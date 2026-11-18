@@ -1,0 +1,567 @@
+<!doctype html>
+<!-- Design board: the owner's escalated exception card, organised around "who fixes it?".
+     Web frames copy the geometry of .approval-card.project-open-item-card (ItemCard / EscalatedItemCard /
+     CardActions / ItemChatRow in src/web/src/components/ProjectProgressStatus.tsx, styles in
+     src/web/src/index.css ~L25150–25450). Apple frames follow EscalatedItemCard's body in
+     src/macos/OrbitApp/Sources/OrbitApp/Views/ApprovalCards.swift (~L4605–4740, doorRow: under on iPhone,
+     beside on Mac). Android frames follow src/android/app/src/main/kotlin/io/orbitd/android/cards/ExceptionCardView.kt.
+     Copy in frames is the shipped copy (ACTION_LABEL, ACTION_CONSEQUENCES, ESCALATED_UNREACHABLE_HEADING,
+     openItemRequiredAction, CHAT_REFUSAL_LABEL, ownerLine) for "today", and proposed English copy for "proposed".
+     The repo is public: project, task, workspace and file names are sample data in the shape of a real
+     INTEGRATION_CONFLICT item (9 files, escalated after 2h 56m, read at 3h 1m). Annotations are Chinese (house format). -->
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<title>Owner exception card: who fixes it?</title>
+<style>
+  :root {
+    --bg-base:#ffffff; --bg-raised:#ffffff; --bg-subtle:#fafbfc; --bg-sunken:#f7f8fa;
+    --bg-hover-strong:#e3e6eb; --fill-inset:rgba(0,0,0,0.05);
+    --border:#dee0e3; --border-subtle:#eceef1;
+    --text-1:#1f2329; --text-2:#646a73; --text-3:#8f959e; --text-4:#a8acb3;
+    --brand:#3370ff; --brand-strong:#245bdb; --brand-tint:#eaf1ff; --brand-border:#bcd3ff;
+    --success:#1a7f37; --success-bg:#e8f6ec; --success-border:#b6e7c4;
+    --error:#cf3b35; --error-bg:#fdeceb; --error-border:#ffccc7;
+    --warning:#c2710c; --warning-bg:#fff4e6; --warning-border:#ffd591;
+    --font-mono:"JetBrains Mono", ui-monospace, SFMono-Regular, Menlo, monospace;
+    --ios-orange:#ff9500; --ios-blue:#007aff; --ios-sec:#8a8a8e; --ios-sep:#e3e3e8;
+    --md-tone:#b45309; --md-primary:#3b5bdb; --md-sec:#5f6368; --md-outline:#c4c7c5;
+  }
+  * { box-sizing:border-box; }
+  body { margin:0; padding:0; background:#eef0f3; color:var(--text-1);
+         font:14px/1.5 Inter, "Noto Sans SC", sans-serif; }
+  .b-part { padding:26px 30px 30px; font:14px/1.5 Inter, "Noto Sans SC", sans-serif; background:#eef0f3; }
+  .b-part + .b-part { border-top:6px solid #e2e5ea; }
+  h1 { font-size:21px; margin:0 0 8px; letter-spacing:-.01em; }
+  h2 { font-size:17px; margin:0 0 6px; }
+  .b-lede { max-width:1500px; margin:0 0 6px; color:var(--text-2); font-size:13.5px; line-height:1.75; }
+  .b-lede b { color:var(--text-1); }
+  code { font:12px/1 var(--font-mono); background:rgba(0,0,0,.06); padding:1px 4px; border-radius:4px; }
+  .b-row { display:flex; gap:26px; align-items:flex-start; flex-wrap:nowrap; margin-top:16px; }
+  .b-col { min-width:0; }
+  .b-cap { font-size:12px; font-weight:700; letter-spacing:.04em; text-transform:uppercase; margin:0 0 8px; }
+  .b-cap.now { color:var(--error); } .b-cap.new { color:var(--success); }
+  .b-cap span { color:var(--text-3); font-weight:600; text-transform:none; letter-spacing:0; }
+  .b-notes { margin:14px 0 0; padding:0; list-style:none; display:grid; gap:7px; max-width:1500px; }
+  .b-notes li { display:flex; gap:9px; font-size:13px; line-height:1.65; color:var(--text-2); }
+  .b-notes li b { color:var(--text-1); }
+  .b-notes .b-mk { margin-top:2px; }
+  .b-mk { display:inline-flex; align-items:center; justify-content:center; flex:none; width:19px; height:19px;
+          border-radius:50%; background:#e5484d; color:#fff; font:700 11px/1 Inter, sans-serif;
+          vertical-align:middle; margin:0 4px; font-style:normal; }
+  .b-mk.g { background:#16a34a; }
+  .b-note-new li .b-mk { background:#16a34a; }
+
+  /* ---------- web: the shipped card's classes, geometry copied ---------- */
+  .b-web { width:720px; padding:12px 14px; background:var(--bg-sunken); border:1px solid var(--border); border-radius:10px; }
+  .approval-card { border:1px solid var(--brand); border-radius:10px; background:var(--brand-tint); overflow:hidden; }
+  .project-open-item-card.is-owner { border-color:var(--warning-border); background:var(--warning-bg); }
+  .approval-head { padding:10px 14px; font-size:13.5px; font-weight:600; display:flex; align-items:center; gap:8px;
+                   background:var(--warning-bg); border-bottom:1px solid var(--warning-border); }
+  .project-open-item-heading { min-width:0; }
+  .criteria-provenance { flex:none; margin-left:auto; padding:2px 7px; border:1px solid var(--warning-border);
+                   border-radius:4px; background:var(--bg-raised); color:var(--warning); font-size:11px; font-weight:600; letter-spacing:.04em; }
+  .w-clock { flex:none; margin-left:auto; font-size:12px; font-weight:500; color:var(--text-2); }
+  .w-clock + .criteria-provenance { margin-left:0; }
+  .approval-body { background:var(--bg-raised); padding:10px 14px; font-size:13.5px; }
+  .project-open-item-next { margin:0 0 12px; padding:10px 12px 8px; background:var(--warning-bg);
+                   border:1px solid var(--warning-border); border-radius:8px; }
+  .project-open-item-required-action { margin:0; font-size:13px; line-height:1.55; font-weight:600; }
+  .project-open-item-actions { display:grid; gap:7px; margin-top:9px; }
+  .project-open-item-door { display:grid; grid-template-columns:minmax(150px,210px) minmax(0,1fr); align-items:baseline; gap:2px 10px; }
+  .project-open-item-consequence { color:var(--text-2); font-size:12px; line-height:1.45; }
+  .w-btn { display:inline-flex; align-items:center; justify-self:start; height:26px; padding:0 10px; border:1px solid var(--border);
+           border-radius:6px; background:var(--bg-raised); color:var(--text-1); font-size:12.5px; font-weight:500; white-space:nowrap; }
+  .w-btn.primary { background:var(--brand); border-color:var(--brand); color:#fff; font-weight:600; }
+  .w-btn.disabled { opacity:.45; }
+  .w-link { justify-self:start; font-size:12.5px; color:var(--text-2); text-decoration:underline; text-underline-offset:2px; padding:0 2px; }
+  .w-link.danger { color:var(--error); }
+  .w-link.brand { color:var(--brand); text-decoration:none; }
+  .criteria-decision-kv { display:flex; gap:8px; font-size:12.5px; color:var(--text-2); line-height:1.7; }
+  .criteria-decision-k { flex:none; width:96px; color:var(--text-3); }
+  .criteria-decision-v { flex:1; min-width:0; }
+  .project-open-item-mono { font-family:var(--font-mono); font-size:11.5px; }
+  .project-open-item-chat { display:flex; flex-wrap:wrap; align-items:center; gap:8px; margin-top:8px; }
+  .project-open-item-chat-refusal { font-size:12px; color:var(--text-3); }
+  .project-open-item-foot { padding:8px 14px; border-top:1px solid var(--border-subtle); font-size:12px; color:var(--text-2); background:var(--warning-bg); }
+
+  /* proposed-only pieces, built from the same tokens */
+  .w-subject { margin:0 0 10px; font-size:13px; color:var(--text-1); }
+  .w-subject .k { color:var(--text-2); }
+  .w-who-h { margin:0 0 6px; font-size:11px; font-weight:700; letter-spacing:.05em; text-transform:uppercase; color:var(--warning); }
+  .w-who-row { display:grid; grid-template-columns:118px minmax(0,1fr); gap:4px 12px; padding:7px 0; }
+  .w-who-row + .w-who-row { border-top:1px dashed var(--warning-border); }
+  .w-who-k { font-size:12.5px; font-weight:600; color:var(--text-1); padding-top:3px; }
+  .w-who-k small { display:block; font-weight:400; color:var(--text-3); font-size:11.5px; }
+  .w-who-v { min-width:0; }
+  .w-state { margin:0 0 6px; font-size:12.5px; color:var(--text-2); line-height:1.5; }
+  .w-state b { color:var(--text-1); }
+  .w-presses { display:flex; flex-wrap:wrap; align-items:center; gap:8px 12px; }
+  .w-cons { margin:4px 0 0; font-size:12px; color:var(--text-2); line-height:1.45; }
+  .w-ends { display:flex; gap:8px; align-items:baseline; margin:0 0 10px; padding:7px 10px; border-radius:8px;
+            background:var(--success-bg); border:1px solid var(--success-border); font-size:12.5px; color:var(--text-1); }
+  .w-ends i:not(.b-mk) { font-style:normal; color:var(--success); font-weight:700; }
+  .w-details { font-size:12.5px; color:var(--text-2); display:flex; gap:6px; align-items:center; }
+  .w-details .chev { display:inline-block; width:12px; color:var(--text-3); }
+  .w-details-open { margin:6px 0 0 18px; padding:8px 10px; border-radius:8px; background:var(--bg-subtle); border:1px solid var(--border-subtle); }
+  .w-close { margin-top:10px; padding-top:9px; border-top:1px solid var(--border-subtle); }
+  .w-close-h { font-size:11.5px; color:var(--text-3); margin:0 0 5px; }
+  .w-close .project-open-item-door { grid-template-columns:minmax(120px,150px) minmax(0,1fr); }
+
+  /* ---------- phones (iOS) ---------- */
+  .b-phone { width:393px; border-radius:46px; background:#111; padding:11px; flex:none; }
+  .b-screen { border-radius:36px; background:#fff; overflow:hidden; }
+  .b-sb { height:44px; display:flex; align-items:center; justify-content:space-between; padding:0 28px 0 34px;
+          font:600 15px/1 Inter, sans-serif; }
+  .b-nav { display:flex; align-items:center; gap:8px; padding:4px 14px 10px; border-bottom:.5px solid var(--ios-sep); }
+  .b-nav .back { color:var(--ios-blue); font-size:22px; line-height:1; }
+  .b-nav .t { font:600 15px/1.2 Inter, sans-serif; } .b-nav .s { font-size:11.5px; color:var(--ios-sec); }
+  .b-scroll { padding:10px 12px 14px; background:#fff; }
+  .b-ghost { height:30px; border-radius:16px; background:#f2f2f7; margin:0 0 10px 60px; }
+  .i-card { border-radius:12px; border:1px solid rgba(255,149,0,.35); background:rgba(255,149,0,.06); padding:11px 12px;
+            display:flex; flex-direction:column; gap:8px; font-size:14px; }
+  .i-title { display:flex; align-items:center; gap:6px; font-weight:600; font-size:14.5px; }
+  .i-title .tri { color:var(--ios-orange); }
+  .i-title .clk { margin-left:auto; font-weight:400; font-size:12px; color:var(--ios-sec); }
+  .i-prov { font-size:11px; color:var(--ios-sec); letter-spacing:.02em; }
+  .i-head { font-size:13.5px; }
+  .i-next { border-radius:8px; background:rgba(255,149,0,.08); border:1px solid rgba(255,149,0,.22); padding:9px 10px;
+            display:flex; flex-direction:column; gap:8px; }
+  .i-req { font-weight:600; font-size:13.5px; line-height:1.4; }
+  .i-door { display:flex; flex-direction:column; gap:3px; align-items:flex-start; }
+  .i-cons { font-size:11.5px; color:var(--ios-sec); line-height:1.35; }
+  .i-btn { display:inline-flex; align-items:center; height:30px; padding:0 12px; border-radius:15px; font-size:13.5px; font-weight:500;
+           background:rgba(0,122,255,.12); color:var(--ios-blue); white-space:nowrap; }
+  .i-btn.primary { background:var(--ios-blue); color:#fff; font-weight:600; }
+  .i-link { font-size:12.5px; color:var(--ios-sec); }
+  .i-link.tint { color:var(--ios-blue); }
+  .i-link.danger { color:#ff3b30; }
+  .i-facts { display:flex; flex-direction:column; gap:3px; font-size:12px; color:var(--ios-sec); }
+  .i-facts .r { display:flex; gap:8px; } .i-facts .k { flex:none; width:74px; } .i-facts .v { color:#3c3c43; min-width:0; overflow-wrap:anywhere; }
+  .i-mono { font-family:var(--font-mono); font-size:10.5px; }
+  .i-owner { font-size:11px; color:var(--ios-sec); }
+  .i-who-h { font-size:10.5px; font-weight:700; letter-spacing:.05em; text-transform:uppercase; color:#c26a00; }
+  .i-who { display:flex; flex-direction:column; gap:5px; }
+  .i-who + .i-who { border-top:1px dashed rgba(255,149,0,.35); padding-top:8px; }
+  .i-who .who { font-size:12.5px; font-weight:600; } .i-who .who small { font-weight:400; color:var(--ios-sec); }
+  .i-who .st { font-size:12px; color:#3c3c43; }
+  .i-press-row { display:flex; gap:12px; align-items:center; flex-wrap:wrap; }
+  .i-ends { font-size:12.5px; border-radius:8px; padding:7px 9px; background:rgba(52,199,89,.10); border:1px solid rgba(52,199,89,.28); }
+  .i-ends i:not(.b-mk) { font-style:normal; color:#248a3d; font-weight:700; }
+  .i-disc { font-size:12.5px; color:var(--ios-sec); display:flex; gap:6px; }
+  .i-close { border-top:.5px solid var(--ios-sep); padding-top:8px; display:flex; flex-direction:column; gap:6px; }
+  .i-close .h { font-size:11px; color:var(--ios-sec); }
+
+  /* ---------- Mac pane ---------- */
+  .b-mac { width:600px; border-radius:11px; overflow:hidden; border:1px solid #c9ccd1; background:#fff; box-shadow:0 8px 26px rgba(0,0,0,.10); flex:none; }
+  .b-mac-bar { height:34px; display:flex; align-items:center; gap:7px; padding:0 12px; background:#f3f3f5; border-bottom:1px solid #dcdde0; font-size:12.5px; color:#555; }
+  .b-mac-bar i { width:11px; height:11px; border-radius:50%; display:inline-block; }
+  .b-mac-bar .t { margin-left:14px; font-weight:600; color:#333; }
+  .b-mac-body { padding:14px 18px 18px; background:#fff; }
+  .b-mac .i-door { flex-direction:row; align-items:baseline; gap:10px; }
+  .b-mac .i-door > :first-child { flex:none; width:200px; padding:5px 8px; border-radius:6px; background:rgba(0,0,0,.05); }
+  .b-mac .i-door > :first-child.i-btn { width:auto; background:rgba(0,122,255,.12); padding:0 12px; height:26px; border-radius:6px; }
+  .b-mac .i-door > :first-child.i-btn.primary { background:var(--ios-blue); }
+  .b-mac .i-btn { height:26px; border-radius:6px; font-size:13px; }
+  .b-mac .i-door .i-cons { flex:1; }
+
+  /* ---------- Android ---------- */
+  .b-droid { width:412px; border-radius:30px; background:#1b1b1f; padding:10px; flex:none; }
+  .b-droid .b-screen { border-radius:22px; background:#fdfcff; }
+  .b-droid .b-sb { height:30px; font-size:13px; padding:0 22px; }
+  .b-droid .b-nav { border-bottom:1px solid #e6e1e5; padding:6px 14px 12px; }
+  .b-droid .b-nav .back { color:#1b1b1f; font-size:20px; }
+  .a-card { border-radius:14px; border:1px solid rgba(180,83,9,.28); background:rgba(180,83,9,.05); padding:14px;
+            display:flex; flex-direction:column; gap:10px; font-family:Roboto, Inter, sans-serif; font-size:14px; }
+  .a-title { display:flex; align-items:center; gap:8px; font-weight:700; font-size:15.5px; }
+  .a-title .tri { color:var(--md-tone); }
+  .a-title .clk { margin-left:auto; font-weight:400; font-size:12px; color:var(--md-sec); }
+  .a-prov { font-size:11px; color:var(--md-sec); letter-spacing:.04em; font-weight:500; }
+  .a-next { border-radius:8px; background:rgba(180,83,9,.08); border:1px solid rgba(180,83,9,.22); padding:9px 10px; display:flex; flex-direction:column; gap:8px; align-items:flex-start; }
+  .a-req { font-weight:600; font-size:14px; line-height:1.4; }
+  .a-door { display:flex; flex-direction:column; gap:3px; align-items:flex-start; }
+  .a-cons { font-size:12px; color:var(--md-sec); line-height:1.35; }
+  .a-btn { display:inline-flex; align-items:center; height:40px; padding:0 20px; border-radius:20px; font-size:14px; font-weight:500;
+           border:1px solid var(--md-outline); color:var(--md-primary); background:transparent; white-space:nowrap; }
+  .a-btn.primary { background:var(--md-primary); color:#fff; border-color:var(--md-primary); }
+  .a-text { display:inline-flex; align-items:center; height:36px; padding:0 8px; font-size:14px; font-weight:500; color:var(--md-primary); }
+  .a-text.sec { color:var(--md-sec); } .a-text.danger { color:#b3261e; }
+  .a-facts { display:flex; flex-direction:column; gap:4px; font-size:12.5px; color:var(--md-sec); }
+  .a-facts .r { display:flex; gap:6px; } .a-facts .k { flex:none; width:78px; } .a-facts .v { color:#1b1b1f; min-width:0; overflow-wrap:anywhere; }
+  .a-mono { font-family:var(--font-mono); font-size:11px; }
+  .a-owner { font-size:11.5px; color:var(--md-sec); }
+  .a-who-h { font-size:11px; font-weight:700; letter-spacing:.06em; text-transform:uppercase; color:var(--md-tone); }
+  .a-who { display:flex; flex-direction:column; gap:5px; align-items:flex-start; }
+  .a-who + .a-who { border-top:1px dashed rgba(180,83,9,.30); padding-top:8px; }
+  .a-who .who { font-size:13px; font-weight:600; } .a-who .who small { font-weight:400; color:var(--md-sec); }
+  .a-who .st { font-size:12.5px; }
+  .a-ends { font-size:13px; border-radius:8px; padding:8px 10px; background:rgba(22,163,74,.08); border:1px solid rgba(22,163,74,.25); }
+  .a-ends i:not(.b-mk) { font-style:normal; color:#15803d; font-weight:700; }
+  .a-disc { font-size:13px; color:var(--md-sec); display:flex; gap:6px; align-items:center; min-height:36px; }
+  .a-close { border-top:1px solid #e6e1e5; padding-top:8px; display:flex; flex-direction:column; gap:4px; }
+  .a-close .h { font-size:11.5px; color:var(--md-sec); }
+
+  /* ---------- tables ---------- */
+  table.b-t { border-collapse:collapse; width:100%; max-width:1900px; background:#fff; border:1px solid var(--border); border-radius:10px; overflow:hidden; font-size:12.5px; }
+  .b-t th, .b-t td { text-align:left; vertical-align:top; padding:8px 11px; border-bottom:1px solid var(--border-subtle); line-height:1.55; }
+  .b-t th { background:var(--bg-subtle); color:var(--text-2); font-weight:600; font-size:12px; }
+  .b-t td.c { color:var(--text-1); }
+  .b-t .pill { display:inline-block; padding:1px 8px; border-radius:5px; background:var(--brand); color:#fff; font-weight:600; white-space:nowrap; }
+  .b-t .pill.s { background:#fff; color:var(--text-1); border:1px solid var(--border); font-weight:500; }
+  .b-t .lk { color:var(--text-2); text-decoration:underline; text-underline-offset:2px; white-space:nowrap; }
+  .b-t .new { color:#c25e00; font-size:11px; font-weight:700; }
+
+  .b-dec { display:grid; grid-template-columns:repeat(2, minmax(0,1fr)); gap:16px; max-width:1900px; margin-top:12px; }
+  .b-dcard { background:#fff; border:1px solid var(--border); border-radius:12px; padding:14px 16px; }
+  .b-dcard h3 { margin:0 0 8px; font-size:14.5px; }
+  .b-opt { border:1px solid var(--border-subtle); border-radius:9px; padding:8px 11px; margin-top:8px; font-size:12.5px; line-height:1.65; color:var(--text-2); background:var(--bg-subtle); }
+  .b-opt b { color:var(--text-1); }
+  .b-opt.rec { border-color:var(--success-border); background:var(--success-bg); }
+  .b-opt .tag { display:inline-block; font-size:10.5px; font-weight:700; padding:0 7px; border-radius:999px; background:#16a34a; color:#fff; margin-left:6px; }
+  .b-land { margin:10px 0 0; padding-left:22px; font-size:13px; line-height:1.75; color:var(--text-2); max-width:1500px; }
+  .b-land b { color:var(--text-1); }
+</style>
+</head>
+<body>
+
+<section class="b-part" id="part-1">
+  <h1>业主的例外卡：按「谁来修？」组织，而不是按机制排门</h1>
+  <p class="b-lede">
+    对象：项目里 <b>升级到你（owner）手里的例外待办</b>，以 <code>INTEGRATION_CONFLICT</code> 为例（web <code>ProjectProgressStatus.tsx</code> 的 <code>EscalatedItemCard</code>；
+    Apple <code>ApprovalCards.swift</code> 的 owner item card；Android <code>ExceptionCardView.kt</code>）。今天的卡按<b>机制</b>摆：一列四扇门（修 / 停 / 看 / 结）同列排开、原始 ref 和 SHA、9 个文件全列、两个对不上的钟；
+    而且<b>从不说它怎么结束</b>——其实它会自己结束：往任务分支推一次就开一代新的落地（<code>docs/project-integration-line-contract.md §2.1</code>），落地成功就由
+    <code>resolveIntegrationItemsOnLanding</code>（<code>project-open-item.ts</code> ~L1227）把它关掉。「Mark as handled」只用于「工作从别的路到了线上」。
+  </p>
+  <p class="b-lede">
+    两个情形贯穿全板：<b>(a) 协调者不可达</b>（<code>coordinatorUnreachable</code>：消息送不进去——这里用「它的工作区 mac-mini 被停用」），<b>(b) 协调者可达</b>（2 小时没人动，钟把它交给了你）。
+    数据：示例项目 <b>Checkout v2</b>、任务 <b>Retry failed webhook deliveries</b>、9 个冲突文件、在协调者手里 2h 56m 后升级、读卡时共等了 3h 1m（真实条目的形状，名字是示例——仓库公开）。
+    红色编号 = 今天的问题；绿色编号 = 提议的改动。产品文案全是英文（CLAUDE.md §5）。<br>「今天」按 main 现状画（含 <code>ff4ffab74</code>/<code>c2420ff05</code>：不可达时标题已是「can’t take messages」、必做句不再提「ask the coordinator」；<code>d2bc7fc4f</code>：Ask again 与 Chat about this 读同一个 <code>readCoordinatorReach</code>）。所以提议第 1 点在 (a) 已经落地，本板在它之上做第 2–5 点。
+  </p>
+  <div class="b-row">
+    <div class="b-col"><p class="b-cap now">① 今天 · web · (a) 协调者不可达</p><div class="b-web" id="web-today-a"></div></div>
+    <div class="b-col"><p class="b-cap now">① 今天 · web · (b) 协调者可达</p><div class="b-web" id="web-today-b"></div></div>
+  </div>
+  <ol class="b-notes">
+    <li><i class="b-mk">1</i><span><b>两个钟各说各的。</b>(b) 标题「no one acted on this for 2h 56m」，脚注「waiting 3h 1m · came to the owner at 2h 56m」——同一个 2h 56m 出现两次，第三个数 3h 1m 又是另一回事。读者要自己做减法才知道「到我手里 5 分钟」。</span></li>
+    <li><i class="b-mk">2</i><span><b>一列门，按机制排。</b>修（Open task session）、看（Open landing）、停（Cancel task）、结（Mark as handled）在同一列、同一种「按钮 + 一句后果」的形状里；只有重量在区分它们。卡没回答 owner 第一个问题：<b>这事该谁修？</b></span></li>
+    <li><i class="b-mk">3</i><span><b>(a) 少了真正的第一步。</b>协调者收不到消息时 Ask again 不画（<code>readCoordinatorReach</code> 的 <code>askable</code> 为假，<code>d2bc7fc4f</code> 起与 Chat 同一个答案），必做句也已不提它，于是卡上的主门只剩「自己修」。但服务端早有路：<code>COORDINATOR_UNAVAILABLE</code> 指向 <code>POST :id/coordinator/rebind</code>（<code>projects.controller.ts</code> ~L896），项目页的协调者卡上也已经有 <code>Enable mac-mini</code> / <code>Change workspace…</code>。例外卡一个都没给。</span></li>
+    <li><i class="b-mk">4</i><span><b>原始事实。</b><code>refs/heads/project/&lt;id&gt; at &lt;sha&gt;</code> 和 9 个路径全量平铺，占了卡的一半高度，却不是做决定要用的东西。</span></li>
+    <li><i class="b-mk">5</i><span><b>没说怎么结束。</b>只有事实块里一行「After a fix: push to the task branch — Orbit re-integrates and re-checks on its own」，没说<b>事项会自己关</b>；于是 owner 修完还会再按一次 Mark as handled——那是给「从别的路落地」用的门。</span></li>
+    <li><i class="b-mk">6</i><span><b>灰掉的 Chat about this。</b>(a) 一个按不了的按钮 + 一句「can’t take a message right now」，与标题「can’t take messages」说同一件事第二遍。</span></li>
+  </ol>
+</section>
+
+<section class="b-part" id="part-2">
+  <h2>② 提议 · web</h2>
+  <p class="b-lede">同一张 <code>.project-open-item-card.is-owner</code>，同样的琥珀色、同样的按钮三种重量；只换<b>顺序与分组</b>：标题 → 是什么 → 谁来修 → 怎么结束 → 细节（折叠）→ 分隔线 → 收尾。</p>
+  <div class="b-row">
+    <div class="b-col"><p class="b-cap new">② 提议 · web · (a) 协调者不可达</p><div class="b-web" id="web-new-a"></div></div>
+    <div class="b-col"><p class="b-cap new">② 提议 · web · (b) 协调者可达</p><div class="b-web" id="web-new-b"></div></div>
+  </div>
+  <div class="b-row">
+    <div class="b-col"><p class="b-cap new">② 提议 · web · Details 展开 <span>（(a)(b) 相同）</span></p><div class="b-web" id="web-new-details"></div></div>
+  </div>
+  <ol class="b-notes b-note-new">
+    <li><i class="b-mk g">1</i><span><b>标题 = 此刻的原因（已部分落地），只有一个钟。</b>(a) 的「the coordinator can’t take messages」是 main 上已有的（<code>ff4ffab74</code>），不改；剩下的是 (b)：「no one acted on this for 2h 56m」→「the coordinator didn’t get to it」，去掉标题里的数字；以及读数改成<b>实时</b>（交过来之后协调者结束了，标题就改说 ended——今天 ESCALATED 只在不可达时换句）。钟只剩右上角一个「waiting 3h 1m」；「2h 56m 后交给你」进 Details。脚注整行删掉（「Owner: you」标题已说）。</span></li>
+    <li><i class="b-mk g">2</i><span><b>「Who fixes it?」两行：协调者 / 你。</b>(a) 第一行先说为什么它来不了（<code>ProjectCoordinatorCard</code> 的同一句 refusal），主按钮是<b>把它请回来</b>——<code>Enable mac-mini</code>（同一张协调者卡的 fix 标签），旁边 <code>Change workspace…</code>（= rebind）。(b) 第一行是 <code>Ask the coordinator again</code>。第二行永远是「You · <code>Fix it myself</code>」，即今天的 Open task session，换成说人话的名字。</span></li>
+    <li><i class="b-mk g">3</i><span><b>一行说它怎么结束</b>（绿色，不是按钮）：<i>Closes by itself once this work lands — push a fix to the task branch and you’re done.</i> 只画在有任务分支的集成类事项上（CONFLICT / CHECK_FAILED / ERROR），取代事实块里的「After a fix」行。</span></li>
+    <li><i class="b-mk g">4</i><span><b>事实折叠。</b>标题下一行「Merge conflict · 任务名 → 项目名」；其余收进 <code>Details · 9 files</code>：文件最多 5 个 + 「4 more」、目标分支（项目名 + 短 ref，mono 小字）、到你手里的时刻、<code>Open landing</code>（看，不是做）。</span></li>
+    <li><i class="b-mk g">5</i><span><b>分隔线后的收尾组</b>「Already settled?」：<code>Mark as handled</code>（后果改为 <i>The work landed another way. Your reason goes on the record.</i>）与 <code>Cancel task</code>（红色 link，确认对话框不变）。它们是结束这条事项的方式，不是修它的方式。</span></li>
+    <li><i class="b-mk g">6</i><span><b>Chat about this：</b>(a) 不再是灰按钮——第一行的状态句已经说了「can’t take messages」；(b) 降为 Ask again 旁边的 link「or Chat about this first」，因为它是「带一句话再交回」的另一种问法（见待定 D2）。</span></li>
+  </ol>
+</section>
+
+<section class="b-part" id="part-3">
+  <h2>③ iPhone（393 pt）· 今天 vs 提议</h2>
+  <p class="b-lede">iPhone 的门是「按钮在上、后果在下」（<code>doorRow</code> 的 iOS 分支）；今天 Apple 不画 Cancel task（控制台没有这扇门），Chat about this 是常亮的 bordered 按钮（走 composer，不先判断能否送达）。提议沿用同一套按钮样式：主 = borderedProminent，次 = bordered，其余 = plain secondary。</p>
+  <div class="b-row" id="ios-row"></div>
+</section>
+
+<section class="b-part" id="part-4">
+  <h2>④ Mac（会话面板）· 今天 vs 提议</h2>
+  <p class="b-lede">同一份 SwiftUI；Mac 上 <code>doorRow</code> 把后果放在按钮<b>右边</b>，所以今天的一列门在 Mac 上更像一张表。提议里「Who fixes it?」的两行在 Mac 上是「谁 | 状态 + 按钮」两栏，和 web 一致。</p>
+  <div class="b-row" id="mac-row-1"></div>
+  <div class="b-row" id="mac-row-2"></div>
+</section>
+
+<section class="b-part" id="part-5">
+  <h2>⑤ Android · 今天 vs 提议</h2>
+  <p class="b-lede">Android 今天画 Cancel task（带确认对话框），按钮 48dp 高（Material Button / OutlinedButton / TextButton 三种重量）。提议沿用这三种，只改顺序和分组；「Fix it myself」= OutlinedButton。</p>
+  <div class="b-row" id="droid-row"></div>
+</section>
+
+<section class="b-part" id="part-6">
+  <h2>⑥ 其它原因下，标题与「谁来修」第一行怎么读</h2>
+  <p class="b-lede">标题和第一行都由同一个实时读数决定（<code>readCoordinatorReach</code> + 协调者状态的 refusal detail + <code>assigneeReason</code>），不再由「它是怎么到你手里的」决定。按钮标签全部复用已有的：协调者卡的 fix 标签、<code>CHANGE_COPY.button</code>、「Start a new coordinator」。</p>
+  <table class="b-t" id="matrix"></table>
+</section>
+
+<section class="b-part" id="part-7">
+  <h2>⑦ 待定 · 要你拍板</h2>
+  <div class="b-dec" id="decisions"></div>
+  <h2 style="margin-top:22px">落地（按代价排）</h2>
+  <ol class="b-land">
+    <li><b>只改顺序与文案（web 先）</b>：<code>CardActions</code> 按「Who fixes it?」分两行 + 收尾组；标题去掉数字、右上一个钟、删脚注；新增「how it ends」一行取代 After a fix 行。不动服务端。</li>
+    <li><b>Details 折叠</b>：<code>ItemFactRows</code> 进 disclosure；文件 5 个封顶；项目名代替 ref（项目名卡上本来就有）；Open landing 移入。</li>
+    <li><b>(a) 的「请回来」按钮</b>：卡读 <code>GET :id/coordinator/status</code>（已有），复用 <code>ProjectCoordinatorCard</code> 的 refusal 句与 fix 标签、<code>Change workspace…</code> 打开同一个工作区选择框（rebind）。无新接口（若 D1 选 A）。</li>
+    <li><b>原生对齐</b>：<code>OwnerItemCards.swift</code>（ExceptionCards 模型）+ <code>ApprovalCards.swift</code>，<code>ExceptionCards.kt</code> + <code>ExceptionCardView.kt</code>；复制 parity 测试读的 web 常量。Apple 继续不画 Cancel task（另议）。</li>
+  </ol>
+</section>
+
+<script>
+const D = {
+  project: 'Checkout v2', task: 'Retry failed webhook deliveries', ws: 'mac-mini',
+  ref: 'refs/heads/project/35aK2xQm8LrT0vHcE1pZq', sha: '9f3c2e1',
+  files: ['src/webhooks/sender.ts', 'src/webhooks/sender.test.ts', 'src/webhooks/retry-policy.ts', 'src/queue/backoff.ts',
+          'src/queue/backoff.test.ts', 'src/config/defaults.ts', 'docs/webhooks.md', 'package.json', 'package-lock.json'],
+  waited: '3h 1m', escalated: '2h 56m',
+};
+const mk = (n, g) => `<i class="b-mk${g ? ' g' : ''}">${n}</i>`;
+const shown = 5;
+
+// ---- shipped copy (today) ----
+const T = {
+  headA: 'Now yours — the coordinator can’t take messages',
+  headB: `Now yours — no one acted on this for ${D.escalated}`,
+  reqA: 'This task cannot reach the project branch until its merge conflict is repaired — fix the task branch.',
+  reqB: 'This task cannot reach the project branch until its merge conflict is repaired — fix the task branch or ask the coordinator to do it.',
+  owner: `Owner: you · waiting ${D.waited} · came to the owner at ${D.escalated}`,
+  ask: ['Ask the coordinator again', 'It goes back to the coordinator with a fresh escalation clock.'],
+  ots: ['Open task session', 'Open the task session to repair the branch.'],
+  cancel: ['Cancel task', 'The task is cancelled and its open item closes.'],
+  landing: ['Open landing', 'Open the landing: every attempt, step by step.'],
+  handled: ['Mark as handled', 'Only if you dealt with it yourself. Your reason goes on the record.'],
+  chatRefusal: 'The coordinator conversation can’t take a message right now',
+  after: 'push to the task branch — Orbit re-integrates and re-checks on its own',
+};
+// ---- proposed copy ----
+const P = {
+  headA: 'Now yours — the coordinator can’t take messages',
+  headB: 'Now yours — the coordinator didn’t get to it',
+  clock: `waiting ${D.waited}`,
+  subject: `<span class="k">Merge conflict ·</span> ${D.task} <span class="k">→</span> ${D.project}`,
+  stA: `Its workspace <b>${D.ws}</b> is disabled, so it can’t take messages.`,
+  backA: `Enable ${D.ws}`, changeWs: 'Change workspace…',
+  backCons: 'Once it’s back, Ask the coordinator again hands this to it with a fresh clock.',
+  stB: 'Reachable. It had this for 2h 56m and didn’t get to it.',
+  ask: 'Ask the coordinator again', askCons: 'It goes back to the coordinator with a fresh 2h clock.',
+  chatLink: 'or Chat about this first',
+  mine: 'Fix it myself', mineCons: 'Opens the task session. Fix the conflict there and push to the task branch.',
+  ends: 'Closes by itself once this work lands — push a fix to the task branch and you’re done.',
+  details: `Details · ${D.files.length} files · Open landing`,
+  settled: 'Already settled?',
+  handled: ['Mark as handled', 'The work landed another way. Your reason goes on the record.'],
+  cancel: ['Cancel task', 'Stops the task. This item closes with it.'],
+};
+
+// =============== web ===============
+function webDoor(kind, [label, cons], mark) {
+  const btn = kind === 'primary' ? `<span class="w-btn primary">${label}</span>`
+    : kind === 'secondary' ? `<span class="w-btn">${label}</span>`
+    : `<span class="w-link${kind === 'danger' ? ' danger' : ''}">${label}</span>`;
+  return `<div class="project-open-item-door">${btn}<span class="project-open-item-consequence">${cons}${mark || ''}</span></div>`;
+}
+function kv(k, v) { return `<div class="criteria-decision-kv"><span class="criteria-decision-k">${k}</span><span class="criteria-decision-v">${v}</span></div>`; }
+function webToday(s) {
+  const a = s === 'a';
+  const doors = a
+    ? webDoor('primary', T.ots, mk(3)) + webDoor('link', T.cancel) + webDoor('link', T.landing) + webDoor('link', T.handled, mk(2))
+    : webDoor('primary', T.ask) + webDoor('secondary', T.ots) + webDoor('link', T.cancel) + webDoor('link', T.landing) + webDoor('link', T.handled, mk(2));
+  return `<div class="approval-card project-open-item-card is-owner">
+    <div class="approval-head"><span class="project-open-item-heading">${a ? T.headA : T.headB}</span>${a ? '' : mk(1)}<span class="criteria-provenance">FROM ORBIT</span></div>
+    <div class="approval-body">
+      <div class="project-open-item-next"><p class="project-open-item-required-action">${a ? T.reqA : T.reqB}</p>
+        <div class="project-open-item-actions">${doors}</div></div>
+      ${kv('Task', D.task)}
+      ${kv('Into', `<span class="project-open-item-mono">${D.ref}</span> at ${D.sha} ${mk(4)}`)}
+      ${kv('Files', `<span class="project-open-item-mono">${D.files.join(' · ')}</span>`)}
+      ${kv('After a fix', T.after + ' ' + mk(5))}
+      <div class="project-open-item-chat"><span class="w-btn${a ? ' disabled' : ''}">Chat about this</span>${a ? `<span class="project-open-item-chat-refusal">${T.chatRefusal}</span>${mk(6)}` : ''}</div>
+    </div>
+    <div class="project-open-item-foot">${T.owner} ${a ? '' : mk(1)}</div></div>`;
+}
+function webNew(s, open) {
+  const a = s === 'a';
+  const coord = a
+    ? `<p class="w-state">${P.stA}</p>
+       <div class="w-presses"><span class="w-btn primary">${P.backA}</span><span class="w-link">${P.changeWs}</span>${mk(2, 1)}</div>
+       <p class="w-cons">${P.backCons}</p>`
+    : `<p class="w-state">${P.stB}</p>
+       <div class="w-presses"><span class="w-btn primary">${P.ask}</span><span class="w-link brand">${P.chatLink}</span>${mk(6, 1)}</div>
+       <p class="w-cons">${P.askCons}</p>`;
+  const files = D.files.slice(0, shown).join(' · ') + ` <span style="color:var(--text-3)">and ${D.files.length - shown} more</span>`;
+  const details = open
+    ? `<div class="w-details"><span class="chev">▾</span>Details</div>
+       <div class="w-details-open">
+        ${kv('Into', `${D.project}’s branch <span class="project-open-item-mono" style="color:var(--text-3)">project/35aK2xQm… at ${D.sha}</span>`)}
+        ${kv(`Files (${D.files.length})`, `<span class="project-open-item-mono">${files}</span>`)}
+        ${kv('Came to you', `after ${D.escalated} with the coordinator`)}
+        ${kv('Landing', `<span class="w-link brand">Open landing</span> <span style="color:var(--text-3)">— every attempt, step by step</span>`)}
+       </div>`
+    : `<div class="w-details"><span class="chev">▸</span>${P.details}${mk(4, 1)}</div>`;
+  return `<div class="approval-card project-open-item-card is-owner">
+    <div class="approval-head"><span class="project-open-item-heading">${a ? P.headA : P.headB}</span>${mk(1, 1)}<span class="w-clock">${P.clock}</span><span class="criteria-provenance">FROM ORBIT</span></div>
+    <div class="approval-body">
+      <p class="w-subject">${P.subject}</p>
+      <div class="project-open-item-next">
+        <p class="w-who-h">Who fixes it?</p>
+        <div class="w-who-row"><div class="w-who-k">The coordinator</div><div class="w-who-v">${coord}</div></div>
+        <div class="w-who-row"><div class="w-who-k">You</div><div class="w-who-v">
+          <div class="w-presses"><span class="w-btn">${P.mine}</span></div><p class="w-cons">${P.mineCons}</p></div></div>
+      </div>
+      <div class="w-ends"><i>✓</i><span>${P.ends}</span>${mk(3, 1)}</div>
+      ${details}
+      <div class="w-close"><p class="w-close-h">${P.settled} ${mk(5, 1)}</p>
+        <div class="project-open-item-actions" style="margin-top:0">${webDoor('link', P.handled)}${webDoor('danger', P.cancel)}</div></div>
+    </div></div>`;
+}
+document.getElementById('web-today-a').innerHTML = webToday('a');
+document.getElementById('web-today-b').innerHTML = webToday('b');
+document.getElementById('web-new-a').innerHTML = webNew('a');
+document.getElementById('web-new-b').innerHTML = webNew('b');
+document.getElementById('web-new-details').innerHTML = webNew('a', true);
+
+// =============== Apple (iPhone + Mac share the model) ===============
+function iDoor(kind, [label, cons]) {
+  const b = kind === 'primary' ? `<span class="i-btn primary">${label}</span>`
+    : kind === 'secondary' ? `<span class="i-btn">${label}</span>`
+    : `<span class="i-link${kind === 'danger' ? ' danger' : ''}">${label}</span>`;
+  return `<div class="i-door">${b}${cons ? `<span class="i-cons">${cons}</span>` : ''}</div>`;
+}
+function iFacts(rows) { return `<div class="i-facts">${rows.map(([k, v]) => `<div class="r"><span class="k">${k}</span><span class="v">${v}</span></div>`).join('')}</div>`; }
+function appleToday(s, marks) {
+  const a = s === 'a';
+  const doors = (a ? '' : iDoor('primary', T.ask)) + iDoor(a ? 'primary' : 'secondary', T.ots) + iDoor('link', T.landing)
+    + `<div class="i-door"><span class="i-btn">Chat about this</span></div>` + iDoor('link', T.handled);
+  return `<div class="i-card">
+    <div class="i-title"><span class="tri">⚠︎</span>Escalated to you</div>
+    <div class="i-prov">FROM ORBIT</div>
+    <div class="i-head">${a ? T.headA : T.headB}${!a && marks ? mk(1) : ''}</div>
+    <div class="i-next"><div class="i-req">${a ? T.reqA : T.reqB}</div>${doors}${marks ? `<div>${mk(2)}${a ? mk(3) + mk(6) : ''}</div>` : ''}</div>
+    ${iFacts([['Task', D.task], ['Into', `<span class="i-mono">${D.ref}</span> at ${D.sha}${marks ? mk(4) : ''}`],
+      ['Files', `<span class="i-mono">${D.files.join(' · ')}</span>`], ['After a fix', T.after + (marks ? mk(5) : '')]])}
+    <div class="i-owner">${T.owner}${!a && marks ? mk(1) : ''}</div></div>`;
+}
+function appleNew(s, marks) {
+  const a = s === 'a';
+  const coord = a
+    ? `<div class="st">${P.stA}</div><div class="i-press-row"><span class="i-btn primary">${P.backA}</span><span class="i-link tint">${P.changeWs}</span>${marks ? mk(2, 1) : ''}</div><div class="i-cons">${P.backCons}</div>`
+    : `<div class="st">${P.stB}</div><div class="i-press-row"><span class="i-btn primary">${P.ask}</span></div><div class="i-cons">${P.askCons}</div><span class="i-link tint">${P.chatLink}</span>`;
+  return `<div class="i-card">
+    <div class="i-title"><span class="tri">⚠︎</span>Escalated to you<span class="clk">${P.clock}</span></div>
+    <div class="i-head" style="font-weight:600">${a ? P.headA : P.headB}${marks ? mk(1, 1) : ''}</div>
+    <div class="i-head">${P.subject.replace(/class="k"/g, 'style="color:var(--ios-sec)"')}</div>
+    <div class="i-next"><div class="i-who-h">Who fixes it?</div>
+      <div class="i-who"><div class="who">The coordinator</div>${coord}</div>
+      <div class="i-who"><div class="who">You</div><div class="i-press-row"><span class="i-btn">${P.mine}</span></div><div class="i-cons">${P.mineCons}</div></div></div>
+    <div class="i-ends"><i>✓</i> ${P.ends}${marks ? mk(3, 1) : ''}</div>
+    <div class="i-disc"><span>›</span>${P.details}${marks ? mk(4, 1) : ''}</div>
+    <div class="i-close"><div class="h">${P.settled}${marks ? mk(5, 1) : ''}</div>${iDoor('link', P.handled)}</div>
+    <div class="i-prov">FROM ORBIT</div></div>`;
+}
+function phone(inner, cap) {
+  return `<div class="b-col"><p class="b-cap ${cap[0]}">${cap[1]}</p><div class="b-phone"><div class="b-screen">
+    <div class="b-sb"><span>9:41</span><span>●●● ▮</span></div>
+    <div class="b-nav"><span class="back">‹</span><div><div class="t">Coordinator</div><div class="s">${D.project}</div></div></div>
+    <div class="b-scroll"><div class="b-ghost"></div>${inner}</div></div></div></div>`;
+}
+document.getElementById('ios-row').innerHTML =
+  phone(appleToday('a', true), ['now', '今天 · (a) 不可达']) + phone(appleToday('b', true), ['now', '今天 · (b) 可达']) +
+  phone(appleNew('a', true), ['new', '提议 · (a) 不可达']) + phone(appleNew('b', true), ['new', '提议 · (b) 可达']);
+
+function mac(inner, cap) {
+  return `<div class="b-col"><p class="b-cap ${cap[0]}">${cap[1]}</p><div class="b-mac">
+    <div class="b-mac-bar"><i style="background:#ff5f57"></i><i style="background:#febc2e"></i><i style="background:#28c840"></i><span class="t">Coordinator — ${D.project}</span></div>
+    <div class="b-mac-body">${inner}</div></div></div>`;
+}
+document.getElementById('mac-row-1').innerHTML =
+  mac(appleToday('a', true), ['now', '今天 · (a) 不可达']) + mac(appleToday('b', true), ['now', '今天 · (b) 可达']);
+document.getElementById('mac-row-2').innerHTML =
+  mac(appleNew('a', true), ['new', '提议 · (a) 不可达']) + mac(appleNew('b', true), ['new', '提议 · (b) 可达']);
+
+// =============== Android ===============
+function aDoor(kind, [label, cons]) {
+  const b = kind === 'primary' ? `<span class="a-btn primary">${label}</span>`
+    : kind === 'secondary' ? `<span class="a-btn">${label}</span>`
+    : `<span class="a-text${kind === 'danger' ? ' danger' : ''}">${label}</span>`;
+  return `<div class="a-door">${b}${cons ? `<span class="a-cons">${cons}</span>` : ''}</div>`;
+}
+function aFacts(rows) { return `<div class="a-facts">${rows.map(([k, v]) => `<div class="r"><span class="k">${k}</span><span class="v">${v}</span></div>`).join('')}</div>`; }
+function droidToday(s) {
+  const a = s === 'a';
+  const doors = (a ? '' : aDoor('primary', T.ask)) + aDoor(a ? 'primary' : 'secondary', T.ots) + aDoor('link', T.cancel) + aDoor('link', T.landing)
+    + `<span class="a-btn">Chat about this</span>` + aDoor('link', T.handled);
+  return `<div class="a-card">
+    <div class="a-title"><span class="tri">⚠</span>Escalated to you</div>
+    <div class="a-prov">FROM ORBIT</div>
+    <div>${a ? T.headA : T.headB}${a ? '' : mk(1)}</div>
+    <div class="a-next"><div class="a-req">${a ? T.reqA : T.reqB}</div>${doors}<div>${mk(2)}${a ? mk(3) + mk(6) : ''}</div></div>
+    ${aFacts([['Task', D.task], ['Into', `<span class="a-mono">${D.ref}</span> at ${D.sha}${mk(4)}`],
+      ['Files', `<span class="a-mono">${D.files.join(' · ')}</span>`], ['After a fix', T.after + mk(5)]])}
+    <div class="a-owner">${T.owner}${a ? '' : mk(1)}</div></div>`;
+}
+function droidNew(s) {
+  const a = s === 'a';
+  const coord = a
+    ? `<div class="st">${P.stA}</div><div style="display:flex;gap:4px;align-items:center;flex-wrap:wrap"><span class="a-btn primary">${P.backA}</span><span class="a-text">${P.changeWs}</span>${mk(2, 1)}</div><div class="a-cons">${P.backCons}</div>`
+    : `<div class="st">${P.stB}</div><span class="a-btn primary">${P.ask}</span><div class="a-cons">${P.askCons}</div><span class="a-text" style="padding-left:0">${P.chatLink}</span>`;
+  return `<div class="a-card">
+    <div class="a-title"><span class="tri">⚠</span>Escalated to you<span class="clk">${P.clock}</span></div>
+    <div style="font-weight:600">${a ? P.headA : P.headB}${mk(1, 1)}</div>
+    <div>${P.subject.replace(/class="k"/g, 'style="color:var(--md-sec)"')}</div>
+    <div class="a-next"><div class="a-who-h">Who fixes it?</div>
+      <div class="a-who"><div class="who">The coordinator</div>${coord}</div>
+      <div class="a-who"><div class="who">You</div><span class="a-btn">${P.mine}</span><div class="a-cons">${P.mineCons}</div></div></div>
+    <div class="a-ends"><i>✓</i> ${P.ends}${mk(3, 1)}</div>
+    <div class="a-disc"><span>›</span>${P.details}${mk(4, 1)}</div>
+    <div class="a-close"><div class="h">${P.settled}${mk(5, 1)}</div>${aDoor('link', P.handled)}${aDoor('danger', P.cancel)}</div>
+    <div class="a-prov">FROM ORBIT</div></div>`;
+}
+function droid(inner, cap) {
+  return `<div class="b-col"><p class="b-cap ${cap[0]}">${cap[1]}</p><div class="b-droid"><div class="b-screen">
+    <div class="b-sb"><span>9:41</span><span>▾ ▮</span></div>
+    <div class="b-nav"><span class="back">←</span><div><div class="t">Coordinator</div><div class="s">${D.project}</div></div></div>
+    <div class="b-scroll" style="background:#fdfcff">${inner}</div></div></div></div>`;
+}
+document.getElementById('droid-row').innerHTML =
+  droid(droidToday('a'), ['now', '今天 · (a) 不可达']) + droid(droidToday('b'), ['now', '今天 · (b) 可达']) +
+  droid(droidNew('a'), ['new', '提议 · (a) 不可达']) + droid(droidNew('b'), ['new', '提议 · (b) 可达']);
+
+// =============== cause matrix ===============
+const pill = (t) => `<span class="pill">${t}</span>`, spill = (t) => `<span class="pill s">${t}</span>`, lk = (t) => `<span class="lk">${t}</span>`;
+const rows = [
+  ['不可达 · 工作区停用<br><code>WORKSPACE_DISABLED</code>', 'Now yours — the coordinator can’t take messages', `Its workspace mac-mini is disabled, so it can’t take messages.`, `${pill('Enable mac-mini')} ${lk('Change workspace…')}`, 'You · Fix it myself'],
+  ['不可达 · 工作区在回收站<br><code>WORKSPACE_TRASHED</code>', '同上', 'Its workspace mac-mini is in Trash, so it can’t take messages.', `${pill('Restore mac-mini')} ${lk('Change workspace…')}`, '同上'],
+  ['不可达 · 工作区没绑 runner<br><code>WORKSPACE_UNBOUND</code>', '同上', 'Its workspace mac-mini isn’t bound to a runner.', `${pill('Bind mac-mini to a runner')} ${lk('Change workspace…')}`, '同上'],
+  ['不可达 · 只是挂了（runner 离线 / 提供方拒绝，会话未结束）', '同上', 'Its runner is offline. Ask again comes back here as soon as it is.', `${spill('Change workspace…')} <span class="new">无 fix 按钮——等它或换地方</span>`, '同上（此时 You 行在视觉上成为主门）'],
+  ['会话已结束<br><code>COORDINATOR_ENDED</code>', 'Now yours — the coordinator conversation ended', 'Its conversation was completed.', `${pill('Start a new coordinator')}`, '同上'],
+  ['项目没有协调者<br><code>NO_COORDINATOR</code>', 'Now yours — this project has no coordinator', 'This project isn’t coordinated.', `${pill('Set up a coordinator…')} <span class="new">新标签：打开项目页的协调者卡</span>`, '同上'],
+  ['可达 · 钟到点<br><code>ESCALATED</code>', 'Now yours — the coordinator didn’t get to it', 'Reachable. It had this for 2h 56m and didn’t get to it.', `${pill('Ask the coordinator again')} ${lk('or Chat about this first')}`, 'You · Fix it myself'],
+  ['可达 · 协调者主动交回<br><code>HANDED_OVER</code>', 'Now yours — the coordinator handed it over', '“&lt;its note&gt;” — it handed this to you on purpose.', `${spill('Ask the coordinator again')} <span class="new">降为次（见 D4）</span>`, `<b>You 行在前</b>：${pill('Fix it myself')}`],
+];
+document.getElementById('matrix').innerHTML =
+  `<tr><th style="width:230px">此刻的原因（实时读数）</th><th style="width:310px">标题</th><th>「The coordinator」行的状态句</th><th style="width:360px">该行的按钮</th><th style="width:230px">「You」行</th></tr>` +
+  rows.map((r) => `<tr>${r.map((c, i) => `<td class="${i ? 'c' : ''}">${c}</td>`).join('')}</tr>`).join('') +
+  `<tr><td colspan="5" style="color:var(--text-2)">所有情形：标题右侧只有一个钟（<code>waiting</code> = 自 <code>waitingSince</code> 起）；「Closes by itself once this work lands…」一行只画在有任务分支的集成类事项上；收尾组（Mark as handled / Cancel task）不变。CHAIN_LIMIT 是 <code>TASK_FAILED</code> 类，不在本板范围。</td></tr>`;
+
+// =============== decisions ===============
+const DEC = [
+  ['D1 · (a) 把协调者请回来之后，谁把这条交回去？',
+   ['A · 两步', `按 <b>Enable mac-mini</b>（或 Change workspace…）只修协调者；卡片原地翻成 (b)，<b>Ask the coordinator again</b> 成为主门，再按一次交回。不新增服务端写；启用/换工作区是项目级动作（影响项目里所有事项），和「这一条交回去」分开更诚实。`, true],
+   ['B · 一步', `一个按钮 <b>Enable mac-mini and hand this back</b>：启用后紧接着 returnToCoordinator。少一次按，但需要一个组合写（或客户端串两次请求，中间失败时卡片状态难说清），且同项目其它升级事项不会一起交回。`]],
+  ['D2 · 「Chat about this」：控件还是一行字？',
+   ['A · 按可达性变形', `(a) 不画按钮——第一行的状态句已经说「can’t take messages」；(b) 作为 Ask again 旁的 link「or Chat about this first」（带一句话再交回）。卡上不再有灰按钮。`, true],
+   ['B · 保留今天的按钮', `每张卡都有「Chat about this」，(a) 时变灰并附拒绝句。好处是位置恒定；代价是 (a) 时同一事实说两遍、一个按不了的控件。`]],
+  ['D3 · 只留一个钟，留哪个？',
+   ['A · 总等待 waiting 3h 1m', `自 <code>waitingSince</code> 起的总时长，与项目页行、协调者手里时的口径一致；「after 2h 56m with the coordinator」进 Details。`, true],
+   ['B · 到你手里多久 yours for 5m', `强调「你刚接手」，但项目页的行（今天写 <code>escalated 5m ago</code>）与协调者阶段的钟口径不同，跨状态读会跳。`]],
+  ['D4 · 协调者「主动交回」（HANDED_OVER）时谁在前？',
+   ['A · You 在前', `它是有意交给你的（带 note），把 Ask again 放主门等于把球踢回去。Fix it myself 为主，Ask again 降为次。钟到点（ESCALATED）仍是 Ask again 在前。`, true],
+   ['B · 统一 Ask again 在前', `所有可达情形同一顺序，规则更简单；但与 note 的意图相反，容易来回弹。`]],
+];
+document.getElementById('decisions').innerHTML = DEC.map(([h, ...opts]) =>
+  `<div class="b-dcard"><h3>${h}</h3>${opts.map(([t, body, rec]) => `<div class="b-opt${rec ? ' rec' : ''}"><b>${t}</b>${rec ? '<span class="tag">推荐</span>' : ''}<br>${body}</div>`).join('')}</div>`).join('') +
+  `<div class="b-dcard" style="grid-column:1 / -1"><h3>推荐合起来</h3><div class="b-opt rec">D1 = A，D2 = A，D3 = A，D4 = A。全部只改客户端：web 先落，Apple / Android 随 parity 测试跟上；服务端无新接口。你可以只回「按推荐」或逐条改。</div></div>`;
+</script>
+</body>
+</html>

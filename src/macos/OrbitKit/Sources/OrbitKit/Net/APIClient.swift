@@ -611,6 +611,13 @@ public final class APIClient: @unchecked Sendable {
         return list.guests
     }
 
+    /// The people the owner has invited before, to any session, for the email field: newest first,
+    /// those already in this session left out. Web parity: `getSessionGuestSuggestions`.
+    public func sessionGuestSuggestions(_ sessionID: String) async throws -> [SessionGuestSuggestion] {
+        let list: SessionGuestSuggestionList = try await get("sessions/\(sessionID)/guests/suggestions")
+        return list.people
+    }
+
     /// Invite an Orbit account by the email it signs in with; answers the people as they now stand.
     /// Web parity: `inviteSessionGuest`.
     public func inviteSessionGuest(_ sessionID: String, email: String) async throws -> [SessionGuestPerson] {
@@ -667,12 +674,38 @@ public final class APIClient: @unchecked Sendable {
         try await get("guest-sessions/\(sessionID)/events/\(seq)")
     }
 
-    /// A guest's message — text only, a turn of the owner's session, which restarts it when it has
-    /// ended. Web parity: `sendGuestTurn`.
+    /// The bytes of an image or file a turn of the shared session carried: the owner's
+    /// `attachments/:id` answers a guest 404. Web parity: `fetchGuestAttachmentObjectUrl`.
+    public func guestAttachment(_ sessionID: String, id: String) async throws -> Data {
+        try await send(makeRequest("guest-sessions/\(sessionID)/attachments/\(id)", method: "GET",
+                                   body: Optional<Empty>.none))
+    }
+
+    /// Upload one image for a guest's next message (`POST /guest-sessions/:id/attachments`): PNG,
+    /// JPEG, WebP or GIF, at most 5 MB. Answers the attachment id `sendGuestTurn` carries; a 404 is
+    /// "no longer shared".
     @discardableResult
-    public func sendGuestTurn(_ sessionID: String, clientTurnId: String, content: String) async throws -> GuestTurnAccepted {
+    public func uploadGuestAttachment(_ sessionID: String, filename: String, mimeType: String,
+                                      data: Data) async throws -> String {
+        let boundary = "orbit.\(UUID().uuidString)"
+        var req = try makeRequest("guest-sessions/\(sessionID)/attachments", method: "POST",
+                                  body: Optional<Empty>.none)
+        req.setValue("multipart/form-data; boundary=\(boundary)", forHTTPHeaderField: "Content-Type")
+        req.httpBody = Multipart.body(boundary: boundary, fieldName: "file",
+                                      filename: filename, mimeType: mimeType, fileData: data)
+        let respData = try await send(req)
+        return try decoder.decode(AttachmentRef.self, from: respData).id
+    }
+
+    /// A guest's message — text, images uploaded through `uploadGuestAttachment`, or both — a turn of
+    /// the owner's session, which restarts it when it has ended. No images omits `attachmentIds`.
+    /// Web parity: `sendGuestTurn`.
+    @discardableResult
+    public func sendGuestTurn(_ sessionID: String, clientTurnId: String, content: String,
+                              attachmentIds: [String] = []) async throws -> GuestTurnAccepted {
         try await post("guest-sessions/\(sessionID)/turns",
-                       body: GuestTurnRequest(clientTurnId: clientTurnId, content: content))
+                       body: GuestTurnRequest(clientTurnId: clientTurnId, content: content,
+                                              attachmentIds: attachmentIds.isEmpty ? nil : attachmentIds))
     }
 
     // MARK: personal access tokens — listed and revoked here, issued only on the web
@@ -934,9 +967,9 @@ public final class APIClient: @unchecked Sendable {
     /// "Not yet…" on the coordinator's request to record the project done: the request is ended and
     /// the owner's note goes to the coordinator conversation with the card's facts.
     public func declineDoneRequest(projectID: String, itemID: String,
-                                   note: String) async throws -> ProjectDoneRequestDeclined {
+                                   note: String, sendAsWritten: Bool = false) async throws -> ProjectDoneRequestDeclined {
         try await post("projects/\(projectID)/done-requests/\(itemID)/decline",
-                       body: ProjectDoneDeclineBody(note: note))
+                       body: ProjectDoneDeclineBody(note: note, sendAsWritten: sendAsWritten))
     }
 
     // MARK: the done card's follow-ups (`ProjectDoneFollowUps.swift`)
@@ -994,8 +1027,16 @@ public final class APIClient: @unchecked Sendable {
         try await post("owner-requests/\(id)/done", body: body)
     }
 
-    public func declineOwnerRequest(_ id: String, reason: String) async throws -> OwnerRequest {
-        try await post("owner-requests/\(id)/decline", body: OwnerRequestDeclineBody(reason: reason))
+    /// A condition's 30-day question answered by its option (0 Keep waiting, 1 Stop). The answer is a kind
+    /// `OwnerRequest` does not read, so it is taken as it comes and the list is read again.
+    @discardableResult
+    public func answerConditionItem(_ id: String, option: Int) async throws -> JSONValue {
+        try await post("owner-requests/\(id)/done", body: OwnerRequestDoneBody(option: option))
+    }
+
+    public func declineOwnerRequest(_ id: String, reason: String, sendAsWritten: Bool = false) async throws -> OwnerRequest {
+        try await post("owner-requests/\(id)/decline",
+                       body: OwnerRequestDeclineBody(reason: reason, sendAsWritten: sendAsWritten))
     }
 
     /// A WIKI_CREATE card's Create wiki (docs/wiki-explicit-creation-design.md §3.6): the owner's door that makes the
@@ -1230,6 +1271,14 @@ public final class APIClient: @unchecked Sendable {
     /// silent generation ends and the next one is queued. Answers the integration view read again.
     public func retryIntegrationJob(_ projectID: String, jobID: String) async throws -> ProjectIntegrationView {
         try await postEmpty("projects/\(projectID)/integration/jobs/\(jobID)/retry")
+    }
+
+    /// The owner's "Land without the check" on a landing in flight (§2.4 J-S5): the server stops it
+    /// and lands it again with the landing check not run, recorded as skipped by the owner. The
+    /// answer is not read: the card redraws from the integration view read again.
+    public func skipLandingCheck(_ projectID: String, taskID: String) async throws {
+        try await postRaw("projects/\(projectID)/tasks/\(taskID)/integration/skip-merge-check",
+                          body: ["reason": ProjectPage.landingSkipCheckReason])
     }
 
     /// One page of the project's top-level tasks, newest first.
@@ -1884,6 +1933,43 @@ public final class APIClient: @unchecked Sendable {
         try await getCancellable("runners/\(runnerID)/dir-probe", query: [URLQueryItem(name: "path", value: path)])
     }
 
+    // MARK: GitHub (docs/github-workspace-design.md §5.2, §5.3)
+
+    /// `GET /integrations/github`: whether the deployment has the App, and the account's connection.
+    public func githubIntegration() async throws -> GithubIntegration {
+        try await get("integrations/github")
+    }
+
+    /// `GET /integrations/github/repos?q=`: the repositories the person can pick, most recently pushed first.
+    public func githubRepositories(query: String) async throws -> GithubRepositoryPage {
+        try await getCancellable("integrations/github/repos",
+                                 query: query.isEmpty ? [] : [URLQueryItem(name: "q", value: query)])
+    }
+
+    /// `GET /integrations/github/repos/:id/branches`: asked only once Other branch is opened.
+    public func githubBranches(repoID: Int64) async throws -> GithubBranches {
+        try await getCancellable("integrations/github/repos/\(repoID)/branches")
+    }
+
+    /// `GET /integrations/github/start?return=`: where to send the person to sign in to GitHub. `returnTo` is the
+    /// Orbit path the callback comes back to.
+    public func githubStart(returnTo: String) async throws -> URL {
+        let start: GithubStart = try await get("integrations/github/start",
+                                               query: [URLQueryItem(name: "return", value: returnTo)])
+        guard let url = URL(string: start.authorizationUrl) else { throw URLError(.badURL) }
+        return url
+    }
+
+    /// `DELETE /integrations/github`: forget the connection; answers the view as it now stands.
+    public func disconnectGithub() async throws -> GithubIntegration {
+        try await delete("integrations/github")
+    }
+
+    /// `POST /workspaces/:id/clone/retry`: a FAILED clone goes back to PENDING, and the runner is told.
+    public func retryClone(workspaceID: String) async throws -> CloneRetryAnswer {
+        try await post("workspaces/\(workspaceID)/clone/retry", body: [String: String]())
+    }
+
     // MARK: managed runner (docs/managed-runner-design.md, "Server and three client interfaces")
 
     /// `GET /api/auth/capabilities`. A server from before the feature answers 404: nil, which is no
@@ -1924,8 +2010,8 @@ public final class APIClient: @unchecked Sendable {
         try await post("runners/\(runnerID)/codex-rate-limit-reset", body: request)
     }
     public func updateRunner(_ id: String, _ req: UpdateRunnerRequest) async throws -> Runner { try await patch("runners/\(id)", body: req) }
-    /// Persist the list's drag order: `ids` is every runner, in order. Answers with the list as the
-    /// server now orders it (omitted runners appended, foreign ids dropped).
+    /// Persist the list's drag order. The server answers with the full order, with omitted runners
+    /// appended and foreign ids dropped.
     @discardableResult
     public func reorderRunners(_ ids: [String]) async throws -> [Runner] {
         try await post("runners/reorder", body: ReorderRunnersRequest(ids: ids))
@@ -2206,14 +2292,6 @@ public final class APIClient: @unchecked Sendable {
         _ = try await postRaw("sessions/\(sessionID)/diff/refresh", body: Optional<Empty>.none)
     }
 
-    // MARK: recap
-
-    /// Write this session's recap again now, past the settle hooks' two-minute window — the
-    /// conversation's Recap card's refresh. Answers once the pass has finished, with what it did.
-    public func refreshRecap(sessionID: String) async throws -> RecapOutcome {
-        try await postEmpty("sessions/\(sessionID)/recap")
-    }
-
     public func commit(sessionID: String) async throws {
         _ = try await postRaw("sessions/\(sessionID)/commit", body: Optional<Empty>.none)
     }
@@ -2324,6 +2402,11 @@ public final class APIClient: @unchecked Sendable {
     /// The inspector: the schedule, its last runs, findings, this month's use, history and pending cards.
     public func schedule(_ id: String) async throws -> ScheduleDetailResponse {
         try await get("schedules/\(id)")
+    }
+
+    /// `GET /conditions/:id`: a condition's state, newest samples and events (docs/condition-triggers-design.md §8).
+    public func condition(_ id: String) async throws -> ConditionView {
+        try await get("conditions/\(id)")
     }
 
     public func scheduleRuns(_ id: String, limit: Int = 20) async throws -> [ScheduleRunView] {

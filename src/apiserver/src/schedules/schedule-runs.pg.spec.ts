@@ -39,6 +39,7 @@ import {
   scheduleRunDisallowedTools,
   scheduleRunMode,
 } from './schedule-access';
+import type { ScheduleAlert } from './schedule-attention';
 import { SessionsScheduleRunPort } from './schedule-run-sessions';
 import {
   SCHEDULE_APPROVAL_TIMEOUT_MS,
@@ -63,6 +64,7 @@ let schedules: SchedulesService;
 let runs: ScheduleRunsService;
 let calls: Array<{ op: 'interrupt' | 'complete' | 'end'; sessionId: string }> = [];
 let opened: OpenRunSession[] = [];
+let pushed: ScheduleAlert[] = [];
 /** How the next opens fail: not at all, before anything is written (a refusal or a fault), or after the INSERT. */
 let failOpen: false | 'fault' | 'refuse' | 'after' = false;
 let failEnd = false;
@@ -90,6 +92,7 @@ before(async () => {
   const sessionsService = new SessionsService(db as never, quiet as never, quiet as never);
   const real = new SessionsScheduleRunPort(sessionsService);
   const port: ScheduleRunSessionPort = {
+    land: (owner, sessionId) => real.land(owner, sessionId),
     open: async (input) => {
       if (failOpen === 'fault') throw new Error('connection reset');
       if (failOpen === 'refuse') throw new BadRequestException('pick a workspace bound to a runner');
@@ -110,7 +113,7 @@ before(async () => {
     },
   };
   schedules = new SchedulesService(db as unknown as PrismaService, clock);
-  runs = new ScheduleRunsService(db as unknown as PrismaService, port, clock);
+  runs = new ScheduleRunsService(db as unknown as PrismaService, port, clock, { notify: async (alert) => void pushed.push(alert) });
 });
 
 after(async () => {
@@ -225,6 +228,7 @@ async function refusedWith(promise: Promise<unknown>, expected: string): Promise
 function reset(): void {
   calls = [];
   opened = [];
+  pushed = [];
   failOpen = false;
   failEnd = false;
 }
@@ -895,15 +899,15 @@ test('§5.2 a managed runner asleep is not absent: the run opens its session, wh
   reset();
   at('2026-11-14T00:00:00Z');
   const w = await world('managed', { runnerStatus: RunnerStatus.OFFLINE });
-  // The managed runner's default workspace is another one on the same machine: the default's first-session runtime
-  // preflight is not what this test is about.
-  const home = await db.workspace.create({ data: { ownerId: w.ownerId, runnerId: w.runnerId, name: 'managed-home', enabled: true } });
   await db.managedRunner.create({
     data: {
-      ownerId: w.ownerId, runnerId: w.runnerId, defaultWorkspaceId: home.id,
+      ownerId: w.ownerId, runnerId: w.runnerId,
       clusterKey: 'lab', namespace: `ns-${RUN}`, pvcName: `mr-data-${w.runnerId}`,
     },
   });
+  // Asleep after it had been ready: its last report has the runtime the run starts on signed in, so the managed
+  // first-session preflight (a runtime the runner has ready) is met; that preflight is not what this test is about.
+  await db.runner.update({ where: { id: w.runnerId }, data: { engines: [{ engine: 'claude', installed: true, auth: 'yes' }] } });
   const s = await created(w);
   at('2026-11-14T02:00:00Z');
   const { started } = await fireAndStart(s.id);
@@ -1195,3 +1199,145 @@ test('§8.4 Stop this run: CANCELLED (CANCELLED_BY_OWNER), its session interrupt
   await refusedWith(runs.stopRun(w.owner, run.id), 'SCHEDULE_RUN_NOT_ACTIVE');
 });
 
+
+// LAND uses the real SessionsService merge door; the runner's result is represented by its durable receipt.
+async function landFixture(label: string) {
+  reset();
+  at('2026-11-14T00:00:00Z');
+  const w = await world(label);
+  await db.workspace.update({ where: { id: w.workspaceId }, data: { enableWorktree: true } });
+  const result = await runningRun(w, { accessLevel: 'LAND' });
+  await db.session.update({ where: { id: result.sessionId }, data: {
+    assignedRunnerId: w.runnerId, isolationStatus: 'worktree', baseSha: 'a'.repeat(40), branchSha: 'b'.repeat(40),
+  } });
+  return { w, ...result };
+}
+
+test('LAND: reports wait for the turn, then queue the ordinary merge check and record the landed SHA once', { skip }, async () => {
+  const { w, run, sessionId } = await landFixture('land-commits');
+  assert.match(opened.at(-1)!.prompt, /Commit your work on your branch. Do not open a PR/);
+  await runs.report(w.ownerId, sessionId, { outcome: 'CHANGED', key: 'engine@next', summary: 'Bumped the engine.' });
+  await runs.landReportedRuns();
+  assert.equal((await runOf(run.id)).landingStatus, 'WAITING', 'no merge inside the turn');
+  assert.equal((await db.session.findUniqueOrThrow({ where: { id: sessionId } })).mergeStatus, null);
+  await db.session.update({ where: { id: sessionId }, data: { status: 'AWAITING_INPUT' } });
+  await Promise.all([runs.landReportedRuns(), runs.landReportedRuns()]);
+  const queued = await db.session.findUniqueOrThrow({ where: { id: sessionId } });
+  assert.equal(queued.mergeStatus, 'pending', 'the real Merge button path queued it');
+  assert.equal(queued.mergeTarget, 'main');
+  assert.ok(queued.mergeOperationId);
+  assert.equal((await runOf(run.id)).landingStatus, 'MERGING');
+  assert.equal((await runOf(run.id)).landedSha, null, 'queued is not landed');
+  await db.sessionMergeReceipt.create({ data: {
+    ownerId: w.ownerId, sessionId, result: 'MERGED', sourceBranch: queued.branch!, sourceSha: 'b'.repeat(40),
+    targetBranch: 'main', targetShaBefore: 'a'.repeat(40), targetShaAfter: 'c'.repeat(40),
+    recordedBy: 'RUNNER', idempotencyKey: `land-${run.id}`,
+  } });
+  await db.session.update({ where: { id: sessionId }, data: { mergeStatus: 'merged' } });
+  await runs.landReportedRuns();
+  const landed = await runOf(run.id);
+  assert.equal(landed.landingStatus, 'LANDED');
+  assert.equal(landed.landedSha, 'c'.repeat(40));
+  assert.match(landed.summary!, /Landed on main: c{40}\./);
+  await runs.landReportedRuns();
+  assert.equal((await runOf(run.id)).summary, landed.summary, 'replay does not append again');
+});
+
+test('LAND: NO_CHANGE with no commits lands nothing and can complete its session', { skip }, async () => {
+  const { w, run, sessionId } = await landFixture('land-no-commits');
+  await db.session.update({ where: { id: sessionId }, data: { branchSha: 'a'.repeat(40) } });
+  await runs.report(w.ownerId, sessionId, { outcome: 'NO_CHANGE', summary: 'Already current.' });
+  assert.ok(!(await runs.completeNoChangeSessions()).includes(sessionId));
+  await db.session.update({ where: { id: sessionId }, data: { status: 'AWAITING_INPUT' } });
+  await runs.landReportedRuns();
+  assert.equal((await runOf(run.id)).landingStatus, 'NO_COMMITS');
+  assert.equal((await runOf(run.id)).landedSha, null);
+  assert.equal((await db.session.findUniqueOrThrow({ where: { id: sessionId } })).mergeStatus, null);
+  assert.ok((await runs.completeNoChangeSessions()).includes(sessionId));
+});
+
+test('LAND: a merge refusal or red merge check fails the run and waits on the owner with its reason', { skip }, async () => {
+  for (const refusal of [true, false]) {
+    const { w, run, sessionId } = await landFixture(`land-refused-${refusal}`);
+    await runs.report(w.ownerId, sessionId, { outcome: 'NO_CHANGE', summary: 'The version changed.' });
+    await db.session.update({ where: { id: sessionId }, data: {
+      status: 'AWAITING_INPUT', ...(refusal ? { isolationStatus: 'shared-nogit' } : {}),
+    } });
+    if (!refusal) {
+      await runs.landReportedRuns();
+      await db.session.update({ where: { id: sessionId }, data: { mergeStatus: 'error', mergeError: 'Merge check failed: tests are red.' } });
+    }
+    await runs.landReportedRuns();
+    const failed = await runOf(run.id);
+    assert.equal(failed.state, 'FAILED');
+    assert.equal(failed.failureReason, 'LANDING_FAILED');
+    assert.equal(pushed.filter((a) => a.kind === 'FAILED' && a.runId === run.id).length, 1);
+    assert.equal(failed.landedSha, null);
+    const reason = refusal ? 'session has no worktree branch to merge' : 'Merge check failed: tests are red.';
+    assert.ok(failed.summary!.includes(reason));
+    const item = await db.ownerRequest.findFirstOrThrow({ where: { scheduleRunId: run.id, kind: 'SCHEDULE_FAILED', state: 'PENDING' } });
+    assert.ok(item.why!.includes(reason.replace(/\.$/, '')), item.why!);
+    assert.equal((await scheduleOf(run.scheduleId)).consecutiveFailures, 1);
+    await runs.landReportedRuns();
+    assert.equal((await scheduleOf(run.scheduleId)).consecutiveFailures, 1);
+  }
+});
+
+test('LAND: a FAILED report or a run that hit its limit never lands', { skip }, async () => {
+  for (const limit of [false, true]) {
+    const { w, run, sessionId } = await landFixture(`land-failed-${limit}`);
+    if (limit) await runs.fail(run.id, 'RUN_LIMIT', { sessionId });
+    else await runs.report(w.ownerId, sessionId, { outcome: 'FAILED', summary: 'Could not validate.' });
+    await db.session.update({ where: { id: sessionId }, data: { status: 'AWAITING_INPUT' } });
+    await runs.landReportedRuns();
+    assert.equal((await runOf(run.id)).state, 'FAILED');
+    assert.equal((await runOf(run.id)).landedSha, null);
+    assert.equal((await db.session.findUniqueOrThrow({ where: { id: sessionId } })).mergeStatus, null);
+  }
+});
+
+test('LAND: start requires a repository and enabled worktrees', { skip }, async () => {
+  for (const repo of [false, true]) {
+    reset();
+    at('2026-11-14T00:00:00Z');
+    const w = await world(`land-start-${repo}`, { repo });
+    const s = await created(w, { accessLevel: 'LAND' });
+    at(s.nextDueAt!.toISOString());
+    const { started } = await fireAndStart(s.id);
+    assert.equal(started[0].outcome, 'HELD');
+    assert.equal((await runOf(started[0].runId)).heldReason, repo ? 'WORKTREE_DISABLED' : 'NO_REPOSITORY');
+  }
+});
+
+
+test('LAND: a report does not bypass the working-time limit while the turn is still running', { skip }, async () => {
+  const { w, run, sessionId } = await landFixture('land-limit-after-report');
+  await runs.report(w.ownerId, sessionId, { outcome: 'CHANGED', key: 'early', summary: 'Committed the bump.' });
+  advance(31 * MINUTE);
+  await runs.landReportedRuns();
+  assert.equal((await runOf(run.id)).state, 'FAILED');
+  assert.equal((await runOf(run.id)).failureReason, 'RUN_LIMIT');
+  assert.equal((await runOf(run.id)).landedSha, null);
+  assert.ok(calls.some((c) => c.op === 'interrupt' && c.sessionId === sessionId));
+  assert.equal((await db.session.findUniqueOrThrow({ where: { id: sessionId } })).mergeStatus, null);
+});
+
+test('LAND: a pending landing keeps prior failures and Waiting on you until a confirmed success', { skip }, async () => {
+  const { w, run, sessionId } = await landFixture('land-failure-accounting');
+  await runs.report(w.ownerId, sessionId, { outcome: 'FAILED', summary: 'The check failed.' });
+  assert.equal((await scheduleOf(run.scheduleId)).consecutiveFailures, 1);
+  const prior = await db.ownerRequest.findFirstOrThrow({ where: { scheduleRunId: run.id, kind: 'SCHEDULE_FAILED', state: 'PENDING' } });
+  const next = await runs.runNow(w.owner, run.scheduleId);
+  const second = await runOf(next.id);
+  await delivered(second.sessionId!, clockNow);
+  await runs.report(w.ownerId, second.sessionId!, { outcome: 'NO_CHANGE', summary: 'Already current.' });
+  assert.equal((await scheduleOf(run.scheduleId)).consecutiveFailures, 1, 'the report alone has not succeeded');
+  assert.equal((await db.ownerRequest.findUniqueOrThrow({ where: { id: prior.id } })).state, 'PENDING');
+  await db.session.update({ where: { id: second.sessionId! }, data: {
+    status: 'AWAITING_INPUT', baseSha: 'a'.repeat(40), branchSha: 'a'.repeat(40),
+  } });
+  await runs.landReportedRuns();
+  assert.equal((await runOf(second.id)).landingStatus, 'NO_COMMITS');
+  assert.equal((await scheduleOf(run.scheduleId)).consecutiveFailures, 0);
+  assert.equal((await db.ownerRequest.findUniqueOrThrow({ where: { id: prior.id } })).state, 'WITHDRAWN');
+});

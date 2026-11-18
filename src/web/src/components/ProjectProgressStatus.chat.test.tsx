@@ -6,7 +6,13 @@ import { MemoryRouter, Route, Routes, useLocation } from 'react-router-dom';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import type { OpenItemChat, OpenItemFacts, ProjectOpenItemRow } from '@orbit/shared';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { ItemAsCard, openItemChatBanner, openItemChatContext } from './ProjectProgressStatus';
+import {
+  CHAT_FIRST_LINK,
+  ItemAsCard,
+  openItemChatBanner,
+  openItemChatContext,
+  whoFixesIt,
+} from './ProjectProgressStatus';
 import {
   CHAT_ABOUT_INTENT,
   CHAT_ABOUT_THIS,
@@ -254,9 +260,18 @@ function parse(html: string): Document {
   return new DOMParser().parseFromString(html, 'text/html');
 }
 
-/** The card's chat press, which lives in a row of its own. */
+/** The card's chat press, which lives in a row of its own — or, on the owner exception card
+ *  (board owner-exception-who-fixes, D2 = A), is the link beside Ask again. */
 function chatPress(html: string): HTMLButtonElement | null {
-  return parse(html).querySelector<HTMLButtonElement>('.project-open-item-chat button');
+  return parse(html).querySelector<HTMLButtonElement>(
+    '.project-open-item-chat button, button.project-open-item-chat-first',
+  );
+}
+
+/** The words the chat press wears on a card: "or Chat about this first" beside Ask again on the
+ *  owner exception card, "Chat about this" everywhere else. */
+function chatLabel(row: ProjectOpenItemRow): string {
+  return whoFixesIt(row) ? CHAT_FIRST_LINK : CHAT_ABOUT_THIS;
 }
 
 const LIVE = {
@@ -274,7 +289,7 @@ describe('every exception card carries the conversation about it', () => {
   for (const [what, row] of Object.entries(LIVE)) {
     it(`${what}: a live Chat about this`, () => {
       const press = chatPress(card(row, () => undefined));
-      expect(press?.textContent).toBe(CHAT_ABOUT_THIS);
+      expect(press?.textContent).toBe(chatLabel(row));
       expect(press?.disabled, 'drawn dead').toBe(false);
     });
   }
@@ -289,9 +304,10 @@ describe('every exception card carries the conversation about it', () => {
   });
 
   it('refused with the server’s reason where the message has nowhere to go', () => {
+    // The owner exception card draws no greyed chat (D2 = A): its coordinator row says why.
     const none = card({ ...ESCALATED_TASK, chat: chat({ sessionId: null, stage: 'WITH_OWNER', refusal: 'NO_COORDINATOR' }) });
-    expect(chatPress(none)?.disabled).toBe(true);
-    expect(none).toContain(CHAT_REFUSAL_LABEL.NO_COORDINATOR);
+    expect(chatPress(none)).toBeNull();
+    expect(none).not.toContain(CHAT_ABOUT_THIS);
 
     const down = card({ ...LANDING, chat: chat({ refusal: 'COORDINATOR_UNAVAILABLE' }) }, () => undefined);
     expect(chatPress(down)?.disabled, 'a composer of its own does not overrule the server').toBe(true);
@@ -302,17 +318,19 @@ describe('every exception card carries the conversation about it', () => {
     const doors = (row: ProjectOpenItemRow) =>
       [...parse(card(row, () => undefined)).querySelectorAll('.project-open-item-actions > *')]
         .map((door) => door.querySelector<HTMLElement>('button, a')?.textContent?.trim() ?? '');
-    expect(doors(ESCALATED_TASK)).toEqual([
-      'Ask the coordinator again',
-      'Open task session',
-      'Cancel task',
-      'Mark as handled',
-    ]);
+    // The owner exception card (board owner-exception-who-fixes): the doors by who presses them,
+    // and the chat a link beside Ask again rather than a door.
+    const who = (row: ProjectOpenItemRow, group: string) =>
+      [...parse(card(row, () => undefined)).querySelectorAll(`${group} button, ${group} a`)]
+        .map((press) => press.textContent?.trim() ?? '');
+    expect(who(ESCALATED_TASK, '[data-who="coordinator"]')).toEqual(['Ask the coordinator again', CHAT_FIRST_LINK]);
+    expect(who(ESCALATED_TASK, '[data-who="you"]')).toEqual(['Fix it myself']);
+    expect(who(ESCALATED_TASK, '.project-open-item-settled')).toEqual(['Mark as handled', 'Cancel task']);
+    expect(who(ESCALATED_PROMOTION, '[data-who="coordinator"]')).toEqual(['Ask the coordinator again', CHAT_FIRST_LINK]);
+    expect(who(ESCALATED_PROMOTION, '[data-who="you"]')).toEqual(['Review']);
+    expect(who(ESCALATED_PROMOTION, '.project-open-item-settled')).toEqual(['Mark as handled']);
     expect(doors(LANDING)).toEqual(['Open task session', 'Retry', 'Open coordinator', 'Cancel task']);
-    // The candidate's item is the way back to the coordinator and the merge card's way in — no
-    // retry, no merge, here, and the chat beside them rather than among them.
-    expect(doors(ESCALATED_PROMOTION)).toEqual(['Ask the coordinator again', 'Review', 'Mark as handled']);
-    for (const row of Object.values(LIVE)) {
+    for (const row of Object.values(LIVE).filter((r) => !whoFixesIt(r))) {
       expect(doors(row)).not.toContain(CHAT_ABOUT_THIS);
     }
   });
@@ -342,7 +360,9 @@ describe('what the press does', () => {
   }
 
   async function pressChat(): Promise<void> {
-    const press = host.querySelector<HTMLButtonElement>('.project-open-item-chat button');
+    const press = host.querySelector<HTMLButtonElement>(
+      '.project-open-item-chat button, button.project-open-item-chat-first',
+    );
     if (!press) throw new Error('no Chat about this');
     await act(async () => press.click());
   }
@@ -556,9 +576,11 @@ describe('from a server that predates the chat', () => {
     });
     // In the coordinator conversation the host's composer is where it goes; anywhere else an item
     // with no address says there is none.
+    // On the owner exception card a chat with nowhere to go is not drawn at all (D2 = A).
     expect(chatPress(card(old(ESCALATED_TASK), () => undefined))?.disabled).toBe(false);
     const nowhere = card(old(ESCALATED_TASK));
-    expect(chatPress(nowhere)?.disabled).toBe(true);
-    expect(nowhere).toContain(CHAT_REFUSAL_LABEL.NO_COORDINATOR);
+    expect(chatPress(nowhere)).toBeNull();
+    const nowhereLanding = card(old(LANDING));
+    expect(chatPress(nowhereLanding)?.disabled).toBe(false);
   });
 });

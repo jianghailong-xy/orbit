@@ -14,17 +14,22 @@ const machineResourcesCapabilityV1 = "machine-resources/v1"
 // MachineResources mirrors @orbit/shared RunnerResources. A figure the platform has no answer for is left out: the
 // page shows a dash for it, never a zero.
 type MachineResources struct {
-	// CPUPercent is the whole machine's CPU in use since the previous reading, 0–100. Left out on the first reading
-	// of a platform that measures it as a difference (Linux), and where there is no answer.
+	// CPUPercent is the whole machine's CPU in use since the previous reading, 0–100; in a container, the share of
+	// the container's CPU limit. Left out on the first reading of a platform that measures it as a difference
+	// (Linux), and where there is no answer.
 	CPUPercent *float64 `json:"cpuPercent,omitempty"`
-	CPUCores   int      `json:"cpuCores"`
-	// Load1 is the one-minute load average.
+	// CPUCores is the machine's cores; in a container, its CPU limit rounded up.
+	CPUCores int `json:"cpuCores"`
+	// Load1 is the one-minute load average. Left out in a container: the kernel keeps it only for the machine.
 	Load1 *float64 `json:"load1,omitempty"`
 	// MemAvailableBytes is what the system can hand out without swapping: page cache it can drop counts as available.
+	// In a container, both are the container's: its memory limit, and what is left of it.
 	MemTotalBytes     *uint64 `json:"memTotalBytes,omitempty"`
 	MemAvailableBytes *uint64 `json:"memAvailableBytes,omitempty"`
 	// The disk the machine page has always shown: the fullest filesystem among the agents' working directories
 	// (as the heartbeat's agentDirProbes measure them), else the one holding the repos root.
+	// A managed runner on Docker reports its volume instead, once the control plane has sent its storage budget
+	// (checkoutStorage.diskResources).
 	DiskTotalBytes *uint64 `json:"diskTotalBytes,omitempty"`
 	DiskFreeBytes  *uint64 `json:"diskFreeBytes,omitempty"`
 }

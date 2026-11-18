@@ -385,7 +385,8 @@ public enum ComposerLogic {
     public static func makeTurn(clientTurnId: String, text: String, shell: Bool,
                                 attachmentIds: [String], queueForNextTurn: Bool = false,
                                 wikiContext: WikiChatContext? = nil,
-                                skipTranslation: Bool = false) -> SessionTurnRequest {
+                                skipTranslation: Bool = false,
+                                optimizedTranslation: String? = nil) -> SessionTurnRequest {
         SessionTurnRequest(clientTurnId: clientTurnId,
                            content: text,
                            kind: shell ? "shell" : "message",
@@ -393,7 +394,8 @@ public enum ComposerLogic {
                            intent: queueForNextTurn ? "NEXT_TURN" : nil,
                            wikiContext: wikiContext,
                            // Only ever `true` or absent: a body without it is what every send was.
-                           skipTranslation: skipTranslation ? true : nil)
+                           skipTranslation: skipTranslation ? true : nil,
+                           optimizedTranslation: optimizedTranslation)
     }
 
     /// Split a composer draft into the text to send and whether it's a raw shell command. A
@@ -427,6 +429,16 @@ public enum ComposerLogic {
               SubagentFinishedText.parse(bubble.text) == nil else { return nil }
         let body = bubble.text.trimmingCharacters(in: .whitespacesAndNewlines)
         return body.isEmpty ? nil : body
+    }
+
+    /// What Withdraw hands back to the composer: the words the reader wrote, not the English a
+    /// translated message delivered (Settings › Translation), as the tray row shows them
+    /// (`PendingTray.text(of:)`). Nil wherever `restorableText` is.
+    public static func withdrawnText(of bubble: UserBubble) -> String? {
+        guard let delivered = restorableText(of: bubble) else { return nil }
+        let typed = SessionTranslation.shownUserText(bubble.text, bubble.translation, flipped: false)
+            .trimmingCharacters(in: .whitespacesAndNewlines)
+        return typed.isEmpty ? delivered : typed
     }
 }
 

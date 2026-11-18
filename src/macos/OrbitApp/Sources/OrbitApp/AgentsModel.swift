@@ -382,7 +382,7 @@ final class AgentsModel {
     /// snapshot, so the page and the app's tick do not each read the same list.
     func adoptRunnerSnapshot(_ runners: [Runner]) {
         let order = runners.map(\.id)
-        let names = Dictionary(runners.map { ($0.id, $0.displayName ?? $0.name) },
+        let names = Dictionary(runners.map { ($0.id, RunnerPageFormat.displayName($0)) },
                                uniquingKeysWith: { a, _ in a })
         let online = Dictionary(runners.compactMap { runner in
             WorkspaceRunnerAvailabilityLogic.onlineValue(
@@ -407,11 +407,18 @@ final class AgentsModel {
         updateMachinesToSetUp()
     }
 
+    private var managedStatus: ManagedRunnerStatus?
+
+    func adoptManagedStatus(_ status: ManagedRunnerStatus?) {
+        managedStatus = status
+        updateMachinesToSetUp()
+    }
+
     private func updateMachinesToSetUp() {
         guard workspacesAnswered else { return }
-        let machines = AgentListLogic.machinesToSetUp(runners: runnerRows, agents: items)
+        let machines = AgentListLogic.machinesToSetUp(runners: runnerRows, agents: items, managedStatus: managedStatus)
         if machines != machinesToSetUp { machinesToSetUp = machines }
-        let first = runnerRows.first(where: AgentListLogic.isOnline)?.id
+        let first = runnerRows.first { AgentListLogic.isOnline($0) || ManagedRunnerLogic.managedSetupState(runnerID: $0.id, status: managedStatus) != nil }?.id
         if first != firstOnlineMachine { firstOnlineMachine = first }
     }
 

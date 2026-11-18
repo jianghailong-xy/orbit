@@ -35,6 +35,7 @@ import {
   type SubagentPoolMember,
   type SubagentProvider,
   type SubagentRoutingDecision,
+  type SubagentRoutingInput,
 } from '../tasks/model-routing';
 import { engineState, fullestWindow, taskRouteReads } from '../tasks/task-route-decision';
 
@@ -94,17 +95,38 @@ function catalogPrices(preset: ProviderPreset | undefined, catalog: RunnerModelC
  */
 export async function planSubagentRoute(
   db: Prisma.TransactionClient,
-  args: {
-    ownerId: string;
-    workspaceId: string | null;
-    runnerId: string | null;
-    dto: SubagentRunCreateRequest;
-    parent: { engine: string; provider: string; model: string; effort: string | null };
-    /** Pool members' quota, as dispatch reads it (QueueService.accountPool); absent, every member reads unknown. */
-    planUsage?: SubagentPlanUsageReader | null;
-    now?: Date;
-  },
+  args: SubagentRouteArgs,
 ): Promise<SubagentRoutingDecision> {
+  return routeSubagent(await subagentRouteInput(db, args));
+}
+
+export interface SubagentRouteArgs {
+  ownerId: string;
+  /** The workspace and runner the SubAgent runs on: the parent's, or a remote SubAgent's target (§10.3). */
+  workspaceId: string | null;
+  runnerId: string | null;
+  dto: SubagentRunCreateRequest;
+  parent: { engine: string; provider: string; model: string; effort: string | null };
+  /** Pool members' quota, as dispatch reads it (QueueService.accountPool); absent, every member reads unknown. */
+  planUsage?: SubagentPlanUsageReader | null;
+  now?: Date;
+  /** routeSubagent's `runnerLabel` and `strictNamedModel`, which a remote SubAgent sets. */
+  runnerLabel?: string;
+  strictNamedModel?: boolean;
+}
+
+/** A built-in provider's credential, as the region check reads it: the engine's own sign-in, OpenCode's own
+ *  configuration, or DeepSeek Harness's default key, which is DeepSeek's. */
+function builtinCredential(slug: AgentProvider): SubagentProvider['credential'] {
+  if (isLoginEngine(slug)) return { kind: 'login', engine: slug };
+  return slug === AgentProvider.OPENCODE ? { kind: 'opencode' } : { kind: 'key', presetSlug: null };
+}
+
+/** What planSubagentRoute hands routeSubagent, read the same way: for a remote SubAgent's own checks (§10.3). */
+export async function subagentRouteInput(
+  db: Prisma.TransactionClient,
+  args: SubagentRouteArgs,
+): Promise<SubagentRoutingInput> {
   const { ownerId, dto } = args;
   const reads = taskRouteReads(db as unknown as PrismaService, ownerId, args.now ?? new Date());
   const owner = await reads.owner();
@@ -134,6 +156,7 @@ export async function planSubagentRoute(
     // A sign-in spends its subscription; OpenCode's own config and DeepSeek Harness's default key are billed per token.
     billing: isLoginEngine(slug) ? 'subscription' : 'key',
     inScope: true,
+    credential: builtinCredential(slug),
     engines: [{ engine: slug }],
     ...(states[slug] ? { account: { quota: states[slug].quota ?? null, paused: states[slug].paused === true } } : {}),
   }));
@@ -144,7 +167,7 @@ export async function planSubagentRoute(
   const mode = agent?.modelRoutingOptimizeFor;
   const optimizeFor: ModelRoutingOptimizeFor = mode === 'balance' || mode === 'intelligence' ? mode : 'cost';
   const level = (value: unknown) => (['S', 'M', 'L', 'XL'] as const).find((entry) => entry === value) ?? null;
-  return routeSubagent({
+  return {
     type: dto.type,
     definitionName: dto.definitionSource === 'builtin' ? dto.type : basename(dto.definitionSource),
     caller: { model: dto.model ?? null, size: level(dto.size), sizeReason: dto.sizeReason ?? null },
@@ -156,7 +179,9 @@ export async function planSubagentRoute(
     engines,
     modelCatalog: catalog,
     runtimeDefaultModels: sanitizeRuntimeDefaultModels(runner?.runtimeDefaultModels),
-  });
+    ...(args.runnerLabel ? { runnerLabel: args.runnerLabel } : {}),
+    ...(args.strictNamedModel ? { strictNamedModel: true } : {}),
+  };
 }
 
 /** A configured provider (a key or an account pool) as routing reads it, with what the Tier column shows of it. */
@@ -207,6 +232,7 @@ async function readConfiguredProviders(
         },
       } : {}),
       inScope: usable.has(row.id),
+      credential,
       engines: runsOn.map((engine, index) => (
         // On its native engine a vendor that IS that engine's endpoint has the engine's own catalogue (ownModelSpace).
         // Priced from models.dev like every other preset (an Anthropic key on Claude Code, an OpenAI key on Codex).
@@ -238,6 +264,7 @@ async function readConfiguredProviders(
   const poolProviders = pools.map((pool): ConfiguredProvider => {
     if (pool.shared) {
       return { label: pool.label, kind: 'pool', providerId: null, provider: { slug: pool.slug, billing: 'key', inScope: true,
+        credential: { kind: 'pool', engine: pool.engine },
         engines: [{ engine: AgentProvider.CODEX, prices: catalogPrices(openai, catalog, AgentProvider.CODEX) }] } };
     }
     const members: SubagentPoolMember[] = pool.engine === AgentProvider.CODEX
@@ -266,7 +293,8 @@ async function readConfiguredProviders(
           };
         });
     return { label: pool.label, kind: 'pool', providerId: null,
-      provider: { slug: pool.slug, billing: 'subscription', inScope: true, engines: [{ engine: pool.engine }], pool: { members } } };
+      provider: { slug: pool.slug, billing: 'subscription', inScope: true, credential: { kind: 'pool', engine: pool.engine },
+        engines: [{ engine: pool.engine }], pool: { members } } };
   });
   return [...keys, ...poolProviders];
 }
@@ -293,7 +321,9 @@ export async function subagentTierView(db: Prisma.TransactionClient, ownerId: st
     label: ENGINE_CLI_NAMES[slug],
     kind: 'key',
     providerId: null,
-    provider: { slug, billing: isLoginEngine(slug) ? 'subscription' : 'key', inScope: true, engines: [{ engine: slug }] },
+    provider: {
+      slug, billing: isLoginEngine(slug) ? 'subscription' : 'key', inScope: true, credential: builtinCredential(slug), engines: [{ engine: slug }],
+    },
   }));
   return {
     providers: [...builtins, ...configured]

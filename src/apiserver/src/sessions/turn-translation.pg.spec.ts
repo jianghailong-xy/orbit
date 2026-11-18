@@ -202,7 +202,8 @@ scenario('a failed translation is never delivered; Send as written delivers the 
 
 scenario('Retry after a failure delivers the translation', async () => {
   const sessionId = await liveSession(RunStatus.RUNNING);
-  deepSeekReplies = [500, ENGLISH];
+  // Three failures: the automatic tries are spent, so the message is held for the owner's Retry.
+  deepSeekReplies = [500, 500, 500, ENGLISH];
   const sent = await send(sessionId);
   await sessions.translationsSettled();
   assert.equal((await dequeue(sessionId)).turnId, '');
@@ -212,7 +213,7 @@ scenario('Retry after a failure delivers the translation', async () => {
   assert.equal(delivered.turnId, sent.turnId);
   assert.equal(delivered.content, ENGLISH);
   // The account names no agent language: English, as before.
-  assert.equal(deepSeekSystems.length, 2);
+  assert.equal(deepSeekSystems.length, 4);
   for (const system of deepSeekSystems) assert.match(system, /from Chinese \(Simplified\) into English\./);
 });
 

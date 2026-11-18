@@ -29,6 +29,38 @@ func renderOperationCatalogMarkdown() string {
 	b.WriteString("`Plan` is what a session in Plan mode gets: the call `runs`, is `refused` with what to do instead, ")
 	b.WriteString("or its `own_gate` decides; the per-engine matrix is docs/permission-matrix.md.\n\n")
 
+	b.WriteString("## Reading it a piece at a time\n\n")
+	b.WriteString("`orbit capabilities --json` is the whole catalogue as one process is offered it, which is larger ")
+	b.WriteString("than any engine shows a model at once. An agent that wants one operation asks for less: ")
+	b.WriteString("`--summary` (one row per command, and the commands not offered here grouped under why), ")
+	b.WriteString("`--family NAME` (one family, each command with its absolute argv, approval, success evidence and ")
+	b.WriteString("a minimal example) or `--id ID` (one operation in full, both surfaces' examples included). The ")
+	b.WriteString("`guide` MCP tool and `orbit guide [TOPIC] --json` arrange the same rows by what a person asks ")
+	b.WriteString("for: without a topic they answer the objects and the intent routes, and with one its recipe. ")
+	fmt.Fprintf(&b, "Guide %s has these topics (a `?` marks an optional step):\n\n", agentGuideVersion)
+	b.WriteString("| Topic | Routes | Steps | Intent |\n| --- | --- | --- | --- |\n")
+	for _, topic := range guideTopics {
+		var routes, steps []string
+		for _, route := range guideRoutes {
+			if route.Topic == topic.ID {
+				routes = append(routes, route.Route)
+			}
+		}
+		for _, step := range topic.Steps {
+			name := "`" + step.Op + "`"
+			if step.Optional {
+				name += "?"
+			}
+			steps = append(steps, name)
+		}
+		if len(routes) == 0 {
+			routes = []string{"—"}
+		}
+		fmt.Fprintf(&b, "| `%s` | %s | %s | %s |\n", topic.ID, strings.Join(routes, ", "),
+			strings.Join(steps, " → "), escapeTable(topic.Intent))
+	}
+	b.WriteString("\n")
+
 	b.WriteString("| Operation | Object | Risk | Writes | Approval | Destructive | Idempotency | Plan | MCP | CLI | Intent |\n")
 	b.WriteString("| --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |\n")
 	for _, op := range built.Ops {

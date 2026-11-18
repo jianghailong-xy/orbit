@@ -4,6 +4,7 @@ import {
   DEFAULT_AGENT_LANGUAGE,
   DEFAULT_TRANSLATION_LANGUAGE,
   isTranslationLanguage,
+  TRANSLATION_FAILED_CODE,
   TRANSLATION_LANGUAGE_NAMES,
   type ApprovalTranslation,
   type ReplyTranslation,
@@ -17,6 +18,9 @@ import type { Me } from './queries';
 export const TRANSLATION_COPY = {
   translated: 'Translated',
   showOriginal: 'Show original',
+  hideOriginal: 'Hide original',
+  // Not "Show original": that one swaps the translation for the original.
+  showBoth: 'Show both',
   showTranslation: 'Show translation',
   original: 'Original',
   translating: 'Translating…',
@@ -51,6 +55,24 @@ export function translationLanguageOf(me: Me | undefined): TranslationLanguage {
 export function agentLanguageOf(me: Me | undefined): TranslationLanguage {
   const lang = me?.preferences?.translationAgentLanguage;
   return isTranslationLanguage(lang) ? lang : DEFAULT_AGENT_LANGUAGE;
+}
+
+/** An owner card's `translation` when it is in the owner's language and translation is switched on;
+ *  undefined when there is none, it failed, or it is in a language the owner no longer reads. */
+export function ownerLanguageTranslation<T extends { lang: TranslationLanguage; failed?: true }>(
+  translation: T | null | undefined,
+  me: Me | undefined,
+): T | undefined {
+  if (!translation || translation.failed || me?.preferences?.translationEnabled !== true) return undefined;
+  return translation.lang === translationLanguageOf(me) ? translation : undefined;
+}
+
+/** An owner card's answer door refused the owner's words 422 TRANSLATION_FAILED: nothing was recorded,
+ *  and the card offers Retry and Send as written. Read off the error's fields, so a card need not
+ *  import the api module's class to ask. */
+export function answerRefusedUntranslated(err: unknown): boolean {
+  const e = err as { status?: unknown; code?: unknown } | null;
+  return !!e && typeof e === 'object' && e.status === 422 && e.code === TRANSLATION_FAILED_CODE;
 }
 
 /** Whether the owner's messages are being translated now: switched on, and the server able to. */

@@ -161,6 +161,9 @@ export interface ProjectDoneRequestFiled extends DoneRequest {
  */
 export interface ProjectDoneRequestDeclineBody {
   note: string;
+  /** Deliver the note untranslated: the "Send as written" of a note refused 422 TRANSLATION_FAILED
+   *  (OwnerWordsTranslation, translation.ts). */
+  sendAsWritten?: boolean;
 }
 
 /** The result of ending a `DONE_REQUEST` with the owner's "Not yet…" answer. */

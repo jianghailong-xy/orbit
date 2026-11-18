@@ -1,5 +1,6 @@
 import { Prisma } from '@prisma/client';
 import { randomUUID } from 'node:crypto';
+import { SESSION_MERGE_BESIDE_TURN_V1 } from '@orbit/shared';
 
 // Runner process owners and inbox generations are UUID v4. A terminal revive
 // uses a fresh UUID carrying the v5 tag as an out-of-band handoff marker. The
@@ -42,6 +43,9 @@ export const WORKTREE_OPERATION_STALE_MS = 5 * 60_000;
  * that never merged, and `NOT(NULL)` is NULL too — which a WHERE clause treats as non-matching,
  * excluding the row from every claim forever.
  *
+ * A merge on a runner that declares SESSION_MERGE_BESIDE_TURN_V1 holds nothing back: it reads only the
+ * commit the branch is at when it starts and never touches the checkout (mergeFencesTurn).
+ *
  * `sessionAlias` is however the calling query names the session table.
  */
 export function worktreeOperationFenceSql(sessionAlias: string): Prisma.Sql {
@@ -49,6 +53,11 @@ export function worktreeOperationFenceSql(sessionAlias: string): Prisma.Sql {
   return Prisma.sql`(
     (
       ${s}."merge_status" IS NOT DISTINCT FROM 'pending'
+      AND NOT EXISTS (
+        SELECT 1 FROM "runner" merge_runner
+        WHERE merge_runner.id = ${s}."assigned_runner_id"
+          AND ${SESSION_MERGE_BESIDE_TURN_V1} = ANY(merge_runner."capabilities")
+      )
       AND (
         ${s}."merge_requested_at" IS NULL
         OR ${s}."merge_requested_at" > now() - (${WORKTREE_OPERATION_STALE_MS} * interval '1 millisecond')
@@ -62,6 +71,16 @@ export function worktreeOperationFenceSql(sessionAlias: string): Prisma.Sql {
       )
     )
   )`;
+}
+
+/**
+ * Whether a merge still holds its session's turns back, by the capabilities of the runner that runs it. A runner
+ * that declares SESSION_MERGE_BESIDE_TURN_V1 merges from a commit it pinned when it started, in a scratch
+ * worktree, so a turn editing the checkout and a merge landing the branch neither wait for nor cancel each
+ * other. An older runner refuses a merge while a turn holds the checkout, so for it the two still exclude.
+ */
+export function mergeFencesTurn(runnerCapabilities: readonly string[] | null | undefined): boolean {
+  return !runnerCapabilities?.includes(SESSION_MERGE_BESIDE_TURN_V1);
 }
 
 /**

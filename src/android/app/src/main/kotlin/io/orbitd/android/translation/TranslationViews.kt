@@ -9,6 +9,7 @@ import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
@@ -41,6 +42,7 @@ import androidx.compose.ui.text.style.TextDecoration
 import androidx.compose.ui.unit.dp
 import io.orbitd.android.core.translation.Translation
 import io.orbitd.android.management.LocalTranslation
+import io.orbitd.android.text.MarkdownText
 
 /** Settings › Translation's words, identical on Web (`TRANSLATION_COPY`, SettingsPage's Translation card) and iOS/macOS. */
 object TranslationCopy {
@@ -61,6 +63,10 @@ object TranslationCopy {
     // The conversation (board frames 4–6).
     const val TRANSLATED = "Translated"
     const val SHOW_ORIGINAL = "Show original"
+    // Both languages on, one message's original hidden and back (docs/mocks/translation-hide-original). Not SHOW_ORIGINAL, which
+    // swaps the translation for the original.
+    const val HIDE_ORIGINAL = "Hide original"
+    const val SHOW_BOTH = "Show both"
     const val SHOW_TRANSLATION = "Show translation"
     const val ORIGINAL = "Original"
     const val TRANSLATING = "Translating…"
@@ -87,8 +93,18 @@ object BilingualShown {
     fun userEnglish(english: String, turn: Translation.Turn?, bilingual: Boolean): String? =
         if (bilingual && turn?.state == Translation.TurnState.DONE) Translation.bilingualEnglish(english).ifEmpty { null } else null
 
-    fun replyEnglish(english: String, reply: Translation.Reply?, bilingual: Boolean): String? =
-        if (bilingual && reply?.text != null) Translation.bilingualEnglish(english).ifEmpty { null } else null
+    /** A reply drawn whole under the divider: only when its blocks do not pair with its translation's ([replyPairs], frame 4). */
+    fun replyEnglish(english: String, reply: Translation.Reply?, bilingual: Boolean): String? {
+        val translated = reply?.text
+        return if (bilingual && translated != null && Translation.bilingualPairs(translated, english) == null)
+            Translation.bilingualEnglish(english).ifEmpty { null } else null
+    }
+
+    /** A reply drawn block by block, each original under its translation (03-interleaved.png); null draws it as before. */
+    fun replyPairs(english: String, reply: Translation.Reply?, bilingual: Boolean): List<Translation.BilingualPair>? {
+        val translated = reply?.text
+        return if (bilingual && translated != null) Translation.bilingualPairs(translated, english) else null
+    }
 
     fun collapses(english: String): Boolean = Translation.bilingualLineCount(english) > Translation.BILINGUAL_COLLAPSE_LINES
 }
@@ -105,8 +121,48 @@ internal fun inlineCode(english: String, ground: Color): AnnotatedString = build
 }
 
 /**
- * "Show both languages" (02-bilingual.png): the English the agent read or wrote, under a dashed divider, a size smaller and grey. A
- * reply's English over [Translation.BILINGUAL_COLLAPSE_LINES] lines starts as a two-line faded preview with "Show English · N lines",
+ * "Show both languages", interleaved (docs/mocks/session-translation/03-interleaved.png): a reply drawn pair by pair — each block in the
+ * owner's language with its original right under it, a size smaller and grey, no divider inside a pair and the usual block gap between
+ * pairs. An item's original sits under its own words, indented with them; a heading's under the heading, in the regular weight. Code,
+ * tables and images are drawn once, from the translation. Never collapsed.
+ */
+@Composable
+fun InterleavedReply(pairs: List<Translation.BilingualPair>, open: (String) -> Unit, modifier: Modifier = Modifier) {
+    Column(modifier.fillMaxWidth().testTag("translation-interleaved"), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+        pairs.forEach { pair ->
+            val indent = Modifier.padding(start = (pair.depth * 24).dp, top = if (pair.kind == Translation.BlockKind.HEADING) 4.dp else 0.dp)
+            when (pair.kind) {
+                // The marker drawn here, as MarkdownText draws a list's, so the original sits under the item's words.
+                Translation.BlockKind.ITEM -> Row(indent) {
+                    Text(pair.number?.let { "$it. " } ?: "• ", Modifier.widthIn(min = 24.dp))
+                    InterleavedWords(pair, open, Modifier.weight(1f))
+                }
+                Translation.BlockKind.QUOTE -> Row(indent.fillMaxWidth().background(MaterialTheme.colorScheme.surfaceVariant).padding(12.dp)) {
+                    InterleavedWords(pair, open)
+                }
+                else -> InterleavedWords(pair, open, indent)
+            }
+        }
+    }
+}
+
+/** One pair's words: the translated block, and its original right under it in the bilingual style. */
+@Composable
+private fun InterleavedWords(pair: Translation.BilingualPair, open: (String) -> Unit, modifier: Modifier = Modifier) {
+    val muted = footColor()
+    val code = MaterialTheme.colorScheme.surfaceVariant
+    Column(modifier, verticalArrangement = Arrangement.spacedBy(2.dp)) {
+        MarkdownText(pair.text, open = open)
+        pair.original?.let { original ->
+            Text(remember(original, code) { inlineCode(original, code) }, Modifier.testTag("translation-original"),
+                color = muted, style = MaterialTheme.typography.bodySmall)
+        }
+    }
+}
+
+/**
+ * "Show both languages" (02-bilingual.png): the English the agent read or wrote, under a dashed divider, a size smaller and grey — the
+ * owner's message, and a reply whose blocks do not pair (frame 4 of 03-interleaved.png). A reply's English over [Translation.BILINGUAL_COLLAPSE_LINES] lines starts as a two-line faded preview with "Show English · N lines",
  * which opens it in place (frame 3); per message, never kept.
  */
 @Composable
@@ -143,6 +199,8 @@ class ShownOriginals(private val keys: SnapshotStateMap<String, Boolean> = mutab
     companion object {
         fun user(seq: Long, turnId: String?) = "user:${turnId ?: seq}"
         fun reply(seq: Long) = "reply:$seq"
+        /** Both languages on: this message's original hidden ("Hide original"). */
+        fun hidden(key: String) = "hidden:$key"
     }
 }
 
@@ -173,6 +231,43 @@ private fun FootAction(label: String, color: Color, onPress: (() -> Unit)?) {
         color = color, style = MaterialTheme.typography.labelSmall, textDecoration = TextDecoration.Underline)
 }
 
+/**
+ * One of Orbit's own cards drawn in the owner's language (board 04-owner-cards.html, part 2): one foot for the whole card, as a reply's,
+ * "Translated · Show original" ↔ "Original · Show translation".
+ */
+@Composable
+fun CardTranslationFoot(flipped: Boolean, onFlip: () -> Unit, modifier: Modifier = Modifier) {
+    val muted = footColor()
+    Row(modifier.testTag("translation-foot"), horizontalArrangement = Arrangement.spacedBy(4.dp), verticalAlignment = Alignment.CenterVertically) {
+        Text(if (flipped) TranslationCopy.ORIGINAL else TranslationCopy.TRANSLATED, color = muted, style = MaterialTheme.typography.labelSmall)
+        Sep(muted); FootAction(if (flipped) TranslationCopy.SHOW_TRANSLATION else TranslationCopy.SHOW_ORIGINAL, muted, onFlip)
+    }
+}
+
+/**
+ * An owner card's answer the server could not translate (422 TRANSLATION_FAILED, board 04-owner-cards.html mark B): nothing was
+ * recorded, and the card says so with the conversation's words, "Couldn't translate, so it wasn't sent · Retry · Send as written".
+ * Send as written sends the words again untranslated (`sendAsWritten: true`).
+ */
+@Composable
+fun AnswerNotTranslated(retry: () -> Unit, sendAsWritten: () -> Unit, enabled: Boolean, modifier: Modifier = Modifier) {
+    val error = MaterialTheme.colorScheme.error
+    Row(modifier.testTag("card-translation-failed"), verticalAlignment = Alignment.CenterVertically) {
+        Text(TranslationCopy.SEND_FAILED, Modifier.weight(1f, fill = false), color = error, style = MaterialTheme.typography.bodySmall)
+        Sep(error)
+        androidx.compose.material3.TextButton(onClick = retry, enabled = enabled) { Text(TranslationCopy.RETRY) }
+        Sep(error)
+        androidx.compose.material3.TextButton(onClick = sendAsWritten, enabled = enabled) { Text(TranslationCopy.SEND_AS_WRITTEN) }
+    }
+}
+
+/** Both languages on: " · Hide original", or " · Show both" once this message's original is hidden (docs/mocks/translation-hide-original). */
+@Composable
+private fun HideOriginal(hidden: Boolean, onPress: (() -> Unit)?, color: Color) {
+    if (onPress == null) return
+    Sep(color); FootAction(if (hidden) TranslationCopy.SHOW_BOTH else TranslationCopy.HIDE_ORIGINAL, color, onPress)
+}
+
 @Composable
 fun TranslationChip(text: String) {
     Text(text, Modifier.testTag("translation-chip").clip(RoundedCornerShape(50)).background(MaterialTheme.colorScheme.surfaceVariant)
@@ -186,11 +281,14 @@ fun TranslationChip(text: String) {
  */
 @Composable
 fun UserTranslationFoot(turn: Translation.Turn, flipped: Boolean, onFlip: () -> Unit, retry: (() -> Unit)?, sendAsWritten: (() -> Unit)?,
-    modifier: Modifier = Modifier, bilingual: Boolean = false) {
+    modifier: Modifier = Modifier, bilingual: Boolean = false, originalHidden: Boolean = false, onHideOriginal: (() -> Unit)? = null) {
     val muted = footColor()
-    // Both languages on: the English is in the message, so there is nothing to flip to (mark C).
+    // Both languages on: the English is in the message, so there is nothing to flip to (mark C); "Hide original" hides it.
     if (bilingual && turn.state == Translation.TurnState.DONE) {
-        Row(modifier.testTag("translation-foot")) { Text(TranslationCopy.sentToAgentLabel(LocalTranslation.current.agentLanguage), color = muted, style = MaterialTheme.typography.labelSmall) }
+        Row(modifier.testTag("translation-foot"), horizontalArrangement = Arrangement.spacedBy(4.dp), verticalAlignment = Alignment.CenterVertically) {
+            Text(TranslationCopy.sentToAgentLabel(LocalTranslation.current.agentLanguage), color = muted, style = MaterialTheme.typography.labelSmall)
+            HideOriginal(originalHidden, onHideOriginal, muted)
+        }
         return
     }
     when (turn.state) {
@@ -216,11 +314,13 @@ fun UserTranslationFoot(turn: Translation.Turn, flipped: Boolean, onFlip: () -> 
  */
 @Composable
 fun ReplyTranslationFoot(reply: Translation.Reply?, pending: Boolean, flipped: Boolean, onFlip: () -> Unit, retry: (() -> Unit)?,
-    modifier: Modifier = Modifier, bilingual: Boolean = false) {
+    modifier: Modifier = Modifier, bilingual: Boolean = false, originalHidden: Boolean = false, onHideOriginal: (() -> Unit)? = null) {
     val muted = footColor()
     when {
-        bilingual && reply?.text != null -> Row(modifier.testTag("translation-foot")) {
+        bilingual && reply?.text != null -> Row(modifier.testTag("translation-foot"), horizontalArrangement = Arrangement.spacedBy(4.dp),
+            verticalAlignment = Alignment.CenterVertically) {
             Text(TranslationCopy.TRANSLATED, color = muted, style = MaterialTheme.typography.labelSmall)
+            HideOriginal(originalHidden, onHideOriginal, muted)
         }
         reply?.failed == true -> {
             val error = MaterialTheme.colorScheme.error

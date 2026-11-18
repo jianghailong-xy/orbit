@@ -195,7 +195,7 @@ final class RunnerPageDTOTests: XCTestCase {
         XCTAssertEqual(RunnerAttention.listAttentionLine(items),
                        "orbit checkout stuck in a merge · Claude weekly limit 98%")
         XCTAssertEqual(items.last?.detail,
-                       "9.4 GB free of 197 GB, under the 20 GB it keeps free — task runs stop being sent here until space frees up.")
+                       "9.4 GB free of 197 GB, under the 20 GB it keeps free — new sessions and task runs wait until space frees up.")
     }
 
     // MARK: GET /workspaces

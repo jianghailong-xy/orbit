@@ -97,7 +97,7 @@ final class FollowingRunnersAdminWiringTests: XCTestCase {
              "/// One watch as a Following row", ".tag(watch.id)",
              "Button { model.push(.watchDetail(watchID: watch.id)) } label: {"),
             ("Views/SkillsRunnersView.swift",
-             "@ViewBuilder private func row(_ r: Runner) -> some View {",
+             "@ViewBuilder private func row(_ r: Runner, isManaged: Bool = false, separates: Bool = false) -> some View {",
              "#if os(iOS)", ".tag(r.id)",
              "Button { model.push(.runnerDetail(runnerID: r.id)) } label: {"),
             ("Views/SettingsAdminView.swift",

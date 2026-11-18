@@ -14,6 +14,7 @@
 import type { IntegrationCheckResult, IntegrationJobKind, IntegrationJobOutputCheck, IntegrationJobPhase, IntegrationJobState } from './dto';
 import type { ProjectStartRequest, ProjectStartSettingKey, ProjectStartSettings } from './project-start';
 import type { DoneRequest } from './project-done';
+import type { OwnerCardTranslation } from './translation';
 
 /** Where this project's finished tasks land: straight onto main, or onto a branch of its own. */
 export type IntegrationLine = 'MAIN' | 'PROJECT_BRANCH';
@@ -321,6 +322,15 @@ export interface ProjectIntegrationJob<Instant = string> {
    *  now. Clients draw the button from this rather than from `timedOut`, so which timed-out jobs a
    *  retry can end is the server's to say. */
   retryable: boolean;
+  /** Whether the owner's "Land without the check" (`POST /projects/:id/tasks/:taskId/integration/
+   *  skip-merge-check`) takes this landing now: a task's landing in flight, before its push, that
+   *  runs a landing check and was not already asked to stop. The server's answer, so a client never
+   *  draws the button on a landing the door would refuse. Absent from an older server. */
+  skippable?: boolean;
+  /** Where a skip of this landing's check stands: `STOPPING` while the generation the owner skipped
+   *  is still answering its stop, `SKIPPED` on the generation that runs without the check; null
+   *  otherwise. Absent from an older server. */
+  skipCheck?: 'STOPPING' | 'SKIPPED' | null;
 }
 
 // ── The landing session's view (contract §2.9 LS1, LS6) ─────────────────────────────────────────
@@ -500,6 +510,7 @@ export interface IntegrationTimelineSection<Instant = string> {
  * - `DONE`: the task was marked done and its branch handed over — `by` TASK, `sessionId` the work
  *   session.
  * - `RETRY`: a rerun — `by` COORDINATOR (its `sessionId`), OWNER, or ORBIT; `reason` is the one given.
+ *   The owner's skip of a landing still in flight is one too: `by` OWNER, `reason` the skip's.
  * - `BACKFILL` / `BEHIND_WORK`: Orbit queued it — the project started integrating, or the task's
  *   work ended on another branch.
  * - `CHECK`: a merge round's check of the project line, queued by Orbit.
@@ -944,7 +955,10 @@ export type OpenItemKind =
   | 'DELIVERY_REVIEW'
   | 'LANDING_LEASE_EXPIRED'
   | 'LANDING_UNOBSERVED'
-  | 'LANDED_WITHOUT_CONFIRMATION';
+  | 'LANDED_WITHOUT_CONFIRMATION'
+  /** 1110: a task's latest evidence revision its coordinator has not decided within the project's
+   *  window, the owner's from birth. */
+  | 'EVIDENCE_UNDECIDED';
 
 /**
  * The kinds a project's coordinator can be handling (§7.1 V1/V2): `OpenItemKind` minus the owner-only
@@ -1066,6 +1080,12 @@ export interface OpenItemFacts {
   check: IntegrationCheckResult | null;
   /** Whether the task's own branch passed — the check failed only combined with it. */
   branchUnchanged: boolean;
+  /** The Branch row's sentence, written by the server because it depends on the job the check failed
+   *  in: a task's landing (the task passed on its own branch), or a promotion of the project branch or
+   *  of one task's branch to main (that branch did not move and nothing reached main). Null when
+   *  `branchUnchanged` is false; absent from a server older than the field, where a card keeps the
+   *  task's sentence. */
+  branchLine?: string | null;
   /** The code an integration job ended with (INTEGRATION_ERROR). */
   errorCode: string | null;
   /** Why an attempt failed, and where its chain stands (TASK_FAILED). */
@@ -1264,6 +1284,11 @@ export interface ProjectOpenItemRow<Instant = string> {
   /** The request a `DONE_REQUEST` carries — what the "Is this project done?" card is drawn from —
    *  and null for every other kind. Absent from a server that predates done requests. */
   doneRequest?: DoneRequest | null;
+  /** The card's agent-written words in the owner's language (Settings › Translation): a
+   *  `COORDINATOR_QUESTION`'s `question`, `options` and `ifUnanswered`; a `START_REQUEST`'s `why`; a
+   *  `DONE_REQUEST`'s `judgment` and `gaps`. Absent until translated, on
+   *  every item translation was off for, and from a server that predates it. */
+  translation?: OwnerCardTranslation;
   /** What the item's payload holds, as the rows its card draws; null when the payload is not a
    *  shape this build reads — an item an older build opened, a pause, a question — and the card
    *  then draws what it drew before this existed. */
@@ -1278,6 +1303,11 @@ export interface ProjectOpenItemRow<Instant = string> {
   /** "Chat about this": where the item's handling stands, and whether a message about it can reach
    *  the project's coordinator conversation. Absent from a server that predates it. */
   chat?: OpenItemChat | null;
+  /** Whether the project's coordinator can be neither asked again nor messaged right now, as the
+   *  server read it with the list. An escalated item's heading says so ("the coordinator can’t take
+   *  messages") instead of "no one acted on this", because its doors already say it. Absent from a
+   *  server that predates it, which reads as false. */
+  coordinatorUnreachable?: boolean;
 }
 
 /**
@@ -1304,6 +1334,44 @@ export interface ProjectClosedQuestion<Instant = string> {
   delivery: { sessionId: string; at: Instant } | null;
   /** The reason it was withdrawn with; null for an answered question. */
   withdrawReason: string | null;
+  /** `question` in the owner's language, as it was translated while the question was open; absent
+   *  when it never was. An ended question is never translated again. */
+  translation?: OwnerCardTranslation;
+}
+
+/**
+ * Why the auto-run sweep holds a task that otherwise reads Ready (`hold` on the task read): the engine
+ * its run would start on is signed out on its runner, so the run could not be created. Computed by the
+ * sweep's own rule (TasksService.signInHolds), so the row and the sweep agree; it lifts once the
+ * runner's heartbeat reports the engine signed in. Null on every task the sweep does not hold so.
+ */
+export interface TaskSignInHold {
+  kind: 'ENGINE_SIGNED_OUT';
+  /** The engine slug (`claude`, `codex`, …): what the machine's Sign in opens. */
+  engine: string;
+  /** Its product name, as copy says it: "Claude Code". */
+  engineLabel: string;
+  runnerId: string;
+  /** The runner as it is named to people: its display name, else its name. */
+  runnerName: string;
+}
+
+/**
+ * One runner-and-engine sign-in this project's held tasks wait for (`signIns` on the open-items read):
+ * a Needs you row, "N tasks wait for a sign-in", present exactly while the sweep holds at least one of
+ * the project's tasks for it, and gone on the read after that engine is signed in.
+ */
+export interface ProjectSignInWait {
+  engine: string;
+  engineLabel: string;
+  runnerId: string;
+  runnerName: string;
+  /** The held tasks, oldest first. */
+  taskIds: string[];
+  /** "2 tasks wait for a sign-in". */
+  title: string;
+  /** "Claude Code is signed out on mac". */
+  detailLine: string;
 }
 
 /** The project's open exceptions, split by who is expected to act (§4.8). */
@@ -1348,6 +1416,12 @@ export interface ProjectOpenItemsView<Instant = string> {
    * a row's merge into main is a merge into. Null when the project has no repository bound.
    */
   mainBranch?: string | null;
+  /**
+   * The sign-ins this project's held tasks wait for, one per runner and engine (`ProjectSignInWait`),
+   * drawn in Needs you. Derived on every read, never stored: empty once each engine is signed in.
+   * Absent from a server that predates it.
+   */
+  signIns?: ProjectSignInWait[];
 }
 
 /**

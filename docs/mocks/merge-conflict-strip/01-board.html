@@ -1,0 +1,115 @@
+<!doctype html>
+<!-- Merge-conflict strip under the worktree bar (SessionOutputs.tsx .wt-merge-manual).
+     Before: the red line and the two commands run flush against the bar's left edge and
+     bottom border. After: inset to the row's own padding, the same head / why / actions
+     shape as the Commit failed card, and the by-hand recipe as two labelled steps. -->
+<html>
+<head>
+<meta charset="utf-8" />
+<style>
+  :root {
+    --bg: #ffffff; --bg-raised: #ffffff; --bg-subtle: #fafbfc; --bg-sunken: #f2f3f5; --bg-hover: #eff0f2;
+    --border: #dee0e3; --border-subtle: #eceef1;
+    --text-1: #1f2329; --text-2: #646a73; --text-3: #8f959e;
+    --error: #cf3b35; --error-solid: #d4380d; --error-bg: #fdeceb; --error-border: #ffccc7;
+    --ok: #2ea043; --mono: ui-monospace, SFMono-Regular, Menlo, monospace;
+  }
+  body { margin: 0; padding: 28px 36px 36px; background: var(--bg); color: var(--text-1);
+         font: 13px/1.4 -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; width: 900px; }
+  h1 { font-size: 16px; margin: 0 0 4px; }
+  .lede { color: var(--text-2); margin: 0 0 22px; }
+  h2 { font-size: 12px; text-transform: uppercase; letter-spacing: .04em; color: var(--text-3); margin: 22px 0 8px; }
+  .note { color: var(--text-2); font-size: 12px; margin: 8px 0 0; }
+  .note b { color: var(--text-1); }
+
+  .bg-proc { display: flex; align-items: center; gap: 8px; padding: 9px 12px; border: 1px solid var(--border-subtle);
+             border-radius: 8px; background: var(--bg-subtle); margin-bottom: 8px; font-weight: 600; }
+  .bg-proc span { color: var(--text-3); font-weight: 400; }
+  .bg-proc i { margin-left: auto; color: var(--text-3); font-style: normal; font-size: 10px; }
+  .composer { height: 28px; border: 1px solid var(--border); border-bottom: 0; border-radius: 14px 14px 0 0; }
+
+  .wt-bar { margin: 0 0 8px; border: 1px solid var(--border-subtle); border-radius: 8px; background: var(--bg-subtle); overflow: hidden; }
+  .wt-row { display: flex; align-items: center; gap: 8px; min-height: 30px; padding: 2px 6px 2px 10px; font-size: 12px; }
+  .wt-branch { display: inline-flex; gap: 5px; padding: 2px 7px; border: 1px solid var(--border); border-radius: 6px;
+               background: var(--bg-raised); font-family: var(--mono); color: var(--text-3); }
+  .wt-branch b { color: var(--text-1); font-weight: 400; }
+  .add { color: var(--ok); font-family: var(--mono); } .del { color: var(--error); font-family: var(--mono); }
+  .meta { color: var(--text-3); font-family: var(--mono); }
+  .btn { margin-left: auto; padding: 3px 10px; border-radius: 6px; border: 1px solid var(--error-border);
+         background: var(--error-bg); color: var(--error); font-weight: 600; font-size: 12px; }
+  code.cmd { font-family: var(--mono); background: var(--bg-sunken); color: var(--text-2); padding: 2px 7px; border-radius: 6px; }
+
+  /* BEFORE: today's CSS (.wt-merge + .wt-merge-manual) */
+  .before .wt-merge { margin-top: 7px; padding-top: 7px; border-top: 1px dashed var(--border-subtle);
+                      display: flex; flex-direction: column; gap: 4px; font-size: 11.5px; color: var(--text-3); }
+  .before .err { color: var(--error); }
+  .before .or { display: inline-flex; align-items: center; gap: 6px; }
+
+  /* AFTER */
+  .after .wt-merge { margin-top: 0; padding: 9px 10px 10px; border-top: 1px solid var(--border-subtle);
+                     display: flex; flex-direction: column; gap: 4px; font-size: 12px; }
+  .after .head { display: flex; align-items: center; gap: 6px; color: var(--error); font-size: 12.5px; font-weight: 600; }
+  .after .head svg { flex: none; }
+  .after .why { color: var(--text-2); line-height: 1.5; }
+  .after .steps { display: grid; grid-template-columns: auto auto 1fr; align-items: center;
+                  column-gap: 8px; row-gap: 5px; margin: 4px 0 0; }
+  .after .n { width: 16px; height: 16px; border-radius: 50%; background: var(--bg-sunken); color: var(--text-2);
+              font-size: 10.5px; font-weight: 600; display: inline-flex; align-items: center; justify-content: center; }
+  .after .where { color: var(--text-3); }
+  .after code.cmd { justify-self: start; }
+  .after code.cmd.hover { background: var(--bg-hover); outline: 1px solid var(--border); }
+  .after code.cmd .cp { margin-left: 6px; color: var(--text-3); font-family: -apple-system, sans-serif; font-size: 11px; }
+</style>
+</head>
+<body>
+<h1>Merge conflict strip — inset and structured</h1>
+<p class="lede">Worktree bar above the composer, merge into <code>main</code> stopped on a conflict.</p>
+
+<h2>Before (today)</h2>
+<div class="before">
+  <div class="bg-proc">▤ Background processes <span>10 total</span><i>▸</i></div>
+  <div class="wt-bar">
+    <div class="wt-row">
+      <span class="wt-branch">⎇ <span>orbit/<b>session</b>-4d0665</span></span>
+      <span class="add">+1303</span><span class="del">−30</span><span class="meta">· 33 files · committed</span>
+      <span class="btn">Resolve in session</span>
+    </div>
+    <div class="wt-merge">
+      <span class="err">Merge conflict — aborted, working tree left clean. Resolve in the session above, or by hand:</span>
+      <span class="or"><code class="cmd">git rebase main</code> in the session’s worktree, then
+        <code class="cmd">git merge --ff-only orbit/session-4d0665</code> in the repo</span>
+    </div>
+  </div>
+  <div class="composer"></div>
+</div>
+<p class="note">Text and commands start at the bar's border (0px inset) and the last line sits on the bottom edge.</p>
+
+<h2>After</h2>
+<div class="after">
+  <div class="bg-proc">▤ Background processes <span>10 total</span><i>▸</i></div>
+  <div class="wt-bar">
+    <div class="wt-row">
+      <span class="wt-branch">⎇ <span>orbit/<b>session</b>-4d0665</span></span>
+      <span class="add">+1303</span><span class="del">−30</span><span class="meta">· 33 files · committed</span>
+      <span class="btn">Resolve in session</span>
+    </div>
+    <div class="wt-merge">
+      <div class="head">
+        <svg width="14" height="14" viewBox="0 0 16 16"><circle cx="8" cy="8" r="7.5" fill="#d4380d"/><rect x="7.1" y="3.6" width="1.8" height="5.6" rx=".9" fill="#fff"/><circle cx="8" cy="11.6" r="1" fill="#fff"/></svg>
+        Merge conflict with main
+      </div>
+      <div class="why">The merge was aborted and nothing changed. Use <b style="color:var(--text-1);font-weight:600">Resolve in session</b>, or resolve it by hand:</div>
+      <div class="steps">
+        <span class="n">1</span><span class="where">In the session’s worktree</span><code class="cmd">git rebase main</code>
+        <span class="n">2</span><span class="where">Then in the repo</span><code class="cmd hover">git merge --ff-only orbit/session-4d0665<span class="cp">Copy</span></code>
+      </div>
+    </div>
+  </div>
+  <div class="composer"></div>
+</div>
+<p class="note"><b>Inset</b> 10px left/right (matches the row and the Commit failed card), 9px top, 10px bottom.
+  <b>Head / why / steps</b> mirror <code>.wt-commit-fail</code>, so both failures look alike.
+  <b>Steps</b> put where each command runs before the command; a command shows “Copy” on hover.
+  The divider becomes solid and the dead 7px margin above it is gone.</p>
+</body>
+</html>

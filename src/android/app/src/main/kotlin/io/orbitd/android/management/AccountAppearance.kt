@@ -43,7 +43,7 @@ val LocalSessionRecapsChanged = staticCompositionLocalOf<(Boolean) -> Unit> { {}
  * the change. */
 val LocalTranslation = compositionLocalOf { AccountTranslation() }
 val LocalTranslationChanged = staticCompositionLocalOf<(AccountTranslation) -> Unit> { {} }
-/** Settings › Prompt optimizer (`preferences.promptOptimizer`, absent = off, and the server's `promptOptimizerAvailable`), read with the
+/** Settings › Prompt optimizer (`preferences.promptOptimizer`, absent = on, and the server's `promptOptimizerAvailable`), read with the
  * theme from the same `users/me`: whether the composer offers ✦ Optimize (docs/prompt-optimizer-design.md, iOS `PromptOptimizer.isOn`).
  * Settings' switch sets it the moment the server has taken the change. */
 val LocalPromptOptimizer = compositionLocalOf { false }
@@ -56,6 +56,9 @@ data class AccountTranslation(val enabled: Boolean = false, val available: Boole
     val bilingual: Boolean = false) {
     /** The owner's messages are being translated now: switched on, and the server able to. */
     val on: Boolean get() = enabled && available
+    /** The language an owner card's translation must be in to be drawn ([OwnerCardTranslation][io.orbitd.android.core.cards.OwnerCardTranslation]):
+     *  the owner's while their translation is [on], none otherwise (web `ownerLanguageTranslation`, iOS `OwnerCardTranslations.ownerLanguage`). */
+    val cardLanguage: String? get() = language.takeIf { on }
     companion object {
         fun of(user: JsonObject?): AccountTranslation = (user?.get("preferences") as? JsonObject).let {
             AccountTranslation(Translation.enabled(it), Translation.available(user), Translation.language(it), Translation.agentLanguage(it),

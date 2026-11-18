@@ -219,8 +219,9 @@ suite('(m)(q)(w) VERIFICATION and the core task triggers are intact; 0229 took t
     // only — named below as well. 35 since 0484 added the Open list's version counters
     // `task_open_list_epoch_insert`/`_update`/`_delete`, which write `open_list_epoch` only. 36
     // since 0615 added `task_fork_guard`, which refuses a rewrite of a forked task's start and writes
-    // nothing.
-    assert.equal(taskTriggers.length, 36,
+    // nothing. 37 since 1060 added `condition_ended_with_task`, which ends a task's condition when the
+    // task is cancelled, done or failed and writes only `condition`.
+    assert.equal(taskTriggers.length, 37,
       `task carries ${taskTriggers.length} triggers: ${taskTriggers.join(', ')}`);
     for (const added of ['task_progress_epoch_advance', 'task_list_task_count_insert',
       'task_list_task_count_delete', 'task_list_task_count_relist',

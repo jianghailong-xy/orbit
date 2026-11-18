@@ -54,6 +54,10 @@ import io.orbitd.android.composer.HandedOverBanner
 import io.orbitd.android.composer.HandoffNoteCard
 import io.orbitd.android.composer.HandoffStatus
 import io.orbitd.android.composer.CreatedWorkspaceLineView
+import io.orbitd.android.composer.CloneHeard
+import io.orbitd.android.composer.CloneState
+import io.orbitd.android.composer.ManagementGithub
+import io.orbitd.android.composer.WorkspaceClone
 import io.orbitd.android.composer.DraftTarget
 import io.orbitd.android.composer.MachineSetupCopy
 import io.orbitd.android.composer.ProviderChoices
@@ -76,6 +80,9 @@ import io.orbitd.android.core.cards.CardPreviews
 import io.orbitd.android.cards.ReaderSide
 import io.orbitd.android.cards.SessionCards
 import io.orbitd.android.cards.SessionRunStartCard
+import io.orbitd.android.schedule.ScheduleConversationInsert
+import io.orbitd.android.schedule.ScheduleInsert
+import io.orbitd.android.schedule.ScheduledStore
 import io.orbitd.android.cards.SessionTasksCard
 import io.orbitd.android.cards.LocalWatchTargetNames
 import io.orbitd.android.cards.watchTargetName
@@ -220,7 +227,8 @@ fun SessionReader(app: OrbitApplication, handle: SessionHandle, route: OrbitRout
     // QueuedCapacity's words; only the queued page and Later… are the update's alone.
     val runnerUpdatingGate = listRow?.takeIf {
         it.effectiveLifecycleState != "TRASH" && it.effectiveRunState == RunState.QUEUED && !it.regionHeld &&
-            (RunnerUpdating.isRunnerUpdating(it.queuedGate) || QueuedCapacity.isCapacityHeld(it.queuedGate))
+            (RunnerUpdating.isRunnerUpdating(it.queuedGate) || QueuedCapacity.isCapacityHeld(it.queuedGate) ||
+                QueuedDiskLow.isDiskHeld(it.queuedGate))
     }?.queuedGate
     val runnerUpdatingMachine = listRow?.let { data.machineName(it.workspace) }
     // Later… for the runner the update holds this session on (its workspace's runner), and Update Now… when that runner takes it: the
@@ -228,6 +236,7 @@ fun SessionReader(app: OrbitApplication, handle: SessionHandle, route: OrbitRout
     // that is stopping, not updating, has nothing to postpone or install: neither (board runner-stopping ①).
     val runnerUpdatingRunner = listRow?.let { row -> data.workspaces.firstOrNull { ObjectId.same(it.id, row.workspace) }?.runnerId }
     val runnerUpdatingRow = runnerUpdatingRunner?.let { runnerId -> data.runnerRows.firstOrNull { ObjectId.same(it.text("id"), runnerId) } }
+    val updateNowScope = rememberCoroutineScope()
     val runnerUpdatingLater: (@Composable () -> Unit)? = runnerUpdatingRunner?.takeIf { !RunnerUpdating.isRunnerStopping(runnerUpdatingGate) }?.let { runnerId -> {
         RunnerUpdateLaterButton(runnerUpdatingGate?.queuedRunnerUpdate?.targetVersion, runnerUpdatingMachine, { until ->
             runCatching { api.mutate(RunnerUpdateLater.path(runnerId), body = RunnerUpdateLater.body(until)) }
@@ -237,7 +246,16 @@ fun SessionReader(app: OrbitApplication, handle: SessionHandle, route: OrbitRout
             val version = RunnerUpdateNow.version(runner)
             RunnerUpdateNowButton(RunnerPage.displayName(runner), version, { RunnerPage.updateTurns(runner, System.currentTimeMillis()) }, {
                 runCatching { api.mutate(RunnerUpdateNow.path(runnerId), body = RunnerUpdateNow.request()) }
-                    .fold({ app.realtime.refreshDirectory(); OrbitToasts.show(RunnerUpdateNow.toast(version), tone = ToastTone.INFO); null },
+                    .fold({
+                        app.realtime.refreshDirectory(); OrbitToasts.show(RunnerUpdateNow.toast(version), tone = ToastTone.INFO)
+                        // The runner answers on its next heartbeat, after that read: read again until it reports the restart.
+                        updateNowScope.launch {
+                            RunnerUpdateNow.awaitAnswer({
+                                app.realtime.state.value.directory?.runners?.firstOrNull { ObjectId.same(it.text("id"), runnerId) }
+                            }) { app.realtime.rereadDirectory() }
+                        }
+                        null
+                    },
                         { it.message ?: RunnerUpdateNow.FAILED })
             })
         }
@@ -328,6 +346,22 @@ fun SessionReader(app: OrbitApplication, handle: SessionHandle, route: OrbitRout
     // A review open here is this conversation's: leaving it closes it.
     DisposableEffect(crossingStore) { onDispose { crossingStore.close() } }
     val crossingBatches = remember(crossingState.rows, coordinated) { coordinated?.let { crossingState.batches(it) }.orEmpty() }
+    // The scheduled tasks' cards this conversation asked and the changes it made, each where it happened; a run's own session gets
+    // its strip at its head and its report after its end (docs/scheduled-tasks-design.md §8.1, §4, §7.4). Read behind each of the
+    // session's snapshot reads, as the owner requests are.
+    val scheduled = remember(handle) { ScheduledStore.of(app.session, handle, app.processScope) }
+    val scheduledState by scheduled.state.collectAsState()
+    val scheduleRunId = snapshotDetail?.text("scheduleRunId")
+    LaunchedEffect(scheduled, route.id, scheduleRunId, state.session?.snapshotReads) { scheduled.loadSession(route.id!!, scheduleRunId) }
+    val scheduleInserts = remember(scheduledState.sessions, scheduledState.runs, route.id) { ScheduleInsert.of(scheduledState, route.id!!) }
+    val scheduleSessionState = when (snapshotDetail?.text("lifecycleState")) { "COMPLETED" -> "Completed"; "TRASH" -> "Trash"; else -> "Open" }
+    val drawSchedule: @Composable (ScheduleInsert) -> Unit = { insert ->
+        key(insert.key) {
+            ScheduleConversationInsert(insert, scheduled, route.id!!, scheduleSessionState, snapshotDetail?.text("engine")) { id ->
+                open(OrbitRoute(Destination.SCHEDULED, ObjectId.canonical(id) ?: id, origin = Origin.LINK))
+            }
+        }
+    }
     // What the needs-you bar counts in this conversation (iOS `ConsoleModel.openBelowRows`), and which way it lies from
     // the reader: the cards are drawn in the rail before the tail, so they are above only once the reader is past it. A question
     // answered here stops counting with the press, not with the read after it (A08-13).
@@ -415,22 +449,6 @@ fun SessionReader(app: OrbitApplication, handle: SessionHandle, route: OrbitRout
             val key = RecapCard.hideKey(listed?.recapAt, text)
             recapPreferences.edit { putString(RecapCard.hiddenPreferenceKey(id), key) }
             hiddenRecap = key
-        }
-    }
-    var recapRefreshing by remember(handle, route.id) { mutableStateOf(false) }
-    val refreshRecap: () -> Unit = {
-        if (!recapRefreshing) {
-            recapRefreshing = true
-            scope.launch {
-                val notice = try {
-                    val outcome = api.refreshRecap(route.id!!)
-                    if (outcome.written) null else RecapCard.notice(outcome.reason ?: "error")
-                } catch (cancel: CancellationException) { throw cancel } catch (_: Exception) { RecapCard.notice("error") }
-                // A pass that wrote is read back by the session and the lists, which the card and the row draw from.
-                if (notice == null) { app.realtime.refreshSession(); app.realtime.refreshDirectory() }
-                else OrbitToasts.show(notice.text, tone = if (notice.failed) ToastTone.ERROR else ToastTone.INFO)
-                recapRefreshing = false
-            }
         }
     }
     LaunchedEffect(snapshotDetail) { snapshotDetail?.let(worktree::offer) }
@@ -605,6 +623,9 @@ fun SessionReader(app: OrbitApplication, handle: SessionHandle, route: OrbitRout
             val session = state.session
             val detail = session?.snapshot?.detail
             var renamedWorkspaceName by remember(handle, route.id) { mutableStateOf<String?>(null) }
+            // When the detail the created line draws from was read: a clone frame heard before it is older news than its cloneState.
+            val madeReadAt = remember(worktreeState.detail ?: detail) { System.currentTimeMillis() }
+            val github = remember(handle) { ManagementGithub(io.orbitd.android.management.ManagementApi(app.session, handle, app.processScope)) }
             val createdWorkspaceLine = remember(detail, worktreeState.detail, data.effectiveRunnerRows, data.effectiveWorkspaceRows, renamedWorkspaceName) {
                 val source = worktreeState.detail ?: detail ?: return@remember null
                 CreatedWorkspaceLine.fromSession(source, data.effectiveRunnerRows, data.effectiveWorkspaceRows)?.let { line ->
@@ -622,6 +643,7 @@ fun SessionReader(app: OrbitApplication, handle: SessionHandle, route: OrbitRout
                 // Inside the row it follows, so no list index moves: the reader's jumps count rows.
                 val ownerPlaced = remember(displayedRows, ownerRequests) { OwnerRequests.place(displayedRows.map { it.event.ts }, ownerRequests) }
                 val crossingPlaced = remember(displayedRows, crossingBatches) { CrossingCards.place(displayedRows.map { it.event.ts }, crossingBatches) }
+                val schedulePlaced = remember(displayedRows, scheduleInserts) { ScheduleInsert.place(displayedRows.map { it.event.ts }, scheduleInserts) }
                 val live = transcript.takeIf { displayedWindow.newerAfter == null }
                 // A turn running now, read at the live tail: only there is the window's newest head the turn in hand. Not a run that is
                 // merely live: a turn stopped without a `turn_end` would count up for as long as the session waits (iOS reads `.running` too).
@@ -649,7 +671,8 @@ fun SessionReader(app: OrbitApplication, handle: SessionHandle, route: OrbitRout
                     if (!displayedWindow.seeded) item(key = "loading") { LoadingMessage("Loading messages…") }
                     item(key = "older") {
                         if (displayedWindow.hasOlder) TextButton(enabled = !displayedLoading, onClick = { follow = false; model.older() }) { Text(if (displayedLoading) "Loading messages…" else "Load earlier messages") }
-                        else if (ownerPlaced[-1] != null || crossingPlaced[-1] != null) Column(verticalArrangement = Arrangement.spacedBy(16.dp)) {
+                        else if (ownerPlaced[-1] != null || crossingPlaced[-1] != null || schedulePlaced[-1] != null) Column(verticalArrangement = Arrangement.spacedBy(16.dp)) {
+                            schedulePlaced[-1]?.forEach { drawSchedule(it) }
                             ownerPlaced[-1]?.forEach { key(it.id) { OwnerRequestInConversation(it, ownerStore, ownerRunner, openLink, discussCard) } }
                             crossingPlaced[-1]?.forEach { key(it.id) { CrossingCardView(it, crossingState) { crossingStore.open(it.id) } } }
                         }
@@ -657,11 +680,25 @@ fun SessionReader(app: OrbitApplication, handle: SessionHandle, route: OrbitRout
                     // Board 02 ③: a successor opens with the note its predecessor wrote, and the waits that moved here.
                     val receivedHandoff = CoordinatorHandoff.received(detail)
                     if (receivedHandoff != null && displayedWindow.seeded && !displayedWindow.hasOlder) item(key = "handoff-note") {
-                        HandoffNoteCard(receivedHandoff) { open(OrbitRoute(Destination.SESSION, it)) }
+                        HandoffNoteCard(receivedHandoff, io.orbitd.android.core.cards.CoordinatorCleanStart.history(
+                            detail?.text("createdAt"), session?.snapshot?.standing.orEmpty(), cards.merged)) { open(OrbitRoute(Destination.SESSION, it)) }
                     }
                     if (createdWorkspaceLine != null && !displayedWindow.hasOlder) {
                         item(key = "created-workspace") {
+                            // A workspace cloned from GitHub: where its clone stands, from the detail (read at `madeReadAt`) and the stream.
+                            val heardClones by app.clones.all.collectAsState()
+                            val clone = createdWorkspaceLine.cloneState?.let { stored ->
+                                WorkspaceClone.now(stored, heardClones[WorkspaceClone.keyOf(createdWorkspaceLine.workspaceId)], madeReadAt)
+                            }
                             CreatedWorkspaceLineView(
+                                clone = clone,
+                                github = github,
+                                onRetry = {
+                                    github.retryClone(createdWorkspaceLine.workspaceId)
+                                    app.clones.hear(createdWorkspaceLine.workspaceId, CloneHeard(CloneState.PENDING))
+                                    app.realtime.refreshSession()
+                                    worktree.loadDetail()
+                                },
                                 line = createdWorkspaceLine,
                                 settingsEnabled = data.workspaces.any { ObjectId.same(it.id, createdWorkspaceLine.workspaceId) } ||
                                     data.effectiveWorkspaceRows.any { ObjectId.same(it.string("id"), createdWorkspaceLine.workspaceId) },
@@ -692,6 +729,7 @@ fun SessionReader(app: OrbitApplication, handle: SessionHandle, route: OrbitRout
                     itemsIndexed(displayedRows, key = { _, it -> it.key }, contentType = { _, it -> if (it.steps.isNotEmpty()) "steps" else it.event.type }) { index, row ->
                         val asked = ownerPlaced[index]
                         val crossings = crossingPlaced[index]
+                        val scheduleThings = schedulePlaced[index]
                         // The turn's head row sits in its message's item, like the owner's requests, so no list index moves.
                         val head = turnHeads[row.event.seq]?.takeIf { row.event.type == "user" && row.steps.isEmpty() }
                         val held = runnerUpdatingGate?.takeIf { heldSeq != null && row.event.seq == heldSeq }
@@ -703,9 +741,10 @@ fun SessionReader(app: OrbitApplication, handle: SessionHandle, route: OrbitRout
                                 head?.let { TurnHeadLine(it, ticking = sessionLive && row.event.seq == newestHead) }
                             }
                         }
-                        if (asked == null && crossings == null) drawRow()
+                        if (asked == null && crossings == null && scheduleThings == null) drawRow()
                         else Column(verticalArrangement = Arrangement.spacedBy(16.dp)) {
                             drawRow()
+                            scheduleThings?.forEach { drawSchedule(it) }
                             asked?.forEach { key(it.id) { OwnerRequestInConversation(it, ownerStore, ownerRunner, openLink, discussCard) } }
                             crossings?.forEach { key(it.id) { CrossingCardView(it, crossingState) { crossingStore.open(it.id) } } }
                         }
@@ -735,7 +774,7 @@ fun SessionReader(app: OrbitApplication, handle: SessionHandle, route: OrbitRout
                     }
                     // At the live tail, under everything the conversation said and above the cards that ask the owner something.
                     if (live != null && displayedRows.isNotEmpty()) recapCard?.let { card ->
-                        item(key = "recap") { RecapCardView(card, recapRefreshing, refreshRecap, hideRecap) }
+                        item(key = "recap") { RecapCardView(card, hideRecap) }
                     }
                     item(key = "newer") { if (displayedWindow.newerAfter != null) TextButton(enabled = !displayedLoading, onClick = model::newer) { Text("Load newer messages") } }
                     item(key = "interaction-cards") {
@@ -878,7 +917,7 @@ fun SessionReader(app: OrbitApplication, handle: SessionHandle, route: OrbitRout
 }
 
 @Composable
-private fun LiveMessage(label: String, parent: String, text: String, open: (String) -> Unit) {
+internal fun LiveMessage(label: String, parent: String, text: String, open: (String) -> Unit) {
     // A06-11: reasoning still being written is open and held to a few self-scrolling lines (iOS 471b2afbb).
     if (label == "Thinking") return LiveThinking(parent, text, open)
     // Settings › Translation (2A): the agent's own reply, streaming with translation on, is the English greyed with its chip until

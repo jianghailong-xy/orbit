@@ -17,6 +17,9 @@ export interface OwnerItemAlertInput {
   projectTitle: string | null;
   /** The candidate a `PROMOTION_APPROVAL` is about; null for every other kind. */
   promotion: { sourceRef: string; upstreamRef: string; taskCount: number } | null;
+  /** Whether the project's coordinator can be neither asked again nor messaged as the push is sent
+   *  (`coordinatorUnreachable`, the project page's own reading). Absent reads as false. */
+  coordinatorUnreachable?: boolean;
 }
 
 /** What an owner item says on a lock screen, or null for "this is nobody's phone's business". */
@@ -123,6 +126,9 @@ function escalationTitle(item: OwnerItemAlertInput): string {
     case 'NO_COORDINATOR':
       return 'Now yours — this project has no coordinator';
     default:
+      // The clock moved it, but the reason it is the owner's now is what the card's doors say: with
+      // no coordinator to ask or message, "no one acted" would point at somebody who cannot.
+      if (item.coordinatorUnreachable) return ESCALATED_UNREACHABLE_TITLE;
       return `Now yours — no one acted on this for ${waitedBeforeEscalation(item)}`;
   }
 }
@@ -143,6 +149,9 @@ function silentMinutes(item: OwnerItemAlertInput): number {
   return Math.max(1, Math.floor(silentMs / MINUTE));
 }
 
+/** An escalated item's heading while its coordinator cannot be reached — the project page's
+ *  `escalationHeading` for the same row. */
+const ESCALATED_UNREACHABLE_TITLE = 'Now yours — the coordinator can’t take messages';
 /** The heading the question card carries (`CoordinatorQuestionCard.COORDINATOR_QUESTION_HEADING`). */
 const COORDINATOR_QUESTION_TITLE = 'The coordinator has a question';
 /** The title the pause card was opened with (`project-fuse.FUSE_PAUSED_TITLE`). */

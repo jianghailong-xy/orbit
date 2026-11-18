@@ -25,6 +25,7 @@ export const OWNER_INTERACTIVE_ROUTES: readonly string[] = [
   // Session guests (docs/session-guests-design.md §3): who may drive the agent on the owner's machine, with the
   // owner's accounts, is the owner's to decide and to see.
   'GET /sessions/:id/guests',
+  'GET /sessions/:id/guests/suggestions',
   'POST /sessions/:id/guests',
   'DELETE /sessions/:id/guests/:userId',
   'POST /projects/:id/acceptance/confirmation',

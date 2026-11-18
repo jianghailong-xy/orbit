@@ -615,7 +615,7 @@ final class AppModel {
         // A managed runner set up from Machines & models brings its runner and default workspace with it.
         managedRunnerModel.onEnsured = { [weak self] in self?.scheduleLibraryRefresh(.agents) }
         // Its default workspace's first session starts where the workspace list says: follow it as the runner comes up.
-        managedRunnerModel.onFirstSessionProviderChanged = { [weak self] in self?.scheduleLibraryRefresh(.agents) }
+        managedRunnerModel.onStatusChanged = { [weak self] status in self?.agents?.adoptManagedStatus(status) }
         managedRunner = managedRunnerModel
         let watchesModel = WatchesModel(baseURL: url, tokenStore: tokenStore)
         #if os(macOS)
@@ -938,6 +938,9 @@ final class AppModel {
         linkCards = nil
         managedRunner?.reset()
         newAccount = nil
+        github = nil
+        githubLoadError = nil
+        cloneLedger = CloneLedger()
         #if os(iOS)
         disablePush()   // reads the access token, so before the store is cleared below
         #endif
@@ -1363,6 +1366,14 @@ final class AppModel {
             nudgeProjects()
         default:
             break
+        }
+        // A GitHub workspace's clone (docs/github-workspace-design.md §5.4): git's percentage is drawn from what is heard
+        // here and read from nothing else, so a percentage alone reads nothing again. A state that moved is what the
+        // server stored: the open conversations of that workspace read their detail again, and the lists below.
+        if let (workspaceID, clone) = WorkspaceClone.event(type: ev.type.rawValue, data: ev.data,
+                                                           envelopeAgentID: ev.agentId) {
+            guard cloneLedger.hear(workspaceID, clone) else { return }
+            consoleRegistry?.cloneStateMoved(workspaceID: workspaceID)
         }
         switch ControlEventRoute.of(ev) {
         // A task event carries the changed row ids. Fold those exact rows into the loaded page;
@@ -1900,6 +1911,10 @@ final class AppModel {
             // (PushService.notifyApprovalRequest) — posting the diff's banner too would alert
             // twice for one approval. macOS has no APNs path, so it keeps announcing them here.
             if case .needsApproval = event { continue }
+            // A settled run likewise (PushService.notifySessionSettled), which also honours the
+            // session's mute and the account's switch; this banner would be a second, differently
+            // worded alert for the same run.
+            if case .finished = event { continue }
             #endif
             notifications.post(Notifications.content(for: event))
         }
@@ -2146,6 +2161,83 @@ final class AppModel {
         newAccount = answer
     }
 
+    // MARK: GitHub (docs/github-workspace-design.md §5.2, §8)
+
+    /// `GET /integrations/github` as last read: whether the deployment has Orbit's GitHub App, and the account's
+    /// connection. Nil until read.
+    private(set) var github: GithubIntegration?
+    /// Why the last read failed; nil after one that answered.
+    private(set) var githubLoadError: String?
+    /// What the realtime stream said about each GitHub workspace's clone: git's percentage lives only here.
+    private(set) var cloneLedger = CloneLedger()
+
+    /// Read the connection again: Settings → GitHub and the setup card ask as they appear, and again when the app
+    /// comes back from GitHub's sign-in in the browser.
+    func loadGithub() async {
+        guard let api else { return }
+        let generation = apiGeneration
+        do {
+            let view = try await api.githubIntegration()
+            guard generation == apiGeneration else { return }
+            github = view
+            githubLoadError = nil
+        } catch {
+            guard generation == apiGeneration else { return }
+            githubLoadError = APIClient.failureReason(error)
+        }
+    }
+
+    /// Where to sign in to GitHub. The callback comes back to Settings → GitHub on the web; the app reads the
+    /// connection again as it comes back to the front.
+    func githubSignInURL() async throws -> URL {
+        guard let api else { throw URLError(.userAuthenticationRequired) }
+        return try await api.githubStart(returnTo: GithubFlow.returnPath)
+    }
+
+    /// Disconnect, and keep what the server answers. Nil on success, else why not.
+    func disconnectGithub() async -> String? {
+        guard let api else { return nil }
+        do {
+            github = try await api.disconnectGithub()
+            return nil
+        } catch {
+            return APIClient.failureReason(error)
+        }
+    }
+
+    /// Settings → GitHub: the sheet's page on iOS, the Settings section on the Mac, where GitHub is a group of its form.
+    func showGithubSettings() {
+        #if os(iOS)
+        nav.openSettings(at: .github)
+        #else
+        selectedSection = .settings
+        #endif
+    }
+
+    func githubRepositories(query: String) async throws -> GithubRepositoryPage {
+        guard let api else { throw URLError(.userAuthenticationRequired) }
+        return try await api.githubRepositories(query: query)
+    }
+
+    func githubBranches(repoID: Int64) async throws -> GithubBranches {
+        guard let api else { throw URLError(.userAuthenticationRequired) }
+        return try await api.githubBranches(repoID: repoID)
+    }
+
+    /// Retry a failed clone (POST /workspaces/:id/clone/retry): heard as PENDING at once, and the conversations of that
+    /// workspace read their detail again. Nil on success, else why not.
+    func retryClone(workspaceID: String) async -> String? {
+        guard let api else { return nil }
+        do {
+            _ = try await api.retryClone(workspaceID: workspaceID)
+            cloneLedger.hear(workspaceID, CloneHeard(state: .pending))
+            consoleRegistry?.cloneStateMoved(workspaceID: workspaceID)
+            return nil
+        } catch {
+            return APIClient.failureReason(error)
+        }
+    }
+
     // MARK: a machine with no workspace (board rules 1–12)
 
     /// Each machine's new session page as it has been left, for this run of the app. Mutated by
@@ -2211,48 +2303,37 @@ final class AppModel {
 
     /// That page's model, made the first time and kept (`MachineSetupModel`). Call from a `.task` or an
     /// event handler, never a view `body`.
-    func machineSetup(for runner: Runner) -> MachineSetupModel? {
+    func machineSetup(for runner: Runner) -> MachineSetupModel {
         let key = PublicID.storageKey(runner.id)
         if let kept = machineSetups[key] { return kept }
-        guard let agents, let consoleRegistry else { return nil }
-        let standIn = Agent.machineDraft(runnerID: runner.id, name: RunnerPageFormat.displayName(runner),
-                                         engine: MachineSetup.firstEngineOn(runner.engines))
-        let draft = consoleRegistry.draftModel(
-            for: standIn, defaultModel: agents.effectiveDefaultModel(for: standIn),
-            configuredProviders: agents.configuredProviders,
-            configuredProvidersLoaded: agents.configuredProvidersLoaded,
-            providerPools: agents.providerPools, sharedPools: agents.sharedPools,
-            modelCatalog: agents.modelCatalog(for: runner.id),
-            accountDefaultEffort: user?.preferences?.defaultEffort) { [weak self] session in
-                self?.openCreatedMachineSession(session, runnerID: runner.id)
-            }
-        let setup = MachineSetupModel(runner: runner, draft: draft)
+        let setup = MachineSetupModel(runner: runner)
         machineSetups[key] = setup
         return setup
     }
 
-    /// The first message made the workspace: the page you are on becomes the conversation, in the
-    /// workspace it made, and the Set up row turns into that workspace's row.
-    private func openCreatedMachineSession(_ session: Session, runnerID: String) {
-        registerCreatedAgentSession(session)
-        machineSetups[PublicID.storageKey(runnerID)] = nil
-        if machineDraftRunnerID == runnerID {
-            show(.console(sessionID: session.id, origin: .list), agent: session.agent?.id ?? session.agentId)
+    /// The setup card's Create workspace (owner 2026-11-16): the workspace alone, in the folder and under the
+    /// name the card was given (POST /workspaces). The list then says the machine has one, and the page moves
+    /// on to the new workspace's new session page. Why it was refused, or nil.
+    func createMachineWorkspace(runnerID: String, folder: PickedFolder, name: String) async -> String? {
+        guard let api else { return "Not signed in." }
+        do {
+            let made = try await api.createAgent(MachineSetup.createRequest(folder: folder, name: name,
+                                                                            runnerID: runnerID))
+            await agents?.load()
+            machineSetups[PublicID.storageKey(runnerID)] = nil
+            if machineDraftRunnerID == runnerID { show(.compose(agentID: made.id, folderID: nil), agent: made.id) }
+            return nil
+        } catch {
+            return APIClient.failureReason(error)
         }
-        Task { await agents?.load() }
     }
 
     /// The machine got a workspace some other way (another device, the web's form): the page moves on
-    /// to it, and what was being set up here no longer applies. What was waiting comes back in that
-    /// workspace's composer rather than vanishing.
+    /// to it, and what was being set up here no longer applies.
     func machineGotWorkspace(_ runnerID: String) {
         guard machineDraftRunnerID == runnerID, let workspace = agents?.firstWorkspace(onRunner: runnerID)
         else { return }
-        let key = PublicID.storageKey(runnerID)
-        if let held = machineSetups[key]?.handOff() {
-            consoleRegistry?.queueDraftMessage(agentID: workspace.id, message: held)
-        }
-        machineSetups[key] = nil
+        machineSetups[PublicID.storageKey(runnerID)] = nil
         show(.compose(agentID: workspace.id, folderID: nil), agent: workspace.id)
     }
 
@@ -2363,11 +2444,22 @@ final class AppModel {
         if needsYouToasts.isEmpty { needsYouToastsMore = 0 }
     }
 
-    /// A press on a notice: the conversation it names, at the card it waits on.
+    /// A press on a notice: the conversation it names, at the card it waits on. An owner request's
+    /// card is opened in the "Waiting on you" inbox, as its push opens it: in the conversation it sits
+    /// where it was asked, under every turn taken since, so landing at the tail showed nothing.
     func openNeedsYouToast(_ notice: NeedsYouToast, projectInColumn: Bool = false) {
         dismissNeedsYouToast(notice.id)
         if let item = notice.ownerItem {
             openNeedsYouItem(notice.target, item, projectInColumn: projectInColumn)
+        } else if notice.target.waitingKind == .ownerRequest, let requests = ownerRequests {
+            if let request = OwnerRequests.oldestPending(requests.known, sessionID: notice.target.id) {
+                openOwnerRequest(request.id)
+            } else {
+                // Not read on this device yet: the inbox, whose Open tab reads it and holds its card.
+                settingsPresented = false
+                requests.tab = .open
+                requests.inboxPresented = true
+            }
         } else {
             openNeedsYouSession(notice.target)
         }
@@ -2912,23 +3004,6 @@ final class AppModel {
         }
     }
 
-    /// Write a session's recap again now (`POST /sessions/:id/recap`, the conversation's Recap
-    /// card), then read the lists again so the card and the row show the line it wrote — the server
-    /// publishes the session too, but a list on a stream gap would otherwise wait for its next
-    /// snapshot. Answers with what to tell the reader when the pass wrote nothing
-    /// (`RecapCard.notice`); nil when it wrote, or when another pass wrote first.
-    func refreshRecap(_ sessionID: String) async -> RecapCard.Notice? {
-        guard let api else { return RecapCard.notice(for: "error") }
-        do {
-            let outcome = try await api.refreshRecap(sessionID: sessionID)
-            let notice = outcome.written ? nil : RecapCard.notice(for: outcome.reason ?? "error")
-            if notice == nil { await reloadSessionLists() }
-            return notice
-        } catch {
-            return RecapCard.notice(for: "error")
-        }
-    }
-
     // MARK: session tags
 
     /// Load the owner's tag library (best-effort — an older server without the endpoint leaves it
@@ -3353,6 +3428,13 @@ final class AppModel {
         _ = try await api.retryIntegrationJob(projectID, jobID: jobID)
     }
 
+    /// "Land without the check" on a landing in flight (§2.4 J-S5), from the landing card. Throws
+    /// what the server answered, for the card to say; the page reads its line again itself.
+    func skipLandingCheck(_ projectID: String, taskID: String) async throws {
+        guard let api else { throw APIError.notConfigured }
+        try await api.skipLandingCheck(projectID, taskID: taskID)
+    }
+
     /// End a running job whose runner stopped reporting (J-T10), from the merge card's timed-out
     /// doors and the landing page. The page re-reads what it drew from afterwards.
     func abandonIntegrationJob(_ projectID: String, jobID: String) async throws {
@@ -3453,6 +3535,25 @@ final class AppModel {
             projectID: projectID,
             page: projectSessionsAddress.map { ($0.projectID, projectSessions) },
             answered: projectSessionsReadAt != nil)
+    }
+
+    /// Whether the project sessions button spins: anything the page it opens shows as active — a
+    /// member or landing session working (the spinner) or with a background job in flight (the
+    /// breathing glyph), a landing job running or queued, or a merge into main being checked or
+    /// landing. False until the page's read holds this project.
+    func projectActive(_ projectID: String) -> Bool {
+        guard let address = projectSessionsAddress,
+              PublicID.storageKey(address.projectID) == PublicID.storageKey(projectID) else { return false }
+        if let integration = projectSessionsIntegration,
+           projectSessionsLandingRunning || integration.integratingCount + integration.queuedCount > 0
+            || integration.inFlight != nil || integration.inFlightJobs?.isEmpty == false {
+            return true
+        }
+        if projectSessionsMerge?.projectID == address.projectID, projectSessionsMergeRunning { return true }
+        return projectSessions.contains { session in
+            let glyph = SessionStatusGlyph.make(for: session, watching: watches?.summary(for: session.id))
+            return glyph.shape == .spinner || glyph.pulse
+        }
     }
 
     #if os(iOS)
@@ -4009,6 +4110,7 @@ final class AppModel {
     /// Load the agent list, then land on the app's home if we're still on the launch default — see
     /// `resolveDefaultLanding`.
     func loadAgentsThenLand() async {
+        await managedRunner?.load()
         await agents?.load()
         resolveDefaultLanding()
     }

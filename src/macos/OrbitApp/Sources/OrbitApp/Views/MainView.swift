@@ -197,18 +197,13 @@ struct SectionSidebar: View {
             // Scheduled under Tasks with the schedules failing or held (web board 01 ①): account-wide, never a
             // row of a workspace's list; away while the server predates scheduled tasks.
             scheduled: model.scheduled.map { !$0.unsupported } ?? false,
-            scheduledNeedsYou: model.scheduled?.needsYouCount ?? 0,
-            // New wiki… under the Wiki row once there is a wiki (docs/wiki-explicit-creation-design.md §3.4).
-            newWiki: model.wiki?.shown == true && model.wiki?.spaces.isEmpty == false)
+            scheduledNeedsYou: model.scheduled?.needsYouCount ?? 0)
         let openProjects = model.projects?.drawerProjects(coordinators: model.projectCoordinators) ?? []
         let projects = AgentListLogic.sidebarProjects(openProjects, coordinators: model.projectCoordinators)
         let shortcutIndex = model.agentShortcutIndex   // agentID → ⌘N slot, computed once per render
         return List(selection: $selection) {
             ForEach(sections) { row in
-                switch row.newWiki {
-                case true:  newWikiRow
-                case false: sectionRow(row)
-                }
+                sectionRow(row)
             }
             // "Waiting on you", raised as a sheet over whatever is selected.
             OwnerRequestInboxEntry()
@@ -305,20 +300,6 @@ struct SectionSidebar: View {
         }
     }
 
-    /// New wiki…: grey, a plus and no count, as the drawer draws it; it raises the Create wiki form and selects nothing.
-    private var newWikiRow: some View {
-        Button {
-            model.wiki?.creating = true
-        } label: {
-            Label(WikiStartCopy.newWiki, systemImage: "plus")
-                .foregroundStyle(.secondary)
-                .frame(maxWidth: .infinity, alignment: .leading)
-                .contentShape(Rectangle())
-        }
-        .buttonStyle(.plain)
-        .accessibilityIdentifier("sidebar-new-wiki")
-    }
-
     /// Projects, Tasks or the Wiki, with the drawer's amber count of what waits on you there. One
     /// view per row from the snapshot; a count of 0 is drawn hidden, not removed.
     private func sectionRow(_ row: SidebarSectionRow) -> some View {
@@ -395,7 +376,7 @@ struct SectionSidebar: View {
                 .contextMenu { workspaceMenu(agent) }
                 .tag(SidebarSelection.agent(agent.id))
             case .setUp(let machine):
-                setUpRow(machine)
+                setUpRow(machine, separates: machine.isManaged && (agents?.machinesToSetUp.count ?? 0) > 1)
                     .tag(SidebarSelection.machine(machine.id))
             case .placeholder:
                 Text(emptyWorkspacesText("No workspaces"))
@@ -432,12 +413,18 @@ struct SectionSidebar: View {
 
     /// In the tint, as on the phone's drawer, until it is the row selected: blue on the selection's
     /// blue can't be read, and the list knows what a selected row's text should be.
-    private func setUpRow(_ machine: MachineToSetUp) -> some View {
+    private func setUpRow(_ machine: MachineToSetUp, separates: Bool) -> some View {
         let ink = model.machineDraftRunnerID == machine.id ? AnyShapeStyle(.primary) : AnyShapeStyle(Color.accentColor)
-        return Label {
-            Text(MachineSetupCopy.setupTitle(machine: machine.name)).foregroundStyle(ink)
-        } icon: {
-            Image(systemName: "folder.badge.plus").foregroundStyle(ink)
+        return VStack(alignment: .leading, spacing: 4) {
+            Label {
+                Text(MachineSetupCopy.setupTitle(machine: machine.name))
+                    .fontWeight(machine.isManaged ? .semibold : nil)
+                    .foregroundStyle(ink)
+            } icon: {
+                Image(systemName: machine.isManaged ? "cloud" : "folder.badge.plus")
+                    .foregroundStyle(machine.isManaged ? AnyShapeStyle(Color.accentColor) : ink)
+            }
+            if separates { Divider() }
         }
     }
 

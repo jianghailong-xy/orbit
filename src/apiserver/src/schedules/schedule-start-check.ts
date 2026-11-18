@@ -19,7 +19,7 @@ import { isWiderThanStarter, resolvePermissionMode } from '../common/permission-
 import { agentProviderSeed } from '../workspaces/workspace-provider';
 import { scheduleRunMode } from './schedule-access';
 import { widenedParts, type AccessLevel, type Envelope } from './schedule-envelope';
-import { instantOfLocal, offsetAt, parseRule, runsPerWeek } from './schedule-time';
+import { instantOfLocal, offsetAt, parseRule, ruleCommandHash, runsPerWeek } from './schedule-time';
 
 export type ScheduleHeldReason =
   | 'WORKSPACE_NOT_OWNED'
@@ -30,7 +30,8 @@ export type ScheduleHeldReason =
   | 'OUTSIDE_ENVELOPE'
   | 'ACCESS_NOT_ENFORCEABLE'
   | 'MODE_WIDER_THAN_ACCOUNT_DEFAULT'
-  | 'NO_REPOSITORY';
+  | 'NO_REPOSITORY'
+  | 'WORKTREE_DISABLED';
 
 /** What a run that passed starts with: its mode, and the engine and credential it runs on (null: the workspace's). */
 export interface StartPlan {
@@ -65,7 +66,7 @@ async function engineOf(db: Db, schedule: Schedule): Promise<{ engine: string | 
 export async function scheduleStartCheck(db: Db, schedule: Schedule): Promise<StartCheck> {
   const workspace = await db.workspace.findUnique({
     where: { id: schedule.workspaceId },
-    select: { ownerId: true, deletedAt: true, enabled: true, repoUrl: true, workDirIsGit: true },
+    select: { ownerId: true, deletedAt: true, enabled: true, repoUrl: true, workDirIsGit: true, enableWorktree: true },
   });
   if (!workspace || workspace.ownerId !== schedule.ownerId) return { ok: false, reason: 'WORKSPACE_NOT_OWNED' };
   if (workspace.deletedAt) return { ok: false, reason: 'WORKSPACE_DELETED' };
@@ -85,12 +86,15 @@ export async function scheduleStartCheck(db: Db, schedule: Schedule): Promise<St
     accessLevel: schedule.envelopeAccessLevel,
     runsPerWeek: schedule.envelopeRunsPerWeek,
     runLimitMinutes: schedule.envelopeRunLimitMinutes,
+    commandHash: schedule.envelopeCommandHash,
   };
+  const rule = parseRule(schedule.rule);
   const need: Envelope = {
     workspaceId: schedule.workspaceId,
     accessLevel: schedule.accessLevel,
-    runsPerWeek: runsPerWeek(parseRule(schedule.rule)),
+    runsPerWeek: runsPerWeek(rule),
     runLimitMinutes: schedule.runLimitMinutes,
+    commandHash: ruleCommandHash(rule),
   };
   if (widenedParts(envelope, need).length > 0) return { ok: false, reason: 'OUTSIDE_ENVELOPE' };
 
@@ -104,8 +108,11 @@ export async function scheduleStartCheck(db: Db, schedule: Schedule): Promise<St
     return { ok: false, reason: 'MODE_WIDER_THAN_ACCOUNT_DEFAULT' };
   }
 
-  if (schedule.accessLevel === 'OPEN_PR' && !workspace.repoUrl && workspace.workDirIsGit !== true) {
+  if (schedule.accessLevel !== 'CHECK_ONLY' && !workspace.repoUrl && workspace.workDirIsGit !== true) {
     return { ok: false, reason: 'NO_REPOSITORY' };
+  }
+  if (schedule.accessLevel === 'LAND' && !workspace.enableWorktree) {
+    return { ok: false, reason: 'WORKTREE_DISABLED' };
   }
   return { ok: true, plan: { mode, engine, provider } };
 }
@@ -133,12 +140,25 @@ export function scheduleBudgetWindowStart(plannedAt: Date, timezone: string): Da
  * `startedAt` cleared (§7.2), so its attempts are one start. Read under the schedule lock the start takes.
  */
 export async function scheduleOverBudget(db: Db, schedule: Schedule, plannedAt: Date): Promise<boolean> {
-  const started = await db.scheduleRun.count({
+  return (await scheduleBudgetStarts(db, schedule, plannedAt)) >= schedule.envelopeRunsPerWeek;
+}
+
+/** The runs that count against the budget for a slot planned at `plannedAt`, as scheduleOverBudget reads them. */
+export async function scheduleBudgetStarts(db: Db, schedule: Schedule, plannedAt: Date): Promise<number> {
+  return db.scheduleRun.count({
     where: {
       scheduleId: schedule.id,
       startedAt: { not: null },
       plannedAt: { gt: scheduleBudgetWindowStart(plannedAt, schedule.timezone) },
     },
   });
-  return started >= schedule.envelopeRunsPerWeek;
+}
+
+/**
+ * The SCHEDULE_OVER_BUDGET refusal of a Run now that is not the owner's own press (§8.4): the runs actually started in
+ * the window, then the number the owner allowed.
+ */
+export function scheduleOverBudgetMessage(started: number, allowed: number): string {
+  return `This schedule has started ${started} ${started === 1 ? 'run' : 'runs'} in the past 7 days; ` +
+    `its owner allowed ${allowed} a week. Only the owner can run it now.`;
 }

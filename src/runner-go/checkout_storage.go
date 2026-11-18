@@ -70,6 +70,26 @@ func (s *checkoutStorage) judge(reading worktreeGCPressure) worktreeGCPressure {
 	return reading
 }
 
+// diskResources puts the budget on the machine page's disk card (MachineResources): a Docker volume's limit as the
+// disk, and free space as the sweep judges it, so the card shows the volume the checkouts are held to rather than
+// the host's disk that statfs sees through it. Without a budget the statfs figures stand.
+func (s *checkoutStorage) diskResources(r *MachineResources) {
+	if s == nil {
+		return
+	}
+	var reading worktreeGCPressure
+	if r.DiskFreeBytes != nil {
+		reading = worktreeGCPressure{freeBytes: *r.DiskFreeBytes, measured: true}
+	}
+	judged := s.judge(reading)
+	if judged.budget == nil {
+		return
+	}
+	total := uint64(judged.budget.LimitBytes)
+	free := min(judged.freeBytes, total)
+	r.DiskTotalBytes, r.DiskFreeBytes = &total, &free
+}
+
 // measuredAt is when the budget was measured, and whether it is a budget at all: none, one with no
 // limit, one with a usage below zero and one whose time does not parse are all no budget, and the
 // sweep keeps the machine's own floor. Without a time, nothing could say which removals the

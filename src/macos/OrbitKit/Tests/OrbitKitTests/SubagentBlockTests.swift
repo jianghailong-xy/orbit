@@ -124,12 +124,12 @@ final class SubagentBlockTests: XCTestCase {
 
     // MARK: - the third line: what came of it
 
-    func testAWriterThatEndedCountsTheFilesItChangedWithItsTimeAndCost() {
+    func testAWriterThatEndedCountsTheFilesItChangedWithItsTimeButNoCost() {
         let block = SubagentBlock.describe(
             input: call, run: run(changedFiles: ["a.ts", "b.ts", "c.ts"]), status: .ok, result: "Added backoff.")
         XCTAssertEqual(block.outcome, "3 files changed")
         XCTAssertTrue(block.outcomeIsFiles)
-        XCTAssertEqual(block.numbers, "41s · $0.21")
+        XCTAssertEqual(block.numbers, "41s", "the run's cost is not shown")
         XCTAssertEqual(block.changedFiles, ["a.ts", "b.ts", "c.ts"])
         let one = SubagentBlock.describe(input: call, run: run(changedFiles: ["a.ts"]), status: .ok)
         XCTAssertEqual(one.outcome, "1 file changed")
@@ -162,11 +162,6 @@ final class SubagentBlockTests: XCTestCase {
         XCTAssertNotNil(block.startedAt)
     }
 
-    func testACostUnderACentReadsAsLessThanACent() {
-        XCTAssertEqual(SubagentBlock.describe(input: call, run: run(costUsd: 0.004), status: .ok).numbers, "41s · <$0.01")
-        XCTAssertEqual(SubagentBlock.describe(input: call, run: run(costUsd: 0), status: .ok).numbers, "41s · <$0.01")
-    }
-
     func testTheRunningLineCountsTimeAndSteps() {
         XCTAssertEqual(SubagentBlock.runningNumbers(elapsed: 72, steps: 9), "1m 12s · 9 steps")
         XCTAssertEqual(SubagentBlock.runningNumbers(elapsed: 5, steps: 1), "5s · 1 step")
@@ -193,7 +188,6 @@ final class SubagentBlockTests: XCTestCase {
         XCTAssertEqual(group.progress, "2 of 3 done")
         XCTAssertEqual(group.engines, "Claude → Codex, DeepSeek", "the parent's own engine is not a move")
         XCTAssertEqual(group.machines, "2 machines")
-        XCTAssertEqual(group.cost, "$0.02 so far")
         XCTAssertEqual([group.done, group.failed, group.running], [2, 0, 1])
     }
 
@@ -204,7 +198,6 @@ final class SubagentBlockTests: XCTestCase {
         XCTAssertEqual(done.progress, "All done")
         XCTAssertNil(done.engines, "all ran on the parent's engine")
         XCTAssertNil(done.machines)
-        XCTAssertEqual(done.cost, "$0.42")
         let mixed = [run(status: "DONE"), run(status: "FAILED")]
         let failed = SubagentGroup.describe(mixed.map { SubagentBlock.describe(input: call, run: $0, status: .ok) },
                                             runs: mixed, parentEngine: "dsh")
@@ -251,10 +244,46 @@ final class SubagentBlockTests: XCTestCase {
         XCTAssertEqual(summary.count, 3)
         XCTAssertEqual(summary.running, 1)
         XCTAssertEqual(summary.capsule, "3", "the capsule shows no cost")
-        XCTAssertEqual(summary.spread, "3 engines · 2 machines")
         XCTAssertEqual(summary.rows.map(\SubagentRunView.description), ["iOS tests", "Backoff", "Audit"])
         XCTAssertNil(SubagentSessionSummary.make([]), "no Agent, no capsule")
         XCTAssertEqual(SubagentSessionSummary.make([run(costUsd: 0)])?.capsule, "1")
+    }
+
+    func testTheBandSaysWhatTheRunningAgentIsDoing() throws {
+        let deploy = "Deploy dacad7403 to production"
+        let done = run(status: "DONE", createdAt: "2026-11-11T08:00:00.000Z", description: deploy)
+        let one = run(status: "RUNNING", createdAt: "2026-11-11T08:05:00.000Z", endedAt: nil, description: " \(deploy) ")
+        let older = run(status: "RUNNING", createdAt: "2026-11-11T08:01:00.000Z", endedAt: nil, description: "Audit")
+        XCTAssertEqual(SubagentSessionSummary.make([done, one])?.band, deploy)
+        XCTAssertEqual(SubagentSessionSummary.make([done, older, one])?.band, "2 running · \(deploy)", "the newest running one")
+        XCTAssertEqual(SubagentSessionSummary.make([done, run(status: "RUNNING", endedAt: nil)])?.band, "2 · 1 running",
+                       "no description keeps the counts")
+        XCTAssertNil(SubagentSessionSummary.make([done, one])?.last, "the spinner has the right edge while one runs")
+    }
+
+    func testTheIdleBandSaysHowTheLastRunEnded() throws {
+        let deploy = "Deploy dacad7403 to production"
+        let older = run(status: "DONE", createdAt: "2026-11-11T07:00:00.000Z", endedAt: "2026-11-11T07:01:00.000Z",
+                        description: "Audit")
+        let newest = run(status: "DONE", createdAt: "2026-11-11T08:00:00.000Z", endedAt: "2026-11-11T08:00:50.000Z",
+                         description: deploy)
+        let idle = try XCTUnwrap(SubagentSessionSummary.make([older, newest]))
+        XCTAssertEqual(idle.band, "2 · \(deploy)", "the newest run names the band")
+        XCTAssertEqual(idle.last, SubagentSessionSummary.LastRun(failed: false, duration: "50s"))
+        XCTAssertEqual(idle.last?.spoken, "done, 50s")
+
+        let failed = run(status: "FAILED", createdAt: "2026-11-11T09:00:00.000Z", endedAt: "2026-11-11T09:04:12.000Z",
+                         description: "Run the OrbitKit test suite")
+        let red = try XCTUnwrap(SubagentSessionSummary.make([older, newest, failed]))
+        XCTAssertEqual(red.band, "3 · Run the OrbitKit test suite")
+        XCTAssertEqual(red.last?.failed, true)
+        XCTAssertEqual(red.last?.spoken, "failed, 4m 12s")
+
+        // No description on the newest: the count as before, still with its outcome and time.
+        let bare = try XCTUnwrap(SubagentSessionSummary.make([older, run(status: "DONE", createdAt: "2026-11-11T08:00:00.000Z",
+                                                                          endedAt: "2026-11-11T08:00:50.000Z")]))
+        XCTAssertEqual(bare.band, "2")
+        XCTAssertEqual(bare.last, SubagentSessionSummary.LastRun(failed: false, duration: "50s"))
     }
 
     func testAnOlderServerWithoutTheNewFieldsStillDecodes() throws {
@@ -371,6 +400,27 @@ final class SubagentBlockTests: XCTestCase {
         XCTAssertEqual(SubagentResult.text(callResult: receipt,
                                            run: run(background: true, resultSummary: "The spec is written.")),
                        "The spec is written.")
+    }
+
+    /// The server clips a long result to a 2 KB preview: the runner's pretty JSON no longer parses,
+    /// and its first line is a lone `{`. The block reads the run's own text instead.
+    func testAClippedResultReadsTheRunNotTheBrace() {
+        let clipped = "{\n  \"changedFiles\": [],\n  \"costUsd\": 0.21,\n  \"result\": \"Route 1 worked: the transcript is"
+        let handedBack = "Route 1 worked: the transcript is at x.jsonl.\nMore."
+        let text = SubagentResult.text(callResult: clipped, run: run(resultSummary: handedBack))
+        XCTAssertEqual(text, handedBack)
+        XCTAssertEqual(SubagentBlock.describe(input: call, run: run(resultSummary: handedBack, readonly: true),
+                                              status: .ok, result: text).outcome,
+                       "Route 1 worked: the transcript is at x.jsonl.")
+        // Before the run is read there is nothing to say yet, which is better than `{`.
+        XCTAssertNil(SubagentResult.text(callResult: clipped, run: nil))
+    }
+
+    func testAHandBackThatIsJSONSkipsItsBrackets() {
+        let block = SubagentBlock.describe(
+            input: call, run: run(readonly: true), status: .ok,
+            result: "```json\n{\n  \"route\": \"transcript file\"\n}\n```")
+        XCTAssertEqual(block.outcome, #""route": "transcript file""#)
     }
 
     func testPlainTextIsShownAsItCame() {

@@ -2,7 +2,7 @@ import assert from 'node:assert/strict';
 import { test } from 'node:test';
 import { ConflictException } from '@nestjs/common';
 import { RunStatus } from '@prisma/client';
-import { SESSION_MERGE_RECOVERY_V1, type MergeRecovery } from '@orbit/shared';
+import { SESSION_MERGE_BESIDE_TURN_V1, SESSION_MERGE_RECOVERY_V1, type MergeRecovery } from '@orbit/shared';
 import { SessionsService } from './sessions.service';
 
 const SESSION_ID = '11111111-1111-4111-8111-111111111111';
@@ -283,6 +283,21 @@ test('another caller is still told to wait for the turn', async () => {
     ConflictException,
   );
   assert.deepEqual(h.writes, []);
+});
+
+test('on a runner that merges beside a turn, a merge mid-turn is queued at once, whoever asks', async () => {
+  for (const options of [{ requestedBy: 'AGENT' as const, selfRequest: true }, { requestedBy: 'AGENT' as const }, {}]) {
+    const h = harness({ status: RunStatus.RUNNING }, [SESSION_MERGE_RECOVERY_V1, SESSION_MERGE_BESIDE_TURN_V1]);
+
+    const answer = await h.service.mergeToMain(OWNER_ID, SESSION_ID, 'develop', undefined, options);
+
+    assert.equal((answer as { mergeAfterTurn?: boolean }).mergeAfterTurn, undefined, JSON.stringify(options));
+    assert.equal(h.writes.length, 1);
+    const data = dataOf(h.writes[0]);
+    assert.equal(data.mergeStatus, 'pending', 'the merge is queued while the turn runs');
+    assert.equal(data.mergeAfterTurnAt, null, 'nothing is kept for the turn\'s end');
+    assert.deepEqual(h.order, ['commit', 'wake runner-1']);
+  }
 });
 
 test('a merge that queues clears a merge kept for the turn\'s end', async () => {

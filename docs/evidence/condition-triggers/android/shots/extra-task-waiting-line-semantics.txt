@@ -1,0 +1,11 @@
+Printing with useUnmergedTree = 'true'
+Node #466 at (l=0.0, t=0.0, r=411.0, b=891.0)px
+ |-Node #518 at (l=0.0, t=0.0, r=411.0, b=891.0)px
+   IsContainer = 'true'
+    |-Node #520 at (l=16.0, t=20.0, r=395.0, b=55.0)px, Tag: 'task-waiting-line'
+       |-Node #523 at (l=42.0, t=20.0, r=270.0, b=38.0)px
+       | Text = '[Waiting for: 3 or more OSDs are in]'
+       | Actions = [ClearTextSubstitution, GetTextLayoutResult, SetTextSubstitution, ShowTextSubstitution]
+       |-Node #524 at (l=42.0, t=40.0, r=126.0, b=55.0)px
+         Text = '[2 in · 3 min ago]'
+         Actions = [ClearTextSubstitution, GetTextLayoutResult, SetTextSubstitution, ShowTextSubstitution]

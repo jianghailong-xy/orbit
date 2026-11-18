@@ -23,8 +23,8 @@ extension View {
 }
 
 /// Settings' own stack: the list at its root, and each page it opens as a frame of
-/// `NavState.settingsPath` — the `SettingsPage`s; from Machines & models a machine's record and its engine
-/// and name pages, and a pool's page; and an account's record under Admin. A form row pushes with its
+/// `NavState.settingsPath` — the `SettingsPage`s; from Machines a machine's record and its engine
+/// and name pages, and from Providers a pool's page. A form row pushes with its
 /// `NavigationLink` value; a list row inside a page pushes through `AppModel.push`, which lands here
 /// while the sheet is up.
 struct SettingsSheet: View {
@@ -49,7 +49,6 @@ struct SettingsSheet: View {
                         case .accountPool(let poolID):    AccountPoolSettingsPage(poolID: poolID)
                         case .sharedPool(let poolID):     SharedPoolSettingsPage(poolID: poolID)
                         case .providerDetail(let providerID): ProviderDetailSettingsPage(providerID: providerID)
-                        case .userDetail(let userID):     AdminUserDetailView(userID: userID)
                         default:                          EmptyView()
                         }
                     }
@@ -76,23 +75,24 @@ private struct SettingsPageView: View {
 
     var body: some View {
         switch page {
-        // The page the Machines & models section shows, pushing onto Settings' stack: Machines & models'
-        // one row, where the web's Runners and Providers pages became one.
-        case .machinesAndModels: RunnersListView(rowNavigation: .push)
-        case .sessions:       SessionSettingsPage()
+        case .general:        SessionSettingsPage()
         case .notifications:  NotificationSettingsPage()
+        case .profile:        ProfileSettingsPage()
+        case .github:         GithubSettingsPage()
         case .sharedLinks:    SharedLinksSettingsPage()
         case .accessTokens:   AccessTokensSettingsPage()
         case .terminals:      TerminalsSettingsPage()
+        // The Machines & models page in its two halves, as the web's Settings nav has Machines and Providers.
+        case .machines:       RunnersListView(rowNavigation: .push, part: .machines)
+        case .providers:      RunnersListView(rowNavigation: .push, part: .providers)
         case .changePassword: ChangePasswordPage()
-        case .admin:          AdminUsersView(rowNavigation: .push)
         }
     }
 }
 
 // MARK: - The list
 
-/// Settings' root: the account, then `SettingsHome`'s groups, then Sign out and the build.
+/// Settings' root: the account, then `SettingsHome`'s groups, then Sign out.
 struct SettingsHomeView: View {
     @Environment(AppModel.self) private var model
     @Environment(\.scenePhase) private var scenePhase
@@ -108,23 +108,17 @@ struct SettingsHomeView: View {
     /// The edit-profile card, which the avatar and name open.
     @State private var editingProfile = false
 
-    private var isAdmin: Bool { model.user?.role == "ADMIN" }
-
     var body: some View {
         Form {
             header
             if alertsAllowed == false { alertsOffCard }
             ForEach(SettingsHome.Group.allCases, id: \.self) { group in
                 Section {
-                    ForEach(SettingsHome.rows(group, isAdmin: isAdmin), id: \.self) { row in
+                    ForEach(SettingsHome.rows(group), id: \.self) { row in
                         self.row(row)
                     }
                 } header: {
                     if let header = SettingsHome.header(group) { SettingsHeader(header) }
-                } footer: {
-                    if let footer = SettingsHome.footer(group) {
-                        Text(footer)
-                    }
                 }
             }
             signOutSection
@@ -152,12 +146,13 @@ struct SettingsHomeView: View {
             Task { await model.savePreferences(UpdatePreferencesRequest(theme: value)) }
         }
         .onAppear(perform: seed)
-        // Each row's value is its own read, so they are asked for side by side. Machines & models' is what
-        // its page's Needs you holds: the machines, and the pools — a Codex one of the account's own with
-        // its people and keys, which say whether it can run.
+        // Each row's value is its own read, so they are asked for side by side. Machines' and Providers'
+        // are what their pages' Needs you holds: the machines, and the pools — a Codex one of the
+        // account's own with its people and keys, which say whether it can run.
         .task { alertsAllowed = await model.notifications.alertsAllowed() }
         .task { await model.runners?.load() }
         .task { await model.agents?.reloadPools() }
+        .task { await model.agents?.loadOwnKeys() }
         .task { await model.sharedPools?.load() }
         .task(id: MachinesAndModelsLists.codexPoolIDs(model)) {
             for id in MachinesAndModelsLists.codexPoolIDs(model) { await model.sharedPools?.loadAccess(id) }
@@ -165,6 +160,7 @@ struct SettingsHomeView: View {
         .task { await model.sharedLinks?.load() }
         .task { await model.accessTokens?.load() }
         .task { await model.terminals?.load() }
+        .task { await model.loadGithub() }
         // Back from the system's Settings, where the card sends you: say what it is now.
         .onChange(of: scenePhase) { _, phase in
             guard phase == .active else { return }
@@ -235,21 +231,17 @@ struct SettingsHomeView: View {
                 Text("Light").tag("light")
                 Text("Dark").tag("dark")
             } label: { label }
-        case .email:
-            LabeledContent { Text(model.user?.email ?? "") } label: { label }
-        case .instance:
-            LabeledContent { Text(SettingsHome.instanceName(model.baseURL) ?? "") } label: { label }
-        case .machinesAndModels:
-            NavigationLink(value: NavNode.settingsPage(.machinesAndModels)) {
+        case .machines, .providers:
+            NavigationLink(value: NavNode.settingsPage(row == .machines ? .machines : .providers)) {
                 LabeledContent {
-                    if let value = machinesAndModelsValue {
+                    if let value = row == .machines ? machinesValue : providersValue {
                         // What needs a person is said in amber, as the mock's row says it.
                         Text(value.text)
                             .foregroundStyle(value.needsYou ? RunnerInk.amber : Color.secondary)
                     }
                 } label: { label }
             }
-        case .sessions, .notifications, .sharedLinks, .accessTokens, .terminals, .changePassword, .admin:
+        case .general, .notifications, .profile, .sharedLinks, .accessTokens, .terminals, .github:
             if let page = SettingsHome.page(row) {
                 NavigationLink(value: NavNode.settingsPage(page)) {
                     LabeledContent { if let value = value(of: row) { Text(value) } } label: { label }
@@ -258,12 +250,20 @@ struct SettingsHomeView: View {
         }
     }
 
-    /// Only an answer the server gave — never the empty list a model starts with: how many lines the
-    /// page's Needs you holds, or with none how many machines are online.
-    private var machinesAndModelsValue: (text: String, needsYou: Bool)? {
+    /// Only an answer the server gave — never the empty list a model starts with: how many of the
+    /// machines' lines the page's Needs you holds, or with none how many machines are online.
+    private var machinesValue: (text: String, needsYou: Bool)? {
         guard let runners = model.runners, runners.loadState.hasLoaded else { return nil }
-        let needsYou = MachinesAndModelsLists(model).attention.count
+        let needsYou = MachinesAndModelsLists(model).attention.filter(\.isMachine).count
         return (SettingsHome.machinesAndModelsValue(needsYou: needsYou, runners: runners.runners), needsYou > 0)
+    }
+
+    /// How many pools the Providers page's Needs you holds, once every list has answered; nothing else.
+    private var providersValue: (text: String, needsYou: Bool)? {
+        let lists = MachinesAndModelsLists(model)
+        guard lists.settled,
+              let text = SettingsHome.needsYouValue(lists.attention.filter { !$0.isMachine }.count) else { return nil }
+        return (text, true)
     }
 
     private func value(of row: SettingsHome.Row) -> String? {
@@ -276,6 +276,8 @@ struct SettingsHomeView: View {
             return model.accessTokens?.activeCount.map(SettingsHome.accessTokensValue)
         case .terminals:
             return model.terminals?.count.map { Terminals.settingsValue(count: $0) }
+        case .github:
+            return SettingsHome.githubValue(model.github)
         default:
             return nil
         }
@@ -291,14 +293,6 @@ struct SettingsHomeView: View {
                 } icon: {
                     Image(systemName: "rectangle.portrait.and.arrow.right").foregroundStyle(Color.red)
                 }
-            }
-        } footer: {
-            if let line = SettingsHome.versionLine(
-                version: Bundle.main.infoDictionary?["CFBundleShortVersionString"] as? String,
-                build: Bundle.main.infoDictionary?["CFBundleVersion"] as? String) {
-                Text(line)
-                    .frame(maxWidth: .infinity)
-                    .padding(.top, 12)
             }
         }
     }
@@ -737,8 +731,8 @@ private struct SessionSettingsPage: View {
     @State private var recaps = true
     /// Settings › Translation: the account's switch. Absent on the server means off.
     @State private var translation = false
-    /// Settings › Prompt optimizer: the account's switch. Absent on the server means off.
-    @State private var promptOptimizer = false
+    /// Settings › Prompt optimizer: the account's switch. Absent on the server means on.
+    @State private var promptOptimizer = true
     /// "Show both languages" (02-bilingual.png, mark A). Absent on the server means off.
     @State private var bilingual = false
     @State private var seeded = false
@@ -760,7 +754,7 @@ private struct SessionSettingsPage: View {
                 }
             }
         }
-        .navigationTitle(SettingsPage.sessions.title)
+        .navigationTitle(SettingsPage.general.title)
         .onAppear(perform: seed)
         .onChange(of: permMode) { _, value in
             let saved = model.user?.preferences?.defaultPermissionMode
@@ -789,7 +783,9 @@ private struct SessionSettingsPage: View {
             Task { await model.savePreferences(UpdatePreferencesRequest(translationEnabled: value)) }
         }
         .onChange(of: promptOptimizer) { _, value in
-            guard (model.user?.preferences?.promptOptimizer ?? false) != value else { return }
+            // A server without a key draws it off; that is not the owner turning it off.
+            guard !PromptOptimizer.unavailable(model.user),
+                  PromptOptimizer.switchedOn(model.user?.preferences) != value else { return }
             Task { await model.savePreferences(UpdatePreferencesRequest(promptOptimizer: value)) }
         }
         .onChange(of: bilingual) { _, value in
@@ -886,7 +882,7 @@ private struct SessionSettingsPage: View {
         promptSuggestions = p?.suggestedReplies ?? true
         recaps = p?.showRecaps ?? true
         translation = !SessionTranslation.unavailable(model.user) && p?.translationEnabled == true
-        promptOptimizer = !PromptOptimizer.unavailable(model.user) && p?.promptOptimizer == true
+        promptOptimizer = !PromptOptimizer.unavailable(model.user) && PromptOptimizer.switchedOn(p)
         bilingual = p?.translationBilingual == true
     }
 }
@@ -1021,7 +1017,25 @@ private struct NotificationSettingsPage: View {
 
 // MARK: - Change password
 
-/// The web Profile page's form: the current password, and the new one twice.
+/// The web Profile page, as far as the header's card leaves it: the email the account signs in with,
+/// and Change password, which the web opens as a dialog and a phone as a page.
+private struct ProfileSettingsPage: View {
+    @Environment(AppModel.self) private var model
+
+    var body: some View {
+        Form {
+            Section {
+                LabeledContent("Email", value: model.user?.email ?? "")
+            }
+            Section {
+                NavigationLink(SettingsPage.changePassword.title, value: NavNode.settingsPage(.changePassword))
+            }
+        }
+        .navigationTitle(SettingsPage.profile.title)
+    }
+}
+
+/// The web Profile page's Change password dialog: the current password, and the new one twice.
 private struct ChangePasswordPage: View {
     @Environment(AppModel.self) private var model
 

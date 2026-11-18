@@ -149,9 +149,10 @@ private fun Pill(model: WorktreeModel, state: WorktreeState, d: JsonObject, bran
     val add = files.sumOf { maxOf(0, it.additions) }
     val del = files.sumOf { maxOf(0, it.deletions) }
     val commitFailure = WorktreeBarLogic.commitFailure(d.string("commitStatus"), d.string("commitError"), d.string("commitResultMessage"))
-    val failure = if (commitFailure != null) null else WorktreeBarLogic.failureMessage(d.string("mergeStatus"), d.string("mergeError"),
-        d.string("commitStatus"), d.string("commitError"))
-    val manual = if (failure != null && d.string("commitStatus") != "error") WorktreeBarLogic.manualMergeCommand(d.string("mergeTarget"), branch) else null
+    val conflict = if (commitFailure != null) null else WorktreeBarLogic.mergeConflict(d.string("mergeStatus"), d.string("mergeError"),
+        d.string("mergeTarget"), branch)
+    val failure = if (commitFailure != null || conflict != null) null else WorktreeBarLogic.failureMessage(d.string("mergeStatus"),
+        d.string("mergeError"), d.string("commitStatus"), d.string("commitError"))
     val shape = RoundedCornerShape(8.dp)
     Column(Modifier.fillMaxWidth().padding(bottom = 6.dp).clip(shape).background(MaterialTheme.colorScheme.onSurface.copy(alpha = 0.04f))
         .border(1.dp, MaterialTheme.colorScheme.onSurface.copy(alpha = 0.1f), shape).testTag("worktree-bar")) {
@@ -178,7 +179,13 @@ private fun Pill(model: WorktreeModel, state: WorktreeState, d: JsonObject, bran
                 }
             }
             if (commitFailure != null) key(d.string("commitError")) { CommitFailureView(model, state, commitFailure, branch) }
-            else if (recovery == null && failure != null) FailureLine(failure, manual)
+        }
+        // A failed merge is its own section under the row, inset from the bar's edges (web's `.wt-merge-inset`).
+        if (recovery == null && (conflict != null || failure != null)) {
+            HorizontalDivider(color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.08f))
+            Column(Modifier.fillMaxWidth().padding(start = 10.dp, end = 10.dp, top = 9.dp, bottom = 10.dp)) {
+                if (conflict != null) key(d.string("mergeError")) { MergeConflictView(conflict) } else if (failure != null) FailureLine(failure)
+            }
         }
         // A merge held for target recovery: what holds it, one line, and the review behind it.
         if (commitFailure == null && recovery != null) {
@@ -382,10 +389,10 @@ private fun CommitFailureView(model: WorktreeModel, state: WorktreeState, failur
     } }
 }
 
-/** A failed merge's reason, with the copies a reader needs to take it elsewhere. */
+/** A failed merge's reason, with the copy a reader needs to take it elsewhere. */
 @OptIn(ExperimentalFoundationApi::class)
 @Composable
-private fun FailureLine(message: String, manual: String?) {
+private fun FailureLine(message: String) {
     val clipboard = LocalClipboardManager.current
     var menu by remember { mutableStateOf(false) }
     val error = MaterialTheme.colorScheme.error
@@ -396,8 +403,55 @@ private fun FailureLine(message: String, manual: String?) {
     }
     DropdownMenu(menu, { menu = false }) {
         DropdownMenuItem(text = { Text("Copy failure reason") }, onClick = { clipboard.setText(AnnotatedString(message)); menu = false })
-        manual?.let { command -> DropdownMenuItem(text = { Text("Copy manual merge command") }, onClick = { clipboard.setText(AnnotatedString(command)); menu = false }) }
     } }
+}
+
+/** A merge conflict (web's conflict panel): what happened, then the by-hand recipe as two steps, each command a tap to copy. */
+@Composable
+private fun MergeConflictView(conflict: WorktreeBarLogic.MergeConflict) {
+    val clipboard = LocalClipboardManager.current
+    var showGit by rememberSaveable { mutableStateOf(false) }
+    var copied by remember { mutableStateOf<String?>(null) }
+    LaunchedEffect(copied) { if (copied != null) { delay(1_500); copied = null } }
+    val secondary = MaterialTheme.colorScheme.onSurfaceVariant
+    val sunken = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.06f)
+    Column(Modifier.testTag("merge-conflict"), verticalArrangement = Arrangement.spacedBy(4.dp)) {
+        Text("⊗ ${conflict.headline}", color = MaterialTheme.colorScheme.error, style = MaterialTheme.typography.bodySmall,
+            fontWeight = FontWeight.SemiBold)
+        Text(buildAnnotatedString {
+            val button = "Resolve in session"
+            val at = conflict.why.indexOf(button)
+            if (at < 0) append(conflict.why) else {
+                append(conflict.why.substring(0, at))
+                withStyle(SpanStyle(fontWeight = FontWeight.SemiBold, color = MaterialTheme.colorScheme.onSurface)) { append(button) }
+                append(conflict.why.substring(at + button.length))
+            }
+        }, color = secondary, style = MaterialTheme.typography.bodySmall)
+        conflict.steps.forEachIndexed { i, step ->
+            Row(Modifier.padding(top = 2.dp), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                Box(Modifier.size(16.dp).clip(CircleShape).background(sunken), contentAlignment = Alignment.Center) {
+                    Text("${i + 1}", color = secondary, style = MaterialTheme.typography.labelSmall, fontWeight = FontWeight.SemiBold)
+                }
+                Column(verticalArrangement = Arrangement.spacedBy(3.dp)) {
+                    Text(step.place, color = secondary, style = MaterialTheme.typography.bodySmall)
+                    Text(if (copied == step.command) "Copied" else step.command,
+                        Modifier.clip(RoundedCornerShape(6.dp)).background(sunken)
+                            .clickable(onClickLabel = "Copy command") { clipboard.setText(AnnotatedString(step.command)); copied = step.command }
+                            .padding(horizontal = 7.dp, vertical = 2.dp),
+                        color = secondary, fontFamily = FontFamily.Monospace, style = MaterialTheme.typography.bodySmall)
+                }
+            }
+        }
+        if (conflict.gitOutput != null) {
+            Text(if (showGit) "Hide git output ▾" else "Show git output ▸", Modifier.padding(top = 2.dp).clickable { showGit = !showGit }
+                .semantics { stateDescription = if (showGit) "Shown" else "Hidden" }, color = secondary, style = MaterialTheme.typography.bodySmall)
+            if (showGit) SelectionContainer {
+                Text(conflict.gitOutput, Modifier.fillMaxWidth().clip(RoundedCornerShape(6.dp)).background(sunken)
+                    .padding(horizontal = 8.dp, vertical = 6.dp), fontFamily = FontFamily.Monospace, style = MaterialTheme.typography.bodySmall,
+                    color = secondary)
+            }
+        }
+    }
 }
 
 @Composable

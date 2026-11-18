@@ -302,6 +302,7 @@ func antigravityEnv(job *ClaimedSession, execDir string) []string {
 		envWiki:                     wikiEnv(job.WikiDisabled),
 		envScheduleRun:              scheduleRunEnv(job.ScheduleRun),
 		envMCPPermissionPrompt:      "0",
+		envSpawnDepth:               strconv.Itoa(job.SpawnDepth),
 		// Without it every start spawns a detached `agy --bg-updater` that replaces the binary in
 		// place, and only the lowercase "true" turns it off (§6). The binary changes when Orbit's
 		// engine updater says so.
@@ -1170,6 +1171,10 @@ func runAntigravitySessionProcess(ctx context.Context, shutdownCtx context.Conte
 		pendingReloads = nil
 		// Model, effort, permission mode and environment are all fixed when agy starts.
 		d.retire()
+		// An account switch is recorded now rather than at the next agy: the conversation is the
+		// session's own, never an account's, so with agy retired nothing holds the account it left,
+		// which can be removed while the session is idle (moveIdleSessionToItsAccount).
+		writeSessionMeta(scratchDir, job, execDir)
 		emit(evSystem, map[string]interface{}{"subtype": "resumed", "reason": "config_changed"})
 	}
 

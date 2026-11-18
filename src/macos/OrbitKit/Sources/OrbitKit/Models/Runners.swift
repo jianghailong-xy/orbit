@@ -314,6 +314,9 @@ public struct RunnerEngineHealth: Codable, Equatable, Sendable, Identifiable {
     /// Kimi only: the site its login is on, `mainland-cn` (kimi.com) or `global` (kimi.ai) — see
     /// `KimiSite`. Absent before the first Kimi sign-in on that machine, and from an older runner.
     public let kimiRegion: String?
+    /// OpenCode only: its CLI listed no provider key, stored or in its environment. `auth` stays
+    /// unknown — OpenCode's free models need none. Absent otherwise, and from an older runner.
+    public let openCodeNoKey: Bool?
     /// The Default the owner removed from Orbit on this runner (`DELETE /runners/:id/accounts/:engine/
     /// default`), which `POST …/default/restore` brings back (shared `RunnerEngineHealth.removedDefault`).
     /// Present only while the runner reports another account of this engine: Default is then left out
@@ -329,8 +332,9 @@ public struct RunnerEngineHealth: Codable, Equatable, Sendable, Identifiable {
                 accounts: [RunnerEngineAccount]? = nil, update: RunnerEngineUpdate? = nil,
                 authSource: String? = nil, planUsage: PlanUsageSnapshot? = nil,
                 installationError: String? = nil, dsh: DshRuntimeHealth? = nil, kimiRegion: String? = nil,
-                removedDefault: RunnerRemovedDefault? = nil) {
+                removedDefault: RunnerRemovedDefault? = nil, openCodeNoKey: Bool? = nil) {
         self.engine = engine
+        self.openCodeNoKey = openCodeNoKey
         self.installationError = installationError
         self.dsh = dsh
         self.kimiRegion = kimiRegion
@@ -580,6 +584,63 @@ public struct RunnerAccountRemoveState: Codable, Equatable, Sendable {
     public let account: String?
     public let status: String?
     public let message: String?
+    /// With `failed` because the account is in use: the sessions the machine named as running in it,
+    /// oldest first. Empty otherwise, and from an older server that sends none; one entry this build
+    /// can't read is dropped rather than failing the runner.
+    public let sessions: [RunnerAccountRemoveSession]
+    /// With `pending`: how many sessions the removal moved to another account and waits on to leave
+    /// it. Nil while it waits on none, and from an older server.
+    public let moving: Int?
+
+    public init(engine: String?, account: String?, status: String?, message: String?,
+                sessions: [RunnerAccountRemoveSession] = [], moving: Int? = nil) {
+        self.engine = engine
+        self.account = account
+        self.status = status
+        self.message = message
+        self.sessions = sessions
+        self.moving = moving
+    }
+
+    private enum CodingKeys: String, CodingKey {
+        case engine, account, status, message, sessions, moving
+    }
+
+    public init(from decoder: Decoder) throws {
+        let c = try decoder.container(keyedBy: CodingKeys.self)
+        engine = try c.decodeIfPresent(String.self, forKey: .engine)
+        account = try c.decodeIfPresent(String.self, forKey: .account)
+        status = try c.decodeIfPresent(String.self, forKey: .status)
+        message = try c.decodeIfPresent(String.self, forKey: .message)
+        sessions = ((try? c.decodeIfPresent([LossyDecodable<RunnerAccountRemoveSession>].self, forKey: .sessions)) ?? [])
+            .compactMap(\.value)
+        moving = try? c.decodeIfPresent(Int.self, forKey: .moving)
+    }
+}
+
+/// A session that keeps an account from being removed (shared `RunnerAccountRemoveSession`): what the
+/// runner's page lists and opens. A status this build has never heard of decodes as nil.
+public struct RunnerAccountRemoveSession: Codable, Equatable, Sendable {
+    public let id: String
+    public let title: String
+    public let status: RunStatus?
+
+    public init(id: String, title: String, status: RunStatus?) {
+        self.id = id
+        self.title = title
+        self.status = status
+    }
+
+    private enum CodingKeys: String, CodingKey {
+        case id, title, status
+    }
+
+    public init(from decoder: Decoder) throws {
+        let c = try decoder.container(keyedBy: CodingKeys.self)
+        id = try c.decode(String.self, forKey: .id)
+        title = (try? c.decodeIfPresent(String.self, forKey: .title)) ?? ""
+        status = (try? c.decodeIfPresent(String.self, forKey: .status)).flatMap { $0 }.flatMap(RunStatus.init(rawValue:))
+    }
 }
 
 /// Where a runner's sign-in relay has got to (shared `RunnerLoginState`).

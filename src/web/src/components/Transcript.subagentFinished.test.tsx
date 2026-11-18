@@ -258,7 +258,7 @@ describe('a SubAgent’s finished wake in the transcript', () => {
     expect(shown()).not.toContain('It ended while you were working');
   });
 
-  it('keeps a background job’s news in the same note as its own line, and anything else in the fold', async () => {
+  it('keeps a background job’s news as its own line and omits unrelated appended context', async () => {
     const job = [
       '<background-job-wake>',
       '  A background job you started with bg_run has news you were waiting for; the control plane opened this turn for it:',
@@ -278,15 +278,19 @@ describe('a SubAgent’s finished wake in the transcript', () => {
     await mount([wakeEvent(`${SUBAGENT_DONE}\n\n${extra}`)]);
     expect(container.querySelectorAll('.bgwake')).toHaveLength(1);
     expect(container.querySelector('.chat-user')).toBeNull();
-    expect(fold().querySelector('.bgwake-body')?.textContent).toContain('Orbit attached');
+    expect(fold().querySelector('.bgwake-body')?.textContent).not.toContain('Orbit attached');
+    expect(fold().textContent).not.toContain('You coordinate project P.');
     expect(shown()).not.toContain('Orbit attached');
   });
 
-  it('draws today’s entry for a block in a wording it does not know', async () => {
+  // A wording it does not know is still Orbit's alone: the generic From Orbit line, never the reader's bubble
+  // (owner rule 2026-11-16, OrbitEventLine).
+  it('draws the From Orbit line for a block in a wording it does not know', async () => {
     const unknown = SUBAGENT_DONE.replace('finished: DONE', 'finished: CANCELLED');
     await mount([wakeEvent(unknown)]);
     expect(container.querySelector('.sawake')).toBeNull();
-    expect(container.textContent).toContain('Orbit attached');
+    expect(container.querySelector('.chat-user')).toBeNull();
+    expect(container.querySelector('.orbitwake .bgwake-title')?.textContent).toBe('From Orbit');
   });
 
   it('keeps the line, the whole result and a fold the browser can open in an exported transcript', () => {

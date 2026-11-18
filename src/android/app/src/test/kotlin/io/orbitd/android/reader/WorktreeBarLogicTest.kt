@@ -119,7 +119,17 @@ class WorktreeBarLogicTest {
             " finish; an index.lock that no process has open was left behind by a git that died and is safe" +
             " to remove. Then commit the work on this branch with a message that describes it. Do not push.",
             L.resolveCommitPrompt("orbit/web-command-workspace-7960ce", summary))
-        assertEquals("git rebase develop orbit/fix-a1b2c3 && git checkout develop && git merge --ff-only orbit/fix-a1b2c3", L.manualMergeCommand("develop", "orbit/fix-a1b2c3"))
+    }
+
+    @Test fun aConflictReadsAsWebsPanel() {
+        assertEquals(WorktreeBarLogic.MergeConflict("Merge conflict with develop",
+            "The merge was aborted and nothing changed. Use Resolve in session, or resolve it by hand:",
+            listOf(WorktreeBarLogic.MergeConflict.Step("In the session’s worktree", "git rebase develop"),
+                WorktreeBarLogic.MergeConflict.Step("Then in the repo", "git merge --ff-only orbit/fix-a1b2c3")),
+            "CONFLICT (content): file.txt"), L.mergeConflict("conflict", " CONFLICT (content): file.txt \n", "develop", "orbit/fix-a1b2c3"))
+        assertEquals("Merge conflict with main", L.mergeConflict("conflict", null, null, "orbit/fix-a1b2c3")?.headline)
+        assertNull(L.mergeConflict("conflict", "  ", null, "b")?.gitOutput)
+        listOf(null, "pending", "error", "merged").forEach { assertNull(L.mergeConflict(it, "x", "main", "b")) }
     }
 
     private fun patch(path: String, text: String?, truncated: Boolean? = null) = buildJsonObject {

@@ -16,9 +16,9 @@ import OrbitKit
 /// checked, and the two answers — or, once the project is recorded done, its receipt.
 ///
 /// The look is the start card's: the same blue surface and header, the same white grouped panels.
-/// It is the whole card wherever it is drawn — in the coordinator conversation, where it arrived,
-/// and over the project page — never a preview that opens a review (`ApprovalReviewLayout`'s
-/// whole-card path: nobody hands it a review target).
+/// In the coordinator conversation it is a preview that opens this whole card in the review sheet
+/// (the row hands `ApprovalReviewLayout` its review target); over the project page nobody does, and
+/// it is drawn whole.
 struct ProjectDoneCard: View {
     let subject: ProjectDoneSubject
     /// The coordinator's request, or nil for a card nobody asked for — the server's done check then
@@ -46,6 +46,13 @@ struct ProjectDoneCard: View {
     var onReopen: (() async -> Void)? = nil
     /// Open, Change, Move to a follow-up… and Confirm… (`ProjectDoneFollowUps.swift`).
     var followUps = ProjectDoneFollowUpActions()
+    /// Settings › Translation: "Translated · Show original" under the coordinator's call, and its press.
+    var translationFoot: [SessionTranslation.FootPart] = []
+    var onFlipTranslation: () -> Void = {}
+    /// The last Not yet… note could not be translated and was not sent: "Couldn't translate, so it
+    /// wasn't sent · Retry · Send as written", Send as written going through `onNotYetAsWritten`.
+    var notYetRefused = false
+    var onNotYetAsWritten: ((String) async -> Bool)? = nil
 
     @Environment(\.inApprovalReview) private var inReview
     @State private var recording = false
@@ -56,6 +63,8 @@ struct ProjectDoneCard: View {
     @State private var criteriaOpen: Bool?
     @State private var moving: MoveCriterionSubject?
     @State private var confirming: ConfirmCriterionSubject?
+    /// The Done when rows pressed open past their three lines.
+    @State private var openCriteria: Set<String> = []
 
     var body: some View {
         if ProjectDone.recorded(subject, record: record) {
@@ -125,6 +134,7 @@ struct ProjectDoneCard: View {
                     .fixedSize(horizontal: false, vertical: true)
                     .doneRow()
             }
+            TranslationFootView(parts: translationFoot) { _ in onFlipTranslation() }
         }
         if subject.nonCode {
             NonCodeBanner(mark: subject.nonCodeMark, onChange: followUps.openDelivers)
@@ -168,6 +178,11 @@ struct ProjectDoneCard: View {
                 Text(ProjectDone.notYetHint)
                     .font(.orbitLabel).foregroundStyle(.secondary)
                     .fixedSize(horizontal: false, vertical: true)
+                if notYetRefused, let onNotYet {
+                    TranslationFootView(parts: OwnerCardTranslations.refusedFoot) { action in
+                        decline(action == .sendAsWritten ? (onNotYetAsWritten ?? onNotYet) : onNotYet)
+                    }
+                }
             }
         }
     }
@@ -212,25 +227,39 @@ struct ProjectDoneCard: View {
             ? ProjectDone.confirmationLine(criterion.confirmation?.current) : nil
         let canConfirm = criterion.satisfiedBy == .confirmation && !criterion.satisfied
             && followUps.confirm != nil && item != nil
-        return HStack(alignment: .top, spacing: 8) {
+        let tint = state.warn ? ProjectPalette.warningInk : criterion.satisfied ? Color.green : Color.red
+        let expanded = openCriteria.contains(criterion.id)
+        // The state goes under the words, not beside them: two wrapping texts side by side
+        // squeezed a long criterion into a narrow column, and their heights came out wrong in the
+        // transcript's list (a blank band above the row, the card drawn over the row above it).
+        return HStack(alignment: .firstTextBaseline, spacing: 8) {
             Text("\(item?.ordinal ?? index + 1)")
                 .font(.orbitLabel).monospacedDigit().foregroundStyle(.secondary)
                 .frame(minWidth: 14, alignment: .leading)
-            VStack(alignment: .leading, spacing: 2) {
+            VStack(alignment: .leading, spacing: 4) {
+                // Three lines until pressed: a criterion can run to a paragraph, and six of them
+                // pushed the answers screens below the question.
                 Text(item?.text ?? criterion.definitionId).font(.orbitSubtext)
+                    .lineLimit(expanded ? nil : 3)
                     .fixedSize(horizontal: false, vertical: true)
+                    .contentShape(Rectangle())
+                    .onTapGesture {
+                        if expanded { openCriteria.remove(criterion.id) } else { openCriteria.insert(criterion.id) }
+                    }
+                Label {
+                    Text(state.text.prefix(1).uppercased() + state.text.dropFirst())
+                        .fixedSize(horizontal: false, vertical: true)
+                } icon: {
+                    Image(systemName: state.warn ? "exclamationmark.circle.fill"
+                          : criterion.satisfied ? "checkmark.circle.fill" : "circle")
+                }
+                .labelStyle(DoneStateLabelStyle())
+                .font(.orbitLabel.weight(.semibold))
+                .foregroundStyle(tint)
                 if let confirmed {
                     Text(confirmed).font(.orbitLabel).foregroundStyle(.secondary)
                         .fixedSize(horizontal: false, vertical: true)
                 }
-            }
-            Spacer(minLength: 6)
-            VStack(alignment: .trailing, spacing: 4) {
-                Text(state.text)
-                    .font(.orbitLabel.weight(.semibold))
-                    .foregroundStyle(state.warn ? ProjectPalette.warningInk
-                                     : criterion.satisfied ? Color.green : Color.red)
-                    .multilineTextAlignment(.trailing)
                 if canConfirm, let item {
                     Button(ProjectDone.confirmLabel(criterion.confirmation)) {
                         confirming = ConfirmCriterionSubject(criterionID: item.id, ordinal: item.ordinal,
@@ -279,18 +308,22 @@ struct ProjectDoneCard: View {
         .disabled(recording)
     }
 
+    private func decline(_ send: @escaping (String) async -> Bool) {
+        guard let text = ProjectDone.declineNote(note), !sending else { return }
+        PlatformHaptics.tap()
+        sending = true
+        Task {
+            if await send(text) {
+                note = ""
+                notYetOpen = false
+            }
+            sending = false
+        }
+    }
+
     private func sendButton(_ send: @escaping (String) async -> Bool) -> some View {
         Button {
-            guard let text = ProjectDone.declineNote(note), !sending else { return }
-            PlatformHaptics.tap()
-            sending = true
-            Task {
-                if await send(text) {
-                    note = ""
-                    notYetOpen = false
-                }
-                sending = false
-            }
+            decline(send)
         } label: {
             Text(ProjectDone.sendToCoordinator).approvalActionLabel()
         }
@@ -706,6 +739,16 @@ private struct DoneOrdinal: View {
             .foregroundStyle(Color(light: .white, dark: .black))
             .frame(minWidth: 18, minHeight: 18)
             .background(Color.primary, in: Circle())
+    }
+}
+
+/// A criterion's state line: the glyph beside the first line of its words, tight to them.
+private struct DoneStateLabelStyle: LabelStyle {
+    func makeBody(configuration: Configuration) -> some View {
+        HStack(alignment: .firstTextBaseline, spacing: 4) {
+            configuration.icon
+            configuration.title
+        }
     }
 }
 

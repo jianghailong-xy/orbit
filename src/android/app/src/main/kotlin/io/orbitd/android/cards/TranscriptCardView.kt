@@ -22,7 +22,6 @@ import androidx.compose.ui.window.Dialog
 import androidx.compose.ui.window.DialogProperties
 import io.orbitd.android.core.cards.*
 import io.orbitd.android.navigation.ObjectId
-import io.orbitd.android.reader.AttachedNoteEntry
 import io.orbitd.android.reader.SessionMessageBubble
 import io.orbitd.android.reader.personWords
 import io.orbitd.android.ui.LocalOrbitColors
@@ -182,11 +181,10 @@ internal fun OwnerAnswerLineView(card: InteractionCard, event: RunEvent?, queued
     if (open) OwnerAnswerTold(card, event) { open = false }
 }
 
-/** What the coordinator was told: the line it was sent as, then its words verbatim, and what delivery appended folded under them. */
+/** What the coordinator was told: the line it was sent as, then its words verbatim. */
 @Composable
 private fun OwnerAnswerTold(card: InteractionCard, event: RunEvent?, close: () -> Unit) {
     val words = event?.personWords().orEmpty()
-    val note = event?.fields?.text("controlPlaneNote")?.takeIf { it.isNotBlank() }
     Dialog(close, properties = DialogProperties(usePlatformDefaultWidth = false)) {
         Surface(Modifier.fillMaxSize().safeDrawingPadding()) {
             Column(Modifier.padding(12.dp).verticalScroll(rememberScrollState()).testTag("${card.key}:told"),
@@ -198,7 +196,6 @@ private fun OwnerAnswerTold(card: InteractionCard, event: RunEvent?, close: () -
                 Text(OwnerAnswerLine.line(card.source), style = MaterialTheme.typography.labelMedium,
                     color = MaterialTheme.colorScheme.onSurfaceVariant)
                 SelectionContainer { Text(words, style = MaterialTheme.typography.bodyMedium) }
-                note?.let { AttachedNoteEntry(it.trim()) }
             }
         }
     }
@@ -252,13 +249,11 @@ internal fun CoordinatorDeliveryLineView(card: InteractionCard, event: RunEvent?
     if (shown) CoordinatorDeliveryTold(card, delivery, event, open) { shown = false }
 }
 
-/** What the coordinator — or this session — was told: the line it was sent as, its words verbatim, what delivery appended folded under
- * them, and the task. */
+/** What the coordinator — or this session — was told: the line it was sent as, its words verbatim, and the task. */
 @Composable
 private fun CoordinatorDeliveryTold(card: InteractionCard, delivery: CoordinatorDelivery, event: RunEvent?, open: (String) -> Unit,
     close: () -> Unit) {
     val words = event?.personWords().orEmpty()
-    val note = event?.fields?.text("controlPlaneNote")?.takeIf { it.isNotBlank() }
     Dialog(close, properties = DialogProperties(usePlatformDefaultWidth = false)) {
         Surface(Modifier.fillMaxSize().safeDrawingPadding()) {
             Column(Modifier.padding(12.dp).verticalScroll(rememberScrollState()).testTag("${card.key}:told"),
@@ -271,7 +266,6 @@ private fun CoordinatorDeliveryTold(card: InteractionCard, delivery: Coordinator
                     color = MaterialTheme.colorScheme.onSurfaceVariant)
                 Text(CoordinatorDeliveryLine.sent(delivery), style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.outline)
                 SelectionContainer { Text(words, style = MaterialTheme.typography.bodyMedium) }
-                note?.let { AttachedNoteEntry(it.trim()) }
                 delivery.task?.let { task ->
                     TextButton(onClick = { close(); open("orbit-task:${task.id}") }, Modifier.testTag("${card.key}:task")) {
                         Text(CoordinatorDeliveryLine.itsTask)

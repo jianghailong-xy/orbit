@@ -32,6 +32,7 @@ import { uuidToBase62 } from '@orbit/shared';
 import { type PrismaClient, RunStatus, RunnerStatus, SessionDispatchOrigin } from '@prisma/client';
 import { Client } from 'pg';
 
+import type { AttachmentsService } from '../attachments/attachments.service';
 import { EMAIL_SENT_ACTIVITY, EmailOutboxWorker, INVITE_NO_LONGER_LIVE } from '../email/email-outbox';
 import { EmailSettingsService } from '../email/email-settings.service';
 import { RESEND_API_URL_ENV } from '../email/resend.client';
@@ -89,7 +90,7 @@ test('session invitation email on PostgreSQL: 0618, one email per person and ses
   const settings = new EmailSettingsService(prisma);
   const worker = new EmailOutboxWorker(prisma, settings, { loop: false }, MANAGED_RUNNERS_OFF);
   // remove() announces withdrawn turns; none are queued here.
-  const guests = new SessionGuestsService(prisma, { announceQueuedTurnsChanged: () => undefined } as unknown as SessionsService);
+  const guests = new SessionGuestsService(prisma, { announceQueuedTurnsChanged: () => undefined } as unknown as SessionsService, {} as AttachmentsService);
 
   const person = async (label: string, name: string) => {
     const id = randomUUID();

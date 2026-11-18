@@ -25,7 +25,10 @@ export const PERSONAL_PAGES = [
 ] as const;
 
 /** The Integrations group of Settings: each connected service's page, its nav label and address. */
-export const INTEGRATION_PAGES = [{ path: '/settings/integrations/feishu', label: 'Feishu' }] as const;
+export const INTEGRATION_PAGES = [
+  { path: '/settings/integrations/feishu', label: 'Feishu' },
+  { path: '/settings/integrations/github', label: 'GitHub' },
+] as const;
 
 const setting = <K extends string>(
   anchor: K,
@@ -96,7 +99,7 @@ export const PERSONAL_SETTINGS = {
     'notifySessionFinished',
     '/settings/notifications',
     'When a session finishes',
-    'Alert your devices when a run finishes on its own or fails for good.',
+    'Alert your devices when a session you started finishes on its own or fails for good. Task, coordinator and agent-started sessions stay quiet; Project done still rings.',
   ),
   notifyAgentMessage: setting(
     'notifyAgentMessage',

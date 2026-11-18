@@ -53,8 +53,8 @@ class CreateAndStartCardShellTest : ComposerShellTest() {
         compose.onNode(door("CHAT")).performScrollTo().assertTextEquals("Chat about this")
         compose.onNode(door("CREATE_TASK")).assertTextEquals("Create task").assertIsEnabled()
         compose.onNode(door("CREATE_AND_START")).assertTextEquals("Create and start").assertIsEnabled()
-        assertTrue("Create task, then Create and start, then Chat about this",
-            top("CREATE_TASK") < top("CREATE_AND_START") && top("CREATE_AND_START") < top("CHAT"))
+        assertTrue("Create and start, then Create task, then Chat about this",
+            top("CREATE_AND_START") < top("CREATE_TASK") && top("CREATE_TASK") < top("CHAT"))
         compose.onNode(door("CREATE_AND_START")).performScrollTo().performClick()
         await { shows("Allowed · recorded by the server") }
         assertEquals("""{"behavior":"allow","startAfterCreate":true}""", sent())

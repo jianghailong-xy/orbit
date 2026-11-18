@@ -114,13 +114,19 @@ final class TranslationTests: XCTestCase {
     func testBothLanguagesOnTheFeetLoseTheFlip() {
         let done = TurnTranslation(state: .done, from: .zhHans, original: "改吧")
         XCTAssertEqual(SessionTranslation.userFoot(done, flipped: false, bilingual: true),
-                       [.text("Sent to the agent in English")])
+                       [.text("Sent to the agent in English"), .action("Hide original", .hideOriginal)])
         // Agents working in another language: the foot names it.
         XCTAssertEqual(SessionTranslation.userFoot(done, flipped: false, bilingual: true, agentLanguage: .ja),
-                       [.text("Sent to the agent in Japanese")])
+                       [.text("Sent to the agent in Japanese"), .action("Hide original", .hideOriginal)])
         XCTAssertEqual(SessionTranslation.replyFoot(ReplyTranslation(lang: .zhHans, text: "好"), pending: false,
                                                     flipped: false, bilingual: true),
-                       [.text("Translated")])
+                       [.text("Translated"), .action("Hide original", .hideOriginal)])
+        // Hidden (docs/mocks/translation-hide-original): "Show both" brings the original back.
+        XCTAssertEqual(SessionTranslation.userFoot(done, flipped: false, bilingual: true, originalHidden: true),
+                       [.text("Sent to the agent in English"), .action("Show both", .hideOriginal)])
+        XCTAssertEqual(SessionTranslation.replyFoot(ReplyTranslation(lang: .zhHans, text: "好"), pending: false,
+                                                    flipped: false, bilingual: true, originalHidden: true),
+                       [.text("Translated"), .action("Show both", .hideOriginal)])
         // Off: exactly today's feet.
         XCTAssertEqual(SessionTranslation.userFoot(done, flipped: false, bilingual: false),
                        [.action("Show original", .flip)])
@@ -144,8 +150,12 @@ final class TranslationTests: XCTestCase {
                                                     bilingual: true))
         XCTAssertNil(SessionTranslation.userEnglish("x", TurnTranslation(state: .sentAsWritten, from: .zhHans, original: "x"),
                                                     bilingual: true))
-        XCTAssertEqual(SessionTranslation.replyEnglish("Done.", ReplyTranslation(lang: .zhHans, text: "好了"), bilingual: true),
-                       "Done.")
+        // A reply drawn whole: one whose blocks do not pair (two paragraphs translated as one).
+        XCTAssertEqual(SessionTranslation.replyEnglish("Done.\n\nAll tests pass.",
+                                                       ReplyTranslation(lang: .zhHans, text: "好了，测试全部通过。"), bilingual: true),
+                       "Done.\n\nAll tests pass.")
+        // One that pairs is drawn block by block instead, with no English under it.
+        XCTAssertNil(SessionTranslation.replyEnglish("Done.", ReplyTranslation(lang: .zhHans, text: "好了"), bilingual: true))
         XCTAssertNil(SessionTranslation.replyEnglish("Done.", ReplyTranslation(lang: .zhHans, failed: true), bilingual: true))
         XCTAssertNil(SessionTranslation.replyEnglish("Done.", nil, bilingual: true))
         // With it on the bubble shows what they wrote whatever the old flip said; copy follows.
@@ -215,9 +225,9 @@ final class TranslationTests: XCTestCase {
 
     func testTheComposerTagOpensSettingsOnSessions() {
         var nav = NavState()
-        nav.openSettings(at: .sessions)
+        nav.openSettings(at: .general)
         XCTAssertTrue(nav.settingsPresented)
-        XCTAssertEqual(nav.settingsPath, [.settingsPage(.sessions)])
+        XCTAssertEqual(nav.settingsPath, [.settingsPage(.general)])
     }
 
     // MARK: - Decoding a message's, a reply's and a card's translation
@@ -451,9 +461,10 @@ final class TranslationTests: XCTestCase {
         XCTAssertEqual(reducer.state.queued.first?.translation?.state, .translating)
     }
 
-    /// Queued messages are drawn in the tray over the composer: a held one says where its translation
-    /// is, and cannot be steered.
-    func testTheTraySaysWhereAHeldMessageIs() {
+    /// Queued messages are drawn in the tray over the composer, but one held for its translation is not:
+    /// it stays in the conversation with its chip or its failure, since the tray only waits for the
+    /// engine (web parity: `inPendingTray`, board frame 6).
+    func testAHeldMessageStaysOutOfTheTray() {
         var reducer = TranscriptReducer()
         func held(_ id: String, _ state: String) -> QueuedTurnInfo {
             QueuedTurnInfo(turnId: id, kind: "message", content: id, placement: "queued",
@@ -464,8 +475,38 @@ final class TranslationTests: XCTestCase {
                                       QueuedTurnInfo(turnId: "t3", kind: "message", content: "plain", placement: "queued")],
                                      knownBefore: [])
         let rows = PendingTray.rows(state: reducer.state, withdrawing: [], steering: [], steerOffered: true)
-        XCTAssertEqual(rows.map(\.state), ["Couldn't translate, so it wasn't sent", "Translating…", "Queued for next turn"])
-        XCTAssertEqual(rows.map(\.offersSteer), [false, false, true])
+        XCTAssertEqual(rows.map(\.bubble.turnId), ["t3"])
+        XCTAssertEqual(rows.map(\.state), ["Queued for next turn"])
+        XCTAssertEqual(reducer.state.queued.filter { !PendingTray.holds($0) }.map(\.turnId), ["t1", "t2"])
+    }
+
+    /// Sent while held, the message stays in the conversation; translated with a turn ahead of it, the
+    /// next listing has it queued, and it moves to the tray (web parity: the snapshot re-places it).
+    func testATranslatedMessageWaitingBehindATurnMovesToTheTray() {
+        var reducer = TranscriptReducer()
+        reducer.addOptimisticUser(clientTurnId: "c1", text: "再跑一遍")
+        reducer.setOptimisticTurnId(clientTurnId: "c1", turnId: "t1",
+                                    translation: TurnTranslation(state: .translating, from: .zhHans, original: "再跑一遍"),
+                                    placement: "queued")
+        func listed(_ state: String, _ placement: String) -> QueuedTurnInfo {
+            QueuedTurnInfo(turnId: "t1", kind: "message", content: "再跑一遍", placement: placement,
+                           translation: .object(["state": .string(state), "from": .string("zh-Hans"),
+                                                 "original": .string("再跑一遍")]))
+        }
+        reducer.reconcileQueuedTurns([listed("TRANSLATING", "queued")], knownBefore: ["t1"])
+        XCTAssertEqual(users(reducer.state).map(\.turnId), ["t1"], "still being translated: in the conversation")
+        XCTAssertTrue(reducer.state.queued.isEmpty)
+        // Translated, and accepted as the next turn: it stays where it is.
+        reducer.reconcileQueuedTurns([listed("DONE", "accepted")], knownBefore: ["t1"])
+        XCTAssertEqual(users(reducer.state).map(\.turnId), ["t1"])
+        XCTAssertTrue(reducer.state.accepted.isEmpty, "drawn once, in the conversation")
+        // Translated with a turn ahead of it: the tray's.
+        reducer.reconcileQueuedTurns([listed("DONE", "queued")], knownBefore: ["t1"])
+        XCTAssertTrue(users(reducer.state).isEmpty)
+        XCTAssertEqual(reducer.state.queued.map(\.turnId), ["t1"])
+        XCTAssertEqual(reducer.state.queued.first?.queued, true)
+        XCTAssertEqual(PendingTray.rows(state: reducer.state, withdrawing: [], steering: [], steerOffered: false).map(\.state),
+                       ["Queued for next turn"])
     }
 
     func testTheSendAnswerPutsTheChipOnTheOptimisticBubble() {

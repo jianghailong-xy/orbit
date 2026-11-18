@@ -26,6 +26,7 @@ import {
   CreateProjectDto,
   HandOverOpenItemDto,
   ObserveIntegrationDto,
+  RecordProjectRulingDto,
   RecordMergeEvidenceDto,
   RequestProjectDoneDto,
   RequestPromotionDto,
@@ -554,6 +555,22 @@ export class RunnerProjectsController {
     @Body() dto: AskOwnerDto,
   ) {
     return this.openItems.askOwner(runner.ownerId, id, sessionId?.trim(), dto);
+  }
+
+  /**
+   * A coordinator recording an owner ruling given in its conversation (`project_ruling_record`,
+   * coordinator handoff v2 §2). X-Orbit-Session-Id is the authority, checked by the service against
+   * the project's own coordinator pointer, exactly as for `askOwner`; the quote must be found in the
+   * named turn's owner text. Records a fact and grants nothing, so no orchestration credential.
+   */
+  @Post('projects/:id/rulings')
+  recordRuling(
+    @CurrentRunner() runner: Runner,
+    @Headers('x-orbit-session-id') sessionId: string | undefined,
+    @Param('id', PublicIdPipe) id: string,
+    @Body() dto: RecordProjectRulingDto,
+  ) {
+    return this.openItems.recordRuling(runner.ownerId, id, sessionId?.trim(), dto);
   }
 
   /**

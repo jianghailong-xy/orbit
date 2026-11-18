@@ -20,6 +20,9 @@
  *   (7) Refusals, each with the line the clients show and nothing written: offline, no workspace, the
  *       workspace's engine signed out there (GET says the same); a warning the runner no longer reports;
  *       somebody else's runner.
+ *   (8) An Update engines report with failed lines (docs/mocks/engine-update-fix-with-agent): one press for the
+ *       machine, whose message lists only the failed lines; refused once nothing failed, or once Dismiss
+ *       cleared the report.
  *
  *     bash scripts/run-pg-spec.sh src/apiserver/src/runners/runner-attention-fix.pg.spec.ts
  *
@@ -55,6 +58,7 @@ const quiet = new Proxy({}, { get: () => () => undefined }) as unknown as Realti
 
 const CODEX_FAILURE = 'Error: No such file or directory (os error 2)';
 const NPM_MISSING = 'exit status 127: sh: 1: npm: not found';
+const UPDATE_REPORT = 'Claude Code — already current (2.1.325)\nCodex — updated 0.168.2 → 0.169.0\nOpenCode — update timed out after 5m0s';
 
 /** Codex 13 days behind 0.169.0, its update failing; Claude Code signed in (or not). */
 function engines(claudeAuth: 'yes' | 'no' = 'yes'): RunnerEngineHealth[] {
@@ -331,5 +335,54 @@ test('Fix with an agent on PostgreSQL', { skip, concurrency: 1, timeout: 300_000
     await assert.rejects(controller.fix(stranger.user, current.runnerId, 'engineNotUpdating', { engine: 'codex' }), NotFoundException);
     assert.throws(() => controller.fix(current.user, current.runnerId, 'offline', {}), BadRequestException);
     await assert.rejects(controller.fix(current.user, current.runnerId, 'installFailed', {}), BadRequestException);
+  });
+
+  await t.test('(8) an Update engines report with failed lines: one agent for the machine', async () => {
+    const m = await machine('vmi3753066', {
+      installStatus: 'failed',
+      installEngine: null,
+      installCommand: 'orbit engine-update',
+      installMessage: UPDATE_REPORT,
+      installMode: 'update',
+    });
+    await usedAt(m, await workspace(m, 'orbit-develop'), new Date());
+    const started = await controller.fix(m.user, m.runnerId, 'engineUpdateFailed', {});
+    assert.equal(started.title, `Fix: engine update failed on ${m.name}`);
+    assert.equal(
+      await firstMessage(started.sessionId),
+      `Orbit ran its engine update on this machine (${m.name}, Linux) with \`orbit engine-update\`, and it reported:\n` +
+        '- OpenCode — update timed out after 5m0s\n\n' +
+        "The runner's log has what each update was doing when it stopped. Find out why and get it updated. Ask me " +
+        "before installing system packages or changing system files. When you're done, re-run Orbit's engine update " +
+        'on this machine (the runner_engine_install tool, mode update) so the machine page shows the result, and tell ' +
+        'me what versions the engines report.',
+    );
+    assert.deepEqual((await runners.getRunner(m.ownerId, m.runnerId)).agentFix?.fixing.map((f) => [f.kind, f.engine]), [['engineUpdateFailed', null]]);
+    await assert.rejects(controller.fix(m.user, m.runnerId, 'engineUpdateFailed', {}), refusedWith('AGENT_FIX_RUNNING'));
+    // Counted apart from the engine's own warning: Codex's not-updating card still starts its own.
+    await controller.fix(m.user, m.runnerId, 'engineNotUpdating', { engine: 'codex' });
+    assert.equal((await fixSessions(m)).length, 2);
+
+    // A run with nothing failed, and a report Dismiss cleared, have nothing to fix.
+    const fine = await machine('fine', {
+      installStatus: 'done', installCommand: 'orbit engine-update', installMode: 'update',
+      installMessage: 'Claude Code — already current (2.1.325)\nCodex — updated 0.168.2 → 0.169.0',
+    });
+    await usedAt(fine, await workspace(fine, 'orbit-dev'), new Date());
+    await assert.rejects(controller.fix(fine.user, fine.runnerId, 'engineUpdateFailed', {}), refusedWith('AGENT_FIX_NO_WARNING'));
+    const dismissed = await machine('dismissed', {
+      installStatus: 'failed', installCommand: 'orbit engine-update', installMode: 'update', installMessage: UPDATE_REPORT,
+    });
+    await usedAt(dismissed, await workspace(dismissed, 'orbit-dev'), new Date());
+    await runners.cancelInstall(dismissed.ownerId, dismissed.runnerId);
+    await assert.rejects(controller.fix(dismissed.user, dismissed.runnerId, 'engineUpdateFailed', {}), refusedWith('AGENT_FIX_NO_WARNING'));
+    // An install that failed is its row's panel, not this report.
+    const install = await machine('install', {
+      installStatus: 'failed', installEngine: 'codex', installCommand: 'npm install -g @openai/codex', installMode: 'install',
+      installMessage: 'update failed: npm ERR! code EACCES',
+    });
+    await usedAt(install, await workspace(install, 'orbit-dev'), new Date());
+    await assert.rejects(controller.fix(install.user, install.runnerId, 'engineUpdateFailed', {}), refusedWith('AGENT_FIX_NO_WARNING'));
+    for (const r of [fine, dismissed, install]) assert.equal(await stored(r.runnerId), null);
   });
 });

@@ -16,7 +16,8 @@
  *    cards go exactly as with translation off (no `translation` on any of them).
  *  - `preferences.translationBilingual` ("Show both languages", board 02-bilingual.png): absent is
  *    OFF. On, every translated message ALSO shows the text in the agent's language (what the agent
- *    read or wrote), below a dashed divider (bilingualEnglish, bilingualLineCount). Off, the clients
+ *    read or wrote): a reply block by block, each original under its translation (bilingualPairs),
+ *    and the owner's message whole below a dashed divider (bilingualEnglish). Off, the clients
  *    draw exactly what they drew before it existed. Display only: the server translates the same
  *    either way.
  *  - `PATCH /users/me/preferences` with `{ translationEnabled?, translationLanguage?,
@@ -71,7 +72,9 @@
  *    and the live `approval_request`) gains `translation` (ApprovalTranslation) once the server has
  *    translated what it shows the owner: the questions of an AskUserQuestion — question, header,
  *    each option's label and description, index for index with `input.questions` — and a tool
- *    card's `input.description` and `input.plan`. It is written after the card is first published,
+ *    card's `input.description` and `input.plan`; on Orbit's create, blocker and DAG-change cards
+ *    (TRANSLATED_ORBIT_CARDS) also the title, acceptance criteria, batch tasks, goal, instructions,
+ *    criteria items, reason and note. It is written after the card is first published,
  *    so a SECOND `approval_request` with the same id follows, carrying it: replace the card's
  *    display text, nothing else about it. `input` itself is never changed.
  *  - Answering (3A). `POST /sessions/:id/approvals/:approvalId/decision` takes `answers` keyed by the
@@ -269,29 +272,320 @@ export interface ApprovalTranslation {
   plan?: string;
   /** `input.questions` translated (AskUserQuestion). */
   questions?: TranslatedQuestion[];
+  // Orbit's own cards (board 04-owner-cards.html, part 2). Each field is the input field of the same
+  // name translated, present only when the original has text; arrays go index for index with the
+  // input's, and an entry's field the original lacks is absent there too.
+  /** `input.title` (orbit_task_create, orbit_project_create). */
+  title?: string;
+  /** `input.acceptanceCriteria` (orbit_task_create). */
+  acceptanceCriteria?: string;
+  /** `input.tasks` (orbit_task_batch): index for index, so `tasks[i]` is `input.tasks[i]` and
+   *  `input.preview.tasks[i]`. */
+  tasks?: TranslatedTaskBody[];
+  /** `input.goal` (orbit_project_create). */
+  goal?: string;
+  /** `input.instructions` (orbit_project_create). */
+  instructions?: string;
+  /** `input.acceptanceCriteriaItems` (orbit_project_create), index for index. */
+  acceptanceCriteriaItems?: Array<{ text?: string; verificationMethod?: string }>;
+  /** `input.reason` (orbit_blocker_resolve): the agent's argument that the blocker no longer applies. */
+  reason?: string;
+  /** `input.note` (orbit_dag_change). */
+  note?: string;
 }
+
+/** One task of a batch card as shown in the owner's language (ApprovalTranslation.tasks). */
+export interface TranslatedTaskBody {
+  title?: string;
+  description?: string;
+  acceptanceCriteria?: string;
+}
+
+/**
+ * An owner card that lives outside a session (board 04-owner-cards.html), in the owner's language: a
+ * coordinator's question, start request or done request (`ProjectOpenItemRow.translation`,
+ * `ProjectClosedQuestion.translation`), an owner request (`OwnerRequest.translation`), an owner-confirmation
+ * review (`review.translation`, `problems.translation` on OwnerConfirmationReviewView), a crossing
+ * (`translation` on a `GET /projects/:id/handoffs` row) or a criteria-change proposal (`translation` on a
+ * pending criteria decision). Completion evidence has its own shape, EvidenceTranslation. Stored beside the
+ * card's own fields, which stay exactly what the agent wrote. Absent until it is translated, and on every
+ * card translation is off for.
+ *
+ * Each field is the card's field of the same name translated, present only when the original has text;
+ * arrays go index for index with the card's, and an entry's field the original lacks is absent there too.
+ * A step's `command` and `link` are never translated: the card draws them from the original.
+ */
+export interface OwnerCardTranslation {
+  lang: TranslationLanguage;
+  /** The card could not be translated: draw it as the agent wrote it. Nothing else is set. */
+  failed?: true;
+  /** A coordinator question's `question`. */
+  question?: string;
+  /** A question's or a DECISION request's `options`. */
+  options?: Array<{ label?: string; description?: string }>;
+  /** A question's or a request's `ifUnanswered`. */
+  ifUnanswered?: string;
+  /** An open coordinator question's `detailLine` (`ProjectOpenItemRow.detailLine`) built from the translated
+   *  `ifUnanswered`: "Blocks N tasks · If you don’t answer: <translated>". Served by the open-items read only,
+   *  beside a whole translation in the owner's current language; never stored. Absent from an older server. */
+  detailLine?: string;
+  /** An owner request's `title`. On an open coordinator question, the open-items row's `title`
+   *  (`ProjectOpenItemRow.title`) built from the translated `question`: "Coordinator asks: <translated>".
+   *  Served by the open-items read only, beside a whole translation in the owner's current language; never
+   *  stored. Absent from an older server, and on a START_REQUEST or DONE_REQUEST, whose titles are Orbit's. */
+  title?: string;
+  /** An owner request's `why`. */
+  why?: string;
+  /** An open item's `handoverNote` (`ProjectOpenItemRow.handoverNote`): the coordinator's reason for handing it
+   *  to the owner (open_item_hand_over), on an item of any kind. Absent from an older server. */
+  handoverNote?: string;
+  /** A MANUAL_STEP request's `steps`, the text of each. */
+  steps?: Array<{ text?: string }>;
+  /** An owner request's `verifyHint`. */
+  verifyHint?: string;
+  /** A START_REQUEST's `why` uses `why` above. A DONE_REQUEST's `judgment`, or an owner-confirmation
+   *  review's `judgment`. */
+  judgment?: string;
+  /** A DONE_REQUEST's `gaps`, index for index; `criterionKey` and `evidenceRefs` are drawn from the original. */
+  gaps?: Array<{ title?: string; whyNotProven?: string; coordinatorChecked?: string }>;
+  /** An owner-confirmation review's `needsYou`, index for index: each line's `text` and `options`. */
+  needsYou?: Array<{ text?: string; options?: Array<{ label?: string; description?: string }> }>;
+  /** An owner-confirmation PROBLEMS record's `reason`, or a crossing's `reason`. */
+  reason?: string;
+  /** An owner-confirmation PROBLEMS record's `problems`, the text of each. */
+  problems?: Array<{ text?: string }>;
+  /** A criteria-change proposal's `proposed`, index for index: each criterion's `text` and
+   *  `verificationMethod`. */
+  proposed?: Array<{ text?: string; verificationMethod?: string }>;
+}
+
+/**
+ * A completion-evidence revision's `claim` and `gaps` in the owner's language (`translation` on a
+ * pending evidence judgment). `gaps` goes index for index with the envelope's. Absent until it is
+ * translated, and on every revision translation is off for.
+ */
+export interface EvidenceTranslation {
+  lang: TranslationLanguage;
+  /** The evidence could not be translated: draw it as the agent wrote it. Nothing else is set. */
+  failed?: true;
+  claim?: string;
+  gaps?: string[];
+}
+
+/** The Orbit cards whose agent-written fields beyond `description` are translated. */
+export const TRANSLATED_ORBIT_CARDS = [
+  'orbit_task_create',
+  'orbit_task_batch',
+  'orbit_project_create',
+  'orbit_blocker_resolve',
+  'orbit_dag_change',
+] as const;
 
 /** The 422 a decision whose words could not be translated is refused with: nothing was recorded. */
 export const TRANSLATION_FAILED_CODE = 'TRANSLATION_FAILED' as const;
 
 /**
- * "Show both languages" (board 02-bilingual.png, frame 3 option B). An agent reply's original (in the
- * account's agent language, English by default) is drawn in full when it runs to at most
- * BILINGUAL_COLLAPSE_LINES lines; longer, it collapses to a two-line faded preview with
- * "Show <agent language> · N lines" ("Show English · N lines"). A line is counted the same way on every client — a
- * source line wraps every BILINGUAL_LINE_CHARS characters, blank lines do not count — so N is the
- * same number on the web, an iPhone and an Android phone.
+ * Words the owner typed on an owner card (an answer to a coordinator's question, an owner request's done text or
+ * decline reason, a done request's "Not yet…" note, an owner-confirmation answer), as they were delivered to the
+ * agent: translated from the owner's language into the agent's (`lang`). Stored beside the owner's own words, which
+ * stay what every card shows; absent when translation was off, or the owner pressed Send as written.
+ *
+ * Every door that takes such words takes `sendAsWritten: true` to deliver them untranslated, and refuses them whole
+ * with a 422 TRANSLATION_FAILED, recording nothing, when they cannot be translated — as an approval answer is.
+ */
+export interface OwnerWordsTranslation {
+  lang: TranslationLanguage;
+  text: string;
+}
+
+/**
+ * "Show both languages" (board 02-bilingual.png, frame 3 option B), for a reply whose blocks do not
+ * pair (bilingualPairs answers null) and so is drawn whole: its original (in the account's agent
+ * language, English by default) is drawn in full when it runs to at most BILINGUAL_COLLAPSE_LINES
+ * lines; longer, it collapses to a two-line faded preview with "Show <agent language> · N lines"
+ * ("Show English · N lines"). An interleaved reply never collapses (03-interleaved.png). A line is
+ * counted the same way on every client — a source line wraps every BILINGUAL_LINE_CHARS characters,
+ * blank lines do not count — so N is the same number on the web, an iPhone and an Android phone.
  */
 export const BILINGUAL_COLLAPSE_LINES = 6;
 export const BILINGUAL_LINE_CHARS = 60;
 
-/** The English drawn under a translated reply: its prose only. A fenced code block is drawn once, in
- *  the translation above it, never again in the English (board mark D). */
+/** The English drawn under the owner's translated message, and under a reply whose blocks do not pair
+ *  (bilingualPairs answers null): its prose only. A fenced code block is drawn once, in the
+ *  translation above it, never again in the English (board mark D). */
 export function bilingualEnglish(text: string): string {
   return text
     .replace(/^ {0,3}(```|~~~)[^\n]*\n[\s\S]*?^ {0,3}\1[^\n]*$/gm, '')
     .replace(/\n{3,}/g, '\n\n')
     .trim();
+}
+
+/**
+ * "Show both languages", interleaved (board docs/mocks/session-translation/03-interleaved.png): an
+ * agent reply is drawn block by block, each paragraph, list item, heading or quote in the owner's
+ * language with its original (the agent's words) right under it, smaller and grey.
+ *
+ * ONE RULE, THREE PORTS. OrbitKit `BilingualPairs.pairs` and Android `Translation.bilingualPairs`
+ * are line for line the same, and all three are walked through `bilingual-pairs.fixture.json`.
+ *
+ *  - Both texts are split into blocks by lines: a fenced code block (``` or ~~~ opening and the same
+ *    fence closing, at most 3 spaces in; an unclosed fence is not one), a heading (`#`…`######`), a
+ *    list item (`-`, `*`, `+`, `1.`, `1)`) with the lines that continue it, a quote (consecutive `>`
+ *    lines), a table (consecutive lines starting with `|`), a thematic break, and otherwise a
+ *    paragraph (consecutive non-blank lines up to a line that starts one of the above).
+ *  - `depth` is how many list items the block sits inside, by indentation.
+ *  - Paragraphs, headings, list items and quotes pair; code, tables, breaks and image-only paragraphs
+ *    do not ('other'): they are drawn once, from the translation, and the original's are dropped.
+ *  - The two sequences of pairable blocks must match in count, kind and depth, or there is no
+ *    pairing (null) and the message is drawn whole, translation over original (board frame 4). A
+ *    reply with nothing to pair is null too.
+ *
+ * Each pair is a block of the translation, in order: `text` is its source with its indentation
+ * removed — an item's without its marker (`marker` keeps "-" or "3."), a heading's whole line, a
+ * quote's without its `>`s — and `original` the matching block of the original in the same form,
+ * except a heading's, which is its words alone. 'other' blocks carry no `original`.
+ */
+export type BilingualBlockKind = 'paragraph' | 'heading' | 'item' | 'quote' | 'other';
+
+export interface BilingualPair {
+  kind: BilingualBlockKind;
+  depth: number;
+  /** An item's marker as written: "-", "*", "+", "1.", "2)". */
+  marker?: string;
+  text: string;
+  original?: string;
+}
+
+interface BilingualBlock {
+  kind: BilingualBlockKind;
+  depth: number;
+  marker?: string;
+  /** What `text` / `original` hold, by the rule above. */
+  body: string;
+  /** A heading's words alone; otherwise the same as body. */
+  words: string;
+}
+
+const FENCE = /^ *(```|~~~)/;
+const HEADING = /^ {0,3}(#{1,6})(?: +|$)(.*)$/;
+const ITEM = /^( *)([-*+]|\d{1,9}[.)])( +|$)(.*)$/;
+const BREAK = /^ {0,3}([-*_])(?: *\1){2,} *$/;
+const QUOTE = /^ {0,3}>/;
+const TABLE = /^ *\|/;
+const IMAGES = /^(?:!\[[^\]]*\]\([^)]*\)\s*)+$/;
+
+function indentOf(line: string): number {
+  return line.length - line.replace(/^ +/, '').length;
+}
+
+function dedent(line: string, n: number): string {
+  const k = Math.min(n, indentOf(line));
+  return line.slice(k);
+}
+
+function startsBlock(line: string): boolean {
+  return FENCE.test(line) || HEADING.test(line) || BREAK.test(line) || ITEM.test(line) || QUOTE.test(line) || TABLE.test(line);
+}
+
+function bilingualBlocks(text: string): BilingualBlock[] {
+  const lines = text.replace(/\r\n?/g, '\n').split('\n');
+  const blocks: BilingualBlock[] = [];
+  // The content column of each open list item, innermost last.
+  const items: number[] = [];
+  let i = 0;
+  while (i < lines.length) {
+    const line = lines[i];
+    if (line.trim() === '') {
+      i++;
+      continue;
+    }
+    const indent = indentOf(line);
+    while (items.length > 0 && indent < items[items.length - 1]) items.pop();
+    const depth = items.length;
+    const push = (kind: BilingualBlockKind, body: string, words = body, marker?: string) =>
+      blocks.push({ kind, depth, body, words, marker });
+    // A fence opens at most 3 spaces in from the column its block sits at, and closes the same way.
+    const base = depth > 0 ? items[depth - 1] : 0;
+    const fence = indent - base <= 3 ? /^(```|~~~)/.exec(line.trimStart()) : null;
+    if (fence) {
+      let close = i + 1;
+      while (close < lines.length && !(indentOf(lines[close]) - base <= 3 && lines[close].trimStart().startsWith(fence[1]))) close++;
+      if (close < lines.length) {
+        push('other', lines.slice(i, close + 1).map((l) => dedent(l, indent)).join('\n'));
+        i = close + 1;
+        continue;
+      }
+    }
+    const heading = HEADING.exec(line);
+    if (heading) {
+      push('heading', line.trim(), heading[2].replace(/(?:^| +)#+ *$/, '').trim());
+      i++;
+      continue;
+    }
+    if (BREAK.test(line)) {
+      push('other', line.trim());
+      i++;
+      continue;
+    }
+    const item = ITEM.exec(line);
+    if (item) {
+      const spaces = item[3].length;
+      const column = indent + item[2].length + (spaces >= 1 && spaces <= 4 ? spaces : 1);
+      const body = [item[4]];
+      i++;
+      while (i < lines.length && lines[i].trim() !== '' && !startsBlock(lines[i])) {
+        body.push(dedent(lines[i], column));
+        i++;
+      }
+      blocks.push({ kind: 'item', depth, marker: item[2], body: body.join('\n'), words: body.join('\n') });
+      items.push(column);
+      continue;
+    }
+    if (QUOTE.test(line)) {
+      const body: string[] = [];
+      while (i < lines.length && QUOTE.test(lines[i])) {
+        body.push(lines[i].replace(/^ {0,3}> ?/, ''));
+        i++;
+      }
+      push('quote', body.join('\n'));
+      continue;
+    }
+    if (TABLE.test(line)) {
+      const body: string[] = [];
+      while (i < lines.length && TABLE.test(lines[i])) {
+        body.push(dedent(lines[i], indent));
+        i++;
+      }
+      push('other', body.join('\n'));
+      continue;
+    }
+    const body = [dedent(line, indent)];
+    i++;
+    while (i < lines.length && lines[i].trim() !== '' && !startsBlock(lines[i])) {
+      body.push(dedent(lines[i], indent));
+      i++;
+    }
+    const joined = body.join('\n');
+    push(IMAGES.test(joined.trim()) ? 'other' : 'paragraph', joined);
+  }
+  return blocks;
+}
+
+/** The translation's blocks with the original's matched under them, or null when the two texts do not
+ *  split into the same pairable blocks (draw the message whole, as before; board frame 4). */
+export function bilingualPairs(translation: string, original: string): BilingualPair[] | null {
+  const ours = bilingualBlocks(translation);
+  const theirs = bilingualBlocks(original).filter((b) => b.kind !== 'other');
+  const pairable = ours.filter((b) => b.kind !== 'other');
+  if (pairable.length === 0 || pairable.length !== theirs.length) return null;
+  if (pairable.some((b, k) => b.kind !== theirs[k].kind || b.depth !== theirs[k].depth)) return null;
+  let k = 0;
+  return ours.map((b) => {
+    const pair: BilingualPair = { kind: b.kind, depth: b.depth, text: b.body };
+    if (b.marker !== undefined) pair.marker = b.marker;
+    if (b.kind !== 'other') pair.original = theirs[k++].words;
+    return pair;
+  });
 }
 
 /** How many lines `english` runs to, by the rule above. */

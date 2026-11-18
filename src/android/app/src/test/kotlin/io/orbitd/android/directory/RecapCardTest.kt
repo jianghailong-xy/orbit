@@ -12,7 +12,7 @@ import org.junit.Assert.assertTrue
 import org.junit.Test
 
 /** The conversation's Recap card ([RecapCard]; OrbitKit's `RecapCard`): when a conversation is at rest for it, what it says about
- * when the recap was written, what a refresh that wrote nothing says, and its words — held to RecapCard.swift word for word. */
+ * when the recap was written, and its words — held to RecapCard.swift word for word. */
 class RecapCardTest {
     private val now = Instant.parse("2026-10-22T10:00:00Z")
     private val utc = ZoneId.of("UTC")
@@ -58,16 +58,6 @@ class RecapCardTest {
         assertEquals(clock.format(Instant.parse(today)), card(session(recapAt = today))?.whenWritten)
     }
 
-    @Test fun aRefreshThatWroteNothingSaysWhy() {
-        assertEquals(RecapCard.Notice(RecapCardCopy.upToDate, false), RecapCard.notice("no-events"))
-        assertEquals(RecapCard.Notice(RecapCardCopy.tooLittle, false), RecapCard.notice("too-few-events"))
-        assertEquals(RecapCard.Notice(RecapCardCopy.unavailable, false), RecapCard.notice("no-key"))
-        assertEquals(RecapCard.Notice(RecapCardCopy.unavailable, false), RecapCard.notice("disabled"))
-        assertEquals(RecapCard.Notice(RecapCardCopy.failed, true), RecapCard.notice("llm-failed"))
-        assertEquals(RecapCard.Notice(RecapCardCopy.failed, true), RecapCard.notice("error"))
-        assertNull("another pass wrote first: reading again shows its line", RecapCard.notice("cas-lost"))
-    }
-
     /** The card's × (the owner, 2026-11-01, docs/mocks/session-recap-display/06-hide): the recap this device hid stays hidden in that
      * conversation until the server writes a newer one; a recap that came with no time is known by its words. */
     @Test fun aHiddenRecapStaysHiddenUntilANewerOneIsWritten() {
@@ -89,7 +79,7 @@ class RecapCardTest {
         val swift = File(root, "src/macos/OrbitKit/Sources/OrbitKit/App/RecapCard.swift").readText()
         val words = RecapCardCopy::class.java.declaredFields.filter { it.type == String::class.java }
             .associate { it.isAccessible = true; it.name to it.get(null) as String }
-        assertEquals(8, words.size)
+        assertEquals(2, words.size)
         words.forEach { (name, value) ->
             assertTrue("RecapCard.swift no longer declares $name as \"$value\"", swift.contains("public static let $name = \"$value\""))
         }

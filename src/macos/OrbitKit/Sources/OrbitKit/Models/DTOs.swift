@@ -310,6 +310,10 @@ public struct Runner: Codable, Equatable, Sendable, Identifiable {
     /// checked on the machine before it is offered (docs/first-workspace-contract.md §1). Nil when
     /// nothing registered one, and from an older server.
     public var registerDir: String? = nil
+    /// True on the account's managed runner, which every screen calls Orbit Cloud (@orbit/shared
+    /// `RunnerRowIdentity.managed`), false on every other. Nil from an older server, where
+    /// `ManagedRunnerIdentity` (the managed status's runnerId) still says which runner it is.
+    public var managed: Bool? = nil
     /// Engine install/update relay and account-removal relay. Their string-valued states stay raw
     /// so a newer control plane cannot make the runner list undecodable.
     public let install: RunnerInstallState?
@@ -365,7 +369,7 @@ public struct RunnerAgentFix: Codable, Equatable, Sendable {
 }
 
 /// An agent at work on one warning (@orbit/shared `RunnerAgentFixing`): `kind` is a
-/// `RunnerAttentionFixKind`'s raw value; `engine` is nil for `cannotSelfUpdate`.
+/// `RunnerAttentionFixKind`'s raw value; `engine` is nil for `cannotSelfUpdate` and `engineUpdateFailed`.
 public struct RunnerAgentFixing: Codable, Equatable, Sendable {
     public let kind: String
     public let engine: String?
@@ -388,6 +392,8 @@ public enum RunnerAttentionFixKind: String, Codable, Equatable, Sendable {
     case engineNotUpdating
     case cannotSelfUpdate
     case installFailed
+    /// An Update Engines Now report with a failed line: the machine's, whichever engines failed.
+    case engineUpdateFailed
 }
 
 /// POST /runners/:id/attention/:kind/fix body: `engine` for `engineNotUpdating` and `installFailed`,
@@ -689,6 +695,10 @@ public struct Session: Codable, Equatable, Sendable, Identifiable {
     /// Session.runningSubagents, counted): the parked-but-working state web calls "Running Agent".
     /// Read off the session list; absent from older servers, which reads as none.
     public let runningSubagentCount: Int?
+    /// What the newest of those is doing, as its launch call described it ("Deploy dacad7403 to
+    /// production"): the row says "Agent: <this>…". Nil when none is running, when the call said
+    /// nothing, and from older servers — the row then keeps "Running Agent…".
+    public let runningSubagentTitle: String?
     /// Whether the engine is generating on a turn nobody dispatched. A runtime restarts the model
     /// on its own when a background task reports in or a scheduled wake-up fires; those turns
     /// never reach the control plane's turn bookkeeping, so the session stays at AWAITING_INPUT
@@ -894,6 +904,7 @@ public struct Session: Codable, Equatable, Sendable, Identifiable {
         runningBgCount = try values.decodeIfPresent(Int.self, forKey: .runningBgCount)
         runningBgJobCount = try values.decodeIfPresent(Int.self, forKey: .runningBgJobCount)
         runningSubagentCount = try values.decodeIfPresent(Int.self, forKey: .runningSubagentCount)
+        runningSubagentTitle = try values.decodeIfPresent(String.self, forKey: .runningSubagentTitle)
         engineTurnActive = try values.decodeIfPresent(Bool.self, forKey: .engineTurnActive)
         activity = try values.decodeIfPresent(String.self, forKey: .activity)
         error = try values.decodeIfPresent(String.self, forKey: .error)
@@ -935,6 +946,7 @@ public struct Session: Codable, Equatable, Sendable, Identifiable {
                 runningBgCount: Int? = nil,
                 runningBgJobCount: Int? = nil,
                 runningSubagentCount: Int? = nil,
+                runningSubagentTitle: String? = nil,
                 engineTurnActive: Bool? = nil,
                 activity: String? = nil,
                 error: String? = nil, endReason: String? = nil, agent: SessionAgentRef? = nil,
@@ -1015,6 +1027,7 @@ public struct Session: Codable, Equatable, Sendable, Identifiable {
         self.runningBgCount = runningBgCount
         self.runningBgJobCount = runningBgJobCount
         self.runningSubagentCount = runningSubagentCount
+        self.runningSubagentTitle = runningSubagentTitle
         self.engineTurnActive = engineTurnActive
         self.activity = activity
         self.error = error
@@ -1114,6 +1127,11 @@ public struct SessionAgentRef: Codable, Equatable, Sendable, Identifiable {
     /// the conversation that made it reads (`CreatedWorkspaceLine`).
     public var workDir: String? = nil
     public var deletedAt: String? = nil
+    /// A workspace cloned from GitHub (docs/github-workspace-design.md §4): its repository, and where the clone
+    /// stands. All nil for one that is not.
+    public var repoUrl: String? = nil
+    public var cloneState: String? = nil
+    public var cloneError: String? = nil
 }
 
 /// A personal colored label (Files.app-style tag) the owner applies to their sessions. The library
@@ -1223,11 +1241,16 @@ public struct SessionTurnRequest: Codable, Sendable {
     /// A wiki chat's page and selection, beside the owner's words rather than in them (wiki contract
     /// `chat.turns`). Nil leaves the field out: any other session refuses one.
     public let wikiContext: WikiChatContext?
-    /// Prompt optimizer (D2): the text is the optimizer's English, sent exactly as inserted, so
+    /// Prompt optimizer (D2): the text is the optimizer's prompt, sent exactly as inserted, so
     /// Translation neither holds nor translates it. Nil leaves the key out (`PromptOptimizerState.skipTranslation`).
     public let skipTranslation: Bool?
+    /// Prompt optimizer (D2): the text is the reading copy Use inserted, and this is the optimizer's
+    /// agent-language prompt, which Translation releases instead of translating. Nil leaves the key out
+    /// (`PromptOptimizerState.optimizedTranslation`).
+    public let optimizedTranslation: String?
     public init(clientTurnId: String, content: String, kind: String = "message", attachmentIds: [String]? = nil,
-                intent: String? = nil, wikiContext: WikiChatContext? = nil, skipTranslation: Bool? = nil) {
+                intent: String? = nil, wikiContext: WikiChatContext? = nil, skipTranslation: Bool? = nil,
+                optimizedTranslation: String? = nil) {
         self.clientTurnId = clientTurnId
         self.content = content
         self.kind = kind
@@ -1235,6 +1258,7 @@ public struct SessionTurnRequest: Codable, Sendable {
         self.intent = intent
         self.wikiContext = wikiContext
         self.skipTranslation = skipTranslation
+        self.optimizedTranslation = optimizedTranslation
     }
 }
 
@@ -1287,6 +1311,11 @@ public struct TurnAccepted: Codable, Sendable {
     /// turn instead of queued behind it (`SteerDelivery`). Nil from a server that predates the
     /// kind, which is the pre-steer behaviour: queued.
     public let kind: String?
+    /// Where the server put this turn, decided under the Session row lock: `accepted` (the
+    /// executable head, delivered now), `queued` (waiting behind a turn in flight) or `steer`.
+    /// Authoritative over the send's own guess (`ComposerLogic.willQueue`), which reads a status
+    /// that can be stale — web parity: `turnPlacementOf`. Nil from a server that predates it.
+    public let placement: String?
     /// Where the message actually landed, when that is not the session it was sent to.
     ///
     /// A task has one run at a time, and the platform re-dispatches a failed one within seconds —
@@ -1529,8 +1558,11 @@ public struct CreateSessionRequest: Codable, Sendable {
     /// Instead of `agentId`, on `assignedRunnerId`: the folder of a workspace this session makes, in
     /// the transaction that creates it (docs/first-workspace-contract.md §3).
     public let newWorkspace: NewWorkspaceRequest?
-    /// Prompt optimizer (D2): the opening message is the optimizer's English, sent as inserted. Nil omits it.
+    /// Prompt optimizer (D2): the opening message is the optimizer's prompt, sent as inserted. Nil omits it.
     public let skipTranslation: Bool?
+    /// Prompt optimizer (D2): the opening message is the reading copy Use inserted; this is its agent-language
+    /// prompt. Nil omits it.
+    public let optimizedTranslation: String?
     public init(prompt: String, title: String? = nil, agentId: String? = nil, assignedRunnerId: String? = nil,
                 engine: String? = nil, provider: String? = nil,
                 model: String? = nil, permissionMode: String? = nil, effort: String? = nil,
@@ -1538,8 +1570,10 @@ public struct CreateSessionRequest: Codable, Sendable {
                 shell: Bool? = nil, attachmentIds: [String]? = nil, codexAccount: String? = nil,
                 claudeAccount: String? = nil, antigravityAccount: String? = nil, kimiAccount: String? = nil,
                 cursorAccount: String? = nil, folderId: String? = nil,
-                newWorkspace: NewWorkspaceRequest? = nil, skipTranslation: Bool? = nil) {
+                newWorkspace: NewWorkspaceRequest? = nil, skipTranslation: Bool? = nil,
+                optimizedTranslation: String? = nil) {
         self.skipTranslation = skipTranslation
+        self.optimizedTranslation = optimizedTranslation
         self.prompt = prompt
         self.title = title
         self.agentId = agentId
@@ -1864,6 +1898,10 @@ public struct SessionDetail: Codable, Equatable, Sendable, Identifiable {
     /// The landing a code session's work fed (§2.9 LS1's derived field), or nil for a conversation
     /// that produced no landing work.
     public let sourceLanding: SessionSourceLanding?
+    /// What the session's engine was given from Orbit and took, in the engine's own words (contract
+    /// §2.7) — what the Agent Tools sheet draws. Nil until its runner sends one, from an older server,
+    /// and for a value this build cannot read, which never costs the rest of the detail.
+    public let agentTools: AgentToolsReport?
 
     /// Whether this detail is a landing session, which is what chooses its renderer.
     public var isLanding: Bool { sessionKind == "LANDING" }
@@ -1923,6 +1961,7 @@ public struct SessionDetail: Codable, Equatable, Sendable, Identifiable {
         landing = try? values.decodeIfPresent(SessionLandingView.self, forKey: .landing)
         sourceLanding = try? values.decodeIfPresent(SessionSourceLanding.self,
                                                     forKey: .sourceLanding)
+        agentTools = try? values.decodeIfPresent(AgentToolsReport.self, forKey: .agentTools)
     }
 
     public init(id: String, status: RunStatus? = nil, runStatus: RunStatus? = nil,
@@ -1946,7 +1985,7 @@ public struct SessionDetail: Codable, Equatable, Sendable, Identifiable {
                 agent: SessionDetailAgent? = nil, shareToken: String? = nil,
                 retryAt: String? = nil, retryAttempts: Int? = nil, route: TaskRunRoute? = nil,
                 sessionKind: String? = nil, landing: SessionLandingView? = nil,
-                sourceLanding: SessionSourceLanding? = nil) {
+                sourceLanding: SessionSourceLanding? = nil, agentTools: AgentToolsReport? = nil) {
         self.id = id
         self.status = status
         self.runStatus = runStatus
@@ -1986,6 +2025,7 @@ public struct SessionDetail: Codable, Equatable, Sendable, Identifiable {
         self.sessionKind = sessionKind
         self.landing = landing
         self.sourceLanding = sourceLanding
+        self.agentTools = agentTools
     }
 }
 
@@ -2026,15 +2066,19 @@ public struct ResumeRequest: Codable, Sendable {
     /// A wiki chat's page and selection: a chat's next message may revive it, and carries them here as on
     /// a live one (wiki contract `chat.turns`). Nil leaves the field out.
     public let wikiContext: WikiChatContext?
-    /// Prompt optimizer (D2): a revive whose words are the optimizer's English, sent as inserted. Nil omits it.
+    /// Prompt optimizer (D2): a revive whose words are the optimizer's prompt, sent as inserted. Nil omits it.
     public let skipTranslation: Bool?
+    /// Prompt optimizer (D2): a revive whose words are the reading copy Use inserted; this is its
+    /// agent-language prompt. Nil omits it.
+    public let optimizedTranslation: String?
     public init(clientTurnId: String, content: String, kind: String? = nil,
                 model: String? = nil, permissionMode: String? = nil, effort: String? = nil,
                 fastMode: Bool? = nil,
                 attachmentIds: [String]? = nil, provider: String? = nil, account: String? = nil,
                 stopSessionId: String? = nil, wikiContext: WikiChatContext? = nil,
-                skipTranslation: Bool? = nil) {
+                skipTranslation: Bool? = nil, optimizedTranslation: String? = nil) {
         self.skipTranslation = skipTranslation
+        self.optimizedTranslation = optimizedTranslation
         self.clientTurnId = clientTurnId
         self.content = content
         self.kind = kind
@@ -2202,20 +2246,4 @@ public struct SessionSearchResponse: Codable, Equatable, Sendable {
     /// The match count to display. An older server sends no total, and a page with nothing behind
     /// it is its own total either way.
     public var effectiveTotal: Int { total ?? hits.count }
-}
-
-/// What one recap pass did (apiserver sessions/recap.ts `RecapOutcome`): the line it wrote, or why it
-/// wrote none — the answer of `POST /sessions/:id/recap` (`APIClient.refreshRecap`).
-public struct RecapOutcome: Decodable, Equatable, Sendable {
-    public let written: Bool
-    /// The recap the pass wrote; nil when it wrote none.
-    public let recapText: String?
-    /// Why it wrote none (`RecapCard.notice(for:)`); nil when it wrote.
-    public let reason: String?
-
-    public init(written: Bool, recapText: String? = nil, reason: String? = nil) {
-        self.written = written
-        self.recapText = recapText
-        self.reason = reason
-    }
 }

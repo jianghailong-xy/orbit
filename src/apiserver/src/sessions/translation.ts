@@ -23,7 +23,12 @@ export function translationAvailable(): boolean {
 
 /** Why a translation did not happen. Its message is English and safe to show or log. */
 export class TranslationFailed extends Error {
-  constructor(readonly reason: 'NO_KEY' | 'TIMEOUT' | 'HTTP' | 'EMPTY' | 'TRUNCATED' | 'MANGLED' | 'NETWORK', message: string) {
+  constructor(
+    readonly reason: 'NO_KEY' | 'TIMEOUT' | 'HTTP' | 'EMPTY' | 'TRUNCATED' | 'MANGLED' | 'NETWORK',
+    message: string,
+    /** An HTTP answer worth asking again: 429 or 5xx. */
+    readonly transient = false,
+  ) {
     super(message);
     this.name = 'TranslationFailed';
   }
@@ -92,11 +97,15 @@ function maxTokensFor(text: string): number {
   return Math.min(8192, Math.max(256, Math.ceil(text.length * 1.5) + 64));
 }
 
+/** The pauses before the second and third try of a transiently failed call. */
+const RETRY_DELAYS_MS = [500, 1500];
+
 /**
  * Translate `text` from `from` into `to`. Resolves with the translation; rejects with
  * TranslationFailed on anything else — no key, a non-2xx answer, a reply cut off by its token limit,
  * a reply with no text, one that mangled the protected spans, or the timeout (20 s by default,
- * decision 4A). The race is a hard outer bound even if a fetch implementation ignores abort.
+ * decision 4A). A network failure or a 429/5xx answer is tried up to three times in all, within that
+ * same timeout. The race is a hard outer bound even if a fetch implementation ignores abort.
  */
 export async function translate(
   text: string,
@@ -114,7 +123,8 @@ export async function translate(
   call.body.temperature = 0;
   const controller = new AbortController();
   let timer: ReturnType<typeof setTimeout> | undefined;
-  const request = (async (): Promise<string> => {
+  /** One call. A network failure or a 429/5xx answer is transient and marked so; the rest are final. */
+  const attempt = async (): Promise<string> => {
     let resp: Response;
     try {
       resp = await fetch(call.url, {
@@ -129,7 +139,7 @@ export async function translate(
     }
     if (!resp.ok) {
       await resp.body?.cancel().catch(() => undefined);
-      throw new TranslationFailed('HTTP', `The translator answered ${resp.status}.`);
+      throw new TranslationFailed('HTTP', `The translator answered ${resp.status}.`, resp.status === 429 || resp.status >= 500);
     }
     const data = (await resp.json().catch(() => null)) as
       | { choices?: { finish_reason?: unknown; message?: { content?: unknown } }[] }
@@ -141,6 +151,19 @@ export async function translate(
     const content = typeof choice?.message?.content === 'string' ? choice.message.content.trim() : '';
     if (!content) throw new TranslationFailed('EMPTY', 'The translator returned nothing.');
     return restoreVerbatim(content, spans);
+  };
+  // Transient failures are tried again after a short pause, all inside the one timeout below.
+  const request = (async (): Promise<string> => {
+    for (let n = 0; ; n++) {
+      try {
+        return await attempt();
+      } catch (e) {
+        const transient = e instanceof TranslationFailed && (e.reason === 'NETWORK' || e.transient);
+        if (!transient || n >= RETRY_DELAYS_MS.length || controller.signal.aborted) throw e;
+      }
+      await new Promise((resolve) => setTimeout(resolve, RETRY_DELAYS_MS[n]));
+      if (controller.signal.aborted) throw new TranslationFailed('TIMEOUT', 'Translation took longer than 20 seconds.');
+    }
   })();
   const timedOut = new Promise<never>((_resolve, reject) => {
     timer = setTimeout(() => {

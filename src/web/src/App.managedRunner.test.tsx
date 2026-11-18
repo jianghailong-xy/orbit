@@ -67,9 +67,9 @@ const fixture = JSON.parse(
 const state = (name: string) => fixture.states.find((c) => c.name === name)!.status;
 const capability = (name: string) => fixture.capabilities.find((c) => c.name === name)!;
 
-// The managed runner and its default workspace, as the status names them (public ids).
+// A managed runner and an ordinary workspace on it (public ids).
 const MANAGED_RUNNER = state('sleeping').runnerId!;
-const MANAGED_WORKSPACE = state('sleeping').workspaceId!;
+const MANAGED_WORKSPACE = '33zx0JhRhJo8rd25d3qAT';
 const MAC = '33zx0JhRhJo8rd25d3qAM';
 const HPC = '33zx0JhRhJo8rd25d3qAN';
 const MAC_WORKSPACE = '33zx0JhRhJo8rd25d3qAP';
@@ -340,6 +340,15 @@ describe('with the capability switched on', () => {
     await vi.waitFor(() => expect(consoleShows()).toBe('Managed runner|sleeping'));
     expect(container.textContent).not.toContain('register a machine');
   });
+
+  for (const name of ['preparing: starting', 'sleeping', 'waking: starting again']) {
+    it(`lands on the managed setup card while ${name}`, async () => {
+      server = { capabilities: on, status: state(name), runners: [runner(MANAGED_RUNNER, 'Managed runner', false)], workspaces: [] };
+      await visit('/');
+      await vi.waitFor(() => expect(addressBar()).toBe(`/runners/${MANAGED_RUNNER}/new`));
+      await vi.waitFor(() => expect(consoleShows()).toContain('Managed runner|'));
+    });
+  }
 
   it('keeps the workspace a person already had first, and hands no managed state to a self-managed console', async () => {
     server = {

@@ -25,7 +25,9 @@ import { Result } from './ui/Result';
 const BYPASS = ['/login', '/enroll', '/setup', '/privacy'];
 // The public share page (/s/<token>) is signed-out and self-loading — never gate it behind
 // the splash or the setup-status check.
-const isBypass = (pathname: string) => BYPASS.includes(pathname) || pathname.startsWith('/s/');
+// The help center reads signed out too, and loads its own pages.
+const isBypass = (pathname: string) =>
+  BYPASS.includes(pathname) || pathname.startsWith('/s/') || pathname === '/help' || pathname.startsWith('/help/');
 
 // Drive / dismiss the first-paint splash defined in index.html. The bar only ever moves forward as
 // the app reports real milestones; finishing snaps it to 100% and fades the splash out.

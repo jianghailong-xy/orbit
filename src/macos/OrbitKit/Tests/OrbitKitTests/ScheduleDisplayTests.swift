@@ -41,6 +41,7 @@ final class ScheduleDisplayTests: XCTestCase {
                 case .schedule(let s, _): return s.title
                 case .run(let s, _, _): return s.title
                 case .draft(let c, _): return c.title ?? ""
+                case .task(let t): return t.title
                 }
             }
             return "\(g.title)|\(g.subtitle ?? "nil")|\(items.joined(separator: ","))"
@@ -217,6 +218,11 @@ final class ScheduleDisplayTests: XCTestCase {
                        "Weekdays at 09:00 · apiserver · Check only · draft, waiting for you")
     }
 
+    func testLandMayCopy() {
+        XCTAssertEqual(ScheduleDisplay.mayText("LAND"), "Edit and land on main · edits in its own worktree, then Orbit merges it into main after the run. It can't release or deploy.")
+        XCTAssertEqual(ScheduleDisplay.accessOrder["LAND"], 2)
+    }
+
     func testPastRunLines() {
         XCTAssertEqual(ScheduleDisplay.runLine(state: "FAILED", summary: nil, failureReason: "NO_REPORT", reasonText: nil),
                        "Ended without a report")
@@ -342,6 +348,23 @@ final class ScheduleDisplayTests: XCTestCase {
         let card = try JSONDecoder().decode(ScheduleCard.self, from: Data(
             #"{"id":"c","kind":"CREATE","notice":"You'll hear about new versions and failures only."}"#.utf8))
         XCTAssertEqual(card.notice, "You'll hear about new versions and failures only.")
+    }
+
+    /// A failed press says what went wrong: only a dropped connection reads "Couldn't reach Orbit".
+    func testAFailedPressSaysWhatWentWrong() throws {
+        XCTAssertEqual(ScheduleDisplay.pressFailure(URLError(.notConnectedToInternet)), "Couldn't reach Orbit. Try again.")
+        let unreadable: Error
+        do { _ = try JSONDecoder().decode(ScheduleRule.self, from: Data(#"{"kind":"DAILY"}"#.utf8)); return XCTFail() }
+        catch { unreadable = error }
+        XCTAssertEqual(ScheduleDisplay.pressFailure(unreadable),
+                       "Orbit answered, but this version of the app couldn't read the reply. "
+                        + "Update the app; the card shows what Orbit did.")
+        XCTAssertEqual(ScheduleDisplay.pressFailure(APIError.invalidResponse), ScheduleDisplay.PressFailure.unreadable)
+        XCTAssertEqual(ScheduleDisplay.pressFailure(APIError.http(status: 409, body: #"{"message":"Already decided."}"#)),
+                       "Already decided.")
+        XCTAssertEqual(ScheduleDisplay.pressFailure(APIError.http(status: 502, body: "<html>")),
+                       "Orbit couldn't do this (error 502). Try again.")
+        XCTAssertEqual(ScheduleDisplay.pressFailure(APIError.unauthorized), "You're signed out. Sign in and try again.")
     }
 
     /// The web's `scheduleRunAgentName`: the schedule view's engine first, else the session's own.

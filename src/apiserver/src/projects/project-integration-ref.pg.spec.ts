@@ -834,8 +834,10 @@ test('a project’s integration line is recorded, defaulted, locked, read for la
       stack.receipts,
       {} as SessionAttemptService,
     );
-    assert.deepEqual(await runnerDoor.mergeSession(runner, undefined, undefined, undefined, merged,
-      { targetBranch: `project/${f.publicId}` }), { ok: true });
+    const answer = await runnerDoor.mergeSession(runner, undefined, undefined, undefined, merged,
+      { targetBranch: `project/${f.publicId}` });
+    const { ok, outcome, mergeStatus } = answer as { ok?: boolean; outcome: string; mergeStatus: string | null };
+    assert.deepEqual([ok, outcome, mergeStatus], [true, 'PENDING', 'pending']);
     assert.deepEqual(await stack.db.session.findUniqueOrThrow({
       where: { id: merged },
       select: { mergeStatus: true, mergeTarget: true },

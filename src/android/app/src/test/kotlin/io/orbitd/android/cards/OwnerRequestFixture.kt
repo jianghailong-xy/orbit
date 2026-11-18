@@ -23,6 +23,8 @@ internal class OwnerRequestFixture {
     val held = ConcurrentHashMap<String, JsonObject>()
     /** The secret door's refusal, when a test wants one. */
     @Volatile var refuseSecret: String? = null
+    /** Settings › Translation: done and decline refuse the owner's words 422 TRANSLATION_FAILED unless sent as written. */
+    @Volatile var refuseUntranslated = false
     /** The open projects (`GET /projects?status=OPEN`) and each one's open items, for the coordinators' questions. */
     @Volatile var projects: JsonArray = JsonArray(emptyList())
     val openItems = ConcurrentHashMap<String, JsonObject>()
@@ -66,7 +68,10 @@ internal class OwnerRequestFixture {
                         val ended = { state: String, extra: JsonObjectBuilder.() -> Unit -> JsonObject(row + buildJsonObject {
                             put("state", state); put("resolvedAt", Instant.now().toString()); put("resolvedByUserId", "u"); extra()
                         }) }
-                        val next = when (parts.drop(2).joinToString("/")) {
+                        val door = parts.drop(2).joinToString("/")
+                        if (refuseUntranslated && door in setOf("done", "decline") && body["sendAsWritten"] != JsonPrimitive(true))
+                            return json(422, """{"code":"TRANSLATION_FAILED","message":"The answer could not be translated, so nothing was recorded."}""")
+                        val next = when (door) {
                             "done" -> ended("DONE") { put("answer", body) }
                             "decline" -> ended("DECLINED") { put("resolutionNote", body["reason"]!!) }
                             "secret" -> refuseSecret?.let { return json(400, buildJsonObject { put("message", it) }.toString()) }

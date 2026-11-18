@@ -69,7 +69,7 @@ async function mount(keys: QueryKey[]): Promise<QueryClient> {
   const client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
   // Seeded rather than fetched: a cached read with no observer is marked by an invalidation and
   // never refetched, so the flag read below is the provider's doing and nothing else's.
-  for (const key of keys) client.setQueryData(key, { pending: [] });
+  for (const key of keys) seed(client, key);
   container = document.createElement('div');
   document.body.appendChild(container);
   const nextRoot = createRoot(container);
@@ -105,6 +105,16 @@ async function publish(event: Record<string, unknown>): Promise<void> {
 
 const invalidated = (client: QueryClient, key: QueryKey): boolean =>
   client.getQueryState(key)?.isInvalidated === true;
+
+/** Seeds a cached read with the declaration its real counterpart makes: the stream selects on
+ *  `meta.entities`, and a bare `setQueryData` creates an entry that declares nothing. */
+function seed(client: QueryClient, key: QueryKey): void {
+  const entities = key[0] === 'session' ? ['task']
+    : key[0] === 'project' ? ['project', 'task']
+    : ['provider'];
+  client.getQueryCache().build(client, { queryKey: key, meta: { entities } });
+  client.setQueryData(key, { pending: [] });
+}
 
 async function untilInvalidated(client: QueryClient, key: QueryKey): Promise<void> {
   await vi.waitFor(

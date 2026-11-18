@@ -258,3 +258,84 @@ func TestClaudeConversationIsDatedByTheRecordsAtItsEnd(t *testing.T) {
 		}
 	}
 }
+
+// An idle session switched to another account is left cold, with no engine to start and carry its
+// conversation. The switch carries it all the same, and records the account it is on now: the
+// account it left holds nothing of it any more, and can be removed while the session carries on
+// (2026-11-16: three sessions switched away kept their old account from being removed until each
+// ran a turn).
+func TestAnIdleClaudeSessionSwitchedAwayReleasesItsAccount(t *testing.T) {
+	claudeAccountSlotTestHomes(t)
+	work, err := claudeAccountKind.create("Work")
+	if err != nil {
+		t.Fatal(err)
+	}
+	personal, err := claudeAccountKind.create("Personal")
+	if err != nil {
+		t.Fatal(err)
+	}
+	execDir := t.TempDir()
+	const id = "7a1b2c3d-4e5f-4a6b-8c7d-9e0f1a2b3c4d"
+	scratch := runDir(id)
+	if err := os.MkdirAll(scratch, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	fromWork, _ := claudeTranscriptPathIn(work.Dir, execDir, id)
+	if err := os.MkdirAll(filepath.Dir(fromWork), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	said := claudeTurns(t, time.Now().Add(-time.Hour), "hello", "from Work")
+	if err := os.WriteFile(fromWork, said, 0o600); err != nil {
+		t.Fatal(err)
+	}
+	job := &ClaimedSession{SessionID: id, SessionUUID: id, Provider: providerClaude,
+		Agent: AgentExecConfig{Provider: providerClaude, Env: map[string]string{"CLAUDE_CONFIG_DIR": work.Dir}}}
+	writeClaudeSessionMeta(scratch, job, execDir) // it ran on Work
+	if got := claudeSessionAccountDirs([]string{id}); len(got[work.Dir]) != 1 {
+		t.Fatalf("before the switch the session is not on Work: %v", got)
+	}
+
+	// The switch's reload applies the new account's environment, then finds the session idle.
+	job.Agent.Env = map[string]string{"CLAUDE_CONFIG_DIR": personal.Dir}
+	moveIdleClaudeConversation(job, execDir, scratch)
+
+	dst, _ := claudeTranscriptPathIn(personal.Dir, execDir, id)
+	if got, err := os.ReadFile(dst); err != nil || string(got) != string(said) {
+		t.Fatalf("the conversation on the account it moved to: %q, %v", got, err)
+	}
+	live := claudeSessionAccountDirs([]string{id})
+	if len(live[work.Dir]) != 0 || len(live[personal.Dir]) != 1 {
+		t.Fatalf("after the switch the session is on %v, want Personal only", live)
+	}
+	if err := claudeAccountKind.remove(work.ID, live); err != nil {
+		t.Fatalf("removing the account it left: %v", err)
+	}
+	if got, err := os.ReadFile(dst); err != nil || string(got) != string(said) {
+		t.Fatalf("removing the old account took the conversation: %q, %v", got, err)
+	}
+}
+
+// A conversation that could not be carried stays where it is, and so does the record: the account
+// holding it is still the session's, and still refused.
+func TestAnIdleClaudeSessionWhoseConversationStaysKeepsItsAccount(t *testing.T) {
+	claudeAccountSlotTestHomes(t)
+	work, err := claudeAccountKind.create("Work")
+	if err != nil {
+		t.Fatal(err)
+	}
+	execDir := t.TempDir()
+	const id = "8b2c3d4e-5f6a-4b7c-9d8e-0f1a2b3c4d5e"
+	scratch := runDir(id)
+	if err := os.MkdirAll(scratch, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	job := &ClaimedSession{SessionID: id, SessionUUID: id, Provider: providerClaude,
+		Agent: AgentExecConfig{Provider: providerClaude, Env: map[string]string{"CLAUDE_CONFIG_DIR": work.Dir}}}
+	writeClaudeSessionMeta(scratch, job, execDir)
+	// Switched to an account directory that does not exist: nothing can be carried there.
+	job.Agent.Env = map[string]string{"CLAUDE_CONFIG_DIR": filepath.Join(t.TempDir(), "gone")}
+	moveIdleClaudeConversation(job, execDir, scratch)
+	if got := claudeSessionAccountDirs([]string{id}); len(got[work.Dir]) != 1 {
+		t.Fatalf("the session left the account its conversation is in: %v", got)
+	}
+}

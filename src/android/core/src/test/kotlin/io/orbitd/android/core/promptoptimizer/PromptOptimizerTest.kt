@@ -16,6 +16,7 @@ import kotlinx.serialization.json.jsonObject
 import kotlinx.serialization.json.put
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
+import org.junit.Assert.assertNotNull
 import org.junit.Assert.assertNull
 import org.junit.Assert.assertSame
 import org.junit.Assert.assertTrue
@@ -24,7 +25,7 @@ import org.junit.Test
 
 /** Prompt optimizer (docs/prompt-optimizer-design.md, board docs/mocks/prompt-optimizer), OrbitKit's PromptOptimizerTests case for
  * case: the wire shapes of @orbit/shared prompt-optimizer.ts, the composer's button rule, Use / Undo, and when a send carries
- * `skipTranslation`. */
+ * `optimizedTranslation`. */
 class PromptOptimizerTest {
     private fun decode(json: String) = PromptOptimization.decode(Wire.json.parseToJsonElement(json))
 
@@ -134,10 +135,11 @@ class PromptOptimizerTest {
     private fun user(prefs: String, available: Boolean?): JsonObject = Wire.json.parseToJsonElement(
         """{"id":"u","email":"a@b.c","preferences":$prefs${available?.let { ",\"promptOptimizerAvailable\":$it" } ?: ""}}""").jsonObject
 
-    @Test fun theSwitchIsOffUnlessExactlyTrueAndTheServerCan() {
-        assertFalse("absent is off", PromptOptimizer.isOn(user("{}", true)))
+    @Test fun theSwitchIsOnUnlessExactlyFalseAndTheServerCan() {
+        assertTrue("absent is on", PromptOptimizer.isOn(user("{}", true)))
         assertFalse(PromptOptimizer.isOn(user("""{"promptOptimizer":false}""", true)))
-        assertFalse("a stray value reads as absent", PromptOptimizer.isOn(user("""{"promptOptimizer":"true"}""", true)))
+        assertTrue("a stray value reads as absent", PromptOptimizer.isOn(user("""{"promptOptimizer":"false"}""", true)))
+        assertFalse("absent, but no server key", PromptOptimizer.isOn(user("{}", false)))
         assertTrue(PromptOptimizer.isOn(user("""{"promptOptimizer":true}""", true)))
         assertFalse(PromptOptimizer.isOn(user("""{"promptOptimizer":true}""", false)))
         assertFalse("a payload that does not say", PromptOptimizer.isOn(user("""{"promptOptimizer":true}""", null)))
@@ -201,7 +203,7 @@ class PromptOptimizerTest {
         assertTrue(state.suggestion != null)
         assertFalse(state.isOptimizing)
         assertFalse(state.offersUndo("fix the login redirect bug"))
-        assertFalse(state.skipTranslation("fix the login redirect bug"))
+        assertNull(state.optimizedTranslation("fix the login redirect bug"))
         val dismissed = state.dismiss()
         assertNull("× / back: the card goes, the draft stays", dismissed.suggestion)
         assertSame("nothing to use once dismissed", dismissed, dismissed.use("fix the login redirect bug"))
@@ -210,9 +212,9 @@ class PromptOptimizerTest {
     @Test fun useReplacesTheDraftAndUndoPutsItBack() {
         val draft = "fix the login redirect bug"
         val before = suggested()
-        val inserted = before.suggestion!!.text
+        val inserted = before.suggestion!!.insertText
         val used = before.use(draft)
-        assertTrue(inserted.startsWith("After signing in"))
+        assertEquals("with Translation on, Use inserts the owner-language gloss", "登录后用户落在错误的页面。", inserted)
         assertEquals(inserted, used.inserted)
         assertNull("the card goes on Use", used.suggestion)
         assertTrue(used.offersUndo(inserted))
@@ -220,7 +222,7 @@ class PromptOptimizerTest {
         val undone = used.undo(inserted)
         assertFalse(undone.offersUndo(draft))
         assertSame("Undo once", undone, undone.undo(draft))
-        assertFalse("the owner's own words are translated as usual", undone.skipTranslation(draft))
+        assertNull("the owner's own words are translated as usual", undone.optimizedTranslation(draft))
     }
 
     @Test fun undoIsNotOfferedOnceTheTextWasEditedOrTheToastWent() {
@@ -230,7 +232,7 @@ class PromptOptimizerTest {
         assertSame(used, used.undo("$inserted please"))
         val forgot = used.forgetUndo()
         assertFalse(forgot.offersUndo(inserted))
-        assertTrue("the toast going does not edit the text", forgot.skipTranslation(inserted))
+        assertNotNull("the toast going does not edit the text", forgot.optimizedTranslation(inserted))
     }
 
     @Test fun basedOnAnEarlierDraftWhenTheBoxChangedWhileOptimizing() {
@@ -251,41 +253,58 @@ class PromptOptimizerTest {
         assertFalse("a failure after a cancel is dropped", cancelled.failedNow().failed)
     }
 
-    @Test fun theGlossToggleFlipsAndANewSuggestionStartsOnThePrompt() {
-        val flipped = suggested().toggleGloss()
-        assertTrue(flipped.showingGloss)
-        assertFalse(flipped.dismiss().showingGloss)
-        assertFalse(flipped.start("again").showingGloss)
+    @Test fun aSuggestionWithAGlossOpensOnItAndTheToggleFlipsToThePrompt() {
+        val opened = suggested()
+        assertTrue("D2: the card opens in the owner's language", opened.showingGloss)
+        val flipped = opened.toggleGloss()
+        assertFalse(flipped.showingGloss)
+        assertTrue(flipped.toggleGloss().showingGloss)
+        assertFalse(opened.dismiss().showingGloss)
+        assertFalse(opened.start("again").showingGloss)
+        val noGloss = suggested("""{"segments":[{"text":"x","added":false}],"language":"en","contextUsed":[]}""")
+        assertFalse("no gloss: the card shows the prompt", noGloss.showingGloss)
     }
 
-    // skipTranslation (D2)
+    @Test fun theAgentNoteNamesThePromptsLanguage() {
+        assertEquals("The agent receives the English version.", PromptOptimizerCopy.agentReceives("en"))
+        assertEquals("The agent receives the Japanese version.", PromptOptimizerCopy.agentReceives("ja"))
+        assertEquals("The agent receives the original prompt.", PromptOptimizerCopy.agentReceives(null))
+    }
 
-    @Test fun skipTranslationOnlyForUneditedOptimizedAgentLanguageText() {
+    // optimizedTranslation (D2)
+
+    private val boardPrompt =
+        "After signing in, users land on the wrong page. The redirect target is meant to come from the `returnTo` query parameter."
+
+    @Test fun theUneditedGlossCarriesTheOptimizedPromptAsItsTranslation() {
         val used = suggested().use("draft")
         val inserted = used.inserted!!
-        assertTrue(used.skipTranslation(inserted))
-        assertTrue("the send trims as Send does", used.skipTranslation(inserted + "\n"))
-        assertFalse("edited: translated as usual", used.skipTranslation("$inserted Also check iOS."))
-        assertFalse(used.skipTranslation("something else"))
-        assertFalse("spent by the send", used.sent().skipTranslation(inserted))
+        assertEquals(boardPrompt, used.optimizedTranslation(inserted))
+        assertEquals("the send trims as Send does", boardPrompt, used.optimizedTranslation(inserted + "\n"))
+        assertNull("edited: translated as usual", used.optimizedTranslation("$inserted Also check iOS."))
+        assertNull(used.optimizedTranslation("something else"))
+        assertNull("spent by the send", used.sent().optimizedTranslation(inserted))
     }
 
-    @Test fun skipTranslationForAChosenAgentLanguageNotOnlyEnglish() {
+    @Test fun aChosenAgentLanguageNotOnlyEnglish() {
         val used = suggested("""{"segments":[{"text":"ログインのリダイレクトを直して","added":false}],"language":"ja","gloss":"修复登录跳转","contextUsed":[]}""").use("draft")
-        assertTrue(used.skipTranslation(used.inserted!!))
-        assertFalse(used.skipTranslation(used.inserted + "!"))
+        assertEquals("修复登录跳转", used.inserted)
+        assertEquals("ログインのリダイレクトを直して", used.optimizedTranslation(used.inserted!!))
+        assertNull(used.optimizedTranslation(used.inserted + "!"))
     }
 
-    @Test fun noSkipForAPromptInTheDraftsOwnLanguage() {
+    @Test fun nothingCarriedForAPromptInTheDraftsOwnLanguage() {
         val used = suggested("""{"segments":[{"text":"修复登录跳转","added":false}],"text":"修复登录跳转","language":"zh-Hans","contextUsed":[]}""").use("draft")
-        assertFalse(used.skipTranslation(used.inserted!!))
+        assertEquals("修复登录跳转", used.inserted)
+        assertNull(used.optimizedTranslation(used.inserted!!))
     }
 
-    @Test fun theSendBodiesCarrySkipTranslationOnlyWhenSet() {
+    @Test fun theSendBodiesCarryOptimizedTranslationOnlyWhenSet() {
         val body = buildJsonObject { put("clientTurnId", "c"); put("content", "t") }
-        assertSame(body, PromptOptimizer.withSkipTranslation(body, false))
-        val skipped = PromptOptimizer.withSkipTranslation(body, true)
-        assertEquals(JsonPrimitive(true), skipped["skipTranslation"])
-        assertEquals("t", (skipped["content"] as JsonPrimitive).content)
+        assertSame(body, PromptOptimizer.withOptimizedTranslation(body, null))
+        val carried = PromptOptimizer.withOptimizedTranslation(body, "English")
+        assertEquals(JsonPrimitive("English"), carried["optimizedTranslation"])
+        assertNull(carried["skipTranslation"])
+        assertEquals("t", (carried["content"] as JsonPrimitive).content)
     }
 }

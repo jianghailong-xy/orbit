@@ -2,6 +2,8 @@ package io.orbitd.android.projects
 
 import io.orbitd.android.composer.LocalManagedRunnerStatus
 import io.orbitd.android.composer.ManagedRunner
+import io.orbitd.android.composer.ManagedRunnerIdentity
+import io.orbitd.android.management.RunnerPage
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
@@ -64,7 +66,11 @@ object CoordinatorChange {
         val id = w.text("id") ?: return@mapNotNull null
         val name = w.text("name") ?: id
         val provider = w.text("lastProvider")?.takeIf { it.isNotEmpty() } ?: ProviderEngines.CLAUDE
-        val runner = w.obj("runner")?.let { r -> r.text("displayName")?.takeIf { it.isNotEmpty() } ?: r.text("name")?.takeIf { it.isNotEmpty() } }
+        // Orbit Cloud for the account's managed runner ([managed]'s runnerId), as every other place that names a machine.
+        val runner = w.obj("runner")?.let { r ->
+            RunnerPage.nameOf(w.text("runnerId") ?: r.text("id"), r.text("name"), r.text("displayName"), managed?.runnerId ?: ManagedRunnerIdentity.runnerId)
+                .takeIf { it.isNotEmpty() }
+        }
         val usual = listOfNotNull(ProviderEngines.cliName(provider), runner).joinToString(" · ")
         if (id == currentWorkspaceId) return@mapNotNull Row(id, name, usual, null, current = true, runnerOffline = false)
         val runnerId = w.text("runnerId")?.takeIf { it.isNotEmpty() }

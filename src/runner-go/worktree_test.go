@@ -1145,6 +1145,37 @@ func TestResolveBaseShaKeepsTighterAndMergedForks(t *testing.T) {
 	}
 }
 
+// A branch rebased onto a newer target and then fast-forwarded in has fully landed, but its old fork
+// also spans the target commits the rebase brought in: the bar counted them as this session's work.
+// The last rebase's onto point is the fork then, still with the session's commit ahead of it.
+func TestResolveBaseShaLandedAfterRebaseUsesTheRebaseOnto(t *testing.T) {
+	repo := initRepo(t)
+	oldFork := mustGit(t, repo, "rev-parse", "HEAD")
+	mustGit(t, repo, "checkout", "-b", "orbit/feat")
+	commitFile(t, repo, "feat.txt", "feature\n", "feat work")
+	mustGit(t, repo, "checkout", "main")
+	commitFile(t, repo, "other.txt", "other\n", "someone else's work")
+	onto := mustGit(t, repo, "rev-parse", "main")
+	mustGit(t, repo, "checkout", "orbit/feat")
+	mustGit(t, repo, "rebase", "main")
+	mustGit(t, repo, "checkout", "main")
+	mustGit(t, repo, "merge", "--ff-only", "orbit/feat")
+
+	if got := resolveBaseSha(repo, "s6", "orbit/feat", oldFork); got != onto {
+		t.Errorf("a branch landed after a rebase must fork at the rebase's onto point, got %s want %s", got, onto)
+	}
+	if ref := mustGit(t, repo, "rev-parse", baseRefName("s6")); ref != onto {
+		t.Errorf("the tighter fork must be persisted, got %s want %s", ref, onto)
+	}
+	if n := mustGit(t, repo, "rev-list", "--count", onto+"..orbit/feat"); n != "1" {
+		t.Errorf("the session's one commit must stay ahead of the fork, got %s", n)
+	}
+	// Stable: asked again with the healed base, it stays.
+	if got := resolveBaseSha(repo, "s6", "orbit/feat", onto); got != onto {
+		t.Errorf("the healed fork must be stable, got %s", got)
+	}
+}
+
 // TestFreshenBaseShaAfterRebase: a branch rebased mid-session leaves the recorded fork outside
 // its history — the live/final diffs must re-base onto the NEW fork instead of counting the
 // target's commits as session work (the "+3170 −532 phantom diff" symptom).

@@ -98,6 +98,16 @@ type secretStore struct {
 	ledger  []secretLedgerEntry
 	scrub   *integrationOutputRedactor
 	owedRem map[string]string // grant id -> removal note, until the control plane acknowledges it
+	// scanning counts the removal scans still running per grant id (scanThenOwe): the grant is reported removed when
+	// its scan ends, not before.
+	scanning map[string]int
+
+	// scanMu runs one removal scan at a time; scans counts the ones not yet finished.
+	scanMu sync.Mutex
+	scans  sync.WaitGroup
+	// flushMu runs one flushRemoved at a time: each finished scan flushes, and so does every reconcile, and two
+	// flushes reading owedRem before either cleared it would report the same removal twice.
+	flushMu sync.Mutex
 
 	ready     chan struct{}
 	readyOnce sync.Once
@@ -118,6 +128,7 @@ func newSecretStore(api secretGrantAPI, ledgerPath string) *secretStore {
 		now:        time.Now,
 		held:       map[string]*heldSecret{},
 		owedRem:    map[string]string{},
+		scanning:   map[string]int{},
 		ready:      make(chan struct{}),
 	}
 }
@@ -286,14 +297,21 @@ func (s *secretStore) startup() {
 			s.removeFileEntry(entry)
 			logln("secret grants: grant", entry.GrantID, "was not completely written when the runner stopped; the partial write was cleaned up")
 		case !entry.ExpiresAt.After(now):
-			// The value is still on disk here, and nowhere else once this deletes it: what a checkout copied of it is
-			// recorded first, as remove() does before it forgets a value (secretBeforeForget).
+			// The value is still on disk here, and nowhere else once this deletes it: it is kept pending first, and what a
+			// checkout copied of it is recorded off this path, as remove() does before it forgets a value.
+			var r *integrationOutputRedactor
 			if state, size := inspectSecretFile(entry.Path, entry.Dev, entry.Ino); state == secretFileOurs && size <= secretValueMax {
 				if data, err := os.ReadFile(entry.Path); err == nil && len(data) > 0 {
-					recordBeforeForget(newSecretRedactor([]string{string(data)}))
+					r = newSecretRedactor([]string{string(data)})
 				}
 			}
-			s.owe(entry.GrantID, s.removeFileEntry(entry))
+			scan := holdPendingTaint(r)
+			note := s.removeFileEntry(entry)
+			if scan {
+				s.scanThenOwe(entry.GrantID, r, note, true)
+			} else {
+				s.owe(entry.GrantID, note)
+			}
 			logln("secret grants: grant", entry.GrantID, "expired while the runner was stopped; its file was removed")
 		default:
 			kept = append(kept, entry)
@@ -342,8 +360,8 @@ func (s *secretStore) expire() {
 	if s == nil {
 		return
 	}
-	// Every minute: what a removal could not record yet is tried again.
-	retryPendingTaint()
+	// Every minute: what a removal could not record yet is tried again, off this goroutine, which delivers grants.
+	go retryPendingTaint()
 	s.reconcileMu.Lock()
 	now := s.now()
 	s.mu.Lock()
@@ -355,7 +373,7 @@ func (s *secretStore) expire() {
 	}
 	s.mu.Unlock()
 	for _, id := range due {
-		s.owe(id, s.remove(id))
+		s.remove(id, true)
 	}
 	s.reconcileMu.Unlock()
 	s.flushRemoved()
@@ -379,9 +397,11 @@ func (s *secretStore) removeAll() int {
 	}
 	s.mu.Unlock()
 	for _, id := range ids {
-		s.owe(id, s.remove(id))
+		s.remove(id, true)
 	}
 	s.reconcileMu.Unlock()
+	// `orbit unregister` exits after this: every removal is recorded and reported before it does.
+	s.waitScans()
 	s.flushRemoved()
 	return len(ids)
 }
@@ -398,7 +418,7 @@ func (s *secretStore) reconcile(listed *[]SecretGrantRef, removing []string) {
 	s.reconcileMu.Lock()
 	for _, id := range removing {
 		if id != "" {
-			s.owe(id, s.remove(id))
+			s.remove(id, true)
 		}
 	}
 	if listed != nil {
@@ -428,7 +448,7 @@ func (s *secretStore) reconcile(listed *[]SecretGrantRef, removing []string) {
 		s.mu.Unlock()
 		sort.Strings(gone)
 		for _, id := range gone {
-			s.owe(id, s.remove(id))
+			s.remove(id, true)
 		}
 		now := s.now()
 		for _, id := range order {
@@ -566,7 +586,7 @@ func (s *secretStore) writeFile(held *heldSecret, target *secretFileTarget) erro
 func (s *secretStore) ack(held *heldSecret) {
 	err := s.api.ackSecretGrant(held.id, SecretGrantAck{Outcome: secretAckDelivered})
 	if isHTTPNotFound(err) {
-		s.remove(held.id)
+		s.remove(held.id, false)
 		return
 	}
 	if err != nil {
@@ -589,19 +609,26 @@ func (s *secretStore) ackFailed(id, code, message string) {
 	}
 }
 
-// remove drops one grant from this machine and returns the removal note, "" when there is nothing to say. An ENV
-// grant leaves memory and its leases are revoked; a FILE grant's file goes when it is still the one written.
-func (s *secretStore) remove(id string) string {
-	// While the value is still known: a commit holding it is recorded before it can no longer be recognised.
+// remove drops one grant from this machine and, when report is set, owes the control plane its removal. An ENV grant
+// leaves memory and its leases are revoked; a FILE grant's file goes when it is still the one written.
+//
+// What a checkout copied of the value is recorded off this path (scanThenOwe): the value leaves the held set and the
+// scrubber at once, kept only as a pending matcher, so a scan of every checkout — an hour on a loaded runner — never
+// holds up delivering or acknowledging another grant. While it is pending every reader of the taint record fails
+// closed, and the removal is reported once the scan has ended.
+func (s *secretStore) remove(id string, report bool) {
 	s.mu.Lock()
 	value := secretValue("")
 	if held := s.held[id]; held != nil {
 		value = held.value
 	}
 	s.mu.Unlock()
+	// While the value is still held: pending first, so no reader sees a moment in which it is known to neither.
+	var r *integrationOutputRedactor
 	if value != "" {
-		recordBeforeForget(newSecretRedactor([]string{string(value)}))
+		r = newSecretRedactor([]string{string(value)})
 	}
+	scan := holdPendingTaint(r)
 	s.mu.Lock()
 	held := s.held[id]
 	delete(s.held, id)
@@ -625,8 +652,49 @@ func (s *secretStore) remove(id string) string {
 	if held != nil || entry != nil {
 		logln("secret grants: grant", id, "removed from this runner")
 	}
-	return note
+	switch {
+	case scan:
+		s.scanThenOwe(id, r, note, report)
+	case report:
+		s.mu.Lock()
+		scanning := s.scanning[id] > 0
+		s.mu.Unlock()
+		// A grant whose scan is still running is reported by that scan: asking again while it runs says nothing new.
+		if !scanning {
+			s.owe(id, note)
+		}
+	}
 }
+
+// scanThenOwe records, in the background and one scan at a time, what every checkout holds of r's value (a matcher
+// holdPendingTaint already keeps pending), and then owes and reports the grant's removal when report is set. A scan
+// that fails leaves the matcher pending, retried every minute, and the removal is reported all the same: the value is
+// gone from this runner, and the pending matcher keeps everything refused until its record is written.
+func (s *secretStore) scanThenOwe(id string, r *integrationOutputRedactor, note string, report bool) {
+	s.mu.Lock()
+	s.scanning[id]++
+	s.mu.Unlock()
+	s.scans.Add(1)
+	go func() {
+		defer s.scans.Done()
+		s.scanMu.Lock()
+		err := recordPendingTaint(r)
+		s.scanMu.Unlock()
+		logPendingTaintFailure(err)
+		s.mu.Lock()
+		if s.scanning[id]--; s.scanning[id] <= 0 {
+			delete(s.scanning, id)
+		}
+		s.mu.Unlock()
+		if report {
+			s.owe(id, note)
+			s.flushRemoved()
+		}
+	}()
+}
+
+// waitScans waits for every removal scan started so far.
+func (s *secretStore) waitScans() { s.scans.Wait() }
 
 // removeFileEntry unlinks a ledger entry's file if it is still the one the runner wrote, and the empty directories it
 // created. What it finds otherwise is the note the owner's card shows.
@@ -662,6 +730,8 @@ func (s *secretStore) flushRemoved() {
 	if s == nil {
 		return
 	}
+	s.flushMu.Lock()
+	defer s.flushMu.Unlock()
 	s.mu.Lock()
 	owed := make(map[string]string, len(s.owedRem))
 	for id, note := range s.owedRem {

@@ -57,7 +57,7 @@ configuration is an invalid test setup. A disabled worker must not consume exist
 | --- | --- | --- |
 | Dependency construction and module initialization | Construct only the inert configuration/status facade. Do not construct a Kubernetes client, read kubeconfig, try in-cluster discovery, validate Ceph secrets, register watches, or start a reconcile timer. | Validate the explicitly selected environment, RBAC, storage profile, image, admission protection, resource budget, and model supply before reconciliation starts. Missing prerequisites make the managed service unavailable while ordinary login remains usable. |
 | Successful login and first-user bootstrap | No managed intent, runner, workspace, credential, or PVC write. | Idempotently record owner-scoped provisioning intent after authentication; login does not wait for Pod readiness or contact Kubernetes. Provisioning failure must not invalidate the issued login session. |
-| Refresh, logout, password change, and capability reads | Preserve existing authentication behavior; reads have no provisioning side effects. | Still no implicit allocation. Login/bootstrap and explicit ensure are the allocation entry points. |
+| Refresh, logout, password change, and capability reads | Preserve existing authentication behavior; reads have no provisioning side effects. | Still no allocation from these: a refresh writes nothing managed and no read does. Login/bootstrap and explicit ensure are allocation entry points, and so, since 2026-11-16, is the signed-in pass, which gives every account with a live login session its mapping ([managed-runner-signed-in-accounts-design.md](managed-runner-signed-in-accounts-design.md)). |
 | Ensure, retry, wake, sleep, or delete APIs | Authenticate first, then return `404 MANAGED_RUNNER_DISABLED` before any managed DB write or infrastructure call. | Record a valid desired-state transition; the manager performs resource operations. Retry never creates a second mapping or bypasses fencing. |
 | Messages, executable tasks, scheduled work, watch wakes, and auto retry | Continue existing self-managed queue behavior. No managed allocation, wake, sleep, or cleanup hook runs. | Only demand addressed to this owner's managed mapping requests wake; hooks run before an offline runner gate can prevent demand from being recorded. |
 | Three client applications | Missing capability or `enabled: false` preserves existing onboarding, navigation, workspace selection, and self-managed runner controls. Hide managed provisioning and retry flows. | Render the common server state contract; clients do not infer enabled status from runner names or offline heartbeats. |
@@ -145,7 +145,7 @@ read state `NOT_PROVISIONED`. The manager alone advances observed management sta
 | `REQUESTED` | Intent recorded. Evaluate storage and compute admission. |
 | `WAITING_CAPACITY` | An identified compute, storage, quota, or model requirement is unavailable. Keep demand and retry after capacity changes; no duplicate resources. |
 | `PROVISIONING` | Adopt/create the recorded PVC and bootstrap Secret. Await bound storage; partial success is reusable. |
-| `STARTING` | Exactly one authorized Pod is attaching/initializing; await a matching heartbeat, healthy mount, and usable runtime. |
+| `STARTING` | Exactly one authorized Pod is attaching/initializing; await a matching heartbeat, healthy mount, and usable runtime. An instance that reports in with no runtime signed in and no model key of the owner's own it runs waits here with `MODEL_UNAVAILABLE` for as long as that lasts — never FAILED for it — and is READY by itself once one is signed in or a key is added; idle, it sleeps like a READY runner. |
 | `READY` | Authorized instance is running, heartbeat is fresh, and required runtime is available. New session turns may be claimed. |
 | `DRAINING` | Stop claims, wait for active and background work to finish/release, then stop compute. Demand arriving during drain is preserved. |
 | `SLEEPING` | Compute is stopped and detached; stable IDs, workspace, PVC, and data remain. Demand requests admission and `STARTING` again. |
@@ -161,20 +161,23 @@ Expose both states and `lastHeartbeatAt`, with an explicit server-derived `usabl
 
 ## Persistent filesystem layout
 
-Mount the entire per-user PVC at **`/var/lib/orbit`** as an ext4 filesystem. The managed image uses
+Mount the entire per-user PVC at **`/home/orbit`** as an ext4 filesystem: the volume's root is the
+`orbit` user's home itself. (Until 2026-11-17 it was mounted at `/var/lib/orbit` with home in its `home`
+folder; volumes in that layout were discarded and rebuilt rather than migrated, and migration 0980
+moved the workspaces on managed runners to the same folders under `/home/orbit`.) The managed image uses
 the following fixed absolute locations on every node and image rebuild:
 
 | Location or environment | Data to retain |
 | --- | --- |
-| `HOME=/var/lib/orbit/home` | User-owned runtime configuration, engine histories, and non-rebuildable state under the home directory. |
-| `ORBIT_HOME=/var/lib/orbit/home/.orbit` | The complete machine directory, including private `config.json`, credential/account slots, run metadata, and local recovery markers. |
+| `HOME=/home/orbit` | User-owned runtime configuration, engine histories, and non-rebuildable state under the home directory. |
+| `ORBIT_HOME=/home/orbit/.orbit` | The complete machine directory, including private `config.json`, credential/account slots, run metadata, and local recovery markers. |
 | `$ORBIT_HOME/runs/<canonical-session-id>` | Session metadata, supervisor/event state, legacy Codex state, and isolated engine homes. |
 | `$ORBIT_HOME/worktrees/<canonical-session-id>` | Session Git checkouts and worktree metadata. Retain alongside the original repository's `.git` directory. |
 | `$ORBIT_HOME/uploads/<canonical-session-id>` | Downloaded/uploaded attachment scratch until normal session-aware GC; restart must not wipe it. |
 | `$ORBIT_HOME/codex-state/<partition>` | Runner-wide Codex SQLite database partitions, together with WAL and SHM files. |
-| `CODEX_HOME=/var/lib/orbit/home/.codex` | Default Codex configuration, authentication when used, history, and engine sessions. Additional account homes keep their persisted paths. |
-| `CLAUDE_CONFIG_DIR=/var/lib/orbit/home/.claude` | Claude state when this supplied runtime is enabled. Other supported runtimes keep state below the same persistent home. |
-| `/var/lib/orbit/home/orbit-repos` | Checkout root reported by existing `reposRoot()`; default workspace `workDir` is `/var/lib/orbit/home/orbit-repos/default`. |
+| `CODEX_HOME=/home/orbit/.codex` | Default Codex configuration, authentication when used, history, and engine sessions. Additional account homes keep their persisted paths. |
+| `CLAUDE_CONFIG_DIR=/home/orbit/.claude` | Claude state when this supplied runtime is enabled. Other supported runtimes keep state below the same persistent home. |
+| `/home/orbit/orbit-repos` | Checkout root reported by existing `reposRoot()`, and the runner's own work directory; no default workspace folder since 2026-11-17 (`docs/managed-runner-no-default-workspace.md`). |
 
 Persist the whole home/machine directories, not just the named examples. The image and executable
 tools are reproducible, `/tmp` and container runtime sockets are ephemeral, and the authoritative
@@ -214,6 +217,15 @@ crash/recovery correctness of the selected stack still requires the tests below.
    Persist the managed `initialProvider` selection, derived from that supply. For a workspace with
    no history, the server/client first-session path uses it explicitly; never globally replace the
    self-managed Claude seed or fall back to an uninstalled/unauthenticated engine.
+   A missing login is not a failure: it is how every new account starts. A runner up and heartbeating
+   without supply stays `STARTING` with `MODEL_UNAVAILABLE`, past the startup deadline too (the
+   deadline is moved on, so an instance that stops reporting while it waits still fails
+   `STARTUP_TIMEOUT`), and is READY at the next pass once a runtime is signed in or a key is added,
+   with no retry. Idle for the idle interval it drains and sleeps exactly as a READY runner does (7
+   and 8), compute given back and the reason kept, so a client still points at the sign-in; a drain
+   called off sends it back to waiting, never to READY. A wake brings it up to wait again: the web's
+   Machines & models page wakes it when opened, since an engine is signed in only on a runner that is
+   up.
 4. Transient errors use persisted backoff with jitter, a maximum attempt count and startup deadline.
    The optional test profile must state concrete values before enabling; they are not infrastructure
    facts available here. Startup budgets must accommodate the existing Codex shared-state startup
@@ -249,7 +261,9 @@ crash/recovery correctness of the selected stack still requires the tests below.
 
 ## Single Pod and single writer protection
 
-The first version selects **RWO, Filesystem, ext4, and the kernel RBD mounter** on a verified stack.
+The first version selects **RWO, Filesystem, ext4, and the kernel RBD mounter** on a verified stack. The .3 deployment
+(2026-11-16) deviates — XFS with the local Ceph-CSI reflink patch and `rbd-nbd`, on one node — and
+[the deployment record](managed-runner-k3s-xfs-deployment.md) is its authoritative record.
 Kubernetes RWO permits multiple Pods on the same node. Kubernetes RWOP is stable from v1.29, but the
 Ceph-CSI v3.18.0 matrix still marks both RBD RWOP modes Alpha and advises against Alpha production
 use. RBD `exclusive-lock` can transfer cooperatively between clients and does not make two mounted
@@ -347,6 +361,32 @@ The required proof has two parts: no second Pod is admitted against the original
 predecessor can successfully write after takeover. Database locks, heartbeat leases, RWO, and
 exclusive-lock each cover only part of that proof. The concrete multi-node test plan below must
 establish both before claiming storage acceptance.
+
+## Implementation record: the .3 deployment (2026-11-16)
+
+The production managed-runner environment on 10.66.0.3 (`workstation`) runs the Kubernetes backend with these
+owner-approved deviations from the baseline above. [The deployment record](managed-runner-k3s-xfs-deployment.md) has the
+full values, verification and risks.
+
+- **Filesystem:** XFS with `reflink=1`, not ext4, through the local Ceph-CSI 3.18.2 patch
+  ([csi-xfs-reflink](../deploy/managed-runner/csi-xfs-reflink/README.md)). The StorageClass is `runner-data-xfs`
+  (ReadWriteOnce, Filesystem, `reflink: enabled`, `noatime,discard`, `Retain`, 100 GiB, expansion disabled).
+- **Mounter:** `rbd-nbd`, not kernel RBD. The node's 6.1 kernel cannot map this Ceph release's default `aes256k`
+  CephX keys, and `rbd-nbd` is the node's existing, working mounter. This is outside the first version's kernel-RBD
+  baseline and must be re-reviewed if the node kernel is upgraded.
+- **Topology:** one k3s v1.37.2 node, Debian 12 kernel 6.1, Ceph Tentacle 20.2.5 with two HDD OSDs on the same host and
+  a pool of `size 2 / min_size 1` — not the two-node verified topology. There is no cross-node failover.
+- **Runner size and budget:** 2 CPU / 4 GiB and a 100 GiB volume per account; 6 CPU / 48 GiB / 8 GiB ephemeral, 4 Pods,
+  4 attachments, 3 active users, 10 Ti usable and 1 Ti headroom.
+- **Eligibility:** every enabled account, as the design says; a disabled account is refused. Open sign-up accounts and
+  test accounts are not excluded by the rule.
+- **Runner image:** built from `orbit/runner-3-k3s-fastpath` at `0c03c6a5…`, which carries the checkout index fast
+  path, and pinned by digest in the profile; the patched CSI image is local and pinned by `nodeplugin.plugin.image.tag`
+  with `IfNotPresent`.
+- **Not done:** the XFS durability and power-cut drills required by D4 of the checkout storage design. The ext4
+  evidence does not transfer to XFS.
+- **Retired backend:** the Docker channel on the same host was stopped after the cutover. Its profile, a backup of its
+  one mapping row and its data volume are preserved for rollback.
 
 ## Ceph integration and compatibility
 
@@ -553,9 +593,9 @@ actions { canEnsure, canWake, canSleep, canRetry, canDelete }
 `firstSessionProvider` (since 2026-10-18, task T07) is what a first session in the default workspace, sent with
 nothing named, starts on now: `initialProvider` once the runner has been READY, before that the first of the owner's
 own model keys whose engine the runner reported installed, or, before it has reported any, whose engine the managed
-image installs (Claude Code and Codex, `MANAGED_IMAGE_ENGINES`), and null when there is no such key, as the create
-would refuse the session `MODEL_UNAVAILABLE`. A key no engine on the runner runs (a Kimi key on the managed image)
-is never named, whatever the owner's order; since 2026-11-14. A client offers that session exactly when it is set; a
+image installs (all seven engines since 2026-11-16, `MANAGED_IMAGE_ENGINES`), and null when there is no such key, as
+the create would refuse the session `MODEL_UNAVAILABLE`. A key no engine on the runner runs (a Kimi key on a runner
+that reported no Kimi Code) is never named, whatever the owner's order; since 2026-11-14. A client offers that session exactly when it is set; a
 server that predates the field is read by `initialProvider`.
 
 IDs use the existing wire codec; timestamps are ISO 8601. Nullable IDs describe stages before the
@@ -701,9 +741,10 @@ cluster, a real runner heartbeat or a real model session.
 | Hook | `AuthService.completeLogin`, the exit of password login, first-user bootstrap and the Google ticket exchange, calls `ManagedRunnerService.signedIn` after the tokens are issued. It is injected as `MANAGED_RUNNER_SIGN_IN`, the one export of `ManagedRunnerModule`, which is global for it. Nothing else calls it: refresh, logout, a password change, an administrator opening an account and the capability and status reads record nothing. A unit spec holds the call site to that one method. |
 | Off | `signedIn` returns before reading anything. Login and bootstrap make exactly the database calls they made before. |
 | On | An eligible owner without a mapping gets one (mapping, runner row and default workspace in the manager-core transaction), and the reconcile worker is kicked. The sign-in waits for no instance and makes no Kubernetes call. An existing mapping is left as it is in every state: a sign-in does not retry FAILED, recreate a removed workspace or a tombstone, or wake anything. Every failure is logged and swallowed, so the issued session stands; an explicit `ensure`, or the next sign-in, records the intent. |
-| Eligibility | `ManagedRunnerEligibility` (`managed-runner-eligibility.ts`) is the one decision of who is given a managed runner. Sign-in, explicit `ensure` (403 `MANAGED_RUNNER_NOT_ELIGIBLE`) and the status read (`canEnsure` false, with that reason) ask it. With the switch on it answers yes for every account; narrowing it to invited testers changes that implementation and nothing else. No configuration was added. |
+| Signed-in pass | Added 2026-11-16 ([managed-runner-signed-in-accounts-design.md](managed-runner-signed-in-accounts-design.md), D1–D4 A). A session that began before the switch went on is only ever refreshed, so the sign-in hook never reaches it. With the switch on and the environment available, `ManagedRunnerService.provisionSignedIn` runs at start and every 300 s: every account not disabled, with an unrevoked and unexpired refresh token and no mapping in any state, that the eligibility rule gives one, gets its mapping as a sign-in makes it. Refresh and the reads still record nothing. Off, no timer exists. |
+| Eligibility | `ManagedRunnerEligibility` (`managed-runner-eligibility.ts`) is the one decision of who is given a managed runner. Sign-in, the signed-in pass, explicit `ensure` (403 `MANAGED_RUNNER_NOT_ELIGIBLE`) and the status read (`canEnsure` false, with that reason) ask it. With the switch on it answers yes for every account; narrowing it to invited testers changes that implementation and nothing else. No configuration was added. |
 | Default workspace | Created once with the mapping, bound by `runnerId` and `targetRunnerId`, with `position` NULL, so it sorts after every workspace the owner already has. Existing order, the first workspace a client lands on, selections and deep links are unchanged. Nothing is matched by name. An owner who removes it does not get it, or another, back at the next sign-in. |
-| Model supply | READY also needs the fresh heartbeat after STARTING to report a runtime installed and signed in: `auth: yes`, no installation error, and advertised where the claim requires it. Claude Code, Codex, Kimi Code and Antigravity count, preferred in that order, and the first is stored as `initialProvider`. With none signed in, one of the owner's own enabled model keys counts (since 2026-10-18, task T05: an account whose only model is an API key, such as a DeepSeek key, never became READY before). The key counts when the runner reported the engine that key runs on installed, without an installation error and advertised where the claim requires it. That engine needs no sign-in, because a session on a key brings its own credential. The first such key in the owner's order (`position`, unset last, then age) is stored as `initialProvider`, by its slug. Another account's key, a shared key (an administrator's), a disabled key and a key whose slug is a built-in runtime's name do not count. Without either the mapping stays STARTING with reason `MODEL_UNAVAILABLE`; a runtime signed in or a key added meanwhile makes the next pass READY. At the startup deadline it turns FAILED with that reason, retryable, and a retry waits on the same Pod. OpenCode, DeepSeek Harness and Cursor CLI are not counted as supply in this version, and neither is a key whose engine is one of them (`MANAGED_SUPPLY_RUNTIMES` and `ownerManagedKeys` in `src/apiserver/src/managed-runners/managed-runner-supply.ts`). |
+| Model supply | READY also needs the fresh heartbeat after STARTING to report a runtime installed and signed in: `auth: yes`, no installation error, and advertised where the claim requires it. Claude Code, Codex, Kimi Code, Antigravity and Cursor CLI count, preferred in that order, and the first is stored as `initialProvider`. With none signed in, one of the owner's own enabled model keys counts (since 2026-10-18, task T05: an account whose only model is an API key, such as a DeepSeek key, never became READY before). The key counts when the runner reported the engine that key runs on installed, without an installation error and advertised where the claim requires it. That engine needs no sign-in, because a session on a key brings its own credential. The first such key in the owner's order (`position`, unset last, then age) is stored as `initialProvider`, by its slug. Another account's key, a shared key (an administrator's), a disabled key and a key whose slug is a built-in runtime's name do not count. Without either the mapping stays STARTING with reason `MODEL_UNAVAILABLE`; a runtime signed in or a key added meanwhile makes the next pass READY. Until 2026-11-16 it turned FAILED with that reason at the startup deadline, and needed a retry; now it waits, past the deadline, and sleeps when idle ("Provisioning retry wake and sleep" 3). A mapping an earlier version left FAILED with `MODEL_UNAVAILABLE` is taken up again by the manager itself, as a retry would take it (`loginWaitResumed`); no migration rewrites it, because a replica still on the earlier version during a rolling deploy can write that row after any migration has run. OpenCode and DeepSeek Harness have no sign-in of their own: they count only for a key whose engine is one of them (`MANAGED_SUPPLY_RUNTIMES`, `MANAGED_KEY_RUNTIMES` and `ownerManagedKeys` in `src/apiserver/src/managed-runners/managed-runner-supply.ts`; Cursor CLI and both of these since 2026-11-16, when the image began to ship every engine). |
 | First session | The derived provider seed (`lastProviderByWorkspace`) answers a managed default workspace with no interactive history with its `initialProvider`: a runtime's name as that built-in provider, or a key's slug as that configured provider on the engine its row names. Its `lastProvider` in workspace payloads, and a session created there without a provider, start on it; every other workspace keeps the Claude floor. `SessionsService.create` refuses a first session there with 409 `MODEL_UNAVAILABLE`, before anything is created, on a runtime the managed runner did not report installed and signed in, whether the provider was named or derived. A session bringing its own credential needs only the CLI installed. After the first interactive session the workspace's history decides, as for every workspace. The deprecated workspace `provider` alias is neither read nor written. |
 
 Left for the authorized test environment: a real sign-in provisioning a real PVC and Pod; the managed
@@ -954,7 +995,7 @@ of a real engine session (D4) or of a new deployment's wiring (D3).
 | Area | As implemented |
 | --- | --- |
 | Channel | `deploy/managed-runner/docker-channel/channel.py`, Python 3 standard library, a process of its own and the only one holding `docker.sock`. JSON over HTTP on a unix socket (or loopback), bearer token from a file only its owner reads. It creates, reads and removes data volumes; keeps the runner credential of a generation; creates one container from its own template and starts it, reads its state and exit, stops it and removes it once stopped; reports what holds a volume, the host's size and this instance's resources. Everything it creates carries `orbit.managed-runner.instance=<instanceId>`; nothing without that label is read, returned, adopted or removed. A request names identities and amounts only: `privileged`, capabilities, binds and mounts, host network/PID/IPC/UTS, devices, security options, a user, an environment or labels are refused by name, a volume that is not `mr-data-<runner uuid>` (a host path, the Docker socket) is refused, another image is refused, amounts above its ceilings are refused. The spec is checked against its rules before it is sent and the created container is inspected and checked again before it starts. Its README gives the API, the rules and the reasons. |
-| Template | Image by local ID (built here, never pushed), user 10001:10001, every capability dropped, `no-new-privileges`, read-only root, private IPC and cgroup namespaces, `NanoCpus`, memory with no swap beyond it, PID limit, `/tmp` a sized tmpfs (counted in memory), restart policy `no`, bounded json-file logs, the one configured network, and three mounts: the data volume at `/var/lib/orbit` (Docker copies the image's 10001-owned `/var/lib/orbit` into an empty volume, so no root init step is needed), the bootstrap volume at `/run/orbit-bootstrap`, `/tmp`. |
+| Template | Image by local ID (built here, never pushed), user 10001:10001, every capability dropped, `no-new-privileges`, read-only root, private IPC and cgroup namespaces, `NanoCpus`, memory with no swap beyond it, PID limit, `/tmp` a sized tmpfs (counted in memory), restart policy `no`, bounded json-file logs, the one configured network, and three mounts: the data volume at `/home/orbit` (Docker copies the image's 10001-owned `/home/orbit` into an empty volume, so no root init step is needed), the bootstrap volume at `/run/orbit-bootstrap`, `/tmp`. |
 | Credential and identity | The runner credential of the container's generation is written, before it starts, into its bootstrap volume as root-owned mode-0444 files beside `generation` and `instance.json` (runner, generation, instance UID). The container's environment names the files (`ORBIT_RUNNER_CREDENTIAL_FILE`, `ORBIT_MANAGED_RUNNER_INSTANCE_FILE`), never the credential or the generation. The image's entrypoint reads both from the files and, as on Kubernetes, hands the generation and UID to `orbit run`, which no longer prints them in its log. That entrypoint change is commit 198f6d6cc (branch `d2/entrypoint-instance-file`), handed to the image task (T03): this task changes nothing under `deploy/managed-runner/image`. The instance UID is a canonical UUID the channel gives each container: the runner door authorizes it as it authorizes a Pod UID. |
 | Network | One dedicated bridge network the deployment creates, inter-container traffic off; the runner reaches the apiserver at an address of the host's container network. For a Docker container (identity from its instance file) the Docker profile, and the entrypoint in 198f6d6cc, accept plain HTTP to a private, loopback or link-local address or a single-label host; anything else must be HTTPS, and a Pod's rule is unchanged. |
 | Backend | `DockerBackend` implements the run backend interface over the channel: fixed names from the runner UUID, create once with read-back after a lost answer, identity checks (owner, runner, generation, volume UID), the volume as its own storage (handle `docker:<instance>/<volume>/<uid>`), holders of every label, the guard probe (a dry run under another name must come back `SINGLE_CONTAINER_GUARD`), removal by instance UID, Docker's exit report as the stop proof. A channel that cannot be reached, or answers 5xx/429, is transient; its refusals are `DOCKER_CHANNEL_FORBIDDEN`, `DOCKER_CHANNEL_MISMATCH`, `DOCKER_CHANNEL_REFUSED`, `VOLUME_OVER_LIMIT`, `CONTAINER_GUARD_MISSING` or `CONTAINER_GUARD_UNVERIFIED`, each with a sentence in the manager's table. |
@@ -1888,3 +1929,21 @@ which the Docker backend's isolation does not give them.
 - fake-model.py stands in for a model: its steps are regular and fast. The rounds ran beside other sessions' work on the
   HPC host, whose memory pressure made some rounds re-read their page cache from the disk; each round records that, and
   the comparison pools the rounds of a kind.
+
+## Implementation record: a startup deadline outlasted by an image pull
+
+Recorded 2026-11-16, from production. Two hosted runners were rolled onto a new image at 13:35Z (the image roll: drained,
+woken at once as the next generation). Their node, `workstation` in `orbit-ws03`, pulled that image from the registry
+from 13:35:34 to 14:23:15Z: about 800 MB of layers at 100–170 KB/s, as the registry's own log times each blob. Both Pods
+stayed Pending, their init container not yet started, for 48 minutes. The startup deadline is 30 minutes, so at 14:05Z
+the manager failed both `STARTUP_TIMEOUT` ("no fresh heartbeat"). At 14:23:29Z the runners started, reported in with
+the right generation and Pod UID, and stayed `ONLINE` under a mapping left FAILED. Nothing took them up again but an
+owner's retry. The heartbeat identity checks were not at fault.
+
+| Area | As implemented |
+| --- | --- |
+| A Pod still being made | The Kubernetes backend reads a Pod as `preparing` when it is Pending on a node and every container is waiting as `ContainerCreating` or `PodInitializing`, or has started or completed (`kubernetes-backend.ts`, `podPreparing`). STARTING waits on such a Pod past its startup deadline: once the deadline passes it is moved on, with one warn line each time (`whilePreparing`), as `withoutSupply` does for a runner waiting for a login. A pull error (`ErrImagePull`, `ImagePullBackOff`), a container that cannot be created, an init container that crashed, and a Pod no node took are not `preparing`, so the deadline fails them as before. A running Pod whose runner stays silent still fails at the deadline (`managed-runner-manager.pg.spec.ts` case 12). The Docker backend makes an instance whole in its create, so it never reports `preparing`. |
+| A FAILED start that reported in | A mapping FAILED `STARTUP_TIMEOUT` with RUNNING desired is looked at on every sweep. Once the runner has heartbeated freshly since the failure, it goes back to STARTING on the same instance, as an owner's retry would wait on it again (`startupResumed`); `starting` then checks the instance and its report as on any start. Only the instance recorded for the generation can heartbeat at all, because the runner door refuses any other. Its compute was never given back, since a recorded instance keeps it. Silent, it stays FAILED for a retry. This also takes up the two production mappings once a release with it is deployed: their runners heartbeat now. |
+
+The local evidence is cases (5) and (6) of `managed-runner-image-roll.pg.spec.ts`, run with `scripts/run-pg-spec.sh`.
+The Pod's pull is played by the in-memory cluster's Pending status, not a real kubelet.

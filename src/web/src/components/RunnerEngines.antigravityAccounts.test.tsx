@@ -308,12 +308,12 @@ describe('one Google account', () => {
     expect(row.querySelector('.re-login-note')?.textContent).toContain('Google terms');
   });
 
-  it('offers Sign in with Google, and no Add account, while its one account is signed out', () => {
+  it('offers Sign in, and no Add account, while its one account is signed out', () => {
     const page = mount(runner(antigravity({ auth: 'no', accounts: [{ ...DEFAULT, auth: 'no' }], planUsage: undefined })));
     const row = engineRow(page);
     expect(tags(row)).toEqual(['Signed out']);
     // A second account is only something to add once a first is signed in.
-    expect(buttons(row)).toEqual(['Sign in with Google']);
+    expect(buttons(row)).toEqual(['Sign in']);
   });
 
   it.each([

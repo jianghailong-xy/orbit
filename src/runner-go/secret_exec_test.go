@@ -36,6 +36,7 @@ func newSecretExecFixture(t *testing.T, expires time.Time) *secretExecFixture {
 	t.Cleanup(func() { os.RemoveAll(home) })
 	t.Setenv("ORBIT_HOME", home)
 	t.Setenv("ORBIT_SESSION_ID", secretExecSession)
+	t.Cleanup(func() { waitRemovalScans(t) })
 	t.Setenv(envBgSocket, "")
 	t.Setenv(envBgToken, "")
 	oldRetry, oldGrace := secretExecRetryEvery, secretExecKillGrace

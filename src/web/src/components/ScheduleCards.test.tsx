@@ -12,6 +12,7 @@ import {
   FREEZE_RUN,
   MORE_OFTEN_CARD,
   OPEN_PRS_CARD,
+  LAND_CARD,
   SCHEDULE_NOW,
   WEEKLY_RECORD,
   freezeDetail,
@@ -186,6 +187,14 @@ describe('the envelope card (board 2/2 ② ③)', () => {
     expect([...card.querySelectorAll('.sched-card-foot button')].map((b) => b.textContent)).toEqual(['Keep weekly', 'Allow']);
     await click(button('Keep weekly'));
     expect(calls.find((c) => c.method === 'POST')!.path).toBe('/schedule-requests/req-codex-daily/decline');
+  });
+
+  it('asks to land on main with the shared May copy', async () => {
+    serve();
+    await render(<cards.ScheduleCardView card={LAND_CARD} />);
+    const card = host.querySelector('[data-schedule-card="envelope"]')!;
+    expect(card.querySelector('.sched-card-head')!.textContent).toBe('Let Codex stable check land on main?');
+    expect(facts(card).Asked).toBe("Edit and land on main — edits in its own worktree, then Orbit merges it into main after the run. It can't release or deploy.");
   });
 
   it('asks to open PRs, with Keep check only', async () => {

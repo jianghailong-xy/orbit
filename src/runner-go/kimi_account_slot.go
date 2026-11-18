@@ -58,14 +58,15 @@ func kimiSlotLoginStatus(ctx context.Context, binPath, dir string) authState {
 // kimiSessionAccountHomes is every KIMI_CODE_HOME a session this runner is running is on — read from
 // each session's own record (sessionMeta.KimiCodeHome), written before its kimi starts. A session on
 // Default contributes nothing: Default is not a slot, and no removal touches it.
-func kimiSessionAccountHomes(sessionIDs []string) map[string]bool {
-	out := map[string]bool{}
+func kimiSessionAccountHomes(sessionIDs []string) accountDirSessions {
+	out := accountDirSessions{}
 	for _, id := range sessionIDs {
 		meta := readSessionMeta(filepath.Join(runDir(id), "meta.json"))
 		if meta == nil || meta.KimiCodeHome == "" {
 			continue
 		}
-		out[filepath.Clean(meta.KimiCodeHome)] = true
+		dir := filepath.Clean(meta.KimiCodeHome)
+		out[dir] = append(out[dir], id)
 	}
 	return out
 }

@@ -12,6 +12,7 @@ import {
   type LoginEngine,
   type PlanUsage,
   type PlanUsageSnapshot,
+  type RunnerAccountRemoveSession,
   type RunnerAccountRemoveState,
   type RunnerEngineAccount,
   type ReportedEngine,
@@ -20,7 +21,7 @@ import {
   type RunnerRemovedDefault,
 } from '@orbit/shared';
 import { api } from '../api';
-import { agentFixView, installFixTarget } from '../lib/agentFix';
+import { agentFixView, engineNotUpdatingFixTarget, installFixTarget } from '../lib/agentFix';
 import { AgentFixButton, AgentFixLine } from './AgentFix';
 import { accountIsPaused, usePauseClock } from '../lib/accountPause';
 import { AccountPauseActions, AccountPauseStatus, type AccountPauseControls } from './AccountPause';
@@ -69,6 +70,7 @@ import {
 } from '../lib/claudeRegionCopy';
 import {
   RUNNER_ENGINE_COULDNT_CHECK,
+  RUNNER_ENGINE_NO_PROVIDER_KEY,
   RUNNER_ENGINE_NO_QUOTA_LIMIT,
   RUNNER_ENGINE_NO_READING,
   RUNNER_ENGINE_RENEW,
@@ -79,8 +81,17 @@ import {
   runnerEngineNext,
 } from '../lib/runnerCopy';
 import {
+  RUNNER_ACCOUNT_IN_USE_OPEN,
+  RUNNER_ACCOUNT_IN_USE_RUNNING,
+  RUNNER_ACCOUNT_IN_USE_UNTITLED,
+  RUNNER_ACCOUNT_IN_USE_WAITING,
   RUNNER_DEFAULT_USE_AGAIN,
+  runnerAccountInUseMany,
+  runnerAccountInUseOne,
+  runnerAccountMovingMany,
+  runnerAccountMovingOne,
   runnerAccountRemoveDetailAutomatic,
+  RUNNER_ACCOUNT_REMOVE_DETAIL,
   runnerAccountRemoveDetailLast,
   runnerAccountRemoveTitle,
   runnerDefaultRemoveDetail,
@@ -103,6 +114,7 @@ import { DshRunnerStatus } from './DshRunnerStatus';
 import { ProviderTile } from './ProviderGallery';
 import { GoogleSignInTerms, KIMI_SITE, RunnerSignIn } from './RunnerSignIn';
 import type { Runner } from './TasksSidePanel';
+import { useMachineName } from '../lib/managedRunner';
 
 /** An engine this page has a row for: one a runner signs in with, or OpenCode — which it does not. */
 type RowEngine = LoginEngine | 'opencode';
@@ -259,9 +271,11 @@ function metaFor(kind: RowKind, engine: RowEngine, health?: RunnerEngineHealth, 
     return kind === 'missing' ? 'Not installed — Orbit can install it here' : 'Not installed';
   }
   // With a sign-in, the badge says the check failed and the line keeps the version alone rather
-  // than saying it twice. Without one (OpenCode), the CLI's own answer is the whole story.
+  // than saying it twice. Without one (OpenCode), the line says what the Unknown is about — the
+  // sign-in, not the version beside it — and, when the CLI listed no key at all, that it found none.
   if (kind === 'unknown') {
-    return signIn ? versionOf(engine, health) : `${versionOf(engine, health)} · the CLI wouldn't say`;
+    if (signIn) return versionOf(engine, health);
+    return `${versionOf(engine, health)} · ${health.openCodeNoKey ? RUNNER_ENGINE_NO_PROVIDER_KEY : 'sign-in unknown'}`;
   }
   // Which of Kimi's two sites the login is on: the same CLI signs in to either, and a session spends
   // that site's subscription.
@@ -620,6 +634,7 @@ function EngineRow({
   open: boolean;
   onFold: (open: boolean) => void;
 }) {
+  const machineNameOf = useMachineName();
   const message = useToast();
   const qc = useQueryClient();
   const kind = rowKindOf(health, runner.install, engine);
@@ -734,6 +749,8 @@ function EngineRow({
     : updateNoteOf(health?.update, undefined, engine === 'cursor', engineUpdateDismissedFor(runner, engine));
   const warn = note?.tone === 'warn' && !offline;
   const dismissWarning = useDismissEngineUpdateWarning(runner.id);
+  // Fix with an agent on this row's update warning: the same fix the machine's Needs Attention card starts.
+  const updateFixView = warn ? agentFixView(runner.agentFix, engineNotUpdatingFixTarget(engine), 'panel') : null;
 
   const action = () => {
     if (antigravity?.supported === false) return null;
@@ -753,7 +770,9 @@ function EngineRow({
       // Signed in (on the key or on Google), or a check that got no answer: nothing to sign in to
       // on the row. An unanswered check keeps its action in More, like every engine's.
       if ((kind === 'in' && !envKey) || kind === 'unknown') return null;
-      return <Button size="small" variant="primary" className="re-action" disabled={offline} onClick={() => onSignIn(signIn === engine ? null : engine)}>Sign in with Google</Button>;
+      // Signed out, it reads Sign in like every engine's row (the panel it opens names Google); on the
+      // machine's Gemini key, naming Google is what tells this sign-in from the key.
+      return <Button size="small" variant="primary" className="re-action" disabled={offline} onClick={() => onSignIn(signIn === engine ? null : engine)}>{envKey ? 'Sign in with Google' : 'Sign in'}</Button>;
     }
     if (offline) {
       // Nothing on an offline machine can be pressed. An engine with a sign-in still shows where
@@ -1012,14 +1031,14 @@ function EngineRow({
       {loginHint && <div className="re-panel-hint re-login-note">{loginHint}</div>}
       {cursorHint && <div className="re-panel-hint re-login-note">{cursorHint}</div>}
       {openCodeHint && <div className="re-panel-hint re-login-note">{openCodeHint}</div>}
-      {googleLogin === 'available' && signIn !== engine && <div className="re-login-note"><GoogleSignInTerms /></div>}
+      {googleLogin === 'available' && signIn !== engine && <div className="re-login-note re-google-terms"><GoogleSignInTerms /></div>}
 
       {/* The relay panels. Each one is the row's own news, so it opens under the row it belongs
           to rather than as a page-level banner. */}
       {kind === 'installing' && (
         <div className="re-panel">
           <div className="re-panel-row">
-            Installing {engineNameOf(engine)} on {runner.displayName || runner.name}…
+            Installing {engineNameOf(engine)} on {machineNameOf(runner)}…
           </div>
           {runner.install?.command && <code className="re-cmd">{runner.install.command}</code>}
           <div className="re-panel-hint">
@@ -1066,6 +1085,15 @@ function EngineRow({
               lives now, and telling someone to open a terminal for something the UI can do was
               only ever a symptom of the button being on the wrong page. On that page its Update
               engines is already above, and the link would only lead back to it. */}
+          {/* Fix with an agent, beside the panel's own links (lib/agentFix.ts). */}
+          {updateFixView && (
+            <div className="re-panel-hint agent-fix-row">
+              {updateFixView.state === 'fixing'
+                ? <AgentFixLine view={updateFixView} />
+                : <AgentFixButton view={updateFixView} target={engineNotUpdatingFixTarget(engine)} runnerId={runner.id} />}
+            </div>
+          )}
+          {updateFixView?.state !== 'fixing' && <AgentFixLine view={updateFixView} />}
           <div className="re-panel-hint">
             Orbit tries every 30 min.
             {/* Until the next release: only a warning against a known latest has one to wait for. */}
@@ -1271,6 +1299,7 @@ function AccountRow({
   signIn: string | null;
   onSignIn: (panel: string | null) => void;
 }) {
+  const machineNameOf = useMachineName();
   const message = useToast();
   const qc = useQueryClient();
   const kind = envKey ? 'in' : accountKindOf(account);
@@ -1284,6 +1313,10 @@ function AccountRow({
   const mine = removal?.engine === engine && removal.account === account.id ? removal : null;
   const removing = beingRemoved(runner, engine, account.id);
   const refused = mine?.status === 'failed' ? mine.message : null;
+  // The sessions the machine named as running in it, when that is why it refused.
+  const blocking = mine?.status === 'failed' ? (mine.sessions ?? []) : [];
+  // The sessions a removal under way moved to another account and waits on to leave this one.
+  const moving = mine?.status === 'pending' ? (mine.moving ?? 0) : 0;
   const remove = useMutation({
     mutationFn: () =>
       api<RunnerAccountRemoveState>(
@@ -1309,7 +1342,7 @@ function AccountRow({
   // Default comes off Orbit's list, not the machine, and only while another account is there to
   // run on (RunnersService.removeAccount).
   const removable = !isDefault || others > 0;
-  const runnerName = runner.displayName || runner.name;
+  const runnerName = machineNameOf(runner);
   // Removing deletes the slot's sign-in from the machine, and only signing in again brings it back;
   // removing Default stops only Orbit using it, until Use again. Either is asked first, wherever it is
   // offered — anchored to More once its menu has closed, or to the duplicate panel's own Remove.
@@ -1318,8 +1351,7 @@ function AccountRow({
     description: isDefault
       ? runnerDefaultRemoveDetail(runnerName, engineNameOf(engine))
       : !defaultRemoved
-        ? `Its sign-in is deleted from ${runnerName}. ` +
-          `Workspaces set to this account run on ${defaultName}.`
+        ? RUNNER_ACCOUNT_REMOVE_DETAIL
         : others > 0
           ? runnerAccountRemoveDetailAutomatic(runnerName)
           : runnerAccountRemoveDetailLast(runnerName, defaultName),
@@ -1447,11 +1479,27 @@ function AccountRow({
       )}
       {/* The machine would not do it, and its reason is the only thing that can explain why: a
           session is running on that account, or the runner is too old to remove one at all. */}
-      {refused && (
+      {moving > 0 && (
+        <div className="re-dup">
+          <span>
+            {moving === 1
+              ? runnerAccountMovingOne(engineNameOf(engine))
+              : runnerAccountMovingMany(engineNameOf(engine), moving)}
+          </span>
+        </div>
+      )}
+      {(refused || blocking.length > 0) && (
         <div className="re-panel bad">
-          <div className="re-panel-row">{refused}</div>
+          <div className="re-panel-row">
+            {blocking.length === 0
+              ? refused
+              : blocking.length === 1
+                ? runnerAccountInUseOne(engineNameOf(engine))
+                : runnerAccountInUseMany(engineNameOf(engine), blocking.length)}
+          </div>
+          {blocking.length > 0 && <BlockingSessions sessions={blocking} />}
           <div className="re-panel-hint">
-            {tildePath(accountDir(account))} on {runner.displayName || runner.name} is untouched.
+            {tildePath(accountDir(account))} on {machineNameOf(runner)} is untouched.
           </div>
         </div>
       )}
@@ -1461,6 +1509,28 @@ function AccountRow({
         </div>
       )}
     </div>
+  );
+}
+
+/** The sessions keeping an account from being removed, each opening its session: end them there. */
+function BlockingSessions({ sessions }: { sessions: RunnerAccountRemoveSession[] }) {
+  return (
+    <ul className="re-blocking">
+      {sessions.map((s) => {
+        const tone = s.status === 'RUNNING' || s.status === 'PENDING' ? 'running' : s.status === 'AWAITING_INPUT' ? 'waiting' : 'other';
+        const label = tone === 'running' ? RUNNER_ACCOUNT_IN_USE_RUNNING : tone === 'waiting' ? RUNNER_ACCOUNT_IN_USE_WAITING : null;
+        return (
+          <li key={s.id}>
+            <Link className="re-blocking-row" to={`/sessions/${encodeId(s.id)}`}>
+              <span className={`re-blocking-dot ${tone}`} aria-hidden />
+              <span className="re-blocking-title">{s.title.trim() || RUNNER_ACCOUNT_IN_USE_UNTITLED}</span>
+              {label && <span className="re-blocking-state">{label}</span>}
+              <span className="re-blocking-open">{RUNNER_ACCOUNT_IN_USE_OPEN} →</span>
+            </Link>
+          </li>
+        );
+      })}
+    </ul>
   );
 }
 

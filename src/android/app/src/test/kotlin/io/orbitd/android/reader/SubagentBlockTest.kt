@@ -8,7 +8,7 @@ import org.junit.Test
 
 /**
  * The SubAgent block's row model (board docs/mocks/subagent/03.png), case for case with OrbitKit's `SubagentBlockTests`: the folded
- * second line with duration and cost once done and without them while running, Background in the type's place, the opened block's
+ * second line with duration (never cost) once done and without it while running, Background in the type's place, the opened block's
  * Why line, what the block hands back, the re-read signature, and nesting without folding into a steps line.
  */
 class SubagentBlockTest {
@@ -22,9 +22,9 @@ class SubagentBlockTest {
         SubagentRun("toolu_sa", type, background, status, level, model, modelLabel, reasons, costUsd, resultSummary,
             "2026-11-11T11:02:31.000Z", endedAt.takeIf { status != "RUNNING" })
 
-    @Test fun theSecondLineCarriesTypeTierModelDurationAndCostOnceDone() {
+    @Test fun theSecondLineCarriesTypeTierModelAndDurationButNoCostOnceDone() {
         val block = SubagentBlock.describe(call, run(), callRunning = false)
-        assertEquals("explore · S · DeepSeek Chat · 41s · $0.21", block.detailLine)
+        assertEquals("explore · S · DeepSeek Chat · 41s", block.detailLine)
         assertEquals("explore", block.type)
         assertFalse(block.background)
         assertFalse(block.running)
@@ -37,26 +37,13 @@ class SubagentBlockTest {
         assertTrue(block.running)
     }
 
-    @Test fun aCostUnderACentReadsAsLessThanACent() {
-        assertEquals("explore · S · DeepSeek Chat · 41s · <$0.01", SubagentBlock.describe(call, run(costUsd = 0.004), false).detailLine)
-        assertEquals("explore · S · DeepSeek Chat · 41s · <$0.01", SubagentBlock.describe(call, run(costUsd = 0.0), false).detailLine)
-    }
-
-    @Test fun theCostHasTwoDecimals() {
-        assertEquals("$0.03", SubagentBlock.cost(run(costUsd = 0.03)))
-        assertEquals("$1.50", SubagentBlock.cost(run(costUsd = 1.5)))
-        assertEquals("$0.13", SubagentBlock.cost(run(costUsd = 0.126)))
-        assertNull(SubagentBlock.cost(run(status = "RUNNING")))
-        assertNull(SubagentBlock.cost(null))
-    }
-
     @Test fun aLongerRunReadsInMinutes() {
         val block = SubagentBlock.describe(call, run(endedAt = "2026-11-11T11:03:43.000Z"), false)
-        assertEquals("explore · S · DeepSeek Chat · 1m 12s · $0.21", block.detailLine)
+        assertEquals("explore · S · DeepSeek Chat · 1m 12s", block.detailLine)
     }
 
     @Test fun theModelFallsBackToTheIdWhenTheTableNamesNone() {
-        assertEquals("explore · S · deepseek-chat · 41s · $0.21", SubagentBlock.describe(call, run(modelLabel = null), false).detailLine)
+        assertEquals("explore · S · deepseek-chat · 41s", SubagentBlock.describe(call, run(modelLabel = null), false).detailLine)
     }
 
     @Test fun theCallSaysWhatItKnowsBeforeARunIsRead() {
@@ -98,7 +85,7 @@ class SubagentBlockTest {
         val block = SubagentBlock.describe(json("""{"type":"general","background":true}"""), run(type = "general", background = true,
             level = "M", model = "gpt-5.6-sol", modelLabel = "GPT-5.6 Sol", costUsd = 0.03), callRunning = false)
         assertFalse(block.running)
-        assertEquals("Background · M · GPT-5.6 Sol · 41s · $0.03", block.detailLine)
+        assertEquals("Background · M · GPT-5.6 Sol · 41s", block.detailLine)
     }
 
     @Test fun theOpenedBlocksWhyJoinsTheRoutersReasons() {
@@ -168,7 +155,7 @@ class SubagentBlockTest {
             {"type":"no id"}]""") as JsonArray).map { it.jsonObject }
         val runs = SubagentRun.byCall(rows)
         assertEquals(setOf("toolu_sa_fg", "toolu_sa_bg"), runs.keys)
-        assertEquals("explore · S · DeepSeek Chat · 41s · $0.03", SubagentBlock.describe(call, runs["toolu_sa_fg"], false).detailLine)
+        assertEquals("explore · S · DeepSeek Chat · 41s", SubagentBlock.describe(call, runs["toolu_sa_fg"], false).detailLine)
         assertEquals("Background · M · GPT-5.6 Sol", SubagentBlock.describe(call, runs["toolu_sa_bg"], false).detailLine)
         assertTrue(runs.getValue("toolu_sa_bg").isRunning)
     }
@@ -184,6 +171,13 @@ class SubagentBlockTest {
         val receipt = """{"runId":"sa_bg","status":"running"}"""
         assertNull(SubagentResult.text(receipt, run(background = true, status = "RUNNING")))
         assertEquals("Spec written.", SubagentResult.text(receipt, run(background = true, resultSummary = "Spec written.")))
+    }
+
+    // The server clips a long result to a 2 KB preview: the runner's pretty JSON no longer parses; the run's own text stands in.
+    @Test fun aClippedResultReadsTheRunNotTheBrace() {
+        val clipped = "{\n  \"changedFiles\": [],\n  \"result\": \"Route 1 worked: the transcript is"
+        assertEquals("Route 1 worked.", SubagentResult.text(clipped, run(resultSummary = "Route 1 worked.")))
+        assertNull(SubagentResult.text(clipped, null))
     }
 
     @Test fun plainTextIsShownAsItCame() {

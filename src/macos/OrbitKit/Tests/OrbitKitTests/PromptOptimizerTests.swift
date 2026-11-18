@@ -4,7 +4,7 @@ import XCTest
 
 /// Prompt optimizer (docs/prompt-optimizer-design.md, board docs/mocks/prompt-optimizer): the wire
 /// shapes of @orbit/shared prompt-optimizer.ts, the composer's button rule, Use / Undo, and when a
-/// send carries `skipTranslation`.
+/// send carries `skipTranslation` or `optimizedTranslation` (D2).
 final class PromptOptimizerTests: XCTestCase {
 
     private func decode<T: Decodable>(_ type: T.Type, _ json: String) throws -> T {
@@ -93,11 +93,14 @@ final class PromptOptimizerTests: XCTestCase {
         return try decode(User.self, "{\"id\":\"u\",\"email\":\"a@b.c\",\"preferences\":\(prefs)\(avail)}")
     }
 
-    func testTheSwitchIsOffUnlessExactlyTrueAndTheServerCan() throws {
-        XCTAssertFalse(PromptOptimizer.isOn(try user(prefs: "{}", available: true)), "absent is off")
+    func testTheSwitchIsOnUnlessExactlyFalseAndTheServerCan() throws {
+        XCTAssertTrue(PromptOptimizer.isOn(try user(prefs: "{}", available: true)), "absent is on")
+        XCTAssertTrue(PromptOptimizer.isOn(try user(prefs: "null", available: true)), "no preferences at all is on")
         XCTAssertFalse(PromptOptimizer.isOn(try user(prefs: "{\"promptOptimizer\":false}", available: true)))
-        XCTAssertFalse(PromptOptimizer.isOn(try user(prefs: "{\"promptOptimizer\":\"yes\"}", available: true)),
-                       "a stray value reads as absent rather than failing me")
+        XCTAssertTrue(PromptOptimizer.isOn(try user(prefs: "{\"promptOptimizer\":\"yes\"}", available: true)),
+                      "a stray value reads as absent rather than failing me")
+        XCTAssertFalse(PromptOptimizer.isOn(try user(prefs: "{}", available: false)), "no server key")
+        XCTAssertFalse(PromptOptimizer.isOn(try user(prefs: "{}", available: nil)), "a login payload says nothing")
         XCTAssertTrue(PromptOptimizer.isOn(try user(prefs: "{\"promptOptimizer\":true}", available: true)))
         XCTAssertFalse(PromptOptimizer.isOn(try user(prefs: "{\"promptOptimizer\":true}", available: false)))
         XCTAssertFalse(PromptOptimizer.isOn(nil))
@@ -111,6 +114,8 @@ final class PromptOptimizerTests: XCTestCase {
 
     func testThePreferenceIsWrittenOnlyWhenSet() throws {
         XCTAssertEqual(try encoded(UpdatePreferencesRequest(promptOptimizer: true))["promptOptimizer"] as? Bool, true)
+        XCTAssertEqual(try encoded(UpdatePreferencesRequest(promptOptimizer: false))["promptOptimizer"] as? Bool, false,
+                       "turning it off writes false")
         XCTAssertNil(try encoded(UpdatePreferencesRequest(recaps: true))["promptOptimizer"])
     }
 
@@ -154,6 +159,12 @@ final class PromptOptimizerTests: XCTestCase {
         XCTAssertEqual(PromptOptimizerCopy.showIn(.ja), "Show in Japanese")
     }
 
+    func testUnderAGlossTheCardSaysWhichLanguageTheAgentReceives() {
+        XCTAssertEqual(PromptOptimizerCopy.agentReceives(.en), "The agent receives the English version.")
+        XCTAssertEqual(PromptOptimizerCopy.agentReceives(.ja), "The agent receives the Japanese version.")
+        XCTAssertEqual(PromptOptimizerCopy.agentReceives(nil), "The agent receives the translated version.")
+    }
+
     func testBackFromTheGlossNamesThePromptsLanguageNotEnglish() throws {
         XCTAssertEqual(PromptOptimizerCopy.showPrompt(.en), "Show in English")
         XCTAssertEqual(PromptOptimizerCopy.showPrompt(.ja), "Show in Japanese")
@@ -180,22 +191,56 @@ final class PromptOptimizerTests: XCTestCase {
         XCTAssertFalse(state.isOptimizing)
         XCTAssertFalse(state.offersUndo(current: "fix the login redirect bug"))
         XCTAssertFalse(state.skipTranslation(sending: "fix the login redirect bug"))
+        XCTAssertNil(state.optimizedTranslation(sending: "fix the login redirect bug"))
+        XCTAssertFalse(state.showingPrompt, "with a gloss the card opens on it (D2)")
         state.dismiss()
         XCTAssertNil(state.suggestion, "× / Esc: the card goes, the draft stays")
         XCTAssertNil(state.use(current: "fix the login redirect bug"), "nothing to use once dismissed")
+    }
+
+    func testTabOptimizesADraftOnceUntilItChanges() throws {
+        let draft = "fix the login redirect bug"
+        var state = PromptOptimizerState()
+        XCTAssertTrue(state.tabOptimizes(on: true, text: draft))
+        XCTAssertFalse(state.tabOptimizes(on: false, text: draft), "the switch off gives Tab back")
+        XCTAssertFalse(state.tabOptimizes(on: true, text: "/compact"), "only where ✦ could take it")
+        XCTAssertFalse(state.tabOptimizes(on: true, text: "  "))
+        state.start(draft: draft)
+        XCTAssertFalse(state.tabOptimizes(on: true, text: draft), "while a press is out Tab moves focus")
+        state.succeeded(try decode(PromptOptimization.self, boardAnswer))
+        XCTAssertFalse(state.tabOptimizes(on: true, text: draft), "on the card Tab is Use")
+        state.dismiss(current: draft)
+        XCTAssertFalse(state.tabOptimizes(on: true, text: draft), "after Esc, Tab on the same draft moves focus")
+        XCTAssertTrue(state.tabOptimizes(on: true, text: draft + " today"), "an edit gives Tab back")
+
+        var used = try suggested()
+        let inserted = try XCTUnwrap(used.use(current: draft))
+        XCTAssertFalse(used.tabOptimizes(on: true, text: inserted), "Tab after Use moves focus")
+
+        var retried = try suggested()
+        retried.dismiss()
+        XCTAssertTrue(retried.tabOptimizes(on: true, text: draft), "Try again's dismissal spends nothing")
     }
 
     func testUseReplacesTheDraftAndUndoPutsItBack() throws {
         var state = try suggested()
         let draft = "fix the login redirect bug"
         let inserted = try XCTUnwrap(state.use(current: draft))
-        XCTAssertTrue(inserted.hasPrefix("After signing in"))
+        XCTAssertEqual(inserted, "登录后用户落在错误的页面。", "with a gloss, Use inserts the owner's language (D2)")
         XCTAssertNil(state.suggestion, "the card goes on Use")
         XCTAssertTrue(state.offersUndo(current: inserted))
         XCTAssertEqual(state.undo(current: inserted), draft)
         XCTAssertFalse(state.offersUndo(current: draft))
         XCTAssertNil(state.undo(current: draft), "Undo once")
         XCTAssertFalse(state.skipTranslation(sending: draft), "the owner's own words are translated as usual")
+        XCTAssertNil(state.optimizedTranslation(sending: draft))
+    }
+
+    func testWithoutAGlossUseInsertsThePromptItself() throws {
+        var state = try suggested("""
+        {"segments":[{"text":"修复登录跳转","added":false}],"text":"修复登录跳转","language":"zh-Hans","contextUsed":[]}
+        """)
+        XCTAssertEqual(state.use(current: "draft"), "修复登录跳转")
     }
 
     func testUndoIsNotOfferedOnceTheTextWasEditedOrTheToastWent() throws {
@@ -205,7 +250,7 @@ final class PromptOptimizerTests: XCTestCase {
         XCTAssertNil(state.undo(current: inserted + " please"))
         state.forgetUndo()
         XCTAssertFalse(state.offersUndo(current: inserted))
-        XCTAssertTrue(state.skipTranslation(sending: inserted), "the toast going does not edit the text")
+        XCTAssertNotNil(state.optimizedTranslation(sending: inserted), "the toast going does not edit the text")
     }
 
     func testBasedOnAnEarlierDraftWhenTheBoxChangedWhileOptimizing() throws {
@@ -229,34 +274,41 @@ final class PromptOptimizerTests: XCTestCase {
         XCTAssertNil(state.suggestion, "an answer after a cancel is dropped")
     }
 
-    // MARK: - skipTranslation (D2)
+    // MARK: - optimizedTranslation and skipTranslation (D2)
 
-    func testSkipTranslationOnlyForUneditedOptimizedAgentLanguageText() throws {
+    func testAnUneditedGlossCarriesTheOptimizersPromptAsItsTranslation() throws {
         var state = try suggested()
+        let prompt = try XCTUnwrap(state.suggestion?.text)
         let inserted = try XCTUnwrap(state.use(current: "draft"))
-        XCTAssertTrue(state.skipTranslation(sending: inserted))
-        XCTAssertTrue(state.skipTranslation(sending: inserted + "\n"), "the send trims as Send does")
-        XCTAssertFalse(state.skipTranslation(sending: inserted + " Also check iOS."), "edited: translated as usual")
-        XCTAssertFalse(state.skipTranslation(sending: "something else"))
+        XCTAssertEqual(state.optimizedTranslation(sending: inserted), prompt)
+        XCTAssertEqual(state.optimizedTranslation(sending: inserted + "\n"), prompt, "the send trims as Send does")
+        XCTAssertFalse(state.skipTranslation(sending: inserted), "a gloss is translated, by the optimizer's own prompt")
+        XCTAssertNil(state.optimizedTranslation(sending: inserted + " Also check iOS."), "edited: translated as usual")
+        XCTAssertNil(state.optimizedTranslation(sending: "something else"))
         state.sent()
-        XCTAssertFalse(state.skipTranslation(sending: inserted), "spent by the send")
+        XCTAssertNil(state.optimizedTranslation(sending: inserted), "spent by the send")
     }
 
-    func testSkipTranslationForAChosenAgentLanguageNotOnlyEnglish() throws {
+    func testOptimizedTranslationForAChosenAgentLanguageNotOnlyEnglish() throws {
         var state = try suggested("""
         {"segments":[{"text":"ログインのリダイレクトを直して","added":false}],"language":"ja","gloss":"修复登录跳转","contextUsed":[]}
         """)
         let inserted = try XCTUnwrap(state.use(current: "draft"))
-        XCTAssertTrue(state.skipTranslation(sending: inserted))
-        XCTAssertFalse(state.skipTranslation(sending: inserted + "!"))
+        XCTAssertEqual(inserted, "修复登录跳转")
+        XCTAssertEqual(state.optimizedTranslation(sending: inserted), "ログインのリダイレクトを直して")
+        XCTAssertNil(state.optimizedTranslation(sending: inserted + "!"))
     }
 
-    func testNoSkipForAPromptInTheDraftsOwnLanguage() throws {
+    func testWithoutAGlossAnUneditedPromptSkipsTranslation() throws {
         var state = try suggested("""
         {"segments":[{"text":"修复登录跳转","added":false}],"text":"修复登录跳转","language":"zh-Hans","contextUsed":[]}
         """)
         let inserted = try XCTUnwrap(state.use(current: "draft"))
-        XCTAssertFalse(state.skipTranslation(sending: inserted))
+        XCTAssertTrue(state.skipTranslation(sending: inserted))
+        XCTAssertNil(state.optimizedTranslation(sending: inserted))
+        XCTAssertFalse(state.skipTranslation(sending: inserted + "!"), "edited: translated as usual")
+        state.sent()
+        XCTAssertFalse(state.skipTranslation(sending: inserted), "spent by the send")
     }
 
     func testTheSendBodiesCarrySkipTranslationOnlyWhenSet() throws {
@@ -269,6 +321,19 @@ final class PromptOptimizerTests: XCTestCase {
         XCTAssertNil(try encoded(CreateSessionRequest(prompt: "p"))["skipTranslation"])
         XCTAssertEqual(try encoded(ResumeRequest(clientTurnId: "c", content: "p", skipTranslation: true))["skipTranslation"] as? Bool, true)
         XCTAssertNil(try encoded(ResumeRequest(clientTurnId: "c", content: "p"))["skipTranslation"])
+    }
+
+    func testTheSendBodiesCarryOptimizedTranslationOnlyWhenSet() throws {
+        let plain = try encoded(ComposerLogic.makeTurn(clientTurnId: "c", text: "t", shell: false, attachmentIds: []))
+        XCTAssertNil(plain["optimizedTranslation"])
+        let turn = try encoded(ComposerLogic.makeTurn(clientTurnId: "c", text: "t", shell: false, attachmentIds: [],
+                                                      optimizedTranslation: "English"))
+        XCTAssertEqual(turn["optimizedTranslation"] as? String, "English")
+        XCTAssertNil(turn["skipTranslation"])
+        XCTAssertEqual(try encoded(CreateSessionRequest(prompt: "p", optimizedTranslation: "English"))["optimizedTranslation"] as? String, "English")
+        XCTAssertNil(try encoded(CreateSessionRequest(prompt: "p"))["optimizedTranslation"])
+        XCTAssertEqual(try encoded(ResumeRequest(clientTurnId: "c", content: "p", optimizedTranslation: "English"))["optimizedTranslation"] as? String, "English")
+        XCTAssertNil(try encoded(ResumeRequest(clientTurnId: "c", content: "p"))["optimizedTranslation"])
     }
 }
 
@@ -295,7 +360,7 @@ final class PromptOptimizerWiringTests: XCTestCase {
         let composer = try source(app + "Views/ComposerView.swift")
         XCTAssertTrue(composer.contains("PromptOptimizer.showsButton(on: PromptOptimizer.isOn(app.user), text: console.composerText)"))
         XCTAssertTrue(composer.contains("PromptOptimizeButton(busy: console.promptOptimizer.isOptimizing) { console.optimizePrompt() }"))
-        XCTAssertTrue(composer.contains("#if os(macOS)\n            if let optimization = console.promptOptimizer.suggestion {\n                optimizationCard(optimization, sheet: false)"),
+        XCTAssertTrue(composer.contains("#if os(macOS)\n            if let optimization = console.promptOptimizer.suggestion {\n                optimizationCard(optimization)"),
                       "a Mac draws the card above the composer")
         XCTAssertTrue(composer.contains(".sheet(isPresented: optimizationSheetShown) {"), "a phone draws it as a sheet")
         XCTAssertTrue(composer.contains("PromptOptimizationFailureLine(retry:"))
@@ -305,15 +370,75 @@ final class PromptOptimizerWiringTests: XCTestCase {
     func testSendsCarryTheFlagFromTheState() throws {
         let console = try source(app + "ConsoleModel.swift")
         XCTAssertTrue(console.contains("let skipTranslation = fromComposer && promptOptimizer.skipTranslation(sending: draft)"))
-        XCTAssertTrue(console.contains("skipTranslation: skipTranslation ? true : nil)"), "a revive carries it")
+        XCTAssertTrue(console.contains("let optimizedTranslation = fromComposer ? promptOptimizer.optimizedTranslation(sending: draft) : nil"))
+        XCTAssertTrue(console.contains("skipTranslation: skipTranslation ? true : nil,\n                                          optimizedTranslation: optimizedTranslation)"),
+                      "a revive carries them")
+        XCTAssertTrue(console.contains("skipTranslation: skipTranslation,\n                                                 optimizedTranslation: optimizedTranslation)"),
+                      "a live turn carries them")
         XCTAssertTrue(console.contains("let skip = promptOptimizer.skipTranslation(sending: composerText)"),
-                      "a new session's opening message carries it")
+                      "a new session's opening message carries them")
+        XCTAssertTrue(console.contains("let optimizedTranslation = promptOptimizer.optimizedTranslation(sending: composerText)"))
+        XCTAssertTrue(console.contains("skipTranslation: skip, optimizedTranslation: optimizedTranslation))"))
+    }
+
+    func testTheCardOpensOnTheGlossAndSaysWhatTheAgentReceives() throws {
+        let views = try source(app + "Views/PromptOptimizerViews.swift")
+        XCTAssertTrue(views.contains("if !showingPrompt, let gloss = optimization.gloss { return Text(gloss) }"))
+        XCTAssertTrue(views.contains("Text(PromptOptimizerCopy.agentReceives(optimization.promptLanguage))"))
+        XCTAssertTrue(views.contains("Button(showingPrompt ? PromptOptimizerCopy.showIn(glossLanguage)"))
+    }
+
+    func testAPhoneSheetLeadsWithTheOwnersLanguage() throws {
+        XCTAssertEqual(PromptOptimizerCopy.edit, "Edit")
+        XCTAssertEqual(PromptOptimizerCopy.sentToAgent(.en), "Sent to the agent in English")
+        XCTAssertEqual(PromptOptimizerCopy.sentToAgent(nil), "Sent to the agent in English")
+        XCTAssertEqual(PromptOptimizerCopy.usedLine(["this session's last 106 turns", "session recap"]),
+                       "Used this session's last 106 turns · session recap")
+        let views = try source(app + "Views/PromptOptimizerViews.swift")
+        XCTAssertTrue(views.contains("if let gloss = optimization.gloss { Text(gloss) } else { promptRuns(optimization, codeStyle: .body) }"),
+                      "the gloss, what Use inserts, is the sheet's text")
+        XCTAssertTrue(views.contains("Button(showingPrompt ? PromptOptimizerCopy.hide : PromptOptimizerCopy.show)"))
+        let composer = try source(app + "Views/ComposerView.swift")
+        XCTAssertTrue(composer.contains("PromptOptimizationSheet(\n                    optimization: optimization,"))
+    }
+
+    func testTabInTheBoxIsUseOnAMac() throws {
+        // The web's card says the same (src/web/src/components/PromptOptimizer.tsx).
+        XCTAssertEqual(PromptOptimizerCopy.keysHint, "Tab uses it · Esc dismisses · your draft is kept")
+        XCTAssertEqual(PromptOptimizerCopy.useKey, "Tab")
+        let composer = try source(app + "Views/ComposerView.swift")
+        let card = try XCTUnwrap(composer.range(of: "if console.promptOptimizer.suggestion != nil, !showSlash {\n                    console.useOptimization(edit: false)"),
+                                 "Tab with the card open presses Use")
+        let suggestion = try XCTUnwrap(composer.range(of: "guard offeredSuggestion != nil else { return .ignored }"))
+        XCTAssertLessThan(card.lowerBound, suggestion.lowerBound, "the card's Tab is read first")
+        let views = try source(app + "Views/PromptOptimizerViews.swift")
+        XCTAssertTrue(views.contains("Text(PromptOptimizerCopy.useKey).font(.caption).opacity(0.75)"))
+        XCTAssertTrue(views.contains("Text(PromptOptimizerCopy.keysHint)"))
+    }
+
+    func testTabOnADraftOptimizesOnAMac() throws {
+        XCTAssertEqual(PromptOptimizerCopy.optimizeHelpWithKeys, "Have DeepSeek improve this draft before you send it · Tab · ⌘⇧O")
+        let composer = try source(app + "Views/ComposerView.swift")
+        let card = try XCTUnwrap(composer.range(of: "if console.promptOptimizer.suggestion != nil, !showSlash {"))
+        let draft = try XCTUnwrap(composer.range(of: "console.promptOptimizer.tabOptimizes(on: PromptOptimizer.isOn(app.user), text: console.composerText) {\n                    console.optimizePrompt()"),
+                                  "Tab on a draft presses ✦")
+        let suggestion = try XCTUnwrap(composer.range(of: "guard offeredSuggestion != nil else { return .ignored }"))
+        XCTAssertLessThan(card.lowerBound, draft.lowerBound, "the card's Use is read first")
+        XCTAssertLessThan(draft.lowerBound, suggestion.lowerBound)
+        let console = try source(app + "ConsoleModel.swift")
+        XCTAssertTrue(console.contains("promptOptimizer.dismiss(current: composerText)"), "Esc spends the draft for Tab")
     }
 
     func testSettingsDrawTheSwitchOnBothPlatforms() throws {
         let sheet = try source(app + "Views/SettingsSheet.swift")
         XCTAssertTrue(sheet.contains("case .promptOptimizer:\n                    promptOptimizerSection"))
         XCTAssertTrue(sheet.contains("UpdatePreferencesRequest(promptOptimizer: value)"))
+        // On by default (owner, 2026-11-16): both pages seed absent as on and start the toggle on.
+        for page in [sheet, try source(app + "Views/SettingsAdminView.swift")] {
+            XCTAssertTrue(page.contains("@State private var promptOptimizer = true"))
+            XCTAssertTrue(page.contains("promptOptimizer = !PromptOptimizer.unavailable(model.user) && PromptOptimizer.switchedOn(p)"))
+            XCTAssertTrue(page.contains("guard !PromptOptimizer.unavailable(model.user),\n"))
+        }
         let mac = try source(app + "Views/SettingsAdminView.swift")
         XCTAssertTrue(mac.contains("Toggle(PromptOptimizerCopy.title, isOn: $promptOptimizer)"))
         XCTAssertTrue(mac.contains(".disabled(PromptOptimizer.unavailable(model.user))"))

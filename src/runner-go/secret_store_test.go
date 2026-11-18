@@ -171,6 +171,7 @@ func TestSecretReconcileDeliversAndAnAbsentListRemovesNothing(t *testing.T) {
 
 	// [] means hold nothing: both go, and both are reported removed.
 	store.reconcile(refs(), nil)
+	store.waitScans()
 	if _, err := os.Stat(path); !os.IsNotExist(err) {
 		t.Fatal("[] left the file")
 	}
@@ -197,6 +198,7 @@ func TestSecretReconcileReportsRemovingGrantsHeldOrNot(t *testing.T) {
 	store := newSecretStore(api, filepath.Join(home, "ledger.json"))
 	store.reconcile(refs(env), nil)
 	store.reconcile(nil, []string{"g-env", "g-lost"})
+	store.waitScans()
 	if _, err := store.lease("TOKEN_A", "s1", ""); err == nil {
 		t.Fatal("a removing grant was kept")
 	}
@@ -227,6 +229,7 @@ func TestSecretFileReplacedIsLeftAndNoted(t *testing.T) {
 		t.Fatal(err)
 	}
 	store.reconcile(refs(), nil)
+	store.waitScans()
 	if data, _ := os.ReadFile(path); string(data) != "someone else's" {
 		t.Fatal("a different file was removed")
 	}
@@ -480,6 +483,7 @@ func TestSecretExpiryRemovesFilesWithoutTheControlPlane(t *testing.T) {
 	running.reconcile(refs(env), nil)
 	running.now = func() time.Time { return time.Now().Add(2 * time.Hour) }
 	running.expire()
+	running.waitScans()
 	if _, err := running.lease("TOKEN_A", "s1", ""); err == nil {
 		t.Fatal("an expired ENV grant was kept")
 	}
@@ -585,11 +589,106 @@ func TestSecretExpiredAtStartupIsScannedBeforeItIsForgotten(t *testing.T) {
 	later := newSecretStore(&erroringSecretAPI{}, ledger)
 	later.now = func() time.Time { return time.Now().Add(2 * time.Hour) }
 	later.startup()
+	later.waitScans()
 
 	if len(scanned) != 1 || !scanned[0].holds(value) {
 		t.Fatalf("the expired grant was forgotten without a scan for its value (%d scans)", len(scanned))
 	}
 	if _, err := os.Stat(filepath.Join(home, "keys", "api.key")); !os.IsNotExist(err) {
 		t.Fatal("the expired file survived startup")
+	}
+}
+
+// A removal's scan of every checkout runs off the delivery path: while it is stuck, another listed grant is still
+// fetched and acknowledged on the same heartbeat, the removed value is already out of the scrubber and every reader of
+// the taint record fails closed, and the removal is reported only once the scan has ended.
+func TestSecretRemovalScanDoesNotHoldUpDelivery(t *testing.T) {
+	home := secretTestHome(t)
+	api := newFakeSecretAPI()
+	old := envGrant("g-old", "OLD_KEY", "s1", "", time.Now().Add(time.Hour))
+	old.Value = secretValue("retired-canary-9876543210fedcba")
+	api.grants[old.ID] = old
+	store := newSecretStore(api, filepath.Join(home, "ledger.json"))
+	store.reconcile(refs(old), nil)
+
+	started := make(chan *integrationOutputRedactor, 1)
+	release := make(chan struct{})
+	prev := secretBeforeForget
+	secretBeforeForget = func(r *integrationOutputRedactor) error {
+		started <- r
+		<-release
+		return nil
+	}
+	released := false
+	defer func() {
+		if !released {
+			close(release)
+		}
+		store.waitScans()
+		secretBeforeForget = prev
+	}()
+
+	// The heartbeat that ends g-old lists g-new.
+	fresh := envGrant("g-new", "NEW_KEY", "s1", "", time.Now().Add(time.Hour))
+	api.grants[fresh.ID] = fresh
+	done := make(chan struct{})
+	go func() { store.reconcile(refs(fresh), nil); close(done) }()
+	select {
+	case <-done:
+	case <-time.After(10 * time.Second):
+		t.Fatal("delivering g-new waited on g-old's removal scan")
+	}
+	var scanning *integrationOutputRedactor
+	select {
+	case scanning = <-started:
+	case <-time.After(10 * time.Second):
+		t.Fatal("g-old's removal was never scanned")
+	}
+	if !scanning.holds([]byte("retired-canary-9876543210fedcba")) {
+		t.Fatal("the scan was not for g-old's value")
+	}
+	if acks := api.acks["g-new"]; len(acks) != 1 || acks[0].Outcome != secretAckDelivered {
+		t.Fatalf("g-new acks = %#v", acks)
+	}
+	if _, err := store.lease("NEW_KEY", "s1", ""); err != nil {
+		t.Fatalf("g-new is not usable while g-old is scanned: %v", err)
+	}
+	if _, err := store.lease("OLD_KEY", "s1", ""); err == nil {
+		t.Fatal("g-old is still leasable while its scan runs")
+	}
+	if store.scrubber().holds([]byte("retired-canary-9876543210fedcba")) {
+		t.Fatal("g-old's value is still in the scrubber")
+	}
+	if _, err := readSecretTaintChecked(); !errors.Is(err, errSecretTaintScanning) {
+		t.Fatalf("the taint record was readable while g-old's scan ran: %v", err)
+	}
+	// The next heartbeats still name g-old as removing: it is not reported before its scan ends, and a list that
+	// changes is still delivered.
+	other := envGrant("g-other", "OTHER_KEY", "s1", "", time.Now().Add(time.Hour))
+	api.grants[other.ID] = other
+	store.reconcile(refs(fresh, other), []string{"g-old"})
+	if acks := api.acks["g-other"]; len(acks) != 1 {
+		t.Fatalf("g-other acks = %#v", acks)
+	}
+	if notes := api.removed["g-old"]; len(notes) != 0 {
+		t.Fatalf("g-old was reported removed before its scan ended: %#v", notes)
+	}
+
+	close(release)
+	released = true
+	store.waitScans()
+	api.mu.Lock()
+	notes := append([]string(nil), api.removed["g-old"]...)
+	api.mu.Unlock()
+	if len(notes) != 1 {
+		t.Fatalf("g-old was not reported removed once its scan ended: %#v", notes)
+	}
+	if secretTaintIsPending() {
+		t.Fatal("a scan that recorded left its matcher pending")
+	}
+	select {
+	case <-started:
+		t.Fatal("g-old was scanned twice")
+	default:
 	}
 }
