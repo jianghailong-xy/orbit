@@ -43,12 +43,12 @@ controllers and their decorators, so it lists what the server mounts, not what a
 | Caller | Routes |
 | --- | --- |
 | `public` | 31 |
-| `user` | 439 |
+| `user` | 440 |
 | `admin` | 28 |
 | `runner` | 186 |
 | `channel` | 1 |
 | `link gateway` | 3 |
-| **Total** | **688** |
+| **Total** | **689** |
 
 ## Public routes
 
@@ -139,6 +139,7 @@ controllers and their decorators, so it lists what the server mounts, not what a
 | `GET` | `/api/integrations/feishu` | — | `FeishuController.read` |
 | `PATCH` | `/api/integrations/feishu` | body `ChangeFeishuAppDto` | `FeishuController.change` |
 | `PUT` | `/api/integrations/feishu` | body `ConnectFeishuAppDto` | `FeishuController.connect` |
+| `PUT` | `/api/integrations/feishu/access` | body `SaveFeishuAccessDto` | `FeishuController.saveAccess` |
 | `GET` | `/api/integrations/feishu/chats` | query `ticket` | `FeishuController.chatRoutes` |
 | `DELETE` | `/api/integrations/feishu/chats/:id` | path `id` | `FeishuController.removeChat` |
 | `PATCH` | `/api/integrations/feishu/chats/:id` | body `ChangeFeishuChatDto`; path `id` | `FeishuController.changeChat` |

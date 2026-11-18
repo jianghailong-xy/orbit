@@ -171,6 +171,9 @@ export const PUBLIC_ID_FIELDS: ReadonlySet<string> = new Set([
   // A managed runner's default workspace (migration 0399): the workspace a reader opens — an
   // address, never a fence.
   'defaultWorkspaceId',
+  // Where the sessions other people start through a Feishu app open (migration 1140,
+  // docs/feishu-bot-design.md §14.1): an address the owner picks, never a fence.
+  'openWorkspaceId',
   'runnerId',
   'assignedRunnerId',
   'targetRunnerId',
