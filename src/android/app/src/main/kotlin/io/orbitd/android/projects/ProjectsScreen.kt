@@ -880,8 +880,10 @@ private fun OpenItemRow(row: JsonObject, now: Instant, main: String, enabled: Bo
             Text(ProjectPage.who(row), style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
         }
         Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
-            Text(row.text("title").orEmpty(), fontWeight = FontWeight.SemiBold)
-            row.text("detailLine")?.takeIf { it.isNotEmpty() }?.let { Text(it, style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.onSurfaceVariant) }
+            // In the owner's language while a usable translation exists; the card it opens offers Show original.
+            val language = LocalTranslation.current.cardLanguage
+            Text(OwnerCardTranslation.listTitle(row, language), fontWeight = FontWeight.SemiBold)
+            OwnerCardTranslation.listDetailLine(row, language).takeIf { it.isNotEmpty() }?.let { Text(it, style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.onSurfaceVariant) }
             ExceptionCards.handlingLine(row, now, main)?.let { line ->
                 Row(Modifier.testTag("$tag:handling"), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(6.dp)) {
                     Text(ExceptionCards.handlingLabel, Modifier.background(MaterialTheme.colorScheme.primary.copy(alpha = 0.12f), RoundedCornerShape(4.dp))

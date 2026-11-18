@@ -91,6 +91,15 @@ object OwnerCardTranslation {
         else -> null
     }
 
+    /** The project page's open-items list row (iOS `listTitle` / `listDetailLine`, web `OpenItemRowView`): the server's translated
+     * `translation.title` (a question's "Coordinator asks: " kept in English) and `translation.detailLine` while a usable translation
+     * exists, the row's `title` and `detailLine` otherwise. A list row has no flip of its own: the card it opens offers Show original. */
+    fun listTitle(row: JsonObject, owner: String?): String =
+        usable(row["translation"], owner)?.let { words(it, "title") } ?: row.text("title").orEmpty()
+
+    fun listDetailLine(row: JsonObject, owner: String?): String =
+        usable(row["translation"], owner)?.let { words(it, "detailLine") } ?: row.text("detailLine").orEmpty()
+
     /** A question that has ended (ProjectClosedQuestion): its `question`, as it was translated while open. */
     fun closedQuestion(record: JsonObject, owner: String?): JsonObject? = nested(record, "question", QUESTION_FIELDS, owner)
 

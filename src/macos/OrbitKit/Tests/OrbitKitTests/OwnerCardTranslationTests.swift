@@ -129,6 +129,30 @@ final class OwnerCardTranslationTests: XCTestCase {
         XCTAssertEqual(none.shownDetailLine(owner: zh, showOriginal: false), "d")
     }
 
+    func testTheProjectPagesListRowDrawsTheTranslatedTitleAndDetailLine() throws {
+        let json = #"""
+        {"itemId":"i1","kind":"COORDINATOR_QUESTION","title":"Coordinator asks: Keep?",
+         "detailLine":"Blocks 1 task · If you don’t answer: I keep both.",
+         "question":{"question":"Keep?","ifUnanswered":"I keep both."},
+         "translation":{"lang":"zh-Hans","question":"保留？","ifUnanswered":"我两种都留。",
+                        "title":"Coordinator asks: 保留？",
+                        "detailLine":"Blocks 1 task · If you don’t answer: 我两种都留。"}}
+        """#
+        let row = try decode(ProjectOpenItemRow.self, json)
+        XCTAssertEqual(row.listTitle(owner: zh), "Coordinator asks: 保留？")
+        XCTAssertEqual(row.listDetailLine(owner: zh), "Blocks 1 task · If you don’t answer: 我两种都留。")
+        XCTAssertEqual(row.listTitle(owner: .ja), row.title, "another language draws the original")
+        XCTAssertEqual(row.listDetailLine(owner: .ja), row.detailLine)
+        XCTAssertEqual(row.listTitle(owner: nil), row.title, "translation off draws the original")
+        XCTAssertEqual(row.listDetailLine(owner: nil), row.detailLine)
+        let failed = try decode(ProjectOpenItemRow.self, #"{"itemId":"i1","kind":"COORDINATOR_QUESTION","title":"Coordinator asks: Keep?","detailLine":"d","translation":{"lang":"zh-Hans","failed":true}}"#)
+        XCTAssertEqual(failed.listTitle(owner: zh), "Coordinator asks: Keep?", "a failed translation draws the original")
+        XCTAssertEqual(failed.listDetailLine(owner: zh), "d")
+        let none = try decode(ProjectOpenItemRow.self, #"{"itemId":"i1","kind":"COORDINATOR_QUESTION","title":"Coordinator asks: Keep?","detailLine":"d"}"#)
+        XCTAssertEqual(none.listTitle(owner: zh), "Coordinator asks: Keep?")
+        XCTAssertEqual(none.listDetailLine(owner: zh), "d")
+    }
+
     func testAnAnsweredQuestionsRecordIsDrawnTranslated() throws {
         let closed = try decode(ProjectClosedQuestion.self, """
         {"itemId":"i1","question":{"question":"Keep?","options":[{"label":"Yes"}]},"askedAt":"a",

@@ -264,6 +264,16 @@ export function useOwnerCardTranslation<T extends { lang: TranslationLanguage; f
   return { shown: flip.pick(translation), foot: flip.foot };
 }
 
+/**
+ * A list row's `translation` when it is usable — in the owner's language, translation on, not failed —
+ * and undefined otherwise. A row has no flip of its own: the card it opens offers Show original.
+ */
+export function useOwnerLanguageTranslation<T extends { lang: TranslationLanguage; failed?: true }>(
+  translation: T | null | undefined,
+): T | undefined {
+  return ownerLanguageTranslation(translation, useCachedMe());
+}
+
 type AnyCardTranslation = { lang: TranslationLanguage; failed?: true } | null | undefined;
 
 /**

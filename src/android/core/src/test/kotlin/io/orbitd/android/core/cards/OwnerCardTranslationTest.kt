@@ -63,6 +63,25 @@ class OwnerCardTranslationTest {
         assertEquals("a translation served without one keeps row.detailLine", "d", OwnerCardTranslation.openItem(older, "ja")!!.text("detailLine"))
     }
 
+    @Test fun theProjectPagesListRowDrawsTheTranslatedTitleAndDetailLineOrTheOriginals() {
+        val base = """{"kind":"COORDINATOR_QUESTION","title":"Coordinator asks: Q?","detailLine":"If you don’t answer: it waits","question":{"question":"Q?"}"""
+        val row = j("""$base,"translation":{"lang":"ja","question":"問？","title":"Coordinator asks: 問？","detailLine":"If you don’t answer: 待つ"}}""")
+        assertEquals("Coordinator asks: 問？", OwnerCardTranslation.listTitle(row, "ja"))
+        assertEquals("If you don’t answer: 待つ", OwnerCardTranslation.listDetailLine(row, "ja"))
+        listOf(
+            row to "ko",
+            row to null,
+            j("""$base,"translation":{"lang":"ja","failed":true}}""") to "ja",
+            j("$base}") to "ja",
+        ).forEach { (r, owner) ->
+            assertEquals("Coordinator asks: Q?", OwnerCardTranslation.listTitle(r, owner))
+            assertEquals("If you don’t answer: it waits", OwnerCardTranslation.listDetailLine(r, owner))
+        }
+        val older = j("""$base,"translation":{"lang":"ja","question":"問？","detailLine":"If you don’t answer: 待つ"}}""")
+        assertEquals("an older server's translation without a title keeps the original", "Coordinator asks: Q?", OwnerCardTranslation.listTitle(older, "ja"))
+        assertEquals("If you don’t answer: 待つ", OwnerCardTranslation.listDetailLine(older, "ja"))
+    }
+
     @Test fun anOwnerRequestsInboxRowTitleIsTranslatedWhileItsCardWouldBe() {
         val request = Wire.decode(j("""{"id":"r","kind":"DECISION","state":"PENDING","title":"Pick a region","why":"W","createdAt":"2026-11-18T00:00:00Z",
             "translation":{"lang":"ja","title":"リージョンを選ぶ"}}""").toString().encodeToByteArray(), OwnerRequest.serializer())

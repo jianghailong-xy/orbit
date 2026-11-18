@@ -965,7 +965,7 @@ export class ProjectOpenItemService {
           assigneeReason: 'DEFAULT' satisfies OpenItemAssigneeReason,
           askedBySessionId: asking,
           dedupeKey,
-          title: `Coordinator asks: ${question.question}`,
+          title: coordinatorQuestionTitle(question.question),
           payload: question as unknown as Prisma.InputJsonValue,
           waitingSince: now,
           assignedAt: now,
@@ -4074,14 +4074,20 @@ function conditionStandsRefusal(item: RefusedItem): string {
     + ' Once the work lands, or nothing waits on it any more, it closes by hand as before.';
 }
 
+/** A coordinator question's item title: Orbit's English prefix, then the agent's question. */
+function coordinatorQuestionTitle(question: string): string {
+  return `Coordinator asks: ${question}`;
+}
+
 function randomKey(): string {
   return randomUUID();
 }
 
 /**
  * A question's translation as the open-items read serves it: with `detailLine`, the question's detail line
- * built from the translated `ifUnanswered`, when the translation is whole and in the owner's current language.
- * "Blocks N tasks · If you don't answer:" stays Orbit's own English; only the agent's words are swapped in.
+ * built from the translated `ifUnanswered`, and `title`, the row's title built from the translated `question`,
+ * when the translation is whole and in the owner's current language. "Blocks N tasks · If you don't answer:"
+ * and "Coordinator asks: " stay Orbit's own English; only the agent's words are swapped in.
  */
 function withTranslatedDetailLine(
   question: CoordinatorQuestion | null,
@@ -4092,6 +4098,7 @@ function withTranslatedDetailLine(
   return {
     ...translation,
     detailLine: questionDetailLine({ ...question, ifUnanswered: translation.ifUnanswered ?? question.ifUnanswered }),
+    title: coordinatorQuestionTitle(translation.question ?? question.question),
   };
 }
 

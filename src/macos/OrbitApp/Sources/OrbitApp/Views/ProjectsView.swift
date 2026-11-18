@@ -989,15 +989,18 @@ struct ProjectDetailView: View {
 
     private func openItem(_ row: ProjectOpenItemRow, store: ProjectDetailModel, now: Date) -> some View {
         let owner = row.assignee != .coordinator
+        // In the owner's language while a usable translation exists; the card it opens offers Show original.
+        let language = OwnerCardTranslations.ownerLanguage(model.user)
+        let detailLine = row.listDetailLine(owner: language)
         return VStack(alignment: .leading, spacing: 12) {
             HStack(spacing: 8) {
                 Circle().fill(owner ? Color.orange : Color.accentColor).frame(width: 8, height: 8)
                 Text(ProjectPage.who(row)).font(.orbitMeta).foregroundStyle(.secondary)
             }
             VStack(alignment: .leading, spacing: 4) {
-                Text(row.title).font(.orbitSubtext.weight(.semibold))
-                if !row.detailLine.isEmpty {
-                    Text(row.detailLine).font(.orbitLabel).foregroundStyle(.secondary)
+                Text(row.listTitle(owner: language)).font(.orbitSubtext.weight(.semibold))
+                if !detailLine.isEmpty {
+                    Text(detailLine).font(.orbitLabel).foregroundStyle(.secondary)
                 }
                 // §4.7 H1 / §10.8: the rerun or observation handling it, while that is in flight —
                 // the row is still open, and says so rather than "handled", as the web's row does.

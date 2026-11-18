@@ -329,7 +329,10 @@ export interface OwnerCardTranslation {
    *  `ifUnanswered`: "Blocks N tasks · If you don’t answer: <translated>". Served by the open-items read only,
    *  beside a whole translation in the owner's current language; never stored. Absent from an older server. */
   detailLine?: string;
-  /** An owner request's `title`. */
+  /** An owner request's `title`. On an open coordinator question, the open-items row's `title`
+   *  (`ProjectOpenItemRow.title`) built from the translated `question`: "Coordinator asks: <translated>".
+   *  Served by the open-items read only, beside a whole translation in the owner's current language; never
+   *  stored. Absent from an older server, and on a START_REQUEST or DONE_REQUEST, whose titles are Orbit's. */
   title?: string;
   /** An owner request's `why`. */
   why?: string;

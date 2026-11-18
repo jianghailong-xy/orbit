@@ -58,6 +58,7 @@ import { refreshTaskScheduleViews } from '../lib/taskSchedule';
 import { readTaskRunConflict } from '../lib/taskRunHandoff';
 import { ago, formatSpan } from '../lib/watches';
 import { TaskRunHandoffNotice } from './TaskRunHandoffNotice';
+import { useOwnerLanguageTranslation } from './TranslationParts';
 import { Alert } from './ui/Alert';
 import { Button } from './ui/Button';
 import { Dialog } from './ui/Dialog';
@@ -2919,16 +2920,21 @@ function OpenItemRowView({
   const firstAction = row.primaryAction && actions.includes(row.primaryAction)
     ? row.primaryAction
     : actions[0];
+  // The server's translated title and detail line while a usable translation exists; the row has no
+  // flip of its own, the card it opens offers Show original.
+  const translated = useOwnerLanguageTranslation(row.translation);
+  const title = translated?.title ?? row.title;
+  const detailLine = translated?.detailLine ?? row.detailLine;
   return (
     <li className={`project-open-item-row is-${row.assignee === 'OWNER' ? 'owner' : 'coordinator'}`}>
       <span className="project-open-item-dot" aria-hidden="true" />
       <div className="project-open-item-main">
-        <div className="project-open-item-title" title={row.title}>
-          {row.title}
+        <div className="project-open-item-title" title={title}>
+          {title}
         </div>
-        {row.detailLine ? (
-          <div className="project-open-item-line" title={row.detailLine}>
-            {row.detailLine}
+        {detailLine ? (
+          <div className="project-open-item-line" title={detailLine}>
+            {detailLine}
           </div>
         ) : null}
         {/* §4.7 H1: the coordinator's rerun of it, while it runs — the row is still open, and says

@@ -14,7 +14,12 @@
  *   (c) translation off: nothing is asked of the translator and no translation is stored or served;
  *   (d) the switch turned on after filing: reading the still-open card queues one translation — two reads while
  *       it runs still translate the card once — and the next read serves it;
- *   (e) a card that has ended (answered question, done request) is not translated on read.
+ *   (e) a card that has ended (answered question, done request) is not translated on read;
+ *   (f) a question's translation in a language the owner no longer reads is served as stored, with no translated
+ *       row title or detail line beside it.
+ *
+ * A translated question's row is served a translated `title` too ("Coordinator asks: " kept in English) beside a
+ * whole translation in the owner's language, and none beside a failed one, an absent one or another language's.
  *
  * Not destructive: every id is freshly generated and every assertion is scoped to its own account.
  */
@@ -156,9 +161,13 @@ test('owner cards outside a session are translated, once, whole or failed', { sk
     options: [{ label: zh('Reopen now'), description: zh('Accept the cost.') }, { label: zh('Wait') }],
     ifUnanswered: zh('the rollout stays paused'),
   };
-  // What the open-items read serves: the stored translation and the detail line built from its ifUnanswered,
-  // Orbit's own "If you don’t answer:" kept in English.
-  const servedQuestion = { ...translatedQuestion, detailLine: `If you don’t answer: ${zh('the rollout stays paused')}` };
+  // What the open-items read serves: the stored translation, the detail line built from its ifUnanswered and the
+  // row title built from its question, Orbit's own "If you don’t answer:" and "Coordinator asks: " kept in English.
+  const servedQuestion = {
+    ...translatedQuestion,
+    detailLine: `If you don’t answer: ${zh('the rollout stays paused')}`,
+    title: `Coordinator asks: ${translatedQuestion.question}`,
+  };
 
   await t.test('(a) a question and a request are translated after filing and served with it', async () => {
     await reset();
@@ -177,6 +186,8 @@ test('owner cards outside a session are translated, once, whole or failed', { sk
     assert.deepEqual(row.translation, servedQuestion, 'the open-items read serves it, with its detail line translated');
     assert.equal(row.question?.question, QUESTION.question, 'and the question as the agent wrote it beside it');
     assert.equal(row.detailLine, 'If you don’t answer: the rollout stays paused', 'and the detail line as built from it');
+    assert.equal(row.title, `Coordinator asks: ${QUESTION.question}`, 'and the row title as the agent asked it');
+    assert.ok(row.translation?.title?.startsWith('Coordinator asks: ZH['), 'the translated title keeps Orbit\'s prefix');
     assert.ok(published.includes(`project_changed:${p.projectId}`), 'the project is announced changed');
 
     assert.deepEqual((await listed(decision.id)).translation, {
@@ -209,7 +220,7 @@ test('owner cards outside a session are translated, once, whole or failed', { sk
 
     assert.deepEqual(await stored('project_open_item', itemId), { lang: 'zh-Hans', failed: true });
     const row = await openRow(itemId);
-    assert.deepEqual(row.translation, { lang: 'zh-Hans', failed: true }, 'no translated detail line beside a failed one');
+    assert.deepEqual(row.translation, { lang: 'zh-Hans', failed: true }, 'no translated title or detail line beside a failed one');
     assert.equal(row.detailLine, 'If you don’t answer: the rollout stays paused');
     assert.equal(row.question?.question, QUESTION.question);
     assert.deepEqual(row.question?.options, QUESTION.options, 'the original, untouched');
@@ -238,7 +249,7 @@ test('owner cards outside a session are translated, once, whole or failed', { sk
     assert.deepEqual(asked, [], 'the translator is never asked');
     assert.equal(await stored('project_open_item', itemId), null);
     assert.equal(await stored('owner_request', decision.id), null);
-    assert.equal((await openRow(itemId)).translation, undefined, 'the row carries no translation');
+    assert.equal((await openRow(itemId)).translation, undefined, 'the row carries no translation, so no translated title');
     assert.equal((await listed(decision.id)).translation, null);
     // Ended, so (d) counts only its own cards: a read with translation on queues every open card without one.
     await items.answerOpenItem(p.ownerId, p.projectId, itemId, { option: 0 });
@@ -290,6 +301,24 @@ test('owner cards outside a session are translated, once, whole or failed', { sk
     assert.deepEqual(asked, [], 'nothing is asked of the translator');
     assert.equal(await stored('project_open_item', itemId), null);
     assert.equal(await stored('owner_request', decision.id), null);
+  });
+
+  await t.test('(f) a translation in another language is served without a translated title or detail line', async () => {
+    await reset();
+    await prefer(OFF);
+    const itemId = await ask('f');
+    await settle();
+    const other = { ...translatedQuestion, lang: 'ja' };
+    await sql.query(`UPDATE project_open_item SET translation = $2::jsonb WHERE id = $1`, [itemId, JSON.stringify(other)]);
+    await prefer(ON);
+    let release!: () => void;
+    gate = new Promise<void>((resolve) => { release = resolve; });
+    const row = await openRow(itemId);
+    assert.deepEqual(row.translation, other, 'the stored one as it is: no title, no detail line');
+    assert.equal(row.title, `Coordinator asks: ${QUESTION.question}`);
+    release();
+    await settle();
+    await items.answerOpenItem(p.ownerId, p.projectId, itemId, { option: 0 });
   });
 
   await t.test('cleanup', async () => {

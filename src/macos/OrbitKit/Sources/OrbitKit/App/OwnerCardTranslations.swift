@@ -147,6 +147,19 @@ public extension ProjectOpenItemRow {
         shownTranslation(owner, showOriginal)?.detailLine ?? detailLine
     }
 
+    /// The project page's list row title: the server's title built from the translated question
+    /// ("Coordinator asks: " kept in English) while a usable translation exists, `title` otherwise. A
+    /// list row has no flip of its own: the card it opens offers Show original.
+    func listTitle(owner: TranslationLanguage?) -> String {
+        shownTranslation(owner, false)?.title ?? title
+    }
+
+    /// The project page's list row detail line: the translated one while a usable translation exists,
+    /// `detailLine` otherwise.
+    func listDetailLine(owner: TranslationLanguage?) -> String {
+        shownDetailLine(owner: owner, showOriginal: false)
+    }
+
     /// A `START_REQUEST`'s request as the card draws it.
     func shownStartRequest(owner: TranslationLanguage?, showOriginal: Bool) -> ProjectStartRequest? {
         guard let startRequest, let t = shownTranslation(owner, showOriginal) else { return startRequest }
