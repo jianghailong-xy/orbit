@@ -211,7 +211,7 @@ object ScheduleDisplay {
     enum class Circle { open, running, done, new, failed, held, draft, paused, muted;
         val rawValue: String get() = name
     }
-    enum class Mark { check, alert }
+    enum class Mark { check, alert, clock }
     enum class TagTone { new, fail, held, mute }
 
     data class Tag(val tone: TagTone, val text: String)
@@ -222,7 +222,7 @@ object ScheduleDisplay {
     fun runCircle(state: String, newFinding: Boolean = false): CircleView {
         val label = C.runStates[state] ?: state
         return when (state) {
-            "QUEUED" -> CircleView(Circle.open)
+            "QUEUED" -> CircleView(Circle.open, Mark.clock)
             "RUNNING" -> CircleView(Circle.running)
             "AWAITING_APPROVAL" -> CircleView(Circle.held, Mark.alert, Tag(TagTone.held, label))
             "NO_CHANGE" -> CircleView(Circle.done, Mark.check, Tag(TagTone.mute, label))

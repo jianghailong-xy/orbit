@@ -102,7 +102,11 @@ function selectionOf(params: URLSearchParams): Selection {
 function Circle({ view }: { view: ScheduleCircleView }): JSX.Element {
   return (
     <span className="sched-circle" data-circle={view.circle} aria-hidden="true">
-      {view.mark === 'check' ? '✓' : view.mark === 'alert' ? '!' : null}
+      {view.mark === 'check' ? '✓' : view.mark === 'alert' ? '!' : view.mark === 'clock' ? (
+        <svg width="12" height="12" viewBox="0 0 12 12" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round">
+          <path d="M6 2.5V6l2.3 1.4" />
+        </svg>
+      ) : null}
     </span>
   );
 }

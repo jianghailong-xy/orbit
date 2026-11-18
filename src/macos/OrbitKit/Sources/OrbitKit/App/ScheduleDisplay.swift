@@ -280,7 +280,7 @@ public enum ScheduleDisplay {
     /// A row's circle (board 1/2 ①): `open` is to come, `running` turns, `done` a grey tick, `new` a green tick,
     /// `failed` red, `held` amber, `draft` dashed, `paused` faint, `muted` a run that never did the work.
     public enum Circle: String, CaseIterable, Sendable { case open, running, done, new, failed, held, draft, paused, muted }
-    public enum Mark: String, Sendable { case check, alert }
+    public enum Mark: String, Sendable { case check, alert, clock }
     public enum TagTone: String, Sendable { case new, fail, held, mute }
 
     public struct Tag: Equatable, Sendable {
@@ -306,7 +306,7 @@ public enum ScheduleDisplay {
     public static func runCircle(state: String, newFinding: Bool = false) -> CircleView {
         let label = C.runStates[state] ?? state
         switch state {
-        case "QUEUED": return CircleView(.open)
+        case "QUEUED": return CircleView(.open, .clock)
         case "RUNNING": return CircleView(.running)
         case "AWAITING_APPROVAL": return CircleView(.held, .alert, Tag(tone: .held, text: label))
         case "NO_CHANGE": return CircleView(.done, .check, Tag(tone: .mute, text: label))

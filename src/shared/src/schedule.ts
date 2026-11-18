@@ -1111,7 +1111,7 @@ export function scheduleCreateWhen(card: Pick<ScheduleCreateCard, 'when'>, now: 
 // ---------------------------------------------------------------------------------------------------------------
 
 /**
- * A row's circle (board 1/2 ①): `open` is to come, `running` turns, `done` a grey tick (no change, or already
+ * A row's circle (board 1/2 ①): `open` is to come (a queued run wears clock hands in it), `running` turns, `done` a grey tick (no change, or already
  * reported), `new` a green tick (a new finding), `failed` red, `held` amber, `draft` dashed, `paused` faint, `muted`
  * a run that never did the work (skipped, missed, cancelled).
  */
@@ -1123,7 +1123,7 @@ export type ScheduleTagTone = 'new' | 'fail' | 'held' | 'mute';
 export interface ScheduleCircleView {
   circle: ScheduleCircle;
   /** What sits inside the circle. */
-  mark: 'check' | 'alert' | null;
+  mark: 'check' | 'alert' | 'clock' | null;
   /** The label at the right of a row, if any. */
   tag: { tone: ScheduleTagTone; text: string } | null;
 }
@@ -1139,7 +1139,7 @@ export function scheduleRunCircle(
   const label = C.runStates[run.state];
   switch (run.state) {
     case 'QUEUED':
-      return { circle: 'open', mark: null, tag: null };
+      return { circle: 'open', mark: 'clock', tag: null };
     case 'RUNNING':
       return { circle: 'running', mark: null, tag: null };
     case 'AWAITING_APPROVAL':
