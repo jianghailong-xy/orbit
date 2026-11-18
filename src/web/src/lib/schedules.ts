@@ -12,6 +12,7 @@ import {
 } from '@orbit/shared';
 import { api } from '../api';
 import { streamPoll } from './listBudget';
+import { SCHEDULED_RUNS_FOLDER } from './sessionFolders';
 
 /**
  * Scheduled tasks on the web (docs/scheduled-tasks-design.md §9.2): the REST reads the Scheduled page, the inspector,
@@ -84,10 +85,13 @@ export function useScheduledNeedsCount(): number {
   return useMemo(() => (list.data?.schedules ?? []).filter(scheduleNeedsYou).length, [list.data]);
 }
 
-/** A run's session, reached from the schedule's history: run sessions are in no list, only here (§7.4). */
-export function scheduleRunSessionPath(run: Pick<ScheduleRunView, 'sessionId' | 'scheduleId' | 'id'>): string | null {
+/**
+ * A run's session, reached from the schedule's history: the ordinary session page, with its workspace's list on the
+ * Scheduled runs folder, the one list that holds it (owner 2026-11-19).
+ */
+export function scheduleRunSessionPath(run: Pick<ScheduleRunView, 'sessionId'>): string | null {
   if (!run.sessionId) return null;
-  return `/sessions/${encodeURIComponent(run.sessionId)}?schedule=${encodeURIComponent(run.scheduleId)}&run=${encodeURIComponent(run.id)}`;
+  return `/sessions/${encodeURIComponent(run.sessionId)}?folder=${SCHEDULED_RUNS_FOLDER}`;
 }
 
 /** The Scheduled page with one schedule open in the inspector. */

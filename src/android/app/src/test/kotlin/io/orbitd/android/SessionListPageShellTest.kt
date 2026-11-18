@@ -307,6 +307,34 @@ class SessionListPageShellTest {
         await { exists(hasText("Nothing in this folder")) }
     }
 
+    @Test fun scheduledRunsKeepTheirFolderAndViewWhenReturningFromTheSession() {
+        val run = NavShell.row(NavShell.RUN, "Completed run", fields = ""","runSource":"SCHEDULE"""")
+        NavShell.lifecycle = NavShell.lifecycle + (NavShell.RUN to "COMPLETED")
+        NavShell.scheduled = mapOf("completed" to listOf(run))
+        NavShell.extra = mapOf("completed" to listOf(run))
+        signIn()
+        val folder = hasTestTag("folder-row:scheduled")
+        val session = hasRowMenu("Options for Completed run")
+        await { exists(review) }
+        compose.onNode(folder).assertDoesNotExist()
+        compose.pickFromSessionOptions("Completed")
+        await { exists(folder) }
+        compose.onNode(session).assertDoesNotExist()
+        compose.onNode(folder).assert(SemanticsMatcher.keyNotDefined(SemanticsActions.OnLongClick)).performClick()
+        await { exists(session) }
+        compose.onNode(hasText("Scheduled runs") and hasAnyAncestor(hasTestTag("app-bar")), useUnmergedTree = true).assertExists()
+        compose.onNode(hasText("Alpha") and hasAnyAncestor(hasTestTag("app-bar")), useUnmergedTree = true).assertExists()
+        compose.onNodeWithContentDescription("Folder actions").assertDoesNotExist()
+        compose.onNode(session).performClick()
+        await { exists(hasContentDescription("Session actions")) }
+        compose.onNodeWithContentDescription("Back").performClick()
+        await { exists(session) }
+
+        NavShell.scheduled = emptyMap()
+        app().realtime.refreshDirectory()
+        await { exists(hasText("No scheduled runs here.")) }
+    }
+
     /** No connection: the rows stay and the list says nothing. The drawer heads its workspaces with why, in iOS's words. */
     @Test fun offlineTheRowsStayAndTheDrawerSaysWhy() {
         signIn()

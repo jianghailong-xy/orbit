@@ -33,6 +33,7 @@ private final class SessionFolderRecorder: @unchecked Sendable {
     struct Sent {
         let method: String?
         let path: String?
+        let query: [URLQueryItem]?
         let body: [String: Any]?
     }
 
@@ -40,7 +41,8 @@ private final class SessionFolderRecorder: @unchecked Sendable {
     private var storage: [Sent] = []
 
     func append(_ request: URLRequest) {
-        let sent = Sent(method: request.httpMethod, path: request.url?.path, body: Self.body(request))
+        let query = request.url.flatMap { URLComponents(url: $0, resolvingAgainstBaseURL: false)?.queryItems }
+        let sent = Sent(method: request.httpMethod, path: request.url?.path, query: query, body: Self.body(request))
         lock.lock()
         storage.append(sent)
         lock.unlock()
@@ -94,6 +96,29 @@ final class SessionFolderAPIClientTests: XCTestCase {
             return (status, Data(json.utf8))
         }
         return recorder
+    }
+
+    func testScheduledRunsUsesAPlainWorkspaceReadInEveryView() async throws {
+        for view in SessionView.allCases {
+            let recorder = answer(#"""
+            [
+              {"id":"run","status":"RUNNING","agent":{"id":"w1","name":"Workspace"},"runSource":"SCHEDULE"},
+              {"id":"manual","status":"RUNNING","agentId":"w1","runSource":"MANUAL"},
+              {"id":"other","status":"RUNNING","agentId":"w2","runSource":"SCHEDULE"}
+            ]
+            """#)
+
+            let rows = try await client().listScheduledRuns(workspaceID: "w1", view: view)
+
+            XCTAssertEqual(rows.map(\.id), ["run"])
+            XCTAssertEqual(recorder.sent.map(\.method), ["GET"])
+            XCTAssertEqual(recorder.sent.map(\.path), ["/api/sessions"])
+            XCTAssertEqual(Set(recorder.sent.first?.query ?? []), [
+                URLQueryItem(name: "workspaceId", value: "w1"),
+                URLQueryItem(name: "view", value: view.rawValue),
+                URLQueryItem(name: "scheduled", value: "1"),
+            ])
+        }
     }
 
     func testListingCreatingRenamingAndDeletingFolders() async throws {

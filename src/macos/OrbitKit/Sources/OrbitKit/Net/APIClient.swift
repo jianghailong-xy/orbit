@@ -215,6 +215,18 @@ public final class APIClient: @unchecked Sendable {
                                       projectId: projectId, includeLanding: includeLanding)
     }
 
+    /// The scheduled folder always reads a plain array, independent of the Open list cursor.
+    public func listScheduledRuns(workspaceID: String, view: SessionView) async throws -> [Session] {
+        // Every list row carries runSource, and the folder keeps only SCHEDULE rows, so a server that ignores
+        // `scheduled` (an older one answers its whole list) shows an empty folder rather than a person's sessions.
+        let rows: [Session] = try await getCancellable("sessions", query: [
+            URLQueryItem(name: "workspaceId", value: workspaceID),
+            URLQueryItem(name: "view", value: view.queryValue),
+            URLQueryItem(name: "scheduled", value: "1"),
+        ])
+        return SessionFilter.forAgent(rows, agentID: workspaceID, view: view, scheduled: true)
+    }
+
     /// How many rows `GET /sessions?view=<view>&limit=1` answers: 0 or 1. The welcome card's read of
     /// whether an account has ever had a session (docs/mocks/new-user-onboarding, board 03 rule 1), the
     /// web's `useNewAccount`. Rows are counted, never decoded: an answer that isn't an array throws.

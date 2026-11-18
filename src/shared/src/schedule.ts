@@ -418,9 +418,7 @@ export const SCHEDULE_COPY = {
   runSession: {
     crumb: 'Scheduled',
     runOf: 'run of {date}',
-    strip:
-      'Scheduled run · planned {planned}, started {started} · access {access} · this session is not in your session '
-      + 'list',
+    strip: 'Scheduled run · planned {planned}, started {started} · access {access}',
     reported: 'Reported: {state}',
     agent: '{engine} agent',
     duration: '{minutes} min',
@@ -1789,7 +1787,7 @@ export function scheduleApprovalWaiting(input: {
 // A run's session
 // ---------------------------------------------------------------------------------------------------------------
 
-/** "Scheduled run · planned 10:00, started 10:01 · access Check only · this session is not in your session list". */
+/** "Scheduled run · planned 10:00, started 10:01 · access Check only". */
 export function scheduleRunStripText(
   run: Pick<ScheduleRunView, 'plannedAt' | 'startedAt'>,
   accessLevel: ScheduleAccessLevel,

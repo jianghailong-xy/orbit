@@ -9984,7 +9984,7 @@ export function WorkspaceView({
   );
 
   return (
-    <div ref={setSplitEl} className={`workspace-split${selectedId || composingRoute || landingsProjectId ? ' show-conversation' : ''}${isScheduleRun && !composing && !onScheduledRuns ? ' is-schedule-run' : ''}`}>
+    <div ref={setSplitEl} className={`workspace-split${selectedId || composingRoute || landingsProjectId ? ' show-conversation' : ''}`}>
       {/* A machine with no workspace has no sessions to list: its setup page is the card alone. */}
       {!bareMachine && <>
       <aside className={`session-col${listProjectId ? ' session-project-page' : ''}`} style={{ width: colWidth }}>
