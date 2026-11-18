@@ -6,6 +6,7 @@ import {
   Logger,
   NotFoundException,
 } from '@nestjs/common';
+import { isTranslationLanguage } from '@orbit/shared';
 import { PrismaService } from '../prisma/prisma.service';
 import { deliverOwedTaskTurn } from './owed-task-turn';
 import { readBlockSender } from '../sessions/session-message';
@@ -144,12 +145,19 @@ export class EvidenceReviewService {
    * `fromSessionId` is the session that decided, and null for the account owner's press in the app:
    * the block names it and its mode, as a session's message says who sent it (session-message.ts).
    */
-  async deliverSendBack(ownerId: string, taskId: string, decisionId: string, fromSessionId: string | null): Promise<void> {
+  async deliverSendBack(
+    ownerId: string,
+    taskId: string,
+    decisionId: string,
+    fromSessionId: string | null,
+  ): Promise<void> {
     const decision = await this.prisma.taskEvidenceDecision.findFirst({
       where: { id: decisionId, taskId, ownerId },
       select: {
         decision: true,
         note: true,
+        translatedNote: true,
+        translationLang: true,
         decidedByType: true,
         evidence: { select: { revision: true, sourceSessionId: true } },
         task: { select: { title: true } },
@@ -158,11 +166,19 @@ export class EvidenceReviewService {
     if (!decision || decision.decision !== 'SEND_BACK' || !decision.note) return;
     const runSessionId = decision.evidence.sourceSessionId;
     const from = fromSessionId ? await readBlockSender(this.prisma, ownerId, fromSessionId, runSessionId) : null;
+    const message = (note: string): string => evidenceSendBackMessage({
+      taskId,
+      taskTitle: decision.task.title,
+      revision: decision.evidence.revision.toString(),
+      decidedByType: decision.decidedByType,
+      note,
+      from,
+    });
+    const translated = decision.translatedNote != null && isTranslationLanguage(decision.translationLang)
+      ? { content: message(decision.translatedNote), from: decision.translationLang }
+      : undefined;
     await deliverOwedTaskTurn(this.prisma, this.sessions, ownerId, runSessionId,
-      evidenceSendBackTurnId(decisionId), evidenceSendBackMessage({
-        taskId, taskTitle: decision.task.title, revision: decision.evidence.revision.toString(),
-        decidedByType: decision.decidedByType, note: decision.note, from,
-      }));
+      evidenceSendBackTurnId(decisionId), message(decision.note), translated);
   }
 
   async deliverSendBacksOwedTo(sessionId?: string): Promise<void> {

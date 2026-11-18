@@ -6400,9 +6400,9 @@ export class RunnerApiController {
       else void this.push.notifyApprovalRequest(sessionId, approval.id, approval.toolName);
       // Settings › Translation (3A, reply-translation.ts): the card goes out in the agent's words at once, and again in
       // the owner's language once it is translated.
-      if (cardHasText(approval.input)) {
+      if (cardHasText(approval.input, approval.toolName)) {
         const langs = await translationLanguages(this.prisma, session.ownerId).catch(() => null);
-        translateApprovalCard(this.translationDeps(), sessionId, approval.id, approval.input, langs);
+        translateApprovalCard(this.translationDeps(), sessionId, approval.id, approval.input, langs, approval.toolName);
       }
     }
     return { id: approval.id, status: approval.status as ApprovalStatus };

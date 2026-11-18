@@ -1,4 +1,4 @@
-import type { FeishuMessageDetail, OwnerItemPushKind } from '@orbit/shared';
+import type { ApprovalTranslation, FeishuMessageDetail, OwnerItemPushKind } from '@orbit/shared';
 import type { OwnerItemAlert } from '../../push/owner-item-alert';
 import { toolInputPreview } from './tool-input-preview';
 
@@ -26,6 +26,9 @@ export interface FeishuApprovalItem {
   id: string;
   toolName: string;
   input: unknown;
+  /** What the card shows, in the owner's language (Settings › Translation, reply-translation.ts); absent or null
+   *  until translated, and on every card translation is off for. */
+  translation?: ApprovalTranslation | null;
 }
 
 /** What a card is about: one row of §6.1's table. */
@@ -319,6 +322,34 @@ export function questionsOf(input: unknown): FeishuQuestion[] {
 }
 
 /**
+ * The questions as the card shows them: `questionsOf(input)` with each question's words, header and options in the
+ * owner's language when the approval carries a translation of them (`approval.translation.questions`, index for index
+ * with the input's). A failed translation, or one that does not line up with the input, shows the original. Only the
+ * words change: an option's place in the list, which is what the form sends back, is the input's.
+ */
+export function shownQuestionsOf(input: unknown, translation: ApprovalTranslation | null | undefined): FeishuQuestion[] {
+  const questions = questionsOf(input);
+  const raw = (input as { questions?: unknown } | null)?.questions;
+  const translated = translation && translation.failed !== true ? translation.questions : undefined;
+  if (!translated || !Array.isArray(raw) || translated.length !== raw.length || questions.length !== raw.length) return questions;
+  return questions.map((q, index) => {
+    const t = translated[index];
+    const rawOptions = (raw[index] as { options?: unknown } | null)?.options;
+    const rawCount = Array.isArray(rawOptions) ? rawOptions.length : 0;
+    if (!t || !Array.isArray(t.options) || t.options.length !== q.options.length || rawCount !== q.options.length) return q;
+    return {
+      ...q,
+      question: t.question || q.question,
+      header: q.header ? t.header || q.header : '',
+      options: q.options.map((o, at) => ({
+        label: t.options[at]?.label || o.label,
+        description: o.description ? t.options[at]?.description || o.description : '',
+      })),
+    };
+  });
+}
+
+/**
  * The answer form's field names (§7.2's "answer the agent's question"). Feishu wants a component's name unique within
  * the card, and one card can hold several questions' forms, so each name carries the approval's place on the card;
  * a submission carries only its own form's fields, so the handler reads them by their suffix alone.
@@ -356,7 +387,7 @@ function approvalSection(
     return out;
   }
   if (!full) return out;
-  const questions = questionsOf(approval.input);
+  const questions = shownQuestionsOf(approval.input, approval.translation);
   questions.forEach((q) => {
     const options = q.options.map((o) => `• ${o.label}${o.description ? ` — ${o.description}` : ''}`).join('\n');
     out.push(text(cut([q.header ? `${q.header}: ${q.question}` : q.question, options].filter(Boolean).join('\n'))));

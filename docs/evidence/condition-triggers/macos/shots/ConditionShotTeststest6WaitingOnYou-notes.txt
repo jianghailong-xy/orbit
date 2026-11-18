@@ -1,0 +1,8 @@
+inbox: no window after launch; File > New Window
+inbox: Condition shown
+inbox: The check timed out 3 times in a row. shown
+inbox: Pause shown
+inbox: Look into it shown
+inbox: Still waiting for 3 or more OSDs are in. Keep waiting? shown
+inbox: Keep waiting shown
+inbox: Stop shown

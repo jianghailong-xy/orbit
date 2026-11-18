@@ -13,8 +13,11 @@ import type {
   OwnerConfirmationIfConfirmed,
   OwnerConfirmationReviewView,
   OwnerConfirmationStart,
+  ReplyTranslation,
 } from '@orbit/shared';
 import { Alert } from './ui/Alert';
+import { RefusedAnswerFoot, useOwnerCardFlip } from './TranslationParts';
+import { answerRefusedUntranslated } from '../lib/translation';
 import { useLocation } from 'react-router-dom';
 import { api } from '../api';
 import { markdownToPlainLines } from '../lib/markdownText';
@@ -34,6 +37,7 @@ import {
   reviewAnswered,
   reviewAnswersComplete,
   reviewCameInAfter,
+  shownConfirmationReview,
   type OwnerAnswerBody,
   type ReviewChoice,
   type ReviewChoices,
@@ -92,6 +96,9 @@ import { streamPoll } from '../lib/listBudget';
 export interface OwnerConfirmationReport {
   text: string;
   reportedAt: string;
+  /** The run's reply as it was translated where it was said (Settings › Translation), served when it
+   *  is in the owner's language; absent otherwise. */
+  translation?: ReplyTranslation;
 }
 
 export interface OwnerConfirmationWaiting {
@@ -384,6 +391,7 @@ export interface OwnerDecisionRequestBody {
   note?: string;
   reviewRecordId?: string | null;
   answers?: OwnerAnswerBody[];
+  sendAsWritten?: true;
 }
 
 /** What a confirmation says about the review the card drew (`reviewAnswered`). */
@@ -407,6 +415,8 @@ export function ownerDecisionRequest(
   decision: OwnerDecision,
   note?: string,
   review?: OwnerDecisionReview,
+  /** Send as written, after the door refused the owner's words 422 TRANSLATION_FAILED. */
+  sendAsWritten?: boolean,
 ): { path: string; body: OwnerDecisionRequestBody } {
   const reason = note?.trim() ?? '';
   const answers = review?.answers ?? [];
@@ -419,6 +429,7 @@ export function ownerDecisionRequest(
       ...(decision === 'CONFIRM'
         ? { reviewRecordId: review?.reviewRecordId ?? null, ...(answers.length > 0 ? { answers } : {}) }
         : {}),
+      ...(sendAsWritten ? { sendAsWritten: true } : {}),
     },
   };
 }
@@ -430,8 +441,9 @@ export function sendOwnerDecision(
   decision: OwnerDecision,
   note?: string,
   review?: OwnerDecisionReview,
+  sendAsWritten?: boolean,
 ): Promise<unknown> {
-  const request = ownerDecisionRequest(taskId, requestId, decision, note, review);
+  const request = ownerDecisionRequest(taskId, requestId, decision, note, review, sendAsWritten);
   return api(request.path, { method: 'POST', body: request.body });
 }
 
@@ -634,10 +646,14 @@ export function OwnerConfirmationCard({
   onChoose = () => {},
   onDecide,
   onSendBack,
+  refused = null,
 }: {
   /** The card's own element, which is where its keyboard claim says it is drawn (`CardHotkey.ts`). */
   ref?: Ref<HTMLDivElement>;
   view: Pick<OwnerConfirmationView, 'taskId' | 'title' | 'acceptanceCriteria' | 'ifConfirmed'>;
+  /** The last press, refused 422 TRANSLATION_FAILED because the owner's answers could not be
+   *  translated: posts it again, `sendAsWritten` for Send as written. Null when nothing was refused. */
+  refused?: ((sendAsWritten: boolean) => Promise<unknown>) | null;
   waiting: OwnerConfirmationWaiting;
   /** A press from this card is on its way to the door. */
   busy?: boolean;
@@ -653,7 +669,17 @@ export function OwnerConfirmationCard({
   /** Hand the send-back to the composer. The door is pressed by the send that follows, not here. */
   onSendBack: () => void;
 }): JSX.Element {
-  const refusal = error ? ownerDecisionRefusal(error) : null;
+  const refusal = error && !refused ? ownerDecisionRefusal(error) : null;
+  // The run's report, the review and its problems are the agent-written words: one flip for all
+  // of them (board 04-owner-cards.html).
+  const flip = useOwnerCardFlip(
+    waiting.report?.translation,
+    waiting.review?.review?.translation,
+    waiting.review?.problems?.translation,
+  );
+  const reportText = flip.pick(waiting.report?.translation)?.text;
+  const report = waiting.report && reportText ? { ...waiting.report, text: reportText } : waiting.report;
+  const review = waiting.review ? shownConfirmationReview(waiting.review, flip.pick) : waiting.review;
   return (
     // Where the pinned line's pointer lands (`revealOwnerConfirmationCard`).
     <div
@@ -674,15 +700,17 @@ export function OwnerConfirmationCard({
             {OWNER_CONFIRMATION_YOURS}
             <span className="owner-confirmation-id">{view.taskId}</span>
           </div>
-          <OwnerConfirmationBoxes acceptanceCriteria={view.acceptanceCriteria} report={waiting.report} foldCriteria />
+          <OwnerConfirmationBoxes acceptanceCriteria={view.acceptanceCriteria} report={report} foldCriteria />
           {/* The reviewer's box, between what the agent said and what confirming sets off (contract
               §6 H1): where the review stands, and its questions for the owner when it asks any. */}
-          {waiting.review ? (
-            <OwnerConfirmationReviewBar review={waiting.review} place="CARD" choices={choices} onChoose={onChoose} />
+          {review ? (
+            <OwnerConfirmationReviewBar review={review} place="CARD" choices={choices} onChoose={onChoose} />
           ) : null}
+          {flip.foot}
           {/* Right above the buttons: the card is taller than a phone's screen, and this is what is
               in view at the press. A refused press says why between it and the buttons. */}
           <OwnerConfirmationIfYouConfirm ifConfirmed={view.ifConfirmed} />
+          {refused ? <RefusedAnswerFoot resend={refused} /> : null}
           {error && refusal ? (
             <Alert
               className="evidence-decision-error"
@@ -736,8 +764,8 @@ export function SessionOwnerConfirmationCard({
   });
   const waiting = ownerConfirmationWaitingIn(read.data, sessionId);
   const answer = useMutation({
-    mutationFn: (press: { requestId: string; decision: OwnerDecision; note?: string; review?: OwnerDecisionReview }) =>
-      sendOwnerDecision(taskId ?? '', press.requestId, press.decision, press.note, press.review),
+    mutationFn: (press: { requestId: string; decision: OwnerDecision; note?: string; review?: OwnerDecisionReview; sendAsWritten?: boolean }) =>
+      sendOwnerDecision(taskId ?? '', press.requestId, press.decision, press.note, press.review, press.sendAsWritten),
     // Re-read whichever way the door answered: a recorded decision takes the card away, and a
     // refusal for staleness means what is waiting has moved.
     onSettled: () => (taskId ? refreshOwnerConfirmationViews(qc, taskId) : undefined),
@@ -809,6 +837,9 @@ export function SessionOwnerConfirmationCard({
       waiting={waiting}
       busy={answer.isPending}
       error={answer.isError ? answer.error : null}
+      refused={answer.isError && answerRefusedUntranslated(answer.error) && answer.variables
+        ? (sendAsWritten) => answer.mutateAsync({ ...answer.variables!, sendAsWritten })
+        : null}
       keys={keys}
       choices={choices}
       onChoose={choose}

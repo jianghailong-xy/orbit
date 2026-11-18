@@ -347,6 +347,123 @@ test('an approval\'s description is translated', async () => {
   assert.deepEqual(deepSeek.calls, ['Delete the build folder'], 'the command itself is never sent');
 });
 
+// ── Orbit's own cards (board 04-owner-cards.html, part 2) ─────────────────────────────────────────
+
+/** Files an Orbit card through the real createApproval and answers the translation it was published again with. */
+async function orbitCard(w: ReturnType<typeof world>, toolName: string, input: Record<string, unknown>) {
+  await w.controller.createApproval({ id: RUNNER_ID }, SESSION, { toolName, input, toolUseId: `${toolName}-1` });
+  await replyTranslationsSettled();
+  const [first, second] = w.cards();
+  assert.equal(first.translation, undefined, 'the card is not held back for its translation');
+  assert.equal(w.approvals.length, 1);
+  assert.deepEqual(w.approvals[0].translation, second?.translation, 'what is published is what is stored');
+  const [listed] = await w.sessions.listApprovals(OWNER, SESSION);
+  assert.deepEqual(listed?.translation, second?.translation, 'GET /approvals serves it');
+  return second?.translation;
+}
+
+test('a task create card carries its title, description and acceptance criteria translated', async () => {
+  const w = world();
+  const translation = await orbitCard(w, 'orbit_task_create', {
+    title: 'Fix the Safari login',
+    description: 'The login button does nothing in Safari.',
+    acceptanceCriteria: 'Logging in works in Safari 18.',
+    completionCriterion: 'EVIDENCE_JUDGMENT',
+  });
+  assert.deepEqual(translation, {
+    lang: 'zh-Hans',
+    description: ZH('The login button does nothing in Safari.'),
+    title: ZH('Fix the Safari login'),
+    acceptanceCriteria: ZH('Logging in works in Safari 18.'),
+  });
+  assert.equal(deepSeek.calls.includes('EVIDENCE_JUDGMENT'), false, 'the criterion keyword is Orbit\'s, not the agent\'s words');
+});
+
+test('a batch card carries each task\'s title, description and criteria translated, index for index', async () => {
+  const w = world();
+  const translation = await orbitCard(w, 'orbit_task_batch', {
+    tasks: [
+      { title: 'Write the migration', description: 'Add the column.', acceptanceCriteria: 'The spec passes.', ref: 'a' },
+      { title: 'Backfill', dependsOnRefs: ['a'] },
+    ],
+    preview: { taskCount: 2, tasks: [{ title: 'Write the migration' }, { title: 'Backfill' }] },
+  });
+  assert.deepEqual(translation, {
+    lang: 'zh-Hans',
+    tasks: [
+      { title: ZH('Write the migration'), description: ZH('Add the column.'), acceptanceCriteria: ZH('The spec passes.') },
+      { title: ZH('Backfill') },
+    ],
+  });
+  assert.deepEqual(w.approvals[0].input, {
+    tasks: [
+      { title: 'Write the migration', description: 'Add the column.', acceptanceCriteria: 'The spec passes.', ref: 'a' },
+      { title: 'Backfill', dependsOnRefs: ['a'] },
+    ],
+    preview: { taskCount: 2, tasks: [{ title: 'Write the migration' }, { title: 'Backfill' }] },
+  }, 'input stays the agent\'s words');
+});
+
+test('a project create card carries its title, goal, instructions and criteria items translated', async () => {
+  const w = world();
+  const translation = await orbitCard(w, 'orbit_project_create', {
+    title: 'CSV export',
+    goal: 'Ship the new CSV export.',
+    instructions: 'Keep the old columns for one release.',
+    acceptanceCriteriaItems: [
+      { text: 'The export keeps cost_center.', verificationMethod: 'A spec reads the header.' },
+      { text: 'The finance sheet still loads.' },
+    ],
+  });
+  assert.deepEqual(translation, {
+    lang: 'zh-Hans',
+    title: ZH('CSV export'),
+    goal: ZH('Ship the new CSV export.'),
+    instructions: ZH('Keep the old columns for one release.'),
+    acceptanceCriteriaItems: [
+      { text: ZH('The export keeps cost_center.'), verificationMethod: ZH('A spec reads the header.') },
+      { text: ZH('The finance sheet still loads.') },
+    ],
+  });
+});
+
+test('a blocker card carries its reason translated, and a DAG change card its note', async () => {
+  const blocker = world();
+  assert.deepEqual(await orbitCard(blocker, 'orbit_blocker_resolve', {
+    projectId: 'p1', projectTitle: 'CSV export', blockerId: 'b1',
+    reason: 'The provider is back online.',
+    blocker: { kind: 'PROVIDER', requiredAction: 'Sign the provider in again.' },
+  }), { lang: 'zh-Hans', reason: ZH('The provider is back online.') });
+  assert.deepEqual(deepSeek.calls, ['The provider is back online.'], 'the blocker\'s own facts are the server\'s, not the agent\'s');
+
+  deepSeek.calls = [];
+  const dag = world();
+  assert.deepEqual(await orbitCard(dag, 'orbit_dag_change', {
+    listId: 'l1', note: 'Backfill no longer waits on the migration.',
+    preview: { listTitle: 'Data', ops: [{ op: 'remove', taskTitle: 'Backfill', dependsOnTitle: 'Migration' }] },
+  }), { lang: 'zh-Hans', note: ZH('Backfill no longer waits on the migration.') });
+  assert.deepEqual(deepSeek.calls, ['Backfill no longer waits on the migration.']);
+});
+
+test('an Orbit card whose translation fails is recorded as failed, whole', async () => {
+  const w = world();
+  deepSeek.failing = true;
+  const translation = await orbitCard(w, 'orbit_project_create', {
+    title: 'CSV export', goal: 'Ship the new CSV export.', acceptanceCriteriaItems: [{ text: 'It ships.' }],
+  });
+  assert.deepEqual(translation, { lang: 'zh-Hans', failed: true });
+});
+
+test('a tool card is not translated for fields only Orbit\'s cards show', async () => {
+  const w = world();
+  await w.controller.createApproval({ id: RUNNER_ID }, SESSION, {
+    toolName: 'mcp__other__write', input: { title: 'Notes', note: 'x', reason: 'y' }, toolUseId: 'other-1',
+  });
+  await replyTranslationsSettled();
+  assert.equal(w.cards().length, 1, 'published once, never again with a translation');
+  assert.deepEqual(deepSeek.calls, []);
+});
+
 test('a translated option the owner picks is stored as the original label', async () => {
   const w = world();
   const row = await askQuestion(w);

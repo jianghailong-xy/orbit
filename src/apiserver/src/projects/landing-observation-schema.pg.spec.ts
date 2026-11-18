@@ -744,11 +744,13 @@ test('0453 §10.4 §10.9 on the schema before it, over rows of every table it al
         // 1060 adds `task.start_when_condition_id` with its unique index, its foreign key to `condition` and
         // `task_run_at_or_start_when_chk`. The key needs 1030's `condition` table, which needs `schedule` and more,
         // so 1060 cannot be replayed here alone: its four objects, by name, are left out of the empty side instead.
+        // 1070 adds `project_open_item.translation`; it is left out the same way, by name.
         const from1060 = new Set(['start_when_condition_id', 'task_start_when_condition_id_key',
           'task_start_when_condition_id_fkey', 'task_run_at_or_start_when_chk']);
         const empty = await shape(caseClient);
         const before1060 = Object.fromEntries(Object.entries(empty).map(([kind, rows]) =>
-          [kind, rows.filter((row) => !(row.table === 'task' && from1060.has(row.name)))]));
+          [kind, rows.filter((row) => !(row.table === 'task' && from1060.has(row.name))
+            && !(row.table === 'project_open_item' && row.name === 'translation'))]));
         assert.deepEqual(await shape(sql), before1060,
           'the tables 0453 alters differ between a database migrated over data and one migrated from empty');
       } finally {
