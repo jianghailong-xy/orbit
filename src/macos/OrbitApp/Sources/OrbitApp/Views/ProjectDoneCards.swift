@@ -46,6 +46,13 @@ struct ProjectDoneCard: View {
     var onReopen: (() async -> Void)? = nil
     /// Open, Change, Move to a follow-up… and Confirm… (`ProjectDoneFollowUps.swift`).
     var followUps = ProjectDoneFollowUpActions()
+    /// Settings › Translation: "Translated · Show original" under the coordinator's call, and its press.
+    var translationFoot: [SessionTranslation.FootPart] = []
+    var onFlipTranslation: () -> Void = {}
+    /// The last Not yet… note could not be translated and was not sent: "Couldn't translate, so it
+    /// wasn't sent · Retry · Send as written", Send as written going through `onNotYetAsWritten`.
+    var notYetRefused = false
+    var onNotYetAsWritten: ((String) async -> Bool)? = nil
 
     @Environment(\.inApprovalReview) private var inReview
     @State private var recording = false
@@ -125,6 +132,7 @@ struct ProjectDoneCard: View {
                     .fixedSize(horizontal: false, vertical: true)
                     .doneRow()
             }
+            TranslationFootView(parts: translationFoot) { _ in onFlipTranslation() }
         }
         if subject.nonCode {
             NonCodeBanner(mark: subject.nonCodeMark, onChange: followUps.openDelivers)
@@ -168,6 +176,11 @@ struct ProjectDoneCard: View {
                 Text(ProjectDone.notYetHint)
                     .font(.orbitLabel).foregroundStyle(.secondary)
                     .fixedSize(horizontal: false, vertical: true)
+                if notYetRefused, let onNotYet {
+                    TranslationFootView(parts: OwnerCardTranslations.refusedFoot) { action in
+                        decline(action == .sendAsWritten ? (onNotYetAsWritten ?? onNotYet) : onNotYet)
+                    }
+                }
             }
         }
     }
@@ -279,18 +292,22 @@ struct ProjectDoneCard: View {
         .disabled(recording)
     }
 
+    private func decline(_ send: @escaping (String) async -> Bool) {
+        guard let text = ProjectDone.declineNote(note), !sending else { return }
+        PlatformHaptics.tap()
+        sending = true
+        Task {
+            if await send(text) {
+                note = ""
+                notYetOpen = false
+            }
+            sending = false
+        }
+    }
+
     private func sendButton(_ send: @escaping (String) async -> Bool) -> some View {
         Button {
-            guard let text = ProjectDone.declineNote(note), !sending else { return }
-            PlatformHaptics.tap()
-            sending = true
-            Task {
-                if await send(text) {
-                    note = ""
-                    notYetOpen = false
-                }
-                sending = false
-            }
+            decline(send)
         } label: {
             Text(ProjectDone.sendToCoordinator).approvalActionLabel()
         }

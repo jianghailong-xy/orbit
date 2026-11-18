@@ -10,6 +10,7 @@ import type {
   OwnerConfirmationNotReviewedReason,
   OwnerConfirmationReviewState,
   OwnerConfirmationReviewView,
+  OwnerCardTranslation,
 } from '@orbit/shared';
 import { COORDINATOR_PAUSE_SELECT } from '../projects/coordinator-evidence-queue';
 import { runItemHold } from '../projects/run-item-hold';
@@ -262,7 +263,11 @@ const REVIEW_SELECT = {
   reviewerEndedAt: true,
   projectId: true,
   records: {
-    select: { id: true, kind: true, reviewedSha: true, judgment: true, reason: true, body: true, recordedAt: true },
+    select: {
+      id: true, kind: true, reviewedSha: true, judgment: true, reason: true, body: true, recordedAt: true,
+      // Settings › Translation (migration 1080): the record's words in the owner's language, or null.
+      translation: true,
+    },
   },
 } as const;
 
@@ -274,7 +279,13 @@ type StoredRecord = {
   reason: string | null;
   body: Prisma.JsonValue;
   recordedAt: Date;
+  translation: Prisma.JsonValue;
 };
+
+/** A record's stored translation, as the read spreads it: absent when there is none. */
+function translationOf(record: StoredRecord): { translation?: OwnerCardTranslation } {
+  return record.translation ? { translation: record.translation as unknown as OwnerCardTranslation } : {};
+}
 
 /**
  * The review of each of these requests, read now — the one definition of a review's state (T6).
@@ -412,6 +423,7 @@ export async function confirmationReviewStates(
           reviewedSha: reviewRecord.reviewedSha,
           judgment: reviewRecord.judgment ?? '',
           ...lists,
+          ...translationOf(reviewRecord),
         }
         : null,
       returned: returnRecord ? returnRecordView(returnRecord) : null,
@@ -438,6 +450,7 @@ function returnRecordView(record: StoredRecord): ConfirmationReturnRecordView<Da
     reviewedSha: record.reviewedSha,
     reason: record.reason ?? '',
     problems: ((record.body ?? {}) as { problems?: ConfirmationReviewItem[] }).problems ?? [],
+    ...translationOf(record),
   };
 }
 

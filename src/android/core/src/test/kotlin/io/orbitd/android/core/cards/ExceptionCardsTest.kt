@@ -647,7 +647,7 @@ class ExceptionCardsTest {
                 "Now yours — the coordinator didn’t get to it", "Reachable. It had this for 2h 56m and didn’t get to it.",
                 listOf("Ask the coordinator again", "or Chat about this first"), "Ask the coordinator again"),
             Part6(ExceptionCards.CoordinatorCause.HANDED_OVER, read(handed), handed,
-                "Now yours — the coordinator handed it over", "“The conflict is in your retry policy” — it handed this to you on purpose.",
+                "Now yours — the coordinator handed it over", "It handed this to you on purpose.",
                 listOf("Ask the coordinator again", "or Chat about this first"), null),
         )
     }
@@ -846,7 +846,7 @@ class ExceptionCardsTest {
         val web = File(root(), "src/web/src/components/ProjectProgressStatus.tsx").readText()
         listOf(ExceptionCards.whoFixesIt, ExceptionCards.whoFixesCoordinator, ExceptionCards.whoFixesYou, ExceptionCards.fixItMyself,
             ExceptionCards.startNewCoordinator, ExceptionCards.setUpCoordinator, ExceptionCards.chatFirstLink, ExceptionCards.askAgainOnceBack,
-            ExceptionCards.runnerDownSentence, ExceptionCards.coordinatorEndedSentence, ExceptionCards.noCoordinatorSentence, ExceptionCards.handedOverSentence,
+            ExceptionCards.runnerDownSentence, ExceptionCards.coordinatorEndedSentence, ExceptionCards.noCoordinatorSentence, ExceptionCards.handedOverSentence, ExceptionCards.handoverNoteCaption,
             ExceptionCards.closesByItself, ExceptionCards.alreadySettled, ExceptionCards.markHandledSettledConsequence, ExceptionCards.cancelTaskSettledConsequence,
             ExceptionCards.detailsLabel, ExceptionCards.openLandingDetail, ExceptionCards.escalatedUnreachableHeading, ExceptionCards.escalatedReachableHeading,
             ExceptionCards.coordinatorEndedHeading, ExceptionCards.handedOverHeading, ExceptionCards.noCoordinatorHeading,
@@ -858,7 +858,7 @@ class ExceptionCardsTest {
         listOf("is disabled, so it can’t take messages.`", "is in Trash, so it can’t take messages.`", "isn’t bound to a runner.`",
             "`Reachable. It had this for \${waitedBeforeEscalation(row)} and didn’t get to it.`", "`after \${waitedBeforeEscalation(row)} with the coordinator`",
             "`waiting \${formatSpan(waitedMs(row, now))}`", "`\${folded.projectName}’s branch `", "` and \${facts.files.length - DETAIL_FILES_SHOWN} more`",
-            "`\${name.slice(0, 16)}…`", "Its workspace \${reading.workspaceName}", "`“\${note}” — \${HANDED_OVER_SENTENCE}`",
+            "`\${name.slice(0, 16)}…`", "Its workspace \${reading.workspaceName}",
         ).forEach { assertTrue("ProjectProgressStatus.tsx no longer says $it", web.contains(it)) }
         val workspace = File(root(), "src/web/src/lib/coordinatorWorkspace.ts").readText()
         assertTrue(workspace.contains("button: '${ExceptionCards.changeWorkspace}'"))

@@ -2092,7 +2092,9 @@ extension ExceptionCards {
         "Its runner is offline. Ask again comes back here as soon as it is."
     public static let coordinatorEndedSentence = "Its conversation was completed."
     public static let noCoordinatorSentence = "This project isn’t coordinated."
-    public static let handedOverSentence = "it handed this to you on purpose."
+    public static let handedOverSentence = "It handed this to you on purpose."
+    /// The browser's `HANDOVER_NOTE_CAPTION`: the caption over the coordinator's hand-over note.
+    public static let handoverNoteCaption = "Why the coordinator handed it over"
     /// The browser's `CLOSES_BY_ITSELF`: the green line, in place of the old "After a fix" row.
     public static let closesByItselfLine =
         "Closes by itself once this work lands — push a fix to the task branch and you’re done."
@@ -2222,9 +2224,8 @@ extension ExceptionCards {
         case .escalated:
             return "Reachable. It had this for \(waitedBeforeEscalation(row)) and didn’t get to it."
         case .handedOver:
-            let note = row.handoverNote?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
-            if !note.isEmpty { return "“\(note)” — \(handedOverSentence)" }
-            return handedOverSentence.prefix(1).uppercased() + String(handedOverSentence.dropFirst())
+            // The coordinator's own note is drawn under its caption (`shownHandoverNote`), not in here.
+            return handedOverSentence
         }
     }
 

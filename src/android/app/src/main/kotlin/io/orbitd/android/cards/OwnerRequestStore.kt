@@ -151,9 +151,12 @@ class OwnerRequestStore internal constructor(private val auth: AuthSession, val 
     }
 
     /** One press through a door: null when it was recorded, else what to say. */
-    suspend fun act(door: suspend OwnerRequestsApi.() -> OwnerRequest): String? = try {
+    suspend fun act(door: suspend OwnerRequestsApi.() -> OwnerRequest): String? = attempt(door)?.let(::message)
+
+    /** One press through a door: null when it was recorded, else why not. */
+    suspend fun attempt(door: suspend OwnerRequestsApi.() -> OwnerRequest): Exception? = try {
         adopt(api.door()); null
-    } catch (cancel: CancellationException) { throw cancel } catch (error: Exception) { message(error) }
+    } catch (cancel: CancellationException) { throw cancel } catch (error: Exception) { error }
 
     companion object {
         const val OPEN = "open"

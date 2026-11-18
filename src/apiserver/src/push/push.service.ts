@@ -12,7 +12,7 @@ import { openFuseEpisodeId } from '../projects/project-fuse';
 import { ConfigService } from '@nestjs/config';
 import * as jwt from 'jsonwebtoken';
 import { RunStatus, type DeviceToken } from '@prisma/client';
-import { AgentProvider, ENGINE_CLI_NAMES, RUN_NOTICE_MESSAGE_MAX, uuidToBase62, type LoginEngine } from '@orbit/shared';
+import { AgentProvider, ENGINE_CLI_NAMES, RUN_NOTICE_MESSAGE_MAX, TRANSLATION_TIMEOUT_MS, uuidToBase62, type LoginEngine } from '@orbit/shared';
 import { loggedRetry, withTransactionRetry } from '../common/transaction-retry';
 import { PrismaService } from '../prisma/prisma.service';
 import { readOwnerItemSessionIds } from '../projects/owner-decision-signal';
@@ -35,6 +35,10 @@ import { FcmTransport } from './fcm-transport';
 import { FeishuTransport, orbitUrl, type FeishuTarget } from './feishu-transport';
 import { fcmData } from './fcm-payload';
 import { claudeRegionPushBody, regionMachineName } from '../runners/runner-region';
+import { translationLanguages } from '../sessions/turn-translation';
+import { waitForCardTranslation } from '../sessions/card-translation-wait';
+import { cardHasText } from '../sessions/reply-translation';
+import { isScheduleItemKind } from '../schedules/schedule-attention';
 
 const APNS_HOST_PROD = 'api.push.apple.com';
 const APNS_HOST_SANDBOX = 'api.sandbox.push.apple.com';
@@ -139,6 +143,9 @@ export class PushService {
   private readonly syncTimers = new Map<string, ReturnType<typeof setTimeout>>();
   /** Feishu cards started in the background and not settled yet (`background`). */
   private readonly feishuInFlight = new Set<Promise<unknown>>();
+  /** How long an alert quoting an agent's words waits for its card's translation (decision 3A of 'Translate every
+   *  owner card'): the translation timeout. A field so specs can shorten it. */
+  translationWaitMs = TRANSLATION_TIMEOUT_MS;
 
   constructor(
     private readonly prisma: PrismaService,
@@ -216,6 +223,37 @@ export class PushService {
     if (!feishu) return Promise.resolve(false);
     const payload = JSON.parse(body) as { aps: { alert: { title: string; body: string } }; kind: string };
     return this.feishuOther(feishu, { kind: payload.kind, title: payload.aps.alert.title, body: payload.aps.alert.body });
+  }
+
+  /**
+   * A card's translation into the owner's language, for an alert that quotes it (decision 3A of 'Translate every
+   * owner card'): with the owner's translation on, waited for up to `translationWaitMs` — the card's translation job
+   * on this process wakes the wait when it has tried (card-translation-wait.ts) — and null when it failed or was not
+   * ready in time, so the alert goes out in the original. With translation off, null at once: nothing waits.
+   * `read` answers the card's stored `translation`, or null when there is nothing to wait for (gone, no text).
+   */
+  private async cardTranslation<T>(
+    ownerId: string,
+    card: string,
+    read: () => Promise<{ translation: unknown } | null>,
+  ): Promise<T | null> {
+    const langs = await translationLanguages(this.prisma, ownerId).catch(() => null);
+    if (!langs) return null;
+    const ready = (row: { translation: unknown } | null): boolean =>
+      (row?.translation as { lang?: unknown } | null | undefined)?.lang === langs.owner;
+    // Waiting starts before the read, so a translation stored in between still wakes it.
+    const wait = waitForCardTranslation(card, langs.owner, this.translationWaitMs);
+    try {
+      let row = await read();
+      if (row && !ready(row)) {
+        await wait.settled;
+        row = await read();
+      }
+      const translation = row?.translation as { lang?: unknown; failed?: unknown } | null | undefined;
+      return row && ready(row) && translation?.failed !== true ? (translation as T) : null;
+    } finally {
+      wait.cancel();
+    }
   }
 
   private async targets(ownerId: string): Promise<DeviceToken[]> {
@@ -308,12 +346,31 @@ export class PushService {
         kind: 'approval',
       });
 
-      this.background(feishu && this.feishu ? this.feishu.post(feishu, this.feishu.approvalCard(feishu, sessionId, approvalId, coordinatorFallback)) : null);
+      const transport = this.feishu;
+      this.background(feishu && transport
+        ? (async () => {
+          // A FULL card quotes the agent's words: it waits for the approval's translation as the owner cards do (3A),
+          // and draws approval.translation when there is one. The phone's banner names only the tool, and never waits.
+          if (feishu.detail === 'FULL') await this.approvalTranslation(session.ownerId, approvalId);
+          return transport.post(feishu, transport.approvalCard(feishu, sessionId, approvalId, coordinatorFallback));
+        })()
+        : null);
 
       await this.deliver(tokens, body, 'alert', '10');
     } catch (err) {
       this.log.warn(`push notify failed: ${(err as Error).message}`);
     }
+  }
+
+  /** Waits (cardTranslation) for an approval card's translation, when it has words to translate. */
+  private async approvalTranslation(ownerId: string, approvalId: string): Promise<void> {
+    await this.cardTranslation(ownerId, `approval:${approvalId}`, async () => {
+      const approval = await this.prisma.approval.findFirst({
+        where: { id: approvalId, status: 'PENDING' },
+        select: { input: true, toolName: true, translation: true },
+      });
+      return approval && cardHasText(approval.input, approval.toolName) ? { translation: approval.translation } : null;
+    });
   }
 
   /**
@@ -878,15 +935,26 @@ export class PushService {
       // candidate or task has moved on, which nothing closed yet (`openItemOwed`).
       if (!item || item.state !== 'OPEN') return;
       if ((await openItemsNoLongerOwed(this.prisma, [itemId])).size > 0) return;
-      const alert = ownerItemAlert({
+      const input = {
         ...item,
         projectTitle: item.project?.title ?? null,
         promotion: await this.promotionFor(item.promotionId),
         coordinatorUnreachable: await this.coordinatorUnreachableFor(item.ownerId, item.project),
-      });
+      };
+      let alert = ownerItemAlert(input);
       if (!alert) return;
       const { tokens, feishu } = await this.channels(item.ownerId);
       if (tokens.length === 0 && !feishu) return;
+      if (item.kind === 'COORDINATOR_QUESTION') {
+        // The body quotes the coordinator's question: in the owner's language when its translation is ready in time.
+        const translation = await this.cardTranslation<{ question?: string }>(item.ownerId, `open-item:${itemId}`, async () => {
+          const row = await this.prisma.projectOpenItem.findUnique({ where: { id: itemId }, select: { translation: true } });
+          return row ? { translation: row.translation } : null;
+        });
+        if (translation?.question) {
+          alert = ownerItemAlert({ ...input, payload: { ...(item.payload as object), question: translation.question } }) ?? alert;
+        }
+      }
 
       const body = JSON.stringify({
         aps: {
@@ -949,7 +1017,17 @@ export class PushService {
       if (!request || request.state !== 'PENDING') return;
       const { tokens, feishu } = await this.channels(request.ownerId);
       if (tokens.length === 0 && !feishu) return;
-      const alert = ownerRequestAlert(request.kind as OwnerRequestKind, request.title);
+      // The title is the agent's: in the owner's language when its translation is ready in time. A schedule's item is
+      // never translated (OwnerRequestsService.queueTranslation), so nothing waits for one.
+      const translation = isScheduleItemKind(request.kind) ? null : await this.cardTranslation<{ title?: string }>(
+        request.ownerId,
+        `owner-request:${requestId}`,
+        async () => {
+          const row = await this.prisma.ownerRequest.findUnique({ where: { id: requestId }, select: { translation: true } });
+          return row ? { translation: row.translation } : null;
+        },
+      );
+      const alert = ownerRequestAlert(request.kind as OwnerRequestKind, translation?.title || request.title);
       const body = JSON.stringify({
         aps: {
           alert,
@@ -1043,7 +1121,12 @@ export class PushService {
       if (!row || row.state !== 'PENDING') return;
       const { tokens, feishu } = await this.channels(row.ownerId);
       if (tokens.length === 0 && !feishu) return;
-      const alert = crossingRequestAlert(row);
+      // The request's title is the agent's: in the owner's language when its translation is ready in time.
+      const translation = await this.cardTranslation<{ title?: string }>(row.ownerId, `crossing:${handoffId}`, async () => {
+        const stored = await this.prisma.projectHandoffApproval.findUnique({ where: { id: handoffId }, select: { translation: true } });
+        return stored ? { translation: stored.translation } : null;
+      });
+      const alert = crossingRequestAlert({ ...row, title: translation?.title || row.title });
       const sessionId = crossingCardSessionId(row);
       const projectId = row.toProjectId ?? row.fromProjectId;
       const body = JSON.stringify({

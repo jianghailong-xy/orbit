@@ -15,6 +15,10 @@ import io.orbitd.android.MainActivity
 import io.orbitd.android.TestOrbitApplication
 import io.orbitd.android.core.cards.*
 import io.orbitd.android.core.protocol.Wire
+import io.orbitd.android.management.AccountTranslation
+import io.orbitd.android.management.LocalTranslation
+import io.orbitd.android.translation.TranslationCopy
+import androidx.compose.runtime.CompositionLocalProvider
 import kotlinx.serialization.json.*
 import org.junit.Assert.*
 import org.junit.Rule
@@ -196,6 +200,47 @@ class ExceptionCardViewTest {
         compose.onNodeWithTag("$key:who:status", useUnmergedTree = true).assertTextEquals("It handed this to you on purpose.")
         compose.onNodeWithTag("$key:RETURN_COORDINATOR").performScrollTo().performClick()
         assertEquals(CardVerb.RETURN_COORDINATOR, pressed.single().first)
+    }
+
+    /** The coordinator's hand-over note, under its caption in the coordinator row: translated with its own flip while a usable translation
+     * exists, as written otherwise, and nothing at all when the item carries no note. */
+    @Test fun aHandOverDrawsTheCoordinatorsNoteUnderItsCaptionTranslated() {
+        fun handed(note: String?, translation: JsonElement = JsonNull) = card(JsonObject(
+            row("INTEGRATION_CONFLICT", listOf("ASK_COORDINATOR_AGAIN", "OPEN_TASK_SESSION"), reason = "HANDED_OVER")
+                + mapOf("handoverNote" to JsonPrimitive(note), "translation" to translation)))
+        fun showIn(card: InteractionCard, language: String?) {
+            val account = AccountTranslation(enabled = language != null, available = true, language = language ?: "ja")
+            compose.runOnUiThread { compose.activity.setContent { MaterialTheme { CompositionLocalProvider(LocalTranslation provides account) {
+                Column(Modifier.verticalScroll(rememberScrollState())) {
+                    ExceptionCard(card, fresh = true, result = CardActionState(), mergeCard = null, open = { opened += it }, discuss = null,
+                        review = { reviewed += it }, main = "main") { verb, input -> pressed += verb to input }
+                }
+            } } } }
+            compose.waitForIdle()
+        }
+        val note = "Your retry policy"
+        val translated = buildJsonObject { put("lang", "ja"); put("handoverNote", "再試行ポリシー") }
+        showIn(handed(note, translated), "ja")
+        compose.onNodeWithTag("$key:who:handover:caption", useUnmergedTree = true).assertTextEquals(ExceptionCards.handoverNoteCaption)
+        compose.onNodeWithTag("$key:who:handover:note", useUnmergedTree = true).assertTextEquals("再試行ポリシー")
+        compose.onNodeWithTag("$key:who:status", useUnmergedTree = true).assertTextEquals("It handed this to you on purpose.")
+        assertTrue("the note is under the status sentence", top("$key:who:status") < top("$key:who:handover:caption"))
+        assertTrue(top("$key:who:handover:caption") < top("$key:who:handover:note"))
+        compose.onNodeWithText(TranslationCopy.SHOW_ORIGINAL, useUnmergedTree = true).performScrollTo().performClick()
+        compose.onNodeWithTag("$key:who:handover:note", useUnmergedTree = true).assertTextEquals(note)
+        compose.onNodeWithText(TranslationCopy.SHOW_TRANSLATION, useUnmergedTree = true).assertExists()
+
+        showIn(handed(note), "ja")
+        compose.onNodeWithTag("$key:who:handover:caption", useUnmergedTree = true).assertTextEquals(ExceptionCards.handoverNoteCaption)
+        compose.onNodeWithTag("$key:who:handover:note", useUnmergedTree = true).assertTextEquals(note)
+        compose.onNodeWithText(TranslationCopy.SHOW_ORIGINAL, useUnmergedTree = true).assertDoesNotExist()
+        showIn(handed(note, translated), null)
+        compose.onNodeWithTag("$key:who:handover:note", useUnmergedTree = true).assertTextEquals(note)
+        compose.onNodeWithText(TranslationCopy.SHOW_ORIGINAL, useUnmergedTree = true).assertDoesNotExist()
+
+        showIn(handed(null, translated), "ja")
+        compose.onNodeWithTag("$key:who:handover", useUnmergedTree = true).assertDoesNotExist()
+        compose.onNodeWithText(ExceptionCards.handoverNoteCaption, useUnmergedTree = true).assertDoesNotExist()
     }
 
     @Test fun aFailedTaskRunsAgainWithItsOwnPressAndCancelAsksFirst() {

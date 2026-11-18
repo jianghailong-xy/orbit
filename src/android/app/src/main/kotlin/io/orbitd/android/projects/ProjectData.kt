@@ -61,8 +61,8 @@ class ProjectApi(private val auth: AuthSession, private val handle: SessionHandl
     /** The owner's done door: the seal read, the gaps accepted, the DONE_REQUEST answered or null. */
     suspend fun done(id: String, body: JsonObject) = send("done:${body.text("criteriaDigest")}:${body.text("requestId")}", listOf("projects", id, "done"), body = body) as? JsonObject
     /** "Not yet…" on the coordinator's request: the request ends, and the owner's note goes to the coordinator with the card's facts. */
-    suspend fun declineDone(id: String, itemId: String, note: String) = send("decline:$itemId", listOf("projects", id, "done-requests", itemId, "decline"),
-        body = buildJsonObject { put("note", note) })
+    suspend fun declineDone(id: String, itemId: String, note: String, sendAsWritten: Boolean = false) = send("decline:$itemId", listOf("projects", id, "done-requests", itemId, "decline"),
+        body = buildJsonObject { put("note", note); if (sendAsWritten) put("sendAsWritten", true) })
     suspend fun setStatus(id: String, status: String, revision: String) = send(revision, listOf("projects", id), HttpMethod.PATCH, buildJsonObject { put("status", status) })
     suspend fun authorize(id: String, body: JsonObject) = send(body.text("expectedConfigRevision").orEmpty(), listOf("projects", id), HttpMethod.PATCH, body)
     /** The owner's non-code mark (Delivers on How it runs): written at the press, who and when kept by the server. */
