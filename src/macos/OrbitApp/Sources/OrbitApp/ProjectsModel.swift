@@ -329,6 +329,14 @@ final class ProjectDetailModel {
         await load()
     }
 
+    /// "Land without the check" on the landing in flight (§2.4 J-S5): the server stops it and lands
+    /// it again with the landing check not run. Then the page reads everything again, so the card
+    /// says where the skip stands. Throws what the server answered, for the card to say.
+    func skipLandingCheck(_ taskID: String) async throws {
+        try await api.skipLandingCheck(projectID, taskID: taskID)
+        await load()
+    }
+
     /// Pause project, or Resume project — the owner's, and a press rather than a setting: it stops
     /// the project moving at once, and resuming undoes it.
     func setPaused(_ paused: Bool) async -> String? {

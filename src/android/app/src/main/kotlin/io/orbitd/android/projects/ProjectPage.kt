@@ -60,12 +60,14 @@ data class LandingHead(val right: String, val isClock: Boolean, val detail: Stri
  * body under that head). */
 data class LandingCard(val word: String, val title: String, val state: String, val running: Boolean, val timedOut: Boolean, val what: String?,
     val jobs: List<Job>, val target: String?, val clock: String, val clockLabel: String, val wait: String?, val updated: String?,
-    val liveness: LandingLiveness?, val detail: String?, val retryJobId: String?, val mergeJob: Boolean = false) {
+    val liveness: LandingLiveness?, val detail: String?, val retryJobId: String?, val mergeJob: Boolean = false,
+    val skipTaskId: String? = null, val skipNote: String? = null) {
     /** One job in flight, as the card's body draws it: its task's title (null for a job that lands no task) and its own state.
      * `landingSessionId` is the landing it belongs to (§2.9), or null where the server named none; `mergeJob` is a round of
      * merging into main, whose way in is the merge card — its row carries no "Open landing ›". */
     data class Job(val jobId: String, val taskId: String?, val title: String?, val state: String, val running: Boolean, val timedOut: Boolean,
-        val retryable: Boolean, val detail: String?, val landingSessionId: String? = null, val mergeJob: Boolean = false)
+        val retryable: Boolean, val detail: String?, val landingSessionId: String? = null, val mergeJob: Boolean = false,
+        val skippable: Boolean = false, val skipCheck: String? = null)
     val head: LandingHead get() = ProjectPage.landingHead(state, timedOut, clockLabel, clock, wait, updated, liveness)
 }
 /** One job of the list the landing row opens, drawn as the row itself: `taskId` is what a press opens, `detail` what a timed-out or
@@ -73,7 +75,7 @@ data class LandingCard(val word: String, val title: String, val state: String, v
  * `landingSessionId` is the landing this job belongs to (§2.9); `mergeJob` is a round of merging into main, whose row's only way in
  * is "Open landing ›" — the merge card is that round's other way. */
 data class LandingJobLine(val jobId: String, val taskId: String?, val line: LandingLine, val detail: String?, val retryable: Boolean,
-    val landingSessionId: String? = null, val mergeJob: Boolean = false)
+    val landingSessionId: String? = null, val mergeJob: Boolean = false, val skippable: Boolean = false, val skipCheck: String? = null)
 data class Pill(val label: String, val tone: TagTone)
 data class Tag(val text: String, val tone: TagTone)
 data class TaskGroup(val key: String, val heading: String, val tasks: List<JsonObject>, val settled: Boolean = false)
@@ -148,6 +150,14 @@ object ProjectPage {
     const val landingOnto = "onto"
     const val landingNothingToDo = "Nothing to do — it lands on its own."
     const val landingAllJobs = "All jobs"
+    const val landingSkipCheck = "Land without the check"
+    const val landingSkipCheckConfirm = "The landing check won't run for this landing. It stops now and lands again without the check, recorded as skipped by you."
+    const val landingSkipCheckGo = "Land without it"
+    const val landingSkipCheckCancel = "Keep checking"
+    const val landingSkipCheckFailed = "Could not skip the check"
+    const val landingSkipCheckReason = "The owner chose to land this without waiting for the landing check."
+    const val landingSkipCheckStopping = "Stopping — it lands again without the landing check."
+    const val landingSkipCheckSkipped = "Landing without the landing check — you skipped it."
     /** "waited 1m 20s": the wait as a clause of the head's one line (iOS 3b23aa163). */
     const val landingWaited = "waited"
     // §7.2 V6's words (board docs/mocks/landing-session/v4, 05), every one of them declared in OrbitKit's ProjectPage.swift
@@ -256,15 +266,22 @@ object ProjectPage {
         val jobs = landingJobLines(view, now, updatedAt, refreshFailed, zone).map { job ->
             // A merge job lands no single task, so its row is named by its word — "Merge to main", "Merge check" — not left blank.
             LandingCard.Job(job.jobId, job.taskId, job.line.what ?: job.line.word, job.line.state, job.line.running,
-                job.line.timedOut, job.retryable, job.detail, job.landingSessionId, job.mergeJob)
+                job.line.timedOut, job.retryable, job.detail, job.landingSessionId, job.mergeJob, job.skippable, job.skipCheck)
         }
         // The line's own rule for the name slot, one row down: several jobs are a count in the head and a row each in the body.
         val several = view.n("integratingCount") + view.n("queuedCount") > 1
         val lead = jobs.firstOrNull()
+        val singleJob = jobs.singleOrNull()?.takeUnless { several }
+        val skipTaskId = singleJob?.takeIf { it.skippable }?.taskId?.takeIf { it.isNotEmpty() }
+        val skipNote = when (singleJob?.skipCheck) {
+            "STOPPING" -> landingSkipCheckStopping
+            "SKIPPED" -> landingSkipCheckSkipped
+            else -> null
+        }
         return LandingCard(line.word, if (several) listOfNotNull(line.word, line.what).joinToString(" ") else line.word, line.state, line.running,
             line.timedOut, if (several) null else line.what, jobs, lead?.let { landingTarget(view, it.jobId) }, line.clock, line.clockLabel, line.wait,
             line.updated, line.liveness, if (line.timedOut) lead?.detail else null, lead?.takeIf { it.retryable }?.jobId,
-            !several && ProjectMergeCard.isMergeJob(view.obj("inFlight")))
+            !several && ProjectMergeCard.isMergeJob(view.obj("inFlight")), skipTaskId, skipNote)
     }
 
     /** The branch a job lands on, short, off the project's own landings (`landTasks[].integration.landTask`) — the task page's Target
@@ -291,7 +308,7 @@ object ProjectPage {
                     outputMovedAt = job.text("outputMovedAt"), typicalMs = job.number("typicalMs"), livenessWord = job.text("liveness"),
                     firstStartedAt = firstStartedAt(view, job.text("jobId")))
             LandingJobLine(job.text("jobId").orEmpty(), job.text("taskId"), line, landingJobDetail(job, zone, main), job.flag("retryable"),
-                job.text("landingSessionId")?.takeIf { it.isNotEmpty() }, mergeJob)
+                job.text("landingSessionId")?.takeIf { it.isNotEmpty() }, mergeJob, job.flag("skippable"), job.text("skipCheck"))
         }
     }
 

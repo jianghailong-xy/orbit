@@ -108,7 +108,7 @@ abstract class LandingEntriesShots {
         }
         val card = ProjectPage.landingCard(view, now, now, false)!!
         show { Column(Modifier.fillMaxWidth().padding(16.dp)) {
-            ProjectLandingCardView(card, onOpenJobs = {}, onOpenProject = null, openLanding = {}, retry = { null }) } }
+            ProjectLandingCardView(card, onOpenJobs = {}, onOpenProject = null, openLanding = {}, retry = { null }, skipCheck = { null }) } }
         compose.onNodeWithTag("landing-card:open-landing", useUnmergedTree = true).assertExists()
         shot("01-landing-card")
     }

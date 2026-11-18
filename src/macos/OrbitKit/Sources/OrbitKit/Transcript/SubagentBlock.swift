@@ -308,8 +308,6 @@ public struct SubagentSessionSummary: Equatable, Sendable {
     public let running: Int
     /// `4`: the capsule's words after its mark.
     public let capsule: String
-    /// How many engines and machines: the sheet's second figure (`3 engines · 2 machines`).
-    public let spread: String
     /// The runs, the running ones first, then the rest newest first.
     public let rows: [SubagentRunView]
 
@@ -357,13 +355,9 @@ public struct SubagentSessionSummary: Equatable, Sendable {
     public static func make(_ runs: [SubagentRunView]) -> SubagentSessionSummary? {
         guard !runs.isEmpty else { return nil }
         let running = runs.filter(\.isRunning).count
-        let engines = Set(runs.compactMap(\.engine).filter { !$0.isEmpty }).count
-        let machines = Set(runs.map { $0.workspaceName ?? "" }).count
-        var spread = engines == 1 ? "1 engine" : "\(engines) engines"
-        if machines > 1 { spread += " · \(machines) machines" }
         let rows = runs.filter(\.isRunning).sorted { $0.createdAt > $1.createdAt }
             + runs.filter { !$0.isRunning }.sorted { $0.createdAt > $1.createdAt }
         return SubagentSessionSummary(count: runs.count, running: running, capsule: "\(runs.count)",
-                                      spread: spread, rows: rows)
+                                      rows: rows)
     }
 }
