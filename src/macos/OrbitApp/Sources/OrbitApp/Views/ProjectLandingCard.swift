@@ -15,7 +15,9 @@ import OrbitKit
 /// each one's own state — and the branch it lands on. A timed-out card says where the runner
 /// stopped.
 ///
-/// Read-only apart from that Retry: a press opens the jobs in flight, which is what the row it
+/// Read-only apart from two doors, each drawn only where the server says it takes the job: Retry
+/// (`retryable`), and "Land without the check" (`skippable`, §2.4 J-S5), which asks in a
+/// confirmation before it stops anything. A press opens the jobs in flight, which is what the row it
 /// replaced did — or, from a server that lists none, the project page, exactly as before.
 struct ProjectLandingCardView: View {
     let card: ProjectPage.LandingCard
@@ -27,8 +29,14 @@ struct ProjectLandingCardView: View {
     let onOpenProject: (() -> Void)?
     /// One Retry, by job — the Jobs sheet's own door (`app.retryIntegrationJob`).
     let retry: (String) async throws -> Void
+    /// One "Land without the check", by task — the owner's skip door (`skip-merge-check`).
+    let skipCheck: (String) async throws -> Void
     /// A Retry on its way: its button takes no second press.
     @State private var retrying = false
+    /// The skip's question is open.
+    @State private var askingSkip = false
+    /// A skip on its way: its link takes no second press.
+    @State private var skipping = false
     /// Why the last Retry did not go through, in the server's words.
     @State private var actionError: String?
 
@@ -61,7 +69,7 @@ struct ProjectLandingCardView: View {
                 if let target = card.target { targetLine(target) }
                 sentence
             }
-            if card.retryJobId != nil || onOpenJobs != nil || lead != nil {
+            if card.retryJobId != nil || card.skipTaskId != nil || onOpenJobs != nil || lead != nil {
                 HStack(spacing: 8) {
                     if let jobID = card.retryJobId {
                         Button { press(jobID) } label: { Text(ProjectPage.landingRetry) }
@@ -75,6 +83,15 @@ struct ProjectLandingCardView: View {
                         // One job: the card's foot names its landing (owner 2026-10-19, 方案 A), or
                         // says the server names none in the same slot.
                         LandingEntryLink(entry: LandingPageCopy.landingEntry(lead.landingSessionId))
+                    }
+                    if card.skipTaskId != nil {
+                        // A quiet link, not a primary: the card still says nothing is wanted of the
+                        // reader, and the press only asks.
+                        Button(ProjectPage.landingSkipCheck) { askingSkip = true }
+                            .font(.orbitLabel.weight(.semibold))
+                            .buttonStyle(.plain)
+                            .foregroundStyle(Color.accentColor)
+                            .disabled(skipping)
                     }
                     Spacer(minLength: 8)
                     // Only where there is a list to open: on a server that lists no jobs the card's
@@ -108,6 +125,15 @@ struct ProjectLandingCardView: View {
             }
         }
         .padding(.vertical, 4)
+        .confirmationDialog(ProjectPage.landingSkipCheck, isPresented: $askingSkip,
+                            titleVisibility: .visible) {
+            Button(ProjectPage.landingSkipCheckGo) {
+                if let taskID = card.skipTaskId { skip(taskID) }
+            }
+            Button(ProjectPage.landingSkipCheckCancel, role: .cancel) {}
+        } message: {
+            Text(ProjectPage.landingSkipCheckConfirm)
+        }
     }
 
     /// Everything the card says inside its press: the head and, for one job, what is landing.
@@ -140,7 +166,13 @@ struct ProjectLandingCardView: View {
             Text(detail).font(.orbitMeta).foregroundStyle(.secondary)
                 .fixedSize(horizontal: false, vertical: true)
                 .frame(maxWidth: .infinity, alignment: .leading)
-        } else if !card.timedOut && (several || !card.mergeJob) {
+        } else if !card.timedOut && !several && !card.mergeJob, let note = card.skipNote {
+            // A skip under way, said in the note's place: "Nothing to do" would hide that the
+            // owner's press was taken.
+            Text(note).font(.orbitMeta).foregroundStyle(.primary.opacity(0.75))
+                .fixedSize(horizontal: false, vertical: true)
+        } else if !card.timedOut && (several || !card.mergeJob) && actionError == nil {
+            // A refusal under the foot says something is wrong; this sentence would say otherwise.
             Text(ProjectPage.landingNothingToDo).font(.orbitMeta).foregroundStyle(.secondary)
         }
     }
@@ -170,6 +202,25 @@ struct ProjectLandingCardView: View {
                     }
                 }
             }
+        }
+    }
+
+    /// The confirmed skip: no second press while it is on its way, and a refusal said under the card
+    /// in the server's words, as Retry's is.
+    private func skip(_ taskID: String) {
+        guard !skipping else { return }
+        PlatformHaptics.tap()
+        skipping = true
+        actionError = nil
+        Task {
+            do {
+                try await skipCheck(taskID)
+            } catch {
+                var reason = APIClient.failureReason(error)
+                while reason.hasSuffix(".") { reason.removeLast() }
+                actionError = "\(ProjectPage.landingSkipCheckFailed) — \(reason)."
+            }
+            skipping = false
         }
     }
 

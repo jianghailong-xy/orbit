@@ -638,6 +638,13 @@ public struct ProjectIntegrationJob: Codable, Equatable, Sendable {
     public let limitSeconds: Int?
     /// Whether the owner's Retry takes this job now.
     public let retryable: Bool
+    /// Whether the owner's "Land without the check" takes this landing now (§2.4 J-S5): a task's
+    /// landing in flight, before its push, that runs a landing check and was not already asked to
+    /// stop. False from a server that does not send it.
+    public let skippable: Bool
+    /// Where a skip of this landing's check stands: `STOPPING` while the skipped generation is still
+    /// answering its stop, `SKIPPED` on the generation that runs without the check; nil otherwise.
+    public let skipCheck: String?
     /// The candidate a promotion job checks or lands; nil for a task landing.
     public let promotionId: String?
     /// The claim generation the job is on: 0 before its first claim, one more per takeover.
@@ -666,7 +673,8 @@ public struct ProjectIntegrationJob: Codable, Equatable, Sendable {
                 promotionId: String? = nil, claim: Int? = nil, round: Int? = nil,
                 check: ProjectIntegrationCheck? = nil, stepStartedAt: String? = nil,
                 outputMovedAt: String? = nil, typicalMs: Int? = nil, liveness: String? = nil,
-                blockingReason: LandTaskBlockingReason? = nil, landingSessionId: String? = nil) {
+                blockingReason: LandTaskBlockingReason? = nil, landingSessionId: String? = nil,
+                skippable: Bool = false, skipCheck: String? = nil) {
         self.jobId = jobId
         self.kind = kind
         self.state = state
@@ -692,6 +700,8 @@ public struct ProjectIntegrationJob: Codable, Equatable, Sendable {
         self.liveness = liveness
         self.blockingReason = blockingReason
         self.landingSessionId = landingSessionId
+        self.skippable = skippable
+        self.skipCheck = skipCheck
     }
 
     public init(from decoder: Decoder) throws {
@@ -721,6 +731,8 @@ public struct ProjectIntegrationJob: Codable, Equatable, Sendable {
         liveness = try? c.decodeIfPresent(String.self, forKey: .liveness)
         blockingReason = try? c.decodeIfPresent(LandTaskBlockingReason.self, forKey: .blockingReason)
         landingSessionId = try? c.decodeIfPresent(String.self, forKey: .landingSessionId)
+        skippable = (try? c.decodeIfPresent(Bool.self, forKey: .skippable)) ?? false
+        skipCheck = try? c.decodeIfPresent(String.self, forKey: .skipCheck)
     }
 }
 
