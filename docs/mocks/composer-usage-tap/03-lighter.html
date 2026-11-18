@@ -1,0 +1,61 @@
+<!doctype html>
+<!-- Design mock: lighter ways than a filled capsule (board 02) for the iPhone footer's merged plan usage
+     + context gauge to read as one control. iOS dark and light appearance. Not shipped code. -->
+<html lang="zh">
+<head>
+<meta charset="utf-8">
+<title>Composer usage · lighter grouping</title>
+<link rel="stylesheet" href="../../../src/web/src/index.css">
+<link rel="stylesheet" href="../project-progress/mock.css">
+<link rel="stylesheet" href="board.css">
+</head>
+<body class="m">
+<svg width="0" height="0" style="position:absolute" aria-hidden="true">
+  <symbol id="i-up" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round"><path d="M12 19V5M5 12l7-7 7 7"/></symbol>
+</svg>
+<div class="m-sheet">
+  <h1 class="m-h1 zh">03 · 不加填色，怎么让用量条和圆环看起来是一个控件</h1>
+  <p class="m-sub zh">02 的灰色胶囊太突兀：底栏里 + 、Bypass、模型名都没有底色，只有它有。下面四种更轻的做法（左：2 倍放大；右：实际大小，深色 / 浅色）。读数都一样：套餐 94%（橙），上下文 41%。</p>
+  <div class="m-stage opt-wrap">
+    <div class="m-stage-l"><span class="m-k ">A</span><span class="zh">现状（01 已实现）</span></div>
+    <div class="opt"><div class="zoom"><div class="card"><div class="tb"><span class="plus">+</span><span>Bypass</span><span class="grow"></span><span class="model"><b>Opus 5.5</b><span>Medium</span></span><span class="gp" style="padding:0 8px"><span class="gbar amber"><i style="width:94%"></i></span><span class="ring" data-p="41" data-t=""></span></span><span class="send"><svg><use href="#i-up"/></svg></span></div></div></div><div class="desc zh">条和圆环隔开 6pt，看起来是两个东西。</div><div class="strip"><div class="mini dk"><div class="ptb"><span class="plus">+</span><span>Bypass</span><span class="grow"></span><span class="model"><b>Opus 5.5</b> Medium</span><span class="gp" style="padding:0 8px"><span class="gbar amber"><i style="width:94%"></i></span><span class="ring" data-p="41" data-t=""></span></span><span class="send"><svg><use href="#i-up"/></svg></span></div></div><div class="mini lt"><div class="ptb"><span class="plus">+</span><span>Bypass</span><span class="grow"></span><span class="model"><b>Opus 5.5</b> Medium</span><span class="gp" style="padding:0 8px"><span class="gbar amber"><i style="width:94%"></i></span><span class="ring" data-p="41" data-t="#e5e5ea"></span></span><span class="send"><svg><use href="#i-up"/></svg></span></div></div></div></div>
+  </div>
+  <div class="m-stage opt-wrap">
+    <div class="m-stage-l"><span class="m-k new">B</span><span class="zh">靠近一点，不加底色</span></div>
+    <div class="opt"><div class="zoom"><div class="card"><div class="tb"><span class="plus">+</span><span>Bypass</span><span class="grow"></span><span class="model"><b>Opus 5.5</b><span>Medium</span></span><span class="gp tight" style="padding:0 8px"><span class="gbar amber"><i style="width:94%"></i></span><span class="ring" data-p="41" data-t=""></span></span><span class="send"><svg><use href="#i-up"/></svg></span></div></div></div><div class="desc zh">间距从 6pt 缩到 3pt，靠近了就会被看成一组（格式塔"接近"原则）。<b class="pro">最轻，和 + 、Bypass、模型名一样都没有底色。</b><b class="con">"能点"仍然只靠"底栏里的东西都能点"这个约定。</b></div><div class="strip"><div class="mini dk"><div class="ptb"><span class="plus">+</span><span>Bypass</span><span class="grow"></span><span class="model"><b>Opus 5.5</b> Medium</span><span class="gp tight" style="padding:0 8px"><span class="gbar amber"><i style="width:94%"></i></span><span class="ring" data-p="41" data-t=""></span></span><span class="send"><svg><use href="#i-up"/></svg></span></div></div><div class="mini lt"><div class="ptb"><span class="plus">+</span><span>Bypass</span><span class="grow"></span><span class="model"><b>Opus 5.5</b> Medium</span><span class="gp tight" style="padding:0 8px"><span class="gbar amber"><i style="width:94%"></i></span><span class="ring" data-p="41" data-t="#e5e5ea"></span></span><span class="send"><svg><use href="#i-up"/></svg></span></div></div></div></div>
+  </div>
+  <div class="m-stage opt-wrap">
+    <div class="m-stage-l"><span class="m-k new">C</span><span class="zh">细描边胶囊</span></div>
+    <div class="opt"><div class="zoom"><div class="card"><div class="tb"><span class="plus">+</span><span>Bypass</span><span class="grow"></span><span class="model"><b>Opus 5.5</b><span>Medium</span></span><span class="gp tight line"><span class="gbar amber"><i style="width:94%"></i></span><span class="ring" data-p="41" data-t=""></span></span><span class="send"><svg><use href="#i-up"/></svg></span></div></div></div><div class="desc zh">0.5pt 的浅灰描边，不填色。<b class="pro">明确是一个整体，比填色轻很多。</b><b class="con">底栏里只有它有边框，还是会稍微显眼一点。</b></div><div class="strip"><div class="mini dk"><div class="ptb"><span class="plus">+</span><span>Bypass</span><span class="grow"></span><span class="model"><b>Opus 5.5</b> Medium</span><span class="gp tight line"><span class="gbar amber"><i style="width:94%"></i></span><span class="ring" data-p="41" data-t=""></span></span><span class="send"><svg><use href="#i-up"/></svg></span></div></div><div class="mini lt"><div class="ptb"><span class="plus">+</span><span>Bypass</span><span class="grow"></span><span class="model"><b>Opus 5.5</b> Medium</span><span class="gp tight line"><span class="gbar amber"><i style="width:94%"></i></span><span class="ring" data-p="41" data-t="#e5e5ea"></span></span><span class="send"><svg><use href="#i-up"/></svg></span></div></div></div></div>
+  </div>
+  <div class="m-stage opt-wrap">
+    <div class="m-stage-l"><span class="m-k new">D</span><span class="zh">双圆环（一个图形）</span></div>
+    <div class="opt"><div class="zoom"><div class="card"><div class="tb"><span class="plus">+</span><span>Bypass</span><span class="grow"></span><span class="model"><b>Opus 5.5</b><span>Medium</span></span><span class="ring2" data-c="#ff9f0a" data-p="94" data-t=""></span><span class="send"><svg><use href="#i-up"/></svg></span></div></div></div><div class="desc zh">外圈 = 上下文，内圈 = 套餐，像 Apple Watch 的活动圆环。<b class="pro">本身就是一个图形，不用分组；点击区域 32×32，比现在窄约 30pt，模型名有更多空间。</b><b class="con">用户要学一下哪圈是哪个（面板里写清楚）。</b></div><div class="strip"><div class="mini dk"><div class="ptb"><span class="plus">+</span><span>Bypass</span><span class="grow"></span><span class="model"><b>Opus 5.5</b> Medium</span><span class="ring2" data-c="#ff9f0a" data-p="94" data-t=""></span><span class="send"><svg><use href="#i-up"/></svg></span></div></div><div class="mini lt"><div class="ptb"><span class="plus">+</span><span>Bypass</span><span class="grow"></span><span class="model"><b>Opus 5.5</b> Medium</span><span class="ring2" data-c="#ff9f0a" data-p="94" data-t="#e5e5ea"></span><span class="send"><svg><use href="#i-up"/></svg></span></div></div></div></div>
+  </div>
+  <div class="m-stage opt-wrap">
+    <div class="m-stage-l"><span class="m-k new">E</span><span class="zh">圆环下面挂一条短条</span></div>
+    <div class="opt"><div class="zoom"><div class="card"><div class="tb"><span class="plus">+</span><span>Bypass</span><span class="grow"></span><span class="model"><b>Opus 5.5</b><span>Medium</span></span><span class="stack"><span class="ring" data-p="41" data-t=""></span><span class="gbar amber"><i style="width:94%"></i></span></span><span class="send"><svg><use href="#i-up"/></svg></span></div></div></div><div class="desc zh">条缩成 16×3 放在圆环正下方，竖着叠成一个小图标。<b class="pro">一个整体，宽度和圆环一样。</b><b class="con">条太短，读数不如现在清楚。</b></div><div class="strip"><div class="mini dk"><div class="ptb"><span class="plus">+</span><span>Bypass</span><span class="grow"></span><span class="model"><b>Opus 5.5</b> Medium</span><span class="stack"><span class="ring" data-p="41" data-t=""></span><span class="gbar amber"><i style="width:94%"></i></span></span><span class="send"><svg><use href="#i-up"/></svg></span></div></div><div class="mini lt"><div class="ptb"><span class="plus">+</span><span>Bypass</span><span class="grow"></span><span class="model"><b>Opus 5.5</b> Medium</span><span class="stack"><span class="ring" data-p="41" data-t="#e5e5ea"></span><span class="gbar amber"><i style="width:94%"></i></span></span><span class="send"><svg><use href="#i-up"/></svg></span></div></div></div></div>
+  </div>
+
+  <ul class="m-notes zh">
+    <li><span class="m-n">1</span><span><b>推荐 D（双圆环）。</b>它本来就是一个图形，不需要再靠底色或边框去"框"在一起；两个读数都还在，颜色规则也不变（外圈按上下文，内圈按套餐）；而且比现在更窄，模型名不容易被截断。</span></li>
+    <li><span class="m-n">2</span><span><b>如果想保留横条，选 B</b>：只把间距缩小，最不显眼。C 介于 B 和 02 的胶囊之间。</span></li>
+    <li><span class="m-n">3</span><span>所有方案的点击区域都不小于 32×32（看不见），按下时整块一起变暗。iPad 和 macOS 不变。</span></li>
+  </ul>
+</div>
+<script>
+for (const el of document.querySelectorAll('.ring')) {
+  const p = Number(el.dataset.p || 0), c = el.dataset.c || '#0a84ff', t = el.dataset.t || '#3a3a3c';
+  el.innerHTML = `<svg viewBox="0 0 36 36"><circle cx="18" cy="18" r="14" fill="none" stroke="${t}" stroke-width="5"/>` +
+    (p > 0 ? `<circle cx="18" cy="18" r="14" fill="none" stroke="${c}" stroke-width="5" stroke-linecap="round" pathLength="100" stroke-dasharray="${p} 100"/>` : '') + '</svg>';
+}
+// Two concentric rings: outer = context (41%, blue), inner = plan (data-p, data-c).
+for (const el of document.querySelectorAll('.ring2')) {
+  const p = Number(el.dataset.p), c = el.dataset.c, t = el.dataset.t || '#3a3a3c';
+  const arc = (r, pct, col) => `<circle cx="20" cy="20" r="${r}" fill="none" stroke="${t}" stroke-width="4"/>` +
+    `<circle cx="20" cy="20" r="${r}" fill="none" stroke="${col}" stroke-width="4" stroke-linecap="round" pathLength="100" stroke-dasharray="${pct} 100"/>`;
+  el.innerHTML = `<svg viewBox="0 0 40 40">${arc(16, 41, '#0a84ff')}${arc(9.5, p, c)}</svg>`;
+}
+</script>
+</body>
+</html>

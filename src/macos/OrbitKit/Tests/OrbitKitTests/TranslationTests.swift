@@ -114,13 +114,19 @@ final class TranslationTests: XCTestCase {
     func testBothLanguagesOnTheFeetLoseTheFlip() {
         let done = TurnTranslation(state: .done, from: .zhHans, original: "改吧")
         XCTAssertEqual(SessionTranslation.userFoot(done, flipped: false, bilingual: true),
-                       [.text("Sent to the agent in English")])
+                       [.text("Sent to the agent in English"), .action("Hide original", .hideOriginal)])
         // Agents working in another language: the foot names it.
         XCTAssertEqual(SessionTranslation.userFoot(done, flipped: false, bilingual: true, agentLanguage: .ja),
-                       [.text("Sent to the agent in Japanese")])
+                       [.text("Sent to the agent in Japanese"), .action("Hide original", .hideOriginal)])
         XCTAssertEqual(SessionTranslation.replyFoot(ReplyTranslation(lang: .zhHans, text: "好"), pending: false,
                                                     flipped: false, bilingual: true),
-                       [.text("Translated")])
+                       [.text("Translated"), .action("Hide original", .hideOriginal)])
+        // Hidden (docs/mocks/translation-hide-original): "Show both" brings the original back.
+        XCTAssertEqual(SessionTranslation.userFoot(done, flipped: false, bilingual: true, originalHidden: true),
+                       [.text("Sent to the agent in English"), .action("Show both", .hideOriginal)])
+        XCTAssertEqual(SessionTranslation.replyFoot(ReplyTranslation(lang: .zhHans, text: "好"), pending: false,
+                                                    flipped: false, bilingual: true, originalHidden: true),
+                       [.text("Translated"), .action("Show both", .hideOriginal)])
         // Off: exactly today's feet.
         XCTAssertEqual(SessionTranslation.userFoot(done, flipped: false, bilingual: false),
                        [.action("Show original", .flip)])

@@ -18,6 +18,9 @@ import type { Me } from './queries';
 export const TRANSLATION_COPY = {
   translated: 'Translated',
   showOriginal: 'Show original',
+  hideOriginal: 'Hide original',
+  // Not "Show original": that one swaps the translation for the original.
+  showBoth: 'Show both',
   showTranslation: 'Show translation',
   original: 'Original',
   translating: 'Translating…',

@@ -36,6 +36,12 @@ function fortyTaskProject(taskCount = 40): StateDigestInput {
       ruling: `Ruling ${i + 1}: ${'the owner decided the digest stays under four thousand tokens; '.repeat(3)}`,
       createdAt: `2026-11-1${i}T08:00:00.000Z`,
     })),
+    answers: Array.from({ length: 4 }, (_, i) => ({
+      id: `answer${i + 1}Abcdefghijklmnop`,
+      question: `Question ${i + 1}: ${'should the successor be told this one turn at a time? '.repeat(4)}`,
+      answer: `Answer ${i + 1}: ${'no, it reads it once in its opening '.repeat(3)}`,
+      answeredAt: `2026-11-1${6 - i}T08:00:00.000Z`,
+    })),
     openItems: Array.from({ length: 5 }, (_, i) => ({
       id: `item${i + 1}Abcdefghijklmnopqr`,
       kind: i % 2 ? 'ASK_OWNER' : 'TASK_FAILED',
@@ -60,7 +66,7 @@ test('the digest of a 40-task project is dated, has every section, every task an
   assert.match(digest, /40 task\(s\) \(OPEN 8, IN_PROGRESS 8, DONE 8, FAILED 8, CANCELLED 8\); 8 acceptance criteria, 3 met\./);
 
   // Sections, in order.
-  const sections = ['Acceptance criteria', 'Owner rulings in force (project_ruling', 'Open items', 'Tasks (title · status · criterion'];
+  const sections = ['Acceptance criteria', 'Owner rulings in force (project_ruling', 'Owner answers in force', 'Open items', 'Tasks (title · status · criterion'];
   const at = sections.map((s) => digest.indexOf(`\n${s}`));
   assert.ok(at.every((i) => i > 0), 'every section is there');
   assert.deepEqual([...at].sort((a, b) => a - b), at, 'in order');
@@ -72,6 +78,8 @@ test('the digest of a 40-task project is dated, has every section, every task an
   }
   // Every live ruling, with its date and id.
   for (const r of input.rulings) assert.match(digest, new RegExp(`\\n- ${r.createdAt.slice(0, 10)} · Ruling .* · ${r.id}\\n`));
+  // Every answer in force, with its date and id, the question and the answer clipped to one line.
+  for (const a of input.answers) assert.match(digest, new RegExp(`\\n- ${a.answeredAt.slice(0, 10)} · Question .*… → Answer .* · ${a.id}\\n`));
   // Every open item.
   for (const o of input.openItems) assert.ok(digest.includes(` · ${o.id}\n`), o.id);
   // One line per task — title, status, criterion — none truncated away; unfinished ones first.
@@ -94,7 +102,7 @@ test('beyond the ceiling the digest truncates with a count, and counts tasks it 
 });
 
 test('an empty project renders every section empty', () => {
-  const digest = renderStateDigest({ asOf: AS_OF, criteria: [], rulings: [], openItems: [], tasks: [], taskTotal: 0, tasksByStatus: {} });
+  const digest = renderStateDigest({ asOf: AS_OF, criteria: [], rulings: [], answers: [], openItems: [], tasks: [], taskTotal: 0, tasksByStatus: {} });
   for (const empty of ['(none stated)', '(none recorded)', '(none)', '(none yet)']) assert.ok(digest.includes(`\n${empty}\n`), empty);
 });
 
@@ -108,8 +116,16 @@ test('the reader renders live rulings, open items and tasks from the project\'s 
         : [{ id: 'crit-a', ordinal: 0, revision: 1, satisfiedBy: 'TASKS', servingTasks: [] }]),
     },
     projectRuling: { findMany: record('projectRuling', [{ id: 'rul-1', projectId: PROJECT_ID, ruling: 'Keep it under 4k tokens', quote: 'under 4k', sourceKind: 'TURN', sourceId: 'turn-1', recordedBySessionId: null, supersededById: null, createdAt: AS_OF }]) },
-    projectOpenItem: { findMany: record('projectOpenItem', [{ id: 'item-1', kind: 'ASK_OWNER', assignee: 'OWNER', title: 'Which branch?', taskId: null }]) },
-    task: { findMany: record('task', [{ id: 'task-1', title: 'Render the digest', status: 'IN_PROGRESS', criterionDefinitionId: 'crit-a' }]) },
+    projectOpenItem: {
+      findMany: async (args: { where: { state: string } }) => (args.where.state === 'OPEN'
+        ? record('projectOpenItem', [{ id: 'item-1', kind: 'ASK_OWNER', assignee: 'OWNER', title: 'Which branch?', taskId: null }])(args)
+        : record('answered', [])(args)),
+    },
+    task: {
+      findMany: async (args: { select: Record<string, unknown> }) => (args.select.title
+        ? record('task', [{ id: 'task-1', title: 'Render the digest', status: 'IN_PROGRESS', criterionDefinitionId: 'crit-a' }])(args)
+        : record('unsettled', [])(args)),
+    },
     projectTaskStatusCount: { findMany: record('projectTaskStatusCount', [{ status: 'IN_PROGRESS', count: 1 }]) },
   } as unknown as PrismaService;
 
@@ -123,6 +139,56 @@ test('the reader renders live rulings, open items and tasks from the project\'s 
   assert.match(digest, /\n- Render the digest · IN_PROGRESS · C1 · task-1\n/);
 });
 
+test('the reader keeps the answers still in force: recent ones, and old ones blocking unfinished work', async () => {
+  const day = 24 * 60 * 60 * 1000;
+  const question = (text: string, blocksTaskIds: string[] = []) => ({
+    question: text,
+    options: [{ label: 'Cancel it' }, { label: 'Keep it' }],
+    recommendedOption: 0,
+    blocksTaskIds,
+    ifUnanswered: null,
+  });
+  // Newest first, as the read orders them.
+  const answered = [
+    { id: 'ans-translated', payload: question('Recent, typed in another language?'), answer: { text: '保留', translation: { text: 'keep it' }, answeredByUserId: 'u' }, resolvedAt: new Date(AS_OF.getTime() - day) },
+    { id: 'ans-recent', payload: question('Recent, blocking nothing?'), answer: { text: 'yes', answeredByUserId: 'u' }, resolvedAt: new Date(AS_OF.getTime() - 2 * day) },
+    { id: 'ans-blocking', payload: question('Old, blocking open work?', ['task-open']), answer: { option: 0, answeredByUserId: 'u' }, resolvedAt: new Date(AS_OF.getTime() - 30 * day) },
+    { id: 'ans-settled', payload: question('Old, blocking finished work?', ['task-done']), answer: { option: 1, answeredByUserId: 'u' }, resolvedAt: new Date(AS_OF.getTime() - 30 * day) },
+    { id: 'ans-stale', payload: question('Old, blocking nothing?'), answer: { option: 1, answeredByUserId: 'u' }, resolvedAt: new Date(AS_OF.getTime() - 30 * day) },
+  ];
+  let unsettledAsked: unknown;
+  const prisma = {
+    projectAcceptanceCriterionDefinition: { findMany: async () => [] },
+    projectRuling: { findMany: async () => [] },
+    projectOpenItem: {
+      findMany: async (args: { where: Record<string, unknown> }) => {
+        if (args.where.state === 'OPEN') return [];
+        assert.deepEqual(args.where, { projectId: PROJECT_ID, ownerId: 'owner-1', kind: 'COORDINATOR_QUESTION', state: 'RESOLVED', resolution: 'ANSWERED' });
+        return answered;
+      },
+    },
+    task: {
+      findMany: async (args: { where: { id?: { in: string[] } }; select: Record<string, unknown> }) => {
+        if (args.select.title) return [];
+        unsettledAsked = args.where.id?.in;
+        return [{ id: 'task-open' }];
+      },
+    },
+    projectTaskStatusCount: { findMany: async () => [] },
+  } as unknown as PrismaService;
+
+  const digest = await readStateDigest(prisma, 'owner-1', PROJECT_ID, AS_OF);
+
+  assert.deepEqual(unsettledAsked, ['task-open', 'task-done'], 'one read for every blocked task');
+  assert.match(digest, /\n- 2026-11-15 · Recent, blocking nothing\? → yes · ans-recent\n/);
+  assert.match(digest, /\n- 2026-10-18 · Old, blocking open work\? → Cancel it · ans-blocking\n/);
+  assert.match(digest, /\n- 2026-11-16 · Recent, typed in another language\? → keep it · ans-translated\n/,
+    'the owner\'s words in the agent language, as the answer\'s own turn tells them');
+  assert.ok(!digest.includes('ans-settled'), 'an old answer whose work is finished is not in force');
+  assert.ok(!digest.includes('ans-stale'), 'nor an old one that blocks nothing');
+  assert.ok(digest.indexOf('ans-translated') < digest.indexOf('ans-recent'), 'in the order read: newest first');
+});
+
 test('a successor\'s opening reports from the digest: no required project_get/task_list, and a later read wins', () => {
   const digest = renderStateDigest(fortyTaskProject());
   for (const note of ['Where things stand: two tasks are waiting on the owner.', null]) {
@@ -131,7 +197,7 @@ test('a successor\'s opening reports from the digest: no required project_get/ta
     assert.ok(!opening.includes('Read first'), 'the read-first requirement is gone');
     assert.ok(!/use project_get .* then task_list/.test(opening));
     assert.match(opening, /you do not need project_get or task_list before your first report/);
-    assert.match(opening, /The digest is dated and the handoff note is the previous conversation’s own words: where a later read disagrees with either, the later read wins\./);
+    assert.match(opening, /The digest is dated and a handoff note, when there is one, is the previous conversation’s own words: where a later read disagrees with either, the later read wins\./);
     assert.ok(opening.includes(`\n\n${digest}`), 'the digest is in the opening');
     assert.ok(opening.indexOf('this is its coordinator session') < opening.indexOf('<state_digest'), 'after the standing instructions');
     assert.equal(opening.includes('<handoff_note>'), note !== null);

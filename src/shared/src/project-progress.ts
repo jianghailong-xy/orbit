@@ -510,6 +510,7 @@ export interface IntegrationTimelineSection<Instant = string> {
  * - `DONE`: the task was marked done and its branch handed over — `by` TASK, `sessionId` the work
  *   session.
  * - `RETRY`: a rerun — `by` COORDINATOR (its `sessionId`), OWNER, or ORBIT; `reason` is the one given.
+ *   The owner's skip of a landing still in flight is one too: `by` OWNER, `reason` the skip's.
  * - `BACKFILL` / `BEHIND_WORK`: Orbit queued it — the project started integrating, or the task's
  *   work ended on another branch.
  * - `CHECK`: a merge round's check of the project line, queued by Orbit.

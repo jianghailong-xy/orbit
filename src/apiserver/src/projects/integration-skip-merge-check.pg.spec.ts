@@ -43,6 +43,7 @@ import { CriterionUnlandedProducer } from './criterion-unlanded.producer';
 import { INTEGRATION_JOB_CLAIM } from './project-integration-job';
 import { ProjectOpenItemEscalationService } from './open-item-escalation.service';
 import { configureProjectIntegration, readInFlightJobs } from './project-integration-line';
+import { readLandingTimeline } from './landing-timeline';
 import { InFlightLandingSkipped, ProjectOpenItemService } from './project-open-item.service';
 import { ProjectIntegrationRetryController } from './project-integration-retry.controller';
 import { INTEGRATION_SKIP_CHECK_TOOL_NAME } from './project-integration-skip-check';
@@ -956,6 +957,20 @@ test('a running landing is asked to stop, and the one without the check is queue
       assert.equal(rows[1]!.skipApprovedByUserId, w.ownerId);
       assert.equal(rows[1]!.skipReason, OWNER_REASON);
       assert.deepEqual(await itemsOf(stack.db, task.taskId), [], 'the stopped generation opened no item');
+
+      // The landing page's own read of it: the generation without the check says so, and says the
+      // owner asked for it with the skip's reason — not that the task was marked done.
+      const landing = await stack.db.projectLanding.findFirstOrThrow({
+        where: { taskId: task.taskId, subject: 'TASK' },
+        select: { id: true, projectId: true, ownerId: true, subject: true, taskId: true, promotionId: true },
+      });
+      const timeline = await readLandingTimeline(stack.db as unknown as PrismaService, landing);
+      const second = timeline.sections.find((section) => section.generation === 2)!;
+      assert.deepEqual(
+        { cause: second.trigger?.cause, by: second.trigger?.by, reason: second.trigger?.reason },
+        { cause: 'RETRY', by: 'OWNER', reason: OWNER_REASON });
+      assert.equal(second.entries.find((entry) => entry.kind === 'SKIPPED_CHECK')?.text,
+        `Landing check skipped · ${OWNER_REASON}`);
     } finally {
       await stack.db.$disconnect();
     }

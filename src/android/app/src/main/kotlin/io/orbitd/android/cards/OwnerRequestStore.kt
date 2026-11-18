@@ -14,7 +14,9 @@ import io.orbitd.android.core.cards.text
 import io.orbitd.android.core.net.ApiError
 import io.orbitd.android.core.net.ApiRequest
 import io.orbitd.android.core.net.NetworkException
+import io.orbitd.android.core.protocol.ProtocolException
 import io.orbitd.android.core.protocol.Wire
+import io.orbitd.android.core.schedule.ScheduleApi
 import io.orbitd.android.core.schedule.ScheduleWaitingItem
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CoroutineScope
@@ -23,6 +25,7 @@ import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
+import kotlinx.serialization.SerializationException
 import kotlinx.serialization.json.JsonArray
 import kotlinx.serialization.json.JsonObject
 
@@ -179,6 +182,8 @@ class OwnerRequestStore internal constructor(private val auth: AuthSession, val 
         fun message(error: Throwable): String = when {
             error is ApiError && error.messages.isNotEmpty() -> error.messages.first()
             error is NetworkException -> "Can't reach Orbit. Check your connection and try again."
+            error is ApiError -> "Orbit couldn't do this (error ${error.status}). Try again."
+            error is ProtocolException || error is SerializationException -> ScheduleApi.UNREADABLE
             else -> "Couldn't reach Orbit. Please try again."
         }
     }

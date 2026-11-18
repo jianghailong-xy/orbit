@@ -4924,9 +4924,12 @@ export class ProjectsService {
     // with a different addressee. Anything that is not one of those two refusals is a fault rather
     // than a state of this project, and is left alone.
     // A successor opens with the project's state rendered in (docs/coordinator-handoff-v2-design.md
-    // §3), read here, after the outgoing conversation is completed, so it is as of the swap.
-    const openingHandoff = handoff
-      ? { note: handoff.note, digest: await readStateDigest(this.prisma, ownerId, project.id) }
+    // §3), read here, after the outgoing conversation is completed, so it is as of the swap. Every
+    // successor, not only a handoff's: one opened by the owner's replace, a workspace switch or a
+    // recovery has no note, and the digest is all it inherits of the decisions made before it —
+    // including the owner's answers, which are no longer replayed to it one turn each (§5.2 R11).
+    const openingHandoff = handoff || project.coordinatorSessionId
+      ? { note: handoff?.note ?? null, digest: await readStateDigest(this.prisma, ownerId, project.id) }
       : null;
     let session: { id: string };
     try {
@@ -5209,10 +5212,10 @@ export class ProjectsService {
     for (const watchId of claimed.movedWatches) this.realtime?.publishWatchChanged(ownerId, watchId);
     this.sessions?.announceProjectSessionChanged?.(session.id);
     // §4.4 X-D4 (2): the conversation this project's open exceptions are owed to is now this one, so
-    // everything still waiting is handed over rather than left addressed to the conversation before.
-    // The conversation being REPLACED goes with it (§5.2 R11): an owner's answer to a question that
-    // one asked was addressed to it, and this rotation is the moment it stops being able to read it.
-    await this.openItems?.deliverOwed(id, project.coordinatorSessionId ?? undefined);
+    // everything still waiting is handed over rather than left addressed to the conversation before,
+    // with every owner answer no coordinator has read yet (§5.2 R11); the ones already read are in
+    // this conversation's opening digest instead.
+    await this.openItems?.deliverOwed(id);
     // And the evidence revisions waiting for a coordinator: handed to this one, oldest first
     // (projects/coordinator-evidence-queue.service.ts).
     await this.evidenceQueue?.deliverOwed(id);

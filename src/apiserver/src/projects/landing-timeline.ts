@@ -441,6 +441,12 @@ function sectionTrigger(
       reason: job.retryReason,
     };
   }
+  // The owner's skip of a landing still in flight (§2.4 J-S5): the generation it stopped failed of
+  // nothing, so there is no rerun row — but it is the owner asking for this landing again, with the
+  // reason the skip carries, which is what a rerun by the owner says.
+  if (job.kind === 'LAND_TASK' && job.skipMergeCheck) {
+    return { ...base, cause: 'RETRY', by: 'OWNER', reason: job.skipReason };
+  }
   if (job.kind === 'LAND_PROMOTION') {
     return { ...base, cause: 'CONFIRMED', by: job.confirmedAutomatically ? 'AUTOMATIC' : 'OWNER' };
   }

@@ -270,9 +270,11 @@ function metaFor(kind: RowKind, engine: RowEngine, health?: RunnerEngineHealth, 
     return kind === 'missing' ? 'Not installed — Orbit can install it here' : 'Not installed';
   }
   // With a sign-in, the badge says the check failed and the line keeps the version alone rather
-  // than saying it twice. Without one (OpenCode), the CLI's own answer is the whole story.
+  // than saying it twice. Without one (OpenCode), the line says what the Unknown is about — the
+  // sign-in, not the version beside it — and, when the CLI listed no key at all, that it found none.
   if (kind === 'unknown') {
-    return signIn ? versionOf(engine, health) : `${versionOf(engine, health)} · the CLI wouldn't say`;
+    if (signIn) return versionOf(engine, health);
+    return `${versionOf(engine, health)} · ${health.openCodeNoKey ? 'no provider key found' : 'sign-in unknown'}`;
   }
   // Which of Kimi's two sites the login is on: the same CLI signs in to either, and a session spends
   // that site's subscription.

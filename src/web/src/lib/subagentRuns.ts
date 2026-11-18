@@ -109,6 +109,9 @@ export function delegateResultText(content: unknown, run: SubagentRunView | unde
     const value = JSON.parse(text.trim());
     if (value && typeof value === 'object') parsed = value;
   } catch {
+    // The call's JSON clipped to a preview (the server trims a long result): the run's own text, never the
+    // receipt's opening brace.
+    if (text.trim().startsWith('{')) return run && run.status !== 'RUNNING' && run.resultSummary ? run.resultSummary : null;
     return text;
   }
   if (parsed && typeof parsed.result === 'string' && parsed.result) return parsed.result;

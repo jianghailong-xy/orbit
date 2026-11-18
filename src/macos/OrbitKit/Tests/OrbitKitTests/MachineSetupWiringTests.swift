@@ -53,10 +53,10 @@ final class MachineSetupWiringTests: XCTestCase {
     func testTheDrawerDrawsTheRowAfterEveryWorkspace() throws {
         let shell = try app("Views/CompactShell.swift")
         let rows = try slice(shell, from: "private var agentsRows: some View {", to: "private func unreachableRow(")
-        try assertInOrder(rows, ["ForEach(agents.orderedItems)", "ForEach(agents.machinesToSetUp)", "setUpRow(machine)"],
+        try assertInOrder(rows, ["ForEach(agents.orderedItems)", "ForEach(agents.machinesToSetUp)", "setUpRow(machine, separates:"],
                           "the Set up rows come last")
         try assertInOrder(rows, ["model.drawerDestination == .machine(runnerID: machine.id)",
-                                 "open(.machine(runnerID: machine.id))", "Image(systemName: \"folder.badge.plus\")",
+                                 "open(.machine(runnerID: machine.id))", "Image(systemName: machine.isManaged ? \"cloud\" : \"folder.badge.plus\")",
                                  "MachineSetupCopy.setupTitle(machine: machine.name)", ".foregroundStyle(Color.accentColor)"],
                           "the row is board 03's")
     }
@@ -70,14 +70,15 @@ final class MachineSetupWiringTests: XCTestCase {
         // if/else or a second ForEach under the section is the row shape the outline list's reload aborted on.
         let rows = try slice(sidebar, from: "private func workspaceRows(", to: "private func setUpRow(")
         try assertInOrder(rows, ["ForEach(AgentListLogic.sidebarRows(agents?.orderedItems ?? [], machines: agents?.machinesToSetUp ?? []))",
-                                 "case .agent(let agent):", "case .setUp(let machine):", "setUpRow(machine)",
+                                 "case .agent(let agent):", "case .setUp(let machine):", "setUpRow(machine, separates:",
                                  ".tag(SidebarSelection.machine(machine.id))", "case .placeholder:"],
                           "the workspaces, then the machines to set up")
         XCTAssertEqual(rows.components(separatedBy: "ForEach(").count - 1, 1, "one ForEach under the section")
         XCTAssertFalse(rows.contains("} else {"), "no if/else swapping the placeholder for the rows")
-        let row = try slice(main, from: "private func setUpRow(_ machine: MachineToSetUp) -> some View {", to: "\n    }\n")
+        let row = try slice(main, from: "private func setUpRow(_ machine: MachineToSetUp, separates: Bool) -> some View {", to: "\n    }\n")
         try assertInOrder(row, ["model.machineDraftRunnerID == machine.id ? AnyShapeStyle(.primary) : AnyShapeStyle(Color.accentColor)",
-                                "MachineSetupCopy.setupTitle(machine: machine.name)", "Image(systemName: \"folder.badge.plus\")"],
+                                "MachineSetupCopy.setupTitle(machine: machine.name)",
+                                "Image(systemName: machine.isManaged ? \"cloud\" : \"folder.badge.plus\")"],
                           "tinted, until it is the row selected")
         // The selection is ONE stored value; its actions run in `.onChange`, after the List's update.
         XCTAssertTrue(main.contains("SidebarLogic.selection(section: model.selectedSection, agentID: model.selectedAgentID,"),

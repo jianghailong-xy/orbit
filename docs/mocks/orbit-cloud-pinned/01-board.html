@@ -1,0 +1,253 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Orbit Cloud pinned first in the machine lists</title>
+<style>
+  :root {
+    --bg: #ffffff; --bg-panel: #f7f8fa; --bg-hover: #f5f6f7; --bg-menu: #ffffff;
+    --border: #dee0e3; --border-subtle: #eceef1;
+    --text-1: #1f2329; --text-2: #646a73; --text-3: #8f959e;
+    --brand: #3370ff; --brand-tint: #eaf1ff; --brand-border: #bcd3ff;
+    --success-solid: #2ea121; --warning-solid: #fa8c16;
+    --shadow: 0 6px 24px rgba(31, 35, 41, .12);
+  }
+  .dark {
+    --bg: #1f1f22; --bg-panel: #26262a; --bg-hover: #343437; --bg-menu: #2b2b2f;
+    --border: #424246; --border-subtle: #343437;
+    --text-1: #c9ced5; --text-2: #a7adb6; --text-3: #8b9099;
+    --brand: #5b8cff; --brand-tint: rgba(91,140,255,.16); --brand-border: rgba(91,140,255,.32);
+    --success-solid: #3fb45b; --warning-solid: #e0902b;
+    --shadow: 0 6px 24px rgba(0,0,0,.45);
+  }
+  * { box-sizing: border-box; }
+  body { margin: 0; padding: 32px 40px 60px; font: 14px/1.45 -apple-system, BlinkMacSystemFont, "Segoe UI", Inter, sans-serif; background: #eef0f3; color: #1f2329; }
+  h1 { font-size: 22px; margin: 0 0 6px; }
+  h2 { font-size: 16px; margin: 36px 0 4px; }
+  p.lead { margin: 0 0 8px; color: #646a73; max-width: 880px; }
+  .row { display: flex; gap: 24px; flex-wrap: wrap; align-items: flex-start; margin-top: 14px; }
+  .frame { width: 300px; }
+  .frame.wide { width: 330px; }
+  .cap { font-size: 12px; font-weight: 600; color: #646a73; margin: 0 0 6px; text-transform: uppercase; letter-spacing: .04em; }
+  .cap .pick { color: #2ea121; }
+  .note { font-size: 12px; color: #646a73; margin-top: 8px; }
+
+  /* Settings nav (SettingsLayout's Machines group) */
+  .nav { background: var(--bg); border: 1px solid var(--border-subtle); border-radius: 10px; padding: 14px 12px; color: var(--text-1); }
+  .group-title { font-size: 13px; font-weight: 600; color: var(--text-2); padding: 0 8px 6px; }
+  .nrow { display: flex; align-items: center; gap: 10px; height: 36px; padding: 0 8px; border-radius: 6px; font-size: 14px; }
+  .nrow .ic { width: 16px; display: inline-flex; justify-content: center; color: var(--text-2); }
+  .nrow .lbl { flex: 1; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .nrow .meta { font-size: 12px; color: var(--text-3); }
+  .nrow.active { background: var(--brand-tint); color: var(--brand); }
+  .nrow.active .ic, .nrow.active .meta { color: var(--brand); }
+  .dot { width: 7px; height: 7px; border-radius: 50%; margin-right: 4px; flex-shrink: 0; }
+  .dot.on { background: var(--success-solid); }
+  .dot.warn { background: var(--warning-solid); }
+  .state { display: inline-flex; align-items: center; gap: 4px; }
+  .state .dot { margin-right: 0; }
+  .grip { color: var(--text-3); }
+
+  /* The pinned row */
+  .cloud .ic { color: var(--brand); }
+  .cloud .lbl { font-weight: 600; }
+  .cloud.outlined { box-shadow: inset 0 0 0 1px var(--brand-border); }
+  .cloud.outlined.active { box-shadow: none; }
+  .divider { height: 1px; background: var(--border-subtle); margin: 6px 8px; }
+  .sub { font-size: 11px; font-weight: 600; color: var(--text-3); text-transform: uppercase; letter-spacing: .05em; padding: 8px 8px 2px; }
+
+  /* Account menu → Machines submenu */
+  .menu { background: var(--bg-menu); border-radius: 12px; box-shadow: var(--shadow); padding: 6px; color: var(--text-1); border: 1px solid var(--border-subtle); }
+  .mrow { display: flex; align-items: center; gap: 10px; height: 44px; padding: 0 16px; border-radius: 8px; font-size: 15px; }
+  .mrow.hover { background: var(--bg-hover); }
+  .mrow .lbl { flex: 1; }
+  .mrow .meta { font-size: 13px; color: var(--text-3); }
+  .mrow .ic { width: 16px; display: inline-flex; justify-content: center; color: var(--brand); }
+  .mrow.cloud .lbl { font-weight: 600; }
+  .mrow .plus { color: var(--text-2); font-size: 18px; }
+  .msep { height: 1px; background: var(--border-subtle); margin: 6px 10px; }
+
+  table.rules { border-collapse: collapse; margin-top: 12px; max-width: 980px; background: #fff; border-radius: 8px; overflow: hidden; }
+  table.rules td, table.rules th { text-align: left; vertical-align: top; padding: 9px 14px; border-bottom: 1px solid #eceef1; font-size: 13px; }
+  table.rules th { background: #f7f8fa; color: #646a73; font-weight: 600; }
+</style>
+</head>
+<body>
+<svg width="0" height="0" style="position:absolute">
+  <symbol id="hdd" viewBox="0 0 16 16"><g fill="none" stroke="currentColor" stroke-width="1.2"><rect x="2.5" y="1.8" width="11" height="12.4" rx="1.2"/><path d="M2.5 6h11M2.5 10h11"/><path d="M5 4h3M5 8h3M5 12h3"/></g></symbol>
+  <symbol id="cloud" viewBox="0 0 16 16"><path fill="none" stroke="currentColor" stroke-width="1.3" stroke-linejoin="round" d="M4.6 12.8h7a3 3 0 0 0 .4-5.97A4.2 4.2 0 0 0 4 6.2a3.3 3.3 0 0 0 .6 6.6z"/></symbol>
+  <symbol id="grip" viewBox="0 0 16 16"><g fill="currentColor"><circle cx="6" cy="4" r="1"/><circle cx="10" cy="4" r="1"/><circle cx="6" cy="8" r="1"/><circle cx="10" cy="8" r="1"/><circle cx="6" cy="12" r="1"/><circle cx="10" cy="12" r="1"/></g></symbol>
+</svg>
+
+<h1>Orbit Cloud: pinned first and marked in every machine list</h1>
+<p class="lead">Orbit Cloud is the account's managed runner. Today it sits wherever the drag order puts it, which is near the bottom in the owner's list. It only looks different when its page is open, and that look is the same "selected" tint every row gets. The change: it always comes first, it looks different at rest without looking selected, and your own machines follow it in your own order.</p>
+
+<h2>1 · Settings → Machines group</h2>
+<p class="lead">Option A uses a brand-colored cloud icon, a bolder name and a hairline under the row. Option B adds a brand outline to the pinned row. Option C adds two small headings.</p>
+<div class="row">
+  <div class="frame">
+    <div class="cap">Today</div>
+    <div class="nav">
+      <div class="group-title">Machines</div>
+      <div class="nrow"><span class="ic"><svg width="16" height="16"><use href="#hdd"/></svg></span><span class="lbl">HPC</span><span class="dot on"></span></div>
+      <div class="nrow"><span class="ic"><svg width="16" height="16"><use href="#hdd"/></svg></span><span class="lbl">wikova</span><span class="dot warn"></span></div>
+      <div class="nrow"><span class="ic"><svg width="16" height="16"><use href="#hdd"/></svg></span><span class="lbl">workstation</span><span class="dot on"></span></div>
+      <div class="nrow"><span class="ic"><svg width="16" height="16"><use href="#hdd"/></svg></span><span class="lbl">longdeMac-mini.local</span><span class="dot on"></span></div>
+      <div class="nrow"><span class="ic"><svg width="16" height="16"><use href="#hdd"/></svg></span><span class="lbl">orbit@austin</span><span class="dot warn"></span></div>
+      <div class="nrow"><span class="ic"><svg width="16" height="16"><use href="#hdd"/></svg></span><span class="lbl">orbit</span><span class="dot on"></span></div>
+      <div class="nrow"><span class="ic"><svg width="16" height="16"><use href="#hdd"/></svg></span><span class="lbl">Orbit Cloud</span><span class="state"><span class="dot on"></span><span class="meta">Ready</span></span></div>
+      <div class="nrow"><span class="ic"><svg width="16" height="16"><use href="#hdd"/></svg></span><span class="lbl">jdcloud</span><span class="dot warn"></span></div>
+    </div>
+    <div class="note">It's 7th of 8 and looks like every other machine.</div>
+  </div>
+
+  <div class="frame">
+    <div class="cap">A · Pinned, cloud icon, hairline <span class="pick">· recommended</span></div>
+    <div class="nav">
+      <div class="group-title">Machines</div>
+      <div class="nrow cloud"><span class="ic"><svg width="16" height="16"><use href="#cloud"/></svg></span><span class="lbl">Orbit Cloud</span><span class="state"><span class="dot on"></span><span class="meta">Ready</span></span></div>
+      <div class="divider"></div>
+      <div class="nrow"><span class="ic"><svg width="16" height="16"><use href="#hdd"/></svg></span><span class="lbl">HPC</span><span class="dot on"></span></div>
+      <div class="nrow"><span class="ic grip"><svg width="16" height="16"><use href="#grip"/></svg></span><span class="lbl">wikova</span><span class="dot warn"></span></div>
+      <div class="nrow"><span class="ic"><svg width="16" height="16"><use href="#hdd"/></svg></span><span class="lbl">workstation</span><span class="dot on"></span></div>
+      <div class="nrow"><span class="ic"><svg width="16" height="16"><use href="#hdd"/></svg></span><span class="lbl">longdeMac-mini.local</span><span class="dot on"></span></div>
+      <div class="nrow"><span class="ic"><svg width="16" height="16"><use href="#hdd"/></svg></span><span class="lbl">orbit@austin</span><span class="dot warn"></span></div>
+      <div class="nrow"><span class="ic"><svg width="16" height="16"><use href="#hdd"/></svg></span><span class="lbl">orbit</span><span class="dot on"></span></div>
+      <div class="nrow"><span class="ic"><svg width="16" height="16"><use href="#hdd"/></svg></span><span class="lbl">jdcloud</span><span class="dot warn"></span></div>
+    </div>
+    <div class="note">Orbit Cloud has no grip and can't be dragged. Your machines drag below the line in their saved order. The grip on "wikova" shows the hover state.</div>
+  </div>
+
+  <div class="frame">
+    <div class="cap">A · Orbit Cloud page open</div>
+    <div class="nav">
+      <div class="group-title">Machines</div>
+      <div class="nrow cloud active"><span class="ic"><svg width="16" height="16"><use href="#cloud"/></svg></span><span class="lbl">Orbit Cloud</span><span class="state"><span class="dot on"></span><span class="meta">Ready</span></span></div>
+      <div class="divider"></div>
+      <div class="nrow"><span class="ic"><svg width="16" height="16"><use href="#hdd"/></svg></span><span class="lbl">HPC</span><span class="dot on"></span></div>
+      <div class="nrow"><span class="ic"><svg width="16" height="16"><use href="#hdd"/></svg></span><span class="lbl">wikova</span><span class="dot warn"></span></div>
+      <div class="nrow"><span class="ic"><svg width="16" height="16"><use href="#hdd"/></svg></span><span class="lbl">workstation</span><span class="dot on"></span></div>
+    </div>
+    <div class="cap" style="margin-top:16px">A · Another machine open</div>
+    <div class="nav">
+      <div class="group-title">Machines</div>
+      <div class="nrow cloud"><span class="ic"><svg width="16" height="16"><use href="#cloud"/></svg></span><span class="lbl">Orbit Cloud</span><span class="state"><span class="dot on"></span><span class="meta">Ready</span></span></div>
+      <div class="divider"></div>
+      <div class="nrow active"><span class="ic"><svg width="16" height="16"><use href="#hdd"/></svg></span><span class="lbl">HPC</span><span class="dot on"></span></div>
+      <div class="nrow"><span class="ic"><svg width="16" height="16"><use href="#hdd"/></svg></span><span class="lbl">wikova</span><span class="dot warn"></span></div>
+    </div>
+    <div class="note">"Selected" stays the one tinted fill, so the marking never reads as the current page.</div>
+  </div>
+</div>
+
+<div class="row">
+  <div class="frame">
+    <div class="cap">B · Pinned, brand outline</div>
+    <div class="nav">
+      <div class="group-title">Machines</div>
+      <div class="nrow cloud outlined"><span class="ic"><svg width="16" height="16"><use href="#cloud"/></svg></span><span class="lbl">Orbit Cloud</span><span class="state"><span class="dot on"></span><span class="meta">Ready</span></span></div>
+      <div style="height:6px"></div>
+      <div class="nrow"><span class="ic"><svg width="16" height="16"><use href="#hdd"/></svg></span><span class="lbl">HPC</span><span class="dot on"></span></div>
+      <div class="nrow"><span class="ic"><svg width="16" height="16"><use href="#hdd"/></svg></span><span class="lbl">wikova</span><span class="dot warn"></span></div>
+      <div class="nrow"><span class="ic"><svg width="16" height="16"><use href="#hdd"/></svg></span><span class="lbl">workstation</span><span class="dot on"></span></div>
+    </div>
+    <div class="note">Louder. But an outlined row looks like a focus ring, and no other nav row is drawn this way.</div>
+  </div>
+  <div class="frame">
+    <div class="cap">C · Pinned under headings</div>
+    <div class="nav">
+      <div class="group-title">Machines</div>
+      <div class="sub">Orbit Cloud</div>
+      <div class="nrow cloud"><span class="ic"><svg width="16" height="16"><use href="#cloud"/></svg></span><span class="lbl">Orbit Cloud</span><span class="state"><span class="dot on"></span><span class="meta">Ready</span></span></div>
+      <div class="sub">Your machines</div>
+      <div class="nrow"><span class="ic"><svg width="16" height="16"><use href="#hdd"/></svg></span><span class="lbl">HPC</span><span class="dot on"></span></div>
+      <div class="nrow"><span class="ic"><svg width="16" height="16"><use href="#hdd"/></svg></span><span class="lbl">wikova</span><span class="dot warn"></span></div>
+      <div class="nrow"><span class="ic"><svg width="16" height="16"><use href="#hdd"/></svg></span><span class="lbl">workstation</span><span class="dot on"></span></div>
+    </div>
+    <div class="note">The clearest structure, but the "Orbit Cloud" heading just repeats the row below it, and the nav gets a third level.</div>
+  </div>
+</div>
+
+<h2>2 · Account menu → Machines submenu</h2>
+<p class="lead">The same rule here: Orbit Cloud first, marked with the cloud icon and a bolder name, then a separator, then your machines in your order. The menu has no icons today, so only the pinned row gets one, and the separator keeps the other names lined up with each other.</p>
+<div class="row">
+  <div class="frame wide">
+    <div class="cap">Today</div>
+    <div class="menu">
+      <div class="mrow hover"><span class="lbl">HPC</span><span class="dot on"></span></div>
+      <div class="mrow"><span class="lbl">wikova</span><span class="dot on"></span></div>
+      <div class="mrow"><span class="lbl">workstation</span><span class="dot on"></span></div>
+      <div class="mrow"><span class="lbl">longdeMac-mini.local</span><span class="dot on"></span></div>
+      <div class="mrow"><span class="lbl">orbit@austin</span><span class="dot on"></span></div>
+      <div class="mrow"><span class="lbl">orbit</span><span class="dot on"></span></div>
+      <div class="mrow"><span class="lbl">Orbit Cloud</span><span class="dot on"></span></div>
+      <div class="mrow"><span class="lbl">jdcloud</span><span class="dot on"></span></div>
+      <div class="msep"></div>
+      <div class="mrow"><span class="lbl">Add a machine</span><span class="plus">+</span></div>
+    </div>
+  </div>
+  <div class="frame wide">
+    <div class="cap">A · Pinned and marked <span class="pick">· recommended</span></div>
+    <div class="menu">
+      <div class="mrow cloud"><span class="ic"><svg width="16" height="16"><use href="#cloud"/></svg></span><span class="lbl">Orbit Cloud</span><span class="dot on"></span></div>
+      <div class="msep"></div>
+      <div class="mrow hover"><span class="lbl">HPC</span><span class="dot on"></span></div>
+      <div class="mrow"><span class="lbl">wikova</span><span class="dot on"></span></div>
+      <div class="mrow"><span class="lbl">workstation</span><span class="dot on"></span></div>
+      <div class="mrow"><span class="lbl">longdeMac-mini.local</span><span class="dot on"></span></div>
+      <div class="mrow"><span class="lbl">orbit@austin</span><span class="dot on"></span></div>
+      <div class="mrow"><span class="lbl">orbit</span><span class="dot on"></span></div>
+      <div class="mrow"><span class="lbl">jdcloud</span><span class="dot on"></span></div>
+      <div class="msep"></div>
+      <div class="mrow"><span class="lbl">Add a machine</span><span class="plus">+</span></div>
+    </div>
+  </div>
+  <div class="frame wide">
+    <div class="cap">A · Orbit Cloud asleep</div>
+    <div class="menu">
+      <div class="mrow cloud"><span class="ic"><svg width="16" height="16"><use href="#cloud"/></svg></span><span class="lbl">Orbit Cloud</span><span class="meta">Asleep</span></div>
+      <div class="msep"></div>
+      <div class="mrow"><span class="lbl">HPC</span><span class="dot on"></span></div>
+      <div class="mrow"><span class="lbl">wikova</span><span class="dot on"></span></div>
+    </div>
+    <div class="note">Its state label works as it does today. Only the position and the mark change.</div>
+  </div>
+</div>
+
+<h2>3 · Option A in dark mode</h2>
+<div class="row dark" style="background:#18181b;padding:20px;border-radius:12px;display:inline-flex">
+  <div class="frame">
+    <div class="nav">
+      <div class="group-title">Machines</div>
+      <div class="nrow cloud"><span class="ic"><svg width="16" height="16"><use href="#cloud"/></svg></span><span class="lbl">Orbit Cloud</span><span class="state"><span class="dot on"></span><span class="meta">Ready</span></span></div>
+      <div class="divider"></div>
+      <div class="nrow active"><span class="ic"><svg width="16" height="16"><use href="#hdd"/></svg></span><span class="lbl">HPC</span><span class="dot on"></span></div>
+      <div class="nrow"><span class="ic"><svg width="16" height="16"><use href="#hdd"/></svg></span><span class="lbl">wikova</span><span class="dot warn"></span></div>
+      <div class="nrow"><span class="ic"><svg width="16" height="16"><use href="#hdd"/></svg></span><span class="lbl">workstation</span><span class="dot on"></span></div>
+    </div>
+  </div>
+  <div class="frame wide">
+    <div class="menu">
+      <div class="mrow cloud"><span class="ic"><svg width="16" height="16"><use href="#cloud"/></svg></span><span class="lbl">Orbit Cloud</span><span class="dot on"></span></div>
+      <div class="msep"></div>
+      <div class="mrow hover"><span class="lbl">HPC</span><span class="dot on"></span></div>
+      <div class="mrow"><span class="lbl">wikova</span><span class="dot on"></span></div>
+      <div class="msep"></div>
+      <div class="mrow"><span class="lbl">Add a machine</span><span class="plus">+</span></div>
+    </div>
+  </div>
+</div>
+
+<h2>4 · Rules (Option A)</h2>
+<table class="rules">
+  <tr><th>Rule</th><th>Detail</th></tr>
+  <tr><td>Position</td><td>Orbit Cloud always comes first in every list of machines: the Settings Machines group, the account menu's Machines submenu, and the native clients' machine lists. Ordering happens on the client. The saved order isn't changed.</td></tr>
+  <tr><td>Drag</td><td>The pinned row has no grip and can't be dropped on. Reordering moves only your own machines, and Orbit Cloud stays first whatever its saved position.</td></tr>
+  <tr><td>Mark</td><td>A cloud icon in the brand color (replacing the drive icon) and a semibold name. The background stays plain at rest. The tinted fill still means "this page is open."</td></tr>
+  <tr><td>Separator</td><td>A hairline right under the pinned row, shown only when you also have machines of your own.</td></tr>
+  <tr><td>State</td><td>No change: Ready / Asleep / Waking up… from the shared managed-runner display.</td></tr>
+  <tr><td>No Orbit Cloud</td><td>Without a managed runner (switch off or older server), the lists look exactly as they do today. The existing "Set up" entry already sits at the top of the group.</td></tr>
+  <tr><td>Icon note</td><td>Providers → "API keys" already uses the cloud icon. Since it's in a different group that's acceptable, but an Orbit-mark glyph is an alternative if the overlap bothers you.</td></tr>
+</table>
+</body>
+</html>
