@@ -160,7 +160,7 @@ final class AgentToolsTests: XCTestCase {
         XCTAssertTrue(rows[0].text.hasPrefix("Tasks 21 · Projects 20 · Task lists 6"), rows[0].text)
         XCTAssertEqual(rows[0].word, "Available")
         XCTAssertEqual(rows[0].tone, .ok)
-        XCTAssertEqual(rows[1].text, "Sessions, agents and runners · 22")
+        XCTAssertEqual(rows[1].text, "Sessions, agents and runners · 23")
         XCTAssertEqual(rows[1].word, "Available")
 
         let down = AgentTools.toolsRows(try failed())
