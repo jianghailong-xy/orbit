@@ -126,7 +126,13 @@ import {
 import { ControlPlaneLeader } from '../realtime/control-plane-leader';
 import { assertMayEndWorkingRuns } from '../sessions/session-reach';
 import { SessionNotSendable, SessionsService } from '../sessions/sessions.service';
-import { isClaudeRegionRefused, isEngineSignedOut } from '../sessions/engine-signin-preflight';
+import {
+  ENGINE_LABELS,
+  isClaudeRegionRefused,
+  isEngineSignedOut,
+  signedOutEngineRefusal,
+} from '../sessions/engine-signin-preflight';
+import { RUNNER_BEATS } from '../runners/runner-presence';
 import { withSessionState } from '../sessions/session-state';
 import {
   readTaskWorkCarriers,
@@ -11839,6 +11845,9 @@ export class TasksService implements OnModuleInit, OnModuleDestroy {
     // Two independent brakes. The quota gate comes first because it is the one that knows
     // *when* work can resume, and it prevents the doomed run rather than reacting to it.
     const { blocked: quotaBlocked, blind: quotaBlind } = await this.quotaGate(ready);
+    // A third, beside the disk floor: the engine the run would start on is signed out on its runner,
+    // so sessions.create would refuse it (signedOutEngineRefusal) on every pass until somebody signs in.
+    const signedOut = await this.signedOutGate(ready);
     // Don't re-dispatch a task whose runs keep failing (see AUTO_RUN_RETRY_BACKOFF_MS). Tasks
     // whose run would spend a quota nothing reports are named so the backoff can damp a usage
     // limit the gate above had no reset time to hold on.
@@ -11868,6 +11877,8 @@ export class TasksService implements OnModuleInit, OnModuleDestroy {
     let quotaHeld = 0;
     let diskHeld = 0;
     let cloneHeld = 0;
+    // Per runner and engine, for the one line below: "on which machine, and which sign-in".
+    const signedOutHeld = new Map<string, number>();
     let atCapacity = 0;
     let projectFull = 0;
     let overtaken = 0;
@@ -11912,6 +11923,14 @@ export class TasksService implements OnModuleInit, OnModuleDestroy {
       // there yet. It lifts on the sweep after the runner reports the clone READY; a FAILED clone waits for Retry.
       if (t.cloneHeld) {
         cloneHeld += 1;
+        continue;
+      }
+      // The sign-in gate, for the same reason again: the run would be refused before it was created,
+      // with the warning the sweep used to log for every such task every minute. It lifts on the sweep
+      // after the runner's next heartbeat reports the engine signed in; nothing here can sign it in.
+      const where = signedOut.get(t.id);
+      if (where) {
+        signedOutHeld.set(where, (signedOutHeld.get(where) ?? 0) + 1);
         continue;
       }
       if (heldOff.has(t.id)) continue;
@@ -11965,6 +11984,13 @@ export class TasksService implements OnModuleInit, OnModuleDestroy {
     if (diskHeld > 0) {
       this.logger.log(
         `auto-run: ${diskHeld} ready task(s) held — free disk below the runner's floor`,
+      );
+    }
+    if (signedOutHeld.size > 0) {
+      const total = [...signedOutHeld.values()].reduce((sum, n) => sum + n, 0);
+      this.logger.log(
+        `auto-run: ${total} ready task(s) held — engine signed out on their runner: ` +
+          [...signedOutHeld].map(([where, n]) => `${where} (${n})`).join(', '),
       );
     }
     if (atCapacity > 0) {
@@ -12618,6 +12644,71 @@ export class TasksService implements OnModuleInit, OnModuleDestroy {
       if (until) blocked.set(t.id, until);
     }
     return { blocked, blind };
+  }
+
+  /**
+   * Of these tasks, the ones whose run would start on an engine's own sign-in that their runner reports
+   * signed out — mapped, by task id, to how the hold names it (`Claude Code on runner "mac"`). The run
+   * would never be created: sessions.create refuses it with EngineSignedOutConflict, which the sweep
+   * logged as a warning per task per pass for as long as nobody signed in (2026-11-17: 308 in 2.5 hours
+   * for two tasks).
+   *
+   * Judged by the preflight itself (signedOutEngineRefusal), on the facts it reads — the runner's
+   * heartbeat `engines`, its accounts, its liveness — and for the account the run would use, picked the
+   * way quotaGate and sessions.create pick it (automaticAccount). Everything the preflight lets through
+   * is let through here: an offline runner, an `unknown` probe, an engine not installed, a credential the
+   * workspace's env brings. A run on a key or a pool (`login` false) brings its own credential and is
+   * never held.
+   */
+  private async signedOutGate(
+    tasks: Array<{
+      id: string;
+      assignee: { provider: string; login?: boolean; runnerId: string | null; workspaceId: string } | null;
+    }>,
+  ): Promise<Map<string, string>> {
+    const held = new Map<string, string>();
+    const judged = tasks.filter((t) => t.assignee?.login === true && t.assignee.runnerId);
+    if (judged.length === 0) return held;
+    const runners = await this.prisma.runner.findMany({
+      where: { id: { in: [...new Set(judged.map((t) => t.assignee!.runnerId!))] } },
+      select: {
+        id: true, name: true, displayName: true, status: true, ...RUNNER_BEATS, engines: true, accountNames: true,
+        accountPauses: true, defaultRemoved: true, planUsage: true, capabilities: true,
+      },
+    });
+    const runnerById = new Map(runners.map((r) => [r.id, r]));
+    const workspaceById = new Map(
+      (
+        await this.prisma.workspace.findMany({
+          where: { id: { in: [...new Set(judged.map((t) => t.assignee!.workspaceId))] } },
+          select: {
+            id: true, env: true, codexAccount: true, claudeAccount: true, antigravityAccount: true, kimiAccount: true,
+            cursorAccount: true,
+          },
+        })
+      ).map((w) => [w.id, w]),
+    );
+    const now = this.now();
+    for (const t of judged) {
+      const { provider, runnerId, workspaceId } = t.assignee!;
+      const runner = runnerById.get(runnerId!);
+      const workspace = workspaceById.get(workspaceId);
+      if (!runner || !workspace || !isAccountEngine(provider)) continue;
+      const automatic = automaticAccount(provider, workspace, runner, now);
+      const refusal = signedOutEngineRefusal({
+        runtime: provider,
+        bringsOwnCredentials: false,
+        workspaceEnv: workspace.env,
+        accounts: automatic ? { ...workspace, [ACCOUNT_CHOICE[provider]]: automatic } : workspace,
+        runner,
+        nowMs: now.getTime(),
+      });
+      if (refusal) {
+        const label = ENGINE_LABELS[provider];
+        held.set(t.id, `${label} on runner "${runner.displayName || runner.name}"`);
+      }
+    }
+    return held;
   }
 
   /**
