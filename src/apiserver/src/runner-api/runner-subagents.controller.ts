@@ -75,6 +75,7 @@ import { planSubagentRoute } from './subagent-route';
 import {
   chooseSubagentWorkspace,
   neededCapabilities,
+  notGitRefusal,
   planRemoteSubagent,
   readRelayBatch,
   remoteFactsOf,
@@ -332,6 +333,7 @@ export class RunnerSubagentsController {
         parentWorkspaceId: parent.workspaceId,
         workspace: dto.workspace,
         needs: dto.needs,
+        readonly: dto.readonly === true,
       });
       if (pick.kind === 'remote') return this.openRemoteSubagentRun(sessionId, dto, pick);
       return this.createSubagentRun(runner, sessionId, dto, pick.reason);
@@ -482,7 +484,7 @@ export class RunnerSubagentsController {
     }
     const workspace = await this.prisma.workspace.findUnique({
       where: { id: original.workspaceId },
-      select: { id: true, name: true, workDir: true, runnerId: true, runner: { select: { capabilities: true } } },
+      select: { id: true, name: true, workDir: true, workDirIsGit: true, runnerId: true, runner: { select: { capabilities: true } } },
     });
     if (!workspace) throw refuse('SUBAGENT_RESUME_GONE', 'The workspace that SubAgent ran on is gone, and its conversation with it.');
     if (workspace.runnerId !== original.targetRunnerId || !workspace.runner) {
@@ -492,13 +494,15 @@ export class RunnerSubagentsController {
     if (!workspace.runner.capabilities.includes(SUBAGENT_REMOTE_RESUME_V1)) {
       throw refuse('SUBAGENT_RESUME_UNSUPPORTED', `${workspace.name}'s runner is too old to continue a SubAgent's conversation.`);
     }
+    const inPlace = workspace.workDirIsGit === false;
+    if (inPlace && !dto.readonly) throw notGitRefusal(workspace.name);
     // The model it last ran on, unless the call names one: the conversation is that engine's, and a model named is
     // run as named on the target (planRemoteSubagent), so the resume is not routed onto another engine.
     const lastModel = attemptsOf(original.attempts).at(-1)?.model;
     const pinned = dto.model?.trim() || !lastModel ? dto : Object.assign(new SubagentRunCreateDto(), dto, { model: lastModel });
     return this.openRemoteSubagentRun(sessionId, pinned, {
       kind: 'remote',
-      workspace: { id: workspace.id, name: workspace.name, runnerId: original.targetRunnerId, workDir: workspace.workDir },
+      workspace: { id: workspace.id, name: workspace.name, runnerId: original.targetRunnerId, workDir: workspace.workDir, inPlace },
       reason: `Continues the SubAgent that ran on ${workspace.name}, with its conversation`,
     });
   }
@@ -558,7 +562,10 @@ export class RunnerSubagentsController {
         ...(dto.permissionMode ? { permissionMode: dto.permissionMode } : {}),
         ...(dto.needs?.length ? { needs: neededCapabilities(dto.needs) } : {}),
         ...(dto.resumeOf ? { resumeOf: dto.resumeOf } : {}),
+        ...(pick.workspace.inPlace ? { inPlace: true } : {}),
       };
+      // Only a read-only run goes in a work dir that is not a git repository (§10.2): nothing would discard its changes.
+      if (facts.inPlace && !facts.readonly) throw notGitRefusal(pick.workspace.name);
       // What it runs on, judged on the target runner (§10.3); the refusals are thrown before anything is written.
       const { decision, target: chosen, built } = await planRemoteSubagent(tx, {
         ownerId: session.ownerId, sessionId, dto, facts, pick, planUsage: this.planUsage,
@@ -653,6 +660,7 @@ export class RunnerSubagentsController {
         prompt: facts.prompt,
         exec: built.exec,
         resumeOf: facts.resumeOf ?? null,
+        inPlace: facts.inPlace === true && facts.readonly === true,
       };
       return { claim };
     }, loggedRetry(this.logger, 'runnerSubagents.claimRemoteSubagentRun'));
