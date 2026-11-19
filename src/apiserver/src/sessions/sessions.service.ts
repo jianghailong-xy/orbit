@@ -6988,6 +6988,12 @@ export class SessionsService {
        */
       translate?: boolean;
       /**
+       * With `translate`: the language the message was written in, when it is not the owner's — a guest's
+       * message is held and translated from the guest's own language (session-guests.service.ts). Absent, the
+       * owner's Settings › Translation language.
+       */
+      translateFrom?: TranslationLanguage;
+      /**
        * The owner's words this turn carries were translated already, by a door that refuses them whole when
        * translation fails (reply-translation.ts ownerWordsForAgent): `dto.content` is the message as the owner's
        * words make it — what the transcript shows and what a replay of the key compares — and `content` the same
@@ -7015,7 +7021,7 @@ export class SessionsService {
     const optimizedTranslation = readOptimizedTranslation(dto.optimizedTranslation);
     const translateFrom = opts?.translate && dto.skipTranslation !== true && dto.kind !== 'shell' && dto.content?.trim()
       && !isSlashCommand(dto.content)
-      ? (await translationLanguages(this.prisma, ownerId))?.owner ?? null
+      ? opts.translateFrom ?? (await translationLanguages(this.prisma, ownerId))?.owner ?? null
       : null;
     // Retried whole. This is where a user turn serializes against the runner's claim and against
     // turnComplete, and every one of those decisions is taken from the Session row read under the
@@ -7127,10 +7133,14 @@ export class SessionsService {
       }
       // Settings › Translation: written HELD, routed and woken only once translated (releaseHeldTurn).
       if (translateFrom && dto.content) {
+        const held = await this.insertHeldTurnLocked(
+          tx, ownerId, session, dto, translateFrom, intent, wikiContext, opts?.clearSettledWorktreeState === true,
+          opts?.externalSender,
+        );
+        // What rides on the turn rides on a held one too (a guest's message counts toward the guest's day).
+        await opts?.onTurnWritten?.(tx, held);
         return {
-          turn: await this.insertHeldTurnLocked(
-            tx, ownerId, session, dto, translateFrom, intent, wikiContext, opts?.clearSettledWorktreeState === true,
-          ),
+          turn: held,
           placement: 'queued' as const,
           wakeQueue: false,
           wakeInbox: false,
@@ -7441,6 +7451,7 @@ export class SessionsService {
     intent: SessionTurnIntent | undefined,
     wikiContext: WikiChatContext | null,
     clearSettledWorktreeState: boolean,
+    externalSender?: ExternalTurnSender,
   ): Promise<ConversationTurn> {
     const content = dto.content!;
     const attachmentIds = await this.assertLinkableAttachments(ownerId, session.id, dto.clientTurnId, dto.attachmentIds, tx);
@@ -7451,6 +7462,7 @@ export class SessionsService {
       clientTurnId: dto.clientTurnId,
       ...(intent === 'NEXT_TURN' ? { sendIntent: 'NEXT_TURN' as const } : {}),
       ...(wikiContext ? { wikiContext: wikiContext as unknown as Prisma.InputJsonValue } : {}),
+      ...externalSenderColumns(externalSender),
       ...heldTurnColumns(content, from),
     });
     await this.linkAttachments(turn.id, attachmentIds, tx);
@@ -7458,8 +7470,8 @@ export class SessionsService {
       where: { id: session.id },
       data: {
         lastTurnAt: new Date(),
-        // The owner's own words, as they wrote them.
-        ...pendingMessageColumns(content, null, null),
+        // The sender's own words, as they wrote them (a guest's, named as the guest).
+        ...pendingMessageColumns(content, null, null, externalSenderOf(externalSenderColumns(externalSender))),
         // The owner took over, as in createTurn.
         retryAt: null,
         retryClaimedAt: null,
@@ -10479,6 +10491,8 @@ export class SessionsService {
        *  branches — a revived session's message is held like any other (insertHeldOpeningLocked's rule:
        *  the claim does not hand out a session whose only work is held). */
       translate?: boolean;
+      /** With `translate`: the language the message was written in — see `createTurn`'s own. On both branches. */
+      translateFrom?: TranslationLanguage;
     },
   ): Promise<SessionResumeAnswer> {
     refuseOwnerFieldsToToken(opts?.credential, { permissionMode: dto.permissionMode });
@@ -10595,6 +10609,7 @@ export class SessionsService {
         onTurnWritten: opts?.onTurnWritten,
         requestFingerprint,
         translate: opts?.translate,
+        translateFrom: opts?.translateFrom,
       });
       // Nothing was revived: this turn joined a process that was already running. Said out loud
       // because the orchestration door offers resume as a fallback for `send`, and the caller
@@ -10632,7 +10647,7 @@ export class SessionsService {
     const reviveOptimizedTranslation = readOptimizedTranslation(dto.optimizedTranslation);
     const reviveHeldFrom = opts?.translate && dto.skipTranslation !== true && dto.kind !== 'shell' && dto.content?.trim()
       && !isSlashCommand(dto.content)
-      ? (await translationLanguages(this.prisma, ownerId))?.owner ?? null
+      ? opts.translateFrom ?? (await translationLanguages(this.prisma, ownerId))?.owner ?? null
       : null;
     const revived = await withTransactionRetry(this.prisma, async (tx) => {
       // THE RIGHT TO DO THIS, FIRST, and held to commit. A delivery whose lease was taken over

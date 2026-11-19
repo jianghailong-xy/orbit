@@ -4,7 +4,10 @@ import {
   PayloadTooLargeException,
 } from '@nestjs/common';
 import { Prisma, RunStatus } from '@prisma/client';
-import { uuidToBase62, type GuestSessionSummary, type SessionGuestPerson, type SessionGuestSuggestion } from '@orbit/shared';
+import {
+  DEFAULT_TRANSLATION_LANGUAGE, isTranslationLanguage, uuidToBase62, type GuestSessionSummary, type SessionGuestPerson,
+  type SessionGuestSuggestion, type TranslationLanguage, type TurnTranslation,
+} from '@orbit/shared';
 import {
   assertValidUpload, COMPOSER_IMAGE_TYPES, GUEST_IMAGE_TOO_LARGE, GUEST_IMAGE_TYPE_REFUSED, imageBytesMatch,
   MAX_COMPOSER_IMAGE_BYTES,
@@ -23,6 +26,7 @@ import { withSessionState } from '../sessions/session-state';
 import { readSessionActivities } from '../sessions/task-work-carrier';
 import { parseMaxPayload } from '../sessions/truncate-payload';
 import { visibleQuestions } from '../sessions/run-question';
+import { readOptimizedTranslation, translationLanguages } from '../sessions/turn-translation';
 
 /** The one answer a guest door gives when there is no live invitation: never invited, removed, left, or Trash. */
 export const GUEST_SESSION_NOT_SHARED = 'This conversation is no longer shared with you.';
@@ -52,7 +56,11 @@ export const GUEST_DAILY_CAP_REACHED =
  * would apply (model, permissionMode, effort, provider, fastMode, engine, account, ...) — is refused by name, 400,
  * before anything is written. A whitelist, so a field SessionTurnDto or SessionResumeDto gains later is refused here too.
  */
-const GUEST_TURN_FIELDS: ReadonlySet<string> = new Set(['clientTurnId', 'content', 'intent', 'attachmentIds']);
+const GUEST_TURN_FIELDS: ReadonlySet<string> = new Set([
+  'clientTurnId', 'content', 'intent', 'attachmentIds',
+  // Settings › Translation, as on POST /sessions/:id/turns (D2): send as written, or the optimizer's agent-language text.
+  'skipTranslation', 'optimizedTranslation',
+]);
 /** The only `intent` a guest may name: a message queued for the next turn, which is also what omitting it may route to. */
 const GUEST_TURN_INTENTS: ReadonlySet<unknown> = new Set([undefined, 'NEXT_TURN']);
 export const guestFieldRefused = (field: string) => `A guest can't set ${field} on a message.`;
@@ -80,8 +88,8 @@ interface LiveInvitation {
 }
 
 /**
- * The body of `POST /guest-sessions/:id/turns`: `clientTurnId`, `content`, `intent` and `attachmentIds`; anything else
- * is refused by name.
+ * The body of `POST /guest-sessions/:id/turns`: `clientTurnId`, `content`, `intent`, `attachmentIds`, `skipTranslation`
+ * and `optimizedTranslation`; anything else is refused by name.
  */
 export interface GuestTurnBody {
   clientTurnId?: unknown;
@@ -465,8 +473,10 @@ export class SessionGuestsService {
    * its external sender, and one `session.guest.turn` activity row beside it. Its images are the guest's own uploads
    * (guestImages), linked to the turn as an owner turn's are, so the runner hands the owner's agent that turn's images
    * as it does any. A session that has ended is resumed (D5) with its own mode, model and provider: only
-   * `clientTurnId`, `content` and `attachmentIds` reach the service, so there is no override to take. A message to a
-   * live session is queued or steered as the owner's would be. One message is one toward the day's cap, images or not.
+   * `clientTurnId`, `content`, `attachmentIds` and the two translation fields reach the service, so there is no
+   * override to take. A message to a live session is queued or steered as the owner's would be. One message is one
+   * toward the day's cap, images or not, held for translation or not. With the owner's Translation on it is held and
+   * translated into the owner's agent language (D2, guestTranslationSource); the guest's words stay the original.
    */
   async turn(guestId: string, sessionId: string, body: GuestTurnBody) {
     const invitation = await this.invitation(guestId, sessionId);
@@ -478,6 +488,12 @@ export class SessionGuestsService {
     const { clientTurnId } = fields;
     const content = fields.content ?? '';
     const intent = fields.intent as 'NEXT_TURN' | undefined;
+    if (fields.skipTranslation !== undefined && typeof fields.skipTranslation !== 'boolean') {
+      throw new BadRequestException('skipTranslation must be a boolean');
+    }
+    const skipTranslation = fields.skipTranslation === true;
+    // A 400 for anything but a string, before anything is written; null when absent or blank.
+    const optimizedTranslation = readOptimizedTranslation(fields.optimizedTranslation);
     if (typeof clientTurnId !== 'string' || clientTurnId.trim() === '') throw new BadRequestException('clientTurnId is required');
     const attachmentIds = await this.guestImages(guestId, sessionId, fields.attachmentIds);
     // Images may go out on their own, as an owner's may.
@@ -494,7 +510,15 @@ export class SessionGuestsService {
       throw new ConflictException('clientTurnId was already used in this session');
     }
     const externalSender: ExternalTurnSender = { source: 'ORBIT_GUEST', id: guestId, name: invitation.guestName };
-    const dto = { clientTurnId, content, ...(intent ? { intent } : {}), ...(attachmentIds.length ? { attachmentIds } : {}) };
+    const dto = {
+      clientTurnId, content, ...(intent ? { intent } : {}), ...(attachmentIds.length ? { attachmentIds } : {}),
+      ...(skipTranslation ? { skipTranslation } : {}), ...(optimizedTranslation !== null ? { optimizedTranslation } : {}),
+    };
+    // D2: with the OWNER's Translation on, the guest's message is held and translated into the owner's agent language,
+    // from the guest's own language, exactly as an owner's is. Off, or written in the agent language already, it goes
+    // as written.
+    const translateFrom = await this.guestTranslationSource(invitation.ownerId, guestId);
+    const translation = translateFrom ? { translate: true, translateFrom } : {};
     // Written with the turn, so a replay of this clientTurnId neither counts nor records anything again.
     const onTurnWritten = async (tx: Prisma.TransactionClient, turn: { id: string }) => {
       await this.countGuestTurn(tx, invitation.guestRowId);
@@ -503,15 +527,29 @@ export class SessionGuestsService {
     const ended = await this.hasEnded(sessionId);
     if (!ended) {
       try {
-        const sent = await this.sessions.createTurn(invitation.ownerId, sessionId, dto, { externalSender, onTurnWritten });
+        const sent = await this.sessions.createTurn(invitation.ownerId, sessionId, dto, { externalSender, onTurnWritten, ...translation });
         return { ...answerOf(sent), revived: false };
       } catch (error) {
         // It ended between the read above and the turn's own lock: resume it, as below.
         if (!(error instanceof SessionNotSendable)) throw error;
       }
     }
-    const resumed = await this.sessions.resume(invitation.ownerId, sessionId, dto, { externalSender, onTurnWritten });
+    const resumed = await this.sessions.resume(invitation.ownerId, sessionId, dto, { externalSender, onTurnWritten, ...translation });
     return { ...answerOf(resumed), revived: resumed.revived };
+  }
+
+  /**
+   * The language a guest's message is translated from (D2), or null when it goes as written: the owner's Translation
+   * is off (translationLanguages), or the guest's own language — their Settings › Translation "Your language", absent
+   * = DEFAULT_TRANSLATION_LANGUAGE as for anyone — is the owner's agent language already.
+   */
+  private async guestTranslationSource(ownerId: string, guestId: string): Promise<TranslationLanguage | null> {
+    const langs = await translationLanguages(this.prisma, ownerId);
+    if (!langs) return null;
+    const guest = await this.prisma.user.findUnique({ where: { id: guestId }, select: { preferences: true } });
+    const own = (guest?.preferences as { translationLanguage?: unknown } | null)?.translationLanguage;
+    const from = isTranslationLanguage(own) ? own : DEFAULT_TRANSLATION_LANGUAGE;
+    return from === langs.agent ? null : from;
   }
 
   /**
@@ -600,13 +638,17 @@ async function firstBytes(path: string): Promise<Uint8Array> {
   }
 }
 
-/** What a guest is told of the turn they sent: the turn's id and placement, never the session's other ids. */
-function answerOf(sent: { turnId: string; seq: number | null; kind: string; placement: unknown; targetTurnId?: string }) {
+/** What a guest is told of the turn they sent: the turn's id and placement, never the session's other ids; and its
+ *  translation (TRANSLATING on the send that held it), as POST /sessions/:id/turns answers it. */
+function answerOf(sent: {
+  turnId: string; seq: number | null; kind: string; placement: unknown; targetTurnId?: string; translation?: TurnTranslation;
+}) {
   return {
     turnId: sent.turnId,
     seq: sent.seq,
     kind: sent.kind,
     placement: sent.placement,
     ...(sent.targetTurnId ? { targetTurnId: sent.targetTurnId } : {}),
+    ...(sent.translation ? { translation: sent.translation } : {}),
   };
 }
