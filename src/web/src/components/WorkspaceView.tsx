@@ -11308,7 +11308,7 @@ export function WorkspaceView({
         )}
         {/* Every Agent this session started, beside the branch below as iOS draws it: one line that opens
             their list. Hidden until it has started one. */}
-        {selectedId && !selectedTrashed && <SessionAgentsStrip key={selectedId} runs={subagentRuns} />}
+        {selectedId && !selectedTrashed && <SessionAgentsStrip key={selectedId} runs={subagentRuns} parent={{ engine: selectedEngine, model: selected?.model ?? null }} />}
         {mainCheckout.drawer}
         <MainCheckoutCtx.Provider value={mainCheckout.host}>
         <SessionOutputs
