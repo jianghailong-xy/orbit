@@ -46,7 +46,7 @@ class DoneFollowUpsTest {
 
     @Test fun branchlessWorkIsItsOwnReasonNeverNoCodeOrNotOnMain() {
         val doc = cbai()
-        assertEquals("3 met · 0 landed on main · 3 ran without a branch", ProjectDone.cardTally(ProjectDone.counts(doc)))
+        assertEquals("3 met · 0 landed on main · 3 ran without a branch · 1 not met", ProjectDone.cardTally(ProjectDone.counts(doc)))
         assertEquals("zero parts are dropped", "1 met · 1 landed on main · 1 not met", ProjectDone.cardTally(j("""{"criteria":2,"met":1,"onMain":1,"byReason":{}}""")))
         assertEquals("4 criteria · 0 on main · 3 ran without a branch · 1 not met", ProjectDone.whyNotDoneTally(doc))
         val row = DoneFollowUps.rowState(ProjectDone.criteria(doc).first().derived, false, "main")
