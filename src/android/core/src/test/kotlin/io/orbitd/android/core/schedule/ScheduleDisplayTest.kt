@@ -148,7 +148,7 @@ class ScheduleDisplayTest {
 
     @Test fun everyRunStateHasACircle() {
         val expected = mapOf(
-            "QUEUED" to Triple(Circle.open, null, null), "RUNNING" to Triple(Circle.running, null, null),
+            "QUEUED" to Triple(Circle.open, Mark.clock, null), "RUNNING" to Triple(Circle.running, null, null),
             "AWAITING_APPROVAL" to Triple(Circle.held, Mark.alert, "Waiting for you"), "NO_CHANGE" to Triple(Circle.done, Mark.check, "No change"),
             "CHANGED" to Triple(Circle.done, Mark.check, "Known"), "FAILED" to Triple(Circle.failed, Mark.alert, "Failed"),
             "SKIPPED" to Triple(Circle.muted, Mark.check, "Skipped"), "MISSED" to Triple(Circle.muted, Mark.check, "Missed"),

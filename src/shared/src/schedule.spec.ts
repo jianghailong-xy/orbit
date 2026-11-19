@@ -213,7 +213,7 @@ describe('scheduleTimeline', () => {
 
 describe('circles', () => {
   const EXPECTED: Record<ScheduleRunState, [string, string | null, string | null]> = {
-    QUEUED: ['open', null, null],
+    QUEUED: ['open', 'clock', null],
     RUNNING: ['running', null, null],
     AWAITING_APPROVAL: ['held', 'alert', 'Waiting for you'],
     NO_CHANGE: ['done', 'check', 'No change'],

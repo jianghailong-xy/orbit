@@ -53,6 +53,7 @@
 .sched-circle[data-circle='running'] { border-color: var(--brand); border-right-color: transparent; animation: sched-spin 1.2s linear infinite; }
 .sched-circle[data-circle='draft'] { border-style: dashed; border-color: var(--brand); }
 .sched-circle[data-circle='paused'] { border-color: var(--border); }
+.sched-circle[data-circle='open'] { color: var(--text-3); }
 @keyframes sched-spin { to { transform: rotate(360deg); } }
 @media (prefers-reduced-motion: reduce) { .sched-circle[data-circle='running'] { animation: none; } }
 

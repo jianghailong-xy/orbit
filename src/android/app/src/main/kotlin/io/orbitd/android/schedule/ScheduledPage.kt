@@ -118,8 +118,12 @@ fun ScheduleCircleGlyph(view: ScheduleDisplay.CircleView, size: Dp = 22.dp) {
                 ScheduleDisplay.Circle.muted -> secondary.copy(alpha = 0.5f)
                 else -> secondary
             }
-            if (mark == ScheduleDisplay.Mark.check) Icon(painterResource(R.drawable.ic_check), null, Modifier.size(size * 0.6f), tint = tint)
-            else Text("!", color = tint, fontWeight = FontWeight.Black, fontSize = (size.value * 0.55f).sp)
+            when (mark) {
+                ScheduleDisplay.Mark.check -> Icon(painterResource(R.drawable.ic_check), null, Modifier.size(size * 0.6f), tint = tint)
+                // A queued run: clock hands inside the ring, which is the clock's face.
+                ScheduleDisplay.Mark.clock -> Icon(painterResource(R.drawable.ic_clock_hands), null, Modifier.size(size * 0.6f), tint = tint)
+                ScheduleDisplay.Mark.alert -> Text("!", color = tint, fontWeight = FontWeight.Black, fontSize = (size.value * 0.55f).sp)
+            }
         }
     }
 }

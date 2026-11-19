@@ -4,6 +4,7 @@ import type { SessionFolder } from '../api';
 import { COORDINATOR_LEAD_COPY, type SidebarProject } from './projectAttention';
 import { sessionTimeSections } from './sessionGrouping';
 import {
+  projectSessionsButtonActive,
   LANDINGS_GROUP_GAP_MS,
   landingTaskName,
   landingsCountLine,
@@ -677,5 +678,30 @@ describe('the source session’s landing label', () => {
   it('is nothing at all for a conversation that fed no landing', () => {
     expect(sourceLandingLabel(null)).toBeNull();
     expect(sourceLandingLabel(undefined)).toBeNull();
+  });
+});
+
+/** The title bar's Project sessions button spins while anything its page shows is active (owner
+ *  2026-11-17, docs/mocks/project-sessions-button-running, option C). */
+describe('projectSessionsButtonActive', () => {
+  const still = () => null;
+  it('spins for a session at work or with a background job in flight', () => {
+    expect(projectSessionsButtonActive([{ id: 'a' }], () => 'spinner', null, null)).toBe(true);
+    expect(projectSessionsButtonActive([{ id: 'a' }], () => 'pulse', null, null)).toBe(true);
+    expect(projectSessionsButtonActive([{ id: 'a' }], still, null, null)).toBe(false);
+  });
+  it('spins for a landing job running or queued', () => {
+    expect(projectSessionsButtonActive([], still, { inFlight: { kind: 'LAND_TASK' } }, null)).toBe(true);
+    expect(projectSessionsButtonActive([], still, { inFlight: null, integratingCount: 0, queuedCount: 1 }, null)).toBe(true);
+    expect(projectSessionsButtonActive([], still, { inFlight: null, inFlightJobs: [{}] }, null)).toBe(true);
+    expect(projectSessionsButtonActive([], still, { inFlight: null, integratingCount: 0, queuedCount: 0, inFlightJobs: [] }, null)).toBe(false);
+  });
+  it('spins for a merge into main being checked or landing, not one waiting on a decision', () => {
+    for (const state of ['CHECKING', 'CONFIRMED', 'RECHECKING']) {
+      expect(projectSessionsButtonActive([], still, null, { state })).toBe(true);
+    }
+    for (const state of ['READY', 'BLOCKED', 'MERGED']) {
+      expect(projectSessionsButtonActive([], still, null, { state })).toBe(false);
+    }
   });
 });

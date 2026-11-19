@@ -278,7 +278,7 @@ describe('the composer offers the engine’s suggested next message', () => {
   it('takes it on a double-tap on a touch screen, holding the idle box’s first tap', async () => {
     await mount();
     await waitForUi(() => expect(offered()).toBe(SUGGESTION));
-    expect(tapHint(), 'the hint follows the words').toBe('Double-tap to use');
+    expect(tapHint(), 'the hint follows the words').toBe('Double-tap');
     expect(mounted().querySelector('.composer-suggestion-tap')?.getAttribute('aria-hidden')).toBe('true');
 
     const first = await lift(120, 30, 1_000);
@@ -296,7 +296,7 @@ describe('the composer offers the engine’s suggested next message', () => {
 
     await type('');
     await waitForUi(() => expect(offered()).toBe(SUGGESTION));
-    expect(tapHint(), 'and the hint stays').toBe('Double-tap to use');
+    expect(tapHint(), 'and the hint stays').toBe('Double-tap');
   });
 
   it('hands a lone tap on the idle box on as its focus once the double-tap window passes', async () => {
@@ -312,7 +312,7 @@ describe('the composer offers the engine’s suggested next message', () => {
   it('leaves a focused box its taps, and counts two apart in time or place as two', async () => {
     await mount();
     await waitForUi(() => expect(offered()).toBe(SUGGESTION));
-    expect(tapHint(), 'the hint follows the words').toBe('Double-tap to use');
+    expect(tapHint(), 'the hint follows the words').toBe('Double-tap');
     box().focus();
 
     expect((await lift(120, 30, 1_000)).defaultPrevented, 'a focused box keeps its first tap').toBe(false);

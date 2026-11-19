@@ -54,7 +54,12 @@ struct ScheduleCircleGlyph: View {
             case .muted:
                 Circle().strokeBorder(Color.secondary.opacity(0.25), lineWidth: 1.5)
             }
-            if let mark = view.mark {
+            if view.mark == .clock {
+                // A queued run: clock hands inside the ring, which is the clock's face.
+                ScheduleClockHands()
+                    .stroke(markColor, style: StrokeStyle(lineWidth: 1.6, lineCap: .round, lineJoin: .round))
+                    .padding(size * 0.2)
+            } else if let mark = view.mark {
                 Image(systemName: mark == .check ? "checkmark" : "exclamationmark")
                     .font(.orbitMeta.weight(.heavy))
                     .foregroundStyle(markColor)
@@ -71,6 +76,17 @@ struct ScheduleCircleGlyph: View {
         case .muted: return Color.secondary.opacity(0.5)
         default: return .secondary
         }
+    }
+}
+
+/// A clock's two hands, pointing at about four o'clock, for a queued run's circle.
+private struct ScheduleClockHands: Shape {
+    func path(in rect: CGRect) -> Path {
+        var path = Path()
+        path.move(to: CGPoint(x: rect.midX, y: rect.minY))
+        path.addLine(to: CGPoint(x: rect.midX, y: rect.midY))
+        path.addLine(to: CGPoint(x: rect.midX + rect.width * 0.32, y: rect.midY + rect.height * 0.2))
+        return path
     }
 }
 

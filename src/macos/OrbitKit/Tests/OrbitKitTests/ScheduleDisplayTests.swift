@@ -158,7 +158,7 @@ final class ScheduleDisplayTests: XCTestCase {
 
     func testEveryRunStateHasACircle() {
         let expected: [String: (ScheduleDisplay.Circle, ScheduleDisplay.Mark?, String?)] = [
-            "QUEUED": (.open, nil, nil), "RUNNING": (.running, nil, nil),
+            "QUEUED": (.open, .clock, nil), "RUNNING": (.running, nil, nil),
             "AWAITING_APPROVAL": (.held, .alert, "Waiting for you"), "NO_CHANGE": (.done, .check, "No change"),
             "CHANGED": (.done, .check, "Known"), "FAILED": (.failed, .alert, "Failed"),
             "SKIPPED": (.muted, .check, "Skipped"), "MISSED": (.muted, .check, "Missed"),
