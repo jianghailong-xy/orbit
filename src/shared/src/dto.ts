@@ -2914,11 +2914,11 @@ export interface RemoteSubagentEventsPage {
 /**
  * One model of the Providers page's Tier column (GET /providers/subagent-tiers, docs/subagent-design.md §7):
  * the tiers routeSubagent reads for it. Clients show `levels` joined with " · ", all four as "S–XL by effort",
- * and none as "Not set": a model with no tier stays out of automatic routing.
+ * and none as "Not set": a model with no tier ranks after every tiered one (its engine's default model runs then).
  */
 export interface ProviderModelTier {
   model: string;
-  /** The tiers this model fills, lowest first, at whatever effort each takes. Empty: not routed. */
+  /** The tiers this model fills, lowest first, at whatever effort each takes. Empty: ranked after tiered models. */
   levels: SubagentSize[];
   /** `catalogue`: the preset or the built-in tier table. `owner`: set on this page. Null: nobody has. */
   source: 'catalogue' | 'owner' | null;
