@@ -109,6 +109,10 @@ final class Phase2LogicTests: XCTestCase {
         XCTAssertEqual(Approvals.chatReplyLabel([q("Which?", [], header: "Auth method")]), "Auth method")
         XCTAssertEqual(Approvals.chatReplyLabel([q("Which?", [])]), "Which?")   // no header → question
         XCTAssertEqual(Approvals.chatReplyLabel([]), "")
+        // What ✦ Optimize is told a chat reply answers (web `questionReplyContext`).
+        XCTAssertEqual(Approvals.chatReplyContext([q("Which way?", ["Yes", "No"], header: "Runner full")]),
+                       "Runner full: Which way?\n- Yes\n- No")
+        XCTAssertEqual(Approvals.chatReplyContext([]), "")
     }
 
     // MARK: composer gating

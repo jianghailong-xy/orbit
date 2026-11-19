@@ -126,7 +126,11 @@ describe('a translated approval', () => {
         />,
       ),
     );
-    expect(container.querySelector('.approval-translated-desc')?.textContent).toBe('运行 web 测试');
+    const line = container.querySelector('.approval-translated-desc');
+    expect(line?.firstChild?.textContent).toBe('运行 web 测试');
+    // The agent's own words stay beside it, in grey, and nowhere else on the card.
+    expect(line?.querySelector('.approval-desc-original')?.textContent).toBe('Run the web tests');
+    expect(container.textContent?.split('Run the web tests')).toHaveLength(2);
   });
 
   it("shows a plan in the owner's language", async () => {
