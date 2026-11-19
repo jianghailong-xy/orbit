@@ -1344,8 +1344,15 @@ export function TasksSidePanel({ open = false, onNavigate }: { open?: boolean; o
                     { type: 'separator' as const, key: 'machines-add-separator' },
                     {
                       key: 'machines-add',
-                      icon: <PlusOutlined />,
-                      label: 'Add a machine',
+                      // Its + leads, in the machines' icon column, so the words start where their names do; the end column
+                      // is the machines' state alone (docs/mocks/machine-menu-icons/02-add-machine-align, A).
+                      textValue: 'Add a machine',
+                      label: (
+                        <span className="tp-account-machine-os">
+                          <PlusOutlined aria-hidden />
+                          Add a machine
+                        </span>
+                      ),
                       onSelect: () => navigate('/settings/machines/new'),
                     },
                   ],

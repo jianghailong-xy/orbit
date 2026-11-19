@@ -133,6 +133,7 @@ case "$side $*" in
   "target compose ps -q "*) [ -e "$state/$4" ] && [ ! -e "$state/$4.stopped" ] && echo "c-$4" ;;
   "target exec c-gateway cat "*) cat "$state/gateway.file" ;;
   "target exec c-db-proxy cat "*) cat "$state/db-proxy.file" ;;
+  "target exec c-nats cat "*) cat "$state/nats.file" ;;
   "target exec c-pgbackup cat "*) cat "$state/pgbackup.file" ;;
   "target compose up "*)
     service="${'$'}{!#}"
@@ -142,6 +143,7 @@ case "$side $*" in
     case "$service" in
       gateway) cp gateway/nginx.conf "$state/gateway.file" ;;
       db-proxy) cp deploy/db-proxy/haproxy.cfg "$state/db-proxy.file" ;;
+      nats) cp src/link-gateway/nats.conf "$state/nats.file" ;;
       pgbackup) cp scripts/pg-backup.sh "$state/pgbackup.file" ;;
       web) "$FAKE_REAL_DOCKER" compose config --images web >"$state/web.image" ;;
     esac ;;
@@ -843,6 +845,8 @@ test('a plan prints what the deploy would change, and changes nothing on the tar
     return lines.slice(start, end);
   };
   appendFileSync(path.join(fixture.checkout, 'deploy/db-proxy/haproxy.cfg'), '# a change of the second release\n');
+  // And NATS's grants: a running orbit-nats keeps the nats.conf it started on, which Compose's hash does not see.
+  appendFileSync(path.join(fixture.checkout, 'src/link-gateway/nats.conf'), '# a change of the second release\n');
   const second = fixture.commit('the second release');
   run = fixture.run(upgrade, ['--build-only']);
   assert.equal(run.status, 0, run.output);
@@ -854,6 +858,7 @@ test('a plan prints what the deploy would change, and changes nothing on the tar
   assert.match(plan.stdout, / {4}postgres +unchanged\n/);
   assert.match(plan.stdout, / {4}pgbackup +unchanged\n/);
   assert.match(plan.stdout, / {4}db-proxy +recreate \(it runs another deploy\/db-proxy\/haproxy\.cfg\)\n/);
+  assert.match(plan.stdout, / {4}nats +recreate \(it runs another src\/link-gateway\/nats\.conf\)\n/);
   assert.match(plan.stdout, / {4}apiserver +recreate\n/);
   assert.deepEqual(snapshot(fixture.target), before, 'every file on the target is as it was');
   assert.equal(readFileSync(path.join(fixture.target, '.env'), 'utf8'), env);
@@ -864,7 +869,10 @@ test('a plan prints what the deploy would change, and changes nothing on the tar
   run = fixture.run(upgrade, ['--deploy', second]);
   assert.equal(run.status, 0, run.output);
   assert.deepEqual(table(run.stdout), table(plan.stdout));
-  assert.ok(ups(run).includes('compose up -d --wait --no-deps --no-build --force-recreate db-proxy'), ups(run).join('\n'));
+  for (const service of ['db-proxy', 'nats']) {
+    assert.ok(ups(run).includes(`compose up -d --wait --no-deps --no-build --force-recreate ${service}`), ups(run).join('\n'));
+  }
+  assert.match(readFileSync(path.join(fixture.state, 'nats.file'), 'utf8'), /a change of the second release/);
   assert.ok(!upped(run).includes('postgres'), ups(run).join('\n'));
 });
 

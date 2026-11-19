@@ -238,6 +238,9 @@ describe('Machines in the account menu', () => {
     expect(osOf('hpc')).toBe('linux');
     expect(osOf('win-box')).toBe('windows');
     expect(osOf('old-runner')).toBe('unknown');
+    // Add a machine's + leads, in the same column, so its words start where the names do; no icon at the row's end.
+    expect(accountRow('Add a machine')!.querySelector('.tp-account-machine-os > .anticon-plus')).not.toBeNull();
+    expect(accountRow('Add a machine')!.querySelector('.orbit-menu-icon')).toBeNull();
     // Orbit Cloud keeps its cloud, whatever OS it runs.
     expect(accountRow('Orbit Cloud')!.querySelector('.tp-account-machine-os')).toBeNull();
     expect(accountRow('Orbit Cloud')!.querySelector('.anticon-cloud')).not.toBeNull();

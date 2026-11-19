@@ -289,7 +289,7 @@ class SessionListPageShellTest {
         val row = hasTestTag("folder-row:34A05cFolderResearch1")
         await { exists(row) }
         assertFalse("filed rows are behind their folder", exists(hasRowMenu("Options for Filed row")))
-        assertEquals("1 waiting for you", compose.onNode(row).fetchSemanticsNode().config.getOrNull(SemanticsProperties.StateDescription))
+        assertEquals("1 waiting for you. 1 sessions", compose.onNode(row).fetchSemanticsNode().config.getOrNull(SemanticsProperties.StateDescription))
         compose.onNode(row).assert(hasText("Research", substring = true)).assert(hasRowMenu("Options for Research"))
         compose.onNode(row).performClick()
         await { exists(hasRowMenu("Options for Filed row")) }
