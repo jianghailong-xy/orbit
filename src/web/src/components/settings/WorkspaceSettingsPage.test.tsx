@@ -209,17 +209,6 @@ const click = async (el: Element) => {
   });
   await settle(3);
 };
-const press = async (el: HTMLElement) => {
-  await act(async () => {
-    const init = { bubbles: true, cancelable: true, button: 0, buttons: 1, detail: 1 };
-    el.dispatchEvent(new PointerEvent('pointerdown', { ...init, pointerType: 'mouse' }));
-    el.dispatchEvent(new MouseEvent('mousedown', init));
-    el.dispatchEvent(new PointerEvent('pointerup', { ...init, buttons: 0, pointerType: 'mouse' }));
-    el.dispatchEvent(new MouseEvent('mouseup', { ...init, buttons: 0 }));
-    el.dispatchEvent(new MouseEvent('click', { ...init, buttons: 0 }));
-  });
-  await settle(3);
-};
 const type = async (input: HTMLInputElement | HTMLTextAreaElement, value: string) => {
   const proto = input instanceof HTMLTextAreaElement ? HTMLTextAreaElement.prototype : HTMLInputElement.prototype;
   await act(async () => {
@@ -296,7 +285,7 @@ describe('a workspace’s Settings page', () => {
     expect($$('button').some((b) => text(b) === 'Save')).toBe(false);
   });
 
-  it('shows smart selection, Optimize for and its engines only while the account has it on', async () => {
+  it('shows smart selection and its engines only while the account has it on; Optimize For is not here', async () => {
     await mount(`/settings/workspaces/${ORBIT}`);
     expect($$('.settings-row-title', section('Sessions')).map(text)).toEqual(['Worktree isolation', 'Model']);
     act(() => root?.unmount());
@@ -305,7 +294,6 @@ describe('a workspace’s Settings page', () => {
     expect($$('.settings-row-title', section('Sessions')).map(text)).toEqual([
       'Worktree isolation',
       'Smart model selection for tasks',
-      'Optimize for',
       'Model',
     ]);
     expect(text(section('Sessions').querySelector('.rd-engines-label'))).toBe('Engines it may use');
@@ -328,16 +316,13 @@ describe('every edit is one PATCH carrying only that field', () => {
     expect(toast.success).toHaveBeenCalledWith('Setting saved');
   });
 
-  it('a select when it changes, and each engine ticked', async () => {
+  it('a switch when it changes, and each engine ticked', async () => {
     const { sent } = await mount(`/settings/workspaces/${ORBIT}`, undefined, { preferences: { modelRouting: true } });
     await click(toggle('Smart model selection for tasks'));
-    await click(document.body.querySelector('[aria-label="Optimize for"]')!);
-    await press($$('[role="option"]').find((o) => text(o) === 'Balance')!);
     const codex = $$('.rd-engines-list [role="checkbox"]').find((c) => text(c.closest('label')) === 'Codex')!;
     await click(codex);
     expect(only(sent)).toEqual([
       { method: 'PATCH', path: `/workspaces/${ORBIT}`, body: { modelRouting: true } },
-      { method: 'PATCH', path: `/workspaces/${ORBIT}`, body: { modelRoutingOptimizeFor: 'balance' } },
       { method: 'PATCH', path: `/workspaces/${ORBIT}`, body: { modelRoutingProviders: ['codex'] } },
     ]);
   });

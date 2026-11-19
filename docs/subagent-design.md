@@ -244,7 +244,8 @@ Optimize For 只在第 5 条（没人给档位）时抬档：Balance 至少 M，
 - 路由：`model-routing.ts` 增加 `routeSubagent(input)`，与 `routeTaskRun` 共用档位表和引擎状态读取；档位表扩成按模型。
 - 审批：`ApprovalCreateRequest` 加 `subagentRunId`；`reapApprovalsOfReturnedCalls` 跳过它。
 - 设置：Agent（workspace）上加 `subagentsEnabled`、`subagentsMaxRunning`；屏蔽列表放 owner 级
-  `UserPreferences.subagentBlockedProviders`；Optimize For 复用 `modelRoutingOptimizeFor`。
+  `UserPreferences.subagentBlockedProviders`；Optimize For 是账号级的 `UserPreferences.optimizeFor`（没设过 = Balance，owner，2026-11-19；
+  原先复用 Agent 的 `modelRoutingOptimizeFor`，已不再读）。
 
 ### 6.3 runner
 
@@ -263,7 +264,9 @@ Optimize For 只在第 5 条（没人给档位）时抬档：Balance 至少 M，
 
 ## 7. 设置与界面
 
-- **Agent 设置 → SubAgents**：开关、Optimize For（Cost / Balance / Intelligence）、Providers（默认全部，点进去屏蔽）、
+- **设置 → General → New sessions**：Optimize For（Cost / Balance / Intelligence），账号级，紧跟 Smart model selection
+  （owner，2026-11-19，board `docs/mocks/routing-mode-account`）。
+- **Agent 设置 → SubAgents**：开关、Providers（默认全部，点进去屏蔽）、
   Running at once。
 - **Providers 页**：每个模型多一列 Tier；preset 的档位和价格跟目录走，自定义 endpoint 显示 `Not set`，点开可以标。
 - **报告**：沿用 model routing 报告页，加一个 SubAgents 视图：按档位、模型统计次数、成功率、花费、额度换候选次数、

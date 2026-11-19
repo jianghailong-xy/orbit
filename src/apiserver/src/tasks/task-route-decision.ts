@@ -14,7 +14,7 @@ import {
   type RunnerModelCatalog,
 } from '@orbit/shared';
 import { runnerAccountPausedUntil } from '../common/account-pause';
-import { modelRoutingEnabled } from '../common/model-routing-switch';
+import { modelRoutingEnabled, optimizeForOf } from '../common/model-routing-switch';
 import { resolvePermissionMode } from '../common/permission-mode';
 import { firstRuntimeCatalogModel, sanitizeRuntimeDefaultModels } from '../common/runtime-model';
 import { normalizeEffortForProvider } from '../common/runtime-provider';
@@ -71,7 +71,7 @@ export function taskRouteReads(prisma: PrismaService, ownerId: string, now: Date
     workspace: (id: string) => once(`workspace:${id}`, () => prisma.workspace.findFirst({
       where: { id, ownerId },
       select: {
-        runnerId: true, effort: true, modelRouting: true, modelRoutingProviders: true, modelRoutingOptimizeFor: true,
+        runnerId: true, effort: true, modelRouting: true, modelRoutingProviders: true,
         env: true, codexAccount: true, claudeAccount: true, kimiAccount: true,
       },
     })),
@@ -350,7 +350,9 @@ async function routeEngines(
   const states: Record<string, ModelRoutingEngineState> = {};
   for (const engine of new Set([env.engine, ...allowed])) {
     if (env.runner && (engine === AgentProvider.CLAUDE || engine === AgentProvider.CODEX)) {
-      states[engine] = engineState(engine, agent, env.runner, reads.now);
+      // What only the SubAgent router reads stays out of the task run's recorded features.
+      const { quotaUnread: _unread, expiresAt: _expires, nearLimit: _near, ...state } = engineState(engine, agent, env.runner, reads.now);
+      states[engine] = state;
     }
   }
   const verifiedRunEngine = task.verifiesTaskId ? await lastRunEngine(reads, task.verifiesTaskId) : null;
@@ -486,8 +488,8 @@ export async function planTaskRunRoute(
     dependents,
     promptChars: prompt.length,
   };
-  const optimizeFor = agent?.modelRoutingOptimizeFor === 'balance' ? 'balance'
-    : agent?.modelRoutingOptimizeFor === 'intelligence' ? 'intelligence' : 'cost';
+  // The account's, for every Agent (owner, 2026-11-19).
+  const optimizeFor = optimizeForOf(await reads.owner());
   const decision = routeTaskRun({
     optimizeFor,
     features: structuralFeatures,

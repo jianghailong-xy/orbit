@@ -14,6 +14,7 @@ import {
   type SubagentRunCreateRequest,
 } from '@orbit/shared';
 import { Prisma } from '@prisma/client';
+import { optimizeForOf } from '../common/model-routing-switch';
 import { isLoginEngine, sanitizeRunnerEngines } from '../common/runner-engines';
 import { sanitizeRuntimeDefaultModels } from '../common/runtime-model';
 import type { PrismaService } from '../prisma/prisma.service';
@@ -171,8 +172,7 @@ export async function subagentRouteInput(
   const catalog = (runner?.modelCatalog ?? null) as RunnerModelCatalog | null;
   const configured = await readConfiguredProviders(db, ownerId, { catalog, planUsage: args.planUsage ?? null, now: reads.now });
 
-  const mode = agent?.modelRoutingOptimizeFor;
-  const optimizeFor: ModelRoutingOptimizeFor = mode === 'balance' || mode === 'intelligence' ? mode : 'cost';
+  const optimizeFor: ModelRoutingOptimizeFor = optimizeForOf(owner);
   const level = (value: unknown) => (['S', 'M', 'L', 'XL'] as const).find((entry) => entry === value) ?? null;
   return {
     type: dto.type,
