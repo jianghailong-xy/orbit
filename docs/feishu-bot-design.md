@@ -641,9 +641,27 @@ F0 → F1 → F2 → F3 串行，F3n 在 F3 之后两端并行。以后再做：
   - 隐式路由可以单独关掉：`PATCH /api/integrations/feishu/chats/:id` 只收 `enabled`（`disabled_reason` 记 `OWNER`），
     带别的字段得 400。机器人被移出群时，隐式路由也停用（`disabled_reason = 'BOT_REMOVED'`，之后打开得 409，与接入过的群相同）。
   - 在隐式路由的群里发 connect 并确认，这一行变成 `source = 'CONNECT'`，用它自己的设置；首次使用者保留。
-  - 已有一条 connect 后还没确认的行（`source = 'CONNECT'`、`confirmed_at` 为空）的群，第一次被 @ 时怎么处理由 O4 定，
-    定了写进本节。
+  - 已有一条 connect 后还没确认的行（`source = 'CONNECT'`、`confirmed_at` 为空）的群（O4 定）：按未接入的群处理，
+    第一次被 @ 时这一行就地变成隐式路由（`source = 'OPEN_ACCESS'`、`enabled = true`，记首次使用者），ticket 留着；
+    主人之后用那张卡确认，这一行照常变成 `source = 'CONNECT'`，用它自己的设置。
   - 外部群照旧拒绝。
+  - 主人自己在没有确认接入的群里顶层 @机器人（O4 定）：照旧回 notConnected 句子，不开会话、不写数据。默认设置是给别人用的，
+    主人要从群里派活就接入这个群。主人在隐式路由的话题里 @机器人，照常作为一个 turn 进入那个会话（不记外部发送者）。
+
+  落地（O4，`feishu-chat-route.service.ts#openGroup`、`feishu-group.service.ts#reserveOpen`，无迁移）：
+
+  - 开放模式「有效」（14.1）时，没有确认接入的群由 `openGroup` 交给 `FeishuGroupService`，路由带 `openAccess`，
+    workspace 与 permission mode 取 `open_workspace_id`、`open_permission_mode`，允许名单为空（可用范围内的人都可以）。
+    没有路由行、或只有一条没确认的 connect 行时，先读 `GET /open-apis/im/v1/chats/:chat_id`：读不到回 unreadable 句子，
+    外部群回 external 句子，都不写数据。隐式路由被关掉（`OWNER` 或 `BOT_REMOVED`）回 14.6 的「关掉的群」句子。
+    开放模式不有效时，这些群都回 notConnected 句子，话题里的 @ 也一样。
+  - 顶层 @ 在一个事务里：先 `FOR UPDATE` 锁住这个群的路由行（有的话），再 `reserveOpenSlot`（锁应用行、计数、写话题行），
+    最后写隐式路由（`INSERT … ON CONFLICT (app_id, chat_id) DO UPDATE`，只改没确认的 connect 行）。所以超过上限时
+    路由、话题行、会话、activity 都不写，只在话题里回 14.6 的句子；`NOT_OPEN` 回 notConnected。路由行在会话之前提交，
+    审批卡的 `Started by <name> in <群名>`（O5）读得到群名。
+  - 会话建成后 `openSlotStarted` 盖章，盖到的那一次写 `feishu.group.session.created`；被拒时 `releaseOpenSlot`。
+    话题里的 @ 与接入过的群相同（`feishu.group.session.turn`），不计上限。同一事件再处理一次：会话按 id 找到，不再占位、
+    不再写路由。
 - 切回 `OWNER_ONLY` 后：
   - 非主人私聊照旧回 stranger 句子；
   - 隐式路由不再开会话，回 notConnected 句子；

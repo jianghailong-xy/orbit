@@ -3028,6 +3028,11 @@ export const TRANSACTION_PARTICIPANTS: readonly TransactionParticipant[] = [
   { at: 'feishu/feishu-direct.service.ts#recordActivity', under: 'feishu/feishu-direct.service.ts#start, and sessions/sessions.service.ts#createTurn (onTurnWritten)' },
   { at: 'feishu/feishu-group.service.ts#registerTopic', under: 'feishu/feishu-group.service.ts#start, and sessions/sessions.service.ts#createTurn (onTurnWritten)' },
   { at: 'feishu/feishu-group.service.ts#reserve', under: 'feishu/feishu-group.service.ts#start (its first transaction)' },
+  // A group using the open bot's settings (docs/feishu-bot-design.md §14.2, task O4): its feishu_chat_route row locked
+  // FOR UPDATE when there is one, the slot held through feishu-open-limits.ts#reserveOpenSlot, then one INSERT … ON
+  // CONFLICT (app_id, chat_id) DO UPDATE of the implicit route (only over a connect never confirmed). Over a limit it
+  // writes nothing; a replay finds its slot and the route already OPEN_ACCESS, and writes nothing more.
+  { at: 'feishu/feishu-group.service.ts#reserveOpen', under: 'feishu/feishu-group.service.ts#start (its first transaction, for a group using the app\'s settings)' },
   { at: 'feishu/feishu-group.service.ts#openReserved', under: 'feishu/feishu-group.service.ts#start (its second transaction)' },
   // The open bot's slots (docs/feishu-bot-design.md §14.4, migration 1140): the app row locked FOR UPDATE, and the
   // request's feishu_thread row reserved with open_access_open_id, then stamped once its session exists. Run inside the
