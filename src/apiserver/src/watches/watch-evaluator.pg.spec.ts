@@ -58,6 +58,7 @@ import {
   WatchEvaluatorService,
   watchHintFor,
 } from './watch-evaluator.service';
+import { WATCH_PREDICATE_VERSION } from './watch-predicate';
 import { redactReason, redactSnapshot } from './watch-redaction';
 import { WatchesService } from './watches.service';
 
@@ -1512,7 +1513,7 @@ test('the job leaf is checked where a watch is created: its version, its window,
   const before = await count();
   const refused: Array<[string, Record<string, unknown>, string]> = [
     ['under version 2', { predicateVersion: 2 }, 'UNKNOWN_PREDICATE_KIND'],
-    ['under a version this build does not serve', { predicateVersion: 4 }, 'PREDICATE_VERSION_UNSUPPORTED'],
+    ['under a version this build does not serve', { predicateVersion: WATCH_PREDICATE_VERSION + 1 }, 'PREDICATE_VERSION_UNSUPPORTED'],
     ['a window under the minimum', { predicate: quiet(WATCH_LIMITS.minNoOutputSeconds - 1) }, 'PREDICATE_PARAMETER_INVALID'],
     ['a window past the longest TTL', { predicate: quiet(WATCH_LIMITS.maxTtlSeconds + 1) }, 'PREDICATE_PARAMETER_INVALID'],
     ['a fractional window', { predicate: quiet(300.5) }, 'PREDICATE_PARAMETER_INVALID'],
