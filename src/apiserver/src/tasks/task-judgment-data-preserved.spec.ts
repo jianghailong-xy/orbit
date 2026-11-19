@@ -2893,14 +2893,14 @@ test('the ledger stays append-only, and every later migration is accounted for',
       '0509_project_promotion_request',
       // 0510 adds nullable owner_request client metadata only; no preserved rows, triggers or DONE fence change.
       '0510_owner_request_resolved_client',
-      // 0511 only replaces 0487's `open_list_bump_owner`, so that an UPDATE of `project_integration_job` that changes
+      // 0511 adds nullable project JSON only; no preserved rows, triggers or DONE fence change.
+      '0511_project_done_task_epochs',
+      // 0512 only replaces 0487's `open_list_bump_owner`, so that an UPDATE of `project_integration_job` that changes
       // nothing but a lease renewal's columns bumps no Open-list counter. No table, column, constraint or trigger is
       // created, altered or dropped; the function writes `open_list_epoch` alone, and none of the six preserved
       // triggers/functions is named or replaced, so it is not another writer of the DONE fence. No INSERT, UPDATE or
       // DELETE runs at apply time.
-      '0511_open_list_renewal_not_a_change',
-      // 0512 adds nullable project JSON only; no preserved rows, triggers or DONE fence change.
-      '0512_project_done_task_epochs',
+      '0512_open_list_renewal_not_a_change',
       // 0513 adds attribution and admits its explicit retry; no preserved row or fence changes.
       '0513_integration_baseline_red',
       // 0514 adds two nullable wiki_maintenance_run columns and their CHECK only; no preserved rows, triggers or DONE fence change.
@@ -2928,9 +2928,8 @@ test('the ledger stays append-only, and every later migration is accounted for',
       '0528_approval_subagent_run',
       // 0530 swaps two CHECKs and lets a probe's wiki_repo_op name no job; no preserved rows, triggers or DONE fence change.
       '0530_wiki_repo_probe',
-      // 0531 adds two nullable owner_request columns (repo_url_norm, workspace_id), swaps owner_request's kind CHECK
-      // for one that admits WIKI_CREATE, adds one CHECK and one partial unique index; `owner_request` is none of the
-      // preserved relations, no trigger, function or DONE fence changes, and no row is written.
+      // 0531 adds WIKI_CREATE owner requests, two nullable columns, two CHECKs and a partial unique index;
+      // no preserved rows, triggers or DONE fence change, and no row is written.
       '0531_owner_request_wiki_create',
       // 0532 adds three nullable conversation_turn columns and their CHECK only; no preserved rows, triggers or DONE
       // fence change.
@@ -3154,6 +3153,10 @@ test('the ledger stays append-only, and every later migration is accounted for',
       // DECIDED and REVISED; catalog-only, no row is written, and no preserved relation, trigger, function or DONE
       // fence changes.
       '1110_evidence_undecided_item',
+      // 1120 adds nullable translated_note and translation_lang TEXT columns to task_evidence_decision
+      // so queued send-backs retain their translated text. No constraints or defaults are added,
+      // no existing rows are written, and no preserved relation, trigger, function or DONE fence changes.
+      '1120_evidence_send_back_translation',
       // 1130 adds three partial indexes, one on `task` and two on `session`; no row is written, and no preserved
       // relation, trigger, function or DONE fence changes.
       '1130_rare_predicate_indexes',
@@ -3182,6 +3185,9 @@ test('the ledger stays append-only, and every later migration is accounted for',
       // each that NULL passes to project_standard_set_confirmation, which is not a preserved relation; no row is
       // written, and no trigger, function or DONE fence changes.
       '1200_standard_set_confirmation_wording',
+      // 1213 adds a nullable session.branch_commits (JSONB, no default); no row is written, and no preserved
+      // relation, trigger, function or DONE fence changes.
+      '1213_session_branch_commits',
       // 1220 sets fastupdate = off on run_event's trigram index and merges its pending list; no row is written, and
       // no preserved relation, trigger, function or DONE fence changes.
       '1220_run_event_text_trgm_fastupdate_off',

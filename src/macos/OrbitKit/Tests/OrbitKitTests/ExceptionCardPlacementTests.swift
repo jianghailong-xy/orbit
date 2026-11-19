@@ -20,6 +20,24 @@ import XCTest
 /// screenshot's to judge; ORDER is what this file settles.
 final class ExceptionCardPlacementTests: XCTestCase {
 
+    func testOnlyOwnerExceptionsAreSelectedFromTheOpenItemsRead() throws {
+        let stamp = "2026-09-22T12:00:00Z"
+        let owner = openItem("owner", waitingSince: stamp, escalatedAt: stamp)
+        let coordinator = ProjectOpenItemRow(itemId: "coordinator", kind: .taskFailed, title: "Task failed",
+                                             waitingSince: stamp, assignee: .coordinator)
+        let settled = ProjectOpenItemRow(itemId: "coordinator-settled", kind: .taskFailed, title: "Task failed",
+                                         waitingSince: stamp, assignee: .coordinator)
+        let encoder = JSONEncoder()
+        var payload = try XCTUnwrap(JSONSerialization.jsonObject(
+            with: encoder.encode(ProjectOpenItemsView(needsYou: [owner], withCoordinator: [coordinator]))
+        ) as? [String: Any])
+        payload["settled"] = [try JSONSerialization.jsonObject(with: encoder.encode(settled))]
+        let items = try JSONDecoder().decode(ProjectOpenItemsView.self, from: JSONSerialization.data(withJSONObject: payload))
+
+        XCTAssertEqual(ExceptionCards.cards(items).map(\.itemId), ["owner"])
+        XCTAssertEqual(ProjectPage.needsYouRows(items).map(\.itemId), ["owner"])
+    }
+
     // MARK: the fixture
 
     private func item(_ id: String, at stamp: String) -> TranscriptItem {

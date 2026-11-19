@@ -507,18 +507,20 @@ class ProjectPageTest {
         startRequest?.let { put("startRequest", it) }; doneRequest?.let { put("doneRequest", it) }
     }
 
-    @Test fun openItemsSummaryKeepsCoordinatorItemsQuietUntilTheServerReassignsThem() {
+    @Test fun openItemsShowsOnlyOwnerRows() {
         val coordinator = item("INTEGRATION_CHECK_FAILED", "COORDINATOR", 3_600, escalateIn = -60)
         val quiet = ProjectPage.openItemsSummary(page(), items(withCoordinator = listOf(coordinator)))!!
-        assertEquals(1, quiet.count); assertEquals(0, quiet.needsYou)
+        assertEquals(0, quiet.count); assertEquals(0, quiet.needsYou)
         assertNull("a local countdown reaching zero does not reassign an item", quiet.attention)
-        assertEquals("No action needed from you · 1 with the coordinator", quiet.subtitle)
+        assertEquals("No open items", quiet.subtitle)
         val owner = item("INTEGRATION_CHECK_FAILED", "OWNER", 3_600)
         val escalated = ProjectPage.openItemsSummary(page(), items(needsYou = listOf(owner)))!!
         assertEquals(1, escalated.count); assertEquals("1 item needs you", escalated.attention); assertEquals("1 item needs you", escalated.subtitle)
         val pause = item("FUSE_PAUSED", "OWNER", 60, actions = listOf("RESUME"), fuse = "f1")
-        val mixed = ProjectPage.openItemsSummary(page(), items(needsYou = listOf(owner, pause), withCoordinator = listOf(coordinator)))!!
-        assertEquals(3, mixed.count); assertEquals("2 items need you", mixed.attention); assertEquals("2 items need you · 1 with the coordinator", mixed.subtitle)
+        val mixedItems = items(needsYou = listOf(owner, pause), withCoordinator = listOf(coordinator))
+        assertEquals(listOf(owner, pause), ProjectPage.needsYouRows(mixedItems))
+        val mixed = ProjectPage.openItemsSummary(page(), mixedItems)!!
+        assertEquals(2, mixed.count); assertEquals("2 items need you", mixed.attention); assertEquals("2 items need you", mixed.subtitle)
     }
 
     @Test fun openItemsSummaryDoesNotTurnAnUnreadInboxIntoAnEmptyOne() {

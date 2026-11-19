@@ -6575,6 +6575,9 @@ model TaskEvidenceDecision {
   /// Why the work is coming back. Required on SEND_BACK by the door: a rejection with nothing to
   /// act on is the state the next revision cannot get out of. Optional on CONFIRM.
   note     String?
+  /// The translated SEND_BACK note stays on the decision until its run can receive it.
+  translatedNote  String? @map("translated_note")
+  translationLang String? @map("translation_lang")
 
   decidedAt         DateTime    @default(now()) @map("decided_at")
   decidedByType     CreatorType @map("decided_by_type")
