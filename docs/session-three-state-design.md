@@ -1,6 +1,7 @@
 # Session state: three activity states and the facts beside them
 
-Status: **proposal, nothing decided**. Written 2026-11-19 against commit `a1282659a4`.
+Status: **D1, D5 and D8 decided as recommended by the owner on 2026-11-19; D2, D3, D4, D6 and D7
+still open**. Written 2026-11-19 against commit `a1282659a4`.
 If accepted it replaces §2.1 of [session-lifecycle-design.md](session-lifecycle-design.md).
 The complete list of read sites is in
 [session-three-state-read-sites.md](session-three-state-read-sites.md) (442 rows).
@@ -314,6 +315,8 @@ value an old client reads.
    is small. Recommendation: decide after stage 5, not now (D6).
 
 ## 9. Decisions for the owner
+
+Decided on 2026-11-19, each as recommended below: **D1**, **D5** and **D8**. The others are open.
 
 - **D1. Four situations, not three.** Accept that "released" is the session's own fact, kept
   beside three activity states. Recommended: yes, as a column, so that the status says only

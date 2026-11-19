@@ -1,6 +1,7 @@
 # Session state: modification plan
 
-Status: **proposal, nothing decided or started**. Written 2026-11-19 against commit
+Status: **D1, D5 and D8 decided as recommended on 2026-11-19; tracked as Orbit project
+`3508bDBDE5xPH43TYuiqP`**. Written 2026-11-19 against commit
 `a1282659a4`. It implements
 [session-three-state-design.md](session-three-state-design.md) and uses the read-site list in
 [session-three-state-read-sites.md](session-three-state-read-sites.md). Section and decision
@@ -28,7 +29,8 @@ visible effect and the least risk, so it goes first if only one thing is started
 
 ## 2. Assumptions
 
-The plan takes the recommended answer to every open decision. A different answer changes the
+The owner took the recommended answer on D1, D5 and D8 on 2026-11-19. For the decisions still
+open the plan takes the recommended answer. A different answer changes the
 plan as shown.
 
 | Decision | Assumed | If the owner decides otherwise |
