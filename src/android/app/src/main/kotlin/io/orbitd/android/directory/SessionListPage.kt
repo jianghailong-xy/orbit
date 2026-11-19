@@ -163,7 +163,7 @@ internal fun RowSpinner(modifier: Modifier = Modifier) {
 }
 
 /** A folder's row (iOS `SessionFolderRowView`): its name, what the sessions it holds would have said — how many wait on you, else a
- * spinner, else the breathing mark, by the drawer's rule — their count and a chevron. A tap opens it and a long press is its menu. */
+ * spinner, else the breathing mark, by the drawer's rule — their count (unless some wait on you) and a chevron. A tap opens it and a long press is its menu. */
 @Composable
 internal fun FolderRow(folder: Folder, sessions: List<DirectorySession>, runnerOffline: Boolean, watching: Map<String, WatchSessionSummary>,
     onOpen: () -> Unit, onOptions: () -> Unit) {
@@ -186,7 +186,7 @@ internal fun FolderRow(id: String, name: String, summary: FolderRowSummary, onOp
         DrawerCopy.waitingForYou(waiting).takeIf { waiting > 0 },
         SessionListCopy.FOLDER_RUNNING.takeIf { running },
     ).joinToString(". ") else when {
-        waiting > 0 -> DrawerCopy.waitingForYou(waiting)
+        waiting > 0 -> "${DrawerCopy.waitingForYou(waiting)}. ${SessionListCopy.folderSessions(count)}"
         running -> SessionListCopy.FOLDER_RUNNING
         jobs -> SessionListCopy.FOLDER_JOBS
         else -> SessionListCopy.folderSessions(count)
@@ -209,7 +209,8 @@ internal fun FolderRow(id: String, name: String, summary: FolderRowSummary, onOp
             running && !scheduled -> RowSpinner()
             jobs -> BreathingTerminal()
         }
-        Text("$count", style = MaterialTheme.typography.labelMedium, color = muted, modifier = Modifier.clearAndSetSemantics {})
+        // One number on the row (owner 2026-11-19, as on the web): who waits on you takes the total's place, which `words` still reads.
+        if (waiting == 0) Text("$count", style = MaterialTheme.typography.labelMedium, color = muted, modifier = Modifier.clearAndSetSemantics {})
         Icon(painterResource(R.drawable.ic_chevron_forward), null, Modifier.size(14.dp), tint = muted.copy(alpha = 0.6f))
     }
 }

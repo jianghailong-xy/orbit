@@ -570,11 +570,13 @@ test('the count is taken for a live reader: the turn, or the job a card names', 
   const wakingStatus = await waking.service.coordinatorStatus(OWNER_ID, PROJECT_ID);
   assert.equal(wakingStatus.coordination.session?.pendingApprovals, 7);
   assert.equal(waking.queries.includes('approval.count'), true);
-  // A generating session holds its turn's cards — every card that names no job — and a job's card
-  // only while that job is up. None is up here, so the job half asks for no job at all.
-  assert.deepEqual(waking.approvalWheres, [
-    { sessionId: SESSION_ID, status: 'PENDING', OR: [{ backgroundJobId: null }, { backgroundJobId: { in: [] } }] },
-  ]);
+  // A generating session holds its turn's cards: every card that names no job, and a job's card only while
+  // that job is up (countLiveApprovals). With no shell up, that is the turn's cards alone.
+  assert.deepEqual(waking.approvalWheres, [{
+    sessionId: SESSION_ID,
+    status: 'PENDING',
+    OR: [{ backgroundJobId: null }, { backgroundJobId: { in: [] } }],
+  }]);
 
   // The same turn with a job still running: that job's card is read by it, so it is counted beside
   // the turn's own.
