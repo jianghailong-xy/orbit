@@ -1083,24 +1083,17 @@ public enum ProjectPage {
 
     public static let openItemsHeading = "Open items"
     public static let needsYouGroup = "Needs you"
-    public static let withCoordinatorGroup = "With the coordinator"
 
-    /// The toolbar counts every open item; only the owner's share raises a reminder on the page.
     public struct OpenItemsSummary: Equatable, Sendable {
         public let needsYou: Int
-        public let withCoordinator: Int
-        public var count: Int { needsYou + withCoordinator }
+        public var count: Int { needsYou }
 
         public var attention: String? {
             guard needsYou > 0 else { return nil }
             return needsYou == 1 ? "1 item needs you" : "\(needsYou) items need you"
         }
 
-        public var subtitle: String {
-            if count == 0 { return "No open items" }
-            let owner = attention ?? "No action needed from you"
-            return withCoordinator > 0 ? "\(owner) · \(withCoordinator) with the coordinator" : owner
-        }
+        public var subtitle: String { attention ?? "No open items" }
     }
 
     /// A missing read is not an empty inbox. A start request counts only while the page can answer
@@ -1113,8 +1106,7 @@ public enum ProjectPage {
         let start = StartProject.pageRow(status: status, started: started, openItems: items)
         let done = ProjectDone.live(openItems: items, status: status.rawValue)
         return OpenItemsSummary(needsYou: needsYouRows(items).count + (start?.request == nil ? 0 : 1)
-                                    + (done == nil ? 0 : 1),
-                                withCoordinator: items.withCoordinator.count)
+                                    + (done == nil ? 0 : 1))
     }
 
     /// The owner's rows, without the request to record the project done should a server ever list

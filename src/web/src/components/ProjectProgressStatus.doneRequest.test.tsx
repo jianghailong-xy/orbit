@@ -64,7 +64,7 @@ describe('Record as done… in Open items', () => {
 
     expect(html).toContain(PROJECT_DONE_COPY.recordAsDoneRow);
     expect(html).toMatch(/class="project-open-item-row[^"]*\bis-hint\b[^"]*"[^>]*data-kind="DONE"/);
-    expect(html).toContain('0 need you · 0 with the coordinator · oldest first');
+    expect(html).toContain('0 need you · oldest first');
   });
 
   it('gives way to the coordinator’s request, which counts once with its wait', () => {
@@ -73,6 +73,6 @@ describe('Record as done… in Open items', () => {
     expect(html).not.toContain(PROJECT_DONE_COPY.recordAsDoneRow);
     expect(html).toContain('data-kind="DONE_REQUEST"');
     expect(html).toContain('waiting 25m');
-    expect(html).toContain('1 need you · 0 with the coordinator · oldest first');
+    expect(html).toContain('1 need you · oldest first');
   });
 });

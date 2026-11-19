@@ -781,7 +781,6 @@ private fun OpenItemsSheet(state: ProjectPageState, doc: JsonObject, now: Instan
                     val start = StartProjectCopy.pageRow(ProjectDoc.status(doc), ProjectDoc.started(doc), items)
                     val done = ProjectDone.pageRow(doc, items)
                     val needsYou = ProjectPage.needsYouRows(items)
-                    val withCoordinator = items.objects("withCoordinator")
                     // The main branch a rerun of a merge check, or an observation of the line, names.
                     val main = RunSettings.mainBranchName(doc.obj("integration")?.text("upstreamRef"))
                     Column(Modifier.padding(end = 8.dp)) {
@@ -808,12 +807,6 @@ private fun OpenItemsSheet(state: ProjectPageState, doc: JsonObject, now: Instan
                             }
                             needsYou.forEach { row -> OpenItemRow(row, now, main, enabled, perform, openTask) { perform("REVIEW", row) } }
                         }
-                        if (withCoordinator.isNotEmpty()) {
-                            GroupLabel(ProjectPage.withCoordinatorGroup)
-                            withCoordinator.forEach { row -> OpenItemRow(row, now, main, enabled, perform, openTask) { perform("OPEN_COORDINATOR", row) } }
-                        }
-                        if (summary.count == 0 && start == null && done == null)
-                            Text(ProjectPage.nothingWaiting, Modifier.padding(top = 12.dp).testTag("project-open-items-empty"), color = MaterialTheme.colorScheme.onSurfaceVariant)
                     }
                 }
                 state.openItemsUnread -> Column(Modifier.fillMaxWidth().padding(vertical = 24.dp).testTag("project-open-items-failed"),
