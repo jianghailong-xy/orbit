@@ -25142,6 +25142,19 @@ a.smc-from:hover {
 .src-excerpt {
   margin-top: 6px;
 }
+/* The reply's own size and line height (those of the .md inside it), so its height can be read in
+   lines: a long reply shows its first 4, fading out, until "Show more" (SessionReplyCard). */
+.src-body {
+  font-size: 14px;
+  line-height: 1.6;
+}
+.src-body.is-clamped {
+  max-height: 6.4em;
+  max-height: 4lh;
+  overflow: hidden;
+  -webkit-mask-image: linear-gradient(to bottom, #000 55%, transparent);
+  mask-image: linear-gradient(to bottom, #000 55%, transparent);
+}
 .src-excerpt {
   padding-left: 8px;
   border-left: 2px solid var(--bg-hover-strong);
