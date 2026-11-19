@@ -430,7 +430,7 @@ test('Feishu: the owner answers a tool approval on its card — Allow once and D
 
   await t.test('(8) an answer later than the budget: "Working…", then the card once through the update token', async () => {
     const prisma = db as unknown as PrismaService;
-    const router = new FeishuRouter(prisma, {} as FeishuOwnerService, {} as FeishuChatRouteService, { handleCardAction: async () => null } as unknown as FeishuDirectService, {} as FeishuGroupService);
+    const router = new FeishuRouter(prisma, {} as FeishuOwnerService, {} as FeishuChatRouteService, { handleCardAction: async () => null } as unknown as FeishuDirectService, {} as FeishuGroupService, {} as FeishuOutbound);
     const transport = new FeishuTransport(prisma, new FeishuAppService(prisma), new FeishuOutbound());
     const actions = new FeishuCardActions(prisma, router, {} as SessionsService, transport, new FeishuOutbound());
     const lateCard = { schema: '2.0', header: { title: { tag: 'plain_text', content: 'late' } } };

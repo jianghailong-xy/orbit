@@ -73,10 +73,14 @@ struct SessionFolderRowView: View {
                 Circle().fill(Color.accentColor).frame(width: 6, height: 6)
                     .accessibilityHidden(true)
             }
-            Text("\(sessionCount)")
-                .font(.orbitMeta)
-                .monospacedDigit()
-                .foregroundStyle(.secondary)
+            // One number on the row (owner 2026-11-19, as on the web): who waits on you takes the
+            // total's place, and the total moves into what VoiceOver reads.
+            if !waitsOnYou {
+                Text("\(sessionCount)")
+                    .font(.orbitMeta)
+                    .monospacedDigit()
+                    .foregroundStyle(.secondary)
+            }
             Image(systemName: "chevron.right")
                 .font(.orbitMeta.weight(.semibold))
                 .foregroundStyle(.tertiary)
@@ -88,11 +92,16 @@ struct SessionFolderRowView: View {
         .accessibilityValue(runningDot ? "\(folderStatusWords), session running" : folderStatusWords)
     }
 
+    private var waitsOnYou: Bool {
+        if case .needsYou = status { return true }
+        return false
+    }
+
     /// What VoiceOver reads for the state the trailing slot draws — the same words the session rows
     /// use for the same facts.
     private var folderStatusWords: String {
         switch status {
-        case .needsYou(let count): return "\(count) waiting for you"
+        case .needsYou(let count): return "\(count) waiting for you, \(sessionCount) sessions"
         case .running:             return "Session running"
         case .jobs:                return "Background job running"
         case .idle:                return "\(sessionCount) sessions"

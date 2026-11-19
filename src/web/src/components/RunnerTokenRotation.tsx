@@ -1,6 +1,6 @@
 import { CheckOutlined, CopyOutlined } from '@ant-design/icons';
 import { useMutation } from '@tanstack/react-query';
-import { useState, type RefObject } from 'react';
+import { useEffect, useRef, useState, type RefObject } from 'react';
 import { api } from '../api';
 import { copyText } from '../lib/clipboard';
 import { useToast } from '../lib/toast';
@@ -23,6 +23,9 @@ export function useRunnerTokenRotation() {
   // The freshly minted token from a rotation, shown exactly once.
   const [revealed, setRevealed] = useState<{ name: string; token: string } | null>(null);
   const [copied, setCopied] = useState(false);
+  // The "Copied" reset is cancelled when this goes, so it never updates a component that is gone.
+  const copiedReset = useRef<ReturnType<typeof setTimeout>>(undefined);
+  useEffect(() => () => clearTimeout(copiedReset.current), []);
   // Where focus goes once the token is put away: the menu's button the rotation was asked from.
   const [returnFocus, setReturnFocus] = useState<RefObject<HTMLElement | null> | undefined>();
 
@@ -55,7 +58,8 @@ export function useRunnerTokenRotation() {
     void copyText(revealed.token).then((ok) => {
       if (!ok) return;
       setCopied(true);
-      setTimeout(() => setCopied(false), 1600);
+      clearTimeout(copiedReset.current);
+      copiedReset.current = setTimeout(() => setCopied(false), 1600);
     });
   };
 

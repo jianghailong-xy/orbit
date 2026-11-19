@@ -4,8 +4,13 @@ import {
   FEISHU_APP_CALLBACKS,
   FEISHU_APP_EVENTS,
   FEISHU_APP_SCOPES,
+  FEISHU_CHAT_MAX_CONCURRENT_LIMIT,
+  FEISHU_CHAT_SESSIONS_PER_DAY_LIMIT,
   FEISHU_OPEN_PLATFORM_ORIGINS,
   FEISHU_PLATFORMS,
+  type FeishuAccessChange,
+  type FeishuAccessMode,
+  type FeishuAccessSettings,
   type FeishuAppChange,
   type FeishuAppConnect,
   type FeishuAppSettings,
@@ -21,6 +26,7 @@ import { Alert } from '../components/ui/Alert';
 import { Badge } from '../components/ui/Badge';
 import { Button, LinkButton } from '../components/ui/Button';
 import { Input } from '../components/ui/Input';
+import { NumberInput } from '../components/ui/NumberInput';
 import { Popconfirm } from '../components/ui/Popconfirm';
 import { Radio, RadioGroup } from '../components/ui/Radio';
 import { Select } from '../components/ui/Select';
@@ -31,7 +37,8 @@ import { SettingsHeader } from '../components/settings';
 import { copyText } from '../lib/clipboard';
 import { useToast } from '../lib/toast';
 import { workspacesQuery } from '../lib/queries';
-import { feishuChatsQuery, modeLabel } from './FeishuConnectGroupPage';
+import { useManagedRunnerId } from '../lib/managedRunner';
+import { FEISHU_GROUP_MODES, feishuChatsQuery, modeLabel, runnerName, type WorkspaceRow } from './FeishuConnectGroupPage';
 
 /** `GET /integrations/feishu` (docs/feishu-bot-design.md §4.1, §10): never the App Secret, only whether one is saved and readable. */
 export const feishuIntegrationQuery = () =>
@@ -55,6 +62,7 @@ export const FEISHU_SCOPE_PURPOSES: Readonly<Record<(typeof FEISHU_APP_SCOPES)[n
   'im:message.group_at_msg:readonly': 'Read group messages that @mention the bot',
   'im:chat:readonly': 'Read group information',
   'contact:user.base:readonly': "Read people's basic information, to show their names",
+  'application:application:self_manage': "Check that a person is in the app's availability before the bot answers them",
 };
 
 /** §6.4: what the detail switch says, off (the default) and on. Feishu keeps whatever a card carries. */
@@ -382,11 +390,262 @@ function OwnerSection({ app }: { app: FeishuAppSettings }) {
   );
 }
 
+/** §14.1: the two answers to "Who can use the bot", each with what it means. */
+export const ACCESS_CHOICES: ReadonlyArray<{ value: FeishuAccessMode; label: string; hint: string }> = [
+  {
+    value: 'OWNER_ONLY',
+    label: 'Only you',
+    hint: 'Direct messages from anyone else are refused, and a group works only once you connect it.',
+  },
+  {
+    value: 'AVAILABILITY_SCOPE',
+    label: 'Everyone the app is available to in Feishu',
+    hint: "Feishu's availability decides who. They can message the bot directly, or @mention it in any group inside your "
+      + 'organization that it is in. No group needs connecting.',
+  },
+];
+export const OPEN_TO_OTHERS = 'Open to others';
+/** §14.5: what opening the bot means, under the consequence's title. */
+export const OPEN_ACCESS_CONSEQUENCE =
+  "Approvals and agents' questions come to you in Feishu, never to the person who asked. They get each turn's final "
+  + 'reply only: no tool output, files or Orbit links.';
+export const OPEN_ACCESS_AVAILABILITY = "Who can use the app is set in Feishu's developer console, under the app's availability.";
+export const ACCESS_OWNER_CHANNEL_NOTE = 'Only you, signed in to Orbit, can change this. An access token cannot.';
+export const openAccessConsequence = (runner: string, mode: string) =>
+  `Anyone the app is available to in Feishu can make agents act on ${runner} in ${modeLabel(mode)} mode.`;
+
+type AccessDraft = Omit<FeishuAccessSettings, 'maxRunningPerPerson' | 'sessionsPerDayPerPerson' | 'maxRunningTotal' | 'sessionsPerDayTotal'> & {
+  maxRunningPerPerson: number | null;
+  sessionsPerDayPerPerson: number | null;
+  maxRunningTotal: number | null;
+  sessionsPerDayTotal: number | null;
+};
+const LIMIT_KEYS = ['maxRunningPerPerson', 'sessionsPerDayPerPerson', 'maxRunningTotal', 'sessionsPerDayTotal'] as const;
+
+/**
+ * Who can use the bot (docs/feishu-bot-design.md §14.1): only the owner, or everyone the app is available to in
+ * Feishu, with the workspace, permission mode and limits of the sessions other people start. Saved with
+ * PUT /integrations/feishu/access, an owner-channel route: the signed-in owner only, never an access token.
+ */
+function AccessSection({ app }: { app: FeishuAppSettings }) {
+  const qc = useQueryClient();
+  const message = useToast();
+  const managedRunnerId = useManagedRunnerId();
+  const workspaces = useQuery(workspacesQuery());
+  const saved = app.access;
+  const [draft, setDraft] = useState<AccessDraft>(saved);
+  const ids = { title: useId(), mode: useId(), workspace: useId(), permission: useId(), limits: useId() };
+  const live = ((workspaces.data ?? []) as WorkspaceRow[]).filter((w) => !w.deletedAt && w.enabled !== false);
+  const workspace = live.find((w) => w.id === draft.workspaceId);
+  const open = draft.mode === 'AVAILABILITY_SCOPE';
+  const save = useMutation({
+    mutationFn: (body: FeishuAccessChange) => api<FeishuIntegration>('/integrations/feishu/access', { method: 'PUT', body }),
+    onSuccess: (integration) => {
+      qc.setQueryData(feishuIntegrationQuery().queryKey, integration);
+      if (integration.app) setDraft(integration.app.access);
+      void qc.invalidateQueries({ queryKey: ['integrations', 'feishu', 'chats'] });
+      message.success(
+        integration.app?.access.mode === 'AVAILABILITY_SCOPE' ? 'The bot is open to others' : 'Only you can use the bot now',
+      );
+    },
+  });
+  const edit = (change: Partial<AccessDraft>) => {
+    setDraft((was) => ({ ...was, ...change }));
+    if (save.isError) save.reset();
+  };
+  const changed = (Object.keys(draft) as Array<keyof AccessDraft>).some((key) => draft[key] !== saved[key]);
+  const ready = changed && (!open || (draft.workspaceId !== null && LIMIT_KEYS.every((key) => draft[key] !== null)));
+  const submit = (event: FormEvent) => {
+    event.preventDefault();
+    if (!ready || save.isPending) return;
+    // Only you leaves the rest as saved, so opening the bot again needs nothing re-entered (§14.1).
+    save.mutate(open
+      ? {
+        mode: draft.mode,
+        workspaceId: draft.workspaceId,
+        permissionMode: draft.permissionMode,
+        maxRunningPerPerson: draft.maxRunningPerPerson!,
+        sessionsPerDayPerPerson: draft.sessionsPerDayPerPerson!,
+        maxRunningTotal: draft.maxRunningTotal!,
+        sessionsPerDayTotal: draft.sessionsPerDayTotal!,
+      }
+      : { mode: draft.mode });
+  };
+  const limit = (key: (typeof LIMIT_KEYS)[number], label: string, max: number) => (
+    <NumberInput
+      aria-label={label}
+      className="feishu-limit-input"
+      value={draft[key]}
+      min={1}
+      max={max}
+      step={1}
+      precision={0}
+      onValueChange={(value) => edit({ [key]: value } as Partial<AccessDraft>)}
+    />
+  );
+  return (
+    <form className="orbit-card feishu-card" onSubmit={submit} aria-labelledby={ids.title}>
+      <div className="orbit-card-head">
+        <h2 className="orbit-card-title" id={ids.title}>
+          Who can use the bot
+        </h2>
+        {saved.mode === 'AVAILABILITY_SCOPE' && <Badge tone="warning">{OPEN_TO_OTHERS}</Badge>}
+      </div>
+      <div className="orbit-card-body feishu-fields">
+        <RadioGroup<FeishuAccessMode>
+          aria-labelledby={ids.title}
+          className="feishu-modes"
+          value={draft.mode}
+          onValueChange={(mode) => edit({ mode })}
+        >
+          {ACCESS_CHOICES.map((choice) => (
+            <Radio key={choice.value} value={choice.value}>
+              <span className="admin-signin-choice">{choice.label}</span>
+              <span className="admin-signin-hint">{choice.hint}</span>
+            </Radio>
+          ))}
+        </RadioGroup>
+        {open && (
+          <div className="feishu-open" role="group" aria-label="Sessions other people start">
+            <div className="admin-signin-label">Sessions other people start</div>
+            <div className="admin-signin-row">
+              <div>
+                <div className="admin-signin-label" id={ids.workspace}>
+                  Workspace
+                </div>
+                <div className="admin-signin-hint">A workspace of its own, with nothing sensitive in its folder, is safest.</div>
+              </div>
+              <Select
+                aria-labelledby={ids.workspace}
+                style={{ minWidth: 220 }}
+                placeholder="Choose a workspace"
+                loading={workspaces.isPending}
+                value={draft.workspaceId}
+                options={live.map((w) => ({ value: w.id, label: `${w.name} · ${runnerName(w, managedRunnerId)}` }))}
+                onValueChange={(workspaceId) => edit({ workspaceId })}
+              />
+            </div>
+            <div className="admin-signin-row">
+              <div>
+                <div className="admin-signin-label" id={ids.permission}>
+                  Permission mode
+                </div>
+                <div className="admin-signin-hint">{FEISHU_GROUP_MODES.find((m) => m.value === draft.permissionMode)?.hint}</div>
+              </div>
+              <Select
+                aria-labelledby={ids.permission}
+                style={{ minWidth: 220 }}
+                value={draft.permissionMode}
+                options={FEISHU_GROUP_MODES.map((m) => ({ value: m.value, label: m.label }))}
+                onValueChange={(permissionMode) => permissionMode && edit({ permissionMode })}
+              />
+            </div>
+            <div>
+              <div className="admin-signin-label" id={ids.limits}>
+                Limits
+              </div>
+              <div className="admin-signin-hint">A message past a limit starts nothing; the bot says why.</div>
+              <div className="feishu-open-limits" role="group" aria-labelledby={ids.limits}>
+                <span>Each person</span>
+                <span className="feishu-open-limit">
+                  {limit('maxRunningPerPerson', 'Each person at a time', FEISHU_CHAT_MAX_CONCURRENT_LIMIT)} at a time
+                  {limit('sessionsPerDayPerPerson', 'Each person a day', FEISHU_CHAT_SESSIONS_PER_DAY_LIMIT)} a day
+                </span>
+                <span>Everyone together</span>
+                <span className="feishu-open-limit">
+                  {limit('maxRunningTotal', 'Everyone together at a time', FEISHU_CHAT_MAX_CONCURRENT_LIMIT)} at a time
+                  {limit('sessionsPerDayTotal', 'Everyone together a day', FEISHU_CHAT_SESSIONS_PER_DAY_LIMIT)} a day
+                </span>
+              </div>
+            </div>
+            <Alert
+              type="warning"
+              className="feishu-consequence"
+              title={openAccessConsequence(runnerName(workspace, managedRunnerId), draft.permissionMode)}
+              description={
+                <>
+                  {OPEN_ACCESS_CONSEQUENCE} {OPEN_ACCESS_AVAILABILITY}{' '}
+                  <a href={`${consoleOf(app.platform)}/${encodeURIComponent(app.appId)}`} target="_blank" rel="noreferrer">
+                    Open the developer console ↗
+                  </a>
+                </>
+              }
+            />
+          </div>
+        )}
+        {save.isError && <Alert type="error" title="Couldn't save who can use the bot" description={save.error.message} />}
+        <div className="feishu-actions">
+          <span className="feishu-hint feishu-access-note">{ACCESS_OWNER_CHANNEL_NOTE}</span>
+          <Button onClick={() => edit(saved)} disabled={!changed || save.isPending}>
+            Cancel
+          </Button>
+          <Button variant="primary" type="submit" disabled={!ready} loading={save.isPending}>
+            Save
+          </Button>
+        </div>
+      </div>
+    </form>
+  );
+}
+
 /** Why a connected group is off, in a sentence. */
 const OFF_REASON: Readonly<Record<string, string>> = {
   BOT_REMOVED: 'The bot was removed from the group. Add it back and send "@bot connect" there to connect it again.',
   OWNER: 'Switched off: mentions in the group start nothing.',
 };
+
+export const OWN_SETTINGS = 'Own settings';
+export const USES_SETTINGS_ABOVE = 'Uses the settings above';
+/** An OPEN_ACCESS group switched off by the owner (§14.2): the bot answers a mention there with a sentence. */
+export const OPEN_GROUP_OFF = 'Switched off: a mention here starts nothing, and the bot says so.';
+/** An OPEN_ACCESS group while only the owner can use the bot (§14.2): it answers as an unconnected group. */
+export const OPEN_GROUP_IDLE = 'Not in use while only you can use the bot.';
+
+/** Who first used a group that uses the settings above, when, and how many sessions it started today (§14.2). */
+export function firstUseText(route: Pick<FeishuChatRoute, 'firstUsedByName' | 'firstUsedAt' | 'sessionsToday'>, now = new Date()): string {
+  const at = route.firstUsedAt ? new Date(route.firstUsedAt) : null;
+  const time = at?.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+  const when = !at ? '' : at.toDateString() === now.toDateString() ? ` today at ${time}` : ` on ${at.toLocaleDateString()} at ${time}`;
+  const today = route.sessionsToday === 1 ? '1 session today' : `${route.sessionsToday} sessions today`;
+  return `First used by ${route.firstUsedByName ?? 'someone Feishu did not name'}${when} · ${today}`;
+}
+
+/** One group that uses the settings above: who used it first, today's sessions, and its own switch. No removal: it comes back with the next mention. */
+function OpenGroupRow({ route, open }: { route: FeishuChatRoute; open: boolean }) {
+  const qc = useQueryClient();
+  const message = useToast();
+  const switchId = useId();
+  const change = useMutation({
+    mutationFn: (body: FeishuChatChange) => api<FeishuChatRoute>(`/integrations/feishu/chats/${route.id}`, { method: 'PATCH', body }),
+    onSuccess: () => void qc.invalidateQueries({ queryKey: ['integrations', 'feishu', 'chats'] }),
+    onError: (e: Error) => message.error("Couldn't change the group", e.message),
+  });
+  const name = route.chatName ?? 'Unnamed group';
+  const state = !route.enabled
+    ? route.disabledReason === 'BOT_REMOVED' ? OFF_REASON.BOT_REMOVED : OPEN_GROUP_OFF
+    : open ? firstUseText(route) : OPEN_GROUP_IDLE;
+  return (
+    <li className="feishu-group" aria-label={name}>
+      <div className="admin-signin-row">
+        <div>
+          <div className="admin-signin-label">
+            <span id={switchId}>{name}</span> <Badge tone="info">{USES_SETTINGS_ABOVE}</Badge>
+          </div>
+          <div className="admin-signin-hint">{state}</div>
+        </div>
+        <div className="feishu-group-actions">
+          <Switch
+            aria-labelledby={switchId}
+            checked={route.enabled}
+            disabled={!route.enabled && route.disabledReason === 'BOT_REMOVED'}
+            loading={change.isPending}
+            onCheckedChange={(enabled) => change.mutate({ enabled })}
+          />
+        </div>
+      </div>
+    </li>
+  );
+}
 
 /** One connected group: where its sessions open and how, with its switch and its removal. */
 function GroupRow({ route, workspaceName }: { route: FeishuChatRoute; workspaceName: string }) {
@@ -415,8 +674,8 @@ function GroupRow({ route, workspaceName }: { route: FeishuChatRoute; workspaceN
     <li className="feishu-group" aria-label={name}>
       <div className="admin-signin-row">
         <div>
-          <div className="admin-signin-label" id={switchId}>
-            {name}
+          <div className="admin-signin-label">
+            <span id={switchId}>{name}</span> <Badge tone="success">{OWN_SETTINGS}</Badge>
           </div>
           <div className="admin-signin-hint">
             {workspaceName} · {modeLabel(route.permissionMode)} mode · {who} · up to {route.maxConcurrentSessions} at a time,{' '}
@@ -450,8 +709,20 @@ function GroupRow({ route, workspaceName }: { route: FeishuChatRoute; workspaceN
   );
 }
 
-/** §8.1: the groups connected to Orbit. A group is connected from Feishu — the owner sends `@bot connect` in it. */
-function GroupsSection() {
+/** What the Groups card says, by who can use the bot (§8.1, §14.2). */
+export const GROUPS_HINT_OWNER_ONLY =
+  'To connect a group, add the bot to it and send "@bot connect" there. The bot answers with a link to choose the '
+  + 'workspace, the permission mode and who can start sessions. Only groups inside your organization can be connected.';
+export const GROUPS_HINT_OPEN =
+  'Everyone the app is available to can use the bot in any group inside your organization that it is in, with the '
+  + 'settings above. To give a group its own workspace, mode or people, send "@bot connect" there. Groups with people '
+  + 'from other organizations are never served.';
+
+/**
+ * §8.1, §14.2: the groups connected to Orbit — a group is connected from Feishu, the owner sends `@bot connect` in it —
+ * and, once the bot is open to others, the groups that used it with the settings above, each with its own switch.
+ */
+function GroupsSection({ open }: { open: boolean }) {
   const chats = useQuery(feishuChatsQuery());
   const workspaces = useQuery(workspacesQuery());
   const nameOf = (id: string) => ((workspaces.data ?? []) as Array<{ id: string; name: string }>).find((w) => w.id === id)?.name ?? 'A workspace';
@@ -461,19 +732,18 @@ function GroupsSection() {
         <h2 className="orbit-card-title">Groups</h2>
       </div>
       <div className="orbit-card-body feishu-fields">
-        <p className="feishu-hint">
-          To connect a group, add the bot to it and send &quot;@bot connect&quot; there. The bot answers with a link to
-          choose the workspace, the permission mode and who can start sessions. Only groups inside your organization can be
-          connected.
-        </p>
+        <p className="feishu-hint">{open ? GROUPS_HINT_OPEN : GROUPS_HINT_OWNER_ONLY}</p>
         {chats.isPending && <Spinner />}
         {chats.isError && <Alert type="error" title="Couldn't load the groups" description={chats.error.message} />}
-        {chats.isSuccess && chats.data.routes.length === 0 && <p className="feishu-hint">No groups are connected.</p>}
+        {chats.isSuccess && chats.data.routes.length === 0 && (
+          <p className="feishu-hint">{open ? 'No group has used the bot yet.' : 'No groups are connected.'}</p>
+        )}
         {chats.isSuccess && chats.data.routes.length > 0 && (
           <ul className="feishu-groups">
-            {chats.data.routes.map((route) => (
-              <GroupRow key={route.id} route={route} workspaceName={nameOf(route.workspaceId)} />
-            ))}
+            {chats.data.routes.map((route) =>
+              route.source === 'OPEN_ACCESS'
+                ? <OpenGroupRow key={route.id} route={route} open={open} />
+                : <GroupRow key={route.id} route={route} workspaceName={nameOf(route.workspaceId)} />)}
           </ul>
         )}
       </div>
@@ -724,7 +994,8 @@ export function FeishuIntegrationPage() {
       )}
       {app && <AppSummary app={app} allowed={allowed} onReplace={() => setReplacing(true)} />}
       {app && allowed && <OwnerSection app={app} />}
-      {app && allowed && <GroupsSection />}
+      {app && allowed && <AccessSection key={`access:${app.platform}:${app.appId}`} app={app} />}
+      {app && allowed && <GroupsSection open={app.access.mode === 'AVAILABILITY_SCOPE'} />}
       {(!app || replacing) && (
         <CredentialsForm key={app ? `${app.platform}:${app.appId}` : 'new'} app={app} allowed={allowed} onDone={app ? () => setReplacing(false) : undefined} />
       )}

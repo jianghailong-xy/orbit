@@ -570,8 +570,37 @@ test('the count is taken for a live reader: the turn, or the job a card names', 
   const wakingStatus = await waking.service.coordinatorStatus(OWNER_ID, PROJECT_ID);
   assert.equal(wakingStatus.coordination.session?.pendingApprovals, 7);
   assert.equal(waking.queries.includes('approval.count'), true);
-  // A generating session holds its turn's cards, so the count is of the session and nothing narrower.
-  assert.deepEqual(waking.approvalWheres, [{ sessionId: SESSION_ID, status: 'PENDING' }]);
+  // A generating session holds its turn's cards: every card that names no job, and a job's card only while
+  // that job is up (countLiveApprovals). With no shell up, that is the turn's cards alone.
+  assert.deepEqual(waking.approvalWheres, [{
+    sessionId: SESSION_ID,
+    status: 'PENDING',
+    OR: [{ backgroundJobId: null }, { backgroundJobId: { in: [] } }],
+  }]);
+
+  // The same turn with a job still running: that job's card is read by it, so it is counted beside
+  // the turn's own.
+  const wakingJobbed = serviceWith({
+    pendingApprovals: 2,
+    project: projectRow({
+      coordinatorSessionId: SESSION_ID,
+      coordinatorWorkspaceId: WORKSPACE_ID,
+      coordinatorSession: sessionRow({
+        status: RunStatus.AWAITING_INPUT, engineTurnActive: true, runningBgShells: ['bgj_still_polling'],
+      }),
+      coordinatorWorkspace: workspaceRow(),
+      members: COORDINATOR_MEMBER,
+    }),
+  });
+  const wakingJobbedStatus = await wakingJobbed.service.coordinatorStatus(OWNER_ID, PROJECT_ID);
+  assert.equal(wakingJobbedStatus.coordination.session?.pendingApprovals, 2);
+  assert.deepEqual(wakingJobbed.approvalWheres, [
+    {
+      sessionId: SESSION_ID,
+      status: 'PENDING',
+      OR: [{ backgroundJobId: null }, { backgroundJobId: { in: ['bgj_still_polling'] } }],
+    },
+  ]);
 
   // And the second reader, on the conversation shape a runner-hosted job asks on: PARKED, with the
   // runner still reporting the job up. The card that job is polling for is a question the owner has

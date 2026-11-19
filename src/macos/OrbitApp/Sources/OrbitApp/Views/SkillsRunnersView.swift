@@ -464,6 +464,9 @@ struct RunnerRow: View {
                     Image(systemName: "cloud")
                         .foregroundStyle(Color.accentColor)
                         .accessibilityHidden(true)
+                } else {
+                    // Every other machine by the OS it reported (docs/mocks/machine-menu-icons, A).
+                    MachineOSMark(runner: runner)
                 }
                 VStack(alignment: .leading, spacing: 2) {
                     HStack(alignment: .firstTextBaseline, spacing: 8) {

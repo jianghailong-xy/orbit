@@ -1400,6 +1400,8 @@ func runInteractiveSession(t *Transport, job *ClaimedSession, ctx context.Contex
 			pool.holdFollowUpForUpdate(live, permitGeneration)
 		}
 		pool.endTurnCompletion(live)
+		// The browser lease lasts the holder's turn (browser_supervisor.go).
+		runnerBrowser().Release(sessionID)
 		return err
 	}
 	// The server changes PENDING -> RUNNING before returning a claim and may wake

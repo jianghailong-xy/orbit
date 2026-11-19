@@ -2008,6 +2008,7 @@ func runLoop(cfg *RunnerConfig) (bool, func()) {
 				ReposRoot:            machineReposRoot,
 				SelfUpdate:           selfUpdateReport(),
 				ManagedWorkload:      workload,
+				Browser:              runnerBrowser().Report(),
 				CloneReports:         cloneReports,
 				ConditionSamples:     conditionSamples,
 			}, t.heartbeat)
@@ -2477,6 +2478,17 @@ func runLoop(cfg *RunnerConfig) (bool, func()) {
 					default:
 					}
 				}
+			}
+			// The owner's Clear saved logins: stop the browser and delete its profile. On its own goroutine, since
+			// stopping Chrome waits for it to exit; the beat it asks for right after reports profileClearedAt.
+			if resp.ClearBrowserProfile {
+				logln("clear saved logins requested by the control plane")
+				go func() {
+					if err := runnerBrowser().ClearProfile(); err != nil {
+						logln("clear saved logins:", err)
+					}
+					beatNow()
+				}()
 			}
 			// The owner's Update Now: install the waiting release now, interrupting the turns in flight
 			// (selfUpdateGate.updateNow). The check it asks for takes it.

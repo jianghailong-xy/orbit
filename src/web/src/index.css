@@ -1374,6 +1374,15 @@ button.toast--pill:focus-visible {
 .tp-account-machine-cloud > .anticon {
   color: var(--brand);
 }
+/* Every other machine, by the OS it reported (docs/mocks/machine-menu-icons, A): its mark in grey, the name as is. */
+.tp-account-machine-os {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+}
+.tp-account-machine-os > .anticon {
+  color: var(--text-3);
+}
 /* Log out: the label in the menu's own danger colour, its icon in --error, as the replaced menu drew them (the
    page rule reached only the icon there). */
 .tp-account-menu .orbit-menu-item[data-danger] .orbit-menu-icon {
@@ -3697,9 +3706,9 @@ button.toast--pill:focus-visible {
   white-space: nowrap;
 }
 /* The Tasks card (SessionCreatedTasksStrip.tsx) sits in the tray's shell above; these are
-   only what a task list adds to it. Collapsed, the title never wraps and the sentence never gives
-   way: beside the sentence the title is what truncates, beside a lone task's name the name does;
-   the failed count is red. Opened, one row per task: a fixed status column, the title (with what it
+   only what a task list adds to it. Collapsed, the title never wraps and stays whole: beside a lone
+   task's name the name truncates, beside the band (`N running · <task>`, `<total> · <task>`) the
+   band does, and the pill after either keeps its size; the failed count is red. Opened, one row per task: a fixed status column, the title (with what it
    replaces, in grey), its age; then the links to the rest. */
 .ct-head {
   min-width: 0;
@@ -3707,10 +3716,15 @@ button.toast--pill:focus-visible {
   text-overflow: ellipsis;
   white-space: nowrap;
 }
-.ct-head:has(+ .ct-one) {
+.ct-head:has(+ .ct-one),
+.ct-head:has(~ .ct-count) {
   flex: none;
 }
 .ct-count {
+  flex: 0 1 auto;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
   white-space: nowrap;
 }
 .ct-failed {
@@ -3725,6 +3739,7 @@ button.toast--pill:focus-visible {
   color: var(--brand);
 }
 .ct-one + .status-pill,
+.ct-count + .status-pill,
 .ct-row .status-pill {
   height: 20px;
   font-size: 11.5px;
@@ -19875,6 +19890,20 @@ button.chat-jump-start:hover {
 .np-summary a:hover {
   color: var(--brand-strong);
 }
+/* The draft moved off what its workspace last ran on (board new-session-usable-default ② ③). */
+.np-summary.np-fallback {
+  color: var(--warning);
+}
+/* Nothing on the machine runs the draft (board ④): the way out, under the reason. */
+.np-cant-run {
+  margin-top: 10px;
+  font-size: 12px;
+  color: var(--text-2);
+}
+.np-cant-run a {
+  color: var(--brand);
+  text-decoration: none;
+}
 .np-note {
   margin-top: 9px;
   padding: 4px 10px;
@@ -28652,6 +28681,42 @@ button.agent-progress-agent:hover {
   flex-shrink: 0;
 }
 
+/* Who can use the bot (docs/feishu-bot-design.md §14.1): the settings of sessions other people start, under the open choice. */
+.feishu-open {
+  display: grid;
+  gap: 18px;
+  margin-left: 24px;
+  padding: 14px 16px 16px;
+  border-left: 2px solid var(--brand-border);
+  border-radius: 0 8px 8px 0;
+  background: var(--bg-subtle);
+}
+.feishu-open .admin-signin-row > div:first-child {
+  flex: 1;
+  min-width: 0;
+}
+.feishu-open-limits {
+  display: grid;
+  grid-template-columns: 150px auto;
+  align-items: center;
+  gap: 8px 0;
+  margin-top: 10px;
+  font-size: 14px;
+}
+.feishu-open-limit {
+  display: inline-flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+}
+.feishu-open-limit .orbit-number-input {
+  width: 72px;
+}
+.feishu-actions .feishu-access-note {
+  margin-right: auto;
+  align-self: center;
+}
+
 .feishu-members {
   display: grid;
   grid-template-columns: repeat(auto-fill, minmax(180px, 1fr));
@@ -29273,7 +29338,7 @@ button.agent-progress-agent:hover {
 }
 
 /* The Agents line (SessionAgentsStrip.tsx), in the Background processes tray's shell and rows: the band's
-   words truncate before the title does; opened, Running and Done over the tray's own rows, each a run's name
+   words truncate before the title does; opened, the tray's own rows in one list (running first, no headings), each a run's name
    then its facts. */
 .ag-head {
   flex: none;
@@ -29292,14 +29357,101 @@ button.agent-progress-agent:hover {
   text-overflow: ellipsis;
   white-space: nowrap;
 }
-.ag-section {
-  flex: none;
-  padding: 4px 2px 0;
-  font-size: 11px;
-  font-weight: 600;
-  text-transform: uppercase;
-  color: var(--text-3);
-}
 .ag-row .ag-title {
   font-family: inherit;
+}
+/* Where the work went (docs/mocks/agents-band-models): a machine fact and model chips, as Apple's
+   AgentFact and AgentEngineChip draw them. Always one line: under 720px the models after the first fold
+   into "+n", under 520px the words go and the marks keep their counts. */
+.ag-tray {
+  container-type: inline-size;
+}
+.ag-line .ag-band {
+  flex: 0 1 auto;
+}
+.ag-chip,
+.ag-fact,
+.ag-more {
+  flex: none;
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  border-radius: 5px;
+  padding: 0 5px;
+  line-height: 18px;
+  white-space: nowrap;
+  font-size: 12px;
+}
+.ag-fact,
+.ag-more {
+  background: var(--bg-hover);
+  color: var(--text-2);
+}
+.ag-fact .anticon {
+  font-size: 11px;
+}
+.ag-chip {
+  --ag-tint: var(--text-3);
+  background: color-mix(in srgb, var(--ag-tint) 13%, transparent);
+  color: var(--text-1);
+  padding-left: 2px;
+  min-width: 0;
+}
+.ag-chip[data-engine='claude'] { --ag-tint: #d97857; }
+.ag-chip[data-engine='dsh'] { --ag-tint: #4d6bff; }
+.ag-chip[data-engine='kimi'] { --ag-tint: #1a73f2; }
+.ag-chip[data-engine='antigravity'] { --ag-tint: #4285f5; }
+.ag-chip[data-engine='codex'],
+.ag-chip[data-engine='cursor'],
+.ag-chip[data-engine='opencode'] { --ag-tint: var(--text-1); }
+.ag-chip-mark {
+  font-style: normal;
+  width: 14px;
+  height: 14px;
+  border-radius: 4px;
+  background: var(--ag-tint);
+  color: var(--bg-base, #fff);
+  font-size: 9px;
+  font-weight: 800;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+}
+.ag-chip-name {
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.ag-chip-n {
+  color: var(--text-3);
+}
+.ag-more {
+  display: none;
+}
+.ag-failed {
+  flex: none;
+  color: var(--error);
+  font-weight: 600;
+  white-space: nowrap;
+}
+.ag-facts {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+@container (max-width: 720px) {
+  .ag-line .ag-chip-extra {
+    display: none;
+  }
+  .ag-line .ag-more {
+    display: inline-flex;
+  }
+}
+@container (max-width: 520px) {
+  .ag-line .ag-word,
+  .ag-line .ag-chip-name {
+    display: none;
+  }
+  .ag-line .ag-chip {
+    padding-right: 3px;
+  }
 }

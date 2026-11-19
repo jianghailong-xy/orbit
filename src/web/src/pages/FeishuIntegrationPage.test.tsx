@@ -9,6 +9,9 @@ import {
   FEISHU_APP_EVENTS,
   FEISHU_APP_SCOPES,
   FEISHU_APP_TAKEN_MESSAGE,
+  FEISHU_OPEN_DEFAULTS,
+  type FeishuAccessChange,
+  type FeishuAccessSettings,
   type FeishuAppSettings,
   type FeishuChatRoute,
   type FeishuMessageDetail,
@@ -35,6 +38,10 @@ vi.mock('../lib/toast', () => ({ useToast: () => toast }));
 const copied: string[] = [];
 vi.mock('../lib/clipboard', () => ({ copyText: vi.fn(async (text: string) => (copied.push(text), true)) }));
 const { api } = await import('../api');
+const {
+  ACCESS_OWNER_CHANNEL_NOTE, GROUPS_HINT_OPEN, GROUPS_HINT_OWNER_ONLY, OPEN_ACCESS_AVAILABILITY, OPEN_ACCESS_CONSEQUENCE, OPEN_GROUP_OFF,
+  OPEN_GROUP_IDLE, OPEN_TO_OTHERS, OWN_SETTINGS, USES_SETTINGS_ABOVE, firstUseText,
+} = await import('./FeishuIntegrationPage');
 const { CONNECT_ACCOUNT, APPROVALS_IN_FEISHU_HINT, DEFAULT_WORKSPACE_HINT, DISCONNECT_OWNER, FeishuIntegrationPage, MESSAGE_DETAIL_HINT, NOT_ALLOWED_NOTICE, OPEN_BOT, SECRET_UNREADABLE_NOTICE, SEND_TEST } = await import('./FeishuIntegrationPage');
 
 const SECRET = 'feishu-secret-never-shown-again';
@@ -42,8 +49,12 @@ const SECRET = 'feishu-secret-never-shown-again';
 /** The account's app as the stand-in keeps it: the secret as sent, which no answer carries. */
 let stored: {
   platform: FeishuPlatform; appId: string; secret: string; enabled: boolean; messageDetail?: FeishuMessageDetail; defaultWorkspaceId?: string | null;
-  approvalsInFeishu?: boolean;
+  approvalsInFeishu?: boolean; access?: FeishuAccessSettings;
 } | null;
+/** What a new app reads back (§14.1): only the owner, the rest at its defaults. */
+const ACCESS_DEFAULTS: FeishuAccessSettings = { mode: 'OWNER_ONLY', workspaceId: null, ...FEISHU_OPEN_DEFAULTS };
+/** The PUT /integrations/feishu/access requests, apart from `requests`. */
+let accessRequests: FeishuAccessChange[];
 /** The account's workspaces, as GET /workspaces answers them. */
 const WORKSPACES = [{ id: 'ws-1', name: 'groups workspace', runner: { name: 'build-box' } }, { id: 'w2docs', name: 'docs' }];
 let allowed: boolean;
@@ -84,6 +95,7 @@ const app = (): FeishuAppSettings | null =>
     lastEventAt: null,
     lastError: null,
     connectedReplicas,
+    access: structuredClone(stored.access ?? ACCESS_DEFAULTS),
     createdAt: '2026-11-07T08:00:00.000Z',
     updatedAt: '2026-11-07T08:00:00.000Z',
   };
@@ -182,9 +194,11 @@ beforeEach(() => {
   vi.mocked(api).mockReset();
   chatRoutes = [];
   chatRequests = [];
+  accessRequests = [];
   vi.mocked(api).mockImplementation(async (path: string, options: { method?: string; body?: unknown } = {}) => {
     const method = options.method ?? 'GET';
     if (path === '/workspaces') return WORKSPACES;
+    if (path === '/auth/capabilities') throw new ApiError('Not found', 404);
     if (path.startsWith('/integrations/feishu/chats')) {
       chatRequests.push({ method, path, ...(options.body === undefined ? {} : { body: structuredClone(options.body) }) });
       if (method === 'GET') return { routes: structuredClone(chatRoutes), pending: null };
@@ -206,6 +220,14 @@ beforeEach(() => {
       }
       if (path === '/integrations/feishu/owner' && method === 'DELETE') {
         owner = null;
+        return { allowed, app: app() };
+      }
+      if (path === '/integrations/feishu/access' && method === 'PUT') {
+        const change = options.body as FeishuAccessChange;
+        accessRequests.push(structuredClone(change));
+        const was = stored!.access ?? ACCESS_DEFAULTS;
+        const kept = Object.fromEntries(Object.entries(change).filter(([, v]) => v !== undefined));
+        stored!.access = { ...was, ...kept } as FeishuAccessSettings;
         return { allowed, app: app() };
       }
       if (path === '/integrations/feishu/test' && method === 'POST') {
@@ -430,7 +452,7 @@ describe('the app connected', () => {
     expect(field('App ID')?.value).toBe('cli_mine');
     expect(field('App Secret')?.value).toBe('');
     await type(field('App Secret'), `${SECRET}-rotated`);
-    await click(button('Save'), 'Save');
+    await click(button('Save', card('Replace credentials')), 'Save');
     expect(requests.at(-1)).toEqual({ method: 'PUT', body: { platform: 'FEISHU', appId: 'cli_mine', appSecret: `${SECRET}-rotated` } });
     expect(card('Replace credentials'), 'closed once saved').toBeUndefined();
   });
@@ -537,7 +559,8 @@ describe('the connected groups (§8.1)', () => {
     stored = { platform: 'FEISHU', appId: 'cli_mine', secret: SECRET, enabled: true };
   });
   const route = (over: Partial<FeishuChatRoute> = {}): FeishuChatRoute => ({
-    id: 'route-1', chatId: 'oc_team', chatName: 'Release team', workspaceId: 'ws-1', permissionMode: 'acceptEdits',
+    id: 'route-1', chatId: 'oc_team', chatName: 'Release team', source: 'CONNECT', firstUsedByOpenId: null, firstUsedByName: null,
+    firstUsedAt: null, sessionsToday: 0, workspaceId: 'ws-1', permissionMode: 'acceptEdits',
     allowedOpenIds: [], maxConcurrentSessions: 2, sessionsPerDay: 20, enabled: true, disabledReason: null,
     confirmedAt: '2026-11-08T08:00:00.000Z', updatedAt: '2026-11-08T08:00:00.000Z', ...over,
   });
@@ -600,5 +623,187 @@ describe('connectionText', () => {
     expect(of(true, 1)).toBe('Connected on 1 Orbit server');
     expect(of(true, 3)).toBe('Connected on 3 Orbit servers');
     expect(of(false, 2)).toBe('Off');
+  });
+});
+
+describe('who can use the bot (§14.1)', () => {
+  beforeEach(() => {
+    stored = { platform: 'FEISHU', appId: 'cli_mine', secret: SECRET, enabled: true };
+  });
+  const access = () => card('Who can use the bot')!;
+  const headBadge = () => access().querySelector('.orbit-card-head .orbit-badge')?.textContent;
+  const limit = (label: string) => access().querySelector<HTMLInputElement>(`[aria-label="${label}"] input, input[aria-label="${label}"]`);
+  const picker = (label: string) => {
+    const id = [...access().querySelectorAll<HTMLElement>('.admin-signin-label')].find((l) => l.textContent === label)?.id;
+    return access().querySelector<HTMLElement>(`[aria-labelledby="${id}"]`);
+  };
+
+  it('sits between your Feishu account and Groups, and reads Only you by default with nothing else to set', async () => {
+    await open();
+    const titles = [...container!.querySelectorAll('.orbit-card-title')].map((t) => t.textContent);
+    expect(titles.slice(0, 4)).toEqual(['Your app', 'Your Feishu account', 'Who can use the bot', 'Groups']);
+    expect(radio('Only you')?.getAttribute('aria-checked')).toBe('true');
+    expect(radio('Everyone the app is available to in Feishu')?.getAttribute('aria-checked')).toBe('false');
+    expect(access().textContent).toContain('Direct messages from anyone else are refused, and a group works only once you connect it.');
+    expect(headBadge(), 'not open: no badge').toBeUndefined();
+    expect(access().textContent).not.toContain('Sessions other people start');
+    expect(access().textContent).toContain(ACCESS_OWNER_CHANNEL_NOTE);
+    expect(button('Save', access())?.disabled, 'nothing changed').toBe(true);
+    expect(card('Groups')!.textContent).toContain(GROUPS_HINT_OWNER_ONLY);
+  });
+
+  it('opens with Auto, 1 / 10 each and 3 / 50 together, says what that means, and saves it all with PUT …/access', async () => {
+    await open();
+    await click(radio('Everyone the app is available to in Feishu'), 'Everyone');
+    const settings = access().querySelector('[aria-label="Sessions other people start"]');
+    expect(settings, 'the settings of others\' sessions unfold').toBeTruthy();
+    expect(picker('Permission mode')?.textContent).toContain('Auto');
+    expect(settings!.textContent).toContain('Agents decide for themselves what is safe to run.');
+    expect([limit('Each person at a time'), limit('Each person a day'), limit('Everyone together at a time'), limit('Everyone together a day')]
+      .map((input) => input?.value)).toEqual(['1', '10', '3', '50']);
+    const warning = settings!.querySelector('.orbit-alert-warning');
+    expect(warning?.textContent).toContain('Anyone the app is available to in Feishu can make agents act on');
+    expect(warning?.textContent).toContain('in Auto mode.');
+    expect(warning?.textContent).toContain(OPEN_ACCESS_CONSEQUENCE);
+    expect(warning?.textContent).toContain(OPEN_ACCESS_AVAILABILITY);
+    const consoleLink = [...warning!.querySelectorAll('a')].find((a) => a.textContent?.includes('Open the developer console'));
+    expect(consoleLink?.getAttribute('href')).toBe('https://open.feishu.cn/app/cli_mine');
+    expect(consoleLink?.target).toBe('_blank');
+    expect(button('Save', access())?.disabled, 'no workspace chosen yet').toBe(true);
+
+    await click(picker('Workspace'), 'Workspace');
+    const listed = [...document.body.querySelectorAll<HTMLElement>('[role="listbox"] [role="option"]')];
+    expect(listed.map((o) => o.textContent)).toEqual(['groups workspace · build-box', 'docs · its runner']);
+    await press(listed[0], 'groups workspace');
+    expect(warning?.isConnected ? warning.textContent : access().querySelector('.orbit-alert-warning')?.textContent)
+      .toContain('Anyone the app is available to in Feishu can make agents act on build-box in Auto mode.');
+    await click(button('Save', access()), 'Save');
+
+    expect(accessRequests).toEqual([{
+      mode: 'AVAILABILITY_SCOPE', workspaceId: 'ws-1', permissionMode: 'auto',
+      maxRunningPerPerson: 1, sessionsPerDayPerPerson: 10, maxRunningTotal: 3, sessionsPerDayTotal: 50,
+    }]);
+    expect(toast.success).toHaveBeenCalledWith('The bot is open to others');
+    expect(headBadge()).toBe(OPEN_TO_OTHERS);
+    expect(card('Groups')!.textContent).toContain(GROUPS_HINT_OPEN);
+    expect(card('Groups')!.textContent).not.toContain(GROUPS_HINT_OWNER_ONLY);
+
+    await open();
+    expect(headBadge(), 'read back on a fresh visit').toBe(OPEN_TO_OTHERS);
+    expect(radio('Everyone the app is available to in Feishu')?.getAttribute('aria-checked')).toBe('true');
+  });
+
+  it('saves the limits and mode as changed, and Cancel puts back what is saved', async () => {
+    stored!.access = { ...ACCESS_DEFAULTS, mode: 'AVAILABILITY_SCOPE', workspaceId: 'w2docs' };
+    await open();
+    await type(limit('Each person a day'), '4');
+    await type(limit('Everyone together at a time'), '7');
+    expect(button('Save', access())?.disabled).toBe(false);
+    await click(button('Cancel', access()), 'Cancel');
+    expect(limit('Each person a day')?.value).toBe('10');
+    expect(button('Save', access())?.disabled).toBe(true);
+
+    await click(picker('Permission mode'), 'Permission mode');
+    await press([...document.body.querySelectorAll<HTMLElement>('[role="listbox"] [role="option"]')].find((o) => o.textContent === 'Plan'), 'Plan');
+    await type(limit('Everyone together a day'), '80');
+    await click(button('Save', access()), 'Save');
+    expect(accessRequests.at(-1)).toEqual({
+      mode: 'AVAILABILITY_SCOPE', workspaceId: 'w2docs', permissionMode: 'plan',
+      maxRunningPerPerson: 1, sessionsPerDayPerPerson: 10, maxRunningTotal: 3, sessionsPerDayTotal: 80,
+    });
+  });
+
+  it('goes back to Only you with the mode alone, so the rest stays saved for next time', async () => {
+    stored!.access = { ...ACCESS_DEFAULTS, mode: 'AVAILABILITY_SCOPE', workspaceId: 'ws-1' };
+    await open();
+    expect(card('Groups')!.textContent).toContain(GROUPS_HINT_OPEN);
+    await click(radio('Only you'), 'Only you');
+    expect(access().textContent).not.toContain('Sessions other people start');
+    await click(button('Save', access()), 'Save');
+    expect(accessRequests).toEqual([{ mode: 'OWNER_ONLY' }]);
+    expect(toast.success).toHaveBeenCalledWith('Only you can use the bot now');
+    expect(headBadge()).toBeUndefined();
+    expect(card('Groups')!.textContent).toContain(GROUPS_HINT_OWNER_ONLY);
+    expect(stored!.access?.workspaceId, 'kept').toBe('ws-1');
+  });
+
+  it("shows the server's refusal and keeps the choice", async () => {
+    await open();
+    const previous = vi.mocked(api).getMockImplementation()!;
+    vi.mocked(api).mockImplementation(async (path: string, options?: { method?: string; body?: unknown }) => {
+      if (path === '/integrations/feishu/access') {
+        throw new ApiError('A personal access token cannot do this. Sign in to Orbit and try again.', 403, 'OWNER_INTERACTIVE_CREDENTIAL_REQUIRED');
+      }
+      return previous(path, options as never);
+    });
+    await click(radio('Everyone the app is available to in Feishu'), 'Everyone');
+    await click(picker('Workspace'), 'Workspace');
+    await press(document.body.querySelector<HTMLElement>('[role="listbox"] [role="option"]'), 'first workspace');
+    await click(button('Save', access()), 'Save');
+    expect(access().textContent).toContain("Couldn't save who can use the bot");
+    expect(access().textContent).toContain('A personal access token cannot do this.');
+    expect(headBadge()).toBeUndefined();
+    expect(radio('Everyone the app is available to in Feishu')?.getAttribute('aria-checked')).toBe('true');
+  });
+});
+
+describe('groups once the bot is open (§14.2)', () => {
+  const firstUsedAt = new Date();
+  firstUsedAt.setHours(15, 42, 0, 0);
+  const route = (over: Partial<FeishuChatRoute>): FeishuChatRoute => ({
+    id: 'route-x', chatId: 'oc_x', chatName: 'Group', source: 'OPEN_ACCESS', firstUsedByOpenId: 'ou_li', firstUsedByName: 'Li Wei',
+    firstUsedAt: firstUsedAt.toISOString(), sessionsToday: 2, workspaceId: '', permissionMode: '', allowedOpenIds: [],
+    maxConcurrentSessions: 1, sessionsPerDay: 1, enabled: true, disabledReason: null, confirmedAt: '2026-11-18T08:00:00.000Z',
+    updatedAt: '2026-11-18T08:00:00.000Z', ...over,
+  });
+  beforeEach(() => {
+    stored = { platform: 'FEISHU', appId: 'cli_mine', secret: SECRET, enabled: true, access: { ...ACCESS_DEFAULTS, mode: 'AVAILABILITY_SCOPE', workspaceId: 'ws-1' } };
+    chatRoutes = [
+      route({
+        id: 'route-own', chatName: 'Platform team', source: 'CONNECT', firstUsedByOpenId: null, firstUsedByName: null, firstUsedAt: null,
+        workspaceId: 'ws-1', permissionMode: 'default', allowedOpenIds: ['a', 'b', 'c'], maxConcurrentSessions: 2, sessionsPerDay: 20,
+      }),
+      route({ id: 'route-open', chatName: 'Orbit test' }),
+      route({ id: 'route-off', chatName: 'Design review', enabled: false, disabledReason: 'OWNER' }),
+    ];
+  });
+  const row = (name: string) => card('Groups')!.querySelector<HTMLElement>(`.feishu-group[aria-label="${name}"]`)!;
+
+  it('marks a connected group Own settings and the others Uses the settings above, with who used them first and today\'s sessions', async () => {
+    await open();
+    expect(row('Platform team').textContent).toContain(OWN_SETTINGS);
+    expect(row('Platform team').textContent).toContain('groups workspace · Default mode · 3 people and you · up to 2 at a time, 20 a day');
+    expect(row('Orbit test').textContent).toContain(USES_SETTINGS_ABOVE);
+    const at = firstUsedAt.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+    expect(row('Orbit test').textContent).toContain(`First used by Li Wei today at ${at} · 2 sessions today`);
+    expect(row('Orbit test').querySelector('[role="switch"]')?.getAttribute('aria-checked')).toBe('true');
+    expect(button('Remove', row('Orbit test')), 'it comes back with the next mention: switch it off instead').toBeUndefined();
+    expect(row('Design review').textContent).toContain(USES_SETTINGS_ABOVE);
+    expect(row('Design review').textContent).toContain(OPEN_GROUP_OFF);
+    expect(row('Design review').querySelector('[role="switch"]')?.getAttribute('aria-checked')).toBe('false');
+  });
+
+  it('switches a group that uses the settings above off with PATCH, and says so', async () => {
+    await open();
+    await click(row('Orbit test').querySelector('[role="switch"]'), 'the switch');
+    expect(chatRequests.filter((r) => r.method === 'PATCH')).toEqual([
+      { method: 'PATCH', path: '/integrations/feishu/chats/route-open', body: { enabled: false } },
+    ]);
+    await vi.waitFor(() => expect(row('Orbit test').textContent).toContain(OPEN_GROUP_OFF));
+    expect(row('Orbit test').querySelector('[role="switch"]')?.getAttribute('aria-checked')).toBe('false');
+  });
+
+  it('says such a group is not in use while only you can use the bot', async () => {
+    stored!.access = { ...stored!.access!, mode: 'OWNER_ONLY' };
+    await open();
+    expect(card('Groups')!.textContent).toContain(GROUPS_HINT_OWNER_ONLY);
+    expect(row('Orbit test').textContent).toContain(OPEN_GROUP_IDLE);
+    expect(row('Platform team').textContent).not.toContain(OPEN_GROUP_IDLE);
+  });
+
+  it('says how many sessions, on which day, and copes with a name Feishu did not give', () => {
+    const now = new Date('2026-11-19T12:00:00');
+    expect(firstUseText({ firstUsedByName: null, firstUsedAt: new Date('2026-11-17T09:05:00').toISOString(), sessionsToday: 1 }, now))
+      .toMatch(/^First used by someone Feishu did not name on .+ at .+ · 1 session today$/);
   });
 });

@@ -315,6 +315,8 @@ services:
       # runners keeps them off. The profile read here, the Docker channel's token and its socket are the files in
       # ORBIT_MANAGED_RUNNERS_DIR, mounted below.
       ORBIT_MANAGED_RUNNERS_ENABLED: "${ORBIT_MANAGED_RUNNERS_ENABLED:-false}"
+      # Orbit Cloud browser, off unless the host's .env says true (docs/runner-browser-design.md §2).
+      ORBIT_MANAGED_RUNNER_BROWSER_ENABLED: "${ORBIT_MANAGED_RUNNER_BROWSER_ENABLED:-false}"
       ORBIT_MANAGED_RUNNERS_PROFILE: /var/lib/orbit-managed-runners/profile.json
     volumes:
       # Read-only. With ORBIT_MANAGED_RUNNERS_DIR unset, /dev/null stands in, so nothing is created on the host.

@@ -122,8 +122,8 @@ public enum SubagentSettings {
     public static let columnModel = "Model"
     public static let columnTier = "Tier"
     public static let columnPrice = "Price / M out"
-    public static let tiersFooter = "Preset tiers and prices follow the catalogue. A custom endpoint's model "
-        + "stays out of automatic routing until it has a tier."
+    public static let tiersFooter = "Preset tiers and prices follow the catalogue. A model with no tier still "
+        + "runs SubAgents, after every model whose tier fits."
     public static let notSet = "Not set"
     public static let allLevels = "S–XL by effort"
     public static let subscription = "Subscription"
@@ -192,7 +192,7 @@ public enum SubagentSettings {
         return levels.joined(separator: " · ")
     }
 
-    /// Whether the Tier cell warns: a model with no tier stays out of automatic routing.
+    /// Whether the Tier cell warns: a model with no tier ranks after every tiered one.
     public static func tierIsUnset(_ levels: [String]) -> Bool { levels.isEmpty }
 
     /// A model's Price / M out cell.

@@ -78,6 +78,7 @@ import { listPollMs, streamDown, streamPoll } from '../lib/listBudget';
 import { workspaceListPath } from '../lib/workspaceListFolder';
 import { orderWorkspaces, reorderedWorkspaceIds, workspaceRunnerId } from '../lib/workspaceOrder';
 import { machineDraftPath, machineName, machinesToSetUp } from '../lib/machineSetup';
+import { MachineOsIcon } from '../lib/machineOs';
 import { setupTitle } from '../lib/machineSetupCopy';
 import { useThemeMode, type ThemeMode } from '../lib/theme';
 import { useToast } from '../lib/toast';
@@ -1323,7 +1324,11 @@ export function TasksSidePanel({ open = false, onNavigate }: { open?: boolean; o
                                 {machineName(runner, managedRunnerId)}
                               </span>
                             ) : (
-                              <span>{machineName(runner, managedRunnerId)}</span>
+                              // Every other machine by the OS it reported (docs/mocks/machine-menu-icons, A).
+                              <span className="tp-account-machine-os">
+                                <MachineOsIcon runner={runner} />
+                                {machineName(runner, managedRunnerId)}
+                              </span>
                             )}
                             {!ready && (
                               <span className="tp-account-current-theme">{managedRow?.label ?? 'Offline'}</span>
@@ -1339,8 +1344,15 @@ export function TasksSidePanel({ open = false, onNavigate }: { open?: boolean; o
                     { type: 'separator' as const, key: 'machines-add-separator' },
                     {
                       key: 'machines-add',
-                      icon: <PlusOutlined />,
-                      label: 'Add a machine',
+                      // Its + leads, in the machines' icon column, so the words start where their names do; the end column
+                      // is the machines' state alone (docs/mocks/machine-menu-icons/02-add-machine-align, A).
+                      textValue: 'Add a machine',
+                      label: (
+                        <span className="tp-account-machine-os">
+                          <PlusOutlined aria-hidden />
+                          Add a machine
+                        </span>
+                      ),
                       onSelect: () => navigate('/settings/machines/new'),
                     },
                   ],
