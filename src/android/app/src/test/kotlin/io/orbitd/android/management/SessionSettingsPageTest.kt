@@ -116,12 +116,19 @@ class SessionSettingsPageTest {
         assertEquals(buildJsonObject { put("optimizeFor", "intelligence") }, patch)
         // The server's answer carries it, so the segment stays selected.
         compose.onNode(hasText("Intelligence") and isSelectable()).assertIsSelected()
+    }
 
-        // A stored value prefills its own segment on the next read.
+    /** An account that stored a mode opens on its own segment, and opening writes nothing. */
+    @Test fun aStoredOptimizeForPrefillsItsSegment() {
+        val api = api()
         fixture.optimizeFor = "cost"
-        val reads = fixture.calls.count { it == "GET users/me" }
-        revision++
-        compose.waitUntil(60_000) { fixture.calls.count { it == "GET users/me" } > reads }
+        compose.setContent {
+            SettingsScreen(api, OrbitRoute(Destination.SETTINGS, "sessions"), revision, {}, {}, logout = {}, changed = {}, workspaceDeleted = {},
+                deviceAlerts = { true }, notifications = {}, about = {})
+        }
+        await(SESSION_RECAPS)
         compose.waitUntil(60_000) { runCatching { compose.onNode(hasText("Cost") and isSelectable()).assertIsSelected() }.isSuccess }
+        compose.onNode(hasText("Balance") and isSelectable()).assertIsNotSelected()
+        assertTrue(fixture.bodies.none { it.startsWith("PATCH users/me/preferences") })
     }
 }
