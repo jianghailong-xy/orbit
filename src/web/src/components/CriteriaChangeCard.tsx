@@ -11,20 +11,12 @@ import {
 } from '../lib/acceptanceConfirmation';
 import {
   CRITERIA_CHANGE_EXPLAINS,
-  CRITERIA_CHANGE_NEW,
-  CRITERIA_CHANGE_REVISED,
-  CRITERIA_CHANGE_STRICTER,
   CRITERIA_CHANGE_TITLE,
-  CRITERIA_CHANGE_WHAT_CHANGED,
-  confirmedChangesKey,
-  confirmedChangesProjectKey,
   criteriaChangeConfirmLabel,
-  criteriaChangeKind,
   criteriaChangeMeta,
   criteriaChangeShowAll,
   criteriaChangeSummary,
   criteriaChangeUnchanged,
-  criteriaChangeWas,
   projectStarted,
 } from '../lib/projectStart';
 import {
@@ -37,6 +29,7 @@ import {
 } from './AcceptanceConfirmationCard';
 import { CardActionButton, CardActions } from './CardAction';
 import { ENTER_HINT, useDecisionCardKeys } from './CardHotkey';
+import { CriteriaChangeList, criteriaChangeRows } from './CriteriaChangeList';
 import { ReviewCard } from './ReviewCard';
 import { useIsMobile } from '../lib/useMediaQuery';
 import { PROVENANCE_LABEL, shortSeal } from './CriteriaDecisionCard';
@@ -122,32 +115,7 @@ export function CriteriaChangeCard({
   const count = standing.currentVersion.material.length;
   const confirmedCount = standing.confirmation?.criteriaMaterial.length ?? 0;
   const items = [...(criteria ?? [])].sort((a, b) => a.ordinal - b.ordinal);
-  const rows = [
-    ...[...changes.added].sort((a, b) => a.ordinal - b.ordinal).map((change) => ({
-      key: `new:${change.key}`,
-      mark: '+',
-      tone: 'is-new',
-      kind: criteriaChangeKind(change.ordinal, CRITERIA_CHANGE_NEW),
-      text: change.text,
-      was: null as string | null,
-    })),
-    ...[...changes.stricter].sort((a, b) => a.ordinal - b.ordinal).map((change) => ({
-      key: `stricter:${change.key}`,
-      mark: '↑',
-      tone: 'is-stricter',
-      kind: criteriaChangeKind(change.ordinal, CRITERIA_CHANGE_STRICTER),
-      text: change.verificationMethod,
-      was: criteriaChangeWas(change.confirmedVerificationMethod),
-    })),
-    ...[...changes.revised].sort((a, b) => a.ordinal - b.ordinal).map((change) => ({
-      key: `revised:${change.key}`,
-      mark: '~',
-      tone: 'is-revised',
-      kind: criteriaChangeKind(change.ordinal, CRITERIA_CHANGE_REVISED),
-      text: change.text,
-      was: null as string | null,
-    })),
-  ];
+  const rows = criteriaChangeRows(changes);
   const unchanged = criteriaChangeUnchanged(
     [...changes.unchanged].sort((a, b) => a - b),
     changes.removed.length,
@@ -165,20 +133,7 @@ export function CriteriaChangeCard({
         <div className="settlement-card-meta">
           {criteriaChangeMeta(projectTitle, confirmedCount, count, shortSeal(standing.currentVersion.digest))}
         </div>
-        {rows.length > 0 ? (
-          <ul className="criteria-change-list" aria-label={CRITERIA_CHANGE_WHAT_CHANGED}>
-            {rows.map((row) => (
-              <li key={row.key} className={row.tone}>
-                <span className="criteria-change-mark" aria-hidden="true">{row.mark}</span>
-                <span className="criteria-change-kind">{row.kind}</span>
-                <span className="criteria-change-text">
-                  {row.text}
-                  {row.was ? <span className="criteria-change-was">{row.was}</span> : null}
-                </span>
-              </li>
-            ))}
-          </ul>
-        ) : null}
+        <CriteriaChangeList rows={rows} />
         <div className="criteria-change-rest">
           {unchanged ? <span>{unchanged}</span> : null}
           {items.length > 0 ? (
@@ -262,13 +217,11 @@ export function SessionCriteriaChangeCard({
   const held = criteriaChangeHeld(standing, document);
 
   const confirm = useMutation({
-    mutationFn: (press: { digest: string; summary: string }) =>
+    mutationFn: (press: { digest: string }) =>
       confirmAcceptanceCriteria(project, press.digest),
-    onSuccess: (next, press) => {
-      // What this press confirmed, for the receipt under the seal it signed: the read that draws
-      // the receipt says only the seal, since nothing is left changed once it is confirmed.
-      qc.setQueryData(confirmedChangesKey(project, press.digest), press.summary);
-      qc.setQueryData(confirmedChangesProjectKey(project), press.summary);
+    onSuccess: (next) => {
+      // The answer is the read's own document, and its confirmation carries what this press
+      // changed (`confirmation.changes`), so the receipt needs nothing kept by this window.
       qc.setQueryData(acceptanceConfirmationKey(project), next);
     },
     onError: () => qc.invalidateQueries({ queryKey: acceptanceConfirmationKey(project) }),
@@ -286,10 +239,7 @@ export function SessionCriteriaChangeCard({
   const title = document?.title || project;
   const press = (): void => {
     if (!onScreen || !standing?.changesSinceConfirmed || confirm.isPending) return;
-    confirm.mutate({
-      digest: standing.currentVersion.digest,
-      summary: criteriaChangeCounts(standing.changesSinceConfirmed),
-    });
+    confirm.mutate({ digest: standing.currentVersion.digest });
   };
   const talkAbout = (): void => {
     if (!standing) return;

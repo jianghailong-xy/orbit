@@ -2127,9 +2127,10 @@ export class ProjectsService {
         // the definition's BEFORE trigger out of the assertion AND its verification method, and
         // the hash this service computes elsewhere covers the assertion alone. A `resultingSeal`
         // calculated here would be a second recipe, and the one that disagrees.
-        const resulting = standardSetVersion(criteriaFromDefinitions(
+        const resultingCriteria = criteriaFromDefinitions(
           await ProjectsService.acceptanceDefinitions(tx, projectId),
-        ));
+        );
+        const resulting = standardSetVersion(resultingCriteria);
         resultingSeal = resulting.digest;
 
         // THE CONFIRMATION MOVES WITH THE EDIT — when, and only when, it named the set this answer
@@ -2152,6 +2153,7 @@ export class ProjectsService {
         if (confirmed?.criteriaDigest === currentSeal) {
           await tx.projectStandardSetConfirmation.create({
             data: {
+              ...(await ProjectAcceptanceService.confirmationWords(tx, projectId, resultingCriteria)),
               projectId,
               ownerId,
               confirmedById: ownerId,
