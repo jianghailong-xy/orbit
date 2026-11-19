@@ -16,7 +16,7 @@ import { RUNNER_BEATS, runnerIsOnline } from '../runners/runner-presence';
 import { RETRY_CLAIM_WINDOW_MS } from '../sessions/session-request';
 import { SessionNotSendable, SessionsService } from '../sessions/sessions.service';
 import { BACKGROUND_WAKE_TURN_PREFIX, sessionHasEnded, undeliveredWakeTurn } from './background-job-wake';
-import { fileSubagentWake, type SubagentWakeOutcome, unfiledSubagentWakes } from './subagent-wake';
+import { fileSubagentWake, fileWorkflowWake, type SubagentWakeOutcome, unfiledSubagentWakes, unfiledWorkflowWakes } from './subagent-wake';
 import { interruptRunsOfOfflineTargets } from './subagent-remote';
 import { reapApprovalsOfEndedSubagents } from '../sessions/abandoned-approvals';
 import {
@@ -179,6 +179,7 @@ export class ScheduledWakeupWorker implements OnModuleInit, OnModuleDestroy {
     this.pass = this.drain()
       .then(() => this.interruptRemoteSubagentsOfOfflineRunners())
       .then(() => this.fileOwedSubagentWakes())
+      .then(() => this.fileOwedWorkflowWakes())
       .then(
         () => undefined,
         (error) => this.log.error(`scheduled wakeup pass failed: ${messageOf(error)}`),
@@ -223,6 +224,18 @@ export class ScheduledWakeupWorker implements OnModuleInit, OnModuleDestroy {
         outcomes.push(await fileSubagentWake(this.prisma, this.sessions, runId));
       } catch (error) {
         this.log.error(`the wake for SubAgent run ${runId} was not filed: ${messageOf(error)}`);
+      }
+    }
+    return outcomes;
+  }
+
+  async fileOwedWorkflowWakes(): Promise<SubagentWakeOutcome[]> {
+    const outcomes: SubagentWakeOutcome[] = [];
+    for (const runId of await unfiledWorkflowWakes(this.prisma, this.batch)) {
+      try {
+        outcomes.push(await fileWorkflowWake(this.prisma, this.sessions, runId));
+      } catch (error) {
+        this.log.error(`the wake for workflow run ${runId} was not filed: ${messageOf(error)}`);
       }
     }
     return outcomes;

@@ -462,7 +462,6 @@ import {
   READY_TO_START,
   START_PROJECT_INTENT,
   START_ROW_OWN,
-  confirmedChangesProjectKey,
   mainBranchName,
   projectStarted,
   startMainBranch,
@@ -5120,18 +5119,6 @@ export function WorkspaceView({
     ...acceptanceConfirmationQuery(coordinatedProjectId ?? ''),
     enabled: Boolean(coordinatedProjectId) && !selectedTrashed,
   });
-  // What a re-confirmation pressed in this window changed — "1 new, 1 stricter" — which only the
-  // change card knew at the press (`confirmedChangesProjectKey`). Never fetched: once a set is confirmed
-  // nothing is left changed, so there is nothing to ask the server for, and a receipt drawn
-  // without it says the seal and the count.
-  const confirmedChanges = useQuery({
-    queryKey: confirmedChangesProjectKey(coordinatedProjectId ?? ''),
-    meta: { entities: ['project', 'task'] },
-    queryFn: (): string | null => null,
-    enabled: false,
-    staleTime: Infinity,
-    gcTime: Infinity,
-  });
 
   // The candidate on offer, read HERE as well as inside the strip's card below, for the one state
   // the strip does not keep: a candidate a check blocked has a moment, and where that moment falls
@@ -5326,10 +5313,7 @@ export function WorkspaceView({
               moment: confirmation.confirmedAt,
               key: `acceptance-receipt:${confirmation.confirmedAt}`,
               element: (
-                <AcceptanceConfirmationReceipt
-                  confirmation={confirmation}
-                  changed={confirmedChanges.data ?? null}
-                />
+                <AcceptanceConfirmationReceipt confirmation={confirmation} />
               ),
             }];
       }),
@@ -5357,7 +5341,6 @@ export function WorkspaceView({
     ],
     [
       acceptanceConfirmation.data,
-      confirmedChanges.data,
       conversationCreatedAt,
       criteriaDecisions.data,
       criteriaReplies,

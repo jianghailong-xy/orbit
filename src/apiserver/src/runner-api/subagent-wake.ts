@@ -9,6 +9,7 @@ import {
   fileBackgroundJobWake,
   sessionHasEnded,
   SUBAGENT_WAKE_KIND,
+  WORKFLOW_WAKE_KIND,
   takeJobOffNextTurnQueue,
   undeliveredWakeTurn,
 } from './background-job-wake';
@@ -46,19 +47,18 @@ class SubagentWakeSettled extends Error {}
 
 export type SubagentWakeOutcome = 'FILED' | 'DROPPED' | 'SETTLED_ELSEWHERE' | 'NOT_OWED';
 
-type WakeRow = {
+type WakeIdentity = {
   id: string;
   ownerId: string;
   sessionId: string;
   status: string;
   description: string | null;
-  resultSummary: string | null;
   wakeOwed: boolean;
   wakeFiledAt: Date | null;
 };
 
 /** The wake as the background-wake store keeps it. */
-function wakeOf(row: WakeRow): BackgroundWakeDto {
+function wakeOf(row: WakeIdentity & { resultSummary: string | null }): BackgroundWakeDto {
   const runId = uuidToBase62(row.id);
   const result = (row.resultSummary ?? '').replace(/\0/g, '');
   const excerpt = result.length > SUBAGENT_WAKE_RESULT_CAP ? `${result.slice(0, SUBAGENT_WAKE_RESULT_CAP)}…` : result;
@@ -98,9 +98,60 @@ export async function fileSubagentWake(
     },
   });
   if (!row || !row.wakeOwed || row.wakeFiledAt || row.status === 'RUNNING') return 'NOT_OWED';
-  const wake = wakeOf(row);
+  return fileRunWake(prisma, sessions, row, wakeOf(row), 'a SubAgent run',
+    (tx) => markSubagentWakeFiled(tx, row.id), () => dropSubagentWake(prisma, row.id));
+}
+
+export async function fileWorkflowWake(
+  prisma: PrismaClient,
+  sessions: Pick<SessionsService, 'createTurn'>,
+  runId: string,
+): Promise<SubagentWakeOutcome> {
+  const row = await prisma.subagentWorkflowRun.findUnique({
+    where: { id: runId },
+    select: {
+      id: true, ownerId: true, sessionId: true, status: true, name: true, description: true,
+      result: true, error: true, callsDone: true, callsFailed: true, costUsd: true,
+      wakeOwed: true, wakeFiledAt: true,
+    },
+  });
+  if (!row || !row.wakeOwed || row.wakeFiledAt || row.status === 'RUNNING') return 'NOT_OWED';
+  const jobId = uuidToBase62(row.id);
+  const result = [
+    ...(row.error ? [`Error: ${row.error}`] : []),
+    ...(row.result ? [`Result: ${row.result}`] : []),
+  ].join('\n');
+  const excerpt = result.length > SUBAGENT_WAKE_RESULT_CAP ? `${result.slice(0, SUBAGENT_WAKE_RESULT_CAP)}…` : result;
+  // Keep the summary with the wake so it survives turn coalescing and forwarding to another session.
+  const stats = `Calls done: ${row.callsDone}, failed: ${row.callsFailed}. Cost: $${row.costUsd.toFixed(2)}.`;
+  const wake: BackgroundWakeDto = {
+    wakeId: `${jobId}:exit`,
+    jobId,
+    trigger: 'exit',
+    kind: WORKFLOW_WAKE_KIND,
+    command: row.name,
+    description: row.description ?? undefined,
+    status: row.status,
+    outputPath: '',
+    outputOffset: 0,
+    outputSize: result.length,
+    outputExcerpt: excerpt ? `${stats}\n${excerpt}` : stats,
+  };
+  return fileRunWake(prisma, sessions, row, wake, 'a workflow',
+    (tx) => markWorkflowWakeFiled(tx, row.id), () => markWorkflowWakeFiled(prisma, row.id));
+}
+
+async function fileRunWake(
+  prisma: PrismaClient,
+  sessions: Pick<SessionsService, 'createTurn'>,
+  row: WakeIdentity,
+  wake: BackgroundWakeDto,
+  subject: string,
+  markFiled: (tx: Prisma.TransactionClient) => Promise<boolean>,
+  drop: () => Promise<boolean>,
+): Promise<SubagentWakeOutcome> {
   try {
-    await fileWakeOn(sessions, row, row.sessionId, wake);
+    await fileWakeOn(sessions, row, row.sessionId, wake, markFiled);
     return 'FILED';
   } catch (error) {
     if (error instanceof SubagentWakeSettled) return 'SETTLED_ELSEWHERE';
@@ -114,8 +165,8 @@ export async function fileSubagentWake(
     try {
       await fileWakeOn(sessions, row, successor, {
         ...wake,
-        description: forwardedDescription(row.description, 'a SubAgent run'),
-      } as BackgroundWakeDto);
+        description: forwardedDescription(row.description, subject),
+      }, markFiled);
       return 'FILED';
     } catch (error) {
       if (error instanceof SubagentWakeSettled) return 'SETTLED_ELSEWHERE';
@@ -123,15 +174,16 @@ export async function fileSubagentWake(
     }
   }
   // Nobody to wake: settled, so the sweep does not come back to it.
-  return (await dropSubagentWake(prisma, row.id)) ? 'DROPPED' : 'SETTLED_ELSEWHERE';
+  return (await drop()) ? 'DROPPED' : 'SETTLED_ELSEWHERE';
 }
 
 /** File the run's wake as a turn of `sessionId`: the parent, or the successor a handoff forwards it to. */
 async function fileWakeOn(
   sessions: Pick<SessionsService, 'createTurn'>,
-  row: WakeRow,
+  row: WakeIdentity,
   sessionId: string,
   wake: BackgroundWakeDto,
+  markFiled: (tx: Prisma.TransactionClient) => Promise<boolean>,
 ): Promise<void> {
   const clientTurnId = `${BACKGROUND_WAKE_TURN_PREFIX}${wake.wakeId}`;
   await sessions.createTurn(
@@ -142,7 +194,7 @@ async function fileWakeOn(
       steerIfLive: true,
       coalesce: async (tx, session, route) => {
         if (sessionHasEnded(session)) throw new SessionNotSendable('the session has ended');
-        if (!(await markSubagentWakeFiled(tx, row.id))) throw new SubagentWakeSettled();
+        if (!(await markFiled(tx))) throw new SubagentWakeSettled();
         const queued = await undeliveredWakeTurn(tx, sessionId, route);
         const filedOn = queued?.clientTurnId ?? clientTurnId;
         await fileBackgroundJobWake(tx, sessionId, filedOn, wake);
@@ -162,6 +214,15 @@ async function markSubagentWakeFiled(tx: Prisma.TransactionClient, runId: string
   return settled.count === 1;
 }
 
+/** Settle a workflow wake in its turn's transaction, or on its own when the wake is dropped. */
+async function markWorkflowWakeFiled(db: Prisma.TransactionClient, runId: string): Promise<boolean> {
+  const settled = await db.subagentWorkflowRun.updateMany({
+    where: { id: runId, wakeOwed: true, wakeFiledAt: null },
+    data: { wakeFiledAt: new Date() },
+  });
+  return settled.count === 1;
+}
+
 /** Settle a wake nobody is left to receive (the parent ended), if nothing has yet. */
 async function dropSubagentWake(prisma: PrismaClient, runId: string): Promise<boolean> {
   const settled = await prisma.subagentRun.updateMany({
@@ -172,9 +233,9 @@ async function dropSubagentWake(prisma: PrismaClient, runId: string): Promise<bo
 }
 
 /**
- * End every run of the session its runner left RUNNING, as INTERRUPTED, owing the parent a wake. Called when a
+ * End every run of the session its runner left RUNNING as INTERRUPTED. A workflow owns its calls' wake. Called when a
  * different runner process takes the session over: the process that hosted those runs is gone, and their child
- * engines with it, so none of them will report an end. Returns the run ids, whose wakes the caller files once
+ * engines with it, so none of them will report an end. Returns the run ids so the caller can file any owed wakes once
  * this transaction has committed. A remote run is left alone: its target runner hosts it, not the process replaced.
  */
 export async function interruptOrphanedSubagentRuns(tx: Prisma.TransactionClient, sessionId: string): Promise<string[]> {
@@ -183,7 +244,7 @@ export async function interruptOrphanedSubagentRuns(tx: Prisma.TransactionClient
     SET "status" = 'INTERRUPTED',
         "result_summary" = ${ORPHANED_SUBAGENT_RESULT},
         "ended_at" = now(),
-        "wake_owed" = true
+        "wake_owed" = ("workflow_run_id" IS NULL)
     WHERE "session_id" = ${sessionId}::uuid AND "status" = 'RUNNING'
       -- A remote run (docs/subagent-design.md §10) lives on its target runner, which a takeover of the parent leaves running.
       AND "target_runner_id" IS NULL
@@ -192,9 +253,36 @@ export async function interruptOrphanedSubagentRuns(tx: Prisma.TransactionClient
   return rows.map((row) => row.id);
 }
 
+/** What a workflow its runner left RUNNING says, once the next runner process has taken its session over. */
+export const ORPHANED_WORKFLOW_ERROR =
+  'The workflow was interrupted: the runner process hosting it stopped (a restart, an update or a crash) before ' +
+  'it reported an end.';
+
+/** Interrupt workflows left running by the previous process and keep their completion wakes owed. */
+export async function interruptOrphanedWorkflowRuns(tx: Prisma.TransactionClient, sessionId: string): Promise<string[]> {
+  const rows = await tx.$queryRaw<Array<{ id: string }>>`
+    UPDATE "subagent_workflow_run"
+    SET "status" = 'INTERRUPTED', "ended_at" = now(), "wake_owed" = true, "error" = ${ORPHANED_WORKFLOW_ERROR}
+    WHERE "session_id" = ${sessionId}::uuid AND "status" = 'RUNNING'
+    RETURNING "id"
+  `;
+  return rows.map((row) => row.id);
+}
+
 /** Ended runs whose owed wake is still to be filed, oldest first: what the sweep files. */
 export async function unfiledSubagentWakes(prisma: PrismaClient, limit: number): Promise<string[]> {
   const rows = await prisma.subagentRun.findMany({
+    where: { wakeOwed: true, wakeFiledAt: null, status: { not: 'RUNNING' } },
+    orderBy: { endedAt: 'asc' },
+    take: limit,
+    select: { id: true },
+  });
+  return rows.map((row) => row.id);
+}
+
+/** Ended workflows whose owed wake is still to be filed, oldest first. */
+export async function unfiledWorkflowWakes(prisma: PrismaClient, limit: number): Promise<string[]> {
+  const rows = await prisma.subagentWorkflowRun.findMany({
     where: { wakeOwed: true, wakeFiledAt: null, status: { not: 'RUNNING' } },
     orderBy: { endedAt: 'asc' },
     take: limit,

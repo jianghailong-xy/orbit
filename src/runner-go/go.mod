@@ -5,6 +5,7 @@ go 1.23
 require (
 	github.com/charmbracelet/bubbletea v1.3.4
 	github.com/coder/websocket v1.8.15
+	github.com/dop251/goja v0.0.0-20260226184354-913bd86fb70c
 	golang.org/x/sys v0.30.0
 	google.golang.org/protobuf v1.36.12
 )
@@ -14,7 +15,10 @@ require (
 	github.com/charmbracelet/lipgloss v1.0.0 // indirect
 	github.com/charmbracelet/x/ansi v0.8.0 // indirect
 	github.com/charmbracelet/x/term v0.2.1 // indirect
+	github.com/dlclark/regexp2 v1.11.4 // indirect
 	github.com/erikgeiser/coninput v0.0.0-20211004153227-1c3628e74d0f // indirect
+	github.com/go-sourcemap/sourcemap v2.1.3+incompatible // indirect
+	github.com/google/pprof v0.0.0-20230207041349-798e818bf904 // indirect
 	github.com/lucasb-eyer/go-colorful v1.2.0 // indirect
 	github.com/mattn/go-isatty v0.0.20 // indirect
 	github.com/mattn/go-localereader v0.0.1 // indirect

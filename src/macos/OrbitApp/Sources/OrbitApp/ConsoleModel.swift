@@ -4596,10 +4596,6 @@ final class ConsoleModel {
     /// request arrives with its own suggestions (web's `edited`). Kept here rather than in the
     /// card: a row the List recycles is a new view, and edits it held would be gone.
     private var startDrafts: [String: StartSettingsDraft] = [:]
-    /// What a press on the change card confirmed — "1 new, 1 stricter" — by the seal it signed, for
-    /// the receipt of that confirmation. Kept by this console only: once a set is confirmed nothing
-    /// is left changed, so the read cannot say it afterwards (web's `confirmedChangesKey`).
-    private var confirmedChangeSummaries: [String: String] = [:]
     /// Bumped to open this conversation's "Tasks created here" list from elsewhere on screen — the
     /// start card's "View tasks ›" (web's `openRequest`).
     private(set) var createdTasksOpenTick = 0
@@ -5254,12 +5250,6 @@ final class ConsoleModel {
         else { return false }
         createdTasksOpenTick &+= 1
         return true
-    }
-
-    /// What a press on the change card confirmed, for the receipt of the confirmation it made — nil
-    /// for any other record, whose read says only the seal.
-    func confirmedChanges(_ confirmation: RecordedStandardSetConfirmation) -> String? {
-        confirmedChangeSummaries[confirmation.criteriaDigest]
     }
 
     /// Whether a STARTED project is running on a plan nobody has confirmed — the older confirmation
@@ -6109,9 +6099,8 @@ final class ConsoleModel {
     }
 
     /// Confirm the criteria a started project moved to — the change card's press. The same door as
-    /// the confirmation above, which for a started project only confirms; what this press adds is
-    /// what the version changed, kept for the receipt under the seal it signed, because the read
-    /// can no longer say it once the set is confirmed.
+    /// the confirmation above, which for a started project only confirms; what the press changed is
+    /// on the answer the door returns (`confirmation.changes`), which the receipt reads.
     func confirmCriteriaChange() async {
         guard let projectID, let standing = acceptanceConfirmation,
               CriteriaChanges.answerable(standing),
@@ -6120,7 +6109,6 @@ final class ConsoleModel {
         do {
             let next = try await api.confirmAcceptanceCriteria(projectID: projectID,
                                                                criteriaDigest: digest)
-            confirmedChangeSummaries[digest] = CriteriaChanges.counts(changes)
             answeredDecisions[DeliveredDecisionCard(kind: .criteriaChange).id] =
                 .criteriaChange(standing, criteria: projectCriteria.sorted { $0.ordinal < $1.ordinal },
                                 changes: CriteriaChanges.counts(changes), at: Date())

@@ -106,17 +106,18 @@ final class AcceptanceConfirmationReceiptTests: XCTestCase {
 
     // MARK: what the record says
 
-    /// The seal on the record is the one somebody SIGNED. The card beside it names the version
-    /// standing now — that is what it is asking about — and a receipt that read the same field would
-    /// be telling the reader they confirmed wording they never saw.
+    /// The seal on the record is the one somebody SIGNED, and it lives in the fold now — the
+    /// headline is the count and what changed. The card beside it names the version standing now —
+    /// that is what it is asking about — and a receipt that read the same field would be telling
+    /// the reader they confirmed wording they never saw.
     func testTheRecordNamesTheSealThatWasSignedAndNotTheOneStandingNow() throws {
         let standing = staleStanding()
         let receipt = try XCTUnwrap(AcceptanceConfirmations.receipt(standing: standing))
 
         XCTAssertEqual(receipt.confirmation.criteriaDigest, Self.signed)
-        let line = AcceptanceConfirmations.confirmedLine(receipt.confirmation)
-        XCTAssertTrue(line.contains(CriteriaDecisions.shortSeal(Self.signed)), line)
-        XCTAssertFalse(line.contains(CriteriaDecisions.shortSeal(Self.moved)), line)
+        let seal = AcceptanceConfirmations.receiptSeal(receipt.confirmation)
+        XCTAssertTrue(seal.contains(CriteriaDecisions.shortSeal(Self.signed)), seal)
+        XCTAssertFalse(seal.contains(CriteriaDecisions.shortSeal(Self.moved)), seal)
 
         // And the two facts really are two: the card's own meta line names the version standing now,
         // in the same breath as saying the confirmation no longer stands. No `satisfied` here — the
@@ -175,6 +176,106 @@ final class AcceptanceConfirmationReceiptTests: XCTestCase {
         XCTAssertEqual(AcceptanceConfirmations.receiptStamp("08:00"), "by you at 08:00")
         XCTAssertEqual(AcceptanceConfirmations.receiptStamp(nil), "by you",
                        "a moment this client cannot read is left off rather than left dangling")
+    }
+
+    // MARK: what the record keeps — the words, and what changed
+
+    /// The new fields decode tolerantly: absent on a server older than this build, present with the
+    /// words confirmed and what the press changed on one that keeps them, and a shape this build
+    /// cannot read is none of — never a confirmation read that fails to decode.
+    func testTheRecordReadsTheWordsAndTheChangesItKeeps() throws {
+        func decode(_ json: String) throws -> RecordedStandardSetConfirmation {
+            try JSONDecoder().decode(RecordedStandardSetConfirmation.self, from: Data(json.utf8))
+        }
+        // Absent: an older server's record — no changes, no words, and nothing is invented.
+        let old = try decode("""
+        {"criteriaDigest":"d","criteriaMaterial":[],"confirmedAt":"t","confirmedById":"u1"}
+        """)
+        XCTAssertNil(old.changes)
+        XCTAssertEqual(old.criteria, [])
+        XCTAssertFalse(old.wordingRecorded)
+
+        // Present: the confirmed set in the words confirmed, and what this confirmation changed.
+        let kept = try decode("""
+        {"criteriaDigest":"d","criteriaMaterial":[],"confirmedAt":"t","confirmedById":"u1",
+         "changes":{"added":[{"key":"k2","ordinal":2,"text":"B"}],"stricter":[],"revised":[],
+                    "removed":["k9"],"unchanged":[1]},
+         "criteria":[{"key":"k1","ordinal":1,"text":"A","verificationMethod":"npm test","since":"UNCHANGED"},
+                     {"key":"k2","ordinal":2,"text":"B","verificationMethod":"review","since":"EDITED"},
+                     {"key":"k9","ordinal":null,"text":null,"verificationMethod":null,"since":"REMOVED"}],
+         "wordingRecorded":true}
+        """)
+        XCTAssertEqual(kept.changes?.added.map(\.key), ["k2"])
+        XCTAssertEqual(kept.changes?.removed, ["k9"])
+        XCTAssertEqual(kept.changes?.unchanged, [1])
+        XCTAssertEqual(kept.criteria.map(\.key), ["k1", "k2", "k9"])
+        XCTAssertEqual(kept.criteria[1].since, .edited)
+        XCTAssertEqual(kept.criteria[2].since, .removed)
+        XCTAssertNil(kept.criteria[2].ordinal,
+                     "a criterion that no longer stands has no number to be listed under")
+        XCTAssertNil(kept.criteria[2].text, "and a changed criterion's old words are gone")
+        XCTAssertTrue(kept.wordingRecorded)
+
+        // A shape this build cannot read is none of it, not a failed read.
+        let odd = try decode("""
+        {"criteriaDigest":"d","criteriaMaterial":[],"confirmedAt":"t","confirmedById":"u1",
+         "changes":"yesterday","criteria":{"k1":"A"},"wordingRecorded":"yes"}
+        """)
+        XCTAssertNil(odd.changes)
+        XCTAssertEqual(odd.criteria, [])
+        XCTAssertFalse(odd.wordingRecorded)
+
+        // And a `since` this build has no tag for leaves the row untagged, rather than failing it.
+        let ahead = try decode("""
+        {"criteriaDigest":"d","criteriaMaterial":[],"confirmedAt":"t","confirmedById":"u1",
+         "criteria":[{"key":"k1","ordinal":1,"text":"A","verificationMethod":null,"since":"MERGED"}],
+         "wordingRecorded":true}
+        """)
+        XCTAssertEqual(ahead.criteria.count, 1)
+        XCTAssertEqual(ahead.criteria[0].since, .unchanged)
+    }
+
+    /// The note under the fold's list, or none: the two sentences a record can need, read off the
+    /// record's own facts.
+    func testTheNoteUnderTheList() {
+        func record(_ criteria: [ConfirmedCriterionReading], wordingRecorded: Bool)
+            -> RecordedStandardSetConfirmation {
+            RecordedStandardSetConfirmation(criteriaDigest: Self.signed, criteriaMaterial: [],
+                                            confirmedAt: "2026-09-17T09:30:00.000Z",
+                                            confirmedById: "u1", criteria: criteria,
+                                            wordingRecorded: wordingRecorded)
+        }
+        // A record older than keeping the words: today's words stand in where the hash still
+        // matches, and the criteria that changed have none left — counted after the note.
+        let old = record([ConfirmedCriterionReading(key: "k1", ordinal: 1, text: "A"),
+                          ConfirmedCriterionReading(key: "k2", ordinal: 2)],
+                         wordingRecorded: false)
+        XCTAssertEqual(AcceptanceConfirmations.receiptNote(old),
+                       AcceptanceConfirmations.receiptWordingNotKept
+                           + AcceptanceConfirmations.receiptWordsGoneSentence(1))
+        let oldIntact = record([ConfirmedCriterionReading(key: "k1", ordinal: 1, text: "A")],
+                               wordingRecorded: false)
+        XCTAssertEqual(AcceptanceConfirmations.receiptNote(oldIntact),
+                       AcceptanceConfirmations.receiptWordingNotKept,
+                       "nothing gone adds nothing")
+
+        // A record whose words were kept, once some of them moved: which, by number.
+        let moved = record([ConfirmedCriterionReading(key: "k1", ordinal: 1, text: "A"),
+                            ConfirmedCriterionReading(key: "k3", ordinal: 3, text: "C",
+                                                      since: .edited),
+                            ConfirmedCriterionReading(key: "k5", ordinal: 5, text: "E",
+                                                      since: .removed)],
+                           wordingRecorded: true)
+        XCTAssertEqual(AcceptanceConfirmations.receiptNote(moved),
+                       AcceptanceConfirmations.receiptMovedNote([3, 5]))
+        let intact = record([ConfirmedCriterionReading(key: "k1", ordinal: 1, text: "A")],
+                            wordingRecorded: true)
+        XCTAssertNil(AcceptanceConfirmations.receiptNote(intact),
+                     "a kept record whose criteria all still stand has nothing to note")
+        // A criterion with no number left is not named by number.
+        let gone = record([ConfirmedCriterionReading(key: "k9", since: .removed)],
+                          wordingRecorded: true)
+        XCTAssertNil(AcceptanceConfirmations.receiptNote(gone))
     }
 
     // MARK: the wire — the read draws it, the press does not
@@ -266,34 +367,59 @@ final class AcceptanceConfirmationReceiptTests: XCTestCase {
     // MARK: what the app draws with it
 
     /// The row reaches the screen: the switch dispatches it, the card draws the line and the stamp
-    /// from the record, and the record is never counted as an open question — it is an answer, and
-    /// pointing a reader at it would be pointing them at something with nothing to press.
+    /// from the record, with what the confirmation was about folded under it, and the record is
+    /// never counted as an open question — it is an answer, and pointing a reader at it would be
+    /// pointing them at something with nothing to press.
     func testTheRecordIsDrawnAsAReceiptAndNeverCountedAsAQuestion() throws {
         let card = try source(Self.cardPath)
         let dispatch = try section(card, from: "case .acceptanceConfirmation:",
                                    to: "case .ownerConfirmation(")
         XCTAssertTrue(dispatch.contains("case .acceptanceConfirmationReceipt(let confirmed):"),
                       "the delivered-card switch draws nothing for a confirmation's record")
-        XCTAssertTrue(dispatch.contains("AcceptanceConfirmationReceiptCard(confirmed: confirmed,"),
-                      "and what it draws must be handed the record it is about")
-        XCTAssertTrue(dispatch.contains("changed: console.confirmedChanges(confirmed))"),
-                      "with what a re-confirmation pressed here changed, which the read cannot say")
+        XCTAssertTrue(dispatch.contains("AcceptanceConfirmationReceiptCard(confirmed: confirmed)"),
+                      "and what it draws must be handed the record it is about — and nothing a "
+                          + "window remembered: what the press changed is on the record now")
 
         let view = try section(card, from: "private struct AcceptanceConfirmationReceiptCard: View",
                                to: "\n// MARK: -")
         XCTAssertTrue(view.contains("AcceptanceConfirmations.receiptHeading"),
                       "the record draws OrbitKit's heading rather than one composed here")
-        XCTAssertTrue(view.contains("AcceptanceConfirmations.receiptLine(confirmed, changed: changed)"),
-                      "and OrbitKit's line, which is the one naming the seal that was signed — "
-                          + "started for a start, confirmed for anything else")
+        XCTAssertTrue(view.contains("AcceptanceConfirmations.receiptLine(confirmed)"),
+                      "and OrbitKit's line — started for a start, confirmed for anything else")
         XCTAssertTrue(view.contains("RunSettingsSummaryText(settings: started.settings,"),
                       "and a start's record says what the project was started with")
         XCTAssertTrue(view.contains("AcceptanceConfirmations.receiptStamp("),
                       "and the stamp saying who signed it, and when")
-        XCTAssertFalse(view.contains("Button"),
-                       "a record is not a question: nothing on it is pressable")
+        XCTAssertFalse(view.contains("approvalActionLabel"),
+                       "a record is not a question: nothing on it is a pressable action — the "
+                           + "fold's toggle is a reading control and writes nothing")
+
+        // The fold, closed by default: the change card's own rows, the numbered criteria with
+        // their tags, the note, and the seal — all off the record, all in OrbitKit's words.
+        XCTAssertTrue(view.contains("AcceptanceReceiptFold(confirmed: confirmed)"),
+                      "what the confirmation was about is folded under its record")
+        XCTAssertTrue(view.contains("@State private var open = false"),
+                      "and the fold is closed by default")
+        XCTAssertTrue(view.contains("AcceptanceConfirmations.receiptOpenLabel("),
+                      "the closed toggle says what it opens and how much of it there is")
+        XCTAssertTrue(view.contains("AcceptanceConfirmations.receiptCloseLabel"),
+                      "and the open one says it closes")
+        XCTAssertTrue(view.contains("CriteriaChanges.rows(changes)"),
+                      "the change rows are the change card's own, so question and record read alike")
+        XCTAssertTrue(view.contains("CriteriaChangeRowView(row: row)"),
+                      "drawn by the same row view")
+        XCTAssertTrue(view.contains("AcceptanceConfirmations.receiptWordsGone"),
+                      "a criterion whose words were never kept says so")
+        XCTAssertTrue(view.contains("AcceptanceConfirmations.receiptTagNew"),
+                      "and what was new, moved or removed since is tagged")
+        XCTAssertTrue(view.contains("AcceptanceConfirmations.receiptNote(confirmed)"),
+                      "with the note under the list when there is one")
+        XCTAssertTrue(view.contains("AcceptanceConfirmations.receiptSeal(confirmed)"),
+                      "and the seal the press locked as the fold's last line")
 
         let console = try source(Self.consolePath)
+        XCTAssertFalse(console.contains("confirmedChanges("),
+                       "the window-held 'what this press changed' is gone: the record keeps it")
         let counted = try section(console, from: "var openBelowRows: [BelowRow] {",
                                   to: "\n    /// A row the transcript has been asked to scroll to")
         let receipts = try section(counted, from: "case .criteriaDecisionReceipt, .evidenceDecisionReceipt,",

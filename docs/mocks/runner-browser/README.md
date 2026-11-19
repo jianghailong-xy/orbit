@@ -15,6 +15,10 @@ Orbit Cloud runner（托管 runner）里的 agent 用真的 Chrome 干活；你�
 | [`02-control-view-2.png`](02-control-view-2.png) | ② 提案：自己的标签页、接管中；Fit / 100%、能粘贴，没有 `--no-sandbox` 提示条 |
 | [`02-control-view-3.png`](02-control-view-3.png) | ③ 抽屉加 Open in new tab；标签页只看时 |
 | [`02-control-view-4.png`](02-control-view-4.png) | A / B / C 比较（建议 C）、不变的、落地 |
+| [`03-agent-tools.png`](03-agent-tools.png) | 给 agent 的工具：请你登录、状态、打开、清除（整板） |
+| [`03-agent-tools-1.png`](03-agent-tools-1.png) | ① 请你登录：agent → 卡 → 标签页 → agent 继续 |
+| [`03-agent-tools-2.png`](03-agent-tools-2.png) | ② 工具面（orbit mcp 与 CLI）、不做的 |
+| [`03-agent-tools-3.png`](03-agent-tools-3.png) | 已定 Q1–Q4 = A（owner 2026-11-19）、落地 |
 
 ## 怎么做的
 

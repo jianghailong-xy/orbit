@@ -279,6 +279,53 @@ func TestRemoteSubagentRefusesAWorkDirThatIsNotGit(t *testing.T) {
 	}
 }
 
+// A claim in place (a read-only run on a workDir that is not a git repository): the child runs in the workDir itself,
+// read-only even though its claim's type is "general", no worktree is made, and the workDir is left where it is.
+func TestRemoteSubagentInPlaceRunsReadOnlyInTheWorkDir(t *testing.T) {
+	r := newRemoteRig(t)
+	plain := t.TempDir()
+	writeTestFile(t, filepath.Join(plain, "my.cnf"), "[client]\n")
+	r.stub.claim["workDir"] = plain
+	r.stub.claim["inPlace"] = true
+	remoteSubagents.onHeartbeat(r.t, []string{"run-1"}, nil, false)
+	end := r.stub.awaitEnd(t)
+	result, _ := end["resultSummary"].(string)
+	if end["status"] != subagentStatusDone || result != "swift build passed" {
+		t.Fatalf("the end was %v", end)
+	}
+	cwdRaw, _ := os.ReadFile(filepath.Join(r.marks, "cwd"))
+	got, _ := filepath.EvalSymlinks(strings.TrimSpace(string(cwdRaw)))
+	if want, _ := filepath.EvalSymlinks(plain); got != want {
+		t.Fatalf("the child ran in %s, want the workDir %s", got, want)
+	}
+	argv, _ := os.ReadFile(filepath.Join(r.marks, "argv"))
+	for _, tool := range subagentReadonlyDisallowed {
+		if !strings.Contains(string(argv), tool) {
+			t.Fatalf("the child was not denied %s:\n%s", tool, argv)
+		}
+	}
+	if _, err := os.Stat(filepath.Join(plain, "my.cnf")); err != nil {
+		t.Fatalf("the workDir lost its files: %v", err)
+	}
+	if _, err := os.Stat(filepath.Join(plain, ".git")); !os.IsNotExist(err) {
+		t.Fatalf("a git repository was made in the workDir: %v", err)
+	}
+	if _, err := os.Stat(filepath.Join(remoteSubagentDir("run-1"), "tree")); !os.IsNotExist(err) {
+		t.Fatalf("a worktree was made: %v", err)
+	}
+	waitUntil(t, func() bool { rec, _ := readRemoteSubagentRecord("run-1"); return rec.Ended },
+		"the run's record was not kept as ended")
+	if rec, _ := readRemoteSubagentRecord("run-1"); !rec.InPlace || rec.Tree != "" {
+		t.Fatalf("the record does not say it ran in place: %+v", rec)
+	}
+	// A restart's recovery and the GC never touch a workDir a run in place worked in.
+	recoverRemoteSubagents(r.t)
+	gcRemoteSubagentConversations(time.Now().Add(remoteSubagentKeep + time.Hour))
+	if _, err := os.Stat(filepath.Join(plain, "my.cnf")); err != nil {
+		t.Fatalf("the workDir was removed by the cleanup: %v", err)
+	}
+}
+
 // A stop from the server (the parent stopped or ended) ends the child within the grace: STOPPED, worktree removed.
 func TestRemoteSubagentStopsWhenTheServerSaysSo(t *testing.T) {
 	r := newRemoteRig(t)

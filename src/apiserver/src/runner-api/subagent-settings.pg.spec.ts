@@ -103,10 +103,10 @@ test('SubAgents settings: defaults, the human doors, the runner refusals and the
     name: `orbit-worker-${runnerId.slice(-8)}`, runnerId, workDir: '/work/repo',
   }));
 
-  await t.test('defaults: SubAgents on, Optimize For Cost, 4 at once, nothing blocked', async () => {
+  await t.test('defaults: SubAgents on, Optimize For Cost, 8 at once, nothing blocked', async () => {
     assert.equal(agent.subagentsEnabled, true);
     assert.equal(agent.modelRoutingOptimizeFor, 'cost');
-    assert.equal(agent.subagentsMaxRunning, 4);
+    assert.equal(agent.subagentsMaxRunning, 8);
     const me = await users.me(user);
     assert.deepEqual(subagentBlockedProviders(me?.preferences), [], 'a new account blocks no provider');
   });
