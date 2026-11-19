@@ -101,6 +101,26 @@ final class LandingCheckTests: XCTestCase {
         XCTAssertEqual(block.rows.map(\.label), ["", "Landings on hold", "Upstream", "Project tip", "Combined baseline", "Landing check", ""])
         XCTAssertEqual(block.rows.map(\.value), [LandingCheckCopy.baselineBody, "2", "u", "t", "m", "make fast", LandingCheckCopy.resumes])
     }
+    func testEscalatedBaselineItemKeepsTheBaselineCardNotWhoFixes() throws {
+        let row = try JSONDecoder().decode(ProjectOpenItemRow.self, from: Data("""
+            {"itemId":"b1","kind":"INTEGRATION_CHECK_FAILED","title":"Baseline red","assignee":"OWNER",
+             "assigneeReason":"ESCALATED","escalatedAt":"2026-11-11T00:06:00Z","taskId":"t0",
+             "waitingSince":"2026-11-11T00:00:00Z","facts":{"targetRef":"refs/heads/project/payments"},
+             "baseline":{"upstreamSha":"u","targetSha":"t",
+             "mergeTreeSha":"m","check":{"name":"LANDING_CHECK","command":"make fast"}},"heldTaskIds":["t1","t2"]}
+            """.utf8))
+        XCTAssertEqual(row.assignee, .owner)
+        XCTAssertEqual(row.assigneeReason, .escalated)
+        XCTAssertFalse(ExceptionCards.whoFixesIt(row), "A baseline item keeps its own card once escalated")
+        XCTAssertEqual(ExceptionCards.headingLine(row), "Baseline checks failing on project/payments")
+        guard case .rows(let block) = ExceptionCards.facts(row) else { return XCTFail("Missing baseline card") }
+        XCTAssertEqual(block.rows.map(\.label), ["", "Landings on hold", "Upstream", "Project tip", "Combined baseline", "Landing check", ""])
+        XCTAssertEqual(block.rows.map(\.value), [LandingCheckCopy.baselineBody, "2", "u", "t", "m", "make fast",
+                                                 "Landings resume automatically when this open item is resolved."])
+        // One "View held tasks" link per held task: the card draws one per id.
+        XCTAssertEqual(LandingCheckCopy.viewHeld, "View held tasks")
+        XCTAssertEqual(row.heldTaskIds, ["t1", "t2"])
+    }
     func testScopeRecoveryNeverAssignsNewestResultsToAnotherAttemptClaimOrRound() {
         let entry = IntegrationTimelineEntry(kind: "CHECK_FINISHED", claim: 2, round: 3,
             check: LandingTimelineCheck(name: "LANDING_CHECK", index: 1), data: ["exitCode": .int(1), "expectedExitCode": .int(0)],

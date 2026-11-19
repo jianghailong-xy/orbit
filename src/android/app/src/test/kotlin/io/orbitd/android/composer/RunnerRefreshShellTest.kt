@@ -26,6 +26,12 @@ class RunnerRefreshShellTest : ComposerShellTest() {
     }
     private fun reads(call: String) = ComposerShell.calls.count { it == call }
     private val label = hasTestTag("composer-pool-account")
+    /** The account is named in the usage sheet, which the toolbar's ring opens (board android-composer-parity): opened once the
+     * catalogue's opening reads are done, so the press's own read is not counted with them. */
+    private fun openUsage() {
+        compose.onNodeWithTag("composer-context").performClick()
+        await { has(hasTestTag("composer-context-sheet")) }
+    }
 
     /** The pool's account is named off the composer's catalogue, read as the page opens: two failed reads are tried again. */
     @Test fun theCataloguesOpeningReadIsTriedThreeTimes() {
@@ -35,9 +41,11 @@ class RunnerRefreshShellTest : ComposerShellTest() {
             if (failures-- > 0) ApiResponse(503, """{"message":"unavailable"}""".encodeToByteArray()) else ApiResponse(200, ComposerShell.pools.encodeToByteArray())
         }
         signIn(); openSession()
+        await { compose.waitForIdle(); reads("GET providers/pools") >= 3 }
+        assertEquals(3, reads("GET providers/pools"))
+        openUsage()
         await { has(label) }
         compose.onNode(label).assertTextEquals("second@example.test")
-        assertEquals(3, reads("GET providers/pools"))
     }
 
     /** A catalogue whose three tries all failed is not left that way: the next reconnect reads it, and the account is named. */
@@ -50,9 +58,11 @@ class RunnerRefreshShellTest : ComposerShellTest() {
         signIn(); openSession()
         // The composer's retries wait on the main looper, which only an idle UI runs.
         await { compose.waitForIdle(); reads("GET providers/pools") >= 3 }
-        assertFalse(has(label))
+        val opening = reads("GET providers/pools")
         failing = false
         ComposerShell.endStream()
+        await { compose.waitForIdle(); reads("GET providers/pools") > opening }
+        openUsage()
         await { has(label) }
         compose.onNode(label).assertTextEquals("second@example.test")
     }
@@ -63,15 +73,16 @@ class RunnerRefreshShellTest : ComposerShellTest() {
             "modelCatalog":{"codex":[{"value":"gpt-6","label":"GPT-6","contextWindow":$tokens}]}}""")
     }
 
-    /** What the page read off the runner is read again on a reconnect: the composer's line says the window the runner reports now. */
+    /** What the page read off the runner is read again on a reconnect: the usage sheet says the window the runner reports now. */
     @Test fun aReconnectReadsTheRunnerRowAgain() {
         onPool(); window(272000)
         signIn(); openSession()
-        awaitText("Context: 0 / 272000 tokens · Usage")
+        openUsage()
+        awaitText("Context: 0 / 272000 tokens")
         val before = reads("GET runners")
         window(400000)
         ComposerShell.endStream()
-        awaitText("Context: 0 / 400000 tokens · Usage")
+        awaitText("Context: 0 / 400000 tokens")
         assertTrue(reads("GET runners") > before)
     }
 
