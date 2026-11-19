@@ -1,0 +1,62 @@
+<!doctype html><html><head><meta charset="utf-8"><style>
+@font-face{font-family:Inter;src:url(/var/tmp/landing-mock-render/fonts/Inter.ttf)}
+@font-face{font-family:NotoSC;src:url(/var/tmp/landing-mock-render/fonts/NotoSansSC.ttf)}
+@font-face{font-family:Mono;src:url(/var/tmp/landing-mock-render/fonts/JetBrainsMono.ttf)}
+body{margin:0;padding:32px;width:1720px;font:14px/1.55 Inter,NotoSC,sans-serif;color:#1f2329;background:#eef0f3}
+h1{font-size:24px;margin:0 0 4px}h2{font-size:18px;margin:30px 0 8px}.cap{color:#646a73;margin:0 0 12px}
+.mono{font-family:Mono,monospace;font-size:12.5px}
+.cols{display:grid;grid-template-columns:1fr 1fr;gap:24px}
+.pane{background:#fff;border-radius:10px;padding:14px;box-shadow:0 1px 3px rgba(0,0,0,.08)}
+.pane h3{margin:0 0 8px;font-size:13px;color:#8f959e;letter-spacing:.05em}
+.shot{position:relative}.shot img{width:100%;display:block;border:1px solid #e3e6eb}
+.edge{position:absolute;top:0;bottom:0;border-left:2px dashed #cf3b35}
+.edge.ok{border-left-color:#1a7f37}
+table{border-collapse:collapse;width:100%;background:#fff;border-radius:8px;overflow:hidden;font-size:13.5px}
+td,th{padding:6px 10px;border-bottom:1px solid #eceef1;text-align:left;vertical-align:top}th{background:#fafbfc;color:#646a73;font-weight:600}
+.bad{color:#cf3b35;font-weight:600}.ok{color:#1a7f37;font-weight:600}
+.dec{background:#fff;border-left:4px solid #3370ff;padding:10px 14px;margin:10px 0;border-radius:6px}.dec b.k{color:#3370ff}
+</style></head><body>
+<h1>对话卡片宽度不一致 · 审查与方案（待确认）</h1>
+<p class="cap">orbit-develop · web。下面两张图都是<b>真实构建</b>（src/web dist + 夹具数据）截的对话栏，窗口 1920 宽、对话栏 1279px。“建议”图是在同一构建上注入拟议 CSS 后截的。</p>
+
+<h2>① 结论：还存在</h2>
+<p class="cap">测量（卡片外框宽度，px）：</p>
+<table>
+<tr><th>对话栏宽</th><th>Project started <span class="mono">.psc</span></th><th>Exception item <span class="mono">.oic</span></th><th>Answered <span class="mono">.answered-question-card</span></th><th>待办卡 <span class="mono">.project-open-item-card</span></th></tr>
+<tr><td>1279（1920 窗口）</td><td>720</td><td>720</td><td class="bad">1279</td><td class="bad">1279</td></tr>
+<tr><td>799（1440 窗口）</td><td>720</td><td>720</td><td class="bad">799</td><td class="bad">799</td></tr>
+<tr><td>459（1100 窗口）</td><td>459</td><td>459</td><td>459</td><td>459</td></tr>
+<tr><td>362（手机 390）</td><td>362</td><td>362</td><td>362</td><td>362</td></tr>
+</table>
+<p class="cap" style="margin-top:8px">对话栏超过 720px 就开始不齐：通知类卡片停在 720，决策类卡片（共用 <span class="mono">.approval-card</span> 外框的）一直铺满。窄屏、手机上本来就一样宽。</p>
+
+<div class="cols">
+<div class="pane"><h3>现在（1920 窗口）</h3><div class="shot"><img src="before.png"><div class="edge" style="left:56.3%"></div></div>
+<p class="cap" style="margin-top:6px">红虚线 = 720px。前两张停在线上，后两张冲过去到栏的右边。</p></div>
+<div class="pane"><h3>建议：所有卡片同一上限 720px</h3><div class="shot"><img src="after.png"><div class="edge ok" style="left:56.3%"></div></div>
+<p class="cap" style="margin-top:6px">四张卡片右边对齐在同一条线上；回复正文、你的消息不变。</p></div>
+</div>
+
+<h2>② 来历</h2>
+<table>
+<tr><th>日期</th><th>改动</th></tr>
+<tr><td>11-11</td><td>orbit-cards-left 获批：Orbit 的卡片放到左侧、占满一栏</td></tr>
+<tr><td>11-12</td><td>session-message-bubble 获批：“cards capped too” —— 例外项、任务开工、项目已启动、确认审查卡片封顶 720px</td></tr>
+<tr><td>11-16</td><td>证据决定回执也封顶 720px（“和其他卡片一致”）</td></tr>
+<tr><td>—</td><td class="bad">共用 .approval-card 的卡片从没跟上：待办卡、问题卡与已回答记录、标准决定、证据决定、主人确认、合入卡、跨项目决定等仍然铺满</td></tr>
+</table>
+
+<h2>③ 全部对话卡片的现状（来自 CSS 普查）</h2>
+<table>
+<tr><th>上限</th><th>卡片</th><th>建议</th></tr>
+<tr><td>720px</td><td>例外项 .oic、项目已启动 .psc、任务开工 .tsc、确认审查 .crc、其他会话消息 .smc、证据决定回执、Start project 卡</td><td>不变</td></tr>
+<tr><td class="bad">无上限（铺满）</td><td>待办卡、问题卡 / 已回答记录、标准决定、标准变更、证据决定、主人确认、合入卡、跨项目决定、项目结算卡（都用 .approval-card）</td><td>→ 720px（D1）</td></tr>
+<tr><td>560 / 640 / 668px</td><td>状态卡 .chat-status-card 560、会话回复卡 .src 560、落地窗口卡 640、定时卡 .sched-card 560 · 记录 640、机器设置卡 668</td><td>→ 720px（D2）</td></tr>
+</table>
+
+<h2>④ 做法</h2>
+<p class="cap">一个变量 <span class="mono">--chat-card-max: 720px</span>，只在对话栏 (<span class="mono">.workspace-sessions</span>) 里生效，所有对话卡片的 max-width 都读它；项目页、弹窗、侧栏里的同名卡片不受影响。原来各写各的 720 也改成读这个变量，以后只有一处。</p>
+<div class="dec"><b class="k">D1</b> 决策类卡片（.approval-card 一族）也封顶 720？　<b>A（建议）</b> 是，所有卡片一个宽度 —— 延续 11-12 你批的“cards capped too”。　B 决策卡继续铺满，只把通知卡放开到铺满（回到 11-11 的方案）。</div>
+<div class="dec"><b class="k">D2</b> 目前更窄的卡片（560/640/668）？　<b>A（建议）</b> 也到 720，右边一条线。　B 保留它们的窄宽度（它们内容少），只统一 D1。</div>
+<p class="cap">iOS / Android：本次只做 web；确认后需要的话再开任务对齐。</p>
+</body></html>
