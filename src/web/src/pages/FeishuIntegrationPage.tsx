@@ -68,6 +68,11 @@ export const APPROVALS_IN_FEISHU_HINT =
   "On, a tool approval's card has Allow once and Deny, answered by you only. "
   + '"Always allow", questions, and Orbit\'s own confirmation cards are answered in Orbit. Off, cards only open Orbit.';
 
+/** §15.2: what the Show Orbit in Feishu switch says (board 01-hide-orbit ①). On by default. */
+export const SHOW_ORBIT_HINT =
+  'Off, cards have no Open in Orbit button and the bot sends nobody a link to Orbit. '
+  + 'Your alerts still arrive and approvals can still be answered on the card; open Orbit yourself for anything else.';
+
 /** §7.3: what the default workspace is for. */
 export const DEFAULT_WORKSPACE_HINT =
   'A new direct message to the bot starts a session here. With none chosen, the bot asks you to choose one in Feishu.';
@@ -110,6 +115,7 @@ function AppSummary({
   const switchId = useId();
   const detailId = useId();
   const approvalsId = useId();
+  const showOrbitId = useId();
   const workspaceId = useId();
   const workspaces = useQuery(workspacesQuery());
   const change = useMutation({
@@ -205,6 +211,20 @@ function AppSummary({
             checked={app.approvalsInFeishu}
             loading={change.isPending && change.variables?.approvalsInFeishu !== undefined}
             onCheckedChange={(approvalsInFeishu) => change.mutate({ approvalsInFeishu })}
+          />
+        </div>
+        <div className="admin-signin-row">
+          <div>
+            <div className="admin-signin-label" id={showOrbitId}>
+              Show Orbit in Feishu
+            </div>
+            <div className="admin-signin-hint">{SHOW_ORBIT_HINT}</div>
+          </div>
+          <Switch
+            aria-labelledby={showOrbitId}
+            checked={app.showOrbit}
+            loading={change.isPending && change.variables?.showOrbit !== undefined}
+            onCheckedChange={(showOrbit) => change.mutate({ showOrbit })}
           />
         </div>
         <div className="admin-signin-row">

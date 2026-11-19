@@ -39,6 +39,8 @@ export interface FeishuAppSettings {
   enabled: boolean;
   messageDetail: FeishuMessageDetail;
   approvalsInFeishu: boolean;
+  /** "Show Orbit in Feishu" (§15.2): off, the owner's cards and replies carry no Open in Orbit button and no Orbit link. */
+  showOrbit: boolean;
   defaultWorkspaceId: string | null;
   /** The owner's open_id in this app and their name, once bound (§5). */
   ownerOpenId: string | null;
@@ -128,6 +130,8 @@ export interface FeishuAppChange {
   messageDetail?: FeishuMessageDetail;
   /** Whether a tool approval's card has Allow once and Deny (§7.2). Off, it has only Open in Orbit. */
   approvalsInFeishu?: boolean;
+  /** "Show Orbit in Feishu" (§15.2). Off, no card or reply to the owner has Open in Orbit or an Orbit link. */
+  showOrbit?: boolean;
   /** Where a session started from the owner's direct messages opens (§7.3); null clears it. */
   defaultWorkspaceId?: string | null;
 }

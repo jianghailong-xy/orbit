@@ -16,7 +16,9 @@
  *       chain spoken in last), not the first one;
  *   (4) a turn with no assistant text writes no row; a session with no chain writes no row;
  *   (5) in a group chat (a chain whose chat has a feishu_chat_route) the reply goes in the thread, with the words alone:
- *       no Open in Orbit, no Orbit link; and it is sent with the app in TITLES_ONLY as in FULL (§6.4).
+ *       no Open in Orbit, no Orbit link; and it is sent with the app in TITLES_ONLY as in FULL (§6.4);
+ *   (6) with Show Orbit in Feishu off (§15.2), a direct chat's reply is a plain text message, the words alone: no
+ *       Open in Orbit line and no Orbit link.
  *
  *   bash scripts/run-pg-spec.sh src/apiserver/src/feishu/feishu-outbox.pg.spec.ts
  */
@@ -316,5 +318,26 @@ test('Feishu: a session\'s replies go back to its chain, and turn-complete never
       assert.deepEqual(contentOf(reply!).body.elements, [{ tag: 'markdown', content: `Shipped (${detail}).` }], 'the words alone');
       assert.ok(!JSON.stringify(reply!.body).includes('/sessions/'), 'no Orbit link in a group');
     }
+  });
+
+  await t.test('(6) Show Orbit in Feishu off: the direct chat\'s reply is plain text, with no Open in Orbit and no link', async () => {
+    await db.feishuApp.update({ where: { appId: X.appId }, data: { showOrbit: false } });
+    const last = await db.conversationTurn.aggregate({ where: { sessionId: session!.id }, _max: { seq: true } });
+    const turn = await db.conversationTurn.create({
+      data: { sessionId: session!.id, seq: (last._max.seq ?? 0) + 1, clientTurnId: randomUUID(), kind: 'message', status: 'PENDING', content: 'and the footer?' },
+    });
+    const done = await runTurn(session!.id, turn.id, [{ text: '**Fixed** the footer too.' }]);
+    assert.equal(done.status, 200, done.text);
+    const row = await until('the plain reply sent', async () => {
+      const r = await outbox(turn.id);
+      return r?.status === 'SENT' ? r : null;
+    });
+    const reply = repliesTo(row.rootMessageId).find((r) => r.answeredWith === row.messageId);
+    assert.ok(reply, 'the reply went to the chain');
+    assert.equal((reply!.body as { msg_type: string }).msg_type, 'text', 'plain text, as any chat message');
+    assert.deepEqual(contentOf(reply!), { text: '**Fixed** the footer too.' }, 'the words alone, no Open in Orbit line');
+    const body = JSON.stringify(reply!.body);
+    assert.ok(!body.includes('Open in Orbit') && !body.includes('/sessions/') && !body.includes(uuidToBase62(session!.id)), 'no Orbit link');
+    await db.feishuApp.update({ where: { appId: X.appId }, data: { showOrbit: true } });
   });
 });

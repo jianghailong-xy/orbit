@@ -48,6 +48,10 @@ export class ChangeFeishuAppDto implements FeishuAppChange {
   @IsOptional()
   @IsBoolean()
   approvalsInFeishu?: boolean;
+
+  @IsOptional()
+  @IsBoolean()
+  showOrbit?: boolean;
   /** Where the owner's new direct messages open a session (§7.3); null clears it. */
   @IsOptional()
   @ValidateIf((_, value) => value !== null)

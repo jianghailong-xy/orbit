@@ -52,6 +52,24 @@ test('past 30 KB the reply is plain text; past 150 KB it is cut, and says so', (
   assert.ok(bytes(cutDirect.content) <= FEISHU_TEXT_MAX_BYTES);
 });
 
+test('Show Orbit in Feishu off: the owner\'s reply is plain text, with no Open in Orbit line (§15.2)', () => {
+  const words = '**Done.** The export bug is fixed.';
+  const on = renderSessionReply(words, URL);
+  assert.equal(on.msgType, 'interactive', 'on: the card with its button, as before');
+  const off = renderSessionReply(words, null, true);
+  assert.deepEqual(off, { msgType: 'text', content: { text: words } }, 'off: the words alone, as any chat message');
+  const long = renderSessionReply('a'.repeat(FEISHU_CARD_MAX_BYTES), null, true);
+  assert.deepEqual(long.content, { text: 'a'.repeat(FEISHU_CARD_MAX_BYTES) });
+  const huge = renderSessionReply('修复\n'.repeat(FEISHU_TEXT_MAX_BYTES / 4), null, true);
+  const text = (huge.content as { text: string }).text;
+  assert.ok(bytes(huge.content) <= FEISHU_TEXT_MAX_BYTES);
+  assert.ok(text.endsWith(`\n\n${REPLY_CUT_NOTE}`), 'the owner\'s own chat still says where the rest is');
+  for (const body of [off, long, huge]) {
+    const json = JSON.stringify(body);
+    assert.ok(!json.includes('Open in Orbit') && !json.includes('orbit.example') && !json.includes('http'), json.slice(0, 80));
+  }
+});
+
 test('a failed reply waits 5 s, doubling, at most 10 minutes, a bounded number of times', () => {
   const timing = feishuTiming();
   assert.deepEqual([1, 2, 3, 4].map((n) => outboxRetryMs(n, timing)), [5_000, 10_000, 20_000, 40_000]);
