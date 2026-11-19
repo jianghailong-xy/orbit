@@ -216,11 +216,19 @@ public enum ScheduleCopy {
         public static let alwaysAllow = "Always allow"
         public static let allowOnce = "Allow once"
         public static let deny = "Deny"
+        public static let stop = "Stop"
+        public static let openLastRun = "Open last run"
     }
     public enum DeleteConfirm {
         public static let title = "Delete “{title}”?"
         public static let body = "It stops running: a run waiting to start is cancelled, and one under way finishes. Its runs and their sessions are kept, but the Scheduled page no longer shows it or its history, and you cannot undo this here."
         public static let confirm = "Delete"
+        public static let cancel = "Cancel"
+    }
+    public enum StopConfirm {
+        public static let title = "Stop this run?"
+        public static let body = "It ends where it is and counts as stopped by you. Its session is kept, and the schedule runs again at its next time."
+        public static let confirm = "Stop"
         public static let cancel = "Cancel"
     }
     public static let keep: [String: String] = [
@@ -520,10 +528,16 @@ public enum ScheduleCopy {
         "actions.alwaysAllow": ScheduleCopy.Actions.alwaysAllow,
         "actions.allowOnce": ScheduleCopy.Actions.allowOnce,
         "actions.deny": ScheduleCopy.Actions.deny,
+        "actions.stop": ScheduleCopy.Actions.stop,
+        "actions.openLastRun": ScheduleCopy.Actions.openLastRun,
         "deleteConfirm.title": ScheduleCopy.DeleteConfirm.title,
         "deleteConfirm.body": ScheduleCopy.DeleteConfirm.body,
         "deleteConfirm.confirm": ScheduleCopy.DeleteConfirm.confirm,
         "deleteConfirm.cancel": ScheduleCopy.DeleteConfirm.cancel,
+        "stopConfirm.title": ScheduleCopy.StopConfirm.title,
+        "stopConfirm.body": ScheduleCopy.StopConfirm.body,
+        "stopConfirm.confirm": ScheduleCopy.StopConfirm.confirm,
+        "stopConfirm.cancel": ScheduleCopy.StopConfirm.cancel,
         "keep.ACCESS_LEVEL": ScheduleCopy.keep["ACCESS_LEVEL"]!,
         "keep.RUNS_PER_WEEK": ScheduleCopy.keep["RUNS_PER_WEEK"]!,
         "keep.RUN_LIMIT": ScheduleCopy.keep["RUN_LIMIT"]!,

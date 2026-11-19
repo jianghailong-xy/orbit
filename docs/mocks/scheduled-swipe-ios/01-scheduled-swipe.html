@@ -1,0 +1,274 @@
+<!doctype html>
+<!-- Design mock: the iOS Scheduled page's row swipes and long-press menu, by row kind. ① is the page as
+     the owner's iPhone shows it (2026-11-19, dark appearance) plus the trailing Delete landed in
+     1fac762b1e; the rest is the proposal. Swipe geometry follows RowSwipeActions.swift's circles.
+     Not shipped code. -->
+<html lang="zh">
+<head>
+<meta charset="utf-8">
+<title>Scheduled · row swipes (iOS)</title>
+<style>
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body { background: #e9ebef; font-family: -apple-system, Inter, 'Noto Sans SC', sans-serif; color: #1c1f26; }
+  .board { width: 1560px; padding: 36px 40px 40px; background: #f6f7f9; }
+  .board + .board { border-top: 1px solid #dde0e6; }
+  h1 { font-size: 24px; font-weight: 750; margin-bottom: 6px; }
+  .sub { font-size: 14px; line-height: 1.7; color: #4a5160; max-width: 1400px; margin-bottom: 22px; }
+  .row3 { display: grid; grid-template-columns: repeat(3, 393px); gap: 64px; align-items: start; }
+  .lab { font-size: 13.5px; font-weight: 650; color: #4a5160; margin: 0 0 8px 2px; display: flex; gap: 8px; align-items: center; }
+  .k { display: inline-block; padding: 0 7px; border-radius: 5px; font-size: 12px; line-height: 20px; font-weight: 700; background: #dfe2e8; color: #4a5160; }
+  .k.new { background: #dbe6ff; color: #2a55d9; }
+  .cap { font-size: 12.5px; line-height: 1.7; color: #4a5160; margin: 8px 2px 0; }
+  .cap b { color: #1c1f26; }
+  .notes { list-style: none; margin-top: 22px; display: grid; gap: 8px; max-width: 1400px; }
+  .notes li { display: flex; gap: 10px; font-size: 13.5px; line-height: 1.7; color: #343a46; }
+  .n { flex: none; width: 21px; height: 21px; border-radius: 50%; background: #3e69f6; color: #fff; font-size: 12px; font-weight: 700;
+       display: inline-flex; align-items: center; justify-content: center; margin-top: 2px; }
+  code { font-family: 'JetBrains Mono', monospace; font-size: 12px; background: #e6e8ec; padding: 0 4px; border-radius: 4px; }
+  table { border-collapse: collapse; font-size: 13px; line-height: 1.55; background: #fff; }
+  th, td { border: 1px solid #dde0e6; padding: 7px 10px; text-align: left; vertical-align: top; }
+  th { background: #eef0f4; font-weight: 650; }
+  td.c { white-space: nowrap; }
+  .pill { display: inline-block; padding: 0 7px; border-radius: 10px; color: #fff; font-size: 12px; line-height: 19px; font-weight: 600; margin: 1px 2px 1px 0; }
+  .muted { color: #8a90a0; }
+  .two { display: grid; grid-template-columns: 1fr 1fr; gap: 40px; align-items: start; }
+  .q { font-size: 15px; font-weight: 700; margin: 0 0 6px; }
+  .rec { color: #2a55d9; font-weight: 700; }
+  .cost { flex: none; padding: 0 6px; border-radius: 4px; font-size: 11px; font-weight: 700; line-height: 20px; margin-top: 2px; }
+  .cost.s { background: #e8f5e9; color: #2e7d32; }
+  .cost.m { background: #fff4e0; color: #b35a00; }
+
+  /* ---------- the phone (dark, as the owner's screenshot) ---------- */
+  .ph { position: relative; width: 393px; height: 852px; border-radius: 48px; overflow: hidden; background: #000; color: #fff;
+        box-shadow: 0 0 0 9px #1b1b1d, 0 0 0 10px #3a3a3c; font-family: -apple-system, Inter, 'Noto Sans SC', sans-serif; }
+  .ph-st { height: 54px; display: flex; align-items: flex-end; justify-content: space-between; padding: 0 34px 8px 50px; font-size: 16.5px; font-weight: 600; }
+  .ph-bar { height: 52px; display: flex; justify-content: space-between; align-items: center; padding: 0 16px; }
+  .ph-btn { width: 40px; height: 40px; border-radius: 50%; background: #1c1c1e; display: flex; align-items: center; justify-content: center; }
+  .ph-btn svg { width: 18px; height: 18px; fill: #fff; }
+  .ph-ttl { display: flex; justify-content: space-between; align-items: baseline; padding: 14px 18px 0; }
+  .ph-ttl b { font-size: 30px; font-weight: 800; color: #3e69f6; }
+  .ph-ttl span { font-size: 30px; font-weight: 700; color: #8e8e93; }
+  .ph-ws { margin: 8px 18px 6px; display: inline-block; padding: 3px 10px; border: 1px solid #3a3a3c; border-radius: 14px; color: #3e69f6; font-size: 13px; }
+  .gh { padding: 16px 18px 6px; font-size: 16px; font-weight: 700; color: #aeaeb2; }
+  .gh i { font-style: normal; font-weight: 500; font-size: 13px; margin-left: 6px; }
+  .r { position: relative; height: 62px; }
+  .rc { position: absolute; inset: 0; display: flex; gap: 12px; padding: 9px 18px 0; background: #000; }
+  .rc .ci { flex: none; width: 21px; height: 21px; border-radius: 50%; border: 1.6px solid #48484a; margin-top: 1px; display: flex; align-items: center; justify-content: center; }
+  .rc .ci svg { width: 11px; height: 11px; fill: #fff; }
+  .ci.done { background: #30d158; border-color: #30d158; }
+  .ci.run { border-color: #3e69f6; border-right-color: transparent; }
+  .ci.draft { border-style: dashed; }
+  .rt { flex: 1; min-width: 0; }
+  .rt1 { display: flex; justify-content: space-between; gap: 8px; font-size: 15.5px; line-height: 21px; }
+  .rt1 .tm { color: #8e8e93; font-size: 13px; }
+  .rt2 { font-size: 13px; line-height: 18px; color: #8e8e93; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; margin-top: 2px; }
+  .r.paused .rt1 span:first-child { color: #8e8e93; }
+  .r.draft .rt1 span:first-child { font-style: italic; color: #8e8e93; }
+  .qa { display: flex; gap: 12px; align-items: center; padding: 18px 18px; color: #636366; font-size: 15px; }
+  .qa .plus { width: 24px; height: 24px; border-radius: 50%; background: #3e69f6; color: #fff; display: flex; align-items: center; justify-content: center; font-size: 18px; }
+
+  /* a slid row: the content becomes a rounded card, buttons in 60pt slots 10pt apart, 10pt from the edge */
+  .r.open .rc { border-radius: 22px; background: #1c1c1e; padding-left: 14px; padding-right: 14px; }
+  .sw { position: absolute; top: 0; bottom: 0; display: flex; gap: 10px; align-items: center; }
+  .sw.tr { right: 10px; } .sw.ld { left: 10px; }
+  .sl { width: 60px; display: flex; flex-direction: column; align-items: center; gap: 4px; }
+  .sl .cc { width: 42px; height: 42px; border-radius: 50%; display: flex; align-items: center; justify-content: center; }
+  .sl .cc svg { width: 18px; height: 18px; fill: #fff; }
+  .sl .tt { font-size: 11.5px; line-height: 13px; color: #e5e5ea; white-space: nowrap; }
+  .full { position: absolute; top: 4px; bottom: 4px; left: 10px; border-radius: 22px; display: flex; align-items: center; padding-left: 18px; gap: 8px; font-size: 14px; font-weight: 600; }
+  .full svg { width: 18px; height: 18px; fill: #fff; }
+
+  /* long press */
+  .dim { position: absolute; inset: 0; background: rgba(0,0,0,.55); backdrop-filter: blur(4px); }
+  .lift { position: absolute; left: 10px; right: 10px; height: 62px; border-radius: 16px; overflow: hidden; }
+  .lift .rc { background: #1c1c1e; }
+  .ctx { position: absolute; left: 14px; width: 250px; background: #2c2c2e; border-radius: 14px; overflow: hidden; }
+  .it { display: flex; justify-content: space-between; align-items: center; padding: 11px 16px; font-size: 15.5px; border-top: 0.5px solid #3a3a3c; }
+  .it:first-child { border-top: 0; }
+  .it svg { width: 17px; height: 17px; fill: #fff; }
+  .it.red { color: #ff453a; } .it.red svg { fill: #ff453a; }
+  .it.dis { color: #636366; } .it.dis svg { fill: #636366; }
+  .ctx .gap { height: 7px; background: #1c1c1e; }
+
+  /* marks */
+  .mk { position: absolute; border: 2px solid #ff3b30; border-radius: 12px; pointer-events: none; }
+  .mkn { position: absolute; width: 22px; height: 22px; border-radius: 50%; background: #ff3b30; color: #fff; font-size: 12.5px; font-weight: 700;
+         display: flex; align-items: center; justify-content: center; font-family: Inter, sans-serif; }
+</style>
+</head>
+<body>
+
+<section class="board" id="part-1">
+  <h1>Scheduled · iOS 行的左滑、右滑和长按：先定规则</h1>
+  <p class="sub">App 里已经有一套左右滑的规矩（会话列表 <code>SessionRowActions.swift</code>、任务列表 <code>TasksView.swift</code>）：<b>右滑放正向、可撤回的操作</b>，只有它能一滑到底；<b>左滑放删除和次要操作</b>，删除在最外侧、红色、不能一滑到底、点了先问；<b>长按菜单是全集</b>，左右滑有的长按里都有（VoiceOver 和 Mac 右键也靠它）。Scheduled 页照这套规矩配，按行的种类各给一组。</p>
+  <table>
+    <tr><th>行的种类（这一页有六种）</th><th>右滑 · 从外到内</th><th>左滑 · 从外到内</th><th>长按菜单</th><th>点一下</th></tr>
+    <tr><td class="c"><b>A 计划行</b>（Today / Tomorrow / Later 里，还没跑）</td>
+        <td><span class="pill" style="background:#ff9f0a">Pause</span> 一滑到底即暂停 · <span class="pill" style="background:#0a84ff">Run now</span></td>
+        <td><span class="pill" style="background:#ff453a">Delete</span> 先问 · <span class="pill" style="background:#5e5ce6">Change…</span></td>
+        <td>Run Now · Pause · Change… · Open Last Run · ─ · Delete…</td><td>打开详情</td></tr>
+    <tr><td class="c"><b>B 暂停 / 被挂起的行</b>（Paused 组）</td>
+        <td><span class="pill" style="background:#30d158">Resume</span> 一滑到底即恢复 · <span class="pill" style="background:#0a84ff">Run now</span>（挂起的没有，服务端会拒）</td>
+        <td><span class="pill" style="background:#ff453a">Delete</span> · <span class="pill" style="background:#5e5ce6">Change…</span></td>
+        <td>Run Now · Resume · Change… · Open Last Run · ─ · Delete…</td><td>打开详情</td></tr>
+    <tr><td class="c"><b>C 正在跑的一次</b>（Queued / Running）</td>
+        <td><span class="pill" style="background:#0a84ff">Open run</span></td>
+        <td><span class="pill" style="background:#ff453a">Stop</span> 先问</td>
+        <td>Open Run · Open Schedule · ─ · Stop Run…</td><td>打开详情</td></tr>
+    <tr><td class="c"><b>D 跑完的一次</b>（打开 Show past runs 才有）</td>
+        <td><span class="pill" style="background:#0a84ff">Open run</span></td>
+        <td class="muted">无</td>
+        <td>Open Run · Open Schedule</td><td>打开详情</td></tr>
+    <tr><td class="c"><b>E 草稿</b>（等你允许的创建卡）</td>
+        <td class="muted">无（Allow 是放权，要看完卡片再按）</td>
+        <td><span class="pill" style="background:#636366">Not now</span></td>
+        <td>Open Conversation · ─ · Not Now</td><td>打开草稿</td></tr>
+    <tr><td class="c"><b>F 等条件的任务</b>（When… 组里的任务行）</td>
+        <td class="muted">无</td><td class="muted">无</td><td>Open Task</td><td>打开任务</td></tr>
+  </table>
+  <ul class="notes">
+    <li><span class="n">1</span><span><b>一滑到底只给 Pause / Resume</b>：可撤回，历史里有记录，可以 Undo。Run now 不给：误触会花掉这周的一次额度，还会真去跑。</span></li>
+    <li><span class="n">2</span><span><b>Delete 和 Stop 都先问</b>：Delete 用详情页 ⋯ 里那句现成的问话；Stop 问「Stop this run?」。都染红色但不用系统的 destructive 角色，否则行会在你回答之前先被动画删掉（今天落地的 Delete 就是这么做的）。</span></li>
+    <li><span class="n">3</span><span><b>「一次」的行不再能 Delete 整个计划</b>：今天落地的版本里，正在跑 / 跑完的那一行左滑也是 Delete，删的却是整个计划，看不出来。改成 Stop（正在跑）或者没有（跑完）；要删计划，用计划行或长按里的 Open Schedule。</span></li>
+    <li><span class="n">4</span><span><b>Change… 打开对话</b>，和详情页的 Change… 一样（agent-first：改计划是跟 agent 说，不是表单）。</span></li>
+  </ul>
+</section>
+
+<section class="board" id="part-2">
+  <h1>六种情形</h1>
+  <p class="sub">示例数据：今天 18:00 有一次正在跑，21:00 还有一个；明天一个；暂停组是你截图里那一条。</p>
+  <div class="row3">
+    <div><div class="lab"><span class="k">现在</span>今天落地的版本：左滑只有 Delete</div><div id="p1"></div>
+      <p class="cap">右滑什么都没有；左滑一个红色 Delete，「一次」的行上也是它。</p></div>
+    <div><div class="lab"><span class="k new">改后</span>右滑计划行（A）</div><div id="p2"></div>
+      <p class="cap"><b>Pause</b> 在最外侧，一滑到底就暂停；里侧 <b>Run now</b> 要点。</p></div>
+    <div><div class="lab"><span class="k new">改后</span>左滑计划行（A）</div><div id="p3"></div>
+      <p class="cap"><b>Delete</b> 在最外侧，不能一滑到底，点了先问；里侧 <b>Change…</b> 打开对话。</p></div>
+  </div>
+  <div class="row3" style="margin-top:40px">
+    <div><div class="lab"><span class="k new">改后</span>右滑暂停的行（B），一滑到底</div><div id="p4"></div>
+      <p class="cap">滑过一半，<b>Resume</b> 铺满整行，松手就恢复。</p></div>
+    <div><div class="lab"><span class="k new">改后</span>左滑正在跑的一次（C）</div><div id="p5"></div>
+      <p class="cap">只有 <b>Stop</b>，点了先问，不会删计划。</p></div>
+    <div><div class="lab"><span class="k new">改后</span>长按计划行</div><div id="p6"></div>
+      <p class="cap">全集：左右滑里的都在这，外加 Open Last Run。</p></div>
+  </div>
+</section>
+
+<section class="board" id="part-3">
+  <h1>待你定，以及落地</h1>
+  <div class="two">
+    <div>
+      <p class="q">待定 1 · 右滑一滑到底做什么？</p>
+      <p class="cap" style="margin-top:0"><span class="rec">A 推荐</span>：Pause / Resume（上面画的）。<b>B</b>：什么都不做，两边都只能点。会话列表右滑一滑到底是 Complete，A 和它一致。</p>
+      <p class="q" style="margin-top:18px">待定 2 · 按钮画成什么样？</p>
+      <p class="cap" style="margin-top:0"><span class="rec">A 推荐</span>：圆形，和会话列表一样（<code>circleSwipeActions</code>，上面画的）。<b>B</b>：系统自带的。iOS 26 按行高画，这一页的行约 62pt，会被压成扁胶囊——会话列表就是因为这个才自己画圆。</p>
+      <p class="q" style="margin-top:18px">待定 3 · 范围</p>
+      <p class="cap" style="margin-top:0"><span class="rec">A 推荐</span>：这次只做 iPhone / iPad；Mac 只加同一份右键菜单（Mac 没有左右滑习惯）。Android 和 Web 另起一张图跟进。<b>B</b>：四端一起做。</p>
+    </div>
+    <div>
+      <p class="q">落地（按代价排）</p>
+      <ul class="notes" style="margin-top:6px">
+        <li><span class="cost s">小</span><span><b>行带上种类</b>：<code>ScheduleRowModel</code> 现在只有 <code>scheduleID</code>，加上是计划 / 一次 / 草稿 / 任务，一次再带上 run id 和状态（<code>ScheduledPage.swift</code>）。</span></li>
+        <li><span class="cost s">小</span><span><b>一份动作表</b>：每种行一张 <code>RowSwipeAction</code> 列表，左滑、右滑、长按都从它画，不会三处对不上（<code>RowSwipeActions.swift</code> 已经有这个类型）。</span></li>
+        <li><span class="cost s">小</span><span><b>按下去</b>：<code>ScheduledModel</code> 已有 runNow / pause / resume / stop / delete；Change… 走 <code>openChangeConversation</code>；草稿的 Not now 走卡片现成的决定。</span></li>
+        <li><span class="cost s">小</span><span><b>文案</b>：新增 Stop、Stop this run? 两句，进 <code>ScheduleCopy</code>，Web 的 <code>SCHEDULE_COPY</code> 同步加（<code>ScheduleCopyParityTests</code> 会比对）。</span></li>
+        <li><span class="cost m">中</span><span><b>圆形左右滑</b>（待定 2 选 A）：给 Scheduled 的 List 挂 <code>rowSwipeList</code>，行用 <code>circleSwipeActions</code>；iOS 26 以下仍用系统的。</span></li>
+        <li><span class="cost s">小</span><span><b>真机截图验收</b>：走 client.yml 探测分支，iPhone 上左滑、右滑、一滑到底、长按各拍一张。</span></li>
+      </ul>
+    </div>
+  </div>
+</section>
+
+<script>
+const I = {
+  menu: '<svg viewBox="0 0 20 20"><rect x="2" y="4" width="16" height="2" rx="1"/><rect x="2" y="9" width="16" height="2" rx="1"/><rect x="2" y="14" width="16" height="2" rx="1"/></svg>',
+  more: '<svg viewBox="0 0 20 20"><circle cx="4" cy="10" r="2"/><circle cx="10" cy="10" r="2"/><circle cx="16" cy="10" r="2"/></svg>',
+  pause: '<svg viewBox="0 0 20 20"><rect x="4" y="3" width="4" height="14" rx="1"/><rect x="12" y="3" width="4" height="14" rx="1"/></svg>',
+  play: '<svg viewBox="0 0 20 20"><path d="M5 3.2v13.6a1 1 0 0 0 1.5.85l11-6.8a1 1 0 0 0 0-1.7l-11-6.8A1 1 0 0 0 5 3.2z"/></svg>',
+  trash: '<svg viewBox="0 0 20 20"><path d="M7 2h6l1 2h4v2H2V4h4zM4 7h12l-1 11H5z"/></svg>',
+  chat: '<svg viewBox="0 0 20 20"><path d="M3 3h14a1 1 0 0 1 1 1v9a1 1 0 0 1-1 1H8l-4 3.5V14H3a1 1 0 0 1-1-1V4a1 1 0 0 1 1-1z"/></svg>',
+  stop: '<svg viewBox="0 0 20 20"><rect x="4" y="4" width="12" height="12" rx="2"/></svg>',
+  open: '<svg viewBox="0 0 20 20"><path d="M8 3h9v9h-2V6.4l-9.3 9.3-1.4-1.4L13.6 5H8z"/></svg>',
+  check: '<svg viewBox="0 0 20 20"><path d="M7.5 13.6 3.9 10l-1.4 1.4 5 5 10-10-1.4-1.4z"/></svg>',
+  resume: '<svg viewBox="0 0 20 20"><path d="M5 3.2v13.6a1 1 0 0 0 1.5.85l11-6.8a1 1 0 0 0 0-1.7l-11-6.8A1 1 0 0 0 5 3.2z"/></svg>',
+};
+const A = {
+  pause: ['Pause', '#ff9f0a', I.pause], resume: ['Resume', '#30d158', I.resume], run: ['Run now', '#0a84ff', I.play],
+  del: ['Delete', '#ff453a', I.trash], change: ['Change…', '#5e5ce6', I.chat], stop: ['Stop', '#ff453a', I.stop],
+  open: ['Open run', '#0a84ff', I.open],
+};
+// The page's rows. ci: circle kind.
+const R = {
+  done: { id: 'done', ci: 'done', t: 'x1 walkthrough version check', tm: '09:00', l: 'Version line unchanged · not notified' },
+  running: { id: 'running', ci: 'run', t: 'Nightly dependency audit', tm: '18:00', l: '↻ Daily · orbit-op · running 4 min' },
+  disk: { id: 'disk', ci: '', t: 'Prod disk check', tm: '21:00', l: '↻ Daily · HPC' },
+  cost: { id: 'cost', ci: '', t: 'Weekly cost report', tm: '09:00', l: '↻ Mondays · GPT-sg' },
+  vn: { id: 'vn', ci: '', t: 'ai-vn 磁盘余量与自动清理巡检', tm: '', l: '↻ Daily 09:00 · GPT-sg · paused Nov 19', cls: 'paused' },
+};
+const content = (r) => `<div class="rc"><span class="ci ${r.ci}">${r.ci === 'done' ? I.check : ''}</span><div class="rt">
+  <div class="rt1"><span>${r.t}</span><span class="tm">${r.tm}</span></div><div class="rt2">${r.l}</div></div></div>`;
+const row = (r) => `<div class="r ${r.cls || ''}" id="${r.id}">${content(r)}</div>`;
+const slotW = (n) => 10 + n * 60 + (n - 1) * 10 + 10;
+/** A row slid open. side 'tr' (left swipe) or 'ld' (right swipe); acts from the screen edge inward. */
+const open = (r, side, acts) => {
+  const slots = acts.map((k) => A[k]).map(([t, c, i]) => `<div class="sl"><span class="cc" style="background:${c}">${i}</span><span class="tt">${t}</span></div>`);
+  const ordered = side === 'tr' ? slots.reverse() : slots; // trailing reads inside-out left to right
+  const w = slotW(acts.length);
+  return `<div class="r open ${r.cls || ''}" id="${r.id}"><div class="sw ${side}">${ordered.join('')}</div>
+    ${content(r).replace('class="rc"', `class="rc" style="transform:translateX(${side === 'tr' ? -w : w}px)"`)}</div>`;
+};
+/** A full right swipe past the threshold: the outermost action fills the row. */
+const full = (r, act) => {
+  const [t, c, i] = A[act];
+  return `<div class="r open ${r.cls || ''}" id="${r.id}"><div class="full" style="background:${c};right:110px">${i}${t}</div>
+    ${content(r).replace('class="rc"', 'class="rc" style="transform:translateX(283px)"')}</div>`;
+};
+const page = (rows) => `<div class="ph">
+  <div class="ph-st"><span>18:07</span><span>5G ▮</span></div>
+  <div class="ph-bar"><span class="ph-btn">${I.menu}</span><span class="ph-btn">${I.more}</span></div>
+  <div class="ph-ttl"><b>Scheduled</b><span>4</span></div>
+  <span class="ph-ws">All workspaces ⌄</span>
+  <div class="gh">Today<i>2</i></div>${rows.today}
+  <div class="gh">Tomorrow<i>1</i></div>${rows.tomorrow}
+  <div class="gh">Paused<i>1</i></div>${rows.paused}
+  <div class="qa"><span class="plus">+</span>Describe a scheduled task…</div>
+</div>`;
+const base = { today: row(R.running) + row(R.disk), tomorrow: row(R.cost), paused: row(R.vn) };
+const put = (id, rows) => { document.getElementById(id).outerHTML = page({ ...base, ...rows }).replace('class="ph"', `class="ph" id="${id}"`); };
+
+put('p1', { today: row(R.running) + open(R.disk, 'tr', ['del']) });
+put('p2', { today: row(R.running) + open(R.disk, 'ld', ['pause', 'run']) });
+put('p3', { today: row(R.running) + open(R.disk, 'tr', ['del', 'change']) });
+put('p4', { paused: full(R.vn, 'resume') });
+put('p5', { today: open(R.running, 'tr', ['stop']) + row(R.disk) });
+put('p6', {});
+
+// ⑥ long press on "Prod disk check": the row lifted over the dimmed page, the menu under it.
+const p6 = document.getElementById('p6');
+const at = (ph, sel) => { const a = ph.getBoundingClientRect(), b = ph.querySelector(sel).getBoundingClientRect();
+  return { x: b.left - a.left, y: b.top - a.top, w: b.width, h: b.height }; };
+const d = at(p6, '#disk');
+const it = (t, i, cls = '') => `<div class="it ${cls}">${t}${i}</div>`;
+p6.insertAdjacentHTML('beforeend', `<div class="dim"></div>
+  <div class="lift" style="top:${d.y}px">${content(R.disk)}</div>
+  <div class="ctx" id="menu" style="top:${d.y + d.h + 10}px">
+    ${it('Run Now', I.play)}${it('Pause', I.pause)}${it('Change…', I.chat)}${it('Open Last Run', I.open)}
+    <div class="gap"></div>${it('Delete…', I.trash, 'red')}</div>`);
+
+const mark = (ph, sel, n, pad = 4, side = 'tr') => {
+  const r = at(ph, sel);
+  ph.insertAdjacentHTML('beforeend', `<div class="mk" style="left:${r.x - pad}px;top:${r.y - pad}px;width:${r.w + 2 * pad}px;height:${r.h + 2 * pad}px"></div>`
+    + `<div class="mkn" style="left:${side === 'tr' ? r.x + r.w - 6 : r.x - 14}px;top:${r.y - 14}px">${n}</div>`);
+};
+window.drawMarks = () => {
+  mark(document.getElementById('p1'), '#disk .sw', '3', 3);
+  mark(document.getElementById('p2'), '#disk .sw', '1', 3, 'ld');
+  mark(document.getElementById('p3'), '#disk .sw', '2', 3);
+  mark(document.getElementById('p4'), '#vn .full', '1', 3, 'ld');
+  mark(document.getElementById('p5'), '#running .sw', '3', 3);
+  mark(p6, '#menu', '4', 4);
+};
+</script>
+</body>
+</html>

@@ -84,7 +84,7 @@ class ManagementShellTest {
     @Test fun maxConcurrentIsChangedInItsDialog() {
         signIn()
         compose.onAllNodesWithContentDescription("Open navigation").onFirst().performClick()
-        compose.onNode(hasText("Settings") and hasClickAction()).performScrollTo().performClick()
+        compose.onNodeWithTag("drawer:settings").performClick()
         compose.onNode(hasText(MachinesAndModels.MACHINES) and hasClickAction()).performScrollTo().performClick()
         compose.waitUntil(60_000) { compose.onAllNodes(hasText("Old alias") and hasClickAction()).fetchSemanticsNodes().isNotEmpty() }
         compose.onNode(hasText("Old alias") and hasClickAction()).performScrollTo().performClick()
@@ -158,7 +158,7 @@ class ManagementShellTest {
     }
     private fun runnerPage() {
         compose.onAllNodesWithContentDescription("Open navigation").onFirst().performClick()
-        compose.onNode(hasText("Settings") and hasClickAction()).performScrollTo().performClick()
+        compose.onNodeWithTag("drawer:settings").performClick()
         compose.onNode(hasText(MachinesAndModels.MACHINES) and hasClickAction()).performScrollTo().performClick()
         compose.waitUntil(60_000) { compose.onAllNodes(hasText("Old alias") and hasClickAction()).fetchSemanticsNodes().isNotEmpty() }
         compose.onNode(hasText("Old alias") and hasClickAction()).performScrollTo().performClick()

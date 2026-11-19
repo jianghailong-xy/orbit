@@ -172,6 +172,17 @@ final class RunnerPageFormatTests: XCTestCase {
         XCTAssertEqual(RunnerPageFormat.statusLine(neverSeen, now: now), "Offline")
     }
 
+    func testTheLocationIsTheCountryItsIPIsIn() throws {
+        XCTAssertNil(RunnerPageFormat.location(try wikova()), "no check has decided: nothing is shown")
+        let japan: [String: Any] = ["verdict": "allowed", "country": "JP", "regionCode": NSNull(), "name": "Japan",
+                                    "viaProxy": false, "checkedAt": "2026-09-28T11:57:00Z"]
+        XCTAssertEqual(RunnerPageFormat.location(try runner(Self.wikovaJSON, ["region": japan])), "📍 Japan")
+        var proxied = japan
+        proxied["viaProxy"] = true
+        XCTAssertEqual(RunnerPageFormat.location(try runner(Self.wikovaJSON, ["region": proxied])),
+                       "📍 Japan (via proxy)")
+    }
+
     func testDrainingAndAFullMachine() throws {
         // A machine that drains is online, its dot green, as the web's card draws it.
         let draining = try runner(Self.wikovaJSON, ["status": "DRAINING"])

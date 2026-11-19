@@ -136,7 +136,7 @@ class ComposerIncrementsDeviceTest : IncrementDeviceTest() {
         preferences = """{"promptSuggestions":true}"""
         signIn()
         compose.onAllNodesWithContentDescription("Open navigation").onFirst().performClick()
-        compose.onNode(hasText("Settings") and hasClickAction()).performClick()
+        compose.onNodeWithTag("drawer:settings").performClick()
         // The switch is on Sessions' page (docs/mocks/ios-settings-order).
         val sessions = hasText("Sessions") and hasClickAction()
         await("the Sessions row") { exists(sessions) }

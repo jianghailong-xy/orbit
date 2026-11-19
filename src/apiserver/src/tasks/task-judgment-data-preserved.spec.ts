@@ -3159,7 +3159,11 @@ test('the ledger stays append-only, and every later migration is accounted for',
       '1170_session_open_list_owner_idx',
       // 1180 adds workflow runs, links SubAgent calls to them, and raises the default workspace SubAgent limit.
       // Its update touches only workspace rows; no preserved relation, trigger, function or DONE fence changes.
-      '1180_subagent_workflow'],
+      '1180_subagent_workflow',
+      // 1200 adds two nullable JSONB columns with no default (criteria_wording, criteria_changes) and a CHECK
+      // each that NULL passes to project_standard_set_confirmation, which is not a preserved relation; no row is
+      // written, and no trigger, function or DONE fence changes.
+      '1200_standard_set_confirmation_wording'],
     'a later migration exists; re-read it before trusting the assertions above');
   // Stated rather than described: 0230's fence differs from 0228's by exactly one added lane.
   const later = readFileSync(

@@ -37,6 +37,8 @@
  *   (6) confirming clears that too
  *   (7) a loosening is held and so is no change; approved while the confirmation is behind, it
  *       lands without carrying the confirmation — and is listed, not counted as unchanged
+ *   (8) a confirmation older than keeping its words (1200) reads today's words where the hash
+ *       matches and none where it moved
  *
  *   bash scripts/run-pg-spec.sh src/apiserver/src/projects/criteria-change-since-confirmed.pg.spec.ts
  */
@@ -208,6 +210,14 @@ test('the confirmation read says what changed since the owner last confirmed, an
     assert.equal(confirmed.state, 'CONFIRMED');
     assert.deepEqual(confirmed.changesSinceConfirmed, onlyUnchanged(1, 2, 3));
     assert.equal(confirmed.changesSinceConfirmedAbsentReason, null);
+
+    // Its receipt (1200): the words it confirmed, kept with it, and no changes — there was no
+    // confirmation before it to have changed anything against.
+    assert.equal(confirmed.confirmation?.wordingRecorded, true);
+    assert.equal(confirmed.confirmation?.changes, null);
+    assert.deepEqual(confirmed.confirmation?.criteria?.map((c) => [c.ordinal, c.text, c.since]), [
+      [1, FIRST, 'UNCHANGED'], [2, SECOND, 'UNCHANGED'], [3, THIRD, 'UNCHANGED'],
+    ]);
   });
 
   // ═══ (2) one criterion added ═════════════════════════════════════════════════════════════════
@@ -236,6 +246,12 @@ test('the confirmation read says what changed since the owner last confirmed, an
     assert.equal(answer.state, 'CONFIRMED');
     assert.deepEqual(answer.changesSinceConfirmed, onlyUnchanged(1, 2, 3, 4));
     assert.equal(answer.changesSinceConfirmedAbsentReason, null);
+    // What it confirmed stays on its record: the diff the card asked about, kept by the server, so
+    // the receipt says "1 new" on every device and after every reload.
+    assert.deepEqual(answer.confirmation?.changes, {
+      added: [{ key: await keyOf(FOURTH), ordinal: 4, text: FOURTH }],
+      stricter: [], revised: [], removed: [], unchanged: [1, 2, 3],
+    });
 
     const after = await read();
     assert.equal(after.state, 'CONFIRMED');
@@ -251,6 +267,10 @@ test('the confirmation read says what changed since the owner last confirmed, an
 
     const standing = await read();
     assert.equal(standing.state, 'STALE');
+    // The receipt of the confirmation behind it still reads as what was confirmed, marked as moved.
+    const second = standing.confirmation?.criteria?.find((c) => c.ordinal === 2);
+    assert.deepEqual(second && [second.text, second.verificationMethod, second.since],
+      [SECOND, METHOD, 'EDITED']);
     assert.deepEqual(standing.changesSinceConfirmed, {
       added: [],
       stricter: [{
@@ -373,5 +393,30 @@ test('the confirmation read says what changed since the owner last confirmed, an
 
     assert.deepEqual((await confirm()).changesSinceConfirmed, onlyUnchanged(1, 2, 3, 4, 5),
       'and confirming clears it like any other');
+  });
+
+  // ═══ (8) a confirmation older than keeping its words ═════════════════════════════════════════
+
+  await t.test('(8) a record with no kept words shows today\'s words where the hash matches, none where it moved', async () => {
+    await sql.query(
+      `UPDATE "project_standard_set_confirmation" SET "criteria_wording" = NULL, "criteria_changes" = NULL
+        WHERE "project_id" = $1::uuid`,
+      [projectId],
+    );
+    const older = await read();
+    assert.equal(older.confirmation?.wordingRecorded, false);
+    assert.equal(older.confirmation?.changes, null);
+    assert.ok(older.confirmation?.criteria?.every((c) => c.text !== null && c.since === 'UNCHANGED'),
+      'every hash still matches, so every word is today\'s and the same');
+
+    // FIFTH one rung up: its hash moves, and the words it was confirmed with were never kept.
+    await tighten((current) => current.map((criterion) => (
+      criterion.text === FIFTH ? { ...criterion, verificationMethod: 'VERIFICATION' } : criterion
+    )));
+    const moved = (await read()).confirmation?.criteria ?? [];
+    const fifthKey = await keyOf(FIFTH);
+    const fifth = moved.find((c) => c.key === fifthKey);
+    assert.deepEqual(fifth && [fifth.text, fifth.since], [null, 'EDITED']);
+    assert.equal(moved.filter((c) => c.text === null).length, 1, 'only the criterion that moved lost its words');
   });
 });
