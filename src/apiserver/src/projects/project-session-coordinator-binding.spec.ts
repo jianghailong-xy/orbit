@@ -114,7 +114,7 @@ function makeService(
   const sessionCreates: unknown[][] = [];
   const prisma = {
     // The owner's smart model selection, which the promotion's instructions are rendered under:
-    // an account that never turned it on.
+    // an account that never wrote it, which reads on.
     user: { findUnique: async () => ({ preferences: {} }) },
     session: {
       findFirst: async ({ where }: any) => {
@@ -283,7 +283,7 @@ test('promotion tells the current turn its coordinator role without rewriting it
   // field), so the promotion carries that text.
   assert.equal(
     created.coordinatorInstructions,
-    buildCoordinatorInstructions('Crawl', PROJECT_ID, false),
+    buildCoordinatorInstructions('Crawl', PROJECT_ID, false, true),
   );
   assert.match(created.coordinatorInstructions, /not for doing their work yourself/);
   assert.match(created.coordinatorInstructions, /Read first/);
@@ -300,7 +300,7 @@ test('promotion describes the Automatic setting the created project actually has
 
   assert.equal(
     created.coordinatorInstructions,
-    buildCoordinatorInstructions('Crawl', PROJECT_ID, true),
+    buildCoordinatorInstructions('Crawl', PROJECT_ID, true, true),
   );
 });
 

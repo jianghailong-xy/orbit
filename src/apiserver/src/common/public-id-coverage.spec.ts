@@ -154,7 +154,8 @@ const CONTROLLERS = [
   WikiChatController,
   // Each account's own Feishu app (migration 0489, docs/feishu-bot-design.md §10): an administrator's removal
   // names the account by its id. The account's own routes (FeishuController) name a connected group by its id (§8.1),
-  // and its confirm names the workspace the group's sessions open in.
+  // and its confirm names the workspace the group's sessions open in; the access save (§14.1) names the workspace the
+  // sessions other people start open in.
   FeishuAdminController,
   FeishuController,
 ];

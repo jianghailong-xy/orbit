@@ -1,5 +1,6 @@
 package io.orbitd.android.composer
 
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
@@ -8,8 +9,15 @@ import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.testTag
+import androidx.compose.ui.res.painterResource
+import androidx.compose.ui.semantics.Role
+import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.semantics
+import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import io.orbitd.android.OrbitApplication
+import io.orbitd.android.R
 import io.orbitd.android.core.auth.SessionHandle
 import io.orbitd.android.core.net.ApiError
 import io.orbitd.android.core.realtime.*
@@ -33,6 +41,7 @@ fun NewSessionComposer(
     data: DirectoryData,
     open: (OrbitRoute) -> Unit,
     land: (String, OrbitRoute) -> Unit = { _, next -> open(next) },
+    replace: (OrbitRoute) -> Unit = open,
 ) {
     val workspaceId = route.workspaceId
     if (workspaceId == null) {
@@ -60,38 +69,60 @@ fun NewSessionComposer(
     }
     LaunchedEffect(state.draft.createdSessionId, state.acknowledgementPending) {
         state.draft.createdSessionId?.takeUnless { state.acknowledgementPending }?.let { id ->
-            open(OrbitRoute(Destination.SESSION, id, workspaceId = workspaceId, origin = route.origin))
+            // The draft's page becomes the session's, as on iOS (`openCreatedAgentSession`): Back leaves for the page under it.
+            replace(OrbitRoute(Destination.SESSION, id, workspaceId = workspaceId, origin = route.origin))
             model.consumeCreated()
         }
     }
     BoxWithConstraints(Modifier.fillMaxSize()) {
         val composerHeight = if (maxHeight < 320.dp) maxHeight else maxHeight * 0.65f
         Column(Modifier.fillMaxSize()) {
-            Text(data.workspaces.firstOrNull { ObjectId.same(it.id, workspaceId) }?.name ?: "New session", Modifier.padding(16.dp), style = MaterialTheme.typography.titleMedium)
+            // The workspace's name is the bar's title (iOS `WorkspaceTitle`), so the page opens on the hero.
             route.folderId?.let { id -> Text(data.folders.firstOrNull { ObjectId.same(it.id, id) }?.name ?: "Folder", Modifier.padding(horizontal = 16.dp)) }
             error?.let { Text(it); TextButton(onClick = { retry++ }) { Text("Retry workspace") } }
             // First the engine — the CLI this session runs on for good — then, in the composer's model menu, the credential it spends.
-            detail?.let { workspace ->
-                val effective = JsonObject(workspace + state.draft.resumeConfig)
-                val engine = state.catalog?.engineOf(effective)
-                    ?: ProviderEngines.sessionEngine(effective.text("engine") ?: effective.text("lastEngine"), effective.text("provider"), emptyList())
-                Row(Modifier.padding(horizontal = 16.dp), verticalAlignment = Alignment.CenterVertically) {
-                    Text(EngineCopy.ENGINE, style = MaterialTheme.typography.labelLarge, color = MaterialTheme.colorScheme.onSurfaceVariant)
-                    TextButton(enabled = state.loaded && !state.busy && state.draft.pending == null && state.draft.createdSessionId == null,
-                        onClick = { choosingEngine = true; model.loadCatalog() }, modifier = Modifier.testTag("new-session-engine")) {
-                        Text("${ProviderEngines.cliName(engine)} ⌄", style = MaterialTheme.typography.titleMedium)
+            // The engine is the hero, as iOS draws it: the vendor's mark, the engine's name as the one tappable identity, then the line
+            // that says what to do and the model it starts on.
+            Box(Modifier.weight(1f).fillMaxWidth().padding(horizontal = 24.dp), contentAlignment = Alignment.Center) {
+                detail?.let { workspace ->
+                    val effective = JsonObject(workspace + state.draft.resumeConfig)
+                    val engine = state.catalog?.engineOf(effective)
+                        ?: ProviderEngines.sessionEngine(effective.text("engine") ?: effective.text("lastEngine"), effective.text("provider"), emptyList())
+                    val engineName = ProviderEngines.cliName(engine)
+                    val modelId = effective.text("model").orEmpty()
+                    val modelName = if (modelId.isBlank()) "Runtime default"
+                        else state.catalog?.modelLabel(engine, effective.text("provider") ?: engine, modelId)
+                            ?: if (engine == ProviderEngines.CLAUDE) ProviderEngines.claudeModelName(modelId) else modelId
+                    val choosable = state.loaded && !state.busy && state.draft.pending == null && state.draft.createdSessionId == null
+                    Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                        ProviderMark(AgentBrand.of(engine), engineName)
+                        Spacer(Modifier.height(14.dp))
+                        Row(Modifier.clickable(enabled = choosable, role = Role.Button) { choosingEngine = true; model.loadCatalog() }
+                            .semantics(mergeDescendants = true) { contentDescription = "Engine: $engineName. Switch" }
+                            .testTag("new-session-engine"), verticalAlignment = Alignment.CenterVertically) {
+                            Text(engineName, style = MaterialTheme.typography.headlineSmall, fontWeight = FontWeight.Bold, maxLines = 1,
+                                overflow = TextOverflow.Ellipsis, modifier = Modifier.weight(1f, fill = false))
+                            Spacer(Modifier.width(7.dp))
+                            Icon(painterResource(R.drawable.ic_chevron_down), null, Modifier.size(16.dp), tint = MaterialTheme.colorScheme.onSurfaceVariant)
+                        }
+                        Spacer(Modifier.height(18.dp))
+                        Text("Send a task to get started.", style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                        Spacer(Modifier.height(5.dp))
+                        Text(modelName, style = MaterialTheme.typography.bodySmall, maxLines = 1, overflow = TextOverflow.Ellipsis,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.7f))
                     }
+                    if (choosingEngine) EngineChoices(model, state, effective, handle.account.server, openRunner) { choosingEngine = false }
                 }
-                if (choosingEngine) EngineChoices(model, state, effective, handle.account.server, openRunner) { choosingEngine = false }
             }
-            Spacer(Modifier.weight(1f))
             val current = detail
             val fresh = current != null && current.flag("enabled") != false
             val session = current?.let { SessionState(target.key, snapshot = SessionSnapshot(it, emptyList(), emptyList(), emptyList(), emptyMap()), fresh = fresh) }
             // The managed runner asleep is no fault: sending wakes it, and the composer says so (the shared composer line).
             ManagedRunnerAsleepLine(detail?.text("runnerId"), LocalManagedRunnerStatus.current)
+            // The page opens with the box focused and the keyboard up, as iOS's draft does (`focusesComposer`): asked for once the
+            // draft is restored, since the box can't take the focus before (it is disabled until then).
             Box(Modifier.heightIn(max = composerHeight)) {
-                SessionComposer(app, handle, target.key, session, target, openRunner = openRunner)
+                SessionComposer(app, handle, target.key, session, target, focusRequest = if (state.loaded) 1 else 0, openRunner = openRunner)
             }
         }
     }

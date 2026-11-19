@@ -1054,7 +1054,7 @@ export function TaskDetailPanel({
   // The account's switch for smart model selection. Off (the default), none of it is drawn here:
   // no Suggested, no ✦ placeholder, and runs read as they did before routing.
   const me = useQuery(meQuery());
-  const smartSelection = me.data?.preferences?.modelRouting === true;
+  const smartSelection = me.data?.preferences?.modelRouting !== false;
   // Each tier with the model and effort it runs as for this task, as the server resolved them on the
   // assignee's runner, and the work it is for.
   const modelHintOptions: ModelHintOption[] | null = q.data?.modelHintOptions ?? null;

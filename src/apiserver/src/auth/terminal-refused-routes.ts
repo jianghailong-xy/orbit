@@ -483,6 +483,7 @@ export const TERMINAL_REFUSED_ROUTES: readonly string[] = [
   'PUT /admin/sign-in/google',
   'PUT /attachments/:id/pin',
   'PUT /integrations/feishu',
+  'PUT /integrations/feishu/access',
   'PUT /projects/:id/share',
   'PUT /providers/shared-pools/:id/keys/:keyId/secret',
   'PUT /sessions/:id/share',

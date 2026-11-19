@@ -94,7 +94,7 @@ test('managed runners switched off with existing state: nothing is stopped, dele
     const token = generateToken(32);
     const runnerId = (await sql.query(
       `INSERT INTO runner (id, name, owner_id, token_hash, status, last_heartbeat_at, max_concurrent)
-         VALUES (gen_random_uuid(), 'orbit-managed', $1, $2, 'ONLINE', now() - interval '10 seconds', 2) RETURNING id`,
+         VALUES (gen_random_uuid(), 'Orbit Cloud', $1, $2, 'ONLINE', now() - interval '10 seconds', 2) RETURNING id`,
       [ownerId, sha256(token)],
     )).rows[0].id as string;
     const workspaceId = (await sql.query(

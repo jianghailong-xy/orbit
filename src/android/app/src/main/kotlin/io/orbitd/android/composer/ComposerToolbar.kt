@@ -51,9 +51,9 @@ import kotlinx.coroutines.withContext
 /** The card's corner: the toolbar's round ends sit on its centre, as iOS's `cardRadius`. */
 internal val ComposerCardShape = RoundedCornerShape(24.dp)
 
-/** The card's fill: the page's own surface in light (white on the band's tint), a raised tone in dark, where the page is darker. */
+/** The card's fill: the page's own surface in light, and in dark the near-black #1A1A1A iOS 26's glass card reads as over its black page. */
 @Composable
-internal fun composerCardColor(): Color = MaterialTheme.colorScheme.let { if (it.surface.luminance() > 0.5f) it.surface else it.surfaceColorAtElevation(6.dp) }
+internal fun composerCardColor(): Color = MaterialTheme.colorScheme.let { if (it.surface.luminance() > 0.5f) it.surface else Color(0xFF1A1A1A) }
 
 /** The card's hairline, deeper while the box is being typed in (iOS: 0.22 focused, 0.10 at rest). */
 @Composable

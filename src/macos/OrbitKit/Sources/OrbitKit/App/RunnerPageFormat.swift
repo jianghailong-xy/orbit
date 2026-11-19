@@ -34,7 +34,7 @@ public enum RunnerPageFormat {
 
     /// The name every screen shows a machine by: the owner's alias, else Orbit Cloud for the account's
     /// managed runner (its row's `managed`, else `ManagedRunnerIdentity`, the managed status's runnerId —
-    /// never its stored name `orbit-managed`), else the machine's own name.
+    /// never its stored name, `orbit-managed` on a server before migration 1250), else the machine's own name.
     public static func displayName(_ runner: Runner) -> String {
         displayName(runner, managedRunnerID: ManagedRunnerIdentity.runnerID)
     }

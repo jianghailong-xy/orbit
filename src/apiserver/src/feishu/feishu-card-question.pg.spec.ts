@@ -10,7 +10,7 @@
  *
  *   (1) single select: the runner's long poll gets allow with answers {question → [the chosen label]}, the same as the
  *       web app's decision route gives it for the same choice; recorded as FEISHU with one Activity row; toast
- *       `Answer sent.` and the card drawn as `Answered in Orbit` with no control;
+ *       `Answer sent.` and the card drawn as `Answered in Feishu` with no control;
  *   (2) multi select: answers {question → the chosen labels};
  *   (3) Other text: a typed answer on a single select is the answer, and on a multi select joins the picks;
  *   (4) TITLES_ONLY: the card has no answer control, only Open in Orbit, and shows no question; a submission naming
@@ -229,7 +229,7 @@ test('Feishu: the owner answers the agent\'s question on its card — single, mu
     assert.ok(c.ms < 3_000, `answered in ${c.ms}ms`);
     assert.deepEqual(c.answer.toast, { type: 'success', content: 'Answer sent.' });
     assert.deepEqual(answerControls(c.answer.card.data), [], 'the card is drawn with no control');
-    assert.match(JSON.stringify(c.answer.card.data), /Answered in Orbit · \d\d:\d\d UTC/);
+    assert.match(JSON.stringify(c.answer.card.data), /Answered in Feishu · \d\d:\d\d UTC/);
     const decision = await waiting;
     assert.equal(decision.status, 200, decision.text);
     assert.equal(decision.json.status, 'ALLOWED');

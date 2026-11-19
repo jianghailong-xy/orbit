@@ -105,6 +105,27 @@ test('row 2: the definition\'s model id, or inherit, is used, not routed', () =>
   assert.match(unknown.reasons[0], /names gpt-9-ultra, which no enabled provider lists — routed as auto/);
 });
 
+test('smart model selection off: no tier is routed, a named model still is', () => {
+  // A size, a definition's size, the type's default: none is routed — the SubAgent runs on the parent's.
+  for (const over of [{ caller: { size: 'S' as const } }, { definition: { size: 'XL' as const } }, {}]) {
+    const off = route(input({ ...over, smartSelection: false }));
+    assert.equal(off.tierSource, 'not-routed');
+    assert.equal(off.level, null);
+    assert.deepEqual([off.provider, off.engine, off.model, off.effort], ['claude', 'claude', OPUS, 'high']);
+    assert.deepEqual(off.fallbacks, []);
+    assert.deepEqual(off.reasons, [`Smart model selection is off: runs on the parent's ${OPUS}`]);
+  }
+  // A model the caller or the definition names is not a tier: it is used as named.
+  const named = route(input({ caller: { model: GPT }, smartSelection: false }));
+  assert.equal(named.tierSource, 'named-model');
+  assert.deepEqual([named.provider, named.model], ['codex', GPT]);
+  const byDefinition = route(input({ definitionName: 'spec-writer.md', definition: { model: GPT }, smartSelection: false }));
+  assert.equal(byDefinition.tierSource, 'definition-model');
+  assert.equal(byDefinition.model, GPT);
+  // Absent reads on, as every input before the switch reached the router.
+  assert.equal(route(input({ caller: { size: 'S' } })).tierSource, 'size');
+});
+
 test("row 3: the caller's size, over the definition's", () => {
   const decision = route(input({ caller: { size: 'L', sizeReason: 'one service plus its spec' }, definition: { size: 'S' } }));
   assert.equal(decision.tierSource, 'size');

@@ -270,7 +270,7 @@ function WorkspaceSettingsPage({ id }: { id: string }) {
   const runner = runners.find((r) => r.id === workspace?.runnerId) ?? null;
   const configuredProviders = useQuery(providersQuery()).data ?? [];
   // The account's switch for smart model selection: off (the default), the workspace has none of it.
-  const smartSelection = useQuery(meQuery()).data?.preferences?.modelRouting === true;
+  const smartSelection = useQuery(meQuery()).data?.preferences?.modelRouting !== false;
   const rules = useQuery({ ...workspacePermissionRulesQuery(id), enabled: !!workspace });
   const imported = useQuery({
     queryKey: ['imported-sessions', id],

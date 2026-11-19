@@ -744,10 +744,12 @@ private struct SessionSettingsPage: View {
             ForEach(SessionSettings.groups, id: \.self) { group in
                 switch group {
                 case .row(let row):
-                    Section {
-                        control(row)
-                    } footer: {
-                        Text(SessionSettings.footer(row))
+                    if SessionSettings.shows(row, smartModelSelection: modelRouting) {
+                        Section {
+                            control(row)
+                        } footer: {
+                            Text(SessionSettings.footer(row))
+                        }
                     }
                 case .translation:
                     translationSection

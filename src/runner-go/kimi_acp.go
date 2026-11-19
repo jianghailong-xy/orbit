@@ -2437,6 +2437,9 @@ func kimiAutomaticPermissionOption(job *ClaimedSession, toolName string, input i
 			return selectDecision(true)
 		}
 	}
+	if kimiReadonlyShellFollowsParent(job, toolName) {
+		return selectDecision(true)
+	}
 	if job.Agent.PermissionMode == "acceptEdits" && (toolName == "Edit" || toolName == "Write") {
 		return selectDecision(true)
 	}
@@ -2444,6 +2447,23 @@ func kimiAutomaticPermissionOption(job *ClaimedSession, toolName string, input i
 		return selectDecision(false)
 	}
 	return "", false
+}
+
+// kimiReadonlyShellFollowsParent reports whether a read-only SubAgent's shell request is answered without a card:
+// its plan mode keeps Kimi's edit tools off but asks about every shell call, so a parent session that runs
+// without asking (Auto, Bypass) would get a card for each `git grep` its read-only helper makes. The owner chose,
+// on 2026-11-20, that such a request follows the parent's mode. Nothing here checks the command: a shell call
+// that writes runs too, so a read-only Kimi child is read-only by its plan-mode instructions alone, under those
+// two parent modes. Under any other parent mode the card is filed as before.
+func kimiReadonlyShellFollowsParent(job *ClaimedSession, toolName string) bool {
+	if !job.readonlySubagent || job.readonlyParentMode == nil || (toolName != "Bash" && toolName != "Terminal") {
+		return false
+	}
+	switch job.readonlyParentMode() {
+	case "auto", "bypassPermissions":
+		return true
+	}
+	return false
 }
 
 // kimiToolMatchesRule recognizes the conservative subset shared by Orbit's

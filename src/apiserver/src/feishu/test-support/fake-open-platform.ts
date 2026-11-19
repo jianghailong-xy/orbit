@@ -31,7 +31,8 @@ const { WebSocketServer } = require('ws') as { WebSocketServer: new (options: { 
  * It knows the self-built apps a spec registers (`addApp`) and answers what Orbit asks of them: the token trade,
  * `POST /open-apis/auth/v3/tenant_access_token/internal`; the bot's own name, `GET /open-apis/bot/v3/info`; a person's name,
  * `GET /open-apis/contact/v3/users/:user_id` (`userNames`); a group and its members, `GET /open-apis/im/v1/chats/:chat_id[/members]` (`chats`); sending,
- * replying to and updating messages under `/open-apis/im/v1/messages`; and the long connection as the SDK speaks it
+ * replying to and updating messages under `/open-apis/im/v1/messages`; whether a person is in the app's availability scope,
+ * `POST /open-apis/application/v6/applications/:app_id/visibility/check_white_black_list` (`availability`); and the long connection as the SDK speaks it
  * (task F0-2's comment has the protocol): `POST /callback/ws/endpoint` answers a `ws://` address on this same server,
  * whose WebSocket carries `pbbp2.Frame`s (fake-frames.ts). Each open WebSocket is a `FakeConnection`; `push` sends it
  * an event as Feishu would and resolves with the client's acknowledgement. Every request is kept in `requests` as it
@@ -124,6 +125,12 @@ export class FakeOpenPlatform {
   readonly userNames = new Map<string, string>();
   /** Groups by chat_id, as the chat API answers them; a chat_id not here is answered Feishu's refusal. */
   readonly chats = new Map<string, { name: string; external: boolean; members?: Array<{ openId: string; name: string }> }>();
+  /**
+   * How the availability check (§14.3) answers for each open_id: IN (on the white list), PAID (on the paid list only),
+   * BLOCKED (on the white list and the black list), OUT (on neither), or SERVER_ERROR (HTTP 500 for any request that
+   * names it). An open_id not here is OUT, as Feishu answers every id it is asked about.
+   */
+  readonly availability = new Map<string, 'IN' | 'PAID' | 'BLOCKED' | 'OUT' | 'SERVER_ERROR'>();
   private readonly apps = new Map<string, FakeFeishuApp>();
   /** The message each de-duplication key (`uuid`) delivered, per app. */
   private readonly byUuid = new Map<string, string>();
@@ -182,6 +189,20 @@ export class FakeOpenPlatform {
         const items = all.slice(from, from + 2).map((m) => ({ member_id_type: 'open_id', member_id: m.openId, name: m.name, tenant_key: 'fake' }));
         const more = from + 2 < all.length;
         return { status: 200, body: { code: 0, msg: 'success', data: { items, has_more: more, page_token: more ? String(from + 2) : '', member_total: all.length } } };
+      }));
+    this.route('POST', '/open-apis/application/v6/applications/:app_id/visibility/check_white_black_list', (request) =>
+      this.withToken(request, (app) => {
+        const pathAppId = decodeURIComponent(request.path.split('/')[5] ?? '');
+        const userIds = (request.body as { user_ids?: unknown } | null)?.user_ids;
+        // Another app's id needs admin:app.info:readonly, which no fake app has; a malformed request is Feishu's 210001.
+        if (pathAppId !== app.appId) return { status: 400, body: { code: 99991672, msg: 'Access denied. One of the following scopes is required: [admin:app.info:readonly]' } };
+        if ((request.query.get('user_id_type') ?? 'open_id') !== 'open_id' || !Array.isArray(userIds)) return { status: 400, body: { code: 210001, msg: 'param is invalid' } };
+        if (userIds.some((id) => this.availability.get(String(id)) === 'SERVER_ERROR')) return { status: 500, body: { code: 500, msg: 'internal error' } };
+        const user_visibility_list = userIds.map((id) => {
+          const state = this.availability.get(String(id)) ?? 'OUT';
+          return { user_id: id, in_white_list: state === 'IN' || state === 'BLOCKED', in_black_list: state === 'BLOCKED', in_paid_list: state === 'PAID' };
+        });
+        return { status: 200, body: { code: 0, msg: 'success', data: { user_visibility_list, department_visibility_list: [], group_visibility_list: [] } } };
       }));
     this.route('POST', '/open-apis/im/v1/messages', message);
     this.route('POST', '/open-apis/im/v1/messages/:message_id/reply', message);
