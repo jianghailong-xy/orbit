@@ -2583,6 +2583,25 @@ describe('ProjectDetailPage — a project nobody has started', () => {
     return html.slice(at, html.indexOf('data-project-block=', at + 1));
   };
 
+  it('shows owner open items and hides open and settled coordinator items', () => {
+    const owner = { ...startRow, kind: 'INTEGRATION_CHECK_FAILED', title: 'Owner exception', startRequest: null };
+    const coordinator = { ...owner, itemId: 'coordinator-open', assignee: 'COORDINATOR', title: 'Coordinator open exception' };
+    const html = page({ startedAt: '2026-09-29T08:26:00.000Z' }, {
+      needsYou: [owner],
+      withCoordinator: [coordinator],
+      settled: [{
+        ...coordinator,
+        itemId: 'coordinator-settled',
+        title: 'Coordinator settled exception',
+        outcome: { state: 'RESOLVED', resolution: 'HANDLED', resolvedAt: owner.waitingSince },
+      }],
+    });
+
+    expect(text(openItemsOf(html))).toContain('Owner exception');
+    expect(html).not.toContain('Coordinator open exception');
+    expect(html).not.toContain('Coordinator settled exception');
+  });
+
   it('tags it Not started, where a started project reads Open', () => {
     const unstarted = page({ startedAt: null }, null);
     expect(unstarted).toContain('>Not started</span>');
