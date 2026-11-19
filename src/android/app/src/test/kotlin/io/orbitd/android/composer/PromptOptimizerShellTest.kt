@@ -100,7 +100,7 @@ class PromptOptimizerShellTest : ComposerShellTest() {
         signIn(); openSession()
         await { ComposerShell.calls.contains("GET users/me") }
         type("fix the login redirect bug")
-        await { has(hasTestTag("composer-send") and hasText("Send") and isEnabled()) }
+        await { has(hasTestTag("composer-send") and hasContentDescription("Send") and isEnabled()) }
         compose.waitForIdle()
         assertFalse(has(button))
     }

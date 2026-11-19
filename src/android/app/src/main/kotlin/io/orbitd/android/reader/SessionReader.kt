@@ -267,10 +267,11 @@ fun SessionReader(app: OrbitApplication, handle: SessionHandle, route: OrbitRout
         data.sessions.values.firstNotNullOfOrNull { rows -> rows.firstOrNull { ObjectId.same(it.id, route.id) }?.projectMembership?.projectId }
     }
     // The button's number is the sheet's head's: the project's Open and Completed sessions as the page reads them, read as the
-    // conversation opens, then what the sheet itself last counted. No number until the first read answers.
-    val readCount by rememberProjectSessionCount(app, api, projectId)
-    var sheetCount by remember(projectId) { mutableStateOf<Int?>(null) }
+    // conversation opens and kept current while it shows, or what the sheet itself last counted while its reads pause. No number until
+    // the first read answers. It spins while anything the sheet shows is active (owner 2026-11-17, option C).
     var projectSheet by remember(handle, route.id) { mutableStateOf(false) }
+    val projectButton by rememberProjectSessionsButton(app, handle, api, projectId, paused = projectSheet)
+    var sheetCount by remember(projectId) { mutableStateOf<Int?>(null) }
     val link = remember(handle, route.id) { "${handle.account.server.trimEnd('/')}/sessions/${ObjectId.toPublic(route.id!!)}" }
     val currentRows by rememberUpdatedState(shownRows)
     val nested = remember { object : NestedScrollConnection {
@@ -609,7 +610,7 @@ fun SessionReader(app: OrbitApplication, handle: SessionHandle, route: OrbitRout
                 else if (offTail) question.value?.let { QuestionCapsule(it) { row -> model.show(row.event.seq) } }
             }
         }, actions = {
-            if (projectId != null) ProjectSessionsButton(sheetCount ?: readCount) { projectSheet = true }
+            if (projectId != null) ProjectSessionsButton(projectButton.count ?: sheetCount, projectButton.active) { projectSheet = true }
             SessionMenu(listed.takeUnless { state.denied }, state.session?.snapshot?.detail, link, state.session?.fresh == true && data.fresh,
                 actions, open, { action = it }, { settings = true }, leave)
         })
@@ -893,7 +894,7 @@ fun SessionReader(app: OrbitApplication, handle: SessionHandle, route: OrbitRout
                     ManagedRunnerAsleepLine(data.workspaces.firstOrNull { ObjectId.same(it.id, workspaceOfSession) }?.runnerId,
                         composerLocked = handoff?.locksComposer == true)
                     Box(Modifier.heightIn(max = composerHeight).clipToBounds()) { SessionComposer(app, handle, route.id!!, state.session,
-                    focusRequest = composeFocus, inputFocusChanged = { composerFocused = it }, foldsChrome = foldsChrome,
+                    focusRequest = composeFocus, inputFocusChanged = { composerFocused = it },
                     openTask = { open(OrbitRoute(Destination.TASK, it)) },
                     openRunner = { runner, engine -> open(OrbitRoute(Destination.RUNNER, runner, recordId = "engine:$engine")) },
                     openTranslationSettings = { open(OrbitRoute(Destination.SETTINGS, "sessions")) }) }

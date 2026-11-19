@@ -1,0 +1,17 @@
+{
+  "chipWhenSwitchOff": 0,
+  "inputReachingRunnerByFrame": {
+    "6": {
+      "keys": 2,
+      "pointer": 3,
+      "typed": "!"
+    },
+    "9": {
+      "keys": 28,
+      "pointer": 3,
+      "typed": "me@example.com"
+    }
+  },
+  "writesByFrame": [],
+  "protocolNotes": []
+}

@@ -60,15 +60,21 @@ func TestFetchGlobalOpenCodeModelCatalogUsesPrivateMachineDirectory(t *testing.T
 	pwdPath := filepath.Join(binDir, "pwd")
 	argsPath := filepath.Join(binDir, "args")
 	flagPath := filepath.Join(binDir, "project-config-disabled")
+	xdgPath := filepath.Join(binDir, "xdg")
 	writeFakeBin(t, binDir, providerOpenCode, `printf '%s\n' "$@" > "$CAPTURE_ARGS"
 pwd > "$CAPTURE_PWD"
 printf '%s' "$OPENCODE_DISABLE_PROJECT_CONFIG" > "$CAPTURE_PROJECT_CONFIG"
+printf '%s\n' "$XDG_CONFIG_HOME" "$XDG_DATA_HOME" > "$CAPTURE_XDG"
 printf '%s\n' 'provider/model' '{"id":"model","providerID":"provider","name":"Model","limit":{"context":123},"variants":{}}'`)
 	t.Setenv("PATH", binDir+":"+os.Getenv("PATH"))
 	t.Setenv("CAPTURE_PWD", pwdPath)
 	t.Setenv("CAPTURE_ARGS", argsPath)
 	t.Setenv("CAPTURE_PROJECT_CONFIG", flagPath)
+	t.Setenv("CAPTURE_XDG", xdgPath)
 	t.Setenv("ORBIT_HOME", machineDir)
+	t.Setenv("XDG_CONFIG_HOME", filepath.Join(machineDir, "global-config"))
+	dataHome := filepath.Join(machineDir, "data")
+	t.Setenv("XDG_DATA_HOME", dataHome)
 
 	models, err := fetchGlobalOpenCodeModelCatalog(context.Background())
 	if err != nil {
@@ -103,5 +109,12 @@ printf '%s\n' 'provider/model' '{"id":"model","providerID":"provider","name":"Mo
 	}
 	if string(flag) != "1" {
 		t.Fatalf("OPENCODE_DISABLE_PROJECT_CONFIG = %q, want 1", flag)
+	}
+	xdg, err := os.ReadFile(xdgPath)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got, want := string(xdg), neutralDir+"\n"+dataHome+"\n"; got != want {
+		t.Fatalf("OpenCode XDG_CONFIG_HOME and XDG_DATA_HOME = %q, want %q", got, want)
 	}
 }

@@ -254,7 +254,7 @@ Board: `docs/mocks/condition-triggers/01-board.png`, iOS as the reference.
 
 - **Scheduled page:** a group "Waiting for a condition" above Today, for `WHEN` schedules and `startWhen` tasks.
   Where a timed row shows its time, these show the newest reading and its age. A gauge replaces the circle.
-  UNKNOWN rows are in **Needs you**.
+  UNKNOWN rows lead that group, tagged *Can't read* (owner 2026-11-19: the page has no Needs you group).
 - **Inspector:** a *Condition* block (reading, firing line, re-arm line), *How it checks* (interval, runner,
   command, when it was approved, and, when the condition's read says `keepsWorkspaceAwake`, "Keeps this cloud workspace
   awake while it waits."), and FIRED / READY_AGAIN lines in the history.

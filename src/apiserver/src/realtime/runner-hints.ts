@@ -187,6 +187,11 @@ export interface HintBus {
   close(): Promise<void>;
 }
 
+/** The bus as a browser viewer's byte stream uses it: publishing bytes as they are (NatsHintBus does). */
+export interface StreamBus extends Pick<HintBus, 'up' | 'subscribe' | 'request'> {
+  publish(subject: string, message: Uint8Array): void;
+}
+
 /** How long a session's runner is remembered. A moved session is forgotten at once on the replica that moved it
  *  (forgetSession); elsewhere its inbox hints go to the runner it left for at most this long, one heartbeat. */
 const SESSION_RUNNER_TTL_MS = 30_000;
@@ -250,6 +255,14 @@ export class RunnerHints implements OnModuleInit, OnModuleDestroy {
 
   get enabled(): boolean {
     return this.url !== null;
+  }
+
+  /**
+   * The NATS connection a browser viewer's byte stream rides (managed-runners/browser-viewer.ts): null while hints are
+   * off or the connection is down.
+   */
+  streamBus(): StreamBus | null {
+    return this.bus?.up ? (this.bus as unknown as StreamBus) : null;
   }
 
   onModuleInit(): void {
@@ -510,7 +523,7 @@ class NatsHintBus implements HintBus {
     void this.dial();
   }
 
-  publish(subject: string, message: string, headers?: Record<string, string>): void {
+  publish(subject: string, message: string | Uint8Array, headers?: Record<string, string>): void {
     if (!this.nc) throw new Error('not connected');
     if (!headers) {
       this.nc.publish(subject, message);

@@ -349,8 +349,12 @@ struct ComposerView: View {
     }
 
     /// The "Chinese → English" tag shows while the account translates and the box is empty.
+    /// A suggestion on offer takes the line instead (docs/mocks/prompt-suggestion-room): the tag is about
+    /// words typed, and the guess needs the width. Its "unavailable" warning still shows over a guess.
     private var showsTranslationTag: Bool {
-        SessionTranslation.isOn(app.user) && console.composerText.isEmpty
+        guard SessionTranslation.isOn(app.user), console.composerText.isEmpty else { return false }
+        if offeredSuggestion == nil { return true }
+        return (SessionTranslation.temporarilyUnavailableUntil(app.user) ?? .distantPast) > Date()
     }
 
     /// The engine's guess at the next message, when the empty box offers it (`ComposerLogic`,
@@ -1861,7 +1865,7 @@ struct ComposerView: View {
 /// placeholder would be (docs/prompt-suggestions-design.md §4.1). On a Mac, Use at its end (or Tab)
 /// takes it, and only Use takes the click. A touch screen has no button: a double-tap on the line
 /// takes it (`GrowingTextEditor`), and the words are followed by
-/// "Double-tap to use". Either way a tap anywhere else lands in the field, to type something else.
+/// "Double-tap". Either way a tap anywhere else lands in the field, to type something else.
 private struct PromptSuggestionLine: View {
     let text: String
     #if !os(iOS)
@@ -1874,7 +1878,7 @@ private struct PromptSuggestionLine: View {
         // field's own line height and the words sit exactly where typed ones would.
         HStack(alignment: .firstTextBaseline, spacing: 8) {
             words
-            Text("Double-tap to use")
+            Text("Double-tap")
                 .font(.orbitLabel)
                 .foregroundStyle(Self.placeholderColor)
                 .fixedSize()

@@ -24,6 +24,7 @@ import {
   type ResolvedCredential,
 } from '../providers/engine-provider';
 import { sessionEngine, sessionEnginesOf } from '../providers/session-engine';
+import { ACCOUNT_CHOICE } from '../providers/account';
 import { automaticAccount, runAccount } from '../providers/plan-usage-accounts';
 import { followsRuntimeCatalog } from '../providers/preset-overlay';
 import { signedOutEngineRefusal } from '../sessions/engine-signin-preflight';
@@ -69,7 +70,7 @@ export function taskRouteReads(prisma: PrismaService, ownerId: string, now: Date
       where: { id, ownerId },
       select: {
         runnerId: true, effort: true, modelRouting: true, modelRoutingProviders: true, modelRoutingOptimizeFor: true,
-        env: true, codexAccount: true, claudeAccount: true,
+        env: true, codexAccount: true, claudeAccount: true, kimiAccount: true,
       },
     })),
     /** What an unpinned run of this task starts on: its project's coordinator, else its workspace's
@@ -283,7 +284,8 @@ export function engineState(
   const accounts = {
     codexAccount: agent.codexAccount,
     claudeAccount: agent.claudeAccount,
-    ...(automatic ? { [engine === AgentProvider.CLAUDE ? 'claudeAccount' : 'codexAccount']: automatic } : {}),
+    kimiAccount: agent.kimiAccount,
+    ...(automatic ? { [ACCOUNT_CHOICE[engine]]: automatic } : {}),
   };
   const signedOut = signedOutEngineRefusal({
     runtime: engine,
@@ -296,10 +298,14 @@ export function engineState(
   const account = runAccount(engine, agent.env, accounts, runner, now);
   const snapshot = account === null ? undefined : spentPlanUsage(runner.planUsage as PlanUsage | null, engine, account);
   const quota = fullestWindow(snapshot, now);
+  // No reading at all, or one without a window fullestWindow reads (a runner that fetched nothing for it).
+  const quotaUnread = !snapshot || ![snapshot.fiveHour, snapshot.sevenDay, snapshot.primary, snapshot.secondary].some(Boolean);
   const regionBlocked = engine === AgentProvider.CLAUDE && blockedRunnerRegion(runner, now) !== null;
   // Only the SubAgent router reads it (routeSubagent); chooseEngine does not.
   const paused = runnerAccountPausedUntil(runner.accountPauses, engine, account, now) !== null;
-  return { signedOut, quota, ...(regionBlocked ? { regionBlocked } : {}), ...(paused ? { paused } : {}) };
+  return {
+    signedOut, quota, ...(quotaUnread ? { quotaUnread } : {}), ...(regionBlocked ? { regionBlocked } : {}), ...(paused ? { paused } : {}),
+  };
 }
 
 /** The engine a task's newest work run was created on: what a verification looks past (§6). */

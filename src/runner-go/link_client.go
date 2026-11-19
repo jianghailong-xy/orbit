@@ -555,6 +555,10 @@ func linkHello(processID string) *linkpb.Hello {
 	if instance := currentManagedInstance(); instance != nil {
 		hello.ManagedInstance = &linkpb.ManagedInstance{Generation: instance.Generation, PodUid: instance.PodUID}
 	}
+	// Byte streams to the managed runner browser (link_streams.go): declared only by a managed runner.
+	if linkStreamsDeclared() {
+		hello.Capabilities = append(hello.Capabilities, linkStreamCapability)
+	}
 	return hello
 }
 

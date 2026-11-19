@@ -20,7 +20,8 @@ import (
 )
 
 // conn is one runner's connection after the upgrade (docs/runner-link-design.md §6.1): the handler's goroutine reads,
-// one goroutine writes from three queues (control frames first, then hints and RPC results, then the live stream's),
+// one goroutine writes from four queues (control frames first, then hints and RPC results, then the live stream's, then
+// byte streams' data),
 // and a timer pings. Its state lives in memory only; a runner that loses it reconnects.
 type conn struct {
 	g      *gateway
@@ -58,6 +59,9 @@ type conn struct {
 	pingTimer  *time.Timer
 	welcomed   bool
 	welcomedAt time.Time
+	// browser is what the connection's Welcome said of the managed runner browser: the welcome route offers it only to a
+	// managed runner whose Hello's ManagedInstance matches the manager's record (streams.go, streamable).
+	browser bool
 
 	chunks reassembler
 	// link is what the connection forwards with (forward.go, heartbeat.go, events.go, live.go); nil on a gateway built
@@ -81,8 +85,9 @@ type closeRequest struct {
 	text   string
 }
 
-// The three priorities frames are written in (§5.1). A tier is written only while every tier above it is empty, and
-// a frame sent in pieces (Chunk) yields to a higher tier between two pieces.
+// The priorities frames are written in (§5.1), and below them byte streams' data (docs/runner-browser-design.md §4).
+// A tier is written only while every tier above it is empty, and a frame sent in pieces (Chunk) yields to a higher tier
+// between two pieces.
 type tier int
 
 const (
@@ -94,6 +99,9 @@ const (
 	tierNormal
 	// tierLive: what serves the live stream (TurnPrefixRequest). Best effort: a full queue drops the frame.
 	tierLive
+	// tierStream: byte streams' StreamData (streams.go), written only when nothing else waits. Each stream's window
+	// bounds what it queues; a full queue ends the stream, never the connection.
+	tierStream
 	tierCount
 )
 
@@ -101,13 +109,15 @@ const (
 	controlQueue = 64
 	normalQueue  = 256
 	liveQueue    = 64
+	// streamQueue holds the StreamData of a runner's streams: their windows in frames as small as a viewer's input.
+	streamQueue = 4096
 	// maxQueuedBytes bounds what one connection's queues hold, whatever their count: answers can be megabytes each, and
 	// a runner that stops reading must not make the gateway hold them all.
 	maxQueuedBytes = 32 << 20
 	writeTimeout   = 10 * time.Second
 )
 
-var tierNames = [tierCount]string{"control", "normal", "live"}
+var tierNames = [tierCount]string{"control", "normal", "live", "stream"}
 
 func newConn(g *gateway, ws *websocket.Conn, claims *linkClaims, remote string) *conn {
 	ctx, cancel := context.WithCancel(context.Background())
@@ -118,6 +128,9 @@ func newConn(g *gateway, ws *websocket.Conn, claims *linkClaims, remote string) 
 	}
 	c.log = g.log.With("conn", c.id, "runner", claims.RunnerID, "process", claims.LeaseOwner, "remote", remote)
 	c.writeWS = func(ctx context.Context, b []byte) error { return ws.Write(ctx, websocket.MessageBinary, b) }
+	if g.wrapWrite != nil {
+		c.writeWS = g.wrapWrite(c.writeWS)
+	}
 	// Forwarding needs somewhere to forward to: configuration requires backends, and a gateway built without them (as
 	// some tests build it) forwards nothing.
 	if g.backends != nil {
@@ -190,13 +203,15 @@ func (c *conn) handshake() bool {
 	c.mu.Lock()
 	c.hello = hello
 	c.mu.Unlock()
-	// What Welcome says of the Hello's sessions and of the runner's release, as the welcome route answers it (welcome.go).
+	// What Welcome says of the Hello's sessions, of the runner's release and of its browser, as the welcome route answers
+	// it (welcome.go).
 	// Asked before this connection takes over from an older one of the process, which carries the work meanwhile.
 	var sessions []*linkpb.SessionState
 	var release *linkpb.AssignedRelease
+	var browser bool
 	if c.link != nil {
 		c.link.greeted(hello)
-		sessions, release = c.link.welcome(hello)
+		sessions, release, browser = c.link.welcome(hello)
 	}
 	if old := c.g.reg.activate(c); old != nil {
 		old.closeWith(linkpb.CloseCode_CLOSE_CODE_SUPERSEDED, "a newer connection of this process took over", 0,
@@ -221,9 +236,11 @@ func (c *conn) handshake() bool {
 		Hints:               &linkpb.HintState{},
 		Release:             release,
 		ConnectionId:        c.id,
+		Browser:             browser,
 	}}}, true)
 	c.welcomed = true
 	c.welcomedAt = time.Now()
+	c.browser = browser
 	c.mu.Unlock()
 	if c.link != nil {
 		c.link.start(credit)
@@ -310,6 +327,8 @@ func (c *conn) dispatch(f *linkpb.Frame) bool {
 		if c.link != nil {
 			c.link.onPrefixAnswer(body.TurnPrefixResponse)
 		}
+	case *linkpb.Frame_StreamOpened, *linkpb.Frame_StreamData, *linkpb.Frame_StreamCredit, *linkpb.Frame_StreamClose:
+		c.onStreamFrame(f)
 	case *linkpb.Frame_Chunk:
 		joined, err := c.chunks.add(body.Chunk)
 		if err != nil {
@@ -544,7 +563,7 @@ type outQueues struct {
 	writing, stopped bool
 }
 
-var queueBounds = [tierCount]int{tierControl: controlQueue, tierNormal: normalQueue, tierLive: liveQueue}
+var queueBounds = [tierCount]int{tierControl: controlQueue, tierNormal: normalQueue, tierLive: liveQueue, tierStream: streamQueue}
 
 // push queues it at the back of tier t, unless the tier is full. start says no writer is running: the caller starts
 // one. Once the connection is over, a frame is taken and never written.
@@ -758,6 +777,7 @@ func (c *conn) finish() {
 		return
 	}
 	c.g.reg.remove(c)
+	c.g.closeStreams(c)
 	if c.link != nil {
 		c.link.close()
 	}

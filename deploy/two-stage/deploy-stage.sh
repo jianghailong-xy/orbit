@@ -354,6 +354,7 @@ done
 # Compose sees no change in it, so a new one reaches the service only by recreating it.
 declare -A MOUNTED=(
   [db-proxy]="/usr/local/etc/haproxy/haproxy.cfg deploy/db-proxy/haproxy.cfg"
+  [nats]="/etc/orbit-nats/nats.conf src/link-gateway/nats.conf"
   [gateway]="/etc/nginx/conf.d/default.conf gateway/nginx.conf"
   [pgbackup]="/usr/local/bin/pg-backup.sh scripts/pg-backup.sh"
 )
@@ -579,8 +580,9 @@ for service in "${DEPLOYED[@]}"; do
       fi
       ;;
     *)
-      # db-proxy and gateway, recreated for the file the plan found they do not run: db-proxy's haproxy.cfg ends every
-      # database connection once, and the apiserver's reconnect on their own (docs/postgres-standby.md).
+      # db-proxy, nats and gateway, recreated for the file the plan found they do not run: db-proxy's haproxy.cfg ends every
+      # database connection once, and the apiserver's reconnect on their own (docs/postgres-standby.md); nats.conf ends
+      # the apiserver's and the link gateway's connections to NATS once, and both reconnect on their own.
       if [ -n "${FORCE[$service]:-}" ]; then
         echo "==> $service: recreated to run this release's ${MOUNTED[$service]#* }"
         up --force-recreate "$service"

@@ -1,0 +1,202 @@
+<!doctype html><html><head><meta charset="utf-8"><style>
+*{box-sizing:border-box}
+body{margin:0;background:#e7e7ec;font-family:-apple-system,Inter,'Noto Sans SC',sans-serif;color:#111}
+.board{padding:40px 44px 48px;width:1900px;background:#e7e7ec}
+h1{font-size:28px;margin:0 0 8px}
+.sub{color:#555;font-size:15px;line-height:1.55;max-width:1500px;margin-bottom:28px}
+h2{font-size:20px;margin:34px 0 4px}
+.h2sub{color:#666;font-size:14px;margin-bottom:16px}
+.frames{display:flex;gap:34px;align-items:flex-start}
+.cap{font-size:15px;font-weight:700;margin:0 0 4px}
+.cap .tag{display:inline-block;font-size:12px;font-weight:600;border-radius:5px;padding:1px 6px;margin-left:6px;vertical-align:2px}
+.tag.today{background:#dcdce1;color:#444}.tag.new{background:#e7ddff;color:#5b2fd6}
+.capnote{font-size:13px;color:#555;line-height:1.45;margin-bottom:10px;width:393px;min-height:76px}
+
+/* ---------- iPhone ---------- */
+.ph{width:393px;height:430px;border-radius:0 0 48px 48px;background:#f2f2f7;overflow:hidden;position:relative;
+    box-shadow:0 0 0 10px #111,0 10px 30px rgba(0,0,0,.25);margin:10px 10px 0;clip-path:inset(-12px -12px -40px -12px)}
+.ph.tall{height:760px;border-radius:48px}
+.ph .fade{position:absolute;left:0;right:0;top:0;height:60px;background:linear-gradient(#e7e7ec,rgba(242,242,247,0))}
+.tx{padding:30px 20px 0;font-size:15px;line-height:1.45;color:#333}
+.tx p{margin:0 0 10px}
+.tx .tool{font-size:13px;color:#888;margin-bottom:10px}
+.bands{position:absolute;left:0;right:0;bottom:0;padding:0 12px 30px}
+.iband{display:flex;align-items:center;gap:7px;background:#fff;border-radius:14px;min-height:34px;padding:4px 11px;
+       box-shadow:0 1px 3px rgba(0,0,0,.08);font-size:14px;margin-bottom:8px;white-space:nowrap;overflow:hidden}
+.iband.two{flex-wrap:wrap;row-gap:2px;padding:6px 11px}
+.iband .spark{color:#8b3dff;font-size:12px}
+.iband b{font-weight:600}
+.iband .sec{color:#8a8a8e;overflow:hidden;text-overflow:ellipsis;min-width:0}
+.iband .sp{flex:1}
+.iband .chev{color:#b5b5ba;font-weight:700;font-size:13px}
+.compose{background:#fff;border-radius:22px;height:52px;box-shadow:0 1px 3px rgba(0,0,0,.08);display:flex;align-items:center;
+         padding:0 16px;color:#a0a0a6;font-size:15px}
+.compose .send{margin-left:auto;width:30px;height:30px;border-radius:50%;background:#d9d9de}
+
+/* the engine chip, as AgentEngineChip draws it */
+.ec{display:inline-flex;align-items:center;gap:4px;background:rgba(217,120,87,.13);border-radius:6px;padding:1px 6px 1px 3px;
+    font-size:12.5px;color:#111;white-space:nowrap;flex:none}
+.ec i{font-style:normal;width:14px;height:14px;border-radius:4px;background:#d97857;color:#fff;font-size:9px;font-weight:800;
+      display:inline-flex;align-items:center;justify-content:center}
+.ec .x{color:#8a8a8e;margin-left:1px}
+.more{font-size:12.5px;color:#666;background:#ececf0;border-radius:6px;padding:1px 6px;flex:none}
+.fact{display:inline-flex;align-items:center;gap:4px;font-size:12.5px;color:#666;background:#ececf0;border-radius:6px;padding:1px 6px;flex:none;white-space:nowrap}
+.fact svg{width:12px;height:12px}
+.ok{width:15px;height:15px;flex:none}
+.spin{width:14px;height:14px;border-radius:50%;border:2px solid #d0d0d5;border-top-color:#8a8a8e;flex:none}
+.dur{color:#8a8a8e;font-size:13px;font-variant-numeric:tabular-nums}
+.fail{color:#e5484d;font-weight:600;font-size:13px}
+
+/* sheet */
+.shbar{display:flex;align-items:center;justify-content:center;height:56px;margin-top:20px;position:relative}
+.shbar b{font-size:17px}.shbar .done{position:absolute;right:16px;background:#fff;border-radius:20px;padding:7px 15px;font-weight:600;font-size:15px;box-shadow:0 1px 4px rgba(0,0,0,.12)}
+.card{background:#fff;border-radius:20px;margin:14px 16px 0;padding:14px 18px}
+.figs{display:flex}.fig{flex:1}.fig .v{font-size:20px;font-weight:600}.fig .c{font-size:12px;color:#8a8a8e;margin-top:2px}
+.mix{border-top:1px solid #e5e5ea;margin-top:12px;padding-top:12px;display:flex;flex-direction:column;gap:7px;font-size:13px}
+.mix .ln{display:flex;align-items:center;gap:6px}.mix .ln .n{color:#8a8a8e;margin-left:auto;font-variant-numeric:tabular-nums}
+.ssec{color:#8a8a8e;font-weight:600;font-size:14px;margin:18px 34px 6px}
+.srow{display:flex;gap:10px;padding:10px 0}.srow+.srow{border-top:1px solid #e5e5ea}
+.srow .t{font-size:15px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;width:290px}
+.srow .meta{display:flex;flex-wrap:wrap;gap:5px;margin-top:4px;align-items:center}
+.diff{outline:2px dashed #8b3dff;outline-offset:3px;border-radius:6px}
+.was{outline:2px dashed #e5484d;outline-offset:3px;border-radius:6px;background:#ffe9e9}
+
+/* ---------- web ---------- */
+.wcol{display:flex;flex-direction:column;gap:22px}
+.wf{width:1180px}
+.wtray{background:#f8f9fb;border:1px solid #e3e5e9;border-radius:12px;font-size:15px}
+.wbar{display:flex;align-items:center;gap:9px;height:46px;padding:0 16px;white-space:nowrap}
+.wbar .spark{color:#7c4dff;font-size:15px}
+.wbar b{font-weight:600}
+.wbar .cnt{color:#777}
+.wbar .ttl{color:#666;overflow:hidden;text-overflow:ellipsis;min-width:0}
+.wbar .sp{flex:1}
+.wbar .car{color:#999;font-size:11px;margin-left:4px}
+.wbar .ec{font-size:13.5px}.wbar .fact,.wbar .more{font-size:13.5px}
+.wbody{border-top:1px solid #e9ebee;padding:6px 12px 12px}
+.wh{font-size:12.5px;font-weight:700;color:#8a8f98;letter-spacing:.03em;margin:8px 4px 6px}
+.wrow{display:grid;grid-template-columns:22px 1fr 250px 160px 92px 64px 16px;align-items:center;gap:8px;background:#fff;
+      border:1px solid #e7e9ec;border-radius:9px;height:42px;padding:0 12px;margin-bottom:6px;font-size:15px}
+.wrow .t{white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.wrow .r{color:#999;font-size:13px;text-align:right;font-variant-numeric:tabular-nums}
+.wrow .c{display:flex}
+.wrow.old{grid-template-columns:22px 1fr auto 16px}
+.wrow.old .facts{color:#8a8f98;font-size:14.5px}
+.tip{position:absolute;background:#1d1d1f;color:#fff;font-size:13px;border-radius:8px;padding:9px 12px;line-height:1.6;box-shadow:0 6px 18px rgba(0,0,0,.25)}
+.tip .n{color:#aaa;font-variant-numeric:tabular-nums;margin-left:10px;float:right}
+.mark{display:inline-flex;width:22px;height:22px;border-radius:50%;background:#8b3dff;color:#fff;font-size:12px;font-weight:700;
+      align-items:center;justify-content:center;flex:none}
+
+/* ---------- notes ---------- */
+.notes{display:grid;grid-template-columns:1.25fr 1fr;gap:26px;margin-top:38px}
+.panel{background:#fff;border-radius:16px;padding:20px 24px;font-size:14.5px;line-height:1.55}
+.panel h3{margin:0 0 10px;font-size:17px}
+table{border-collapse:collapse;width:100%;font-size:14px}
+td,th{border-top:1px solid #ececf0;padding:7px 8px;text-align:left;vertical-align:top}
+th{color:#666;font-weight:600;border-top:none}
+code{font-family:'JetBrains Mono',monospace;font-size:12.5px;background:#f2f2f5;border-radius:4px;padding:0 4px}
+.q{border-left:4px solid #8b3dff;padding:4px 0 4px 14px;margin:12px 0}
+.q b{display:block;margin-bottom:3px}
+.rec{color:#5b2fd6;font-weight:600}
+ul{margin:4px 0;padding-left:20px}
+</style><style>
+.ec.k{background:rgba(26,115,242,.12)}.ec.k i{background:#1a73f2}.ec.cx{background:rgba(0,0,0,.08)}.ec.cx i{background:#111}
+.ec.logo{padding:1px 3px}
+.win{width:1180px;border-radius:12px;overflow:hidden;box-shadow:0 0 0 1px #cfd0d6,0 10px 30px rgba(0,0,0,.14);background:#fff}
+.win.mid{width:760px}
+.chrome{height:38px;background:#ececf0;display:flex;align-items:center;gap:7px;padding:0 14px;border-bottom:1px solid #dcdce1}
+.chrome i{width:11px;height:11px;border-radius:50%;background:#d0d0d5;display:inline-block}
+.chrome .url{margin-left:14px;background:#fff;border-radius:6px;height:24px;flex:1;max-width:420px;font-size:12px;color:#888;display:flex;align-items:center;padding:0 10px}
+.page{display:flex;height:300px}
+.side{width:230px;background:#f6f6f8;border-right:1px solid #e8e8ec;padding:16px 14px;font-size:13px;color:#555;flex:none}
+.side div{padding:6px 8px;border-radius:6px;margin-bottom:2px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.side .on{background:#e7e7ec;color:#111;font-weight:600}
+.conv{flex:1;display:flex;flex-direction:column;padding:0 28px 18px;min-width:0}
+.conv .msgs{flex:1;padding-top:24px;font-size:15px;line-height:1.5;color:#333}
+.conv .msgs p{margin:0 0 10px}.conv .msgs .tool{font-size:13px;color:#888;margin-bottom:10px}
+.wcomp{border:1px solid #e3e5e9;border-radius:14px;height:64px;margin-top:10px;color:#a0a0a6;font-size:15px;padding:12px 16px}
+.wbar{gap:8px}
+.bars{display:flex;flex-direction:column;gap:12px}
+.bl{font-size:13px;color:#555;margin:0 0 4px}
+.w760{width:704px}.w560{width:520px}
+.board{width:2330px}.wrow{grid-template-columns:22px 1fr 170px 240px 110px 64px 16px}</style></head><body><div class="board">
+<h1>Agents bar: which models and machines did the work · revision 3</h1>
+<div class="sub">Revision 3: <b>no ✓ when every run succeeded</b> (only a spinner while one runs, or "✕ n failed" in red), and <b>every model or mark carries its run count</b>. From revision 2: <b>always one line</b> (the two-row running line is gone). <b>On the phone, other machines come first</b>; when everything ran on this machine, the slot goes to the model, or only to the coding agent's mark when the name doesn't fit. <b>Web gets its own page mock</b> and stays one line at every width.
+Data from your screenshot: 12 runs, 9 on Opus 5.5, 3 on DeepSeek V4.1 Flash 1017, across 4 machines; runs 10–12 (Opus 5.5 on orbit-prod-fcm) are made up. ④ and ⑤ are made-up sessions for the same-machine cases.
+Chips reuse <code>AgentEngineChip</code> (the coding agent's mark + model) and <code>AgentFact</code> (🖥 machine). <b style="color:#5b2fd6">Purple dashed outline</b> = changed.</div>
+
+<h2>iPhone · the line above the composer (Mac draws the same row)</h2>
+<div class="h2sub">What gets the space, in order: ✦ Agents, the spinner or a failure → <b>other machines</b> → the model → the title. On a phone the title is only shown while something runs.</div>
+<div class="frames" style="gap:28px"><div><div class="cap">① Nothing running<span class="tag today">Today</span></div><div class="capnote">The newest run's title, its check and its time. Nothing says two models and four machines did the work.</div>
+ <div class="ph"><div class="tx"><p>Both resumes kept the code word, and the worktree write landed where it should.</p><div class="tool">✓ delegate · Check workspace checkout is untouched</div><p>The workspace checkout is untouched, so that's all 12 checks done.</p></div><div class="bands">
+  <div class="iband"><span class="spark">✦</span><b>Agents</b><span class="sec">12 · Check workspace checkout is untouched</span><span class="sp"></span><svg class="ok" viewBox="0 0 16 16"><circle cx="8" cy="8" r="8" fill="#34c759"/><path d="M4.6 8.3l2.2 2.2 4.6-4.8" stroke="#fff" stroke-width="1.8" fill="none"/></svg><span class="dur">25s</span><span class="chev">›</span></div>
+  <div class="compose">Message<span class="send"></span></div></div></div></div><div><div class="cap">② Nothing running · other machines<span class="tag new">Proposal</span></div><div class="capnote">Machines come first. If there is room after them, the most-used model follows with its run count, and "+1" for the rest. No ✓: success is the quiet case.</div>
+ <div class="ph"><div class="tx"><p>Both resumes kept the code word, and the worktree write landed where it should.</p><div class="tool">✓ delegate · Check workspace checkout is untouched</div><p>The workspace checkout is untouched, so that's all 12 checks done.</p></div><div class="bands">
+  <div class="iband"><span class="spark">✦</span><b>Agents</b><span class="sec" style="flex:none">12 ·</span><span class="fact diff"><svg viewBox="0 0 16 16"><rect x="1.5" y="2.5" width="13" height="8.5" rx="1.5" fill="none" stroke="#666" stroke-width="1.4"/><path d="M5.5 13.5h5M8 11v2.5" stroke="#666" stroke-width="1.4"/></svg>4 machines</span><span class="diff" style="display:inline-flex;gap:5px"><span class="ec "><i>C</i>Opus 5.5<span class="x">×9</span></span><span class="more">+1</span></span><span class="sp"></span><span class="chev">›</span></div>
+  <div class="compose">Message<span class="send"></span></div></div></div></div><div><div class="cap">③ Running on another machine<span class="tag new">Proposal</span></div><div class="capnote">One row. The title gets cut first. The machine stays, and the model gives way because there's no room for it.</div>
+ <div class="ph"><div class="tx"><p>Main CI is green on df0fe42fb. Handing the deploy to orbit-op on the cheaper model.</p><div class="tool">⟳ delegate · Deploy df0fe42fb to production</div></div><div class="bands">
+  <div class="iband"><span class="spark">✦</span><b>Agents</b><span class="sec">Deploy df0fe42fb to produc…</span><span class="fact diff"><svg viewBox="0 0 16 16"><rect x="1.5" y="2.5" width="13" height="8.5" rx="1.5" fill="none" stroke="#666" stroke-width="1.4"/><path d="M5.5 13.5h5M8 11v2.5" stroke="#666" stroke-width="1.4"/></svg>orbit-op</span><span class="sp"></span><span class="spin"></span><span class="chev">›</span></div>
+  <div class="compose">Message<span class="send"></span></div></div></div></div><div><div class="cap">④ Running here, another model<span class="tag new">Proposal</span></div><div class="capnote">No other machine, so the model takes the slot: its chip with the name when the name fits…</div>
+ <div class="ph"><div class="tx"><p>Asking a cheaper model to read the diff while I write the migration.</p><div class="tool">⟳ delegate · Review the schedule diff for missed renames</div></div><div class="bands">
+  <div class="iband"><span class="spark">✦</span><b>Agents</b><span class="sec">Review the schedule diff…</span><span class="diff" style="display:inline-flex;gap:5px"><span class="ec "><i>C</i>Haiku 5.5</span></span><span class="sp"></span><span class="spin"></span><span class="chev">›</span></div>
+  <div class="compose">Message<span class="send"></span></div></div></div></div><div><div class="cap">⑤ Nothing running · here, two agents<span class="tag new">Proposal</span></div><div class="capnote">…and only the coding agent's mark when it doesn't. Here three Codex runs and two Kimi runs, all on this machine, each mark with its count.</div>
+ <div class="ph"><div class="tx"><p>Codex and Kimi both agree the race is in the retry path. Writing the fix now.</p><div class="tool">✓ delegate · Second opinion on the retry race</div></div><div class="bands">
+  <div class="iband"><span class="spark">✦</span><b>Agents</b><span class="sec" style="flex:none">5 ·</span><span class="diff" style="display:inline-flex;gap:5px"><span class="ec cx"><i>C</i><span class="x">×3</span></span><span class="ec k"><i>K</i><span class="x">×2</span></span></span><span class="sp"></span><span class="chev">›</span></div>
+  <div class="compose">Message<span class="send"></span></div></div></div></div></div>
+
+<h2>Web · the session page</h2>
+<div class="h2sub">The tray sits where it does today, between the conversation and the composer. One line at every width.</div>
+<div class="frames" style="flex-direction:column;gap:26px">
+ <div><div class="cap">⑥ Nothing running<span class="tag new">Proposal</span></div><div class="win "><div class="chrome"><i></i><i></i><i></i><span class="url">orbit · Ship optimizeHelp split</span></div>
+ <div class="page"><div class="side"><div style="color:#999;font-size:12px;font-weight:600;padding-left:8px">SESSIONS</div><div class="on">Ship optimizeHelp split</div><div>Schedules: failure tag</div><div>Share extension handoff</div><div>Landing retry for 0471</div></div><div class="conv"><div class="msgs"><p>Both resumes kept the code word, and the worktree write landed where it should.</p><div class="tool">✓ delegate · Check workspace checkout is untouched</div><p>The workspace checkout is untouched, so that's all 12 checks done.</p></div>
+  <div class="wtray"><div class="wbar"><span class="spark">✦</span><b>Agents</b><span class="cnt">12</span><span class="fact diff"><svg viewBox="0 0 16 16"><rect x="1.5" y="2.5" width="13" height="8.5" rx="1.5" fill="none" stroke="#666" stroke-width="1.4"/><path d="M5.5 13.5h5M8 11v2.5" stroke="#666" stroke-width="1.4"/></svg>4 machines</span><span class="diff" style="display:inline-flex;gap:6px"><span class="ec "><i>C</i>Opus 5.5<span class="x">×9</span></span><span class="ec "><i>C</i>DeepSeek V4.1 Flash 1017<span class="x">×3</span></span></span><span class="sp"></span><span class="car">▼</span></div></div>
+  <div class="wcomp">Message the agent…</div></div></div></div></div>
+ <div><div class="cap">⑦ Running on another machine<span class="tag new">Proposal</span></div><div class="win "><div class="chrome"><i></i><i></i><i></i><span class="url">orbit · Ship optimizeHelp split</span></div>
+ <div class="page"><div class="side"><div style="color:#999;font-size:12px;font-weight:600;padding-left:8px">SESSIONS</div><div class="on">Ship optimizeHelp split</div><div>Schedules: failure tag</div><div>Share extension handoff</div><div>Landing retry for 0471</div></div><div class="conv"><div class="msgs"><p>Main CI is green on df0fe42fb. Handing the deploy to orbit-op on the cheaper model.</p><div class="tool">⟳ delegate · Deploy df0fe42fb to production</div></div>
+  <div class="wtray"><div class="wbar"><span class="spark">✦</span><b>Agents</b><span class="cnt">12 ·</span><span class="ttl" style="color:#333">Deploy df0fe42fb to production</span><span class="fact diff"><svg viewBox="0 0 16 16"><rect x="1.5" y="2.5" width="13" height="8.5" rx="1.5" fill="none" stroke="#666" stroke-width="1.4"/><path d="M5.5 13.5h5M8 11v2.5" stroke="#666" stroke-width="1.4"/></svg>orbit-op</span><span class="diff" style="display:inline-flex;gap:5px"><span class="ec "><i>C</i>DeepSeek V4.1 Flash 1017</span></span><span class="sp"></span><span class="spin" style="width:16px;height:16px"></span><span class="cnt">1m 02s</span><span class="car">▼</span></div></div>
+  <div class="wcomp">Message the agent…</div></div></div></div></div>
+ <div style="display:flex;gap:40px;align-items:flex-start">
+  <div><div class="cap">⑧ A narrower window, still one line<span class="tag new">Proposal</span></div>
+   <div class="capnote" style="width:700px;min-height:0">The title gets cut first, then the time. The machine and the model stay.</div><div class="win mid"><div class="chrome"><i></i><i></i><i></i><span class="url">orbit · Ship optimizeHelp split</span></div>
+ <div class="page"><div class="conv"><div class="msgs"><p>Main CI is green on df0fe42fb. Handing the deploy to orbit-op on the cheaper model.</p><div class="tool">⟳ delegate · Deploy df0fe42fb to production</div></div>
+  <div class="wtray"><div class="wbar"><span class="spark">✦</span><b>Agents</b><span class="cnt">12 ·</span><span class="ttl" style="color:#333">Deploy df0fe42fb to pr…</span><span class="fact diff"><svg viewBox="0 0 16 16"><rect x="1.5" y="2.5" width="13" height="8.5" rx="1.5" fill="none" stroke="#666" stroke-width="1.4"/><path d="M5.5 13.5h5M8 11v2.5" stroke="#666" stroke-width="1.4"/></svg>orbit-op</span><span class="diff" style="display:inline-flex;gap:5px"><span class="ec "><i>C</i>DeepSeek V4.1 Flash 1017</span></span><span class="sp"></span><span class="spin" style="width:16px;height:16px"></span><span class="car">▼</span></div></div>
+  <div class="wcomp">Message the agent…</div></div></div></div></div>
+  <div><div class="cap">⑨ What gives way as the bar narrows<span class="tag new">Proposal</span></div>
+   <div class="capnote" style="width:700px;min-height:0">Machines are never dropped. Model names go before they would wrap.</div><div class="bars"><div><div class="bl">Full width: every model with its run count.</div><div class="wtray "><div class="wbar"><span class="spark">✦</span><b>Agents</b><span class="cnt">12</span><span class="fact"><svg viewBox="0 0 16 16"><rect x="1.5" y="2.5" width="13" height="8.5" rx="1.5" fill="none" stroke="#666" stroke-width="1.4"/><path d="M5.5 13.5h5M8 11v2.5" stroke="#666" stroke-width="1.4"/></svg>4 machines</span><span class="ec "><i>C</i>Opus 5.5<span class="x">×9</span></span><span class="ec "><i>C</i>DeepSeek V4.1 Flash 1017<span class="x">×3</span></span><span class="sp"></span><span class="car">▼</span></div></div></div><div><div class="bl">Step 1: models after the most-used one fold into "+n". Counts stay.</div><div class="wtray w760"><div class="wbar"><span class="spark">✦</span><b>Agents</b><span class="cnt">12</span><span class="fact"><svg viewBox="0 0 16 16"><rect x="1.5" y="2.5" width="13" height="8.5" rx="1.5" fill="none" stroke="#666" stroke-width="1.4"/><path d="M5.5 13.5h5M8 11v2.5" stroke="#666" stroke-width="1.4"/></svg>4 machines</span><span class="ec "><i>C</i>Opus 5.5<span class="x">×9</span></span><span class="more">+1</span><span class="sp"></span><span class="car">▼</span></div></div></div><div><div class="bl">Step 2: "machines" and the model name go; the mark keeps its count. This is the phone line.</div><div class="wtray w560"><div class="wbar"><span class="spark">✦</span><b>Agents</b><span class="cnt">12</span><span class="fact"><svg viewBox="0 0 16 16"><rect x="1.5" y="2.5" width="13" height="8.5" rx="1.5" fill="none" stroke="#666" stroke-width="1.4"/><path d="M5.5 13.5h5M8 11v2.5" stroke="#666" stroke-width="1.4"/></svg>4</span><span class="ec "><i>C</i><span class="x">×9</span></span><span class="more">+1</span><span class="sp"></span><span class="car">▼</span></div></div></div><div><div class="bl">The only time the right end speaks while nothing runs: a failure, in red.</div><div class="wtray "><div class="wbar"><span class="spark">✦</span><b>Agents</b><span class="cnt">12</span><span class="fact"><svg viewBox="0 0 16 16"><rect x="1.5" y="2.5" width="13" height="8.5" rx="1.5" fill="none" stroke="#666" stroke-width="1.4"/><path d="M5.5 13.5h5M8 11v2.5" stroke="#666" stroke-width="1.4"/></svg>4 machines</span><span class="ec "><i>C</i>Opus 5.5<span class="x">×9</span></span><span class="ec "><i>C</i>DeepSeek V4.1 Flash 1017<span class="x">×3</span></span><span class="sp"></span><span class="fail">✕ 1 failed</span><span class="car">▼</span></div></div></div></div></div>
+ </div>
+ <div><div class="cap">⑩ Opened<span class="tag new">Proposal</span><span style="font-weight:400;color:#555;font-size:13px;margin-left:8px">The grey text after each title becomes a machine tag and a model chip in fixed columns, machine first like the bar.</span></div><div class="wtray" style="width:1180px"><div class="wbar"><span class="spark">✦</span><b>Agents</b><span class="cnt">12</span><span class="fact"><svg viewBox="0 0 16 16"><rect x="1.5" y="2.5" width="13" height="8.5" rx="1.5" fill="none" stroke="#666" stroke-width="1.4"/><path d="M5.5 13.5h5M8 11v2.5" stroke="#666" stroke-width="1.4"/></svg>4 machines</span><span class="ec "><i>C</i>Opus 5.5<span class="x">×9</span></span><span class="ec "><i>C</i>DeepSeek V4.1 Flash 1017<span class="x">×3</span></span><span class="sp"></span><span class="car">▲</span></div>
+ <div class="wbody"><div class="wrow"><span><svg class="ok" viewBox="0 0 16 16" style="width:18px;height:18px"><circle cx="8" cy="8" r="8" fill="#3a9a4a"/><path d="M4.6 8.3l2.2 2.2 4.6-4.8" stroke="#fff" stroke-width="1.8" fill="none"/></svg></span><span class="t">Check workspace checkout is untouched</span><span class="c"><span class="fact"><svg viewBox="0 0 16 16"><rect x="1.5" y="2.5" width="13" height="8.5" rx="1.5" fill="none" stroke="#666" stroke-width="1.4"/><path d="M5.5 13.5h5M8 11v2.5" stroke="#666" stroke-width="1.4"/></svg>orbit-prod-fcm</span></span><span class="c"><span class="ec "><i>C</i>Opus 5.5</span></span><span class="c"><span class="fact">🔒 Read-only</span></span><span class="r">25s</span><span style="color:#999">›</span></div><div class="wrow"><span><svg class="ok" viewBox="0 0 16 16" style="width:18px;height:18px"><circle cx="8" cy="8" r="8" fill="#3a9a4a"/><path d="M4.6 8.3l2.2 2.2 4.6-4.8" stroke="#fff" stroke-width="1.8" fill="none"/></svg></span><span class="t">Resume: check file, edit again</span><span class="c"><span class="fact"><svg viewBox="0 0 16 16"><rect x="1.5" y="2.5" width="13" height="8.5" rx="1.5" fill="none" stroke="#666" stroke-width="1.4"/><path d="M5.5 13.5h5M8 11v2.5" stroke="#666" stroke-width="1.4"/></svg>orbit-prod-fcm</span></span><span class="c"><span class="ec "><i>C</i>Opus 5.5</span></span><span class="c"></span><span class="r">28s</span><span style="color:#999">›</span></div><div class="wrow"><span><svg class="ok" viewBox="0 0 16 16" style="width:18px;height:18px"><circle cx="8" cy="8" r="8" fill="#3a9a4a"/><path d="M4.6 8.3l2.2 2.2 4.6-4.8" stroke="#fff" stroke-width="1.8" fill="none"/></svg></span><span class="t">Build-check optimizeHelp split on Mac</span><span class="c"><span class="fact"><svg viewBox="0 0 16 16"><rect x="1.5" y="2.5" width="13" height="8.5" rx="1.5" fill="none" stroke="#666" stroke-width="1.4"/><path d="M5.5 13.5h5M8 11v2.5" stroke="#666" stroke-width="1.4"/></svg>orbit-macos</span></span><span class="c"><span class="ec "><i>C</i>DeepSeek V4.1 Flash 1017</span></span><span class="c"></span><span class="r">3m 47s</span><span style="color:#999">›</span></div><div class="wrow"><span><svg class="ok" viewBox="0 0 16 16" style="width:18px;height:18px"><circle cx="8" cy="8" r="8" fill="#3a9a4a"/><path d="M4.6 8.3l2.2 2.2 4.6-4.8" stroke="#fff" stroke-width="1.8" fill="none"/></svg></span><span class="t">Read production's deployed release</span><span class="c"><span class="fact"><svg viewBox="0 0 16 16"><rect x="1.5" y="2.5" width="13" height="8.5" rx="1.5" fill="none" stroke="#666" stroke-width="1.4"/><path d="M5.5 13.5h5M8 11v2.5" stroke="#666" stroke-width="1.4"/></svg>orbit-prod</span></span><span class="c"><span class="ec "><i>C</i>DeepSeek V4.1 Flash 1017</span></span><span class="c"><span class="fact">🔒 Read-only</span></span><span class="r">57s</span><span style="color:#999">›</span></div><div class="wrow"><span><svg class="ok" viewBox="0 0 16 16" style="width:18px;height:18px"><circle cx="8" cy="8" r="8" fill="#3a9a4a"/><path d="M4.6 8.3l2.2 2.2 4.6-4.8" stroke="#fff" stroke-width="1.8" fill="none"/></svg></span><span class="t">Deploy df0fe42fb to production</span><span class="c"><span class="fact"><svg viewBox="0 0 16 16"><rect x="1.5" y="2.5" width="13" height="8.5" rx="1.5" fill="none" stroke="#666" stroke-width="1.4"/><path d="M5.5 13.5h5M8 11v2.5" stroke="#666" stroke-width="1.4"/></svg>orbit-op</span></span><span class="c"><span class="ec "><i>C</i>DeepSeek V4.1 Flash 1017</span></span><span class="c"></span><span class="r">2m 14s</span><span style="color:#999">›</span></div></div></div></div>
+</div>
+
+<div class="notes">
+ <div class="panel"><h3>Rules</h3>
+  <table>
+   <tr><th style="width:36%">Case</th><th>What the folded line shows</th></tr>
+   <tr><td>Running, on another machine</td><td>Title · 🖥 machine · model chip (web). Phone: title · 🖥 machine.</td></tr>
+   <tr><td>Running, here, on a model other than the session's</td><td>Title · model chip, or the coding agent's mark alone if the name doesn't fit.</td></tr>
+   <tr><td>Running, here, same model as the session</td><td>Title only, as today.</td></tr>
+   <tr><td>Nothing running, some runs on other machines</td><td>Count · 🖥 n machines · model chips with run counts (most-used first, "+n" when out of room) · "✕ n failed" in red if any failed, else nothing.</td></tr>
+   <tr><td>Nothing running, all here, several models or agents</td><td>Count · model chips, or the agents' marks when the names don't fit, each with its run count.</td></tr>
+   <tr><td>Nothing running, all here, one model, the session's own</td><td>Count only. Nothing more, since there is no spread to show.</td></tr>
+   <tr><td>No ✓ when all succeeded</td><td>Success is the expected case; a ✓ beside the marks read as a badge on them. Each run's own ✓ is still in the list.</td></tr>
+   <tr><td>"One model"</td><td><code>modelLabel ?? model</code> as the row shows it. A run with no model counts under its agent's name ("Claude").</td></tr>
+   <tr><td>"Machines"</td><td>Distinct workspaces, the session's own included. A run with no workspace ran here.</td></tr>
+   <tr><td>Web, what gives way first</td><td>Title → time → models after the first → the words "machines" and the model's name (the mark and its count stay). Machines and counts never give way.</td></tr>
+  </table>
+  <h3 style="margin-top:18px">Files it would touch</h3>
+  <ul>
+   <li>Web: <code>lib/subagentRuns.ts</code> (the summary gains <code>machines</code>, <code>models</code> and <code>failed</code>), <code>SessionAgentsStrip.tsx</code> and its CSS, and the tests next to them.</li>
+   <li>Apple: <code>OrbitKit/Transcript/SubagentBlock.swift</code> (<code>SubagentSessionSummary</code>), <code>AgentBlockViews.swift</code> (<code>AgentsBandRow</code>, <code>AgentsSheet</code> card: "2 models · 4 machines" instead of "1 engine"), <code>SubagentBlockTests.swift</code>.</li>
+   <li>Mac's folded mark "✦ 12" (<code>FoldedBandBar</code>) and Android (no Agents line): unchanged.</li>
+  </ul>
+ </div>
+ <div class="panel"><h3>For you to decide</h3>
+  <div class="q"><b>1. Nothing running: does the newest run's title leave the line?</b>
+   <span class="rec">A (recommended): yes</span>, as drawn in ② and ⑥. Once everything is done, the newest title says little; where the work went says more. The row in the list still has it.<br>B: keep it after the chips, on web only.</div>
+  <div class="q"><b>2. The coding agent's mark</b>
+   <span class="rec">A (recommended): the letter mark the chips already use</span> (C, K, X…, in the agent's colour).<br>B: the real product logos. That means new assets on all three clients. With letters, Claude and Codex are both "C" and only the colour tells them apart (orange vs black, as in ⑤).</div>
+  <div class="q"><b>3. Running here on the session's own model: show its chip?</b>
+   <span class="rec">A (recommended): no</span>, the line stays as today, so a chip only appears when it means something.<br>B: always show it.</div>
+ </div>
+</div>
+</div></body></html>

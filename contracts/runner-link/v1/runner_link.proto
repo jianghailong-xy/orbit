@@ -11,6 +11,10 @@
 //   - The generated code (src/runner-go/linkpb, src/shared/src/runner-link) is committed and never
 //     edited by hand; contracts/runner-link/buf.gen.yaml says how to regenerate it.
 //
+// Minor revisions of v1 (each only adds, §5.11; a peer learns of one from a Hello capability):
+//   - Byte streams (StreamOpen, StreamOpened, StreamData, StreamCredit, StreamClose), capability
+//     `link-stream-v1` (docs/runner-browser-design.md §4).
+//
 // Units: times are Unix milliseconds (`*_unix_ms`), durations are milliseconds (`*_ms`).
 syntax = "proto3";
 
@@ -28,8 +32,8 @@ message Frame {
   uint64 id = 1;
 
   // What the frame carries. Each peer writes control frames (Close, TokenRefresh, Redirect, Drain,
-  // Heartbeat, HeartbeatAck, EventAck, Credit) ahead of hints and RPC traffic, and those ahead of
-  // live stream batches (§5.1).
+  // Heartbeat, HeartbeatAck, EventAck, Credit) ahead of hints and RPC traffic, those ahead of live
+  // stream batches (§5.1), and StreamData below everything else.
   oneof body {
     // Runner to gateway, the first frame: who is connecting and where it left off.
     Hello hello = 2;
@@ -67,6 +71,16 @@ message Frame {
     TurnPrefixResponse turn_prefix_response = 18;
     // Either way: a piece of a frame too large to send whole.
     Chunk chunk = 19;
+    // Gateway to runner: open a byte stream to a local service (docs/runner-browser-design.md §4).
+    StreamOpen stream_open = 20;
+    // Runner to gateway: the stream a StreamOpen asked for is open.
+    StreamOpened stream_opened = 21;
+    // Either way: bytes of an open stream.
+    StreamData stream_data = 22;
+    // Either way: room for more of a stream's bytes.
+    StreamCredit stream_credit = 23;
+    // Either way: a stream is closed, or was refused.
+    StreamClose stream_close = 24;
   }
 }
 
@@ -180,6 +194,11 @@ message Welcome {
   // Names this connection in gateway logs. The runner logs it too, so the two sides' logs can be
   // matched.
   string connection_id = 9;
+  // Whether this runner is offered the managed runner browser (docs/runner-browser-design.md §2): true only when the
+  // server's ORBIT_MANAGED_RUNNER_BROWSER_ENABLED and ORBIT_MANAGED_RUNNERS_ENABLED switches are both on and Hello
+  // carried a ManagedInstance the manager authorized. False for every self-managed runner, and from a gateway or
+  // apiserver older than the field.
+  bool browser = 10;
 }
 
 // Which transport carries a runner's daemon work: claiming sessions, fetching messages, heartbeats,
@@ -636,4 +655,93 @@ message TurnPrefixResponse {
   // The live_seq of the last live event folded into text and thinking. The server forwards only
   // live events after it, so the client sees each delta once.
   uint64 through_live_seq = 6;
+}
+
+// Byte streams (docs/runner-browser-design.md §4): a raw byte pipe between a viewer, through the
+// apiserver and the gateway, and a local service on the runner, today the browser's VNC socket.
+// The gateway sends StreamOpen only to a connection whose Hello carried the capability
+// `link-stream-v1`. Each stream has a window of 256 KiB (262,144 bytes) in each direction: a sender
+// has at most that many bytes of StreamData sent and not yet credited back, and the receiver returns
+// room with StreamCredit as it consumes them. A peer that sends past its window has the stream
+// closed with STREAM_CLOSE_CODE_FLOW_VIOLATION. StreamData rides the lowest write tier, below live
+// stream batches, so it never holds up a control frame. A stream lives on the connection it was
+// opened on and ends with it.
+//
+// Between the apiserver and the gateway the open is a NATS request on rnr.<runnerId> carrying a
+// Frame with only stream_open set, in protobuf's canonical JSON, answered on its reply subject by a
+// Frame with stream_opened or stream_close set. The stream's bytes then travel on
+// vnc.<streamId>.down (apiserver to gateway) and vnc.<streamId>.up (gateway to apiserver), each NATS
+// message one binary-encoded Frame with only stream_data, stream_credit or stream_close set.
+
+// Gateway to runner: open a stream. The runner answers with StreamOpened, or with StreamClose when it
+// will not or cannot open it.
+message StreamOpen {
+  // Names the stream in every frame of it: a UUID the apiserver chose, unique per stream.
+  string stream_id = 1;
+  // What the stream connects to on the runner.
+  StreamKind kind = 2;
+}
+
+// What a stream connects to on the runner.
+enum StreamKind {
+  // Not stated: the runner refuses it (STREAM_CLOSE_CODE_REFUSED).
+  STREAM_KIND_UNSPECIFIED = 0;
+  // The managed runner browser's VNC server (RFB on ~/.orbit/browser/vnc.sock).
+  STREAM_KIND_VNC = 1;
+}
+
+// Runner to gateway: the stream is open, and either side may send its bytes.
+message StreamOpened {
+  // The stream_id of the StreamOpen this answers.
+  string stream_id = 1;
+}
+
+// Either way: the next bytes of a stream, in order. A frame carries at most 32 KiB, so that a
+// control frame waits for at most one of them.
+message StreamData {
+  // The stream the bytes belong to.
+  string stream_id = 1;
+  // The bytes, after the last StreamData of the stream in the same direction.
+  bytes data = 2;
+}
+
+// Either way: the receiver consumed this many more bytes of the stream, and the sender may send that
+// many more (the window above).
+message StreamCredit {
+  // The stream the credit is for.
+  string stream_id = 1;
+  // How many bytes the window grows by.
+  uint32 bytes = 2;
+}
+
+// Either way: the stream is closed, or was refused when it answers a StreamOpen. Nothing more is
+// sent on it, in either direction; a frame for a closed stream is ignored.
+message StreamClose {
+  // The stream that closed.
+  string stream_id = 1;
+  // Why it closed.
+  StreamCloseCode code = 2;
+  // Detail for logs, in English; never parsed.
+  string message = 3;
+}
+
+// Why a stream closed.
+enum StreamCloseCode {
+  // No reason given.
+  STREAM_CLOSE_CODE_UNSPECIFIED = 0;
+  // One side ended it: the viewer left, or the local service closed its end.
+  STREAM_CLOSE_CODE_NORMAL = 1;
+  // The runner will not open it: it did not declare the capability, the feature is off, it is not
+  // a managed runner, or the kind is unknown.
+  STREAM_CLOSE_CODE_REFUSED = 2;
+  // The local service is not there (the browser is not running).
+  STREAM_CLOSE_CODE_UNAVAILABLE = 3;
+  // The runner already has as many open streams as it may (2).
+  STREAM_CLOSE_CODE_TOO_MANY_STREAMS = 4;
+  // A peer sent more bytes than its window allowed, or a frame that breaks the stream's rules.
+  STREAM_CLOSE_CODE_FLOW_VIOLATION = 5;
+  // The runner's link connection is gone, or no gateway holds one.
+  STREAM_CLOSE_CODE_CONNECTION_LOST = 6;
+  // The runner did not answer StreamOpen in time.
+  STREAM_CLOSE_CODE_TIMEOUT = 7;
 }

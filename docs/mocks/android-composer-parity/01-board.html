@@ -1,0 +1,503 @@
+<!doctype html>
+<html lang="zh">
+<head>
+<meta charset="utf-8">
+<title>android-composer-parity</title>
+<!-- Render: node docs/mocks/android-composer-parity/render.mjs (Roboto for the phones, Inter + Noto Sans SC for the board). -->
+<style>
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body { background: #eef0f3; }
+  .board {
+    width: 1640px; padding: 36px 40px 44px; background: #eef0f3; color: #1f2329;
+    font-family: Inter, "Noto Sans SC", sans-serif; -webkit-font-smoothing: antialiased;
+  }
+  h1 { font-size: 26px; font-weight: 700; letter-spacing: -0.2px; }
+  .lede { margin-top: 8px; font-size: 15px; color: #4b5260; line-height: 1.6; max-width: 1480px; }
+  h2 { font-size: 17px; font-weight: 700; margin: 32px 0 12px; display: flex; align-items: baseline; gap: 10px; }
+  h2 small { font-size: 13px; font-weight: 400; color: #6b7280; }
+  .row { display: flex; gap: 24px; align-items: flex-start; }
+  .tile { width: 360px; flex: none; }
+  .cap { font-size: 14px; font-weight: 700; margin-bottom: 8px; line-height: 1.4; }
+  .cap span { display: block; font-weight: 400; color: #6b7280; font-size: 12.5px; }
+  .shot { width: 360px; border-radius: 14px; overflow: hidden; box-shadow: 0 0 0 1px rgba(0,0,0,0.08); }
+  .shot img { display: block; width: 360px; }
+  .num { display: inline-flex; width: 19px; height: 19px; border-radius: 10px; background: #1f2329; color: #fff;
+    font-size: 11.5px; font-weight: 700; align-items: center; justify-content: center; margin-right: 5px; vertical-align: 1px; }
+  .num.o { background: #c2410c; }
+  .notes { flex: 1; background: #fff; border-radius: 14px; padding: 18px 22px; font-size: 13.5px; line-height: 1.65; color: #2b303b;
+    box-shadow: 0 0 0 1px rgba(0,0,0,0.06); }
+  .notes h3 { font-size: 14px; margin: 14px 0 6px; }
+  .notes h3:first-child { margin-top: 0; }
+  .notes ul, .notes ol { padding-left: 20px; }
+  .notes li { margin: 3px 0; }
+  .notes code { font-family: "JetBrains Mono", monospace; font-size: 12px; background: #f1f3f6; padding: 1px 4px; border-radius: 4px; }
+  table { border-collapse: collapse; width: 100%; font-size: 13px; }
+  th, td { text-align: left; padding: 6px 8px; border-bottom: 1px solid #e5e7eb; vertical-align: top; }
+  th { font-weight: 700; color: #4b5260; background: #f8f9fb; }
+  .todo { background: #fff7ed; box-shadow: 0 0 0 1px #fed7aa; }
+  .todo h3 { color: #9a3412; }
+
+  /* ── an Android phone's bottom, 360 dp wide (the owner's phone: 1080 px at 3x) ── */
+  .a {
+    --page: #111318; --band: #1d2024; --card: #24272c; --card-line: rgba(255,255,255,0.13); --card-line-focus: rgba(255,255,255,0.28);
+    --on: #e2e2e9; --on-var: #c4c6d0; --outline: #8e9099; --primary: #9ecaff; --on-primary: #003258;
+    --chip: #33363b; --track: rgba(226,226,233,0.30); --dis-fill: rgba(226,226,233,0.12); --dis-on: rgba(226,226,233,0.38);
+    --menu: #2b2e33; --scrim: rgba(0,0,0,0.5); --git: #191b1f;
+    position: relative; width: 360px; overflow: hidden; border-radius: 14px; background: var(--page);
+    box-shadow: 0 0 0 1px rgba(0,0,0,0.08); color: var(--on);
+    font-family: Roboto, "Noto Sans SC", sans-serif; font-size: 14px; letter-spacing: 0.1px;
+    display: flex; flex-direction: column; justify-content: flex-end;
+  }
+  .a.light {
+    --page: #f9f9ff; --band: #f0f0f7; --card: #ffffff; --card-line: rgba(0,0,0,0.12); --card-line-focus: rgba(0,0,0,0.28);
+    --on: #191c20; --on-var: #44474e; --outline: #74777f; --primary: #3a608f; --on-primary: #ffffff;
+    --chip: #e2e2e9; --track: rgba(25,28,32,0.22); --dis-fill: rgba(25,28,32,0.10); --dis-on: rgba(25,28,32,0.38);
+    --menu: #eceef4; --git: #e8e9ef;
+  }
+  .a-tail { padding: 14px 16px 12px; font-size: 15px; line-height: 22px; color: var(--on); }
+  .a-tail .muted { color: var(--on-var); font-size: 13px; }
+  .a-git { margin: 0 10px 8px; height: 40px; border-radius: 12px; border: 1px solid rgba(127,127,127,0.25); background: var(--git);
+    display: flex; align-items: center; gap: 10px; padding: 0 8px; font-family: "JetBrains Mono", monospace; font-size: 11.5px; color: var(--on-var); white-space: nowrap; overflow: hidden; }
+  .a-git .br { flex: 0 1 auto; min-width: 0; overflow: hidden; text-overflow: ellipsis; }
+  .a-git .br { border: 1px solid rgba(127,127,127,0.3); border-radius: 8px; padding: 3px 7px; color: var(--on); }
+  .a-git .add { color: #7fd18b; } .a-git .del { color: #f2a19a; }
+  .a-band { background: var(--band); padding: 8px 10px 6px; }
+  .a-nav { height: 22px; background: var(--band); position: relative; }
+  .a-nav::after { content: ""; position: absolute; left: 50%; top: 9px; width: 108px; height: 4px; margin-left: -54px; border-radius: 2px; background: var(--on); opacity: 0.85; }
+
+  /* the card: text across its width, the toolbar pinned to its foot (iOS ComposerView.swift:523-578) */
+  .a-card { position: relative; background: var(--card); border-radius: 24px; box-shadow: inset 0 0 0 1px var(--card-line); }
+  .a-card.focus { box-shadow: inset 0 0 0 1px var(--card-line-focus); }
+  .a-text { padding: 14px 16px 6px; min-height: 44px; font-size: 16px; line-height: 22px; display: flex; gap: 8px; align-items: flex-start; }
+  .a-text .ph { flex: 1; color: var(--outline); }
+  .a-text .tx { flex: 1; color: var(--on); }
+  .a-text .caret { display: inline-block; width: 2px; height: 19px; background: var(--primary); vertical-align: -4px; margin-left: 1px; }
+  .a-tag { flex: none; font-size: 12px; font-weight: 500; color: var(--on-var); background: var(--chip); border-radius: 99px; padding: 2px 9px; line-height: 18px; }
+  .a-bar { display: flex; align-items: center; gap: 2px; padding: 0 4px 4px; height: 52px; }
+  .a-icon { width: 40px; height: 48px; flex: none; display: flex; align-items: center; justify-content: center; position: relative; }
+  .a-icon svg { width: 24px; height: 24px; fill: var(--on-var); }
+  .a-mode { flex: none; font-weight: 500; color: var(--on-var); padding: 0 6px; height: 48px; line-height: 48px; white-space: nowrap; }
+  .a-spacer { flex: 1; min-width: 4px; }
+  .a-model { min-width: 0; flex: 0 1 auto; padding: 0 6px; height: 48px; display: flex; align-items: center; gap: 5px; white-space: nowrap; }
+  .a-model b { min-width: 0; font-weight: 600; color: var(--on); overflow: hidden; text-overflow: ellipsis; }
+  .a-model em { flex: none; font-style: normal; font-weight: 400; color: var(--on-var); }
+  .a-model.no-effort em { display: none; }
+  .a-model.smart { color: var(--primary); }
+  .a-acct { flex: 0 1 auto; max-width: 96px; color: var(--on-var); font-size: 13px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .a-gauge { flex: none; height: 48px; min-width: 32px; display: flex; align-items: center; justify-content: center; }
+  .a-gauge .cap { height: 28px; padding: 0 8px; border-radius: 99px; box-shadow: inset 0 0 0 1px rgba(127,127,127,0.35);
+    display: flex; align-items: center; gap: 5px; margin: 0; }
+  .a-pbar { width: 24px; height: 5px; border-radius: 3px; background: var(--track); position: relative; overflow: hidden; }
+  .a-pbar i { position: absolute; left: 0; top: 0; bottom: 0; background: var(--on-var); border-radius: 3px; }
+  .a-opt { flex: none; height: 36px; padding: 0 12px; justify-content: center; font-size: 15px; border-radius: 99px; font-weight: 500; font-size: 13px; color: var(--primary);
+    box-shadow: inset 0 0 0 1px var(--outline); display: flex; align-items: center; margin: 0 2px; }
+  .a-opt.compact { width: 36px; padding: 0; }
+  .a-send { width: 44px; height: 48px; flex: none; display: flex; align-items: center; justify-content: center; }
+  .a-send b { width: 40px; height: 40px; border-radius: 20px; background: var(--primary); display: flex; align-items: center; justify-content: center; }
+  .a-send svg { width: 22px; height: 22px; fill: var(--on-primary); }
+  .a-send.off b { background: var(--dis-fill); }
+  .a-send.off svg { fill: var(--dis-on); }
+  .a-send .sq { width: 13px; height: 13px; border-radius: 2px; background: var(--on-primary); }
+
+  /* menus and the held-Send menu */
+  .a-menu { position: absolute; background: var(--menu); border-radius: 4px; padding: 8px 0; min-width: 196px; z-index: 5;
+    box-shadow: 0 2px 6px rgba(0,0,0,0.3), 0 8px 24px rgba(0,0,0,0.25); }
+  .a-menu div { height: 44px; padding: 0 16px 0 12px; display: flex; align-items: center; gap: 12px; font-size: 14px; color: var(--on); white-space: nowrap; }
+  .a-menu div .ck { width: 20px; color: var(--primary); text-align: center; font-weight: 700; }
+  .a-menu div.dim { color: var(--dis-on); }
+  .a-menu .sep { height: 1px; padding: 0; margin: 6px 0; background: rgba(127,127,127,0.25); }
+  .a-dim { position: absolute; inset: 0; background: var(--scrim); z-index: 4; }
+
+  /* today's composer, drawn as the code has it (SessionComposer.kt:203-357) for the light frame */
+  .t-line { font-size: 13px; color: var(--primary); padding: 6px 4px 8px; }
+  .t-field { border: 1px solid var(--outline); border-radius: 4px; height: 56px; display: flex; align-items: center; padding: 0 8px 0 16px; gap: 8px; }
+  .t-field .ph { flex: 1; color: var(--on-var); font-size: 16px; }
+  .t-row { display: flex; align-items: center; height: 52px; }
+  .t-row .plus { width: 48px; text-align: center; color: var(--primary); font-size: 20px; font-weight: 500; }
+  .t-row .model { flex: 1; text-align: center; color: var(--primary); font-weight: 500; font-size: 15px; }
+  .t-row .stop { height: 40px; padding: 0 24px; border-radius: 20px; background: var(--primary); color: var(--on-primary); font-weight: 500; line-height: 40px; }
+
+  /* D: attachments inside the card (iOS ComposerAttachmentsView), the gauge's bottom sheet */
+  .a-atts { display: flex; gap: 8px; padding: 12px 12px 0; }
+  .a-att { position: relative; width: 58px; height: 58px; flex: none; border-radius: 14px; overflow: hidden;
+    background: linear-gradient(135deg, #3a4a6b, #2a3140 60%, #343a46); box-shadow: inset 0 0 0 1px rgba(255,255,255,0.08); }
+  .a-att.img2 { background: linear-gradient(160deg, #5b4a3a, #2f2a26 70%); }
+  .a-att .x { position: absolute; top: 4px; right: 4px; width: 18px; height: 18px; border-radius: 9px; background: rgba(0,0,0,0.6);
+    color: #fff; font-size: 12px; line-height: 18px; text-align: center; }
+  .a-att .prog { position: absolute; left: 6px; right: 6px; bottom: 6px; height: 3px; border-radius: 2px; background: rgba(255,255,255,0.25); }
+  .a-att .prog i { position: absolute; left: 0; top: 0; bottom: 0; width: 55%; border-radius: 2px; background: var(--primary); }
+  .a-att.fail { box-shadow: inset 0 0 0 1.5px #ffb4ab; }
+  .a-att.fail .bang { position: absolute; inset: 0; padding-top: 10px; font-size: 10.5px !important; display: flex; align-items: center; justify-content: center; color: #ffb4ab; font-size: 11px; font-weight: 600;
+    background: rgba(0,0,0,0.45); flex-direction: column; gap: 2px; }
+  .a-file { height: 58px; flex: none; border-radius: 14px; padding: 0 28px 0 12px; position: relative; background: var(--chip);
+    display: flex; flex-direction: column; justify-content: center; font-size: 12.5px; color: var(--on); }
+  .a-file small { color: var(--on-var); font-size: 11.5px; }
+  .a-file .x { position: absolute; top: 4px; right: 4px; width: 18px; height: 18px; border-radius: 9px; background: rgba(0,0,0,0.45); color: #fff; font-size: 12px; line-height: 18px; text-align: center; }
+  .a-sheet { position: absolute; left: 0; right: 0; bottom: 0; z-index: 6; background: #1d2024; border-radius: 28px 28px 0 0; padding: 10px 24px 28px; }
+  .a-sheet .grab { width: 32px; height: 4px; border-radius: 2px; background: var(--outline); margin: 0 auto 16px; }
+  .a-sheet h4 { font-size: 20px; font-weight: 400; margin-bottom: 14px; }
+  .a-sheet .ln { font-size: 14px; margin: 6px 0; color: var(--on); }
+  .a-sheet .kv { display: flex; font-size: 14px; margin: 8px 0; } .a-sheet .kv span:first-child { flex: 1; } .a-sheet .kv span:last-child { color: var(--on-var); }
+  .a-sheet .lp { height: 4px; border-radius: 2px; background: var(--track); position: relative; margin: 6px 0 12px; }
+  .a-sheet .lp i { position: absolute; left: 0; top: 0; bottom: 0; border-radius: 2px; background: var(--primary); }
+  .a-sheet .sm { font-size: 12px; color: var(--on-var); }
+  .a-sheet hr { border: 0; height: 1px; background: rgba(127,127,127,0.3); margin: 14px 0; }
+  .a-sheet .act { display: flex; gap: 14px; align-items: flex-start; }
+  .a-sheet .act svg { width: 22px; height: 22px; fill: var(--on-var); flex: none; margin-top: 1px; }
+
+  /* marks on the frames */
+  .mk { position: absolute; z-index: 9; width: 20px; height: 20px; border-radius: 10px; background: #f97316; color: #fff;
+    font: 700 11.5px/20px Inter, sans-serif; text-align: center; box-shadow: 0 0 0 2px rgba(255,255,255,0.9); }
+</style>
+</head>
+<body>
+<div class="board">
+  <h1>Android composer：对齐 iOS 的卡片式输入框</h1>
+  <p class="lede">
+    owner 2026-11-19 的截图（①）对比 iOS（②）：Android 的输入框是三块松散的 Material 控件——上方一行原始 token 数、中间一个描边文本框、下方「+ / 居中的模型名 / 大号 Stop 按钮」。
+    提案（③ 起）把五处改成 iOS 的样子：<span class="num">1</span>一张圆角卡片，<span class="num">2</span>上下文改成工具栏里的小环形表，<span class="num">3</span>权限模式回到工具栏，
+    <span class="num">4</span>模型名靠右、放不下时先截断，<span class="num">5</span>Send / Stop 改成圆形图标按钮。行为（发送、Stop、长按排队、翻译标签、建议、优化）不变，只改布局。
+    图中 UI 文案为英文（即将上线的文案），注释为中文。
+  </p>
+
+  <h2>A · 同一状态的三份 <small>运行中的会话 · 输入框为空 · 翻译开启 · 上下文 144,499 / 1,000,000（14%）</small></h2>
+  <div class="row">
+    <div class="tile">
+      <div class="cap">① Android 今天<span>owner 的截图（1080 px，即 360 dp 宽）</span></div>
+      <div class="shot"><img src="00-android-today.png"></div>
+    </div>
+
+    <div class="tile">
+      <div class="cap">② iOS 参考<span>按 ComposerView.swift 画；手机上环形表不带数字（showsGaugeNumbers）</span></div>
+      <div class="a" style="--card:#1c1c1e;--band:#000;--page:#000;--primary:#3d7bff;--on-primary:#fff;--on-var:rgba(235,235,245,0.6);--git:#111">
+        <div class="a-git"><span class="br">⎇ orbit/androi…ssion-2cc1d6</span><span class="add">+614</span><span class="del">−109</span><span>· 19 files</span></div>
+        <div class="a-band" style="padding:6px 16px 4px">
+          <div class="a-card" style="border-radius:24px">
+            <div class="a-text" style="font-family:Inter,sans-serif;font-size:17px"><span class="ph">Message…</span><span class="a-tag" style="font-family:Inter">Chinese → English</span></div>
+            <div class="a-bar" style="font-family:Inter,sans-serif;font-size:15px;height:46px;padding:0 8px 4px">
+              <div class="a-icon" style="width:32px;height:32px"><svg viewBox="0 0 24 24"><path d="M19 13h-6v6h-2v-6H5v-2h6V5h2v6h6v2z"/></svg></div>
+              <div class="a-mode" style="height:32px;line-height:32px">Accept Edits</div>
+              <div class="a-spacer"></div>
+              <div class="a-model" style="height:32px;line-height:32px"><b>Opus 5.5</b><em>High</em></div>
+              <div class="a-gauge" style="height:32px;min-width:32px"><svg width="16" height="16" viewBox="0 0 16 16"><circle cx="8" cy="8" r="6.5" fill="none" stroke="rgba(235,235,245,0.18)" stroke-width="2"/><circle cx="8" cy="8" r="6.5" fill="none" stroke="rgba(235,235,245,0.6)" stroke-width="2" stroke-dasharray="5.7 40.8" transform="rotate(-90 8 8)" stroke-linecap="round"/></svg></div>
+              <div class="a-send" style="width:32px;height:32px"><b style="width:28px;height:28px;border-radius:14px;background:#3d7bff"><span class="sq" style="width:10px;height:10px;background:#fff"></span></b></div>
+            </div>
+          </div>
+        </div>
+        <div class="a-nav" style="background:#000;height:26px"></div>
+      </div>
+    </div>
+
+    <div class="tile">
+      <div class="cap">③ Android 提案（暗色）<span>同一状态；Material 3 的色和字，iOS 的布局</span></div>
+      <div class="a" id="p-main">
+        <div class="a-git"><span class="br">⎇ orbit/androi…ssion-2cc1d6</span><span class="add">+614</span><span class="del">−109</span><span>· 19 files</span></div>
+        <div class="a-band">
+          <div data-mk="1" class="a-card">
+            <div class="a-text"><span class="ph">Message…</span><span class="a-tag">Chinese → English</span></div>
+            <div class="a-bar">
+              <div class="a-icon"><svg viewBox="0 0 24 24"><path d="M19 13h-6v6h-2v-6H5v-2h6V5h2v6h6v2z"/></svg></div>
+              <div data-mk="3" class="a-mode">Accept Edits</div>
+              <div class="a-spacer"></div>
+              <div data-mk="4" class="a-model"><b>Opus 5.5</b><em>High</em></div>
+              <div data-mk="2" class="a-gauge"><svg width="18" height="18" viewBox="0 0 18 18"><circle cx="9" cy="9" r="7" fill="none" stroke="var(--track)" stroke-width="2.2"/><circle cx="9" cy="9" r="7" fill="none" stroke="var(--on-var)" stroke-width="2.2" stroke-dasharray="6.2 44" transform="rotate(-90 9 9)" stroke-linecap="round"/></svg></div>
+              <div data-mk="5" class="a-send"><b><span class="sq"></span></b></div>
+            </div>
+          </div>
+        </div>
+        <div class="a-nav"></div>
+      </div>
+    </div>
+
+    <div class="notes" style="min-width:0">
+      <h3>五处改动（③ 上的橙色编号）</h3>
+      <ol>
+        <li><b>卡片</b>：文本框 + 工具栏收进一张 24 dp 圆角卡片（1 dp 描边，聚焦时加深），取代 <code>OutlinedTextField</code> 和下方的散行。文字在上、工具栏在下，文字变长时向上长，<b>+</b> 和 Send 不动。</li>
+        <li><b>上下文</b>：去掉「Context: 144499 / 1000000 tokens · Usage」整行，换成工具栏里 18 dp 的环形表（14%）。点它从底部弹出「Context and plan usage」sheet（D②），内容同今天的对话框。还没有读数时是空环，Cursor CLI 是虚线空环。</li>
+        <li><b>权限模式</b>：Accept Edits 放在 + 右边，点开是下拉菜单（见 B③）。它的优先级比模型名高，永远不截断。</li>
+        <li><b>模型名</b>：去掉 <code>weight(1f)</code> 的居中拉伸，改成靠右；名字加粗，后面跟灰色的推理强度（“Opus 5.5 High”，同 iOS <code>chipRow</code>；Fast 模式是 “High · Fast”）。放不下时先藏强度，再截断名字。点开仍是今天的「Model and account」对话框。</li>
+        <li><b>Send / Stop</b>：40 dp 实心圆（↑ / ■），触摸区 48 dp。没字可发时灰；上传中在圆里转圈。长按 Send 的「Queue for next turn」照旧。</li>
+      </ol>
+      <h3>不变的</h3>
+      <ul>
+        <li>输入框为空才显示的翻译标签（位置从「输入框尾部图标」改到卡片右上，和 iOS 一致）、建议的双击使用、✦ Optimize、错误/通知/附件行、Ctrl+Enter 发送、键盘弹出时折叠的规则（折的对象从上下文行变成无——环形表在工具栏里不折）。</li>
+      </ul>
+    </div>
+  </div>
+
+  <h2>B · 提案的其它状态 <small>空闲 · 打字 · 运行中打字后长按 Send · 亮色</small></h2>
+  <div class="row">
+    <div class="tile">
+      <div class="cap">① 新会话，还没发过消息<span>Send 灰；环形表空（还没有读数，不显示 0%）</span></div>
+      <div class="a">
+        <div class="a-tail"><span class="muted">New session · orbit</span></div>
+        <div class="a-band">
+          <div class="a-card">
+            <div class="a-text"><span class="ph">Message…</span></div>
+            <div class="a-bar">
+              <div class="a-icon"><svg viewBox="0 0 24 24"><path d="M19 13h-6v6h-2v-6H5v-2h6V5h2v6h6v2z"/></svg></div>
+              <div class="a-mode">Default</div>
+              <div class="a-spacer"></div>
+              <div class="a-model"><b>Sonnet 5.5</b><em>Default</em></div>
+              <div class="a-gauge"><svg width="18" height="18" viewBox="0 0 18 18"><circle cx="9" cy="9" r="7" fill="none" stroke="var(--track)" stroke-width="2.2"/></svg></div>
+              <div class="a-send off"><b><svg viewBox="0 0 24 24"><path d="M4 12l1.41 1.41L11 7.83V20h2V7.83l5.58 5.59L20 12l-8-8-8 8z"/></svg></b></div>
+            </div>
+          </div>
+        </div>
+        <div class="a-nav"></div>
+      </div>
+    </div>
+
+    <div class="tile">
+      <div class="cap">② 打字中（键盘在下方，未画）<span>卡片描边加深；翻译标签消失，文字占满宽；长模型名走完三档：✦ 圆钮 → 藏强度 → 截断名字（D③）</span></div>
+      <div class="a">
+        <div class="a-band">
+          <div class="a-card focus">
+            <div class="a-text"><span class="tx">把 composer 的上下文行改成环形表，点开时显示 token 数和套餐用量，并保留 Compact 按钮<span class="caret"></span></span></div>
+            <div class="a-bar">
+              <div class="a-icon"><svg viewBox="0 0 24 24"><path d="M19 13h-6v6h-2v-6H5v-2h6V5h2v6h6v2z"/></svg></div>
+              <div class="a-mode">Accept Edits</div>
+              <div class="a-spacer"></div>
+              <div class="a-model"><b>Opus 5.5 (1M context)</b><em>High</em></div>
+              <div class="a-gauge"><svg width="18" height="18" viewBox="0 0 18 18"><circle cx="9" cy="9" r="7" fill="none" stroke="var(--track)" stroke-width="2.2"/><circle cx="9" cy="9" r="7" fill="none" stroke="var(--on-var)" stroke-width="2.2" stroke-dasharray="6.2 44" transform="rotate(-90 9 9)" stroke-linecap="round"/></svg></div>
+              <div class="a-opt">✦ Optimize</div>
+              <div class="a-send"><b><svg viewBox="0 0 24 24"><path d="M4 12l1.41 1.41L11 7.83V20h2V7.83l5.58 5.59L20 12l-8-8-8 8z"/></svg></b></div>
+            </div>
+          </div>
+        </div>
+        <div class="a-nav"></div>
+      </div>
+    </div>
+
+    <div class="tile">
+      <div class="cap">③ 运行中有字，长按 Send<span>今天的 Queue for next turn 菜单，挂在圆形按钮上</span></div>
+      <div class="a" style="height:300px">
+        <div class="a-tail"><span class="muted">Running · Editing ComposerUsage.kt</span></div>
+        <div class="a-band">
+          <div class="a-card focus">
+            <div class="a-text"><span class="tx">And add a test for the empty case<span class="caret"></span></span></div>
+            <div class="a-bar">
+              <div class="a-icon"><svg viewBox="0 0 24 24"><path d="M19 13h-6v6h-2v-6H5v-2h6V5h2v6h6v2z"/></svg></div>
+              <div class="a-mode">Accept Edits</div>
+              <div class="a-spacer"></div>
+              <div class="a-model"><b>Opus 5.5</b><em>High</em></div>
+              <div class="a-gauge"><svg width="18" height="18" viewBox="0 0 18 18"><circle cx="9" cy="9" r="7" fill="none" stroke="var(--track)" stroke-width="2.2"/><circle cx="9" cy="9" r="7" fill="none" stroke="var(--on-var)" stroke-width="2.2" stroke-dasharray="6.2 44" transform="rotate(-90 9 9)" stroke-linecap="round"/></svg></div>
+              <div class="a-send"><b><svg viewBox="0 0 24 24"><path d="M4 12l1.41 1.41L11 7.83V20h2V7.83l5.58 5.59L20 12l-8-8-8 8z"/></svg></b></div>
+            </div>
+          </div>
+        </div>
+        <div class="a-nav"></div>
+        <div class="a-menu" style="right:12px;bottom:128px"><div><span class="ck">⇥</span>Queue for next turn</div></div>
+      </div>
+    </div>
+
+    <div class="tile">
+      <div class="cap">④ 亮色，A③ 同一状态<span>卡片是白底，区域是 surface tone 2</span></div>
+      <div class="a light">
+        <div class="a-git"><span class="br">⎇ orbit/androi…ssion-2cc1d6</span><span class="add" style="color:#1a7f37">+614</span><span class="del" style="color:#c0392b">−109</span><span>· 19 files</span></div>
+        <div class="a-band">
+          <div class="a-card">
+            <div class="a-text"><span class="ph">Message…</span><span class="a-tag">Chinese → English</span></div>
+            <div class="a-bar">
+              <div class="a-icon"><svg viewBox="0 0 24 24"><path d="M19 13h-6v6h-2v-6H5v-2h6V5h2v6h6v2z"/></svg></div>
+              <div class="a-mode">Accept Edits</div>
+              <div class="a-spacer"></div>
+              <div class="a-model"><b>Opus 5.5</b><em>High</em></div>
+              <div class="a-gauge"><svg width="18" height="18" viewBox="0 0 18 18"><circle cx="9" cy="9" r="7" fill="none" stroke="var(--track)" stroke-width="2.2"/><circle cx="9" cy="9" r="7" fill="none" stroke="var(--on-var)" stroke-width="2.2" stroke-dasharray="6.2 44" transform="rotate(-90 9 9)" stroke-linecap="round"/></svg></div>
+              <div class="a-send"><b><span class="sq"></span></b></div>
+            </div>
+          </div>
+        </div>
+        <div class="a-nav"></div>
+      </div>
+    </div>
+  </div>
+
+  <h2>C · 点开 <small>权限模式菜单 · 环形表（带套餐用量时）· 今天亮色对照</small></h2>
+  <div class="row">
+    <div class="tile">
+      <div class="cap">① 点 Accept Edits<span>下拉菜单，当前项打 ✓；引擎不支持的项置灰并写原因（同 iOS）</span></div>
+      <div class="a" style="height:372px">
+        <div class="a-band">
+          <div class="a-card">
+            <div class="a-text"><span class="ph">Message…</span></div>
+            <div class="a-bar">
+              <div class="a-icon"><svg viewBox="0 0 24 24"><path d="M19 13h-6v6h-2v-6H5v-2h6V5h2v6h6v2z"/></svg></div>
+              <div class="a-mode" style="color:var(--on)">Accept Edits</div>
+              <div class="a-spacer"></div>
+              <div class="a-model"><b>Opus 5.5</b><em>High</em></div>
+              <div class="a-gauge"><svg width="18" height="18" viewBox="0 0 18 18"><circle cx="9" cy="9" r="7" fill="none" stroke="var(--track)" stroke-width="2.2"/><circle cx="9" cy="9" r="7" fill="none" stroke="var(--on-var)" stroke-width="2.2" stroke-dasharray="6.2 44" transform="rotate(-90 9 9)" stroke-linecap="round"/></svg></div>
+              <div class="a-send off"><b><svg viewBox="0 0 24 24"><path d="M4 12l1.41 1.41L11 7.83V20h2V7.83l5.58 5.59L20 12l-8-8-8 8z"/></svg></b></div>
+            </div>
+          </div>
+        </div>
+        <div class="a-nav"></div>
+        <div class="a-menu" style="left:58px;bottom:72px">
+          <div><span class="ck"></span>Default</div>
+          <div><span class="ck">✓</span>Accept Edits</div>
+          <div><span class="ck"></span>Plan</div>
+          <div><span class="ck"></span>Auto</div>
+          <div><span class="ck"></span>Don't Ask</div>
+          <div><span class="ck"></span>Bypass</div>
+        </div>
+      </div>
+    </div>
+
+    <div class="tile">
+      <div class="cap">② 账号有套餐用量时<span>同 iOS：套餐条和环并排进一个细边胶囊，一次点开两样；胶囊占了位置，模型名后的 “High” 先藏起来。账号池的账号名不上工具栏（360 dp 放不下），在点开的对话框里</span></div>
+      <div class="a">
+        <div class="a-band">
+          <div class="a-card">
+            <div class="a-text"><span class="ph">Message…</span></div>
+            <div class="a-bar">
+              <div class="a-icon"><svg viewBox="0 0 24 24"><path d="M19 13h-6v6h-2v-6H5v-2h6V5h2v6h6v2z"/></svg></div>
+              <div class="a-mode">Accept Edits</div>
+              <div class="a-spacer"></div>
+              <div class="a-model"><b>Opus 5.5</b><em>High</em></div>
+                            <div class="a-gauge"><div class="cap"><span class="a-pbar"><i style="width:62%"></i></span><svg width="16" height="16" viewBox="0 0 18 18"><circle cx="9" cy="9" r="7" fill="none" stroke="var(--track)" stroke-width="2.4"/><circle cx="9" cy="9" r="7" fill="none" stroke="var(--on-var)" stroke-width="2.4" stroke-dasharray="6.2 44" transform="rotate(-90 9 9)" stroke-linecap="round"/></svg></div></div>
+              <div class="a-send off"><b><svg viewBox="0 0 24 24"><path d="M4 12l1.41 1.41L11 7.83V20h2V7.83l5.58 5.59L20 12l-8-8-8 8z"/></svg></b></div>
+            </div>
+          </div>
+        </div>
+        <div class="a-nav"></div>
+      </div>
+      <div class="cap" style="margin-top:22px">③ 今天的亮色（按代码画，对照用）</div>
+      <div class="a light">
+        <div class="a-band" style="padding:4px 12px">
+          <div class="t-line">Context: 144499 / 1000000 tokens · Usage</div>
+          <div class="t-field"><span class="ph">Message…</span><span class="a-tag">Chinese → English</span></div>
+          <div class="t-row"><span class="plus">+</span><span class="model">Opus 5.5</span><span class="stop">Stop</span></div>
+        </div>
+        <div class="a-nav"></div>
+      </div>
+    </div>
+
+    <div class="notes">
+      <h3>要改的文件</h3>
+      <table>
+        <tr><th>文件</th><th>改什么</th></tr>
+        <tr><td><code>composer/SessionComposer.kt</code> 203-357</td><td>卡片容器；<code>OutlinedTextField</code> 换无边框的 <code>BasicTextField</code>（占位、翻译标签、建议照旧）；工具栏 Row：+ 图标、权限模式菜单、模型名、环形表、Optimize、圆形 Send/Stop。<code>ModelChip</code> 去掉 <code>weight(1f)</code>，名字后加 <code>effortLabel</code>（今天只在朗读里），放不下时先去掉它。附件行（203-241 里那段文字行）改成卡片里的缩略图条。</td></tr>
+        <tr><td><code>composer/ComposerUsage.kt</code></td><td>上下文行改成环形表（+ 有套餐时的胶囊）；套餐条 + 环的胶囊按自身宽度排，不用 weight（iOS 2f437e668f 修过被挤压后压到邻居的问题）；<code>AlertDialog</code> 换 <code>ModalBottomSheet</code>，行不变；账号池账号名从这一行挪进 sheet 的 Account 行（已有）。</td></tr>
+        <tr><td><code>composer/PromptOptimizerViews.kt</code></td><td><code>PromptOptimizeButton</code> 加 compact 形态（40 dp ✦ 圆钮 / 转圈）；先给模型名（带强度）排位，Optimize 再按剩下的宽度选带字还是 ✦（iOS 是 layoutPriority 0.5 &lt; 模型的 1 + ViewThatFits）。两种形态朗读都是 “Optimize” / 忙时 “Optimizing…”，忙时按一下取消。</td></tr>
+        <tr><td><code>SessionComposer.kt</code> <code>ModelChoices</code></td><td>Permissions 段留着（对话框里也能改），工具栏菜单和它写同一个 <code>permissionMode</code>。</td></tr>
+        <tr><td><code>test/…/composer/*</code>、<code>androidTest/…/ComposerDeviceTest.kt</code></td><td>测试找的 <code>composer-send</code>、<code>composer-model</code>、<code>composer-translation-tag</code> 标签不变；按「Stop」「Send」文字找按钮的断言改成按 contentDescription。新加 <code>composer-mode</code>、<code>composer-context</code>。</td></tr>
+      </table>
+      <h3>规则</h3>
+      <ul>
+        <li>一行放不下时的让位（iOS 方案 C，逐档、放得下就停）：① “✦ Optimize” 收成 ✦ 圆钮 → ② 藏推理强度（模型菜单里仍可见可改）→ ③ 截断模型名。+、模式、表、Send 不缩。板上每个工具栏都按这条规则实际排过（<code>layoutBoard</code>）。</li>
+        <li>360 dp + Accept Edits + Optimize（D③ 下）三档走完 “Opus 5.5” 仍被截成 “Opus 5…”：Android 比 iPhone 17 Pro（402 pt）窄 40 多 dp。没有 Optimize 时 360 dp 放得下 “Opus 5.5 High”（A③）。</li>
+        <li>触摸区 48 dp 高（Material 下限）；+ 和 Send 的格子宽 40 / 44 dp，触摸区向两侧文字按钮的留白里延伸（minimumInteractiveComponentSize），可见的圆 40 dp。iOS 是 32 pt，这里不照搬尺寸，只照搬布局。</li>
+        <li>朗读：Send/Stop 的 contentDescription 是「Send」「Stop」；环形表读「Context 14% used」，有套餐时再读套餐用量。</li>
+      </ul>
+      <div class="notes todo" style="margin-top:14px;padding:12px 16px;box-shadow:0 0 0 1px #fed7aa">
+        <h3 style="margin-top:0">已定（owner 2026-11-19）</h3>
+        <ol>
+          <li>附件放进卡片，同 iOS（D①）。</li>
+          <li>环形表旁边不带「14%」，同 iOS 手机。</li>
+          <li>点环形表弹底部 sheet（D②）。</li>
+          <li>Optimize 照 iOS 方案 C 逐档收起：放得下带字，放不下收成 ✦ 圆钮，再藏推理强度，最后才截断模型名（D③）。与 iOS 那边的会话对齐。</li>
+          <li>模型名后带推理强度，同 iOS（“Opus 5.5 High”）。</li>
+        </ol>
+      </div>
+    </div>
+  </div>
+
+  <h2>D · 你 11-19 定下的各项 <small>附件进卡片 · 点环形表弹底部 sheet · 不带 14% · Optimize 照 iOS 方案 C 逐档收起</small></h2>
+  <div class="row">
+    <div class="tile">
+      <div class="cap">① 附件在卡片里，文字上方<span>同 iOS：58 dp 圆角缩略图（文件是名字 + 大小的块），右上角 × 移除；上传中底部进度条；失败红边，点它重传。点缩略图打开今天的预览</span></div>
+      <div class="a">
+        <div class="a-band">
+          <div class="a-card focus">
+            <div class="a-atts">
+              <div class="a-att"><span class="x">×</span></div>
+              <div class="a-att img2"><span class="x">×</span><span class="prog"><i></i></span></div>
+              <div class="a-att fail"><span class="bang">Failed<br>Retry</span><span class="x">×</span></div>
+              <div class="a-file">notes.pdf<small>212 KB</small><span class="x">×</span></div>
+            </div>
+            <div class="a-text"><span class="tx">Why does the second screenshot overlap?<span class="caret"></span></span></div>
+            <div class="a-bar"><div class="a-icon"><svg viewBox="0 0 24 24"><path d="M19 13h-6v6h-2v-6H5v-2h6V5h2v6h6v2z"/></svg></div><div class="a-mode">Accept Edits</div><div class="a-spacer"></div><div class="a-model"><b>Opus 5.5</b><em>High</em></div><div class="a-gauge"><svg width="18" height="18" viewBox="0 0 18 18"><circle cx="9" cy="9" r="7" fill="none" stroke="var(--track)" stroke-width="2.2"/><circle cx="9" cy="9" r="7" fill="none" stroke="var(--on-var)" stroke-width="2.2" stroke-dasharray="6.2 44" transform="rotate(-90 9 9)" stroke-linecap="round"/></svg></div><div class="a-send"><b><svg viewBox="0 0 24 24"><path d="M4 12l1.41 1.41L11 7.83V20h2V7.83l5.58 5.59L20 12l-8-8-8 8z"/></svg></b></div></div>
+          </div>
+        </div>
+        <div class="a-nav"></div>
+      </div>
+    </div>
+
+    <div class="tile">
+      <div class="cap">② 点环形表：底部 sheet<span>ModalBottomSheet，内容就是今天对话框里的那些行（上下文、模型、账号、套餐用量、Compact），只换容器；关掉回到输入框</span></div>
+      <div class="a" style="height:520px">
+        <div class="a-tail" style="flex:1"></div>
+        <div class="a-band">
+          <div class="a-card">
+            <div class="a-text"><span class="ph">Message…</span></div>
+            <div class="a-bar"><div class="a-icon"><svg viewBox="0 0 24 24"><path d="M19 13h-6v6h-2v-6H5v-2h6V5h2v6h6v2z"/></svg></div><div class="a-mode">Accept Edits</div><div class="a-spacer"></div><div class="a-model"><b>Opus 5.5</b><em>High</em></div><div class="a-gauge"><svg width="18" height="18" viewBox="0 0 18 18"><circle cx="9" cy="9" r="7" fill="none" stroke="var(--track)" stroke-width="2.2"/><circle cx="9" cy="9" r="7" fill="none" stroke="var(--on-var)" stroke-width="2.2" stroke-dasharray="6.2 44" transform="rotate(-90 9 9)" stroke-linecap="round"/></svg></div><div class="a-send"><b><svg viewBox="0 0 24 24"><path d="M4 12l1.41 1.41L11 7.83V20h2V7.83l5.58 5.59L20 12l-8-8-8 8z"/></svg></b></div></div>
+          </div>
+        </div>
+        <div class="a-nav"></div>
+        <div class="a-dim"></div>
+        <div class="a-sheet">
+          <div class="grab"></div>
+          <h4>Context and plan usage</h4>
+          <div class="ln">Context: 144499 / 1000000 tokens</div>
+          <div class="lp"><i style="width:14%"></i></div>
+          <div class="kv"><span>claude · claude-opus-5-5</span></div>
+          <div class="kv"><span>Account</span><span>work-2</span></div>
+          <div class="ln">5h: 38% used</div><div class="lp"><i style="width:38%"></i></div><div class="sm">Resets 21:40</div>
+          <div class="ln" style="margin-top:10px">Week: 62% used</div><div class="lp"><i style="width:62%"></i></div>
+          <hr>
+          <div class="act"><svg viewBox="0 0 24 24"><path d="M4 9h16v2H4zm0 4h16v2H4zM12 2l-4 4h8zm0 20l4-4H8z"/></svg><div><div class="ln" style="margin:0">Compact</div><div class="sm">Summarize earlier turns and keep going here.</div></div></div>
+        </div>
+      </div>
+    </div>
+
+    <div class="tile">
+      <div class="cap">③ Optimize 让位（照 iOS 方案 C，commit 133e019b4b）<span>上：放得下时（这里是 412 dp、Plan 模式）带字 “✦ Optimize”，模型名带 “High”。下：360 dp 放不下，先收成 40 dp 的 ✦ 圆钮（朗读仍是 “Optimize”）；再藏推理强度；还不够才截断模型名——这一帧三档都走完，名字仍是 “Opus 5…”</span></div>
+      <div class="a" style="width:412px">
+        <div class="a-band">
+          <div class="a-card focus">
+            <div class="a-text"><span class="tx">Make the gauge a ring<span class="caret"></span></span></div>
+            <div class="a-bar"><div class="a-icon"><svg viewBox="0 0 24 24"><path d="M19 13h-6v6h-2v-6H5v-2h6V5h2v6h6v2z"/></svg></div><div class="a-mode">Plan</div><div class="a-spacer"></div><div class="a-model"><b>Opus 5.5</b><em>High</em></div><div class="a-gauge"><svg width="18" height="18" viewBox="0 0 18 18"><circle cx="9" cy="9" r="7" fill="none" stroke="var(--track)" stroke-width="2.2"/><circle cx="9" cy="9" r="7" fill="none" stroke="var(--on-var)" stroke-width="2.2" stroke-dasharray="6.2 44" transform="rotate(-90 9 9)" stroke-linecap="round"/></svg></div><div class="a-opt">✦ Optimize</div><div class="a-send"><b><svg viewBox="0 0 24 24"><path d="M4 12l1.41 1.41L11 7.83V20h2V7.83l5.58 5.59L20 12l-8-8-8 8z"/></svg></b></div></div>
+          </div>
+        </div>
+      </div>
+      <div class="a" style="margin-top:12px">
+        <div class="a-band">
+          <div class="a-card focus">
+            <div class="a-text"><span class="tx">Make the gauge a ring<span class="caret"></span></span></div>
+            <div class="a-bar"><div class="a-icon"><svg viewBox="0 0 24 24"><path d="M19 13h-6v6h-2v-6H5v-2h6V5h2v6h6v2z"/></svg></div><div class="a-mode">Accept Edits</div><div class="a-spacer"></div><div class="a-model"><b>Opus 5.5</b><em>High</em></div><div class="a-gauge"><svg width="18" height="18" viewBox="0 0 18 18"><circle cx="9" cy="9" r="7" fill="none" stroke="var(--track)" stroke-width="2.2"/><circle cx="9" cy="9" r="7" fill="none" stroke="var(--on-var)" stroke-width="2.2" stroke-dasharray="6.2 44" transform="rotate(-90 9 9)" stroke-linecap="round"/></svg></div><div class="a-opt">✦ Optimize</div><div class="a-send"><b><svg viewBox="0 0 24 24"><path d="M4 12l1.41 1.41L11 7.83V20h2V7.83l5.58 5.59L20 12l-8-8-8 8z"/></svg></b></div></div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+<script>
+// Laid out once the fonts are in: by render.mjs, or on open in a browser.
+window.layoutBoard = () => {
+// What gives way when a toolbar is full (iOS option C, board composer-usage-tap 04): first "✦ Optimize" becomes the ✦ round
+// button, then the effort leaves the chip, and only then does the model's name truncate.
+for (const bar of document.querySelectorAll('.a-bar')) {
+  const chip = bar.querySelector('.a-model'), opt = bar.querySelector('.a-opt');
+  if (!chip || bar.dataset.nofit) continue;
+  const cut = () => { const b = chip.querySelector('b'); return b.scrollWidth > b.clientWidth + 0.5 || chip.scrollWidth > chip.clientWidth + 0.5; };
+  if (cut() && opt) { opt.textContent = '✦'; opt.classList.add('compact'); }
+  if (cut()) chip.classList.add('no-effort');
+  bar.dataset.tier = (opt?.classList.contains('compact') ? 1 : 0) + (chip.classList.contains('no-effort') ? 1 : 0) + (cut() ? '+cut' : '');
+}
+
+
+// A mark at each [data-mk]'s top-left corner, drawn on its phone so nothing inside clips it.
+for (const el of document.querySelectorAll('[data-mk]')) {
+  const phone = el.closest('.a'), r = el.getBoundingClientRect(), pr = phone.getBoundingClientRect();
+  const m = document.createElement('span'); m.className = 'mk'; m.textContent = el.dataset.mk;
+  const card = el.classList.contains('a-card');
+  m.style.left = (r.left - pr.left + (card ? -6 : r.width / 2 - 10)) + 'px'; if (!card) m.style.top = (r.top - pr.top - 4) + 'px';
+  m.style.top = (r.top - pr.top + (card ? -6 : -8)) + "px";
+  phone.appendChild(m);
+}
+
+};
+if (!window.__render) document.fonts.ready.then(window.layoutBoard);
+</script>
+</body>
+</html>
