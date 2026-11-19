@@ -359,7 +359,7 @@ final class MachinesAndModelsPageWiringTests: XCTestCase {
         let head = try slice(try detail(), from: "private func head(now: Date) -> some View {",
                              to: "private func attentionSection(")
         for piece in ["RunnerMachineTile(presence: RunnerPageFormat.presence(runner, now: now))",
-                      "Text(statusLine(now: now))", "let host = RunnerPageFormat.hostLine(runner, managed: managedRow != nil)",
+                      "Text(statusLine(now: now))", "RunnerPageFormat.hostLine(runner, managed: managedRow != nil)",
                       ".listRowBackground(Color.clear)"] {
             XCTAssertTrue(head.contains(piece), "the head lost \(piece)")
         }
