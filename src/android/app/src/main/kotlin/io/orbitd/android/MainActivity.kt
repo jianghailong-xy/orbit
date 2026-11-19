@@ -235,6 +235,11 @@ private fun OrbitShell(auth: AuthViewModel, app: OrbitApplication, incoming: Pai
             if (navigation.current != next) LastPageMarks.opened(next)
             navigation = navigation.push(next)
         }
+        fun replaceTop(next: OrbitRoute) {
+            keyboard?.hide(); focus.clearFocus()
+            if (navigation.current != next) LastPageMarks.opened(next)
+            navigation = navigation.replaceTop(next)
+        }
         fun openScheduledRun(id: String) = open(OrbitRoute(Destination.SESSION, id, folderId = ScheduledRunsFolder.ID))
         if (route.destination == Destination.SESSION && route.folderId == ScheduledRunsFolder.ID &&
             navigation.frames.getOrNull(navigation.frames.lastIndex - 1)?.let {
@@ -492,7 +497,7 @@ private fun OrbitShell(auth: AuthViewModel, app: OrbitApplication, incoming: Pai
                                     swap = { next -> keyboard?.hide(); focus.clearFocus(); navigation = navigation.back().push(next) }) {
                                     navigation = navigation.dropSession(route.id!!)
                                 }
-                                Destination.DRAFT -> NewSessionComposer(app, signedIn.handle, route, data, ::open) { key, root -> land(key, root) }
+                                Destination.DRAFT -> NewSessionComposer(app, signedIn.handle, route, data, ::open, ::land, ::replaceTop)
                                 Destination.TASKS, Destination.TASK, Destination.LIST -> TasksScreen(app, signedIn.handle, route, revision, ::open) { navigation = navigation.back() }
                                 Destination.PROJECTS, Destination.PROJECT -> ProjectsScreen(app, signedIn.handle, route, ::open) { navigation = navigation.back() }
                                 Destination.WIKI, Destination.WIKI_ENTRY, Destination.WIKI_BROWSE, Destination.WIKI_INDEX,
