@@ -107,7 +107,8 @@ const (
 	integrationFailureScanBytes = 4 * integrationFailureLineRunes
 )
 
-// integrationLocks serialises jobs on this machine by repository root and target ref. The database
+// integrationLocks serialises jobs on this machine by repository root and integrationLockRef: the
+// target ref for a job that writes it, a key of its own for one that does not. The database
 // serialises them across machines (J1's partial unique index over RUNNING rows); this is the local
 // half, and it is what keeps two goroutines of THIS process from staging two worktrees onto one
 // checkout's refs at once.
