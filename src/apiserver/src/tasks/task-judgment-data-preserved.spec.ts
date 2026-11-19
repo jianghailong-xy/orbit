@@ -3151,6 +3151,10 @@ test('the ledger stays append-only, and every later migration is accounted for',
       // DECIDED and REVISED; catalog-only, no row is written, and no preserved relation, trigger, function or DONE
       // fence changes.
       '1110_evidence_undecided_item',
+      // 1120 adds nullable managed_runner.update_requested_at, update_requested_by and update_completed_at (no
+      // default); `managed_runner` is none of the preserved relations, no row is written, and no trigger, function or
+      // DONE fence changes.
+      '1120_managed_runner_update_now',
       // 1130 adds three partial indexes, one on `task` and two on `session`; no row is written, and no preserved
       // relation, trigger, function or DONE fence changes.
       '1130_rare_predicate_indexes',

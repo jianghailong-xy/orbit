@@ -16,9 +16,11 @@ import {
 import { Prisma, type ManagedRunner } from '@prisma/client';
 import {
   MANAGED_RUNNER_BUSY,
+  MANAGED_RUNNER_CURRENT,
   MANAGED_RUNNER_REVISION_CONFLICT,
   MANAGED_RUNNER_SLEEP_CAPABILITY,
   MANAGED_RUNNER_TRANSITION_REFUSED,
+  type ManagedRunnerBusyTurn,
   type ManagedRunnerStatus,
 } from '@orbit/shared';
 
@@ -41,7 +43,8 @@ import { MANAGED_RUNNER_RUNTIME, type ManagedRunnerRuntime } from './managed-run
 import type { ManagedRunnerSignIn } from './managed-runner-sign-in';
 import { SIGNED_IN_PAGE, SIGNED_IN_PASS_SECONDS, SignedInPassTimer, signedInWithoutMapping } from './managed-runner-signed-in';
 import { managedRunnerWork, recordManagedDemand } from './managed-runner-work';
-import { DEFAULT_HEARTBEAT_FRESH_MS, managedRunnerStatus, managedRunnerUnavailableReason } from './managed-runner-status';
+import { freshInstanceReport, workloadIdle, type StoredManagedWorkload } from './managed-runner-sleep';
+import { DEFAULT_HEARTBEAT_FRESH_MS, managedRunnerStatus, managedRunnerUnavailableReason, ownerUpdatePending } from './managed-runner-status';
 import { managedFirstSessionKeyOf, ownerManagedKeys } from './managed-runner-supply';
 import {
   MANAGED_RUNNER_VOLUME_SWITCH_REFUSED,
@@ -52,7 +55,7 @@ import {
   type ManagedVolumeSwitchOutcome,
 } from './managed-runner-volume-switch';
 import type { ManagedRunnerVolumeSwitchDto } from './dto';
-import { RUNNER_BEATS } from '../runners/runner-presence';
+import { RUNNER_BEATS, runnerLastBeatAt } from '../runners/runner-presence';
 
 export const MANAGED_RUNNER_NOT_FOUND = 'MANAGED_RUNNER_NOT_FOUND';
 
@@ -323,6 +326,77 @@ export class ManagedRunnerService implements OnModuleInit, OnModuleDestroy, Mana
     if (count === 0) throw this.revisionConflict(await this.owned(ownerId));
     runtime.worker.kick();
     return this.status(ownerId);
+  }
+
+  /**
+   * The owner's Update Now (docs/managed-runner-update-now-design.md, "What changes" 3): a READY runner whose status
+   * says it runs an older image (`update`) is moved onto the current one through the drain and wake an image roll
+   * takes. Refused 409 MANAGED_RUNNER_CURRENT without an `update`, and 409 MANAGED_RUNNER_TRANSITION_REFUSED unless
+   * it is READY and wanted running (a sleeping runner already wakes on the current image). Asked again while one is
+   * in progress, it is answered with the status as it stands.
+   *
+   * Only an idle runner is updated here — idle by its instance's fresh report and with nothing in the records
+   * (`managedRunnerWork`), as for an image roll. A busy one is refused 409 MANAGED_RUNNER_BUSY with the turns running
+   * on it (session, title, start) and how many background jobs a new container would end; this server interrupts
+   * nothing, whatever `interruptTurns` says. Accepted, the request records when and by whom on the mapping and wakes
+   * the manager, whose READY pass drains it marked `imageRollTo` without waiting out the idle interval
+   * (ManagedRunnerManager.ownerUpdate); the status reads `updating` until the next generation is READY.
+   */
+  async updateNow(ownerId: string): Promise<ManagedRunnerStatus> {
+    const runtime = this.operable();
+    await this.refuseDisabledOwner(ownerId);
+    const mapping = await this.owned(ownerId);
+    if (ownerUpdatePending(mapping)) return this.status(ownerId);
+    if (mapping.managementState !== 'READY' || mapping.desiredState !== 'RUNNING') {
+      throw new ConflictException({ code: MANAGED_RUNNER_TRANSITION_REFUSED, message: `A ${mapping.managementState} managed runner is not updated.` });
+    }
+    if (!(await this.status(ownerId)).update) {
+      throw new ConflictException({ code: MANAGED_RUNNER_CURRENT, message: 'This managed runner already runs the current version.' });
+    }
+    const now = new Date();
+    const runner = await this.prisma.runner.findUnique({
+      where: { id: mapping.runnerId },
+      select: { capabilities: true, ...RUNNER_BEATS, managedWorkload: true },
+    });
+    const report = freshInstanceReport(runner, runnerLastBeatAt(runner), mapping, now, runtime.profile.lifecycle.heartbeatFreshSeconds * 1000);
+    const work = await managedRunnerWork(this.prisma, mapping.runnerId);
+    if (!report || !workloadIdle(report) || report.draining || work.length > 0) {
+      throw new ConflictException({
+        code: MANAGED_RUNNER_BUSY,
+        message: 'This managed runner is busy, and updating it now would stop its work. It updates by itself once it is idle.',
+        work,
+        ...(await this.busyWith(mapping.runnerId, report)),
+      });
+    }
+    const { count } = await this.prisma.managedRunner.updateMany({
+      where: { id: mapping.id, ownerId, revision: mapping.revision, managementState: 'READY', desiredState: 'RUNNING' },
+      data: { updateRequestedAt: now, updateRequestedBy: ownerId, revision: { increment: 1 } },
+    });
+    if (count === 0) throw this.revisionConflict(await this.owned(ownerId));
+    this.log.log(`managed runner ${mapping.id}: its owner asked to update it now; idle, it is rolled onto the current image`);
+    runtime.worker.kick();
+    return this.status(ownerId);
+  }
+
+  /**
+   * What a busy Update Now would stop: the turns running on the runner, oldest first, and its background jobs — the
+   * instance's own count when its report is fresh, or else the shells the records show alive, whichever is more.
+   */
+  private async busyWith(runnerId: string, report: StoredManagedWorkload | null): Promise<{ turns: ManagedRunnerBusyTurn[]; backgroundJobs: number }> {
+    const running = await this.prisma.session.findMany({
+      where: { assignedRunnerId: runnerId, status: 'RUNNING' },
+      select: { id: true, title: true, startedAt: true },
+      orderBy: [{ startedAt: 'asc' }, { id: 'asc' }],
+    });
+    const open = await this.prisma.session.findMany({
+      where: { assignedRunnerId: runnerId, status: { in: ['PENDING', 'RUNNING', 'AWAITING_INPUT', 'INTERRUPTED'] } },
+      select: { runningBgShells: true },
+    });
+    const recorded = open.reduce((sum, s) => sum + s.runningBgShells.length, 0);
+    return {
+      turns: running.map((s) => ({ sessionId: s.id, title: s.title, startedAt: s.startedAt?.toISOString() ?? null })),
+      backgroundJobs: Math.max(recorded, report?.backgroundJobs ?? 0),
+    };
   }
 
   /**
