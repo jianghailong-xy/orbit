@@ -10,6 +10,10 @@ import {
 import { Prisma, type FeishuApp } from '@prisma/client';
 import {
   FEISHU_APP_TAKEN,
+  FEISHU_OPEN_WORKSPACE_REQUIRED,
+  FEISHU_OPEN_WORKSPACE_REQUIRED_MESSAGE,
+  type FeishuAccessChange,
+  type FeishuAccessMode,
   FEISHU_APP_TAKEN_MESSAGE,
   FEISHU_NOT_ALLOWED,
   FEISHU_NOT_ALLOWED_MESSAGE,
@@ -68,6 +72,15 @@ function settingsOf(row: FeishuApp, connectedReplicas: number): FeishuAppSetting
     lastEventAt: row.lastEventAt?.toISOString() ?? null,
     lastError: row.lastError,
     connectedReplicas,
+    access: {
+      mode: row.accessMode as FeishuAccessMode,
+      workspaceId: row.openWorkspaceId,
+      permissionMode: row.openPermissionMode,
+      maxRunningPerPerson: row.openMaxRunningPerPerson,
+      sessionsPerDayPerPerson: row.openSessionsPerDayPerPerson,
+      maxRunningTotal: row.openMaxRunningTotal,
+      sessionsPerDayTotal: row.openSessionsPerDayTotal,
+    },
     createdAt: row.createdAt.toISOString(),
     updatedAt: row.updatedAt.toISOString(),
   };
@@ -167,8 +180,9 @@ export class FeishuAppService {
    * keeps its row and takes the new secret: the owner's identity and the status stand, and the last failure is
    * cleared. Another app replaces the row: open_ids are per app (§4.1), so the owner's identity and the status go
    * with the old one, and so will whatever later hangs off it; the account's own choices — the switch, the detail,
-   * approvals in Feishu, the default workspace — carry over. An App ID another account holds fails the insert on
-   * its unique key, and the old row stays.
+   * approvals in Feishu, the default workspace, the settings of others' sessions — carry over. Who can use the bot does
+   * not (§14.1): another app is available to other people, so it starts as Only you. An App ID another account holds
+   * fails the insert on its unique key, and the old row stays.
    */
   private async save(ownerId: string, app: { platform: FeishuPlatform; appId: string; appSecretEnc: string }): Promise<void> {
     const lockKey = parseInt(createHash('sha256').update(ownerId).digest('hex').slice(0, 8), 16) & 0x7fffffff;
@@ -186,6 +200,12 @@ export class FeishuAppService {
             messageDetail: current.messageDetail,
             approvalsInFeishu: current.approvalsInFeishu,
             defaultWorkspaceId: current.defaultWorkspaceId,
+            openWorkspaceId: current.openWorkspaceId,
+            openPermissionMode: current.openPermissionMode,
+            openMaxRunningPerPerson: current.openMaxRunningPerPerson,
+            openSessionsPerDayPerPerson: current.openSessionsPerDayPerPerson,
+            openMaxRunningTotal: current.openMaxRunningTotal,
+            openSessionsPerDayTotal: current.openSessionsPerDayTotal,
           }
         : {};
       await tx.feishuApp.create({ data: { ownerId, ...app, ...kept } });
@@ -220,6 +240,39 @@ export class FeishuAppService {
     const integration = await this.integration(ownerId);
     if (!integration.app) throw new NotFoundException('No Feishu app is connected to this account.');
     return integration;
+  }
+
+  /**
+   * `PUT /integrations/feishu/access` (owner channel, §14.1): who can use the bot, and the workspace, permission mode and
+   * four limits of the sessions other people start. A field left out keeps what is saved. 404 while the account has no
+   * app, and for a workspace that is not the account's own (another account's is answered as one that does not exist);
+   * 400 FEISHU_OPEN_WORKSPACE_REQUIRED for opening the bot with no workspace given or saved. Nothing is written then.
+   */
+  async saveAccess(ownerId: string, change: FeishuAccessChange): Promise<FeishuIntegration> {
+    const live = async (id: string) =>
+      (await this.prisma.workspace.count({ where: { id, ownerId, deletedAt: null } })) > 0;
+    if (change.workspaceId && !(await live(change.workspaceId))) throw new NotFoundException('workspace not found');
+    const app = await this.prisma.feishuApp.findUnique({ where: { ownerId }, select: { id: true, openWorkspaceId: true } });
+    if (!app) throw new NotFoundException('No Feishu app is connected to this account.');
+    const workspaceId = change.workspaceId !== undefined ? change.workspaceId : app.openWorkspaceId;
+    if (change.mode === 'AVAILABILITY_SCOPE' && !(workspaceId && await live(workspaceId))) {
+      throw new BadRequestException({ code: FEISHU_OPEN_WORKSPACE_REQUIRED, message: FEISHU_OPEN_WORKSPACE_REQUIRED_MESSAGE });
+    }
+    const { count } = await this.prisma.feishuApp.updateMany({
+      where: { id: app.id, ownerId },
+      data: {
+        accessMode: change.mode,
+        ...(change.workspaceId !== undefined ? { openWorkspaceId: change.workspaceId } : {}),
+        ...(change.permissionMode !== undefined ? { openPermissionMode: change.permissionMode } : {}),
+        ...(change.maxRunningPerPerson !== undefined ? { openMaxRunningPerPerson: change.maxRunningPerPerson } : {}),
+        ...(change.sessionsPerDayPerPerson !== undefined ? { openSessionsPerDayPerPerson: change.sessionsPerDayPerPerson } : {}),
+        ...(change.maxRunningTotal !== undefined ? { openMaxRunningTotal: change.maxRunningTotal } : {}),
+        ...(change.sessionsPerDayTotal !== undefined ? { openSessionsPerDayTotal: change.sessionsPerDayTotal } : {}),
+      },
+    });
+    if (count === 0) throw new NotFoundException('No Feishu app is connected to this account.');
+    this.logger.log(`account ${ownerId} set who can use its Feishu bot: ${change.mode}`);
+    return this.integration(ownerId);
   }
 
   /** `DELETE /integrations/feishu`: remove the account's app (§4.1). Removing none answers the same. */

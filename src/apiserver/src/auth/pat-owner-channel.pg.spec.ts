@@ -507,6 +507,18 @@ test('the owner channel refuses a personal access token door by door and field b
       login: 200,
       observe: async () => (await chatRow(chatToRemove)) !== null,
     },
+    // Opening the Feishu bot to everyone the app is available to (§14.1): the token writes no column of the app.
+    {
+      route: 'PUT /integrations/feishu/access',
+      path: '/integrations/feishu/access',
+      body: { mode: 'AVAILABILITY_SCOPE', workspaceId, permissionMode: 'acceptEdits', maxRunningPerPerson: 2, sessionsPerDayTotal: 40 },
+      login: 200,
+      observe: async () => {
+        const app = await db.feishuApp.findUniqueOrThrow({ where: { appId: feishuAppId } });
+        return [app.accessMode, app.openWorkspaceId, app.openPermissionMode, app.openMaxRunningPerPerson, app.openSessionsPerDayPerPerson,
+          app.openMaxRunningTotal, app.openSessionsPerDayTotal, app.updatedAt.toISOString()];
+      },
+    },
     // A terminal asking to be approved (docs/terminal-session-design.md): two real requests on the account's runner.
     { route: 'GET /terminals/requests', path: '/terminals/requests', login: 200 },
     {

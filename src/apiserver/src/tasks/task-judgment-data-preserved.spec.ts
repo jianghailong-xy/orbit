@@ -3147,7 +3147,17 @@ test('the ledger stays append-only, and every later migration is accounted for',
       // 1110 restates three CHECKs on project_open_item (kind, resolution, owner-only) to admit EVIDENCE_UNDECIDED,
       // DECIDED and REVISED; catalog-only, no row is written, and no preserved relation, trigger, function or DONE
       // fence changes.
-      '1110_evidence_undecided_item'],
+      '1110_evidence_undecided_item',
+      // 1140 opens the Feishu bot to the app's availability (docs/feishu-bot-design.md §14): `feishu_app` gains
+      // access_mode, open_workspace_id (foreign key to `workspace`, ON DELETE SET NULL, with its index),
+      // open_permission_mode and four limits, all NOT NULL with constant defaults but the workspace; `feishu_chat_route`
+      // gains source (NOT NULL, constant default) and three nullable first-use columns, and its enabled CHECK is widened
+      // for OPEN_ACCESS rows; `feishu_thread` gains a nullable open_access_open_id with a partial index. Every CHECK and
+      // the foreign key are added NOT VALID and validated. None is a preserved relation, no `task`, `session`, `project`
+      // or `project_acceptance_*` object nor any of the six preserved triggers/functions is named, and no function,
+      // trigger or type is created, replaced or dropped, so it is not another writer of the DONE fence. No INSERT,
+      // UPDATE or DELETE: a constant default is a catalog change.
+      '1140_feishu_open_access'],
     'a later migration exists; re-read it before trusting the assertions above');
   // Stated rather than described: 0230's fence differs from 0228's by exactly one added lane.
   const later = readFileSync(
