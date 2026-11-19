@@ -28,7 +28,12 @@
  *   (j) the Secrets page's Saved section: Use saved links the grant (saved_secret_id) and stamps last_used_at; every
  *       grant names its runner, also once that runner is deleted; Add (409 on a taken label, 400 on a bad value or
  *       label); Replace; the list's lastUsedAt and liveCopies; Delete without revokeCopies leaves the copies, with it
- *       ends each live one REVOKED through the card's own revoke.
+ *       ends each live one REVOKED through the card's own revoke;
+ *   (k) the Secrets page's copies: GET /account-secrets/grants lists each state with its fields, a copy on a deleted
+ *       runner as REMOVED / RUNNER_DELETED under the runner's recorded name, removed ones only when asked and only
+ *       for 30 days; a copy waiting for delivery says why (RUNNER_OFFLINE, NOT_FETCHED, FETCHED_NOT_ACKED) and since
+ *       when; the label is the owner's translated title when there is one; Revoke by grant removes an ACTIVE copy,
+ *       cancels an undelivered one, and is 409 on an ended one.
  *
  * Not destructive: every id is freshly generated and every assertion is scoped to its own accounts.
  */
@@ -631,5 +636,174 @@ test('owner request secrets: one runner, removed when the scope ends', { skip, c
     assert.ok((await secrets.reconcileFor(a.runnerId)).secretGrantsRemoving.includes(twoOnMain.grant.id));
     assert.deepEqual(await statesOf([threeCopy.request.id]), unrelated);
     assert.equal(await db.accountSecret.count({ where: { id: two.id } }), 0);
+  });
+
+  await t.test('(k) the copies list: each state, why a copy waits and since when, the owner\'s label; revoke by grant', async () => {
+    const k = await account('k');
+    const runnerK = { id: k.runnerId, ownerId: k.ownerId };
+    const fileK = (sessionId: string, title: string, spec: Record<string, string> = { envVar: 'K_API_KEY' }) =>
+      requests.file(k.ownerId, sessionId, {
+        kind: 'SECRET', title, why: 'the run calls the API', secretSpec: { name: 'K key', ...spec } as never,
+      });
+    const grantK = (requestId: string) => db.ownerRequestSecret.findUniqueOrThrow({ where: { requestId } });
+    const values: string[] = [];
+    const submitK = async (sessionId: string, title: string, spec?: Record<string, string>) => {
+      const request = await fileK(sessionId, title, spec);
+      const value = canary();
+      values.push(value);
+      await secrets.submit(k.ownerId, request.id, { value });
+      return { request, grant: await grantK(request.id) };
+    };
+    const taskId = await k.task();
+    const taskSession = await k.session({ taskId });
+    const taskSessionRow = await db.session.findUniqueOrThrow({ where: { id: taskSession } });
+
+    // NOT_FETCHED: on an online runner, never fetched; since the copy was made.
+    const waiting = await submitK(await k.session(), 'Waiting key');
+    // FETCHED_NOT_ACKED: fetched, no ack yet; since the fetch. A file copy, made for a task's run.
+    const fetched = await submitK(taskSession, 'Fetched key', { filePath: '~/.config/k/key' });
+    await secrets.fetch(runnerK, fetched.grant.id);
+    const fetchedAt = (await grantK(fetched.request.id)).fetchedAt!;
+    // RUNNER_OFFLINE: its runner signed off; since its last beat.
+    const offlineBeat = new Date(Date.now() - 2 * 60 * 60 * 1000);
+    const offline = await submitK(await k.session({ on: k.secondRunnerId }), 'Offline key');
+    await db.runner.update({ where: { id: k.secondRunnerId }, data: { status: RunnerStatus.OFFLINE, lastHeartbeatAt: offlineBeat } });
+    // ACTIVE: delivered.
+    const active = await submitK(await k.session(), 'Active key');
+    await secrets.fetch(runnerK, active.grant.id);
+    await secrets.ack(runnerK, active.grant.id, 'DELIVERED', undefined, undefined);
+    // REMOVING: delivered, then revoked on its card.
+    const removing = await submitK(await k.session(), 'Removing key');
+    await secrets.fetch(runnerK, removing.grant.id);
+    await secrets.ack(runnerK, removing.grant.id, 'DELIVERED', undefined, undefined);
+    await secrets.revoke(k.ownerId, removing.request.id);
+    // REMOVED: delivered, revoked, and the runner confirmed.
+    const removed = await submitK(await k.session(), 'Removed key');
+    await secrets.fetch(runnerK, removed.grant.id);
+    await secrets.ack(runnerK, removed.grant.id, 'DELIVERED', undefined, undefined);
+    await secrets.revoke(k.ownerId, removed.request.id);
+    await secrets.removed(runnerK, removed.grant.id, undefined);
+    // REMOVED 31 days ago: past the window.
+    const old = await submitK(await k.session(), 'Old key');
+    await secrets.cancel(k.ownerId, old.request.id);
+    await sql.query(`UPDATE "owner_request_secret" SET "removed_at" = now() - interval '31 days' WHERE "id" = $1`, [old.grant.id]);
+    // A copy on a runner deleted since: before the sweep it reads as ending RUNNER_DELETED (LIVE / END_REASON), after
+    // it as REMOVED / RUNNER_DELETED, named by the runner's recorded name.
+    const doomed = await db.runner.create({
+      data: {
+        id: randomUUID(), ownerId: k.ownerId, name: 'k-doomed', tokenHash: `hash-${randomUUID()}`, status: RunnerStatus.ONLINE,
+        capabilities: ['owner-secret/v1'], capabilitiesReportedAt: new Date(), lastHeartbeatAt: new Date(),
+      },
+    });
+    const orphan = await submitK(await k.session({ on: doomed.id }), 'Orphan key');
+    await secrets.fetch({ id: doomed.id, ownerId: k.ownerId }, orphan.grant.id);
+    await secrets.ack({ id: doomed.id, ownerId: k.ownerId }, orphan.grant.id, 'DELIVERED', undefined, undefined);
+    await sql.query(`UPDATE "session" SET "assigned_runner_id" = NULL WHERE "assigned_runner_id" = $1`, [doomed.id]);
+    await sql.query(`DELETE FROM "runner" WHERE "id" = $1`, [doomed.id]);
+    const beforeSweep = (await secrets.listGrants(k.ownerId, false)).grants.find((g) => g.id === orphan.grant.id)!;
+    assert.equal(beforeSweep.state, 'ACTIVE');
+    assert.equal(beforeSweep.endReason, 'RUNNER_DELETED', 'a copy whose scope ended reads the reason the sweep will give');
+    assert.deepEqual(beforeSweep.runner, { id: null, name: 'k-doomed', online: false, lastHeartbeatAt: null });
+    await secrets.sweep();
+
+    // The owner's language: one request carries a title translated for the owner, the other cards do not.
+    await db.ownerRequest.update({
+      where: { id: waiting.request.id },
+      data: { translation: { lang: 'zh-Hans', title: 'Translated waiting key' } },
+    });
+    await db.user.update({ where: { id: k.ownerId }, data: { preferences: { translationEnabled: true, translationLanguage: 'zh-Hans' } } });
+    const savedDeepSeek = process.env.DEEPSEEK_API_KEY;
+    process.env.DEEPSEEK_API_KEY = 'owner-secrets-pg-spec-translation-on';
+    let listed: Awaited<ReturnType<OwnerSecretsService['listGrants']>>;
+    let liveOnly: Awaited<ReturnType<OwnerSecretsService['listGrants']>>;
+    try {
+      listed = await secrets.listGrants(k.ownerId, true);
+      liveOnly = await secrets.listGrants(k.ownerId, false);
+    } finally {
+      if (savedDeepSeek === undefined) delete process.env.DEEPSEEK_API_KEY;
+      else process.env.DEEPSEEK_API_KEY = savedDeepSeek;
+    }
+    // Translation off: the title as filed.
+    await db.user.update({ where: { id: k.ownerId }, data: { preferences: { translationEnabled: false } } });
+    const untranslated = await secrets.listGrants(k.ownerId, false);
+
+    // Never the value, nor anything that is not a label, place, state or date.
+    const body = JSON.stringify([listed, liveOnly, untranslated, beforeSweep]);
+    for (const value of values) assert.equal(body.includes(value), false, 'no value in the list');
+    assert.equal(body.includes('valueEnc') || body.includes('value_enc'), false);
+
+    const row = (grantId: string) => listed.grants.find((g) => g.id === grantId)!;
+    const ids = (l: typeof listed) => l.grants.map((g) => g.id).sort();
+    assert.deepEqual(ids(listed), [waiting, fetched, offline, active, removing, removed, orphan].map((g) => g.grant.id).sort(),
+      'live and recently removed copies; the one removed 31 days ago is not listed');
+    assert.deepEqual(ids(liveOnly), [waiting, fetched, offline, active, removing].map((g) => g.grant.id).sort(),
+      'without removed=30d only the live states');
+    assert.equal((await secrets.listGrants(b.ownerId, true)).grants.some((g) => listed.grants.some((m) => m.id === g.id)), false,
+      'another account sees none of them');
+
+    // Labels: the owner-facing translation, else the stored title.
+    assert.equal(row(waiting.grant.id).label, 'Translated waiting key');
+    assert.equal(row(active.grant.id).label, 'Active key');
+    assert.equal(untranslated.grants.find((g) => g.id === waiting.grant.id)!.label, 'Waiting key', 'translation off: as filed');
+
+    // Each delivery hint, with its since.
+    const waitingRow = row(waiting.grant.id);
+    assert.deepEqual(waitingRow.deliveryHint, { reason: 'NOT_FETCHED', since: waiting.grant.createdAt });
+    assert.deepEqual(row(fetched.grant.id).deliveryHint, { reason: 'FETCHED_NOT_ACKED', since: fetchedAt });
+    assert.deepEqual(row(offline.grant.id).deliveryHint, { reason: 'RUNNER_OFFLINE', since: offlineBeat });
+    for (const g of [active, removing, removed, orphan]) assert.equal(row(g.grant.id).deliveryHint, null);
+
+    // The full row of a waiting copy (session scope, env), and of a task's file copy.
+    const { createdAt: _c, runner: waitingRunner, ...waitingRest } = waitingRow;
+    assert.equal(waitingRunner.id, k.runnerId);
+    assert.equal(waitingRunner.name, 'k-main');
+    assert.equal(waitingRunner.online, true);
+    assert.ok(waitingRunner.lastHeartbeatAt instanceof Date);
+    assert.deepEqual(waitingRest, {
+      id: waiting.grant.id, requestId: waiting.request.id, label: 'Translated waiting key', exposure: 'ENV', envName: 'K_API_KEY',
+      filePath: null, sessionId: waiting.grant.sessionId, sessionTitle: 'asks', taskId: null, taskTitle: null, taskScoped: false,
+      state: 'PENDING_DELIVERY', endReason: null, removalNote: null, fetchedAt: null, deliveredAt: null,
+      expiresAt: waiting.grant.expiresAt, removedAt: null, savedSecretId: null,
+      deliveryHint: { reason: 'NOT_FETCHED', since: waiting.grant.createdAt },
+    });
+    assert.deepEqual(
+      (({ exposure, envName, filePath, sessionId, taskId, taskTitle, taskScoped, state, fetchedAt: f }) =>
+        ({ exposure, envName, filePath, sessionId, taskId, taskTitle, taskScoped, state, fetchedAt: f }))(row(fetched.grant.id)),
+      { exposure: 'FILE', envName: null, filePath: '~/.config/k/key', sessionId: taskSessionRow.id, taskId, taskTitle: 'work (k)',
+        taskScoped: true, state: 'PENDING_DELIVERY', fetchedAt },
+    );
+    assert.deepEqual(row(offline.grant.id).runner, { id: k.secondRunnerId, name: 'k-second', online: false, lastHeartbeatAt: offlineBeat });
+    const activeRow = row(active.grant.id);
+    assert.equal(activeRow.state, 'ACTIVE');
+    assert.equal(activeRow.endReason, null);
+    assert.ok(activeRow.deliveredAt instanceof Date && activeRow.fetchedAt instanceof Date);
+    assert.equal(activeRow.removedAt, null);
+    assert.deepEqual([row(removing.grant.id).state, row(removing.grant.id).endReason, row(removing.grant.id).removedAt],
+      ['REMOVING', 'REVOKED', null]);
+    assert.equal(row(removed.grant.id).state, 'REMOVED');
+    assert.equal(row(removed.grant.id).endReason, 'REVOKED');
+    assert.ok(row(removed.grant.id).removedAt instanceof Date);
+    const orphanRow = row(orphan.grant.id);
+    assert.deepEqual([orphanRow.state, orphanRow.endReason, orphanRow.removalNote], ['REMOVED', 'RUNNER_DELETED',
+      'Removal unconfirmed: the runner was deleted before it could confirm.']);
+    assert.deepEqual(orphanRow.runner, { id: null, name: 'k-doomed', online: false, lastHeartbeatAt: null });
+
+    // Revoke by grant: through the card's own revoke.
+    await assert.rejects(secrets.revokeGrant(b.ownerId, active.grant.id), NotFoundException, 'another account\'s grant is 404');
+    assert.equal((await grantK(active.request.id)).state, 'ACTIVE');
+    await assert.rejects(secrets.revokeGrant(k.ownerId, randomUUID()), NotFoundException);
+    await secrets.revokeGrant(k.ownerId, active.grant.id);
+    assert.deepEqual((({ state, endReason, valueEnc }) => ({ state, endReason, valueEnc }))(await grantK(active.request.id)),
+      { state: 'REMOVING', endReason: 'REVOKED', valueEnc: null }, 'an ACTIVE copy is REMOVING until its runner confirms');
+    await secrets.revokeGrant(k.ownerId, waiting.grant.id);
+    assert.deepEqual((({ state, endReason, valueEnc }) => ({ state, endReason, valueEnc }))(await grantK(waiting.request.id)),
+      { state: 'REMOVED', endReason: 'REVOKED', valueEnc: null }, 'an undelivered, unfetched copy is cancelled');
+    assert.equal((await db.ownerRequest.findUniqueOrThrow({ where: { id: waiting.request.id } })).state, 'PENDING',
+      'cancelling leaves the card open for another key');
+    await secrets.revokeGrant(k.ownerId, fetched.grant.id);
+    assert.equal((await grantK(fetched.request.id)).state, 'REMOVING', 'a fetched, unacknowledged copy waits for its runner');
+    for (const ended of [removed, removing, orphan, active]) {
+      await assert.rejects(secrets.revokeGrant(k.ownerId, ended.grant.id), ConflictException, 'an ended copy is 409');
+    }
   });
 });

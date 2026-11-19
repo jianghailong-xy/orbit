@@ -17,6 +17,8 @@ export const OWNER_INTERACTIVE_ROUTES: readonly string[] = [
   'POST /owner-requests/:id/create-wiki',
   'GET /account-secrets',
   'POST /account-secrets',
+  'GET /account-secrets/grants',
+  'POST /account-secrets/grants/:id/revoke',
   'PUT /account-secrets/:id',
   'DELETE /account-secrets/:id',
   'POST /tasks/:taskId/owner-confirmation',

@@ -164,10 +164,13 @@ test('the owner channel refuses a personal access token door by door and field b
   const secretToSubmit = await secretRequest();
   const secretToCancel = await secretRequest();
   const secretToRevoke = await secretRequest();
-  for (const requestId of [secretToCancel, secretToRevoke]) {
+  const secretToRevokeByGrant = await secretRequest();
+  for (const requestId of [secretToCancel, secretToRevoke, secretToRevokeByGrant]) {
     ok(await api('POST', `/owner-requests/${requestId}/secret`, login, { value: 'fixture-key' }), 'preparing a secret grant');
   }
   await db.ownerRequestSecret.update({ where: { requestId: secretToRevoke }, data: { state: 'ACTIVE', deliveredAt: new Date() } });
+  await db.ownerRequestSecret.update({ where: { requestId: secretToRevokeByGrant }, data: { state: 'ACTIVE', deliveredAt: new Date() } });
+  const grantToRevoke = (await db.ownerRequestSecret.findUniqueOrThrow({ where: { requestId: secretToRevokeByGrant } })).id;
   const grantRow = (requestId: string) => db.ownerRequestSecret.findUnique({ where: { requestId } });
   const savedSecret = await db.accountSecret.create({ data: { ownerId: userId, label: 'door fixture', valueEnc: 'to be replaced' } });
   const savedRow = () => db.accountSecret.findUnique({ where: { id: savedSecret.id } });
@@ -268,6 +271,11 @@ test('the owner channel refuses a personal access token door by door and field b
       login: 200, observe: wikiCreated,
     },
     { route: 'GET /account-secrets', path: '/account-secrets', login: 200 },
+    { route: 'GET /account-secrets/grants', path: '/account-secrets/grants?removed=30d', login: 200 },
+    {
+      route: 'POST /account-secrets/grants/:id/revoke', path: `/account-secrets/grants/${grantToRevoke}/revoke`,
+      login: 204, observe: () => grantRow(secretToRevokeByGrant),
+    },
     {
       route: 'POST /account-secrets', path: '/account-secrets',
       body: { label: 'added key', value: 'added-key-value' }, login: 201,

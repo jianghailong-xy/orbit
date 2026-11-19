@@ -1,4 +1,4 @@
-import { Body, Controller, Delete, Get, HttpCode, HttpStatus, Param, Post, Put, Query, Req, UseGuards } from '@nestjs/common';
+import { BadRequestException, Body, Controller, Delete, Get, HttpCode, HttpStatus, Param, Post, Put, Query, Req, UseGuards } from '@nestjs/common';
 import { JwtAuthGuard } from '../auth/jwt-auth.guard';
 import { PatForbidden } from '../auth/pat-scope.decorator';
 import { AuthUser, CurrentUser } from '../common/current-user.decorator';
@@ -22,6 +22,33 @@ export class AccountSecretsController {
   list(@CurrentUser() user: AuthUser, @Req() request: { headers: Record<string, string | string[] | undefined> }) {
     refuseActingSession(request.headers);
     return this.secrets.listSaved(user.userId);
+  }
+
+  /**
+   * Every copy of a secret on a machine: live (waiting for delivery, active, being removed) and, with `removed=30d`,
+   * those removed in the last 30 days. Labels, places, states and dates only.
+   */
+  @Get('grants')
+  grants(
+    @CurrentUser() user: AuthUser,
+    @Req() request: { headers: Record<string, string | string[] | undefined> },
+    @Query('removed') removed?: string,
+  ) {
+    refuseActingSession(request.headers);
+    if (removed !== undefined && removed !== '30d') throw new BadRequestException('removed is 30d or absent');
+    return this.secrets.listGrants(user.userId, removed === '30d');
+  }
+
+  /** Revoke one copy, as its card's Revoke would: a delivered one is removed, one not delivered yet is cancelled. */
+  @Post('grants/:id/revoke')
+  @HttpCode(HttpStatus.NO_CONTENT)
+  async revokeGrant(
+    @CurrentUser() user: AuthUser,
+    @Param('id', PublicIdPipe) id: string,
+    @Req() request: { headers: Record<string, string | string[] | undefined> },
+  ): Promise<void> {
+    refuseActingSession(request.headers);
+    await this.secrets.revokeGrant(user.userId, id);
   }
 
   @Post()

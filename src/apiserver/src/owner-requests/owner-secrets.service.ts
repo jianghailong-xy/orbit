@@ -13,6 +13,8 @@ import { Prisma } from '@prisma/client';
 import { loggedRetry, withTransactionRetry } from '../common/transaction-retry';
 import { PrismaService } from '../prisma/prisma.service';
 import { RealtimeService } from '../realtime/realtime.service';
+import { runnerIsOnline, runnerLastBeatSql } from '../runners/runner-presence';
+import { translationLanguages, type TranslationLanguages } from '../sessions/turn-translation';
 import { WatchDeliveryService } from '../watches/watch-delivery.service';
 import { OWNER_SECRET_MAX_DAYS, OWNER_REQUEST_NOT_PENDING, type OwnerRequestSecretSpec } from './owner-request';
 import { enqueueResolutions } from './owner-request-endings';
@@ -746,6 +748,146 @@ export class OwnerSecretsService implements OnModuleInit, OnModuleDestroy {
     if (touched.length > 0) this.realtime?.markRunnerChanged(touched);
     return ended.length + orphaned.count;
   }
+
+  // ─── The Secrets page's copies ──────────────────────────────────────────────────────────────
+
+  /**
+   * Every copy of a secret the owner handed to a machine: each grant PENDING_DELIVERY, ACTIVE or REMOVING, and with
+   * `withRemoved` those REMOVED in the last 30 days. Names, places and dates only: never the value or anything
+   * derived from it. A grant still PENDING_DELIVERY or ACTIVE whose scope `LIVE` says has ended is read with the
+   * `END_REASON` the sweep will give it; a live one waiting for delivery says why (`deliveryHint`).
+   */
+  async listGrants(ownerId: string, withRemoved: boolean): Promise<{ grants: OwnerSecretGrantRow[] }> {
+    const rows = await this.prisma.$queryRaw<Array<{
+      id: string; request_id: string; title: string; translation: unknown; exposure: string; name: string | null;
+      file_path: string | null; runner_id: string | null; runner_name: string | null; runner_status: string | null;
+      runner_last_beat_at: Date | null; session_id: string; session_title: string | null; task_id: string | null;
+      task_title: string | null; state: string; end_reason: string | null; removal_note: string | null;
+      created_at: Date; fetched_at: Date | null; delivered_at: Date | null; expires_at: Date; removed_at: Date | null;
+      saved_secret_id: string | null; live: boolean;
+    }>>`
+      SELECT g."id"::text AS id, g."request_id"::text AS request_id, r."title", r."translation", g."exposure", g."name",
+             g."file_path", g."runner_id"::text AS runner_id,
+             COALESCE(runner."display_name", runner."name", g."runner_name") AS runner_name,
+             runner."status"::text AS runner_status,
+             CASE WHEN runner."id" IS NULL THEN NULL ELSE ${runnerLastBeatSql('runner')} END AS runner_last_beat_at,
+             g."session_id"::text AS session_id, s."title" AS session_title,
+             g."task_id"::text AS task_id, t."title" AS task_title,
+             g."state",
+             CASE WHEN g."state" IN ('PENDING_DELIVERY', 'ACTIVE') AND NOT (${LIVE}) THEN ${END_REASON}
+                  ELSE g."end_reason" END AS end_reason,
+             g."removal_note", g."created_at", g."fetched_at", g."delivered_at", g."expires_at", g."removed_at",
+             g."saved_secret_id"::text AS saved_secret_id,
+             (${LIVE}) AS live
+        FROM "owner_request_secret" g
+        JOIN "owner_request" r ON r."id" = g."request_id" AND r."owner_id" = g."owner_id"
+        LEFT JOIN "runner" runner ON runner."id" = g."runner_id" AND runner."owner_id" = g."owner_id"
+        LEFT JOIN "session" s ON s."id" = g."session_id" AND s."owner_id" = g."owner_id"
+        LEFT JOIN "task" t ON t."id" = g."task_id" AND t."owner_id" = g."owner_id"
+       WHERE g."owner_id" = ${ownerId}::uuid
+         AND (g."state" IN ('PENDING_DELIVERY', 'ACTIVE', 'REMOVING')
+              OR (${withRemoved} AND g."state" = 'REMOVED' AND g."removed_at" > now() - interval '30 days'))
+       ORDER BY g."created_at" DESC, g."id" DESC`;
+    const langs = rows.some((row) => row.translation) ? await translationLanguages(this.prisma, ownerId) : null;
+    const now = Date.now();
+    return {
+      grants: rows.map((row) => {
+        const runnerOnline = row.runner_id !== null && runnerIsOnline({ status: row.runner_status ?? 'OFFLINE', lastHeartbeatAt: row.runner_last_beat_at }, now);
+        return {
+          id: row.id,
+          requestId: row.request_id,
+          label: ownerFacingTitle(row.title, row.translation, langs),
+          exposure: row.exposure,
+          envName: row.name,
+          filePath: row.file_path,
+          runner: { id: row.runner_id, name: row.runner_name, online: runnerOnline, lastHeartbeatAt: row.runner_last_beat_at },
+          sessionId: row.session_id,
+          sessionTitle: row.session_title,
+          taskId: row.task_id,
+          taskTitle: row.task_title,
+          taskScoped: row.task_id !== null,
+          state: row.state,
+          endReason: row.end_reason,
+          removalNote: row.removal_note,
+          createdAt: row.created_at,
+          fetchedAt: row.fetched_at,
+          deliveredAt: row.delivered_at,
+          expiresAt: row.expires_at,
+          removedAt: row.removed_at,
+          savedSecretId: row.saved_secret_id,
+          deliveryHint: row.state === 'PENDING_DELIVERY' && row.live
+            ? deliveryHintOf(runnerOnline, row.runner_last_beat_at, row.fetched_at, row.created_at)
+            : null,
+        };
+      }),
+    };
+  }
+
+  /** The Secrets page's Revoke on one copy: its card's own `revoke`, which cancels a copy not delivered yet. */
+  async revokeGrant(ownerId: string, grantId: string): Promise<void> {
+    const grant = await this.prisma.ownerRequestSecret.findFirst({ where: { id: grantId, ownerId }, select: { requestId: true } });
+    if (!grant) throw new NotFoundException('secret grant not found');
+    await this.revoke(ownerId, grant.requestId);
+  }
+}
+
+/** Why a live copy is still waiting for delivery, and since when (the Secrets page's "Waiting for delivery"). */
+export interface OwnerSecretDeliveryHint {
+  /** RUNNER_OFFLINE: its runner is not online; FETCHED_NOT_ACKED: fetched, not acknowledged; NOT_FETCHED: neither. */
+  reason: 'RUNNER_OFFLINE' | 'FETCHED_NOT_ACKED' | 'NOT_FETCHED';
+  /** Offline: the runner's last beat (the copy's creation when it was never heard from); fetched: the fetch;
+   *  not fetched: the copy's creation. */
+  since: Date;
+}
+
+/** One row of the Secrets page's copies list. Never the value, its length, or anything derived from it. */
+export interface OwnerSecretGrantRow {
+  id: string;
+  requestId: string;
+  /** The request's title as the owner's card reads it: its translation in the owner's language, else as filed. */
+  label: string;
+  exposure: string;
+  envName: string | null;
+  filePath: string | null;
+  /** `name` is the runner's name now, or the one recorded on the grant once the runner is deleted (`id` null). */
+  runner: { id: string | null; name: string | null; online: boolean; lastHeartbeatAt: Date | null };
+  sessionId: string;
+  sessionTitle: string | null;
+  taskId: string | null;
+  taskTitle: string | null;
+  taskScoped: boolean;
+  state: string;
+  endReason: string | null;
+  removalNote: string | null;
+  createdAt: Date;
+  fetchedAt: Date | null;
+  deliveredAt: Date | null;
+  expiresAt: Date;
+  removedAt: Date | null;
+  savedSecretId: string | null;
+  deliveryHint: OwnerSecretDeliveryHint | null;
+}
+
+export function deliveryHintOf(
+  runnerOnline: boolean,
+  runnerLastBeatAt: Date | null,
+  fetchedAt: Date | null,
+  createdAt: Date,
+): OwnerSecretDeliveryHint {
+  if (!runnerOnline) return { reason: 'RUNNER_OFFLINE', since: runnerLastBeatAt ?? createdAt };
+  if (fetchedAt) return { reason: 'FETCHED_NOT_ACKED', since: fetchedAt };
+  return { reason: 'NOT_FETCHED', since: createdAt };
+}
+
+/**
+ * An owner request's title as its card shows it to the owner (web OwnerRequestCard `shownRequest`, read with
+ * `useOwnerLanguageTranslation`): the stored translation's title while translation is on, in the owner's current
+ * language and not failed; the title as filed otherwise.
+ */
+export function ownerFacingTitle(title: string, translation: unknown, langs: TranslationLanguages | null): string {
+  const t = translation as { lang?: unknown; failed?: unknown; title?: unknown } | null | undefined;
+  if (!langs || !t || t.failed || t.lang !== langs.owner) return title;
+  return typeof t.title === 'string' && t.title.trim() !== '' ? t.title : title;
 }
 
 /** The owner's doors refuse a request made on an agent's behalf: entering a secret is the owner's own act (§8.1). */
