@@ -1,5 +1,5 @@
 import { RunEventType } from './enums';
-import { asyncAgentLaunchId, toolResultText, workflowLaunchReceipt } from './events';
+import { asyncAgentLaunchId, ORBIT_WORKFLOW_TOOL, orbitWorkflowLaunchReceipt, toolResultText, workflowLaunchReceipt } from './events';
 import { parseTaskProgress, type TaskProgress } from './taskProgress';
 
 // Derives the set of background shell processes (and their latest output) from a session's
@@ -146,9 +146,10 @@ function isBackgroundToolUse(payload: unknown): boolean {
   return isTaskLaunchCall(p);
 }
 
-/** The workspace's own Agent (Task before Claude Code 2.x) or Workflow call. */
+/** The workspace's own Agent (Task before Claude Code 2.x) or Workflow call, or Orbit's own workflow. */
 function isTaskLaunchCall(p: Record<string, unknown>): boolean {
-  return (p.name === 'Agent' || p.name === 'Task' || p.name === 'Workflow') && !p.parentToolUseId;
+  return (p.name === 'Agent' || p.name === 'Task' || p.name === 'Workflow' || p.name === ORBIT_WORKFLOW_TOOL) &&
+    !p.parentToolUseId;
 }
 
 export function deriveBackgroundShells(
@@ -209,13 +210,15 @@ export function deriveBackgroundShells(
       const res = resultByToolUseId.get(String(p.id));
       if (!res) continue;
       const workflow = p.name === 'Workflow' ? workflowLaunchReceipt(res.content) : null;
-      const agentId = p.name === 'Workflow' ? null : asyncAgentLaunchId(res.content);
-      const shellId = workflow?.taskId ?? agentId;
+      // Orbit's own workflow (docs/subagent-workflow-design.md) is named by its run id, and by the call's description.
+      const orbitWorkflow = p.name === ORBIT_WORKFLOW_TOOL ? orbitWorkflowLaunchReceipt(res.content) : null;
+      const agentId = p.name === 'Workflow' || p.name === ORBIT_WORKFLOW_TOOL ? null : asyncAgentLaunchId(res.content);
+      const shellId = workflow?.taskId ?? orbitWorkflow?.workflowRunId ?? agentId;
       if (!shellId || byId.has(shellId)) continue;
       const description = workflow ? workflow.summary : input.description ? String(input.description) : undefined;
       const shell: BgShell = {
         shellId,
-        kind: workflow ? 'workflow' : 'agent',
+        kind: workflow || orbitWorkflow ? 'workflow' : 'agent',
         toolUseId: String(p.id ?? ''),
         command: '',
         description,
@@ -262,8 +265,11 @@ export function deriveBackgroundShells(
         shell.endedAt = ev.ts ?? undefined;
       }
       // Only a runner-hosted job's record states a kind; an engine's own shell, agent or workflow
-      // reports none, and a SubAgent's report (subagentRunId) is not about a launch listed here.
-      if (typeof p.kind === 'string' && p.kind !== '' && !p.subagentRunId) runnerJobKind.set(shell, p.kind);
+      // reports none, a SubAgent's report (subagentRunId) is not about a launch listed here, and
+      // Orbit's workflow re-announced after a resume (workflowRunId) stays a workflow.
+      if (typeof p.kind === 'string' && p.kind !== '' && !p.subagentRunId && !p.workflowRunId) {
+        runnerJobKind.set(shell, p.kind);
+      }
       const progress = parseTaskProgress(p.progress);
       if (progress) shell.progress = progress;
       // User `!`-shells carry their final output on the (persisted) background_task, since the
