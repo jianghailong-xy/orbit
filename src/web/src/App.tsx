@@ -21,6 +21,7 @@ import { WorkspaceConsole } from './components/WorkspaceConsole';
 import { RunnerRegisterGuide } from './components/RunnerRegisterGuide';
 import { Spinner } from './components/ui/Spinner';
 import { ProfilePage } from './pages/ProfilePage';
+import { RunnerBrowserPage } from './pages/RunnerBrowserPage';
 import { GeneralSettingsPage } from './pages/settings/GeneralPage';
 import { NotificationsSettingsPage } from './pages/settings/NotificationsPage';
 import { AppearanceSettingsPage } from './pages/settings/AppearancePage';
@@ -295,6 +296,9 @@ export function App() {
             <Route path="help-feedback" element={<AdminHelpFeedbackPage />} />
             <Route path="integrations/github" element={<AdminGithubPage />} />
           </Route>
+          {/* The Orbit Cloud runner's browser in a tab of its own (docs/runner-browser-design.md §5, option C): only the
+              viewer and a slim bar. Not found while the server's browser switch is off. */}
+          <Route path="runners/:id/browser" element={<RunnerBrowserPage />} />
           <Route path="settings" element={<SettingsLayout />}>
             <Route index element={<Navigate to="/settings/general" replace />} />
             <Route path="general" element={<GeneralSettingsPage />} />

@@ -18,6 +18,11 @@ export interface FeishuCardContext {
   detail: FeishuMessageDetail;
   /** Whether the owner answers approvals on the card (`approvalsInFeishu`, §7.2). Off, only Open in Orbit. */
   approvalsInFeishu: boolean;
+  /**
+   * "Show Orbit in Feishu" (`showOrbit`, §15.2). Off, the card has no Open in Orbit button and no Orbit link; a card
+   * that can be answered only in Orbit says so in one line (ANSWER_IN_ORBIT) instead.
+   */
+  showOrbit: boolean;
   /** Where Open in Orbit goes: the session, or the project. */
   openUrl: string;
 }
@@ -62,6 +67,8 @@ export const DETAILS_HIDDEN = 'Details hidden by your settings';
 export const CUT_NOTE = '(Cut to fit a Feishu card. The rest is in Orbit.)';
 export const TOO_LONG_NOTE = 'This alert is too long for a Feishu card. Open it in Orbit to see it.';
 export const REPLY_HINT = 'Reply to this message to reply to the session.';
+/** In place of Open in Orbit when Show Orbit in Feishu is off (§15.2): the owner alone reads it, so it may name Orbit. */
+export const ANSWER_IN_ORBIT = 'Answer this in Orbit.';
 const UNTITLED_SESSION = 'Untitled session';
 
 /** The kind of each owner item, in the words its chip uses (§7.6 V12). */
@@ -191,7 +198,7 @@ export function renderConnectGroupCard(chatName: string | null, confirmUrl: stri
 /**
  * A card within FEISHU_CARD_MAX_BYTES. Only what FULL adds can be long, so a card over the limit is drawn again with
  * every detail text cut shorter, each cut one saying so. A card that is still too long with none left (a stretch of
- * very many approvals) says so and keeps its title and Open in Orbit.
+ * very many approvals) says so and keeps its title and Open in Orbit (only the title when Show Orbit is off).
  */
 function fitted(alert: FeishuAlert, ctx: FeishuCardContext, outcome: string | null): FeishuCard {
   let limit = Number.POSITIVE_INFINITY;
@@ -206,7 +213,7 @@ function fitted(alert: FeishuAlert, ctx: FeishuCardContext, outcome: string | nu
   const bare = build(alert, ctx, outcome, 0);
   return {
     ...bare,
-    body: { direction: 'vertical', elements: [text(TOO_LONG_NOTE), ...(outcome === null ? [openInOrbit(ctx.openUrl)] : [])] },
+    body: { direction: 'vertical', elements: [text(TOO_LONG_NOTE), ...(outcome === null && ctx.showOrbit ? [openInOrbit(ctx.openUrl)] : [])] },
   };
 }
 
@@ -291,14 +298,37 @@ function build(
     }
   }
 
-  if (live) elements.push(row([openInOrbit(ctx.openUrl)]));
-  else elements.push({ tag: 'markdown', content: `[Open in Orbit](${ctx.openUrl})` });
+  if (ctx.showOrbit) {
+    if (live) elements.push(row([openInOrbit(ctx.openUrl)]));
+    else elements.push({ tag: 'markdown', content: `[Open in Orbit](${ctx.openUrl})` });
+  } else if (live && answeredOnlyInOrbit(alert, ctx)) {
+    elements.push(note(ANSWER_IN_ORBIT));
+  }
   return {
     schema: '2.0',
     config: { update_multi: true, summary: { content: live ? `${title} · ${subtitle}` : `${title} · ${outcome}` } },
     header: { title: plain(title), subtitle: plain(subtitle), template: live ? template : 'grey' },
     body: { direction: 'vertical', elements },
   };
+}
+
+/**
+ * Whether the live card asks for something the card itself cannot answer (§15.2): an owner item, Orbit's own
+ * confirmation, a question without its form, or a tool approval while approvals are answered in Orbit.
+ */
+function answeredOnlyInOrbit(alert: FeishuAlert, ctx: FeishuCardContext): boolean {
+  if (alert.kind === 'owner-item') return true;
+  if (alert.kind !== 'approval') return false;
+  return alert.approvals.some((approval) => {
+    switch (approvalClass(approval.toolName)) {
+      case 'tool':
+        return !ctx.approvalsInFeishu;
+      case 'orbit':
+        return true;
+      case 'question':
+        return !(ctx.approvalsInFeishu && ctx.detail === 'FULL' && questionsOf(approval.input).length > 0);
+    }
+  });
 }
 
 function sessionTitle(title: string): string {

@@ -72,6 +72,8 @@ let chatRoutes: FeishuChatRoute[];
 let chatRequests: Array<{ method: string; path: string; body?: unknown }>;
 /** What the stand-in answers POST …/test with when it refuses. */
 let refuseTest: ApiError | null;
+/** The app's Show Orbit in Feishu (§15.2), as the stand-in keeps it; on unless a test switches it. */
+let showOrbit = true;
 let container: HTMLDivElement | null = null;
 let root: Root | null = null;
 
@@ -84,6 +86,7 @@ const app = (): FeishuAppSettings | null =>
     enabled: stored.enabled,
     messageDetail: stored.messageDetail ?? 'TITLES_ONLY',
     approvalsInFeishu: stored.approvalsInFeishu ?? true,
+    showOrbit,
     defaultWorkspaceId: stored.defaultWorkspaceId ?? null,
     ownerOpenId: owner?.openId ?? null,
     ownerName: owner?.name ?? null,
@@ -243,10 +246,12 @@ beforeEach(() => {
       if (!stored) throw new ApiError('No Feishu app is connected to this account.', 404);
       const change = options.body as {
         enabled?: boolean; messageDetail?: FeishuMessageDetail; defaultWorkspaceId?: string | null; approvalsInFeishu?: boolean;
+        showOrbit?: boolean;
       };
       if (change.enabled !== undefined) stored.enabled = change.enabled;
       if (change.defaultWorkspaceId !== undefined) stored.defaultWorkspaceId = change.defaultWorkspaceId;
       if (change.approvalsInFeishu !== undefined) stored.approvalsInFeishu = change.approvalsInFeishu;
+      if (change.showOrbit !== undefined) showOrbit = change.showOrbit;
       if (change.messageDetail !== undefined) stored.messageDetail = change.messageDetail;
     } else if (method === 'DELETE') {
       stored = null;
@@ -393,6 +398,32 @@ describe('the app connected', () => {
     expect(control()?.getAttribute('aria-checked')).toBe('false');
     await click(control(), 'Answer approvals in Feishu');
     expect(requests.at(-1)).toEqual({ method: 'PATCH', body: { approvalsInFeishu: true } });
+    expect(control()?.getAttribute('aria-checked')).toBe('true');
+  });
+
+  beforeEach(() => {
+    showOrbit = true;
+  });
+
+  it('shows Orbit in Feishu by default, right under the approvals switch, says what off means, and switches it with PATCH', async () => {
+    const { SHOW_ORBIT_HINT } = await import('./FeishuIntegrationPage');
+    await open();
+    const rows = [...card('Your app')!.querySelectorAll<HTMLElement>('.admin-signin-row')];
+    const labels = rows.map((r) => r.querySelector('.admin-signin-label')?.textContent?.trim());
+    expect(labels.indexOf('Show Orbit in Feishu')).toBe(labels.indexOf('Answer approvals in Feishu') + 1);
+    const row = rows.find((r) => r.querySelector('.admin-signin-label')?.textContent?.trim() === 'Show Orbit in Feishu');
+    expect(row?.textContent).toContain(
+      'Off, cards have no Open in Orbit button and the bot sends nobody a link to Orbit. Your alerts still arrive and approvals '
+      + 'can still be answered on the card; open Orbit yourself for anything else.',
+    );
+    expect(row?.textContent).toContain(SHOW_ORBIT_HINT);
+    const control = () => row!.querySelector<HTMLElement>('[role="switch"]');
+    expect(control()?.getAttribute('aria-checked')).toBe('true');
+    await click(control(), 'Show Orbit in Feishu');
+    expect(requests.at(-1)).toEqual({ method: 'PATCH', body: { showOrbit: false } });
+    expect(control()?.getAttribute('aria-checked')).toBe('false');
+    await click(control(), 'Show Orbit in Feishu');
+    expect(requests.at(-1)).toEqual({ method: 'PATCH', body: { showOrbit: true } });
     expect(control()?.getAttribute('aria-checked')).toBe('true');
   });
 

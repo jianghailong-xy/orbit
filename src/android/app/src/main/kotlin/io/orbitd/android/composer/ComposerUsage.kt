@@ -51,26 +51,27 @@ internal fun ComposerUsage(model: ComposerModel, state: ComposerState, detail: J
     // Cursor CLI never reports how much of its window a session has used (contract §4.1): no reading, rather than 0 (iOS 5 ⑦).
     val noContext = ProviderChoices.engine(detail, state.catalog?.providers.orEmpty()) == CursorRuntime.ENGINE
     val contextLabel = if (noContext) CursorRuntime.UNAVAILABLE else if (window == null) "$tokens tokens" else "$tokens / $window tokens"
-    // A07-7: a session on a pool spends one of its accounts at a time, named beside the quota (iOS f929ab1e4) — read once the
-    // catalog is in, which a session that names a pool's account asks for as it opens.
-    val onPool = listOf("poolCodexLogin", "poolMemberProviderId", "poolKeyId").any { detail[it] is JsonObject || detail.text(it) != null }
-    LaunchedEffect(onPool, detail.text("provider")) { if (onPool && state.catalog == null && !state.catalogLoading) model.loadCatalog() }
+    // A07-7: a session on a pool spends one of its accounts at a time, named in the sheet (iOS f929ab1e4) once the catalog is in.
+    // The plan's reading beside the ring comes off the catalogue (its runner's report, a pool account's own), read as the composer
+    // opens, as iOS reads its runner's plan usage with the console: the bar is there from the start, not after a menu was opened.
+    LaunchedEffect(detail.text("provider")) { if (state.catalog == null && !state.catalogLoading) model.loadCatalog() }
     val account = state.catalog?.poolAccount(detail)
     val fraction = if (window != null && !noContext) (tokens.toFloat() / window).coerceIn(0f, 1f) else 0f
+    val percent = if (tokens > 0) Math.round(fraction * 100) else 0
     // Aloud: the share used, or why there is none; then the plan's window, which the ring's capsule draws beside it.
     val spoken = when {
         noContext -> "Context: ${CursorRuntime.UNAVAILABLE}"
         tokens <= 0 -> "Context: no reading yet"
         window == null -> "Context: $tokens tokens"
-        else -> "Context ${Math.round(fraction * 100)}% used"
+        else -> "Context $percent% used"
     } + (planRow?.let { ", ${it.label} ${it.reading}" } ?: "")
     Box(Modifier.height(48.dp).widthIn(min = TOOLBAR_RING.dp).clip(RoundedCornerShape(12.dp))
         .clickable(role = Role.Button) { expanded = true; model.loadCatalog() }
         .semantics { contentDescription = spoken }.testTag("composer-context"), contentAlignment = Alignment.Center) {
-        if (planRow == null) UsageRingIcon(fraction, noContext)
+        if (planRow == null) UsageRingIcon(percent, noContext)
         else Row(Modifier.height(28.dp).border(0.5.dp, MaterialTheme.colorScheme.outline.copy(alpha = 0.5f), RoundedCornerShape(50))
             .padding(horizontal = 7.dp), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(4.dp)) {
-            UsageBarIcon(planRow); UsageRingIcon(fraction, noContext, 16.dp)
+            UsageBarIcon(planRow); UsageRingIcon(percent, noContext)
         }
     }
     if (expanded) ModalBottomSheet(onDismissRequest = { expanded = false }, sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true),

@@ -11,6 +11,7 @@ import {
   type FeishuAlert,
   type FeishuApprovalItem,
   type FeishuCard,
+  type FeishuCardContext,
 } from '../feishu/cards/feishu-cards';
 import { FeishuAppService } from '../feishu/feishu-app.service';
 import type { FeishuAppCredentials } from '../feishu/feishu-open-platform';
@@ -27,6 +28,8 @@ export interface FeishuTarget {
   openId: string;
   detail: FeishuMessageDetail;
   approvalsInFeishu: boolean;
+  /** "Show Orbit in Feishu" (§15.2): off, no card carries Open in Orbit or an Orbit link. */
+  showOrbit: boolean;
 }
 
 /** The kind column of `feishu_message` (§6.1). */
@@ -139,6 +142,11 @@ export function orbitUrl(to: { sessionId?: string | null; projectId?: string | n
   return `${publicOrigin()}/`;
 }
 
+/** The app's settings a card is drawn with, and where its Open in Orbit goes when it has one. */
+function cardContext(target: FeishuTarget, openUrl: string): FeishuCardContext {
+  return { detail: target.detail, approvalsInFeishu: target.approvalsInFeishu, showOrbit: target.showOrbit, openUrl };
+}
+
 /** Worth trying again: Feishu was not reached, or failed on its side. A refusal (a 4xx, a Feishu code) is the answer. */
 function retryable(result: FeishuSendResult): boolean {
   return !result.ok && (result.status === null || result.status >= 500);
@@ -182,7 +190,7 @@ export class FeishuTransport {
     try {
       const app = await this.prisma.feishuApp.findUnique({
         where: { ownerId },
-        select: { appId: true, platform: true, appSecretEnc: true, enabled: true, ownerOpenId: true, messageDetail: true, approvalsInFeishu: true },
+        select: { appId: true, platform: true, appSecretEnc: true, enabled: true, ownerOpenId: true, messageDetail: true, approvalsInFeishu: true, showOrbit: true },
       });
       if (!app || !app.enabled || !app.ownerOpenId) return null;
       if (!(await this.apps.allowed())) return null;
@@ -199,6 +207,7 @@ export class FeishuTransport {
         openId: app.ownerOpenId,
         detail: app.messageDetail === 'FULL' ? 'FULL' : 'TITLES_ONLY',
         approvalsInFeishu: app.approvalsInFeishu,
+        showOrbit: app.showOrbit,
       };
     } catch (err) {
       this.log.warn(`feishu target lookup failed: ${(err as Error).message}`);
@@ -387,7 +396,7 @@ export class FeishuTransport {
       try {
         const listed = held.alert?.kind === 'approval' ? held.alert.approvals : [];
         const openUrl = orbitUrl({ sessionId: held.session_id });
-        const ctx = { detail: target.detail, approvalsInFeishu: target.approvalsInFeishu, openUrl };
+        const ctx = cardContext(target, openUrl);
         if (held.session_id && listed.some((a) => answerable.has(a.id))) {
           const alert = await this.approvalCard(target, held.session_id, held.approval_id).render();
           if (alert) drawn = { card: renderFeishuCard(alert, ctx), alert, closed: false };
@@ -452,7 +461,7 @@ export class FeishuTransport {
     let result: FeishuSendResult = { ok: true, messageId: held.message_id };
     let attempts = 0;
     if (held.alert) {
-      const card = renderFeishuTerminalCard(held.alert, { detail: target.detail, approvalsInFeishu: target.approvalsInFeishu, openUrl }, outcome);
+      const card = renderFeishuTerminalCard(held.alert, cardContext(target, openUrl), outcome);
       ({ result, attempts } = await this.attempt(() => this.outbound.updateCard(target.credentials, held.message_id, card)));
     }
     const lastError = result.ok ? null : failure(result);
@@ -497,7 +506,7 @@ export class FeishuTransport {
            WHERE "id" = ${id}::uuid AND "lease_token" = ${token}::uuid`;
         return delivered || held.message_id !== null;
       }
-      const card = renderFeishuCard(alert, { detail: target.detail, approvalsInFeishu: target.approvalsInFeishu, openUrl: spec.openUrl });
+      const card = renderFeishuCard(alert, cardContext(target, spec.openUrl));
       const { result, attempts } = await this.attempt(() =>
         held.message_id
           ? this.outbound.updateCard(target.credentials, held.message_id, card)

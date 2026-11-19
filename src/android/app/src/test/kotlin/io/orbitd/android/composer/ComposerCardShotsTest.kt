@@ -82,4 +82,15 @@ class ComposerCardShotsTest : ComposerShellTest() {
         compose.onNodeWithTag("composer-input").performTextInput("Why does the second screenshot overlap?")
         shot("d1-attachments-dark")
     }
+
+    @Config(qualifiers = "+night")
+    @Test fun thePlanBarBesideTheRing() {
+        ComposerShell.runner = ComposerShell.obj("""{"id":"${ComposerShell.RUNNER}","name":"Fixture runner","online":true,"status":"ONLINE",
+            "engines":[{"engine":"codex","installed":true,"auth":"yes"}],"modelCatalog":{"codex":[{"value":"gpt-6","label":"GPT-6"}]},
+            "planUsage":{"codex":{"provider":"codex","primary":{"utilization":23,"windowDurationMins":300}}}}""")
+        ComposerShell.session = mapOf("provider" to JsonPrimitive("codex"), "model" to JsonPrimitive("gpt-6"))
+        signIn(); openSession()
+        await { has(hasTestTag("composer-context") and hasContentDescription("23%", substring = true)) }
+        shot("c2-plan-bar-dark")
+    }
 }
