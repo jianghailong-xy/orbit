@@ -75,6 +75,8 @@ import {
   attentionSignedOutTitle,
   attentionUpdatesTurnedOffDetail,
   runnerGb,
+  runnerLocation,
+  runnerLocationViaProxy,
   runnerNamesMore,
   runnerNamesTwo,
   runnerOfflineLastSeen,
@@ -833,6 +835,16 @@ export function runnerVersionLine(version: string | null | undefined, managed = 
   const v = version?.trim() || null;
   if (managed) return isReleaseVersion(v) ? runnerVersionTag(v!) : MANAGED_RUNNER_KEPT_UP_TO_DATE;
   return v ? runnerVersionTag(v) : null;
+}
+
+/**
+ * Where a machine's IP is, from the Claude region check's last answer (`runner.region`): `📍 Japan`,
+ * `📍 Japan (via proxy)`. Null for a runner no check has decided, or one too old to check.
+ */
+export function runnerLocationLine(region: Runner['region']): string | null {
+  const place = region?.name?.trim() || region?.country?.trim();
+  if (!place) return null;
+  return region!.viaProxy ? runnerLocationViaProxy(place) : runnerLocation(place);
 }
 
 /**

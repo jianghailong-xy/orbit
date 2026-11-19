@@ -142,6 +142,19 @@ public enum RunnerPageFormat {
         return [host, version].compactMap { $0 }.joined(separator: RunnerPageCopy.RUNNER_LINE_SEPARATOR)
     }
 
+    /// Where a machine's IP is, from the Claude region check's last answer (`runner.region`):
+    /// `📍 Japan`, `📍 Japan (via proxy)`. Nil for a runner no check has decided, or one too old to
+    /// check. The web's `runnerLocationLine`.
+    public static func location(_ runner: Runner) -> String? {
+        guard let region = runner.region else { return nil }
+        let name = region.name?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+        let place = name.isEmpty ? (region.country?.trimmingCharacters(in: .whitespacesAndNewlines) ?? "") : name
+        guard !place.isEmpty else { return nil }
+        return region.viaProxy == true
+            ? RunnerPageCopy.runnerLocationViaProxy(place: place)
+            : RunnerPageCopy.runnerLocation(place: place)
+    }
+
     // MARK: Needs Attention
 
     /// An item's sentence as the page shows it. A nearly spent quota leads with when it resets, in the
