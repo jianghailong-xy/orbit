@@ -3166,7 +3166,10 @@ test('the ledger stays append-only, and every later migration is accounted for',
       '1200_standard_set_confirmation_wording',
       // 1220 sets fastupdate = off on run_event's trigram index and merges its pending list; no row is written, and
       // no preserved relation, trigger, function or DONE fence changes.
-      '1220_run_event_text_trgm_fastupdate_off'],
+      '1220_run_event_text_trgm_fastupdate_off',
+      // 1240 adds a plain index on project_coordinator_wake (idempotency_key); no row is written, and no preserved
+      // relation, trigger, function or DONE fence changes.
+      '1240_project_coordinator_wake_key_idx'],
     'a later migration exists; re-read it before trusting the assertions above');
   // Stated rather than described: 0230's fence differs from 0228's by exactly one added lane.
   const later = readFileSync(
