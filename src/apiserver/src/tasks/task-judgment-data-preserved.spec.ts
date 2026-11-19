@@ -2768,7 +2768,10 @@ test('the ledger stays append-only, and every later migration is accounted for',
       // object nor any of the six preserved triggers/functions is named, and no function, trigger or type is
       // created, replaced or dropped, so it is not another writer of the DONE fence. No INSERT, UPDATE or
       // DELETE: every stored op reads NULL in both columns and satisfies the CHECKs as it stands.
-      '0488_wiki_op_answers_challenge'],
+      '0488_wiki_op_answers_challenge',
+      // 1270 adds two plain indexes, session_merge_receipt (source_sha) and task (owner_id, updated_at); no row is
+      // written, and no preserved relation, trigger, function or DONE fence changes.
+      '1270_receipt_source_sha_task_updated_idx'],
     'a later migration exists; re-read it before trusting the assertions above');
   // Stated rather than described: 0230's fence differs from 0228's by exactly one added lane.
   const later = readFileSync(
