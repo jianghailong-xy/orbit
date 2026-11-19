@@ -267,8 +267,8 @@ internal object AccountCopy {
     fun next(account: String) = "Next: $account"
 }
 
-/** Removing a runner's Default from Orbit and bringing it back, in the web's words: src/web/src/lib/runnerAccountCopy.ts, which
- * RunnerAccountCopyParityTest reads as text — the web's, not Swift's, so the order the native clients land in changes nothing. Its two
+/** Removing a runner's Default from Orbit and bringing it back, and making an added Claude Code account the Default, in the web's words:
+ * src/web/src/lib/runnerAccountCopy.ts, which RunnerAccountCopyParityTest reads as text — the web's, not Swift's, so the order the native clients land in changes nothing. Its two
  * lines for the workspace form's account field have no counterpart here: no Android page sets a workspace's account. */
 internal object RunnerAccountCopy {
     /** The question in front of Default's Remove…, and an added account's while Default is removed. */
@@ -307,6 +307,38 @@ internal object RunnerAccountCopy {
     const val IN_USE_WAITING = "Waiting for input"
     /** A listed session with no title yet. */
     const val IN_USE_UNTITLED = "Untitled session"
+
+    /** An added Claude Code account's way to become the Default: the item in its ⋯ menu, and what it does. */
+    const val SET_DEFAULT = "Set as default"
+    const val SET_DEFAULT_HINT = "Moves this login into ~/.claude, so the terminal uses it too"
+    /** Why that item can't be chosen: the runner is offline, too old to swap logins, or swapping already. */
+    const val SET_DEFAULT_OFFLINE = "The runner is offline"
+    const val SET_DEFAULT_UPDATE = "Update the runner to set a default Claude Code account on it"
+    const val SET_DEFAULT_BUSY = "A default is already being set on this runner"
+    /** The question in front of Set as default. */
+    fun setDefaultTitle(name: String) = "Make $name the default?"
+    /** What Set as default comes to: [name] is the added account and [dir] its folder, [defaultName] and [defaultDir] the Default's, each
+     * the way a terminal spells it. */
+    fun setDefaultDetail(name: String, defaultDir: String, defaultName: String, dir: String, runner: String) = "$name’s login moves to " +
+        "$defaultDir, and $defaultName’s to $dir. Claude Code in a terminal on $runner uses $name from then on — restart any that are open. " +
+        "Sessions stay on their accounts, and a turn in progress finishes first. Workspaces keep their account."
+    /** The confirmation's own button. */
+    const val SET_DEFAULT_CONFIRM = "Make default"
+    /** Under the account while it is being made the Default, with no turn left to wait for. */
+    fun settingDefault(name: String) = "Making $name the default"
+    /** The same, while one session on either account finishes its turn. */
+    fun settingDefaultOne(name: String) = "Making $name the default — waiting for 1 session to finish its turn"
+    /** The same, while several do. */
+    fun settingDefaultMany(name: String, count: Int) = "Making $name the default — waiting for $count sessions to finish their turns"
+    /** Beside it, while Claude Code runs in a terminal on either folder: the swap waits for it to exit. */
+    const val SETTING_DEFAULT_TERMINAL = "It also waits for Claude Code running in a terminal there to exit."
+    /** A swap that failed, or that the control plane refused: over the reason. */
+    fun setDefaultFailed(name: String) = "Couldn’t make $name the default"
+    /** Under that reason: a failed swap puts both logins back. */
+    const val SET_DEFAULT_UNCHANGED = "Both logins are as they were."
+    /** What a former Default is called — the account a Set as default moved out of ~/.claude into an added folder — while the owner has
+     * not named it and no email is known for it. */
+    const val FORMER_DEFAULT = "Former default"
 }
 
 /**
@@ -1373,9 +1405,17 @@ internal object RunnerPage {
     fun accountNoQuotaLimit(runner: JsonObject, engine: String, account: String): Boolean =
         engine == "kimi" && kimiNoQuotaLimit(accountSnapshotReported(EngineAccounts.usage(engine, runner), account))
 
-    /** CodexAccounts.label: what the user called it, else Default, or `Account <id>`. */
-    fun accountLabel(id: String, accounts: List<JsonObject>): String =
-        accounts.firstOrNull { it.str("id") == id }?.str("name")?.takeIf { it.isNotEmpty() } ?: if (id == "default") "Default" else "Account $id"
+    /** CodexAccounts.label: what the user called it, else Default; a former Default (the account a Set as default moved out of
+     * ~/.claude) by its email, else "Former default"; or `Account <id>`. */
+    fun accountLabel(id: String, accounts: List<JsonObject>): String {
+        val account = accounts.firstOrNull { it.str("id") == id }
+        account?.str("name")?.takeIf { it.isNotEmpty() }?.let { return it }
+        if (id == "default") return "Default"
+        if ((account?.get("formerDefault") as? JsonPrimitive)?.booleanOrNull == true) {
+            return account?.str("email")?.takeIf { it.isNotEmpty() } ?: RunnerAccountCopy.FORMER_DEFAULT
+        }
+        return "Account $id"
+    }
 
     /** One sign-in on the engine page. [auth] is none for an Antigravity Default on the machine's Gemini key ([envKey]),
      * which has nothing to sign in or pause; its line says what it runs on. [site]: Kimi only, the site its login is on —
@@ -1470,6 +1510,50 @@ internal object RunnerPage {
             else -> RunnerAccountCopy.movingMany(engineName(engine), count)
         }
     }
+
+    /** What a runner declares when it can make an added Claude Code account the Default: the swap itself, and moving a session into its
+     * account's new folder (RunnersService.setDefaultAccount asks for both). */
+    private val CLAUDE_ACCOUNT_SWAP_CAPABILITIES = listOf("claude-account-swap/v1", "claude-account-move/v1")
+
+    /** Whether [line]'s menu offers Set as default: an added Claude Code account's only. */
+    fun offersSetDefault(engine: String, line: AccountLine) = engine == "claude" && !line.isDefault
+
+    /** The Set as default this runner has in flight or last finished, when it is [account]'s; null otherwise. */
+    fun swapOf(runner: JsonObject, account: String): JsonObject? = runner.obj("claudeAccountSwap")?.takeIf { it.str("account") == account }
+
+    /** Why Set as default can't be chosen now, said where its hint is; null when it can. [pressing]: this page's own request is on its way. */
+    fun setDefaultBlocked(runner: JsonObject, offline: Boolean, pressing: Boolean): String? = when {
+        offline -> RunnerAccountCopy.SET_DEFAULT_OFFLINE
+        !runner.strings("capabilities").containsAll(CLAUDE_ACCOUNT_SWAP_CAPABILITIES) -> RunnerAccountCopy.SET_DEFAULT_UPDATE
+        pressing || runner.obj("claudeAccountSwap")?.str("status") == "pending" -> RunnerAccountCopy.SET_DEFAULT_BUSY
+        else -> null
+    }
+
+    /** The question before [line]'s Set as default, title and body: the swap of the two folders, the terminal, the sessions and the
+     * workspaces. The Default's folder is the one the runner reports, else ~/.claude. */
+    fun setDefaultQuestion(runner: JsonObject, health: JsonObject, line: AccountLine): Pair<String, String> {
+        val accounts = health.list("accounts")
+        val default = accounts.firstOrNull { it.str("id") == "default" }
+        val defaultDir = (default?.str("home") ?: default?.str("codexHome"))?.let(::tildePath) ?: "~/.claude"
+        return RunnerAccountCopy.setDefaultTitle(line.name) to RunnerAccountCopy.setDefaultDetail(line.name, defaultDir,
+            accountLabel("default", accounts), line.home.orEmpty(), displayName(runner))
+    }
+
+    /** Under an account while it is being made the Default: how many sessions' turns the swap waits on, and any terminal Claude Code on
+     * either folder. Null unless its swap is pending. */
+    fun settingDefaultLine(runner: JsonObject, line: AccountLine): String? {
+        val swap = swapOf(runner, line.id)?.takeIf { it.str("status") == "pending" } ?: return null
+        val waiting = swap.list("waitingOn").size
+        val said = when (waiting) {
+            0 -> RunnerAccountCopy.settingDefault(line.name)
+            1 -> RunnerAccountCopy.settingDefaultOne(line.name)
+            else -> RunnerAccountCopy.settingDefaultMany(line.name, waiting)
+        }
+        return if (swap.list("foreignProcesses").isNotEmpty()) "$said ${RunnerAccountCopy.SETTING_DEFAULT_TERMINAL}" else said
+    }
+
+    /** A swap of this account's that failed, which puts both logins back: its `message` is the machine's reason. Null otherwise. */
+    fun failedSwap(runner: JsonObject, line: AccountLine): JsonObject? = swapOf(runner, line.id)?.takeIf { it.str("status") == "failed" }
 
     /** What stands over those sessions in place of the machine's sentence, the engine named as its CLI is. */
     fun inUseHeading(engine: String, count: Int) =

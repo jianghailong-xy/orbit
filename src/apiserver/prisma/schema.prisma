@@ -1080,6 +1080,20 @@ model Runner {
   // abandoned one is swept by.
   codexAccountRemoveAt      DateTime? @map("codex_account_remove_at")
 
+  // Making an added Claude account the Default (migration 1000, docs/claude-default-swap-contract.md §5):
+  // the runner swaps that account's login with the one in ~/.claude. The removal's relay again — one
+  // request per runner, redelivered every heartbeat while `pending`:
+  //   NULL | pending | done | failed — claudeAccountSwapMessage explains a failure
+  claudeAccountSwapAccount String?   @map("claude_account_swap_account")
+  claudeAccountSwapStatus  String?   @map("claude_account_swap_status")
+  claudeAccountSwapMessage String?   @map("claude_account_swap_message")
+  // While pending: the sessions with a turn in progress the swap waits on, as the runner last named them.
+  claudeAccountSwapWaiting String[]  @default([]) @map("claude_account_swap_waiting") @db.Uuid
+  // While pending: Claude processes on either folder that are not Orbit sessions ({ pid, command }[]).
+  claudeAccountSwapForeign Json?     @map("claude_account_swap_foreign")
+  // When it was asked: the attempt every report names, and the deadline an abandoned one is swept by.
+  claudeAccountSwapAt      DateTime? @map("claude_account_swap_at")
+
   // Per-engine health on this machine — installed / version / signed in — reported by heartbeat
   // from the same probe `orbit doctor` prints. Shape: @orbit/shared RunnerEngineHealth[].
   engines        Json?     @map("engines")
@@ -2309,6 +2323,9 @@ model Session {
   workSubdir           String?   @map("work_subdir")
   baseSha              String?   @map("base_sha")
   changedFiles         Json?     @map("changed_files")
+  /// The commits of `branch` from `baseSha` to its tip, newest first (@orbit/shared BranchCommit[]), as the runner
+  /// last read them. Like changedFiles, not selected by the list query.
+  branchCommits        Json?     @map("branch_commits")
   isolationStatus      String?   @map("isolation_status")
   // ── "Merge to main" (UI button on the worktree status bar) ──────────────────
   // The user can ask the runner to merge this session's `branch` into a target branch.
