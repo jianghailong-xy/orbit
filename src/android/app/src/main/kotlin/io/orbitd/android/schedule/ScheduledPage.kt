@@ -118,8 +118,12 @@ fun ScheduleCircleGlyph(view: ScheduleDisplay.CircleView, size: Dp = 22.dp) {
                 ScheduleDisplay.Circle.muted -> secondary.copy(alpha = 0.5f)
                 else -> secondary
             }
-            if (mark == ScheduleDisplay.Mark.check) Icon(painterResource(R.drawable.ic_check), null, Modifier.size(size * 0.6f), tint = tint)
-            else Text("!", color = tint, fontWeight = FontWeight.Black, fontSize = (size.value * 0.55f).sp)
+            when (mark) {
+                ScheduleDisplay.Mark.check -> Icon(painterResource(R.drawable.ic_check), null, Modifier.size(size * 0.6f), tint = tint)
+                // A queued run: clock hands inside the ring, which is the clock's face.
+                ScheduleDisplay.Mark.clock -> Icon(painterResource(R.drawable.ic_clock_hands), null, Modifier.size(size * 0.6f), tint = tint)
+                ScheduleDisplay.Mark.alert -> Text("!", color = tint, fontWeight = FontWeight.Black, fontSize = (size.value * 0.55f).sp)
+            }
         }
     }
 }
@@ -145,12 +149,12 @@ private data class ScheduleRowModel(val id: String, val circle: ScheduleDisplay.
 /**
  * The Scheduled page: "Scheduled 6" and the workspace filter, the timeline's groups, the line at the end, and the detail sheet of
  * the row pressed. [focused] — a schedule a push or a card named — opens its sheet. [workspaces] are the quick-add line's choices,
- * [preferredWorkspace] the one it starts on. [openSession] opens a run's or a draft's conversation over the page; [change] starts a
- * conversation in a schedule's workspace (Change… is no form).
+ * [preferredWorkspace] is the initial choice. [openSession] opens a draft's conversation, and [openRun] opens a run's session.
+ * [change] starts a conversation in the schedule's workspace.
  */
 @Composable
 fun ScheduledPage(store: ScheduledStore, workspaces: List<Pair<String, String>>, preferredWorkspace: String?, focused: String?,
-    openSession: (String) -> Unit, change: (ScheduleView) -> Unit, openTask: (String) -> Unit = {}) {
+    openSession: (String) -> Unit, openRun: (String) -> Unit, change: (ScheduleView) -> Unit, openTask: (String) -> Unit = {}) {
     val state by store.state.collectAsState()
     val zone = store.timezone
     LaunchedEffect(store) { store.loadNow() }
@@ -177,7 +181,7 @@ fun ScheduledPage(store: ScheduledStore, workspaces: List<Pair<String, String>>,
         } else {
             groups.forEach { group ->
                 item(key = "group-${group.id}") { GroupHeader(group) }
-                val rows = rows(group, state, store, zone, now, openTask)
+                val rows = rows(group, state, store, zone, now, openRun, openTask)
                 items(rows, key = { it.id }) { row -> ScheduleRow(row) }
             }
             item(key = "quick-add") { QuickAddLine(store, typed, { typed = it }, workspaces, preferredWorkspace) }
@@ -185,7 +189,7 @@ fun ScheduledPage(store: ScheduledStore, workspaces: List<Pair<String, String>>,
         state.errorText?.let { error -> item(key = "error") { Text(error, color = scheduleRed(), style = MaterialTheme.typography.bodySmall) } }
     }
     state.inspectedId?.let { id ->
-        ScheduleDetailSheet(store, id, close = { store.inspect(null) }, openSession = { session -> store.inspect(null); openSession(session) },
+        ScheduleDetailSheet(store, id, close = { store.inspect(null) }, openSession = { session -> store.inspect(null); openRun(session) },
             change = { s -> store.inspect(null); change(s) })
     }
     state.draftPanel?.let { panel ->
@@ -247,7 +251,7 @@ private fun GroupHeader(group: ScheduleDisplay.TimelineGroup) {
 }
 
 private fun rows(group: ScheduleDisplay.TimelineGroup, state: ScheduledStore.State, store: ScheduledStore, zone: String,
-    now: Instant, openTask: (String) -> Unit): List<ScheduleRowModel> = group.items.map { item ->
+    now: Instant, openRun: (String) -> Unit, openTask: (String) -> Unit): List<ScheduleRowModel> = group.items.map { item ->
     when (item) {
         // A task that starts when its condition holds (board ④ ①): "Task · once, when 3 or more OSDs are in · HPC".
         is ScheduleDisplay.TimelineItem.Task -> {
@@ -275,7 +279,9 @@ private fun rows(group: ScheduleDisplay.TimelineGroup, state: ScheduledStore.Sta
                 if (underWay) ScheduleDisplay.phoneRowLine(s.rule, s.workspaceName, s.accessLevel, s.state, s.heldReason, runningMinutes = minutes)
                 else ScheduleDisplay.runLine(run.state, run.summary, run.failureReason, run.reasonText, facts.notified),
                 underWay && ScheduleDisplay.ruleRepeats(s.rule), scheduleClock(run.plannedAt, zone), draft = false, paused = false) {
-                store.inspect(s.id); store.loadDetail(s.id)
+                val session = run.sessionId
+                if (session != null) openRun(session)
+                else { store.inspect(s.id); store.loadDetail(s.id) }
             }
         }
         is ScheduleDisplay.TimelineItem.Schedule -> {

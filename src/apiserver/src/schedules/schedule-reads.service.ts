@@ -133,6 +133,11 @@ export class ScheduleReadsService {
       where: {
         ownerId,
         status: 'OPEN',
+        // Stated on the task row as well as implied by the relation: without it the planner walks the
+        // owner's tasks newest first looking for 200 with a live condition, and when there are none it
+        // reads every one (production, 2026-11-19: 109,840 rows, 115,834 buffers, 285 ms). With it the
+        // entry is task_start_when_condition_id_key, which holds only tasks that have a condition.
+        startWhenConditionId: { not: null },
         startWhenCondition: { state: { not: 'ENDED' }, firedAt: null },
         ...(workspaceId ? { assigneeId: workspaceId } : {}),
       },

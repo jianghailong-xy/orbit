@@ -154,7 +154,7 @@ class ConditionShotsTest {
         show {
             val state by store.state.collectAsState()
             Column(Modifier.padding(16.dp).verticalScroll(rememberScrollState())) {
-                ScheduleInsert.of(state, "S-cap").forEach { ScheduleConversationInsert(it, store, "S-cap", null, null) {} }
+                ScheduleInsert.of(state, "S-cap").forEach { ScheduleConversationInsert(it, store, "S-cap") {} }
             }
         }
         listOf("Create scheduled task?", "Ceph capacity guard", "Raw used above 90%", " for 10 min",
@@ -164,7 +164,7 @@ class ConditionShotsTest {
         show {
             val state by store.state.collectAsState()
             Column(Modifier.padding(16.dp).verticalScroll(rememberScrollState())) {
-                ScheduleInsert.of(state, "S-cmd").forEach { ScheduleConversationInsert(it, store, "S-cmd", null, null) {} }
+                ScheduleInsert.of(state, "S-cmd").forEach { ScheduleConversationInsert(it, store, "S-cmd") {} }
             }
         }
         waitFor("Let Ceph capacity guard check with a new command?")
@@ -176,7 +176,7 @@ class ConditionShotsTest {
     /** Frame 4: the Scheduled page — "Waiting for a condition" above Today with each row's newest reading and its age, the gauge, and
      * the condition that cannot be read under Needs you. */
     @Test fun frame4ScheduledPage() {
-        show { ScheduledPage(store, listOf("a1" to "HPC", "a2" to "apiserver"), "a1", null, {}, {}) }
+        show { ScheduledPage(store, listOf("a1" to "HPC", "a2" to "apiserver"), "a1", null, {}, {}, {}) }
         waitFor("Waiting for a condition")
         listOf("Needs you", "Mon disk guard", "Can't read", "When root disk below 5% · HPC", "Ceph capacity guard", "6.9%",
             " · 1 min ago", "When raw used above 90% · HPC", "Set kubernetes pool to 3 copies", "2 in", " · 3 min ago",
@@ -187,16 +187,16 @@ class ConditionShotsTest {
     }
 
     /** Frame 5: a run its condition started, at the head of its session: the firing in place of a planned time, and its report. */
-    @Test fun frame5RunHeader() {
+    @Test fun frame5RunConversationCards() {
         runBlocking { store.loadSessionNow("S-run"); store.loadConditionNow("c-guard") }
         show {
             val state by store.state.collectAsState()
             Column(Modifier.padding(16.dp).verticalScroll(rememberScrollState()), verticalArrangement = Arrangement.spacedBy(12.dp)) {
-                ScheduleInsert.of(state, "S-run").forEach { ScheduleConversationInsert(it, store, "S-run", "Open", "claude") {} }
+                ScheduleInsert.of(state, "S-run").forEach { ScheduleConversationInsert(it, store, "S-run") {} }
             }
         }
         waitFor("Fired 03:12 · 90.4% for 10 min · Check only")
-        listOf("Ceph capacity guard", "Run of ", "Reported: Changed · above-90@", "Raw used 90.4%. Cause: old snapshots in kubernetes.").forEach(::says)
+        listOf("Reported: Changed · above-90@", "Raw used 90.4%. Cause: old snapshots in kubernetes.").forEach(::says)
         shot("frame-5-run-header")
     }
 
@@ -215,7 +215,7 @@ class ConditionShotsTest {
 
     /** Frame 6 ② ③: the inspector's Condition and How it checks blocks, and its Fired / Ready again history lines. */
     @Test fun frame6Inspector() {
-        show { ScheduledPage(store, listOf("a1" to "HPC"), "a1", "s-guard", {}, {}) }
+        show { ScheduledPage(store, listOf("a1" to "HPC"), "a1", "s-guard", {}, {}, {}) }
         waitFor("How it checks".uppercase())
         listOf("CONDITION", "6.9%", "checked 1 min ago", "Fires above 90% for 10 min. Ready again below 85%.", "90%", "85%",
             "Every 5 min on workstation-gpu, without a model.", Fixture.GUARD_COMMAND, "Read-only. Approved by you on ").forEach(::says)

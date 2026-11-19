@@ -44,7 +44,7 @@ public struct LandingStep: Equatable, Sendable, Identifiable {
 }
 
 public enum LandingSteps {
-    static let order = ["queue", "claim", "sync", "check:TASK_ACCEPTANCE", "check:MERGE_CHECK", "push"]
+    static let order = ["queue", "claim", "sync", "check:TASK_ACCEPTANCE", "check:LANDING_CHECK", "check:BASELINE", "check:MERGE_CHECK", "push"]
 
     /// The kinds a step's folded row prefers to say: how it ended.
     static let verdicts: Set<String> = [
@@ -59,7 +59,9 @@ public enum LandingSteps {
     static let failures: Set<String> = ["STOP_REQUESTED", "CANCELLED", "ABANDONED", "TIMED_OUT", "PUSH_REFUSED"]
 
     static func checkKey(_ entry: IntegrationTimelineEntry) -> String {
-        entry.check?.name == "TASK_ACCEPTANCE" ? "check:TASK_ACCEPTANCE" : "check:MERGE_CHECK"
+        if entry.data?["scope"]?.stringValue == "BASELINE" { return "check:BASELINE" }
+        if entry.check?.name == "LANDING_CHECK" { return "check:LANDING_CHECK" }
+        return entry.check?.name == "TASK_ACCEPTANCE" ? "check:TASK_ACCEPTANCE" : "check:MERGE_CHECK"
     }
 
     /// Which step a line belongs to; `current` is the step the attempt was last in.
@@ -75,7 +77,7 @@ public enum LandingSteps {
         case "CHECK_STARTED", "CHECK_FINISHED":
             return checkKey(entry)
         case "SKIPPED_CHECK":
-            return "check:MERGE_CHECK"
+            return checkKey(entry)
         case "PUSH_REFUSED":
             return "push"
         case "RESULT", "RESULT_FALLBACK":
@@ -106,6 +108,7 @@ public enum LandingSteps {
         case "claim": return LandingStepCopy.claim
         case "sync": return LandingStepCopy.sync
         case "check:TASK_ACCEPTANCE": return LandingPageCopy.checkLabel("TASK_ACCEPTANCE")
+        case "check:LANDING_CHECK", "check:BASELINE": return LandingCheckCopy.label
         case "check:MERGE_CHECK": return LandingPageCopy.checkLabel("MERGE_CHECK")
         default:
             return kind == "LAND_TASK" ? LandingStepCopy.push
@@ -136,6 +139,7 @@ public enum LandingSteps {
     public static func failed(_ step: LandingStep, kind: String) -> Bool {
         step.entries.contains { item in
             let entry = item.entry
+            if entry.data?["skipped"]?.stringValue == "PATHS_EXEMPT" { return false }
             if failures.contains(entry.kind) { return true }
             if ["CHECK_FINISHED", "RESULT", "RESULT_FALLBACK"].contains(entry.kind) {
                 return !entry.succeeded(in: kind)

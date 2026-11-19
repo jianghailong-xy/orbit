@@ -181,6 +181,13 @@ public struct OpenItemHandling: Codable, Equatable, Sendable {
 }
 
 /// One exception item as `GET /projects/:id/open-items` serves it (§4.8).
+public struct OpenItemBaseline: Codable, Equatable, Sendable {
+    public let upstreamSha: String
+    public let targetSha: String
+    public let mergeTreeSha: String
+    public let check: LandingCheckResult
+}
+
 public struct ProjectOpenItemRow: Codable, Equatable, Sendable, Identifiable {
     /// Where this item is on its way to the coordinator (§4.4), which is the address `Open
     /// coordinator` reaches. Read for the same reason as every other field here: a press is drawn
@@ -327,6 +334,8 @@ public struct ProjectOpenItemRow: Codable, Equatable, Sendable, Identifiable {
     public let facts: OpenItemFacts?
     /// The rerun or observation handling it while that is in flight (§4.7 H1, §10.8), or nil — for
     /// none, and from a server that predates it.
+    public let baseline: OpenItemBaseline?
+    public let heldTaskIds: [String]
     public let handling: OpenItemHandling?
     /// Whether the project's coordinator can be neither asked again nor messaged right now, as the
     /// server read it with the list. An escalated card's heading says so instead of "no one acted on
@@ -383,7 +392,8 @@ public struct ProjectOpenItemRow: Codable, Equatable, Sendable, Identifiable {
                 startRequest: ProjectStartRequest? = nil, doneRequest: DoneRequest? = nil,
                 facts: OpenItemFacts? = nil, handling: OpenItemHandling? = nil,
                 coordinatorUnreachable: Bool = false, handoverNote: String? = nil,
-                chat: Chat? = nil, translation: OwnerCardTranslation? = nil) {
+                chat: Chat? = nil, translation: OwnerCardTranslation? = nil,
+                baseline: OpenItemBaseline? = nil, heldTaskIds: [String] = []) {
         self.itemId = itemId
         self.kind = kind
         self.title = title
@@ -410,6 +420,8 @@ public struct ProjectOpenItemRow: Codable, Equatable, Sendable, Identifiable {
         self.doneRequest = doneRequest
         self.facts = facts
         self.handling = handling
+        self.baseline = baseline
+        self.heldTaskIds = heldTaskIds
         self.coordinatorUnreachable = coordinatorUnreachable
         self.handoverNote = handoverNote
         self.chat = chat
@@ -450,6 +462,8 @@ public struct ProjectOpenItemRow: Codable, Equatable, Sendable, Identifiable {
                                                forKey: .startRequest)) ?? nil
         doneRequest = (try? c.decodeIfPresent(DoneRequest.self, forKey: .doneRequest)) ?? nil
         facts = try c.decodeIfPresent(OpenItemFacts.self, forKey: .facts)
+        baseline = try c.decodeIfPresent(OpenItemBaseline.self, forKey: .baseline)
+        heldTaskIds = try c.decodeIfPresent([String].self, forKey: .heldTaskIds) ?? []
         handling = (try? c.decodeIfPresent(OpenItemHandling.self, forKey: .handling)) ?? nil
         coordinatorUnreachable = (try? c.decodeIfPresent(Bool.self, forKey: .coordinatorUnreachable)) ?? false
         handoverNote = (try? c.decodeIfPresent(String.self, forKey: .handoverNote)) ?? nil

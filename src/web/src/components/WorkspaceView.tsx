@@ -180,6 +180,7 @@ import {
   SESSION_PROJECT_COPY,
   landingsRowSummary,
   listShowsProjects,
+  projectSessionsButtonActive,
   sessionProjectListing,
   sourceLandingLabel,
   type SessionProjectRow,
@@ -343,7 +344,17 @@ import {
 import { DshRepairCard } from './Transcript';
 import type { TranslationActionResponse } from '@orbit/shared';
 import { useApprovalDecisions } from '../lib/approvalDecisions';
-import { agentLanguageOf, answerRefusedUntranslated, bilingualOn, heldForTranslation, translationLanguageOf, translationOn, translationTag } from '../lib/translation';
+import {
+  agentLanguageOf,
+  answerRefusedUntranslated,
+  bilingualOn,
+  heldForTranslation,
+  translationLanguageOf,
+  translationOn,
+  translationTag,
+  unavailableTranslationTag,
+  useTranslationUnavailable,
+} from '../lib/translation';
 import { QuestionTranslationsCtx, RefusedSendBack, TranslationCtx, type TranslationActions } from './TranslationParts';
 import { useQuestionTranslations } from '../lib/questionTranslations';
 import {
@@ -377,7 +388,7 @@ import {
 } from './CriteriaDecisionCard';
 import { AnsweredQuestionCard, CoordinatorQuestions, closedQuestionRows, coordinatorQuestions } from './CoordinatorQuestionCard';
 import { useSessionOwnerRequestInserts } from './OwnerRequestCard';
-import { ScheduleRunCrumb, scheduleRunAgentName, useScheduleRunOfSession, useSessionScheduleInserts } from './ScheduleCards';
+import { useScheduleRunOfSession, useSessionScheduleInserts } from './ScheduleCards';
 import {
   OWNER_REQUEST_CHAT_PLACEHOLDER,
   OWNER_REQUEST_CHAT_PREFIX,
@@ -512,7 +523,6 @@ import {
   CONTINUE_MESSAGE,
   ENGINE_CLI_NAMES,
   derivePermissionSemantics,
-  scheduleRunHeadText,
   encodeCursorModel,
   fastModeAvailable,
   isAccountEngine,
@@ -2710,6 +2720,8 @@ export function WorkspaceView({
     placeholder: string;
     /** Carried ahead of the typed message by a send that starts an ordinary turn. */
     context?: string;
+    /** What ✦ Optimize is told the draft answers (`replyingTo`); absent, the banner and `context`. */
+    about?: string;
   } | null>(null);
   const [localStatusCards, setLocalStatusCards] = useState<LocalStatusCard[]>([]);
   const [images, setImages] = useState<ComposerImage[]>([]); // images staged in the composer
@@ -3438,13 +3450,16 @@ export function WorkspaceView({
   // The button's count is the column header's "Project · N sessions". Where the column shows another
   // project or none, the same two reads (one cache entry with the column's) count it.
   const titleBarOwnRead = !!titleBarProjectId && titleBarProjectId !== openProjectId;
+  // Polled as the page polls its own two, so the button's spinner follows them while the page is shut.
   const titleBarOpenQ = useQuery({
     ...projectSessionsQuery({ projectId: titleBarProjectId ?? '', view: 'open', includeLanding: true }),
     enabled: titleBarOwnRead,
+    refetchInterval: (query) => listPollMs(controlLive, query),
   });
   const titleBarCompletedQ = useQuery({
     ...projectSessionsQuery({ projectId: titleBarProjectId ?? '', view: 'completed', includeLanding: true }),
     enabled: titleBarOwnRead,
+    refetchInterval: (query) => listPollMs(controlLive, query),
   });
   const titleBarSessionCount = !titleBarProjectId ? null
     : !titleBarOwnRead ? (projectSessionsQ.isSuccess || completedProjectSessionsQ.isSuccess ? projectMembers.length : null)
@@ -3709,6 +3724,28 @@ export function WorkspaceView({
   useEffect(() => {
     if (!projectColumnCrowds || !showProjectColumn) setProjectColumnOnDemand(false);
   }, [projectColumnCrowds, showProjectColumn]);
+  // The title bar's Project sessions button spins while anything its page shows is active (owner
+  // 2026-11-17, docs/mocks/project-sessions-button-running, option C). Its landing line and merge are
+  // read here only while that page is shut: open, the page reads them itself (the same cache entries),
+  // and these stop.
+  const titleBarPageShown = !!titleBarProjectId && (isMobile ? sheetProjectId === titleBarProjectId
+    : titleBarProjectId === columnProjectId && projectColumnOpen);
+  const titleBarReadsLine = !!titleBarProjectId && !selectedTrashed && !titleBarPageShown;
+  const titleBarIntegrationQ = useQuery({
+    ...projectIntegrationQuery(titleBarProjectId ?? ''),
+    enabled: titleBarReadsLine,
+  });
+  const titleBarPromotionQ = useQuery({
+    ...projectPromotionQuery(titleBarProjectId ?? ''),
+    enabled: titleBarReadsLine,
+    refetchInterval: pollWhileInFlight(20_000, (query) => promotionInFlight(query.state.data)),
+  });
+  const titleBarActive = !!titleBarProjectId && projectSessionsButtonActive(
+    titleBarOwnRead ? [...(titleBarOpenQ.data ?? []), ...(titleBarCompletedQ.data ?? [])] : allProjectMembers,
+    (s) => statusGlyphMotion(s, sessionWatching(watchingBySession, s.id)?.word),
+    titleBarIntegrationQ.data,
+    titleBarPromotionQ.data,
+  );
   // Esc folds the column too, unless focus is in a field, a dialog or a menu, which own the key.
   useEffect(() => {
     if (!projectColumnOpen) return;
@@ -7592,11 +7629,12 @@ export function WorkspaceView({
       : undefined;
   // "Chat about this" on a question card hands the reply off to the main composer: show the
   // reply-context chip and focus the box. The send itself is rerouted to a deny in onSend.
-  const startChatReply = (id: string, question: string): void => {
+  const startChatReply = (id: string, question: string, about?: string): void => {
     setReplyTo({
       target: { kind: 'approval', id },
       banner: `Replying to Claude’s question${question ? `: ${question}` : ''}`,
       placeholder: 'Reply to Claude’s question…',
+      ...(about ? { about } : {}),
     });
     setTimeout(() => taRef.current?.focus(), 0);
   };
@@ -8343,12 +8381,15 @@ export function WorkspaceView({
   const shownWorkspaceId: string | undefined = selected ? (selected.workspace?.id ?? undefined) : workspaceId;
   // ✦ Optimize's context (docs/prompt-optimizer-design.md, D1): a session supplies its own; a new
   // draft has none yet, so it names the workspace the composer picked.
+  // A draft armed as a card's reply also says what it answers, so the rewrite stays a reply to it.
+  const replyingTo = replyTo ? replyTo.about ?? [replyTo.banner, replyTo.context].filter(Boolean).join('\n\n') : '';
   const promptOptimizerTarget = useMemo<PromptOptimizerTarget>(
     () => ({
       ...(selectedId ? { sessionId: selectedId } : shownWorkspaceId ? { workspaceId: shownWorkspaceId } : {}),
+      ...(replyingTo ? { replyingTo } : {}),
       onInserted: setOptimizedInsert,
     }),
-    [selectedId, shownWorkspaceId],
+    [selectedId, shownWorkspaceId, replyingTo],
   );
   useEffect(() => setOptimizedInsert(null), [selectedId]);
   // The workspace can't be switched once the session exists (live or terminal), nor when the
@@ -9456,14 +9497,6 @@ export function WorkspaceView({
     : null;
   const headSub = composing
     ? [headWorkspaceName, openFolder?.name, 'New session'].filter(Boolean).join(' · ')
-    // A scheduled run's header is its run's: state · agent · how long it took (board web/run.png).
-    : selected && isScheduleRun && scheduleRun
-      ? scheduleRunHeadText({
-          state: headLifecycleWord,
-          engine: scheduleRunAgentName(scheduleRun, ENGINE_CLI_NAMES[selectedEngine] ?? null),
-          run: scheduleRun.run,
-          now: new Date(),
-        })
     : selected
       ? [
           headRunWord,
@@ -10230,7 +10263,6 @@ export function WorkspaceView({
             </button>
           )}
           <div className="workspace-header-main">
-            {scheduleRun && isScheduleRun && !composing && <ScheduleRunCrumb of={scheduleRun} />}
             {selected?.taskId && !composing && (
               <button
                 type="button"
@@ -10330,8 +10362,7 @@ export function WorkspaceView({
                   <GlobalOutlined /> Shared · Live
                 </button>
               )}
-              {/* A scheduled run is followed through its schedule, not by a chip of its own. */}
-              {!composing && selectedId && !selectedTrashed && !selectedMissing && !isScheduleRun && (
+              {!composing && selectedId && !selectedTrashed && !selectedMissing && (
                 <SessionWatchBadges sessionId={selectedId} />
               )}
             </div>
@@ -10348,10 +10379,11 @@ export function WorkspaceView({
             <>
               {titleBarProjectId && !selectedTrashed && (
                 <Button variant="text" className="workspace-header-project"
-                  icon={<SidebarNavIcon name="projects" />}
+                  icon={titleBarActive
+                    ? <LoadingOutlined spin style={{ color: 'var(--brand)' }} />
+                    : <SidebarNavIcon name="projects" />}
                   title={PROJECT_COLUMN_COPY.label} aria-label={PROJECT_COLUMN_COPY.label}
-                  aria-pressed={isMobile ? sheetProjectId === titleBarProjectId
-                    : titleBarProjectId === columnProjectId && projectColumnOpen}
+                  aria-pressed={titleBarPageShown}
                   onClick={isMobile ? () => setSheetProjectId(titleBarProjectId) : toggleProjectColumn}>
                   {titleBarSessionCount ?? undefined}
                 </Button>
@@ -11786,6 +11818,8 @@ export function SessionComposer({
   const navigate = useNavigate();
   const me = useQuery(meQuery());
   const translationIsOn = translationOn(me.data);
+  // A failing translator being skipped (policy board frame 6): warned here, before the send.
+  const translationUnavailable = useTranslationUnavailable(me.data);
   // The textarea's scroll offset, mirrored so the chip layer stays in step once the draft passes
   // its auto-grow cap.
   const [composerScroll, setComposerScroll] = useState(0);
@@ -12008,7 +12042,9 @@ export function SessionComposer({
     setText,
     taRef,
     shellMode,
-    disabled: !!composerDisabled || !!replyTo,
+    // A reply armed by a card's "Chat about this" is still a draft the owner writes, so ✦ stays (as on
+    // macOS/iOS and Android): what Use puts in the box goes to the card's door like any typed reply.
+    disabled: !!composerDisabled,
     resetKey: selectedId,
   });
   // The `+` menu "Shell" entry: prefix the draft with `!` so onSend routes it as a raw
@@ -12436,7 +12472,7 @@ export function SessionComposer({
             Tab
           </kbd>
           <span className="composer-suggestion-tap" aria-hidden="true">
-            Double-tap to use
+            Double-tap
           </span>
           {/* For a screen reader on a touch screen, whose own double-tap is "activate": hidden
               from the eye there, and gone with a keyboard, which has Tab. */}
@@ -12706,11 +12742,17 @@ export function SessionComposer({
         {translationIsOn && (
           <button
             type="button"
-            className="composer-translation-tag"
-            title="Messages are translated before the agent gets them. Open Settings › Translation"
+            className={`composer-translation-tag${translationUnavailable ? ' is-unavailable' : ''}`}
+            title={
+              translationUnavailable
+                ? `${unavailableTranslationTag(translationLanguageOf(me.data), agentLanguageOf(me.data))}. The translator is failing, so a message sent now is held until you Retry or Send as written. Open Settings › Translation`
+                : 'Messages are translated before the agent gets them. Open Settings › Translation'
+            }
             onClick={() => navigate('/settings/general', { state: { settingsAnchor: 'translationEnabled' } })}
           >
-            {translationTag(translationLanguageOf(me.data), agentLanguageOf(me.data))}
+            {translationUnavailable
+              ? unavailableTranslationTag(translationLanguageOf(me.data), agentLanguageOf(me.data))
+              : translationTag(translationLanguageOf(me.data), agentLanguageOf(me.data))}
           </button>
         )}
         {/* A 32px icon like `+` and Send, there whenever the optimizer is on and only disabled with

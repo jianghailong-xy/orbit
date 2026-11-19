@@ -2911,6 +2911,8 @@ test('the ledger stays append-only, and every later migration is accounted for',
       // 0517 adds the email_outbox table, its indexes and its foreign key to "user" only; no preserved rows,
       // triggers or DONE fence change, and no row is written.
       '0517_email_outbox',
+      // 0518 constrains enqueue event causes only; no preserved rows or DONE fence changes.
+      '0518_integration_baseline_hold',
       // 0519 adds two nullable wiki_maintenance_run columns and one defaulted wiki_cursor counter; no preserved rows,
       // triggers or DONE fence change.
       '0519_wiki_repo_attention',
@@ -3136,10 +3138,19 @@ test('the ledger stays append-only, and every later migration is accounted for',
       // project_handoff_approval, and creates project_criteria_change_translation. No INSERT/UPDATE/DELETE, and
       // no trigger, function or DONE fence changes.
       '1080_owner_card_translation_more',
+      // 1100 adds nullable conversation_turn.translation_failure_reason and translation_http_status with a CHECK
+      // every stored row passes (both NULL); conversation_turn is none of the preserved relations, no row is written,
+      // and no trigger, function or DONE fence changes.
+      '1100_conversation_turn_translation_failure',
+      // 1101 widens the enqueue event cause CHECK to admit SKIP_CHECK; no preserved rows or DONE fence changes.
+      '1101_integration_enqueue_skip_check',
       // 1110 restates three CHECKs on project_open_item (kind, resolution, owner-only) to admit EVIDENCE_UNDECIDED,
       // DECIDED and REVISED; catalog-only, no row is written, and no preserved relation, trigger, function or DONE
       // fence changes.
-      '1110_evidence_undecided_item'],
+      '1110_evidence_undecided_item',
+      // 1130 adds three partial indexes, one on `task` and two on `session`; no row is written, and no preserved
+      // relation, trigger, function or DONE fence changes.
+      '1130_rare_predicate_indexes'],
     'a later migration exists; re-read it before trusting the assertions above');
   // Stated rather than described: 0230's fence differs from 0228's by exactly one added lane.
   const later = readFileSync(

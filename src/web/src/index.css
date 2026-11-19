@@ -8189,6 +8189,20 @@ button.chat-jump-start:hover {
   height: 18px;
   white-space: nowrap;
 }
+/* Held because its translation failed (docs/ux/translation-failure-policy.html, frames 4B and 7): the reason's
+   sentence can outrun the column and wrap, so the row grows downward from under the bubble instead of being held
+   to one 18px line, which drew a wrapped first line up over the bubble's border. Right-aligned like the bubble. */
+.chat-user-meta.has-failure-foot {
+  height: auto;
+  min-height: 18px;
+  align-items: flex-start;
+  white-space: normal;
+}
+.chat-user-meta.has-failure-foot > .chat-translate-foot.is-error {
+  min-width: 0;
+  justify-content: flex-end;
+  text-align: right;
+}
 .chat-user-meta > .chat-copy,
 .chat-user-meta > .chat-time,
 .chat-user-meta > .chat-meta-sep {
@@ -8302,6 +8316,10 @@ button.chat-jump-start:hover {
   display: flex;
   margin: 6px 0 0;
 }
+/* On an approval card (frame 5) the line sits inside the card's own 14px inset, as .approval-stale does. */
+.approval-untranslated-row {
+  padding: 8px 14px 0;
+}
 /* A send-back the composer finished and the server could not translate: above the composer. */
 .composer-translate-refused {
   margin-bottom: 8px;
@@ -8342,7 +8360,11 @@ button.chat-jump-start:hover {
     opacity: 1;
   }
 }
+/* A failure line says why (docs/ux/translation-failure-policy.html, frame 7), which can outrun a narrow column:
+   it wraps rather than running out of its card, and Retry and Send as written each stay whole. */
 .chat-translate-foot.is-error {
+  flex-wrap: wrap;
+  white-space: normal;
   color: var(--error-solid);
 }
 .chat-translate-sep {
@@ -8358,6 +8380,7 @@ button.chat-jump-start:hover {
   cursor: pointer;
 }
 .chat-translate-foot.is-error .chat-translate-action {
+  white-space: nowrap;
   color: var(--error-solid);
 }
 .chat-translate-action:disabled {
@@ -8449,6 +8472,21 @@ button.chat-jump-start:hover {
 }
 .composer-translation-tag:hover {
   color: var(--text-1);
+}
+/* Translation unavailable (docs/ux/translation-failure-policy.html, frame 6): the warning style, before a send.
+   Longer than the plain tag, so in a narrow toolbar it gives way before the model picker does (the whole of it
+   stays in the title). */
+.composer-translation-tag.is-unavailable {
+  flex: 0 100 auto;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  color: var(--warning);
+  background: var(--warning-bg);
+  border-color: var(--warning-border);
+}
+.composer-translation-tag.is-unavailable:hover {
+  color: var(--warning);
 }
 /* Prompt optimizer (docs/mocks/prompt-optimizer, frames 2–6): ✦ Optimize beside Send, and the
    suggestion card (or the failure line) above the composer, as the slash menu sits. */
@@ -13423,6 +13461,94 @@ button.chat-jump-start:hover {
   word-break: break-word;
   font-size: 12.5px;
   margin: 8px 0;
+}
+/* A plain tool call (ToolCallBody): the command, path or URL itself, not the input as JSON. */
+.approval-tool {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding: 6px 0 4px;
+}
+.approval-tool .approval-translated-desc {
+  margin-bottom: 0;
+}
+.approval-desc-original {
+  margin-left: 8px;
+  font-size: 12px;
+  color: var(--text-3);
+}
+.approval-tool-chip {
+  margin-left: 8px;
+  padding: 1px 7px;
+  border-radius: 5px;
+  background: var(--brand-border);
+  color: var(--brand-strong);
+  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  font-size: 11.5px;
+  font-weight: 500;
+  vertical-align: 1px;
+}
+.approval-cmd {
+  position: relative;
+}
+.approval-cmd .chat-pre-wrap.cmd .chat-pre {
+  background: var(--bg-raised);
+  padding-right: 56px;
+}
+.approval-copy {
+  position: absolute;
+  top: 6px;
+  right: 8px;
+  z-index: 1;
+  padding: 1px 7px;
+  border: 1px solid var(--border);
+  border-radius: 5px;
+  background: var(--bg-raised);
+  color: var(--text-3);
+  font-size: 11px;
+  cursor: pointer;
+}
+.approval-copy:hover {
+  color: var(--text-1);
+}
+.approval-path {
+  padding: 6px 10px;
+  border: 1px solid var(--border-subtle);
+  border-radius: 6px;
+  background: var(--bg-raised);
+  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  font-size: 12.5px;
+  word-break: break-all;
+}
+.approval-path-dir {
+  color: var(--text-3);
+}
+.approval-meta {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+.approval-meta span {
+  padding: 1px 9px;
+  border: 1px solid var(--border);
+  border-radius: 999px;
+  background: var(--bg-raised);
+  color: var(--text-2);
+  font-size: 11.5px;
+}
+.approval-meta span.is-warn {
+  border-color: var(--warning-border);
+  background: var(--warning-bg);
+  color: var(--warning-solid);
+}
+.approval-raw-toggle {
+  align-self: flex-start;
+  padding: 0;
+  border: none;
+  background: none;
+  color: var(--brand);
+  font-size: 12px;
+  cursor: pointer;
 }
 /* ---- Card actions: one size, wherever a card asks the reader for something ----
    The approval card settled these numbers over three rounds of beta — default control size, not a
@@ -28571,6 +28697,10 @@ button.agent-progress-agent:hover {
   font-size: 12.5px;
 }
 
+.landing-check-confirmation { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 16px; }
+@media (max-width: 600px) { .landing-check-confirmation { grid-template-columns: 1fr; } }
+
+.orbit-number-input.project-check-timeout { width: min(100%, 24rem); max-width: 100%; }
 /* The Providers page's Tier column (docs/subagent-design.md §7, board docs/mocks/subagent/05.png). */
 .model-tiers {
   width: 100%;

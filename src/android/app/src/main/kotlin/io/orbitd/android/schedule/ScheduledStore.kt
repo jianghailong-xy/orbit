@@ -219,7 +219,7 @@ class ScheduledStore internal constructor(private val auth: AuthSession, val han
         }
     }
 
-    /** The run a session's read names, for a server whose schedule-cards read names none: a run's session is in no list. */
+    /** The run a session's read names, for a server whose schedule-cards read names none. */
     private suspend fun findRun(runId: String): ScheduleRunView? {
         val schedules = try { api.list(state = "all").schedules } catch (cancel: CancellationException) { throw cancel } catch (_: Exception) { return null }
         for (s in schedules) {

@@ -566,6 +566,11 @@ struct ProjectDetailView: View {
                             withAnimation { proxy.scrollTo(ProjectDone.nonCodeAnchor, anchor: .center) }
                         }
                     })
+                case .landingCheck:
+                    if let view = store.integration {
+                        MergeCheckEditor(store: store, view: view,
+                                         automatic: store.document?.coordinatorEnabled ?? false, landing: true)
+                    }
                 case .mergeCheck:
                     if let view = store.integration {
                         MergeCheckEditor(store: store, view: view,
@@ -998,7 +1003,19 @@ struct ProjectDetailView: View {
                 Text(ProjectPage.who(row)).font(.orbitMeta).foregroundStyle(.secondary)
             }
             VStack(alignment: .leading, spacing: 4) {
-                Text(row.listTitle(owner: language)).font(.orbitSubtext.weight(.semibold))
+                Text(row.baseline == nil ? row.listTitle(owner: language) : ExceptionCards.headingLine(row)).font(.orbitSubtext.weight(.semibold))
+                if row.baseline != nil {
+                    if case .rows(let block) = ExceptionCards.facts(row) {
+                        ForEach(Array(block.rows.enumerated()), id: \.offset) { _, fact in
+                            Text(fact.label.isEmpty ? fact.value : fact.label + ": " + fact.value).font(.orbitLabel)
+                        }
+                    }
+                    DisclosureGroup(LandingCheckCopy.viewHeld) {
+                        ForEach(row.heldTaskIds, id: \.self) { id in
+                            Link(id, destination: URL(string: "orbit-task:\(id)")!).font(.orbitLabel)
+                        }
+                    }
+                }
                 if !detailLine.isEmpty {
                     Text(detailLine).font(.orbitLabel).foregroundStyle(.secondary)
                 }
@@ -1434,6 +1451,22 @@ struct ProjectDetailView: View {
                     automaticSetting(store, view, document: document)
                     atMostSetting(store, document: document)
                     if !document.nonCode {
+                        VStack(alignment: .leading, spacing: 6) {
+                            if view.line == .main {
+                                Text(LandingCheckCopy.label)
+                                Text(LandingCheckCopy.main).font(.orbitLabel).foregroundStyle(.secondary)
+                            } else {
+                                Button { pageSheet = .landingCheck } label: {
+                                    VStack(alignment: .leading, spacing: 4) {
+                                        Text(LandingCheckCopy.label)
+                                        Text(view.landingCheckCommand ?? LandingCheckCopy.inheritedCommand(view.mergeCheckCommand)).font(.orbitMono)
+                                        Text(view.landingCheckTimeoutSeconds.map { "\($0) seconds" }
+                                             ?? LandingCheckCopy.inheritedTimeout(view.mergeCheckTimeoutSeconds)).font(.orbitLabel)
+                                        Text(LandingCheckCopy.hint).font(.orbitLabel).foregroundStyle(.secondary)
+                                    }.frame(maxWidth: .infinity, alignment: .leading)
+                                }.buttonStyle(.plain).disabled(store.busy)
+                            }
+                        }
                         mergeCheckSetting(store, view, document: document)
                     }
                     if let seconds = view.escalationSeconds {
@@ -2711,6 +2744,7 @@ private enum ProjectPageSheet: String, Identifiable {
     case done
     /// How it runs' merge check, where a command has room.
     case mergeCheck
+    case landingCheck
     /// How it runs' main branch: the branches to pick from, and a name typed.
     case mainBranch
     /// The jobs the Work overview's landing row counts, from a press on that row.
@@ -2916,7 +2950,7 @@ private struct ProjectDoneSheet: View {
                 error = refused
                 return false
             }
-            if store.doneDeclineRefusedUntranslated { return false }
+            if store.doneDeclineRefusedUntranslated != nil { return false }
             dismiss()
             return true
         }
@@ -2941,15 +2975,19 @@ private struct MergeCheckEditor: View {
     let store: ProjectDetailModel
     let view: ProjectIntegrationView
     let automatic: Bool
+    let landing: Bool
     @Environment(\.dismiss) private var dismiss
     @State private var command: String
+    @State private var timeout: String
     @State private var refused: String?
 
-    init(store: ProjectDetailModel, view: ProjectIntegrationView, automatic: Bool) {
+    init(store: ProjectDetailModel, view: ProjectIntegrationView, automatic: Bool, landing: Bool = false) {
         self.store = store
         self.view = view
         self.automatic = automatic
-        _command = State(initialValue: view.mergeCheckCommand ?? "")
+        self.landing = landing
+        _timeout = State(initialValue: view.landingCheckTimeoutSeconds.map(String.init) ?? "")
+        _command = State(initialValue: (landing ? view.landingCheckCommand : view.mergeCheckCommand) ?? "")
     }
 
     var body: some View {
@@ -2959,16 +2997,23 @@ private struct MergeCheckEditor: View {
         NavigationStack {
             Form {
                 Section {
-                    TextField(RunSettings.mergeCheckPlaceholder, text: $command, axis: .vertical)
+                    TextField(landing ? LandingCheckCopy.commandPlaceholder : RunSettings.mergeCheckPlaceholder, text: $command, axis: .vertical)
                         .font(.orbitMono)
                         .autocorrectionDisabled()
                         #if os(iOS)
                         .textInputAutocapitalization(.never)
                         #endif
+                    if landing {
+                        TextField(LandingCheckCopy.timeoutPlaceholder, text: $timeout)
+                            .accessibilityLabel(LandingCheckCopy.timeout)
+                        Text(LandingCheckCopy.timeoutHint).font(.orbitLabel)
+                        if timeout.isEmpty { Text(LandingCheckCopy.inheritedTimeout(view.mergeCheckTimeoutSeconds)).font(.orbitLabel) }
+                        if command.isEmpty { Text(LandingCheckCopy.inheritedCommand(view.mergeCheckCommand)).font(.orbitLabel) }
+                    }
                 } footer: {
                     VStack(alignment: .leading, spacing: 4) {
-                        Text(RunSettings.mergeCheckHint(view, main: main))
-                        if missing {
+                        Text(landing ? LandingCheckCopy.hint : RunSettings.mergeCheckHint(view, main: main))
+                        if missing && !landing {
                             Text("⚠ \(RunSettings.noMergeCheckWarning(main))").foregroundStyle(Color.orange)
                         }
                         if let refused {
@@ -2977,7 +3022,7 @@ private struct MergeCheckEditor: View {
                     }
                 }
             }
-            .navigationTitle(RunSettings.mergeCheck)
+            .navigationTitle(landing ? LandingCheckCopy.label : RunSettings.mergeCheck)
             #if os(iOS)
             .navigationBarTitleDisplayMode(.inline)
             #endif
@@ -2987,7 +3032,7 @@ private struct MergeCheckEditor: View {
                 }
                 ToolbarItem(placement: .confirmationAction) {
                     Button(RunSettings.save) { save() }
-                        .disabled(store.busy || RunSettings.mergeCheckWrite(view, to: command) == nil)
+                        .disabled(store.busy || write == nil || (landing && !timeout.isEmpty && (Int(timeout) ?? 0) < 1))
                 }
             }
         }
@@ -2997,8 +3042,12 @@ private struct MergeCheckEditor: View {
         #endif
     }
 
+    private var write: UpdateProjectIntegrationRequest? {
+        landing ? RunSettings.landingCheckWrite(view, command: command, timeout: Int(timeout))
+            : RunSettings.mergeCheckWrite(view, to: command)
+    }
+
     private func save() {
-        let write = RunSettings.mergeCheckWrite(view, to: command)
         Task {
             if let failure = await store.updateIntegration(write) {
                 refused = failure

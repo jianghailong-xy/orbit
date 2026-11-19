@@ -1,0 +1,186 @@
+<!doctype html>
+<html lang="zh">
+<meta charset="utf-8">
+<title>输入框建议：让出一整行（方案 B）</title>
+<style>
+  body { margin: 0; background: #f2f2f4; }
+  .b-part { font: 15px/1.6 Inter, "Noto Sans SC", sans-serif; color: #1c1c1e; padding: 32px 40px 40px; width: 1500px; box-sizing: border-box; background: #f2f2f4; }
+  .b-part h1 { font-size: 26px; margin: 0 0 4px; }
+  .b-part h2 { font-size: 20px; margin: 0 0 14px; }
+  .b-sub { color: #6b6b70; margin: 0 0 22px; }
+  .b-row { display: flex; gap: 36px; align-items: flex-start; }
+  .b-col { width: 472px; }
+  .b-label { font-weight: 600; margin: 0 0 8px; }
+  .b-label .b-tag { display: inline-block; font-size: 12px; font-weight: 600; padding: 1px 8px; border-radius: 10px; margin-left: 6px; }
+  .b-now { background: #fde8e8; color: #b42318; }
+  .b-new { background: #e3f1e6; color: #1e7b34; }
+  .b-stage { width: 440px; background: #fff; border-radius: 22px; padding: 18px 16px 22px; box-shadow: 0 1px 3px rgba(0,0,0,.08); position: relative; }
+  .b-stage .b-w { position: absolute; top: 4px; right: 14px; font-size: 11px; color: #a0a0a6; }
+  /* the composer card, iPhone Pro Max: 440pt wide, 16pt margins */
+  .cmp { border: 1px solid #dcdce0; border-radius: 28px; background: #fdfdfd; box-shadow: 0 6px 18px rgba(0,0,0,.06); padding: 14px 16px 12px; font-family: Inter, "Noto Sans SC", sans-serif; }
+  .cmp-line { display: flex; align-items: center; gap: 8px; height: 26px; }
+  .cmp-field { flex: 1; min-width: 0; display: flex; align-items: baseline; gap: 8px; }
+  .cmp-words { font-size: 17px; color: #bdbdc2; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; min-width: 0; flex: 0 1 auto; }
+  .cmp-words.typed { color: #1c1c1e; }
+  .cmp-hint { font-size: 13px; color: #bdbdc2; white-space: nowrap; flex: none; }
+  .cmp-ttag { flex: none; font-size: 13px; color: #6e6e73; background: #ececee; border-radius: 13px; padding: 3px 10px; white-space: nowrap; }
+  .cmp-bar { display: flex; align-items: center; margin-top: 22px; font-size: 17px; }
+  .cmp-bar .plus { font-size: 26px; color: #8e8e93; width: 30px; line-height: 1; }
+  .cmp-bar .mode { color: #8e8e93; margin-left: 14px; }
+  .cmp-bar .sp { flex: 1; }
+  .cmp-bar .model { font-weight: 600; }
+  .cmp-bar .eff { color: #8e8e93; margin-left: 6px; }
+  .cmp-bar .gauge { width: 30px; height: 6px; border-radius: 3px; background: #e5e5ea; margin-left: 12px; position: relative; }
+  .cmp-bar .gauge::after { content: ''; position: absolute; left: 0; top: 0; bottom: 0; width: 9px; border-radius: 3px; background: #3b6fe0; }
+  .cmp-bar .ring { width: 22px; height: 22px; border-radius: 50%; border: 3px solid #d1d1d6; border-top-color: #3b6fe0; margin-left: 12px; box-sizing: border-box; }
+  .cmp-bar .send { width: 40px; height: 40px; border-radius: 50%; background: #c7c7cc; color: #fff; margin-left: 12px; display: grid; place-items: center; font-size: 20px; }
+  .b-mk { display: inline-grid; place-items: center; width: 22px; height: 22px; border-radius: 50%; background: #ff3b30; color: #fff; font: 600 13px/1 Inter, sans-serif; vertical-align: middle; }
+  .b-pin { position: absolute; }
+  .b-notes { margin: 14px 0 0; padding: 0; list-style: none; }
+  .b-notes li { margin: 0 0 8px; display: flex; gap: 8px; }
+  .b-notes li .b-mk { flex: none; margin-top: 1px; }
+  .b-count { font-size: 13px; color: #6b6b70; margin-top: 8px; }
+  .b-count b { color: #1c1c1e; }
+  .b-box { background: #fff; border-radius: 14px; padding: 18px 22px; margin-top: 22px; }
+  .b-box h3 { margin: 0 0 8px; font-size: 16px; }
+  .b-box ol, .b-box ul { margin: 0; padding-left: 20px; }
+  .b-box li { margin-bottom: 6px; }
+  code { font: 13px "JetBrains Mono", monospace; background: #eeeef0; padding: 1px 5px; border-radius: 4px; }
+</style>
+<body>
+
+<section class="b-part" id="part-1">
+  <h1>输入框里的建议：让出一整行（方案 B）</h1>
+  <p class="b-sub">iPhone Pro Max（440pt 宽）。建议字号不变（正文 17pt，和打字一样大），问题是这一行被翻译标签和提示挤得只剩 5–7 个字。方案 B：有建议时翻译标签让位，提示缩成「Double-tap」，卡片高度不变。</p>
+  <div class="b-row">
+    <div class="b-col">
+      <p class="b-label">① 今天<span class="b-tag b-now">只露 5–7 字</span></p>
+      <div class="b-stage"><span class="b-w">440pt</span>
+        <div class="cmp" data-measure="now-long">
+          <div class="cmp-line">
+            <div class="cmp-field"><span class="cmp-words">告诉我它什么时候能部署到生产环境，以及出问题时怎么回滚</span><span class="cmp-hint">Double-tap to use</span></div>
+            <span class="cmp-ttag">Chinese → English</span>
+          </div>
+          <div class="cmp-bar"><span class="plus">+</span><span class="mode">Auto</span><span class="sp"></span><span class="model">Opus 5.5</span><span class="eff">Default</span><span class="gauge"></span><span class="ring"></span><span class="send">↑</span></div>
+        </div>
+        <p class="b-count">露出的建议：<b class="n"></b></p>
+      </div>
+      <div class="b-stage" style="margin-top:16px">
+        <div class="cmp" data-measure="now-en">
+          <div class="cmp-line">
+            <div class="cmp-field"><span class="cmp-words">Run the full web suite, then push the branch for review</span><span class="cmp-hint">Double-tap to use</span></div>
+            <span class="cmp-ttag">Chinese → English</span>
+          </div>
+          <div class="cmp-bar"><span class="plus">+</span><span class="mode">Auto</span><span class="sp"></span><span class="model">Opus 5.5</span><span class="eff">Default</span><span class="gauge"></span><span class="ring"></span><span class="send">↑</span></div>
+        </div>
+        <p class="b-count">露出的建议：<b class="n"></b></p>
+      </div>
+      <ul class="b-notes">
+        <li><span class="b-mk">1</span><span>一行里三样东西抢地方：建议、「Double-tap to use」（约 120pt）、翻译标签（约 130pt）。建议是最后让位的那个，结果最重要的反而最短。</span></li>
+        <li><span class="b-mk">2</span><span>看不出拍两下会填进去什么，建议就没法用。</span></li>
+      </ul>
+    </div>
+
+    <div class="b-col">
+      <p class="b-label">② 方案 B<span class="b-tag b-new">约 3 倍的字</span></p>
+      <div class="b-stage"><span class="b-w">440pt</span>
+        <div class="cmp" data-measure="b-long">
+          <div class="cmp-line">
+            <div class="cmp-field"><span class="cmp-words">告诉我它什么时候能部署到生产环境，以及出问题时怎么回滚</span><span class="cmp-hint">Double-tap</span></div>
+          </div>
+          <div class="cmp-bar"><span class="plus">+</span><span class="mode">Auto</span><span class="sp"></span><span class="model">Opus 5.5</span><span class="eff">Default</span><span class="gauge"></span><span class="ring"></span><span class="send">↑</span></div>
+        </div>
+        <p class="b-count">露出的建议：<b class="n"></b></p>
+      </div>
+      <div class="b-stage" style="margin-top:16px">
+        <div class="cmp" data-measure="b-en">
+          <div class="cmp-line">
+            <div class="cmp-field"><span class="cmp-words">Run the full web suite, then push the branch for review</span><span class="cmp-hint">Double-tap</span></div>
+          </div>
+          <div class="cmp-bar"><span class="plus">+</span><span class="mode">Auto</span><span class="sp"></span><span class="model">Opus 5.5</span><span class="eff">Default</span><span class="gauge"></span><span class="ring"></span><span class="send">↑</span></div>
+        </div>
+        <p class="b-count">露出的建议：<b class="n"></b></p>
+      </div>
+      <ul class="b-notes">
+        <li><span class="b-mk">3</span><span>有建议时不画翻译标签：建议的那一行全给文字。标签讲的是「你打的字会被翻译」，这时你还没打字。</span></li>
+        <li><span class="b-mk">4</span><span>提示从「Double-tap to use」缩成「Double-tap」，同样的 footnote 灰字，紧跟在建议后面。VoiceOver 照旧读「Suggested reply: …」并带 Use suggestion 动作，不受影响。</span></li>
+        <li><span class="b-mk">5</span><span>卡片高度、工具栏、发送键都不动，§4.1「卡片高度不变」继续成立。</span></li>
+      </ul>
+    </div>
+
+    <div class="b-col" style="width:430px">
+      <p class="b-label">③ 标签什么时候出现（方案 B）</p>
+      <div class="b-stage" style="width:400px">
+        <p style="margin:0 0 8px;font-size:13px;color:#6b6b70">空框、没有建议（新会话、建议已作废）</p>
+        <div class="cmp">
+          <div class="cmp-line">
+            <div class="cmp-field"><span class="cmp-words">Message…</span></div>
+            <span class="cmp-ttag">Chinese → English</span>
+          </div>
+        </div>
+        <p style="margin:14px 0 8px;font-size:13px;color:#6b6b70">有建议</p>
+        <div class="cmp">
+          <div class="cmp-line">
+            <div class="cmp-field"><span class="cmp-words">告诉我它什么时候能部署到生产环境，以及出问题时怎么回滚</span><span class="cmp-hint">Double-tap</span></div>
+          </div>
+        </div>
+        <p style="margin:14px 0 8px;font-size:13px;color:#6b6b70">在打字（今天就这样）</p>
+        <div class="cmp">
+          <div class="cmp-line">
+            <div class="cmp-field"><span class="cmp-words typed">什么时候上线</span></div>
+          </div>
+        </div>
+      </div>
+      <ul class="b-notes">
+        <li><span class="b-mk">6</span><span>代价：多数 turn 结束后都有建议，标签就很少露面。它仍在新会话、建议作废后出现；设置 › 翻译 照旧是开关所在。</span></li>
+      </ul>
+    </div>
+  </div>
+</section>
+
+<section class="b-part" id="part-2">
+  <h2>各端怎么落（同一规则）</h2>
+  <div class="b-row">
+    <div class="b-box" style="flex:1;margin-top:0">
+      <h3>规则</h3>
+      <ul>
+        <li>建议在框里时：<b>不画翻译标签</b>（所有端，包括 Mac 和桌面 web）。</li>
+        <li>触屏上的提示：「Double-tap to use」→「<b>Double-tap</b>」。Mac 的 Use ⇥ 按钮、桌面 web 的 <code>Tab</code> 键帽不变。</li>
+        <li>没建议时、在打字时：和今天一样。</li>
+      </ul>
+    </div>
+    <div class="b-box" style="flex:1.3;margin-top:0">
+      <h3>落地（按代价排）</h3>
+      <ol>
+        <li>iOS / Mac：<code>ComposerView.showsTranslationTag</code> 加 <code>offeredSuggestion == nil</code>；<code>PromptSuggestionLine</code> 的提示改字。</li>
+        <li>Android：<code>SessionComposer.kt</code> 的 <code>trailingIcon</code> 条件加「没有建议」；<code>SuggestionPlaceholder</code> 的提示改字。</li>
+        <li>Web：<code>WorkspaceView.tsx</code> 的 <code>translationIsOn &amp;&amp; …</code> 加 <code>!offeredSuggestion</code>；<code>.composer-suggestion-tap</code> 改字。</li>
+        <li>测试里写死的「Double-tap to use」（web / Android / OrbitKit 源码断言）跟着改；docs/prompt-suggestions-design.md §4.1/§4.3 记下这次决定。</li>
+      </ol>
+    </div>
+  </div>
+</section>
+
+<script>
+  // Count what each sample actually shows after layout, so the board's numbers are measured, not guessed.
+  window.drawMarks = () => {
+    for (const card of document.querySelectorAll('[data-measure]')) {
+      const el = card.querySelector('.cmp-words');
+      const text = el.textContent;
+      const range = document.createRange();
+      const node = el.firstChild;
+      const right = el.getBoundingClientRect().right - el.scrollWidth + el.clientWidth;
+      let shown = 0;
+      const limit = el.getBoundingClientRect().right - 14; // the ellipsis takes ~14px
+      for (let i = 1; i <= text.length; i++) {
+        range.setStart(node, 0); range.setEnd(node, i);
+        if (range.getBoundingClientRect().right <= limit || el.scrollWidth <= el.clientWidth) shown = i; else break;
+      }
+      if (el.scrollWidth <= el.clientWidth) shown = text.length;
+      const out = card.parentElement.querySelector('.b-count .n');
+      out.textContent = `${shown} / ${text.length} 字符（${Math.round(el.clientWidth)}pt）` + (shown < text.length ? `「${text.slice(0, shown)}…」` : '，全部');
+    }
+  };
+</script>
+</body>
+</html>

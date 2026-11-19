@@ -123,6 +123,7 @@ SELECT item."project_id"                                       AS project_id,
   JOIN "project" proj ON proj."id" = item."project_id"
  WHERE item."state" = 'OPEN'
    AND NOT (CASE
+      WHEN "item"."kind" = 'INTEGRATION_CHECK_FAILED' AND "item"."dedupe_key" LIKE 'ICB:%' THEN true
       WHEN "item"."kind" = 'LANDING_UNOBSERVED' THEN EXISTS (
         SELECT 1 FROM "task" owed_task
          WHERE owed_task."id" = "item"."task_id"

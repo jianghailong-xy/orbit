@@ -115,7 +115,7 @@ class ProjectDataTest {
             """PATCH /projects/p1/integration {"line":"MAIN","mergeCheckCommand":null,"exceptionEscalationSeconds":3600}""",
             "POST /projects/p1/pause", "POST /projects/p1/resume",
             // The owner's own start answers no request: the key is sent, and it is null.
-            """POST /projects/p1/start {"criteriaDigest":"d1","line":"MAIN","automatic":true,"maxConcurrentTasks":2,"mergeCheckCommand":null,"requestId":null}""",
+            """POST /projects/p1/start {"criteriaDigest":"d1","line":"MAIN","automatic":true,"maxConcurrentTasks":2,"mergeCheckCommand":null,"mergeCheckTimeoutSeconds":null,"requestId":null}""",
             "POST /projects/p1/fuse/f1/resume", """POST /projects/p1/blockers/b1/resolve {"reason":"agent added"}""",
             """POST /tasks/t1/execute {"triggerId":"press-1"}""",
             """PATCH /task-lists/l1 {"paused":false,"note":"Resumed from the project Run queue"}""",

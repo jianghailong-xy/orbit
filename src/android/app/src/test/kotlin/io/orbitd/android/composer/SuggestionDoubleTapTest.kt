@@ -26,7 +26,7 @@ import org.robolectric.RobolectricTestRunner
 import org.robolectric.annotation.Config
 
 /** The engine's guess in the empty box on a touch screen (docs/prompt-suggestions-design.md §4.3, §9 补充二): no Use button, a
- * double-tap on the field takes it, and "Double-tap to use" follows the words. */
+ * double-tap on the field takes it, and "Double-tap" follows the words. */
 @RunWith(RobolectricTestRunner::class)
 @Config(sdk = [29], application = TestOrbitApplication::class)
 class SuggestionDoubleTapTest {
@@ -37,7 +37,7 @@ class SuggestionDoubleTapTest {
         compose.waitForIdle()
         compose.onNodeWithText("run the tests").assertExists()
         compose.onNodeWithTag("composer-suggestion-hint", useUnmergedTree = true).assertExists()
-        compose.onAllNodesWithText("Double-tap to use", useUnmergedTree = true).assertCountEquals(0)
+        compose.onAllNodesWithText("Double-tap", useUnmergedTree = true).assertCountEquals(0)
     }
 
     private var value by mutableStateOf("")

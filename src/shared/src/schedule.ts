@@ -1111,7 +1111,7 @@ export function scheduleCreateWhen(card: Pick<ScheduleCreateCard, 'when'>, now: 
 // ---------------------------------------------------------------------------------------------------------------
 
 /**
- * A row's circle (board 1/2 ①): `open` is to come, `running` turns, `done` a grey tick (no change, or already
+ * A row's circle (board 1/2 ①): `open` is to come (a queued run wears clock hands in it), `running` turns, `done` a grey tick (no change, or already
  * reported), `new` a green tick (a new finding), `failed` red, `held` amber, `draft` dashed, `paused` faint, `muted`
  * a run that never did the work (skipped, missed, cancelled).
  */
@@ -1123,7 +1123,7 @@ export type ScheduleTagTone = 'new' | 'fail' | 'held' | 'mute';
 export interface ScheduleCircleView {
   circle: ScheduleCircle;
   /** What sits inside the circle. */
-  mark: 'check' | 'alert' | null;
+  mark: 'check' | 'alert' | 'clock' | null;
   /** The label at the right of a row, if any. */
   tag: { tone: ScheduleTagTone; text: string } | null;
 }
@@ -1139,7 +1139,7 @@ export function scheduleRunCircle(
   const label = C.runStates[run.state];
   switch (run.state) {
     case 'QUEUED':
-      return { circle: 'open', mark: null, tag: null };
+      return { circle: 'open', mark: 'clock', tag: null };
     case 'RUNNING':
       return { circle: 'running', mark: null, tag: null };
     case 'AWAITING_APPROVAL':
@@ -1798,25 +1798,6 @@ export function scheduleRunStripText(
     started: run.startedAt ? localParts(new Date(run.startedAt), timezone).time : '—',
     access: C.access[accessLevel].label,
   });
-}
-
-/**
- * A run's session's header line (board web/run.png): "Open · Codex agent · 4 min" — the session's state word, the
- * engine it ran on, and how long the run took (until now while it runs). A part that is not known is left out.
- */
-export function scheduleRunHeadText(input: {
-  state: string | null;
-  engine: string | null;
-  run: Pick<ScheduleRunView, 'startedAt' | 'endedAt'>;
-  now: Date;
-}): string {
-  const { run } = input;
-  const parts = [input.state, input.engine ? scheduleFill(C.runSession.agent, { engine: input.engine }) : null];
-  if (run.startedAt) {
-    const ms = (run.endedAt ? Date.parse(run.endedAt) : input.now.getTime()) - Date.parse(run.startedAt);
-    parts.push(scheduleFill(C.runSession.duration, { minutes: Math.max(1, Math.round(ms / 60_000)) }));
-  }
-  return parts.filter(Boolean).join(C.separator);
 }
 
 /** "run of Nov 13". */
