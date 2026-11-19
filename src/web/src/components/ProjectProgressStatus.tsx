@@ -1412,6 +1412,27 @@ function FactRow({ label, children }: { label: string; children: ReactNode }): J
   );
 }
 
+/** A row's paths: the first few, and the rest one press away — a delivery can name hundreds, and
+ *  unfolded they push everything after the card out of sight. */
+function PathList({ paths }: { paths: readonly string[] }): JSX.Element {
+  const [open, setOpen] = useState(false);
+  const hidden = Math.max(0, paths.length - DETAIL_FILES_SHOWN);
+  const shown = open || hidden === 0 ? paths : paths.slice(0, DETAIL_FILES_SHOWN);
+  return (
+    <>
+      <span className="project-open-item-mono">{shown.join(' · ')}</span>
+      {hidden > 0 ? (
+        <>
+          {' '}
+          <button className="chat-more" onClick={() => setOpen((o) => !o)}>
+            {open ? 'Show less' : `Show ${hidden} more`}
+          </button>
+        </>
+      ) : null}
+    </>
+  );
+}
+
 /** How many lines of a failed check's output stay out of the fold. The rest are one press away. */
 const CHECK_TAIL_LINES = 6;
 
@@ -1557,8 +1578,8 @@ function ItemFactRows({
               : null}
           </FactRow>
         ) : (
-          <FactRow label="Files">
-            <span className="project-open-item-mono">{facts.files.join(' · ')}</span>
+          <FactRow label={facts.files.length > DETAIL_FILES_SHOWN ? `Files (${facts.files.length})` : 'Files'}>
+            <PathList paths={facts.files} />
           </FactRow>
         )
       ) : null}
@@ -1568,11 +1589,9 @@ function ItemFactRows({
         <FactRow label="Its reason">{facts.review.argument ?? ''}</FactRow>
       ) : facts.review ? (
         <FactRow label="Declared">
-          <span className="project-open-item-mono">
-            {facts.review.declaredPaths.length > 0
-              ? facts.review.declaredPaths.join(' · ')
-              : 'no paths'}
-          </span>
+          {facts.review.declaredPaths.length > 0
+            ? <PathList paths={facts.review.declaredPaths} />
+            : <span className="project-open-item-mono">no paths</span>}
         </FactRow>
       ) : null}
       {facts.task && facts.files.length > 0 && !facts.review && !folded ? (

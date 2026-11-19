@@ -842,6 +842,30 @@ describe('the exception card’s fact block', () => {
     expect(html).toContain('nothing landed');
   });
 
+  it('folds a long file list to five paths, with the rest one press away', async () => {
+    const files = Array.from({ length: 8 }, (_, i) => `src/file-${i}.ts`);
+    const row = { ...REVIEW, facts: { ...REVIEW.facts!, files } };
+    const html = card(row);
+    expect(html).toContain('<span class="criteria-decision-k">Files (8)</span>');
+    expect(html).toContain('src/file-4.ts');
+    expect(html).not.toContain('src/file-5.ts');
+    expect(html).toContain('Show 3 more');
+    // A short list is drawn whole, under its plain label and with nothing to press.
+    expect(card(REVIEW)).not.toContain('more</button>');
+
+    await mount(
+      <MemoryRouter>
+        <QueryClientProvider client={client({ needsYou: [], withCoordinator: [row] })}>
+          <ExceptionCards projectId={PROJECT_ID} now={NOW} />
+        </QueryClientProvider>
+      </MemoryRouter>,
+    );
+    await act(async () => button('Show 3 more')!.click());
+    expect(document.body.textContent).toContain('src/file-7.ts');
+    await act(async () => button('Show less')!.click());
+    expect(document.body.textContent).not.toContain('src/file-7.ts');
+  });
+
   it('draws a delivery review as the coordinator’s: what changed beside what was declared', () => {
     const TASK = '③ 实现所有者收尾门与 Done 优先语义';
     const html = card(REVIEW);
