@@ -218,6 +218,10 @@ services:
       # Set it on the host as ORBIT_WIKI_MODE, not ORBIT_WIKI, for the reason ORBIT_WATCHES_MODE gives above.
       ORBIT_WIKI: "${ORBIT_WIKI_MODE:-on}"
       ORBIT_WIKI_CANARY_OWNERS: "${ORBIT_WIKI_CANARY_OWNERS:-}"
+      # Optional: off stops the "Run stopped" wake (TASK_RUN_STOPPED, projects/task-run-stopped.producer.ts), which tells
+      # a project's coordinator when a task's run parks with nothing to wake it; on (default) keeps it. Takes effect on
+      # `docker compose up -d apiserver`. Set it on the host as ORBIT_RUN_STOPPED_WAKE_MODE.
+      ORBIT_RUN_STOPPED_WAKE: "${ORBIT_RUN_STOPPED_WAKE_MODE:-on}"
       PORT: "3000"
       CORS_ORIGINS: "http://localhost:2086"
       # Where runners reach this deployment — the origin the web image bakes in below. A session on a
