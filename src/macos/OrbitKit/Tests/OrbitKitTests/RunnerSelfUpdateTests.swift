@@ -440,7 +440,7 @@ final class RunnerSelfUpdateTests: XCTestCase {
         let page = try source("src/macos/OrbitApp/Sources/OrbitApp/Views/SkillsRunnersView.swift")
         for piece in [".navigationTitle(RunnerPageFormat.displayName(runner, managedRunnerID: managedRow?.runnerID))",
                       "Text(RunnerPageFormat.displayName(runner, managedRunnerID: managedRow?.runnerID))",
-                      "let host = RunnerPageFormat.hostLine(runner, managed: managedRow != nil)",
+                      "RunnerPageFormat.hostLine(runner, managed: managedRow != nil)",
                       "RunnerPageFormat.versionValue(runner, latest: runners.latestVersion, managed: managedRow != nil))",
                       "managed: managed != nil)"] {
             XCTAssertTrue(page.contains(piece), "the runner page lost `\(piece)`")

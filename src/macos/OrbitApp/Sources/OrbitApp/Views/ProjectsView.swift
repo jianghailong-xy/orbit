@@ -892,7 +892,6 @@ struct ProjectDetailView: View {
         let done = ProjectDone.pageRow(status: document.status, derivedDone: document.derivedDone,
                                        openItems: store.openItems)
         let needsYou = store.openItems.map(ProjectPage.needsYouRows) ?? []
-        let withCoordinator = store.openItems?.withCoordinator ?? []
         if !needsYou.isEmpty || start != nil || done != nil {
             Section {
                 if let start { startItem(start, store: store, now: now) }
@@ -900,13 +899,6 @@ struct ProjectDetailView: View {
                 ForEach(needsYou) { row in openItem(row, store: store, now: now) }
             } header: {
                 groupLabel(ProjectPage.needsYouGroup)
-            }
-        }
-        if !withCoordinator.isEmpty {
-            Section {
-                ForEach(withCoordinator) { row in openItem(row, store: store, now: now) }
-            } header: {
-                groupLabel(ProjectPage.withCoordinatorGroup)
             }
         }
     }
