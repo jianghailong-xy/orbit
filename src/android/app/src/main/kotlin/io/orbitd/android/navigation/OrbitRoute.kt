@@ -13,7 +13,15 @@ enum class Destination { WORKSPACES, WORKSPACE, FOLDER, SEARCH, SESSION, DRAFT, 
      *  `SESSION` (reader/LandingSessionPage.kt's `SessionDestination`). */
     LANDINGS,
     WIKI_BROWSE, WIKI_INDEX, WIKI_ARTICLE, WIKI_DOC, WIKI_REVIEW, WIKI_SETTINGS, WIKI_RUN, WIKI_JOB, WIKI_PLAN, WIKI_PLAN_DOC, WIKI_PLAN_SECTION,
-    WIKI_ACTIVITY, WIKI_TRASH }
+    WIKI_ACTIVITY, WIKI_TRASH,
+    /** The owner requests inbox (web `WaitingOnYouPage`): `id` the request whose card opens focused, from a push's action. */
+    WAITING_ON_YOU,
+    /** Scheduled tasks (docs/scheduled-tasks-design.md §9.2): account-wide, in the drawer only. `id` the schedule whose detail sheet
+     * opens over the timeline, from a push or a card's Open. */
+    SCHEDULED,
+    /** A session someone shared with this account (docs/session-guests-design.md §4): `id` the session, drawn as the guest view. A
+     *  Shared with me row opens it; a session link the owner's read answers 404 for draws the same view through `SESSION`. */
+    GUEST_SESSION }
 enum class Origin { DRAWER, LIST, SEARCH, LINK, EXTERNAL }
 
 /** Object and source travel together; the preceding frame is the actual return destination. */
@@ -51,6 +59,9 @@ data class OrbitNavigation(
     fun push(route: OrbitRoute): OrbitNavigation = if (current == route) this
         else copy(stacks = stacks + (section to (frames + route)))
     fun back(): OrbitNavigation = if (!canGoBack) this else copy(stacks = stacks + (section to frames.dropLast(1)))
+    /** The page on top gives way to [route] in its place (iOS `NavState.replaceTop`): a draft becomes the session it created,
+     * so Back goes where the draft would have, never to the draft again. */
+    fun replaceTop(route: OrbitRoute): OrbitNavigation = copy(stacks = stacks + (section to (frames.dropLast(1) + route)))
     /** A drawer row's tap (iOS `openDrawerDestination`, 3d50935b4): the row of the destination already showing leaves
      * its page as it is — the tap only closes the drawer — and any other lands on its destination's root page, the
      * stack being left going with it. A workspace's lands on the folder page its list was left on, while [hasFolder]
@@ -123,6 +134,9 @@ val OrbitRoute.waitsForDirectory get() = destination == Destination.PROJECT_SESS
  * spellings of its id are one destination. */
 fun projectDestination(id: String) = "project:${ObjectId.canonical(id) ?: id}"
 
+/** The destination of a drawer Shared with me row (OrbitKit `SidebarSelection.guestSession`). */
+fun guestDestination(id: String) = "guest:${ObjectId.canonical(id) ?: id}"
+
 /** The destination of a drawer Set up <machine> row (iOS `DrawerDestination.machineDraft`). */
 fun machineDraftDestination(id: String) = "setup:${ObjectId.canonical(id) ?: id}"
 
@@ -139,8 +153,23 @@ internal object OrbitArrivals {
 
 object ObjectId {
     private const val alphabet = "0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz"
+    private val uuid = Regex("[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}")
+    private const val CACHED = 4096
+    /** The list and the drawer compare every row's ids on each directory change: a page of the answers, so each spelling is
+     * parsed once. Oldest first out; [NONE] stands for an id with no canonical form. */
+    private val cache = object : LinkedHashMap<String, String>(CACHED, 0.75f, true) {
+        override fun removeEldestEntry(eldest: MutableMap.MutableEntry<String, String>?) = size > CACHED
+    }
+    private const val NONE = ""
+
     fun canonical(value: String): String? {
-        if (value.matches(Regex("[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}"))) return value.lowercase()
+        synchronized(cache) { cache[value] }?.let { return it.ifEmpty { null } }
+        val result = parse(value)
+        synchronized(cache) { cache[value] = result ?: NONE }
+        return result
+    }
+    private fun parse(value: String): String? {
+        if (value.matches(uuid)) return value.lowercase()
         if (value.isEmpty() || value.length > 22 || value.any { it !in alphabet }) return null
         var number = BigInteger.ZERO
         value.forEach { number = number * BigInteger.valueOf(62) + BigInteger.valueOf(alphabet.indexOf(it).toLong()) }
@@ -148,7 +177,7 @@ object ObjectId {
         val hex = number.toString(16).padStart(32, '0')
         return "${hex.take(8)}-${hex.substring(8, 12)}-${hex.substring(12, 16)}-${hex.substring(16, 20)}-${hex.substring(20)}"
     }
-    fun same(a: String?, b: String?): Boolean = a == b || (a != null && b != null && canonical(a) != null && canonical(a) == canonical(b))
+    fun same(a: String?, b: String?): Boolean = a == b || (a != null && b != null && canonical(a)?.let { it == canonical(b) } == true)
     /** OrbitKit `PublicID.toPublic`: a UUID's 16 bytes as Base62, the spelling the deployment's own routes use. */
     fun toPublic(id: String): String {
         val uuid = canonical(id) ?: return id
@@ -164,8 +193,13 @@ object OrbitLinks {
     private val references = mapOf("session" to Destination.SESSION, "task" to Destination.TASK,
         "project" to Destination.PROJECT, "wiki" to Destination.WIKI_ENTRY, "list" to Destination.LIST)
     // `orbit://project/<id>` is a merge push's (A11-9): the project's sessions page. Like `orbit://wiki/<space>`, no iOS DeepLink host.
+    // `orbit://owner-request/<id>` is an owner request push's action: the inbox, that request's card open on its input.
+    // `orbit://terminal-login/<id>` is a terminal asking to be approved: the inbox, whose Open tab heads with its card.
+    // `orbit://schedule/<id>` is a scheduled task's push that names no run session: the Scheduled page, its detail sheet open.
     private val deepLinks = references.filterKeys { it !in setOf("project", "wiki") } +
-        mapOf("watch" to Destination.WATCH, "runner" to Destination.RUNNER, "wiki" to Destination.WIKI, "project" to Destination.PROJECT_SESSIONS)
+        mapOf("watch" to Destination.WATCH, "runner" to Destination.RUNNER, "wiki" to Destination.WIKI, "project" to Destination.PROJECT_SESSIONS,
+            "owner-request" to Destination.WAITING_ON_YOU, "terminal-login" to Destination.WAITING_ON_YOU,
+            "schedule" to Destination.SCHEDULED)
     /** iOS DeepLink's `case "active", ""` (A05h, DL-1): an `orbit:` link with no host, an empty one or `active` (percent-decoded,
      * in any case) opens the workspaces home, whatever path, query or fragment follows — iOS's URL percent-encodes a blank there
      * and DeepLink never reads it — while a blank in the host is no URL there, so nothing opens. Read off the link itself:

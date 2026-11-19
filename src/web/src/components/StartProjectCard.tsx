@@ -1,3 +1,4 @@
+import { LANDING_CHECK_COPY, inheritedLandingCommand, inheritedLandingTimeout } from '../lib/landingCheck';
 import {
   lazy,
   useEffect,
@@ -20,6 +21,7 @@ import type {
   ProjectStartRequest,
   ProjectStartSettings,
   StartProjectRequestBody,
+  OwnerCardTranslation,
 } from '@orbit/shared';
 import { api } from '../api';
 import { acceptanceConfirmationKey, acceptanceConfirmationQuery } from '../lib/acceptanceConfirmation';
@@ -76,6 +78,7 @@ import {
   runLineMain,
   runLineMainHint,
   runMergeCheckHint,
+  runMergeCheckHintAgentPush,
   runTasksAtATime,
   startAskedLine,
   startBarCaption,
@@ -110,6 +113,7 @@ import { OWNER_SEND_BACK_ACTION } from './OwnerConfirmationCard';
 import { ago } from '../lib/watches';
 import { ReviewCard } from './ReviewCard';
 import { useIsMobile } from '../lib/useMediaQuery';
+import { useOwnerCardTranslation } from './TranslationParts';
 import { Alert } from './ui/Alert';
 import { Dialog } from './ui/Dialog';
 import { Drawer } from './ui/Drawer';
@@ -163,6 +167,8 @@ export interface StartSettingsDraft {
   automatic: boolean;
   maxConcurrentTasks: number | null;
   mergeCheckCommand: string;
+  landingCheckCommand?: string;
+  landingCheckTimeoutSeconds?: number | null;
   /** The check's budget in seconds — null, an empty box, for the one-hour default. */
   mergeCheckTimeoutSeconds: number | null;
   /** How the work reaches main (§10.5 O-L1, A-Q21) — null where the card offers no choice: a read
@@ -197,6 +203,8 @@ export function startDraftOf(
     automatic: true,
     maxConcurrentTasks: settings.maxConcurrentTasks,
     mergeCheckCommand: settings.mergeCheckCommand ?? '',
+    landingCheckCommand: settings.landingCheckCommand ?? '',
+    landingCheckTimeoutSeconds: settings.landingCheckTimeoutSeconds ?? null,
     // The coordinator's budget when it suggested one, and an empty box — the default — when it did
     // not: what it sends is what the card opens on, and the owner may change it.
     mergeCheckTimeoutSeconds: settings.mergeCheckTimeoutSeconds ?? null,
@@ -211,7 +219,8 @@ export function startDraftOf(
 /** Whether the draft is a set of settings the door would take: a whole number of tasks in range. */
 export function startDraftComplete(draft: StartSettingsDraft): boolean {
   const count = draft.maxConcurrentTasks;
-  return count !== null && Number.isInteger(count) && count >= 1 && count <= START_MAX_CONCURRENT_TASKS;
+  return count !== null && Number.isInteger(count) && count >= 1 && count <= START_MAX_CONCURRENT_TASKS
+    && (draft.landingCheckTimeoutSeconds == null || (Number.isInteger(draft.landingCheckTimeoutSeconds) && draft.landingCheckTimeoutSeconds > 0));
 }
 
 /**
@@ -237,6 +246,10 @@ export function startBody(
     maxConcurrentTasks: draft.maxConcurrentTasks ?? request.settings.maxConcurrentTasks,
     mergeCheckCommand: draft.mergeCheckCommand.trim() || null,
     mergeCheckTimeoutSeconds: draft.mergeCheckTimeoutSeconds,
+    ...(draft.line === 'PROJECT_BRANCH' ? {
+      landingCheckCommand: draft.landingCheckCommand?.trim() ? draft.landingCheckCommand : null,
+      landingCheckTimeoutSeconds: draft.landingCheckTimeoutSeconds ?? null,
+    } : {}),
     // With a main line only: the door refuses AGENT_PUSH anywhere else (409
     // DELIVERY_MODE_NEEDS_MAIN_LINE), and a card that offered no choice records none.
     ...(draft.line === 'MAIN' && draft.deliveryMode ? { deliveryMode: draft.deliveryMode } : {}),
@@ -300,6 +313,7 @@ export function StartProjectCard({
   projectTitle,
   askedAt,
   request,
+  translation = null,
   criteria,
   plan,
   graph = null,
@@ -326,6 +340,8 @@ export function StartProjectCard({
   askedAt: string | null;
   /** What the coordinator asked for: the settings it suggests and why. */
   request: ProjectStartRequest;
+  /** The open item's `translation` (Settings › Translation): `why` in the owner's language. */
+  translation?: OwnerCardTranslation | null;
   /** The stated criteria, or null when the project document could not be read. */
   criteria: ConfirmationCriterion[] | null;
   plan: StartPlanView;
@@ -367,7 +383,10 @@ export function StartProjectCard({
   const items = [...(criteria ?? [])].sort((a, b) => a.ordinal - b.ordinal);
   const whyText = useRef<HTMLParagraphElement>(null);
   const criteriaList = useRef<HTMLOListElement>(null);
-  const whyHides = useClampHides(whyText, null, request.why);
+  // The coordinator's why is the card's one agent-written field (board 04-owner-cards.html).
+  const translated = useOwnerCardTranslation(translation);
+  const why = translated.shown?.why || request.why;
+  const whyHides = useClampHides(whyText, null, why);
   const criteriaHide = useClampHides(
     criteriaList,
     '.settlement-card-criterion',
@@ -446,13 +465,14 @@ export function StartProjectCard({
           <div className="start-card-quote">
             <div className="start-card-quote-head">{START_COORDINATOR}</div>
             <p ref={whyText} className={whyOpen ? 'start-card-quote-text is-open' : 'start-card-quote-text'}>
-              {request.why}
+              {why}
             </p>
             {whyOpen || whyHides ? (
               <button type="button" className="start-card-link" onClick={() => setWhyOpen((open) => !open)}>
                 {whyOpen ? START_LESS : START_MORE}
               </button>
             ) : null}
+            {translated.foot}
           </div>
         ) : null}
         {stale ? <p className="settlement-card-stale">{stale}</p> : null}
@@ -547,27 +567,6 @@ export function StartProjectCard({
               />
             </div>
           </div>
-          {/* Which branch "main" is for this project: where its tasks start and its work ends up.
-              Under the line, because the two are one decision and lock together. A project with no
-              repository has no branch to name, and no row. */}
-          {draft.upstream !== null ? (
-            <div className="start-card-row">
-              <div className="start-card-row-head">
-                <span>{RUN_MAIN_BRANCH}</span>
-                <MainBranchSelect
-                  className="start-card-line"
-                  value={draft.upstream}
-                  branches={branches}
-                  remembered={lastMainBranch?.branch ?? null}
-                  disabled={!editable}
-                  onChange={(upstream) => set({ upstream })}
-                />
-              </div>
-              {lastMainBranch && draft.upstream === lastMainBranch.branch ? (
-                <div className="start-card-hint">{runLastChoiceFor(lastMainBranch.repository)}</div>
-              ) : null}
-            </div>
-          ) : null}
           {/* How the work reaches main (§10.5 O-L1, A-Q21): Orbit lands it, or the agent pushes it
               there itself — a choice only a project landing directly into main has. On a project
               branch the menu stays on Orbit's and the line under it says why. */}
@@ -602,6 +601,43 @@ export function StartProjectCard({
               </div>
             </div>
           ) : null}
+          {/* Which branch "main" is for this project: where its tasks start and its work ends up.
+              Right after the line and its Delivery, because the line and this branch are one decision
+              and lock together. A project with no repository has no branch to name, and no row. */}
+          {draft.upstream !== null ? (
+            <div className="start-card-row">
+              <div className="start-card-row-head">
+                <span>{RUN_MAIN_BRANCH}</span>
+                <MainBranchSelect
+                  className="start-card-line"
+                  value={draft.upstream}
+                  branches={branches}
+                  remembered={lastMainBranch?.branch ?? null}
+                  disabled={!editable}
+                  onChange={(upstream) => set({ upstream })}
+                />
+              </div>
+              {lastMainBranch && draft.upstream === lastMainBranch.branch ? (
+                <div className="start-card-hint">{runLastChoiceFor(lastMainBranch.repository)}</div>
+              ) : null}
+            </div>
+          ) : null}
+          <div className="start-card-row" data-landing-check="true">
+            <div className="start-card-row-head"><span>{LANDING_CHECK_COPY.LABEL}</span></div>
+            {draft.line === 'MAIN' ? <div className="start-card-hint">{LANDING_CHECK_COPY.MAIN}</div> : <>
+              <Textarea value={draft.landingCheckCommand ?? ''} disabled={!editable}
+                aria-label={LANDING_CHECK_COPY.LABEL} placeholder={LANDING_CHECK_COPY.COMMAND_PLACEHOLDER}
+                onChange={(event) => set({ landingCheckCommand: event.target.value })} />
+              <div className="start-card-hint">{LANDING_CHECK_COPY.HINT}</div>
+              {!draft.landingCheckCommand && <div className="start-card-hint">{inheritedLandingCommand(draft.mergeCheckCommand || null)}</div>}
+              <NumberInput className="project-check-timeout" value={draft.landingCheckTimeoutSeconds ?? null} min={1} precision={0} disabled={!editable}
+                aria-label={`${LANDING_CHECK_COPY.LABEL} ${LANDING_CHECK_COPY.TIMEOUT}`}
+                placeholder={LANDING_CHECK_COPY.INHERITS_TIMEOUT}
+                onValueChange={(value) => set({ landingCheckTimeoutSeconds: value })} />
+              <div className="start-card-hint">{LANDING_CHECK_COPY.TIMEOUT_HINT}</div>
+              {draft.landingCheckTimeoutSeconds == null && <div className="start-card-hint">{inheritedLandingTimeout(draft.mergeCheckTimeoutSeconds)}</div>}
+            </>}
+          </div>
           <div className="start-card-row">
             <button
               type="button"
@@ -626,12 +662,16 @@ export function StartProjectCard({
                   autoSize={{ minRows: 1, maxRows: 6 }}
                   onChange={(event) => set({ mergeCheckCommand: event.target.value })}
                 />
-                <div className="start-card-hint">{runMergeCheckHint(main)}</div>
+                {agentPushes ? (
+                  <div className="start-card-hint">{runMergeCheckHintAgentPush(main)}</div>
+                ) : (
+                  <div className="start-card-hint">{runMergeCheckHint(main)}</div>
+                )}
                 <div className="start-card-row-head start-card-budget">
                   <span>{RUN_MERGE_CHECK_TIMEOUT}</span>
                   <span className="start-card-inline">
                     <NumberInput
-                      className="start-card-count"
+                      className="project-check-timeout"
                       min={1}
                       precision={0}
                       value={draft.mergeCheckTimeoutSeconds}
@@ -842,6 +882,7 @@ export function SessionStartProjectCard({
   const standingRead = useQuery({ ...acceptanceConfirmationQuery(project), enabled });
   const documentRead = useQuery({
     queryKey: ['project', project],
+    meta: { entities: ['project', 'task'] },
     queryFn: () => api<StartProjectDocument>(`/projects/${encodeURIComponent(project)}`),
     enabled,
     refetchInterval: streamPoll(20_000),
@@ -972,6 +1013,7 @@ export function SessionStartProjectCard({
       projectTitle={title}
       askedAt={shown.waitingSince}
       request={request}
+      translation={shown.translation ?? null}
       criteria={criteria}
       plan={startPlanView(graphRead.data ?? null, document?._count?.tasks ?? 0)}
       graph={graphRead.data ?? null}
@@ -1015,7 +1057,7 @@ export function SessionStartProjectCard({
 export function defaultStartSettings(
   view: Pick<
     ProjectIntegrationView,
-    'line' | 'ref' | 'upstreamRef' | 'mergeCheckCommand' | 'mergeCheckTimeoutSeconds'
+    'line' | 'ref' | 'upstreamRef' | 'mergeCheckCommand' | 'mergeCheckTimeoutSeconds' | 'landingCheckCommand' | 'landingCheckTimeoutSeconds'
   >,
   project: { maxConcurrentTasks?: number },
   graph: Pick<ProjectDependencyGraphResponse, 'marks' | 'edges'> | null,
@@ -1029,6 +1071,8 @@ export function defaultStartSettings(
     ...(view.upstreamRef ? { upstreamRef: mainBranchRef(view.upstreamRef) } : {}),
     automatic: true,
     maxConcurrentTasks: project.maxConcurrentTasks ?? 1,
+    landingCheckCommand: view.landingCheckCommand ?? null,
+    landingCheckTimeoutSeconds: view.landingCheckTimeoutSeconds ?? null,
     mergeCheckCommand: view.mergeCheckCommand ?? null,
     // The budget the project's check already runs on, which a start that names none keeps.
     mergeCheckTimeoutSeconds: view.mergeCheckTimeoutSeconds ?? null,
@@ -1072,6 +1116,7 @@ function OwnerStartProjectCard({
   const standingRead = useQuery(acceptanceConfirmationQuery(projectId));
   const documentRead = useQuery({
     queryKey: ['project', projectId],
+    meta: { entities: ['project', 'task'] },
     queryFn: () => api<StartProjectDocument>(`/projects/${encodeURIComponent(projectId)}`),
   });
   const integrationRead = useQuery(projectIntegrationQuery(projectId));

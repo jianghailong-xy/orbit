@@ -1,3 +1,4 @@
+import { seedPromotionRequest } from '../test-support/promotion-request';
 import assert from 'node:assert/strict';
 import { randomUUID } from 'node:crypto';
 import { readFileSync } from 'node:fs';
@@ -438,6 +439,7 @@ test('a stop is a fact: QUEUED jobs end now, RUNNING ones are asked or ended, an
       testedSha: sha('2'), testedTreeSha: sha('3'), landedTreeSha: sha('3'), sourceSha: sha('a'),
       checks: [GREEN_CHECK], conflicts: [],
     });
+    await seedPromotionRequest(stack.prisma, w.projectId);
     const candidate1 = await stack.promotions.considerCandidate(w.projectId);
     assert.ok(candidate1);
     const check1 = await claim(stack, w);
@@ -451,6 +453,7 @@ test('a stop is a fact: QUEUED jobs end now, RUNNING ones are asked or ended, an
       testedSha: sha('5'), testedTreeSha: sha('6'), landedTreeSha: sha('6'), sourceSha: sha('b'),
       checks: [GREEN_CHECK], conflicts: [],
     });
+    await seedPromotionRequest(stack.prisma, w.projectId);
     const candidate2 = await stack.promotions.considerCandidate(w.projectId);
     assert.ok(candidate2);
     assert.equal((await stack.db.projectPromotion.findUniqueOrThrow({ where: { id: candidate1.promotionId } })).state,
@@ -490,6 +493,7 @@ test('a stop is a fact: QUEUED jobs end now, RUNNING ones are asked or ended, an
       where: { id: check2.jobId },
       data: { claimedAt: new Date(Date.now() - 11 * 60_000), heartbeatAt: new Date(Date.now() - 11 * 60_000) },
     });
+    await seedPromotionRequest(stack.prisma, w.projectId);
     const candidate3 = await stack.promotions.considerCandidate(w.projectId);
     assert.ok(candidate3);
     const ended = await jobRow(stack, check2.jobId);

@@ -297,10 +297,10 @@ describe('the Wiki home', () => {
   it('draws the design’s bands in the design’s order: the line under the head, the search, Principles, the documents, Browse · A–Z', () => {
     const html = paint('home', '/wiki/orbit', { docs: DOCS });
     const order = [
-      '<h1 class="page-title">Wiki</h1>',
+      '<h1 class="page-title wk-name-title">',
       'class="wk-home-state"',
       'class="wk-search"',
-      'class="wk-dir-col"',
+      'class="wk-dir-col autohide-scrollbar"',
       '<b>Principles</b>',
       '<span class="no">1</span><b>产品概览与架构</b>',
       '<span class="no">2</span><b>任务与项目</b>',
@@ -351,7 +351,7 @@ describe('the Wiki home', () => {
 
   it('draws the head from the spaces list and grey bars for the rest while the first read is out (mock 31 ⑦)', () => {
     const html = paint('home', '/wiki/orbit', { spaces: [{ ...SPACE, pendingOps: 3 }] });
-    expect(html).toContain('<span class="wk-space-tag" title="The codebase this wiki describes">orbit</span>');
+    expect(html).toContain('<span class="v">orbit</span>');
     expect(html).toContain('title="3 waiting on you"');
     expect(html).toContain('<div class="wk-home-state"><span class="wk-sk" aria-hidden="true"></span></div>');
     expect(html).toContain('class="wk-pl-cat wk-home-sk" aria-busy="true"');
@@ -456,7 +456,7 @@ describe('the Wiki, for an account the server has not switched it on for', () =>
 
 /**
  * The head (design §12.3.1, §12.3.4, mocks 30 ③ and 31 ④): `Wiki`, the space, Contents, Activity with
- * the number waiting on the owner, Settings and New entry. One space is a label; several are a select.
+ * the number waiting on the owner, and Settings (New entry left with board 45). One space is a label; several are a select.
  */
 const WIKOVA_ID = '0196e000-0000-7000-8000-0000000000b2';
 const WIKIDS_ID = '0196e000-0000-7000-8000-0000000000b3';
@@ -487,30 +487,52 @@ const THREE_SPACES = [
 ];
 
 describe('the Wiki head', () => {
-  it('names a lone space by its repository, as a label with nothing to choose', () => {
+  it('names a lone space by its repository, and is a menu all the same: New wiki… lives in it (board 47)', () => {
     const html = paint('home', '/wiki/orbit');
-    expect(html).toContain('<span class="wk-space-tag" title="The codebase this wiki describes">orbit</span>');
-    expect(html).not.toContain('<select');
-  });
-
-  it('offers a native select over several, closed on the name, each option saying what waits in it', () => {
-    const html = paint('home', '/wiki/orbit', { spaces: THREE_SPACES });
     expect(html).toContain('<span class="v">orbit</span>');
-    expect(html).toContain('<option value="orbit" selected="">orbit · 3 waiting</option>');
-    expect(html).toContain('<option value="wikova">wikova · 4 waiting</option>');
-    expect(html).toContain('<option value="wikids">wikids</option>');
+    expect(html).toMatch(/<button[^>]*class="wk-select"[^>]*aria-haspopup="menu"/);
     expect(html).not.toContain('wk-space-tag');
   });
 
-  it('puts Contents, Activity, Settings and New entry in that order, Activity carrying every space’s number', () => {
+  it('draws several as the name over a menu button, no native select (board wiki-space-menu B; the menu: WikiPage.spaceMenu.test)', () => {
+    const html = paint('home', '/wiki/orbit', { spaces: THREE_SPACES });
+    expect(html).toContain('<span class="v">orbit</span>');
+    expect(html).toMatch(/<button[^>]*class="wk-select"[^>]*aria-haspopup="menu"/);
+    expect(html).not.toContain('<select');
+    expect(html).not.toContain('wk-space-tag');
+  });
+
+  it('puts Contents, Activity and Settings in that order, with no New entry (board 45), Activity carrying every space’s number', () => {
     const html = paint('home', '/wiki/orbit', { spaces: THREE_SPACES });
     const at = (needle: string) => html.indexOf(needle);
     expect(at('wk-contents-btn')).toBeGreaterThan(-1);
     expect(at('wk-activity-btn')).toBeGreaterThan(at('wk-contents-btn'));
     expect(at('aria-label="Settings"')).toBeGreaterThan(at('wk-activity-btn'));
-    expect(at('aria-label="New entry"')).toBeGreaterThan(at('aria-label="Settings"'));
+    expect(html).not.toContain('New entry');
     expect(wikiWaiting(THREE_SPACES)).toBe(7);
     expect(html).toContain('class="tp-rail-badge needs-you" title="7 waiting on you" aria-label="7 waiting on you">7</span>');
+  });
+
+  it('heads the directory column and the head row with the space’s name alone: no Wiki title, no search line in the column (board wiki-rail-name B)', () => {
+    for (const spaces of [undefined, THREE_SPACES]) {
+      const html = paint('home', '/wiki/orbit', spaces ? { spaces } : {});
+      const rail = html.slice(html.indexOf('class="wk-rail-top"'), html.indexOf('class="wk-toc'));
+      expect(rail).toMatch(/^class="wk-rail-top"><h1 class="page-title wk-name-title wk-rail-head"><(span class="wk-space-tag"|button[^>]*class="wk-select")/);
+      expect(rail).not.toContain('>Wiki<');
+      expect(rail).not.toContain('wk-search');
+      // The search line above the column stays, for a phone and a docked chat that folds the column away.
+      expect(html.indexOf('class="wk-search"')).toBeLessThan(html.indexOf('class="wk-dir-col'));
+      // The head row a phone draws is headed by the name too, with no Wiki title beside it.
+      const head = html.slice(html.indexOf('class="wk-title-row"'), html.indexOf('class="wk-actions"'));
+      expect(head).toMatch(/^class="wk-title-row"><h1 class="page-title wk-name-title"><(span class="wk-space-tag"|button[^>]*class="wk-select")/);
+      expect(head).not.toContain('>Wiki<');
+    }
+  });
+
+  it('keeps Wiki as the title where there is no space to name', () => {
+    const html = paint('home', '/wiki/orbit', { spaces: [] });
+    expect(html).toContain('<h1 class="page-title">Wiki</h1>');
+    expect(html).not.toContain('wk-name-title');
   });
 
   it('draws no badge at zero', () => {
@@ -527,7 +549,8 @@ describe('the space /wiki opens (design §12.3.4)', () => {
   });
 
   const opened = (path = '/wiki'): string | null =>
-    paint('home', path, { spaces: THREE_SPACES }).match(/<option value="([^"]+)" selected="">/)?.[1] ?? null;
+    // The space on screen is the name the head's menu button shows (its spaces' names are their slugs here).
+    paint('home', path, { spaces: THREE_SPACES }).match(/<span class="v">([^<]+)<\/span>/)?.[1] ?? null;
 
   it('is the one bound to the workspace the reader came from, ahead of the last one looked at', () => {
     browser.session.set(WIKI_FROM_WORKSPACE_KEY, 'ws-wikova-develop');

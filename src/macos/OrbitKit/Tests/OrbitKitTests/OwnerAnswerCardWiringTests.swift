@@ -93,7 +93,7 @@ final class OwnerAnswerCardWiringTests: XCTestCase {
         XCTAssertTrue(model.contains("CoordinatorQuestions.held(drawn: decisionCards, read: openItems)"))
         XCTAssertTrue(model.contains(
             "guard let turn = OwnerAnswer.handover(of: itemID, in: state), let card = turn.ownerAnswer else { return nil }"))
-        XCTAssertTrue(model.contains("return OwnerAnswerTold(card: card, text: turn.text, attached: turn.attached)"))
+        XCTAssertTrue(model.contains("return OwnerAnswerTold(card: card, text: turn.text)"))
     }
 
     /// The answered card leaves the blue for the neutral frame, with a grey chip and the answer ticked
@@ -107,8 +107,7 @@ final class OwnerAnswerCardWiringTests: XCTestCase {
         for line in [".approvalChrome(.gray, dashed: queued)", ".foregroundStyle(Color.gray)",
                      ".font(.orbitMeta).foregroundStyle(Color.green)",
                      "Text(CoordinatorQuestions.queuedForCoordinator)", "if let notice {",
-                     "if let told { toldFold(told) }", "Text(OwnerAnswerCard.told)", "Text(told.text)",
-                     "if let attached = told.attached { AttachedNoteEntry(attached: attached) }"] {
+                     "if let told { toldFold(told) }", "Text(OwnerAnswerCard.told)", "Text(told.text)"] {
             XCTAssertTrue(code.contains(line), "the record view no longer draws \(line)")
         }
         XCTAssertFalse(code.joined(separator: "\n").contains(".approvalChrome(.blue"),
@@ -118,7 +117,9 @@ final class OwnerAnswerCardWiringTests: XCTestCase {
 
         let open = try section(cards, from: "private struct CoordinatorQuestionCardView: View {",
                                to: "private var previewSummary: String {")
-        XCTAssertTrue(open.contains("symbol: \"questionmark.bubble.fill\", tone: .blue,"),
-                      "the open question card is no longer blue")
+        XCTAssertTrue(open.contains("symbol: \"questionmark.bubble.fill\", tone: open ? .orange : .blue,"),
+                      "the open question card is no longer orange while it waits, blue once it does not")
+        XCTAssertTrue(open.contains("dimmed: !open, emphasized: open)"),
+                      "the open question card no longer draws its heavier edge while it waits")
     }
 }

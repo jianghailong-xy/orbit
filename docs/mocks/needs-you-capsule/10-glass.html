@@ -1,0 +1,94 @@
+<!doctype html><html lang="zh"><meta charset="utf-8">
+<link rel="stylesheet" href="kit.css">
+<script src="kit.js"></script>
+<style>
+  .lede, .foot { max-width: 1880px; }
+  .row4 { display: flex; gap: 32px; align-items: flex-start; }
+  .row4 .col { width: 440px; }
+  .ntitle { position: absolute; left: 80px; top: 62px; height: 44px; display: flex; align-items: center; font: 600 20px "Inter", "Noto Sans SC"; z-index: 12; color: var(--l1); }
+  /* 行（被卡片盖住的内容），带一点颜色，才看得出玻璃 */
+  .rowsLayer { position: absolute; left: 0; right: 0; top: 0; height: 956px; }
+  .pill { display: inline-block; height: 22px; border-radius: 6px; background: rgba(120,120,128,.12); padding: 0 8px; font: 600 13px/22px Inter; color: rgba(60,60,67,.7); }
+  .ph.dark .pill { background: rgba(120,120,128,.3); color: rgba(235,235,245,.7); }
+  .bar { display: inline-block; width: 46px; height: 5px; border-radius: 3px; background: linear-gradient(90deg,#34C759 0 55%, #0A84FF 55% 70%, rgba(120,120,128,.3) 70%); vertical-align: middle; margin-right: 6px; }
+  .srow .s .bl { color: #0A84FF; }
+  .srow .s .or { color: #FF9500; }
+  /* 卡片：圆角 24，内容层 */
+  .card { position: absolute; left: 16px; right: 16px; height: 70px; border-radius: 24px; z-index: 16; overflow: hidden; }
+  .card .blur { display: none; }
+  .card.glass { backdrop-filter: blur(10px) saturate(1.8); -webkit-backdrop-filter: blur(10px) saturate(1.8); }
+  .card .tint { position: absolute; inset: 0; }
+  .card .rim { position: absolute; inset: 0; border-radius: 24px; pointer-events: none; }
+  .card .body { position: absolute; inset: 0; display: flex; align-items: center; gap: 12px; padding: 0 16px 0 14px; color: var(--l1); }
+  .card .ico { width: 38px; height: 38px; border-radius: 50%; background: rgba(255,149,0,.18); flex: none; display: flex; align-items: center; justify-content: center; }
+  .card .w { flex: 1; min-width: 0; }
+  .card .h { display: flex; justify-content: space-between; gap: 8px; font: 600 15px/20px "Inter", "Noto Sans SC"; }
+  .card .h span { font-weight: 400; font-size: 13px; color: var(--l2); flex: none; }
+  .card p { margin: 1px 0 0; font: 15px/20px "Inter", "Noto Sans SC"; color: var(--l2); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  /* 今天：不透明的平面 */
+  .ph.light .card.flat { background: #F7F7F9; box-shadow: 0 10px 26px rgba(0,0,0,.12), inset 0 0 0 .5px rgba(0,0,0,.06); overflow: visible; }
+  .ph.dark .card.flat { background: #232325; box-shadow: 0 10px 28px rgba(0,0,0,.7), inset 0 0 0 .5px rgba(255,255,255,.08); overflow: visible; }
+  /* 玻璃：亮 —— 白雾 + 顶部高光 + 边缘折光 */
+  .ph.light .card.glass .tint { background: linear-gradient(180deg, rgba(255,255,255,.62), rgba(255,255,255,.48)); }
+  .ph.light .card.glass .rim { box-shadow: inset 0 1px 0 rgba(255,255,255,.95), inset 0 0 0 .75px rgba(255,255,255,.7), inset 0 -1px 0 rgba(0,0,0,.05); }
+  .ph.dark .card.glass .tint { background: linear-gradient(180deg, rgba(60,60,64,.55), rgba(40,40,44,.5)); }
+  .ph.dark .card.glass .rim { box-shadow: inset 0 1px 0 rgba(255,255,255,.22), inset 0 0 0 .75px rgba(255,255,255,.12); }
+  .glassWrap { position: absolute; left: 16px; right: 16px; height: 70px; border-radius: 24px; z-index: 15; box-shadow: 0 8px 24px rgba(0,0,0,.10); }
+  .ph.dark .glassWrap { box-shadow: 0 8px 24px rgba(0,0,0,.45); }
+  .note { position: absolute; z-index: 22; font: 600 12.5px/1.35 "Inter", "Noto Sans SC"; color: #0A60D0; background: rgba(214,228,255,.95); padding: 4px 8px; border-radius: 8px; }
+</style>
+<body>
+<h1>needs-you 卡片 · 换回毛玻璃（iOS 26 Liquid Glass）</h1>
+<p class="lede">owner 11-15：<b>毛玻璃效果没有了。</b>beta.8 的卡片是一块不透明的平面（左一列）：后面滚过去的行看不见、颜色也透不过来。原因很可能是我在玻璃外面又加了一层阴影（04 浮起时加的）——给玻璃视图加 <code>.shadow</code> 会让系统把它画成平的。改法：iOS 26 上只用系统玻璃本身（它自带的深度和边缘高光），不再叠阴影；更早的系统没有玻璃，保留现在的实底 + 阴影。下面玻璃是照 Liquid Glass 的观感手画的（把后面的行模糊、提饱和、叠一层雾、加顶边高光），真机上由系统渲染。</p>
+
+<h2>收起 · 行从后面滚过</h2>
+<div class="row4" id="r1"></div>
+<h2>展开（顺带：去掉全屏灰色遮罩）</h2>
+<div class="row4" id="r2"></div>
+<h2>规格</h2>
+<table class="tok" id="spec"></table>
+<p class="foot" id="foot"></p>
+<script>
+const ROWS = [
+  { t: '定时任务 v1 (Scheduled tasks)', s: '<span class="bar"></span><span class="pill">4/13</span> S4 报告实现已完成', tm: 'now' },
+  { t: 'Compact and coordinator handoff from…', s: '<span class="bl">Resolving a merge conflict · 19m</span>', tm: 'now' },
+  { t: 'Managed runners on other Docker hosts', s: 'Watching any 1 of 2 tasks · 1 running', tm: 'now' },
+  { t: 'Session translation (Settings › Translation)', s: '已请求把项目分支合入 main', tm: '22m' },
+  { t: '审批时自动跳转会话设计', s: '<span class="or">Waiting for approval</span>', tm: '22s' },
+  { t: 'Help center (web)', s: '<span class="bar"></span>Watching all 8 tasks · 1 running', tm: 'now' },
+  { t: 'Task: 结构化 Session 生命周期与 spawn', s: 'Background process running…', tm: 'now' },
+];
+const rowsHtml = (top) => `<div class="pinhd" style="position:absolute;left:20px;top:${top}px;font:700 22px Inter;color:var(--l2)">Pinned</div>` + ROWS.map((r, i) =>
+  `<div class="srow sep" style="top:${top + 42 + i * 70}px"><div class="a"><b>${r.t}</b><span class="tm">${r.tm}</span></div><div class="s">${r.s}</div></div>`).join('');
+const listNav = `<div class="nav"><div class="gc l">${ic('ham', 21, 'var(--l1)', 2)}</div>
+<div class="gc" style="right:20px;width:92px;border-radius:22px;justify-content:space-around;padding:0 10px">${ic('filter', 21, 'var(--l1)', 2)}${ic('pen', 20, 'var(--l1)', 2)}</div></div><div class="ntitle">orbit-develop</div>`;
+const inner = (title, sub, age) => `<div class="body"><span class="ico">${ic('hand', 21, '#FF9500', 2.1)}</span><div class="w"><div class="h">${title}<span>${age}</span></div><p>${sub}</p></div></div>`;
+// 玻璃卡：里面放一份同样位置的行，模糊
+const glass = (top, rowsTop, title, sub, age) => `<div class="glassWrap" style="top:${top}px"></div><div class="card glass" style="top:${top}px"><div class="blur" style="top:${-top}px"><div class="rowsLayer">${rowsHtml(rowsTop)}</div></div><div class="tint"></div><div class="rim"></div>${inner(title, sub, age)}</div>`;
+const flat = (top, title, sub, age) => `<div class="card flat" style="top:${top}px">${inner(title, sub, age)}</div>`;
+const shell = (mode, rowsTop, cards, h = 560) => phone(mode, `${statusBar('12:44')}${listNav}<div class="rowsLayer">${rowsHtml(rowsTop)}</div>${edge(mode, 70, 112)}${cards}<div class="home"></div>`, { h, cls: 'crop' });
+const T = ['orbit-develop needs you', 'Android 自动更新报错', '5h'];
+const note = (txt, x, y) => `<div class="note" style="left:${x}px;top:${y}px">${txt}</div>`;
+document.getElementById('r1').innerHTML = `
+<div class="col"><span class="tag now">今天 · beta.8（亮）</span>${shell('light', 98, flat(116, ...T))}<div class="cap"><h3>一块实心板</h3>后面的行（这里正滚过「Compact and coordinator…」那一行和蓝色的 merge conflict）完全被挡住，看不出它浮在内容上。</div></div>
+<div class="col"><span class="tag rec">改后 · 玻璃（亮）</span>${shell('light', 98, glass(116, 98, ...T) + note('后面的行被模糊、颜色透出来', 150, 196))}<div class="cap"><h3>透出后面的内容</h3>行在卡片后面被模糊，颜色（蓝字、进度条）隐约透出来；顶边一道高光，边缘细亮线——和导航栏的玻璃按钮同一种材质。</div></div>
+<div class="col"><span class="tag now">今天 · beta.8（暗）</span>${shell('dark', 98, flat(116, ...T))}<div class="cap">暗色同样是一块灰板。</div></div>
+<div class="col"><span class="tag rec">改后 · 玻璃（暗）</span>${shell('dark', 98, glass(116, 98, ...T))}<div class="cap">暗色玻璃：后面的行模糊透出，边缘一道很淡的亮线。</div></div>`;
+
+const E2 = ['orbit needs you', 'Task: Owner answer replayed to a new coordinator', '1d'];
+const up = `<div style="position:absolute;right:30px;top:143px;z-index:17">${ic('chevu', 16, 'var(--l2)', 2.6)}</div>`;
+document.getElementById('r2').innerHTML = `
+<div class="col"><span class="tag now">今天 · 展开</span>${shell('light', 186, `<div style="position:absolute;inset:0;z-index:14;background:rgba(0,0,0,.18)"></div>${flat(116, ...T)}${up}${flat(194, ...E2)}${note('全屏灰罩：点哪里都只是收起', 110, 290)}`)}<div class="cap"><h3>挡住了整页</h3>展开后一层全屏灰色遮罩，下面的会话点不了、滚不动。</div></div>
+<div class="col"><span class="tag rec">改后 · 展开（亮）</span>${shell('light', 186, glass(116, 186, ...T) + up + glass(194, 186, ...E2))}<div class="cap"><h3>没有遮罩</h3>两张玻璃卡浮在列表上，后面的行照常可点、可滚。收起：点 ↑、点其中一张去那个会话；Android 点别处也会收起（那一下照常落到下面）。</div></div>
+<div class="col"><span class="tag rec">改后 · 展开（暗）</span>${shell('dark', 186, glass(116, 186, ...T) + up + glass(194, 186, ...E2))}<div class="cap">暗色同样。</div></div>
+<div class="col"><span class="tag alt">iOS 26 以前</span>${shell('light', 98, flat(116, ...T))}<div class="cap"><h3>没有玻璃的系统</h3>iOS 17–18 没有 Liquid Glass：保持今天的实底 + 阴影。</div></div>`;
+
+document.getElementById('spec').innerHTML = `
+<tr><td>材质</td><td>iOS 26：<code>glassEffect(.regular.interactive(), in: RoundedRectangle(cornerRadius: 24, style: .continuous))</code>，<b>外面不再加 <code>.shadow</code></b>（玻璃自带深度）；叠边两层也换成同一种玻璃（更淡）。iOS 17–18：<code>secondarySystemBackground</code> 实底 + 细边 + 阴影，不变。</td></tr>
+<tr><td>动画</td><td>上滑时的透明度/缩放只在拖动中加；静止时不套任何 <code>opacity</code>/<code>scale</code>，免得把玻璃压成平面。</td></tr>
+<tr><td>展开</td><td>去掉全屏遮罩（iOS 的灰罩、Android 的整窗弹层）。Android 弹层只占卡片那一块，点外面收起且不吞掉那一下。</td></tr>
+<tr><td>Android</td><td>Material 没有玻璃：卡片用 <code>surfaceContainerHigh</code> 92% 不透明 + 细边（不做模糊，Android 12 以下不支持实时模糊）。</td></tr>
+<tr><td>验证</td><td>模拟器截图里卡片后面放一行带颜色的内容（蓝字/进度条），对照「卡片区域里能否看到这些颜色的模糊」——beta.8 看不到，改后应该看得到。</td></tr>`;
+document.getElementById('foot').innerHTML = `<b>待你定</b>：① iOS 26 用系统玻璃、去掉外加阴影（推荐）；② 展开去掉全屏遮罩（推荐，你说的问题）；③ Android 用 92% 半透明面 + 细边（推荐），还是保持实底。`;
+</script>
+</body></html>

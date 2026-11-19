@@ -16,7 +16,7 @@
 2. **对模型的请求全部进队列。** 队列是持久化的 `wiki_model_request`。调度器按全局并发上限 `ORBIT_WIKI_MODEL_CONCURRENCY` 取请求执行，起多个 worker 进程也不会超过这个数。
    - 请求按优先级先来先得：owner 主动发起的排在后台维护前面。
    - 模型不可达或 key 被拒时，整个队列暂停，状态在界面上可见。
-3. **runner 只做仓库操作。** 包括 fetch `origin/main`、建索引、读指定片段、diff、锚点检查。
+3. **runner 只做仓库操作。** 包括 fetch 仓库的默认分支（`origin/<name>`，由远端 HEAD 决定）、建索引、读指定片段、diff、锚点检查。
    - 通道照集成作业（`integration-job/v1`）的做法：runner 在心跳里领取，在会话池之外执行。
    - 不起 agent 会话，不占并发槽位，也不接触任何模型 key。
 4. **作业和请求都落库，带租约。** 每个请求同时就是一个断点：
@@ -173,11 +173,11 @@ apiserver（API 进程）                  wiki-worker（新服务，同一镜�
 
 ### 4.3 仓库内容：runner 交快照，服务端查快照
 
-- runner 在 `origin/main` 上建一份快照：
+- runner 在仓库的默认分支上建一份快照：
   - 路径列表（含大小）
   - 文档标题
   - 符号索引
-  - `origin/main` 可达的提交集合
+  - 该分支可达的提交集合
   - README 首段
 
   快照按 sha 缓存，同一个 sha 只传一次。
@@ -302,7 +302,9 @@ apiserver（API 进程）                  wiki-worker（新服务，同一镜�
 
 | 失败 | 处理 |
 | --- | --- |
-| infra：端点不可达、5xx、429、runner 离线、worker 崩溃（租约自然过期） | 退避重试（`attempts + 1`，0 / 10 / 30 秒），不计入连续失败；健康行显示在等什么；到重试上限以失败结束（见下） |
+| 仓库前提错误（2026-11-11，仓库分档）：没有 workspace、没有工作目录、目录不存在、不是 git checkout（旧 runner）、文件太多、runner 没有 / 离线 / 太旧到一个仓库操作都领不了、远端拒绝凭据、读到的是别的仓库（origin、根提交、路径重合度） | 不是失败、不重试、不占重试上限：`maintain` 运行当场按 `sessions`（别的仓库时 `wrong_repository`）档继续，从会话抽条目、提议、推进游标，代码锚点和文档等下次读得到再做；这次运行不再问 runner，原因写在运行行和健康行上。见 `docs/wiki-repo-tiers-design.md` §6、契约 `repoOps.reasons` |
+| 仓库瞬时故障：fetch 网络失败、操作没在等待内结算、runner 在操作中掉线、没有原因的失败、读的途中文件夹变了 | 探测的快照按 infra 退避重试；本作业的快照累计 3 次（`repoOps.probe.maxAttempts`）没成功后，按 `sessions` 档继续，运行照样可以成功。读途中文件夹变了时先重建一次快照再读 |
+| infra：端点不可达、5xx、429、runner 离线（探测之后的步骤里）、worker 崩溃（租约自然过期） | 退避重试（`attempts + 1`，0 / 10 / 30 秒），不计入连续失败；健康行显示在等什么；到重试上限以失败结束（见下） |
 | worker 停机（部署、重启时的 SIGTERM） | 不算失败：作业交还，立即重新排队，不计次、不退避，不计入连续失败，也不向重试上限靠近（§5.4，owner 2026-10-09 定） |
 | 意外错误：程序断言不成立、类型错误这类，既不是平台的，也不是内容的 | 先按 infra 重试，以防只是偶发；到它自己的上限就以失败结束（见下） |
 | 401 | 队列暂停（§5.3），健康行写明 key 被拒 |
@@ -314,6 +316,9 @@ apiserver（API 进程）                  wiki-worker（新服务，同一镜�
   等着它的行在同一个事务里收尾：名下的模型请求和仓库操作取消；`maintain` 作业的运行记为 `failed` / `infra`，是平台原因结束的，照旧
   不计入连续失败；plan 作业以失败结束，owner 可以再要一次。停机交还不计次，所以部署再多也不会把作业推到上限。2026-10-09 之前没有上限：
   docs_build 作业 79620f23 的写入器断言不成立，空间每空出来一次就再失败一次。合同见 `jobs.retry`（`docs/wiki-contract.md` §24.4）。
+- **仓库不是维护运行的闸门**（2026-11-11）：上表头两行只管 `maintain` 作业的第一步（探测）。读不到仓库不算运行失败，不计入连续失败；
+  红色原因（别的仓库、凭据被拒）连续 3 次运行时推送一次（契约 `maintenance.health.notifyRepository`）。其他要读仓库的作业（plan、docs_build、
+  docs_follow、import、articles）遇到读不到时的处理没有改，仍按上表的 infra 行。
 
 ### 5.6 再要一次文档生成（owner 2026-10-17 定）
 
@@ -355,7 +360,7 @@ apiserver（API 进程）                  wiki-worker（新服务，同一镜�
 ## 7. 仓库操作（runner）
 
 - **能力与表**：能力名 `wiki-repo-op/v1`，表 `wiki_repo_op`，字段：
-  - 关联：`job_id`、`space_id`、`workspace_id`、`runner_id`
+  - 关联：`job_id`（只有 `probe` 可以为空，迁移 0530）、`space_id`、`workspace_id`、`runner_id`
   - 内容：`kind`、`input`、`state`
   - 租约：`lease_owner`、`claim_generation`、`claimed_at`、`heartbeat_at`
   - 结果：`result`、`error`
@@ -374,10 +379,27 @@ apiserver（API 进程）                  wiki-worker（新服务，同一镜�
     - 服务端只为声明了 `wiki-repo-op-read/v1` 的 runner 下发整文件读取；这些 runner 的 read 回答也是整份文件。一次 read 装多少文件由服务端按快照给出的大小打包（`read.operationBytes`）。
   - `diff`：两个 sha 之间的 `--name-status -M`，以及新增的设计文档（`--diff-filter=AR -- docs/`）。
   - `anchors`：现有的锚点检查（`wiki_anchors.go`），直接复用。
-- **安全检查**：沿用现有检查：origin URL 要和空间的 `repo.urlNorm` 一致，根提交要匹配，否则报错。
+  - `probe`（2026-11-11，能力 `wiki-repo-op-probe/v1`）：只判断工作目录会按哪一档读，不 fetch、不建快照、不读文件：是 space 仓库的 git checkout
+    答 `git` 和 origin，目录在、不是 git 答 `folder`，其余按原因失败（`no_work_dir`、`not_found`、`wrong_repository`、`root_mismatch`）。
+    由维护设置的 `POST /api/wiki/spaces/:id/maintenance/probe` 发起，不挂作业，等 15 秒；打开维护时探测出别的仓库就拒绝（`WIKI_MAINTENANCE_WRONG_REPOSITORY`）。
+    维护运行自己不用它：运行的探测就是它的 `snapshot`。
+- **文件夹快照**（2026-11-11，能力 `wiki-repo-op-folder/v1`，`docs/wiki-repo-tiers-design.md` §4）：runner 声明了它，服务端就在每一种操作的输入里写
+  `allowFolder: true`；工作目录不是 git checkout 时，runner 不再报 `not a git checkout`，而是扫描目录：
+  - 不跟随符号链接，不出工作目录；内置排除表（`.git/`、`.env*`、密钥、`node_modules/`、构建目录等）在 `.gitignore` 之前生效，之后读各层 `.gitignore`；
+  - 前 8 KB 有 NUL 的文件只记路径、大小和 hash；排除之后超过 100,000 个文件就以 `too_many_files` 失败；
+  - 索引同 git 快照，另加 `source: "folder"` 和每个文件内容的 sha256，`commits` 为空；快照的 sha 是树哈希（按路径排序的 `path NUL size NUL sha256 LF` 取 sha1），
+    所以 `skipSha`、原文缓存、快照换代都不用改；`wiki_repo_snapshot.source` 记 `git` / `folder`（迁移 0521）；
+  - `read` 先重算树哈希，变了就以 `folder_moved` 失败；没有 `diff`；`anchors` 核路径和符号，不核提交；
+  - 服务端落地之前比路径重合度：space 已有快照时，新快照覆盖不到旧快照一半的路径就不落地，记 `path_overlap`（owner 在设置里按 `Use this folder` 可以接受一次）。
+  - 没声明它的 runner 遇到非 git 目录照旧报 `not a git checkout`，服务端读成 `not_git`，按 `sessions` 档跑，并写 `Upgrade the runner to read folders`。
+- **失败的原因**（2026-11-11）：runner 的失败回答在 `error` 旁边带结构化的 `reason`（契约 `repoOps.reasons`），服务端按它分前提和瞬时（§5.5）；
+  没带原因的旧 runner 按错误文字识别，认不出的算瞬时的 `op_failed`。
+- **安全检查**：沿用现有检查：origin URL 要和空间的 `repo.urlNorm` 一致，根提交要匹配，否则报错（原因 `wrong_repository` / `root_mismatch`）。
+  文件夹档没有 origin 和提交可比，靠上面的路径重合度。
 - **服务端缓存**：每个空间只保留最近一份快照及其片段，只对 owner 可见；空间删除时一起清理。读到的原文同样只对 owner 可见，随空间删除，并跟着快照换代清理。
 - **旧 runner**：
-  - 没声明 `wiki-repo-op/v1` 的 runner，需要仓库的步骤会挂起，健康行提示升级 runner。
+  - 没声明 `wiki-repo-op/v1` 的 runner，需要仓库的步骤会挂起，健康行提示升级 runner。2026-11-11 起 `maintain` 运行不再为它挂起：探测时就按
+    `sessions` 档跑（原因 `runner_upgrade`）；其他作业照旧。
   - 声明了 `wiki-repo-op/v1` 但没声明 `wiki-repo-op-read/v1` 的 runner 照旧只能读到每个文件的前 `read.boundedChars`（22,000）字：服务端照旧处理（截断的文本按今天的方式当作缺失并写明），健康行给出同一个原因 "Upgrade the runner to read the repository"。
 
 ## 8. 各流水线怎么搬

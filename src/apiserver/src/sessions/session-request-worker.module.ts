@@ -2,6 +2,7 @@ import { Module } from '@nestjs/common';
 
 import { SessionsModule } from './sessions.module';
 import { SessionRequestWorker } from './session-request.worker';
+import { PushModule } from '../push/push.module';
 
 /**
  * The session request worker: one loop per replica that expires requests past their deadline and
@@ -9,7 +10,7 @@ import { SessionRequestWorker } from './session-request.worker';
  * scheduled-wakeup worker's is, so a harness that imports SessionsModule does not start a clock.
  */
 @Module({
-  imports: [SessionsModule],
+  imports: [SessionsModule, PushModule],
   providers: [SessionRequestWorker],
   exports: [SessionRequestWorker],
 })

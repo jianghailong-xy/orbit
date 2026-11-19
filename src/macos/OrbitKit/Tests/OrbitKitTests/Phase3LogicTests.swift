@@ -181,8 +181,33 @@ final class Phase3LogicTests: XCTestCase {
         XCTAssertNil(Notifications.intent(actionId: Notifications.actionReply, userInfo: ui, responseText: "   "))
         XCTAssertNil(Notifications.intent(actionId: Notifications.actionAllow, userInfo: [:]))   // no session
 
+        // A runner draining for its update with the owner's work waiting (D3, kind runner-updating) names no
+        // session: a tap opens the runner's page, by the lists' spelling of its id. Other runner alerts stay untapped.
+        let drain = ["kind": "runner-updating", "runnerID": "019a0000-0000-7000-8000-000000000003"]
+        XCTAssertEqual(Notifications.intent(actionId: "com.apple.UNNotificationDefaultActionIdentifier", userInfo: drain),
+                       .open(.runner(PublicID.toPublic("019a0000-0000-7000-8000-000000000003"))))
+        XCTAssertNil(Notifications.intent(actionId: "com.apple.UNNotificationDefaultActionIdentifier",
+                                          userInfo: ["kind": "runner-updating"]), "it names its runner")
+        // An engine signed out and Claude blocked in the runner's region name the runner too, and open it.
+        for kind in ["engine-signed-out", "claude-region-blocked"] {
+            XCTAssertEqual(Notifications.intent(actionId: "com.apple.UNNotificationDefaultActionIdentifier",
+                                                userInfo: ["kind": kind, "runnerID": "019a0000-0000-7000-8000-000000000003"]),
+                           .open(.runner(PublicID.toPublic("019a0000-0000-7000-8000-000000000003"))), kind)
+            XCTAssertNil(Notifications.intent(actionId: "com.apple.UNNotificationDefaultActionIdentifier",
+                                              userInfo: ["kind": kind]), "\(kind) names its runner")
+        }
+        // A project nobody has opens the project; without its id there is nothing to open.
+        XCTAssertEqual(Notifications.intent(actionId: "com.apple.UNNotificationDefaultActionIdentifier",
+                                            userInfo: ["kind": "project-orphan", "projectID": "p1"]),
+                       .openProject(projectID: "p1"))
+        XCTAssertNil(Notifications.intent(actionId: "com.apple.UNNotificationDefaultActionIdentifier",
+                                          userInfo: ["kind": "project-orphan"]))
+
         // A merge into main waiting on the owner opens the project's page, where its card is
         // (owner decision 2026-10-06); every other owner item still opens the conversation.
+        XCTAssertEqual(Notifications.intent(actionId: "com.apple.UNNotificationDefaultActionIdentifier",
+                                            userInfo: ["kind": "project-done", "projectID": "p1"]),
+                       .openProject(projectID: "p1"))
         let merge = ["sessionID": "s1", "kind": "approve-merge-to-main", "projectID": "p1", "openItemID": "i1"]
         XCTAssertEqual(Notifications.intent(actionId: "com.apple.UNNotificationDefaultActionIdentifier", userInfo: merge),
                        .openProjectMerge(projectID: "p1", sessionID: "s1"))
@@ -192,6 +217,20 @@ final class Phase3LogicTests: XCTestCase {
         XCTAssertEqual(Notifications.intent(actionId: "com.apple.UNNotificationDefaultActionIdentifier",
                                             userInfo: ["sessionID": "s1", "kind": "approve-merge-to-main"]),
                        .open(.session("s1")), "an alert naming no project still opens its conversation")
+
+        // A crossing request opens the conversation that draws its decision card; a source with no
+        // coordinator conversation leaves only the project to open.
+        XCTAssertEqual(Notifications.intent(actionId: "com.apple.UNNotificationDefaultActionIdentifier",
+                                            userInfo: ["kind": "crossing-request", "sessionID": "s3",
+                                                       "projectID": "p1", "handoffID": "h1"]),
+                       .open(.session("s3")))
+        XCTAssertEqual(Notifications.intent(actionId: "com.apple.UNNotificationDefaultActionIdentifier",
+                                            userInfo: ["kind": "crossing-request", "projectID": "p1",
+                                                       "handoffID": "h1"]),
+                       .openProject(projectID: "p1"))
+        XCTAssertNil(Notifications.intent(actionId: "com.apple.UNNotificationDefaultActionIdentifier",
+                                          userInfo: ["kind": "crossing-request", "handoffID": "h1"]),
+                     "nothing to open without a conversation or a project")
     }
 
     // MARK: menu-bar summary

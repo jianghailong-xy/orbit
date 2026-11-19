@@ -98,17 +98,57 @@ public struct SessionMessageFrom: Sendable, Equatable, Codable {
     }
 }
 
+/// That the message a session row previews (`Session.lastUserText`) is Orbit's own: a turn the control
+/// plane wrote itself — a fact told to a coordinator, the answer to a criteria proposal, a watch's wake,
+/// the owner's answer handed on, a task run's brief (docs/session-list-projects-design.md §3.5, owner
+/// 2026-11-07). Mirrors `@orbit/shared`'s `OrbitMessageFrom`. The rows carry it as `lastUserFromOrbit`,
+/// nil for anybody else's words, and the row says `Orbit: …` (`SessionLine.orbitLine`).
+public struct OrbitMessageFrom: Sendable, Equatable, Codable {
+    /// The card the conversation draws a coordinator's notification as, read by the conversation's own
+    /// rule (`CoordinatorDelivery.parseCard`): the row says that line's sentence. Nil for every other
+    /// message of Orbit's — and for a card this build cannot read — whose row says its first line.
+    public let coordinatorDelivery: CoordinatorDelivery?
+
+    public init(coordinatorDelivery: CoordinatorDelivery? = nil) {
+        self.coordinatorDelivery = coordinatorDelivery
+    }
+
+    private enum CodingKeys: String, CodingKey { case coordinatorDelivery }
+
+    public init(from decoder: Decoder) throws {
+        let values = try decoder.container(keyedBy: CodingKeys.self)
+        coordinatorDelivery = CoordinatorDelivery.parseCard(try? values.decodeIfPresent(JSONValue.self, forKey: .coordinatorDelivery))
+    }
+}
+
 /// What the card says, in the web's own words: `lib/sessionMessage.ts`, which
 /// `SessionMessageCopyParityTests` holds this end to.
 public enum SessionMessageCard {
-    /// The word in front of the sending session's title, on the card's head and on the sticky bar.
+    /// The word in front of the sending session's title, on the card's head.
     public static let from = "From"
     /// What a session with no title is called where its title would be.
     public static let untitled = "Untitled session"
-    /// The foot line: who this is not.
+    /// Who this is not: the help and the accessibility label of the line that names the sender
+    /// (docs/mocks/session-message-bubble, owner 2026-11-12), no longer a sentence on screen.
     public static let notYou = "Sent by another Orbit session, not by you"
     public static let openTask = "Its task ↗"
     public static let undelivered = "The session has not confirmed it received this."
+
+    /// A long message folds by its rendered height, not its length (docs/mocks/session-message-clamp,
+    /// approved 2026-11-11; 4 of 6 since docs/mocks/session-message-bubble, 2026-11-12): taller than
+    /// `clampFrom` lines, it shows its first `clampLines` and `showMore`; opened, the whole text and
+    /// `showLess`. Web: `SessionMessageCard.tsx`'s
+    /// `SESSION_MESSAGE_CLAMP_*` and `SESSION_MESSAGE_SHOW_*`.
+    public static let clampLines = 4
+    public static let clampFrom = 6
+    public static let showMore = "Show more"
+    public static let showLess = "Show less"
+
+    /// Whether a body `height` tall, at `lineHeight` per line, is long enough to fold. Nothing
+    /// measured yet (a zero line height) folds nothing.
+    public static func folds(height: Double, lineHeight: Double) -> Bool {
+        lineHeight > 0 && height > lineHeight * Double(clampFrom)
+    }
 
     /// The sending session as the card names it: its title, or what an untitled one is called.
     public static func title(_ card: SessionMessage) -> String {
@@ -116,18 +156,39 @@ public enum SessionMessageCard {
         return title.isEmpty ? untitled : title
     }
 
-    /// "Sent by another Orbit session, not by you · 2m ago".
-    public static func meta(ts: String? = nil, now: Date = Date()) -> String {
-        var line = notYou
-        if let ts, let relative = RelativeTime.format(ts, now: now) { line += " · \(relative)" }
-        return line
+    /// The foot line's first item, when the message was sent: "2m ago". Nil with no time to say;
+    /// the task, the request and the attached note follow it on the same line, each after " · ".
+    public static func meta(ts: String? = nil, now: Date = Date()) -> String? {
+        guard let ts else { return nil }
+        return RelativeTime.format(ts, now: now)
     }
 
-    /// What the bar pinned to the top of a console says about this turn: who sent it, and what it
-    /// said (web parity: the `data-sticky-label` / `data-sticky-text` the card's root carries). Not
-    /// "Your question" — that above a card reading "not by you" is the screen contradicting itself.
-    public static func sticky(_ card: SessionMessage, text: String) -> (label: String, text: String) {
-        ("\(from) \(title(card))", text)
+    /// The card's line for a sender that runs narrower than this session, each mode as the mode
+    /// picker names it (web `sessionMessageNarrower`; board session-message-attached-line ③).
+    public static func narrower(from: String, to: String) -> String {
+        "Sender runs in \(modeLabel(from)), narrower than this session's \(modeLabel(to)): not taken as your approval"
+    }
+
+    /// The card's line when a session message's recorded block says the sender runs narrower than
+    /// this session; nil otherwise. Nothing else in the note is drawn (owner, 2026-11-18).
+    public static func narrowerLine(_ note: String?) -> String? {
+        guard let note else { return nil }
+        let range = NSRange(note.startIndex..., in: note)
+        let blocks = blockPattern.matches(in: note, range: range).compactMap { Range($0.range, in: note).map { String(note[$0]) } }
+        return blocks.lazy.compactMap { block -> String? in
+            guard let m = narrowerPattern.firstMatch(in: block, range: NSRange(block.startIndex..., in: block)),
+                  let from = Range(m.range(at: 1), in: block), let to = Range(m.range(at: 2), in: block) else { return nil }
+            return Self.narrower(from: String(block[from]), to: String(block[to]))
+        }.first
+    }
+
+    /// The block delivery appends after another session's message (apiserver `sessionMessageBlock`).
+    private static let blockPattern = try! NSRegularExpression(pattern: "<orbit-session-message\\b[^>]*>[\\s\\S]*?</orbit-session-message>")
+    /// The block's sentence for a sender that may do less than this session (apiserver `narrowerSenderNote`).
+    private static let narrowerPattern = try! NSRegularExpression(pattern: "The sender runs in (\\S+), which is narrower than this session's (\\S+)\\.")
+
+    private static func modeLabel(_ mode: String) -> String {
+        PermissionMode(rawValue: mode).map(AgentDefaults.label) ?? mode
     }
 
     /// The session that sent the message, as the app's own `orbit-session:` door.

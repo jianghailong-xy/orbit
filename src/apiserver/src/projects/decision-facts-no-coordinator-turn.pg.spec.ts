@@ -99,6 +99,7 @@ import { ProjectAcceptanceService } from './project-acceptance.service';
 import { ProjectOpenItemService } from './project-open-item.service';
 import { ProjectSettledUnmergedProducer } from './project-settled-unmerged.producer';
 import { ProjectTasksSettledProducer } from './project-tasks-settled.producer';
+import { PushService } from '../push/push.service';
 import { ProjectsService } from './projects.service';
 import { TaskDispatchRefusalProducer } from './task-dispatch-refusal.producer';
 import { TaskExceptionInputProducer } from './task-exception-input.producer';
@@ -155,6 +156,7 @@ function builtByDeclaredTypes<T>(
 function connect(url: string): Stack {
   const db = prismaClientFor(url);
   const prisma = db as unknown as PrismaService;
+  const push = new Proxy({}, { get: () => () => Promise.resolve() }) as unknown as PushService;
   const realtime = new Proxy({}, { get: () => () => undefined }) as unknown as RealtimeService;
   const queue = { notifySessionQueued: () => undefined } as unknown as QueueService;
   const sessions = new SessionsService(prisma, queue, realtime);
@@ -185,6 +187,7 @@ function connect(url: string): Stack {
       new ProjectSettledUnmergedProducer(prisma, convergence, deliveries)],
     [CompletionEvidenceProducer, producer],
     [CoordinatorEvidenceQueueService, new CoordinatorEvidenceQueueService(prisma, producer)],
+    [PushService, push],
   ]);
   return {
     db,

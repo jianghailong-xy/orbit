@@ -70,6 +70,7 @@ class ProjectDataTest {
                 path.lastOrNull() == "coordinator" -> ok("""{"sessionId":"s1","created":true,"workspaceId":"w1"}""")
                 path.lastOrNull() == "replace" -> ok("""{"sessionId":"s2","created":true}""")
                 path.lastOrNull() == "handoffs" -> ok("[]")
+                path == listOf("workspaces") || path == listOf("runners") -> ok("[]")
                 else -> ok("{}")
             }
         }
@@ -88,10 +89,13 @@ class ProjectDataTest {
         api.resumeFuse("p1", "f1"); api.resolveBlocker("p1", "b1", "agent added")
         api.run("t1", "press-1", "t1:OPEN:READY"); api.resumeList("l1")
         assertEquals("s2", api.replaceCoordinator("p1", "replace:s1")?.text("sessionId"))
+        assertEquals("s2", api.replaceCoordinator("p1", "replace:s2", "w2")?.text("sessionId"))
+        api.workspaces(); api.runners()
         // A11c: the crossings and their answer, Retry on a landing job, and the owner's done door and its Not yet….
         assertEquals(emptyList<JsonObject>(), api.crossings("p1"))
         api.decideCrossing("p1", obj("""{"id":"h1","publicId":"34bH1","crossingKey":"k1"}"""), approve = true)
         api.retryJob("p1", "j1")
+        api.skipLandingCheck("p1", "t1")
         api.done("p1", buildJsonObject { put("requestId", "d1"); put("criteriaDigest", "c"); put("acceptedGaps", JsonArray(emptyList())) })
         api.declineDone("p1", "d1", "the deploy is not verified")
         api.delete("p1")
@@ -111,13 +115,17 @@ class ProjectDataTest {
             """PATCH /projects/p1/integration {"line":"MAIN","mergeCheckCommand":null,"exceptionEscalationSeconds":3600}""",
             "POST /projects/p1/pause", "POST /projects/p1/resume",
             // The owner's own start answers no request: the key is sent, and it is null.
-            """POST /projects/p1/start {"criteriaDigest":"d1","line":"MAIN","automatic":true,"maxConcurrentTasks":2,"mergeCheckCommand":null,"requestId":null}""",
+            """POST /projects/p1/start {"criteriaDigest":"d1","line":"MAIN","automatic":true,"maxConcurrentTasks":2,"mergeCheckCommand":null,"mergeCheckTimeoutSeconds":null,"requestId":null}""",
             "POST /projects/p1/fuse/f1/resume", """POST /projects/p1/blockers/b1/resolve {"reason":"agent added"}""",
             """POST /tasks/t1/execute {"triggerId":"press-1"}""",
             """PATCH /task-lists/l1 {"paused":false,"note":"Resumed from the project Run queue"}""",
             "POST /projects/p1/coordinator/replace",
+            // Change workspace…: the workspace it opens in rides in the body.
+            """POST /projects/p1/coordinator/replace {"workspaceId":"w2"}""",
+            "GET /workspaces", "GET /runners",
             "GET /projects/p1/handoffs", """POST /projects/p1/handoffs/34bH1/decision {"decision":"APPROVE","acknowledgedCrossingKey":"k1"}""",
             "POST /projects/p1/integration/jobs/j1/retry",
+            """POST /projects/p1/tasks/t1/integration/skip-merge-check {"reason":"The owner chose to land this without waiting for the landing check."}""",
             """POST /projects/p1/done {"requestId":"d1","criteriaDigest":"c","acceptedGaps":[]}""",
             """POST /projects/p1/done-requests/d1/decline {"note":"the deploy is not verified"}""",
             "DELETE /projects/p1",

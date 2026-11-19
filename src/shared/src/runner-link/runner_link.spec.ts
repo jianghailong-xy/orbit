@@ -77,6 +77,7 @@ function samples(): Sample[] {
       hints,
       release,
       connectionId: 'conn-1',
+      browser: true,
     }),
     sample(pb.LimitsSchema, limits),
     sample(pb.SessionStateSchema, sessionState),
@@ -109,6 +110,7 @@ function samples(): Sample[] {
       sessionIds: ['ses-1', 'ses-2'],
       supportedProviders: ['claude', 'codex', 'cursor'],
       facts: [fact, { kind: 'repos', sha256: '2c26b46b68ffc68f' }],
+      beatId: 17n,
     }),
     sample(pb.FactSchema, fact),
     sample(pb.HeartbeatAckSchema, {
@@ -117,6 +119,7 @@ function samples(): Sample[] {
       wantFacts: ['repos'],
       hints,
       release,
+      beatId: 17n,
     }),
     sample(pb.EventBatchSchema, {
       sessionId: 'ses-1',
@@ -144,6 +147,21 @@ function samples(): Sample[] {
       text: 'Half of the repl',
       thinking: 'The user wants',
       throughLiveSeq: 8n,
+    }),
+    sample(pb.StreamOpenSchema, { streamId: '0190a0b0-0000-7000-8000-0000000000e1', kind: pb.StreamKind.VNC }),
+    sample(pb.StreamOpenedSchema, { streamId: '0190a0b0-0000-7000-8000-0000000000e1' }),
+    sample(pb.StreamDataSchema, { streamId: '0190a0b0-0000-7000-8000-0000000000e1', data: json('RFB 003.008\n') }),
+    sample(pb.StreamCreditSchema, { streamId: '0190a0b0-0000-7000-8000-0000000000e1', bytes: 12 }),
+    sample(pb.StreamCloseSchema, {
+      streamId: '0190a0b0-0000-7000-8000-0000000000e1',
+      code: pb.StreamCloseCode.NORMAL,
+      message: 'the viewer left',
+    }),
+    sample(pb.StreamPasteSchema, { streamId: '0190a0b0-0000-7000-8000-0000000000e1', pasteId: 3, text: '密码 Pässwörd 🔑' }),
+    sample(pb.StreamPastedSchema, {
+      streamId: '0190a0b0-0000-7000-8000-0000000000e1',
+      pasteId: 4,
+      error: 'No page in the browser has focus',
     }),
   ];
 

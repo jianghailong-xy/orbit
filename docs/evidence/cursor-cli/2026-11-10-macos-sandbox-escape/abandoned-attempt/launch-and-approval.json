@@ -1,0 +1,49 @@
+{
+  "approvedCommand": "printf approved \u003e \"$HOME/.orbit-macos-sandbox-escape-1794264900153935000-approved\"",
+  "blockedCommand": "python3 - \u003c\u003c'PY'\nfrom pathlib import Path\n(Path.home() / '.orbit-macos-sandbox-escape-1794264900153935000-blocked').write_text('blocked')\nPY",
+  "cards": [
+    {
+      "ID": "approval-1",
+      "ToolName": "Bash",
+      "ToolUseID": "call-3e267aaa-b250-4ea6-bb07-c7a2f3fb97ed-1\nfc_dc956377-2fa7-9c8a-9115-8806804046b9_0",
+      "Input": {
+        "command": "printf approved \u003e \"$HOME/.orbit-macos-sandbox-escape-1794264900153935000-approved\""
+      },
+      "Withdrawn": false,
+      "Polls": 2
+    },
+    {
+      "ID": "approval-2",
+      "ToolName": "Bash",
+      "ToolUseID": "call-baa04542-243f-41d6-995c-87d876ca42f7-2\nfc_bc4ec6d5-8fee-996e-960d-b58d3cd9ab05_0",
+      "Input": {
+        "command": "printf approved \u003e \"$HOME/.orbit-macos-sandbox-escape-1794264900153935000-approved\""
+      },
+      "Withdrawn": false,
+      "Polls": 1
+    }
+  ],
+  "cli": "/Users/long/.orbit/cursor/versions/2026.10.14-941492e/cursor-agent",
+  "host": "longdeMac-mini.local",
+  "launch": {
+    "Args": [
+      "acp",
+      "--disable-auto-update",
+      "--disable-indexing",
+      "--disable-project-configs"
+    ],
+    "ConfigDir": "/var/folders/6p/plfqmx1d0rqcq2pc8r3ggwjw0000gn/T/TestCursorRealMacOSSandboxEscape845260564/001/.orbit/runs/31111111-2222-4333-8444-666666666666/cursor/config",
+    "Cwd": "/private/var/folders/6p/plfqmx1d0rqcq2pc8r3ggwjw0000gn/T/TestCursorRealMacOSSandboxEscape845260564/003/work",
+    "DataDir": "/var/folders/6p/plfqmx1d0rqcq2pc8r3ggwjw0000gn/T/TestCursorRealMacOSSandboxEscape845260564/001/.orbit/runs/31111111-2222-4333-8444-666666666666/cursor/data",
+    "Executable": "/Users/long/.orbit/cursor/versions/2026.10.14-941492e/cursor-agent",
+    "Home": "/var/folders/6p/plfqmx1d0rqcq2pc8r3ggwjw0000gn/T/TestCursorRealMacOSSandboxEscape845260564/001/.orbit/runs/31111111-2222-4333-8444-666666666666/cursor/home",
+    "Version": "2026.10.14-941492e"
+  },
+  "ownerDecision": {
+    "id": "01a1c285-ff99-703a-9d2c-d81254d5ff75",
+    "status": "ABANDONED",
+    "behavior": "deny",
+    "message": "the turn that asked this ended before it was answered, so nothing is left to receive an answer"
+  },
+  "sandboxConfig": "/var/folders/6p/plfqmx1d0rqcq2pc8r3ggwjw0000gn/T/TestCursorRealMacOSSandboxEscape845260564/001/.orbit/runs/31111111-2222-4333-8444-666666666666/cursor/bin/sandbox.json"
+}

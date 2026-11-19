@@ -1,0 +1,66 @@
+<!doctype html><html lang="zh"><meta charset="utf-8">
+<link rel="stylesheet" href="../project-done-sessions-page/kit.css">
+<link rel="stylesheet" href="board.css">
+<script src="../project-done-sessions-page/kit.js"></script>
+<script src="board.js"></script>
+<body><div class="board">
+<h1>① 直进 main 的项目：卡为什么出、怎么才能不出</h1>
+<p class="lede" style="max-width:1780px">场景取自 2026-11-10 的「核实卡片显示规则」会话：项目选了 <b>Directly into feature/v1.1.1</b>，Automatic 开着，交付方式是默认的 <b>Orbit lands it</b>。规则（契约 M7）是：直进 main 的项目，Orbit 每次合入 main 都要问你；不出卡的唯一办法是 <b>The agent pushes it</b>（AGENT_PUSH，修订 29）。这个开关三端 10-29 就有了，但卡片上看不到为什么问你，Automatic 的说明也没指向它。所以用户以为 Automatic 坏了。</p>
+<div class="row" id="figs"></div>
+<table class="board-table">
+<tr><th></th><th>现在</th><th>建议</th></tr>
+<tr><td>卡片为什么问你</td><td>不说。检查中只有 “Asks you when it passes.”</td><td>一行理由，只在 Automatic 开着却仍然问你时出现，并直接带到 Delivery</td></tr>
+<tr><td>Delivery 放在哪</td><td>排在 Main branch 下面、Automatic 上面，和 Tasks land on 隔着一行</td><td>紧跟在 Directly into main 下面：它只对直进 main 的项目有意义</td></tr>
+<tr><td>两种交付方式各自的代价</td><td>只说谁去推</td><td>写明有没有合并卡、合并检查谁跑、Orbit 做什么</td></tr>
+<tr><td>Automatic 的说明</td><td>“always asks you … never merges by itself”，到此为止</td><td>后面补半句：要不出卡，改 Delivery</td></tr>
+</table>
+<div class="files"><b>会动到的文件</b>（只改文案和排列，不改规则）：<code>src/web/src/lib/projectStart.ts</code>、<code>ProjectRunSettings.tsx</code>、<code>ProjectPromotionCard.tsx</code>；<code>src/macos/OrbitKit/Sources/OrbitKit/App/ProjectRunSettings.swift</code>、<code>OwnerItemCards.swift</code>；Android <code>ProjectSettings.kt</code>、<code>CardModels.kt</code>。理由那一行要用的事实（line、deliveryMode、coordinatorEnabled）客户端手里都有，<code>onPass</code> 已经下发，不需要改服务端。</div>
+</div>
+<script>
+const WHY = `<div class="why">Asks you because this project lands directly on <code>${MAIN}</code>, where Automatic never merges by itself.<span class="lnk">Let the agent push instead…</span></div>`;
+document.getElementById('figs').innerHTML = [
+  fig('now', '现在 · 合并卡', prjPage(mk(mergeCard(), 1)),
+    `<b>卡上没有理由</b><ol>
+<li>${n(1)}Branch、Checks、${MAIN} 三行都是绿的，Automatic 也开着。卡上没有一句话告诉你为什么还要你点。</li>
+<li>能看到的唯一线索在 How it runs 的 Automatic 说明里。</li></ol>`),
+  fig('now', '现在 · How it runs', runSheet([
+    group('Execution', [
+      { lab: '<b>Tasks land on</b>' },
+      { lab: 'Project branch', hint: 'Locked: this project started integrating 3 days ago.', dis: true },
+      { lab: T.lineMain, tick: true, hint: T.lineMainHint },
+      { lab: 'Main branch', v: MAIN },
+    ]),
+    group('Delivery', [
+      { lab: T.platform, tick: true, hint: T.platformHint },
+      { lab: T.push, hint: T.pushHint, n: 1 },
+    ]),
+    group('', [{ lab: 'Automatic', sw: true, hint: T.autoMain, n: 2 }]),
+  ]),
+    `<b>开关有了，但看不出它就是答案</b><ol>
+<li>${n(1)}只说谁去推，没说选它就没有合并卡，也没说合并检查从此不跑。</li>
+<li>${n(2)}Automatic 说“always asks you”，到此为止，没指向 Delivery。</li></ol>`),
+  fig('after', '建议 · 合并卡', prjPage(mk(mergeCard({ why: WHY }), 1)),
+    `<b>卡上加一行理由</b><ol>
+<li>${n(1)}只在 <code>onPass = ASK</code>、Automatic 开、线是 MAIN、交付是 PLATFORM 时出现。Automatic 关着时问你是理所当然的，不加这行。</li>
+<li>“Let the agent push instead…” 打开 How it runs，滚到 Delivery。</li>
+<li>Merge / Not now 不变：这张卡还得你答（见 ②）。</li></ol>`),
+  fig('after', '建议 · How it runs', runSheet([
+    group('Execution', [
+      { lab: '<b>Tasks land on</b>' },
+      { lab: 'Project branch', hint: 'Locked: this project started integrating 3 days ago.', dis: true },
+      { lab: T.lineMain, tick: true, hint: T.lineMainHint },
+      { lab: '<b>Delivery</b>', chg: true, n: 1 },
+      { lab: T.platform, tick: true, chg: true, hint: `Orbit runs the merge check, then asks you before each merge into ${MAIN}.` },
+      { lab: T.push, chg: true, hint: `No merge card. The agent pushes to ${MAIN} itself; Orbit records each commit once it sees it there.` },
+      { lab: 'Main branch', v: MAIN },
+    ]),
+    group('', [{ lab: 'Automatic', sw: true, chg: true, n: 2, hint: `The coordinator decides when each task is done and handles conflicts and failed checks. Merging into ${MAIN} still asks you — to skip that card, choose The agent pushes it under Delivery.` }]),
+  ]),
+    `<b>Delivery 跟着线走，代价写清楚</b><ol>
+<li>${n(1)}Delivery 紧跟在 Directly into main 下面。线锁定后它照样能改（O-L1），所以不变灰。</li>
+<li>${n(2)}Automatic 的说明补半句，指向 Delivery。</li>
+<li>选项文案说的是你得到什么：有没有卡、谁跑检查、Orbit 记什么。</li></ol>`),
+].join('');
+document.body.dataset.ready = '1';
+</script>
+</body>

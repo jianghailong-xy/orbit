@@ -30,12 +30,21 @@ object ProviderEngines {
     val ENGINE_CLI_NAMES = mapOf(CLAUDE to "Claude Code", CODEX to "Codex", KIMI to "Kimi Code", ANTIGRAVITY to "Antigravity CLI",
         OPENCODE to "OpenCode", DSH to "DeepSeek Harness", CURSOR to "Cursor CLI")
 
+    /** The name Claude Code gives a Claude api id — `claude-opus-5-5` is "Opus 5.5", `claude-haiku-4-5` "Haiku 4.5" (web
+     *  `claudeModelName`, the runner's claudeModelID in reverse) — for a model the runner's catalogue has no row for: a runner whose
+     *  probe failed, a pin on a previous model. Anything else stays as it is. */
+    fun claudeModelName(id: String): String {
+        val m = Regex("^claude-([a-z]+)-(\\d+)(?:-(\\d{1,2}))?$").matchEntire(id) ?: return id
+        val (family, major, minor) = m.destructured
+        return family.replaceFirstChar { it.uppercase() } + " " + major + if (minor.isEmpty()) "" else ".$minor"
+    }
+
     /**
      * Whether this app draws [engine] in a list of engines, given the runners in view — the account's, where a page has them, else the
      * one it is about (web `webShowsEngine`, OrbitKit `appleShowsEngine`). Every engine but Cursor CLI always; Cursor CLI once one of
      * those runners knows it (CursorRuntime.knows: it declares `provider:cursor` or reports the engine), which is the order its rollout
      * keeps: the runners and what they declare first, then the entrances (project P9). Until then the New Session's engines, a task's
-     * engine pin, Infrastructure's engine cards and a runner's Engines rows leave it out, and the app reads as it did before Cursor CLI;
+     * engine pin, Machines & models' engine cards and a runner's Engines rows leave it out, and the app reads as it did before Cursor CLI;
      * from then on a machine that predates it says so on its row.
      */
     fun androidShowsEngine(engine: String?, runners: List<JsonObject>?) = engine != CURSOR || runners.orEmpty().any(CursorRuntime::knows)
@@ -158,11 +167,13 @@ object ProviderEngines {
         return if (vendor != null) "the $vendor key “$label”" else "the key “$label”"
     }
 
-    /** An account pool read as a provider row: it runs on the engine it was made on and nowhere else — Claude Code for one's own
-     * unless it says otherwise, Codex for a shared one ([fallback]) — with that engine's catalogue as its model space. [shared]
-     * marks one shared with the account, whose members are keys picked for it rather than its own accounts. */
+    /** An account pool read as a provider row: it runs on the engine it was made on — Claude Code for one's own unless it says
+     * otherwise, Codex for a shared one ([fallback]) — with that engine's catalogue as its model space, and on no other unless the
+     * server lists more for a pool of one's own (`engines`: a Codex pool Claude Code runs on too, ORBIT_CLAUDE_CODEX_LOGIN_GATEWAY).
+     * [shared] marks one shared with the account, whose members are keys picked for it rather than its own accounts. */
     fun poolRow(row: JsonObject, fallback: String, shared: Boolean = false): JsonObject = (row.text("engine") ?: fallback).let { engine ->
-        JsonObject(row + mapOf("runtime" to JsonPrimitive(engine), "engines" to JsonArray(listOf(JsonPrimitive(engine))),
+        val engines = (row["engines"] as? JsonArray)?.takeIf { !shared } ?: JsonArray(listOf(JsonPrimitive(engine)))
+        JsonObject(row + mapOf("runtime" to JsonPrimitive(engine), "engines" to engines,
             "pool" to JsonPrimitive(true), "modelsFromRuntime" to JsonPrimitive(true), "sharedPool" to JsonPrimitive(shared)))
     }
 

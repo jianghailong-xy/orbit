@@ -25,7 +25,8 @@ class ExceptionCardsTest {
         waitingSince: String = "2026-09-19T19:01:41.497Z", escalatedAt: String? = "2026-09-19T21:02:23.903Z",
         detailLine: String = "the run ended with exit code 1", delivery: String? = null, facts: JsonElement = JsonNull,
         fuseEpisodeId: String? = null, title: String = "Task failed: P5.1 Route Handlers",
-        landingSessionId: String? = null, integrationJobId: String? = null, lease: JsonElement = JsonNull) = buildJsonObject {
+        landingSessionId: String? = null, integrationJobId: String? = null, lease: JsonElement = JsonNull,
+        coordinatorUnreachable: Boolean? = null) = buildJsonObject {
         put("itemId", "01a0bb0b-b3fb-744c-b9a6-2fd68b4420b4"); put("kind", kind); put("title", title); put("detailLine", detailLine)
         put("assignee", assignee); put("assigneeReason", reason); put("waitingSince", waitingSince); put("escalatedAt", escalatedAt)
         put("taskId", taskId); put("sessionId", sessionId); put("promotionId", promotionId); put("fuseEpisodeId", fuseEpisodeId)
@@ -36,12 +37,33 @@ class ExceptionCardsTest {
         primaryAction?.let { put("primaryAction", it) }
         handledBy?.let { titles -> putJsonArray("handledBy") { titles.forEachIndexed { i, t -> addJsonObject { put("taskId", "t$i"); put("title", t); put("state", "OPEN") } } } }
         put("question", JsonNull); put("facts", facts); put("lease", lease)
+        coordinatorUnreachable?.let { put("coordinatorUnreachable", it) }
     }
 
     /** The coordinator conversation's cards for these items, as the catalogue grants them. */
     private fun cards(vararg rows: JsonObject): List<InteractionCard> = CardCatalog.project("s1", "p1", mapOf(
         "project" to buildJsonObject { put("id", "p1") },
         "openItems" to buildJsonObject { putJsonArray("needsYou") { rows.forEach { add(it) } }; putJsonArray("withCoordinator") {} }))
+
+    @Test fun onlyOwnerExceptionsBecomeConversationCards() {
+        val owner = row()
+        val coordinator = JsonObject(row(assignee = "COORDINATOR", reason = "DEFAULT", escalatedAt = null) +
+            ("itemId" to JsonPrimitive("coordinator")))
+        val settled = JsonObject(coordinator + mapOf(
+            "itemId" to JsonPrimitive("coordinator-settled"),
+            "outcome" to buildJsonObject { put("state", "RESOLVED"); put("resolution", "HANDLED") },
+        ))
+        val items = buildJsonObject {
+            put("needsYou", JsonArray(listOf(owner)))
+            put("withCoordinator", JsonArray(listOf(coordinator)))
+            put("settled", JsonArray(listOf(settled)))
+        }
+        val cards = CardCatalog.project("s1", "p1", mapOf(
+            "project" to buildJsonObject { put("id", "p1") },
+            "openItems" to items,
+        ))
+        assertEquals(listOf("item:${owner.text("itemId")}"), cards.map { it.key })
+    }
 
     private fun body(request: ApiRequest) = Wire.json.parseToJsonElement(request.body!!.decodeToString()).jsonObject
 
@@ -229,13 +251,28 @@ class ExceptionCardsTest {
             ExceptionCards.handledByLine(row(handledBy = listOf("Fix the branch", "Re-check later"))))
     }
 
+    /** 2026-11-15: an escalated card said "no one acted on this" over doors and a chat that could not reach the coordinator. With the
+     * server reading it unreachable the heading says so, in web's and Apple's words; reachable, or from an older server, it is unchanged. */
+    @Test fun anEscalatedItemWhoseCoordinatorCannotBeReachedSaysSo() {
+        val unreachable = row(coordinatorUnreachable = true, actions = listOf("OPEN_TASK_SESSION", "CANCEL_TASK"))
+        assertEquals("Now yours — the coordinator can’t take messages", ExceptionCards.headingLine(unreachable, now))
+        assertEquals("Now yours — the coordinator didn’t get to it", ExceptionCards.headingLine(row(coordinatorUnreachable = false), now))
+        assertEquals("Now yours — the coordinator didn’t get to it", ExceptionCards.headingLine(row(), now))
+        val web = File(root(), "src/web/src/components/ProjectProgressStatus.tsx").readText()
+        assertTrue(web.contains("'${ExceptionCards.escalatedUnreachableHeading}'"))
+        val swift = File(root(), "src/macos/OrbitKit/Sources/OrbitKit/App/OwnerItemCards.swift").readText()
+        assertTrue(swift.contains("\"${ExceptionCards.escalatedUnreachableHeading}\""))
+        val push = File(root(), "src/apiserver/src/push/owner-item-alert.ts").readText()
+        assertTrue(push.contains("'${ExceptionCards.escalatedUnreachableHeading}'"))
+    }
+
     @Test fun theHeadingAndTheFooterSayHowItBecameTheOwnersAndForHowLong() {
-        assertEquals("Now yours — no one acted on this for 2h", ExceptionCards.headingLine(row(), now))
+        assertEquals("Now yours — the coordinator didn’t get to it", ExceptionCards.headingLine(row(), now))
         assertEquals("Task failed: P5.1 Route Handlers", ExceptionCards.subject(row(), now))
         assertEquals("Now yours — the coordinator conversation ended", ExceptionCards.heading(row(reason = "COORDINATOR_ENDED"), now))
         assertEquals("Now yours — the 3rd failure in this chain", ExceptionCards.heading(row(reason = "CHAIN_LIMIT"), now))
         assertEquals("Now yours — the coordinator handed it over", ExceptionCards.heading(row(reason = "HANDED_OVER"), now))
-        assertEquals("Now yours — this project has no coordinator (waiting 1d 16h)", ExceptionCards.heading(row(reason = "NO_COORDINATOR"), now))
+        assertEquals("Now yours — this project has no coordinator", ExceptionCards.heading(row(reason = "NO_COORDINATOR"), now))
         val pause = row(kind = "FUSE_PAUSED", reason = "DEFAULT", escalatedAt = null, title = "Coordinator paused — 3 self-started runs today")
         assertEquals("the heading slot never opens blank", pause.text("title"), ExceptionCards.headingLine(pause, now))
         assertNull(ExceptionCards.subject(pause, now))
@@ -470,6 +507,25 @@ class ExceptionCardsTest {
         assertEquals(1, block.rows.count { it.logTail != null })
     }
 
+    /** The Branch row says what the server wrote for the job the check failed in: a task's landing keeps the task's sentence, a promotion
+     * of the project branch or of one task's branch says only that the branch did not move and nothing reached main. */
+    @Test fun theBranchRowIsTheServersSentenceForTheJobTheCheckFailedIn() {
+        fun branchOf(extra: String): String? {
+            val facts = Wire.json.parseToJsonElement("""{"task":null,"targetRef":null,"targetSha":null,"files":[],"nothingLanded":false,
+                "check":{"command":"npm test","exitCode":1,"expectedExitCode":0,"durationMs":14400000},"errorCode":null,"failure":null$extra}""")
+            val block = ExceptionCards.facts(row(kind = "INTEGRATION_CHECK_FAILED", facts = facts)) as ExceptionCards.Facts.Rows
+            return block.rows.firstOrNull { it.label == ExceptionCards.branchLabel }?.value
+        }
+        val project = "unchanged — the project branch did not move, and nothing reached main"
+        val candidate = "unchanged — this task’s branch did not move, and nothing on it reached main"
+        assertEquals(project, branchOf(""","branchUnchanged":true,"branchLine":"$project""""))
+        assertEquals(candidate, branchOf(""","branchUnchanged":true,"branchLine":"$candidate""""))
+        assertEquals("unchanged — the task passed on its own branch; it fails only on the combined tree",
+            branchOf(""","branchUnchanged":true,"branchLine":"${ExceptionCards.branchUnchanged}""""))
+        assertEquals("a server older than branchLine leaves the task's sentence", ExceptionCards.branchUnchanged, branchOf(""","branchUnchanged":true"""))
+        assertNull(branchOf(""","branchUnchanged":false,"branchLine":null"""))
+    }
+
     @Test fun aLongLogFoldsFromItsEndAndQuietRowsDrawNoBlankBlocks() {
         val written = (1..9).joinToString("\n") { "line $it" }
         val tail = ExceptionCards.CheckTail.of(written)!!
@@ -514,8 +570,8 @@ class ExceptionCardsTest {
             "Open the coordinator conversation.", "Open the task session to repair the branch.", "A new integration attempt is queued with your reason.",
             "The task is cancelled and its open item closes.", "It goes back to the coordinator with a fresh escalation clock.",
         ).forEach { assertTrue("OwnerItemCards.swift no longer says \"$it\"", swift.contains("\"$it\"")) }
-        listOf("Now yours — no one acted on this for \\(", "Now yours — the coordinator conversation ended", "Now yours — the 3rd failure in this chain",
-            "Now yours — the coordinator handed it over", "Now yours — this project has no coordinator (waiting \\(",
+        listOf("Now yours — the coordinator conversation ended", "Now yours — the 3rd failure in this chain",
+            "Now yours — the coordinator handed it over", "Now yours — the coordinator can’t take messages",
             "The coordinator is fixing this in \\(\$0.title).", "attempt \\(attempt) of \\(limit) in this chain", "Show \\(hidden) more lines",
         ).forEach { assertTrue("OwnerItemCards.swift no longer says $it", swift.contains(it)) }
         assertTrue(swift.contains("public static let foldedLines = ${ExceptionCards.CheckTail.foldedLines}"))
@@ -525,5 +581,313 @@ class ExceptionCardsTest {
             projectPage.contains("public static let landTaskRoundsPerClaim = ${ExceptionCards.landTaskRoundsPerClaim}"))
         val needsYou = File(root(), "src/macos/OrbitKit/Sources/OrbitKit/App/NeedsYou.swift").readText()
         assertTrue("the session row's separator", needsYou.contains("public static let needSeparator = \" · \""))
+    }
+
+    // MARK: "Who fixes it?" (board docs/mocks/owner-exception-who-fixes, D1–D4 = A; web ProjectProgressStatus.whoFixes.test.tsx)
+
+    private val boardNow = Instant.parse("2026-11-16T12:00:00Z")
+    private fun ago(minutes: Long) = boardNow.minusSeconds(minutes * 60).toString()
+    private val boardFiles = listOf("src/webhooks/sender.ts", "src/webhooks/sender.test.ts", "src/webhooks/retry-policy.ts", "src/queue/backoff.ts",
+        "src/queue/backoff.test.ts", "src/config/defaults.ts", "docs/webhooks.md", "package.json", "package-lock.json")
+
+    /** Board ②'s escalated merge conflict: 3h 1m waiting, 2h 56m of it with the coordinator — reachable unless [unreachable]. */
+    private fun conflict(unreachable: Boolean = false, kind: String = "INTEGRATION_CONFLICT", reason: String = "ESCALATED",
+        handoverNote: String? = null, chatRefusal: String? = if (unreachable) "COORDINATOR_UNAVAILABLE" else null,
+        coordinatorUnreachable: Boolean = unreachable, taskId: String? = "35aTask00000000000001", promotionId: String? = null,
+        assignee: String = "OWNER") = buildJsonObject {
+        put("itemId", "35aItem0000000000000001"); put("kind", kind); put("title", "Merge conflict: Retry failed webhook deliveries")
+        put("detailLine", "9 files conflict with project/35aK2xQm"); put("assignee", assignee); put("assigneeReason", reason)
+        put("waitingSince", ago(181)); put("escalateAt", JsonNull); put("escalatedAt", ago(5))
+        put("taskId", taskId); put("sessionId", "35aSession000000000001"); put("landingSessionId", "35aLanding00000000001")
+        put("promotionId", promotionId); put("fuseEpisodeId", JsonNull)
+        putJsonObject("delivery") { put("state", "DELIVERED"); put("sessionId", "35aCoord0000000000001"); put("at", ago(180)) }
+        putJsonArray("actions") {
+            (if (unreachable) listOf("OPEN_TASK_SESSION", "OPEN_LANDING", "CANCEL_TASK")
+            else listOf("ASK_COORDINATOR_AGAIN", "OPEN_TASK_SESSION", "OPEN_LANDING", "CANCEL_TASK")).forEach { add(it) }
+        }
+        put("question", JsonNull)
+        putJsonObject("facts") {
+            putJsonObject("task") { put("id", "35aTask00000000000001"); put("title", "Retry failed webhook deliveries") }
+            put("targetRef", "refs/heads/project/35aK2xQm8LrT0vHcE1pZq"); put("targetSha", "9f3c2e1aa0b1c2d3e4f5a6b7c8d9e0f1a2b3c4d5")
+            putJsonArray("files") { boardFiles.forEach { add(it) } }
+            put("nothingLanded", false); put("check", JsonNull); put("branchUnchanged", false); put("errorCode", JsonNull); put("failure", JsonNull)
+        }
+        putJsonObject("chat") { put("sessionId", "35aCoord0000000000001"); put("stage", "WITH_OWNER"); put("refusal", chatRefusal) }
+        put("coordinatorUnreachable", coordinatorUnreachable)
+        handoverNote?.let { put("handoverNote", it) }
+    }
+
+    /** `GET /projects/:id/coordinator/status`, as the frozen contract shapes it. */
+    private fun status(state: String, refusalDetail: String? = null, completed: Boolean = false) = buildJsonObject {
+        put("projectId", "35aK2xQm8LrT0vHcE1pZq"); put("state", state)
+        putJsonObject("coordination") {
+            put("sessionId", if (state == "NEVER_OPENED") null else "35aCoord0000000000001")
+            if (state == "LIVE") putJsonObject("session") { put("id", "35aCoord0000000000001"); put("lifecycleState", if (completed) "COMPLETED" else "OPEN") }
+            else put("session", JsonNull)
+            put("workspaceId", if (state == "NEVER_OPENED") null else "35aWorkspace0000000001")
+            put("workspaceName", if (state == "NEVER_OPENED") null else "mac-mini")
+        }
+        putJsonObject("openability") { put("canOpen", state != "UNAVAILABLE"); put("refusalDetail", refusalDetail) }
+    }
+
+    private fun workspace(enabled: Boolean, runnerId: String?) = buildJsonObject {
+        put("id", "35aWorkspace0000000001"); put("name", "mac-mini"); put("enabled", enabled); put("runnerId", runnerId)
+    }
+
+    /** One board part 6 row, read the way the card reads it: the status parsed, and the workspace list only for a LIVE one. */
+    private fun read(row: JsonObject, status: JsonObject? = null, workspace: JsonObject? = null): ExceptionCards.CoordinatorReading {
+        val parsed = if (ExceptionCards.askable(row)) null else ExceptionCards.CoordinatorStatus.of(status)
+        return ExceptionCards.readCoordinatorCause(row, parsed, if (parsed?.state == "LIVE") ExceptionCards.WorkspaceFacts.of(workspace) else null)
+    }
+
+    private data class Part6(val cause: ExceptionCards.CoordinatorCause, val reading: ExceptionCards.CoordinatorReading, val row: JsonObject,
+        val heading: String, val sentence: String, val presses: List<String>, val leads: String?)
+
+    /** Board part 6, one row per cause: web's PART_6 table, expectation for expectation. */
+    private fun part6(): List<Part6> {
+        val unreachable = conflict(unreachable = true)
+        val ended = conflict(unreachable = true, reason = "COORDINATOR_ENDED")
+        val none = conflict(unreachable = true, reason = "NO_COORDINATOR", chatRefusal = "NO_COORDINATOR")
+        val handed = conflict(reason = "HANDED_OVER", handoverNote = "The conflict is in your retry policy")
+        val cantTake = "Now yours — the coordinator can’t take messages"
+        return listOf(
+            Part6(ExceptionCards.CoordinatorCause.WORKSPACE_DISABLED, read(unreachable, status("LIVE"), workspace(enabled = false, runnerId = "r1")), unreachable,
+                cantTake, "Its workspace mac-mini is disabled, so it can’t take messages.", listOf("Enable mac-mini", "Change workspace…"), "Enable mac-mini"),
+            Part6(ExceptionCards.CoordinatorCause.WORKSPACE_TRASHED, read(unreachable, status("UNAVAILABLE", "WORKSPACE_TRASHED")), unreachable,
+                cantTake, "Its workspace mac-mini is in Trash, so it can’t take messages.", listOf("Restore mac-mini", "Change workspace…"), "Restore mac-mini"),
+            Part6(ExceptionCards.CoordinatorCause.WORKSPACE_UNBOUND, read(unreachable, status("UNAVAILABLE", "WORKSPACE_UNBOUND")), unreachable,
+                cantTake, "Its workspace mac-mini isn’t bound to a runner.", listOf("Bind mac-mini to a runner", "Change workspace…"), "Bind mac-mini to a runner"),
+            Part6(ExceptionCards.CoordinatorCause.RUNNER_DOWN, read(unreachable, status("LIVE"), workspace(enabled = true, runnerId = "r1")), unreachable,
+                cantTake, "Its runner is offline. Ask again comes back here as soon as it is.", listOf("Change workspace…"), null),
+            Part6(ExceptionCards.CoordinatorCause.COORDINATOR_ENDED, read(ended, status("LIVE", completed = true)), ended,
+                "Now yours — the coordinator conversation ended", "Its conversation was completed.", listOf("Start a new coordinator"), "Start a new coordinator"),
+            Part6(ExceptionCards.CoordinatorCause.NO_COORDINATOR, read(none, status("NEVER_OPENED")), none,
+                "Now yours — this project has no coordinator", "This project isn’t coordinated.", listOf("Set up a coordinator…"), "Set up a coordinator…"),
+            Part6(ExceptionCards.CoordinatorCause.ESCALATED, read(conflict()), conflict(),
+                "Now yours — the coordinator didn’t get to it", "Reachable. It had this for 2h 56m and didn’t get to it.",
+                listOf("Ask the coordinator again", "or Chat about this first"), "Ask the coordinator again"),
+            Part6(ExceptionCards.CoordinatorCause.HANDED_OVER, read(handed), handed,
+                "Now yours — the coordinator handed it over", "It handed this to you on purpose.",
+                listOf("Ask the coordinator again", "or Chat about this first"), null),
+        )
+    }
+
+    private fun assertPart6(cause: ExceptionCards.CoordinatorCause) {
+        val case = part6().single { it.cause == cause }
+        assertEquals(cause, case.reading.cause)
+        assertEquals(case.heading, ExceptionCards.whoFixesHeading(case.reading.cause))
+        assertEquals(case.sentence, ExceptionCards.coordinatorRowSentence(case.row, case.reading))
+        val presses = ExceptionCards.coordinatorRowPresses(case.reading)
+        assertEquals(case.presses, presses.map { it.label })
+        assertEquals("which press leads", case.leads, presses.firstOrNull { it.tier == ExceptionCards.PressTier.PRIMARY }?.label)
+        assertTrue("one primary at most", presses.count { it.tier == ExceptionCards.PressTier.PRIMARY } <= 1)
+        assertTrue(ExceptionCards.whoFixesIt(case.row))
+    }
+
+    @Test fun part6WorkspaceDisabled() {
+        assertPart6(ExceptionCards.CoordinatorCause.WORKSPACE_DISABLED)
+        // With a name, Change workspace… is a text link beside the fix.
+        val reading = part6().single { it.cause == ExceptionCards.CoordinatorCause.WORKSPACE_DISABLED }.reading
+        assertEquals("35aWorkspace0000000001", reading.workspaceId)
+        assertEquals(listOf(ExceptionCards.PressTier.PRIMARY, ExceptionCards.PressTier.LINK), ExceptionCards.coordinatorRowPresses(reading).map { it.tier })
+    }
+    @Test fun part6WorkspaceTrashed() = assertPart6(ExceptionCards.CoordinatorCause.WORKSPACE_TRASHED)
+    @Test fun part6WorkspaceUnbound() {
+        assertPart6(ExceptionCards.CoordinatorCause.WORKSPACE_UNBOUND)
+        // A LIVE conversation whose workspace the list says has no runner reads unbound too.
+        assertEquals(ExceptionCards.CoordinatorCause.WORKSPACE_UNBOUND,
+            read(conflict(unreachable = true), status("LIVE"), workspace(enabled = true, runnerId = null)).cause)
+    }
+    @Test fun part6RunnerDown() {
+        assertPart6(ExceptionCards.CoordinatorCause.RUNNER_DOWN)
+        val reading = part6().single { it.cause == ExceptionCards.CoordinatorCause.RUNNER_DOWN }.reading
+        assertEquals(listOf(ExceptionCards.PressTier.SECONDARY), ExceptionCards.coordinatorRowPresses(reading).map { it.tier })
+        assertNull("no note under a run that is only down", ExceptionCards.coordinatorRowNote(conflict(unreachable = true), reading))
+        assertTrue("Fix it myself leads", ExceptionCards.fixItMyselfLeads(reading))
+    }
+    @Test fun part6CoordinatorEnded() {
+        assertPart6(ExceptionCards.CoordinatorCause.COORDINATOR_ENDED)
+        // Every other way a status says the conversation is over.
+        assertEquals(ExceptionCards.CoordinatorCause.COORDINATOR_ENDED, read(conflict(unreachable = true), status("TRASHED")).cause)
+        assertEquals(ExceptionCards.CoordinatorCause.COORDINATOR_ENDED, read(conflict(unreachable = true), status("UNAVAILABLE", "SOMETHING_ELSE")).cause)
+        assertEquals("it takes a message but cannot be asked", ExceptionCards.CoordinatorCause.COORDINATOR_ENDED,
+            read(conflict(unreachable = true, coordinatorUnreachable = false), status("LIVE"), workspace(enabled = false, runnerId = "r1")).cause)
+    }
+    @Test fun part6NoCoordinator() = assertPart6(ExceptionCards.CoordinatorCause.NO_COORDINATOR)
+    @Test fun part6Escalated() = assertPart6(ExceptionCards.CoordinatorCause.ESCALATED)
+    @Test fun part6HandedOver() {
+        assertPart6(ExceptionCards.CoordinatorCause.HANDED_OVER)
+        assertEquals("a hand-over with no note still says it was on purpose", "It handed this to you on purpose.",
+            ExceptionCards.coordinatorRowSentence(conflict(reason = "HANDED_OVER"), ExceptionCards.CoordinatorReading(ExceptionCards.CoordinatorCause.HANDED_OVER)))
+    }
+
+    @Test fun withoutAStatusTheRowAloneDecidesAndNeverClaimsAWorkspace() {
+        assertEquals(ExceptionCards.CoordinatorCause.RUNNER_DOWN, read(conflict(unreachable = true)).cause)
+        assertEquals(ExceptionCards.CoordinatorCause.COORDINATOR_ENDED, read(conflict(unreachable = true, reason = "COORDINATOR_ENDED")).cause)
+        assertEquals(ExceptionCards.CoordinatorCause.COORDINATOR_ENDED, read(conflict(unreachable = true, coordinatorUnreachable = false)).cause)
+        assertEquals(ExceptionCards.CoordinatorCause.NO_COORDINATOR, read(conflict(unreachable = true, chatRefusal = "NO_COORDINATOR")).cause)
+        assertNull(read(conflict(unreachable = true)).workspaceName)
+        val disabledNoName = ExceptionCards.CoordinatorReading(ExceptionCards.CoordinatorCause.WORKSPACE_DISABLED)
+        assertEquals("Its workspace is disabled, so it can’t take messages.", ExceptionCards.coordinatorRowSentence(conflict(), disabledNoName))
+        assertEquals(listOf(ExceptionCards.RowPress(ExceptionCards.RowPressKind.CHANGE_WORKSPACE, ExceptionCards.PressTier.SECONDARY, "Change workspace…")),
+            ExceptionCards.coordinatorRowPresses(disabledNoName))
+        // An askable row never reads the status, whatever it says.
+        assertEquals(ExceptionCards.CoordinatorCause.ESCALATED,
+            ExceptionCards.readCoordinatorCause(conflict(), ExceptionCards.CoordinatorStatus.of(status("NEVER_OPENED"))).cause)
+    }
+
+    @Test fun onlyOwnerItemsOfTheFiveKindsByEscalationOrHandOverGetTheCard() {
+        for (kind in listOf("INTEGRATION_CONFLICT", "INTEGRATION_CHECK_FAILED", "INTEGRATION_ERROR", "TASK_FAILED", "DELIVERY_REVIEW"))
+            assertTrue(kind, ExceptionCards.whoFixesIt(conflict(kind = kind)))
+        for (reason in listOf("ESCALATED", "HANDED_OVER", "COORDINATOR_ENDED", "NO_COORDINATOR")) assertTrue(reason, ExceptionCards.whoFixesIt(conflict(reason = reason)))
+        assertFalse(ExceptionCards.whoFixesIt(conflict(reason = "CHAIN_LIMIT")))
+        assertFalse(ExceptionCards.whoFixesIt(conflict(reason = "DEFAULT")))
+        assertFalse(ExceptionCards.whoFixesIt(conflict(assignee = "COORDINATOR")))
+        for (kind in listOf("LANDING_LEASE_EXPIRED", "FUSE_PAUSED", "LANDED_WITHOUT_CONFIRMATION")) assertFalse(kind, ExceptionCards.whoFixesIt(conflict(kind = kind)))
+    }
+
+    @Test fun d1ARepairPressRepairsTheCoordinatorOnly() {
+        val disabled = part6().single { it.cause == ExceptionCards.CoordinatorCause.WORKSPACE_DISABLED }
+        for (case in part6().filter { it.row.let { r -> !ExceptionCards.askable(r) } }) {
+            val kinds = ExceptionCards.coordinatorRowPresses(case.reading).map { it.kind }
+            assertFalse("${case.cause} draws no Ask again until it is back", ExceptionCards.RowPressKind.ASK_AGAIN in kinds)
+        }
+        assertEquals(ExceptionCards.askAgainOnceBack, ExceptionCards.coordinatorRowNote(disabled.row, disabled.reading))
+        // Once the server reads it askable, the same card is the reachable one, in place — the status it read no longer matters.
+        val back = read(conflict(), status("LIVE"), workspace(enabled = false, runnerId = "r1"))
+        assertEquals(ExceptionCards.CoordinatorCause.ESCALATED, back.cause)
+        assertEquals(ExceptionCards.RowPressKind.ASK_AGAIN, ExceptionCards.coordinatorRowPresses(back).first().kind)
+        assertEquals("It goes back to the coordinator with a fresh escalation clock.", ExceptionCards.coordinatorRowNote(conflict(), back))
+    }
+
+    /** Ask again's note names the project's escalation window, as web's `askAgainFreshClock` does; without one it keeps the standing line. */
+    @Test fun askAgainsNoteNamesTheProjectsEscalationWindow() {
+        val escalated = read(conflict())
+        assertEquals("It goes back to the coordinator with a fresh 2h clock.", ExceptionCards.coordinatorRowNote(conflict(), escalated, 7200))
+        assertEquals("It goes back to the coordinator with a fresh 1h 30m clock.", ExceptionCards.coordinatorRowNote(conflict(), escalated, 5400))
+        assertEquals("It goes back to the coordinator with a fresh 2h clock.",
+            ExceptionCards.coordinatorRowNote(conflict(reason = "HANDED_OVER"), read(conflict(reason = "HANDED_OVER")), 7200))
+        assertEquals("It goes back to the coordinator with a fresh escalation clock.", ExceptionCards.coordinatorRowNote(conflict(), escalated))
+        assertEquals("It goes back to the coordinator with a fresh escalation clock.", ExceptionCards.coordinatorRowNote(conflict(), escalated, 0))
+        // The repair causes keep their own note whatever the window.
+        val disabled = part6().single { it.cause == ExceptionCards.CoordinatorCause.WORKSPACE_DISABLED }
+        assertEquals(ExceptionCards.askAgainOnceBack, ExceptionCards.coordinatorRowNote(disabled.row, disabled.reading, 7200))
+        val web = File(root(), "src/web/src/components/ProjectProgressStatus.tsx").readText()
+        assertTrue(web.contains("It goes back to the coordinator with a fresh \${formatSpan(escalationSeconds * 1000)} clock."))
+        assertTrue(web.contains("exceptionEscalationSeconds"))
+    }
+
+    @Test fun d2NoChatWhenUnreachableAndTheChatLinkBesideAskAgainWhenReachable() {
+        for (case in part6()) {
+            val kinds = ExceptionCards.coordinatorRowPresses(case.reading).map { it.kind }
+            val askable = ExceptionCards.askable(case.row)
+            assertEquals(case.cause.name, askable, ExceptionCards.RowPressKind.CHAT_FIRST in kinds)
+        }
+        val reachable = ExceptionCards.coordinatorRowPresses(read(conflict()))
+        assertEquals(listOf(ExceptionCards.RowPressKind.ASK_AGAIN, ExceptionCards.RowPressKind.CHAT_FIRST), reachable.map { it.kind })
+        assertEquals(ExceptionCards.PressTier.LINK, reachable[1].tier)
+    }
+
+    @Test fun d3OneClockTheTotalWaitAndNoNumberInTheHeading() {
+        assertEquals("waiting 3h 1m", ExceptionCards.whoFixesClock(conflict(), boardNow))
+        assertFalse(ExceptionCards.escalatedReachableHeading.any { it.isDigit() })
+        assertFalse(ExceptionCards.noCoordinatorHeading.any { it.isDigit() })
+        // How long the coordinator had it is in Details instead.
+        assertEquals("after 2h 56m with the coordinator", ExceptionCards.cameToYouLine(conflict()))
+    }
+
+    @Test fun d4AHandOverLeadsWithFixItMyself() {
+        val handed = read(conflict(reason = "HANDED_OVER"))
+        assertTrue(ExceptionCards.youLead(handed))
+        assertTrue(ExceptionCards.fixItMyselfLeads(handed))
+        assertEquals(ExceptionCards.PressTier.SECONDARY, ExceptionCards.coordinatorRowPresses(handed).first().tier)
+        val escalated = read(conflict())
+        assertFalse(ExceptionCards.youLead(escalated))
+        assertFalse(ExceptionCards.fixItMyselfLeads(escalated))
+        assertEquals(ExceptionCards.PressTier.PRIMARY, ExceptionCards.coordinatorRowPresses(escalated).first().tier)
+        for (case in part6().filter { it.cause != ExceptionCards.CoordinatorCause.HANDED_OVER }) assertFalse(case.cause.name, ExceptionCards.youLead(case.reading))
+    }
+
+    @Test fun closesByItselfOnlyOnAnIntegrationItemWithATaskBranch() {
+        for (kind in listOf("INTEGRATION_CONFLICT", "INTEGRATION_CHECK_FAILED", "INTEGRATION_ERROR")) assertTrue(kind, ExceptionCards.closesByItself(conflict(kind = kind)))
+        assertFalse(ExceptionCards.closesByItself(conflict(kind = "TASK_FAILED")))
+        assertFalse(ExceptionCards.closesByItself(conflict(kind = "DELIVERY_REVIEW")))
+        assertFalse("a candidate's failed check has no task branch",
+            ExceptionCards.closesByItself(conflict(kind = "INTEGRATION_CHECK_FAILED", taskId = null, promotionId = "35aPromo0000000000001")))
+        assertFalse(ExceptionCards.closesByItself(conflict(promotionId = "35aPromo0000000000001")))
+    }
+
+    @Test fun theSublineTheYouLineAndTheFoldedDetails() {
+        assertEquals("Merge conflict · Retry failed webhook deliveries → Checkout v2", ExceptionCards.whoFixesSubline(conflict(), "Checkout v2"))
+        assertEquals("Merge conflict · Retry failed webhook deliveries", ExceptionCards.whoFixesSubline(conflict(), null))
+        assertEquals("Opens the task session. Fix the conflict there and push to the task branch.", ExceptionCards.fixItMyselfLine(conflict()))
+        assertEquals("Opens the task session.", ExceptionCards.fixItMyselfLine(conflict(kind = "TASK_FAILED")))
+        assertEquals("Details · 9 files · Open landing", ExceptionCards.detailsSummary(conflict(), landing = true))
+        assertEquals("Details · 9 files", ExceptionCards.detailsSummary(conflict(), landing = false))
+        val rows = ExceptionCards.detailRows(conflict(), "Checkout v2")
+        assertEquals(listOf("Into", "Files (9)", "Came to you"), rows.map { it.label })
+        // web `shortRef`: the first 16 characters (`name.slice(0, 16)`), so the project id is cut after 8.
+        assertEquals("Checkout v2’s branch project/35aK2xQm… at 9f3c2e1", rows[0].value)
+        assertEquals("src/webhooks/sender.ts · src/webhooks/sender.test.ts · src/webhooks/retry-policy.ts · src/queue/backoff.ts · " +
+            "src/queue/backoff.test.ts and 4 more", rows[1].value)
+        assertEquals(ExceptionCards.Face.MONO, rows[1].runs.first().face)
+        assertEquals("after 2h 56m with the coordinator", rows[2].value)
+        assertFalse(rows.any { it.label == "Task" || it.label == "After a fix" })
+    }
+
+    @Test fun theFilesStopAtFive() {
+        assertEquals(5, ExceptionCards.detailFilesShown)
+        fun files(n: Int) = (ExceptionCards.detailRows(buildJsonObject {
+            conflict().forEach { (k, v) -> if (k != "facts") put(k, v) }
+            putJsonObject("facts") { putJsonArray("files") { (1..n).forEach { add("f$it.ts") } } }
+        }, null).single { it.label.startsWith("Files") })
+        assertEquals("f1.ts · f2.ts · f3.ts · f4.ts · f5.ts", files(5).value)
+        assertEquals("Files (5)", files(5).label)
+        assertEquals("f1.ts · f2.ts · f3.ts · f4.ts · f5.ts and 1 more", files(6).value)
+        assertEquals("f1.ts", files(1).value)
+    }
+
+    @Test fun theCoordinatorStatusReadIsTheContractsFields() {
+        val read = ExceptionCards.CoordinatorStatus.of(status("UNAVAILABLE", "WORKSPACE_DISABLED"))!!
+        assertEquals(ExceptionCards.CoordinatorStatus("UNAVAILABLE", "35aWorkspace0000000001", "mac-mini", null, "WORKSPACE_DISABLED"), read)
+        assertEquals("COMPLETED", ExceptionCards.CoordinatorStatus.of(status("LIVE", completed = true))!!.sessionLifecycleState)
+        assertNull(ExceptionCards.CoordinatorStatus.of(null))
+        assertNull(ExceptionCards.CoordinatorStatus.of(buildJsonObject { }))
+        // The workspace list predating `runnerId` claims nothing about the binding.
+        assertEquals(ExceptionCards.WorkspaceFacts(true, null), ExceptionCards.WorkspaceFacts.of(buildJsonObject { put("enabled", true) }))
+        // The contract's fields, by name.
+        val contract = File(root(), "docs/project-coordinator-status-contract.md").readText()
+        listOf("refusalDetail", "workspaceName", "lifecycleState", "NEVER_OPENED", "UNAVAILABLE", "WORKSPACE_TRASHED", "WORKSPACE_UNBOUND")
+            .forEach { assertTrue("the status contract no longer says $it", contract.contains(it)) }
+    }
+
+    /** Every new word is web's (`ProjectProgressStatus.tsx`'s "Who fixes it?" section, `coordinatorWorkspace.ts`). */
+    @Test fun everyWhoFixesWordIsWebs() {
+        val web = File(root(), "src/web/src/components/ProjectProgressStatus.tsx").readText()
+        listOf(ExceptionCards.whoFixesIt, ExceptionCards.whoFixesCoordinator, ExceptionCards.whoFixesYou, ExceptionCards.fixItMyself,
+            ExceptionCards.startNewCoordinator, ExceptionCards.setUpCoordinator, ExceptionCards.chatFirstLink, ExceptionCards.askAgainOnceBack,
+            ExceptionCards.runnerDownSentence, ExceptionCards.coordinatorEndedSentence, ExceptionCards.noCoordinatorSentence, ExceptionCards.handedOverSentence, ExceptionCards.handoverNoteCaption,
+            ExceptionCards.closesByItself, ExceptionCards.alreadySettled, ExceptionCards.markHandledSettledConsequence, ExceptionCards.cancelTaskSettledConsequence,
+            ExceptionCards.detailsLabel, ExceptionCards.openLandingDetail, ExceptionCards.escalatedUnreachableHeading, ExceptionCards.escalatedReachableHeading,
+            ExceptionCards.coordinatorEndedHeading, ExceptionCards.handedOverHeading, ExceptionCards.noCoordinatorHeading,
+            ExceptionCards.cameToYouLabel, "Kept the judgment method Orbit questioned", "Changed files it didn’t declare", "Git refused to merge it",
+        ).forEach { assertTrue("ProjectProgressStatus.tsx no longer says '$it'", web.contains("'$it'") || web.contains("\"$it\"")) }
+        ExceptionCards.whoFixesKind.forEach { (kind, word) -> assertTrue("WHO_FIXES_KIND.$kind", web.contains("$kind: '$word'")) }
+        ExceptionCards.fixItMyselfConsequence.forEach { (kind, line) -> assertTrue("FIX_IT_MYSELF_CONSEQUENCE.$kind", web.contains("$kind: '$line'")) }
+        assertTrue(web.contains("export const DETAIL_FILES_SHOWN = ${ExceptionCards.detailFilesShown};"))
+        listOf("is disabled, so it can’t take messages.`", "is in Trash, so it can’t take messages.`", "isn’t bound to a runner.`",
+            "`Reachable. It had this for \${waitedBeforeEscalation(row)} and didn’t get to it.`", "`after \${waitedBeforeEscalation(row)} with the coordinator`",
+            "`waiting \${formatSpan(waitedMs(row, now))}`", "`\${folded.projectName}’s branch `", "` and \${facts.files.length - DETAIL_FILES_SHOWN} more`",
+            "`\${name.slice(0, 16)}…`", "Its workspace \${reading.workspaceName}",
+        ).forEach { assertTrue("ProjectProgressStatus.tsx no longer says $it", web.contains(it)) }
+        val workspace = File(root(), "src/web/src/lib/coordinatorWorkspace.ts").readText()
+        assertTrue(workspace.contains("button: '${ExceptionCards.changeWorkspace}'"))
+        assertEquals("Enable mac-mini", ExceptionCards.fixLabel(ExceptionCards.CoordinatorCause.WORKSPACE_DISABLED, "mac-mini"))
+        listOf("WORKSPACE_DISABLED: (workspace: string) => `Enable \${workspace}`", "WORKSPACE_TRASHED: (workspace: string) => `Restore \${workspace}`",
+            "WORKSPACE_UNBOUND: (workspace: string) => `Bind \${workspace} to a runner`",
+        ).forEach { assertTrue("coordinatorWorkspace.ts no longer says $it", workspace.contains(it)) }
+        assertEquals("Restore x", ExceptionCards.fixLabel(ExceptionCards.CoordinatorCause.WORKSPACE_TRASHED, "x"))
+        assertEquals("Bind x to a runner", ExceptionCards.fixLabel(ExceptionCards.CoordinatorCause.WORKSPACE_UNBOUND, "x"))
+        assertNull(ExceptionCards.fixLabel(ExceptionCards.CoordinatorCause.RUNNER_DOWN, "x"))
     }
 }

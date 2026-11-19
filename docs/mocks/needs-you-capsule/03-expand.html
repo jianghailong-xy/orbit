@@ -1,0 +1,122 @@
+<!doctype html><html lang="zh"><meta charset="utf-8">
+<link rel="stylesheet" href="kit.css">
+<script src="kit.js"></script>
+<style>
+  .lede, .foot { max-width: 1400px; }
+  .row3 { display: flex; gap: 40px; align-items: flex-start; }
+  /* 列表页导航：汉堡 + 内联标题 + 右侧双键（照 owner 11-13 截图） */
+  .ntitle { position: absolute; left: 80px; top: 62px; height: 44px; display: flex; align-items: center; font: 600 20px "Inter", "Noto Sans SC"; z-index: 12; color: var(--l1); }
+  /* 收起态：+N 里带一个 ⌄，告诉你这枚能展开 */
+  .cap44 .more.x { display: inline-flex; align-items: center; gap: 2px; padding: 0 5px 0 7px; }
+  /* 遮罩 */
+  .scrim { position: absolute; left: 0; right: 0; top: 0; bottom: 0; z-index: 14; }
+  .ph.light .scrim { background: rgba(0,0,0,.16); }
+  .ph.dark .scrim { background: rgba(0,0,0,.5); }
+  /* 展开后的面板：胶囊原地长高，同宽、同玻璃 */
+  .pnl { position: absolute; left: 16px; right: 16px; z-index: 15; border-radius: 26px; background: var(--glass); overflow: hidden;
+         box-shadow: inset 0 .75px 0 var(--glass-hi), 0 0 0 .5px var(--glass-edge), 0 14px 36px rgba(0,0,0,.22); color: var(--l1); }
+  .pnl .hd { height: 48px; display: flex; align-items: center; gap: 10px; padding: 0 16px 0 7px; }
+  .pnl .hd b { flex: 1; font-size: 15px; font-weight: 600; }
+  .pnl .it { position: relative; height: 58px; display: flex; align-items: center; gap: 10px; padding: 0 14px 0 7px; }
+  .pnl .it::before { content: ""; position: absolute; left: 47px; right: 0; top: 0; height: .5px; background: var(--sep); }
+  .pnl .it .w { flex: 1; min-width: 0; display: flex; flex-direction: column; }
+  .pnl .it .w b { font-size: 15px; line-height: 19px; font-weight: 600; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .pnl .it .w s { text-decoration: none; font-size: 13px; line-height: 17px; color: var(--l2); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .pnl .it .age { font-size: 13px; color: var(--l2); font-variant-numeric: tabular-nums; flex: none; }
+  .pnl .it.pressed { background: var(--pill); }
+  .pnl .ft { position: relative; height: 44px; display: flex; align-items: center; justify-content: center; font-size: 15px; color: #0A84FF; }
+  .pnl .ft::before { content: ""; position: absolute; left: 0; right: 0; top: 0; height: .5px; background: var(--sep); }
+  .ph.light .pnl { background: #fff; }
+  /* 方案 B：一串独立胶囊，把列表往下推 */
+  .stackgap { position: absolute; left: 16px; right: 16px; z-index: 10; }
+  /* 方案 C：底部 sheet */
+  .sheet { position: absolute; left: 0; right: 0; bottom: 0; z-index: 15; background: var(--glass); border-radius: 34px 34px 0 0;
+           box-shadow: 0 -10px 30px rgba(0,0,0,.18); padding: 8px 0 30px; color: var(--l1); }
+  .sheet .grab { width: 36px; height: 5px; border-radius: 3px; background: var(--l3); margin: 0 auto 10px; }
+  .sheet h4 { margin: 0 20px 6px; font-size: 20px; font-weight: 700; }
+  .sheet .pnl { position: static; box-shadow: none; background: transparent; border-radius: 0; margin: 0 6px; }
+</style>
+<body>
+<h1>needs-you 胶囊 · 不止一件时，点开能展开</h1>
+<p class="lede">现在：几件同时在等，胶囊只说<b>最久的那一件</b>，右边一个 <code>+1</code>；按下直接去那一件，剩下的看不到、也选不了。owner 11-13：<b>有多个时，点击后要能展开</b>。下面三种展开方式，推荐 A。只有一件时一切照旧（按下直达）。英文是上线文案，中文是说明；示意数据取自 11-13 截图（orbit-prod）。</p>
+
+<h2>三种方式（亮色 · 会话列表页）</h2>
+<div class="row3" id="opts"></div>
+
+<h2>方案 A 细节</h2>
+<div class="row3" id="detail"></div>
+
+<h2>规格（方案 A）</h2>
+<table class="tok" id="spec"></table>
+
+<p class="foot" id="foot"></p>
+<script>
+const P1 = 'Orbit 接入 Ollama（本地模型供应商）';
+const P2 = 'MCP/CLI 可执行恢复路径与 Agent 交互';
+const P3 = 'Wiki 服务端执行与 System model';
+const ITEMS = [
+  { glyph: 'qbub', title: 'Question from coordinator', sub: P1, age: '8m' },
+  { glyph: 'merge', title: 'Approve merge to main', sub: P2, age: '3m' },
+];
+const ITEMS3 = ITEMS.concat([{ glyph: 'hand', title: 'orbit-prod needs you', sub: 'Rebuild the wiki articles report', age: '1m' }]);
+
+const listNav = `<div class="nav"><div class="gc l">${ic('ham', 21, 'var(--l1)', 2)}</div>
+<div class="gc" style="right:20px;width:92px;border-radius:22px;justify-content:space-around;padding:0 10px">${ic('filter', 21, 'var(--l1)', 2)}${ic('pen', 20, 'var(--l1)', 2)}</div></div><div class="ntitle">orbit-prod</div>`;
+const ROWS = [
+  { t: P2, s: 'Running · editing recovery.ts', tm: 'now' },
+  { t: P1, s: '<span class="dt"></span><span>Question from coordinator</span>', tm: '8m' },
+  { t: 'Rebuild the wiki articles report', s: '<span class="dt"></span><span>Waiting for approval</span>', tm: '1m' },
+  { t: 'Android 客户端：会话页与项目页', s: 'Running · gradle testDebugUnitTest', tm: '6m' },
+  { t: P3, s: 'Completed · merged to main', tm: '1h' },
+  { t: 'Ship the 0.1.231 release', s: 'Completed · tagged v0.1.231', tm: '2h' },
+  { t: 'Landing lease reminder skips locked rows', s: 'Completed', tm: '3h' },
+];
+const rows = (top) => `<div class="sec" style="top:${top}px">Today</div>` + ROWS.map((r, i) =>
+  `<div class="srow${i < ROWS.length - 1 ? ' sep' : ''}" style="top:${top + 30 + i * 70}px"><div class="a"><b>${r.t}</b><span class="tm">${r.tm}</span></div><div class="s">${r.s}</div></div>`).join('');
+const moreX = (n) => `<span class="more x">+${n}${ic('chevd', 11, 'var(--l2)', 3)}</span>`;
+// 收起态：第一行照旧说最久那件；+N 里多一个 ⌄
+const collapsed = (n, top = 116) => capA({ ...ITEMS[0], top, style: 'left:16px;right:16px' }).replace('</b>', `</b>${moreX(n)}`);
+const item = (o, pressed) => `<div class="it${pressed ? ' pressed' : ''}">${tile(o.glyph)}<span class="w"><b>${o.title}</b><s>${o.sub}</s></span><span class="age">${o.age}</span>${ic('chevr', 13, 'var(--l3)', 2.6)}</div>`;
+const panel = (items, { top = 116, pressed = -1, all } = {}) => `<div class="scrim"></div><div class="pnl" style="top:${top}px">
+<div class="hd">${tile(items[0].glyph)}<b>${all || items.length} need you</b>${ic('chevu', 14, 'var(--l2)', 2.6)}</div>
+${items.map((o, i) => item(o, i === pressed)).join('')}${all ? `<div class="ft">Show all ${all}</div>` : ''}</div>`;
+const shell = (mode, body, h = 720) => phone(mode, `${statusBar('6:34')}${listNav}${body}<div class="home"></div>`, { h, cls: 'crop' });
+
+// ── 三种方式 ──
+const A = shell('light', `${rows(176)}${panel(ITEMS)}`);
+const B = shell('light', `${capA({ ...ITEMS[0], top: 116, style: 'left:16px;right:16px' }).replace('</b>', `</b><span class="more x">${ic('chevu', 11, 'var(--l2)', 3)}</span>`)}
+${capA({ ...ITEMS[1], top: 166, style: 'left:16px;right:16px' })}${rows(226)}`);
+const C = shell('light', `${collapsed(1)}${rows(176)}<div class="scrim"></div><div class="sheet"><div class="grab"></div><h4>2 need you</h4>
+<div class="pnl">${ITEMS.map((o) => item(o)).join('')}</div></div>`);
+document.getElementById('opts').innerHTML = `
+<div class="col"><span class="tag rec">A · 原地展开成面板（推荐）</span>${A}<div class="cap"><h3>胶囊原地长高</h3>按下 → 胶囊向下长成一块同宽的玻璃面板，盖在列表上，后面压一层浅遮罩。头一行 <code>2 need you</code> + ↑；下面每件一行：图形、什么事、哪个项目、等了多久。<ul><li>点某一行 → 直达那一件（和现在按胶囊去的地方一样）</li><li>点 ↑ / 遮罩 / 下滑 → 收起</li><li>列表不跳动，手指不用离开顶部</li></ul><span class="cost">改动：小</span> 只动胶囊这一个视图 + 给它一份完整清单</div></div>
+<div class="col"><span class="tag alt">B · 摊开成一串胶囊</span>${B}<div class="cap"><h3>每件一枚，推着列表往下</h3>按下 → 下面再长出 N−1 枚同样的胶囊，列表整体下移。<ul><li>每枚都和单件时长得一样，不用学新东西</li><li>缺点：列表（会话页是转录）整段往下跳；三件以上占掉半屏</li><li>没有遮罩，忘了收起就一直占着</li></ul></div></div>
+<div class="col"><span class="tag alt">C · 底部 sheet</span>${C}<div class="cap"><h3>从底部弹出清单</h3>按下 → 系统 sheet，标题 <code>2 need you</code>，下面同样的行。<ul><li>件数多也装得下，系统手势现成</li><li>缺点：按在顶上、东西出在底下，眼睛和手都要跨整屏；两三件为它弹一张 sheet 偏重</li></ul></div></div>`;
+
+// ── A 细节 ──
+const aCollapsed = shell('light', `${collapsed(1)}${rows(176)}`, 420);
+const aDark = shell('dark', `${rows(176)}${panel(ITEMS3, { pressed: 1 })}`, 420);
+const many = [ITEMS3[0], ITEMS3[1], ITEMS3[2],
+  { glyph: 'warn', title: 'Escalated to you', sub: 'Android 客户端：会话页与项目页', age: '40s' },
+  { glyph: 'pause', title: 'Paused', sub: P3, age: 'now' }];
+const aMany = shell('light', `${rows(176)}${panel(many, { all: 7 })}`, 560);
+document.getElementById('detail').innerHTML = `
+<div class="col"><span class="tag rec">收起态</span>${aCollapsed}<div class="cap">和今天唯一的区别：<code>+1</code> 小胶囊里多一个 <b>⌄</b>，说明「按下会展开」而不是「按下就走」。只有一件时没有这个小胶囊，按下仍直达。</div></div>
+<div class="col"><span class="tag rec">展开 · 暗色 · 按住第二行</span>${aDark}<div class="cap">顺序 = 等得最久的在上（和胶囊挑「最久那件」同一个 FIFO），所以第一行就是收起时胶囊说的那件。owner 项（五种）和普通工具审批混排，各用各的图形和词——都是今天已有的词。</div></div>
+<div class="col"><span class="tag rec">件数多</span>${aMany}<div class="cap">面板最多 5 行；超过时底部 <code>Show all 7</code>，进 sessions 列表的「需要你」筛选。会话页里同样展开，面板盖在转录上，不推转录。</div></div>`;
+
+document.getElementById('spec').innerHTML = `
+<tr><td>触发</td><td><code>count ≥ 2</code> 时整枚胶囊的按压 = 展开/收起；<code>count = 1</code> 照旧直达。会话内那种（<code>1 open question below</code>，↓/↑）不展开，按下仍滚到卡。</td></tr>
+<tr><td>收起态</td><td><code>+N</code> 小胶囊里加 <code>chevron.down</code> 11pt；其他一律不变。</td></tr>
+<tr><td>面板</td><td>与胶囊同宽、左右边距相同；圆角 26；iOS 26 同一块 <code>glassEffect</code>，用 <code>matchedGeometryEffect</code> 从胶囊长出来（spring 0.3s）；旧系统 <code>secondarySystemBackground</code> + 阴影。</td></tr>
+<tr><td>行</td><td>头行 48pt：最久那件的圆片 + <code>N need you</code>（15 半粗）+ <code>chevron.up</code>。条目行 58pt：圆片 30 / 第一行 15 半粗 / 第二行 13 secondary / 时间 13 tabular / <code>chevron.right</code>。分隔线从文字左沿起（47pt）。</td></tr>
+<tr><td>遮罩</td><td>亮 黑 16%、暗 黑 50%；点遮罩收起，不穿透到下面的行。</td></tr>
+<tr><td>上限</td><td>最多 5 行，第 6 件起出 <code>Show all N</code>（打开会话列表的需要你筛选）。</td></tr>
+<tr><td>读屏</td><td>收起态 hint 改为 <code>Shows the N things waiting on you</code>；展开后焦点落到头行，每行标签 = 两行连读 + 时间。</td></tr>
+<tr><td>新文案</td><td><code>N need you</code>、<code>Show all N</code>、上面那句 hint——其余全是现成的词。</td></tr>`;
+
+document.getElementById('foot').innerHTML = `<b>实现要点</b>：今天 <code>NeedsYouLogic.banner</code> 只产出「最久的那一件」+ 总数；A 需要它再给一份按 FIFO 排好的完整清单（每件 = 会话 + 可选的 owner 项 + 词 + 第二行 + since），点行时走现有的 <code>openNeedsYouItem</code> / <code>openNeedsYouSession</code>。不加请求，数据都在 Open 快照里。<br>
+<b>Android</b> 的 <code>NeedsYouBar</code> 同样做（Material 3：胶囊下方展开的 <code>surfaceContainerHigh</code> 卡片）。<br>
+<b>待你定</b>：① 选 A / B / C；② 头行文案用 <code>2 need you</code> 还是 <code>2 waiting on you</code>；③ 上限 5 行是否合适。`;
+</script>
+</body></html>

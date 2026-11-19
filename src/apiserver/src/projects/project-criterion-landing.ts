@@ -235,6 +235,15 @@ export function landingBranchesFor(codebase: LandingCodebase | null): LandingBra
 export interface LandingReceiptFacts {
   result: string;
   targetBranch: string;
+  /** What `upstreamReceiptCarriesLine` compares to tell a rework still on the line from work
+   *  already on the upstream. A reader that selects only the two fields above gets the older,
+   *  coarser answer: any upstream receipt counts. `LANDING_SERVING_WORK_SELECT` selects all three. */
+  sourceSha?: string;
+  createdAt?: Date;
+  detail?: Prisma.JsonValue;
+  /** Where a MERGED receipt left its target: on a line receipt, the commit its landing job recorded as
+   *  `landed_sha`, which a promotion's upstream receipt names as its `sourceSha`. */
+  targetShaAfter?: string | null;
 }
 
 /**
@@ -309,6 +318,9 @@ export interface LandingServingTask {
 export interface CriterionWithLandingFacts {
   id: string;
   servingTasks: ReadonlyArray<LandingServingTask>;
+  /** A CONFIRMATION criterion (migration 0545) takes no part in landing: it is met by somebody
+   *  saying it holds, not by work reaching a branch. Absent reads as TASKS. */
+  satisfiedBy?: 'TASKS' | 'CONFIRMATION';
 }
 
 /** One criterion's landing answer, addressed the same way the satisfaction answer is. */
@@ -339,11 +351,85 @@ export function taskLanding(
   branches: LandingBranches,
 ): TaskLanding {
   const landed = receipts.filter((receipt) => LANDED_RESULTS.includes(receipt.result));
-  if (landed.some((receipt) => branches.upstream.includes(receipt.targetBranch))) return 'ON_UPSTREAM';
+  const onLine = newestLineReceipt(landed, branches);
+  if (landed.some((receipt) => branches.upstream.includes(receipt.targetBranch)
+    && upstreamReceiptCarriesLine(receipt, onLine, landed, branches))) return 'ON_UPSTREAM';
   if (landed.some((receipt) => branches.integration.includes(receipt.targetBranch))) {
     return 'ON_INTEGRATION_LINE';
   }
   return 'NOT_KNOWN';
+}
+
+/** The task's newest landed receipt on an integration line that is not also its upstream: the
+ *  work that line holds now. None on a MAIN-line project, whose one branch is both. */
+function newestLineReceipt(
+  landed: ReadonlyArray<LandingReceiptFacts>,
+  branches: LandingBranches,
+): LandingReceiptFacts | undefined {
+  let newest: LandingReceiptFacts | undefined;
+  for (const receipt of landed) {
+    if (!branches.integration.includes(receipt.targetBranch)
+      || branches.upstream.includes(receipt.targetBranch)) continue;
+    if (!newest || (receipt.createdAt && newest.createdAt && receipt.createdAt > newest.createdAt)) {
+      newest = receipt;
+    }
+  }
+  return newest;
+}
+
+/**
+ * Whether one landed upstream receipt says the work the task's newest line receipt landed is on the
+ * upstream — decided from receipts alone, never from a repository. `taskLandingSql` is the same rule
+ * in SQL, and `tasksOnTheLine` (project-promotion.service.ts) reads it through `taskLanding`, so the
+ * promotion's task set, `integration.state` and a criterion's landing cannot disagree.
+ *
+ * - With no line receipt, any upstream receipt does.
+ * - One naming the commit that line receipt landed does, whoever wrote it.
+ * - One a landing or a promotion wrote does when it is newer than that line receipt. An older one is
+ *   about an earlier revision: the task was reopened and its rework landed on the line after it
+ *   (F1-4, 2026-11-08), and only a promotion carrying the rework writes a newer one.
+ * - One an observation wrote (`detail.observed`) does only by naming the commit (task
+ *   34vJmfV0DZk5cySoXlB3r, 2026-11-10): it is about the commit the task's identity was frozen as,
+ *   which can be a stale tip already on the upstream.
+ * - One naming the commit an earlier line landing left (that line receipt's `targetShaAfter`), when a
+ *   later line receipt of the task moved the line again, does not, however new it is (task
+ *   34xkUZ2LOP5x9cqm7wrle, 2026-11-15): a promotion confirmed before the rework landed merges the
+ *   source it froze, and its receipt names the landing that source carries (`upstreamReceiptWork`).
+ *
+ * Receipts with no `createdAt` (a reader that did not select it) keep the older answer, and so do
+ * line receipts with no `targetShaAfter`.
+ */
+function upstreamReceiptCarriesLine(
+  upstream: LandingReceiptFacts,
+  onLine: LandingReceiptFacts | undefined,
+  landed: ReadonlyArray<LandingReceiptFacts>,
+  branches: LandingBranches,
+): boolean {
+  if (!onLine) return true;
+  if (upstream.sourceSha !== undefined && upstream.sourceSha === onLine.sourceSha) return true;
+  if (observedReceiptDetail(upstream.detail)) return false;
+  if (namesASupersededLineLanding(upstream, landed, branches)) return false;
+  return !upstream.createdAt || !onLine.createdAt || upstream.createdAt > onLine.createdAt;
+}
+
+/** Whether the upstream receipt names a line landing of the task that a later MERGED line receipt
+ *  moved past (`upstreamReceiptCarriesLine`'s last rule). `taskLandingSql` has the same test. */
+function namesASupersededLineLanding(
+  upstream: LandingReceiptFacts,
+  landed: ReadonlyArray<LandingReceiptFacts>,
+  branches: LandingBranches,
+): boolean {
+  if (!upstream.sourceSha) return false;
+  const line = landed.filter((receipt) => branches.integration.includes(receipt.targetBranch)
+    && !branches.upstream.includes(receipt.targetBranch));
+  return line.some((named) => named.targetShaAfter === upstream.sourceSha && named.createdAt
+    && line.some((later) => later.result === 'MERGED' && !!later.targetShaAfter
+      && later.targetShaAfter !== upstream.sourceSha
+      && !!later.createdAt && later.createdAt > named.createdAt!));
+}
+
+function observedReceiptDetail(detail: Prisma.JsonValue | undefined): boolean {
+  return !!detail && typeof detail === 'object' && !Array.isArray(detail) && detail.observed === true;
 }
 
 /** A full ref as its branch name, in SQL — the same `branchName` fold one expression over. */
@@ -372,8 +458,49 @@ export function taskLandingSql(alias: string): string {
            AND landing_receipt."result" IN (${results})
            AND landing_receipt."target_branch" = ${branchNameSql(`receipt_line."${ref}"`)}
       )`;
+  // `upstreamReceiptCarriesLine`, receipt for receipt: an upstream receipt counts with no line
+  // receipt under it, by naming the newest line receipt's commit, or — unless an observation wrote
+  // it, or it names the commit an earlier line landing left that a later MERGED line receipt moved
+  // past (`namesASupersededLineLanding`) — by being newer than that receipt.
+  const upstreamName = branchNameSql('upstream_line."upstream_ref"');
+  const integrationName = branchNameSql('upstream_line."integration_ref"');
+  const onUpstream = `EXISTS (
+        SELECT 1 FROM "session_merge_receipt" upstream_receipt
+          JOIN "project_codebase" upstream_line
+            ON upstream_line."project_id" = ${alias}."project_id"
+           AND upstream_line."slot" = 'primary'
+          LEFT JOIN LATERAL (
+            SELECT newest_line."source_sha", newest_line."created_at"
+              FROM "session_merge_receipt" newest_line
+             WHERE newest_line."task_id" = ${alias}."id"
+               AND newest_line."result" IN (${results})
+               AND newest_line."target_branch" = ${integrationName}
+               AND ${integrationName} <> ${upstreamName}
+             ORDER BY newest_line."created_at" DESC, newest_line."id" DESC
+             LIMIT 1
+          ) line_receipt ON true
+         WHERE upstream_receipt."task_id" = ${alias}."id"
+           AND upstream_receipt."result" IN (${results})
+           AND upstream_receipt."target_branch" = ${upstreamName}
+           AND (line_receipt."source_sha" IS NULL
+             OR upstream_receipt."source_sha" = line_receipt."source_sha"
+             OR (upstream_receipt."detail" -> 'observed' IS DISTINCT FROM 'true'::jsonb
+               AND NOT EXISTS (
+                 SELECT 1 FROM "session_merge_receipt" named_line
+                   JOIN "session_merge_receipt" later_line
+                     ON later_line."task_id" = named_line."task_id"
+                    AND later_line."target_branch" = named_line."target_branch"
+                    AND later_line."result" = 'MERGED'
+                    AND later_line."target_sha_after" <> upstream_receipt."source_sha"
+                    AND later_line."created_at" > named_line."created_at"
+                  WHERE named_line."task_id" = ${alias}."id"
+                    AND named_line."result" IN (${results})
+                    AND named_line."target_branch" = ${integrationName}
+                    AND named_line."target_sha_after" = upstream_receipt."source_sha")
+               AND upstream_receipt."created_at" > line_receipt."created_at"))
+      )`;
   return `CASE
-      WHEN ${receiptOn('upstream_ref')} THEN 'ON_UPSTREAM'
+      WHEN ${onUpstream} THEN 'ON_UPSTREAM'
       WHEN ${receiptOn('integration_ref')} THEN 'ON_INTEGRATION_LINE'
       ELSE 'NOT_KNOWN'
     END`;
@@ -796,6 +923,9 @@ export function criterionLanding(
   branches: LandingBranches,
 ): CriterionLandingAnswer[] {
   return definitions.map((definition) => {
+    if (definition.satisfiedBy === 'CONFIRMATION') {
+      return { definitionId: definition.id, landing: 'LANDED' as CriterionLanding };
+    }
     const delivery = definition.servingTasks.filter((task) => !taskHasNothingToLand(task));
     const tasks = delivery.map((task) => taskLanding(task.mergeReceipts, branches));
     let landing: CriterionLanding = 'UNKNOWN';
@@ -846,6 +976,7 @@ export async function readCriterionLandingFacts(
     where: { projectId, project: { ownerId } },
     select: {
       id: true,
+      satisfiedBy: true,
       servingTasks: {
         where: { ownerId },
         // `id` is not the fold's to read; it is how the jobs below are keyed to these rows.
@@ -890,7 +1021,7 @@ export const NEWEST_WORK_REPOSITORY = {
  */
 export const LANDING_SERVING_WORK_SELECT = {
   codeless: true,
-  mergeReceipts: { select: { result: true, targetBranch: true } },
+  mergeReceipts: { select: { result: true, targetBranch: true, sourceSha: true, createdAt: true, detail: true, targetShaAfter: true } },
   // §1.1's repository condition (O-L7): where the newest work session ran, and where the project's
   // line is bound. Two relation levels each, not a statement per task (`workInAnotherRepository`).
   sessions: NEWEST_WORK_REPOSITORY,

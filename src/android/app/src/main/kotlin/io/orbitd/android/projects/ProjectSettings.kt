@@ -1,5 +1,6 @@
 package io.orbitd.android.projects
 
+import io.orbitd.android.management.LocalTranslation
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
@@ -21,8 +22,10 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.window.Dialog
 import androidx.compose.ui.window.DialogProperties
 import io.orbitd.android.core.cards.*
+import io.orbitd.android.core.translation.Translation
 import io.orbitd.android.directory.StatusMessage
 import io.orbitd.android.management.CodexSignInText
+import io.orbitd.android.translation.CardTranslationFoot
 import io.orbitd.android.ui.LocalOrbitColors
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.async
@@ -40,7 +43,8 @@ import java.time.Instant
 /** Each control writes as it is changed; a write the door refuses says so over its own words (`runSettingsSection`). */
 @Composable
 internal fun RunSettingsSection(state: ProjectPageState, doc: JsonObject, now: Instant, enabled: Boolean, editMergeCheck: () -> Unit,
-    integration: (JsonObject?) -> Unit, automatic: (Boolean) -> Unit, stepConcurrency: (Int) -> Unit, pause: (Boolean) -> Unit) {
+    integration: (JsonObject?) -> Unit, automatic: (Boolean) -> Unit, stepConcurrency: (Int) -> Unit, pause: (Boolean) -> Unit,
+    nonCode: (Boolean) -> Unit = {}, mergeLive: suspend () -> Boolean = { false }) {
     Column(Modifier.testTag("project-settings"), verticalArrangement = Arrangement.spacedBy(12.dp)) {
         SectionHead(StartProjectCopy.howItRuns, RunSettings.appliesFromNextTask)
         val view = state.integration
@@ -50,16 +54,27 @@ internal fun RunSettingsSection(state: ProjectPageState, doc: JsonObject, now: I
                 // every sentence about where work goes names: that one, or main.
                 val stored = ProjectMainBranch.stored(view)
                 val main = stored ?: RunSettings.defaultMainBranch
-                LineSetting(view, doc, now, enabled, stored != null, main, integration)
-                stored?.let { HorizontalDivider(); MainBranchSetting(view, it, now, enabled, integration) }
-                // A server that predates the delivery mode reports none, and draws no row.
-                if (view.text("deliveryMode") != null) { HorizontalDivider(); DeliverySetting(view, enabled, main, integration) }
-                HorizontalDivider()
+                // What the project delivers (board 01 A–C), first: it decides whether the landing settings under it mean anything. A
+                // server that predates the mark sends none, and draws no row.
+                val marked = doc.flag("nonCode")
+                if (doc["nonCode"] is JsonPrimitive) { DeliversSetting(doc, view, enabled, main, nonCode); HorizontalDivider() }
+                if (marked) { LandingOff(); HorizontalDivider() } else {
+                    LineSetting(view, doc, now, enabled, stored != null, main, integration)
+                    // A server that predates the delivery mode reports none, and draws no row. Under the line: it only means something
+                    // for a project that lands directly on main.
+                    if (view.text("deliveryMode") != null) { HorizontalDivider(); DeliverySetting(view, enabled, main, integration, mergeLive) }
+                    stored?.let { HorizontalDivider(); MainBranchSetting(view, it, now, enabled, integration) }
+                    HorizontalDivider()
+                }
                 AutomaticSetting(view, doc, enabled, main, automatic)
                 HorizontalDivider()
                 AtMostSetting(state, doc, enabled, stepConcurrency)
-                HorizontalDivider()
-                MergeCheckSetting(view, doc, enabled, main, editMergeCheck)
+                if (!marked) {
+                    HorizontalDivider()
+                    LandingCheckSetting(view, enabled, integration)
+                    HorizontalDivider()
+                    MergeCheckSetting(view, doc, enabled, main, editMergeCheck)
+                }
                 view.number("escalationSeconds")?.let { seconds -> HorizontalDivider(); EscalationSetting(view, seconds, enabled, integration) }
                 HorizontalDivider()
                 val paused = doc.text("pausedAt") != null
@@ -144,19 +159,72 @@ private fun LineOption(view: JsonObject, line: String, title: String, branch: St
 
 /** Delivery: how a finished task's work reaches main (§10.5 O-L1) — Orbit lands it, or the agent pushes it there itself. Picking one
  * writes it, as the line does, and it does not lock with the line; but only a main line takes the agent's way, so on a project branch,
- * or a line nobody decided, that way is drawn and not offered, with why (the door's 409 `DELIVERY_MODE_NEEDS_MAIN_LINE`). */
+ * or a line nobody decided, that way is drawn and not offered, with why (the door's 409 `DELIVERY_MODE_NEEDS_MAIN_LINE`). Handing it to
+ * the agent while a merge into main is still live ([mergeLive]) asks first; Cancel writes nothing, and the choice stays Orbit's. */
 @Composable
-private fun DeliverySetting(view: JsonObject, enabled: Boolean, main: String, write: (JsonObject?) -> Unit) {
+private fun DeliverySetting(view: JsonObject, enabled: Boolean, main: String, write: (JsonObject?) -> Unit, mergeLive: suspend () -> Boolean) {
     val mainLine = view.text("line") == "MAIN"
     val chosen = RunSettings.delivery(view.text("line"), view.text("deliveryMode"))
+    val scope = rememberCoroutineScope()
+    var asking by remember { mutableStateOf<JsonObject?>(null) }
     Column(Modifier.testTag("project-delivery"), verticalArrangement = Arrangement.spacedBy(8.dp)) {
         Text(RunSettings.delivery)
         DeliveryOption(chosen == "PLATFORM", RunSettings.deliveryPlatform, RunSettings.deliveryPlatformHint(main), enabled, offered = true,
             "project-delivery:PLATFORM") { write(RunSettings.deliveryWrite(view, "PLATFORM")) }
         DeliveryOption(chosen == "AGENT_PUSH", RunSettings.deliveryAgentPush,
             if (mainLine) RunSettings.deliveryAgentPushHint(main) else RunSettings.deliveryNeedsMainLine(main), enabled, offered = mainLine,
-            "project-delivery:AGENT_PUSH") { write(RunSettings.deliveryWrite(view, "AGENT_PUSH")) }
+            "project-delivery:AGENT_PUSH") {
+            RunSettings.deliveryWrite(view, "AGENT_PUSH")?.let { body -> scope.launch { if (mergeLive()) asking = body else write(body) } }
+        }
     }
+    asking?.let { body ->
+        AlertDialog(onDismissRequest = { asking = null }, modifier = Modifier.testTag("project-delivery-confirm"),
+            title = { Text(RunSettings.agentPushConfirmTitle(main)) }, text = { Text(RunSettings.agentPushConfirmBody(main)) },
+            confirmButton = { TextButton(onClick = { asking = null; write(body) }, modifier = Modifier.testTag("project-delivery-confirm:yes")) {
+                Text(RunSettings.agentPushConfirm) } },
+            dismissButton = { TextButton(onClick = { asking = null }, modifier = Modifier.testTag("project-delivery-confirm:cancel")) { Text("Cancel") } })
+    }
+}
+
+/** Delivers (board 01 ②③): Code or Not code, with who set the mark and when, and its reason. iOS writes it at the press, so a
+ * change asks first, saying what it does — the web says the same above its Save. */
+@Composable
+private fun DeliversSetting(doc: JsonObject, view: JsonObject, enabled: Boolean, main: String, write: (Boolean) -> Unit) {
+    val marked = doc.flag("nonCode")
+    var asking by remember { mutableStateOf<Boolean?>(null) }
+    val branch = view.text("ref")?.takeIf { view.text("line") == "PROJECT_BRANCH" } ?: "project/${doc.text("id").orEmpty()}"
+    Column(Modifier.testTag("project-delivers"), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+        Text(DoneCopy.RUN_DELIVERS)
+        DeliveryOption(!marked, DoneCopy.RUN_DELIVERS_CODE, DoneCopy.RUN_DELIVERS_CODE_HINT.replace("{main}", main), enabled, offered = true,
+            "project-delivers:CODE") { if (marked) asking = false }
+        DeliveryOption(marked, DoneCopy.RUN_DELIVERS_NOT_CODE, DoneCopy.RUN_DELIVERS_NOT_CODE_HINT, enabled, offered = true,
+            "project-delivers:NOT_CODE") { if (!marked) asking = true }
+        DoneFollowUps.provenance(doc) { ProjectDone.dateTime(it) }?.let { provenance ->
+            Column(Modifier.fillMaxWidth().background(MaterialTheme.colorScheme.onSurface.copy(alpha = 0.04f), RoundedCornerShape(8.dp)).padding(10.dp)
+                .testTag("project-delivers-by"), verticalArrangement = Arrangement.spacedBy(2.dp)) {
+                Note(provenance)
+                DoneFollowUps.reasonLine(doc)?.let { Note(it) }
+            }
+        }
+    }
+    asking?.let { next ->
+        AlertDialog(onDismissRequest = { asking = null }, modifier = Modifier.testTag("project-delivers-confirm"),
+            title = { Text(if (next) DoneCopy.RUN_TO_NOT_CODE_TITLE else DoneCopy.RUN_TO_CODE_TITLE) },
+            text = { Text(if (next) DoneCopy.RUN_TO_NOT_CODE.replace("{branch}", RunSettings.shortBranch(branch)) else DoneCopy.RUN_TO_CODE) },
+            confirmButton = { TextButton(onClick = { asking = null; write(next) }, modifier = Modifier.testTag("project-delivers-confirm:yes")) {
+                Text(if (next) DoneCopy.RUN_TO_NOT_CODE_ACTION else DoneCopy.RUN_TO_CODE_ACTION, fontWeight = FontWeight.Bold) } },
+            dismissButton = { TextButton(onClick = { asking = null }, modifier = Modifier.testTag("project-delivers-confirm:cancel")) { Text("Cancel") } })
+    }
+}
+
+/** Landing · Off (board 01 C): the four landing settings folded into one line while the project is marked non-code. */
+@Composable
+private fun LandingOff() = Column(Modifier.testTag("project-landing-off"), verticalArrangement = Arrangement.spacedBy(4.dp)) {
+    Row(verticalAlignment = Alignment.CenterVertically) {
+        Text(DoneCopy.RUN_LANDING, Modifier.weight(1f))
+        Text(DoneCopy.RUN_SWITCH_OFF, color = MaterialTheme.colorScheme.onSurfaceVariant)
+    }
+    Note(DoneCopy.RUN_LANDING_OFF_HINT)
 }
 
 /** One of the two ways, ticked when it is the one; a way not [offered] here is drawn dimmed, its line saying why. */
@@ -184,7 +252,7 @@ private fun AutomaticSetting(view: JsonObject, doc: JsonObject, enabled: Boolean
         }
         // What Automatic does with a merge into main depends on the line, and on who delivers the work.
         Note(if (RunSettings.delivery(view.text("line"), view.text("deliveryMode")) == "AGENT_PUSH") RunSettings.automaticHintAgentPush(main)
-            else RunSettings.automaticHint(if (view.text("line") == "MAIN") "MAIN" else "PROJECT_BRANCH", main))
+            else RunSettings.automaticHint(if (view.text("line") == "MAIN") "MAIN" else "PROJECT_BRANCH", main, view.text("deliveryMode") != null))
     }
 }
 
@@ -224,7 +292,9 @@ private fun MergeCheckSetting(view: JsonObject, doc: JsonObject, enabled: Boolea
         }
         view.text("mergeCheckCommand")?.let { Text(it, fontFamily = FontFamily.Monospace, color = MaterialTheme.colorScheme.onSurfaceVariant, maxLines = 2,
             overflow = TextOverflow.Ellipsis) } ?: Note(RunSettings.mergeCheckPlaceholder)
-        Note(RunSettings.mergeCheckHint(main))
+        // While the agent pushes, the check is the agent's to run.
+        Note(if (RunSettings.delivery(view.text("line"), view.text("deliveryMode")) == "AGENT_PUSH") RunSettings.mergeCheckHintAgentPush(main)
+            else RunSettings.mergeCheckHint(main))
         if (missing) Note("⚠ ${RunSettings.noMergeCheckWarning(main)}", warning)
     }
 }
@@ -263,7 +333,8 @@ internal fun MergeCheckEditor(view: JsonObject, automatic: Boolean, enabled: Boo
         text = { Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
             OutlinedTextField(command, { command = it }, Modifier.fillMaxWidth().testTag("merge-check-command"), placeholder = { Text(RunSettings.mergeCheckPlaceholder) },
                 textStyle = LocalTextStyle.current.copy(fontFamily = FontFamily.Monospace), enabled = !saving)
-            Note(RunSettings.mergeCheckHint(main))
+            Note(if (RunSettings.delivery(view.text("line"), view.text("deliveryMode")) == "AGENT_PUSH") RunSettings.mergeCheckHintAgentPush(main)
+                else RunSettings.mergeCheckHint(main))
             if (missing) Note("⚠ ${RunSettings.noMergeCheckWarning(main)}", LocalOrbitColors.current.needsYou)
             refused?.let { Note(it, MaterialTheme.colorScheme.error) }
         } },
@@ -383,6 +454,8 @@ internal fun RequestedStartSheet(api: ProjectApi, id: String, enabled: Boolean, 
     var held by remember { mutableStateOf<JsonObject?>(null) }
     var edited by remember { mutableStateOf<StartProjectCopy.Draft?>(null) }
     var starting by remember { mutableStateOf(false) }
+    // The coordinator's why in the owner's language (Settings › Translation), flipped whole to its own words by the foot.
+    var showOriginal by remember { mutableStateOf(false) }
     var error by remember { mutableStateOf<String?>(null) }
     // Why the last round could not read the document or the open items, said with Retry until a round does; Retry asks at once.
     var failure by remember { mutableStateOf<String?>(null) }
@@ -412,7 +485,9 @@ internal fun RequestedStartSheet(api: ProjectApi, id: String, enabled: Boolean, 
                 val cancel: @Composable () -> Unit = { TextButton(onClick = close, enabled = !starting, modifier = Modifier.testTag("project-start-request-cancel")) { Text("Cancel") } }
                 val doc = document
                 val row = doc?.let { StartProjectCopy.live(openItems, ProjectDoc.started(it)) } ?: held
-                val request = StartProjectCopy.request(row)
+                val owner = LocalTranslation.current.cardLanguage
+                val translated = row?.let { OwnerCardTranslation.openItem(it, owner) }
+                val request = StartProjectCopy.request(if (translated != null && !showOriginal) translated else row)
                 if (doc != null && confirmation != null && row != null && request != null && integrationAnswered) {
                     LaunchedEffect(row) { if (held == null) held = row }
                     val draft = edited ?: StartProjectCopy.Draft.of(request.settings, integration)
@@ -435,7 +510,9 @@ internal fun RequestedStartSheet(api: ProjectApi, id: String, enabled: Boolean, 
                                 }
                             }
                         }, onViewTasks = viewTasks, branches = ProjectMainBranch.branches(integration), lastChoice = ProjectMainBranch.lastChoice(integration),
-                        graph = parsed, trailing = cancel)
+                        graph = parsed, trailing = cancel, translationFoot = if (translated != null) ({
+                            CardTranslationFoot(showOriginal, { showOriginal = !showOriginal })
+                        }) else null)
                 } else {
                     Row(verticalAlignment = Alignment.CenterVertically) {
                         Text("▶ ${StartProjectCopy.title}", Modifier.weight(1f), style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold,
@@ -461,16 +538,22 @@ internal fun RequestedStartSheet(api: ProjectApi, id: String, enabled: Boolean, 
  * refusal stays on the card in the door's words. */
 @Composable
 internal fun ProjectDoneSheet(api: ProjectApi, id: String, state: ProjectPageState, now: Instant, enabled: Boolean, close: () -> Unit,
-    write: suspend (String, suspend () -> Unit) -> String?) {
+    actions: CriteriaActions? = null, write: suspend (String, suspend () -> Unit) -> String?) {
     val doc = state.document ?: return
     val row = ProjectDone.live(state.openItems, ProjectDoc.status(doc))
+    var doneCheck by remember { mutableStateOf<JsonObject?>(null) }
     var confirmation by remember { mutableStateOf<JsonObject?>(null) }
     var unread by remember { mutableStateOf(false) }
     var record by remember { mutableStateOf<JsonObject?>(null) }
     var error by remember { mutableStateOf<String?>(null) }
     // While a press is out the sheet cannot be put away from it.
     var writing by remember { mutableStateOf(false) }
-    LaunchedEffect(id) {
+    // Read again with the page: a move or a confirmation from this card changes what the check finds.
+    LaunchedEffect(id, row?.text("itemId"), doc) {
+        if (row == null) try { doneCheck = api.doneCheck(id) }
+        catch (cancel: CancellationException) { throw cancel }
+        catch (failure: Exception) { error = failureReason(failure) }
+
         try { confirmation = api.confirmation(id); unread = false } catch (cancel: CancellationException) { throw cancel } catch (_: Exception) { unread = true }
     }
     val digest = confirmation?.obj("currentVersion")?.text("digest")
@@ -479,21 +562,27 @@ internal fun ProjectDoneSheet(api: ProjectApi, id: String, state: ProjectPageSta
         try { error = write(refusal, body); return error == null } finally { writing = false }
     }
     val itemId = row?.text("itemId")
-    val notYet: (suspend (String) -> Boolean)? = if (itemId == null) null else { note ->
-        press("${ProjectDone.notDeclined} — ") { api.declineDone(id, itemId, note) }.also { if (it) close() }
+    // The last "Not yet…" note was refused untranslated (422 TRANSLATION_FAILED): the card offers Retry and Send as written.
+    var notTranslated by remember { mutableStateOf(false) }
+    var notTranslatedWhy by remember { mutableStateOf<Pair<io.orbitd.android.core.translation.Translation.FailureReason, Int?>?>(null) }
+    val notYet: (suspend (String, Boolean) -> Boolean)? = if (itemId == null) null else { note, asWritten ->
+        press("${ProjectDone.notDeclined} — ") {
+            try { api.declineDone(id, itemId, note, asWritten); notTranslated = false }
+            catch (failure: Exception) { notTranslated = Translation.refused(failure); notTranslatedWhy = Translation.refusalReason(failure); throw failure }
+        }.also { if (it) close() else if (notTranslated) error = null }
     }
     Dialog(onDismissRequest = { if (!writing) close() }, properties = DialogProperties(usePlatformDefaultWidth = false)) {
         Surface(Modifier.fillMaxWidth(0.94f).testTag("project-done-sheet"), shape = MaterialTheme.shapes.large) {
             Column(Modifier.heightIn(max = 720.dp).verticalScroll(rememberScrollState()).padding(16.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
                 ProjectDoneCard(doc, row, confirmation?.obj("confirmation")?.text("confirmedAt"), ProjectDone.openItemsCount(state.openItems),
-                    ProjectDone.runningCount(doc), record, sealRead = row?.obj("doneRequest") != null || digest != null, now = now, enabled = enabled,
-                    error = error, tag = "project-done",
+                    ProjectDone.runningCount(doc), record, sealRead = row?.obj("doneRequest") != null || (digest != null && doneCheck != null), now = now, enabled = enabled,
+                    error = error, tag = "project-done", doneCheck = doneCheck, actions = actions,
                     onRecord = {
                         val body = ProjectDone.body(doc, itemId, row?.obj("doneRequest"), digest)
                         var answer: JsonObject? = null
                         if (body != null && press("${ProjectDone.notRecorded} — ") { answer = api.done(id, body) }) record = answer ?: buildJsonObject { put("status", "DONE") }
                     },
-                    onNotYet = notYet,
+                    onNotYet = notYet, notTranslated = notTranslated, notTranslatedWhy = notTranslatedWhy,
                     onReopen = { if (press("${ProjectDone.notReopened} — ") { api.setStatus(id, "OPEN", "reopen:${doc.text("updatedAt")}") }) { record = null; close() } },
                     trailing = { TextButton(onClick = close, enabled = !writing, modifier = Modifier.testTag("project-done-cancel")) {
                         Text(if (record == null) "Cancel" else "Done") } })
@@ -501,4 +590,48 @@ internal fun ProjectDoneSheet(api: ProjectApi, id: String, state: ProjectPageSta
             }
         }
     }
+}
+
+/** Landing settings use the same integration PATCH as merge settings. Null inherits independently. */
+@Composable
+private fun LandingCheckSetting(view: JsonObject, enabled: Boolean, write: (JsonObject?) -> Unit) {
+    var editing by remember { mutableStateOf(false) }
+    Column(Modifier.fillMaxWidth().testTag("project-landing-check"), verticalArrangement = Arrangement.spacedBy(4.dp)) {
+        Text(LandingCheckCopy.label)
+        if (view.text("line") == "MAIN") Note(LandingCheckCopy.main) else {
+            TextButton(onClick = { editing = true }, enabled = enabled) {
+                Text(view.text("landingCheckCommand") ?: LandingCheckCopy.inheritedCommand(view.text("mergeCheckCommand")))
+            }
+            Note(view.number("landingCheckTimeoutSeconds")?.let { "$it seconds" }
+                ?: LandingCheckCopy.inheritedTimeout(view.number("mergeCheckTimeoutSeconds")))
+            Note(LandingCheckCopy.hint)
+        }
+    }
+    if (editing) {
+        var command by remember { mutableStateOf(view.text("landingCheckCommand").orEmpty()) }
+        var timeout by remember { mutableStateOf(view.number("landingCheckTimeoutSeconds")?.toString().orEmpty()) }
+        val valid = timeout.isEmpty() || (timeout.toIntOrNull() ?: 0) > 0
+        AlertDialog(onDismissRequest = { editing = false }, title = { Text(LandingCheckCopy.label) },
+            text = { Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                OutlinedTextField(command, { command = it }, label = { Text(LandingCheckCopy.command) },
+                    placeholder = { Text(LandingCheckCopy.commandPlaceholder) }, modifier = Modifier.testTag("landing-check-command"))
+                if (command.isBlank()) Note(LandingCheckCopy.inheritedCommand(view.text("mergeCheckCommand")))
+                OutlinedTextField(timeout, { timeout = it }, label = { Text(LandingCheckCopy.timeout) },
+                    placeholder = { Text(LandingCheckCopy.timeoutPlaceholder) }, modifier = Modifier.testTag("landing-check-timeout"))
+                Note(LandingCheckCopy.timeoutHint)
+                if (timeout.isEmpty()) Note(LandingCheckCopy.inheritedTimeout(view.number("mergeCheckTimeoutSeconds")))
+            } }, confirmButton = { TextButton(onClick = {
+                write(landingCheckWrite(view, command, timeout.toIntOrNull())); editing = false
+            }, enabled = enabled && valid && landingCheckWrite(view, command, timeout.toIntOrNull()) != null) { Text(RunSettings.save) } },
+            dismissButton = { TextButton(onClick = { editing = false }) { Text("Cancel") } })
+    }
+}
+
+internal fun landingCheckWrite(view: JsonObject, command: String, timeout: Int?): JsonObject? {
+    val next = command.takeIf { it.isNotBlank() }
+    val body = buildJsonObject {
+        if (next != view.text("landingCheckCommand")) put("landingCheckCommand", next?.let(::JsonPrimitive) ?: JsonNull)
+        if (timeout != view.number("landingCheckTimeoutSeconds")) put("landingCheckTimeoutSeconds", timeout?.let(::JsonPrimitive) ?: JsonNull)
+    }
+    return body.takeIf { it.isNotEmpty() }
 }

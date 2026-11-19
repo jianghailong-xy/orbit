@@ -107,6 +107,8 @@ enum SessionRunSource {
   MANUAL
   TASK_LIST_AUTO
   PROJECT_COORDINATOR
+  /// A scheduled task's run (migration 0790): `Session.scheduleRunId` names the run.
+  SCHEDULE
 
   @@map("session_run_source")
 }
@@ -324,20 +326,28 @@ model User {
   providerPools    ProviderPool[] // account pools of those providers, each dispatchable by its own slug
   poolPlaces       ProviderPoolPerson[] // the shared pools this user is in (migration 0321)
   poolUsage        PoolUsage[] // what this user spent on shared-pool keys, by key and month
+  keyGatewayTokens KeyGatewayToken[] // Claude Code sessions on their OpenAI keys, through /api/gw/anthropic
   sessionTags      SessionTag[] // personal colored session labels (tenant scope)
   sessionFolders   SessionFolder[] // folders sessions are filed in, each inside one workspace (0348)
   refreshTokens    RefreshToken[] // long-lived rotating refresh tokens (hashed at rest)
   personalAccessTokens PersonalAccessToken[] // the user's own API tokens (hashed at rest, 0383)
   patDeviceLogins  PatDeviceLogin[] // the `orbit login` requests this user approved or denied (0388)
+  helpAskAdminRequests     HelpAskAdminRequest[] @relation("HelpAskAdminRequestOwner") // Asks this user sent to an admin (0890)
+  helpAskAdminRequestsToMe HelpAskAdminRequest[] @relation("HelpAskAdminRequestAdmin") // Asks sent to this admin (0890)
+  helpFeedback             HelpFeedback[] // this user's Did this help? / Did this answer it? votes (0900)
+  terminalLogins   TerminalLogin[] // terminal sign-ins asked for on this user's runners (0660)
+  terminalCredentials TerminalCredential[] // the terminals this user approved (0660)
   identities       UserIdentity[] // the Google account this user signs in with (0391)
   oauthLoginFlows  OAuthLoginFlow[] // Google sign-ins in flight that would link to this user (0391)
   clientVersions   ClientVersion[] // which build of each client this user is running
   mergeReceipts    SessionMergeReceipt[] // merges recorded against this user's session branches
   agents           Agent[] // Agent identities this user owns (tenant scope)
   avatar           UserAvatar? // the profile photo, when one is set (0335)
+  emailOutbox      EmailOutbox[] // the welcome email of this account (after 0517), and its session invitations (0618)
 
   /// Presses of Run Now this user made, and the receipts of their requests (0137).
   runRequests       TaskRunRequest[]
+  createRequests    CreateRequestReceipt[]
 
   /// Cross-project crossings recorded under this account (unit L4, 0155).
   handoffApprovals ProjectHandoffApproval[]
@@ -349,6 +359,9 @@ model User {
 
   /// Persistent observations this account is keeping (migration 0259).
   watches          Watch[]
+  ownerRequests    OwnerRequest[]
+  ownerRequestSecrets OwnerRequestSecret[]
+  accountSecrets   AccountSecret[]
 
   /// Public links this account made, ended ones included (migration 0306).
   shareLinks       ShareLink[]
@@ -363,8 +376,30 @@ model User {
   /// The cell serving this account's runners, once one asked for a link token (migration 0443).
   tenantCell       TenantCell?
 
+  /// The account's own Feishu (Lark) app, when it connected one (migration 0489).
+  feishuApp        FeishuApp?
+  /// The GitHub account connected through the deployment's App, and connections in flight (migration 0820).
+  githubConnection GithubConnection?
+  githubOAuthFlows GithubOAuthFlow[]
+  /// Owner-identity codes the account generated for its Feishu app and has not used yet (migration 0494).
+  feishuConnectCodes FeishuConnectCode[]
+  /// The Feishu groups the account connected, or is connecting, to Orbit (migration 0496).
+  feishuChatRoutes FeishuChatRoute[]
+  /// The alert cards sent to the owner of the account's Feishu app (migration 0495).
+  feishuMessages   FeishuMessage[]
+  /// The Feishu message chains of its sessions (migration 0499).
+  feishuThreads    FeishuThread[]
+  sessionGuestPlaces SessionGuest[] // the sessions this user was invited into as a guest (0560)
+  /// Its sessions' replies on their way back to Feishu (migration 0501).
+  feishuOutbox     FeishuOutbox[]
+
   @@map("user")
   mentionDeliveries TaskCommentMentionDelivery[]
+  /// Scheduled tasks (migration 0790) and the changes to them waiting on this owner.
+  schedules             Schedule[]
+  scheduleChangeRequests ScheduleChangeRequest[]
+  /// Conditions (migration 1030, docs/condition-triggers-design.md §3).
+  conditions            Condition[]
 }
 
 /// A long-lived opaque refresh token a client swaps for a fresh short-lived access JWT via
@@ -445,6 +480,56 @@ model PersonalAccessToken {
 ///
 /// `pat_device_login_status_chk` (status from the list below; decided ⇔ `decidedById` and
 /// `decidedAt` set) and `pat_device_login_expires_in_days_chk` live only in the migration.
+/// A terminal on a runner's machine asking the account's owner to approve it (docs/terminal-session-design.md
+/// "The terminal credential", 0660). Started with the machine's runner credential, so it is bound to that runner and
+/// to the runner's owner from the start; the owner approves or denies it in the app (an owner-channel act), and the
+/// CLI, polling with the device code only it holds, collects the TERMINAL credential once. No credential is kept here.
+model TerminalLogin {
+  id             String    @id @default(uuid(7)) @db.Uuid
+  /// sha256 hex of the device code the CLI polls with.
+  deviceCodeHash String    @unique @map("device_code_hash")
+  /// The short code the terminal and the approve card both show (`7KQ-4MZ`). Never looked up: the card is the owner's.
+  userCode       String    @map("user_code")
+  ownerId        String    @map("owner_id") @db.Uuid
+  owner          User      @relation(fields: [ownerId], references: [id], onDelete: Cascade)
+  runnerId       String    @map("runner_id") @db.Uuid
+  runner         Runner    @relation(fields: [runnerId], references: [id], onDelete: Cascade)
+  /// The machine as the app names its runner, when the request started.
+  machineName    String    @map("machine_name")
+  /// `PENDING` | `APPROVED` | `DENIED` | `DELIVERED` (a poll collected the credential).
+  status         String    @default("PENDING")
+  decidedAt      DateTime? @map("decided_at") @db.Timestamptz(3)
+  /// The request's own end, ten minutes after it starts.
+  expiresAt      DateTime  @map("expires_at") @db.Timestamptz(3)
+  createdAt      DateTime  @default(now()) @map("created_at") @db.Timestamptz(3)
+
+  @@index([ownerId, status])
+  @@index([runnerId])
+  @@map("terminal_login")
+}
+
+/// A TERMINAL credential (0660): what `orbit` in a terminal acts with, minted only by the owner's approval of a
+/// TerminalLogin, bound to the account and to one runner, and ending 30 days after that approval. Only its sha256 is kept.
+model TerminalCredential {
+  id          String    @id @default(uuid(7)) @db.Uuid
+  tokenHash   String    @unique @map("token_hash")
+  ownerId     String    @map("owner_id") @db.Uuid
+  owner       User      @relation(fields: [ownerId], references: [id], onDelete: Cascade)
+  runnerId    String    @map("runner_id") @db.Uuid
+  runner      Runner    @relation(fields: [runnerId], references: [id], onDelete: Cascade)
+  machineName String    @map("machine_name")
+  /// The approval that minted it.
+  approvedAt  DateTime  @map("approved_at") @db.Timestamptz(3)
+  expiresAt   DateTime  @map("expires_at") @db.Timestamptz(3)
+  lastUsedAt  DateTime? @map("last_used_at") @db.Timestamptz(3)
+  revokedAt   DateTime? @map("revoked_at") @db.Timestamptz(3)
+  createdAt   DateTime  @default(now()) @map("created_at") @db.Timestamptz(3)
+
+  @@index([ownerId])
+  @@index([runnerId])
+  @@map("terminal_credential")
+}
+
 model PatDeviceLogin {
   id             String    @id @default(uuid(7)) @db.Uuid
   /// sha256 hex of the device code the CLI polls with.
@@ -496,6 +581,61 @@ model SignInProvider {
   updatedAt       DateTime @updatedAt @map("updated_at") @db.Timestamptz(3)
 
   @@map("sign_in_provider")
+}
+
+/// Outgoing email (docs/welcome-email-design.md §3.1; migration 0516): at most one row, id 1, written by an
+/// administrator on Admin → Email. No row is the same as a row that is off. `email_settings_one_row_chk`
+/// (`id` = 1) lives only in the migration.
+model EmailSettings {
+  id              Int      @id @default(1) @db.SmallInt
+  enabled         Boolean  @default(false)
+  /// AES-256-GCM ciphertext of the Resend API key ("iv:tag:ct", each base64); empty = none saved.
+  resendApiKeyEnc String   @default("") @map("resend_api_key_enc")
+  fromAddress     String   @default("") @map("from_address")
+  /// Empty: the earliest administrator's address.
+  replyTo         String   @default("") @map("reply_to")
+  welcomeEnabled  Boolean  @default(true) @map("welcome_enabled")
+  /// The administrator who saved it last. An id rather than a relation, so deleting them writes nothing here.
+  updatedById     String?  @map("updated_by_id") @db.Uuid
+  updatedAt       DateTime @default(now()) @updatedAt @map("updated_at") @db.Timestamptz(3)
+
+  @@map("email_settings")
+}
+
+/// One email to send (docs/welcome-email-design.md §3.3; migrations 0517, 0618): a WELCOME row written in the
+/// transaction that creates the account, or a SESSION_INVITE row written with a session guest's new invitation.
+/// Status PENDING | SENT | FAILED | SKIPPED (CHECKs live in the migrations). No body and no secret: the email
+/// is rendered when it is sent.
+///
+/// 0618 adds the unique index this schema cannot spell — UNIQUE NULLS NOT DISTINCT (kind, user_id, session_id),
+/// one WELCOME per account and one SESSION_INVITE per (account, session) — and the CHECK that session_id is
+/// set exactly when kind is SESSION_INVITE.
+model EmailOutbox {
+  id                String    @id @default(uuid(7)) @db.Uuid
+  kind              String
+  userId            String    @map("user_id") @db.Uuid
+  user              User      @relation(fields: [userId], references: [id], onDelete: Cascade, onUpdate: NoAction)
+  /// The session a SESSION_INVITE is for; null for a WELCOME (0618).
+  sessionId         String?   @map("session_id") @db.Uuid
+  session           Session?  @relation(fields: [sessionId], references: [id], onDelete: Cascade, onUpdate: NoAction)
+  toAddress         String    @map("to_address")
+  /// The administrator who created the account, or the owner who invited the guest; null for a Google
+  /// sign-up. No relation, as updatedById.
+  createdById       String?   @map("created_by_id") @db.Uuid
+  status            String
+  attempts          Int       @default(0)
+  generation        Int       @default(0)
+  keyAttempt        Int       @default(0) @map("key_attempt")
+  nextAttemptAt     DateTime  @default(now()) @map("next_attempt_at") @db.Timestamptz(3)
+  lastError         String?   @map("last_error")
+  lastAttemptAt     DateTime? @map("last_attempt_at") @db.Timestamptz(3)
+  providerMessageId String?   @map("provider_message_id")
+  sentAt            DateTime? @map("sent_at") @db.Timestamptz(3)
+  createdAt         DateTime  @default(now()) @map("created_at") @db.Timestamptz(3)
+  updatedAt         DateTime  @default(now()) @updatedAt @map("updated_at") @db.Timestamptz(3)
+
+  @@index([sessionId], map: "email_outbox_session_id_idx")
+  @@map("email_outbox")
 }
 
 /// The runner dispatch pause (docs/runner-link-design.md §11.1, §11.3, D8; migration 0442): at most one
@@ -603,6 +743,66 @@ model OAuthLoginFlow {
   @@map("oauth_login_flow")
 }
 
+/// The deployment's GitHub App (docs/github-workspace-design.md §4, migration 0820): one row, saved by an
+/// administrator in Admin → Integrations. The client secret and the private key (PEM) are encrypted as a
+/// model provider's API key is (providers/provider-crypto.ts); the empty string is "none saved", and no
+/// response carries either. `slug` is what GitHub's GET /app answered at the save.
+model GithubAppConfig {
+  /// `github`, held by `github_app_config_id_chk`.
+  id              String   @id @default("github")
+  enabled         Boolean  @default(false)
+  appId           BigInt   @map("app_id")
+  slug            String
+  clientId        String   @map("client_id")
+  clientSecretEnc String   @map("client_secret_enc")
+  privateKeyEnc   String   @map("private_key_enc")
+  /// The administrator who saved it last. An id rather than a relation.
+  updatedById     String?  @map("updated_by_id") @db.Uuid
+  updatedAt       DateTime @updatedAt @map("updated_at") @db.Timestamptz(3)
+
+  @@map("github_app_config")
+}
+
+/// The GitHub account an Orbit account connected through the App (migration 0820): at most one per
+/// account, and a GitHub account connects to one Orbit account only. Its user-to-server tokens are
+/// encrypted as GithubAppConfig's secrets are; an App whose user tokens never expire leaves the
+/// refresh token empty.
+model GithubConnection {
+  id               String   @id @default(uuid(7)) @db.Uuid
+  ownerId          String   @unique(map: "github_connection_owner_id_key") @map("owner_id") @db.Uuid
+  owner            User     @relation(fields: [ownerId], references: [id], onDelete: Cascade, map: "github_connection_owner_id_fkey")
+  githubUserId     BigInt   @unique(map: "github_connection_github_user_id_key") @map("github_user_id")
+  login            String
+  accessTokenEnc   String   @map("access_token_enc")
+  refreshTokenEnc  String   @map("refresh_token_enc")
+  accessExpiresAt  DateTime @map("access_expires_at") @db.Timestamptz(3)
+  refreshExpiresAt DateTime @map("refresh_expires_at") @db.Timestamptz(3)
+  createdAt        DateTime @default(now()) @map("created_at") @db.Timestamptz(3)
+  updatedAt        DateTime @updatedAt @map("updated_at") @db.Timestamptz(3)
+
+  @@map("github_connection")
+}
+
+/// A GitHub connection in flight (migration 0820), from /integrations/github/start to its callback: one
+/// use, ten minutes. Keeps only the sha256 of its state and of the browser-binding cookie; the PKCE
+/// verifier as it is, since it is sent to GitHub with the code.
+model GithubOAuthFlow {
+  id           String   @id @default(uuid(7)) @db.Uuid
+  ownerId      String   @map("owner_id") @db.Uuid
+  owner        User     @relation(fields: [ownerId], references: [id], onDelete: Cascade, map: "github_oauth_flow_owner_id_fkey")
+  stateHash    String   @unique(map: "github_oauth_flow_state_hash_key") @map("state_hash")
+  bindingHash  String   @map("binding_hash")
+  codeVerifier String   @map("code_verifier")
+  /// The Orbit page the callback sends the browser back to: a path on this site.
+  returnPath   String   @map("return_path")
+  expiresAt    DateTime @map("expires_at") @db.Timestamptz(3)
+  createdAt    DateTime @default(now()) @map("created_at") @db.Timestamptz(3)
+
+  @@index([expiresAt], map: "github_oauth_flow_expires_at_idx")
+  @@index([ownerId], map: "github_oauth_flow_owner_id_idx")
+  @@map("github_oauth_flow")
+}
+
 /// Owner-scoped APNs/FCM registration. Token uniqueness is global; Android also replaces the
 /// installation's previous token atomically. Legacy iOS rows keep a NULL installation identity.
 /// `environment` selects the APNs host; Android accepts only production (FCM has no APNs sandbox).
@@ -667,11 +867,11 @@ model Runner {
   labels            String[]     @default([])
   status            RunnerStatus @default(OFFLINE)
   maxConcurrent     Int          @default(1) @map("max_concurrent")
-  // Free-space floor, in MB, below which this machine takes no new auto-run work. Null (the
-  // default) leaves the gate off, which is the behaviour every runner had before it existed.
+  // Free-space floor, in MB, below which this machine takes no new auto-run work. A new runner
+  // starts at 10 GB; null leaves the gate off (a managed runner's null keeps a share of its volume).
   // One knob per machine, but evaluated against each workspace's own measured filesystem —
   // "keep this much headroom wherever you are writing" is the same policy on every mount.
-  minFreeDiskMb     Int?         @map("min_free_disk_mb")
+  minFreeDiskMb     Int?         @default(10240) @map("min_free_disk_mb")
   version           String?
   tokenHash         String       @map("token_hash") // hash of the long-lived runner credential
   // The runner's own low-frequency record of its heartbeats: written by a heartbeat at most every
@@ -722,6 +922,21 @@ model Runner {
   // Now"), cleared as the next heartbeat hands the request over. No reply: the state above is
   // the answer, on the heartbeats that follow — the shape of modelCatalogRefreshAt.
   selfUpdateRequestedAt DateTime? @map("self_update_requested_at")
+  // The owner's Later (0571): the time the waiting release is put off until, handed to the next
+  // heartbeat as postponeSelfUpdateUntil and cleared there, like selfUpdateRequestedAt.
+  selfUpdatePostponeUntil DateTime? @map("self_update_postpone_until")
+  // The owner's Update Now (0590): install the waiting release now, interrupting the turns in
+  // flight. Handed to the next heartbeat as selfUpdateNow and cleared there, like the two above.
+  selfUpdateNowRequestedAt DateTime? @map("self_update_now_requested_at")
+  // The managed runner browser as the last heartbeat reported it (1090; @orbit/shared RunnerBrowserReport, with the
+  // beat's time as reportedAt). Rewritten by every beat, to NULL when one omits it: a runner with no browser.
+  browserState      Json?        @map("browser_state")
+  // The owner's Clear saved logins (1090): handed to the next heartbeat as clearBrowserProfile and cleared there,
+  // like selfUpdateRequestedAt. The report's profileClearedAt is the answer.
+  browserClearRequestedAt DateTime? @map("browser_clear_requested_at")
+  // The push that something of the owner's waits on this runner's drain (0595): set by the one
+  // heartbeat that sends it, cleared by a beat that is not draining, so each drain pushes once.
+  drainWaitingPushedAt DateTime? @map("drain_waiting_pushed_at")
   // Where this machine puts checkouts Orbit clones for it, reported each heartbeat. A clone of
   // `<owner>/<repo>` lands at `<reposRoot>/<owner>-<repo>`.
   // NULL means this runner has never reported one — a build too old to send it. That withdraws
@@ -794,6 +1009,9 @@ model Runner {
   regionCheckRequestedAt DateTime? @map("region_check_requested_at")
 
   executableRuntimeHeartbeats     ExecutableRuntimeHeartbeat[]
+  // Terminal sign-ins on this machine, and the TERMINAL credentials bound to it (0660): they go with it.
+  terminalLogins         TerminalLogin[]
+  terminalCredentials    TerminalCredential[]
 
   // Browser-less sign-in relay for this machine's built-in runtime CLI. The runner drives the CLI
   // on its own machine while the user approves in their own browser, so a machine with no
@@ -855,9 +1073,26 @@ model Runner {
   codexAccountRemoveAccount String?   @map("codex_account_remove_account")
   codexAccountRemoveStatus  String?   @map("codex_account_remove_status")
   codexAccountRemoveMessage String?   @map("codex_account_remove_message")
+  // With a removal refused because the account is in use: the sessions the runner named as running in
+  // it, which the page lists by title (migration 0910). Empty otherwise.
+  codexAccountRemoveSessions String[] @default([]) @map("codex_account_remove_sessions") @db.Uuid
   // When the current removal was asked for: the identity every report names, and the deadline an
   // abandoned one is swept by.
   codexAccountRemoveAt      DateTime? @map("codex_account_remove_at")
+
+  // Making an added Claude account the Default (migration 1000, docs/claude-default-swap-contract.md §5):
+  // the runner swaps that account's login with the one in ~/.claude. The removal's relay again — one
+  // request per runner, redelivered every heartbeat while `pending`:
+  //   NULL | pending | done | failed — claudeAccountSwapMessage explains a failure
+  claudeAccountSwapAccount String?   @map("claude_account_swap_account")
+  claudeAccountSwapStatus  String?   @map("claude_account_swap_status")
+  claudeAccountSwapMessage String?   @map("claude_account_swap_message")
+  // While pending: the sessions with a turn in progress the swap waits on, as the runner last named them.
+  claudeAccountSwapWaiting String[]  @default([]) @map("claude_account_swap_waiting") @db.Uuid
+  // While pending: Claude processes on either folder that are not Orbit sessions ({ pid, command }[]).
+  claudeAccountSwapForeign Json?     @map("claude_account_swap_foreign")
+  // When it was asked: the attempt every report names, and the deadline an abandoned one is swept by.
+  claudeAccountSwapAt      DateTime? @map("claude_account_swap_at")
 
   // Per-engine health on this machine — installed / version / signed in — reported by heartbeat
   // from the same probe `orbit doctor` prints. Shape: @orbit/shared RunnerEngineHealth[].
@@ -874,6 +1109,15 @@ model Runner {
   /// `default`, taken back out by restoreDefault, and never by the runner. Empty is every Default
   /// listed and used, as before. NOT NULL DEFAULT '{}' in SQL, like every scalar list here.
   defaultRemoved String[]  @default([]) @map("default_removed")
+  /// The engine update warnings dismissed on this runner (migration 0705), each until the next release:
+  /// { "<engine>": "<latest>" }, the `update.latest` the failure was against when Dismiss was pressed.
+  /// Clients hide that engine's update warning while it equals the engine's current `update.latest`.
+  /// Written by RunnersService.dismissEngineUpdateWarning, never by the runner. NULL is nothing dismissed.
+  engineUpdateDismissals Json? @map("engine_update_dismissals")
+  /// The sessions Fix with an agent started here, one per warning (migration 0760):
+  /// { "<kind>[:<engine>]": { "sessionId": "<uuid>", "at": "<iso>" } }. A second start for a warning is
+  /// refused while its session is open. Written by RunnerAttentionFixService.fix, never by the runner.
+  attentionFixes Json? @map("attention_fixes")
 
   // Browser-driven install of one engine CLI, the same one-slot relay shape as the sign-in above
   // (a machine installs one CLI at a time; the request is redelivered until the runner reports).
@@ -973,6 +1217,14 @@ model RunnerPresence {
   /// gateway opened a new connection for it, or when a link beat came after it missed one. Null until either has
   /// (migration 0450). What the reaper reads a mass disconnection off once the runner is back.
   lostAt        DateTime? @map("lost_at")
+  /// The machine's CPU, memory and disk as its beats report them, and its last hour of them (migration 0720):
+  /// {at, latest, samples: [[ms, cpu %, memory %, disk %], …]}. Null until the runner reports one; a beat without
+  /// one leaves it as it is (runners/runner-presence.ts).
+  resources     Json?     @map("resources")
+  /// The sessions that hold one of the runner's slots only through runner-hosted background jobs, as its last beat
+  /// named them (migration 0780, RunnerHeartbeatRequest.backgroundJobSessionIds): replaced on every beat, empty for a
+  /// beat that names none. The runners list counts them as running while the runner is online.
+  backgroundJobSessionIds String[] @default([]) @map("background_job_session_ids") @db.Uuid
 
   @@map("runner_presence")
 }
@@ -1180,11 +1432,16 @@ model Workspace {
   canDelegate         Boolean   @default(false) @map("can_delegate")
   // Optional admission cap for this Agent's Project tasks. NULL preserves legacy behaviour.
   maxConcurrentTasks  Int?      @map("max_concurrent_tasks")
+  // SubAgents (docs/subagent-design.md §6.2): whether this Agent's sessions may delegate, and how
+  // many of one session's SubAgents may run at once. On by default (§9 B).
+  subagentsEnabled    Boolean   @default(true) @map("subagents_enabled")
+  subagentsMaxRunning Int       @default(8) @map("subagents_max_running")
   // Default reasoning effort a new session inherits when its create request omits one
   // ('' / null = the model's default). Claude: low|medium|high|xhigh|max; codex adds minimal.
   effort              String?   @map("effort")
   // Owner-controlled routing; false records shadow decisions without changing dispatch.
   modelRouting        Boolean   @default(false) @map("model_routing")
+  modelRoutingOptimizeFor String @default("cost") @map("model_routing_optimize_for")
   modelRoutingProviders String[] @default([]) @map("model_routing_providers")
   // routing: bind to a specific runner and/or match runner labels
   targetRunnerId      String?   @map("target_runner_id") @db.Uuid
@@ -1263,6 +1520,21 @@ model Workspace {
   // platform without an answer) and must never be read as "full".
   workDirFreeBytes    BigInt?   @map("work_dir_free_bytes")
   workDirTotalBytes   BigInt?   @map("work_dir_total_bytes")
+  // A workspace cloned from GitHub (docs/github-workspace-design.md §4, migration 0820). All NULL for
+  // one that is not. The repository is named by its id, which survives a rename or a transfer.
+  githubRepoId         BigInt?   @map("github_repo_id")
+  githubInstallationId BigInt?   @map("github_installation_id")
+  // The branch to clone; NULL is the repository's default branch.
+  cloneRef             String?   @map("clone_ref")
+  // PENDING | CLONING | READY | FAILED, held by `workspace_clone_state_chk`.
+  cloneState           String?   @map("clone_state")
+  // Why a clone FAILED: English, redacted.
+  cloneError           String?   @map("clone_error")
+  cloneStartedAt       DateTime? @map("clone_started_at") @db.Timestamptz(3)
+  cloneFinishedAt      DateTime? @map("clone_finished_at") @db.Timestamptz(3)
+  // Which credential the clone used, as the runner reported it: `machine` or `github-app`, held by
+  // `workspace_clone_credential_chk` (migration 0880). NULL until a report names one.
+  cloneCredential      String?   @map("clone_credential")
   ownerId             String    @map("owner_id") @db.Uuid
   owner               User      @relation(fields: [ownerId], references: [id])
   createdAt           DateTime  @default(now()) @map("created_at")
@@ -1276,6 +1548,7 @@ model Workspace {
   position            Int?      @map("position")
 
   sessions      Session[]
+  subagentRuns  SubagentRun[] // remote SubAgent runs that ran here (docs/subagent-design.md §10)
   assignedTasks Task[] // tasks assigned to run in this workspace
   foremanFor    TaskList[] @relation("TaskListForeman") // lists whose coordination runs here
   coordinatorForProjects Project[] @relation("ProjectCoordinatorWorkspace") // projects coordinated here
@@ -1294,6 +1567,14 @@ model Workspace {
   managedRunnerDefault ManagedRunner? @relation("ManagedRunnerDefaultWorkspace")
   /// The wiki repository operations read in this workspace's checkout (migration 0402).
   wikiRepoOps WikiRepoOp[]
+  /// Main checkout reads and actions this workspace asked its runner for (migration 0534).
+  mainCheckoutRequests MainCheckoutRequest[]
+  /// The Feishu app whose direct-message sessions open here, when its owner chose this one (migration 0489).
+  feishuAppDefaults FeishuApp[] @relation("FeishuAppDefaultWorkspace")
+  /// The Feishu app whose sessions other people start open here (migration 1140, docs/feishu-bot-design.md §14).
+  feishuAppOpenAccess FeishuApp[] @relation("FeishuAppOpenWorkspace")
+  /// Feishu groups whose sessions open here (migration 0496).
+  feishuChatRoutes FeishuChatRoute[]
 
   /// The key a wiki binding's composite foreign key names (migration 0307), so a space can only be
   /// bound to its own owner's workspaces. `id` alone is already unique.
@@ -1332,10 +1613,11 @@ enum ManagedRunnerManagementState {
   @@map("managed_runner_management_state")
 }
 
-/// One user's managed runner: the durable mapping from the owner to a stable runner row, a stable
-/// default workspace and one data PVC in one configured cluster namespace (migration 0399,
-/// docs/managed-runner-design.md "Identity and durable mapping"). Created with the runner and the
-/// workspace in one transaction; the manager reconciles Kubernetes towards `desiredState` and
+/// One user's managed runner: the durable mapping from the owner to a stable runner row and one
+/// data PVC in one configured cluster namespace (migration 0399, docs/managed-runner-design.md
+/// "Identity and durable mapping"). Created with the runner in one transaction. Since 0930 it has
+/// no default workspace (docs/managed-runner-no-default-workspace.md): `defaultWorkspaceId` is
+/// set only on an older mapping whose default workspace was used, and nothing writes it; the manager reconciles Kubernetes towards `desiredState` and
 /// records what it observed. Absence of a row is the read state NOT_PROVISIONED.
 ///
 /// Every reference is RESTRICT: deleting the user, the runner or the workspace would discard the
@@ -1349,8 +1631,8 @@ model ManagedRunner {
   owner              User                         @relation(fields: [ownerId], references: [id], onDelete: Restrict)
   runnerId           String                       @unique @map("runner_id") @db.Uuid
   runner             Runner                       @relation(fields: [runnerId, ownerId], references: [id, ownerId], onDelete: Restrict, map: "managed_runner_runner_fkey")
-  defaultWorkspaceId String                       @unique @map("default_workspace_id") @db.Uuid
-  defaultWorkspace   Workspace                    @relation("ManagedRunnerDefaultWorkspace", fields: [defaultWorkspaceId, ownerId], references: [id, ownerId], onDelete: Restrict, map: "managed_runner_default_workspace_fkey")
+  defaultWorkspaceId String?                      @unique @map("default_workspace_id") @db.Uuid
+  defaultWorkspace   Workspace?                   @relation("ManagedRunnerDefaultWorkspace", fields: [defaultWorkspaceId, ownerId], references: [id, ownerId], onDelete: Restrict, map: "managed_runner_default_workspace_fkey")
   desiredState       ManagedRunnerDesiredState    @default(RUNNING) @map("desired_state")
   managementState    ManagedRunnerManagementState @default(REQUESTED) @map("management_state")
   /// The execution incarnation the Pod is created for. Monotonic; only a proven stop or fencing
@@ -1408,6 +1690,10 @@ model ManagedRunner {
   /// while the drain stands and no demand has come since it began; from then on the drain cannot be
   /// called off, and the instance exits on its own.
   stopAcknowledgedAt  DateTime?                   @map("stop_acknowledged_at") @db.Timestamptz(3)
+  /// DRAINING for an image roll: the image the profile names, which the instance's Pod was not made from. The drain
+  /// keeps the runner wanted (desiredState RUNNING), and once it has stopped the runner wakes at once as the next
+  /// generation, made from that image. Null for a drain to sleep, and once the roll ends or is called off.
+  imageRollTo         String?                     @map("image_roll_to")
   initialProvider    String?                      @map("initial_provider")
   resourceProfileId  String?                      @map("resource_profile_id")
   /// The one resource operation in flight: which (`CREATE_PVC`, `CREATE_SECRET`, `CREATE_POD`,
@@ -1579,6 +1865,9 @@ model WorkspacePermissionRule {
   // long before the rule is revoked).
   createdById String?   @map("created_by_id") @db.Uuid
   approvalId  String?   @map("approval_id") @db.Uuid
+  // Written by answering Always allow on a scheduled run's card (migration 0860): the only Bash rules a CHECK_ONLY
+  // run on Claude Code carries (docs/scheduled-tasks-design.md §6.2).
+  fromScheduleRun Boolean @default(false) @map("from_schedule_run")
   createdAt   DateTime  @default(now()) @map("created_at")
 
   @@unique([workspaceId, toolName, ruleContent])
@@ -1779,6 +2068,13 @@ model Session {
   /// and add their own `kind: 'session'`, so a field called `kind` would be overwritten in the
   /// payload. The column keeps the short name.
   sessionKind          String    @default("CONVERSATION") @map("kind")
+  /// Who opened this conversation (migration 0670, docs/workspace-default-model-design.md §2.2):
+  /// PERSON, or the Orbit door that opened it on its own — COORDINATOR, COORDINATOR_JUDGMENT,
+  /// TASK_LIST_CONSOLE, WIKI_CHAT, FEISHU, SERVICE_TOKEN, MENTION_REPLY, or ORBIT for a row 0670 knew
+  /// was Orbit's but not through which door. Held to that set by `session_opened_by_check`. Written by
+  /// the creating door, never from a title; the workspace default (workspace-provider.ts) counts only
+  /// PERSON, through the partial index `session_workspace_person_opened_idx` (SQL only).
+  openedBy             String    @default("PERSON") @map("opened_by")
   // PENDING = created, claimable by its assigned runner.
   status               RunStatus @default(PENDING)
   // billing, accrued per turn
@@ -1789,6 +2085,13 @@ model Session {
   // next completion of that process is measured from (runner-api/running-totals.ts). Null until a
   // completion reporting running totals is booked (migration 0478).
   engineUsageTotals    Json?     @map("engine_usage_totals")
+  // The session's Agent Tools report (docs/orbit-agent-contract.md §2.7): what its engine was given
+  // from Orbit and took, in the engine's own words — the MCP connection's status and the engine's
+  // reason, the Orbit tools it lists by family and why one is short, the contract/catalogue/primer
+  // versions, the switches it was spawned with, how Orbit's instructions reached it, and the
+  // playbooks skill. The newest `agent_tools` system event the runner sent, kept by the event
+  // ingest; null until one arrives, and for engines that report no MCP connection (migration 0940).
+  agentTools           Json?     @map("agent_tools")
   // How full the context window is RIGHT NOW: the tokens the latest top-level assistant message
   // actually cost (fresh input + cache reads + cache writes + output), denormalized from the
   // turn_end event that already carries it for the clients' context gauge. A long-lived session
@@ -1859,6 +2162,19 @@ model Session {
   // ConversationTurn.senderSessionId is not one.
   lastUserFromSessionId String?  @map("last_user_from_session_id") @db.Uuid
   lastUserFromTitle     String?  @map("last_user_from_title")
+  // That lastUserText is Orbit's own message (a turn the control plane wrote itself: a fact told to a
+  // coordinator, a watch's wake, the owner's answer handed on…): `{ coordinatorDelivery: <card> | null }`,
+  // the card being the one the conversation draws a coordinator's notification as. Null for any other
+  // sender. Written and cleared in the same statements as lastUserText (0491).
+  lastUserFromOrbit     Json?    @map("last_user_from_orbit")
+  // The platform wrote this session's opening prompt (0493): a coordinator's, a judgment's, a dispatch
+  // console's or an @-mention reply's. Its `initial-<id>` turn is then Orbit's on the row and the queue.
+  promptByOrbit         Boolean  @default(false) @map("prompt_by_orbit")
+  // Who sent lastUserText, when somebody outside Orbit did: 'FEISHU' and the sender's name, as the turn's
+  // externalSender* columns record them (docs/feishu-bot-design.md §8.2). Both null for anybody else.
+  // Written and cleared in the same statements as lastUserText (0502).
+  lastUserFromExternalSource String? @map("last_user_from_external_source")
+  lastUserFromExternalName   String? @map("last_user_from_external_name")
   // Denormalized set of the agent's still-running background shells (Bash run_in_background):
   // the tool_use ids of launches that haven't yet reported a terminal `<task-notification>`.
   // Added on launch, removed on completion, cleared on (re)spawn/complete. Lets the list +
@@ -1986,6 +2302,13 @@ model Session {
   /// foreign key: a deleted space leaves its chats as sessions. Its partial index over
   /// (wiki_chat_space_id, created_at) is the migration's alone, as schema.prisma cannot spell one.
   wikiChatSpaceId          String?   @map("wiki_chat_space_id") @db.Uuid
+  /// The help center's Ask (migration 0850, @orbit/shared HelpAskMarker `{ page }`): a session is an Ask exactly
+  /// when it is set. Written by the Ask door (help/help-ask.ts) in this row's own INSERT and never afterwards (a
+  /// trigger refuses the UPDATE). An Ask belongs to no workspace, is in no session list, starts read-only on its
+  /// runner, and may call only the runner doors of help/help-ask-reads.ts.
+  helpAsk                  Json?     @map("help_ask")
+  /// Still stuck → Ask your admin (migration 0890): this Ask sent to an admin, at most once.
+  helpAskAdminRequest      HelpAskAdminRequest?
   // ── Per-session git worktree isolation ──────────────────────────────────────
   // When the agent's workDir is a git repo, the runner runs this session in its own
   // git worktree on `branch`, forked from `baseSha` (the workDir HEAD at claim time).
@@ -1997,8 +2320,14 @@ model Session {
   // 'worktree' (isolated) or 'shared-nogit' (workDir wasn't a git repo, so it ran in
   // the shared dir with no isolation). All null for pre-feature / never-run sessions.
   branch               String?
+  /// The folder below its workspace's workDir a no-worktree session runs in (POST /sessions `workSubdir`): relative,
+  /// normalized, no `..`. Null runs it at workDir. Delivered on the claim; the runner refuses one that leaves workDir.
+  workSubdir           String?   @map("work_subdir")
   baseSha              String?   @map("base_sha")
   changedFiles         Json?     @map("changed_files")
+  /// The commits of `branch` from `baseSha` to its tip, newest first (@orbit/shared BranchCommit[]), as the runner
+  /// last read them. Like changedFiles, not selected by the list query.
+  branchCommits        Json?     @map("branch_commits")
   isolationStatus      String?   @map("isolation_status")
   // ── "Merge to main" (UI button on the worktree status bar) ──────────────────
   // The user can ask the runner to merge this session's `branch` into a target branch.
@@ -2014,6 +2343,12 @@ model Session {
   /// this session runs a turn of its own — when a merge is refused — the check waits here until that
   /// turn ends. Null when no check is owed (migration 0431).
   mergeRepairTurnEndedAt DateTime? @map("merge_repair_turn_ended_at")
+  /// A merge this session asked for of itself during its own turn (SessionsService.mergeToMain), which
+  /// could not be queued while that turn ran: when it was asked, and the target it named (null → the
+  /// default). Taken up when the turn ends (SessionsService.mergeAfterOwnTurn) and cleared by any merge
+  /// that queues. Null when none is owed (migration 0740).
+  mergeAfterTurnAt     DateTime? @map("merge_after_turn_at")
+  mergeAfterTurnTarget String?   @map("merge_after_turn_target")
   mergeRequestedAt     DateTime? @map("merge_requested_at")
   /// Who pressed Merge for the operation queued (0454, contract §10.6 O-R3): `USER` for a request carrying
   /// the account owner's credential, `AGENT` for one made from a session, NULL for one the server queued
@@ -2150,6 +2485,8 @@ model Session {
   events                RunEvent[]
   turns                 ConversationTurn[]
   backgroundJobWakes    BackgroundJobWake[]
+  subagentRuns          SubagentRun[]
+  subagentWorkflowRuns  SubagentWorkflowRun[]
   scheduledWakeups      SessionScheduledWakeup[]
   wakeupLoops           SessionWakeupLoop[]
   /// The requests other sessions have asked of this one (session_request.to_session_id).
@@ -2157,6 +2494,10 @@ model Session {
   /// What other sessions have sent this one, as §2.4's hourly limit counts it (session_message_charge).
   messageCharges        SessionMessageCharge[] @relation("SessionMessageChargeRecipient")
   poolGatewayTokens     PoolGatewayToken[]
+  keyGatewayTokens      KeyGatewayToken[]
+  coordinatorHandoffsFrom CoordinatorHandoff[] @relation("CoordinatorHandoffFrom")
+  coordinatorHandoffsTo   CoordinatorHandoff[] @relation("CoordinatorHandoffTo")
+  keyGatewayUsage       KeyGatewayUsage[]
   poolLoginTokens       PoolLoginToken[]
   poolLoginUsage        PoolLoginUsage[]
   toolCalls             ToolCall[]
@@ -2204,6 +2545,12 @@ model Session {
   observingWatches      Watch[]
   /// Public links with this session as their root, ended ones included (migration 0306).
   shareLinks            ShareLink[]
+  guests                SessionGuest[] // the people the owner invited to reply (0560)
+  guestInviteEmails     EmailOutbox[] // the email each invited person was sent (0618)
+  /// The scheduled-task run this session serves (migration 0790), set only with `runSource = SCHEDULE`. Its partial
+  /// index (`session_schedule_run_idx`, WHERE NOT NULL) lives in the migration.
+  scheduleRunId         String?   @map("schedule_run_id") @db.Uuid
+  scheduleRun           ScheduleRun? @relation(fields: [scheduleRunId], references: [id], onDelete: SetNull, map: "session_schedule_run_id_fkey")
 
   @@index([assignedRunnerId, status])
   // "what did this workspace last run on", the derived seed a new session inherits when the
@@ -2216,6 +2563,17 @@ model Session {
   @@index([ownerId])
   @@index([ownerId, status, taskId], map: "session_owner_status_task_idx")
   @@index([status])
+  // The session's Settings panel (docs/mocks/session-settings, migration 0700). `env` is the
+  // session's own variables, a string→string map laid over the workspace's when the engine starts;
+  // null is none. `envChangedAt` is when it last changed, `envAppliedAt` when an engine last started
+  // with it — the two tell the panel a restart is owed. The notify pair is null (follow the account
+  // preference), 'on' or 'off'; `notificationsMuted` silences every push for this session.
+  env                  Json?     @map("env")
+  envChangedAt         DateTime? @map("env_changed_at")
+  envAppliedAt         DateTime? @map("env_applied_at")
+  notifyTurnFinished   String?   @map("notify_turn_finished")
+  notifyNeedsYou       String?   @map("notify_needs_you")
+  notificationsMuted   Boolean   @default(false) @map("notifications_muted")
   // The auto-retry sweeper's only query: armed retries that have come due.
   @@index([retryAt])
   // What a folder delete's ON DELETE SET NULL looks its sessions up by.
@@ -2510,6 +2868,7 @@ model SessionFolder {
 // process from the runner's seq-owning session loop, so persisting it as an event
 // would race the runner's monotonic seq. Idempotent on (sessionId, toolUseId).
 model Approval {
+  coordinatorFallback String? @map("coordinator_fallback")
   id           String    @id @default(uuid(7)) @db.Uuid
   sessionId    String    @map("session_id") @db.Uuid
   session      Session   @relation(fields: [sessionId], references: [id], onDelete: Cascade)
@@ -2531,6 +2890,10 @@ model Approval {
   /// whose job is still up (Session.runningBgShells). No FK, like `turnId`: the job id is a token
   /// the runner mints for a process, not a row anything can reference.
   backgroundJobId String? @map("background_job_id")
+  /// The SubAgent run whose child engine asked this, under its parent's session (docs/subagent-design.md §5.3):
+  /// that child polls for the answer, and it outlives the parent's turn and calls, so the card is collected
+  /// when the run ends and not by them (`sessions/abandoned-approvals.ts`). No FK, like `turnId`.
+  subagentRunId   String? @map("subagent_run_id") @db.Uuid
   // PENDING -> ALLOWED | DENIED, or ABANDONED when the turn that raised it ended unanswered
   status       String    @default("PENDING")
   message      String? // optional deny reason / note from the human
@@ -2547,6 +2910,19 @@ model Approval {
   startAfterCreate Boolean @default(false) @map("start_after_create")
   // User who decided it (no FK; cf. Activity.actorId).
   decidedById  String?   @map("decided_by_id") @db.Uuid
+  /// The credential the decider used (0500, 0505, 0661): `LOGIN` | `PAT` | `IMPERSONATION` | `FEISHU` | `COORDINATOR` | `TERMINAL` — a click on a Feishu card
+  /// (docs/feishu-bot-design.md §7.2). NULL on a row nobody decided and on every row decided before 0500.
+  decidedCredentialKind String? @map("decided_credential_kind")
+  /// The clicker's open_id and the card's message_id when `decidedCredentialKind` is `FEISHU`, and only then
+  /// (approval_decided_via_chk).
+  decidedFeishuOpenId    String? @map("decided_feishu_open_id")
+  decidedFeishuMessageId String? @map("decided_feishu_message_id")
+  /// Settings › Translation (0550, @orbit/shared ApprovalTranslation): what the card shows the owner, in
+  /// their language. `input` stays the engine's English. NULL when translation was not involved.
+  translation  Json?
+  /// The machine name of the TERMINAL credential that decided it (0663), when `decidedCredentialKind` is `TERMINAL`,
+  /// and only then (approval_decided_via_chk). Copied, so it outlives a revoked or expired credential.
+  decidedTerminalMachineName String? @map("decided_terminal_machine_name")
   createdAt    DateTime  @default(now()) @map("created_at")
   decidedAt    DateTime? @map("decided_at")
 
@@ -2663,7 +3039,34 @@ model ConversationTurn {
   /// hourly limit counts with (`conversation_turn_sender_session_id_idx`) lives in that migration,
   /// because schema.prisma cannot express a partial index.
   senderSessionId String?   @map("sender_session_id") @db.Uuid
-  status          String    @default("PENDING") // PENDING | IN_FLIGHT | ANSWERED
+  /// Who outside Orbit sent this turn (docs/feishu-bot-design.md §8.2, migration 0502): 'FEISHU', the sender's
+  /// open_id and the name Feishu gave when the turn was written (null when it would not say). Null for every
+  /// other turn — the owner (also the bot owner's own words in a group), a session, the platform. Written only
+  /// by the Feishu group door, never from a request body.
+  externalSenderSource String? @map("external_sender_source")
+  externalSenderId     String? @map("external_sender_id")
+  externalSenderName   String? @map("external_sender_name")
+  status          String    @default("PENDING") // PENDING | IN_FLIGHT | ANSWERED | HELD (being translated, or its translation failed)
+  /// Which client sent this turn (migration 0662, sessions/turn-sender-client.ts): web, ios, macos, android,
+  /// terminal, feishu or runner, from the credential and the `X-Orbit-Client` / `X-Orbit-Device` headers of the
+  /// door it came in through, never from a body. The detail is an ios client's device (iphone / ipad) or a
+  /// terminal's machine name. Null for a session's message (its sender column says it), a token's, the
+  /// platform's own deliveries, and every turn written before 0662.
+  senderClient       String? @map("sender_client")
+  senderClientDetail String? @map("sender_client_detail")
+  /// Session translation (migration 0532, @orbit/shared translation.ts): what the owner wrote, when the turn was
+  /// translated for the engine — `content` is then the English delivered. Null on every turn translation was not
+  /// involved in, and so are the two below.
+  displayPrompt    String?  @map("display_prompt")
+  /// TRANSLATING | FAILED (both with status HELD: not deliverable) | DONE | SENT_AS_WRITTEN.
+  translationState String?  @map("translation_state")
+  /// The language the owner wrote in (TRANSLATION_LANGUAGES).
+  translationLang  String?  @map("translation_lang")
+  /// Why the translation failed (migration 1100, TranslationFailureReason): set only while translationState is FAILED,
+  /// cleared when it leaves FAILED. Null on a FAILED turn written before 1100.
+  translationFailureReason String? @map("translation_failure_reason")
+  /// The translator's HTTP status beside translationFailureReason HTTP; null otherwise.
+  translationHttpStatus    Int?    @map("translation_http_status")
   deliveredAt     DateTime? @map("delivered_at")
   leaseDeadlineAt DateTime? @map("lease_deadline_at")
   // Random runner-engine generation that owns the current delivery lease. A
@@ -2726,6 +3129,121 @@ model BackgroundJobWake {
 
   @@unique([sessionId, clientTurnId, jobId])
   @@map("background_job_wake")
+}
+
+/// A runner-hosted workflow, opened once per tool call. Its SubAgent calls carry their own usage.
+model SubagentWorkflowRun {
+  id           String    @id @default(uuid(7)) @db.Uuid
+  ownerId      String    @map("owner_id") @db.Uuid
+  sessionId    String    @map("session_id") @db.Uuid
+  session      Session   @relation(fields: [sessionId], references: [id], onDelete: Cascade, onUpdate: NoAction)
+  toolUseId    String    @map("tool_use_id")
+  name         String
+  description  String?
+  phases       String[]  @default([])
+  script       String
+  scriptSha256 String    @map("script_sha256")
+  args         Json?
+  /// RUNNING | DONE | FAILED | INTERRUPTED | STOPPED
+  status       String    @default("RUNNING")
+  result       String?
+  error        String?
+  maxCostUsd   Float?    @map("max_cost_usd")
+  costUsd      Float     @default(0) @map("cost_usd")
+  callsDone    Int       @default(0) @map("calls_done")
+  callsFailed  Int       @default(0) @map("calls_failed")
+  wakeOwed     Boolean   @default(false) @map("wake_owed")
+  /// Partial index subagent_workflow_run_wake_unfiled_idx (migration 1180) serves the sweep.
+  wakeFiledAt  DateTime? @map("wake_filed_at") @db.Timestamptz(3)
+  createdAt    DateTime  @default(now()) @map("created_at") @db.Timestamptz(3)
+  endedAt      DateTime? @map("ended_at") @db.Timestamptz(3)
+  calls        SubagentRun[]
+
+  @@unique([sessionId, toolUseId])
+  @@index([sessionId, status])
+  @@map("subagent_workflow_run")
+}
+
+/// One SubAgent run (docs/subagent-design.md §6.1): a parent session's `mcp__orbit__delegate` call, run by
+/// the runner in the parent's cwd. Not a Session: its events go into the parent's stream, and this row keeps
+/// the routing decision, status and spend. Its cost is added to the parent's `cost_usd` when it ends
+/// (runner-api PATCH sessions/:id/subagents/:runId). One row per (session, tool_use_id), so a retried POST
+/// answers with the row it already wrote.
+model SubagentRun {
+  id               String    @id @default(uuid(7)) @db.Uuid
+  ownerId          String    @map("owner_id") @db.Uuid
+  sessionId        String    @map("session_id") @db.Uuid
+  session          Session   @relation(fields: [sessionId], references: [id], onDelete: Cascade, onUpdate: NoAction)
+  /// The `delegate` call's tool_use id: not a public id.
+  toolUseId        String    @map("tool_use_id")
+  /// explore | general | a definition file's name
+  type             String
+  /// Where the definition came from: `builtin`, or the definition file's path.
+  definitionSource String    @map("definition_source")
+  background       Boolean   @default(false)
+  /// RUNNING | DONE | FAILED | INTERRUPTED | STOPPED
+  status           String    @default("RUNNING")
+  /// level, tierSource, optimizeFor, engine, provider, model, effort, reasons[], candidates, policyVersion
+  decision         Json
+  /// Every child process the run started, in order (SubagentAttempt): the first where it opened, then each
+  /// candidate it moved to after a usage-limit or capacity failure (§4.3). [] on rows written before attempts were kept.
+  attempts         Json      @default("[]")
+  resultSummary    String?   @map("result_summary")
+  changedFiles     String[]  @default([]) @map("changed_files")
+  costUsd          Float     @default(0) @map("cost_usd")
+  usage            Json?
+  createdAt        DateTime  @default(now()) @map("created_at") @db.Timestamptz(3)
+  endedAt          DateTime? @map("ended_at") @db.Timestamptz(3)
+  /// The delegate call's own 3-to-8-word description, which the wake for its end names.
+  description      String?
+  /// The parent is to be woken when the run ends: a background run, or a foreground call that stopped waiting
+  /// (runner-api/subagent-wake.ts). Held here so a runner restart cannot lose it.
+  wakeOwed         Boolean   @default(false) @map("wake_owed")
+  /// When the owed wake was filed as a turn of the parent, or dropped because the parent had ended.
+  /// Partial index subagent_run_wake_unfiled_idx (migration 0527) serves the sweep.
+  wakeFiledAt      DateTime? @map("wake_filed_at") @db.Timestamptz(3)
+  /// A remote SubAgent (docs/subagent-design.md §10): the workspace it runs on, another of the parent's repository.
+  /// Null for one on the parent's own machine.
+  workspaceId      String?   @map("workspace_id") @db.Uuid
+  workspace        Workspace? @relation(fields: [workspaceId], references: [id], onDelete: SetNull, onUpdate: NoAction)
+  /// The runner a remote run was handed to: the only one that may claim it, relay its events, ask its cards and
+  /// report its end (§10.3). No foreign key, so a deleted runner leaves the run remote, for the offline sweep to end.
+  targetRunnerId   String?   @map("target_runner_id") @db.Uuid
+  /// What the target runner needs that the parent's machine had locally: prompt, readonly, permissionMode, needs.
+  remote           Json?
+  /// When the target runner claimed it.
+  claimedAt        DateTime? @map("claimed_at") @db.Timestamptz(3)
+  /// When the parent asked a remote run to stop; the target's heartbeat is told until it reports an end.
+  stopRequestedAt  DateTime? @map("stop_requested_at") @db.Timestamptz(3)
+  relayEvents      SubagentRelayEvent[]
+  workflowRunId    String?   @map("workflow_run_id") @db.Uuid
+  workflowRun      SubagentWorkflowRun? @relation(fields: [workflowRunId], references: [id], onDelete: SetNull, onUpdate: NoAction)
+  callIndex        Int?      @map("call_index")
+  label            String?
+  phase            String?
+
+  @@unique([sessionId, toolUseId])
+  @@index([sessionId, status])
+  @@index([targetRunnerId, status])
+  @@unique([workflowRunId, callIndex])
+  @@map("subagent_run")
+}
+
+/// One event a remote SubAgent's target runner relayed (docs/subagent-design.md §10.3), stored rewritten as the
+/// parent's stream carries it: nested under the delegate call, child tool ids prefixed with the run id. The parent's
+/// runner numbers its session's events, so it reads these and emits them into its own stream; `seq` is the run's
+/// own numbering, from 1, and a batch sent again writes nothing twice.
+model SubagentRelayEvent {
+  id        String      @id @default(uuid(7)) @db.Uuid
+  runId     String      @map("run_id") @db.Uuid
+  run       SubagentRun @relation(fields: [runId], references: [id], onDelete: Cascade, onUpdate: NoAction)
+  seq       Int
+  type      String
+  payload   Json
+  createdAt DateTime    @default(now()) @map("created_at") @db.Timestamptz(3)
+
+  @@unique([runId, seq])
+  @@map("subagent_relay_event")
 }
 
 /// A wakeup a session asked the control plane to hold (runner-api/scheduled-wakeup.ts), because Claude
@@ -2812,6 +3330,10 @@ model SessionWakeupLoop {
 /// is not one: the request is written under the RECIPIENT's row lock, and a key to the asker would
 /// take that row too. The partial indexes the workers and reads use live in migration 0350.
 model SessionRequest {
+  kind              String    @default("MESSAGE")
+  approvalId        String?   @map("approval_id") @db.Uuid
+  escalatedItemId   String?   @map("escalated_item_id") @db.Uuid
+  ownerAlertedAt    DateTime? @map("owner_alerted_at") @db.Timestamptz(3)
   id                String    @id @default(uuid(7)) @db.Uuid
   ownerId           String    @map("owner_id") @db.Uuid
   fromSessionId     String    @map("from_session_id") @db.Uuid
@@ -2825,7 +3347,7 @@ model SessionRequest {
   /// `[{ label, description? }]`, two to four of them, or null.
   options           Json?
   replyBy           DateTime  @map("reply_by") @db.Timestamptz(3)
-  /// OPEN | REPLIED | NO_REPLY | RECIPIENT_ENDED | EXPIRED | UNDELIVERED
+  /// OPEN | REPLIED | NO_REPLY | RECIPIENT_ENDED | EXPIRED | UNDELIVERED | OWNER_ANSWERED | READ
   state             String    @default("OPEN")
   replyText         String?   @map("reply_text")
   replyOption       Int?      @map("reply_option")
@@ -2940,6 +3462,10 @@ model Attachment {
   /// counts, duration and failed and skipped names. Metadata, so it outlives the bytes when they
   /// expire (§2.8). NULL on every other row.
   testReportSummary Json?   @map("test_report_summary")
+  /// The session guest who uploaded this image through the guest door (0880, docs/session-guests-design.md §5): a
+  /// guest's turn may name only rows carrying its own id here. NULL on every other row. No relation, as
+  /// session_guest's owner_id has none.
+  uploadedByGuestId String? @map("uploaded_by_guest_id") @db.Uuid
   createdAt DateTime          @default(now()) @map("created_at")
 
   @@index([ownerId])
@@ -2983,7 +3509,8 @@ model Activity {
   type           String
   payload        Json?
   /// The door the write came in through (docs/personal-access-token-design.md §6.4): `LOGIN` |
-  /// `PAT`. NULL on a row no user credential wrote.
+  /// `PAT` | `FEISHU` (the account's Feishu bot, docs/feishu-bot-design.md §7.2, 0499) | `GUEST` (0560) | `TERMINAL`
+  /// (an approval answered from `orbit` in a terminal, 0663). NULL on a row no user credential wrote.
   credentialKind String?  @map("credential_kind")
   /// The personal access token's id when `credentialKind` is `PAT`, and only then
   /// (activity_credential_chk, 0384). No FK, like actorId: the record outlives the token.
@@ -3012,6 +3539,7 @@ model Activity {
 /// intent, the criteria are what a check is run against. Merging them would make "is this done"
 /// a matter of interpreting a paragraph, which is the failure verification exists to avoid.
 model Project {
+  promotionRequests ProjectPromotionRequest[]
   id      String @id @default(uuid(7)) @db.Uuid
   title   String
   // Tenant scope: list/authorization always filter by this column (like tasks and task lists).
@@ -3043,8 +3571,23 @@ model Project {
   doneAt             DateTime? @map("done_at") @db.Timestamptz(3)
   /// The seal of the criteria the DONE was recorded against.
   doneCriteriaDigest String?   @map("done_criteria_digest") @db.Char(64)
+  /// Serving task lifecycle epochs captured by the owner DONE press (migration 0512).
+  /// Null on legacy records, which retain timestamp-based reopen detection.
+  doneTaskEpochs Json? @map("done_task_epochs")
   /// The gaps the owner accepted when recording it done, as the card sent them (`AcceptedGap[]`).
   acceptedGaps       Json      @default("[]") @map("accepted_gaps")
+
+  /// Non-code by an explicit mark, never inferred (migration 0535, owner decision 2026-11-11): the
+  /// coordinator sets it through project_update, the owner on the project page. A marked project
+  /// reads no landing (`project-done-derived.ts`, `project-done-request.ts`). The three columns
+  /// after it say who wrote it last, set or cleared — OWNER, or COORDINATOR with the conversation
+  /// it was written from — and when; null while nobody has.
+  nonCode                Boolean   @default(false) @map("non_code")
+  nonCodeSetBy           String?   @map("non_code_set_by")
+  nonCodeSetBySessionId  String?   @map("non_code_set_by_session_id") @db.Uuid
+  nonCodeSetAt           DateTime? @map("non_code_set_at") @db.Timestamptz(3)
+  /// The short reason given with the mark's last write (migration 0555); null when none was.
+  nonCodeReason          String?   @map("non_code_reason")
 
   /// The account owner's Reopen project (migration 0469): when they pressed it, and what it was
   /// pressed over, the seal of the criteria and each task serving one by a digest of its facts
@@ -3195,6 +3738,7 @@ model Project {
   acceptanceCriterionDefinitions ProjectAcceptanceCriterionDefinition[]
   standardSetConfirmations       ProjectStandardSetConfirmation[]
   criteriaAuthorship             ProjectCriteriaAuthorship[]
+  criterionConfirmations         ProjectCriterionConfirmation[]
   mergeEvidence   ProjectMergeEvidence[]
   mergeReceipts   SessionMergeReceipt[]
 
@@ -3218,6 +3762,8 @@ model Project {
   /// The exceptions somebody has to act on, and where they were queued (migration 0278).
   openItems          ProjectOpenItem[]
   openItemDeliveries ProjectOpenItemDelivery[]
+  /// The orphans the sweep told somebody about, once each (migration 0585).
+  orphanNotices      ProjectOrphanNotice[]
 
   /// Every attempt the platform made to land work on this project's integration line (migration 0281).
   integrationJobs ProjectIntegrationJob[]
@@ -3243,6 +3789,8 @@ model Project {
   // `@unique` already is one.)
   @@index([coordinatorWorkspaceId])
   @@map("project")
+  coordinatorHandoffs CoordinatorHandoff[]
+  rulings             ProjectRuling[]
 }
 
 /// A Project's explicit binding to ONE line of code (`docs/project-source-contract.md` §3.1,
@@ -3304,7 +3852,11 @@ model ProjectCodebase {
   /// When the platform started landing work on the line. Non-null locks it: from then on a trigger
   /// refuses moving either ref or the repository's identity (0270).
   integrationStartedAt     DateTime? @map("integration_started_at") @db.Timestamptz(3)
-  /// The project-level check run on the combined tree before a landing. Null: none.
+  /// The project landing check; null falls back to mergeCheckCommand (0508). Not locked by 0270.
+  landingCheckCommand        String? @map("landing_check_command")
+  /// Landing check budget; null falls back to mergeCheckTimeoutSeconds.
+  landingCheckTimeoutSeconds Int?    @map("landing_check_timeout_seconds")
+  /// The project-level check run before promotion into upstream. Null: none.
   mergeCheckCommand        String?   @map("merge_check_command")
   /// That check's budget in seconds. Null: the one-hour default an acceptance command gets.
   mergeCheckTimeoutSeconds Int?      @map("merge_check_timeout_seconds")
@@ -3491,6 +4043,7 @@ model ProjectIntegrationJob {
   /// commits of its own that the base already had, every one of them (migration 0410): TRUE says the
   /// work is on the target and nothing was pushed because nothing was missing, FALSE says the branch
   /// carried nothing. NULL is "not measured", read exactly as before the column existed.
+  baselineRed Boolean @default(false) @map("baseline_red")
   sourceFullyApplied Boolean? @map("source_fully_applied")
   /// What an OBSERVE_LANDING job saw (0453, contract §10.4, §10.6): one entry per observed task,
   /// `{ taskId, deliveredSha, baseSha, onUpstream, onIntegrationLine, empty, fullyApplied }`. NULL on
@@ -3585,7 +4138,7 @@ model ProjectIntegrationJobLog {
   claimGeneration BigInt @map("claim_generation")
   /// The round inside that claim, from 1, as the job row had it when the chunk arrived.
   round           Int
-  /// TASK_ACCEPTANCE | MERGE_CHECK (`project_integration_job_log_check_name_chk`).
+  /// TASK_ACCEPTANCE | MERGE_CHECK | LANDING_CHECK (`project_integration_job_log_check_name_chk`).
   checkName       String @map("check_name")
   /// The check's position in the run, from 1.
   checkIndex      Int    @map("check_index")
@@ -3922,6 +4475,10 @@ model ProjectOpenItem {
   resolutionNote      String?   @map("resolution_note")
   answer              Json?
   supersededByItemId  String?   @map("superseded_by_item_id") @db.Uuid
+  /// Settings › Translation (migration 1070, @orbit/shared OwnerCardTranslation): a COORDINATOR_QUESTION's
+  /// agent-written fields in the owner's language, `{ lang, failed?, … }`. `payload` stays the agent's words.
+  /// NULL when translation was not involved.
+  translation         Json?
 
   createdAt DateTime @default(now()) @map("created_at") @db.Timestamptz(3)
   updatedAt DateTime @updatedAt @map("updated_at") @db.Timestamptz(3)
@@ -3955,6 +4512,33 @@ model ProjectOpenItemDelivery {
   @@unique([itemId, sessionId, purpose], map: "project_open_item_delivery_item_session_purpose_key")
   @@index([sessionId, clientTurnId], map: "project_open_item_delivery_session_turn_idx")
   @@map("project_open_item_delivery")
+}
+
+/// One pending item of a project that nobody could move or nobody was told about, as the orphan sweep
+/// reported it (docs/evidence-always-has-an-addressee-design.md §4, migration 0585). One row per
+/// (project, orphan key): the key names the item and the state it was found in, so the same orphan in
+/// the same state is reported once, and a new state is a new key. `recipient` is who was told —
+/// the project's coordinator conversation (`sessionId`, the turn keyed `clientTurnId`), or the
+/// account owner when the project has no Automatic coordinator to tell. History, not a queue: nothing
+/// reads it to decide anything but whether this orphan was already reported.
+model ProjectOrphanNotice {
+  id           String   @id @default(uuid(7)) @db.Uuid
+  projectId    String   @map("project_id") @db.Uuid
+  project      Project  @relation(fields: [projectId], references: [id], onDelete: Cascade, onUpdate: NoAction)
+  ownerId      String   @map("owner_id") @db.Uuid
+  /// The task whose pending item it is. History rather than a foreign key, like the session.
+  taskId       String   @map("task_id") @db.Uuid
+  orphanKey    String   @map("orphan_key")
+  /// EVIDENCE | EXCEPTION_ITEM | TASK_RUN | DEPENDENCIES
+  kind         String
+  /// COORDINATOR | OWNER
+  recipient    String
+  sessionId    String?  @map("session_id") @db.Uuid
+  clientTurnId String?  @map("client_turn_id")
+  createdAt    DateTime @default(now()) @map("created_at") @db.Timestamptz(3)
+
+  @@unique([projectId, orphanKey], map: "project_orphan_notice_project_key")
+  @@map("project_orphan_notice")
 }
 
 /// One time a project's coordinator spent more on its own than the project allows, and what became of
@@ -4075,9 +4659,84 @@ model ProjectAcceptanceCriterionDefinition {
   /// settles it — `Task.criterionDefinitionId` is a declaration, not a completion input.
   servingTasks Task[]
 
+  /// How this criterion is met (migration 0545): `TASKS` by the work filed under it (the rule
+  /// `project-criterion-satisfaction.ts` has always applied), `CONFIRMATION` by a standing
+  /// confirmation of its current revision from the owner, the coordinator or an Agent check. A
+  /// change of mode is a change of meaning: the definition trigger bumps `revision` and
+  /// `semanticRevision` and folds the mode into both hashes for a CONFIRMATION row.
+  satisfiedBy   CriterionSatisfiedBy           @default(TASKS) @map("satisfied_by")
+  confirmations ProjectCriterionConfirmation[]
+
   @@unique([projectId, ordinal], map: "project_acceptance_definition_ordinal_idx")
   @@index([projectId, contentHash], map: "project_acceptance_definition_content_idx")
   @@map("project_acceptance_criterion_definition")
+}
+
+/// How a project criterion is met (migration 0545).
+enum CriterionSatisfiedBy {
+  TASKS
+  CONFIRMATION
+
+  @@map("criterion_satisfied_by")
+}
+
+/// Who said a CONFIRMATION criterion holds.
+enum CriterionConfirmerKind {
+  OWNER
+  COORDINATOR
+  AGENT_CHECK
+
+  @@map("criterion_confirmer_kind")
+}
+
+/// Where one confirmation row stands. An owner's or a coordinator's row is CONFIRMED when it is
+/// written; an Agent check's row is PENDING while its check task runs, and the check's report
+/// settles it CONFIRMED (PASS) or FAILED (FAIL).
+enum CriterionConfirmationOutcome {
+  PENDING
+  CONFIRMED
+  FAILED
+
+  @@map("criterion_confirmation_outcome")
+}
+
+/// One confirmation of one revision of a CONFIRMATION criterion, or one Agent-check attempt at it
+/// (migration 0545). A criterion in CONFIRMATION mode is met exactly while a row of this criterion
+/// is CONFIRMED, names the criterion's CURRENT revision and is not withdrawn: a revision bump makes
+/// every row before it stale without touching it, and a withdrawal is a stamp, never a delete, so
+/// who confirmed and who took it back both stay on record.
+model ProjectCriterionConfirmation {
+  id           String                                @id @default(uuid(7)) @db.Uuid
+  ownerId      String                                @map("owner_id") @db.Uuid
+  projectId    String                                @map("project_id") @db.Uuid
+  project      Project                               @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  definitionId String                                @map("definition_id") @db.Uuid
+  definition   ProjectAcceptanceCriterionDefinition  @relation(fields: [definitionId], references: [id], onDelete: Cascade)
+  /// The criterion revision this row is about.
+  revision     Int
+  confirmerKind CriterionConfirmerKind               @map("confirmer_kind")
+  outcome      CriterionConfirmationOutcome
+  /// The coordinator conversation that confirmed, or the Agent check's run. Null for the owner.
+  sessionId    String?                               @map("session_id") @db.Uuid
+  /// The Agent check's task, through which its run was dispatched. Null for the other two kinds.
+  checkTaskId  String?                               @map("check_task_id") @db.Uuid
+  /// What was checked: optional for every kind.
+  note         String?
+  attachmentIds String[]                             @default([]) @map("attachment_ids") @db.Uuid
+  /// The criterion's wording and verification method at `revision`, kept with the row (migration
+  /// 0555) so a stale confirmation can show what was confirmed. Null on an older row whose revision
+  /// had already moved when 0555 ran.
+  criterionText               String? @map("criterion_text")
+  criterionVerificationMethod String? @map("criterion_verification_method")
+  createdAt    DateTime                              @default(now()) @map("created_at")
+  /// When an Agent check reported its verdict. Equal to `createdAt` for the other two kinds.
+  settledAt    DateTime?                             @map("settled_at")
+  withdrawnAt  DateTime?                             @map("withdrawn_at")
+  withdrawnByKind CriterionConfirmerKind?            @map("withdrawn_by_kind")
+
+  @@index([definitionId, createdAt], map: "project_criterion_confirmation_definition_idx")
+  @@index([checkTaskId], map: "project_criterion_confirmation_check_task_idx")
+  @@map("project_criterion_confirmation")
 }
 
 /// The account owner saying, of ONE version of a project's stated criteria, that the complete set
@@ -4131,6 +4790,14 @@ model ProjectStandardSetConfirmation {
   /// that only confirmed. The "Project started" card is drawn from it, so the card shows the start
   /// as it happened rather than whatever the settings say by the time somebody reads it.
   startedWith Json? @map("started_with")
+  /// The words each criterion had when this was written (migration 1200): `definitionId`,
+  /// `ordinal`, `text`, `verificationMethod`, one object per criterion. Null on an older row; the
+  /// receipt then shows today's words only where the content hash still matches.
+  criteriaWording Json? @map("criteria_wording")
+  /// What the confirmed set changed since the confirmation before it (`@orbit/shared`
+  /// `CriteriaChangesSinceConfirmed`), as the card that asked showed it. Null when there was none
+  /// before it, and on a row older than 1200.
+  criteriaChanges Json? @map("criteria_changes")
 
   @@index([projectId, confirmedAt(sort: Desc)], map: "project_standard_set_confirmation_recent_idx")
   @@map("project_standard_set_confirmation")
@@ -4213,9 +4880,23 @@ model ProjectRatifiedActionIntent {
   idempotencyKey       String   @map("idempotency_key")
   commitToken          String   @unique @map("commit_token") @db.Uuid
   createdAt            DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
+  translation          ProjectCriteriaChangeTranslation?
 
   @@unique([ownerId, projectId, idempotencyKey])
   @@map("project_ratified_action_intent")
+}
+
+/// Settings › Translation (migration 1080): a criteria proposal's `proposed[].text` and `verificationMethod` in the
+/// owner's language, `{ lang, failed?, proposed? }`. A table of its own because 0195 refuses every write to a filed
+/// intent; the translation is a reader's copy, never part of what is approved.
+model ProjectCriteriaChangeTranslation {
+  intentId    String                      @id @map("intent_id") @db.Uuid
+  ownerId     String                      @map("owner_id") @db.Uuid
+  translation Json
+  updatedAt   DateTime                    @default(now()) @updatedAt @map("updated_at") @db.Timestamptz(3)
+  intent      ProjectRatifiedActionIntent @relation(fields: [intentId], references: [id], onDelete: Cascade, map: "project_criteria_change_translation_intent_fkey")
+
+  @@map("project_criteria_change_translation")
 }
 
 model ProjectRatifiedActionCommit {
@@ -4790,6 +5471,31 @@ model TaskProgress {
   @@map("task_progress")
 }
 
+/// The receipt of one project_create or session_create request (migration 0645,
+/// docs/recovery-contract.md §6). A repeat of the request under the same id reads `result` back
+/// instead of creating a second Project or Session; the same id with another payload is refused.
+model CreateRequestReceipt {
+  ownerId        String   @map("owner_id") @db.Uuid
+  owner          User     @relation(fields: [ownerId], references: [id], onDelete: Cascade, onUpdate: NoAction)
+  /// `PROJECT_CREATE` or `SESSION_CREATE`.
+  actionKind     String   @map("action_kind")
+  /// The caller's X-Orbit-Request-Id.
+  requestToken   String   @map("request_token")
+  /// sha256 of the canonical payload and the session that sent it.
+  fingerprint    String
+  /// OPEN | COMPLETED | UNKNOWN.
+  status         String   @default("OPEN")
+  /// The answer, kept so a repeat returns it.
+  result         Json?
+  /// While OPEN, how long the delivery creating it is waited for.
+  leaseExpiresAt DateTime @map("lease_expires_at") @db.Timestamptz(6)
+  createdAt      DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt      DateTime @default(now()) @updatedAt @map("updated_at") @db.Timestamptz(6)
+
+  @@id([ownerId, actionKind, requestToken])
+  @@map("create_request_receipt")
+}
+
 model TaskRunRequest {
   ownerId      String   @map("owner_id") @db.Uuid
   owner        User     @relation(fields: [ownerId], references: [id], onDelete: Cascade)
@@ -4884,8 +5590,10 @@ model ProjectHandoffApproval {
   /// answer, and no crossing can name a deleted project, so nothing is loosened by removing it.
   fromProjectId String  @map("from_project_id") @db.Uuid
   fromProject   Project @relation("ProjectHandoffFrom", fields: [fromProjectId], references: [id], onDelete: Cascade)
-  toProjectId   String  @map("to_project_id") @db.Uuid
-  toProject     Project @relation("ProjectHandoffTo", fields: [toProjectId], references: [id], onDelete: Cascade)
+  /// Null only for a MOVE_TASK that takes the task out of every project (0610, a CHECK): the
+  /// account owner's confirmation then files it under none.
+  toProjectId   String?  @map("to_project_id") @db.Uuid
+  toProject     Project? @relation("ProjectHandoffTo", fields: [toProjectId], references: [id], onDelete: Cascade)
 
   /// FILE_TASK | MOVE_TASK | DEPEND_ON_TASK, frozen by a CHECK in 0155 rather than by a Prisma enum
   /// (cf. `ProjectBlocker.kind`): the values are `project-handoff.ts`'s closed set, and a second
@@ -4937,6 +5645,10 @@ model ProjectHandoffApproval {
   /// (owner, subject, from, to) — which is what makes a second request for a move that is already
   /// waiting, from any session, find the first instead of filing beside it.
   requestedCriterionDefinitionId String? @map("requested_criterion_definition_id") @db.Uuid
+
+  /// Settings › Translation (migration 1080, @orbit/shared OwnerCardTranslation): `title` and `reason` in the
+  /// owner's language, written only while PENDING. Not one of the guarded columns. NULL when not involved.
+  translation Json?
 
   createdAt DateTime @default(now()) @map("created_at")
   updatedAt DateTime @default(now()) @map("updated_at")
@@ -5343,6 +6055,11 @@ model Task {
   /// migration 0001 put on the long-deleted execution `Task`: that table is gone, and this is a
   /// property of the human-facing task, not of a run.
   runAt            DateTime?   @map("run_at")
+  /// The condition that starts this task (migration 1060, docs/condition-triggers-design.md §6.2): a peer of
+  /// `runAt`, and a task has at most one of the two (`task_run_at_or_start_when_chk`). The start that keeps it
+  /// clears it, as a start clears `runAt`.
+  startWhenConditionId String?    @unique @map("start_when_condition_id") @db.Uuid
+  startWhenCondition   Condition? @relation("TaskStartWhen", fields: [startWhenConditionId], references: [id], onDelete: SetNull)
   // Per-task override for the runs this task dispatches: a built-in engine slug
   // ("claude"/"codex"/"kimi"/"opencode"/"antigravity") or one of the owner's configured
   // ModelProvider slugs, and a model id inside that provider's space. NULL keeps the historical
@@ -5508,6 +6225,27 @@ model Task {
   /// declaration takes the task out of its criterion's landing conjunction. NULL on a task that is
   /// not codeless, and on one created codeless — creating it so is the first statement, not a change.
   codelessReason     String?  @map("codeless_reason")
+  /// The session this task was forked from (migration 0615, SOURCE row PF, SR55): the session whose
+  /// create call filed it, on that call's runner credential. The five fork columns are all NULL or
+  /// all set, written by the create doors in the task's own INSERT and never afterwards (0615's
+  /// `task_fork_guard`), so every run of the task, a retry included, starts from the same commit.
+  /// No foreign key: deleting that session does not move where this task starts.
+  forkSessionId           String?  @map("fork_session_id") @db.Uuid
+  /// The machine the forking session ran on when it forked: where the snapshot commit exists, and
+  /// the `RUNNER_LOCAL` authority of a forked run. No foreign key, as above.
+  forkRunnerId            String?  @map("fork_runner_id") @db.Uuid
+  /// The snapshot commit the task starts from, 40 lowercase hex.
+  forkSha                 String?  @map("fork_sha")
+  /// The forking session's HEAD when it took the snapshot, 40 lowercase hex.
+  forkBaseHead            String?  @map("fork_base_head")
+  /// Whether the snapshot carries edits the forking session had not committed: exactly when
+  /// `forkSha` is not `forkBaseHead` (0615's `task_fork_shape_chk`).
+  forkIncludesUncommitted Boolean? @map("fork_includes_uncommitted")
+  /// The paths the snapshot changed relative to `forkBaseHead`, as the runner read them when it took
+  /// it (migration 0617): what a forked task's task_await payload names (design §2.7 F4). Empty when
+  /// the task was not forked, the snapshot changed nothing, or its runner sent none; written once,
+  /// like the five above.
+  forkChangedFiles        String[] @default([]) @map("fork_changed_files")
   /// The refusal this task's most recent start met before its run could begin (migration 0298):
   /// a `TaskDispatchRefusal` (@orbit/shared) — the §10.1 code and its fixAction, when, which run,
   /// the commit it stood on and the prerequisite commits that commit did not contain. NULL when
@@ -5539,6 +6277,8 @@ model Task {
   /// Files the task carries as INPUT to its work (design mocks, specs). Copied into each run's
   /// session at dispatch; cascade-deleted with the task.
   attachments  Attachment[]
+  /// Its startWhen condition (migration 1030), when it has one.
+  conditions   Condition[] @relation("ConditionTask")
   /// Public links with this task as their root, ended ones included (migration 0306).
   shareLinks   ShareLink[]
   completionEvidence TaskCompletionEvidence[]
@@ -5702,6 +6442,8 @@ model Task {
   /// The tenancy fence `[K2]`'s two ledger tables hang off: a child row names BOTH the task and
   /// the owner, so it cannot disagree with its parent about whose it is. The same device migration
   /// 0120 used for (decision, project).
+  /// The Ask this task carries to an admin (Still stuck → Ask your admin, migration 0890), when it is one.
+  helpAskAdminRequests HelpAskAdminRequest[]
   @@unique([id, ownerId], map: "task_id_owner_id_key")
   @@map("task")
 }
@@ -5769,6 +6511,9 @@ model TaskCompletionEvidence {
   evidence          Json
   evidenceDigest    String @map("evidence_digest") @db.Char(64)
   revision          BigInt
+  /// Settings › Translation (migration 1080, @orbit/shared EvidenceTranslation): the envelope's claim and gaps in
+  /// the owner's language, `{ lang, failed?, claim?, gaps? }`. `evidence` stays the agent's words. NULL when not involved.
+  translation       Json?
 
   idempotencyKeys TaskCompletionEvidenceIdempotency[]
   legacyImport TaskLegacyEvidenceImport?
@@ -5834,6 +6579,9 @@ model TaskEvidenceDecision {
   /// Why the work is coming back. Required on SEND_BACK by the door: a rejection with nothing to
   /// act on is the state the next revision cannot get out of. Optional on CONFIRM.
   note     String?
+  /// The translated SEND_BACK note stays on the decision until its run can receive it.
+  translatedNote  String? @map("translated_note")
+  translationLang String? @map("translation_lang")
 
   decidedAt         DateTime    @default(now()) @map("decided_at")
   decidedByType     CreatorType @map("decided_by_type")
@@ -6027,6 +6775,9 @@ model TaskOwnerConfirmationReviewRecord {
   /// RETURN only: the key of the turn that carries it to the run, derived from this row's id.
   returnClientTurnId String?  @map("return_client_turn_id")
   recordedAt         DateTime @map("recorded_at")
+  /// Settings › Translation (migration 1080, @orbit/shared OwnerCardTranslation): judgment and needsYou (REVIEW),
+  /// reason and problems (PROBLEMS) in the owner's language. NULL when translation was not involved.
+  translation        Json?
 
   decisions TaskOwnerDecision[]
 
@@ -6785,6 +7536,9 @@ model ModelProvider {
   // passed as --model (e.g. "deepseek-chat"). For a preset-backed row this is a snapshot taken
   // at write time; reads serve the preset's current list instead (see presetSlug).
   models        Json     @default("[]")
+  // The owner's SubAgent tier per model id (S/M/L/XL) for models the catalogue gives none (docs/subagent-design.md §7).
+  // Written only by PATCH /providers/mine/:id/model-tier; a model list edit leaves it alone.
+  modelTiers    Json     @default("{}") @map("model_tiers")
   defaultModel  String?  @map("default_model")
   // The vendor preset (@orbit/shared PROVIDER_PRESETS) this row was created from — its identity,
   // fixed for life: the logo it shows and the vendor it "is", even when its own slug had to be
@@ -6804,6 +7558,11 @@ model ModelProvider {
   // Cursor key is ever checked.
   keyCheckState String?   @map("key_check_state")
   keyCheckedAt  DateTime? @map("key_checked_at")
+  // An OpenAI key's spent budget (migration 0612): until when OpenAI said `insufficient_quota` for it, as
+  // the /api/gw/anthropic gateway read it (docs/claude-engine-openai-gateway-design.md §5.4). The same
+  // gateway sets keyCheckState INVALID when OpenAI refuses the key (401). NULL = not known to be spent;
+  // cleared by the key's next answered request and by a new secret.
+  spentUntil    DateTime? @map("spent_until")
   // NULL = a shared provider (admin-managed): visible in, and dispatchable for, admins' sessions
   // only (usableProviderScope). Set = a personal (BYOK) provider: visible in, and dispatchable for,
   // only its owner's sessions. Slugs stay globally unique either way, so dispatch-by-slug is never
@@ -6815,6 +7574,10 @@ model ModelProvider {
   poolMemberships ProviderPoolMember[]
   // The retired provider names that resolve to this key (ProviderSlugAlias).
   aliases       ProviderSlugAlias[]
+  // The tokens Claude Code sessions on this key run with instead of it (migration 0611).
+  gatewayTokens KeyGatewayToken[]
+  // What those sessions' answers used and cost, as the gateway read them (migration 0613).
+  gatewayUsage  KeyGatewayUsage[]
   createdAt     DateTime @default(now()) @map("created_at")
   updatedAt     DateTime @updatedAt @map("updated_at")
 
@@ -7035,6 +7798,118 @@ model PoolGatewayToken {
   @@map("pool_gateway_token")
 }
 
+/// The credential a Claude Code session on an OpenAI key runs with instead of the key (migration 0611,
+/// docs/claude-engine-openai-gateway-design.md §4.2): the session reaches /api/gw/anthropic with it, and the
+/// gateway sends on with the key, which never leaves the server. Only `tokenHash` (SHA-256) is stored. Minted on
+/// each claim, reclaim and provider-switch reload; earlier tokens of the same session and key stay good, their
+/// expiry pushed out with each claim. Deleting the session, the key or the person deletes its tokens; a key
+/// disabled or rotated revokes them (`revokedAt`).
+/// A coordinator handoff (migration 0810, docs/coordinator-handoff.md): the outgoing coordinator
+/// writes a note in a platform turn, then the replacement opens its successor with that note. One
+/// live row (WRITING, HANDING_OVER, FAILED) per outgoing coordinator; COMPLETED names the successor.
+model CoordinatorHandoff {
+  id            String    @id @default(uuid(7)) @db.Uuid
+  ownerId       String    @map("owner_id") @db.Uuid
+  projectId     String    @map("project_id") @db.Uuid
+  project       Project   @relation(fields: [projectId], references: [id], onDelete: Cascade, onUpdate: NoAction)
+  fromSessionId String    @map("from_session_id") @db.Uuid
+  fromSession   Session   @relation("CoordinatorHandoffFrom", fields: [fromSessionId], references: [id], onDelete: Cascade, onUpdate: NoAction)
+  toSessionId   String?   @map("to_session_id") @db.Uuid
+  toSession     Session?  @relation("CoordinatorHandoffTo", fields: [toSessionId], references: [id], onDelete: Cascade, onUpdate: NoAction)
+  /// WRITING | HANDING_OVER | FAILED | CANCELLED | COMPLETED (a CHECK).
+  state         String
+  /// Advanced by Try again; the note turn's key carries it.
+  attempt       Int       @default(1)
+  /// The note turn's `conversation_turn.client_turn_id`; null once a skip took the note out.
+  clientTurnId  String?   @map("client_turn_id")
+  startedAt     DateTime  @default(now()) @map("started_at")
+  /// TURN_FAILED | TURN_STOPPED | TIMED_OUT | EMPTY_NOTE | REPLACE_FAILED, only while FAILED.
+  failureCode   String?   @map("failure_code")
+  note          String?
+  /// The waits the swap moved, as `{ id, label, paused }`.
+  movedWaits    Json      @default("[]") @map("moved_waits")
+  endedAt       DateTime? @map("ended_at")
+  createdAt     DateTime  @default(now()) @map("created_at")
+  updatedAt     DateTime  @default(now()) @updatedAt @map("updated_at")
+
+  @@index([fromSessionId, createdAt])
+  @@index([toSessionId])
+  @@index([projectId])
+  @@map("coordinator_handoff")
+}
+
+/// An owner ruling kept on its project (docs/coordinator-handoff-v2-design.md §2, migration 0970):
+/// the ruling in one sentence, the owner's own words, and where they were said — an answered
+/// coordinator question (ASK_OWNER, written by the answer) or a coordinator turn (TURN, recorded by
+/// `project_ruling_record`). A later ruling supersedes an earlier one; the old row is kept.
+model ProjectRuling {
+  id                  String   @id @default(uuid(7)) @db.Uuid
+  ownerId             String   @map("owner_id") @db.Uuid
+  projectId           String   @map("project_id") @db.Uuid
+  project             Project  @relation(fields: [projectId, ownerId], references: [id, ownerId], onDelete: Cascade, map: "project_ruling_project_fkey")
+  ruling              String
+  quote               String
+  /// ASK_OWNER | TURN (a CHECK).
+  sourceKind          String   @map("source_kind")
+  /// The answered open item (ASK_OWNER) or the conversation turn (TURN). No foreign key.
+  sourceId            String   @map("source_id") @db.Uuid
+  /// The coordinator that recorded it; null for an automatic ruling. No foreign key.
+  recordedBySessionId String?  @map("recorded_by_session_id") @db.Uuid
+  supersededById      String?  @map("superseded_by_id") @db.Uuid
+  createdAt           DateTime @default(now()) @map("created_at")
+
+  @@index([projectId, createdAt])
+  @@map("project_ruling")
+}
+
+model KeyGatewayToken {
+  id         String        @id @default(uuid(7)) @db.Uuid
+  tokenHash  String        @unique @map("token_hash")
+  sessionId  String        @map("session_id") @db.Uuid
+  session    Session       @relation(fields: [sessionId], references: [id], onDelete: Cascade, onUpdate: NoAction)
+  providerId String        @map("provider_id") @db.Uuid
+  provider   ModelProvider @relation(fields: [providerId], references: [id], onDelete: Cascade, onUpdate: NoAction)
+  userId     String        @map("user_id") @db.Uuid
+  user       User          @relation(fields: [userId], references: [id], onDelete: Cascade, onUpdate: NoAction)
+  createdAt  DateTime      @default(now()) @map("created_at")
+  expiresAt  DateTime      @map("expires_at")
+  revokedAt  DateTime?     @map("revoked_at")
+
+  @@index([sessionId])
+  @@index([providerId])
+  @@index([userId])
+  @@map("key_gateway_token")
+}
+
+/// One answer OpenAI gave a Claude Code session on an OpenAI key through /api/gw/anthropic (migration 0613):
+/// its tokens as the Responses stream's final event counted them, read off the stream as it passed, and their
+/// price from openai-prices.ts (design §5.5, decision D8). Per session and key; the same answer is also a
+/// `usage` row and part of `session.cost_usd`, written with it.
+model KeyGatewayUsage {
+  id                String        @id @default(uuid(7)) @db.Uuid
+  sessionId         String        @map("session_id") @db.Uuid
+  session           Session       @relation(fields: [sessionId], references: [id], onDelete: Cascade, onUpdate: NoAction)
+  providerId        String        @map("provider_id") @db.Uuid
+  provider          ModelProvider @relation(fields: [providerId], references: [id], onDelete: Cascade, onUpdate: NoAction)
+  /// The model that answered, as the answer names it.
+  model             String
+  /// The tier it was served on, which prices it; null when the answer named none.
+  serviceTier       String?       @map("service_tier")
+  /// All input, cached included.
+  inputTokens       BigInt        @default(0) @map("input_tokens")
+  cachedInputTokens BigInt        @default(0) @map("cached_input_tokens")
+  /// All output, reasoning included.
+  outputTokens      BigInt        @default(0) @map("output_tokens")
+  reasoningTokens   BigInt        @default(0) @map("reasoning_tokens")
+  // US dollars × 1,000,000.
+  costMicros        BigInt        @default(0) @map("cost_micros")
+  createdAt         DateTime      @default(now()) @map("created_at")
+
+  @@index([sessionId])
+  @@index([providerId])
+  @@map("key_gateway_usage")
+}
+
 /// What one person spent on one key of a shared pool in one calendar month, UTC (migration 0321):
 /// `windowStart` is the month's first day. Written by the pool gateway; read by the pool page and by the
 /// claim, which passes over a key whose share cap the others have spent.
@@ -7112,7 +7987,10 @@ model PoolCodexLogin {
 /// person to the pool's owner; its session's deletion deletes it too. It names no account (migration
 /// 0355): what a request of its goes out on is the account its session is on (`session.pool_codex_account_id`),
 /// read by the gateway at every request, so taking one account out of the pool leaves the token alone and
-/// a session that moved to another account sends on that one.
+/// a session that moved to another account sends on that one. A SubAgent's token (migration 0800) is the one
+/// exception: its child has no session row of its own, so the token names the credential chosen for it —
+/// `accountId`, one of the pool's ChatGPT accounts, or `keyId`, one of its API keys — and the gateway sends on
+/// that instead. At most one is set; neither has a foreign key.
 model PoolLoginToken {
   id        String       @id @default(uuid(7)) @db.Uuid
   tokenHash String       @unique @map("token_hash")
@@ -7124,6 +8002,8 @@ model PoolLoginToken {
   createdAt DateTime     @default(now()) @map("created_at")
   expiresAt DateTime     @map("expires_at")
   revokedAt DateTime?    @map("revoked_at")
+  accountId String?      @map("account_id")
+  keyId     String?      @map("key_id") @db.Uuid
 
   @@index([sessionId])
   @@map("pool_login_token")
@@ -7200,6 +8080,119 @@ model CodexRateLimitResetOperation {
 /// The database is the fact source. Real-time events only ever schedule an evaluation earlier, so
 /// liveness is `nextEvaluateAt` plus a leased sweep — there is deliberately no event table, no
 /// outbox and no hint queue here (contract §8).
+/// An agent session asking the account owner to act (migration 0503): a decision, a secret, a step only a person can
+/// do, or a yes/no. PENDING, then exactly one of DONE | DECLINED | EXPIRED | WITHDRAWN, which is final
+/// (`owner-requests/owner-request.ts`). The asking session and the project are history, not foreign keys.
+model OwnerRequest {
+  id                  String    @id @default(uuid(7)) @db.Uuid
+  ownerId             String    @map("owner_id") @db.Uuid
+  owner               User      @relation(fields: [ownerId], references: [id], onDelete: Cascade)
+  askedBySessionId    String    @map("asked_by_session_id") @db.Uuid
+  projectId           String?   @map("project_id") @db.Uuid
+  kind                String
+  state               String    @default("PENDING")
+  title               String
+  why                 String
+  blocksTaskIds       String[]  @default([]) @map("blocks_task_ids") @db.Uuid
+  ifUnanswered        String?   @map("if_unanswered")
+  /// DECISION: `[{ label, description? }]`.
+  options             Json?
+  recommendedOption   Int?      @map("recommended_option")
+  /// MANUAL_STEP: `[{ text, command?, link? }]`.
+  steps               Json?
+  /// SECRET: `{ name, runnerId, envVar? , filePath? }` — never the value.
+  secretSpec          Json?     @map("secret_spec")
+  verifyHint          String?   @map("verify_hint")
+  /// WIKI_CREATE: the repository the wiki is for, normalized as `wiki_space.repo_url_norm` (migration 0531).
+  repoUrlNorm         String?   @map("repo_url_norm")
+  /// WIKI_CREATE: the asking session's workspace, which the wiki's maintenance reads. History, not a foreign key.
+  workspaceId         String?   @map("workspace_id") @db.Uuid
+  /// SCHEDULE_* kinds (migration 0840): the schedule and run the item is about, and what answers it. History, no FK.
+  scheduleId              String?   @map("schedule_id") @db.Uuid
+  scheduleRunId           String?   @map("schedule_run_id") @db.Uuid
+  approvalId              String?   @map("approval_id") @db.Uuid
+  scheduleChangeRequestId String?   @map("schedule_change_request_id") @db.Uuid
+  /// CONDITION_UNKNOWN (migration 1030): the condition that cannot be read. History, no FK.
+  conditionId             String?   @map("condition_id") @db.Uuid
+  expiresAt           DateTime? @map("expires_at") @db.Timestamptz(3)
+  clientRequestId     String?   @map("client_request_id")
+  resolvedAt          DateTime? @map("resolved_at") @db.Timestamptz(3)
+  resolvedByUserId    String?   @map("resolved_by_user_id") @db.Uuid
+  resolvedBySessionId String?   @map("resolved_by_session_id") @db.Uuid
+  /// The client the owner ended it from (`web`, `ios`, `macos`, `android`); null when withdrawn, expired or unknown.
+  resolvedClient      String?   @map("resolved_client")
+  /// Why it was declined (required) or withdrawn.
+  resolutionNote      String?   @map("resolution_note")
+  /// What the owner chose or said when marking it done: `{ option?, text? }`.
+  answer              Json?
+  /// Settings › Translation (migration 1070, @orbit/shared OwnerCardTranslation): the agent-written fields in the
+  /// owner's language, `{ lang, failed?, … }`; the columns above stay the agent's words. NULL when not involved.
+  translation         Json?
+  createdAt           DateTime  @default(now()) @map("created_at") @db.Timestamptz(3)
+  updatedAt           DateTime  @updatedAt @map("updated_at") @db.Timestamptz(3)
+  /// The one delivery of its ending to the asking session (migration 0504), written with the ending.
+  deliveries          WatchDelivery[]
+  /// SECRET: the value's grant to one runner (migration 0506), once the owner has entered one.
+  secretGrant         OwnerRequestSecret?
+
+  @@unique([askedBySessionId, clientRequestId], map: "owner_request_session_client_key")
+  @@index([ownerId, state, createdAt], map: "owner_request_owner_state_idx")
+  @@map("owner_request")
+}
+
+/// The value an owner entered on a SECRET request, granted to one runner (migration 0506, design
+/// docs/design/owner-request-secrets.md §3.2). PENDING_DELIVERY → ACTIVE → REMOVING → REMOVED; `valueEnc` is the
+/// AES-256-GCM ciphertext (owner-requests/owner-secret-crypto.ts) and is NULL from REMOVING on. `runnerId` is a
+/// composite foreign key with `ownerId` in SQL, ON DELETE SET NULL (runner_id) — declared there rather than here,
+/// because Prisma cannot null half of a composite key — so a deleted runner leaves the grant to be ended
+/// RUNNER_DELETED. No length, prefix or hash of the value is stored.
+model OwnerRequestSecret {
+  id          String       @id @default(uuid(7)) @db.Uuid
+  ownerId     String       @map("owner_id") @db.Uuid
+  owner       User         @relation(fields: [ownerId], references: [id], onDelete: Cascade)
+  requestId   String       @unique(map: "owner_request_secret_request_key") @map("request_id") @db.Uuid
+  request     OwnerRequest @relation(fields: [requestId], references: [id], onDelete: Cascade)
+  runnerId    String?      @map("runner_id") @db.Uuid
+  sessionId   String       @map("session_id") @db.Uuid
+  taskId      String?      @map("task_id") @db.Uuid
+  /// The task's lifecycle epoch at submission (task_progress.lifecycle_epoch): a reopened task is a new epoch.
+  taskEpoch   Int?         @map("task_epoch")
+  /// The environment variable, for ENV; NULL for FILE.
+  name        String?
+  exposure    String
+  filePath    String?      @map("file_path")
+  valueEnc    String?      @map("value_enc")
+  state       String       @default("PENDING_DELIVERY")
+  endReason   String?      @map("end_reason")
+  expiresAt   DateTime     @map("expires_at") @db.Timestamptz(3)
+  /// When the runner first fetched the value: a grant ended before its ack is REMOVING once fetched (§2).
+  fetchedAt   DateTime?    @map("fetched_at") @db.Timestamptz(3)
+  deliveredAt DateTime?    @map("delivered_at") @db.Timestamptz(3)
+  removedAt   DateTime?    @map("removed_at") @db.Timestamptz(3)
+  removalNote String?      @map("removal_note")
+  createdAt   DateTime     @default(now()) @map("created_at") @db.Timestamptz(3)
+  updatedAt   DateTime     @updatedAt @map("updated_at") @db.Timestamptz(3)
+
+  @@index([runnerId, state], map: "owner_request_secret_runner_state_idx")
+  @@map("owner_request_secret")
+}
+
+/// An owner's saved secret (migration 0506, design §3.4): write-only — no route returns `valueEnc` or anything
+/// derived from it. "Use saved" re-encrypts a copy into a new grant.
+model AccountSecret {
+  id        String   @id @default(uuid(7)) @db.Uuid
+  ownerId   String   @map("owner_id") @db.Uuid
+  owner     User     @relation(fields: [ownerId], references: [id], onDelete: Cascade)
+  label     String
+  valueEnc  String   @map("value_enc")
+  createdAt DateTime @default(now()) @map("created_at") @db.Timestamptz(3)
+  updatedAt DateTime @updatedAt @map("updated_at") @db.Timestamptz(3)
+
+  @@unique([ownerId, label], map: "account_secret_owner_label_key")
+  @@map("account_secret")
+}
+
+
 model Watch {
   id      String @id @default(uuid(7)) @db.Uuid
   ownerId String @map("owner_id") @db.Uuid
@@ -7341,7 +8334,8 @@ model WatchMatch {
 model WatchDelivery {
   id String @id @default(uuid(7)) @db.Uuid
 
-  /// `MATCH` | `EXPIRY` (migration 0261) | `REVOKED` | `UNRESOLVABLE` (0263). A CHECK holds each row
+  /// `MATCH` | `EXPIRY` (migration 0261) | `REVOKED` | `UNRESOLVABLE` (0263) | `OWNER_REQUEST` (0504: an owner
+  /// request's ending, delivered as one turn to the session that asked). A CHECK holds each row
   /// to the one thing its kind is about: a MATCH row names its Match; the other three name a
   /// RESUME_SESSION watch that ended that way unmatched, and only an EXPIRY row carries the snapshot
   /// its evaluation took (contract §5). A REVOKED row says nothing about the targets (§7).
@@ -7352,6 +8346,10 @@ model WatchDelivery {
   /// index): one end delivery per watch, whichever way it ended.
   watchId String?     @map("watch_id") @db.Uuid
   watch   Watch?      @relation(fields: [watchId], references: [id], onDelete: Cascade)
+  /// Set only on an OWNER_REQUEST row (migration 0504), and unique among those rows (a partial index): a
+  /// request ends once, so its ending is delivered to the session that asked at most once.
+  ownerRequestId String?       @map("owner_request_id") @db.Uuid
+  ownerRequest   OwnerRequest? @relation(fields: [ownerRequestId], references: [id], onDelete: Cascade)
   /// An EXPIRY row's structured snapshot, and NULL on every other kind. It is written in the same
   /// transaction as the EXPIRED state and never changes, so every attempt builds the same turn.
   expirySnapshot Json? @map("expiry_snapshot")
@@ -7880,6 +8878,9 @@ model WikiCursor {
   lastOutcome         String?   @map("last_outcome")
   consecutiveFailures Int       @default(0) @map("consecutive_failures")
   lastError           String?   @map("last_error")
+  /// Maintenance runs in a row that read the repository for a red reason (migration 0519, contract
+  /// `maintenance.health.notifyRepository`); a run that reads it sets it back to 0.
+  repoAttentionRuns   Int       @default(0) @map("repo_attention_runs")
   /// Why the last fact that found a run due made no task (0320): `daily_limit_reached` or
   /// `review_queue_full`, and when. Cleared when a task is made.
   heldReason          String?   @map("held_reason")
@@ -7938,6 +8939,14 @@ model WikiMaintenanceRun {
   catchUp         String?   @map("catch_up")
   /// The provider the run was pinned to answers on this machine or a private network (`catchUp.localEndpoint`).
   localEndpoint   Boolean   @default(false) @map("local_endpoint")
+  /// `git` | `folder` | `sessions` | `wrong_repository` — the repository tier the run's latest attempt read (contract
+  /// `repoOps.tiers`, migration 0514), and why it read less than git (`repoOps.tiers.reasons`); NULL before its probe.
+  repoTier        String?   @map("repo_tier")
+  repoReason      String?   @map("repo_reason")
+  /// The reason as one redacted English sentence, and when the probe read it (migration 0519): the health line's
+  /// `repo.detail` and `repo.checkedAt`.
+  repoDetail      String?   @map("repo_detail")
+  repoCheckedAt   DateTime? @map("repo_checked_at") @db.Timestamptz(3)
   createdAt       DateTime  @default(now()) @map("created_at") @db.Timestamptz(3)
   updatedAt       DateTime  @default(now()) @updatedAt @map("updated_at") @db.Timestamptz(3)
 
@@ -8541,17 +9550,18 @@ model WikiModelRequest {
 /// compare-and-set on (lease_owner, claim_generation).
 model WikiRepoOp {
   id      String  @id @default(uuid(7)) @db.Uuid
-  jobId   String  @map("job_id") @db.Uuid
-  job     WikiJob @relation(fields: [jobId], references: [id], onDelete: Cascade, map: "wiki_repo_op_job_fkey")
-  ownerId String  @map("owner_id") @db.Uuid
-  spaceId String  @map("space_id") @db.Uuid
+  /// Null for a settings probe (migration 0530), which no job asks; every other kind is some job's.
+  jobId   String?  @map("job_id") @db.Uuid
+  job     WikiJob? @relation(fields: [jobId], references: [id], onDelete: Cascade, map: "wiki_repo_op_job_fkey")
+  ownerId String   @map("owner_id") @db.Uuid
+  spaceId String   @map("space_id") @db.Uuid
   space   WikiSpace @relation(fields: [spaceId, ownerId], references: [id, ownerId], onDelete: Cascade, map: "wiki_repo_op_space_fkey")
   /// The checkout read: the workspace whose work directory it is, and the machine it runs on (written by
   /// the claim, which is also what the result route's fence reads).
   workspaceId String     @map("workspace_id") @db.Uuid
   workspace   Workspace  @relation(fields: [workspaceId, ownerId], references: [id, ownerId], onDelete: Cascade, map: "wiki_repo_op_workspace_fkey")
   runnerId    String?    @map("runner_id") @db.Uuid
-  /// `snapshot` | `read` | `diff` | `anchors`.
+  /// `snapshot` | `read` | `diff` | `anchors` | `probe`.
   kind String
   /// What the kind reads — a read's paths and limits, a diff's two commits, a snapshot's skip sha.
   input Json   @default("{}")
@@ -8603,6 +9613,9 @@ model WikiRepoSnapshot {
   digest        String @db.Char(64)
   sizeBytes     BigInt @map("size_bytes")
   fragmentCount Int    @map("fragment_count")
+  /// What the index was read from (migration 0521): `git`, or `folder`, a working directory that is not a git checkout,
+  /// whose sha is its tree hash (docs/wiki-repo-tiers-design.md §4.2).
+  source        String   @default("git")
   createdAt     DateTime @default(now()) @map("created_at") @db.Timestamptz(3)
   updatedAt     DateTime @default(now()) @updatedAt @map("updated_at") @db.Timestamptz(3)
 
@@ -8651,4 +9664,821 @@ model WikiRepoFile {
   @@unique([spaceId, sha, path], map: "wiki_repo_file_space_sha_path_key")
   @@index([spaceId, sha], map: "wiki_repo_file_space_sha_idx")
   @@map("wiki_repo_file")
+}
+
+/// An account's own Feishu (Lark) self-built app (docs/feishu-bot-design.md §4.1, migration 0489): at most one per
+/// account, and an app reaches at most one account of this deployment, because an app's long connection has one
+/// consumer (§3.2). The account's Settings → Integrations → Feishu writes it (feishu/feishu-app.service.ts), and only
+/// after Feishu traded these credentials for a tenant_access_token; an administrator can remove it.
+///
+/// The App Secret is kept encrypted as a model provider's API key is (providers/provider-crypto.ts), and no response
+/// carries it in either form: the settings answer `hasSecret` and `secretUnreadable`. Another App ID or platform is
+/// another app, so it replaces the row, and the owner's identity, the status and whatever later hangs off the old app
+/// go with it. Two CHECKs carry the closed sets and cannot be spelled here: `feishu_app_platform_chk` and
+/// `feishu_app_message_detail_chk`.
+model FeishuApp {
+  id                 String     @id @default(uuid(7)) @db.Uuid
+  ownerId            String     @unique(map: "feishu_app_owner_id_key") @map("owner_id") @db.Uuid
+  owner              User       @relation(fields: [ownerId], references: [id], onDelete: Cascade, map: "feishu_app_owner_id_fkey")
+  /// `FEISHU` (open.feishu.cn) | `LARK` (open.larksuite.com).
+  platform           String
+  /// The app's App ID (`cli_…`).
+  appId              String     @unique(map: "feishu_app_app_id_key") @map("app_id")
+  /// AES-256-GCM ciphertext of the App Secret ("iv:tag:ct", each base64).
+  appSecretEnc       String     @map("app_secret_enc")
+  /// The app's own switch: off, Orbit neither connects it nor sends through it.
+  enabled            Boolean    @default(true)
+  /// `TITLES_ONLY` | `FULL`: what an alert card carries (§6.4).
+  messageDetail      String     @default("TITLES_ONLY") @map("message_detail")
+  /// Whether tool approvals can be answered on the owner's cards (§7.2).
+  approvalsInFeishu  Boolean    @default(true) @map("approvals_in_feishu")
+  /// Where a session started in the owner's direct messages opens (§7.3).
+  defaultWorkspaceId String?    @map("default_workspace_id") @db.Uuid
+  defaultWorkspace   Workspace? @relation("FeishuAppDefaultWorkspace", fields: [defaultWorkspaceId], references: [id], onDelete: SetNull, map: "feishu_app_default_workspace_id_fkey")
+  /// The owner's open_id in this app, once they bound it (§5); open_ids are per app.
+  ownerOpenId        String?    @map("owner_open_id")
+  /// Read when the owner bound it, for display only.
+  ownerName          String?    @map("owner_name")
+  /// Read once connected.
+  botName            String?    @map("bot_name")
+  lastConnectedAt    DateTime?  @map("last_connected_at") @db.Timestamptz(3)
+  lastEventAt        DateTime?  @map("last_event_at") @db.Timestamptz(3)
+  /// Feishu's error code and message, never a credential.
+  lastError          String?    @map("last_error")
+  /// Who can use the bot (migration 1140, §14.1): `OWNER_ONLY` (the default) | `AVAILABILITY_SCOPE`, everyone the app is
+  /// available to in Feishu, who start sessions with the five settings below.
+  accessMode         String     @default("OWNER_ONLY") @map("access_mode")
+  /// Where sessions other people start open; required to open the bot, cleared when the workspace is dropped.
+  openWorkspaceId    String?    @map("open_workspace_id") @db.Uuid
+  openWorkspace      Workspace? @relation("FeishuAppOpenWorkspace", fields: [openWorkspaceId], references: [id], onDelete: SetNull, map: "feishu_app_open_workspace_id_fkey")
+  /// The PermissionMode those sessions run in.
+  openPermissionMode String     @default("auto") @map("open_permission_mode")
+  /// The four limits (§14.4): one person's sessions at a time and a day, and everyone's together.
+  openMaxRunningPerPerson     Int @default(1) @map("open_max_running_per_person")
+  openSessionsPerDayPerPerson Int @default(10) @map("open_sessions_per_day_per_person")
+  openMaxRunningTotal         Int @default(3) @map("open_max_running_total")
+  openSessionsPerDayTotal     Int @default(50) @map("open_sessions_per_day_total")
+  /// "Show Orbit in Feishu" (migration 1150, §15.2): off, the owner's cards and replies carry no Open in Orbit button
+  /// and no Orbit link.
+  showOrbit          Boolean    @default(true) @map("show_orbit")
+  createdAt          DateTime   @default(now()) @map("created_at") @db.Timestamptz(3)
+  updatedAt          DateTime   @default(now()) @updatedAt @map("updated_at") @db.Timestamptz(3)
+  inboundEvents      FeishuInboundEvent[]
+  links              FeishuLink[]
+  chatRoutes         FeishuChatRoute[]
+  messages           FeishuMessage[]
+  threads            FeishuThread[]
+  outbox             FeishuOutbox[]
+
+  @@index([openWorkspaceId], map: "feishu_app_open_workspace_id_idx")
+  @@map("feishu_app")
+}
+
+/// One group chat of an account's Feishu app, connected to Orbit (docs/feishu-bot-design.md §8.1, §8.3, migration 0496):
+/// where the sessions people in the group start open, in which permission mode, who may start them and how many. Made
+/// when the owner sends `@<bot> connect` in the group, holding only the one-time ticket the card's button carries;
+/// confirmed on Orbit's page (an owner-channel route), which writes the choices and clears the ticket. The bot removed
+/// from the group switches it off (BOT_REMOVED). Written by feishu/feishu-chat-route.service.ts alone.
+model FeishuChatRoute {
+  id                    String     @id @default(uuid(7)) @db.Uuid
+  ownerId               String     @map("owner_id") @db.Uuid
+  owner                 User       @relation(fields: [ownerId], references: [id], onDelete: Cascade, map: "feishu_chat_route_owner_id_fkey")
+  appId                 String     @map("app_id")
+  app                   FeishuApp  @relation(fields: [appId], references: [appId], onDelete: Cascade, map: "feishu_chat_route_app_id_fkey")
+  /// Feishu's chat_id (`oc_…`).
+  chatId                String     @map("chat_id")
+  /// The group's name as Feishu gave it when connect was sent, for display only.
+  chatName              String?    @map("chat_name")
+  /// Set once confirmed.
+  workspaceId           String?    @map("workspace_id") @db.Uuid
+  workspace             Workspace? @relation(fields: [workspaceId], references: [id], onDelete: Cascade, map: "feishu_chat_route_workspace_id_fkey")
+  /// The PermissionMode every session of the group runs in; set once confirmed.
+  permissionMode        String?    @map("permission_mode")
+  /// open_ids that may start sessions; empty means everyone in the group. The owner always may.
+  allowedOpenIds        String[]   @default([]) @map("allowed_open_ids")
+  maxConcurrentSessions Int        @default(2) @map("max_concurrent_sessions")
+  sessionsPerDay        Int        @default(20) @map("sessions_per_day")
+  enabled               Boolean    @default(false)
+  confirmedAt           DateTime?  @map("confirmed_at") @db.Timestamptz(3)
+  /// `BOT_REMOVED` | `OWNER`, while switched off after being confirmed.
+  disabledReason        String?    @map("disabled_reason")
+  /// Hex SHA-256 of the live one-time ticket, while one is.
+  ticketHash            String?    @unique(map: "feishu_chat_route_ticket_hash_key") @map("ticket_hash")
+  /// Who sent the connect that issued the ticket (the app's owner then).
+  ticketOpenId          String?    @map("ticket_open_id")
+  /// The event that issued the ticket: the same event processed again issues the same one.
+  ticketEventId         String?    @map("ticket_event_id")
+  ticketExpiresAt       DateTime?  @map("ticket_expires_at") @db.Timestamptz(3)
+  /// `CONNECT` (the owner's connect) | `OPEN_ACCESS`: an implicit route, made the first time someone mentioned the bot in
+  /// an unconnected internal group while it was open (migration 1140, §14.2). It uses the app's settings, not its own.
+  source                String     @default("CONNECT")
+  /// Who used the group first, and when: set on an implicit route.
+  firstUsedByOpenId     String?    @map("first_used_by_open_id")
+  firstUsedByName       String?    @map("first_used_by_name")
+  firstUsedAt           DateTime?  @map("first_used_at") @db.Timestamptz(3)
+  createdAt             DateTime   @default(now()) @map("created_at") @db.Timestamptz(3)
+  updatedAt             DateTime   @default(now()) @updatedAt @map("updated_at") @db.Timestamptz(3)
+
+  @@unique([appId, chatId], map: "feishu_chat_route_app_id_chat_id_key")
+  @@index([ownerId], map: "feishu_chat_route_owner_id_idx")
+  @@index([workspaceId], map: "feishu_chat_route_workspace_id_idx")
+  @@map("feishu_chat_route")
+}
+
+/// A one-time code that makes whoever sends it to the account's Feishu bot, in a direct message, the app's owner
+/// (docs/feishu-bot-design.md §5.1, migration 0494). Generated from Settings → Feishu (feishu/feishu-owner.service.ts),
+/// 8 characters, good for 10 minutes and one use: only its SHA-256 is stored, and the row is deleted when it is used,
+/// when a group sees it, or when the account generates another.
+model FeishuConnectCode {
+  id        String   @id @default(uuid(7)) @db.Uuid
+  ownerId   String   @map("owner_id") @db.Uuid
+  owner     User     @relation(fields: [ownerId], references: [id], onDelete: Cascade, map: "feishu_connect_code_owner_id_fkey")
+  /// Hex SHA-256 of the code as typed, upper-cased.
+  codeHash  String   @unique(map: "feishu_connect_code_code_hash_key") @map("code_hash")
+  expiresAt DateTime @map("expires_at") @db.Timestamptz(3)
+  createdAt DateTime @default(now()) @map("created_at") @db.Timestamptz(3)
+
+  @@index([ownerId], map: "feishu_connect_code_owner_id_idx")
+  @@index([expiresAt], map: "feishu_connect_code_expires_at_idx")
+  @@map("feishu_connect_code")
+}
+
+/// An alert card the Feishu bot sent to its owner (docs/feishu-bot-design.md §6.1, §6.2, migration 0495), written only by
+/// push/feishu-transport.ts. Cards are merged at the grain of the APNs collapse id: `(appId, collapseKey)` is unique, a
+/// repeated announcement bumps `revision`, and whoever holds the lease sends or updates the card and records
+/// `renderedRevision`, so two apiservers send one card between them. `sessionId`, `approvalId` and `openItemId` carry no
+/// foreign key, as `Approval.turnId` carries none. Two CHECKs carry the closed sets and cannot be spelled here:
+/// `feishu_message_kind_chk` and `feishu_message_status_chk`.
+model FeishuMessage {
+  id               String    @id @default(uuid(7)) @db.Uuid
+  ownerId          String    @map("owner_id") @db.Uuid
+  owner            User      @relation(fields: [ownerId], references: [id], onDelete: Cascade, map: "feishu_message_owner_id_fkey")
+  appId            String    @map("app_id")
+  app              FeishuApp @relation(fields: [appId], references: [appId], onDelete: Cascade, onUpdate: Cascade, map: "feishu_message_app_id_fkey")
+  /// `approval-<first approval of the stretch>`, `settled-<session>-<turn seq>`, `owner-item-<item>`, or another
+  /// alert's own collapse id; a one-off alert's is unique to it.
+  collapseKey      String    @map("collapse_key")
+  /// `approval` | `finished` | `failed` | `agent-message` | `owner-item` | `other` (§6.1).
+  kind             String
+  /// The owner's open_id the card was sent to.
+  receiveId        String    @map("receive_id")
+  /// The chat Feishu put the card in.
+  chatId           String?   @map("chat_id")
+  /// Feishu's message_id, once Feishu accepted the card.
+  messageId        String?   @unique(map: "feishu_message_message_id_key") @map("message_id")
+  sessionId        String?   @map("session_id") @db.Uuid
+  /// An approval card's: the first approval of the stretch it lists.
+  approvalId       String?   @map("approval_id") @db.Uuid
+  openItemId       String?   @map("open_item_id") @db.Uuid
+  /// `PENDING` (not sent yet) | `SENT` | `FAILED` (given up before Feishu accepted it) | `CLOSED` (drawn as its outcome once
+  /// its matter was settled elsewhere, F1-5).
+  status           String    @default("PENDING")
+  /// The alert the card was last drawn from (feishu/cards/feishu-cards.ts `FeishuAlert`).
+  alert            Json?     @db.JsonB
+  revision         Int       @default(1)
+  renderedRevision Int       @default(0) @map("rendered_revision")
+  leaseToken       String?   @map("lease_token") @db.Uuid
+  leaseUntil       DateTime? @map("lease_until") @db.Timestamptz(3)
+  attempts         Int       @default(0)
+  /// Feishu's code and message for the last failure, never a credential.
+  lastError        String?   @map("last_error")
+  sentAt           DateTime? @map("sent_at") @db.Timestamptz(3)
+  createdAt        DateTime  @default(now()) @map("created_at") @db.Timestamptz(3)
+  updatedAt        DateTime  @default(now()) @updatedAt @map("updated_at") @db.Timestamptz(3)
+
+  @@unique([appId, collapseKey], map: "feishu_message_app_id_collapse_key_key")
+  @@index([sessionId], map: "feishu_message_session_id_idx")
+  @@index([openItemId], map: "feishu_message_open_item_id_idx")
+  @@index([ownerId], map: "feishu_message_owner_id_idx")
+  @@map("feishu_message")
+}
+
+/// A Feishu message chain that belongs to a session (docs/feishu-bot-design.md §7.3, §7.5, migration 0499), written only
+/// by feishu/feishu-direct.service.ts: the chain the owner started with a new direct message (the bot's receipt
+/// answers it), and each alert card the owner replied to. `(appId, chatId, rootMessageId)` is unique; `lastSpokenAt`
+/// says which of a session's chains its replies go back to. `sessionId` carries no foreign key, as
+/// `FeishuMessage.sessionId` carries none; every reader scopes it by `ownerId`.
+model FeishuThread {
+  id            String    @id @default(uuid(7)) @db.Uuid
+  ownerId       String    @map("owner_id") @db.Uuid
+  owner         User      @relation(fields: [ownerId], references: [id], onDelete: Cascade, map: "feishu_thread_owner_id_fkey")
+  appId         String    @map("app_id")
+  app           FeishuApp @relation(fields: [appId], references: [appId], onDelete: Cascade, onUpdate: Cascade, map: "feishu_thread_app_id_fkey")
+  chatId        String    @map("chat_id")
+  /// The message the chain starts from: Feishu's `root_id` of every reply in it.
+  rootMessageId String    @map("root_message_id")
+  sessionId     String    @map("session_id") @db.Uuid
+  /// When someone last spoke in the chain: its opening, or the owner's latest reply in it.
+  lastSpokenAt  DateTime  @default(now()) @map("last_spoken_at") @db.Timestamptz(3)
+  /// The non-owner whose request opened this chain's session while the bot was open (migration 1140, §14.4); null for
+  /// every other chain. The open-access limits count these. Their partial index lives in the migration.
+  openAccessOpenId String? @map("open_access_open_id")
+  createdAt     DateTime  @default(now()) @map("created_at") @db.Timestamptz(3)
+  updatedAt     DateTime  @default(now()) @updatedAt @map("updated_at") @db.Timestamptz(3)
+
+  @@unique([appId, chatId, rootMessageId], map: "feishu_thread_app_id_chat_id_root_message_id_key")
+  @@index([sessionId, lastSpokenAt], map: "feishu_thread_session_id_last_spoken_at_idx")
+  @@index([ownerId], map: "feishu_thread_owner_id_idx")
+  @@map("feishu_thread")
+}
+
+/// A session's reply on its way back to Feishu (docs/feishu-bot-design.md §7.5, migration 0501): one row per finished
+/// turn of a session that has a message chain (feishu_thread), with the turn's last assistant text and the chain spoken
+/// in last. turn-complete writes it after its own transaction committed, in a statement of its own, and only logs a
+/// failure (§1.3 item 6), so a turn never waits on Feishu nor fails for it. A worker on any replica claims due rows and
+/// replies into the chain (feishu/feishu-outbox.ts). `status` is PENDING | FAILED | SENT | GAVE_UP (a CHECK);
+/// `feishu_outbox_due_idx` is partial and cannot be spelled here.
+model FeishuOutbox {
+  id            String    @id @default(uuid(7)) @db.Uuid
+  ownerId       String    @map("owner_id") @db.Uuid
+  owner         User      @relation(fields: [ownerId], references: [id], onDelete: Cascade, map: "feishu_outbox_owner_id_fkey")
+  appId         String    @map("app_id")
+  app           FeishuApp @relation(fields: [appId], references: [appId], onDelete: Cascade, onUpdate: Cascade, map: "feishu_outbox_app_id_fkey")
+  sessionId     String    @map("session_id") @db.Uuid
+  turnId        String    @unique(map: "feishu_outbox_turn_id_key") @map("turn_id") @db.Uuid
+  /// The chain it goes to, as feishu_thread had it when the turn ended.
+  chatId        String    @map("chat_id")
+  rootMessageId String    @map("root_message_id")
+  /// The turn's last assistant text.
+  text          String
+  status        String    @default("PENDING")
+  attempts      Int       @default(0)
+  /// When it is next due: now, a claim's lease, or the backoff after a failure.
+  dueAt         DateTime  @default(now()) @map("due_at") @db.Timestamptz(3)
+  messageId     String?   @map("message_id")
+  /// Feishu's code and message of the last failure, never a credential or the text.
+  lastError     String?   @map("last_error")
+  sentAt        DateTime? @map("sent_at") @db.Timestamptz(3)
+  createdAt     DateTime  @default(now()) @map("created_at") @db.Timestamptz(3)
+  updatedAt     DateTime  @default(now()) @updatedAt @map("updated_at") @db.Timestamptz(3)
+
+  @@index([sessionId, createdAt], map: "feishu_outbox_session_id_created_at_idx")
+  @@index([ownerId], map: "feishu_outbox_owner_id_idx")
+  @@index([appId], map: "feishu_outbox_app_id_idx")
+  @@map("feishu_outbox")
+}
+
+/// The inbound inbox of the Feishu bot integration (docs/feishu-bot-design.md §7.1, migration 0492): every event an
+/// app's long connection delivered, written before it is acknowledged, so a redelivery of the same `(appId, eventId)`
+/// — Feishu redelivers what it did not see acknowledged within 3 seconds, to any replica's connection — finds its row
+/// and is acknowledged without being processed again. A worker on any replica claims an unprocessed row with
+/// FOR UPDATE SKIP LOCKED and a lease (feishu/feishu-inbox.service.ts), routes it (feishu/feishu-router.ts), and
+/// stamps `processedAt`; a failure is retried a bounded number of times. Rows go 7 days after they were processed, or
+/// were given up on.
+model FeishuInboundEvent {
+  id          String    @id @default(uuid(7)) @db.Uuid
+  /// The App ID (`cli_…`) of the app whose connection delivered it; its app's removal takes it.
+  appId       String    @map("app_id")
+  app         FeishuApp @relation(fields: [appId], references: [appId], onDelete: Cascade, onUpdate: Cascade, map: "feishu_inbound_event_app_id_fkey")
+  /// Feishu's event_id (`header.event_id`, or a v1 event's `uuid`).
+  eventId     String    @map("event_id")
+  /// Feishu's event type (`im.message.receive_v1`, `card.action.trigger`, …).
+  eventType   String    @map("event_type")
+  /// The envelope as Feishu sent it.
+  payload     Json      @db.JsonB
+  receivedAt  DateTime  @default(now()) @map("received_at") @db.Timestamptz(3)
+  /// The replica (feishu/feishu-link.service.ts `replicaId`) whose connection delivered it.
+  receivedBy  String    @map("received_by")
+  processedAt DateTime? @map("processed_at") @db.Timestamptz(3)
+  processedBy String?   @map("processed_by")
+  /// Claims so far, the one in flight included.
+  attempts    Int       @default(0)
+  /// Until when the claim in flight holds it; a retry waits for it too.
+  leaseUntil  DateTime? @map("lease_until") @db.Timestamptz(3)
+  /// Why the last attempt failed.
+  error       String?
+
+  @@unique([appId, eventId], map: "feishu_inbound_event_app_id_event_id_key")
+  @@map("feishu_inbound_event")
+}
+
+/// One replica's long connection of one app (docs/feishu-bot-design.md §4.4, migration 0492): written by that
+/// replica alone (feishu/feishu-link.service.ts), its heartbeat renewed while the process lives, deleted when the
+/// connection is closed on purpose. The settings page counts the CONNECTED rows with a fresh heartbeat.
+model FeishuLink {
+  appId         String    @map("app_id")
+  app           FeishuApp @relation(fields: [appId], references: [appId], onDelete: Cascade, onUpdate: Cascade, map: "feishu_link_app_id_fkey")
+  replicaId     String    @map("replica_id")
+  /// `CONNECTING` | `CONNECTED` | `BACKOFF` (waiting `nextAttemptAt` after a failure) | `STOPPED` (Feishu said the
+  /// app is disabled or gone; no reconnect until the app is saved again).
+  state         String
+  connectedAt   DateTime? @map("connected_at") @db.Timestamptz(3)
+  /// Failures in a row since the last connection.
+  failures      Int       @default(0)
+  nextAttemptAt DateTime? @map("next_attempt_at") @db.Timestamptz(3)
+  lastError     String?   @map("last_error")
+  heartbeatAt   DateTime  @default(now()) @map("heartbeat_at") @db.Timestamptz(3)
+
+  @@id([appId, replicaId], map: "feishu_link_pkey")
+  @@map("feishu_link")
+}
+
+/// The administrators' switch "Allow accounts to connect Feishu bots" (docs/feishu-bot-design.md §4.1, migration
+/// 0489): at most one row, id 1, written only by an administrator through PUT /api/admin/integrations/feishu
+/// (feishu/feishu-app.service.ts). While `allowed` is false no account connects an app; the apps already saved stay.
+/// No row is the same as a row that allows it: the switch is on by default. `feishu_deployment_setting_one_row_chk`
+/// (`id` = 1) lives only in the migration.
+model FeishuDeploymentSetting {
+  id          Int      @id @default(1) @db.SmallInt
+  allowed     Boolean
+  /// When `allowed` was last switched.
+  updatedAt   DateTime @default(now()) @map("updated_at") @db.Timestamptz(3)
+  /// The administrator who switched it. An id rather than a relation, so deleting them writes nothing here.
+  updatedById String?  @map("updated_by_id") @db.Uuid
+
+  @@map("feishu_deployment_setting")
+}
+
+/// K7: a coordinator request remains pending until a candidate consumes it in its own transaction.
+model ProjectPromotionRequest {
+  id        String  @id @default(uuid(7)) @db.Uuid
+  projectId String  @map("project_id") @db.Uuid
+  project   Project @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  /// History references: deleting a conversation or promotion must not erase the request's provenance.
+  sessionId             String   @map("session_id") @db.Uuid
+  reason                String
+  createdAt             DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
+  consumedByPromotionId String?  @map("consumed_by_promotion_id") @db.Uuid
+
+  @@index([projectId, createdAt])
+  @@map("project_promotion_request")
+}
+
+/// A main checkout read or action relayed to a workspace's runner (docs/main-checkout-git-contract.md §10, migration
+/// 0534): queued here, handed out once on the heartbeat, finished by the runner's answer or by the timeout. A partial
+/// unique index (in the migration; schema.prisma cannot express one) keeps one action in flight per runner and root.
+model MainCheckoutRequest {
+  id          String    @id @default(uuid(7)) @db.Uuid
+  ownerId     String    @map("owner_id") @db.Uuid
+  workspaceId String    @map("workspace_id") @db.Uuid
+  workspace   Workspace @relation(fields: [workspaceId, ownerId], references: [id, ownerId], onDelete: Cascade, map: "main_checkout_request_workspace_fkey")
+  /// No foreign key, as wiki_repo_op's: the runner is who it was handed to, not what it belongs to.
+  runnerId    String    @map("runner_id") @db.Uuid
+  /// realpath of the checkout the runner reported (RunnerRepoHealth.root).
+  root        String
+  /// 'snapshot' | 'action'.
+  op          String
+  /// The client's requestId (actions only); unique per owner.
+  requestId   String?   @map("request_id")
+  /// move | commit | push | rescue (actions only).
+  kind        String?
+  /// What the runner is handed: the MainCheckoutActionCommand, or the snapshot's root and diff paths.
+  input       Json      @default("{}")
+  /// The session that gets the result line (contract §7). Not a relation: a line is written to it if it still exists.
+  initiatedFromSessionId String? @map("initiated_from_session_id") @db.Uuid
+  /// pending (queued) → claimed (handed to the runner) → finished.
+  state       String    @default("pending")
+  /// The outcome: MainCheckoutActionResult, or for a read the MainCheckoutSnapshotAnswer.
+  result      Json?
+  /// A runner's result that arrived after the request had finished (TIMEOUT, CANCELLED): kept, never replacing it.
+  lateResult  Json?     @map("late_result")
+  createdAt   DateTime  @default(now()) @map("created_at") @db.Timestamptz(3)
+  expiresAt   DateTime  @map("expires_at") @db.Timestamptz(3)
+  claimedAt   DateTime? @map("claimed_at") @db.Timestamptz(3)
+  finishedAt  DateTime? @map("finished_at") @db.Timestamptz(3)
+
+  @@unique([ownerId, requestId], map: "main_checkout_request_id_key")
+  @@index([workspaceId, ownerId], map: "main_checkout_request_workspace_idx")
+  @@map("main_checkout_request")
+}
+
+/// Someone the owner of a session invited to reply in it (docs/session-guests-design.md §7, migration 0560). A live row
+/// (`removedAt` null) lets `userId` read the session through /guest-sessions and send turns into it, recorded as the
+/// owner's turns with external sender ORBIT_GUEST. Removing or leaving stamps `removedAt` and `removedReason`
+/// (REMOVED | LEFT); inviting again is a new row. Two partial indexes this schema cannot spell: unique
+/// (session_id, user_id) WHERE removed_at IS NULL, and (user_id) WHERE removed_at IS NULL.
+model SessionGuest {
+  id            String    @id @default(uuid(7)) @db.Uuid
+  sessionId     String    @map("session_id") @db.Uuid
+  session       Session   @relation(fields: [sessionId], references: [id], onDelete: Cascade, map: "session_guest_session_id_fkey")
+  /// The session's owner when the guest was added. No foreign key: the session's cascade takes the row.
+  ownerId       String    @map("owner_id") @db.Uuid
+  userId        String    @map("user_id") @db.Uuid
+  user          User      @relation(fields: [userId], references: [id], onDelete: Cascade, map: "session_guest_user_id_fkey")
+  addedAt       DateTime  @default(now()) @map("added_at") @db.Timestamptz(3)
+  /// The first time the guest opened the session; null until they do.
+  openedAt      DateTime? @map("opened_at") @db.Timestamptz(3)
+  removedAt     DateTime? @map("removed_at") @db.Timestamptz(3)
+  /// REMOVED (the owner took them out) | LEFT (they left); set exactly when removedAt is.
+  removedReason String?   @map("removed_reason")
+  /// The UTC day turnsOnDay counts (0572); null until the guest's first message.
+  turnDay       DateTime? @map("turn_day") @db.Date
+  /// Messages the guest sent on turnDay: the daily cap's count, taken by one conditional UPDATE.
+  turnsOnDay    Int       @default(0) @map("turns_on_day")
+
+  @@map("session_guest")
+}
+
+/// Scheduled tasks (migration 0790, docs/scheduled-tasks-design.md §3–§4).
+
+enum ScheduleAccessLevel {
+  CHECK_ONLY
+  OPEN_PR
+  LAND
+
+  @@map("schedule_access_level")
+}
+
+enum ScheduleState {
+  ACTIVE
+  PAUSED
+  HELD
+  ENDED
+
+  @@map("schedule_state")
+}
+
+enum ScheduleEndedReason {
+  DELETED
+  END_REACHED
+  GOAL_REACHED
+
+  @@map("schedule_ended_reason")
+}
+
+/// Who made a change: the owner pressing something (USER), an ordinary session (SESSION), or the schedule's own
+/// run session (RUN). A RUN's narrowing does not shrink the envelope (§4).
+enum ScheduleChangedBy {
+  USER
+  SESSION
+  RUN
+
+  @@map("schedule_changed_by")
+}
+
+enum ScheduleRunTrigger {
+  SCHEDULED
+  CATCH_UP
+  MANUAL
+  /// A WHEN schedule's condition fired (migration 1040); `plannedAt` is the firing sample's time.
+  CONDITION
+
+  @@map("schedule_run_trigger")
+}
+
+enum ScheduleRunState {
+  QUEUED
+  RUNNING
+  AWAITING_APPROVAL
+  NO_CHANGE
+  CHANGED
+  FAILED
+  SKIPPED
+  MISSED
+  HELD
+  CANCELLED
+
+  @@map("schedule_run_state")
+}
+
+enum ScheduleChangeRequestKind {
+  CREATE
+  UPDATE
+
+  @@map("schedule_change_request_kind")
+}
+
+enum ScheduleChangeRequestState {
+  PENDING
+  ALLOWED
+  DECLINED
+  SUPERSEDED
+
+  @@map("schedule_change_request_state")
+}
+
+/// A goal, a rhythm and an envelope (schedules/schedules.service.ts). `workspaceId`, `agentId` and
+/// `createdFromSessionId` are history references, not foreign keys. The envelope (`envelope*`) is written only by a
+/// press on the owner channel, or narrowed by a person's own narrowing (§4). The partial index `schedule_due_idx`
+/// (WHERE state = 'ACTIVE') and the CHECKs live in the migration.
+model Schedule {
+  id                       String              @id @default(uuid(7)) @db.Uuid
+  ownerId                  String              @map("owner_id") @db.Uuid
+  owner                    User                @relation(fields: [ownerId], references: [id], onDelete: Cascade)
+  workspaceId              String              @map("workspace_id") @db.Uuid
+  agentId                  String?             @map("agent_id") @db.Uuid
+  /// The person's own words, verbatim.
+  intent                   String
+  title                    String
+  prompt                   String
+  /// `{ kind: ONCE, at }` | `{ kind: DAILY, time }` | `{ kind: WEEKLY, time, weekdays[] }` |
+  /// `{ kind: WHEN, conditionId, runsPerWeek, condition }` (schedule-time.ts).
+  rule                     Json
+  timezone                 String
+  startAt                  DateTime            @map("start_at") @db.Timestamptz(3)
+  endAt                    DateTime?           @map("end_at") @db.Timestamptz(3)
+  accessLevel              ScheduleAccessLevel @map("access_level")
+  runLimitMinutes          Int                 @default(30) @map("run_limit_minutes")
+  envelopeWorkspaceId      String              @map("envelope_workspace_id") @db.Uuid
+  envelopeAccessLevel      ScheduleAccessLevel @map("envelope_access_level")
+  envelopeRunsPerWeek      Int                 @map("envelope_runs_per_week")
+  envelopeRunLimitMinutes  Int                 @map("envelope_run_limit_minutes")
+  /// A WHEN rule's approved probe command, as its sha256 (migration 1040); NULL for a timed schedule.
+  envelopeCommandHash      String?             @map("envelope_command_hash")
+  state                    ScheduleState       @default(ACTIVE)
+  heldReason               String?             @map("held_reason")
+  endedReason              ScheduleEndedReason? @map("ended_reason")
+  /// The last run's note to the next, at most 2000 characters.
+  note                     String?
+  /// The agent's one-sentence read-back of the schedule as it is now (at most 500 characters). A rule or zone change
+  /// that brings none clears it, and the inspector derives the When part from the rule.
+  readBack                 String?             @map("read_back")
+  revision                 Int                 @default(1)
+  nextDueAt                DateTime?           @map("next_due_at") @db.Timestamptz(3)
+  consecutiveFailures      Int                 @default(0) @map("consecutive_failures")
+  createdFromSessionId     String?             @map("created_from_session_id") @db.Uuid
+  createdAt                DateTime            @default(now()) @map("created_at") @db.Timestamptz(3)
+  updatedAt                DateTime            @default(now()) @updatedAt @map("updated_at") @db.Timestamptz(3)
+  endedAt                  DateTime?           @map("ended_at") @db.Timestamptz(3)
+  revisions                ScheduleRevision[]
+  runs                     ScheduleRun[]
+  findings                 ScheduleFinding[]
+  changeRequests           ScheduleChangeRequest[]
+  /// Its WHEN rule's condition (migration 1030), when it has one.
+  conditions               Condition[]
+
+  @@index([ownerId, state], map: "schedule_owner_state_idx")
+  @@map("schedule")
+}
+
+/// One row per change to a schedule, what the history shows and Undo reads. `fields` is `{ before, after }`.
+model ScheduleRevision {
+  id              String            @id @default(uuid(7)) @db.Uuid
+  scheduleId      String            @map("schedule_id") @db.Uuid
+  schedule        Schedule          @relation(fields: [scheduleId], references: [id], onDelete: Cascade)
+  revision        Int
+  changedBy       ScheduleChangedBy @map("changed_by")
+  sessionId       String?           @map("session_id") @db.Uuid
+  fields          Json
+  /// Set on the revision an Undo wrote: the revision it undid.
+  undoOfRevision  Int?              @map("undo_of_revision")
+  createdAt       DateTime          @default(now()) @map("created_at") @db.Timestamptz(3)
+
+  @@unique([scheduleId, revision], map: "schedule_revision_schedule_revision_key")
+  @@map("schedule_revision")
+}
+
+/// One firing. Its partial unique indexes (one per SCHEDULED/CATCH_UP slot, one in progress, one queued) live in
+/// the migration. `sessionId` is a history reference.
+model ScheduleRun {
+  id               String             @id @default(uuid(7)) @db.Uuid
+  scheduleId       String             @map("schedule_id") @db.Uuid
+  schedule         Schedule           @relation(fields: [scheduleId], references: [id], onDelete: Cascade)
+  scheduleRevision Int                @map("schedule_revision")
+  plannedAt        DateTime           @map("planned_at") @db.Timestamptz(3)
+  trigger          ScheduleRunTrigger
+  state            ScheduleRunState   @default(QUEUED)
+  attempt          Int                @default(1)
+  startedAt        DateTime?          @map("started_at") @db.Timestamptz(3)
+  endedAt          DateTime?          @map("ended_at") @db.Timestamptz(3)
+  sessionId        String?            @map("session_id") @db.Uuid
+  key              String?
+  summary          String?
+  links            Json               @default("[]")
+  failureReason    String?            @map("failure_reason")
+  /// LAND after a successful report: WAITING, MERGING, LANDED, NO_COMMITS or FAILED (0990).
+  landingStatus    String?            @map("landing_status")
+  landedSha        String?            @map("landed_sha") @db.Char(40)
+  /// A QUEUED run is not started before this (migration 0830): a retry's 1, 5 or 15 minutes (§7.2).
+  notBeforeAt      DateTime?          @map("not_before_at") @db.Timestamptz(3)
+  /// Why a HELD run's start checks failed (§6.1, migration 0830).
+  heldReason       String?            @map("held_reason")
+  /// The level the run started with (§6.2, migration 0860): what its session is held to, whatever the schedule
+  /// says later. NULL until the run starts.
+  accessLevel      ScheduleAccessLevel? @map("access_level")
+  createdAt        DateTime           @default(now()) @map("created_at") @db.Timestamptz(3)
+  sessions         Session[]
+
+  @@index([scheduleId, plannedAt(sort: Desc)], map: "schedule_run_schedule_planned_idx")
+  @@map("schedule_run")
+}
+
+/// Something a run reported as new, under the key it chose; one per key per schedule. A creation baseline is one
+/// with `notifiedAt` already set.
+model ScheduleFinding {
+  id            String    @id @default(uuid(7)) @db.Uuid
+  scheduleId    String    @map("schedule_id") @db.Uuid
+  schedule      Schedule  @relation(fields: [scheduleId], references: [id], onDelete: Cascade)
+  key           String
+  summary       String?
+  firstRunId    String?   @map("first_run_id") @db.Uuid
+  lastSeenRunId String?   @map("last_seen_run_id") @db.Uuid
+  notifiedAt    DateTime? @map("notified_at") @db.Timestamptz(3)
+  links         Json      @default("[]")
+  createdAt     DateTime  @default(now()) @map("created_at") @db.Timestamptz(3)
+
+  @@unique([scheduleId, key], map: "schedule_finding_schedule_key_key")
+  @@map("schedule_finding")
+}
+
+/// A create, or a change that grows the envelope, waiting for the owner's press (§4). Only an owner-channel
+/// decision moves it out of PENDING to ALLOWED or DECLINED; a newer request for the same schedule SUPERSEDES it.
+model ScheduleChangeRequest {
+  id               String                     @id @default(uuid(7)) @db.Uuid
+  ownerId          String                     @map("owner_id") @db.Uuid
+  owner            User                       @relation(fields: [ownerId], references: [id], onDelete: Cascade)
+  scheduleId       String?                    @map("schedule_id") @db.Uuid
+  schedule         Schedule?                  @relation(fields: [scheduleId], references: [id], onDelete: Cascade)
+  kind             ScheduleChangeRequestKind
+  state            ScheduleChangeRequestState @default(PENDING)
+  askedBy          ScheduleChangedBy          @map("asked_by")
+  askedBySessionId String?                    @map("asked_by_session_id") @db.Uuid
+  baseRevision     Int?                       @map("base_revision")
+  proposed         Json
+  envelopeBefore   Json?                      @map("envelope_before")
+  envelopeAsked    Json                       @map("envelope_asked")
+  widens           String[]                   @default([])
+  decidedAt        DateTime?                  @map("decided_at") @db.Timestamptz(3)
+  decidedByUserId  String?                    @map("decided_by_user_id") @db.Uuid
+  resultRevision   Int?                       @map("result_revision")
+  createdAt        DateTime                   @default(now()) @map("created_at") @db.Timestamptz(3)
+
+  @@index([ownerId, state, createdAt], map: "schedule_change_request_owner_state_idx")
+  @@map("schedule_change_request")
+}
+
+/// Conditions: work that starts when something outside Orbit becomes true (migration 1030,
+/// docs/condition-triggers-design.md §3, §5; conditions/).
+
+enum ConditionState {
+  WAITING
+  HOLDING
+  FIRED
+  UNKNOWN
+  ENDED
+
+  @@map("condition_state")
+}
+
+enum ConditionCompareOp {
+  GT
+  GTE
+  LT
+  LTE
+  EQ
+  EXIT_ZERO
+
+  @@map("condition_compare_op")
+}
+
+enum ConditionSampleOutcome {
+  VALUE
+  EXIT
+  TIMEOUT
+  ERROR
+
+  @@map("condition_sample_outcome")
+}
+
+enum ConditionEventKind {
+  FIRED
+  READY_AGAIN
+  CANT_READ
+  READ_AGAIN
+  ASKED_STILL_WAITING
+
+  @@map("condition_event_kind")
+}
+
+/// One probe and the comparison its readings are held to, attached to exactly one task or schedule. The runner runs
+/// the probe; the server moves `state` (conditions/condition-evaluation.ts). `workspaceId` is the workspace whose
+/// runner runs it, a history reference like Schedule's. The CHECKs (timeout 1..60, interval at least 60, exactly one
+/// of task or schedule, a value for every op but EXIT_ZERO) and the limit of 20 not ENDED per account
+/// (conditions.service.ts createCondition) live outside this file.
+model Condition {
+  id                   String                  @id @default(uuid(7)) @db.Uuid
+  ownerId              String                  @map("owner_id") @db.Uuid
+  owner                User                    @relation(fields: [ownerId], references: [id], onDelete: Cascade)
+  workspaceId          String                  @map("workspace_id") @db.Uuid
+  probeCommand         String                  @map("probe_command")
+  probeTimeoutSeconds  Int                     @default(20) @map("probe_timeout_seconds")
+  compareOp            ConditionCompareOp      @map("compare_op")
+  compareValue         Float?                  @map("compare_value")
+  holdSeconds          Int                     @default(0) @map("hold_seconds")
+  rearmOp              ConditionCompareOp?     @map("rearm_op")
+  rearmValue           Float?                  @map("rearm_value")
+  intervalSeconds      Int                     @default(300) @map("interval_seconds")
+  /// The condition in words, written by the agent: "3 or more OSDs are in".
+  text                 String
+  unit                 String?
+  state                ConditionState          @default(WAITING)
+  /// False from FIRED until the re-arm comparison holds: what UNKNOWN goes back to.
+  armed                Boolean                 @default(true)
+  lastSampleAt         DateTime?               @map("last_sample_at") @db.Timestamptz(3)
+  lastValue            Float?                  @map("last_value")
+  lastOutcome          ConditionSampleOutcome? @map("last_outcome")
+  /// When the newest sample that read was taken: the age a can't-read card shows.
+  lastReadAt           DateTime?               @map("last_read_at") @db.Timestamptz(3)
+  trueSince            DateTime?               @map("true_since") @db.Timestamptz(3)
+  unknownSince         DateTime?               @map("unknown_since") @db.Timestamptz(3)
+  /// TIMEOUT | ERROR | RUNNER_OFFLINE | RUNNER_ASLEEP, while UNKNOWN.
+  unknownReason        String?                 @map("unknown_reason")
+  failedChecks         Int                     @default(0) @map("failed_checks")
+  firedAt              DateTime?               @map("fired_at") @db.Timestamptz(3)
+  /// WHEN rules only (migration 1050): fire again every this many seconds while the comparison still holds and it has
+  /// not re-armed. At least 900 and at least intervalSeconds; NULL fires on the crossing only.
+  repeatSeconds        Int?                    @map("repeat_seconds")
+  /// What a repeat is counted from: the last FIRED, or the sample the comparison held again on after a break. NULL
+  /// while no repeat is due (not FIRED, the comparison false, UNKNOWN, or no repeatSeconds).
+  repeatFrom           DateTime?               @map("repeat_from") @db.Timestamptz(3)
+  /// When its schedule was last resumed (migration 1040): silence is counted from the newer of this and the newest sample.
+  resumedAt            DateTime?               @map("resumed_at") @db.Timestamptz(3)
+  approvedCommandHash  String                  @map("approved_command_hash")
+  approvedAt           DateTime                @map("approved_at") @db.Timestamptz(3)
+  taskId               String?                 @map("task_id") @db.Uuid
+  task                 Task?                   @relation("ConditionTask", fields: [taskId], references: [id], onDelete: Cascade)
+  /// The task this condition starts (Task.startWhenConditionId, migration 1060).
+  startsTask           Task?                   @relation("TaskStartWhen")
+  scheduleId           String?                 @map("schedule_id") @db.Uuid
+  schedule             Schedule?               @relation(fields: [scheduleId], references: [id], onDelete: Cascade)
+  /// The conversation it was created from, where its Waiting on you item is shown. History, no FK.
+  createdFromSessionId String?                 @map("created_from_session_id") @db.Uuid
+  createdAt            DateTime                @default(now()) @map("created_at") @db.Timestamptz(3)
+  updatedAt            DateTime                @default(now()) @updatedAt @map("updated_at") @db.Timestamptz(3)
+  endedAt              DateTime?               @map("ended_at") @db.Timestamptz(3)
+  /// When the owner last answered Keep waiting on the 30-day question (migration 1060, §6.2).
+  keepWaitingSince     DateTime?               @map("keep_waiting_since") @db.Timestamptz(3)
+  samples              ConditionSample[]
+  events               ConditionEvent[]
+
+  @@unique([taskId], map: "condition_task_key")
+  @@unique([scheduleId], map: "condition_schedule_key")
+  @@index([ownerId, state], map: "condition_owner_state_idx")
+  @@index([workspaceId], map: "condition_workspace_idx")
+  @@map("condition")
+}
+
+/// One reading the runner reported. Kept 30 days, and the latest 1000 per condition (conditions.service.ts).
+model ConditionSample {
+  id          String                 @id @default(uuid(7)) @db.Uuid
+  conditionId String                 @map("condition_id") @db.Uuid
+  condition   Condition              @relation(fields: [conditionId], references: [id], onDelete: Cascade)
+  at          DateTime               @db.Timestamptz(3)
+  outcome     ConditionSampleOutcome
+  value       Float?
+  exitCode    Int?                   @map("exit_code")
+  stderrTail  String?                @map("stderr_tail")
+  createdAt   DateTime               @default(now()) @map("created_at") @db.Timestamptz(3)
+
+  @@unique([conditionId, at], map: "condition_sample_condition_at_key")
+  /// What the 30-day prune reads.
+  @@index([at], map: "condition_sample_at_idx")
+  @@map("condition_sample")
+}
+
+/// What a condition's history shows.
+model ConditionEvent {
+  id          String             @id @default(uuid(7)) @db.Uuid
+  conditionId String             @map("condition_id") @db.Uuid
+  condition   Condition          @relation(fields: [conditionId], references: [id], onDelete: Cascade)
+  at          DateTime           @db.Timestamptz(3)
+  kind        ConditionEventKind
+  value       Float?
+  runId       String?            @map("run_id") @db.Uuid
+  /// A FIRED that is a repeat (migration 1050): the history says "Fired again".
+  repeat      Boolean            @default(false)
+  createdAt   DateTime           @default(now()) @map("created_at") @db.Timestamptz(3)
+
+  @@index([conditionId, at(sort: Desc)], map: "condition_event_condition_at_idx")
+  @@map("condition_event")
+}
+
+/// Still stuck → Ask your admin (migration 0890; docs/mocks/help-center board 02 ② right frame, side note 5): an Ask
+/// its person sent to an admin, keyed by the Ask so it is sent at most once, and the ordinary task in the admin's own
+/// task list that carries it. /help → Your questions reads it to say "With your admin". Written only by
+/// help/help-ask.ts#askAdmin. Its own table because 0850's trigger keeps `session.help_ask` as its INSERT wrote it.
+model HelpAskAdminRequest {
+  sessionId String   @id @map("session_id") @db.Uuid
+  session   Session  @relation(fields: [sessionId], references: [id], onDelete: Cascade)
+  /// The asker: the tenant this row is read under.
+  ownerId   String   @map("owner_id") @db.Uuid
+  owner     User     @relation("HelpAskAdminRequestOwner", fields: [ownerId], references: [id], onDelete: Cascade)
+  adminId   String   @map("admin_id") @db.Uuid
+  admin     User     @relation("HelpAskAdminRequestAdmin", fields: [adminId], references: [id], onDelete: Cascade)
+  /// The admin's task; null once the admin deleted it (the question was still sent).
+  taskId    String?  @map("task_id") @db.Uuid
+  task      Task?    @relation(fields: [taskId], references: [id], onDelete: SetNull)
+  createdAt DateTime @default(now()) @map("created_at")
+
+  @@index([ownerId])
+  @@index([adminId])
+  @@index([taskId])
+  @@map("help_ask_admin_request")
+}
+
+/// Did this help? / Did this answer it? (migration 0900; docs/mocks/help-center board 03, decision 3): one person's
+/// Yes / No on one article (`kind` article, `itemId` its slug) or one Ask answer (`kind` answer, `itemId`
+/// `<Ask session id>:<seq>`). One vote per person per item, the last one standing. No text column, by decision:
+/// Admin → Help feedback shows counts only. Written only by help/help-feedback.ts#record.
+model HelpFeedback {
+  userId    String   @map("user_id") @db.Uuid
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  kind      String
+  itemId    String   @map("item_id")
+  helpful   Boolean
+  createdAt DateTime @default(now()) @map("created_at")
+
+  @@id([userId, kind, itemId])
+  @@index([kind, itemId])
+  @@map("help_feedback")
 }

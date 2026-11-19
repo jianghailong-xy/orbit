@@ -693,6 +693,22 @@ test('the owner starts a project in one write, once', {
     assert.deepEqual(echo.projectStarted, card, 'and the echo was stored with the same card');
   });
 
+  await t.test('K1: the start door validates and persists landing settings', async () => {
+    const project = await coordinated('landing-start');
+    const sent = await press(project.id, {
+      criteriaDigest: await seal(project.id), line: 'PROJECT_BRANCH', automatic: false,
+      maxConcurrentTasks: 2, mergeCheckCommand: 'make full',
+      landingCheckCommand: 'make landing', landingCheckTimeoutSeconds: 180,
+    });
+    assert.equal(sent.status, 201, JSON.stringify(sent.json));
+    const cb = await prisma.projectCodebase.findFirstOrThrow({ where: { projectId: project.id } });
+    assert.equal(cb.landingCheckCommand, 'make landing');
+    assert.equal(cb.landingCheckTimeoutSeconds, 180);
+    assert.equal(cb.mergeCheckCommand, 'make full');
+    assert.equal((sent.json.settings as Record<string, unknown>).landingCheckCommand, 'make landing');
+    assert.equal((sent.json.settings as Record<string, unknown>).landingCheckTimeoutSeconds, 180);
+  });
+
   // ═══ (7) the older door starts an unstarted project, with the defaults ═════════════════════════
 
   const byRule = await coordinated('old-door-dependent', { dependent: true, maxConcurrentTasks: 7 });

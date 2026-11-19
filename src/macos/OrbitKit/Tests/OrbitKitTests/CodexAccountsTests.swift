@@ -195,7 +195,24 @@ final class CodexAccountsTests: XCTestCase {
         XCTAssertEqual(CodexAccounts.label("c0ffee42", accounts: accounts), "Account c0ffee42")
     }
 
-    func testAnAccountRenamedInOrbitIsNamedByItDefaultIncluded() {
+    func testAFormerDefaultIsNamedByItsEmailElseFormerDefaultUnlessTheOwnerNamedIt() {
+        let accounts = [
+            RunnerEngineAccount(id: "default", name: "Work"),
+            RunnerEngineAccount(id: pro, formerDefault: true, email: "me@home.example"),
+            RunnerEngineAccount(id: "c0ffee42", formerDefault: true),
+            RunnerEngineAccount(id: "5e1fa7b2", name: "Personal", formerDefault: true, email: "me@home.example"),
+        ]
+        XCTAssertEqual(CodexAccounts.label(pro, accounts: accounts), "me@home.example")
+        XCTAssertEqual(CodexAccounts.label("c0ffee42", accounts: accounts), "Former default")
+        XCTAssertEqual(CodexAccounts.label("5e1fa7b2", accounts: accounts), "Personal")
+        // Decoded the way the server serves it.
+        let decoded = try? JSONDecoder().decode(RunnerEngineAccount.self, from: Data(
+            #"{"id":"c0ffee42","home":"/h","auth":"yes","formerDefault":true,"email":"me@home.example"}"#.utf8))
+        XCTAssertEqual(decoded?.formerDefault, true)
+        XCTAssertEqual(decoded?.email, "me@home.example")
+    }
+
+        func testAnAccountRenamedInOrbitIsNamedByItDefaultIncluded() {
         let accounts = [account("default", name: "jianghailong.main"), account(pro, name: "Research"), account("c0ffee42", name: "")]
         XCTAssertEqual(CodexAccounts.label("default", accounts: accounts), "jianghailong.main")
         XCTAssertEqual(CodexAccounts.label(pro, accounts: accounts), "Research")
@@ -356,7 +373,6 @@ final class CodexAccountsTests: XCTestCase {
         XCTAssertEqual(SessionProviderChoices.providers(for: "codex", sources: sources).first { $0.slug == "codex" }?.accounts, [
             AccountChoice(id: "default", label: "Default", quota: "5h 100%", nearLimit: true),
             AccountChoice(id: pro, label: "kxugfvukxczwl@mail.com", quota: "Weekly 0%"),
-            AccountChoice(id: "c0ffee42", label: "Account c0ffee42", unavailable: "Not signed in"),
         ])
         XCTAssertNil(SessionProviderChoices.providers(for: "claude", sources: sources).first { $0.slug == "claude" }?.accounts)
         // One account, or an engine that cannot run, lists none.

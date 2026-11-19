@@ -19,7 +19,10 @@ import {
   wikiChatCardActions,
   wikiChatCardTitle,
   wikiChatFabState,
+  wikiChatPlanFace,
+  wikiChatPlanMovedNote,
   wikiChatResultLine,
+  wikiChatRewriteLinks,
   wikiChatRewriteWaits,
   wikiDocChanged,
   wikiDocVersionHeading,
@@ -31,7 +34,10 @@ import {
   type WikiChatFabCounts,
   type WikiChatFabState,
   type WikiChatPress,
+  type WikiChatRewriteLink,
   type WikiDocSectionVersionView,
+  type SessionTurnIntent,
+  type SessionTurnPlacement,
 } from '@orbit/shared';
 import { api, ApiError } from '../api';
 import { routeId } from './idCodec';
@@ -74,14 +80,24 @@ export const wikiChatOffline = (machine: string): string => fill(panel.offline, 
 // The panel's own controls, which neither the design nor the contract words: names for a reader of the screen.
 export const WIKI_CHAT_HISTORY = 'Chats in this space';
 export const WIKI_CHAT_NO_HISTORY = 'No chats in this space yet';
+// The history the title opens (board 45 ④, owner 11-11), its row menu the session list's own words.
+export const WIKI_CHAT_HISTORY_TITLE = 'Chats';
+export const WIKI_CHAT_SEARCH = 'Search chats';
+export const WIKI_CHAT_NO_MATCH = 'No chats match';
+export const WIKI_CHAT_GROUP_OPEN = 'Open';
+export const WIKI_CHAT_GROUP_COMPLETED = 'Completed';
+export const WIKI_CHAT_SHOW_MORE = 'Show more';
+export const WIKI_CHAT_TRASH_NOTE = 'Chats you move to Trash stay there for 30 days. Restore them from Trash in the session list.';
+export const WIKI_CHAT_ROW_ACTIONS = 'Chat actions';
+export const WIKI_CHAT_RENAME = 'Rename…';
+export const WIKI_CHAT_RENAME_FIELD = 'Chat name';
+export const WIKI_CHAT_COMPLETE = 'Complete';
+export const WIKI_CHAT_MOVE_TO_TRASH = 'Move to Trash';
+export const WIKI_CHAT_ACTION_FAILED = 'That didn’t work. Try again in a moment.';
 export const WIKI_CHAT_OPEN_SESSION = 'Open as a full session';
 export const WIKI_CHAT_CLOSE = 'Hide chat';
-export const WIKI_CHAT_SEND = 'Send';
-export const WIKI_CHAT_STOP = 'Stop';
 export const WIKI_CHAT_RESIZE = 'Resize chat';
 export const WIKI_CHAT_WORKSPACE = 'Workspace';
-export const WIKI_CHAT_MODEL = 'Model';
-export const WIKI_CHAT_MODE = 'Mode';
 export const WIKI_CHAT_SEND_FAILED = 'The message couldn’t be sent. Check the connection, then try again.';
 /** The phone's Ask sheet (docs/wiki-comment-to-session-design.md §5): over the paragraph's sentences, each picked by a tap. */
 export const WIKI_CHAT_PICK_SENTENCES = 'Tap the sentences you mean';
@@ -155,8 +171,14 @@ export interface WikiChatRow {
   title: string;
   status: string;
   open: boolean;
+  /** In the session list's Completed. Absent from an older server, read as not. */
+  completed?: boolean;
+  /** A turn of it is queued or running. Absent from an older server, read as not. */
+  working?: boolean;
   createdAt: string;
   updatedAt: string;
+  /** Its last turn's time, else its creation's: what the list is ordered by. Absent from an older server. */
+  lastActiveAt?: string;
   drafts: number;
   needsYou: number;
 }
@@ -168,16 +190,62 @@ export interface WikiChatList {
   choices: WikiChatWorkspace[];
   fab: WikiChatFabCounts;
   chats: WikiChatRow[];
+  /** More chats match past this page (contract `chat.list.page`). Absent from an older server, read as none. */
+  more?: boolean;
 }
 
-/** The chats read, or null from a server that has no chats yet (404): the button then stays at rest. */
-export async function getWikiChats(spaceId: string): Promise<WikiChatList | null> {
+/**
+ * The chats read, or null from a server that has no chats yet (404): the button then stays at rest. `q` and `offset`
+ * ask for one page of the history (contract `chat.list.page`, board 45 ④); the counts come back over every chat.
+ */
+export async function getWikiChats(spaceId: string, page: { q?: string; offset?: number } = {}): Promise<WikiChatList | null> {
+  const params = new URLSearchParams();
+  const q = page.q?.trim();
+  if (q) params.set('q', q);
+  if (page.offset) params.set('offset', String(page.offset));
+  const query = params.toString();
   try {
-    return await api<WikiChatList>(`/wiki/spaces/${encodeURIComponent(spaceId)}/chats`);
+    return await api<WikiChatList>(`/wiki/spaces/${encodeURIComponent(spaceId)}/chats${query ? `?${query}` : ''}`);
   } catch (error) {
     if (error instanceof ApiError && error.status === 404) return null;
     throw error;
   }
+}
+
+/**
+ * The panel's history (board 45 ④, owner 11-11: Q3 A, Q4 A), as the session list files the chats: Open — the ones
+ * that need the owner, then the ones a turn runs in, then the rest as the server orders them, the one last spoken in
+ * first — and Completed, as ordered.
+ */
+export function wikiChatHistoryGroups(rows: readonly WikiChatRow[]): { open: WikiChatRow[]; completed: WikiChatRow[] } {
+  const rank = (row: WikiChatRow) => (row.needsYou > 0 ? 0 : row.working ? 1 : 2);
+  const open = rows.filter((row) => !row.completed);
+  return {
+    open: open.map((row, at) => ({ row, at })).sort((a, b) => rank(a.row) - rank(b.row) || a.at - b.at).map(({ row }) => row),
+    completed: rows.filter((row) => row.completed),
+  };
+}
+
+/** A history row's second line (board 45 ④ ③): what it needs from the owner, else that it is working, else how long ago it was spoken in. */
+export function wikiChatHistoryLine(row: WikiChatRow, now: number): { tone: 'needs_you' | 'working' | 'quiet'; text: string } {
+  if (row.needsYou > 0) return { tone: 'needs_you', text: row.needsYou === 1 ? fab.needsYouOne : fill(fab.needsYouMany, { n: row.needsYou }) };
+  if (row.working) return { tone: 'working', text: fab.working };
+  return { tone: 'quiet', text: wikiChatAgo(row.lastActiveAt ?? row.updatedAt, now) };
+}
+
+const MINUTE = 60_000;
+const HOUR = 60 * MINUTE;
+const DAY = 24 * HOUR;
+
+/** "Just now", "5m ago", "2h ago", "Yesterday", "3d ago", "2w ago": when a chat was last spoken in. */
+export function wikiChatAgo(iso: string, now: number): string {
+  const diff = now - Date.parse(iso);
+  if (!Number.isFinite(diff) || diff < MINUTE) return 'Just now';
+  if (diff < HOUR) return `${Math.floor(diff / MINUTE)}m ago`;
+  if (diff < DAY) return `${Math.floor(diff / HOUR)}h ago`;
+  if (diff < 2 * DAY) return 'Yesterday';
+  if (diff < 7 * DAY) return `${Math.floor(diff / DAY)}d ago`;
+  return `${Math.floor(diff / (7 * DAY))}w ago`;
 }
 
 /** The address value of a chat not started yet: `?chat=new`. */
@@ -236,6 +304,33 @@ export function wikiChatSearch(search: string, chat: string | null): string {
   return next ? `?${next}` : '';
 }
 
+const CLOSED_KEY = 'orbit.wikiChat.closed';
+
+/**
+ * Whether the owner hid the panel with ✕ in this space (board 45, owner 11-11, Q1 A): kept on the device, across
+ * tabs and restarts, until the round button opens the panel again. While it is, a wiki page no longer opens with
+ * the panel shown.
+ */
+export function readWikiChatClosed(spaceSlug: string): boolean {
+  try {
+    const all = JSON.parse(localStorage.getItem(CLOSED_KEY) ?? '{}') as Record<string, unknown>;
+    return all[spaceSlug] === true;
+  } catch {
+    return false;
+  }
+}
+
+export function writeWikiChatClosed(spaceSlug: string, closed: boolean): void {
+  try {
+    const all = JSON.parse(localStorage.getItem(CLOSED_KEY) ?? '{}') as Record<string, unknown>;
+    if (closed) all[spaceSlug] = true;
+    else delete all[spaceSlug];
+    localStorage.setItem(CLOSED_KEY, JSON.stringify(all));
+  } catch {
+    // Storage refused: the panel opens by default again next time, which is the lesser loss.
+  }
+}
+
 const OPEN_KEY = 'orbit.wikiChat.open';
 
 /**
@@ -266,8 +361,9 @@ export function writeWikiChatOpen(spaceSlug: string, chat: string | null): void 
 
 /**
  * The panel by the window's width (design §4.1, contract `chat.panel.widths`):
- * - wide (≥ 1440): docked on the right, pushing the page over; dragged between 320 and 560; the directory stays;
- * - docked (1200–1439): docked on the right; the directory folds into the Contents drawer;
+ * - wide (≥ 1440): a column right of the page, from the window's top to its foot; dragged between 320 and half the window;
+ *   the directory stays;
+ * - docked (1200–1439): the same column; the directory stays and the app sidebar shows as its icon rail;
  * - over (640–1199): slides in over the right of the page, with no scrim; Contents drawer;
  * - sheet (< 640): a sheet from the bottom, at half or full height; Contents drawer.
  */
@@ -277,8 +373,16 @@ export const WIKI_CHAT_WIDTH = {
   wide: 1440,
   docked: 1200,
   over: 640,
-  panel: { initial: 400, min: 320, max: 560 },
+  /**
+   * The panel's width (owner 11-11, after board 45: 400 was too narrow on a wide window): a third of the window
+   * between 400 and 720 unless dragged, and dragged between 320 and half the window.
+   */
+  panel: { share: 1 / 3, initial: 400, cap: 720, min: 320, maxShare: 1 / 2 },
 } as const;
+
+/** The widest the panel can be dragged in a window this wide: half of it, never under the narrowest. */
+export const wikiChatPanelMax = (windowWidth: number): number =>
+  Math.max(WIKI_CHAT_WIDTH.panel.min, Math.floor(windowWidth * WIKI_CHAT_WIDTH.panel.maxShare));
 
 export function wikiChatLayout(windowWidth: number): WikiChatLayout {
   if (windowWidth >= WIKI_CHAT_WIDTH.wide) return 'wide';
@@ -287,19 +391,31 @@ export function wikiChatLayout(windowWidth: number): WikiChatLayout {
   return 'sheet';
 }
 
-/** The panel's width: the dragged one where it can be dragged, else the default; a sheet is as wide as the window. */
-export function wikiChatPanelWidth(layout: WikiChatLayout, dragged: number | null): number | null {
-  const { initial, min, max } = WIKI_CHAT_WIDTH.panel;
+/**
+ * The panel's width: the dragged one where it can be dragged (wide), held between 320 and half the window; else a
+ * third of the window between 400 and 720. A sheet is as wide as the window.
+ */
+export function wikiChatPanelWidth(layout: WikiChatLayout, dragged: number | null, windowWidth: number): number | null {
+  const { share, initial, cap, min } = WIKI_CHAT_WIDTH.panel;
   if (layout === 'sheet') return null;
-  if (layout !== 'wide' || dragged === null || !Number.isFinite(dragged)) return initial;
-  return Math.min(max, Math.max(min, Math.round(dragged)));
+  if (layout !== 'wide' || dragged === null || !Number.isFinite(dragged)) {
+    return Math.min(cap, Math.max(initial, Math.round(windowWidth * share)));
+  }
+  return Math.min(wikiChatPanelMax(windowWidth), Math.max(min, Math.round(dragged)));
 }
 
 /** Whether the open panel pushes the page over (it docks) rather than lying over it. */
 export const wikiChatDocks = (layout: WikiChatLayout): boolean => layout === 'wide' || layout === 'docked';
 
-/** Whether the open panel folds the directory column into the Contents drawer: everywhere narrower than wide. */
-export const wikiChatFoldsDirectory = (layout: WikiChatLayout): boolean => layout !== 'wide';
+/**
+ * Whether the open panel folds the directory column into the Contents drawer: where it lies over the page. Where it is a
+ * column of its own the directory stays, and narrower than wide the app sidebar gives up its width instead
+ * (`wikiChatFoldsSidebar`, board docs/mocks/wiki-rail 03 C2).
+ */
+export const wikiChatFoldsDirectory = (layout: WikiChatLayout): boolean => !wikiChatDocks(layout);
+
+/** Whether the open panel shows the app sidebar as its icon rail: a column in a window narrower than wide. */
+export const wikiChatFoldsSidebar = (layout: WikiChatLayout): boolean => layout === 'docked';
 
 const WIDTH_KEY = 'orbit.wikiChat.width';
 
@@ -389,7 +505,7 @@ export function wikiChatSnap(
 export type WikiChatPage =
   | { kind: 'doc'; docSlug: string; sectionKey: string; label: string }
   | { kind: 'entry'; entryId: string; label: string }
-  | { kind: 'plan'; docSlug: string; label: string };
+  | { kind: 'plan'; docSlug: string; sectionKey?: string; label: string };
 
 /**
  * The composer's attachments (design §4.2): the page, which follows the reader until the message is sent, and
@@ -436,6 +552,42 @@ function samePage(a: WikiChatPage | null, b: WikiChatPage | null): boolean {
   return JSON.stringify(a) === JSON.stringify(b);
 }
 
+/**
+ * Which section of a document the page attaches (design §4.2): the one nearest the top of the reading, as the page
+ * announces it — except on a page opened at a section's anchor (`#sec-<key>`, where the directory's and the index's
+ * section rows land; C15), which attaches that section. The jump to an anchor puts its heading at the top of the
+ * window, but a last section cannot scroll that far, and the reading's top is still the section before it. So the
+ * first section the page announces after the anchor is only where the jump landed; once the reading moves off it, the
+ * reader has scrolled, and from then on the page follows the reading as before.
+ */
+export interface WikiChatReading {
+  /** The section nearest the top of the reading, as the page last announced it. */
+  read: { slug: string; key: string } | null;
+  /** The section the address's anchor names, while it holds; `landed` is the section the jump to it showed. */
+  anchor: { slug: string; key: string; landed: string | null } | null;
+}
+
+export type WikiChatReadingAction =
+  | { type: 'anchor'; slug: string | null; key: string | null }
+  | { type: 'read'; slug: string; key: string };
+
+export function wikiChatReading(state: WikiChatReading, action: WikiChatReadingAction): WikiChatReading {
+  if (action.type === 'anchor') {
+    return { ...state, anchor: action.slug && action.key ? { slug: action.slug, key: action.key, landed: null } : null };
+  }
+  const read = { slug: action.slug, key: action.key };
+  const { anchor } = state;
+  if (!anchor || anchor.slug !== action.slug) return { read, anchor };
+  if (anchor.landed === null) return { read, anchor: { ...anchor, landed: action.key } };
+  return { read, anchor: anchor.landed === action.key ? anchor : null };
+}
+
+/** The section a document's page attaches: the anchor's while it holds, else the reading's, else the document's first. */
+export function wikiChatPageSection(state: WikiChatReading, slug: string, keys: readonly string[]): string | null {
+  for (const at of [state.anchor, state.read]) if (at && at.slug === slug && keys.includes(at.key)) return at.key;
+  return keys[0] ?? null;
+}
+
 /** What the composer shows, which is exactly what the message sends. */
 export function wikiChatShown(state: WikiChatAttachments): { page: WikiChatPage | null; quote: WikiChatQuote | null } {
   return { page: state.pageCrossed ? null : state.page, quote: state.quote };
@@ -451,7 +603,7 @@ export function wikiChatContext(state: WikiChatAttachments): WikiChatContext | u
   const context: WikiChatContext = {};
   if (page?.kind === 'doc') context.page = { kind: 'doc', docSlug: page.docSlug, sectionKey: page.sectionKey };
   if (page?.kind === 'entry') context.page = { kind: 'entry', entryId: page.entryId };
-  if (page?.kind === 'plan') context.page = { kind: 'plan', docSlug: page.docSlug };
+  if (page?.kind === 'plan') context.page = { kind: 'plan', docSlug: page.docSlug, ...(page.sectionKey ? { sectionKey: page.sectionKey } : {}) };
   if (quote && quote.sentenceIds.length > 0) {
     context.selection = { docSlug: quote.docSlug, sectionKey: quote.sectionKey, sentenceIds: [...quote.sentenceIds] };
   }
@@ -460,13 +612,20 @@ export function wikiChatContext(state: WikiChatAttachments): WikiChatContext | u
 
 // ── Sending ─────────────────────────────────────────────────────────────────────────────────────
 
-/** What a new chat is made with (contract `chat.create`): the owner's first words, word for word. */
+/**
+ * What a new chat is made with (contract `chat.create`): the owner's first words, word for word, and what the
+ * composer's attachment row and toolbar hold (board 43) — the files staged for it, and the model, mode, effort and
+ * speed the owner picked (left out, the chat starts as a session of its workspace does).
+ */
 export interface WikiChatCreate {
   workspaceId?: string;
   content: string;
   wikiContext?: WikiChatContext;
+  attachmentIds?: string[];
   model?: string;
   permissionMode?: string;
+  effort?: string;
+  fastMode?: boolean;
 }
 
 /** `POST /api/wiki/spaces/:id/chats`: the chat's session and its row, the first turn filed under a UUID of ours. */
@@ -478,19 +637,29 @@ export const createWikiChat = (spaceId: string, body: WikiChatCreate, clientTurn
 
 /**
  * The chat's next message, through the session's own message door with an explicit routing intent (contract
- * `chat.turns`): its content is the owner's words alone, the attachments ride beside it as `wikiContext`.
+ * `chat.turns`): its content is the owner's words alone, the page and the selection ride beside it as `wikiContext`,
+ * and the composer's files as `attachmentIds`. While a turn runs the composer sends it into that turn
+ * (`CURRENT_WORK`) or for the next one, as the session page does; a card's own sentence waits for the next turn.
  */
 export const sendWikiChatTurn = (
   sessionId: string,
   content: string,
   wikiContext: WikiChatContext | undefined,
+  options: { intent?: SessionTurnIntent; attachmentIds?: string[]; kind?: 'message' | 'shell' } = {},
   clientTurnId: string = compatibleUuid(),
 ) =>
-  api<{ turnId: string; seq: number; kind: string; placement: string }>(
+  api<{ turnId: string; seq: number; kind: string; placement: SessionTurnPlacement; targetTurnId?: string }>(
     `/sessions/${encodeURIComponent(sessionId)}/turns/current-work-routing`,
     {
       method: 'POST',
-      body: { clientTurnId, content, intent: 'NEXT_TURN', ...(wikiContext ? { wikiContext } : {}) },
+      body: {
+        clientTurnId,
+        content,
+        intent: options.intent ?? 'NEXT_TURN',
+        ...(options.attachmentIds?.length ? { attachmentIds: options.attachmentIds } : {}),
+        ...(options.kind === 'shell' ? { kind: 'shell' } : {}),
+        ...(wikiContext ? { wikiContext } : {}),
+      },
     },
   );
 
@@ -616,7 +785,10 @@ export interface WikiChatCardLook {
   tone: WikiChatTone;
   /** A settled card is drawn flat (board 42 ③ ④'s quiet cards). */
   quiet: boolean;
-  /** The line under the title a state carries: `A newer draft took over.`, or the In Review note. */
+  /**
+   * The line under the title a state carries: `A newer draft took over.`, the In Review note, an undone rewrite's, or — an
+   * applied plan card the plan moved on from — why it can no longer be undone (`wikiChatPlanMovedNote`, C17).
+   */
   note: string | null;
   /** Applied with a challenge still waiting in Review (`wikiChatAppliedInReview`): its note opens that item. */
   inReview: boolean;
@@ -624,6 +796,21 @@ export interface WikiChatCardLook {
   actions: WikiChatAction[];
   /** The buttons of the line under an applied card: Settings, Try again, See changes. */
   rewriteActions: WikiChatAction[];
+}
+
+/**
+ * The note on an undone Rewrite from main card (design §8.4, owner 11-07): the Undo puts back the version before the
+ * card's, written at an older commit, and the next maintenance run writes the section from main again when main has
+ * changed a file it draws on — a reason, so not a rewrite for nothing, and said on the card rather than left silent.
+ */
+export const WIKI_CHAT_UNDONE_REWRITE_NOTE = 'If main has changed the files this section draws on, the next maintenance run writes it from main again.';
+
+/** The line under a card's title a state carries (design §7.3, §8.4). */
+function cardNote(view: Pick<WikiChatDraftView, 'kind' | 'state' | 'undoable'>, inReview: boolean): string | null {
+  if (inReview) return WIKI_CHAT_COPY.card.appliedInReviewNote;
+  if (view.state === 'replaced') return WIKI_CHAT_COPY.card.replacedNote;
+  if (view.state === 'undone' && view.kind === 'rewrite') return WIKI_CHAT_UNDONE_REWRITE_NOTE;
+  return wikiChatPlanMovedNote(view);
 }
 
 const STATE_TONE: Record<WikiChatDraftView['state'], WikiChatTone> = {
@@ -643,7 +830,7 @@ export function wikiChatCardLook(view: Pick<WikiChatDraftView, 'kind' | 'state' 
     title: wikiChatCardTitle(view.state, view.label, inReview),
     tone: inReview ? 'amber' : STATE_TONE[view.state],
     quiet: view.state !== 'draft' && view.state !== 'changed',
-    note: inReview ? WIKI_CHAT_COPY.card.appliedInReviewNote : view.state === 'replaced' ? WIKI_CHAT_COPY.card.replacedNote : null,
+    note: cardNote(view, inReview),
     inReview,
     actions: all.filter((action) => !REWRITE_ACTIONS.includes(action)),
     rewriteActions: all.filter((action) => REWRITE_ACTIONS.includes(action)),
@@ -734,11 +921,19 @@ function sourceLine(source: Record<string, unknown>, chatId: string): string {
   return shortRef ? `${kind} ${shortRef}` : kind;
 }
 
-export function wikiChatCardFace(view: Pick<WikiChatDraftView, 'kind' | 'ops' | 'rationale' | 'rewrites' | 'sessionId'>): WikiChatCardFace {
+export function wikiChatCardFace(
+  view: Pick<WikiChatDraftView, 'kind' | 'ops' | 'rationale' | 'rewrites' | 'sessionId'> & { change?: WikiChatDraftView['change'] },
+): WikiChatCardFace {
   const rows: WikiChatCardFace['rows'] = [];
   const diff: WikiChatCardFace['diff'] = [];
   const sources = new Set<string>();
   let heading: string | null = null;
+  if (view.kind === 'plan' && view.change) {
+    // A plan card says what its change does to the document (`wikiChatPlanFace`, board 42 ④ ③), then the agent's why.
+    const plan = wikiChatPlanFace(view.change);
+    if (view.rationale.trim()) plan.rows.push({ label: 'Why', value: view.rationale.trim() });
+    return { heading: plan.heading, rows: plan.rows, diff, sources: [] };
+  }
   const titleOf = (op: WikiChatDraftOpView): string | null => {
     const draft = (op.payload.entry ?? {}) as Record<string, unknown>;
     const changes = (op.payload.changes ?? {}) as Record<string, unknown>;
@@ -780,6 +975,18 @@ export function wikiChatCardFace(view: Pick<WikiChatDraftView, 'kind' | 'ops' | 
   return { heading, rows, diff, sources: [...sources] };
 }
 
+/**
+ * The links of a card's Rewrites row (board 42 ② ③): a section each — or, for a plan card whose rebuild spans more than
+ * one document, a document each, opening its first section (board 42 ③: `3.1 · 3.5`; `wikiChatRewriteLinks`, C17).
+ */
+export function wikiChatRewritesRow(view: Pick<WikiChatDraftView, 'kind' | 'rewrites'>): Array<WikiChatRewriteLink & { title: string | null }> {
+  return wikiChatRewriteLinks(view.kind, view.rewrites).map((link) => {
+    // A section's link says its title on hover; a document's names no one section.
+    const section = view.rewrites.find((one) => one.doc === link.doc && one.key === link.key && one.where === link.label);
+    return { ...link, title: section?.title ?? null };
+  });
+}
+
 /** The labels of the card's rows (board 42 ②): Sources, Rewrites, Similar. */
 export const WIKI_CHAT_SOURCES = WIKI_CHAT_COPY.card.sources;
 export const WIKI_CHAT_REWRITES = WIKI_CHAT_COPY.card.rewrites;
@@ -796,6 +1003,23 @@ export const WIKI_CHAT_REDO_MESSAGE = WIKI_CHAT_COPY.card.redoMessage;
 export const wikiChatActionLabel = (action: WikiChatAction): string => WIKI_CHAT_COPY.actions[action];
 /** Said when a press is refused, with the server's reason after it. */
 export const WIKI_CHAT_PRESS_FAILED = 'The card couldn’t be pressed';
+
+/**
+ * What a refused press lists under its reason (contract `chat.presses.apply`, C12): each error the plan's gate found in a
+ * plan card's change — or a schema refusal's fields — as the server wrote it, where it is first; nothing for any other
+ * answer. A gate the press fails writes nothing, and the card says why, every error of it.
+ */
+export function wikiChatPressDetails(error: unknown): string[] {
+  if (!(error instanceof ApiError) || (error.code !== 'WIKI_PLAN_GATE' && error.code !== 'WIKI_SCHEMA')) return [];
+  const errors = error.body?.errors;
+  if (!Array.isArray(errors)) return [];
+  return errors.flatMap((one) => {
+    const item = (one ?? {}) as { path?: unknown; message?: unknown };
+    const message = typeof item.message === 'string' ? item.message.trim() : '';
+    if (!message) return [];
+    return [typeof item.path === 'string' && item.path ? `${item.path}: ${message}` : message];
+  });
+}
 
 /** A press refused or lost, said truthfully: the server's reason, a failure of the server, or no connection. */
 export function wikiChatPressError(error: unknown): string {

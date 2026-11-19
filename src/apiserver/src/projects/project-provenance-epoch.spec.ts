@@ -152,12 +152,22 @@ const ALLOWED_READERS: Readonly<Record<string, string>> = {
     'types completion-evidence source provenance; does not read task project provenance',
   'src/apiserver/src/tasks/task-completion-evidence.service.ts':
     'validates and records completion-evidence source provenance; grants no project authority',
+  // The undecided-evidence clock files an owner item for evidence left undecided past the project's
+  // window, and copies that evidence's source session into the item's `session_id` for the card to
+  // link. Whether an item is filed is decided by the window, the decision and the newer revision
+  // alone; the value is never compared.
+  'src/apiserver/src/projects/evidence-undecided.ts':
+    "copies completion-evidence's source session onto the owner item it files; decides nothing",
   // §2.9 LS6's landing view reuses the same `sourceSessionId` spelling for a different fact: the
   // work session a landing attempt is about (`project_integration_job.session_id`, a history
   // reference). The view copies it into the attempt for a reader to display and answers NULL when
   // that session is gone; no branch compares it, and it grants or refuses nothing.
   'src/apiserver/src/projects/landing-view.ts':
     'renders the landing attempt source session as evidence; decides nothing',
+  // The runner's bounded task view copies an evidence revision's `sourceSessionId` (the N10
+  // completion-evidence fact above, not Task.sourceSessionId) into its summary; nothing compares it.
+  'src/runner-go/bounded_views.go':
+    'copies completion-evidence source provenance into a bounded summary; decides nothing',
   'src/shared/src/project-progress.ts':
     'types the landing attempt source session for the wire; reads no task provenance',
   // The decision door reads the same N10 column, and reads it to REFUSE: a session that submitted

@@ -1,0 +1,224 @@
+package main
+
+import (
+	"bufio"
+	"fmt"
+	"io"
+	"os/exec"
+	"path/filepath"
+	"strconv"
+	"strings"
+	"sync"
+)
+
+// A secret file written into a checkout ships with the commit at the end of the turn (`git add -A`). So after every
+// `git add` that a commit, a live diff or a baseline follows, staged content is scanned for every value this runner
+// holds; a file holding one is unstaged and named in a warning event (docs/design/owner-request-secrets.md §7.2).
+
+// secretWarnSinks is where each live session hears about a file left out (registerSecretWarnings), by session id.
+var secretWarnSinks sync.Map
+
+type secretWarnSink struct {
+	emit emitFn
+	turn func() string
+}
+
+// secretWarned keeps a file from being announced on every live diff: once per session and path per process.
+var secretWarned sync.Map
+
+// registerSecretWarnings routes a session's warnings to its emit until the returned func is called.
+func registerSecretWarnings(sessionID string, emit emitFn, turn ...func() string) func() {
+	key := decodeSessionID(sessionID)
+	sink := &secretWarnSink{emit: emit}
+	if len(turn) > 0 {
+		sink.turn = turn[0]
+	}
+	secretWarnSinks.Store(key, sink)
+	return func() { secretWarnSinks.CompareAndDelete(key, sink) }
+}
+
+// unstageHeldSecrets unstages every staged file of dir whose content holds a value this runner holds, or whose blob
+// was recorded as holding one while a value was known (secret_taint.go): a file held back while a grant was live is
+// held back after it has ended too. env is the git environment the staging ran under (a temporary index), nil for the
+// checkout's own. sessionID names whom to warn; empty for a workspace's own baseline. What it unstages for a value it
+// holds is recorded, so the next `git add` of the same content, which makes the same blob, is known after the grant.
+func unstageHeldSecrets(dir string, env []string, sessionID string) {
+	red := runnerSecrets().scrubber()
+	recorded := taintObjectIDs(dir)
+	if red == nil && len(recorded) == 0 {
+		return
+	}
+	hits := stagedFilesHoldingSecrets(dir, env, red, recorded)
+	if len(hits) == 0 {
+		return
+	}
+	paths := make([]string, 0, len(hits))
+	record := append([]secretTaintObject(nil), hits...)
+	for _, hit := range hits {
+		paths = append(paths, hit.Path)
+		// The file as it is on disk too: the upload door hashes its bytes, which a CRLF or text=auto filter makes
+		// differ from the staged blob.
+		if raw, err := rawBlobIDs(filepath.Join(dir, hit.Path)); err == nil {
+			for _, id := range raw {
+				if id != hit.ID {
+					record = append(record, secretTaintObject{ID: id, Path: hit.Path})
+				}
+			}
+		}
+	}
+	recordTaintObjects(dir, record)
+	var err error
+	if _, headErr := gitEnv(dir, env, "rev-parse", "--verify", "--quiet", "HEAD"); headErr == nil {
+		_, err = gitEnv(dir, env, append([]string{"reset", "--quiet", "--"}, paths...)...)
+	} else {
+		_, err = gitEnv(dir, env, append([]string{"rm", "--cached", "--quiet", "--"}, paths...)...)
+	}
+	for _, path := range paths {
+		secretUnstagedWarning(sessionID, path, err)
+	}
+}
+
+// stagedFilesHoldingSecrets is the staged files, changed against HEAD (all of them before there is a HEAD), whose
+// staged blob holds a value red knows (red may be nil) or is one of recorded, with that blob's id.
+func stagedFilesHoldingSecrets(dir string, env []string, red *integrationOutputRedactor, recorded map[string]string) []secretTaintObject {
+	args := []string{"diff", "--cached", "--name-only", "-z", "--no-renames", "--diff-filter=ACMRT", "HEAD"}
+	if _, err := gitEnv(dir, env, "rev-parse", "--verify", "--quiet", "HEAD"); err != nil {
+		args = []string{"ls-files", "--cached", "-z"}
+	}
+	out, err := gitEnv(dir, env, args...)
+	if err != nil || out == "" {
+		return nil
+	}
+	var names []string
+	for _, name := range strings.Split(out, "\x00") {
+		if name != "" {
+			names = append(names, name)
+		}
+	}
+	var hits []secretTaintObject
+	var batch []string
+	for _, name := range names {
+		// A name with a newline in it cannot be asked for in a batch; it is read on its own.
+		if strings.ContainsAny(name, "\n\r") {
+			id, _ := gitEnv(dir, env, "rev-parse", ":"+name)
+			content, err := gitEnv(dir, env, "cat-file", "blob", ":"+name)
+			if _, tainted := recorded[id]; (id != "" && tainted) || (err == nil && red != nil && red.holds([]byte(content))) {
+				hits = append(hits, secretTaintObject{ID: id, Path: name})
+			}
+			continue
+		}
+		batch = append(batch, name)
+	}
+	return append(hits, stagedBlobsHolding(dir, env, batch, red, recorded)...)
+}
+
+// stagedBlobsHolding reads the staged blob of each name through one `git cat-file --batch`.
+func stagedBlobsHolding(dir string, env []string, names []string, red *integrationOutputRedactor, recorded map[string]string) []secretTaintObject {
+	if len(names) == 0 {
+		return nil
+	}
+	cmd := exec.Command("git", "-C", dir, "cat-file", "--batch")
+	cmd.Env = env
+	stdin, err := cmd.StdinPipe()
+	if err != nil {
+		return nil
+	}
+	stdout, err := cmd.StdoutPipe()
+	if err != nil {
+		return nil
+	}
+	if err := cmd.Start(); err != nil {
+		return nil
+	}
+	go func() {
+		defer stdin.Close()
+		for _, name := range names {
+			if _, err := io.WriteString(stdin, ":"+name+"\n"); err != nil {
+				return
+			}
+		}
+	}()
+	reader := bufio.NewReader(stdout)
+	var hits []secretTaintObject
+	for _, name := range names {
+		header, err := reader.ReadString('\n')
+		if err != nil {
+			break
+		}
+		fields := strings.Fields(header)
+		if len(fields) != 3 {
+			continue // "<name> missing": a submodule or a path git could not resolve
+		}
+		size, err := strconv.ParseInt(fields[2], 10, 64)
+		if err != nil {
+			break
+		}
+		content := make([]byte, size)
+		if _, err := io.ReadFull(reader, content); err != nil {
+			break
+		}
+		_, _ = reader.ReadByte() // the newline after the content
+		_, tainted := recorded[fields[0]]
+		if fields[1] == "blob" && (tainted || (red != nil && red.holds(content))) {
+			hits = append(hits, secretTaintObject{ID: fields[0], Path: name})
+		}
+	}
+	_, _ = io.Copy(io.Discard, reader)
+	_ = cmd.Wait()
+	return hits
+}
+
+// secretUnstagedWarning tells the session that path was left out of its commit.
+func secretUnstagedWarning(sessionID, path string, unstageErr error) {
+	if unstageErr != nil {
+		logln(fmt.Sprintf("secret grants: %s in session %s holds a secret's value and could not be unstaged: %v", path, decodeSessionID(sessionID), unstageErr))
+		return
+	}
+	secretFileWarning(sessionID, path, "secret_unstaged", secretHoldsValueReason, fmt.Sprintf("%s holds the value of a secret the owner delivered to this runner, so Orbit left it out of the commit. Keep secrets out of the checkout; use orbit secret exec or the secret's own file instead.", path))
+}
+
+// secretHoldsValueReason is secretFileWarning's reason for a file found holding a value.
+const secretHoldsValueReason = "holds a secret's value"
+
+// secretFileWarning tells the session, once per session, kind, reason and path, that path was kept back: for holding
+// a value (secretHoldsValueReason), or for what reason says. The log line and the notice say the same reason. The
+// value and the secret's name are not in it: the path is enough to act on.
+func secretFileWarning(sessionID, path, subtype, reason, message string) {
+	key := decodeSessionID(sessionID)
+	if _, seen := secretWarned.LoadOrStore(key+"\x00"+subtype+"\x00"+reason+"\x00"+path, true); seen {
+		return
+	}
+	logln(fmt.Sprintf("secret grants: %s in session %s %s (%s)", path, key, reason, subtype))
+	if sink, ok := secretWarnSinks.Load(key); ok && key != "" {
+		// `notice` is what every client already draws as the runner's heads-up (web Transcript NoticeNode).
+		sink.(*secretWarnSink).emit(evSystem, map[string]interface{}{"subtype": subtype, "path": path, "notice": message})
+	}
+}
+
+// secretPatchesWarning reports an unreadable record once per turn, without blaming any file.
+func secretPatchesWarning(sessionID string, count int) {
+	key := decodeSessionID(sessionID)
+	sink, ok := secretWarnSinks.Load(key)
+	turn := ""
+	if ok && sink.(*secretWarnSink).turn != nil {
+		turn = sink.(*secretWarnSink).turn()
+	}
+	if _, seen := secretWarned.LoadOrStore(key+"\x00"+turn+"\x00secret_patches_withheld", true); seen {
+		return
+	}
+	logln(fmt.Sprintf("secret grants: withheld diffs of %d files in session %s (record_unreadable)", count, key))
+	if ok && key != "" {
+		sink.(*secretWarnSink).emit(evSystem, map[string]interface{}{
+			"subtype": "secret_patches_withheld", "count": count, "reason": "record_unreadable",
+			"notice": secretPatchesWithheldNotice(count),
+		})
+	}
+}
+
+// secretPatchesWithheldNotice is the one notice for a turn whose diffs were all withheld for an unreadable record.
+func secretPatchesWithheldNotice(count int) string {
+	if count == 1 {
+		return "Orbit withheld the diff of 1 file because it could not read this runner's record of files that held a secret. No secret was found in it; its diff shows again once the record can be read."
+	}
+	return fmt.Sprintf("Orbit withheld the diffs of %d files because it could not read this runner's record of files that held a secret. No secret was found in these files; their diffs show again once the record can be read.", count)
+}

@@ -1,0 +1,8 @@
+#!/bin/sh
+# Orbit: the shell Cursor CLI runs this session's commands in. The CLI runs with a HOME of the
+# session's own; its commands get the real one back, the environment a session of any other engine
+# gives them, and none of the CLI's credentials or directories.
+HOME='<RUN>/home'
+export HOME
+unset CURSOR_API_KEY CURSOR_AUTH_TOKEN CURSOR_CONFIG_DIR CURSOR_DATA_DIR AGENT_CLI_CREDENTIAL_STORE CURSOR_AGENT_DISABLE_DEBUG_LOG DIRENV_DISABLE NODE_COMPILE_CACHE NO_OPEN_BROWSER XDG_CACHE_HOME XDG_CONFIG_DIRS XDG_CONFIG_HOME XDG_DATA_DIRS XDG_DATA_HOME XDG_RUNTIME_DIR XDG_STATE_HOME
+exec '/bin/bash' "$@"

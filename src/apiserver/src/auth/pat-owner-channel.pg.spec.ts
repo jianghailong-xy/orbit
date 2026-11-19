@@ -41,6 +41,9 @@ import {
   assertCoordinatorPgUrlIsIsolated,
   verifyCoordinatorPgIdentity,
 } from '../projects/coordinator-pg-test-safety';
+import { hashChatTicket } from '../feishu/feishu-chat-route.service';
+import { wikiCreateTitle } from '../owner-requests/owner-request';
+import { normalizeRepoUrl } from '../wiki/wiki.service';
 import { OWNER_INTERACTIVE_ROUTES } from './pat-owner-channel-routes';
 import { PAT_FORBIDDEN_REASONS, type PatForbiddenReason } from './pat-scope.decorator';
 import { PAT_SCOPES, PatService } from './pat.service';
@@ -111,7 +114,7 @@ test('the owner channel refuses a personal access token door by door and field b
   const token = (await pats.issue(userId, { name: 'every scope', scopes: [...PAT_SCOPES], expiresInDays: 90, createdVia: 'WEB' })).token;
   const jwtSecret = `owner-channel-${randomUUID()}`;
   const login = await new JwtService({ secret: jwtSecret }).signAsync({ sub: userId, email });
-  server = await startApiserver(url, jwtSecret, { ORBIT_WIKI: 'on' });
+  server = await startApiserver(url, jwtSecret, { ORBIT_WIKI: 'on', PROVIDER_SECRET_KEY: `owner-channel-secrets-${RUN}` });
   const api = (method: string, path: string, bearer: string, body?: unknown): Promise<Reply> =>
     call(server!, method, `/api${path}`, bearer, body);
   const ok = (reply: Reply, what: string) => {
@@ -150,9 +153,129 @@ test('the owner channel refuses a personal access token door by door and field b
     ok(await api('POST', '/sessions', login, { prompt: 'knocked on', workspaceId }), 'creating a session').json.id,
   );
 
+  // Real SECRET cards on this runner: submit, cancel an undelivered grant, and revoke a delivered one.
+  await db.session.update({ where: { id: sessionId }, data: { assignedRunnerId: runnerId } });
+  const secretRequest = async () => (await db.ownerRequest.create({
+    data: {
+      ownerId: userId, askedBySessionId: sessionId, kind: 'SECRET', title: 'API key', why: 'the session needs a key',
+      secretSpec: { name: 'API key', runnerId, envVar: 'OWNER_CHANNEL_KEY' },
+    },
+  })).id;
+  const secretToSubmit = await secretRequest();
+  const secretToCancel = await secretRequest();
+  const secretToRevoke = await secretRequest();
+  for (const requestId of [secretToCancel, secretToRevoke]) {
+    ok(await api('POST', `/owner-requests/${requestId}/secret`, login, { value: 'fixture-key' }), 'preparing a secret grant');
+  }
+  await db.ownerRequestSecret.update({ where: { requestId: secretToRevoke }, data: { state: 'ACTIVE', deliveredAt: new Date() } });
+  const grantRow = (requestId: string) => db.ownerRequestSecret.findUnique({ where: { requestId } });
+  const savedSecret = await db.accountSecret.create({ data: { ownerId: userId, label: 'door fixture', valueEnc: 'to be replaced' } });
+  const savedRow = () => db.accountSecret.findUnique({ where: { id: savedSecret.id } });
+
+  // A real WIKI_CREATE card (docs/wiki-explicit-creation-design.md §3.6): filed from a session in a workspace on a
+  // repository with no wiki, so the Create wiki door makes that wiki and settles the card.
+  const wikiRepoUrl = `https://github.com/owner-channel/wiki-${RUN}`;
+  const wikiRepoUrlNorm = normalizeRepoUrl(wikiRepoUrl)!;
+  const wikiWorkspaceId = randomUUID();
+  await db.workspace.create({ data: { id: wikiWorkspaceId, ownerId: userId, runnerId, name: `wiki ${RUN}`, enabled: true, repoUrl: wikiRepoUrl } });
+  const wikiSessionId = toUuid(
+    ok(await api('POST', '/sessions', login, { prompt: 'asks for a wiki', workspaceId: wikiWorkspaceId }), 'creating a session on the repository').json.id,
+  );
+  const wikiToCreate = (await db.ownerRequest.create({
+    data: {
+      ownerId: userId, askedBySessionId: wikiSessionId, kind: 'WIKI_CREATE', title: wikiCreateTitle(wikiRepoUrlNorm),
+      why: 'the session needs a wiki', repoUrlNorm: wikiRepoUrlNorm, workspaceId: wikiWorkspaceId,
+    },
+  })).id;
+  const wikiCreated = async () => ({
+    state: (await db.ownerRequest.findUniqueOrThrow({ where: { id: wikiToCreate } })).state,
+    spaces: await db.wikiSpace.count({ where: { ownerId: userId, repoUrlNorm: wikiRepoUrlNorm, deletedAt: null } }),
+  });
+
+  // A Feishu app of the account's (switched off, so nothing connects it) with a group waiting on a live ticket, and two
+  // groups connected: the three group doors (docs/feishu-bot-design.md §8.1) stood up for real.
+  const feishuAppId = `cli_owner_channel_${RUN}`;
+  await db.feishuApp.create({
+    data: { ownerId: userId, platform: 'FEISHU', appId: feishuAppId, appSecretEnc: 'owner:channel:not-a-secret', enabled: false, ownerOpenId: 'ou_owner' },
+  });
+  const chatTicket = `owner-channel-ticket-${RUN}`;
+  const pendingChat = await db.feishuChatRoute.create({
+    data: {
+      ownerId: userId, appId: feishuAppId, chatId: `oc_pending_${RUN}`,
+      ticketHash: hashChatTicket(chatTicket), ticketOpenId: 'ou_owner', ticketEventId: `ev-${RUN}`, ticketExpiresAt: new Date(Date.now() + 30 * 60_000),
+    },
+  });
+  const connectedChat = async (chat: string) => (await db.feishuChatRoute.create({
+    data: { ownerId: userId, appId: feishuAppId, chatId: `oc_${chat}_${RUN}`, workspaceId, permissionMode: 'default', enabled: true, confirmedAt: new Date() },
+  })).id;
+  const chatToChange = await connectedChat('to-change');
+  const chatToRemove = await connectedChat('to-remove');
+  const chatRow = (id: string) => db.feishuChatRoute.findUnique({ where: { id } });
+
+  // Two terminal sign-ins waiting on the account's runner: the approve card's doors stood up for real.
+  const terminalRequest = async () => (await db.terminalLogin.create({
+    data: {
+      deviceCodeHash: `owner-channel-${randomUUID()}`, userCode: '7KQ-4MZ', ownerId: userId, runnerId,
+      machineName: 'a runner', expiresAt: new Date(Date.now() + 10 * 60_000),
+    },
+  })).id;
+  const terminalToApprove = await terminalRequest();
+  const terminalToDeny = await terminalRequest();
+  const terminalStatus = async (id: string) => (await db.terminalLogin.findUniqueOrThrow({ where: { id } })).status;
+  // Two other accounts: one to invite through the guest door, one already invited for the remove door to take out.
+  const guestEmail = `owner-channel-guest-${RUN}@personal-access-token.invalid`;
+  await db.user.create({ data: { email: guestEmail, name: 'Invited' } });
+  const guestToRemove = (await db.user.create({
+    data: { email: `owner-channel-removed-${RUN}@personal-access-token.invalid`, name: 'Removed' },
+  })).id;
+  await db.sessionGuest.create({ data: { sessionId, ownerId: userId, userId: guestToRemove } });
+
   // ── (1) the owner channel, door by door ────────────────────────────────────────────────────
 
+  // Scheduled tasks' create cards (docs/scheduled-tasks-design.md §4, §8.1), as a session's schedule_create leaves them.
+  const scheduleCard = async () => (await db.scheduleChangeRequest.create({
+    data: {
+      ownerId: userId, kind: 'CREATE', askedBy: 'SESSION', askedBySessionId: sessionId,
+      proposed: {
+        workspaceId, intent: 'check it daily', title: 'Owner channel check', prompt: 'check it', readBack: null,
+        rule: { kind: 'DAILY', time: '10:00' }, timezone: 'UTC', accessLevel: 'CHECK_ONLY', runLimitMinutes: 30,
+        startAt: null, endAt: null, baseline: null,
+      },
+      envelopeAsked: { workspaceId, accessLevel: 'CHECK_ONLY', runsPerWeek: 7, runLimitMinutes: 30 },
+    },
+  })).id;
+  const cardToAllow = await scheduleCard();
+  const cardToDecline = await scheduleCard();
+  const cardForASession = await scheduleCard();
+  const cardState = async (id: string) => (await db.scheduleChangeRequest.findUniqueOrThrow({ where: { id } })).state;
+
   const doors: Door[] = [
+    {
+      route: 'POST /owner-requests/:id/secret', path: `/owner-requests/${secretToSubmit}/secret`,
+      body: { value: 'submitted-key', saveAs: 'submitted key' }, login: 200,
+      observe: async () => ({ grant: await grantRow(secretToSubmit), saved: await db.accountSecret.findUnique({ where: { ownerId_label: { ownerId: userId, label: 'submitted key' } } }) }),
+    },
+    {
+      route: 'POST /owner-requests/:id/secret/cancel', path: `/owner-requests/${secretToCancel}/secret/cancel`,
+      login: 200, observe: () => grantRow(secretToCancel),
+    },
+    {
+      route: 'POST /owner-requests/:id/secret/revoke', path: `/owner-requests/${secretToRevoke}/secret/revoke`,
+      login: 200, observe: () => grantRow(secretToRevoke),
+    },
+    {
+      route: 'POST /owner-requests/:id/create-wiki', path: `/owner-requests/${wikiToCreate}/create-wiki`,
+      login: 200, observe: wikiCreated,
+    },
+    { route: 'GET /account-secrets', path: '/account-secrets', login: 200 },
+    {
+      route: 'PUT /account-secrets/:id', path: `/account-secrets/${savedSecret.id}`,
+      body: { value: 'replacement-key' }, login: 204, observe: savedRow,
+    },
+    {
+      route: 'DELETE /account-secrets/:id', path: `/account-secrets/${savedSecret.id}`,
+      login: 204, observe: savedRow,
+    },
     { route: 'POST /tasks/:taskId/owner-confirmation', path: `/tasks/${nobody()}/owner-confirmation`, body: { decision: 'CONFIRM' }, login: 404 },
     {
       route: 'POST /tasks/:taskId/evidence/decision',
@@ -160,11 +283,25 @@ test('the owner channel refuses a personal access token door by door and field b
       body: { decision: 'CONFIRM', evidenceRevision: '1', decidingSessionId: nobody() },
       login: 404,
     },
+    { route: 'POST /tasks/:taskId/evidence/:revision/restart', path: `/tasks/${nobody()}/evidence/1/restart`, body: {}, login: 404 },
     {
       route: 'POST /sessions/:id/approvals/:approvalId/decision',
       path: `/sessions/${sessionId}/approvals/${nobody()}/decision`,
       body: { behavior: 'allow' },
       login: 404,
+    },
+    // Session guests (docs/session-guests-design.md §3): the People list, inviting by email, removing.
+    { route: 'GET /sessions/:id/guests', path: `/sessions/${sessionId}/guests`, login: 200 },
+    { route: 'GET /sessions/:id/guests/suggestions', path: `/sessions/${sessionId}/guests/suggestions`, login: 200 },
+    {
+      route: 'POST /sessions/:id/guests', path: `/sessions/${sessionId}/guests`,
+      body: { email: guestEmail }, login: 201,
+      observe: () => db.sessionGuest.count({ where: { sessionId, removedAt: null } }),
+    },
+    {
+      route: 'DELETE /sessions/:id/guests/:userId', path: `/sessions/${sessionId}/guests/${guestToRemove}`,
+      login: 200,
+      observe: () => db.sessionGuest.count({ where: { sessionId, userId: guestToRemove, removedAt: null } }),
     },
     {
       route: 'POST /projects/:id/acceptance/confirmation',
@@ -217,6 +354,13 @@ test('the owner channel refuses a personal access token door by door and field b
       login: 201,
       observe: async () => (await projectRow(toPause)).pausedAt,
     },
+    // A criterion the project does not state: a login is answered 404, and nothing moves.
+    {
+      route: 'POST /projects/:id/criteria/:criterionKey/move',
+      path: `/projects/${anyProject}/criteria/${nobody()}/move`,
+      body: { newProject: { title: 'a follow-up' } },
+      login: 404,
+    },
     // The project is OPEN, so a login is answered by the door's own refusal: PROJECT_STILL_OPEN.
     {
       route: 'POST /projects/:id/sessions/complete',
@@ -229,6 +373,8 @@ test('the owner channel refuses a personal access token door by door and field b
       body: { note: 'not yet' },
       login: 409,
     },
+    // The owner's DONE readiness read (a324f2397): what Record as done would be weighed against.
+    { route: 'GET /projects/:id/done-check', path: `/projects/${anyProject}/done-check`, login: 200 },
     {
       route: 'GET /projects/:id/acceptance/criteria-decisions/pending',
       path: `/projects/${anyProject}/acceptance/criteria-decisions/pending`,
@@ -308,6 +454,9 @@ test('the owner channel refuses a personal access token door by door and field b
       login: 200,
       observe: () => db.wikiSpaceWorkspace.count({ where: { workspaceId, spaceId, leftOutAt: null } }),
     },
+    // The maintenance settings' probe and run now of a space nobody has: the plain 404, nothing asked, nothing made.
+    { route: 'POST /wiki/spaces/:id/maintenance/probe', path: `/wiki/spaces/${nobody()}/maintenance/probe`, body: { workspaceId }, login: 404 },
+    { route: 'POST /wiki/spaces/:id/maintenance/run', path: `/wiki/spaces/${nobody()}/maintenance/run`, body: {}, login: 404 },
     // A space nobody has: a login that got past the door would move the wiki the cases around it read to Trash.
     { route: 'DELETE /wiki/spaces/:id', path: `/wiki/spaces/${nobody()}`, login: 404 },
     // The Trash (contract `space.trash`): a restore of the wiki in use answers it as it is; a permanent delete of a wiki
@@ -337,6 +486,58 @@ test('the owner channel refuses a personal access token door by door and field b
     { route: 'POST /wiki/chat-drafts/:id/undo', path: `/wiki/chat-drafts/${nobody()}/undo`, login: 404 },
     { route: 'POST /wiki/chat-drafts/:id/retry', path: `/wiki/chat-drafts/${nobody()}/retry`, login: 404 },
     { route: 'POST /wiki/chat-drafts/:id/seen', path: `/wiki/chat-drafts/${nobody()}/seen`, login: 404 },
+    // Connecting a Feishu group with a live ticket, changing a connected one, removing one.
+    {
+      route: 'POST /integrations/feishu/chats/confirm',
+      path: '/integrations/feishu/chats/confirm',
+      body: { ticket: chatTicket, workspaceId, permissionMode: 'acceptEdits', allowedOpenIds: ['ou_member'], maxConcurrentSessions: 3, sessionsPerDay: 7 },
+      login: 201,
+      observe: async () => (await chatRow(pendingChat.id))?.confirmedAt ?? null,
+    },
+    {
+      route: 'PATCH /integrations/feishu/chats/:id',
+      path: `/integrations/feishu/chats/${chatToChange}`,
+      body: { maxConcurrentSessions: 5 },
+      login: 200,
+      observe: async () => (await chatRow(chatToChange))?.maxConcurrentSessions,
+    },
+    {
+      route: 'DELETE /integrations/feishu/chats/:id',
+      path: `/integrations/feishu/chats/${chatToRemove}`,
+      login: 200,
+      observe: async () => (await chatRow(chatToRemove)) !== null,
+    },
+    // Opening the Feishu bot to everyone the app is available to (§14.1): the token writes no column of the app.
+    {
+      route: 'PUT /integrations/feishu/access',
+      path: '/integrations/feishu/access',
+      body: { mode: 'AVAILABILITY_SCOPE', workspaceId, permissionMode: 'acceptEdits', maxRunningPerPerson: 2, sessionsPerDayTotal: 40 },
+      login: 200,
+      observe: async () => {
+        const app = await db.feishuApp.findUniqueOrThrow({ where: { appId: feishuAppId } });
+        return [app.accessMode, app.openWorkspaceId, app.openPermissionMode, app.openMaxRunningPerPerson, app.openSessionsPerDayPerPerson,
+          app.openMaxRunningTotal, app.openSessionsPerDayTotal, app.updatedAt.toISOString()];
+      },
+    },
+    // A terminal asking to be approved (docs/terminal-session-design.md): two real requests on the account's runner.
+    { route: 'GET /terminals/requests', path: '/terminals/requests', login: 200 },
+    {
+      route: 'POST /terminals/requests/:id/approve', path: `/terminals/requests/${terminalToApprove}/approve`,
+      login: 200, observe: () => terminalStatus(terminalToApprove),
+    },
+    {
+      route: 'POST /terminals/requests/:id/deny', path: `/terminals/requests/${terminalToDeny}/deny`,
+      login: 200, observe: () => terminalStatus(terminalToDeny),
+    },
+    // A scheduled task's create cards, pressed for real: the token writes nothing, the login's press decides the card.
+    {
+      route: 'POST /schedule-requests/:id/allow', path: `/schedule-requests/${cardToAllow}/allow`, body: {},
+      login: 200, observe: () => cardState(cardToAllow),
+    },
+    {
+      route: 'POST /schedule-requests/:id/decline', path: `/schedule-requests/${cardToDecline}/decline`,
+      login: 200, observe: () => cardState(cardToDecline),
+    },
   ];
 
   await t.test('every door in OWNER_INTERACTIVE_ROUTES has a case below, on a path that door answers, and nothing else has one', () => {
@@ -359,6 +560,18 @@ test('the owner channel refuses a personal access token door by door and field b
       if (door.observe) assert.notDeepEqual(await door.observe(), before, "the login did the door's work");
     });
   }
+
+  await t.test('POST /schedule-requests/:id/{allow,decline}: a login carrying an acting session is refused, over HTTP', async () => {
+    for (const verb of ['allow', 'decline']) {
+      const reply = await call(server!, 'POST', `/api/schedule-requests/${cardForASession}/${verb}`, login, {}, {
+        'x-orbit-session-id': sessionId,
+      });
+      assert.equal(reply.status, 403, `${verb} with a session answered ${reply.status}: ${reply.text}`);
+      assert.equal(reply.json?.code, 'SCHEDULE_DECISION_OWNER_CHANNEL_ONLY');
+    }
+    assert.equal(await cardState(cardForASession), 'PENDING', 'a session pressed nothing');
+    assert.equal(await db.schedule.count({ where: { ownerId: userId } }), 1, 'only the login\'s Create wrote a schedule');
+  });
 
   // ── (2) auth/*, admin/*, runner credentials, share links ────────────────────────────────────
 

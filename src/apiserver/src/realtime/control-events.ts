@@ -65,6 +65,10 @@ export function controlTypeFor(t: RunEventType): ControlEventType | null {
       return ControlEventType.WATCH_CHANGED;
     case RunEventType.WIKI_CHANGED:
       return ControlEventType.WIKI_CHANGED;
+    case RunEventType.TERMINALS_CHANGED:
+      return ControlEventType.TERMINALS_CHANGED;
+    case RunEventType.TRANSLATION_STATUS_CHANGED:
+      return ControlEventType.TRANSLATION_STATUS_CHANGED;
     default:
       return null;
   }
@@ -86,7 +90,9 @@ export function isUserScopedType(t: ControlEventType): boolean {
     t === ControlEventType.PROJECT_CRITERIA_DECISIONS_CHANGED ||
     t === ControlEventType.PROJECT_CHANGED ||
     t === ControlEventType.WATCH_CHANGED ||
-    t === ControlEventType.WIKI_CHANGED
+    t === ControlEventType.WIKI_CHANGED ||
+    t === ControlEventType.TERMINALS_CHANGED ||
+    t === ControlEventType.TRANSLATION_STATUS_CHANGED
   );
 }
 

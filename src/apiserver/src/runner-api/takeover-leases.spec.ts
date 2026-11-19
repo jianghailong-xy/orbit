@@ -2,6 +2,7 @@ import assert from 'node:assert/strict';
 import { test } from 'node:test';
 import { BadRequestException, ConflictException, ForbiddenException } from '@nestjs/common';
 import { RunStatus } from '@prisma/client';
+import { SESSION_MERGE_BESIDE_TURN_V1 } from '@orbit/shared';
 import { newTerminalResumeHandoffOwner } from '../common/session-inbox-fence';
 import { RunnerApiController } from './runner-api.controller';
 
@@ -23,6 +24,8 @@ function harness(
   operationState: Record<string, unknown> = {},
   /** Cards this session has open when the takeover lands — what the collection returns. */
   pendingApprovals: string[] = [],
+  /** What the runner declared: by default nothing, a runner whose merge still holds turns back. */
+  runnerCapabilities: string[] = [],
 ) {
   const executeCalls: unknown[][] = [];
   // Every statement in order, the transaction-local declarations included; `executeCalls` holds the
@@ -30,12 +33,24 @@ function harness(
   const statements: string[] = [];
   const published: Array<{ type: string; payload: Record<string, unknown> }> = [];
   let queryCalls = 0;
+  // The predecessor's SubAgent runs, ended INTERRUPTED (subagent-wake.ts interruptOrphanedSubagentRuns): none here.
+  const subagentInterrupts: string[] = [];
+  const workflowInterrupts: string[] = [];
   let notified: string | undefined;
   const tx = {
+    runner: { findUnique: async () => ({ capabilities: runnerCapabilities }) },
     // Answered by statement: this boundary runs two, and a fake that hands the session row back
     // to both would have the approval collection reading a session as a list of cards.
     $queryRaw: async (...args: unknown[]) => {
       if (sql(args).includes('UPDATE "approval"')) return pendingApprovals.map((id) => ({ id }));
+      if (sql(args).includes('UPDATE "subagent_run"')) {
+        subagentInterrupts.push(sql(args));
+        return [];
+      }
+      if (sql(args).includes('UPDATE "subagent_workflow_run"')) {
+        workflowInterrupts.push(sql(args));
+        return [];
+      }
       queryCalls += 1;
       return owned
         ? [
@@ -81,6 +96,7 @@ function harness(
     published,
     notified: () => notified,
     queryCalls: () => queryCalls,
+    subagentInterrupts, workflowInterrupts,
   };
 }
 
@@ -96,6 +112,12 @@ test('takeover CAS retires the observed process generation and installs the new 
   );
 
   assert.equal(h.queryCalls(), 1);
+  // The SubAgents the replaced process hosted end with it: INTERRUPTED, owing the parent a wake.
+  assert.equal(h.subagentInterrupts.length, 1);
+  assert.match(h.subagentInterrupts[0], /"status" = 'INTERRUPTED'/);
+  assert.match(h.subagentInterrupts[0], /"wake_owed" = \("workflow_run_id" IS NULL\)/);
+  assert.equal(h.workflowInterrupts.length, 1);
+  assert.match(h.workflowInterrupts[0], /"status" = 'INTERRUPTED'.*"wake_owed" = true/);
   assert.equal(h.executeCalls.length, 3);
   assert.match(sql(h.executeCalls[0]), /INSERT INTO "inbox_lease_generation"/);
   assert.match(sql(h.executeCalls[0]), /"retired_at"/);
@@ -255,6 +277,29 @@ for (const tc of [
     assert.equal(h.notified(), undefined);
   });
 }
+
+test('takeover rotates past a claimed merge on a runner that merges beside a turn', async () => {
+  const h = harness(
+    OLD_OWNER,
+    GENERATION,
+    true,
+    RunStatus.AWAITING_INPUT,
+    {
+      mergeStatus: 'pending',
+      mergeOperationId: '66666666-6666-4666-8666-666666666666',
+      mergeOperationOwner: '66666666-6666-4666-8666-666666666666',
+    },
+    [],
+    [SESSION_MERGE_BESIDE_TURN_V1],
+  );
+
+  await h.controller.takeoverLeases({ id: RUNNER_ID }, SESSION_ID, {
+    leaseOwner: NEW_OWNER,
+    expectedLeaseOwner: OLD_OWNER,
+  });
+
+  assert.ok(h.executeCalls.length > 0, 'the owner was rotated');
+});
 
 for (const tc of [
   {

@@ -15,7 +15,7 @@ metadata:
   # Only an operator taking over from a node that cannot report removes it by hand (README).
   finalizers: [orbit.dev/managed-runner-stop-report]
   labels:
-    app.kubernetes.io/name: orbit-managed-runner
+    app.kubernetes.io/name: orbit-cloud-runner
     orbit-test-environment: __TEST_ENVIRONMENT_ID__
   annotations:
     orbit.dev/owner-id: __OWNER_UUID__
@@ -56,7 +56,7 @@ spec:
           memory: __INIT_MEMORY_LIMIT__
       volumeMounts:
         - name: user-state
-          mountPath: /var/lib/orbit
+          mountPath: /home/orbit
         - name: temporary
           mountPath: /tmp
   containers:
@@ -106,7 +106,7 @@ spec:
           memory: __RUNNER_MEMORY_LIMIT__
       volumeMounts:
         - name: user-state
-          mountPath: /var/lib/orbit
+          mountPath: /home/orbit
         - name: temporary
           mountPath: /tmp
         - name: bootstrap

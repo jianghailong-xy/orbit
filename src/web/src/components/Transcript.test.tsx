@@ -1,14 +1,17 @@
 import { existsSync, readFileSync } from 'node:fs';
+import { act } from 'react';
+import { createRoot } from 'react-dom/client';
 import { resolve } from 'node:path';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { JSDOM } from 'jsdom';
 import { renderToStaticMarkup } from 'react-dom/server';
 import { MemoryRouter } from 'react-router-dom';
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it, vi } from 'vitest';
 import {
   AutoRetryCtx,
   type AutoRetryHelp,
   AuthErrorCtx,
+  EventFullCtx,
   ExportCtx,
   LiveToolOutputsCtx,
   MD,
@@ -48,7 +51,7 @@ describe('transcript sign-in cards', () => {
     expect(cards(html)).toBe(1);
   });
 
-  it('keeps a card per failure when the runner reports different ones', () => {
+  it('keeps a row per failure when the runner reports different ones — the older one settled', () => {
     const html = renderToStaticMarkup(
       <Transcript
         events={[
@@ -58,7 +61,8 @@ describe('transcript sign-in cards', () => {
       />,
     );
 
-    expect(cards(html)).toBe(2);
+    expect(cards(html)).toBe(1);
+    expect(html).toContain('data-settled="superseded"');
   });
 
   it('shows the message the retry would re-send', () => {
@@ -72,6 +76,65 @@ describe('transcript sign-in cards', () => {
 
     expect(html).toContain('ship the thing');
     expect(html).toContain('Retry — re-send my last message');
+  });
+
+  // Once the session has moved past a failure its card is history: one muted row, no sign-in and
+  // no Retry — whose re-send is the session's latest message, not the one this failure ate.
+  describe('a card the session has moved past', () => {
+    const OTHER = 'Failed to authenticate: OAuth session expired and could not be refreshed';
+    const user = (seq: number, text: string): RunEvent => ({ seq, type: 'user', payload: { text } });
+    const switched = (seq: number, notice: string): RunEvent => ({
+      seq,
+      type: 'system',
+      payload: { subtype: 'init', notice, noticeKind: 'pool-member-switched' },
+    });
+    const render = (events: RunEvent[]) =>
+      renderToStaticMarkup(
+        <AuthErrorCtx.Provider value={{ provider: 'codex', onRetry: () => {}, retryText: 'ship the thing' }}>
+          <Transcript events={events} />
+        </AuthErrorCtx.Provider>,
+      );
+    const settled = (html: string) => [...html.matchAll(/data-settled="(\w+)"/g)].map((m) => m[1]);
+
+    it('keeps only the latest unsettled failure as a full card', () => {
+      const html = render([
+        user(1, 'deploy'),
+        errorEvent(2, AUTH_FAILED),
+        user(3, 'deploy'),
+        errorEvent(4, OTHER),
+      ]);
+
+      expect(settled(html)).toEqual(['superseded']);
+      expect(cards(html)).toBe(1);
+      expect(html.split('Retry — re-send my last message').length - 1).toBe(1);
+    });
+
+    it('marks failures resolved once the agent works again, and mutes the account switches', () => {
+      const html = render([
+        user(1, 'deploy'),
+        switched(2, 'Switched to B — A is signed out'),
+        errorEvent(3, AUTH_FAILED),
+        user(4, 'deploy'),
+        switched(5, 'Switched to A — B is signed out'),
+        errorEvent(6, OTHER),
+        user(7, 'deploy'),
+        switched(8, 'Switched to B — A is signed out'),
+        { seq: 9, type: 'assistant', payload: { text: 'Deployed.' } },
+      ]);
+
+      expect(settled(html)).toEqual(['superseded', 'resolved']);
+      expect(cards(html)).toBe(0);
+      expect(html).not.toContain('Retry — re-send my last message');
+      expect(html).toContain('— resolved');
+      expect(html.split('chat-notice chat-notice-settled').length - 1).toBe(3);
+    });
+
+    it('leaves the switch beside a live card in the warning tone', () => {
+      const html = render([user(1, 'deploy'), switched(2, 'Switched to B — A is signed out'), errorEvent(3, AUTH_FAILED)]);
+
+      expect(cards(html)).toBe(1);
+      expect(html).not.toContain('chat-notice-settled');
+    });
   });
 });
 
@@ -1186,7 +1249,7 @@ describe('engine stderr', () => {
     expect(html).not.toContain('chat-error-card-log');
   });
 
-  it('keeps an apply_patch stderr failure inside the surrounding tool group', () => {
+  it('keeps an apply_patch stderr failure inside the surrounding steps line', () => {
     const html = renderToStaticMarkup(
       <Transcript
         events={[
@@ -1206,9 +1269,8 @@ describe('engine stderr', () => {
       />,
     );
 
-    expect(html).toContain('Tools × 3');
-    expect(html).toContain('1 failed');
-    expect(html).toContain('Failed: ');
+    expect(html).toContain('Ran 2 shell commands, edited 1 file');
+    expect(html).toContain(' · 1 failed');
     expect(html).not.toContain('chat-error-card');
     // The expected source line belongs to the failed call's expandable result, not a second red row.
     expect(html).not.toContain("The transcript's tool-call rendering");
@@ -1380,6 +1442,56 @@ describe('Orbit write tool cards', () => {
     payload: { id: 't1', name, input },
   });
 
+  it("draws the owner's Chat about this reply to a card as their message, not inside the call", () => {
+    const fixture = JSON.parse(
+      readFileSync(resolve(__dirname, '../../../shared/src/owner-chat-reply.fixture.json'), 'utf8'),
+    ) as { writerWords: string; cases: { result: string }[] };
+    for (const name of ['mcp__orbit__project_create', 'mcp__orbit__runner_delete']) {
+      const html = renderToStaticMarkup(
+        <MemoryRouter>
+          <Transcript
+            events={[
+              toolEvent(name, { title: 'Move the database' }),
+              {
+                seq: 2,
+                type: 'tool_result',
+                payload: { toolUseId: 't1', content: [{ type: 'text', text: fixture.cases[0].result }] },
+              },
+            ]}
+          />
+        </MemoryRouter>,
+      );
+      // Its own bubble, as anything else they type is, and never folded into a steps line (where
+      // the native client used to leave it, under "Used tool").
+      expect(html).toContain('chat-msg chat-user');
+      expect(html).toContain(fixture.writerWords);
+      expect(html).not.toContain('Not done yet, and not a no');
+    }
+  });
+
+  it("draws the owner's words from the chat receipt an engine records in place of the text", () => {
+    // Claude Code and Codex record a result's structuredContent, the runner's receipt, instead of its
+    // text; a chat's receipt carries the same reply as its `text`.
+    const fixture = JSON.parse(
+      readFileSync(resolve(__dirname, '../../../shared/src/owner-chat-reply.fixture.json'), 'utf8'),
+    ) as { writerWords: string; cases: { name: string; result: string }[] };
+    const receipt = fixture.cases.find((c) => c.name === 'the receipt an engine shows in place of the text')!.result;
+    for (const content of [receipt, [{ type: 'text', text: receipt }]]) {
+      const html = renderToStaticMarkup(
+        <MemoryRouter>
+          <Transcript
+            events={[
+              toolEvent('mcp__orbit__project_create', { title: 'Move the database' }),
+              { seq: 2, type: 'tool_result', payload: { toolUseId: 't1', content } },
+            ]}
+          />
+        </MemoryRouter>,
+      );
+      expect(html).toContain('chat-msg chat-user');
+      expect(html).toContain(fixture.writerWords);
+    }
+  });
+
   it('says what a single create wrote, by name', () => {
     // One size down from the batch: the row names the task and carries its description, instead of
     // falling through to `orbit · task_create` over a dump of the call's own JSON.
@@ -1526,6 +1638,7 @@ describe('Orbit write tool cards', () => {
   it('names a restructure by its reason rather than its JSON', () => {
     const html = renderToStaticMarkup(
       <MemoryRouter>
+        <ExportCtx.Provider value={'html' as never}>
         <Transcript
           events={[
             toolEvent('mcp__orbit__tasklist_propose_dag', {
@@ -1535,6 +1648,7 @@ describe('Orbit write tool cards', () => {
             }),
           ]}
         />
+        </ExportCtx.Provider>
       </MemoryRouter>,
     );
 
@@ -1545,7 +1659,9 @@ describe('Orbit write tool cards', () => {
   it('still falls back to the generic card for any other MCP tool', () => {
     const html = renderToStaticMarkup(
       <MemoryRouter>
-        <Transcript events={[toolEvent('mcp__orbit__task_get', { taskId: 'x' })]} />
+        <ExportCtx.Provider value={'html' as never}>
+          <Transcript events={[toolEvent('mcp__orbit__task_get', { taskId: 'x' })]} />
+        </ExportCtx.Provider>
       </MemoryRouter>,
     );
 
@@ -1559,10 +1675,10 @@ describe('injected context in a user bubble', () => {
   // These events carry the note the apiserver records beside the echo (`controlPlaneNote`), which
   // is the only thing that tells what was appended apart; an event without one is drawn exactly as
   // echoed (Transcript.controlPlaneNote.test.tsx).
-  const COORDINATOR = `<orbit_project_coordinator_context>
-  你是项目（id: 4gfFCpGvM8ZoqYTZwH3cCB）的协调会话。
-</orbit_project_coordinator_context>`;
-  const appended = `\n\n${COORDINATOR}`;
+  const CONDITIONS = `<list-conditions>
+  这个列表的协调会话。
+</list-conditions>`;
+  const appended = `\n\n${CONDITIONS}`;
   const userEvent = (text: string, controlPlaneNote?: string): RunEvent => ({
     seq: 1,
     type: 'user',
@@ -1574,40 +1690,28 @@ describe('injected context in a user bubble', () => {
       <Transcript events={[userEvent(`把这个项目协调起来${appended}`, appended)]} />,
     );
 
-    // Over the whole markup: folded, the block is nowhere in it — not in the body, and not in an
+    // Over the whole markup: the block is nowhere in it — not in the body, and not in an
     // attribute either, where it used to ride as a tooltip.
     expect(html).toContain('把这个项目协调起来');
-    expect(html).not.toContain('orbit_project_coordinator_context');
+    expect(html).not.toContain('list-conditions');
     expect(html).not.toContain('的协调会话');
   });
 
-  it('keeps the block one click away, so what the model read is not lost', () => {
-    const events = [userEvent(`把这个项目协调起来${appended}`, appended)];
+  it('omits the appended note from both the live transcript and the export', () => {
+    const events = [userEvent(`Keep this project coordinated${appended}`, appended)];
     const html = renderToStaticMarkup(<Transcript events={events} />);
     const exported = renderToStaticMarkup(
       <ExportCtx.Provider value={{ images: new Map() }}>
         <Transcript events={events} live={false} />
       </ExportCtx.Provider>,
     );
-
-    // A tooltip is out of reach on a touch screen, so the entry itself opens to the block: folded
-    // here (⊕), and already open in an export (⊖), where there is nothing to click.
-    const entry = (expanded: boolean) =>
-      new RegExp(
-        `<button[^>]*aria-expanded="${expanded}"[^>]*><span class="chat-injected-mark">${expanded ? '⊖' : '⊕'}</span> Orbit attached: project coordinator context</button>`,
-      );
-    expect(html).toMatch(entry(false));
-    expect(exported).toMatch(entry(true));
-    expect(exported).toContain('的协调会话');
-  });
-
-  it('says that something was attached, so the reply is not unexplained', () => {
-    const html = renderToStaticMarkup(
-      <Transcript events={[userEvent(`把这个项目协调起来${appended}`, appended)]} />,
-    );
-
-    expect(html).toContain('Orbit attached');
-    expect(html).toContain('project coordinator context');
+    for (const markup of [html, exported]) {
+      expect(markup).toContain('Keep this project coordinated');
+      expect(markup).not.toContain('Orbit attached');
+      expect(markup).not.toContain('chat-injected');
+      expect(markup).not.toContain('list-conditions');
+      expect(markup).not.toContain('的协调会话');
+    }
   });
 
   it('leaves a message nobody appended to completely alone', () => {
@@ -1617,10 +1721,14 @@ describe('injected context in a user bubble', () => {
     expect(html).not.toContain('Orbit attached');
   });
 
-  it('does not offer to copy a message whose only text was injected', () => {
+  // Owner rule 2026-11-16: a turn whose only text was injected is nobody's message — the From Orbit line in the
+  // agent's stream (OrbitEventLine), naming the block, never the reader's bubble.
+  it('draws a message whose only text was injected as the From Orbit line, with nothing to copy', () => {
     const html = renderToStaticMarkup(<Transcript events={[userEvent(appended, appended)]} />);
 
-    expect(html).toContain('Orbit attached');
+    expect(html).toContain('From Orbit');
+    expect(html).toContain('list conditions');
+    expect(html).not.toContain('chat-user');
     expect(html).not.toContain('aria-label="Copy message"');
   });
 });
@@ -1765,7 +1873,9 @@ describe('a tag block typed into a user bubble', () => {
 describe('Bash folded row', () => {
   const bashRow = (input: Record<string, unknown>) =>
     renderToStaticMarkup(
-      <Transcript events={[{ seq: 1, type: 'tool_use', payload: { id: 't1', name: 'Bash', input } }]} />,
+      <ExportCtx.Provider value={'html' as never}>
+        <Transcript events={[{ seq: 1, type: 'tool_use', payload: { id: 't1', name: 'Bash', input } }]} />
+      </ExportCtx.Provider>,
     );
 
   it('falls back to the command when the runtime sends no description', () => {
@@ -1784,7 +1894,9 @@ describe('Bash folded row', () => {
 describe('Edit card', () => {
   const editRow = (input: Record<string, unknown>) =>
     renderToStaticMarkup(
-      <Transcript events={[{ seq: 1, type: 'tool_use', payload: { id: 't1', name: 'Edit', input } }]} />,
+      <ExportCtx.Provider value={'html' as never}>
+        <Transcript events={[{ seq: 1, type: 'tool_use', payload: { id: 't1', name: 'Edit', input } }]} />
+      </ExportCtx.Provider>,
     );
 
   it('opens onto the diff it was given', () => {
@@ -1881,87 +1993,107 @@ describe('foreground Shell card', () => {
   });
 });
 
-// The folded row of a tool group has one job: decide whether the group is worth opening. A
-// settled group answers that with its counts and per-kind breakdown — the last call of 31 is an
-// arbitrary anchor — so only a call still in flight gets a string, and it speaks in the same
-// prose the expanded rows use rather than in raw shell.
-describe('tool group folded row', () => {
+// Everything a turn does between two replies folds into one line of steps: the thinking first, then
+// each kind of call in the order it came. The line is there to say what happened; the cards behind it
+// are one click away, so nothing is lost — only deferred.
+describe('steps line', () => {
   const call = (seq: number, id: string, description: string, command: string) => ({
     seq,
     type: 'tool_use',
     payload: { id, name: 'Bash', input: { command, description } },
   });
   const done = (seq: number, toolUseId: string) => ({ seq, type: 'tool_result', payload: { toolUseId, content: 'ok' } });
-  // Assert against the folded row alone — an expanded group legitimately shows every raw command.
-  const foldedRow = (html: string) => html.split('chat-tool-group-detail')[0];
 
-  it('names the in-flight call by purpose while the group is still running', () => {
-    const html = foldedRow(renderToStaticMarkup(
+  it('says what a stretch of work did in one sentence, thinking first', () => {
+    const html = renderToStaticMarkup(
+      <Transcript
+        events={[
+          { seq: 1, type: 'thinking', payload: { text: 'look first', thinkingMs: 15_000 } },
+          call(2, 't1', 'List deploy files', 'ls /root/orbit/deploy'),
+          done(3, 't1'),
+          call(4, 't2', 'Show container status', 'docker compose ps'),
+          done(5, 't2'),
+          { seq: 6, type: 'assistant', payload: { text: 'Containers are up.' } },
+        ]}
+      />,
+    );
+
+    expect(html).toContain('Thought for 15s, listed 1 directory, ran 1 shell command');
+    // The cards wait behind the line, the reasoning with them.
+    expect(html).not.toContain('chat-steps-detail');
+    expect(html).not.toContain('docker compose ps');
+    expect(html).not.toContain('look first');
+    expect(html).toContain('Containers are up.');
+  });
+
+  it('folds a single call too, so every stretch reads alike', () => {
+    const html = renderToStaticMarkup(<Transcript events={[call(1, 't1', 'Show status', 'git status'), done(2, 't1')]} />);
+
+    expect(html).toContain('Ran 1 shell command');
+    expect(html).not.toContain('chat-tool-card');
+  });
+
+  it('counts files rather than calls for reads and edits', () => {
+    const edit = (seq: number, id: string, file_path: string) => ({
+      seq,
+      type: 'tool_use',
+      payload: { id, name: 'Edit', input: { file_path, old_string: 'a', new_string: 'b' } },
+    });
+    const html = renderToStaticMarkup(
+      <Transcript
+        events={[
+          { seq: 1, type: 'tool_use', payload: { id: 'r1', name: 'Read', input: { file_path: '/w/a.ts' } } },
+          done(2, 'r1'),
+          edit(3, 'e1', '/w/a.ts'),
+          done(4, 'e1'),
+          edit(5, 'e2', '/w/a.ts'),
+          done(6, 'e2'),
+          edit(7, 'e3', '/w/b.ts'),
+          done(8, 'e3'),
+          { seq: 9, type: 'tool_use', payload: { id: 'g1', name: 'Grep', input: { pattern: 'x' } } },
+          done(10, 'g1'),
+        ]}
+      />,
+    );
+
+    expect(html).toContain('Read 1 file, edited 2 files, searched 1 time');
+  });
+
+  it('draws the call in flight under the line by purpose and command, and only that one', () => {
+    const html = renderToStaticMarkup(
       <Transcript
         live
         events={[
           call(1, 't1', 'List orbit CLI capabilities', 'orbit capabilities --json'),
           done(2, 't1'),
           call(3, 't2', 'Locate codex rollout file', 'find /root/.codex -name "*01a000ae*" 2>/dev/null | head'),
-          call(4, 't3', 'Read runner logs', 'journalctl -u orbit-runner | tail -50'),
-        ]}
-      />,
-    ));
-
-    expect(html).toContain('· Running: ');
-    expect(html).toContain('Locate codex rollout file');
-    // Neither the raw command of the running call nor of the finished one.
-    expect(html).not.toContain('01a000ae');
-    expect(html).not.toContain('orbit capabilities');
-  });
-
-  it('leaves the row to the counts once every call has settled', () => {
-    const html = renderToStaticMarkup(
-      <Transcript
-        events={[
-          call(1, 't1', 'List orbit CLI capabilities', 'orbit capabilities --json'),
-          done(2, 't1'),
-          call(3, 't2', 'Locate codex rollout file', 'find /root/.codex -name "*01a000ae*" 2>/dev/null | head'),
-          done(4, 't2'),
-          call(5, 't3', 'Read runner logs', 'journalctl -u orbit-runner | tail -50'),
-          done(6, 't3'),
         ]}
       />,
     );
 
-    expect(html).toContain('3 succeeded');
-    expect(html).not.toContain('Running: ');
-    // No call speaks for the group: neither the last command nor its description.
-    expect(html).not.toContain('journalctl');
-    expect(html).not.toContain('Read runner logs');
-    // The per-call detail is one click away, so nothing is lost — only deferred.
-    expect(html).not.toContain('chat-tool-group-detail');
+    expect(html).toContain('Ran 1 shell command');
+    expect(html).toContain('chat-steps-live');
+    expect(html).toContain('Locate codex rollout file');
+    expect(html).toContain('01a000ae');
+    // The settled call stays behind the line.
+    expect(html).not.toContain('orbit capabilities');
   });
 
-  // Opening a group because something is running means closing it again the moment that call
-  // lands, which drops the transcript by the height of the group right where the reader is
-  // looking. Only a failure — a state that cannot revert — is worth opening on.
-  it('stays folded while running so settling cannot yank the layout', () => {
-    const events = [
-      call(1, 't1', 'List orbit CLI capabilities', 'orbit capabilities --json'),
-      done(2, 't1'),
-      call(3, 't2', 'Read runner logs', 'journalctl -u orbit-runner | tail -50'),
-      done(4, 't2'),
-      call(5, 't3', 'Build runner', 'go build ./...'),
-    ];
+  it('joins the line once the call lands, without unfolding anything', () => {
+    const events = [call(1, 't1', 'Build runner', 'go build ./...')];
     const runningHtml = renderToStaticMarkup(<Transcript live events={events} />);
-    const settledHtml = renderToStaticMarkup(<Transcript live events={[...events, done(6, 't3')]} />);
+    const settledHtml = renderToStaticMarkup(<Transcript live events={[...events, done(2, 't1')]} />);
 
-    expect(runningHtml).not.toContain('chat-tool-group-detail');
-    // Same shape before and after the last call lands: only the row's own text changes.
-    expect(settledHtml).not.toContain('chat-tool-group-detail');
-    expect(runningHtml).toContain('1 running · 2 succeeded');
-    expect(settledHtml).toContain('3 succeeded');
+    expect(runningHtml).toContain('chat-steps-live');
+    expect(runningHtml).not.toContain('chat-steps-line');
+    expect(settledHtml).toContain('Ran 1 shell command');
+    expect(settledHtml).not.toContain('chat-steps-live');
+    expect(settledHtml).not.toContain('chat-steps-detail');
   });
 
-  // Forcing a failed group open unfolds the failed call with it (ToolView opens on error), so one
-  // bad command became a screenful of clamped heredoc. Name the failure on the row instead.
-  it('names the failed call on the row rather than unfolding the group', () => {
+  // Forcing a failed stretch open unfolds the failed call with it (ToolView opens on error), so one
+  // bad command became a screenful of clamped heredoc. The line counts the failure instead.
+  it('counts a failure on the line rather than unfolding it', () => {
     const html = renderToStaticMarkup(
       <Transcript
         events={[
@@ -1969,44 +2101,25 @@ describe('tool group folded row', () => {
           done(2, 't1'),
           call(3, 't2', 'Build runner', 'go build ./...'),
           { seq: 4, type: 'tool_result', payload: { toolUseId: 't2', content: 'boom', isError: true } },
-          call(5, 't3', 'Read runner logs', 'journalctl -u orbit-runner | tail -50'),
-          done(6, 't3'),
         ]}
       />,
     );
 
-    expect(html).not.toContain('chat-tool-group-detail');
-    expect(html).toContain('1 failed');
-    expect(html).toContain('· Failed: ');
-    expect(html).toContain('Build runner');
-    // The command that failed stays behind the fold, error included.
-    expect(html).not.toContain('go build');
+    expect(html).toContain('Ran 2 shell commands<span class="chat-steps-failed"> · 1 failed</span>');
+    expect(html).not.toContain('chat-steps-detail');
     expect(html).not.toContain('boom');
   });
 
-  // The first failure is usually what caused the ones after it.
-  it('names the first failure when several calls failed', () => {
-    const bad = (seq: number, toolUseId: string) => ({
-      seq,
-      type: 'tool_result',
-      payload: { toolUseId, content: 'boom', isError: true },
-    });
+  it('is open in an export, where nothing can be clicked', () => {
     const html = renderToStaticMarkup(
-      <Transcript
-        events={[
-          call(1, 't1', 'Generate the client', 'prisma generate'),
-          bad(2, 't1'),
-          call(3, 't2', 'Build runner', 'go build ./...'),
-          bad(4, 't2'),
-          call(5, 't3', 'Read runner logs', 'journalctl -u orbit-runner | tail -50'),
-          done(6, 't3'),
-        ]}
-      />,
+      <ExportCtx.Provider value={'html' as never}>
+        <Transcript events={[call(1, 't1', 'Build runner', 'go build ./...'), done(2, 't1')]} />
+      </ExportCtx.Provider>,
     );
 
-    expect(html).toContain('· Failed: ');
-    expect(html).toContain('Generate the client');
-    expect(html).not.toContain('Build runner');
+    expect(html).toContain('chat-steps is-open');
+    expect(html).toContain('chat-steps-detail');
+    expect(html).toContain('Build runner');
   });
 
   it('reserves the caret column for a running call with no detail yet', () => {
@@ -2018,18 +2131,12 @@ describe('tool group folded row', () => {
             { seq: 1, type: 'tool_use', payload: { id: 't1', name: 'wait', input: {} } },
             done(2, 't1'),
             { seq: 3, type: 'tool_use', payload: { id: 't2', name: 'wait', input: {} } },
-            done(4, 't2'),
-            { seq: 5, type: 'tool_use', payload: { id: 't3', name: 'wait', input: {} } },
-            done(6, 't3'),
-            { seq: 7, type: 'tool_use', payload: { id: 't4', name: 'wait', input: {} } },
-            done(8, 't4'),
-            { seq: 9, type: 'tool_use', payload: { id: 't5', name: 'wait', input: {} } },
           ]}
         />
       </ExportCtx.Provider>,
     );
 
-    expect(html).toContain('1 running · 4 succeeded');
+    expect(html).toContain('Used 1 tool');
     expect(html).toContain(
       'class="chat-tool-row no-detail"><span class="chat-tool-caret"></span><span class="chat-tool-icon"',
     );
@@ -2052,14 +2159,13 @@ describe('failed tool call body', () => {
     },
   ];
 
-  // The red mark on the row says it failed; unfolding sixteen clamped lines of heredoc to say
-  // the same thing is the disproportionate part.
+  // The red count on the steps line says it failed; unfolding sixteen clamped lines of heredoc to
+  // say the same thing is the disproportionate part.
   it('stays folded, like every other settled call', () => {
     const html = renderToStaticMarkup(<Transcript events={failed} />);
 
-    expect(html).toContain('Append the tests');
-    expect(html).toContain('chat-tool-status err');
-    expect(html).not.toContain('chat-tool-detail');
+    expect(html).toContain(' · 1 failed');
+    expect(html).not.toContain('chat-steps-detail');
     expect(html).not.toContain('No such file or directory');
   });
 
@@ -2121,8 +2227,8 @@ describe('failed tool call body', () => {
       />,
     );
 
-    expect(html).toContain('chat-tool-status err');
-    expect(html).not.toContain('chat-tool-status running');
+    expect(html).toContain(' · 1 failed');
+    expect(html).not.toContain('chat-steps-live');
     // agy's interrupt carries no payload at all, and it is still the reader's Stop.
     expect(html).toContain('<div class="chat-note" data-seq="2">⊘ interrupted</div>');
   });
@@ -2158,6 +2264,53 @@ describe('an interrupt row says what stopped the turn', () => {
 
   it('says the runner restarted when the runner cut the turn short', () => {
     expect(row(7)).toBe('⊘ interrupted — the runner restarted');
+  });
+});
+
+// The owner's Update Now (D4): the runner cuts the turn with `reason: runner_update` and the release, and
+// the updated runner is handed the turn back as Orbit's continuation — drawn as one Orbit line, never as a
+// bubble in the reader's name, with the background-jobs note delivery appended under it.
+describe('a turn the owner’s Update Now cut, and the turn Orbit sent to continue it', () => {
+  const continuation =
+    '[Orbit] The runner update interrupted this turn; continue. Orbit updated its runner to 0.1.254 at the owner’s request, ' +
+    'which stopped this turn; the conversation so far has been restored.\n\nThe interrupted message:\nBackfill the missing shard rows.';
+  const doc = (drop?: number) => new JSDOM(renderToStaticMarkup(
+    <Transcript
+      events={([
+        { seq: 1, type: 'user', turnId: 't1', ts: '2026-11-12T12:19:00.000Z', payload: { text: 'Backfill the missing shard rows.' } },
+        { seq: 2, type: 'assistant', turnId: 't1', ts: '2026-11-12T12:19:10.000Z', payload: { text: 'Step 3 of 8.' } },
+        // The call the cut stopped, and the runner's synthetic result that answers it (interrupted_tool_calls.go).
+        { seq: 21, type: 'tool_use', turnId: 't1', ts: '2026-11-12T12:20:00.000Z',
+          payload: { id: 'exec-cut', name: 'Bash', input: { command: 'sleep 25; echo step 4 >> steps.log' } } },
+        { seq: 22, type: 'tool_result', turnId: 't1', ts: '2026-11-12T12:20:26.000Z',
+          payload: { toolUseId: 'exec-cut', isError: true, interrupted: 'runner_update',
+            content: '[Tool call interrupted: the runner update stopped this turn before this call\'s result was recorded, so its outcome is unknown.]' } },
+        { seq: 3, type: 'interrupt', turnId: 't1', ts: '2026-11-12T12:20:26.000Z', payload: { reason: 'runner_update', targetVersion: '0.1.254' } },
+        { seq: 4, type: 'user', turnId: 't1', ts: '2026-11-12T12:21:01.000Z',
+          payload: { text: continuation + '\n\n<background-jobs>\nnone\n</background-jobs>', controlPlaneNote: '\n\n<background-jobs>\nnone\n</background-jobs>' } },
+        { seq: 5, type: 'assistant', turnId: 't1', ts: '2026-11-12T12:21:05.000Z', payload: { text: 'Checking steps.log first.' } },
+        { seq: 6, type: 'interrupt', turnId: 't2', ts: '2026-11-12T12:30:00.000Z', payload: { reason: 'runner_update' } },
+      ] as RunEvent[]).filter((ev) => ev.seq !== drop)}
+    />,
+  )).window.document;
+
+  it('says the runner updated, and to which release', () => {
+    expect(doc().querySelector('.chat-note[data-seq="3"]')?.textContent).toBe('⊘ interrupted — the runner updated to 0.1.254');
+    expect(doc().querySelector('.chat-note[data-seq="6"]')?.textContent).toBe('⊘ interrupted — the runner updated');
+  });
+
+  it('leaves no call the cut stopped drawn as pending: it reads as interrupted', () => {
+    // Folded, the steps line counts the call as settled — failed, since its outcome is unknown.
+    expect(doc().querySelector('.chat-steps-failed')?.textContent).toBe(' · 1 failed');
+    // Control: without the runner's synthetic result the same call settles as nothing at all.
+    expect(doc(22).querySelector('.chat-steps-failed')).toBeNull();
+  });
+
+  it('draws the continuation as one Orbit line, not the reader’s bubble', () => {
+    const d = doc();
+    expect(d.querySelector('.runner-update-resume[data-seq="4"]')?.textContent).toBe('The runner update interrupted this turn; continue.');
+    expect(d.body.textContent).not.toContain('The interrupted message');
+    expect(d.body.textContent).toContain('Checking steps.log first.');
   });
 });
 
@@ -2224,14 +2377,14 @@ describe('runtime authentication help', () => {
   });
 });
 
-describe('shared-checkout notice', () => {
+describe('main-checkout notice', () => {
   const NOTICE =
-    'This turn left 1 file modified in the shared checkout /root/orbit, outside this session’s worktree: src/a.ts.';
+    "1 file changed in the main checkout during this turn /root/orbit on main, outside this session's worktree. Orbit saw them appear; it can't tell who wrote them.";
 
   it('renders a runner notice as a calm note, not an error', () => {
     const html = renderToStaticMarkup(
       <Transcript
-        events={[{ seq: 1, type: 'system', payload: { notice: NOTICE, noticeKind: 'shared-checkout-dirty' } }]}
+        events={[{ seq: 1, type: 'system', payload: { notice: NOTICE, noticeKind: 'main-checkout-changed' } }]}
       />,
     );
 
@@ -2283,8 +2436,8 @@ describe('tool run folding', () => {
     // — with an unknown tone name the whole border shorthand is dropped and the stripe vanishes.
     // Only the names the stylesheet defines will do (see .chat-tone-* in index.css).
     expect(html).toContain('chat-tone-agent');
-    // Splitting the run on the card leaves two singles — neither reaches the fold threshold.
-    expect(html).not.toContain('chat-tool-group');
+    // The card splits the run: a steps line either side of it.
+    expect(html.split('class="chat-steps"').length - 1).toBe(2);
   });
 
   // A sub-workspace card was kept out only by its children, which arrive after the call — so it
@@ -2297,7 +2450,7 @@ describe('tool run folding', () => {
     ]);
 
     expect(html).toContain('chat-tool-task');
-    expect(html).not.toContain('chat-tool-group');
+    expect(html.split('class="chat-steps"').length - 1).toBe(2);
   });
 
   // Same reason as the child-session card: a batch renders its own picture and its own list of
@@ -2310,62 +2463,39 @@ describe('tool run folding', () => {
     ]);
 
     expect(html).toContain('Create tasks');
-    expect(html).not.toContain('chat-tool-group');
+    expect(html.split('class="chat-steps"').length - 1).toBe(2);
   });
 
-  // A screenshot is the one card the reader is meant to *look* at, and ToolView unfolds it for
-  // exactly that reason — but it can't unfold the group around it, so a picture folded into
-  // "Read × 3" reaches the reader as a counter.
-  it('keeps a screenshot out of the fold, picture and all', () => {
-    const data = 'iVBORw0KGgo=';
-    const shot = [{ type: 'image', source: { type: 'base64', media_type: 'image/png', data } }];
-    const html = render([
-      callWith('Read', { file_path: '/tmp/s0.png' }, shot),
-      callWith('Read', { file_path: '/tmp/s1.png' }, shot),
-      callWith('Read', { file_path: '/tmp/s2.png' }, shot),
-    ]);
-
-    expect(html).not.toContain('chat-tool-group');
-    expect(html.split(`data:image/png;base64,${data}`).length - 1).toBe(3);
-  });
-
-  // Lifting the picture out is not licence to stop folding around it: the plain calls either side
-  // are still a run, and still the noise the summary row exists to swallow.
-  it('still folds the plain calls a screenshot sits among', () => {
+  // An agent reading a screenshot is a step like any other read (owner, 11-11): it folds into the
+  // line rather than standing out as a card of its own, and the closed line draws no picture.
+  it('folds a screenshot into the steps line with the calls around it', () => {
     const data = 'iVBORw0KGgo=';
     const html = render([
       callWith('Bash', { command: 'ls' }, 'a.txt'),
       callWith('Bash', { command: 'pwd' }, '/tmp'),
-      callWith('Bash', { command: 'whoami' }, 'root'),
       callWith('Read', { file_path: '/tmp/s0.png' }, [
         { type: 'image', source: { type: 'base64', media_type: 'image/png', data } },
       ]),
+      callWith('Bash', { command: 'whoami' }, 'root'),
     ]);
 
-    expect(html).toContain('Bash × 3');
-    expect(html).toContain(`data:image/png;base64,${data}`);
+    expect(html.split('class="chat-steps"').length - 1).toBe(1);
+    expect(html).toContain('read 1 file');
+    expect(html).not.toContain(`data:image/png;base64,${data}`);
   });
 
-  // Codex's app-server can pass an MCP CallToolResult wrapper through unchanged. The image is
-  // then under `content`, rather than being the tool_result's top-level array, so it must still
-  // split the run and must not fall back to printing the base64 payload as JSON text.
-  it('keeps a wrapped screenshot out of the fold', () => {
+  // Codex's app-server can pass an MCP CallToolResult wrapper through unchanged. The image is then
+  // under `content`, rather than being the tool_result's top-level array; it folds all the same.
+  it('folds a wrapped screenshot too', () => {
     const data = 'iVBORw0KGgo=';
     const shot = {
       content: [{ type: 'text', text: 'screenshot ready' }, { type: 'image', data, mimeType: 'image/png' }],
     };
-    const html = render([
-      callWith('Bash', { command: 'ls' }, 'a.txt'),
-      callWith('Bash', { command: 'pwd' }, '/tmp'),
-      callWith('Bash', { command: 'whoami' }, 'root'),
-      callWith('exec', { command: 'capture' }, shot),
-    ]);
+    const html = render([callWith('Bash', { command: 'ls' }, 'a.txt'), callWith('exec', { command: 'capture' }, shot)]);
 
-    expect(html).toContain('Bash × 3');
-    expect(html).not.toContain('chat-tool-group-detail');
-    expect(html).toContain(`data:image/png;base64,${data}`);
+    expect(html.split('class="chat-steps"').length - 1).toBe(1);
+    expect(html).not.toContain(`data:image/png;base64,${data}`);
     expect(resultText(shot)).toBe('screenshot ready');
-    expect(html).not.toContain(`"data": "${data}"`);
   });
 
   it('still folds a run of plain calls', () => {
@@ -2375,15 +2505,16 @@ describe('tool run folding', () => {
       callWith('Bash', { command: 'whoami' }, 'root'),
     ]);
 
-    expect(html).toContain('chat-tool-group');
-    expect(html).toContain('Bash × 3');
+    expect(html).toContain('chat-steps');
+    expect(html).toContain('Listed 1 directory, ran 2 shell commands');
   });
 });
 
 // A screenshot too big to ship inline reaches the transcript as an image block with no `data`
-// (see the apiserver's MAX_IMAGE_PAYLOAD). What must survive that clip is the *card opening*:
-// the untrimmed payload is fetched only for an open card, so a card that folds because it can't
-// see an image is a card that never asks for the image — the picture would be gone, not deferred.
+// (see the apiserver's MAX_IMAGE_PAYLOAD). It folds into the steps line like any read, and its card
+// stays folded until clicked (owner, 11-11); what must survive the clip is the card opening on the
+// image block once clicked: the untrimmed payload is fetched only for an open card, so a card with
+// nothing to open on is a card that never asks for the image — the picture would be gone.
 describe('clipped screenshot results', () => {
   const imageResult = (source: Record<string, unknown>): RunEvent[] => [
     { seq: 1, type: 'tool_use', payload: { id: 'ti', name: 'Read', input: { file_path: '/tmp/shot.png' } } },
@@ -2394,30 +2525,78 @@ describe('clipped screenshot results', () => {
       payload: { toolUseId: 'ti', content: [{ type: 'image', source }] },
     },
   ];
-  const render = (events: RunEvent[]) => renderToStaticMarkup(<Transcript events={events} />);
 
-  it('opens the card for an image whose bytes the server dropped', () => {
-    const html = render(imageResult({ type: 'base64', media_type: 'image/png' }));
+  // Mounts the transcript, opens its steps line and then the card, and hands back the page;
+  // `fetchFull` answers the card's refetch of the untrimmed result.
+  const openLine = async (events: RunEvent[], fetchFull: ReturnType<typeof vi.fn>) => {
+    const dom = new JSDOM('<div id="root"></div>', { url: 'http://localhost' });
+    vi.stubGlobal('window', dom.window);
+    vi.stubGlobal('document', dom.window.document);
+    vi.stubGlobal('IS_REACT_ACT_ENVIRONMENT', true);
+    const root = createRoot(dom.window.document.getElementById('root')!);
+    await act(async () => {
+      root.render(
+        <EventFullCtx.Provider value={fetchFull}>
+          <Transcript events={events} />
+        </EventFullCtx.Provider>,
+      );
+    });
+    const line = dom.window.document.querySelector<HTMLElement>('.chat-steps-line');
+    expect(line, 'the screenshot did not fold into a steps line').not.toBeNull();
+    await act(async () => line!.click());
+    const card = dom.window.document.querySelector<HTMLElement>('.chat-steps-detail .chat-tool-card');
+    // Opening the line draws the card folded: the picture waits for the reader, not the agent.
+    expect(card?.classList.contains('is-open')).toBe(false);
+    expect(fetchFull).not.toHaveBeenCalled();
+    await act(async () => card!.querySelector<HTMLElement>('.chat-tool-row')!.click());
+    return {
+      document: dom.window.document,
+      close: async () => {
+        await act(async () => root.unmount());
+        dom.window.close();
+        vi.unstubAllGlobals();
+      },
+    };
+  };
 
-    expect(html).toContain('is-open');
-  });
-
-  // Opening on the block is only half of it: the card is now a picture-shaped hole until the
-  // untrimmed payload lands, and a reader who cannot tell "coming" from "gone" reads it as broken.
-  it('shows the picture-shaped placeholder while the bytes are being fetched back', () => {
-    const html = render(imageResult({ type: 'base64', media_type: 'image/png' }));
-
-    expect(html).toContain('chat-result-image-loading');
-  });
-
-  it('still opens — and renders — a small image that arrived whole', () => {
+  it('opens the card on a dropped image when clicked, holds its place, and fetches the picture back', async () => {
     const data = 'iVBORw0KGgo=';
-    const html = render(imageResult({ type: 'base64', media_type: 'image/png', data }));
+    let answer: (v: unknown) => void = () => {};
+    const fetchFull = vi.fn(() => new Promise((resolve) => (answer = resolve)));
+    const { document, close } = await openLine(imageResult({ type: 'base64', media_type: 'image/png' }), fetchFull);
+    try {
+      expect(document.querySelector('.chat-steps-detail .is-open')).not.toBeNull();
+      // A reader who cannot tell "coming" from "gone" reads the hole as broken.
+      expect(document.querySelector('.chat-result-image-loading')).not.toBeNull();
+      expect(fetchFull).toHaveBeenCalledWith(2);
 
-    expect(html).toContain('is-open');
-    expect(html).toContain(`data:image/png;base64,${data}`);
-    // The bytes are here, so there is nothing to wait for.
-    expect(html).not.toContain('chat-result-image-loading');
+      await act(async () =>
+        answer({
+          payload: {
+            toolUseId: 'ti',
+            content: [{ type: 'image', source: { type: 'base64', media_type: 'image/png', data } }],
+          },
+        }),
+      );
+      expect(document.body.innerHTML).toContain(`data:image/png;base64,${data}`);
+      expect(document.querySelector('.chat-result-image-loading')).toBeNull();
+    } finally {
+      await close();
+    }
+  });
+
+  it('shows a small image that arrived whole as soon as its card opens', async () => {
+    const data = 'iVBORw0KGgo=';
+    const { document, close } = await openLine(
+      imageResult({ type: 'base64', media_type: 'image/png', data }),
+      vi.fn(() => new Promise(() => {})),
+    );
+    try {
+      expect(document.body.innerHTML).toContain(`data:image/png;base64,${data}`);
+      expect(document.querySelector('.chat-result-image-loading')).toBeNull();
+    } finally {
+      await close();
+    }
   });
 
   it('leaves a text-only result folded', () => {
@@ -2504,5 +2683,33 @@ describe('an auto-retry card whose task a newer run has taken', () => {
 
     expect(html).toContain('chat-quota');
     expect(html).not.toContain('A newer run has this task');
+  });
+});
+
+describe('legacy secret patch notices', () => {
+  const pending = "Orbit is still checking this runner's checkouts for a secret the owner removed, so it left this diff out of what it reports for now. Nothing in the file is known to hold a secret; its diff shows again with the session's next report.";
+  const unreadable = "Orbit could not read its record of files that held a secret's value on this runner, so it left this diff out of what it reports. Nothing in the file is known to hold a secret.";
+  const legacy = (seq: number, template = pending, turnId = 'one'): RunEvent => ({
+    seq, type: 'system', turnId,
+    payload: { subtype: 'secret_patch_withheld', path: `file${seq}`, notice: `file${seq}: ${template}` },
+  });
+  it('folds consecutive temporary templates and preserves real matches, unknown notices and summaries', () => {
+    const html = renderToStaticMarkup(<Transcript events={[
+      legacy(1), legacy(2, unreadable),
+      { seq: 3, type: 'system', payload: { subtype: 'secret_patch_withheld', path: 'real', notice: 'real holds the value of a secret' } },
+      { seq: 4, type: 'system', payload: { subtype: 'secret_patch_withheld', path: 'unknown', notice: 'Unknown notice' } },
+      { seq: 5, type: 'system', payload: { subtype: 'secret_patches_withheld', count: 3, reason: 'record_unreadable', notice: 'Record summary' } },
+    ]} />);
+    expect(html).toContain("Orbit held back the diffs of 2 files while it checked this runner for a removed secret. No secret was found in them.");
+    expect(html).not.toContain('file1:');
+    expect(html).toContain('real holds the value of a secret');
+    expect(html).toContain('Unknown notice');
+    expect(html).toContain('Record summary');
+  });
+  it('does not fold across a different event or turn', () => {
+    const html = renderToStaticMarkup(<Transcript events={[
+      legacy(1), { seq: 2, type: 'system', payload: { notice: 'Boundary' } }, legacy(3), legacy(4, pending, 'two'),
+    ]} />);
+    expect(html.match(/Orbit held back the diff of 1 file while/g)).toHaveLength(3);
   });
 });

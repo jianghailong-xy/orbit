@@ -1,6 +1,7 @@
 package io.orbitd.android.management
 
 import io.orbitd.android.composer.CursorRuntime
+import io.orbitd.android.composer.ManagedRunnerIdentity
 import io.orbitd.android.composer.ProviderEngines
 import io.orbitd.android.core.cards.ClaudeRegion
 import io.orbitd.android.core.cards.ClaudeRegionCopy
@@ -19,10 +20,74 @@ import kotlin.math.floor
  * the latest release are inputs — so RunnerPageTest runs the web's runnerAttention.cases.json on it.
  */
 internal object RunnerCopy {
+    // The Update card (docs/runner-update-drain-design.md, board 4): OrbitKit RunnerPageCopy's words.
+    const val UPDATE_TAG_AVAILABLE = "Available"
+    const val UPDATE_TAG_DRAINING = "Not taking new work"
+    const val UPDATE_TAG_RESTARTING = "Restarting"
+    const val UPDATE_TAG_POSTPONED = "Postponed"
+    fun updateAvailableTitle(version: String) = "$version is available"
+    const val UPDATE_AVAILABLE_BODY = "It installs when no turn is running. If turns keep running for an hour, it stops taking new " +
+        "work so they can finish."
+    /** The Available card's body for a runner that reports its quiet window (`selfUpdate.quietWindowSeconds`), in whole
+     * [minutes]; [unit] is "minute" or "minutes". OrbitKit RunnerPageCopy.runnerUpdateAvailableBodyQuiet. */
+    fun updateAvailableBodyQuiet(minutes: Int, unit: String) =
+        "It installs once the runner has been idle for $minutes $unit. If it stays busy for an hour, it stops taking new work so its turns can finish."
+    /** About's version note for a runner that reports its quiet window. OrbitKit RunnerPageCopy.runnerVersionInstallsWhenQuiet. */
+    fun versionInstallsWhenQuiet(minutes: Int) = "installs when the runner has been idle for $minutes min"
+    /** A quiet window in whole minutes, at least one. */
+    fun quietMinutes(seconds: Int): Int = maxOf(1, Math.round(seconds / 60.0).toInt())
+    /** The Available card's body for a runner with a quiet window of [seconds]. */
+    fun availableBodyQuiet(seconds: Int): String = quietMinutes(seconds).let { updateAvailableBodyQuiet(it, if (it == 1) "minute" else "minutes") }
+    fun updateDrainingTitle(version: String) = "Updating to $version"
+    fun updateDrainingBody(version: String, since: String) = "$version has been waiting since $since. After an hour it stopped taking " +
+        "new work so the turns in flight can finish; then it installs and restarts."
+    const val UPDATE_DRAINING_BODY_NO_SINCE = "It stopped taking new work so the turns in flight can finish; then it installs and restarts."
+    fun updateWaitingForOf(left: Int, of: Int, unit: String) = "Waiting for $left of $of $unit"
+    fun updateWaitingFor(left: Int, unit: String) = "Waiting for $left $unit"
+    fun updateTurnRunning(duration: String) = "running $duration"
+    const val UPDATE_UNTITLED_TURN = "Untitled session"
+    fun updateRestartingTitle(version: String) = "Restarting into $version…"
+    const val UPDATE_RESTARTING_BODY = "Usually under a minute."
+    /** Restarting for the owner's Update Now: `2 interrupted turns continue once it is back. Usually under a minute.` */
+    fun updateRestartingBodyInterrupted(turns: Int) =
+        (if (turns == 1) "1 interrupted turn continues once it is back. " else "$turns interrupted turns continue once it is back. ") + UPDATE_RESTARTING_BODY
+    // The Updated card (board 4): shown for a day after the update, then About's Last Update says it.
+    const val UPDATE_TAG_UPDATED_HOURS = 24
+    fun updateUpdatedTitle(version: String) = "Updated to $version"
+    /** `34 s`, `1 min 12 s`, `2 min`. */
+    fun updateTook(seconds: Int): String = when {
+        seconds < 60 -> "$seconds s"
+        seconds % 60 == 0 -> "${seconds / 60} min"
+        else -> "${seconds / 60} min ${seconds % 60} s"
+    }
+    /** `Took 34 s. 2 interrupted turns resumed.`; either half alone when the runner measured only that. */
+    fun updateUpdatedBody(took: String?, interruptedTurns: Int): String = listOfNotNull(took?.let { "Took $it." }, when {
+        interruptedTurns == 1 -> "1 interrupted turn resumed."
+        interruptedTurns > 1 -> "$interruptedTurns interrupted turns resumed."
+        else -> null
+    }).joinToString(" ")
+    fun updatePostponedTitle(version: String, until: String) = "$version postponed until $until"
+    fun updatePostponedBody(until: String) = "Taking work as usual. At $until it waits for the turns in flight again, for up to an hour."
+    fun versionUpdatingTo(version: String) = "updating to $version"
     const val ONLINE = "Online"
     const val OFFLINE = "Offline"
+    /** A managed runner that has not reported yet (preparing, waiting for capacity, failed to start): its Resources and Engines say
+     * only this (web runnerCopy MANAGED_RUNNER_NOT_REPORTED). */
+    const val MANAGED_NOT_REPORTED = "Available once the runner is ready."
+    /** The account's managed runner wherever its name is shown, unless its owner renamed it: its stored name (`orbit-managed` on a server before migration 1250) is
+     * the server's, not a word for anyone to read (web runnerCopy MANAGED_RUNNER_LABEL). */
+    const val MANAGED_RUNNER_LABEL = "Orbit Cloud"
+    /** A managed runner's version when it reports none that is a release (its image is `managed-<sha>`). */
+    const val MANAGED_RUNNER_KEPT_UP_TO_DATE = "Kept up to date by Orbit"
+    /** About's Version note on a managed runner: Orbit rolls its image, so it neither updates itself nor needs to. */
+    const val MANAGED_RUNNER_UPDATED_BY_ORBIT = "Orbit updates this machine for you."
     const val SEP = " · "
+    const val NO_PROVIDER_KEY = "no provider key found"
     fun offlineLastSeen(whenText: String) = "Offline · last seen $whenText"
+    /** The country a machine's IP is in, first in the line under a machine page's title (OrbitKit `runnerLocation`). */
+    fun location(place: String) = "📍 $place"
+    /** The same, when the check went through a proxy: the country is the proxy's, not the machine's. */
+    fun locationViaProxy(place: String) = "📍 $place (via proxy)"
     fun versionTag(version: String) = "v$version"
     fun runningOf(active: Int, max: Int) = "$active of $max running"
     const val ADD = "Add Runner"
@@ -33,12 +98,30 @@ internal object RunnerCopy {
     const val WORKSPACES = "Workspaces"
     const val ABOUT = "About This Runner"
     const val MAX_CONCURRENT = "Max Concurrent"
+    const val MAX_CONCURRENT_HINT = "How many sessions this machine runs at once. A change applies to the next session it picks up — no restart."
+    const val EDIT = "Edit"
     const val DISK = "Disk"
     const val KEEP_FREE = "Keep Free"
-    const val CAPACITY_FOOTER = "Max Concurrent applies to the next session it picks up — no restart. Below Keep Free, task " +
-        "runs stop being sent here and finished worktrees are cleaned up sooner."
+    const val CAPACITY_FOOTER = "Max Concurrent applies to the next session it picks up — no restart. Below Keep Free, new sessions and " +
+        "task runs wait until space frees up, and finished worktrees are cleaned up sooner."
     fun gb(amount: String) = "$amount GB"
     fun diskUsed(used: String, total: String) = "$used of $total GB used"
+    // Resources (web runnerCopy.ts "MARK: Resources", docs/mocks/runner-resource-monitor)
+    const val RESOURCES = "Resources"
+    const val RESOURCES_CPU = "CPU"
+    const val RESOURCES_MEMORY = "Memory"
+    const val RESOURCES_LIVE = "Live · every 30 s · last hour"
+    const val RESOURCES_OFFLINE = "Offline"
+    const val RESOURCES_DISK_ONLY = "Disk is read from your workspaces"
+    const val RESOURCES_UPDATE = "Update runner"
+    const val RESOURCES_NO_READING = "No reading yet"
+    const val RESOURCES_MEMORY_FULL = "Nearly full — new sessions may be slow to start."
+    fun resourcesLastReading(ago: String) = "Offline · last reading $ago"
+    fun resourcesPredates(what: String) = "This runner predates $what readings."
+    const val CPU_ONE_CORE = "1 core"
+    fun cpuCores(count: String) = "$count cores"
+    fun cpuLoad(load: String) = "load $load"
+    fun diskFree(free: String) = "$free GB free"
     const val SIGNED_IN = "Signed in"
     const val SIGNED_OUT = "Signed out"
     const val NOT_INSTALLED = "Not installed"
@@ -51,15 +134,36 @@ internal object RunnerCopy {
     const val REFRESH_MODEL_LISTS = "Refresh Model Lists"
     const val ENGINES_FOOTER = "Orbit keeps these CLIs updated every 30 min. Sign-ins live on this machine — a session spends " +
         "that subscription, nothing to paste."
+    /** A hosted runner's: its CLIs are fixed in Orbit's image, which moves with each Orbit release, not every 30 min. */
+    const val ENGINES_MANAGED_FOOTER = "Orbit updates these CLIs with each Orbit release. Sign-ins live on this runner — a session spends " +
+        "that subscription, nothing to paste."
     const val ENGINES_OFFLINE_FOOTER = "Signing in and updating need the runner online."
     /** DeepSeek Harness has no sign-in: its row, its page and the footer under it say what it runs on instead (board 1 ⑤⑥⑦). */
     const val USES_API_KEYS = "Uses API keys"
     const val DSH_READY = "Ready · each session uses the DeepSeek key it was started with"
     const val DSH_FOOTER = "Orbit keeps DeepSeek Harness updated every 30 min. It has no sign-in: every session runs on a DeepSeek key."
+    const val DSH_MANAGED_FOOTER = "Orbit updates DeepSeek Harness with each Orbit release. It has no sign-in: every session runs on a DeepSeek key."
     fun enginesChecked(whenText: String) = "Checked $whenText"
     fun enginesReported(whenText: String) = "Reported $whenText"
     fun accountsSignedIn(count: Int) = "$count accounts signed in"
     fun updateFailed(version: String, whenText: String) = "Update to $version failed $whenText"
+    /** The Needs Attention card's second action, beside Update Engines Now; [engine] is the CLI's own name (web
+     * attentionDismissUntilNextRelease). */
+    fun dismissUntilNextRelease(engine: String) = "Dismiss until next $engine release"
+    /** The engine row's warning: the same dismissal (web RUNNER_ENGINE_UPDATE_DISMISS). */
+    const val UPDATE_DISMISS = "Dismiss"
+    /** What the version line adds after the drift once its warning is dismissed (web ENGINE_UPDATE_WARNING_DISMISSED). */
+    const val UPDATE_WARNING_DISMISSED = " · warning dismissed"
+    const val UPDATE_DISMISS_FAILED = "Couldn’t dismiss the warning"
+    /** Fix with an agent (docs: agent-fix contract): one press starts a session on this machine, no sheet. */
+    const val FIX_WITH_AGENT = "Fix with an agent"
+    /** The line in the button's place while the session a press started is open; "Open session" follows it as a link. */
+    fun agentFixing(workspace: String) = "An agent is fixing this in $workspace · "
+    const val OPEN_SESSION = "Open session"
+    /** Under the Install failed panel's button, while a press can start a session. */
+    fun agentFixStarts(workspace: String, engine: String) = "Starts a session in $workspace on this machine, with $engine."
+    /** Appended to a signed-out reason on the Install failed panel, whose engine rows sit above it. */
+    fun agentFixSignIn(engine: String) = " Sign in to $engine above to use this."
     const val WORKTREES = "Worktrees"
     fun workspaceRunning(count: Int) = "$count running"
     const val ABOUT_NAME = "Name"
@@ -163,17 +267,20 @@ internal object AccountCopy {
     fun next(account: String) = "Next: $account"
 }
 
-/** Removing a runner's Default from Orbit and bringing it back, in the web's words: src/web/src/lib/runnerAccountCopy.ts, which
- * RunnerAccountCopyParityTest reads as text — the web's, not Swift's, so the order the native clients land in changes nothing. Its two
+/** Removing a runner's Default from Orbit and bringing it back, and making an added Claude Code account the Default, in the web's words:
+ * src/web/src/lib/runnerAccountCopy.ts, which RunnerAccountCopyParityTest reads as text — the web's, not Swift's, so the order the native clients land in changes nothing. Its two
  * lines for the workspace form's account field have no counterpart here: no Android page sets a workspace's account. */
 internal object RunnerAccountCopy {
     /** The question in front of Default's Remove…, and an added account's while Default is removed. */
     fun removeTitle(name: String) = "Remove $name?"
+    /** Removing an added account while Default is in use. */
+    const val REMOVE_DETAIL = "Its sessions move to another account first. Workspaces using it switch to Default."
     /** Removing Default, which only Orbit stops using; [cli] is the CLI's own name (Codex, Claude Code). */
     fun defaultRemoveDetail(runner: String, cli: String) = "Orbit stops using it on $runner. Its sign-in stays on the machine, and $cli in a " +
         "terminal there keeps working. Workspaces set to it run on Automatic."
     /** Removing an added account while Default is removed from Orbit, with another account left. */
-    fun removeDetailAutomatic(runner: String) = "Its sign-in is deleted from $runner. Workspaces set to this account run on Automatic."
+    fun removeDetailAutomatic(runner: String) = "Its sessions move to another account first, then its sign-in is deleted from $runner. " +
+        "Workspaces set to this account run on Automatic."
     /** Removing the last account Orbit uses while Default is removed: the removal holds only while another account is there, so Default
      * ([name]) comes back into use. */
     fun removeDetailLast(runner: String, name: String) = "Its sign-in is deleted from $runner. Without it, Orbit uses $name there again, " +
@@ -183,6 +290,55 @@ internal object RunnerAccountCopy {
     /** That line's button, which brings Default back. */
     const val USE_AGAIN = "Use again"
     fun useAgainFailed(name: String) = "Couldn’t use $name again"
+    /** Over the sessions a refused removal lists, when one session in the account can't move to another — no other account is signed in,
+     * or its runner can't carry the conversation; [engine] is the CLI's own name (Codex, Claude Code). Sessions that can move are moved. */
+    fun inUseOne(engine: String) = "This $engine account can’t be removed while a session on it can’t move to another account — sign in another account, or end the session below; then remove the account"
+    /** The same, when several sessions in it can't move. */
+    fun inUseMany(engine: String, count: Int) = "This $engine account can’t be removed while $count sessions on it can’t move to another account — sign in another account, or end them below; then remove the account"
+    /** Under an account whose removal is waiting on the one session it moved to another account to leave. */
+    fun movingOne(engine: String) = "Moving a session to another $engine account — this one is removed once it has left, after its turn if one is running"
+    /** The same, when it moved several. */
+    fun movingMany(engine: String, count: Int) = "Moving $count sessions to another $engine account — this one is removed once they have left, after their turns if any are running"
+    /** Each listed session's way to it. */
+    const val IN_USE_OPEN = "Open session"
+    /** A listed session in a turn (RUNNING, or PENDING on its way to one). */
+    const val IN_USE_RUNNING = "Running"
+    /** A listed session between turns (AWAITING_INPUT): its process still holds the account. */
+    const val IN_USE_WAITING = "Waiting for input"
+    /** A listed session with no title yet. */
+    const val IN_USE_UNTITLED = "Untitled session"
+
+    /** An added Claude Code account's way to become the Default: the item in its ⋯ menu, and what it does. */
+    const val SET_DEFAULT = "Set as default"
+    const val SET_DEFAULT_HINT = "Moves this login into ~/.claude, so the terminal uses it too"
+    /** Why that item can't be chosen: the runner is offline, too old to swap logins, or swapping already. */
+    const val SET_DEFAULT_OFFLINE = "The runner is offline"
+    const val SET_DEFAULT_UPDATE = "Update the runner to set a default Claude Code account on it"
+    const val SET_DEFAULT_BUSY = "A default is already being set on this runner"
+    /** The question in front of Set as default. */
+    fun setDefaultTitle(name: String) = "Make $name the default?"
+    /** What Set as default comes to: [name] is the added account and [dir] its folder, [defaultName] and [defaultDir] the Default's, each
+     * the way a terminal spells it. */
+    fun setDefaultDetail(name: String, defaultDir: String, defaultName: String, dir: String, runner: String) = "$name’s login moves to " +
+        "$defaultDir, and $defaultName’s to $dir. Claude Code in a terminal on $runner uses $name from then on — restart any that are open. " +
+        "Sessions stay on their accounts, and a turn in progress finishes first. Workspaces keep their account."
+    /** The confirmation's own button. */
+    const val SET_DEFAULT_CONFIRM = "Make default"
+    /** Under the account while it is being made the Default, with no turn left to wait for. */
+    fun settingDefault(name: String) = "Making $name the default"
+    /** The same, while one session on either account finishes its turn. */
+    fun settingDefaultOne(name: String) = "Making $name the default — waiting for 1 session to finish its turn"
+    /** The same, while several do. */
+    fun settingDefaultMany(name: String, count: Int) = "Making $name the default — waiting for $count sessions to finish their turns"
+    /** Beside it, while Claude Code runs in a terminal on either folder: the swap waits for it to exit. */
+    const val SETTING_DEFAULT_TERMINAL = "It also waits for Claude Code running in a terminal there to exit."
+    /** A swap that failed, or that the control plane refused: over the reason. */
+    fun setDefaultFailed(name: String) = "Couldn’t make $name the default"
+    /** Under that reason: a failed swap puts both logins back. */
+    const val SET_DEFAULT_UNCHANGED = "Both logins are as they were."
+    /** What a former Default is called — the account a Set as default moved out of ~/.claude into an added folder — while the owner has
+     * not named it and no email is known for it. */
+    const val FORMER_DEFAULT = "Former default"
 }
 
 /**
@@ -387,6 +543,19 @@ internal data class AttentionAction(val kind: String, val engine: String? = null
 internal data class AttentionItem(val kind: String, val tone: String, val short: String, val title: String, val detail: String,
     val action: AttentionAction? = null, val resetsAt: String? = null, val names: List<String> = emptyList())
 
+/** A runner's `agentFix` (GET /runners, RunnerAgentFix in src/shared/src/dto.ts): where a press of Fix with an agent starts its session —
+ * the machine's most recently used workspace, on that workspace's engine — or why it can't ([blockedCode] offline, noWorkspace,
+ * engineSignedOut, with the server's own [blockedMessage]), and the warnings an agent is fixing now. */
+internal data class AgentFix(val workspaceId: String?, val workspaceName: String?, val engine: String?, val engineName: String?,
+    val blockedCode: String?, val blockedMessage: String?, val fixing: List<AgentFixing>)
+
+/** An open session a press started, on one warning: [engine] for engineNotUpdating and installFailed, null for cannotSelfUpdate. */
+internal data class AgentFixing(val kind: String, val engine: String?, val sessionId: String, val workspaceId: String, val workspaceName: String)
+
+/** What one warning draws for Fix with an agent: the session at work on it ([fixing], in the button's place), or the button — disabled
+ * while [enabled] is false — with the grey [line] under it, if any. */
+internal data class AgentFixView(val fixing: AgentFixing?, val enabled: Boolean, val line: String?)
+
 internal data class RunnerDisk(val freeBytes: Long, val totalBytes: Long, val usedPercent: Int)
 
 /** One quota window. [remaining]: an Antigravity bucket, whose percent says what is left, as agy says it; `utilization`
@@ -544,7 +713,100 @@ internal object RunnerPage {
     /** What an engine row says about being kept current; warn means only a person can say why. [pinned]: an engine Orbit keeps on one
      * build rather than the newest (Cursor CLI, whose version a runner release moves) — its routine note says so, since "checked" alone
      * would read as "and it is the latest" (web `updateNoteOf`'s `pinned`). */
-    fun updateNoteOf(update: JsonObject?, nowMs: Long, pinned: Boolean = false): Pair<String, String>? {
+    fun updateNoteOf(update: JsonObject?, nowMs: Long, pinned: Boolean = false, dismissed: String? = null): Pair<String, String>? {
+        val note = undismissedUpdateNoteOf(update, nowMs, pinned)
+        // Dismissed until the next release (engineUpdateDismissedFor): while the release it was dismissed against is still the latest, the
+        // warning goes quiet — no card, no warning, out of Needs Attention — but the drift stays on the version line. A newer latest no
+        // longer matches, and warns again.
+        if (note?.first == "warn" && !dismissed.isNullOrEmpty() && update?.str("latest") == dismissed) {
+            return "quiet" to "${note.second}${RunnerCopy.UPDATE_WARNING_DISMISSED}"
+        }
+        return note
+    }
+
+    /** The release this [engine]'s update warning was dismissed against on this [runner] (runner.engineUpdateDismissals, POST
+     * runners/:id/engines/:engine/update-warning/dismiss), or null — an older server sends none. */
+    fun engineUpdateDismissedFor(runner: JsonObject, engine: String?): String? =
+        engine?.let { runner.obj("engineUpdateDismissals")?.str(it) }?.takeIf { it.isNotEmpty() }
+
+    /** Whether this engine's update warning offers Dismiss until its next release: a warning against a known latest, on a runner online. */
+    fun offersUpdateDismiss(runner: JsonObject, engine: String, nowMs: Long): Boolean {
+        val health = engineHealth(runner, engine)?.takeIf { it.bool("installed") == true } ?: return false
+        if (isOffline(runner, nowMs)) return false
+        val update = health.obj("update") ?: return false
+        if (update.str("latest").isNullOrEmpty()) return false
+        return updateNoteOf(update, nowMs, dismissed = engineUpdateDismissedFor(runner, engine))?.first == "warn"
+    }
+
+    /** POST, no body: the server records the engine's current update.latest as dismissed and answers `{engine, latest}`. */
+    fun updateDismissPath(runner: String, engine: String) = "runners/$runner/engines/$engine/update-warning/dismiss"
+
+    // Fix with an agent
+
+    /** The runner's agentFix, or null — an older server sends none, and then no warning draws the button. */
+    fun agentFixOf(runner: JsonObject): AgentFix? {
+        val fix = runner.obj("agentFix") ?: return null
+        val blocked = fix.obj("blocked")
+        return AgentFix(fix.str("workspaceId"), fix.str("workspaceName"), fix.str("engine"), fix.str("engineName"),
+            blocked?.str("code"), blocked?.str("message"),
+            fix.list("fixing").mapNotNull { entry ->
+                AgentFixing(entry.str("kind") ?: return@mapNotNull null, entry.str("engine"), entry.str("sessionId") ?: return@mapNotNull null,
+                    entry.str("workspaceId").orEmpty(), entry.str("workspaceName").orEmpty())
+            })
+    }
+
+    /** The open session at work on this warning: the same kind and, but for the machine's own (cannotSelfUpdate, engineUpdateFailed),
+     * the same engine. */
+    fun agentFixing(fix: AgentFix, kind: String, engine: String?): AgentFixing? =
+        fix.fixing.firstOrNull { it.kind == kind && (kind == "cannotSelfUpdate" || kind == "engineUpdateFailed" || it.engine == engine) }
+
+    /** A Needs Attention card's Fix with an agent: only an engine that won't update and a runner that can't update itself — work on the
+     * machine — and nothing at all while it is offline. Blocked otherwise, the button stays, disabled, over the server's reason. */
+    fun agentFixOnCard(runner: JsonObject, item: AttentionItem): AgentFixView? {
+        if (item.kind != "engineNotUpdating" && item.kind != "cannotSelfUpdate") return null
+        val fix = agentFixOf(runner) ?: return null
+        if (fix.blockedCode == "offline") return null
+        val engine = if (item.kind == "engineNotUpdating") item.action?.engine ?: return null else null
+        agentFixing(fix, item.kind, engine)?.let { return AgentFixView(it, enabled = false, line = null) }
+        return AgentFixView(null, enabled = fix.blockedCode == null, line = fix.blockedMessage?.takeIf { fix.blockedCode != null })
+    }
+
+    /** An engine's Install failed panel: the button with a line saying where the session starts, or, blocked — offline too — why not; a
+     * signed-out engine's reason adds that its sign-in is on the rows above. */
+    fun agentFixOnInstall(runner: JsonObject, engine: String): AgentFixView? {
+        val fix = agentFixOf(runner) ?: return null
+        return agentFixOnPanel(fix, "installFailed", engine)
+    }
+
+    /** Under an Update Engines Now report (docs/mocks/engine-update-fix-with-agent/03-mobile.png): only while the finished run has a
+     * failed line, drawn red; then as on an Install failed panel, the engine rows being above it here too. */
+    fun agentFixOnUpdate(runner: JsonObject): AgentFixView? {
+        val fix = agentFixOf(runner) ?: return null
+        if (updateRelayLines(runner.obj("install")).none { it.failed }) return null
+        return agentFixOnPanel(fix, "engineUpdateFailed", null)
+    }
+
+    private fun agentFixOnPanel(fix: AgentFix, kind: String, engine: String?): AgentFixView {
+        agentFixing(fix, kind, engine)?.let { return AgentFixView(it, enabled = false, line = null) }
+        if (fix.blockedCode != null) {
+            val signIn = if (fix.blockedCode == "engineSignedOut") RunnerCopy.agentFixSignIn(fix.engineName ?: engineName(fix.engine.orEmpty())) else ""
+            return AgentFixView(null, enabled = false, line = (fix.blockedMessage.orEmpty() + signIn).ifEmpty { null })
+        }
+        val starts = fix.workspaceName?.let { RunnerCopy.agentFixStarts(it, fix.engineName ?: engineName(fix.engine.orEmpty())) }
+        return AgentFixView(null, enabled = true, line = starts)
+    }
+
+    /** POST runners/:id/attention/:kind/fix answers the session it started: {sessionId, workspaceId, workspaceName, title}. */
+    fun agentFixPath(runner: String, kind: String) = "runners/$runner/attention/$kind/fix"
+
+    /** Its body: the engine for engineNotUpdating and installFailed; for cannotSelfUpdate the newest runner release this client knows;
+     * nothing for engineUpdateFailed. */
+    fun agentFixBody(kind: String, engine: String?, latest: String?) = buildJsonObject {
+        if (kind == "cannotSelfUpdate") latest?.takeIf { it.isNotEmpty() }?.let { put("latest", it) }
+        else if (kind != "engineUpdateFailed") engine?.let { put("engine", it) }
+    }
+
+    private fun undismissedUpdateNoteOf(update: JsonObject?, nowMs: Long, pinned: Boolean): Pair<String, String>? {
         update ?: return null
         if (update.str("status") == "skipped") return "quiet" to "not auto-updated"
         val latest = update.str("latest")?.takeIf { it.isNotEmpty() }
@@ -618,7 +880,7 @@ internal object RunnerPage {
      * on a key or a pool instead — then nothing can run on it, with a workspace or without one (OrbitKit RunnerAttention.noCliSignedIn,
      * the web's noCliSignedIn). Null when one is signed in or its sign-in is unknown, when none is installed, and when a workspace runs
      * on a key: that machine runs without any sign-in, so a signed-out login is news only to the workspaces on it. Settings counts the
-     * machine by the same answer (Infrastructure.attention).
+     * machine by the same answer (MachinesAndModels.attention).
      */
     fun noCliSignedIn(runner: JsonObject, workspaces: List<JsonObject>): List<String>? {
         // A signed-out Claude Code on a machine blocked for the Claude region is no CLI to sign in: Orbit won't start a Claude sign-in
@@ -744,7 +1006,7 @@ internal object RunnerPage {
         val free = formatDiskGb(disk.freeBytes); val total = formatDiskGb(disk.totalBytes)
         val summary = "Disk ${disk.usedPercent}% full"
         return AttentionItem("diskLow", "warn", summary, summary,
-            reserve?.let { "$free GB free of $total GB, under the ${formatDiskGb(it * MIB)} GB it keeps free — task runs stop being sent here until space frees up." }
+            reserve?.let { "$free GB free of $total GB, under the ${formatDiskGb(it * MIB)} GB it keeps free — new sessions and task runs wait until space frees up." }
                 ?: "$free GB free of $total GB. No reserve is set, so task runs keep landing here until the disk fills.",
             AttentionAction("setReserve"))
     }
@@ -764,7 +1026,8 @@ internal object RunnerPage {
      * report it is judged by runsAsRoot, as before: a regular user stays on its version until someone runs the command.
      */
     private fun cannotSelfUpdateItem(runner: JsonObject, latest: String?, offline: Boolean): AttentionItem? {
-        val version = runner.str("version")?.trim()?.takeIf { it.isNotEmpty() } ?: return null
+        // A version that isn't a release number (a managed runner's managed-<sha>, a dev build) is behind nothing.
+        val version = runner.str("version")?.trim()?.takeIf { Regex("^[vV]?[0-9]").containsMatchIn(it) } ?: return null
         if (latest.isNullOrEmpty() || compareRunnerVersions(version, latest) >= 0) return null
         val command = RunnerCopy.UPGRADE_COMMAND
         val report = runner.obj("selfUpdate")
@@ -804,7 +1067,8 @@ internal object RunnerPage {
 
     private fun engineUpdateItems(runner: JsonObject, nowMs: Long) = (engineOrder + ProviderEngines.CURSOR).mapNotNull { engine ->
         val health = engineHealth(runner, engine)?.takeIf { it.bool("installed") == true } ?: return@mapNotNull null
-        val note = updateNoteOf(health.obj("update"), nowMs)?.takeIf { it.first == "warn" } ?: return@mapNotNull null
+        val note = updateNoteOf(health.obj("update"), nowMs, dismissed = engineUpdateDismissedFor(runner, engine))?.takeIf { it.first == "warn" }
+            ?: return@mapNotNull null
         val summary = "${engineName(engine)} update failed"
         AttentionItem("engineNotUpdating", "warn", summary, summary,
             "${note.second.replaceFirstChar { it.uppercase() }}. Orbit retries every 30 min — Update Engines Now tries again right away.",
@@ -812,7 +1076,7 @@ internal object RunnerPage {
     }
 
     /** Everything about this runner that needs a person, most severe first. */
-    fun attention(runner: JsonObject, workspaces: List<JsonObject>, nowMs: Long, latestVersion: String?): List<AttentionItem> {
+    fun attention(runner: JsonObject, workspaces: List<JsonObject>, nowMs: Long, latestVersion: String?, managed: Boolean = false): List<AttentionItem> {
         val offline = isOffline(runner, nowMs)
         val items = mutableListOf<AttentionItem>()
         if (offline) items += offlineItem(runner, nowMs)
@@ -823,7 +1087,8 @@ internal object RunnerPage {
             items += quotaItems(runner, workspaces, nowMs)
             diskItem(runner, workspaces)?.let { items += it }
         }
-        cannotSelfUpdateItem(runner, latestVersion, offline)?.let { items += it }
+        // Orbit rolls the managed runner's image: it is never told to update itself.
+        if (!managed) cannotSelfUpdateItem(runner, latestVersion, offline)?.let { items += it }
         if (!offline) items += engineUpdateItems(runner, nowMs)
         return items
     }
@@ -834,23 +1099,77 @@ internal object RunnerPage {
         return items.take(2).map { it.short }.takeIf { it.isNotEmpty() }?.joinToString(RunnerCopy.SEP)
     }
 
-    fun displayName(runner: JsonObject) = runner.str("displayName")?.trim()?.takeIf { it.isNotEmpty() } ?: runner.text("name")
+    /**
+     * The name a machine is shown by everywhere: its owner's own name for it, else Orbit Cloud for the account's managed runner — told
+     * by its row's `managed` (GET /runners), else by [managedRunnerId], the managed status's runnerId (by default the one the
+     * signed-in shell last read), never by its stored name — else the name it registered with (web machineName).
+     */
+    fun displayName(runner: JsonObject, managedRunnerId: String? = ManagedRunnerIdentity.runnerId): String =
+        runner.str("displayName")?.trim()?.takeIf { it.isNotEmpty() }
+            ?: if (isManaged(runner, managedRunnerId)) RunnerCopy.MANAGED_RUNNER_LABEL else runner.text("name")
 
-    /** Online: `<hostname> · v<version>`; offline: `Offline · last seen 14d ago · v<version>`. */
-    fun listSubtitle(runner: JsonObject, nowMs: Long): String {
-        val version = runner.str("version")?.trim()?.takeIf { it.isNotEmpty() }?.let(RunnerCopy::versionTag)
+    /** The same from a runner's fields, for a row that is not a runner's own JSON (a directory runner, a session's assignedRunner).
+     *  [managed] is the row's own flag where it has one (a GET /runners row); null leaves it to the id. */
+    fun nameOf(id: String?, name: String?, displayName: String?, managedRunnerId: String? = ManagedRunnerIdentity.runnerId, managed: Boolean? = null): String =
+        displayName?.trim()?.takeIf { it.isNotEmpty() }
+            ?: if (isManaged(id, managedRunnerId, managed)) RunnerCopy.MANAGED_RUNNER_LABEL
+            else name.orEmpty()
+
+    /** Whether [runner] is the account's managed runner: its row says so (`managed`), or (an older server, which sends no flag) its
+     *  id is the managed status's runnerId. */
+    fun isManaged(runner: JsonObject, managedRunnerId: String? = ManagedRunnerIdentity.runnerId): Boolean =
+        isManaged(runner.str("id"), managedRunnerId, runner.bool("managed"))
+
+    /** The same from a runner's id and its row's flag (null where the row has none). */
+    fun isManaged(id: String?, managedRunnerId: String? = ManagedRunnerIdentity.runnerId, managed: Boolean? = null): Boolean =
+        managed == true || (!id.isNullOrEmpty() && !managedRunnerId.isNullOrEmpty() && ObjectId.same(id, managedRunnerId))
+
+    /** The OS a runner reported, from its `os:<goos>` capability (`darwin`, `linux`, `windows`, …), as the web's machineOs reads it;
+     *  null when it has not said. A machine row draws its mark by it (docs/mocks/machine-menu-icons, A). */
+    fun os(runner: JsonObject): String? = runner.strings("capabilities").firstOrNull { it.startsWith("os:") }?.removePrefix("os:")
+
+    /** Pin the account's managed runner, keeping the order the server sent for the other machines. */
+    fun managedRunnerFirst(runners: List<JsonObject>, managedRunnerId: String? = ManagedRunnerIdentity.runnerId): List<JsonObject> =
+        runners.sortedByDescending { isManaged(it, managedRunnerId) }
+
+    /** Whether a version is a release number, not a managed image's `managed-<sha>` or a `dev` build. */
+    fun isReleaseVersion(version: String?): Boolean = version != null && Regex("^[vV]?[0-9]").containsMatchIn(version.trim())
+
+    /** A version beside a runner's name: `v<version>`. A managed runner shows its release when it reports one, and otherwise says
+     * Orbit keeps it up to date — never its image hash (web runnerVersionLine). */
+    fun versionLine(version: String?, managed: Boolean = false): String? {
+        val v = version?.trim()?.takeIf { it.isNotEmpty() }
+        if (managed) return if (isReleaseVersion(v)) RunnerCopy.versionTag(v!!) else RunnerCopy.MANAGED_RUNNER_KEPT_UP_TO_DATE
+        return v?.let(RunnerCopy::versionTag)
+    }
+
+    /** Online: `<hostname> · v<version>`; offline: `Offline · last seen 14d ago · v<version>`. A managed runner's version is [versionLine]'s. */
+    fun listSubtitle(runner: JsonObject, nowMs: Long, managed: Boolean = false): String {
+        val version = versionLine(runner.str("version"), managed)
         if (isOffline(runner, nowMs)) {
             val status = runner.str("lastHeartbeatAt")?.takeIf { it.isNotEmpty() }?.let { RunnerCopy.offlineLastSeen(ago(it, nowMs)) } ?: RunnerCopy.OFFLINE
             return listOfNotNull(status, version).joinToString(RunnerCopy.SEP)
         }
-        return hostLine(runner)
+        return hostLine(runner, managed)
     }
 
-    fun hostLine(runner: JsonObject): String {
-        val host = runner.str("hostname")?.trim()?.takeIf { it.isNotEmpty() && it != displayName(runner) }
-        val version = runner.str("version")?.trim()?.takeIf { it.isNotEmpty() }?.let(RunnerCopy::versionTag)
-        return listOfNotNull(host, version).joinToString(RunnerCopy.SEP)
+    fun hostLine(runner: JsonObject, managed: Boolean = false): String {
+        val shown = runner.str("displayName")?.trim()?.takeIf { it.isNotEmpty() } ?: if (managed) RunnerCopy.MANAGED_RUNNER_LABEL else runner.text("name")
+        val host = runner.str("hostname")?.trim()?.takeIf { it.isNotEmpty() && it != shown }
+        return listOfNotNull(host, versionLine(runner.str("version"), managed)).joinToString(RunnerCopy.SEP)
     }
+
+    /** Where a machine's IP is, from the Claude region check's last answer (`runner.region`): `📍 Japan`, `📍 Japan (via proxy)`.
+     *  Null for a runner no check has decided, or one too old to check. The web's `runnerLocationLine`. */
+    fun location(runner: JsonObject): String? {
+        val region = runner.obj("region") ?: return null
+        val place = region.str("name")?.trim()?.takeIf { it.isNotEmpty() } ?: region.str("country")?.trim()?.takeIf { it.isNotEmpty() } ?: return null
+        return if (region.bool("viaProxy") == true) RunnerCopy.locationViaProxy(place) else RunnerCopy.location(place)
+    }
+
+    /** The head's line under the title: the country its IP is in, then [hostLine]. */
+    fun headLine(runner: JsonObject, managed: Boolean = false): String =
+        listOfNotNull(location(runner), hostLine(runner, managed).takeIf { it.isNotEmpty() }).joinToString(RunnerCopy.SEP)
 
     /** green online, amber while it drains, grey offline. */
     /** The status dot, by the web's rule: "online" or "offline" — a machine that drains is online. */
@@ -944,6 +1263,10 @@ internal object RunnerPage {
      * first sign-in — and with several accounts, which can be on different sites: each says its own on the engine page. */
     fun engineSite(health: JsonObject): String? =
         if (health.str("engine") != "kimi" || health.list("accounts").size >= 2) null else KimiSite.of(health.str("kimiRegion"))?.domain
+    /** OpenCode's note after its version when its CLI listed no provider key (`1.19.5 · no provider key found`): its
+     * unknown sign-in is about a key, never the version. Null otherwise. */
+    fun engineKeyNote(health: JsonObject): String? =
+        if (health.str("engine") == "opencode" && health.bool("openCodeNoKey") == true && health.str("auth") != "yes") RunnerCopy.NO_PROVIDER_KEY else null
     /** The engines whose quota a runner reads: the ones Orbit signs in. */
     fun reportsQuota(engine: String) = isLoginEngine(engine)
 
@@ -1010,11 +1333,12 @@ internal object RunnerPage {
         !(health.text("engine") == ProviderEngines.CURSOR && runner != null && CursorRuntime.state(runner).blocksRow) &&
         (health.str("auth") == "no" || health.list("accounts").any { it.str("auth") == "no" && !runsOnEnvKey(health, it.text("id"), it.str("auth")) })
 
-    fun updateFailedLine(health: JsonObject, nowMs: Long, zone: ZoneId = ZoneId.systemDefault()): String? {
+    /** [dismissed]: the release this engine's warning was dismissed against (engineUpdateDismissedFor) — while it is the latest, no line. */
+    fun updateFailedLine(health: JsonObject, nowMs: Long, zone: ZoneId = ZoneId.systemDefault(), dismissed: String? = null): String? {
         if (health.bool("installed") != true) return null
         val update = health.obj("update")?.takeIf { it.str("status") == "failed" } ?: return null
         val latest = update.str("latest")?.trim()?.takeIf { it.isNotEmpty() } ?: return null
-        if (updateNoteOf(update, nowMs)?.first != "warn") return null
+        if (updateNoteOf(update, nowMs, dismissed = dismissed)?.first != "warn") return null
         val whenText = update.str("at")?.let { day(it, nowMs, zone) } ?: return null
         return RunnerCopy.updateFailed(latest, whenText)
     }
@@ -1081,9 +1405,17 @@ internal object RunnerPage {
     fun accountNoQuotaLimit(runner: JsonObject, engine: String, account: String): Boolean =
         engine == "kimi" && kimiNoQuotaLimit(accountSnapshotReported(EngineAccounts.usage(engine, runner), account))
 
-    /** CodexAccounts.label: what the user called it, else Default, or `Account <id>`. */
-    fun accountLabel(id: String, accounts: List<JsonObject>): String =
-        accounts.firstOrNull { it.str("id") == id }?.str("name")?.takeIf { it.isNotEmpty() } ?: if (id == "default") "Default" else "Account $id"
+    /** CodexAccounts.label: what the user called it, else Default; a former Default (the account a Set as default moved out of
+     * ~/.claude) by its email, else "Former default"; or `Account <id>`. */
+    fun accountLabel(id: String, accounts: List<JsonObject>): String {
+        val account = accounts.firstOrNull { it.str("id") == id }
+        account?.str("name")?.takeIf { it.isNotEmpty() }?.let { return it }
+        if (id == "default") return "Default"
+        if ((account?.get("formerDefault") as? JsonPrimitive)?.booleanOrNull == true) {
+            return account?.str("email")?.takeIf { it.isNotEmpty() } ?: RunnerAccountCopy.FORMER_DEFAULT
+        }
+        return "Account $id"
+    }
 
     /** One sign-in on the engine page. [auth] is none for an Antigravity Default on the machine's Gemini key ([envKey]),
      * which has nothing to sign in or pause; its line says what it runs on. [site]: Kimi only, the site its login is on —
@@ -1157,6 +1489,85 @@ internal object RunnerPage {
         return (state.str("status") == "pending") to (if (state.str("status") == "failed") state.str("message") else null)
     }
 
+    /** A session a refused removal names as running in the account: its title, and its RunStatus as the server says it. */
+    data class InUseSession(val id: String, val title: String, val status: String?)
+
+    /** The sessions the machine refused this account's removal over (`sessions`): none unless it was refused for them, and none from a
+     * server older than the list. */
+    fun inUseSessions(state: JsonObject?, engine: String, account: String): List<InUseSession> {
+        if (state == null || state.str("engine") != engine || state.str("account") != account || state.str("status") != "failed") return emptyList()
+        return state.list("sessions").mapNotNull { session -> session.str("id")?.let { InUseSession(it, session.str("title").orEmpty(), session.str("status")) } }
+    }
+
+    /** Under an account whose removal is under way and waiting on the sessions it moved to another account (`moving`) to leave it;
+     * null otherwise, and from a server older than the move. */
+    fun movingLine(state: JsonObject?, engine: String, account: String): String? {
+        if (state == null || state.str("engine") != engine || state.str("account") != account || state.str("status") != "pending") return null
+        val count = state.int("moving") ?: return null
+        return when {
+            count < 1 -> null
+            count == 1 -> RunnerAccountCopy.movingOne(engineName(engine))
+            else -> RunnerAccountCopy.movingMany(engineName(engine), count)
+        }
+    }
+
+    /** What a runner declares when it can make an added Claude Code account the Default: the swap itself, and moving a session into its
+     * account's new folder (RunnersService.setDefaultAccount asks for both). */
+    private val CLAUDE_ACCOUNT_SWAP_CAPABILITIES = listOf("claude-account-swap/v1", "claude-account-move/v1")
+
+    /** Whether [line]'s menu offers Set as default: an added Claude Code account's only. */
+    fun offersSetDefault(engine: String, line: AccountLine) = engine == "claude" && !line.isDefault
+
+    /** The Set as default this runner has in flight or last finished, when it is [account]'s; null otherwise. */
+    fun swapOf(runner: JsonObject, account: String): JsonObject? = runner.obj("claudeAccountSwap")?.takeIf { it.str("account") == account }
+
+    /** Why Set as default can't be chosen now, said where its hint is; null when it can. [pressing]: this page's own request is on its way. */
+    fun setDefaultBlocked(runner: JsonObject, offline: Boolean, pressing: Boolean): String? = when {
+        offline -> RunnerAccountCopy.SET_DEFAULT_OFFLINE
+        !runner.strings("capabilities").containsAll(CLAUDE_ACCOUNT_SWAP_CAPABILITIES) -> RunnerAccountCopy.SET_DEFAULT_UPDATE
+        pressing || runner.obj("claudeAccountSwap")?.str("status") == "pending" -> RunnerAccountCopy.SET_DEFAULT_BUSY
+        else -> null
+    }
+
+    /** The question before [line]'s Set as default, title and body: the swap of the two folders, the terminal, the sessions and the
+     * workspaces. The Default's folder is the one the runner reports, else ~/.claude. */
+    fun setDefaultQuestion(runner: JsonObject, health: JsonObject, line: AccountLine): Pair<String, String> {
+        val accounts = health.list("accounts")
+        val default = accounts.firstOrNull { it.str("id") == "default" }
+        val defaultDir = (default?.str("home") ?: default?.str("codexHome"))?.let(::tildePath) ?: "~/.claude"
+        return RunnerAccountCopy.setDefaultTitle(line.name) to RunnerAccountCopy.setDefaultDetail(line.name, defaultDir,
+            accountLabel("default", accounts), line.home.orEmpty(), displayName(runner))
+    }
+
+    /** Under an account while it is being made the Default: how many sessions' turns the swap waits on, and any terminal Claude Code on
+     * either folder. Null unless its swap is pending. */
+    fun settingDefaultLine(runner: JsonObject, line: AccountLine): String? {
+        val swap = swapOf(runner, line.id)?.takeIf { it.str("status") == "pending" } ?: return null
+        val waiting = swap.list("waitingOn").size
+        val said = when (waiting) {
+            0 -> RunnerAccountCopy.settingDefault(line.name)
+            1 -> RunnerAccountCopy.settingDefaultOne(line.name)
+            else -> RunnerAccountCopy.settingDefaultMany(line.name, waiting)
+        }
+        return if (swap.list("foreignProcesses").isNotEmpty()) "$said ${RunnerAccountCopy.SETTING_DEFAULT_TERMINAL}" else said
+    }
+
+    /** A swap of this account's that failed, which puts both logins back: its `message` is the machine's reason. Null otherwise. */
+    fun failedSwap(runner: JsonObject, line: AccountLine): JsonObject? = swapOf(runner, line.id)?.takeIf { it.str("status") == "failed" }
+
+    /** What stands over those sessions in place of the machine's sentence, the engine named as its CLI is. */
+    fun inUseHeading(engine: String, count: Int) =
+        if (count == 1) RunnerAccountCopy.inUseOne(engineName(engine)) else RunnerAccountCopy.inUseMany(engineName(engine), count)
+
+    fun inUseTitle(session: InUseSession) = session.title.ifBlank { RunnerAccountCopy.IN_USE_UNTITLED }
+
+    /** A listed session's state, and its dot's tone: in a turn (green), waiting for input (amber), else no words and a grey dot. */
+    fun inUseStatus(status: String?): Pair<String?, String?> = when (status) {
+        "RUNNING", "PENDING" -> RunnerAccountCopy.IN_USE_RUNNING to "ok"
+        "AWAITING_INPUT" -> RunnerAccountCopy.IN_USE_WAITING to "warn"
+        else -> null to null
+    }
+
     /** The Default an engine leaves out while its owner removed it from Orbit (`removedDefault`: its directory, and its name if it was
      * renamed), which the engine page names after the accounts that remain, with the way back. The server marks an engine only while
      * the runner reports another account of it, so this is null whenever Default is in use. */
@@ -1181,28 +1592,46 @@ internal object RunnerPage {
 
     /** The question before [line]'s Remove…, title and body. Default's, and an added account's while Default is removed, are the web's:
      * that only Orbit stops using Default; that the added account's workspaces then run on Automatic, or, for the last account Orbit
-     * uses there, that Orbit uses Default again. An added account's while Default is in use is the page's own, as it was. */
+     * uses there, that Orbit uses Default again; while Default is in use, that its workspaces switch to Default. */
     fun removeQuestion(runner: JsonObject, health: JsonObject, line: AccountLine): Pair<String, String> {
         val name = displayName(runner)
         val title = RunnerAccountCopy.removeTitle(line.name)
         if (line.isDefault) return title to RunnerAccountCopy.defaultRemoveDetail(name, engineName(health.text("engine")))
-        val removed = removedDefault(health) ?: return "Remove “${line.name}” from $name?" to
-            "${line.home ?: "Its sign-in"} goes from this machine, and sessions stop running on it. Default is untouched."
+        val removed = removedDefault(health) ?: return title to RunnerAccountCopy.REMOVE_DETAIL
         return title to if (othersStaying(runner, health, line.id) > 0) RunnerAccountCopy.removeDetailAutomatic(name)
             else RunnerAccountCopy.removeDetailLast(name, removedDefaultName(removed))
     }
 
     fun engineUpdateInFlight(install: JsonObject?) = install?.str("mode") == "update" && install.str("status") in setOf("pending", "installing")
 
-    fun updateRelayLine(install: JsonObject?): String? {
-        if (install?.str("mode") != "update") return null
+    /** One line of what the last Update Engines Now said, and whether it is a failure (drawn red). */
+    data class UpdateRelayLine(val text: String, val failed: Boolean = false)
+
+    /**
+     * Where the last Update Engines Now got to (iOS `updateRelayLines`). A finished run lists only the engines that need
+     * someone: the failures, and an install Orbit may not replace. Current, updated, pinned, waiting for sessions or retried
+     * on the next pass sort themselves out, and listing them buried the line that mattered.
+     */
+    fun updateRelayLines(install: JsonObject?): List<UpdateRelayLine> {
+        if (install?.str("mode") != "update") return emptyList()
         return when (install.str("status")) {
-            "pending" -> "Queued — the runner picks this up on its next check-in."
-            "installing" -> "Updating this machine’s engine CLIs…"
-            "done", "failed" -> install.str("message")?.trim()?.takeIf { it.isNotEmpty() } ?: "Nothing to update."
-            else -> null
+            "pending" -> listOf(UpdateRelayLine("Queued — the runner picks this up on its next check-in."))
+            "installing" -> listOf(UpdateRelayLine("Updating this machine’s engine CLIs…"))
+            "done", "failed" -> {
+                val message = install.str("message")?.trim().orEmpty()
+                if (message.isEmpty()) return listOf(UpdateRelayLine("Nothing to update."))
+                message.split("\n")
+                    .filter { updateLineFailed(it) || it.contains("owned by another user") }
+                    .map { UpdateRelayLine(it, failed = updateLineFailed(it)) }
+                    .ifEmpty { listOf(UpdateRelayLine("Nothing here needs your attention.")) }
+            }
+            else -> emptyList()
         }
     }
+
+    /** The runner's own rule for a failed run (`updateRunFailed`, src/runner-go/engineinstall.go), read per line. */
+    private fun updateLineFailed(line: String) =
+        line.contains("update failed") || line.contains("timed out") || line.contains("does not run")
 
     // workspaces
     /** A path as a terminal spells it, with the machine's home directory as `~`. */
@@ -1225,18 +1654,97 @@ internal object RunnerPage {
     // about
     /** `0.1.197 · Latest`; a runner behind that installs the release itself says so, and so does one a staged rollout holds
      * back. One that reports where its updates stand says which it is; an older one is judged by runsAsRoot, as before. */
-    fun versionValue(runner: JsonObject, latest: String?): String? {
+    fun versionValue(runner: JsonObject, latest: String?, managed: Boolean = false): String? {
+        // Orbit rolls the managed runner's image: its release and that Orbit updates it, or that Orbit keeps it up to date.
+        if (managed) return runner.str("version")?.trim()?.takeIf(::isReleaseVersion)?.let { it + RunnerCopy.SEP + RunnerCopy.MANAGED_RUNNER_UPDATED_BY_ORBIT }
+            ?: RunnerCopy.MANAGED_RUNNER_KEPT_UP_TO_DATE
         val version = runner.str("version")?.trim()?.takeIf { it.isNotEmpty() } ?: return null
         val newest = latest?.trim()?.takeIf { it.isNotEmpty() } ?: return version
         if (compareRunnerVersions(version, newest) >= 0) return version + RunnerCopy.SEP + "Latest"
+        // Draining or restarting for a release: `0.1.253 · updating to 0.1.254`.
+        val report = runner.obj("selfUpdate")
+        val target = report?.str("targetVersion")
+        if (target != null && report.str("phase") in setOf("draining", "restarting")) return version + RunnerCopy.SEP + RunnerCopy.versionUpdatingTo(target)
         val note = when (runner.obj("selfUpdate")?.str("state")) {
             null -> if (runner.bool("runsAsRoot") == true) "installs when no turn is running" else null
-            "enabled", "waitingForIdle" -> "installs when no turn is running"
+            "enabled", "waitingForIdle" -> runner.obj("selfUpdate")?.int("quietWindowSeconds")?.takeIf { it > 0 }
+                ?.let { RunnerCopy.versionInstallsWhenQuiet(RunnerCopy.quietMinutes(it)) } ?: "installs when no turn is running"
             "heldByRollout" -> "not rolled out to it yet"
             else -> null
         } ?: return version
         return "$version${RunnerCopy.SEP}$newest $note"
     }
+
+    /** The runner page's Update card (board 4): a release this runner is behind, in the phase it reports — OrbitKit
+     * RunnerPageFormat.UpdateCard. [warn]: amber while it holds work back or restarts. [progressLabel] and [progress]: draining only. */
+    data class UpdateCard(val phase: String, val warn: Boolean, val title: String, val tag: String, val body: String,
+                          val progressLabel: String? = null, val progress: Float? = null, val turns: List<UpdateTurn> = emptyList())
+
+    /** A turn the drain waits for (the runner's `updateTurns`): its session, title, and `running 1 h 52 min` when the server knows
+     * when the run began. */
+    data class UpdateTurn(val id: String, val title: String, val running: String?)
+
+    /** The card a runner's report calls for; none with no phase (nothing waiting, or a runner too old to say), no version to
+     * name, or a phase this client doesn't know — those keep the page's wording from before. */
+    fun updateCard(runner: JsonObject, nowMs: Long, zone: ZoneId = ZoneId.systemDefault()): UpdateCard? {
+        val report = runner.obj("selfUpdate") ?: return null
+        val phase = report.str("phase") ?: return updatedCard(report, nowMs, zone)
+        val version = report.str("targetVersion") ?: return null
+        return when (phase) {
+            // A runner that reports its quiet window waits for it; one that doesn't keeps the old wording.
+            "available" -> UpdateCard(phase, false, RunnerCopy.updateAvailableTitle(version), RunnerCopy.UPDATE_TAG_AVAILABLE,
+                report.int("quietWindowSeconds")?.takeIf { it > 0 }?.let { RunnerCopy.availableBodyQuiet(it) } ?: RunnerCopy.UPDATE_AVAILABLE_BODY)
+            "draining" -> {
+                val left = report.int("turnsInFlight") ?: 0
+                val of = report.int("turnsAtDrain")?.let { maxOf(it, left) }
+                val waited = isoMs(report.str("drainingSince"))?.let { updateWaited(maxOf(0L, (nowMs - it) / 60_000).toInt()) }
+                val unit = if ((of ?: left) == 1) "turn" else "turns"
+                val count = if (of != null) RunnerCopy.updateWaitingForOf(left, of, unit) else RunnerCopy.updateWaitingFor(left, unit)
+                val since = report.str("availableSince")?.let { updateClock(it, zone) }
+                UpdateCard(phase, true, RunnerCopy.updateDrainingTitle(version), RunnerCopy.UPDATE_TAG_DRAINING,
+                    since?.let { RunnerCopy.updateDrainingBody(version, it) } ?: RunnerCopy.UPDATE_DRAINING_BODY_NO_SINCE,
+                    progressLabel = waited?.let { count + RunnerCopy.SEP + it } ?: count,
+                    progress = if (of != null && of > 0) (of - left).toFloat() / of else 0f,
+                    turns = updateTurns(runner, nowMs))
+            }
+            // After the owner's Update Now, the turns it interrupted continue once it is back.
+            "restarting" -> UpdateCard(phase, true, RunnerCopy.updateRestartingTitle(version), RunnerCopy.UPDATE_TAG_RESTARTING,
+                report.int("interruptedTurns")?.takeIf { it > 0 }?.let(RunnerCopy::updateRestartingBodyInterrupted) ?: RunnerCopy.UPDATE_RESTARTING_BODY)
+            "postponed" -> report.str("postponedUntil")?.let { updateClock(it, zone) }?.let { until ->
+                UpdateCard(phase, false, RunnerCopy.updatePostponedTitle(version, until), RunnerCopy.UPDATE_TAG_POSTPONED, RunnerCopy.updatePostponedBody(until))
+            }
+            else -> null
+        }
+    }
+
+    /** The owner's running turns on this runner (its `updateTurns`, longest first): the draining card's rows and Update Now's list. */
+    fun updateTurns(runner: JsonObject, nowMs: Long): List<UpdateTurn> = runner.list("updateTurns").mapNotNull { turn ->
+        val turnId = turn.str("id") ?: return@mapNotNull null
+        UpdateTurn(turnId, turn.str("title")?.trim()?.takeIf { it.isNotEmpty() } ?: RunnerCopy.UPDATE_UNTITLED_TURN,
+            isoMs(turn.str("startedAt"))?.let { RunnerCopy.updateTurnRunning(updateWaited(maxOf(0L, (nowMs - it) / 60_000).toInt())) })
+    }
+
+    /** The Updated card (board 4): the last update, for a day after it was installed — how long the restart took and how many turns
+     * an Update Now interrupted for it, as far as the runner measured them. None with no update recorded, or an older one. */
+    private fun updatedCard(report: JsonObject, nowMs: Long, zone: ZoneId): UpdateCard? {
+        val to = report.str("lastUpdatedTo") ?: return null
+        val atIso = report.str("lastUpdatedAt") ?: return null
+        val at = isoMs(atIso) ?: return null
+        if (nowMs - at > RunnerCopy.UPDATE_TAG_UPDATED_HOURS * 3_600_000L || at - nowMs > 60_000) return null
+        return UpdateCard("updated", false, RunnerCopy.updateUpdatedTitle(to), updateClock(atIso, zone) ?: return null,
+            RunnerCopy.updateUpdatedBody(report.int("lastUpdateSeconds")?.takeIf { it > 0 }?.let(RunnerCopy::updateTook),
+                report.int("lastUpdateInterruptedTurns") ?: 0))
+    }
+
+    /** How long it has waited: `38 min`, `1 h 52 min`, `2 h`. */
+    fun updateWaited(minutes: Int): String = when {
+        minutes < 60 -> "$minutes min"
+        minutes % 60 == 0 -> "${minutes / 60} h"
+        else -> "${minutes / 60} h ${minutes % 60} min"
+    }
+
+    /** The clock time the card names, as the board writes it: `09:58`. */
+    fun updateClock(iso: String, zone: ZoneId = ZoneId.systemDefault()) = isoMs(iso)?.let { format("HH:mm", it, zone) }
 
     /** `Sep 20, 4:00 PM · 0.1.189 → 0.1.190`: when the runner last updated itself, in the reader's time zone, and between
      * which versions; none from a runner that doesn't report its updates, or hasn't updated itself yet. */

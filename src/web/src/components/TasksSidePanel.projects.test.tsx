@@ -192,6 +192,7 @@ describe('the sidebar’s Projects group', () => {
       // Its coordinator's turn a minute ago is newer than FineWeb's last task write.
       { title: 'Orbit Wiki · 阶段 1（MVP）', working: true, needsYou: null, active: false },
       { title: 'FineWeb × Common Crawl → RocksDB 语料库', working: true, needsYou: null, active: false },
+      // Nothing waiting, nothing in flight, last touched six days ago: still named, as the phones name it.
       { title: 'Postgres 性能与容量治理', working: false, needsYou: null, active: false },
     ]);
     expect(container!.querySelector('.tp-count.needs-you')?.getAttribute('title')).toBe('2 waiting on you');
@@ -254,7 +255,7 @@ describe('the sidebar’s Tasks entry', () => {
     serve();
     await visit('/projects');
     const labels = [...container!.querySelectorAll('.tp-section .tp-item .tp-label')].map((l) => l.textContent);
-    expect(labels.slice(0, 3)).toEqual(['Projects', 'Tasks', 'Wiki']);
+    expect(labels.slice(0, 5)).toEqual(['Projects', 'Tasks', 'Scheduled', 'Waiting on you', 'Wiki']);
   });
 
   it.each([

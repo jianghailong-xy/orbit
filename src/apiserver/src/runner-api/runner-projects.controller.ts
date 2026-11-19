@@ -2,6 +2,7 @@ import { randomUUID } from 'node:crypto';
 import {
   BadRequestException,
   Body,
+  ConflictException,
   Controller,
   Delete,
   ForbiddenException,
@@ -25,8 +26,10 @@ import {
   CreateProjectDto,
   HandOverOpenItemDto,
   ObserveIntegrationDto,
+  RecordProjectRulingDto,
   RecordMergeEvidenceDto,
   RequestProjectDoneDto,
+  RequestPromotionDto,
   RequestProjectStartDto,
   ResolveOpenItemDto,
   ResolveProjectBlockerDto,
@@ -35,6 +38,7 @@ import {
   SkipMergeCheckDto,
   UpdateProjectDto,
 } from '../projects/dto';
+import { ProjectPromotionService } from '../projects/project-promotion.service';
 import { ProjectAcceptanceService } from '../projects/project-acceptance.service';
 import { HANDOFF_STORED_STATES, type HandoffStoredState } from '../projects/project-handoff';
 import { ProjectHandoffService } from '../projects/project-handoff.service';
@@ -43,6 +47,7 @@ import { SessionAttemptService } from '../projects/session-attempt.service';
 import { ProjectsService } from '../projects/projects.service';
 import { readRequestAsk } from '../sessions/session-request';
 import { assertClientTurnIdNotReserved } from '../sessions/watch-turn-key';
+import { CreateRequestReceipts, readRequestId, REQUEST_ID_HEADER } from './create-request-receipts';
 import { CurrentRunner } from './current-runner.decorator';
 import { RunnerAuthGuard } from './runner-auth.guard';
 import { RunnerOrchestrationAuthorizer } from './runner-orchestration-authorizer';
@@ -108,6 +113,12 @@ export class RunnerProjectsController {
      * provide only the collaborators those routes reach. Absent, that one route answers 503.
      */
     @Optional() private readonly integrationJobs?: IntegrationJobRelay,
+    @Optional() private readonly promotions?: ProjectPromotionService,
+    /**
+     * The create door's receipts (create-request-receipts.ts). `@Optional()` for the hand-built specs
+     * that exercise other routes here; absent, a create is answered as one with no request id.
+     */
+    @Optional() private readonly receipts?: CreateRequestReceipts,
   ) {}
 
   /**
@@ -144,9 +155,29 @@ export class RunnerProjectsController {
     @Headers('x-orbit-session-id') sessionId: string | undefined,
     @Headers('x-orbit-session-token') orchestrationToken: string | undefined,
     @Body() dto: CreateProjectDto,
+    @Headers(REQUEST_ID_HEADER) requestIdHeader?: string,
   ) {
     RunnerProjectsController.refuseGovernance(dto);
     const inSession = sessionId?.trim();
+    // A named request is created at most once (create-request-receipts.ts): a repeat under the same
+    // X-Orbit-Request-Id — the answer to the first was lost, or both are in flight — is answered with
+    // the Project the first created, never a second one, so one session still coordinates one Project.
+    const requestId = readRequestId(requestIdHeader);
+    if (!requestId || !this.receipts) {
+      return this.createProjectOnce(runner, inSession, orchestrationToken, dto);
+    }
+    return this.receipts.run(runner.ownerId, 'PROJECT_CREATE', requestId, { sessionId: inSession ?? null, dto }, () =>
+      this.createProjectOnce(runner, inSession, orchestrationToken, dto),
+    );
+  }
+
+  // An instance property, not a method: the prototype is the route surface its spec pins.
+  private readonly createProjectOnce = async (
+    runner: Runner,
+    inSession: string | undefined,
+    orchestrationToken: string | undefined,
+    dto: CreateProjectDto,
+  ) => {
     if (dto.workspaceId) {
       if (!inSession) {
         // Nothing to check the choice against. A headless caller IS the owner operating this
@@ -170,13 +201,46 @@ export class RunnerProjectsController {
       );
     }
     return inSession
-      ? this.projects.createInSession(runner.ownerId, runner.id, inSession, dto)
+      ? this.createInSessionOrReplay(runner, inSession, dto)
       : this.projects.create(
           runner.ownerId,
           dto,
           undefined,
           { type: 'RUNNER', id: runner.id },
         );
+  };
+
+  /**
+   * A create from inside a session, where ALREADY_COORDINATING is first reconciled against the
+   * receipts: when the project the session coordinates is the one an identical earlier
+   * `project_create` from this session created, the first answer was lost and this is its replay,
+   * so it is answered with that answer (`replayOf` names the request) rather than refused. Only a
+   * project the receipts cannot account for reaches the caller as the refusal, and its recovery
+   * chain asks the user before anything else is opened.
+   */
+  private readonly createInSessionOrReplay = async (runner: Runner, inSession: string, dto: CreateProjectDto) => {
+    try {
+      return await this.projects.createInSession(runner.ownerId, runner.id, inSession, dto);
+    } catch (error) {
+      const coordinating = RunnerProjectsController.coordinatingProjectOf(error);
+      if (!coordinating || !this.receipts) throw error;
+      const replay = await this.receipts.completedAnswerFor(
+        runner.ownerId,
+        'PROJECT_CREATE',
+        { sessionId: inSession, dto },
+        coordinating,
+      );
+      if (!replay) throw error;
+      return replay;
+    }
+  };
+
+  /** The public id ALREADY_COORDINATING names as the session's current project, or null for any other error. */
+  private static coordinatingProjectOf(error: unknown): string | null {
+    if (!(error instanceof ConflictException)) return null;
+    const body = error.getResponse() as { code?: unknown; coordinatingProject?: { id?: unknown } | null };
+    if (body?.code !== 'ALREADY_COORDINATING') return null;
+    return typeof body.coordinatingProject?.id === 'string' ? body.coordinatingProject.id : null;
   }
 
   /**
@@ -494,6 +558,22 @@ export class RunnerProjectsController {
   }
 
   /**
+   * A coordinator recording an owner ruling given in its conversation (`project_ruling_record`,
+   * coordinator handoff v2 §2). X-Orbit-Session-Id is the authority, checked by the service against
+   * the project's own coordinator pointer, exactly as for `askOwner`; the quote must be found in the
+   * named turn's owner text. Records a fact and grants nothing, so no orchestration credential.
+   */
+  @Post('projects/:id/rulings')
+  recordRuling(
+    @CurrentRunner() runner: Runner,
+    @Headers('x-orbit-session-id') sessionId: string | undefined,
+    @Param('id', PublicIdPipe) id: string,
+    @Body() dto: RecordProjectRulingDto,
+  ) {
+    return this.openItems.recordRuling(runner.ownerId, id, sessionId?.trim(), dto);
+  }
+
+  /**
    * A coordinator asking the account owner to start its project (`project_request_start`).
    *
    * Filed and returned, like a question: the owner answers on the "Start this project?" card, and
@@ -585,6 +665,21 @@ export class RunnerProjectsController {
       kind: 'SESSION',
       sessionId: sessionId?.trim() ?? '',
     });
+  }
+
+  /** K7: the current coordinator requests a candidate; normal merge authorization still applies. */
+  @Post('projects/:id/promotions/request')
+  @HttpCode(200)
+  requestPromotion(
+    @CurrentRunner() runner: Runner,
+    @Headers('x-orbit-session-id') sessionId: string | undefined,
+    @Param('id', PublicIdPipe) id: string,
+    @Body() dto: RequestPromotionDto,
+  ) {
+    if (!this.promotions) throw new HttpException(
+      { code: 'INTEGRATION_QUEUE_UNAVAILABLE', message: 'this control plane runs no integration queue' }, 503,
+    );
+    return this.promotions.requestPromotion(runner.ownerId, id, sessionId, dto?.reason);
   }
 
   /**

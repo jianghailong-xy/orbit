@@ -3,6 +3,7 @@
 package main
 
 import (
+	"os/user"
 	"testing"
 )
 
@@ -59,9 +60,8 @@ func TestHostdUpdateProbeDoesNotTryToDropWhenItIsNotRoot(t *testing.T) {
 	}
 }
 
-// And uid 0 is only refused where the refusal means something: on a root daemon. A foreground
-// hostd running as an ordinary user has nothing to escalate.
-func TestHostdUpdateFromRootIsRefusedOnlyByARootDaemon(t *testing.T) {
+// A foreground hostd running as an ordinary user has no privileges to shed for root either.
+func TestHostdUpdateFromRootDoesNotSetuidInUnprivilegedDaemon(t *testing.T) {
 	h := newHostdUpdateHarness(t, rolloutTestPrevious, newRolloutRelease(t, rolloutTestLatest))
 	h.update.geteuid = func() int { return 1000 }
 
@@ -75,6 +75,28 @@ func TestHostdUpdateFromRootIsRefusedOnlyByARootDaemon(t *testing.T) {
 	for _, probe := range h.probed {
 		if attr := probe.SysProcAttr; attr != nil && attr.Credential != nil {
 			t.Errorf("probe %v asked to setuid without being root: %+v", probe.Args, *attr.Credential)
+		}
+	}
+}
+
+func TestHostdUpdateRootUsesNobody(t *testing.T) {
+	h := newHostdUpdateHarness(t, rolloutTestPrevious, newRolloutRelease(t, rolloutTestLatest))
+	h.update.lookupUser = func(name string) (*user.User, error) {
+		if name != "nobody" {
+			t.Fatal(name)
+		}
+		return &user.User{Uid: "65534", Gid: "65533", Username: "nobody"}, nil
+	}
+	if resp := h.ask(0); !resp.OK {
+		t.Fatal(resp.Error)
+	}
+	if len(h.probed) != 2 {
+		t.Fatalf("probes=%d", len(h.probed))
+	}
+	for _, cmd := range h.probed {
+		c := cmd.SysProcAttr.Credential
+		if c == nil || c.Uid != 65534 || c.Gid != 65533 {
+			t.Fatalf("probe credential: %+v", c)
 		}
 	}
 }

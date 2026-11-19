@@ -34,8 +34,8 @@ test('a running job may stay silent for the lease, or for its check budgets plus
   for (const phase of [null, 'FETCH', 'MAIN_SYNC', 'REBASE', 'MERGE', 'PUSH', 'VERIFY']) {
     assert.equal(integrationJobLimitSeconds({ ...landing, state: 'RUNNING', phase }), 600, String(phase));
   }
-  // The task's acceptance (300) and the merge check's default hour, then the lease.
-  assert.equal(integrationJobLimitSeconds({ ...landing, state: 'RUNNING', phase: 'CHECK' }), 300 + 3600 + 600);
+  // Task acceptance (300), two landing-check budgets (combined and baseline), then the lease.
+  assert.equal(integrationJobLimitSeconds({ ...landing, state: 'RUNNING', phase: 'CHECK' }), 300 + 2 * 3600 + 600);
   // A generation whose merge check was approved away runs the acceptance alone.
   assert.equal(integrationJobLimitSeconds({ ...landing, skipMergeCheck: true, state: 'RUNNING', phase: 'CHECK' }),
     300 + 600);

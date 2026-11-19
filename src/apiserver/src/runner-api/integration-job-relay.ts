@@ -21,6 +21,7 @@ import {
   UpstreamMovedCommitsEnriched,
 } from '@orbit/shared';
 import { PrismaService } from '../prisma/prisma.service';
+import { baselineHoldSql } from '../projects/baseline-hold';
 import {
   INTEGRATION_CLAIM_STALE_MS,
   INTEGRATION_JOBS_PER_HEARTBEAT,
@@ -35,6 +36,7 @@ import {
   REPORTABLE_JOB_PHASES,
   REPORTABLE_JOB_STATES,
   checkSawTheFinishedBranch,
+  checkTimeoutSeconds,
   checksFor,
   enqueueForDoneTask,
   integrationDedupeKey,
@@ -50,6 +52,8 @@ import {
   openItemKindForJobState,
   pushBoundaryPassed,
   queueLandingBehindTheWork,
+  queueBaselineHeld,
+  queueSkippedLandingAfterStop,
   shortBranchName,
   timedOutErrorCode,
   workBranchEndedOn,
@@ -273,6 +277,8 @@ interface HeldClaim {
   acceptanceCommand: string | null;
   acceptanceExpectedExitCode: number | null;
   acceptanceTimeoutSeconds: number | null;
+  landingCheckCommand: string | null;
+  landingCheckTimeoutSeconds: number | null;
   mergeCheckCommand: string | null;
   mergeCheckTimeoutSeconds: number | null;
   cancelRequestedAt: Date | null;
@@ -663,6 +669,18 @@ async function claimOne(
          -- the runner. With both tips in it, the source lands by J-S4 MERGE and that landing closes
          -- the item. Without them, it meets the same conflict and opens another item, and every
          -- other task's landing waits as before.
+         --
+         -- And except the landings of a task filed to fix that item (fixes_open_item_id). That is
+         -- the other way the absorb reaches the line, and the one task_create documents: a separate
+         -- task whose source branch is the merge commit. Held here, it would wait on the item it
+         -- exists to close, and the line would never move again. Only that item is passed over: a
+         -- fix for any other item, and every other landing, is held as before. Its landing does
+         -- not close the item, because the item is also the record that the conflicted task's own
+         -- work is not on the line, and whether the fix carried it is not something the server can
+         -- read; the landing hands the item back to the coordinator instead (X-D4 (5),
+         -- rearmItemFixedBy). Without both tips, it meets the same conflict and opens an item of
+         -- its own, on the fix task and assigned as any landing's failure is, which the fix's next
+         -- landing is exempt from as the conflicted task's is.
          AND NOT EXISTS (
            SELECT 1 FROM "project_open_item" i
              JOIN "project_integration_job" f ON f."id" = i."integration_job_id"
@@ -670,7 +688,14 @@ async function claimOne(
               AND f."phase" = 'MAIN_SYNC'
               AND i."kind" = 'INTEGRATION_CONFLICT'
               AND i."state" = 'OPEN'
-              AND f."task_id" IS DISTINCT FROM c."task_id")
+              AND f."task_id" IS DISTINCT FROM c."task_id"
+              AND NOT EXISTS (
+                SELECT 1 FROM "task" fix
+                 WHERE fix."id" = c."task_id" AND fix."fixes_open_item_id" = i."id"))
+         AND NOT EXISTS (
+           SELECT 1 FROM "project_open_item" i
+             JOIN "project_integration_job" f ON f."id" = i."integration_job_id"
+            WHERE ${baselineHoldSql('c')})
          AND (
            -- A queued job whose repository and target ref nobody holds. A QUEUED row somebody asked
            -- to stop is never claimed: J-T8 ends those in the transaction that asks, so one that is
@@ -763,6 +788,8 @@ const HELD_CLAIM_COLUMNS = Prisma.sql`
       t."acceptance_command" AS "acceptanceCommand",
       t."acceptance_expected_exit_code" AS "acceptanceExpectedExitCode",
       t."acceptance_timeout_seconds" AS "acceptanceTimeoutSeconds",
+      cb."landing_check_command" AS "landingCheckCommand",
+      cb."landing_check_timeout_seconds" AS "landingCheckTimeoutSeconds",
       cb."merge_check_command" AS "mergeCheckCommand",
       cb."merge_check_timeout_seconds" AS "mergeCheckTimeoutSeconds",
       j."cancel_requested_at" AS "cancelRequestedAt",
@@ -1266,8 +1293,8 @@ export interface IntegrationJobPlatformEnd {
  * only pushes after it reads `cancelRequested = false` from this answer.
  *
  * A RENEWAL MUST NOT INVALIDATE THE OPEN LIST'S VERSION: the statement updates the job row, and
- * `readOpenListVersion` fingerprints that table by the columns the list can show, excluding these
- * renewal-only ones (open-list-version.ts).
+ * the table's Open-list counter skips an UPDATE that changed nothing but these renewal-only columns
+ * (`open_list_bump_owner`, migration 0511).
  */
 export async function receiveIntegrationJobProgress(
   prisma: PrismaService,
@@ -1413,7 +1440,7 @@ function progressReport(body: IntegrationJobProgressRequest): {
   let current: IntegrationJobCurrentCheck | null = null;
   if (check != null) {
     const name = check.name;
-    if (name !== 'TASK_ACCEPTANCE' && name !== 'MERGE_CHECK') {
+    if (name !== 'TASK_ACCEPTANCE' && name !== 'MERGE_CHECK' && name !== 'LANDING_CHECK') {
       throw new IntegrationJobRefused('INVALID_RESULT', `unknown check name ${name}`);
     }
     if (![check.index, check.count, check.budgetSeconds].every((n) => Number.isSafeInteger(n) && n >= 1)) {
@@ -1664,7 +1691,7 @@ function outputChunk(body: IntegrationJobOutputRequest): {
     );
   }
   const name = body.check?.name;
-  if (name !== 'TASK_ACCEPTANCE' && name !== 'MERGE_CHECK') {
+  if (name !== 'TASK_ACCEPTANCE' && name !== 'MERGE_CHECK' && name !== 'LANDING_CHECK') {
     throw new IntegrationJobRefused('INVALID_RESULT', `unknown check name ${String(name)}`);
   }
   const index = body.check.index;
@@ -1922,6 +1949,17 @@ export async function applyIntegrationJobResult(
   if (!REPORTABLE_JOB_STATES.includes(state as never) || !isTerminalJobState(state)) {
     throw new IntegrationJobRefused('INVALID_RESULT', `${state} is not a result`);
   }
+  for (const check of body.checks ?? []) {
+    if (check.skipped !== undefined && (check.skipped !== 'PATHS_EXEMPT'
+      || check.name !== 'LANDING_CHECK' || !Array.isArray(check.files) || check.files.length === 0
+      || !check.files.every((file) => typeof file === 'string' && file.length > 0))) {
+      throw new IntegrationJobRefused('INVALID_RESULT', 'a skipped landing check names PATHS_EXEMPT and its files');
+    }
+  }
+  if (body.baselineRed === true && (state !== 'CHECK_FAILED'
+    || !body.checks?.some((check) => check.scope === 'BASELINE'))) {
+    throw new IntegrationJobRefused('INVALID_RESULT', 'baselineRed requires CHECK_FAILED and a BASELINE check');
+  }
   // J2, said before the database says it, so the runner gets the reason rather than a constraint.
   if (state === 'LANDED' && (!body.landedTreeSha || body.landedTreeSha !== body.testedTreeSha)) {
     throw new IntegrationJobRefused(
@@ -2053,8 +2091,29 @@ export async function applyIntegrationJobResult(
     )) {
       throw new IntegrationJobRefused('STALE_CLAIM');
     }
+    if (body.baselineRed === true && job.kind !== 'LAND_TASK') {
+      throw new IntegrationJobRefused('INVALID_RESULT', 'only LAND_TASK may report baselineRed');
+    }
+    if (body.baselineRed === true) {
+      const validSha = (sha: unknown): sha is string => typeof sha === 'string' && /^[0-9a-f]{40}$/.test(sha);
+      if (![body.upstreamSha, body.targetShaBefore, body.checks?.find((check) => check.scope === 'BASELINE')?.treeSha]
+        .every(validSha)) {
+        // K3 runners predate treeSha. Without complete provenance, keep their original per-job
+        // failure rather than rejecting the result or opening a hold we cannot reliably identify.
+        body = {
+          ...body,
+          baselineRed: false,
+          upstreamSha: validSha(body.upstreamSha) ? body.upstreamSha : undefined,
+          targetShaBefore: validSha(body.targetShaBefore) ? body.targetShaBefore : undefined,
+        };
+      }
+    }
+
     // §10.6: OBSERVED and OBSERVE are an observation's alone, and an observation ends only OBSERVED,
     // ERROR or CANCELLED — said by the kind of the row, now that it is read.
+    if (job.kind !== 'LAND_TASK' && body.checks?.some((check) => check.skipped !== undefined)) {
+      throw new IntegrationJobRefused('INVALID_RESULT', 'only LAND_TASK may skip a landing check');
+    }
     const misfit = observationRefusal(job.kind, { state, phase: body.phase ?? null });
     if (misfit) throw new IntegrationJobRefused('INVALID_RESULT', misfit);
     // O-J3: an observation that looked writes what it saw, task by task, with its terminal state.
@@ -2138,7 +2197,8 @@ export async function applyIntegrationJobResult(
     //   * the project, FOR KEY SHARE;
     //   * the tasks its receipts and comment name, FOR KEY SHARE;
     //   * then the binding.
-    if (stoppedLanding) {
+    // K5 needs the same lower-rank parents before enqueueing; its task lock also serializes generations.
+    if (stoppedLanding || body.baselineRed === true) {
       recoveryHeld = await MergeReceiptService.lockLandedRecoveries(
         tx, [job.sessionId, ...repairs.flatMap((repair) => repair.sessionIds)], true);
       await tx.$queryRaw(Prisma.sql`
@@ -2147,7 +2207,7 @@ export async function applyIntegrationJobResult(
         SELECT "id" FROM "task"
          WHERE "id" = ANY(${orderedIds([job.taskId, ...repairs.flatMap((repair) => repair.taskIds)])}::uuid[])
          ORDER BY "id"
-         FOR KEY SHARE`);
+         ${body.baselineRed === true ? Prisma.sql`FOR UPDATE` : Prisma.sql`FOR KEY SHARE`}`);
       await tx.$queryRaw(Prisma.sql`
         SELECT "id" FROM "project_codebase"
          WHERE "project_id" = ${job.projectId}::uuid AND "slot" = 'primary'
@@ -2185,6 +2245,18 @@ export async function applyIntegrationJobResult(
       });
       if (nowDone?.status !== 'DONE') return;
       await enqueueForDoneTask(tx, job.ownerId, job.taskId);
+    };
+    /**
+     * The owner skipped the landing check of this generation while it ran (§2.4 J-S5, in flight):
+     * the stop was asked so the generation without the check could take J3's one place. Queued once
+     * this row is terminal, from what the stop's own line asked — and not for an abandon, which ends
+     * a generation nobody will run again (J-T10).
+     */
+    const queueSkippedLanding = async (endedAs: string): Promise<void> => {
+      if (!stoppedLanding || !cancelRequested || platformEnd !== undefined || job.taskId == null) return;
+      await queueSkippedLandingAfterStop(tx, {
+        id: job.id, ownerId: job.ownerId, projectId: job.projectId, taskId: job.taskId,
+      }, endedAs);
     };
 
     // The task this job is about, read BESIDE the job rather than below it: `task_id` is a history
@@ -2272,6 +2344,7 @@ export async function applyIntegrationJobResult(
       // the reopen has room for its own generation (J-T8) — the same requeue every other terminal
       // result takes below.
       await queueReopenedDone();
+      if (cancelRequested) await queueSkippedLanding('CANCELLED');
       // §4.6 X-E5: the claim is over either way — cleared for a requeue, ended for a stop that was
       // asked — so the item about its silence is answered in this transaction like every other edge.
       await resolveLeaseExpiredItems(tx, job.id);
@@ -2569,6 +2642,7 @@ export async function applyIntegrationJobResult(
       sourceOnUpstream: typeof body.sourceOnUpstream === 'boolean' ? body.sourceOnUpstream : undefined,
       // The same for the other measurement a NOTHING_TO_LAND carries (0410).
       sourceFullyApplied: typeof body.sourceFullyApplied === 'boolean' ? body.sourceFullyApplied : undefined,
+      baselineRed: body.baselineRed === true,
       checks: checks as unknown as Prisma.InputJsonValue,
       conflicts: (body.conflicts ?? []).slice(0, 200),
       errorCode: body.errorCode ?? undefined,
@@ -2643,6 +2717,7 @@ export async function applyIntegrationJobResult(
     // own route (it consumes the marker), so the new generation is exactly the one that DONE would
     // have queued.
     await queueReopenedDone();
+    await queueSkippedLanding(effectiveState);
 
     // §2.6: a failed job is somebody's to look at, and the platform does not retry it by itself.
     let openItemId: string | null = null;
@@ -2752,6 +2827,11 @@ export async function applyIntegrationJobResult(
             select: { sessionId: true },
           }))?.sessionId ?? null
         : null;
+      // A check the platform stopped at its budget: the limit it was stopped at, recorded on the item
+      // so its text can say it without reading a project setting that may have changed since (G6).
+      const stoppedCheckTimeoutSeconds = state === 'CHECK_FAILED' && checks.some((check) => check.timedOut)
+        ? await checkBudgetsOf(tx, job)
+        : null;
       const opened = await recordIntegrationFailure(tx, {
         projectId: job.projectId,
         ownerId: job.ownerId,
@@ -2763,40 +2843,55 @@ export async function applyIntegrationJobResult(
         state: state as 'CONFLICT' | 'CHECK_FAILED' | 'ERROR',
         title: integrationItemTitle(state, job.kind, task?.title ?? candidateTask?.title ?? 'a task', mainBranch,
           candidateRow?.sourceKind ?? null),
-        dedupeKey: integrationDedupeKey(state, job.id),
+        dedupeKey: body.baselineRed === true
+          ? `ICB:${job.serialKey}:${body.upstreamSha}:${body.targetShaBefore}`
+          : integrationDedupeKey(state, job.id),
         // §4.7 H4: when this job is a rerun whose item the clock handed to the owner while it ran, the
         // failure it opens stays theirs — the coordinator's rerun does not carry the decision back.
         heldByOwner: await ownerHoldOnHandledItems(tx, job.id),
-        payload: failurePayload(state, {
-          kind: job.kind,
-          phase: body.phase ?? null,
-          targetRef: job.targetRef,
-          targetSha: body.targetShaBefore ?? null,
-          conflicts: body.conflicts ?? [],
-          checks,
-          errorCode: body.errorCode ?? null,
-          errorDetail,
-          // J-T13: at the payload's TOP level, a field of its own — the delivery text's generator
-          // does not read it, so the replay it does stays byte-for-byte the same.
-          upstreamMovedCommits,
-          outdatedRunner,
-          candidateSourceKind: candidateRow?.sourceKind ?? null,
-          // §4.2 / §2.9: the same rule for the landing session and the round it failed in — the
-          // card reads them, the delivery text never does.
-          landingSessionId,
-          round: job.round ?? null,
-          generation: job.generation,
-          retry: job.retryOfJobId
-            ? {
-                retryOfJobId: job.retryOfJobId,
-                failureClass: job.retryFailureClass,
-                reason: job.retryReason,
-                requestedBySessionId: job.retryRequestedBySessionId,
-                requestedByUserId: job.retryRequestedByUserId,
-              }
-            : null,
-          skippedCheck: skippedMergeCheck(job),
-        }),
+        payload: {
+          ...(body.baselineRed === true ? {
+            baseline: {
+              upstreamSha: body.upstreamSha!, targetSha: body.targetShaBefore!,
+              // Read from the check stored on this job, not mainSyncSha: a source-side absorb includes task work.
+              mergeTreeSha: checks.find((check) => check.scope === 'BASELINE')!.treeSha!,
+              check: checks.find((check) => check.scope === 'BASELINE')!,
+            },
+            heldTaskIds: liveTaskId ? [liveTaskId] : [],
+          } : {}),
+          ...failurePayload(state, {
+            kind: job.kind,
+            phase: body.phase ?? null,
+            targetRef: job.targetRef,
+            targetSha: body.targetShaBefore ?? null,
+            conflicts: body.conflicts ?? [],
+            checks,
+            checkBudgets: stoppedCheckTimeoutSeconds,
+            baselineRed: body.baselineRed === true,
+            errorCode: body.errorCode ?? null,
+            errorDetail,
+            // J-T13: at the payload's TOP level, a field of its own — the delivery text's generator
+            // does not read it, so the replay it does stays byte-for-byte the same.
+            upstreamMovedCommits,
+            outdatedRunner,
+            candidateSourceKind: candidateRow?.sourceKind ?? null,
+            // §4.2 / §2.9: the same rule for the landing session and the round it failed in — the
+            // card reads them, the delivery text never does.
+            landingSessionId,
+            round: job.round ?? null,
+            generation: job.generation,
+            retry: job.retryOfJobId
+              ? {
+                  retryOfJobId: job.retryOfJobId,
+                  failureClass: job.retryFailureClass,
+                  reason: job.retryReason,
+                  requestedBySessionId: job.retryRequestedBySessionId,
+                  requestedByUserId: job.retryRequestedByUserId,
+                }
+              : null,
+            skippedCheck: skippedMergeCheck(job),
+          }),
+        },
       });
       openItemId = opened?.itemId ?? openItemId;
       if (opened) {
@@ -2806,6 +2901,10 @@ export async function applyIntegrationJobResult(
       // opened, in this transaction — the old card ends RETRIED and points at the new failure, which
       // is in front of somebody; nothing about it is closed quietly.
       if (opened) await supersedeHandledItems(tx, job.id, opened.itemId);
+      if (body.baselineRed === true && liveTaskId) await queueBaselineHeld(tx, {
+        ownerId: job.ownerId, projectId: job.projectId, taskId: liveTaskId,
+        sessionId: job.sessionId!, sourceRef: job.sourceRef, runnerId: job.runnerId,
+      });
     }
     // §2.2 J-T5: the task's landing answers what was open about landing it, in this same
     // transaction — beside the receipt that says the work is there, which is the fact the item was
@@ -2827,7 +2926,7 @@ export async function applyIntegrationJobResult(
     // not the answer about a branch the work did not end on. Whether the work that exception is
     // about went in with it is the coordinator's to check, so the item goes back in front of it.
     const rearmedItemId = job.kind === 'LAND_TASK' && job.taskId && receiptState !== null && !leftWorkBehind
-      ? await rearmItemFixedBy(tx, job.taskId)
+      ? await rearmItemFixedBy(tx, job.taskId, job.serialKey)
       : null;
 
     // §2.9 LS2: the facts this result IS — each check's result, a refused push, the answer itself,
@@ -2961,6 +3060,7 @@ async function appendResultEvents(
       data: {
         name: check.name,
         index,
+        ...(check.scope ? { scope: check.scope } : {}),
         startedAt: startedAt.toISOString(),
         derivedFromDuration: true,
       },
@@ -2978,6 +3078,8 @@ async function appendResultEvents(
       data: {
         name: check.name,
         index,
+        ...(check.scope ? { scope: check.scope } : {}),
+        ...(check.skipped ? { skipped: check.skipped, files: check.files } : {}),
         exitCode: check.exitCode,
         expectedExitCode: check.expectedExitCode,
         timedOut: check.timedOut,
@@ -3484,15 +3586,18 @@ function fullyAppliedComment(input: {
     + where;
 }
 
-/** What a person is shown about a failure (§4.2's payload column). */function failurePayload(
+/** What a person is shown about a failure (§4.2's payload column). */export function failurePayload(
   state: string,
   detail: {
     kind: string;
+    baselineRed?: boolean;
     phase: string | null;
     targetRef: string;
     targetSha: string | null;
     conflicts: string[];
     checks: IntegrationCheckResult[];
+    /** The budgets the checks were given, read only when one of them was stopped at its budget. */
+    checkBudgets: CheckBudgets | null;
     errorCode: string | null;
     errorDetail: Record<string, unknown> | null;
     /** J-T13's commits, when a LAND_PROMOTION ended because the upstream moved under it. Its own
@@ -3530,7 +3635,7 @@ function fullyAppliedComment(input: {
   // (J-T1b), and, for a rerun, the generation it was and what it was asked to answer — so a second
   // red is read as a second red, not as a first one.
   const classified = {
-    failureClass: landingFailureClass({ state, checks: detail.checks }),
+    failureClass: landingFailureClass({ state, checks: detail.checks, baselineRed: detail.baselineRed }),
     generation: detail.generation,
     // §4.2's payload: the landing this failure belongs to and the round it failed in, at the top
     // level of every INTEGRATION_* kind. `errorDetail` is quoted verbatim by the delivery text (G6),
@@ -3556,11 +3661,13 @@ function fullyAppliedComment(input: {
     };
   }
   if (state === 'CHECK_FAILED') {
-    const failed = detail.checks.find((check) => check.exitCode !== check.expectedExitCode)
+    const failed = detail.checks.find((check) => !check.skipped && check.exitCode !== check.expectedExitCode)
       ?? detail.checks[detail.checks.length - 1];
+    // A check stopped at its budget carries that budget, so its item says the limit it hit.
+    const budget = failed?.timedOut && detail.checkBudgets ? checkTimeoutSeconds(failed.name, detail.checkBudgets) : null;
     return {
       jobKind: detail.kind,
-      check: failed ?? null,
+      check: failed ? { ...failed, ...(budget != null ? { timeoutSeconds: budget } : {}) } : null,
       branchUnchanged: true,
       ...classified,
     };
@@ -3573,6 +3680,27 @@ function fullyAppliedComment(input: {
     ...(detail.outdatedRunner ? { outdatedRunner: detail.outdatedRunner } : {}),
     ...classified,
   };
+}
+
+type CheckBudgets = Parameters<typeof checkTimeoutSeconds>[1];
+
+/**
+ * The budgets the job's checks run under, from the same columns the claim's command reads them from
+ * (`HELD_CLAIM_COLUMNS`): the task of the job's session, and the job's codebase.
+ */
+async function checkBudgetsOf(
+  tx: Prisma.TransactionClient,
+  job: { sessionId: string | null; codebaseId: string },
+): Promise<CheckBudgets | null> {
+  const rows = await tx.$queryRaw<CheckBudgets[]>(Prisma.sql`
+    SELECT t."acceptance_timeout_seconds" AS "acceptanceTimeoutSeconds",
+           cb."landing_check_timeout_seconds" AS "landingCheckTimeoutSeconds",
+           cb."merge_check_timeout_seconds" AS "mergeCheckTimeoutSeconds"
+      FROM "project_codebase" cb
+      LEFT JOIN "session" s ON s."id" = ${job.sessionId}::uuid
+      LEFT JOIN "task" t ON t."id" = s."task_id"
+     WHERE cb."id" = ${job.codebaseId}::uuid`);
+  return rows[0] ?? null;
 }
 
 /**

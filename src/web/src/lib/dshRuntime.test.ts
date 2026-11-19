@@ -237,7 +237,7 @@ describe('the engine and credentials of DeepSeek Harness', () => {
   it('offers to connect a DeepSeek key when there is none, on a runner that can run Harness', () => {
     const connect = engineChoices(sourcesOn(capable([health()]), [])).find((e) => e.slug === 'dsh')!;
     expect(connect).toMatchObject({ label: 'DeepSeek Harness', provider: null, unavailable: 'Connect a DeepSeek key', fixHref: DSH_CONNECT_HREF });
-    expect(DSH_CONNECT_HREF).toBe('/providers/new/deepseek');
+    expect(DSH_CONNECT_HREF).toBe('/settings/providers/new/deepseek');
     // An old runner says "Update runner" instead (no key could run there either), and it is never
     // among another engine's credentials.
     expect(engineChoices(sourcesOn({ capabilities: [], engines: null }, [])).find((e) => e.slug === 'dsh')).toMatchObject({

@@ -1,0 +1,393 @@
+<!doctype html>
+<html lang="zh">
+<head>
+<meta charset="utf-8">
+<title>Welcome email — design board</title>
+<style>
+  * { box-sizing: border-box; }
+  body { margin: 0; background: #eceef1; font: 15px/1.6 Inter, "Noto Sans SC", sans-serif; color: #1d1d1f; }
+  .board { width: 1640px; padding: 8px 0 40px; }
+  .b-part { margin: 32px 40px 0; padding: 32px 36px 36px; background: #fff; border-radius: 18px; font: 15px/1.6 Inter, "Noto Sans SC", sans-serif; }
+  .b-part h2 { margin: 0 0 4px; font-size: 26px; }
+  .b-sub { color: #6e6e73; margin: 0 0 24px; }
+  .b-row { display: flex; gap: 32px; align-items: flex-start; }
+  .b-col { flex: 1; min-width: 0; }
+  .b-cap { font-weight: 600; font-size: 17px; margin: 0 0 10px; }
+  .b-cap small { font-weight: 400; color: #6e6e73; font-size: 14px; margin-left: 8px; }
+  .b-notes { margin: 18px 0 0; padding: 0; list-style: none; }
+  .b-notes li { display: flex; gap: 10px; margin: 8px 0; }
+  .b-m { flex: none; width: 24px; height: 24px; border-radius: 50%; background: #e5484d; color: #fff; font: 600 13px/24px Inter, sans-serif; text-align: center; }
+  .b-pin { position: absolute; width: 24px; height: 24px; border-radius: 50%; background: #e5484d; color: #fff; font: 600 13px/24px Inter, sans-serif; text-align: center; box-shadow: 0 0 0 3px #fff; z-index: 3; }
+  .b-ring { position: absolute; border: 2px dashed #e5484d; border-radius: 10px; pointer-events: none; z-index: 2; }
+  .b-rel { position: relative; }
+  .b-tag { display: inline-block; padding: 1px 10px; border-radius: 999px; font-size: 13px; font-weight: 600; }
+  .b-tag.red { background: #fde8e8; color: #c62828; }
+  .b-tag.green { background: #e3f6e8; color: #1e7b34; }
+  .b-tag.grey { background: #f0f0f2; color: #6e6e73; }
+
+  /* ① flow */
+  .b-flow { display: flex; align-items: stretch; gap: 0; margin: 6px 0 4px; }
+  .b-node { width: 220px; padding: 14px 16px; border: 1.5px solid #d2d2d7; border-radius: 12px; background: #fafafa; font-size: 14px; }
+  .b-node b { display: block; font-size: 15px; margin-bottom: 2px; }
+  .b-node.new { border-color: #0a7cff; background: #f0f7ff; }
+  .b-node.dead { border-style: dashed; color: #8e8e93; background: #fff; }
+  .b-arrow { flex: none; width: 44px; display: flex; align-items: center; justify-content: center; color: #8e8e93; font-size: 22px; }
+  .b-lane { display: flex; gap: 16px; align-items: center; margin: 14px 0; }
+  .b-lane-label { width: 90px; flex: none; font-weight: 700; }
+  code, .mono { font-family: "JetBrains Mono", "DejaVu Sans Mono", monospace; font-size: 13px; }
+  code { background: #f2f2f5; padding: 1px 5px; border-radius: 5px; }
+
+  /* ② mail client frame */
+  .b-mailwin { border: 1px solid #d2d2d7; border-radius: 12px; overflow: hidden; background: #f6f8fc; }
+  .b-mailbar { display: flex; gap: 6px; padding: 10px 14px; background: #e9ecf2; }
+  .b-mailbar i { width: 11px; height: 11px; border-radius: 50%; background: #c7cbd3; display: block; }
+  .b-mailhead { padding: 16px 24px 10px; background: #fff; border-bottom: 1px solid #eceef1; }
+  .b-mailhead .subj { font-size: 21px; font-weight: 500; margin-bottom: 8px; }
+  .b-mailhead .from { font-size: 13px; color: #5f6368; }
+  .b-mailhead .from b { color: #1d1d1f; }
+  .b-mailbody { padding: 26px 0 30px; background: #fff; }
+  /* the email itself: 600 px single column, inline-style look */
+  .em { width: 560px; margin: 0 auto; font: 15px/1.6 Inter, Helvetica, Arial, sans-serif; color: #1f2328; }
+  .em-logo { display: flex; align-items: center; gap: 8px; font-weight: 700; font-size: 18px; margin-bottom: 22px; }
+  .em-logo span.o { width: 26px; height: 26px; border-radius: 50%; border: 3px solid #1f2328; position: relative; }
+  .em-logo span.o::after { content: ""; position: absolute; width: 8px; height: 8px; border-radius: 50%; background: #0a7cff; top: -6px; right: -4px; }
+  .em h1 { font-size: 24px; line-height: 1.3; margin: 0 0 14px; }
+  .em p { margin: 0 0 14px; }
+  .em .muted { color: #59636e; }
+  .em .btn { display: inline-block; background: #1f2328; color: #fff; padding: 11px 22px; border-radius: 8px; font-weight: 600; text-decoration: none; margin: 4px 0 22px; }
+  .em .box { border: 1px solid #e4e7eb; border-radius: 10px; padding: 16px 18px; margin: 0 0 18px; }
+  .em .step { display: flex; gap: 12px; margin: 0 0 12px; }
+  .em .step:last-child { margin-bottom: 0; }
+  .em .step .n { flex: none; width: 24px; height: 24px; border-radius: 50%; background: #eef1f4; font-weight: 700; font-size: 13px; line-height: 24px; text-align: center; }
+  .em .step b { display: block; }
+  .em .apps a { color: #0a63d1; text-decoration: none; margin-right: 18px; font-weight: 500; }
+  .em .foot { border-top: 1px solid #e4e7eb; margin-top: 22px; padding-top: 14px; font-size: 12.5px; color: #6e7781; line-height: 1.55; }
+  .em a.l { color: #0a63d1; text-decoration: none; }
+
+  /* phone */
+  .b-phone { width: 393px; height: 852px; border-radius: 54px; border: 12px solid #1d1d1f; background: #fff; overflow: hidden; position: relative; flex: none; }
+  .b-phone .sb { height: 50px; display: flex; justify-content: space-between; align-items: flex-end; padding: 0 30px 6px; font-weight: 600; font-size: 15px; }
+  .b-phone .nav { padding: 6px 16px 10px; color: #0a7cff; font-size: 16px; border-bottom: 1px solid #eee; }
+  .b-phone .ph-head { padding: 12px 16px 8px; }
+  .b-phone .ph-head .subj { font-size: 20px; font-weight: 600; line-height: 1.3; }
+  .b-phone .ph-head .from { font-size: 13px; color: #6e6e73; margin-top: 4px; }
+  .b-phone .em { width: auto; margin: 0 16px; font-size: 15px; transform-origin: top left; }
+  .b-phone .em h1 { font-size: 21px; }
+
+  /* variants */
+  .b-var { border: 1px solid #e4e7eb; border-radius: 12px; padding: 14px 16px; background: #fbfbfc; font-size: 14px; }
+  .b-var .k { font-weight: 600; margin-bottom: 4px; }
+  .b-var .v { font-family: Inter, sans-serif; color: #1f2328; background: #fff; border: 1px solid #eceef1; border-radius: 8px; padding: 8px 10px; margin-top: 6px; }
+
+  /* ③ admin page (drawn after AdminSignInPage) */
+  .ad { border: 1px solid #d2d2d7; border-radius: 12px; overflow: hidden; background: #fff; font: 14px/1.5 Inter, sans-serif; }
+  .ad-top { display: flex; gap: 22px; padding: 14px 24px 0; border-bottom: 1px solid #ececef; }
+  .ad-top a { padding: 0 2px 10px; color: #6e6e73; text-decoration: none; font-weight: 500; }
+  .ad-top a.on { color: #1d1d1f; border-bottom: 2px solid #1d1d1f; }
+  .ad-in { padding: 18px 28px 26px; }
+  .ad-in h1 { font-size: 22px; margin: 0 0 14px; }
+  .ad-card { border: 1px solid #e5e5ea; border-radius: 12px; }
+  .ad-card-head { display: flex; justify-content: space-between; align-items: center; padding: 14px 18px; border-bottom: 1px solid #efeff2; font-weight: 600; font-size: 15px; }
+  .ad-card-body { padding: 16px 18px 18px; display: flex; flex-direction: column; gap: 16px; }
+  .ad-rowx { display: flex; justify-content: space-between; align-items: center; gap: 20px; }
+  .ad-label { font-weight: 600; font-size: 13.5px; margin-bottom: 5px; }
+  .ad-hint { color: #6e6e73; font-size: 12.5px; margin-top: 4px; }
+  .ad-input { border: 1px solid #d2d2d7; border-radius: 8px; padding: 7px 10px; font-size: 14px; color: #1d1d1f; background: #fff; }
+  .ad-input.ph { color: #a1a1a6; }
+  .ad-grid { display: grid; grid-template-columns: 2fr 1fr 1.3fr; gap: 12px; }
+  .ad-grid2 { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
+  .ad-seg { display: inline-flex; border: 1px solid #d2d2d7; border-radius: 8px; overflow: hidden; }
+  .ad-seg span { padding: 7px 12px; font-size: 13.5px; }
+  .ad-seg span.on { background: #1d1d1f; color: #fff; }
+  .ad-sw { width: 40px; height: 22px; border-radius: 11px; background: #34c759; position: relative; flex: none; }
+  .ad-sw::after { content: ""; position: absolute; width: 18px; height: 18px; border-radius: 50%; background: #fff; top: 2px; right: 2px; }
+  .ad-btn { display: inline-block; border: 1px solid #d2d2d7; border-radius: 8px; padding: 6px 14px; font-weight: 500; background: #fff; }
+  .ad-btn.pri { background: #1d1d1f; color: #fff; border-color: #1d1d1f; }
+  .ad-ok { background: #effaf2; border: 1px solid #c8ebd2; color: #1e7b34; border-radius: 8px; padding: 8px 12px; font-size: 13px; }
+  .ad-err { background: #fff4f4; border: 1px solid #f5cccc; color: #b42318; border-radius: 8px; padding: 8px 12px; font-size: 13px; }
+  .ad-sep { border-top: 1px solid #efeff2; }
+  .ad-stat { display: flex; justify-content: space-between; align-items: center; font-size: 13.5px; }
+
+  /* ④ users row (drawn after the owner's screenshot) */
+  .ur { display: grid; grid-template-columns: 330px 150px 170px 140px 140px 1fr; align-items: center; padding: 16px 20px; border-top: 1px solid #ececef; font: 15px/1.4 Inter, sans-serif; }
+  .ur .av { width: 42px; height: 42px; border-radius: 50%; background: #c7c7cc; color: #fff; font-weight: 600; display: flex; align-items: center; justify-content: center; flex: none; }
+  .ur .who { display: flex; gap: 12px; align-items: center; }
+  .ur .who small { display: block; color: #8e8e93; font-size: 13px; }
+  .ur .dot { display: inline-block; width: 8px; height: 8px; border-radius: 50%; background: #34c759; margin-right: 6px; }
+  .ur .sub { display: block; color: #8e8e93; font-size: 12.5px; margin-top: 2px; }
+  .ur .act { display: flex; justify-content: flex-end; gap: 12px; align-items: center; }
+  .ur .va { border: 1px solid #d2d2d7; border-radius: 8px; padding: 4px 12px; }
+  .menu { position: absolute; right: 20px; top: 66px; width: 230px; background: #fff; border: 1px solid #e0e0e5; border-radius: 10px; box-shadow: 0 10px 30px rgba(0,0,0,.12); padding: 6px; font-size: 14px; z-index: 1; }
+  .menu div { padding: 7px 10px; border-radius: 6px; }
+  .menu div.hl { background: #f0f5ff; color: #0a63d1; font-weight: 500; }
+  .menu hr { border: 0; border-top: 1px solid #eee; margin: 4px 0; }
+
+  /* ⑤ decisions */
+  table.b-t { border-collapse: collapse; width: 100%; font-size: 14.5px; }
+  table.b-t th, table.b-t td { border: 1px solid #e4e7eb; padding: 10px 12px; text-align: left; vertical-align: top; }
+  table.b-t th { background: #f6f7f9; }
+  table.b-t td.rec { background: #effaf2; font-weight: 600; }
+  ol.b-ship { margin: 0; padding-left: 22px; }
+  ol.b-ship li { margin: 6px 0; }
+  .b-term { margin: 0; background: #1d1f23; color: #e6e6e6; border-radius: 10px; padding: 14px 16px; font: 13px/1.75 "JetBrains Mono", "DejaVu Sans Mono", monospace; white-space: pre-wrap; }
+  .b-term .c { color: #8b949e; } .b-term .ok { color: #7ee787; } .b-term .err { color: #ff8b8b; }
+</style>
+</head>
+<body>
+<div class="board">
+
+<!-- ① -->
+<section class="b-part" id="part-1">
+  <h2>① 今天 vs 新：账号建出来之后</h2>
+  <p class="b-sub">今天 Orbit 完全没有发信能力（无 SMTP、无邮件服务商、无依赖），新用户注册后什么也收不到。新方案在建账号的同一事务里落一行 outbox，事务提交后由后台 worker 发出。</p>
+
+  <div class="b-lane">
+    <div class="b-lane-label">今天</div>
+    <div class="b-flow">
+      <div class="b-node"><b>Continue with Google</b>首次登录，开放注册</div>
+      <div class="b-arrow">→</div>
+      <div class="b-node"><b>一个事务</b><code>user</code> + <code>user_identity</code> + Activity</div>
+      <div class="b-arrow">→</div>
+      <div class="b-node"><b>进到 Orbit</b>托管 runner 开着时顺带建 runner</div>
+      <div class="b-arrow">→</div>
+      <div class="b-node dead"><b>邮箱</b>什么也没有 <span class="b-tag red">今天</span></div>
+    </div>
+  </div>
+
+  <div class="b-lane">
+    <div class="b-lane-label">新</div>
+    <div class="b-flow">
+      <div class="b-node"><b>建账号</b>Google 注册 · 管理员建账号<br><span style="color:#8e8e93">（/setup 首个管理员不发）</span></div>
+      <div class="b-arrow">→</div>
+      <div class="b-node new"><b>同一事务 +1 行</b><code>email_outbox</code><br>WELCOME，每个账号一行</div>
+      <div class="b-arrow">→</div>
+      <div class="b-node new"><b>发送 worker</b>SKIP LOCKED 取行<br>发时才渲染，失败重试 3 次</div>
+      <div class="b-arrow">→</div>
+      <div class="b-node new"><b>Resend API</b>管理员在 Admin → Email 配的 key 与发件人</div>
+      <div class="b-arrow">→</div>
+      <div class="b-node new"><b>收件箱</b>Welcome to Orbit <span class="b-tag green">新</span></div>
+    </div>
+  </div>
+
+  <ul class="b-notes">
+    <li><span class="b-m">1</span><span>入队与建账号同生共死：账号在，行就在；唯一键保证并发首登、重复点击都只有一封。</span></li>
+    <li><span class="b-m">2</span><span>通道没开或欢迎邮件开关关着：行记 <code>SKIPPED</code>，之后打开也不补发。开启前已有的账号一律不发。</span></li>
+    <li><span class="b-m">3</span><span>行里只存 kind / 收件人 / 状态，不存正文和任何密钥；正文发送时按当时的部署状态渲染。</span></li>
+  </ul>
+</section>
+
+<!-- ② -->
+<section class="b-part" id="part-2">
+  <h2>② 邮件本身（英文，HTML + 纯文本两份）</h2>
+  <p class="b-sub">示例数据：Maya Chen，Google 开放注册，部署 orbit.example.com，托管 runner 开着。</p>
+  <div class="b-row">
+    <div class="b-col b-rel" id="mailwrap">
+      <div class="b-cap">桌面邮件客户端 <small>单列 560px，内联样式，无外链图片</small></div>
+      <div class="b-mailwin">
+        <div class="b-mailbar"><i></i><i></i><i></i></div>
+        <div class="b-mailhead">
+          <div class="subj" id="m-subj">Welcome to Orbit, Maya</div>
+          <div class="from"><b>Orbit</b> &lt;orbit@example.com&gt; · to maya@example.com · reply-to admin@example.com</div>
+        </div>
+        <div class="b-mailbody">
+          <div class="em">
+            <div class="em-logo"><span class="o"></span>Orbit</div>
+            <h1>Your Orbit account is ready</h1>
+            <p id="m-where">Hi Maya, an account for <b>maya@example.com</b> is open on <a class="l" href="#">orbit.example.com</a>. Sign in with Google, using that same address.</p>
+            <a class="btn" id="m-btn" href="#">Open Orbit</a>
+            <div class="box" id="m-steps">
+              <div class="step"><span class="n">1</span><div><b>Your runner is being prepared</b><span class="muted">Agents run on a machine of their own. This deployment sets one up for you, so there is nothing to install.</span></div></div>
+              <div class="step"><span class="n">2</span><div><b>Start your first session</b><span class="muted">Pick a workspace, describe what you want done, and an agent starts working on it.</span></div></div>
+              <div class="step"><span class="n">3</span><div><b>Keep an eye on it from anywhere</b><span class="muted">Turn tasks into tracked work and get notified when an agent needs you.</span></div></div>
+            </div>
+            <p class="apps" id="m-apps"><span class="muted" style="margin-right:12px">Get the apps:</span><a href="#">macOS</a><a href="#">iPhone</a><a href="#">Android</a></p>
+            <div class="foot" id="m-foot">You are receiving this one-time email because an account was created for maya@example.com on orbit.example.com. If that wasn't you, reply to this email to reach the administrator.</div>
+          </div>
+        </div>
+      </div>
+      <div class="b-pin" style="left:-12px;top:96px">1</div>
+      <div class="b-pin" style="left:-12px;top:286px">2</div>
+      <div class="b-pin" style="left:-12px;top:355px">3</div>
+      <div class="b-pin" style="left:-12px;top:447px">4</div>
+      <div class="b-pin" style="left:-12px;top:704px">5</div>
+      <div class="b-pin" style="left:-12px;top:776px">6</div>
+    </div>
+
+    <div class="b-phone">
+      <div class="sb"><span>9:41</span><span>●●● ▮</span></div>
+      <div class="nav">‹ Inbox</div>
+      <div class="ph-head">
+        <div class="subj">Welcome to Orbit, Maya</div>
+        <div class="from">Orbit · to me</div>
+      </div>
+      <div class="em" style="margin-top:12px">
+        <div class="em-logo"><span class="o"></span>Orbit</div>
+        <h1>Your Orbit account is ready</h1>
+        <p>Hi Maya, an account for <b>maya@example.com</b> is open on <a class="l" href="#">orbit.example.com</a>. Sign in with Google, using that same address.</p>
+        <a class="btn" href="#" style="display:block;text-align:center">Open Orbit</a>
+        <div class="box">
+          <div class="step"><span class="n">1</span><div><b>Your runner is being prepared</b><span class="muted">Nothing to install.</span></div></div>
+          <div class="step"><span class="n">2</span><div><b>Start your first session</b></div></div>
+          <div class="step"><span class="n">3</span><div><b>Keep an eye on it from anywhere</b></div></div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <ul class="b-notes">
+    <li><span class="b-m">1</span><span>主题带名字（Google 给的 given name；没有就用邮箱 @ 前面那段）。From 与 Reply-To 来自 Admin → Email；Reply-To 默认最早的管理员，新人回信能找到人。</span></li>
+    <li><span class="b-m">2</span><span>开门见山：哪个部署、哪个邮箱、用什么登录。登录方式按账号实际情况三选一（见下方变体）。<b>永远不放密码、token 或一次性链接。</b></span></li>
+    <li><span class="b-m">3</span><span>唯一主按钮 Open Orbit，指向本部署的 <code>PUBLIC_ORIGIN</code>。</span></li>
+    <li><span class="b-m">4</span><span>三步上手。第 1 步按部署状态二选一：托管 runner 开着 → "being prepared, nothing to install"；没开 → "Connect a computer: install the runner from Settings → Runners"。</span></li>
+    <li><span class="b-m">5</span><span>客户端下载链接到本部署自己的 <code>/dl</code>，与 runner 更新同一来源。</span></li>
+    <li><span class="b-m">6</span><span>页脚说明为什么收到、不是本人怎么办；一次性事务邮件，不放退订链接。</span></li>
+  </ul>
+
+  <div class="b-row" style="margin-top:22px">
+    <div class="b-col b-var">
+      <div class="k">变体 A · Google 注册（上图）</div>
+      <div class="v">Sign in with Google, using that same address.</div>
+    </div>
+    <div class="b-col b-var">
+      <div class="k">变体 B · 管理员建的、有密码</div>
+      <div class="v">Alex Rivera added you to Orbit. Sign in with this email address and the password Alex gave you.</div>
+    </div>
+    <div class="b-col b-var">
+      <div class="k">变体 C · 管理员建的、只能 Google（passwordless）</div>
+      <div class="v">Alex Rivera added you to Orbit. Sign in with Google, using this address.</div>
+    </div>
+    <div class="b-col b-var">
+      <div class="k">第 1 步 · 没开托管 runner</div>
+      <div class="v"><b>Connect a computer</b> — install the runner from Settings → Runners. Your agents run there, with that machine's access.</div>
+    </div>
+  </div>
+</section>
+
+<!-- ③ -->
+<section class="b-part" id="part-3">
+  <h2>③ 管理员配置：Admin → Email（新页，Resend）</h2>
+  <p class="b-sub">结构照搬现有的 Admin → Sign-in 页（同一张 orbit-card，同一套「密钥已存 / 解不开请重填」语义），不新造外观。保存即生效，不用重启。</p>
+  <div class="b-row">
+    <div class="b-col b-rel" style="flex:1.35">
+      <div class="ad">
+        <div class="ad-top"><a>Users</a><a>Sign-in</a><a class="on">Email</a><a>Integrations</a></div>
+        <div class="ad-in">
+          <h1>Email</h1>
+          <div class="ad-card">
+            <div class="ad-card-head"><span>Outgoing email</span><span class="b-tag green">On</span></div>
+            <div class="ad-card-body">
+              <div class="ad-rowx" id="a-on">
+                <div><div class="ad-label">Send email from this deployment</div><div class="ad-hint">Orbit sends through Resend. Nothing is sent while this is off.</div></div>
+                <div class="ad-sw"></div>
+              </div>
+              <div id="a-key"><div class="ad-label">Resend API key</div><div class="ad-input ph">Saved — enter a new one to replace it</div><div class="ad-hint">A key with sending access is enough. It is never shown again; leave this empty to keep it. <span style="color:#0a63d1">Create a key in Resend</span></div></div>
+              <div class="ad-grid2" id="a-from">
+                <div><div class="ad-label">From</div><div class="ad-input">Orbit &lt;orbit@example.com&gt;</div><div class="ad-hint">Its domain must be verified in Resend.</div></div>
+                <div><div class="ad-label">Reply-To</div><div class="ad-input ph">admin@example.com</div><div class="ad-hint">Empty: the first administrator's address.</div></div>
+              </div>
+              <div class="ad-sep"></div>
+              <div class="ad-rowx" id="a-welcome">
+                <div><div class="ad-label">Send a welcome email to new accounts</div><div class="ad-hint">One email when an account is created, by Google sign-up or in Users. Accounts that already exist don't get one.</div></div>
+                <div class="ad-sw"></div>
+              </div>
+              <div class="ad-rowx" id="a-test">
+                <div class="ad-ok">Test email sent to admin@example.com — Resend id <span class="mono">4ef9a417…c33c</span></div>
+                <div style="display:flex;gap:10px;flex:none"><span class="ad-btn">Send test email</span><span class="ad-btn pri">Save</span></div>
+              </div>
+              <div class="ad-sep"></div>
+              <div class="ad-stat" id="a-stat"><span><b>Last 7 days</b> · Sent 12 · <span style="color:#b42318">Failed 1</span></span><span style="color:#0a63d1">Show failures</span></div>
+            </div>
+          </div>
+        </div>
+      </div>
+      <div class="b-pin" style="left:-30px;top:191px">1</div>
+      <div class="b-pin" style="left:-30px;top:251px">2</div>
+      <div class="b-pin" style="left:-30px;top:352px">3</div>
+      <div class="b-pin" style="left:-30px;top:470px">4</div>
+      <div class="b-pin" style="left:-30px;top:528px">5</div>
+      <div class="b-pin" style="left:-30px;top:590px">6</div>
+    </div>
+    <div class="b-col">
+      <div class="b-cap">出错时（同一位置换成红框）</div>
+      <div class="ad-err" style="margin-bottom:12px">Couldn't send the test email: Resend answered 403 — The example.com domain is not verified. Verify it in Resend, then try again.</div>
+      <div class="ad-err" style="margin-bottom:12px">Couldn't send the test email: Resend answered 401 — API key is invalid.</div>
+      <div class="ad-err" style="margin-bottom:12px">The saved API key can't be decrypted (PROVIDER_SECRET_KEY changed). Paste it again — sending is paused until you do.</div>
+      <div class="b-cap" style="margin-top:18px">卡头 Off 时说明缺什么</div>
+      <div class="ad-card" style="margin-bottom:22px"><div class="ad-card-head"><span>Outgoing email</span><span class="b-tag grey">Off</span></div><div class="ad-card-body"><div class="ad-hint" style="margin:0">Add a Resend API key and a From address to send email.</div></div></div>
+      <ul class="b-notes" style="margin-top:0">
+        <li><span class="b-m">1</span><span>总开关。On 的条件：开关开、key 已存且能解密、From 已填。关着时新账号行记 SKIPPED，不积压。</span></li>
+        <li><span class="b-m">2</span><span>Resend API key 用 <code>PROVIDER_SECRET_KEY</code> 加密存库，API 只回 <code>hasApiKey</code>，永不回传、不进日志。</span></li>
+        <li><span class="b-m">3</span><span>From 的域名必须先在 Resend 验证；Reply-To 默认最早的管理员，新人回信能找到人。</span></li>
+        <li><span class="b-m">4</span><span>欢迎邮件单独一个开关，默认开（通道开着才生效）。</span></li>
+        <li><span class="b-m">5</span><span>发测试邮件给当前管理员，当场显示 Resend 的回答（邮件 id 或 HTTP 状态 + message），排错不用翻日志。</span></li>
+        <li><span class="b-m">6</span><span>近 7 天统计；Show failures 列出收件人、时间、错误原文。</span></li>
+      </ul>
+    </div>
+  </div>
+</section>
+
+<!-- ④ -->
+<section class="b-part" id="part-4">
+  <h2>④ Users 列表：只在失败时出声</h2>
+  <p class="b-sub">成功不加任何东西（与你截图里的行完全一样）。失败（重试 3 次后）在状态下多一行灰字，⋯ 菜单多一项手动重发。</p>
+  <div class="b-rel" style="border:1px solid #e5e5ea;border-radius:12px;overflow:visible;background:#fff">
+    <div class="ur" style="border-top:0">
+      <div class="who"><div class="av">M</div><div>Maya Chen<small>maya@example.com</small></div></div>
+      <div>Google</div>
+      <div><span class="dot"></span>Active</div>
+      <div>2h ago</div>
+      <div>Nov 11, 2026</div>
+      <div class="act"><span class="va">View as</span><span>⋮</span></div>
+    </div>
+    <div class="ur">
+      <div class="who"><div class="av">J</div><div>Jordan Lee<small>jordan@example.org</small></div></div>
+      <div>Google</div>
+      <div><span class="dot"></span>Active<span class="sub" id="u-fail">Welcome email failed</span></div>
+      <div>5m ago</div>
+      <div>Nov 11, 2026</div>
+      <div class="act"><span class="va">View as</span><span style="background:#f0f0f2;border-radius:6px;padding:0 6px">⋮</span></div>
+    </div>
+    <div class="menu" style="top:150px">
+      <div>Reset password</div>
+      <div>Access tokens</div>
+      <div>Update wiki documents…</div>
+      <div>Remove Feishu app</div>
+      <div>Unlink Google</div>
+      <div class="hl">Send welcome email</div>
+      <div>Make admin</div>
+      <hr>
+      <div style="color:#c62828">Disable</div>
+      <div style="color:#c62828">Delete</div>
+    </div>
+    <div class="b-pin" style="left:452px;top:104px">1</div>
+    <div class="b-pin" style="right:262px;top:343px">2</div>
+  </div>
+  <ul class="b-notes" style="margin-top:250px">
+    <li><span class="b-m">1</span><span>悬停灰字显示 Resend 的错误原文和最后一次尝试时间。</span></li>
+    <li><span class="b-m">2</span><span>Send welcome email：失败或 SKIPPED 时可用，把该账号的行重置为 PENDING；已发送的不出现这一项（不重复发）；没配 Resend 时禁用并提示 Email is not configured on this deployment。</span></li>
+  </ul>
+</section>
+
+<!-- ⑤ -->
+<section class="b-part" id="part-5">
+  <h2>⑤ 已拍板（2026-11-11）</h2>
+  <table class="b-t">
+    <tr><th style="width:170px">#</th><th>决定</th></tr>
+    <tr><td>D1 发信通道</td><td class="rec">Resend HTTP API（<code>POST https://api.resend.com/emails</code>，带 Idempotency-Key 防重发）</td></tr>
+    <tr><td>D2 配置放哪</td><td class="rec">管理后台 Admin → Email 页：API key 加密存库，保存即生效，可当场发测试邮件</td></tr>
+    <tr><td>D3 管理员建的账号</td><td class="rec">也发，写明 "{admin} added you" 和登录方式</td></tr>
+    <tr><td>D4 失败处理</td><td class="rec">自动重试 3 次 + Users 行内灰字 + ⋯ 菜单手动重发</td></tr>
+  </table>
+
+  <h2 style="margin-top:30px;font-size:22px">落地（按代价排）</h2>
+  <ol class="b-ship">
+    <li><b>模板 + 渲染函数</b>（纯函数；HTML/纯文本快照测试，覆盖 3 种登录方式 × 托管 runner 开/关）—— 小</li>
+    <li><b>Resend 客户端 + Email 设置页 + 测试邮件</b>（<code>email_settings</code> 迁移、加密、API、web 页；fetch 与结果分类；self-hosting 文档）—— 中</li>
+    <li><b>outbox + worker</b>：<code>email_outbox</code> 迁移，建账号事务内入队，SKIP LOCKED 发送、重试、Activity；pg spec 证明并发首登只一行、未配置记 SKIPPED、两个 worker 不重复发 —— 中</li>
+    <li><b>Users 行失败提示 + 重发菜单</b> —— 小</li>
+  </ol>
+</section>
+
+</div>
+</body>
+</html>

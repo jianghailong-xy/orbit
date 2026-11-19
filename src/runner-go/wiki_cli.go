@@ -140,21 +140,24 @@ Options:
 
 ` + wikiNoteDescription + `
 `,
-	"draft": `orbit wiki draft — draft a rewrite of wiki sections from main, in a wiki chat
+	"draft": `orbit wiki draft — draft a rewrite of wiki sections from main, or a plan change, in a wiki chat
 
 Usage:
   orbit wiki draft --kind rewrite --section DOC/KEY... --reason TEXT --idempotency-key KEY [--replaces ID]
                    [--change JSON] [--json]
 
 Options:
-  --kind KIND              rewrite: sections that lag behind main, written again from it. plan is not
-                           open yet. Required
+  --kind KIND              rewrite: sections that lag behind main, written again from it. plan: a change
+                           to how a document is planned or written, sent as --change. Required
   --section DOC/KEY        A written section of the confirmed plan: the document's slug and the
                            section's key. Repeatable, 1 to ` + fmt.Sprint(wikiDraftSectionsMax) + `
   --reason TEXT            Why, in a sentence or two; the card shows it. Required
   --idempotency-key KEY    Required: the same key with the same request answers with the card it made
   --replaces ID            The open card of this chat that this one replaces
-  --change JSON            plan: the change, as a JSON object shaped as a plan proposal's (not open yet)
+  --change JSON            plan: the change, a JSON object { docs, categories? }: the documents as they
+                           should read, several in one card (a split sends the document without the
+                           sections that move, and a new document holding them). A writing requirement
+                           goes into the covers of the sections it is for
   --json
 
 ` + wikiDraftDescription + `
@@ -178,102 +181,6 @@ non-zero when any op is still without a verdict then: those ops keep waiting, an
 for them again. A server that does not verify on its own is too old for this command, which says so
 and verifies nothing.
 `,
-}
-
-// wikiCLICapabilities are listed inside a session only (SessionOnly): every one of them reads or
-// proposes as the session it runs in, and a terminal outside one has nothing to act for.
-var wikiCLICapabilities = []cliCapabilitySpec{
-	{
-		Tool:  "wiki_search",
-		Argv:  []string{"orbit", "wiki", "search"},
-		Usage: "orbit wiki search <query> [--kind KIND]... [--topic SLUG] [--path PATH]... [--limit N] [--json]",
-		Arguments: []string{
-			"[query] (required; the words to look for, or one repo-relative path)",
-			"--kind <" + strings.Join(wikiEntryKinds, "|") + "> (kinds; repeatable)",
-			"--topic <slug>",
-			"--path <repo-relative path> (paths; repeatable)",
-			"--limit <n> (1-" + fmt.Sprint(wikiSearchLimitMax) + ")",
-			"--json",
-		},
-		SessionOnly: true,
-	},
-	{
-		Tool:  "wiki_get",
-		Argv:  []string{"orbit", "wiki", "get"},
-		Usage: "orbit wiki get <id>[,<id>...] [--include WHAT]... [--json]",
-		Arguments: []string{
-			"[ids] (required; 1 to " + fmt.Sprint(wikiGetIDsMax) + " entry ids, comma-separated or repeated)",
-			"--include <" + strings.Join(append(append([]string{}, wikiIncludes...), "none"), "|") + "> (repeatable; default sources)",
-			"--json",
-		},
-		SessionOnly: true,
-	},
-	{
-		Tool:  "wiki_propose",
-		Argv:  []string{"orbit", "wiki", "propose"},
-		Usage: "orbit wiki propose (--ops JSON | --ops-file -) [--rationale TEXT | --rationale-file -] [--idempotency-key KEY] [--dry-run] [--replaces ID] [--json]",
-		Arguments: []string{
-			`--ops <json> | --ops-file - (required; the ops array, or a whole {"ops":...} body)`,
-			"--rationale <text> | --rationale-file - (required)",
-			"--idempotency-key <key> (required)",
-			"--dry-run (dryRun)",
-			"--replaces <card id> (in a wiki chat)",
-			"--json",
-		},
-		Mutates:     true,
-		SessionOnly: true,
-	},
-	{
-		Tool:  "wiki_note",
-		Argv:  []string{"orbit", "wiki", "note"},
-		Usage: "orbit wiki note (<text> | --text TEXT | --text-file -) [--path PATH]... [--corrects ID] [--replaces ID] [--json]",
-		Arguments: []string{
-			"[text] | --text <text> | --text-file - (required; one claim, at most " + fmt.Sprint(wikiNoteTextMaxChars) + " characters)",
-			"--path <repo-relative path> (paths; repeatable, at most " + fmt.Sprint(wikiNotePathsMax) + ")",
-			"--corrects <entry id>",
-			"--replaces <card id> (in a wiki chat)",
-			"--json",
-		},
-		Mutates:     true,
-		SessionOnly: true,
-	},
-	{
-		Tool:  "wiki_draft",
-		Argv:  []string{"orbit", "wiki", "draft"},
-		Usage: "orbit wiki draft --kind rewrite --section DOC/KEY... --reason TEXT --idempotency-key KEY [--replaces ID] [--change JSON] [--json]",
-		Arguments: []string{
-			"--kind <" + strings.Join(wikiDraftKinds, "|") + "> (required; plan is not open yet)",
-			"--section <doc/key> (sections; repeatable, 1 to " + fmt.Sprint(wikiDraftSectionsMax) + ")",
-			"--reason <text> (required)",
-			"--idempotency-key <key> (required)",
-			"--replaces <card id>",
-			"--change <json> (plan: the change; not open yet)",
-			"--json",
-		},
-		Mutates:     true,
-		SessionOnly: true,
-	},
-	{
-		// A verb with no MCP tool beside it (contract `agentSurface.verify.tool`): it waits for the server's
-		// verdicts, which is a command's wait, so its description is its own rather than a descriptor's.
-		Tool:  "wiki_verify",
-		Argv:  []string{"orbit", "wiki", "verify"},
-		Usage: "orbit wiki verify --space ID [--json]",
-		Arguments: []string{
-			"--space <id> (required; the automatic space this session proposed into)",
-			"--json",
-		},
-		Description: wikiVerifyDescription,
-		InputSchema: map[string]interface{}{
-			"type": "object",
-			"properties": map[string]interface{}{
-				"space": map[string]interface{}{"type": "string", "description": "The automatic space this session proposed into."},
-			},
-			"required": []string{"space"},
-		},
-		Mutates:     true,
-		SessionOnly: true,
-	},
 }
 
 // wikiCLIContext is the session a wiki command acts for. There is no headless form, and no
@@ -450,7 +357,7 @@ func cliWikiNote(args []string, in io.Reader, out io.Writer, ctx cliOrchestratio
 
 func cliWikiDraft(args []string, out io.Writer, ctx cliOrchestrationContext) error {
 	fs := newCLIFlagSet("orbit wiki draft")
-	kind := fs.String("kind", "", "rewrite (plan is not open yet)")
+	kind := fs.String("kind", "", "rewrite, or plan with --change")
 	var sections stringList
 	fs.Var(&sections, "section", "a written section, as doc/key")
 	reason := fs.String("reason", "", "why, in a sentence or two")
@@ -471,7 +378,7 @@ func cliWikiDraft(args []string, out io.Writer, ctx cliOrchestrationContext) err
 	if strings.TrimSpace(*change) != "" {
 		var parsed map[string]interface{}
 		if err := json.Unmarshal([]byte(strings.TrimSpace(*change)), &parsed); err != nil || parsed == nil {
-			return fmt.Errorf("--change must be a JSON object, shaped as a plan proposal's change")
+			return fmt.Errorf("--change must be a JSON object: { docs, categories? }")
 		}
 		toolArgs["change"] = parsed
 	}

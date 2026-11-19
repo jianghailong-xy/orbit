@@ -34,6 +34,69 @@ final class WikiChatLogicTests: XCTestCase {
         XCTAssertFalse(WikiChatLogic.fabShown(settingsOnTop: false, hasSpace: false))
     }
 
+    // MARK: open by default and the history (board 45, owner 11-11)
+
+    /// Shown where the panel is the third column, on every page but Settings, unless the owner hid it with ✕.
+    func testThePanelOpensWithTheWikiWhereItIsAColumn() {
+        XCTAssertTrue(WikiChatLogic.opensByDefault(sheet: false, settingsOnTop: false, hiddenByOwner: false))
+        XCTAssertFalse(WikiChatLogic.opensByDefault(sheet: true, settingsOnTop: false, hiddenByOwner: false), "a phone's sheet")
+        XCTAssertFalse(WikiChatLogic.opensByDefault(sheet: false, settingsOnTop: true, hiddenByOwner: false), "Settings")
+        XCTAssertFalse(WikiChatLogic.opensByDefault(sheet: false, settingsOnTop: false, hiddenByOwner: true), "✕")
+    }
+
+    /// The column is a third of the Wiki's width between 400 and 720, and drags up to half of it (the web's widths).
+    func testTheColumnIsAThirdOfTheWikisWidth() {
+        XCTAssertEqual(WikiChatLogic.Column.ideal(1000), 400)
+        XCTAssertEqual(WikiChatLogic.Column.ideal(1440), 480)
+        XCTAssertEqual(WikiChatLogic.Column.ideal(2055), 685)
+        XCTAssertEqual(WikiChatLogic.Column.ideal(3008), 720)
+        XCTAssertEqual(WikiChatLogic.Column.max(2055), 1027)
+        XCTAssertEqual(WikiChatLogic.Column.max(500), 320)
+    }
+
+    /// Open: needs you, then working, then as served; Completed as served (the web's `wikiChatHistoryGroups`).
+    func testTheHistoryFilesOpenAndCompleted() {
+        func row(_ id: String, completed: Bool = false, working: Bool = false, needsYou: Int = 0) -> WikiChatRow {
+            WikiChatRow(sessionId: id, title: id, completed: completed, working: working, needsYou: needsYou)
+        }
+        let groups = WikiChatLogic.historyGroups([row("a"), row("b", working: true), row("c", completed: true), row("d", needsYou: 2), row("e")])
+        XCTAssertEqual(groups.open.map(\.sessionId), ["d", "b", "a", "e"])
+        XCTAssertEqual(groups.completed.map(\.sessionId), ["c"])
+    }
+
+    /// A row's second line in the button's own words, else how long ago (the web's `wikiChatHistoryLine`, `wikiChatAgo`).
+    func testAHistoryRowSaysWhatItNeedsElseHowLongAgo() {
+        let now = ISO8601DateFormatter().date(from: "2026-11-11T12:00:00Z")!
+        func line(_ row: WikiChatRow) -> String { WikiChatLogic.historyLine(row, now: now).text }
+        XCTAssertEqual(WikiChatLogic.historyLine(WikiChatRow(sessionId: "a", needsYou: 1), now: now).tone, .needsYou)
+        XCTAssertEqual(line(WikiChatRow(sessionId: "a", needsYou: 1)), "1 needs you")
+        XCTAssertEqual(line(WikiChatRow(sessionId: "a", needsYou: 3)), "3 need you")
+        XCTAssertEqual(line(WikiChatRow(sessionId: "a", working: true)), "Working…")
+        let ago = { (iso: String) in WikiChatLogic.ago(iso, now: now) }
+        XCTAssertEqual([ago("2026-11-11T11:59:30.000Z"), ago("2026-11-11T11:55:00.000Z"), ago("2026-11-11T09:00:00Z"),
+                        ago("2026-11-10T09:00:00.000Z"), ago("2026-11-07T12:00:00.000Z"), ago("2026-10-21T12:00:00.000Z"),
+                        ago("not a time")],
+                       ["Just now", "5m ago", "3h ago", "Yesterday", "4d ago", "3w ago", "Just now"])
+        XCTAssertEqual(line(WikiChatRow(sessionId: "a", updatedAt: "2026-11-11T11:00:00.000Z")), "1h ago", "an older server: updatedAt")
+    }
+
+    /// The new fields read when served, and default when an older server leaves them out (contract `chat.list.page`).
+    func testTheChatsReadTakesThePagesFields() throws {
+        let read = try JSONDecoder().decode(WikiChatList.self, from: Data(#"""
+        {"spaceId":"s","fab":{"needsYou":0,"working":false,"updated":0},"more":true,
+         "chats":[{"sessionId":"a","title":"A","status":"SUCCEEDED","open":false,"completed":true,"working":false,
+                   "createdAt":"2026-11-01T00:00:00.000Z","updatedAt":"2026-11-02T00:00:00.000Z",
+                   "lastActiveAt":"2026-11-02T00:00:00.000Z","drafts":1,"needsYou":0}]}
+        """#.utf8))
+        XCTAssertTrue(read.more)
+        XCTAssertEqual(read.chats.first?.completed, true)
+        XCTAssertEqual(read.chats.first?.lastActiveAt, "2026-11-02T00:00:00.000Z")
+        let older = try JSONDecoder().decode(WikiChatList.self, from: Data(#"{"spaceId":"s","chats":[{"sessionId":"a"}]}"#.utf8))
+        XCTAssertFalse(older.more)
+        XCTAssertEqual([older.chats.first?.completed, older.chats.first?.working], [false, false])
+        XCTAssertNil(older.chats.first?.lastActiveAt)
+    }
+
     /// The newest chat that needs the owner, else the newest open one, else a new chat.
     func testTheButtonOpensTheChatThatNeedsYou() {
         func row(_ id: String, open: Bool = true, needsYou: Int = 0) -> WikiChatRow {
@@ -128,6 +191,44 @@ final class WikiChatLogicTests: XCTestCase {
         XCTAssertEqual(WikiChatLogic.context(entry), WikiChatContext(page: .entry(entryId: "E1")))
         let plan = run(.follow(.plan(docSlug: "session-runtime", label: "3.1")))
         XCTAssertEqual(WikiChatLogic.context(plan), WikiChatContext(page: .plan(docSlug: "session-runtime")))
+        // A plan page at one of its document's sections names that section too (C12).
+        let section = run(.follow(.plan(docSlug: "session-runtime", label: "3.1 §2", sectionKey: "recovery")))
+        XCTAssertEqual(WikiChatLogic.context(section), WikiChatContext(page: .plan(docSlug: "session-runtime", sectionKey: "recovery")))
+        XCTAssertEqual(WikiChatLogic.shown(section).page?.label, "3.1 §2")
+        let encoder = JSONEncoder()
+        encoder.outputFormatting = [.sortedKeys]
+        XCTAssertEqual(String(decoding: try encoder.encode(WikiChatContext(page: .plan(docSlug: "d", sectionKey: "s2"))), as: UTF8.self),
+                       #"{"page":{"docSlug":"d","kind":"plan","sectionKey":"s2"}}"#)
+        let read = try JSONDecoder().decode(WikiChatContext.self, from: Data(#"{"page":{"kind":"plan","docSlug":"d","sectionKey":"s2"}}"#.utf8))
+        XCTAssertEqual(read, WikiChatContext(page: .plan(docSlug: "d", sectionKey: "s2")))
+    }
+
+    /// A plan page attaches its document, and at one of its sections that section, by its key in the plan in force
+    /// (C12): the web's `useWikiChatPage`, on a phone and a Mac. A section the plan does not hold attaches the document.
+    func testAPlanPageAttachesTheSectionItShows() throws {
+        let plan = try JSONDecoder().decode(WikiPlanState.self, from: Data(#"""
+        {"confirmed": {"id": "pv4", "version": 4, "status": "confirmed", "docs": [
+          {"id": "d1", "category": "runtime", "slug": "sessions-runtime", "title": "Sessions runtime", "sections": [
+            {"id": "x1", "key": "turn-delivery", "title": "Turn delivery", "kind": "flow"},
+            {"id": "x2", "key": "recovery", "title": "Recovery", "kind": "concepts"}]}]}}
+        """#.utf8))
+        XCTAssertEqual(WikiChatLogic.planPage(slug: "sessions-runtime", index: 1, number: "3.1", plan: plan),
+                       .plan(docSlug: "sessions-runtime", label: "3.1 §2", sectionKey: "recovery"))
+        XCTAssertEqual(WikiChatLogic.planPage(slug: "sessions-runtime", index: nil, number: "3.1", plan: plan),
+                       .plan(docSlug: "sessions-runtime", label: "3.1"))
+        XCTAssertEqual(WikiChatLogic.planPage(slug: "sessions-runtime", index: 7, number: nil, plan: plan),
+                       .plan(docSlug: "sessions-runtime", label: "sessions-runtime"))
+        XCTAssertEqual(WikiChatLogic.planPage(slug: "sessions-runtime", index: 1, number: "3.1", plan: nil),
+                       .plan(docSlug: "sessions-runtime", label: "3.1"), "the plan not read yet: the document alone")
+    }
+
+    /// A press the plan's gate refused says its reason and, a line each, every error the gate found (C12).
+    func testARefusedPressSaysItsReasonThenEveryErrorOfTheGate() {
+        let body = #"{"code":"WIKI_PLAN_GATE","message":"The plan change did not pass the plan's gate (schema): 1 error.","errors":[{"check":"schema","path":"change.doc.sections[1].kind","message":"\"essay\" is not a section kind"}]}"#
+        XCTAssertEqual(WikiChatLogic.pressRefusal(APIError.http(status: 422, body: body)),
+                       "The card couldn’t be pressed: The plan change did not pass the plan's gate (schema): 1 error.\nchange.doc.sections[1].kind: \"essay\" is not a section kind")
+        XCTAssertEqual(WikiChatLogic.pressRefusal(APIError.http(status: 409, body: #"{"message":"It changed since this draft."}"#)),
+                       "The card couldn’t be pressed: It changed since this draft.")
     }
 
     /// The context goes out in the contract's keys and no others (`wikiChatContextErrors` refuses any other), and
@@ -341,6 +442,59 @@ final class WikiChatLogicTests: XCTestCase {
         // One whose tag lacks what its line needs is named as any block this does not know.
         XCTAssertEqual(describeNote("<orbit_wiki_selection doc=\"3.1\">\nx\n</orbit_wiki_selection>"), "context")
         XCTAssertNil(WikiChatLogic.parseNoteTag("<orbit_wiki_context entries=\"3\">\nx\n</orbit_wiki_context>"))
+    }
+
+    // MARK: a new chat's first message (board 43)
+
+    /// The composer's first message makes the create the web's `WikiChatNew` makes: the words trimmed, the page and the
+    /// selection, the files the attachment row staged, and what the toolbar shows — speed only when on; with no words
+    /// nothing goes, files or not. Every key it sends is one of the contract's `chat.create.body`.
+    func testTheFirstMessageMakesTheCreate() throws {
+        let context = WikiChatContext(page: .doc(docSlug: "session-runtime", sectionKey: "s3"))
+        let first = WikiChatLogic.FirstMessage(words: "  这句少了原因 \n", attachmentIds: ["A1", "A2"], model: "claude-opus-5-5",
+                                               permissionMode: "auto", effort: "", fastMode: false)
+        let request = try XCTUnwrap(WikiChatLogic.createRequest(first, workspaceId: "W1", context: context, clientTurnId: "u-1"))
+        let body = try XCTUnwrap(JSONSerialization.jsonObject(with: JSONEncoder().encode(request)) as? [String: Any])
+        XCTAssertEqual(Set(body.keys), ["workspaceId", "content", "clientTurnId", "wikiContext", "attachmentIds", "model",
+                                        "permissionMode", "effort"])
+        XCTAssertEqual(body["content"] as? String, "这句少了原因")
+        XCTAssertEqual(body["attachmentIds"] as? [String], ["A1", "A2"])
+        XCTAssertEqual(body["model"] as? String, "claude-opus-5-5")
+        XCTAssertEqual(body["permissionMode"] as? String, "auto")
+        XCTAssertEqual(body["effort"] as? String, "", "an explicit Default sticks, as a new session's does")
+        XCTAssertEqual((body["wikiContext"] as? [String: Any])?.keys.sorted(), ["page"])
+
+        var fast = first
+        fast.fastMode = true
+        fast.attachmentIds = []
+        fast.model = nil
+        let fastBody = try XCTUnwrap(JSONSerialization.jsonObject(with: JSONEncoder().encode(
+            XCTUnwrap(WikiChatLogic.createRequest(fast, workspaceId: "W1", context: nil, clientTurnId: "u-2")))) as? [String: Any])
+        XCTAssertEqual(fastBody["fastMode"] as? Bool, true)
+        XCTAssertNil(fastBody["attachmentIds"], "no files, no list")
+        XCTAssertNil(fastBody["model"], "a model not resolved yet is the workspace's to pick")
+        XCTAssertNil(fastBody["wikiContext"])
+
+        var bare = first
+        bare.words = " \n "
+        XCTAssertNil(WikiChatLogic.createRequest(bare, workspaceId: "W1", context: context, clientTurnId: "u-3"),
+                     "a chat opens with the owner's words: files never go alone")
+
+        // Held to the contract's body.
+        var dir = URL(fileURLWithPath: #filePath).deletingLastPathComponent()
+        var contractURL: URL?
+        for _ in 0..<12 {
+            let candidate = dir.appendingPathComponent("contracts/wiki.contract.json")
+            if FileManager.default.fileExists(atPath: candidate.path) { contractURL = candidate; break }
+            dir = dir.deletingLastPathComponent()
+        }
+        let contract = try JSONDecoder().decode(JSONValue.self, from: Data(contentsOf: XCTUnwrap(contractURL, "contracts/wiki.contract.json")))
+        let said = try XCTUnwrap(contract["chat"]?["create"]?["body"]?.stringValue)
+        let keys = Set(said.trimmingCharacters(in: CharacterSet(charactersIn: "{} ")).split(separator: ",").map {
+            $0.trimmingCharacters(in: .whitespaces).trimmingCharacters(in: CharacterSet(charactersIn: "?"))
+        })
+        XCTAssertTrue(keys.isSuperset(of: Set(body.keys).union(fastBody.keys)),
+                      "the create sends \(Set(body.keys).union(fastBody.keys).subtracting(keys)), which chat.create.body does not name")
     }
 
     // MARK: the routes

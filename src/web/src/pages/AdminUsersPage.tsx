@@ -4,7 +4,7 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import type { WikiPlanSupportBuildResult, WikiSupportSpace, WikiSupportSpaces } from '@orbit/shared';
 import { api, fetchUserAvatarDataUrl, listUserAccessTokens, revokeUserAccessToken, startImpersonation, type AccessToken } from '../api';
 import { AccessTokenTable } from '../components/AccessTokenTable';
-import { AdminNav } from '../components/AdminNav';
+import { SettingsHeader } from '../components/settings';
 import { Avatar } from '../components/ui/Avatar';
 import { Badge } from '../components/ui/Badge';
 import { Button } from '../components/ui/Button';
@@ -18,6 +18,7 @@ import { Spinner } from '../components/ui/Spinner';
 import { TableEmptyRow, TableFrame } from '../components/ui/Table';
 import { Textarea } from '../components/ui/Textarea';
 import { fullDate } from '../lib/accessTokens';
+import { attemptTime, emailSettingsQuery } from './AdminEmailPage';
 import { authMethodsQuery } from '../lib/googleLink';
 import { meQuery, type SignInMethods } from '../lib/queries';
 import { useToast } from '../lib/toast';
@@ -42,6 +43,15 @@ interface AdminUser {
   /** When the account's profile photo was set — the version it is fetched by; null without one, absent from a
    *  server that predates the list naming it. */
   avatarUpdatedAt?: string | null;
+  /** The account's welcome email (docs/welcome-email-design.md §3.5); null when it has none, absent from a server
+   *  that predates it. */
+  welcomeEmail?: WelcomeEmail | null;
+}
+interface WelcomeEmail {
+  status: 'PENDING' | 'SENT' | 'FAILED' | 'SKIPPED';
+  lastError: string | null;
+  lastAttemptAt: string | null;
+  updatedAt: string;
 }
 interface CreateResult {
   email: string;
@@ -56,6 +66,14 @@ export const ENABLE_USER = 'Enable';
 export const DELETE_USER = 'Delete';
 export const RESET_PASSWORD = 'Reset password';
 export const VIEW_AS = 'View as';
+/** The welcome email (docs/welcome-email-design.md §3.5): the grey line under a failed one's status, and the menu entry. */
+export const WELCOME_EMAIL_FAILED = 'Welcome email failed';
+export const SEND_WELCOME_EMAIL = 'Send welcome email';
+export const EMAIL_NOT_CONFIGURED = 'Email is not configured on this deployment';
+/** An account's own Feishu app removed by an administrator (docs/feishu-bot-design.md §4.1): the entry, and what each answer says. */
+export const REMOVE_FEISHU_APP = 'Remove Feishu app';
+export const FEISHU_APP_REMOVED = 'Feishu app removed.';
+export const NO_FEISHU_APP = 'This account has no Feishu app.';
 export const START_VIEWING = 'Start viewing';
 /** A row's menu of every other action, named for the account it acts on. */
 export const MORE_ACTIONS = 'More actions';
@@ -139,13 +157,24 @@ function SignInCell({ methods }: { methods?: SignInMethods }) {
   );
 }
 
-function StatusCell({ disabledAt }: { disabledAt?: string | null }) {
-  return disabledAt ? (
+function StatusCell({ disabledAt, welcomeEmail }: { disabledAt?: string | null; welcomeEmail?: WelcomeEmail | null }) {
+  const status = disabledAt ? (
     <span className="admin-users-status admin-users-status-off" title={`Disabled on ${fullDate(disabledAt)}`}>
       Disabled
     </span>
   ) : (
     <span className="admin-users-status">Active</span>
+  );
+  if (welcomeEmail?.status !== 'FAILED') return status;
+  // Only a failure is said: a sent, waiting or skipped welcome email adds nothing to the row.
+  const at = welcomeEmail.lastAttemptAt ?? welcomeEmail.updatedAt;
+  return (
+    <div className="admin-users-status-stack">
+      {status}
+      <span className="admin-users-welcome-failed" title={`${welcomeEmail.lastError ?? 'Unknown error'}\nLast attempt ${attemptTime(at)}`}>
+        {WELCOME_EMAIL_FAILED}
+      </span>
+    </div>
   );
 }
 
@@ -178,6 +207,8 @@ export function AdminUsersPage() {
   const googleOn = useQuery(authMethodsQuery()).data?.google === true;
   // An administrator cannot disable or delete their own account, so their row does not offer it.
   const meId = useQuery(meQuery()).data?.id;
+  // A welcome email can be sent again only while this deployment's outgoing email is on.
+  const emailOn = useQuery(emailSettingsQuery()).data?.on === true;
   // On a phone a row keeps only its menu, which then starts with the row's own action.
   const phone = useMediaQuery(PHONE_QUERY);
 
@@ -319,6 +350,34 @@ export function AdminUsersPage() {
     );
 
   /**
+   * Remove the account's Feishu app, once confirmed (docs/feishu-bot-design.md §4.1, DELETE /admin/users/:id/feishu):
+   * its connection on every server ends, and its owner identity goes with it. The route answers whether there was one.
+   */
+  const askRemoveFeishu = (u: AdminUser) =>
+    void confirm({
+      title: `Remove the Feishu app of ${u.email}?`,
+      description:
+        'Orbit disconnects the Feishu app this account connected and forgets its App ID, App Secret and owner. The app itself stays in their Feishu developer console, and they can connect it again.',
+      confirmText: REMOVE_FEISHU_APP,
+      danger: true,
+      onConfirm: async () => {
+        const { removed } = await api<{ removed: boolean }>(`/admin/users/${u.id}/feishu`, { method: 'DELETE' });
+        if (removed) message.success(FEISHU_APP_REMOVED, u.email);
+        else message.info(NO_FEISHU_APP, u.email);
+      },
+    });
+
+  /** Send a FAILED or SKIPPED welcome email again (docs/welcome-email-design.md §3.5): the row goes back to waiting. */
+  const welcomeMut = useMutation({
+    mutationFn: (u: AdminUser) => api(`/admin/users/${u.id}/welcome-email`, { method: 'POST' }),
+    onSuccess: (_, u) => {
+      invalidate();
+      message.success('Welcome email queued', u.email);
+    },
+    onError: (e: Error, u) => message.error(`Couldn't send the welcome email to ${u.email}`, e.message),
+  });
+
+  /**
    * View Orbit as the user, read-only, to debug what they see: the server answers a token for 30
    * minutes and records the reason. The app loads again as them, so nothing read as the administrator
    * stays on screen; the banner over every page brings the administrator back.
@@ -354,7 +413,27 @@ export function AdminUsersPage() {
       { key: 'reset', label: RESET_PASSWORD, onSelect: () => void askReset(u) },
       { key: 'tokens', label: 'Access tokens', onSelect: () => setTokensOf(u) },
       { key: 'wiki', label: UPDATE_WIKI_DOCS, onSelect: () => setWikiOf(u) },
+      { key: 'feishu', label: REMOVE_FEISHU_APP, onSelect: () => askRemoveFeishu(u) },
       ...(u.signInMethods?.google ? [{ key: 'unlink', label: UNLINK_GOOGLE, onSelect: () => askUnlink(u) }] : []),
+      ...(u.welcomeEmail?.status === 'FAILED' || u.welcomeEmail?.status === 'SKIPPED'
+        ? [
+            {
+              key: 'welcome',
+              textValue: SEND_WELCOME_EMAIL,
+              label: emailOn ? (
+                SEND_WELCOME_EMAIL
+              ) : (
+                <span className="admin-users-menu-two-line">
+                  {SEND_WELCOME_EMAIL}
+                  <span className="admin-users-menu-hint">{EMAIL_NOT_CONFIGURED}</span>
+                </span>
+              ),
+              disabled: !emailOn,
+              title: emailOn ? undefined : EMAIL_NOT_CONFIGURED,
+              onSelect: () => welcomeMut.mutate(u),
+            },
+          ]
+        : []),
       {
         key: 'role',
         label: u.role === 'ADMIN' ? 'Make member' : 'Make admin',
@@ -390,7 +469,7 @@ export function AdminUsersPage() {
   const columns: { key: string; title: string; className?: string; cell: (u: AdminUser) => ReactNode }[] = [
     { key: 'user', title: 'User', cell: (u) => <UserCell user={u} you={u.id === meId} /> },
     { key: 'signIn', title: 'Sign-in', className: 'admin-users-col-signin', cell: (u) => <SignInCell methods={u.signInMethods} /> },
-    { key: 'status', title: 'Status', className: 'admin-users-col-status', cell: (u) => <StatusCell disabledAt={u.disabledAt} /> },
+    { key: 'status', title: 'Status', className: 'admin-users-col-status', cell: (u) => <StatusCell disabledAt={u.disabledAt} welcomeEmail={u.welcomeEmail} /> },
     { key: 'lastActive', title: 'Last active', className: 'admin-users-col-active', cell: (u) => <LastActiveCell last={u.lastActive} now={now} /> },
     { key: 'createdAt', title: 'Created', className: 'admin-users-col-created', cell: (u) => fullDate(u.createdAt) },
     { key: 'actions', title: '', className: 'admin-users-col-actions', cell: actions },
@@ -412,38 +491,34 @@ export function AdminUsersPage() {
     });
 
   return (
-    <div className="admin-page">
-      <AdminNav />
-      <div className="admin-users-head">
-        <div className="admin-users-heading">
-          <h1 className="page-title">Users</h1>
-          {users.data && (
-            <div className="admin-users-sub">
-              {[
+    <div className="settings-page settings-page--wide admin-users-page">
+      <SettingsHeader
+        title="Users"
+        description={
+          users.data
+            ? [
                 plural(all.length, 'account', 'accounts'),
                 plural(admins, 'administrator', 'administrators'),
                 ...(disabled ? [`${disabled} disabled`] : []),
-              ].join(' · ')}
-            </div>
-          )}
-        </div>
-        <div className="admin-users-tools">
-          <Input
-            className="admin-users-search"
-            prefix={<SearchOutlined />}
-            placeholder="Search name or email"
-            aria-label="Search users"
-            value={query}
-            allowClear
-            onClear={() => setQuery('')}
-            onChange={(e) => setQuery(e.target.value)}
-          />
+              ].join(' · ')
+            : undefined
+        }
+        action={
           <Button variant="primary" onClick={() => setCreateOpen(true)}>
             Add user
           </Button>
-        </div>
-      </div>
-
+        }
+      />
+      <Input
+        className="admin-users-search"
+        prefix={<SearchOutlined />}
+        placeholder="Search name or email"
+        aria-label="Search users"
+        value={query}
+        allowClear
+        onClear={() => setQuery('')}
+        onChange={(e) => setQuery(e.target.value)}
+      />
       <TableFrame className="admin-users-frame" loading={users.isLoading}>
         <table className="orbit-table admin-users-table">
           <thead>
@@ -581,7 +656,11 @@ function UserWikiDocs({ user, onClose }: { user: AdminUser; onClose: () => void 
   const [spaceId, setSpaceId] = useState('');
   const [why, setWhy] = useState('');
   const key = ['admin', 'users', user.id, 'wiki-spaces'] as const;
-  const spacesQ = useQuery({ queryKey: key, queryFn: () => api<WikiSupportSpaces>(`/admin/wiki/users/${user.id}/spaces`) });
+  const spacesQ = useQuery({
+    queryKey: key,
+    meta: { entities: ['wiki'] },
+    queryFn: () => api<WikiSupportSpaces>(`/admin/wiki/users/${user.id}/spaces`),
+  });
   const build = useMutation({
     mutationFn: ({ space, reason }: { space: WikiSupportSpace; reason: string }) =>
       api<WikiPlanSupportBuildResult>(`/admin/wiki/spaces/${space.id}/plan/build`, { method: 'POST', body: { reason } }),

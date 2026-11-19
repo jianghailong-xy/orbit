@@ -186,6 +186,9 @@ function read(db: PrismaClient, f: Fixture) {
     source: 'EXPLICIT',
     locked: true,
     startedAt: new Date('2026-09-25T13:00:00.000Z'),
+    landingCheckCommand: null,
+    landingCheckTimeoutSeconds: null,
+    landingCheckCommandAbsentReason: 'FALLS_BACK_TO_MERGE_CHECK',
     mergeCheckCommand: 'npm test',
     mergeCheckCommandAbsentReason: null,
     mergeCheckTimeoutSeconds: 900,
@@ -546,6 +549,9 @@ test('the landing line describes running work before the queue, on real PostgreS
             startedAt: jobs[0].startedAt, queuedAt: jobs[0].queuedAt, heartbeatAt: jobs[0].heartbeatAt,
             runnerName: 'workstation-gpu', retriedBy: null, timedOut: false, limitSeconds: 600,
             retryable: false,
+            // The fixture's project runs no landing check, so there is none to skip.
+            skippable: false,
+            skipCheck: null,
             // A row claimed before the progress protocol existed — which is every fixture here — is
             // a legacy claim (§2.2 J-T4). The optional field travels on the wire from 0434.
             progressProtocol: null,
@@ -599,7 +605,7 @@ test('the landing line describes running work before the queue, on real PostgreS
         });
 
       await t.test('(h) while checking, the limit is the check budgets plus the lease', async () => {
-        for (const [label, silent, timedOut] of [['checking', 24, false], ['overdue', 26, true]] as const) {
+        for (const [label, silent, timedOut] of [['checking', 39, false], ['overdue', 41, true]] as const) {
           const f = await fixture(db, `check-${label}`);
           await db.projectCodebase.update({
             where: { id: f.codebaseId },
@@ -609,7 +615,8 @@ test('the landing line describes running work before the queue, on real PostgreS
           await job(db, f, { at: minutesAgo(silent + 2), claimedAt: minutesAgo(silent + 1), state: 'RUNNING',
             taskId, phase: 'CHECK', heartbeatAt: minutesAgo(silent), idempotency: label });
           const only = await onlyJob(db, f);
-          assert.equal(only.limitSeconds, 900 + 600, label);
+          // Combined landing check plus possible K3 baseline attribution, then the lease.
+          assert.equal(only.limitSeconds, 2 * 900 + 600, label);
           assert.equal(only.timedOut, timedOut, label);
         }
       });
@@ -943,6 +950,9 @@ test('the landing line describes running work before the queue, on real PostgreS
           // This fixture writes its jobs directly, with no landing subject beside them.
           landingSessionId: null,
           liveness: 'LIVE', blockingReason: null, retryable: false,
+          // The fixture's project runs no landing check, so there is none to skip.
+          skippable: false,
+          skipCheck: null,
         });
         const promotion = view.inFlightJobs?.find((entry) => entry.kind === 'LAND_PROMOTION');
         assert.equal(promotion?.promotionId, promotionId);

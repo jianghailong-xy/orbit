@@ -57,6 +57,7 @@ const prisma = {
           identities: [],
           clientVersions: [],
           personalAccessTokens: [],
+          emailOutbox: [],
         };
       });
     },

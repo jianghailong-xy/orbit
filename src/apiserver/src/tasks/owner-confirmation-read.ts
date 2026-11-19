@@ -7,6 +7,8 @@ import {
   type OwnerConfirmationAnswer,
   type OwnerConfirmationIfConfirmed,
   type OwnerConfirmationReviewView,
+  type ReplyTranslation,
+  type TranslationLanguage,
 } from '@orbit/shared';
 import { readIfConfirmed, type DependentReleaseReader } from './owner-confirmation-if-confirmed';
 import { confirmationReviewStates, type ReviewedRequest } from './owner-confirmation-review';
@@ -50,6 +52,10 @@ const RETURNED: PrismaTypes.TaskOwnerConfirmationRequestWhereInput = {
 export interface OwnerConfirmationReport {
   text: string;
   reportedAt: Date;
+  /** The run event's own translation of that message (Settings › Translation), served when it is in the
+   *  owner's current language: the reply was already translated where it was said, so it is never translated
+   *  again here. Absent otherwise. */
+  translation?: ReplyTranslation;
 }
 
 /** The question in front of the owner now. */
@@ -294,19 +300,21 @@ export function returnedByReviewer(request: { reviews: Array<{ records: unknown[
 export async function ownerConfirmationReport(
   tx: PrismaTypes.TransactionClient,
   request: { sessionId: string; turnId: string; claim?: { turnId: string } | null },
+  ownerLang?: TranslationLanguage | null,
 ): Promise<OwnerConfirmationReport | null> {
   const declared = request.claim?.turnId;
   if (declared && declared !== request.turnId) {
-    const said = await lastAssistantText(tx, request.sessionId, declared);
+    const said = await lastAssistantText(tx, request.sessionId, declared, ownerLang);
     if (said) return said;
   }
-  return lastAssistantText(tx, request.sessionId, request.turnId);
+  return lastAssistantText(tx, request.sessionId, request.turnId, ownerLang);
 }
 
 async function lastAssistantText(
   tx: PrismaTypes.TransactionClient,
   sessionId: string,
   turnId: string,
+  ownerLang?: TranslationLanguage | null,
 ): Promise<OwnerConfirmationReport | null> {
   const events = await tx.runEvent.findMany({
     where: { sessionId, turnId, type: RunEventType.ASSISTANT },
@@ -315,9 +323,11 @@ async function lastAssistantText(
     select: { payload: true, createdAt: true },
   });
   for (const event of events) {
-    const text = (event.payload as { text?: unknown } | null)?.text;
+    const payload = event.payload as { text?: unknown; translation?: ReplyTranslation } | null;
+    const text = payload?.text;
     if (typeof text === 'string' && text.trim() !== '') {
-      return { text: text.trim(), reportedAt: event.createdAt };
+      const translation = ownerLang && payload?.translation?.lang === ownerLang ? payload.translation : undefined;
+      return { text: text.trim(), reportedAt: event.createdAt, ...(translation ? { translation } : {}) };
     }
   }
   return null;
@@ -332,6 +342,8 @@ export async function readOwnerConfirmation(
   ownerId: string,
   taskId: string,
   releases?: DependentReleaseReader,
+  /** The owner's language when their translation is on: a report is served with its run event's translation in it. */
+  ownerLang?: TranslationLanguage | null,
 ): Promise<OwnerConfirmationView | null> {
   const task = await tx.task.findFirst({
     where: { id: taskId, ownerId },
@@ -398,19 +410,21 @@ export async function readOwnerConfirmation(
       decidedByType: row.decidedByType,
       requestId: row.requestId,
       sessionId: row.request?.sessionId ?? null,
-      report: row.request ? await ownerConfirmationReport(tx, row.request) : null,
+      report: row.request ? await ownerConfirmationReport(tx, row.request, ownerLang) : null,
       review: row.requestId ? reviews.get(row.requestId) ?? null : null,
       reviewStateAtDecision: row.reviewState,
       reviewRecordId: row.reviewRecordId,
       answers: (row.answers as OwnerConfirmationAnswer[] | null) ?? [],
     });
   }
-  const waiting = asked && latest
+  const held = latest && reviews.get(latest.id)?.reviewer.kind === 'PROJECT_COORDINATOR'
+    && reviews.get(latest.id)?.state === 'UNDER_REVIEW';
+  const waiting = asked && latest && !held
     ? {
       requestId: asked.requestId,
       sessionId: asked.sessionId,
       requestedAt: latest.requestedAt,
-      report: await ownerConfirmationReport(tx, latest),
+      report: await ownerConfirmationReport(tx, latest, ownerLang),
       review: reviews.get(latest.id) ?? null,
     }
     : null;

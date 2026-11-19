@@ -40,6 +40,7 @@ import { ProjectsController } from './projects.controller';
 import { ProjectsService } from './projects.service';
 import { WorkspacesController } from '../workspaces/workspaces.controller';
 import { WorkspacesService } from '../workspaces/workspaces.service';
+import { MainCheckoutService } from '../workspaces/main-checkout.service';
 import { SessionAttemptService } from './session-attempt.service';
 import { TaskCheckpointService } from './task-checkpoint.service';
 
@@ -153,6 +154,8 @@ async function openDoor(stack: Stack): Promise<{ base: string; close: () => Prom
     providers: [
       { provide: ProjectsService, useValue: stack.projects },
       { provide: WorkspacesService, useValue: stack.workspaces },
+      // The main checkout's routes ride along on the workspace door; nothing here calls them.
+      { provide: MainCheckoutService, useValue: {} },
       { provide: ProjectAcceptanceService, useValue: {} },
       { provide: ProjectHandoffService, useValue: {} },
       { provide: SessionAttemptService, useValue: {} },
@@ -504,11 +507,15 @@ test('a project’s integration line is recorded, defaulted, locked, read for la
   skip, concurrency: 1, timeout: 300_000,
 }, async (t) => {
   const stack = await connect();
-  const door = await openDoor(stack);
+  // Registered before the door opens: a door that fails to start (a provider Nest cannot resolve)
+  // must not leave the pool and the client open, or the process never exits and the spec hangs.
+  let opened: Awaited<ReturnType<typeof openDoor>> | undefined;
   t.after(async () => {
-    await door.close();
+    await opened?.close();
     await disconnect(stack);
   });
+  const door = await openDoor(stack);
+  opened = door;
 
   await t.test('explicit integration settings read back', async () => {
     const f = await project(stack, 'explicit');
@@ -827,8 +834,26 @@ test('a project’s integration line is recorded, defaulted, locked, read for la
       stack.receipts,
       {} as SessionAttemptService,
     );
-    assert.deepEqual(await runnerDoor.mergeSession(runner, undefined, undefined, undefined, merged,
-      { targetBranch: `project/${f.publicId}` }), { ok: true });
+    // 166ce5937 makes the agent's queued merge explicit: PENDING with polling guidance, so
+    // callers cannot mistake acceptance for a completed merge. The owner's menu keeps ok: true.
+    const answer = await runnerDoor.mergeSession(runner, undefined, undefined, undefined, merged,
+      { targetBranch: `project/${f.publicId}` });
+    const queued = await stack.db.session.findUniqueOrThrow({ where: { id: merged } });
+    assert.ok(queued.mergeOperationId);
+    assert.deepEqual(answer, {
+      ok: true,
+      outcome: 'PENDING',
+      sessionId: merged,
+      operationId: queued.mergeOperationId,
+      mergeStatus: 'pending',
+      receipt: null,
+      receiptAbsentReason: 'MERGE_STILL_RUNNING',
+      next: {
+        actionCode: 'POLL_STATE',
+        afterSeconds: 30,
+        resources: [{ type: 'SESSION', id: merged }],
+      },
+    });
     assert.deepEqual(await stack.db.session.findUniqueOrThrow({
       where: { id: merged },
       select: { mergeStatus: true, mergeTarget: true },

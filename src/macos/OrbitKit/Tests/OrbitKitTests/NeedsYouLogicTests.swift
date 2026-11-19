@@ -400,6 +400,53 @@ final class NeedsYouLogicTests: XCTestCase {
         XCTAssertEqual(banner?.more, 1, "the blocked tool call is the one behind it")
     }
 
+    // MARK: the bar unfolded (owner 2026-11-13, 03-expand option B)
+
+    /// One line per waiting conversation: owner items first, oldest item first, then the blocked
+    /// tool calls by how long they have waited — so the first line is the one the folded bar names.
+    func testEntriesListEveryConversationInTheBarsOwnOrder() {
+        let blockedNew = session("s-new", approvals: 1, agentID: "dev", agentName: "orbit-prod",
+                                 title: "Rebuild the report", lastTurnAt: "2026-09-13T11:00:00Z")
+        let blockedOld = session("s-old", approvals: 1, agentID: "dev", agentName: "orbit-prod",
+                                 title: "Ship the release", lastTurnAt: "2026-09-13T07:00:00Z")
+        let newer = coordinator("c1", project: "Newer project",
+                                items: [ownerItem(.coordinatorQuestion, since: "2026-09-13T12:00:00Z", id: "new")])
+        let older = coordinator("c2", project: "Older project",
+                                items: [ownerItem(.promotionApproval, since: "2026-09-13T08:00:00Z", id: "old")])
+        let waiting = [blockedNew, newer, blockedOld, older]
+        let entries = NeedsYouLogic.entries(waiting: waiting)
+        XCTAssertEqual(entries.map(\.target.id), ["c2", "c1", "s-old", "s-new"])
+        XCTAssertEqual(entries.map(\.text), ["Approve merge to main", "Question from coordinator",
+                                             "orbit-prod needs you", "orbit-prod needs you"])
+        XCTAssertEqual(entries.map(\.detail), ["Older project", "Newer project",
+                                               "Ship the release", "Rebuild the report"])
+        XCTAssertEqual(entries.map(\.ownerItem?.itemId), ["old", "new", nil, nil])
+        XCTAssertEqual(entries.map(\.more), [0, 0, 0, 0], "each line is one conversation")
+        let banner = NeedsYouLogic.banner(waiting: waiting)
+        XCTAssertEqual(entries.first?.target.id, banner?.target.id, "the folded bar names the first line")
+        XCTAssertEqual(entries.first?.ownerItem?.itemId, banner?.ownerItem?.itemId)
+    }
+
+    /// Several blocked tool calls fold to "3 sessions need you"; unfolded, each names itself.
+    func testEntriesNameEachBlockedSession() {
+        let a = session("a", approvals: 1, agentID: "a", agentName: "A", title: "First",
+                        lastTurnAt: "2026-08-14T09:00:00.000Z")
+        let b = session("b", approvals: 1, agentID: "b", agentName: "B", title: "Second",
+                        lastTurnAt: "2026-08-14T08:00:00.000Z")
+        let entries = NeedsYouLogic.entries(waiting: [a, b])
+        XCTAssertEqual(entries.map(\.text), ["B needs you", "A needs you"])
+        XCTAssertEqual(entries.map(\.since), ["2026-08-14T08:00:00.000Z", "2026-08-14T09:00:00.000Z"])
+        XCTAssertEqual(NeedsYouLogic.banner(waiting: [a, b])?.target.id, entries.first?.target.id)
+    }
+
+    /// The conversation on screen is left out, as it is from the folded bar's count.
+    func testEntriesExcludeTheFocusedSession() {
+        let a = session("a", approvals: 1, agentID: "a", agentName: "A")
+        let b = session("b", approvals: 1, agentID: "b", agentName: "B")
+        XCTAssertEqual(NeedsYouLogic.entries(waiting: [a, b], excluding: "a").map(\.target.id), ["b"])
+        XCTAssertTrue(NeedsYouLogic.entries(waiting: []).isEmpty)
+    }
+
     /// A kind a later control plane invents is counted (the server counted it) but not named: the
     /// bar falls through to the wording it has always had rather than saying half a sentence.
     func testAnUnknownKindDoesNotNameTheBar() {
@@ -456,5 +503,81 @@ final class NeedsYouLogicTests: XCTestCase {
             json.replacingOccurrences(of: #""mainBranch":"master""#, with: #""mainBranch":7"#).utf8))
         XCTAssertEqual(garbled.ownerItems?.first?.kind, .promotionApproval)
         XCTAssertEqual(NeedsYouLogic.banner(waiting: [garbled])?.text, "Approve merge to main")
+    }
+
+    // MARK: noticed once (the owner, 2026-11-15, docs/mocks/needs-you-capsule/12-once)
+
+    /// A conversation that starts waiting is noticed once, by name and by what it waits on; the same
+    /// wait is not noticed again, a new wait in the same conversation is, and the one on screen never.
+    func testAWaitIsNoticedOnceByNameAndWhat() throws {
+        let a = session("a", approvals: 1, agentName: "orbit-develop", title: "Android 自动更新报错",
+                        lastTurnAt: "2026-11-15T01:00:00Z")
+        let b = session("b", approvals: 1, agentName: "orbit-op", title: "Orbit 接入 Ollama",
+                        lastTurnAt: "2026-11-15T02:00:00Z")
+        let seen = Set([a].map(NeedsYouLogic.waitKey))
+        let fresh = NeedsYouLogic.newlyWaiting([a, b], seen: seen)
+        XCTAssertEqual(fresh.map(\.target.id), ["b"], "only what was not waiting before")
+        let notice = try XCTUnwrap(fresh.first)
+        XCTAssertEqual(notice.title, "Orbit 接入 Ollama")
+        XCTAssertEqual(notice.line, "Needs your reply · orbit-op")
+        XCTAssertEqual(notice.glyph, .hand)
+
+        let bothSeen = Set([a, b].map(NeedsYouLogic.waitKey))
+        XCTAssertTrue(NeedsYouLogic.newlyWaiting([a, b], seen: bothSeen).isEmpty, "the same wait, not again")
+        let bAgain = session("b", approvals: 1, agentName: "orbit-op", title: "Orbit 接入 Ollama",
+                             lastTurnAt: "2026-11-15T03:00:00Z")
+        XCTAssertEqual(NeedsYouLogic.newlyWaiting([a, bAgain], seen: bothSeen).map(\.target.id), ["b"],
+                       "stopping again is a new wait")
+        XCTAssertTrue(NeedsYouLogic.newlyWaiting([a, b], seen: seen, excluding: "b").isEmpty,
+                      "the conversation on screen has its own card in front of the reader")
+    }
+
+    /// An owner request stops no turn, so the conversation keeps taking turns while it waits: each
+    /// one is the same wait, not a new notice, and the notice says the request's own words.
+    func testAnOwnerRequestIsNoticedOnceWhateverTurnsFollow() throws {
+        func filed(_ lastTurnAt: String) -> Session {
+            Session(id: "t", title: "Task: Walkthrough", status: .awaitingInput, agentId: "w",
+                    assignedRunnerId: nil, pendingApprovals: 1, waitingKind: .ownerRequest,
+                    branch: nil, updatedAt: nil,
+                    agent: SessionAgentRef(id: "w", name: "orbit-develop", provider: nil, model: nil, effort: nil),
+                    lastTurnAt: lastTurnAt)
+        }
+        let notice = try XCTUnwrap(NeedsYouLogic.newlyWaiting([filed("2026-11-17T22:36:15Z")], seen: []).first)
+        XCTAssertEqual(notice.line, "Waiting on you · orbit-develop")
+        let seen = Set([filed("2026-11-17T22:36:15Z")].map(NeedsYouLogic.waitKey))
+        XCTAssertTrue(NeedsYouLogic.newlyWaiting([filed("2026-11-17T22:52:34Z")], seen: seen).isEmpty,
+                      "a later turn of the same conversation is the same wait")
+    }
+
+    /// Any wait the server names says the row's own words, never the tool call's "Needs your reply".
+    func testANamedWaitIsNoticedInTheRowsWords() throws {
+        let confirming = Session(id: "c", title: "Task: Ship it", status: .awaitingInput, agentId: "w",
+                                 assignedRunnerId: nil, pendingApprovals: 1, waitingKind: .ownerConfirmation,
+                                 branch: nil, updatedAt: nil,
+                                 agent: SessionAgentRef(id: "w", name: "orbit-develop", provider: nil, model: nil, effort: nil),
+                                 lastTurnAt: "2026-11-18T01:00:00Z")
+        let notice = try XCTUnwrap(NeedsYouLogic.newlyWaiting([confirming], seen: []).first)
+        XCTAssertEqual(notice.line, "Waiting for your confirmation · orbit-develop")
+    }
+
+    // MARK: here (the owner, 2026-11-15, docs/mocks/needs-you-capsule/07-console-one-capsule)
+
+    /// The conversation's own capsule: its cards first, in their words and direction; its approvals
+    /// after them, at its tail — so alone they say "below" and press to the approval's row.
+    func testTheConversationsOwnCapsuleCountsItsCardsAndItsApprovals() throws {
+        let alone = try XCTUnwrap(NeedsYouLogic.here(rows: [], approvalIDs: ["a1"], side: nil))
+        XCTAssertEqual(alone.text, "1 waiting below")
+        XCTAssertEqual(alone.rowID, "approval-a1")
+        XCTAssertEqual(alone.side, .below)
+        XCTAssertEqual(alone.glyph, .hand)
+
+        let both = try XCTUnwrap(NeedsYouLogic.here(rows: [questionRow("q1")], approvalIDs: ["a1"], side: .above))
+        XCTAssertEqual(both.text, "2 waiting above")
+        XCTAssertEqual(both.rowID, "q1", "the oldest card first, then the tail")
+        XCTAssertEqual(both.glyph, .question)
+
+        XCTAssertEqual(NeedsYouLogic.here(rows: [questionRow("q1")], approvalIDs: [], side: .below)?.text,
+                       "1 open question below", "no approval: the words the bar always had")
+        XCTAssertNil(NeedsYouLogic.here(rows: [], approvalIDs: [], side: .below))
     }
 }

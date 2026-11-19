@@ -46,7 +46,7 @@ import {
 import { useToast } from '../lib/toast';
 
 /**
- * One account pool (/providers/pools/:id), linkable like a provider's own page: its accounts with
+ * One account pool (/settings/providers/pools/:id), linkable like a provider's own page: its accounts with
  * where each stands, and the ways to change it — add an account, take one out, delete the pool.
  * Taking an account out or deleting the pool leaves the provider itself standing. The same address
  * opens a Codex pool (CodexPoolPage): one of the user's own, or one somebody added them to.
@@ -59,7 +59,11 @@ export function ProviderPoolPage() {
   const poolId = routeId(useParams().id);
   const pools = useQuery(providerPoolsQuery());
   const shared = useQuery(sharedPoolsQuery());
-  const keys = useQuery({ queryKey: PROVIDERS_LIST_KEY, queryFn: () => api<ProviderRow[]>(PROVIDERS_BASE) });
+  const keys = useQuery({
+    queryKey: PROVIDERS_LIST_KEY,
+    meta: { entities: ['provider'] },
+    queryFn: () => api<ProviderRow[]>(PROVIDERS_BASE),
+  });
   const [adding, setAdding] = useState(false);
   const pool = pools.data?.find((row) => routeId(row.id) === poolId);
   // A Codex pool of the user's own: who can use it and its API keys, read beside its accounts.
@@ -80,7 +84,7 @@ export function ProviderPoolPage() {
     onSuccess: () => {
       refresh();
       message.success('Pool deleted');
-      navigate('/infrastructure#pools');
+      navigate('/settings/providers/pools');
     },
     onError: (e: Error) => message.error("Couldn't delete the pool", e.message),
   });
@@ -101,8 +105,8 @@ export function ProviderPoolPage() {
   if (!pool) {
     return (
       <div className="provider-form">
-        <Link className="provider-back" to="/infrastructure#pools">
-          ‹ Machines & models
+        <Link className="provider-back" to="/settings/providers/pools">
+          ‹ Account pools
         </Link>
         <div style={{ marginTop: 16, color: 'var(--text-3)' }}>That pool no longer exists.</div>
       </div>
@@ -111,8 +115,8 @@ export function ProviderPoolPage() {
 
   return (
     <div style={{ maxWidth: 900, margin: '0 auto' }}>
-      <Link className="provider-back" to="/infrastructure#pools">
-        ‹ Machines & models
+      <Link className="provider-back" to="/settings/providers/pools">
+        ‹ Account pools
       </Link>
       <div className="pool-page-head">
         <div style={{ minWidth: 0 }}>
@@ -248,7 +252,7 @@ function CodexPoolPage({
     onSuccess: () => {
       refresh();
       message.success(mine ? 'Pool deleted' : `You left ${pool.label}`);
-      navigate('/infrastructure#pools');
+      navigate('/settings/providers/pools');
     },
     onError: (e: Error) => message.error(mine ? "Couldn't delete the pool" : "Couldn't leave the pool", e.message),
   });
@@ -285,15 +289,15 @@ function CodexPoolPage({
 
   return (
     <div style={{ maxWidth: 900, margin: '0 auto' }}>
-      <Link className="provider-back" to="/infrastructure#pools">
-        ‹ Machines & models
+      <Link className="provider-back" to="/settings/providers/pools">
+        ‹ Account pools
       </Link>
       <div className="pool-page-head">
         <div style={{ minWidth: 0 }}>
           <div className="pool-page-title">
             <PoolEngineMark pool={pool} size={26} />
             <h1 className="page-title">{pool.label}</h1>
-            {people && <span className="re-chip pool-shared-chip">SHARED</span>}
+            {people && <span className="re-chip pool-shared-chip">Shared</span>}
           </div>
           <div className="pool-sub">
             Codex pool · <b>{who}</b> · {!mine && `${plural(access!.people.length, 'person', 'people')} · `}

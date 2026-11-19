@@ -174,7 +174,7 @@ final class TranscriptDeepLinkTests: XCTestCase {
         XCTAssertEqual(row(TranscriptAnchor(kind: "event", id: "e", seq: 11)), answer)
         // Three calls in a run fold into one row, named by its first call: a tool call — or its
         // result — inside the run lands on that row.
-        let group = try XCTUnwrap(rows.first { if case .toolGroup = $0 { return true }; return false })
+        let group = try XCTUnwrap(rows.first { if case .steps = $0 { return true }; return false })
         XCTAssertEqual(group.id, "toolu_a")
         XCTAssertEqual(row(TranscriptAnchor(kind: "tool_call", id: "c", seq: 14)), group.id)
         XCTAssertEqual(row(TranscriptAnchor(kind: "event", id: "r", seq: 17)), group.id)

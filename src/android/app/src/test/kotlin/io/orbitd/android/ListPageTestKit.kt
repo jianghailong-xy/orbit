@@ -9,6 +9,9 @@ import androidx.compose.ui.test.hasAnyAncestor
 import androidx.compose.ui.test.hasContentDescription
 import androidx.compose.ui.test.hasText
 import androidx.compose.ui.test.isPopup
+import androidx.compose.ui.test.onNodeWithTag
+import androidx.compose.ui.test.isDialog
+import androidx.compose.ui.test.junit4.ComposeTestRule
 import androidx.compose.ui.test.performClick
 import androidx.compose.ui.test.performSemanticsAction
 
@@ -23,4 +26,14 @@ internal fun SemanticsNodeInteraction.openRowMenu() = performSemanticsAction(Sem
 internal fun SemanticsNodeInteractionsProvider.pickFromSessionOptions(row: String) {
     onNode(hasContentDescription("Session scope", substring = true)).performClick()
     onNode(hasText(row) and hasAnyAncestor(isPopup())).performClick()
+}
+
+/** A project's sessions page off its row in the list. The row's tap opens the coordinator's conversation (owner 2026-11-11,
+ * docs/mocks/project-sessions-column board 5); its menu's Sessions still opens the page, which is what a test of the page's own
+ * content wants. */
+internal fun ComposeTestRule.openProjectSessionsPage(projectId: String) {
+    onNodeWithTag("project-row:$projectId").openRowMenu()
+    val sessions = hasText("Sessions") and hasAnyAncestor(isDialog())
+    waitUntil(60_000) { onAllNodes(sessions).fetchSemanticsNodes().isNotEmpty() }
+    onNode(sessions).performClick()
 }

@@ -324,6 +324,27 @@ test('a merge check change needs postgres; every case below is a skip without it
     assert.equal((await provenanceOf(stack, f)).length, 1, 'the refused write recorded no provenance');
   });
 
+  await t.test('K1: both landing settings require an exact card, including whitespace and omitted fields', async () => {
+    const f = await project(stack, 'landing-card');
+    const proposal = { landingCheckCommand: 'npm run landing', landingCheckTimeoutSeconds: 180 };
+    assert.deepEqual(await writeAsSession(stack, f, proposal), { refused: true });
+    await filedCard(stack, f, proposal, 'allow');
+    for (const change of [
+      { ...proposal, landingCheckCommand: 'npm run landing ' },
+      { ...proposal, landingCheckTimeoutSeconds: 181 },
+      { landingCheckCommand: proposal.landingCheckCommand },
+      { landingCheckTimeoutSeconds: proposal.landingCheckTimeoutSeconds },
+    ]) {
+      assert.deepEqual(await writeAsSession(stack, f, change), { refused: true });
+    }
+    assert.deepEqual(await writeAsSession(stack, f, proposal), { refused: false });
+    const read = await stack.db.projectCodebase.findFirstOrThrow({ where: { projectId: f.projectId } });
+    assert.equal(read.landingCheckCommand, proposal.landingCheckCommand);
+    assert.equal(read.landingCheckTimeoutSeconds, proposal.landingCheckTimeoutSeconds);
+    assert.equal(read.mergeCheckCommand, OLD_CHECK);
+    assert.equal((await provenanceOf(stack, f)).length, 1);
+  });
+
   await t.test('the line is refused with a card or without one', async () => {
     const f = await project(stack, 'line');
     // A card that covers the merge check this request also carries — so the refusal is the LINE's

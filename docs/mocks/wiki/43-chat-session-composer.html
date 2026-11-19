@@ -1,0 +1,106 @@
+<!doctype html>
+<html lang="zh">
+<head>
+<meta charset="utf-8">
+<title>43 wiki chat panel: the session page's composer</title>
+<link rel="stylesheet" href="comment-session.css">
+<style>
+/* Board 43 only; the rest is comment-session.css (boards 36-42). */
+.board { width: 1680px; }
+.f3 { display: grid; grid-template-columns: repeat(3, 413px); gap: 34px; align-items: start; }
+.fr { display: flex; flex-direction: column; }
+.fr .lbl { font-size: 14px; font-weight: 700; margin: 0 0 8px; display: flex; gap: 8px; align-items: center; }
+.fr .lbl .n { width: 22px; height: 22px; border-radius: 50%; background: #16161a; color: #fff; font-size: 12.5px; display: inline-flex; align-items: center; justify-content: center; flex: none; }
+.shot { display: block; border-radius: 10px; box-shadow: 0 1px 2px rgba(0,0,0,.08), 0 6px 22px rgba(0,0,0,.10); background: #fff; }
+.p413 { width: 413px; }
+.c386 { width: 386px; }
+.c811 { width: 811px; }
+.rec { outline: 3px solid #f08c00; outline-offset: 3px; }
+.fr .cap { max-width: 413px; }
+.d3 { display: grid; grid-template-columns: 386px 386px 386px; gap: 40px; align-items: start; }
+.cols { display: grid; grid-template-columns: 1fr 1fr; gap: 40px; margin-top: 8px; }
+.qa { background: #fff; border-radius: 12px; padding: 16px 18px 6px; box-shadow: 0 1px 2px rgba(0,0,0,.06); }
+.qa h3 { margin: 0 0 10px; font-size: 15px; }
+.qa .opt { margin: 0 0 10px; padding-left: 14px; border-left: 3px solid #d0d0d8; }
+.qa .opt.rec2 { border-left-color: #f08c00; }
+.qa .opt b { color: #16161a; }
+.notes li ul { list-style: disc; }
+.notes li ul li { padding-left: 0; margin-bottom: 4px; }
+</style>
+</head>
+<body>
+<div class="board">
+<h1 class="b-h1">43 · Wiki 聊天面板的输入框换成 session 页的 composer</h1>
+<p class="b-sub">你的要求：「Chat 的 UI 设计，可以复用普通 Session 的 composer」。<b>① 是你发来的生产截图</b>。② ③ ④ ⑤ 的输入框是<b>当前 main（2521b7883）session 页真实的 composer</b>（WorkspaceView），限制到面板宽 374 px 拍的。页面附件、选区附件和 workspace 小块是用 composer 自己的样式类画进去的；面板头和空白区取自你的截图。<b>只换输入框，别的都不动。</b></p>
+<div class="b-legend"><span><span class="tag new">新</span>这次要改的</span><span><span class="tag keep">沿用</span>照旧</span><span><span class="tag ask">待你定</span>两个选择，各有推荐</span></div>
+
+<div class="band"><span class="bn">1</span>新聊天：现在，和两种放法 <small>· 区别只在 workspace 选择器放哪</small></div>
+<div class="f3">
+  <div class="fr">
+    <div class="lbl"><span class="n">①</span>现在（生产）</div>
+    <img class="shot p413" src="43-chat-session-composer/f1-today-c.png" alt="today">
+    <div class="cap">顶上 <code>Runs in</code> 一行有三个选择器：workspace、模型、模式。输入框是面板自己的<b>短输入框</b>：只有附件块、文字和发送，没有图片和文件、斜杠命令、用量，运行中也只有 Stop。</div>
+  </div>
+  <div class="fr">
+    <div class="lbl"><span class="n">②</span>方案 A <span class="tag ask">推荐</span></div>
+    <img class="shot p413 rec" src="43-chat-session-composer/f2-propA-new-c.png" alt="proposal A">
+    <div class="cap"><code>Runs in</code> 只留 workspace，并且只在新聊天出现，发出第一句后就收起。模型和模式回到输入框工具栏，位置和 session 页一样。输入框就是 session 页那一个：<code>+</code> 加图片和文件，<code>Auto</code>，<code>Opus 5.5 · Default</code>，用量圈，发送。</div>
+  </div>
+  <div class="fr">
+    <div class="lbl"><span class="n">③</span>方案 B</div>
+    <img class="shot p413" src="43-chat-session-composer/f3-propB-new-c.png" alt="proposal B">
+    <div class="cap">去掉 <code>Runs in</code> 整行，workspace 也进工具栏，放在 <code>+</code> 后面，和 session 页给新会话的放法一样。面板只有 374 px 宽，一行放不下，所以<b>工具栏折成两行</b>（见 ⑥）。</div>
+  </div>
+</div>
+
+<div class="band"><span class="bn">2</span>聊天开始以后 <small>· A、B 一样：workspace 不再显示，session 页也是开了就不能换</small></div>
+<div class="d3">
+  <div class="fr">
+    <div class="lbl"><span class="n">④</span>卡片开着时</div>
+    <img class="shot c386" src="43-chat-session-composer/d-panel-reply.png" alt="reply">
+    <div class="cap">页面附件和选区附件放进 composer 的<b>附件行</b>，和图片、文件排在一起，各带 <code>×</code>。规则照旧：发送时定格，叉掉的就不发。占位文字用 wiki 的那句 <code>Reply, or say what to change in the draft</code>。</div>
+  </div>
+  <div class="fr">
+    <div class="lbl"><span class="n">⑤</span>运行中</div>
+    <img class="shot c386" src="43-chat-session-composer/d-panel-running.png" alt="running">
+    <div class="cap">发送键变成 <code>Stop</code>。这时再打字，按 session 页的规则<b>排队或插话</b>；现在的面板只能等这一轮结束。</div>
+  </div>
+  <div class="fr">
+    <div class="lbl"><span class="n">⑥</span>为什么 B 要折行</div>
+    <img class="shot c386" src="43-chat-session-composer/d-panel-new.png" alt="one row">
+    <div class="cap">实测：把 workspace 塞进同一行，模型芯片被挤到 7 px，<code>Default</code> 压在用量圈上。session 页够宽，所以没有这个问题。</div>
+  </div>
+</div>
+
+<div class="band"><span class="bn">3</span>参照：被复用的就是它 <small>· session 页今天的 composer，全宽</small></div>
+<img class="shot c811" src="43-chat-session-composer/d-session-today.png" alt="session composer today">
+
+<div class="cols">
+  <div class="notes"><ol>
+    <li><span class="n">1</span><span class="tag new">新</span>面板的输入框换成 session 页的 composer，<b>是同一个组件，不是照着仿一个</b>。图片与文件附件、斜杠命令、模式、模型与思考强度、用量、发送与 Stop、运行中排队或插话，行为都和 session 页一致，以后 session 页改了，面板跟着变。</li>
+    <li><span class="n">2</span><span class="tag keep">沿用</span>不动的部分：面板头（标题 ▾、<code>+</code>、<code>↗</code>、<code>✕</code>）、对话区（本来就是 session 页的对话）、改动卡、圆按钮的四种状态，以及页面与选区附件的规则。也没有新的英文文案：占位文字沿用 wiki 的两句。</li>
+    <li><span class="n">3</span><span class="tag new">新</span>要动的地方：
+      <ul style="margin:6px 0 0;padding-left:18px">
+        <li><code>WorkspaceView.tsx</code>：把 composer 抽成独立组件，做法同 C7 抽实时流，session 页的行为和测试不变；</li>
+        <li><code>WikiChatPanel.tsx</code>：用它替换现在的短输入框，页面与选区附件接进附件行；</li>
+        <li><code>index.css</code>：面板宽度下的工具栏；</li>
+        <li>服务端：之后的消息本来就走 session 自己的发消息门；新聊天的第一条要带图片或文件的话，建聊天的门（<code>POST /api/wiki/spaces/:id/chats</code>）要补上附件。</li>
+      </ul>
+    </li>
+  </ol></div>
+  <div>
+    <div class="qa">
+      <h3><span class="tag ask">待你定 1</span>新聊天时 workspace 放哪</h3>
+      <div class="opt rec2"><b>② A（推荐）</b>：顶上留一行 <code>Runs in</code>，只放 workspace，只在新聊天出现。<br>理由：面板里的 composer 和 session 页一模一样，一行放得下。workspace 每个 space 只选一次就记住，之后很少改，不值得常驻工具栏。</div>
+      <div class="opt"><b>③ B</b>：workspace 进工具栏，窄处折成两行。要给 composer 加一个只在窄处才用的布局。</div>
+    </div>
+    <div class="qa" style="margin-top:14px">
+      <h3><span class="tag ask">待你定 2</span>iOS 是否一起换</h3>
+      <div class="opt rec2"><b>一起换（推荐）</b>：iOS 的 sheet 里也改用 Console 的输入框（<code>ComposerView</code>）。C11 现在用的是它自己的短输入框（<code>WikiChatComposer</code>）。web 与 iOS 一致是这个项目的验收要求之一。</div>
+      <div class="opt"><b>先只换 web</b>：iOS 留着短输入框，以后再说。</div>
+    </div>
+  </div>
+</div>
+</div>
+</body>
+</html>

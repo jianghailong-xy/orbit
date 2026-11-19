@@ -1,27 +1,14 @@
 package io.orbitd.android.navigation
 
-import androidx.compose.foundation.background
-import androidx.compose.foundation.layout.Arrangement
-import androidx.compose.foundation.layout.Box
-import androidx.compose.foundation.layout.Row
-import androidx.compose.foundation.layout.padding
-import androidx.compose.foundation.layout.size
-import androidx.compose.foundation.shape.RoundedCornerShape
-import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.NavigationDrawerItem
 import androidx.compose.material3.Text
 import androidx.compose.runtime.*
-import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.testTag
-import androidx.compose.ui.semantics.clearAndSetSemantics
 import androidx.compose.ui.semantics.contentDescription
-import androidx.compose.ui.semantics.heading
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.font.FontWeight
-import androidx.compose.ui.unit.dp
 import io.orbitd.android.OrbitApplication
 import io.orbitd.android.core.auth.SessionHandle
 import io.orbitd.android.core.cards.text
@@ -36,7 +23,6 @@ import io.orbitd.android.projects.DrawerMark
 import io.orbitd.android.projects.ProjectAttention
 import io.orbitd.android.realtime.PagePoll
 import io.orbitd.android.realtime.PagePolls
-import io.orbitd.android.ui.LocalOrbitColors
 import kotlinx.coroutines.CancellationException
 import kotlinx.serialization.json.*
 
@@ -97,8 +83,7 @@ fun DrawerProjects(state: DrawerProjectsState, coordinators: Map<String, Coordin
             DrawerMark.Running -> if (live) ({ RunningMark(Modifier.testTag("drawer-project-running:$id")) }) else null
             DrawerMark.Idle -> null
         }
-        NavigationDrawerItem(label = { Text(title) }, selected = section == projectDestination(id),
-            onClick = { select(projectDestination(id), root(id)) }, badge = badge)
+        DrawerRow(section == projectDestination(id), { select(projectDestination(id), root(id)) }, trailing = badge) { DrawerLabel(title) }
     }
 }
 
@@ -111,36 +96,6 @@ fun ProjectsDrawerCount(state: DrawerProjectsState) {
     val waiting = ProjectAttention.needsYouCount(state.projects)
     if (waiting > 0) Text("$waiting", Modifier.testTag("projects-drawer-count").semantics { contentDescription = DrawerCopy.waitingOnYou(waiting) },
         color = Color(0xFFFF9500), style = MaterialTheme.typography.labelSmall.copy(fontWeight = FontWeight.SemiBold))
-}
-
-/** A drawer group's label and how many rows it heads (iOS `CompactShell.drawerGroupLabel`): the title as the drawer's other heading
- * writes it ([io.orbitd.android.directory.SectionHeading]), the count beside it in the meta size. */
-@Composable
-private fun DrawerGroupLabel(title: String, count: Int) {
-    val color = MaterialTheme.colorScheme.onSurfaceVariant
-    Row(Modifier.padding(horizontal = 16.dp, vertical = 12.dp).semantics(mergeDescendants = true) { heading() }.testTag("drawer-group:$title"),
-        horizontalArrangement = Arrangement.spacedBy(8.dp), verticalAlignment = Alignment.CenterVertically) {
-        Text(title, style = MaterialTheme.typography.labelMedium, color = color)
-        Text("$count", style = MaterialTheme.typography.labelSmall, color = color)
-    }
-}
-
-/** The amber count in a drawer row's trailing slot (iOS `NeedsYouCountCapsule`): how many things under the row wait on you. */
-@Composable
-internal fun NeedsYouCount(count: Int, modifier: Modifier = Modifier) {
-    val amber = LocalOrbitColors.current.needsYou
-    Text("$count", modifier.background(amber.copy(alpha = 0.15f), RoundedCornerShape(50)).padding(horizontal = 7.dp, vertical = 2.dp)
-        .clearAndSetSemantics { contentDescription = DrawerCopy.waitingForYou(count) },
-        color = amber, style = MaterialTheme.typography.labelMedium, fontWeight = FontWeight.SemiBold)
-}
-
-/** The running spinner in a drawer row's trailing slot (iOS `SpinnerGlyph(color: .secondary)`, said "Running"), drawn as a project row
- * on a session list draws its own. */
-@Composable
-private fun RunningMark(modifier: Modifier = Modifier) {
-    Box(modifier.clearAndSetSemantics { contentDescription = DrawerCopy.running }) {
-        CircularProgressIndicator(Modifier.size(12.dp), color = MaterialTheme.colorScheme.onSurfaceVariant, strokeWidth = 1.5.dp)
-    }
 }
 
 /** The drawer's words, as iOS says them: a project row's count (`NeedsYouCountCapsule`'s label) and spinner, the Projects row's count

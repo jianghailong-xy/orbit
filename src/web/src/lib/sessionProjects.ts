@@ -13,6 +13,7 @@ import type { SessionFolder } from '../api';
 import { JOB_PHASES, JOB_WORDS, jobPhases, jobWords, landingClockTime } from '../components/ProjectPanoramaHeader';
 import { routeId } from './idCodec';
 import { LANDING_PAGE_COPY } from './landingSession';
+import { promotionInFlight } from './listBudget';
 import { elapsedLabel, type SidebarProject } from './projectAttention';
 import { promotionTimelineDetail, promotionTimelineTitle } from './projectMerge';
 import { DEFAULT_MAIN_BRANCH, mainBranchName, runLineMain } from './projectStart';
@@ -86,6 +87,7 @@ export const SESSION_PROJECT_COPY = {
   waitingSession: (text: string, title: string) => `${text} · ${title}`,
   noCoordinator: 'No coordinator',
   openSession: 'Open Session',
+  complete: 'Complete',
   openCoordinator: 'Open Coordinator',
   sessions: 'Sessions',
   openProject: 'Open Project',
@@ -502,6 +504,24 @@ export function landingsWindowGroups(rows: readonly LandingsWindowRow[]): Landin
     }
   }
   return runs;
+}
+
+/**
+ * Whether the title bar's Project sessions button spins (owner 2026-11-17,
+ * docs/mocks/project-sessions-button-running, option C; iOS `AppModel.projectActive`): anything the
+ * page it opens shows as active — a member or LANDING session with the spinner or the breathing
+ * terminal (`motion`), a landing job running or queued, or a merge into main being checked or landing.
+ */
+export function projectSessionsButtonActive(
+  sessions: readonly unknown[],
+  motion: (session: any) => 'spinner' | 'pulse' | null,
+  integration: { inFlight?: unknown; integratingCount?: number; queuedCount?: number; inFlightJobs?: readonly unknown[] } | null | undefined,
+  promotion: unknown,
+): boolean {
+  if (integration && (integration.inFlight != null || (integration.integratingCount ?? 0) + (integration.queuedCount ?? 0) > 0
+    || (integration.inFlightJobs?.length ?? 0) > 0)) return true;
+  if (promotionInFlight(promotion)) return true;
+  return sessions.some((session) => motion(session) !== null);
 }
 
 /** The Landings row's three facts: the mark of the most urgent landing, how long it has waited (or

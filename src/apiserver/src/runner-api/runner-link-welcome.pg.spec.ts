@@ -26,6 +26,12 @@
  *   (4) The release is the one GET /runner/release assigns this runner from what /dl publishes: in the welcome's
  *       answer and in a link heartbeat's linkHints, and in neither over HTTPS.
  *   (5) /dl not configured, failing, or not answering: no release, and the sessions answered all the same, at once.
+ *   (6) The managed runner browser (docs/runner-browser-design.md §2), with the browser switch on: offered only to a
+ *       managed runner whose instance — the Hello's ManagedInstance, as the gateway forwards it — matches the
+ *       manager's record, generation and Pod UID. The same managed runner's credential with no instance, an older or
+ *       newer generation, or another Pod UID is refused 403, so its Welcome goes without the browser and the gateway
+ *       sends it no StreamOpen (src/link-gateway/streams.go, streamable). A self-managed runner is never offered it,
+ *       even one that names an instance.
  *
  *   bash scripts/run-pg-spec.sh src/apiserver/src/runner-api/runner-link-welcome.pg.spec.ts
  *
@@ -47,7 +53,16 @@ import { type INestApplication, Module, ValidationPipe } from '@nestjs/common';
 import { HttpAdapterHost, NestFactory } from '@nestjs/core';
 import { json } from 'express';
 import { type PrismaClient, RunStatus } from '@prisma/client';
-import { RunEventType, uuidToBase62 } from '@orbit/shared';
+import {
+  MANAGED_RUNNER_GENERATION_HEADER,
+  MANAGED_RUNNER_INSTANCE_CAPABILITY,
+  MANAGED_RUNNER_INSTANCE_NOT_AUTHORIZED,
+  MANAGED_RUNNER_INSTANCE_REQUIRED,
+  MANAGED_RUNNER_INSTANCE_SUPERSEDED,
+  MANAGED_RUNNER_POD_UID_HEADER,
+  RunEventType,
+  uuidToBase62,
+} from '@orbit/shared';
 import { Client } from 'pg';
 
 import { sha256 } from '../common/crypto.util';
@@ -56,6 +71,7 @@ import { PublicIdExceptionFilter } from '../common/public-id.filter';
 import { PublicIdInterceptor } from '../common/public-id.interceptor';
 import { RunnerLinkErrorFilter } from '../common/runner-link-error.filter';
 import { TransientDbConflictFilter } from '../common/transient-db-conflict.filter';
+import { MANAGED_RUNNER_BROWSER_GATE, MANAGED_RUNNER_BROWSER_OFF, type ManagedRunnerBrowserGate } from '../managed-runners/managed-runner-browser-gate';
 import { prismaClientFor } from '../prisma/prisma-client';
 import { PrismaService } from '../prisma/prisma.service';
 import { AttemptBudgetMeterService } from '../projects/attempt-budget-meter.service';
@@ -75,6 +91,7 @@ import { listenForRunnerLinkCalls } from './runner-link-call';
 import { readRunnerLink, RUNNER_LINK, runnerLinkCredential, signRunnerLinkToken, type RunnerLinkState } from './runner-link-token';
 import { RunnerLinkWelcomeController } from './runner-link-welcome.controller';
 import { RunnerOrchestrationAuthorizer } from './runner-orchestration-authorizer';
+import { assignRunnerRelease, loadRunnerReleasePolicy, RUNNER_RELEASE_POLICY_FILE } from './runner-release';
 import { RunnerReleaseController } from './runner-release.controller';
 import { RunnerReleaseFeed } from './runner-release-feed';
 import '../test-support/daemon-routes-over-http';
@@ -183,7 +200,13 @@ async function standInForDl(): Promise<{ base: (kind: 'ok' | 'failing' | 'silent
 }
 
 /** The control plane's runner door as main.ts builds it, with the gateway's internal listener beside it. */
-async function bootDoor(db: PrismaClient, link: RunnerLinkState, realtime: RealtimeService, releases: RunnerReleaseFeed) {
+async function bootDoor(
+  db: PrismaClient,
+  link: RunnerLinkState,
+  realtime: RealtimeService,
+  releases: RunnerReleaseFeed,
+  browser: ManagedRunnerBrowserGate = MANAGED_RUNNER_BROWSER_OFF,
+) {
   const queue = new QueueService(db as unknown as PrismaService, realtime);
   const sessions = new SessionsService(db as unknown as PrismaService, queue, realtime);
   @Module({
@@ -203,6 +226,7 @@ async function bootDoor(db: PrismaClient, link: RunnerLinkState, realtime: Realt
       { provide: MergeReceiptService, useValue: {} },
       { provide: RUNNER_LINK, useValue: link },
       { provide: RunnerReleaseFeed, useValue: releases },
+      { provide: MANAGED_RUNNER_BROWSER_GATE, useValue: browser },
       RunnerAuthGuard,
     ],
   })
@@ -415,6 +439,8 @@ test('the link Welcome: each session\'s durable seq and lease, and the release t
       [firstMissing, 0, true],
       [empty, 0, true],
     ]);
+    // A self-managed runner is never offered the managed runner browser (docs/runner-browser-design.md §2).
+    assert.equal(answer.body.browser, false);
 
     // The hole filled, the seqs after it count again.
     await viaHttpsBatch(holed, [text(4, 'four')]);
@@ -489,7 +515,12 @@ test('the link Welcome: each session\'s durable seq and lease, and the release t
     const assigned = await send(door.httpsPort, 'GET', `/api/runner/release?latest=${LATEST}&previous=${PREVIOUS}`, viaHttps());
     assert.equal(assigned.status, 200, JSON.stringify(assigned.body));
     const expected = { version: assigned.body.version, rollback: assigned.body.rollback };
-    assert.deepEqual(expected, { version: LATEST, rollback: false }, 'runner-release.json assigns the latest to every runner');
+    // The repository's runner-release.json may stage a rollout, and this runner's place in it comes from its random id.
+    const pointer = loadRunnerReleasePolicy(RUNNER_RELEASE_POLICY_FILE);
+    assert.ok('policy' in pointer);
+    const assignment = assignRunnerRelease(runnerId, { latest: LATEST, previous: PREVIOUS }, pointer.policy);
+    assert.deepEqual(expected, assignment && { version: assignment.version, rollback: assignment.rollback },
+      'the release runner-release.json assigns this runner');
 
     const answer = await welcome([mine]);
     assert.deepEqual(stateOf(answer), [[mine, 0, true]]);
@@ -523,7 +554,9 @@ test('the link Welcome: each session\'s durable seq and lease, and the release t
           const answer = await ask();
           assert.equal(answer.status, 200, `${kind}, ${when}: ${JSON.stringify(answer.body)}`);
           assert.deepEqual(stateOf(answer), [[mine, 3, true]], `${kind}, ${when}`);
-          assert.deepEqual(Object.keys(answer.body), ['sessions'], `${kind}, ${when}: no release`);
+          // No release, and no browser for this self-managed runner (docs/runner-browser-design.md §2).
+          assert.deepEqual(Object.keys(answer.body), ['sessions', 'browser'], `${kind}, ${when}: no release`);
+          assert.equal(answer.body.browser, false, `${kind}, ${when}: no browser`);
           // The gateway gives the route 3 s; a read of /dl is never waited for.
           assert.ok(answer.ms < 1_000, `${kind}, ${when}: answered in ${answer.ms} ms`);
           const linkBeat = await send(out.linkPort, 'POST', '/api/runner/heartbeat', viaLink(), beat);
@@ -537,5 +570,75 @@ test('the link Welcome: each session\'s durable seq and lease, and the release t
       }
     }
     assert.ok(dl.reads.includes('/failing/dl/version.json') && dl.reads.includes('/silent/dl/version.json'));
+  });
+
+  await t.test('(6) with the browser switch on, the browser is offered only to the managed instance the manager recorded', async () => {
+    const on = await bootDoor(prisma, link, realtime, feeds.unset, Object.freeze({ enabled: true, problem: null }));
+    try {
+      // A managed runner of a third account: generation 3, run in the Pod the manager recorded.
+      const managedOwner = randomUUID();
+      const managedRunner = randomUUID();
+      const managedToken = `a-managed-runner:${randomUUID()}`;
+      const managedProcess = randomUUID();
+      const podUid = randomUUID();
+      await prisma.user.create({
+        data: { id: managedOwner, email: `runner-link-welcome-managed-${managedOwner}@runner-door.invalid`, name: 'managed', passwordHash: 'x' },
+      });
+      await prisma.runner.create({
+        data: { id: managedRunner, ownerId: managedOwner, name: 'a managed runner', tokenHash: sha256(managedToken), maxConcurrent: 4 },
+      });
+      await prisma.managedRunner.create({
+        data: {
+          ownerId: managedOwner, runnerId: managedRunner, clusterKey: 'runner-link-welcome-spec', namespace: 'orbit',
+          pvcName: `mr-data-${managedRunner}`, managementState: 'READY', generation: 3, podUid,
+        },
+      });
+      const managedLinkToken = signRunnerLinkToken(
+        link.config!,
+        { runnerId: managedRunner, ownerId: managedOwner, cellId: 'cell-1', leaseOwner: managedProcess, credential: runnerLinkCredential(sha256(managedToken)) },
+        new Date(),
+      ).token;
+      /** A welcome call as the gateway forwards a Hello: its capabilities, and its ManagedInstance when it names one. */
+      const ask = (port: number, token: string, instance?: { generation: string; podUid: string }) =>
+        send(port, 'POST', '/api/runner/link/welcome', {
+          authorization: `Bearer ${GATEWAY_TOKEN}`,
+          'x-orbit-runner-link-token': token,
+          'x-orbit-supported-providers': PROVIDERS,
+          'x-orbit-runner-capabilities': `${MANAGED_RUNNER_INSTANCE_CAPABILITY},link-stream-v1`,
+          ...(instance
+            ? { [MANAGED_RUNNER_GENERATION_HEADER]: instance.generation, [MANAGED_RUNNER_POD_UID_HEADER]: instance.podUid }
+            : {}),
+        }, { sessionIds: [] });
+
+      const matching = await ask(on.linkPort, managedLinkToken, { generation: '3', podUid });
+      assert.equal(matching.status, 200, JSON.stringify(matching.body));
+      assert.equal(matching.body.browser, true, 'the recorded instance is offered the browser');
+
+      for (const [what, instance, code] of [
+        ['no ManagedInstance', undefined, MANAGED_RUNNER_INSTANCE_REQUIRED],
+        ['an older generation', { generation: '2', podUid }, MANAGED_RUNNER_INSTANCE_SUPERSEDED],
+        ['a newer generation', { generation: '4', podUid }, MANAGED_RUNNER_INSTANCE_NOT_AUTHORIZED],
+        ['another Pod UID', { generation: '3', podUid: randomUUID() }, MANAGED_RUNNER_INSTANCE_NOT_AUTHORIZED],
+      ] as const) {
+        const refused = await ask(on.linkPort, managedLinkToken, instance);
+        assert.equal(refused.status, 403, `${what}: ${JSON.stringify(refused.body)}`);
+        assert.equal(refused.body.code, code, `${what}: ${JSON.stringify(refused.body)}`);
+        assert.notEqual(refused.body.browser, true, `${what}: no browser`);
+      }
+
+      // A self-managed runner, with the switch on: never, whatever instance its Hello names.
+      for (const instance of [undefined, { generation: '3', podUid }]) {
+        const self = await ask(on.linkPort, linkToken, instance);
+        assert.equal(self.status, 200, JSON.stringify(self.body));
+        assert.equal(self.body.browser, false, `a self-managed runner${instance ? ' naming an instance' : ''}`);
+      }
+
+      // And with the switch off, not even the recorded instance.
+      const off = await ask(door.linkPort, managedLinkToken, { generation: '3', podUid });
+      assert.equal(off.status, 200, JSON.stringify(off.body));
+      assert.equal(off.body.browser, false, 'the switch off');
+    } finally {
+      await on.close();
+    }
   });
 });

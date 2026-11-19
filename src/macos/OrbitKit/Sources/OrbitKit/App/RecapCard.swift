@@ -2,7 +2,7 @@ import Foundation
 
 /// The conversation's last row while it is at rest (the owner, 2026-10-22,
 /// docs/mocks/session-recap-display/04-decided): the recap its list row reads in one line, here
-/// whole, with when it was written and a way to write it again now. A port of the web's
+/// whole, with when it was written. A port of the web's
 /// `SessionRecapCard`, whose words `RecapCardCopyParityTests` holds these to.
 public struct RecapCard: Equatable, Sendable {
     /// The recap, whole: the server stores one line of at most 80 characters.
@@ -63,46 +63,13 @@ public struct RecapCard: Equatable, Sendable {
         return Calendar.current.isDate(at, inSameDayAs: now) ? clock : "\(dayTime.string(from: at)), \(clock)"
     }
 
-    /// What a refresh that wrote nothing says to the reader.
-    public struct Notice: Equatable, Sendable {
-        public let text: String
-        /// A failure, which the reader may want to try again — drawn as one.
-        public let failed: Bool
-    }
-
-    /// The notice for a pass that wrote nothing, by its reason (apiserver sessions/recap.ts
-    /// `RecapSkipReason`). Nil when there is nothing to say: another pass wrote first, and reading
-    /// the session again shows that one's line. Web parity: `recapRefreshNotice`.
-    public static func notice(for reason: String) -> Notice? {
-        switch reason {
-        case "cas-lost":
-            return nil
-        case "no-events":
-            return Notice(text: upToDate, failed: false)
-        case "too-few-events":
-            return Notice(text: tooLittle, failed: false)
-        case "no-key", "disabled":
-            return Notice(text: unavailable, failed: false)
-        default:
-            return Notice(text: failed, failed: true)
-        }
-    }
-
     // MARK: words — the web's `RECAP_CARD_COPY` (components/SessionRecapCard.tsx)
 
     /// The card's name, over the recap.
     public static let word = "Recap"
-    /// The ⋯ at the end of the recap that holds Refresh and Hide (the owner, 2026-11-02,
-    /// docs/mocks/session-recap-display/07-last-line B), as VoiceOver reads it.
-    public static let more = "Recap actions"
-    /// The menu's item that writes the recap again now.
-    public static let refresh = "Refresh recap"
-    /// The menu's item that hides this recap in this conversation on this device.
+    /// The × at the end of the recap that hides this recap in this conversation on this device, as
+    /// VoiceOver reads it. It was a ⋯ menu with Refresh too; the owner, 2026-11-16: just the ×.
     public static let hide = "Hide recap"
-    public static let upToDate = "The recap is already up to date."
-    public static let tooLittle = "There's too little to recap yet."
-    public static let unavailable = "Recaps aren't available on this server."
-    public static let failed = "Couldn't refresh the recap. Try again."
 
     // Built once and reused, like `RelativeTime`'s: "5:38 PM" and "Wed, Aug 6" — what the web's
     // `toLocaleTimeString`/`toLocaleDateString` calls produce in its default locale.

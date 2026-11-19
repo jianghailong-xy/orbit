@@ -6,6 +6,7 @@ import {
   rangeOf,
   sessionsToEvict,
   storageKey,
+  storedOlderEdge,
   trimForStorage,
   type StoredEvent,
 } from './transcriptStore';
@@ -82,6 +83,20 @@ describe('trimForStorage', () => {
     });
     expect(trimmed.events).toHaveLength(MAX_STORED_EVENTS);
     expect(trimmed.hasMoreOlder).toBe(true);
+  });
+});
+
+describe('storedOlderEdge', () => {
+  it('keeps the edge a page recorded', () => {
+    expect(storedOlderEdge({ oldestSeq: 35, hasMoreOlder: true }, page(35, 40))).toEqual({ oldestSeq: 35, hasMoreOlder: true });
+    expect(storedOlderEdge({ oldestSeq: 1, hasMoreOlder: false }, page(1, 40))).toEqual({ oldestSeq: 1, hasMoreOlder: false });
+  });
+  it('reads a window stored without an edge as possibly having older events above its first row', () => {
+    // The owner's session: rows from seq 35 on disk, the edge lost to a replay after a failed tail page.
+    expect(storedOlderEdge({ oldestSeq: null, hasMoreOlder: false }, page(35, 634))).toEqual({ oldestSeq: 35, hasMoreOlder: true });
+  });
+  it('knows nothing is older than a window that starts at the session’s first event', () => {
+    expect(storedOlderEdge({ oldestSeq: null, hasMoreOlder: false }, page(1, 12))).toEqual({ oldestSeq: 1, hasMoreOlder: false });
   });
 });
 

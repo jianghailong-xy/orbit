@@ -194,18 +194,22 @@ export function openItemKindForJobState(
 }
 
 /**
- * What a landing that did not land failed OF, in the four words its next step turns on (§2.6, J-T1b):
- * the branches conflicted, a check on the combined tree disagreed, a check ran out of its budget
- * before it answered, or the machinery stopped. A conflict is answered only by a branch that changed;
- * the other three may be answered by running the same landing again, when whoever asks can say why
+ * What a landing that did not land failed OF (§2.6, J-T1b): the branches conflicted, a check
+ * disagreed (on the combined tree or also on the baseline), a check ran out of its budget,
+ * or the machinery stopped. A conflict is answered only by a branch that changed;
+ * the other classes may be answered by running the same landing again, when whoever asks can say why
  * it will come out differently.
  */
-export const LANDING_FAILURE_CLASSES = ['CONFLICT', 'CHECK_FAILED', 'CHECK_TIMED_OUT', 'ERROR'] as const;
+export const LANDING_FAILURE_CLASSES = ['CONFLICT', 'CHECK_FAILED', 'CHECK_TIMED_OUT', 'BASELINE_RED', 'ERROR'] as const;
 export type LandingFailureClass = (typeof LANDING_FAILURE_CLASSES)[number];
 
-/** The classes `integration_retry` runs a landing again from — migration 0344's CHECK spells them. */
-export const RETRYABLE_LANDING_FAILURE_CLASSES = ['CHECK_FAILED', 'CHECK_TIMED_OUT', 'ERROR'] as const;
+/** Explicit retry treats BASELINE_RED like CHECK_FAILED; migrations 0344/0513 admit both. */
+export const RETRYABLE_LANDING_FAILURE_CLASSES = ['CHECK_FAILED', 'CHECK_TIMED_OUT', 'BASELINE_RED', 'ERROR'] as const;
 export type RetryableLandingFailureClass = (typeof RETRYABLE_LANDING_FAILURE_CLASSES)[number];
+/** What `integration_retry` reruns: a retryable failure, or a MAIN_SYNC conflict whose branch has
+ *  moved since (§3.1 M3). The CONFLICT one is queued without the retry columns, whose class check
+ *  (0344/0513) admits only the retryable classes. */
+export type LandingRetryFailureClass = RetryableLandingFailureClass | 'CONFLICT';
 
 /**
  * The class of a finished job, or null for a state that is not a failure.
@@ -214,11 +218,12 @@ export type RetryableLandingFailureClass = (typeof RETRYABLE_LANDING_FAILURE_CLA
  * killed at its budget — never off the output: a check's own words are the delivery's, and a class
  * decided by grepping them would be decided by whatever the test happened to print.
  */
-export function landingFailureClass(job: { state: string; checks: unknown }): LandingFailureClass | null {
+export function landingFailureClass(job: { state: string; checks: unknown; baselineRed?: boolean }): LandingFailureClass | null {
   switch (job.state) {
     case 'CONFLICT': return 'CONFLICT';
     case 'ERROR': return 'ERROR';
     case 'CHECK_FAILED': {
+      if (job.baselineRed === true) return 'BASELINE_RED';
       const checks = Array.isArray(job.checks) ? job.checks : [];
       const timedOut = checks.some((check) =>
         check !== null && typeof check === 'object' && (check as { timedOut?: unknown }).timedOut === true);
@@ -236,7 +241,9 @@ export function isRetryableLandingFailure(
 
 /** The checks the runner ran, as it reports them back. `outputTail` is clipped by the runner. */
 export interface IntegrationCheckResult {
-  name: 'TASK_ACCEPTANCE' | 'MERGE_CHECK';
+  skipped?: 'PATHS_EXEMPT';
+  files?: string[];
+  name: 'TASK_ACCEPTANCE' | 'MERGE_CHECK' | 'LANDING_CHECK';
   command: string;
   expectedExitCode: number;
   exitCode: number | null;
@@ -247,7 +254,7 @@ export interface IntegrationCheckResult {
 
 /** The check the runner is told to run (§2.3 `IntegrationJobCommand`). */
 export interface IntegrationCheckSpec {
-  name: 'TASK_ACCEPTANCE' | 'MERGE_CHECK';
+  name: 'TASK_ACCEPTANCE' | 'MERGE_CHECK' | 'LANDING_CHECK';
   command: string;
   expectedExitCode: number;
   timeoutSeconds: number;
@@ -275,6 +282,8 @@ export interface IntegrationCheckSource {
   acceptanceCommand: string | null;
   acceptanceExpectedExitCode: number | null;
   acceptanceTimeoutSeconds: number | null;
+  landingCheckCommand?: string | null;
+  landingCheckTimeoutSeconds?: number | null;
   mergeCheckCommand: string | null;
   mergeCheckTimeoutSeconds: number | null;
   skipMergeCheck: boolean;
@@ -290,7 +299,7 @@ export interface IntegrationCheckSource {
  *
  * ONE GENERATION MAY SKIP ITS CHECK. `integration_skip_merge_check` queues a landing with the merge
  * check NOT RUN, because the account owner agreed the check is what is red rather than the delivery
- * (§2.4 J-S5, 0393) — so no MERGE_CHECK spec is built and the runner's CHECK phase does not happen
+ * (§2.4 J-S5, 0393) — so no LANDING_CHECK spec is built and the runner's CHECK phase does not happen
  * at all. The task's own acceptance is deliberately NOT skipped with it: the check the owner was
  * asked about is the project's, and a task whose own criterion cannot pass on the combined tree is a
  * statement about that task that no approval here chose to waive. This is the only place a check
@@ -313,22 +322,40 @@ export function checksFor(row: IntegrationCheckSource): IntegrationCheckSpec[] {
       name: 'TASK_ACCEPTANCE',
       command: row.acceptanceCommand,
       expectedExitCode: row.acceptanceExpectedExitCode,
-      timeoutSeconds: row.acceptanceTimeoutSeconds ?? DEFAULT_CHECK_TIMEOUT_SECONDS,
+      timeoutSeconds: checkTimeoutSeconds('TASK_ACCEPTANCE', row),
     });
   }
   // The kind is checked as well as the flag even though 0393's CHECK makes the combination
   // impossible: what skips a check is one task's landing onto the project's own branch, and a row
   // that arrived saying otherwise — a hand-written fixture, a build ahead of the migration — keeps
   // the check it was queued for rather than landing unchecked.
-  if (row.mergeCheckCommand && !(row.kind === 'LAND_TASK' && row.skipMergeCheck)) {
+  const landing = row.kind === 'LAND_TASK';
+  const command = landing ? row.landingCheckCommand ?? row.mergeCheckCommand : row.mergeCheckCommand;
+  if (command && !(landing && row.skipMergeCheck)) {
     checks.push({
-      name: 'MERGE_CHECK',
-      command: row.mergeCheckCommand,
+      name: landing ? 'LANDING_CHECK' : 'MERGE_CHECK',
+      command,
       expectedExitCode: 0,
-      timeoutSeconds: row.mergeCheckTimeoutSeconds ?? DEFAULT_CHECK_TIMEOUT_SECONDS,
+      timeoutSeconds: checkTimeoutSeconds(landing ? 'LANDING_CHECK' : 'MERGE_CHECK', row),
     });
   }
   return checks;
+}
+
+/**
+ * The budget `checksFor` gives the check of this name: the task's acceptance its own, a landing check
+ * the project's landing budget or else its merge-check budget, a merge check the merge-check budget.
+ * Also what a timed-out check's item records as the limit it was stopped at.
+ */
+export function checkTimeoutSeconds(
+  name: IntegrationCheckSpec['name'],
+  row: Pick<IntegrationCheckSource, 'acceptanceTimeoutSeconds' | 'landingCheckTimeoutSeconds' | 'mergeCheckTimeoutSeconds'>,
+): number {
+  if (name === 'TASK_ACCEPTANCE') return row.acceptanceTimeoutSeconds ?? DEFAULT_CHECK_TIMEOUT_SECONDS;
+  if (name === 'LANDING_CHECK') {
+    return row.landingCheckTimeoutSeconds ?? row.mergeCheckTimeoutSeconds ?? DEFAULT_CHECK_TIMEOUT_SECONDS;
+  }
+  return row.mergeCheckTimeoutSeconds ?? DEFAULT_CHECK_TIMEOUT_SECONDS;
 }
 
 /**
@@ -353,7 +380,9 @@ export function integrationJobLimitSeconds(
   const lease = INTEGRATION_CLAIM_STALE_MS / 1_000;
   if (job.progressProtocol === INTEGRATION_PROGRESS_V2_PROTOCOL) return lease;
   if (job.phase !== 'CHECK') return lease;
-  return checksFor(job).reduce((total, check) => total + check.timeoutSeconds, lease);
+  // Legacy claims can be silent for both the combined check and K3 attribution. V2 renews
+  // throughout preparation and both runs, so its lease remains unchanged.
+  return checksFor(job).reduce((total, check) => total + check.timeoutSeconds * (job.kind === 'LAND_TASK' && check.name === 'LANDING_CHECK' ? 2 : 1), lease);
 }
 
 /** How many jobs one runner is handed per heartbeat (J-T2's dispatch). */
@@ -847,7 +876,7 @@ export async function queueLandingBehindTheWork(
  *
  * It rides on the generation it was asked for and nowhere else: the project's
  * `merge_check_command` is not touched, so the next landing and every promotion check run as they
- * did. The check is skipped, never passed — `checksFor` hands the runner no MERGE_CHECK at all, and
+ * did. The check is skipped, never passed — `checksFor` hands the runner no LANDING_CHECK at all, and
  * the row keeps this so that a landing whose checks array is empty cannot be read as a green one.
  */
 export interface LandingSkipMergeCheck {
@@ -939,7 +968,7 @@ export function timedOutErrorCode(job: {
 /** Which door ended a timed-out attempt, for the timeline's `TIMED_OUT` fact (§2.9 LS2). The two
  *  the job row cannot tell apart from an ordinary J-T9 end are the candidate's recheck gate and
  *  M-T13's retirement, which today write the same `error_detail` as the retry door. */
-export type TimeoutEndCause = 'RETRY' | 'RECHECK' | 'M13' | 'STOP' | 'SUPERSEDE' | 'TASK_REOPEN';
+export type TimeoutEndCause = 'RETRY' | 'RECHECK' | 'M13' | 'STOP' | 'SUPERSEDE' | 'TASK_REOPEN' | 'SKIP_CHECK';
 
 export async function endTimedOutLanding(
   tx: Prisma.TransactionClient,
@@ -1018,9 +1047,25 @@ export async function endTimedOutLanding(
   return errorCode;
 }
 
+/** K5: the result transaction queues the same delivery behind the baseline hold, without a retry decision. */
+export async function queueBaselineHeld(
+  tx: Prisma.TransactionClient,
+  input: { ownerId: string; projectId: string; taskId: string; sessionId: string; sourceRef: string; runnerId: string | null },
+): Promise<void> {
+  const codebase = await tx.projectCodebase.findFirstOrThrow({
+    where: { projectId: input.projectId, slot: 'primary' },
+    select: { id: true, canonicalRepoUrl: true, integrationRef: true, upstreamRef: true },
+  });
+  await queueLandTask(tx, {
+    ...input, codebase,
+    session: { id: input.sessionId, branch: shortBranchName(input.sourceRef), runnerId: input.runnerId },
+    cause: 'BASELINE_HELD',
+  });
+}
+
 /**
  * Queue the next generation of a task's landing because its coordinator asked for it (§2.3 J-T1b) —
- * the one way a landing that stopped is attempted again without the task being completed again (J5).
+ * the explicit retry door for a stopped landing (J5); K5 queues baseline-held work in its result transaction.
  *
  * The branch is the one a DONE written now would hand the line (`landingWorkSession`), not the one
  * the failed generation was handed: a task that was run again after its landing failed has its work
@@ -1039,12 +1084,18 @@ export async function queueLandingRetry(
     ownerId: string;
     projectId: string;
     taskId: string;
-    retry: LandingRetryRequest;
+    /** The failed generation this one reruns. Omitted only for the owner's skip of a landing that
+     *  was still in flight: the one it replaces was stopped rather than failed, so there is no
+     *  failure to rerun, and the skip columns alone say who asked and why. */
+    retry?: LandingRetryRequest;
     /**
      * Set only by `integration_skip_merge_check`: this generation runs no merge check (§2.4 J-S5,
      * 0393). Omitted by `integration_retry`, which queues the same generation WITH the check.
      */
     skipMergeCheck?: LandingSkipMergeCheck;
+    /** Which door queued it, when it is neither a recorded rerun nor a skip: the rerun of a MAIN_SYNC
+     *  conflict whose branch moved carries no retry columns (§3.1 M3) and is still the RETRY door's. */
+    cause?: EnqueueCause;
   },
 ): Promise<{ jobId: string; generation: number; sourceRef: string; landingSessionId: string } | null> {
   const task = await tx.task.findFirst({
@@ -1066,7 +1117,7 @@ export async function queueLandingRetry(
     session: { id: work.id, branch: work.branch, runnerId: work.assignedRunnerId },
     retry: input.retry,
     skipMergeCheck: input.skipMergeCheck,
-    cause: 'RETRY',
+    cause: input.cause ?? (input.retry ? 'RETRY' : 'SKIP_CHECK'),
   });
   if (queued === null) return null;
   const job = await tx.projectIntegrationJob.findUniqueOrThrow({
@@ -1079,6 +1130,87 @@ export async function queueLandingRetry(
     sourceRef: job.sourceRef,
     landingSessionId: queued.landingSessionId,
   };
+}
+
+/**
+ * The tip of the branch a rerun of this task's landing would hand the line — the same
+ * `landingWorkSession` choice `queueLandingRetry` makes — as its runner last reported it
+ * (`session.branch_sha`, 0370). Null when there is no such branch or no tip was reported.
+ */
+export async function readLandingSourceTip(
+  db: Prisma.TransactionClient,
+  input: { ownerId: string; projectId: string; taskId: string },
+): Promise<string | null> {
+  const task = await db.task.findFirst({
+    where: { id: input.taskId, ownerId: input.ownerId, projectId: input.projectId },
+    select: { codeless: true, sessions: workSessionsOfTaskSelect() },
+  });
+  const work = landingWorkSession(task?.sessions ?? []);
+  if (!task || task.codeless || !work?.branch) return null;
+  const tip = await db.session.findUnique({ where: { id: work.id }, select: { branchSha: true } });
+  return tip?.branchSha ?? null;
+}
+
+/** The stop a skip of an in-flight landing asks for: the cause its `STOP_REQUESTED` line carries,
+ *  and what the result transaction reads to queue the generation without the check once the stopped
+ *  one has answered (`queueSkippedLandingAfterStop`). */
+export const SKIP_CHECK_STOP_CAUSE = 'SKIP_CHECK';
+
+/** What a `STOP_REQUESTED` line asked by a skip carries in its data. */
+export interface SkipCheckStopData {
+  cause: typeof SKIP_CHECK_STOP_CAUSE;
+  skip: { reason: string; approvedByUserId: string };
+}
+
+/** The skip a stop line's data asked for, or null when the stop was not a skip's. */
+export function skipCheckStopOf(data: unknown): SkipCheckStopData['skip'] | null {
+  if (!data || typeof data !== 'object') return null;
+  const row = data as { cause?: unknown; skip?: { reason?: unknown; approvedByUserId?: unknown } };
+  if (row.cause !== SKIP_CHECK_STOP_CAUSE || !row.skip) return null;
+  const { reason, approvedByUserId } = row.skip;
+  if (typeof reason !== 'string' || !reason || typeof approvedByUserId !== 'string' || !approvedByUserId) {
+    return null;
+  }
+  return { reason, approvedByUserId };
+}
+
+/**
+ * The owner skipped the landing check of a landing that was still RUNNING: the runner was asked to
+ * stop, and the generation without the check waits for its answer, because J3 allows one landing of
+ * a task in flight. Called by the result transaction once the stopped generation is terminal.
+ *
+ * Whatever it answered, unless it landed — a runner that never read the stop (a legacy one reads it
+ * only when it starts) may report LANDED, ALREADY_LANDED or NOTHING_TO_LAND, and then there is
+ * nothing left to land. CANCELLED, CHECK_FAILED, ERROR and CONFLICT all queue it: the owner asked
+ * for this work to land without the check, and a conflict the next generation meets again is
+ * reported by that generation as an ordinary failure, with its item — a stopped generation opens
+ * none (J-T8).
+ *
+ * Nothing is queued when the task is no longer DONE (reopened since: its next DONE lands the new
+ * work, with the check), or when another generation is already in flight (the reopened DONE the
+ * same result just queued).
+ */
+export async function queueSkippedLandingAfterStop(
+  tx: Prisma.TransactionClient,
+  job: { id: string; ownerId: string; projectId: string; taskId: string },
+  endedAs: string,
+): Promise<void> {
+  if (endedAs === 'LANDED' || endedAs === 'ALREADY_LANDED' || endedAs === 'NOTHING_TO_LAND') return;
+  const stop = await tx.projectIntegrationJobEvent.findFirst({
+    where: { jobId: job.id, kind: 'STOP_REQUESTED' },
+    orderBy: { seq: 'desc' },
+    select: { data: true },
+  });
+  const skip = skipCheckStopOf(stop?.data);
+  if (!skip) return;
+  const task = await tx.task.findFirst({ where: { id: job.taskId }, select: { status: true } });
+  if (task?.status !== 'DONE') return;
+  await queueLandingRetry(tx, {
+    ownerId: job.ownerId,
+    projectId: job.projectId,
+    taskId: job.taskId,
+    skipMergeCheck: { reason: skip.reason, approvedByUserId: skip.approvedByUserId, approvalId: null },
+  });
 }
 
 // ── the delivered identity (§10.5 O-L4) ────────────────────────────────────────────────────────

@@ -120,6 +120,33 @@ final class RunnerPageFormatTests: XCTestCase {
 
     // MARK: the list row and the page head
 
+    func testManagedFirstKeepsTheOtherMachinesInTheirSavedOrder() throws {
+        let first = try macMini()
+        let second = try wikova()
+        let managed = try runner(Self.hpcJSON, ["managed": true])
+        XCTAssertEqual(RunnerPageFormat.managedFirst([first, managed, second], managedRunnerID: nil),
+                       [managed, first, second])
+    }
+
+    func testManagedFirstUsesTheStatusIDOnOlderServers() throws {
+        let first = try macMini()
+        let managed = try wikova()
+        XCTAssertEqual(RunnerPageFormat.managedFirst([first, managed], managedRunnerID: managed.id),
+                       [managed, first])
+    }
+
+    func testManagedFirstKeepsTheSavedOrderWithoutAManagedRunner() throws {
+        let runners = [try macMini(), try runner(Self.wikovaJSON, ["name": "orbit-cloud"])]
+        XCTAssertEqual(RunnerPageFormat.managedFirst(runners, managedRunnerID: nil), runners)
+    }
+
+    func testOSReadsTheReportedCapabilityAndNothingWithoutOne() throws {
+        XCTAssertEqual(RunnerPageFormat.os(try runner(Self.wikovaJSON, ["capabilities": ["session-worktree-ops-v1", "os:linux"]])), "linux")
+        XCTAssertEqual(RunnerPageFormat.os(try runner(Self.macMiniJSON, ["capabilities": ["os:darwin"]])), "darwin")
+        XCTAssertNil(RunnerPageFormat.os(try runner(Self.wikovaJSON, ["capabilities": ["provider:dsh"]])))
+        XCTAssertNil(RunnerPageFormat.os(try runner(Self.wikovaJSON, ["capabilities": NSNull()])))
+    }
+
     func testTheHeadAndTheRowSayWhereTheMachineStands() throws {
         let wikova = try wikova()
         XCTAssertEqual(RunnerPageFormat.presence(wikova, now: now), .online)
@@ -136,12 +163,24 @@ final class RunnerPageFormatTests: XCTestCase {
         XCTAssertEqual(RunnerPageFormat.statusWord(mini, now: now), "Offline")
         XCTAssertEqual(RunnerPageFormat.statusLine(mini, now: now, timeZone: shanghai),
                        "Offline · last seen Sep 14, 10:25 PM")
+        XCTAssertNil(RunnerPageFormat.slots(mini, now: now), "offline, the count is stale: Max Concurrent shows no use")
         XCTAssertEqual(RunnerPageFormat.hostLine(mini), "v0.1.155",
                        "a hostname that is the name shown is left out")
         XCTAssertNil(RunnerPageFormat.slots(mini, now: now), "an offline machine draws no count and no bar")
 
         let neverSeen = try runner(Self.macMiniJSON, ["lastHeartbeatAt": NSNull()])
         XCTAssertEqual(RunnerPageFormat.statusLine(neverSeen, now: now), "Offline")
+    }
+
+    func testTheLocationIsTheCountryItsIPIsIn() throws {
+        XCTAssertNil(RunnerPageFormat.location(try wikova()), "no check has decided: nothing is shown")
+        let japan: [String: Any] = ["verdict": "allowed", "country": "JP", "regionCode": NSNull(), "name": "Japan",
+                                    "viaProxy": false, "checkedAt": "2026-09-28T11:57:00Z"]
+        XCTAssertEqual(RunnerPageFormat.location(try runner(Self.wikovaJSON, ["region": japan])), "📍 Japan")
+        var proxied = japan
+        proxied["viaProxy"] = true
+        XCTAssertEqual(RunnerPageFormat.location(try runner(Self.wikovaJSON, ["region": proxied])),
+                       "📍 Japan (via proxy)")
     }
 
     func testDrainingAndAFullMachine() throws {
@@ -550,22 +589,95 @@ final class RunnerPageFormatTests: XCTestCase {
                        "a session is running on this account")
     }
 
+    func testARefusalOverSessionsInTheAccountListsThem() throws {
+        let json = """
+        {"engine":"codex","account":"1fda3f43","status":"failed","message":"in use",
+         "sessions":[{"id":"a","title":"Fix login","status":"RUNNING"},
+                     {"id":"b","title":"  ","status":"AWAITING_INPUT"},
+                     {"id":"c","title":"Old","status":"SOMETHING_NEW"},
+                     {"title":"no id"}]}
+        """
+        let state = try JSONDecoder().decode(RunnerAccountRemoveState.self, from: Data(json.utf8))
+        // One this build can't read is dropped; an unknown status is nil, not a failure.
+        XCTAssertEqual(state.sessions.map(\.id), ["a", "b", "c"])
+        XCTAssertNil(state.sessions[2].status)
+
+        let removal = try XCTUnwrap(RunnerPageFormat.removal(state, engine: "codex", account: "1fda3f43"))
+        XCTAssertEqual(removal.refused,
+                       "This Codex account can’t be removed while 3 sessions on it can’t move to another account — sign in another account, or end them below; then remove the account")
+        XCTAssertEqual(removal.blocking.map(\.title), ["Fix login", "Untitled session", "Old"])
+        XCTAssertEqual(removal.blocking.map(\.label), ["Running", "Waiting for input", nil])
+        XCTAssertEqual(removal.blocking.map(\.tone), [.ok, .warn, .muted])
+
+        let one = RunnerAccountRemoveState(engine: "claude", account: "5dd14473", status: "failed", message: "in use",
+                                           sessions: [RunnerAccountRemoveSession(id: "a", title: "Fix login", status: .pending)])
+        XCTAssertEqual(RunnerPageFormat.removal(one, engine: "claude", account: "5dd14473")?.refused,
+                       "This Claude Code account can’t be removed while a session on it can’t move to another account — sign in another account, or end the session below; then remove the account")
+
+        // From an older server: no list, and the machine's own words.
+        let older = try JSONDecoder().decode(RunnerAccountRemoveState.self, from: Data(
+            #"{"engine":"codex","account":"1fda3f43","status":"failed","message":"in use"}"#.utf8))
+        XCTAssertEqual(older.sessions, [])
+        XCTAssertEqual(RunnerPageFormat.removal(older, engine: "codex", account: "1fda3f43"),
+                       RunnerPageFormat.AccountRemoval(pending: false, refused: "in use"))
+    }
+
+    /// A removal under way that moved the account's sessions to another account says so while it waits
+    /// for them to leave (web `runnerAccountMovingOne`/`Many`).
+    func testARemovalWaitingOnTheSessionsItMovedSaysSo() throws {
+        let many = try JSONDecoder().decode(RunnerAccountRemoveState.self, from: Data(
+            #"{"engine":"codex","account":"1fda3f43","status":"pending","message":null,"moving":16}"#.utf8))
+        let removal = try XCTUnwrap(RunnerPageFormat.removal(many, engine: "codex", account: "1fda3f43"))
+        XCTAssertTrue(removal.pending)
+        XCTAssertNil(removal.refused)
+        XCTAssertEqual(removal.moving,
+                       "Moving 16 sessions to another Codex account — this one is removed once they have left, after their turns if any are running")
+        let one = RunnerAccountRemoveState(engine: "claude", account: "5dd14473", status: "pending", message: nil, moving: 1)
+        XCTAssertEqual(RunnerPageFormat.removal(one, engine: "claude", account: "5dd14473")?.moving,
+                       "Moving a session to another Claude Code account — this one is removed once it has left, after its turn if one is running")
+        let none = RunnerAccountRemoveState(engine: "codex", account: "1fda3f43", status: "pending", message: nil)
+        XCTAssertNil(RunnerPageFormat.removal(none, engine: "codex", account: "1fda3f43")?.moving)
+    }
+
     func testUpdateEnginesNowSaysWhereItGot() {
+        typealias Line = RunnerPageFormat.UpdateRelayLine
         let queued = RunnerInstallState(status: "pending", engine: nil, command: nil, message: nil, mode: "update")
-        XCTAssertEqual(RunnerPageFormat.updateRelayLine(queued),
-                       "Queued — the runner picks this up on its next check-in.")
+        XCTAssertEqual(RunnerPageFormat.updateRelayLines(queued),
+                       [Line("Queued — the runner picks this up on its next check-in.")])
         XCTAssertTrue(RunnerPageFormat.engineUpdateInFlight(queued))
         let running = RunnerInstallState(status: "installing", engine: nil, command: nil, message: nil, mode: "update")
-        XCTAssertEqual(RunnerPageFormat.updateRelayLine(running), "Updating this machine’s engine CLIs…")
+        XCTAssertEqual(RunnerPageFormat.updateRelayLines(running), [Line("Updating this machine’s engine CLIs…")])
         let done = RunnerInstallState(status: "done", engine: nil, command: nil,
-                                      message: "claude 2.1.284 → 2.1.290", mode: "update")
-        XCTAssertEqual(RunnerPageFormat.updateRelayLine(done), "claude 2.1.284 → 2.1.290")
+                                      message: "Claude Code updated 2.1.284 → 2.1.290\nCodex — 5 sessions running, it'll update once they finish",
+                                      mode: "update")
+        XCTAssertEqual(RunnerPageFormat.updateRelayLines(done), [Line("Nothing here needs your attention.")])
         XCTAssertFalse(RunnerPageFormat.engineUpdateInFlight(done))
         let quiet = RunnerInstallState(status: "done", engine: nil, command: nil, message: nil, mode: "update")
-        XCTAssertEqual(RunnerPageFormat.updateRelayLine(quiet), "Nothing to update.")
+        XCTAssertEqual(RunnerPageFormat.updateRelayLines(quiet), [Line("Nothing to update.")])
         let install = RunnerInstallState(status: "pending", engine: "kimi", command: nil, message: nil, mode: "install")
-        XCTAssertNil(RunnerPageFormat.updateRelayLine(install), "an install is not an update")
+        XCTAssertEqual(RunnerPageFormat.updateRelayLines(install), [], "an install is not an update")
         XCTAssertFalse(RunnerPageFormat.engineUpdateInFlight(install))
+    }
+
+    /// Only the engines that need someone, and the failed ones red — the web report's rule.
+    func testUpdateEnginesNowListsOnlyWhatNeedsSomeone() {
+        typealias Line = RunnerPageFormat.UpdateRelayLine
+        let failed = RunnerInstallState(status: "failed", engine: nil, command: "orbit engine-update", message: [
+            "Claude Code — already up to date (2.1.323)",
+            "Codex — 5 sessions running, it'll update once they finish",
+            "Kimi Code — updater finished, but its version couldn't be read",
+            "OpenCode — update timed out after 5m0s",
+            "Antigravity — installed but does not run: signal: killed",
+            "Gemini — owned by another user, left alone",
+            "Cursor CLI — update failed: npm error code EACCES",
+            "DeepSeek Harness — fixed supported version 0.2.0-rc.2",
+        ].joined(separator: "\n"), mode: "update")
+        XCTAssertEqual(RunnerPageFormat.updateRelayLines(failed), [
+            Line("OpenCode — update timed out after 5m0s", failed: true),
+            Line("Antigravity — installed but does not run: signal: killed", failed: true),
+            Line("Gemini — owned by another user, left alone"),
+            Line("Cursor CLI — update failed: npm error code EACCES", failed: true),
+        ])
     }
 
     // MARK: Workspaces

@@ -51,6 +51,17 @@ public enum WikiRunsCopy {
     public static func took(_ duration: String) -> String { "took \(duration)" }                                  // wikiTook
     public static func started(_ ago: String) -> String { "started \(ago)" }                                      // wikiStarted
 
+    /// What a maintenance run read of the repository, as its row's tag (`WIKI_RUN_TIER_WORDS`): a run that found
+    /// another repository's folder read the sessions alone too.
+    public static func tier(_ tier: WikiRepoTier) -> String {
+        switch tier {
+        case .git:                       return "git"
+        case .folder:                    return "folder"
+        case .sessions, .wrongRepository: return "sessions only"
+        case .unknown:                   return ""
+        }
+    }
+
     // MARK: the call log
 
     /// The log itself: the web table's name, and the section a run's page lists its calls under.
@@ -122,6 +133,23 @@ public struct WikiRunRow: Equatable, Sendable {
         self.state = state
         self.text = text
         self.when = when
+    }
+}
+
+/// What a maintenance run read of the repository, as a tag on its row (the web's `WikiRunTier`, design §7.4).
+public struct WikiRunTier: Equatable, Sendable {
+    /// plain: git; muted: the folder; warn: amber, the code checks wait; error: red, somebody has to set the folder right.
+    public enum Tone: String, Sendable { case plain, muted, warn, error }
+
+    public let tier: String
+    public let tone: Tone
+    /// Why it read the sessions alone; nil on git and the folder.
+    public let reason: String?
+
+    public init(tier: String, tone: Tone, reason: String?) {
+        self.tier = tier
+        self.tone = tone
+        self.reason = reason
     }
 }
 
@@ -248,6 +276,22 @@ public enum WikiRunsLogic {
         case .cancelled, .unknown:
             return WikiRunRow(kind: kind, mark: .none, tone: .muted, state: WikiRunsCopy.cancelled, text: "",
                               when: ago(job.endedAt ?? job.updatedAt))
+        }
+    }
+
+    /// What a maintenance run read of the repository, as a tag on its row — the web's `wikiRunTier`: `git`, `folder`
+    /// or `sessions only`, and when it read the sessions alone, why. Nil for a run that names no tier: any other kind,
+    /// or one before its probe.
+    public static func tier(_ job: WikiJob) -> WikiRunTier? {
+        guard let repo = job.repo else { return nil }
+        let tier = WikiRunsCopy.tier(repo.tier)
+        guard !tier.isEmpty else { return nil }
+        switch repo.tier {
+        case .git:    return WikiRunTier(tier: tier, tone: .plain, reason: nil)
+        case .folder: return WikiRunTier(tier: tier, tone: .muted, reason: nil)
+        default:
+            let red = repo.tier == .wrongRepository || WikiRepoTier.reasonNeedsAttention(repo.reason)
+            return WikiRunTier(tier: tier, tone: red ? .error : .warn, reason: repo.detail)
         }
     }
 

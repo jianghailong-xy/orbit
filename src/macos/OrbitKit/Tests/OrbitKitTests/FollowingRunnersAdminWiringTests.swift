@@ -93,11 +93,11 @@ final class FollowingRunnersAdminWiringTests: XCTestCase {
     func testEveryListBuildsOneRowAndOnlyTheCompactContainerPushes() throws {
         let cases: [(view: String, start: String, end: String, tag: String, push: String)] = [
             ("Views/FollowingView.swift",
-             "@ViewBuilder private func row(_ watch: Watch, now: Date) -> some View {",
+             "@ViewBuilder private func row(_ watch: Watch) -> some View {",
              "/// One watch as a Following row", ".tag(watch.id)",
              "Button { model.push(.watchDetail(watchID: watch.id)) } label: {"),
             ("Views/SkillsRunnersView.swift",
-             "@ViewBuilder private func row(_ r: Runner) -> some View {",
+             "@ViewBuilder private func row(_ r: Runner, isManaged: Bool = false, separates: Bool = false) -> some View {",
              "#if os(iOS)", ".tag(r.id)",
              "Button { model.push(.runnerDetail(runnerID: r.id)) } label: {"),
             ("Views/SettingsAdminView.swift",
@@ -206,7 +206,7 @@ final class FollowingRunnersAdminWiringTests: XCTestCase {
         XCTAssertFalse(root.contains("selectedRunnerID == nil") || root.contains("selectedWatchID == nil"))
 
         // The entries. A runner deep link is the same "select this runner" act a row is.
-        let route = code(try slice(app, from: "func route(to route: Route) {",
+        let route = code(try slice(app, from: "func route(to route: Route,",
                                    to: "/// Open a watch's record on Following."))
         XCTAssertTrue(route.contains("case .runner(let id):  selectedRunnerID = id"),
                       "the deep link routes through the same projection the list selects through")

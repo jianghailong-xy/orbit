@@ -1,0 +1,12 @@
+{"at":"2026-11-07T17:10:37.930930639Z","model":"Auto (default)","n":1,"note":"turn-1","scenario":"sandbox-shell-linux","task":"P5c 34h05fsaJBXkS3SDQ2smK","version":"2026.10.14-941492e"}
+{"at":"2026-11-07T17:10:57.448386921Z","model":"Auto (default)","n":2,"note":"turn-2","scenario":"sandbox-shell-linux","task":"P5c 34h05fsaJBXkS3SDQ2smK","version":"2026.10.14-941492e"}
+{"at":"2026-11-07T17:11:05.261059903Z","model":"Auto (default)","n":3,"note":"turn-3","scenario":"sandbox-shell-linux","task":"P5c 34h05fsaJBXkS3SDQ2smK","version":"2026.10.14-941492e"}
+{"at":"2026-11-07T17:11:15.314274212Z","model":"Auto (default)","n":4,"note":"turn-4","scenario":"sandbox-shell-linux","task":"P5c 34h05fsaJBXkS3SDQ2smK","version":"2026.10.14-941492e"}
+{"at":"2026-11-07T17:13:36.579151601Z","model":"Auto (default)","n":5,"note":"turn-1","scenario":"sandbox-shell-linux-fd5","task":"P5c 34h05fsaJBXkS3SDQ2smK","version":"2026.10.14-941492e"}
+{"at":"2026-11-07T17:13:56.078869907Z","model":"Auto (default)","n":6,"note":"turn-2","scenario":"sandbox-shell-linux-fd5","task":"P5c 34h05fsaJBXkS3SDQ2smK","version":"2026.10.14-941492e"}
+{"at":"2026-11-07T17:14:01.140068662Z","model":"Auto (default)","n":7,"note":"turn-3","scenario":"sandbox-shell-linux-fd5","task":"P5c 34h05fsaJBXkS3SDQ2smK","version":"2026.10.14-941492e"}
+{"at":"2026-11-07T17:14:09.751600673Z","model":"Auto (default)","n":8,"note":"turn-4","scenario":"sandbox-shell-linux-fd5","task":"P5c 34h05fsaJBXkS3SDQ2smK","version":"2026.10.14-941492e"}
+{"at":"2026-11-07T17:14:50.06996259Z","model":"Auto (default)","n":9,"note":"turn-1","scenario":"sandbox-shell-linux-socket","task":"P5c 34h05fsaJBXkS3SDQ2smK","version":"2026.10.14-941492e"}
+{"at":"2026-11-07T17:15:15.30787055Z","model":"Auto (default)","n":10,"note":"turn-2","scenario":"sandbox-shell-linux-socket","task":"P5c 34h05fsaJBXkS3SDQ2smK","version":"2026.10.14-941492e"}
+{"at":"2026-11-07T17:15:20.598231233Z","model":"Auto (default)","n":11,"note":"turn-3","scenario":"sandbox-shell-linux-socket","task":"P5c 34h05fsaJBXkS3SDQ2smK","version":"2026.10.14-941492e"}
+{"at":"2026-11-07T17:15:35.864011623Z","model":"Auto (default)","n":12,"note":"turn-4","scenario":"sandbox-shell-linux-socket","task":"P5c 34h05fsaJBXkS3SDQ2smK","version":"2026.10.14-941492e"}

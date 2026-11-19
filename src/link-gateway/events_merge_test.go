@@ -167,7 +167,7 @@ func TestBatchesOfSeveralConnectionsGoAsOneMergedCallAndEachIsAcknowledgedOnItsO
 		runner, process := claimsOf(t, c.LinkToken)
 		byRunner[runner+"/"+process] = i
 		if c.Headers["x-orbit-runner-capabilities"] != "session-terminal-handoff-v1,source-pin/v1" ||
-			c.Headers["x-orbit-managed-runner-generation"] != "7" || c.Headers["x-orbit-managed-runner-pod-uid"] != "pod-1" ||
+			c.Headers["x-orbit-cloud-runner-generation"] != "7" || c.Headers["x-orbit-cloud-runner-pod-uid"] != "pod-1" ||
 			c.Headers["x-orbit-supported-providers"] != "claude,codex" {
 			t.Fatalf("connection %d's headers %v: what every call forwarded for it carries", i, c.Headers)
 		}
@@ -602,7 +602,7 @@ func TestTheMergeWindowIsReadFromTheEnvironment(t *testing.T) {
 	env := func(extra map[string]string) func(string) string {
 		base := map[string]string{
 			"LINK_TLS_MODE": "off", "LINK_API_URL": "http://api", "LINK_GATEWAY_TOKEN": strings.Repeat("g", 32),
-			"LINK_PUBLIC_KEYS": publicPEM(t, newTestKeys(t).pub),
+			"LINK_PUBLIC_KEYS": publicPEM(t, newTestKeys(t).pub), "LINK_INTERNAL_API_URLS": "http://api:3001",
 		}
 		for k, v := range extra {
 			base[k] = v

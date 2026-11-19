@@ -13,8 +13,6 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.channels.Channel
 import kotlinx.coroutines.flow.distinctUntilChanged
 import kotlinx.coroutines.flow.map
-import kotlinx.coroutines.flow.MutableStateFlow
-import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
@@ -35,12 +33,9 @@ class PushController(
     private val tokenSource: PushTokenSource = FirebaseTokenSource(app),
 ) : Application.ActivityLifecycleCallbacks {
     val notifications = PushNotifications(app)
-    private val mutableNotice = MutableStateFlow<PushMessage?>(null)
-    val notice = mutableNotice.asStateFlow()
-    fun dismissNotice() { mutableNotice.value = null }
     private val storage = PushStorage(File(app.noBackupFilesDir, "push"))
     val registration = PushRegistration(session, storage, app.packageName, {
-        notifications.clear(); dismissNotice()
+        notifications.clear()
     })
     val configured: Boolean get() = tokenSource.available
     val signedIn = session.state.map { it is AuthState.SignedIn }.distinctUntilChanged()
@@ -81,7 +76,6 @@ class PushController(
         }
         scope.launch {
             realtime.state.map { Triple(it.handle, it.invalidationRevision, it.session?.id) }.distinctUntilChanged().collect {
-                if (mutableNotice.value?.payload?.sessionId?.let { id -> ObjectId.same(id, it.third) } == true) dismissNotice()
                 if (foreground) {
                     safely { if (configured) registration.ensureRegistered() }
                     // An account event: each notification is checked against its own record, never against a second read of the
@@ -142,21 +136,18 @@ class PushController(
                     if (foreground) {
                         // iOS lists every foreground alert in Notification Center without a banner. Here
                         // it stays in the tray silently; only the focused session's own approval, whose
-                        // card is on screen, is left out. An approval elsewhere also gets the in-app notice.
+                        // card is on screen, is left out. An approval elsewhere is noticed in the app from the Open snapshot, as
+                        // anything that starts waiting on you is (`NeedsYouToasts`), not from the push.
                         val approval = message.payload.kind == "approval"
                         val focused = message.payload.sessionId != null &&
                             ObjectId.same(message.payload.sessionId, realtime.state.value.session?.id)
                         if (!(approval && focused)) {
                             notifications.show(message, data, silent = true)
-                            if (approval) mutableNotice.value = message
                         }
                         notifications.remember(message)
                     } else if (notifications.show(message, data)) notifications.remember(message)
                     // A logout/token update may clear notifications while the system notify call runs.
-                    if (!registration.accepts(message.registrationKey)) {
-                        notifications.cancel(message)
-                        if (mutableNotice.value == message) dismissNotice()
-                    }
+                    if (!registration.accepts(message.registrationKey)) notifications.cancel(message)
                 }
                 PushCheck.STALE, PushCheck.MISSING, PushCheck.FORBIDDEN -> {
                     notifications.cancel(message); notifications.remember(message)
@@ -164,6 +155,21 @@ class PushController(
                 PushCheck.UNKNOWN -> return false // Offline cannot authorize a new actionable banner.
             }
             true
+        }
+    }
+
+    /** An owner request put off with Later is due: its notification comes back, as an alert, while the request still waits on the owner
+     * and its binding is this device's. */
+    suspend fun repost(data: Map<String, String>) {
+        if (!configured) return
+        session.restore()
+        registration.onAuthStateChanged()
+        work.withLock {
+            val message = PushMessage.parse(data)?.takeIf { it.payload.isOwnerRequest } ?: return
+            if (!registration.accepts(message.registrationKey)) return
+            val handle = (session.state.value as? AuthState.SignedIn)?.handle ?: return
+            if (PushAuthority(session, handle).check(message) == PushCheck.ACTIVE && registration.accepts(message.registrationKey))
+                notifications.show(message, data)
         }
     }
 
@@ -181,7 +187,7 @@ class PushController(
     private suspend fun reconcileLocked(readOpen: Boolean = true): Boolean {
         val handle = (session.state.value as? AuthState.SignedIn)?.handle ?: return true
         val binding = registration.activeBinding() ?: return true
-        val active = (notifications.active() + listOfNotNull(mutableNotice.value)).distinctBy { it.notificationKey }
+        val active = notifications.active().distinctBy { it.notificationKey }
         if (active.isEmpty()) return true
         val authority = PushAuthority(session, handle)
         val needsYou = if (!readOpen) null else try { authority.needsYou() } catch (cancel: CancellationException) { throw cancel }
@@ -200,10 +206,7 @@ class PushController(
         return complete
     }
 
-    private fun remove(message: PushMessage) {
-        notifications.cancel(message)
-        if (mutableNotice.value == message) dismissNotice()
-    }
+    private fun remove(message: PushMessage) = notifications.cancel(message)
 
     private fun refreshBusiness() { realtime.refreshDirectory(); realtime.refreshSession() }
     private suspend fun safely(block: suspend () -> Unit) {

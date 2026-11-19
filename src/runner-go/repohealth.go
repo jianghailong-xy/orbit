@@ -2,6 +2,8 @@ package main
 
 import (
 	"context"
+	"crypto/sha256"
+	"encoding/hex"
 	"fmt"
 	"os"
 	"sort"
@@ -31,6 +33,9 @@ type RepoHealthReport struct {
 	// AgentIDs are the agents whose workDir sits in this checkout, so the UI can attach the
 	// warning to the agent the user is looking at without re-deriving repo roots from paths.
 	AgentIDs []string `json:"agentIds,omitempty"`
+	// The main checkout's counts and fingerprint (contract §4), inlined into the entry; empty
+	// when the snapshot scan failed. Never file contents or patches.
+	MainCheckoutHeartbeatFields
 }
 
 // agentWorkDir pairs an agent with the directory its sessions run in.
@@ -57,6 +62,18 @@ func (p *repoHealthProbe) refresh() {
 		return // a previous scan is still running (slow or wedged git) — let it finish
 	}
 	defer p.refreshMu.Unlock()
+	p.scanLocked()
+}
+
+// refreshNow scans now for a checkout just added to dirs, waiting out a scan already running rather
+// than skipping it: that one may have read dirs before the addition. Never on the heartbeat goroutine.
+func (p *repoHealthProbe) refreshNow() {
+	p.refreshMu.Lock()
+	defer p.refreshMu.Unlock()
+	p.scanLocked()
+}
+
+func (p *repoHealthProbe) scanLocked() {
 	next := scanRepoHealth(p.dirs())
 	p.mu.Lock()
 	p.snapshot = next
@@ -104,6 +121,9 @@ func scanRepoHealth(dirs []agentWorkDir) []RepoHealthReport {
 		if !seen {
 			st := inspectRepoRoot(root)
 			rep = &RepoHealthReport{Root: root, Branch: st.Branch, State: st.State, Paths: st.Paths}
+			if mc := mainCheckoutHeartbeat(root); mc != nil {
+				rep.MainCheckoutHeartbeatFields = *mc
+			}
 			byRoot[root] = rep
 		}
 		if d.AgentID != "" && !contains(rep.AgentIDs, d.AgentID) {
@@ -118,74 +138,6 @@ func scanRepoHealth(dirs []agentWorkDir) []RepoHealthReport {
 	// Stable order so an unchanged machine sends an identical payload every minute.
 	sort.Slice(out, func(i, j int) bool { return out[i].Root < out[j].Root })
 	return out
-}
-
-// sharedCheckoutWatch notices when an isolated session leaves changes in the checkout its worktree
-// forked from, instead of in its own.
-//
-// Nothing prevents that, and the ways in are mundane: the Bash tool's working directory persists
-// between calls, so one legitimate `cd <workDir>` (to build an image, to read a file with the
-// toolchain that only exists there) silently redirects every later relative-path write. The agent
-// then commits on its branch and sees nothing wrong, while the edit sits in the shared checkout —
-// where it blocks other sessions' merges, is absent from every branch, and gets baked into the
-// next image built from that directory. Telling the author at turn boundaries is the only moment
-// anyone can still connect the change to what made it.
-//
-// Reported once per appearance: the baseline is refreshed after each report, so a path that
-// somebody else left dirty, or that this session was already told about, stays quiet.
-type sharedCheckoutWatch struct {
-	mu   sync.Mutex
-	root string
-	seen map[string]bool
-}
-
-// watchSharedCheckout starts watching the repo root a worktree forked from. Nil for a session that
-// isn't isolated: the shared directory IS its workspace, so writing there is the normal case and a
-// warning would be noise.
-func watchSharedCheckout(wt *Worktree) *sharedCheckoutWatch {
-	if wt == nil || wt.RepoDir == "" {
-		return nil
-	}
-	w := &sharedCheckoutWatch{root: wt.RepoDir, seen: map[string]bool{}}
-	for _, p := range inspectRepoRoot(w.root).Paths {
-		w.seen[p] = true // whatever was already dirty is somebody else's business
-	}
-	return w
-}
-
-// newlyDirty returns the shared checkout's paths that have gone dirty since the last call, and
-// folds them into the baseline so the next call stays quiet about them.
-func (w *sharedCheckoutWatch) newlyDirty() []string {
-	if w == nil {
-		return nil
-	}
-	w.mu.Lock()
-	defer w.mu.Unlock()
-	var fresh []string
-	current := map[string]bool{}
-	for _, p := range inspectRepoRoot(w.root).Paths {
-		current[p] = true
-		if !w.seen[p] {
-			fresh = append(fresh, p)
-		}
-	}
-	w.seen = current // also forgets paths that were cleaned up, so a re-dirtied one reports again
-	sort.Strings(fresh)
-	return fresh
-}
-
-// sharedCheckoutNotice is the transcript line for newly-dirtied paths: what happened, why it isn't
-// where the author thinks it is, and where to look.
-func sharedCheckoutNotice(root, branch string, paths []string) string {
-	where := "this session's branch"
-	if branch != "" {
-		where = branch
-	}
-	return fmt.Sprintf(
-		"This turn left %s modified in the shared checkout %s, outside this session's worktree: %s. "+
-			"Those edits are not on %s, so they won't be merged from here — and a deploy built from that "+
-			"directory would ship them. Re-apply them in the worktree if they belong to this session.",
-		plural(len(paths), "file"), root, namePaths(paths), where)
 }
 
 // repoCleanupOutcome is what a "Clean up checkout" request reports back: whether the checkout is
@@ -217,9 +169,11 @@ type repoCleanupOutcome struct {
 // must never rewrite a directory that isn't one of its own agents' workDirs.
 func cleanupRepoRoot(dir string, allowed func(string) bool) repoCleanupOutcome {
 	// Serialized against merges: both mutate this checkout, and a repair landing mid-merge would
-	// yank the tree out from under a fast-forward.
+	// yank the tree out from under a fast-forward. The checkout's own lock serializes it against the
+	// main checkout actions too.
 	mergeLock.Lock()
 	defer mergeLock.Unlock()
+	defer lockMainCheckout(dir)()
 
 	root, err := git(expandTilde(dir), "rev-parse", "--show-toplevel")
 	if err != nil || root == "" {
@@ -232,7 +186,13 @@ func cleanupRepoRoot(dir string, allowed func(string) bool) repoCleanupOutcome {
 	if before.State == repoStateClean {
 		return repoCleanupOutcome{Status: "done", State: repoStateClean, Message: "checkout was already clean"}
 	}
+	return cleanupRepoRootLocked(root, before)
+}
 
+// cleanupRepoRootLocked is the rescue and reset behind cleanupRepoRoot, for a caller already holding
+// mergeLock and the checkout's lock. Save & clean (the main checkout's rescue action) comes here
+// too, for a checkout that is merely dirty, untracked files included, once its fingerprint matched.
+func cleanupRepoRootLocked(root string, before repoRootState) repoCleanupOutcome {
 	rescue, err := rescueWorkingTree(root, before)
 	if err != nil {
 		// Nothing has been touched yet, so failing here is safe: the checkout stays exactly as
@@ -279,13 +239,17 @@ func cleanupRepoRoot(dir string, allowed func(string) bool) repoCleanupOutcome {
 	return repoCleanupOutcome{Status: "done", State: after.State, RescueBranch: rescue, Message: msg}
 }
 
-// rescueWorkingTree commits the checkout's current on-disk content to a fresh orbit/rescue-* branch
+// rescueWorkingTree commits the checkout's current on-disk content to an orbit/rescue-* branch
 // without touching HEAD, the index, or the working tree, and returns the branch name ("" when the
 // tree matches HEAD and there is nothing worth keeping).
 //
 // Everything runs against a temp index seeded from HEAD: the real one holds the conflict stages
 // that make this a rescue in the first place. Ignored files are left out — `add -A` honors
 // .gitignore — so node_modules never lands in a rescue commit.
+//
+// The branch is named from the content (HEAD and the saved tree), so saving the same checkout twice
+// — a Move redone after a crash — finds the branch it made the first time instead of making a
+// second one. A branch of that name holding anything else is an error, and nothing is changed.
 func rescueWorkingTree(root string, state repoRootState) (string, error) {
 	head, err := git(root, "rev-parse", "HEAD")
 	if err != nil || head == "" {
@@ -315,16 +279,26 @@ func rescueWorkingTree(root string, state repoRootState) (string, error) {
 	if headTree, _ := git(root, "rev-parse", head+"^{tree}"); headTree == tree {
 		return "", nil // on-disk content already matches HEAD: only the index was broken
 	}
+	sum := sha256.Sum256([]byte(head + " " + tree))
+	branch := "orbit/rescue-" + hex.EncodeToString(sum[:])[:8]
+	if existing, err := git(root, "rev-parse", "--verify", "--quiet", "refs/heads/"+branch); err == nil && existing != "" {
+		gotTree, _ := git(root, "rev-parse", existing+"^{tree}")
+		gotParent, _ := git(root, "rev-parse", existing+"^")
+		if gotTree == tree && gotParent == head {
+			return branch, nil // saved already: the same content on the same HEAD
+		}
+		return "", fmt.Errorf("%s already exists and holds something else", branch)
+	}
 	body := fmt.Sprintf(
-		"Orbit found this checkout in a %q state and cleaned it up.\n\nSaved here first: this is the working tree exactly as it was,\nconflict markers and all. Files: %s\n",
+		"Orbit saved this checkout (%q state) before changing it.\n\nThis is the working tree exactly as it was,\nconflict markers and all. Files: %s\n",
 		state.State, strings.Join(state.Paths, ", "))
 	commit, err := gitEnv(root, env,
-		"commit-tree", tree, "-p", head, "-m", "rescue: working tree before Orbit cleaned up this checkout", "-m", body)
+		"commit-tree", tree, "-p", head, "-m", "rescue: working tree before Orbit changed this checkout", "-m", body)
 	if err != nil || commit == "" {
 		return "", fmt.Errorf("commit-tree: %s", gitStderr(err))
 	}
-	branch := "orbit/rescue-" + shortSha(commit)
-	if _, err := git(root, "branch", branch, commit); err != nil {
+	// Create only: a branch someone made between the check above and here is left alone.
+	if _, err := git(root, "update-ref", "refs/heads/"+branch, commit, ""); err != nil {
 		return "", fmt.Errorf("branch: %s", gitStderr(err))
 	}
 	return branch, nil

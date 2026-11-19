@@ -1,3 +1,5 @@
+import { seedPromotionRequest } from '../test-support/promotion-request';
+import { receiveOpenItem } from '../test-support/open-item-delivery';
 import assert from 'node:assert/strict';
 import { randomUUID } from 'node:crypto';
 import { test } from 'node:test';
@@ -50,7 +52,7 @@ import {
 import { ensureLandingSession } from './landing-session';
 import { ProjectOpenItemEscalationService } from './open-item-escalation.service';
 import { configureProjectIntegration } from './project-integration-line';
-import { ProjectOpenItemService } from './project-open-item.service';
+import { IntegrationSkipChecked, ProjectOpenItemService } from './project-open-item.service';
 import { ProjectIntegrationRetryController } from './project-integration-retry.controller';
 import { ProjectHandoffService } from './project-handoff.service';
 import { ProjectPromotionService } from './project-promotion.service';
@@ -367,7 +369,8 @@ function claim(stack: Stack, w: World, lease: string): Promise<IntegrationJobCom
 
 type Failure = Omit<IntegrationJobResultRequest, 'claimGeneration' | 'leaseOwner'>;
 
-function report(stack: Stack, w: World, job: IntegrationJobCommand, result: Failure) {
+async function report(stack: Stack, w: World, job: IntegrationJobCommand, result: Failure) {
+  if (job.kind === 'LAND_TASK') await seedPromotionRequest(stack.db, w.projectId);
   return stack.api.integrationJobResult({ id: w.runnerId }, job.jobId, {
     claimGeneration: job.claimGeneration,
     leaseOwner: job.leaseOwner,
@@ -541,7 +544,7 @@ test('one task segment collects the DONE, integration_retry, the owner rerun, th
         { userId: w.ownerId, email: `${w.ownerId}@landing.invalid` },
         w.projectId, task.taskId,
         { reason: 'the check cannot run on this machine' },
-      );
+      ) as IntegrationSkipChecked;
       const skippedSubject = await subjectOfJob(stack.db, skipped.jobId);
       assert.equal(skippedSubject.job.state, 'QUEUED', 'the skip is queued, not claimed yet');
       assert.equal(skippedSubject.job.skipMergeCheck, true);
@@ -1185,6 +1188,23 @@ test('the landing’s todos list its owed INTEGRATION_* item and not another kin
     const stack = await connect();
     try {
       const { w, task, job, landing, failedId } = await redLanding(stack, 'todos-kind');
+      await stack.openItems.deliverForItems([failedId]);
+      for (const status of [RunStatus.FAILED, RunStatus.PENDING, RunStatus.RUNNING]) {
+        // A FAILED coordinator still takes the turn only with an auto-retry pending.
+        const retryAt = status === RunStatus.FAILED ? new Date(Date.now() + 60 * 60_000) : null;
+        await stack.db.session.update({ where: { id: w.coordinatorSessionId }, data: { status, retryAt } });
+        assert.deepEqual(await todosOf(stack, w, landing.sessionId), [],
+          `${status}: an unread coordinator item is not an owner-facing landing todo`);
+        assert.equal(await rowStateOf(stack, w, landing.sessionId), 'IN_FLIGHT',
+          `${status}: the unread item does not mark the landing as awaiting a decision`);
+      }
+      // Down with no retry coming, the coordinator never reads it: the owner sees it on the landing.
+      await stack.db.session.update({ where: { id: w.coordinatorSessionId }, data: { status: RunStatus.FAILED, retryAt: null } });
+      assert.deepEqual(await todosOf(stack, w, landing.sessionId), [[failedId, 'INTEGRATION_CHECK_FAILED', 'OPEN']],
+        'an item its coordinator cannot take is an owner-facing landing todo');
+      await stack.db.session.update({ where: { id: w.coordinatorSessionId }, data: { status: RunStatus.AWAITING_INPUT } });
+      await receiveOpenItem(stack.db, failedId);
+
 
       // Another kind about the same task and the same job, and owed (a delivery review of a DONE
       // task is): the landing is not where it is answered, so it is not one of its todos.
@@ -1222,6 +1242,8 @@ test('an INTEGRATION_* item still OPEN but owed by nobody is not one of the land
     const stack = await connect();
     try {
       const { w, task, landing, failedId } = await redLanding(stack, 'todos-owed');
+      await stack.openItems.deliverForItems([failedId]);
+      await receiveOpenItem(stack.db, failedId);
       assert.deepEqual(
         await todosOf(stack, w, landing.sessionId),
         [[failedId, 'INTEGRATION_CHECK_FAILED', 'OPEN']],
@@ -1305,6 +1327,8 @@ test('an owed INTEGRATION_* item about the round’s candidate is a todo though 
         },
         select: { id: true },
       });
+      await stack.openItems.deliverForItems([legacy.id]);
+      await receiveOpenItem(stack.db, legacy.id);
       assert.equal(
         await stack.db.projectIntegrationJob.count({ where: { id: legacyJobId, landingId: round.id } }),
         0,

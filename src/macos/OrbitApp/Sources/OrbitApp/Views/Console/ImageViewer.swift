@@ -129,6 +129,12 @@ extension View {
                 }
             }
             .environment(store)
+            .onDisappear { FullScreenCoverHold.shared.end() }
+        }
+        // Before the cover is presented, not on its content's appear: the split re-picks its
+        // columns as the presentation starts.
+        .onChange(of: target.wrappedValue?.id) { _, now in
+            if now != nil { FullScreenCoverHold.shared.begin() }
         }
         #else
         self
@@ -633,5 +639,34 @@ func anchorAtBottom(_ popover: UIPopoverPresentationController?, of view: UIView
     popover.sourceView = view
     popover.sourceRect = CGRect(x: view.bounds.midX, y: view.bounds.maxY - 1, width: 1, height: 1)
     popover.permittedArrowDirections = []
+}
+#endif
+
+#if os(iOS)
+/// Whether a full-screen image viewer is up, or has just closed. On iPad, presenting and dismissing a
+/// `fullScreenCover` over the `NavigationSplitView` can make UIKit re-pick the split's display mode,
+/// which arrives as a `columnVisibility` change nobody asked for — the sidebar opened after closing
+/// an image. `MainView` reads `holding` to put the columns back as the reader left them.
+@MainActor @Observable
+final class FullScreenCoverHold {
+    static let shared = FullScreenCoverHold()
+    private(set) var holding = false
+    private var release: Task<Void, Never>?
+
+    func begin() {
+        release?.cancel()
+        holding = true
+    }
+
+    /// Keeps holding a moment past the dismissal: the split settles its columns after the cover's
+    /// content has gone.
+    func end() {
+        release?.cancel()
+        release = Task { [weak self] in
+            try? await Task.sleep(for: .milliseconds(600))
+            guard !Task.isCancelled else { return }
+            self?.holding = false
+        }
+    }
 }
 #endif

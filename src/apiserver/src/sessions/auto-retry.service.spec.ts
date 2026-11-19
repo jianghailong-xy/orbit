@@ -288,6 +288,12 @@ function makeService(
       // The card's read (`retryMessage`): the session, owner-scoped.
       findFirst: async (args: { where: { id: string; ownerId: string } }) =>
         rows.find((r) => r.id === args.where.id && r.ownerId === args.where.ownerId) ?? null,
+      // Whether the message re-sent is Orbit's (`wroteByOrbit`): a fixture's session opened by a person
+      // unless it says the platform wrote its prompt.
+      findUnique: async (args: { where: { id: string } }) => {
+        const row = rows.find((r) => r.id === args.where.id);
+        return row ? { promptByOrbit: false, ...row } : null;
+      },
     },
     runEvent: {
       // Honour `where.type` and `take`: what stranded these sessions was reading a fixed
@@ -307,6 +313,18 @@ function makeService(
           && (turnId === undefined || (e.turnId ?? null) === turnId)
           && (seq?.gt === undefined || (e.seq ?? 0) > seq.gt));
         return matching.slice(-args.take).reverse();
+      },
+      // Whether the turn re-sent was cut by the owner's Update Now (`updateCutOf`): its interrupt with
+      // `payload.reason`, matched by `where.payload.path/equals` as Prisma does.
+      findFirst: async (args: { where: { type?: string; turnId?: string | null; payload?: { path: string[]; equals: unknown } } }) => {
+        const all: Array<{ type: string; payload: unknown; turnId?: string; seq?: number }> =
+          opts.events ?? [{ type: 'user', payload: { text: 'the original message' } }];
+        const { type, turnId, payload } = args.where;
+        const hit = all.filter((e) =>
+          (!type || e.type === type)
+          && (turnId === undefined || (e.turnId ?? null) === turnId)
+          && (!payload || (e.payload as Record<string, unknown> | null)?.[payload.path[0]] === payload.equals)).at(-1);
+        return hit ? { payload: hit.payload } : null;
       },
     },
     conversationTurn: {

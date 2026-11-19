@@ -60,6 +60,10 @@ private struct RunnerEngineContent: View {
     @FocusState private var newAccountFocused: Bool
     @State private var newAccountRenaming = false
     @State private var pendingRemoval: RunnerPageFormat.AccountLine?
+    /// The added Claude Code account whose Set as default confirmation is up.
+    @State private var pendingSetDefault: RunnerPageFormat.AccountLine?
+    /// This page's own Set as default request is on its way: the menu item says busy until it lands.
+    @State private var swapPressing = false
     /// Use again is on its way: the button stays busy until the list read after it carries Default back
     /// and its line goes.
     @State private var restoring = false
@@ -73,6 +77,8 @@ private struct RunnerEngineContent: View {
     @State private var renaming: RunnerPageFormat.AccountLine?
     @State private var renameDraft = ""
     @State private var notice: String?
+    /// A Fix with an agent press is on its way: its button holds until the list read after it.
+    @State private var fixPressing = false
 
     private static let adding = "+"
     /// What a runner account's pause applies to, as the Pause Account sheet says it.
@@ -100,12 +106,12 @@ private struct RunnerEngineContent: View {
             } else if let health, health.installed == true, let login = RunnerPageFormat.loginEngine(engine) {
                 accountsSection(health, login: login, offline: offline, now: now)
             } else if let login = RunnerPageFormat.loginEngine(engine) {
-                installSection(Infrastructure.rowKind(Infrastructure.engineHealth(runner, login), install: runner.install,
+                installSection(MachinesAndModels.rowKind(MachinesAndModels.engineHealth(runner, login), install: runner.install,
                                                       engine: login),
-                               installable: Infrastructure.installable(runner, login), offline: offline)
+                               installable: MachinesAndModels.installable(runner, login), offline: offline)
             } else if engine == "opencode" {
-                installSection(Infrastructure.rowKind(health, install: runner.install, slug: engine),
-                               installable: Infrastructure.installsOpenCode(runner), offline: offline)
+                installSection(MachinesAndModels.rowKind(health, install: runner.install, slug: engine),
+                               installable: MachinesAndModels.installsOpenCode(runner), offline: offline)
             }
             // Cursor CLI stays on the build Orbit pins, which a runner release moves: Update Engines Now
             // has nothing to do for it (board iOS 2).
@@ -144,7 +150,7 @@ private struct RunnerEngineContent: View {
 
     /// DeepSeek Harness has no sign-in here: every session runs on the DeepSeek key it was started with.
     /// What this machine decides is whether it can start Harness at all — and the one fix that happens
-    /// here is installing the pinned CLI (web parity: DeepSeek Harness's machine rows on Infrastructure).
+    /// here is installing the pinned CLI (web parity: DeepSeek Harness's machine rows on Machines & models).
     @ViewBuilder private func dshSection(offline: Bool) -> some View {
         let state = DshRuntime.state(of: runner)
         Section {
@@ -172,7 +178,7 @@ private struct RunnerEngineContent: View {
     /// An engine the machine doesn't have — a sign-in engine, or OpenCode — installed from here as the
     /// web's engine row installs it: Install, or Retry after an install that failed, and the relay's own
     /// words while it runs. Nothing for an Antigravity this runner can't run at all (`installable`).
-    @ViewBuilder private func installSection(_ kind: Infrastructure.RowKind, installable: Bool,
+    @ViewBuilder private func installSection(_ kind: MachinesAndModels.RowKind, installable: Bool,
                                              offline: Bool) -> some View {
         if kind == .installing || installable {
             Section {
@@ -187,6 +193,15 @@ private struct RunnerEngineContent: View {
                     Text(message)
                         .font(.orbitLabel)
                         .foregroundStyle(Color.secondary)
+                }
+                // Install failed: an agent can be sent to fix it, under the failure; Retry stays as it is.
+                if let fix = RunnerAgentFixLogic.installFailedState(runner, engine: engine) {
+                    VStack(alignment: .leading, spacing: 6) {
+                        RunnerAgentFixButton(state: fix, pressing: fixPressing) {
+                            fixWithAnAgent(RunnerAgentFixTarget(kind: .installFailed, engine: engine))
+                        }
+                        RunnerAgentFixLine(state: fix) { openSession($0) }
+                    }
                 }
             } footer: {
                 // Cursor CLI's page has no Update Engines Now to carry its footer.
@@ -247,10 +262,17 @@ private struct RunnerEngineContent: View {
                             .foregroundStyle(Color.secondary)
                             .fixedSize(horizontal: false, vertical: true)
                     }
-                    if let health, let failed = RunnerPageFormat.updateFailedLine(health, now: now) {
+                    if let health, let failed = RunnerPageFormat.updateFailedLine(
+                        health, now: now, dismissed: runner.engineUpdateDismissals?[engine]) {
                         Text(failed)
                             .font(.orbitListSubtitle)
                             .foregroundStyle(RunnerInk.amber)
+                    }
+                    // Until the next release: only a warning against a known latest has one to wait for.
+                    if let health, RunnerPageFormat.offersUpdateWarningDismiss(runner, health: health, now: now) {
+                        Button(RunnerPageCopy.RUNNER_ENGINE_UPDATE_DISMISS) { dismissUpdateWarning() }
+                            .linkButtonStyle()
+                            .font(.orbitLabel)
                     }
                 }
                 Spacer(minLength: 0)
@@ -289,6 +311,13 @@ private struct RunnerEngineContent: View {
                         Button("Cancel", role: .cancel) {}
                     } message: { line in
                         Text(removalNote(line))
+                    }
+                    .orbitConfirmation({ _ in setDefaultTitle },
+                                       isPresented: setDefaultAsked, presenting: pendingSetDefault) { line in
+                        Button(RunnerAccountCopy.RUNNER_ACCOUNT_SET_DEFAULT_CONFIRM) { setDefault(line) }
+                        Button("Cancel", role: .cancel) {}
+                    } message: { line in
+                        Text(setDefaultNote(line))
                     }
             }
             if let removed = RunnerPageFormat.removedDefaultLine(health),
@@ -341,13 +370,29 @@ private struct RunnerEngineContent: View {
         Section {
             Button(RunnerPageCopy.RUNNER_UPDATE_ENGINES_NOW) { updateEngines() }
                 .disabled(offline || RunnerPageFormat.engineUpdateInFlight(runner.install))
-            if let relay = RunnerPageFormat.updateRelayLine(runner.install) {
-                Text(relay)
-                    .font(.orbitLabel)
-                    .foregroundStyle(Color.secondary)
+            let relay = RunnerPageFormat.updateRelayLines(runner.install)
+            if !relay.isEmpty {
+                VStack(alignment: .leading, spacing: 2) {
+                    ForEach(Array(relay.enumerated()), id: \.offset) { _, line in
+                        Text(line.text)
+                            .font(.orbitLabel)
+                            .foregroundStyle(line.failed ? RunnerInk.red : Color.secondary)
+                    }
+                }
+            }
+            // A failed line: an agent can be sent to fix it, under the report, as on an Install failed panel.
+            if let fix = RunnerAgentFixLogic.engineUpdateState(runner) {
+                VStack(alignment: .leading, spacing: 6) {
+                    RunnerAgentFixButton(state: fix, pressing: fixPressing) {
+                        fixWithAnAgent(RunnerAgentFixTarget(kind: .engineUpdateFailed, engine: nil))
+                    }
+                    RunnerAgentFixLine(state: fix) { openSession($0) }
+                }
             }
         } footer: {
             Text(offline ? RunnerPageCopy.RUNNER_ENGINES_OFFLINE_FOOTER
+                 : RunnerPageFormat.isManaged(runner)
+                     ? (engine == "dsh" ? DshRuntime.managedEnginePageFooter : RunnerPageCopy.RUNNER_ENGINES_MANAGED_FOOTER)
                  : engine == "dsh" ? DshRuntime.enginePageFooter : RunnerPageCopy.RUNNER_ENGINES_FOOTER)
         }
     }
@@ -379,6 +424,11 @@ private struct RunnerEngineContent: View {
                     HStack(spacing: 4) {
                         Text(line.name)
                             .font(.headline)
+                        // Web's DEFAULT chip: a Default renamed in Orbit, or promoted by Set as default
+                        // while keeping its name (`AccountName`'s re-chip).
+                        if line.isDefault && line.name != "Default" {
+                            PoolChip(text: RunnerEngineSetDefaultViews.defaultChip)
+                        }
                         // Where Automatic starts the next session — the account pools' mark for the same
                         // thing (web `AccountName`).
                         if RunnerPageFormat.marksNext(runner, engine: engine, account: line.id, now: now) {
@@ -443,10 +493,25 @@ private struct RunnerEngineContent: View {
                         .disabled(offline || removal?.pending == true)
                 }
             }
+            if let moving = removal?.moving {
+                Text(moving)
+                    .font(.orbitLabel)
+                    .foregroundStyle(.secondary)
+            }
+            // Becoming the Default, or a swap that failed: the same chrome Set as default shots render.
+            RunnerEngineSetDefaultViews.SwapStatus(runner: runner, line: line)
             if let refused = removal?.refused {
                 Text(refused)
                     .font(.orbitLabel)
                     .foregroundStyle(RunnerInk.red)
+            }
+            // Refused because sessions are running in it: which ones, each a way to it (web parity).
+            if let blocking = removal?.blocking, !blocking.isEmpty {
+                VStack(alignment: .leading, spacing: 6) {
+                    ForEach(blocking) { session in
+                        blockingSessionRow(session)
+                    }
+                }
             }
             if signingIn == line.id {
                 RunnerSignInView(runnerID: runner.id, engine: login, account: line.signInAccount, autoStart: true,
@@ -490,6 +555,33 @@ private struct RunnerEngineContent: View {
         .onChange(of: foldsBack(line, now: now)) { _, fold in
             if fold { closeSignIn() }
         }
+    }
+
+    /// One session a refused removal lists: its dot, its title as a link, where it stands, and Open
+    /// session — the whole row a press that opens it.
+    private func blockingSessionRow(_ session: RunnerPageFormat.BlockingSession) -> some View {
+        Button { openSession(session.id) } label: {
+            HStack(alignment: .firstTextBaseline, spacing: 6) {
+                Circle()
+                    .fill(RunnerInk.status(session.tone))
+                    .frame(width: 6, height: 6)
+                    .alignmentGuide(.firstTextBaseline) { $0[.bottom] }
+                Text(session.title)
+                    .foregroundStyle(Color.accentColor)
+                    .lineLimit(1)
+                    .truncationMode(.tail)
+                if let label = session.label {
+                    Text(label)
+                        .foregroundStyle(Color.secondary)
+                }
+                Spacer(minLength: 8)
+                Text("\(RunnerAccountCopy.RUNNER_ACCOUNT_IN_USE_OPEN) →")
+                    .foregroundStyle(Color.accentColor)
+            }
+            .font(.orbitLabel)
+            .contentShape(Rectangle())
+        }
+        .buttonStyle(.plain)
     }
 
     /// The row with its presses: its long-press menu, and its left swipe — on a phone (iOS 26,
@@ -577,6 +669,14 @@ private struct RunnerEngineContent: View {
             } else if line.auth == "yes" {
                 Button { pausing = line } label: { Label("Pause…", systemImage: "pause.fill") }
             }
+        }
+        // What it does under its name, or why it can't be chosen now (web / Android Set as default).
+        if RunnerPageFormat.offersSetDefault(line, engine: engine) {
+            let blocked = RunnerPageFormat.setDefaultBlocked(runner, offline: offline, pressing: swapPressing)
+            Button { pendingSetDefault = line } label: {
+                RunnerEngineSetDefaultViews.MenuItemLabel(blocked: blocked)
+            }
+            .disabled(blocked != nil)
         }
         if RunnerPageFormat.offersRemove(line, health: health, runner: runner) {
             Divider()
@@ -677,7 +777,8 @@ private struct RunnerEngineContent: View {
         var line = AttributedString(version ?? "")
         // Cursor CLI's build is the one Orbit pins, which its note says.
         if let note = RunnerAttention.updateNoteOf(health.update, nowMs: RunnerPageFormat.nowMs(now),
-                                                   pinned: engine == CursorRuntime.engine) {
+                                                   pinned: engine == CursorRuntime.engine,
+                                                   dismissed: runner.engineUpdateDismissals?[engine]) {
             if version != nil { line += AttributedString(RunnerPageCopy.RUNNER_LINE_SEPARATOR) }
             var words = AttributedString(note.text)
             if note.tone == .warn { words[Colour.self] = RunnerInk.amber }
@@ -698,6 +799,10 @@ private struct RunnerEngineContent: View {
         Binding(get: { pendingRemoval != nil }, set: { if !$0 { pendingRemoval = nil } })
     }
 
+    private var setDefaultAsked: Binding<Bool> {
+        Binding(get: { pendingSetDefault != nil }, set: { if !$0 { pendingSetDefault = nil } })
+    }
+
     private var renameAsked: Binding<Bool> {
         Binding(get: { renaming != nil }, set: { if !$0 { renaming = nil } })
     }
@@ -707,8 +812,17 @@ private struct RunnerEngineContent: View {
         return removalQuestion(line).title
     }
 
+    private var setDefaultTitle: String {
+        guard let line = pendingSetDefault else { return RunnerAccountCopy.RUNNER_ACCOUNT_SET_DEFAULT }
+        return setDefaultQuestion(line).title
+    }
+
     private func removalNote(_ line: RunnerPageFormat.AccountLine) -> String {
         removalQuestion(line).message
+    }
+
+    private func setDefaultNote(_ line: RunnerPageFormat.AccountLine) -> String {
+        setDefaultQuestion(line).message
     }
 
     /// Default's removal in the web's words; an added account's in the page's own, or — while Default is
@@ -716,6 +830,11 @@ private struct RunnerEngineContent: View {
     private func removalQuestion(_ line: RunnerPageFormat.AccountLine) -> RunnerPageFormat.RemovalQuestion {
         let health = RunnerPageFormat.engines(runner).first { $0.engine == engine } ?? RunnerEngineHealth(engine: engine)
         return RunnerPageFormat.removalQuestion(line, health: health, runner: runner)
+    }
+
+    private func setDefaultQuestion(_ line: RunnerPageFormat.AccountLine) -> RunnerPageFormat.RemovalQuestion {
+        let health = RunnerPageFormat.engines(runner).first { $0.engine == engine } ?? RunnerEngineHealth(engine: engine)
+        return RunnerPageFormat.setDefaultQuestion(line, health: health, runner: runner)
     }
 
     // MARK: presses
@@ -820,6 +939,20 @@ private struct RunnerEngineContent: View {
         }
     }
 
+    /// Make default: the runner swaps this login with ~/.claude. A control-plane refusal is said over
+    /// the web's failed title; a machine failure rides in `claudeAccountSwap` after the list is read.
+    private func setDefault(_ line: RunnerPageFormat.AccountLine) {
+        guard let login = RunnerPageFormat.loginEngine(engine) else { return }
+        let id = runner.id
+        swapPressing = true
+        Task {
+            if let failure = await runners.setDefaultAccount(id, engine: login, account: line.id) {
+                show(RunnerAccountCopy.runnerAccountSetDefaultFailed(name: line.name) + " — " + failure)
+            }
+            swapPressing = false
+        }
+    }
+
     /// Use again: Default back in Orbit's use. The model reads the runner again after the write, so the
     /// line goes once the list carries Default back; one that fails says so above the server's reason.
     private func restoreDefault(_ login: LoginEngine, name: String) {
@@ -838,6 +971,33 @@ private struct RunnerEngineContent: View {
         Task {
             if let failure = await runners.updateEngines(id) { show(failure) }
         }
+    }
+
+    private func dismissUpdateWarning() {
+        let id = runner.id
+        let slug = engine
+        Task {
+            if let failure = await runners.dismissEngineUpdateWarning(id, engine: slug) { show(failure) }
+        }
+    }
+
+    /// Fix with an agent on a failed install or engine update: one press, no sheet; the list read after it
+    /// turns the button into the fixing line, and the page stays. A refusal is the server's own sentence.
+    private func fixWithAnAgent(_ target: RunnerAgentFixTarget) {
+        let id = runner.id
+        fixPressing = true
+        Task {
+            if let failure = await runners.fixAttention(id, target: target) {
+                show("\(RunnerPageCopy.AGENT_FIX_FAILED) — \(failure)")
+            }
+            fixPressing = false
+        }
+    }
+
+    /// The session fixing it: its conversation, after the Settings sheet comes down.
+    private func openSession(_ id: String) {
+        model.settingsPresented = false
+        model.route(to: .session(id))
     }
 
     private func install() {

@@ -242,6 +242,8 @@ export function censusFixtures({ run: RUN, db, sql, server, jwt }: CensusWorld) 
     await db.session.update({ where: { id: sessionId }, data: { changedFiles: [{ path: 'census.txt', status: 'M' }] } });
     const eventId = randomUUID();
     await db.runEvent.create({ data: { id: eventId, sessionId, seq: 1, type: 'assistant_text', payload: { text: `wrote ${artifactPath}` } } });
+    // A reply of the agent's, which Settings › Translation can translate again (reply-translation.ts).
+    await db.runEvent.create({ data: { sessionId, seq: 2, type: 'assistant', payload: { text: 'the census replied' } } });
     await db.attachment.create({
       data: { ownerId, sessionId, mimeType: 'text/plain', sizeBytes: 6, fileName: 'census.txt', data: Buffer.from('census') },
     });
@@ -567,6 +569,23 @@ export function censusFixtures({ run: RUN, db, sql, server, jwt }: CensusWorld) 
        VALUES ($1,$2,$3,$4,'rewrite','The census section lags behind main.','[{"doc":"census","key":"census"}]','[{"doc":"census","key":"census"}]')`,
       [wikiChatDraftId, ownerId, wikiSpaceId, wikiChatId],
     );
+    // And an applied plan card of the chat (C17): its press changed the census section's covers and made version 99, which
+    // the plan never reached, so the plan has moved past it — its Undo is refused, and its Try again asks for no build.
+    const wikiPlanCardId = randomUUID();
+    await wiki(
+      `INSERT INTO "wiki_chat_draft"("id","owner_id","space_id","session_id","kind","rationale","change","sections","decision","decided_at")
+       VALUES ($1,$2,$3,$4,'plan','The census section should say who it is for.',$5::jsonb,'[{"doc":"census","key":"census"}]','applied',now())`,
+      [wikiPlanCardId, ownerId, wikiSpaceId, wikiChatId, JSON.stringify({
+        baseVersion: 1,
+        version: 99,
+        docs: [{
+          category: 'census', slug: 'census', title: 'Census', question: 'What does the census hold?', audience: [], scopeIn: [], scopeOut: [],
+          length: { min: 100, max: 1000 }, protected: false,
+          sections: [{ key: 'census', title: 'Census', kind: 'overview', covers: 'What the census holds, for a first-time reader.', length: 100, sources: {} }],
+        }],
+        categories: [],
+      })],
+    );
 
     const deviceUserCode = `${name.toUpperCase()}${RUN.slice(0, 4)}-CNSS`.slice(0, 9);
     await db.deviceEnrollment.create({
@@ -635,6 +654,27 @@ export function censusFixtures({ run: RUN, db, sql, server, jwt }: CensusWorld) 
     ok(await as('PUT', `/tasks/${shareTaskId}/share`, {}), 'a share link');
     const shareLinkId = (await db.shareLink.findFirstOrThrow({ where: { ownerId, taskId: shareTaskId } })).id;
 
+    // A Feishu app of the account's, switched off so no replica connects it, and two groups connected to it (§8.1).
+    const feishuAppId = `cli_census_${randomUUID().replace(/-/g, '').slice(0, 16)}`;
+    await db.feishuApp.create({ data: { ownerId, platform: 'FEISHU', appId: feishuAppId, appSecretEnc: 'census:not:a-secret', enabled: false } });
+    const feishuChatRoute = async (chat: string) => (await db.feishuChatRoute.create({
+      data: {
+        ownerId, appId: feishuAppId, chatId: `oc_${chat}_${randomUUID().slice(0, 8)}`, chatName: `${name} ${chat}`,
+        workspaceId, permissionMode: 'default', enabled: true, confirmedAt: new Date(),
+      },
+    })).id;
+    const feishuChatRouteId = await feishuChatRoute('group');
+    const spareFeishuChatRouteId = await feishuChatRoute('spare-group');
+    // Two other accounts invited to reply in the session (docs/session-guests-design.md): one the owner invites again, one
+    // the owner's remove takes out.
+    const guest = async (label: string) => {
+      const invited = await account(`${name}-${label}`, 'MEMBER');
+      await db.sessionGuest.create({ data: { sessionId, ownerId, userId: invited.userId } });
+      return invited;
+    };
+    const guestEmail = (await guest('guest')).email;
+    const spareGuestUserId = (await guest('guest-spare')).userId;
+
     const purgedSessionId = await session(ownerId, workspaceId, runnerId, `${name} trashed session`);
     await db.session.update({ where: { id: purgedSessionId }, data: { deletedAt: new Date() } });
 
@@ -666,6 +706,7 @@ export function censusFixtures({ run: RUN, db, sql, server, jwt }: CensusWorld) 
       turnId,
       eventId,
       eventSeq: 1,
+      replyEventSeq: 2,
       sessionRequestId,
       folderId,
       tagId,
@@ -715,7 +756,10 @@ export function censusFixtures({ run: RUN, db, sql, server, jwt }: CensusWorld) 
       wikiDocVersionId,
       wikiChatId,
       wikiChatDraftId,
+      wikiPlanCardId,
       wikiTopicSlug: 'census',
+      feishuChatRouteId,
+      guestEmail,
       adminSubjectId: adminSubject.userId,
       adminSubjectTokenId,
       adminProviderId: await adminProvider(`${name}-admin-provider`),
@@ -726,6 +770,8 @@ export function censusFixtures({ run: RUN, db, sql, server, jwt }: CensusWorld) 
         agentId: await workspace(ownerId, runnerId, `${name}-spare-agent`),
         workspaceId: await workspace(ownerId, runnerId, `${name}-spare-workspace`),
         attachmentId: await attachment(),
+        // Its own, because the owner's delete from Settings → Storage really removes it.
+        storedFileId: await attachment(),
         projectId: await project(`${name} spare project`),
         providerId: await provider(`${name}-spare-provider`),
         poolId: idOf(await as('POST', '/providers/pools', { label: `${name} spare pool` }), 'a spare pool'),
@@ -741,6 +787,8 @@ export function censusFixtures({ run: RUN, db, sql, server, jwt }: CensusWorld) 
         })(),
         tagId: idOf(await as('POST', '/session-tags', { name: `${name} spare tag`, color: '#663399' }), 'a spare tag'),
         shareLinkId,
+        feishuChatRouteId: spareFeishuChatRouteId,
+        guestUserId: spareGuestUserId,
         listId: idOf(await as('POST', '/task-lists', { title: `${name} spare list` }), 'a spare list'),
         taskId: await task(`${name} spare task`),
       },

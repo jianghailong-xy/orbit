@@ -1,106 +1,149 @@
-# Project DONE: there is still no gate, and it is now a projection
+# Project DONE: derived facts and the owner's record
 
-A project's `DONE` used to mean that its stated acceptance criteria were satisfied — decided by a
-database trigger and re-checked by the service before the write. Migration
-`0229_project_acceptance_judgment_removal` removed both, on the account owner's decision of
-2026-09-03. This page says what is true now, because a page describing a gate that is gone is worse
-than no page.
+This is the live description of both paths to project `DONE`. The projection records what the
+facts prove (`done_by = DERIVED`); the account owner can also record a decision with accepted gaps
+(`done_by = OWNER`). A coordinator can request that decision, but cannot make it for the owner.
+The implementation is in `project-done-derived.ts`, `project-done-request.ts`,
+`project-open-item.service.ts` and `project-acceptance.service.ts`, under
+`src/apiserver/src/projects/`.
 
-## What decides a project's DONE
+## Derived DONE
 
-Since 2026-09-08, a PROJECTION — `projects/project-done-derived.ts`. It is not the gate 0229
-removed, and the difference is the whole of this section: a gate refuses somebody's write, and this
-refuses nobody. It re-reads facts that are already committed and stores what they project.
+`readDerivedProjectDone` reads the same satisfaction and landing answers that `project_get`
+serves (`project-criterion-satisfaction.ts` and `project-criterion-landing.ts`). It derives DONE
+only when there is at least one stated criterion and both inputs hold:
 
-The account owner was asked again, with 0229's own sentence — "The owner was offered a narrower
-guard and chose the other option" — quoted back to them, and answered that the derivation should be
-built. So this is a re-deliberation of that decision and not the correction of an oversight.
+- Every criterion is satisfied and its landing is `LANDED`. Work on the project's integration
+  branch alone is `ON_INTEGRATION_LINE`, not upstream landing. Tasks with nothing to land do not
+  hold back other serving work's landing; that does not make a criterion with no landing evidence
+  automatically landed. See [the integration-line contract](project-integration-line-contract.md).
+- The owner's standard-set confirmation stands for today's criteria, compared by their semantic
+  version. Changing an assertion or verification method retires the old confirmation.
 
-`project.status` is projected as `DONE` when, and only while, BOTH hold:
+Criteria are authored as `acceptanceCriteriaItems` through `project_update`; tasks name the
+criterion they serve through `criterion_definition_id`. Satisfaction comes from those tasks'
+completion criteria and checks, not from an additional project acceptance run.
 
-- every criterion the project states reads `satisfied` **and** `landing = 'LANDED'`, from the two
-  readers `project_get` already serves (`project-criterion-satisfaction.ts`,
-  `project-criterion-landing.ts`) — not a second definition of either. `landing = 'LANDED'` means
-  the serving tasks THAT HAVE A COMMIT TO LAND are all on the project's UPSTREAM; work that has only
-  reached its project branch reads `ON_INTEGRATION_LINE` and does not count, and work that declares
-  itself `codeless` — SR5's escape hatch: it resolves no source, so it has no commit of its own —
-  takes no part in the conjunction at all rather than holding it off `LANDED` for ever
-  (`docs/project-integration-line-contract.md` §1.4, §3.5 M11). So for a project that integrates on a
-  branch of its own, the status is `OPEN` until the account owner confirms the merge into main, and
-  flips when the receipts for that merge are written; and
-- one `project_standard_set_confirmation` row names the version of the criteria that stands today
-  (migration 0245, r3), compared by `criteriaSemanticRevision`. Editing a criterion's assertion or
-  its verification method moves that digest, so the confirmation stops counting with no flag
-  anybody has to clear.
+`storeDerivedProjectStatus` stores that reading after standard-set confirmation, task writes,
+completion-evidence decisions, merge receipts and criteria writes. These post-commit refreshes
+read committed facts; a merge receipt is an edge that changes landing, not a third input.
+The projection moves between OPEN and DONE in both directions: reopening serving work, adding
+unsettled work against a criterion, or changing the criteria can take derived DONE away.
+It never writes or overwrites CANCELLED.
 
-A project that states no criteria is never projected `DONE`: "every one of zero criteria holds" is
-the vacuous truth `NO_WORK_SERVES_IT` refuses one level down.
+A derived record stores `doneBy`, `doneAt`, `doneCriteriaDigest` and empty `acceptedGaps`.
+The conditional write protects a concurrent owner decision and makes concurrent derivations
+write the transition once. When the projection actually writes OPEN to DONE, it sends the account
+owner one project-done push. A re-derivation that writes nothing sends none; an owner-recorded
+DONE sends none. Push delivery is best effort and a failure is logged. The DERIVED receipt card
+names when the owner confirmed the criteria and offers **Reopen project**; automatic completion
+does not require another owner confirmation.
 
-It is recomputed on four edges, none of which has a requester asking for a status: after the
-owner's confirmation is written, on the post-commit edge of any task write in the project, after a
-merge receipt is recorded (`sessions/merge-receipt.service.ts`), and after a write that restates the
-criteria themselves — an edit moves the version the confirmation names, so the write that makes it
-is the write that has to re-derive from it. The receipt is an EDGE and not a third input: `landing`
-above is the input, and recording the receipt is the write that moves it, so without that edge an
-owner who confirmed the criteria before the last branch landed keeps a column reading OPEN until
-some unrelated task write happens along. It
-moves the column in BOTH directions — reopening a task or filing a new one against a met criterion
-takes `DONE` away again — because a projection that could only ever set `DONE` would be a decision
-recorded once rather than a reading of the facts. `CANCELLED` is never written and never overwritten:
-that says a person dropped the project, which is not a claim the work can settle.
+## The owner's record and DONE_REQUEST
 
-What 0229 removed stays removed, and none of it comes back to do this:
+Only the project's coordinator conversation may call `project_request_done`, and the project
+must be OPEN. It supplies a short judgment and criterion-linked gaps. Each gap requires
+`whyNotProven` (why Orbit cannot prove the criterion), `coordinatorChecked` (what the coordinator
+checked instead) and `evidenceRefs` (1 to 20 evidence references). Only the gap title is optional.
 
-- there is no database trigger on `project` that inspects it (0150's `project_acceptance_done_gate`
-  / `_advance_epoch` / `_epoch_audit` and 0172's `_criteria_fact` are all dropped, and so is 0150's
-  alphabetical firing-order constraint, whose disappearance 0229 records as its intent);
-- there is no application-layer refusal (`ProjectsService.refuseDirectDone` and its
-  `PROJECT_DONE_AUTOMATIC_ONLY` 409 are removed);
-- there is no acceptance epoch, no accepted-run pointer and no legacy-acceptance stamp on the row;
-- the four acceptance tables and the `project_acceptance_verdict` enum stay dropped. The projection
-  adds no migration and no table of its own.
+Before filing anything, `readDoneState` and `doneReadiness` collect all findings:
 
-Who may still WRITE the column directly is a separate question with a separate answer: every actor
-that could write it after 0229 can still write it, except that a request carrying an acting session
-is refused `PROJECT_STATUS_NOT_SESSION_WRITABLE` (`refuseProjectStatusWrite`, 2026-09-08). The
-projection is not such a request — it carries no `status` from any caller and no session — which is
-why the two coexist rather than the second refusing the first. `project-status-write-sites.spec.ts`
-holds the complete list of places production code can set the column to those two.
+- `REFUSE`: no criteria, an unsatisfied criterion, tasks running or queued or IN_PROGRESS, open
+  owner items, or a landing/merge into main queued or running. The asking conversation's own run
+  does not count as work in flight. `DONE_REQUEST_NOT_READY` (409) returns the findings and files
+  nothing.
+- `WARN`: each criterion not LANDED, with its reason and next action. These warnings accompany
+  the request, including when no supplied gap names the criterion.
 
-Eleven projects were `DONE` when 0229 landed; ten of them stood on an acceptance run that no longer
-exists. Their `status` was not rewritten then, and the projection does not rewrite it now unless one
-of its four edges fires for that project.
+At most one `DONE_REQUEST` is open per project. An identical request reuses it; a different new
+request supersedes the old one. The owner-facing **Is this project done?** card carries the
+coordinator's judgment, gaps and warnings, with **Record as done** and **Not yet…** actions.
 
-## What the acceptance criteria are now
+**Record as done** calls `POST /projects/:id/done`. The owner supplies the current criteria digest,
+accepted gaps and, when answering a card, its request id. The server locks the project and request,
+refuses a request that is no longer open or whose criteria/work have moved, and atomically records
+DONE and resolves the request APPROVED. The record stores `done_by = OWNER`, the time, criteria
+digest, accepted gaps and the serving tasks' lifecycle epochs (`done_task_epochs`). It replaces any
+previous Reopen press. A CANCELLED project must be reopened first.
 
-`project_acceptance_criterion_definition` still holds every authored criterion — 274 across 41
-projects when 0229 landed — one row each, with the assertion text and the reader-facing
-verification method. `0233_project_acceptance_criterion_wiring_removal` then took the declared
-completion criterion and its configuration off that row: a criterion no longer names the work that
-serves it, the work names the criterion (`task.criterion_definition_id`, migration 0232). They are
-authored through `project_update`'s `acceptanceCriteriaItems` and read through `project_get`.
+**Not yet…** requires the owner's note, resolves the request DECLINED and tells the coordinator
+what is missing, retaining the judgment, gaps and warnings. A new request with the same criteria
+digest and state digest as the latest decline is refused with
+`DONE_REQUEST_UNCHANGED_SINCE_DECLINE` (409), with nothing filed. Rewording the judgment or gaps
+alone does not count as changed work; after the work changes, the ordinary readiness check still
+has to pass.
 
-Nothing evaluates them. That is the same position an `EXECUTABLE` task has been in since
-`0228_task_judgment_removal`: the declaration is precise, and the implementation is absent until the
-account owner rebuilds one.
+The owner can also record DONE without a coordinator request (`requestId: null`). The done-check
+reader returns the same refusals and warnings for the clients' card. On recording, the server
+recomputes them and appends every finding to `acceptedGaps`, even a REFUSE finding: these findings
+block a coordinator's request, not the owner's decision. Each stored entry retains the full
+finding and uses its criterion key, or the reserved `project:<id>` anchor with PROJECT scope for a
+project-wide finding. The response returns those accepted gaps. Any open done request is answered
+by this record too. Recording does not silently turn an unproved criterion into a proved one.
 
-The legacy `project.acceptance_criteria` text went with the judgment. It was the input form of the
-per-item rows — `project_acceptance_sync_legacy_definitions()` split it by `sha256(text)` and wrote
-them — and once that parser was removed the text was prose with no parser, saying the same thing
-twice. The per-item rows are the whole of it.
+## What takes a DONE record back
 
-## Where a new finding belongs
+| Record | What the next derivation does |
+| --- | --- |
+| DERIVED | Tracks the current satisfaction, landing and standing confirmation; losing any required input returns the project to OPEN. |
+| OWNER | Keeps the owner's accepted-gap decision until the criteria digest changes or a serving task is reopened after the record. Ordinary re-derivation does not erase it merely because a gap remains. |
 
-A new finding belongs to the existing project only if it changes an acceptance criterion. In that
-case, edit that criterion. If it changes no acceptance criterion, it does not belong to this
-project's completion claim: create a separate project for it, rather than keeping an achieved goal
-permanently open by adding unrelated work to its backlog.
+For OWNER records, reopening is detected by comparing current lifecycle epochs with the counters
+captured at record time, not by comparing `doneAt` with `epoch_started_at`. The task epoch advances
+when terminal DONE, CANCELLED or FAILED work returns to OPEN or IN_PROGRESS. This catches a reopen
+transaction that started before the record and committed afterward, and a task reopened and
+finished again before derivation. A newly serving task absent from the snapshot counts if it is
+nonterminal. Legacy records without an epoch snapshot retain the timestamp fallback.
 
-The refusal to file new work into a settled project repeats this routing rule, so a caller is told
-whether to revise this project's criteria or create a separate project.
+When one of these facts invalidates an OWNER record, derivation writes OPEN, or DERIVED DONE if
+the facts now prove completion themselves. If it reopens the project, the coordinator receives the
+reason (criteria changed or serving task reopened).
 
-## What is still recorded
+## The owner's Reopen press (0469)
 
-`project_merge_evidence` survives: what a target branch was observed to CONTAIN, hashed by content
-and never by `git branch --contains`. Nothing reads it to decide anything — acceptance runs were its
-only consumer — so it is a record kept for a reader.
+Migration `0469` introduced `project.reopened_at` and `reopened_facts`. A signed-in owner's
+`PATCH /projects/:id` taking the project out of DONE with `status=OPEN` and a LOGIN credential
+records the press through `ProjectsService.reopenRecord` / `reopenRecordOfPress`. A session, token
+or runner call is not this press and cannot establish its hold; owner-channel credential and
+session-write restrictions still apply.
+
+The press keeps stored status OPEN while the criteria seal and the recorded facts of serving work
+stand. Those facts include task status and lifecycle epoch, evidence revisions and decisions,
+verdicts and concluded checks, and landing receipts. A rename or progress report does not end it;
+neither does work serving no criterion. Merely changing which criterion a task serves, removing a
+serving task or attaching already-finished old work is not itself a new fact that ends the hold.
+Newly serving work is compared using its dated facts when it has no recorded digest.
+
+`derivedDone` continues to report what the facts prove even while stored status is OPEN. Lists and
+the settled-project task-writing rule read stored status, so work can be filed after Reopen. Once
+the recorded facts change, automatic DONE can resume if its inputs hold. The coordinator can also
+request DONE while the press stands; the owner's new record ends it.
+
+## Requests that go stale and the state digest
+
+`refreshProjectDone` reconciles stale requests on the same post-commit write edges as derivation,
+including task writes and merge receipts. If the project is no longer OPEN, its criteria changed,
+or its state digest moved, the open request becomes SUPERSEDED with a stored reason and the
+coordinator receives a turn naming why. It stops contributing **Ready to close** to the list;
+clients retain the stale-request row rather than presenting an actionable old card. Open-items
+reads also repair a missed best-effort refresh, and the owner's record endpoint checks freshness
+again. The write edge is the normal reconciliation path, not a later page visit.
+
+`doneStateDigest` (version 2) hashes sorted facts only:
+
+- tasks serving a criterion: id, status, criterion id and running/queued state;
+- each criterion's id, satisfaction, landing and landing reason;
+- in-flight landing jobs: id and state.
+
+The criteria seal is compared separately. A task serving no criterion moving does not change this
+digest or supersede the request. This narrower digest is distinct from readiness: the preflight
+still checks all project tasks for work in flight and checks owner items. It is also distinct from
+the richer serving-work facts captured by a Reopen press.
+
+## Historical note: 0229
+
+On the owner's 2026-09-03 decision, `0229_project_acceptance_judgment_removal` removed the old
+project acceptance trigger, application gate, acceptance runs and verdict tables. The later
+projection was separately authorized; neither path above restores that old machine. Requests
+carrying an acting session still cannot write project status (`PROJECT_STATUS_NOT_SESSION_WRITABLE`).
+The surviving merge-evidence history is a record, not the old acceptance evaluator.

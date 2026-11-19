@@ -1,0 +1,58 @@
+<!doctype html><html lang="zh"><meta charset="utf-8">
+<link rel="stylesheet" href="../project-done-sessions-page/kit.css">
+<link rel="stylesheet" href="board.css">
+<script src="../project-done-sessions-page/kit.js"></script>
+<script src="board.js"></script>
+<body><div class="board">
+<h1>② 切到 The agent pushes it：等着的卡、合并检查</h1>
+<p class="lede" style="max-width:1780px">服务端现状（契约 O-L1、O-L2、O-L3）：交付方式开工后照样能改，<b>只影响之后写下的 DONE</b>。已经在等你的合并卡不动。AGENT_PUSH 的任务 DONE 时不建候选、<b>不跑合并检查</b>。跑任务的 agent 只被告知“push your commits to origin/feature/v1.1.1 before you finish”，没有被要求先跑检查。今天三端切过去时不提示，Merge check 那一行也还写着“again before main”，但这件事已经不会发生。</p>
+<div class="row" id="figs"></div>
+<table class="board-table">
+<tr><th></th><th>现在</th><th>建议</th></tr>
+<tr><td>切换那一刻</td><td>直接 Save，没有提示</td><td>有等着的卡时弹一次确认，说清它还在、要你答；没有就不弹</td></tr>
+<tr><td>Merge check 一行</td><td>照旧显示 “…and again before main”，实际已经不跑</td><td>写明谁在跑它（取决于待你定 2）</td></tr>
+<tr><td>agent 的任务说明（O-L3）</td><td>只叫它推上去</td><td>待你定 2 选 A 时加一句：推之前先在 rebase 到 origin/main 的树上跑这条命令</td></tr>
+<tr><td>项目页</td><td>没有合并卡；落地靠观测（Observe again、LANDING_UNOBSERVED）</td><td>不变</td></tr>
+</table>
+<div class="decide"><b>待你定：</b><ol>
+<li><b>理由那一行出现的条件</b>（①）。推荐：只在 Automatic 开着时出现。另一个选项是 Automatic 关着时也说一句 “Asks you because Automatic is off”。</li>
+<li><b>AGENT_PUSH 下合并检查怎么办。</b><b>A（推荐）</b>：把检查命令写进 agent 的任务说明，叫它推之前先跑；这一行写 “Run by the agent before it pushes”。Orbit 不核实它真的跑了。<b>B</b>：只照实说 “Not run: the agent pushes itself”，命令灰掉留着，切回 Orbit lands it 时还在。A 要改服务端 <code>task-execution-prompt.ts</code> 的 <code>taskDeliverySentence</code>，B 只改文案。</li>
+<li><b>切过去时那张等着的卡。</b>推荐：留着让你答（服务端现状，确认里说清楚）。另一个选项是切换的同一个事务里把候选退役，让任务回到 agent 手里去推。这要改服务端，而且那条已经过了检查的工作就没人合了，所以不推荐。</li>
+</ol></div>
+<div class="files"><b>会动到的文件</b>：①的那几个，加上 2A 的 <code>src/apiserver/src/tasks/task-execution-prompt.ts</code> 及其 spec（以及 <code>task-start-card.ts</code> 复算的那句）。规则（M7、O-L1、O-L2）一个字不改。</div>
+</div>
+<script>
+const CONFIRM = `<div class="dim"></div><div class="act"><div class="box" style="position:relative"><span class="badge" style="position:absolute;top:-10px;right:-10px">1</span>
+<div class="msg"><b>Let the agent push to ${MAIN}?</b>Tasks finished from now on are pushed by their agent: no merge card, and Orbit merges nothing into ${MAIN}. The 1 merge waiting for you stays until you answer it.</div>
+<div class="ab">Let the agent push</div></div><div class="cancel">Cancel</div></div>`;
+const execGroup = (push, today) => group('Execution', [
+  { lab: T.lineMain, tick: true, hint: T.lineMainHint },
+  { lab: '<b>Delivery</b>' },
+  { lab: T.platform, tick: !push, hint: today ? T.platformHint : `Orbit runs the merge check, then asks you before each merge into ${MAIN}.` },
+  { lab: T.push, tick: push, hint: today ? T.pushHint : `No merge card. The agent pushes to ${MAIN} itself; Orbit records each commit once it sees it there.` },
+]);
+document.getElementById('figs').innerHTML = [
+  fig('after', '建议 · 点 The agent pushes it 之后', runSheet([execGroup(false)], CONFIRM),
+    `<b>有卡在等时才问一次</b><ol>
+<li>${n(1)}说三件事：从什么时候起算、从此没有卡、等着的那张还在。</li>
+<li>没有等着的卡就不弹，直接选中，和今天一样。</li></ol>`),
+  fig('now', '现在 · 选了 The agent pushes it', runSheet([execGroup(true, true),
+    group('Merge check', [{ lab: 'Command', cmd: 'npm test', hint: T.checkHint, n: 1 }])]),
+    `<b>Merge check 还在说一件不会发生的事</b><ol>
+<li>${n(1)}“again before ${MAIN}”：AGENT_PUSH 不建候选，这条命令不会再跑。</li></ol>`),
+  fig('after', '建议 A · 检查交给 agent', runSheet([execGroup(true),
+    group('Merge check', [{ lab: 'Command', cmd: 'npm test', chg: true, n: 1,
+      hint: `Run by the agent before it pushes, on its work rebased onto ${MAIN}. Orbit doesn’t run it.` }])]),
+    `<b>A：写进任务说明</b><ol>
+<li>${n(1)}照实说：agent 在跑，Orbit 不跑，也不核实。</li>
+<li>agent 的说明多一句：“Before you push, run <code>npm test</code> on your work rebased onto origin/${MAIN}.”</li></ol>`),
+  fig('after', '建议 B · 照实说不跑', runSheet([execGroup(true),
+    group('Merge check', [{ lab: 'Command', cmd: 'npm test', off: true, chg: true, n: 1,
+      hint: `Not run: the agent pushes to ${MAIN} itself. Kept for when Orbit lands the work again.` }])]),
+    `<b>B：只改文案</b><ol>
+<li>${n(1)}命令灰掉留着，切回 Orbit lands it 时还在。</li>
+<li>服务端不动。</li></ol>`),
+].join('');
+document.body.dataset.ready = '1';
+</script>
+</body>

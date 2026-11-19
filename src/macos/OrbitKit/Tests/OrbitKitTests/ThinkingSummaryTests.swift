@@ -72,4 +72,19 @@ final class ThinkingSummaryTests: XCTestCase {
             ThinkingSummary.settledLabel(chars: 872, blocks: 1, startedTs: nil, finishedTs: nil),
             "Thought · 872 chars")
     }
+
+    func testLiveLabelRunsTheClockFromTheFirstDelta() {
+        let now = ThinkingSummary.date("2026-09-15T17:52:04.000Z")!
+        XCTAssertEqual(
+            ThinkingSummary.liveLabel(chars: 1400, startedTs: "2026-09-15T17:51:52.000Z", now: now),
+            "Thinking… 12s · 1.4k chars")
+    }
+
+    func testLiveLabelStatesSizeAloneWithNoStartOrAClockBehindTheRunner() {
+        let now = ThinkingSummary.date("2026-09-15T17:51:50.000Z")!
+        XCTAssertEqual(ThinkingSummary.liveLabel(chars: 629, startedTs: nil, now: now), "Thinking… 629 chars")
+        XCTAssertEqual(
+            ThinkingSummary.liveLabel(chars: 629, startedTs: "2026-09-15T17:51:52.000Z", now: now),
+            "Thinking… 629 chars")
+    }
 }

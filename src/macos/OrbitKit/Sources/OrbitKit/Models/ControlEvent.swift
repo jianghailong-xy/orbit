@@ -43,11 +43,19 @@ public enum ControlEventType: String, Codable, Sendable {
     /// and nothing else (contract `realtime.redaction`): a nudge to re-read the Wiki pages and the
     /// Review queue, never the session list, and nothing depends on it arriving at all.
     case wikiChanged = "wiki.changed"
+    /// The owner's terminals changed — a terminal asked to be approved, a request was decided or collected, or a
+    /// terminal was revoked. USER-scoped; `data` names the request or terminal and nothing else: a nudge to re-read
+    /// `GET /terminals/requests` (the approve card) and `GET /terminals` (Settings → Terminals).
+    case terminalsChanged = "terminals.changed"
     /// The account's Open list may read differently now (docs/realtime-control-plane-stream.md
     /// §4.8). USER-scoped; `data` carries the list's version (`ControlListChanged`). Sent only to a
     /// stream that declared `?hints=list_changed` (`URLSessionControlStream`): a hint to make one
     /// conditional delta read, never a change in itself.
     case sessionsListChanged = "sessions.list_changed"
+    /// The server started, kept or stopped skipping a failing translator (circuit breaker, board
+    /// docs/ux/translation-failure-policy.html frame 6). USER-scoped: a nudge to re-read `GET /users/me`
+    /// for `translationUnavailableUntil`. Not sent when the skip simply runs out: the client times that.
+    case translationStatusChanged = "translation.status_changed"
     case notification = "notification"
     case unknown
 
@@ -166,6 +174,15 @@ public struct ControlSessionSummary: Codable, Equatable, Sendable {
     /// saying the session is in no folder — how a move out of one reaches the owner's other
     /// clients — and `.some(id)` is the folder it is in now.
     public let folderId: String??
+    /// The handoff on the outgoing coordinator and the one a successor received. Doubly optional for
+    /// `retryAt`'s reason: `nil` is an older control plane that never sends the key (keep the row's),
+    /// `.some(nil)` is this server saying there is none — a cancelled handoff — and `.some(value)`
+    /// is where it stands now.
+    public let coordinatorHandoff: SessionCoordinatorHandoff??
+    public let coordinatorHandoffReceived: SessionCoordinatorHandoffReceived??
+    /// `Session.enginePhase`. Doubly optional for `retryAt`'s reason: `.some(nil)` is the server
+    /// saying the phase is over, `nil` an older one that never sends the key.
+    public let enginePhase: String??
 
     public var effectiveRunStatus: RunStatus { runStatus ?? status }
     public var effectiveRunState: SessionRunState {
@@ -236,6 +253,16 @@ public struct ControlSessionSummary: Codable, Equatable, Sendable {
             : nil
         folderId = values.contains(.folderId)
             ? .some(try values.decodeIfPresent(String.self, forKey: .folderId))
+            : nil
+        coordinatorHandoff = values.contains(.coordinatorHandoff)
+            ? .some(try? values.decodeIfPresent(SessionCoordinatorHandoff.self, forKey: .coordinatorHandoff))
+            : nil
+        coordinatorHandoffReceived = values.contains(.coordinatorHandoffReceived)
+            ? .some(try? values.decodeIfPresent(SessionCoordinatorHandoffReceived.self,
+                                                forKey: .coordinatorHandoffReceived))
+            : nil
+        enginePhase = values.contains(.enginePhase)
+            ? .some(try? values.decodeIfPresent(String.self, forKey: .enginePhase))
             : nil
     }
 }

@@ -1,0 +1,197 @@
+<!doctype html>
+<html lang="zh">
+<meta charset="utf-8">
+<title>协调者不可用时：只是协调者队列里的一条消息</title>
+<style>
+  * { box-sizing: border-box; }
+  body { margin: 0; background: #e9e9ec; color: #1f2329;
+         font: 15px/1.6 Inter, "WenQuanYi Zen Hei", "PingFang SC", sans-serif; -webkit-font-smoothing: antialiased; }
+  .board { width: 1880px; padding: 48px 52px 56px; background: #f4f4f6; }
+  h1 { margin: 0; font-size: 30px; line-height: 1.3; }
+  .lede { margin: 12px 0 0; max-width: 1640px; font-size: 16.5px; color: #3c4149; }
+  .lede b { color: #1f2329; }
+  .meta { margin-top: 8px; font-size: 13px; color: #7a7f88; }
+  h2 { margin: 44px 0 6px; font-size: 21px; }
+  h2 span { margin-left: 8px; font-size: 14px; font-weight: 500; color: #7a7f88; }
+  .sub { margin: 0 0 16px; color: #555a63; font-size: 14.5px; max-width: 1640px; }
+  code { font: 12.5px/1.4 "JetBrains Mono", monospace; background: #e8e9ee; padding: 1px 5px; border-radius: 4px; }
+  .frames { display: flex; gap: 28px; align-items: flex-start; }
+  figure { margin: 0; flex: 1 1 0; min-width: 0; }
+  .tag { display: inline-block; margin-bottom: 9px; padding: 2px 10px; border-radius: 6px; font-size: 13px; font-weight: 700; }
+  .tag.now { background: #dedee3; color: #4b4f57; }
+  .tag.rec { background: #d6ebff; color: #0a5ca8; }
+  figcaption { margin-top: 12px; font-size: 14px; color: #3c4149; }
+  figcaption ul { margin: 6px 0 0; padding-left: 20px; }
+  figcaption li { margin-top: 4px; }
+  .num { display: inline-block; width: 19px; height: 19px; border-radius: 50%; background: #e8590c; color: #fff;
+         font: 700 11.5px/19px Inter, sans-serif; text-align: center; margin-right: 5px; vertical-align: 1px; }
+  .mark { display: inline-block; width: 19px; height: 19px; border-radius: 50%; background: #e8590c; color: #fff;
+          font: 700 11.5px/19px Inter, sans-serif; text-align: center; margin-left: 6px; vertical-align: 1px; }
+  .gone { position: relative; }
+  .gone::after { content: ""; position: absolute; inset: 0; background: repeating-linear-gradient(135deg, rgba(244,244,246,.0) 0 10px, rgba(244,244,246,.55) 10px 20px); border-radius: 10px; }
+  .x { position: absolute; z-index: 2; top: 50%; left: 50%; transform: translate(-50%,-50%); background: #c53030; color: #fff;
+       font: 700 14px/1 Inter, sans-serif; padding: 7px 12px; border-radius: 6px; white-space: nowrap; }
+
+  /* ── the app, drawn by hand in its look ── */
+  .ui { font: 13.5px/1.5 Inter, -apple-system, "Segoe UI", sans-serif; color: #1f2329; }
+  .card { background: #fff; border: 1px solid #d9dce3; border-radius: 10px; overflow: hidden; box-shadow: 0 1px 3px rgba(0,0,0,.07); }
+  .card.ev { border: 1.5px solid #5b7cf0; background: #eef2fe; }
+  .card-h { display: flex; justify-content: space-between; align-items: center; padding: 10px 14px;
+            border-bottom: 1px solid #d9dce3; font-weight: 700; font-size: 14px; }
+  .card.ev .card-h { border-bottom-color: #c9d3f6; }
+  .from { font-size: 10.5px; font-weight: 700; letter-spacing: .05em; color: #b7791f; border: 1px solid #e9d29a;
+          background: #fffbea; padding: 1px 7px; border-radius: 4px; }
+  .card-b { padding: 12px 14px; }
+  .tline { font-size: 12px; color: #6b7280; margin-bottom: 8px; }
+  .gapbox { background: #fdf3e2; border: 1px solid #eed9b4; border-radius: 7px; padding: 8px 11px; margin-bottom: 9px; font-size: 12.5px; }
+  .gapbox .k { font-size: 10.5px; font-weight: 700; letter-spacing: .05em; color: #b45309; }
+  .btn { display: block; text-align: center; border-radius: 7px; padding: 7px; font-weight: 600; margin-top: 7px; }
+  .btn.pri { background: #3b6cf6; color: #fff; }
+  .btn.sec { background: #fff; border: 1px solid #d9dce3; color: #374151; }
+  .fold { display: flex; align-items: flex-start; gap: 10px; padding: 12px 14px; }
+  .dot { width: 9px; height: 9px; border-radius: 50%; background: #d97706; margin-top: 6px; flex: none; }
+  .fold .h { font-weight: 700; }
+  .note { color: #6b7280; font-size: 12.5px; }
+  .link { color: #3b6cf6; font-weight: 600; white-space: nowrap; margin-left: auto; }
+
+  /* the coordinator conversation */
+  .conv { background: #fff; border: 1px solid #d9dce3; border-radius: 10px; box-shadow: 0 1px 3px rgba(0,0,0,.07); overflow: hidden; }
+  .conv-h { display: flex; align-items: center; gap: 8px; padding: 9px 14px; border-bottom: 1px solid #e5e7eb; font-weight: 600; }
+  .pill { font-size: 11.5px; font-weight: 600; padding: 1px 8px; border-radius: 999px; }
+  .pill.q { background: #fef3c7; color: #92400e; }
+  .pill.ok { background: #dcfce7; color: #166534; }
+  .conv-b { padding: 12px 14px; background: #fafafb; }
+  .msg { color: #4b5563; font-size: 13px; margin-bottom: 10px; }
+  .bub { background: #fff; border: 1px solid #e5e7eb; border-radius: 9px; padding: 8px 11px; font-size: 12.5px; margin-bottom: 4px; }
+  .bub b { font-weight: 600; }
+  .qmeta { font-size: 11.5px; color: #6b7280; margin-bottom: 10px; }
+  .qtag { display: inline-block; background: #eef0f3; border-radius: 4px; padding: 0 6px; margin-right: 6px; color: #374151; font-weight: 600; }
+  .notice { background: #fffbea; border: 1px solid #f1dfa0; border-radius: 8px; padding: 7px 11px; font-size: 12.5px; color: #78350f; }
+  .composer { border-top: 1px solid #e5e7eb; padding: 9px 14px; color: #9ca3af; font-size: 12.5px; }
+
+  .item .warn { margin: 12px 14px 0; background: #fdf3e2; border: 1px solid #eed9b4; border-radius: 8px; padding: 10px 12px; font-size: 12.5px; }
+  .item .warn b { display: block; margin-bottom: 4px; font-size: 13px; }
+  .facts { padding: 10px 14px 4px; font-size: 12.5px; }
+  .facts div { display: flex; gap: 16px; margin-bottom: 3px; }
+  .facts span:first-child { width: 60px; color: #6b7280; flex: none; }
+  .foot { border-top: 1px solid #e5e7eb; padding: 9px 14px; font-size: 12.5px; color: #4b5563; }
+  .foot.hl { background: #fffbea; }
+
+  table { width: 100%; border-collapse: collapse; background: #fff; border-radius: 10px; overflow: hidden;
+          box-shadow: 0 1px 3px rgba(0,0,0,.07); font-size: 14px; }
+  th { text-align: left; padding: 9px 14px; background: #eeeff2; font-size: 13px; font-weight: 600; color: #4b4f57; }
+  td { padding: 9px 14px; border-top: 1px solid #eceef1; vertical-align: top; }
+  td.big { font-weight: 600; white-space: nowrap; }
+  .chg { color: #0a5ca8; font-weight: 600; }
+  .ask { background: #fff; border: 2px solid #e8590c; border-radius: 10px; padding: 14px 20px; font-size: 14.5px; }
+  .ask b { color: #c2470a; }
+</style>
+<body>
+<div class="board">
+  <h1>协调者不可用时：只是协调者队列里的一条消息</h1>
+  <p class="lede"><b>结论：</b>协调者 FAILED、排了重试、或在队列里等账号时，证据和异常待办都只是它会话里一条<b>排队中的消息</b>：不给 owner 出卡，不进「Needs you」，没有倒计时，也不设上限。<b>计时从协调者真正取走这条消息那一刻开始</b>，给满一个窗口（这两个项目是 2 小时），之后才照今天的规则转给 owner。现有的「Waiting for the coordinator」折叠卡（含 Decide it myself）去掉。</p>
+  <div class="meta">手绘示意，样式照真实组件。时间假设：协调者 12:20 起在等 Claude 账号，16:20 恢复；项目窗口 2 小时。owner 11-08 定：方案 a（只在协调者会话的队列里看得到）、折叠卡去掉、不设上限；异常待办同样处理，取走前项目页不画。</div>
+
+  <!-- ① evidence -->
+  <h2>① 证据<span>协调者不可用时提交的一版证据</span></h2>
+  <p class="sub">今天有两种结果：协调者 FAILED 时 owner 看到折叠卡；协调者在队列里等账号时证据照投，2 小时后整张判定卡弹给 owner。</p>
+  <div class="frames ui">
+    <figure>
+      <span class="tag now">今天 · 协调者 FAILED</span>
+      <div class="gone"><span class="x">去掉</span>
+        <div class="card"><div class="fold"><span class="dot"></span>
+          <div><div class="h">Waiting for the coordinator</div>
+            <div>C18 · Web: chat panel uses the session page's composer</div>
+            <div><b>Coordinator paused</b> · 5-hour limit</div>
+            <div class="note">It goes to the coordinator when it’s back. You can still decide now.</div></div>
+          <span class="link">Decide it myself ›</span></div></div>
+      </div>
+      <figcaption>折叠卡及其 Decide it myself 整个去掉（web、macOS/iOS、Android 都不再画）。</figcaption>
+    </figure>
+    <figure>
+      <span class="tag now">今天 · 协调者在队列里等账号，2 小时后</span>
+      <div class="gone"><span class="x">不再出现</span>
+        <div class="card ev">
+          <div class="card-h">Does this evidence settle the task? <span class="from">FROM ORBIT</span></div>
+          <div class="card-b">
+            <div class="tline">C18 · Web: chat panel uses the session page's composer</div>
+            <div class="gapbox"><div class="k">WHAT THIS EVIDENCE DOES NOT ESTABLISH · 4</div>Web, compose-topology and Go ran on 0f7cd4b6c …</div>
+            <span class="btn pri">Confirm done</span><span class="btn sec">Chat about this</span>
+          </div>
+        </div>
+      </div>
+      <figcaption>协调者没取走之前，这张卡不会因为计时弹出来。</figcaption>
+    </figure>
+    <figure>
+      <span class="tag rec">建议 · 协调者会话里</span>
+      <div class="conv">
+        <div class="conv-h">Wiki 聊天窗口：边聊边改 <span class="pill q">Queued</span><span class="mark">1</span></div>
+        <div class="conv-b">
+          <div class="notice">Account paused until 4:20 PM</div>
+          <div style="height:10px"></div>
+          <div class="bub"><b>Orbit</b> · Evidence revision 2 submitted: C18 · Web: chat panel uses the session page's composer</div>
+          <div class="qmeta"><span class="qtag">Queued for next turn</span><span class="mark">2</span></div>
+        </div>
+        <div class="composer">Message the coordinator…</div>
+      </div>
+      <figcaption>
+        <ul>
+          <li><span class="num">1</span>会话本身的状态和原因是现有的（Queued、Account paused until …），不新增文案。</li>
+          <li><span class="num">2</span>证据就是队尾一条 Orbit 消息，和别的排队消息一样显示 <b>Queued for next turn</b>。owner 在别处看不到它。</li>
+          <li>协调者 FAILED 时也是这样：等它回来，Orbit 再把这条消息排进去（今天就会补发，不变）。</li>
+        </ul>
+      </figcaption>
+    </figure>
+  </div>
+
+  <!-- ② open item -->
+  <h2>② 异常待办<span>“Checks failed on the combined tree” 这类</span></h2>
+  <p class="sub">和证据一样：协调者取走之前，项目页上不画这张卡，只是协调者会话里一条排队消息；取走之后照今天的样子画出来，并从那一刻起计时。</p>
+  <div class="frames ui">
+    <figure>
+      <span class="tag now">今天</span>
+      <div class="card item">
+        <div class="card-h">Checks failed on the combined tree <span class="from">FROM ORBIT</span></div>
+        <div class="facts"><div><span>Task</span>链路心跳：服务端变慢时 runner 不再断开重连</div><div><span>Check</span>npm ci &amp;&amp; … · <b style="color:#c53030">exit 1</b> after 57s</div></div>
+        <div class="foot">Owner: coordinator · waiting 1h 58m · goes to the owner in 2m</div>
+      </div>
+      <figcaption>协调者 12:22 起在等账号，一直没机会看，2 分钟后转给 owner。</figcaption>
+    </figure>
+    <figure>
+      <span class="tag rec">建议 · 协调者还没取走</span>
+      <div class="gone"><span class="x">项目页不画</span>
+      <div class="card item">
+        <div class="card-h">Checks failed on the combined tree <span class="from">FROM ORBIT</span></div>
+        <div class="facts"><div><span>Task</span>链路心跳：服务端变慢时 runner 不再断开重连</div><div><span>Check</span>npm ci &amp;&amp; … · <b style="color:#c53030">exit 1</b> after 57s</div></div>
+        <div class="foot">Owner: coordinator · waiting 1h 58m</div>
+      </div></div>
+      <figcaption><span class="num">3</span>项目页的待办列表里没有它，也不计时；协调者会话里它和 ① 一样是一条 <b>Queued for next turn</b> 的 Orbit 消息。</figcaption>
+    </figure>
+    <figure>
+      <span class="tag rec">建议 · 16:21 协调者取走之后</span>
+      <div class="card item">
+        <div class="card-h">Checks failed on the combined tree <span class="from">FROM ORBIT</span></div>
+        <div class="facts"><div><span>Task</span>链路心跳：服务端变慢时 runner 不再断开重连</div><div><span>Check</span>npm ci &amp;&amp; … · <b style="color:#c53030">exit 1</b> after 57s</div></div>
+        <div class="foot">Owner: coordinator · waiting 4h 1m · goes to the owner in 2h<span class="mark">4</span></div>
+      </div>
+      <figcaption><span class="num">4</span>从取走那一刻起给满 2 小时。之后照今天：它回复了这条就不再计时，没回复就到点转给 owner。</figcaption>
+    </figure>
+  </div>
+
+  <!-- ③ rules -->
+  <h2>③ 规则对照</h2>
+  <table>
+    <tr><th style="width:24%">情形</th><th style="width:25%">证据 · 今天</th><th style="width:25%">异常待办 · 今天</th><th>改后（两条路相同）</th></tr>
+    <tr><td class="big">协调者 FAILED（额度、429、登录过期）</td><td>折叠卡给 owner，不计时</td><td>不投递，<b>照走表</b></td><td class="chg">排队等它回来，不出卡，项目页不画，不计时</td></tr>
+    <tr><td class="big">排了自动重试（retryAt）</td><td>折叠卡给 owner，不计时</td><td><b>照走表</b></td><td class="chg">同上</td></tr>
+    <tr><td class="big">在队列里等账号（PENDING）</td><td>投递后<b>照走表</b>，2 小时后弹判定卡</td><td><b>照走表</b></td><td class="chg">消息排在队里，不计时</td></tr>
+    <tr><td class="big">在跑别的长 turn</td><td>投递后照走表</td><td>照走表</td><td class="chg">排在下一个 turn，取走才计时</td></tr>
+    <tr><td class="big">取走以后</td><td>2 小时后转 owner</td><td>2 小时后转 owner；回复过就不计</td><td>不变（从取走起算）</td></tr>
+    <tr><td class="big">已结束、进回收站、关掉 Automatic</td><td>立刻转 owner</td><td>立刻转 owner</td><td>不变</td></tr>
+    <tr><td class="big">不在项目里的派发任务，派发会话不可用</td><td>FAILED 当成已结束，立刻转 owner；排队时 30 分钟后转</td><td>—</td><td class="chg">与项目相同：排队等它回来，取走才计 30 分钟</td></tr>
+  </table>
+
+  
+</div>
+</body>
+</html>

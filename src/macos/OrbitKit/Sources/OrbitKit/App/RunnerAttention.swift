@@ -42,6 +42,8 @@ public struct RunnerAttentionRunner: Decodable, Equatable, Sendable {
     public let selfUpdate: RunnerSelfUpdate?
     public let minFreeDiskMb: Int?
     public let engines: [RunnerEngineHealth]?
+    /// The engine update warnings dismissed on it, by engine (`Runner.engineUpdateDismissals`).
+    public let engineUpdateDismissals: [String: String]?
     public let planUsage: PlanUsage?
     /// Where its Claude connection last came out (`Runner.region`); nil for one that doesn't check.
     public let region: RunnerRegionView?
@@ -58,6 +60,7 @@ public struct RunnerAttentionRunner: Decodable, Equatable, Sendable {
         selfUpdate = runner.selfUpdate
         minFreeDiskMb = runner.minFreeDiskMb
         engines = runner.engines
+        engineUpdateDismissals = runner.engineUpdateDismissals
         planUsage = runner.planUsage
         region = runner.region
     }
@@ -112,12 +115,16 @@ public struct RunnerAttentionInput: Decodable, Equatable, Sendable {
     public let nowMs: Int64
     /// `RunnerAttention.latestRunnerVersion`'s answer; nil when nothing says what the latest is.
     public let latestVersion: String?
+    /// The account's managed runner (Orbit Cloud): Orbit rolls its image, so it is never told to update
+    /// itself. Optional in the case file, where a case without it is any other runner.
+    public let managed: Bool?
 
-    public init(runner: Runner, workspaces: [Agent], nowMs: Int64, latestVersion: String?) {
+    public init(runner: Runner, workspaces: [Agent], nowMs: Int64, latestVersion: String?, managed: Bool = false) {
         self.runner = RunnerAttentionRunner(runner)
         self.workspaces = workspaces.map(RunnerAttentionWorkspace.init)
         self.nowMs = nowMs
         self.latestVersion = latestVersion
+        self.managed = managed
     }
 }
 
@@ -371,8 +378,24 @@ public enum RunnerAttention {
     /// `pinned` is an engine Orbit keeps on one build rather than the newest (Cursor CLI, whose version a
     /// runner release moves): its routine note says so, since "checked" alone would read as "and it is
     /// the latest" (web `updateNoteOf`).
+    /// `dismissed` is the release this engine's warning was dismissed against on the runner
+    /// (`Runner.engineUpdateDismissals`): while it is still `update.latest` the warning goes quiet, with
+    /// the drift kept on the version line (`13d behind 0.169.0 · warning dismissed`); a newer latest no
+    /// longer matches, and warns again.
     public static func updateNoteOf(_ update: RunnerEngineUpdate?, nowMs: Int64,
-                                    pinned: Bool = false) -> RunnerEngineUpdateNote? {
+                                    pinned: Bool = false, dismissed: String? = nil) -> RunnerEngineUpdateNote? {
+        let note = undismissedUpdateNoteOf(update, nowMs: nowMs, pinned: pinned)
+        if let note, note.tone == .warn, let dismissed, !dismissed.isEmpty, update?.latest == dismissed {
+            return RunnerEngineUpdateNote(tone: .quiet, text: note.text + ENGINE_UPDATE_WARNING_DISMISSED)
+        }
+        return note
+    }
+
+    /// What the version line adds after the drift once its warning is dismissed.
+    public static let ENGINE_UPDATE_WARNING_DISMISSED = " · warning dismissed"
+
+    private static func undismissedUpdateNoteOf(_ update: RunnerEngineUpdate?, nowMs: Int64,
+                                                pinned: Bool) -> RunnerEngineUpdateNote? {
         guard let update else { return nil }
         if update.status == "skipped" {
             return RunnerEngineUpdateNote(tone: .quiet, text: "not auto-updated")
@@ -492,7 +515,7 @@ public enum RunnerAttention {
     /// it has a workspace yet (web's `noCliSignedIn`). Nil when one is signed in or its sign-in is unknown,
     /// when none is installed, and when a workspace runs on a key: that machine runs without any sign-in,
     /// so a signed-out login is news only to the workspaces on it (`signedOutItems`). Settings counts the
-    /// machine by the same answer (`Infrastructure.attention`).
+    /// machine by the same answer (`MachinesAndModels.attention`).
     ///
     /// A signed-out Claude Code on a machine blocked for the Claude region (`region`) is no CLI to sign
     /// in: Orbit won't start a Claude sign-in there, and the region's own item says why.
@@ -729,7 +752,9 @@ public enum RunnerAttention {
     /// that is behind installs the release itself when no turn is running.
     private static func cannotSelfUpdateItem(_ runner: RunnerAttentionRunner, _ latestVersion: String?,
                                              offline: Bool) -> RunnerAttentionItem? {
-        guard let version = runner.version?.trimmingCharacters(in: .whitespacesAndNewlines), !version.isEmpty,
+        // A version that isn't a release number (a managed runner's managed-<sha>, a dev build) is behind nothing.
+        guard let version = runner.version?.trimmingCharacters(in: .whitespacesAndNewlines),
+              version.range(of: "^[vV]?[0-9]", options: .regularExpression) != nil,
               let latestVersion, !latestVersion.isEmpty,
               compareRunnerVersions(version, latestVersion) < 0 else { return nil }
         let command = RunnerPageCopy.RUNNER_UPGRADE_COMMAND
@@ -790,12 +815,15 @@ public enum RunnerAttention {
         }
     }
 
-    /// An installed CLI whose update note is a warning (`updateNoteOf`).
+    /// An installed CLI whose update note is a warning (`updateNoteOf`) — not one whose warning was
+    /// dismissed against the release that is still the latest (`engineUpdateDismissals`).
     private static func engineUpdateItems(_ runner: RunnerAttentionRunner, nowMs: Int64) -> [RunnerAttentionItem] {
         reportedEngines.compactMap { engine, cliName in
             guard let health = runner.engines?.first(where: { $0.engine == engine }),
                   health.installed == true,
-                  let note = updateNoteOf(health.update, nowMs: nowMs), note.tone == .warn else { return nil }
+                  let note = updateNoteOf(health.update, nowMs: nowMs,
+                                         dismissed: runner.engineUpdateDismissals?[engine]),
+                  note.tone == .warn else { return nil }
             let summary = RunnerPageCopy.attentionEngineUpdateFailed(engine: cliName)
             return RunnerAttentionItem(
                 kind: .engineNotUpdating, tone: .warn, short: summary, title: summary,
@@ -829,17 +857,20 @@ public enum RunnerAttention {
             items += quotaItems(runner, input.workspaces, nowMs: input.nowMs)
             if let disk = diskItem(runner, input.workspaces) { items.append(disk) }
         }
-        if let cannotUpdate = cannotSelfUpdateItem(runner, input.latestVersion, offline: offline) {
+        if input.managed != true,
+           let cannotUpdate = cannotSelfUpdateItem(runner, input.latestVersion, offline: offline) {
             items.append(cannotUpdate)
         }
         if !offline { items += engineUpdateItems(runner, nowMs: input.nowMs) }
         return items
     }
 
+    /// `managed` nil reads it from the account's managed runner (`RunnerPageFormat.isManaged`).
     public static func runnerAttention(runner: Runner, workspaces: [Agent], nowMs: Int64,
-                                       latestVersion: String?) -> [RunnerAttentionItem] {
+                                       latestVersion: String?, managed: Bool? = nil) -> [RunnerAttentionItem] {
         runnerAttention(RunnerAttentionInput(runner: runner, workspaces: workspaces, nowMs: nowMs,
-                                             latestVersion: latestVersion))
+                                             latestVersion: latestVersion,
+                                             managed: managed ?? RunnerPageFormat.isManaged(runner)))
     }
 
     /// Whether Update Runner Now can do anything here. Only a runner that reports its updates takes
@@ -865,11 +896,28 @@ public enum RunnerAttention {
         return shorts.isEmpty ? nil : shorts.joined(separator: RunnerPageCopy.RUNNER_LINE_SEPARATOR)
     }
 
+    /// Whether a version is a release number, not a managed image's `managed-<sha>` or a `dev` build.
+    public static func isReleaseVersion(_ version: String?) -> Bool {
+        guard let version = version?.trimmingCharacters(in: .whitespacesAndNewlines) else { return false }
+        return version.range(of: "^[vV]?[0-9]", options: .regularExpression) != nil
+    }
+
+    /// How a version is shown beside a runner's name: `v<version>`. A managed runner (Orbit Cloud) shows
+    /// its release when it reports one, and otherwise says Orbit keeps it up to date — never its image hash.
+    public static func runnerVersionLine(_ version: String?, managed: Bool = false) -> String? {
+        let trimmed = version?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+        if managed {
+            return isReleaseVersion(trimmed)
+                ? RunnerPageCopy.runnerVersionTag(version: trimmed) : RunnerPageCopy.MANAGED_RUNNER_KEPT_UP_TO_DATE
+        }
+        return trimmed.isEmpty ? nil : RunnerPageCopy.runnerVersionTag(version: trimmed)
+    }
+
     /// The list's second line. Online: `<hostname> · v<version>`, leaving out a hostname that is
     /// empty or the same as the name shown above it. Offline: `Offline · last seen 14d ago · v<version>`.
-    public static func runnerListSubtitle(_ runner: RunnerAttentionRunner, nowMs: Int64) -> String {
-        let version = (runner.version?.trimmingCharacters(in: .whitespacesAndNewlines))
-            .flatMap { $0.isEmpty ? nil : RunnerPageCopy.runnerVersionTag(version: $0) }
+    /// A managed runner's version is `runnerVersionLine`'s.
+    public static func runnerListSubtitle(_ runner: RunnerAttentionRunner, nowMs: Int64, managed: Bool = false) -> String {
+        let version = runnerVersionLine(runner.version, managed: managed)
         if runnerIsOffline(runner, nowMs: nowMs) {
             let lastSeen = runner.lastHeartbeatAt.flatMap { $0.isEmpty ? nil : $0 }
             let status = lastSeen.map { RunnerPageCopy.runnerOfflineLastSeen(when: ago($0, nowMs: nowMs)) }
@@ -878,12 +926,14 @@ public enum RunnerAttention {
         }
         let hostname = runner.hostname?.trimmingCharacters(in: .whitespacesAndNewlines)
         let displayName = runner.displayName?.trimmingCharacters(in: .whitespacesAndNewlines)
-        let shownName = displayName.flatMap { $0.isEmpty ? nil : $0 } ?? runner.name
+        let shownName = displayName.flatMap { $0.isEmpty ? nil : $0 }
+            ?? (managed ? RunnerPageCopy.MANAGED_RUNNER_LABEL : runner.name)
         let host = hostname.flatMap { $0.isEmpty || $0 == shownName ? nil : $0 }
         return [host, version].compactMap { $0 }.joined(separator: RunnerPageCopy.RUNNER_LINE_SEPARATOR)
     }
 
-    public static func runnerListSubtitle(_ runner: Runner, nowMs: Int64) -> String {
-        runnerListSubtitle(RunnerAttentionRunner(runner), nowMs: nowMs)
+    /// `managed` nil reads it from the account's managed runner (`RunnerPageFormat.isManaged`).
+    public static func runnerListSubtitle(_ runner: Runner, nowMs: Int64, managed: Bool? = nil) -> String {
+        runnerListSubtitle(RunnerAttentionRunner(runner), nowMs: nowMs, managed: managed ?? RunnerPageFormat.isManaged(runner))
     }
 }

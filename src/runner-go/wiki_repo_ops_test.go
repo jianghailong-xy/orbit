@@ -15,25 +15,30 @@ import (
 // checkout's first commit).
 
 // wikiRepoOpFixture is a bare origin, a seed repository that pushes to it, and a checkout of it whose
-// origin/main stays where the clone left it until something fetches.
+// remote-tracking ref stays where the clone left it until something fetches.
 type wikiRepoOpFixture struct {
 	home, bare, seed, checkout string
 	first                      string
+	branch                     string
 }
 
 func newWikiRepoOpFixture(t *testing.T) *wikiRepoOpFixture {
+	return newWikiRepoOpFixtureOn(t, "main")
+}
+
+func newWikiRepoOpFixtureOn(t *testing.T, branch string) *wikiRepoOpFixture {
 	t.Helper()
 	home := t.TempDir()
 	t.Setenv("HOME", home)
 	f := &wikiRepoOpFixture{
 		home: home, bare: filepath.Join(home, "origin.git"), seed: filepath.Join(home, "seed"),
-		checkout: filepath.Join(home, "orbit"),
+		checkout: filepath.Join(home, "orbit"), branch: branch,
 	}
-	mustGit(t, home, "init", "-q", "--bare", "-b", "main", f.bare)
+	mustGit(t, home, "init", "-q", "--bare", "-b", branch, f.bare)
 	if err := os.MkdirAll(f.seed, 0o755); err != nil {
 		t.Fatal(err)
 	}
-	mustGit(t, f.seed, "init", "-q", "-b", "main")
+	mustGit(t, f.seed, "init", "-q", "-b", branch)
 	mustGit(t, f.seed, "config", "user.email", "test@orbit")
 	mustGit(t, f.seed, "config", "user.name", "Test")
 	f.write(t, "README.md", "# orbit\n\nA repository the wiki reads, and one that is read every day.\n\nSecond paragraph.\n")
@@ -46,7 +51,7 @@ func newWikiRepoOpFixture(t *testing.T) *wikiRepoOpFixture {
 	mustGit(t, f.seed, "commit", "-q", "-m", "first")
 	f.first = mustGit(t, f.seed, "rev-parse", "HEAD")
 	mustGit(t, f.seed, "remote", "add", "origin", f.bare)
-	mustGit(t, f.seed, "push", "-q", "origin", "main")
+	mustGit(t, f.seed, "push", "-q", "origin", f.branch)
 	mustGit(t, home, "clone", "-q", f.bare, f.checkout)
 	mustGit(t, f.checkout, "config", "user.email", "test@orbit")
 	mustGit(t, f.checkout, "config", "user.name", "Test")
@@ -64,14 +69,30 @@ func (f *wikiRepoOpFixture) write(t *testing.T, name, content string) {
 	}
 }
 
-// push lands a commit on origin's main from the seed; the checkout does not see it until it fetches.
+// push lands a commit on origin's default branch from the seed; the checkout does not see it until it fetches.
 func (f *wikiRepoOpFixture) push(t *testing.T, message string, change func()) string {
 	t.Helper()
 	change()
 	mustGit(t, f.seed, "add", "-A")
 	mustGit(t, f.seed, "commit", "-q", "-m", message)
-	mustGit(t, f.seed, "push", "-q", "origin", "main")
+	mustGit(t, f.seed, "push", "-q", "origin", f.branch)
 	return mustGit(t, f.seed, "rev-parse", "HEAD")
+}
+
+// A repository whose default branch is not main is read at that branch: the wiki follows the
+// repository's own answer, not a branch name guessed for it.
+func TestWikiRepoOpSnapshotReadsOriginMasterWhenItIsTheDefaultBranch(t *testing.T) {
+	f := newWikiRepoOpFixtureOn(t, "master")
+	outcome := runWikiRepoOp(f.command(t, "snapshot", map[string]interface{}{}), nil)
+	if outcome.state != "succeeded" {
+		t.Fatalf("snapshot on origin/master failed: %s", outcome.err)
+	}
+	if outcome.result["sha"] != f.first {
+		t.Fatalf("snapshot sha = %v, want master at %s", outcome.result["sha"], f.first)
+	}
+	if got := mustGit(t, f.checkout, "symbolic-ref", "refs/remotes/origin/HEAD"); got != "refs/remotes/origin/master" {
+		t.Fatalf("origin/HEAD = %s, want origin/master", got)
+	}
 }
 
 // command is the operation as the control plane hands it over: this checkout, and the space's repository.
@@ -619,7 +640,7 @@ func TestWikiRepoOpFetchFailureSaysWhichOperationInWhichCheckout(t *testing.T) {
 		f.command(t, "anchors", map[string]interface{}{"anchors": []map[string]interface{}{{"index": 0, "type": "path", "path": "docs/moved.md"}}}),
 	} {
 		outcome := runWikiRepoOp(cmd, nil)
-		want := "the " + cmd.Kind + " operation could not fetch origin main into the checkout " + root + ", so nothing was read: "
+		want := "the " + cmd.Kind + " operation could not fetch origin's default branch into the checkout " + root + ", so nothing was read: "
 		if outcome.state != "failed" || !strings.Contains(outcome.err, want) || !strings.Contains(outcome.err, "cannot lock ref 'refs/remotes/origin/main'") {
 			t.Fatalf("the %s's failed fetch = %s %q, want %q with git's own words", cmd.Kind, outcome.state, outcome.err, want)
 		}

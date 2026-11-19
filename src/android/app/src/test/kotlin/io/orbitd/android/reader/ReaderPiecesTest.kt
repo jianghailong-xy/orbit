@@ -30,12 +30,16 @@ class ReaderPiecesTest {
     @get:Rule val compose = createAndroidComposeRule<MainActivity>()
     private val reasoning = (1..40).joinToString("\n\n") { "Step $it of weighing the options." }
 
-    /** iOS 471b2afbb: a stretch still being written is open, held to about 160 dp at its newest line, and folds on a tap. */
-    @Test fun reasoningStillBeingWrittenIsOpenBoundedAtItsNewestLineAndFoldsOnATap() {
+    /** docs/mocks/thinking-fold-live: a stretch still being written starts folded on one row that states its size; a tap opens it,
+     * held to about 160 dp at its newest line (iOS 471b2afbb), and another folds it. */
+    @Test fun reasoningStillBeingWrittenStartsFoldedAndOpensBoundedAtItsNewestLine() {
         compose.runOnUiThread { compose.activity.setContent { MaterialTheme { Column { LiveThinking("", reasoning) {} } } } }
         compose.waitForIdle()
-        compose.onNodeWithText("Thinking…", useUnmergedTree = true).assertIsDisplayed()
+        compose.onNodeWithText("Thinking… ${ThinkingSummary.size(reasoning.length)}", useUnmergedTree = true).assertIsDisplayed()
         val fold = compose.onNodeWithTag("thinking-fold")
+        fold.assert(SemanticsMatcher.expectValue(SemanticsProperties.StateDescription, "Collapsed"))
+        compose.onNodeWithTag("thinking-live").assertDoesNotExist()
+        fold.performClick()
         fold.assert(SemanticsMatcher.expectValue(SemanticsProperties.StateDescription, "Expanded"))
         val box = compose.onNodeWithTag("thinking-live").fetchSemanticsNode().boundsInRoot
         with(compose.density) { assertTrue("held to 160 dp, not ${box.height.toDp()}", box.height <= 160.dp.toPx() + 1) }

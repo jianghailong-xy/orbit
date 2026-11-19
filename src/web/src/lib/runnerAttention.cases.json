@@ -2407,6 +2407,54 @@
     }
   },
   {
+    "name": "selfUpdate disabledByEnv on a managed runner: its version is no release, so nothing is behind",
+    "input": {
+      "runner": {
+        "name": "lab",
+        "hostname": "lab-host",
+        "version": "managed-95884b154feb3d4e2a575fb012c4185b20c282ac",
+        "online": true,
+        "lastHeartbeatAt": "2026-09-29T00:14:45Z",
+        "maxConcurrent": 4,
+        "activeSessions": 0,
+        "runsAsRoot": false,
+        "selfUpdate": {
+          "state": "disabledByEnv",
+          "reason": "ORBIT_NO_SELFUPDATE is set"
+        },
+        "engines": [
+          {
+            "engine": "claude",
+            "installed": true,
+            "version": "2.1.284 (Claude Code)",
+            "auth": "yes"
+          },
+          {
+            "engine": "codex",
+            "installed": true,
+            "version": "codex-cli 0.158.0",
+            "auth": "yes"
+          },
+          {
+            "engine": "kimi",
+            "installed": true,
+            "version": "2.1.1",
+            "auth": "yes"
+          }
+        ]
+      },
+      "workspaces": [],
+      "nowMs": 1790640900000,
+      "latestVersion": "0.1.197"
+    },
+    "expected": {
+      "items": [],
+      "listLine": null,
+      "subtitle": "lab-host · vmanaged-95884b154feb3d4e2a575fb012c4185b20c282ac",
+      "disk": null
+    }
+  },
+  {
     "name": "selfUpdate failed and behind: its update failed, with Update Runner Now, though it runs as root",
     "input": {
       "runner": {
@@ -3936,6 +3984,362 @@
         ],
       "listLine": null,
       "subtitle": "Offline · last seen 5h ago · v0.1.235",
+      "disk": null
+    }
+  },
+  {
+    "name": "Codex update warning dismissed against the release that is still the latest: no card, and the machine leaves Needs Attention",
+    "input": {
+      "runner": {
+        "name": "orbit@austin",
+        "hostname": "aivps-sg",
+        "version": "0.1.256",
+        "online": true,
+        "lastHeartbeatAt": "2026-09-29T00:14:45Z",
+        "maxConcurrent": 16,
+        "activeSessions": 0,
+        "runsAsRoot": true,
+        "engines": [
+          {
+            "engine": "claude",
+            "installed": true,
+            "version": "2.1.290 (Claude Code)",
+            "auth": "yes"
+          },
+          {
+            "engine": "codex",
+            "installed": true,
+            "version": "codex-cli 0.159.2",
+            "auth": "yes",
+            "update": {
+              "status": "failed",
+              "at": "2026-09-28T23:50:00Z",
+              "okAt": "2026-09-15T00:00:00Z",
+              "latest": "0.169.0",
+              "behindSince": "2026-09-16T00:00:00Z",
+              "message": "0.159.2 → 0.169.0: Codex updates itself with npm, and npm isn't on this runner's PATH."
+            }
+          },
+          {
+            "engine": "kimi",
+            "installed": true,
+            "version": "2.1.1",
+            "auth": "yes"
+          }
+        ],
+        "engineUpdateDismissals": {
+          "codex": "0.169.0"
+        }
+      },
+      "workspaces": [
+        {
+          "id": "ws-app",
+          "name": "app",
+          "lastProvider": "codex",
+          "workDir": "~/app"
+        }
+      ],
+      "nowMs": 1790640900000,
+      "latestVersion": "0.1.256"
+    },
+    "expected": {
+      "items": [],
+      "listLine": null,
+      "subtitle": "aivps-sg · v0.1.256",
+      "disk": null
+    }
+  },
+  {
+    "name": "a Codex release newer than the one its warning was dismissed against: the card is back",
+    "input": {
+      "runner": {
+        "name": "orbit@austin",
+        "hostname": "aivps-sg",
+        "version": "0.1.256",
+        "online": true,
+        "lastHeartbeatAt": "2026-09-29T00:14:45Z",
+        "maxConcurrent": 16,
+        "activeSessions": 0,
+        "runsAsRoot": true,
+        "engines": [
+          {
+            "engine": "claude",
+            "installed": true,
+            "version": "2.1.290 (Claude Code)",
+            "auth": "yes"
+          },
+          {
+            "engine": "codex",
+            "installed": true,
+            "version": "codex-cli 0.159.2",
+            "auth": "yes",
+            "update": {
+              "status": "failed",
+              "at": "2026-09-28T23:50:00Z",
+              "okAt": "2026-09-15T00:00:00Z",
+              "latest": "0.170.0",
+              "behindSince": "2026-09-16T00:00:00Z",
+              "message": "0.159.2 → 0.170.0: Codex updates itself with npm, and npm isn't on this runner's PATH."
+            }
+          },
+          {
+            "engine": "kimi",
+            "installed": true,
+            "version": "2.1.1",
+            "auth": "yes"
+          }
+        ],
+        "engineUpdateDismissals": {
+          "codex": "0.169.0"
+        }
+      },
+      "workspaces": [
+        {
+          "id": "ws-app",
+          "name": "app",
+          "lastProvider": "codex",
+          "workDir": "~/app"
+        }
+      ],
+      "nowMs": 1790640900000,
+      "latestVersion": "0.1.256"
+    },
+    "expected": {
+      "items": [
+        {
+          "kind": "engineNotUpdating",
+          "tone": "warn",
+          "short": "Codex update failed",
+          "title": "Codex update failed",
+          "actionKind": "updateEngines"
+        }
+      ],
+      "listLine": "Codex update failed",
+      "subtitle": "aivps-sg · v0.1.256",
+      "disk": null
+    }
+  },
+  {
+    "name": "a dismissal of another engine's warning leaves Codex's card where it is",
+    "input": {
+      "runner": {
+        "name": "orbit@austin",
+        "hostname": "aivps-sg",
+        "version": "0.1.256",
+        "online": true,
+        "lastHeartbeatAt": "2026-09-29T00:14:45Z",
+        "maxConcurrent": 16,
+        "activeSessions": 0,
+        "runsAsRoot": true,
+        "engines": [
+          {
+            "engine": "claude",
+            "installed": true,
+            "version": "2.1.290 (Claude Code)",
+            "auth": "yes"
+          },
+          {
+            "engine": "codex",
+            "installed": true,
+            "version": "codex-cli 0.159.2",
+            "auth": "yes",
+            "update": {
+              "status": "failed",
+              "at": "2026-09-28T23:50:00Z",
+              "okAt": "2026-09-15T00:00:00Z",
+              "latest": "0.169.0",
+              "behindSince": "2026-09-16T00:00:00Z",
+              "message": "0.159.2 → 0.169.0: Codex updates itself with npm, and npm isn't on this runner's PATH."
+            }
+          },
+          {
+            "engine": "kimi",
+            "installed": true,
+            "version": "2.1.1",
+            "auth": "yes"
+          }
+        ],
+        "engineUpdateDismissals": {
+          "claude": "0.169.0"
+        }
+      },
+      "workspaces": [
+        {
+          "id": "ws-app",
+          "name": "app",
+          "lastProvider": "codex",
+          "workDir": "~/app"
+        }
+      ],
+      "nowMs": 1790640900000,
+      "latestVersion": "0.1.256"
+    },
+    "expected": {
+      "items": [
+        {
+          "kind": "engineNotUpdating",
+          "tone": "warn",
+          "short": "Codex update failed",
+          "title": "Codex update failed",
+          "actionKind": "updateEngines"
+        }
+      ],
+      "listLine": "Codex update failed",
+      "subtitle": "aivps-sg · v0.1.256",
+      "disk": null
+    }
+  },
+  {
+    "name": "Orbit Cloud (managed) on a release with ORBIT_NO_SELFUPDATE and behind: Orbit rolls its image, so no Updates are turned off",
+    "input": {
+      "runner": {
+        "name": "orbit-cloud",
+        "hostname": "lab-host",
+        "version": "0.1.190",
+        "online": true,
+        "lastHeartbeatAt": "2026-09-29T00:14:45Z",
+        "maxConcurrent": 4,
+        "activeSessions": 0,
+        "runsAsRoot": false,
+        "selfUpdate": {
+          "state": "disabledByEnv",
+          "reason": "ORBIT_NO_SELFUPDATE is set",
+          "installDir": "/Users/lab/.orbit/bin"
+        },
+        "engines": [
+          {
+            "engine": "claude",
+            "installed": true,
+            "version": "2.1.284 (Claude Code)",
+            "auth": "yes"
+          },
+          {
+            "engine": "codex",
+            "installed": true,
+            "version": "codex-cli 0.158.0",
+            "auth": "yes"
+          },
+          {
+            "engine": "kimi",
+            "installed": true,
+            "version": "2.1.1",
+            "auth": "yes"
+          }
+        ]
+      },
+      "workspaces": [],
+      "nowMs": 1790640900000,
+      "latestVersion": "0.1.197",
+      "managed": true
+    },
+    "expected": {
+      "items": [],
+      "listLine": null,
+      "subtitle": "lab-host · v0.1.190",
+      "disk": null
+    }
+  },
+  {
+    "name": "Orbit Cloud (managed) on a managed-<sha> image: its version line says Orbit keeps it up to date, never the hash",
+    "input": {
+      "runner": {
+        "name": "orbit-cloud",
+        "version": "managed-95884b154feb3d4e2a575fb012c4185b20c282ac",
+        "online": true,
+        "lastHeartbeatAt": "2026-09-29T00:14:45Z",
+        "maxConcurrent": 4,
+        "activeSessions": 0,
+        "runsAsRoot": false,
+        "selfUpdate": {
+          "state": "disabledByEnv",
+          "reason": "ORBIT_NO_SELFUPDATE is set"
+        },
+        "engines": [
+          {
+            "engine": "claude",
+            "installed": true,
+            "version": "2.1.284 (Claude Code)",
+            "auth": "yes"
+          },
+          {
+            "engine": "codex",
+            "installed": true,
+            "version": "codex-cli 0.158.0",
+            "auth": "yes"
+          },
+          {
+            "engine": "kimi",
+            "installed": true,
+            "version": "2.1.1",
+            "auth": "yes"
+          }
+        ]
+      },
+      "workspaces": [],
+      "nowMs": 1790640900000,
+      "latestVersion": "0.1.197",
+      "managed": true
+    },
+    "expected": {
+      "items": [],
+      "listLine": null,
+      "subtitle": "Kept up to date by Orbit",
+      "disk": null
+    }
+  },
+  {
+    "name": "Orbit Cloud (managed) asleep on a managed-<sha> image: offline since, and kept up to date by Orbit",
+    "input": {
+      "runner": {
+        "name": "orbit-cloud",
+        "version": "managed-95884b154feb3d4e2a575fb012c4185b20c282ac",
+        "online": false,
+        "lastHeartbeatAt": "2026-09-27T00:15:00Z",
+        "maxConcurrent": 4,
+        "activeSessions": 0,
+        "runsAsRoot": false,
+        "selfUpdate": {
+          "state": "disabledByEnv",
+          "reason": "ORBIT_NO_SELFUPDATE is set"
+        },
+        "engines": [
+          {
+            "engine": "claude",
+            "installed": true,
+            "version": "2.1.284 (Claude Code)",
+            "auth": "yes"
+          },
+          {
+            "engine": "codex",
+            "installed": true,
+            "version": "codex-cli 0.158.0",
+            "auth": "yes"
+          },
+          {
+            "engine": "kimi",
+            "installed": true,
+            "version": "2.1.1",
+            "auth": "yes"
+          }
+        ]
+      },
+      "workspaces": [],
+      "nowMs": 1790640900000,
+      "latestVersion": "0.1.197",
+      "managed": true
+    },
+    "expected": {
+      "items": [
+        {
+          "kind": "offline",
+          "tone": "idle",
+          "short": "Offline",
+          "title": "Offline for 2 days",
+          "actionKind": null
+        }
+      ],
+      "listLine": null,
+      "subtitle": "Offline · last seen 2d ago · Kept up to date by Orbit",
       "disk": null
     }
   }

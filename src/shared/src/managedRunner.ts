@@ -61,8 +61,11 @@ export const MANAGED_RUNNER_ROTATE_REFUSED = 'MANAGED_RUNNER_ROTATE_REFUSED';
  * the instance the manager authorized; a self-managed runner declares nothing and is unaffected.
  */
 export const MANAGED_RUNNER_INSTANCE_CAPABILITY = 'managed-runner-instance-v1';
-export const MANAGED_RUNNER_GENERATION_HEADER = 'x-orbit-managed-runner-generation';
-export const MANAGED_RUNNER_POD_UID_HEADER = 'x-orbit-managed-runner-pod-uid';
+export const MANAGED_RUNNER_GENERATION_HEADER = 'x-orbit-cloud-runner-generation';
+export const MANAGED_RUNNER_POD_UID_HEADER = 'x-orbit-cloud-runner-pod-uid';
+/** The same two headers as a runner built before they were renamed sends them; the server reads either. */
+export const LEGACY_MANAGED_RUNNER_GENERATION_HEADER = 'x-orbit-managed-runner-generation';
+export const LEGACY_MANAGED_RUNNER_POD_UID_HEADER = 'x-orbit-managed-runner-pod-uid';
 
 /** 403: a managed runner's credential sent without the instance protocol (an older runner, or a copy). */
 export const MANAGED_RUNNER_INSTANCE_REQUIRED = 'MANAGED_RUNNER_INSTANCE_REQUIRED';
@@ -176,6 +179,7 @@ export interface ManagedRunnerStatus {
   managementState: ManagedRunnerReadState;
   desiredState: ManagedRunnerDesiredState | null;
   runnerId: string | null;
+  /** @deprecated Always null: a managed runner has no default workspace (docs/managed-runner-no-default-workspace.md). */
   workspaceId: string | null;
   /** The runner row's own heartbeat observation (`ONLINE`, `OFFLINE`, `DRAINING`). */
   heartbeatStatus: string | null;

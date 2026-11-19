@@ -7,23 +7,28 @@ import (
 	"sort"
 	"strings"
 	"time"
+	"unique"
+	"unsafe"
 
 	"orbit/link-gateway/linkpb"
 )
 
 // Heartbeats (docs/runner-link-design.md §5.7). A Heartbeat is forwarded to the apiserver's heartbeat route as the
-// body a runner posts over HTTPS today, the exact inverse of the shadow comparison's mapping (README.md, "Shadow
-// comparison"): the typed fields become their members, and each Fact's JSON becomes the member it is named after. The
-// route does everything it does today, the runner's presence included, and its answer, today's HeartbeatResponse,
-// goes back as HeartbeatAck.reconcile_json for the runner to apply as it applies that response today.
+// body a runner posted over HTTPS before the link (README.md, "Heartbeats"): the typed fields become their members, and
+// each Fact's JSON becomes the member it is named after. The route does everything it did then, the runner's presence
+// included, and its answer, the HeartbeatResponse, goes back as HeartbeatAck.reconcile_json for the runner to apply.
 //
 // A Fact may come by digest only, when the runner sent its content before. The connection keeps the last full value of
 // each kind, and a digest it holds is filled from it. A digest it does not hold is named in want_facts, and that beat
 // is not forwarded: an absent heartbeat member has a meaning (it keeps or clears what the server holds), so a body
 // missing one would say something the runner did not. The runner sends those parts whole in its next beat, at once.
 
-// The members a heartbeat's typed fields fill (heartbeatTypedMembers, shadow.go); a Fact of one of these kinds is
-// ignored rather than allowed to replace it.
+// heartbeatTypedMembers are the members of the heartbeat body that a Heartbeat's typed fields fill, or the connection
+// does (status, version): a Fact of one of these kinds is ignored rather than allowed to replace it. Every other member
+// travels as a Fact named after it.
+var heartbeatTypedMembers = map[string]bool{
+	"status": true, "version": true, "leaseOwner": true, "idleCapacity": true, "supervisedSessionIds": true, "draining": true,
+}
 
 // factCache is the last full value of each fact kind a connection's runner sent.
 type factCache struct {
@@ -31,10 +36,27 @@ type factCache struct {
 	bytes  int
 }
 
+// cachedFact is one fact a connection holds. Its digest and content are interned: the shared parts of every runner's
+// heartbeat (engines, model catalogs, commands: about 7 KB) are alike across most runners, and are held once for all
+// the connections that sent them rather than once each.
 type cachedFact struct {
-	sha  string
-	json []byte
+	sha  unique.Handle[string]
+	json unique.Handle[string]
 }
+
+// newCachedFact interns a fact's digest and content.
+func newCachedFact(sha string, raw []byte) cachedFact {
+	return cachedFact{sha: unique.Make(sha), json: unique.Make(string(raw))}
+}
+
+// content is the fact's JSON. It shares the interned string's bytes, which nothing may write to: it is only ever
+// read, as a member of the body the heartbeat is forwarded with.
+func (f cachedFact) content() json.RawMessage {
+	v := f.json.Value()
+	return json.RawMessage(unsafe.Slice(unsafe.StringData(v), len(v)))
+}
+
+func (f cachedFact) size() int { return len(f.json.Value()) }
 
 // Bounds on what one connection's cache holds. A fact past them is used for its beat and not kept, so its next
 // digest-only beat asks for it again.
@@ -57,8 +79,8 @@ func (fc *factCache) resolve(facts []*linkpb.Fact, m *gatewayMetrics) (members m
 		}
 		raw := f.GetJson()
 		if len(raw) == 0 {
-			if cached, ok := fc.byKind[kind]; ok && cached.sha == f.GetSha256() {
-				members[kind] = cached.json
+			if cached, ok := fc.byKind[kind]; ok && cached.sha.Value() == f.GetSha256() {
+				members[kind] = cached.content()
 				m.heartbeatFacts.inc("cached")
 			} else {
 				wanted[kind] = true
@@ -81,7 +103,7 @@ func (fc *factCache) resolve(facts []*linkpb.Fact, m *gatewayMetrics) (members m
 			continue
 		}
 		m.heartbeatFacts.inc("whole")
-		fc.keep(kind, cachedFact{sha: strings.ToLower(f.GetSha256()), json: append([]byte(nil), raw...)})
+		fc.keep(kind, newCachedFact(strings.ToLower(f.GetSha256()), raw))
 	}
 	for kind := range wanted {
 		want = append(want, kind)
@@ -92,14 +114,14 @@ func (fc *factCache) resolve(facts []*linkpb.Fact, m *gatewayMetrics) (members m
 
 func (fc *factCache) keep(kind string, f cachedFact) {
 	old, had := fc.byKind[kind]
-	size := fc.bytes + len(f.json)
+	size := fc.bytes + f.size()
 	if had {
-		size -= len(old.json)
+		size -= old.size()
 	}
 	if size > maxFactBytes || (!had && len(fc.byKind) >= maxFactKinds) {
 		if had {
 			// Stale now: it no longer matches what the runner holds.
-			fc.bytes -= len(old.json)
+			fc.bytes -= old.size()
 			delete(fc.byKind, kind)
 		}
 		return
@@ -108,12 +130,16 @@ func (fc *factCache) keep(kind string, f cachedFact) {
 	fc.bytes = size
 }
 
-// onHeartbeat hands the beat to the connection's heartbeat worker. A beat still waiting for its turn is replaced by
-// the newer one: each beat is complete and reconciled level-triggered, so the newest says everything the older did.
+// onHeartbeat hands the beat to the connection's heartbeat worker, which it starts when none is running. A beat still
+// waiting for its turn is replaced by the newer one: each beat is complete and reconciled level-triggered, so the
+// newest says everything the older did.
 func (l *linkState) onHeartbeat(hb *linkpb.Heartbeat) {
 	for {
 		select {
 		case l.beats <- hb:
+			if l.beating.CompareAndSwap(false, true) {
+				go l.heartbeatWorker()
+			}
 			return
 		default:
 		}
@@ -125,14 +151,25 @@ func (l *linkState) onHeartbeat(hb *linkpb.Heartbeat) {
 	}
 }
 
-// heartbeatLoop forwards the connection's heartbeats one at a time, in order.
-func (l *linkState) heartbeatLoop() {
+// heartbeatWorker forwards the connection's heartbeats one at a time, in order, and ends when none is waiting: a
+// connection has a goroutine for its heartbeats only while one is forwarded, a few milliseconds every 30 s, rather
+// than all its life.
+func (l *linkState) heartbeatWorker() {
 	for {
 		select {
 		case <-l.c.ctx.Done():
+			l.beating.Store(false)
 			return
 		case hb := <-l.beats:
 			l.forwardHeartbeat(hb)
+			continue
+		default:
+		}
+		l.beating.Store(false)
+		// A beat that came after the channel was found empty and before beating was cleared started no worker: this
+		// one goes on for it.
+		if len(l.beats) == 0 || !l.beating.CompareAndSwap(false, true) {
+			return
 		}
 	}
 }
@@ -146,7 +183,8 @@ func (l *linkState) forwardHeartbeat(hb *linkpb.Heartbeat) {
 	}
 	l.noteHeartbeat(hb)
 	members, want := l.facts.resolve(hb.GetFacts(), m)
-	ack := &linkpb.HeartbeatAck{Mode: c.mode}
+	// Every answer names the beat it answers, so the runner can tell it from the answer to another (proto beat_id).
+	ack := &linkpb.HeartbeatAck{Mode: linkpb.Mode_MODE_LINK, BeatId: hb.GetBeatId()}
 	if len(want) > 0 {
 		// Nothing was reconciled: no reconcile_json, and no HintState, which the route was not asked for.
 		m.heartbeatForwards.inc("want_facts")

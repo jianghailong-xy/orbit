@@ -796,7 +796,7 @@ func TestKimiTurnOutcomeIsReadFromTheTurnsOwnRecord(t *testing.T) {
 	ctx := context.Background()
 
 	wire, from := wireWith(t, kimiQuotaTurnRecords)
-	if got := readKimiTurnOutcome(ctx, wire, from); got != (kimiTurnOutcome{read: true, ran: true, failure: kimiQuotaSentence}) {
+	if got := readKimiTurnOutcome(ctx, wire, from, nil); got != (kimiTurnOutcome{read: true, ran: true, failure: kimiQuotaSentence}) {
 		t.Fatalf("a turn ended on the usage limit is reported as %+v", got)
 	}
 	if !strings.HasPrefix(strings.ToLower(kimiQuotaSentence), "you've hit your usage limit") {
@@ -815,7 +815,7 @@ func TestKimiTurnOutcomeIsReadFromTheTurnsOwnRecord(t *testing.T) {
 	// and the one the runner used to report as a turn that completed with nothing to say.
 	wire, from = wireWith(t, kimiRefusedTurnRecords)
 	want := "Kimi Code failed this turn (APIStatusError): 400 Invalid request: the prompt is malformed"
-	if got := readKimiTurnOutcome(ctx, wire, from); got != (kimiTurnOutcome{read: true, ran: true, failure: want}) {
+	if got := readKimiTurnOutcome(ctx, wire, from, nil); got != (kimiTurnOutcome{read: true, ran: true, failure: want}) {
 		t.Fatalf("a refused turn is reported as %+v, want %q", got, want)
 	}
 	if strings.Contains(strings.ToLower(want), "hit your usage limit") {
@@ -825,7 +825,7 @@ func TestKimiTurnOutcomeIsReadFromTheTurnsOwnRecord(t *testing.T) {
 	// A turn that went well.
 	wire, from = wireWith(t, `{"type":"turn.prompt","agentId":"main","turnId":1,"input":[{"type":"text","text":"x"}],"time":1}`+"\n"+
 		`{"type":"turn.ended","agentId":"main","turnId":1,"reason":"completed","durationMs":58,"time":2}`+"\n")
-	if got := readKimiTurnOutcome(ctx, wire, from); got != (kimiTurnOutcome{read: true, ran: true}) {
+	if got := readKimiTurnOutcome(ctx, wire, from, nil); got != (kimiTurnOutcome{read: true, ran: true}) {
 		t.Fatalf("a turn that went well is reported as %+v", got)
 	}
 
@@ -834,13 +834,13 @@ func TestKimiTurnOutcomeIsReadFromTheTurnsOwnRecord(t *testing.T) {
 	wire, from = wireWith(t, `{"type":"turn.ended","agentId":"main","turnId":0,"reason":"failed","error":{"name":"APIProviderQuotaExhaustedError","message":"429 quota"},"time":1}`+"\n"+
 		`{"type":"turn.prompt","agentId":"main","turnId":1,"input":[{"type":"text","text":"x"}],"time":2}`+"\n"+
 		`{"type":"turn.ended","agentId":"main","turnId":1,"reason":"completed","time":3}`+"\n")
-	if got := readKimiTurnOutcome(ctx, wire, from); got != (kimiTurnOutcome{read: true, ran: true}) {
+	if got := readKimiTurnOutcome(ctx, wire, from, nil); got != (kimiTurnOutcome{read: true, ran: true}) {
 		t.Fatalf("the late end of the turn before: %+v", got)
 	}
 	// A turn.ended with no error object at all still failed: reported without an invented name.
 	wire, from = wireWith(t, `{"type":"turn.prompt","agentId":"main","turnId":1,"input":[{"type":"text","text":"x"}],"time":1}`+"\n"+
 		`{"type":"turn.ended","agentId":"main","turnId":1,"reason":"failed","durationMs":58,"time":2}`+"\n")
-	if got := readKimiTurnOutcome(ctx, wire, from); got != (kimiTurnOutcome{read: true, ran: true, failure: "Kimi Code failed this turn"}) {
+	if got := readKimiTurnOutcome(ctx, wire, from, nil); got != (kimiTurnOutcome{read: true, ran: true, failure: "Kimi Code failed this turn"}) {
 		t.Fatalf("a failed turn with no error record is reported as %+v", got)
 	}
 
@@ -854,7 +854,7 @@ func TestKimiTurnOutcomeIsReadFromTheTurnsOwnRecord(t *testing.T) {
 			_ = f.Close()
 		}
 	}()
-	if got := readKimiTurnOutcome(ctx, wire, from); got != (kimiTurnOutcome{read: true, ran: true, failure: kimiQuotaSentence}) {
+	if got := readKimiTurnOutcome(ctx, wire, from, nil); got != (kimiTurnOutcome{read: true, ran: true, failure: kimiQuotaSentence}) {
 		t.Fatalf("an end written after the answer is reported as %+v", got)
 	}
 
@@ -863,19 +863,19 @@ func TestKimiTurnOutcomeIsReadFromTheTurnsOwnRecord(t *testing.T) {
 	wire, from = wireWith(t, `{"type":"turn.prompt","agentId":"main","turnId":1,"input":[{"type":"text","text":"x"}],"time":2}`+"\n")
 	// (the record above is turn.prompt with no end: the turn never reached one, same as no record at all)
 	began := time.Now()
-	if got := readKimiTurnOutcome(ctx, wire, from); got != (kimiTurnOutcome{read: true}) || time.Since(began) < kimiTurnOutcomeWait {
+	if got := readKimiTurnOutcome(ctx, wire, from, nil); got != (kimiTurnOutcome{read: true}) || time.Since(began) < kimiTurnOutcomeWait {
 		t.Fatalf("a prompt with no turn: %+v after %v", got, time.Since(began))
 	}
 
 	// No wire found for the session, or a shutdown mid-read: nothing is knowable, and the turn stands
 	// as the runner has always reported it.
-	if got := readKimiTurnOutcome(ctx, "", 0); got != (kimiTurnOutcome{}) {
+	if got := readKimiTurnOutcome(ctx, "", 0, nil); got != (kimiTurnOutcome{}) {
 		t.Fatalf("no wire found for the session: %+v", got)
 	}
 	cancelled, cancel := context.WithCancel(context.Background())
 	cancel()
 	wire, from = wireWith(t, "")
-	if got := readKimiTurnOutcome(cancelled, wire, from); got != (kimiTurnOutcome{}) {
+	if got := readKimiTurnOutcome(cancelled, wire, from, nil); got != (kimiTurnOutcome{}) {
 		t.Fatalf("a cancelled read: %+v", got)
 	}
 }

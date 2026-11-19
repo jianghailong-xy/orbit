@@ -1,0 +1,385 @@
+<!doctype html><html lang="zh"><head><meta charset="utf-8"><title>落地流程：分两层检查</title>
+<style>
+@font-face { font-family: Inter; src: url("file:///mnt/data/tmp/lt-mock/Inter.ttf"); font-weight: 100 900; }
+@font-face { font-family: NotoSC; src: url("file:///mnt/data/tmp/lt-mock/NotoSansSC.ttf"); font-weight: 100 900; }
+body { margin: 0; background: #f9f9f7; font-family: -apple-system, "PingFang SC", Inter, NotoSC, sans-serif; color: #0b0b0b; }
+section { width: 1360px; margin: 20px auto; background: #fcfcfb; border: 1px solid #e2e0d9; border-radius: 14px; padding: 26px 30px 30px; box-sizing: border-box; }
+h1 { font-size: 24px; margin: 0 0 6px; }
+h2 { font-size: 19px; margin: 0 0 4px; }
+.sub { color: #52514e; font-size: 14px; margin: 0 0 18px; line-height: 1.6; }
+.flows { display: grid; grid-template-columns: 1fr 1fr; gap: 22px; }
+.flow { border: 1px solid #e2e0d9; border-radius: 12px; padding: 18px 18px 14px; }
+.flow.now { background: #fdf6f5; } .flow.new { background: #f4f9f4; }
+.flow h3 { margin: 0 0 14px; font-size: 16px; }
+.lane { display: flex; align-items: stretch; gap: 0; margin-bottom: 10px; flex-wrap: nowrap; }
+.box { background: #fff; border: 1.5px solid #c9c7c0; border-radius: 9px; padding: 8px 10px; font-size: 12.5px; line-height: 1.45; min-width: 0; flex: 1; }
+.box b { display: block; font-size: 13px; margin-bottom: 2px; }
+.box.hot { border-color: #d03b3b; background: #fff4f3; }
+.box.ok { border-color: #0ca30c; background: #f1fbf1; }
+.box.key { border-color: #2a78d6; background: #f1f6fd; }
+.box.gate { border-color: #eda100; background: #fff9ea; }
+.arr { align-self: center; color: #898781; font-size: 18px; padding: 0 5px; flex: 0 0 auto; }
+.tag { display: inline-block; font-size: 11px; padding: 1px 6px; border-radius: 9px; background: #0b0b0b; color: #fff; margin-left: 4px; vertical-align: 1px; }
+.tag.red { background: #d03b3b; } .tag.green { background: #0a7d0a; } .tag.blue { background: #2a78d6; }
+.pain { margin: 12px 0 0; padding-left: 20px; font-size: 13px; color: #52514e; line-height: 1.7; }
+.pain b { color: #0b0b0b; }
+.legend { display: flex; flex-wrap: wrap; gap: 6px 20px; font-size: 12.5px; color: #52514e; margin: 4px 0 12px; }
+.legend span { display: inline-flex; align-items: center; gap: 6px; }
+.gl { font-size: 15px; font-weight: 700; margin: 18px 0 2px; }
+.gl small { font-weight: 400; color: #52514e; font-size: 13px; margin-left: 8px; }
+.stats { display: grid; grid-template-columns: repeat(4, 1fr); gap: 14px; margin: 6px 0 4px; }
+.stat { border: 1px solid #e2e0d9; border-radius: 10px; padding: 12px 14px; }
+.stat .k { font-size: 12.5px; color: #52514e; }
+.stat .v { font-size: 13px; margin-top: 6px; line-height: 1.5; }
+.stat .v b { font-size: 22px; font-variant-numeric: tabular-nums; }
+table { border-collapse: collapse; width: 100%; font-size: 13px; }
+th, td { border-bottom: 1px solid #e2e0d9; padding: 8px 10px; text-align: left; vertical-align: top; line-height: 1.55; }
+th { background: #f3f2ee; font-weight: 600; }
+td code { font-family: "JetBrains Mono", ui-monospace, monospace; font-size: 12px; background: #f0efea; padding: 0 4px; border-radius: 4px; }
+.todo { background: #fff9ea; border: 1px solid #eda100; border-radius: 10px; padding: 12px 16px; margin-top: 16px; font-size: 13.5px; line-height: 1.75; }
+.foot { font-size: 12px; color: #898781; margin-top: 10px; line-height: 1.6; }
+</style></head><body>
+
+<section id="part-1">
+<h1>落地流程：任务落地跑快检，项目结束跑一次全检</h1>
+<p class="sub">项目「会话暂时不可用时消息排队（第二批）」34tldQSV0yrkdQ5yx6PpR 的落地，从 11-08 02:06 到现在（11-10 21:08）还没落完。按今天的流程，剩下的队列还要约 7 小时。<br>下面 ① 是今天的流程，② 是建议的流程。图里时间都是北京时间。</p>
+<div class="flows">
+ <div class="flow now"><h3>① 今天</h3>
+  <div class="lane">
+   <div class="box"><b>任务完成</b>证据里已跑过一遍全量 pg 矩阵</div><div class="arr">→</div>
+   <div class="box"><b>排队</b>项目分支一次只落一个<br>前一个要跑 1¾ h</div><div class="arr">→</div>
+   <div class="box"><b>同步 main</b>在这个任务的落地里做</div><div class="arr">→</div>
+   <div class="box hot"><b>全检 95–111 min</b>tsc + 全量单测 + 全量 pg<br>只改文档也照跑</div>
+  </div>
+  <div class="lane">
+   <div class="box hot"><b>main 本身红 → 记在任务头上</b>每个任务轮流撞一次，各开一条失败待办</div><div class="arr">→</div>
+   <div class="box hot"><b>不自动重试</b>协调者等基线修好，再手动逐个重试，又回队尾</div>
+  </div>
+  <div class="lane">
+   <div class="box hot"><b>冲突排到队头才发现</b>S5 先排 61 min，3 秒后冲突，返工 2 h，再回队尾</div><div class="arr">→</div>
+   <div class="box"><b>中途合入 main</b>本项目合了 4 次，每次又一轮检查</div>
+  </div>
+  <ul class="pain">
+   <li><b>一个任务落地</b>：排队 + 105 min，失败再来一轮</li>
+   <li><b>D1 只改了一份文档</b>：全检 5 轮约 8.5 h，前后拖了 2 天</li>
+  </ul>
+ </div>
+ <div class="flow new"><h3>② 建议</h3>
+  <div class="lane">
+   <div class="box"><b>任务完成</b>当场与项目分支 tip 试合并</div><div class="arr">→</div>
+   <div class="box key"><b>快检 10–15 min</b>tsc + 单测 + 改到的 pg spec<br>只改 docs → 跳过</div><div class="arr">→</div>
+   <div class="box ok"><b>落到项目分支</b>结果按树的 SHA 缓存，同一棵树不重跑</div>
+  </div>
+  <div class="lane">
+   <div class="box gate"><b>同步 main 单独一步</b>先只检查「项目分支 + main」本身</div><div class="arr">→</div>
+   <div class="box gate"><b>本身红 → 队列暂停</b>一条阻塞，不记在任务头上；基线修好后自动续上</div>
+  </div>
+  <div class="lane">
+   <div class="box ok"><b>修 main 基线的任务直接进 main</b>不等项目结束，别的项目也受益</div><div class="arr">→</div>
+   <div class="box key"><b>项目结束：全检一次</b>~110 min → owner 确认 → 合入 main</div>
+  </div>
+  <ul class="pain">
+   <li><b>一个任务落地</b>：约 15 min，冲突在交付当时就知道</li>
+   <li><b>全量 pg 矩阵</b>：整个项目只在合入 main 时跑一次</li>
+  </ul>
+ </div>
+</div>
+</section>
+
+<section id="part-2">
+<h2>同一组交付，两种流程的落地时间线（11-10）</h2>
+<p class="sub">每一行是一个任务的落地。① 来自各任务落地会话的真实记录。② 用同样的交付时刻、同样的冲突和返工、同样的基线变红时刻，只换成快检（15 min）和「本身红就暂停队列」两条规则推算。</p>
+<div class="legend">
+<span><svg width="26" height="12"><rect width="26" height="12" rx="3" fill="url(#hatchL)"/><defs><pattern id="hatchL" width="6" height="6" patternUnits="userSpaceOnUse" patternTransform="rotate(45)"><rect width="6" height="6" fill="#e6e4dd"/><line x1="0" y1="0" x2="0" y2="6" stroke="#a9a79f" stroke-width="2"/></pattern></defs></svg>排队（串行位被占）</span>
+<span><svg width="26" height="12"><rect width="26" height="12" rx="3" fill="#2a78d6"/></svg>合入检查在跑</span>
+<span><svg width="26" height="12"><rect width="26" height="12" rx="3" fill="#9085e9"/></svg>冲突返工（Codex）</span>
+<span><svg width="26" height="12"><line x1="0" x2="26" y1="6" y2="6" stroke="#b5b3ab" stroke-width="1.5" stroke-dasharray="2 3"/></svg>失败后等人重试</span>
+<span><svg width="14" height="14"><g stroke="#d03b3b" stroke-width="2.2"><line x1="2" y1="2" x2="12" y2="12"/><line x1="2" y1="12" x2="12" y2="2"/></g></svg>检查红</span>
+<span><svg width="16" height="14"><path d="M8 0 l7 13 h-14 z" fill="#fab219" stroke="#7a5500"/></svg>冲突</span>
+<span><svg width="14" height="14"><circle cx="7" cy="7" r="6" fill="#0ca30c"/></svg>落地</span>
+<span><svg width="40" height="14"><rect x="0" y="1" width="24" height="12" rx="3" fill="rgba(42,120,214,.16)" stroke="#2a78d6" stroke-dasharray="4 3"/><circle cx="32" cy="7" r="6" fill="#fcfcfb" stroke="#0ca30c" stroke-width="2" stroke-dasharray="2 2"/></svg>虚线 = 预计（全绿的前提下）</span>
+<span><svg width="14" height="14"><rect x="1" y="1" width="12" height="12" rx="2" fill="#0b0b0b"/></svg>项目分支合入 main</span>
+</div>
+<div class="gl">① 今天<small>按今天的队列全绿推算，S5 约 11-11 03:52 落地</small></div>
+<svg width="1282" height="412" viewBox="0 0 1282 412" xmlns="http://www.w3.org/2000/svg" font-family="inherit">
+<defs><pattern id="hatch" width="6" height="6" patternUnits="userSpaceOnUse" patternTransform="rotate(45)"><rect width="6" height="6" fill="#e6e4dd"/><line x1="0" y1="0" x2="0" y2="6" stroke="#a9a79f" stroke-width="2"/></pattern><pattern id="hatchp" width="6" height="6" patternUnits="userSpaceOnUse" patternTransform="rotate(45)"><rect width="6" height="6" fill="#fcfcfb"/><line x1="0" y1="0" x2="0" y2="6" stroke="#cfcdc6" stroke-width="2"/></pattern></defs>
+<line x1="250" x2="250" y1="20" y2="406" stroke="#e2e0d9" stroke-width="1"/>
+<text x="250" y="14" font-size="11" fill="#898781" text-anchor="middle">06:00</text>
+<line x1="294" x2="294" y1="20" y2="406" stroke="#f0efea" stroke-width="1"/>
+<line x1="338" x2="338" y1="20" y2="406" stroke="#f0efea" stroke-width="1"/>
+<line x1="382" x2="382" y1="20" y2="406" stroke="#e2e0d9" stroke-width="1"/>
+<text x="382" y="14" font-size="11" fill="#898781" text-anchor="middle">09:00</text>
+<line x1="426" x2="426" y1="20" y2="406" stroke="#f0efea" stroke-width="1"/>
+<line x1="470" x2="470" y1="20" y2="406" stroke="#f0efea" stroke-width="1"/>
+<line x1="514" x2="514" y1="20" y2="406" stroke="#e2e0d9" stroke-width="1"/>
+<text x="514" y="14" font-size="11" fill="#898781" text-anchor="middle">12:00</text>
+<line x1="558" x2="558" y1="20" y2="406" stroke="#f0efea" stroke-width="1"/>
+<line x1="602" x2="602" y1="20" y2="406" stroke="#f0efea" stroke-width="1"/>
+<line x1="646" x2="646" y1="20" y2="406" stroke="#e2e0d9" stroke-width="1"/>
+<text x="646" y="14" font-size="11" fill="#898781" text-anchor="middle">15:00</text>
+<line x1="690" x2="690" y1="20" y2="406" stroke="#f0efea" stroke-width="1"/>
+<line x1="734" x2="734" y1="20" y2="406" stroke="#f0efea" stroke-width="1"/>
+<line x1="778" x2="778" y1="20" y2="406" stroke="#e2e0d9" stroke-width="1"/>
+<text x="778" y="14" font-size="11" fill="#898781" text-anchor="middle">18:00</text>
+<line x1="822" x2="822" y1="20" y2="406" stroke="#f0efea" stroke-width="1"/>
+<line x1="866" x2="866" y1="20" y2="406" stroke="#f0efea" stroke-width="1"/>
+<line x1="910" x2="910" y1="20" y2="406" stroke="#e2e0d9" stroke-width="1"/>
+<text x="910" y="14" font-size="11" fill="#898781" text-anchor="middle">21:00</text>
+<line x1="954" x2="954" y1="20" y2="406" stroke="#f0efea" stroke-width="1"/>
+<line x1="998" x2="998" y1="20" y2="406" stroke="#f0efea" stroke-width="1"/>
+<line x1="1042" x2="1042" y1="20" y2="406" stroke="#e2e0d9" stroke-width="1"/>
+<text x="1042" y="14" font-size="11" fill="#898781" text-anchor="middle">11-11 00:00</text>
+<line x1="1086" x2="1086" y1="20" y2="406" stroke="#f0efea" stroke-width="1"/>
+<line x1="1130" x2="1130" y1="20" y2="406" stroke="#f0efea" stroke-width="1"/>
+<line x1="1174" x2="1174" y1="20" y2="406" stroke="#e2e0d9" stroke-width="1"/>
+<text x="1174" y="14" font-size="11" fill="#898781" text-anchor="middle">11-11 03:00</text>
+<line x1="1218" x2="1218" y1="20" y2="406" stroke="#f0efea" stroke-width="1"/>
+<line x1="1262" x2="1262" y1="20" y2="406" stroke="#f0efea" stroke-width="1"/>
+<line x1="915.9" x2="915.9" y1="22" y2="408" stroke="#0b0b0b" stroke-width="1.5"/><text x="911.9" y="33" font-size="11" font-weight="700" fill="#0b0b0b" text-anchor="end">现在 21:08</text>
+<line x1="1212.1" x2="1212.1" y1="22" y2="408" stroke="#0ca30c" stroke-width="1.5" stroke-dasharray="5 3"/><text x="1208.1" y="33" font-size="11" font-weight="700" fill="#0a7d0a" text-anchor="end">全部落完 ≈ 03:52</text>
+<g transform="translate(0,40)">
+<rect x="0" y="0" width="1282" height="30" fill="#f6f5f1"/>
+<text x="10" y="19.0" font-size="12.5" fill="#0b0b0b" font-weight="600">R2 · pg 二次确认</text>
+<rect x="256.6" y="7" width="3.0" height="16" rx="3" fill="url(#hatch)"/>
+<rect x="257.3" y="7" width="79.9" height="16" rx="3" fill="#2a78d6"/>
+<circle cx="337.3" cy="15.0" r="6" fill="#0ca30c" stroke="#0ca30c" stroke-width="2"/><path d="M334.3 15.0 l2 2.4 l4 -4.6" stroke="#fff" stroke-width="1.8" fill="none"/>
+</g>
+<g transform="translate(0,70)">
+<text x="10" y="19.0" font-size="12.5" fill="#0b0b0b" font-weight="600">D1 · 设计文档</text>
+<text x="240" y="19.0" font-size="11" fill="#898781" text-anchor="end">只改 docs</text>
+<rect x="338.0" y="7" width="79.2" height="16" rx="3" fill="#2a78d6"/>
+<circle cx="417.2" cy="15.0" r="6" fill="#0ca30c" stroke="#0ca30c" stroke-width="2"/><path d="M414.2 15.0 l2 2.4 l4 -4.6" stroke="#fff" stroke-width="1.8" fill="none"/><text x="427.2" y="19.0" font-size="11.5" fill="#52514e">第 5 轮全检才过；前 4 轮 6.7 h 全红（11-08）</text>
+</g>
+<g transform="translate(0,100)">
+<rect x="0" y="0" width="1282" height="30" fill="#f6f5f1"/>
+<text x="10" y="19.0" font-size="12.5" fill="#0b0b0b" font-weight="600">S2</text>
+<rect x="464.1" y="7" width="77.7" height="16" rx="3" fill="#2a78d6"/>
+<circle cx="541.9" cy="15.0" r="6" fill="#0ca30c" stroke="#0ca30c" stroke-width="2"/><path d="M538.9 15.0 l2 2.4 l4 -4.6" stroke="#fff" stroke-width="1.8" fill="none"/>
+</g>
+<g transform="translate(0,130)">
+<text x="10" y="19.0" font-size="12.5" fill="#0b0b0b" font-weight="600">S4</text>
+<rect x="505.9" y="7" width="36.7" height="16" rx="3" fill="url(#hatch)"/>
+<rect x="542.6" y="7" width="3.0" height="16" rx="3" fill="#d03b3b"/>
+<g stroke="#d03b3b" stroke-width="2.2"><line x1="538.3" y1="10.0" x2="548.3" y2="20.0"/><line x1="538.3" y1="20.0" x2="548.3" y2="10.0"/></g>
+<line x1="543.3" x2="635.7" y1="15.0" y2="15.0" stroke="#b5b3ab" stroke-width="1.5" stroke-dasharray="2 3"/>
+<rect x="635.7" y="7" width="3.0" height="16" rx="3" fill="url(#hatch)"/>
+<g stroke="#d03b3b" stroke-width="2.2"><line x1="633.7" y1="10.0" x2="643.7" y2="20.0"/><line x1="633.7" y1="20.0" x2="643.7" y2="10.0"/></g>
+<line x1="638.7" x2="821.3" y1="15.0" y2="15.0" stroke="#b5b3ab" stroke-width="1.5" stroke-dasharray="2 3"/>
+<rect x="821.3" y="7" width="155.5" height="16" rx="3" fill="url(#hatchp)" stroke="#898781" stroke-width="1.2" stroke-dasharray="4 3"/>
+<rect x="976.7" y="7" width="78.5" height="16" rx="3" fill="rgba(42,120,214,.16)" stroke="#2a78d6" stroke-width="1.2" stroke-dasharray="4 3"/>
+<circle cx="1055.2" cy="15.0" r="6" stroke-dasharray="2 2" fill="#fcfcfb" stroke="#0ca30c" stroke-width="2"/>
+</g>
+<g transform="translate(0,160)">
+<rect x="0" y="0" width="1282" height="30" fill="#f6f5f1"/>
+<text x="10" y="19.0" font-size="12.5" fill="#0b0b0b" font-weight="600">修基线 · census</text>
+<rect x="551.4" y="7" width="82.1" height="16" rx="3" fill="#2a78d6"/>
+<circle cx="633.5" cy="15.0" r="6" fill="#0ca30c" stroke="#0ca30c" stroke-width="2"/><path d="M630.5 15.0 l2 2.4 l4 -4.6" stroke="#fff" stroke-width="1.8" fill="none"/>
+</g>
+<g transform="translate(0,190)">
+<text x="10" y="19.0" font-size="12.5" fill="#0b0b0b" font-weight="600">S1</text>
+<rect x="594.7" y="7" width="39.6" height="16" rx="3" fill="url(#hatch)"/>
+<g stroke="#d03b3b" stroke-width="2.2"><line x1="630.0" y1="10.0" x2="640.0" y2="20.0"/><line x1="630.0" y1="20.0" x2="640.0" y2="10.0"/></g>
+<line x1="635.0" x2="821.3" y1="15.0" y2="15.0" stroke="#b5b3ab" stroke-width="1.5" stroke-dasharray="2 3"/>
+<rect x="821.3" y="7" width="77.7" height="16" rx="3" fill="#2a78d6"/>
+<circle cx="899.0" cy="15.0" r="6" fill="#0ca30c" stroke="#0ca30c" stroke-width="2"/><path d="M896.0 15.0 l2 2.4 l4 -4.6" stroke="#fff" stroke-width="1.8" fill="none"/>
+</g>
+<g transform="translate(0,220)">
+<rect x="0" y="0" width="1282" height="30" fill="#f6f5f1"/>
+<text x="10" y="19.0" font-size="12.5" fill="#0b0b0b" font-weight="600">S3</text>
+<g stroke="#d03b3b" stroke-width="2.2"><line x1="632.2" y1="10.0" x2="642.2" y2="20.0"/><line x1="632.2" y1="20.0" x2="642.2" y2="10.0"/></g>
+<line x1="637.2" x2="821.3" y1="15.0" y2="15.0" stroke="#b5b3ab" stroke-width="1.5" stroke-dasharray="2 3"/>
+<rect x="821.3" y="7" width="77.7" height="16" rx="3" fill="url(#hatch)"/>
+<rect x="899.0" y="7" width="16.9" height="16" rx="3" fill="#2a78d6"/>
+<rect x="915.9" y="7" width="60.9" height="16" rx="3" fill="rgba(42,120,214,.16)" stroke="#2a78d6" stroke-width="1.2" stroke-dasharray="4 3"/>
+<circle cx="976.7" cy="15.0" r="6" stroke-dasharray="2 2" fill="#fcfcfb" stroke="#0ca30c" stroke-width="2"/>
+</g>
+<g transform="translate(0,250)">
+<text x="10" y="19.0" font-size="12.5" fill="#0b0b0b" font-weight="600">修基线 · 0506 撞号</text>
+<rect x="654.1" y="7" width="74.1" height="16" rx="3" fill="#2a78d6"/>
+<g stroke="#d03b3b" stroke-width="2.2"><line x1="723.1" y1="10.0" x2="733.1" y2="20.0"/><line x1="723.1" y1="20.0" x2="733.1" y2="10.0"/></g><text x="738.1" y="19.0" font-size="11.5" fill="#52514e">跑了 101 min 才红</text>
+</g>
+<g transform="translate(0,280)">
+<rect x="0" y="0" width="1282" height="30" fill="#f6f5f1"/>
+<text x="10" y="19.0" font-size="12.5" fill="#0b0b0b" font-weight="600">S5</text>
+<rect x="683.4" y="7" width="44.7" height="16" rx="3" fill="url(#hatch)"/>
+<path d="M728.9 8.0 l7 12 h-14 z" fill="#fab219" stroke="#7a5500" stroke-width="1"/><text x="728.9" y="19.0" font-size="9" text-anchor="middle" fill="#3a2a00" font-weight="700">!</text>
+<rect x="731.8" y="7" width="86.5" height="16" rx="3" fill="#9085e9"/>
+<path d="M820.5 8.0 l7 12 h-14 z" fill="#fab219" stroke="#7a5500" stroke-width="1"/><text x="820.5" y="19.0" font-size="9" text-anchor="middle" fill="#3a2a00" font-weight="700">!</text>
+<rect x="822.7" y="7" width="82.1" height="16" rx="3" fill="#9085e9"/>
+<rect x="904.9" y="7" width="228.8" height="16" rx="3" fill="url(#hatchp)" stroke="#898781" stroke-width="1.2" stroke-dasharray="4 3"/>
+<rect x="1133.7" y="7" width="78.5" height="16" rx="3" fill="rgba(42,120,214,.16)" stroke="#2a78d6" stroke-width="1.2" stroke-dasharray="4 3"/>
+<circle cx="1212.1" cy="15.0" r="6" stroke-dasharray="2 2" fill="#fcfcfb" stroke="#0ca30c" stroke-width="2"/>
+</g>
+<g transform="translate(0,310)">
+<text x="10" y="19.0" font-size="12.5" fill="#0b0b0b" font-weight="600">S6</text>
+<rect x="715.7" y="7" width="13.2" height="16" rx="3" fill="url(#hatch)"/>
+<g stroke="#d03b3b" stroke-width="2.2"><line x1="725.3" y1="10.0" x2="735.3" y2="20.0"/><line x1="725.3" y1="20.0" x2="735.3" y2="10.0"/></g>
+<line x1="730.3" x2="821.3" y1="15.0" y2="15.0" stroke="#b5b3ab" stroke-width="1.5" stroke-dasharray="2 3"/>
+<rect x="821.3" y="7" width="233.9" height="16" rx="3" fill="url(#hatchp)" stroke="#898781" stroke-width="1.2" stroke-dasharray="4 3"/>
+<rect x="1055.2" y="7" width="78.5" height="16" rx="3" fill="rgba(42,120,214,.16)" stroke="#2a78d6" stroke-width="1.2" stroke-dasharray="4 3"/>
+<circle cx="1133.7" cy="15.0" r="6" stroke-dasharray="2 2" fill="#fcfcfb" stroke="#0ca30c" stroke-width="2"/>
+</g>
+<g transform="translate(0,340)">
+<rect x="0" y="0" width="1282" height="30" fill="#f6f5f1"/>
+<text x="10" y="19.0" font-size="12.5" fill="#0b0b0b" font-weight="600">修基线 · pat 红</text>
+<g stroke="#d03b3b" stroke-width="2.2"><line x1="731.2" y1="10.0" x2="741.2" y2="20.0"/><line x1="731.2" y1="20.0" x2="741.2" y2="10.0"/></g>
+<rect x="742.1" y="7" width="78.5" height="16" rx="3" fill="#2a78d6"/>
+<circle cx="820.5" cy="15.0" r="6" fill="#0ca30c" stroke="#0ca30c" stroke-width="2"/><path d="M817.5 15.0 l2 2.4 l4 -4.6" stroke="#fff" stroke-width="1.8" fill="none"/>
+</g>
+<g transform="translate(0,370)">
+<text x="10" y="19.0" font-size="12.5" fill="#0b0b0b" font-weight="600">合入 main</text>
+<text x="240" y="19.0" font-size="11" fill="#898781" text-anchor="end">中途（11-08 另 1 次）</text>
+<rect x="411.2" y="9.0" width="12" height="12" rx="2" fill="#0b0b0b"/><text x="417.2" y="18.5" font-size="9" text-anchor="middle" fill="#fff" font-weight="700">M</text>
+<rect x="502.9" y="9.0" width="12" height="12" rx="2" fill="#0b0b0b"/><text x="508.9" y="18.5" font-size="9" text-anchor="middle" fill="#fff" font-weight="700">M</text>
+<rect x="893.7" y="9.0" width="12" height="12" rx="2" fill="#0b0b0b"/><text x="899.7" y="18.5" font-size="9" text-anchor="middle" fill="#fff" font-weight="700">M</text>
+</g>
+</svg>
+<div class="gl">② 建议<small>同样这批交付，S5 一交付就能落地；最晚的 21:09，就是 S5 交付后 15 分钟</small></div>
+<svg width="1282" height="442" viewBox="0 0 1282 442" xmlns="http://www.w3.org/2000/svg" font-family="inherit">
+<defs><pattern id="hatch" width="6" height="6" patternUnits="userSpaceOnUse" patternTransform="rotate(45)"><rect width="6" height="6" fill="#e6e4dd"/><line x1="0" y1="0" x2="0" y2="6" stroke="#a9a79f" stroke-width="2"/></pattern><pattern id="hatchp" width="6" height="6" patternUnits="userSpaceOnUse" patternTransform="rotate(45)"><rect width="6" height="6" fill="#fcfcfb"/><line x1="0" y1="0" x2="0" y2="6" stroke="#cfcdc6" stroke-width="2"/></pattern></defs>
+<line x1="250" x2="250" y1="20" y2="436" stroke="#e2e0d9" stroke-width="1"/>
+<text x="250" y="14" font-size="11" fill="#898781" text-anchor="middle">06:00</text>
+<line x1="294" x2="294" y1="20" y2="436" stroke="#f0efea" stroke-width="1"/>
+<line x1="338" x2="338" y1="20" y2="436" stroke="#f0efea" stroke-width="1"/>
+<line x1="382" x2="382" y1="20" y2="436" stroke="#e2e0d9" stroke-width="1"/>
+<text x="382" y="14" font-size="11" fill="#898781" text-anchor="middle">09:00</text>
+<line x1="426" x2="426" y1="20" y2="436" stroke="#f0efea" stroke-width="1"/>
+<line x1="470" x2="470" y1="20" y2="436" stroke="#f0efea" stroke-width="1"/>
+<line x1="514" x2="514" y1="20" y2="436" stroke="#e2e0d9" stroke-width="1"/>
+<text x="514" y="14" font-size="11" fill="#898781" text-anchor="middle">12:00</text>
+<line x1="558" x2="558" y1="20" y2="436" stroke="#f0efea" stroke-width="1"/>
+<line x1="602" x2="602" y1="20" y2="436" stroke="#f0efea" stroke-width="1"/>
+<line x1="646" x2="646" y1="20" y2="436" stroke="#e2e0d9" stroke-width="1"/>
+<text x="646" y="14" font-size="11" fill="#898781" text-anchor="middle">15:00</text>
+<line x1="690" x2="690" y1="20" y2="436" stroke="#f0efea" stroke-width="1"/>
+<line x1="734" x2="734" y1="20" y2="436" stroke="#f0efea" stroke-width="1"/>
+<line x1="778" x2="778" y1="20" y2="436" stroke="#e2e0d9" stroke-width="1"/>
+<text x="778" y="14" font-size="11" fill="#898781" text-anchor="middle">18:00</text>
+<line x1="822" x2="822" y1="20" y2="436" stroke="#f0efea" stroke-width="1"/>
+<line x1="866" x2="866" y1="20" y2="436" stroke="#f0efea" stroke-width="1"/>
+<line x1="910" x2="910" y1="20" y2="436" stroke="#e2e0d9" stroke-width="1"/>
+<text x="910" y="14" font-size="11" fill="#898781" text-anchor="middle">21:00</text>
+<line x1="954" x2="954" y1="20" y2="436" stroke="#f0efea" stroke-width="1"/>
+<line x1="998" x2="998" y1="20" y2="436" stroke="#f0efea" stroke-width="1"/>
+<line x1="1042" x2="1042" y1="20" y2="436" stroke="#e2e0d9" stroke-width="1"/>
+<text x="1042" y="14" font-size="11" fill="#898781" text-anchor="middle">11-11 00:00</text>
+<line x1="1086" x2="1086" y1="20" y2="436" stroke="#f0efea" stroke-width="1"/>
+<line x1="1130" x2="1130" y1="20" y2="436" stroke="#f0efea" stroke-width="1"/>
+<line x1="1174" x2="1174" y1="20" y2="436" stroke="#e2e0d9" stroke-width="1"/>
+<text x="1174" y="14" font-size="11" fill="#898781" text-anchor="middle">11-11 03:00</text>
+<line x1="1218" x2="1218" y1="20" y2="436" stroke="#f0efea" stroke-width="1"/>
+<line x1="1262" x2="1262" y1="20" y2="436" stroke="#f0efea" stroke-width="1"/>
+<line x1="916.6" x2="916.6" y1="22" y2="438" stroke="#0ca30c" stroke-width="1.5" stroke-dasharray="5 3"/><text x="920.6" y="33" font-size="11" font-weight="700" fill="#0a7d0a" text-anchor="start">全部落完 21:09</text>
+<g transform="translate(0,40)">
+<rect x="0" y="0" width="1282" height="30" fill="#f6f5f1"/>
+<text x="10" y="19.0" font-size="12.5" fill="#0b0b0b" font-weight="600">R2 · pg 二次确认</text>
+<rect x="256.6" y="7" width="11.0" height="16" rx="3" fill="#2a78d6"/>
+<circle cx="267.6" cy="15.0" r="6" fill="#0ca30c" stroke="#0ca30c" stroke-width="2"/><path d="M264.6 15.0 l2 2.4 l4 -4.6" stroke="#fff" stroke-width="1.8" fill="none"/>
+</g>
+<g transform="translate(0,70)">
+<text x="10" y="19.0" font-size="12.5" fill="#0b0b0b" font-weight="600">D1 · 设计文档</text>
+<text x="240" y="19.0" font-size="11" fill="#898781" text-anchor="end">只改 docs</text>
+<text x="253.7" y="19.0" font-size="11.5" fill="#0a7d0a" text-anchor="start">跳过检查，11-08 02:06 交付当时就落地</text>
+</g>
+<g transform="translate(0,100)">
+<rect x="0" y="0" width="1282" height="30" fill="#f6f5f1"/>
+<text x="10" y="19.0" font-size="12.5" fill="#0b0b0b" font-weight="600">S2</text>
+<rect x="462.7" y="7" width="11.0" height="16" rx="3" fill="#2a78d6"/>
+<circle cx="473.7" cy="15.0" r="6" fill="#0ca30c" stroke="#0ca30c" stroke-width="2"/><path d="M470.7 15.0 l2 2.4 l4 -4.6" stroke="#fff" stroke-width="1.8" fill="none"/>
+</g>
+<g transform="translate(0,130)">
+<text x="10" y="19.0" font-size="12.5" fill="#0b0b0b" font-weight="600">S4</text>
+<rect x="505.9" y="7" width="11.0" height="16" rx="3" fill="#2a78d6"/>
+<circle cx="516.9" cy="15.0" r="6" fill="#0ca30c" stroke="#0ca30c" stroke-width="2"/><path d="M513.9 15.0 l2 2.4 l4 -4.6" stroke="#fff" stroke-width="1.8" fill="none"/>
+</g>
+<g transform="translate(0,160)">
+<rect x="0" y="0" width="1282" height="30" fill="#f6f5f1"/>
+<text x="10" y="19.0" font-size="12.5" fill="#0b0b0b" font-weight="600">同步 main 检查</text>
+<text x="240" y="19.0" font-size="11" fill="#898781" text-anchor="end">组合树本身</text>
+<rect x="542.6" y="7" width="19.8" height="16" rx="3" fill="#d03b3b"/>
+<text x="565.3" y="19.0" font-size="11.5" fill="#a32c2c" text-anchor="start">红·暂停</text>
+<rect x="634.3" y="7" width="118.8" height="16" rx="3" fill="#d03b3b"/>
+<text x="757.5" y="19.0" font-size="11.5" fill="#a32c2c" text-anchor="start">组合树本身红：队列暂停，不算任务失败；基线修好后自动续上</text>
+</g>
+<g transform="translate(0,190)">
+<text x="10" y="19.0" font-size="12.5" fill="#0b0b0b" font-weight="600">修基线 · census</text>
+<text x="240" y="19.0" font-size="11" fill="#898781" text-anchor="end">直进 main</text>
+<rect x="551.4" y="7" width="11.0" height="16" rx="3" fill="#2a78d6"/>
+<circle cx="562.4" cy="15.0" r="6" fill="#0ca30c" stroke="#0ca30c" stroke-width="2"/><path d="M559.4 15.0 l2 2.4 l4 -4.6" stroke="#fff" stroke-width="1.8" fill="none"/>
+</g>
+<g transform="translate(0,220)">
+<rect x="0" y="0" width="1282" height="30" fill="#f6f5f1"/>
+<text x="10" y="19.0" font-size="12.5" fill="#0b0b0b" font-weight="600">S1</text>
+<rect x="594.7" y="7" width="11.0" height="16" rx="3" fill="#2a78d6"/>
+<circle cx="605.7" cy="15.0" r="6" fill="#0ca30c" stroke="#0ca30c" stroke-width="2"/><path d="M602.7 15.0 l2 2.4 l4 -4.6" stroke="#fff" stroke-width="1.8" fill="none"/>
+</g>
+<g transform="translate(0,250)">
+<text x="10" y="19.0" font-size="12.5" fill="#0b0b0b" font-weight="600">S3</text>
+<rect x="635.0" y="7" width="118.1" height="16" rx="3" fill="url(#hatch)"/>
+<rect x="753.1" y="7" width="11.0" height="16" rx="3" fill="#2a78d6"/>
+<circle cx="764.1" cy="15.0" r="6" fill="#0ca30c" stroke="#0ca30c" stroke-width="2"/><path d="M761.1 15.0 l2 2.4 l4 -4.6" stroke="#fff" stroke-width="1.8" fill="none"/>
+</g>
+<g transform="translate(0,280)">
+<rect x="0" y="0" width="1282" height="30" fill="#f6f5f1"/>
+<text x="10" y="19.0" font-size="12.5" fill="#0b0b0b" font-weight="600">修基线 · 0506 撞号</text>
+<rect x="653.3" y="7" width="11.0" height="16" rx="3" fill="#2a78d6"/>
+<circle cx="664.3" cy="15.0" r="6" fill="#0ca30c" stroke="#0ca30c" stroke-width="2"/><path d="M661.3 15.0 l2 2.4 l4 -4.6" stroke="#fff" stroke-width="1.8" fill="none"/>
+</g>
+<g transform="translate(0,310)">
+<text x="10" y="19.0" font-size="12.5" fill="#0b0b0b" font-weight="600">S5</text>
+<path d="M683.4 8.0 l7 12 h-14 z" fill="#fab219" stroke="#7a5500" stroke-width="1"/><text x="683.4" y="19.0" font-size="9" text-anchor="middle" fill="#3a2a00" font-weight="700">!</text><text x="693.4" y="19.0" font-size="11.5" fill="#52514e">交付即试合并</text>
+<rect x="687.1" y="7" width="131.3" height="16" rx="3" fill="#9085e9"/>
+<path d="M818.3 8.0 l7 12 h-14 z" fill="#fab219" stroke="#7a5500" stroke-width="1"/><text x="818.3" y="19.0" font-size="9" text-anchor="middle" fill="#3a2a00" font-weight="700">!</text>
+<rect x="822.7" y="7" width="82.9" height="16" rx="3" fill="#9085e9"/>
+<rect x="905.6" y="7" width="11.0" height="16" rx="3" fill="#2a78d6"/>
+<circle cx="916.6" cy="15.0" r="6" fill="#0ca30c" stroke="#0ca30c" stroke-width="2"/><path d="M913.6 15.0 l2 2.4 l4 -4.6" stroke="#fff" stroke-width="1.8" fill="none"/>
+</g>
+<g transform="translate(0,340)">
+<rect x="0" y="0" width="1282" height="30" fill="#f6f5f1"/>
+<text x="10" y="19.0" font-size="12.5" fill="#0b0b0b" font-weight="600">S6</text>
+<rect x="715.7" y="7" width="48.4" height="16" rx="3" fill="url(#hatch)"/>
+<rect x="764.1" y="7" width="11.0" height="16" rx="3" fill="#2a78d6"/>
+<circle cx="775.1" cy="15.0" r="6" fill="#0ca30c" stroke="#0ca30c" stroke-width="2"/><path d="M772.1 15.0 l2 2.4 l4 -4.6" stroke="#fff" stroke-width="1.8" fill="none"/>
+</g>
+<g transform="translate(0,370)">
+<text x="10" y="19.0" font-size="12.5" fill="#0b0b0b" font-weight="600">修基线 · pat 红</text>
+<text x="240" y="19.0" font-size="11" fill="#898781" text-anchor="end">直进 main</text>
+<rect x="742.1" y="7" width="11.0" height="16" rx="3" fill="#2a78d6"/>
+<circle cx="753.1" cy="15.0" r="6" fill="#0ca30c" stroke="#0ca30c" stroke-width="2"/><path d="M750.1 15.0 l2 2.4 l4 -4.6" stroke="#fff" stroke-width="1.8" fill="none"/>
+</g>
+<g transform="translate(0,400)">
+<rect x="0" y="0" width="1282" height="30" fill="#f6f5f1"/>
+<text x="10" y="19.0" font-size="12.5" fill="#0b0b0b" font-weight="600">合入 main</text>
+<text x="240" y="19.0" font-size="11" fill="#898781" text-anchor="end">项目结束一次</text>
+<text x="924.7" y="19.0" font-size="11.5" fill="#0b0b0b" text-anchor="start">S7 完成后：全检一次 ~110 min → owner 确认 → 合入 main</text>
+</g>
+</svg>
+<div class="stats">
+ <div class="stat"><div class="k">一次落地的检查</div><div class="v"><b>105</b> min → <b>15</b> min</div></div>
+ <div class="stat"><div class="k">这批落地累计占用串行位</div><div class="v"><b>≈ 20</b> h（已用 13 h）→ <b>≈ 2.5</b> h</div></div>
+ <div class="stat"><div class="k">因 main 本身红而失败的落地</div><div class="v"><b>5</b> 次 → <b>0</b> 次<br>改为 2 段「队列暂停」</div></div>
+ <div class="stat"><div class="k">这批任务全部落完</div><div class="v">11-11 <b>03:52</b> → 11-10 <b>21:09</b></div></div>
+</div>
+<p class="foot">② 的假设：基线变红的时刻与 ① 里第一次撞上的时刻相同（04:39、06:44）。修复任务快检 15 min。S5 两次冲突的返工时长照搬 ①；建议里 S5 第一次冲突在交付当时就发现，省掉 61 min 排队。全量 pg 矩阵挪到项目结束合入 main 时跑，不在这张图里。</p>
+</section>
+
+<section id="part-3">
+<h2>规则怎么改，改哪里</h2>
+<table>
+<tr><th style="width:22%">规则</th><th style="width:30%">今天</th><th style="width:30%">建议</th><th>动到的契约条款</th></tr>
+<tr><td><b>1 · 检查分两层</b></td><td>一条 <code>mergeCheckCommand</code>，每次落地都跑全检（本项目 95–111 min）</td><td>落地进项目分支跑快检；合入 main（<code>CHECK_PROMOTION</code>）跑全检</td><td>§1.1 代码库行加第二条命令；§2.4</td></tr>
+<tr><td><b>2 · 只改文档时跳过</b></td><td>D1 只改 docs，全检 5 轮</td><td>仓库声明哪些路径不影响检查，改动只落在这些路径时直接落地</td><td>§1.4 codeless 的延伸</td></tr>
+<tr><td><b>3 · 同步 main 单独一步</b></td><td>在某个任务的落地里同步（M1），红了算这个任务的</td><td>先单独检查「项目分支 + main」本身；红就开一条阻塞、暂停队列，和冲突时的 M2 同一种做法</td><td>§3.1 M1、M2、M4</td></tr>
+<tr><td><b>4 · 基线修好后自动续上</b></td><td>J5：失败后不自动重试，等协调者逐个手动重试</td><td>只对「因组合树本身红而暂停」的落地：基线变化这个事实触发续跑。任务自己的红仍按 J5 不重试</td><td>§2.2 J5（判据 6）</td></tr>
+<tr><td><b>5 · 修基线的任务直接进 main</b></td><td>先落项目分支，等下一次合入 main</td><td>修 main 本身红的任务走直接合入 main 的线，快检后立即合入</td><td>§1.2 线的选择</td></tr>
+<tr><td><b>6 · 交付时就试合并</b></td><td>排到队头才发现冲突</td><td>任务完成时与项目分支 tip 和排在前面的任务试合并，有冲突当场退回</td><td>§2.3 触发点</td></tr>
+<tr><td><b>7 · 按树缓存检查结果</b></td><td>证据跑过的树，落地时再跑一遍</td><td>按（组合树 SHA，命令）记结果，同一棵树不重跑</td><td>§2.4</td></tr>
+<tr><td><b>8 · 只在项目结束时合入 main</b></td><td>本项目中途合入 main 4 次</td><td>默认项目结束才合入一次（全检 + owner 确认）。main 仍在每次落地前合进项目分支，差异保持很小</td><td>§3.3 晋升触发</td></tr>
+</table>
+<div class="todo"><b>待你定</b><br>
+① 规则 4 要改 J5「失败后不自动重试」（判据 6，你定的）。只放开「组合树本身红」这一种，可以吗？<br>
+② 快检的范围：「改到的 pg spec」需要一份路径到 spec 的映射。用仓库里的声明文件，还是先用固定的一小组 spec？<br>
+③ 中途要不要允许合入 main？建议：默认不合，只有协调者说明原因并经你确认时才合。<br>
+④ 先在本项目把 <code>mergeCheckCommand</code> 换成快检试一轮吗？这需要你在确认卡上点同意。</div>
+</section>
+</body></html>

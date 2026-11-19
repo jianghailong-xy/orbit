@@ -89,14 +89,17 @@ describe('splitRecordedNote', () => {
 
 describe('describeNote', () => {
   it('names a recorded note by the block it opens with', () => {
-    expect(describeNote(`\n\n${BACKGROUND_JOBS}`)).toBe('background jobs');
     expect(describeNote(CONDITIONS)).toBe('list conditions');
-    expect(describeNote(COORDINATOR)).toBe('project coordinator context');
+    // Unnamed (owner, 2026-11-14): the coordinator's standing role and the background-jobs inventory
+    // are Orbit's routine, and a `#`-reference is already a link in the person's own words.
+    expect(describeNote(COORDINATOR)).toBe('');
+    expect(describeNote(`\n\n${BACKGROUND_JOBS}`)).toBe('');
+    expect(describeNote(`\n\n${REF_TASK}\n\n${REF_LIST}`)).toBe('');
   });
 
   it('names the block that says another session sent the message, beside what else rode along', () => {
     expect(describeNote(`\n\n${SESSION_MESSAGE}`)).toBe('session message');
-    expect(describeNote(`\n\n${SESSION_MESSAGE}\n\n${BACKGROUND_JOBS}`)).toBe('session message, background jobs');
+    expect(describeNote(`\n\n${SESSION_MESSAGE}\n\n${BACKGROUND_JOBS}`)).toBe('session message');
   });
 
   it('says how many notes the wiki context holds, off the count the block carries', () => {
@@ -110,23 +113,27 @@ describe('describeNote', () => {
   it('names every block one delivery appended, and counts a repeat instead of listing it twice', () => {
     // Delivery appends references, then the condition board, then background jobs, then the
     // coordinator's role: a coordinator with a build still running gets two blocks in one note.
-    const appended = `\n\n${REF_TASK}\n\n${REF_TASK}\n\n${BACKGROUND_JOBS}\n\n${COORDINATOR}`;
+    const appended = `\n\n${REF_TASK}\n\n${CONDITIONS}\n\n${CONDITIONS}\n\n${BACKGROUND_JOBS}\n\n${COORDINATOR}`;
 
-    expect(describeNote(appended)).toBe('referenced task ×2, background jobs, project coordinator context');
-    expect(describeNote(`\n\n${REF_LIST}\n\n${COORDINATOR}`)).toBe('referenced list, project coordinator context');
+    expect(describeNote(appended)).toBe('list conditions ×2');
+    expect(describeNote(`\n\n${REF_LIST}\n\n${COORDINATOR}`)).toBe('');
   });
 
-  it('names a wiki context beside the block a coordinator gets on the same turn', () => {
+  it('names a wiki context beside the block a coordinator gets on the same turn, and only it', () => {
     // A project's conversation is both promoted and working in a bound workspace, so the two
-    // blocks arrive in one note and the strip has to name both.
-    expect(describeNote(`\n\n${WIKI_CONTEXT}\n\n${COORDINATOR}`)).toBe('Wiki context · 2 entries, project coordinator context');
+    // blocks arrive in one note; the coordinator's is its routine and goes unnamed.
+    expect(describeNote(`\n\n${WIKI_CONTEXT}\n\n${COORDINATOR}`)).toBe('Wiki context · 2 entries');
   });
 
   it("names a wiki chat's blocks the way board 42 does, off their opening tags", () => {
     expect(describeNote(`\n\n${WIKI_SELECTION}`)).toBe('Wiki selection · 3.1 §3 · 1 sentence · 2 sources');
-    // The chat's first message: its standing rules, then the page and the selection, in delivery's order.
+    // The chat's first message: its standing rules, then the page and the selection, in delivery's order. The line
+    // lists what the owner attached — the page and the selection, as board 42 ① shows it — not the rules (C15).
     expect(describeNote(`\n\n${WIKI_CHAT_PROMPT}\n\n${WIKI_PAGE}\n\n${WIKI_SELECTION}`))
-      .toBe('Wiki chat, Wiki page · 3.1 §3, Wiki selection · 3.1 §3 · 1 sentence · 2 sources');
+      .toBe('Wiki page · 3.1 §3, Wiki selection · 3.1 §3 · 1 sentence · 2 sources');
+    expect(describeNote(`\n\n${WIKI_CHAT_PROMPT}\n\n${WIKI_SELECTION}`)).toBe('Wiki selection · 3.1 §3 · 1 sentence · 2 sources');
+    // A first message sent with neither carries the rules alone, and names nothing.
+    expect(describeNote(`\n\n${WIKI_CHAT_PROMPT}`)).toBe('');
     expect(describeNote('<orbit_wiki_selection doc="3.1" section="3" to="4" sentences="2" sources="3">\n§3 A\nx\n</orbit_wiki_selection>'))
       .toBe('Wiki selection · 3.1 §3–§4 · 2 sentences · 3 sources');
     expect(describeNote('<orbit_wiki_page of="entry" entry="34x" title="The &quot;turn&quot; lease">\n{}\n</orbit_wiki_page>'))

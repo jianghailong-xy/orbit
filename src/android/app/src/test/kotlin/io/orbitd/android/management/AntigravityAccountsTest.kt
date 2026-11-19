@@ -344,10 +344,10 @@ class AntigravityAccountsTest {
     }
 
     /** A machine's line on the Machines & models page ("N of M signed in") counts Antigravity only where the runner can sign it in with Google. */
-    @Test fun infrastructureCountsAntigravityOnlyWhereGoogleSignInIsOffered() {
+    @Test fun machinesAndModelsCountsAntigravityOnlyWhereGoogleSignInIsOffered() {
         val now = System.currentTimeMillis()
-        assertEquals("1 of 4 signed in", Infrastructure.summary(fixture("google"), now))
-        assertEquals("0 of 3 signed in", Infrastructure.summary(fixture("macos"), now))
-        assertEquals("0 of 3 signed in", Infrastructure.summary(fixture("old"), now))
+        assertEquals("1 of 4 signed in", MachinesAndModels.summary(fixture("google"), now))
+        assertEquals("0 of 3 signed in", MachinesAndModels.summary(fixture("macos"), now))
+        assertEquals("0 of 3 signed in", MachinesAndModels.summary(fixture("old"), now))
     }
 }

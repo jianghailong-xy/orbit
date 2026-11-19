@@ -391,3 +391,38 @@ func TestCLIProjectCreateInsideASessionRefusesIntegrationBeforeAsking(t *testing
 		t.Fatalf("hits = %v, want nothing sent at all", *hits)
 	}
 }
+
+func TestCLIProjectUpdateLandingCheckUsesExactApprovalProposal(t *testing.T) {
+	for _, decision := range []string{`{"status":"ALLOWED"}`, `{"status":"DENIED"}`} {
+		t.Run(decision, func(t *testing.T) {
+			srv, hits, filed, written := mergeCheckServer(t, decision)
+			configureCLITestRunner(t, srv.URL)
+			t.Setenv("ORBIT_SESSION_ID", "sess-1")
+			t.Setenv("ORBIT_AGENT_ID", "agent-1")
+			var out bytes.Buffer
+			err := cmdProjectCLI([]string{"update", "proj-1", "--landing-check-command", "npm run landing ",
+				"--landing-check-timeout-seconds", "180", "--json"}, strings.NewReader(""), &out)
+			allowed := strings.Contains(decision, "ALLOWED")
+			if allowed && err != nil {
+				t.Fatal(err)
+			}
+			if !allowed && (err == nil || !strings.Contains(err.Error(), "did not approve")) {
+				t.Fatalf("declined proposal returned %v", err)
+			}
+			input := (*filed)["input"].(map[string]interface{})
+			if input["landingCheckCommand"] != "npm run landing " || input["landingCheckTimeoutSeconds"] != float64(180) {
+				t.Fatalf("card lost the proposal: %#v", input)
+			}
+			if updatedProject(*hits) != allowed {
+				t.Fatalf("writes did not follow approval: %v", *hits)
+			}
+			if allowed {
+				integration := (*written)["integration"].(map[string]interface{})
+				if integration["landingCheckCommand"] != input["landingCheckCommand"] ||
+					integration["landingCheckTimeoutSeconds"] != input["landingCheckTimeoutSeconds"] {
+					t.Fatalf("write differs from the card: %#v / %#v", integration, input)
+				}
+			}
+		})
+	}
+}

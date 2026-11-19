@@ -215,7 +215,11 @@ func recoverMerge(req MergeCommand) mergeOutcome {
 	// resolved, with any moved target merged in on top. Otherwise the source is replayed now.
 	if r.RebaseBaseSha == "" || !targetContainsSource(root, r.RebaseBaseSha, syncSha) {
 		r.RebaseBaseSha = ""
-		if !targetContainsSource(root, r.SourceSha, syncSha) {
+		if base := replayedBase(root, syncSha, anchor, r, landed); base != "" {
+			// The branch already carries this replay, made by a check whose answer the prior read
+			// here predates. Replaying the source onto its own copies conflicts with them.
+			r.RebaseBaseSha = base
+		} else if !targetContainsSource(root, r.SourceSha, syncSha) {
 			r.RebaseBaseSha = syncSha
 			// Move only our private branch to the source before replay. The source itself stays put.
 			if _, err := git(r.RepairWorktree, "reset", "--hard", r.SourceSha); err != nil {
@@ -233,6 +237,13 @@ func recoverMerge(req MergeCommand) mergeOutcome {
 	}
 	r.CandidateTreeSha, _ = git(root, "rev-parse", r.CandidateSha+"^{tree}")
 	r.PushCommits, _ = recoveryCommits(root, r.RemoteSha, r.CandidateSha)
+	// The preview's patch goes to the owner's screen: a candidate holding an owner-request secret has none, and is
+	// refused here as its push would be (secret_wire.go).
+	// Excluded is only what origin has: the candidate is built on the local target, whose unpublished commits this
+	// push would send.
+	if refusal := secretPushRefusalOf(root, []string{r.CandidateSha, r.SourceSha}, r.RemoteSha, "refs/remotes/origin/"+r.TargetBranch); refusal != "" {
+		return recoveryError(r, "PREVIEW_FAILED", refusal)
+	}
 	r.Patch, err = git(root, "diff", "--no-ext-diff", "--binary", r.RemoteSha, r.CandidateSha, "--")
 	if err != nil {
 		return recoveryError(r, "PREVIEW_FAILED", gitStderr(err))
@@ -589,6 +600,9 @@ func applyMergeRecovery(root string, req MergeCommand) mergeOutcome {
 		if err := recoveryLocalReady(root, r.TargetBranch, r.CandidateSha); err != nil {
 			return recoveryError(r, "LOCAL_CHECKOUT_BLOCKED", err.Error())
 		}
+		if refusal := secretPushRefusalOf(root, []string{r.CandidateSha, r.SourceSha}, r.RemoteSha, "refs/remotes/origin/"+r.TargetBranch); refusal != "" {
+			return recoveryError(r, "PUSH_FAILED", refusal)
+		}
 		if err := pushRecoveryCandidate(root, r.CandidateSha, r.TargetBranch); err != nil {
 			// A transport error may mean the push succeeded. Decide by reading the remote.
 			remote, readErr := recoveryRemoteTip(root, r.TargetBranch)
@@ -666,4 +680,57 @@ func recoveryAdvanceLocal(root string, r *MergeRecovery, local string) error {
 	}
 	_, err := git(root, "update-ref", "refs/heads/"+r.TargetBranch, r.CandidateSha, local)
 	return err
+}
+
+// replayedBase answers where the replay of r's source that the repair branch at tip already carries
+// starts — the commit it was replayed onto — or "" when tip carries none. A replay is a linear run of
+// copies with the same patch-ids, in the source's order, on the branch's first-parent line; merges a
+// later check made on top of it for moved targets leave it there. The source commits are the ones a
+// replay picks: from the fork point anchor (else whatever tip lacks), without the landed ones. Only
+// the commits the branch has beyond the target tips are compared. Any failure answers "".
+//
+// It is what keeps a check honest when the record it was handed predates the previous check's answer
+// — the 2026-11-13 incident, where a heartbeat answered late redelivered a check that had already run:
+// that record names no rebase base, and without this the source was replayed onto its own replay.
+func replayedBase(root, tip, anchor string, r *MergeRecovery, landed map[string]bool) string {
+	from := anchor
+	if from == "" {
+		from = tip
+	}
+	out, err := git(root, "rev-list", "--reverse", "--topo-order", "--no-merges", from+".."+r.SourceSha)
+	if err != nil {
+		return ""
+	}
+	var own []string
+	for _, sha := range splitLines(out) {
+		if !landed[sha] {
+			own = append(own, sha)
+		}
+	}
+	out, err = git(root, "rev-list", "--reverse", "--first-parent", tip, "^"+r.SourceSha, "^"+r.LocalSha, "^"+r.RemoteSha)
+	line := splitLines(out)
+	if err != nil || len(own) == 0 || len(line) < len(own) || len(own)+len(line) > landedCompareLimit {
+		return ""
+	}
+	ids, err := patchIDs(root, append(append([]string{}, own...), line...))
+	if err != nil {
+		return ""
+	}
+	for start := 0; start+len(own) <= len(line); start++ {
+		copies := true
+		for k, sha := range own {
+			if id := ids[sha]; id == "" || ids[line[start+k]] != id {
+				copies = false
+				break
+			}
+		}
+		if copies {
+			base, err := git(root, "rev-parse", "--verify", line[start]+"^")
+			if err != nil {
+				return ""
+			}
+			return base
+		}
+	}
+	return ""
 }

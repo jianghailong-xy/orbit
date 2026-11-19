@@ -94,11 +94,17 @@ suite('(b) the nine core-table triggers are gone and run_event keeps its own gua
     assert.equal(present.rowCount, 0, `${trigger} must be gone from ${table}`);
   }
 
-  // `conversation_turn` carried only completion-ACK triggers, so it now carries none.
+  // `conversation_turn` carried only completion-ACK triggers, so it was left with none. The Open
+  // list's version counters (0484) have since given it its own, none of them completion-ACK's.
   const turnTriggers = await client.query(
     `SELECT t.tgname FROM pg_trigger t JOIN pg_class c ON c.oid = t.tgrelid
       WHERE NOT t.tgisinternal AND c.relname = 'conversation_turn' ORDER BY 1`);
-  assert.deepEqual(turnTriggers.rows, [], 'conversation_turn is left with no user trigger at all');
+  assert.deepEqual(turnTriggers.rows.map((row) => row.tgname), [
+    'conversation_turn_evidence_review_deadline',
+    'conversation_turn_open_list_epoch_delete',
+    'conversation_turn_open_list_epoch_insert',
+    'conversation_turn_open_list_epoch_update',
+  ], 'conversation_turn carries only the Open list counters 0484 gave it');
 
   // run_event keeps the behaviour the misnamed guard actually owned, under a neutral name.
   const runEvent = await client.query(

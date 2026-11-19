@@ -1,0 +1,48 @@
+# The database entry through a TCP proxy: apiserver and wiki-worker connect to db-proxy:5432, an
+# HAProxy that forwards each connection unchanged to ORBIT_DB_PROXY_TARGET (default postgres:5432).
+# The target can then change at runtime, to a promoted standby or a new major version, without
+# restarting either of them (docs/postgres-standby.md, "Database proxy"). A deployment opts in from
+# its .env, which every Compose command in the directory reads:
+#
+#   COMPOSE_FILE=docker-compose.yml:deploy/db-proxy.yml
+#
+# Not pgbouncer: the apiserver holds LISTEN/NOTIFY and session-level advisory locks, which need one
+# server session per client connection for as long as that connection lives. Plain TCP keeps exactly
+# that; a transaction-mode pool does not.
+services:
+  db-proxy:
+    image: "${ORBIT_REGISTRY:-docker.io}/library/haproxy:3.4.7-alpine@sha256:b9fe316f718d5015c5cfebd8ca019591f3e44656f61d93cb8b59a1028961e530"
+    container_name: orbit-db-proxy
+    restart: unless-stopped
+    # docker-compose.yml's x-logging, which an anchor cannot reach from this file.
+    logging:
+      driver: json-file
+      options:
+        max-size: "100m"
+        max-file: "5"
+        compress: "true"
+    environment:
+      # host:port. A name is resolved through Docker's DNS, and followed when its container is recreated.
+      ORBIT_DB_PROXY_TARGET: "${ORBIT_DB_PROXY_TARGET:-postgres:5432}"
+    volumes:
+      - ./deploy/db-proxy/haproxy.cfg:/usr/local/etc/haproxy/haproxy.cfg:ro
+    expose:
+      - "5432"
+    healthcheck:
+      # Healthy while the target passes its TCP check, so the apiserver starts only once it can reach the database.
+      test: ["CMD", "wget", "-q", "-O", "/dev/null", "http://127.0.0.1:8405/healthz"]
+      interval: 5s
+      timeout: 5s
+      retries: 12
+      start_period: 10s
+
+  apiserver:
+    environment:
+      DATABASE_URL: "postgresql://orbit:orbit@db-proxy:5432/orbit?schema=public"
+    depends_on:
+      db-proxy:
+        condition: service_healthy
+
+  wiki-worker:
+    environment:
+      DATABASE_URL: "postgresql://orbit:orbit@db-proxy:5432/orbit?schema=public"

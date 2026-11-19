@@ -1,5 +1,6 @@
 package io.orbitd.android.cards
 
+import io.orbitd.android.management.LocalTranslation
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
@@ -27,8 +28,8 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import io.orbitd.android.R
 import io.orbitd.android.core.cards.*
+import io.orbitd.android.translation.CardTranslationFoot
 import io.orbitd.android.core.realtime.RunEvent
-import io.orbitd.android.reader.AttachedNoteEntry
 import io.orbitd.android.reader.personWords
 import io.orbitd.android.text.MarkdownText
 import io.orbitd.android.ui.LocalOrbitColors
@@ -44,7 +45,9 @@ import io.orbitd.android.ui.LocalOrbitColors
  */
 @Composable
 internal fun QuestionRecordCard(card: InteractionCard, queued: Boolean = false, notice: String? = null, onOpen: () -> Unit) {
-    val record = card.source
+    // The question in the owner's language as it was translated while open (Settings › Translation); its review flips it.
+    val owner = LocalTranslation.current.cardLanguage
+    val record = remember(card.source, owner) { OwnerCardTranslation.closedQuestion(card.source, owner) } ?: card.source
     val secondary = MaterialTheme.colorScheme.onSurfaceVariant
     val line = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.12f)
     val shape = RoundedCornerShape(14.dp)
@@ -106,7 +109,10 @@ internal fun QuestionRecordCard(card: InteractionCard, queued: Boolean = false, 
  */
 @Composable
 internal fun QuestionRecordReview(card: InteractionCard, told: RunEvent? = null, open: (String) -> Unit) {
-    val record = card.source
+    var showOriginal by remember(card.key) { mutableStateOf(false) }
+    val owner = LocalTranslation.current.cardLanguage
+    val translated = remember(card.source, owner) { OwnerCardTranslation.closedQuestion(card.source, owner) }
+    val record = if (translated != null && !showOriginal) translated else card.source
     val question = record.obj("question")
     val secondary = MaterialTheme.colorScheme.onSurfaceVariant
     Column(Modifier.fillMaxSize().testTag(card.key)) {
@@ -117,6 +123,7 @@ internal fun QuestionRecordReview(card: InteractionCard, told: RunEvent? = null,
                 CoordinatorQuestions.askedAtLine(record)?.let { Text(it, style = MaterialTheme.typography.labelSmall, color = secondary) }
             }
             MarkdownText(question?.text("question").orEmpty(), open = open)
+            if (translated != null) CardTranslationFoot(showOriginal, { showOriginal = !showOriginal })
             val chosen = CoordinatorQuestions.chosenOption(record)
             question?.objects("options").orEmpty().forEachIndexed { index, option ->
                 ReplayOption("${card.key}:option:$index", option.text("label").orEmpty(), option.text("description"),
@@ -168,16 +175,16 @@ internal fun ReplayOption(tag: String, label: String, why: String?, recommended:
 }
 
 /** What the coordinator was told (web `answered-question-told`): folded under its heading, the words verbatim, and what delivery appended
- * folded under them. */
+ * folded under them. [heading] names who was told: the reviewer, on the owner's answers handed to it (`YouConfirmedCard`). */
 @Composable
-private fun ToldFold(tag: String, event: RunEvent) {
+internal fun ToldFold(tag: String, event: RunEvent, heading: String = OwnerAnswerLine.told) {
     var open by rememberSaveable(tag) { mutableStateOf(false) }
     val secondary = MaterialTheme.colorScheme.onSurfaceVariant
     Column(Modifier.fillMaxWidth().padding(top = 4.dp).testTag(tag), verticalArrangement = Arrangement.spacedBy(6.dp)) {
         Row(Modifier.clickable(role = Role.Button) { open = !open }.semantics { stateDescription = if (open) "Expanded" else "Collapsed" }
             .padding(vertical = 4.dp), horizontalArrangement = Arrangement.spacedBy(6.dp), verticalAlignment = Alignment.CenterVertically) {
             Text("▸", Modifier.rotate(if (open) 90f else 0f).clearAndSetSemantics { }, color = secondary, style = MaterialTheme.typography.labelMedium)
-            Text(OwnerAnswerLine.told, color = secondary, style = MaterialTheme.typography.bodySmall)
+            Text(heading, color = secondary, style = MaterialTheme.typography.bodySmall)
         }
         if (open) {
             SelectionContainer {
@@ -185,7 +192,6 @@ private fun ToldFold(tag: String, event: RunEvent) {
                     RoundedCornerShape(6.dp)).padding(8.dp).testTag("$tag:words"), fontFamily = FontFamily.Monospace,
                     style = MaterialTheme.typography.bodySmall)
             }
-            event.fields.text("controlPlaneNote")?.takeIf { it.isNotBlank() }?.let { AttachedNoteEntry(it.trim()) }
         }
     }
 }

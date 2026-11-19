@@ -179,7 +179,7 @@ func TestRunLoopBeatsOnceASelfManagedRunnerHasReclaimed(t *testing.T) {
 	if at < 0 {
 		t.Fatal("runLoop does not beat a self-managed runner's first heartbeat by itself, with one for the probe")
 	}
-	reclaim := strings.Index(body, "reclaimMissingSessions(loopCtx, t, pool.reclaimStates, prepareTakeover)")
+	reclaim := strings.Index(body, "reclaimWaitedOnSessions(loopCtx, t, pool.reclaimStates, prepareTakeover)")
 	reclaimed := strings.Index(body, "reclaimed = true")
 	if reclaim < 0 || reclaimed < reclaim || at < reclaimed {
 		t.Fatal("the first heartbeat is asked for before the reclaim has made the supervisors it advertises")
@@ -221,7 +221,7 @@ func TestRunLoopBeatsBeforeAManagedInstanceClaims(t *testing.T) {
 
 	gate := strings.Index(body, "case <-startupBeatDone:")
 	loop := strings.Index(body, "\tfor loopCtx.Err() == nil {")
-	claim := strings.Index(body, "t.claimSession(loopCtx, &claims)")
+	claim := strings.Index(body, "t.claimSession(loopCtx, &claims, scope...)")
 	if gate < 0 || loop < gate || claim < loop {
 		t.Fatal("the claim loop does not wait for the startup beat before its first claim")
 	}

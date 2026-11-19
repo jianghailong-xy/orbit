@@ -6,11 +6,10 @@ import (
 	"fmt"
 	"net/url"
 	"os"
+	"runtime"
 	"strconv"
 	"strings"
 	"time"
-
-	"orbit/link-gateway/linkpb"
 )
 
 // Fixed by the design rather than configured (docs/runner-link-design.md §5.1, §5.7, §6.1). They are fields of
@@ -20,10 +19,13 @@ const (
 	maxMergeBatches          = 256
 	maxFrameBytes            = 256 << 10
 	defaultHeartbeatInterval = 30 * time.Second
-	defaultModeInterval      = time.Second
 	defaultPingInterval      = 20 * time.Second
 	defaultPingTimeout       = 60 * time.Second
 	defaultMaxConnsPerRunner = 2
+	// defaultBackendMaxConns is LINK_BACKEND_MAX_CONNS's default: the connections to each backend, which before the
+	// cap were the idle ones kept. An apiserver serves its calls with 10 database connections, so more calls at once
+	// than this only wait inside it instead.
+	defaultBackendMaxConns = 256
 )
 
 // config is everything the gateway is told at start, from the environment (README.md, "Configuration").
@@ -48,13 +50,10 @@ type config struct {
 	PublicKeys []ed25519.PublicKey
 	CellID     string
 
-	// APIURL is the apiserver's base address; the gateway reads the revoked credentials from it with GatewayToken, and
-	// the RUNNER_LINK_REQUIRED switch (mode.go).
+	// APIURL is the apiserver's base address; the gateway reads the revoked credentials from it with GatewayToken.
 	APIURL             string
 	GatewayToken       string
 	RevocationInterval time.Duration
-	// ModeInterval is how often the switch is read; a field only so that tests can shorten it.
-	ModeInterval time.Duration
 
 	HeartbeatInterval time.Duration
 	PingInterval      time.Duration
@@ -85,17 +84,14 @@ type config struct {
 	// either way) or "off".
 	FrameLog string
 
-	// Mode is LINK_MODE. MODE_LINK (link) pins what Welcome and HeartbeatAck tell runners, whatever the server's
-	// RUNNER_LINK_REQUIRED switch says: the staging drills. MODE_HTTP (http, the default) is what they are told until
-	// that switch is on, and again once it is off (mode.go). The mode decides whether a connection's work is forwarded
-	// (MODE_LINK) or only compared (MODE_HTTP, the shadow period).
-	Mode linkpb.Mode
-
 	// InternalAPIURLs are the apiserver's internal listeners for runner link calls (RUNNER_LINK_INTERNAL_PORT), one per
-	// apiserver instance: the backends every forwarded call goes to (backend.go). Required in MODE_LINK.
+	// apiserver instance: the backends every forwarded call goes to (backend.go). Required.
 	InternalAPIURLs []string
 	// RPCTimeout bounds one forwarded call to a backend, retries included.
 	RPCTimeout time.Duration
+	// BackendMaxConns bounds the connections to each backend (LINK_BACKEND_MAX_CONNS); a call past it waits for one
+	// to come free (backend.go).
+	BackendMaxConns int
 
 	// DrillLoseAnswers is LINK_DRILL_LOSE_ANSWERS: how many answers of each call a staging drill has the gateway lose
 	// (drill.go). Nil, the default, loses none.
@@ -124,6 +120,11 @@ type linkTuning struct {
 	MaxQueued creditLevel
 	// HoldFor is how long room freed for a session in line is held for its runner to send again.
 	HoldFor time.Duration
+	// CreditHold is how long after the queue was last past HighWater the credit stays reduced, below LowWater too.
+	CreditHold time.Duration
+	// A credit change is told to CreditSpreadBatch connections every CreditSpreadEvery (creditBook.spread).
+	CreditSpreadBatch int
+	CreditSpreadEvery time.Duration
 	// RetryBudget is how long a call keeps being retried on other backends, and BackendDownFor how long a backend
 	// that could not be dialed is passed over.
 	RetryBudget, BackendDownFor time.Duration
@@ -176,13 +177,29 @@ func defaultLinkTuning() linkTuning {
 		LowWater:         defaultMaxQueued.half().half(),
 		MaxQueued:        defaultMaxQueued,
 		HoldFor:          15 * time.Second,
-		RetryBudget:      5 * time.Second,
-		BackendDownFor:   5 * time.Second,
-		WatchersTTL:      60 * time.Second,
-		PrefixTimeout:    10 * time.Second,
-		WelcomeTimeout:   3 * time.Second,
-		Merge:            defaultMergeTuning(),
+		// Longer than the 11-13 s between a large gateway's GC marks, each of which can push the queue past HighWater.
+		CreditHold: 30 * time.Second,
+		// 100,000 connections a second: 400,000 are told in 4 s.
+		CreditSpreadBatch: 1_000,
+		CreditSpreadEvery: 10 * time.Millisecond,
+		RetryBudget:       5 * time.Second,
+		BackendDownFor:    5 * time.Second,
+		WatchersTTL:       60 * time.Second,
+		PrefixTimeout:     10 * time.Second,
+		WelcomeTimeout:    3 * time.Second,
+		Merge:             defaultMergeTuning(),
 	}
+}
+
+// defaultHandshakeRate is LINK_HANDSHAKE_RATE's default, and LINK_HANDSHAKE_BURST's (a second of it): 100 new
+// connections a second for each CPU the gateway may use (GOMAXPROCS, which follows the container's CPU limit), and
+// never under 200. A vCPU completes about 500 TLS handshakes a second at 1.5-1.8 ms each, and past about twice that a
+// core the handshakes time out and are retried rather than level off (task 34paLvEDFObkoBxYLAJSN, series D), so a
+// fifth of it leaves the rest for the connections already open. At 28 vCPUs that is 2,800 a second, which brings
+// 800,000 runners back in under 5 minutes after a restart, inside the 10 min 45 s the reaper holds their work; at the
+// old 200 a second a lone gateway got about 130,000 back in that time.
+func defaultHandshakeRate(cpus int) int {
+	return max(100*cpus, 200)
 }
 
 // letsEncrypt is the ACME directory used unless LINK_ACME_DIRECTORY_URL names another.
@@ -250,7 +267,6 @@ func configFromEnv(getenv func(string) string) (config, error) {
 		APIURL:             strings.TrimRight(str("LINK_API_URL", ""), "/"),
 		GatewayToken:       str("LINK_GATEWAY_TOKEN", ""),
 		RevocationInterval: dur("LINK_REVOCATION_INTERVAL", 30*time.Second),
-		ModeInterval:       defaultModeInterval,
 		HeartbeatInterval:  defaultHeartbeatInterval,
 		PingInterval:       defaultPingInterval,
 		PingTimeout:        defaultPingTimeout,
@@ -258,8 +274,8 @@ func configFromEnv(getenv func(string) string) (config, error) {
 		HandshakeTimeout:   dur("LINK_HANDSHAKE_TIMEOUT", 5*time.Second),
 		IPRate:             num("LINK_IP_RATE", 1),
 		IPBurst:            integer("LINK_IP_BURST", 20),
-		HandshakeRate:      num("LINK_HANDSHAKE_RATE", 200),
-		HandshakeBurst:     integer("LINK_HANDSHAKE_BURST", 400),
+		HandshakeRate:      num("LINK_HANDSHAKE_RATE", float64(defaultHandshakeRate(runtime.GOMAXPROCS(0)))),
+		HandshakeBurst:     integer("LINK_HANDSHAKE_BURST", defaultHandshakeRate(runtime.GOMAXPROCS(0))),
 		MaxConnsPerRunner:  defaultMaxConnsPerRunner,
 		DrainBatch:         integer("LINK_DRAIN_BATCH", 250),
 		DrainBatchInterval: dur("LINK_DRAIN_BATCH_INTERVAL", time.Second),
@@ -270,9 +286,9 @@ func configFromEnv(getenv func(string) string) (config, error) {
 		NATSURL:            str("LINK_NATS_URL", ""),
 		NATSSeed:           strings.TrimSpace(getenv("LINK_NATS_SEED")),
 		FrameLog:           str("LINK_FRAME_LOG", "lifecycle"),
-		Mode:               linkpb.Mode_MODE_HTTP,
 		InternalAPIURLs:    splitList(getenv("LINK_INTERNAL_API_URLS")),
 		RPCTimeout:         dur("LINK_RPC_TIMEOUT", 60*time.Second),
+		BackendMaxConns:    integer("LINK_BACKEND_MAX_CONNS", defaultBackendMaxConns),
 		link:               defaultLinkTuning(),
 	}
 	// Merged ingest (events_merge.go): a window of 0 forwards every batch alone, as before merging.
@@ -311,14 +327,6 @@ func configFromEnv(getenv func(string) string) (config, error) {
 	c.link.HighWater = c.link.MaxQueued.half()
 	c.link.LowWater = c.link.HighWater.half()
 	c.DrillIngestRate = num("LINK_DRILL_INGEST_RATE", 0)
-
-	switch mode := str("LINK_MODE", "http"); mode {
-	case "http":
-	case "link":
-		c.Mode = linkpb.Mode_MODE_LINK
-	default:
-		problems = append(problems, fmt.Sprintf("LINK_MODE=%q is not http or link", mode))
-	}
 
 	if c.TLSMode == "" {
 		c.TLSMode = "files"
@@ -379,8 +387,8 @@ func configFromEnv(getenv func(string) string) (config, error) {
 			problems = append(problems, fmt.Sprintf("LINK_INTERNAL_API_URLS: %q is not an http:// or https:// address without a path", raw))
 		}
 	}
-	if c.Mode == linkpb.Mode_MODE_LINK && len(c.InternalAPIURLs) == 0 {
-		problems = append(problems, "LINK_MODE=link needs LINK_INTERNAL_API_URLS: the apiserver's internal listener (RUNNER_LINK_INTERNAL_PORT) that runner calls are forwarded to")
+	if len(c.InternalAPIURLs) == 0 {
+		problems = append(problems, "LINK_INTERNAL_API_URLS is required: the apiserver's internal listener (RUNNER_LINK_INTERNAL_PORT) that runner calls are forwarded to")
 	}
 	for i, raw := range c.InternalAPIURLs {
 		c.InternalAPIURLs[i] = strings.TrimRight(raw, "/")

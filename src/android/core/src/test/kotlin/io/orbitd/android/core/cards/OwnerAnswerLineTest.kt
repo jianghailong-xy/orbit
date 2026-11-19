@@ -49,8 +49,8 @@ class OwnerAnswerLineTest {
     @Test fun theLineSaysSentToTheCoordinatorAndWhen() {
         val source = transcriptCards(echo(card)).single().source
         val zone = ZoneId.of("Asia/Shanghai")
-        assertEquals("Sent to the coordinator · 08:29", OwnerAnswerLine.line(source, Instant.parse("2026-10-09T01:00:00Z"), zone))
-        assertEquals("Sent to the coordinator · 10/9 08:29", OwnerAnswerLine.line(source, Instant.parse("2026-10-12T01:00:00Z"), zone))
+        assertEquals("Sent to the coordinator · 8:29\u202FAM", OwnerAnswerLine.line(source, Instant.parse("2026-10-09T01:00:00Z"), zone))
+        assertEquals("Sent to the coordinator · 10/9 8:29\u202FAM", OwnerAnswerLine.line(source, Instant.parse("2026-10-12T01:00:00Z"), zone))
         assertEquals(CoordinatorQueue.sentLine(OwnerReview.receiptTime("2026-10-09T00:29:37.104Z", Instant.parse("2026-10-09T01:00:00Z"), zone)),
             OwnerAnswerLine.line(source, Instant.parse("2026-10-09T01:00:00Z"), zone))
     }

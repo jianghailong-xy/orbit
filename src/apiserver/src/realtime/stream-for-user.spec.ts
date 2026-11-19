@@ -101,6 +101,7 @@ function fakePrisma(
     // A number stands in for "the table answers this much"; a function is the table itself, for the
     // one case where the count is a predicate over WHICH rows answer (`backgroundJobId ∈ …`).
     approval: {
+      findMany: async () => [],
       count: async ({ where }: { where: Record<string, never> }) =>
         typeof pendingApprovals === 'function' ? pendingApprovals(where) : pendingApprovals,
     },
@@ -116,7 +117,12 @@ function fakePrisma(
     // …and the four owner items a project can be waiting on its owner for (§7.6 V13),
     // which these fixtures have none of either.
     sessionRequest: noSessionRequests(),
+    // …and no coordinator handoff (projects/coordinator-handoff.ts).
+    coordinatorHandoff: { findFirst: async () => null },
     projectOpenItem: { findMany: async () => [] },
+    ownerRequest: { groupBy: async () => [] },
+    // A move out of a project waiting on the owner (57a2943fa4's crossing signal): none here.
+    projectHandoffApproval: { findMany: async () => [] },
   } as unknown as PrismaService;
 }
 
@@ -362,7 +368,7 @@ test('an APPROVAL_REQUEST maps to approval.requested with the live pending count
   assert.equal(got[0].type, 'approval.requested');
   // The kind rides with the count because clients overwrite the row with both: a blocked tool call
   // is counted here, so this row says "approval", not "Waiting for your confirmation".
-  assert.deepEqual(got[0].data, { approvalId: 'ap1', pendingApprovals: 2, waitingKind: null });
+  assert.deepEqual(got[0].data, { approvalId: 'ap1', pendingApprovals: 2, waitingKind: null, questionWithCoordinator: null });
 });
 
 test('transcript events (text deltas) are dropped, not forwarded', async () => {
@@ -543,6 +549,27 @@ test('publishWorkspaceChanged preserves a false task-row effect flag', async () 
     agentId: 'workspaceNew',
     affectsTaskRows: false,
   });
+});
+
+// A heartbeat has no session: a workspace's checkout health moving rides the owner key, and says so, so a client reads
+// its workspace list again (the Main checkout bar) and nothing else.
+test('publishWorkspaceRepoHealthChanged reaches only that owner as agent.changed, marked as repo health', async () => {
+  const svc = svcWith({}, 0);
+  const mine: ControlEvent[] = [];
+  const theirs: ControlEvent[] = [];
+  const subA = svc.streamForUser('userA').subscribe((e) => mine.push(e));
+  const subB = svc.streamForUser('userB').subscribe((e) => theirs.push(e));
+
+  svc.publishWorkspaceRepoHealthChanged('userA', 'workspace-1');
+  await delay(30);
+  subA.unsubscribe();
+  subB.unsubscribe();
+
+  assert.equal(mine.length, 1);
+  assert.equal(mine[0].type, 'agent.changed');
+  assert.deepEqual(mine[0].data, { agentId: 'workspace-1', affectsTaskRows: false, repoHealth: true });
+  assert.equal(mine[0].sessionId, '');
+  assert.equal(theirs.length, 0);
 });
 
 test('publishForUser reaches only that owner, with no session scope', async () => {

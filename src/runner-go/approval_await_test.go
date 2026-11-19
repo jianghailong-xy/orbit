@@ -2,6 +2,7 @@ package main
 
 import (
 	"context"
+	"encoding/json"
 	"net/http"
 	"net/http/httptest"
 	"os"
@@ -152,7 +153,7 @@ func TestKimiPermissionKeepsReadingTheCardThroughADoorOutage(t *testing.T) {
 	url, filed, polls := approvalDoor(t, 2, `{"status":"ALLOWED"}`)
 	job := &ClaimedSession{SessionID: "sess-1", Agent: AgentExecConfig{PermissionMode: "default"}}
 
-	res := bridgeKimiPermission(context.Background(), NewTransport(url, "tok"), job, map[string]interface{}{
+	res := (&kimiACPClient{}).bridgeKimiPermission(context.Background(), NewTransport(url, "tok"), job, map[string]interface{}{
 		"toolCall": map[string]interface{}{
 			"title": "Bash", "toolCallId": "call_1", "rawInput": map[string]interface{}{"command": "ls"},
 		},
@@ -167,6 +168,47 @@ func TestKimiPermissionKeepsReadingTheCardThroughADoorOutage(t *testing.T) {
 	}
 	if filed.Load() != 1 || polls.Load() != 3 {
 		t.Fatalf("filed %d, polled %d; want one card read through two 502s", filed.Load(), polls.Load())
+	}
+}
+
+// 2026-11-19: a Kimi SubAgent's Bash approvals filed cards whose command box read "$" and nothing
+// else, because the bridge filed the request's toolCall as the input when rawInput was null — and
+// Kimi never sends rawInput on session/request_permission. The command reaches the card through
+// the joined argument stream instead.
+func TestKimiPermissionBridgeFilesCardWithJoinedCommand(t *testing.T) {
+	fastApprovalRetry(t)
+	var body map[string]interface{}
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		switch {
+		case strings.Contains(r.URL.Path, "/approvals/"):
+			_, _ = w.Write([]byte(`{"status":"ALLOWED"}`))
+		case strings.HasSuffix(r.URL.Path, "/approvals"):
+			_ = json.NewDecoder(r.Body).Decode(&body)
+			_, _ = w.Write([]byte(`{"id":"ap1","status":"PENDING"}`))
+		default:
+			w.WriteHeader(http.StatusNotFound)
+		}
+	}))
+	defer srv.Close()
+
+	app := &kimiACPClient{done: make(chan struct{}), notifications: make(chan kimiInboundItem, 8)}
+	app.readLoop(strings.NewReader(
+		`{"jsonrpc":"2.0","method":"session/update","params":{"sessionId":"s","update":{"sessionUpdate":"tool_call_update","toolCallId":"0:tool_1","status":"in_progress","content":[{"type":"content","content":{"type":"text","text":"{\"command\":\"cat go.mod\"}"}}]}}}` + "\n"))
+	job := &ClaimedSession{SessionID: "sess-1", Agent: AgentExecConfig{PermissionMode: "default"}}
+
+	res := app.bridgeKimiPermission(context.Background(), NewTransport(srv.URL, "tok"), job, map[string]interface{}{
+		"toolCall": map[string]interface{}{"title": "Bash", "toolCallId": "0:tool_1"},
+		"options": []interface{}{
+			map[string]interface{}{"optionId": "approve_once", "kind": "allow_once"},
+			map[string]interface{}{"optionId": "reject", "kind": "reject_once"},
+		},
+	})
+
+	if got := firstString(mapValue(res["outcome"]), "optionId"); got != "approve_once" {
+		t.Fatalf("outcome = %#v, want approve_once", res)
+	}
+	if got := firstString(mapValue(body["input"]), "command"); got != "cat go.mod" {
+		t.Fatalf("filed card input = %#v, want the joined command", body)
 	}
 }
 

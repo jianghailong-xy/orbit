@@ -8,12 +8,13 @@ import {
   Optional,
 } from '@nestjs/common';
 import { Prisma, ProjectIdentitySource, ProjectStatus } from '@prisma/client';
-import type { WorkspacePermissionRuleInfo } from '@orbit/shared';
+import { MAIN_CHECKOUT_GIT_CAPABILITY, type WorkspacePermissionRuleInfo } from '@orbit/shared';
 import { loggedRetry, withTransactionRetry } from '../common/transaction-retry';
 import { PrismaService } from '../prisma/prisma.service';
 import { RealtimeService } from '../realtime/realtime.service';
 import { SessionsService } from '../sessions/sessions.service';
 import { lastProviderByWorkspace, withProviderSeed } from './workspace-provider';
+import { lastActiveByWorkspace, workspaceSessionCount } from './workspace-usage';
 import { antigravityState, hasGeminiEnvKey } from '../common/antigravity-readiness';
 import { usedRunnerEngines } from '../common/runner-engines';
 import {
@@ -23,6 +24,7 @@ import {
 } from '../common/runner-repo-health';
 import { MODEL_ROUTING_ENGINES } from '../tasks/model-routing';
 import { CreateWorkspaceDto, UpdateWorkspaceDto } from './dto';
+import { isNewFolderName, newFolderWorkDirOn, readGithub, type NewWorkspaceTarget } from '../sessions/new-workspace';
 
 /** The engines a list names, each once and in the order the router weighs them. Absent stays absent:
  *  a patch that says nothing about the list leaves it as it is. */
@@ -82,9 +84,42 @@ export class WorkspacesService {
     if (!runner) throw new ForbiddenException('runner not found');
   }
 
+  /** Where `newFolder` puts the workspace: under its runner's reposRoot, as POST /sessions `newWorkspace` does. */
+  private async newFolderOn(ownerId: string, dto: CreateWorkspaceDto): Promise<string> {
+    if (!dto.runnerId) throw new BadRequestException('newFolder needs runnerId: the machine it is made on');
+    if (dto.workDir !== undefined) throw new BadRequestException('Send one of workDir and newFolder');
+    if (!isNewFolderName(dto.newFolder)) {
+      throw new BadRequestException(
+        'newFolder must be one folder name of 1 to 64 letters, digits, ".", "_" or "-", other than "." and ".."',
+      );
+    }
+    const runner = await this.prisma.runner.findFirstOrThrow({
+      where: { id: dto.runnerId, ownerId },
+      select: { reposRoot: true, capabilities: true, capabilitiesReportedAt: true, managedRunner: { select: { id: true } } },
+    });
+    return newFolderWorkDirOn(runner, dto.newFolder);
+  }
+
+  /** Where `github` puts the workspace and what it clones (docs/mocks/github-workspace board 04): read, and refused, as
+   *  POST /sessions `newWorkspace.github` is (SessionsService.githubWorkspaceFor). */
+  private async githubOn(ownerId: string, dto: CreateWorkspaceDto): Promise<NewWorkspaceTarget> {
+    if (!dto.runnerId) throw new BadRequestException('github needs runnerId: the machine it is cloned on');
+    if (dto.workDir !== undefined || dto.newFolder !== undefined) {
+      throw new BadRequestException('Send one of workDir, newFolder and github');
+    }
+    const ask = readGithub(dto.github, 'github');
+    const runner = await this.prisma.runner.findFirstOrThrow({
+      where: { id: dto.runnerId, ownerId },
+      select: { id: true, reposRoot: true, capabilities: true, capabilitiesReportedAt: true },
+    });
+    return this.sessions.githubWorkspaceFor(ownerId, runner, ask);
+  }
+
   async create(ownerId: string, dto: CreateWorkspaceDto) {
     await this.assertOwnedRunner(ownerId, dto.targetRunnerId);
     await this.assertOwnedRunner(ownerId, dto.runnerId);
+    const cloned = dto.github === undefined ? undefined : await this.githubOn(ownerId, dto);
+    const workDir = cloned ? cloned.workDir : dto.newFolder === undefined ? dto.workDir : await this.newFolderOn(ownerId, dto);
     const workspace = await this.prisma.workspace.create({
       data: {
         ownerId,
@@ -104,7 +139,8 @@ export class WorkspacesService {
         targetRunnerId: dto.targetRunnerId,
         targetLabels: dto.targetLabels ?? [],
         runnerId: dto.runnerId,
-        workDir: dto.workDir,
+        workDir,
+        autoCreateWorkDir: dto.newFolder !== undefined,
         // Stored exactly as stated. The one reader — `project-integration-line.ts` — normalizes it
         // itself (canonicalRepoUrl), so nothing here has to agree with that function's shape.
         repoUrl: dto.repoUrl,
@@ -118,10 +154,18 @@ export class WorkspacesService {
         cursorAccount: dto.cursorAccount ?? null,
         enabled: dto.enabled ?? true,
         autoInitGit: dto.autoInitGit ?? false,
-        enableWorktree: dto.enableWorktree ?? false,
+        // A clone from GitHub runs each session on its own branch, which landing back to the repository needs, as
+        // POST /sessions makes one.
+        enableWorktree: cloned ? true : (dto.enableWorktree ?? false),
         defaultMergeTarget: dto.defaultMergeTarget,
         modelRouting: dto.modelRouting ?? false,
+        modelRoutingOptimizeFor: dto.modelRoutingOptimizeFor ?? 'cost',
         modelRoutingProviders: modelRoutingEngines(dto.modelRoutingProviders) ?? [],
+        subagentsEnabled: dto.subagentsEnabled ?? true,
+        subagentsMaxRunning: dto.subagentsMaxRunning ?? 8,
+        // A clone (§5.3): its repository and PENDING, which the runner's next reconcile asks it to clone, and which
+        // holds the workspace's sessions until it is READY.
+        ...(cloned?.clone ? { ...cloned.clone, cloneState: 'PENDING' as const } : {}),
       },
     });
     if (workspace.workDir && workspace.runnerId) this.realtime?.markRunnerChanged(workspace.runnerId);
@@ -141,6 +185,7 @@ export class WorkspacesService {
         repoCleanupStatus: true,
         repoCleanupBranch: true,
         repoCleanupMessage: true,
+        capabilities: true,
       },
     },
   } as const;
@@ -156,18 +201,24 @@ export class WorkspacesService {
   private withRepoHealth<T extends { id: string; runner?: { repoHealth?: unknown } | null }>(
     workspace: T,
   ) {
-    if (!workspace.runner) return { ...workspace, repoHealth: null, repoCleanup: null };
+    if (!workspace.runner) return { ...workspace, repoHealth: null, repoCleanup: null, mainCheckoutActions: false };
     const {
       repoHealth: reported,
       repoCleanupStatus,
       repoCleanupBranch,
       repoCleanupMessage,
+      capabilities,
       ...runner
     } = workspace.runner as Record<string, unknown> & { repoHealth?: unknown };
     return {
       ...workspace,
       runner,
+      // The entry carries the main checkout counts and fingerprint a runner with main-checkout-git/v1 reports
+      // (head, upstream, ahead, behind, fileCount, truncated, fingerprint), for Shared and Worktree workspaces alike:
+      // both work in or fork from this one checkout.
       repoHealth: repoHealthForWorkspace(readRunnerRepoHealth(reported), workspace.id),
+      // Whether its runner can move, commit, push and rescue the main checkout: without it clients show no buttons.
+      mainCheckoutActions: Array.isArray(capabilities) && capabilities.includes(MAIN_CHECKOUT_GIT_CAPABILITY),
       // The repair relay's last word, so the UI can hold "Cleaning up…" and then name the rescue
       // branch instead of silently dropping the warning.
       repoCleanup: repoCleanupStatus
@@ -180,10 +231,13 @@ export class WorkspacesService {
     };
   }
 
-  /** `only`: the workspaces a token confined to them may see (`workspaceConfinement`). */
-  async list(ownerId: string, only?: readonly string[]) {
+  /**
+   * `only`: the workspaces a token confined to them may see (`workspaceConfinement`). `onRunner`: one machine's
+   * workspaces, what a TERMINAL credential reads (`terminalRunnerOf`).
+   */
+  async list(ownerId: string, only?: readonly string[], onRunner?: string) {
     const workspaces = await this.prisma.workspace.findMany({
-      where: { ownerId, deletedAt: null, ...(only ? { id: { in: [...only] } } : {}) },
+      where: { ownerId, deletedAt: null, ...(only ? { id: { in: [...only] } } : {}), ...(onRunner ? { runnerId: onRunner } : {}) },
       // Custom drag order first; never-reordered workspaces (position NULL) sort last by
       // creation time, so newly added workspaces append below the arranged ones.
       orderBy: [{ position: { sort: 'asc', nulls: 'last' } }, { createdAt: 'asc' }],
@@ -191,8 +245,13 @@ export class WorkspacesService {
       include: WorkspacesService.RUNNER_INCLUDE,
     });
     // One indexed query for the whole list — the provider each project last ran on.
-    const seeded = withProviderSeed(workspaces, await lastProviderByWorkspace(this.prisma, workspaces.map((a) => a.id)));
-    return this.withAntigravityKeys(ownerId, seeded.map((workspace) => this.withRepoHealth(workspace)));
+    const ids = workspaces.map((a) => a.id);
+    const seeded = withProviderSeed(workspaces, await lastProviderByWorkspace(this.prisma, ids));
+    const lastActive = await lastActiveByWorkspace(this.prisma, ids);
+    return this.withAntigravityKeys(
+      ownerId,
+      seeded.map((workspace) => ({ ...this.withRepoHealth(workspace), lastActiveAt: lastActive.get(workspace.id) ?? null })),
+    );
   }
 
   /**
@@ -254,6 +313,20 @@ export class WorkspacesService {
     if (!workspace) throw new NotFoundException('workspace not found');
     const seeded = withProviderSeed([workspace], await lastProviderByWorkspace(this.prisma, [workspace.id]))[0];
     return (await this.withAntigravityKeys(ownerId, [this.withRepoHealth(seeded)]))[0];
+  }
+
+  /**
+   * GET /workspaces/:id: the workspace with when it was last used and how many conversations it holds,
+   * which its Settings page's header says. Apart from `get`, which update and remove read back
+   * through, so a per-row save never pays for the count.
+   */
+  async getWithUsage(ownerId: string, id: string) {
+    const workspace = await this.get(ownerId, id);
+    const [lastActive, sessionCount] = await Promise.all([
+      lastActiveByWorkspace(this.prisma, [workspace.id]),
+      workspaceSessionCount(this.prisma, workspace.id),
+    ]);
+    return { ...workspace, lastActiveAt: lastActive.get(workspace.id) ?? null, sessionCount };
   }
 
   /**
@@ -325,7 +398,10 @@ export class WorkspacesService {
       kimiAccount: dto.kimiAccount,
       cursorAccount: dto.cursorAccount,
       modelRouting: dto.modelRouting,
+      modelRoutingOptimizeFor: dto.modelRoutingOptimizeFor,
       modelRoutingProviders: modelRoutingEngines(dto.modelRoutingProviders),
+      subagentsEnabled: dto.subagentsEnabled,
+      subagentsMaxRunning: dto.subagentsMaxRunning,
     };
     if (dto.disallowedTools) data.disallowedTools = dto.disallowedTools as Prisma.InputJsonValue;
     if (dto.providerFallbacks) {

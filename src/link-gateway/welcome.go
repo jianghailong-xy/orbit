@@ -8,14 +8,15 @@ import (
 	"orbit/link-gateway/linkpb"
 )
 
-// Welcome's sessions and release (docs/runner-link-design.md §5.3, §5.4, §5.8, §7). Before a MODE_LINK connection's
-// Welcome is written, the gateway asks the apiserver's welcome route (POST /runner/link/welcome,
+// Welcome's sessions, release and browser (docs/runner-link-design.md §5.3, §5.4, §5.8, §7; docs/runner-browser-design.md
+// §2). Before a connection's Welcome is
+// written, the gateway asks the apiserver's welcome route (POST /runner/link/welcome,
 // src/apiserver/src/runner-api/runner-link-welcome.ts) where each session the Hello names stands, how far its events
 // are stored and whether this process still holds it, and which release the runner is assigned. The route decides
-// both; the gateway copies what it says.
+// both, and whether the runner is offered the managed runner browser; the gateway copies what it says.
 //
 // When the route gives no usable answer within linkTuning.WelcomeTimeout (no backend reached, a refusal, an answer that
-// does not read), the Welcome goes without sessions and without a release. The handshake is not refused for it: an
+// does not read), the Welcome goes without sessions, without a release and without the browser. The handshake is not refused for it: an
 // apiserver older than the route, or a database that is down, must not keep every runner off the link. A Welcome without
 // sessions says nothing about them, which is not the same as their events being stored nowhere or their leases being
 // lost: the runner keeps every event no EventAck has covered and sends it again (each seq is stored once), and learns of
@@ -32,11 +33,13 @@ type welcomeAnswer struct {
 		Version  string `json:"version"`
 		Rollback bool   `json:"rollback"`
 	} `json:"release"`
+	// Absent from an apiserver older than the field: no browser.
+	Browser bool `json:"browser"`
 }
 
-// welcome is what Welcome says of hello's sessions and of the runner's release, as the welcome route answers it: both
-// nil when the route did not say.
-func (l *linkState) welcome(hello *linkpb.Hello) ([]*linkpb.SessionState, *linkpb.AssignedRelease) {
+// welcome is what Welcome says of hello's sessions, of the runner's release and of its browser, as the welcome route
+// answers it: nil, nil and false when the route did not say.
+func (l *linkState) welcome(hello *linkpb.Hello) ([]*linkpb.SessionState, *linkpb.AssignedRelease, bool) {
 	c, m := l.c, l.c.g.metrics
 	named := hello.GetSessions()
 	ids := make([]string, len(named))
@@ -72,7 +75,7 @@ func (l *linkState) welcome(hello *linkpb.Hello) ([]*linkpb.SessionState, *linkp
 	}
 	m.welcomeLookups.inc(result)
 	if result != "answered" {
-		return nil, nil
+		return nil, nil, false
 	}
 	sessions := make([]*linkpb.SessionState, len(named))
 	for i, s := range a.Sessions {
@@ -83,7 +86,7 @@ func (l *linkState) welcome(hello *linkpb.Hello) ([]*linkpb.SessionState, *linkp
 	if r := a.Release; r != nil && r.Version != "" {
 		release = &linkpb.AssignedRelease{Version: r.Version, Rollback: r.Rollback}
 	}
-	return sessions, release
+	return sessions, release, a.Browser
 }
 
 // states reports whether the answer states each of ids, in the order asked: the route's contract.

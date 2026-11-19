@@ -108,6 +108,7 @@ test('create stores explicit assertions and required methods', async () => {
       text: 'the image boots',
       verificationMethod: 'Run the image smoke test',
       completionCriterionOverrideReason: 'A person judges the visible product behaviour',
+      satisfiedBy: 'TASKS',
       revision: 1,
     },
     {
@@ -115,6 +116,7 @@ test('create stores explicit assertions and required methods', async () => {
       text: 'the full suite passes',
       verificationMethod: 'Run npm test; require exit code 0',
       completionCriterionOverrideReason: 'This fixture exercises structured persistence',
+      satisfiedBy: 'TASKS',
       revision: 1,
     },
   ]);
@@ -560,6 +562,7 @@ test('the detail read reports progress without loading the project’s tasks', a
     },
     // The tally is the maintained one (0282): rows read by primary key, not a groupBy over this
     // project's tasks. A read that went back to the groupBy would find no delegate here.
+    projectRuling: { findMany: async () => [] },
     projectTaskStatusCount: {
       findMany: async (args: any) => {
         tallyArgs = args;
@@ -634,6 +637,7 @@ test('the detail read serves the authored criteria and no second representation 
     },
     task: { groupBy: async () => assert.fail('the detail read must not tally the project’s tasks') },
     projectTaskStatusCount: { findMany: async () => [] },
+    projectRuling: { findMany: async () => [] },
     projectAcceptanceCriterionDefinition: {
       findMany: async () => [{ id: CRITERION_A_ID, ordinal: 1, revision: 1, servingTasks: [] }],
     },
@@ -684,6 +688,7 @@ test('the detail item is the authored declaration, with no derived verdict besid
     },
     task: { groupBy: async () => assert.fail('the detail read must not tally the project’s tasks') },
     projectTaskStatusCount: { findMany: async () => [] },
+    projectRuling: { findMany: async () => [] },
     projectAcceptanceCriterionDefinition: {
       findMany: async () => [{ id: CRITERION_A_ID, ordinal: 1, revision: 2, servingTasks: [] }],
     },
@@ -713,6 +718,9 @@ test('the detail item is the authored declaration, with no derived verdict besid
   // the criterion says — no work is filed against it, so no work has met it.
   assert.deepEqual(project.acceptanceCriteriaItems[0], {
     ...definition,
+    // Migration 0545: met by its tasks (the default), so it carries no confirmation.
+    satisfiedBy: 'TASKS',
+    confirmation: null,
     key: criterionKeyOf(CRITERION_A_ID),
     satisfied: false,
     unmet: [{ clause: 'NO_WORK_SERVES_IT', heldUpBy: [] }],
@@ -730,6 +738,8 @@ test('the detail item is the authored declaration, with no derived verdict besid
     independence: 'INDEPENDENT',
     conflicts: [],
     remedy: null,
+    // Board 02 I (0555): no move brought it here.
+    movedFrom: null,
   });
   assert.equal(project.acceptanceCriteriaItems[0].key, uuidToBase62(CRITERION_A_ID));
 
@@ -752,6 +762,8 @@ test('the detail item is the authored declaration, with no derived verdict besid
   assert.deepEqual(project.derivedDone.criteria, [{
     definitionId: CRITERION_A_ID,
     satisfied: false,
+    satisfiedBy: 'TASKS',
+    confirmation: null,
     landing: 'UNKNOWN',
     independence: 'INDEPENDENT',
     conflicts: [],
@@ -771,7 +783,7 @@ test('the detail item is the authored declaration, with no derived verdict besid
     met: 0,
     landed: 0,
     onMain: 0,
-    byReason: { IN_FLIGHT: 0, ON_PROJECT_BRANCH: 0, NOTHING_TO_LAND: 0, NO_RECEIPT: 1, CODELESS: 0 },
+    byReason: { IN_FLIGHT: 0, ON_PROJECT_BRANCH: 0, NOTHING_TO_LAND: 0, NO_RECEIPT: 1, NO_BRANCH: 0, CODELESS: 0 },
   });
 });
 
@@ -824,6 +836,7 @@ test('an update writes only the fields it was sent, and null clears one', async 
     doneBy: null,
     doneAt: null,
     doneCriteriaDigest: null,
+    doneTaskEpochs: Prisma.DbNull,
     acceptedGaps: [],
     reopenedAt: null,
     reopenedFacts: Prisma.DbNull,
@@ -924,6 +937,7 @@ test('a structured update preserves ids and revisions across reorder, and increm
     text: 'Image boots',
     verificationMethod: 'Smoke the image',
     completionCriterionOverrideReason: 'A person judges the visible product behaviour',
+    satisfiedBy: 'TASKS',
     contentHash: definitionWrites[2][2].contentHash,
     revision: 1,
   }]);
@@ -932,6 +946,7 @@ test('a structured update preserves ids and revisions across reorder, and increm
     text: 'Build succeeds',
     verificationMethod: 'EXECUTABLE',
     completionCriterionOverrideReason: 'This fixture exercises structured persistence',
+    satisfiedBy: 'TASKS',
     contentHash: definitionWrites[3][2].contentHash,
     revision: 3,
   }]);

@@ -13,6 +13,7 @@ import (
 	"os/exec"
 	"path/filepath"
 	"sort"
+	"strconv"
 	"strings"
 	"sync"
 	"time"
@@ -98,7 +99,7 @@ func runOpenCodeSessionProcess(ctx context.Context, shutdownCtx context.Context,
 	go func() {
 		select {
 		case <-shutdownCtx.Done():
-			timer := time.NewTimer(shutdownDrainTimeout)
+			timer := time.NewTimer(stopDrainBudget(shutdownCtx, shutdownDrainTimeout))
 			defer timer.Stop()
 			select {
 			case <-timer.C:
@@ -296,6 +297,8 @@ func runOpenCodeSessionProcess(ctx context.Context, shutdownCtx context.Context,
 			stopInbox()
 			logln("OpenCode drain timeout for", job.SessionID+"; cancelling active turn")
 			if activeCancel != nil {
+				// Marked, as the Claude drain marks its own (watchShutdownDrain).
+				emit(evInterrupt, stopInterruptPayload(shutdownCtx))
 				activeCancel(errOpenCodeShutdownTimeout)
 			}
 		case result := <-activeDone:
@@ -485,8 +488,10 @@ func runOpenCodeTurn(ctx context.Context, job *ClaimedSession, execDir, scratchD
 		"ORBIT_ALLOW_ORCHESTRATION":       orchestrationEnv(job.AllowOrchestration),
 		envWatches:                        watchesEnv(job.WatchesDisabled),
 		envWiki:                           wikiEnv(job.WikiDisabled),
+		envScheduleRun:                    scheduleRunEnv(job.ScheduleRun),
 		envOrchestrationToken:             job.OrchestrationToken,
 		envMCPPermissionPrompt:            "0",
+		envSpawnDepth:                     strconv.Itoa(job.SpawnDepth),
 	})
 	// Runner-hosted background jobs (mcp__orbit__bg_run), for `orbit mcp` to
 	// inherit; also written into the MCP server's own environment block by
@@ -517,6 +522,9 @@ func runOpenCodeTurn(ctx context.Context, job *ClaimedSession, execDir, scratchD
 			return cancelledOpenCodeTurn(ctx, result.RuntimeSessionID)
 		}
 		return failedOpenCodeSpawn("process", err, emit)
+	}
+	if spawned := subagentSpawnedHook(ctx); spawned != nil {
+		spawned(cmd)
 	}
 
 	var stderrWG sync.WaitGroup
@@ -813,7 +821,9 @@ func openCodeError(v interface{}) (message string, providerAuth bool) {
 			message = string(raw)
 		}
 	}
-	return message, name == "ProviderAuthError"
+	// OpenCode can report a rejected API key as an APIError with the 401 only in data.
+	statusCode, _ := data["statusCode"].(float64)
+	return message, name == "ProviderAuthError" || (name == "APIError" && statusCode == 401)
 }
 
 func newOpenCodeAgentName() (string, error) {
@@ -878,7 +888,7 @@ func openCodeConfigContent(job *ClaimedSession, scratchDir, agentName string, es
 	}
 	appendPrompt := strings.TrimSpace(strings.Join(nonEmptyStrings(
 		job.appendSystemPrompt(),
-		openCodeOrbitCLIInstructions(executable, job.insideRecordedWork(), job.watchesOn()),
+		openCodeOrbitCLIInstructions(executable, job.insideRecordedWork(), job.watchesOn(), agentDelegates(job.Agent)),
 	), "\n\n"))
 	if appendPrompt != "" {
 		instructionsPath := filepath.Join(scratchDir, "opencode-instructions.txt")
@@ -913,9 +923,19 @@ func openCodeConfigContent(job *ClaimedSession, scratchDir, agentName string, es
 			"ORBIT_ALLOW_ORCHESTRATION": orchestrationEnv(job.AllowOrchestration),
 			envWatches:                  watchesEnv(job.WatchesDisabled),
 			envWiki:                     wikiEnv(job.WikiDisabled),
+			envScheduleRun:              scheduleRunEnv(job.ScheduleRun),
 			envOrchestrationToken:       job.OrchestrationToken,
 			envMCPPermissionPrompt:      "0",
+			envSpawnDepth:               strconv.Itoa(job.SpawnDepth),
 			envRunnerChild:              "1",
+		}
+		// A SubAgent's `orbit mcp` neither offers nor serves delegate (subagentChildJob).
+		if runID := strings.TrimSpace(job.Agent.Env[envSubagentRunID]); runID != "" {
+			environment[envSubagentRunID] = runID
+		}
+		// A SubAgent's `orbit mcp` neither offers nor serves delegate (subagentChildJob).
+		if runID := strings.TrimSpace(job.Agent.Env[envSubagentRunID]); runID != "" {
+			environment[envSubagentRunID] = runID
 		}
 		// Where `orbit mcp` reaches the runner to start a background job the runner
 		// owns. Written here as well as into the OpenCode process env, because this
@@ -953,8 +973,8 @@ func nonEmptyStrings(values ...string) []string {
 	return out
 }
 
-func openCodeOrbitCLIInstructions(executable string, insideRecordedWork, watches bool) string {
-	return strings.Replace(orbitCLIInstructions(executable, insideRecordedWork, watches), "mcp__orbit__*", "orbit_*", 1)
+func openCodeOrbitCLIInstructions(executable string, insideRecordedWork, watches, delegates bool) string {
+	return strings.Replace(orbitCLIInstructions(executable, insideRecordedWork, watches, delegates), "mcp__orbit__*", "orbit_*", 1)
 }
 
 func appendConfigString(value interface{}, addition string) []string {

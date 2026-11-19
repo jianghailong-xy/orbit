@@ -1,6 +1,8 @@
 package io.orbitd.android.reader
 
 import androidx.compose.runtime.Immutable
+import io.orbitd.android.core.cards.OrbitEvent
+import io.orbitd.android.core.cards.SubagentFinished
 import io.orbitd.android.core.cards.queuedWake
 import io.orbitd.android.core.cards.transcriptCards
 import io.orbitd.android.core.realtime.RunEvent
@@ -76,12 +78,18 @@ internal object SteerDelivery {
 
     /** The payload keys a turn carries its Orbit cards under (`TurnCards`), on its echo and its queued row alike. */
     val cardKeys = listOf("openItemDelivery", "ownerAnswer", "coordinatorDelivery", "taskStart", "projectStarted",
-        "confirmationReviewRequest", "confirmationReturn", "sessionMessage", "sessionReplies")
+        "confirmationReviewRequest", "confirmationReturn", "confirmationAnswers", "evidenceReview", "evidenceSendBack", "runQuestion",
+        "runNotice", "sessionOpening", "sessionMessage", "sessionReplies")
 
     /** Whether an echo is the reader's own words and nothing else's (OrbitKit `SteerDelivery.isReadersOwn`, web `readersOwnWords`):
      * no card Orbit draws it as — a delivery, a brief, a review's turn, another session's message or its replies — and no wake. */
     fun readersOwn(event: RunEvent): Boolean = cardKeys.none { event.fields[it].let { value -> value != null && value != JsonNull } } &&
-        transcriptCards(event).isEmpty() && queuedWake(event.fields.string("text").orEmpty()) == null
+        transcriptCards(event).isEmpty() && queuedWake(event.fields.string("text").orEmpty()) == null &&
+        SubagentFinished.parse(event.fields.string("text")) == null && !orbitOnly(event)
+
+    /** Whether an echo is Orbit's alone — nothing typed, nothing attached, a recorded note — which draws the From Orbit line ([OrbitEvent]). */
+    fun orbitOnly(event: RunEvent): Boolean = event.type == "user" && transcriptCards(event).isEmpty() &&
+        OrbitEvent.draws(event.personWords(), event.fields.string("controlPlaneNote"), (event.fields["attachments"] as? JsonArray).orEmpty().isNotEmpty())
 
     /** Whether an echo is one of the reader's steers: sent into a running turn, and the reader's own words ([readersOwn]). */
     fun readersSteer(event: RunEvent) = event.type == "user" && event.fields["steer"] == JsonPrimitive(true) && readersOwn(event)

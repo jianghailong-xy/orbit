@@ -186,12 +186,19 @@ class ReaderIncrementsDeviceTest : IncrementDeviceTest() {
         openSession(thinking)
         fun labels() = compose.onAllNodesWithTag("thinking-fold").fetchSemanticsNodes()
             .map { it.config.getOrNull(SemanticsProperties.Text)?.joinToString("") { t -> t.text }.orEmpty() }
+        // Each stretch is a steps line first; its reasoning rows are behind it.
+        fun openSteps(seq: Int) { compose.onNode(hasTestTag("steps-line") and hasAnyAncestor(hasTestTag("steps:$seq"))).performClick(); settle() }
+        await("the streamed block's steps line") { exists(hasTestTag("steps:16")) }
+        openSteps(16)
         await("the streamed block closed with its time") { labels().any { it == "Thought for 4s · 37 chars" } }
         capture("01-streamed-then-closed")
-        scrollTranscriptTo(hasTestTag("event:11"))
+        scrollTranscriptTo(hasTestTag("steps:11"))
+        openSteps(11)
         await("three timed blocks of 21k characters") { labels().any { it == "Thought for 1m 47s · 3 blocks · 21k chars" } }
         capture("02-21k-chars")
-        scrollTranscriptTo(hasTestTag("event:2"))
+        scrollTranscriptTo(hasTestTag("steps:2"))
+        verify("the first turn's steps line", exists(hasText("Thought for 1m 47s, ran 1 shell command")))
+        openSteps(2)
         await("the first turn's reasoning") { labels().any { it == "Thought for 1m 47s · 3 blocks · 20 chars" } }
         verify("a block the runner did not time states its size alone", labels().any { it == "Thought · 14 chars" })
         val fold = hasTestTag("thinking-fold") and hasText("Thought for 1m 47s · 3 blocks · 20 chars")
@@ -205,15 +212,20 @@ class ReaderIncrementsDeviceTest : IncrementDeviceTest() {
         await("a second tap folds it") { !exists(hasText("second"), unmerged = true) }
     }
 
-    /** A06-10, while streaming: the reasoning being written is open, bounded at its newest line, and folds and opens on a tap. */
+    /** A06-10, while streaming: the reasoning being written starts folded (docs/mocks/thinking-fold-live), opens bounded at its
+     * newest line, and folds and opens on a tap. */
     @Test fun thinkingStillBeingWrittenFoldsOnATap() = journey {
         overlay = mapOf("status" to "\"RUNNING\"", "runState" to "\"RUNNING\"")
         events = listOf(event(1, "user", """{"text":"Plan the release"}"""))
         opening = (1..40).joinToString("") { frame("""{"type":"thinking_delta","seq":0,"payload":{"delta":"Step $it of weighing the options.\n\n"}}""") }
         openSession(live)
-        val fold = hasTestTag("thinking-fold") and hasText("Thinking…")
-        await("the reasoning being written") { exists(fold) && exists(hasTestTag("thinking-live"), unmerged = true) }
-        verify("it starts open", compose.onAllNodes(fold).fetchSemanticsNodes().first().config.getOrNull(SemanticsProperties.StateDescription) == "Expanded")
+        val fold = hasTestTag("thinking-fold") and hasText("Thinking…", substring = true)
+        await("the reasoning being written") { exists(fold) }
+        verify("it starts folded", compose.onAllNodes(fold).fetchSemanticsNodes().first().config.getOrNull(SemanticsProperties.StateDescription) == "Collapsed")
+        verify("its words are not drawn folded", !exists(hasTestTag("thinking-live"), unmerged = true))
+        capture("00-streaming-folded")
+        compose.onNode(fold).performClick()
+        await("a tap opens it") { exists(hasTestTag("thinking-live"), unmerged = true) }
         await("it shows its newest line") { exists(hasText("Step 40 of weighing the options.", substring = true), unmerged = true) }
         verify("its box is bounded at the newest line (Step 1 is scrolled away)", runCatching {
             compose.onNode(hasText("Step 1 of weighing the options.", substring = true) and hasAnyAncestor(hasTestTag("thinking-live")), useUnmergedTree = true).assertIsNotDisplayed()

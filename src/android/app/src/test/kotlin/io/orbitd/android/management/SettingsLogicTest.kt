@@ -13,22 +13,36 @@ class SettingsLogicTest {
         assertEquals("1 of 2 online", settingsRunnersValue(listOf(buildJsonObject { put("online", true) }, buildJsonObject { put("online", false) })))
         assertEquals("None", settingsSharedLinksValue(0))
         assertEquals("25 active", settingsSharedLinksValue(25))
-        assertEquals("orbit.example.com", settingsInstanceName("https://orbit.example.com/"))
-        assertEquals("10.0.2.2:3000", settingsInstanceName("http://10.0.2.2:3000/orbit/"))
+        assertEquals(null, settingsNeedsYouValue(0))
+        assertEquals("1 needs you", settingsNeedsYouValue(1))
+        assertEquals("3 need you", settingsNeedsYouValue(3))
         assertEquals("Sign out?", SETTINGS_SIGN_OUT_TITLE)
         assertEquals(listOf("Default", "Accept Edits", "Plan", "Auto", "Don't Ask", "Bypass"), personalPermissions.map { it.second })
         assertEquals("Share task", settingsTitle("share", "TASK:abc"))
     }
 
-    /** UserPreferences.smartModelSelection: on only for an explicit true; absent, or anything but a boolean, is off. */
-    @Test fun smartModelSelectionIsOnOnlyForAnExplicitTrue() {
+    /** UserPreferences.smartModelSelection: off only for an explicit false; absent, or anything but a boolean, is on. */
+    @Test fun smartModelSelectionIsOffOnlyForAnExplicitFalse() {
         fun prefs(json: String) = Json.parseToJsonElement(json).jsonObject
         assertTrue(smartModelSelection(prefs("""{"modelRouting":true}""")))
         assertFalse(smartModelSelection(prefs("""{"modelRouting":false}""")))
-        assertFalse(smartModelSelection(prefs("""{"theme":"dark"}""")))
-        assertFalse(smartModelSelection(prefs("""{"modelRouting":"true"}""")))
-        assertFalse(smartModelSelection(prefs("""{"modelRouting":1}""")))
-        assertFalse(smartModelSelection(null))
+        assertTrue(smartModelSelection(prefs("""{"theme":"dark"}""")))
+        assertTrue(smartModelSelection(prefs("""{"modelRouting":"false"}""")))
+        assertTrue(smartModelSelection(prefs("""{"modelRouting":0}""")))
+        assertTrue(smartModelSelection(null))
+    }
+
+    /** UserPreferences.optimizeFor: each of the three values parses; absent, or anything else, reads as balance. */
+    @Test fun optimizeForIsBalanceUnlessTheAccountPickedAnother() {
+        fun prefs(json: String) = Json.parseToJsonElement(json).jsonObject
+        assertEquals("balance", optimizeFor(null))
+        assertEquals("balance", optimizeFor(prefs("""{"theme":"dark"}""")))
+        assertEquals("cost", optimizeFor(prefs("""{"optimizeFor":"cost"}""")))
+        assertEquals("balance", optimizeFor(prefs("""{"optimizeFor":"balance"}""")))
+        assertEquals("intelligence", optimizeFor(prefs("""{"optimizeFor":"intelligence"}""")))
+        assertEquals("balance", optimizeFor(prefs("""{"optimizeFor":"cheap"}""")))
+        assertEquals("balance", optimizeFor(prefs("""{"optimizeFor":1}""")))
+        assertEquals(listOf("cost", "balance", "intelligence"), OPTIMIZE_FOR_VALUES)
     }
 
     @Test fun profileSavesThePhotoFirstThenTheNameOnlyWhenEitherChanged() {

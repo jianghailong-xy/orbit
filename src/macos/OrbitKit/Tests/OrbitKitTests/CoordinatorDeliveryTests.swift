@@ -256,9 +256,8 @@ final class CoordinatorDeliveryTests: XCTestCase {
                      CoordinatorDeliveryCard.heading(run), CoordinatorDeliveryCard.openHint(run)] {
             XCTAssertFalse(said.contains("coordinator"), said)
         }
-        // The sentence and the sticky bar are what they were.
+        // The sentence is what it was.
         XCTAssertEqual(CoordinatorDeliveryCard.sentence(run), "Criteria proposal rejected")
-        XCTAssertEqual(StickySummary.of(text: "From Orbit · criteria decision", coordinatorDelivery: run).label, "↑ From Orbit")
 
         let coordinator = try XCTUnwrap(try parse(reply.replacingOccurrences(of: "false}", with: "true}")))
         XCTAssertTrue(coordinator.toCoordinator)
@@ -289,15 +288,13 @@ final class CoordinatorDeliveryTests: XCTestCase {
     // MARK: - the sticky bar
 
     /// Unlike the owner's answer, the line IS the head of a round — the reply under it answers it — so
-    /// the bar points back at it and names it `↑ From Orbit` and the sentence, never `Your question`.
-    func testTheStickyBarNamesTheLineFromOrbit() {
+    /// it ends the question's reach; and nobody typed it, so the bar hides over it rather than naming it.
+    func testTheStickyBarHidesOverTheLine() {
         XCTAssertTrue(StickySummary.isAnchor(text: Self.told, coordinatorDelivery: expected))
-        let summary = StickySummary.of(text: Self.told, coordinatorDelivery: expected)
-        XCTAssertEqual(summary.label, "↑ From Orbit")
-        XCTAssertEqual(summary.text, CoordinatorDeliveryCard.sentence(expected))
-        XCTAssertNotEqual(summary.label, StickySummary.yourQuestion)
-        XCTAssertEqual(StickySummary.compactLabel(summary.label), "↑ From Orbit", "the iPhone's capsule says it too")
-        XCTAssertEqual(StickySummary.of(text: Self.told).label, StickySummary.yourQuestion,
+        var line = UserBubble(id: "u", text: Self.told, ts: nil, pending: false, queued: false)
+        line.coordinatorDelivery = expected
+        XCTAssertTrue(StickySummary.isOrbits(line))
+        XCTAssertFalse(StickySummary.isOrbits(UserBubble(id: "u", text: Self.told, ts: nil, pending: false, queued: false)),
                        "with no card it is the reader's message, as before")
     }
 }

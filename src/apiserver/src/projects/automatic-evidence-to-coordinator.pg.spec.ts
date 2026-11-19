@@ -582,7 +582,7 @@ test('(1) an Automatic project hands the revision to its coordinator to decide, 
     }
   });
 
-test('(2) once exceptionEscalationSeconds have passed since the delivery, the owner is asked',
+test('(2) once exceptionEscalationSeconds have passed since pickup, the owner is asked',
   { skip, timeout: 180_000 }, async () => {
     const stack = await connect();
     try {
@@ -591,7 +591,13 @@ test('(2) once exceptionEscalationSeconds have passed since the delivery, the ow
       await submit(stack, w);
       const [row] = await evidenceWakes(stack.db, w.taskId);
       assert.equal(row!.status, 'DELIVERED', `refused with ${row!.refusalCode}`);
-      const deliveredAt = row!.updatedAt.getTime();
+      const takenAt = new Date(row!.updatedAt.getTime() + 3 * ESCALATION_SECONDS * 1_000);
+      assert.deepEqual(await ownerAsked(stack, w, takenAt), [], 'queued evidence started a clock');
+      await stack.db.conversationTurn.updateMany({
+        where: { sessionId: w.coordinatorSessionId!, clientTurnId: coordinatorDeliveryTurnId(row!.idempotencyKey) },
+        data: { status: 'IN_FLIGHT', deliveredAt: takenAt },
+      });
+      const deliveredAt = takenAt.getTime();
 
       // By the read's own clock: held until the second before the escalation, asked from it on.
       const window = ESCALATION_SECONDS * 1_000;
@@ -610,14 +616,15 @@ test('(2) once exceptionEscalationSeconds have passed since the delivery, the ow
       assert.equal(await ownerCount(stack, w, new Date(deliveredAt + 300_000)), 1);
 
       // And through the two production reads, which read at "now": until the delivery is old
-      // enough the owner is not asked, and once it is — the row aged by the same 300 seconds the
+      // enough the owner is not asked, and once it is — the turn aged by the same 300 seconds the
       // clock would take — the card's read lists it and the badge lights.
       assert.deepEqual(await cardNow(stack, w), []);
       assert.equal(await badge(stack, w), badgeBefore);
       await stack.db.$executeRaw`
-        UPDATE "project_coordinator_wake"
-           SET "updated_at" = "updated_at" - make_interval(secs => 301)
-         WHERE "id" = ${row!.id}::uuid`;
+        UPDATE "conversation_turn"
+           SET "delivered_at" = now() - make_interval(secs => 301)
+         WHERE "session_id" = ${w.coordinatorSessionId}::uuid
+           AND "client_turn_id" = ${coordinatorDeliveryTurnId(row!.idempotencyKey)}`;
       assert.deepEqual(await cardNow(stack, w), [w.taskId],
         'the delivery is past its escalation and the owner is still not asked');
       assert.equal(await badge(stack, w), badgeBefore + 1, 'the badge did not light with the card');
@@ -878,7 +885,7 @@ test('(9) the hold ends the moment the coordinator cannot act on it, and not whi
       const paused = await readPendingEvidenceJudgments(stack.prisma, w.ownerId, {
         id: w.coordinatorSessionId!, taskId: null,
       });
-      assert.deepEqual(paused.waitingOnCoordinator.map((r) => r.taskId), [w.taskId]);
+      assert.deepEqual(paused.waitingOnCoordinator, []);
 
       // Parked on a retry is the same pause.
       await stack.db.session.update({
@@ -904,15 +911,22 @@ test('(10) a revision the coordinator could not decide is only recorded, and the
   { skip, timeout: 180_000 }, async () => {
     const stack = await connect();
     try {
-      // A quote that is not the live criterion: nobody may decide it, so nobody is told.
+      // The criterion the task declares is deleted before it submits: the server binds no standard
+      // (a stale quote no longer can make a revision undecidable — the server ignores it), nobody may
+      // decide it, so nobody is told. The sibling below declares a criterion of its own that stays.
       const w = await world(stack, 'moved');
-      await submit(stack, w, { quote: `${STANDARD}, as it read before somebody reworded it` });
+      const kept = randomUUID();
+      await stack.db.projectAcceptanceCriterionDefinition.create({
+        data: { id: kept, projectId: w.projectId, ordinal: 2, text: STANDARD, verificationMethod: 'the same', contentHash: '0'.repeat(64) },
+      });
+      await stack.db.projectAcceptanceCriterionDefinition.delete({ where: { id: w.definitionId } });
+      await submit(stack, w);
       const [moved] = await evidenceWakes(stack.db, w.taskId);
       assert.equal(moved!.status, 'CONSUMED');
       assert.equal(moved!.consumerType, 'JUDGMENT_REQUEST_DERIVER');
       assert.deepEqual(await messagesOn(stack.db, w.coordinatorSessionId), []);
       // In the same fixture, a revision of another task that CAN be decided is delivered.
-      const sibling = await judgedTask(stack.db, w, 'moved-sibling');
+      const sibling = await judgedTask(stack.db, { ...w, definitionId: kept }, 'moved-sibling');
       await submit(stack, w, { task: sibling });
       const [siblingWake] = await evidenceWakes(stack.db, sibling.taskId);
       assert.equal(siblingWake!.status, 'DELIVERED', `refused with ${siblingWake!.refusalCode}`);
@@ -1061,7 +1075,7 @@ test('(13) a coordinator conversation that is only down is not written to or rev
       const read = await readPendingEvidenceJudgments(stack.prisma, w.ownerId, {
         id: w.coordinatorSessionId!, taskId: null,
       });
-      assert.deepEqual(read.waitingOnCoordinator.map((r) => r.taskId), [w.taskId]);
+      assert.deepEqual(read.waitingOnCoordinator, []);
     } finally {
       await stack.db.$disconnect();
     }

@@ -10,6 +10,7 @@
  * string values, which is what both a Prisma row and a decoded response hold.
  */
 import type { ProjectIntegrationBuckets, SessionWaitingKind } from './project-progress';
+import type { SessionActivity } from './task-run-reason';
 import type {
   ProjectStatus,
   RunStatus,
@@ -74,6 +75,8 @@ export interface LinkPreviewSession<Instant = string> {
   /** When an armed auto-retry re-sends the failed message; null when none is armed. */
   retryAt: Instant | null;
   engineTurnActive: boolean;
+  /** What a parked session is still doing (SessionActivity), as the list row says it. */
+  activity: SessionActivity | null;
   pendingApprovals: number;
   waitingKind: SessionWaitingKind | null;
   runningBgCount: number;

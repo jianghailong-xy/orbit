@@ -50,7 +50,7 @@ import {
   verifyCoordinatorPgIdentity,
 } from './coordinator-pg-test-safety';
 import { ProjectAcceptanceService } from './project-acceptance.service';
-import { INTEGRATION_JOB_CLAIM } from './project-integration-job';
+import { checksFor, INTEGRATION_JOB_CLAIM } from './project-integration-job';
 import { configureProjectIntegration } from './project-integration-line';
 import { ProjectOpenItemService } from './project-open-item.service';
 import { readTaskIntegrationViews } from './project-task-integration';
@@ -724,4 +724,85 @@ test('a landing’s address is not derived from its source session: the source m
     } finally {
       await stack.db.$disconnect();
     }
+  });
+
+test('K1: claims read mutable landing overrides and independent NULL fallbacks; promotions keep the merge check',
+  { skip, timeout: 240_000 }, async () => {
+    const stack = await connect();
+    try {
+      for (const [label, command, timeout] of [
+        ['overrides', 'npm run landing', 180],
+        ['fallbacks', null, null],
+        ['command-only', 'npm run landing', null],
+        ['timeout-only', null, 180],
+      ] as const) {
+        const w = await world(stack, `k1-${label}`);
+        await stack.db.$transaction((tx) => configureProjectIntegration(tx, {
+          ownerId: w.ownerId, projectId: w.projectId,
+          settings: { mergeCheckCommand: 'npm run full', mergeCheckTimeoutSeconds: 900 },
+        }));
+        const task = await doneTask(stack, w, `k1-${label}`);
+        assert.notEqual((await stack.db.projectCodebase.findFirstOrThrow({
+          where: { projectId: w.projectId },
+        })).integrationStartedAt, null, 'the landing settings remain mutable after the line locks');
+        // The queued job must read settings at claim time, even after the line has locked.
+        await stack.db.$transaction((tx) => configureProjectIntegration(tx, {
+          ownerId: w.ownerId, projectId: w.projectId,
+          settings: { landingCheckCommand: command, landingCheckTimeoutSeconds: timeout },
+        }));
+        const jobs = await beat(stack, w);
+        assert.equal(jobs.length, 1);
+        assert.deepEqual(jobs[0]!.checks, [
+          { name: 'TASK_ACCEPTANCE', command: 'exit 0', expectedExitCode: 0, timeoutSeconds: 3600 },
+          { name: 'LANDING_CHECK', command: command ?? 'npm run full', expectedExitCode: 0,
+            timeoutSeconds: timeout ?? 900 },
+        ]);
+        const settings = (await stack.projects.get(w.ownerId, w.projectId)).integration;
+        const view = await stack.projects.integration(w.ownerId, w.projectId);
+        for (const read of [settings, view]) {
+          assert.equal(read.landingCheckCommand, command);
+          assert.equal(read.landingCheckTimeoutSeconds, timeout);
+          assert.equal(read.landingCheckCommandAbsentReason,
+            command === null ? 'FALLS_BACK_TO_MERGE_CHECK' : null);
+        }
+        const runningCheck = { name: 'LANDING_CHECK' as const, index: 2, count: 2,
+          budgetSeconds: timeout ?? 900, startedAt: new Date().toISOString() };
+        const fence = { claimGeneration: jobs[0]!.claimGeneration, leaseOwner: jobs[0]!.leaseOwner };
+        await stack.api.integrationJobProgress({ id: w.runnerId }, jobs[0]!.jobId, {
+          ...fence, phase: 'CHECK', round: 1, check: runningCheck,
+        });
+        const running = await stack.projects.integration(w.ownerId, w.projectId);
+        assert.equal(running.inFlightJobs?.[0]?.check?.name, 'LANDING_CHECK');
+        await stack.api.integrationJobOutput({ id: w.runnerId }, jobs[0]!.jobId, {
+          ...fence, check: { name: 'LANDING_CHECK', index: 2 }, seq: 0, text: 'landing output',
+        });
+        const output = await stack.db.projectIntegrationJobLog.findFirstOrThrow({
+          where: { jobId: jobs[0]!.jobId },
+        });
+        assert.equal(output.checkName, 'LANDING_CHECK');
+        const failed = jobs[0]!.checks[1]!;
+        await report(stack, w, jobs[0]!, { ...RED_MERGE_CHECK,
+          checks: [{ ...failed, exitCode: 1, timedOut: false, durationMs: 100,
+            outputTail: 'landing check failed' }] });
+        const stopped = await stack.projects.integration(w.ownerId, w.projectId);
+        assert.equal(stopped.mergeCheckOnTip, 'FAILING');
+        assert.match((await read(stack, w, task)).landTask!.blockingReason!.summary, /landing check/);
+        const cb = await stack.db.projectCodebase.findFirstOrThrow({ where: { projectId: w.projectId } });
+        for (const kind of ['CHECK_PROMOTION', 'LAND_PROMOTION']) {
+          assert.deepEqual(checksFor({ ...cb, kind, promotionSourceKind: 'PROJECT_BRANCH',
+            acceptanceCommand: 'exit 7', acceptanceExpectedExitCode: 7, acceptanceTimeoutSeconds: 60,
+            skipMergeCheck: false }), [
+            { name: 'MERGE_CHECK', command: 'npm run full', expectedExitCode: 0, timeoutSeconds: 900 },
+          ]);
+        }
+        assert.deepEqual(checksFor({ ...cb, kind: 'LAND_TASK', promotionSourceKind: null,
+          acceptanceCommand: 'exit 0', acceptanceExpectedExitCode: 0, acceptanceTimeoutSeconds: 60,
+          skipMergeCheck: true }), [
+          { name: 'TASK_ACCEPTANCE', command: 'exit 0', expectedExitCode: 0, timeoutSeconds: 60 },
+        ]);
+        await assert.rejects(() => stack.db.projectCodebase.update({
+          where: { id: cb.id }, data: { landingCheckTimeoutSeconds: 0 },
+        }), /project_codebase_landing_check_timeout_positive/);
+      }
+    } finally { await stack.db.$disconnect(); }
   });

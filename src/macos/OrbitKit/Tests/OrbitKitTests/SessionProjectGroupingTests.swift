@@ -71,6 +71,22 @@ final class SessionProjectGroupingTests: XCTestCase {
                                        contentSessions: content, watching: watching, line: line)
     }
 
+    /// Design §4.3 (owner 2026-11-07): a DONE or CANCELLED project's row leads its menu with Complete,
+    /// in Open only; an OPEN project's row has no completion.
+    func testOnlyAFinishedProjectInOpenOffersComplete() {
+        for status in ProjectStatus.allCases {
+            let members = [session("coordinator", role: .coordinator, projectStatus: status),
+                           session("worker", projectStatus: status)]
+            for view in [SessionView.open, .completed] {
+                let row = listing(members, view: view, projects: []).projects.first
+                XCTAssertEqual(row?.status, status)
+                XCTAssertEqual(row?.offersComplete(in: view),
+                               view == .open && (status == .done || status == .cancelled),
+                               "\(status) in \(view)")
+            }
+        }
+    }
+
     func testAllMembershipRolesMergeInOpenAndCompleted() {
         let members = [coordinator()] + [SessionProjectMembership.Role.task, .context, .judgment, .child]
             .map { session($0.rawValue, role: $0) }
@@ -217,6 +233,45 @@ final class SessionProjectGroupingTests: XCTestCase {
         XCTAssertEqual(out.projects.first?.line,
                        SessionLine(text: "Waiting for your confirmation · Quota retry", tone: .approval))
         XCTAssertEqual(out.projects.first?.target, .session("old"))
+    }
+
+    /// Owner 2026-11-14: the tap follows the row's line when it says a member is waiting on you,
+    /// read off the rows this grouping builds, and opens the coordinator for every other line.
+    func testTheRowsTapOpensTheMemberItsWaitingLineNames() {
+        let coord = coordinator()
+        let waiting = session("p0", title: "GitHub workspaces P0", approvals: 1, since: [ago(30)])
+        let row = listing([coord, waiting, session("p1-worker", state: .running, tool: "Read")]).projects[0]
+        XCTAssertEqual(row.line.tone, .approval)
+        XCTAssertEqual(SessionProjectSheet.rowTap(row), .waitingMember(waiting))
+        // The oldest of two waiting members, the one the line names.
+        let newer = session("newer", approvals: 1, since: [ago(5)])
+        XCTAssertEqual(SessionProjectSheet.rowTap(listing([coord, newer, waiting]).projects[0]),
+                       .waitingMember(waiting))
+        // A member read from the project page's members, held by the app's lists.
+        let remote = session("remote", approvals: 1, since: [ago(90)], lastTurnAt: ago(1))
+        let fromContent = listing([coord], content: [coord, remote]).projects[0]
+        XCTAssertEqual(SessionProjectSheet.rowTap(fromContent, held: [remote]), .waitingMember(remote))
+    }
+
+    func testTheRowsTapOpensTheCoordinatorWhenItIsWaitingOrNobodyIs() {
+        let coord = coordinator(approvals: 1)
+        let both = listing([coord, session("older", approvals: 1, since: [ago(90)])]).projects[0]
+        XCTAssertEqual(both.target, .session("coordinator"))
+        XCTAssertEqual(SessionProjectSheet.rowTap(both), .coordinator(coord))
+        let quiet = coordinator()
+        let running = listing([quiet, session("worker", state: .running, tool: "Bash")],
+                              watching: [:]).projects[0]
+        XCTAssertNotEqual(running.line.tone, .approval)
+        XCTAssertEqual(SessionProjectSheet.rowTap(running), .coordinator(quiet))
+        let busyCoordinator = session("coordinator", role: .coordinator, state: .running, tool: "Bash")
+        XCTAssertEqual(SessionProjectSheet.rowTap(listing([busyCoordinator, session("idle")]).projects[0]),
+                       .coordinator(busyCoordinator))
+        let handling = listing([quiet], projects: [project(held: ProjectListCoordinatorItems(
+            count: 1, leadKind: .taskFailed, oldestWaitingSince: ago(3)))]).projects[0]
+        XCTAssertEqual(SessionProjectSheet.rowTap(handling), .coordinator(quiet))
+        let idle = listing([quiet, session("idle")]).projects[0]
+        XCTAssertEqual(SessionProjectSheet.rowTap(idle), .coordinator(quiet))
+        XCTAssertEqual(SessionProjectSheet.rowTap(idle, push: false), .sessions)
     }
 
     func testRemoteWaitSuppliesContentWhileIndicatorAndTimeStayLocal() {

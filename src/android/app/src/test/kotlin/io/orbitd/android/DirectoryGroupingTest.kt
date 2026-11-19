@@ -1,6 +1,10 @@
 package io.orbitd.android
 
+import io.orbitd.android.core.protocol.Wire
 import io.orbitd.android.directory.*
+import io.orbitd.android.navigation.Destination
+import io.orbitd.android.navigation.OrbitNavigation
+import io.orbitd.android.navigation.OrbitRoute
 import java.time.Instant
 import java.time.ZoneId
 import org.junit.Assert.*
@@ -32,6 +36,46 @@ class DirectoryGroupingTest {
         assertEquals(listOf("a"), visibleSessions(sessions, folders, "w", "f", SessionView.OPEN, null).map { it.id })
         assertEquals(3, visibleSessions(sessions, folders, "w", null, SessionView.TRASH, null).size)
         assertEquals(3, visibleSessions(sessions, folders, "w", null, SessionView.OPEN, null, byTag = true).size)
+    }
+
+    @Test fun scheduledRunsAreKeptOnlyOnTheirWorkspaceFolderPage() {
+        val run = Wire.decode(
+            """{"id":"run","agent":{"id":"w"},"folderId":"f","runSource":"SCHEDULE"}""".encodeToByteArray(),
+            DirectorySession.serializer(),
+        )
+        val rows = listOf(run, run.copy(id = "elsewhere", workspaceId = "other"), run.copy(id = "manual", runSource = "MANUAL"),
+            run.copy(id = "legacy", runSource = null))
+        assertEquals(listOf("manual", "legacy"), rows.withoutScheduledRuns().map { it.id })
+        assertEquals(listOf(run), ScheduledRunsFolder.sessions(rows, "w"))
+    }
+
+    @Test fun scheduledFolderShowsWithRunsInFolderViewsAndCountsSessionsNeedingReply() {
+        val rows = listOf(
+            DirectorySession("running", status = "RUNNING", workspaceId = "w", runSource = "SCHEDULE"),
+            DirectorySession("waiting", pendingApprovals = 3, workspaceId = "w", runSource = "SCHEDULE"),
+            DirectorySession("start", pendingApprovals = 1, waitingKind = "START_REQUEST", workspaceId = "w", runSource = "SCHEDULE"),
+            DirectorySession("parked", status = "AWAITING_INPUT", engineTurnActive = true, workspaceId = "w", runSource = "SCHEDULE"),
+        )
+        val sessions = ScheduledRunsFolder.sessions(rows, "w")
+        for (view in listOf(SessionView.OPEN, SessionView.COMPLETED)) {
+            val show = listShowsFolders(false, view, null, Grouping.RECENCY)
+            assertEquals(FolderRowSummary(4, 1, true), ScheduledRunsFolder.row(sessions, show))
+            assertNull(ScheduledRunsFolder.row(emptyList(), show))
+        }
+        assertEquals(FolderRowSummary(3, 1, false), ScheduledRunsFolder.row(sessions.drop(1), true))
+        assertNull(ScheduledRunsFolder.row(sessions, listShowsFolders(false, SessionView.TRASH, null, Grouping.RECENCY)))
+        assertNull(ScheduledRunsFolder.row(sessions, listShowsFolders(false, SessionView.OPEN, "tag", Grouping.RECENCY)))
+        assertNull(ScheduledRunsFolder.row(sessions, listShowsFolders(false, SessionView.OPEN, null, Grouping.TAG)))
+        assertNull(ScheduledRunsFolder.row(sessions, listShowsFolders(true, SessionView.OPEN, null, Grouping.RECENCY)))
+    }
+
+    @Test fun backFromRunKeepsTheFolderAndItsView() {
+        val workspace = OrbitRoute(Destination.WORKSPACE, "w")
+        val folder = OrbitRoute(Destination.FOLDER, ScheduledRunsFolder.ID, "w", sessionView = SessionView.COMPLETED.query)
+        val run = OrbitRoute(Destination.SESSION, "run", "w")
+        val nav = OrbitNavigation().select("w", workspace).push(folder).push(run)
+        assertEquals(folder, nav.back().current)
+        assertEquals(workspace, nav.back().back().current)
     }
 
     @Test fun tagGroupingUsesOnePrimaryTagPerSessionAndKeepsUntagged() {

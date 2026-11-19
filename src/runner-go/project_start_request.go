@@ -103,6 +103,28 @@ func projectStartRequestBody(args map[string]interface{}) (map[string]interface{
 		}
 		body["mergeCheckTimeoutSeconds"] = seconds
 	}
+	if raw, present := args["landingCheckCommand"]; present {
+		if raw != nil {
+			command, ok := raw.(string)
+			if !ok {
+				return nil, errors.New("landingCheckCommand must be a string or null")
+			}
+			body["landingCheckCommand"] = strings.TrimSpace(command)
+		} else {
+			body["landingCheckCommand"] = nil
+		}
+	}
+	if raw, present := args["landingCheckTimeoutSeconds"]; present {
+		if raw == nil {
+			body["landingCheckTimeoutSeconds"] = nil
+		} else {
+			seconds, err := positiveSeconds(raw, "landingCheckTimeoutSeconds")
+			if err != nil {
+				return nil, err
+			}
+			body["landingCheckTimeoutSeconds"] = seconds
+		}
+	}
 	return body, nil
 }
 

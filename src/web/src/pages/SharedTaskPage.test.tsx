@@ -230,17 +230,16 @@ function appPanelBlocks(): string[] {
       </MemoryRouter>
     </QueryClientProvider>,
   );
-  const PUBLIC_NAME: Record<string, string> = {
-    Dependencies: 'dependencies',
-    Description: 'description',
-    Acceptance: 'acceptance',
-    Inputs: 'inputs',
-    Runs: 'runs',
-    Comments: 'comments',
+  // The panel's section titles, as the public page's blocks: "Done means" holds the acceptance and
+  // the brief (the description), "In the plan" the dependencies, Activity the runs and comments.
+  const PUBLIC_NAMES: Record<string, string[]> = {
+    'Done means': ['acceptance', 'description'],
+    'In the plan': ['dependencies'],
+    Inputs: ['inputs'],
+    Activity: ['runs', 'comments'],
   };
   return [...html.matchAll(/class="tdp-section-title">([^<(]+)/g)]
-    .map((m) => PUBLIC_NAME[m[1].trim()])
-    .filter((name): name is string => name != null);
+    .flatMap((m) => PUBLIC_NAMES[m[1].trim()] ?? []);
 }
 
 describe('a task link’s public page', { timeout: 60_000 }, () => {
@@ -252,7 +251,7 @@ describe('a task link’s public page', { timeout: 60_000 }, () => {
     // The header first — how it ended, how that is judged, when — then the panel's own blocks in the
     // panel's own order: the app draws the same task's blocks, and the page must agree with it.
     const panel = appPanelBlocks();
-    expect(panel).toEqual(['dependencies', 'description', 'acceptance', 'inputs', 'runs', 'comments']);
+    expect(panel).toEqual(['acceptance', 'description', 'dependencies', 'inputs', 'runs', 'comments']);
     expect(blocks()).toEqual(['header', ...panel]);
     const header = container.querySelector('[data-block="header"]')!.textContent;
     expect(header).toContain('Done');
@@ -263,7 +262,7 @@ describe('a task link’s public page', { timeout: 60_000 }, () => {
   it('without its layers: no comments, no files, and no way into a run', async () => {
     rootAnswer = taskRoot({ commentsAndFiles: false, conversations: false });
     await mount(`/s/${TOKEN}`);
-    expect(blocks()).toEqual(['header', 'dependencies', 'description', 'acceptance', 'runs']);
+    expect(blocks()).toEqual(['header', 'acceptance', 'description', 'dependencies', 'runs']);
     const runs = container.querySelector('[data-block="runs"]')!;
     expect(runs.textContent).toContain('Conversation not shared');
     expect(runs.querySelector('a')).toBeNull();

@@ -7,13 +7,13 @@
 # session takes any turn; the session answers its next message, once; and a control turn asked for during the outage is
 # handed out once, to the session's next engine, and to nothing that fetched for the one that stopped.
 #
-#   release-outage-drill.sh prepare  The stack in shadow mode (MODE_HTTP), built from this checkout; the runner and the
-#                                    suite's scripted claude built from ORBIT_RELEASE_OUTAGE_RUNNER_SRC; the runner
-#                                    registered, working over HTTPS.
-#   release-outage-drill.sh https    The apiserver killed for ORBIT_RELEASE_OUTAGE_SECONDS, the runner on HTTPS.
-#   release-outage-drill.sh link     The stack in MODE_LINK and the runner on the link; the link gateway killed as long, the
-#                                    apiserver up; a diff refresh asked for while it is down.
-#   release-outage-drill.sh all      prepare, https, link.
+#   release-outage-drill.sh prepare    The stack, built from this checkout; the runner and the suite's scripted claude
+#                                      built from ORBIT_RELEASE_OUTAGE_RUNNER_SRC; the runner registered, working over the
+#                                      link.
+#   release-outage-drill.sh apiserver  The apiserver killed for ORBIT_RELEASE_OUTAGE_SECONDS, the link gateway up.
+#   release-outage-drill.sh link       The link gateway killed as long, the apiserver up; a diff refresh asked for while
+#                                      it is down.
+#   release-outage-drill.sh all        prepare, apiserver, link.
 #   release-outage-drill.sh stop     Stop the drill runner.
 #
 # Settings, besides the staging stack's own (staging-lib.sh, staging-up.sh):
@@ -33,7 +33,7 @@ set -euo pipefail
 # shellcheck source=../staging-lib.sh
 source "$(dirname "${BASH_SOURCE[0]}")/../staging-lib.sh"
 
-helper="$here/drills/rollback-drill.mjs"
+helper="$here/drills/drill-api.mjs"
 out="$state/client/release-outage"
 drill="$state/release-outage-runner"
 timeline="$out/timeline.txt"
@@ -279,9 +279,9 @@ outage() {
 prepare() {
   local name
   rm -f "$timeline"
-  say "prepare: the stack $project in shadow mode, built from $(git -C "$repo" rev-parse --short HEAD); the runner from $runner_src ($(git -C "$runner_src" rev-parse --short HEAD), $(git -C "$runner_src" status --short -- src/runner-go | wc -l) files changed)"
+  say "prepare: the stack $project, built from $(git -C "$repo" rev-parse --short HEAD); the runner from $runner_src ($(git -C "$runner_src" rev-parse --short HEAD), $(git -C "$runner_src" status --short -- src/runner-go | wc -l) files changed)"
   stop_runner
-  ORBIT_LINK_STAGING_MODE=http ORBIT_LINK_STAGING_BACKENDS=1 "$here/staging-up.sh" > "$out/prepare-staging-up.log" 2>&1 ||
+  ORBIT_LINK_STAGING_BACKENDS=1 "$here/staging-up.sh" > "$out/prepare-staging-up.log" 2>&1 ||
     fail "staging-up.sh (see $out/prepare-staging-up.log)"
   stack_settings
   say "stack $project up at $origin"
@@ -315,35 +315,25 @@ EOF
   ( trap '' HUP; exec setsid "${runner[@]}" run ) < /dev/null >> "$drill/runner.log" 2>&1 &
   echo $! > "$drill/runner.pid"
   say "drill runner $name ($(runner_id)) started (pid $(runner_pid))"
-  wait_presence HTTP 120
+  wait_log 'carries the work of process' 0 120
+  wait_presence LINK 120
   api workspace "$(runner_id)" "$drill/work" "$name" > "$drill/workspace.json" || fail "creating the drill workspace"
   say "workspace: $(cat "$drill/workspace.json")"
   printf 'phase\tsession\tdown_at\tback_at\treleased_at\tduring\tafter\tnext_message\tdiff_turn\tverdict\n' > "$table"
-  say "prepare holds: the runner works over HTTPS"
+  say "prepare holds: the runner works over the link"
 }
 
-https_phase() {
+apiserver_phase() {
   stack_settings
   runner_running || fail "the drill runner is not running: run prepare"
-  [ "$(setting STAGING_MODE http)" = http ] || fail "the stack is in $(setting STAGING_MODE http) mode: run prepare"
-  wait_presence HTTP 60
-  outage https "$project-apiserver"
+  wait_presence LINK 60
+  outage apiserver "$project-apiserver"
 }
 
 link_phase() {
   stack_settings
   runner_running || fail "the drill runner is not running: run prepare"
-  local before
-  before="$(log_count 'runner link mode: on')"
-  if [ "$(setting STAGING_MODE http)" != link ]; then
-    say "link: the stack to MODE_LINK"
-    ORBIT_LINK_STAGING_MODE=link ORBIT_LINK_STAGING_BACKENDS=1 "$here/staging-up.sh" --no-build > "$out/link-staging-up.log" 2>&1 ||
-      fail "staging-up.sh to MODE_LINK (see $out/link-staging-up.log)"
-    wait_log 'runner link mode: on' "$before" 180
-  fi
   wait_presence LINK 120
-  # The long polls the runner opened over HTTPS before the switch (25 s at most) end there first.
-  sleep 30
   outage link "$project-link-gateway"
 }
 
@@ -352,13 +342,13 @@ summary() {
 }
 
 case "${1:-}" in
-  prepare|https|link|all|stop) mkdir -p "$out" ;;
+  prepare|apiserver|link|all|stop) mkdir -p "$out" ;;
 esac
 case "${1:-}" in
   prepare) prepare ;;
-  https) https_phase; summary ;;
+  apiserver) apiserver_phase; summary ;;
   link) link_phase; summary ;;
-  all) prepare; https_phase; link_phase; summary ;;
+  all) prepare; apiserver_phase; link_phase; summary ;;
   stop) stop_runner ;;
   -h|--help|"") sed -n '2,32p' "$0" ;;
   *) die "unknown phase $1 (see --help)" ;;

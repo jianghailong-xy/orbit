@@ -120,3 +120,8 @@ test('each announcer still carries the call that tells the owner', () => {
     );
   }
 });
+
+test('the derived project DONE edge announces the committed transition', () => {
+  const source = readFileSync(path.join(SRC, 'projects/project-done-derived.ts'), 'utf8');
+  assert.match(source, /\bnotifyProjectDone\s*\(/);
+});

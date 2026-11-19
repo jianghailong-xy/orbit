@@ -3,6 +3,7 @@ import {
   antigravityModelBuckets,
   codexAccountSnapshot,
   type PlanUsage,
+  type PlanUsageExtraUsage,
   type PlanUsageRateLimit,
   type PlanUsageSnapshot,
   type PlanUsageWindow,
@@ -362,6 +363,78 @@ export function planUsageRows(usage: PlanUsageSnapshot): PlanUsageDisplayRow[] {
       },
     ];
   });
+}
+
+/** Where a Claude login's weekly resets are used: Orbit never spends one (resetGrants). */
+export const CLAUDE_USAGE_PAGE = 'https://claude.ai/settings/usage';
+
+/** A Claude login's weekly limit counts as nearly used from here, for the reset reminder. */
+const CLAUDE_RESET_HINT_PERCENT = 90;
+
+const isClaudeSnapshot = (usage: PlanUsageSnapshot): boolean =>
+  (usage.provider ?? AgentProvider.CLAUDE) === AgentProvider.CLAUDE &&
+  !usage.primary &&
+  !usage.secondary &&
+  !usage.rateLimits?.length;
+
+/**
+ * A Claude login's model-scoped weekly limits (PlanUsageSnapshot.modelLimits) as popover rows, after
+ * the named windows. Display only: they are not planUsageRows, so neither the pill's number nor any
+ * quota decision weighs them. A limit past its reset reads as the fresh window it now is.
+ */
+export function claudeModelLimitRows(usage: PlanUsageSnapshot, now: number = Date.now()): PlanUsageDisplayRow[] {
+  if (!isClaudeSnapshot(usage)) return [];
+  return (usage.modelLimits ?? []).map((limit) => {
+    const at = Date.parse(limit.resetsAt ?? '');
+    const over = !Number.isNaN(at) && at <= now;
+    const utilization = over ? 0 : limit.utilization;
+    return {
+      key: `model:${limit.model}`,
+      label: `Weekly · ${limit.model}`,
+      window: over ? { utilization } : { utilization, ...(limit.resetsAt ? { resetsAt: limit.resetsAt } : {}) },
+      percent: clampPercent(utilization),
+      nearLimit: utilization >= 90,
+    };
+  });
+}
+
+function formatMinor(minor: number, extra: PlanUsageExtraUsage): string {
+  const exponent = extra.exponent ?? 0;
+  const amount = minor / 10 ** exponent;
+  if (!extra.currency) return amount.toFixed(exponent);
+  try {
+    return new Intl.NumberFormat('en-US', { style: 'currency', currency: extra.currency }).format(amount);
+  } catch {
+    return `${amount.toFixed(exponent)} ${extra.currency}`;
+  }
+}
+
+/** A Claude login's extra usage (PlanUsageSnapshot.extraUsage) in one line: "Off", "On", or what it
+ *  spent ("$1.20 used", "$1.20 of $50.00"). Null when the endpoint said nothing about it. */
+export function claudeExtraUsageLabel(usage: PlanUsageSnapshot): string | null {
+  const extra = isClaudeSnapshot(usage) ? usage.extraUsage : undefined;
+  if (!extra) return null;
+  if (!extra.enabled) return 'Off';
+  if (typeof extra.usedMinor !== 'number') return 'On';
+  const used = formatMinor(extra.usedMinor, extra);
+  return typeof extra.limitMinor === 'number' ? `${used} of ${formatMinor(extra.limitMinor, extra)}` : `${used} used`;
+}
+
+/**
+ * The reminder a Claude login gets once its weekly limit is nearly used: resets are used on
+ * claude.ai, never from Orbit. Names how many the endpoint says are usable when it says so — over
+ * OAuth it has so far answered ineligible, so mostly it can only point the way. Null below the line,
+ * for a weekly window past its reset, and for any other engine.
+ */
+export function claudeResetHint(usage: PlanUsageSnapshot, now: number = Date.now()): string | null {
+  if (!isClaudeSnapshot(usage)) return null;
+  const weekly = currentPlanUsageRows(usage, now).find((row) => row.key === 'sevenDay');
+  if (!weekly || weekly.window.utilization < CLAUDE_RESET_HINT_PERCENT) return null;
+  const left = usage.resetGrants?.eligible ? usage.resetGrants.resetsLeft : 0;
+  if (left > 0) {
+    return `Weekly limit nearly used. You have ${left} weekly reset${left === 1 ? '' : 's'} to use on claude.ai.`;
+  }
+  return 'Weekly limit nearly used. If your plan includes a weekly reset, you can use it on claude.ai.';
 }
 
 /**

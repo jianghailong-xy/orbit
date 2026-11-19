@@ -288,15 +288,21 @@ public struct WikiChatWorkspace: Codable, Equatable, Sendable, Identifiable {
     }
 }
 
-/// One chat of a space (contract `chat.list.chats`), newest first.
+/// One chat of a space (contract `chat.list.chats`), the one last spoken in first.
 public struct WikiChatRow: Codable, Equatable, Sendable, Identifiable {
     public let sessionId: String
     public let title: String
     public let status: String
     /// One of the open session statuses and not in Trash.
     public let open: Bool
+    /// In the session list's Completed (board 45 ④); false from an older server.
+    public let completed: Bool
+    /// A turn of it is queued or running; false from an older server.
+    public let working: Bool
     public let createdAt: String?
     public let updatedAt: String?
+    /// Its last turn's time, else its creation's: what the list is ordered by. Nil from an older server.
+    public let lastActiveAt: String?
     /// How many cards it holds.
     public let drafts: Int
     /// How many of the button's `needsYou` are this chat's.
@@ -305,13 +311,18 @@ public struct WikiChatRow: Codable, Equatable, Sendable, Identifiable {
     public var id: String { sessionId }
 
     public init(sessionId: String, title: String = "", status: String = "", open: Bool = true,
-                createdAt: String? = nil, updatedAt: String? = nil, drafts: Int = 0, needsYou: Int = 0) {
+                completed: Bool = false, working: Bool = false,
+                createdAt: String? = nil, updatedAt: String? = nil, lastActiveAt: String? = nil,
+                drafts: Int = 0, needsYou: Int = 0) {
         self.sessionId = sessionId
         self.title = title
         self.status = status
         self.open = open
+        self.completed = completed
+        self.working = working
         self.createdAt = createdAt
         self.updatedAt = updatedAt
+        self.lastActiveAt = lastActiveAt
         self.drafts = drafts
         self.needsYou = needsYou
     }
@@ -322,8 +333,11 @@ public struct WikiChatRow: Codable, Equatable, Sendable, Identifiable {
         title = try c.decodeIfPresent(String.self, forKey: .title) ?? ""
         status = try c.decodeIfPresent(String.self, forKey: .status) ?? ""
         open = try c.decodeIfPresent(Bool.self, forKey: .open) ?? true
+        completed = try c.decodeIfPresent(Bool.self, forKey: .completed) ?? false
+        working = try c.decodeIfPresent(Bool.self, forKey: .working) ?? false
         createdAt = try c.decodeIfPresent(String.self, forKey: .createdAt)
         updatedAt = try c.decodeIfPresent(String.self, forKey: .updatedAt)
+        lastActiveAt = try c.decodeIfPresent(String.self, forKey: .lastActiveAt)
         drafts = try c.decodeIfPresent(Int.self, forKey: .drafts) ?? 0
         needsYou = try c.decodeIfPresent(Int.self, forKey: .needsYou) ?? 0
     }
@@ -337,14 +351,17 @@ public struct WikiChatList: Codable, Equatable, Sendable {
     public let choices: [WikiChatWorkspace]
     public let fab: WikiChatFabCounts
     public let chats: [WikiChatRow]
+    /// More chats match past this page (contract `chat.list.page`); false from an older server.
+    public let more: Bool
 
     public init(spaceId: String, workspace: WikiChatWorkspace? = nil, choices: [WikiChatWorkspace] = [],
-                fab: WikiChatFabCounts = WikiChatFabCounts(), chats: [WikiChatRow] = []) {
+                fab: WikiChatFabCounts = WikiChatFabCounts(), chats: [WikiChatRow] = [], more: Bool = false) {
         self.spaceId = spaceId
         self.workspace = workspace
         self.choices = choices
         self.fab = fab
         self.chats = chats
+        self.more = more
     }
 
     public init(from decoder: Decoder) throws {
@@ -354,6 +371,7 @@ public struct WikiChatList: Codable, Equatable, Sendable {
         choices = try c.decodeIfPresent([WikiChatWorkspace].self, forKey: .choices) ?? []
         fab = try c.decodeIfPresent(WikiChatFabCounts.self, forKey: .fab) ?? WikiChatFabCounts()
         chats = try c.decodeIfPresent([WikiChatRow].self, forKey: .chats) ?? []
+        more = try c.decodeIfPresent(Bool.self, forKey: .more) ?? false
     }
 }
 
@@ -364,7 +382,8 @@ public struct WikiChatContext: Codable, Equatable, Sendable {
     public enum Page: Equatable, Sendable {
         case doc(docSlug: String, sectionKey: String)
         case entry(entryId: String)
-        case plan(docSlug: String)
+        /// A plan page, at one of its document's sections when it shows one (C12).
+        case plan(docSlug: String, sectionKey: String? = nil)
     }
 
     public struct Selection: Codable, Equatable, Sendable {
@@ -399,7 +418,8 @@ public struct WikiChatContext: Codable, Equatable, Sendable {
             case "doc":   page = .doc(docSlug: try p.decode(String.self, forKey: .docSlug),
                                       sectionKey: try p.decode(String.self, forKey: .sectionKey))
             case "entry": page = .entry(entryId: try p.decode(String.self, forKey: .entryId))
-            case "plan":  page = .plan(docSlug: try p.decode(String.self, forKey: .docSlug))
+            case "plan":  page = .plan(docSlug: try p.decode(String.self, forKey: .docSlug),
+                                       sectionKey: try p.decodeIfPresent(String.self, forKey: .sectionKey))
             default:      page = nil
             }
         } else {
@@ -420,32 +440,42 @@ public struct WikiChatContext: Codable, Equatable, Sendable {
             case .entry(let id):
                 try p.encode("entry", forKey: .kind)
                 try p.encode(id, forKey: .entryId)
-            case .plan(let slug):
+            case .plan(let slug, let key):
                 try p.encode("plan", forKey: .kind)
                 try p.encode(slug, forKey: .docSlug)
+                try p.encodeIfPresent(key, forKey: .sectionKey)
             }
         }
         try c.encodeIfPresent(selection, forKey: .selection)
     }
 }
 
-/// `POST /wiki/spaces/:id/chats` (contract `chat.create.body`): the owner's first words, word for word.
+/// `POST /wiki/spaces/:id/chats` (contract `chat.create.body`): the owner's first words, word for word, and what the
+/// composer's attachment row and toolbar hold (board 43) — the pictures and files staged for it, and the model, mode,
+/// effort and speed. Left out, each starts as a session of the workspace does.
 public struct WikiChatCreateRequest: Encodable, Equatable, Sendable {
     public let workspaceId: String?
     public let content: String
     public let clientTurnId: String
     public let wikiContext: WikiChatContext?
+    public let attachmentIds: [String]?
     public let model: String?
     public let permissionMode: String?
+    public let effort: String?
+    public let fastMode: Bool?
 
     public init(workspaceId: String?, content: String, clientTurnId: String, wikiContext: WikiChatContext? = nil,
-                model: String? = nil, permissionMode: String? = nil) {
+                attachmentIds: [String]? = nil, model: String? = nil, permissionMode: String? = nil,
+                effort: String? = nil, fastMode: Bool? = nil) {
         self.workspaceId = workspaceId
         self.content = content
         self.clientTurnId = clientTurnId
         self.wikiContext = wikiContext
+        self.attachmentIds = attachmentIds
         self.model = model
         self.permissionMode = permissionMode
+        self.effort = effort
+        self.fastMode = fastMode
     }
 }
 
@@ -537,6 +567,104 @@ public struct WikiChatDraftRewrite: Codable, Equatable, Sendable {
     }
 }
 
+/// A plan card's change (contract `chat.drafts.read`, change; C12, C17): the documents it puts into the plan — each one
+/// of the plan's by its slug, or a new one — in the plan's new order, and the sections it moves between them, against
+/// the confirmed version it was drafted on, with the version its press made.
+public struct WikiChatPlanChange: Codable, Equatable, Sendable {
+    public struct Category: Codable, Equatable, Sendable {
+        public let key: String
+        public let title: String
+        /// The change opens it: the plan had no such category.
+        public let opens: Bool
+    }
+
+    /// One section a plan card adds, changes or removes in one of its documents.
+    public struct Section: Codable, Equatable, Sendable {
+        public let key: String
+        public let title: String
+        /// Its place in the document: 2 for `§2`.
+        public let number: Int
+        /// `added`, `changed` or `removed`.
+        public let edit: String
+        /// A changed one's fields that change (`chat.copy.planFields`'s keys).
+        public let fields: [String]
+        /// What it covers as the change has it, when it is added or its covers change.
+        public let covers: String?
+    }
+
+    /// One document the card puts into the plan.
+    public struct Doc: Codable, Equatable, Sendable {
+        public let slug: String
+        public let title: String
+        /// "3.1": where the version the card was drafted on numbers it — a new one's, where the change puts it.
+        public let number: String
+        /// A document the plan did not have.
+        public let added: Bool
+        /// The category it is filed under, and whether the change opens it.
+        public let category: Category
+        /// Its own fields that change, in the schema's order (none for a new one).
+        public let fields: [String]
+        /// The sections it adds or changes, in its new order, then the ones it removes; a section moved in or out is a
+        /// move, not here.
+        public let sections: [Section]
+
+        public init(from decoder: Decoder) throws {
+            let c = try decoder.container(keyedBy: CodingKeys.self)
+            slug = try c.decode(String.self, forKey: .slug)
+            title = try c.decodeIfPresent(String.self, forKey: .title) ?? ""
+            number = try c.decodeIfPresent(String.self, forKey: .number) ?? ""
+            added = try c.decodeIfPresent(Bool.self, forKey: .added) ?? false
+            category = try c.decode(Category.self, forKey: .category)
+            fields = try c.decodeIfPresent([String].self, forKey: .fields) ?? []
+            sections = try c.decodeIfPresent([Section].self, forKey: .sections) ?? []
+        }
+    }
+
+    /// Where a moved section was, or where the change puts it: its document, that document's number, its key and its
+    /// place (3 for `§3`).
+    public struct Place: Codable, Equatable, Sendable {
+        public let doc: String
+        public let number: String
+        public let key: String
+        public let section: Int
+    }
+
+    /// A section a plan card moves from one of its documents to another.
+    public struct Move: Codable, Equatable, Sendable {
+        public let title: String
+        public let from: Place
+        public let to: Place
+        /// Its fields that change besides its place, in the schema's order.
+        public let fields: [String]
+        /// Its covers as the change has them, when the move changes them.
+        public let covers: String?
+
+        public init(from decoder: Decoder) throws {
+            let c = try decoder.container(keyedBy: CodingKeys.self)
+            title = try c.decodeIfPresent(String.self, forKey: .title) ?? ""
+            from = try c.decode(Place.self, forKey: .from)
+            to = try c.decode(Place.self, forKey: .to)
+            fields = try c.decodeIfPresent([String].self, forKey: .fields) ?? []
+            covers = try c.decodeIfPresent(String.self, forKey: .covers)
+        }
+    }
+
+    /// The confirmed version the card was drafted on.
+    public let baseVersion: Int
+    /// The version its press made and confirmed; nil until it is pressed.
+    public let version: Int?
+    public let docs: [Doc]
+    public let moves: [Move]
+
+    public init(from decoder: Decoder) throws {
+        let c = try decoder.container(keyedBy: CodingKeys.self)
+        baseVersion = try c.decodeIfPresent(Int.self, forKey: .baseVersion) ?? 0
+        version = try c.decodeIfPresent(Int.self, forKey: .version)
+        docs = try c.decodeIfPresent([Doc].self, forKey: .docs) ?? []
+        moves = try c.decodeIfPresent([Move].self, forKey: .moves) ?? []
+    }
+}
+
 /// A card as the owner's door serves it (contract `chat.drafts.read`).
 public struct WikiChatDraftView: Codable, Equatable, Sendable, Identifiable {
     public let id: String
@@ -563,6 +691,8 @@ public struct WikiChatDraftView: Codable, Equatable, Sendable, Identifiable {
     public let undoable: Bool
     public let changesetId: String?
     public let rewrite: WikiChatDraftRewrite?
+    /// A plan card's change (contract `chat.drafts.read`, change; C12); nil on every other card, and on an older server.
+    public let change: WikiChatPlanChange?
     public let createdAt: String?
 
     public init(from decoder: Decoder) throws {
@@ -586,6 +716,7 @@ public struct WikiChatDraftView: Codable, Equatable, Sendable, Identifiable {
         undoable = try c.decodeIfPresent(Bool.self, forKey: .undoable) ?? false
         changesetId = try c.decodeIfPresent(String.self, forKey: .changesetId)
         rewrite = try c.decodeIfPresent(WikiChatDraftRewrite.self, forKey: .rewrite)
+        change = try c.decodeIfPresent(WikiChatPlanChange.self, forKey: .change)
         createdAt = try c.decodeIfPresent(String.self, forKey: .createdAt)
     }
 

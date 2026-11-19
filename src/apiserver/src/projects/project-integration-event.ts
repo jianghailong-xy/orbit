@@ -68,7 +68,7 @@ export interface IntegrationJobEventInput {
   kind: IntegrationJobEventKind;
   claim?: number | bigint;
   round?: number | null;
-  check?: { name: 'TASK_ACCEPTANCE' | 'MERGE_CHECK'; index: number } | null;
+  check?: { name: 'TASK_ACCEPTANCE' | 'MERGE_CHECK' | 'LANDING_CHECK'; index: number } | null;
   phase?: string | null;
   step?: string | null;
   actor?: IntegrationTimelineActorInput | null;
@@ -173,7 +173,7 @@ export function minutesText(seconds: number | null | undefined): string {
 }
 
 /** What queued an attempt, which the enqueue event's own text says. */
-export type EnqueueCause = 'DONE' | 'RETRY' | 'BACKFILL' | 'BEHIND_WORK' | 'DECISION' | 'AUTOMATIC';
+export type EnqueueCause = 'DONE' | 'RETRY' | 'SKIP_CHECK' | 'BACKFILL' | 'BEHIND_WORK' | 'BASELINE_HELD' | 'DECISION' | 'AUTOMATIC';
 
 export function enqueuedText(input: {
   kind: IntegrationJobKind;
@@ -195,8 +195,12 @@ export function enqueuedText(input: {
   switch (input.cause) {
     case 'RETRY':
       return `Queued again to land on ${target}`;
+    case 'SKIP_CHECK':
+      return `Queued again to land on ${target} · without the landing check`;
     case 'BACKFILL':
       return `Queued to land on ${target} · the project started integrating`;
+    case 'BASELINE_HELD':
+      return `Queued to land on ${target} · waiting for the baseline to be fixed`;
     case 'BEHIND_WORK':
       return `Queued to land on ${target} · the task's work ended on another branch`;
     default:
@@ -233,12 +237,12 @@ export function roundText(round: number, kind: string): string {
   return kind === 'LAND_TASK' ? `Round ${round} of ${LAND_TASK_ROUNDS_PER_CLAIM}` : `Round ${round}`;
 }
 
-export function checkLabel(name: 'TASK_ACCEPTANCE' | 'MERGE_CHECK'): string {
-  return name === 'MERGE_CHECK' ? 'Merge check' : 'Task acceptance';
+export function checkLabel(name: 'TASK_ACCEPTANCE' | 'MERGE_CHECK' | 'LANDING_CHECK'): string {
+  return name === 'LANDING_CHECK' ? 'Landing check' : name === 'MERGE_CHECK' ? 'Merge check' : 'Task acceptance';
 }
 
 export function checkStartedText(
-  check: { name: 'TASK_ACCEPTANCE' | 'MERGE_CHECK' },
+  check: { name: 'TASK_ACCEPTANCE' | 'MERGE_CHECK' | 'LANDING_CHECK' },
   claim: number | null,
   runnerName: string | null,
 ): string {
@@ -249,14 +253,22 @@ export function checkStartedText(
 }
 
 export function checkFinishedText(check: {
-  name: 'TASK_ACCEPTANCE' | 'MERGE_CHECK';
+  scope?: 'COMBINED' | 'BASELINE';
+  skipped?: 'PATHS_EXEMPT';
+  name: 'TASK_ACCEPTANCE' | 'MERGE_CHECK' | 'LANDING_CHECK';
   exitCode: number | null;
   expectedExitCode: number;
   timedOut: boolean;
   durationMs: number;
 }): string {
-  const label = checkLabel(check.name);
+  const label = check.scope === 'BASELINE'
+    ? 'Checked the project branch with main, without this task'
+    : checkLabel(check.name);
+  if (check.skipped === 'PATHS_EXEMPT') return `${label} skipped · only exempt paths changed`;
   if (check.timedOut) return `${label} timed out after ${durationText(check.durationMs)}`;
+  if (check.scope === 'BASELINE' && check.exitCode != null) {
+    return `${label} · ${check.exitCode === check.expectedExitCode ? 'passes' : 'also fails'}`;
+  }
   if (check.exitCode !== check.expectedExitCode) {
     const code = check.exitCode == null ? 'no exit code' : `exit ${check.exitCode}`;
     return `${label} failed · ${code} · ${durationText(check.durationMs)}`;
@@ -396,8 +408,10 @@ export function retryText(input: {
   return input.reason ? `${head} · ${input.reason}` : head;
 }
 
+/** A skip is only ever of a task landing's check, which since §11 K1 is the landing check (the
+ *  project's `landing_check_command`, or its merge check where that is unset). */
 export function skippedCheckText(reason: string | null): string {
-  return reason ? `Merge check skipped · ${reason}` : 'Merge check skipped';
+  return reason ? `Landing check skipped · ${reason}` : 'Landing check skipped';
 }
 
 export function handlingText(itemState: 'OPEN' | 'CLOSED'): string {
@@ -590,7 +604,7 @@ export function eventEntry(row: EventRow): IntegrationTimelineEntry<Date> {
     claim: Number(row.claim),
     round: row.round,
     check: row.checkName && row.checkIndex != null
-      ? { name: row.checkName as 'TASK_ACCEPTANCE' | 'MERGE_CHECK', index: row.checkIndex }
+      ? { name: row.checkName as 'TASK_ACCEPTANCE' | 'MERGE_CHECK' | 'LANDING_CHECK', index: row.checkIndex }
       : null,
     phase: row.phase as IntegrationTimelineEntry<Date>['phase'],
     step: row.step,

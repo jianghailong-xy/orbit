@@ -341,6 +341,14 @@ export enum RunEventType {
   // of truth is GET /sessions/:id/turns, which focused clients re-fetch on receipt. Keeping the
   // payload empty avoids maintaining a second queued-turn wire shape on the event stream.
   QUEUED_TURNS_CHANGED = 'queued_turns_changed',
+  // Settings › Translation: an agent reply (an `assistant` text block) or a prompt_suggestion was
+  // translated into the owner's language, or its translation failed. Live-only, seq 0, like the
+  // approval nudges, so it never takes a runner-owned seq: the durable record is the
+  // `translation` key the server writes into the translated event's own payload, which every
+  // replay (/events/page, the SSE catch-up, /events/:seq/full) carries. Payload:
+  // TranslationEventPayload { of: <seq of the translated event>, lang, text } or { of, lang,
+  // failed: true } (@orbit/shared translation.ts).
+  TRANSLATION = 'translation',
   // "This stream cannot bring your window up to date in place — drop your cached window and
   // re-seed from a tail page." Never persisted. The SSE endpoint synthesizes it when a resuming
   // client's gap exceeds SSE_GAP_CAP; an apiserver hands it to its own streams of a session (never
@@ -415,6 +423,16 @@ export enum RunEventType {
   // Nothing depends on it (contract `realtime.correctness`): the wiki pages re-read on focus and on
   // reconnect, so a dropped one costs latency and nothing else.
   WIKI_CHANGED = 'wiki_changed',
+  // The owner's terminals changed: a terminal asked to be approved, a request was approved, denied or
+  // collected, or a terminal credential was revoked (docs/terminal-session-design.md). Owner-scoped like
+  // the libraries above, and only a nudge carrying the request's or credential's id: the approve card
+  // and Settings → Terminals re-read `GET /terminals/requests` and `GET /terminals`.
+  TERMINALS_CHANGED = 'terminals_changed',
+  // Owner → agent translation became temporarily unavailable or available again: the apiserver's translator
+  // circuit breaker opened, opened again or closed (MeTranslation.translationUnavailableUntil, @orbit/shared
+  // translation.ts). The breaker is per process and the same for every account, so it reaches every user; only a
+  // nudge, to read `GET /users/me` again.
+  TRANSLATION_STATUS_CHANGED = 'translation_status_changed',
 }
 
 /** Control-plane-internal lifecycle signals (see RunEventType): published through the realtime
@@ -433,7 +451,9 @@ export function isLifecycleType(t: RunEventType): boolean {
     t === RunEventType.PROJECT_CRITERIA_DECISIONS_CHANGED ||
     t === RunEventType.PROJECT_CHANGED ||
     t === RunEventType.WATCH_CHANGED ||
-    t === RunEventType.WIKI_CHANGED
+    t === RunEventType.WIKI_CHANGED ||
+    t === RunEventType.TERMINALS_CHANGED ||
+    t === RunEventType.TRANSLATION_STATUS_CHANGED
   );
 }
 

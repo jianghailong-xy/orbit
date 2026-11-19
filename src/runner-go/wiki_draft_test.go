@@ -109,7 +109,7 @@ func TestWikiDraftRefusesMalformedRequestsWithoutSendingThem(t *testing.T) {
 	if got := (*requests)[0].body["sections"]; !reflect.DeepEqual(got, []interface{}{map[string]interface{}{"doc": "sessions-runtime", "section": "leases"}}) {
 		t.Errorf("sections sent = %#v", got)
 	}
-	// The plan kind is the server's to refuse while it is not open: this side sends it as asked, with no sections.
+	// The plan kind (C12): this side sends its change as asked, with no sections, and the server gates the change.
 	plan := mcp.callTool("wiki_draft", map[string]interface{}{"kind": "plan", "change": map[string]interface{}{"op": "edit"}, "reason": "r", "idempotencyKey": "k2"})
 	if plan["isError"] == true || len(*requests) != 2 || (*requests)[1].body["kind"] != "plan" || (*requests)[1].body["sections"] != nil {
 		t.Errorf("a plan draft was not sent as asked: %s %#v", wikiToolText(t, plan), *requests)
@@ -139,6 +139,31 @@ func TestWikiDraftSaysACardNotAWrite(t *testing.T) {
 	}))
 	if !strings.Contains(again, "already made card d2") || strings.Contains(again, "Drafted card") {
 		t.Errorf("a replayed draft = %q", again)
+	}
+}
+
+// A plan card says what its press does instead (C12): the plan changed, confirmed and rebuilt, and nothing written yet.
+// One card may change several documents (C17): a split sends both, and this side sends them as asked.
+func TestWikiDraftSaysAPlanCardIsAChangeOfThePlanNotAWrite(t *testing.T) {
+	reply := `{"status":"draft","draftId":"d3","kind":"plan","replayed":false,` +
+		`"rewrites":[{"doc":"sessions-runtime","key":"turn-delivery","where":"1.1 §1","title":"Turn delivery"},` +
+		`{"doc":"recovery","key":"recovery","where":"1.3 §1","title":"Recovery"}]}`
+	srv, requests := wikiDoor(t, http.StatusOK, reply)
+	change := map[string]interface{}{"docs": []interface{}{
+		map[string]interface{}{"slug": "sessions-runtime", "title": "Sessions runtime"},
+		map[string]interface{}{"slug": "recovery", "title": "Recovery and respawn"},
+	}}
+	text := wikiToolText(t, wikiMCP(t, srv.URL).callTool("wiki_draft", map[string]interface{}{
+		"kind": "plan", "change": change, "reason": "1.1 is too long: recovery gets a document of its own.", "idempotencyKey": "k3",
+	}))
+	for _, phrase := range []string{"Drafted card d3 (plan)", "Nothing was written", "only then is the plan changed, confirmed and its documents rebuilt",
+		"Never call it applied", "replaces: d3", "1.1 §1 Turn delivery", "1.3 §1 Recovery"} {
+		if !strings.Contains(text, phrase) {
+			t.Errorf("a plan card's answer does not say %q: %q", phrase, text)
+		}
+	}
+	if len(*requests) != 1 || !reflect.DeepEqual((*requests)[0].body["change"], change) {
+		t.Errorf("the change was not sent as asked: %#v", *requests)
 	}
 }
 

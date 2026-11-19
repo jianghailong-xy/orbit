@@ -33,14 +33,17 @@ import {
   draftRewrites,
   draftStateOf,
   draftViews,
+  planCardSectionViews,
   sectionViews,
   storedOps,
+  storedPlanChange,
   storedSections,
   type DraftRow,
   type StoredDraftOp,
 } from './wiki-chat-cards';
 import { WikiDocs } from './wiki-docs';
 import { followWikiDocsPress, wikiDocsFollowFactsOf } from './wiki-docs-follow';
+import { wikiPlanCardBase, wikiPlanCardChangeOf, wikiPlanCardSections, WikiPlans } from './wiki-plan';
 import { assertWikiSpaceInUse } from './wiki-trash';
 import { WikiRefusalError, WikiService, type CheckedChatOps, type WikiPrincipal, type WikiProposeInput } from './wiki.service';
 
@@ -57,11 +60,20 @@ import { WikiRefusalError, WikiService, type CheckedChatOps, type WikiPrincipal,
  * WIKI_OWNER_CHANNEL_ONLY before it reads anything, whatever the session, and takes only the owner's interactive
  * credential for a write (the controller's guard). Apply accepts a card's ops as Review's Accept does, confirmed — a
  * principle the owner's — with no verification, in one transaction with the card's Rewrites queued (`docs_follow`); Undo
- * takes it back through revert's own writes and restores the sections its rewrite wrote.
+ * takes it back through revert's own writes and restores the sections its rewrite wrote. A plan card's press is the
+ * plan's own edit, confirmation and build in one go (`WikiPlans.applyCardChangeIn`), all or nothing (C12), however many
+ * documents it changes; its Undo puts the version it was drafted on back as a new confirmed one and restores the sections
+ * the press's builds wrote (`WikiPlans.undoCardChangeIn`, `undoPlanRebuild`; C17).
  *
  * LOCKS, in one order everywhere: the card's row FOR UPDATE first; then the entries a press writes (`WikiService`); then
- * the documents (`followWikiDocsPress`, `WikiDocs.restoreIn`); then the space's row and its follow job. A follow job's
- * write takes the cards that asked for a section FOR SHARE before its entries and documents (`WikiDocs.store`).
+ * the documents (`followWikiDocsPress`, `WikiDocs.restoreIn`); then the space's row and its follow job — or, for a plan
+ * card, its plan versions. A follow job's write takes the cards that asked for a section FOR SHARE before its entries and
+ * documents (`WikiDocs.store`); a plan card's press asks for no follow job, so no follow job holds its card. A plan card's
+ * Undo takes the space row and its plan versions before the documents it restores — a restore writes into the version it
+ * has just confirmed — and every document write holds its plan version FOR SHARE before the document (`WikiDocs.store`),
+ * so a build of the version the Undo supersedes either writes before the Undo reads what to restore, or writes nothing.
+ * The one cycle this leaves — an entry press holding an entry the Undo's restore reads — is a deadlock PostgreSQL breaks,
+ * and the press that loses it is tried again (`withTransactionRetry`).
  */
 
 /** What a press answers: the card as it stands after it, and whether this was the same press again. */
@@ -121,10 +133,16 @@ export class WikiChatDrafts {
     private readonly prisma: PrismaService,
     private readonly wiki: WikiService,
     private readonly docs: WikiDocs,
+    // The plan's own doors, which a plan card's press goes through (C12).
+    private readonly planDoors: WikiPlans,
     // `wiki.changed` after a card is made, replaced or pressed (contract `chat.realtime`). Global; defaulted for specs
     // that build this by hand.
     @Optional() private readonly realtime?: RealtimeService,
   ) {}
+
+  private plans(): WikiPlans {
+    return this.planDoors;
+  }
 
   /** The space a session is a chat of (contract `chat.binding.is`), or null for a session that is no chat. */
   async chatOf(ownerId: string, sessionId: string | null): Promise<{ spaceId: string } | null> {
@@ -200,23 +218,18 @@ export class WikiChatDrafts {
 
   /**
    * `wiki_draft` (contract `agentSurface.chat.draft`): a rewrite of written sections of the confirmed plan from main,
-   * 1 to rules.rewritesMax of them. The plan kind arrives with the plan card (C12): until then it is refused WIKI_SCHEMA at
-   * kind. Answers `{ status: draft, draftId, kind, rewrites }`.
+   * 1 to rules.rewritesMax of them; or a plan change (`draftPlanCard`). Answers `{ status: draft, draftId, kind, rewrites }`.
    */
   async draftInChat(principal: WikiPrincipal & { sessionId: string }, spaceId: string, body: unknown): Promise<WikiChatDraftToolAnswer> {
     const input = (body !== null && typeof body === 'object' && !Array.isArray(body) ? body : {}) as Record<string, unknown>;
-    if (input.kind === 'plan') {
-      throw refusal('WIKI_SCHEMA', 'plan drafts are not open yet: they arrive with the plan card. Draft a rewrite of sections from main, or say '
-        + 'what the plan should change in the chat', [{ path: 'kind', message: 'plan is not open yet' }]);
-    }
-    if (input.kind !== 'rewrite') {
-      throw refusal('WIKI_SCHEMA', 'kind is rewrite: the sections to write again from main (an entry is wiki_propose\'s)', [
-        { path: 'kind', message: 'must be rewrite' },
-      ]);
+    if (input.kind !== 'rewrite' && input.kind !== 'plan') {
+      throw refusal('WIKI_SCHEMA', 'kind is rewrite — the sections to write again from main — or plan, a change to how a document is planned (an '
+        + 'entry is wiki_propose\'s)', [{ path: 'kind', message: 'must be rewrite or plan' }]);
     }
     const reason = typeof input.reason === 'string' ? input.reason.trim() : '';
     if (reason === '' || Array.from(reason).length > WIKI_LIMITS.fieldTextMaxChars) {
-      throw refusal('WIKI_SCHEMA', `reason says why these sections lag behind main, in at most ${WIKI_LIMITS.fieldTextMaxChars} characters`, [
+      const why = input.kind === 'plan' ? 'what the plan should do' : 'why these sections lag behind main';
+      throw refusal('WIKI_SCHEMA', `reason says ${why}, in at most ${WIKI_LIMITS.fieldTextMaxChars} characters`, [
         { path: 'reason', message: reason === '' ? 'is required' : `must be at most ${WIKI_LIMITS.fieldTextMaxChars} characters` },
       ]);
     }
@@ -226,6 +239,7 @@ export class WikiChatDrafts {
         { path: 'idempotencyKey', message: key === '' ? 'is required' : 'must be at most 200 characters' },
       ]);
     }
+    if (input.kind === 'plan') return this.draftPlanCard(principal, spaceId, input, reason, key);
     const raw = input.sections;
     if (!Array.isArray(raw) || raw.length < 1 || raw.length > WIKI_CHAT_RULES.rewritesMax) {
       throw refusal('WIKI_SCHEMA', `sections names 1 to ${WIKI_CHAT_RULES.rewritesMax} sections, each { doc, section }`, [
@@ -294,6 +308,67 @@ export class WikiChatDrafts {
     return answer;
   }
 
+  /**
+   * `wiki_draft`'s plan kind (contract `agentSurface.chat.draft.plan`, C12): a change shaped as a proposal's, gated
+   * against the version in force as a maintenance run's proposal is (`WikiPlans.checkCardChange`), its errors going back
+   * to the agent that wrote it. The card keeps the change as gated, with the version it was drafted on, and as its
+   * sections the ones the change adds or changes: what its rebuild writes. Nothing of the plan is written. The same call
+   * under its key answers with the card it made, however the plan moved since.
+   */
+  private async draftPlanCard(
+    principal: WikiPrincipal & { sessionId: string },
+    spaceId: string,
+    input: Record<string, unknown>,
+    reason: string,
+    key: string,
+  ): Promise<WikiChatDraftToolAnswer> {
+    if (input.sections !== undefined && input.sections !== null) {
+      throw refusal('WIKI_SCHEMA', 'a plan card names no sections: its sections are the ones its change adds or changes', [
+        { path: 'sections', message: 'is a rewrite\'s' },
+      ]);
+    }
+    const replaces = input.replaces === undefined || input.replaces === null ? null : idAt(input.replaces, 'replaces');
+    const requestSha256 = sha256(sortedJson({ kind: 'plan', spaceId, change: input.change ?? null, reason, replaces }));
+    const replayedAnswer = (replayed: Record<string, unknown>): WikiChatDraftToolAnswer => ({
+      status: 'draft', draftId: replayed.draftId as string, kind: 'plan', replayed: true, rewrites: replayed.rewrites as WikiChatDraftToolAnswer['rewrites'],
+    });
+    const earlier = await this.replayCard(this.prisma as unknown as Prisma.TransactionClient, principal, key, requestSha256);
+    if (earlier) return replayedAnswer(earlier);
+    const change = await this.plans().checkCardChange(principal.ownerId, spaceId, input.change);
+    const view = wikiPlanCardChangeOf(await wikiPlanCardBase(this.prisma, principal.ownerId, spaceId, change.baseVersion), change);
+    // What its rebuild writes, in every document of it: the sections it adds, changes or moves in (C17).
+    const sections = wikiPlanCardSections(view);
+    const answer = await withTransactionRetry(
+      this.prisma,
+      async (tx) => {
+        const replayed = await this.replayCard(tx, principal, key, requestSha256);
+        if (replayed) return replayedAnswer(replayed);
+        await this.lockReplaced(tx, principal, replaces);
+        const created = await tx.wikiChatDraft.create({
+          data: {
+            ownerId: principal.ownerId,
+            spaceId,
+            sessionId: principal.sessionId,
+            kind: 'plan',
+            rationale: reason,
+            sections: sections as unknown as Prisma.InputJsonValue,
+            change: change as unknown as Prisma.InputJsonValue,
+            tainted: await this.wiki.chatWasTainted(tx, principal.sessionId),
+            replacesId: replaces,
+            idempotencyKey: key,
+            requestSha256,
+          },
+          select: { id: true },
+        });
+        const plan = await confirmedPlanOf(tx, principal.ownerId, spaceId);
+        return { status: 'draft' as const, draftId: created.id, kind: 'plan' as const, replayed: false, rewrites: planCardSectionViews(plan, view, sections) };
+      },
+      loggedRetry(this.logger, 'wiki.draftChatPlan'),
+    );
+    if (!answer.replayed) this.realtime?.publishWikiChanged(principal.ownerId, spaceId);
+    return answer;
+  }
+
   /** The card an earlier call made under the same key, answered again; or the refusal for a key reused. */
   private async replayCard(
     tx: Prisma.TransactionClient,
@@ -308,6 +383,10 @@ export class WikiChatDrafts {
         + 'with the card it made, and another request needs another key');
     }
     const plan = await confirmedPlanOf(tx, principal.ownerId, existing.spaceId);
+    const planChange = storedPlanChange(existing);
+    const rewrites = planChange
+      ? planCardSectionViews(plan, wikiPlanCardChangeOf(await wikiPlanCardBase(tx, principal.ownerId, existing.spaceId, planChange.baseVersion), planChange), storedSections(existing.sections))
+      : sectionViews(plan, storedSections(existing.rewrites));
     return {
       status: 'draft',
       draftId: existing.id,
@@ -316,7 +395,7 @@ export class WikiChatDrafts {
         seq: op.seq, status: 'draft', entryId: op.entryId, ...(op.similar?.length ? { similar: op.similar } : {}),
       })),
       similar: similarOf(storedOps(existing.ops)),
-      rewrites: sectionViews(plan, storedSections(existing.rewrites)),
+      rewrites,
     };
   }
 
@@ -489,7 +568,7 @@ export class WikiChatDrafts {
       this.prisma,
       async (tx) => {
         const row = await this.lockCard(tx, ownerId, draftId);
-        if (row.decision === decision && row.undoneAt === null) return { replayed: true, row, record: null };
+        if (row.decision === decision && row.undoneAt === null) return { replayed: true, row, record: null, planVersion: null };
         const state = draftStateOf(row, await draftFacts(tx, ownerId, [row]));
         if (state === 'changed') {
           throw refusal('WIKI_REVISION_CONFLICT', 'what this card changes changed since it was drafted: nothing was applied. Ask the chat to draft it '
@@ -499,7 +578,6 @@ export class WikiChatDrafts {
         if (decision === 'edited' && row.kind !== 'entry') {
           throw new ConflictException(`only an entry card is edited, and this is a ${row.kind} card: Apply it or Discard it`);
         }
-        if (row.kind === 'plan') throw new ConflictException('plan cards are not open yet: they arrive with the plan card, and nothing was written');
         const ops = storedOps(row.ops);
         for (const seq of edits.keys()) {
           const op = ops.find((one) => one.seq === seq);
@@ -522,14 +600,23 @@ export class WikiChatDrafts {
             edits,
           });
         }
-        await followWikiDocsPress(tx, {
-          ownerId,
-          spaceId: row.spaceId,
-          draftId: row.id,
-          chatId: row.sessionId,
-          sections: storedSections(row.rewrites),
-          entryIds: record?.entryIds ?? [],
-        });
+        // A plan card's press is the plan's own edit and confirmation in this transaction (C12): a gate it fails throws,
+        // and nothing is written. Its rebuild is asked for once this commits, as a confirmation's is.
+        const planChange = storedPlanChange(row);
+        let planVersion: number | null = null;
+        if (row.kind === 'plan') {
+          if (!planChange) throw new ConflictException('this plan card keeps no change to apply, and nothing was written');
+          planVersion = (await this.plans().applyCardChangeIn(tx, { ownerId, spaceId: row.spaceId, change: planChange })).version;
+        } else {
+          await followWikiDocsPress(tx, {
+            ownerId,
+            spaceId: row.spaceId,
+            draftId: row.id,
+            chatId: row.sessionId,
+            sections: storedSections(row.rewrites),
+            entryIds: record?.entryIds ?? [],
+          });
+        }
         await tx.wikiChatDraft.updateMany({
           where: { id: row.id, ownerId, decision: null },
           data: {
@@ -537,12 +624,17 @@ export class WikiChatDrafts {
             decidedAt: new Date(),
             changesetId: record?.changesetId ?? null,
             trustBefore: record ? (record.trustBefore as Prisma.InputJsonValue) : Prisma.DbNull,
+            ...(planChange ? { change: { ...planChange, version: planVersion } as unknown as Prisma.InputJsonValue } : {}),
           },
         });
-        return { replayed: false, row, record };
+        return { replayed: false, row, record, planVersion };
       },
       loggedRetry(this.logger, 'wiki.pressChatDraft', { transaction: PRESS_TRANSACTION }),
     );
+    if (!pressed.replayed && pressed.planVersion !== null) {
+      const build = await this.plans().buildAfterCardPress(ownerId, pressed.row.spaceId, pressed.planVersion);
+      if (build) await this.recordCardBuild(ownerId, draftId, build, false);
+    }
     if (!pressed.replayed) this.realtime?.publishWikiChanged(ownerId, pressed.row.spaceId);
     return {
       replayed: pressed.replayed,
@@ -576,7 +668,10 @@ export class WikiChatDrafts {
    * Apply recorded reverted (`WikiService.revertChatApplyIn`); each section the card's rewrite wrote restored to the
    * version that rewrite kept — one written again since is left and named; the card's press taken off a follow job that
    * has not started (a job left with nothing is cancelled), while one that runs writes none of the card's sections it has
-   * not written yet (`WikiDocs.store`); and the card marked undone.
+   * not written yet (`WikiDocs.store`); and the card marked undone. A plan card's (C17): the plan put back as it was before
+   * its press, as a new version of the owner's, confirmed (`WikiPlans.undoCardChangeIn`) — refused WIKI_REVISION_CONFLICT
+   * once the plan moved on — and the sections its press's builds wrote or dropped restored (`undoPlanRebuild`); once that
+   * commits, the build of the version it confirmed is asked for, as a confirmation asks.
    */
   async undo(ownerId: string, userId: string, draftId: string, actingSessionId: string | null): Promise<WikiChatPressAnswer> {
     refuseActingSession(actingSessionId, 'undoing a wiki chat\'s card');
@@ -584,9 +679,22 @@ export class WikiChatDrafts {
       this.prisma,
       async (tx) => {
         const row = await this.lockCard(tx, ownerId, draftId);
-        if (row.undoneAt !== null) return { replayed: true, row, revert: null, sections: [] as Array<Record<string, unknown>> };
+        if (row.undoneAt !== null) return { replayed: true, row, revert: null, sections: [] as Array<Record<string, unknown>>, planVersion: null };
         const state = draftStateOf(row, await draftFacts(tx, ownerId, [row]));
         if (state !== 'applied') throw notOpen(state, 'Undo');
+        if (row.kind === 'plan') {
+          // The plan's own doors, as its press went through them: the version it was drafted on stored again and confirmed,
+          // under the space row's lock, and refused once the plan moved on from the one the press made.
+          const change = storedPlanChange(row);
+          if (!change || change.version === null) throw new ConflictException('this plan card keeps no version its press made, so nothing was undone');
+          const { version } = await this.plans().undoCardChangeIn(tx, { ownerId, spaceId: row.spaceId, change });
+          const sections = await this.undoPlanRebuild(tx, ownerId, row, change.version);
+          await tx.wikiChatDraft.updateMany({
+            where: { id: row.id, ownerId, undoneAt: null },
+            data: { undoneAt: new Date(), change: { ...(row.change as Record<string, unknown>), undoVersion: version } as Prisma.InputJsonValue },
+          });
+          return { replayed: false, row, revert: null, sections, planVersion: version };
+        }
         if (!wikiChatDraftUndoable(row.kind as WikiChatDraftKind, state, storedOps(row.ops))) {
           throw new ConflictException('this card cannot be undone: a supersede or a retire ends a lineage nothing brings back, and a reinforce or a '
             + 'challenge is answered as any other — the challenge in Review. Nothing was written');
@@ -601,17 +709,72 @@ export class WikiChatDrafts {
           : null;
         const sections = await this.undoRewrite(tx, ownerId, row);
         await tx.wikiChatDraft.updateMany({ where: { id: row.id, ownerId, undoneAt: null }, data: { undoneAt: new Date() } });
-        return { replayed: false, row, revert, sections };
+        return { replayed: false, row, revert, sections, planVersion: null as number | null };
       },
       loggedRetry(this.logger, 'wiki.undoChatDraft', { transaction: PRESS_TRANSACTION }),
     );
+    // The version a plan card's Undo confirmed is built as a confirmation's is: every section it restored is unchanged by
+    // its fingerprint, so the build asks no model for them.
+    if (!undone.replayed && undone.planVersion !== null) await this.plans().buildAfterCardPress(ownerId, undone.row.spaceId, undone.planVersion);
     if (!undone.replayed) this.realtime?.publishWikiChanged(ownerId, undone.row.spaceId);
     return {
       replayed: undone.replayed,
       draft: await this.view(ownerId, draftId),
       revert: undone.revert,
       sections: undone.sections,
+      ...(undone.planVersion !== null ? { planVersion: undone.planVersion } : {}),
     };
+  }
+
+  /**
+   * What a plan card's Undo does to its rebuild (contract `chat.presses.undo`; C17): every section a build of the version
+   * its press made replaced or dropped — a version kept for the build of that version (`docs.versions.kept`) — goes back
+   * to the first version those builds kept of it, what stood before the press, through the owner's restore
+   * (`WikiDocs.restoreIn`, after the plan it is restored into is confirmed in this transaction): its sentences, its
+   * footnotes and its fingerprint, with no model asked. A section anything else wrote since is left as it is and named;
+   * one the plan in force no longer has is named too. A section only the card's version had — a split's new document —
+   * kept nothing, and the plan the Undo confirms does not have it.
+   */
+  private async undoPlanRebuild(tx: Prisma.TransactionClient, ownerId: string, row: DraftRow, version: number): Promise<Array<Record<string, unknown>>> {
+    const kept = await tx.wikiDocSectionVersion.findMany({
+      where: { ownerId, spaceId: row.spaceId, reason: 'build', reasonPlanVersion: version },
+      orderBy: { seq: 'asc' },
+      select: { id: true, docSlug: true, sectionKey: true, seq: true },
+    });
+    const firsts = new Map<string, (typeof kept)[number]>();
+    for (const one of kept) if (!firsts.has(sectionKey(one.docSlug, one.sectionKey))) firsts.set(sectionKey(one.docSlug, one.sectionKey), one);
+    const out: Array<Record<string, unknown>> = [];
+    for (const first of firsts.values()) {
+      const at = { doc: first.docSlug, key: first.sectionKey };
+      const since = await tx.wikiDocSectionVersion.findFirst({
+        where: {
+          ownerId,
+          spaceId: row.spaceId,
+          docSlug: first.docSlug,
+          sectionKey: first.sectionKey,
+          seq: { gt: first.seq },
+          NOT: { reason: 'build', reasonPlanVersion: version },
+        },
+        select: { id: true },
+      });
+      if (since) {
+        out.push({ ...at, outcome: 'skipped', reason: 'written again since' });
+        continue;
+      }
+      try {
+        const restored = await this.docs.restoreIn(tx, ownerId, first.id, { slug: first.docSlug, key: first.sectionKey });
+        out.push({ ...at, outcome: restored.outcome, versionId: first.id, keptVersionId: restored.keptVersionId });
+      } catch (error) {
+        if (error instanceof ConflictException) {
+          out.push({ ...at, outcome: 'skipped', reason: 'no longer in the plan' });
+        } else if (error instanceof WikiRefusalError) {
+          out.push({ ...at, outcome: 'skipped', reason: error.refusal.message });
+        } else {
+          throw error;
+        }
+      }
+    }
+    return out;
   }
 
   /**
@@ -713,6 +876,9 @@ export class WikiChatDrafts {
   async retry(ownerId: string, userId: string, draftId: string, actingSessionId: string | null): Promise<WikiChatPressAnswer> {
     refuseActingSession(actingSessionId, 'retrying a wiki chat\'s rewrite');
     void userId;
+    // A card of a wiki in Trash is read as none (contract `space.trash`): the lock below answers it the plain 404.
+    const card = await this.prisma.wikiChatDraft.findFirst({ where: { id: draftId, ownerId, space: { deletedAt: null } }, select: DRAFT_SELECT });
+    if (card?.kind === 'plan') return this.retryPlanCard(ownerId, card);
     const retried = await withTransactionRetry(
       this.prisma,
       async (tx) => {
@@ -735,6 +901,42 @@ export class WikiChatDrafts {
     );
     this.realtime?.publishWikiChanged(ownerId, retried.row.spaceId);
     return { replayed: false, draft: await this.view(ownerId, draftId) };
+  }
+
+  /**
+   * A plan card's Try again (contract `chat.presses.retry`): an applied plan card whose rebuild failed asks for the build of
+   * the version its press confirmed again (`WikiPlans.rebuildForCard`), while that version is in force, and its result is
+   * unseen again. The card is read, not held: an Undo that commits meanwhile puts another version in force, and the
+   * rebuild asks for nothing then (C17).
+   */
+  private async retryPlanCard(ownerId: string, row: DraftRow): Promise<WikiChatPressAnswer> {
+    const state = draftStateOf(row, await draftFacts(this.prisma, ownerId, [row]));
+    if (state !== 'applied') throw notOpen(state, 'Try again');
+    const rewrite = (await draftRewrites(this.prisma, ownerId, [row])).get(row.id);
+    const version = storedPlanChange(row)?.version ?? null;
+    if (rewrite?.result !== 'failed' || version === null) {
+      throw new ConflictException(`this card's rebuild is ${rewrite?.result ?? 'not there'}, not failed: Try again asks only for a failed one, and nothing was written`);
+    }
+    const asked = await this.plans().rebuildForCard(ownerId, row.spaceId, version);
+    await this.recordCardBuild(ownerId, row.id, asked.job.id, true);
+    this.realtime?.publishWikiChanged(ownerId, row.spaceId);
+    return { replayed: false, draft: await this.view(ownerId, row.id) };
+  }
+
+  /**
+   * The build a plan card's press or Try again asked for, named on the card (`change.build`, contract
+   * `chat.drafts.results.plan`): its rewrite is that build's, whatever later builds of the version do. Try again's makes
+   * the result unseen again. A wiki moved to Trash since the build was asked for has dropped it, and its card is not
+   * written (contract `space.trash`).
+   */
+  private async recordCardBuild(ownerId: string, draftId: string, build: string, unseen: boolean): Promise<void> {
+    await this.prisma.$executeRaw(Prisma.sql`
+      UPDATE "wiki_chat_draft" d
+         SET "change" = jsonb_set(d."change", '{build}', to_jsonb(${build}::text)),
+             "seen_at" = CASE WHEN ${unseen}::boolean THEN NULL ELSE d."seen_at" END
+        FROM "wiki_space" s
+       WHERE d."id" = ${draftId}::uuid AND d."owner_id" = ${ownerId}::uuid AND d."kind" = 'plan' AND d."change" IS NOT NULL
+         AND s."id" = d."space_id" AND s."deleted_at" IS NULL`);
   }
 
   /**
@@ -767,4 +969,14 @@ function similarOf(ops: readonly StoredDraftOp[]): WikiSimilar[] {
     }
   }
   return [...out.values()].sort((a, b) => b.score - a.score);
+}
+
+/** A value's JSON with every object's keys sorted, at every depth: the same request digests the same however it was spelled. */
+function sortedJson(value: unknown): string {
+  const sorted = (one: unknown): unknown => {
+    if (Array.isArray(one)) return one.map(sorted);
+    if (one === null || typeof one !== 'object') return one;
+    return Object.fromEntries(Object.keys(one as Record<string, unknown>).sort().map((key) => [key, sorted((one as Record<string, unknown>)[key])]));
+  };
+  return JSON.stringify(sorted(value));
 }

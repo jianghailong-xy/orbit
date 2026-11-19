@@ -1,0 +1,58 @@
+/* 2026-11-10 · AGENT_PUSH（交付方式）· 在 ../project-done-sessions-page/kit.css 之上补的几样 */
+body { padding: 36px 40px 44px; }
+.board { display: inline-block; padding: 24px 28px 28px; }
+figure { margin: 0; }
+/* 合并卡（approvalChrome .orange）里的行 */
+.ac.m { margin: 8px 0 0; padding: 13px 15px 14px; }
+.ac.m .tile { width: 28px; height: 28px; }
+.ac.m .h b { font-size: 16.5px; line-height: 1.3; }
+.ac.m .prov { margin-top: 6px; font-size: 12.5px; letter-spacing: .01em; }
+.ac.m .lbl { margin-top: 8px; font-size: 12.5px; }
+.ac.m .val { font-size: 14px; line-height: 1.4; }
+.ac.m .val.g { color: var(--green-ink); }
+.ac.m code, .sheet code { font-family: "SF Mono", "JetBrains Mono", ui-monospace, monospace; font-size: .92em; }
+.why { margin-top: 10px; border-radius: 10px; background: rgba(120,120,128,.1); padding: 8px 10px; font-size: 13px; line-height: 1.45; color: #3a3a3c; }
+.why .lnk { display: block; margin-top: 4px; font-weight: 600; color: var(--tint); }
+.btns { display: flex; gap: 8px; margin-top: 11px; flex-wrap: wrap; }
+.btn2 { font-size: 14.5px; font-weight: 600; border-radius: 999px; padding: 7px 14px; }
+.btn2.p { background: var(--tint); color: #fff; }
+.btn2.s { background: rgba(120,120,128,.14); color: var(--tint); }
+/* How it runs：iOS 分组表单 sheet */
+.sheet { position: absolute; inset: 54px 0 0; background: #f2f2f7; border-radius: 12px 12px 0 0; overflow: hidden; }
+.sheet .grab { width: 36px; height: 5px; border-radius: 3px; background: rgba(60,60,67,.3); margin: 6px auto 0; }
+.sheet .sbar { display: flex; align-items: center; padding: 10px 16px 6px; font-size: 16px; }
+.sheet .sbar b { flex: 1; text-align: center; font-size: 16.5px; font-weight: 600; }
+.sheet .sbar span { color: var(--tint); min-width: 54px; }
+.sheet .sbar span.r { text-align: right; font-weight: 600; }
+.sheet .gh { font-size: 12.5px; color: rgba(60,60,67,.6); text-transform: uppercase; letter-spacing: .02em; margin: 14px 32px 6px; }
+.sheet .grp { background: #fff; border-radius: 11px; margin: 0 16px; overflow: hidden; }
+.sheet .cell { padding: 9px 14px 9px; border-top: .5px solid rgba(60,60,67,.18); font-size: 15px; position: relative; }
+.sheet .cell:first-child { border-top: 0; }
+.sheet .cell .lab { display: flex; align-items: center; gap: 8px; color: #16161a; }
+.sheet .cell .lab .v { margin-left: auto; color: rgba(60,60,67,.6); }
+.sheet .cell .hint { font-size: 12.5px; line-height: 1.4; color: rgba(60,60,67,.62); margin-top: 2px; }
+.sheet .cell.opt .lab::after { content: ''; }
+.sheet .cell .tick { margin-left: auto; color: var(--tint); font-weight: 700; }
+.sheet .cell.dis .lab, .sheet .cell.dis .hint { color: rgba(60,60,67,.38); }
+.sheet .cell .sw { margin-left: auto; width: 46px; height: 28px; border-radius: 14px; background: var(--green); position: relative; flex: none; }
+.sheet .cell .sw::after { content: ''; position: absolute; top: 2px; right: 2px; width: 24px; height: 24px; border-radius: 50%; background: #fff; box-shadow: 0 1px 3px rgba(0,0,0,.25); }
+.sheet .foot { font-size: 12.5px; line-height: 1.4; color: rgba(60,60,67,.6); margin: 6px 32px 0; }
+.sheet .cell .cmd { font-size: 13.5px; color: #3a3a3c; margin-top: 2px; }
+.sheet .cell .cmd.off { color: rgba(60,60,67,.38); text-decoration: line-through; }
+.chg { box-shadow: inset 3px 0 0 var(--tint); }
+/* 改交付方式时的确认（iOS action sheet） */
+.dim { position: absolute; inset: 0; z-index: 10; background: rgba(0,0,0,.28); }
+.act { position: absolute; z-index: 11; left: 10px; right: 10px; bottom: 30px; }
+.act .box { background: rgba(250,250,252,.98); border-radius: 14px; }
+.act .msg { padding: 14px 18px 12px; text-align: center; font-size: 13px; line-height: 1.45; color: rgba(60,60,67,.7); }
+.act .msg b { display: block; font-size: 13.5px; color: rgba(60,60,67,.85); margin-bottom: 3px; }
+.act .ab { border-top: .5px solid rgba(60,60,67,.2); padding: 15px; text-align: center; font-size: 18px; color: var(--tint); }
+.act .cancel { margin-top: 8px; background: #fff; border-radius: 14px; padding: 15px; text-align: center; font-size: 18px; font-weight: 600; color: var(--tint); }
+.board-table { border-collapse: collapse; margin-top: 30px; font-size: 13.5px; background: #f4f4f7; border-radius: 12px; overflow: hidden; max-width: 1800px; }
+.board-table th, .board-table td { text-align: left; padding: 9px 14px; border-bottom: 1px solid #dcdce3; vertical-align: top; line-height: 1.5; }
+.board-table th { background: #dedee6; font-size: 13px; white-space: nowrap; }
+.decide { margin-top: 26px; background: #fff4d6; border: 1px solid #f0d58a; border-radius: 12px; padding: 14px 18px; max-width: 1780px; font-size: 15px; line-height: 1.6; }
+.decide b { color: #6b4b00; }
+.decide ol { margin: 4px 0 0; padding-left: 22px; }
+.files { margin-top: 18px; max-width: 1780px; font-size: 13.5px; color: #4f4f58; line-height: 1.6; }
+.grp .mk > .badge { top: 8px; right: 8px; }

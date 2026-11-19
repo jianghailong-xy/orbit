@@ -23,6 +23,7 @@ import {
   PromotionRetryFacts,
   decideIntegrationRetry,
   decidePromotionRetry,
+  mainSyncMovedMessage,
 } from './project-integration-retry';
 
 /**
@@ -54,6 +55,8 @@ function refusalOf(input: IntegrationRetryFacts): { status: number; code: string
 
 test('a failed landing is classified off its structured result, never off its output', () => {
   assert.equal(landingFailureClass({ state: 'CHECK_FAILED', checks: [RED] }), 'CHECK_FAILED');
+  assert.equal(landingFailureClass({ state: 'CHECK_FAILED', checks: [RED], baselineRed: true }), 'BASELINE_RED');
+  assert.equal(landingFailureClass({ state: 'CHECK_FAILED', checks: [{ ...RED, outputTail: 'BASELINE_RED' }] }), 'CHECK_FAILED');
   assert.equal(landingFailureClass({ state: 'CHECK_FAILED', checks: [RED, SLOW] }), 'CHECK_TIMED_OUT');
   // Go's own test timeout panics with exit 1 and the runner's budget never ran out: that is a red
   // check, whatever the output says about timing out.
@@ -72,7 +75,7 @@ test('a failed landing is classified off its structured result, never off its ou
       `${state}: a class exactly where an item is opened`,
     );
   }
-  assert.deepEqual([...RETRYABLE_LANDING_FAILURE_CLASSES], ['CHECK_FAILED', 'CHECK_TIMED_OUT', 'ERROR']);
+  assert.deepEqual([...RETRYABLE_LANDING_FAILURE_CLASSES], ['CHECK_FAILED', 'CHECK_TIMED_OUT', 'BASELINE_RED', 'ERROR']);
 });
 
 test('Automatic: a red, a timed-out or an errored landing of a DONE task is rerun, handling the coordinator\'s items', () => {
@@ -230,6 +233,84 @@ test('a failed landing\'s item tells the coordinator its class, and that running
   assert.doesNotMatch(told, /This is generation/, 'a first generation is not a rerun');
 });
 
+/** A check the platform stopped at a 4h budget after it had run that long, as the relay records it. */
+const STOPPED = {
+  name: 'MERGE_CHECK', command: 'npm run test:all', expectedExitCode: 0, exitCode: null, timedOut: true,
+  durationMs: 14_400_250, timeoutSeconds: 14_400, outputTail: 'ok 812 orders sync\n',
+};
+
+/** What every timed-out item's next step says about a rerun and the owner's question, landing or candidate. */
+function assertTimedOutAdvice(told: string): void {
+  assert.match(told, /Check MERGE_CHECK did not finish: the platform stopped it at its 4h limit after running 4h 0m, so it reached no verdict; the target branch did not move\./);
+  assert.match(told, /It ran: npm run test:all/);
+  assert.match(told, /The end of its output:\nok 812 orders sync/, 'the output tail is kept');
+  assert.doesNotMatch(told, /exited with code/, 'a stopped check has no exit code of its own to report');
+  // A rerun only beside a reason the next run can be shorter.
+  assert.match(told, /takes about as long and stops at the same limit, so rerun it once only when you can name why the next run will be shorter — the machine was under unusual load, the output above shows a one-off hang \(a stuck network call or lock, for example\), or a fix for the slow part has landed since — and give that reason: /);
+  // Otherwise the owner's question, with its options.
+  assert.match(told, /If this check usually takes close to its limit or longer, a rerun will time out again: do not rerun it, ask the account owner with ask_owner instead, offering options such as raising the check’s time limit, changing the merge-check command \(to a faster one, or a subset of it\), or filing a fix task for the slow part, with your recommended option and its reason\./);
+  assert.doesNotMatch(told, /go test|10-minute/, 'no example written for one toolchain');
+  assert.doesNotMatch(told, /the check timed out/, 'a timeout is not listed as a reason a rerun comes out differently');
+}
+
+test('a timed-out landing check\'s item states the limit and the run time, and advises a rerun only with a reason', () => {
+  const told = openItemMessage({
+    id: '01a0f5c9-0000-7000-8000-00000000000a',
+    kind: 'INTEGRATION_CHECK_FAILED',
+    title: 'Checks failed on the combined tree: ③',
+    projectId: PROJECT,
+    taskId: TASK,
+    payload: { jobKind: 'LAND_TASK', check: { ...STOPPED, name: 'MERGE_CHECK' }, branchUnchanged: true, failureClass: 'CHECK_TIMED_OUT', generation: 1 },
+  });
+  assertTimedOutAdvice(told);
+  assert.match(told, /give that reason: queue the landing once more with integration_retry \(projectId: 34Y7My8sqhKLWtmCQYv1l, taskId: 34Y7Utvsd47A14DjMzIzD, reason: why this time will be different\)/);
+});
+
+test('a timed-out promotion check\'s item states the limit and the run time, and advises a rerun only with a reason', () => {
+  const told = openItemMessage({
+    id: '01a0f5c9-0000-7000-8000-00000000000b',
+    kind: 'INTEGRATION_CHECK_FAILED',
+    title: 'Checks failed on the combined tree: merging the project branch into main',
+    projectId: PROJECT,
+    taskId: null,
+    promotionId: CANDIDATE,
+    payload: { jobKind: 'CHECK_PROMOTION', check: STOPPED, branchUnchanged: true, failureClass: 'CHECK_TIMED_OUT', generation: 1 },
+  });
+  assertTimedOutAdvice(told);
+  assert.match(told, /give that reason: rerun this candidate’s check once with integration_retry \(projectId: 34Y7My8sqhKLWtmCQYv1l, promotionId: /);
+  assert.doesNotMatch(told, /If the merge-check command or its time limit has to change/, 'the owner’s question is asked once, in the timeout’s own words');
+});
+
+test('a timed-out check\'s item written before the limit was recorded says it does not know the limit', () => {
+  const { timeoutSeconds: _limit, ...unrecorded } = STOPPED;
+  const told = openItemMessage({
+    id: '01a0f5c9-0000-7000-8000-00000000000c',
+    kind: 'INTEGRATION_CHECK_FAILED',
+    title: 'Checks failed on the combined tree: ③',
+    projectId: PROJECT,
+    taskId: TASK,
+    payload: { jobKind: 'LAND_TASK', check: { ...unrecorded, durationMs: 605_000 }, branchUnchanged: true, failureClass: 'CHECK_TIMED_OUT', generation: 1 },
+  });
+  assert.match(told, /the platform stopped it at its time limit \(this item did not record the limit\) after running 10m 5s, so it reached no verdict/);
+  assert.doesNotMatch(told, /exited with code/);
+});
+
+test('a red check\'s item keeps its exit-code wording and the rerun list names no timeout', () => {
+  for (const [jobKind, ids] of [['LAND_TASK', { taskId: TASK }], ['CHECK_PROMOTION', { taskId: null, promotionId: CANDIDATE }]] as const) {
+    const told = openItemMessage({
+      id: '01a0f5c9-0000-7000-8000-00000000000d',
+      kind: 'INTEGRATION_CHECK_FAILED',
+      title: 'Checks failed on the combined tree: ③',
+      projectId: PROJECT,
+      ...ids,
+      payload: { jobKind, check: { ...RED, durationMs: 9_000 }, branchUnchanged: true, failureClass: 'CHECK_FAILED', generation: 1 },
+    });
+    assert.match(told, /Check MERGE_CHECK exited with code 1 \(its declaration expects 0\); the target branch did not move\./, jobKind);
+    assert.match(told, /If it is not the (delivery|work)’s problem — the merge check’s baseline was repaired since, the integration machinery failed — /, jobKind);
+    assert.doesNotMatch(told, /did not finish|stopped it at|go test|10-minute|usually takes close to its limit/, jobKind);
+  }
+});
+
 test('a rerun that failed again says what it reran and why, and not to rerun it as it stands', () => {
   const told = openItemMessage({
     id: '01a0f5c9-0000-7000-8000-000000000002',
@@ -341,6 +422,45 @@ test('integration_retry still refuses a MAIN_SYNC conflict, and says to absorb t
     }));
     assert.match(other.message, /reworked against the line as it is now/, String(phase));
   }
+});
+
+test('integration_retry reruns a MAIN_SYNC conflict once its branch has moved off the conflicted commit, and only that conflict', () => {
+  const item = { id: 'item-1', kind: 'INTEGRATION_CONFLICT', assignee: 'COORDINATOR', assigneeReason: 'DEFAULT' };
+  const mainSync = { id: 'j', generation: 1, state: 'CONFLICT', checks: [], phase: 'MAIN_SYNC' };
+  const conflicted = 'a'.repeat(40);
+  const moved = 'b'.repeat(40);
+  // Pure facts the server holds: no git, no repository, nothing to probe.
+  const accepted = decideIntegrationRetry(facts({
+    newestLanding: mainSync, openItems: [item], sourceTips: { conflicted, current: moved },
+  }));
+  assert.ok(accepted.ok);
+  assert.equal(accepted.failureClass, 'CONFLICT');
+  assert.equal(accepted.retryOfJobId, 'j');
+  assert.deepEqual(accepted.handle, ['item-1']);
+  assert.equal(accepted.message, mainSyncMovedMessage(conflicted, moved));
+  assert.match(accepted.message!, /^Landing again: the branch has moved since it conflicted at MAIN_SYNC \(aaaaaaa → bbbbbbb\)\. If it now contains the project line and main, it lands by a merge/);
+  // Not moved, or a tip the server never learned: today's refusal, word for word.
+  for (const sourceTips of [
+    { conflicted, current: conflicted },
+    { conflicted, current: null },
+    { conflicted: null, current: moved },
+    undefined,
+  ]) {
+    const refused = refusalOf(facts({ newestLanding: mainSync, openItems: [item], sourceTips }));
+    assert.match(refused.message, /stopped at MAIN_SYNC/, JSON.stringify(sourceTips));
+    assert.match(refused.message, /running it again meets the same conflict, and so does sending the task back to redo its work/);
+  }
+  // A conflict of the task's own commits is not answered by a moved branch through this door.
+  const rebase = refusalOf(facts({
+    newestLanding: { ...mainSync, phase: 'REBASE' }, openItems: [item], sourceTips: { conflicted, current: moved },
+  }));
+  assert.match(rebase.message, /reworked against the line as it is now/);
+  // A plain rerun says nothing extra.
+  const red = decideIntegrationRetry(facts({
+    newestLanding: { id: 'k', generation: 1, state: 'CHECK_FAILED', checks: [] }, sourceTips: { conflicted, current: moved },
+  }));
+  assert.ok(red.ok);
+  assert.equal(red.message, undefined);
 });
 
 // ── a blocked candidate's check (§4.7 H1): the item about a merge into main, which names no task ──

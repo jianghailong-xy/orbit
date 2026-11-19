@@ -4,10 +4,12 @@ import {
   ConflictException,
   Injectable,
   NotFoundException,
+  Optional,
 } from '@nestjs/common';
 import { Prisma } from '@prisma/client';
 import { RunEventType } from '@orbit/shared';
 import { PrismaService } from '../prisma/prisma.service';
+import { RealtimeService } from '../realtime/realtime.service';
 import { withSessionState } from '../sessions/session-state';
 import { assertEngineSession } from '../sessions/engine-session';
 import { WikiDocs } from '../wiki/wiki-docs';
@@ -155,6 +157,9 @@ export interface OpenLink {
    *  pages (public-project.ts effectiveProjectInclude). */
   include: Required<ShareInclude>;
   sharedAt: Date;
+  /** When the link stops opening anything by itself, if ever: what a viewer stream rechecks at (§5 of
+   *  docs/session-viewer-stream-design.md). */
+  expiresAt: Date | null;
   /** Set for a session root: the transcript the link serves. */
   sessionId: string | null;
   /** Set for a task, a project or a wiki root (public-task.ts / public-project.ts / public-wiki.ts
@@ -203,6 +208,9 @@ export class ShareLinksService {
     // A wiki link's pages are the owner's own document reads (public-wiki.ts). Defaulted so a spec
     // that builds this by hand for another kind of root need not stand the wiki up.
     private readonly wikiDocs: WikiDocs = undefined as unknown as WikiDocs,
+    // Tells the viewer streams a link was turned off or changed (docs/session-viewer-stream-design.md §5). Absent in
+    // the specs that build this by hand, whose streams' ping recheck is the only one there is.
+    @Optional() private readonly realtime?: RealtimeService,
   ) {}
 
   // ── the owner's half ───────────────────────────────────────────────────────────────────────
@@ -349,9 +357,42 @@ export class ShareLinksService {
       kind,
       include: kind === 'PROJECT' ? effectiveProjectInclude(include) : include,
       sharedAt: row.createdAt,
+      expiresAt: row.expiresAt,
       sessionId: row.sessionId,
       root: kind === 'SESSION' || !root ? null : root,
     };
+  }
+
+  /**
+   * Whether `token` still opens session `sessionId` to a viewer stream, as SharedStreamGuard decided when the stream
+   * opened: the link's root on `:token/stream`, a conversation it opens besides its root on
+   * `:token/sessions/:sessionId/stream`. Null for the one 404; otherwise when the link expires, if ever
+   * (ViewerStreamService rechecks then), and whether it includes tool output now.
+   */
+  async streamAccess(
+    token: string,
+    sessionId: string,
+    conversation: boolean,
+  ): Promise<{ until: Date | null; toolOutput: boolean } | null> {
+    try {
+      const link = await this.resolve(token);
+      if (conversation) await this.openConversation(link, sessionId);
+      else if (link.sessionId !== sessionId) return null;
+      return { until: link.expiresAt, toolOutput: link.include.toolOutput === true };
+    } catch (error) {
+      if (error instanceof NotFoundException) return null;
+      throw error;
+    }
+  }
+
+  /** What a link's card in a chat app names (shared/share-card.ts): its kind and its root's title.
+   *  The same 404 as `resolve` for a link that opens nothing. Not a view. */
+  async cardOf(token: string): Promise<{ kind: ShareRootKind; title: string }> {
+    const link = await this.resolve(token);
+    const title = link.sessionId
+      ? (await this.prisma.session.findUnique({ where: { id: link.sessionId }, select: { title: true } }))?.title
+      : link.root?.title;
+    return { kind: link.kind, title: title ?? '' };
   }
 
   /** A task link's root page: the task, with the layers the link includes (public-task.ts). The
@@ -532,6 +573,8 @@ export class ShareLinksService {
       where: { id, revokedAt: null },
       data: { include: include as Prisma.InputJsonObject, expiresAt, updatedAt: now },
     });
+    // It may no longer include a conversation a stream shows, or tool output a stream sends: those streams recheck.
+    if (written.count === 1) this.realtime?.publishViewerRevoked({ linkId: id });
     return written.count === 1;
   }
 
@@ -540,6 +583,11 @@ export class ShareLinksService {
    * recorded EXPIRED; the rest are TURNED_OFF. Answers how many were turned off.
    */
   private async end(where: Prisma.ShareLinkWhereInput, now: Date): Promise<number> {
+    // Which links these are, for the viewer streams opened through them. One opened between this read and the
+    // writes below has no stream worth a signal yet; the streams' ping recheck covers it all the same.
+    const ending = this.realtime
+      ? await this.prisma.shareLink.findMany({ where: { ...where, revokedAt: null }, select: { id: true } })
+      : [];
     await this.prisma.shareLink.updateMany({
       where: { ...where, revokedAt: null, expiresAt: { lte: now } },
       data: { revokedAt: now, revokedReason: 'EXPIRED', updatedAt: now },
@@ -548,6 +596,7 @@ export class ShareLinksService {
       where: { ...where, revokedAt: null },
       data: { revokedAt: now, revokedReason: 'TURNED_OFF', updatedAt: now },
     });
+    for (const link of ending) this.realtime?.publishViewerRevoked({ linkId: link.id });
     return turnedOff.count;
   }
 

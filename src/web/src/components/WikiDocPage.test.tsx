@@ -342,7 +342,7 @@ describe('the directory, Browse and the A–Z index by document', () => {
     await open('/wiki/orbit/d/session-runtime');
     await vi.waitFor(() => expect(container.querySelector('.wk-toc .wk-toc-item.doc')).toBeTruthy());
     const toc = container.querySelector('.wk-toc')!;
-    expect(text('.wk-toc-item:not(.doc):not(.sec) .lb', toc)).toEqual(['Home', 'Browse by category', 'A–Z index', 'Plan']);
+    expect(text('.wk-toc-item:not(.doc):not(.sec) .lb', toc)).toEqual(['Home', 'Browse by category', 'A–Z index', 'Plan', 'Activity']);
     expect(text('.wk-toc-item.plan .tp-count', toc)).toEqual(['2']);
     expect(text('.wk-toc-cat', toc)).toEqual(['产品概览', '会话', '给 agent 的开发约定']);
     expect(text('.wk-toc-item.doc .no', toc)).toEqual(['1.1', '3.1', '3.2', '3.3', '4.1']);

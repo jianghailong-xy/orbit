@@ -237,10 +237,15 @@ public enum ProjectPage {
         /// A round of merging into main: its row carries the word and no "Open landing ›" — the
         /// merge card is that round's way in.
         public let mergeJob: Bool
+        /// Whether to offer "Land without the check": the server's `skippable`.
+        public let skippable: Bool
+        /// Where a skip of this job's check stands: the server's `skipCheck`.
+        public let skipCheck: String?
         public var id: String { jobId }
 
         public init(jobId: String, taskId: String?, line: LandingLine, detail: String?,
-                    retryable: Bool, landingSessionId: String? = nil, mergeJob: Bool = false) {
+                    retryable: Bool, landingSessionId: String? = nil, mergeJob: Bool = false,
+                    skippable: Bool = false, skipCheck: String? = nil) {
             self.jobId = jobId
             self.taskId = taskId
             self.line = line
@@ -248,6 +253,8 @@ public enum ProjectPage {
             self.retryable = retryable
             self.landingSessionId = landingSessionId
             self.mergeJob = mergeJob
+            self.skippable = skippable
+            self.skipCheck = skipCheck
         }
     }
 
@@ -260,6 +267,17 @@ public enum ProjectPage {
     public static let landingMayHaveBeenPushed = "may have been pushed"
     public static let landingRetriedByOwner = "retried by you"
     public static let landingRetriedByCoordinator = "retried by the coordinator"
+    /// The owner's skip of a landing still in flight (§2.4 J-S5), in the web's `LANDING_WORDS`
+    /// (`SKIP_CHECK_*`): the press, its question and two answers, its refusal, the reason it
+    /// records, and the two notes that say where a skip stands in the place of "Nothing to do".
+    public static let landingSkipCheck = "Land without the check"
+    public static let landingSkipCheckConfirm = "The landing check won't run for this landing. It stops now and lands again without the check, recorded as skipped by you."
+    public static let landingSkipCheckGo = "Land without it"
+    public static let landingSkipCheckCancel = "Keep checking"
+    public static let landingSkipCheckFailed = "Could not skip the check"
+    public static let landingSkipCheckReason = "The owner chose to land this without waiting for the landing check."
+    public static let landingSkipCheckStopping = "Stopping — it lands again without the landing check."
+    public static let landingSkipCheckSkipped = "Landing without the landing check — you skipped it."
     /// The card's own three: the branch the work lands on ("onto project/…"), the sentence that
     /// takes the reader off the hook while it lands, and the way into the jobs from the card that
     /// also offers Retry.
@@ -502,7 +520,8 @@ public enum ProjectPage {
                 jobId: job.jobId, taskId: job.taskId, line: line,
                 detail: landingJobDetail(job, main: main), retryable: job.retryable,
                 landingSessionId: job.landingSessionId,
-                mergeJob: ProjectMergeCard.mergeJobKinds.contains(job.kind))
+                mergeJob: ProjectMergeCard.mergeJobKinds.contains(job.kind),
+                skippable: job.skippable, skipCheck: job.skipCheck)
         }
     }
 
@@ -705,12 +724,16 @@ public enum ProjectPage {
             /// A round of merging into main: its row carries the word and no "Open landing ›" —
             /// the merge card is that round's way in.
             public let mergeJob: Bool
+            /// The server's `skippable`.
+            public let skippable: Bool
+            /// The server's `skipCheck`.
+            public let skipCheck: String?
             public var id: String { jobId }
 
             public init(jobId: String, taskId: String?, title: String?, state: String,
                         running: Bool, timedOut: Bool, retryable: Bool, detail: String?,
                         word: String = "", landingSessionId: String? = nil,
-                        mergeJob: Bool = false) {
+                        mergeJob: Bool = false, skippable: Bool = false, skipCheck: String? = nil) {
                 self.jobId = jobId
                 self.taskId = taskId
                 self.title = title
@@ -722,6 +745,8 @@ public enum ProjectPage {
                 self.word = word
                 self.landingSessionId = landingSessionId
                 self.mergeJob = mergeJob
+                self.skippable = skippable
+                self.skipCheck = skipCheck
             }
         }
 
@@ -756,6 +781,12 @@ public enum ProjectPage {
         public let detail: String?
         /// The job Retry takes, when the server says a retry takes one.
         public let retryJobId: String?
+        /// The task whose landing "Land without the check" skips, when the card holds that one
+        /// landing and the server says the skip takes it; nil otherwise.
+        public let skipTaskId: String?
+        /// Where a skip of the one landing's check stands, said in the place of "Nothing to do";
+        /// nil when nobody skipped it.
+        public let skipNote: String?
         /// The card holds one job — by the same counts its head is named by — and it is a round of
         /// merging into main (a merge check, or the merge itself). It lands no task, so the card
         /// says no "Nothing to do" (board v4 04 draws no body under that head). Read off
@@ -791,7 +822,8 @@ public enum ProjectPage {
                                 retryable: job.retryable, detail: job.detail,
                                 word: job.line.word,
                                 landingSessionId: job.landingSessionId,
-                                mergeJob: job.mergeJob)
+                                mergeJob: job.mergeJob,
+                                skippable: job.skippable, skipCheck: job.skipCheck)
             }
         // The row's own rule for the name slot, one row down: several jobs are a count in the head
         // and a row each in the body; one job is its title in the body.
@@ -808,6 +840,10 @@ public enum ProjectPage {
             liveness: line.liveness,
             detail: line.timedOut ? lead?.detail : nil,
             retryJobId: lead?.retryable == true ? lead?.jobId : nil,
+            skipTaskId: !several && lead?.skippable == true ? lead?.taskId : nil,
+            skipNote: several ? nil
+                : lead?.skipCheck == "STOPPING" ? landingSkipCheckStopping
+                : lead?.skipCheck == "SKIPPED" ? landingSkipCheckSkipped : nil,
             mergeJob: !several && ProjectMergeCard.isMergeJob(view.inFlight))
     }
 
@@ -1047,24 +1083,17 @@ public enum ProjectPage {
 
     public static let openItemsHeading = "Open items"
     public static let needsYouGroup = "Needs you"
-    public static let withCoordinatorGroup = "With the coordinator"
 
-    /// The toolbar counts every open item; only the owner's share raises a reminder on the page.
     public struct OpenItemsSummary: Equatable, Sendable {
         public let needsYou: Int
-        public let withCoordinator: Int
-        public var count: Int { needsYou + withCoordinator }
+        public var count: Int { needsYou }
 
         public var attention: String? {
             guard needsYou > 0 else { return nil }
             return needsYou == 1 ? "1 item needs you" : "\(needsYou) items need you"
         }
 
-        public var subtitle: String {
-            if count == 0 { return "No open items" }
-            let owner = attention ?? "No action needed from you"
-            return withCoordinator > 0 ? "\(owner) · \(withCoordinator) with the coordinator" : owner
-        }
+        public var subtitle: String { attention ?? "No open items" }
     }
 
     /// A missing read is not an empty inbox. A start request counts only while the page can answer
@@ -1077,8 +1106,7 @@ public enum ProjectPage {
         let start = StartProject.pageRow(status: status, started: started, openItems: items)
         let done = ProjectDone.live(openItems: items, status: status.rawValue)
         return OpenItemsSummary(needsYou: needsYouRows(items).count + (start?.request == nil ? 0 : 1)
-                                    + (done == nil ? 0 : 1),
-                                withCoordinator: items.withCoordinator.count)
+                                    + (done == nil ? 0 : 1))
     }
 
     /// The owner's rows, without the request to record the project done should a server ever list

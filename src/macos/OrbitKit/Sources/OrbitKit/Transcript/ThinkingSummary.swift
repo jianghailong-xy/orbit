@@ -52,6 +52,18 @@ public enum ThinkingSummary {
         return "\(trimmed)k chars"
     }
 
+    /// The row for a stretch still being written: `Thinking… 12s · 1.4k chars`, its clock read
+    /// against `now` so a caller ticking once a second keeps it running. The stretch is folded by
+    /// default (docs/mocks/thinking-fold-live), so this row is what says it is still working. No
+    /// clock when its start was never seen, or when this device's clock is behind the runner's.
+    public static func liveLabel(chars: Int, startedTs: String?, now: Date) -> String {
+        var label = "Thinking…"
+        if let start = date(startedTs), now > start {
+            label += " \(duration(now.timeIntervalSince(start))) ·"
+        }
+        return "\(label) \(size(chars))"
+    }
+
     /// The whole row for a settled stretch: `Thought for 1m 47s · 3 blocks · 21k chars`. The block
     /// count appears only when blocks were folded together, and the duration only when the clock
     /// that measured it survived — the runner's stored `thinkingMs` first, the watched span after.

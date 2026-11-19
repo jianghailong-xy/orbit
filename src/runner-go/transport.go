@@ -17,6 +17,7 @@ import (
 	"strconv"
 	"strings"
 	"sync"
+	"sync/atomic"
 	"time"
 	"unicode/utf8"
 )
@@ -30,6 +31,9 @@ const (
 	sessionTerminalHandoffV1         = "session-terminal-handoff-v1"
 	sessionWorktreeOpsV1             = "session-worktree-ops-v1"
 	sessionMergeRecoveryV1           = "session-merge-recovery-v1"
+	// A merge runs whether or not a turn holds the session's checkout, and holds no turn back
+	// (heartbeatMerge); a commit runs beside a live background job.
+	sessionMergeBesideTurnV1 = "session-merge-beside-turn-v1"
 	// The commit relay may also carry `discard`, and this runner reports which finished
 	// sessions' checkouts still hold uncommitted work (abandoned_checkout.go).
 	abandonedCheckoutCapabilityV1 = "abandoned-checkout-v1"
@@ -81,6 +85,7 @@ func init() {
 		sessionWorktreeOpsV1,
 		sessionMergeRecoveryV1,
 		abandonedCheckoutCapabilityV1,
+		sessionMergeBesideTurnV1,
 		sessionCurrentWorkRoutingV1,
 		sessionClaudeSteerWithdrawV1,
 		sessionClaudeCoordinatorContextV1,
@@ -98,6 +103,8 @@ func init() {
 		claudeAccountLoginCapabilityV1,
 		claudeAccountRemoveCapabilityV1,
 		claudeAccountMoveCapabilityV1,
+		claudeAccountSwapCapabilityV1,
+		claudeScheduledCheckOnlyAsksCapabilityV1,
 		antigravityAccountLoginCapabilityV1,
 		antigravityAccountRemoveCapabilityV1,
 		kimiLoginRegionCapabilityV1,
@@ -107,11 +114,34 @@ func init() {
 		sessionMoveCapabilityV1,
 		wikiRepoOpCapabilityV1,
 		wikiRepoOpReadCapabilityV1,
+		wikiRepoOpFolderCapabilityV1,
+		wikiRepoOpProbeCapabilityV1,
 		cursorKeyCheckCapabilityV1,
 		dirProbeCapabilityV1,
 		createWorkDirCapabilityV1,
+		cloneWorkDirCapabilityV1,
+		conditionProbeCapabilityV1,
+		createWorkDirCapabilityV2,
 		claudeRegionCapabilityV1,
+		mainCheckoutGitCapabilityV1,
+		mainCheckoutDiscardCapabilityV1,
+		selfUpdatePostponeCapabilityV1,
+		selfUpdateNowCapabilityV1,
+		taskForkCapabilityV1,
+		codelessCheckoutCapabilityV1,
+		machineResourcesCapabilityV1,
+		helpAskCapabilityV1,
+		subagentRemoteResumeCapabilityV1,
+		subagentRemoteInPlaceCapabilityV1,
 	}, cursorAccountCapabilities()...), declaredSteerCapabilities()...), ",")
+	// Where 0600 means something (secret_file_unix.go); a Windows runner is never handed a secret.
+	if secretFilesSupported {
+		runnerCapabilitiesV1 += "," + ownerSecretCapabilityV1
+	}
+	// Only a runner the managed image's entrypoint started has the browser (browser_supervisor.go).
+	if declaresBrowserClear(os.LookupEnv) {
+		runnerCapabilitiesV1 += "," + browserClearCapabilityV1
+	}
 }
 
 type transportHTTPError struct {
@@ -229,6 +259,12 @@ type Transport struct {
 	// transport, by startLink; nil everywhere else, where every call goes over HTTPS: `orbit mcp`, the CLI
 	// verbs and the approval hook, which name themselves (runnerCallerHeader), and the release check.
 	link *linkMode
+	// noTakeoverBatch is set once the control plane has answered the batch takeover 404 or 405: it
+	// predates it, and every takeover from then on is one request per session, as before it.
+	noTakeoverBatch atomic.Bool
+	// observer hears about every request and card of the tool call it was set for (transport_observe.go).
+	observerMu sync.Mutex
+	observer   func(transportEvent)
 }
 
 // eventStreams is the sessions' event streams of the daemon's transport (link_events.go). Nil on any
@@ -340,13 +376,19 @@ func (t *Transport) doHeaders(ctx context.Context, method, path string, body, ou
 // doVia is doHeaders sent through client: t.client for every call but the wiki door's
 // (wiki_conn.go). On the daemon's transport a daemon route's call goes over the runner link
 // instead (linkMode.doVia); every other call is doHTTP's.
-func (t *Transport) doVia(ctx context.Context, client *http.Client, method, path string, body, out interface{}, timeout time.Duration, headers map[string]string) error {
+func (t *Transport) doVia(ctx context.Context, client *http.Client, method, path string, body, out interface{}, timeout time.Duration, headers map[string]string) (err error) {
+	// What this process sent and how it ended, for the failure it may have to report (recovery_render.go).
+	noteTransportAttempt()
+	defer func() { noteTransportResultHeaders(method, err, headers, body) }()
 	if t.link != nil {
-		return t.link.doVia(ctx, method, path, body, out, timeout, headers, func(ctx context.Context) error {
+		err = t.link.doVia(ctx, method, path, body, out, timeout, headers, func(ctx context.Context) error {
 			return t.doHTTP(ctx, client, method, path, body, out, timeout, headers)
 		})
+	} else {
+		err = t.doHTTP(ctx, client, method, path, body, out, timeout, headers)
 	}
-	return t.doHTTP(ctx, client, method, path, body, out, timeout, headers)
+	t.observe(transportEvent{Kind: transportEventRequest, Method: method, Path: path, Err: err})
+	return err
 }
 
 // doHTTP is one call over HTTPS, as every call went before the runner link.
@@ -437,12 +479,25 @@ func (t *Transport) deregister() error {
 	return t.do(nil, "POST", "/runner/deregister", nil, nil, 15*time.Second)
 }
 
+// gitCredential is POST /runner/git-credential: Orbit's GitHub App token for one workspace's repository
+// (github_credential.go). Never logged.
+func (t *Transport) gitCredential(ctx context.Context, request RunnerGitCredentialRequest) (*RunnerGitCredentialAnswer, error) {
+	var answer RunnerGitCredentialAnswer
+	if err := t.do(ctx, "POST", "/runner/git-credential", request, &answer, orbitGitCredentialTimeout); err != nil {
+		return nil, err
+	}
+	return &answer, nil
+}
+
 func (t *Transport) heartbeat(b HeartbeatRequest) (*HeartbeatResponse, error) {
+	timeout := 15 * time.Second
 	if t.link != nil {
 		t.link.supervising(b.SupervisedSessionIDs)
+		// Over the link a beat waits for its answer as long as the gateway may take to give one (link_heartbeat.go).
+		timeout = linkHeartbeatTimeout
 	}
 	var r HeartbeatResponse
-	if err := t.do(nil, "POST", "/runner/heartbeat", b, &r, 15*time.Second); err != nil {
+	if err := t.do(nil, "POST", "/runner/heartbeat", b, &r, timeout); err != nil {
 		return nil, err
 	}
 	if t.link != nil {
@@ -466,14 +521,21 @@ var fetchCallTimeout = 35 * time.Second
 // claimSession is the session the control plane hands this runner, nil for none. It is asked once a hint says a session
 // waits (link_hints.go), and nil is the hint not coming as well. ids is the claim loop's request id over the link
 // (linkRequestIDs): a claim that got no answer goes again under it, as soon as the loop asks again.
-func (t *Transport) claimSession(ctx context.Context, ids *linkRequestIDs) (*ClaimedSession, error) {
+//
+// scope, when given, names the only sessions the claim may take (drainClaimScope); only a control
+// plane that says it honours it (HeartbeatResponse.DrainScopedClaims) is sent one.
+func (t *Transport) claimSession(ctx context.Context, ids *linkRequestIDs, scope ...string) (*ClaimedSession, error) {
 	if t.link != nil {
 		if due, err := t.link.gates.takeClaim(ctx, linkHintWait); !due {
 			return nil, err
 		}
 	}
 	var r ClaimedSession
-	err := t.do(ids.with(ctx), "GET", "/runner/sessions/claim", nil, &r, fetchCallTimeout)
+	path := "/runner/sessions/claim"
+	if len(scope) > 0 {
+		path = linkWithQuery(path, "drainScope", strings.Join(scope, ","))
+	}
+	err := t.do(ids.with(ctx), "GET", path, nil, &r, fetchCallTimeout)
 	ids.settle(err)
 	if ids.kept() {
 		t.link.gates.markClaim() // the question the claim asked is still open, which no hint may say
@@ -535,7 +597,10 @@ func (t *Transport) postEvents(ctx context.Context, sessionID string, batch RunE
 func (t *Transport) finalizeRun(ctx context.Context, sessionID string, b RunFinalizeRequest) (bool, error) {
 	var r RunFinalizeResponse
 	b.LeaseOwner = t.leaseOwner
+	b = scrubRunFinalize(b, sessionID)
 	path := "/runner/sessions/" + sessionID + "/finalize"
+	// The finalize carries the run's last worktree state: no sample scanned before it is newer.
+	worktreeReports.reported(sessionID)
 	if err := t.do(ctx, "POST", path, b, &r, 35*time.Second); err != nil {
 		return true, err
 	}
@@ -592,6 +657,12 @@ func (t *Transport) inbox(ctx context.Context, sessionID, leaseGeneration string
 	if r.TurnID == "" {
 		return nil, nil
 	}
+	// The end of a coordinator handing over leaves the session's background work running; noted before any loop
+	// acts on the turn, whichever engine's loop that is (session_keep_work.go).
+	if r.Kind == "end" && keepBackgroundWorkRequested(r.Content) {
+		markSessionKeepsWork(sessionID)
+	}
+	r.Content = withExternalSenderBlock(r.Kind, r.Content, r.ExternalSender)
 	return &r, nil
 }
 
@@ -671,6 +742,131 @@ func retryTakeoverTurnLeases(ctx context.Context, takeover func(context.Context)
 	return retryIdempotentWhile(ctx, takeover, isRetryableTransportError)
 }
 
+// takeoverBatchMax is the most sessions one batch takeover names: the control plane's
+// BATCH_TAKEOVER_TURN_LEASES_MAX.
+const takeoverBatchMax = 500
+
+// errTakeoverBatchUnsupported is a batch takeover refused for want of the route: a control plane older
+// than it. Nothing was taken over; the caller takes the same sessions over one request at a time.
+var errTakeoverBatchUnsupported = errors.New("the control plane has no batch takeover")
+
+// takeoverRow is one session's answer to a batch takeover: the status the single takeover answers
+// with, or the refusal it would have answered with, as the *transportHTTPError that call returns.
+type takeoverRow struct {
+	status string
+	err    error
+}
+
+// takeoverBatchSize is how many sessions a reclaim phase takes over per request: takeoverBatchMax, or
+// one once the control plane has said it has no batch takeover.
+func (t *Transport) takeoverBatchSize() int {
+	if t.noTakeoverBatch.Load() {
+		return 1
+	}
+	return takeoverBatchMax
+}
+
+// takeoverTurnLeasesBatch is takeoverTurnLeases for every one of jobs in one request
+// (POST /runner/sessions/takeover-leases), each against its own snapshot owner. It answers a row
+// per job, in the jobs' order, or errTakeoverBatchUnsupported when the route is not there.
+func (t *Transport) takeoverTurnLeasesBatch(ctx context.Context, jobs []*ClaimedSession) ([]takeoverRow, error) {
+	type row struct {
+		SessionID          string  `json:"sessionId"`
+		ExpectedLeaseOwner *string `json:"expectedLeaseOwner"`
+	}
+	rows := make([]row, len(jobs))
+	for i, job := range jobs {
+		rows[i] = row{SessionID: job.SessionID}
+		if job.LeaseOwner != "" {
+			owner := job.LeaseOwner
+			rows[i].ExpectedLeaseOwner = &owner
+		}
+	}
+	var response struct {
+		Results []struct {
+			SessionID string `json:"sessionId"`
+			Status    string `json:"status"`
+			Error     *struct {
+				StatusCode int    `json:"statusCode"`
+				Message    string `json:"message"`
+				Code       string `json:"code"`
+			} `json:"error"`
+		} `json:"results"`
+	}
+	err := t.do(ctx, "POST", "/runner/sessions/takeover-leases",
+		map[string]interface{}{"leaseOwner": t.leaseOwner, "sessions": rows}, &response, 30*time.Second)
+	if isTransportHTTPStatus(err, http.StatusNotFound) || isTransportHTTPStatus(err, http.StatusMethodNotAllowed) {
+		t.noTakeoverBatch.Store(true)
+		return nil, errTakeoverBatchUnsupported
+	}
+	if err != nil {
+		return nil, err
+	}
+	// An answer this build cannot line up with what it asked is taken as no batch takeover at all: the
+	// sessions are taken over one at a time, which is safe whatever the batch did, since a session
+	// already taken over by this process answers its own takeover with its status.
+	if len(response.Results) != len(jobs) {
+		logln(fmt.Sprintf("reclaim: batch takeover answered %d rows for %d sessions; taking them over one at a time", len(response.Results), len(jobs)))
+		t.noTakeoverBatch.Store(true)
+		return nil, errTakeoverBatchUnsupported
+	}
+	out := make([]takeoverRow, len(jobs))
+	for i, r := range response.Results {
+		if !strings.EqualFold(r.SessionID, jobs[i].SessionID) {
+			logln(fmt.Sprintf("reclaim: batch takeover answered row %d for %s, not %s; taking them over one at a time", i, r.SessionID, jobs[i].SessionID))
+			t.noTakeoverBatch.Store(true)
+			return nil, errTakeoverBatchUnsupported
+		}
+		if r.Error != nil {
+			body, _ := json.Marshal(map[string]interface{}{"statusCode": r.Error.StatusCode, "message": r.Error.Message, "code": r.Error.Code})
+			out[i].err = &transportHTTPError{
+				method: "POST", path: "/runner/sessions/" + jobs[i].SessionID + "/takeover-leases",
+				statusCode: r.Error.StatusCode, body: string(body),
+			}
+			continue
+		}
+		out[i].status = r.Status
+	}
+	return out, nil
+}
+
+// takeoverClaimedSessions is takeoverClaimedSession for many sessions in one request, retried whole as
+// that one is. A row taken over has its job's lease owner moved to this process; a refused row keeps
+// its own. errTakeoverBatchUnsupported says to take the same sessions over one at a time instead.
+func takeoverClaimedSessions(ctx context.Context, t *Transport, jobs []*ClaimedSession) ([]takeoverRow, error) {
+	if t.noTakeoverBatch.Load() {
+		return nil, errTakeoverBatchUnsupported
+	}
+	var rows []takeoverRow
+	err := retryIdempotentWhile(ctx, func(attemptCtx context.Context) error {
+		var err error
+		rows, err = t.takeoverTurnLeasesBatch(attemptCtx, jobs)
+		return err
+	}, func(err error) bool {
+		return !errors.Is(err, errTakeoverBatchUnsupported) && isRetryableTransportError(err)
+	})
+	if err != nil {
+		return nil, err
+	}
+	for i, row := range rows {
+		if row.err == nil {
+			jobs[i].LeaseOwner = t.leaseOwner
+		}
+	}
+	return rows, nil
+}
+
+// takeoverChunk takes jobs over in one batch request, or — against a control plane without the batch
+// takeover, which a reclaim phase then asks for one job at a time — with the single takeover, its
+// refusal as the job's row. Any other failure of the request is returned as the reclaim's.
+func takeoverChunk(ctx context.Context, t *Transport, jobs []*ClaimedSession) ([]takeoverRow, error) {
+	if len(jobs) == 1 && t.noTakeoverBatch.Load() {
+		status, err := takeoverClaimedSession(ctx, t, jobs[0])
+		return []takeoverRow{{status: status, err: err}}, nil
+	}
+	return takeoverClaimedSessions(ctx, t, jobs)
+}
+
 // takeoverClaimedSession always confirms even a matching snapshot owner with the server.
 // A claim/reclaim response can be stale by the time this process handles it, so a local
 // equality check cannot substitute for the Session row lock in takeover-leases.
@@ -690,6 +886,11 @@ func takeoverClaimedSession(ctx context.Context, t *Transport, job *ClaimedSessi
 func (t *Transport) turnComplete(ctx context.Context, sessionID string, b TurnCompleteRequest) (string, error) {
 	var r TurnCompleteResponse
 	b.LeaseOwner = t.leaseOwner
+	// Every path a completion is sent by, a kept one an earlier process journaled included (secret_wire.go).
+	b = scrubTurnComplete(b, sessionID)
+	// What this completion reports of the worktree is newer than any heartbeat sample scanned before
+	// now (worktreeReportClock). Recorded before the send: one still in flight already outranks them.
+	worktreeReports.reported(sessionID)
 	err := retryIdempotentWhile(ctx, func(attemptCtx context.Context) error {
 		r = TurnCompleteResponse{}
 		return t.do(attemptCtx, "POST", "/runner/sessions/"+sessionID+"/turn-complete", b, &r, 35*time.Second)
@@ -893,6 +1094,12 @@ func (t *Transport) loginResult(b LoginResultRequest) error {
 	return t.do(nil, "POST", "/runner/login-result", b, nil, 15*time.Second)
 }
 
+// claudeAccountSwapResult reports where a heartbeat-delivered Claude account swap stands
+// (claude-account-swap/v1).
+func (t *Transport) claudeAccountSwapResult(b ClaudeAccountSwapResult) error {
+	return t.do(nil, "POST", "/runner/claude-account-swap-result", b, nil, 15*time.Second)
+}
+
 // codexAccountRemoveResult reports what a heartbeat-delivered account removal came to, on the route
 // a control plane older than accounts-per-engine reads — the one that handed the request over.
 func (t *Transport) codexAccountRemoveResult(b AccountRemoveResultRequest) error {
@@ -914,6 +1121,16 @@ func (t *Transport) installResult(b InstallResultRequest) error {
 // content it was holding was saved.
 func (t *Transport) repoCleanupResult(b RepoCleanupResultRequest) error {
 	return t.do(nil, "POST", "/runner/repo-cleanup-result", b, nil, 15*time.Second)
+}
+
+// mainCheckoutSnapshot answers a heartbeat-delivered main checkout read (contract §10.2).
+func (t *Transport) mainCheckoutSnapshot(id string, b MainCheckoutSnapshotAnswer) error {
+	return t.do(nil, "POST", "/runner/main-checkout/"+url.PathEscape(id)+"/snapshot", b, nil, 15*time.Second)
+}
+
+// mainCheckoutResult reports how a heartbeat-delivered main checkout action went (contract §10.2).
+func (t *Transport) mainCheckoutResult(id string, b MainCheckoutActionResult) error {
+	return t.do(nil, "POST", "/runner/main-checkout/"+url.PathEscape(id)+"/result", b, nil, 15*time.Second)
 }
 
 // commitResult reports the outcome of a heartbeat-delivered CommitCommand back to the server.
@@ -956,6 +1173,7 @@ func (t *Transport) diffResult(sessionID string, b DiffResultRequest) error {
 }
 
 func (t *Transport) diffResultContext(ctx context.Context, sessionID string, b DiffResultRequest) error {
+	worktreeReports.reported(sessionID)
 	return t.do(ctx, "POST", "/runner/sessions/"+sessionID+"/diff", b, nil, 35*time.Second)
 }
 
@@ -994,7 +1212,13 @@ const maxSessionAttachmentBytes = 25 << 20
 
 var errAttachmentTooLarge = errors.New("File exceeds the 25 MiB limit")
 
-func (t *Transport) uploadSessionAttachmentFile(ctx context.Context, sessionID string, file *os.File, mimeType, filename string) (string, error) {
+func (t *Transport) uploadSessionAttachmentFile(ctx context.Context, sessionID string, file *os.File, mimeType, filename string) (id string, err error) {
+	noteTransportAttempt()
+	defer func() { noteTransportResult(http.MethodPost, err) }()
+	return t.uploadSessionAttachmentFileOnce(ctx, sessionID, file, mimeType, filename)
+}
+
+func (t *Transport) uploadSessionAttachmentFileOnce(ctx context.Context, sessionID string, file *os.File, mimeType, filename string) (string, error) {
 	if ctx == nil {
 		ctx = context.Background()
 	}
@@ -1007,6 +1231,11 @@ func (t *Transport) uploadSessionAttachmentFile(ctx context.Context, sessionID s
 	}
 	if info.Size() > maxSessionAttachmentBytes {
 		return "", errAttachmentTooLarge
+	}
+	// Every door that sends a file's bytes comes through here or uploadFile: none sends one holding an
+	// owner-request secret (local_file.go).
+	if err := refuseFileHoldingSecret(file, file.Name()); err != nil {
+		return "", err
 	}
 
 	var body bytes.Buffer
@@ -1077,9 +1306,12 @@ func (t *Transport) createApproval(ctx context.Context, sessionID string, body i
 		ID     string `json:"id"`
 		Status string `json:"status"`
 	}
+	// A SubAgent's engine asks under its parent's session, and its card names the run (subagentApprovalBody).
+	body = subagentApprovalBody(ctx, body)
 	if err := t.do(ctx, "POST", "/runner/sessions/"+sessionID+"/approvals", body, &r, 20*time.Second); err != nil {
 		return "", err
 	}
+	t.observe(transportEvent{Kind: transportEventApprovalFiled, ApprovalID: r.ID, ToolName: approvalToolName(body)})
 	return r.ID, nil
 }
 
@@ -1235,9 +1467,16 @@ func (t *Transport) labelSummary(listID string) (json.RawMessage, error) {
 // listProviders returns the provider slugs this owner may pass as `provider` — the built-in
 // engines plus their configured ones. Plain runner auth, like the task routes whose `provider`
 // field it answers for, so it works outside an orchestration-enabled session too.
-func (t *Transport) listProviders() (json.RawMessage, error) {
+//
+// With workspace (a workspace of the owner's, by name or id) the server answers instead which provider ×
+// engine that workspace's runner can run, each usable or not with the reason, and the workspace's default.
+func (t *Transport) listProviders(workspace string) (json.RawMessage, error) {
+	path := "/runner/providers"
+	if workspace != "" {
+		path += "?" + url.Values{"workspace": {workspace}}.Encode()
+	}
 	var out json.RawMessage
-	err := t.do(nil, "GET", "/runner/providers", nil, &out, taskOpTimeout)
+	err := t.do(nil, "GET", path, nil, &out, taskOpTimeout)
 	return out, err
 }
 
@@ -1629,13 +1868,18 @@ func (t *Transport) recordProjectMergeEvidence(id string, body map[string]interf
 // orchestration grant, so that body, and only that body, travels through doOrchestration: it
 // carries the session-bound credential and refreshes it once if it has expired. A create without
 // the field is byte-identical to what it always sent.
-func (t *Transport) createProject(sessionID, orchestrationToken string, body map[string]interface{}) (json.RawMessage, error) {
+//
+// requestID names this create (create_request.go): sent again under the same id, the server answers with
+// the project the first delivery created instead of creating another. Empty sends no id.
+func (t *Transport) createProject(sessionID, orchestrationToken, requestID string, body map[string]interface{}) (json.RawMessage, error) {
 	var out json.RawMessage
 	if _, named := body["workspaceId"]; named {
-		err := t.doOrchestration("POST", "/runner/projects", body, &out, sessionID, orchestrationToken)
+		err := t.doOrchestrationWith("POST", "/runner/projects", body, &out, sessionID, orchestrationToken, taskOpTimeout,
+			createRequestHeaders(nil, requestID))
 		return out, err
 	}
-	err := t.doHeaders(nil, "POST", "/runner/projects", body, &out, taskOpTimeout, sessionHeader(sessionID))
+	err := t.doHeaders(nil, "POST", "/runner/projects", body, &out, taskOpTimeout,
+		createRequestHeaders(sessionHeader(sessionID), requestID))
 	return out, err
 }
 
@@ -1746,6 +1990,64 @@ func (t *Transport) askOwner(sessionID, id string, body map[string]interface{}) 
 	return out, err
 }
 
+// fileOwnerRequest files a request that the account owner do or provide something, and returns at
+// once. The session header names who is asking: any session this runner hosts may file one.
+func (t *Transport) fileOwnerRequest(sessionID string, body map[string]interface{}) (json.RawMessage, error) {
+	var out json.RawMessage
+	err := t.doHeaders(nil, "POST", "/runner/owner-requests", body, &out, taskOpTimeout, sessionHeader(sessionID))
+	return out, err
+}
+
+// withdrawOwnerRequest withdraws a request this session filed: a PENDING one of any kind, or a DONE SECRET one whose
+// key is in use, which ends that key's grant (secret_store.go).
+func (t *Transport) withdrawOwnerRequest(sessionID, id string, body map[string]interface{}) (json.RawMessage, error) {
+	if err := validatePathSegmentID(id); err != nil {
+		return nil, err
+	}
+	var out json.RawMessage
+	err := t.doHeaders(nil, "POST", "/runner/owner-requests/"+url.PathEscape(id)+"/withdraw", body, &out,
+		taskOpTimeout, sessionHeader(sessionID))
+	return out, err
+}
+
+// secretGrantTimeout bounds each of the three secret-grant calls. They are small, and a reconcile makes them one
+// after another.
+const secretGrantTimeout = 15 * time.Second
+
+// fetchSecretGrant asks for one grant's value. The answer is never logged, and an error never carries it: a non-2xx
+// answer has no value in its body.
+func (t *Transport) fetchSecretGrant(id string) (*SecretGrantFetch, error) {
+	if err := validatePathSegmentID(id); err != nil {
+		return nil, err
+	}
+	var out SecretGrantFetch
+	if err := t.do(nil, "POST", "/runner/secret-grants/"+url.PathEscape(id)+"/fetch", map[string]interface{}{},
+		&out, secretGrantTimeout); err != nil {
+		return nil, err
+	}
+	return &out, nil
+}
+
+// ackSecretGrant reports whether a fetched grant was materialised.
+func (t *Transport) ackSecretGrant(id string, ack SecretGrantAck) error {
+	if err := validatePathSegmentID(id); err != nil {
+		return err
+	}
+	return t.do(nil, "POST", "/runner/secret-grants/"+url.PathEscape(id)+"/ack", ack, nil, secretGrantTimeout)
+}
+
+// removedSecretGrant reports a grant gone from this machine; note says what was found, never the value.
+func (t *Transport) removedSecretGrant(id, note string) error {
+	if err := validatePathSegmentID(id); err != nil {
+		return err
+	}
+	body := map[string]interface{}{}
+	if note != "" {
+		body["note"] = note
+	}
+	return t.do(nil, "POST", "/runner/secret-grants/"+url.PathEscape(id)+"/removed", body, nil, secretGrantTimeout)
+}
+
 // requestProjectStart files a coordinator's request that the account owner start its project, and
 // returns at once: the owner answers on the start card, and the coordinator is told when the project
 // starts, as a turn of its own.
@@ -1778,6 +2080,31 @@ func (t *Transport) requestProjectDone(sessionID, id string, body map[string]int
 	var out json.RawMessage
 	err := t.doHeaders(nil, "POST", "/runner/projects/"+url.PathEscape(id)+"/done-requests", body,
 		&out, taskOpTimeout, sessionHeader(sessionID))
+	return out, err
+}
+
+// criterionConfirmationCall is the coordinator's confirm, withdraw or start-a-check on one of its
+// project's CONFIRMATION criteria (migration 0545). The session header is the authority: the server
+// checks it against the project's own coordinator pointer.
+func (t *Transport) criterionConfirmationCall(sessionID, id, criterionID, path string, body map[string]interface{}) (json.RawMessage, error) {
+	if err := validatePathSegmentID(id); err != nil {
+		return nil, err
+	}
+	if err := validatePathSegmentID(criterionID); err != nil {
+		return nil, err
+	}
+	var out json.RawMessage
+	err := t.doHeaders(nil, "POST", "/runner/projects/"+url.PathEscape(id)+"/criteria/"+
+		url.PathEscape(criterionID)+path, body, &out, taskOpTimeout, sessionHeader(sessionID))
+	return out, err
+}
+
+// reportCriterionCheck is an Agent check's verdict, from the session running it: the server finds
+// the attempt through that session's task.
+func (t *Transport) reportCriterionCheck(sessionID string, body map[string]interface{}) (json.RawMessage, error) {
+	var out json.RawMessage
+	err := t.doHeaders(nil, "POST", "/runner/criterion-checks/report", body, &out, taskOpTimeout,
+		sessionHeader(sessionID))
 	return out, err
 }
 
@@ -1817,6 +2144,19 @@ func (t *Transport) handOverOpenItem(sessionID, id, itemID, note string) (json.R
 	err := t.doHeaders(nil, "POST",
 		"/runner/projects/"+url.PathEscape(id)+"/open-items/"+url.PathEscape(itemID)+"/hand-over",
 		map[string]interface{}{"note": note}, &out, taskOpTimeout, sessionHeader(sessionID))
+	return out, err
+}
+
+// recordProjectRuling records an owner ruling on the project (`project_ruling_record`, coordinator
+// handoff v2 §2). The session header is the authority: the server checks it against the project's
+// coordinator pointer and the quote against the named turn's owner text.
+func (t *Transport) recordProjectRuling(sessionID, id string, body map[string]interface{}) (json.RawMessage, error) {
+	if err := validatePathSegmentID(id); err != nil {
+		return nil, err
+	}
+	var out json.RawMessage
+	err := t.doHeaders(nil, "POST", "/runner/projects/"+url.PathEscape(id)+"/rulings",
+		body, &out, taskOpTimeout, sessionHeader(sessionID))
 	return out, err
 }
 
@@ -1870,6 +2210,17 @@ func (t *Transport) observeIntegration(sessionID, id, reason string) (json.RawMe
 	var out json.RawMessage
 	err := t.doHeaders(nil, "POST",
 		"/runner/projects/"+url.PathEscape(id)+"/integration/observe",
+		map[string]interface{}{"reason": reason}, &out, taskOpTimeout, sessionHeader(sessionID))
+	return out, err
+}
+
+// requestPromotion records a K7 request as the project's current coordinator conversation.
+func (t *Transport) requestPromotion(sessionID, id, reason string) (json.RawMessage, error) {
+	if err := validatePathSegmentID(id); err != nil {
+		return nil, err
+	}
+	var out json.RawMessage
+	err := t.doHeaders(nil, "POST", "/runner/projects/"+url.PathEscape(id)+"/promotions/request",
 		map[string]interface{}{"reason": reason}, &out, taskOpTimeout, sessionHeader(sessionID))
 	return out, err
 }
@@ -1965,16 +2316,55 @@ func (t *Transport) removeTaskDependency(id, dependsOnTaskID string) (json.RawMe
 }
 
 func (t *Transport) createTask(agentID, sessionID string, body interface{}) (json.RawMessage, error) {
-	var out json.RawMessage
-	err := t.doHeaders(nil, "POST", "/runner/tasks", body, &out, taskOpTimeout, taskCreateHeaders(agentID, sessionID))
-	return out, err
+	return resendKeyedCreate(body, func() (json.RawMessage, error) {
+		var out json.RawMessage
+		err := t.doHeaders(nil, "POST", "/runner/tasks", body, &out, taskOpTimeout, taskCreateHeaders(agentID, sessionID))
+		return out, err
+	})
 }
 
 // createTasksBatch writes several tasks in one atomic call; body is {"tasks":[...]}.
 func (t *Transport) createTasksBatch(agentID, sessionID string, body interface{}) (json.RawMessage, error) {
-	var out json.RawMessage
-	err := t.doHeaders(nil, "POST", "/runner/tasks/batch-create", body, &out, taskOpTimeout, taskCreateHeaders(agentID, sessionID))
+	return resendKeyedCreate(body, func() (json.RawMessage, error) {
+		var out json.RawMessage
+		err := t.doHeaders(nil, "POST", "/runner/tasks/batch-create", body, &out, taskOpTimeout, taskCreateHeaders(agentID, sessionID))
+		return out, err
+	})
+}
+
+// resendKeyedCreate sends a create and, when — and only when — the body carries the caller's
+// idempotencyKey, sends it again under that same key while the answer is lost: a dropped connection,
+// a timeout, a body cut off after the status line. The key is what makes that safe (the server answers
+// the second delivery with what the first one wrote), so a create without one is sent exactly once and
+// a lost answer is handed back for the caller to re-read before it decides (docs/orbit-agent-contract.md
+// §5.2). A refusal the server answered is the result and is never resent. Bounded like startTask's.
+func resendKeyedCreate(body interface{}, send func() (json.RawMessage, error)) (json.RawMessage, error) {
+	out, err := send()
+	if !bodyCarriesIdempotencyKey(body) {
+		return out, err
+	}
+	delay := runRequestResendDelay
+	for attempt := 1; attempt < runRequestResendAttempts && err != nil && createAnswerWasLost(err); attempt++ {
+		time.Sleep(delay)
+		delay *= 2
+		out, err = send()
+	}
 	return out, err
+}
+
+func bodyCarriesIdempotencyKey(body interface{}) bool {
+	m, ok := body.(map[string]interface{})
+	if !ok {
+		return false
+	}
+	key, _ := m["idempotencyKey"].(string)
+	return strings.TrimSpace(key) != ""
+}
+
+// createAnswerWasLost says whether a create's attempt ended without the server's answer.
+func createAnswerWasLost(err error) bool {
+	var answered *transportHTTPError
+	return !errors.As(err, &answered)
 }
 
 // pinTasksBatch re-pins many tasks in one request — the door for "change the model of every task
@@ -2052,8 +2442,9 @@ func randomUUID() (string, error) {
 }
 
 // How far a named run request is resent, and how long it waits between attempts: three resends
-// after the first delivery, backing off 250ms -> 500ms -> 1s. A bounded ~1.75s in the worst case,
-// and then the invocation fails and says exactly why. Bounded because this is for a dropped
+// after the first delivery, backing off 250ms -> 500ms -> 1s, or longer when the server's
+// retryAfter asks for it (each wait capped at keyedResendCap, so ~15s at worst). Then the
+// invocation fails and says exactly why, keeping its id. Bounded because this is for a dropped
 // connection and a lease being handed over, not for an outage.
 const (
 	runRequestResendAttempts = 4
@@ -2185,26 +2576,12 @@ func (t *Transport) startTask(id, triggerID string) (json.RawMessage, error) {
 }
 
 // deliverRunRequest sends one named run request until it is answered, resending only what
-// `isResendableRunFailure` says left it unanswered — the runner's door and the person's alike.
+// `isResendableRunFailure` says left it unanswered — the runner's door and the person's alike. The
+// waits honour the server's retryAfter (deliverKeyed). Once the attempts are spent it returns the
+// real last answer, not a summary of it: a caller that ran out of attempts while the control plane
+// kept saying "being answered right now" needs to be told that.
 func deliverRunRequest(send func() (json.RawMessage, error)) (json.RawMessage, error) {
-	var lastErr error
-	for attempt := range runRequestResendAttempts {
-		if attempt > 0 {
-			time.Sleep(runRequestResendDelay << (attempt - 1))
-		}
-		out, err := send()
-		if err == nil {
-			return out, nil
-		}
-		lastErr = err
-		if !isResendableRunFailure(err) {
-			return nil, err
-		}
-	}
-	// The real last answer, not a summary of it: a caller that ran out of attempts while the
-	// control plane kept saying "being answered right now" needs to be told that, and a lost
-	// connection needs to read as one.
-	return nil, lastErr
+	return deliverKeyed(send, isResendableRunFailure)
 }
 
 // A comment names the session it was written from, so the control plane can record which run of
@@ -2321,12 +2698,17 @@ func (t *Transport) dagPreview(id string, body map[string]interface{}) (json.Raw
 
 // dagApply commits that batch, after a human allowed it. The server re-validates rather than
 // trusting the preview: approval happens at human speed and the graph may have moved.
-func (t *Transport) dagApply(id string, body map[string]interface{}) (json.RawMessage, error) {
+//
+// The session is passed rather than re-read from the environment: the caller already holds the
+// identity it acts for (`orbit mcp` knows its session, the CLI resolves it once), and the server
+// reads this header as WHO is writing — the rule that a restructure from a session needs the
+// answered card hangs off it, so it must not depend on a second read that can disagree.
+func (t *Transport) dagApply(id string, body map[string]interface{}, sessionID string) (json.RawMessage, error) {
 	if err := validatePathSegmentID(id); err != nil {
 		return nil, err
 	}
 	var out json.RawMessage
-	err := t.doHeaders(nil, "POST", "/runner/task-lists/"+url.PathEscape(id)+"/dag-apply", body, &out, taskOpTimeout, callingSessionHeader())
+	err := t.doHeaders(nil, "POST", "/runner/task-lists/"+url.PathEscape(id)+"/dag-apply", body, &out, taskOpTimeout, sessionHeader(sessionID))
 	return out, err
 }
 
@@ -2343,9 +2725,12 @@ func (t *Transport) deleteTaskList(id string) (json.RawMessage, error) {
 // Owner-scoped, runner-token-authenticated. Each call also carries the current session id
 // and its signed credential so the server can prove which claimed process made the request.
 
-func (t *Transport) createSession(parentSessionID, orchestrationToken string, body interface{}) (json.RawMessage, error) {
+// createSession spawns a session. requestID names this create (create_request.go): sent again under the
+// same id, the server answers with the session the first delivery created. Empty sends no id.
+func (t *Transport) createSession(parentSessionID, orchestrationToken, requestID string, body interface{}) (json.RawMessage, error) {
 	var out json.RawMessage
-	err := t.doOrchestration("POST", "/runner/sessions", body, &out, parentSessionID, orchestrationToken)
+	err := t.doOrchestrationWith("POST", "/runner/sessions", body, &out, parentSessionID, orchestrationToken, taskOpTimeout,
+		createRequestHeaders(nil, requestID))
 	return out, err
 }
 
@@ -2465,6 +2850,17 @@ func (t *Transport) endSession(callerSessionID, orchestrationToken, id string) (
 	}
 	var out json.RawMessage
 	err := t.doOrchestration("POST", "/runner/sessions/"+url.PathEscape(id)+"/end", nil, &out, callerSessionID, orchestrationToken)
+	return out, err
+}
+
+// moveSession files a session in a folder of its workspace (or in none), or moves an ended one to
+// another workspace: the Move panel's rules, refusals as a 409 with the reason.
+func (t *Transport) moveSession(callerSessionID, orchestrationToken, id string, body interface{}) (json.RawMessage, error) {
+	if err := validatePathSegmentID(id); err != nil {
+		return nil, err
+	}
+	var out json.RawMessage
+	err := t.doOrchestration("POST", "/runner/sessions/"+url.PathEscape(id)+"/move", body, &out, callerSessionID, orchestrationToken)
 	return out, err
 }
 
@@ -2780,17 +3176,22 @@ func (t *Transport) doOrchestration(method, path string, body, out interface{}, 
 // outlast the server's wait, or every successful wait comes back as a transport error and the
 // answer the caller asked for is the one thing they never see.
 func (t *Transport) doOrchestrationTimeout(method, path string, body, out interface{}, sessionID, fallbackToken string, timeout time.Duration) error {
+	return t.doOrchestrationWith(method, path, body, out, sessionID, fallbackToken, timeout, nil)
+}
+
+// doOrchestrationWith is doOrchestrationTimeout with headers of the request's own beside the credential.
+func (t *Transport) doOrchestrationWith(method, path string, body, out interface{}, sessionID, fallbackToken string, timeout time.Duration, extra map[string]string) error {
 	// A headless caller (launchd/cron) has no calling session, so there is no session-bound
 	// credential to read or refresh: the runner token alone authenticates, and the server
 	// narrows the request to this runner's own sessions.
 	if strings.TrimSpace(sessionID) == "" {
-		return t.doHeaders(nil, method, path, body, out, timeout, nil)
+		return t.doHeaders(nil, method, path, body, out, timeout, extra)
 	}
 	token, err := credentialForOrchestrationRequest(sessionID, fallbackToken)
 	if err != nil {
 		return err
 	}
-	err = t.doHeaders(nil, method, path, body, out, timeout, orchestratorHeaders(sessionID, token))
+	err = t.doHeaders(nil, method, path, body, out, timeout, createRequestMerge(orchestratorHeaders(sessionID, token), extra))
 	if !isRefreshableOrchestrationCredentialError(err) {
 		return err
 	}
@@ -2798,7 +3199,7 @@ func (t *Transport) doOrchestrationTimeout(method, path string, body, out interf
 	if refreshErr != nil {
 		return fmt.Errorf("refresh session orchestration credential: %w", refreshErr)
 	}
-	return t.doHeaders(nil, method, path, body, out, timeout, orchestratorHeaders(sessionID, token))
+	return t.doHeaders(nil, method, path, body, out, timeout, createRequestMerge(orchestratorHeaders(sessionID, token), extra))
 }
 
 func (t *Transport) listAgents(sessionID, orchestrationToken string) (json.RawMessage, error) {

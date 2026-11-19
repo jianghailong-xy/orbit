@@ -1,5 +1,6 @@
 import { useMutation, useQueryClient } from '@tanstack/react-query';
 import type {
+  WikiRepoProbeAnswer,
   WikiAnchorInput,
   WikiChangeset,
   WikiDecideAction,
@@ -303,4 +304,20 @@ export function useWikiWrite<TBody, TResult>(run: (body: TBody) => Promise<TResu
       void client.invalidateQueries({ queryKey: ['wiki'] });
     },
   });
+}
+
+/**
+ * `POST /api/wiki/spaces/:id/maintenance/probe` — which tier a workspace's folder would be read on, in the words the
+ * maintenance form draws under its picker (docs/wiki-repo-tiers-design.md §7.3). The owner's; it writes nothing a reader sees.
+ */
+export function probeWikiMaintenance(spaceId: string, workspaceId: string): Promise<WikiRepoProbeAnswer> {
+  return api(`/wiki/spaces/${encodeURIComponent(spaceId)}/maintenance/probe`, { method: 'POST', body: { workspaceId } });
+}
+
+/**
+ * `POST /api/wiki/spaces/:id/maintenance/run` — Check again and run now: the run is made at once and counts against the day;
+ * `acceptFolder` is Use this folder. 409 WIKI_MAINTENANCE_RUNNING while another run has not ended.
+ */
+export function runWikiMaintenanceNow(spaceId: string, acceptFolder = false): Promise<{ jobId: string; runId: string }> {
+  return api(`/wiki/spaces/${encodeURIComponent(spaceId)}/maintenance/run`, { method: 'POST', body: acceptFolder ? { acceptFolder } : {} });
 }

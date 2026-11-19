@@ -19,20 +19,31 @@ export const statusTone = (color: string): BadgeProps['tone'] => TONES[color] ??
 
 const DURATIONS = [1, 2, 4, 8] as const;
 
-export function AccountPauseStatus({ until, now, status, detail, className = '' }: {
+export function AccountPauseStatus({ until, now, status, detail, className = '', dot = false }: {
   until?: string | null;
   className?: string;
   detail?: string;
   now: number;
   status: { label: string; color: string };
+  /** A coloured dot before plain words instead of a filled badge: where the row's buttons sit beside it
+   *  and a badge would read as one more of them (an account pool's rows, settings-buttons board 02). */
+  dot?: boolean;
 }) {
   const paused = accountIsPaused(until, now);
   const extra = detail ?? (status.label === 'Available' ? null : status.label);
+  const tone = statusTone(paused ? 'orange' : status.color);
+  const label = paused ? `Paused until ${pauseResumeTime(until!, now)}` : status.label;
   return (
     <div className={`re-status ${className}`.trim()}>
-      <Badge tone={statusTone(paused ? 'orange' : status.color)} title={paused ? `Paused until ${pauseResumeTime(until!, now)}` : status.label}>
-        {paused ? `Paused until ${pauseResumeTime(until!, now)}` : status.label}
-      </Badge>
+      {dot ? (
+        <span className={`account-status-dot account-status-dot-${tone}`} title={label}>
+          {label}
+        </span>
+      ) : (
+        <Badge tone={tone} title={label}>
+          {label}
+        </Badge>
+      )}
       {paused && <div className="account-pause-remaining">{pauseRemaining(until!, now)}{extra && ` · ${extra}`}</div>}
     </div>
   );

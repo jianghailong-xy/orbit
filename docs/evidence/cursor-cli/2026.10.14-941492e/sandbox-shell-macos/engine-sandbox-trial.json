@@ -1,0 +1,16 @@
+{
+  "context": "Codex exec_command sandbox, not the runner-hosted job",
+  "argv": [
+    "/usr/bin/sandbox-exec",
+    "-p",
+    "(version 1)\n(allow default)\n(deny file-write*)\n(allow file-write* (subpath \"/Users/long/.orbit/worktrees/1d26e6e8-07b2-5862-91d4-4fdecb5ab034/src/runner-go\"))\n(allow file-write* (subpath \"/private/tmp\"))\n(allow file-write* (subpath \"/private/var/folders/6p/plfqmx1d0rqcq2pc8r3ggwjw0000gn/T\"))\n(allow file-write* (subpath \"/Users/long/.orbit/caches\"))\n(allow file-write* (literal \"/dev/null\") (literal \"/dev/zero\") (literal \"/dev/tty\"))\n",
+    "--",
+    "/bin/sh",
+    "-c",
+    "exit 0"
+  ],
+  "cwd": "/Users/long/.orbit/worktrees/1d26e6e8-07b2-5862-91d4-4fdecb5ab034/src/runner-go",
+  "exitCode": 71,
+  "stdout": "",
+  "stderr": "sandbox-exec: sandbox_apply: Operation not permitted\n"
+}

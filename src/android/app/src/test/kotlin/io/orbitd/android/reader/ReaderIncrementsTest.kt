@@ -53,7 +53,12 @@ class ReaderIncrementsTest : ComposerShellTest() {
             thinking(7, ""), thinking(8, "after the call"), said(9, "assistant", "Found it."))
         signIn(); openSession()
         await { shows("Found it.") }
-        assertTrue(has(hasText("Thought for 1m 47s · 3 blocks · 20 chars"), unmerged = true))
+        // Between the question and the reply, the reasoning and the call are one steps line.
+        assertTrue(has(hasText("Thought for 1m 47s, ran 1 shell command"), unmerged = true))
+        assertEquals(1, compose.onAllNodesWithTag("steps-line").fetchSemanticsNodes().size)
+        assertEquals("the reasoning rows wait behind the line", 0, compose.onAllNodesWithTag("thinking-fold").fetchSemanticsNodes().size)
+        compose.onNodeWithTag("steps-line").performClick()
+        await { has(hasText("Thought for 1m 47s · 3 blocks · 20 chars"), unmerged = true) }
         // An empty block draws no row; the block after the call keeps its own, and an older runner's says its size alone.
         assertTrue(has(hasText("Thought · 14 chars"), unmerged = true))
         assertEquals(2, compose.onAllNodesWithTag("thinking-fold").fetchSemanticsNodes().size)

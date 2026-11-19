@@ -1,0 +1,107 @@
+<!doctype html><html><head><meta charset="utf-8"><style>
+:root{--bg-subtle:#fafbfc;--border:#dee0e3;--border-subtle:#eceef1;--text-1:#1f2329;--text-2:#646a73;--text-3:#8f959e;--text-4:#a8acb3;--brand:#3370ff;--brand-tint:#eaf1ff;--brand-border:#bcd3ff;--error:#cf3b35;--error-bg:#fdeceb;--error-border:#ffccc7;--ok:#2ea121;--ok-bg:#e8f6ec}
+*{box-sizing:border-box}body{margin:0;background:#f2f3f5;font-family:Inter,"Noto Sans SC",sans-serif;color:var(--text-1);width:1400px;padding:36px 40px 44px}
+h1{font-size:26px;margin:0 0 6px}.sub{color:var(--text-2);font-size:14px;margin-bottom:26px;line-height:1.6}
+.grid{display:grid;grid-template-columns:1fr 1fr;gap:26px}
+.f{background:#fff;border-radius:14px;padding:18px 20px 22px;box-shadow:0 1px 3px rgba(0,0,0,.06)}
+.fh{font-size:16px;font-weight:600;margin-bottom:4px}.fh b{display:inline-block;width:24px;height:24px;border-radius:12px;background:var(--text-1);color:#fff;text-align:center;line-height:24px;font-size:13px;margin-right:8px}
+.fc{font-size:13px;color:var(--text-2);margin-bottom:14px;line-height:1.6}
+.card{border:1px solid var(--border);border-radius:12px;overflow:hidden;font-size:13px}
+.row{display:grid;grid-template-columns:1fr 92px 90px 96px;gap:12px;align-items:center;padding:11px 14px}
+.row+.row,.row+.pnl+.row{border-top:1px solid var(--border-subtle)}
+.focused{background:var(--brand-tint);box-shadow:inset 3px 0 0 var(--brand)}
+.id{display:flex;gap:10px;align-items:center}.ic{width:28px;height:28px;border-radius:7px;background:#2b2d31;color:#fff;font-size:15px;display:flex;align-items:center;justify-content:center}
+.ic.cl{background:#c96442}.nm{font-weight:600}.ver{font-size:12px;color:var(--text-3)}
+.badge{font-size:12px;padding:2px 8px;border-radius:5px;justify-self:start}.b-bad{color:var(--error);background:var(--error-bg)}.b-warn{color:#c56b00;background:#fff4e6}.b-ok{color:var(--ok);background:var(--ok-bg)}
+.q{color:var(--text-4);font-size:12px}
+.btn{font:inherit;font-size:12.5px;border:1px solid var(--border);background:#fff;border-radius:7px;padding:4px 11px;color:var(--text-1);justify-self:end;white-space:nowrap}
+.btn.pri{background:var(--brand);border-color:var(--brand);color:#fff}.btn:disabled{color:var(--text-4);background:#f5f6f7;border-color:var(--border-subtle)}
+.pnl{margin:0 14px 12px;padding:12px 13px;border-radius:10px;background:var(--error-bg);border:1px solid var(--error-border)}
+.focused + .pnl{margin-left:14px}
+.pr{color:var(--error);font-weight:500;font-size:12.5px;white-space:pre-wrap;line-height:1.55}
+.ph{margin-top:7px;font-size:11.5px;color:var(--text-3)}
+.cmd{display:inline-block;padding:4px 9px;border-radius:7px;background:#fff;border:1px solid var(--border);font-family:"JetBrains Mono",monospace;font-size:11.5px;color:var(--text-2)}
+.acts{margin-top:10px;display:flex;align-items:center;gap:14px}
+.link{color:var(--brand);font-size:11.5px}
+.why{margin-top:6px;font-size:11.5px;color:var(--text-3);line-height:1.5}
+.fixing{display:flex;align-items:center;gap:8px;font-size:12px;color:var(--text-2)}
+.spin{width:12px;height:12px;border-radius:6px;border:2px solid var(--brand-border);border-top-color:var(--brand)}
+.new{outline:2px dashed #f5a623;outline-offset:3px;border-radius:6px}
+.note{margin-top:12px;font-size:12px;color:#8a5a00;background:#fff8e6;border-radius:8px;padding:8px 10px;line-height:1.6}
+.msg{margin-top:14px;border:1px solid var(--border);border-radius:10px;padding:10px 12px;background:var(--bg-subtle)}
+.msg .who{font-size:11.5px;color:var(--text-3);margin-bottom:4px}.msg .t{font-size:12.5px;line-height:1.55}
+.msg code{font-family:"JetBrains Mono",monospace;font-size:11.5px;background:#fff;border:1px solid var(--border-subtle);border-radius:4px;padding:0 3px}
+.dec{margin-top:26px;background:#fff;border-radius:14px;padding:18px 22px}
+.dec h2{font-size:17px;margin:0 0 12px}.d{display:grid;grid-template-columns:230px 1fr 1fr;gap:14px;padding:10px 0;border-top:1px solid var(--border-subtle);font-size:13px;line-height:1.6}
+.d:first-of-type{border-top:0}.opt{padding:8px 10px;border-radius:8px;background:#f7f8fa}.opt.rec{background:var(--brand-tint);box-shadow:inset 0 0 0 1px var(--brand-border)}
+.opt b{display:block;margin-bottom:2px}.tag{font-size:11px;color:var(--brand);font-weight:600}
+</style></head><body>
+<h1>Install failed 时让 Agent 去修 · 设计图</h1>
+<div class="sub">位置：机器页（以及 设置 → Machines）引擎行下的红色 Install failed 框。规则沿用昨天批过的 <i>Fix with an agent</i>（机器警告）：按一下，就在<b>这台机器上</b>用<b>最近用过的 workspace</b> 及其默认设置起一个会话，不弹窗、不让选。黄色虚线框是新增的部分。界面文字为英文，说明为中文。</div>
+<div class="grid">
+
+<div class="f"><div class="fh"><b>1</b>能修：按钮放在红框里，Dismiss 旁</div>
+<div class="fc">按钮下面一行灰字写明会在哪个 workspace、用哪个引擎起会话。没有弹窗，所以只能靠这一行告诉你。行右侧的 Retry 保持不变。</div>
+<div class="card">
+ <div class="row"><div class="id"><div class="ic cl">✳</div><div><div class="nm">Claude Code</div><div class="ver">2.1.325</div></div></div><span class="badge b-ok">Signed in</span><span class="q">62% left</span><span></span></div>
+ <div class="row focused"><div class="id"><div class="ic">◎</div><div><div class="nm">Codex</div><div class="ver">Not installed</div></div></div><span class="badge b-bad">Install failed</span><span class="q">—</span><button class="btn">Retry</button></div>
+ <div class="pnl"><div class="pr">exit status 127: sh: 1: npm: not found</div>
+  <div class="ph">Orbit ran <span class="cmd">npm install -g @openai/codex</span></div>
+  <div class="new" style="margin-top:10px;padding:2px 0 4px">
+   <div class="acts" style="margin-top:4px"><button class="btn pri">Fix with an agent</button><span class="link">Dismiss</span></div>
+   <div class="why">Starts a session in orbit-develop on this machine, with Claude Code.</div></div>
+ </div>
+</div></div>
+
+<div class="f"><div class="fh"><b>2</b>修理中：按钮换成会话链接</div>
+<div class="fc">会话开着时，同一个故障不能再起第二个 Agent。红框一直留着，直到这台机器上报安装成功才消失。Retry 照常能按。</div>
+<div class="card">
+ <div class="row focused"><div class="id"><div class="ic">◎</div><div><div class="nm">Codex</div><div class="ver">Not installed</div></div></div><span class="badge b-bad">Install failed</span><span class="q">—</span><button class="btn">Retry</button></div>
+ <div class="pnl"><div class="pr">exit status 127: sh: 1: npm: not found</div>
+  <div class="ph">Orbit ran <span class="cmd">npm install -g @openai/codex</span></div>
+  <div class="new" style="margin-top:10px;padding:4px 0">
+   <div class="fixing"><span class="spin"></span>An agent is fixing this in orbit-develop · <span class="link" style="font-size:12px">Open session</span></div></div>
+ </div>
+</div>
+<div class="msg"><div class="who">会话首条消息（由红框里的信息拼成）· 标题 “Fix: Codex install failed on vmi3753066”</div>
+<div class="t">Orbit tried to install Codex on this machine (vmi3753066, Linux) by running <code>npm install -g @openai/codex</code>, and it failed with: “exit status 127: sh: 1: npm: not found”. Find out why and get Codex installed. Ask me before installing system packages or changing system files. When you're done, re-run Orbit's install for Codex on this machine so the machine page shows the result, and tell me what <code>codex --version</code> reports.</div></div>
+</div>
+
+<div class="f"><div class="fh"><b>3</b>修不了：你截图里的情形</div>
+<div class="fc">workspace 用的是 Claude Code，而它在这台机器上已退出登录，所以起不了会话。按钮置灰，并写明原因和下一步；不会当场新建 workspace，也不会悄悄换别的引擎（见下方决定 2）。</div>
+<div class="card">
+ <div class="row"><div class="id"><div class="ic cl">✳</div><div><div class="nm">Claude Code</div><div class="ver">2.1.325</div></div></div><span class="badge b-warn">Signed out</span><span class="q">Sign in to see quota</span><button class="btn pri">Sign in</button></div>
+ <div class="row focused"><div class="id"><div class="ic">◎</div><div><div class="nm">Codex</div><div class="ver">Not installed</div></div></div><span class="badge b-bad">Install failed</span><span class="q">—</span><button class="btn">Retry</button></div>
+ <div class="pnl"><div class="pr">exit status 127: sh: 1: npm: not found</div>
+  <div class="ph">Orbit ran <span class="cmd">npm install -g @openai/codex</span></div>
+  <div class="new" style="margin-top:10px;padding:2px 0 4px">
+   <div class="acts" style="margin-top:4px"><button class="btn" disabled>Fix with an agent</button><span class="link">Dismiss</span></div>
+   <div class="why">An agent can't run here: orbit-develop uses Claude Code, which is signed out on this machine. Sign in to Claude Code above to use this.</div></div>
+ </div>
+</div>
+<div class="note">另外两种修不了的情况用同一个位置写原因：机器离线（“This machine is offline.”）和这台机器上还没有 workspace（“No workspace runs on this machine yet.”）。</div>
+</div>
+
+<div class="f"><div class="fh"><b>4</b>修好了：红框自己消失</div>
+<div class="fc">Agent 装好 npm 和 Codex 之后，会通过 Orbit 自己重跑一次安装，结果由这台机器上报，所以不用你再按 Retry。之后这一行进入正常的下一步：登录。</div>
+<div class="card">
+ <div class="row"><div class="id"><div class="ic cl">✳</div><div><div class="nm">Claude Code</div><div class="ver">2.1.325</div></div></div><span class="badge b-ok">Signed in</span><span class="q">58% left</span><span></span></div>
+ <div class="row"><div class="id"><div class="ic">◎</div><div><div class="nm">Codex</div><div class="ver">0.169.0</div></div></div><span class="badge b-warn">Signed out</span><span class="q">Sign in to see quota</span><button class="btn pri">Sign in</button></div>
+</div>
+<div class="msg"><div class="who">会话里 Agent 的最后一条回复（示例）</div>
+<div class="t">npm wasn't installed on this machine. With your OK I installed Node.js 22 from NodeSource, then re-ran Orbit's install: it succeeded. <code>codex --version</code> reports 0.169.0. Codex still needs you to sign in on the machine page.</div></div>
+</div>
+</div>
+
+<div class="dec"><h2>需要你定的 3 件事（蓝框为推荐）</h2>
+<div class="d"><div><b>1. 按钮放哪</b></div>
+ <div class="opt rec"><span class="tag">推荐</span><b>A. 红框里，Dismiss 旁</b>它和报错放在一起，一看就知道是来修这个错的；行右侧的 Retry 不变。</div>
+ <div class="opt"><b>B. 行右侧，代替 Retry</b>更醒目，但 Retry 就得挪进 ⋯ 菜单。而且多数失败只是网络抖动，这时按 Retry 最便宜。</div></div>
+<div class="d"><div><b>2. workspace 的引擎在这台机器上用不了时</b><br><span style="color:var(--text-3);font-size:12px">（图 3，你截图的情形）</span></div>
+ <div class="opt rec"><span class="tag">推荐</span><b>A. 置灰并写明原因</b>沿用昨天批过的规则（用 workspace 自己的默认设置，不做选择）。下一步写在原因里：先登录。</div>
+ <div class="opt"><b>B. 自动换成这台机器上能用的其他引擎</b>比如 Antigravity。能用的情况更多，但会用到你没为这个 workspace 选过的账号和额度，昨天的规则也要跟着改。</div></div>
+<div class="d"><div><b>3. 修完怎么收尾</b></div>
+ <div class="opt rec"><span class="tag">推荐</span><b>A. Agent 自己通过 Orbit 重跑安装</b>（runner_engine_install）。结果由机器上报，红框自己消失，跟你按 Retry 的效果完全一样。</div>
+ <div class="opt"><b>B. Agent 只汇报，你再按 Retry</b>多一步，但每一次安装都由你亲手按下。</div></div>
+</div>
+</body></html>

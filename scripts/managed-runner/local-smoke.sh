@@ -14,7 +14,7 @@ import tempfile
 script = Path(sys.argv[1]).resolve()
 if len(sys.argv) > 3:
     raise SystemExit("usage: local-smoke.sh [evidence-directory]")
-evidence = Path(sys.argv[2]).resolve() if len(sys.argv) == 3 else Path(tempfile.mkdtemp(prefix="orbit-managed-smoke-"))
+evidence = Path(sys.argv[2]).resolve() if len(sys.argv) == 3 else Path(tempfile.mkdtemp(prefix="orbit-cloud-smoke-"))
 evidence.mkdir(parents=True, exist_ok=True)
 scratch = Path(tempfile.mkdtemp(prefix="isolated-", dir=evidence))
 env = dict(os.environ)

@@ -45,6 +45,8 @@ const task = {
   sessions: [], dependsOn: [], dependedOnBy: [], inputs: [], children: [],
   comments: [{ id: id('501'), body: 'Capture the current interface before the first component migration.', createdAt: earlier, author: { name: 'Baseline Reviewer', email: 'reviewer@example.test' }, authorName: 'Baseline Reviewer', source: 'USER', attachments: [], deliveries: [] }],
 };
+/** The task the task page draws, for a capture that adds a field to it. */
+export const FIXTURE_TASK = task;
 const projectTasks = [
   { ...task, id: id('111'), title: 'Inventory existing components', status: 'DONE', outcome: 'DONE', workState: 'DONE', dependencyState: 'TERMINAL', topoLevel: 0, blocksCount: 1 },
   { ...task, id: id('112'), title: 'Capture browser baselines', workState: 'READY', topoLevel: 1, blocksCount: 1 },
@@ -155,6 +157,7 @@ export async function installFixtures(page, { theme = 'light', scenario = 'defau
     if (method === 'GET' && path === '/api/workspaces') return json([WORKSPACE]);
     if (method === 'GET' && path === '/api/providers') return json([]);
     if (method === 'GET' && path === '/api/watches') return json([]);
+    if (method === 'GET' && path === '/api/owner-requests') return json({ requests: [] });
     if (await sessionApi(route)) return;
     if (method === 'GET' && path === '/api/task-lists') return json([]);
     if (method === 'GET' && path === '/api/tasks/counts') return json(counts);

@@ -1,8 +1,19 @@
+import { readRunQuestionCard } from './run-question';
+import { readRunNoticeCard } from './run-notify';
+import { readSessionOpeningCard } from './session-opening-card';
+import { orbitResendSourceTurnId } from './watch-turn-key';
 import type { Prisma, SessionRunSource } from '@prisma/client';
 import type {
+  ConfirmationAnswersCard,
+  EvidenceReviewCard,
+  EvidenceSendBackCard,
+  RunNoticeCard,
+  RunQuestionCard,
+  SessionOpeningCard,
   ConfirmationReturnCard,
   ConfirmationReviewRequestCard,
   CoordinatorDeliveryCard,
+  ExternalMessageFrom,
   OpenItemDeliveryCard,
   OwnerAnswerCard,
   ProjectStartedCard,
@@ -20,11 +31,13 @@ import {
 } from '../projects/project-open-item';
 import { projectStartOfTurn, readProjectStartedCard } from '../projects/project-started';
 import {
+  readConfirmationAnswersCard,
   readConfirmationReturnCard,
   readConfirmationReviewRequestCard,
 } from '../tasks/owner-confirmation-review-turn';
+import { readEvidenceReviewCard, readEvidenceSendBackCard } from '../tasks/evidence-review';
 import { readTaskStartCard } from '../tasks/task-start-card';
-import { readSessionMessageCard } from './session-message';
+import { externalSenderOf, readSessionMessageCard } from './session-message';
 import { readSessionReplyCards, readTurnRequestIds } from './session-request';
 
 /**
@@ -35,7 +48,8 @@ import { readSessionReplyCards, readTurnRequestIds } from './session-request';
  * A turn the control plane opened is drawn as a card rather than as the owner's own message: an
  * exception item's delivery, the owner's answer handed to the coordinator, a fact the coordinator is
  * told and the answer to a session's criteria proposal, a task run's brief, a project's start, a
- * confirmation request handed to its reviewer and a reviewer's return handed to the run, another
+ * confirmation request handed to its reviewer, a reviewer's return handed to the run and the owner's
+ * answers handed to the reviewer, another
  * Orbit session's message, and the outcomes of this session's own requests handed back to it. It is
  * drawn twice — while it waits
  * (`SessionsService.listQueuedTurns`, both views) and once the runner echoes it (the event ingest,
@@ -45,6 +59,11 @@ import { readSessionReplyCards, readTurnRequestIds } from './session-request';
  * the queue that way, and `taskStart` was never on it at all.
  */
 export interface TurnCards {
+  runQuestion?: RunQuestionCard;
+  runNotice?: RunNoticeCard;
+  evidenceReview?: EvidenceReviewCard;
+  evidenceSendBack?: EvidenceSendBackCard;
+  sessionOpening?: SessionOpeningCard;
   openItemDelivery?: OpenItemDeliveryCard;
   ownerAnswer?: OwnerAnswerCard;
   coordinatorDelivery?: CoordinatorDeliveryCard;
@@ -52,8 +71,11 @@ export interface TurnCards {
   projectStarted?: ProjectStartedCard;
   confirmationReviewRequest?: ConfirmationReviewRequestCard;
   confirmationReturn?: ConfirmationReturnCard;
+  confirmationAnswers?: ConfirmationAnswersCard;
   sessionMessage?: SessionMessageCard;
   sessionReplies?: SessionReplyCard[];
+  /** Somebody outside Orbit sent the turn (a Feishu group's member, migration 0502): who, never their open_id. */
+  externalSender?: ExternalMessageFrom;
 }
 
 /**
@@ -70,8 +92,15 @@ export interface TurnCards {
  */
 export async function readTurnCards(
   db: Prisma.TransactionClient,
-  session: { id: string; ownerId: string; taskId: string | null; runSource: SessionRunSource | null },
-  turns: ReadonlyArray<{ id: string; clientTurnId: string; content: string | null; senderSessionId: string | null }>,
+  session: { id: string; ownerId: string; taskId: string | null; runSource: SessionRunSource | null; promptByOrbit?: boolean },
+  turns: ReadonlyArray<{
+    id: string;
+    clientTurnId: string;
+    content: string | null;
+    senderSessionId: string | null;
+    externalSenderSource?: string | null;
+    externalSenderName?: string | null;
+  }>,
 ): Promise<Map<string, TurnCards>> {
   const cards = new Map<string, TurnCards>();
   const add = (turnId: string, card: TurnCards) => cards.set(turnId, { ...cards.get(turnId), ...card });
@@ -116,13 +145,16 @@ export async function readTurnCards(
     const projectStarted = await readProjectStartedCard(db, session.ownerId, start);
     if (projectStarted) add(turn.id, { projectStarted });
   }
-  // A confirmation request handed to its reviewer, and a reviewer's return handed to the run
-  // (docs/owner-confirmation-review-contract.md D7, B3), by the turn's own key.
+  // A confirmation request handed to its reviewer, a reviewer's return handed to the run, and the
+  // owner's answers handed to the reviewer (docs/owner-confirmation-review-contract.md D7, B3, Q5),
+  // by the turn's own key.
   for (const turn of turns) {
     const confirmationReviewRequest = await readConfirmationReviewRequestCard(db, turn.clientTurnId);
     if (confirmationReviewRequest) add(turn.id, { confirmationReviewRequest });
     const confirmationReturn = await readConfirmationReturnCard(db, turn.clientTurnId);
     if (confirmationReturn) add(turn.id, { confirmationReturn });
+    const confirmationAnswers = await readConfirmationAnswersCard(db, turn.clientTurnId);
+    if (confirmationAnswers) add(turn.id, { confirmationAnswers });
   }
   // The turns another Orbit session sent (`session_send` / `project_send`), and who sent each — read
   // off the turn's sender column (session-message.ts, contract §2.3). A message that asked for a reply
@@ -136,6 +168,12 @@ export async function readTurnCards(
     );
     if (sessionMessage) add(turn.id, { sessionMessage });
   }
+  // The turns somebody outside Orbit sent — a connected Feishu group's member (docs/feishu-bot-design.md §8.2) — read
+  // off the turn's own columns: no other row is named, so this costs nothing.
+  for (const turn of turns) {
+    const externalSender = externalSenderOf(turn);
+    if (externalSender) add(turn.id, { externalSender });
+  }
   // The outcomes of this session's own requests that a turn hands back (contract §4.2), read off the
   // request rows by the key of the turn they ride on. That is not only a reply turn: an outcome held
   // for the session joins whichever of its turns is handed out next (`appendSessionRepliesContext`).
@@ -143,6 +181,44 @@ export async function readTurnCards(
   for (const turn of turns) {
     const sessionReplies = replies.get(turn.clientTurnId);
     if (sessionReplies) add(turn.id, { sessionReplies });
+  }
+  for (const turn of turns) {
+    const runQuestion = await readRunQuestionCard(db, turn.clientTurnId);
+    if (runQuestion) add(turn.id, { runQuestion });
+    const runNotice = await readRunNoticeCard(db, session.id, turn.clientTurnId);
+    if (runNotice) add(turn.id, { runNotice });
+  }
+  // A revision handed to the session that dispatched its task, and a send-back's note handed to the
+  // run that submitted it (tasks/evidence-review.ts), by the turn's own key.
+  for (const turn of turns) {
+    const evidenceReview = await readEvidenceReviewCard(db, turn.clientTurnId);
+    if (evidenceReview) add(turn.id, { evidenceReview });
+    const evidenceSendBack = await readEvidenceSendBackCard(db, turn);
+    if (evidenceSendBack) add(turn.id, { evidenceSendBack });
+  }
+  // The opening of a session Orbit opened with a prompt of its own (session-opening-card.ts).
+  for (const turn of turns) {
+    const sessionOpening = await readSessionOpeningCard(db, session, turn);
+    if (sessionOpening) add(turn.id, { sessionOpening });
+  }
+  // A re-send of Orbit's words after a failed turn is drawn as the card the turn it re-sends was: its
+  // key names that turn (`orbitResendSourceTurnId`), which is read here — through any re-sends of
+  // re-sends — and its cards read as if it were this turn. The re-send's own key reads none.
+  for (const turn of turns) {
+    let sourceId = orbitResendSourceTurnId(turn.clientTurnId);
+    let source: (typeof turns)[number] | null = null;
+    for (let hop = 0; sourceId && hop < 8; hop += 1) {
+      const row = await db.conversationTurn.findFirst({
+        where: { id: sourceId, sessionId: session.id },
+        select: { id: true, clientTurnId: true, content: true, senderSessionId: true },
+      });
+      if (!row) break;
+      source = row;
+      sourceId = orbitResendSourceTurnId(row.clientTurnId);
+    }
+    if (!source || orbitResendSourceTurnId(source.clientTurnId)) continue;
+    const resent = (await readTurnCards(db, session, [source])).get(source.id);
+    if (resent) add(turn.id, resent);
   }
   return cards;
 }

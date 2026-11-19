@@ -91,6 +91,16 @@ final class WikiLogicTests: XCTestCase {
                        WikiAnchorMark(word: "4db4f9f", tone: .green))
     }
 
+    func testADeferredAnchorSaysSoUntilItsFirstCheck() throws {
+        // contract anchorRules.deferred: the drawer's line beside it, and the wire's key decoded.
+        let decoded = try JSONDecoder().decode(WikiAnchor.self, from: Data(#"{"type":"path","path":"src/a.go","deferred":true}"#.utf8))
+        XCTAssertTrue(WikiLogic.anchorDeferred(decoded))
+        XCTAssertFalse(WikiLogic.anchorDeferred(WikiAnchor(type: .path, path: "src/a.go")))
+        XCTAssertFalse(WikiLogic.anchorDeferred(WikiAnchor(type: .path, path: "src/a.go",
+                                                           check: .init(state: .verified, ref: WikiFixtures.sha), deferred: true)))
+        XCTAssertEqual(WikiCopy.anchorDeferred, "Not checked yet: the code could not be read when this was learned")
+    }
+
     // MARK: Details
 
     /// A pitfall's rows in the registry's order, its trigger's parts as `Label: value` lines in theirs.

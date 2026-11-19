@@ -1,3 +1,4 @@
+import { seedPromotionRequest } from '../test-support/promotion-request';
 import assert from 'node:assert/strict';
 import { randomUUID } from 'node:crypto';
 import { test } from 'node:test';
@@ -334,7 +335,8 @@ async function claim(stack: Stack, w: World, leaseOwner: string): Promise<Integr
   return jobs[0]!;
 }
 
-function report(stack: Stack, w: World, job: IntegrationJobCommand, result: Result) {
+async function report(stack: Stack, w: World, job: IntegrationJobCommand, result: Result) {
+  if (job.kind === 'LAND_TASK') await seedPromotionRequest(stack.db, w.projectId);
   return stack.api.integrationJobResult({ id: w.runnerId }, job.jobId, {
     claimGeneration: job.claimGeneration,
     leaseOwner: job.leaseOwner,
@@ -421,7 +423,8 @@ test('a failed promotion gives the coordinator only usable named doors, and inte
       assert.doesNotMatch(message, /promotion_recheck/);
       assert.doesNotMatch(message, /supersedesTaskId/);
       assert.match(message, /promotionId/);
-      assert.match(message, /go test.*10-minute/);
+      // Since 62e302136 the next step names no one toolchain's timeout ("go test hitting its default 10-minute limit").
+      assert.doesNotMatch(message, /10-minute/, 'no example written for one toolchain');
 
       const retried = await stack.openItems.retryPromotionCheck(
         w.ownerId,

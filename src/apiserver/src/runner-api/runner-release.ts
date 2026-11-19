@@ -44,13 +44,60 @@ export interface RunnerReleaseAssignment {
   heldByRollout: boolean;
 }
 
-/** A runner release version, as package.json numbers it: dot-separated whole numbers. */
+/**
+ * A runner release version: one or more numeric parts, an optional SemVer prerelease ("0.1.257-beta.1") and
+ * optional build metadata. The syntax and its ordering are pinned by contracts/release-versions.json, which
+ * runner-go reads too (selfupdate.go).
+ */
+const RELEASE_VERSION = /^\d+(?:\.\d+)*(?:-[0-9A-Za-z-]+(?:\.[0-9A-Za-z-]+)*)?(?:\+[0-9A-Za-z-]+(?:\.[0-9A-Za-z-]+)*)?$/;
+
 export function isRunnerReleaseVersion(value: unknown): value is string {
-  return typeof value === 'string' && /^\d+(\.\d+)*$/.test(value);
+  return typeof value === 'string' && RELEASE_VERSION.test(value);
 }
 
-/** How the runner orders releases (runner-go isNewer): component by component, a missing component reading 0. */
+/** The parts of a release version that order it: the numeric core and the prerelease identifiers, if any. */
+function parseRunnerReleaseVersion(value: string): { core: number[]; pre: string[] | null } | null {
+  if (!isRunnerReleaseVersion(value)) return null;
+  const build = value.indexOf('+');
+  const version = build < 0 ? value : value.slice(0, build);
+  const prerelease = version.indexOf('-');
+  const core = (prerelease < 0 ? version : version.slice(0, prerelease)).split('.').map(Number);
+  return { core, pre: prerelease < 0 ? null : version.slice(prerelease + 1).split('.') };
+}
+
+function compareReleaseIdentifier(a: string, b: string): number {
+  const numeric = (id: string) => /^\d+$/.test(id);
+  if (numeric(a) && numeric(b)) return Math.sign(Number(a) - Number(b));
+  if (numeric(a)) return -1; // numeric identifiers sort below alphanumeric ones
+  if (numeric(b)) return 1;
+  return a === b ? 0 : a < b ? -1 : 1;
+}
+
+/**
+ * How the runner orders releases (runner-go compareReleaseVersions): SemVer precedence — numeric parts, then a
+ * release outranks its prereleases, then prerelease identifiers. A string that is not a release version falls
+ * back to the legacy dot-by-dot numeric comparison this function replaced.
+ */
 export function compareRunnerReleaseVersions(a: string, b: string): number {
+  const x = parseRunnerReleaseVersion(a);
+  const y = parseRunnerReleaseVersion(b);
+  if (!x || !y) return compareLegacyRunnerReleaseVersions(a, b);
+  for (let i = 0; i < Math.max(x.core.length, y.core.length); i += 1) {
+    const d = (x.core[i] ?? 0) - (y.core[i] ?? 0);
+    if (d !== 0) return Math.sign(d);
+  }
+  if (!x.pre && !y.pre) return 0;
+  if (!x.pre) return 1;
+  if (!y.pre) return -1;
+  for (let i = 0; i < Math.min(x.pre.length, y.pre.length); i += 1) {
+    const d = compareReleaseIdentifier(x.pre[i], y.pre[i]);
+    if (d !== 0) return d;
+  }
+  return Math.sign(x.pre.length - y.pre.length);
+}
+
+/** The ordering used before the SemVer parser: a non-numeric component reads as 0. */
+function compareLegacyRunnerReleaseVersions(a: string, b: string): number {
   const x = a.split('.').map(Number);
   const y = b.split('.').map(Number);
   for (let i = 0; i < Math.max(x.length, y.length); i += 1) {

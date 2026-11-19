@@ -210,6 +210,8 @@ func TestConfigurationFromEnvironment(t *testing.T) {
 		"LINK_GATEWAY_TOKEN": strings.Repeat("g", 32),
 		"LINK_TLS_CERT_FILE": "/tls/fullchain.pem",
 		"LINK_TLS_KEY_FILE":  "/tls/privkey.pem",
+		// The apiserver's internal listener, which every forwarded call goes to: required.
+		"LINK_INTERNAL_API_URLS": "http://apiserver:3001",
 	}
 	get := func(name string) string { return env[name] }
 	c, err := configFromEnv(get)
@@ -217,7 +219,7 @@ func TestConfigurationFromEnvironment(t *testing.T) {
 		t.Fatal(err)
 	}
 	if c.TLSMode != "files" || c.APIURL != "http://apiserver:3000" || c.PingInterval != 20*time.Second ||
-		c.PingTimeout != 60*time.Second || c.MaxConnsPerRunner != 2 || c.Mode != linkpb.Mode_MODE_HTTP || len(c.PublicKeys) != 1 {
+		c.PingTimeout != 60*time.Second || c.MaxConnsPerRunner != 2 || len(c.InternalAPIURLs) != 1 || len(c.PublicKeys) != 1 {
 		t.Fatalf("config %+v", c)
 	}
 	env["LINK_ACME_DOMAINS"] = "link.example.com"
@@ -235,6 +237,7 @@ func TestConfigurationFromEnvironment(t *testing.T) {
 		t.Fatal("accepted")
 	}
 	for _, want := range []string{"LINK_PUBLIC_KEYS is required", "LINK_API_URL is required", "LINK_GATEWAY_TOKEN is required",
+		"LINK_INTERNAL_API_URLS is required",
 		`LINK_TLS_MODE="magic"`, `LINK_IP_RATE="fast"`, `LINK_DRAIN_GRACE="-1s"`} {
 		if !strings.Contains(err.Error(), want) {
 			t.Errorf("problems do not say %q:\n%s", want, err)

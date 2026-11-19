@@ -1,0 +1,215 @@
+<!doctype html>
+<html><head><meta charset="utf-8">
+<style>
+  body { margin: 0; background: #eef0f3; font-family: Inter, "Noto Sans SC", -apple-system, sans-serif; color: #1c1c1e; }
+  section.b-part { width: 1560px; padding: 36px 44px 44px; box-sizing: border-box; }
+  h1 { font-size: 28px; margin: 0 0 6px; } .sub { font-size: 17px; color: #57606a; margin: 0 0 22px; line-height: 1.5; }
+  .row { display: flex; gap: 36px; align-items: flex-start; }
+  .lab { font-size: 15px; font-weight: 700; margin-bottom: 8px; } .r { color: #cf222e; } .g { color: #1a7f37; }
+  .phone { width: 393px; height: 852px; background: #fff; border-radius: 54px; border: 12px solid #111; box-sizing: content-box; overflow: hidden; position: relative; }
+  .status { height: 50px; display: flex; justify-content: space-between; align-items: flex-end; padding: 0 30px 6px; font-weight: 700; font-size: 16px; }
+  .nav { display: flex; align-items: center; gap: 8px; padding: 6px 14px 8px; }
+  .pill { background: #f2f2f7; border-radius: 22px; padding: 8px 14px; font-size: 15px; font-weight: 600; }
+  .scroll { padding: 4px 14px 90px; }
+  .card { background: #fdf5ec; border: 1px solid #f0d9bd; border-radius: 16px; padding: 12px 14px; margin-bottom: 10px; position: relative; }
+  .muted { color: #8e8e93; } .tiny { font-size: 12px; letter-spacing: .04em; }
+  .h { font-size: 17px; font-weight: 600; }
+  .bar { position: absolute; left: 50%; transform: translateX(-50%); bottom: 26px; background: rgba(255,255,255,.92); border: 1px solid #ddd; border-radius: 22px; padding: 7px 16px; font-size: 13px; color: #555; box-shadow: 0 2px 8px rgba(0,0,0,.12); }
+  .mono { font-family: "JetBrains Mono", monospace; }
+  .mark { position: absolute; width: 22px; height: 22px; border-radius: 50%; background: #cf222e; color: #fff; font-size: 13px; font-weight: 700; text-align: center; line-height: 22px; }
+  .gm { background: #1a7f37; }
+  /* today */
+  .t-req { font-size: 21px; font-weight: 700; line-height: 1.28; margin: 8px 0 10px; }
+  .t-btn { background: #3478f6; color: #fff; border-radius: 22px; text-align: center; padding: 10px; font-size: 18px; }
+  .t-btn2 { background: #ece4da; color: #3478f6; border-radius: 22px; text-align: center; padding: 10px; font-size: 18px; margin-top: 10px; }
+  .t-cap { font-size: 14px; color: #8e8e93; margin: 4px 0 8px; }
+  .t-cen { text-align: center; color: #8e8e93; font-size: 15px; margin-top: 8px; }
+  .t-fact { display: grid; grid-template-columns: 74px 1fr; gap: 8px; font-size: 14px; margin-top: 8px; }
+  .t-out { background: #ececec; border-radius: 10px; padding: 8px 10px; font-size: 13px; margin-top: 8px; height: 70px; overflow: hidden; }
+  /* proposed */
+  .p-head { display: flex; justify-content: space-between; align-items: baseline; }
+  .p-title { font-size: 16px; font-weight: 600; line-height: 1.3; margin-top: 4px; }
+  .p-sub { font-size: 13px; color: #6e6e73; margin-top: 2px; line-height: 1.35; display: -webkit-box; -webkit-line-clamp: 1; -webkit-box-orient: vertical; overflow: hidden; }
+  .who { background: #fbecdc; border: 1px solid #f1d3b0; border-radius: 12px; padding: 10px 12px; margin-top: 10px; }
+  .who .k { font-size: 11px; font-weight: 700; color: #b26b00; letter-spacing: .06em; }
+  .who .n { font-size: 14px; font-weight: 600; margin-top: 8px; }
+  .who .s { font-size: 13px; color: #3a3a3c; margin-top: 2px; line-height: 1.35; }
+  .btnp { display: inline-block; background: #3478f6; color: #fff; border-radius: 16px; padding: 6px 14px; font-size: 15px; font-weight: 600; margin-top: 6px; }
+  .btns { display: inline-block; background: #e9e2d9; color: #3478f6; border-radius: 16px; padding: 6px 14px; font-size: 15px; margin-top: 6px; margin-right: 6px; }
+  .lnk { color: #3478f6; font-size: 14px; margin-left: 8px; }
+  .cap { font-size: 12px; color: #8e8e93; margin-top: 3px; line-height: 1.35; }
+  .sep { border-top: 1px dashed #ecc79c; margin: 10px 0 0; }
+  .ok { background: #e8f3ea; border: 1px solid #c4e0c9; border-radius: 10px; padding: 7px 10px; margin-top: 10px; font-size: 13px; color: #1a5c2a; line-height: 1.35; }
+  .det { font-size: 14px; color: #3478f6; margin-top: 10px; display: flex; justify-content: space-between; }
+  .settled { font-size: 13px; color: #8e8e93; margin-top: 10px; border-top: 1px solid #f0d9bd; padding-top: 8px; }
+  .settled b { color: #3478f6; font-weight: 400; }
+  .dl { display: grid; grid-template-columns: 62px 1fr; gap: 5px 8px; font-size: 13px; margin-top: 8px; line-height: 1.35; }
+  .dl .k2 { color: #8e8e93; }
+  .dl > span { min-width: 0; overflow-wrap: anywhere; }
+  .cmd { max-width: 100%; box-sizing: border-box; }
+  .cmd { font-size: 12px; background: #f4efe8; border-radius: 6px; padding: 4px 6px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .fail { background: #fff; border: 1px solid #ead9c5; border-radius: 8px; padding: 6px 8px; font-size: 12px; margin-top: 4px; line-height: 1.45; }
+  .fail .x { color: #cf222e; }
+  .stack { background: #fdf5ec; border: 1px solid #f0d9bd; border-radius: 12px; padding: 9px 12px; font-size: 14px; color: #6e6e73; margin-bottom: 10px; display: flex; justify-content: space-between; }
+  .notes { width: 420px; font-size: 15px; line-height: 1.5; }
+  .notes li { margin-bottom: 10px; }
+  .tbl { width: 100%; border-collapse: collapse; background: #fff; border-radius: 10px; overflow: hidden; font-size: 15px; }
+  .tbl td, .tbl th { padding: 9px 12px; border-bottom: 1px solid #eaeef2; text-align: left; vertical-align: top; line-height: 1.45; }
+  .tbl th { background: #f6f8fa; font-size: 14px; }
+  .opt { background: #fff; border-radius: 10px; padding: 12px 14px; font-size: 15px; line-height: 1.5; margin-bottom: 12px; }
+  .rec { display: inline-block; background: #1a7f37; color: #fff; font-size: 12px; font-weight: 700; padding: 1px 7px; border-radius: 10px; margin-left: 6px; }
+</style></head><body>
+
+<section class="b-part" id="part-1">
+  <h1>iPhone owner card: text that reads at a glance</h1>
+  <p class="sub">Today's card (your TestFlight screenshot) vs the new "Who fixes it?" card with iOS text fixes. Same item: a landing check failure, coordinator reachable, 23h. Product copy is English. Red = today's problems, green = the fix.</p>
+  <div class="row">
+    <div>
+      <div class="lab r">① Today (TestFlight)</div>
+      <div class="phone">
+        <div class="status"><span>8:13</span><span>70%</span></div>
+        <div class="nav"><span class="pill">‹</span><span class="pill">⚠ 7 waiting below ⌄</span><span class="pill">▦ 45 ···</span></div>
+        <div class="scroll">
+          <div class="card" style="padding:10px 14px"><span class="muted">⚠ Escalated to you</span><br><span class="muted tiny">FROM ORBIT</span><br>✓ Sent back to the coordinator<span class="mark" style="right:-8px;top:8px">1</span></div>
+          <div class="card">
+            <div class="h">⚠ Escalated to you</div>
+            <div class="muted tiny" style="margin-top:4px">FROM ORBIT</div>
+            <div style="font-size:17px;margin-top:6px">Now yours — no one acted on this for 23h</div><span class="mark" style="right:-8px;top:40px">2</span>
+            <div style="background:#fbecdc;border-radius:12px;padding:10px 12px;margin-top:8px;position:relative">
+              <div class="t-req">This task cannot reach the project branch until the integration error is repaired — retry it or ask the coordinator to fix it.</div><span class="mark" style="right:-18px;top:10px">3</span>
+              <div class="t-btn">Ask the coordinator again</div>
+              <div class="t-cap">It goes back to the coordinator with a fresh escalation clock.</div>
+              <div class="t-btn2">Open task session</div>
+              <div class="t-cap">Open the task session to repair the branch.</div>
+              <div class="t-cen">Retry</div><div class="t-cap">A new integration attempt is queued with your reason.</div><span class="mark" style="right:-18px;top:340px">4</span>
+              <div class="t-cen">Open landing</div>
+            </div>
+            <div class="t-fact"><span class="muted">Task</span><span>docs: 排队规则设计稿补「每条结论的来历」一节（情况 · 问题 · 修复）</span></div><span class="mark" style="left:-8px;bottom:120px">5</span>
+            <div class="t-fact"><span class="muted">Check</span><span class="mono" style="font-size:13px">cd src/apiserver &amp;&amp; npx tsc -p tsconfig.test.json &amp;&amp; SPECS=$(ls build/*/*.spec.js | grep -v '\.pg\.sp…<br><span style="color:#3478f6">Show details</span></span></div>
+            <div class="t-out mono">&nbsp;&nbsp;}<br><br>Failure lines …</div><span class="mark" style="right:-8px;bottom:20px">6</span>
+          </div>
+        </div>
+        <div class="bar">● ▭ 25 ☑ 23/24</div>
+      </div>
+    </div>
+    <div class="notes">
+      <div class="lab r">What goes wrong with the text</div>
+      <ol>
+        <li><b>Settled cards keep their full shell.</b> Each "Sent back to the coordinator" card still draws "Escalated to you" + FROM ORBIT, three lines for a closed item, stacked above the one that needs you.</li>
+        <li><b>Three heading lines before the point.</b> "Escalated to you", "FROM ORBIT", then "Now yours — …". The actual cause sits in body-size text under two labels.</li>
+        <li><b>The sentence is the loudest thing on screen.</b> ~21pt bold over 3 lines, louder than the heading, and it repeats what the buttons say.</li>
+        <li><b>Doors read as disabled text.</b> "Retry", "Open landing", "Mark as handled" are centred grey words, while their captions are left-aligned. They don't look tappable, and the column doesn't line up.</li>
+        <li><b>Raw facts wrap freely.</b> A long Chinese task title takes 2 lines. The check command wraps over 3 mono lines and ends in "…" with a separate "Show details".</li>
+        <li><b>Output box shows the wrong part.</b> A fixed grey box shows the tail ("}" and "Failure lines"), and the floating bottom bar covers its last line. The failing test names are below the fold.</li>
+      </ol>
+    </div>
+  </div>
+</section>
+
+<section class="b-part" id="part-2">
+  <h1>Proposed: the new card with iOS text rules</h1>
+  <p class="sub">Builds on the "Who fixes it?" card (board owner-exception-who-fixes, D1–D4 = A). Only type scale, alignment, truncation and the Details block change here.</p>
+  <div class="row">
+    <div>
+      <div class="lab g">② Proposed, folded</div>
+      <div class="phone">
+        <div class="status"><span>8:13</span><span>70%</span></div>
+        <div class="nav"><span class="pill">‹</span><span class="pill">⚠ 7 waiting below ⌄</span><span class="pill">▦ 45 ···</span></div>
+        <div class="scroll">
+          <div class="stack"><span>✓ 2 sent back to the coordinator</span><span style="color:#3478f6">Show</span><span class="mark gm" style="right:-8px;top:6px">1</span></div>
+          <div class="card">
+            <div class="p-head"><span class="muted" style="font-size:13px;font-weight:600">⚠ Escalated to you</span><span class="muted" style="font-size:12px">waiting 23h</span></div>
+            <div class="p-title">Now yours — the coordinator didn’t get to it</div><span class="mark gm" style="right:-8px;top:30px">2</span>
+            <div class="p-sub">Integration error · docs: 排队规则设计稿补「每条结论的来历」一节（情况 · 问题 · 修复）</div><span class="mark gm" style="right:-8px;top:62px">5</span>
+            <div class="who">
+              <div class="k">WHO FIXES IT?</div>
+              <div class="n">The coordinator</div>
+              <div class="s">Reachable. It had this for 23h and didn’t get to it.</div>
+              <span class="btnp">Ask the coordinator again</span>
+              <div><span class="lnk" style="margin-left:0">or Chat about this first</span></div>
+              <div class="cap">It goes back to the coordinator with a fresh 2h clock.</div>
+              <div class="sep"></div>
+              <div class="n">You</div>
+              <span class="btns">Fix it myself</span><span class="btns">Retry…</span><span class="mark gm" style="right:-18px;top:200px">4</span>
+              <div class="cap">Fix it opens the task session. Retry asks for your reason first.</div>
+            </div>
+            <div class="ok">✓ Closes by itself once this work lands — push a fix to the task branch and you’re done.</div><span class="mark gm" style="right:-8px;top:330px">3</span>
+            <div class="det"><span>› Details · check failed · 1 failing test</span><span class="mark gm" style="position:static">6</span></div>
+            <div class="settled">Already settled? <b>Mark as handled</b> · <b style="color:#cf222e">Cancel task</b></div>
+          </div>
+        </div>
+        <div class="bar">● ▭ 25 ☑ 23/24</div>
+      </div>
+    </div>
+    <div>
+      <div class="lab g">③ Proposed, Details open</div>
+      <div class="phone">
+        <div class="status"><span>8:13</span><span>70%</span></div>
+        <div class="nav"><span class="pill">‹</span><span class="pill">⚠ 7 waiting below ⌄</span><span class="pill">▦ 45 ···</span></div>
+        <div class="scroll">
+          <div class="card">
+            <div class="p-head"><span class="muted" style="font-size:13px;font-weight:600">⚠ Escalated to you</span><span class="muted" style="font-size:12px">waiting 23h</span></div>
+            <div class="p-title">Now yours — the coordinator didn’t get to it</div>
+            <div class="det" style="margin-top:8px"><span>⌄ Details</span></div>
+            <div class="dl">
+              <span class="k2">Task</span><span>docs: 排队规则设计稿补「每条结论的来历」一节（情况 · 问题 · 修复）</span>
+              <span class="k2">Into</span><span>Queue rules · project branch</span>
+              <span class="k2">Came</span><span>after 2h with the coordinator</span>
+              <span class="k2">Check</span><span><div class="cmd mono">cd src/apiserver &amp;&amp; npx tsc -p tsconfig.test.json &amp;&amp; …</div><span class="cap" style="color:#3478f6">Copy command</span></span>
+              <span class="k2">Failed</span><span>exit 1 after 6m 12s</span>
+            </div>
+            <div class="fail mono"><span class="x">✖</span> no spec hand-rolls the $queryRaw calling conventions <span class="muted">(158ms)</span></div><span class="mark gm" style="right:-8px;top:250px">6</span>
+            <div class="cap" style="color:#3478f6;margin-top:4px">Full output (171 lines) · Open landing</div>
+            <div class="settled">Already settled? <b>Mark as handled</b> · <b style="color:#cf222e">Cancel task</b></div>
+          </div>
+          <div style="height:40px"></div>
+        </div>
+        <div class="bar">● ▭ 25 ☑ 23/24</div>
+      </div>
+    </div>
+    <div class="notes" style="width:380px">
+      <div class="lab g">The rules</div>
+      <ol>
+        <li><b>Settled items fold into one row:</b> "✓ 2 sent back to the coordinator · Show". Nothing settled sits above an open item at full size.</li>
+        <li><b>One heading line:</b> a small "⚠ Escalated to you" label with the clock on the right, then the cause in 17pt semibold. "FROM ORBIT" moves to the bottom, as on the board.</li>
+        <li><b>No giant sentence.</b> The required-action sentence isn't drawn on the new card. "Who fixes it?" plus the green closing line say the same thing in 13pt.</li>
+        <li><b>Every door is a real button, left-aligned.</b> Primary is filled, secondary is tinted, links are blue. "Retry…" ends in an ellipsis because it asks for a reason first (task 34ycmMcm).</li>
+        <li><b>Facts are clamped.</b> The subline is one line with a tail ellipsis, and the full title lives in Details. The command is one line with "Copy command" instead of wrapping.</li>
+        <li><b>Output shows the failing lines, not the tail.</b> Details lists the ✖ lines (up to 3) in a white box, then "Full output (N lines)". The scroll view keeps a bottom inset so the floating bar never covers content.</li>
+      </ol>
+    </div>
+  </div>
+</section>
+
+<section class="b-part" id="part-3">
+  <h1>iOS text scale, and the decisions</h1>
+  <p class="sub"><b>Decided 2026-11-17 by the owner: D1 = A, D2 = A, D3 = A.</b> Example values in the frames (project name, timings, failing test) are drawn for illustration; the built card reads them from the item.</p>
+  <table class="tbl" style="margin-bottom:20px">
+    <tr><th style="width:240px">Element</th><th style="width:300px">Today</th><th style="width:300px">Proposed (Dynamic Type style)</th><th>Note</th></tr>
+    <tr><td>Kind label "⚠ Escalated to you"</td><td>17pt semibold</td><td>13pt semibold, secondary colour</td><td>a label, not the title</td></tr>
+    <tr><td>Cause heading</td><td>17pt regular</td><td>17pt semibold (headline)</td><td>the one thing to read</td></tr>
+    <tr><td>Required-action sentence</td><td>~21pt bold, 3 lines</td><td>not drawn</td><td>the new card already drops it</td></tr>
+    <tr><td>Row status sentences</td><td>—</td><td>13pt (footnote)</td><td>max 2 lines</td></tr>
+    <tr><td>Captions under buttons</td><td>14pt grey</td><td>12pt (caption)</td><td>1 line per row</td></tr>
+    <tr><td>Fact rows / command</td><td>14pt + 13pt mono, wraps</td><td>13pt; mono 12pt, 1 line + Copy</td><td>inside Details only</td></tr>
+    <tr><td>Output</td><td>13pt mono box, tail</td><td>12pt mono, ✖ lines only (≤3)</td><td>"Full output" opens a sheet</td></tr>
+  </table>
+  <div class="row" style="gap:20px">
+    <div style="flex:1">
+      <div class="lab">D1 · Settled items above an open one</div>
+      <div class="opt"><b>A · Fold into one row</b><span class="rec">recommended</span><br>"✓ 2 sent back to the coordinator · Show", expanding in place.</div>
+      <div class="opt"><b>B · Hide them</b><br>Settled items only appear in the project's history. Cleaner, but you can't confirm what you just did from the session.</div>
+    </div>
+    <div style="flex:1">
+      <div class="lab">D2 · What Details shows of the output</div>
+      <div class="opt"><b>A · Failing lines (≤3) + "Full output"</b><span class="rec">recommended</span><br>The ✖ lines are what you need to decide anything.</div>
+      <div class="opt"><b>B · Nothing; "Full output" only</b><br>Shortest card, one more tap every time.</div>
+    </div>
+    <div style="flex:1">
+      <div class="lab">D3 · Where this lands</div>
+      <div class="opt"><b>A · iOS only first</b><span class="rec">recommended</span><br>This screenshot is iPhone; Mac and Android follow the same rules in a second pass.</div>
+      <div class="opt"><b>B · All three clients together</b><br>One change, one parity test update. Larger.</div>
+    </div>
+  </div>
+</section>
+</body></html>

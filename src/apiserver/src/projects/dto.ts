@@ -23,10 +23,12 @@ import {
   ValidateNested,
 } from 'class-validator';
 import {
+  PROJECT_RULING_LIMITS,
   ProjectStatus,
   type AcceptedGap,
   type DeliveryMode,
   type DoneRequestGap,
+  type MoveCriterionRequestBody,
   type ProjectDoneRequestDeclineBody,
   type ProjectDoneRequestBody,
   type ProjectStartRequestBody,
@@ -35,6 +37,7 @@ import {
 } from '@orbit/shared';
 import { IsPublicId } from '../common/public-id';
 import { MAX_TASK_CRITERION_OVERRIDE_REASON_CHARS } from '../tasks/task-criterion-shape-advice';
+import { CRITERION_SATISFIED_BY, type CriterionSatisfiedByValue } from './project-criterion-confirmation';
 import { MAX_BLOCKER_RESOLUTION_REASON_CHARS } from './project-blocker-resolution';
 import { MAX_OPEN_ITEM_RESOLUTION_NOTE, MAX_QUESTION_CHARS } from './project-open-item';
 import { MAX_INTEGRATION_ABANDON_REASON } from './project-integration-abandon';
@@ -103,6 +106,9 @@ export const SHA256_DIGEST_PATTERN = /^[0-9a-f]{64}$/;
  * it alone", sending `null` means "make it null", and only the second is a claim about the value.
  * A field that CAN be nulled (`sessionBudgetPerDay`, the prose fields) keeps `@IsOptional()`.
  */
+/** How long the non-code mark's reason may be: a sentence, not a document. */
+export const MAX_NON_CODE_REASON_CHARS = 280;
+
 function IsSent(): PropertyDecorator {
   return ValidateIf((_object, value) => value !== undefined);
 }
@@ -154,6 +160,13 @@ export class CreateProjectAcceptanceCriterionDto {
    * declaration that no longer exists should be kept is the account owner's call, not this DTO's. */
   @IsOptional() @IsString() @MaxLength(MAX_TASK_CRITERION_OVERRIDE_REASON_CHARS)
   completionCriterionOverrideReason?: string;
+
+  /** How this criterion is met (migration 0545): `TASKS`, by the work filed under it (the
+   * default), or `CONFIRMATION`, by the owner, the coordinator or an Agent check saying it holds.
+   * Omitted on an update keeps the criterion's current mode. A change of mode is a change of
+   * meaning: it is held for the owner like a rewording, and bumps the criterion's revision. */
+  @IsOptional() @IsIn(CRITERION_SATISFIED_BY)
+  satisfiedBy?: CriterionSatisfiedByValue;
 
   // ── The four wiring fields migration 0233 removed ────────────────────────────────────────────
   // Declared, rather than simply deleted, and that difference is the whole point of declaring
@@ -217,6 +230,9 @@ export class UpdateProjectIntegrationDto implements IntegrationSettings {
   @IsOptional() @IsString() mergeCheckCommand?: string | null;
   /** That check's budget in seconds; null returns it to the one-hour default. */
   @IsOptional() @IsInt() @Min(1) mergeCheckTimeoutSeconds?: number | null;
+  /** Landing check overrides; null falls back to the merge check setting. */
+  @IsOptional() @IsString() landingCheckCommand?: string | null;
+  @IsOptional() @IsInt() @Min(1) landingCheckTimeoutSeconds?: number | null;
   /**
    * How long one of this project's exception items may wait on its coordinator before it becomes
    * yours (§4.6). Five minutes to a week, the same range the column's CHECK holds; two hours unless
@@ -332,6 +348,17 @@ export class UpdateProjectDto {
    * automatic-only, so a project is settled by whoever writes this column and by nothing else. */
   @IsOptional() @IsIn(PROJECT_STATUSES) status?: ProjectStatus;
 
+  /** The explicit non-code mark (migration 0535; owner decision 2026-11-11 — never inferred). True
+   *  marks the project non-code, false clears it. Written by the account owner, or by the
+   *  conversation the project is coordinated from (`project_update`); any other session is refused.
+   *  Each write records who and when (`nonCodeSetBy`, `nonCodeSetBySessionId`, `nonCodeSetAt`).
+   *  A marked project reads no landing; whether its criteria are met is unchanged. */
+  @IsSent() @IsBoolean() nonCode?: boolean;
+  /** An optional short reason for the mark, sent with `nonCode` and stored with it (migration
+   *  0555): every `nonCode` write replaces it, null or blank when none is given. Refused 400 sent
+   *  without `nonCode`. */
+  @IsOptional() @IsString() @MaxLength(MAX_NON_CODE_REASON_CHARS) nonCodeReason?: string | null;
+
   /** This project's integration line and merge check (`UpdateProjectIntegrationDto`). The line is
    *  the account owner's alone, refused whole to a request carrying an acting session. The merge
    *  check may be changed from a session, but only on a confirmation card the owner has answered
@@ -429,6 +456,12 @@ export class OpenProjectCoordinatorDto {
   @IsOptional() @IsPublicId() workspaceId?: string;
 }
 
+export class ReplaceProjectCoordinatorDto {
+  /** Where the replacement opens. Optional: without it, where the last coordinator ran. Naming
+   *  another workspace moves the project's coordination there with the new conversation. */
+  @IsOptional() @IsPublicId() workspaceId?: string;
+}
+
 export class RebindProjectCoordinatorDto {
   /**
    * Where this project's coordinator belongs from now on.
@@ -496,6 +529,8 @@ export class DoneProjectDto implements ProjectDoneRequestBody {
 export class DeclineDoneRequestDto implements ProjectDoneRequestDeclineBody {
   @Transform(({ value }) => typeof value === 'string' ? value.trim() : value)
   @IsString() @MinLength(1) @MaxLength(MAX_DONE_REQUEST_DECLINE_NOTE) note!: string;
+  /** Deliver the owner's words untranslated: the "Send as written" of an answer refused 422 TRANSLATION_FAILED. */
+  @IsOptional() @IsBoolean() sendAsWritten?: boolean;
 }
 
 /**
@@ -537,6 +572,9 @@ export class StartProjectDto implements StartProjectRequestBody {
   /** That check's budget in seconds; null runs it on the one-hour default. Left out, the setting is
    *  not named and the binding keeps the budget it has. */
   @IsOptional() @IsInt() @Min(1) mergeCheckTimeoutSeconds?: number | null;
+  /** Landing check overrides; null falls back to the merge check setting. */
+  @IsOptional() @IsString() landingCheckCommand?: string | null;
+  @IsOptional() @IsInt() @Min(1) landingCheckTimeoutSeconds?: number | null;
   /** The coordinator's start request this start answers, when the card was drawn from one. */
   @IsOptional() @IsPublicId() requestId?: string | null;
   /** How finished work reaches the upstream (§10.5 O-L1), the owner's choice; left out, the
@@ -572,6 +610,9 @@ export class RequestProjectStartDto implements ProjectStartRequestBody {
   /** That check's budget in seconds, suggested; null suggests the one-hour default. Left out it is
    *  not named, and the owner's card opens on an empty box — which is that same default. */
   @IsOptional() @IsInt() @Min(1) mergeCheckTimeoutSeconds?: number | null;
+  /** Landing check overrides; null falls back to the merge check setting. */
+  @IsOptional() @IsString() landingCheckCommand?: string | null;
+  @IsOptional() @IsInt() @Min(1) landingCheckTimeoutSeconds?: number | null;
   /** Shown to the owner on the card, as written. */
   @IsString() @MinLength(1) @MaxLength(MAX_START_REQUEST_WHY) why!: string;
 }
@@ -678,6 +719,7 @@ export class AskOwnerOptionDto {
  * service, which is where both doors meet.
  */
 export class AskOwnerDto {
+  @IsOptional() @IsPublicId() forRunQuestion?: string;
   @IsString() @MinLength(1) @MaxLength(MAX_QUESTION_CHARS) question!: string;
   @IsOptional() @IsArray() @ArrayMaxSize(4)
   @ValidateNested({ each: true }) @Type(() => AskOwnerOptionDto)
@@ -736,6 +778,8 @@ export class ConfirmPromotionDto {
 export class AnswerOpenItemDto {
   @IsOptional() @IsInt() @Min(0) @Max(3) option?: number;
   @IsOptional() @IsString() @MaxLength(4_000) text?: string;
+  /** Deliver the owner's words untranslated: the "Send as written" of an answer refused 422 TRANSLATION_FAILED. */
+  @IsOptional() @IsBoolean() sendAsWritten?: boolean;
 }
 
 /**
@@ -792,6 +836,12 @@ export class AbandonIntegrationJobDto {
 export class ObserveIntegrationDto {
   @Allow()
   reason?: unknown;
+}
+
+/** K7 reason validation belongs to the service so refusals carry the door's stable code. */
+export class RequestPromotionDto {
+  @Allow()
+  reason?: string;
 }
 
 export class SkipMergeCheckDto {
@@ -930,4 +980,78 @@ export class DecideProjectHandoffDto {
     message: 'acknowledgedCrossingKey must be the crossingKey you read from the crossing',
   })
   acknowledgedCrossingKey?: string;
+}
+
+/** The project a move creates: a title, and a goal when the owner gave one. */
+export class MoveCriterionNewProjectDto {
+  @IsString() title!: string;
+  @IsOptional() @IsString() @MaxLength(MAX_PROJECT_GOAL_CHARS) goal?: string | null;
+}
+
+/**
+ * `POST /projects/:id/criteria/:criterionKey/move` (`@orbit/shared` `MoveCriterionRequestBody`):
+ * exactly one destination. The service says which was missing (CRITERION_MOVE_TARGET_REQUIRED).
+ */
+export class MoveCriterionDto implements MoveCriterionRequestBody {
+  @IsOptional() @IsPublicId() toProjectId?: string;
+  @IsOptional() @ValidateNested() @Type(() => MoveCriterionNewProjectDto)
+  newProject?: MoveCriterionNewProjectDto;
+}
+
+/** The longest note a criterion confirmation or an Agent check's report may carry. */
+export const MAX_CRITERION_CONFIRMATION_NOTE_CHARS = 4000;
+
+/**
+ * Confirming a CONFIRMATION criterion holds (migration 0545): the owner's
+ * `POST /projects/:id/criteria/:criterionId/confirmations`, and the coordinator's
+ * `criterion_confirm`. Every field is optional — "what did you check" included.
+ */
+export class ConfirmCriterionDto {
+  /** What was checked. */
+  @IsOptional() @IsString() @MaxLength(MAX_CRITERION_CONFIRMATION_NOTE_CHARS)
+  note?: string;
+
+  /** Uploads that back it up, already this account's. */
+  @IsOptional() @IsArray() @ArrayMaxSize(20) @IsPublicId({ each: true })
+  attachmentIds?: string[];
+
+  /** The revision the confirmer read. Sent, it must still be the criterion's: a confirmation of
+   *  wording that moved underneath the reader is refused rather than recorded against the new one. */
+  @IsOptional() @IsInt() @Min(1)
+  revision?: number;
+}
+
+/** Starting an Agent check of one CONFIRMATION criterion. */
+export class StartCriterionCheckDto {
+  /** The workspace whose agent runs the check. Defaults to the project's coordinator workspace. */
+  @IsOptional() @IsPublicId()
+  workspaceId?: string;
+
+  /** Anything the check should know beyond the criterion and its verification method. */
+  @IsOptional() @IsString() @MaxLength(MAX_CRITERION_CONFIRMATION_NOTE_CHARS)
+  instructions?: string;
+}
+
+/** An Agent check's verdict, from the session running it (`criterion_check_report`). */
+export class ReportCriterionCheckDto {
+  @IsIn(['PASS', 'FAIL'])
+  verdict!: 'PASS' | 'FAIL';
+
+  @IsOptional() @IsString() @MaxLength(MAX_CRITERION_CONFIRMATION_NOTE_CHARS)
+  note?: string;
+
+  @IsOptional() @IsArray() @ArrayMaxSize(20) @IsPublicId({ each: true })
+  attachmentIds?: string[];
+}
+
+/**
+ * A coordinator recording an owner ruling given in its conversation (`project_ruling_record`,
+ * coordinator handoff v2 §2). The service restates the lengths and checks the quote against the
+ * turn's owner text.
+ */
+export class RecordProjectRulingDto {
+  @IsString() @MinLength(1) @MaxLength(PROJECT_RULING_LIMITS.rulingMaxChars) ruling!: string;
+  @IsString() @MinLength(1) @MaxLength(PROJECT_RULING_LIMITS.quoteMaxChars) quote!: string;
+  @IsPublicId() sourceTurnId!: string;
+  @IsOptional() @IsPublicId() supersedes?: string;
 }

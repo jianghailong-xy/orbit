@@ -26,6 +26,8 @@ function runningSession(overrides: Record<string, unknown> = {}) {
 test('reaper applies the startup watchdog to OpenCode sessions', async () => {
   const prisma = {
     session: { findMany: async () => [runningSession()] },
+    // No runner restart cut any of these turns (runtime-startup-clock.ts).
+    runEvent: { findMany: async () => [] },
   } as never;
   const service = new ReaperService(prisma, {} as never);
   const finalized: unknown[][] = [];
@@ -66,6 +68,8 @@ test('reaper leaves initialized OpenCode and uninitialized Claude sessions alone
         }),
       ],
     },
+    // No runner restart cut any of these turns (runtime-startup-clock.ts).
+    runEvent: { findMany: async () => [] },
   } as never;
   const service = new ReaperService(prisma, {} as never);
   const finalized: unknown[][] = [];
@@ -96,6 +100,8 @@ test('reaper applies the startup watchdog to Antigravity sessions that never rep
         }),
       ],
     },
+    // No runner restart cut any of these turns (runtime-startup-clock.ts).
+    runEvent: { findMany: async () => [] },
   } as never;
   const service = new ReaperService(prisma, {} as never);
   const finalized: unknown[][] = [];

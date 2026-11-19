@@ -43,7 +43,7 @@ func (tc *testConn) eventAck(timeout time.Duration) *linkpb.EventAck {
 	return tc.await("event_ack", timeout, nil).GetEventAck()
 }
 
-func TestAnEventBatchIsStoredAsItsMirrorWouldBeAndAcknowledged(t *testing.T) {
+func TestAnEventBatchIsStoredAsTheEventsRouteTakesItAndAcknowledged(t *testing.T) {
 	backend := newFakeBackend(t, stored)
 	h := newLinkHarness(t, []*fakeBackend{backend}, nil)
 	tc, w := h.connectLink(runnerA, processA)
@@ -60,17 +60,16 @@ func TestAnEventBatchIsStoredAsItsMirrorWouldBeAndAcknowledged(t *testing.T) {
 	if len(calls) != 1 {
 		t.Fatalf("%d calls", len(calls))
 	}
-	hello := linkHello(processA).GetHello()
-	req := &linkpb.TunnelRequest{Method: "POST", Path: "/runner/sessions/" + eventSession + "/events", JsonBody: calls[0].Body}
-	if diffs := compareEvents(eb, req, hello); len(diffs) != 0 {
-		t.Fatalf("the forwarded batch differs from the mirror's mapping: %s\nbody %s", fields(diffs), calls[0].Body)
+	// The body the events route takes: the connection's process, and each event with its ts in RFC 3339 to the
+	// millisecond and its payload as the runner sent it.
+	event := func(seq int, ts string) string {
+		return fmt.Sprintf(`{"seq": %d, "type": "assistant", "ts": %q, "turnId": "0190a0b0-0000-7000-8000-0000000000f1",
+			"payload": {"text": "<b>step %d</b> & é 中文", "n": 1.5}}`, seq, ts, seq)
 	}
-	var body struct {
-		LeaseOwner string `json:"leaseOwner"`
-	}
-	_ = json.Unmarshal(calls[0].Body, &body)
-	if body.LeaseOwner != strings.ToLower(processA) {
-		t.Fatalf("leaseOwner %q", body.LeaseOwner)
+	want := fmt.Sprintf(`{"leaseOwner": %q, "events": [%s, %s, %s]}`, strings.ToLower(processA),
+		event(1, "2025-10-25T08:13:20.124Z"), event(2, "2025-10-25T08:13:20.125Z"), event(3, "2025-10-25T08:13:20.126Z"))
+	if !jsonEqual(calls[0].Body, []byte(want)) {
+		t.Fatalf("the forwarded batch is not the events route's body:\n got %s\nwant %s", calls[0].Body, want)
 	}
 	if got := h.g.metrics.eventsStored.get(); got != 3 {
 		t.Fatalf("link_events_stored_total %v", got)
@@ -328,6 +327,7 @@ func TestCreditFallsWhenTheIngestQueueIsDeepAndComesBack(t *testing.T) {
 		c.link.Reduced = creditLevel{Events: 3, Bytes: 8 << 20}
 		c.link.HighWater = creditLevel{Events: 4, Bytes: 512 << 20}
 		c.link.LowWater = creditLevel{Events: 2, Bytes: 256 << 20}
+		c.link.CreditHold = 0
 	})
 	a, _ := h.connectLink(runnerA, processA)
 	b, _ := h.connectLink(runnerB, processB)
@@ -346,14 +346,23 @@ func TestCreditFallsWhenTheIngestQueueIsDeepAndComesBack(t *testing.T) {
 		t.Fatalf("Welcome's credit while reduced: %v", w.GetCredit())
 	}
 	close(release)
-	// The credit is given back before the batch is acknowledged: both are control frames, written in that order.
-	for _, tc := range []*testConn{a, b} {
-		if c := tc.await("credit", 5*time.Second, nil).GetCredit(); c.GetMaxUnackedEvents() != 100 {
-			t.Fatalf("restored credit %v", c)
+	// The batch is acknowledged, and the credit given back to every connection by the walk that tells them
+	// (creditBook.spread), which may come before or after the acknowledgement.
+	var acked, restored bool
+	for !acked || !restored {
+		f := a.await("", 5*time.Second, func(f *linkpb.Frame) bool { return true })
+		switch {
+		case f.GetEventAck() != nil:
+			if f.GetEventAck().GetDurableSeq() != 5 {
+				t.Fatalf("ack %v", f)
+			}
+			acked = true
+		case f.GetCredit() != nil:
+			restored = f.GetCredit().GetMaxUnackedEvents() == 100
 		}
 	}
-	if ack := a.eventAck(5 * time.Second); ack.GetDurableSeq() != 5 {
-		t.Fatalf("ack %v", ack)
+	if c := b.await("credit", 5*time.Second, nil).GetCredit(); c.GetMaxUnackedEvents() != 100 {
+		t.Fatalf("restored credit %v", c)
 	}
 	if h.g.metrics.creditChanges.get("reduced") != 1 || h.g.metrics.creditChanges.get("restored") != 1 {
 		t.Fatal("changes not counted")

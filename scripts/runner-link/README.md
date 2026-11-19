@@ -13,10 +13,9 @@ be taken for a deployment's.
 | `staging-up.sh` | Build from this checkout, start, seed and smoke-check. Run it again to converge: images are rebuilt, changed containers recreated, and the database, secrets, certificates and seeded account kept. `--rotate-cert` gives the link gateway a new certificate in place. `--no-build` reuses the last images. |
 | `staging-down.sh` | Stop and remove the containers and the project's network, keeping the state directory. `--purge` also deletes the state directory and the project's volume. `--rmi` also deletes the images. |
 | `staging-client.sh` | Run the gateway's test client as the seeded probe runner. Arguments go to `link-gateway client`. |
-| `staging-check.sh` | The shadow period's check, with the stack in MODE_HTTP. It checks the running stack's link gateway end to end, in six steps: refusals and TLS; a mirroring runner with heartbeats and pings; a gateway release that drains the runner, which then reconnects; a certificate rotation under a live connection; a revocation that closes a live connection; and hints over NATS, published on each runner's own subject and relayed only for the runner the gateway holds. Each step's records go to `<state>/client/check/`. Run it on a quiet stack, in the files TLS mode. Step 5 leaves the probe runner with a new token, and step 6 registers a second runner the first time it runs (its token is kept in `secrets/hint_peer_token`). |
-| `staging-check-link.sh` | The forwarding check, with the stack in MODE_LINK over two apiservers. Six steps, with the test runner's drills (`link-gateway client -drill`) and the stack's own state: NATS's authorization on the stack's NATS; the link drill (requests and their answers, heartbeats and facts, hints, an approval the owner allows through the web API with its hint and HeartbeatAck's hints, durable events, gaps and credit, the live stream while the owner watches, the turn prefix, an answer in pieces), then presence and the database's own record of it; a claim cancelled while it waits for the claim lock, held from `psql`; calls answered while the second apiserver is killed and started again; a runner that stops reading, closed as a slow consumer; and a session's event stream cut with batches in flight, resumed on a new connection from the durable seq its Welcome states, with no seq refused as a gap and every seq stored once. Each step's records go to `<state>/client/check-link/`. |
-| `staging-check-switch.sh` | The cut-over switch's check, with the gateway following the server's `RUNNER_LINK_REQUIRED` (`ORBIT_LINK_STAGING_MODE=http`). The test runner's switch drill (`link-gateway client -drill switch`): the owner, the stack's administrator, flips the switch on, and HTTPS daemon calls are answered `426 UPGRADE_REQUIRED` unless they name their caller, the shadow's connection is told `MODE_LINK`, and a new connection works over the link; then off in the middle of a session's event stream, and the work connection is told `MODE_HTTP` and its requests refused while its event batches are still stored, before the runner sends the rest over HTTPS. Then the stack's record: the gateway back in `MODE_HTTP`, every read of the switch answered, each switch logged, and every seq of the session stored once. The records go to `<state>/client/check-switch/`, and the switch is left off. |
-| `staging-check-relay.sh` | The relay check, with the stack in MODE_LINK over two apiservers: what a person's request leaves in one apiserver process's memory (an Antigravity sign-in's pasted code, a Cursor key to check) reaches the runner over the link whichever process its calls land on, and is kept nowhere. With the gateway forwarding to the second apiserver alone (`ORBIT_LINK_STAGING_LINK_BACKENDS=apiserver-b`), every call of the runner lands on a process the web's requests never reach: NATS's authorization and logging, the relay drill (`link-gateway client -drill relay`, [client_relay.go](../../src/link-gateway/client_relay.go)), a second apiserver started after the code was pasted, and a holder paused while it is asked. With it forwarding to both (`all`), the relay drill three times, round robin. Then every code and key of the run is looked for in every container's log, the database and the drills' records. Each step's records go to `<state>/client/check-relay/<b-only or round-robin>/`. |
+| `staging-check.sh` | The gateway's own check. It checks the running stack's link gateway end to end, in six steps: refusals and TLS; a runner whose heartbeats are forwarded and answered `MODE_LINK`, with pings; a gateway release that drains the runner, which then reconnects; a certificate rotation under a live connection; a revocation that closes a live connection; and hints over NATS, published on each runner's own subject and relayed only for the runner the gateway holds. Each step's records go to `<state>/client/check/`. Run it on a quiet stack, in the files TLS mode. Step 5 leaves the probe runner with a new token, and step 6 registers a second runner the first time it runs (its token is kept in `secrets/hint_peer_token`), which it connects for a moment to put it online. |
+| `staging-check-link.sh` | The forwarding check, with the stack over two apiservers. Six steps, with the test runner's drills (`link-gateway client -drill`) and the stack's own state: NATS's authorization on the stack's NATS; the link drill (requests and their answers, heartbeats and facts, hints, an approval the owner allows through the web API with its hint and HeartbeatAck's hints, durable events, gaps and credit, the live stream while the owner watches, the turn prefix, an answer in pieces), then presence and the database's own record of it; a claim cancelled while it waits for the claim lock, held from `psql`; calls answered while the second apiserver is killed and started again; a runner that stops reading, closed as a slow consumer; and a session's event stream cut with batches in flight, resumed on a new connection from the durable seq its Welcome states, with no seq refused as a gap and every seq stored once. Each step's records go to `<state>/client/check-link/`. |
+| `staging-check-relay.sh` | The relay check, with the stack over two apiservers: what a person's request leaves in one apiserver process's memory (an Antigravity sign-in's pasted code, a Cursor key to check) reaches the runner over the link whichever process its calls land on, and is kept nowhere. With the gateway forwarding to the second apiserver alone (`ORBIT_LINK_STAGING_LINK_BACKENDS=apiserver-b`), every call of the runner lands on a process the web's requests never reach: NATS's authorization and logging, the relay drill (`link-gateway client -drill relay`, [client_relay.go](../../src/link-gateway/client_relay.go)), a second apiserver started after the code was pasted, and a holder paused while it is asked. With it forwarding to both (`all`), the relay drill three times, round robin. Then every code and key of the run is looked for in every container's log, the database and the drills' records. Each step's records go to `<state>/client/check-relay/<b-only or round-robin>/`. |
 | `staging-name-check.sh` | Check that every staging script refuses a Compose project outside `orbit-link-*` before it does anything: a deployment's containers are `orbit-*`, so such a name could make a script stop, rebuild or write into one. `loadgen-watch.mjs`, which is given a state directory, refuses one of another project before it looks for the secret there. |
 | `nats-auth-check.sh` | Check `src/link-gateway/nats.conf` on a throwaway nats-server with fresh keys: it refuses to start without both public keys, and admits each user to what it does alone. |
 | `gen-hint-fixtures.mjs` | Regenerate `src/link-gateway/testdata/b1-hints.json` from the apiserver's hint encoder. |
@@ -30,6 +29,7 @@ be taken for a deployment's.
 | `cell-spec.mjs` | A cell's size projected from what each operation costs: apiserver processes, database cores, gateway nodes, and what a gateway node's loss adds. Task C2b's inputs are `cell-inputs.json`, task O3's that file at bf061ef45. See [The cell's size](#the-cells-size) and [Re-testing at cell scale](#re-testing-at-cell-scale-task-c2b). |
 | `loadgen-watch.mjs` | The load test's watchers: a session stream (SSE) on each of a run's first running sessions, as their owners, counting the live deltas that reach them and how late. A stream that ends opens again from the last stored event it received (`sinceSeq`), as the apps' do, and each session's stored events it missed are counted. `loadgen-run.sh --watch` starts it. See [The live stream](#the-live-stream). |
 | `loadgen-streams.mjs` | Which apiserver held each session's streams over a run, from NATS's clients (`nats.jsonl`): the sessions each apiserver holds streams of, what NATS delivered to it and its main thread; sessions held by two at once; sessions that moved; and the watchers' gaps and resumes. `loadgen-run.sh` writes it as `streams.md` and `streams.json`. See [Several apiservers](#several-apiservers). |
+| `restart-drill.sh` | A gateway restart under load on the [gateway-alone](#the-gateway-alone) rig: it reuses a finished `gateway-limit.sh` run's binaries, keys and fleet, brings `--level` runners up at cell traffic, then sends the gateway SIGTERM and starts a new one in its place once per `--rates` value (`LINK_HANDSHAKE_RATE`; `default` sets none), timing the drain and the return to 50, 90, 99 and 100% of the level. `restart-drill-report.py` reads its run: the drain, the return against the reaper's 10 min 45 s hold, handshakes accepted and refused, CPU, and the runners' errors. From task 34paLvEDFObkoBxYLAJSN's series E. |
 | `reconnect-drill.sh` | Task C2b's two gateway restarts, beside a load test that is running: it waits for the whole fleet and the loadgen's settle, then measures a release (SIGTERM, the gateway drains) at `--first` (10 minutes) into the steady window and a crash (SIGKILL) at `--second` (20 minutes) with `reconnect-probe.sh`, and reduces both with `reconnect-report.mjs`. See [Re-testing at cell scale](#re-testing-at-cell-scale-task-c2b). |
 | `reconnect-probe.sh` | One gateway restart, measured: the welcome walk's depth before it, `pg_stat_statements` around it, the gateway's `/metrics` and each container's CPU and memory every second, the old process's exit and who started the new one (Docker 29.9.2 does not apply the restart policy to `docker kill`, so after 5 s it runs `docker start` itself), the reconnect's milestones, the reaper's lines and the web gateway's link tokens. It reads four apiservers, `apiserver` to `apiserver-d`, as C2b's reconnect run had. |
 | `reconnect-report.mjs` | A `reconnect-probe.sh` directory reduced to the figures C2b reported: the handshake's quantiles, the welcome route's calls and their database time, what the reconnect added to each container's CPU, each process's counters, the reaper. |
@@ -43,7 +43,7 @@ be taken for a deployment's.
 | `pgmem-snap.sh` | A shell function to source, `snap <label>`: one JSON line of the database container's memory, its `memory.events` and its page cache's scans and refaults. It names C2b's stack, `orbit-link-c2b`. |
 | `fsync_bench.py` | The disk's fsync latency, to compare a machine with C2b's: `python3 -I scripts/runner-link/fsync_bench.py <file> <count> <bytes>`. |
 | `ed25519_bench.mjs` | One Node thread's speed at the Ed25519 check a link token takes, to compare a machine's cores with C2b's: `node scripts/runner-link/ed25519_bench.mjs`. |
-| `gateway-routes-check.sh` | The web gateway's routes for several apiservers (`gateway/several-apiservers/`) on stand-ins that answer with their own name: which nginx loads which configuration (an nginx older than 1.27.3 loads `gateway/nginx.conf` and refuses the routes), one session's streams on one apiserver, the sessions spread over all of them, link tokens on all of them, the rest on the first, an apiserver killed and started again, and a gateway started before any apiserver (502 until its next look-up, 10 s later). A Compose project of its own, removed at the end; no staging stack needed. |
+| `gateway-routes-check.sh` | The web gateway's routes for several apiservers (`gateway/several-apiservers/`) on stand-ins that answer with their own name: which nginx loads which configuration (an nginx older than 1.27.3 loads `gateway/nginx.conf` and refuses the routes), one session's streams, its guest streams and one public link's streams each on one apiserver, the sessions spread over all of them, link tokens on all of them, the rest on the first, an apiserver killed and started again, and a gateway started before any apiserver (502 until its next look-up, 10 s later); with `--hold 130`, a guest stream and both public link streams held open with a ping every 20 s, and the guest's access_token in no line of the gateway's access log. A Compose project of its own, removed at the end; no staging stack needed. |
 | `gateway-limit.sh` | The link gateway alone, level after level: one real gateway built from the checkout (TLS, MODE_LINK, a real NATS) against the stub backend ([src/link-gateway/cmd/linkstub](../../src/link-gateway/cmd/linkstub/README.md)) instead of apiservers and a database, loaded by loadgen shards from several source addresses. No staging stack needed. See [The gateway alone](#the-gateway-alone). |
 | `gateway-limit-report.mjs` | A `gateway-limit.sh` run's report, level by level (`report.md`, `report.json`). `gateway-limit-report.test.mjs` tests it on a synthetic run: `node --test scripts/runner-link/`. |
 | `gateway-limit-probe.go` | The runtime probe `gateway-limit.sh` adds to the gateway's binary at build time (`go build -overlay`): goroutines, GC pauses and heap from `runtime/metrics`, on a loopback port. Outside every Go module: nothing else compiles it. |
@@ -51,8 +51,7 @@ be taken for a deployment's.
 ```bash
 scripts/runner-link/staging-up.sh
 scripts/runner-link/staging-check.sh
-scripts/runner-link/staging-check-switch.sh
-ORBIT_LINK_STAGING_MODE=link ORBIT_LINK_STAGING_BACKENDS=2 scripts/runner-link/staging-up.sh --no-build
+ORBIT_LINK_STAGING_BACKENDS=2 scripts/runner-link/staging-up.sh --no-build
 scripts/runner-link/staging-check-link.sh
 ORBIT_LINK_STAGING_LINK_BACKENDS=apiserver-b scripts/runner-link/staging-up.sh --no-build
 scripts/runner-link/staging-check-relay.sh
@@ -79,7 +78,6 @@ else the default:
 | `ORBIT_LINK_STAGING_TLS` | `files` | `files`: a staging CA and a certificate from it. `acme`: Pebble issues the certificate over ACME. |
 | `ORBIT_LINK_STAGING_NATS_PORT` | `14222` | NATS's client port, on the bind address. |
 | `ORBIT_LINK_STAGING_NATS_MONITOR_PORT` | `18222` | NATS's monitoring, on 127.0.0.1. |
-| `ORBIT_LINK_STAGING_MODE` | `http` | The link gateway's `LINK_MODE`: `http`, which follows the server's `RUNNER_LINK_REQUIRED` switch (the shadow period that `staging-check.sh` checks while the switch is off, and what `staging-check-switch.sh` flips), or `link`, forwarding whatever the switch says, that `staging-check-link.sh` checks. Switching recreates only the gateway. |
 | `ORBIT_LINK_STAGING_BACKENDS` | `1` | How many apiservers the gateway forwards to, 1 to 16. `2` adds `apiserver-b`, the first one's whole definition on the same database, which `staging-check-link.sh` kills and starts again. A third and more are `apiserver-c` and on, each defined as `apiserver-b` is, in `<state>/backends.compose.yml`. Each starts once the first one is healthy, so migrations run once. |
 | `ORBIT_LINK_STAGING_LINK_BACKENDS` | `all` | Which of those apiservers the link gateway forwards to: `all`, round robin, or names such as `apiserver-b`, comma-separated. The web's requests always reach `apiserver`, so with `apiserver-b` alone a runner's calls never land where a person's request left something (`staging-check-relay.sh`). Changing it recreates only the gateway. |
 | `ORBIT_LINK_STAGING_LOADGEN` | `0` | `1` adds `staging.loadgen.compose.yml` for a load test: the gateway logs only Hello, Welcome, Drain and Close, admits any number of connections from one address (the per-address limit; the limit across all clients stays), and the gateway, apiservers and database are capped in memory. |
@@ -159,14 +157,14 @@ over one database, on the clock (design §15.6). It needs no staging stack. Its 
 
 ## Load test
 
-The cell-scale load test (task C2, design §9) runs on a stack in MODE_LINK with the load test's settings. A private
+The cell-scale load test (task C2, design §9) runs on a stack with the load test's settings. A private
 stack keeps it from the shared one's drills, and its database from their sessions:
 
 ```bash
 export ORBIT_LINK_STAGING_PROJECT=orbit-link-c2 ORBIT_LINK_STAGING_DIR=/var/tmp/orbit-link-c2
 ORBIT_LINK_STAGING_HTTP_PORT=61086 ORBIT_LINK_STAGING_LINK_PORT=61443 ORBIT_LINK_STAGING_METRICS_PORT=61464 \
   ORBIT_LINK_STAGING_NATS_PORT=61422 ORBIT_LINK_STAGING_NATS_MONITOR_PORT=61822 ORBIT_LINK_STAGING_PEBBLE_PORT=61500 \
-  ORBIT_LINK_STAGING_MODE=link ORBIT_LINK_STAGING_LOADGEN=1 scripts/runner-link/staging-up.sh
+  ORBIT_LINK_STAGING_LOADGEN=1 scripts/runner-link/staging-up.sh
 scripts/runner-link/loadgen-seed.sh seed            # 10,000 owners, 15,000 runners, 40,000 open sessions
 scripts/runner-link/loadgen-seed.sh arm             # 5,000 of them running, and the fleet file
 scripts/runner-link/loadgen-run.sh --name full-1h -- -duration 1h -event-rate 2000
@@ -469,8 +467,7 @@ streams, what NATS delivered to each, and each one's main thread: an apiserver t
 delivered none of its deltas.
 
 ```bash
-ORBIT_LINK_STAGING_MODE=link ORBIT_LINK_STAGING_LOADGEN=1 ORBIT_LINK_STAGING_BACKENDS=4 ORBIT_LINK_STAGING_SPREAD=1 \
-  scripts/runner-link/staging-up.sh
+ORBIT_LINK_STAGING_LOADGEN=1 ORBIT_LINK_STAGING_BACKENDS=4 ORBIT_LINK_STAGING_SPREAD=1 scripts/runner-link/staging-up.sh
 flock /var/tmp/orbit-loadgen.lock sh -c 'scripts/runner-link/loadgen-seed.sh arm &&
   scripts/runner-link/loadgen-run.sh --name spread --watch 400 -- -duration 6m -settle 2m -event-rate 200 -live-rate 8000 -volatile'
 ORBIT_LINK_STAGING_SPREAD=0 scripts/runner-link/staging-up.sh --no-build     # every stream on the first again
@@ -600,7 +597,8 @@ standby was synchronous. A cell's database needs a synchronous standby (`synchro
 - **The session streams and link tokens spread over every apiserver** (task 34nb3xgCijTDzQJVXDVT7; "Several
   apiservers" above). Landed: task branch 1d6c5a10a, merge e8fae2b28.
 - **(e) `RUNNER_LINK_REQUIRED` on**, every runner working over the link: a runner on HTTPS posts its deltas to the
-  first apiserver alone, so a stream on another one shows its replies only as each is stored. Not done yet.
+  first apiserver alone, so a stream on another one shows its replies only as each is stored. Done: production switched
+  on 2026-11-05 (task D1), and since D2 a runner works over the link alone.
 - **(f) A batch another apiserver stored reaching the streams when reading it back fails** (task
   34njIJN86oqVMVzqtaPQ4). In first-live above, one stream missed two stored events of one session while the host
   swapped, most likely a failed read-back, which the holder of the streams used to drop without a word.
@@ -688,7 +686,7 @@ settings; C2b's first four runs had 4 apiservers and 8 database cores:
 
 ```bash
 export ORBIT_LINK_STAGING_PROJECT=orbit-link-c2b ORBIT_LINK_STAGING_DIR=/var/tmp/orbit-link-c2b
-export ORBIT_LINK_STAGING_MODE=link ORBIT_LINK_STAGING_LOADGEN=1 ORBIT_LINK_STAGING_SPREAD=1 \
+export ORBIT_LINK_STAGING_LOADGEN=1 ORBIT_LINK_STAGING_SPREAD=1 \
   ORBIT_LINK_STAGING_BACKENDS=6 ORBIT_LINK_STAGING_DB_CPUS=11 ORBIT_LINK_STAGING_DB_MEM=16g
 scripts/runner-link/staging-up.sh
 docker exec orbit-link-c2b-postgres psql -U orbit -d orbit -c "ALTER SYSTEM SET shared_buffers = '4GB'" \
@@ -816,14 +814,14 @@ cell's per-operation costs would need about 51 database cores and 20 apiserver p
 but the gateway itself and NATS:
 
 - **The gateway** is built from the checkout under test and runs as a deployment's does: TLS from files (an ECDSA P-256
-  certificate from a CA the run makes), `LINK_MODE=link`, a real NATS (`docker-compose.yml`'s image and
+  certificate from a CA the run makes), a real NATS (`docker-compose.yml`'s image and
   `src/link-gateway/nats.conf`), the load test's logging and per-address settings (`staging.loadgen.compose.yml`), and
   `GODEBUG=gctrace=1`, which writes a line for each GC cycle to its log. It runs in a transient scope of its own
   (`systemd-run`) whose cgroup holds its CPU and memory allowance (`--gateway-cpus`, `--gateway-memory`; no swap). Its
   runtime takes GOMAXPROCS from that CPU allowance. It runs on from level to level.
 - **The stub backend** ([src/link-gateway/cmd/linkstub](../../src/link-gateway/cmd/linkstub/README.md)) answers
   everything the gateway calls, and the loadgen's link token requests, after a fixed delay (`--stub-delay`, 5 ms):
-  - the revocation list and the switch read;
+  - the revocation list;
   - the welcome route, heartbeats, event batches alone and merged, and any tunnelled request;
   - link tokens, signed with a key made for the run, which the gateway trusts.
 
@@ -892,7 +890,9 @@ first level.
 - The stubs keep up while they answer within their delay (p99 within 10% and 1 ms of it) and their own work, from a
   call's arrival to its answer being ready, stays below it. The gateway's own backend call latency shows the same thing
   from its side.
-- The shards keep up while they wait for a CPU less than 10% of the time (their cgroup's CPU pressure).
+- The shards keep up while each waits for a CPU less than 10% of the time (its cgroup's CPU pressure, judged shard by
+  shard: the worst one counts, not their sum).
+- No source address held more connections than there are odd ephemeral ports (see the kernel's needs below).
 - The EventAck the runners wait for is compared with the one the gateway measured, from a batch's arrival to its
   EventAck. The difference is the network and the shards' own loop.
 - The host's figures say what else ran. Before calling a limit the gateway's, `--rig-cpuset` gives the rig cores of
@@ -917,9 +917,15 @@ Everything runs on one host, over the loopback interface: every connection takes
 `127.0.0.0/8` gives as many source addresses as are needed without configuring any.
 
 - **Source addresses.** All connections go to the gateway's one address, so each source address has at most one
-  connection per ephemeral port (`net.ipv4.ip_local_port_range`, 32768–60999 by default: 28,232 ports). The harness
-  refuses a level that would take a source address past 90% of them. Renewals and TIME_WAIT need the rest. Widen the
-  range, or add addresses.
+  connection per ephemeral port (`net.ipv4.ip_local_port_range`, 32768–60999 by default: 28,232 ports). And the
+  shards share the host with the gateway: they bind each connection to its source address with port 0, which Linux
+  serves from the odd ports first, and a port bound on any address is passed over by every `connect()` that picks its
+  own port, the gateway's calls to the stubs among them. Past the odd ports (14,116 by default) a shard's sockets take
+  the even ones the gateway's calls need, and those fail "cannot assign requested address" (task
+  34paLvEDFObkoBxYLAJSN: 24 addresses collapsed at about 340,000 connections). So the harness refuses a level that
+  would take a source address past 90% of the odd ports: at the default range, a level needs one address for every
+  12,700 connections (24 for 300,000, 63 for 800,000); at 1024–65535, one for every 29,000. The report checks the same
+  against the connections each address actually held. Widen the range, or add addresses.
 - **File descriptors.** One per connection in the gateway and in its shard, and a few hundred more. The harness raises
   each process's limit to `min(fs.nr_open, 1048576)`.
 - **conntrack.** With `nf_conntrack` loaded (Docker loads it), each connection is one entry, and each closed one stays
@@ -940,11 +946,11 @@ Everything runs on one host, over the loopback interface: every connection takes
 | Level | Source addresses (default ports / 1024–65535) | `nf_conntrack_max` at least | Shards (about 20,000 runners each) | Gateway memory | Loadgen memory |
 | --- | --- | --- | --- | --- | --- |
 | 3,000 | 1 / 1 (2 for the check: each is exercised) | the default 262,144 | 2 | 0.5 GB | 0.3 GB |
-| 15,000 | 1 / 1 | 262,144 | 2 | 2.4 GB | 1.4 GB |
-| 30,000 | 2 / 1 | 262,144 | 2 | 4.7 GB | 2.8 GB |
-| 65,000 | 3 / 2 | 262,144 | 4 | 10 GB | 6 GB |
-| 100,000 | 4 / 2 | 262,144 | 5 | 16 GB | 9.4 GB |
-| 150,000 | 6 / 3 | 262,144 | 8 | 24 GB | 14 GB |
+| 15,000 | 2 / 1 | 262,144 | 2 | 2.4 GB | 1.4 GB |
+| 30,000 | 3 / 2 | 262,144 | 2 | 4.7 GB | 2.8 GB |
+| 65,000 | 6 / 3 | 262,144 | 4 | 10 GB | 6 GB |
+| 100,000 | 8 / 4 | 262,144 | 5 | 16 GB | 9.4 GB |
+| 150,000 | 12 / 6 | 262,144 | 8 | 24 GB | 14 GB |
 
 ```bash
 # For 65,000 connections and more, on a machine of its own, with room to spare beyond the table's:

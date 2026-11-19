@@ -36,9 +36,6 @@ services:
     environment:
       # Every frame is summarized in the log: staging is where frames are read.
       LINK_FRAME_LOG: all
-      # http (the shadow period, staging-check.sh) or link (forwarding, staging-check-link.sh), as ORBIT_LINK_STAGING_MODE
-      # says; a deployment's gateway is http until the server's switch decides it (task D0).
-      LINK_MODE: ${STAGING_MODE}
       # The apiserver's listener for runner link calls, and the second apiserver's beside it when there are two.
       LINK_INTERNAL_API_URLS: ${STAGING_BACKEND_URLS}
       # How long an event batch waits for others to go with it in one merged call (src/link-gateway/events_merge.go), as

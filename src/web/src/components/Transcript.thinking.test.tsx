@@ -1,6 +1,7 @@
+import type { ReactElement } from 'react';
 import { renderToStaticMarkup } from 'react-dom/server';
 import { describe, expect, it, vi } from 'vitest';
-import { type RunEvent, StreamingDraftsCtx, Transcript } from './Transcript';
+import { ExportCtx, type RunEvent, StreamingDraftsCtx, Transcript } from './Transcript';
 
 /**
  * How a turn's reasoning reads — while it streams, and after it settles.
@@ -15,8 +16,12 @@ const ev = (seq: number, type: string, payload: Record<string, unknown>): RunEve
 const heads = (html: string): number => html.match(/chat-think-head/g)?.length ?? 0;
 
 describe('a settled stretch of reasoning', () => {
+  // A settled block sits behind its turn's steps line; an export draws that line open.
+  const opened = (node: ReactElement) =>
+    renderToStaticMarkup(<ExportCtx.Provider value={'html' as never}>{node}</ExportCtx.Provider>);
+
   it('folds a run of adjacent blocks into a single row that counts them', () => {
-    const html = renderToStaticMarkup(
+    const html = opened(
       <Transcript
         events={[
           ev(1, 'thinking', { text: 'a'.repeat(400) }),
@@ -33,7 +38,7 @@ describe('a settled stretch of reasoning', () => {
   it('keeps a block either side of a tool call on its own row', () => {
     // Those two are not one thought: each explains the call it sits against, and merging across
     // the call would attribute the second one's reasoning to the first one's card.
-    const html = renderToStaticMarkup(
+    const html = opened(
       <Transcript
         events={[
           ev(1, 'thinking', { text: 'why I am about to run this' }),
@@ -51,7 +56,7 @@ describe('a settled stretch of reasoning', () => {
   it('states how long it took, from the duration stored on the block', () => {
     // The runner stores it, so a reloaded turn says what it said while streaming — every turn,
     // not only the one that was on screen.
-    const html = renderToStaticMarkup(
+    const html = opened(
       <Transcript events={[ev(1, 'thinking', { text: 'weighing it up', thinkingMs: 12_000 })]} />,
     );
 
@@ -61,7 +66,7 @@ describe('a settled stretch of reasoning', () => {
   it('states size alone for a block stored with no duration, rather than one it cannot know', () => {
     // An older runner stored none, and `thinking_delta` is broadcast and never persisted, so
     // nothing after the fact can time such a block. Size still answers "is opening this worth it".
-    const html = renderToStaticMarkup(<Transcript events={[ev(1, 'thinking', { text: 'x'.repeat(2300) })]} />);
+    const html = opened(<Transcript events={[ev(1, 'thinking', { text: 'x'.repeat(2300) })]} />);
 
     expect(html).toContain('2.3k chars');
     expect(html).not.toContain('Thought for');
@@ -70,14 +75,14 @@ describe('a settled stretch of reasoning', () => {
   it('draws nothing for a block whose text never arrived', () => {
     // Claude closes every block with {"thinking":"","signature":"…"} — 84% of the durable rows on
     // this deployment. Rendering those would paper a reloaded transcript with blank rows.
-    const html = renderToStaticMarkup(<Transcript events={[ev(1, 'thinking', { text: '' })]} />);
+    const html = opened(<Transcript events={[ev(1, 'thinking', { text: '' })]} />);
 
     expect(heads(html)).toBe(0);
   });
 });
 
 describe('a stretch still being written', () => {
-  it('holds the live reasoning in a scrolling viewport, with its clock running', () => {
+  it('folds the live reasoning to one row, with its clock and size running', () => {
     // `LiveSeconds` prints `Date.now() - startedAt` as it renders, through a formatter that rounds,
     // so a 12s reading tolerates 500ms of the render itself — and a loaded host's mount runs past
     // that. Date alone is frozen: the test's own clock is what moves, not the tolerance.
@@ -89,9 +94,12 @@ describe('a stretch still being written', () => {
     );
     vi.useRealTimers();
 
-    expect(html).toContain('chat-think-port');
-    expect(html).toContain('weighing it up');
-    expect(html).toContain('12s');
+    // Folded by default (docs/mocks/thinking-fold-live): the row, not the text (Transcript.thinkingFold
+    // opens it).
+    expect(html).not.toContain('chat-think-port');
+    expect(html).not.toContain('weighing it up');
+    expect(html).toContain('aria-expanded="false"');
+    expect(html).toContain('12s · 14 chars');
   });
 
   it('runs no clock on a page that opened mid-block', () => {
@@ -103,7 +111,7 @@ describe('a stretch still being written', () => {
       </StreamingDraftsCtx.Provider>,
     );
 
-    expect(html).toContain('chat-think-port');
-    expect(html).not.toMatch(/\d+s</);
+    expect(html).toContain('14 chars');
+    expect(html).not.toMatch(/\d+s\b/);
   });
 });

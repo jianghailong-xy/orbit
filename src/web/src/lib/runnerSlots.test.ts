@@ -128,6 +128,15 @@ describe('why a queued session has not started', () => {
     );
   });
 
+  it('names a runner below its Keep Free floor, which no slot coming free would change', () => {
+    const gate = { queuedReason: 'disk_below_floor' };
+    expect(pendingSlotDescription(0, 16, gate)).toBe(
+      'This runner has less free disk space than its Keep Free setting. This session starts once space is freed.',
+    );
+    expect(queuedTitle(gate)).toBe('Low disk space');
+    expect(queuedLabel(gate)).toBe('Low disk space');
+  });
+
   // A null and an absent value are different claims and must not collapse into one another:
   // one is "no gate", the other is "nobody asked". Only the first may be reported as a plain
   // queue — reporting the second that way would state, on an old server, something it never said.
@@ -139,10 +148,10 @@ describe('why a queued session has not started', () => {
     expect(queuedLabel(undefined)).toBe('Waiting for slot');
   });
 
-  it('keeps slot wording only for the gates that really are slots', () => {
-    expect(queuedTitle({ queuedReason: 'runner_at_capacity' })).toBe('Waiting for a free slot');
-    expect(queuedTitle({ queuedReason: 'tree_at_capacity' })).toBe('Waiting for a free slot');
-    expect(queuedTitle({ queuedReason: 'batch_at_capacity' })).toBe('Waiting for a free slot');
+  it('names the full runner, run or batch, and the other gates by what they are', () => {
+    expect(queuedTitle({ queuedReason: 'runner_at_capacity' })).toBe('Runner full');
+    expect(queuedTitle({ queuedReason: 'tree_at_capacity' })).toBe('Run full');
+    expect(queuedTitle({ queuedReason: 'batch_at_capacity' })).toBe('Batch full');
     expect(queuedTitle({ queuedReason: 'runner_offline' })).toBe('Runner offline');
     expect(queuedTitle({ queuedReason: 'worktree_op_pending' })).toBe(
       'Waiting for a git operation',

@@ -19,6 +19,7 @@ import type { StandardSetConfirmationStanding } from '../lib/acceptanceConfirmat
 import { ACCEPTANCE_PLAN_CHANGE_PREFIX } from './AcceptanceConfirmationCard';
 import { OWNER_SEND_BACK_ACTION } from './OwnerConfirmationCard';
 import { IT_IS_YOURS, SEE_THE_EXCEPTION } from './ProjectPromotionCard';
+import { CHAT_FIRST_LINK } from './ProjectProgressStatus';
 import { ENTER_HINT, SHORTCUT_HINT } from './CardHotkey';
 import { MOBILE_QUERY } from '../lib/useMediaQuery';
 
@@ -101,7 +102,8 @@ const COORDINATOR = {
   runStatus: 'AWAITING_INPUT',
   runState: 'AWAITING_INPUT',
   provider: 'claude',
-  createdAt: '2026-09-11T03:00:00Z',
+  // Created before every record these tests place (handoff v2 §4: one stamped before it is not drawn).
+  createdAt: '2026-09-09T00:00:00Z',
   updatedAt: '2026-09-11T03:10:00Z',
 };
 
@@ -466,9 +468,11 @@ async function blockedCard(): Promise<() => Element | null> {
   return card;
 }
 
+/** The card's chat press: "Chat about this", or on the owner exception card "or Chat about this
+ *  first" beside Ask again (board owner-exception-who-fixes, D2 = A). */
 function chatPressOn(card: Element): HTMLButtonElement {
   const press = [...card.querySelectorAll<HTMLButtonElement>('button')]
-    .find((button) => button.textContent?.trim() === CHAT_ABOUT_THIS);
+    .find((button) => [CHAT_ABOUT_THIS, CHAT_FIRST_LINK].includes(button.textContent?.trim() ?? ''));
   if (!press) throw new Error('no Chat about this on the card');
   return press;
 }
@@ -565,6 +569,32 @@ describe('the blocked merge card’s way to where its handling is shown', { time
     });
     expect(doorsPressed(), 'the link pressed a door').toEqual([]);
   });
+});
+
+it('shows only owner exception cards in the coordinator conversation', async () => {
+  const coordinatorRow: ProjectOpenItemRow = {
+    ...TASK_ROW, itemId: 'coordinator-open', assignee: 'COORDINATOR', assigneeReason: 'DEFAULT', escalatedAt: null,
+  };
+  const outcome: NonNullable<ProjectOpenItemRow['outcome']> = {
+    state: 'RESOLVED', resolution: 'HANDLED', resolvedAt: TASK_ROW.waitingSince,
+    resolvedBy: 'COORDINATOR', resolvedBySessionId: COORDINATOR_PUBLIC, resolvedByUserId: null,
+    note: 'Handled', jobId: null, supersededByItemId: null,
+  };
+  openItems = {
+    needsYou: [TASK_ROW],
+    withCoordinator: [coordinatorRow],
+    settled: [
+      { ...coordinatorRow, itemId: 'coordinator-settled', outcome },
+      { ...TASK_ROW, itemId: 'owner-settled', outcome: { ...outcome, resolvedBy: 'USER' } },
+    ],
+  };
+  await mount(`/sessions/${COORDINATOR_PUBLIC}`);
+  await waitForUi(() => {
+    expect(mounted().querySelector(`[data-open-item="${TASK_ITEM}"]`)).not.toBeNull();
+    expect(mounted().querySelector('[data-open-item="owner-settled"].is-settled')).not.toBeNull();
+  });
+  expect(mounted().querySelector('[data-open-item="coordinator-open"]')).toBeNull();
+  expect(mounted().querySelector('[data-open-item="coordinator-settled"]')).toBeNull();
 });
 
 describe('what the send carries is read at the send', { timeout: 60_000 }, () => {

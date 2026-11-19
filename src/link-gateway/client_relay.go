@@ -120,7 +120,7 @@ func (d *driver) relayBeatUntil(within time.Duration, want func(beatAnswer) bool
 func (d *driver) relayStart(o drillOptions) (*owner, string) {
 	if !d.step("welcome: MODE_LINK", func() (string, error) {
 		if mode := d.cc.welcome.GetMode(); mode != linkpb.Mode_MODE_LINK {
-			return mode.String(), errors.New("the gateway is not in MODE_LINK: start the stack with ORBIT_LINK_STAGING_MODE=link")
+			return mode.String(), errors.New("the gateway did not say MODE_LINK (an older gateway says MODE_HTTP while its server's RUNNER_LINK_REQUIRED is off or unread)")
 		}
 		return "declaring " + strings.Join(relayCapabilities, ", "), nil
 	}) {

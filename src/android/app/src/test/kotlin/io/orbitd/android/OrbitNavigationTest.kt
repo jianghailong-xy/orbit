@@ -169,10 +169,35 @@ class OrbitNavigationTest {
         assertEquals(other, other.dropSession(publicId))
     }
 
+    /** iOS `openCreatedAgentSession`: the session a draft created takes the draft's place, so Back returns to the list it was opened from. */
+    @Test fun aCreatedSessionReplacesItsDraftSoBackSkipsIt() {
+        val root = OrbitRoute(Destination.WORKSPACE, "w1")
+        val draft = OrbitRoute(Destination.DRAFT, workspaceId = "w1")
+        val session = OrbitRoute(Destination.SESSION, uuid, workspaceId = "w1")
+        val nav = OrbitNavigation().bindAccount("server|user").select("w1", root).push(draft).replaceTop(session)
+        assertEquals(listOf(root, session), nav.frames)
+        assertEquals(listOf(root), nav.back().frames)
+    }
+
     /** Copy Link's address names the session by its public id, as the deployment's own routes do (OrbitKit `PublicID.toPublic`). */
     @Test fun aSessionsPublicIdIsItsUuidInBase62() {
         assertEquals(publicId, ObjectId.toPublic(uuid))
         assertEquals(publicId, ObjectId.toPublic(publicId))
+    }
+
+    /** Answers are remembered per spelling: asked again, each is the same, an id with no canonical form included. */
+    @Test fun anIdsCanonicalFormIsTheSameAskedAgain() {
+        repeat(2) {
+            assertEquals(uuid, ObjectId.canonical(publicId))
+            assertEquals(uuid, ObjectId.canonical(uuid.uppercase()))
+            assertNull(ObjectId.canonical("not-an-id"))
+            assertNull(ObjectId.canonical(""))
+            assertTrue(ObjectId.same(publicId, uuid))
+            assertTrue(ObjectId.same(uuid.uppercase(), publicId))
+            assertFalse(ObjectId.same("not-an-id", "not-an-id!"))
+            assertFalse(ObjectId.same(publicId, null))
+            assertTrue(ObjectId.same(null, null))
+        }
     }
 
     @Test fun accountAndInstanceChangesDiscardEveryOldPathAndPendingObject() {

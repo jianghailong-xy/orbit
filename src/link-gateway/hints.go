@@ -20,16 +20,13 @@ import (
 // of that runner, from its first connection's Welcome to its last connection's end, and writes each hint to that
 // runner's connections as a Hint frame.
 //
-// Only to connections in MODE_LINK. A connection in MODE_HTTP is a runner that works over HTTPS and is woken by its
-// long polls, and the shadow period sends it nothing new (§11.2): there a hint is counted and dropped.
-//
 // A hint is sent at most once (§5.2). One that finds no NATS, no connection of its runner or a full queue is counted
 // and dropped, never waited for: the runner's next heartbeat carries the same news.
 //
 // Two more things arrive on a runner's subject (live.go): a WatchersHint, which counts one apiserver instance's
 // watchers of a session (the Orbit-Instance header names the instance) and is summed across instances before the
 // runner is told, and a turn prefix request, a Frame with only turn_prefix_request set, which comes with a reply
-// subject and is relayed to the runner.
+// subject and is relayed to the runner. A StreamOpen request comes the same way (streams.go).
 //
 // The gateway connects as its own NATS user, with the nkey seed in LINK_NATS_SEED (nkey.go, nats.conf).
 
@@ -181,7 +178,7 @@ func (h *hintRelay) run() {
 	}
 }
 
-// deliver writes one hint to the runner's connections in MODE_LINK, and counts what became of it.
+// deliver writes one hint to the runner's connections, and counts what became of it.
 func (h *hintRelay) deliver(runnerID string, msg *nats.Msg) {
 	data := msg.Data
 	var f linkpb.Frame
@@ -189,6 +186,10 @@ func (h *hintRelay) deliver(runnerID string, msg *nats.Msg) {
 	err := (protojson.UnmarshalOptions{DiscardUnknown: true}).Unmarshal(data, &f)
 	if err == nil && f.GetTurnPrefixRequest() != nil {
 		h.g.relayPrefixRequest(runnerID, f.GetTurnPrefixRequest(), msg.Reply)
+		return
+	}
+	if err == nil && f.GetStreamOpen() != nil {
+		h.g.openStream(runnerID, f.GetStreamOpen(), msg.Reply)
 		return
 	}
 	if err != nil || f.GetHint().GetKind() == nil {
@@ -213,12 +214,6 @@ func (h *hintRelay) deliver(runnerID string, msg *nats.Msg) {
 	}
 	result := "no_connection"
 	for _, c := range h.g.reg.connsOf(runnerID) {
-		if c.mode != linkpb.Mode_MODE_LINK {
-			if result == "no_connection" {
-				result = "mode_http"
-			}
-			continue
-		}
 		if c.offer(&linkpb.Frame{Body: &linkpb.Frame_Hint{Hint: hint}}) {
 			result = "sent"
 		} else if result != "sent" {

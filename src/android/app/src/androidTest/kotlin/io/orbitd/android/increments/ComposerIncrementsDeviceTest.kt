@@ -108,7 +108,7 @@ class ComposerIncrementsDeviceTest : IncrementDeviceTest() {
         capture("02-echo-took-over")
     }
 
-    /** A07-16 and A07-21: the empty composer offers the engine's guess with "Double-tap to use" beside it; a double-tap takes it. */
+    /** A07-16 and A07-21: the empty composer offers the engine's guess with "Double-tap" beside it; a double-tap takes it. */
     @Test fun theEmptyComposerOffersTheEnginesGuess() = journey {
         val longGuess = "run the whole instrumentation suite on every API level from 29 to 36 and attach the reports to the release notes"
         events = turnEvents() + event(4, "prompt_suggestion", """{"text":"  ${longGuess} ","source":"engine"}""", turnId = "t-0")
@@ -120,9 +120,9 @@ class ComposerIncrementsDeviceTest : IncrementDeviceTest() {
         compose.onNodeWithTag("composer-suggestion-hint", useUnmergedTree = true).assertIsDisplayed()
         val hint = compose.onNodeWithTag("composer-suggestion-hint", useUnmergedTree = true).fetchSemanticsNode().boundsInRoot
         val field = compose.onNodeWithTag("composer-input").fetchSemanticsNode().boundsInRoot
-        verify("“Double-tap to use” stays inside the field beside a guess too long for it ($hint in $field)",
+        verify("“Double-tap” stays inside the field beside a guess too long for it ($hint in $field)",
             hint.left >= field.left && hint.right <= field.right + 1 && hint.top >= field.top && hint.bottom <= field.bottom + 1 && hint.width > 0)
-        verify("TalkBack does not read the hint's words", !exists(hasText("Double-tap to use"), unmerged = true))
+        verify("TalkBack does not read the hint's words", !exists(hasText("Double-tap"), unmerged = true))
         verify("the draft is empty", draft().isEmpty())
         capture("01-guess-offered")
         compose.onNodeWithTag("composer-input").performTouchInput { doubleClick() }
@@ -136,7 +136,7 @@ class ComposerIncrementsDeviceTest : IncrementDeviceTest() {
         preferences = """{"promptSuggestions":true}"""
         signIn()
         compose.onAllNodesWithContentDescription("Open navigation").onFirst().performClick()
-        compose.onNode(hasText("Settings") and hasClickAction()).performClick()
+        compose.onNodeWithTag("drawer:settings").performClick()
         // The switch is on Sessions' page (docs/mocks/ios-settings-order).
         val sessions = hasText("Sessions") and hasClickAction()
         await("the Sessions row") { exists(sessions) }
@@ -162,21 +162,21 @@ class ComposerIncrementsDeviceTest : IncrementDeviceTest() {
         providersFailing.set(2)
         openSession()
         await("the stream connected") { connected() }
-        compose.onNode(hasText("Context: 0 tokens · Usage") and hasClickAction()).performClick()
+        // The ring opens the usage sheet; it stays open, and its context line shows each window the runner reports.
+        compose.onNode(hasTestTag("composer-context") and hasClickAction()).performClick()
         await("the catalogue read three times") { calls.count { it == "GET providers" } >= 3 }
         val tries = timed.filter { it.second == "GET providers" }.map { it.first }
         note("catalogue tries at uptime ${tries.joinToString()}")
         verify("the second try waited about 300 ms (${tries[1] - tries[0]} ms)", tries[1] - tries[0] in 250..5_000)
         verify("the third try waited about 600 ms (${tries[2] - tries[1]} ms)", tries[2] - tries[1] in 550..5_000)
-        compose.onNode(hasText("Close") and hasClickAction()).performClick()
-        awaitText("Context: 0 / 200000 tokens · Usage")
+        awaitText("Context: 0 / 200000 tokens")
         capture("01-catalogue-after-three-tries")
         // A minute of page time on: the runner is read again, and its new window drawn.
         window = 400_000
         val before = calls.count { it == "GET runners" }
         compose.mainClock.advanceTimeBy(61_000)
         await("a minute on, the runner is read again") { calls.count { it == "GET runners" } > before }
-        awaitText("Context: 0 / 400000 tokens · Usage")
+        awaitText("Context: 0 / 400000 tokens")
         capture("02-minute-re-read")
         // A reconnect reads it again at once.
         window = 300_000
@@ -184,7 +184,7 @@ class ComposerIncrementsDeviceTest : IncrementDeviceTest() {
         reconnect()
         await("the stream reconnected") { connected() }
         await("the reconnect reads the runner") { calls.count { it == "GET runners" } > beforeReconnect }
-        awaitText("Context: 0 / 300000 tokens · Usage")
+        awaitText("Context: 0 / 300000 tokens")
         capture("03-reconnect-re-read")
     }
 

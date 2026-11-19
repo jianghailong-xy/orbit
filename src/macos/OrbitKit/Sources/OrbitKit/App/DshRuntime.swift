@@ -20,7 +20,7 @@ public enum DshRuntime {
     /// session.
     public static let runnerCapability = "provider:dsh"
     /// The `fixEngine` of DeepSeek Harness in the new-session hero while there is no DeepSeek key: fixed
-    /// by connecting one in Infrastructure (web `/providers/new/deepseek`), not on any runner.
+    /// by connecting one in Machines & models (web `/providers/new/deepseek`), not on any runner.
     public static let connectFix = "dsh-connect"
     /// What DeepSeek Harness says in the hero while there is no DeepSeek key to run on.
     public static let connectKey = "Connect a DeepSeek key"
@@ -31,6 +31,9 @@ public enum DshRuntime {
     /// living on the machine: Harness has none.
     public static let enginePageFooter =
         "Orbit keeps DeepSeek Harness updated every 30 min. It has no sign-in: every session runs on a DeepSeek key."
+    /// The same page on a hosted runner, whose Harness is fixed in Orbit's image and moves with each Orbit release.
+    public static let managedEnginePageFooter =
+        "Orbit updates DeepSeek Harness with each Orbit release. It has no sign-in: every session runs on a DeepSeek key."
     /// The permission modes Harness enforces (shared `DSH_PERMISSION_MODES`, measured in P4). The
     /// server rejects a session configured with any other.
     public static let permissionModes: [PermissionMode] = [.default, .auto, .dontAsk]
@@ -120,7 +123,7 @@ public enum DshRuntime {
             }
         }
 
-        /// Fixed on the session's own key, in Infrastructure.
+        /// Fixed on the session's own key, in Machines & models.
         public var isKeyProblem: Bool { self == .needsKey || self == .invalidKey }
     }
 

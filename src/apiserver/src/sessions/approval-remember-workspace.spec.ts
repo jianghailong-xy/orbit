@@ -8,10 +8,10 @@ import { SessionsService } from './sessions.service';
 // cost of teaching trust scales with the thing the product is for. These cover the write side:
 // which decisions become a standing workspace grant, and which deliberately do not.
 
-type Row = { workspaceId: string | null };
+type Row = { workspaceId: string | null; scheduleRun?: { accessLevel: 'CHECK_ONLY'; schedule: null } };
 type Created = { data: unknown[]; skipDuplicates?: boolean };
 
-function makeService(session: Row | null, opts: { landed?: boolean } = {}) {
+function makeService(session: Row | null, opts: { landed?: boolean; command?: string } = {}) {
   const created: Created[] = [];
   const prisma = {
     session: { findFirst: async () => (session ? { id: 's1', ...session } : null) },
@@ -22,7 +22,7 @@ function makeService(session: Row | null, opts: { landed?: boolean } = {}) {
         id: 'a1',
         sessionId: 's1',
         toolName: 'Bash',
-        input: {},
+        input: { command: opts.command },
         toolUseId: null,
         status: 'ALLOWED',
         message: null,
@@ -31,12 +31,15 @@ function makeService(session: Row | null, opts: { landed?: boolean } = {}) {
       }),
     },
     workspacePermissionRule: {
+      updateMany: async () => ({ count: 1 }),
       createMany: async (args: Created) => {
         created.push(args);
         return { count: (args.data as unknown[]).length };
       },
     },
   } as never;
+  // decideApproval runs its write in a retried transaction: this fake has no other client to hand it.
+  (prisma as { $transaction: unknown }).$transaction = async (fn: (tx: unknown) => unknown) => fn(prisma);
   const realtime = { publish: () => {} } as never;
   return { service: new SessionsService(prisma, {} as never, realtime), created };
 }
@@ -161,4 +164,16 @@ test('what counts as reaching past one MCP tool', () => {
   for (const name of ['mcp__orbit__bg_run', 'mcp__a__b__c', 'mcp__acme__dotted.tool', 'Bash', 'Edit', 'orbit_task_create', 'mcp', 'mcpish', 'mcp_x']) {
     assert.equal(reachesPastOneMcpTool(name), false, name);
   }
+});
+
+test('Always allow on a CHECK_ONLY scheduled approval replaces client prefixes with the exact command', async () => {
+  const command = `python3 -c "print(open('watched.txt').read())"`;
+  const { service, created } = makeService({ workspaceId: 'w1', scheduleRun: { accessLevel: 'CHECK_ONLY', schedule: null } }, { command });
+  await service.decideApproval('owner-1', 's1', 'a1', {
+    behavior: 'allow', rememberRules: [{ toolName: 'Bash', ruleContent: 'python3:*' }],
+  });
+  assert.deepEqual(created[0].data, [{
+    workspaceId: 'w1', toolName: 'Bash', ruleContent: command,
+    createdById: 'owner-1', approvalId: 'a1', fromScheduleRun: true,
+  }]);
 });

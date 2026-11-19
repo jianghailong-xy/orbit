@@ -72,9 +72,10 @@ describe('connecting a Cursor key', { timeout: 30_000 }, () => {
         <QueryClientProvider client={client}>
           <MemoryRouter initialEntries={[at]}>
             <Routes>
-              <Route path="/infrastructure" element={<div>infrastructure</div>} />
-              <Route path="/providers/new/:slug" element={<ProviderConnectPage />} />
-              <Route path="/providers/:id" element={<ProviderConnectPage />} />
+              <Route path="/settings/providers" element={<div>providers</div>} />
+              <Route path="/settings/providers/:vendor" element={<div>vendor</div>} />
+              <Route path="/settings/providers/new/:slug" element={<ProviderConnectPage />} />
+              <Route path="/settings/providers/keys/:id" element={<ProviderConnectPage />} />
             </Routes>
           </MemoryRouter>
         </QueryClientProvider>,
@@ -104,7 +105,7 @@ describe('connecting a Cursor key', { timeout: 30_000 }, () => {
   };
   const connectWith = async (answer: CursorKeyCheckAnswer) => {
     check = answer;
-    await mount('/providers/new/cursor-api');
+    await mount('/settings/providers/new/cursor-api');
     await type(container.querySelector<HTMLInputElement>('input[type="password"]'), 'key_test_cursor');
     await click(button('Connect'));
   };
@@ -146,7 +147,7 @@ describe('connecting a Cursor key', { timeout: 30_000 }, () => {
   });
 
   it('says the key runs Cursor CLI alone, where its models come from, and who gets it', async () => {
-    await mount('/providers/new/cursor-api');
+    await mount('/settings/providers/new/cursor-api');
     expect(container.querySelector('h1')?.textContent).toBe('Connect Cursor');
     expect(text()).toContain('Cursor API · models from Cursor CLI on each machine');
     expect(text()).toContain('Works with— Cursor CLI only; sessions on this key are billed to its Cursor plan');
@@ -193,7 +194,7 @@ describe('connecting a Cursor key', { timeout: 30_000 }, () => {
 
   it('keeps an edited Cursor key on Cursor’s protocol, with no check when the key is not changed', async () => {
     rows = [cursorRow];
-    await mount('/providers/p-cursor');
+    await mount('/settings/providers/keys/p-cursor');
     await click(button('Save'));
     expect(sent).toHaveLength(1);
     expect(sent[0]).toMatchObject({ method: 'PATCH', path: `${PROVIDERS_BASE}/p-cursor` });

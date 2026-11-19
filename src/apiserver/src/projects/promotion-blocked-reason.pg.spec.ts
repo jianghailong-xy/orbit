@@ -1,3 +1,4 @@
+import { seedPromotionRequest } from '../test-support/promotion-request';
 /**
  * Why a merge candidate is BLOCKED, stored with the block and served to the card (0409), on real
  * PostgreSQL.
@@ -210,6 +211,7 @@ test('a blocked candidate carries why it is blocked, as its job answered', {
       state: 'LANDED', phase: 'VERIFY', sourceSha: sha('d'), targetShaBefore: UPSTREAM_TIP, upstreamSha: UPSTREAM_TIP,
       testedSha: LINE_TIP, testedTreeSha: sha('e'), landedSha: LINE_TIP, landedTreeSha: sha('e'), aheadOfUpstream: 1,
     });
+    await seedPromotionRequest(prisma, w.projectId);
     const made = await promotions.considerCandidate(w.projectId);
     assert.ok(made, 'the landing made a candidate');
     return { promotionId: made.promotionId, check: await claim(w, 'CHECK_PROMOTION') };

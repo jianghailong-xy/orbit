@@ -60,12 +60,14 @@ data class LandingHead(val right: String, val isClock: Boolean, val detail: Stri
  * body under that head). */
 data class LandingCard(val word: String, val title: String, val state: String, val running: Boolean, val timedOut: Boolean, val what: String?,
     val jobs: List<Job>, val target: String?, val clock: String, val clockLabel: String, val wait: String?, val updated: String?,
-    val liveness: LandingLiveness?, val detail: String?, val retryJobId: String?, val mergeJob: Boolean = false) {
+    val liveness: LandingLiveness?, val detail: String?, val retryJobId: String?, val mergeJob: Boolean = false,
+    val skipTaskId: String? = null, val skipNote: String? = null) {
     /** One job in flight, as the card's body draws it: its task's title (null for a job that lands no task) and its own state.
      * `landingSessionId` is the landing it belongs to (§2.9), or null where the server named none; `mergeJob` is a round of
      * merging into main, whose way in is the merge card — its row carries no "Open landing ›". */
     data class Job(val jobId: String, val taskId: String?, val title: String?, val state: String, val running: Boolean, val timedOut: Boolean,
-        val retryable: Boolean, val detail: String?, val landingSessionId: String? = null, val mergeJob: Boolean = false)
+        val retryable: Boolean, val detail: String?, val landingSessionId: String? = null, val mergeJob: Boolean = false,
+        val skippable: Boolean = false, val skipCheck: String? = null)
     val head: LandingHead get() = ProjectPage.landingHead(state, timedOut, clockLabel, clock, wait, updated, liveness)
 }
 /** One job of the list the landing row opens, drawn as the row itself: `taskId` is what a press opens, `detail` what a timed-out or
@@ -73,7 +75,7 @@ data class LandingCard(val word: String, val title: String, val state: String, v
  * `landingSessionId` is the landing this job belongs to (§2.9); `mergeJob` is a round of merging into main, whose row's only way in
  * is "Open landing ›" — the merge card is that round's other way. */
 data class LandingJobLine(val jobId: String, val taskId: String?, val line: LandingLine, val detail: String?, val retryable: Boolean,
-    val landingSessionId: String? = null, val mergeJob: Boolean = false)
+    val landingSessionId: String? = null, val mergeJob: Boolean = false, val skippable: Boolean = false, val skipCheck: String? = null)
 data class Pill(val label: String, val tone: TagTone)
 data class Tag(val text: String, val tone: TagTone)
 data class TaskGroup(val key: String, val heading: String, val tasks: List<JsonObject>, val settled: Boolean = false)
@@ -148,6 +150,14 @@ object ProjectPage {
     const val landingOnto = "onto"
     const val landingNothingToDo = "Nothing to do — it lands on its own."
     const val landingAllJobs = "All jobs"
+    const val landingSkipCheck = "Land without the check"
+    const val landingSkipCheckConfirm = "The landing check won't run for this landing. It stops now and lands again without the check, recorded as skipped by you."
+    const val landingSkipCheckGo = "Land without it"
+    const val landingSkipCheckCancel = "Keep checking"
+    const val landingSkipCheckFailed = "Could not skip the check"
+    const val landingSkipCheckReason = "The owner chose to land this without waiting for the landing check."
+    const val landingSkipCheckStopping = "Stopping — it lands again without the landing check."
+    const val landingSkipCheckSkipped = "Landing without the landing check — you skipped it."
     /** "waited 1m 20s": the wait as a clause of the head's one line (iOS 3b23aa163). */
     const val landingWaited = "waited"
     // §7.2 V6's words (board docs/mocks/landing-session/v4, 05), every one of them declared in OrbitKit's ProjectPage.swift
@@ -256,15 +266,22 @@ object ProjectPage {
         val jobs = landingJobLines(view, now, updatedAt, refreshFailed, zone).map { job ->
             // A merge job lands no single task, so its row is named by its word — "Merge to main", "Merge check" — not left blank.
             LandingCard.Job(job.jobId, job.taskId, job.line.what ?: job.line.word, job.line.state, job.line.running,
-                job.line.timedOut, job.retryable, job.detail, job.landingSessionId, job.mergeJob)
+                job.line.timedOut, job.retryable, job.detail, job.landingSessionId, job.mergeJob, job.skippable, job.skipCheck)
         }
         // The line's own rule for the name slot, one row down: several jobs are a count in the head and a row each in the body.
         val several = view.n("integratingCount") + view.n("queuedCount") > 1
         val lead = jobs.firstOrNull()
+        val singleJob = jobs.singleOrNull()?.takeUnless { several }
+        val skipTaskId = singleJob?.takeIf { it.skippable }?.taskId?.takeIf { it.isNotEmpty() }
+        val skipNote = when (singleJob?.skipCheck) {
+            "STOPPING" -> landingSkipCheckStopping
+            "SKIPPED" -> landingSkipCheckSkipped
+            else -> null
+        }
         return LandingCard(line.word, if (several) listOfNotNull(line.word, line.what).joinToString(" ") else line.word, line.state, line.running,
             line.timedOut, if (several) null else line.what, jobs, lead?.let { landingTarget(view, it.jobId) }, line.clock, line.clockLabel, line.wait,
             line.updated, line.liveness, if (line.timedOut) lead?.detail else null, lead?.takeIf { it.retryable }?.jobId,
-            !several && ProjectMergeCard.isMergeJob(view.obj("inFlight")))
+            !several && ProjectMergeCard.isMergeJob(view.obj("inFlight")), skipTaskId, skipNote)
     }
 
     /** The branch a job lands on, short, off the project's own landings (`landTasks[].integration.landTask`) — the task page's Target
@@ -291,7 +308,7 @@ object ProjectPage {
                     outputMovedAt = job.text("outputMovedAt"), typicalMs = job.number("typicalMs"), livenessWord = job.text("liveness"),
                     firstStartedAt = firstStartedAt(view, job.text("jobId")))
             LandingJobLine(job.text("jobId").orEmpty(), job.text("taskId"), line, landingJobDetail(job, zone, main), job.flag("retryable"),
-                job.text("landingSessionId")?.takeIf { it.isNotEmpty() }, mergeJob)
+                job.text("landingSessionId")?.takeIf { it.isNotEmpty() }, mergeJob, job.flag("skippable"), job.text("skipCheck"))
         }
     }
 
@@ -514,7 +531,7 @@ object ProjectPage {
     const val startNewCoordinator = "Start a new coordinator"
     fun startNewCoordinatorDetail(finished: Boolean) = if (finished)
         "Opens empty. This conversation stays completed and readable, and stops being the one this project is coordinated from."
-        else "Completes this conversation first, then opens an empty one. Nothing is deleted — it stays readable."
+        else "Completes this conversation first, then opens an empty one here. Nothing is deleted — it stays readable."
     const val replaceCoordinatorQuestion = "Complete this conversation and start a new coordinator?"
     const val replaceCoordinatorDetail = "The current conversation is completed — a turn in flight finishes first — and this project starts coordinating from a new, empty one. Nothing is deleted: the completed conversation stays readable."
     const val replaceCoordinatorConfirm = "Complete and start a new one"
@@ -523,21 +540,16 @@ object ProjectPage {
     // MARK: open items
     const val openItemsHeading = "Open items"
     const val needsYouGroup = "Needs you"
-    const val withCoordinatorGroup = "With the coordinator"
     const val noOpenItems = "No open items"
-    const val noActionNeeded = "No action needed from you"
-    const val nothingWaiting = "Nothing is waiting on you or the coordinator."
     const val openItemsUnread = "Open items couldn't be loaded"
     /** What the toolbar's Open items says aloud before its read has answered, or once it has failed. */
     const val openItemsLoading = "Loading"
     const val openItemsCantLoad = "Couldn't load open items"
     const val closeOpenItems = "Close open items"
-    /** The toolbar counts every open item; only the owner's share raises a reminder on the page (`OpenItemsSummary`). */
-    data class OpenItemsSummary(val needsYou: Int, val withCoordinator: Int) {
-        val count get() = needsYou + withCoordinator
+    data class OpenItemsSummary(val needsYou: Int) {
+        val count get() = needsYou
         val attention get() = if (needsYou <= 0) null else if (needsYou == 1) "1 item needs you" else "$needsYou items need you"
-        val subtitle get() = if (count == 0) noOpenItems
-            else (attention ?: noActionNeeded).let { if (withCoordinator > 0) "$it · $withCoordinator with the coordinator" else it }
+        val subtitle get() = attention ?: noOpenItems
     }
     /** A missing read is not an empty inbox. A start request counts only while the page can answer it, and the coordinator's
      * request to record the project done while it is OPEN; the owner's own Start… and Record as done… are actions nobody waits on. */
@@ -545,7 +557,7 @@ object ProjectPage {
         if (items == null) return null
         val asked = StartProjectCopy.pageRow(ProjectDoc.status(doc), ProjectDoc.started(doc), items) is StartProjectCopy.PageRow.Asked
         val done = ProjectDone.live(items, ProjectDoc.status(doc)) != null
-        return OpenItemsSummary(needsYouRows(items).size + (if (asked) 1 else 0) + (if (done) 1 else 0), items.objects("withCoordinator").size)
+        return OpenItemsSummary(needsYouRows(items).size + (if (asked) 1 else 0) + (if (done) 1 else 0))
     }
     /** The owner's rows, without the request to record the project done should a server ever list it there too: it has a row of
      * its own (`ProjectDone.PageRow`). */
@@ -1118,7 +1130,8 @@ object StartProjectCopy {
     }
     /** `upstreamRef` is the main branch as a full ref: a coordinator's suggestion, or the one the project already stands on. */
     data class Settings(val line: String, val projectBranchName: String?, val automatic: Boolean, val maxConcurrentTasks: Int, val mergeCheckCommand: String?,
-        val upstreamRef: String? = null)
+        val upstreamRef: String? = null, val landingCheckCommand: String? = null,
+        val landingCheckTimeoutSeconds: Int? = null, val mergeCheckTimeoutSeconds: Int? = null)
     /** `StartProject.defaultSettings`: the decided line, else a branch when the plan has dependencies — and the main branch the
      * project already stands on, which a start that names none would keep (the card's own order puts the owner's choices first). */
     fun defaultSettings(view: JsonObject?, maxConcurrentTasks: Int?, graph: DependencyGraph?): Settings {
@@ -1126,7 +1139,8 @@ object StartProjectCopy {
         val line = decided ?: if (graph?.let(::planHasDependencies) == true) "PROJECT_BRANCH" else "MAIN"
         val branch = if (decided == "PROJECT_BRANCH") view?.text("ref")?.takeIf { it.isNotEmpty() }?.let { "refs/heads/$it" } else null
         return Settings(line, branch, true, maxConcurrentTasks ?: 1, view?.text("mergeCheckCommand"),
-            view?.text("upstreamRef")?.takeIf { it.isNotEmpty() }?.let(RunSettings::mainBranchRef))
+            view?.text("upstreamRef")?.takeIf { it.isNotEmpty() }?.let(RunSettings::mainBranchRef),
+            view?.text("landingCheckCommand"), view?.number("landingCheckTimeoutSeconds"), view?.number("mergeCheckTimeoutSeconds"))
     }
 
     /** The main branch a start opens with, by name: the first of the one this project's owner already chose for it, the one they
@@ -1147,15 +1161,17 @@ object StartProjectCopy {
         val count = settings.number("maxConcurrentTasks")?.takeIf { it >= 0 } ?: return null
         val check = when (val value = settings["mergeCheckCommand"]) { null, JsonNull -> null; is JsonPrimitive -> if (value.isString) value.content else return null; else -> return null }
         val digest = asked.text("criteriaDigest") ?: return null
-        return Request(Settings(line, settings.text("projectBranchName"), automatic, count, check, settings.text("upstreamRef")), asked.text("why").orEmpty(), digest)
+        return Request(Settings(line, settings.text("projectBranchName"), automatic, count, check, settings.text("upstreamRef"),
+            settings.text("landingCheckCommand"), settings.number("landingCheckTimeoutSeconds"), settings.number("mergeCheckTimeoutSeconds")), asked.text("why").orEmpty(), digest)
     }
     /** The settings as the card edits them — opened with Automatic on whatever was suggested (`StartSettingsDraft`). `upstream` is
      * the main branch by name, `refs/heads/` left off: what the row shows and the picker takes — null for a project with no
      * repository, which has no main branch to choose, and for an integration read that did not answer. `deliveryMode` is how the work
      * reaches it (§10.5 O-L1, A-Q21) — null where the card offers no choice: a read that does not say, or a server that predates it. */
     data class Draft(val line: String, val automatic: Boolean, val maxConcurrentTasks: Int, val mergeCheckCommand: String = "",
-        val upstream: String? = null, val deliveryMode: String? = null) {
-        val complete get() = (line == "MAIN" || line == "PROJECT_BRANCH") && maxConcurrentTasks in 1..StartProjectCopy.maxConcurrentTasks
+        val upstream: String? = null, val deliveryMode: String? = null, val landingCheckCommand: String = "",
+        val landingCheckTimeoutSeconds: Int? = null, val mergeCheckTimeoutSeconds: Int? = null) {
+        val complete get() = (line == "MAIN" || line == "PROJECT_BRANCH") && maxConcurrentTasks in 1..StartProjectCopy.maxConcurrentTasks && (landingCheckTimeoutSeconds == null || landingCheckTimeoutSeconds > 0)
         val hasMergeCheck get() = mergeCheckCommand.isNotBlank()
         /** The branch every sentence about where work goes names: the one on the card, or main for a project with none. */
         val main get() = upstream ?: RunSettings.defaultMainBranch
@@ -1167,7 +1183,8 @@ object StartProjectCopy {
              * on a line that stays main, and otherwise on PLATFORM, the default. */
             fun of(settings: Settings, view: JsonObject? = null) = Draft(settings.line, true, settings.maxConcurrentTasks, settings.mergeCheckCommand.orEmpty(),
                 if (ProjectMainBranch.repository(view) != null) startMainBranch(settings.upstreamRef, view) else null,
-                view?.text("deliveryMode")?.let { RunSettings.delivery(settings.line, it) })
+                view?.text("deliveryMode")?.let { RunSettings.delivery(settings.line, it) }, settings.landingCheckCommand.orEmpty(),
+                settings.landingCheckTimeoutSeconds, settings.mergeCheckTimeoutSeconds)
         }
     }
     /** `StartProject.body`: the seal, every setting, and the request answered — the branch only with a project branch, a blank check
@@ -1180,6 +1197,11 @@ object StartProjectCopy {
         draft.upstream?.let { put("upstreamRef", RunSettings.mainBranchRef(it)) }
         put("automatic", draft.automatic); put("maxConcurrentTasks", draft.maxConcurrentTasks)
         put("mergeCheckCommand", if (check.isEmpty()) JsonNull else JsonPrimitive(check))
+        if (draft.line == "PROJECT_BRANCH") {
+            put("landingCheckCommand", draft.landingCheckCommand.takeIf { it.isNotBlank() }?.let(::JsonPrimitive) ?: JsonNull)
+            put("landingCheckTimeoutSeconds", draft.landingCheckTimeoutSeconds?.let(::JsonPrimitive) ?: JsonNull)
+        }
+        put("mergeCheckTimeoutSeconds", draft.mergeCheckTimeoutSeconds?.let(::JsonPrimitive) ?: JsonNull)
         // With a main line only: the door refuses AGENT_PUSH anywhere else, and a card that offered no choice records none.
         if (draft.line == "MAIN") draft.deliveryMode?.let { put("deliveryMode", it) }
         put("requestId", requestId?.let(::JsonPrimitive) ?: JsonNull)
@@ -1224,13 +1246,22 @@ object RunSettings {
     const val deliveryPlatform = "Orbit lands it"
     const val deliveryAgentPush = "The agent pushes it"
     fun deliveryPlatformHint(main: String) = "The agent doesn’t push to $main: Orbit lands its branch once the work is accepted."
-    fun deliveryAgentPushHint(main: String) = "The agent pushes to $main itself, and Orbit checks the commits are there."
+    fun deliveryAgentPushHint(main: String) = "No merge card. The agent pushes to $main itself, and Orbit records each commit once it sees it there."
     /** Why the agent may not push here: the project lands on a project branch, or no line is decided. */
     fun deliveryNeedsMainLine(main: String) = "The agent can push only on a project that lands directly into $main. On a project branch, " +
         "Orbit lands the work."
     /** The delivery a line stands for: the agent pushes only on a main line, so on any other — a project branch, or none decided — it
      * is Orbit's, whatever was chosen while the line was main. */
     fun delivery(line: String?, mode: String?) = if (line == "MAIN" && mode == "AGENT_PUSH") "AGENT_PUSH" else "PLATFORM"
+    /** How it runs asks before the agent takes over while a merge into main is still live: one the check is on, one asking the owner,
+     * or one confirmed and merging. Those stay; only the tasks finished from then on are the agent's. */
+    fun agentPushConfirmTitle(main: String) = "Let the agent push to $main?"
+    fun agentPushConfirmBody(main: String) = "Tasks finished from now on are pushed by their agent: no merge card, and Orbit merges nothing " +
+        "into $main. Merges already waiting for you stay until you answer them."
+    const val agentPushConfirm = "Let the agent push"
+    private val liveMergeStates = setOf("CHECKING", "READY", "CONFIRMED", "RECHECKING")
+    /** Whether [promotion] (`GET /projects/:id/promotions/current`) is a merge still live — the case that asks first. */
+    fun mergeLive(promotion: JsonObject?) = promotion?.text("state") in liveMergeStates
 
     // The main branch: the branch a project's tasks start from and its finished work ends up on (`project_codebase.upstream_ref`),
     // main until the owner chooses another. Every sentence here that says where work goes names the project's own, so a project on
@@ -1263,8 +1294,8 @@ object RunSettings {
         "failed checks, and merges the branch into main once the merge check passes — with a " +
         "receipt you can revert. The criteria and anything irreversible stay yours."
     const val automaticHintMain = "The coordinator runs it for you: it decides when each task is done and handles conflicts " +
-        "and failed checks. Merging into main always asks you — a project that lands directly on " +
-        "main never merges by itself. The criteria and anything irreversible stay yours."
+        "and failed checks. Merging into main always asks you — to skip that card, choose “The agent pushes it” under Delivery. " +
+        "The criteria and anything irreversible stay yours."
     /** The start card's one sentence under the switch, for the line and merge check chosen (`automaticSays`). */
     const val automaticOnChecked = "The coordinator decides when each task is done and merges into main once the merge check " +
         "passes — with a receipt you can revert."
@@ -1297,8 +1328,10 @@ object RunSettings {
     const val mergeCheckNoneSays = "Work lands once it rebases cleanly."
     const val atMost = "At most"
     const val mergeCheck = "Merge check"
-    const val mergeCheckHint = "Runs on the combined tree before anything lands — on the project branch and again before main."
-    fun mergeCheckHint(main: String) = "Runs on the combined tree before anything lands — on the project branch and again before $main."
+    const val mergeCheckHint = "Runs before merging into main."
+    fun mergeCheckHint(main: String) = "Runs before merging into $main."
+    /** …while the agent pushes its own work: the check is the agent's, on its work rebased onto main, and Orbit runs none. */
+    fun mergeCheckHintAgentPush(main: String) = "Run by the agent before it pushes, on its work rebased onto $main. Orbit doesn’t run it."
     const val mergeCheckPlaceholder = "No check — work lands once it rebases cleanly"
     const val noMergeCheckWarning = "No merge check: with Automatic on, the branch merges into main with nothing run on the combined tree."
     fun noMergeCheckWarning(main: String) = "No merge check: with Automatic on, the branch merges into $main with nothing run on the combined tree."
@@ -1316,10 +1349,15 @@ object RunSettings {
     const val notLoaded = "How it runs could not be loaded"
     const val lineDecidedAtStart = "decided when you start"
     const val lineSuggested = "the coordinator suggests"
-    /** What Automatic means for the line — the two constants above, said of the project's main branch. */
-    fun automaticHint(line: String?, main: String = defaultMainBranch) = if (line == "MAIN") "The coordinator runs it for you: it decides when " +
-        "each task is done and handles conflicts and failed checks. Merging into $main always asks you — a project that lands directly on " +
-        "$main never merges by itself. The criteria and anything irreversible stay yours."
+    /** What Automatic means for the line — the two constants above, said of the project's main branch. A main line points at the
+     * Delivery row that skips the card; a read with no delivery mode draws no such row ([hasDelivery] false), and says why it asks. */
+    fun automaticHint(line: String?, main: String = defaultMainBranch, hasDelivery: Boolean = true) = if (line == "MAIN") {
+        if (hasDelivery) "The coordinator runs it for you: it decides when each task is done and handles conflicts and failed checks. " +
+            "Merging into $main always asks you — to skip that card, choose “The agent pushes it” under Delivery. The criteria and " +
+            "anything irreversible stay yours."
+        else "The coordinator runs it for you: it decides when each task is done and handles conflicts and failed checks. Merging into " +
+            "$main always asks you — a project that lands directly on $main never merges by itself. The criteria and anything irreversible stay yours."
+    }
         else "The coordinator runs it for you: it decides when each task is done, handles conflicts and failed checks, and merges the " +
         "branch into $main once the merge check passes — with a receipt you can revert. The criteria and anything irreversible stay yours."
     fun tasksAtATime(count: Int?) = "${if (count == 1) "task" else "tasks"} at a time"

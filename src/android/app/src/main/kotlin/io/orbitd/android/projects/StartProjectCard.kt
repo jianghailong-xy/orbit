@@ -1,5 +1,6 @@
 package io.orbitd.android.projects
 
+import io.orbitd.android.management.LocalTranslation
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
@@ -35,6 +36,7 @@ import androidx.compose.ui.text.withStyle
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.window.Dialog
 import io.orbitd.android.core.cards.*
+import io.orbitd.android.translation.CardTranslationFoot
 import io.orbitd.android.ui.LocalOrbitColors
 import kotlinx.serialization.json.JsonElement
 import kotlinx.serialization.json.JsonObject
@@ -63,6 +65,8 @@ internal fun StartProjectCard(
     onStart: () -> Unit, onViewTasks: () -> Unit, onChatAbout: (() -> Unit)? = null, chatEnabled: Boolean = true,
     branches: ProjectMainBranch.Branches? = null, lastChoice: ProjectMainBranch.LastChoice? = null, graph: DependencyGraph? = null,
     recorded: Boolean = false, trailing: @Composable () -> Unit = {},
+    /** The coordinator's words in the owner's language (Settings › Translation): the card's "Translated · Show original" foot. */
+    translationFoot: (@Composable () -> Unit)? = null,
 ) {
     val opensCoordinator = draft.automatic && !hasCoordinator
     // The branch every sentence about where work goes names: the one on the card, or main for a project with no repository.
@@ -96,6 +100,7 @@ internal fun StartProjectCard(
                     overflow = TextOverflow.Ellipsis, onTextLayout = { whyCut = it.didOverflowHeight })
                 if (whyOpen || whyCut) Text(if (whyOpen) StartProjectCopy.less else StartProjectCopy.more,
                     Modifier.clickable(role = Role.Button) { whyOpen = !whyOpen }.testTag("$tag-why"), style = MaterialTheme.typography.labelMedium, color = accent)
+                translationFoot?.invoke()
             }
         }
         if (!recorded) StartProjectCopy.staleExplanation(standing)?.let {
@@ -142,15 +147,31 @@ internal fun StartProjectCard(
             }
             HorizontalDivider()
             LineRow(draft, request, projectId, editable, tag, onDraft)
+            // How the work reaches main, under the line it only means something for: a card whose read does not say offers no
+            // choice, and no row.
+            if (draft.deliveryMode != null) {
+                HorizontalDivider()
+                DeliveryRow(draft, editable, tag, onDraft)
+            }
             // A project with no repository has no branch to name, and no row.
             if (draft.upstream != null) {
                 HorizontalDivider()
                 MainBranchRow(draft, branches, lastChoice, editable, tag, onDraft)
             }
-            // How the work reaches main: a card whose read does not say offers no choice, and no row.
-            if (draft.deliveryMode != null) {
-                HorizontalDivider()
-                DeliveryRow(draft, editable, tag, onDraft)
+            HorizontalDivider()
+            Column(Modifier.padding(12.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                Text(LandingCheckCopy.label)
+                if (draft.line == "MAIN") Text(LandingCheckCopy.main) else {
+                    OutlinedTextField(draft.landingCheckCommand, { onDraft(draft.copy(landingCheckCommand = it)) },
+                        enabled = editable, placeholder = { Text(LandingCheckCopy.commandPlaceholder) }, label = { Text(LandingCheckCopy.command) })
+                    Text(LandingCheckCopy.hint, style = MaterialTheme.typography.labelMedium)
+                    if (draft.landingCheckCommand.isBlank()) Text(LandingCheckCopy.inheritedCommand(draft.mergeCheckCommand.takeIf { it.isNotBlank() }))
+                    OutlinedTextField(draft.landingCheckTimeoutSeconds?.toString().orEmpty(),
+                        { if (it.isEmpty() || (it.toIntOrNull() ?: 0) > 0) onDraft(draft.copy(landingCheckTimeoutSeconds = it.toIntOrNull())) },
+                        enabled = editable, placeholder = { Text(LandingCheckCopy.timeoutPlaceholder) }, label = { Text(LandingCheckCopy.timeout) })
+                    Text(LandingCheckCopy.timeoutHint, style = MaterialTheme.typography.labelMedium)
+                    if (draft.landingCheckTimeoutSeconds == null) Text(LandingCheckCopy.inheritedTimeout(draft.mergeCheckTimeoutSeconds))
+                }
             }
             HorizontalDivider()
             MergeCheckRow(draft, editable, tag, onDraft)
@@ -223,7 +244,10 @@ internal fun StartProjectCard(
 fun CoordinatorStartCard(card: InteractionCard, reads: Map<String, JsonElement>, fresh: Boolean, result: CardActionState,
     open: (String) -> Unit, discuss: ((String) -> Unit)?, recorded: CardInput? = null, submit: (CardVerb, CardInput) -> Unit) {
     val doc = card.context
-    val request = StartProjectCopy.request(card.source)
+    // The coordinator's why in the owner's language (Settings › Translation), flipped whole to its own words by the foot.
+    var showOriginal by rememberSaveable(card.key) { mutableStateOf(false) }
+    val translated = OwnerCardTranslation.openItem(card.source, LocalTranslation.current.cardLanguage)
+    val request = StartProjectCopy.request(if (translated != null && !showOriginal) translated else card.source)
     // The project's repository, the branches its main branch can be chosen from and this account's last choice there: the session
     // read carries them while the project is unstarted, so the card is never drawn on main and then moved. One that failed offers
     // no main branch, and the start keeps the one the project stands on.
@@ -262,12 +286,15 @@ fun CoordinatorStartCard(card: InteractionCard, reads: Map<String, JsonElement>,
                     enabled = fresh && CardVerb.START in card.actions && !result.uncertain && !result.settled, starting = result.busy, error = error,
                     tag = card.key, startTag = "${card.key}:${CardVerb.START.name}",
                     onStart = { submit(CardVerb.START, CardInput(settings = ProjectStartSettings(draft.line, draft.automatic, draft.maxConcurrentTasks,
-                        draft.mergeCheckCommand, request.settings.projectBranchName, draft.upstream?.let(RunSettings::mainBranchRef), draft.deliveryMode))) },
+                        draft.mergeCheckCommand, request.settings.projectBranchName, draft.upstream?.let(RunSettings::mainBranchRef), draft.deliveryMode, draft.landingCheckCommand.takeIf { it.isNotBlank() },
+                        draft.landingCheckTimeoutSeconds, draft.mergeCheckTimeoutSeconds))) },
                     // The tasks the plan names, on the project's page (the browser's link when there is no list to open).
                     onViewTasks = { card.projectId?.let { open("orbit-project:$it") } },
                     onChatAbout = chat, chatEnabled = fresh && !result.busy,
                     branches = ProjectMainBranch.branches(integration), lastChoice = ProjectMainBranch.lastChoice(integration), graph = graph,
-                    recorded = recorded != null)
+                    recorded = recorded != null, translationFoot = if (translated != null && recorded == null) ({
+                        CardTranslationFoot(showOriginal, { showOriginal = !showOriginal })
+                    }) else null)
                 if (pressed && recorded == null) message?.let { Text(it, Modifier.testTag("card-result"), style = MaterialTheme.typography.labelMedium,
                     color = MaterialTheme.colorScheme.onSurfaceVariant) }
                 if (result.busy) LinearProgressIndicator(Modifier.fillMaxWidth())
@@ -450,7 +477,8 @@ private fun MergeCheckRow(draft: StartProjectCopy.Draft, editable: Boolean, tag:
                 enabled = editable, placeholder = { Text(RunSettings.mergeCheckPlaceholder) },
                 textStyle = LocalTextStyle.current.copy(fontFamily = FontFamily.Monospace),
                 keyboardOptions = KeyboardOptions(capitalization = KeyboardCapitalization.None, autoCorrectEnabled = false))
-            Text(RunSettings.mergeCheckHint(draft.main), style = MaterialTheme.typography.labelMedium, color = muted)
+            Text(if (draft.agentPushes) RunSettings.mergeCheckHintAgentPush(draft.main) else RunSettings.mergeCheckHint(draft.main),
+                style = MaterialTheme.typography.labelMedium, color = muted)
         } else if (!draft.hasMergeCheck) Text(RunSettings.mergeCheckNoneSays, style = MaterialTheme.typography.labelMedium, color = muted)
     }
 }

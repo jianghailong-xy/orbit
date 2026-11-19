@@ -128,6 +128,8 @@ public enum WikiChatLogic {
             var actions: [WikiChatAction] = []
             if card.undoable { actions.append(.undo) }
             if card.kind == .entry { actions.append(.openEntry) }
+            // The plan page holds every version: where the owner changes the plan again, or sees why Undo is off (C17).
+            if card.kind == .plan { actions.append(.openInPlan) }
             if let rewrite = card.rewrite {
                 if rewrite.result == .waiting, let reason = rewrite.reason, settingsReasons.contains(reason) { actions.append(.settings) }
                 if rewrite.result == .failed { actions.append(.tryAgain) }
@@ -137,6 +139,14 @@ public enum WikiChatLogic {
         default:
             return []
         }
+    }
+
+    /// What an applied plan card that can no longer be undone says under its title (`wikiChatPlanMovedNote`, contract
+    /// `chat.drafts.states.applied`, C17): the plan moved on since its press, so Undo is off and Open in Plan is where
+    /// the plan changes again. Nil for any other card: an applied plan card is undoable exactly while the plan stands
+    /// where its press left it.
+    public static func planMovedNote(_ card: WikiChatCard) -> String? {
+        card.kind == .plan && card.state == .applied && !card.undoable ? WikiChatCopy.cardPlanMovedNote : nil
     }
 
     /// Whether an applied card's rewrite waits on the owner — what it adds to the Wiki's waiting count W (contract
@@ -321,7 +331,8 @@ public enum WikiChatLogic {
         case chat
         case pageDoc(doc: String, section: String)
         case pageEntry(title: String)
-        case pagePlan(doc: String)
+        /// A plan page; `section` when it shows one of its document's sections (C12).
+        case pagePlan(doc: String, section: String? = nil)
         case selection(doc: String, section: String, toSection: String?, sentences: Int, sources: Int)
         case drafts(applied: Int, edited: Int, discarded: Int, undone: Int)
     }
@@ -331,7 +342,7 @@ public enum WikiChatLogic {
         "chat": "orbit_wiki_chat", "page": "orbit_wiki_page", "selection": "orbit_wiki_selection", "drafts": "orbit_wiki_drafts",
     ]
 
-    /// What the "Orbit attached:" line names a chat note (`wikiChatNoteLabel`, board 42 ②).
+    /// What a chat note is named as where a note is named (`describeNote`; `wikiChatNoteLabel`, board 42 ②).
     public static func noteLabel(_ note: Note) -> String {
         func count(_ n: Int, _ one: String, _ many: String) -> String { n == 1 ? one : fill(many, ["n": "\(n)"]) }
         switch note {
@@ -341,8 +352,8 @@ public enum WikiChatLogic {
             return fill(WikiChatCopy.notePageDoc, ["where": place(doc: doc, section: section)])
         case .pageEntry(let title):
             return fill(WikiChatCopy.notePageEntry, ["title": title])
-        case .pagePlan(let doc):
-            return fill(WikiChatCopy.notePagePlan, ["doc": doc])
+        case .pagePlan(let doc, let section):
+            return fill(WikiChatCopy.notePagePlan, ["doc": section.map { place(doc: doc, section: $0) } ?? doc])
         case .selection(let doc, let section, let to, let sentences, let sources):
             let at = to.map { $0 != section ? "\(place(doc: doc, section: section))–§\($0)" : place(doc: doc, section: section) }
                 ?? place(doc: doc, section: section)
@@ -391,7 +402,7 @@ public enum WikiChatLogic {
                 return .pageEntry(title: title)
             case "plan":
                 guard let doc else { return nil }
-                return .pagePlan(doc: doc)
+                return .pagePlan(doc: doc, section: section)
             default:
                 return nil
             }
@@ -434,11 +445,74 @@ public enum WikiChatLogic {
 
     // MARK: the chats of a space (src/web/src/lib/wikiChat.ts)
 
-    /// Which chat the button opens (`wikiChatToOpen`, contract `chat.list.chats`): the newest holding something that
-    /// needs the owner, else the newest still open, else a new one (`newChat`).
+    /// Which chat the button opens (`wikiChatToOpen`, contract `chat.list.chats`): the first holding something that
+    /// needs the owner, else the open one last spoken in, else a new one (`newChat`).
     public static func toOpen(_ chats: [WikiChatRow]?) -> String {
         let rows = chats ?? []
         return rows.first { $0.needsYou > 0 }?.sessionId ?? rows.first { $0.open }?.sessionId ?? newChat
+    }
+
+    // MARK: open by default and the history (board 45, owner 11-11)
+
+    /// Whether a Wiki page opens with the panel shown (contract `chat.panel.openByDefault`, board 45 ①②): where it is
+    /// the third column (an iPad at a regular width, a Mac) — never a phone's sheet, which would cover the page — on
+    /// every page but Settings, unless the owner hid it with ✕ in this space.
+    public static func opensByDefault(sheet: Bool, settingsOnTop: Bool, hiddenByOwner: Bool) -> Bool {
+        !sheet && !settingsOnTop && !hiddenByOwner
+    }
+
+    /// The third column's width (the web's `wikiChatPanelWidth`, owner 11-11): a third of the width the Wiki has,
+    /// between 400 and 720, as its ideal; dragged between 320 and half of it.
+    public enum Column {
+        public static let min: Double = 320
+        public static let floor: Double = 400
+        public static let cap: Double = 720
+
+        public static func ideal(_ available: Double) -> Double {
+            Swift.min(cap, Swift.max(floor, (available / 3).rounded()))
+        }
+
+        public static func max(_ available: Double) -> Double {
+            Swift.max(min, (available / 2).rounded(.down))
+        }
+    }
+
+    /// The history's two groups (the web's `wikiChatHistoryGroups`, Q4 A): Open — what needs the owner, then what a
+    /// turn runs in, then the rest as served, the one last spoken in first — and Completed, as served.
+    public static func historyGroups(_ rows: [WikiChatRow]) -> (open: [WikiChatRow], completed: [WikiChatRow]) {
+        func rank(_ row: WikiChatRow) -> Int { row.needsYou > 0 ? 0 : row.working ? 1 : 2 }
+        let open = rows.enumerated().filter { !$0.element.completed }
+            .sorted { rank($0.element) != rank($1.element) ? rank($0.element) < rank($1.element) : $0.offset < $1.offset }
+            .map(\.element)
+        return (open, rows.filter(\.completed))
+    }
+
+    /// A history row's second line (the web's `wikiChatHistoryLine`): what it needs from the owner, else that it is
+    /// working, else how long ago it was spoken in.
+    public enum HistoryTone: Equatable, Sendable { case needsYou, working, quiet }
+
+    public static func historyLine(_ row: WikiChatRow, now: Date) -> (tone: HistoryTone, text: String) {
+        if row.needsYou > 0 {
+            return (.needsYou, row.needsYou == 1 ? WikiChatCopy.fabNeedsYouOne
+                        : fill(WikiChatCopy.fabNeedsYouMany, ["n": "\(row.needsYou)"]))
+        }
+        if row.working { return (.working, WikiChatCopy.fabWorking) }
+        return (.quiet, ago(row.lastActiveAt ?? row.updatedAt ?? "", now: now))
+    }
+
+    /// "Just now", "5m ago", "2h ago", "Yesterday", "3d ago", "2w ago" (the web's `wikiChatAgo`).
+    public static func ago(_ iso: String, now: Date) -> String {
+        let parse = ISO8601DateFormatter()
+        parse.formatOptions = [.withInternetDateTime, .withFractionalSeconds]
+        let plain = ISO8601DateFormatter()
+        guard let at = parse.date(from: iso) ?? plain.date(from: iso) else { return "Just now" }
+        let minutes = Int(now.timeIntervalSince(at) / 60)
+        if minutes < 1 { return "Just now" }
+        if minutes < 60 { return "\(minutes)m ago" }
+        if minutes < 24 * 60 { return "\(minutes / 60)h ago" }
+        if minutes < 2 * 24 * 60 { return "Yesterday" }
+        if minutes < 7 * 24 * 60 { return "\(minutes / (24 * 60))d ago" }
+        return "\(minutes / (7 * 24 * 60))w ago"
     }
 
     /// Where the panel says a new chat will run (`wikiChatRunsIn`, design §5.1).
@@ -487,17 +561,56 @@ public enum WikiChatLogic {
         return parts.joined(separator: " · ")
     }
 
+    // MARK: a new chat's first message (board 43: the session page's composer, in the panel)
+
+    /// What the composer holds as a new chat's first message goes: its words as typed, the files its attachment row
+    /// staged (uploaded to no session yet), and what its toolbar shows.
+    public struct FirstMessage: Equatable, Sendable {
+        public var words: String
+        public var attachmentIds: [String]
+        public var model: String?
+        public var permissionMode: String?
+        public var effort: String?
+        public var fastMode: Bool
+
+        public init(words: String, attachmentIds: [String] = [], model: String? = nil, permissionMode: String? = nil,
+                    effort: String? = nil, fastMode: Bool = false) {
+            self.words = words
+            self.attachmentIds = attachmentIds
+            self.model = model
+            self.permissionMode = permissionMode
+            self.effort = effort
+            self.fastMode = fastMode
+        }
+    }
+
+    /// The create the first message makes (contract `chat.create.body`, the web's `WikiChatNew` send): the words
+    /// trimmed, the page and the selection as `wikiContext`, the files as `attachmentIds`, and the toolbar's model,
+    /// mode, effort and speed (speed only when it is on). Nil with no words: a chat opens with the owner's words, and
+    /// files ride with them, never alone.
+    public static func createRequest(_ first: FirstMessage, workspaceId: String, context: WikiChatContext?,
+                                     clientTurnId: String) -> WikiChatCreateRequest? {
+        let words = first.words.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !words.isEmpty else { return nil }
+        return WikiChatCreateRequest(
+            workspaceId: workspaceId, content: words, clientTurnId: clientTurnId, wikiContext: context,
+            attachmentIds: first.attachmentIds.isEmpty ? nil : first.attachmentIds,
+            model: first.model, permissionMode: first.permissionMode, effort: first.effort,
+            fastMode: first.fastMode ? true : nil)
+    }
+
     // MARK: the composer's attachments (design §4.2)
 
     /// The page the reader is on, as the composer's page chip names it.
     public enum Page: Equatable, Sendable {
         case doc(docSlug: String, sectionKey: String, label: String)
         case entry(entryId: String, label: String)
-        case plan(docSlug: String, label: String)
+        /// A plan page, at one of its document's sections when it shows one (C12).
+        case plan(docSlug: String, label: String, sectionKey: String? = nil)
 
         public var label: String {
             switch self {
-            case .doc(_, _, let label), .entry(_, let label), .plan(_, let label): return label
+            case .doc(_, _, let label), .entry(_, let label), .plan(_, let label, _): return label
             }
         }
     }
@@ -572,6 +685,15 @@ public enum WikiChatLogic {
         (state.pageCrossed ? nil : state.page, state.quote)
     }
 
+    /// The page a plan page attaches (design §4.2, C12, the web's `useWikiChatPage`): its document, and — at one of its
+    /// sections (`index`, 0-based) — that section too, by its key in the plan in force, the one the note is read from.
+    public static func planPage(slug: String, index: Int?, number: String?, plan: WikiPlanState?) -> Page {
+        let doc = number ?? slug
+        guard let index, let sections = plan?.confirmed?.docs?.first(where: { $0.slug == slug })?.sections,
+              sections.indices.contains(index) else { return .plan(docSlug: slug, label: doc) }
+        return .plan(docSlug: slug, label: place(doc: doc, section: String(index + 1)), sectionKey: sections[index].key)
+    }
+
     /// The message's `wikiContext`, frozen from what the composer shows (`wikiChatContext`); nil when it shows neither.
     public static func context(_ state: Attachments) -> WikiChatContext? {
         let (page, quote) = shown(state)
@@ -579,7 +701,7 @@ public enum WikiChatLogic {
         switch page {
         case .doc(let slug, let key, _)?: context.page = .doc(docSlug: slug, sectionKey: key)
         case .entry(let id, _)?:          context.page = .entry(entryId: id)
-        case .plan(let slug, _)?:         context.page = .plan(docSlug: slug)
+        case .plan(let slug, _, let key)?: context.page = .plan(docSlug: slug, sectionKey: key)
         case nil:                         break
         }
         if let quote, !quote.sentenceIds.isEmpty {
@@ -667,7 +789,8 @@ public enum WikiChatLogic {
         public let tone: Tone
         /// A settled card is drawn flat (board 42 ③ ④'s quiet cards).
         public let quiet: Bool
-        /// The line under the title a state carries: `A newer draft took over.`, or the In Review note.
+        /// The line under the title a state carries: `A newer draft took over.`, the In Review note, an undone
+        /// rewrite's (`cardUndoneRewriteNote`), or an applied plan card's that can no longer be undone (`planMovedNote`).
         public let note: String?
         /// Applied with a challenge still waiting in Review: its note opens that item.
         public let inReview: Bool
@@ -687,11 +810,20 @@ public enum WikiChatLogic {
             title: cardTitle(card.state, label: card.label, inReview: inReview),
             tone: inReview ? .amber : tone(card.state),
             quiet: card.state != .draft && card.state != .changed,
-            note: inReview ? WikiChatCopy.cardAppliedInReviewNote
-                : card.state == .replaced ? WikiChatCopy.cardReplacedNote : nil,
+            note: cardNote(card, inReview: inReview),
             inReview: inReview,
             actions: all.filter { !rewriteLineActions.contains($0) },
             rewriteActions: all.filter { rewriteLineActions.contains($0) })
+    }
+
+    /// The line under a card's title a state carries (design §7.3, §8.4; the web's `cardNote`): an undone Rewrite from
+    /// main says the next maintenance run writes the section from main again when main has changed its files, and an
+    /// applied plan card the plan moved on from says why it can no longer be undone (`planMovedNote`, C17).
+    static func cardNote(_ card: WikiChatDraftView, inReview: Bool) -> String? {
+        if inReview { return WikiChatCopy.cardAppliedInReviewNote }
+        if card.state == .replaced { return WikiChatCopy.cardReplacedNote }
+        if card.state == .undone && card.kind == .rewrite { return WikiChatCopy.cardUndoneRewriteNote }
+        return planMovedNote(card.card)
     }
 
     /// The tone of the line under an applied card (`wikiChatResultLook`).
@@ -785,6 +917,15 @@ public enum WikiChatLogic {
         var diff: [CardFace.DiffLine] = []
         var sources: [String] = []
         var heading: String?
+        if card.kind == .plan, let change = card.change {
+            // A plan card says what its change does to its documents (`wikiChatPlanFace`, board 42 ④ ③), then why.
+            let plan = planFace(change)
+            rows = plan.rows
+            if let why = card.rationale?.trimmingCharacters(in: .whitespacesAndNewlines), !why.isEmpty {
+                rows.append(.init(label: WikiChatCopy.faceWhy, value: why))
+            }
+            return CardFace(heading: plan.heading, rows: rows, diff: [], sources: [])
+        }
         func titleOf(_ op: WikiChatDraftOpView) -> String? {
             faceText(op.payload?["entry"]?["title"]) ?? faceText(op.payload?["changes"]?["title"]) ?? faceText(op.entry?["title"])
         }
@@ -825,6 +966,89 @@ public enum WikiChatLogic {
             }
         }
         return CardFace(heading: heading, rows: rows, diff: diff, sources: sources)
+    }
+
+    /// What a plan card says on its face (`wikiChatPlanFace`, board 42 ④ ③; C12, C17): its documents as its heading —
+    /// `3.1 Sessions runtime · 3.5 Delivery and heartbeats` — then a row for the sections it moves between them (board
+    /// 42 ③'s Move: `3.1 §3 Delivery and heartbeats → new document 3.5`), and then document by document: a row for a new
+    /// document or for the document's own fields that change, one each for the sections it adds, changes and removes,
+    /// and one for each section whose covers it writes — where a writing requirement goes (design §6, third row). On a
+    /// card of one document a section is `§2 Turn delivery`, as the heading names the document; on a card of several it
+    /// is `3.1 §2 Turn delivery`, and a document's row starts with its number.
+    public static func planFace(_ change: WikiChatPlanChange) -> (heading: String, rows: [CardFace.Row]) {
+        func fields(_ names: [String]) -> String { listed(names.map { WikiChatCopy.planFields[$0] ?? $0 }) }
+        let several = change.docs.count > 1
+        func named(_ doc: String, _ n: Int, _ title: String) -> String { (several ? "\(doc) " : "") + "§\(n) \(title)" }
+        var rows: [CardFace.Row] = []
+        if !change.moves.isEmpty {
+            let moves = change.moves.map { move -> String in
+                let intoNew = change.docs.first(where: { $0.slug == move.to.doc })?.added == true
+                let into = intoNew ? fill(WikiChatCopy.cardPlanNewDocRef, ["doc": move.to.number]) : move.to.number
+                let moved = fill(WikiChatCopy.cardPlanMove, ["section": "\(move.from.number) §\(move.from.section) \(move.title)", "doc": into])
+                if move.fields.isEmpty { return moved }
+                return fill(WikiChatCopy.cardPlanSectionFields, ["section": moved, "fields": fields(move.fields)])
+            }
+            rows.append(.init(label: WikiChatCopy.cardPlanMoves, value: moves.joined(separator: " · ")))
+        }
+        for doc in change.docs {
+            let lead = several ? "\(doc.number) · " : ""
+            func section(_ one: WikiChatPlanChange.Section) -> String { named(doc.number, one.number, one.title) }
+            if doc.added {
+                let template = doc.category.opens ? WikiChatCopy.cardPlanNewCategory : WikiChatCopy.cardPlanNewDoc
+                rows.append(.init(label: WikiChatCopy.cardPlanDocument, value: lead + fill(template, ["category": doc.category.title])))
+            } else if !doc.fields.isEmpty {
+                rows.append(.init(label: WikiChatCopy.cardPlanDocument, value: lead + fill(WikiChatCopy.cardPlanDocFields, ["fields": fields(doc.fields)])))
+            }
+            func of(_ edit: String) -> [WikiChatPlanChange.Section] { doc.sections.filter { $0.edit == edit } }
+            if !of("added").isEmpty {
+                rows.append(.init(label: WikiChatCopy.cardPlanAdds, value: of("added").map(section).joined(separator: " · ")))
+            }
+            if !of("changed").isEmpty {
+                let changed = of("changed").map { fill(WikiChatCopy.cardPlanSectionFields, ["section": section($0), "fields": fields($0.fields)]) }
+                rows.append(.init(label: WikiChatCopy.cardPlanChanges, value: changed.joined(separator: " · ")))
+            }
+            if !of("removed").isEmpty {
+                rows.append(.init(label: WikiChatCopy.cardPlanRemoves, value: of("removed").map(section).joined(separator: " · ")))
+            }
+            for one in doc.sections where one.edit != "removed" {
+                guard let covers = one.covers else { continue }
+                rows.append(.init(label: WikiChatCopy.cardPlanCovers, value: fill(WikiChatCopy.cardPlanSectionCovers, ["section": section(one), "covers": covers])))
+            }
+            // A section moved into this document whose covers the move changes: where a requirement for it goes now.
+            for move in change.moves where move.to.doc == doc.slug {
+                guard let covers = move.covers else { continue }
+                let at = named(doc.number, move.to.section, move.title)
+                rows.append(.init(label: WikiChatCopy.cardPlanCovers, value: fill(WikiChatCopy.cardPlanSectionCovers, ["section": at, "covers": covers])))
+            }
+        }
+        return (change.docs.map { "\($0.number) \($0.title)" }.joined(separator: " · "), rows)
+    }
+
+    /// One link of a card's Rewrites row (`WikiChatRewriteLink`): what it says, and the section it opens beside the chat.
+    public struct RewriteLink: Equatable, Sendable {
+        public let label: String
+        public let doc: String
+        public let key: String
+    }
+
+    /// A card's Rewrites row (`wikiChatRewriteLinks`, board 42 ② ③ ④): a link each section — `3.1 §3` — save a plan
+    /// card whose rebuild spans more than one document, which links each document once by its number — board 42 ③'s
+    /// `3.1 · 3.5` — opening its first section: a split writes its new document whole. The order is the card's.
+    public static func rewriteLinks(kind: WikiChatDraftKind, rewrites: [WikiChatDraftSection]) -> [RewriteLink] {
+        // Each document's first section, in the card's order.
+        var firsts: [WikiChatDraftSection] = []
+        for section in rewrites where !firsts.contains(where: { $0.doc == section.doc }) { firsts.append(section) }
+        guard kind == .plan, firsts.count > 1 else {
+            return rewrites.map { RewriteLink(label: $0.place, doc: $0.doc, key: $0.key) }
+        }
+        return firsts.map { first in
+            // `3.1 §1` → `3.1`: the document's number.
+            var label = first.place
+            if let at = first.place.range(of: " §", options: .backwards)?.lowerBound, at > first.place.startIndex {
+                label = String(first.place[..<at])
+            }
+            return RewriteLink(label: label, doc: first.doc, key: first.key)
+        }
     }
 
     /// A source as the card's Sources row names it: the chat's own words first-hand, else its kind and where it points
@@ -876,6 +1100,25 @@ public enum WikiChatLogic {
             return WikiChatCopy.pressRefused("HTTP 401")
         default:
             return WikiChatCopy.pressUnsent
+        }
+    }
+
+    /// What a card says of a press that did not go: its reason (`pressError`), then each error the gate found, a line each.
+    public static func pressRefusal(_ error: Error) -> String {
+        ([pressError(error)] + pressDetails(error)).joined(separator: "\n")
+    }
+
+    /// What a refused press lists under its reason (`wikiChatPressDetails`, C12): each error the plan's gate found in a
+    /// plan card's change — or a schema refusal's fields — as the server wrote it, where it is first; nothing else.
+    public static func pressDetails(_ error: Error) -> [String] {
+        guard case APIError.http(_, let body) = error, let data = body?.data(using: .utf8),
+              let json = (try? JSONSerialization.jsonObject(with: data)) as? [String: Any],
+              let code = json["code"] as? String, code == "WIKI_PLAN_GATE" || code == "WIKI_SCHEMA",
+              let errors = json["errors"] as? [[String: Any]] else { return [] }
+        return errors.compactMap { one in
+            guard let message = (one["message"] as? String)?.trimmingCharacters(in: .whitespacesAndNewlines), !message.isEmpty else { return nil }
+            if let path = one["path"] as? String, !path.isEmpty { return "\(path): \(message)" }
+            return message
         }
     }
 

@@ -141,6 +141,9 @@ test('workspace counts separate queued activity from Session-list spinner work',
     // …and the four owner items a project can be waiting on its owner for (§7.6 V13),
     // which these fixtures have none of either.
     projectOpenItem: { findMany: async () => [] },
+    ownerRequest: { groupBy: async () => [] },
+    // A move out of a project waiting on the owner (57a2943fa4's crossing signal): none here.
+    projectHandoffApproval: { findMany: async () => [] },
   } as never;
   const service = new SessionsService(prisma, {} as never, {} as never);
 
@@ -253,7 +256,7 @@ test('workspace counts separate queued activity from Session-list spinner work',
     runningBgShells: true,
     approvals: {
       where: { status: 'PENDING', backgroundJobId: { not: null } },
-      select: { backgroundJobId: true },
+      select: { id: true, toolName: true, backgroundJobId: true },
     },
   });
 

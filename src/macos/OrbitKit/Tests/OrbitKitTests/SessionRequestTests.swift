@@ -80,6 +80,34 @@ final class SessionRequestTests: XCTestCase {
         XCTAssertNil(try JSONDecoder().decode(SessionRequestView.self, from: Data(newer.utf8)).state)
     }
 
+    func testARunQuestionsRequestCarriesItsCardAsItStandsNow() throws {
+        func view(_ runQuestion: String?) throws -> SessionRequestView {
+            let field = runQuestion.map { ", \"runQuestion\": \($0)" } ?? ""
+            let json = """
+                {"requestId": "rq", "state": "REPLIED", "fromSessionId": "\(Self.asker)",
+                 "toSessionId": "\(Self.recipient)", "replyBy": "2026-11-11T06:10:00.000Z"\(field)}
+                """
+            return try JSONDecoder().decode(SessionRequestView.self, from: Data(json.utf8))
+        }
+        let card = try XCTUnwrap(try view("""
+            {"requestId": "rq", "approvalId": "ap", "taskId": "task-3", "taskTitle": "Move the list",
+             "runSessionId": "s-run", "replyBy": "2026-11-11T06:10:00.000Z", "state": "REPLIED",
+             "approvalStatus": "ALLOWED",
+             "questions": [{"question": "Keep its place?", "options": [{"label": "Keep"}, {"label": "Back"}]}],
+             "answers": {"Keep its place?": ["Keep"]}, "answeredBy": "SESSION"}
+            """).runQuestion)
+        XCTAssertEqual(card.answeredBy, "SESSION")
+        XCTAssertEqual(card.approvalStatus, "ALLOWED")
+        XCTAssertEqual(card.answers, ["Keep its place?": ["Keep"]])
+        XCTAssertEqual(card.questions.first?.options, ["Keep", "Back"])
+        // Any other request carries none; a card this client cannot read is none, not a failed read.
+        XCTAssertNil(try view(nil).runQuestion)
+        XCTAssertNil(try view("null").runQuestion)
+        XCTAssertNil(try view(#"{"requestId": "rq"}"#).runQuestion)
+        XCTAssertNil(try view(#""nope""#).runQuestion)
+        XCTAssertEqual(try view(#""nope""#).state, .closed(.replied))
+    }
+
     func testTheStatusLineSaysTheDeadlineOnlyWhileItWaits() throws {
         var calendar = Calendar(identifier: .gregorian)
         calendar.timeZone = TimeZone(identifier: "UTC")!
@@ -124,12 +152,8 @@ final class SessionRequestTests: XCTestCase {
         XCTAssertNil(try bubble(reducer).sessionReplies)
     }
 
-    func testTheReplyBlocksLeaveTheNoteToWhatElseWasAppended() {
+    func testAReplyBlockIsNamedAsASessionReply() {
         let block = "<orbit-session-reply request-id=\"a\" outcome=\"REPLIED\">\n回复：ok\n</orbit-session-reply>"
-        XCTAssertEqual(SessionReply.withoutReplyBlocks(block), "")
-        XCTAssertEqual(SessionReply.withoutReplyBlocks("\(block)\n\n<background-jobs>\n…\n</background-jobs>"),
-                       "<background-jobs>\n…\n</background-jobs>")
-        XCTAssertEqual(SessionReply.withoutReplyBlocks(nil), "")
         XCTAssertEqual(describeNote(block), "session reply")
     }
 

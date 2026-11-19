@@ -1,73 +1,16 @@
 // @vitest-environment jsdom
-import { existsSync, readFileSync } from 'node:fs';
-import { resolve } from 'node:path';
 import { act } from 'react';
 import { createRoot, type Root } from 'react-dom/client';
 import { renderToStaticMarkup } from 'react-dom/server';
 import { MemoryRouter } from 'react-router-dom';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
+import { WIKI_CHAT_PROMPT } from '@orbit/shared';
 import { ExportCtx, type RunEvent, Transcript } from './Transcript';
 
-/**
- * What delivery appended to a person's message must not be signed with their name.
- *
- * The runner echoes what it was handed, so a `user` event's text is the person's words followed by
- * whatever the control plane appended on the way out — the background work a returning engine is
- * told about, a list console's condition board, a promoted coordinator's standing role. Those
- * blocks say outright that the user did not say them, and all of them used to render as the
- * person's own words.
- *
- * The apiserver records the appended part beside the echo, as `controlPlaneNote`, when it stores
- * the event: it holds what the person actually wrote (the turn row), so where their words end is a
- * fact of the write rather than a guess about the text. Each block is checked from both sides. With
- * the note, the bubble is the person's words alone and the block is one folded line under it, in
- * its meta row, named ⊕ Orbit attached: and the kind of block it is. Without it — someone who typed
- * those very characters — the bubble shows exactly what they typed and there is no line, however
- * much it looks like a block.
- *
- * That holds for every block, a `#`-reference and a coordinator's role included: events stored
- * before notes were recorded had theirs backfilled, so none of them is read out of the text.
- */
-
-const LABEL = '⊕ Orbit attached:';
-/** What the same line says once it is open: the plus turns to a minus (owner, 2026-10-27). */
-const OPEN_LABEL = '⊖ Orbit attached:';
-
-// The shapes the server appends (background-jobs-context.ts, list-events.service.ts,
-// coordinator-opening.ts, reference-expansion.ts).
-const BACKGROUND_JOBS = [
-  '<background-jobs>',
-  '  你不在的时候结束了：',
-  '    bgj_3a1af2b50428｜job｜bash /root/orbit/.claude/skills/upgrade/upgrade.sh 2>&1 | tail -60｜completed｜退出码 0｜输出 /root/.orbit/runs/01a07c80/bgj_3a1af2b50428.output',
-  '  这是控制面替你记下的，不是用户说的。输出文件由 runner 持有，engine 换过也还在。',
-  '  用 mcp__orbit__bg_output 按 id 读输出，mcp__orbit__bg_list 取完整清单。',
-  '</background-jobs>',
-].join('\n');
-
-const LIST_CONDITIONS = [
-  '<list-conditions list="3Hq9fVbYmP2kQhZ8aNcW4x" title="FineWeb CC-MAIN-2025-26">',
-  '  配额挡住派发｜12 个就绪任务被配额挡住｜首次 2026-08-15T03:11:00.000Z，最近 2026-08-15T04:07:00.000Z，累计 47 次',
-  '  以上是控制面在你上次收到消息之后观察到的，不是用户说的。',
-  '  需要更完整的现状用 tasklist_get / task_list 自取。',
-  '</list-conditions>',
-].join('\n');
-
-const COORDINATOR = [
-  '<orbit_project_coordinator_context>',
-  '你是项目（id: 34HvVYzGmE4NFDMiomVgi）的协调会话。',
-  '这里用来协调任务，不是替任务干活。',
-  '</orbit_project_coordinator_context>',
-].join('\n');
-
-const REFERENCED_TASK = [
-  '<referenced-task id="34MQb2AXbj3QAkZko92ob">',
-  '  标题   回填历史 user 事件的 controlPlaneNote',
-  '  状态   OPEN',
-  '  所属   (无列表) · 负责 orbit',
-  '  运行   共 1 次，其中执行过 turn 的 1 次；最近一次：RUNNING, 0 turns',
-  '  详情请用 task_get 自取。',
-  '</referenced-task>',
-].join('\n');
+const CONDITIONS = '<list-conditions>\n  Quota held dispatch\n</list-conditions>';
+const PAGE = '<orbit_wiki_page of="doc" doc="1.1" slug="runner-presence">\nA runner sends a heartbeat every 30 seconds.\n</orbit_wiki_page>';
+const SELECTION = '<orbit_wiki_selection doc="1.1" slug="runner-presence" sentences="1" sources="1">\nSelected heartbeat source.\n</orbit_wiki_selection>';
+const TYPED = 'What is the current state?';
 
 let container: HTMLDivElement;
 let root: Root;
@@ -84,220 +27,64 @@ afterEach(() => {
   container.remove();
 });
 
-/** A `user` event as ingest stores it: the runner's echo, and the note only when one was recorded. */
 function userEvent(text: string, controlPlaneNote?: string): RunEvent {
-  return {
-    seq: 7,
-    type: 'user',
-    turnId: 'turn-1',
-    ts: '2026-09-10T12:26:47.307Z',
-    payload: controlPlaneNote === undefined ? { text } : { text, controlPlaneNote },
-  };
+  return { seq: 7, type: 'user', turnId: 'turn-1', ts: '2026-11-18T12:26:47.307Z',
+    payload: { text, ...(controlPlaneNote === undefined ? {} : { controlPlaneNote }) } };
 }
 
 async function mount(events: RunEvent[]) {
-  await act(async () => {
-    root.render(
-      <MemoryRouter>
-        <Transcript events={events} />
-      </MemoryRouter>,
-    );
-  });
+  await act(async () => root.render(<MemoryRouter><Transcript events={events} /></MemoryRouter>));
 }
 
-function bubble(): Element {
-  const el = container.querySelector('.chat-user');
-  if (!el) throw new Error(`no user bubble was rendered:\n${container.innerHTML}`);
-  return el;
-}
-
-/** The entry's toggle, found by what it says rather than by how it is styled — shut or open. */
-function attachedToggle(): HTMLButtonElement | null {
-  return (
-    [...container.querySelectorAll('button')].find(
-      (b) => b.textContent?.startsWith(LABEL) || b.textContent?.startsWith(OPEN_LABEL),
-    ) ?? null
-  );
-}
-
-/** What the line opened: under the bubble's meta row, in the bubble's column. */
-function opened(): Element | null {
-  return container.querySelector('.chat-user-wrap > .chat-injected-panel');
-}
-
-async function click(el: Element) {
-  await act(async () => {
-    el.dispatchEvent(new MouseEvent('click', { bubbles: true }));
-  });
-}
-
-/**
- * How every appended block must read once it is known to be Orbit's: never in the person's bubble,
- * but one line ending the meta row under it, named for its kind — how the block stands is the
- * line's accessible name, not its words — folded until clicked, what the model read once open
- * under that row, and folded again on a second click.
- *
- * Two of them open as something other than their own text — the inventory a returning engine is
- * handed, and the tasks a person named with `#` (`card`, whose title is the link the block's id
- * could only be read as). Everything else opens verbatim, which is the whole of what this says
- * about it.
- */
-async function expectFoldedEntry({ typed, block, kind, count, marker, card }: {
-  typed: string;
-  block: string;
-  kind: string;
-  /** What a block that opens as rows or cards adds to its own name once shut; '' for the rest. */
-  count: string;
-  marker: string;
-  /** The one card a `#`-reference opens as, for the block that opens as one. */
-  card?: { title: string; href: string };
-}) {
-  const toggle = attachedToggle();
-  expect(toggle, `no entry signed ${LABEL}:\n${container.innerHTML}`).not.toBeNull();
-  expect(toggle!.textContent).toBe(`${LABEL} ${kind}`);
-  expect(toggle!.getAttribute('aria-label')).toBe(`${LABEL} ${kind}${count}`);
-  expect(toggle!.closest('.chat-user-meta'), 'the line ends the meta row under the bubble').not.toBeNull();
-  // The bubble is exactly what the person typed, and nothing of the note is in it.
-  const words = () => (bubble().textContent ?? '').trim();
-  expect(words()).toBe(typed);
-  expect(bubble().contains(toggle)).toBe(false);
-  // Folded: the entry is named, but what the model read is not on the page until asked for.
-  expect(toggle!.getAttribute('aria-expanded')).toBe('false');
-  expect(opened()).toBeNull();
-  expect(container.textContent).not.toContain(marker);
-
-  await click(toggle!);
-
-  expect(toggle!.getAttribute('aria-expanded')).toBe('true');
-  expect(toggle!.textContent).toBe(`${OPEN_LABEL} ${kind}`);
-  const entry = opened();
-  expect(entry, `nothing opened under the meta row:\n${container.innerHTML}`).not.toBeNull();
-  if (card) {
-    const link = entry!.querySelector('a.reftask-title');
-    expect(link?.textContent, `the opened entry is not a card:\n${container.innerHTML}`).toBe(card.title);
-    expect(link?.getAttribute('href')).toBe(card.href);
-    // The table is what the card replaced, the sentence addressed to the agent with it.
-    expect(entry!.textContent).not.toContain('详情请用 task_get 自取');
-  } else {
-    const original = [...entry!.querySelectorAll('*')].find((el) => el.textContent === block);
-    expect(original, `the opened entry does not show the block verbatim:\n${container.innerHTML}`).toBeTruthy();
-  }
-  expect(words()).toBe(typed);
-
-  await click(toggle!);
-
-  expect(toggle!.getAttribute('aria-expanded')).toBe('false');
-  expect(toggle!.textContent).toBe(`${LABEL} ${kind}`);
-  expect(container.textContent).not.toContain(marker);
-}
-
-describe.each([
-  { tag: '<background-jobs>', typed: '已经部署，请帮我测试', block: BACKGROUND_JOBS, kind: 'background jobs', count: ' · 1 ended, exit 0', marker: 'bgj_3a1af2b50428' },
-  { tag: '<list-conditions>', typed: '这个列表现在什么情况？', block: LIST_CONDITIONS, kind: 'list conditions', count: '', marker: '累计 47 次' },
-  { tag: '<orbit_project_coordinator_context>', typed: '把这个项目协调起来', block: COORDINATOR, kind: 'project coordinator context', count: '', marker: '的协调会话' },
-  {
-    tag: '<referenced-task>', typed: '这个任务现在什么状态？', block: REFERENCED_TASK,
-    kind: 'referenced task', count: ' · OPEN', marker: '回填历史 user 事件的 controlPlaneNote',
-    card: { title: '回填历史 user 事件的 controlPlaneNote', href: '/tasks/34MQb2AXbj3QAkZko92ob' },
-  },
-])('$tag', ({ typed, block, kind, count, marker, card }) => {
-  it('with the note recorded: only the typed words are the bubble’s own, and the block is a folded entry under them that opens to what the model read', async () => {
-    const appended = `\n\n${block}`;
-    await mount([userEvent(`${typed}${appended}`, appended)]);
-
-    await expectFoldedEntry({ typed, block, kind, count, marker, card });
+describe('recorded control-plane notes (owner decision 2026-11-18)', () => {
+  it.each([
+    ['list conditions', CONDITIONS, 'Quota held dispatch'],
+    ['background inventory', '<background-jobs>\n  Still running: hidden-job\n</background-jobs>', 'hidden-job'],
+    ['coordinator role', '<orbit_project_coordinator_context>\nYou coordinate this project.\n</orbit_project_coordinator_context>', 'You coordinate this project.'],
+    ['wiki chat with page and selection', `${WIKI_CHAT_PROMPT}\n\n${PAGE}\n\n${SELECTION}`, 'A runner sends a heartbeat every 30 seconds.'],
+    ['wiki chat without attachments', WIKI_CHAT_PROMPT, 'You are chatting beside a page of this repository'],
+  ])('keeps %s out of the bubble and the rest of the transcript', async (_kind, block, marker) => {
+    const note = `\n\n${block}`;
+    await mount([userEvent(`${TYPED}${note}`, note)]);
+    expect(container.querySelector('.chat-user')?.textContent?.trim()).toBe(TYPED);
+    expect(container.textContent).not.toContain('Orbit attached');
+    expect(container.textContent).not.toContain(block);
+    expect(container.textContent).not.toContain(marker);
+    expect(container.querySelector('[class*="chat-injected"]')).toBeNull();
+    expect([...container.querySelector('.chat-user-meta')!.children].map((el) => el.className))
+      .toEqual(['chat-copy', 'chat-time']);
   });
 
-  it('with no note: someone who typed the same characters sees them in their bubble as typed, and nothing is folded away', async () => {
-    await mount([userEvent(`${typed}\n\n${block}`)]);
+  it('keeps a card and its own words, without the appended note or attachment fold', async () => {
+    const note = `\n\n${CONDITIONS}`;
+    await mount([{
+      ...userEvent(`The work is ready.${note}`, note),
+      payload: { text: `The work is ready.${note}`, controlPlaneNote: note,
+        sessionMessage: { fromSessionId: '00000000-0000-4000-8000-000000000001', fromTitle: 'Worker', fromAgentName: 'orbit' } },
+    }]);
+    expect(container.querySelector('.smc')?.textContent).toContain('The work is ready.');
+    expect(container.querySelector('.chat-user')).toBeNull();
+    expect(container.textContent).not.toContain('Orbit attached');
+    expect(container.textContent).not.toContain('Quota held dispatch');
+    expect(container.querySelector('[class*="chat-injected"]')).toBeNull();
+  });
 
-    const shown = bubble().textContent ?? '';
-    expect(shown).toContain(typed);
-    for (const line of block.split('\n')) expect(shown).toContain(line.trim());
-    expect(attachedToggle()).toBeNull();
+  it('keeps block-shaped text the person typed when no note was recorded', async () => {
+    await mount([userEvent(`${TYPED}\n\n${CONDITIONS}`)]);
+    expect(container.querySelector('.chat-user')?.textContent).toContain('Quota held dispatch');
     expect(container.textContent).not.toContain('Orbit attached');
   });
-});
 
-it('is one line after the hidden copy and time, the counts in its name and tooltip, and nothing else to press', async () => {
-  // The owner's ruling (2026-10-27, docs/mocks/attached-context-note): what the person typed is what
-  // the eye lands on. So no card in the bubble — the line is in the meta row's own voice and says
-  // what was attached; how it stands ("1 ended, exit 0") waits in its name and its tooltip.
-  const appended = `\n\n${BACKGROUND_JOBS}`;
-  await mount([userEvent(`已经部署，请帮我测试${appended}`, appended)]);
-
-  const row = container.querySelector('.chat-user-wrap > .chat-user-meta')!;
-  const line = row.lastElementChild as HTMLButtonElement;
-  expect(line.textContent).toBe(`${LABEL} background jobs`);
-  expect(line.getAttribute('aria-label')).toBe(`${LABEL} background jobs · 1 ended, exit 0`);
-  expect(line.title).toBe('Orbit attached: background jobs · 1 ended, exit 0. The agent read it with this message.');
-  expect([...row.children].map((child) => child.className)).toEqual([
-    'chat-copy',
-    'chat-time',
-    'chat-meta-sep',
-    'chat-injected-head',
-  ]);
-  // The line is the one control: nothing in the bubble or under it offers a second way in.
-  expect(bubble().querySelector('button')).toBeNull();
-  expect(container.querySelectorAll('.chat-user-wrap button')).toHaveLength(2);
-
-  await click(line);
-
-  const wrap = container.querySelector('.chat-user-wrap')!;
-  expect(wrap.lastElementChild?.className, 'the rows open under the meta row').toBe('chat-injected-panel');
-  expect(line.textContent).toBe(`${OPEN_LABEL} background jobs`);
-  expect(bubble().textContent?.trim()).toBe('已经部署，请帮我测试');
-});
-
-describe('the exported transcript', () => {
-  // lib/sessionExport's buildSessionHtml renders exactly this tree — ExportCtx around the app's own
-  // <Transcript> — through renderToStaticMarkup, so the export has no user-bubble code of its own.
-  // Rendered here rather than imported: that module inlines the stylesheet through Vite `?raw`
-  // imports, which Vite refuses to serve from a node_modules linked in from outside the tree.
-  it('is drawn by the same component, so the line is under the bubble there too — and open, since a file has nothing to click', () => {
-    const appended = `\n\n${BACKGROUND_JOBS}`;
+  it('also omits the note and fold from the exported transcript', () => {
+    const note = `\n\n${CONDITIONS}`;
     const html = renderToStaticMarkup(
       <ExportCtx.Provider value={{ images: new Map() }}>
-        <div className="workspace-sessions">
-          <Transcript events={[userEvent(`已经部署，请帮我测试${appended}`, appended)]} live={false} />
-        </div>
+        <Transcript events={[userEvent(`${TYPED}${note}`, note)]} live={false} />
       </ExportCtx.Provider>,
     );
-    const exported = new DOMParser().parseFromString(html, 'text/html').querySelector('.chat-user-wrap');
-    const toggle = [...(exported?.querySelectorAll('.chat-user-meta button') ?? [])].find((b) =>
-      b.textContent?.startsWith(OPEN_LABEL),
-    );
-
-    expect(toggle?.textContent, `no open entry signed ${OPEN_LABEL} under the exported bubble:\n${html}`).toBe(
-      `${OPEN_LABEL} background jobs`,
-    );
-    expect(toggle!.getAttribute('aria-expanded')).toBe('true');
-    const panel = exported!.querySelector(':scope > .chat-injected-panel');
-    expect([...(panel?.querySelectorAll('*') ?? [])].some((el) => el.textContent === BACKGROUND_JOBS)).toBe(true);
-    expect(exported!.querySelector('.chat-user')!.textContent!.trim()).toBe('已经部署，请帮我测试');
-  });
-});
-
-describe('the entry’s focus ring', () => {
-  it('is drawn for keyboard focus alone (:focus-visible), so a click leaves no ring behind', async () => {
-    const appended = `\n\n${BACKGROUND_JOBS}`;
-    await mount([userEvent(`已经部署，请帮我测试${appended}`, appended)]);
-    const toggle = attachedToggle();
-    expect(toggle, `no entry signed ${LABEL}:\n${container.innerHTML}`).not.toBeNull();
-
-    // Read as text: jsdom cannot tell focus that arrived by a click from focus that arrived by Tab,
-    // so only the selector can say which of them draws. Every rule naming the toggle's class that
-    // draws an outline or a shadow is collected, wherever in the stylesheet it sits.
-    const found = ['src/index.css', 'src/web/src/index.css']
-      .map((each) => resolve(process.cwd(), each))
-      .find(existsSync);
-    const css = readFileSync(found!, 'utf8').replace(/\/\*[\s\S]*?\*\//gu, '');
-    const names = new RegExp(`\\.${toggle!.className}(?![\\w-])`, 'u');
-    const drawing = [...css.matchAll(/([^{}]+)\{([^{}]*)\}/gu)]
-      .filter(([, , body]) => /(?:^|;)\s*(?:outline(?:-style)?\s*:(?!\s*(?:none|0)\s*(?:;|$))|box-shadow\s*:)/u.test(body))
-      .flatMap(([, selectors]) => selectors.split(',').map((selector) => selector.trim()))
-      .filter((selector) => names.test(selector));
-
-    expect(drawing).toEqual([`.${toggle!.className}:focus-visible`]);
+    expect(html).toContain(TYPED);
+    expect(html).not.toContain('Orbit attached');
+    expect(html).not.toContain('chat-injected');
+    expect(html).not.toContain('Quota held dispatch');
   });
 });

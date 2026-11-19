@@ -11,6 +11,7 @@ import (
 	"os/exec"
 	"os/user"
 	"path/filepath"
+	"regexp"
 	"runtime"
 	"strings"
 	"time"
@@ -77,6 +78,17 @@ func (s engineSpec) loginHint() string {
 	return s.loginCmd() + "   (headless: " + s.loginHeadless + ")"
 }
 
+// codexInstallAlt is the by-hand install offered when `npm install -g @openai/codex` fails —
+// usually because npm itself is missing, so the alternative must need neither npm nor, off
+// macOS, brew. OpenAI's own standalone installer (README: "Mac or Linux install script")
+// puts a release binary in ~/.local/bin.
+func codexInstallAlt(goos string) string {
+	if goos == "darwin" {
+		return "brew install codex   (macOS)"
+	}
+	return "curl -fsSL https://chatgpt.com/codex/install.sh | sh"
+}
+
 var engineSpecs = []engineSpec{
 	{
 		name:          "Claude Code",
@@ -98,7 +110,7 @@ var engineSpecs = []engineSpec{
 		// never execs (root: standalone ~/.local/bin wins over the npm global), and failing
 		// with EACCES when the service user doesn't own that prefix.
 		updateCmd:  "codex update",
-		installAlt: "brew install codex   (macOS)",
+		installAlt: codexInstallAlt(runtime.GOOS),
 		// npm is where `codex update` reads its own newest version from, standalone install or not.
 		latestURL:   "https://registry.npmjs.org/@openai/codex/latest",
 		latestField: "version",
@@ -208,6 +220,8 @@ type engineHealth struct {
 	installError  string
 	// Kimi only: the site its own login is on (kimi_region.go), "" when there is none.
 	kimiRegion string
+	// OpenCode only: `opencode auth list` listed no key at all (probeOpenCodeAuth).
+	openCodeNoKey bool
 	// Claude Code only: doctor's region check found Claude's connection to Anthropic in a region Anthropic does
 	// not offer Claude in (doctorRegion). Its line says so, and doctor suggests no sign-in for it.
 	regionBlocked bool
@@ -305,6 +319,10 @@ func checkEngine(spec engineSpec, servicePath string) engineHealth {
 		ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 		defer cancel()
 		h.auth, h.authSource, h.planUsage = probeAntigravityAuth(ctx, abs, nil)
+	} else if spec.bin == providerOpenCode {
+		ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+		defer cancel()
+		h.auth, h.openCodeNoKey = probeOpenCodeAuth(ctx, abs, nil)
 	} else {
 		h.auth = probeAuth(spec.bin, abs)
 	}
@@ -314,10 +332,17 @@ func checkEngine(spec engineSpec, servicePath string) engineHealth {
 	return h
 }
 
-// engineVersion runs `<binPath> --version` with a short timeout so a wedged CLI
-// can't hang `orbit doctor`. Returns "" if it errors.
+// engineVersionTimeout is how long a CLI gets to print its version. Five seconds was the number
+// until 2026-11-13, when opencode's 214 MB binary measured 3.3–6.3 s just to answer on a loaded
+// box — so the probe failed often enough that the machine could never be shown as current (the
+// drift clock needs both versions to clear, engineupdate.go's driftSince) and every failure
+// message about it lost its left-hand side.
+const engineVersionTimeout = 20 * time.Second
+
+// engineVersion runs `<binPath> --version` with a timeout so a wedged CLI can't hang
+// `orbit doctor`. Returns "" if it errors.
 func engineVersion(binPath string) string {
-	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	ctx, cancel := context.WithTimeout(context.Background(), engineVersionTimeout)
 	defer cancel()
 	out, err := exec.CommandContext(ctx, binPath, "--version").Output()
 	if err != nil {
@@ -435,30 +460,45 @@ func probeAuthIn(ctx context.Context, bin, binPath string, env []string) authSta
 		// KIMI_CODE_HOME in env (kimiSlotLoginStatus).
 		return probeKimiACPAuth(ctx, binPath, env)
 	case providerOpenCode:
-		out, err := exec.CommandContext(ctx, binPath, "auth", "list").CombinedOutput()
-		if err != nil {
-			// A provider may be local/no-auth, and older OpenCode builds may not
-			// support this probe. Never turn either case into a startup blocker.
-			return authUnknown
-		}
-		// `opencode auth list` reports the number of stored/environment credentials.
-		// A successful but unfamiliar format stays unknown so local/no-auth providers
-		// are never rejected by a best-effort probe.
-		lower := strings.ToLower(string(out))
-		if strings.Contains(lower, "0 credentials") || strings.Contains(lower, "0 credential") {
-			// OpenCode also supports local and built-in providers that require no
-			// stored credential, so zero is not equivalent to signed out.
-			return authUnknown
-		}
-		if strings.Contains(lower, "credential") || strings.Contains(lower, "environment") {
-			return authYes
-		}
-		return authUnknown
+		auth, _ := probeOpenCodeAuth(ctx, binPath, env)
+		return auth
 	case providerAntigravity:
 		auth, _, _ := probeAntigravityAuth(ctx, binPath, env)
 		return auth
 	}
 	return authUnknown
+}
+
+// openCodeCountRe matches the totals `opencode auth list` closes each of its sections with:
+// "2 credentials" under the auth store, "1 environment variable" under the provider keys it found
+// in its environment.
+var openCodeCountRe = regexp.MustCompile(`(?i)\b(\d+)\s+(?:credentials?|environment variables?)\b`)
+
+// probeOpenCodeAuth asks `opencode auth list` for the provider keys OpenCode can use: those in its
+// own auth store and those in its environment. Any key is a yes. None is still unknown, never
+// no: OpenCode runs its own free models without one, and a key in its config file is not listed
+// here — so noKey says only that the list came back empty. A failed or unfamiliar answer is
+// unknown with noKey false. (Before 2026-11-17 a "0 credentials" anywhere made it unknown, so a
+// key found in the environment, listed under its own "0 credentials" store, never read as one.)
+func probeOpenCodeAuth(ctx context.Context, binPath string, env []string) (auth authState, noKey bool) {
+	cmd := exec.CommandContext(ctx, binPath, "auth", "list")
+	cmd.Env = env
+	out, err := cmd.CombinedOutput()
+	if err != nil {
+		// A provider may be local/no-auth, and older OpenCode builds may not
+		// support this probe. Never turn either case into a startup blocker.
+		return authUnknown, false
+	}
+	matches := openCodeCountRe.FindAllStringSubmatch(stripANSI(string(out)), -1)
+	if len(matches) == 0 {
+		return authUnknown, false
+	}
+	for _, m := range matches {
+		if strings.TrimLeft(m[1], "0") != "" {
+			return authYes, false
+		}
+	}
+	return authUnknown, true
 }
 
 // codexLoginStatus is probeAuth's codex question, asked with env as the CLI's environment (nil:

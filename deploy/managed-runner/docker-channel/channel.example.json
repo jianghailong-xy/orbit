@@ -6,7 +6,7 @@
   "dockerSocket": "/var/run/docker.sock",
   "stateDir": "/var/lib/orbit-docker-channel",
   "image": "sha256:0000000000000000000000000000000000000000000000000000000000000000",
-  "network": "orbit-managed-runners",
+  "network": "orbit-cloud-runners",
   "limits": {
     "maxCpuMillis": 4000,
     "maxMemoryBytes": 8589934592,

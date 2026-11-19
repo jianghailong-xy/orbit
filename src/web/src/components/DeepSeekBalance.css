@@ -16,6 +16,28 @@
 .dsb-sep {
   color: var(--text-4);
 }
+/* The line's ↻: grey like the words before it, a 24px target, lit on hover (settings-buttons board 01). */
+.dsb-refresh {
+  display: inline-grid;
+  place-items: center;
+  width: 24px;
+  height: 24px;
+  margin: -4px 0;
+  padding: 0;
+  border: 0;
+  border-radius: 6px;
+  background: none;
+  color: var(--text-3);
+  cursor: pointer;
+}
+.dsb-refresh:hover:not(:disabled) {
+  background: var(--bg-hover);
+  color: var(--text-1);
+}
+.dsb-refresh:disabled {
+  color: var(--text-4);
+  cursor: default;
+}
 .dsb-amounts {
   display: inline-flex;
   align-items: center;

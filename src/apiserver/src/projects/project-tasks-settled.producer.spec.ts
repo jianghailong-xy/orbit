@@ -37,6 +37,7 @@ function producerFixture(
     serving: criterion.servingStatuses.map((status) => ({ id: randomUUID(), status })),
   }));
   const prisma = {
+    projectCoordinatorWake: { findFirst: async () => null },
     // The 0282 tally, as the triggers maintain it: whatever the statuses say, unless the fixture
     // is asked for the one shape the producer has to survive — a tally that has fallen behind.
     projectTaskStatusCount: {
@@ -102,6 +103,8 @@ function producerFixture(
     // master, which is what the receipts above already name.
     projectCodebase: { findFirst: async () => null },
     project: {
+      // The derivation's read of the explicit non-code mark (0535): this project carries none.
+      findFirst: async () => ({ nonCode: false }),
       findUnique: async (args: { select: Record<string, unknown> }) => {
         // Two different questions of the same row: the guardrail's (is it still OPEN, and whose)
         // and the authorization after the claim (is the coordinator on).

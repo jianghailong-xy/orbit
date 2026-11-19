@@ -106,7 +106,7 @@ func TestNotifyHelpNamesTheLimitAndTheUndeliveredCase(t *testing.T) {
 	if err := cmdNotifyCLI([]string{"--help"}, &out); err != nil {
 		t.Fatalf("notify --help: %v", err)
 	}
-	for _, want := range []string{"one per session per minute", "delivered"} {
+	for _, want := range []string{"one per session per minute", "delivered", "Automatic project", "coordinator", "Read recipient"} {
 		if !strings.Contains(out.String(), want) {
 			t.Fatalf("notify --help does not mention %q: %s", want, out.String())
 		}
@@ -124,6 +124,12 @@ func TestNotifyToolIsExposedWithoutOrchestration(t *testing.T) {
 	}
 	if found == nil {
 		t.Fatal("notify is missing from the ungated tool list")
+	}
+	description, _ := found["description"].(string)
+	for _, want := range []string{"In a task run of an Automatic project this goes to the project's coordinator, not to the owner's devices.", "Read recipient in the result to see who got it: coordinator, or owner when Orbit fell back."} {
+		if !strings.Contains(description, want) {
+			t.Fatalf("notify description does not mention %q: %s", want, description)
+		}
 	}
 	schema, _ := found["inputSchema"].(map[string]interface{})
 	required, _ := schema["required"].([]string)

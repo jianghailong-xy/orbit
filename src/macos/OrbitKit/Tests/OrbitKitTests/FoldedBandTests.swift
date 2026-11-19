@@ -11,14 +11,33 @@ final class FoldedBandTests: XCTestCase {
         XCTAssertEqual(FoldedBand.draftLine("可以，建好后直接启动"), "可以，建好后直接启动")
     }
 
-    private func proc(_ id: String, _ status: String) -> BackgroundProc {
-        BackgroundProc(id: id, command: "sleep 1", status: status, outputTail: "")
+    /// The pill says one thing: a draft not yet sent, else the cards' marks, and the placeholder only
+    /// where nothing else would show (the owner, 2026-11-11).
+    func testThePillLeadsWithTheDraftThenTheMarksThenThePlaceholder() {
+        XCTAssertEqual(FoldedBand.lead(draft: "Ship it", hasMarks: true), .draft("Ship it"))
+        XCTAssertEqual(FoldedBand.lead(draft: "Ship it", hasMarks: false), .draft("Ship it"))
+        XCTAssertEqual(FoldedBand.lead(draft: nil, hasMarks: true), .marks)
+        XCTAssertEqual(FoldedBand.lead(draft: nil, hasMarks: false), .placeholder)
     }
 
-    func testTheTraySaysWhatStillRunsOrHowManyThereAre() {
-        XCTAssertEqual(FoldedBand.processes([proc("a", "running"), proc("b", "completed"), proc("c", "running")]),
+    private func proc(_ id: String, _ status: String, endedAt: String? = nil) -> BackgroundProc {
+        BackgroundProc(id: id, command: "sleep 1", status: status, outputTail: "", endedAt: endedAt)
+    }
+
+    /// The Background row's mark counts what the row shows (`BackgroundRowRule`), and is gone with it.
+    func testTheTraySaysWhatStillRunsOrHowManyItStillShows() {
+        let asked = "2026-11-16T02:40:00.000Z"
+        let after = "2026-11-16T02:45:00.000Z"
+        XCTAssertEqual(FoldedBand.processes([proc("a", "running"), proc("b", "completed", endedAt: after),
+                                             proc("c", "running")], lastUserMessageAt: asked, sessionLive: true),
                        "2 running")
-        XCTAssertEqual(FoldedBand.processes((0..<10).map { proc("\($0)", "completed") }), "10")
+        XCTAssertEqual(FoldedBand.processes((0..<10).map { proc("\($0)", "completed", endedAt: after) },
+                                            lastUserMessageAt: asked, sessionLive: true), "10")
+        // Ended before the person's last message: no row, so no mark.
+        XCTAssertNil(FoldedBand.processes([proc("a", "completed", endedAt: "2026-11-16T02:39:00.000Z")],
+                                          lastUserMessageAt: asked, sessionLive: true))
+        // A session that is not live runs nothing, whatever its list last said.
+        XCTAssertNil(FoldedBand.processes([proc("a", "running")], lastUserMessageAt: asked, sessionLive: false))
     }
 
     private func card(running: Int = 0, failed: Int = 0, done: Int, total: Int) throws -> SessionTaskCard {

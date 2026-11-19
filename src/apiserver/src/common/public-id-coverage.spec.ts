@@ -47,10 +47,13 @@ import { WikiController } from '../wiki/wiki.controller';
 import { WikiArticlesController } from '../wiki/wiki-articles.controller';
 import { WikiRunsController } from '../wiki/wiki-runs.controller';
 import { WikiHealthController } from '../wiki/wiki-health.controller';
+import { WikiMaintenanceController } from '../wiki/wiki-maintenance.controller';
 import { WikiJobsController } from '../wiki/wiki-jobs.controller';
 import { WikiPlanController } from '../wiki/wiki-plan.controller';
 import { WikiDocsController } from '../wiki/wiki-docs.controller';
 import { WikiChatController } from '../wiki/wiki-chat.controller';
+import { FeishuAdminController } from '../feishu/feishu-admin.controller';
+import { FeishuController } from '../feishu/feishu.controller';
 
 // Every id crossing the HTTP boundary arrives from a URL, a human, or a model — pasted out of a
 // client link, echoed from a previous tool result, or invented. The columns behind them are all
@@ -73,7 +76,10 @@ import { WikiChatController } from '../wiki/wiki-chat.controller';
 // says otherwise". An allowlist would let a param nobody classified through unchecked. UUID
 // exceptions are route-specific below: a generic `requestId` exemption would also silently exempt
 // future public request-row addresses.
-const NON_ID_PARAMS = new Set(['token', 'userCode', 'seq', 'version', 'account', 'slug', 'engine', 'part', 'revision', 'key']);
+// `week` is a Monday, YYYY-MM-DD (GET /attachments/usage/weeks/:week/files), checked as a date by its route.
+const NON_ID_PARAMS = new Set(['token', 'userCode', 'seq', 'version', 'account', 'slug', 'engine', 'part', 'revision', 'key', 'requestId', 'week']);
+// `requestId` is the client's own idempotency key for a main checkout action (POST /workspaces/:id/main-checkout/
+// actions/:requestId/cancel), looked up only by (the caller, requestId) — never a row's id.
 // `part` is an article's number within its topic (0 the article or overview, 1… its subtopic
 // parts): GET /wiki/spaces/:id/articles/:slug/:part, an integer ParseIntPipe guards.
 // `engine` is a provider name (`claude`, `codex`), the engine whose account store a removal is
@@ -134,6 +140,7 @@ const CONTROLLERS = [
   WikiRunsController,
   // A space's health (contract `maintenance.health`): what the Wiki home's status line reads.
   WikiHealthController,
+  WikiMaintenanceController,
   // A space's server runs and their calls (contract `jobs.read`, P9): what Activity's Runs card reads.
   WikiJobsController,
   // The plan (migration 0325, contract `plan`): the owner's reads, edit, confirmation and decisions.
@@ -145,6 +152,12 @@ const CONTROLLERS = [
   // A space's wiki chats (migration 0476, contract `chat`): making one and reading them. The create's
   // `workspaceId` is decoded by the body pipe.
   WikiChatController,
+  // Each account's own Feishu app (migration 0489, docs/feishu-bot-design.md §10): an administrator's removal
+  // names the account by its id. The account's own routes (FeishuController) name a connected group by its id (§8.1),
+  // and its confirm names the workspace the group's sessions open in; the access save (§14.1) names the workspace the
+  // sessions other people start open in.
+  FeishuAdminController,
+  FeishuController,
 ];
 
 // Nest records one entry per decorated argument under `__routeArguments__`, keyed

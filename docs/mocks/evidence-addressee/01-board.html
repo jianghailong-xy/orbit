@@ -1,0 +1,265 @@
+<!doctype html>
+<html lang="zh">
+<head>
+<meta charset="utf-8">
+<title>Evidence always has an addressee · board 01</title>
+<style>
+  :root { --ink:#1d1d1f; --mute:#6e6e73; --line:#d2d2d7; --bg:#f5f5f7; --red:#d70015; --redbg:#fff0f0;
+          --green:#1a7f37; --greenbg:#eefaf1; --blue:#0a66d8; --bluebg:#eef4fd; --amber:#9a5b00; --amberbg:#fff6e5; }
+  * { box-sizing: border-box; }
+  body { margin:0; background:#e8e8ed; color:var(--ink); }
+  .b-part { width:1600px; margin:0 auto 24px; padding:40px 48px; background:#fff;
+            font: 15px/1.6 Inter, "Noto Sans SC", "WenQuanYi Zen Hei", sans-serif; }
+  h1 { font-size:30px; margin:0 0 6px; }
+  h2 { font-size:24px; margin:0 0 4px; }
+  .b-sub { color:var(--mute); margin:0 0 24px; }
+  .b-tag { display:inline-block; font-size:12px; font-weight:600; padding:2px 8px; border-radius:10px; margin-right:6px; }
+  .t-red { background:var(--redbg); color:var(--red); } .t-green { background:var(--greenbg); color:var(--green); }
+  .t-blue { background:var(--bluebg); color:var(--blue); } .t-amber { background:var(--amberbg); color:var(--amber); }
+  code { font-family:"JetBrains Mono","DejaVu Sans Mono",monospace; font-size:13px; background:var(--bg); padding:1px 5px; border-radius:4px; }
+
+  /* swimlanes */
+  .b-lanes { display:grid; grid-template-columns:150px repeat(7, 1fr); border:1px solid var(--line); border-radius:12px; overflow:hidden; }
+  .b-lh { background:var(--bg); font-weight:600; padding:12px; border-bottom:1px solid var(--line); display:flex; align-items:center; }
+  .b-th { background:var(--bg); font-size:12px; color:var(--mute); padding:8px 10px; border-bottom:1px solid var(--line); border-left:1px solid #eee; }
+  .b-cell { padding:10px; border-bottom:1px solid #eee; border-left:1px solid #eee; min-height:86px; }
+  .b-card { border-radius:8px; padding:8px 10px; font-size:13px; line-height:1.45; border:1px solid var(--line); background:#fff; }
+  .c-red { border-color:#f5b5bb; background:var(--redbg); } .c-green { border-color:#a8dcb7; background:var(--greenbg); }
+  .c-blue { border-color:#b7d0f5; background:var(--bluebg); } .c-amber { border-color:#f0d29a; background:var(--amberbg); }
+  .c-ghost { border-style:dashed; color:var(--mute); background:#fafafa; }
+  .b-card b { display:block; font-size:13px; }
+  .b-num { display:inline-flex; width:20px; height:20px; border-radius:50%; background:var(--red); color:#fff; font-size:12px; font-weight:700;
+           align-items:center; justify-content:center; margin-right:4px; vertical-align:1px; text-indent:0; }
+  .n-green { background:var(--green); } .n-blue { background:var(--blue); }
+  .b-notes { display:grid; grid-template-columns:1fr 1fr; gap:10px 32px; margin-top:20px; font-size:14px; }
+  .b-notes div { padding-left:28px; text-indent:-28px; }
+
+  /* compare */
+  .b-two { display:grid; grid-template-columns:1fr 1fr; gap:28px; }
+  .b-box { border:1px solid var(--line); border-radius:12px; padding:20px 24px; }
+  .b-box h3 { margin:0 0 12px; font-size:18px; }
+  .b-env { font-family:"JetBrains Mono","DejaVu Sans Mono",monospace; font-size:13px; line-height:1.7; background:var(--bg); border-radius:8px; padding:14px 16px; white-space:pre; }
+  .del { color:var(--red); text-decoration:line-through; } .add { color:var(--green); font-weight:600; }
+
+  table.b-t { width:100%; border-collapse:collapse; font-size:14px; }
+  table.b-t th { text-align:left; background:var(--bg); padding:10px 12px; border-bottom:1px solid var(--line); }
+  table.b-t td { padding:10px 12px; border-bottom:1px solid #eee; vertical-align:top; }
+  .b-rec { color:var(--green); font-weight:700; }
+
+  .b-flow { display:flex; align-items:stretch; gap:0; margin:8px 0 4px; }
+  .b-node { flex:1; border:1px solid var(--line); border-radius:10px; padding:12px 14px; font-size:13px; background:#fff; }
+  .b-node.c-red { border-color:#f5b5bb; background:var(--redbg); } .b-node.c-green { border-color:#a8dcb7; background:var(--greenbg); }
+  .b-node.c-blue { border-color:#b7d0f5; background:var(--bluebg); } .b-node.c-amber { border-color:#f0d29a; background:var(--amberbg); }
+  .b-node.c-ghost { border-style:dashed; color:var(--mute); background:#fafafa; }
+  .b-arrow { width:36px; display:flex; align-items:center; justify-content:center; color:var(--mute); font-size:20px; }
+</style>
+</head>
+<body>
+
+<!-- ───────────── PART 1 ───────────── -->
+<section class="b-part" id="part-1">
+  <h1>证据永远有人接 · 01</h1>
+  <p class="b-sub">设计稿 <code>docs/evidence-always-has-an-addressee-design.md</code> · 2026-11-12 · 起因：一份证据躺了 3 小时 46 分，没有任何人被叫醒</p>
+  <h2>① 今天：一份证据为什么会没人接</h2>
+  <p class="b-sub">真实时间线（任务 D 的第 1 版证据；任务 W 在 7 分钟后踩了同一个坑）</p>
+
+  <div class="b-lanes">
+    <div class="b-th"></div>
+    <div class="b-th">01:5x 开工</div><div class="b-th">01:56 提交</div><div class="b-th">服务器比对</div>
+    <div class="b-th">路由</div><div class="b-th">01:56 → 05:42</div><div class="b-th">05:42</div><div class="b-th">05:44</div>
+
+    <div class="b-lh">任务 run<br>(worker)</div>
+    <div class="b-cell"><div class="b-card c-red"><span class="b-num">1</span><b>提示词让它抄标准</b>"criterion {key, text}, copied from the acceptance criteria <u>project_get</u> returns"</div></div>
+    <div class="b-cell"><div class="b-card c-red"><b>填了项目验收项 3</b>"Assistant prose replies… on all three clients"，看起来正对口</div></div>
+    <div class="b-cell"><div class="b-card c-amber"><span class="b-num">2</span><b>回执里一个布尔值</b><code>matchesLive: false</code>，没处理</div></div>
+    <div class="b-cell"></div>
+    <div class="b-cell"><div class="b-card c-ghost"><b>以为在等裁决</b>空等</div></div>
+    <div class="b-cell"><div class="b-card c-green"><b>被协调者叫醒</b>引用自己的标准，交第 2 版</div></div>
+    <div class="b-cell"></div>
+
+    <div class="b-lh">服务器</div>
+    <div class="b-cell"></div>
+    <div class="b-cell"><div class="b-card"><b>接受提交</b>"Reported, never refused"</div></div>
+    <div class="b-cell"><div class="b-card c-red"><b>标准对不上</b>任务没声明 criterionKey → 标准是自己的 acceptanceCriteria，引用的却是验收项 3</div></div>
+    <div class="b-cell"><div class="b-card c-red"><span class="b-num">3</span><b>不投递给协调者</b><code>criterionStandingRefusal ≠ null → return null</code></div></div>
+    <div class="b-cell"><div class="b-card c-ghost"><span class="b-num">4</span><b>没有计时</b>从未投递 → "取走才计时"无从开始</div></div>
+    <div class="b-cell"></div>
+    <div class="b-cell"></div>
+
+    <div class="b-lh">协调者</div>
+    <div class="b-cell"></div><div class="b-cell"></div><div class="b-cell"></div>
+    <div class="b-cell"><div class="b-card c-ghost"><b>看不到</b></div></div>
+    <div class="b-cell"><div class="b-card c-ghost"><b>不知道有这一版</b></div></div>
+    <div class="b-cell"><div class="b-card c-amber"><b>自己翻出来</b>"判不了，得让 D 重交"</div></div>
+    <div class="b-cell"><div class="b-card c-green"><b>CONFIRM</b></div></div>
+
+    <div class="b-lh">owner</div>
+    <div class="b-cell"></div><div class="b-cell"></div><div class="b-cell"></div>
+    <div class="b-cell"><div class="b-card c-red"><span class="b-num">5</span><b>收到一张卡</b>requiredAction：<br>ASK_FOR_EVIDENCE_AGAINST<br>_THE_CURRENT_CRITERION</div></div>
+    <div class="b-cell"><div class="b-card c-ghost"><b>卡上没有能按的按钮</b>能重交的只有 run</div></div>
+    <div class="b-cell"></div><div class="b-cell"></div>
+  </div>
+
+  <div class="b-notes">
+    <div><span class="b-num">1</span><b>诱因在平台。</b><code>task-execution-prompt.ts:146</code> 让所有 worker 去 project_get 抄验收项。没声明 criterionKey 的项目任务照做必错，两次独立运行犯了同一个错。</div>
+    <div><span class="b-num">2</span><b>能修的人只拿到一个布尔值。</b>提交时服务器已经知道全部信息，却选择只报告不拒绝。</div>
+    <div><span class="b-num">3</span><b>有裁决权的人被过滤掉。</b>协调者判不了，所以干脆不告诉它。</div>
+    <div><span class="b-num">4</span><b>计时规则本身没错。</b>2026-11-08 "取走才计时"针对的是有收件人的项；这一版根本没有收件人。</div>
+    <div><span class="b-num">5</span><b>被问的人推进不了。</b>卡片要求"让提交者重交"，这是 run 的动作，不是 owner 的。</div>
+    <div><b>结论：</b>能推进的人不知道，被告知的人推进不了，有权限的人看不到。不是某个校验漏了，而是缺一条约束：<b>每个待处理项都要有"能推进、且被告知"的当前处理人。</b></div>
+  </div>
+</section>
+
+<!-- ───────────── PART 2 ───────────── -->
+<section class="b-part" id="part-2">
+  <h2>② 原则一：标准由服务器绑定，agent 不再抄</h2>
+  <p class="b-sub">任务按哪个标准判定，完全由任务行决定。服务器提交时本来就快照了这份标准（<code>criterionRevision</code>），agent 抄的那份是只会出错的冗余输入。</p>
+  <div class="b-two">
+    <div class="b-box">
+      <h3><span class="b-tag t-red">今天</span>信封 4 个必填字段</h3>
+<div class="b-env">{
+  claim: "…",
+  <span class="del">criterion: { key: "5qKy…",</span>
+  <span class="del">             text: "Assistant prose…" },</span>
+  checks: [ … ],
+  gaps:   [ … ]
+}
+→ 服务器拿 agent 的引用 ⇄ 当前标准 比对</div>
+      <p style="margin:14px 0 0;font-size:14px">引用错 = 判不了，但仍被接受、静默落地。</p>
+    </div>
+    <div class="b-box">
+      <h3><span class="b-tag t-green">改后</span>agent 只交它做了什么</h3>
+<div class="b-env">{
+  claim: "…",
+  checks: [ … ],
+  gaps:   [ … ]
+}
+<span class="add">服务器在提交事务里写入：
+  standard = 任务声明的验收项 ?? 任务自己的 acceptanceCriteria
+→ 判定时比对 快照 ⇄ 当前标准</span></div>
+      <p style="margin:14px 0 0;font-size:14px">"引用错了"在结构上不存在。标准被改写后旧证据仍判不了（按内容绑定的语义不变）。旧 runner 发来的 <code>criterion</code> 迁移期接受并忽略。</p>
+    </div>
+  </div>
+
+  <h3 style="margin:28px 0 10px;font-size:18px">今天的 6 种拒绝原因，改后去哪了</h3>
+  <table class="b-t">
+    <tr><th style="width:44%">拒绝原因</th><th style="width:18%">改后</th><th>谁接</th></tr>
+    <tr><td>证据没引用任何标准</td><td><span class="b-tag t-green">不复存在</span></td><td>—</td></tr>
+    <tr><td>引用的 key 不是任务声明的那个</td><td><span class="b-tag t-green">不复存在</span></td><td>—</td></tr>
+    <tr><td><b>没声明的任务引用了别的项目验收项（本次）</b></td><td><span class="b-tag t-green">不复存在</span></td><td>—</td></tr>
+    <tr><td>任务没有任何标准（无声明、acceptanceCriteria 为空）</td><td><span class="b-tag t-blue">提交时 4xx</span></td><td>调用者本人，当场</td></tr>
+    <tr><td>提交后，项目验收项被改写 / 被删除</td><td><span class="b-tag t-amber">异步路由</span></td><td>任务的 run（见 ③）</td></tr>
+    <tr><td>提交后，任务被移到别的项目</td><td><span class="b-tag t-amber">异步路由（已实现）</span></td><td>任务的 run</td></tr>
+  </table>
+  <p style="margin:14px 0 0"><b>规则：</b>提交时就能判断的错误，当场拒绝，交给调用者；只有提交之后才可能发生的变化，才进入异步路由。</p>
+</section>
+
+<!-- ───────────── PART 3 ───────────── -->
+<section class="b-part" id="part-3">
+  <h2>③ 原则二：判不了的版本，交给能让它变得可判的人</h2>
+  <p class="b-sub">今天只有"任务移项目"会通知 run（<code>moved-task-evidence.ts</code>）。把它推广成一个公共入口，所有"变得判不了"的路径都走它。</p>
+
+  <div class="b-flow">
+    <div class="b-node"><b>触发</b><br>· 项目验收项被改写<br>· 声明的验收项被删除<br>· 任务移项目（已有）</div>
+    <div class="b-arrow">→</div>
+    <div class="b-node c-blue" style="flex:1.2"><b>公共入口：becameUndecidable(evidence)</b><br>key = (evidenceId, standardDigest)<br>同一版对同一份新标准只通知一次</div>
+    <div class="b-arrow">→</div>
+    <div class="b-node c-green"><b>有 live run</b><br>steer 进 run：为什么判不了 + 新标准原文 → 重交</div>
+    <div class="b-arrow">+</div>
+    <div class="b-node c-green"><b>协调者</b>（Automatic）<br>一条知会："已让 run 重交"</div>
+  </div>
+  <div class="b-flow" style="margin-top:12px">
+    <div class="b-node" style="visibility:hidden"></div><div class="b-arrow" style="visibility:hidden">→</div>
+    <div class="b-node" style="flex:1.2;visibility:hidden"></div>
+    <div class="b-arrow">↘</div>
+    <div class="b-node c-amber"><b>没有 live run</b><br>协调者收到待办：<code>task_start</code> 重跑，或改标准</div>
+    <div class="b-arrow">→</div>
+    <div class="b-node c-amber"><b>没有协调者</b><br>owner 卡片，带 owner 能按的 <b>Restart the task</b></div>
+  </div>
+
+  <h3 style="margin:28px 0 10px;font-size:18px">owner 卡片只出现 owner 自己能按的动作</h3>
+  <table class="b-t">
+    <tr><th style="width:36%">待判定行的状态</th><th style="width:32%">今天</th><th>改后</th></tr>
+    <tr><td>可判定，项目 Automatic</td><td>交协调者，超时转 owner</td><td>不变</td></tr>
+    <tr><td>裁决会话参与过这份工作</td><td>owner 卡片</td><td>不变（owner 能判）</td></tr>
+    <tr><td>判不了，需要重交</td><td><span class="b-tag t-red">owner 卡片，没有可按的动作</span></td><td><span class="b-tag t-green">不上 owner 卡</span>走上面的公共入口</td></tr>
+  </table>
+</section>
+
+<!-- ───────────── PART 4 ───────────── -->
+<section class="b-part" id="part-4">
+  <h2>④ 原则三：每个待处理项都有当前处理人，兜底巡检找孤儿</h2>
+  <p class="b-sub">①② 修的是已知路径。新路径以后还会出现，所以加一条能被机械检查的不变量。</p>
+  <div class="b-two">
+    <div class="b-box c-blue" style="background:var(--bluebg)">
+      <h3>不变量</h3>
+      <p style="font-size:17px;margin:0">每个未结束的待处理项，都能读出<br><code style="font-size:15px">(addressee, notifiedAt)</code><br>轮到谁、什么时候告诉他的。<br>读不出来 = <b>孤儿</b>。</p>
+    </div>
+    <div class="b-box">
+      <h3>覆盖的待处理项</h3>
+      <table class="b-t">
+        <tr><th>待处理项</th><th>正常的 addressee</th></tr>
+        <tr><td>未判的最新证据</td><td>协调者 / owner / 派发会话；判不了时是 run</td></tr>
+        <tr><td>异常待办</td><td>协调者，没有时 owner（契约 §4.6）</td></tr>
+        <tr><td>运行中的 run</td><td>run 自己；长时间无进度、无后台任务、无 wake 视为无人</td></tr>
+        <tr><td>等依赖的任务</td><td>依赖任务的 addressee</td></tr>
+      </table>
+    </div>
+  </div>
+  <div class="b-flow" style="margin-top:24px">
+    <div class="b-node"><b>周期巡检</b><br>扫描未结束的项目任务</div>
+    <div class="b-arrow">→</div>
+    <div class="b-node c-red"><b>找到孤儿</b><br>例：本次 D 的 rev 1（addressee = run，但 run 没被告知）</div>
+    <div class="b-arrow">→</div>
+    <div class="b-node c-green"><b>发消息给协调者</b><br>没有协调者时给 owner；同一个孤儿只报一次</div>
+    <div class="b-arrow">✕</div>
+    <div class="b-node c-ghost"><b>不加倒计时卡</b><br>遵守 owner 10-08 "协调者负责推进，有问题再问"与 11-08 "取走才计时"</div>
+  </div>
+</section>
+
+<!-- ───────────── PART 5 ───────────── -->
+<section class="b-part" id="part-5">
+  <h2>⑤ 原则四："没验证"不等于"通过"</h2>
+  <p class="b-sub">同一个项目暴露的另一类问题，与死锁无关，由你决定是否同期做。</p>
+  <div class="b-two">
+    <div class="b-box">
+      <h3><span class="b-tag t-red">今天</span></h3>
+      <p style="margin:0 0 8px">· D 的条款要求"copy parity with <b>Swift and web</b>"，但 D 只依赖服务端任务 A2。Swift 一致性测试因对方文案还不存在而 <b>skip</b>，结果仍是绿的。</p>
+      <p style="margin:0 0 8px">· 协调者把它当"已接受的缺口"确认了。</p>
+      <p style="margin:0">· W 自己写明没做"审批回答 422 时的 Retry / Send as written"，这是项目决策 1A、3A 的要求。</p>
+    </div>
+    <div class="b-box">
+      <h3><span class="b-tag t-green">改后</span></h3>
+      <p style="margin:0 0 8px">· <b>拆任务指引</b>：验收条款只能写依赖链内能证明的内容；跨任务一致性交给汇总验证任务。</p>
+      <p style="margin:0 0 8px">· <b>gap 结构化</b>：<code>{text, criterionClause?, followUpTaskId?}</code>。命中条款却没有后续任务 id 的 gap，判定入口拒绝 CONFIRM。</p>
+      <p style="margin:0">· <b>仓库约定</b>：一致性测试在对方文件缺失时失败，而不是 skip。</p>
+    </div>
+  </div>
+</section>
+
+<!-- ───────────── PART 6 ───────────── -->
+<section class="b-part" id="part-6">
+  <h2>⑥ 待定 · 要你拍板</h2>
+  <table class="b-t" style="margin-top:12px">
+    <tr><th style="width:5%">#</th><th style="width:25%">问题</th><th style="width:44%">选项</th><th>推荐</th></tr>
+    <tr><td>D1</td><td>信封里的 <code>criterion</code></td><td>A 删除，服务器绑定，旧客户端发来就忽略<br>B 保留，提交时与任务标准不符就同步拒绝<br>C 维持，只改提示词</td><td><span class="b-rec">A</span> · B 仍让 agent 做服务器能做的事，只是错得更早；C 只修了诱因</td></tr>
+    <tr><td>D2</td><td>判不了、且没有 live run</td><td>A 交协调者作为待办，无协调者时 owner 卡带 Restart<br>B 平台自动 task_start 重跑</td><td><span class="b-rec">A</span> · 重跑要花钱，标准为什么变了也需要人判断</td></tr>
+    <tr><td>D3</td><td>孤儿巡检报给谁</td><td>A 发消息给协调者，无协调者时 owner，不计时<br>B 只记指标和日志</td><td><span class="b-rec">A</span> · 只记日志的话，这次仍然没人知道</td></tr>
+    <tr><td>D4</td><td>gap 结构化并约束 CONFIRM</td><td>A 结构化，命中条款须带后续任务 id<br>B 只改协调者指引</td><td><span class="b-rec">A</span> · 可放第二期</td></tr>
+    <tr><td>D5</td><td>一致性测试缺对方文件时</td><td>A 失败<br>B skip，但必须在证据里列为 gap</td><td><span class="b-rec">A</span></td></tr>
+  </table>
+
+  <h2 style="margin-top:36px">⑦ 落地（按代价排）</h2>
+  <table class="b-t" style="margin-top:12px">
+    <tr><th style="width:6%">期</th><th style="width:50%">内容</th><th>验证</th></tr>
+    <tr><td>P1</td><td>提示词第 3 步改正（立刻止血，几行）；"任务没有任何标准"改为提交时 4xx</td><td>执行提示词 spec；提交 spec</td></tr>
+    <tr><td>P2</td><td>原则一：服务器绑定标准；判定入口比对快照 ⇄ 当前；runner MCP schema 与 CLI 去掉必填</td><td>pg spec：本次的提交可判定；标准改写后判不了；已发布 runner 的信封仍被接受</td></tr>
+    <tr><td>P3</td><td>原则二：公共入口接上 3 个触发点；owner 卡片只显示 owner 能按的动作</td><td>pg spec：每个触发点 run 收到 steer、协调者收到知会、恰好一次</td></tr>
+    <tr><td>P4</td><td>原则三：addressee 读模型 + 孤儿巡检</td><td>pg spec：构造本次的状态，巡检恰好报一次</td></tr>
+    <tr><td>P5</td><td>原则四：拆任务指引、gap 结构化（D4）、一致性测试约定（D5）</td><td>判定入口 spec；三端一致性测试缺对方时失败</td></tr>
+  </table>
+  <p style="margin:14px 0 0;color:var(--mute)">P1 独立且小，可先做。P2、P3 改同一个判定入口，需顺序落地；P4 依赖 P3 的公共入口。不改任何计时规则、独立性规则、熔断，也不改 checks 和 citations。</p>
+</section>
+
+</body>
+</html>

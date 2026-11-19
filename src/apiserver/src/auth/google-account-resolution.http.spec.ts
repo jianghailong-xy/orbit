@@ -68,6 +68,8 @@ interface Tables {
   identities: Row[];
   activities: Row[];
   refreshTokens: Row[];
+  /** email_outbox: a new account's welcome email row, written in its transaction. */
+  outbox: Row[];
 }
 
 function tables(policy: SignupPolicy): Tables {
@@ -86,6 +88,7 @@ function tables(policy: SignupPolicy): Tables {
     identities: [],
     activities: [],
     refreshTokens: [],
+    outbox: [],
   };
 }
 
@@ -179,6 +182,16 @@ function memoryPrisma(db: Tables, beforeInsert?: BeforeInsert) {
       create: async ({ data }: { data: Row }) => {
         db.refreshTokens.push({ ...data });
         return { ...data };
+      },
+    },
+    // Outgoing email is not configured: a new account's welcome row is written SKIPPED.
+    emailSettings: { findUnique: async () => null },
+    emailOutbox: {
+      create: async ({ data }: { data: Row }) => {
+        const row = { id: randomUUID(), ...data };
+        db.outbox.push(row);
+        inserted?.push(['outbox', row]);
+        return { ...row };
       },
     },
   });

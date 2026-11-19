@@ -1,0 +1,227 @@
+<!doctype html><html lang="zh"><meta charset="utf-8">
+<!-- 2026-11-11 · 去掉 "Waiting on you"，请求回到它的会话里 · 图板。手机套件借 needs-you-capsule（440×956pt，Pro Max）。
+     英文是上线文案，中文是说明。 -->
+<link rel="stylesheet" href="../needs-you-capsule/kit.css">
+<script src="../needs-you-capsule/kit.js"></script>
+<style>
+  body { width: 1500px; padding: 0; }
+  code { font-family: "DejaVu Sans Mono", monospace; font-size: 12.5px; }
+  section.b-part { padding: 28px 32px 34px; background: #e6e6eb; }
+  .b-lede { color: #4f4f58; font-size: 15px; max-width: 1400px; margin: 0 0 18px; }
+  .b-lede b { color: #16161a; }
+  table.b-t { border-collapse: collapse; font-size: 14px; background: #fff; border-radius: 12px; overflow: hidden; width: 1400px; }
+  table.b-t th, table.b-t td { text-align: left; vertical-align: top; padding: 9px 14px; border-bottom: 1px solid #ececf0; }
+  table.b-t th { background: #f4f4f7; font-size: 13px; color: #4f4f58; font-weight: 650; }
+  table.b-t td.b-bad { color: #8f1d13; }
+  table.b-t td.b-ok { color: #14428f; }
+  .b-row { display: flex; gap: 36px; align-items: flex-start; }
+  .b-col { width: 440px; flex: none; }
+  .b-note { font-size: 14px; color: #4f4f58; line-height: 1.62; margin-top: 12px; }
+  .b-note b { color: #16161a; }
+  /* 会话里的卡（近似 OwnerRequestCard / ProjectCrossingRow 的外观，不新造） */
+  .b-card { position: absolute; left: 16px; right: 16px; z-index: 4; border-radius: 18px; background: #1C1C1E; border: 1px solid #2f2f33; padding: 14px 16px 14px; color: #fff; font-size: 15px; }
+  .b-card .b-hd { display: flex; align-items: center; gap: 10px; }
+  .b-card .b-hd b { font-size: 16px; font-weight: 650; flex: 1; }
+  .b-card .b-meta { font-size: 13px; color: rgba(235,235,245,.6); margin: 6px 0 10px; line-height: 1.45; }
+  .b-card ul { list-style: none; margin: 0; padding: 0; }
+  .b-card li { padding: 7px 0; border-top: .5px solid rgba(84,84,88,.65); font-size: 14px; line-height: 1.35; }
+  .b-card li s { display: block; text-decoration: none; font-size: 12.5px; color: rgba(235,235,245,.6); margin-top: 2px; }
+  .b-card .b-more { font-size: 13px; color: #0A84FF; padding-top: 8px; border-top: .5px solid rgba(84,84,88,.65); }
+  .b-card .b-btns { display: flex; gap: 10px; margin-top: 12px; }
+  .b-btn { flex: 1; height: 40px; border-radius: 20px; display: flex; align-items: center; justify-content: center; font-weight: 600; font-size: 15px; background: #2C2C2E; color: #0A84FF; }
+  .b-btn.b-pri { background: #FF9F0A; color: #000; }
+  .b-btn.b-red { color: #FF453A; }
+  .b-cons { font-size: 13px; color: rgba(235,235,245,.75); background: rgba(255,159,10,.12); border-radius: 10px; padding: 8px 10px; margin-top: 10px; line-height: 1.45; }
+  .b-ubub { position: absolute; right: 16px; z-index: 3; max-width: 300px; background: #2C2C2E; color: #fff; border-radius: 20px; padding: 8px 14px; font-size: 16px; line-height: 23px; }
+  .b-reply { position: absolute; left: 16px; right: 16px; z-index: 3; font-size: 16px; line-height: 25px; color: #CACED4; }
+  /* Web 侧边栏（照 owner 截图量） */
+  .b-web { width: 340px; background: #fbfbfc; border-radius: 14px; box-shadow: 0 0 0 1px rgba(0,0,0,.08), 0 10px 26px rgba(0,0,0,.08); padding: 18px 10px 14px; font-family: Inter, "Noto Sans SC", sans-serif; }
+  .b-web .b-logo { font: 700 22px/1 Inter; padding: 4px 12px 18px; }
+  .b-web .b-it { display: flex; align-items: center; gap: 12px; height: 42px; padding: 0 12px; border-radius: 10px; font-size: 16px; color: #1f2329; }
+  .b-web .b-it.b-on { background: #e8eefc; color: #2860e8; }
+  .b-web .b-it .b-k { margin-left: auto; color: #8a8f99; font-size: 13px; }
+  .b-web .b-it .b-c { margin-left: auto; min-width: 26px; height: 26px; border-radius: 13px; background: #fdecd8; color: #c96a12; font: 650 13px/26px Inter; text-align: center; }
+  .b-web .b-it.b-gone { text-decoration: line-through; color: #b04a3c; background: repeating-linear-gradient(135deg, #fff1ef 0 8px, #ffe5e1 8px 16px); }
+  .b-web .b-hr { height: 1px; background: #e7e8eb; margin: 10px 12px; }
+  .b-web .b-sl { font-size: 12px; color: #8a8f99; padding: 6px 12px; }
+  .b-web .b-ss { padding: 7px 12px; border-radius: 10px; }
+  .b-web .b-ss b { display: block; font-size: 14.5px; font-weight: 500; color: #1f2329; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .b-web .b-ss s { display: flex; align-items: center; gap: 6px; text-decoration: none; font-size: 13px; color: #8a8f99; white-space: nowrap; overflow: hidden; }
+  .b-web .b-ss s i { width: 7px; height: 7px; border-radius: 50%; background: #f0973f; flex: none; }
+  .b-web .b-ss s.b-amb { color: #c96a12; }
+  .b-ico { width: 20px; height: 20px; border: 1.8px solid currentColor; border-radius: 5px; flex: none; opacity: .75; }
+  .b-pick { display: inline-block; font-size: 12px; font-weight: 700; background: #d6e4ff; color: #14428f; border-radius: 999px; padding: 1px 9px; margin-left: 6px; }
+</style>
+<body>
+
+<!-- ───────────────────── 1 · 总览 ───────────────────── -->
+<section class="b-part" id="part-1">
+<h1>去掉 "Waiting on you"：每件等你的事回到它自己的会话</h1>
+<p class="b-lede">你定的方向（11-11）：左侧菜单不要 Waiting on you；请求<b>只在发起它的会话里</b>出现；四个客户端一起改；<b>跨项目移动的待批请求并入同一件事</b>。<br>
+关键发现：会话列表本来就有一套「等你」的信号——行上的琥珀点和词、列表顶部的 needs-you 胶囊、文件夹上的数字，都读服务端的 <code>pendingApprovals</code>（<code>owner-decision-signal.ts</code>）。这次<b>不新造外观</b>，只是把今天漏掉的两种事接进这套信号。</p>
+<table class="b-t">
+<tr><th style="width:250px">等你的事</th><th style="width:330px">今天在哪看得到</th><th>改后</th></tr>
+<tr><td>工具审批、改验收标准、开始 / 收尾项目、证据裁决、OWNER_CONFIRMED</td><td>会话里的卡 + 会话行琥珀 + 胶囊</td><td class="b-ok">不变</td></tr>
+<tr><td>协调者的提问、合入 main、升级、熔断暂停（owner items）</td><td>协调会话行琥珀 + 胶囊；<b>也</b>计入 Waiting on you</td><td class="b-ok">只剩会话行 + 胶囊（本来就有）</td></tr>
+<tr><td><b>会话发的请求</b> <code>request_owner_action</code>（DECISION / SECRET / MANUAL_STEP / CONFIRM）</td><td class="b-bad">会话里的卡 + <b>Waiting on you</b>；会话行<b>不亮</b>，胶囊<b>不算</b></td><td class="b-ok">接进 <code>pendingApprovals</code>：发起会话的行亮琥珀、说这件事的词；胶囊算它</td></tr>
+<tr><td><b>跨项目移动任务</b>（MOVE_TASK crossing）</td><td class="b-bad">只在<b>项目页底部</b>的 Cross-project crossings 卡；哪里都不亮 —— 这次 8 件挂了两天</td><td class="b-ok">会话里出一张卡（在目标项目的协调会话 + 发起会话）；那一行亮琥珀；项目页那张卡保留</td></tr>
+</table>
+<p class="b-note">今天这张 "3 steps" 卡就是两个缺口叠在一起：移动请求没人看得到，协调会话只好再发一个 <code>MANUAL_STEP</code> 请求「请去项目页点」，而这个请求本身也只在 Waiting on you 里亮。改后协调会话的行直接写 <b>Approve 8 task moves</b>，点进去就是能按的卡，不需要第二张「去别处点」的卡。</p>
+</section>
+
+<!-- ───────────────────── 2 · 会话列表（iOS） ───────────────────── -->
+<section class="b-part" id="part-2">
+<h2 style="margin-top:0">① 会话列表 · iOS（Android 同 iOS）</h2>
+<p class="b-lede">同一刻的列表。今天协调会话那一行只显示回复预览，看不出在等你；改后它和其它等你的行一样：琥珀点 + 一个说这件事的词，顶上胶囊把它算进去。</p>
+<div class="b-row" id="lists"></div>
+</section>
+
+<!-- ───────────────────── 3 · 会话里的移动卡 ───────────────────── -->
+<section class="b-part" id="part-3">
+<h2 style="margin-top:0">② 会话里的移动卡 · 两次按（iOS 暗色；Web / macOS / Android 同一张卡的各自外观）</h2>
+<p class="b-lede">卡画在<b>目标项目的协调会话</b>里（你正在跟它说话的那个），也画在<b>发起移动的会话</b>里（这次是 Runner 链路 v1 的协调会话，已 DONE）。一批同时提出的移动是一张卡；第二次按把两个项目、每件任务和 crossing key 都列出来——就是项目页那张卡今天的第二次按，搬进会话。</p>
+<div class="b-row" id="cards"></div>
+</section>
+
+<!-- ───────────────────── 4 · 菜单 ───────────────────── -->
+<section class="b-part" id="part-4">
+<h2 style="margin-top:0">③ 菜单里去掉这一项 · 四端</h2>
+<div class="b-row" id="web"></div>
+<table class="b-t" style="margin-top:22px">
+<tr><th style="width:120px">客户端</th><th style="width:520px">去掉什么</th><th>链接改去哪</th></tr>
+<tr><td>Web</td><td>侧边栏 <code>waiting</code> 项和它的数字（<code>TasksSidePanel.tsx:165,916,986</code>）、路由与 <code>WaitingOnYouPage.tsx</code></td><td>旧地址 → 跳到发起请求的会话（没有会话的落到会话列表）</td></tr>
+<tr><td>macOS</td><td>侧边栏 <code>OwnerRequestInboxEntry</code>（<code>MainView.swift:150</code>）、<code>OwnerRequestInboxSheet</code></td><td rowspan="2"><code>orbit://owner-request/&lt;id&gt;</code> 和通知按钮 <code>OWNER_REQUEST_OPEN</code>（Answer / Provide key / Mark done / Review）→ 读请求拿 <code>askedBySessionId</code>，打开会话并滚到那张卡</td></tr>
+<tr><td>iOS</td><td>抽屉 <code>waitingOnYouRow</code>（<code>CompactShell.swift:774</code>，与 macOS 同一份代码）</td></tr>
+<tr><td>Android</td><td>抽屉 <code>drawer:waiting-on-you</code>（<code>MainActivity.kt:304</code>）、<code>Destination.WAITING_ON_YOU</code>、<code>WaitingOnYouScreen</code></td><td><code>OrbitLinks</code> 的 <code>owner-request</code> 和通知主按钮 → 同上</td></tr>
+<tr><td>推送 / 飞书</td><td>不用去掉</td><td>普通点按本来就开发起会话；飞书 <code>status</code> 卡「Waiting on you · N」的条目来自 <code>needsYouSessions</code>，接进新信号后自然包含请求</td></tr>
+</table>
+<p class="b-note">Done / Declined 两个历史页签随页面一起走：已答的请求留在各自会话里（卡变成一行 resolved），任务上的 "Waiting on you" 小标（<code>WaitingOnYouTaskBadge</code>）是任务级的，保留。</p>
+</section>
+
+<!-- ───────────────────── 5 · 待定 + 落地 ───────────────────── -->
+<section class="b-part" id="part-5">
+<h2 style="margin-top:0">待定 · 要你拍板</h2>
+<table class="b-t">
+<tr><th style="width:280px">问题</th><th style="width:420px">方案 A</th><th style="width:420px">方案 B</th><th>建议</th></tr>
+<tr><td><b>1</b> 一批移动怎么答</td><td>一张卡，<b>整批</b>批准 / 拒绝（第二次按列出全部）；单件仍可在卡里展开逐件答</td><td>每件一张卡，各按两次（8 件 = 16 次）</td><td>A<span class="b-pick">推荐</span></td></tr>
+<tr><td><b>2</b> 卡画在哪些会话</td><td>目标项目的协调会话 <b>+</b> 发起会话</td><td>只在目标项目的协调会话</td><td>A<span class="b-pick">推荐</span>：发起方常常已结束（这次就是），目标方是你在说话的地方；两处同一行数据，答一处另一处变成 resolved</td></tr>
+<tr><td><b>3</b> 发起会话已 Completed / 进了回收站，请求还没答</td><td>这个会话<b>回到 Open</b>，行亮琥珀（有事等你的会话不留在 Completed 里）</td><td>留在 Completed；只靠另一处（如目标协调会话）</td><td>A<span class="b-pick">推荐</span>：否则删掉汇总页后它就真的没处看了</td></tr>
+<tr><td><b>4</b> 行上的词（英文上线文案）</td><td colspan="2">请求按种类：<code>Decision for you</code> · <code>Key needed</code> · <code>Steps for you</code> · <code>Confirm for you</code>；移动：<code>Approve task move</code> / <code>Approve 8 task moves</code>；混了几种照今天的规则说 <code>Waiting for approval</code></td><td>照此，除非你想改词</td></tr>
+</table>
+
+<h2>落地（按代价排）</h2>
+<table class="b-t">
+<tr><th style="width:40px">#</th><th style="width:560px">做什么</th><th>代价</th></tr>
+<tr><td>1</td><td>服务端：<code>owner-decision-signal.ts</code> 加两种来源 <code>OWNER_REQUEST</code>、<code>MOVE_REQUEST</code>；行上的 <code>waitingKind</code> 和词；<code>needsYouSessions</code>（推送、飞书 status）跟着算</td><td>小–中，pg spec 覆盖计数和「答了就灭」</td></tr>
+<tr><td>2</td><td>服务端：移动请求挂到目标协调会话和发起会话的读取上（一批一组）；整批答复的接口沿用 crossing key 围栏，逐件校验</td><td>中</td></tr>
+<tr><td>3</td><td>四端：会话里画移动卡（复用 <code>ProjectCrossingRow</code> / <code>CrossingRow</code> 的行和两次按）</td><td>中，四端各一份</td></tr>
+<tr><td>4</td><td>四端：去掉菜单项、页面 / sheet / 路由；<code>owner-request</code> 链接和通知按钮改开会话</td><td>小，主要是删代码和改测试</td></tr>
+<tr><td>5</td><td>（若待定 3 选 A）有未答请求的 Completed 会话回到 Open</td><td>小</td></tr>
+</table>
+</section>
+
+<script>
+// ── ① 列表：今天 vs 改后（亮色，AgentsView） ──
+const PRJ = 'Runner 链路加固：假断线警报、自动升级与搁置问题';
+const listNav = `<div class="nav"><div class="gc l">${ic('ham', 21, 'var(--l1)', 2)}</div>
+<div class="gc" style="right:20px;width:92px;border-radius:22px;justify-content:space-around;padding:0 10px">${ic('filter', 21, 'var(--l1)', 2)}${ic('pen', 20, 'var(--l1)', 2)}</div></div>`;
+const rowsToday = [
+  { t: PRJ, s: '<span>Waiting on you: approve the 8 task moves for criteria 4–11 …</span>', tm: '4h' },
+  { t: 'Rebuild the wiki articles report', s: '<span class="dt"></span><span>Waiting for approval</span>', tm: '9m' },
+  { t: 'Android client: session page and project page', s: 'Running · gradle testDebugUnitTest', tm: '6m' },
+  { t: 'Ship the 0.1.252 release', s: 'Completed · tagged v0.1.252', tm: '1h' },
+];
+const rowsNew = [
+  { t: PRJ, s: '<span class="dt"></span><span>Approve 8 task moves</span>', tm: '4h' },
+  rowsToday[1], rowsToday[2], rowsToday[3],
+];
+const list = (rows, cap, marks) => phone('light', `${statusBar('10:12')}${listNav}<div class="ltitle">orbit-develop</div>
+<div class="search">${ic('search', 18, 'var(--l2)', 2.2)}<span>Search sessions</span></div>
+${cap ? capA({ glyph: 'hand', title: cap.title, sub: cap.sub, age: cap.age, more: cap.more, top: 220, style: 'left:16px;right:16px' }) : ''}
+<div class="sec" style="top:${cap ? 284 : 230}px">Today</div>
+${rows.map((r, i) => `<div class="srow${i < rows.length - 1 ? ' sep' : ''}" style="top:${(cap ? 314 : 260) + i * 70}px"><div class="a"><b>${r.t}</b><span class="tm">${r.tm}</span></div><div class="s">${r.s}</div></div>`).join('')}
+${marks || ''}`, { h: 620, cls: 'crop' });
+document.getElementById('lists').innerHTML = `
+<div class="b-col"><span class="tag now">今天</span>${list(rowsToday, { title: 'Waiting for approval', sub: 'Rebuild the wiki articles report', age: '9m' },
+  mk(12, 310, 416, 62) + num(1, 418, 300))}
+<p class="b-note"><span class="n">1</span>协调会话在等你，但行上只是灰色回复预览；胶囊只知道另一件（工具审批）。真正的移动请求，这一屏哪里都没有。</p></div>
+<div class="b-col"><span class="tag rec">改后</span>${list(rowsNew, { title: 'Approve 8 task moves', sub: PRJ, age: '4h', more: '+1' },
+  mk(12, 310, 416, 62) + num(1, 418, 300) + mk(10, 214, 420, 56, 'round') + num(2, 418, 206))}
+<p class="b-note"><span class="n">1</span>行：琥珀点 + <b>Approve 8 task moves</b>，和旁边 <i>Waiting for approval</i> 同一个样子。<br>
+<span class="n">2</span>胶囊照今天的规则说最久那件，<code>+1</code> = 还有一件（那个工具审批）。按下去打开协调会话，滚到卡。</p></div>
+<div class="b-col"><span class="tag alt">其它请求的词</span>
+<table class="b-t" style="width:440px">
+<tr><th>请求种类</th><th>行上的词</th></tr>
+<tr><td><code>DECISION</code></td><td>Decision for you</td></tr>
+<tr><td><code>SECRET</code></td><td>Key needed</td></tr>
+<tr><td><code>MANUAL_STEP</code></td><td>Steps for you</td></tr>
+<tr><td><code>CONFIRM</code></td><td>Confirm for you</td></tr>
+<tr><td>移动 1 件 / N 件</td><td>Approve task move / Approve N task moves</td></tr>
+<tr><td>几种混在一个会话</td><td>Waiting for approval（今天的规则）</td></tr>
+</table>
+<p class="b-note"><b>Android</b>：<code>SessionRow</code> 的 <code>SessionLiveMark</code> 琥珀点 + <code>SessionLine</code> 的词，读同一个 <code>pendingApprovals</code> / <code>waitingKind</code>，与 iOS 一致，不另画。<br>
+<b>macOS</b>：行首 <code>pause.circle</code> 琥珀（<code>SessionStatusGlyph</code>）照旧亮。<br>
+<b>Web</b>：<code>sessionLine</code> 的 approval 色调，见 ③ 左图。</p></div>`;
+
+// ── ② 会话里的卡 ──
+const MOVES = [
+  ['An apiserver never stops gracefully: every restart cuts what is in flight', 'Criterion 4'],
+  ['A later `sudo orbit …` runs the account’s own binary as root', 'Criterion 5'],
+  ['Merged event commits queue on Postgres’s global NOTIFY lock', 'Criterion 6'],
+];
+const head = (t) => `${statusBar('10:12')}${navCircles()}${edge('dark', 150, 174)}`;
+const moveCard = (top) => `<div class="b-card" style="top:${top}px">
+  <div class="b-hd">${tile('hand')}<b>Move 8 tasks into this project</b></div>
+  <div class="b-meta">From <b style="color:#fff;font-weight:600">Runner 链路 v1：runner ↔ 控制面通信切换到 WebSocket</b> (Done)<br>Asked by its coordinator · Nov 9, 08:31</div>
+  <ul>${MOVES.map(([t, c]) => `<li>${t}<s>Task to move · Target criterion requested: ${c}</s></li>`).join('')}</ul>
+  <div class="b-more">Show all 8</div>
+  <div class="b-btns"><span class="b-btn b-red">Refuse…</span><span class="b-btn b-pri">Approve 8 moves…</span></div>
+</div>`;
+const confirmCard = (top) => `<div class="b-card" style="top:${top}px">
+  <div class="b-hd">${tile('hand')}<b>Approve 8 task moves?</b></div>
+  <div class="b-meta">From <b style="color:#fff;font-weight:600">Runner 链路 v1</b> → <b style="color:#fff;font-weight:600">Runner 链路加固</b></div>
+  <ul>${MOVES.map(([t, c]) => `<li>${t}<s>${c} · key ${['d81f99d9', '55db32cb', 'b09aa76d'][MOVES.findIndex((m) => m[0] === t)]}…</s></li>`).join('')}</ul>
+  <div class="b-more">and 5 more</div>
+  <div class="b-cons">Confirming is the move: the task joins the target project as soon as you answer, and nobody has to send the request again.</div>
+  <div class="b-btns"><span class="b-btn">Cancel</span><span class="b-btn b-pri">Approve 8 moves</span></div>
+</div>`;
+const sess = (body) => phone('dark', `${head()}${body}`, { h: 900, cls: 'crop' });
+document.getElementById('cards').innerHTML = `
+<div class="b-col"><span class="tag rec">第一次按之前</span>${sess(`
+  ${capA({ glyph: 'hand', title: '1 open question below', chev: 'd' })}
+  <div class="b-ubub" style="top:176px">批准</div>
+  <div class="b-reply" style="top:226px">Saying it here does not record it. The 8 moves are waiting on the card below — approving there moves them at once.</div>
+  ${moveCard(330)}` + mk(10, 106, 420, 56, 'round') + num(1, 418, 100) + mk(8, 322, 424, 488) + num(2, 418, 314))}
+<p class="b-note"><span class="n">1</span>会话内胶囊照今天：这个会话有一张待答的卡，↓ 指向它。<br>
+<span class="n">2</span>卡：标题说是什么、从哪个项目来；每件写任务名和它要服务的标准（项目页卡的两个字段原样：<i>Task to move</i> · <i>Target criterion requested</i>）。整批一个按钮，单件在 <i>Show all 8</i> 里逐件答。</p></div>
+<div class="b-col"><span class="tag rec">第二次按</span>${sess(`
+  ${capA({ glyph: 'hand', title: '1 open question below', chev: 'd' })}
+  ${confirmCard(176)}` + mk(12, 586, 416, 56) + num(3, 418, 578))}
+<p class="b-note">第二次按就是项目页今天那一步：两个项目、每件任务、各自的 crossing key 都送回服务端（<code>APPROVAL_TARGET_MISMATCH</code> 围栏照旧，任一件不符整批不写）。<br>
+<span class="n">3</span>后果句是项目页卡上已有的那句 <code>MOVE_TASK_APPROVE_CONSEQUENCE</code>，不写新话。</p></div>
+<div class="b-col"><span class="tag alt">答完</span>${sess(`
+  <div class="b-ubub" style="top:120px">批准</div>
+  <div class="b-reply" style="top:170px">Saying it here does not record it. The 8 moves are waiting on the card below — approving there moves them at once.</div>
+  <div class="b-card" style="top:274px;padding:11px 16px"><div class="b-hd">${tile('hand')}<b style="font-weight:500;font-size:15px">Moved 8 tasks into this project</b><span style="font-size:13px;color:rgba(235,235,245,.6)">now</span></div></div>
+  <div class="b-reply" style="top:346px">The 8 tasks are in. Criteria 4–11 each have their task now; starting the first two.</div>`)}
+<p class="b-note">卡收成一行（同今天请求答完的 resolved 行）；行上的琥珀灭掉；发起会话里那张同时变成这一行。协调会话收到答复照常接着干——不需要再发一张「去项目页点」的卡。</p></div>`;
+
+// ── ③ Web 侧边栏 ──
+const web = (gone) => `<div class="b-web">
+  <div class="b-logo">Orbit</div>
+  <div class="b-it"><span class="b-ico"></span>Projects<span class="b-k">⌘P</span></div>
+  <div class="b-it"><span class="b-ico"></span>Tasks</div>
+  ${gone === 'today' ? '<div class="b-it b-on"><span class="b-ico"></span>Waiting on you<span class="b-c">1</span></div>' : gone === 'mark' ? '<div class="b-it b-gone"><span class="b-ico"></span>Waiting on you<span class="b-c">1</span></div>' : ''}
+  <div class="b-it"><span class="b-ico"></span>Wiki<span class="b-c">7</span></div>
+  <div class="b-hr"></div>
+  <div class="b-sl">orbit-develop</div>
+  <div class="b-ss"><b>${PRJ}</b><s class="${gone === 'new' ? 'b-amb' : ''}">${gone === 'new' ? '<i></i>Approve 8 task moves' : 'Waiting on you: approve the 8 task moves …'}</s></div>
+  <div class="b-ss"><b>Rebuild the wiki articles report</b><s class="b-amb"><i></i>Waiting for approval</s></div>
+  <div class="b-ss"><b>Ship the 0.1.252 release</b><s>Completed · tagged v0.1.252</s></div>
+</div>`;
+document.getElementById('web').innerHTML = `
+<div><span class="tag now">Web 今天</span>${web('today')}</div>
+<div><span class="tag alt">去掉的那一项</span>${web('mark')}</div>
+<div><span class="tag rec">Web 改后</span>${web('new')}<p class="b-note" style="width:340px">菜单少一行；协调会话那一行变琥珀，词同 iOS。</p></div>`;
+</script>
+</body></html>

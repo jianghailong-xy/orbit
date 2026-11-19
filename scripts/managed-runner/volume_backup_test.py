@@ -60,7 +60,7 @@ class VolumeBackupTest(unittest.TestCase):
         self.root = Path(scratch.name)
         self.checkout = self.root / "checkout"
         (self.checkout / "data/managed-runners").mkdir(parents=True)
-        (self.checkout / "data/managed-runners/channel.json").write_text(f'{{\n  "schemaVersion": 1,\n  "image": "{IMAGE}",\n  "network": "orbit-managed-runners"\n}}\n')
+        (self.checkout / "data/managed-runners/channel.json").write_text(f'{{\n  "schemaVersion": 1,\n  "image": "{IMAGE}",\n  "network": "orbit-cloud-runners"\n}}\n')
         self.state = self.root / "state"
         self.state.mkdir()
         bin_dir = self.root / "bin"
@@ -163,7 +163,7 @@ class VolumeBackupTest(unittest.TestCase):
         self.assertIn(["-v", f"{self.backup}:/backup:ro"], self.pairs(unpack))
         self.assertIn("cmp -s /tmp/restored.sha256", self.helper_script(0))
         self.assertIn(["--user", "10001:10001"], self.pairs(inspect), "what SQLite creates beside a database is the runner's")
-        self.assertIn(["-v", f"{created[0]}:/var/lib/orbit:rw"], self.pairs(inspect), "where the runner mounts it")
+        self.assertIn(["-v", f"{created[0]}:/home/orbit:rw"], self.pairs(inspect), "where the runner mounts it")
         script = self.helper_script(1)
         self.assertIn("pragma integrity_check", script)
         self.assertIn("git -C", script)
@@ -188,7 +188,7 @@ class VolumeBackupTest(unittest.TestCase):
         self.assertIn(["-v", f"{V}:/data:rw"], self.pairs(unpack))
         self.assertIn(["-v", f"{self.backup}:/backup:ro"], self.pairs(unpack))
         self.assertIn(["--user", "10001:10001"], self.pairs(inspect))
-        self.assertIn(["-v", f"{V}:/var/lib/orbit:rw"], self.pairs(inspect))
+        self.assertIn(["-v", f"{V}:/home/orbit:rw"], self.pairs(inspect))
 
     def test_verify_inspects_a_volume_in_place_only_while_nothing_runs_on_it(self):
         (self.state / "running").write_text("4f2a9c1b77e0\n")
@@ -202,7 +202,7 @@ class VolumeBackupTest(unittest.TestCase):
         self.assertEqual(result.returncode, 0, result.stderr)
         (inspect,) = self.helper_calls()
         self.assertIn(["--user", "10001:10001"], self.pairs(inspect))
-        self.assertIn(["-v", f"{V}:/var/lib/orbit:rw"], self.pairs(inspect))
+        self.assertIn(["-v", f"{V}:/home/orbit:rw"], self.pairs(inspect))
         self.assertFalse(any(a.startswith(f"{self.backup}") or a.endswith(":/backup:ro") for a in inspect), "no backup directory")
         self.assertIn("pragma integrity_check", self.helper_script(0))
 

@@ -65,7 +65,8 @@ func TestRunnerNetworkGitLeavesSavedCredential(t *testing.T) {
 			return fetchOriginBranch(fx.work, "main")
 		}},
 		{"wiki_fetch", wikiAnchorFetchTimeout, func(fx *credentialFixture) error {
-			return fetchWikiOriginMain(fx.work)
+			_, err := fetchWikiOriginRef(fx.work)
+			return err
 		}},
 	}
 	for _, path := range paths {

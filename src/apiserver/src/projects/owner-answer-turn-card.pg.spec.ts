@@ -27,6 +27,7 @@ import { test } from 'node:test';
 
 import { JwtService } from '@nestjs/jwt';
 import {
+  CreatorType,
   type Prisma,
   type PrismaClient,
   RunStatus,
@@ -353,8 +354,18 @@ test('the turn telling a coordinator the owner’s answer carries an ownerAnswer
 
   await t.test('(4) the card’s time is this conversation’s delivery, also after a rotation', async () => {
     const { projectId, coordinator: first } = await coordinatedProject('the project that rotates its coordinator');
+    // The first coordinator's engine never takes the answer's turn before the next one takes over,
+    // which is what makes R11 tell the next coordinator too: nobody has read it yet.
+    const taskId = randomUUID();
+    await prisma.task.create({
+      data: {
+        id: taskId, ownerId, projectId, title: 'the work the question blocks',
+        creatorType: CreatorType.USER, creatorId: ownerId, assigneeId: workspaceId,
+        completionCriterion: 'EXECUTABLE', acceptanceCommand: 'true', acceptanceExpectedExitCode: 0,
+      },
+    });
     const asked = await openItems.askOwner(ownerId, projectId, first, {
-      question: QUESTION, options: OPTIONS, clientQuestionId: randomUUID(),
+      question: QUESTION, options: OPTIONS, blocksTaskIds: [taskId], clientQuestionId: randomUUID(),
     });
     await openItems.answerOpenItem(ownerId, projectId, asked.itemId, { option: 0 });
     const toldFirst = await turnKeyed(first, OWNER_ANSWER_TURN_PREFIX);
@@ -372,7 +383,7 @@ test('the turn telling a coordinator the owner’s answer carries an ownerAnswer
     const next = await conversation('the coordinator rotated in');
     const ahead = await ownerSays(next, 'the new coordinator has work queued');
     await prisma.project.update({ where: { id: projectId }, data: { coordinatorSessionId: next } });
-    await openItems.deliverOwed(projectId, first);
+    await openItems.deliverOwed(projectId);
     const toldNext = await turnKeyed(next, OWNER_ANSWER_TURN_PREFIX);
     assert.equal(toldNext.clientTurnId, ownerAnswerTurnId(asked.itemId, next));
 

@@ -106,6 +106,14 @@ final class WikiServerExecutionCopyParityTests: XCTestCase {
                 let call: WikiJobCall
                 let row: Row
             }
+            /// What a maintenance run read of the repository, as a tag on its row (design §7.4).
+            struct Tier: Decodable {
+                let name: String
+                let repo: WikiJob.Repo?
+                let tier: String?
+                let tone: String?
+                let reason: String?
+            }
             let title: String
             let none: String
             let kinds: [String: String]
@@ -113,6 +121,7 @@ final class WikiServerExecutionCopyParityTests: XCTestCase {
             let columns: [String]
             let durations: [Duration]
             let cases: [Case]
+            let tiers: [Tier]
             let calls: [Call]
         }
         /// The plan's words while the server drafts it (owner's call 2026-10-08, mock 35's Plan card, and the review
@@ -170,6 +179,30 @@ final class WikiServerExecutionCopyParityTests: XCTestCase {
         XCTAssertEqual(Set(shared.runs.kinds.keys), Set(WikiJobKind.contractOrder.map(\.rawValue)))
         XCTAssertEqual(WikiRunsCopy.runs, shared.runs.title)
         XCTAssertEqual(WikiRunsCopy.none, shared.runs.none)
+    }
+
+    /// Each run's tier tag, as `WikiRunsLogic.tier` says it — read through the job's own decoding, as the read hands it.
+    func testEveryRunsTierSaysTheFixturesWords() throws {
+        let shared = try fixture()
+        XCTAssertFalse(shared.runs.tiers.isEmpty)
+        for one in shared.runs.tiers {
+            let job = WikiJob(id: "j", kind: .maintain, state: .succeeded, createdAt: shared.now, repo: one.repo)
+            let said = WikiRunsLogic.tier(job)
+            XCTAssertEqual(said?.tier, one.tier, one.name)
+            XCTAssertEqual(said?.tone.rawValue, one.tone, "\(one.name): tone")
+            XCTAssertEqual(said?.reason, one.reason, "\(one.name): reason")
+        }
+        XCTAssertEqual(Set(shared.runs.tiers.compactMap(\.repo?.tier)), Set(WikiRepoTier.contractOrder), "every tier is a case")
+        // The tier words are the web's map entries (`WIKI_RUN_TIER_WORDS`).
+        let lib = try web(Self.runsLib)
+        for tier in WikiRepoTier.contractOrder {
+            XCTAssertTrue(lib.contains("\(tier.rawValue): '\(WikiRunsCopy.tier(tier))',"), "the tier \(tier.rawValue) drifted in \(Self.runsLib)")
+        }
+        XCTAssertTrue(lib.contains("export const WIKI_RUN_TIER_WORDS: Record<WikiRepoTier, string> = {"))
+        // A job read with no repo key — an older control plane — has no tag.
+        let older = try JSONDecoder().decode(WikiJob.self, from: Data(#"{"id":"j","kind":"maintain","state":"succeeded"}"#.utf8))
+        XCTAssertNil(older.repo)
+        XCTAssertNil(WikiRunsLogic.tier(older))
     }
 
     /// Each call's row of a run's log, as `WikiRunsLogic.callRow` says it.
@@ -402,7 +435,8 @@ final class WikiServerExecutionCopyParityTests: XCTestCase {
                           calls: WikiJobCallCounts(total: 1), nextCall: WikiJob.NextCall(ahead: 0, enqueuedAt: "g"),
                           requests: [WikiJobCall(id: "r", step: "verify", unit: "u", attempt: 1, attempts: 1, state: .queued,
                                                  enqueuedAt: "h", startedAt: "i", endedAt: "k", inputTokens: 1, outputTokens: 2,
-                                                 httpStatus: 503, error: "l", errorKind: "retryable", ahead: 4)])
+                                                 httpStatus: 503, error: "l", errorKind: "retryable", ahead: 4)],
+                          repo: WikiJob.Repo(tier: .sessions, reason: "not_found", detail: "m"))
         let encoded = try XCTUnwrap(JSONSerialization.jsonObject(with: JSONEncoder().encode(job)) as? [String: Any])
         XCTAssertEqual(Set(encoded.keys), Set(try XCTUnwrap(read["job"] as? [String])))
         let call = try XCTUnwrap((encoded["requests"] as? [[String: Any]])?.first)

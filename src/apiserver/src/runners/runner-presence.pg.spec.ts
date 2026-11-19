@@ -26,6 +26,9 @@
  *   (4) POST /api/runner/heartbeat upserts the runner's one presence row with every beat — the
  *       process, HTTP, no gateway — and rewrites the runner row's own record only once it is five
  *       minutes old;
+ *  (4b) the runners list's `activeSessions` counts the sessions a beat names as held by background jobs
+ *       (backgroundJobSessionIds, migration 0780) beside those in a turn, a session both ways once, and a
+ *       runner that omits the member as before;
  *   (5) every reading answers from presence: with the runner row's own record ten minutes old and a
  *       presence row ten seconds old, the runners list, the runner's own detail, `orbit status`, the
  *       session list (its row and its queue gate) and the session detail all read the runner as
@@ -59,7 +62,7 @@ import {
   assertCoordinatorPgUrlIsIsolated,
   verifyCoordinatorPgIdentity,
 } from '../projects/coordinator-pg-test-safety';
-import { MASS_DISCONNECT_HOLD_MS, ReaperService } from '../realtime/reaper.service';
+import { MASS_DISCONNECT_HOLD_MS, ReaperService, RUNNER_REAP_AFTER_MS } from '../realtime/reaper.service';
 import { readLinkBeat } from '../runner-api/link-heartbeat';
 import { runnerLinkCredential } from '../runner-api/runner-link-token';
 import {
@@ -154,6 +157,10 @@ test('runner presence: an UNLOGGED table every heartbeat upserts, and the one so
       ['reconciled_at', 'timestamp without time zone', 'YES'],
       // 0450: the last beat before the runner last lost contact, which the reaper reads a mass disconnection off.
       ['lost_at', 'timestamp without time zone', 'YES'],
+      // 0720: the machine's CPU, memory and disk and its last hour of them (runners/runner-resources.ts).
+      ['resources', 'jsonb', 'YES'],
+      // 0780: the sessions its background jobs hold slots for (runners/runner-background-holders.ts).
+      ['background_job_session_ids', 'ARRAY', 'NO'],
     ]);
     const { rows: [pk] } = await sql.query(
       `SELECT pg_get_constraintdef(oid) AS def FROM pg_constraint WHERE conname = 'runner_presence_pkey'`,
@@ -251,9 +258,10 @@ test('runner presence: an UNLOGGED table every heartbeat upserts, and the one so
     const reaperOf = () => new ReaperService(db as unknown as PrismaService, realtime, undefined, presence);
     const sweep = (reaper: ReaperService) => (reaper as unknown as { sweep(): Promise<void> }).sweep();
     const now = Date.now();
-    // The runner that went quiet: its presence row four minutes old, its own record ten.
+    // The runner that went quiet: its presence row a minute past the reaper's line (RUNNER_REAP_AFTER_MS, five minutes),
+    // its own record ten minutes old.
     const silent = await runner(fay.id, 'silent', { lastHeartbeatAt: new Date(now - 10 * MINUTE) });
-    await db.runnerPresence.create({ data: { runnerId: silent.id, lastBeatAt: new Date(now - 4 * MINUTE), linkState: 'HTTP' } });
+    await db.runnerPresence.create({ data: { runnerId: silent.id, lastBeatAt: new Date(now - RUNNER_REAP_AFTER_MS - MINUTE), linkState: 'HTTP' } });
     const workspaceId = randomUUID();
     await db.workspace.create({ data: { id: workspaceId, ownerId: fay.id, runnerId: silent.id, name: `reaper-${RUN}`, enabled: true } });
     const running = async (
@@ -312,7 +320,7 @@ test('runner presence: an UNLOGGED table every heartbeat upserts, and the one so
     await crowdBeats();
     const beforeSleep = await counts();
     const asleep = [];
-    for (let i = 0; i < 12; i += 1) asleep.push(await managedRunner(i % 2 === 0 ? 'SLEEPING' : 'DRAINING', 2 * MINUTE));
+    for (let i = 0; i < 12; i += 1) asleep.push(await managedRunner(i % 2 === 0 ? 'SLEEPING' : 'DRAINING', RUNNER_REAP_AFTER_MS + MINUTE));
     assert.deepEqual(await counts(), beforeSleep, 'managed runners put to sleep are not counted');
     const amongAsleep = await running('reaped while a fifth of the runners are asleep');
     const ofAsleep = await running('run of a managed runner put to sleep', asleep[0]);
@@ -349,9 +357,10 @@ test('runner presence: an UNLOGGED table every heartbeat upserts, and the one so
     assert.equal(kept.length, 1, `the mass silence was kept: ${JSON.stringify(kept, (_, v) => (typeof v === 'bigint' ? String(v) : v))}`);
     await sweep(reaperOf());
     assert.equal((await stateOf(held)).status, RunStatus.RUNNING, 'the disconnection kept holds the runner silent in it');
-    // A runner that went quiet on its own after the cell was heard again, past the line now: no disconnection holds it.
+    // A runner that went quiet on its own a minute before the disconnection's first beat, and so outside it, past the line
+    // now: no disconnection holds it.
     const alone = await runner(fay.id, 'alone', { lastHeartbeatAt: new Date(Date.now() - 10 * MINUTE) });
-    await db.runnerPresence.create({ data: { runnerId: alone.id, lastBeatAt: new Date(Date.now() - 100_000), linkState: 'HTTP' } });
+    await db.runnerPresence.create({ data: { runnerId: alone.id, lastBeatAt: new Date(now - RUNNER_REAP_AFTER_MS - 2 * MINUTE), linkState: 'HTTP' } });
     const ofAlone = await running('its runner went quiet on its own', { runnerId: alone.id, ownerId: fay.id, workspaceId });
     await sweep(reaperOf());
     assert.deepEqual(await stateOf(ofAlone), { status: RunStatus.FAILED, error: 'runner offline' });
@@ -398,6 +407,41 @@ test('runner presence: an UNLOGGED table every heartbeat upserts, and the one so
     const staleRow = await db.runnerPresence.findUniqueOrThrow({ where: { runnerId: stale.id } });
     const staleOwn = await db.runner.findUniqueOrThrow({ where: { id: stale.id }, select: { lastHeartbeatAt: true } });
     assert.equal(staleOwn.lastHeartbeatAt?.getTime(), staleRow.lastBeatAt.getTime(), 'a five-minute-old record takes the beat');
+  });
+
+  await t.test('(4b) the runners list counts a session a background job holds a slot for as running, once, and an older runner as before', async () => {
+    const dana = await owner('dana');
+    const jwtToken = await dana.login();
+    const r = await runner(dana.id, 'holders', { maxConcurrent: 16 });
+    const workspaceId = randomUUID();
+    await db.workspace.create({ data: { id: workspaceId, ownerId: dana.id, runnerId: r.id, name: `holders-${RUN}`, enabled: true } });
+    const session = async (status: RunStatus) => {
+      const id = randomUUID();
+      await db.session.create({
+        data: {
+          id, ownerId: dana.id, creatorId: dana.id, workspaceId, assignedRunnerId: r.id, title: status, prompt: 'work',
+          provider: 'claude', providerBuiltin: true, status, dispatchOrigin: SessionDispatchOrigin.USER,
+        },
+      });
+      return id;
+    };
+    const inTurn = await session(RunStatus.RUNNING);
+    const jobOnly = await session(RunStatus.AWAITING_INPUT);
+    const running = async (beat: Record<string, unknown>) => {
+      const answer = await call(server!, 'POST', '/api/runner/heartbeat', r.token, { status: 'ONLINE', idleCapacity: 14, ...beat });
+      assert.equal(answer.status, 201, answer.text);
+      const runners = await call(server!, 'GET', '/api/runners', jwtToken);
+      assert.equal(runners.status, 200, runners.text);
+      return (runners.json as Array<Record<string, unknown>>).find((x) => toUuid(String(x.id)) === r.id)!.activeSessions;
+    };
+    assert.equal(await running({}), 1, 'an older runner, which omits the member: its sessions in a turn, as before');
+    assert.equal(await running({ backgroundJobSessionIds: [jobOnly] }), 2, 'a RUNNING session and a background-job holder are 2');
+    assert.equal(await running({ backgroundJobSessionIds: [inTurn] }), 1, 'the RUNNING session named by its job too counts once');
+    assert.equal(await running({ backgroundJobSessionIds: [inTurn, jobOnly] }), 2);
+    const kept = await db.runnerPresence.findUniqueOrThrow({ where: { runnerId: r.id }, select: { backgroundJobSessionIds: true } });
+    assert.deepEqual(kept.backgroundJobSessionIds.sort(), [inTurn, jobOnly].sort(), 'the HTTPS beat keeps them on the presence row');
+    assert.equal(await running({}), 1, 'the next beat without the member clears them');
+    assert.deepEqual((await db.runnerPresence.findUniqueOrThrow({ where: { runnerId: r.id } })).backgroundJobSessionIds, []);
   });
 
   await t.test('(5) every reading answers from presence, and falls back to the runner’s own record when the table is emptied', async () => {
@@ -536,17 +580,17 @@ test('runner presence: an UNLOGGED table every heartbeat upserts, and the one so
     const tuple = async () =>
       (await sql.query<{ ctid: string }>('SELECT ctid::text FROM runner_presence WHERE runner_id = $1', [r.id])).rows[0]?.ctid;
 
-    await recordRunnerLinkOpened(db as unknown as PrismaService, r.id);
+    await recordRunnerLinkOpened(db as unknown as PrismaService, r.id, { leaseOwner: process });
     assert.equal(await db.runnerPresence.count({ where: { runnerId: r.id } }), 0, 'no presence row: nothing kept, nothing made');
     await linkBeat();
     assert.equal((await presenceRow()).lostAt, null, 'its first beat leaves nothing lost');
 
     // The gateway opens a new connection: the beat before it is kept; asked again, it writes nothing.
     const { lastBeatAt } = await presenceRow();
-    await recordRunnerLinkOpened(db as unknown as PrismaService, r.id);
+    await recordRunnerLinkOpened(db as unknown as PrismaService, r.id, { leaseOwner: process });
     assert.equal((await presenceRow()).lostAt?.getTime(), lastBeatAt.getTime());
     const kept = await tuple();
-    await recordRunnerLinkOpened(db as unknown as PrismaService, r.id);
+    await recordRunnerLinkOpened(db as unknown as PrismaService, r.id, { leaseOwner: process });
     assert.equal(await tuple(), kept, 'the same row version: a welcome sent again changes nothing');
 
     // A beat 30 s after the one before is on time, and leaves lost_at as it was.

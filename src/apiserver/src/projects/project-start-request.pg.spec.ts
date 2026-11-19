@@ -40,7 +40,7 @@
  *       nothing back after;
  *  (10) the merge check's BUDGET travels the whole way: the seconds the coordinator suggests are on
  *       the request, the number the owner starts with lands on `project_codebase`, and the relay
- *       hands the claimed landing's MERGE_CHECK that same number — the one-hour default when the
+ *       hands the claimed landing's LANDING_CHECK that same number — the one-hour default when the
  *       start names none, the binding's own when the start does not name the field at all, and NULL
  *       when it says so.
  *
@@ -461,7 +461,7 @@ test('a coordinator asks its owner to start the project, and the plan is checked
 
   /** What the claim hands the runner for the project's merge check, by its budget. */
   const claimedBudget = async (jobId: string): Promise<number | undefined> =>
-    (await claimed(jobId)).checks.find((check) => check.name === 'MERGE_CHECK')?.timeoutSeconds;
+    (await claimed(jobId)).checks.find((check) => check.name === 'LANDING_CHECK')?.timeoutSeconds;
 
   /** The owner's own write of the merge check, at a terminal (`PATCH /projects/:id/integration`):
    *  how a project comes to have a budget before it is started. */
@@ -629,6 +629,17 @@ test('a coordinator asks its owner to start the project, and the plan is checked
   });
 
   // ═══ (3) who may ask ═══════════════════════════════════════════════════════════════════════════
+
+  await t.test('K1: a start request preserves both landing suggestions', async () => {
+    const project = await planned('landing-request');
+    const filed = await ask(project.id, project.sessionId, { ...SUGGESTED,
+      landingCheckCommand: 'make landing', landingCheckTimeoutSeconds: 180 });
+    assert.equal(filed.settings.landingCheckCommand, 'make landing');
+    assert.equal(filed.settings.landingCheckTimeoutSeconds, 180);
+    const [stored] = await requests(project.id);
+    assert.equal(stored.payload.settings.landingCheckCommand, 'make landing');
+    assert.equal(stored.payload.settings.landingCheckTimeoutSeconds, 180);
+  });
 
   await t.test('(3) only the coordinating conversation may ask; the Automatic switch is not asked', async () => {
     const project = await planned('who-may-ask');
@@ -908,7 +919,7 @@ test('a coordinator asks its owner to start the project, and the plan is checked
         name: 'TASK_ACCEPTANCE', command: 'true', expectedExitCode: 0,
         timeoutSeconds: DEFAULT_CHECK_TIMEOUT_SECONDS,
       },
-      { name: 'MERGE_CHECK', command: 'npm test', expectedExitCode: 0, timeoutSeconds: 90 },
+      { name: 'LANDING_CHECK', command: 'npm test', expectedExitCode: 0, timeoutSeconds: 90 },
     ]);
   });
 

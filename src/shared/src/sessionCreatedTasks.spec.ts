@@ -2,7 +2,7 @@ import { readFileSync } from 'node:fs';
 import path from 'node:path';
 import { describe, expect, it } from 'vitest';
 // Through the package's own entry: what the clients import is the thing under test.
-import { createdTasksCountLine, SESSION_CREATED_TASKS_COPY, sessionTaskCard } from './index';
+import { createdTasksCountLine, SESSION_CREATED_TASKS_COPY, sessionTaskBand, sessionTaskCard } from './index';
 
 /**
  * `session-created-tasks.fixture.json` is the contract the web and the native client are both
@@ -34,6 +34,19 @@ interface CardCase {
   } | null;
 }
 
+interface BandCase {
+  name: string;
+  created: {
+    running: number;
+    failed: number;
+    done: number;
+    total: number;
+    items: { id: string; status: string; running: boolean; queued: boolean; replaces: string | null; createdAt: string }[];
+  } | null;
+  watched: { id: string; status: string | null; running: boolean; queued: boolean; stale: boolean }[];
+  band: { failed: number; text: string; row: string } | null;
+}
+
 /** A `watch-strip.fixture.json` fold case: what a session's watches give the Tasks card. */
 interface FoldCase {
   case: string;
@@ -43,7 +56,7 @@ interface FoldCase {
 
 const fixture = JSON.parse(
   readFileSync(path.join(__dirname, 'session-created-tasks.fixture.json'), 'utf8'),
-) as { copy: Record<string, string>; singleNamesTheTask: boolean; countLine: CountLineCase[]; card: CardCase[] };
+) as { copy: Record<string, string>; singleNamesTheTask: boolean; countLine: CountLineCase[]; card: CardCase[]; band: BandCase[] };
 
 const fold = (
   JSON.parse(readFileSync(path.join(__dirname, 'watch-strip.fixture.json'), 'utf8')) as { fold: FoldCase[] }
@@ -88,7 +101,6 @@ describe('session-created-tasks.fixture.json', () => {
     expect(fixture.copy).toEqual(SESSION_CREATED_TASKS_COPY);
     expect(fixture.copy).toEqual({
       title: 'Tasks',
-      viewAll: 'View all in Tasks ›',
       openProject: 'Open project ›',
       replacesPrefix: 'Replaces ',
       createdInChip: 'Created in ',
@@ -136,6 +148,31 @@ describe('session-created-tasks.fixture.json', () => {
         },
         c.name,
       ).toEqual(c.card);
+    }
+  });
+
+  it('every band case is exactly what sessionTaskBand says', () => {
+    expect(fixture.band.length).toBeGreaterThan(0);
+    for (const c of fixture.band) {
+      const created = c.created && {
+        ...c.created,
+        projects: [],
+        items: c.created.items.map((item) => ({
+          ...item,
+          status: item.status as 'OPEN',
+          title: `Task ${item.id}`,
+          projectId: null,
+          replaces: item.replaces ? { id: item.replaces, title: `Task ${item.replaces}` } : null,
+        })),
+      };
+      const watched = c.watched.map(({ id, status, running, queued, stale }) => ({
+        id,
+        title: `Task ${id}`,
+        standing: status === null ? null : { status, running, queued },
+        stale,
+      }));
+      const band = sessionTaskBand(sessionTaskCard(created, watched));
+      expect(band && { failed: band.failed, text: band.text, row: band.row.id }, c.name).toEqual(c.band);
     }
   });
 

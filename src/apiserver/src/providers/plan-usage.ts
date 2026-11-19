@@ -1,4 +1,11 @@
-import { AgentProvider, type PlanUsageSnapshot, type PlanUsageWindow } from '@orbit/shared';
+import {
+  AgentProvider,
+  type PlanUsageExtraUsage,
+  type PlanUsageModelLimit,
+  type PlanUsageResetGrants,
+  type PlanUsageSnapshot,
+  type PlanUsageWindow,
+} from '@orbit/shared';
 
 /**
  * Subscription quota for a configured (BYOK) provider, read with that provider's *own*
@@ -16,8 +23,10 @@ import { AgentProvider, type PlanUsageSnapshot, type PlanUsageWindow } from '@or
  *  tool-definition shape, which custom-provider's injected env decides by. */
 export const ANTHROPIC_HOST = 'api.anthropic.com';
 
-/** The usage endpoint Claude Code itself calls (same as the runner's planUsageURL). */
-export const OAUTH_USAGE_URL = `https://${ANTHROPIC_HOST}/api/oauth/usage`;
+/** The usage endpoint Claude Code itself calls (same as the runner's planUsageURL), asking for its
+ *  weekly-reset block (`cedar_ember`) as the runner does (claude_usage_extras.go). Over OAuth that
+ *  block has so far answered ineligible ("surface"). */
+export const OAUTH_USAGE_URL = `https://${ANTHROPIC_HOST}/api/oauth/usage?cedar_ember=1`;
 
 /** anthropic-beta value Claude Code sends on OAuth-authenticated requests, mirrored so this
  *  request looks like the CLI's if the header is ever enforced. */
@@ -148,12 +157,81 @@ export function parseSubscriptionUsage(body: unknown, fetchedAt: string): PlanUs
     sevenDaySonnet: window(raw.seven_day_sonnet),
   };
   if (!Object.values(windows).some(Boolean)) return null;
+  const modelLimits = parseModelLimits(raw.limits);
+  const extraUsage = parseExtraUsage(raw.spend, raw.extra_usage);
+  const resetGrants = parseResetGrants(raw.cedar_ember);
   return {
     provider: AgentProvider.CLAUDE,
     ...(windows.fiveHour ? { fiveHour: windows.fiveHour } : {}),
     ...(windows.sevenDay ? { sevenDay: windows.sevenDay } : {}),
     ...(windows.sevenDayOpus ? { sevenDayOpus: windows.sevenDayOpus } : {}),
     ...(windows.sevenDaySonnet ? { sevenDaySonnet: windows.sevenDaySonnet } : {}),
+    ...(modelLimits.length ? { modelLimits } : {}),
+    ...(extraUsage ? { extraUsage } : {}),
+    ...(resetGrants ? { resetGrants } : {}),
     fetchedAt,
+  };
+}
+
+// The display-only parts beside the windows, read the way the runner reads them
+// (claude_usage_extras.go): a part not in the shape expected is left out, alone.
+
+const isRecord = (v: unknown): v is Record<string, unknown> => !!v && typeof v === 'object' && !Array.isArray(v);
+const str = (v: unknown): string | undefined => (typeof v === 'string' && v ? v : undefined);
+const int = (v: unknown): number | undefined => (typeof v === 'number' && Number.isInteger(v) ? v : undefined);
+
+function parseModelLimits(raw: unknown): PlanUsageModelLimit[] {
+  if (!Array.isArray(raw)) return [];
+  return raw.flatMap((l): PlanUsageModelLimit[] => {
+    if (!isRecord(l) || l.kind !== 'weekly_scoped' || typeof l.percent !== 'number') return [];
+    const model = isRecord(l.scope) && isRecord(l.scope.model) ? str(l.scope.model.display_name)?.trim() : undefined;
+    if (!model) return [];
+    const resetsAt = str(l.resets_at);
+    return [{ model, utilization: l.percent, ...(resetsAt ? { resetsAt } : {}), active: l.is_active === true }];
+  });
+}
+
+function parseExtraUsage(spend: unknown, extra: unknown): PlanUsageExtraUsage | undefined {
+  if (isRecord(spend)) {
+    const used = isRecord(spend.used) ? spend.used : undefined;
+    const limit = isRecord(spend.limit) ? spend.limit : undefined;
+    const usedMinor = int(used?.amount_minor);
+    const limitMinor = int(limit?.amount_minor);
+    const currency = usedMinor !== undefined ? str(used?.currency) : undefined;
+    const exponent = usedMinor !== undefined ? int(used?.exponent) : undefined;
+    return {
+      enabled: spend.enabled === true,
+      ...(currency ? { currency } : {}),
+      ...(exponent ? { exponent } : {}),
+      ...(usedMinor !== undefined ? { usedMinor } : {}),
+      ...(limitMinor !== undefined ? { limitMinor } : {}),
+    };
+  }
+  return isRecord(extra) ? { enabled: extra.is_enabled === true } : undefined;
+}
+
+function parseResetGrants(raw: unknown): PlanUsageResetGrants | undefined {
+  if (!isRecord(raw)) return undefined;
+  const grants = (Array.isArray(raw.grants) ? raw.grants : []).flatMap((g) => {
+    const id = isRecord(g) ? str(g.id) : undefined;
+    if (!isRecord(g) || !id) return [];
+    const label = str(g.label);
+    const endsAt = str(g.ends_at);
+    return [
+      {
+        id,
+        ...(label ? { label } : {}),
+        resetsLeft: int(g.resets_left) ?? 0,
+        usableNow: g.usable_now === true,
+        ...(endsAt ? { endsAt } : {}),
+      },
+    ];
+  });
+  const ineligibleReason = str(raw.ineligible_reason);
+  return {
+    eligible: raw.eligible === true,
+    ...(ineligibleReason ? { ineligibleReason } : {}),
+    resetsLeft: grants.reduce((n, g) => n + (g.usableNow && g.resetsLeft > 0 ? g.resetsLeft : 0), 0),
+    ...(grants.length ? { grants } : {}),
   };
 }

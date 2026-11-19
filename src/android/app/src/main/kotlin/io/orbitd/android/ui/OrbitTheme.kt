@@ -25,7 +25,8 @@ private val dark = darkColorScheme(primary = Color(0xFF8AC6FF), onPrimary = Colo
     secondary = Color(0xFFB1CBE3), onSecondary = Color(0xFF16334B),
     secondaryContainer = Color(0xFF203F5C), onSecondaryContainer = Color(0xFFD4E8FC),
     surfaceTint = Color(0xFF8AC6FF),
-    background = Color(0xFF18191B), surface = Color(0xFF18191B), onSurface = Color(0xFFF1F1F4),
+    // Pure black behind the pages, as iOS's `.systemBackground` is in dark mode.
+    background = Color(0xFF000000), surface = Color(0xFF000000), onSurface = Color(0xFFF1F1F4),
     surfaceVariant = Color(0xFF292B2F), onSurfaceVariant = Color(0xFFBFC2CA), outline = Color(0xFF93969E),
     error = Color(0xFFFFB4AB))
 

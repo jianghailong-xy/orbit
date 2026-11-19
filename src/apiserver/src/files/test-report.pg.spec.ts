@@ -267,6 +267,10 @@ test('file_upload --as test-report', { skip: !URL, concurrency: 1, timeout: 600_
     assert.equal(version.status, 200, version.text.slice(0, 400));
     const inVersion = (version.json.files as { publicId: string; testReport: unknown }[]).find((row) => row.publicId === file.publicId);
     assert.deepEqual(inVersion?.testReport, file.testReport, 'and file_list of the evidence version');
+    await db.conversationTurn.updateMany({
+      where: { sessionId, clientTurnId: `evidence-review:v1:${toUuid(submitted.json.id)}` },
+      data: { deliveredAt: new Date() },
+    });
     // The owner's card for a task in no project is drawn once its dispatching session has held it for half an hour.
     const onTheCard = async () => {
       const queue = await readPendingEvidenceJudgments(db as never, ownerId, { id: sessionId, taskId: null }, new Date(Date.now() + 31 * 60_000));

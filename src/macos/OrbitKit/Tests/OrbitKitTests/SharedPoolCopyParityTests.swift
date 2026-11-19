@@ -88,9 +88,11 @@ final class SharedPoolCopyParityTests: XCTestCase {
         assertSays(row, "`\(try XCTUnwrap(SharedPoolPage.invalidReason(theirs, in: asMember)))`", in: Self.accountPools)
         assertSays(row, "> \(SharedPoolPage.replaceKey) </Button>", in: Self.accountPools)
         assertSays(row, "key.enabled ? '\(SharedPoolPage.disableKey)' : '\(SharedPoolPage.enableKey)'", in: Self.accountPools)
-        assertSays(row, "title={`\(SharedPoolPage.removeKeyTitle(key(label: "${key.label}")))`}", in: Self.accountPools)
-        assertSays(row, "description=\"\(SharedPoolPage.removeKeyNote)\"", in: Self.accountPools)
-        assertSays(row, "confirmText=\"\(SharedPoolPage.remove)\"", in: Self.accountPools)
+        // Taking the key out sits behind the row's ⋯ since the settings-buttons landing (board 02): the
+        // item says the word, and the confirmation it opens carries the title, the note and its press.
+        assertSays(row, "title: `\(SharedPoolPage.removeKeyTitle(key(label: "${key.label}")))`,", in: Self.accountPools)
+        assertSays(row, "description: '\(SharedPoolPage.removeKeyNote)',", in: Self.accountPools)
+        assertSays(row, "confirmText: '\(SharedPoolPage.remove)',", in: Self.accountPools)
         // "No keys yet — …", in the web's one sentence for both kinds of pool.
         assertSays(row, "No {shared ? 'keys' : 'accounts'}\(SharedPoolPage.noKeys.dropFirst("No keys".count))",
                    in: Self.accountPools)

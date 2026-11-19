@@ -1,4 +1,3 @@
-#if os(iOS)
 import SwiftUI
 import OrbitKit
 
@@ -21,16 +20,36 @@ import OrbitKit
 /// A folder's row at the top of a workspace's session list (§3.3): the folder glyph, its name, and
 /// the one state it reports for the sessions inside it plus how many there are.
 struct SessionFolderRowView: View {
-    let row: SessionFolderRow
+    private let name: String
+    private let icon: String
+    private let sessionCount: Int
+    private let status: WorkspaceNavigationStatus
+    private let runningDot: Bool
+
+    init(row: SessionFolderRow) {
+        name = row.folder.name
+        icon = "folder"
+        sessionCount = row.sessionCount
+        status = row.status
+        runningDot = false
+    }
+
+    init(scheduledRuns: ScheduledRunsFolder.Summary) {
+        name = ScheduledRunsCopy.title
+        icon = "clock"
+        sessionCount = scheduledRuns.sessionCount
+        status = scheduledRuns.needsYou > 0 ? .needsYou(scheduledRuns.needsYou) : .idle
+        runningDot = scheduledRuns.running
+    }
 
     var body: some View {
         HStack(spacing: 12) {
-            Image(systemName: "folder")
+            Image(systemName: icon)
                 .font(.orbitGlyph)
                 .foregroundStyle(Color.accentColor)
                 .frame(width: 24)
                 .accessibilityHidden(true)
-            Text(row.folder.name)
+            Text(name)
                 .lineLimit(1)
                 .foregroundStyle(.primary)
                 .layoutPriority(2)
@@ -38,7 +57,7 @@ struct SessionFolderRowView: View {
             // The same three marks, in the same order and the same words, as the drawer's Workspace
             // row (`WorkspaceNavigationRow`): the folder stands in for the sessions it hides, so it
             // has to say what they would have said.
-            switch row.status {
+            switch status {
             case .needsYou(let count):
                 NeedsYouCountCapsule(count: count)
             case .running:
@@ -50,10 +69,18 @@ struct SessionFolderRowView: View {
             case .idle:
                 EmptyView()
             }
-            Text("\(row.sessionCount)")
-                .font(.orbitMeta)
-                .monospacedDigit()
-                .foregroundStyle(.secondary)
+            if runningDot {
+                Circle().fill(Color.accentColor).frame(width: 6, height: 6)
+                    .accessibilityHidden(true)
+            }
+            // One number on the row (owner 2026-11-19, as on the web): who waits on you takes the
+            // total's place, and the total moves into what VoiceOver reads.
+            if !waitsOnYou {
+                Text("\(sessionCount)")
+                    .font(.orbitMeta)
+                    .monospacedDigit()
+                    .foregroundStyle(.secondary)
+            }
             Image(systemName: "chevron.right")
                 .font(.orbitMeta.weight(.semibold))
                 .foregroundStyle(.tertiary)
@@ -62,17 +89,22 @@ struct SessionFolderRowView: View {
         .padding(.vertical, 6)
         .contentShape(Rectangle())
         .accessibilityElement(children: .combine)
-        .accessibilityValue(folderStatusWords)
+        .accessibilityValue(runningDot ? "\(folderStatusWords), session running" : folderStatusWords)
+    }
+
+    private var waitsOnYou: Bool {
+        if case .needsYou = status { return true }
+        return false
     }
 
     /// What VoiceOver reads for the state the trailing slot draws — the same words the session rows
     /// use for the same facts.
     private var folderStatusWords: String {
-        switch row.status {
-        case .needsYou(let count): return "\(count) waiting for you"
+        switch status {
+        case .needsYou(let count): return "\(count) waiting for you, \(sessionCount) sessions"
         case .running:             return "Session running"
         case .jobs:                return "Background job running"
-        case .idle:                return "\(row.sessionCount) sessions"
+        case .idle:                return "\(sessionCount) sessions"
         }
     }
 }
@@ -100,7 +132,9 @@ struct SessionFolderPage: View {
     /// passes nil.
     var searchQuery: Binding<String>? = nil
 
+    #if os(iOS)
     @State private var rowSwipe = RowSwipeState()
+    #endif
     /// The row whose action was tapped — the sheets below are held by the page, as the workspace
     /// list holds its own, so they present reliably from a row's swipe or long-press menu.
     @State private var taggingSession: Session?
@@ -176,7 +210,8 @@ struct SessionFolderPage: View {
         SessionTimeGrouping.sections(sessions, pinnedFirst: inputs.view == .open)
     }
     private var query: String {
-        searchQuery?.wrappedValue.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+        guard !address.isScheduledRuns else { return "" }
+        return searchQuery?.wrappedValue.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
     }
     private var isSearching: Bool { !query.isEmpty }
 
@@ -194,7 +229,7 @@ struct SessionFolderPage: View {
             // The phone's back button is the stack's; the wide shell's column has no stack, so the
             // page brings its own (§3.3).
             if rowNavigation == .selection {
-                ToolbarItem(placement: .topBarLeading) {
+                ToolbarItem(placement: backPlacement) {
                     Button {
                         app.leaveFolder(address.folderID)
                     } label: {
@@ -204,14 +239,16 @@ struct SessionFolderPage: View {
                 }
             }
             ToolbarItem(placement: .principal) { title }
-            ToolbarItem(placement: .topBarTrailing) { folderMenu }
-            ToolbarItem(placement: .topBarTrailing) {
-                Button {
-                    app.startComposingSession(inFolder: address.folderID, of: address.agentID)
-                } label: {
-                    Label("New session", systemImage: "square.and.pencil")
+            if !address.isScheduledRuns {
+                ToolbarItem(placement: actionPlacement) { folderMenu }
+                ToolbarItem(placement: actionPlacement) {
+                    Button {
+                        app.startComposingSession(inFolder: address.folderID, of: address.agentID)
+                    } label: {
+                        Label("New session", systemImage: "square.and.pencil")
+                    }
+                    .accessibilityLabel("Start a new session in \(titleText)")
                 }
-                .accessibilityLabel("Start a new session in \(titleText)")
             }
         }
         // The two management asks, in the same words the row's long-press menu asks them in.
@@ -221,7 +258,8 @@ struct SessionFolderPage: View {
         }
         .sheet(item: $sharingSession) { s in
             if let baseURL = app.baseURL {
-                ShareSheet(kind: .session, rootID: s.id, baseURL: baseURL, tokenStore: app.tokenStore)
+                ShareSheet(kind: .session, rootID: s.id, baseURL: baseURL, tokenStore: app.tokenStore,
+                           guests: .of(s, agents: app.agents))
             }
         }
         .sheet(item: $movingSession) { s in
@@ -234,7 +272,11 @@ struct SessionFolderPage: View {
         // Completed keeps its poll; Open is served by the app's shared snapshot, so one read is
         // enough there. The poll follows the control stream, as the workspace's own Completed list
         // does (`ViewPoll`, docs/list-freshness-design.md §4 R6).
-        .task(id: "\(address.agentID)|\(address.view.rawValue)") {
+        .task(id: address) {
+            if address.isScheduledRuns {
+                await app.pollScheduledRuns(address)
+                return
+            }
             await app.agents?.loadSessions(agentID: address.agentID, view: address.view)
             await app.projects?.load()
             guard address.view != .open else { return }
@@ -251,49 +293,33 @@ struct SessionFolderPage: View {
         @Bindable var app = app
         // One grouping, regrouped only when its inputs change, which the list's closures and its
         // empty state share (see the workspace list's `body`).
-        let grouping = listingMemo.value(for: listInputs, compute: Self.grouping)
-        let sessions = grouping.folderListing.sessions
-        let timeSections = grouping.timeSections
-        let projectRows = grouping.projectRows
-        let projectMarks = grouping.projectListing.marks
+        let grouping = address.isScheduledRuns ? nil : listingMemo.value(for: listInputs, compute: Self.grouping)
+        let sessions = grouping?.folderListing.sessions ?? app.agents?.scheduledRuns(in: address) ?? []
+        let timeSections = grouping?.timeSections ?? SessionTimeGrouping.sections(sessions, pinnedFirst: address.view == .open)
+        let projectRows = grouping?.projectRows ?? [:]
+        let projectMarks = grouping?.projectListing.marks ?? [:]
         return List(selection: rowNavigation == .selection ? $app.selectedAgentSessionID : nil) {
             if isSearching {
                 searchResults
             } else {
                 ForEach(Array(timeSections.enumerated()), id: \.element.id) { index, section in
-                    if index == 0, section.title == "Today" {
-                        // The leading "Today" keeps no title, exactly as the workspace list draws it
-                        // (the first row drops its top separator with the title).
-                        ForEach(section.sessions) { session in
-                            if session.id == section.sessions.first?.id {
-                                listRow(session, projects: projectRows, marks: projectMarks)
-                                    .listRowSeparator(.hidden, edges: .top)
-                            } else {
-                                listRow(session, projects: projectRows, marks: projectMarks)
-                            }
-                        }
-                    } else if section.title == "Pinned" {
-                        Section {
-                            if !pinnedCollapsed {
-                                ForEach(section.sessions) { listRow($0, projects: projectRows, marks: projectMarks) }
-                            }
-                        } header: {
-                            pinnedSectionHeader(section.title)
-                        }
-                    } else {
-                        Section {
-                            ForEach(section.sessions) { listRow($0, projects: projectRows, marks: projectMarks) }
-                        } header: {
-                            Text(section.title).textCase(nil)
-                        }
-                    }
+                    folderSection(index: index, section: section, projects: projectRows, marks: projectMarks)
                 }
             }
         }
         .listStyle(.plain)
+        // The Sessions list's soft top edge, not the hard strip iOS 26 picks here (the owner,
+        // 2026-11-12, docs/mocks/ios-header-soft-edge/04-board.html).
+        .softTopEdgeEffect()
+        #if os(iOS)
         .rowSwipeList(rowSwipe)
+        #endif
         .refreshable {
-            await app.agents?.loadSessions(agentID: address.agentID, view: address.view)
+            if address.isScheduledRuns {
+                await app.agents?.loadScheduledRuns(address)
+            } else {
+                await app.agents?.loadSessions(agentID: address.agentID, view: address.view)
+            }
         }
         .overlay {
             if isSearching {
@@ -301,6 +327,8 @@ struct SessionFolderPage: View {
                     ContentUnavailableView("No matches", systemImage: "magnifyingglass",
                                            description: Text("Nothing matches \u{201C}\(hitsQuery)\u{201D}."))
                 }
+            } else if sessions.isEmpty && address.isScheduledRuns {
+                ContentUnavailableView(ScheduledRunsCopy.empty, systemImage: "clock")
             } else if sessions.isEmpty && !(app.agents?.sessionsLoading ?? false) {
                 ContentUnavailableView("Nothing in this folder", systemImage: "folder")
             }
@@ -325,7 +353,24 @@ struct SessionFolderPage: View {
         .accessibilityAddTraits(.isHeader)
     }
 
-    private var titleText: String { folder?.name ?? "Folder" }
+    private var titleText: String { address.isScheduledRuns ? ScheduledRunsCopy.title : folder?.name ?? "Folder" }
+
+    /// The way back to the workspace's list and the page's actions, where each platform's bar puts
+    /// them (as the project's sessions page places its own).
+    private var backPlacement: ToolbarItemPlacement {
+        #if os(iOS)
+        .topBarLeading
+        #else
+        .navigation
+        #endif
+    }
+    private var actionPlacement: ToolbarItemPlacement {
+        #if os(iOS)
+        .topBarTrailing
+        #else
+        .primaryAction
+        #endif
+    }
 
     /// ⋯ — Rename… and Delete Folder…, the same two the row's long-press menu offers (§3.4).
     private var folderMenu: some View {
@@ -347,6 +392,40 @@ struct SessionFolderPage: View {
         .accessibilityLabel("Folder actions")
     }
 
+    /// One recency section of the page's list. The section is the row the List's ForEach draws;
+    /// which header it takes and whether its rows show is decided here, off the one grouping.
+    @ViewBuilder
+    private func folderSection(index: Int, section: SessionTimeSection,
+                               projects: [String: SessionProjectRow],
+                               marks: [String: SessionProjectMark]) -> some View {
+        if index == 0, section.title == "Today" {
+            // The leading "Today" keeps no title, exactly as the workspace list draws it
+            // (the first row drops its top separator with the title).
+            ForEach(section.sessions) { session in
+                if session.id == section.sessions.first?.id {
+                    listRow(session, projects: projects, marks: marks)
+                        .listRowSeparator(.hidden, edges: .top)
+                } else {
+                    listRow(session, projects: projects, marks: marks)
+                }
+            }
+        } else if section.title == "Pinned" {
+            TitledListSection {
+                if !pinnedCollapsed {
+                    ForEach(section.sessions) { listRow($0, projects: projects, marks: marks) }
+                }
+            } title: {
+                pinnedSectionHeader(section.title)
+            }
+        } else {
+            TitledListSection {
+                ForEach(section.sessions) { listRow($0, projects: projects, marks: marks) }
+            } title: {
+                Text(section.title).textCase(nil)
+            }
+        }
+    }
+
     /// One row, wrapped for the container it is in — the workspace list's own arrangement, repeated
     /// here so a folder's page and the list outside behave identically (see `AgentPanes.sessionRow`).
     @ViewBuilder private func listRow(_ s: Session, projects: [String: SessionProjectRow],
@@ -360,8 +439,7 @@ struct SessionFolderPage: View {
 
     /// `mark`: as on the workspace list's rows (`AgentPanes.sessionRow`).
     @ViewBuilder private func sessionRow(_ s: Session, mark: SessionProjectMark?) -> some View {
-        let row = AgentSessionRow(session: s, deleted: address.view == .trash, showsPin: address.view == .open,
-                                  projectMark: mark)
+        let row = AgentSessionRow(session: s, deleted: address.view == .trash, projectMark: mark)
         let onSessions: (() -> Void)? = mark.map { mark in
             { app.openProjectSessions(SessionProjectAddress(projectID: mark.projectId, agentID: address.agentID,
                                                             view: address.view)) }
@@ -393,8 +471,19 @@ struct SessionFolderPage: View {
             case .project: app.openProjectSessions(projectAddress)
             }
         }
-        return SessionProjectRowView(row: row, onOpen: { app.openProjectSessions(projectAddress) })
-        .sessionProjectRowActions(row, onOpen: onOpen, onSessions: { app.openProjectSessions(projectAddress) }, onProject: {
+        // A phone opens the coordinator's conversation, not the project's sessions page, which is
+        // the button in that conversation's navigation bar (owner 2026-11-11, board 5). The iPad's
+        // column keeps the page. A row whose line says a member is waiting on you opens that member
+        // instead, at its card, on both (owner 2026-11-14).
+        let onTap = {
+            switch SessionProjectSheet.rowTap(row, held: app.sessions + (app.agents?.allSessions ?? []), push: rowNavigation == .push) {
+            case .waitingMember(let member): app.openWaitingMember(member, project: projectAddress, push: rowNavigation == .push)
+            case .coordinator(let coordinator): app.openProjectMember(coordinator, push: true)
+            case .sessions: app.openProjectSessions(projectAddress)
+            }
+        }
+        return SessionProjectRowView(row: row, onOpen: onTap)
+        .sessionProjectRowActions(row, view: address.view, onOpen: onOpen, onSessions: { app.openProjectSessions(projectAddress) }, onProject: {
             app.openProject(row.projectId)
         }, onMove: { if let coordinator = row.coordinator { movingSession = coordinator } })
     }
@@ -422,14 +511,14 @@ struct SessionFolderPage: View {
     /// Search hits, standing in for the sections while the field has text — the workspace list's
     /// own rows and words, since the field is the app's search wherever it is typed.
     @ViewBuilder private var searchResults: some View {
-        Section {
+        TitledListSection {
             ForEach(hits) { hit in
                 Button { app.route(to: .session(hit.id)) } label: {
                     SessionSearchRow(hit: hit, query: hitsQuery)
                 }
                 .buttonStyle(.plain)
             }
-        } header: {
+        } title: {
             Text(contentSearched
                  ? "All sessions"
                  : "Matching names only — type more to search message text.")
@@ -551,4 +640,3 @@ extension View {
         modifier(SessionFolderManagement(renaming: renaming, deleting: deleting))
     }
 }
-#endif

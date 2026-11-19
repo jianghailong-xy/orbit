@@ -47,7 +47,7 @@ const TRASH_DOORS = new Set(['POST /wiki/spaces/:id/restore', 'DELETE /wiki/spac
 /** The ids of a tenant that name the wiki or something in it. */
 const WIKI_IDS = [
   'wikiSpaceId', 'wikiEntryId', 'wikiChangesetId', 'wikiChangesetOpId', 'wikiPlanProposalId', 'wikiDocVersionId', 'wikiChatId',
-  'wikiChatDraftId',
+  'wikiChatDraftId', 'wikiPlanCardId',
 ] as const satisfies ReadonlyArray<keyof Tenant>;
 
 /** `value` with every string that is a key of `swap` swapped for its value, however deep. */

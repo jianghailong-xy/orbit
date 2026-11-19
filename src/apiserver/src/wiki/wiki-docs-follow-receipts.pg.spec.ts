@@ -1,3 +1,4 @@
+import { seedPromotionRequest } from '../test-support/promotion-request';
 /**
  * The facts that reach main, through the doors that record them (contracts/wiki.contract.json
  * `docs.follow.triggers`; docs/wiki-contract.md §29.1; task C4), on real PostgreSQL: every receipt here is written the
@@ -281,6 +282,10 @@ async function onlyClaim(stack: Stack, w: World, kind: string): Promise<Integrat
 
 /** The result a runner posts for a job it holds, over the route it posts it on: the integration result door. */
 async function report(stack: Stack, w: World, job: IntegrationJobCommand, result: Result): Promise<void> {
+  if (job.kind === 'LAND_TASK') {
+    const row = await stack.db.projectIntegrationJob.findUniqueOrThrow({ where: { id: job.jobId } });
+    await seedPromotionRequest(stack.db, row.projectId);
+  }
   const answer = await stack.api.integrationJobResult({ id: w.runnerId }, job.jobId, {
     claimGeneration: job.claimGeneration, leaseOwner: job.leaseOwner, ...result,
   });

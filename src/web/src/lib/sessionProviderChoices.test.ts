@@ -2,9 +2,11 @@ import { describe, expect, it } from 'vitest';
 import { AgentProvider } from '@orbit/shared';
 import {
   brandForProvider,
+  CODEX_POOL_ON_CLAUDE_NOTICE,
   currentEngineChoice,
   currentProviderChoice,
   defaultModelLabel,
+  draftFallback,
   engineChoices,
   engineProviders,
   engineTitleFor,
@@ -201,7 +203,7 @@ describe('DeepSeek Harness, on the DeepSeek keys', () => {
   it('offers to connect a DeepSeek key when there is none, at the DeepSeek connect page', () => {
     const dsh = engineOf(engineChoices(sources({ configured: [moonshot], dshRunner: dshReady })), DSH)!;
     expect(dsh).toMatchObject({ slug: 'dsh', label: 'DeepSeek Harness', provider: null, unavailable: 'Connect a DeepSeek key' });
-    expect(dsh.fixHref).toBe('/providers/new/deepseek');
+    expect(dsh.fixHref).toBe('/settings/providers/new/deepseek');
     expect(dsh.providers).toEqual([]);
   });
 
@@ -411,8 +413,7 @@ describe('the runner’s Codex accounts, on Codex’s own sign-in', () => {
     ).toEqual([
       { id: 'default', label: 'Default', quota: '5h 100%', nearLimit: true },
       { id: '3fa91c2e', label: 'Work', quota: 'Weekly 0%' },
-      // Unnamed, unread, and signed out: it is listed, and says why it can't take a session.
-      { id: 'c0ffee42', label: 'Account c0ffee42', unavailable: 'Not signed in' },
+      // Signed out on this runner, c0ffee42 is not one it can run: no row.
     ]);
     expect(accountsOf(codex([{ id: 'default', auth: 'yes' }, { id: '3fa91c2e', auth: 'yes' }]), CLAUDE)).toBeUndefined();
   });
@@ -519,7 +520,6 @@ describe('the runner’s Antigravity (Google) accounts, on Antigravity’s own s
     expect(row?.accounts).toEqual([
       { id: 'default', label: 'Default', quota: '3p-weekly 98% left' },
       { id: '5c2e91a0', label: 'Work', quota: 'gemini-5h 4% left', nearLimit: true },
-      { id: 'c0ffee42', label: 'Account c0ffee42', unavailable: 'Not signed in' },
     ]);
     // The Provider menu may still say how the engine signs in.
     expect(row?.labelDetail).toBe('Google account');
@@ -579,7 +579,6 @@ describe('the runner’s Kimi Code accounts, on Kimi Code’s own sign-in', () =
       // is never one of them.
       { id: 'default', label: 'Default', quota: 'Monthly 41%' },
       { id: '5c2e91a0', label: 'Work', quota: '5h 97%', nearLimit: true },
-      { id: 'c0ffee42', label: 'Account c0ffee42', unavailable: 'Not signed in' },
     ]);
   });
 
@@ -799,6 +798,34 @@ describe('shared pools among the credentials', () => {
   });
 });
 
+describe('a Codex pool of one’s own under Claude Code (ORBIT_CLAUDE_CODEX_LOGIN_GATEWAY)', () => {
+  const mine = { id: 'mine', slug: 'my-chatgpt', label: 'My ChatGPT', engine: 'codex', members: [{ slug: 'my-chatgpt' }] };
+  const configured: ConfiguredProvider[] = [
+    deepseek,
+    { slug: mine.slug, label: mine.label, runtime: 'codex', models: [], presetSlug: 'openai', modelsFromRuntime: true },
+  ];
+
+  it('is not offered under Claude Code while the server lists no engines for it', () => {
+    expect(slugs(engineProviders(CLAUDE, sources({ configured, pools: [mine] })))).not.toContain('my-chatgpt');
+    expect(slugs(engineProviders(CODEX, sources({ configured, pools: [mine] })))).toContain('my-chatgpt');
+  });
+
+  it('is offered under Claude Code with the notice once the server lists claude, and under Codex without it', () => {
+    const pool = { ...mine, engines: ['codex', 'claude'] };
+    const underClaude = engineProviders(CLAUDE, sources({ configured, pools: [pool] })).find((row) => row.slug === 'my-chatgpt');
+    expect(underClaude).toMatchObject({ kind: 'pool', notice: CODEX_POOL_ON_CLAUDE_NOTICE, glyphKey: 'openai' });
+    const underCodex = engineProviders(CODEX, sources({ configured, pools: [pool] })).find((row) => row.slug === 'my-chatgpt');
+    expect(underCodex).toMatchObject({ kind: 'pool' });
+    expect(underCodex?.notice).toBeUndefined();
+  });
+
+  it('never offers a shared pool under Claude Code, whatever it lists', () => {
+    const team = { ...mine, slug: 'team-codex', engines: ['codex', 'claude'], shared: {} as never };
+    expect(slugs(engineProviders(CLAUDE, sources({ configured, pools: [team] })))).not.toContain('team-codex');
+    expect(slugs(engineProviders(CODEX, sources({ configured, pools: [team] })))).toContain('team-codex');
+  });
+});
+
 describe('a Codex pool somebody was added to, in their picker', () => {
   // jianghailong's Codex Pool (docs/mocks/account-pool-access/02), as Zhang Min, whom he added, reads it —
   // and as WorkspaceView hands it in: its ChatGPT accounts and its keys as members
@@ -905,7 +932,7 @@ describe('a Codex pool somebody was added to, in their picker', () => {
     const logins = ACCOUNTS.map((login) => account(login.email!, { state: 'SIGNED_OUT' }));
     const tile = tileOf(codexPool('zhang', keys, {}, logins));
     expect(tile.unavailable).toBe('Signed out');
-    expect(tile.fixHref).toBe(`/providers/pools/${encodeId(POOL_ID)}`);
+    expect(tile.fixHref).toBe(`/settings/providers/pools/${encodeId(POOL_ID)}`);
     expect(tile.fixEngine).toBeUndefined();
   });
 
@@ -1079,5 +1106,61 @@ describe('a runner blocked for the Claude region', () => {
     expect(current.provider?.regionBlocked).toBe(true);
     expect(current.unavailable).toBe('Region not supported');
     expect(current.regionBlocked).toBe(true);
+  });
+});
+
+/**
+ * A new session's default when what the workspace last ran on can't run on this machine (board
+ * docs/mocks/new-session-usable-default): the same engine on a credential that runs, else another
+ * engine that has one, else nothing — the hero says why and the send waits.
+ */
+describe('draftFallback: a new session’s default that can run here', () => {
+  const blocked = { region: { verdict: 'blocked' as const } };
+  const anthropicKey: ConfiguredProvider = { ...claudeMax, slug: 'anthropic', label: 'Personal Max', engines: ['claude'] };
+  const claudeSignedIn = { engine: 'claude' as const, installed: true, auth: 'yes' as const };
+  const codexSignedIn = { engine: 'codex' as const, installed: true, auth: 'yes' as const };
+  const fallbackOf = (from: { engine: AgentProvider; provider: string }, over: Partial<ChoiceSources>) => {
+    const src = sources(over);
+    const engines = engineChoices(src, [from]);
+    return draftFallback(currentEngineChoice(from.engine, from.provider, engines, src), engines, src.engineHealth);
+  };
+
+  it('stays on what the workspace last ran on while it can run', () => {
+    expect(fallbackOf({ engine: CLAUDE, provider: CLAUDE }, { configured: [deepseek], engineHealth: [claudeSignedIn] })).toBeNull();
+  });
+
+  it('moves to a credential of the same engine that runs: the region-blocked sign-in lands on DeepSeek', () => {
+    expect(
+      fallbackOf({ engine: CLAUDE, provider: CLAUDE }, { configured: [deepseek, anthropicKey], engineHealth: [claudeSignedIn, codexSignedIn], ...blocked }),
+    ).toEqual({ engine: CLAUDE, provider: 'deepseek' });
+  });
+
+  it('moves to another engine only when the remembered one has nothing that runs here', () => {
+    expect(
+      fallbackOf({ engine: CLAUDE, provider: 'anthropic' }, { configured: [anthropicKey], engineHealth: [claudeSignedIn, codexSignedIn], ...blocked }),
+    ).toEqual({ engine: CODEX, provider: CODEX });
+  });
+
+  it('moves to another engine only onto one the runner says it has installed', () => {
+    const codexMissing = { engine: 'codex' as const, installed: false, auth: 'unknown' as const };
+    expect(
+      fallbackOf({ engine: CLAUDE, provider: 'anthropic' }, { configured: [anthropicKey], engineHealth: [claudeSignedIn, codexMissing], ...blocked }),
+    ).toBeNull();
+  });
+
+  it('has nowhere to go when nothing on the machine runs', () => {
+    expect(fallbackOf({ engine: CLAUDE, provider: CLAUDE }, { configured: [anthropicKey], engineHealth: [claudeSignedIn], ...blocked })).toBeNull();
+  });
+
+  it('moves for a reason other than the region too: a signed-out sign-in lands on a key', () => {
+    const signedOut = { engine: 'claude' as const, installed: true, auth: 'no' as const };
+    expect(fallbackOf({ engine: CLAUDE, provider: CLAUDE }, { configured: [deepseek], engineHealth: [signedOut] })).toEqual({
+      engine: CLAUDE,
+      provider: 'deepseek',
+    });
+  });
+
+  it('does not move on what nobody has checked: a runner that reported nothing', () => {
+    expect(fallbackOf({ engine: CLAUDE, provider: CLAUDE }, { configured: [deepseek] })).toBeNull();
   });
 });

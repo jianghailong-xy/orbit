@@ -746,8 +746,14 @@ suite('(q) the core tables keep every trigger that predates this project', async
   // added `session_cursor_runner_acquisition_guard`, which does for Cursor CLI what 0377's does for
   // DeepSeek Harness and writes no other relation either; 21 since 0476 added
   // `session_wiki_chat_space_guard`, which refuses an UPDATE that would change which wiki space a
-  // session is a chat of, and writes nothing.
-  assert.deepEqual(counts, { run_event: 1, session: 21, task: 32 });
+  // session is a chat of, and writes nothing. 24 and 35 since 0484 gave both tables the Open
+  // list's three version counters (`<table>_open_list_epoch_insert`/`_update`/`_delete`), which
+  // write only `open_list_epoch`. `task` 36 since 0615 added `task_fork_guard`, which refuses a
+  // rewrite of a forked task's start and writes nothing. `session` 25 since 0850 added
+  // `session_help_ask_guard`, which refuses an UPDATE that would make a session an Ask or not, and
+  // writes nothing. `task` 37 since 1060 added `condition_ended_with_task`, which ends a task's
+  // condition when the task is cancelled, done or failed, and writes only `condition`.
+  assert.deepEqual(counts, { run_event: 1, session: 25, task: 37 });
 
   // And every one that went is named, so a reader can tell a removal from an accident.
   for (const trigger of [

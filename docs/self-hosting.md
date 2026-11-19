@@ -153,6 +153,23 @@ The included gateway serves HTTP. Before exposing Orbit beyond a trusted local h
 Orbit can execute code with the runner account's privileges. Do not expose an instance to untrusted users or
 attach a runner with broader credentials than its users should be able to exercise.
 
+### Live viewers of shared sessions
+
+A public link's page and a guest's page follow the session over a live stream, which stays open while the page is.
+Each apiserver caps how many are open at once:
+
+| Cap | Limit |
+| --- | --- |
+| One visitor (address) on one public link | 4 |
+| One public link, all visitors | 200 |
+| One apiserver, every public and guest stream | 2000, or `VIEWER_STREAMS_MAX` |
+
+A stream over a cap is refused with `429`, and the page then follows the session by reloading what is new every few
+seconds instead. Set `VIEWER_STREAMS_MAX` in `.env` to a whole number of streams to change the per-apiserver total,
+then recreate the apiserver. Any other value stops the apiserver at start. Behind a proxy, list it in
+`TRUSTED_PROXIES` too: otherwise every visitor has the proxy's address, and four streams fill the first cap for a
+link ([configuration](configuration.md)).
+
 ## 4. Register a runner
 
 With managed runners on, every account is given a runner at sign-in, and this step is optional: register a machine
@@ -185,6 +202,23 @@ register`. Registration says the machine is online only once its service has rea
 does not happen within two minutes, `orbit register` says why, shows the end of the service's log and the
 commands to look further, and exits non-zero.
 
+The service runs the account's own copy at `~/.orbit/bin/orbit`, which the runner replaces when it updates itself.
+`/usr/local/bin/orbit`, which `sudo orbit` finds, stays root's own file. When the binary registering sits in
+`/usr/local/bin`, as an older install's does, register copies it into `~/.orbit/bin` and leaves
+`/usr/local/bin/orbit` as it is, so that `orbit` falls behind the runner's updates until root runs
+`sudo /usr/local/bin/orbit upgrade`. `orbit version` and `~/.orbit/bin/orbit version` show the two. Earlier
+releases of register and upgrade replaced `/usr/local/bin/orbit` with a link to the account's copy, which made
+every `sudo orbit …` run a file the account can change as root. The next register or `sudo orbit upgrade` puts a
+root-owned copy back in place of the link and says so:
+
+```text
+✓ /usr/local/bin/orbit is root's own copy again, not a link to a file this account can change; `sudo /usr/local/bin/orbit upgrade` keeps it current.
+```
+
+That command still runs the linked file as root once, before it can replace the link. Where an account may already
+have changed its copy, put a verified release at `/usr/local/bin/orbit` first
+([details](runner-machine-binary-design.md#what-the-repair-cannot-undo)).
+
 Scripts can also act as a person rather than a machine. A user logs the `orbit` CLI in with a personal
 access token, on a runner or on any other machine. `orbit login` opens the deployment's `/cli-login` page to
 approve one, and `--with-token` takes one issued under **Settings → Access tokens**:
@@ -202,6 +236,31 @@ runner service's: that service's agent sessions can read the account's saved log
 
 On a Linux machine where several accounts each run a runner of their own, set the machine up once and have each
 account register itself: [Multi-user Linux machines](#multi-user-linux-machines).
+
+### Session checkouts on the runner's disk
+
+Each session works in a checkout of its own, under `<ORBIT_HOME>/worktrees` (`~/.orbit/worktrees` by default).
+Three things keep them from filling the runner's disk:
+
+- **Keep Free.** Set on the runner's page (Capacity), it is the free space below which the runner reclaims
+  checkouts: finished sessions' first, then those of resting sessions left unwritten for two weeks, when nothing
+  in them would be lost. With none set, a registered runner reclaims only finished sessions' checkouts beyond the
+  32 most recent. Set it at least as high as whatever else guards that disk. A managed runner has a default floor,
+  and takes resting sessions' checkouts sooner ([Their storage](#their-storage)).
+- **Cloned checkouts.** Where the filesystem can clone files, on APFS, XFS made with `reflink=1`, btrfs, or
+  OpenZFS 2.2 or later with block cloning enabled, a session's checkout is cloned from the workspace's own
+  checkout and costs next to nothing on disk until its files change. The workspace's checkout has to be on the
+  same filesystem as `ORBIT_HOME` (on btrfs, in the same subvolume). On ext4, exFAT and any other filesystem that
+  cannot clone, the runner falls back to a plain checkout, which git writes out in full, as before. It needs no
+  setting and no privilege either way.
+- **Paths a repository leaves out.** A repository that commits `.orbit/checkout-exclude`, one pattern a line in
+  gitignore syntax, gets session checkouts without those paths, on runners with git 2.34 or later. The runner
+  reads the file from the commit a session forks from, and an agent brings a left-out path in with
+  `git sparse-checkout add <path>`.
+
+What the runner logs about each checkout, and why one went:
+[runner troubleshooting](runner-troubleshooting.md#d-the-disk-is-short-or-a-sessions-checkout-has-gone),
+sections D to F.
 
 ## 5. Back up and monitor
 
@@ -413,6 +472,68 @@ of the request:
 - `refused Google's ID token: its … claim did not pass`: the ID token Google returned does not fit this
   sign-in. The claim it names says how: `aud` names another client, and `exp` an expired token, which points
   at the apiserver's clock.
+
+## Configure outgoing email
+
+Orbit can send one email: a welcome email to each new account, through [Resend](https://resend.com). It is
+off until an administrator sets it up. Like Google sign-in, the settings live in the database, not in `.env`,
+and apply from the next request without a restart. The deployment itself must provide:
+
+- `PUBLIC_ORIGIN`, the address people open Orbit at: the email's **Open Orbit** button and its links point there.
+- `PROVIDER_SECRET_KEY`, which encrypts the saved Resend API key.
+- Outbound HTTPS from the apiserver to `api.resend.com`.
+
+### Set up Resend
+
+1. Create an account at [resend.com](https://resend.com).
+2. In Resend, open **Domains → Add Domain** and add the domain you will send from, for example `example.com`.
+   Add the DNS records Resend lists (SPF, DKIM and, if offered, the return-path record) at your DNS provider,
+   then press **Verify DNS Records**. Wait until the domain reads **Verified**; until then Resend refuses every
+   send from it with `403 The example.com domain is not verified`.
+3. In Resend, open **API Keys → Create API Key**. **Sending access** is enough; you can limit it to the domain
+   from step 2. Copy the key (it starts with `re_`). Resend shows it only once.
+4. In Orbit, sign in as an administrator and open **Admin → Email** (Admin is in the account menu). Paste the key
+   under **Resend API key**, fill in **From** with an address on the verified domain, such as
+   `Orbit <orbit@example.com>`, and switch on **Send email from this deployment**. **Reply-To** is optional:
+   left empty, replies go to the first administrator's address. **Send a welcome email to new accounts** is on
+   by default. Press **Save**. The badge beside **Outgoing email** turns to **On**.
+5. Press **Send test email**. Orbit sends a short email to your own address and shows what Resend answered:
+   the email's id, or the HTTP status and Resend's message.
+
+### What gets sent
+
+- Every account created after the setting is on gets one welcome email: a Google sign-up, and an account an
+  administrator creates in **Admin → Users**. It says which address and deployment the account is on, how to
+  sign in (with Google, or with the password the administrator gave them), and how to get started. It never
+  contains a password, a token or a sign-in link. The first administrator created at `/setup` gets none.
+- Accounts that existed before email was set up get none, and neither do accounts created while it was off or
+  while the welcome toggle was off. An administrator can send one by hand: **Send welcome email** in the
+  account's ⋯ menu in **Admin → Users**.
+- A failed send is tried again after 1 minute, 10 minutes and 1 hour. After the fourth failure it is marked
+  failed, and **Admin → Users** shows **Welcome email failed** under the account's status (hover for Resend's
+  error), with **Send welcome email** in its menu. A `422` from Resend (an address it will not send to) is
+  marked failed at once. **Admin → Email** shows how many were sent and failed in the last 7 days.
+- Each send carries an `Idempotency-Key`, so Resend does not deliver an email twice when the apiserver
+  restarts in the middle of a send. Several apiservers never send the same email twice.
+
+The API key is encrypted with `PROVIDER_SECRET_KEY` and never shown again. Leave the field empty to keep the
+saved key, or paste a new one to replace it. After `PROVIDER_SECRET_KEY` changes, the saved key can no longer be
+read: **Admin → Email** asks for it again, and sending pauses (nothing is lost or counted as failed) until it is
+pasted again.
+
+### Email troubleshooting
+
+| Symptom | Likely cause |
+| --- | --- |
+| Send test email: `Resend answered 403 — The example.com domain is not verified` | The From domain is not verified in Resend yet (step 2), or From uses another domain. |
+| Send test email: `Resend answered 401 — API key is invalid` | The key was deleted or mistyped. Create a new one and paste it. |
+| Send test email: `Resend answered 403 — You can only send testing emails to your own email address` | No domain is verified, and the account still sends from Resend's test domain. Verify a domain and use it in From. |
+| The badge reads **Off** | The switch is off, or the API key or From is missing. The card says which. |
+| Users show **Welcome email failed** | Hover the line for Resend's error. Fix the cause, then use **Send welcome email** in the account's menu. |
+
+The apiserver logs a `401` or `403` from Resend under `EmailOutbox`
+(`docker compose logs apiserver | grep EmailOutbox`). The line names the account's id and Resend's message,
+never the key.
 
 ## Wiki System model
 
@@ -804,8 +925,8 @@ order.
   3. After an hour, when every old token has expired, drop the old public key.
 - **Monitoring.** `/metrics` on the metrics port (`docker compose port link-gateway 9464` finds it on a `same-origin`
   link, which takes a free port) counts connections, handshakes by result and their duration,
-  disconnects by reason, ping round trips, token refusals by reason, revocation reads, the shadow comparison, and
-  hints by kind and by what became of them. It also counts forwarded calls by result and
+  disconnects by reason, ping round trips, token refusals by reason, revocation reads, and hints by kind and by what
+  became of them. It also counts forwarded calls by result and
   their latency, retries across apiserver instances, events stored and their acknowledgement latency, the ingest queue
   and the credit it grants, the live stream by what became of it, and frames dropped or connections closed for slow
   reading.
@@ -912,7 +1033,10 @@ apiservers (below):
   release.
 
 It sends everything else a person does to the first apiserver. A Codex "Sign in with ChatGPT" runs its sign-in in the
-process that started it, so all of one person's other requests must reach that same process.
+process that started it, so all of one person's other requests must reach that same process. While the first apiserver
+is stopping or stopped, as an upgrade recreates it, those requests go to the others
+(`gateway/several-apiservers/first/`), and back to the first once it answers again. A sign-in that was under way when it
+stopped has to be started again.
 
 **Runners on the link.** Several apiservers need every runner to work over the [runner link](#runner-link), as every
 runner of this release does.
@@ -986,19 +1110,54 @@ a 502, and the link gateway sends the call again or tells the runner to.
 - If you set `keepalive_timeout` in the web gateway's upstreams, or put another proxy or load balancer in front of the
   apiservers, keep its idle timeout under 120 seconds.
 
+One hop out the rule holds the same way. The web gateway keeps a client's idle connection for 120 seconds
+(`keepalive_timeout` in `gateway/nginx.conf`), and runners close theirs after 90 seconds, Go's default. A test in the
+runner (`src/runner-go/idle_connections_test.go`) fails if a runner's client would keep one as long as the gateway does.
+
+**How an apiserver stops.** On `docker stop`, so also when an upgrade or `docker compose up` recreates it, an apiserver
+stops by itself and loses nothing that is in flight (`src/apiserver/src/common/graceful-stop.ts`):
+
+1. It stops accepting connections, on port 3000 and on `RUNNER_LINK_INTERNAL_PORT`. It first takes in the connections
+   and requests that had already reached it, so that none of them is reset. The web gateway and the link gateway find
+   the connection refused at once, and send the request to another apiserver. They do this for a POST too,
+   since none of it was sent.
+2. Its session streams and control-plane streams end. The clients open them again on another apiserver: each session
+   stream picks up after the last stored event it had. The long polls end too, with the answer they give when their
+   wait runs out: a runner's approval long poll says the card is still pending, and its reader asks again at once,
+   of another apiserver; a merge called with `waitSeconds` says it has no outcome yet, and the merge goes on.
+3. It finishes the requests in flight, for up to 23 seconds. Each answer tells the caller to close the connection, and
+   the apiserver closes it once the answer is sent. It closes idle connections at once.
+4. It then stops its background work and closes NATS, its coordination connection and the database. The leader's lock
+   goes with that connection, so another apiserver takes over the reaper and the sweeps at its next poll.
+5. It exits, but no sooner than 4 seconds after the stop began. Until then its address refuses connections, so a
+   session stream that opens again a moment later is sent to another apiserver at once. An address that no longer
+   answers at all would make the web gateway wait out its 2-second connect timeout first.
+
+It exits 0 within 25 seconds of getting the signal, inside the grace period of 30 seconds that `docker-compose.yml`
+gives the apiserver (`stop_grace_period`; a second apiserver defined with `extends` takes it too). The 5 seconds left
+over are for a signal that reaches the process late, as it does on a loaded host. A request still unanswered after the
+23 seconds is cut, and its caller asks again. Of the requests that wait on purpose, only the Cursor key check can take
+that long: it waits up to 25 seconds for a runner's answer. One that began more than about 2 seconds before the stop is
+answered; for a later one, the person checking the key is told it could not be checked. If the migration that runs
+before the apiserver starts is still running when the stop comes, Docker waits out the grace period and kills the
+container.
+
 **How the session streams are spread:**
 
 - **By session.** The web gateway hashes the session's id in the stream's address, so all of one session's streams,
   from every tab and device, reach one apiserver while the set of apiservers stays the same. That apiserver alone
   subscribes to the session's live stream on NATS and relays its deltas. The apps address a session by its public id;
   a stream addressed by its UUID can reach another apiserver, which costs that apiserver a subscription of its own.
+  A guest's stream of a session (`/api/guest-sessions/<id>/stream`) is hashed the same way, so it reaches the apiserver
+  its owner's streams of that session reach. A public link's streams (`/api/shared/<token>/stream` and
+  `/api/shared/<token>/sessions/<id>/stream`) are hashed by the link's token.
 - **When the set changes.** When an apiserver is added or stops, some sessions move to another apiserver, each when its
   stream next connects. A stream already open stays where it is.
-- **When an apiserver stops.** Its streams end, and the clients open them again on the others: the web gateway gives up
-  on the stopped one after 2 seconds, then leaves it out. Each stream picks up from the last stored event it had, and
-  the deltas go on.
+- **When an apiserver stops.** Its streams end, and the clients open them again on the others. A stopping apiserver
+  refuses connections, so the web gateway moves on at once. It gives up on one that went away without stopping after
+  2 seconds, then leaves it out. Each stream picks up from the last stored event it had, and the deltas go on.
 - **When the web gateway starts.** It looks the name up as it starts, which Compose does once the first apiserver is
-  healthy. Had no apiserver been running then, the two routes would answer 502 until its next look-up, 10 seconds
+  healthy. Had no apiserver been running then, these routes would answer 502 until its next look-up, 10 seconds
   later.
 - **Who watches.** Each apiserver tells the link gateway how many streams it has of each session, and the gateway adds
   the counts up. The count of an apiserver that stopped lapses after 60 seconds.
@@ -1124,6 +1283,11 @@ its checkouts, sessions and engine sign-ins. After an hour with nothing to do it
 the volume stays. A new message, a task that can run or a scheduled wakeup starts it again, on the same volume.
 Runners that people register themselves keep working beside it.
 
+> The production deployment on 10.66.0.3 runs managed runners on **Kubernetes**, not the Docker backend described
+> below. See the [Kubernetes runbook](managed-runner-kubernetes-operations.md) and
+> [the .3 deployment record](managed-runner-k3s-xfs-deployment.md). The rest of this section describes the default
+> Docker backend.
+
 ### What the install sets up
 
 `scripts/install-server.sh` prepares managed runners, then writes three lines into `.env`:
@@ -1136,6 +1300,11 @@ COMPOSE_PROFILES=managed-runners-docker,managed-runner-firewall
 
 - **The switch.** `ORBIT_MANAGED_RUNNERS_ENABLED=true` turns managed runners on in the apiserver. Absent, empty or
   `false` is off, and so is any other value, with a warning in the apiserver's log.
+- **The browser switch.** `ORBIT_MANAGED_RUNNER_BROWSER_ENABLED`, off by default and written by neither the install
+  nor an upgrade, offers managed runners a browser the owner can watch and take over. It is on only when it says
+  `true` and managed runners are on; absent, empty or `false` is off, and any other value is off with a warning in
+  the apiserver's log. Self-registered runners are never offered it. Apply a change with
+  `docker compose up -d apiserver`.
 - **The Docker backend.** The `managed-runners-docker` Compose profile starts `docker-channel`, the
   [restricted Docker channel](../deploy/managed-runner/docker-channel/README.md): the only process given the Docker
   socket. It makes each runner's container and volume from its own template and touches nothing it did not make.
@@ -1151,9 +1320,9 @@ COMPOSE_PROFILES=managed-runners-docker,managed-runner-firewall
   ([where each setting lives](managed-runner-docker-operations.md#where-each-setting-lives)).
 - **The image.** The script builds the managed runner image from
   [deploy/managed-runner/image](../deploy/managed-runner/image/Dockerfile) on this host, as
-  `orbit-managed-runner:local`, and pushes it nowhere. Both files name it by its local image ID. To use an image
+  `orbit-cloud-runner:local`, and pushes it nowhere. Both files name it by its local image ID. To use an image
   built elsewhere from a commit you reviewed, load it with `docker load` and pass `--managed-runner-image <image>`.
-- **Their network.** `orbit-managed-runners`, an IPv4-only bridge network on which containers cannot reach one
+- **Their network.** `orbit-cloud-runners`, an IPv4-only bridge network on which containers cannot reach one
   another. A runner reaches the internet (its model's endpoint, Git hosts) and reaches this deployment the way a
   runner on another machine does: through the gateway's published port 2086, at the host's address on that network.
   It reaches neither another runner nor the stack's own containers.
@@ -1163,7 +1332,7 @@ COMPOSE_PROFILES=managed-runners-docker,managed-runner-firewall
   writing anything the install checks that this host can carry the rules; then it applies them once and checks from
   the network that this host and a private address are refused and that DNS still resolves, and once the stack is up
   that the gateway's port is reached. Where any of that fails it stops and says why.
-- **Their server address.** `profile.json` gives each runner `http://<gateway of orbit-managed-runners>:2086`. A
+- **Their server address.** `profile.json` gives each runner `http://<gateway of orbit-cloud-runners>:2086`. A
   runner sends its credential with every request, and a managed runner accepts plain HTTP to any private address,
   so keep `runner.serverUrl` on this host's own address on that network, or make it `https://`. Never point it at
   another machine over plain HTTP, a LAN address included.
@@ -1220,6 +1389,34 @@ Installing with `--no-managed-runner-firewall`, or turning the firewall off late
 host's services and the private networks behind it again: anyone who can sign in can probe and reach them from code
 in their runner. Choose it only where those are firewalled otherwise, or where every account is trusted with them.
 
+### Their storage
+
+A managed runner keeps its sessions' checkouts on its data volume, 20 GiB by default (`storage.capacity` in
+`profile.json`). The channel stops a runner whose volume holds more than its limit (`VOLUME_OVER_LIMIT`), and the
+runner reclaims checkouts before that:
+
+- **Against the volume, not the host's disk.** The apiserver relays the channel's latest measurement of the volume
+  to the runner with each heartbeat answer, and the runner judges free space by what the volume has left under its
+  limit.
+- **The floor** is the owner's **Keep Free** when one is set, and a quarter of the volume's limit otherwise: 5 GiB
+  of 20 GiB. The default is worked out for each heartbeat answer and never stored, so the runner's page shows Keep
+  Free only as its owner set it, and auto-run, which holds ready tasks while a runner's disk is under its floor,
+  applies only that.
+- **Before a new checkout** that would leave less than the floor free, the runner makes room for it first. Below
+  the floor it reclaims resting sessions' checkouts however recently they were written, the oldest first, when
+  nothing in them would be lost; each comes back at its session's next message.
+- **A checkout is never refused,** and a session at work, or whose engine is still warm (up to four hours after
+  its turn), keeps its checkout. So the volume has to hold the workspace and its runner's Max Concurrent + 1
+  session checkouts, with what they install and build. The default profile (20 GiB, Max Concurrent 2) holds that
+  for a repository the size of Orbit's, whose checkout is about 1.75 GiB, or 0.93 GiB with the paths it leaves out.
+- **Clones count at full size.** Docker sizes a volume by adding up its files' apparent sizes, so the channel's
+  limit counts a cloned file as much as a copy. Putting Docker's data root on XFS (`reflink=1`) or btrfs saves this
+  host's disk, not an account's limit. A repository's `.orbit/checkout-exclude` lowers both.
+
+All of this needs managed runners switched on: with `ORBIT_MANAGED_RUNNERS_ENABLED` off, a runner gets neither the
+volume's measurement nor the default floor. The details and the runner's log lines are in
+[the runbook](managed-runner-docker-operations.md#session-checkouts-and-the-volumes-limit).
+
 ### Turn them off or on
 
 Managed runners are switched in `.env`, and only there. An upgrade never writes these lines.
@@ -1256,13 +1453,20 @@ existed, and writes nothing under `data/`.
 a deployment without the firewall gets none, and one with it keeps its service and rules as they were. Add it to a
 deployment with `scripts/install-server.sh --enable-managed-runner-firewall`.
 
+Where the managed runner profile names channel hosts on other machines only
+([Managed runners on another host](#managed-runners-on-another-host)), `/upgrade` builds no managed runner image and
+leaves `channel.json` and `profile.json` as they are, even if `.env` still lists the `managed-runners-docker` profile;
+after the other services it prints the image each host's channel reports. Each channel host then takes the same
+commit with its own kit (`remote-host.sh upgrade <commit>`). A profile with a socket path or a loopback URL in it has a
+channel on this host, and gets the steps below.
+
 Where `.env` turns on the `managed-runners-docker` profile, `/upgrade` also keeps the managed runners current. The
 runner in their image never updates itself, so each upgrade:
 
 1. stops before building anything unless `channel.json` and `profile.json` are in the managed runners' directory,
    as Compose binds it into `docker-channel`;
 2. rebuilds `docker-channel` with the other images, then the managed runner image from this checkout, as
-   `orbit-managed-runner:local`, on this host and pushed nowhere;
+   `orbit-cloud-runner:local`, on this host and pushed nowhere;
 3. when the image ID is new, writes it into both files (the channel's `image`, the profile's `runner.image`), each
    file replaced whole by a rename;
 4. recreates the other services, then the apiserver if that did not recreate it, and with it any
@@ -1347,13 +1551,164 @@ above do not include it, and neither switching managed runners off nor disabling
 volumes up, restore them, and handle a full disk, a memory limit, a channel or apiserver outage and a host restart as
 [Managed runners on Docker: backup, restore and failure handling](managed-runner-docker-operations.md) describes.
 
+### Managed runners on another host
+
+The runners' containers and volumes can live on other machines than the server, each one a **channel host**. The
+server's apiserver then reaches each host's Docker channel over a private link, and the runners reach the server
+the way any runner on the internet does, at its public `https://` address. The design record is
+[docs/managed-runner-remote-host-design.md](managed-runner-remote-host-design.md).
+
+```text
+server (10.66.0.1)                                   channel host (10.66.0.3)
+apiserver ── HTTP + bearer token, private link ──▶  docker-channel   listens on 10.66.0.3:7300 only, for 10.66.0.1 only
+  profile.json: docker.hosts[].channel.url            managed-runner-firewall   rules on this host
+                                                      orbit-cloud-runner image   built here, from the server's commit
+                                                      mr-<runner> containers ── https://<server> ──▶ the server
+```
+
+What a channel host needs:
+
+- A private address the server reaches it at, on a link you trust: a WireGuard or other encrypted tunnel, not a LAN
+  others share. The channel speaks plain HTTP with a bearer token, and answers only the source addresses you name.
+- Docker with the Compose plugin, rootful, on its iptables firewall backend, as for the
+  [managed runners' firewall](#isolation-and-its-limits) on a single host. No deployment with managed runners on the
+  same host: the kit's containers have the same names (`orbit-docker-channel`, `orbit-cloud-runner-firewall`).
+- A checkout of this repository, for the kit to build from, and root.
+- The server at a public `https://` address its runners can reach. The firewall refuses every private address, so a
+  runner never reaches the server over the private link, and the profile refuses a plain `http://` `runner.serverUrl`
+  once a host is remote.
+
+Every container on a channel host shares that host's kernel with whatever else it runs, as on a single host
+([Isolation and its limits](#isolation-and-its-limits)). The firewall closes the network paths, not that one.
+
+#### Install a channel host
+
+On the channel host, as root, from the checkout:
+
+```bash
+deploy/managed-runner/remote-host/remote-host.sh install --listen 10.66.0.3 --allow-peer 10.66.0.1 --commit <the server's commit>
+```
+
+`--listen` is the host's own private address the channel listens on (in 10/8, 172.16/12, 192.168/16 or 100.64/10;
+the channel refuses `0.0.0.0` and public addresses), `--allow-peer` the address the server's connections come from
+(repeat it for several apiserver hosts). `--port` (7300) and `--instance` (`orbit-<8 hex>`, the label of everything
+the channel makes) are optional; without `--commit` it builds the checkout as it is, which must have no uncommitted
+changes. It then does what a single host's install does for its managed runners, with the same code
+(`deploy/managed-runner/host.sh`):
+
+1. checks that the host can carry the firewall's rules, makes the `orbit-cloud-runners` network, and builds the
+   managed runner image as `orbit-cloud-runner:local`, pushed nowhere;
+2. writes `data/channel-host` (mode 0700): the channel's `token`, `channel.json` (listening on `--listen` for the
+   `--allow-peer` addresses alone, naming the image by its ID) after the channel's own check of it, `firewall/config.json`,
+   and `compose.env`, which names the directory for
+   [deploy/managed-runner/remote-host/compose.yml](../deploy/managed-runner/remote-host/compose.yml);
+3. applies the firewall's rules once and checks from the runners' network that this host and private addresses are
+   refused and that DNS resolves;
+4. starts `managed-runner-firewall` and `docker-channel`, the channel in the host's network namespace;
+5. prints the entry for the server's profile and where the token is:
+
+   ```text
+   { "instanceId": "orbit-1a2b3c4d", "channel": { "url": "http://10.66.0.3:7300" }, "tokenFile": "/var/lib/orbit-cloud-runners/orbit-1a2b3c4d.token" }
+   ```
+
+`remote-host.sh status` says what runs there: the instance and its listener, the image `channel.json` names and the
+commit it was built from, both services, the firewall's status, and the runner containers and data volumes.
+
+#### Point the server at it
+
+On the server, managed runners are switched on in `.env` without the `managed-runners-docker` profile, which would
+start a channel on the server itself:
+
+```dotenv
+ORBIT_MANAGED_RUNNERS_ENABLED=true
+ORBIT_MANAGED_RUNNERS_DIR=./data/managed-runners
+```
+
+Copy the channel host's `data/channel-host/token` into the server's `data/managed-runners` as `<instance>.token`
+(mode 0600, the directory 0700), and write `data/managed-runners/profile.json` with every host under `docker.hosts`:
+
+```json
+{
+  "schemaVersion": 1,
+  "valueKind": "actual",
+  "backend": "docker",
+  "environmentId": "orbit-prod",
+  "clusterKey": "orbit-prod",
+  "resourceProfileId": "docker-default",
+  "docker": {
+    "hosts": [
+      { "instanceId": "orbit-1a2b3c4d", "channel": { "url": "http://10.66.0.3:7300" }, "tokenFile": "/var/lib/orbit-cloud-runners/orbit-1a2b3c4d.token" }
+    ]
+  },
+  "storage": { "capacity": "20Gi" },
+  "runner": {
+    "image": "channel",
+    "serverUrl": "https://orbit.example.com",
+    "maxConcurrent": 2,
+    "tmpSizeLimit": "1Gi",
+    "resources": { "cpu": "2", "memory": "4Gi", "pids": 4096 }
+  },
+  "lifecycle": {
+    "maxAttempts": 5, "backoffBaseSeconds": 10, "backoffMaxSeconds": 300, "startupDeadlineSeconds": 1800,
+    "requestTimeoutSeconds": 60, "leaseSeconds": 60, "pollIntervalSeconds": 5, "heartbeatFreshSeconds": 120,
+    "idleSeconds": 3600, "capacityRetrySeconds": 60, "drainSeconds": 600
+  }
+}
+```
+
+`"image": "channel"` takes the image each channel reports in `/v1/info`, so a channel host's upgrade changes one file,
+its own `channel.json`; the apiserver still checks that the channel is the instance the profile names. A pinned
+`"sha256:…"` works too, and must then be copied from the channel host after each of its upgrades: until it matches, the
+apiserver makes no runner there. `runner.serverUrl` is the server's public `https://` origin. Then
+`docker compose up -d --force-recreate apiserver`. The apiserver says at start whether managed runners are on
+(`docker compose logs apiserver | grep 'managed runners are'`), and each host's pool is what that host has, less a
+quarter of its CPU and memory and a tenth of its volumes' disk, unless the entry's `capacity` (or else the profile's)
+states a dimension outright.
+
+#### Add a host, drain one
+
+To add a host, install it as above, add its entry to `docker.hosts`, copy its token, and recreate the apiserver. A new
+account's runner goes to the host with the most room left in its pool, skipping draining hosts, and stays there: its
+volume is on that host's disk. A host whose channel cannot be reached stops only its own runners (`CHANNEL_UNREACHABLE`);
+the others go on.
+
+To take a host out of use, add `"draining": true` to its entry and recreate the apiserver. No new runner is placed
+there; the runners already there keep running on it and waking there. Nothing moves them: moving a sleeping runner is
+a backup of its volume on the old host and a restore on the new one
+([the runbook](managed-runner-docker-operations.md#on-a-channel-host)), which is not automatic yet. Drop the entry only
+once `remote-host.sh status` on that host shows no data volume, since a runner whose host is not in the profile has
+nowhere to run.
+
+#### Upgrade
+
+In this order, with the same commit:
+
+1. **The server**, with `/upgrade` as always. On a profile whose channel hosts are all remote it builds no managed
+   runner image and writes neither `channel.json` nor `profile.json`; at the end it prints the image each host
+   reports, as the apiserver reaches it.
+2. **Each channel host**, with the commit the server now runs:
+
+   ```bash
+   deploy/managed-runner/remote-host/remote-host.sh upgrade <commit>
+   ```
+
+   It checks that commit out (fetching it from `origin` if it is not there), rebuilds the channel, the firewall and the
+   managed runner image, and, where the image ID is new, writes it into `channel.json` as `/upgrade` does on a single
+   host: the file replaced whole by a rename, `data/channel-host/.image-switch` marking a switch not yet started on.
+   It then recreates the firewall if its image changed (its rules stay in force meanwhile) and the channel, and
+   prints its status. With `"image": "channel"`, the apiserver reads the new image from `/v1/info` before it
+   makes its next container there; nothing on the server changes.
+
+Running runners are not interrupted on either side: each moves to the new image with its next container, as on a single
+host ([What an upgrade does](#what-an-upgrade-does)).
+
 ## Multi-user Linux machines
 
 A Linux machine that several people use can carry a runner for each of their accounts. Each runner is a process of
-its own account, with its own credential, heartbeat and sessions, and drains on its own when it stops. Root is needed
-once, to set the machine up. From then on, every account registers, checks and removes its own runner without sudo,
-and the machine's binary is updated for all of them. A machine that is not set up keeps the single-account flow of
-[Register a runner](#4-register-a-runner), and macOS is not affected.
+its own account, with its own credential, heartbeat and sessions, runs that account's own copy of orbit, updates that
+copy itself, and drains on its own when it stops. Root is needed once, to set the machine up. From then on, every
+account registers, checks and removes its own runner without sudo. A machine that is not set up keeps the
+single-account flow of [Register a runner](#4-register-a-runner), and macOS is not affected.
 
 [scripts/hostd-e2e.sh](../scripts/hostd-e2e.sh) runs every command in this section, with the same arguments, on a
 real systemd with no sudo installed (root runs the ones shown with `sudo` itself), and marks each one with the
@@ -1361,16 +1716,14 @@ heading it comes from.
 
 ### Set up the machine once
 
-Every account's runner runs one binary, and the host broker runs it as root, so it has to be the machine's own: a
-regular file root owns and only root can write, in directories only root can write all the way up to `/`, such as
-`/usr/local/bin/orbit`. Every account has to be able to execute it, too: the file and each of those directories need
-execute permission for others. Setup writes the binary it runs from, links resolved, into the units, and refuses any
-other before it writes or runs anything (see below).
+The machine runs a host broker, hostd, as root. It is what starts and stops each account's runner, so that no account
+needs sudo for it. The broker runs one binary, `/usr/local/bin/orbit`, and no other: a regular file root owns and only
+root can write, in directories only root can write all the way up to `/`. The accounts' runners do not run it. Each
+runs its account's own `~/.orbit/bin/orbit`.
 
-[install.sh](../src/web/public/install.sh) does not put that copy in place: on a machine that is not set up, it
-installs into `~/.orbit/bin/orbit` of whichever account runs it, root included. An account's copy there is the
-account's to replace, and root's is in a home no other account can enter. So first, as the account that ran
-install.sh, put a machine-level copy in place:
+[install.sh](../src/web/public/install.sh) does not put the broker's copy in place: it installs into
+`~/.orbit/bin/orbit` of whichever account runs it, root included, with a `~/.local/bin/orbit` launcher linked to it.
+So first, as the account that ran install.sh, put a root-owned copy at `/usr/local/bin/orbit`:
 
 ```bash
 sudo install -o 0 -g 0 -m 0755 ~/.orbit/bin/orbit /usr/local/bin/orbit
@@ -1382,21 +1735,24 @@ Then, once, set the machine up from that copy:
 sudo /usr/local/bin/orbit host setup --server https://orbit.example.com
 ```
 
-`--server` is the deployment's `PUBLIC_ORIGIN`. After these two commands, no account needs root to register, check or
-remove its runner, or to have it updated. Setup writes five files, each one whole every time it runs, so running it
-again is safe:
+`--server` is the deployment's `PUBLIC_ORIGIN`. After these two commands, no account needs root to register, check,
+remove or update its runner. Setup writes five files, each one whole every time it runs, so running it again is safe:
 
 - `/etc/systemd/system/orbit-runner@.service`: the template every account's runner is an instance of,
-  `orbit-runner@<uid>.service`. An instance is named by its account's uid and runs as that account (`User=%i`), so no
-  user name ever has to become a unit name. `Restart=always` brings a runner back when it exits, and `KillMode=mixed`
-  with `TimeoutStopSec=180` lets it drain when it stops.
+  `orbit-runner@<user name>.service`. The instance name is the account's user name escaped by systemd's own rule,
+  the one `systemd-escape` prints, which can be undone, so no two accounts share a unit: `alice` and `test.user` stay
+  as they are, and `test-user` becomes `test\x2duser`, its runner `orbit-runner@test\x2duser.service`. The instance
+  runs as that account (`User=%I`) and starts the account's own copy
+  (`ExecStart=/bin/sh -c 'exec "$HOME/.orbit/bin/orbit" run'`, with `$HOME` from the passwd database).
+  `Restart=always` brings a runner back when it exits, and `KillMode=mixed` with `TimeoutStopSec=180` lets it drain
+  when it stops.
 - `/etc/systemd/system/orbit-hostd.socket`: the host broker's socket, `/run/orbit/host.sock`, mode 0666. Setup
   enables and starts it.
-- `/etc/systemd/system/orbit-hostd.service`: the host broker, run as root. The socket starts it when an account's
-  `orbit` connects, and it exits after 30 quiet seconds.
+- `/etc/systemd/system/orbit-hostd.service`: the host broker, `/usr/local/bin/orbit hostd`, run as root. The socket
+  starts it when an account's `orbit` connects, and it exits after 30 quiet seconds.
 - `/usr/lib/tmpfiles.d/orbit-hostd.conf`: recreates `/run/orbit` at every boot, for the socket to listen in.
 - `/etc/orbit/config.json`: the control plane the machine belongs to, `{"server":"https://orbit.example.com"}`. The
-  broker installs updates from this server and from no other.
+  broker installs updates of its own binary from this server and from no other.
 
 It then creates `/run/orbit`, reloads systemd and starts the socket:
 
@@ -1404,8 +1760,9 @@ It then creates `/run/orbit`, reloads systemd and starts the socket:
 Created symlink /etc/systemd/system/sockets.target.wants/orbit-hostd.socket → /etc/systemd/system/orbit-hostd.socket.
 
 ✓ this host is set up for Orbit runners.
-  Broker:  orbit-hostd.socket (socket-activated; /run/orbit/host.sock)
-  Runners: orbit-runner@<uid>.service, one instance per Linux user
+  Broker:  orbit-hostd.socket (socket-activated; /run/orbit/host.sock), running /usr/local/bin/orbit
+  Runners: orbit-runner@<user>.service, one instance per Linux user,
+           each running that user's own ~/.orbit/bin/orbit
   Server:  https://orbit.example.com
 
   Every user on this host can now run `orbit register` without root.
@@ -1417,26 +1774,24 @@ Run without root, it changes nothing and says what to run instead:
 orbit host: setup writes machine-wide systemd units and must run as root — re-run: sudo /usr/local/bin/orbit host setup --server https://orbit.example.com
 ```
 
-In the same way, it refuses a binary that other accounts cannot execute, since each account's runner runs it as that
-account. Root's own copy is one: install.sh puts it in `/root/.orbit`, which it makes mode 0700, inside `/root`, which
-is normally 0700 too:
+Setup refuses any binary other than `/usr/local/bin/orbit` before it writes or runs anything. Root's own copy, where
+install.sh puts it, is one:
 
 ```text
-orbit host: refusing to set this host up with /root/.orbit/bin/orbit: /root/.orbit, a directory above it, cannot be entered by others (mode 0700); /root, a directory above it, cannot be entered by others (mode 0700).
-Every account's runner would run this binary as that account, so every account has to be able to execute it: it needs execute permission for others, and so does every directory from its own up to /, or systemd cannot start their runners (status=203/EXEC).
+orbit host: refusing to set this host up with /root/.orbit/bin/orbit: the host broker runs only /usr/local/bin/orbit.
+It runs as root, so it runs one binary, the root-owned copy at /usr/local/bin/orbit that hostd's updates replace; every account's runner runs that account's own ~/.orbit/bin/orbit instead.
 Put a root-owned copy in place, then set the host up from it:
   sudo install -o 0 -g 0 -m 0755 /root/.orbit/bin/orbit /usr/local/bin/orbit
   sudo /usr/local/bin/orbit host setup --server https://orbit.example.com
 ```
 
-It also refuses a binary that an account could change: every account's runner would run what that account put there,
-and the broker would run it as root. An account's own copy is one, which the account, or any agent it runs, can
-replace, whether setup runs from it or through the link to it that earlier releases of install.sh made
-`/usr/local/bin/orbit`:
+It also refuses a binary an account could change, since the broker would run it as root. An account's own copy is
+one, which the account, or any agent it runs, can replace, whether setup runs from it or through the link to it that
+earlier releases of install.sh made `/usr/local/bin/orbit`:
 
 ```text
 orbit host: refusing to set this host up with /home/alice/.orbit/bin/orbit: it belongs to uid 1000 rather than root.
-Every account's runner would run this binary, and the host broker would run it as root, so no account may be able to change it: it has to be a regular file root owns and only root can write, in directories only root can write, from its own up to /.
+The host broker would run this binary as root, so no account may be able to change it: it has to be a regular file root owns and only root can write, in directories only root can write, from its own up to /.
 Put a root-owned copy in place, then set the host up from it:
   sudo install -o 0 -g 0 -m 0755 /home/alice/.orbit/bin/orbit /usr/local/bin/orbit
   sudo /usr/local/bin/orbit host setup --server https://orbit.example.com
@@ -1449,7 +1804,7 @@ another binary in place, so setup names every such directory (the mode it report
 
 ```text
 orbit host: refusing to set this host up with /usr/local/bin/orbit: its directory /usr/local/bin is not root's alone (owned by uid 0, mode 0775); /usr/local, a directory above it, is not root's alone (owned by uid 0, mode 0775).
-Every account's runner would run this binary, and the host broker would run it as root, so no account may be able to change it: it has to be a regular file root owns and only root can write, in directories only root can write, from its own up to /.
+The host broker would run this binary as root, so no account may be able to change it: it has to be a regular file root owns and only root can write, in directories only root can write, from its own up to /.
 Take that write access back, then set the host up again:
   sudo chmod g-w /usr/local/bin /usr/local
   sudo /usr/local/bin/orbit host setup --server https://orbit.example.com
@@ -1457,6 +1812,9 @@ Take that write access back, then set the host up again:
 
 Members of `staff` then need root to install there too. Whatever setup refuses, it names what is wrong and the
 commands that put it right.
+
+A machine set up by an earlier release, whose runners are `orbit-runner@<uid>`, is moved by running setup again:
+[Moving a machine set up by an earlier release](#moving-a-machine-set-up-by-an-earlier-release).
 
 ### Register each account's runner
 
@@ -1470,12 +1828,33 @@ orbit register --server https://orbit.example.com --name build-01-alice
 defaults to the machine's host name, the same for every account. Where one Orbit account registers runners for
 several of a machine's accounts, give each its own `--name`: registering under a name the Orbit account already has
 re-issues that runner's credential instead of adding a runner. Approval is as under
-[Register a runner](#4-register-a-runner), but run `orbit register` itself rather than the install command **Add a
-runner** generates: on a machine that is set up, that command replaces the machine's binary, which needs sudo. The
-broker enables and starts the account's instance, nothing asks for a password, and the command ends with:
+[Register a runner](#4-register-a-runner).
+
+An account can install orbit first, the way it does on a machine that is not set up: the install command **Add a
+runner** generates, run as the account itself, puts the account's own copy in `~/.orbit/bin/orbit` with the
+`~/.local/bin/orbit` launcher, asks for no sudo and never writes `/usr/local/bin/orbit`. It does not edit `~/.bashrc`
+or `~/.zshrc`: where `~/.local/bin` is not on the account's PATH, it prints the line that adds it. Registration needs
+no install of its own, though. Run from any orbit, `/usr/local/bin/orbit` included, `orbit register` first puts the
+binary it runs from at the account's `~/.orbit/bin/orbit`, as the account: `~/.orbit` made mode 0700 if it is not
+there, then a new file renamed over the old one. When it already runs from that file, through the launcher or not, it
+copies nothing.
+
+So which `orbit` a shell finds matters. Debian's `~/.profile` puts `~/.local/bin` first on PATH once it exists, so a
+login shell finds the launcher:
+
+```bash
+command -v orbit
+```
+
+Where `/usr/local/bin` comes before `~/.local/bin` on PATH, a bare `orbit` is the broker's binary instead, and
+`orbit register` copies that build over the account's own copy. Type the launcher's path, `~/.local/bin/orbit`, to
+register from the account's own copy there.
+
+The broker enables and starts the account's instance, nothing asks for a password, and the command ends with:
 
 ```text
     ✓ Approved — build-01-alice is now a runner.
+    ✓ Put this account's own copy of orbit at /home/alice/.orbit/bin/orbit, which its runner runs and updates.
     Waiting for the runner to reach https://orbit.example.com (up to 2m0s)…
     ✓ Background service started as alice (runs at boot).
       Stop or remove it later with `orbit unregister`.
@@ -1488,6 +1867,33 @@ broker enables and starts the account's instance, nothing asks for a password, a
     orbit status · orbit doctor · orbit unregister
 ```
 
+hostd-e2e also runs the receipt's `orbit status`, `orbit unregister` and `orbit doctor`; the last reports missing
+coding engines on its test machine.
+
+Before it starts the instance, the broker takes down every older runner unit of the account (see
+[Migrating from per-user units](#migrating-from-per-user-units)), each drained on stop and confirmed down by systemd,
+so the account never runs two runners. Taking one down can take up to three minutes, the unit's drain. The command
+says when it is waiting for that, and waits; it never goes around a broker that is still working:
+
+```text
+    Waiting for the machine broker to finish "enable" — it may be draining an older runner, which takes up to 3 minutes (giving up after 15m0s)…
+```
+
+When an older runner will not stop, the broker neither enables nor starts the instance, and `orbit register` stops
+there with the broker's answer and systemd's, without falling back to sudo. The older runner keeps running as it did:
+
+```text
+✗ Could not start the background service: refusing to enable orbit-runner@alice.service: alice's older runner orbit-runner-alice.service could not be stopped: systemctl stop orbit-runner-alice.service failed: exit status 4: Failed to stop orbit-runner-alice.service: Operation refused, unit orbit-runner-alice.service may be requested by dependency only (it is configured to refuse manual start/stop).
+See system logs and 'systemctl status orbit-runner-alice.service' for details.
+It is still alice's runner, so orbit-runner@alice.service was neither enabled nor started. Once it can be stopped, run `orbit register` again.
+```
+
+The runner is registered by then. Once root has let the old unit stop, the account runs its `orbit register` command
+again, with the flags it registers with (`--server`, `--name` and any others). A broker that has not answered after
+15 minutes stops the command the same way, naming `systemctl status orbit-hostd.service` to look at, since it may
+still be carrying the request out. The broker also refuses an account with no home directory, or with no
+`~/.orbit/bin/orbit` it can execute, and says what to run.
+
 The account reads its runner's state and log itself:
 
 ```bash
@@ -1495,9 +1901,9 @@ systemctl status "orbit-runner@$(systemd-escape "$(id -un)")"
 journalctl -u "orbit-runner@$(systemd-escape "$(id -un)")"
 ```
 
-`journalctl` shows an account what its own runner logged when the journal is persistent (`/var/log/journal`
-exists). systemd's own lines about the unit, and other accounts' runners, need root or the `adm` or
-`systemd-journal` group.
+`systemd-escape` gives the account's instance name, `test\x2duser` for `test-user`. `journalctl` shows an account what
+its own runner logged when the journal is persistent (`/var/log/journal` exists). systemd's own lines about the unit,
+and other accounts' runners, need root or the `adm` or `systemd-journal` group.
 
 To remove the runner:
 
@@ -1505,53 +1911,186 @@ To remove the runner:
 orbit unregister --yes
 ```
 
-Without `--yes` it asks first. The broker stops and disables the account's instance, the runner is deleted from the
-control plane and the account's runner config is removed. Every other account's runner keeps running:
+Without `--yes` it asks first, and with no terminal to ask on it prints `aborted` and changes nothing. The broker
+stops and disables the account's instance, the runner is deleted from the control plane and the account's runner
+config is removed. Its own copy of orbit stays. Every other account's runner keeps running:
 
 ```text
-✓ removed the orbit-runner@1000.service runner service
+✓ removed the orbit-runner@alice.service runner service
 ✓ deleted "build-01-alice" from the control plane
 ✓ unregistered "build-01-alice"
 ```
+
+### Moving a machine set up by an earlier release
+
+Machines set up by an earlier release run each account's runner as `orbit-runner@<uid>.service`, on the shared
+`/usr/local/bin/orbit`. To move one, root puts the new release in place of the broker's binary, as under
+[Set up the machine once](#set-up-the-machine-once), from root's own copy of the new release, where install.sh puts it:
+
+```bash
+sudo install -o 0 -g 0 -m 0755 ~/.orbit/bin/orbit /usr/local/bin/orbit
+```
+
+and runs setup again:
+
+```bash
+sudo /usr/local/bin/orbit host setup --server https://orbit.example.com
+```
+
+Setup writes the new template, then moves each `orbit-runner@<uid>` whose account has its own `~/.orbit/bin/orbit`
+that it can execute, one account at a time: the uid instance is stopped, draining as it does, and disabled, each
+confirmed by systemd, and only then is `orbit-runner@<user name>` enabled and started on the account's copy. No
+account has two runners at any point. A move that fails is put back, and named. Setup then lists every account it
+left, each with the one command that account runs:
+
+```text
+  Moved to instances named after their accounts:
+    orbit-runner@1000.service → orbit-runner@alice.service (alice)
+
+  Left on their orbit-runner@<uid> instance (1):
+    bob (orbit-runner@1001.service): /home/bob/.orbit/bin/orbit is missing or bob cannot execute it.
+      bob runs:  /usr/local/bin/orbit register
+  An instance left keeps its current process. At its next restart it runs its account's own
+  ~/.orbit/bin/orbit, so it needs that copy by then: the command above puts it in place and
+  moves the runner to orbit-runner@<user name>.
+```
+
+An account without a copy is left on its uid instance, which keeps running the process it had. That process is still
+the earlier release's, whose file root has replaced. The instance now reads the new template, though, so the next time
+it starts, after a crash, a reboot or a restart, it starts `~/.orbit/bin/orbit`, and without that file it
+keeps failing to start. So the account runs the command setup gave it, as itself, before then:
+
+```bash
+/usr/local/bin/orbit register
+```
+
+Registration puts the account's own copy in place and has the broker move its runner, taking the uid instance down
+first, as above. Without arguments it asks the browser approval of [Register a runner](#4-register-a-runner) again and
+takes the machine's host name; add `--name` and the other flags it was registered with to keep them.
+
+### Root's runner and its legacy unit
+
+Root is an ordinary account to hostd: root's register uses the same template, producing
+`orbit-runner@root.service`, running as uid 0 from `/root/.orbit/bin/orbit`. Run the registration command above
+in root's own shell, with a distinct runner name. For unattended registration with an enrollment token:
+
+```bash
+orbit register --server https://orbit.example.com --token <enrollment-token> --name <runner-name> --force
+```
+
+The root-access warning still applies.
+
+To move an existing `orbit-runner-root.service`, run as root, with the deployment's server origin:
+
+```bash
+/usr/local/bin/orbit host setup --server https://orbit.example.com
+```
+
+Setup drains and confirms the legacy unit down before starting the instance, preserving the registration and runner
+id without new approval. It puts root's `~/.orbit/bin/orbit` in place from the checked machine binary if missing.
+The legacy unit file is removed. Its drop-ins are **not carried over**: they can override `User=` or `ExecStart=`.
+Setup leaves them in place and names them, including files under both
+`/etc/systemd/system/<unit>.d/` and `/etc/systemd/system.control/<unit>.d/` (written by
+`systemctl set-property`).
+
+Review the settings, then recreate the ones you need for the instance. For example, as root, recreate a PATH
+drop-in and a CPU weight:
+
+```bash
+mkdir -p /etc/systemd/system/orbit-runner@root.service.d
+printf '%s\n' '[Service]' 'Environment=PATH=/opt/node-v26/bin:/usr/local/bin:/usr/bin:/bin' > /etc/systemd/system/orbit-runner@root.service.d/path.conf
+systemctl daemon-reload
+systemctl set-property orbit-runner@root.service CPUWeight=200
+systemctl restart orbit-runner@root.service
+```
+
+After reviewing and recreating the settings, remove the old directories by hand:
+
+```bash
+rm -r /etc/systemd/system/orbit-runner-root.service.d /etc/systemd/system.control/orbit-runner-root.service.d
+```
+
+Root's runner then updates its own `/root/.orbit/bin/orbit` and asks hostd to update `/usr/local/bin/orbit`,
+like every account's runner. Hosts that are not set up keep root on the legacy `orbit-runner-root.service`.
 
 ### Migrating from per-user units
 
 An account that registered before the machine was set up has a unit of its own that root wrote:
 `orbit-runner-<user>.service`, or `orbit-runner.service` from older releases. Nothing has to be done about it by hand:
 
-- The account's next `orbit register` has the broker stop, disable and delete that unit before it starts
-  `orbit-runner@<uid>.service`, so the account never runs two runners.
+- The account's next `orbit register` has the broker stop, disable and delete that unit, and the account's
+  `orbit-runner@<uid>` if it has one, before it starts `orbit-runner@<user name>.service`, so the account never runs
+  two runners.
 - `orbit unregister` has the broker take the same units down after the instance, so none is left behind on a
   credential the control plane has deleted.
 
-A unit is the account's by its `User=`, never by its name, so another account's unit is left alone. Until an account
-registers again, its old unit keeps running as it did, and the broker's updates, which restart only
-`orbit-runner@<uid>` instances, do not restart it.
+A unit is the account's by its `User=`, never by its name, so another account's unit is left alone. A numeric
+`User=` is that uid. Until an account registers again, its old unit keeps running as it did.
 
 ### Updates
 
-Every instance runs the machine's binary, which no account can replace, so no runner updates itself. A runner offered
-a newer release asks the broker instead, and logs it once:
+Each account's runner updates its own copy, as on a machine that is not set up: offered a newer release, it installs
+it into its `~/.orbit/bin/orbit` and re-executes into it, as its own account and without asking the broker. Then it
+asks the broker once to bring its own binary along, and logs the answer:
 
 ```text
-[orbit-runner 2026-11-01T02:48:12.402Z] orbit 0.1.250 available for /usr/local/bin, which only the host can replace; delegated to the host broker at /run/orbit/host.sock: it is installing orbit 0.1.250 for every runner on this machine
+[orbit-runner 2026-11-01T02:48:12.402Z] installed orbit 0.1.250 into this runner's own copy; asked the host broker at /run/orbit/host.sock to update its own binary: it is installing orbit 0.1.250 as its own binary
 ```
 
 The request names nothing: no server, release or account. The broker reads the server from `/etc/orbit/config.json`
 and the release from its `/dl/version.json` as anybody reads it, without a runner's credential, and installs only a
-release newer than the binary on disk, checked as every install is: the manifest's SHA-256, then the version and
-write contract the download reports. It swaps the binary in place and restarts the machine's `orbit-runner@<uid>`
-instances one at a time, each draining as it stops. Its journal, `orbit-hostd.service`, records it:
+release newer than its binary, checked as every install is: the manifest's SHA-256, then the version and write
+contract the download reports, each run as the account that asked, or as the unprivileged account `nobody` when root
+asks. It replaces only the binary `orbit-hostd.service` names, `/usr/local/bin/orbit`, and restarts no runner. Its journal, `orbit-hostd.service`,
+records it:
 
 ```text
-[orbit-runner 2026-11-01T02:48:43.188Z] installed orbit 0.1.250 at /usr/local/bin/orbit (verified as uid 1000); restarting this machine's runners
+[orbit-runner 2026-11-01T02:48:43.188Z] installed orbit 0.1.250 at /usr/local/bin/orbit (verified as uid 1000); no runner restarted: each runs its account's own copy
 ```
 
-It runs one update per five minutes; runners asking meanwhile are told that one just ran. The broker installs only
-what `/dl` publishes to everyone and takes no part in staged rollouts or rollbacks, which are per runner
-([Runner rollout and rollback](release-process.md#runner-rollout-and-rollback)). A runner asks when its own
-assignment offers it another release, and the broker installs only a newer one: the machine moves when the first of
-its runners is offered a newer release, all its runners with it, and a rollback does not move it back.
+It runs one update per five minutes; runners asking meanwhile are told that one just ran, and one asking after the
+install is told the release is already there. The broker installs only what `/dl` publishes to everyone and takes no
+part in staged rollouts or rollbacks, which are per runner
+([Runner rollout and rollback](release-process.md#runner-rollout-and-rollback)). Each runner moves when its own
+assignment offers it another release, and the broker's binary moves when the first runner that installed a newer one
+asks.
+
+An account's copy from a release before this layout, 0.1.243 say, updates itself just the same, but does not ask the
+broker afterwards. The broker's binary then follows from the next release, which that runner, by then on the new code,
+installs and asks about, or at once if root installs it:
+
+```bash
+sudo /usr/local/bin/orbit upgrade
+```
+
+`orbit upgrade` replaces `/usr/local/bin/orbit` where it is and restarts no runner, which none of the accounts' runners
+needs, since none runs that file:
+
+```text
+checking https://orbit.example.com for updates...
+updating 0.1.249 -> 0.1.250...
+✓ orbit is now 0.1.250
+```
+
+The broker holds its binary to the rule setup does every time it replaces it: a regular file root owns and only root
+can write, in directories only root can write all the way up to `/`. A directory that its group can write after setup,
+such as `/usr/local/bin` changed to `root:staff` with mode 2775 as older Debian installs have it, would let any member
+of the group replace what the broker runs as root, so the broker refuses to update its binary there. It fails closed:
+the binary stays as it is, and the runner that asked logs why (the mode it reports leaves out the setgid bit). Its own
+update stands:
+
+```text
+[orbit-runner 2026-11-01T02:54:42.491Z] installed orbit 0.1.250 into this runner's own copy; asked the host broker at /run/orbit/host.sock to update its own binary: it declined: refusing to update /usr/local/bin/orbit: its directory /usr/local/bin is not root's alone (owned by uid 0, mode 0775), and root writes nothing it downloaded where another account can reach
+```
+
+An administrator makes the directory root's alone:
+
+```bash
+sudo chmod g-w /usr/local/bin
+```
+
+Members of `staff` then need root to install there too. The broker installs the next release itself, or
+`sudo /usr/local/bin/orbit upgrade` installs this one.
 
 ### Without the broker
 
@@ -1559,7 +2098,8 @@ its runners is offered a newer release, all its runners with it, and a rollback 
 machine that was never set up or whose socket is gone, they work as they did before the broker existed: on the
 account's own `orbit-runner-<user>.service`, written or removed through sudo
 ([Register a runner](#4-register-a-runner)), with nothing said about a broker. A socket that is there with nothing
-answering it, or a broker that refuses, is reported before the same fallback:
+answering it, or a broker that refuses for any reason other than an older runner of the account that will not stop,
+is reported before the same fallback:
 
 ```text
 note: the machine broker at /run/orbit/host.sock did not answer "enable" (dial unix /run/orbit/host.sock: connect: connection refused) — falling back to the sudo path.
@@ -1568,14 +2108,18 @@ note: the machine broker at /run/orbit/host.sock did not answer "enable" (dial u
 ### Security model
 
 - **Anyone may connect, and nobody gains anything by it.** The socket is mode 0666, but every verb acts on the
-  caller's own runner: hostd takes the caller's uid from the kernel (`SO_PEERCRED`), never from the request, and
-  refuses a request that names a user or any other target.
-- **hostd never runs a download as root.** Checking a release means running it, to read its version and write
-  contract, and each of those runs is dropped to the uid of the account that asked.
-- **hostd never starts a runner as root.** Each instance runs as its account (`User=%i`) and hostd refuses to enable,
-  start or restart uid 0's, so every runner it starts heartbeats `runsAsRoot=false`. Root's own `orbit register` is
-  refused by the broker and falls back to the legacy path, which runs a root runner and warns that its agents have
-  root access.
+  caller's own runner: hostd takes the caller's uid from the kernel (`SO_PEERCRED`) and its name from the passwd
+  database, never from the request, and refuses a request that names a user or any other target. A user name
+  becomes a unit name only through systemd's own escaping, which can be undone, so no account can name another's
+  unit.
+- **hostd runs one binary, and never one an account can change or a download.** hostd runs only
+  `/usr/local/bin/orbit`, held to the rule above. It never executes, reads or writes a file in an account's home:
+  whether an account's `~/.orbit/bin/orbit` is there and executable is asked as that account. Checking a release
+  means running it, to read its version and write contract, and each of those runs is dropped to the uid of the
+  account that asked, or to `nobody` when root asks.
+- **Root is an ordinary instance.** Each instance runs as its account (`User=%I`), from that account's own
+  file. Only a caller with uid 0 can act on `orbit-runner@root.service`. Its heartbeat reports
+  `runsAsRoot=true`, and registration warns that its agents have root access.
 
 ### Known limitations
 
@@ -1586,51 +2130,13 @@ the template is shared by every account and has no per-account environment. So o
 ```text
 the runner will use HTTP proxy http://proxy.example.com:3128 for claude
 …
-note: --proxy is not carried into orbit-runner@1000.service — the machine's shared runner template has no per-user proxy environment.
+note: --proxy is not carried into orbit-runner@alice.service — the machine's shared runner template has no per-user proxy environment.
 ```
 
 The runner comes online, but its coding engines get no proxy settings: where the model APIs are reachable only
 through the proxy, they cannot reach them. Until a later release carries the proxy, do not set up a machine whose
 runners need one. Register its accounts the single-account way instead, whose sudo step writes the proxy into each
 account's own unit ([Register a runner](#4-register-a-runner)).
-
-**The binary and its directories must stay root's alone.** Setup refuses a binary that is not
-([Set up the machine once](#set-up-the-machine-once)), and the broker holds the binary to the same rule every time it
-replaces it: a regular file root owns and only root can write, in directories only root can write all the way up to
-`/`. A directory that its group can write after setup, such as `/usr/local/bin` changed to `root:staff` with mode 2775
-as older Debian installs have it, would let any member of the group replace what every account runs, so the broker
-refuses to update the binary there. It fails closed: the binary stays as it is, and each runner logs once why (the mode
-it reports leaves out the setgid bit):
-
-```text
-[orbit-runner 2026-11-01T02:54:42.491Z] orbit 0.1.250 available for /usr/local/bin, which only the host can replace; delegated to the host broker at /run/orbit/host.sock: it declined: refusing to update /usr/local/bin/orbit: its directory /usr/local/bin is not root's alone (owned by uid 0, mode 0775), and root writes nothing it downloaded where another account can reach
-```
-
-An administrator does one of two things:
-
-- Makes the directory root's alone. Members of `staff` then need root to install there too. The runners' next update
-  check, within 10 minutes, goes through the broker:
-
-  ```bash
-  sudo chmod g-w /usr/local/bin
-  ```
-
-- Or installs each release as root. On such a machine `orbit upgrade` replaces the binary where it is, checks the
-  download by running it as root, and restarts no runner, so the runners are restarted after it:
-
-  ```bash
-  sudo /usr/local/bin/orbit upgrade
-  sudo systemctl restart 'orbit-runner@*'
-  ```
-
-  `orbit upgrade` says that it keeps the shared binary where it is:
-
-  ```text
-  checking https://orbit.example.com for updates...
-  updating 0.1.249 -> 0.1.250...
-  note: /usr/local/bin/orbit is run by services of more than one account (/etc/systemd/system/orbit-hostd.service as root, /etc/systemd/system/orbit-runner@.service as %i), so it stays where it is.
-  ✓ orbit is now 0.1.250
-  ```
 
 ## Upgrading
 
@@ -1662,8 +2168,8 @@ its steps after the ones above:
 
 ```bash
 docker build -f deploy/managed-runner/image/Dockerfile --build-arg "ORBIT_SOURCE_SHA=$(git rev-parse HEAD)" \
-  -t orbit-managed-runner:local .
-docker image inspect -f '{{.Id}}' orbit-managed-runner:local
+  -t orbit-cloud-runner:local .
+docker image inspect -f '{{.Id}}' orbit-cloud-runner:local
 # Write that ID as "image" in data/managed-runners/channel.json and as runner.image in profile.json, then:
 docker compose up -d --wait --no-deps --force-recreate apiserver
 docker compose up -d --wait --no-deps --force-recreate docker-channel

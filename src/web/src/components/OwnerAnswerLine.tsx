@@ -48,7 +48,6 @@ export function OwnerAnswerLine({
   text,
   seq,
   undelivered = false,
-  attached,
   queued,
 }: {
   card: OwnerAnswerCard;
@@ -56,8 +55,6 @@ export function OwnerAnswerLine({
   text: string;
   seq?: number;
   undelivered?: boolean;
-  /** What delivery appended to the same turn, as its own folded entry under the words. */
-  attached?: ReactNode;
   /** The queue's own line, while the turn still waits behind a running one. */
   queued?: ReactNode;
 }) {
@@ -74,7 +71,6 @@ export function OwnerAnswerLine({
               <details className="answered-question-told">
                 <summary>{OWNER_ANSWER_TOLD}</summary>
                 <pre>{text}</pre>
-                {attached}
               </details>
             ),
           }}
@@ -97,7 +93,6 @@ export function OwnerAnswerLine({
         <div className="owner-answer-told">
           <div className="owner-answer-told-head">{OWNER_ANSWER_TOLD}</div>
           <pre>{text}</pre>
-          {attached}
         </div>
       </details>
       {undelivered && (

@@ -7,6 +7,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import type {
   CodexRateLimitResetOperationStatus,
   CodexRateLimitResetOperationView,
+  PlanUsageSnapshot,
 } from '@orbit/shared';
 import { api, ApiError } from '../api';
 import {
@@ -489,6 +490,44 @@ describe("the pill's one number", () => {
     const rows = [...usagePanel()!.querySelectorAll('.cu-row')].map((row) => row.textContent);
     expect(rows[0]).toBe('5h limit0%');
     expect(rows[1]).toMatch(/^Weekly limit59%Resets /);
+  });
+});
+
+describe("a Claude login's popover", () => {
+  const hours = (n: number) => new Date(Date.now() + n * 3600_000).toISOString();
+  const claude = (planUsage: PlanUsageSnapshot) => ({ planUsage: { codex: planUsage } }) as unknown as CodexResetRunner;
+
+  it('adds the model-scoped weekly limits and extra usage, and points a nearly-used week to claude.ai', async () => {
+    await mount(
+      claude({
+        provider: 'claude',
+        sevenDay: { utilization: 95, resetsAt: hours(60) },
+        modelLimits: [{ model: 'Fable', utilization: 12, resetsAt: hours(60), active: false }],
+        extraUsage: { enabled: false, currency: 'USD', exponent: 2, usedMinor: 0 },
+        resetGrants: { eligible: false, ineligibleReason: 'surface', resetsLeft: 0 },
+      }),
+      false,
+    );
+    // The scoped limit is display only: the pill still names the all-models week.
+    expect(pill().getAttribute('aria-label')).toBe('Plan usage 95%');
+    await openUsage();
+    const rows = [...usagePanel()!.querySelectorAll('.cu-row')].map((row) => row.textContent);
+    expect(rows[0]).toMatch(/^Weekly · all models95%Resets /);
+    expect(rows[1]).toMatch(/^Weekly · Fable12%Resets /);
+    expect(rows[2]).toBe('Extra usageOff');
+    expect(panelText()).toContain('If your plan includes a weekly reset, you can use it on claude.ai.');
+    expect(usagePanel()!.querySelector('a')?.getAttribute('href')).toBe('https://claude.ai/settings/usage');
+  });
+
+  it('names the usable resets when the endpoint offers them, and says nothing below the line', async () => {
+    const grants = { eligible: true, resetsLeft: 2 };
+    await mount(claude({ provider: 'claude', sevenDay: { utilization: 91, resetsAt: hours(60) }, resetGrants: grants }), false);
+    await openUsage();
+    expect(panelText()).toContain('You have 2 weekly resets to use on claude.ai.');
+    await unmount();
+    await mount(claude({ provider: 'claude', sevenDay: { utilization: 40, resetsAt: hours(60) }, resetGrants: grants }), false);
+    await openUsage();
+    expect(panelText()).not.toContain('claude.ai');
   });
 });
 

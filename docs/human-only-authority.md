@@ -12,18 +12,17 @@ machine may do it. What bounds it is unchanged — the conclusion names the immu
 version it judged, every stated criterion must be answered in the same call, and the project-level
 verdict is derived from that conjunction rather than supplied.
 
-Project `DONE` is not a `HUMAN_ONLY` write, and since 2026-09-08 it is not, in the ordinary case,
-anybody's write at all: `projects/project-done-derived.ts` PROJECTS the column from a standing
-confirmation of today's standard set and criteria that are every one satisfied and landed,
-recomputing it on four edges that have no requester: the owner's confirmation, the post-commit
-edge of any task write in the project, a merge receipt being recorded, and a write that restates the
-criteria themselves.
-A projection is not a gate — it refuses nothing, and none of what migration
-`0229_project_acceptance_judgment_removal` took away on
-2026-09-03 comes back with it: no trigger on `project`, no acceptance run, and no 409 that turns a
-direct `status=DONE` request into a refusal. Who may still write the column BY HAND is the last
-column of the matrix below, and it turns on one condition — whether the request carries an acting
-session. `docs/project-done-gate.md` is the live page for what decides the value.
+Project `DONE` has two paths: the projection records `done_by=DERIVED` from a standing
+confirmation and criteria that are satisfied and landed; the account owner can record
+`done_by=OWNER`, accepting gaps, with or without a coordinator's `DONE_REQUEST`. The projection
+moves in both directions but preserves the owner's record until its criteria change or serving
+work is reopened. A derived OPEN-to-DONE write tells the owner by push. The owner's Reopen press
+also holds against unchanged facts (migration 0469).
+
+[Project DONE: derived facts and the owner's record](project-done-gate.md) is the live description
+of both paths, their request checks and reopen rules. The matrix below describes credential and
+session restrictions on caller-supplied writes; the historical review sections do not replace
+that live description.
 
 It is deliberately limited to those actions. It does not redesign authentication.
 
@@ -82,6 +81,44 @@ must be read per authenticated door:
 | Borrowed or minted owner JWT | indistinguishable from the owner REST row | allowed | allowed and indistinguishable from owner confirmation | allowed | allowed, and indistinguishable from the owner REST row |
 | Personal access token (`orbit_pat_…`) | `NON_JUDGMENT`, as the owner REST row, but the request carries `credentialKind=PAT` | **refused whole with `OWNER_INTERACTIVE_CREDENTIAL_REQUIRED`**; a new project's first criteria, sent with `POST /projects`, are written | **refused with `OWNER_INTERACTIVE_CREDENTIAL_REQUIRED`** — the confirmation door and `start` alike | allowed with `tasks:write` | **refused whole with `OWNER_INTERACTIVE_CREDENTIAL_REQUIRED`** — `status` on `PATCH /projects/:id`, `DONE`, `CANCELLED` and `OPEN` alike, and `POST /projects/:id/done` |
 | Administrator viewing Orbit as the owner (`POST /admin/users/:id/impersonate`, `auth/impersonation.ts`) | `NON_JUDGMENT`, as the owner REST row, but the request carries `credentialKind=IMPERSONATION` | **refused with `IMPERSONATION_READ_ONLY`**: the token reads and writes nothing | **refused with `IMPERSONATION_READ_ONLY`** | **refused with `IMPERSONATION_READ_ONLY`** | **refused with `IMPERSONATION_READ_ONLY`** |
+| Feishu bot: the owner's click or message in the account's own Feishu app (`credentialKind=FEISHU`, `docs/feishu-bot-design.md` §7.2) | `NON_JUDGMENT`: not a request at all, it never passes `JwtAuthGuard`; `FeishuRouter` calls only the §7.2 allowlist (`feishu/feishu-actions.ts`), as the app's account | **refused**: no route; not on the allowlist | **refused**: no route; not on the allowlist | **refused**: no route; not on the allowlist | **refused**: no route; not on the allowlist |
+| `orbit` in a terminal: the TERMINAL credential (`orbit_term_…`) the owner's tap in the app minted for one machine (`docs/terminal-session-design.md`, "The terminal credential") | `NON_JUDGMENT`, as the owner REST row, but the request carries `credentialKind=TERMINAL`; only routes declaring `@TerminalRoute` admit it, each confined to its own runner's sessions | **refused with `TERMINAL_ROUTE_NOT_ALLOWED`** | **refused with `TERMINAL_ROUTE_NOT_ALLOWED`** | **refused with `TERMINAL_ROUTE_NOT_ALLOWED`** | **refused with `TERMINAL_ROUTE_NOT_ALLOWED`** |
+
+The Feishu bot row is `docs/feishu-bot-design.md` §7.2 (decision 1). Both HUMAN_ONLY columns and every
+other column are refused, and so is every owner-channel action, with one exception: the owner's
+Allow once or Deny on a tool-permission approval's card (`SessionsService.decideApproval`, task F2-1),
+while the app's `approvalsInFeishu` is on, from the clicker whose open_id is the app's `ownerOpenId`.
+It carries a plain allow or deny only — never `rememberRules` ("always allow" widens a standing grant)
+or `startAfterCreate`, either of which is refused before anything is written — and the decision records
+`decided_credential_kind = FEISHU` with the clicker's open_id and the card's message_id (0500), and, in the
+same transaction, an `activity` row `feishu.approval.decided` with `credential_kind = FEISHU`. Orbit's
+own confirmation cards (`orbit_task_create`, `orbit_project_create`, `orbit_agent_create` / `update`,
+deleting a runner, the MCP orchestration grant and the rest filed as `orbit_<name>`) and owner items
+have no action on their cards: only Open in Orbit. A click is stronger than a bearer token — Feishu makes
+it, with the clicker's open_id, over the long connection Orbit opened, and neither `JWT_SECRET`, a PAT
+nor the App Secret can forge one — but it does not prove a person is present (§7.2).
+
+The TERMINAL row is `docs/terminal-session-design.md`, "The terminal credential" (decision D7 = B). Every
+column is refused, and so is every owner-channel act, with one exception: **answering a tool-permission
+approval card** (`POST /sessions/:id/approvals/:approvalId/decision`, `SessionsService.decideApproval`) on a
+session of the credential's own machine — allow once, always allow, or deny, as the app answers it.
+Evidence decisions, criteria and their confirmation, project start / done / pause / resume, task
+confirmation cards, promotion and handoff answers, open items, the integration line and the wiki's owner
+channel all stay refused 403 `TERMINAL_ROUTE_NOT_ALLOWED` before anything is read
+(`src/apiserver/src/auth/terminal-refused-routes.ts`); a session of another machine or account is refused
+403 `TERMINAL_RUNNER_OUT_OF_SCOPE`. An answer that lands records `decided_credential_kind = TERMINAL` and
+`decided_terminal_machine_name` on the approval (0661, 0663) and, in the same transaction, an `activity` row
+`terminal.approval.decided` with `credential_kind = TERMINAL` whose payload names the session, the approval,
+the answer, the terminal, its runner and the machine name. The credential is minted only by the owner's tap
+in the app, never by a token or a runner; it is bound to one machine, kept in the OS keychain (or a `0600`
+file under `ORBIT_HOME`, never the environment), ends 30 days after the tap, and is listed in Settings →
+Terminals with Revoke.
+
+**Accepted risk (owner-accepted, D7 = B):** an agent running as the same OS user can read the stored
+credential and call the approval route itself, approving its own requests on that machine's sessions. It is
+visible in the activity log, and revocable. A runner installed under its own user (hostd) keeps agents out
+of the person's keychain and home. As everywhere on this page, a TERMINAL answer says the terminal's
+credential sent it, not that a person did.
 
 The personal access token row is `docs/personal-access-token-design.md` §5, and it is wider than
 its three refusal cells: a token is refused on every owner-channel action, not only on these
@@ -151,7 +188,7 @@ two `HUMAN_ONLY` rows, which restrict only the `JUDGMENT` role. A request with n
 reaches the column exactly as 0229 left it: the owner REST door passes no session at all, and the
 headless and internal paths write it directly. So this is a boundary on the tool an agent holds,
 not a claim about who is on the other end of a credential — and it is not what makes the column
-say `DONE`: no request does that, the projection does.
+say `DONE`: the projection does that without a request; an owner record is a separate decision.
 
 There is currently no production cron job that writes these three facts. The no-Session service
 default remains available for trusted internal/cron composition; adding such a writer must still
@@ -357,7 +394,7 @@ The `Project DONE` column above was reconciled on 2026-09-08 and now states what
 a request with no acting session writes the column directly, a request carrying one is refused
 whole, and the value itself is projected. What migration `0229_project_acceptance_judgment_removal`
 deleted on 2026-09-03 stays deleted. §"What is true today" below is the reasoning the DONE answer
-came out of, and `docs/project-done-gate.md` is the live page.
+came out of. [The live DONE page](project-done-gate.md) now describes both the projection and the owner record.
 
 ### The premise being tested is false, and that is the finding
 
@@ -494,7 +531,7 @@ The coordinator card's role under (B) is a prompt with a link, not an answer sur
 > so that the project page is not a second confirmation surface. The paragraphs above record where
 > (B) first put the entry rather than the product. The door and its digest rule are unchanged.
 
-### What is true today about project DONE, and what derives it
+### Historical review of project DONE and its derivation
 
 > **Answered, 2026-09-08.** The last paragraph of this section said the deriver must not be built
 > on this review's authority and that it needed the owner to say the 2026-09-03 decision was being

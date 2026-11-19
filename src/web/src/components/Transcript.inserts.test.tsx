@@ -99,7 +99,7 @@ describe('an insert sits at its moment in the conversation', () => {
   });
 
   it('follows a folded run of tool calls as a whole when its seq is inside the run', () => {
-    // Three calls in a row fold into one row, so the middle call is not a top-level card of its
+    // Calls in a row fold into one steps line, so the middle call is not a top-level card of its
     // own. An insert naming it must follow the run rather than be dropped for want of a card.
     const events = [
       ev(1, 'user', { text: 'first question' }),
@@ -110,9 +110,9 @@ describe('an insert sits at its moment in the conversation', () => {
     ];
     const html = render(events, [insert(3)]);
 
-    expect(html).toContain('chat-tool-group');
+    expect(html).toContain('chat-steps');
     expect(occurrences(html, marker(3))).toBe(1);
-    expect(html.indexOf('chat-tool-group')).toBeLessThan(html.indexOf(marker(3)));
+    expect(html.indexOf('chat-steps')).toBeLessThan(html.indexOf(marker(3)));
     expect(html.indexOf(marker(3))).toBeLessThan(html.indexOf('after the run'));
   });
 

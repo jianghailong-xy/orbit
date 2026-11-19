@@ -13,7 +13,9 @@ public enum TranscriptItem: Identifiable, Equatable, Sendable, Codable {
     case toolCall(ToolCard)
     /// A turn stopped short. `runnerRestart`: nobody pressed Stop — the runner restarted under the
     /// turn and cut it off (`TranscriptReducer.cutByRunnerRestart`), so the row says that instead.
-    case interrupt(id: String, seq: Int, runnerRestart: Bool = false)
+    /// `runnerUpdate`: the owner's Update Now cut it (`reason: runner_update`), and the row names the
+    /// release it updated to (`TranscriptReducer.cutByRunnerUpdate`).
+    case interrupt(id: String, seq: Int, runnerRestart: Bool = false, runnerUpdate: RunnerUpdateCut? = nil)
     case error(id: String, message: String)
     /// A sign-in failure, rendered as a remedy card rather than an error line: the runtime reports
     /// it as ordinary assistant text (or an `error` event, when the engine never got to spawn), but
@@ -26,12 +28,17 @@ public enum TranscriptItem: Identifiable, Equatable, Sendable, Codable {
     /// A heads-up carried on a `system` event (`payload.notice`): the turn worked, but something
     /// about it needs saying — the session moved to another account in its pool, fell back to the
     /// runner's own login, left edits in the shared checkout. A calm note, not an error: nothing is
-    /// broken (web parity: `NoticeNode`).
-    case notice(id: String, message: String)
+    /// broken (web parity: `NoticeNode`). `accountSwitch`: the session moved to another account
+    /// (`noticeKind: pool-member-switched`), a line `TranscriptSettlement` mutes once it is history.
+    case notice(id: String, message: String, accountSwitch: Bool = false)
     /// A runtime diagnostic its runner marked recoverable: an auxiliary path degraded while the turn
     /// went on (Codex failing to refresh its model catalog, say). Quieter than a notice, as web's
     /// `.chat-notice.chat-diagnostic` draws it: only the mark keeps the warning tone.
     case diagnostic(DiagnosticNotice)
+    /// A main checkout line (docs/main-checkout-git-contract.md §7): the card for files that appeared in
+    /// the main checkout during a worktree turn, or one action's result. Read from a `system` event's
+    /// `noticeKind`, so it never falls back to the generic notice row.
+    case mainCheckout(MainCheckoutNoticeItem)
 
     public var id: String {
         switch self {
@@ -39,14 +46,49 @@ public enum TranscriptItem: Identifiable, Equatable, Sendable, Codable {
         case .assistant(let b): return b.id
         case .thinking(let b): return b.id
         case .toolCall(let c): return c.id
-        case .interrupt(let id, _, _): return id
+        case .interrupt(let id, _, _, _): return id
         case .error(let id, _): return id
         case .authError(let id, _): return id
         case .autoRetry(let n): return n.id
-        case .notice(let id, _): return id
+        case .notice(let id, _, _): return id
         case .diagnostic(let d): return d.id
+        case .mainCheckout(let m): return m.id
         }
     }
+}
+
+/// One `main-checkout-changed` or `main-checkout-action-result` event, decoded.
+public struct MainCheckoutNoticeItem: Equatable, Sendable, Codable, Identifiable {
+    public static let changedKind = "main-checkout-changed"
+    public static let resultKind = "main-checkout-action-result"
+
+    public let id: String
+    public let seq: Int
+    /// The event's own sentence, for anywhere that draws only text.
+    public let notice: String
+    /// Set for the card.
+    public let changed: MainCheckoutChangedNotice?
+    /// Set for a result line.
+    public let result: MainCheckoutActionResult?
+    /// The event's `ts`: when the card was written, which decides whether the heartbeat can speak for it.
+    public var ts: String? = nil
+
+    public init(id: String, seq: Int, notice: String, changed: MainCheckoutChangedNotice? = nil,
+                result: MainCheckoutActionResult? = nil, ts: String? = nil) {
+        self.id = id
+        self.seq = seq
+        self.notice = notice
+        self.changed = changed
+        self.result = result
+        self.ts = ts
+    }
+}
+
+/// What an interrupt row knows of the owner's Update Now that cut its turn: the release the runner
+/// updated to, nil when the runner did not name it.
+public struct RunnerUpdateCut: Equatable, Sendable, Codable {
+    public let targetVersion: String?
+    public init(targetVersion: String?) { self.targetVersion = targetVersion }
 }
 
 /// One recoverable diagnostic, with the repeats of it folded into its row (web parity: `DiagnosticNode`).
@@ -152,13 +194,6 @@ public struct UserBubble: Equatable, Sendable, Codable {
     /// alone says where the person's words end. Nil when the event carried no note, and then the
     /// bubble is exactly what the runner echoed — nothing is read out of the text.
     public var note: String?
-    /// What delivery appended, as the one entry the view draws in the bubble under the person's
-    /// words — named for its kind, and opening to the text the model read. Nil when the event
-    /// carried no note, so nothing is drawn as Orbit's own.
-    public var attached: (kind: String, text: String)? {
-        guard let note else { return nil }
-        return (describeNote(note), note)
-    }
     /// An exception item's delivery, when the control plane recorded the item's own fields beside
     /// this turn's echo (`openItemDelivery`, see `OpenItemDelivery.parse`). This turn is nobody's
     /// message: the console draws the card instead of the bubble, with `text` — the paragraph
@@ -194,6 +229,10 @@ public struct UserBubble: Equatable, Sendable, Codable {
     /// reader's: the console draws "From [that session]" instead of the owner's bubble. Nil for every
     /// turn the owner typed, and for every message stored before the payload existed.
     public var sessionMessage: SessionMessage?
+    /// Somebody outside Orbit sent it — a connected Feishu group's member — as the control plane
+    /// recorded beside the echo (`externalSender`, see `ExternalSender.parse`): still a bubble, headed
+    /// `From Feishu · <name>` so it does not read as the owner's own. Nil for every other turn.
+    public var externalSender: ExternalMessageFrom?
     /// The outcomes of this session's own requests the turn handed back, when the control plane
     /// recorded them beside the echo (`sessionReplies`, see `SessionReply.parse`). Nobody typed them:
     /// the console draws a reply card per outcome. Nil for every other turn.
@@ -204,6 +243,17 @@ public struct UserBubble: Equatable, Sendable, Codable {
     /// cards. Nil for every other turn.
     public var reviewRequest: ConfirmationReviewRequestCard?
     public var reviewReturn: ConfirmationReturnCard?
+    /// The owner's answers handed to this reviewer once they confirmed (`confirmationAnswers`, §7 Q5):
+    /// drawn as `You confirmed`. Nil for every other turn.
+    public var reviewAnswers: ConfirmationAnswersCard?
+    /// Five more of Orbit's own turns (`OrbitTurnCards.swift`): a revision handed to the session that
+    /// dispatched its task, a send-back's note handed to the run, a task run's question and its notify
+    /// handed to the coordinator, and the opening of a session Orbit opened. Nil for every other turn.
+    public var evidenceReview: EvidenceReviewCard?
+    public var evidenceSendBack: EvidenceSendBackCard?
+    public var runQuestion: RunQuestionCard?
+    public var runNotice: RunNoticeCard?
+    public var sessionOpening: SessionOpeningCard?
     /// The control plane wrote this queued turn itself (`QueuedTurnInfo.authoredByOrbit`), so nobody
     /// typed it: taken off the queue unrun, it hands nothing back to the composer.
     public var authoredByOrbit: Bool
@@ -238,6 +288,13 @@ public struct UserBubble: Equatable, Sendable, Codable {
     /// `SteerDelivery.failureExplanation`.
     public var deliveryCode: String?
     public var deliveryReason: String?
+    /// This message opened a turn (`TurnOpening`), so the turn's head row is drawn under it. nil on
+    /// a steer, an optimistic bubble not yet echoed, and every message read from a sub-agent.
+    public var opensTurn: TurnOpening?
+    /// Settings › Translation: what the owner typed and how far its translation got, `text` being
+    /// the English the engine got (or, while held, the same words). Nil on every message translation
+    /// was not involved in.
+    public var translation: TurnTranslation?
 
     public init(id: String, text: String, attachments: [TurnAttachment] = [], ts: String? = nil,
                 clientTurnId: String? = nil, turnId: String? = nil, pending: Bool, queued: Bool = false,
@@ -247,12 +304,21 @@ public struct UserBubble: Equatable, Sendable, Codable {
                 ownerAnswer: OwnerAnswer? = nil, coordinatorDelivery: CoordinatorDelivery? = nil,
                 taskStart: TaskStart? = nil,
                 startedCard: ProjectStarted? = nil, sessionMessage: SessionMessage? = nil,
+                externalSender: ExternalMessageFrom? = nil,
                 sessionReplies: [SessionReply]? = nil,
                 authoredByOrbit: Bool = false,
                 reviewRequest: ConfirmationReviewRequestCard? = nil,
                 reviewReturn: ConfirmationReturnCard? = nil,
+                reviewAnswers: ConfirmationAnswersCard? = nil,
+                evidenceReview: EvidenceReviewCard? = nil,
+                evidenceSendBack: EvidenceSendBackCard? = nil,
+                runQuestion: RunQuestionCard? = nil,
+                runNotice: RunNoticeCard? = nil,
+                sessionOpening: SessionOpeningCard? = nil,
                 shell: Bool = false, receipt: Bool = false,
-                deliveryCode: String? = nil, deliveryReason: String? = nil) {
+                deliveryCode: String? = nil, deliveryReason: String? = nil,
+                opensTurn: TurnOpening? = nil, translation: TurnTranslation? = nil) {
+        self.translation = translation
         self.id = id
         self.text = text
         self.attachments = attachments
@@ -272,14 +338,22 @@ public struct UserBubble: Equatable, Sendable, Codable {
         self.taskStart = taskStart
         self.startedCard = startedCard
         self.sessionMessage = sessionMessage
+        self.externalSender = externalSender
         self.sessionReplies = sessionReplies
         self.authoredByOrbit = authoredByOrbit
         self.reviewRequest = reviewRequest
         self.reviewReturn = reviewReturn
+        self.reviewAnswers = reviewAnswers
+        self.evidenceReview = evidenceReview
+        self.evidenceSendBack = evidenceSendBack
+        self.runQuestion = runQuestion
+        self.runNotice = runNotice
+        self.sessionOpening = sessionOpening
         self.shell = shell
         self.receipt = receipt
         self.deliveryCode = deliveryCode
         self.deliveryReason = deliveryReason
+        self.opensTurn = opensTurn
     }
 
     // Tolerant decode so transcript snapshots written before `attachments`/`ts` existed still
@@ -287,9 +361,10 @@ public struct UserBubble: Equatable, Sendable, Codable {
     enum CodingKeys: String, CodingKey {
         case id, text, attachments, ts, clientTurnId, turnId, pending, queued, undelivered
         case note, steer, delivery, itemCard, ownerAnswer, coordinatorDelivery, taskStart, startedCard
-        case sessionMessage, sessionReplies
-        case authoredByOrbit, reviewRequest, reviewReturn, withdrawable, shell
-        case receipt, deliveryCode, deliveryReason
+        case sessionMessage, externalSender, sessionReplies
+        case authoredByOrbit, reviewRequest, reviewReturn, reviewAnswers, withdrawable, shell
+        case evidenceReview, evidenceSendBack, runQuestion, runNotice, sessionOpening
+        case receipt, deliveryCode, deliveryReason, opensTurn, translation
     }
     public init(from decoder: Decoder) throws {
         let c = try decoder.container(keyedBy: CodingKeys.self)
@@ -319,17 +394,28 @@ public struct UserBubble: Equatable, Sendable, Codable {
         startedCard = try? c.decodeIfPresent(ProjectStarted.self, forKey: .startedCard)
         // And for who sent a message: a snapshot from before it existed keeps the bubble.
         sessionMessage = try? c.decodeIfPresent(SessionMessage.self, forKey: .sessionMessage)
+        externalSender = try? c.decodeIfPresent(ExternalMessageFrom.self, forKey: .externalSender)
         // And for the outcomes a turn handed back: a snapshot from before they existed keeps its reading.
         sessionReplies = try? c.decodeIfPresent([SessionReply].self, forKey: .sessionReplies)
         authoredByOrbit = (try? c.decodeIfPresent(Bool.self, forKey: .authoredByOrbit)) ?? false
         // And for a review's two turns: a snapshot from before they existed keeps its reading.
         reviewRequest = try? c.decodeIfPresent(ConfirmationReviewRequestCard.self, forKey: .reviewRequest)
         reviewReturn = try? c.decodeIfPresent(ConfirmationReturnCard.self, forKey: .reviewReturn)
+        reviewAnswers = try? c.decodeIfPresent(ConfirmationAnswersCard.self, forKey: .reviewAnswers)
+        // And for the five Orbit turns after it: a snapshot from before they existed keeps its reading.
+        evidenceReview = try? c.decodeIfPresent(EvidenceReviewCard.self, forKey: .evidenceReview)
+        evidenceSendBack = try? c.decodeIfPresent(EvidenceSendBackCard.self, forKey: .evidenceSendBack)
+        runQuestion = try? c.decodeIfPresent(RunQuestionCard.self, forKey: .runQuestion)
+        runNotice = try? c.decodeIfPresent(RunNoticeCard.self, forKey: .runNotice)
+        sessionOpening = try? c.decodeIfPresent(SessionOpeningCard.self, forKey: .sessionOpening)
         shell = (try? c.decodeIfPresent(Bool.self, forKey: .shell)) ?? false
         // A snapshot from before receipts were drawn held none.
         receipt = (try? c.decodeIfPresent(Bool.self, forKey: .receipt)) ?? false
         deliveryCode = try? c.decodeIfPresent(String.self, forKey: .deliveryCode)
         deliveryReason = try? c.decodeIfPresent(String.self, forKey: .deliveryReason)
+        // A snapshot from before turn heads existed draws none until the window is re-read.
+        opensTurn = try? c.decodeIfPresent(TurnOpening.self, forKey: .opensTurn)
+        translation = try? c.decodeIfPresent(TurnTranslation.self, forKey: .translation)
     }
 }
 
@@ -347,6 +433,12 @@ public struct AssistantBubble: Equatable, Sendable, Codable {
     /// by comparing its own clock against the rows', the way web's `decisionReceiptAnchor` does.
     /// Nil while the bubble is still streaming, and on transcripts recorded before this existed.
     public var ts: String?
+    /// Settings › Translation: this reply in the owner's language, or that its translation failed —
+    /// from the event's own payload, or folded in from the live `translation` event.
+    public var translation: ReplyTranslation? = nil
+    /// The turn it answers was opened by a message the owner wrote with translation on, so a reply
+    /// with no `translation` yet is waiting for it ("Translates when the reply is done", 2A).
+    public var awaitsTranslation: Bool? = nil
     public var isFinalized: Bool { seq != nil }
     /// What the UI renders: finalized text if present, else the live buffer.
     public var displayText: String { text.isEmpty ? streamingText : text }
@@ -420,8 +512,8 @@ public struct ToolCard: Equatable, Sendable, Codable {
     /// the web transcript renders the same blocks inline via `resultImages()`.
     public var resultImages: [Data]
     /// Whether the result carried an image block at all — true even when `resultImages` is empty
-    /// because the server dropped an oversized image's bytes (`MAX_IMAGE_PAYLOAD`). The card opens
-    /// on this, and opening is what refetches the picture. Web parity: `hasResultImage`.
+    /// because the server dropped an oversized image's bytes (`MAX_IMAGE_PAYLOAD`). The card has a
+    /// picture to open on because of this, and opening is what refetches it. Web parity: `hasResultImage`.
     public var resultHasImage: Bool
     public var status: ToolStatus
     /// seq of the `tool_use` event, and whether the server clipped its `input` to a preview.
@@ -518,6 +610,10 @@ public struct BackgroundProc: Equatable, Sendable, Identifiable, Codable {
     /// The runtime's own id for the task — the shell id, the agent id, the workflow's task id — read
     /// off the launch receipt. It is what a completion that names no tool_use id is matched by.
     public var taskId: String? = nil
+    /// ISO-8601 of the end the runtime reported (the terminal background_task's time), nil while it
+    /// runs and on rows from before this existed. The folded row shows an ended process until the
+    /// person's next message (`BackgroundRowRule`). Web parity: `BgShell.endedAt`.
+    public var endedAt: String? = nil
 }
 
 /// A live tool-permission / question / plan prompt awaiting a human decision.
@@ -527,7 +623,18 @@ public struct PendingApproval: Equatable, Sendable, Identifiable, Codable {
     public var kind: Kind
     public var toolName: String?
     public var input: JSONValue?
-    public init(id: String, kind: Kind, toolName: String?, input: JSONValue?) {
+    /// Settings › Translation (3A): what the card shows in the owner's language. Draw `shownInput`;
+    /// `input` stays the English the engine sent.
+    public var translation: ApprovalTranslation?
+    /// The engine's call it asks about, where the server named it: an answered question's record
+    /// keeps the card's translation under it.
+    public var toolUseId: String?
+    /// `input` as the card shows it — translated where the server translated it.
+    public var shownInput: JSONValue? { ApprovalTranslation.shownInput(input, translation) }
+    public init(id: String, kind: Kind, toolName: String?, input: JSONValue?,
+                translation: ApprovalTranslation? = nil, toolUseId: String? = nil) {
+        self.translation = translation
+        self.toolUseId = toolUseId
         self.id = id
         self.kind = kind
         self.toolName = toolName

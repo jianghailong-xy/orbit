@@ -96,7 +96,8 @@ class LandingSessionCopyParityTest {
             assertTrue("LandingSessionPage.swift no longer says $it", page.contains(it))
         }
         val view = File(root, "${views}LandingSessionPageView.swift").readText()
-        assertTrue(view.contains("running: card.running, timedOut: card.timedOut, failed: card.stoppedOnFailure)"))
+        // Since 308a40d62 the Swift head is one line whose mark is red for a failure or a timeout, as Android's head is.
+        assertTrue(view.contains("line(kind: card.stoppedOnFailure || card.timedOut ? .failed : .running,"))
     }
 
     /** The landing page's own header line and read-only footer went with the page (owner 2026-10-27): the window has its own

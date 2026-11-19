@@ -12,6 +12,7 @@ import {
 } from '@orbit/shared';
 
 import { attribute, type RequestForBlock } from './session-message';
+import { readRunQuestionCard, RUN_QUESTION_PREFIX } from './run-question';
 import { SESSION_REPLY_TURN_KEY_PREFIX } from './watch-turn-key';
 
 /**
@@ -214,7 +215,7 @@ export class TooManyOpenRequests extends ConflictException {}
  * back with the turn it was for.
  */
 export async function chargeOpenRequest(tx: Prisma.TransactionClient, fromSessionId: string): Promise<void> {
-  const open = await tx.sessionRequest.count({ where: { fromSessionId, state: 'OPEN' } });
+  const open = await tx.sessionRequest.count({ where: { fromSessionId, state: 'OPEN', kind: 'MESSAGE' } });
   if (open < MAX_OPEN_REQUESTS_PER_SESSION) return;
   throw new TooManyOpenRequests({
     statusCode: 409,
@@ -319,6 +320,7 @@ export type ReplyRefusal =
 
 /** What `session_reply` carries. */
 export interface SessionReplyInput {
+  answers?: import('./run-question').QuestionAnswer[];
   message?: string | null;
   option?: number | null;
 }
@@ -331,6 +333,7 @@ export function readReply(request: Pick<SessionRequest, 'options'>, input: Sessi
   replyText: string | null;
   replyOption: number | null;
 } {
+  if (input.answers !== undefined) throw new BadRequestException('answers is only for a run question');
   const message = typeof input.message === 'string' ? stripNul(input.message).trim() : '';
   if (input.message != null && typeof input.message !== 'string') {
     throw new BadRequestException('message must be text');
@@ -477,13 +480,14 @@ export async function hasPendingWakeSource(
   });
   if (wakeup) return true;
   const asked = await tx.sessionRequest.findMany({
-    where: { fromSessionId: sessionId, state: 'OPEN' },
+    where: { fromSessionId: sessionId, state: 'OPEN', kind: 'MESSAGE' },
     select: { toSessionId: true },
   });
   if (asked.length > 0) {
     const waitingOnThis = new Set((await tx.sessionRequest.findMany({
       where: {
         toSessionId: sessionId,
+        kind: 'MESSAGE',
         state: 'OPEN',
         fromSessionId: { in: [...new Set(asked.map((request) => request.toSessionId))] },
       },
@@ -492,7 +496,7 @@ export async function hasPendingWakeSource(
     if (asked.some((request) => !waitingOnThis.has(request.toSessionId))) return true;
   }
   const onItsWay = await tx.sessionRequest.findFirst({
-    where: { fromSessionId: sessionId, state: { not: 'OPEN' }, replyClientTurnId: null, replyHeldAt: null },
+    where: { fromSessionId: sessionId, kind: 'MESSAGE', state: { not: 'OPEN' }, replyClientTurnId: null, replyHeldAt: null },
     select: { id: true },
   });
   if (onItsWay) return true;
@@ -1533,7 +1537,7 @@ export async function readTurnRequestIds(
 
 /** A request as the clients read it: `GET /session-requests/:id` and the session's own list. */
 export async function readSessionRequestView(
-  db: Pick<Prisma.TransactionClient, 'sessionRequest' | 'session'>,
+  db: Prisma.TransactionClient,
   ownerId: string,
   requestId: string,
 ): Promise<SessionRequestView | null> {
@@ -1544,6 +1548,10 @@ export async function readSessionRequestView(
     select: { id: true, title: true },
   });
   const titleOf = (id: string) => sessions.find((session) => session.id === id)?.title ?? '';
+  // A run's question: its card as it stands now, which the clients draw over the one its turn's echo
+  // carries (read before anyone answered).
+  const runQuestion = request.kind === 'RUN_QUESTION' && request.approvalId
+    ? await readRunQuestionCard(db, `${RUN_QUESTION_PREFIX}${request.approvalId}`) : null;
   return {
     requestId: uuidToBase62(request.id),
     state: request.state as SessionRequestView['state'],
@@ -1560,6 +1568,7 @@ export async function readSessionRequestView(
     ...(request.replyOption != null ? { replyOption: request.replyOption } : {}),
     ...(request.excerpt != null ? { excerpt: clip(request.excerpt, EXCERPT_BLOCK_CHARS) } : {}),
     ...(request.closeReason != null ? { closeReason: request.closeReason } : {}),
+    ...(runQuestion ? { runQuestion } : {}),
   };
 }
 
@@ -1586,7 +1595,7 @@ export async function readOpenRequestPeers(
   if (sessionIds.length === 0) return peers;
   const ids = [...new Set(sessionIds)];
   const open = await db.sessionRequest.findMany({
-    where: { ownerId, state: 'OPEN', OR: [{ fromSessionId: { in: ids } }, { toSessionId: { in: ids } }] },
+    where: { ownerId, kind: 'MESSAGE', state: 'OPEN', OR: [{ fromSessionId: { in: ids } }, { toSessionId: { in: ids } }] },
     orderBy: [{ createdAt: 'asc' }, { id: 'asc' }],
     select: { id: true, fromSessionId: true, toSessionId: true },
   });

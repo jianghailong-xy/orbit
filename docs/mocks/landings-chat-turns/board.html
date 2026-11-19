@@ -1,0 +1,103 @@
+<!doctype html><html lang="zh"><meta charset="utf-8"><title>Landings · 每次落地是会话的一个回合（2026-11-11）</title>
+<style>
+:root{--mark:#FF7A00}*{box-sizing:border-box}body{margin:0;background:#F3F3F6;font-family:-apple-system,"PingFang SC",sans-serif;color:#1c1c1e;-webkit-font-smoothing:antialiased}
+.board{padding:30px 44px 36px;width:1560px;background:#F3F3F6}h1{font-size:25px;margin:0 0 8px}
+h2{font-size:19px;margin:22px 0 12px;display:flex;gap:10px;align-items:center}h2 .no{display:inline-grid;place-items:center;width:28px;height:28px;border-radius:50%;background:#1c1c1e;color:#fff;font-size:15px}h2 .sub{font-size:14px;font-weight:500;color:#6b6b72}
+.lede{font-size:15px;line-height:1.7;color:#3a3a40;margin:0 0 12px}.row{display:flex;gap:28px;align-items:flex-start}.col{flex:1;min-width:0}
+.tag{display:inline-block;font-size:13px;font-weight:700;border-radius:7px;padding:3px 10px;margin-bottom:10px}.tag.today{background:#FFE3E0;color:#B42318}.tag.after{background:#DDE7FF;color:#2447B8}.tag.ref{background:#E7E7EC;color:#45454c}
+.shot{position:relative;background:#fff;border-radius:12px;box-shadow:0 0 0 1px rgba(0,0,0,.1);overflow:hidden}.shot img{display:block;width:100%}
+.notes{font-size:14.5px;line-height:1.68;color:#2c2c31;margin-top:12px}.notes ol{margin:0;padding:0;list-style:none}.notes li{margin:7px 0;position:relative;padding-left:30px}.notes li .n{position:absolute;left:0;top:1px}
+.n{display:inline-grid;place-items:center;width:21px;height:21px;border-radius:50%;background:var(--mark);color:#fff;font:700 12.5px/1 -apple-system,sans-serif}.pin{position:absolute;box-shadow:0 0 0 2px #fff;z-index:5}.ring{position:absolute;border:2px dashed var(--mark);border-radius:8px;z-index:4}
+i.en{font-style:italic}code{font:12.5px "JetBrains Mono",monospace;background:rgba(0,0,0,.06);border-radius:4px;padding:0 4px}
+table{border-collapse:separate;border-spacing:0;width:100%;background:#fff;border-radius:12px;overflow:hidden;box-shadow:0 0 0 1px rgba(0,0,0,.07);font-size:14px;line-height:1.55}th,td{text-align:left;vertical-align:top;padding:8px 12px;border-bottom:1px solid #EEEEF1}th{background:#FAFAFC;color:#6b6b72;font-weight:600;font-size:13px}td:first-child{font-weight:650;width:150px}tr:last-child td{border-bottom:0}
+.ask{background:#FFFBEA;box-shadow:0 0 0 1.5px #F2CF63;border-radius:12px;padding:6px 18px 12px;margin-top:18px;font-size:14.5px;line-height:1.75}.rec{color:#1E7B34;font-weight:650}
+/* iPhone, dark */
+.ph{width:440px;height:956px;border-radius:58px;overflow:hidden;position:relative;background:#000;color:#fff;box-shadow:0 0 0 1.5px rgba(0,0,0,.25);font-size:15px;--l2:#8D8D93;--tint:#3E7BFA}
+.ph .top{position:absolute;top:0;left:0;right:0;height:120px;background:#161618;z-index:2}.ph .sb{position:absolute;top:18px;left:60px;right:38px;display:flex;justify-content:space-between;font-weight:650;font-size:18px}
+.ph .back,.ph .more{position:absolute;top:62px;width:45px;height:45px;border-radius:50%;background:#2A2A2D;display:grid;place-items:center;color:#fff;font-size:20px}.ph .back{left:20px}.ph .more{right:20px;color:var(--tint)}
+.ph .ttl{position:absolute;left:76px;right:76px;top:66px;text-align:center}.ph .t1{font-size:18px;font-weight:650}.ph .t2{font-size:13.5px;color:var(--l2);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.ph .body{position:absolute;top:120px;bottom:92px;left:0;right:0;padding:0 18px;display:flex;flex-direction:column;justify-content:flex-end;overflow:hidden}.ph .body>*{flex-shrink:0}
+.ph .chip{align-self:center;margin:10px 0 6px;font-size:13px;font-weight:650;color:#A0A0A6;background:rgba(118,118,128,.24);border-radius:11px;padding:3px 11px}.ph .chip.now{color:var(--tint);background:rgba(62,123,250,.16)}
+.ph .steps{color:var(--l2);font-size:14px;margin:8px 0 3px}.ph .steps .f{color:#FF453A}.ph .rep{font-size:16px;line-height:22px;color:#F2F2F7}.ph .rep b{font-weight:650}.ph .rep code{background:#2C2C2E;color:#E5E5EA;font-size:12.5px}
+.ph .foot{color:var(--l2);font-size:12.5px;margin:4px 0 6px}.ph .card{margin:8px 0 2px;border-radius:12px;background:#1C1C1E;border-left:3px solid #FF453A;padding:10px 12px}
+.ph .card .h{font-weight:650;font-size:15px;display:flex;gap:8px;align-items:center}.ph .card .h i{width:18px;height:18px;border-radius:50%;background:#FF453A;display:inline-grid;place-items:center;font-style:normal;font-size:11px;color:#000}
+.ph .card .r{font-size:13.5px;color:var(--l2);margin-top:6px}.ph .card .d{display:flex;gap:8px;margin-top:10px}.ph .pri,.ph .sec{font-size:14px;font-weight:600;padding:6px 13px;border-radius:16px}.ph .pri{background:var(--tint)}.ph .sec{background:#2C2C2E}
+.ph .bar{position:absolute;bottom:0;left:0;right:0;height:92px;background:#161618;border-top:.5px solid rgba(255,255,255,.1);display:flex;align-items:flex-start;padding:12px 12px 0 18px;gap:10px}.ph .bar .w{flex:1;color:var(--l2);line-height:34px;font-size:14.5px}.ph .btn{color:var(--tint);background:rgba(62,123,250,.16);border-radius:17px;padding:0 14px;height:34px;line-height:34px;font-weight:600}
+.ph .home{position:absolute;bottom:9px;left:50%;width:150px;height:5px;margin-left:-75px;border-radius:3px;background:#fff}
+</style><body>
+<div class="board" data-png="01-why">
+<h1>Landings · 每次落地是会话的一个回合（web + iPhone，2026-11-11 · 按 main 4eb2edfae）</h1>
+<p class="lede"><b>owner 11-11</b>：「Landed 是否应该对应 session 里的 plain text」→「按推荐的来，先出设计图」。<br>
+会话里一个回合 = <b>一行灰字的折叠步骤</b>（<i class="en">ran 8 shell commands ⌄</i>）+ <b>一段纯文本结论</b> + 回合脚（⋯ 和时刻）。后台任务那一行（<i class="en">✓ Background job finished</i>）是<b>外面的事报进来</b>，不是这个回合自己的话。一次落地是 Orbit 自己做完的事，所以照「回合」画：步骤折起，结论是一句纯文本。本图合并了上一张（每代一行折叠步骤、三处内容修正）。web 帧是真实控制台截图（会话页 + 会话自己的 <code>chat-steps</code> / <code>chat-assistant</code> / <code>chat-turn-foot</code> / <code>chat-status-card</code>）；iPhone 照 iOS 会话手画。</p>
+<div class="row">
+ <div class="col"><span class="tag today">a · 现在（你的图 1）</span><div class="shot"><img src="frames/today.png"></div></div>
+ <div class="col"><span class="tag ref">参照 · 会话（你的图 2）</span><div class="shot"><img src="frames/chat-ref.png"></div></div>
+</div></div>
+<div class="board" data-png="02-web">
+<h2><span class="no">1</span>web · 改后<span class="sub">往上翻 / 点开一次 / 窗口最底</span></h2>
+<div class="row">
+ <div class="col"><span class="tag after">b · 往上翻</span><div class="shot" id="s1"><img src="frames/r-history.png"></div>
+  <div class="notes"><ol>
+   <li><span class="n">1</span><b>结论是一句纯文本</b>：<i class="en">Landed <b>任务名</b> on project/… · sha.</i> 任务名加粗、分支和提交用代码样式，跟会话回复一样。上面一行灰字是这次的步骤（<i class="en">5 steps</i>），折着。</li>
+   <li><span class="n">2</span><b>回合脚</b>：⋯（长按 / 右键菜单在这）和时刻，跟会话每个回合底下一样。</li>
+   <li><span class="n">3</span>合入 main：<i class="en">Merged <b>1 task</b> into main · f0416c9 · automatically.</i></li>
+   <li><span class="n">4</span>已经落过：<i class="en">Already landed: <b>…</b> was on the project line before this landing.</i></li>
+   <li><span class="n">5</span>失败过又重来：每一代一行灰字，第 1 代带红色 <i class="en">· 1 failed</i>；结论只说最后结果，加 <i class="en">on the second try</i>。</li>
+  </ol></div></div>
+ <div class="col"><span class="tag after">c · 点开 7:47 那次</span><div class="shot" id="s2"><img src="frames/r-open.png"></div>
+  <div class="notes"><ol>
+   <li><span class="n">2</span>点开 = 展开<b>最后一代</b>的工具行（没有时刻胶囊、没有大写标题）；第 1 代仍折着，点了才开。</li>
+   <li><span class="n">3</span>工具行下面是结论句、<i class="en">Open Task › · Open Source Session ›</i>、回合脚。步骤的三处内容修正照上一张：检查写自己的结果、准备合并树归 Sync、不到一秒不写时长。</li>
+  </ol></div></div>
+ <div class="col"><span class="tag after">d · 窗口最底（Now）</span><div class="shot" id="s3"><img src="frames/r-bottom.png"></div>
+  <div class="notes"><ol>
+   <li><span class="n">1</span><b>没落成</b>：结论句 <i class="en">Did not land <b>…</b>: the merge check exited 1 (expected 0) on the combined tree, and nothing was pushed.</i></li>
+   <li><span class="n">2</span>下面是会话现成的<b>状态卡</b>：<i class="en">Not landed · waiting for a decision</i>、谁来定、推了什么、两个门。</li>
+   <li><span class="n">3</span><b>正在跑</b>：会话的 <i class="en">Working for 7m 47s</i>，一句 <i class="en">Landing <b>…</b> on project/…</i>（还没有结论），</li>
+   <li><span class="n">4</span>步骤默认展开，当前那步转圈、展开是预算条和实时输出。</li>
+  </ol></div></div>
+</div></div>
+<div class="board" data-png="03-iphone-rules">
+<h2><span class="no">2</span>iPhone · 改后<span class="sub">同一套：灰字步骤 + 纯文本结论 + 回合脚；等决定的是状态卡</span></h2>
+<div class="row">
+ <div style="flex:none"><span class="tag after">e · iPhone</span>
+  <div class="ph"><div class="top"><div class="sb"><span>7:46</span><span>100</span></div><div class="back">‹</div><div class="ttl"><div class="t1">Landings</div><div class="t2">Runner self-update and the upgrade gate</div></div><div class="more">⋯</div></div>
+  <div class="body">
+   <div class="chip">Today</div>
+   <div class="steps">4 steps ›</div><div class="rep">Already landed: <b>Release runner 0.1.253: bump the version so runners take the OOMPolicy fix</b> was on the project line before this landing.</div><div class="foot">⋯ &nbsp;5:07 AM</div>
+   <div class="steps">Generation 1 · 4 steps <span class="f">· 1 failed</span> ›</div><div class="steps" style="margin-top:0">Generation 2 · 5 steps ›</div>
+   <div class="rep">Landed <b>Record in the design doc that an OOM kill, not the upgrade gate, stopped HPC's turns</b> on <code>project/34uU…AKA</code> · <code>ed3d3e9</code>, on the second try.</div><div class="foot">⋯ &nbsp;7:47 AM</div>
+   <div class="chip now">Now</div>
+   <div class="steps">4 steps <span class="f">· 1 failed</span> ›</div><div class="rep">Did not land <b>Server: answer a withdrawn owner request with 409</b>: the merge check exited 1 (expected 0), and nothing was pushed.</div>
+   <div class="card"><div class="h"><i>✕</i>Not landed · waiting for a decision</div><div class="r">Decides: the coordinator · Pushed: nothing</div><div class="d"><span class="pri">Open Coordinator</span><span class="sec">Open Task</span></div></div>
+   <div class="foot">⋯ &nbsp;8:36 AM</div>
+  </div>
+  <div class="bar"><span class="w">🔒 Orbit runs these landings</span><span class="btn">Open coordinator</span></div><div class="home"></div></div>
+  <div class="notes" style="width:440px">iPhone 照 iOS 会话：灰字步骤点开是 iOS 的工具行（上一版 iPhone 的样子），长按结论句出菜单。Android 同一套，等这张定了照 Android 会话画。</div></div>
+ <div class="col">
+  <table><tr><th colspan="2">新的结论句（三端同一套英文，服务端字段拼出来，不改接口）</th></tr>
+   <tr><td>落地了</td><td><i class="en">Landed <b>{task}</b> on {line} · {sha}.</i> 第 N 次才成：句末加 <i class="en">, on the second try</i> / <i class="en">, on try {n}</i></td></tr>
+   <tr><td>合入 main</td><td><i class="en">Merged <b>{N} task(s)</b> into main · {sha} · automatically.</i>（手动合入：<i class="en">by you</i>）</td></tr>
+   <tr><td>已经落过</td><td><i class="en">Already landed: <b>{task}</b> was on the project line before this landing.</i></td></tr>
+   <tr><td>没东西可落</td><td><i class="en">Nothing to land for <b>{task}</b>: its branch has no commits beyond the project line.</i></td></tr>
+   <tr><td>没落成</td><td><i class="en">Did not land <b>{task}</b>: {失败原因，服务端原句}{, and nothing was pushed}.</i></td></tr>
+   <tr><td>取消 / 放弃</td><td><i class="en">Stopped landing <b>{task}</b>{: reason}.</i></td></tr>
+   <tr><td>正在跑</td><td><i class="en">Landing <b>{task}</b> on {line}…</i>（上面 <i class="en">Working for …</i>）</td></tr>
+   <tr><td>步骤那行灰字</td><td>一代：<i class="en">{n} steps</i>；多代：<i class="en">Generation {g} · {n} steps</i>，失败加红色 <i class="en">· {k} failed</i></td></tr>
+  </table>
+  <div class="ask"><b>待你定</b><ol style="margin:4px 0 0;padding-left:20px">
+   <li>结论句的措辞：<span class="rec">按上表（推荐）</span>；有要改的词直接告诉我。</li>
+   <li>点开一次：<span class="rec">展开最后一代、更早的折着（推荐）</span>；还是全部折着、只露灰字。</li>
+   <li>回合脚的时刻：<span class="rec">常显（推荐，图里这样）</span>；还是照会话只在悬停时显。</li>
+   <li>先改哪端：<span class="rec">web 先（推荐）</span>，iPhone / Android 随后；三端一起出。</li>
+  </ol></div>
+  <p class="notes" style="color:#6b6b72">要动的：web <code>ProjectLandingsWindow.tsx</code>（行 → 回合）、新的 <code>landingSentence</code>（三端共用的结论句）、<code>landingSteps</code>（三处修正）；iOS / Android 对应文件和测试。服务端不动。</p>
+ </div></div>
+</div>
+<script>
+const MARKS={"r-history": {"clip": {"x": 601, "y": 0, "width": 1099, "height": 720}, "boxes": {"1": {"x": 20, "y": 151, "w": 1059, "h": 45}, "2": {"x": 20, "y": 196, "w": 1059, "h": 18}, "3": {"x": 20, "y": 265, "w": 1059, "h": 22}, "4": {"x": 20, "y": 355, "w": 1059, "h": 45}, "5": {"x": 20, "y": 442, "w": 1059, "h": 24}}}, "r-open": {"clip": {"x": 601, "y": 0, "width": 1099, "height": 900}, "boxes": {"1": {"x": 20, "y": 442, "w": 1059, "h": 24}, "2": {"x": 20, "y": 469, "w": 1059, "h": 224}, "3": {"x": 20, "y": 699, "w": 1059, "h": 45}}}, "r-bottom": {"clip": {"x": 601, "y": 0, "width": 1099, "height": 980}, "boxes": {"1": {"x": 20, "y": 232, "w": 1059, "h": 22}, "2": {"x": 32, "y": 263, "w": 620, "h": 161}, "3": {"x": 20, "y": 468, "w": 1059, "h": 18}, "4": {"x": 20, "y": 514, "w": 1059, "h": 315}}}};
+const place=(id,scene)=>{const box=document.getElementById(id);if(!box)return;const m=MARKS[scene];const k=box.clientWidth/m.clip.width;
+for(const [n,b] of Object.entries(m.boxes)){const r=document.createElement('div');r.className='ring';Object.assign(r.style,{left:(b.x*k-3)+'px',top:(b.y*k-3)+'px',width:(b.w*k+6)+'px',height:(b.h*k+6)+'px'});
+const p=document.createElement('span');p.className='n pin';p.textContent=n;Object.assign(p.style,{left:((b.x+b.w)*k-10)+'px',top:(b.y*k-10)+'px'});box.append(r,p);}};
+window.drawMarks=()=>{place('s1','r-history');place('s2','r-open');place('s3','r-bottom');};
+</script></body></html>

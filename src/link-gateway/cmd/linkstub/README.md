@@ -1,6 +1,6 @@
 # linkstub: the link gateway's backends, stubbed
 
-`linkstub` stands in for everything the link gateway calls in `MODE_LINK`, so that one gateway can be loaded past what a
+`linkstub` stands in for everything the link gateway calls, so that one gateway can be loaded past what a
 staging stack's apiservers and database carry ([scripts/runner-link/gateway-limit.sh](../../../../scripts/runner-link/README.md#the-gateway-alone)).
 It answers each call with the smallest answer its route gives that the gateway and a runner take as valid, a fixed delay
 after the call arrived (`-delay`, 5 ms):
@@ -8,7 +8,6 @@ after the call arrived (`-delay`, 5 ms):
 | Call | Who makes it | Answer |
 | --- | --- | --- |
 | `GET /api/runner/link-token/revocations` | the gateway, on `LINK_API_URL`, every 30 s | nothing revoked in the last 70 minutes |
-| `GET /api/runner/link/mode` | the gateway, on `LINK_API_URL`, with `LINK_MODE=http` | `RUNNER_LINK_REQUIRED` on |
 | `POST /api/runner/link/welcome` | the gateway, before each Welcome | each session asked about, in order: held, durable seq 0; no release |
 | `POST /api/runner/heartbeat` | the gateway, for each heartbeat | the answer to a beat that reconciled nothing (`quietHeartbeatAnswer`), with empty link hints |
 | `POST /api/runner/link/events` | the gateway, merged event calls | each batch stored through its last seq, none refused; `heldMs` 0 |

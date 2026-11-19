@@ -16,8 +16,8 @@ const repo = path.resolve(import.meta.dirname, '..');
 const UPGRADES = ['.claude/skills/upgrade/upgrade.sh', '.agents/skills/upgrade/scripts/upgrade.sh'];
 const INSTALL = 'scripts/install-server.sh';
 const COPIED = [
-  ...UPGRADES, INSTALL, '.env.example', '.gitignore', 'docker-compose.yml', 'gateway/nginx.conf', 'scripts/pg-backup.sh',
-  'scripts/runner-link/door-check.js', 'deploy/runner-link/behind-web-gateway.env',
+  ...UPGRADES, INSTALL, 'deploy/managed-runner/host.sh', '.env.example', '.gitignore', 'docker-compose.yml', 'gateway/nginx.conf', 'scripts/pg-backup.sh',
+  'scripts/runner-link/door-check.js', 'deploy/runner-link/behind-web-gateway.env', 'src/link-gateway/nats.conf',
 ];
 const SECRET_NAMES = [
   'SIGNING_KEY', 'PUBLIC_KEY', 'GATEWAY_TOKEN', 'NATS_APISERVER_SEED', 'NATS_APISERVER_KEY', 'NATS_GATEWAY_SEED', 'NATS_GATEWAY_KEY',
@@ -43,6 +43,8 @@ case "$*" in
   "exec pgbackup-0 cat /usr/local/bin/pg-backup.sh") cat scripts/pg-backup.sh ;;
   "compose ps -q gateway") echo gateway-0 ;;
   "exec gateway-0 cat /etc/nginx/conf.d/default.conf") cat "${'$'}{FAKE_RUNNING_NGINX:-gateway/nginx.conf}" ;;
+  "compose ps -q nats") [ -n "${'$'}{FAKE_RUNNING_NATS_CONF:-}" ] && echo nats-0 ;;
+  "exec nats-0 cat /etc/orbit-nats/nats.conf") cat "$FAKE_RUNNING_NATS_CONF" ;;
   "compose ps -q link-gateway") [ -z "${'$'}{FAKE_LINK_GATEWAY_DOWN:-}" ] && echo link-gateway-0 ;;
   "inspect -f {{with index .State \"Health\"}}{{.Status}}{{end}} link-gateway-0") echo "${'$'}{FAKE_LINK_GATEWAY_HEALTH:-healthy}" ;;
   "build --help") echo '      --provenance string' ;;
@@ -59,9 +61,9 @@ case "$*" in
   "network inspect -f {{range .IPAM.Config}}{{.Gateway}} {{end}} "*) echo "172.30.0.1 " ;;
   "network inspect -f {{.EnableIPv6}} "*) echo false ;;
   "network inspect -f {{with index .Options \"com.docker.network.bridge.name\"}}{{.}}{{else}}br-{{printf \"%.12s\" .Id}}{{end}} "*) echo br-0123456789ab ;;
-  "run --rm --network host "*" orbit-managed-runner-firewall:local preflight") echo '{"backend": "nft", "ipv6": "present", "iptables": "iptables v1.8.13"}' ;;
-  "run --rm --network host "*" orbit-managed-runner-firewall:local apply "*) echo '{"backend": "nft", "enforced": true, "problems": [], "written": ["IPv4", "IPv6"]}' ;;
-  "run --rm --network orbit-managed-runners "*" orbit-managed-runner-firewall:local docker-dns") echo '[]' ;;
+  "run --rm --network host "*" orbit-cloud-runner-firewall:local preflight") echo '{"backend": "nft", "ipv6": "present", "iptables": "iptables v1.8.13"}' ;;
+  "run --rm --network host "*" orbit-cloud-runner-firewall:local apply "*) echo '{"backend": "nft", "enforced": true, "problems": [], "written": ["IPv4", "IPv6"]}' ;;
+  "run --rm --network orbit-cloud-runners "*" orbit-cloud-runner-firewall:local docker-dns") echo '[]' ;;
   "network inspect "*) [ -e "$FAKE_DOCKER_LOG.network" ] || exit 1 ;;
   "network create "*) : >"$FAKE_DOCKER_LOG.network" ;;
 esac
@@ -144,6 +146,7 @@ const APISERVER_UP = /^compose up -d --wait (--no-deps )?apiserver wiki-worker w
 const IMAGES_BUILD = /^compose build .*apiserver wiki-worker web/;
 const DOOR_GATEWAY = 'node - http://gateway/runner-link';
 const WEB_GATEWAY_RECREATE = 'compose up -d --wait --no-deps --force-recreate gateway';
+const NATS_RECREATE = 'compose up -d --wait --wait-timeout 180 --no-deps --force-recreate nats';
 
 function assertNoSecretShown(fixture, run) {
   for (const name of SECRET_NAMES) {
@@ -411,6 +414,25 @@ for (const upgrade of UPGRADES) {
     }
   });
 
+  test(`${upgrade}: nats is recreated once, after the link is up and ahead of the apiserver, where the nats.conf it runs is not this checkout's`, (t) => {
+    const fixture = makeFixture(t);
+    writeFileSync(fixture.envFile, BEFORE_LINK);
+    // The file a running orbit-nats kept after a checkout replaced it: the grants of an earlier release.
+    const running = path.join(fixture.root, 'running-nats.conf');
+    writeFileSync(running, '# the nats.conf of an earlier release\n');
+    const run = fixture.run(upgrade, ['--no-pull'], { FAKE_RUNNING_NATS_CONF: running });
+    assert.equal(run.status, 0, run.output);
+    assert.match(run.stdout, /Recreating nats to run this checkout's src\/link-gateway\/nats\.conf/);
+    const calls = fixture.calls();
+    assert.equal(calls.filter((call) => call === NATS_RECREATE).length, 1);
+    assert.ok(indexOfCall(calls, LINK_UP) < calls.indexOf(NATS_RECREATE));
+    assert.ok(calls.indexOf(NATS_RECREATE) < indexOfCall(calls, APISERVER_UP));
+    // Running this checkout's already: it is left alone.
+    const again = fixture.run(upgrade, ['--no-pull'], { FAKE_RUNNING_NATS_CONF: path.join(fixture.checkout, 'src/link-gateway/nats.conf') });
+    assert.equal(again.status, 0, again.output);
+    assert.ok(!fixture.calls().includes(NATS_RECREATE));
+  });
+
   test(`${upgrade}: a pull that changes the script runs the new one, from the start, once`, (t) => {
     const fixture = makeFixture(t);
     writeFileSync(fixture.envFile, PRODUCTION_SHAPED);
@@ -469,7 +491,7 @@ test('no script writes the switch: RUNNER_LINK_REQUIRED and runner_link_switch a
 
 test('a fresh install writes the link\'s lines once, after the managed runners\' profile, shows no secret, and checks the way a runner takes', (t) => {
   const fixture = makeFixture(t);
-  const run = fixture.run(INSTALL, ['--public-origin', 'http://10.66.82.117:2086', '--managed-runner-image', 'orbit-managed-runner:fixture']);
+  const run = fixture.run(INSTALL, ['--public-origin', 'http://10.66.82.117:2086', '--managed-runner-image', 'orbit-cloud-runner:fixture']);
   assert.equal(run.status, 0, run.output);
   assertNoSecretShown(fixture, run);
   const text = readFileSync(fixture.envFile, 'utf8');
@@ -517,7 +539,7 @@ test('a fresh install whose link does not answer, or whose image makes no secret
 
 test('the firewall added later goes into both of a deployment\'s profile lines', (t) => {
   const fixture = makeFixture(t);
-  assert.equal(fixture.run(INSTALL, ['--no-managed-runner-firewall', '--managed-runner-image', 'orbit-managed-runner:fixture', '--no-start']).status, 0);
+  assert.equal(fixture.run(INSTALL, ['--no-managed-runner-firewall', '--managed-runner-image', 'orbit-cloud-runner:fixture', '--no-start']).status, 0);
   const run = fixture.run(INSTALL, ['--enable-managed-runner-firewall']);
   assert.equal(run.status, 0, run.output);
   assert.deepEqual(readFileSync(fixture.envFile, 'utf8').split('\n').filter((line) => line.startsWith('COMPOSE_PROFILES=')), [
@@ -593,7 +615,12 @@ test('the lines an upgrade writes render a gateway behind the web gateway: plain
   const rendered = JSON.parse(compose(dir, ['config', '--format', 'json', 'link-gateway']));
   const gateway = rendered.services['link-gateway'];
   assert.equal(gateway.environment.LINK_TLS_MODE, 'off');
-  assert.equal(gateway.environment.LINK_IP_RATE, '200');
-  assert.equal(gateway.environment.LINK_IP_BURST, '400');
+  // The per-address limit is what the env file ships: since 015f98107 (2026-11-11) it is 100000/100000, because behind
+  // the web gateway every runner arrives from one address and the per-address limit steps aside for the handshake limit.
+  const shipped = Object.fromEntries(readFileSync(path.join(repo, 'deploy/runner-link/behind-web-gateway.env'), 'utf8')
+    .split('\n').map((line) => line.match(/^(LINK_IP_(?:RATE|BURST))=(.*)$/)).filter(Boolean).map(([, key, value]) => [key, value]));
+  assert.ok(shipped.LINK_IP_RATE && shipped.LINK_IP_BURST, 'behind-web-gateway.env names LINK_IP_RATE and LINK_IP_BURST');
+  assert.equal(gateway.environment.LINK_IP_RATE, shipped.LINK_IP_RATE);
+  assert.equal(gateway.environment.LINK_IP_BURST, shipped.LINK_IP_BURST);
   assert.deepEqual(gateway.ports.map(({ host_ip, target, published }) => [host_ip, target, published]), [['127.0.0.1', 8443, '0'], ['127.0.0.1', 9464, '0']]);
 });

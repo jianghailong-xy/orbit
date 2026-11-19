@@ -45,23 +45,27 @@ final class AgentsModel {
     /// keys: a new-session draft is what offers pools, and the draft seed resolves a workspace that
     /// runs on one through them.
     private(set) var providerPools: [ProviderPool] = []
-    /// How the pool reads have gone: the Infrastructure page waits for an answer before it says what an
+    /// How the pool reads have gone: the Machines & models page waits for an answer before it says what an
     /// engine can run on.
     private(set) var poolsState = ListLoadState()
-    /// The account's own keys (GET /providers/mine), disabled ones included: the Infrastructure page's API
+    /// The account's own keys (GET /providers/mine), disabled ones included: the Machines & models page's API
     /// keys, and what each engine can run on. Read when that page asks, unlike the catalogue above.
     private(set) var ownKeys: [ConfiguredProvider] = []
     private(set) var ownKeysState = ListLoadState()
+    /// Every provider with its models' SubAgent tiers (GET /providers/subagent-tiers): the Infrastructure
+    /// page's Model tiers and an Agent's SubAgents provider list. Nil until read.
+    private(set) var subagentTiers: SubagentTiersResponse?
+    private(set) var subagentTiersFailed = false
     /// The shared Codex pools this account is in (GET /providers/shared-pools), read into their own
     /// model. A new-session draft offers them beside the account pools (`allPools`), and the
-    /// Infrastructure page lists them on their own — which is why the two are kept apart here.
+    /// Machines & models page lists them on their own — which is why the two are kept apart here.
     private(set) var sharedPools: [SharedPool] = []
     /// Every pool a new-session draft may offer, in web's order: the shared ones drawn as account
     /// pools whose members are their keys (`SharedPools.asProviderPool`), then this account's own.
     var allPools: [ProviderPool] { SharedPools.asProviderPools(sharedPools) + providerPools }
     /// The account's own providers as its key list reads them (GET /providers/mine), with the ids and
     /// endpoints the catalogue above leaves out: what tells a DeepSeek key, and what its balance is
-    /// asked by. Read for Infrastructure's API keys (`loadDeepSeekBalances`).
+    /// asked by. Read for Machines & models' API keys (`loadDeepSeekBalances`).
     private(set) var personalProviders: [ConfiguredProvider] = []
     /// Each DeepSeek key's account balance by provider id, as the server last answered — or why it
     /// didn't. Absent until asked, which a page reads as loading.
@@ -74,14 +78,15 @@ final class AgentsModel {
 
     // The selected agent's sessions for the current Open/Completed/Trash view.
     private(set) var agentSessions: [Session] = []
-    #if os(iOS)
-    /// The same scope across every Workspace, for project wording and coordinator placement.
+    /// The same scope across every Workspace, for project wording and coordinator placement (and a
+    /// project's sessions page, on every shell).
     private(set) var allSessions: [Session] = []
-    #endif
     private(set) var sessionsLoading = false
     /// The last (agent, view) `loadSessions` ran for, so a row action can silently refresh the same
     /// list without the view having to thread the agent id / tab back in.
     private var lastSessionQuery: (agentID: String, view: SessionView)?
+    private var scheduledSnapshot: (address: SessionFolderAddress, sessions: [Session])?
+    private var scheduledRequest = 0
     /// Sessions being moved to Trash from this device (`AppModel.deleteSession`), kept out of this
     /// pane's own Completed / Trash reads until the move has settled: a read already on the wire when
     /// Delete was pressed — this pane's poll, or the re-read a delete just before it started — would
@@ -95,6 +100,8 @@ final class AgentsModel {
     /// The app's Open-list refresh (`AppModel.loadSessions`), answering the list it adopted — nil
     /// when that fetch failed. An Open list loads through it, so the app fetches that list once.
     @ObservationIgnored var refreshOpen: (@MainActor () async -> [Session]?)?
+    /// Told when the server has answered the workspace list: the share picker's snapshot names them.
+    @ObservationIgnored var onWorkspacesLoaded: (@MainActor () -> Void)?
 
     private let api: APIClient
 
@@ -102,9 +109,11 @@ final class AgentsModel {
         api = APIClient(baseURL: baseURL, tokenStore: tokenStore)
     }
 
-    var groups: [AgentGroup] {
-        AgentListLogic.sidebarGroups(items, runnerOrder: runnerOrder, machines: machinesToSetUp)
+    /// The store over a transport handed in (the observation tests): the app builds `api` above.
+    init(api: APIClient) {
+        self.api = api
     }
+
     var orderedItems: [Agent] { AgentListLogic.ordered(items, runnerOrder: runnerOrder) }
     /// What the workspace list shows where its rows would be: a failed fetch is never "no workspaces".
     var listPresentation: ListLoadPresentation {
@@ -174,7 +183,7 @@ final class AgentsModel {
     /// read is slow holds up no other key's.
     func loadDeepSeekBalances() async {
         guard let mine = try? await api.personalProviders() else { return }
-        personalProviders = mine
+        assignIfChanged(\.personalProviders, mine)
         let ids = mine.filter(DeepSeekBalance.applies(to:)).compactMap(\.providerID)
         await withTaskGroup(of: Void.self) { group in
             for id in ids { group.addTask { await self.readBalance(id, refresh: false) } }
@@ -190,11 +199,13 @@ final class AgentsModel {
     }
 
     private func readBalance(_ id: String, refresh: Bool) async {
+        let reading: ProviderBalanceReading
         do {
-            deepSeekBalances[id] = .answered(try await api.providerBalance(id, refresh: refresh))
+            reading = .answered(try await api.providerBalance(id, refresh: refresh))
         } catch {
-            deepSeekBalances[id] = .unreachable(APIClient.failureReason(error))
+            reading = .unreachable(APIClient.failureReason(error))
         }
+        if deepSeekBalances[id] != reading { deepSeekBalances[id] = reading }
     }
 
     // MARK: a Cursor key's last check (P2 follow-up)
@@ -207,8 +218,8 @@ final class AgentsModel {
         do {
             let answer = try await api.recheckCursorKey(id)
             if let mine = try? await api.personalProviders() {
-                personalProviders = mine
-                ownKeys = mine
+                assignIfChanged(\.personalProviders, mine)
+                assignIfChanged(\.ownKeys, mine)
             }
             return answer.recorded ? nil : answer.message
         } catch {
@@ -220,24 +231,45 @@ final class AgentsModel {
 
     /// The pools read again: an account went in or out, or a pool went.
     func reloadPools() async {
-        poolsState.begin()
+        assignIfChanged(\.poolsState, poolsState.startingRead())
         do {
-            providerPools = try await api.providerPools()
-            poolsState.succeed()
+            assignIfChanged(\.providerPools, try await api.providerPools())
+            assignIfChanged(\.poolsState, poolsState.afterSuccess())
         } catch {
-            poolsState.fail()
+            assignIfChanged(\.poolsState, poolsState.afterFailure())
         }
     }
 
     /// Best-effort like the pools: a failed read keeps the last good list.
     func loadOwnKeys() async {
-        ownKeysState.begin()
+        assignIfChanged(\.ownKeysState, ownKeysState.startingRead())
         do {
-            ownKeys = try await api.personalProviders()
-            ownKeysState.succeed()
+            assignIfChanged(\.ownKeys, try await api.personalProviders())
+            assignIfChanged(\.ownKeysState, ownKeysState.afterSuccess())
         } catch {
-            ownKeysState.fail()
+            assignIfChanged(\.ownKeysState, ownKeysState.afterFailure())
         }
+    }
+
+    func loadSubagentTiers() async {
+        do {
+            subagentTiers = try await api.subagentTiers()
+            subagentTiersFailed = false
+        } catch {
+            subagentTiersFailed = true
+        }
+    }
+
+    /// Set or clear (nil) the owner's tier for one model of their own key, then read the table again.
+    /// Answers why it failed, or nil.
+    func setModelTier(providerID: String, model: String, tier: String?) async -> String? {
+        do {
+            try await api.setModelTier(providerID: providerID, model: model, tier: tier)
+        } catch {
+            return SubagentSettings.tierSaveFailed + ": " + APIClient.failureReason(error)
+        }
+        await loadSubagentTiers()
+        return nil
     }
 
     func pausePoolMember(_ pool: ProviderPool, member: PoolMember, durationMinutes: Int?) async -> String? {
@@ -289,25 +321,26 @@ final class AgentsModel {
     }
 
     func load() async {
-        loadState.begin()
+        assignIfChanged(\.loadState, loadState.startingRead())
         do {
-            items = try await api.agents()
+            assignIfChanged(\.items, try await api.agents())
             workspacesAnswered = true
+            onWorkspacesLoaded?()
             await refreshRunnerSnapshot()
             // Also when a refresh already on the wire took that call: the workspaces just changed.
             updateMachinesToSetUp()
             // Best-effort too: a transient failure keeps the last good list rather than blanking
             // the pickers (mirrors the runners fetch above).
             if let providers = try? await api.providers() {
-                configuredProviders = providers
-                configuredProvidersLoaded = true
+                assignIfChanged(\.configuredProviders, providers)
+                assignIfChanged(\.configuredProvidersLoaded, true)
             }
             await reloadPools()
-            if let shared = try? await api.sharedPools() { sharedPools = shared }
-            loadState.succeed()
+            if let shared = try? await api.sharedPools() { assignIfChanged(\.sharedPools, shared) }
+            assignIfChanged(\.loadState, loadState.afterSuccess())
         } catch {
-            errorText = friendly(error)
-            loadState.fail()
+            assignIfChanged(\.errorText, friendly(error))
+            assignIfChanged(\.loadState, loadState.afterFailure())
         }
     }
 
@@ -351,7 +384,7 @@ final class AgentsModel {
     /// snapshot, so the page and the app's tick do not each read the same list.
     func adoptRunnerSnapshot(_ runners: [Runner]) {
         let order = runners.map(\.id)
-        let names = Dictionary(runners.map { ($0.id, $0.displayName ?? $0.name) },
+        let names = Dictionary(runners.map { ($0.id, RunnerPageFormat.displayName($0)) },
                                uniquingKeysWith: { a, _ in a })
         let online = Dictionary(runners.compactMap { runner in
             WorkspaceRunnerAvailabilityLogic.onlineValue(
@@ -376,11 +409,18 @@ final class AgentsModel {
         updateMachinesToSetUp()
     }
 
+    private var managedStatus: ManagedRunnerStatus?
+
+    func adoptManagedStatus(_ status: ManagedRunnerStatus?) {
+        managedStatus = status
+        updateMachinesToSetUp()
+    }
+
     private func updateMachinesToSetUp() {
         guard workspacesAnswered else { return }
-        let machines = AgentListLogic.machinesToSetUp(runners: runnerRows, agents: items)
+        let machines = AgentListLogic.machinesToSetUp(runners: runnerRows, agents: items, managedStatus: managedStatus)
         if machines != machinesToSetUp { machinesToSetUp = machines }
-        let first = runnerRows.first(where: AgentListLogic.isOnline)?.id
+        let first = runnerRows.first { AgentListLogic.isOnline($0) || ManagedRunnerLogic.managedSetupState(runnerID: $0.id, status: managedStatus) != nil }?.id
         if first != firstOnlineMachine { firstOnlineMachine = first }
     }
 
@@ -421,7 +461,6 @@ final class AgentsModel {
         agentSessions[index] = agentSessions[index].settingTitle(title)
     }
 
-    #if os(iOS)
     /// File this pane's row in a folder on the spot, for the same reason: a Completed row isn't in
     /// the Open snapshot. See `AppModel.moveSession`.
     func applyMovedSession(_ id: String, folderID: String?) {
@@ -435,7 +474,6 @@ final class AgentsModel {
         guard lastSessionQuery?.agentID != workspaceID else { return }
         agentSessions = SessionFilter.removing(id, from: agentSessions)
     }
-    #endif
 
     /// Update relation metadata even in this pane's independently loaded Completed/Trash rows.
     /// Open rows are refreshed through `applyOpenSnapshot`, but those two scopes otherwise wait for
@@ -450,6 +488,7 @@ final class AgentsModel {
     /// list may otherwise retain a tappable ghost row until its next successful polling response.
     func discardSession(_ id: String) {
         agentSessions = SessionFilter.removing(id, from: agentSessions)
+        scheduledSnapshot?.sessions.removeAll { $0.id == id }
     }
 
     /// Take a row being moved to Trash out of this pane's lists on the tap, and keep it out of the
@@ -457,13 +496,32 @@ final class AgentsModel {
     func hideTrashedSession(_ id: String) {
         trashing.insert(id)
         agentSessions = SessionFilter.removing(id, from: agentSessions)
-        #if os(iOS)
         allSessions = SessionFilter.removing(id, from: allSessions)
-        #endif
+        scheduledSnapshot?.sessions.removeAll { $0.id == id }
     }
 
     func revealTrashedSession(_ id: String) {
         trashing.remove(id)
+    }
+
+    func scheduledRuns(in address: SessionFolderAddress) -> [Session]? {
+        guard let snapshot = scheduledSnapshot, snapshot.address == address else { return nil }
+        return snapshot.sessions
+    }
+
+    func scheduledRunSession(id: String) -> Session? {
+        scheduledSnapshot?.sessions.first { $0.id == id }
+    }
+
+    func loadScheduledRuns(_ address: SessionFolderAddress) async {
+        scheduledRequest += 1
+        let request = scheduledRequest
+        guard let rows = try? await api.listScheduledRuns(workspaceID: address.agentID, view: address.view),
+              !Task.isCancelled, request == scheduledRequest else { return }
+        let sessions = SessionFilter.removing(trashing, from: rows)
+        if scheduledRuns(in: address) != sessions {
+            scheduledSnapshot = (address, sessions)
+        }
     }
 
     /// Load one agent's sessions for a view. The list endpoint filters by view only, so narrow to
@@ -489,13 +547,14 @@ final class AgentsModel {
             // With the app's Open snapshot in hand an Open list has its rows already: show them and
             // let the fetch below refresh them in place.
             if view == .open, let openSnapshot {
-                agentSessions = SessionFilter.forAgent(openSnapshot, agentID: agentID, view: view)
+                assignIfChanged(\.agentSessions,
+                                SessionFilter.forAgent(openSnapshot, agentID: agentID, view: view))
             } else {
-                agentSessions = []
-                sessionsLoading = true
+                assignIfChanged(\.agentSessions, [])
+                assignIfChanged(\.sessionsLoading, true)
             }
         }
-        defer { if isCurrent() { sessionsLoading = false } }
+        defer { if isCurrent() { assignIfChanged(\.sessionsLoading, false) } }
         // The app already keeps the Open list: refresh it through the app's one fetch rather than
         // a second of the same list beside it. A failed one falls through to this list's own, which
         // says what went wrong.
@@ -507,11 +566,10 @@ final class AgentsModel {
             let read = try await api.listSessions(view: view)
             guard isCurrent() else { return }
             let all = SessionFilter.removing(trashing, from: read)
-            #if os(iOS)
-            allSessions = all
-            #endif
-            agentSessions = SessionFilter.forAgent(all, agentID: agentID, view: view)
-        } catch { if isCurrent() { errorText = friendly(error) } }
+            assignIfChanged(\.allSessions, all)
+            assignIfChanged(\.agentSessions,
+                            SessionFilter.forAgent(all, agentID: agentID, view: view))
+        } catch { if isCurrent() { assignIfChanged(\.errorText, friendly(error)) } }
     }
 
     /// Silently refresh the currently-shown session list (after a pin/complete/delete row action).
@@ -545,9 +603,7 @@ final class AgentsModel {
     func applyOpenRow(_ all: [Session], workspaceIDs: Set<String?>) {
         openSnapshot = all
         guard let q = lastSessionQuery, q.view == .open else { return }
-        #if os(iOS)
-        allSessions = all
-        #endif
+        assignIfChanged(\.allSessions, all)
         guard workspaceIDs.contains(q.agentID) else { return }
         let mine = SessionFilter.forAgent(all, agentID: q.agentID, view: .open)
         if agentSessions != mine { agentSessions = mine }
@@ -556,9 +612,7 @@ final class AgentsModel {
     /// Write the Open list only where it changed: Observation invalidates on assignment, equal or
     /// not, and the list redraws for each — a change in another workspace leaves this one's rows.
     private func adoptOpen(_ all: [Session], agentID: String) {
-        #if os(iOS)
         if allSessions != all { allSessions = all }
-        #endif
         let mine = SessionFilter.forAgent(all, agentID: agentID, view: .open)
         if agentSessions != mine { agentSessions = mine }
     }

@@ -55,6 +55,8 @@ import { PublicIdInterceptor } from '../common/public-id.interceptor';
 import { TransientDbConflictFilter } from '../common/transient-db-conflict.filter';
 import { prismaClientFor } from '../prisma/prisma-client';
 import { PrismaService } from '../prisma/prisma.service';
+import { pastCreateAllowance } from '../test-support/past-create-allowance';
+import { SESSION_CREATE_ALLOWANCE_MESSAGE } from './session-create-allowance';
 import { AttemptBudgetMeterService } from '../projects/attempt-budget-meter.service';
 import {
   assertCoordinatorPgUrlIsIsolated,
@@ -167,6 +169,9 @@ test('a coordinator’s creates in a project nobody has started, or one that is 
           create: tasks.create.bind(tasks),
           createMany: tasks.createMany.bind(tasks),
           resolveAgentCreator: tasks.resolveAgentCreator.bind(tasks),
+          // The runner door's card gate (`task-write-approval.ts`): the controller calls it before
+          // every session create, so a facade that does not lend it answers 500 instead.
+          assertSessionTaskWriteApproved: tasks.assertSessionTaskWriteApproved.bind(tasks),
         },
       },
       { provide: MergeReceiptService, useValue: {} },
@@ -224,7 +229,7 @@ test('a coordinator’s creates in a project nobody has started, or one that is 
   });
 
   /** A conversation on this runner, in the middle of a turn — where an agent's create is asked. */
-  async function conversation(title: string): Promise<string> {
+  async function conversation(title: string, { fresh = false } = {}): Promise<string> {
     const id = randomUUID();
     await prisma.session.create({
       data: {
@@ -242,6 +247,8 @@ test('a coordinator’s creates in a project nobody has started, or one that is 
         startedAt: new Date(),
       },
     });
+    // Past its card-free creates unless asked: these cases are about the card a person answers.
+    if (!fresh) await pastCreateAllowance(prisma, ownerId, id);
     return id;
   }
 
@@ -559,8 +566,18 @@ test('a coordinator’s creates in a project nobody has started, or one that is 
 
     // The premise of the case, from the other door: this body's write is refused too, with the same
     // answer. That is what makes the card pointless — a person pressing it can only be turned away.
+    // The write names a session that holds an answered card for this exact body, so the runner
+    // door's card policy has nothing to say and the service's own check is what answers; the card
+    // the ROUTE would file is still never raised, which the assertions below hold.
+    const carded = await conversation('a session holding a card for a body the write refuses');
+    await prisma.approval.create({
+      data: {
+        sessionId: carded, toolName: 'orbit_task_create', input: refused as never,
+        status: 'ALLOWED', decidedById: ownerId, decidedAt: new Date(),
+      },
+    });
     const writeAnswer = await send('POST', '/runner/tasks', refused, {
-      'x-orbit-session-id': uuidToBase62(someone),
+      'x-orbit-session-id': uuidToBase62(carded),
       'x-orbit-workspace-id': uuidToBase62(workspaceId),
     });
     assert.equal(writeAnswer.status, 409, writeAnswer.text);
@@ -607,5 +624,59 @@ test('a coordinator’s creates in a project nobody has started, or one that is 
     // Stored as sent: the card renders the body the runner spelled, public id and all.
     assert.equal(stored.assigneeId, assigneeId);
     assert.equal(stored.title, 'an ordinary create');
+  });
+
+  // ── 11 ───────────────────────────────────────────────────────────────────────────────────────
+  await t.test('by default a session files 8 tasks without a card, and the create that goes past 8 is asked', async () => {
+    const someone = await conversation('an ordinary session, first creates', { fresh: true });
+
+    const batch = Array.from({ length: 7 }, (_, i) => taskBody(`step ${i + 1}`, null));
+    const batchCard = await askBatch(someone, batch);
+    assert.equal(batchCard.status, 'ALLOWED');
+    assert.deepEqual(await approvalRow(batchCard.id), {
+      status: 'ALLOWED',
+      message: SESSION_CREATE_ALLOWANCE_MESSAGE,
+      decided_by_id: null,
+      decided: true,
+    });
+    await write(someone, '/runner/tasks/batch-create', { tasks: batch });
+
+    // The eighth is still within the default 8.
+    const eighth = taskBody('step 8', null);
+    const eighthCard = await ask(someone, 'orbit_task_create', eighth);
+    assert.equal(eighthCard.status, 'ALLOWED');
+    await write(someone, '/runner/tasks', eighth);
+    assert.deepEqual(await raised(someone), { cards: 0, pushes: 0, pending: 0 });
+
+    // The ninth would go past 8: a person is asked.
+    const ninth = await ask(someone, 'orbit_task_create', taskBody('step 9', null));
+    await assertAsked(someone, ninth);
+  });
+
+  // ── 12 ───────────────────────────────────────────────────────────────────────────────────────
+  await t.test("the account's cardFreeTaskCreates replaces the default, and 0 cards every create", async () => {
+    const before = await prisma.user.findUniqueOrThrow({ where: { id: ownerId }, select: { preferences: true } });
+    const withAllowance = async (n: number) =>
+      prisma.user.update({
+        where: { id: ownerId },
+        data: { preferences: { ...((before.preferences ?? {}) as object), cardFreeTaskCreates: n } },
+      });
+    try {
+      await withAllowance(2);
+      const two = await conversation('an account that allows 2', { fresh: true });
+      const pair = [taskBody('one', null), taskBody('two', null)];
+      assert.equal((await askBatch(two, pair)).status, 'ALLOWED');
+      await write(two, '/runner/tasks/batch-create', { tasks: pair });
+      await assertAsked(two, await ask(two, 'orbit_task_create', taskBody('three', null)));
+
+      await withAllowance(0);
+      const none = await conversation('an account that allows none', { fresh: true });
+      await assertAsked(none, await ask(none, 'orbit_task_create', taskBody('the first', null)));
+    } finally {
+      await prisma.user.update({
+        where: { id: ownerId },
+        data: { preferences: (before.preferences ?? {}) as object },
+      });
+    }
   });
 });

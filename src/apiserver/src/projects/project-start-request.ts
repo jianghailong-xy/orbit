@@ -269,7 +269,8 @@ export function startReadiness(
   // A budget with no command is still a merge check setting, and one that needs the same row the
   // command does: the start writes both to the project's binding, and a project with no repository
   // has none to write. Refused here so the coordinator hears it before the owner's card is filed.
-  const checkNamed = mergeCheck !== null || settings.mergeCheckTimeoutSeconds != null;
+  const checkNamed = mergeCheck !== null || settings.mergeCheckTimeoutSeconds != null
+    || settings.landingCheckCommand != null || settings.landingCheckTimeoutSeconds != null;
   const needsRepository = settings.line === 'PROJECT_BRANCH' || checkNamed || settings.upstreamRef;
   if (!plan.repository && needsRepository) {
     finding('REFUSE', 'START_REPOSITORY_UNKNOWN',

@@ -14,6 +14,10 @@ struct TaskActivityLookup: Equatable {
     let progress: (String) -> TaskProgress?
     let isRunning: (String) -> Bool
     let subagentItems: (String) -> [TranscriptItem]
+    /// The `delegate` call's SubAgent run, for the block's tier, model, duration and Why.
+    var subagentRun: (String) -> SubagentRunView? = { _ in nil }
+    /// The session's own engine, which an Agent's chip leads with when the work moved to another one.
+    var parentEngine: String? = nil
     var fullPayload: (@MainActor (Int) async -> JSONValue?)? = nil
 
     static func == (lhs: TaskActivityLookup, rhs: TaskActivityLookup) -> Bool {
@@ -171,8 +175,8 @@ struct SubagentTranscriptView: View {
                 switch row {
                 case .item(let item):
                     TranscriptItemView(item: item, fullPayload: fullPayload)
-                case .toolGroup(let cards):
-                    ToolGroupCardView(cards: cards, fullPayload: fullPayload)
+                case .steps(let items):
+                    StepsRowView(items: items, fullPayload: fullPayload)
                 default:
                     EmptyView()
                 }

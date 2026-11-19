@@ -76,6 +76,9 @@ export interface CriteriaEditItem {
   readonly acceptanceExpectedExitCode?: readonly number[] | null;
   /** The work whose output answers this criterion. */
   readonly evidenceTaskId?: string | null;
+  /** How it is met (migration 0545). Absent is TASKS. A change either way changes what the
+   *  criterion means, so it cannot take effect on its own. */
+  readonly satisfiedBy?: 'TASKS' | 'CONFIRMATION';
 }
 
 /** Weakest to strictest. A step toward the end of this list is the only automatic tightening. */
@@ -106,7 +109,8 @@ function retainedCriterionWeakens(before: CriteriaEditItem, after: CriteriaEditI
   return (before.evidenceTaskId ?? null) !== (after.evidenceTaskId ?? null)
     || acceptedExitCodesWiden(before.acceptanceExpectedExitCode, after.acceptanceExpectedExitCode)
     || verificationMethodWeakens(before.verificationMethod, after.verificationMethod)
-    || before.text !== after.text;
+    || before.text !== after.text
+    || (before.satisfiedBy ?? 'TASKS') !== (after.satisfiedBy ?? 'TASKS');
 }
 
 /**

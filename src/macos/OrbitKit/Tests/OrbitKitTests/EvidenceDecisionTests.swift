@@ -363,7 +363,7 @@ final class EvidenceDecisionTests: XCTestCase {
                       "a server older than the coordinator's queue sends neither group")
     }
 
-    // MARK: 5 — while the coordinator is paused (project 34cygPTQe5LPUT7tdUAzG)
+    // MARK: coordinator delivery compatibility
 
     private static let coordinator = "34cucZFGh0i7pUbWKZlgG"
 
@@ -423,206 +423,17 @@ final class EvidenceDecisionTests: XCTestCase {
         XCTAssertTrue(tolerant.sentToCoordinator.isEmpty)
     }
 
-    /// The shared corpus Android and the web read (`interaction-cards.fixture.json`, T1's groups)
-    /// decodes into the same two groups, and each version stands where the conversation it names
-    /// would draw it: one waiting, one sent, and the pending one still the question it was.
-    func testTheSharedFixturesQueueStandsWhereItsConversationDrawsIt() throws {
-        var directory = URL(fileURLWithPath: #filePath).deletingLastPathComponent()
-        var corpus: [String: Any]?
-        for _ in 0..<12 where corpus == nil {
-            let file = directory.appendingPathComponent("src/shared/src/interaction-cards.fixture.json")
-            if FileManager.default.fileExists(atPath: file.path) {
-                corpus = try JSONSerialization.jsonObject(with: Data(contentsOf: file)) as? [String: Any]
-            }
-            directory.deleteLastPathComponent()
-        }
-        let root = try XCTUnwrap(corpus, "src/shared/src/interaction-cards.fixture.json was not found")
-        let sessionID = try XCTUnwrap(root["sessionId"] as? String)
-        let projectID = try XCTUnwrap(root["projectId"] as? String)
-        let standingRead = try XCTUnwrap((root["snapshot"] as? [String: Any])?["standing"] as? [String: Any])
-        let queue = try JSONDecoder().decode(
-            EvidenceDecisionQueue.self,
-            from: JSONSerialization.data(withJSONObject: try XCTUnwrap(standingRead["evidenceDecisions"])))
-
-        let waiting = try XCTUnwrap(queue.waitingOnCoordinator.first)
-        let handed = try XCTUnwrap(queue.sentToCoordinator.first)
-        XCTAssertNotNil(waiting.submittedAt, "a waiting version carries when it was submitted")
-        func at(_ taskId: String, _ revision: String) -> EvidenceDecisionStanding.State {
-            EvidenceDecisions.standing(queue: queue, projectId: projectID, sessionId: sessionID,
-                                       taskId: taskId, evidenceRevision: revision).state
-        }
-        XCTAssertEqual(at(waiting.taskId, waiting.evidenceRevision), .waiting(waiting))
-        XCTAssertEqual(at(handed.taskId, handed.evidenceRevision), .sent(handed))
-        let asked = try XCTUnwrap(queue.pending.first)
-        XCTAssertEqual(at(asked.taskId, asked.evidenceRevision), .decidable(asked))
-    }
-
-    /// Where a version stands in the coordinator's conversation: waiting (its owner may still decide
-    /// it, nobody is asking them to), sent (nothing to press — the coordinator holds it), or the
-    /// question it always was. Neither of the first two is open, which is what the bar over the
-    /// transcript counts (`NeedsYouLogicTests`).
-    func testAVersionWaitingOrSentIsAnswerableOrNotButNeverOpen() {
-        let waiting = row(taskId: "waiting", gaps: ["没在实体机上跑"])
-        let asked = row(taskId: "asked", gaps: [])
-        let queue = coordinatorQueue(pending: [asked], waiting: [waiting], sent: [sent("handed")])
-
-        let folded = standing(queue, "waiting")
-        XCTAssertEqual(folded.state, .waiting(waiting))
-        XCTAssertTrue(folded.waitsForCoordinator)
-        XCTAssertTrue(folded.answerable, "Decide it myself: its owner may still decide it")
-        XCTAssertEqual(folded.row, waiting, "and the opened card reads the row the read published")
-        XCTAssertFalse(EvidenceDecisions.isOpen(folded), "nobody is asking the reader yet")
-        XCTAssertEqual(EvidenceDecisions.heading(folded), EvidenceDecisions.askHeading,
-                       "opened, it asks today's question")
-        XCTAssertNil(EvidenceDecisions.staleExplanation(folded))
-
-        let handed = standing(queue, "handed")
-        XCTAssertEqual(handed.state, .sent(sent("handed")))
-        XCTAssertFalse(handed.answerable, "the coordinator holds it; this end offers nothing to press")
-        XCTAssertFalse(EvidenceDecisions.isOpen(handed))
-        XCTAssertFalse(handed.waitsForCoordinator)
-
-        XCTAssertEqual(standing(queue, "asked").state, .decidable(asked))
-        XCTAssertTrue(EvidenceDecisions.isOpen(standing(queue, "asked")))
-    }
-
-    /// The two groups are drawn under the rule the cards are: this project's versions, ones the door
-    /// would take from this session — and each in the conversation it is listed for.
-    func testOnlyThisProjectsQueueIsDrawnHere() {
-        let elsewhere = row(taskId: "elsewhere", projectId: "34MPiBgZ80YpSKt0lmTQA", gaps: [])
-        let notMine = row(taskId: "not-mine", gaps: [], independent: false)
-        let mine = row(taskId: "mine", gaps: [])
-        let queue = coordinatorQueue(waiting: [elsewhere, notMine, mine],
-                                     sent: [sent("sent-elsewhere", projectId: "34MPiBgZ80YpSKt0lmTQA"),
-                                            sent("sent-here")])
-        XCTAssertEqual(EvidenceDecisions.coordinatorQueueRows(queue: queue, projectId: Self.project,
-                                                              sessionId: Self.coordinator).map(\.taskId),
-                       ["mine"])
-        XCTAssertEqual(EvidenceDecisions.sentRows(queue: queue, projectId: Self.project).map(\.taskId),
-                       ["sent-here"])
-        XCTAssertTrue(EvidenceDecisions.coordinatorQueueRows(queue: queue, projectId: nil).isEmpty,
-                      "a conversation that coordinates nothing draws none of them")
-        XCTAssertTrue(EvidenceDecisions.sentRows(queue: queue, projectId: nil).isEmpty)
-        XCTAssertEqual(standing(queue, "elsewhere").state, .alreadyDecided,
-                       "another project's waiting version is no card here")
-    }
-
-    /// One card per version, whichever group it is in: it is superseded by a later revision in
-    /// either drawn group, it gives a reply typed against it somewhere to go only while it can still
-    /// be decided here, and a card for a version that only ever waited is let go of once the read
-    /// stops listing it — nobody was asked it — while one that was a question here stays to explain.
-    func testOneCardFollowsItsVersionBetweenTheGroups() {
-        let later = row(taskId: "task", revision: "2", gaps: [])
-        let replaced = standing(coordinatorQueue(waiting: [later]), "task", "1")
-        XCTAssertEqual(replaced.state, .superseded(replacement: later))
-        XCTAssertTrue(EvidenceDecisions.letsGo(replaced, engaged: false),
-                      "it only ever waited: nothing is left behind")
-        XCTAssertFalse(EvidenceDecisions.letsGo(replaced, engaged: true),
-                       "asked here, or opened: it stays and says it was superseded")
-
-        let settled = standing(coordinatorQueue(), "task", "1")
-        XCTAssertEqual(settled.state, .alreadyDecided)
-        XCTAssertTrue(EvidenceDecisions.letsGo(settled, engaged: false))
-        for kept in [standing(coordinatorQueue(waiting: [row(taskId: "task", gaps: [])]), "task"),
-                     standing(coordinatorQueue(sent: [sent("task")]), "task"),
-                     standing(coordinatorQueue(pending: [row(taskId: "task", gaps: [])]), "task"),
-                     standing(nil, "task")] {
-            XCTAssertFalse(EvidenceDecisions.letsGo(kept, engaged: false), "\(kept.state)")
-        }
-
-        // The armed composer keeps a reason while the version can still take one from here.
-        XCTAssertTrue(EvidenceDecisions.holdsReply(standing(coordinatorQueue(waiting: [row(taskId: "task", gaps: [])]), "task")))
-        XCTAssertTrue(EvidenceDecisions.holdsReply(standing(coordinatorQueue(pending: [row(taskId: "task", gaps: [])]), "task")))
-        XCTAssertTrue(EvidenceDecisions.holdsReply(standing(nil, "task")),
-                      "one failed read does not throw away a reason somebody is typing")
-        XCTAssertFalse(EvidenceDecisions.holdsReply(standing(coordinatorQueue(sent: [sent("task")]), "task")),
-                       "handed to the coordinator: the reason has nowhere to go from here")
-        XCTAssertFalse(EvidenceDecisions.holdsReply(replaced))
-        XCTAssertFalse(EvidenceDecisions.holdsReply(settled))
-    }
-
-    /// The conversation's own row does not move when a version is queued for its paused coordinator
-    /// or handed to it, so the console re-reads the queue on a timer exactly while one of those can
-    /// happen — and in a conversation that coordinates a project, never in any other.
-    func testTheQueueIsReReadWhileItCanMove() {
-        let paused = CoordinatorPause.paused(window: nil, retryAt: nil)
-        XCTAssertTrue(EvidenceDecisions.rereadsQueue(nil, coordinates: true, pause: paused),
-                      "paused: a version submitted now waits, and nothing else would show it")
-        XCTAssertFalse(EvidenceDecisions.rereadsQueue(nil, coordinates: false, pause: paused),
-                       "a failed conversation that coordinates nothing has no queue")
-        XCTAssertFalse(EvidenceDecisions.rereadsQueue(coordinatorQueue(), coordinates: true, pause: .back))
-        XCTAssertTrue(EvidenceDecisions.rereadsQueue(coordinatorQueue(waiting: [row(gaps: [])]),
-                                                     coordinates: true, pause: .back),
-                      "back, and still owed one: it is handed over when its turn ends")
-        XCTAssertTrue(EvidenceDecisions.rereadsQueue(coordinatorQueue(sent: [sent()]),
-                                                     coordinates: true, pause: .back),
-                      "holding one: its decision turns the line into a receipt")
-    }
-
-    // MARK: why it waits
-
-    private static let weeklyLimit = "You've hit your weekly limit · resets Oct 12, 7pm (Asia/Shanghai)"
-    private static let resetsAt = "2026-10-12T11:00:00.000Z"
-
-    private func coordinatorSession(_ state: SessionRunState, error: String? = weeklyLimit,
-                                    retryAt: String? = resetsAt) -> Session {
-        Session(id: Self.coordinator, title: "协调者停着时，证据卡排队等它",
-                status: state == .failed ? .failed : (state == .running ? .running : .awaitingInput),
-                runState: state, agentId: "orbit", assignedRunnerId: "hpc", pendingApprovals: 0,
-                branch: nil, updatedAt: nil, projectId: Self.project, error: error, retryAt: retryAt)
-    }
-
-    /// The pause line, read off the coordinator's own row the way the web card reads it — the same
-    /// cases, the same words. The window is the transcript's quota judgment
-    /// (`AutoRetryLogic.quotaWindowKind`), named only for a failure that is a usage limit at all;
-    /// the time is the retry it armed, in the receipt's clock.
-    func testThePauseLineIsReadOffTheCoordinatorsOwnRow() {
-        let now = ThinkingSummary.date("2026-10-09T12:02:00.000Z")!
-        let retries = "2026-10-09T12:02:30.000Z"
-        func at(_ iso: String) -> String { EvidenceDecisions.receiptTime(iso, now: now) }
-        let cases: [(String, Session?, String)] = [
-            ("a weekly limit, with the reset it armed a retry for", coordinatorSession(.failed),
-             "Coordinator paused · weekly limit · resets \(at(Self.resetsAt))"),
-            ("a 5-hour limit, with its reset",
-             coordinatorSession(.failed, error: "You've hit your session limit · resets 6:20pm (Europe/Berlin)"),
-             "Coordinator paused · 5-hour limit · resets \(at(Self.resetsAt))"),
-            ("a weekly limit with no retry armed", coordinatorSession(.failed, retryAt: nil),
-             "Coordinator paused · weekly limit"),
-            ("a usage limit that names no window, with no retry armed",
-             coordinatorSession(.failed,
-                                error: "You've hit your usage limit. Visit https://chatgpt.com/codex/settings/usage "
-                                    + "to purchase more credits or try again at Aug 9th, 2026 1:26 PM.",
-                                retryAt: nil),
-             "Coordinator paused · usage limit"),
-            ("a provider error it will retry",
-             coordinatorSession(.failed,
-                                error: "API Error: 429 {\"type\":\"error\",\"error\":{\"type\":\"rate_limit_error\"}}",
-                                retryAt: retries),
-             "Coordinator paused · retries \(at(retries))"),
-            ("a runner that went away, with nothing armed",
-             coordinatorSession(.failed, error: "runner offline", retryAt: nil), "Coordinator paused"),
-            ("a limit parked waiting for input, with its retry armed",
-             coordinatorSession(.awaitingInput, error: nil),
-             "Coordinator paused · retries \(at(Self.resetsAt))"),
-            ("a failure that only quotes a limit",
-             coordinatorSession(.failed,
-                                error: "The earlier run stopped on this line from the runtime: \(Self.weeklyLimit)",
-                                retryAt: nil),
-             "Coordinator paused"),
-            ("back, and running", coordinatorSession(.running, error: nil, retryAt: nil),
-             "Coordinator is back · it gets this when its current turn ends"),
-            ("back, and waiting for its reader", coordinatorSession(.awaitingInput, error: nil, retryAt: nil),
-             "Coordinator is back · it gets this when its current turn ends"),
-            ("no row to read yet: paused for a reason nobody knows", nil, "Coordinator paused"),
-        ]
-        for (name, session, line) in cases {
-            XCTAssertEqual(EvidenceDecisions.pauseLine(EvidenceDecisions.coordinatorPause(session), now: now),
-                           line, name)
-        }
-        XCTAssertEqual(EvidenceDecisions.coordinatorPause(coordinatorSession(.running, error: nil, retryAt: nil)),
-                       .back)
-        XCTAssertEqual(EvidenceDecisions.coordinatorPause(coordinatorSession(.failed)),
-                       .paused(window: EvidenceDecisions.pauseWeeklyLimit, retryAt: Self.resetsAt))
+    func testLegacyWaitingRowsAreIgnoredAndSentReceiptsRemain() {
+        let waiting = row(gaps: [])
+        let delivered = sent()
+        let read = coordinatorQueue(waiting: [waiting], sent: [delivered])
+        XCTAssertTrue(EvidenceDecisions.cardRows(queue: read, projectId: Self.project).isEmpty)
+        XCTAssertEqual(standing(read, waiting.taskId).state, .alreadyDecided)
+        XCTAssertEqual(EvidenceDecisions.sentRows(queue: read, projectId: Self.project), [delivered])
+        let receipt = standing(read, delivered.taskId)
+        XCTAssertEqual(receipt.state, .sent(delivered))
+        XCTAssertFalse(receipt.answerable)
+        XCTAssertFalse(EvidenceDecisions.isOpen(receipt))
     }
 
     /// The line a version that waited leaves once it is handed over: when, in the receipt's clock —

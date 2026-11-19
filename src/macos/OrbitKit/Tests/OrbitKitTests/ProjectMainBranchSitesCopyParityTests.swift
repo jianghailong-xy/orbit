@@ -277,15 +277,13 @@ final class ProjectMainBranchSitesCopyParityTests: XCTestCase {
                    in: Self.doneWords)
 
         let card = try web(Self.settlement)
-        let subject = ProjectDoneSubject(
-            title: "P", status: "OPEN", criteria: [.init(id: "c1", ordinal: 1, text: "It ships")],
-            derivedDone: ProjectDerivedDone(criteria: [ProjectDoneCriterion(definitionId: "c1", satisfied: true,
-                                                                            landingReason: .noReceipt)]),
-            upstreamRef: Self.branch)
-        let gap = try XCTUnwrap(ProjectDone.syntheticGaps(subject).first?.whyNotProven)
-        let reason = ProjectDone.landingReasonLabel(.noReceipt, main: Self.branch)
-        assertSays(card, "? `\(Self.asWeb(gap.replacingOccurrences(of: reason, with: "${reason}")))`", in: Self.settlement)
-        // Off the project document the cards read, in each of the three cards.
+        // The card nobody asked for no longer synthesizes gaps (`syntheticDoneGaps` is gone); the
+        // server's done check names the main branch in its own findings.
+        XCTAssertFalse(card.contains("syntheticDoneGaps"))
+        XCTAssertEqual(ProjectDone.gaps(ProjectDoneSubject(title: "P", status: "OPEN", criteria: [],
+                                                           upstreamRef: Self.branch), request: nil), [])
+        // Off the project document the cards read, in each of the three places that still name it
+        // (Done when, the grouped findings, the Why-not-done card).
         XCTAssertEqual(card.components(separatedBy: "const main = mainBranchName(project.integration?.upstreamRef);").count, 4)
     }
 

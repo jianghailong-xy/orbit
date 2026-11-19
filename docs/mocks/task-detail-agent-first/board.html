@@ -1,0 +1,464 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<title>Task detail · Agent-First</title>
+<style>
+*{box-sizing:border-box;margin:0;padding:0}
+body{background:#e9e9ee;font-family:-apple-system,BlinkMacSystemFont,Inter,'PingFang SC','Noto Sans SC',sans-serif;color:#1d1d1f;-webkit-font-smoothing:antialiased}
+.board{width:1560px;padding:56px 64px 64px;background:#ececf1}
+.board+.board{margin-top:0}
+h1{font-size:34px;font-weight:700;letter-spacing:-.4px}
+.sub{font-size:16px;color:#555;margin-top:10px;line-height:1.6;max-width:1380px}
+.tag{display:inline-block;font-size:14px;font-weight:700;padding:4px 12px;border-radius:999px;margin-bottom:12px}
+.tag.now{background:#fde2e1;color:#b42318}.tag.new{background:#dde8ff;color:#1f4fd1}
+.row{display:flex;gap:36px;align-items:flex-start;margin-top:32px}
+.col{flex:none}
+.shot{position:relative;width:440px;border-radius:12px;overflow:hidden;box-shadow:0 10px 30px rgba(0,0,0,.12);background:#fff}
+.shot img{display:block;width:100%}
+.mk{position:absolute;width:26px;height:26px;border-radius:50%;background:#f97316;color:#fff;font:700 14px/26px Inter,sans-serif;text-align:center;box-shadow:0 0 0 3px #fff}
+.notes{flex:1;font-size:15px;line-height:1.6}
+.notes ol{list-style:none}
+.notes li{display:flex;gap:10px;margin-bottom:12px}
+.notes li b.n{flex:none;width:24px;height:24px;border-radius:50%;background:#f97316;color:#fff;font:700 13px/24px Inter,sans-serif;text-align:center;margin-top:1px}
+.notes li b.g{background:#2563eb}
+.notes em{font-style:normal;color:#666}
+.canon{background:#fff;border-radius:14px;padding:20px 24px;margin-top:24px;font-size:15px;line-height:1.7}
+.canon h3{font-size:16px;margin-bottom:8px}
+.canon q{color:#1f4fd1;font-weight:600}
+code{font-family:'JetBrains Mono',ui-monospace,Menlo,monospace;font-size:.9em;background:rgba(0,0,0,.05);padding:1px 5px;border-radius:4px}
+
+/* ===== proposal panel (p- prefix) ===== */
+.p{width:640px;background:#fff;border-radius:12px;box-shadow:0 10px 30px rgba(0,0,0,.12);overflow:hidden;font-size:14px;color:#1d1d1f;position:relative}
+.p-head{padding:20px 22px 14px;border-bottom:1px solid #eee}
+.p-crumb{font-size:12.5px;color:#666;display:flex;gap:6px;align-items:center}
+.p-crumb .ic{width:13px;height:11px;border:1.5px solid #999;border-radius:2px}
+.p-top{display:flex;gap:12px;align-items:flex-start;margin-top:6px}
+.p-title{flex:1;font-size:19px;font-weight:700;line-height:1.3;letter-spacing:-.2px}
+.p-acts{display:flex;gap:6px;align-items:center;flex:none}
+.btn{border:1px solid #d9d9de;background:#fff;border-radius:8px;padding:7px 13px;font-size:13.5px;font-weight:600;color:#1d1d1f;white-space:nowrap}
+.btn.pri{background:#2563eb;border-color:#2563eb;color:#fff}
+.btn.ok{background:#16a34a;border-color:#16a34a;color:#fff}
+.btn.sm{padding:4px 10px;font-size:12.5px}
+.ibtn{width:30px;height:30px;border-radius:7px;display:flex;align-items:center;justify-content:center;color:#555;font-size:18px}
+.p-state{display:flex;gap:8px;align-items:center;margin-top:10px;font-size:13px;color:#555;flex-wrap:wrap}
+.pill{display:inline-flex;align-items:center;gap:5px;border-radius:999px;padding:2px 10px;font-size:12.5px;font-weight:600}
+.pill.run{background:#e6efff;color:#1f4fd1}.pill.done{background:#e3f5e8;color:#157a3a}.pill.wait{background:#fff1dc;color:#a35a00}.pill.mute{background:#f1f1f4;color:#555}
+.dot{width:7px;height:7px;border-radius:50%;background:currentColor}
+.spin{width:10px;height:10px;border-radius:50%;border:2px solid #a9c2ff;border-top-color:#1f4fd1}
+.sep{color:#bbb}
+.p-sec{padding:16px 22px;border-bottom:1px solid #f0f0f2}
+.p-h{font-size:12px;font-weight:700;color:#777;text-transform:uppercase;letter-spacing:.5px;margin-bottom:10px;display:flex;align-items:center;gap:8px}
+.p-h .r{margin-left:auto;text-transform:none;letter-spacing:0;font-weight:600;color:#2563eb;font-size:12.5px}
+.card{border:1px solid #e6e6ea;border-radius:10px;padding:12px 14px}
+.card.blue{border-color:#c9d8ff;background:#f6f9ff}
+.card.green{border-color:#cdebd6;background:#f5fbf7}
+.card.amber{border-color:#f5d39b;background:#fffaf0}
+.agent{display:flex;gap:10px;align-items:center}
+.av{width:26px;height:26px;border-radius:50%;background:#e6efff;color:#1f4fd1;font:700 12px/26px Inter;text-align:center;flex:none}
+.agent .who{font-weight:600}.agent .meta{color:#666;font-size:12.5px}
+.phase{margin-top:12px}
+.bar{height:6px;border-radius:3px;background:#e3e8f5;overflow:hidden;margin:6px 0 10px}
+.bar i{display:block;height:100%;background:#2563eb;border-radius:3px}
+.steps div{display:flex;gap:8px;align-items:flex-start;font-size:13px;line-height:1.5;padding:2px 0}
+.steps .s{width:16px;flex:none;text-align:center;font-weight:700}
+.steps .d{color:#16a34a}.steps .c{color:#2563eb}.steps .o{color:#bbb}
+.steps .cur{font-weight:600}
+.now{margin-top:8px;font-size:12.5px;color:#555;background:#fff;border:1px dashed #c9d8ff;border-radius:7px;padding:6px 9px}
+.crit{font-size:13.5px;line-height:1.6}
+.judge{margin-top:10px;font-size:12.5px;color:#555;display:flex;gap:8px;align-items:center;flex-wrap:wrap}
+.brief{font-size:13.5px;line-height:1.6;color:#333;position:relative;max-height:88px;overflow:hidden}
+.brief:after{content:'';position:absolute;left:0;right:0;bottom:0;height:34px;background:linear-gradient(rgba(255,255,255,0),#fff)}
+.more{font-size:12.5px;color:#2563eb;font-weight:600;margin-top:4px}
+.chain{display:flex;align-items:center;gap:8px;flex-wrap:wrap;font-size:13px}
+.node{border:1px solid #e3e3e8;border-radius:8px;padding:5px 9px;display:inline-flex;gap:6px;align-items:center;background:#fff;white-space:nowrap}
+.node.me{border-color:#2563eb;box-shadow:0 0 0 2px #dbe6ff}
+.node .st{font-size:11.5px;color:#777}
+.arr{color:#aaa}
+.plan-say{font-size:13px;color:#444;margin-top:10px;line-height:1.55}
+.env{display:flex;gap:6px;flex-wrap:wrap;align-items:center;font-size:13px}
+.chip{background:#f3f3f6;border-radius:6px;padding:3px 8px;color:#333}
+.chip b{font-weight:600;color:#777;margin-right:4px}
+.feed div.e{display:flex;gap:10px;font-size:13px;line-height:1.5;padding:5px 0}
+.feed .t{width:62px;flex:none;color:#888;font-size:12px;padding-top:1px}
+.feed .who{font-weight:600}
+.feed .cm{background:#f6f6f8;border-radius:8px;padding:6px 10px;margin-top:3px}
+.prov{font-size:12px;color:#888;line-height:1.6}
+.compose{padding:12px 16px;border-top:1px solid #eee;display:flex;gap:8px;align-items:center;background:#fafafb}
+.compose .to{font-size:12px;font-weight:600;background:#e6efff;color:#1f4fd1;border-radius:6px;padding:4px 8px;white-space:nowrap}
+.compose .to.c{background:#f1f1f4;color:#555}
+.compose .in{flex:1;border:1px solid #ddd;border-radius:8px;padding:8px 10px;color:#999;font-size:13px;background:#fff}
+.chk{display:flex;gap:8px;font-size:13px;line-height:1.5;padding:3px 0}
+.chk .s{color:#16a34a;font-weight:700;width:16px;flex:none;text-align:center}
+.chk .x{color:#a35a00}
+.claim{font-size:13px;line-height:1.55;color:#333;border-left:3px solid #cdebd6;padding-left:10px;margin:8px 0}
+.mono{font-family:'JetBrains Mono',ui-monospace,Menlo,monospace;font-size:12px}
+.band{padding:14px 22px;background:#fff8eb;border-bottom:1px solid #f5d39b}
+.band h4{font-size:14px;display:flex;gap:8px;align-items:center}
+.band .acts{display:flex;gap:8px;margin-top:10px}
+.menu{position:absolute;right:58px;top:52px;width:220px;background:#fff;border:1px solid #e3e3e8;border-radius:10px;box-shadow:0 12px 30px rgba(0,0,0,.16);padding:6px;font-size:13px;z-index:3}
+.menu div{padding:7px 10px;border-radius:6px}
+.menu .hr{height:1px;background:#eee;padding:0;margin:4px 0}
+.menu .danger{color:#d92d20}
+.menu .mut{color:#999;font-size:11.5px;padding-top:2px}
+.p.mk2 .p-head,.p.mk2 .p-sec,.p.mk2 .compose{padding-left:44px}
+.p-sec,.compose{position:relative}
+.pm{position:absolute;width:24px;height:24px;border-radius:50%;background:#2563eb;color:#fff;font:700 13px/24px Inter,sans-serif;text-align:center;box-shadow:0 0 0 3px #fff;z-index:4}
+.cap{font-size:15px;font-weight:700;margin-bottom:10px}
+.cap span{font-weight:400;color:#666;font-size:14px}
+table.rules{border-collapse:collapse;width:100%;background:#fff;border-radius:14px;overflow:hidden;font-size:14px;line-height:1.55;margin-top:24px}
+table.rules th,table.rules td{padding:10px 14px;border-bottom:1px solid #eee;text-align:left;vertical-align:top}
+table.rules th{background:#f6f6f9;font-size:13px;color:#555}
+.todo{background:#fff;border-radius:14px;padding:20px 24px;margin-top:24px;font-size:15px;line-height:1.7;border:2px solid #f97316}
+.todo h3{color:#c2410c;margin-bottom:6px}
+.todo li{margin-left:20px;margin-bottom:6px}
+.files{background:#fff;border-radius:14px;padding:18px 24px;margin-top:24px;font-size:14px;line-height:1.7}
+</style>
+</head>
+<body>
+
+<!-- ================= BOARD 1 · TODAY ================= -->
+<div class="board" id="b1">
+  <h1>任务详情页 · Agent-First 重新组织（1/3）：现在的问题</h1>
+  <p class="sub">你给的三张截图（线上真实数据：「Apiserver: docker.hosts list…」Running，「Docker channel: listen on a private address…」Done）。橙色编号对应右侧说明。核心判断：<b>这一页现在是一张「配置表单」，而不是「一个 agent 在为你做的一件事」</b> — 首屏是引擎/模型/排期，agent 正在做什么、交付了什么、凭什么算完成，全都看不到或者埋在最底下。</p>
+
+  <div class="canon">
+    <h3>拿来衡量的理念（仓库里已写下的 + 你说过的）</h3>
+    <div>① <q>人定信封，agent 在信封内自由</q> — Assignee / Engine / Provider / Model / List / Start at 是信封，定一次、很少再看，不该占首屏。</div>
+    <div>② <q>人只对目标、风险、预算和不可委托授权负责</q> — 页面首先要回答：目标（验收标准）是什么、现在要不要我拍板。</div>
+    <div>③ <q>Nothing blocks in silence</q>（product-intro）— 等人的时候要大声说出来；没有等人时不要制造噪音。</div>
+    <div>④ <q>You supervise a project instead of supervising a prompt</q> — 任务是计划里的一个节点：它解锁了谁、被谁卡住，用一句话讲清楚。</div>
+    <div>⑤ <q>Calm, precise, capable, and honest about boundaries</q>（project-maturity）— 一个事实只说一遍、不自相矛盾、不晒内部 id。</div>
+  </div>
+
+  <div class="row">
+    <div class="col">
+      <span class="tag now">现在 · Running 任务</span>
+      <div class="shot"><img src="today-1.png">
+        <span class="mk" style="left:3%;top:8.6%">1</span>
+        <span class="mk" style="left:64%;top:2.4%">2</span>
+        <span class="mk" style="left:1%;top:21%">3</span>
+        <span class="mk" style="left:1%;top:33%">4</span>
+        <span class="mk" style="left:1%;top:55%">5</span>
+        <span class="mk" style="left:28%;top:74%">1</span>
+        <span class="mk" style="left:1%;top:96%">10</span>
+      </div>
+    </div>
+    <div class="col">
+      <span class="tag now">现在 · Done 任务（上）</span>
+      <div class="shot"><img src="today-2.png">
+        <span class="mk" style="left:48%;top:2.2%">2</span>
+        <span class="mk" style="left:19%;top:8%">9</span>
+        <span class="mk" style="left:32%;top:11%">6</span>
+        <span class="mk" style="left:1%;top:58%">7</span>
+      </div>
+    </div>
+    <div class="col">
+      <span class="tag now">现在 · Done 任务（下）</span>
+      <div class="shot"><img src="today-3.png">
+        <span class="mk" style="left:46%;top:28.6%">6</span>
+        <span class="mk" style="left:13%;top:47%">8</span>
+        <span class="mk" style="left:58%;top:62%">8</span>
+        <span class="mk" style="left:52%;top:67%">8</span>
+        <span class="mk" style="left:22%;top:74.5%">11</span>
+        <span class="mk" style="left:13%;top:84%">12</span>
+      </div>
+    </div>
+  </div>
+
+  <div class="row" style="margin-top:28px">
+    <div class="notes" style="background:#fff;border-radius:14px;padding:20px 24px">
+      <ol>
+        <li><b class="n">1</b><div><b>两个真相互相打架。</b>头部写 <code>Open</code>，同一页依赖图里自己的节点写 <code>Running</code>。人要自己判断该信哪个。<em>违反 ⑤。</em></div></li>
+        <li><b class="n">2</b><div><b>主按钮不随状态变。</b>正在跑的任务主按钮还是「Run now」（再开一次？），已完成的任务并排放「Reopen task」+「Run now」两个大按钮，删除（红色垃圾桶）常驻在头部。最该按的事（看正在跑的 run / 看交付）没有按钮。<em>iOS 改版已经是「操作行随状态原地换字」，web 没跟上。</em></div></li>
+        <li><b class="n">3</b><div><b>首屏被信封占满。</b>Assignee/Engine/Provider/Model/List 五个下拉，全是「默认值」的灰字，占了第一屏的一半。<em>违反 ①。</em></div></li>
+        <li><b class="n">4</b><div><b>空的排期输入框在黄金位置。</b><code>dd/mm/yyyy</code> 空日期框 + 置灰的「Save schedule」+ 一行说明，三行给一个 99% 任务不用的功能。</div></li>
+        <li><b class="n">5</b><div><b>依赖图 700px 高画 5 个节点</b>，但没说出那句关键的话：「这个任务完成后，Channel-host kit 就可以开始」。截图 2 里依赖图甚至排在 Description 前面。<em>违反 ④：图是工具，句子才是信息。</em></div></li>
+        <li><b class="n">6</b><div><b>「Judged by · submitted evidence」，但证据在哪？</b>整页找不到提交的 evidence、谁判的、判了什么。紧接着 Acceptance 下面又写「Automatic judgement: Not set — a person decides」，和顶部徽章互相矛盾。<em>完成凭据是 Agent-First 里人最该看的东西，现在是空白。</em></div></li>
+      </ol>
+    </div>
+    <div class="notes" style="background:#fff;border-radius:14px;padding:20px 24px">
+      <ol start="7">
+        <li><b class="n">7</b><div><b>Description 是给 agent 的指令，却和给人的摘要是同一块全文。</b>人需要的是「目标 + 完成标准」，长指令应该默认折叠。</div></li>
+        <li><b class="n">8</b><div><b>Attribution 卡在晒内部结构。</b>项目名重复 3 次、原始 id <code>34w2hTuJ3q…</code>、触发器 <code>coordinator.session_filed</code>、全大写 <code>OPEN</code> / <code>EVIDENCE ONLY</code>、「No declared crossing touches this task」「Nothing is blocking where this work counts」两行空状态。实际只有一句话：「由项目协调者从 X 会话建立，计入项目 X」。</div></li>
+        <li><b class="n">9</b><div><b>「Landed」没有落点。</b>落到哪个分支、哪个 commit、改了哪些文件，都要点进别处找。</div></li>
+        <li><b class="n">10</b><div><b>评论框不知道在跟谁说话。</b>「type @ to mention a workspace」— 任务正在被一个 agent 执行时，人最常想说的是「对这个 run 说一句」，现在要先找到 run 再进会话。</div></li>
+        <li><b class="n">11</b><div><b>空状态噪音。</b>「Followed by (0) · Nothing is watching this task · 1 ended watch」、「Inputs (0)」带长说明、「Created by —」。<em>违反 ③ 的另一面：没事时不要出声。</em></div></li>
+        <li><b class="n">12</b><div><b>agent 的工作在最底下一行。</b>「Runs (1) · orbit-develop · Succeeded」— 没有进度、没有耗时/花费、没有它交付了什么。正在跑时也看不到它在第几步（<code>task_progress_report</code> 的 phase/current/total 已有数据，任务页没用上）。</div></li>
+      </ol>
+    </div>
+  </div>
+</div>
+
+<!-- ================= BOARD 2 · PROPOSAL running + done ================= -->
+<div class="board" id="b2">
+  <h1>任务详情页 · Agent-First 重新组织（2/3）：改版 · Running 与 Done</h1>
+  <p class="sub">新顺序按「人打开任务时依次想知道的事」排：<b>① 现在什么状态、要不要我 → ② agent 在做什么 / 交付了什么（附凭据）→ ③ 目标与完成标准 → ④ 在计划里的位置 → ⑤ 信封（谁、用什么跑）折叠成一行 → ⑥ 经过（runs + 评论 + 判定合成一条时间线）</b>。蓝色编号对应下方说明。界面文字一律英文；任务数据取自你的截图，进度步骤、证据内容、commit 号为示意。</p>
+
+  <div class="row">
+    <div class="col">
+      <div class="cap">A · Running <span>— 「Apiserver: docker.hosts list…」</span></div>
+      <div class="p mk2">
+        <span class="pm" style="left:10px;top:76px">1</span>
+        <span class="pm" style="left:560px;top:30px">2</span>
+        <div class="p-head">
+          <div class="p-crumb"><span class="ic"></span>Managed runners on other Docker hosts (orbit-prod → 10.66.0.3)</div>
+          <div class="p-top">
+            <div class="p-title">Apiserver: docker.hosts list, remote channels, one manager per host, placement</div>
+            <div class="p-acts"><span class="btn pri">Open the run</span><span class="ibtn">⋯</span><span class="ibtn">✕</span></div>
+          </div>
+          <div class="p-state"><span class="pill run"><span class="spin"></span>Running · 7m</span><span>orbit-develop</span><span class="sep">·</span><span>Opus 5.5 on HPC</span><span class="sep">·</span><span>Judged by submitted evidence</span></div>
+        </div>
+
+        <div class="p-sec">
+          <span class="pm" style="left:10px;top:14px">3</span>
+          <div class="p-h">Now</div>
+          <div class="card blue">
+            <div class="agent"><span class="av">O</span><div><div class="who">orbit-develop is working</div><div class="meta">Run started 9:42 AM · last activity 12s ago · $0.84 so far</div></div></div>
+            <div class="phase">
+              <div style="font-size:13px;display:flex"><b>Step 3 of 5</b><span style="margin-left:auto;color:#666">One manager per host</span></div>
+              <div class="bar"><i style="width:52%"></i></div>
+              <div class="steps">
+                <div><span class="s d">✓</span>Read the design: D1–D3 and Proposal item 2</div>
+                <div><span class="s d">✓</span>Config: <span class="mono">docker.hosts[]</span> with remote channel URLs</div>
+                <div class="cur"><span class="s c">●</span>One manager per host, keyed by host id</div>
+                <div><span class="s o">○</span>Placement: pick a host per new runner</div>
+                <div><span class="s o">○</span>Specs + evidence</div>
+              </div>
+              <div class="now">Editing <span class="mono">src/apiserver/src/runners/managed/manager.service.ts</span></div>
+            </div>
+          </div>
+        </div>
+
+        <div class="p-sec">
+          <span class="pm" style="left:10px;top:14px">4</span>
+          <div class="p-h">Done means</div>
+          <div class="crit">The apiserver reads a <span class="mono">docker.hosts</span> list, opens one remote channel and one manager per host, and places each new managed runner on a host; existing single-host configs keep working unchanged.</div>
+          <div class="judge"><span class="pill mute">Judged by submitted evidence</span><span>the coordinator decides · no evidence yet</span></div>
+          <div class="p-h" style="margin-top:14px">Brief for the agent<span class="r">Show all</span></div>
+          <div class="brief">Read docs/managed-runner-remote-host-design.md (branch orbit/orbit-prod-ip-10-66-0-1-runner-runner-do-29e980; merge it if your base lacks it), decision D1 and Proposal item 2. In src/apiserver/src/runners/managed: replace the single docker host with a list, open one channel per host, start one manager per host…</div>
+        </div>
+
+        <div class="p-sec">
+          <span class="pm" style="left:10px;top:14px">5</span>
+          <div class="p-h">In the plan<span class="r">Graph</span></div>
+          <div class="chain">
+            <span class="node me"><span class="spin" style="border-top-color:#1f4fd1"></span>This task</span><span class="arr">+</span>
+            <span class="node"><span style="color:#16a34a">●</span>Docker channel <span class="st">Done</span></span><span class="arr">→</span>
+            <span class="node"><span style="color:#bbb">○</span>Channel-host kit, /upgr… <span class="st">Open</span></span><span class="arr">→</span>
+            <span class="node"><span class="st">+2 more</span></span>
+          </div>
+          <div class="plan-say">Nothing blocks this task. <b>Channel-host kit</b> starts as soon as this lands — its other prerequisite is already done.</div>
+        </div>
+
+        <div class="p-sec">
+          <span class="pm" style="left:10px;top:14px">6</span>
+          <div class="p-h">Runs with<span class="r">Edit</span></div>
+          <div class="env"><span class="chip"><b>Agent</b>orbit-develop</span><span class="chip"><b>Engine</b>Claude Code</span><span class="chip"><b>Provider</b>Sign-in on HPC</span><span class="chip"><b>Model</b>Default</span></div>
+          <div class="prov" style="margin-top:6px">No list · starts when ready · no input files</div>
+        </div>
+
+        <div class="p-sec" style="border-bottom:0">
+          <span class="pm" style="left:10px;top:14px">7</span>
+          <div class="p-h">Activity</div>
+          <div class="feed">
+            <div class="e"><span class="t">9:42 AM</span><div><span class="who">Run started</span> on HPC · Opus 5.5 · started by the project coordinator</div></div>
+            <div class="e"><span class="t">9:35 AM</span><div><span class="who">Filed</span> by the coordinator of <span style="color:#2563eb">Managed runners on other Docker hosts</span></div></div>
+          </div>
+        </div>
+        <div class="compose"><span class="pm" style="left:10px;top:16px">8</span><span class="to">To the run ▾</span><span class="in">Message orbit-develop while it works…</span><span class="btn sm">Send</span></div>
+      </div>
+    </div>
+
+    <div class="col">
+      <div class="cap">B · Done <span>— 「Docker channel: listen on a private address…」</span></div>
+      <div class="p mk2">
+        <span class="pm" style="left:10px;top:76px">1</span>
+        <div class="p-head">
+          <div class="p-crumb"><span class="ic"></span>Managed runners on other Docker hosts (orbit-prod → 10.66.0.3)</div>
+          <div class="p-top">
+            <div class="p-title">Docker channel: listen on a private address with allowPeers</div>
+            <div class="p-acts"><span class="btn">View changes</span><span class="ibtn">⋯</span><span class="ibtn">✕</span></div>
+          </div>
+          <div class="p-state"><span class="pill done"><span class="dot"></span>Done</span><span class="pill done">Landed on main · 7c41e9a</span><span>orbit-develop</span><span class="sep">·</span><span>46m · $3.12</span></div>
+        </div>
+
+        <div class="p-sec">
+          <span class="pm" style="left:10px;top:14px">9</span>
+          <div class="p-h">Delivered</div>
+          <div class="card green">
+            <div style="display:flex;align-items:center;gap:8px;font-size:13px"><span class="pill done">✓ Accepted</span><span>Evidence r1 · accepted by the coordinator · 10:31 AM</span></div>
+            <div class="claim">Channel listens on one private IPv4 with a required allowPeers list; other sources are closed before a request is read; 0.0.0.0, public and empty-allowPeers configs are refused by check-config; unix-socket and loopback paths unchanged.</div>
+            <div class="chk"><span class="s">✓</span><div>Diff · 4 files <span style="color:#16a34a">+312</span> <span style="color:#d92d20">−18</span> <span style="color:#888">channel.py, README.md, channel.example.json, docker_channel_test.py</span></div></div>
+            <div class="chk"><span class="s">✓</span><div><span class="mono">python3 -B -m unittest discover -s scripts/managed-runner</span> · 47 passed, 0 failed</div></div>
+            <div class="chk"><span class="s">✓</span><div>Landed on <b>main</b> as <span class="mono">7c41e9a</span> · 10:40 AM · <span style="color:#2563eb">Landing</span></div></div>
+          </div>
+        </div>
+
+        <div class="p-sec">
+          <div class="p-h">Done means</div>
+          <div class="crit">The channel can listen on one private IPv4 address with a required allowPeers list: other source addresses are closed before a request is read, the bearer token stays required, 0.0.0.0 or public listen addresses are refused by check-config, and unix-socket/loopback modes are unchanged.</div>
+          <div class="judge"><span class="pill done">Met</span><span>by evidence r1</span></div>
+          <div class="p-h" style="margin-top:14px">Brief for the agent<span class="r">Show all</span></div>
+          <div class="brief" style="max-height:44px">Read docs/managed-runner-remote-host-design.md (branch orbit/orbit-prod-ip-10-66-0-1-runner-runner-do-29e980; merge it if your base lacks it), decision D1 and Proposal item 1…</div>
+        </div>
+
+        <div class="p-sec">
+          <div class="p-h">In the plan<span class="r">Graph</span></div>
+          <div class="chain">
+            <span class="node me"><span style="color:#16a34a">●</span>This task</span><span class="arr">→</span>
+            <span class="node"><span style="color:#bbb">○</span>Channel-host kit, /upgr… <span class="st">Open</span></span><span class="arr">→</span>
+            <span class="node"><span class="st">+2 more</span></span>
+          </div>
+          <div class="plan-say"><b>Channel-host kit</b> is still waiting on <b>Apiserver: docker.hosts list…</b> (running, step 3 of 5).</div>
+        </div>
+
+        <div class="p-sec">
+          <div class="p-h">Runs with<span class="r">Edit</span></div>
+          <div class="env"><span class="chip"><b>Agent</b>orbit-develop</span><span class="chip"><b>Engine</b>Claude Code</span><span class="chip"><b>Provider</b>Sign-in on HPC</span><span class="chip"><b>Model</b>Default</span></div>
+        </div>
+
+        <div class="p-sec" style="border-bottom:0">
+          <div class="p-h">Activity</div>
+          <div class="feed">
+            <div class="e"><span class="t">10:40 AM</span><div><span class="who">Landed</span> on main · 7c41e9a</div></div>
+            <div class="e"><span class="t">10:31 AM</span><div><span class="who">Evidence r1 accepted</span> by the coordinator</div></div>
+            <div class="e"><span class="t">10:28 AM</span><div><span class="who">Run succeeded</span> · 46m · Opus 5.5 · $3.12 <span style="color:#2563eb">Open</span></div></div>
+            <div class="e"><span class="t">9:42 AM</span><div><span class="who">Run started</span> on HPC</div></div>
+            <div class="e"><span class="t">9:35 AM</span><div><span class="who">Filed</span> by the coordinator of <span style="color:#2563eb">Managed runners on other Docker hosts</span></div></div>
+          </div>
+        </div>
+        <div class="compose"><span class="to c">Comment ▾</span><span class="in">Comment on this task… type @ to mention a workspace</span><span class="btn sm">Send</span></div>
+      </div>
+    </div>
+  </div>
+
+  <div class="row" style="margin-top:28px">
+    <div class="notes" style="background:#fff;border-radius:14px;padding:20px 24px">
+      <ol>
+        <li><b class="n g">1</b><div><b>一条状态行，一个真相。</b>任务状态与 run 状态合成一个 pill（<code>Running · 7m</code> / <code>Done</code> + <code>Landed on main · 7c41e9a</code>），后面紧跟执行者、模型/机器、判定方式。头部的 <code>Open</code> 与图里 <code>Running</code> 的矛盾消失（解 1、9）。</div></li>
+        <li><b class="n g">2</b><div><b>一个主按钮，随状态换字</b>（和 iOS 已批准的规则一致）：Running → <code>Open the run</code>；Done → <code>View changes</code>；Needs you → 决定按钮放在黄色横条里；Open 且没在跑 → <code>Run now</code>；Failed → <code>Run again</code>。Reopen / Run again / Copy link / Delete 收进 ⋯（解 2）。</div></li>
+        <li><b class="n g">3</b><div><b>Now：agent 在做什么。</b>用已有的 <code>task_progress_report</code>（phase/current/total/message）画步骤与进度条，加最近活动时间、已花费；正在改的文件取自 run 的最新工具调用。没报告过进度的 run 只显示头一行（解 12）。</div></li>
+        <li><b class="n g">4</b><div><b>Done means 放在 Brief 之前。</b>验收标准是人和 agent 的契约，全文显示；判定方式在它下面说一次。给 agent 的长指令改名「Brief for the agent」，默认折叠 4 行（解 6 的矛盾、7）。</div></li>
+      </ol>
+    </div>
+    <div class="notes" style="background:#fff;border-radius:14px;padding:20px 24px">
+      <ol start="5">
+        <li><b class="n g">5</b><div><b>In the plan：一行链 + 一句话。</b>说清「谁卡我 / 我放行谁 / 下游还在等谁」。图仍在，点 <code>Graph</code> 原地展开（现有 TaskDependencyGraph 不动）；加前置的输入框也收进 Graph 展开后（解 5）。</div></li>
+        <li><b class="n g">6</b><div><b>信封折成一行芯片：「Runs with」。</b>只列与默认不同或必须知道的值；<code>Edit</code> 原地展开成今天的五个下拉 + Start at + Input files（见 3/3 的 E）。空的 List / 排期 / Inputs 合成一行灰字（解 3、4、11）。</div></li>
+        <li><b class="n g">7</b><div><b>Activity：一条时间线。</b>建立、开跑、证据提交与判定、落地、评论按时间合并；Attribution 卡浓缩成「Filed by the coordinator of X」一行，原始 id 进 ⋯ → Copy ids；Followed by 只在有人关注时出现（解 8、11、12）。</div></li>
+        <li><b class="n g">8</b><div><b>评论框认得收件人。</b>有 live run 时默认 <code>To the run</code>：发给正在跑的 agent（同时记在任务上）；没有 live run 时是普通 <code>Comment</code>。下拉可切换（解 10）。</div></li>
+        <li><b class="n g">9</b><div><b>Delivered：交付与凭据。</b>Done 时取代 Now：被接受的 evidence（谁、何时、claim 摘要）+ 各项检查（diff 文件数、命令与通过数、落地 commit）。点进去是现有的 evidence 详情 / 落地会话（解 6、9）。</div></li>
+      </ol>
+    </div>
+  </div>
+</div>
+
+<!-- ================= BOARD 3 · Needs you + envelope edit + rules ================= -->
+<div class="board" id="b3">
+  <h1>任务详情页 · Agent-First 重新组织（3/3）：等人的时候、编辑信封、规则</h1>
+  <p class="sub">「Nothing blocks in silence」：只有真的在等人，页面顶部才出现黄色横条，横条里就是要做的决定，不用往下找。没有等人时，这一条不存在。</p>
+
+  <div class="row">
+    <div class="col">
+      <div class="cap">C · Needs you <span>— 证据交给所有者判定（Judged by the account owner）</span></div>
+      <div class="p">
+        <div class="p-head">
+          <div class="p-crumb"><span class="ic"></span>Managed runners on other Docker hosts (orbit-prod → 10.66.0.3)</div>
+          <div class="p-top">
+            <div class="p-title">Apiserver: docker.hosts list, remote channels, one manager per host, placement</div>
+            <div class="p-acts"><span class="ibtn">⋯</span><span class="ibtn">✕</span></div>
+          </div>
+          <div class="p-state"><span class="pill wait"><span class="dot"></span>Needs your decision · 4m</span><span>orbit-develop</span><span class="sep">·</span><span>run finished · 1h 12m · $5.40</span></div>
+        </div>
+        <div class="band">
+          <h4><span style="color:#a35a00">●</span>Evidence r1 is waiting for you</h4>
+          <div class="claim" style="border-left-color:#f5d39b">docker.hosts accepts a list; one channel and one manager per host; placement picks the host with the fewest runners; a single-host config reads as a list of one.</div>
+          <div class="chk"><span class="s">✓</span><div>Diff · 11 files <span style="color:#16a34a">+884</span> <span style="color:#d92d20">−203</span></div></div>
+          <div class="chk"><span class="s">✓</span><div><span class="mono">npm run test -w @orbit/apiserver</span> · 2,318 passed</div></div>
+          <div class="chk"><span class="s x">!</span><div>Not checked: a second real channel host — the run says the lab task covers it</div></div>
+          <div class="acts"><span class="btn ok">Accept</span><span class="btn">Send back…</span><span class="btn" style="border:0;color:#2563eb">Open evidence</span></div>
+        </div>
+        <div class="p-sec">
+          <div class="p-h">Done means</div>
+          <div class="crit">The apiserver reads a <span class="mono">docker.hosts</span> list, opens one remote channel and one manager per host, and places each new managed runner on a host; existing single-host configs keep working unchanged.</div>
+        </div>
+        <div class="p-sec" style="border-bottom:0;color:#999;font-size:13px">In the plan · Runs with · Activity …（同 A）</div>
+        <div class="compose"><span class="to c">Comment ▾</span><span class="in">Comment on this task…</span><span class="btn sm">Send</span></div>
+      </div>
+      <div class="notes" style="width:640px;margin-top:16px;font-size:14px">
+        <p>同一条横条承载所有「等人」：<b>run 停在审批卡上</b>（<code>Allow</code> / <code>Deny</code> + 原命令）、<b>evidence 等所有者判定</b>（上图）、<b>run 失败</b>（<code>Run again</code> / <code>Open the run</code> + 失败一句话）、<b>配额暂停</b>（何时自动恢复，无按钮）。多个同时存在时按「授权 &gt; 判定 &gt; 失败」排，只展开第一个。等协调者判定的 evidence 不出横条：那不是你的决定，只在 Now 里写「Waiting for the coordinator」。</p>
+      </div>
+    </div>
+
+    <div class="col">
+      <div class="cap">D · ⋯ 菜单 <span>— 次要操作都在这里</span></div>
+      <div class="p" style="height:330px">
+        <div class="p-head">
+          <div class="p-crumb"><span class="ic"></span>Managed runners on other Docker hosts (orbit-prod → 10.66.0.3)</div>
+          <div class="p-top">
+            <div class="p-title">Docker channel: listen on a private address with allowPeers</div>
+            <div class="p-acts"><span class="btn">View changes</span><span class="ibtn" style="background:#f1f1f4">⋯</span><span class="ibtn">✕</span></div>
+          </div>
+        </div>
+        <div class="menu">
+          <div>Reopen task</div>
+          <div>Run again</div>
+          <div>Follow task</div>
+          <div class="hr"></div>
+          <div>Copy link</div>
+          <div>Copy as Markdown</div>
+          <div>Copy ids<div class="mut">task · project · session</div></div>
+          <div class="hr"></div>
+          <div class="danger">Delete task…</div>
+        </div>
+      </div>
+
+      <div class="cap" style="margin-top:28px">E · Runs with → Edit <span>— 原地展开，今天的字段一个不少</span></div>
+      <div class="p">
+        <div class="p-sec" style="border-bottom:0">
+          <div class="p-h">Runs with<span class="r" style="color:#555">Done</span></div>
+          <div style="display:grid;grid-template-columns:110px 1fr;row-gap:10px;font-size:13.5px;align-items:center">
+            <span style="color:#777">Agent</span><span class="card" style="padding:6px 10px">orbit-develop <span style="float:right;color:#aaa">⌄</span></span>
+            <span style="color:#777">Engine</span><span class="card" style="padding:6px 10px;color:#666">Assignee's · Claude Code <span style="float:right;color:#aaa">⌄</span></span>
+            <span style="color:#777">Provider</span><span class="card" style="padding:6px 10px;color:#666">Engine default · sign-in on HPC <span style="float:right;color:#aaa">⌄</span></span>
+            <span style="color:#777">Model</span><span class="card" style="padding:6px 10px;color:#666">Provider default <span style="float:right;color:#aaa">⌄</span></span>
+            <span style="color:#777">List</span><span class="card" style="padding:6px 10px;color:#666">No list <span style="float:right;color:#aaa">⌄</span></span>
+            <span style="color:#777">Start at</span><span class="card" style="padding:6px 10px;color:#666">When ready <span style="float:right;color:#2563eb;font-weight:600">Pick a time</span></span>
+            <span style="color:#777">Input files</span><span><span class="btn sm">＋ Add file</span></span>
+          </div>
+          <div class="prov" style="margin-top:12px">Changes apply to the next run. The run going now keeps what it started with.</div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <table class="rules">
+    <tr><th style="width:150px">区块</th><th>Open（未跑）</th><th>Running</th><th>Needs you</th><th>Done</th><th>Failed / Cancelled</th></tr>
+    <tr><td>主按钮</td><td>Run now</td><td>Open the run</td><td>（在横条里）</td><td>View changes（无改动则无）</td><td>Run again</td></tr>
+    <tr><td>黄色横条</td><td>—</td><td>仅审批卡</td><td>决定本身</td><td>—</td><td>失败原因 + Run again</td></tr>
+    <tr><td>Now / Delivered</td><td>—（显示「Not started · waits for X」）</td><td>Now：进度 + 当前动作</td><td>Now：waiting for you</td><td>Delivered：证据 + 落地</td><td>Last run：失败一句话 + 最后进度</td></tr>
+    <tr><td>Done means + Brief</td><td colspan="5">始终显示；Brief 折叠 4 行。判定方式只在 Done means 下面说一次（删去「Automatic judgement: Not set」那段，改到 Edit 里）</td></tr>
+    <tr><td>In the plan</td><td colspan="5">无依赖时整块不显示，⋯ 里有「Add prerequisite」；有依赖时一行链 + 一句话，Graph 原地展开</td></tr>
+    <tr><td>Runs with</td><td colspan="5">始终一行芯片，Edit 原地展开；运行中修改提示「applies to the next run」</td></tr>
+    <tr><td>Activity</td><td colspan="5">建立 / 开跑 / 进度阶段 / 证据与判定 / 落地 / 评论 合一，新的在上；Runs、Attribution、Followed by 三个独立区块取消</td></tr>
+    <tr><td>Composer</td><td colspan="5">有 live run 时默认「To the run」，否则「Comment」</td></tr>
+  </table>
+
+  <div class="todo">
+    <h3>待你定</h3>
+    <ol>
+      <li><b>评论框默认发给 run（A 的 ⑧）</b>：推荐「有 live run 时默认 To the run」。另一种是保持 Comment 为默认，只加一个「To the run」切换。前者更 Agent-First，但会改变现在评论只记在任务上的习惯。</li>
+      <li><b>Activity 合并 Runs / Attribution / Followed by</b>：推荐合并。代价是 Attribution 里的 crossing / blocked-by 信息只在有内容时以一行出现，空状态不再显示。</li>
+      <li><b>花费（$）放在状态行和 Now 里</b>：推荐显示（「预算」是人负责的四件事之一）。若你觉得太吵，只在 Activity 的 run 行显示。</li>
+      <li><b>范围</b>：先做 web，iOS / macOS / Android 跟着同一顺序；还是四端一起出板子？推荐先 web，定稿后再出 iOS 对照板（iOS 现有的 Details 列表同样要折成「Runs with」）。</li>
+    </ol>
+  </div>
+
+  <div class="files">
+    <b>会动到的文件（web）</b>：<code>src/web/src/components/TaskDetailPanel.tsx</code>（区块顺序、状态行、主按钮、⋯ 菜单、Runs with 折叠）· <code>TaskProgressBlock.tsx</code>（复用进 Now）· <code>TaskDependencyGraph.tsx / TaskDependencyList.tsx</code>（一行链 + 原地展开）· <code>TaskAttributionCard.tsx</code>（并入 Activity，一行化）· <code>TaskScheduleEditor.tsx / TaskInputs.tsx</code>（进 Edit）· 新增 Delivered / Needs-you 横条组件（读 <code>task_evidence_list</code> 已有数据）· <code>index.css</code>。服务端：Now 的「正在改的文件」与「$ so far」若任务接口里没有，需要在 task 读接口加两个字段——实现前先核对。
+  </div>
+</div>
+
+</body>
+</html>

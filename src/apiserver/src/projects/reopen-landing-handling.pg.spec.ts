@@ -5,6 +5,7 @@ import { test } from 'node:test';
 import { Prisma, PrismaClient, RunStatus, RunnerStatus, SessionDispatchOrigin, TaskStatus } from '@prisma/client';
 import { Client } from 'pg';
 
+import { receiveOpenItem } from '../test-support/open-item-delivery';
 import {
   IntegrationJobCommand,
   IntegrationJobResultRequest,
@@ -420,6 +421,7 @@ test('reopen -> DONE hands the old integration card to the new generation, then 
     try {
       const w = await world(stack, 'reopen-landed');
       const failed = await failFirst(stack, w, 'reopen-landed');
+      await receiveOpenItem(stack.db, failed.firstItemId);
       const beforeDeliveries = await stack.db.projectOpenItemDelivery.count({ where: { itemId: failed.firstItemId } });
       const reopened = await queueReopenedGeneration(stack, w, failed.taskId, 'reopen-landed');
       let old = await openItem(stack, failed.firstItemId);

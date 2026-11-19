@@ -7,8 +7,12 @@ import { api, ApiError } from '../api';
 import type { ProjectCrossingRow } from '../lib/attribution';
 import {
   MOVE_TASK_APPROVE_CONSEQUENCE,
+  MOVE_TASK_DENY_CONSEQUENCE,
+  MOVE_TASK_OUT_APPROVE_CONSEQUENCE,
   MOVE_TASK_STATE_MEANING,
+  NO_PROJECT,
   ProjectCrossingsCard,
+  crossingConfirmPrompt,
 } from './ProjectCrossingsCard';
 
 /**
@@ -221,5 +225,150 @@ describe('ProjectCrossingsCard — confirming a move, live', () => {
     );
     expect(answers).toHaveLength(2);
     expect(node.textContent).not.toContain('That answer was not recorded');
+  });
+});
+
+/** A move out of the project entirely: the row the source project reads, with no target. */
+function moveOutRow(over: Partial<ProjectCrossingRow> = {}): ProjectCrossingRow {
+  return moveRow({
+    fromProjectId: PROJECT,
+    fromProjectPublicId: PROJECT,
+    fromProject: { title: 'Runner hardening', status: 'OPEN' },
+    toProjectId: null,
+    toProjectPublicId: undefined,
+    toProject: null,
+    requestedCriterion: null,
+    withdrawnCriterion: { key: 'AAASourceCriterion', text: 'The drain never wedges.' },
+    ...over,
+  });
+}
+
+describe('ProjectCrossingsCard — a move out to no project', () => {
+  it('names the missing target no project, in the prompt as everywhere', () => {
+    expect(NO_PROJECT).toBe('no project');
+    expect(MOVE_TASK_OUT_APPROVE_CONSEQUENCE).toBe(
+      "Confirming takes the task out of this project; no project's acceptance counts it any more.",
+    );
+    for (const row of [moveOutRow(), moveOutRow({ toProjectPublicId: null })]) {
+      expect(crossingConfirmPrompt(row, 'APPROVE')).toEqual({
+        verb: 'Approve',
+        from: 'Runner hardening',
+        to: 'no project',
+        subject: 'Wire the drain watchdog',
+        consequence: MOVE_TASK_OUT_APPROVE_CONSEQUENCE,
+      });
+      expect(crossingConfirmPrompt(row, 'DENY').consequence).toBe(MOVE_TASK_DENY_CONSEQUENCE);
+    }
+    // An ordinary move keeps its own words.
+    expect(crossingConfirmPrompt(moveRow(), 'APPROVE').consequence).toBe(MOVE_TASK_APPROVE_CONSEQUENCE);
+  });
+
+  it('draws the row with no project as its target and confirms it the same way', async () => {
+    server.row = moveOutRow();
+    const node = await mount();
+    expect(node.textContent).toContain('Runner hardening');
+    expect(node.textContent).toContain(`→ ${NO_PROJECT}`);
+    expect(node.textContent).not.toContain('unnamed project');
+    expect(node.textContent).not.toContain('null');
+
+    await press(node, 'Approve…');
+    expect(answers).toEqual([]);
+    expect(node.textContent).toContain(
+      'Approve moving “Wire the drain watchdog” from Runner hardening to no project?',
+    );
+    expect(node.textContent).toContain(MOVE_TASK_OUT_APPROVE_CONSEQUENCE);
+    expect(node.textContent).not.toContain(MOVE_TASK_APPROVE_CONSEQUENCE);
+
+    server.decide = async () => {
+      server.row = moveOutRow({ state: 'APPLIED', decidedAt: '2026-10-06T10:00:00.000Z' });
+      return server.row;
+    };
+    await press(node, 'Yes, approve');
+    await until(
+      () => (node.textContent ?? '').includes(MOVE_TASK_STATE_MEANING.APPLIED),
+      'the request read back as applied',
+    );
+    expect(answers).toEqual([{ decision: 'APPROVE', acknowledgedCrossingKey: KEY }]);
+  });
+});
+
+describe('ProjectCrossingsCard — only what no conversation answers (docs/mocks/crossings-page-only-uncovered)', () => {
+  async function mountWith(rows: ProjectCrossingRow[]): Promise<HTMLElement> {
+    vi.mocked(api).mockImplementation((async (path: string) => {
+      if (path === `/projects/${PROJECT}/handoffs`) return rows;
+      throw new Error(`nothing is stubbed at ${path}`);
+    }) as unknown as typeof api);
+    const qc = new QueryClient({ defaultOptions: { queries: { retry: false, refetchOnWindowFocus: false } } });
+    client = qc;
+    const node = document.createElement('div');
+    document.body.appendChild(node);
+    container = node;
+    const tree = createRoot(node);
+    root = tree;
+    await act(async () => {
+      tree.render(
+        <QueryClientProvider client={qc}>
+          <ProjectCrossingsCard projectId={PROJECT} />
+        </QueryClientProvider>,
+      );
+    });
+    await until(() => qc.getQueryCache().getAll().every((q) => q.state.status !== 'pending'), 'the read');
+    await turn();
+    return node;
+  }
+
+  const covered = (over: Partial<ProjectCrossingRow> = {}) =>
+    moveRow({
+      toProject: { title: 'Runner hardening', status: 'OPEN', coordinatorSessionId: 'AAACoordinator' },
+      ...over,
+    });
+
+  it('draws nothing at all when every row is answered in a coordinator conversation', async () => {
+    const node = await mountWith([covered(), covered({ id: 'AAAOther', state: 'APPLIED' })]);
+    expect(node.textContent).toBe('');
+  });
+
+  it('draws nothing when nothing has been asked, rather than an empty panel', async () => {
+    const node = await mountWith([]);
+    expect(node.textContent).toBe('');
+  });
+
+  it('keeps a move out of every project, and a target with no coordinator, and counts only those', async () => {
+    const node = await mountWith([
+      covered({ title: 'Answered in the conversation', subjectTask: null }),
+      moveRow({ id: 'AAAOut', toProjectId: null, toProjectPublicId: null, toProject: null, title: 'Leave the project', subjectTask: null }),
+      moveRow({
+        id: 'AAANoCoord',
+        toProject: { title: 'Runner hardening', status: 'OPEN', coordinatorSessionId: null },
+        title: 'No coordinator to ask',
+        subjectTask: null,
+      }),
+    ]);
+    const text = node.textContent ?? '';
+    expect(text).toContain('Leave the project');
+    expect(text).toContain('No coordinator to ask');
+    expect(text).not.toContain('Answered in the conversation');
+    expect(text).toContain('2 waiting');
+  });
+
+  it('leaves off a move out of every project that the source coordinator answers', async () => {
+    const node = await mountWith([
+      moveRow({
+        id: 'AAAOutCovered', toProjectId: null, toProjectPublicId: null, toProject: null,
+        fromProject: { title: 'Ollama', status: 'CANCELLED', coordinatorSessionId: 'AAASourceCoordinator' },
+        title: 'Asked in the source conversation', subjectTask: null,
+      }),
+      moveRow({ id: 'AAAOutBare', toProjectId: null, toProjectPublicId: null, toProject: null, title: 'No source coordinator', subjectTask: null }),
+    ]);
+    const text = node.textContent ?? '';
+    expect(text).not.toContain('Asked in the source conversation');
+    expect(text).toContain('No source coordinator');
+    expect(text).toContain('1 waiting');
+  });
+
+  it('keeps every row from a server that does not say where a row is answered', async () => {
+    const node = await mountWith([moveRow()]);
+    expect(node.textContent).toContain('Wire the drain watchdog');
+    expect(node.textContent).toContain('1 waiting');
   });
 });

@@ -11,21 +11,33 @@ import { Prisma } from '@prisma/client';
  * before. Nothing is cleared by turning it off: a task's suggestion and an Agent's switch and engines
  * are kept, so turning it back on restores them.
  *
- * Off unless the owner turned it on — the opposite of the orchestration and notification switches,
- * so only turning it on is ever written. `owner` is the row's own read, null when there is none.
+ * On unless the owner turned it off (owner, 2026-11-20): an account that never wrote it reads on, like
+ * the orchestration and notification switches. `owner` is the row's own read, null when there is none,
+ * which reads off.
  */
 export function modelRoutingEnabled(owner: { preferences: unknown } | null): boolean {
-  const prefs = (owner?.preferences ?? {}) as { modelRouting?: unknown };
-  return prefs.modelRouting === true;
+  if (!owner) return false;
+  const prefs = (owner.preferences ?? {}) as { modelRouting?: unknown };
+  return prefs.modelRouting !== false;
+}
+
+/**
+ * The account's Optimize For (owner, 2026-11-19): one for every Agent, SubAgents and smart-selected task runs
+ * alike. Absent, or anything else, is Balance. The per-Agent column (workspace.model_routing_optimize_for)
+ * is no longer read.
+ */
+export function optimizeForOf(owner: { preferences: unknown } | null): 'cost' | 'balance' | 'intelligence' {
+  const value = ((owner?.preferences ?? {}) as { optimizeFor?: unknown }).optimizeFor;
+  return value === 'cost' || value === 'intelligence' ? value : 'balance';
 }
 
 /**
  * The same switch read in SQL, for a scan that wants it beside its rows rather than as a query of
  * its own: `ownerId` names the column holding the account's id. Exactly `modelRoutingEnabled` —
- * the JSON value `true` and nothing else.
+ * anything but the JSON value `false` is on; no account row is off.
  */
 export function modelRoutingEnabledSql(ownerId: string): Prisma.Sql {
   return Prisma.sql`COALESCE((
-    SELECT u.preferences -> 'modelRouting' = 'true'::jsonb FROM "user" u WHERE u.id = ${Prisma.raw(ownerId)}
+    SELECT COALESCE(u.preferences -> 'modelRouting' <> 'false'::jsonb, true) FROM "user" u WHERE u.id = ${Prisma.raw(ownerId)}
   ), false)`;
 }

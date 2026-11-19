@@ -1,6 +1,7 @@
 package io.orbitd.android.cards
 
 import androidx.compose.foundation.layout.*
+import androidx.compose.foundation.text.selection.SelectionContainer
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Modifier
@@ -17,12 +18,9 @@ import io.orbitd.android.R
 import io.orbitd.android.core.cards.*
 import io.orbitd.android.management.RunnerCopy
 import io.orbitd.android.management.RunnerPage
-import io.orbitd.android.reader.EngineErrors
 import io.orbitd.android.text.*
 import io.orbitd.android.ui.LocalOrbitColors
 import kotlinx.serialization.json.*
-import java.time.Instant
-import java.time.ZoneId
 
 /** [recorded]: drawn in a review as the record this window's press made of it — what the press made past is left out. */
 @Composable
@@ -44,11 +42,15 @@ internal fun CardBody(card: InteractionCard, open: (String) -> Unit, owner: Owne
         return
     }
     when (card.family) {
-        CardFamily.TOOL, CardFamily.PROVIDER -> {
+        CardFamily.PROVIDER -> ProviderWriteCardBody(ProviderWriteCards.read(row.text("toolName").orEmpty(), row.obj("input") ?: JsonObject(emptyMap())))
+        CardFamily.TOOL -> {
             val input = row.obj("input") ?: JsonObject(emptyMap())
+            if (row.text("toolName") == ApprovalRules.mergeCheckChange) { IntegrationCheckBody(input); return }
+            if (row.text("toolName") == SkipMergeCheckCards.tool) { SkipMergeCheckCardBody(SkipMergeCheckCards.read(input), open); return }
+            if (ToolCalls.plain(row.text("toolName").orEmpty())) { ToolCallBody(card, open); return }
             input.text("command")?.let { CodeText(it, "sh") }
             if (input.text("command") == null) listOf("file_path", "notebook_path", "url", "pattern", "path").firstNotNullOfOrNull { input.text(it) }?.let { Text(it) }
-            DetailFold("Tool parameters") { CodeText(redactProvider(input, card.family == CardFamily.PROVIDER).toString(), "json") }
+            DetailFold("Tool parameters") { CodeText(input.toString(), "json") }
         }
         CardFamily.QUESTION -> Unit // The exact questions and options are drawn by the form.
         CardFamily.PLAN -> MarkdownText(row.obj("input")?.text("plan") ?: "Plan ready for review.", open = open)
@@ -61,6 +63,9 @@ internal fun CardBody(card: InteractionCard, open: (String) -> Unit, owner: Owne
                 val list = input.obj("preview")?.objects("lists")?.firstOrNull()?.text("title")?.takeIf { it.isNotBlank() }
                     ?: input.text("listTitle")?.takeIf { it.isNotBlank() }
                 list?.let { Text("Into $it") }
+                // A task that starts on a condition (condition-triggers board frame 2): what it waits for, how it is checked and the
+                // command, what it reads today, and what happens if it never holds.
+                io.orbitd.android.core.schedule.StartWhenCardLines.ofCreateInput(input)?.let { io.orbitd.android.schedule.StartWhenLines(it) }
             }
             CardFields(input, if (isTask) listOf("projectTitle", "completionCriterion") else listOf("projectTitle", "listTitle", "completionCriterion"), open)
             input.text("description")?.let { DetailFold("Description") { MarkdownText(it, open = open) } }
@@ -92,8 +97,6 @@ internal fun CardBody(card: InteractionCard, open: (String) -> Unit, owner: Owne
         }
         CardFamily.EVIDENCE -> {
             Text(row.text("title") ?: "", style = MaterialTheme.typography.titleSmall)
-            // Opened by Decide it myself: still saying what it waits for, and that deciding here is the owner's choice.
-            if (CoordinatorQueue.isDecidingMyself(card)) { CoordinatorPausedLine(card); CoordinatorNote(card, CoordinatorQueue.decideHere) }
             Text("Evidence revision ${row.text("evidenceRevision") ?: ""}", style = MaterialTheme.typography.labelMedium)
             Field("Criterion", row.obj("criterion")?.get("text"), open)
             // What the evidence is, right under what it is measured against, and only when this version cites a file (§2.6).
@@ -105,8 +108,14 @@ internal fun CardBody(card: InteractionCard, open: (String) -> Unit, owner: Owne
                 Text("${citation.text("kind")}: ${citation.text("label") ?: citation.text("ref")}")
                 Text(if (citation.flag("resolved")) "Reference found" else "Reference not found: ${citation.text("reason") ?: "unresolved"}", style = MaterialTheme.typography.bodySmall)
             }
-            row.obj("decidability")?.takeIf { !it.flag("decidable") }?.let { CardFields(it, listOf("refusal", "requiredAction"), open) }
+            // A row that offers Restart the task names no required action of somebody else's (§3.3): the owner reads why it cannot
+            // be decided, then the one move that is theirs.
+            val restart = EvidenceRestart.offered(row)
+            row.obj("decidability")?.takeIf { !it.flag("decidable") }?.let {
+                CardFields(it, if (restart) listOf("refusal") else listOf("refusal", "requiredAction"), open)
+            }
             row.obj("independence")?.takeIf { !it.flag("independent") }?.let { CardFields(it, listOf("disqualification", "requiredAction"), open) }
+            if (restart) Text(EvidenceRestart.explanation, Modifier.testTag("evidence-restart-explanation"))
         }
         CardFamily.OWNER_CONFIRMATION -> OwnerCardBody(card, open, owner, reopen, recorded)
         CardFamily.CRITERIA_CHANGE -> {
@@ -159,12 +168,7 @@ internal fun CardBody(card: InteractionCard, open: (String) -> Unit, owner: Owne
         CardFamily.WIKI -> CardFields(row, listOf("op", "entryId", "baseRevision", "payload", "similar", "tainted", "decision", "reason", "change", "facts", "version", "categories", "docs", "gate", "sources", "summary", "fields", "trust", "revert"), open)
         CardFamily.BACKGROUND -> CardFields(row, listOf("state", "predicate", "targets", "matches", "expiryDeliveries", "expiresAt"), open)
         CardFamily.REVIEW, CardFamily.SESSION_REQUEST -> CardFields(row, row.keys.filterNot { it.endsWith("Token") }, open)
-        // A revision waiting for its paused coordinator (`CoordinatorQueue`); one sent to it is a line of the rail (`SessionCards`).
-        CardFamily.COORDINATOR_QUEUE -> if (!CoordinatorQueue.isSent(card)) {
-            Text(row.text("title") ?: "", style = MaterialTheme.typography.titleSmall, maxLines = 2, overflow = TextOverflow.Ellipsis)
-            CoordinatorPausedLine(card)
-            CoordinatorNote(card, CoordinatorQueue.explanation)
-        }
+        CardFamily.COORDINATOR_QUEUE -> Unit
     }
 }
 
@@ -229,27 +233,56 @@ private fun WorkspaceWriteCardBody(write: WorkspaceWriteCard) {
 }
 
 /**
- * Why a revision waits for its coordinator (project 34cygPTQe5LPUT7tdUAzG), read off the coordinator's own session: the quota
- * window it ran out of — judged as the conversation's own quota row judges it (`EngineErrors`), from what its failed run said, else
- * from its last reply, since a usage limit can park a retry without failing the run — and when that resets (its `retryAt`); for any
- * other failure, when it retries. A coordinator no longer paused gets the revision when its current turn ends.
+ * What a provider write sets (iOS `ToolApprovalCard`'s provider branch, web `ProviderWriteBody`): the provider's name on its own row,
+ * each field it writes by caption, the model list one model a row with its window and the default marked, then what it leaves alone.
+ * The key is never a value here: the runner files only that one is set.
  */
-internal fun coordinatorPauseLine(coordinator: JsonObject, now: Instant = Instant.now(), zone: ZoneId = ZoneId.systemDefault()): String {
-    if (!CoordinatorQueue.isPaused(coordinator)) return CoordinatorQueue.back
-    val failed = (coordinator.text("runState") ?: coordinator.text("status")) == "FAILED"
-    val said = coordinator.text("error")?.takeIf { failed && it.isNotBlank() } ?: coordinator.text("lastAssistantText")
-    val window = said?.takeIf(EngineErrors::isUsageLimitErrorText)?.let(EngineErrors::quotaWindow)
-    return CoordinatorQueue.pausedLine(window, coordinator.text("retryAt")?.let { OwnerReview.receiptTime(it, now, zone) })
+@Composable
+private fun ProviderWriteCardBody(write: ProviderWriteCard) {
+    val small = MaterialTheme.typography.bodySmall
+    val muted = MaterialTheme.colorScheme.onSurfaceVariant
+    val caption = MaterialTheme.typography.labelMedium
+    if (write.name.isNotEmpty()) Text(write.name, style = MaterialTheme.typography.titleSmall,
+        fontFamily = if (write.tool == ProviderWriteCards.createTool) null else FontFamily.Monospace)
+    write.fields.forEach { field ->
+        Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+            Text(field.caption, style = small, color = muted)
+            Text(field.value, Modifier.weight(1f), style = small, fontFamily = if (field.mono) FontFamily.Monospace else null)
+        }
+    }
+    write.models?.let { models ->
+        Text(if (write.tool == ProviderWriteCards.updateTool) ProviderWriteCards.modelsReplace else ProviderWriteCards.models, style = caption)
+        models.forEach { model ->
+            Column {
+                Text(buildAnnotatedString {
+                    withStyle(SpanStyle(fontFamily = FontFamily.Monospace)) { append(model.value) }
+                    if (model.isDefault) withStyle(SpanStyle(color = muted)) { append("  · default") }
+                }, style = small)
+                if (model.detail.isNotEmpty()) Text(model.detail, style = small, color = muted)
+            }
+        }
+    }
+    ProviderWriteCards.note(write.tool)?.let { Text(it, style = small, color = muted) }
 }
 
+/**
+ * What a skip lets through (iOS `ToolApprovalCard`'s skip branch, web `SkipMergeCheckBody`): the task's name on the row under the
+ * heading, its project, the command that will not run whole and selectable — the decision is about that command — what it said, the
+ * agent's reason, and that it is this landing only.
+ */
 @Composable
-private fun CoordinatorPausedLine(card: InteractionCard) = Text(coordinatorPauseLine(card.context.obj("coordinator") ?: JsonObject(emptyMap())),
-    Modifier.testTag("${card.key}:paused"), style = MaterialTheme.typography.bodySmall, color = LocalOrbitColors.current.needsYou)
-
-/** The line under the paused one: that the owner may still decide, or — once they chose to — that it is theirs to choose. */
-@Composable
-private fun CoordinatorNote(card: InteractionCard, text: String) = Text(text, Modifier.testTag("${card.key}:note"),
-    style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+private fun SkipMergeCheckCardBody(skip: SkipMergeCheckCard, open: (String) -> Unit) {
+    val small = MaterialTheme.typography.bodySmall
+    val muted = MaterialTheme.colorScheme.onSurfaceVariant
+    Text(skip.taskLine, style = MaterialTheme.typography.titleSmall)
+    skip.projectLine?.let { Text(it, style = small, color = muted) }
+    Text(SkipMergeCheckCards.commandCaption, style = small, color = muted)
+    SelectionContainer { Text(skip.checkCommand, style = small, fontFamily = FontFamily.Monospace) }
+    if (skip.failure.isNotEmpty()) Text(skip.failure, style = small, color = muted)
+    Text(SkipMergeCheckCards.reasonCaption, style = small, color = muted)
+    if (skip.reason.isNotEmpty()) MarkdownText(skip.reason, open = open)
+    Text(skip.note, style = small, color = muted)
+}
 
 @Composable
 internal fun CardFields(source: JsonObject, fields: List<String>, open: (String) -> Unit) {
@@ -288,10 +321,20 @@ internal fun LinkButton(label: String, destination: String, open: (String) -> Un
     TextButton(onClick = { open(destination) }) { Text(label) }
 }
 
-internal fun redactProvider(value: JsonElement, provider: Boolean): JsonElement = if (!provider) value else when (value) {
-    is JsonObject -> JsonObject(value.mapValues { (key, child) ->
-        if (key.lowercase() in setOf("apikey", "api_key", "token", "secret", "password")) JsonPrimitive("Set") else redactProvider(child, true)
-    })
-    is JsonArray -> JsonArray(value.map { redactProvider(it, true) })
-    else -> value
+@Composable
+private fun IntegrationCheckBody(input: JsonObject) {
+    Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
+        listOf("landing", "merge").forEach { layer ->
+            Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                Text(if (layer == "landing") LandingCheckCopy.label else "Merge check", style = MaterialTheme.typography.titleSmall)
+                Text(if (layer == "landing") LandingCheckCopy.hint else "Runs before merging into main.")
+                listOf(false, true).forEach { after ->
+                    Text(if (after) "after" else "now", style = MaterialTheme.typography.labelMedium)
+                    CodeText(IntegrationCheckProposal.command(input, layer, after), "sh")
+                    Text("${LandingCheckCopy.timeout}: ${IntegrationCheckProposal.timeout(input, layer, after)}")
+                }
+            }
+        }
+        Text(LandingCheckCopy.applies, style = MaterialTheme.typography.labelMedium)
+    }
 }

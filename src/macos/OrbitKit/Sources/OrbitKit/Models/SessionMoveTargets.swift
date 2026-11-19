@@ -54,13 +54,17 @@ public struct SessionMoveTarget: Codable, Equatable, Hashable, Sendable, Identif
     public let conversation: SessionMoveConversation?
     /// The folders the session can be filed in there.
     public let folders: [SessionMoveFolder]
+    /// The session is a project's coordinator and a new coordinator for that project could open here
+    /// (enabled, with a runner): Change offers Start a new one there when the conversation itself can't come.
+    /// False for any other session, and from a server that predates it.
+    public let startsCoordinator: Bool
 
     public var id: String { workspaceId }
 
     public init(workspaceId: String, name: String, provider: String = "claude", runnerId: String? = nil,
                 runnerName: String? = nil, runnerOnline: Bool = true, workDir: String? = nil,
                 reason: String? = nil, conversation: SessionMoveConversation? = .continues,
-                folders: [SessionMoveFolder] = []) {
+                folders: [SessionMoveFolder] = [], startsCoordinator: Bool = false) {
         self.workspaceId = workspaceId
         self.name = name
         self.provider = provider
@@ -71,6 +75,7 @@ public struct SessionMoveTarget: Codable, Equatable, Hashable, Sendable, Identif
         self.reason = reason
         self.conversation = conversation
         self.folders = folders
+        self.startsCoordinator = startsCoordinator
     }
 
     public init(from decoder: Decoder) throws {
@@ -87,6 +92,18 @@ public struct SessionMoveTarget: Codable, Equatable, Hashable, Sendable, Identif
         conversation = (try? values.decodeIfPresent(String.self, forKey: .conversation))
             .flatMap(SessionMoveConversation.init(rawValue:))
         folders = try values.decodeIfPresent([SessionMoveFolder].self, forKey: .folders) ?? []
+        startsCoordinator = try values.decodeIfPresent(Bool.self, forKey: .startsCoordinator) ?? false
+    }
+}
+
+/// The project a session coordinates, which moves with it (`SessionMoveTargets.coordinates`).
+public struct SessionMoveCoordinates: Codable, Equatable, Hashable, Sendable {
+    public let projectId: String
+    public let title: String
+
+    public init(projectId: String, title: String) {
+        self.projectId = projectId
+        self.title = title
     }
 }
 
@@ -106,12 +123,15 @@ public struct SessionMoveTargets: Codable, Equatable, Sendable {
     public let changedFiles: Int
     public let unmergedFiles: Int
     public let mergeTarget: String?
+    /// The project this session is the current coordinator of, which is coordinated from wherever
+    /// the session goes; nil for any other session, and from a server that predates it.
+    public let coordinates: SessionMoveCoordinates?
     public let targets: [SessionMoveTarget]
 
     public init(workspaceId: String? = nil, folderId: String? = nil, folders: [SessionMoveFolder] = [],
                 reason: String? = nil, needsEnd: Bool = false, branch: String? = nil,
                 changedFiles: Int = 0, unmergedFiles: Int = 0, mergeTarget: String? = nil,
-                targets: [SessionMoveTarget] = []) {
+                coordinates: SessionMoveCoordinates? = nil, targets: [SessionMoveTarget] = []) {
         self.workspaceId = workspaceId
         self.folderId = folderId
         self.folders = folders
@@ -121,6 +141,7 @@ public struct SessionMoveTargets: Codable, Equatable, Sendable {
         self.changedFiles = changedFiles
         self.unmergedFiles = unmergedFiles
         self.mergeTarget = mergeTarget
+        self.coordinates = coordinates
         self.targets = targets
     }
 
@@ -135,6 +156,7 @@ public struct SessionMoveTargets: Codable, Equatable, Sendable {
         changedFiles = try values.decodeIfPresent(Int.self, forKey: .changedFiles) ?? 0
         unmergedFiles = try values.decodeIfPresent(Int.self, forKey: .unmergedFiles) ?? 0
         mergeTarget = try values.decodeIfPresent(String.self, forKey: .mergeTarget)
+        coordinates = try? values.decodeIfPresent(SessionMoveCoordinates.self, forKey: .coordinates)
         targets = try values.decodeIfPresent([SessionMoveTarget].self, forKey: .targets) ?? []
     }
 }

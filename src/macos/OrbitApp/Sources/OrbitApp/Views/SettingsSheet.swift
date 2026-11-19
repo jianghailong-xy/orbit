@@ -23,8 +23,8 @@ extension View {
 }
 
 /// Settings' own stack: the list at its root, and each page it opens as a frame of
-/// `NavState.settingsPath` — the `SettingsPage`s; from Infrastructure a machine's record and its engine
-/// and name pages, and a pool's page; and an account's record under Admin. A form row pushes with its
+/// `NavState.settingsPath` — the `SettingsPage`s; from Machines a machine's record and its engine
+/// and name pages, and from Providers a pool's page. A form row pushes with its
 /// `NavigationLink` value; a list row inside a page pushes through `AppModel.push`, which lands here
 /// while the sheet is up.
 struct SettingsSheet: View {
@@ -42,11 +42,13 @@ struct SettingsSheet: View {
                         case .runnerDetail(let runnerID): RunnerDetailView(runnerID: runnerID)
                         case .runnerEngine(let runnerID, let engine): RunnerEnginePage(runnerID: runnerID, engine: engine)
                         case .runnerName(let runnerID):   RunnerNamePage(runnerID: runnerID)
-                        case .settingsPage(let page):     SettingsPageView(page: page)
+                        // Inline, as the list is: a page pushed from the list inherits that, but
+                        // one the sheet opens directly on (the composer's translation tag opens
+                        // Sessions) would otherwise get a large title drawn over its first row.
+                        case .settingsPage(let page):     SettingsPageView(page: page).navigationBarTitleDisplayMode(.inline)
                         case .accountPool(let poolID):    AccountPoolSettingsPage(poolID: poolID)
                         case .sharedPool(let poolID):     SharedPoolSettingsPage(poolID: poolID)
                         case .providerDetail(let providerID): ProviderDetailSettingsPage(providerID: providerID)
-                        case .userDetail(let userID):     AdminUserDetailView(userID: userID)
                         default:                          EmptyView()
                         }
                     }
@@ -73,22 +75,24 @@ private struct SettingsPageView: View {
 
     var body: some View {
         switch page {
-        // The page the Infrastructure section shows, pushing onto Settings' stack: Machines & models'
-        // one row, where the web's Runners and Providers pages became one.
-        case .infrastructure: RunnersListView(rowNavigation: .push)
-        case .sessions:       SessionSettingsPage()
+        case .general:        SessionSettingsPage()
         case .notifications:  NotificationSettingsPage()
+        case .profile:        ProfileSettingsPage()
+        case .github:         GithubSettingsPage()
         case .sharedLinks:    SharedLinksSettingsPage()
         case .accessTokens:   AccessTokensSettingsPage()
+        case .terminals:      TerminalsSettingsPage()
+        // The Machines & models page in its two halves, as the web's Settings nav has Machines and Providers.
+        case .machines:       RunnersListView(rowNavigation: .push, part: .machines)
+        case .providers:      RunnersListView(rowNavigation: .push, part: .providers)
         case .changePassword: ChangePasswordPage()
-        case .admin:          AdminUsersView(rowNavigation: .push)
         }
     }
 }
 
 // MARK: - The list
 
-/// Settings' root: the account, then `SettingsHome`'s groups, then Sign out and the build.
+/// Settings' root: the account, then `SettingsHome`'s groups, then Sign out.
 struct SettingsHomeView: View {
     @Environment(AppModel.self) private var model
     @Environment(\.scenePhase) private var scenePhase
@@ -104,23 +108,17 @@ struct SettingsHomeView: View {
     /// The edit-profile card, which the avatar and name open.
     @State private var editingProfile = false
 
-    private var isAdmin: Bool { model.user?.role == "ADMIN" }
-
     var body: some View {
         Form {
             header
             if alertsAllowed == false { alertsOffCard }
             ForEach(SettingsHome.Group.allCases, id: \.self) { group in
                 Section {
-                    ForEach(SettingsHome.rows(group, isAdmin: isAdmin), id: \.self) { row in
+                    ForEach(SettingsHome.rows(group), id: \.self) { row in
                         self.row(row)
                     }
                 } header: {
                     if let header = SettingsHome.header(group) { SettingsHeader(header) }
-                } footer: {
-                    if let footer = SettingsHome.footer(group) {
-                        Text(footer)
-                    }
                 }
             }
             signOutSection
@@ -148,18 +146,21 @@ struct SettingsHomeView: View {
             Task { await model.savePreferences(UpdatePreferencesRequest(theme: value)) }
         }
         .onAppear(perform: seed)
-        // Each row's value is its own read, so they are asked for side by side. Infrastructure's is what
-        // its page's Needs you holds: the machines, and the pools — a Codex one of the account's own with
-        // its people and keys, which say whether it can run.
+        // Each row's value is its own read, so they are asked for side by side. Machines' and Providers'
+        // are what their pages' Needs you holds: the machines, and the pools — a Codex one of the
+        // account's own with its people and keys, which say whether it can run.
         .task { alertsAllowed = await model.notifications.alertsAllowed() }
         .task { await model.runners?.load() }
         .task { await model.agents?.reloadPools() }
+        .task { await model.agents?.loadOwnKeys() }
         .task { await model.sharedPools?.load() }
-        .task(id: InfrastructureLists.codexPoolIDs(model)) {
-            for id in InfrastructureLists.codexPoolIDs(model) { await model.sharedPools?.loadAccess(id) }
+        .task(id: MachinesAndModelsLists.codexPoolIDs(model)) {
+            for id in MachinesAndModelsLists.codexPoolIDs(model) { await model.sharedPools?.loadAccess(id) }
         }
         .task { await model.sharedLinks?.load() }
         .task { await model.accessTokens?.load() }
+        .task { await model.terminals?.load() }
+        .task { await model.loadGithub() }
         // Back from the system's Settings, where the card sends you: say what it is now.
         .onChange(of: scenePhase) { _, phase in
             guard phase == .active else { return }
@@ -230,21 +231,17 @@ struct SettingsHomeView: View {
                 Text("Light").tag("light")
                 Text("Dark").tag("dark")
             } label: { label }
-        case .email:
-            LabeledContent { Text(model.user?.email ?? "") } label: { label }
-        case .instance:
-            LabeledContent { Text(SettingsHome.instanceName(model.baseURL) ?? "") } label: { label }
-        case .infrastructure:
-            NavigationLink(value: NavNode.settingsPage(.infrastructure)) {
+        case .machines, .providers:
+            NavigationLink(value: NavNode.settingsPage(row == .machines ? .machines : .providers)) {
                 LabeledContent {
-                    if let value = infrastructureValue {
+                    if let value = row == .machines ? machinesValue : providersValue {
                         // What needs a person is said in amber, as the mock's row says it.
                         Text(value.text)
                             .foregroundStyle(value.needsYou ? RunnerInk.amber : Color.secondary)
                     }
                 } label: { label }
             }
-        case .sessions, .notifications, .sharedLinks, .accessTokens, .changePassword, .admin:
+        case .general, .notifications, .profile, .sharedLinks, .accessTokens, .terminals, .github:
             if let page = SettingsHome.page(row) {
                 NavigationLink(value: NavNode.settingsPage(page)) {
                     LabeledContent { if let value = value(of: row) { Text(value) } } label: { label }
@@ -253,12 +250,20 @@ struct SettingsHomeView: View {
         }
     }
 
-    /// Only an answer the server gave — never the empty list a model starts with: how many lines the
-    /// page's Needs you holds, or with none how many machines are online.
-    private var infrastructureValue: (text: String, needsYou: Bool)? {
+    /// Only an answer the server gave — never the empty list a model starts with: how many of the
+    /// machines' lines the page's Needs you holds, or with none how many machines are online.
+    private var machinesValue: (text: String, needsYou: Bool)? {
         guard let runners = model.runners, runners.loadState.hasLoaded else { return nil }
-        let needsYou = InfrastructureLists(model).attention.count
-        return (SettingsHome.infrastructureValue(needsYou: needsYou, runners: runners.runners), needsYou > 0)
+        let needsYou = MachinesAndModelsLists(model).attention.filter(\.isMachine).count
+        return (SettingsHome.machinesAndModelsValue(needsYou: needsYou, runners: runners.runners), needsYou > 0)
+    }
+
+    /// How many pools the Providers page's Needs you holds, once every list has answered; nothing else.
+    private var providersValue: (text: String, needsYou: Bool)? {
+        let lists = MachinesAndModelsLists(model)
+        guard lists.settled,
+              let text = SettingsHome.needsYouValue(lists.attention.filter { !$0.isMachine }.count) else { return nil }
+        return (text, true)
     }
 
     private func value(of row: SettingsHome.Row) -> String? {
@@ -269,6 +274,10 @@ struct SettingsHomeView: View {
             return model.sharedLinks?.activeCount.map(SettingsHome.sharedLinksValue)
         case .accessTokens:
             return model.accessTokens?.activeCount.map(SettingsHome.accessTokensValue)
+        case .terminals:
+            return model.terminals?.count.map { Terminals.settingsValue(count: $0) }
+        case .github:
+            return SettingsHome.githubValue(model.github)
         default:
             return nil
         }
@@ -284,14 +293,6 @@ struct SettingsHomeView: View {
                 } icon: {
                     Image(systemName: "rectangle.portrait.and.arrow.right").foregroundStyle(Color.red)
                 }
-            }
-        } footer: {
-            if let line = SettingsHome.versionLine(
-                version: Bundle.main.infoDictionary?["CFBundleShortVersionString"] as? String,
-                build: Bundle.main.infoDictionary?["CFBundleVersion"] as? String) {
-                Text(line)
-                    .frame(maxWidth: .infinity)
-                    .padding(.top, 12)
             }
         }
     }
@@ -712,7 +713,7 @@ private struct AvatarCropView: View {
 
 // MARK: - Sessions
 
-/// The account's five session settings, which the list's Sessions row opens (`SessionSettings`): each
+/// The account's session settings, which the list's Sessions row opens (`SessionSettings`): each
 /// in a section of its own with the web's hint as its footer, as the Notifications page below draws
 /// its switches. Each is written the moment it changes, guarded against the value the account
 /// already has, so seeding them never writes.
@@ -724,23 +725,40 @@ private struct SessionSettingsPage: View {
     @State private var orchestration = true
     /// The account's switch for smart model selection. Absent on the server means off.
     @State private var modelRouting = false
+    /// The account's "Optimize For" pick. Absent on the server means Balance.
+    @State private var optimizeFor: OptimizeFor = .balance
     /// The account's switch for suggested replies. Absent on the server means on.
     @State private var promptSuggestions = true
     /// The account's switch for session recaps. Absent on the server means on.
     @State private var recaps = true
+    /// Settings › Translation: the account's switch. Absent on the server means off.
+    @State private var translation = false
+    /// Settings › Prompt optimizer: the account's switch. Absent on the server means on.
+    @State private var promptOptimizer = true
+    /// "Show both languages" (02-bilingual.png, mark A). Absent on the server means off.
+    @State private var bilingual = false
     @State private var seeded = false
 
     var body: some View {
         Form {
-            ForEach(SessionSettings.Row.allCases, id: \.self) { row in
-                Section {
-                    control(row)
-                } footer: {
-                    Text(SessionSettings.footer(row))
+            ForEach(SessionSettings.groups, id: \.self) { group in
+                switch group {
+                case .row(let row):
+                    if SessionSettings.shows(row, smartModelSelection: modelRouting) {
+                        Section {
+                            control(row)
+                        } footer: {
+                            Text(SessionSettings.footer(row))
+                        }
+                    }
+                case .translation:
+                    translationSection
+                case .promptOptimizer:
+                    promptOptimizerSection
                 }
             }
         }
-        .navigationTitle(SettingsPage.sessions.title)
+        .navigationTitle(SettingsPage.general.title)
         .onAppear(perform: seed)
         .onChange(of: permMode) { _, value in
             let saved = model.user?.preferences?.defaultPermissionMode
@@ -756,6 +774,10 @@ private struct SessionSettingsPage: View {
             guard (model.user?.preferences?.smartModelSelection ?? false) != value else { return }
             Task { await model.savePreferences(UpdatePreferencesRequest(modelRouting: value)) }
         }
+        .onChange(of: optimizeFor) { _, value in
+            guard OptimizeFor(stored: model.user?.preferences?.optimizeFor) != value else { return }
+            Task { await model.savePreferences(UpdatePreferencesRequest(optimizeFor: value.rawValue)) }
+        }
         .onChange(of: promptSuggestions) { _, value in
             guard (model.user?.preferences?.suggestedReplies ?? true) != value else { return }
             Task { await model.savePreferences(UpdatePreferencesRequest(promptSuggestions: value)) }
@@ -764,10 +786,26 @@ private struct SessionSettingsPage: View {
             guard (model.user?.preferences?.showRecaps ?? true) != value else { return }
             Task { await model.savePreferences(UpdatePreferencesRequest(recaps: value)) }
         }
+        .onChange(of: translation) { _, value in
+            guard (model.user?.preferences?.translationEnabled ?? false) != value else { return }
+            Task { await model.savePreferences(UpdatePreferencesRequest(translationEnabled: value)) }
+        }
+        .onChange(of: promptOptimizer) { _, value in
+            // A server without a key draws it off; that is not the owner turning it off.
+            guard !PromptOptimizer.unavailable(model.user),
+                  PromptOptimizer.switchedOn(model.user?.preferences) != value else { return }
+            Task { await model.savePreferences(UpdatePreferencesRequest(promptOptimizer: value)) }
+        }
+        .onChange(of: bilingual) { _, value in
+            guard (model.user?.preferences?.translationBilingual ?? false) != value else { return }
+            Task { await model.savePreferences(UpdatePreferencesRequest(translationBilingual: value)) }
+        }
+        // Another client changed it: follow the account.
+        .onChange(of: model.user?.preferences?.translationBilingual) { _, value in bilingual = value == true }
     }
 
-    /// A row's own control: the mode is a menu on the row, as the list's Appearance is; the other four
-    /// are the account's switches.
+    /// A row's own control: the mode is a menu on the row, as the list's Appearance is; Optimize For is
+    /// a segmented picker; the other four are the account's switches.
     @ViewBuilder private func control(_ row: SessionSettings.Row) -> some View {
         let title = SessionSettings.title(row)
         switch row {
@@ -779,9 +817,70 @@ private struct SessionSettingsPage: View {
             }
         case .orchestration:     Toggle(title, isOn: $orchestration)
         case .modelRouting:      Toggle(title, isOn: $modelRouting)
+        case .optimizeFor:
+            Picker(title, selection: $optimizeFor) {
+                ForEach(OptimizeFor.allCases) { Text($0.label).tag($0) }
+            }
+            .pickerStyle(.segmented)
         case .promptSuggestions: Toggle(title, isOn: $promptSuggestions)
         case .recaps:            Toggle(title, isOn: $recaps)
         }
+    }
+
+    /// Settings › Translation (board frame 7): the switch, Your language and Agents work in (each a
+    /// pushed list of the one shared list) and the web's words as the footer, naming the agent
+    /// language. A server without a DeepSeek key draws it all disabled with frame 2's notice.
+    @ViewBuilder private var translationSection: some View {
+        let unavailable = SessionTranslation.unavailable(model.user)
+        let prefs = model.user?.preferences
+        Section {
+            Toggle(TranslationCopy.translateConversations, isOn: $translation)
+                .accessibilityIdentifier(TranslationCopy.toggleIdentifier)
+            if unavailable {
+                Text(TranslationCopy.unavailable)
+                    .font(.orbitLabel)
+                    .foregroundStyle(.orange)
+            }
+            NavigationLink {
+                TranslationLanguagePicker(side: .owner)
+            } label: {
+                LabeledContent(TranslationCopy.yourLanguage, value: SessionTranslation.language(prefs).name)
+            }
+            NavigationLink {
+                TranslationLanguagePicker(side: .agent)
+            } label: {
+                LabeledContent(TranslationCopy.agentsWorkIn, value: SessionTranslation.agentLanguage(prefs).name)
+            }
+            // Only while translation is on (mark A).
+            if translation {
+                Toggle(TranslationCopy.showBothLanguages, isOn: $bilingual)
+                    .accessibilityIdentifier(TranslationCopy.bilingualIdentifier)
+            }
+        } header: {
+            SettingsHeader(TranslationCopy.title)
+        } footer: {
+            Text(TranslationCopy.translateConversationsHint(SessionTranslation.agentLanguage(prefs)) + " " + TranslationCopy.bilingualFootnote
+                 + " " + TranslationCopy.footnote)
+        }
+        .disabled(unavailable)
+    }
+
+    /// Settings › Prompt optimizer (board frame 1): one account-wide switch, off by default, under
+    /// Suggested replies. A server without a DeepSeek key draws it disabled with frame 1b's notice.
+    @ViewBuilder private var promptOptimizerSection: some View {
+        let unavailable = PromptOptimizer.unavailable(model.user)
+        Section {
+            Toggle(PromptOptimizerCopy.title, isOn: $promptOptimizer)
+            .accessibilityIdentifier(PromptOptimizerCopy.toggleIdentifier)
+            if unavailable {
+                Text(PromptOptimizerCopy.unavailable)
+                    .font(.orbitLabel)
+                    .foregroundStyle(.orange)
+            }
+        } footer: {
+            Text(PromptOptimizerCopy.hint)
+        }
+        .disabled(unavailable)
     }
 
     private func seed() {
@@ -793,8 +892,50 @@ private struct SessionSettingsPage: View {
         permMode = PermissionMode(rawValue: p?.defaultPermissionMode ?? "") ?? AgentDefaults.defaultPermissionMode
         orchestration = p?.enableOrchestration ?? true
         modelRouting = p?.smartModelSelection ?? false
+        optimizeFor = OptimizeFor(stored: p?.optimizeFor)
         promptSuggestions = p?.suggestedReplies ?? true
         recaps = p?.showRecaps ?? true
+        translation = !SessionTranslation.unavailable(model.user) && p?.translationEnabled == true
+        promptOptimizer = !PromptOptimizer.unavailable(model.user) && PromptOptimizer.switchedOn(p)
+        bilingual = p?.translationBilingual == true
+    }
+}
+
+/// Your language or Agents work in: the one shared list, one ticked, written the moment one is
+/// picked (board frame 7's pushed single-choice list).
+private struct TranslationLanguagePicker: View {
+    enum Side { case owner, agent }
+    let side: Side
+    @Environment(AppModel.self) private var model
+
+    var body: some View {
+        let prefs = model.user?.preferences
+        let current = side == .owner ? SessionTranslation.language(prefs) : SessionTranslation.agentLanguage(prefs)
+        Form {
+            Section {
+                ForEach(TranslationLanguage.allCases, id: \.self) { lang in
+                    Button {
+                        guard lang != current else { return }
+                        let patch = side == .owner
+                            ? UpdatePreferencesRequest(translationLanguage: lang.rawValue)
+                            : UpdatePreferencesRequest(translationAgentLanguage: lang.rawValue)
+                        Task { await model.savePreferences(patch) }
+                    } label: {
+                        HStack {
+                            Text(lang.name).foregroundStyle(Color.primary)
+                            Spacer()
+                            if lang == current {
+                                Image(systemName: "checkmark").foregroundStyle(.tint)
+                            }
+                        }
+                        .contentShape(Rectangle())
+                    }
+                }
+            } footer: {
+                Text(side == .owner ? TranslationCopy.yourLanguageHint : TranslationCopy.agentsWorkInHint)
+            }
+        }
+        .navigationTitle(side == .owner ? TranslationCopy.yourLanguage : TranslationCopy.agentsWorkIn)
     }
 }
 
@@ -890,7 +1031,25 @@ private struct NotificationSettingsPage: View {
 
 // MARK: - Change password
 
-/// The web Profile page's form: the current password, and the new one twice.
+/// The web Profile page, as far as the header's card leaves it: the email the account signs in with,
+/// and Change password, which the web opens as a dialog and a phone as a page.
+private struct ProfileSettingsPage: View {
+    @Environment(AppModel.self) private var model
+
+    var body: some View {
+        Form {
+            Section {
+                LabeledContent("Email", value: model.user?.email ?? "")
+            }
+            Section {
+                NavigationLink(SettingsPage.changePassword.title, value: NavNode.settingsPage(.changePassword))
+            }
+        }
+        .navigationTitle(SettingsPage.profile.title)
+    }
+}
+
+/// The web Profile page's Change password dialog: the current password, and the new one twice.
 private struct ChangePasswordPage: View {
     @Environment(AppModel.self) private var model
 
@@ -946,11 +1105,11 @@ private struct ChangePasswordPage: View {
 
 // MARK: - Account pools
 
-/// An account pool's page: the pool as Infrastructure last read it, with account pause controls; for a
+/// An account pool's page: the pool as Machines & models last read it, with account pause controls; for a
 /// Codex pool of one's own, its page (`CodexPoolPageView`) with its people and keys read beside its ChatGPT
 /// accounts, run from here: an account signed in, in again or out, keys and people added and taken out,
-/// the pool deleted. Deleting the pool closes the page. Pushed from Infrastructure's Account pools, on
-/// Settings' stack or the Infrastructure section's own.
+/// the pool deleted. Deleting the pool closes the page. Pushed from Machines & models' Account pools, on
+/// Settings' stack or the Machines & models section's own.
 struct AccountPoolSettingsPage: View {
     @Environment(AppModel.self) private var model
     @Environment(\.dismiss) private var dismiss
@@ -1013,7 +1172,7 @@ struct AccountPoolSettingsPage: View {
 
 /// A DeepSeek key's page, read-only: the key as the account's own list last read it, and the balance of
 /// its DeepSeek account — read with the list, and asked of DeepSeek again by Refresh or Retry. Pushed from
-/// Infrastructure's API keys, on Settings' stack or the Infrastructure section's own.
+/// Machines & models' API keys, on Settings' stack or the Machines & models section's own.
 struct ProviderDetailSettingsPage: View {
     @Environment(AppModel.self) private var model
     let providerID: String
@@ -1025,7 +1184,7 @@ struct ProviderDetailSettingsPage: View {
             .first(where: { $0.providerID.map(PublicID.storageKey) == key }) {
             if CursorRuntime.isKey(provider) {
                 CursorKeyPageView(key: provider,
-                                  model: Infrastructure.cursorModel((model.runners?.runners ?? []).filter { $0.online == true }),
+                                  model: MachinesAndModels.cursorModel((model.runners?.runners ?? []).filter { $0.online == true }),
                                   checkAgain: { await agents.recheckCursorKey(providerID) })
             } else {
                 DeepSeekKeyPageView(key: provider, reading: agents.deepSeekBalances[providerID],
@@ -1119,6 +1278,7 @@ private struct SharedLinksSettingsPage: View {
 
     @State private var tab: SharedLinksList.Tab = .active
     @State private var pendingTurnOff: OrbitKit.ShareLink?
+    @State private var sharing: OrbitKit.ShareLink?
     @State private var notice: String?
 
     var body: some View {
@@ -1162,6 +1322,13 @@ private struct SharedLinksSettingsPage: View {
         .navigationTitle(SharedLinksList.title)
         .task { await model.sharedLinks?.load() }
         .refreshable { await model.sharedLinks?.load() }
+        // A row's press and its ⋯ → Settings… open the link's own Share panel; what changed there is
+        // read back when it closes.
+        .sheet(item: $sharing, onDismiss: { Task { await model.sharedLinks?.load() } }) { link in
+            if let base = model.baseURL {
+                ShareSheet(kind: link.kind, rootID: link.root.id, baseURL: base, tokenStore: model.tokenStore)
+            }
+        }
         .overlay(alignment: .bottom) {
             if let notice {
                 Text(notice)
@@ -1180,7 +1347,58 @@ private struct SharedLinksSettingsPage: View {
         Binding(get: { pendingTurnOff != nil }, set: { if !$0 { pendingTurnOff = nil } })
     }
 
+    /// One link (docs/mocks/share-links/13-row-buttons, web's row): a press opens an active link's
+    /// Share panel; a borderless copy button stays out; the rest is in its ⋯ and its long-press menu,
+    /// Turn off… last. A swipe still turns it off.
     private func row(_ link: OrbitKit.ShareLink) -> some View {
+        let url = link.state == .active ? model.baseURL.map { SharedLinksList.publicURL(link, base: $0) } : nil
+        return HStack(spacing: 12) {
+            if SharedLinksList.opens(link) {
+                Button { sharing = link } label: { words(link) }
+                    .buttonStyle(.plain)
+            } else {
+                words(link)
+            }
+            if let url {
+                Button { copy(url) } label: {
+                    Image(systemName: "doc.on.doc")
+                        .foregroundStyle(.secondary)
+                        .frame(width: 32, height: 32)
+                        .contentShape(Rectangle())
+                }
+                .buttonStyle(.borderless)
+                .accessibilityLabel(SharePanelCopy.copyLink)
+            }
+            if SharedLinksList.canTurnOff(link) {
+                Menu { menuItems(link, url: url) } label: {
+                    Image(systemName: "ellipsis")
+                        .foregroundStyle(.secondary)
+                        .frame(width: 32, height: 32)
+                        .contentShape(Rectangle())
+                }
+                .buttonStyle(.borderless)
+                .accessibilityLabel(SharedLinksList.moreLabel(link))
+            }
+        }
+        .padding(.vertical, 2)
+        .swipeActions(edge: .trailing) {
+            if SharedLinksList.canTurnOff(link) {
+                Button(SharePanelCopy.turnOff, role: .destructive) { pendingTurnOff = link }
+            }
+        }
+        .contextMenu { menuItems(link, url: url) }
+        // On the link's own row — the swipe, the ⋯ and the long-press menu all raise it — so the panel opens
+        // against that row rather than at the top of the page.
+        .orbitConfirmation({ _ in SharePanelCopy.turnOffTitle },
+                           isPresented: turnOffAsked, presenting: pendingTurnOff) { link in
+            Button(SharePanelCopy.turnOff, role: .destructive) { Task { await turnOff(link) } }
+            Button(SharePanelCopy.cancel, role: .cancel) {}
+        } message: { _ in
+            Text(SharePanelCopy.turnOffDetail)
+        }
+    }
+
+    private func words(_ link: OrbitKit.ShareLink) -> some View {
         VStack(alignment: .leading, spacing: 3) {
             Text(link.root.title ?? SharedLinksList.kindWord(link.kind))
                 .lineLimit(2)
@@ -1191,40 +1409,36 @@ private struct SharedLinksSettingsPage: View {
                 .font(.orbitListSubtitle)
                 .foregroundStyle(.secondary)
         }
-        .padding(.vertical, 2)
-        .swipeActions(edge: .trailing) {
-            if SharedLinksList.canTurnOff(link) {
-                Button(SharePanelCopy.turnOff, role: .destructive) { pendingTurnOff = link }
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .contentShape(Rectangle())
+    }
+
+    /// The ⋯ and the long-press menu alike: an active link's Copy Link, Share Link… and Settings…,
+    /// then Turn off… for any link that can still be ended.
+    @ViewBuilder
+    private func menuItems(_ link: OrbitKit.ShareLink, url: URL?) -> some View {
+        if let url {
+            Button { copy(url) } label: {
+                Label(SharePanelCopy.copyLink, systemImage: "doc.on.doc")
+            }
+            SwiftUI.ShareLink(item: url) {
+                Label(SharePanelCopy.shareLink, systemImage: "square.and.arrow.up")
+            }
+            Button { sharing = link } label: {
+                Label(SharedLinksList.settings, systemImage: "slider.horizontal.3")
             }
         }
-        .contextMenu {
-            if link.state == .active, let base = model.baseURL {
-                let url = SharedLinksList.publicURL(link, base: base)
-                Button {
-                    UIPasteboard.general.url = url
-                    show(SharePanelCopy.linkCopied)
-                } label: {
-                    Label(SharePanelCopy.copyLink, systemImage: "doc.on.doc")
-                }
-                SwiftUI.ShareLink(item: url) {
-                    Label(SharePanelCopy.shareLink, systemImage: "square.and.arrow.up")
-                }
-            }
-            if SharedLinksList.canTurnOff(link) {
-                Button(role: .destructive) { pendingTurnOff = link } label: {
-                    Label(SharePanelCopy.turnOff, systemImage: "xmark.circle")
-                }
+        if SharedLinksList.canTurnOff(link) {
+            if url != nil { Divider() }
+            Button(role: .destructive) { pendingTurnOff = link } label: {
+                Label(SharedLinksList.turnOffMenu, systemImage: "xmark.circle")
             }
         }
-        // On the link's own row — the swipe and the long-press menu both raise it — so the panel opens
-        // against that row rather than at the top of the page.
-        .orbitConfirmation({ _ in SharePanelCopy.turnOffTitle },
-                           isPresented: turnOffAsked, presenting: pendingTurnOff) { link in
-            Button(SharePanelCopy.turnOff, role: .destructive) { Task { await turnOff(link) } }
-            Button(SharePanelCopy.cancel, role: .cancel) {}
-        } message: { _ in
-            Text(SharePanelCopy.turnOffDetail)
-        }
+    }
+
+    private func copy(_ url: URL) {
+        UIPasteboard.general.url = url
+        show(SharePanelCopy.linkCopied)
     }
 
     private func turnOff(_ link: OrbitKit.ShareLink) async {
@@ -1347,6 +1561,111 @@ private struct AccessTokensSettingsPage: View {
             show(AccessTokensList.notRevoked(reason))
         } else {
             show(AccessTokensList.revoked)
+        }
+    }
+
+    /// A line over the list's foot for a moment — the app's toast lives under this sheet.
+    private func show(_ text: String) {
+        notice = text
+        Task {
+            try? await Task.sleep(for: .seconds(2))
+            if notice == text { notice = nil }
+        }
+    }
+}
+// MARK: - Terminals
+
+/// Settings → Terminals (docs/terminal-session-design.md, "The terminal credential"): every live terminal — its
+/// machine, when it was approved, last used and when it expires — each with Revoke, which asks first. A revoked
+/// terminal leaves the list. Web parity: `TerminalsPage.tsx`; the words are OrbitKit's `Terminals`.
+private struct TerminalsSettingsPage: View {
+    @Environment(AppModel.self) private var model
+
+    @State private var pendingRevoke: Terminal?
+    @State private var notice: String?
+
+    var body: some View {
+        let terminals = model.terminals?.terminals ?? []
+        List {
+            Section {
+                switch LoadFailureLogic.presentation(model.terminals?.loadState ?? ListLoadState(),
+                                                     isEmpty: terminals.isEmpty) {
+                case .loading:
+                    HStack { Spacer(); ProgressView(); Spacer() }
+                case .failed:
+                    VStack(alignment: .leading, spacing: 8) {
+                        Text(model.terminals?.errorText ?? Terminals.couldNotLoad)
+                            .foregroundStyle(.secondary)
+                        Button(SharePanelCopy.retry) { Task { await model.terminals?.load() } }
+                    }
+                case .empty, .content:
+                    if terminals.isEmpty {
+                        Text(Terminals.empty).foregroundStyle(.secondary)
+                    }
+                    ForEach(terminals) { terminal in
+                        row(terminal)
+                    }
+                }
+            } footer: {
+                Text(Terminals.hint)
+            }
+        }
+        .navigationTitle(Terminals.title)
+        .task { await model.terminals?.load() }
+        .refreshable { await model.terminals?.load() }
+        .orbitConfirmation(Terminals.revokeTitle, isPresented: revokeAsked,
+                           presenting: pendingRevoke) { terminal in
+            Button(Terminals.revoke, role: .destructive) { Task { await revoke(terminal) } }
+            Button(SharePanelCopy.cancel, role: .cancel) {}
+        } message: { _ in
+            Text(Terminals.revokeDetail)
+        }
+        .overlay(alignment: .bottom) {
+            if let notice {
+                Text(notice)
+                    .font(.orbitListSubtitle.weight(.semibold))
+                    .padding(.horizontal, 16)
+                    .padding(.vertical, 10)
+                    .background(.regularMaterial, in: Capsule())
+                    .padding(.bottom, 24)
+                    .transition(.opacity)
+            }
+        }
+        .animation(.default, value: notice)
+    }
+
+    private var revokeAsked: Binding<Bool> {
+        Binding(get: { pendingRevoke != nil }, set: { if !$0 { pendingRevoke = nil } })
+    }
+
+    private func row(_ terminal: Terminal) -> some View {
+        let now = Date()
+        return HStack(alignment: .center, spacing: 12) {
+            VStack(alignment: .leading, spacing: 3) {
+                Text(terminal.machineName)
+                ForEach([Terminals.approvedLine(terminal), Terminals.lastUsedLine(terminal, now: now),
+                         Terminals.expiresLine(terminal, now: now)], id: \.self) { line in
+                    Text(line).font(.orbitListSubtitle).foregroundStyle(.secondary)
+                }
+            }
+            .accessibilityElement(children: .combine)
+            Spacer(minLength: 8)
+            Button(Terminals.revoke, role: .destructive) { pendingRevoke = terminal }
+                .buttonStyle(.bordered)
+                .controlSize(.small)
+                .disabled(model.terminals?.revokingID == terminal.id)
+                .accessibilityIdentifier("terminal-revoke-\(terminal.id)")
+        }
+        .padding(.vertical, 2)
+        .opacity(model.terminals?.revokingID == terminal.id ? 0.5 : 1)
+    }
+
+    private func revoke(_ terminal: Terminal) async {
+        guard let terminals = model.terminals else { return }
+        if let reason = await terminals.revoke(terminal) {
+            show(Terminals.notRevoked(reason))
+        } else {
+            show(Terminals.revoked)
         }
     }
 

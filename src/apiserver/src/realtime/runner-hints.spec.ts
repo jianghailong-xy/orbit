@@ -374,6 +374,8 @@ function decisions(options: { landed?: boolean } = {}) {
     },
     $executeRawUnsafe: async () => 0,
   };
+  // decideApproval runs its write in a retried transaction: this fake has no other client to hand it.
+  (prisma as { $transaction?: unknown }).$transaction = async (fn: (tx: unknown) => unknown) => fn(prisma);
   const realtime = new RealtimeService(prisma as never, { scheduleBadgeSync: () => undefined } as never, hints);
   return { sessions: new SessionsService(prisma as never, {} as never, realtime), realtime, hints, bus, order };
 }

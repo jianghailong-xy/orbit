@@ -19,8 +19,20 @@ data class CardPress(val card: InteractionCard, val verb: CardVerb, val input: C
 
 /** A review's record (`CardPreviews.record`): its title, and the footer where its buttons were — a round [icon], who did what and
  * when, and what came of it where this window knows. */
-data class CardRecord(val title: String, val icon: Icon, val line: String, val detail: String?) {
+data class CardRecord(val title: String, val icon: Icon, val line: String, val detail: String?, val receipt: AcceptanceReceipt? = null) {
     enum class Icon { CHECK, KEPT, REFUSED }
+}
+
+/** One row of "What changed" in a receipt's fold: its mark, "4 · New", the words and, for a stricter check, the one it replaced. */
+data class ReceiptChange(val mark: String, val kind: String, val text: String, val was: String?)
+
+/** One numbered criterion of a receipt's fold: [text] null = its words are not on record; [tags] from "new", "edited since" and
+ * "removed since" — "new" can stand beside either of the others, as on the web. */
+data class ReceiptCriterion(val ordinal: Int?, val text: String?, val tags: List<String> = emptyList())
+
+/** What a recorded acceptance confirmation opens to (the web `AcceptanceReceiptFold`): the change rows, the numbered list, a note and the seal. */
+data class AcceptanceReceipt(val count: Int, val changes: List<ReceiptChange>, val criteria: List<ReceiptCriterion>, val note: String?, val seal: String) {
+    val openLabel get() = CardPreviews.receiptOpenLabel(count)
 }
 
 /**
@@ -182,7 +194,7 @@ object CardPreviews {
 
     private val allows = setOf(CardVerb.ALLOW, CardVerb.REMEMBER, CardVerb.ANSWER, CardVerb.APPROVE_PLAN, CardVerb.CREATE_TASK,
         CardVerb.CREATE_AND_START, CardVerb.CREATE_PROJECT, CardVerb.CREATE_BATCH, CardVerb.CHANGE_DAG, CardVerb.RESOLVE_BLOCKER,
-        CardVerb.DELETE_IT, CardVerb.SAVE_CHANGES, CardVerb.CREATE_WORKSPACE)
+        CardVerb.DELETE_IT, CardVerb.SAVE_CHANGES, CardVerb.CREATE_WORKSPACE, CardVerb.ADD_PROVIDER)
     private val denies = setOf(CardVerb.DENY, CardVerb.KEEP_PLANNING, CardVerb.CHAT)
 
     /**
@@ -233,15 +245,18 @@ object CardPreviews {
                 val count = response.number("criteriaCount") ?: card.context.objects("acceptanceCriteriaItems").size
                 val seal = response.text("criteriaDigest") ?: card.source.obj("startRequest")?.text("criteriaDigest")
                 CardRecord(decisionRecorded, CardRecord.Icon.CHECK, byYou("Started", response.text("startedAt")),
-                    seal?.let { "On ${criteriaCount(count)} at seal ${shortSeal(it)}" })
+                    startedLine(count), receipt(response.obj("confirmation"), count, seal))
             }
             CardFamily.ACCEPTANCE -> {
                 val version = response.obj("currentVersion")
                 val count = version?.objects("material")?.takeIf { it.isNotEmpty() }?.size ?: card.context.objects("acceptanceCriteriaItems").size
-                // What changed is the card's as it was asked: once confirmed, the server has nothing changed left to say.
-                val changes = changesLine(card.source.obj("changesSinceConfirmed")?.takeIf { card.source.text("state") == "STALE" })
-                CardRecord(decisionRecorded, CardRecord.Icon.CHECK, byYou("Confirmed", response.obj("confirmation")?.text("confirmedAt")),
-                    "${criteriaCount(count)} at seal ${shortSeal(version?.text("digest") ?: card.binding)}" + (changes?.let { " — $it" } ?: ""))
+                // What this confirmation changed is the record's own (`confirmation.changes`), read off the answer.
+                val confirmation = response.obj("confirmation")
+                val total = confirmation?.objects("criteriaMaterial")?.takeIf { it.isNotEmpty() }?.size ?: count
+                val seal = confirmation?.text("criteriaDigest") ?: version?.text("digest") ?: card.binding
+                CardRecord(decisionRecorded, CardRecord.Icon.CHECK, byYou("Confirmed", confirmation?.text("confirmedAt")),
+                    if (confirmation?.obj("startedWith") != null) startedLine(total) else reconfirmedLine(total, confirmation?.obj("changes")),
+                    receipt(confirmation, total, seal))
             }
             // The criteria decision ("Weaken this ruler?"): its two answers, and the seals the server says they left.
             else -> {
@@ -254,10 +269,73 @@ object CardPreviews {
         }
     }
 
-    /** "1 new, 1 stricter": what moved since the criteria were last confirmed, by kind (OrbitKit `CriteriaChanges.summary`). */
-    private fun changesLine(changes: JsonObject?): String? = changes?.let { moved ->
-        listOf("added" to "new", "stricter" to "stricter", "revised" to "changed", "removed" to "removed")
-            .mapNotNull { (key, word) -> moved.objects(key).size.takeIf { it > 0 }?.let { "$it $word" } }.joinToString(", ").ifEmpty { null }
+    /** "You started the project on 3 criteria" (web `acceptanceConfirmedLine`). */
+    fun startedLine(count: Int) = "You started the project on $count criteria"
+
+    /** "You confirmed 7 criteria · 1 new, 6 unchanged" (web `acceptanceReconfirmedLine`): [changes] null says the count alone. */
+    fun reconfirmedLine(count: Int, changes: JsonObject?): String {
+        val line = "You confirmed $count criteria"
+        if (changes == null) return line
+        val moved = listOf("added" to "new", "stricter" to "stricter", "revised" to "changed", "removed" to "removed")
+            // Counted as arrays: `removed` lists keys (strings), the other three list objects.
+            .mapNotNull { (key, word) -> (changes[key] as? JsonArray)?.size?.takeIf { it > 0 }?.let { "$it $word" } }.joinToString(", ")
+        val unchanged = (changes["unchanged"] as? JsonArray)?.size?.takeIf { it > 0 }?.let { "$it unchanged" } ?: ""
+        val summary = listOf(moved, unchanged).filter { it.isNotEmpty() }.joinToString(", ")
+        return if (summary.isEmpty()) line else "$line · $summary"
+    }
+
+    /** The fold's toggle, closed (web `acceptanceReceiptOpenLabel`). */
+    fun receiptOpenLabel(count: Int) = "What this confirmed · $count ${if (count == 1) "criterion" else "criteria"}"
+    const val receiptCloseLabel = "Hide what this confirmed"
+    const val receiptWordsGone = "Its words are not on record"
+    const val receiptTagNew = "new"
+    const val receiptTagEdited = "edited since"
+    const val receiptTagRemoved = "removed since"
+    const val receiptWordingNotKept = "This confirmation was recorded before Orbit kept the wording. Criteria that still match it show " +
+        "their words today, which are the same words."
+
+    /** After [receiptWordingNotKept]: how many of those criteria have lost the words that were confirmed. */
+    fun receiptWordsGone(n: Int) = if (n == 1) " One criterion has changed since and its old words are gone." else " $n criteria have changed since and their old words are gone."
+
+    /** Under a record whose words were kept, once some have moved: which, by number. */
+    fun receiptMovedNote(ordinals: List<Int>): String {
+        val sorted = ordinals.sorted()
+        val who = if (sorted.size == 1) "Criterion ${sorted[0]} has" else "Criteria ${sorted.dropLast(1).joinToString(", ")} and ${sorted.last()} have"
+        return "These are the words you confirmed. $who changed since; Orbit asks about the criteria standing now on its own card."
+    }
+
+    /** "Seal d49d35d7511e": the last line of the fold. */
+    fun receiptSeal(seal: String) = "Seal ${shortSeal(seal)}"
+
+    /**
+     * The fold a recorded [confirmation] opens to, or null when it lists no criteria (an older server, or none read): absent
+     * `criteria` ⇒ none, absent `wordingRecorded` ⇒ false, absent `changes` ⇒ no change rows (web `AcceptanceReceiptFold`).
+     */
+    fun receipt(confirmation: JsonObject?, count: Int, seal: String?): AcceptanceReceipt? {
+        val items = confirmation?.objects("criteria").orEmpty().takeIf { it.isNotEmpty() } ?: return null
+        val changes = confirmation?.obj("changes")
+        val added = changes?.objects("added").orEmpty()
+        val addedKeys = added.mapNotNull { it.text("key") }.toSet()
+        fun byOrdinal(list: List<JsonObject>) = list.sortedBy { it.number("ordinal") ?: Int.MAX_VALUE }
+        val rows = byOrdinal(added).map { ReceiptChange("+", "${it.number("ordinal")} · New", it.text("text") ?: "", null) } +
+            byOrdinal(changes?.objects("stricter").orEmpty()).map {
+                ReceiptChange("↑", "${it.number("ordinal")} · Stricter check", it.text("verificationMethod") ?: "",
+                    "was: ${it.text("confirmedVerificationMethod") ?: ""}")
+            } +
+            byOrdinal(changes?.objects("revised").orEmpty()).map { ReceiptChange("~", "${it.number("ordinal")} · Changed", it.text("text") ?: "", null) }
+        val criteria = items.map {
+            val since = it.text("since")
+            ReceiptCriterion(it.number("ordinal"), it.text("text"), listOfNotNull(
+                receiptTagNew.takeIf { _ -> it.text("key") in addedKeys },
+                when (since) { "EDITED" -> receiptTagEdited; "REMOVED" -> receiptTagRemoved; else -> null },
+            ))
+        }
+        val note = if (confirmation?.get("wordingRecorded")?.let { (it as? JsonPrimitive)?.booleanOrNull } != true) {
+            val gone = items.count { it["text"] == null || it["text"] is JsonNull }
+            receiptWordingNotKept + if (gone > 0) receiptWordsGone(gone) else ""
+        } else items.filter { it.text("since").let { s -> s == "EDITED" || s == "REMOVED" } }.mapNotNull { it.number("ordinal") }
+            .takeIf { it.isNotEmpty() }?.let { receiptMovedNote(it) }
+        return AcceptanceReceipt(count, rows, criteria, note, receiptSeal(confirmation?.text("criteriaDigest") ?: seal.orEmpty()))
     }
 
     /** "1 criterion", "3 criteria" (OrbitKit `ReviewRecords`). */

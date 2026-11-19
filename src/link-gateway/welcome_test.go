@@ -54,7 +54,7 @@ func welcomeAsked(t *testing.T, r backendRequest) []string {
 func TestWelcomeSaysWhereEachSessionStandsAsTheWelcomeRouteAnswers(t *testing.T) {
 	backend := newFakeBackend(t, nil)
 	backend.setWelcome(func(w http.ResponseWriter, r *http.Request, body []byte) {
-		answer := map[string]any{"release": map[string]any{"version": "0.1.241", "rollback": true}}
+		answer := map[string]any{"release": map[string]any{"version": "0.1.241", "rollback": true}, "browser": true}
 		var sessions []map[string]any
 		for _, id := range welcomeAsked(t, backendRequest{Body: body}) {
 			state := map[string]any{"sessionId": id, "durableSeq": 0, "leaseHeld": false, "sessionPublicId": "ignored"}
@@ -104,6 +104,9 @@ func TestWelcomeSaysWhereEachSessionStandsAsTheWelcomeRouteAnswers(t *testing.T)
 	}
 	if r := welcome.GetRelease(); r.GetVersion() != "0.1.241" || !r.GetRollback() {
 		t.Fatalf("release %v", r)
+	}
+	if !welcome.GetBrowser() {
+		t.Fatal("the route said browser, the Welcome does not")
 	}
 	if welcome.GetMode() != linkpb.Mode_MODE_LINK || h.g.metrics.welcomeLookups.get("answered") != 1 {
 		t.Fatalf("mode %v, lookups %v", welcome.GetMode(), h.g.metrics.welcomeLookups.get("answered"))
@@ -171,7 +174,7 @@ func TestAWelcomeTheRouteCannotAnswerGoesWithoutSessionsOrReleaseAndTheConnectio
 			if took := time.Since(started); took > 2*time.Second {
 				t.Fatalf("Welcome took %s", took)
 			}
-			if len(welcome.GetSessions()) != 0 || welcome.GetRelease() != nil || welcome.GetMode() != linkpb.Mode_MODE_LINK {
+			if len(welcome.GetSessions()) != 0 || welcome.GetRelease() != nil || welcome.GetBrowser() || welcome.GetMode() != linkpb.Mode_MODE_LINK {
 				t.Fatalf("Welcome %v", welcome)
 			}
 			if got := h.g.metrics.welcomeLookups.get(c.result); got != 1 {
@@ -187,7 +190,6 @@ func TestAWelcomeTheRouteCannotAnswerGoesWithoutSessionsOrReleaseAndTheConnectio
 
 	t.Run("no backend reached", func(t *testing.T) {
 		h := newHarness(t, func(cfg *config) {
-			cfg.Mode = linkpb.Mode_MODE_LINK
 			cfg.InternalAPIURLs = []string{deadBackend(t)}
 			cfg.link.RetryBudget, cfg.link.WelcomeTimeout = 200*time.Millisecond, time.Second
 		})
@@ -199,16 +201,4 @@ func TestAWelcomeTheRouteCannotAnswerGoesWithoutSessionsOrReleaseAndTheConnectio
 			t.Fatalf("lookups failed: %v", got)
 		}
 	})
-}
-
-func TestAWelcomeInModeHTTPAsksNothing(t *testing.T) {
-	backend := newFakeBackend(t, nil)
-	h := newHarness(t, func(cfg *config) { cfg.InternalAPIURLs = []string{backend.url()} })
-	_, welcome := h.greet(runnerA, processA, resumingHello(processA, &linkpb.SessionResume{SessionId: resumedA, LastSeq: 9}))
-	if welcome.GetMode() != linkpb.Mode_MODE_HTTP || len(welcome.GetSessions()) != 0 || welcome.GetRelease() != nil {
-		t.Fatalf("Welcome %v", welcome)
-	}
-	if n := len(backend.welcomeCalls()) + len(backend.requests()); n != 0 {
-		t.Fatalf("MODE_HTTP called a backend %d times", n)
-	}
 }

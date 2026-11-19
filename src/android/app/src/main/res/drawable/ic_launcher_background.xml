@@ -1,0 +1,11 @@
+<!-- The iOS app icon's tile (AppIcon-1024.png): its 1024 px square mapped onto the 72 dp an adaptive icon shows. -->
+<vector xmlns:android="http://schemas.android.com/apk/res/android" xmlns:aapt="http://schemas.android.com/aapt" android:width="108dp" android:height="108dp" android:viewportWidth="108" android:viewportHeight="108">
+    <path android:pathData="M0,0H108V108H0Z">
+        <aapt:attr name="android:fillColor">
+            <gradient android:type="linear" android:startX="30.66" android:startY="26.44" android:endX="79.88" android:endY="81.56">
+                <item android:offset="0" android:color="#FF5B8BFF" />
+                <item android:offset="1" android:color="#FF3370FF" />
+            </gradient>
+        </aapt:attr>
+    </path>
+</vector>

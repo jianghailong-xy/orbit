@@ -20,7 +20,6 @@ import (
 	"os"
 	"os/signal"
 	"runtime"
-	"sort"
 	"strconv"
 	"sync"
 	"sync/atomic"
@@ -35,9 +34,8 @@ import (
 )
 
 // clientMain is `link-gateway client`, a test runner for staging and drills: it trades a runner token for a link
-// token (POST /api/runner/link-token), connects, says Hello, heartbeats, mirrors what it sends over HTTPS the way
-// README.md's shadow comparison asks of a runner, and follows Drain by opening its next connection after the delay
-// it was given and closing the old one once the new one is up. It reconnects with exponential backoff and full
+// token (POST /api/runner/link-token), connects, says Hello, heartbeats, and follows Drain by opening its next
+// connection after the delay it was given and closing the old one once the new one is up. It reconnects with exponential backoff and full
 // jitter (1 s to 60 s, never sooner than a refusal's Retry-After or a Close's retry_after_ms) and writes a JSON
 // summary of what happened when it stops.
 func clientMain(args []string) int {
@@ -51,15 +49,11 @@ func clientMain(args []string) int {
 	fs.DurationVar(&o.duration, "duration", 0, "stop after this long (default: run until interrupted)")
 	fs.IntVar(&o.untilDrains, "until-drains", 0, "stop after this many Drain → reconnect cycles")
 	fs.DurationVar(&o.heartbeat, "heartbeat", 0, "heartbeat interval (default: the one Welcome gives)")
-	fs.BoolVar(&o.mirror, "mirror", true, "send every heartbeat as a shadow mirror: the typed frame and the HTTP request it mirrors")
-	fs.BoolVar(&o.httpBeats, "http", false, "send each heartbeat to the server over HTTPS first, and mirror only those it accepts")
-	fs.IntVar(&o.events, "events", 0, "with each heartbeat, mirror a synthetic event batch of this many events (never sent over HTTPS)")
-	fs.IntVar(&o.corruptEvery, "corrupt-every", 0, "alter the typed half of every Nth mirror, to see the gateway count a mismatch")
 	fs.DurationVar(&o.refreshBefore, "refresh-before", 5*time.Minute, "open the next connection with a fresh token this long before the token expires")
 	fs.StringVar(&o.summaryFile, "summary", "", "write the JSON summary here as well as to standard output")
 	fs.StringVar(&o.captureFile, "capture", "", "append every frame sent and received to this file, length-delimited, for link-gateway dump")
 	var d drillOptions
-	fs.StringVar(&d.name, "drill", "", "run a drill instead: link, cancel, retry, slow, resume, relay, relay-begin or relay-finish against a gateway in MODE_LINK, or switch against one that follows RUNNER_LINK_REQUIRED (client_link.go)")
+	fs.StringVar(&d.name, "drill", "", "run a drill instead: link, cancel, retry, slow, resume, relay, relay-begin or relay-finish (client_link.go)")
 	fs.StringVar(&d.ownerEmail, "owner-email", "", "drills: the account that owns the runner, which creates and watches sessions")
 	fs.StringVar(&d.ownerPasswordFile, "owner-password-file", "", "drills: a file holding that account's password")
 	fs.StringVar(&d.natsURL, "nats-url", "", "drills: NATS, to read a session's live subject as the apiserver does")
@@ -110,8 +104,7 @@ func clientMain(args []string) int {
 type clientOptions struct {
 	api, runnerToken, linkURL, caFile, processID string
 	duration, heartbeat, refreshBefore           time.Duration
-	untilDrains, events, corruptEvery            int
-	mirror, httpBeats                            bool
+	untilDrains                                  int
 	summaryFile, captureFile                     string
 	// readBuffer is the link connection's socket receive buffer (SO_RCVBUF); 0 leaves it to the kernel.
 	readBuffer int
@@ -126,9 +119,6 @@ type clientSummary struct {
 	DialFailures         int            `json:"dialFailures"`
 	HeartbeatsSent       int            `json:"heartbeatsSent"`
 	HeartbeatAcks        int            `json:"heartbeatAcks"`
-	HTTPHeartbeats       map[string]int `json:"httpHeartbeats"`
-	MirrorsSent          map[string]int `json:"mirrorsSent"`
-	CorruptedMirrors     int            `json:"corruptedMirrors"`
 	RPCResults           map[string]int `json:"rpcResults"`
 	Drains               int            `json:"drains"`
 	DrainReconnectsMs    []int64        `json:"drainReconnectAfterMs"`
@@ -157,8 +147,6 @@ type client struct {
 	tokenExpiry time.Time
 	linkURL     string
 
-	mirrors int
-	seq     uint64
 	session string
 	sum     clientSummary
 }
@@ -191,8 +179,8 @@ func newClient(o clientOptions, log *slog.Logger) (*client, error) {
 		dial:    &http.Client{Transport: transport},
 		session: newUUID(),
 		sum: clientSummary{
-			ProcessID: o.processID, Refusals: map[string]int{}, HTTPHeartbeats: map[string]int{}, MirrorsSent: map[string]int{},
-			RPCResults: map[string]int{}, Closes: map[string]int{}, Modes: map[string]int{}, ConnectionIDs: []string{}, DrainReconnectsMs: []int64{},
+			ProcessID: o.processID, Refusals: map[string]int{}, RPCResults: map[string]int{}, Closes: map[string]int{},
+			Modes: map[string]int{}, ConnectionIDs: []string{}, DrainReconnectsMs: []int64{},
 		},
 	}
 	if o.captureFile != "" {
@@ -606,154 +594,25 @@ func (cl *client) closeConn(cc *clientConn) {
 	cc.cancel()
 }
 
-// heartbeat sends one beat. With -mirror it is a mirror (README.md): the body an HTTP heartbeat carries, sent over
-// HTTPS first with -http, then the typed Heartbeat built from that body and the Rpc carrying the body itself.
+// heartbeat sends one beat, as a runner's: the typed fields, and every other member of the heartbeat body as a Fact
+// carrying its JSON whole. The gateway forwards it to the heartbeat route as that body (heartbeat.go).
 func (cl *client) heartbeat(cc *clientConn) {
-	body := map[string]any{
-		"status": "ONLINE", "idleCapacity": 2, "version": "link-gateway-client/" + version,
-		"leaseOwner": cl.o.processID, "supervisedSessionIds": []string{cl.session},
-		"runtimeDefaultModels": map[string]string{"claude": "claude-opus-5-5"},
-		"commands":             []map[string]any{{"name": "review", "description": "Review <changes> & report"}},
-		"reposRoot":            "/srv/repos/é",
+	hb := &linkpb.Heartbeat{ProcessId: cl.o.processID, IdleCapacity: 2, SessionIds: []string{cl.session}}
+	for _, f := range []struct {
+		kind  string
+		value any
+	}{
+		{"commands", []map[string]any{{"name": "review", "description": "Review <changes> & report"}}},
+		{"reposRoot", "/srv/repos/é"},
+		{"runtimeDefaultModels", map[string]string{"claude": "claude-opus-5-5"}},
+	} {
+		raw, _ := json.Marshal(f.value)
+		sum := sha256.Sum256(raw)
+		hb.Facts = append(hb.Facts, &linkpb.Fact{Kind: f.kind, Sha256: hex.EncodeToString(sum[:]), Json: raw})
 	}
-	raw, _ := json.Marshal(body)
-	if cl.o.httpBeats {
-		if err := cl.postHeartbeat(raw); err != nil {
-			cl.sum.HTTPHeartbeats["failed"]++
-			cl.log.Info("HTTP heartbeat failed; not mirrored", "err", err)
-			return
-		}
-		cl.sum.HTTPHeartbeats["ok"]++
-	}
-	hb := heartbeatFromBody(raw)
-	if !cl.o.mirror {
-		if cl.send(cc, &linkpb.Frame{Body: &linkpb.Frame_Heartbeat{Heartbeat: hb}}) == nil {
-			cl.sum.HeartbeatsSent++
-		}
-		return
-	}
-	cl.mirrors++
-	if cl.corrupt() {
-		hb.IdleCapacity++
-	}
-	if cl.sendMirror(cc, &linkpb.Frame{Body: &linkpb.Frame_Heartbeat{Heartbeat: hb}}, "POST", "/runner/heartbeat", raw) {
+	if cl.send(cc, &linkpb.Frame{Body: &linkpb.Frame_Heartbeat{Heartbeat: hb}}) == nil {
 		cl.sum.HeartbeatsSent++
-		cl.sum.MirrorsSent["heartbeat"]++
 	}
-	if cl.o.events > 0 {
-		cl.mirrors++
-		eb, rawEvents := cl.syntheticEvents()
-		if cl.corrupt() {
-			eb.Events[0].Type += "-altered"
-		}
-		if cl.sendMirror(cc, &linkpb.Frame{Body: &linkpb.Frame_EventBatch{EventBatch: eb}}, "POST", "/runner/sessions/"+cl.session+"/events", rawEvents) {
-			cl.sum.MirrorsSent["events"]++
-		}
-	}
-}
-
-func (cl *client) corrupt() bool {
-	if cl.o.corruptEvery > 0 && cl.mirrors%cl.o.corruptEvery == 0 {
-		cl.sum.CorruptedMirrors++
-		return true
-	}
-	return false
-}
-
-// sendMirror sends the typed half and then the raw half, whose request_id names the typed frame.
-func (cl *client) sendMirror(cc *clientConn, typed *linkpb.Frame, method, path string, body []byte) bool {
-	if err := cl.send(cc, typed); err != nil {
-		return false
-	}
-	rpc := &linkpb.Frame{Body: &linkpb.Frame_Rpc{Rpc: &linkpb.Rpc{
-		RequestId: fmt.Sprintf("%s%s:%d", shadowPrefix, cc.id, typed.GetId()),
-		Body:      &linkpb.Rpc_Tunnel{Tunnel: &linkpb.TunnelRequest{Method: method, Path: path, JsonBody: body}},
-	}}}
-	return cl.send(cc, rpc) == nil
-}
-
-func (cl *client) postHeartbeat(body []byte) error {
-	req, err := http.NewRequest(http.MethodPost, cl.o.api+"/api/runner/heartbeat", bytes.NewReader(body))
-	if err != nil {
-		return err
-	}
-	req.Header.Set("Authorization", "Bearer "+cl.o.runnerToken)
-	req.Header.Set("Content-Type", "application/json")
-	resp, err := cl.api.Do(req)
-	if err != nil {
-		return err
-	}
-	defer resp.Body.Close()
-	_, _ = io.Copy(io.Discard, io.LimitReader(resp.Body, 4<<20))
-	if resp.StatusCode/100 != 2 {
-		return fmt.Errorf("POST /api/runner/heartbeat answered %d", resp.StatusCode)
-	}
-	return nil
-}
-
-// heartbeatFromBody builds the typed Heartbeat a mirror carries from the HTTP heartbeat body, by README.md's rules:
-// four members become typed fields, status and version stay with the connection, and every other member becomes a
-// Fact carrying its JSON whole.
-func heartbeatFromBody(body []byte) *linkpb.Heartbeat {
-	var m map[string]json.RawMessage
-	_ = json.Unmarshal(body, &m)
-	hb := &linkpb.Heartbeat{
-		ProcessId: stringMember(m, "leaseOwner"),
-	}
-	if n, ok := numberMember(m, "idleCapacity"); ok {
-		v, _ := strconv.ParseUint(n, 10, 32)
-		hb.IdleCapacity = uint32(v)
-	}
-	hb.Draining, _ = boolMember(m, "draining")
-	hb.SessionIds, _ = stringsMember(m, "supervisedSessionIds")
-	names := make([]string, 0, len(m))
-	for name := range m {
-		if !heartbeatTypedMembers[name] {
-			names = append(names, name)
-		}
-	}
-	sort.Strings(names)
-	for _, name := range names {
-		sum := sha256.Sum256(m[name])
-		hb.Facts = append(hb.Facts, &linkpb.Fact{Kind: name, Sha256: hex.EncodeToString(sum[:]), Json: m[name]})
-	}
-	return hb
-}
-
-// syntheticEvents is one event batch of the HTTP body's shape and the EventBatch mirroring it. The payloads hold
-// what encoders treat differently (<, > and &, non-ASCII, whitespace), and the typed payloads are written by
-// another encoder than the body, so a comparison that is not by JSON value would count them as different.
-func (cl *client) syntheticEvents() (*linkpb.EventBatch, []byte) {
-	type httpEvent struct {
-		Seq     uint64         `json:"seq"`
-		Type    string         `json:"type"`
-		TS      string         `json:"ts"`
-		TurnID  string         `json:"turnId,omitempty"`
-		Payload map[string]any `json:"payload"`
-	}
-	turn := newUUID()
-	var events []httpEvent
-	eb := &linkpb.EventBatch{SessionId: cl.session}
-	for i := 0; i < cl.o.events; i++ {
-		cl.seq++
-		now := time.Now().UTC()
-		payload := map[string]any{
-			"text":   fmt.Sprintf("<b>step %d</b> & \"quotes\" → naïve café 中文", cl.seq),
-			"nested": map[string]any{"n": 1.5, "list": []any{1, "two", nil, true}},
-		}
-		ev := httpEvent{Seq: cl.seq, Type: "assistant", TS: now.Format("2006-01-02T15:04:05.000Z07:00"), TurnID: turn, Payload: payload}
-		events = append(events, ev)
-		var typed bytes.Buffer
-		enc := json.NewEncoder(&typed)
-		enc.SetEscapeHTML(false)
-		enc.SetIndent("", "  ")
-		_ = enc.Encode(payload)
-		eb.Events = append(eb.Events, &linkpb.Event{
-			Seq: ev.Seq, Type: ev.Type, TsUnixMs: now.Truncate(time.Millisecond).UnixMilli(), TurnId: turn, PayloadJson: typed.Bytes(),
-		})
-	}
-	raw, _ := json.Marshal(map[string]any{"leaseOwner": cl.o.processID, "events": events})
-	return eb, raw
 }
 
 func (cl *client) finish() int {

@@ -266,6 +266,29 @@ test('a result, a progress and a fragment under a taken-over claim are refused S
   await h.prisma.wikiJob.deleteMany({ where: { id: jobId } });
 });
 
+test('a failure\'s reason is kept on the failed row as result.reason; one the contract does not name is left out, and an old runner\'s words still settle it (repoOps.reasons)', { skip, timeout: 60_000 }, async () => {
+  const h = await boot();
+  const cases: Array<{ reason: unknown; kept: unknown }> = [
+    { reason: 'not_found', kept: { reason: 'not_found' } },
+    { reason: 'fetch_refused', kept: { reason: 'fetch_refused' } },
+    { reason: 'a_reason_from_the_future', kept: null },
+    { reason: undefined, kept: null },
+  ];
+  for (const c of cases) {
+    const { jobId, opId } = await queued(h, 'snapshot', {});
+    const leaseOwner = randomUUID();
+    const claimGeneration = await claim(h, opId, leaseOwner);
+    const answer = await h.ops.applyWikiRepoOpResult({
+      id: opId, runnerId: h.owner.runnerId,
+      body: { claimGeneration, leaseOwner, state: 'failed', error: '~/work/app was not found on this machine', ...(c.reason === undefined ? {} : { reason: c.reason }) },
+    });
+    assert.deepEqual(answer, { accepted: true, state: 'failed' });
+    const { rows: [row] } = await h.sql.query<{ state: string; result: unknown; error: string }>(`SELECT "state", "result", "error" FROM "wiki_repo_op" WHERE "id" = $1`, [opId]);
+    assert.deepEqual(row, { state: 'failed', result: c.kept, error: '~/work/app was not found on this machine' }, String(c.reason));
+    await h.prisma.wikiJob.deleteMany({ where: { id: jobId } });
+  }
+});
+
 test('a snapshot uploaded in fragments is reassembled to the byte, and replaces the last one', { skip, timeout: 60_000 }, async () => {
   const h = await boot();
   const { jobId, opId } = await queued(h, 'snapshot', { skipSha: null });

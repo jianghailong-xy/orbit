@@ -1,0 +1,75 @@
+<!doctype html><html lang="zh"><meta charset="utf-8"><title>Landings · 每回合先说触发它的那次提交（2026-11-11）</title>
+<style>
+:root{--mark:#FF7A00}*{box-sizing:border-box}body{margin:0;background:#F3F3F6;font-family:-apple-system,"PingFang SC",sans-serif;color:#1c1c1e;-webkit-font-smoothing:antialiased}
+.board{padding:30px 44px 36px;width:1560px;background:#F3F3F6}h1{font-size:25px;margin:0 0 8px}
+h2{font-size:19px;margin:22px 0 12px;display:flex;gap:10px;align-items:center}h2 .no{display:inline-grid;place-items:center;width:28px;height:28px;border-radius:50%;background:#1c1c1e;color:#fff;font-size:15px}h2 .sub{font-size:14px;font-weight:500;color:#6b6b72}
+.lede{font-size:15px;line-height:1.7;color:#3a3a40;margin:0 0 12px}.row{display:flex;gap:28px;align-items:flex-start}.col{flex:1;min-width:0}
+.tag{display:inline-block;font-size:13px;font-weight:700;border-radius:7px;padding:3px 10px;margin-bottom:10px}.tag.today{background:#FFE3E0;color:#B42318}.tag.after{background:#DDE7FF;color:#2447B8}.tag.ref{background:#E7E7EC;color:#45454c}
+.shot{position:relative;background:#fff;border-radius:12px;box-shadow:0 0 0 1px rgba(0,0,0,.1);overflow:hidden}.shot img{display:block;width:100%}
+.notes{font-size:14.5px;line-height:1.68;color:#2c2c31;margin-top:12px}.notes ol{margin:0;padding:0;list-style:none}.notes li{margin:7px 0;position:relative;padding-left:30px}.notes li .n{position:absolute;left:0;top:1px}
+.n{display:inline-grid;place-items:center;width:21px;height:21px;border-radius:50%;background:var(--mark);color:#fff;font:700 12.5px/1 -apple-system,sans-serif}.pin{position:absolute;box-shadow:0 0 0 2px #fff;z-index:5}.ring{position:absolute;border:2px dashed var(--mark);border-radius:8px;z-index:4}
+i.en{font-style:italic}code{font:12.5px "JetBrains Mono",monospace;background:rgba(0,0,0,.06);border-radius:4px;padding:0 4px}
+table{border-collapse:separate;border-spacing:0;width:100%;background:#fff;border-radius:12px;overflow:hidden;box-shadow:0 0 0 1px rgba(0,0,0,.07);font-size:14px;line-height:1.55}th,td{text-align:left;vertical-align:top;padding:8px 12px;border-bottom:1px solid #EEEEF1}th{background:#FAFAFC;color:#6b6b72;font-weight:600;font-size:13px}td:first-child{font-weight:650;width:150px}tr:last-child td{border-bottom:0}
+.ask{background:#FFFBEA;box-shadow:0 0 0 1.5px #F2CF63;border-radius:12px;padding:6px 18px 12px;margin-top:18px;font-size:14.5px;line-height:1.75}.rec{color:#1E7B34;font-weight:650}
+/* iPhone, dark */
+.ph{width:440px;height:956px;border-radius:58px;overflow:hidden;position:relative;background:#000;color:#fff;box-shadow:0 0 0 1.5px rgba(0,0,0,.25);font-size:15px;--l2:#8D8D93;--tint:#3E7BFA}
+.ph .top{position:absolute;top:0;left:0;right:0;height:120px;background:#161618;z-index:2}.ph .sb{position:absolute;top:18px;left:60px;right:38px;display:flex;justify-content:space-between;font-weight:650;font-size:18px}
+.ph .back,.ph .more{position:absolute;top:62px;width:45px;height:45px;border-radius:50%;background:#2A2A2D;display:grid;place-items:center;color:#fff;font-size:20px}.ph .back{left:20px}.ph .more{right:20px;color:var(--tint)}
+.ph .ttl{position:absolute;left:76px;right:76px;top:66px;text-align:center}.ph .t1{font-size:18px;font-weight:650}.ph .t2{font-size:13.5px;color:var(--l2);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.ph .body{position:absolute;top:120px;bottom:92px;left:0;right:0;padding:0 18px;display:flex;flex-direction:column;justify-content:flex-end;overflow:hidden}.ph .body>*{flex-shrink:0}
+.ph .chip{align-self:center;margin:10px 0 6px;font-size:13px;font-weight:650;color:#A0A0A6;background:rgba(118,118,128,.24);border-radius:11px;padding:3px 11px}.ph .chip.now{color:var(--tint);background:rgba(62,123,250,.16)}
+.ph .steps{color:var(--l2);font-size:14px;margin:8px 0 3px}.ph .steps .f{color:#FF453A}.ph .rep{font-size:16px;line-height:22px;color:#F2F2F7}.ph .rep b{font-weight:650}.ph .rep code{background:#2C2C2E;color:#E5E5EA;font-size:12.5px}
+.ph .foot{color:var(--l2);font-size:12.5px;margin:4px 0 6px}.ph .card{margin:8px 0 2px;border-radius:12px;background:#1C1C1E;border-left:3px solid #FF453A;padding:10px 12px}
+.ph .card .h{font-weight:650;font-size:15px;display:flex;gap:8px;align-items:center}.ph .card .h i{width:18px;height:18px;border-radius:50%;background:#FF453A;display:inline-grid;place-items:center;font-style:normal;font-size:11px;color:#000}
+.ph .card .r{font-size:13.5px;color:var(--l2);margin-top:6px}.ph .card .d{display:flex;gap:8px;margin-top:10px}.ph .pri,.ph .sec{font-size:14px;font-weight:600;padding:6px 13px;border-radius:16px}.ph .pri{background:var(--tint)}.ph .sec{background:#2C2C2E}
+.ph .bar{position:absolute;bottom:0;left:0;right:0;height:92px;background:#161618;border-top:.5px solid rgba(255,255,255,.1);display:flex;align-items:flex-start;padding:12px 12px 0 18px;gap:10px}.ph .bar .w{flex:1;color:var(--l2);line-height:34px;font-size:14.5px}.ph .btn{color:var(--tint);background:rgba(62,123,250,.16);border-radius:17px;padding:0 14px;height:34px;line-height:34px;font-weight:600}
+.ph .home{position:absolute;bottom:9px;left:50%;width:150px;height:5px;margin-left:-75px;border-radius:3px;background:#fff}
+</style><body>
+<body>
+<div class="board" data-png="01-trigger">
+<h1>Landings · 每回合开头补上「触发它的那次提交」（web，2026-11-11 · 按 main ccdef0955）</h1>
+<p class="lede"><b>owner 11-11</b>：「补充开始 land 之前的触发提交」→「按推荐的来，先出设计图」。<br>
+会话里一个回合从<b>一条用户消息</b>开始（谁说的写在气泡上方一行灰字，例如 <i class="en">From Feishu · 名字</i>），然后是回复和工具调用。一次落地也照这个来：<b>开头一个用户气泡说「谁交来了什么」</b>——任务、它的分支、它的提交——然后是结论句、步骤、回合脚。原来 Queue 这一步写的就是触发（<i class="en">Task marked done · queued…</i>、<i class="en">Rerun by…</i>、<i class="en">Confirmed by Automatic</i>），所以<b>去掉 Queue 步骤</b>，步骤从 Claim 开始，同一句话不说两遍。帧是真实控制台截图（会话页 + 会话自己的 <code>chat-user-wrap</code> / <code>chat-user-from</code> / <code>chat-user</code>）。</p>
+<div class="row">
+ <div class="col"><span class="tag today">a · 现在（main 上的样子）</span><div class="shot"><img src="frames/today.png"></div>
+  <div class="notes"><ol><li><span class="n">!</span>看不出这次落地是谁、因为什么开始的；交来的分支和提交只藏在 Queue 那一步里，还没有提交号。</li></ol></div></div>
+ <div class="col"><span class="tag after">b · 改后 · 往上翻</span><div class="shot"><img src="frames/t-history.png"></div>
+  <div class="notes"><ol>
+   <li><span class="n">1</span><b>任务做完交来</b>：灰字 <i class="en">From the task · Done</i>，气泡 <i class="en">Land <b>任务名</b> · orbit/task-… · c4a90b7</i>，下面是交来的时刻。</li>
+   <li><span class="n">2</span><b>合入 main</b>：<i class="en">From Automatic</i>（或 <i class="en">From you</i>），气泡 <i class="en">Merge <b>1 task</b> into main · project/… · fe5db82</i>。</li>
+   <li><span class="n">3</span><b>重跑</b>：第 2 代上方单独一个气泡，<i class="en">From the coordinator · Rerun</i>，气泡是它给的理由。</li>
+   <li><span class="n">4</span>步骤数少了 1（不再有 Queue）：<i class="en">3 steps</i>。</li>
+  </ol></div></div>
+</div>
+<div class="row" style="margin-top:22px">
+ <div class="col"><span class="tag after">c · 改后 · 点开 7:47 那次</span><div class="shot"><img src="frames/t-open.png"></div>
+  <div class="notes"><ol>
+   <li><span class="n">1</span>顺序：触发气泡 → 结论句 → 第 1 代步骤（折着，<i class="en">· 1 failed</i>）→ 重跑气泡 → 第 2 代步骤（展开）→ 链接 → 回合脚。读起来就是时间顺序。</li>
+   <li><span class="n">2</span>气泡下方的时刻是<b>开始</b>的时刻，回合脚是<b>结束</b>的时刻，一眼看出用了多久。</li>
+  </ol></div></div>
+ <div class="col"><span class="tag after">d · 改后 · 窗口最底（Now）</span><div class="shot"><img src="frames/t-bottom.png"></div>
+  <div class="notes"><ol>
+   <li><span class="n">1</span>等决定的：触发气泡 → <i class="en">Did not land…</i> → 步骤 → 状态卡 → 回合脚。</li>
+   <li><span class="n">2</span>正在跑的：触发气泡（这里是你点的重跑：<i class="en">From the owner · Rerun</i>）→ <i class="en">Working for</i> → <i class="en">Landing … on project/…</i> → 进度 → 步骤（展开）。</li>
+  </ol></div></div>
+</div>
+<h2><span class="no">2</span>气泡怎么写<span class="sub">界面文字英文；全部来自字段，不抄服务器句子</span></h2>
+<table>
+<tr><th>触发</th><th>气泡上方（谁）</th><th>气泡（交来了什么）</th><th>数据从哪来</th></tr>
+<tr><td>任务做完</td><td><i class="en">From the task · Done</i></td><td><i class="en">Land <b>任务名</b> · orbit/task-… · 提交</i></td><td>任务的交付分支、交付提交（deliveredBranch / deliveredSha）</td></tr>
+<tr><td>重跑</td><td><i class="en">From the coordinator · Rerun</i> / <i class="en">From the owner · Rerun</i></td><td>它给的理由；没有理由时同「任务做完」那句</td><td>重跑记录的发起人和理由</td></tr>
+<tr><td>合入 main</td><td><i class="en">From Automatic</i> / <i class="en">From you</i></td><td><i class="en">Merge <b>N tasks</b> into main · project/… · 提交</i></td><td>合并轮的任务数、源分支和提交、谁确认</td></tr>
+<tr><td>项目开始集成</td><td><i class="en">From Orbit</i></td><td><i class="en">Land <b>任务名</b> · the project started integrating</i></td><td>入队原因 BACKFILL</td></tr>
+<tr><td>工作落在别的分支</td><td><i class="en">From Orbit</i></td><td><i class="en">Land <b>任务名</b> · the task's work ended on another branch</i></td><td>入队原因 BEHIND_WORK</td></tr>
+</table>
+<div class="ask">
+<p><b>要做的（按你说的推荐方案）：</b></p>
+<ol>
+<li><b>服务端</b>：landing 数据里每一代加一个 <code>trigger</code>：原因（交付 / 重跑 / 合并确认 / 补集成 / 落在别的分支）、谁（任务、协调者、owner、Automatic、Orbit）、源分支、源提交、来源 session、理由、时刻。三端都直接读，不再各自去读任务。</li>
+<li><b>web</b>：先改；Queue 步骤从步骤里拿掉，变成气泡。iPhone、Android 之后照同一套。</li>
+<li>气泡点一下打开来源 session（任务的或协调者的）；合并轮打开合并评审。</li>
+</ol>
+<p class="rec">看过没问题我就开始改：先服务端字段 + web，测试通过再合入。</p>
+</div>
+</div>
+</body></html>

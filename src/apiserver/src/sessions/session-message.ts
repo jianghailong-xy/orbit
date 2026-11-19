@@ -1,7 +1,11 @@
 import { ConflictException } from '@nestjs/common';
-import type { Prisma } from '@prisma/client';
+import { Prisma } from '@prisma/client';
 import {
   uuidToBase62,
+  type CoordinatorDeliveryCard,
+  type ExternalMessageFrom,
+  type ExternalMessageSource,
+  type OrbitMessageFrom,
   type SessionMessageCard,
   type SessionMessageFrom,
   type SessionReplyOption,
@@ -33,23 +37,27 @@ import { readExecuteTarget, TASK_RUN_ACTION } from '../tasks/task-run-receipt';
  *   - to the engine, as a block appended AFTER the message at delivery (`appendSessionMessageContext`),
  *     so `controlPlaneNoteOf` records it as the control plane's note and not as the sender's words;
  *   - to the clients, as the card stored beside the runner's echo (`readSessionMessageCard`).
- * The limit counts what one session sent another in the last hour from a record of its own, written as
- * each message is sent (`chargeSessionMessage`).
+ * The limit counts what one session sent another in the last five minutes from a record of its own,
+ * written as each message is sent (`chargeSessionMessage`).
  */
 
 /**
- * §2.4: the most messages one session may send ONE other session in any rolling hour — ordinary
- * messages and, once they exist, requests together.
+ * §2.4: the most messages one session may send ONE other session in any rolling five minutes —
+ * ordinary messages, requests and message-carrying interrupts together. The budget belongs to the
+ * ordered pair: A→B and B→A are counted apart, and what A sends any other session is not counted here.
  *
- * A constant, not a setting. An agent's turn takes minutes, so collaboration does not come near 20
- * in an hour; the loop this exists for — "how is it going" / "still working" — goes round in a minute
- * or two. Before it, nothing bounded a free session talking to another: `maxCoordinatorSteers` only
- * charges a session that runs a task attempt (`SessionAttemptService#chargeSteer`).
+ * A constant, not a setting. It is a burst and loop limiter, not a pacing rule: sixty in five minutes
+ * is twelve a minute sustained, far above what two collaborating sessions exchange even in a dense
+ * handoff, so legitimate traffic does not meet it. What does meet it is a tight loop — a session
+ * polling another with "how is it going", or two sessions answering each other turn after turn — and
+ * it stops that within minutes. Before it, nothing bounded a free session talking to another:
+ * `maxCoordinatorSteers` only charges a session that runs a task attempt
+ * (`SessionAttemptService#chargeSteer`).
  */
-export const SESSION_MESSAGES_PER_PAIR_PER_HOUR = 20;
+export const SESSION_MESSAGES_PER_PAIR_PER_WINDOW = 60;
 
-/** The rolling hour §2.4 counts over. */
-const SESSION_MESSAGE_WINDOW_MS = 60 * 60 * 1000;
+/** The rolling five minutes §2.4 counts over. */
+export const SESSION_MESSAGE_WINDOW_MS = 5 * 60 * 1000;
 
 export const SESSION_MESSAGE_RATE_LIMITED_CODE = 'SESSION_MESSAGE_RATE_LIMITED';
 
@@ -58,7 +66,7 @@ export const SESSION_MESSAGE_RATE_LIMITED_CODE = 'SESSION_MESSAGE_RATE_LIMITED';
 export class SessionMessageRateLimited extends ConflictException {}
 
 /**
- * Charge one NEW message from `fromSessionId` to `toSessionId` against §2.4's hourly limit, or
+ * Charge one NEW message from `fromSessionId` to `toSessionId` against §2.4's per-pair limit, or
  * refuse it.
  *
  * Called from `createTurn`'s `participateSendTransaction` — under the recipient's Session lock, after
@@ -70,10 +78,10 @@ export class SessionMessageRateLimited extends ConflictException {}
  *
  * What is counted is what was SENT: a `session_message_charge` row written here for every message
  * admitted (migration 0351), and not the recipient's turns. A turn still queued is deleted when an
- * interrupt drops the queue or the owner withdraws it, and counted off the turns the hour went down
+ * interrupt drops the queue or the owner withdraws it, and counted off the turns the window went down
  * with it — queue a few messages, drop them with an interrupt that carries one more, and the pair
  * starts again. A row here is untouched by whatever happens to its message afterwards. The pair's rows
- * whose hour is over are dropped as it counts, so within the window the count only grows.
+ * whose window is over are dropped as it counts, so within the window the count only grows.
  *
  * Only the three session-to-session doors call it. A person's message, a headless credential's and the
  * platform's own deliveries carry no sender, are not counted, and are never refused here. Nor is a
@@ -86,13 +94,13 @@ export async function chargeSessionMessage(
   fromSessionId: string,
   toSessionId: string,
 ): Promise<void> {
-  // Counted the way the spawn-rate window counts its hour (`SessionsService` SPAWN_RATE_WINDOW_MS): a
-  // Prisma DateTime against the column Prisma wrote.
+  // Counted the way the spawn-rate window counts (`SessionsService` SPAWN_RATE_WINDOW_MS): a Prisma
+  // DateTime against the column Prisma wrote.
   const windowStart = new Date(Date.now() - SESSION_MESSAGE_WINDOW_MS);
   const pair = { toSessionId, fromSessionId };
   await tx.sessionMessageCharge.deleteMany({ where: { ...pair, createdAt: { lte: windowStart } } });
   const sent = await tx.sessionMessageCharge.count({ where: pair });
-  if (sent < SESSION_MESSAGES_PER_PAIR_PER_HOUR) {
+  if (sent < SESSION_MESSAGES_PER_PAIR_PER_WINDOW) {
     await tx.sessionMessageCharge.create({ data: pair });
     return;
   }
@@ -102,9 +110,11 @@ export async function chargeSessionMessage(
     code: SESSION_MESSAGE_RATE_LIMITED_CODE,
     message:
       `this session has already sent session ${uuidToBase62(toSessionId)} ${sent} messages in the `
-      + `last hour, the most one session may send another. Asking it again will not make it finish `
-      + `sooner: to wait for that session to finish its work, call session_await on it and end your `
-      + `turn — you are woken when it is done`,
+      + `last 5 minutes, the most one session may send one other session in any rolling 5 minutes. `
+      + `The limit is for this pair only: sending to any other session is unaffected, and this one `
+      + `accepts messages from you again as the window rolls on. Asking it again will not make it `
+      + `finish sooner: to wait for that session to finish its work, call session_await on it and `
+      + `end your turn — you are woken when it is done`,
     retryable: false,
   });
 }
@@ -394,21 +404,85 @@ export async function readSessionMessageFrom(
 
 /**
  * The message a session row previews while it waits for an answer, and who sent it, as the one write
- * of the three columns: every writer of `lastUserText` writes it through this, so the sender cannot be
+ * of the four columns: every writer of `lastUserText` writes it through this, so the sender cannot be
  * left behind when the text moves on. `from` is the sending session (`readSessionMessageFrom`, or the
- * card the echo is stored with); null is the owner's words, or the platform's. A null text clears all
- * three, which is what an answer does.
+ * card the echo is stored with); `orbit` says the platform wrote it (orbit-message.ts), with the card
+ * its line is written from when it is a coordinator's notification. Both null is the owner's words. A
+ * null text clears all four, which is what an answer does.
  */
 export function pendingMessageColumns(
   text: string | null,
   from: SessionMessageFrom | null,
-): { lastUserText: string | null; lastUserFromSessionId: string | null; lastUserFromTitle: string | null } {
+  orbit: OrbitMessageFrom | null,
+  /** Who outside Orbit sent it (a Feishu group's member, docs/feishu-bot-design.md §8.2); null for anybody else. */
+  external: ExternalMessageFrom | null = null,
+): {
+  lastUserText: string | null;
+  lastUserFromSessionId: string | null;
+  lastUserFromTitle: string | null;
+  lastUserFromOrbit: Prisma.InputJsonValue | typeof Prisma.DbNull;
+  lastUserFromExternalSource: string | null;
+  lastUserFromExternalName: string | null;
+} {
   const sender = text === null ? null : from;
+  // A message has one sender: a session's own message is that session's, whatever key it chose.
+  const platform = text === null || sender !== null ? null : orbit;
+  // Nor is a message another session or Orbit wrote also an outsider's.
+  const outsider = text === null || sender !== null || platform !== null ? null : external;
   return {
     lastUserText: text,
     lastUserFromSessionId: sender?.sessionId ?? null,
     lastUserFromTitle: sender?.title ?? null,
+    lastUserFromOrbit: platform === null
+      ? Prisma.DbNull
+      : { coordinatorDelivery: platform.coordinatorDelivery as unknown as Prisma.InputJsonObject | null },
+    lastUserFromExternalSource: outsider?.source ?? null,
+    lastUserFromExternalName: outsider?.name ?? null,
   };
+}
+
+/** A session row's `lastUserFromExternal`, read back from the two columns `pendingMessageColumns` writes. */
+export function lastUserFromExternalOf(row: {
+  lastUserFromExternalSource: string | null;
+  lastUserFromExternalName: string | null;
+}): ExternalMessageFrom | null {
+  const source = externalSourceOf(row.lastUserFromExternalSource);
+  return source ? { source, name: row.lastUserFromExternalName } : null;
+}
+
+/**
+ * Who outside Orbit sent a turn, as the one door that knows writes it: the source, the sender's id there and their
+ * name. FEISHU (feishu-group.service.ts): a Feishu open_id, and the name Feishu gave, null when it would not say.
+ * ORBIT_GUEST (session-guests/guest-sessions.service.ts): the invited account's user id, and its name.
+ */
+export interface ExternalTurnSender {
+  source: ExternalMessageSource;
+  id: string;
+  name: string | null;
+}
+
+/** A stored `external_sender_source` / `last_user_from_external_source` as a source this server knows, or null. */
+function externalSourceOf(stored: string | null | undefined): ExternalMessageSource | null {
+  return stored === 'FEISHU' || stored === 'ORBIT_GUEST' ? stored : null;
+}
+
+/** The turn's columns for an outside sender (migration 0502), or none. A name is kept to one line of 200 characters. */
+export function externalSenderColumns(sender: ExternalTurnSender | null | undefined): {
+  externalSenderSource?: string;
+  externalSenderId?: string;
+  externalSenderName?: string | null;
+} {
+  if (!sender) return {};
+  const name = sender.name?.replace(/\s+/g, ' ').trim().slice(0, 200) || null;
+  return { externalSenderSource: sender.source, externalSenderId: sender.id, externalSenderName: name };
+}
+
+/** A turn's outside sender as the clients and the runner are told it — never its open_id — or null. */
+export function externalSenderOf(
+  turn: { externalSenderSource?: string | null; externalSenderName?: string | null } | null | undefined,
+): ExternalMessageFrom | null {
+  const source = externalSourceOf(turn?.externalSenderSource);
+  return source ? { source, name: turn?.externalSenderName ?? null } : null;
 }
 
 /** A session row's `lastUserFrom`, read back from the two columns `pendingMessageColumns` writes. */
@@ -419,4 +493,21 @@ export function lastUserFromOf(row: {
   return row.lastUserFromSessionId === null
     ? null
     : { sessionId: row.lastUserFromSessionId, title: row.lastUserFromTitle ?? '' };
+}
+
+/**
+ * A session row's `lastUserFromOrbit`, read back from the column `pendingMessageColumns` writes. Here
+ * rather than beside the reading of a turn (orbit-message.ts), because the realtime summary reads it
+ * too, and that module's imports reach the sessions service: loaded from the realtime service, they
+ * left `SessionsService` built before `RealtimeService` existed, with no class to inject.
+ */
+export function lastUserFromOrbitOf(row: { lastUserFromOrbit: Prisma.JsonValue | null }): OrbitMessageFrom | null {
+  const stored = row.lastUserFromOrbit;
+  if (stored === null || typeof stored !== 'object' || Array.isArray(stored)) return null;
+  const card = (stored as { coordinatorDelivery?: unknown }).coordinatorDelivery;
+  return {
+    coordinatorDelivery: card !== null && typeof card === 'object' && !Array.isArray(card)
+      ? card as unknown as CoordinatorDeliveryCard
+      : null,
+  };
 }

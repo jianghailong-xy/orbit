@@ -48,8 +48,9 @@ ENTRY_POINTS = [
 # long-running-loop drill, an isolated stack one starts by hand as root for an acceptance run, which runs the
 # lab's fake model (an Anthropic-dialect stand-in, nothing of Kubernetes).
 EXCLUDED = [":(exclude)scripts/managed-runner/", ":(exclude)scripts/long-running-loops/"]
-# The parts of deploy/managed-runner the Docker backend is made of, which an entry point may name.
-DOCKER_BACKEND_PARTS = {"docker-channel", "image", "firewall"}
+# The parts of deploy/managed-runner the Docker backend is made of, which an entry point may name: with the channel-host
+# kit for a channel on another machine (remote-host) and the host preparation it shares with the install (host.sh).
+DOCKER_BACKEND_PARTS = {"docker-channel", "image", "firewall", "remote-host", "host.sh"}
 # What would wire the rest in: the delivery's tooling and lab, and the admission webhook.
 NEEDLES = [
     "scripts/managed-runner",

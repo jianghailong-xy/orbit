@@ -33,7 +33,8 @@ function writeRun(dir) {
     binaryUnderTest: { source: 'src/link-gateway at the commit above', probe: true, probeFile: 'scripts/runner-link/gateway-limit-probe.go', probeSha256: 'ab'.repeat(32) },
     gateway: { cpus: '4', memory: '4G', cpuset: '0-7', env: [], tls: 'files, ECDSA P-256' },
     rig: { shards: 2, sources: ['127.0.0.2', '127.0.0.3'], stubs: 2, stubDelay: '5ms', eventsPerConnection: 0.1333, loadgenArgs: ['-volatile'] },
-    host: { cpus: 24, cpuModel: 'Test CPU', memKb: 16 * 2 ** 20, kernel: '6.12', settings: { 'net.ipv4.tcp_mem': '182313 243084 364626' } },
+    host: { cpus: 24, cpuModel: 'Test CPU', memKb: 16 * 2 ** 20, kernel: '6.12',
+      settings: { 'net.ipv4.tcp_mem': '182313 243084 364626', 'net.ipv4.ip_local_port_range': '32768 60999' } },
     loadTestLock: true, warnings: [], gatewayStartMs: T0, idleFromMs: IDLE[0], idleToMs: IDLE[1],
   });
   put('levels/1000/level.json', { level: 1000, startedMs: LEVEL[0], endedMs: LEVEL[1], rampRate: 16.667, eventRate: 133.3, shardExits: [0, 0] });
@@ -69,7 +70,8 @@ function writeRun(dir) {
     const cgroups = { gateway: { cpuUsec: gw, throttledUsec: 0, memBytes: mem, anonBytes: mem / 2, sockBytes: MiB, psiSomeUsec: 0, oomKills: 0 },
       'stub-0': { cpuUsec: (t - T0) * 10, throttledUsec: 0, memBytes: 10 * MiB, anonBytes: 0, sockBytes: 0, psiSomeUsec: 0, oomKills: 0 },
       nats: { cpuUsec: 0, throttledUsec: 0, memBytes: 20 * MiB, anonBytes: 0, sockBytes: 0, psiSomeUsec: 0, oomKills: 0 } };
-    if (busy) for (const s of [0, 1]) cgroups[`loadgen-1000-${s}`] = { cpuUsec: (t - LEVEL[0]) * 50, throttledUsec: 0, memBytes: 100 * MiB, anonBytes: 0, sockBytes: 0, psiSomeUsec: 0, oomKills: 0 };
+    // Each shard waits for a CPU 6% of its time: 12% added up, which is no shard's.
+    if (busy) for (const s of [0, 1]) cgroups[`loadgen-1000-${s}`] = { cpuUsec: (t - LEVEL[0]) * 50, throttledUsec: 0, memBytes: 100 * MiB, anonBytes: 0, sockBytes: 0, psiSomeUsec: (t - LEVEL[0]) * 60, oomKills: 0 };
     samples.push({ t, cgroups, gateway: { rssKb: busy ? 240 * 1024 : 18 * 1024, hwmKb: 0, threads: 9 },
       host: { cpu: host, load: [20, 20, 20], memAvailKb: 5 * 2 ** 20, swapFreeKb: 0, pswpin: 0, pswpout: 0, psiSomeUsec: 0 }, kernel: k });
   }
@@ -144,6 +146,12 @@ test('every figure of a level comes out as the run recorded it', () => {
   assert.equal(l.rig.loadgen.meanCores, 0.1);
   assert.equal(l.rig.stub.meanCores, 0.01);
   assert.equal(l.rig.check.stubKeptUp, true);
+  // The shards' CPU pressure is judged shard by shard: 6% each, not 12% together.
+  assert.equal(l.rig.loadgen.cpuPressurePct, 6);
+  assert.equal(l.rig.check.loadgenKeptUp, true);
+  // At most 501 connections from one address, against 14,116 odd ports in 32768-60999.
+  assert.deepEqual([l.rig.check.sources, l.rig.check.connectionsPerSourceMax, l.rig.check.oddPortsPerSource, l.rig.check.sourcesKeptToOddPorts],
+    [2, 501, 14116, true]);
   assert.equal(l.rig.check.stubAnsweredP99Ms, upper(bucket(5.1)));
   assert.equal(l.rig.stubSelf.routes.heartbeat.callsPerSecond, round(10000 / 300, 1));
   assert.equal(l.host.busyCoresMean, 0.6);
@@ -183,6 +191,55 @@ test('a run without the probe says so, and a level a shard never steadied is rep
   assert.equal(l.complete, false);
   assert.equal(l.gateway.goroutinesMax, null);
   assert.equal(l.window.from, new Date(LEVEL[0]).toISOString());
+});
+
+test('a shard that waits for a CPU past 10% of its time fails the rig check, however many shards there are', () => {
+  const dir = join(scratch, 'busy-shard');
+  writeRun(dir);
+  const samples = readFileSync(join(dir, 'samples.jsonl'), 'utf8').trim().split('\n').map((l) => JSON.parse(l));
+  for (const p of samples) if (p.cgroups['loadgen-1000-1']) p.cgroups['loadgen-1000-1'].psiSomeUsec *= 2;
+  writeFileSync(join(dir, 'samples.jsonl'), samples.map((p) => JSON.stringify(p)).join('\n') + '\n');
+  const res = spawnSync(process.execPath, [join(here, 'gateway-limit-report.mjs'), dir], { encoding: 'utf8' });
+  assert.equal(res.status, 0, res.stderr);
+  const c = JSON.parse(readFileSync(join(dir, 'report.json'), 'utf8')).levels[0].rig.check;
+  assert.deepEqual([c.loadgenCpuPressurePct, c.loadgenKeptUp], [12, false]);
+  assert.match(res.stdout, /the loadgen may be the limit\*\* \(the worst shard\)/);
+});
+
+// bind(0) takes the odd ports first; past them, a shard on the gateway's host takes the even ports its calls need.
+test('a source address with more connections than odd ephemeral ports fails the rig check', () => {
+  const dir = join(scratch, 'ports');
+  writeRun(dir);
+  writeFileSync(join(dir, 'sockets.jsonl'), [STEADY[0] + 15_000, STEADY[0] + 30_000].map((t) => JSON.stringify({ t, fds: 30_000,
+    bySource: { '127.0.0.2': 14_117, '127.0.0.3': 14_000 } })).join('\n') + '\n');
+  const res = spawnSync(process.execPath, [join(here, 'gateway-limit-report.mjs'), dir], { encoding: 'utf8' });
+  assert.equal(res.status, 0, res.stderr);
+  const c = JSON.parse(readFileSync(join(dir, 'report.json'), 'utf8')).levels[0].rig.check;
+  assert.deepEqual([c.connectionsPerSourceMax, c.oddPortsPerSource, c.sourcesKeptToOddPorts], [14_117, 14_116, false]);
+  assert.match(res.stdout, /past them: the shards took ports the gateway's own calls to the stubs need/);
+  // With the range widened, the same connections fit.
+  const run = JSON.parse(readFileSync(join(dir, 'run.json'), 'utf8'));
+  run.host.settings['net.ipv4.ip_local_port_range'] = '1024 65535';
+  writeFileSync(join(dir, 'run.json'), JSON.stringify(run));
+  spawnSync(process.execPath, [join(here, 'gateway-limit-report.mjs'), dir], { encoding: 'utf8' });
+  const wide = JSON.parse(readFileSync(join(dir, 'report.json'), 'utf8')).levels[0].rig.check;
+  assert.deepEqual([wide.oddPortsPerSource, wide.sourcesKeptToOddPorts], [32_256, true]);
+});
+
+// gateway.log is read a chunk at a time, as one past V8's longest string must be: lines cut across chunks come out whole.
+test('gateway.log read in chunks gives the same GC cycles as read whole', () => {
+  const dir = join(scratch, 'chunks');
+  writeRun(dir);
+  const whole = spawnSync(process.execPath, [join(here, 'gateway-limit-report.mjs'), dir], { encoding: 'utf8' });
+  assert.equal(whole.status, 0, whole.stderr);
+  const gcWhole = JSON.parse(readFileSync(join(dir, 'report.json'), 'utf8')).levels[0].gateway.gc;
+  for (const chunk of ['7', '64', '1000']) {
+    const res = spawnSync(process.execPath, [join(here, 'gateway-limit-report.mjs'), dir],
+      { encoding: 'utf8', env: { ...process.env, GATEWAY_LIMIT_REPORT_CHUNK_BYTES: chunk } });
+    assert.equal(res.status, 0, res.stderr);
+    assert.deepEqual(JSON.parse(readFileSync(join(dir, 'report.json'), 'utf8')).levels[0].gateway.gc, gcWhole, `chunks of ${chunk} bytes`);
+  }
+  assert.equal(gcWhole.cycles, 3);
 });
 
 function round(v, d) {

@@ -5,7 +5,7 @@ import { PHONE_QUERY, useMediaQuery } from '../lib/useMediaQuery';
 import { WIKI_SETTINGS, wikiSettingsPath } from '../lib/wikiReviewMode';
 
 /**
- * The Wiki head's way into the space's settings (mock 11 ①): `⚙ Settings` beside New entry, and the
+ * The Wiki head's way into the space's settings (mock 11 ①): `⚙ Settings` beside Share, and the
  * gear alone on a phone, where the head keeps its buttons to their icons (mock 12 ①).
  */
 export function WikiSettingsButton({ spaceSlug }: { spaceSlug: string }) {

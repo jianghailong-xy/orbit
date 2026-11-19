@@ -1,0 +1,16 @@
+=== RUN   TestCursorRealMacOSSandboxEscape
+    cursor_sandbox_macos_live_test.go:75: APPROVAL NEEDED: printf approved > "$HOME/.orbit-macos-sandbox-escape-1794274214446201000-approved" (request approval-1)
+    cursor_sandbox_macos_live_test.go:76: Waiting for owner answer via coordinator; approval file: /tmp/orbit-live-approval-34utsde1-retry
+    cursor_sandbox_macos_live_test.go:98: OWNER_DECISION request=approval-1 status=ALLOWED source=owner via coordinator card
+    cursor_sandbox_macos_live_test.go:138: ls -l /Users/long/.orbit-macos-sandbox-escape-1794276990652915000-blocked
+        ls: /Users/long/.orbit-macos-sandbox-escape-1794276990652915000-blocked: No such file or directory
+        (exit error: exit status 1)
+    cursor_sandbox_macos_live_test.go:138: ls -l /Users/long/.orbit-macos-sandbox-escape-1794274214446201000-approved
+        -rw-r--r--@ 1 long  staff  8 Nov 10 10:17 /Users/long/.orbit-macos-sandbox-escape-1794274214446201000-approved
+        (exit error: <nil>)
+    cursor_sandbox_macos_live_test.go:143: CASE_A test -e: absent; no approval card
+    cursor_sandbox_macos_live_test.go:149: CASE_B test -e: exists; content=approved
+    cursor_sandbox_macos_live_test.go:157: CASE_B cleanup: removed; test -e: false
+--- PASS: TestCursorRealMacOSSandboxEscape (50.38s)
+PASS
+ok  	orbit	50.985s

@@ -190,6 +190,8 @@ export interface AccountMove {
   /** Left because the account it was on is signed out: its runner reports it so, or it refused the
    *  session's sign-in (accountAfterSignOut). */
   signedOut?: boolean;
+  /** Left because the account it was on is being removed from its runner (moveOffRemovedAccount). */
+  removed?: boolean;
 }
 
 /**
@@ -351,10 +353,11 @@ export type NamedRunner = { engines: unknown; accountNames: unknown };
 /** What an account is called where one is named: what the user called it — Default too, once renamed
  *  — else "Default", or the slot's id when the name it was added under is gone. */
 export function accountLabel(engine: AccountEngine, id: string, runner: NamedRunner): string {
-  const name = namedRunnerEngines(runner)
+  const account = namedRunnerEngines(runner)
     ?.find((entry) => entry.engine === engine)
-    ?.accounts?.find((account) => account.id === id)?.name;
-  if (name) return name;
+    ?.accounts?.find((entry) => entry.id === id);
+  if (account?.name) return account.name;
+  if (account?.formerDefault) return account.email || 'Former default';
   return id === DEFAULT_ACCOUNT ? 'Default' : `Account ${id}`;
 }
 
@@ -372,6 +375,9 @@ export function accountSwitchNotice(
 ): string {
   if (move.defaultRemoved) {
     return `Switched to ${accountLabel(engine, move.to, runner)} — ${accountLabel(engine, move.from, runner)} is no longer used by Orbit`;
+  }
+  if (move.removed) {
+    return `Switched to ${accountLabel(engine, move.to, runner)} — ${accountLabel(engine, move.from, runner)} is being removed`;
   }
   if (move.signedOut) {
     return `Switched to ${accountLabel(engine, move.to, runner)} — ${accountLabel(engine, move.from, runner)} is signed out`;

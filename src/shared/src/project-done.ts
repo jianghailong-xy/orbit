@@ -1,3 +1,4 @@
+import type { TaskStatus } from './enums';
 import type { OpenItemKind } from './project-progress';
 
 /**
@@ -15,12 +16,18 @@ export type ProjectDoneBy = 'OWNER' | 'DERIVED';
  * One gap the owner accepted when recording a project done: a criterion Orbit could not prove, and
  * what was checked instead.
  *
- * The server keeps the object as it was sent. `criterionKey` is the anchor every version of the card
- * carries (the criterion's `key`, as `project_get` returns it); the rest is the explanation the card
+ * For a coordinator request the server keeps the object as it was sent. Without a request it
+ * appends every current check finding, including project-wide findings anchored as documented below.
+ * `criterionKey` is the anchor every version of the card carries; the rest is the explanation the card
  * showed, which may grow without making an older server unable to read a gap accepted earlier.
  */
 export interface AcceptedGap {
+  /** A criterion key, or `project:<projectId>` when scope is PROJECT. The latter is a
+   * reserved project anchor, never the key of a stated criterion. */
   criterionKey: string;
+  scope?: 'CRITERION' | 'PROJECT';
+  /** The original check finding, retained for project-wide context and criterion details. */
+  finding?: ProjectDoneFinding;
   /** A few words naming the gap — the card's headline for it. */
   title?: string;
   /** Why Orbit cannot prove the criterion. */
@@ -74,13 +81,16 @@ export interface DoneRequest {
  *   is taking it to main.
  * - `NOTHING_TO_LAND` — its work ran a branch and the line found no commit of its own on it.
  * - `NO_RECEIPT` — no receipt puts its work on either branch: merged outside Orbit, or not merged.
- * - `CODELESS` — its work has no branch to land.
+ * - `NO_BRANCH` — its work ran without a branch and no job or receipt names it, so Orbit cannot see
+ *   whether its changes reached main.
+ * - `CODELESS` — its work has nothing to land: declared codeless, or done in another repository.
  */
 export type CriterionLandingReason =
   | 'IN_FLIGHT'
   | 'ON_PROJECT_BRANCH'
   | 'NOTHING_TO_LAND'
   | 'NO_RECEIPT'
+  | 'NO_BRANCH'
   | 'CODELESS';
 
 /**
@@ -151,6 +161,9 @@ export interface ProjectDoneRequestFiled extends DoneRequest {
  */
 export interface ProjectDoneRequestDeclineBody {
   note: string;
+  /** Deliver the note untranslated: the "Send as written" of a note refused 422 TRANSLATION_FAILED
+   *  (OwnerWordsTranslation, translation.ts). */
+  sendAsWritten?: boolean;
 }
 
 /** The result of ending a `DONE_REQUEST` with the owner's "Not yet…" answer. */
@@ -192,4 +205,119 @@ export interface ProjectDoneRecord {
   criteriaDigest: string;
   acceptedGaps: AcceptedGap[];
   requestId: string | null;
+}
+
+/** One criterion, as the check reads it. */
+export interface DoneStateCriterion {
+  stated: {
+    ordinal: number;
+    key: string;
+    text: string;
+    definitionId: string;
+    definitionRevision: number;
+    verificationMethod: string | null;
+    completionCriterionOverrideReason: string | null;
+    contentHash: string;
+  };
+  satisfied: boolean;
+  /** The work holding it unmet, as the satisfaction lane names it; empty when nothing is filed. */
+  heldUpBy: Array<{ taskId: string; title: string }>;
+  landing: 'LANDED' | 'ON_INTEGRATION_LINE' | 'UNKNOWN';
+  /** Why it is not LANDED (`criterion-landing-reason.ts`); null when it is. */
+  reason: CriterionLandingReason | null;
+  /** The serving work that has something to land and is not on the upstream. */
+  heldOffLanded: Array<{ taskId: string; title: string }>;
+}
+
+/** One task of the project, as the check reads it. */
+export interface DoneStateTask {
+  id: string;
+  title: string;
+  status: `${TaskStatus}`;
+  criterionDefinitionId: string | null;
+  /** A run of it is going, or waiting for a runner — never the asking conversation's own. */
+  run: 'RUNNING' | 'QUEUED' | null;
+}
+
+/** Everything the check and the digest read: the project as it stands. */
+export interface DoneState {
+  criteria: DoneStateCriterion[];
+  /** Every task of the project, cancelled ones included, oldest first. */
+  tasks: DoneStateTask[];
+  /** The open items waiting on the owner, oldest first — this kind's own excepted. */
+  ownerItems: Array<{ itemId: string; kind: OpenItemKind; title: string }>;
+  /** The landings and merges into main queued or running, oldest first. */
+  jobs: Array<{ integrationJobId: string; kind: string; state: string; taskId: string | null }>;
+  criteriaDigest: string;
+  stateDigest: string;
+  /** The project carries the explicit non-code mark (migration 0535): it reads no landing, so no
+   *  criterion carries a `reason` or `heldOffLanded`, and no `DONE_CRITERION_UNLANDED` is found. */
+  nonCode: boolean;
+}
+
+/** GET /projects/:id/done-check: owner read, with no asking session excluded.
+ * REFUSE findings inform the owner; they do not prevent an owner record. */
+export interface ProjectDoneCheck extends DoneState {
+  findings: ProjectDoneFinding[];
+}
+
+/**
+ * `POST /projects/:id/criteria/:criterionKey/move` — the done card's "Move to a follow-up…": one
+ * unmet acceptance criterion of this project, and the serving tasks of it that are not DONE or
+ * CANCELLED, moved to another project in one transaction. Name exactly one destination:
+ * `toProjectId`, an OPEN project of the same owner, or `newProject`, created by the move.
+ *
+ * The account owner's alone: a request made from a session is refused 403.
+ */
+export interface MoveCriterionRequestBody {
+  toProjectId?: string;
+  newProject?: { title: string; goal?: string | null };
+}
+
+/** Why a move was refused (409 unless noted), each with the tasks or items that stand in the way. */
+export const MOVE_CRITERION_REFUSALS = [
+  /** 400: neither or both of `toProjectId` and `newProject` were sent, or the title is blank. */
+  'CRITERION_MOVE_TARGET_REQUIRED',
+  /** 400: `toProjectId` is the project the criterion is already in. */
+  'CRITERION_MOVE_SAME_PROJECT',
+  /** The source project is DONE or CANCELLED: reopen it first. */
+  'CRITERION_MOVE_SOURCE_NOT_OPEN',
+  /** The destination project is DONE or CANCELLED. */
+  'CRITERION_MOVE_TARGET_NOT_OPEN',
+  /** The criterion is met; only an unmet criterion is moved to a follow-up. */
+  'CRITERION_MOVE_CRITERION_MET',
+  /** A task that would move has a live run (queued, running, waiting for input or interrupted). */
+  'CRITERION_MOVE_TASK_RUNNING',
+  /** A task that would move is being landed on the source project's line. */
+  'CRITERION_MOVE_TASK_LANDING',
+  /** A task that would move is being written by something else right now; try again. */
+  'CRITERION_MOVE_BUSY',
+  /** A task that would move depends on, or is depended on by, open work staying behind. */
+  'CRITERION_MOVE_DEPENDENCY_CROSSES',
+  /** A parent, subtask, check, supersession or fix link would cross the two projects. */
+  'CRITERION_MOVE_LINK_CROSSES',
+  /** An open item about a task that would move belongs to the source project (a landing on its line,
+   *  a question its coordinator asked) and is answered there first. A TASK_FAILED item moves with
+   *  its task instead. */
+  'CRITERION_MOVE_TASK_ITEM_OPEN',
+] as const;
+export type MoveCriterionRefusal = (typeof MOVE_CRITERION_REFUSALS)[number];
+
+/** What a move answers: where the criterion went and what went with it. */
+export interface MoveCriterionResult {
+  fromProjectId: string;
+  toProjectId: string;
+  /** True when the destination was created by this move. */
+  createdProject: boolean;
+  /** The criterion's key, which the move does not change. */
+  criterionKey: string;
+  /** Serving tasks that moved with it. */
+  movedTaskIds: string[];
+  /** DONE and CANCELLED serving tasks, which stay with the source project and no longer serve the
+   *  criterion (their declaration reads as one whose criterion is gone). */
+  keptTaskIds: string[];
+  /** Open TASK_FAILED items about the moved tasks, which moved with them. */
+  movedOpenItemIds: string[];
+  /** The source project's criteria seal before and after the move. */
+  fromCriteriaDigest: { before: string; after: string };
 }

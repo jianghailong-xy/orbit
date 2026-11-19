@@ -97,6 +97,12 @@ const PROJECT_TRIGGERS: Record<string, string> = {
   project_coordinator_rotation_count:
     'deferred AFTER UPDATE OF coordinator_session_id — counts a rotation of the coordinator '
     + 'pointer (0112/0113)',
+  project_open_list_epoch_delete:
+    'AFTER DELETE, per statement — bumps the owner\'s Open list version counter (0484/0487)',
+  project_open_list_epoch_insert:
+    'AFTER INSERT, per statement — bumps the owner\'s Open list version counter (0484/0487)',
+  project_open_list_epoch_update:
+    'AFTER UPDATE, per statement — bumps the owner\'s Open list version counter (0484/0487)',
   zz_project_completion_contract_project:
     'AFTER INSERT OR UPDATE OF the authorization set (goal, instructions, coordinator_enabled, '
     + 'max_concurrent_tasks, session_budget_per_day, config_revision, '

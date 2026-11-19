@@ -164,6 +164,7 @@ export class RunnerAuthGuard implements CanActivate {
       req.runner = { id: claims.runnerId, ownerId: claims.ownerId };
       req.runnerLink = {
         leaseOwner: claims.leaseOwner,
+        tokenMintedAt: claims.iat,
         requestId,
         afterSeq,
         gatewayId: parseRunnerLinkGatewayId(req.headers),
@@ -178,6 +179,7 @@ export class RunnerAuthGuard implements CanActivate {
     req.runner = admitted;
     req.runnerLink = {
       leaseOwner: claims.leaseOwner,
+      tokenMintedAt: claims.iat,
       requestId,
       afterSeq,
       gatewayId: parseRunnerLinkGatewayId(req.headers),

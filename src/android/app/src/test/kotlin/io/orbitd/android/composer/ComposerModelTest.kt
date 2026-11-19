@@ -154,7 +154,7 @@ class ComposerModelTest {
         assertEquals(1, rig.sends.size)
     }
 
-    @Test fun uploadWaitRemovalAndFailureDoNotDropAttachmentsOrResurrectRemovedChips() = runTest {
+    @Test fun uploadWaitRemovalAndAFailedUploadDropsOnlyItsOwnChip() = runTest {
         val rig = Rig(this); val model = rig.start(); rig.uploadHeld = CompletableDeferred()
         repeat(3) { i -> model.importAttachment(StagedAttachment("a$i", "f$i", "text/plain"),
             { StagedAttachment("a$i", "f$i", "text/plain", 1) to byteArrayOf(1) }, {}) }
@@ -167,9 +167,14 @@ class ComposerModelTest {
         assertEquals(1, rig.sends.size)
         assertEquals(2, Wire.json.parseToJsonElement(rig.sends.values.single()).jsonObject["attachmentIds"]!!.jsonArray.size)
         assertTrue(model.state.value.draft.attachments.isEmpty())
+        // A file that can't be read drops its chip and gives the reason, as iOS refuses one; a send after that carries the words alone.
         model.importAttachment(StagedAttachment("bad", "bad", "text/plain"), { error("permission revoked") }, {}); runCurrent()
+        assertTrue(model.state.value.draft.attachments.isEmpty())
+        assertEquals("permission revoked", model.state.value.error)
         model.edit("failure", 0, 0); model.send(); runCurrent()
-        assertEquals(1, rig.sends.size); assertEquals("bad", model.state.value.draft.attachments.single().id)
+        model.state.first { !it.waiting && !it.busy }
+        assertEquals(2, rig.sends.size)
+        assertNull(Wire.json.parseToJsonElement(rig.sends.values.last()).jsonObject["attachmentIds"]?.jsonArray?.takeIf { it.isNotEmpty() })
     }
 
     @Test fun diskFailurePreventsSendAndLongDraftRestoresSelectionAndNamespace() = runTest {
@@ -446,6 +451,29 @@ class ComposerModelTest {
         assertEquals("a picked key Harness doesn't run leaves the workspace's engine behind", "claude", engine("""{"lastEngine":"dsh","provider":"glm"}"""))
         assertEquals("opencode", engine("""{"provider":"opencode"}"""))
         assertEquals("claude", engine("""{"provider":"a-deleted-key"}"""))
+    }
+
+    /** A Codex pool of one's own runs Claude Code only where GET /providers/pools lists `claude` among its `engines`
+     * (ORBIT_CLAUDE_CODEX_LOGIN_GATEWAY), and says what that risks under it; a shared pool never does, whatever it lists. */
+    @Test fun aCodexPoolOfOnesOwnRunsClaudeCodeOnlyWhereTheServerSaysSo() {
+        fun catalog(vararg pools: JsonObject) = ComposerCatalog(EngineFixture.obj(EngineFixture.RUNNER),
+            EngineFixture.providers() + pools)
+        val plain = ProviderEngines.poolRow(EngineFixture.obj("""{"slug":"my-chatgpt","label":"My ChatGPT","engine":"codex","members":[]}"""),
+            ProviderEngines.CLAUDE)
+        assertTrue(catalog(plain).credentials("claude").none { it.id == "my-chatgpt" })
+        assertTrue(catalog(plain).credentials("codex").any { it.id == "my-chatgpt" })
+
+        val listed = ProviderEngines.poolRow(EngineFixture.obj(
+            """{"slug":"my-chatgpt","label":"My ChatGPT","engine":"codex","engines":["codex","claude"],"members":[]}"""), ProviderEngines.CLAUDE)
+        val underClaude = catalog(listed).credentials("claude").first { it.id == "my-chatgpt" }
+        assertEquals(CredentialKind.POOL, underClaude.kind)
+        assertEquals(EngineCopy.CODEX_POOL_ON_CLAUDE_NOTICE, underClaude.notice)
+        assertNull(catalog(listed).credentials("codex").first { it.id == "my-chatgpt" }.notice)
+
+        val team = ProviderEngines.poolRow(EngineFixture.obj(
+            """{"slug":"team-codex","label":"Team Codex","engines":["codex","claude"],"members":[]}"""), ProviderEngines.CODEX, shared = true)
+        assertTrue(catalog(team).credentials("claude").none { it.id == "team-codex" })
+        assertTrue(catalog(team).credentials("codex").any { it.id == "team-codex" })
     }
 
     /** The Provider menu lists only what the engine runs, grouped: its own sign-in (or OpenCode's own configuration), its pools,

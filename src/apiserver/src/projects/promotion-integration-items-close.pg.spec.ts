@@ -1,3 +1,4 @@
+import { seedPromotionRequest } from '../test-support/promotion-request';
 /**
  * A merge card that ends answers the exceptions it left open.
  *
@@ -356,6 +357,7 @@ test('the next candidate supersedes the one standing, and closes the exception i
     });
     const untouched = await unrelatedItems(db, w, other);
 
+    await seedPromotionRequest(db, w.projectId);
     const made = await promotions.considerCandidate(w.projectId);
     assert.ok(made, 'the landing offered no candidate');
     const after = await db.projectPromotion.findUniqueOrThrow({

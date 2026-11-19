@@ -1,3 +1,4 @@
+import { seedPromotionRequest } from '../test-support/promotion-request';
 /**
  * The sentences the server writes about a merge into the project's main branch, read through the
  * doors that serve them, on real PostgreSQL (project 34cjQN5ynG6eIH5A0neeu, criterion 4). Each names
@@ -37,6 +38,7 @@ import type {
 } from '@orbit/shared';
 import { Client } from 'pg';
 
+import { receiveOpenItem } from '../test-support/open-item-delivery';
 import { prismaClientFor } from '../prisma/prisma-client';
 import type { PrismaService } from '../prisma/prisma.service';
 import type { QueueService } from '../queue/queue.service';
@@ -87,6 +89,14 @@ const STEPS = {
     'The project branch cannot reach master until this integration is repaired — re-run it or ask the coordinator to fix it.',
   ],
 } as const satisfies Record<string, Said>;
+
+/**
+ * An item the owner holds names the coordinator only while its card can ask it again (c2420ff05,
+ * `ASK_COORDINATOR_AGAIN`). Here it never can: the delivery card does not read the coordinator's
+ * conversation at all, and this spec's coordinator, where there is one, is not a conversation a
+ * message reaches. So the owner's sentence ends at its own step, and the coordinator's keeps the clause.
+ */
+const ownersStep = (sentence: string): string => sentence.replace(' or ask the coordinator to fix it.', '.');
 
 /** A full 40-hex object name, which is the only kind a job column and a receipt accept. */
 const sha = (nibble: string) => nibble.repeat(40);
@@ -252,6 +262,7 @@ test('the sentences about a merge into main name the project’s main branch, an
       state: 'LANDED', phase: 'VERIFY', sourceSha: sha('d'), targetShaBefore: UPSTREAM_TIP, upstreamSha: UPSTREAM_TIP,
       testedSha: LINE_TIP, testedTreeSha: sha('e'), landedSha: LINE_TIP, landedTreeSha: sha('e'), aheadOfUpstream: 1,
     });
+    await seedPromotionRequest(prisma, w.projectId);
     const made = await promotions.considerCandidate(w.projectId);
     assert.ok(made, 'the landing made a candidate');
     return { promotionId: made.promotionId, check: await claim(w, 'CHECK_PROMOTION') };
@@ -259,6 +270,8 @@ test('the sentences about a merge into main name the project’s main branch, an
 
   /** An open item's next step as the project's open items read serves it, and as its delivery card does. */
   async function nextStep(w: World, itemId: string) {
+    await openItems.deliverOwed(w.projectId);
+    await receiveOpenItem(db, itemId);
     const listed = await openItems.list(ownerId, w.projectId);
     const row = [...listed.needsYou, ...listed.withCoordinator].find((each) => each.itemId === itemId);
     assert.ok(row, `CONTROL: the open items read lists ${itemId}`);
@@ -282,8 +295,8 @@ test('the sentences about a merge into main name the project’s main branch, an
           assert.equal(item.assignee, 'OWNER', 'CONTROL: the project has no coordinator, so the item is the owner’s');
           assert.equal(item.title, said(upstream, failure.title));
           assert.deepEqual(await nextStep(w, item.id), {
-            listed: said(upstream, failure.step),
-            card: said(upstream, failure.step),
+            listed: ownersStep(said(upstream, failure.step)),
+            card: ownersStep(said(upstream, failure.step)),
           });
         });
     }
@@ -306,6 +319,10 @@ test('the sentences about a merge into main name the project’s main branch, an
       payload: { jobKind: 'CHECK_PROMOTION', failureClass: 'CHECK_TIMED_OUT' }, step: STEPS.TIMED_OUT,
     },
     {
+      kind: 'INTEGRATION_CHECK_FAILED', assignee: 'OWNER',
+      payload: { jobKind: 'LAND_PROMOTION', failureClass: 'CHECK_TIMED_OUT' }, step: STEPS.TIMED_OUT,
+    },
+    {
       kind: 'INTEGRATION_ERROR', assignee: 'OWNER',
       payload: { jobKind: 'LAND_PROMOTION', failureClass: 'ERROR', errorCode: 'PUSH_REJECTED' }, step: STEPS.REPAIR,
     },
@@ -314,6 +331,15 @@ test('the sentences about a merge into main name the project’s main branch, an
     await t.test(`(2) ${upstream ? `on ${upstream}` : 'with no repository'}, every next step about the merge, `
       + 'on the open items read and the delivery card', async () => {
       const w = await world(`steps-${upstream ?? 'unbound'}`, upstream);
+      const coordinator = await prisma.session.create({
+        data: {
+          ownerId, creatorId: ownerId, title: 'Review integration items', prompt: 'Review integration items',
+          workspaceId: w.workspaceId, assignedRunnerId: w.runnerId, status: RunStatus.AWAITING_INPUT,
+        },
+      });
+      await prisma.project.update({
+        where: { id: w.projectId }, data: { coordinatorEnabled: true, coordinatorSessionId: coordinator.id },
+      });
       for (const [index, shape] of SHAPES.entries()) {
         const now = new Date();
         const item = await prisma.projectOpenItem.create({
@@ -324,7 +350,7 @@ test('the sentences about a merge into main name the project’s main branch, an
           },
           select: { id: true },
         });
-        const expected = said(upstream, shape.step);
+        const expected = shape.assignee === 'OWNER' ? ownersStep(said(upstream, shape.step)) : said(upstream, shape.step);
         assert.deepEqual(await nextStep(w, item.id), { listed: expected, card: expected },
           `${shape.kind} with the ${shape.assignee.toLowerCase()}`);
       }

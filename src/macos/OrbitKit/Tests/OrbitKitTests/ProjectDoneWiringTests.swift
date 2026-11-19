@@ -10,6 +10,14 @@ import XCTest
 /// over the source, the way `StartProjectWiringTests` does, each assertion written so that DETACHING
 /// the wire is what turns it red. What it cannot see is layout; that is what the screenshots are for.
 final class ProjectDoneWiringTests: XCTestCase {
+    func testStaleRowDrawsKitWordsOnProjectPage() throws {
+        let cards = try source(Self.cards)
+        let page = try source("src/macos/OrbitApp/Sources/OrbitApp/Views/SessionProjectPage.swift")
+        XCTAssertTrue(cards.contains("Text(ProjectDone.staleHeading)"))
+        XCTAssertTrue(page.contains("ProjectDone.staleRequest(app.projectSessionsOpenItems)"))
+        XCTAssertTrue(page.contains("ProjectStaleDoneRow(detail: detail)"))
+    }
+
 
     private enum WiringError: Error, CustomStringConvertible {
         case missing(String)
@@ -102,16 +110,16 @@ final class ProjectDoneWiringTests: XCTestCase {
     func testThePressesGoToTheOwnersDoors() throws {
         let console = try source(Self.console)
         let record = code(try section(console, from: "func recordProjectDone() async {",
-                                      to: "func declineDoneRequest(note: String) async -> Bool {"))
+                                      to: "func declineDoneRequest(note: String, sendAsWritten: Bool = false) async -> Bool {"))
         XCTAssertTrue(record.contains("ProjectDone.body(subject: subject, requestID: doneRequestRow?.itemId,"))
         XCTAssertTrue(record.contains("currentDigest: acceptanceConfirmation?.currentVersion.digest)"),
                       "unasked, the press names the seal standing now")
         XCTAssertTrue(record.contains("doneRecord = try await api.recordProjectDone(projectID: projectID, body) doneRecordAt = Date()"),
                       "the card turns into its receipt from the record the door wrote, and notes when")
         XCTAssertTrue(record.contains("statusMessage = \"\\(ProjectDone.notRecorded) — "))
-        let decline = code(try section(console, from: "func declineDoneRequest(note: String) async -> Bool {",
+        let decline = code(try section(console, from: "func declineDoneRequest(note: String, sendAsWritten: Bool = false) async -> Bool {",
                                        to: "func reopenProject() async {"))
-        XCTAssertTrue(decline.contains("api.declineDoneRequest(projectID: projectID, itemID: row.itemId, note: note)"))
+        XCTAssertTrue(decline.contains("api.declineDoneRequest(projectID: projectID, itemID: row.itemId, note: note, sendAsWritten: sendAsWritten)"))
         let reopen = code(try section(console, from: "func reopenProject() async {",
                                       to: "func askCoordinatorAboutDone() async {"))
         XCTAssertTrue(reopen.contains("api.updateProjectStatus(projectID, to: .open) doneRecord = nil doneRecordAt = nil"))
@@ -120,11 +128,9 @@ final class ProjectDoneWiringTests: XCTestCase {
                       "Ask the coordinator sends the card's own facts as one turn")
     }
 
-    /// The transcript draws each kind, and both whole where they arrived: the done card is the
-    /// question and then its receipt, in the conversation itself (mock ⑤ ①–③, the browser's inline
-    /// `ProjectDoneCard`) — not a preview that opens a review, which is what it was before
-    /// (evidence revision 1's first gap).
-    func testTheTranscriptDrawsBothCardsWholeWhereTheyArrived() throws {
+    /// The transcript draws each kind: the done question as a preview whose press opens the whole
+    /// card in the review sheet (the owner, 2026-11-17), and why it is not done whole, inline.
+    func testTheTranscriptPreviewsTheDoneQuestionAndDrawsWhyNotDoneWhole() throws {
         let approvals = try source(Self.approvals)
         let dispatch = code(try section(approvals, from: "struct DeliveredDecisionCardView: View {",
                                         to: ".environment(\\.approvalReviewTarget, .delivered(card))"))
@@ -132,15 +138,21 @@ final class ProjectDoneWiringTests: XCTestCase {
         XCTAssertTrue(dispatch.contains("case .projectNotDone: ProjectNotDoneCardView(console: console)"))
         let card = code(try section(approvals, from: "private struct ProjectDoneCardView: View {",
                                     to: "private struct ProjectNotDoneCardView: View {"))
-        XCTAssertTrue(card.contains("request: row?.doneRequest,"))
+        XCTAssertTrue(card.contains("request: row?.shownDoneRequest(owner: owner, showOriginal: showOriginal),"))
         XCTAssertTrue(card.contains("onRecord: { await console.recordProjectDone() },"))
         XCTAssertTrue(card.contains("onNotYet: row == nil ? nil : { await console.declineDoneRequest(note: $0) },"),
                       "Not yet… is offered only on a card the coordinator asked for")
-        XCTAssertTrue(card.contains("onReopen: { await console.reopenProject() })"))
+        XCTAssertTrue(card.contains("onReopen: { await console.reopenProject() },"))
+        XCTAssertTrue(card.contains("followUps: followUps,"),
+                      "Open, Change, Move to a follow-up… and Confirm… are wired at this conversation's doors")
+        for door in ["await console.moveCriterion(key, body)", "await console.confirmCriterion(id, body)",
+                     "model.openFromConversation(.task($0), overConsole: overConsole)"] {
+            XCTAssertTrue(card.contains(door), "the conversation's done card no longer presses \(door)")
+        }
         XCTAssertTrue(card.contains("openItems: ProjectDone.openItemsCount(console.openItems),"),
                       "Orbit checked counts the open-items read the card is drawn beside")
-        XCTAssertTrue(card.contains(".environment(\\.approvalReviewTarget, nil)"),
-                      "with no review target the card takes ApprovalReviewLayout's whole-card path")
+        XCTAssertFalse(card.contains(".environment(\\.approvalReviewTarget, nil)"),
+                      "the row's .delivered target makes the question a preview that opens the review")
         let notDone = code(try section(approvals, from: "private struct ProjectNotDoneCardView: View {",
                                        to: "/// The start card itself"))
         XCTAssertTrue(notDone.contains("onAskCoordinator: { Task { await console.askCoordinatorAboutDone() } })"))
@@ -155,8 +167,8 @@ final class ProjectDoneWiringTests: XCTestCase {
         let view = try source(Self.consoleView)
         let route = code(try section(view, from: "private func openReview(for row: TranscriptRow) {",
                                      to: "default:"))
-        XCTAssertFalse(route.contains(".projectDone"),
-                       "the needs-you bar scrolls to the done card; there is no review to open")
+        XCTAssertTrue(route.contains(".projectDone:") || route.contains(".projectDone,"),
+                      "the open-question capsule opens the done card's review, as a tap on its preview does")
         XCTAssertFalse(route.contains(".projectNotDone"), "why it is not done is drawn whole, inline")
     }
 
@@ -171,11 +183,17 @@ final class ProjectDoneWiringTests: XCTestCase {
         for call in ["ProjectDone.meta(projectTitle: subject.title, asked: request != nil, waiting: waiting)",
                      "return ProjectDone.requestWaiting(askedAt)",
                      "Text(request.judgment)", "ProjectDone.doneWhenHead(count)",
-                     "Text(ProjectDone.cardTally(counts, main: subject.main))",
-                     "Text(ProjectDone.criterionState(criterion, main: subject.main))",
+                     "Text(ProjectDone.cardTally(subject))",
+                     "ProjectDone.criterionRowState(criterion, nonCode: subject.nonCode, main: subject.main)",
+                     "ProjectDone.confirmationLine(criterion.confirmation?.current)",
+                     "NonCodeBanner(mark: subject.nonCodeMark, onChange: followUps.openDelivers)",
+                     "DoneFindingsView(subject: subject, findings: findings, openTask: followUps.openTask,",
+                     "MoveCriterionSheet(subject: moving, move: move, openProjects: followUps.openProjects)",
+                     "ConfirmCriterionSheet(subject: confirming, confirm: confirm, upload: followUps.upload)",
+                     "MovedOutLines(movedOut: subject.criteriaMovedOut)",
                      "ProjectDoneGapList(subject: subject, gaps: gaps)",
                      "ProjectDone.orbitCheckedLine(counts: counts, confirmedAt: confirmedAt,",
-                     "Text(ProjectDone.recordingExplanation)", "Text(ProjectDone.recordLabel(counts))",
+                     "Text(ProjectDone.recordingExplanation)", "Text(ProjectDone.recordLabel(counts, asked: request != nil, check: doneCheck))",
                      "Text(ProjectDone.notYet)", "TextField(ProjectDone.missingBeforeDone, text: $note, axis: .vertical)",
                      "Text(ProjectDone.notYetHint)", "Text(ProjectDone.sendToCoordinator)", "Text(ProjectDone.back)",
                      "if request != nil, onNotYet != nil { notYetButton }",
@@ -221,7 +239,7 @@ final class ProjectDoneWiringTests: XCTestCase {
         XCTAssertTrue(row.contains("ProjectDoneRequestRow(row: row, now: now, busy: store.busy) { pageSheet = .done }"))
         XCTAssertTrue(row.contains("ProjectOwnDoneRow(busy: store.busy) { pageSheet = .done }"))
         let sheets = code(try section(page, from: ".sheet(item: $pageSheet) { sheet in", to: "case .mergeCheck:"))
-        XCTAssertTrue(sheets.contains("case .done: ProjectDoneSheet(store: store)"))
+        XCTAssertTrue(sheets.contains("case .done: ProjectDoneSheet(store: store, openTask: { taskID in"))
         let sheet = code(try section(page, from: "private struct ProjectDoneSheet: View {",
                                      to: "/// The merge check, where a command has room"))
         for call in ["ProjectDone.live(openItems: store.openItems, status: document.status.rawValue)",
@@ -229,7 +247,7 @@ final class ProjectDoneWiringTests: XCTestCase {
                      "ProjectDone.body(subject: subject, requestID: row?.itemId,",
                      "openItems: ProjectDone.openItemsCount(store.openItems),",
                      "switch await store.recordDone(body) {",
-                     "store.declineDone(itemID: row.itemId, note: note)", "store.setStatus(.open)"] {
+                     "store.declineDone(itemID: row.itemId, note: note, sendAsWritten: sendAsWritten)", "store.setStatus(.open)"] {
             XCTAssertTrue(sheet.contains(call), "the card over the page no longer \(call)")
         }
         let menu = code(try section(page, from: "private func menu(", to: "Label(\"Record as cancelled\""))
@@ -247,7 +265,7 @@ final class ProjectDoneWiringTests: XCTestCase {
         let record = code(try section(model, from: "func recordDone(", to: "func declineDone("))
         XCTAssertTrue(record.contains("try await api.recordProjectDone(projectID: projectID, body)"))
         XCTAssertTrue(code(try section(model, from: "func declineDone(", to: "func delete()"))
-            .contains("api.declineDoneRequest(projectID: self.projectID, itemID: itemID, note: note)"))
+            .contains("api.declineDoneRequest(projectID: self.projectID, itemID: itemID, note: note, sendAsWritten: sendAsWritten)"))
     }
 
     /// The two rows a project page draws, in OrbitKit's words.

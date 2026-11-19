@@ -5,6 +5,7 @@ import { api } from '../api';
 import { encodeId, routeId } from '../lib/idCodec';
 import { machineDraftPath } from '../lib/machineSetup';
 import { useFollowFirstSessionProvider, useManagedRunner } from '../lib/managedRunner';
+import { GuestSessionView, guestSessionQuery } from '../pages/GuestSessionPage';
 import { projectDetailsQuery, sessionQuery } from '../lib/queries';
 import { firstOpenableWorkspace } from '../lib/workspaceOrder';
 import { Button } from './ui/Button';
@@ -20,7 +21,11 @@ import { ProjectLandingsWindow } from './ProjectLandingsWindow';
 export function WorkspaceConsole() {
   const navigate = useNavigate();
   const { pathname } = useLocation();
-  const workspaces = useQuery({ queryKey: ['workspaces'], queryFn: () => api<any[]>('/workspaces') });
+  const workspaces = useQuery({
+    queryKey: ['workspaces'],
+    meta: { entities: ['workspace', 'checkout'] },
+    queryFn: () => api<any[]>('/workspaces'),
+  });
   // Poll while the console is open so the composer's plan-usage gauge stays current
   // (the runner refreshes its usage roughly every 2 min while busy).
   const runners = useQuery({
@@ -102,11 +107,19 @@ export function WorkspaceConsole() {
   // below forever; instead surface a clear not-found state with a way out. Gated on a
   // failed session fetch so a genuinely in-flight load still shows the spinner.
   const sessionNotFound = !!selectedSessionId && !viewRunner && sessionQ.isError;
+  // A session that is not yours may be one someone invited you to reply in: the same address then draws the guest
+  // view, in this pane (board docs/mocks/share-links/11-guest-one-link, D8/D9). Asked only once the owner's read has
+  // failed, so your own sessions cost nothing more; until the guest door answers, the pane waits.
+  const guestQ = useQuery({
+    ...guestSessionQuery(selectedSessionId ?? ''),
+    enabled: !!selectedSessionId && sessionQ.isError,
+  });
+  const asGuest = !!selectedSessionId && sessionQ.isError && guestQ.isSuccess;
+  const askingGuestDoor = !!selectedSessionId && sessionQ.isError && guestQ.isPending;
   // The owner's managed runner, handed to the console only when it is this console's runner: its
   // state stands above the composer. Nothing waits on it — the console draws as before while it
   // loads, and with the capability missing or off there is none.
   const { managed } = useManagedRunner();
-  // The default workspace's draft starts where the workspace list says; follow it as the runner comes up.
   useFollowFirstSessionProvider(managed);
   const consoleManaged =
     managed?.status.runnerId && viewRunner && routeId(managed.status.runnerId) === routeId(viewRunner.id)
@@ -116,7 +129,13 @@ export function WorkspaceConsole() {
   return (
     <main className="app-main">
       <div className="app-view">
-        {viewRunner ? (
+        {asGuest && selectedSessionId ? (
+          <GuestSessionView sessionId={selectedSessionId} />
+        ) : askingGuestDoor ? (
+          <div style={{ padding: 48, textAlign: 'center' }}>
+            <Spinner />
+          </div>
+        ) : viewRunner ? (
           <WorkspaceView runner={viewRunner} managed={consoleManaged} fleet={runners.data} />
         ) : landingsProjectId && runners.isFetched && !runners.data?.length ? (
           // An account with no machine has no console to open, and the window does not need one.

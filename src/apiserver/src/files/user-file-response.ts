@@ -27,6 +27,14 @@ export function inlineType(type: string): string | null {
   return INLINE_TYPES.has(bare) ? bare : null;
 }
 
+/**
+ * Whether a browser could read this type as a script. Every JavaScript MIME type has one of these words in
+ * it, and a browser reads a comma list by its last type, so the whole string is searched, not its first type.
+ * The page policy lets this origin's files run as scripts (src/web/nginx.conf), and nosniff refuses one
+ * labelled as anything else, so no such type may leave on a user's file.
+ */
+const SCRIPT_TYPE = /javascript|ecmascript|jscript|livescript/i;
+
 /** Save this file, under this name: an ASCII name for old clients, and the real one beside it. */
 export function attachmentDisposition(filename: string): string {
   const ascii = filename.replace(/[^\x20-\x7E]|["\\\r\n]/g, '_') || 'download';
@@ -36,8 +44,8 @@ export function attachmentDisposition(filename: string): string {
 /**
  * The rule for bytes somebody else wrote, on every answer that carries them. A file opened from Orbit's
  * own origin would otherwise run there, beside the login. So no answer may be sniffed into something
- * else, none is a document with an origin (sandbox), a type off the list is never shown, and a type on
- * it leaves bare: what the client sent as a type could read differently to a browser than it does here.
+ * else, none is a document with an origin (sandbox), a type off the list is never shown, a script type
+ * leaves as bytes, and a type on the list leaves bare: what the client sent as a type could read differently to a browser than it does here.
  */
 function applyUserFileRule(response: Pick<Response, 'setHeader'>, file: StreamableFile): void {
   const { type, disposition } = file.getHeaders();
@@ -45,7 +53,10 @@ function applyUserFileRule(response: Pick<Response, 'setHeader'>, file: Streamab
   response.setHeader('Content-Security-Policy', 'sandbox');
   response.setHeader('X-Content-Type-Options', 'nosniff');
   if (shown) response.setHeader('Content-Type', shown);
-  else if (!String(disposition).startsWith('attachment')) response.setHeader('Content-Disposition', 'attachment');
+  else {
+    if (SCRIPT_TYPE.test(type)) response.setHeader('Content-Type', 'application/octet-stream');
+    if (!String(disposition).startsWith('attachment')) response.setHeader('Content-Disposition', 'attachment');
+  }
 }
 
 /**

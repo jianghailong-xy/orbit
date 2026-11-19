@@ -3,9 +3,11 @@ import assert from 'node:assert/strict';
 import { renderRawQuery, noSessionRequests } from '../test-support/prisma-transaction-double';
 import { test } from 'node:test';
 import { ConflictException, ForbiddenException, Logger } from '@nestjs/common';
-import { RunStatus } from '@prisma/client';
+import { Prisma, RunStatus } from '@prisma/client';
 import { API_ERROR_RETRY_BACKOFF_MS, MAX_API_ERROR_RETRIES, RunEventType } from '@orbit/shared';
 import { RunnerApiController } from './runner-api.controller';
+import { coordinatorDeliveryTurnId } from '../projects/coordinator-delivery.service';
+import { WATCH_TURN_KEY_PREFIX } from '../sessions/watch-turn-key';
 import {
   renderRunEventSeqConflictMetrics,
   resetRunEventSeqConflictMetrics,
@@ -49,6 +51,10 @@ function makeController(
     turnSenders?: Record<string, string>;
     /** The sessions a sender is read from (session-message.ts, owner-scoped): each one's owner and title. */
     senders?: Record<string, { ownerId: string; title: string }>;
+    /** Each turn's key (`conversation_turn.client_turn_id`), by turn id: whose namespace it is in. */
+    turnKeys?: Record<string, string>;
+    /** The DELIVERED coordinator wakes a notification's card is read from (coordinator-delivery-card.ts). */
+    coordinatorWakes?: Array<{ event: string; subjectId: string; detail: unknown; delivery: unknown; updatedAt: Date }>;
     coordinatorContextEpoch?: number;
     retryAttempts?: number;
   } = {},
@@ -124,7 +130,18 @@ function makeController(
       findMany: async (args: { where: { sessionId: string; id: { in: string[] } } }) =>
         Object.entries(stored.turnContents ?? {})
           .filter(([id]) => args.where.sessionId === 'session-1' && args.where.id.in.includes(id))
-          .map(([id, content]) => ({ id, content, senderSessionId: stored.turnSenders?.[id] ?? null })),
+          .map(([id, content]) => ({
+            id,
+            content,
+            senderSessionId: stored.turnSenders?.[id] ?? null,
+            ...(stored.turnKeys?.[id] ? { clientTurnId: stored.turnKeys[id] } : {}),
+          })),
+    },
+    // The coordinator's notifications delivered to this conversation, by the key their turn was written under.
+    projectCoordinatorWake: {
+      findMany: async (args: { where: { sessionId: string; OR: Array<{ delivery: { equals: string } }> } }) =>
+        (stored.coordinatorWakes ?? []).filter((wake) => args.where.sessionId === 'session-1'
+          && args.where.OR.some((key) => (wake.delivery as { clientTurnId?: string }).clientTurnId === key.delivery.equals)),
     },
     session: {
       findUniqueOrThrow: async () => ({
@@ -464,6 +481,44 @@ test('an async Agent and a Workflow count as running sub-agents until their noti
   );
 });
 
+test('an Orbit workflow remains running after its JSON receipt and clears on background completion', async () => {
+  const toolUseId = 'toolu_orbit_workflow';
+  const { calls, controller } = makeController();
+  await controller.events({ id: 'runner-1' }, 'session-1', {
+    events: [
+      { seq: 64, type: RunEventType.TOOL_USE, ts: '2026-11-19T06:00:00.000Z',
+        payload: { id: toolUseId, name: 'mcp__orbit__workflow', input: {} } },
+      { seq: 65, type: RunEventType.TOOL_RESULT, ts: '2026-11-19T06:00:01.000Z',
+        payload: { toolUseId, content: [{ type: 'text', text: JSON.stringify({
+          workflowRunId: 'workflow-1', status: 'running',
+        }, null, 2) }] } },
+    ],
+  });
+  assert.deepEqual(calls.update[0].data.runningSubagents, [toolUseId]);
+
+  const ended = makeController(RunStatus.AWAITING_INPUT, 'runtime-1', { runningSubagents: [toolUseId] });
+  await ended.controller.events({ id: 'runner-1' }, 'session-1', {
+    events: [
+      { seq: 66, type: RunEventType.BACKGROUND_TASK, ts: '2026-11-19T06:01:00.000Z',
+        payload: { toolUseId, kind: 'workflow', status: 'completed' } },
+    ],
+  });
+  assert.deepEqual(ended.calls.update[0].data.runningSubagents, []);
+});
+
+test('an Orbit workflow re-announced after a resume counts as a running sub-agent, not a background job', async () => {
+  const toolUseId = 'toolu_orbit_workflow';
+  const { calls, controller } = makeController();
+  await controller.events({ id: 'runner-1' }, 'session-1', {
+    events: [
+      { seq: 70, type: RunEventType.BACKGROUND_TASK, ts: '2026-11-19T06:02:00.000Z',
+        payload: { toolUseId, status: 'running', kind: 'subagent', workflowRunId: 'workflow-1' } },
+    ],
+  });
+  assert.deepEqual(calls.update[0].data.runningSubagents, [toolUseId]);
+  assert.equal(calls.update[0].data.runningBgJobs, undefined);
+});
+
 test('a Workflow leaves the running sub-agents when its notification arrives', async () => {
   const { calls, controller } = makeController(RunStatus.AWAITING_INPUT, 'runtime-1', {
     runningSubagents: ['toolu_agent', 'toolu_wf'],
@@ -476,6 +531,83 @@ test('a Workflow leaves the running sub-agents when its notification arrives', a
     ],
   });
 
+  assert.deepEqual(calls.update[0].data.runningSubagents, ['toolu_agent']);
+});
+
+// Session ac5fYOgID3kywMbjnz8xX (Claude Code 2.1.325): the background Agent's launch went into
+// runningSubagents, a Claude restart reported it "stopped" with no <tool-use-id>, SendMessage revived
+// it, and its "completed" notification named the SendMessage call. The runner reports both terminal
+// notifications under the launch it recorded from the ack (runner-go noteAgentLaunch), and that is
+// what empties the set; the ids the notifications carried themselves never could.
+const RELAUNCH_ID = 'toolu_01E3219KcZphXTzWY9hPoVmr';
+const RELAUNCH_SEND_ID = 'toolu_018uxDocXvBrR8Veipg6A15o';
+function relaunchTail(stoppedId: string, completedId: string) {
+  return [
+    { seq: 101, type: RunEventType.BACKGROUND_TASK, ts: '2026-11-15T23:43:12.208Z',
+      payload: { status: 'stopped', shellId: 'ac99e9cc2f9865c6f', toolUseId: stoppedId } },
+    { seq: 102, type: RunEventType.TOOL_USE, ts: '2026-11-15T23:43:29.000Z',
+      payload: { id: RELAUNCH_SEND_ID, name: 'SendMessage', input: { to: 'ac99e9cc2f9865c6f', message: 'Resume' } } },
+    { seq: 103, type: RunEventType.TOOL_RESULT, ts: '2026-11-15T23:43:30.335Z',
+      payload: { toolUseId: RELAUNCH_SEND_ID, content: [{ type: 'text', text: '{"success":true,"message":"Resuming agent ac99e9c","resumedAgentId":"ac99e9cc2f9865c6f"}' }] } },
+    { seq: 104, type: RunEventType.BACKGROUND_TASK, ts: '2026-11-16T00:27:42.000Z',
+      payload: { status: 'completed', shellId: 'ac99e9cc2f9865c6f', toolUseId: completedId } },
+  ];
+}
+
+test('a restarted and revived background Agent leaves runningSubagents when its ends name the launch', async () => {
+  const launch = makeController();
+  await launch.controller.events({ id: 'runner-1' }, 'session-1', {
+    events: [
+      { seq: 99, type: RunEventType.TOOL_USE, ts: '2026-11-15T23:06:45.000Z',
+        payload: { id: RELAUNCH_ID, name: 'Agent', input: { description: 'Probe', run_in_background: true } } },
+      { seq: 100, type: RunEventType.TOOL_RESULT, ts: '2026-11-15T23:07:12.814Z',
+        payload: { toolUseId: RELAUNCH_ID, content: [{ type: 'text', text: ASYNC_AGENT_ACK }] } },
+    ],
+  });
+  assert.deepEqual(launch.calls.update[0].data.runningSubagents, [RELAUNCH_ID], 'the launch is running');
+
+  const { calls, controller } = makeController(RunStatus.AWAITING_INPUT, 'runtime-1', { runningSubagents: [RELAUNCH_ID] });
+  await controller.events({ id: 'runner-1' }, 'session-1', { events: relaunchTail(RELAUNCH_ID, RELAUNCH_ID) });
+  assert.deepEqual(calls.update[0].data.runningSubagents, [], 'nothing is left running, and the revival does not re-enter the set');
+});
+
+test('the same ends under the ids the notifications carried leave the launch stuck (why the runner maps them)', async () => {
+  const { calls, controller } = makeController(RunStatus.AWAITING_INPUT, 'runtime-1', { runningSubagents: [RELAUNCH_ID] });
+  await controller.events({ id: 'runner-1' }, 'session-1', { events: relaunchTail('', RELAUNCH_SEND_ID) });
+  assert.equal('runningSubagents' in (calls.update[0]?.data ?? {}), false, 'the launch stays in runningSubagents');
+});
+
+// Orbit's own SubAgent (docs/subagent-design.md §6.2): a background delegate's receipt leaves it running,
+// a foreground delegate's result is its completion.
+test('a background delegate counts as a running sub-agent until its notification; a foreground one ends with its result', async () => {
+  const { calls, controller } = makeController();
+
+  await controller.events({ id: 'runner-1' }, 'session-1', {
+    events: [
+      { seq: 90, type: RunEventType.TOOL_USE, ts: '2026-11-11T07:00:00.000Z',
+        payload: { id: 'toolu_bg', name: 'mcp__orbit__delegate', input: { description: 'Sweep', prompt: 'Read', background: true } } },
+      { seq: 91, type: RunEventType.TOOL_RESULT, ts: '2026-11-11T07:00:00.200Z',
+        payload: { toolUseId: 'toolu_bg', content: [{ type: 'text', text: '{\n  "runId": "r1",\n  "status": "running"\n}' }] } },
+      { seq: 92, type: RunEventType.TOOL_USE, ts: '2026-11-11T07:00:01.000Z',
+        payload: { id: 'toolu_fg', name: 'mcp__orbit__delegate', input: { description: 'Fix', prompt: 'Fix it' } } },
+      { seq: 93, type: RunEventType.TOOL_RESULT, ts: '2026-11-11T07:02:00.000Z',
+        payload: { toolUseId: 'toolu_fg', content: [{ type: 'text', text: '{"runId":"r2","status":"DONE","result":"fixed"}' }] } },
+    ],
+  });
+  assert.deepEqual(calls.update[0].data.runningSubagents, ['toolu_bg']);
+});
+
+test('a background delegate leaves the running sub-agents when its terminal background_task arrives', async () => {
+  const { calls, controller } = makeController(RunStatus.AWAITING_INPUT, 'runtime-1', {
+    runningSubagents: ['toolu_agent', 'toolu_bg'],
+  });
+
+  await controller.events({ id: 'runner-1' }, 'session-1', {
+    events: [
+      { seq: 95, type: RunEventType.BACKGROUND_TASK, ts: '2026-11-11T07:10:00.000Z',
+        payload: { status: 'completed', toolUseId: 'toolu_bg', summary: 'SubAgent finished' } },
+    ],
+  });
   assert.deepEqual(calls.update[0].data.runningSubagents, ['toolu_agent']);
 });
 
@@ -1061,6 +1193,110 @@ test('a batch that neither asks nor answers leaves the sender alone', async () =
 
   const preview = previewUpdate(calls);
   assert.ok(!('lastUserFromSessionId' in preview) && !('lastUserFromTitle' in preview));
+});
+
+/**
+ * A message Orbit wrote itself says so on the row (`lastUserFromOrbit`, docs/session-list-projects-design.md
+ * §3.5, owner 2026-11-07): read off the turn's own key and the cards stored with this very echo, in the same
+ * write as the text, and with the card of a coordinator's notification, which the row's sentence is written
+ * from — the card the transcript is drawn with, not a second reading of it.
+ */
+test('a watch’s wake is previewed as Orbit’s, with no card', async () => {
+  const { calls, controller } = makeController(RunStatus.RUNNING, 'runtime-1', {
+    turnContents: { 'turn-1': 'Orbit Watch w-1 matched at generation 2: CI finished\n\nThis turn was queued by the watch.' },
+    turnKeys: { 'turn-1': `${WATCH_TURN_KEY_PREFIX}44444444-4444-4444-8444-444444444444:2` },
+  });
+
+  await controller.events({ id: 'runner-1' }, 'session-1', {
+    events: [{ seq: 1, type: RunEventType.USER, ts: '2026-11-07T07:21:58.000Z', turnId: 'turn-1', payload: { text: 'Orbit Watch w-1 matched' } }],
+  });
+
+  const preview = previewUpdate(calls);
+  assert.match(preview.lastUserText, /^Orbit Watch w-1 matched at generation 2/);
+  assert.deepEqual(preview.lastUserFromOrbit, { coordinatorDelivery: null });
+  assert.equal(preview.lastUserFromSessionId, null, 'a session was named for Orbit’s words');
+});
+
+test('a coordinator’s notification is previewed as Orbit’s, with the card its echo is stored with', async () => {
+  const key = coordinatorDeliveryTurnId('wake-key-1');
+  const { calls, controller } = makeController(RunStatus.RUNNING, 'runtime-1', {
+    turnContents: { 'turn-1': 'From Orbit · project “Rows” has a revision of completion evidence for you to decide' },
+    turnKeys: { 'turn-1': key },
+    coordinatorWakes: [{
+      event: 'COMPLETION_EVIDENCE_REVISED',
+      subjectId: 'task-1',
+      detail: { title: 'Orbit lines', evidenceRevision: 2 },
+      delivery: { clientTurnId: key },
+      updatedAt: new Date('2026-11-07T07:20:00.000Z'),
+    }],
+  });
+
+  await controller.events({ id: 'runner-1' }, 'session-1', {
+    events: [{ seq: 1, type: RunEventType.USER, ts: '2026-11-07T07:21:58.000Z', turnId: 'turn-1', payload: { text: 'From Orbit · project' } }],
+  });
+
+  const preview = previewUpdate(calls);
+  const card = {
+    kind: 'EVIDENCE_SUBMITTED',
+    task: { id: 'task-1', title: 'Orbit lines' },
+    revision: 2,
+    count: null,
+    deliveredAt: '2026-11-07T07:20:00.000Z',
+    toCoordinator: true,
+  };
+  assert.deepEqual(preview.lastUserFromOrbit, { coordinatorDelivery: card });
+  const [echo] = calls.createMany[0].data as Array<{ payload: { coordinatorDelivery?: unknown } }>;
+  assert.deepEqual(echo.payload.coordinatorDelivery, card, 'the row and the transcript read different cards');
+});
+
+test('the owner’s message, and a session’s under a key of Orbit’s namespace, are not Orbit’s', async () => {
+  const { calls, controller } = makeController(RunStatus.RUNNING, 'runtime-1', {
+    turnContents: { 'turn-1': 'mine', 'turn-2': 'a report' },
+    turnKeys: { 'turn-1': '7a0c3f53-0c5e-4f0e-9d1c-6f3f9f1b2c4d', 'turn-2': `${WATCH_TURN_KEY_PREFIX}chosen-by-an-agent` },
+    turnSenders: { 'turn-2': 'sender-1' },
+    senders: { 'sender-1': { ownerId: 'owner-1', title: 'Worker: criterion 3' } },
+  });
+
+  await controller.events({ id: 'runner-1' }, 'session-1', {
+    events: [{ seq: 1, type: RunEventType.USER, ts: '2026-11-07T07:21:58.000Z', turnId: 'turn-1', payload: { text: 'mine' } }],
+  });
+  assert.equal(previewUpdate(calls).lastUserFromOrbit, Prisma.DbNull, 'the owner’s words read as Orbit’s');
+
+  calls.update.length = 0;
+  await controller.events({ id: 'runner-1' }, 'session-1', {
+    events: [{ seq: 2, type: RunEventType.USER, ts: '2026-11-07T07:22:58.000Z', turnId: 'turn-2', payload: { text: 'a report' } }],
+  });
+  const preview = previewUpdate(calls);
+  assert.equal(preview.lastUserFromSessionId, 'sender-1');
+  assert.equal(preview.lastUserFromOrbit, Prisma.DbNull, 'a session’s message read as Orbit’s for the key it chose');
+});
+
+test('a reply clears Orbit’s mark together with the message', async () => {
+  const { calls, controller } = makeController(RunStatus.RUNNING, 'runtime-1', {
+    turnContents: { 'turn-1': 'Orbit Watch w-1 matched at generation 2: CI finished' },
+    turnKeys: { 'turn-1': `${WATCH_TURN_KEY_PREFIX}44444444-4444-4444-8444-444444444444:2` },
+  });
+
+  await controller.events({ id: 'runner-1' }, 'session-1', {
+    events: [
+      { seq: 1, type: RunEventType.USER, ts: '2026-11-07T07:21:58.000Z', turnId: 'turn-1', payload: { text: 'Orbit Watch' } },
+      { seq: 2, type: RunEventType.ASSISTANT, ts: '2026-11-07T07:22:20.000Z', turnId: 'turn-1', payload: { text: 'CI is green.' } },
+    ],
+  });
+
+  const preview = previewUpdate(calls);
+  assert.equal(preview.lastUserText, null);
+  assert.equal(preview.lastUserFromOrbit, Prisma.DbNull, 'Orbit’s mark outlived the message it was on');
+});
+
+test('a batch that neither asks nor answers leaves Orbit’s mark alone', async () => {
+  const { calls, controller } = makeController(RunStatus.RUNNING);
+
+  await controller.events({ id: 'runner-1' }, 'session-1', {
+    events: [{ seq: 9, type: RunEventType.SYSTEM, ts: '2026-11-07T07:23:00.000Z', turnId: 'turn-2', payload: { subtype: 'status' } }],
+  });
+
+  assert.ok(!('lastUserFromOrbit' in previewUpdate(calls)));
 });
 
 test('terminal sessions reject durable events before any write or publish', async () => {

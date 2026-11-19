@@ -506,3 +506,7 @@ The project's twelve items leave these open. They are settled here so the parall
     it against `region.verdict`.
 14. runner-go keeps each proxy's last decided answer under its home across restarts, keyed by a SHA-256 of the proxy,
     and reads it back when it starts, so a restart neither lets a blocked verdict lapse early nor extends it (§10).
+15. SubAgent routing applies §8 too: on a blocked runner it removes every Anthropic-bound credential on `claude` (the
+    sign-in, a Claude pool, an Anthropic key) with `claude can’t use Anthropic on <runner>`, through
+    `credentialIsAnthropicBound` on each provider row of the route input. Remote `delegate` and
+    `provider_list --workspace` read the same check; a DeepSeek key on Claude Code stays usable (⑥).

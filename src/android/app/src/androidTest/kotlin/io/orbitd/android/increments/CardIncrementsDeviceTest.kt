@@ -242,32 +242,6 @@ class CardIncrementsDeviceTest : IncrementDeviceTest() {
         capture("02-wake-details")
     }
 
-    /** A08-16: a revision waiting for the paused coordinator is a card that asks nothing until Decide it myself; one already sent to it
-     * is a line. */
-    @Test fun evidenceWaitingOnAPausedCoordinatorFoldsToAWaitingCard() = journey {
-        paused = true
-        openQuestion = false
-        openConversation()
-        val key = "evidence:$waitingTask:1"
-        scrollTranscriptTo(hasTestTag(key))
-        verify("the card is titled for the coordinator", says(key, CoordinatorQueue.title))
-        verify("it says why it waits", textOf("$key:paused") ==
-            "Coordinator paused · weekly limit · resets ${OwnerReview.receiptTime(retryAt)}")
-        verify("and that the owner may still decide", textOf("$key:note") == CoordinatorQueue.explanation)
-        verify("it asks nothing yet", !exists(hasTestTag("$key:CONFIRM_EVIDENCE")) && !exists(hasTestTag("$key:SEND_BACK")))
-        verify("the sent revision is one line", textOf("evidence:$sentTask:1").ifEmpty {
-            compose.onAllNodes(hasAnyAncestor(hasTestTag("evidence:$sentTask:1")), useUnmergedTree = true).fetchSemanticsNodes()
-                .mapNotNull { it.config.getOrNull(SemanticsProperties.Text)?.joinToString("") { t -> t.text } }.joinToString("")
-        } == CoordinatorQueue.sentLine(OwnerReview.receiptTime(sentAt)))
-        verify("nothing waiting for the coordinator is counted", !exists(hasTestTag("needs-you-bar")))
-        capture("01-waiting-card")
-        compose.onNodeWithTag("$key:DECIDE_MYSELF").performScrollTo().performClick()
-        await("today's evidence card in place") { exists(hasTestTag("$key:CONFIRM_EVIDENCE")) }
-        verify("deciding here is the owner's choice", textOf("$key:note") == CoordinatorQueue.decideHere)
-        compose.onNodeWithTag("$key:SEND_BACK").performScrollTo()
-        capture("02-decide-it-myself")
-    }
-
     /** A08-19: the owner's answer handed to the coordinator is one grey line that opens to the words the agent read. */
     @Test fun ownersAnswerToTheCoordinatorIsOneLine() = journey {
         openConversation()
@@ -286,11 +260,13 @@ class CardIncrementsDeviceTest : IncrementDeviceTest() {
     /** B19: the session-request, reply, task-start, delivery and project-start cards, and the sender's door. */
     @Test fun sessionRequestReplyDeliveryAndSourceCards() = journey {
         openConversation()
-        scrollTranscriptTo(hasText("Message from another session"))
-        verify("the request card", exists(hasText("Message from another session")) && exists(hasText("Can you confirm the tag?"), unmerged = true))
+        // The message is a bubble (docs/mocks/session-message-bubble): who sent it above, its words in it, the request on its foot.
+        scrollTranscriptTo(hasTestTag("session-message:from"))
+        verify("the message bubble", exists(hasTestTag("session-message:from") and hasText("Release checklist"), unmerged = true) &&
+            exists(hasText("Message from Release checklist"), unmerged = true))
         await("the request's state read from the server") { calls.any { it == "GET session-requests/$request" } }
-        await("the request's state drawn") { exists(hasText("REPLIED"), unmerged = true) }
-        verify("the recipient answers it", exists(hasText("The recipient session answers this request."), unmerged = true))
+        await("the request's state drawn") { exists(hasText("Replied"), unmerged = true) }
+        verify("it asked for a reply", exists(hasText("Asked for a reply · "), unmerged = true))
         capture("01-session-request")
         scrollTranscriptTo(hasText("Session reply · REPLIED"))
         verify("the reply card says what came back", exists(hasText("Tagged v0.1.230."), unmerged = true))
@@ -303,8 +279,8 @@ class CardIncrementsDeviceTest : IncrementDeviceTest() {
         scrollTranscriptTo(hasText("Project started"))
         verify("the project-start card", exists(hasText("Release 0.1.230"), unmerged = true))
         capture("04-project-started")
-        scrollTranscriptTo(hasText("Message from another session"))
-        compose.onAllNodes(hasText("Open sender session") and hasClickAction()).onFirst().performScrollTo().performClick()
+        scrollTranscriptTo(hasTestTag("session-message:from"))
+        compose.onAllNodes(hasTestTag("session-message:from") and hasClickAction()).onFirst().performScrollTo().performClick()
         await("the sender's session opens") { app.realtime.state.value.session?.id?.let { io.orbitd.android.navigation.ObjectId.same(it, sender) } == true }
         awaitText("Asking the coordinator.")
         capture("05-sender-session")

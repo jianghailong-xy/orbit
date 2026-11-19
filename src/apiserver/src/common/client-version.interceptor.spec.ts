@@ -112,6 +112,18 @@ test('writes immediately when the version changes', async () => {
   );
 });
 
+// Two builds of one kind at once (an old tab beside a new one): each is written once an hour, not on every
+// request. Production, 2026-11-19: alternating beta.52 and beta.53 rewrote one row ~4 times a second.
+test('two builds of one client kind alternating write once each per hour', async () => {
+  const { calls, hit } = harness();
+  for (let i = 0; i < 50; i++) hit(i % 2 === 0 ? 'web/0.1.261-beta.52' : 'web/0.1.261-beta.53');
+  await settle();
+  assert.deepEqual(
+    calls.map((c) => c.create.version),
+    ['0.1.261-beta.52', '0.1.261-beta.53'],
+  );
+});
+
 // Same user, two clients: the stale phone has to stay visible behind the current browser.
 test('tracks each client kind separately', async () => {
   const { calls, hit } = harness();

@@ -16,12 +16,11 @@ import (
 	"time"
 )
 
-// What each route is, in the stats: the routes the gateway calls (backend.go, revocations.go, mode.go, welcome.go,
-// heartbeat.go, events.go, events_merge.go, forward.go) and the loadgen's link token.
+// What each route is, in the stats: the routes the gateway calls (backend.go, revocations.go, welcome.go, heartbeat.go,
+// events.go, events_merge.go, forward.go) and the loadgen's link token.
 const (
 	routeLinkToken    = "link_token"
 	routeRevocations  = "revocations"
-	routeMode         = "mode"
 	routeWelcome      = "welcome"
 	routeHeartbeat    = "heartbeat"
 	routeEvents       = "events"
@@ -30,7 +29,7 @@ const (
 	routeUnknown      = "unknown"
 )
 
-var routeNames = []string{routeLinkToken, routeRevocations, routeMode, routeWelcome, routeHeartbeat, routeEvents,
+var routeNames = []string{routeLinkToken, routeRevocations, routeWelcome, routeHeartbeat, routeEvents,
 	routeEventsMerged, routeRPC, routeUnknown}
 
 // maxBody bounds a call's body: a merged call carries at most 2 MiB of events (LINK_EVENT_MERGE_MAX_BYTES) and its
@@ -44,7 +43,6 @@ var (
 	quietBeat = []byte(`{"cancelSessionIds":[],"leaseLostSessionIds":[],"maxConcurrent":2,"minFreeDiskMb":0,` +
 		`"mergeRequests":[],"commitRequests":[],"artifactRequests":[],` +
 		`"linkHints":{"inboxSessionIds":[],"claim":false,"approvals":[]}}`)
-	modeOn      = []byte(`{"required":true}`)
 	emptyObject = []byte(`{}`)
 )
 
@@ -146,8 +144,6 @@ func (s *stub) answer(r *http.Request, body []byte, readErr error) (string, int,
 	case routeRevocations:
 		b, _ := json.Marshal(map[string]any{"since": iso(s.now().Add(-revocationWindow)), "revocations": []any{}})
 		return route, http.StatusOK, b
-	case routeMode:
-		return route, http.StatusOK, modeOn
 	case routeWelcome:
 		status, answer := welcome(body)
 		return route, status, answer
@@ -170,8 +166,6 @@ func routeOf(method, p string) string {
 	switch {
 	case method == http.MethodGet && p == "/api/runner/link-token/revocations":
 		return routeRevocations
-	case method == http.MethodGet && p == "/api/runner/link/mode":
-		return routeMode
 	case method == http.MethodPost && p == "/api/runner/link/welcome":
 		return routeWelcome
 	case method == http.MethodPost && p == "/api/runner/heartbeat":

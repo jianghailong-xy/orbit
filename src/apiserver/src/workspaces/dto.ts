@@ -9,6 +9,7 @@ import {
   IsOptional,
   IsString,
   Matches,
+  Max,
   Min,
   MinLength,
   ValidateNested,
@@ -16,6 +17,9 @@ import {
 import { IsPublicId } from '../common/public-id';
 import { ACCOUNT_ID_PATTERN } from '../runners/dto';
 import { MODEL_ROUTING_ENGINES } from '../tasks/model-routing';
+
+/** The most SubAgents one session may run at once that the owner can set (docs/subagent-design.md §7). */
+export const SUBAGENTS_MAX_RUNNING_LIMIT = 16;
 
 export class ProviderFallbackDto {
   @IsString() @MinLength(1) provider!: string;
@@ -51,6 +55,13 @@ export class CreateWorkspaceDto {
   // the project directory it runs in. Both are otherwise minted by `orbit register`.
   @IsOptional() @IsPublicId() runnerId?: string;
   @IsOptional() @IsString() workDir?: string;
+  /** In place of workDir: a new folder of this name under the runner's reposRoot, made by the runner before
+   *  this workspace's first session starts (the claim's createWorkDir). Needs runnerId. */
+  @IsOptional() @IsString() newFolder?: string;
+  /** In place of workDir and newFolder: a clone of one of the caller's GitHub repositories, { repoId, ref?, folder? }
+   *  (docs/github-workspace-design.md §5.3), into `<reposRoot>/<folder>`. Needs runnerId. Read and refused as POST
+   *  /sessions `newWorkspace.github` is; the runner clones it on its next reconcile, and sessions wait for the clone. */
+  @IsOptional() @IsObject() github?: Record<string, unknown>;
   // Explicit repository address; when empty, the runner's directory probe can backfill it from
   // origin. Used for project integration, never to clone or change the checkout.
   @IsOptional() @IsString() repoUrl?: string;
@@ -80,12 +91,19 @@ export class CreateWorkspaceDto {
   // The owner's alone: it decides what runs cost, so the agent tools' whitelist
   // (runner-agents.controller.ts ORCHESTRATOR_WORKSPACE_CREATE_FIELDS) deliberately leaves it out.
   @IsOptional() @IsBoolean() modelRouting?: boolean;
+  @IsOptional() @IsIn(['cost', 'balance', 'intelligence'])
+  modelRoutingOptimizeFor?: 'cost' | 'balance' | 'intelligence';
   // The other engines smart selection may move this Agent's task runs to (§6): only engines with a
   // tier table, and only the owner's to name, for the same reason as the switch. Empty (the
   // default) keeps every run on this Agent's own engine.
   @IsOptional() @IsArray() @ArrayMaxSize(MODEL_ROUTING_ENGINES.length)
   @IsIn(MODEL_ROUTING_ENGINES, { each: true })
   modelRoutingProviders?: string[];
+  // SubAgents (docs/subagent-design.md §6.2, §7): whether this Agent's sessions may delegate, and how many
+  // of one session's SubAgents run at once. Human-only like modelRouting: the runner's whitelist
+  // (ORCHESTRATOR_WORKSPACE_CREATE_FIELDS) leaves them out and refuses them by name (HUMAN_ONLY_WORKSPACE_FIELDS).
+  @IsOptional() @IsBoolean() subagentsEnabled?: boolean;
+  @IsOptional() @IsInt() @Min(1) @Max(SUBAGENTS_MAX_RUNNING_LIMIT) subagentsMaxRunning?: number;
 }
 
 export class UpdateWorkspaceDto {
@@ -128,10 +146,15 @@ export class UpdateWorkspaceDto {
   @IsOptional() @IsString() defaultMergeTarget?: string;
   /** See CreateWorkspaceDto.modelRouting. Absent leaves the switch as it is. */
   @IsOptional() @IsBoolean() modelRouting?: boolean;
+  @IsOptional() @IsIn(['cost', 'balance', 'intelligence'])
+  modelRoutingOptimizeFor?: 'cost' | 'balance' | 'intelligence';
   /** See CreateWorkspaceDto.modelRoutingProviders. Absent leaves the list as it is; [] empties it. */
   @IsOptional() @IsArray() @ArrayMaxSize(MODEL_ROUTING_ENGINES.length)
   @IsIn(MODEL_ROUTING_ENGINES, { each: true })
   modelRoutingProviders?: string[];
+  /** See CreateWorkspaceDto.subagentsEnabled. Absent leaves each as it is. */
+  @IsOptional() @IsBoolean() subagentsEnabled?: boolean;
+  @IsOptional() @IsInt() @Min(1) @Max(SUBAGENTS_MAX_RUNNING_LIMIT) subagentsMaxRunning?: number;
 }
 
 // The full workspace list in the desired sidebar order; each id's index becomes its position.

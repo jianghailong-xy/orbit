@@ -1,0 +1,215 @@
+<!-- DESIGN MOCK (2026-11-19). The browser viewer has too little room to act in: a 1280x800 screen squeezed into a
+     narrow drawer. Proposal (option C, owner 2026-11-19): the viewer opens in a browser tab of its own; the drawer stays for a quick look.
+     Annotations in Chinese, UI copy in English, demo page content. Render: see README.md -->
+<!doctype html><html lang="zh"><meta charset="utf-8">
+<title>Orbit Cloud 浏览器：在自己的标签页里打开</title>
+<style>
+  :root { --brand:#3E69F6; --brand-bg:#EAF0FF; --t1:#111114; --t2:#8a8a90; --sep:#e4e4e8; --amber:#b86e00; --amber-bg:#FDF2E6; --green:#23a15a; }
+  * { box-sizing:border-box; }
+  body { margin:0; padding:36px 40px 48px; width:1540px; background:#ececef; color:var(--t1);
+         font:14px/1.5 -apple-system,"Inter","Noto Sans SC",sans-serif; -webkit-font-smoothing:antialiased; }
+  h1 { font-size:25px; margin:0 0 6px; } .lede { color:#55555e; margin:0 0 24px; max-width:1440px; }
+  .part { margin-bottom:34px; }
+  .fh { font-weight:700; font-size:15px; margin:0 0 8px; display:flex; gap:8px; align-items:center; }
+  .fh small { font-weight:400; color:#6b6b75; font-size:12.5px; }
+  .tag { font:600 11.5px/1 sans-serif; padding:4px 7px; border-radius:5px; background:#dcf3e5; color:#17683b; }
+  .tag.grey { background:#e6e6ea; color:#55555e; } .tag.red { background:#fde8e6; color:#b3261e; }
+  .note { font-size:12.5px; color:#55555e; margin:8px 2px 0; line-height:1.7; max-width:1460px; } .note b { color:var(--t1); }
+  code { font:12px "JetBrains Mono","DejaVu Sans Mono",monospace; }
+  .sheet { background:#fff; border-radius:12px; padding:18px 22px; }
+  .sheet h2 { font-size:16px; margin:0 0 10px; }
+  table { border-collapse:collapse; width:100%; font-size:12.5px; } td, th { border-top:1px solid #eee; padding:6px 8px; text-align:left; vertical-align:top; }
+  th { color:#6b6b75; font-weight:600; background:#fafafb; }
+  .two { display:grid; grid-template-columns:1fr 1fr; gap:28px; }
+  .q { background:#fff7e6; border:1px solid #f1d9a8; border-radius:10px; padding:12px 16px; margin-top:20px; font-size:13px; line-height:1.7; }
+  .q b { color:#7a4a00; }
+  .cv-x { position:relative; } .cv-x::after { content:attr(data-n); position:absolute; top:-9px; right:-9px; width:19px; height:19px; border-radius:50%;
+       background:#d93838; color:#fff; font:700 11.5px/19px sans-serif; text-align:center; z-index:5; }
+
+  /* app window */
+  .cv-win { width:1460px; height:820px; background:#fff; border-radius:12px; box-shadow:0 1px 0 #d5d5da, 0 6px 24px rgba(0,0,0,.06); overflow:hidden; position:relative; font-size:13px; }
+  .cv-win.small { width:715px; height:470px; }
+  .cv-top { height:30px; background:#f3f3f5; border-bottom:1px solid var(--sep); display:flex; align-items:center; gap:6px; padding:0 12px; }
+  .cv-top i { width:10px; height:10px; border-radius:50%; background:#d9d9de; display:inline-block; }
+  .cv-app { position:absolute; inset:30px 0 0 0; display:flex; }
+  .cv-nav { width:220px; background:#f7f7f9; border-right:1px solid var(--sep); padding:14px 12px; color:#333; font-size:13px; flex:none; }
+  .cv-nav div { padding:5px 8px; border-radius:6px; } .cv-nav .on { background:#e7ecfb; color:#2546b8; font-weight:600; }
+  .cv-nav .h { color:#8a8a90; font-size:11.5px; margin-top:10px; }
+  .cv-page { flex:1; padding:20px 26px; color:#333; overflow:hidden; }
+  .cv-page h3 { margin:0 0 10px; font-size:15px; }
+  .cv-card { border:1px solid var(--sep); border-radius:10px; padding:10px 14px; margin-bottom:12px; }
+  .cv-card .r { padding:6px 0; border-top:1px solid #f0f0f2; } .cv-card .r:first-child { border-top:0; }
+  .cv-sub { color:#8a8a90; font-size:12px; }
+  .cv-redl { color:#d93025; }
+  .cv-scrim { position:absolute; inset:30px 0 0 0; background:rgba(20,20,28,.35); }
+
+  /* drawer + viewer */
+  .cv-drawer { position:absolute; top:30px; right:0; bottom:0; background:#fff; border-left:1px solid var(--sep); display:flex; flex-direction:column; }
+  .cv-hd { display:flex; align-items:center; gap:10px; padding:10px 14px; border-bottom:1px solid var(--sep); }
+  .cv-hd.ctl { background:var(--amber-bg); border-bottom-color:#f1d9a8; }
+  .cv-hd .tt { flex:1; font-weight:600; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+  .cv-hd.ctl .tt { color:#c0661a; }
+  .cv-hd .tt small { font-weight:400; color:#9a6a30; margin-left:6px; }
+  .cv-cl { color:#8a8a90; font-size:17px; line-height:1; }
+  .cv-btn { border-radius:8px; padding:5px 12px; font-weight:600; font-size:12.5px; background:#fff; color:var(--t1); border:1px solid #d6d6dc; white-space:nowrap; }
+  .cv-btn.pri { background:var(--brand); color:#fff; border-color:var(--brand); }
+  .cv-ico { width:28px; height:28px; border-radius:7px; border:1px solid #d6d6dc; display:grid; place-items:center; font-size:14px; color:#444; background:#fff; }
+  .cv-seg { display:inline-flex; border:1px solid #d6d6dc; border-radius:8px; overflow:hidden; font-size:12px; font-weight:600; }
+  .cv-seg span { padding:4px 10px; color:#55555e; background:#fff; } .cv-seg span.on { background:#eef0f4; color:var(--t1); }
+  .cv-stage { flex:1; padding:12px; background:#f6f7f9; display:flex; align-items:center; justify-content:center; min-height:0; }
+  .cv-stage.top { align-items:flex-start; }
+  .cv-ft { display:flex; align-items:center; gap:12px; padding:7px 14px; border-top:1px solid var(--sep); color:#6b6b75; font-size:12px; }
+  .cv-ft .r { margin-left:auto; display:flex; gap:12px; align-items:center; }
+  .cv-live { color:var(--green); font-weight:600; }
+
+  /* the remote Chrome (1280x800 drawn at a given width via --w) */
+  .cv-chrome { width:1280px; height:800px; zoom:var(--s); background:#fff; border:2px solid #cfd3da; position:relative; overflow:hidden; flex:none; font-size:15px; }
+  .cv-chrome.ctl { border:calc(3px / var(--s)) solid #f0a020; }
+  .cv-info.cv-x::after { zoom:calc(1 / var(--s)); top:4px; right:auto; left:8px; }
+  .cv-chrome.cv-x::after { zoom:calc(1 / var(--s)); top:6px; right:6px; }
+  .cv-tabs { height:3.2em; background:#dfe3ea; display:flex; align-items:flex-end; padding:0 .8em; gap:.4em; }
+  .cv-tab { background:#fff; border-radius:.6em .6em 0 0; padding:.5em 1em; font-size:.85em; width:16em; }
+  .cv-omni { height:3em; display:flex; align-items:center; gap:.8em; padding:0 1em; border-bottom:1px solid #e3e6eb; color:#5f6368; }
+  .cv-omni .u { flex:1; background:#f1f3f4; border-radius:1.5em; padding:.35em 1em; color:#202124; font-size:.9em; }
+  .cv-info { height:2.6em; display:flex; align-items:center; justify-content:center; background:#fff; border-bottom:1px solid #e3e6eb; color:#3c4043; font-size:.82em; }
+  .cv-g { text-align:center; padding-top:4.2em; position:relative; }
+  .cv-g .logo { font:700 4.6em/1 "Inter",sans-serif; letter-spacing:-.02em; }
+  .cv-g .logo b:nth-child(1){color:#4285f4} .cv-g .logo b:nth-child(2){color:#ea4335} .cv-g .logo b:nth-child(3){color:#fbbc05}
+  .cv-g .logo b:nth-child(4){color:#4285f4} .cv-g .logo b:nth-child(5){color:#34a853} .cv-g .logo b:nth-child(6){color:#ea4335}
+  .cv-g .box { width:36em; height:3em; border:1px solid #dfe1e5; border-radius:1.5em; margin:1.6em auto 1.2em; box-shadow:0 1px 4px rgba(0,0,0,.08); }
+  .cv-g .bt span { display:inline-block; background:#f8f9fa; border-radius:.3em; padding:.6em 1.1em; margin:0 .3em; font-size:.85em; color:#3c4043; }
+  .cv-g .sg { position:absolute; right:1.2em; top:1em; background:#1a73e8; color:#fff; border-radius:1.2em; padding:.4em 1.1em; font-size:.85em; }
+  .cv-cur { position:absolute; width:0; height:0; border-left:.5em solid transparent; border-right:.5em solid transparent; border-bottom:1em solid #111; transform:rotate(-30deg); }
+
+  .cv-cap { font-size:12.5px; color:#55555e; margin:8px 2px 0; }
+  /* the owner's own browser window around the Orbit tab */
+  .lb-tabs { height:38px; background:#e3e6ec; display:flex; align-items:flex-end; gap:4px; padding:0 10px 0 84px; position:relative; }
+  .lb-tabs::before { content:'● ● ●'; position:absolute; left:14px; top:11px; color:#c9ccd3; font-size:11px; letter-spacing:2px; }
+  .lb-tab { height:30px; border-radius:9px 9px 0 0; padding:7px 14px; font-size:12px; color:#55555e; width:230px; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+  .lb-tab.on { background:#fff; color:var(--t1); font-weight:500; }
+  .lb-url { height:38px; display:flex; align-items:center; gap:10px; padding:0 12px; border-bottom:1px solid var(--sep); color:#6b6b75; font-size:12px; }
+  .lb-url .u { flex:1; background:#f1f3f4; border-radius:16px; padding:5px 14px; color:#202124; }
+  .lb-page { position:absolute; left:0; right:0; bottom:0; display:flex; flex-direction:column; }
+  .cv-pair { display:grid; grid-template-columns:715px 715px; gap:30px; }
+  .cv-grey { color:#8a8a90; }
+</style>
+
+<h1>Orbit Cloud 浏览器：在自己的标签页里打开</h1>
+<p class="lede">问题（2026-11-19，真机截图）：1280×800 的横屏画面塞进一个竖长的窄抽屉，只剩一半大小，上下三分之二是空灰，字看不清、点不准；而接管的时候恰恰是要打字登录的时候。
+  提案（方案 C，你 11-19 提的）：<b>浏览器在自己的标签页里打开</b>，整个标签页就是画面，可以和会话并排、放到第二块屏；抽屉留着快速看一眼。另加 <b>粘贴</b>、<b>Fit / 100%</b>，去掉 Chrome 的 <code>--no-sandbox</code> 提示条。远端屏幕保持 1280×800 不变（agent 共用同一块屏，中途改尺寸会打乱它的页面）。界面文案英文，注释中文，网页是演示内容。</p>
+
+<!-- =================================================================== PART 1 -->
+<section class="part" id="part-1">
+  <div class="fh">① 今天：Settings → Open browser <span class="tag red">太挤</span> <small>按真机截图复原：抽屉约窗口的 1/3 宽</small></div>
+  <div class="cv-win">
+    <div class="cv-top"><i></i><i></i><i></i></div>
+    <div class="cv-app">
+      <div class="cv-nav"><div>Back to Orbit</div><div class="h">Machines</div><div class="on">Orbit Cloud</div><div>HPC</div><div>wikova</div><div class="h">Providers</div><div>API keys</div></div>
+      <div class="cv-page"><h3>Browser</h3>
+        <div class="cv-card"><div class="r">Browser<div class="cv-sub">Running · you are in control</div></div><div class="r">Saved logins<div class="cv-sub">Sites you sign in to here stay signed in on this runner. Agents on this runner can use them.</div></div><div class="r cv-redl">Clear saved logins</div></div>
+        <h3>Capacity</h3><div class="cv-card"><div class="r">Max Concurrent</div><div class="r">Keep Free</div></div>
+      </div>
+    </div>
+    <div class="cv-drawer" style="width:500px">
+      <div class="cv-hd ctl"><span class="cv-cl">✕</span><span class="tt">You are controlling the browser</span><span class="cv-btn">Done</span></div>
+      <div class="cv-stage cv-x" data-n="1">
+        <div class="cv-chrome ctl cv-x" data-n="2" style="--s:0.3703">
+          <div class="cv-tabs"><div class="cv-tab">Google</div></div>
+          <div class="cv-omni">← → ⟳ <span class="u">google.com</span></div>
+          <div class="cv-info cv-x" data-n="3">You are using an unsupported command-line flag: --no-sandbox. Stability and security will suffer.</div>
+          <div class="cv-g"><div class="logo"><b>G</b><b>o</b><b>o</b><b>g</b><b>l</b><b>e</b></div><div class="box"></div><div class="bt"><span>Google Search</span><span>I'm Feeling Lucky</span></div><span class="sg">Sign in</span></div>
+        </div>
+      </div>
+      <div class="cv-ft"><span>Not in use by any session</span><span class="r"><span>Scaled to fit</span><span class="cv-live">Live</span></span></div>
+    </div>
+  </div>
+  <p class="note"><b>①</b> 竖长抽屉配横屏画面：画面按宽度缩到约 37%，上下各一大片空灰。<b>②</b> 字号约 5–6px，输入框和按钮都很小，登录时点不准。<b>③</b> <code>--no-sandbox</code> 提示条：在本来就小的画面里再占一行，而且看着吓人；这个参数是有意的（容器本身就是隔离边界），提示条可以关掉。左边 Settings 页这时用不上，却占着 2/3 的宽度。</p>
+</section>
+
+<!-- =================================================================== PART 2 -->
+<section class="part" id="part-2">
+  <div class="fh">② 提案：浏览器在自己的标签页里，接管中 <span class="tag">方案 C</span> <small>Settings 的 Open browser、会话的 Take control 都开这个标签页，已在接管状态</small></div>
+  <div class="cv-win">
+    <div class="lb-tabs"><div class="lb-tab">Orbit · Settings</div><div class="lb-tab on cv-x" data-n="1">Browser · Orbit Cloud</div></div>
+    <div class="lb-url">← → ⟳ <span class="u">orbitd.io/runners/34yH8NT9Kn7DjK3adYCAE/browser</span></div>
+    <div class="lb-page" style="top:77px">
+      <div class="cv-hd ctl">
+        <span class="tt">You are controlling the browser<small>· the agent keeps running</small></span>
+        <span class="cv-seg cv-x" data-n="2" style="margin-right:10px"><span class="on">Fit</span><span>100%</span></span>
+        <span class="cv-btn cv-x" data-n="3">Done</span>
+      </div>
+      <div class="cv-stage"><div class="cv-chrome ctl cv-x" data-n="4" style="--s:0.80"><div class="cv-tabs"><div class="cv-tab">Google</div></div><div class="cv-omni">← → ⟳ <span class="u">google.com</span></div><div class="cv-g"><div class="logo"><b>G</b><b>o</b><b>o</b><b>g</b><b>l</b><b>e</b></div><div class="box"></div><div class="bt"><span>Google Search</span><span>I'm Feeling Lucky</span></div><span class="sg">Sign in</span></div></div></div>
+      <div class="cv-ft"><span>Not in use by any session</span><span class="r"><span class="cv-x" data-n="5" style="margin-right:12px">Paste with ⌘V</span><span>1280 × 800 · 80%</span><span class="cv-live">Live</span></span></div>
+    </div>
+  </div>
+  <p class="note"><b>①</b> 一个普通的浏览器标签页（同站点，沿用你的 Orbit 登录，不用再登一次），只有画面和一条细栏，没有 Orbit 的导航；标题 <code>Browser · Orbit Cloud</code> 好找。整个标签页给画面，按浏览器自己的全屏（F11 / ⌃⌘F）还能更大；可以拖出来放到会话旁边或第二块屏。
+    <b>②</b> Fit 缩放到放得下；100% 按 1:1，放不下就在框里滚动。<b>③</b> Done：停止发输入、回到只看（标签页留着）；什么都不发给 agent。关标签页 = 关掉这条查看流。
+    <b>④</b> 画面，没有 <code>--no-sandbox</code> 提示条。<b>⑤</b> <b>粘贴（今天不支持）</b>：接管时 ⌘V / Ctrl+V 把你电脑剪贴板里的文字送过去并粘贴（Mac 的 ⌘ 换成远端的 Ctrl）；远端复制的文字也回到你的剪贴板（浏览器先问一次权限）。只看时不发任何东西。</p>
+</section>
+
+<!-- =================================================================== PART 3 -->
+<section class="part" id="part-3">
+  <div class="fh">③ 抽屉留着快速看一眼；标签页只看时 <small>抽屉的 Expand 换成 Open in new tab</small></div>
+  <div class="cv-pair">
+    <div>
+      <div class="cv-win small">
+        <div class="cv-top"><i></i><i></i><i></i></div>
+        <div class="cv-app"><div class="cv-page" style="padding:14px 16px"><h3>Sign in to the dashboard and export the report</h3><div class="cv-sub">browser_navigate · browser_click · browser_type …</div></div></div>
+        <div class="cv-drawer" style="width:430px">
+          <div class="cv-hd"><span class="cv-cl">✕</span><span class="tt">Browser <span class="cv-grey" style="font-weight:400">· used by this session</span></span>
+            <span class="cv-btn cv-x" data-n="1">↗ Open in new tab</span><span class="cv-btn pri cv-x" data-n="2">Take control</span></div>
+          <div class="cv-stage"><div class="cv-chrome " style="--s:0.3156"><div class="cv-tabs"><div class="cv-tab">Google</div></div><div class="cv-omni">← → ⟳ <span class="u">google.com</span></div><div class="cv-g"><div class="logo"><b>G</b><b>o</b><b>o</b><b>g</b><b>l</b><b>e</b></div><div class="box"></div><div class="bt"><span>Google Search</span><span>I'm Feeling Lucky</span></div><span class="sg">Sign in</span></div></div></div>
+          <div class="cv-ft"><span>View only</span><span class="r"><span>Fit</span><span class="cv-live">Live</span></span></div>
+        </div>
+      </div>
+      <p class="cv-cap"><b>①</b> 在新标签页里打开，仍然只看；抽屉随之关上，它的查看流让给标签页（每台 runner 最多 2 条）。<b>②</b> Take control：开新标签页，直接在接管状态（同 ②）。</p>
+    </div>
+    <div>
+      <div class="cv-win small">
+        <div class="lb-tabs" style="padding-left:70px"><div class="lb-tab" style="width:150px">Orbit · Sign in to…</div><div class="lb-tab on" style="width:180px">Browser · Orbit Cloud</div></div>
+        <div class="lb-url"><span class="u">orbitd.io/runners/34yH8NT9Kn7DjK3adYCAE/browser</span></div>
+        <div class="lb-page" style="top:77px">
+          <div class="cv-hd"><span class="tt">Watching the browser <span class="cv-grey" style="font-weight:400">· used by “Sign in to the dashboard…”</span></span>
+            <span class="cv-btn pri cv-x" data-n="3">Take control</span></div>
+          <div class="cv-stage"><div class="cv-chrome " style="--s:0.40"><div class="cv-tabs"><div class="cv-tab">Google</div></div><div class="cv-omni">← → ⟳ <span class="u">google.com</span></div><div class="cv-g"><div class="logo"><b>G</b><b>o</b><b>o</b><b>g</b><b>l</b><b>e</b></div><div class="box"></div><div class="bt"><span>Google Search</span><span>I'm Feeling Lucky</span></div><span class="sg">Sign in</span></div></div></div>
+          <div class="cv-ft"><span class="cv-x" data-n="4" style="margin-right:14px">View only</span><span class="r"><span>1280 × 800 · 40%</span><span class="cv-live">Live</span></span></div>
+        </div>
+      </div>
+      <p class="cv-cap"><b>③</b> 标签页只看时，头部写正在用它的会话（可点回会话）；Take control 就在这里接管。<b>④</b> 只看时键鼠和粘贴都不发。这一格窗口画得小，所以比例低。</p>
+    </div>
+  </div>
+</section>
+
+<!-- =================================================================== PART 4 -->
+<section class="part" id="part-4">
+  <div class="two">
+    <div class="sheet">
+      <h2>三个方案，选 C</h2>
+      <table>
+        <tr><th></th><th>A 窗口内浮层</th><th>B 抽屉拉宽</th><th>C 自己的标签页 <span class="tag">建议</span></th></tr>
+        <tr><td>地方</td><td>大</td><td>中，左边留一条</td><td><b>最大</b>：整个标签页，可全屏、可拖到第二块屏</td></tr>
+        <tr><td>同时看对话</td><td>不行（盖住）</td><td>勉强</td><td><b>能</b>：两个窗口并排</td></tr>
+        <tr><td>实现</td><td>新浮层，画布挪过去</td><td>Drawer 加宽度档</td><td>一个新页面，只放现有查看器 + 细栏</td></tr>
+        <tr><td>注意</td><td>—</td><td>—</td><td>每台最多 2 条流：开标签页时让抽屉那条让出来</td></tr>
+      </table>
+      <div class="q"><b>建议 C。</b>地方最多、能和会话并排，而且做起来最省：查看器本来就是独立组件，新页面只是把它单独放出来。A 不用做了。</div>
+    </div>
+    <div class="sheet">
+      <h2>不变的</h2>
+      <table>
+        <tr><td>远端屏幕</td><td>保持 1280×800；不跟着查看器变尺寸（agent 共用同一块屏）</td></tr>
+        <tr><td>输入</td><td>共享输入，不打断 agent（P3 = B）；Done / 关标签页只是停止发输入</td></tr>
+        <tr><td>谁能看</td><td>只有 runner 的主人（P4 = A）；最多 2 条查看流；标签页地址给别人也打不开</td></tr>
+        <tr><td>开关</td><td>关着时页面 404，入口都不出现</td></tr>
+      </table>
+      <h2 style="margin-top:18px">落地（按代价排）</h2>
+      <table>
+        <tr><td>1</td><td>去掉 <code>--no-sandbox</code> 提示条：runner 启 Chrome 时加 <code>--test-type</code>（只关这类提示）；随 runner 镜像发</td></tr>
+        <tr><td>2</td><td><b>粘贴</b>：接管时 ⌘V / Ctrl+V 送本机剪贴板文字，远端复制的回到本机</td></tr>
+        <tr><td>3</td><td>标签页 <code>/runners/:id/browser</code>：只看 / 接管、Fit / 100%、Done；Open browser 和 Take control 打开它；抽屉加 Open in new tab，让出查看流</td></tr>
+        <tr><td>4</td><td>组件测试 + 真页截图对比本板</td></tr>
+      </table>
+    </div>
+  </div>
+</section>
+</html>

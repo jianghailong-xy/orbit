@@ -1,0 +1,675 @@
+{
+  "about": "The repository part of the Settings maintenance card (docs/wiki-repo-tiers-design.md §7.3, mock 44 part 5): for each health, the tag, the line, whether Check again and run now may be pressed and why not, and whether Use this folder is offered; null when the card has nothing to set right. Web lib/wikiRepoCard.ts, OrbitKit WikiRepoCardLogic and Android WikiRepoCardLogic are each held to it.",
+  "now": "2026-09-28T12:00:00.000Z",
+  "copy": {
+    "checkAndRun": "Check again and run now",
+    "changeWorkspace": "Change workspace…",
+    "useFolder": "Use this folder",
+    "useFolderTitle": "Use this folder?",
+    "useFolderNote": "The next run keeps this folder's snapshot even though it shares few files with the last one, and later runs compare with it.",
+    "dailyLimit": "Daily limit reached",
+    "runUnderWay": "A run is under way",
+    "runStarted": "Maintenance run started",
+    "runRefused": "Couldn't start the run",
+    "probeChecking": "Checking the folder…",
+    "probeFailed": "Could not check the folder"
+  },
+  "cases": [
+    {
+      "name": "git, the last run succeeded: nothing to set right",
+      "health": {
+        "spaceId": "34VR0RwUSIcaoO7ZZqv52",
+        "entries": 11689,
+        "maintenance": {
+          "look": "ok",
+          "enabled": true,
+          "lastOkAt": "2026-09-28T10:00:00.000Z",
+          "lastRunAt": "2026-09-28T10:00:00.000Z",
+          "consecutiveFailures": 0,
+          "backlog": 3,
+          "oldestPendingAt": "2026-09-28T09:00:00.000Z",
+          "lagSeconds": 10800,
+          "dailyLimitReached": false,
+          "held": null,
+          "running": null,
+          "lastRun": {
+            "sessionId": null,
+            "jobId": "34cE0job0000000000009",
+            "outcome": "succeeded",
+            "endedAt": "2026-09-28T10:00:00.000Z"
+          },
+          "lastFailure": null
+        },
+        "repo": {
+          "look": "ready",
+          "workspace": {
+            "id": "34VR0RwUSIcaoO7ZZqv5w",
+            "workDir": "~/work/app"
+          },
+          "runner": {
+            "id": "34VR0RwUSIcaoO7ZZqv5r",
+            "name": "MacBook",
+            "version": "0.1.223",
+            "capability": true,
+            "online": true
+          },
+          "pending": 0,
+          "tier": "git",
+          "reason": null,
+          "detail": null,
+          "checkedAt": "2026-09-28T10:00:00.000Z"
+        },
+        "executor": {
+          "mode": "server",
+          "serverExecutes": true
+        },
+        "systemModel": {
+          "state": "up",
+          "model": "qwen3.8-27b-fp8",
+          "since": "2026-09-28T11:00:00.000Z",
+          "checkedAt": "2026-09-28T11:59:55.000Z",
+          "workerSeenAt": "2026-09-28T11:59:55.000Z"
+        }
+      },
+      "card": null
+    },
+    {
+      "name": "maintenance off: no card part",
+      "health": {
+        "spaceId": "34VR0RwUSIcaoO7ZZqv52",
+        "entries": 11689,
+        "maintenance": {
+          "look": "off",
+          "enabled": false,
+          "lastOkAt": "2026-09-28T10:00:00.000Z",
+          "lastRunAt": "2026-09-28T10:00:00.000Z",
+          "consecutiveFailures": 0,
+          "backlog": 3,
+          "oldestPendingAt": "2026-09-28T09:00:00.000Z",
+          "lagSeconds": 10800,
+          "dailyLimitReached": false,
+          "held": null,
+          "running": null,
+          "lastRun": {
+            "sessionId": null,
+            "jobId": "34cE0job0000000000009",
+            "outcome": "succeeded",
+            "endedAt": "2026-09-28T10:00:00.000Z"
+          },
+          "lastFailure": null
+        },
+        "repo": {
+          "look": "ready",
+          "workspace": {
+            "id": "34VR0RwUSIcaoO7ZZqv5w",
+            "workDir": "~/work/app"
+          },
+          "runner": {
+            "id": "34VR0RwUSIcaoO7ZZqv5r",
+            "name": "MacBook",
+            "version": "0.1.223",
+            "capability": true,
+            "online": true
+          },
+          "pending": 0,
+          "tier": "sessions",
+          "reason": "not_found",
+          "detail": "~/work/app was not found on MacBook",
+          "checkedAt": "2026-09-28T10:00:00.000Z"
+        },
+        "executor": {
+          "mode": "server",
+          "serverExecutes": true
+        },
+        "systemModel": {
+          "state": "up",
+          "model": "qwen3.8-27b-fp8",
+          "since": "2026-09-28T11:00:00.000Z",
+          "checkedAt": "2026-09-28T11:59:55.000Z",
+          "workerSeenAt": "2026-09-28T11:59:55.000Z"
+        }
+      },
+      "card": null
+    },
+    {
+      "name": "folder: Reading the folder, grey",
+      "health": {
+        "spaceId": "34VR0RwUSIcaoO7ZZqv52",
+        "entries": 11689,
+        "maintenance": {
+          "look": "ok",
+          "enabled": true,
+          "lastOkAt": "2026-09-28T10:00:00.000Z",
+          "lastRunAt": "2026-09-28T10:00:00.000Z",
+          "consecutiveFailures": 0,
+          "backlog": 3,
+          "oldestPendingAt": "2026-09-28T09:00:00.000Z",
+          "lagSeconds": 10800,
+          "dailyLimitReached": false,
+          "held": null,
+          "running": null,
+          "lastRun": {
+            "sessionId": null,
+            "jobId": "34cE0job0000000000009",
+            "outcome": "succeeded",
+            "endedAt": "2026-09-28T10:00:00.000Z"
+          },
+          "lastFailure": null
+        },
+        "repo": {
+          "look": "ready",
+          "workspace": {
+            "id": "34VR0RwUSIcaoO7ZZqv5w",
+            "workDir": "~/work/app"
+          },
+          "runner": {
+            "id": "34VR0RwUSIcaoO7ZZqv5r",
+            "name": "MacBook",
+            "version": "0.1.223",
+            "capability": true,
+            "online": true
+          },
+          "pending": 0,
+          "tier": "folder",
+          "reason": null,
+          "detail": "~/work/app is not a git checkout",
+          "checkedAt": "2026-09-28T10:00:00.000Z"
+        },
+        "executor": {
+          "mode": "server",
+          "serverExecutes": true
+        },
+        "systemModel": {
+          "state": "up",
+          "model": "qwen3.8-27b-fp8",
+          "since": "2026-09-28T11:00:00.000Z",
+          "checkedAt": "2026-09-28T11:59:55.000Z",
+          "workerSeenAt": "2026-09-28T11:59:55.000Z"
+        }
+      },
+      "card": {
+        "tag": {
+          "text": "Reading the folder",
+          "tone": "muted"
+        },
+        "line": "Folder, not git · commit anchors off · checked 2h ago",
+        "canRun": true,
+        "blocked": null,
+        "useFolder": false
+      }
+    },
+    {
+      "name": "sessions, not found: Code checks paused, amber",
+      "health": {
+        "spaceId": "34VR0RwUSIcaoO7ZZqv52",
+        "entries": 11689,
+        "maintenance": {
+          "look": "ok",
+          "enabled": true,
+          "lastOkAt": "2026-09-28T10:00:00.000Z",
+          "lastRunAt": "2026-09-28T10:00:00.000Z",
+          "consecutiveFailures": 0,
+          "backlog": 3,
+          "oldestPendingAt": "2026-09-28T09:00:00.000Z",
+          "lagSeconds": 10800,
+          "dailyLimitReached": false,
+          "held": null,
+          "running": null,
+          "lastRun": {
+            "sessionId": null,
+            "jobId": "34cE0job0000000000009",
+            "outcome": "succeeded",
+            "endedAt": "2026-09-28T10:00:00.000Z"
+          },
+          "lastFailure": null
+        },
+        "repo": {
+          "look": "ready",
+          "workspace": {
+            "id": "34VR0RwUSIcaoO7ZZqv5w",
+            "workDir": "~/work/app"
+          },
+          "runner": {
+            "id": "34VR0RwUSIcaoO7ZZqv5r",
+            "name": "MacBook",
+            "version": "0.1.223",
+            "capability": true,
+            "online": true
+          },
+          "pending": 0,
+          "tier": "sessions",
+          "reason": "not_found",
+          "detail": "~/work/app was not found on MacBook",
+          "checkedAt": "2026-09-28T10:00:00.000Z"
+        },
+        "executor": {
+          "mode": "server",
+          "serverExecutes": true
+        },
+        "systemModel": {
+          "state": "up",
+          "model": "qwen3.8-27b-fp8",
+          "since": "2026-09-28T11:00:00.000Z",
+          "checkedAt": "2026-09-28T11:59:55.000Z",
+          "workerSeenAt": "2026-09-28T11:59:55.000Z"
+        }
+      },
+      "card": {
+        "tag": {
+          "text": "Code checks paused",
+          "tone": "warn"
+        },
+        "line": "~/work/app was not found on MacBook · checked 2h ago",
+        "canRun": true,
+        "blocked": null,
+        "useFolder": false
+      }
+    },
+    {
+      "name": "sessions, credentials refused: red",
+      "health": {
+        "spaceId": "34VR0RwUSIcaoO7ZZqv52",
+        "entries": 11689,
+        "maintenance": {
+          "look": "ok",
+          "enabled": true,
+          "lastOkAt": "2026-09-28T10:00:00.000Z",
+          "lastRunAt": "2026-09-28T10:00:00.000Z",
+          "consecutiveFailures": 0,
+          "backlog": 3,
+          "oldestPendingAt": "2026-09-28T09:00:00.000Z",
+          "lagSeconds": 10800,
+          "dailyLimitReached": false,
+          "held": null,
+          "running": null,
+          "lastRun": {
+            "sessionId": null,
+            "jobId": "34cE0job0000000000009",
+            "outcome": "succeeded",
+            "endedAt": "2026-09-28T10:00:00.000Z"
+          },
+          "lastFailure": null
+        },
+        "repo": {
+          "look": "ready",
+          "workspace": {
+            "id": "34VR0RwUSIcaoO7ZZqv5w",
+            "workDir": "~/work/app"
+          },
+          "runner": {
+            "id": "34VR0RwUSIcaoO7ZZqv5r",
+            "name": "MacBook",
+            "version": "0.1.223",
+            "capability": true,
+            "online": true
+          },
+          "pending": 0,
+          "tier": "sessions",
+          "reason": "fetch_refused",
+          "detail": "The git remote refused the credentials on MacBook",
+          "checkedAt": "2026-09-28T10:00:00.000Z"
+        },
+        "executor": {
+          "mode": "server",
+          "serverExecutes": true
+        },
+        "systemModel": {
+          "state": "up",
+          "model": "qwen3.8-27b-fp8",
+          "since": "2026-09-28T11:00:00.000Z",
+          "checkedAt": "2026-09-28T11:59:55.000Z",
+          "workerSeenAt": "2026-09-28T11:59:55.000Z"
+        }
+      },
+      "card": {
+        "tag": {
+          "text": "Code checks paused",
+          "tone": "error"
+        },
+        "line": "The git remote refused the credentials on MacBook · checked 2h ago",
+        "canRun": true,
+        "blocked": null,
+        "useFolder": false
+      }
+    },
+    {
+      "name": "wrong repository for path_overlap: Wrong folder, red, and Use this folder",
+      "health": {
+        "spaceId": "34VR0RwUSIcaoO7ZZqv52",
+        "entries": 11689,
+        "maintenance": {
+          "look": "ok",
+          "enabled": true,
+          "lastOkAt": "2026-09-28T10:00:00.000Z",
+          "lastRunAt": "2026-09-28T10:00:00.000Z",
+          "consecutiveFailures": 0,
+          "backlog": 3,
+          "oldestPendingAt": "2026-09-28T09:00:00.000Z",
+          "lagSeconds": 10800,
+          "dailyLimitReached": false,
+          "held": null,
+          "running": null,
+          "lastRun": {
+            "sessionId": null,
+            "jobId": "34cE0job0000000000009",
+            "outcome": "succeeded",
+            "endedAt": "2026-09-28T10:00:00.000Z"
+          },
+          "lastFailure": null
+        },
+        "repo": {
+          "look": "ready",
+          "workspace": {
+            "id": "34VR0RwUSIcaoO7ZZqv5w",
+            "workDir": "~/work/app"
+          },
+          "runner": {
+            "id": "34VR0RwUSIcaoO7ZZqv5r",
+            "name": "MacBook",
+            "version": "0.1.223",
+            "capability": true,
+            "online": true
+          },
+          "pending": 0,
+          "tier": "wrong_repository",
+          "reason": "path_overlap",
+          "detail": "~/work/app shares few files with the last snapshot",
+          "checkedAt": "2026-09-28T10:00:00.000Z"
+        },
+        "executor": {
+          "mode": "server",
+          "serverExecutes": true
+        },
+        "systemModel": {
+          "state": "up",
+          "model": "qwen3.8-27b-fp8",
+          "since": "2026-09-28T11:00:00.000Z",
+          "checkedAt": "2026-09-28T11:59:55.000Z",
+          "workerSeenAt": "2026-09-28T11:59:55.000Z"
+        }
+      },
+      "card": {
+        "tag": {
+          "text": "Wrong folder",
+          "tone": "error"
+        },
+        "line": "~/work/app shares few files with the last snapshot · checked 2h ago",
+        "canRun": true,
+        "blocked": null,
+        "useFolder": true
+      }
+    },
+    {
+      "name": "wrong repository, another clone: no Use this folder",
+      "health": {
+        "spaceId": "34VR0RwUSIcaoO7ZZqv52",
+        "entries": 11689,
+        "maintenance": {
+          "look": "ok",
+          "enabled": true,
+          "lastOkAt": "2026-09-28T10:00:00.000Z",
+          "lastRunAt": "2026-09-28T10:00:00.000Z",
+          "consecutiveFailures": 0,
+          "backlog": 3,
+          "oldestPendingAt": "2026-09-28T09:00:00.000Z",
+          "lagSeconds": 10800,
+          "dailyLimitReached": false,
+          "held": null,
+          "running": null,
+          "lastRun": {
+            "sessionId": null,
+            "jobId": "34cE0job0000000000009",
+            "outcome": "succeeded",
+            "endedAt": "2026-09-28T10:00:00.000Z"
+          },
+          "lastFailure": null
+        },
+        "repo": {
+          "look": "ready",
+          "workspace": {
+            "id": "34VR0RwUSIcaoO7ZZqv5w",
+            "workDir": "~/work/app"
+          },
+          "runner": {
+            "id": "34VR0RwUSIcaoO7ZZqv5r",
+            "name": "MacBook",
+            "version": "0.1.223",
+            "capability": true,
+            "online": true
+          },
+          "pending": 0,
+          "tier": "wrong_repository",
+          "reason": "wrong_repository",
+          "detail": "~/work/app is a clone of github.com/x/y, not this wiki's repository",
+          "checkedAt": "2026-09-28T10:00:00.000Z"
+        },
+        "executor": {
+          "mode": "server",
+          "serverExecutes": true
+        },
+        "systemModel": {
+          "state": "up",
+          "model": "qwen3.8-27b-fp8",
+          "since": "2026-09-28T11:00:00.000Z",
+          "checkedAt": "2026-09-28T11:59:55.000Z",
+          "workerSeenAt": "2026-09-28T11:59:55.000Z"
+        }
+      },
+      "card": {
+        "tag": {
+          "text": "Wrong folder",
+          "tone": "error"
+        },
+        "line": "~/work/app is a clone of github.com/x/y, not this wiki's repository · checked 2h ago",
+        "canRun": true,
+        "blocked": null,
+        "useFolder": false
+      }
+    },
+    {
+      "name": "the day used up: Check again and run now is off, Daily limit reached",
+      "health": {
+        "spaceId": "34VR0RwUSIcaoO7ZZqv52",
+        "entries": 11689,
+        "maintenance": {
+          "look": "ok",
+          "enabled": true,
+          "lastOkAt": "2026-09-28T10:00:00.000Z",
+          "lastRunAt": "2026-09-28T10:00:00.000Z",
+          "consecutiveFailures": 0,
+          "backlog": 3,
+          "oldestPendingAt": "2026-09-28T09:00:00.000Z",
+          "lagSeconds": 10800,
+          "dailyLimitReached": true,
+          "held": null,
+          "running": null,
+          "lastRun": {
+            "sessionId": null,
+            "jobId": "34cE0job0000000000009",
+            "outcome": "succeeded",
+            "endedAt": "2026-09-28T10:00:00.000Z"
+          },
+          "lastFailure": null
+        },
+        "repo": {
+          "look": "ready",
+          "workspace": {
+            "id": "34VR0RwUSIcaoO7ZZqv5w",
+            "workDir": "~/work/app"
+          },
+          "runner": {
+            "id": "34VR0RwUSIcaoO7ZZqv5r",
+            "name": "MacBook",
+            "version": "0.1.223",
+            "capability": true,
+            "online": true
+          },
+          "pending": 0,
+          "tier": "sessions",
+          "reason": "not_found",
+          "detail": "~/work/app was not found on MacBook",
+          "checkedAt": "2026-09-28T10:00:00.000Z"
+        },
+        "executor": {
+          "mode": "server",
+          "serverExecutes": true
+        },
+        "systemModel": {
+          "state": "up",
+          "model": "qwen3.8-27b-fp8",
+          "since": "2026-09-28T11:00:00.000Z",
+          "checkedAt": "2026-09-28T11:59:55.000Z",
+          "workerSeenAt": "2026-09-28T11:59:55.000Z"
+        }
+      },
+      "card": {
+        "tag": {
+          "text": "Code checks paused",
+          "tone": "warn"
+        },
+        "line": "~/work/app was not found on MacBook · checked 2h ago",
+        "canRun": false,
+        "blocked": "Daily limit reached",
+        "useFolder": false
+      }
+    },
+    {
+      "name": "a run under way: Check again and run now is off",
+      "health": {
+        "spaceId": "34VR0RwUSIcaoO7ZZqv52",
+        "entries": 11689,
+        "maintenance": {
+          "look": "running",
+          "enabled": true,
+          "lastOkAt": "2026-09-28T10:00:00.000Z",
+          "lastRunAt": "2026-09-28T10:00:00.000Z",
+          "consecutiveFailures": 0,
+          "backlog": 3,
+          "oldestPendingAt": "2026-09-28T09:00:00.000Z",
+          "lagSeconds": 10800,
+          "dailyLimitReached": false,
+          "held": null,
+          "running": {
+            "sessionId": null,
+            "jobId": "34cE0job0000000000010",
+            "startedAt": "2026-09-28T11:58:00.000Z"
+          },
+          "lastRun": {
+            "sessionId": null,
+            "jobId": "34cE0job0000000000009",
+            "outcome": "succeeded",
+            "endedAt": "2026-09-28T10:00:00.000Z"
+          },
+          "lastFailure": null
+        },
+        "repo": {
+          "look": "ready",
+          "workspace": {
+            "id": "34VR0RwUSIcaoO7ZZqv5w",
+            "workDir": "~/work/app"
+          },
+          "runner": {
+            "id": "34VR0RwUSIcaoO7ZZqv5r",
+            "name": "MacBook",
+            "version": "0.1.223",
+            "capability": true,
+            "online": true
+          },
+          "pending": 0,
+          "tier": "folder",
+          "reason": null,
+          "detail": null,
+          "checkedAt": "2026-09-28T10:00:00.000Z"
+        },
+        "executor": {
+          "mode": "server",
+          "serverExecutes": true
+        },
+        "systemModel": {
+          "state": "up",
+          "model": "qwen3.8-27b-fp8",
+          "since": "2026-09-28T11:00:00.000Z",
+          "checkedAt": "2026-09-28T11:59:55.000Z",
+          "workerSeenAt": "2026-09-28T11:59:55.000Z"
+        }
+      },
+      "card": {
+        "tag": {
+          "text": "Reading the folder",
+          "tone": "muted"
+        },
+        "line": "Folder, not git · commit anchors off · checked 2h ago",
+        "canRun": false,
+        "blocked": "A run is under way",
+        "useFolder": false
+      }
+    },
+    {
+      "name": "git, but the last run failed: Last run failed",
+      "health": {
+        "spaceId": "34VR0RwUSIcaoO7ZZqv52",
+        "entries": 11689,
+        "maintenance": {
+          "look": "failing",
+          "enabled": true,
+          "lastOkAt": "2026-09-28T10:00:00.000Z",
+          "lastRunAt": "2026-09-28T10:00:00.000Z",
+          "consecutiveFailures": 1,
+          "backlog": 3,
+          "oldestPendingAt": "2026-09-28T09:00:00.000Z",
+          "lagSeconds": 10800,
+          "dailyLimitReached": false,
+          "held": null,
+          "running": null,
+          "lastRun": {
+            "sessionId": null,
+            "jobId": "34cE0job0000000000009",
+            "outcome": "failed",
+            "endedAt": "2026-09-28T11:30:00.000Z"
+          },
+          "lastFailure": null
+        },
+        "repo": {
+          "look": "ready",
+          "workspace": {
+            "id": "34VR0RwUSIcaoO7ZZqv5w",
+            "workDir": "~/work/app"
+          },
+          "runner": {
+            "id": "34VR0RwUSIcaoO7ZZqv5r",
+            "name": "MacBook",
+            "version": "0.1.223",
+            "capability": true,
+            "online": true
+          },
+          "pending": 0,
+          "tier": "git",
+          "reason": null,
+          "detail": null,
+          "checkedAt": "2026-09-28T11:00:00.000Z"
+        },
+        "executor": {
+          "mode": "server",
+          "serverExecutes": true
+        },
+        "systemModel": {
+          "state": "up",
+          "model": "qwen3.8-27b-fp8",
+          "since": "2026-09-28T11:00:00.000Z",
+          "checkedAt": "2026-09-28T11:59:55.000Z",
+          "workerSeenAt": "2026-09-28T11:59:55.000Z"
+        }
+      },
+      "card": {
+        "tag": {
+          "text": "Last run failed",
+          "tone": "error"
+        },
+        "line": "The last run failed · checked 1h ago",
+        "canRun": true,
+        "blocked": null,
+        "useFolder": false
+      }
+    }
+  ]
+}

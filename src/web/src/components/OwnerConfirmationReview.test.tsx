@@ -9,8 +9,17 @@ import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { MemoryRouter } from 'react-router-dom';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { ownerConfirmationQuery } from '../lib/queries';
-import { parseConfirmationReturn, parseConfirmationReviewRequest } from '../lib/confirmationReviewTurns';
-import { ReviewRequestedCard, SentBackByReviewerCard, OPEN_TASK_SESSION } from './ConfirmationReviewTurnCards';
+import {
+  parseConfirmationAnswers,
+  parseConfirmationReturn,
+  parseConfirmationReviewRequest,
+} from '../lib/confirmationReviewTurns';
+import {
+  ReviewRequestedCard,
+  SentBackByReviewerCard,
+  OPEN_TASK_SESSION,
+  YouConfirmedCard,
+} from './ConfirmationReviewTurnCards';
 import { DecisionStrip, type PendingDecisionQueue } from './DecisionRail';
 import {
   OWNER_CONFIRMATION_AUTHORSHIP_TITLE,
@@ -31,6 +40,9 @@ import {
 import {
   ANSWERS_SENT_WITH_CONFIRM,
   ANSWER_NOT_SHOWN,
+  ANSWERS_SENT_TO_REVIEWER,
+  REVIEWER_WAS_TOLD,
+  YOU_CONFIRMED,
   BEFORE_REVIEW,
   REVIEW_EVIDENCE,
   REVIEW_REQUESTED,
@@ -514,7 +526,48 @@ describe('a report its reviewer sent back', () => {
     expect(html).toContain('会话间请求与回复：修复 P1 审查发现的问题');
     expect(html).toMatch(/Due \d/u);
     expect(html).toContain(OPEN_TASK_SESSION);
+    const queued = parseConfirmationReviewRequest({ confirmationReviewRequest: { ...card!, dueAt: null } });
+    expect(queued).not.toBeNull();
+    const queuedHtml = renderToStaticMarkup(
+      <MemoryRouter><ReviewRequestedCard card={queued!} queued /></MemoryRouter>,
+    );
+    expect(queuedHtml).toContain(REVIEW_REQUESTED);
+    expect(queuedHtml).not.toContain('Due ');
     expect(parseConfirmationReviewRequest({ confirmationReviewRequest: { requestId: 'x' } })).toBeNull();
+  });
+
+  it('tells its reviewer the owner’s answers as You confirmed, never as the owner’s own message', () => {
+    const text = '<orbit-confirmation-answers task="34vXI18539ffXKTPxmYUb">\n…\n</orbit-confirmation-answers>';
+    const card = parseConfirmationAnswers({
+      text,
+      confirmationAnswers: {
+        decisionId: 'd1',
+        taskId: TASK_ID,
+        title: 'Welcome email for new accounts (Resend, Admin → Email)',
+        decidedAt: '2026-11-11T05:13:08.000Z',
+        answers: [
+          { key: 'n1', question: 'How should it reach main?', choice: 'Merge to main now, then I do the real send', text: null, notShown: false },
+          { key: 'n2', question: 'Where should the 429 page link to?', choice: null, text: 'The status page, not the docs', notShown: false },
+          { key: 'n3', question: 'Ship behind a flag first?', choice: 'No — ship directly', text: null, notShown: true },
+          { key: 'n4', question: 'A line with no answer at all' },
+        ],
+      },
+    });
+    expect(card?.answers.map((answer) => answer.key)).toEqual(['n1', 'n2', 'n3']);
+    const html = renderToStaticMarkup(
+      <MemoryRouter><YouConfirmedCard card={card!} text={text} /></MemoryRouter>,
+    );
+    expect(html).toContain(YOU_CONFIRMED);
+    expect(html).toContain(ANSWERS_SENT_TO_REVIEWER);
+    expect(html).toContain(escaped('Welcome email for new accounts (Resend, Admin → Email)'));
+    expect(html).toContain('Merge to main now, then I do the real send');
+    expect(html).not.toContain('0. Merge');
+    expect(html).toContain('“The status page, not the docs”');
+    expect(html.split(ANSWER_NOT_SHOWN).length - 1).toBe(1);
+    expect(html).toContain(REVIEWER_WAS_TOLD);
+    expect(html).toContain('/tasks/');
+    expect(parseConfirmationAnswers({ text: 'hi' })).toBeNull();
+    expect(parseConfirmationAnswers({ confirmationAnswers: { taskId: TASK_ID, title: 'x' } })).toBeNull();
   });
 });
 

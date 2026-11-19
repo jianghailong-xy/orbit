@@ -1,6 +1,15 @@
 import { useRef, useState, type KeyboardEvent } from 'react';
 import type { PlanUsageSnapshot } from '@orbit/shared';
-import { bindingPlanUsageRow, currentPlanUsageRows, modelPlanUsage, planUsageRowSpent } from '../lib/planUsage';
+import {
+  bindingPlanUsageRow,
+  CLAUDE_USAGE_PAGE,
+  claudeExtraUsageLabel,
+  claudeModelLimitRows,
+  claudeResetHint,
+  currentPlanUsageRows,
+  modelPlanUsage,
+  planUsageRowSpent,
+} from '../lib/planUsage';
 import {
   CodexResetConfirm,
   CodexResetCreditCard,
@@ -37,7 +46,9 @@ export function PlanUsageIndicator({
   reset?: CodexResetContext;
   account?: PlanUsageAccount;
 }) {
-  const rows = currentPlanUsageRows(usage);
+  const rows = [...currentPlanUsageRows(usage), ...claudeModelLimitRows(usage)];
+  const extraUsage = claudeExtraUsageLabel(usage);
+  const resetHint = claudeResetHint(usage);
   const [open, setOpen] = useState(false);
   const trigger = useRef<HTMLButtonElement>(null);
   const panel = useRef<HTMLDivElement>(null);
@@ -108,6 +119,22 @@ export function PlanUsageIndicator({
           </div>
         );
       })}
+      {extraUsage && (
+        <div className="cu-row">
+          <div className="cu-head">
+            <span className="cu-label">Extra usage</span>
+            <span className="cu-pct">{extraUsage}</span>
+          </div>
+        </div>
+      )}
+      {resetHint && (
+        <div className="cu-reset cu-reset-hint">
+          {resetHint}{' '}
+          <a href={CLAUDE_USAGE_PAGE} target="_blank" rel="noreferrer">
+            Open claude.ai usage
+          </a>
+        </div>
+      )}
       <CodexResetCreditCard state={credit} />
     </div>
   );

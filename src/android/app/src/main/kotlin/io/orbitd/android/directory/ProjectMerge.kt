@@ -17,6 +17,8 @@ import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.async
 import kotlinx.coroutines.coroutineScope
 import kotlinx.serialization.json.JsonObject
+import kotlinx.serialization.json.JsonPrimitive
+import kotlinx.serialization.json.booleanOrNull
 
 // A11-9 (iOS 6b4bef713, 39adc7561): the merge into main lives on the project's sessions page — its card under the progress card; the
 // merges already made are rows of the project's Landings window (owner 2026-10-27) — and the coordinator conversation keeps one line
@@ -137,6 +139,8 @@ class ProjectMergeModel(private val api: ProjectApi, val projectId: String, priv
     /** The project's open items, or null until read: a blocked candidate's holder is one of them. */
     var openItems by mutableStateOf<JsonObject?>(null); private set
     private var criteria by mutableStateOf<List<JsonObject>>(emptyList())
+    /** The project's Automatic (`coordinatorEnabled`), off the same document read as the criteria; null until that read answers. */
+    var automatic by mutableStateOf<Boolean?>(null); private set
     private var mergedReadAt: Instant? = null
     private var itemsReadAt: Instant? = null
     private var criteriaReadAt: Instant? = null
@@ -167,7 +171,10 @@ class ProjectMergeModel(private val api: ProjectApi, val projectId: String, priv
             val criteriaRead = if (due.criteria) async { attempt { api.document(projectId) } } else null
             mergedRead?.await()?.let { if (mine == generation) { merged = it; mergedReadAt = clock() } }
             itemsRead?.await()?.let { if (mine == generation) { openItems = it; itemsReadAt = clock() } }
-            criteriaRead?.await()?.let { if (mine == generation) { criteria = it.objects("acceptanceCriteriaItems"); criteriaReadAt = clock() } }
+            criteriaRead?.await()?.let { if (mine == generation) {
+                criteria = it.objects("acceptanceCriteriaItems"); automatic = (it["coordinatorEnabled"] as? JsonPrimitive)?.booleanOrNull
+                criteriaReadAt = clock()
+            } }
         }
     }
 

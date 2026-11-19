@@ -1,7 +1,20 @@
 package io.orbitd.android.projects
 
+import android.graphics.Bitmap
+import android.graphics.Canvas
+import java.io.File
+import org.robolectric.annotation.GraphicsMode
 import androidx.activity.compose.setContent
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.background
+import androidx.compose.foundation.border
+import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.ui.unit.dp
+import io.orbitd.android.ui.LocalOrbitColors
+import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.material3.Surface
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.ui.Modifier
@@ -43,20 +56,94 @@ class ProjectDoneCardTest {
     private var notes = mutableListOf<String>()
     private var reopened = 0
 
-    private fun card(doc: JsonObject, request: JsonObject?, record: JsonObject? = null, sealRead: Boolean = true) {
+    private fun card(doc: JsonObject, request: JsonObject?, record: JsonObject? = null, sealRead: Boolean = true, doneCheck: JsonObject? = null, running: Int = 0) {
         compose.runOnUiThread { compose.activity.setContent { OrbitTheme(darkTheme = false) {
-            Column(Modifier.verticalScroll(rememberScrollState())) {
+            Surface(Modifier.fillMaxSize()) {
+            Column(Modifier.verticalScroll(rememberScrollState()).padding(16.dp)) {
                 ProjectDoneCard(doc, request, "2026-09-29T10:00:00.000Z", ProjectDone.openItemsCount(buildJsonObject {
-                    put("needsYou", JsonArray(emptyList())); put("withCoordinator", JsonArray(emptyList())); request?.let { put("doneRequest", it) } }), 0,
-                    record, sealRead, now, enabled = true, error = null, tag = "done",
-                    onRecord = { recorded++ }, onNotYet = if (request == null) null else { note -> notes += note; true }, onReopen = { reopened++ })
+                    put("needsYou", JsonArray(emptyList())); put("withCoordinator", JsonArray(emptyList())); request?.let { put("doneRequest", it) } }), running,
+                    record, sealRead, now, enabled = true, error = null, tag = "done", doneCheck = doneCheck,
+                    onRecord = { recorded++ }, onNotYet = if (request == null) null else { note, _ -> notes += note; true }, onReopen = { reopened++ })
+            }
             }
         } } }
         compose.waitForIdle()
     }
     private fun shows(text: String) = compose.onNodeWithText(text, substring = false).performScrollTo().assertIsDisplayed()
+    @Test @org.robolectric.annotation.GraphicsMode(org.robolectric.annotation.GraphicsMode.Mode.NATIVE)
+    fun latestDeclineRow() {
+        compose.runOnUiThread { compose.activity.setContent { OrbitTheme(darkTheme = false) {
+            ProjectDoneDeclineRow(j("""{"note":"Android build still fails on the release key.","declinedAt":"2026-11-10T10:12:00Z"}"""))
+        } } }
+        compose.onNodeWithTag("project-done-decline").assertExists()
+        compose.onNodeWithText("“Android build still fails on the release key.” ${ProjectDone.declineHint}").assertIsDisplayed()
+        compose.waitForIdle()
+        val view = compose.activity.window.decorView
+        assertTrue(view.width > 0 && view.height > 0)
+        val bitmap = android.graphics.Bitmap.createBitmap(view.width, view.height, android.graphics.Bitmap.Config.ARGB_8888)
+        view.draw(android.graphics.Canvas(bitmap))
+        val output = java.io.File(System.getenv("ORBIT_DECLINE_SCREENSHOT") ?: "build/evidence/not-yet-android.png")
+        output.parentFile.mkdirs()
+        output.outputStream().use { bitmap.compress(android.graphics.Bitmap.CompressFormat.PNG, 100, it) }
+    }
+
     private fun texts(): List<String> = compose.onAllNodes(hasText("", substring = true), useUnmergedTree = true).fetchSemanticsNodes()
         .flatMap { node -> if (SemanticsProperties.Text in node.config) node.config[SemanticsProperties.Text].map { it.text } else emptyList() }
+
+    @Test @Config(qualifiers = "w411dp-h400dp")
+    @org.robolectric.annotation.GraphicsMode(org.robolectric.annotation.GraphicsMode.Mode.NATIVE)
+    fun derivedDoneNamesTheConfirmationAndReopensWhileOwnerIsUnchanged() {
+        val ending = JsonObject(doc + mapOf("status" to JsonPrimitive("DONE"), "doneBy" to JsonPrimitive("DERIVED")))
+        compose.runOnUiThread { compose.activity.setContent { OrbitTheme(darkTheme = false) {
+            androidx.compose.material3.Surface {
+                val success = LocalOrbitColors.current.success
+                Column(Modifier.padding(16.dp).fillMaxWidth().background(success.copy(alpha = 0.08f), RoundedCornerShape(14.dp))
+                    .border(1.dp, success.copy(alpha = 0.3f), RoundedCornerShape(14.dp)).padding(12.dp)) {
+                    ProjectSettledCard(ending, "ending", confirmedAt = "2026-10-02T12:00:00Z", onReopen = { reopened++; null })
+                }
+            }
+        } } }
+        compose.waitForIdle()
+        compose.onNodeWithText("From the criteria you confirmed on Oct 2. Not right? Reopen it.").assertIsDisplayed()
+        compose.onNodeWithTag("ending-reopen").assertTextEquals("Reopen project")
+        System.getenv("ORBIT_DERIVED_SCREENSHOT")?.let { path ->
+            val view = compose.activity.window.decorView
+            val bitmap = android.graphics.Bitmap.createBitmap(view.width, view.height, android.graphics.Bitmap.Config.ARGB_8888)
+            view.draw(android.graphics.Canvas(bitmap))
+            java.io.File(path).outputStream().use { bitmap.compress(android.graphics.Bitmap.CompressFormat.PNG, 100, it) }
+            bitmap.recycle()
+        }
+        compose.onNodeWithTag("ending-reopen").performClick()
+        compose.waitForIdle()
+        assertEquals(1, reopened)
+        compose.runOnUiThread { compose.activity.setContent { OrbitTheme {
+            ProjectSettledCard(JsonObject(ending + ("doneBy" to JsonPrimitive("OWNER"))), "owner", confirmedAt = "2026-10-02T12:00:00Z", onReopen = { reopened++; null })
+        } } }
+        compose.waitForIdle()
+        compose.onNodeWithTag("owner-reopen").assertDoesNotExist()
+        compose.onNodeWithText("From the criteria", substring = true).assertDoesNotExist()
+    }
+
+    @Test @Config(qualifiers = "w411dp-h400dp")
+    @GraphicsMode(GraphicsMode.Mode.NATIVE)
+    fun staleRequestRowUsesTheServerReason() {
+        val items = j("""{"latestDoneRequestSuperseded":{"reason":"Criterion 3’s task was reopened after it asked.","supersededAt":"2026-11-10T12:00:00Z"}}""")
+        compose.runOnUiThread { compose.activity.setContent { OrbitTheme(darkTheme = false) {
+            Surface(Modifier.fillMaxSize()) {
+                Column(Modifier.padding(16.dp)) { ProjectStaleDoneRow(ProjectDone.staleRequest(items)!!) }
+            }
+        } } }
+        compose.waitForIdle()
+        compose.onNodeWithText(ProjectDone.staleHeading).assertIsDisplayed()
+        compose.onNodeWithText("Criterion 3’s task was reopened after it asked. ${ProjectDone.staleDetail}").assertIsDisplayed()
+        System.getenv("ORBIT_STALE_SCREENSHOT")?.let { path ->
+            val view = compose.activity.window.decorView
+            val bitmap = Bitmap.createBitmap(view.width, view.height, Bitmap.Config.ARGB_8888)
+            view.draw(Canvas(bitmap))
+            File(path).outputStream().use { bitmap.compress(Bitmap.CompressFormat.PNG, 100, it) }
+            bitmap.recycle()
+        }
+    }
 
     @Test fun theCoordinatorsRequestIsDrawnWholeWithHowLongItHasWaited() {
         card(doc, row)
@@ -72,9 +159,10 @@ class ProjectDoneCardTest {
         compose.onNodeWithTag("done-record").performScrollTo().assertTextEquals(ProjectDone.recordAsDone).assertIsEnabled()
         compose.onNodeWithTag("done-not-yet").assertTextEquals(ProjectDone.notYet)
         assertFalse("no conversation asks why it is not done any more", texts().any { it.contains("Why is this project not done?") })
-        // Done when's criteria, one press away.
-        compose.onNodeWithTag("done-criteria").assertTextEquals(ProjectDone.showAll(2)).performClick()
-        shows("met · Landed on main"); shows("met · nothing to land")
+        // Done when's criteria, open at once up to a dozen (web `DONE_WHEN_OPEN_UP_TO`), each row's state on its own.
+        compose.onAllNodesWithTag("done-criteria").assertCountEquals(0)
+        compose.onNodeWithTag("done-row:1-state", useUnmergedTree = true).assertTextEquals("Met · Landed on main")
+        compose.onNodeWithTag("done-row:2-state", useUnmergedTree = true).assertTextEquals("Met · nothing to land")
         compose.onNodeWithTag("done-record").performScrollTo().performClick()
         compose.waitForIdle(); assertEquals(1, recorded)
     }
@@ -95,16 +183,55 @@ class ProjectDoneCardTest {
         compose.onAllNodesWithTag("done-note").assertCountEquals(0)
     }
 
-    @Test fun aCardNobodyAskedForSaysSoCarriesOrbitsGapsAndOffersNoNotYet() {
+    @Test fun aCardNobodyAskedForListsTheDoneCheckAndOffersNoNotYet() {
         val unmet = j(doc.toString().replace(""""satisfied":true,"landingReason":"NOTHING_TO_LAND"""", """"satisfied":false,"landingReason":"NOTHING_TO_LAND"""")
             .replace(""""met":2""", """"met":1"""))
-        card(unmet, null)
+        card(unmet, null, doneCheck = j("""{"findings":[{"severity":"REFUSE","code":"DONE_CRITERION_UNSATISFIED","message":"m",
+            "criterion":{"key":"c2","ordinal":2,"text":"The live check was completed"},"tasks":[]},
+            {"severity":"WARN","code":"DONE_CRITERION_UNLANDED","message":"m","criterion":{"key":"c1","ordinal":1,"text":"The release is on main"},"tasks":[]}]}"""))
         compose.onNodeWithTag("done-meta").assertTextEquals("Project closeout · record as done anyway")
-        shows("Orbit cannot prove this criterion is met by its work yet.")
+        // What stands in the way first, and apart from it what Orbit can't prove about where work landed (decided board ③ B–D).
+        shows("1 thing stands in the way")
+        shows("Criterion 2 is not met — no task serves it")
+        shows("Orbit can’t prove 1 thing")
+        shows("Criterion 1 is not on main")
+        shows("If you record it done anyway, Orbit keeps criterion 2 as the gap you accepted.")
         compose.onNodeWithTag("done-record").performScrollTo().assertTextEquals(ProjectDone.recordAsDoneAnyway)
         compose.onAllNodesWithTag("done-not-yet").assertCountEquals(0)
         card(unmet, null, sealRead = false)
         compose.onNodeWithTag("done-record").performScrollTo().assertIsNotEnabled()
+    }
+
+    @Test @Config(qualifiers = "w411dp-h891dp") @GraphicsMode(GraphicsMode.Mode.NATIVE)
+    fun doneCheckProposalScreenshot() {
+        val check = j("""{"findings":[
+            {"severity":"REFUSE","code":"DONE_TASKS_IN_FLIGHT","message":"long server diagnostic","tasks":[{},{}]},
+            {"severity":"REFUSE","code":"DONE_CRITERION_UNSATISFIED","message":"long server diagnostic","criterion":{"ordinal":5},"tasks":[{"taskId":"t5","title":"Ship it"}]},
+            {"severity":"WARN","code":"DONE_CRITERION_UNLANDED","message":"long server diagnostic","criterion":{"ordinal":6}}]}""")
+        val proposal = j("""{"title":"Session Recap","status":"OPEN","derivedDone":{"criteria":[],
+            "counts":{"criteria":6,"met":4,"landed":3,"onMain":3,"byReason":{"IN_FLIGHT":2}}}}""")
+        card(proposal, null, doneCheck = check, running = 2)
+        shows("2 things stand in the way")
+        shows("2 tasks are still running")
+        shows("Criterion 5 is not met — 1 task is still open")
+        shows("Orbit can’t prove 1 thing")
+        shows("Criterion 6 is not on main")
+        val view = compose.activity.window.decorView
+        val bitmap = Bitmap.createBitmap(view.width, view.height, Bitmap.Config.ARGB_8888)
+        view.draw(Canvas(bitmap))
+        val root = generateSequence(File(System.getProperty("user.dir"))) { it.parentFile }
+            .first { File(it, "src/android").isDirectory }
+        val file = File(root, "src/android/build/evidence/done-check/android.png")
+        file.parentFile.mkdirs()
+        file.outputStream().use { bitmap.compress(Bitmap.CompressFormat.PNG, 100, it) }
+        assertTrue(file.length() > 0)
+        bitmap.recycle()
+    }
+
+    @Test fun noFindingsHasNoRedBox() {
+        card(doc, null, doneCheck = j("""{"findings":[]}"""))
+        compose.onAllNodesWithTag("done-findings").assertCountEquals(0)
+        compose.onAllNodesWithText(ProjectDone.findingsAccepted).assertCountEquals(0)
     }
 
     @Test fun theRecordTurnsTheCardIntoItsReceiptInPlace() {

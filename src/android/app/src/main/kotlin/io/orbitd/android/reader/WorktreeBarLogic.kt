@@ -127,9 +127,23 @@ internal object WorktreeBarLogic {
             "push. Once the rebase finishes, the branch can be merged into $target cleanly from " +
             "the status bar above the composer."
 
-    fun manualMergeCommand(mergeTarget: String?, branch: String): String {
-        val target = mergeTarget ?: "main"
-        return "git rebase $target $branch && git checkout $target && git merge --ff-only $branch"
+    /**
+     * A merge conflict laid out as web's conflict panel (board docs/mocks/merge-conflict-strip): a headline naming the
+     * target, what happened, and the by-hand recipe as two steps — two because the branch is checked out in the
+     * session's worktree and the target in the machine's checkout. git's own words stay behind "Show git output".
+     */
+    data class MergeConflict(val headline: String, val why: String, val steps: List<Step>, val gitOutput: String?) {
+        data class Step(val place: String, val command: String)
+    }
+
+    fun mergeConflict(mergeStatus: String?, mergeError: String?, mergeTarget: String?, branch: String): MergeConflict? {
+        if (mergeStatus != "conflict") return null
+        val target = trimmed(mergeTarget) ?: "main"
+        return MergeConflict("Merge conflict with $target",
+            "The merge was aborted and nothing changed. Use Resolve in session, or resolve it by hand:",
+            listOf(MergeConflict.Step("In the session’s worktree", "git rebase $target"),
+                MergeConflict.Step("Then in the repo", "git merge --ff-only $branch")),
+            trimmed(mergeError))
     }
 
     /** Whether the file list is ahead of the stored patches, so a live session asks its runner for a fresh diff. */

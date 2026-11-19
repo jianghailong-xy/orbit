@@ -153,20 +153,22 @@ export function lastTypedUserMessageText(
 
 /** What each of Orbit's blocks is called where a recorded note shows it (describeNote). */
 const TAG_LABEL: Record<string, string> = {
-  'referenced-list': 'referenced list',
-  'referenced-task': 'referenced task',
-  orbit_project_coordinator_context: 'project coordinator context',
   'list-conditions': 'list conditions',
-  'background-jobs': 'background jobs',
   'orbit-session-message': 'session message',
   'orbit-session-reply': 'session reply',
 };
 
-/** The wiki context block, whose line says how much it holds rather than only what it is. Exported
- *  because the entries inside it are read by a second parser (`lib/wikiContext`), and two spellings
- *  of one tag is how the row list and the line that names it come to disagree about what a note
- *  holds. */
-export const WIKI_CONTEXT_TAG = 'orbit_wiki_context';
+/** Routine blocks describeNote leaves unnamed when naming a generic Orbit event. */
+const UNNAMED_TAGS: ReadonlySet<string> = new Set([
+  'orbit_project_coordinator_context',
+  'orbit-external-sender',
+  'referenced-task',
+  'referenced-list',
+  'background-jobs',
+]);
+
+/** The wiki context block, named with the count recorded in its opening tag. */
+const WIKI_CONTEXT_TAG = 'orbit_wiki_context';
 
 /** The wiki chat's blocks (wiki contract `chat.notes`), whose line is read off their opening tag's attributes. */
 const WIKI_CHAT_TAGS: ReadonlySet<string> = new Set(Object.values(WIKI_CHAT_NOTE_TAGS));
@@ -179,7 +181,7 @@ function countNames(names: string[]): string {
 }
 
 /**
- * "referenced task ×2, background jobs" — what a recorded note holds, counted where it repeats.
+ * "list conditions ×2, session message" — what a recorded note holds, counted where it repeats.
  *
  * Named rather than merely counted: "2 blocks attached" tells the reader nothing about why the
  * reply mentions something they never asked about, which is the entire reason this line exists.
@@ -191,12 +193,14 @@ function countNames(names: string[]): string {
  *
  * The wiki context says how many notes rode along, off the count the block itself carries
  * (`<orbit_wiki_context entries="3">`, wiki-push.ts) — "Wiki context · 3 entries". Counted here
- * rather than by reading the block's lines, which is what the expanded list is for: this line is
- * the one that has to be right while the block is still folded shut.
+ * rather than by reading the block's lines, so the event can be named without parsing its entries.
  *
  * A wiki chat's blocks are named the same way, off their opening tag's attributes
  * (`wikiChatNoteLabel`, wiki contract `chat.notes`): "Wiki selection · 3.1 §3 · 1 sentence · 2 sources".
- * One whose tag lacks what its line needs is named generically, as any block this does not know.
+ * One whose tag lacks what its line needs is named generically, as any block this does not know. The
+ * chat's own words to its agent (`<orbit_wiki_chat>`, on its first message) are not named: they are
+ * not something the owner attached, so the line lists the page and the selection the composer showed
+ * and a first message sent with neither names nothing.
  */
 export function describeNote(note: string): string {
   const names: string[] = [];
@@ -206,6 +210,8 @@ export function describeNote(note: string): string {
     if (tag === WIKI_CONTEXT_TAG) {
       const count = /^<orbit_wiki_context\s+entries="(\d+)"/.exec(rest)?.[1];
       names.push(count ? `Wiki context · ${count} entries` : 'Wiki context');
+    } else if (tag === WIKI_CHAT_NOTE_TAGS.chat || (tag && UNNAMED_TAGS.has(tag))) {
+      // Skipped past below, unnamed.
     } else if (tag && WIKI_CHAT_TAGS.has(tag)) {
       const chatNote = parseWikiChatNoteTag(rest);
       names.push(chatNote ? wikiChatNoteLabel(chatNote) : 'context');

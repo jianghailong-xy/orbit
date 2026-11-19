@@ -299,10 +299,10 @@ describe('Activity', () => {
     expect(html.match(/class="project-integration wk-status-row"/g)).toHaveLength(1);
     // `← Wiki` goes back to the space's home; the page is its own, not a reading page.
     expect(html).toContain('href="/wiki/orbit"');
-    expect(html).toContain('class="wk-page wk-page--activity"');
-    // The directory stands beside it with none of its rows lit.
-    expect(html).toContain('class="wk-dir-col"');
-    expect(html).not.toMatch(/wk-toc-item[^"]* active/);
+    expect(html).toContain('class="wk-page wk-page--activity wk-page--railed"');
+    // The directory stands beside it with its own Activity row lit, and no other (board docs/mocks/wiki-rail ③).
+    expect(html).toContain('class="wk-dir-col autohide-scrollbar"');
+    expect(html.match(/class="wk-toc-item[^"]* active"[^>]*>(?:(?!<\/a>).)*/g)?.map((row) => row.includes('>Activity<'))).toEqual([true]);
     // Principles are content: they stay on the home.
     expect(html).not.toContain('>Principles<');
   });
@@ -364,7 +364,7 @@ describe('Activity', () => {
       categories: [],
     } satisfies WikiDocsDirectory);
     const html = wiki('/wiki/orbit/activity', cache);
-    const order = ['<h1 class="page-title">Wiki</h1>', '<div class="wk-home-state">35 documents · 5 written</div>', 'class="wk-search"', 'class="wk-crumb wk-crumb--back"'].map(
+    const order = ['<h1 class="page-title wk-name-title">', '<div class="wk-home-state">35 documents · 5 written</div>', 'class="wk-search"', 'class="wk-crumb wk-crumb--back"'].map(
       (needle) => at(html, needle),
     );
     expect(order).toEqual([...order].sort((a, b) => a - b));
@@ -545,9 +545,9 @@ describe('a desktop over two spaces: what waits elsewhere is on it too', () => {
 });
 
 describe('the head’s Activity button', () => {
-  it('comes after Contents and before Settings and New entry, with the badge, and is pressed on Activity', () => {
+  it('comes after Contents and before Settings, with the badge, and is pressed on Activity', () => {
     const home = wiki('/wiki/orbit');
-    const order = ['wk-contents-btn', 'wk-activity-btn', 'aria-label="Settings"', 'aria-label="New entry"'].map((needle) => at(home, needle));
+    const order = ['wk-contents-btn', 'wk-activity-btn', 'aria-label="Settings"'].map((needle) => at(home, needle));
     expect(order).toEqual([...order].sort((a, b) => a - b));
     expect(home).toMatch(/<button(?=[^>]*aria-label="Activity")(?=[^>]*aria-describedby="[^"]+")[^>]*class="[^"]*wk-activity-btn">/);
     const activity = wiki('/wiki/orbit/activity');

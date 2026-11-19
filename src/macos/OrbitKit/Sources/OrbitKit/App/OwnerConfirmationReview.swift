@@ -28,7 +28,7 @@ import Foundation
 public struct ConfirmationReviewItem: Codable, Equatable, Sendable, Identifiable {
     /// Given by the server: c1… checked, x1… notChecked, n1… needsYou, o1… leftOpen, p1… problems.
     public let key: String
-    public let text: String
+    public var text: String
     public let criterionKey: String?
     public let whyNotProven: String?
     public let coordinatorChecked: String?
@@ -49,8 +49,8 @@ public struct ConfirmationReviewItem: Codable, Equatable, Sendable, Identifiable
 
 /// One answer a question offers: ask_owner's shape.
 public struct ConfirmationNeedsYouOption: Codable, Equatable, Sendable {
-    public let label: String
-    public let description: String?
+    public var label: String
+    public var description: String?
 
     public init(label: String, description: String? = nil) {
         self.label = label
@@ -61,10 +61,10 @@ public struct ConfirmationNeedsYouOption: Codable, Equatable, Sendable {
 /// A line only the owner can decide: a question, its options, and the one the card preselects.
 public struct ConfirmationNeedsYouItem: Codable, Equatable, Sendable, Identifiable {
     public let key: String
-    public let text: String
+    public var text: String
     public let criterionKey: String?
     public let evidenceRefs: [String]?
-    public let options: [ConfirmationNeedsYouOption]
+    public var options: [ConfirmationNeedsYouOption]
     /// Index into `options`: preselected, and tagged Recommended.
     public let recommendedOption: Int
 
@@ -98,7 +98,7 @@ public enum OwnerConfirmationNotReviewedReason: String, Codable, Equatable, Send
     case reviewerStopped = "REVIEWER_STOPPED"
     case noCoordinator = "NO_COORDINATOR"
     case automaticOff = "AUTOMATIC_OFF"
-    case coordinatorPaused = "COORDINATOR_PAUSED"
+    case pausedCoordinator = "COORDINATOR_PAUSED"
     case unreachable = "UNREACHABLE"
     case unknown = "UNKNOWN"
 
@@ -154,16 +154,20 @@ public struct ConfirmationReturnRecordView: Codable, Equatable, Sendable {
     public let recordId: String
     public let recordedAt: String
     public let reviewedSha: String?
-    public let reason: String
-    public let problems: [ConfirmationReviewItem]
+    public var reason: String
+    public var problems: [ConfirmationReviewItem]
+    /// A PROBLEMS record's `reason` and `problems` in the owner's language (Settings ›
+    /// Translation); nil until translated, and on a RETURN record.
+    public let translation: OwnerCardTranslation?
 
     public init(recordId: String, recordedAt: String, reviewedSha: String? = nil, reason: String,
-                problems: [ConfirmationReviewItem]) {
+                problems: [ConfirmationReviewItem], translation: OwnerCardTranslation? = nil) {
         self.recordId = recordId
         self.recordedAt = recordedAt
         self.reviewedSha = reviewedSha
         self.reason = reason
         self.problems = problems
+        self.translation = translation
     }
 }
 
@@ -203,15 +207,19 @@ public struct OwnerConfirmationReviewView: Codable, Equatable, Sendable {
         public let recordId: String
         public let recordedAt: String
         public let reviewedSha: String?
-        public let judgment: String
+        public var judgment: String
         public let checked: [ConfirmationReviewItem]
         public let notChecked: [ConfirmationReviewItem]
-        public let needsYou: [ConfirmationNeedsYouItem]
+        public var needsYou: [ConfirmationNeedsYouItem]
         public let leftOpen: [ConfirmationReviewItem]
+        /// `judgment` and `needsYou` in the owner's language (Settings › Translation); nil until
+        /// translated.
+        public let translation: OwnerCardTranslation?
 
         public init(recordId: String, recordedAt: String, reviewedSha: String? = nil, judgment: String,
                     checked: [ConfirmationReviewItem] = [], notChecked: [ConfirmationReviewItem] = [],
-                    needsYou: [ConfirmationNeedsYouItem] = [], leftOpen: [ConfirmationReviewItem] = []) {
+                    needsYou: [ConfirmationNeedsYouItem] = [], leftOpen: [ConfirmationReviewItem] = [],
+                    translation: OwnerCardTranslation? = nil) {
             self.recordId = recordId
             self.recordedAt = recordedAt
             self.reviewedSha = reviewedSha
@@ -220,6 +228,7 @@ public struct OwnerConfirmationReviewView: Codable, Equatable, Sendable {
             self.notChecked = notChecked
             self.needsYou = needsYou
             self.leftOpen = leftOpen
+            self.translation = translation
         }
     }
 
@@ -230,16 +239,16 @@ public struct OwnerConfirmationReviewView: Codable, Equatable, Sendable {
     public let reviewer: Reviewer
     /// The request's requestedAt: "Reviewing since".
     public let since: String
-    public let dueAt: String
+    public let dueAt: String?
     public let windowSeconds: Int
-    public let headline: ConfirmationReviewHeadline?
-    public let review: Record?
+    public var headline: ConfirmationReviewHeadline?
+    public var review: Record?
     public let returned: ConfirmationReturnRecordView?
-    public let problems: ConfirmationReturnRecordView?
+    public var problems: ConfirmationReturnRecordView?
 
     public init(reviewId: String, state: OwnerConfirmationReviewState,
                 notReviewedReason: OwnerConfirmationNotReviewedReason? = nil,
-                outdated: Outdated? = nil, reviewer: Reviewer, since: String, dueAt: String,
+                outdated: Outdated? = nil, reviewer: Reviewer, since: String, dueAt: String?,
                 windowSeconds: Int, headline: ConfirmationReviewHeadline? = nil, review: Record? = nil,
                 returned: ConfirmationReturnRecordView? = nil,
                 problems: ConfirmationReturnRecordView? = nil) {
@@ -274,7 +283,7 @@ public struct OwnerConfirmationReviewView: Codable, Equatable, Sendable {
         outdated = try? box.decodeIfPresent(Outdated.self, forKey: .outdated)
         reviewer = try box.decode(Reviewer.self, forKey: .reviewer)
         since = try box.decode(String.self, forKey: .since)
-        dueAt = try box.decode(String.self, forKey: .dueAt)
+        dueAt = try box.decodeIfPresent(String.self, forKey: .dueAt)
         windowSeconds = try box.decode(Int.self, forKey: .windowSeconds)
         headline = try? box.decodeIfPresent(ConfirmationReviewHeadline.self, forKey: .headline)
         review = try? box.decodeIfPresent(Record.self, forKey: .review)
@@ -325,10 +334,10 @@ public struct ConfirmationUnderReview: Codable, Equatable, Sendable {
     public let reviewerTitle: String?
     /// The request's requestedAt.
     public let since: String
-    public let dueAt: String
+    public let dueAt: String?
 
     public init(requestId: String, taskId: String, reviewerSessionId: String? = nil,
-                reviewerTitle: String? = nil, since: String, dueAt: String) {
+                reviewerTitle: String? = nil, since: String, dueAt: String?) {
         self.requestId = requestId
         self.taskId = taskId
         self.reviewerSessionId = reviewerSessionId
@@ -534,7 +543,7 @@ public extension OwnerConfirmations {
         case .timedOut?: why = noAnswerWithin(reviewWindowWords(windowSeconds))
         case .reviewerEnded?: why = notReviewedReviewerEnded
         case .reviewerStopped?: why = notReviewedReviewerStopped
-        case .coordinatorPaused?: why = notReviewedCoordinatorPaused
+        case .pausedCoordinator?: why = notReviewedCoordinatorPaused
         case .automaticOff?: why = notReviewedAutomaticOff
         case .noCoordinator?: why = notReviewedNoCoordinator
         case .unreachable?: why = notReviewedUnreachable

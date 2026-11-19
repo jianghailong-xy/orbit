@@ -38,6 +38,34 @@ final class SessionCreatedTasksCopyParityTests: XCTestCase {
         let singleNamesTheTask: Bool
         let countLine: [CountLineCase]
         let card: [CardCase]
+        let band: [BandCase]
+    }
+
+    /// `sessionTaskBand(sessionTaskCard(created, watched))` → the collapsed line past one row, or nil.
+    private struct BandCase: Decodable {
+        struct Created: Decodable {
+            struct Item: Decodable {
+                let id: String
+                let status: String
+                let running: Bool
+                let queued: Bool
+                let createdAt: String
+            }
+            let running: Int
+            let failed: Int
+            let done: Int
+            let total: Int
+            let items: [Item]
+        }
+        struct Band: Decodable, Equatable {
+            let failed: Int
+            let text: String
+            let row: String
+        }
+        let name: String
+        let created: Created?
+        let watched: [CardCase.Watched]
+        let band: Band?
     }
 
     /// `sessionTaskCard(created, watched)` → the card, or nil for none.
@@ -137,7 +165,6 @@ final class SessionCreatedTasksCopyParityTests: XCTestCase {
         let theirs = try fixture().copy
         let mine: [String: String] = [
             "title": SessionCreatedTasksCopy.title,
-            "viewAll": SessionCreatedTasksCopy.viewAll,
             "openProject": SessionCreatedTasksCopy.openProject,
             "replacesPrefix": SessionCreatedTasksCopy.replacesPrefix,
             "createdInChip": SessionCreatedTasksCopy.createdInChip,
@@ -265,6 +292,36 @@ final class SessionCreatedTasksCopyParityTests: XCTestCase {
                     watching: card.watching, stale: card.stale)
             }
             XCTAssertEqual(card, c.card, c.name)
+        }
+    }
+
+    // MARK: the band: the collapsed line, as the Agents line says it
+
+    func testEveryBandCaseIsTheLineThisClientWrites() throws {
+        let cases = try fixture().band
+        XCTAssertFalse(cases.isEmpty, "the fixture has no band cases, so this check checks nothing")
+        for c in cases {
+            let created = c.created.map { created in
+                SessionCreatedTasks(
+                    total: created.total, running: created.running, failed: created.failed, done: created.done,
+                    items: created.items.map { item in
+                        SessionCreatedTaskRow(id: item.id, title: "Task \(item.id)", status: item.status,
+                                              running: item.running, queued: item.queued,
+                                              createdAt: item.createdAt, projectId: nil, replaces: nil)
+                    },
+                    projects: [])
+            }
+            let watched = c.watched.map { task in
+                SessionWatchedTask(id: task.id, title: "Task \(task.id)",
+                                   standing: task.status.map {
+                                       WatchTargetStatus(status: $0, running: task.running, queued: task.queued)
+                                   },
+                                   stale: task.stale)
+            }
+            let band = SessionTaskCard(created: created, watched: watched)?.band.map {
+                BandCase.Band(failed: $0.failed, text: $0.text, row: $0.row.id)
+            }
+            XCTAssertEqual(band, c.band, c.name)
         }
     }
 }

@@ -1,0 +1,47 @@
+<!doctype html><html lang="zh"><meta charset="utf-8">
+<link rel="stylesheet" href="../project-done-sessions-page/kit.css">
+<link rel="stylesheet" href="board.css">
+<script src="../project-done-sessions-page/kit.js"></script>
+<script src="board.js"></script>
+<body>
+<h1>① 项目 DONE：谁来确认</h1>
+<p class="lede" style="max-width:1780px">项目进 DONE 有两条路。<b>推导</b>（<code>project-done-derived.ts</code>）：判据全部满足、全部落到 main，再加上你早先确认过这版判据，Orbit 就自己把它写成 DONE，<b>这一刻不问你</b>。<b>记录</b>（<code>POST /projects/:id/done</code>）：只在事实证明不了时才走，coordinator 提请求，你在「Is this project done?」卡上按。下面画的是正常落地的项目在推导这一刻你看到的东西：现在、方案 A、方案 B。</p>
+<div class="row" id="figs"></div>
+<div class="decide"><b>待你定：</b>A 还是 B？A 保持 2026-09-08 的决定（确认判据 = 同意），只补通知和 Reopen 入口，改动小。B 推翻那个决定：Orbit 永远不自己写 DONE，<code>done_by='DERIVED'</code> 不再出现，「recorded by Orbit」文案和 <code>docs/project-done-gate.md</code> 都要改；推导出的 DONE 后续被事实收回的规则也随之消失（你的记录只在判据变或服务任务 reopen 时收回）。</div>
+<table class="board-table">
+<tr><th></th><th>现在</th><th>方案 A · 自动 + 通知</th><th>方案 B · 每次都要你按</th></tr>
+<tr><td>谁写 DONE</td><td>Orbit（推导）</td><td>Orbit（推导）</td><td>只有你；Orbit 只出卡</td></tr>
+<tr><td>你在那一刻知道吗</td><td>不知道：没有推送，没有 Needs you</td><td>推送 + 页上回执卡</td><td>推送 + Needs you 里一张待答卡</td></tr>
+<tr><td>判据没变、任务没 reopen 时，事实变了会不会收回</td><td>会（投影双向）</td><td>会（投影双向）</td><td>不会（你的记录是决定）</td></tr>
+<tr><td>要改的地方</td><td>—</td><td>推送一条；三端回执卡加一行出处和 Reopen</td><td>推导只开 DONE_REQUEST 不写列；三端卡加「asked by Orbit」；文档与 spec 改写</td></tr>
+</table>
+<script>
+const TALLY6 = '6 criteria · 6 met · 6 landed on main';
+document.getElementById('figs').innerHTML = [
+  fig('now', '现在', projPage(mk(receiptCard({ by: 'recorded by Orbit', tally: TALLY6, reopen: false }), 1),
+      { coordSub: '项目已被平台记为 DONE，6 条判据都已落到 main。' }),
+    `<b>Orbit 自己写了 DONE，你什么都没按</b><ol>
+<li>${n(1)}最后一个合并落到 main，推导就把项目记成 DONE。你最后一次动作是开工时确认判据。</li>
+<li>没有推送，没有 Needs you。下次打开这一页才看到。</li>
+<li>要撤回得去项目页（⊞）找 Reopen。</li></ol>`),
+  fig('after', '方案 A', projPage(pushBanner('Session Recap is done', 'Orbit recorded it: all 6 criteria met and on main.') +
+      mk(receiptCard({ by: 'recorded by Orbit', tally: TALLY6, line: 'From the criteria you confirmed on Oct 2. Not right? Reopen it.' }), 1)),
+    `<b>保持自动，补上「告诉你」</b><ol>
+<li>推导写下 DONE 的同一刻发一条推送。</li>
+<li>${n(1)}回执卡多一行出处：依据哪天你确认的判据；卡上直接给 Reopen。</li>
+<li>不新增待答事项，你不需要做任何事。</li></ol>`),
+  fig('after', '方案 B', projPage(pushBanner('Session Recap looks done', 'All 6 criteria met and on main. Record it as done?') +
+      mk(askCard({ meta: 'Session Recap · asked by Orbit · nothing to prove', checked: '6 of 6 criteria met · 6 landed on main',
+        buttons: [['Record as done', 'p'], ['Not yet…', 's']] }), 1)),
+    `<b>Orbit 只出卡，不写列</b><ol>
+<li>${n(1)}事实全部成立时，Orbit 代替 coordinator 开一张「Is this project done?」。没有 gap，所以没有「What Orbit can’t prove」。</li>
+<li>项目在你按之前一直是 OPEN；列表行显示 Ready to close。</li>
+<li>Not yet… 和现在一样，备注发给 coordinator。</li></ol>`),
+  fig('after', '方案 B · 按下之后', projPage(mk(receiptCard({ by: 'recorded by you', tally: TALLY6 + ' · 0 gaps accepted' }), 1),
+      { coordSub: '你把项目记为 DONE。' }),
+    `<b>每个 DONE 都是你的记录</b><ol>
+<li>${n(1)}回执统一成 recorded by you。「recorded by Orbit」从三端消失。</li>
+<li>之后只有判据改动或服务判据的任务被 reopen 才会收回。</li></ol>`),
+].join('');
+</script>
+</body>

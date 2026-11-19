@@ -1,3 +1,4 @@
+import { RUN_QUESTION_PREFIX } from './run-question';
 import { BadRequestException } from '@nestjs/common';
 import { TASK_ACCEPTANCE_CLIENT_TURN_PREFIX } from '../tasks/executable-acceptance-round';
 
@@ -23,6 +24,36 @@ export const SESSION_REPLY_TURN_KEY_PREFIX = 'session-reply:';
  * the platform's own delivery.
  */
 export const AUTO_RETRY_TURN_KEY_PREFIX = 'auto-retry:';
+
+/**
+ * The part of the re-send namespace a re-send of Orbit's own words is written under: the sweep's and the
+ * failure card's Retry alike, when the message they re-send is one the control plane wrote (a fact told
+ * to a coordinator, a watch's wake, a task run's brief, the opening of a session the platform opened —
+ * orbit-message.ts `orbitMessageOf`). Counted by `isOrbitAuthoredTurn`, so the re-send is Orbit's where
+ * the message it re-sends was: on the session row (`lastUserFromOrbit`) and on the queue
+ * (`authoredByOrbit`). A re-send of the owner's own words stays under the bare prefix above, and is
+ * still the owner's (docs/session-list-projects-design.md §3.5). Inside the reserved prefix, so no
+ * caller can take it.
+ */
+export const AUTO_RETRY_ORBIT_TURN_KEY_PREFIX = `${AUTO_RETRY_TURN_KEY_PREFIX}orbit:`;
+
+/**
+ * The sweep's key for a re-send of Orbit's words: it names the turn it re-sends (`from:<turnId>:`),
+ * so the re-send is drawn as the card that turn was (sessions/turn-cards.ts) instead of as its block.
+ * The failure card's Retry names it already (`retry-message:<turnId>`, auto-retry.service.ts).
+ */
+export function orbitResendTurnKey(sourceTurnId: string | null, nonce: string): string {
+  return sourceTurnId
+    ? `${AUTO_RETRY_ORBIT_TURN_KEY_PREFIX}from:${sourceTurnId}:${nonce}`
+    : `${AUTO_RETRY_ORBIT_TURN_KEY_PREFIX}${nonce}`;
+}
+
+/** The turn an Orbit re-send re-sends, by either key that names it; null for every other key. */
+export function orbitResendSourceTurnId(clientTurnId: string | null | undefined): string | null {
+  if (!clientTurnId?.startsWith(AUTO_RETRY_ORBIT_TURN_KEY_PREFIX)) return null;
+  return /^(?:from|retry-message):([0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12})(?::|$)/i
+    .exec(clientTurnId.slice(AUTO_RETRY_ORBIT_TURN_KEY_PREFIX.length))?.[1] ?? null;
+}
 
 /**
  * The three namespaces a confirmation request's review is carried in
@@ -61,6 +92,8 @@ export const OPEN_ITEM_TURN_KEY_PREFIX = 'open-item:v1:';
 
 /** Every prefix a caller's own `clientTurnId` may not start with. */
 const RESERVED_TURN_KEY_PREFIXES = [
+  RUN_QUESTION_PREFIX,
+  'run-notify:v1:',
   WATCH_TURN_KEY_PREFIX,
   SESSION_REPLY_TURN_KEY_PREFIX,
   AUTO_RETRY_TURN_KEY_PREFIX,

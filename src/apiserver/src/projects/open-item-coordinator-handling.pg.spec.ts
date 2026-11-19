@@ -1,3 +1,5 @@
+import { seedPromotionRequest } from '../test-support/promotion-request';
+import { receiveOpenItem } from '../test-support/open-item-delivery';
 import assert from 'node:assert/strict';
 import { randomUUID } from 'node:crypto';
 import { test } from 'node:test';
@@ -439,7 +441,8 @@ async function onlyClaim(stack: Stack, w: World, kind: string): Promise<Integrat
   return claimed[0]!;
 }
 
-function report(stack: Stack, w: World, job: IntegrationJobCommand, result: Result) {
+async function report(stack: Stack, w: World, job: IntegrationJobCommand, result: Result) {
+  if (job.kind === 'LAND_TASK') await seedPromotionRequest(stack.db, w.projectId);
   return stack.api.integrationJobResult({ id: w.runnerId }, job.jobId, {
     claimGeneration: job.claimGeneration,
     leaseOwner: job.leaseOwner,
@@ -455,6 +458,7 @@ async function failedLanding(stack: Stack, w: World, label: string) {
   assert.equal(answer.accepted, true);
   const [item] = await itemsWhere(stack.db, { taskId: task.taskId });
   assert.ok(item, 'the red landing opened an item');
+  await receiveOpenItem(stack.db, item.id);
   return { ...task, firstJobId: landing.jobId, itemId: item.id };
 }
 
@@ -480,6 +484,7 @@ async function blockedCandidate(stack: Stack, w: World) {
   assert.equal(items.length, 1, `the red check opened one item — ${JSON.stringify(items)}`);
   assert.equal(items[0]!.taskId, null, 'about the candidate, and about no task');
   assert.equal(failed.openItemId, items[0]!.id);
+  await receiveOpenItem(stack.db, items[0]!.id);
   return { taskId: task.taskId, promotionId: promotion.id, checkJobId: check.jobId, itemId: items[0]!.id };
 }
 
@@ -549,7 +554,11 @@ async function makeDue(stack: Stack, itemId: string): Promise<void> {
 
 async function escalate(stack: Stack, itemId: string): Promise<void> {
   await makeDue(stack, itemId);
+  // A live coordinator retains a taken ITEM. Switching off Automatic makes this fixture eligible.
+  const target = await stack.db.projectOpenItem.findUniqueOrThrow({ where: { id: itemId } });
+  await stack.db.project.update({ where: { id: target.projectId }, data: { coordinatorEnabled: false } });
   const swept = await stack.escalation.sweep();
+  await stack.db.project.update({ where: { id: target.projectId }, data: { coordinatorEnabled: true } });
   assert.ok(swept.some((row) => row.itemId === itemId), 'the clock handed the item to the owner');
 }
 
@@ -693,7 +702,8 @@ test('task landing, rerun fails again: the item ends SUPERSEDED / RETRIED pointi
       assert.match(told[0]!, /This is generation 2 of this task’s landing, rerun at the coordinator session’s request/);
 
       const read = await stack.openItems.list(w.ownerId, w.projectId);
-      assert.deepEqual(read.withCoordinator.map((r) => r.itemId), [second.id]);
+      assert.deepEqual(read.withCoordinator.map((r) => r.itemId), [],
+        "the new failure stays queued until its own delivery is received");
       assert.equal(read.settled.find((r) => r.itemId === red.itemId)?.outcome?.supersededByItemId, second.id);
     } finally {
       await stack.db.$disconnect();
@@ -887,6 +897,8 @@ test('a task rerun queued or running is progress: it has no deadline, then its l
       const red = await failedLanding(stack, w, 'land-in-flight');
       const retried = await retryTask(stack, w, red.taskId);
       await makeDue(stack, red.itemId);
+      // Isolate the handling-job exemption from the taken-up exemption.
+      await stack.db.session.update({ where: { id: w.coordinatorSessionId }, data: { status: RunStatus.FAILED } });
 
       assert.deepEqual(await stack.escalation.sweep(), [], 'a queued rerun has no escalation deadline');
       let held = await item(stack.db, red.itemId);
@@ -927,6 +939,8 @@ test('a promotion re-check queued or running is progress: it cannot escalate bef
       const blocked = await blockedCandidate(stack, w);
       const retried = await retryCandidate(stack, w, blocked.promotionId);
       await makeDue(stack, blocked.itemId);
+      // Isolate the handling-job exemption from the taken-up exemption.
+      await stack.db.session.update({ where: { id: w.coordinatorSessionId }, data: { status: RunStatus.FAILED } });
       assert.deepEqual(await stack.escalation.sweep(), [], 'a queued re-check has no deadline');
       let read = await stack.openItems.list(w.ownerId, w.projectId);
       const queued = read.withCoordinator.find((row) => row.itemId === blocked.itemId);
@@ -951,6 +965,8 @@ test('a promotion re-check queued or running is progress: it cannot escalate bef
       const again = await blockedCandidate(stack, v);
       const secondRetry = await retryCandidate(stack, v, again.promotionId);
       await makeDue(stack, again.itemId);
+      // Isolate the handling-job exemption from the taken-up exemption.
+      await stack.db.session.update({ where: { id: v.coordinatorSessionId }, data: { status: RunStatus.FAILED } });
       assert.deepEqual(await stack.escalation.sweep(), [], 'the queued failing re-check is still progress');
       const red = await onlyClaim(stack, v, 'CHECK_PROMOTION');
       assert.deepEqual(await stack.escalation.sweep(), [], 'the running failing re-check is still progress');
@@ -1142,6 +1158,7 @@ test('escalated merge into main: the owner\'s card offers "Ask the coordinator a
       assert.equal(fresh.length, 1, 'the hand-back is a fresh turn on the coordinator');
       assert.match(fresh[0]!.content ?? '', /integration_retry/);
       assert.match(fresh[0]!.content ?? '', new RegExp(`promotionId: ${uuidToBase62(blocked.promotionId)}`));
+      await receiveOpenItem(stack.db, blocked.itemId);
       read = await stack.openItems.list(w.ownerId, w.projectId);
       assert.equal(read.needsYou.some((row) => row.itemId === blocked.itemId), false);
       assert.deepEqual(read.withCoordinator.find((row) => row.itemId === blocked.itemId)?.actions,

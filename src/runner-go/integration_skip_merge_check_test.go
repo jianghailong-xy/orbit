@@ -404,3 +404,20 @@ func TestCLISkipMergeCheckAtATerminal(t *testing.T) {
 		t.Fatalf("hits = %v, want nothing sent at all", *hits)
 	}
 }
+
+func TestMCPSkipMergeCheckCardUsesLandingOverride(t *testing.T) {
+	project := strings.Replace(skipProjectRead, `"mergeCheckCommand": "scripts/check.sh",`,
+		`"landingCheckCommand": "scripts/landing.sh", "mergeCheckCommand": "scripts/check.sh",`, 1)
+	srv, _, told := skipCheckServerReading(t, `{"status":"ALLOWED"}`, skipTaskRead, project)
+	mcp := &mcpServer{agentID: "agent-1", sessionID: "sess-1", t: NewTransport(srv.URL, "tok")}
+	res := mcp.callTool("integration_skip_merge_check", map[string]interface{}{
+		"projectId": "proj-1", "taskId": "task-1", "reason": "the landing check cannot run here",
+	})
+	if res["isError"] == true {
+		t.Fatalf("skip failed: %#v", res)
+	}
+	input := told.card["input"].(map[string]interface{})
+	if input["checkCommand"] != "scripts/landing.sh" {
+		t.Fatalf("card named the wrong check: %#v", input)
+	}
+}

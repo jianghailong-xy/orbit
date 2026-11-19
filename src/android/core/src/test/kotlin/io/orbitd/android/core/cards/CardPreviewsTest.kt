@@ -112,24 +112,24 @@ class CardPreviewsTest {
     /** An agent's ask answered here: "Answered", who did what and when — the server's time where it says it — and what came of it. */
     @Test fun anAnsweredAskIsItsRecord() {
         val allowed = buildJsonObject { put("status", "ALLOWED"); put("decidedAt", "2026-10-04T10:41:00.000Z") }
-        assertEquals(CardRecord("Answered", CardRecord.Icon.CHECK, "Answered by you · 10:41", "Sent to the agent"),
+        assertEquals(CardRecord("Answered", CardRecord.Icon.CHECK, "Answered by you · 10:41\u202FAM", "Sent to the agent"),
             record(card("approval:a2"), CardVerb.ANSWER, allowed))
-        assertEquals(CardRecord("Answered", CardRecord.Icon.CHECK, "Approved by you · 10:41", "The agent is running the plan"),
+        assertEquals(CardRecord("Answered", CardRecord.Icon.CHECK, "Approved by you · 10:41\u202FAM", "The agent is running the plan"),
             record(card("approval:a3"), CardVerb.APPROVE_PLAN, allowed))
-        assertEquals(CardRecord("Answered", CardRecord.Icon.KEPT, "Kept planning · by you · 10:40", "The agent goes on planning"),
+        assertEquals(CardRecord("Answered", CardRecord.Icon.KEPT, "Kept planning · by you · 10:40\u202FAM", "The agent goes on planning"),
             record(card("approval:a3"), CardVerb.KEEP_PLANNING, buildJsonObject { put("status", "DENIED") }))
         listOf("approval:a5" to CardVerb.CREATE_BATCH, "approval:a6" to CardVerb.CHANGE_DAG, "approval:a7" to CardVerb.RESOLVE_BLOCKER).forEach { (key, verb) ->
-            assertEquals(key, CardRecord("Answered", CardRecord.Icon.CHECK, "Approved by you · 10:41", "Sent to the agent"), record(card(key), verb, allowed))
+            assertEquals(key, CardRecord("Answered", CardRecord.Icon.CHECK, "Approved by you · 10:41\u202FAM", "Sent to the agent"), record(card(key), verb, allowed))
         }
         // On another day the time says the date too.
-        assertEquals("Answered by you · 10/4 10:41", record(card("approval:a2"), CardVerb.ANSWER, allowed, java.time.Instant.parse("2026-10-05T09:00:00Z")).line)
+        assertEquals("Answered by you · 10/4 10:41\u202FAM", record(card("approval:a2"), CardVerb.ANSWER, allowed, java.time.Instant.parse("2026-10-05T09:00:00Z")).line)
     }
 
     /** A confirmation says which report it settled; one whose report has no time says nothing more. */
     @Test fun aConfirmedTaskIsItsRecord() {
         val owner = card("owner:$task:owner1")
         val decided = buildJsonObject { put("decision", "CONFIRM"); put("decidedAt", "2026-10-04T14:06:00.000Z") }
-        assertEquals(CardRecord("Confirmed done", CardRecord.Icon.CHECK, "Confirmed done by you · 14:06", "Recorded on the 00:00 report"),
+        assertEquals(CardRecord("Confirmed done", CardRecord.Icon.CHECK, "Confirmed done by you · 2:06\u202FPM", "Recorded on the 12:00\u202FAM report"),
             record(owner, CardVerb.CONFIRM_OWNER, decided))
         val view = owner.context.obj("view")!!
         val untimed = JsonObject(view + ("waiting" to JsonObject(view.obj("waiting")!! + ("report" to buildJsonObject { put("text", "Done.") }))))
@@ -141,21 +141,92 @@ class CardPreviewsTest {
         val document = fixture().obj("snapshot")!!.obj("standing")!!.obj("project")!!
         val start = InteractionCard("start:start1", CardFamily.START, "Start this project?", fixture().obj("startItem")!!, "s", project, "start1",
             "seal1:plan1", listOf(CardVerb.START), context = document)
-        assertEquals(CardRecord("Decision recorded", CardRecord.Icon.CHECK, "Started by you · 14:06", "On 3 criteria at seal a1b2c3d4e5f6"),
+        assertEquals(CardRecord("Decision recorded", CardRecord.Icon.CHECK, "Started by you · 2:06\u202FPM", "You started the project on 3 criteria"),
             record(start, CardVerb.START, buildJsonObject { put("startedAt", "2026-10-04T14:06:00.000Z"); put("criteriaDigest", "a1b2c3d4e5f6a7b8"); put("criteriaCount", 3) }))
-        assertEquals("without an answer to read, the card's own seal and count", "On 1 criterion at seal seal1", record(start, CardVerb.START).detail)
+        assertEquals("without an answer to read, the card's own count", "You started the project on 1 criteria", record(start, CardVerb.START).detail)
         val acceptance = cards.single { it.key.startsWith("acceptance:") }
         val confirmed = buildJsonObject {
             put("state", "CONFIRMED")
             putJsonObject("currentVersion") { put("digest", "d4e5f6a7b8c9d0"); putJsonArray("material") { repeat(5) { addJsonObject { put("definitionId", "c$it") } } } }
             putJsonObject("confirmation") { put("confirmedAt", "2026-10-04T14:06:00.000Z") }
         }
-        assertEquals(CardRecord("Decision recorded", CardRecord.Icon.CHECK, "Confirmed by you · 14:06", "5 criteria at seal d4e5f6a7b8c9"),
+        assertEquals(CardRecord("Decision recorded", CardRecord.Icon.CHECK, "Confirmed by you · 2:06\u202FPM", "You confirmed 5 criteria"),
             record(acceptance, CardVerb.CONFIRM_CRITERIA, confirmed))
-        val stale = acceptance.copy(source = JsonObject(acceptance.source + mapOf("state" to JsonPrimitive("STALE"), "changesSinceConfirmed" to buildJsonObject {
-            putJsonArray("added") { addJsonObject { put("ordinal", 4) } }; putJsonArray("stricter") { addJsonObject { put("ordinal", 2) } }; putJsonArray("revised") {}
-        })))
-        assertEquals("5 criteria at seal d4e5f6a7b8c9 — 1 new, 1 stricter", record(stale, CardVerb.CONFIRM_CRITERIA, confirmed).detail)
+    }
+
+    private fun recorded(extra: kotlinx.serialization.json.JsonObjectBuilder.() -> Unit) = buildJsonObject {
+        put("state", "CONFIRMED")
+        putJsonObject("confirmation") {
+            put("confirmedAt", "2026-10-04T14:06:00.000Z"); put("criteriaDigest", "d49d35d7511e0123")
+            putJsonArray("criteriaMaterial") { repeat(7) { addJsonObject { put("definitionId", "c$it") } } }
+            extra()
+        }
+    }
+
+    private fun criterion(key: String, ordinal: Int?, text: String?, since: String = "UNCHANGED") = buildJsonObject {
+        put("key", key); if (ordinal != null) put("ordinal", ordinal) else put("ordinal", JsonNull); put("text", text?.let { JsonPrimitive(it) } ?: JsonNull)
+        put("since", since)
+    }
+
+    /** What a confirmation changed and the fold it opens (the web receipt, word for word). */
+    @Test fun aConfirmationOpensToWhatItConfirmed() {
+        val acceptance = cards.single { it.key.startsWith("acceptance:") }
+        val answer = recorded {
+            putJsonObject("changes") {
+                putJsonArray("added") { addJsonObject { put("key", "k4"); put("ordinal", 4); put("text", "Ships in English") } }
+                putJsonArray("stricter") { addJsonObject { put("key", "k2"); put("ordinal", 2); put("verificationMethod", "Run the suite"); put("confirmedVerificationMethod", "Read it") } }
+                putJsonArray("revised") {}; putJsonArray("removed") {}
+                putJsonArray("unchanged") { repeat(5) { add(JsonPrimitive("u$it")) } }
+            }
+            put("wordingRecorded", true)
+            putJsonArray("criteria") {
+                add(criterion("k2", 2, "Tests pass")); add(criterion("k3", 3, "Old words", "EDITED")); add(criterion("k4", 4, "Ships in English", "EDITED"))
+                add(criterion("k5", 5, "Gone", "REMOVED")); add(criterion("k6", null, null))
+            }
+        }
+        val record = record(acceptance, CardVerb.CONFIRM_CRITERIA, answer)
+        assertEquals("You confirmed 7 criteria · 1 new, 1 stricter, 5 unchanged", record.detail)
+        val fold = record.receipt!!
+        assertEquals("What this confirmed · 7 criteria", fold.openLabel)
+        assertEquals(listOf(ReceiptChange("+", "4 · New", "Ships in English", null),
+            ReceiptChange("↑", "2 · Stricter check", "Run the suite", "was: Read it")), fold.changes)
+        assertEquals(listOf(ReceiptCriterion(2, "Tests pass"), ReceiptCriterion(3, "Old words", listOf("edited since")),
+            ReceiptCriterion(4, "Ships in English", listOf("new", "edited since")), ReceiptCriterion(5, "Gone", listOf("removed since")), ReceiptCriterion(null, null)), fold.criteria)
+        assertEquals("These are the words you confirmed. Criteria 3, 4 and 5 have changed since; Orbit asks about the criteria standing now on its own card.", fold.note)
+        assertEquals("Seal d49d35d7511e", fold.seal)
+        assertEquals("Hide what this confirmed", CardPreviews.receiptCloseLabel)
+        assertEquals("Its words are not on record", CardPreviews.receiptWordsGone)
+    }
+
+    @Test fun theHeadlineSaysWhatTheConfirmationChanged() {
+        assertEquals("You confirmed 7 criteria", CardPreviews.reconfirmedLine(7, null))
+        val onlyUnchanged = buildJsonObject { putJsonArray("added") {}; putJsonArray("unchanged") { add(JsonPrimitive("a")); add(JsonPrimitive("b")) } }
+        assertEquals("You confirmed 7 criteria · 2 unchanged", CardPreviews.reconfirmedLine(7, onlyUnchanged))
+        assertEquals("You confirmed 7 criteria", CardPreviews.reconfirmedLine(7, buildJsonObject { }))
+        assertEquals("You confirmed 7 criteria · 1 changed, 1 removed", CardPreviews.reconfirmedLine(7, buildJsonObject {
+            putJsonArray("revised") { addJsonObject { put("ordinal", 1) } }; putJsonArray("removed") { add(JsonPrimitive("x")) } }))
+        // A start says it started, whatever the change words are.
+        val acceptance = cards.single { it.key.startsWith("acceptance:") }
+        val started = recorded { putJsonObject("startedWith") { put("mode", "AUTO") } }
+        assertEquals("You started the project on 7 criteria", record(acceptance, CardVerb.CONFIRM_CRITERIA, started).detail)
+        assertEquals("You started the project on 1 criteria", CardPreviews.startedLine(1))
+    }
+
+    @Test fun anOlderRecordNamesWhatItCannotShow() {
+        val acceptance = cards.single { it.key.startsWith("acceptance:") }
+        // Absent fields: no fold at all.
+        assertNull(record(acceptance, CardVerb.CONFIRM_CRITERIA, recorded { }).receipt)
+        val older = recorded { putJsonArray("criteria") { add(criterion("a", 1, "Same")); add(criterion("b", 2, null, "EDITED")) } }
+        val note = record(acceptance, CardVerb.CONFIRM_CRITERIA, older).receipt!!.note
+        assertEquals(CardPreviews.receiptWordingNotKept + " One criterion has changed since and its old words are gone.", note)
+        assertEquals(" 3 criteria have changed since and their old words are gone.", CardPreviews.receiptWordsGone(3))
+        val plain = recorded { putJsonArray("criteria") { add(criterion("a", 1, "Same")) } }
+        assertEquals(CardPreviews.receiptWordingNotKept, record(acceptance, CardVerb.CONFIRM_CRITERIA, plain).receipt!!.note)
+        assertEquals("What this confirmed · 1 criterion", CardPreviews.receiptOpenLabel(1))
+        assertEquals("These are the words you confirmed. Criterion 3 has changed since; Orbit asks about the criteria standing now on its own card.", CardPreviews.receiptMovedNote(listOf(3)))
+        assertEquals("These are the words you confirmed. Criteria 2, 3 and 5 have changed since; Orbit asks about the criteria standing now on its own card.", CardPreviews.receiptMovedNote(listOf(5, 2, 3)))
+        val kept = recorded { put("wordingRecorded", true); putJsonArray("criteria") { add(criterion("a", 1, "Same")) } }
+        assertNull(record(acceptance, CardVerb.CONFIRM_CRITERIA, kept).receipt!!.note)
     }
 
     /** "Weaken this ruler?": approved, it names the seal it left; refused, the seal the criteria stay at. */
@@ -164,10 +235,10 @@ class CardPreviewsTest {
         val approved = buildJsonObject {
             put("decision", "APPROVE"); put("decidedAt", "2026-10-04T14:06:00.000Z"); put("baseSeal", "d4e5f6"); put("resultingSeal", "e7f8a9")
         }
-        assertEquals(CardRecord("Decision recorded", CardRecord.Icon.CHECK, "Approved by you · 14:06", "Re-sealed: d4e5f6 → e7f8a9"),
+        assertEquals(CardRecord("Decision recorded", CardRecord.Icon.CHECK, "Approved by you · 2:06\u202FPM", "Re-sealed: d4e5f6 → e7f8a9"),
             record(criteria, CardVerb.APPROVE_CRITERIA, approved))
         assertNull("no resulting seal, no detail", record(criteria, CardVerb.APPROVE_CRITERIA).detail)
-        assertEquals(CardRecord("Decision recorded", CardRecord.Icon.REFUSED, "Refused by you · 10:40", "The criteria stay at seal seal1"),
+        assertEquals(CardRecord("Decision recorded", CardRecord.Icon.REFUSED, "Refused by you · 10:40\u202FAM", "The criteria stay at seal seal1"),
             record(criteria, CardVerb.REJECT_CRITERIA))
     }
 

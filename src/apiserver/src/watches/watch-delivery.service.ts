@@ -22,6 +22,7 @@ import {
   watchDeadLetterCodeOf,
 } from '@orbit/shared';
 
+import { ownerRequestResolutionTurn, ownerRequestTurnClientId } from '../owner-requests/owner-request';
 import { PrismaService } from '../prisma/prisma.service';
 import { PushService } from '../push/push.service';
 import { RealtimeService } from '../realtime/realtime.service';
@@ -34,6 +35,7 @@ import {
   countWatchReconcileRepair,
 } from './watch-metrics';
 import { redactErrorText, redactReason, redactSnapshot } from './watch-redaction';
+import { type ForkHandback, readForkHandbacks } from '../tasks/task-fork-handback';
 import { currentWatchRollout, watchWorkersRun, type WatchRollout } from './watch-rollout';
 
 /**
@@ -93,6 +95,15 @@ import { currentWatchRollout, watchWorkersRun, type WatchRollout } from './watch
  * that brings `attempts` to the contract's `maxDeliveryAttempts` makes the row a DEAD_LETTER, and so
  * does a refusal no retry can change. Both keep `last_error`, and the watch's own read lists every
  * delivery with its state, so a dead letter is something a client reads, not a line a log once said.
+ *
+ * OWNER REQUESTS
+ * An owner request's ending (migration 0504) is a RESUME_SESSION delivery of kind OWNER_REQUEST, written in the
+ * transaction that ends the request and naming it rather than a watch. Its turn goes to the session that asked, by the
+ * same `createTurn` path, lease, retry and dead letter as a watch's end, under `owner-request:<requestId>:resolved` —
+ * a request ends once — and is built from columns an ended request never changes. The wake guards below are a watch's:
+ * a resolution is paced by a person, not by a condition that can loop, so neither the storm limit nor the daily budget
+ * counts or refuses it, and there are no targets to recheck. An asking session whose life is over is refused exactly as
+ * an observer's is.
  *
  * GUARDS
  * Every attempt is checked again when it is made (contract `deliveryGuards`, docs/watch-operations.md).
@@ -365,20 +376,23 @@ export class WatchDeliveryService implements OnModuleInit, OnModuleDestroy {
    */
   async claimDue(): Promise<ClaimedWatchDelivery[]> {
     return this.prisma.$queryRaw<ClaimedWatchDelivery[]>`
+      -- A WITH and not a subquery of the UPDATE's FROM: a plan with d outside would run a subquery once for each row
+      -- of d, each run locking past the rows this statement has already written, and LIMIT would bound nothing.
+      WITH "due" AS MATERIALIZED (
+        SELECT "id" FROM "watch_delivery"
+        WHERE "state" = 'PENDING' AND "next_attempt_at" <= now()
+        ORDER BY "next_attempt_at", "id"
+        LIMIT ${this.claimBatch}
+        FOR UPDATE SKIP LOCKED
+      )
       UPDATE "watch_delivery" AS d
       SET "state" = 'IN_FLIGHT',
           "lease_owner" = ${this.workerId}::uuid,
           "lease_generation" = gen_random_uuid(),
           "lease_deadline_at" = now() + ${this.leaseMs}::int * interval '1 millisecond',
           "updated_at" = now()
-      FROM (
-        SELECT "id" FROM "watch_delivery"
-        WHERE "state" = 'PENDING' AND "next_attempt_at" <= now()
-        ORDER BY "next_attempt_at", "id"
-        LIMIT ${this.claimBatch}
-        FOR UPDATE SKIP LOCKED
-      ) AS due
-      WHERE d."id" = due."id"
+      FROM "due"
+      WHERE d."id" = "due"."id"
       RETURNING d."id", d."lease_generation" AS "leaseGeneration"`;
   }
 
@@ -389,17 +403,20 @@ export class WatchDeliveryService implements OnModuleInit, OnModuleDestroy {
    */
   async reclaimExpired(): Promise<number> {
     const reclaimed = await this.prisma.$queryRaw<Array<{ id: string; state: string }>>`
-      UPDATE "watch_delivery" AS d
-      SET ${afterFailedAttempt(false, this.retryBaseMs, this.retryMaxMs)},
-          "last_error" = 'LEASE_EXPIRED: the worker holding this delivery stopped before settling it'
-      FROM (
+      -- Read once, as in claimDue: a subquery read again per row of d would take every expired lease in one pass,
+      -- dead-lettering each one on its last attempt.
+      WITH "expired" AS MATERIALIZED (
         SELECT "id" FROM "watch_delivery"
         WHERE "state" = 'IN_FLIGHT' AND "lease_deadline_at" <= now()
         ORDER BY "lease_deadline_at", "id"
         LIMIT ${this.claimBatch}
         FOR UPDATE SKIP LOCKED
-      ) AS expired
-      WHERE d."id" = expired."id"
+      )
+      UPDATE "watch_delivery" AS d
+      SET ${afterFailedAttempt(false, this.retryBaseMs, this.retryMaxMs)},
+          "last_error" = 'LEASE_EXPIRED: the worker holding this delivery stopped before settling it'
+      FROM "expired"
+      WHERE d."id" = "expired"."id"
       RETURNING d."id", d."state"`;
     // Reconciliation, not an event, noticed these: their workers stopped without a word.
     countWatchReconcileRepair('delivery_lease_expired', reclaimed.length);
@@ -432,9 +449,17 @@ export class WatchDeliveryService implements OnModuleInit, OnModuleDestroy {
         },
         watch: { select: { id: true, ownerId: true, observerSessionId: true, mode: true, expiresAt: true } },
         expirySnapshot: true,
+        ownerRequest: {
+          select: {
+            id: true, ownerId: true, askedBySessionId: true, kind: true, state: true, title: true,
+            options: true, secretSpec: true, answer: true, resolutionNote: true, resolvedAt: true, repoUrlNorm: true,
+            secretGrant: { select: { exposure: true, expiresAt: true } },
+          },
+        },
       },
     });
     if (!delivery) return 'LEASE_LOST';
+    if (delivery.ownerRequest) return this.attemptOwnerRequest(claim, delivery.ownerRequest);
     const { match, watch } = delivery;
     // Whose watch this delivery is for, and which one: a Match's delivery names it through the
     // Match, an end's names it directly. `watch_delivery_kind_shape_chk` guarantees one of the two.
@@ -455,8 +480,12 @@ export class WatchDeliveryService implements OnModuleInit, OnModuleDestroy {
         const end = delivery.kind as BareWatchEnd;
         await this.resumeObserver(claim, watch!, watchEndTurnClientId(watch!.id, end), watchEndTurnContent(watch!.id, end));
       } else if (delivery.action === 'RESUME_SESSION') {
+        // A forked task's hand-back (design §2.5): its branch and the merge the forking session runs. The
+        // fork's columns never change, and the merge command follows the status the Match recorded.
+        const forks = await readForkHandbacks(this.prisma, match.watch.ownerId, forkCandidates(match));
         await this.resumeObserver(
-          claim, match.watch, watchTurnClientId(match.watch.id, match.generation), watchTurnContent(match.watch.id, match), true,
+          claim, match.watch, watchTurnClientId(match.watch.id, match.generation),
+          watchTurnContent(match.watch.id, match, forks), true,
         );
       } else {
         await this.spaceContinuous(this.prisma, match.watch);
@@ -489,12 +518,28 @@ export class WatchDeliveryService implements OnModuleInit, OnModuleDestroy {
     return 'DELIVERED';
   }
 
+  /** An owner request's ending, delivered to the session that asked it (OWNER REQUESTS above). */
+  private async attemptOwnerRequest(
+    claim: ClaimedWatchDelivery,
+    request: Parameters<typeof ownerRequestResolutionTurn>[0] & { ownerId: string; askedBySessionId: string },
+  ): Promise<WatchDeliveryOutcome> {
+    const asker: DeliveredWatch = { id: request.id, ownerId: request.ownerId, observerSessionId: request.askedBySessionId, mode: 'ONE_SHOT' };
+    try {
+      await this.resumeObserver(claim, asker, ownerRequestTurnClientId(request.id), ownerRequestResolutionTurn(request), false, false);
+    } catch (error) {
+      if (error instanceof DeliveryLeaseLost) return 'LEASE_LOST';
+      return this.fail(claim, error);
+    }
+    return 'DELIVERED';
+  }
+
   private async resumeObserver(
     claim: ClaimedWatchDelivery,
     watch: DeliveredWatch,
     clientTurnId: string,
     content: string,
     spaced = false,
+    guarded = true,
   ): Promise<void> {
     const sessionId = watch.observerSessionId;
     if (!sessionId) throw new DeliveryRefused('OBSERVER_SESSION_GONE', 'the watch names no observer session');
@@ -513,7 +558,7 @@ export class WatchDeliveryService implements OnModuleInit, OnModuleDestroy {
             const refusal = observerRefusal(await readObserver(tx, sessionId));
             if (refusal) throw refusal;
             if (spaced) await this.spaceContinuous(tx, watch);
-            await this.guardWake(tx, watch, sessionId);
+            if (guarded) await this.guardWake(tx, watch, sessionId);
             if (!(await acknowledgeDelivery(tx, claim))) throw new DeliveryLeaseLost();
             queued = true;
           },
@@ -725,7 +770,18 @@ function observerRefusal(session: ObserverRow | null): DeliveryRefused | null {
  * delivery writes the same bytes. A snapshot too large for one turn is replaced by its size and where
  * to read it; the changed targets are still named.
  */
-function watchTurnContent(watchId: string, match: DeliveredMatch): string {
+/** The TASK targets of a Match, with the status it recorded for each: whose fork hand-back its turn may carry. */
+function forkCandidates(match: DeliveredMatch): Array<{ id: string; status: string | null }> {
+  return redactSnapshot(match.perTargetSnapshot).targets
+    // A redacted id is not one to look up.
+    .filter((target) => target.kind === 'TASK' && /^[0-9a-f-]{36}$/i.test(target.id))
+    .map((target) => ({
+      id: target.id,
+      status: typeof target.observed?.status === 'string' ? target.observed.status : null,
+    }));
+}
+
+function watchTurnContent(watchId: string, match: DeliveredMatch, forks: readonly ForkHandback[] = []): string {
   // Contract `deliveryGuards.redaction`: the stored snapshot and reason pass through the allowlist first.
   const snapshot = redactSnapshot(match.perTargetSnapshot);
   const reason = redactReason(match.reason);
@@ -745,15 +801,19 @@ function watchTurnContent(watchId: string, match: DeliveredMatch): string {
     reason,
   };
   const changed = snapshot.targets.filter((target) => target.changed === true);
+  // Design §2.5: a forked task's work comes back by the forking session's own merge, so its turn says how.
+  const forked = forks.length > 0 ? { forkedTasks: forks } : {};
   const whole = render({
     ...base,
     changedTargets: changed.map(({ kind, id, state, observed }) => ({ kind, id, state, ...(observed ? { observed } : {}) })),
+    ...forked,
     latestSnapshot: snapshot,
   });
   if (whole.length <= MAX_PROMPT_CHARS) return whole;
   return render({
     ...base,
     changedTargets: changed.map(({ kind, id, state }) => ({ kind, id, state })),
+    ...forked,
     latestSnapshot: {
       evaluatedAt: snapshot.evaluatedAt,
       targets: snapshot.targets.length,

@@ -1,0 +1,30 @@
+{
+  "/usr/bin/sw_vers": "ProductName:\t\tmacOS\nProductVersion:\t\t27.2\nBuildVersion:\t\t26B123\n",
+  "/usr/bin/uname": "Darwin longdeMac-mini.local 27.2.0 Darwin Kernel Version 27.2.0: Wed Oct 14 23:48:16 PDT 2026; root:xnu-13432.41.4~25/RELEASE_ARM64_T8112 arm64\n",
+  "argv": [
+    "/usr/bin/sandbox-exec",
+    "-p",
+    "(version 1)\n(allow default)\n(deny file-write*)\n(allow file-write* (subpath \"/Users/long/.orbit/worktrees/1d26e6e8-07b2-5862-91d4-4fdecb5ab034/src/runner-go\"))\n(allow file-write* (subpath \"/private/tmp\"))\n(allow file-write* (subpath \"/private/var/folders/6p/plfqmx1d0rqcq2pc8r3ggwjw0000gn/T\"))\n(allow file-write* (subpath \"/Users/long/.orbit/caches\"))\n(allow file-write* (literal \"/dev/null\") (literal \"/dev/zero\") (literal \"/dev/tty\"))\n",
+    "--",
+    "/bin/sh",
+    "-c",
+    "exit 0"
+  ],
+  "cwd": "/Users/long/.orbit/worktrees/1d26e6e8-07b2-5862-91d4-4fdecb5ab034/src/runner-go",
+  "detectionAvailable": true,
+  "detectionReason": "",
+  "peerStartIdentity": "",
+  "platform": "darwin",
+  "trialError": "\u003cnil\u003e",
+  "trialOutput": "",
+  "withoutSeparatorArgv": [
+    "/usr/bin/sandbox-exec",
+    "-p",
+    "(version 1)\n(allow default)\n(deny file-write*)\n(allow file-write* (subpath \"/Users/long/.orbit/worktrees/1d26e6e8-07b2-5862-91d4-4fdecb5ab034/src/runner-go\"))\n(allow file-write* (subpath \"/private/tmp\"))\n(allow file-write* (subpath \"/private/var/folders/6p/plfqmx1d0rqcq2pc8r3ggwjw0000gn/T\"))\n(allow file-write* (subpath \"/Users/long/.orbit/caches\"))\n(allow file-write* (literal \"/dev/null\") (literal \"/dev/zero\") (literal \"/dev/tty\"))\n",
+    "/bin/sh",
+    "-c",
+    "exit 0"
+  ],
+  "withoutSeparatorError": "\u003cnil\u003e",
+  "withoutSeparatorOutput": ""
+}

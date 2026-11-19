@@ -1,0 +1,277 @@
+diff -ru today/src/web/src/components/Transcript.tsx new/src/web/src/components/Transcript.tsx
+--- today/src/web/src/components/Transcript.tsx	2026-11-11 12:31:58.000000000 +0800
++++ new/src/web/src/components/Transcript.tsx	2026-11-11 12:50:12.766982155 +0800
+@@ -108,6 +108,7 @@
+ import { parseCoordinatorDelivery } from '../lib/coordinatorDelivery';
+ import type { CoordinatorDeliveryCard as CoordinatorDelivery } from '@orbit/shared';
+ import { CoordinatorDeliveryLine } from './CoordinatorDeliveryLine';
++import { coordinatorDeliverySentence } from '../lib/coordinatorDelivery';
+ import { parseTaskStartCard } from '../lib/taskStartCard';
+ import type { TaskStartCard as TaskStart } from '@orbit/shared';
+ import { TaskStartCard } from './TaskStartCard';
+@@ -1716,31 +1717,190 @@
+   // In a wiki chat a drafting call is its card, which no run summary may fold away (`isGroupableTool`).
+   const chat = useContext(WikiDraftCardCtx) !== null;
+   const items = useMemo(() => groupToolRuns(nodes, chat), [nodes, chat]);
++  const renderItem = (item: NodeListItem) => {
++    const seqs = item.kind === 'steps' ? item.nodes.map((node) => node.seq) : [item.node.seq];
++    const head =
++      item.kind === 'node' && item.node.kind === 'user' && item.node.turnHead ? (
++        <TurnHead key={`head-${item.node.seq}`} startTs={item.node.ts} endTs={item.node.turnHead.endTs} live={live} />
++      ) : null;
++    return [
++      item.kind === 'steps' ? (
++        <StepsLine key={item.key} nodes={item.nodes} live={live} />
++      ) : (
++        <NodeView key={item.node.seq} node={item.node} live={live} />
++      ),
++      head,
++      ...seqs
++        .flatMap((seq) => placed?.get(seq) ?? [])
++        .map((insert) => <Fragment key={insert.key}>{insert.element}</Fragment>),
++    ];
++  };
++  const blocks = useMemo(() => foldOrbitExchanges(items), [items]);
+   return (
+     <>
+-      {items.flatMap((item) => {
+-        const seqs = item.kind === 'steps' ? item.nodes.map((node) => node.seq) : [item.node.seq];
+-        // The row a turn opens with, under its message and over everything the turn writes.
+-        const head =
+-          item.kind === 'node' && item.node.kind === 'user' && item.node.turnHead ? (
+-            <TurnHead key={`head-${item.node.seq}`} startTs={item.node.ts} endTs={item.node.turnHead.endTs} live={live} />
+-          ) : null;
+-        return [
+-          item.kind === 'steps' ? (
+-            <StepsLine key={item.key} nodes={item.nodes} live={live} />
+-          ) : (
+-            <NodeView key={item.node.seq} node={item.node} live={live} />
+-          ),
+-          head,
+-          ...seqs
+-            .flatMap((seq) => placed?.get(seq) ?? [])
+-            .map((insert) => <Fragment key={insert.key}>{insert.element}</Fragment>),
+-        ];
++      {blocks.flatMap((b) => {
++        if (b.kind === 'item') return renderItem(b.item);
++        if (b.kind === 'exchange') return [<ExchangeRow key={b.ex.key} ex={b.ex} render={renderItem} />];
++        return [<ExchangeGroup key={b.key} exs={b.exs} render={renderItem} />];
+       })}
+     </>
+   );
+ }
+ 
++// ── MOCK PROTOTYPE: fold the turns Orbit opened ──────────────────────────────────────────────
++type OrbitExchange = { task: { id: string; title: string } | null; cat: string; key: string; seq: number; what: string; reply: string; ts?: string; endTs?: string; items: NodeListItem[] };
++type FoldBlock =
++  | { kind: 'item'; item: NodeListItem }
++  | { kind: 'exchange'; ex: OrbitExchange }
++  | { kind: 'group'; key: string; exs: OrbitExchange[] };
++const foldMode = () => ((window as any).__mockFold as string | undefined) ?? 'group';
++
++function orbitTurnWhat(node: Node): string | null {
++  if (node.kind !== 'user' || !node.turnHead) return null;
++  if (node.coordinatorDelivery) return coordinatorDeliverySentence(node.coordinatorDelivery);
++  if (parseWatchWake(node.text)) return 'Watch matched';
++  const bg = parseBackgroundWake(node.note);
++  if (bg) return 'Background job ended';
++  return null;
++}
++const NEEDS_YOU = ['mcp__orbit__ask_owner', 'mcp__orbit__request_owner_action'];
++function needsYou(items: NodeListItem[]): boolean {
++  return items.some((it) => {
++    const ns = it.kind === 'steps' ? it.nodes : [it.node];
++    return ns.some((n) => n.kind === 'tool' && (NEEDS_YOU.includes(n.name) || !!n.result?.isError && false));
++  });
++}
++function replyGist(items: NodeListItem[]): string {
++  const texts = items.flatMap((it) => (it.kind === 'node' && it.node.kind === 'assistant' ? [String((it.node as any).text ?? '')] : []));
++  const last = texts[texts.length - 1] ?? '';
++  const line = last.split('\n').map((l) => l.trim()).find((l) => l !== '') ?? '';
++  return line.replace(/\[([^\]]+)\]\([^)]*\)/g, '$1').replace(/[*`#>]/g, '');
++}
++function foldOrbitExchanges(items: NodeListItem[]): FoldBlock[] {
++  // Turns: each top-level user node with a turn head opens one.
++  const turns: NodeListItem[][] = [];
++  for (const it of items) {
++    if (it.kind === 'node' && it.node.kind === 'user' && it.node.turnHead) turns.push([it]);
++    else if (turns.length) turns[turns.length - 1].push(it);
++    else turns.push([it]);
++  }
++  const out: FoldBlock[] = [];
++  const titles = new Map<string, string>();
++  let run: OrbitExchange[] = [];
++  const flush = () => {
++    if (run.length >= 2 && foldMode() !== 'rows') out.push({ kind: 'group', key: `exg-${run[0].seq}`, exs: run });
++    else run.forEach((ex) => out.push({ kind: 'exchange', ex }));
++    run = [];
++  };
++  turns.forEach((turn, i) => {
++    const first = turn[0];
++    const what = first.kind === 'node' ? orbitTurnWhat(first.node) : null;
++    const last = i === turns.length - 1;
++    if (what && !last && !needsYou(turn)) {
++      const n = (first as { node: TextNode }).node;
++      const wake = parseWatchWake(n.text);
++      const task = n.coordinatorDelivery?.task ?? (wake?.changedTargets[0] ? { id: wake.changedTargets[0].id, title: titles.get(wake.changedTargets[0].id) ?? '' } : null);
++      if (n.coordinatorDelivery?.task) titles.set(n.coordinatorDelivery.task.id, n.coordinatorDelivery.task.title);
++      run.push({ task, cat: n.coordinatorDelivery ? (n.coordinatorDelivery.kind.startsWith('EVIDENCE') ? 'evidence' : 'task') : parseWatchWake(n.text) ? 'watch' : 'job', key: `ex-${n.seq}`, seq: n.seq, what, reply: replyGist(turn), ts: n.ts, endTs: n.turnHead?.endTs, items: turn });
++      return;
++    }
++    flush();
++    turn.forEach((item) => out.push({ kind: 'item', item }));
++  });
++  flush();
++  return out;
++}
++const clock = (ts?: string) => (ts ? new Date(ts).toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit' }) : '');
++function ExchangeRow({ ex, render, inTask }: { ex: OrbitExchange; render: (it: NodeListItem) => ReactNode[]; inTask?: boolean }) {
++  const [open, setOpen] = useState(false);
++  const what = inTask && ex.task ? ex.what.replace(`: ${ex.task.title}`, '') : ex.what;
++  return (
++    <div className={`orbit-exchange${open ? ' is-open' : ''}`} data-seq={ex.seq}>
++      <div className="orbit-exchange-line" onClick={() => setOpen((o) => !o)} title={`${ex.what} — ${ex.reply}`}>
++        <span className="orbit-exchange-what">{what}</span>
++        {ex.reply && <span className="orbit-exchange-reply">{ex.reply}</span>}
++        <span className="orbit-exchange-time">{clock(ex.ts)}</span>
++        <span className="chat-steps-caret">{open ? <DownOutlined /> : <RightOutlined />}</span>
++      </div>
++      {open && <div className="orbit-exchange-detail">{ex.items.flatMap(render)}</div>}
++    </div>
++  );
++}
++const CAT_WORDS: Record<string, [string, string]> = { evidence: ['evidence', 'evidence'], task: ['can start', 'can start'], watch: ['watch', 'watches'], job: ['background job', 'background jobs'] };
++function exchangeKinds(exs: OrbitExchange[]): string {
++  return Object.entries(CAT_WORDS).flatMap(([c, [one, many]]) => {
++    const n = exs.filter((e) => e.cat === c).length;
++    return n ? [`${n} ${n === 1 ? one : many}`] : [];
++  }).join(', ');
++}
++type TaskBranch = { id: string; title: string; exs: OrbitExchange[]; kids: TaskBranch[] };
++function ExchangeTree({ exs, render }: { exs: OrbitExchange[]; render: (it: NodeListItem) => ReactNode[] }) {
++  const deps: Record<string, string> = (window as any).__mockDeps ?? {};
++  const byId = new Map<string, TaskBranch>();
++  const order: TaskBranch[] = [];
++  const other: OrbitExchange[] = [];
++  for (const ex of exs) {
++    if (!ex.task) { other.push(ex); continue; }
++    let b = byId.get(ex.task.id);
++    if (!b) { b = { id: ex.task.id, title: ex.task.title, exs: [], kids: [] }; byId.set(ex.task.id, b); order.push(b); }
++    if (!b.title && ex.task.title) b.title = ex.task.title;
++    b.exs.push(ex);
++  }
++  const roots: TaskBranch[] = [];
++  for (const b of order) {
++    const up = deps[b.id] && byId.get(deps[b.id]);
++    if (up) up.kids.push(b); else roots.push(b);
++  }
++  return (
++    <>
++      {roots.map((b) => <TaskBranchView key={b.id} b={b} render={render} />)}
++      {other.length > 0 && <TaskBranchView b={{ id: 'other', title: 'Not about a task', exs: other, kids: [] }} render={render} />}
++    </>
++  );
++}
++function TaskBranchView({ b, render }: { b: TaskBranch; render: (it: NodeListItem) => ReactNode[] }) {
++  const [open, setOpen] = useState(!(window as any).__mockTreeShut);
++  const all = (x: TaskBranch): OrbitExchange[] => [...x.exs, ...x.kids.flatMap(all)];
++  const every = all(b).sort((x, y) => x.seq - y.seq);
++  const desc = (x: TaskBranch): number => x.kids.length + x.kids.reduce((n, k) => n + desc(k), 0);
++  const down = desc(b);
++  const last = open ? b.exs[b.exs.length - 1] : every[every.length - 1];
++  return (
++    <div className={`orbit-branch${open ? ' is-open' : ''}`}>
++      <div className="orbit-branch-line" onClick={() => setOpen((o) => !o)}>
++        <span className="orbit-branch-caret">{open ? <DownOutlined /> : <RightOutlined />}</span>
++        <span className="orbit-branch-title">{b.title}</span>
++        <span className="orbit-exchange-reply orbit-branch-meta">{open ? `${b.exs.length} ${b.exs.length === 1 ? 'update' : 'updates'}` : `${every.length} ${every.length === 1 ? 'update' : 'updates'}${down ? ` · ${down} downstream` : ''} · last: ${last.reply}`}</span>
++        <span className="orbit-exchange-time">{clock(last.ts)}</span>
++      </div>
++      {open && (
++        <div className="orbit-branch-body">
++          {b.exs.map((ex) => <ExchangeRow key={ex.key} ex={ex} render={render} inTask />)}
++          {b.kids.map((k) => <TaskBranchView key={k.id} b={k} render={render} />)}
++        </div>
++      )}
++    </div>
++  );
++}
++function ExchangeGroup({ exs, render }: { exs: OrbitExchange[]; render: (it: NodeListItem) => ReactNode[] }) {
++  const [open, setOpen] = useState(false);
++  return (
++    <div className={`orbit-exchanges${open ? ' is-open' : ''}`} data-seq={exs[0].seq}>
++      <div className="orbit-exchanges-line" onClick={() => setOpen((o) => !o)}>
++        <span className="orbit-exchanges-count">{`${exs.length} Orbit updates handled`}</span>
++        <span className="orbit-exchange-reply orbit-exchanges-kinds">{exchangeKinds(exs)}</span>
++        <span className="orbit-exchange-time">{`${clock(exs[0].ts)} – ${clock(exs[exs.length - 1].endTs ?? exs[exs.length - 1].ts)}`}</span>
++        <span className="chat-steps-caret">{open ? <DownOutlined /> : <RightOutlined />}</span>
++      </div>
++      {open && (
++        <div className="orbit-exchanges-rows">
++          {foldMode() === 'tree' ? <ExchangeTree exs={exs} render={render} /> : exs.map((ex) => <ExchangeRow key={ex.key} ex={ex} render={render} />)}
++        </div>
++      )}
++    </div>
++  );
++}
++
+ /**
+  * Everything a turn does between two things it says — its thinking and its tool calls, however few
+  * — folds into one line of steps ("Thought for 15s, ran 2 shell commands"), so the replies read as
+diff -ru today/src/web/src/index.css new/src/web/src/index.css
+--- today/src/web/src/index.css	2026-11-11 12:31:58.000000000 +0800
++++ new/src/web/src/index.css	2026-11-11 12:50:26.999057905 +0800
+@@ -27034,3 +27034,53 @@
+   line-height: 1.5;
+ }
+ .project-done-findings ul { list-style: none; padding: 0; margin: 0; }
++
++/* MOCK: a turn Orbit opened, folded with its reply into one quiet line. */
++.orbit-exchange, .orbit-exchanges { margin: 2px 0 6px; padding: 0 12px; }
++.orbit-exchange-line, .orbit-exchanges-line {
++  display: flex; align-items: center; gap: 8px; min-width: 0; padding: 3px 0;
++  font-size: 13px; color: var(--text-3); cursor: pointer; user-select: none;
++}
++.orbit-exchange-line:hover, .orbit-exchanges-line:hover { color: var(--text-2); }
++.orbit-exchange-line::before, .orbit-exchanges-line::before {
++  content: '→'; flex: none; font-size: 12px; opacity: .7;
++}
++.orbit-exchanges-line::before { content: '⋯'; }
++.orbit-exchange-what { flex: none; color: var(--text-2); max-width: 46%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
++.orbit-exchanges-count { flex: none; color: var(--text-2); }
++.orbit-exchange-reply { flex: 1 1 auto; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
++.orbit-exchange-reply::before { content: '— '; }
++.orbit-exchange-time { flex: none; font-variant-numeric: tabular-nums; margin-left: auto; }
++.orbit-exchange-line:hover .chat-steps-caret, .orbit-exchanges-line:hover .chat-steps-caret,
++.orbit-exchange.is-open > .orbit-exchange-line .chat-steps-caret,
++.orbit-exchanges.is-open > .orbit-exchanges-line .chat-steps-caret { opacity: 1; }
++.orbit-exchanges-rows { margin: 2px 0 4px 2px; padding-left: 10px; border-left: 2px solid var(--border); }
++.orbit-exchanges-rows .orbit-exchange { padding: 0; margin: 0; }
++.orbit-exchange-detail { margin: 6px 0 10px 2px; padding-left: 12px; border-left: 2px solid var(--border); }
++.orbit-exchanges-kinds::before { content: "· "; }
++@media (max-width: 600px) {
++  .orbit-exchange-line { flex-wrap: wrap; row-gap: 0; }
++  .orbit-exchange-what { max-width: calc(100% - 90px); }
++  .orbit-exchange-line .orbit-exchange-reply { order: 5; flex-basis: 100%; padding-left: 20px; }
++  .orbit-exchange-line .orbit-exchange-reply::before { content: ''; }
++  .orbit-exchanges-kinds { display: none; }
++}
++@media (max-width: 600px) {
++  .orbit-exchange-line .orbit-exchange-what { flex: 1 1 0; min-width: 0; max-width: none; }
++  .orbit-exchange-line .chat-steps-caret { display: none; }
++}
++/* MOCK tree: updates under the task they are about, a downstream task under the one that unlocked it. */
++.orbit-branch-line { display: flex; align-items: center; gap: 8px; min-width: 0; padding: 4px 0 2px; font-size: 13px; color: var(--text-3); cursor: pointer; user-select: none; }
++.orbit-branch-caret { flex: none; font-size: 10px; width: 12px; color: var(--text-3); }
++.orbit-branch-title { flex: none; max-width: 50%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: var(--text-1, var(--text)); font-weight: 500; }
++.orbit-branch-meta::before { content: '· ' !important; }
++.orbit-branch-body { margin-left: 5px; padding-left: 14px; border-left: 1px dashed var(--border); }
++.orbit-branch-body .orbit-exchange { padding: 0; margin: 0; }
++.orbit-branch-body .orbit-exchange-line::before { content: '└'; opacity: .5; }
++@media (max-width: 600px) {
++  .orbit-branch-line { flex-wrap: wrap; }
++  .orbit-branch-title { flex: 1 1 0; max-width: none; }
++  .orbit-branch-meta { order: 5; flex-basis: 100%; padding-left: 20px; }
++  .orbit-branch-meta::before { content: '' !important; }
++}
++@media (max-width: 600px) { .orbit-branch.is-open > .orbit-branch-line .orbit-branch-meta { display: none; } }

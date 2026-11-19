@@ -232,6 +232,7 @@ describe('the coordinator conversation', () => {
         }
         return {};
       }
+      if (path.endsWith('/done-check')) return { findings: [] };
       if (path.endsWith('/open-items')) return server.openItems;
       if (path.includes('/acceptance/confirmation')) {
         return { state: 'CONFIRMED', confirmed: true, currentVersion: { digest: 'digest-1', material: [] }, confirmation: null };

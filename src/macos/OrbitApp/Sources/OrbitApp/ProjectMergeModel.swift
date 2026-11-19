@@ -1,4 +1,3 @@
-#if os(iOS)
 import Foundation
 import Observation
 import OrbitKit
@@ -23,6 +22,9 @@ final class ProjectMergeModel: PromotionReviewSource {
     /// under the sheet draws the same row off the page's own read). Kept as last read.
     private(set) var landings: [ProjectLandTask] = []
     private var criteria: [ProjectCriteriaDocument.Item] = []
+    /// The project's Automatic, off the same read as the criteria — what the asking card's reason
+    /// line turns on (`PromotionCards.askReason`). Nil until that read has said.
+    private(set) var automatic: Bool?
     private var mergedReadAt: Date?
     private var itemsReadAt: Date?
     private var landingsReadAt: Date?
@@ -90,6 +92,7 @@ final class ProjectMergeModel: PromotionReviewSource {
         }
         if let document = try? await criteriaRead?.value, mine == generation {
             criteria = document.acceptanceCriteriaItems ?? []
+            automatic = document.coordinatorEnabled
             criteriaReadAt = Date()
         }
     }
@@ -152,4 +155,3 @@ final class ProjectMergeModel: PromotionReviewSource {
         return refused
     }
 }
-#endif

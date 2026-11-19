@@ -1,0 +1,51 @@
+diff --git a/src/web/src/components/TasksSidePanel.tsx b/src/web/src/components/TasksSidePanel.tsx
+index bf8a6c6..88ae9e0 100644
+--- a/src/web/src/components/TasksSidePanel.tsx
++++ b/src/web/src/components/TasksSidePanel.tsx
+@@ -13,6 +13,7 @@ import {
+   MenuFoldOutlined,
+   MenuUnfoldOutlined,
+   MoreOutlined,
++  RestOutlined,
+   SettingOutlined,
+   TeamOutlined,
+   UserOutlined,
+@@ -677,6 +678,16 @@ export function TasksSidePanel({ open = false, onNavigate }: { open?: boolean; o
+         navigate(wikiSettingsPath(space.slug));
+       },
+     },
++    ...(wikiTrashCount > 0
++      ? [
++          {
++            key: 'open-trash',
++            icon: <RestOutlined />,
++            label: `${WIKI_TRASH_PAGE_TITLE} (${wikiTrashCount})`,
++            onSelect: () => setWikiTrashOpen(true),
++          },
++        ]
++      : []),
+     { type: 'separator' as const, key: 'divider' },
+     {
+       key: 'trash',
+@@ -1122,21 +1133,6 @@ export function TasksSidePanel({ open = false, onNavigate }: { open?: boolean; o
+                     menu={wikiMenu(space)}
+                   />
+                 ))}
+-              {wikiOpen && wikiTrashCount > 0 && (
+-                <div
+-                  className="tp-item tp-wiki-trash"
+-                  onClick={() => setWikiTrashOpen(true)}
+-                  onKeyDown={(event) => handleNavActivation(event, () => setWikiTrashOpen(true))}
+-                  role="button"
+-                  tabIndex={0}
+-                >
+-                  <span className="tp-ico">
+-                    <DeleteOutlined />
+-                  </span>
+-                  <span className="tp-label">{WIKI_TRASH_PAGE_TITLE}</span>
+-                  <span className="tp-count">{wikiTrashCount}</span>
+-                </div>
+-              )}
+             </div>
+           )}
+           {wikiTrashOpen && <WikiTrashDialog onClose={() => setWikiTrashOpen(false)} />}

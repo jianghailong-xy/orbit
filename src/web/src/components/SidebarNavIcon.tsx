@@ -22,18 +22,25 @@ const glyphs = {
       <path d="M11.5 6.8h10M11.5 17.2h10" />
     </>
   ),
+  // calendar — scheduled tasks.
+  scheduled: (
+    <>
+      <rect x="3" y="4.5" width="18" height="16.5" rx="3" />
+      <path d="M3 9.5h18M8 2.5v4M16 2.5v4" />
+    </>
+  ),
+  // tray — what is waiting on the owner.
+  waiting: (
+    <>
+      <path d="M3 13.5 5.8 4.2A2 2 0 0 1 7.7 2.8h8.6a2 2 0 0 1 1.9 1.4L21 13.5v5.2a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-5.2Z" />
+      <path d="M3 13.5h5.2l1.3 2.6h5l1.3-2.6H21" />
+    </>
+  ),
   // book.closed
   wiki: (
     <>
       <path d="M6 2.5h12a1.5 1.5 0 0 1 1.5 1.5v13.5H6a2 2 0 0 0 0 4h13.5M6 2.5a2 2 0 0 0-2 2v15M7.5 2.5v15" />
       <path d="M18.5 17.5v4" />
-    </>
-  ),
-  // desktopcomputer
-  runners: (
-    <>
-      <rect x="1.5" y="3.5" width="21" height="14" rx="1.8" />
-      <path d="M1.5 14.5h21M12 17.5v4M7.5 21.5h9" />
     </>
   ),
 };

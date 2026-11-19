@@ -44,10 +44,17 @@ public enum Approvals {
     /// Changing a project's merge check — the check run on the combined tree before that project's
     /// work lands. The one integration setting an agent may propose: where the work LANDS is the
     /// owner's alone and the runner does not ask about it at all. Web keys it off
-    /// `isMergeCheckChange`, and draws the two commands; here it renders as the plain card, whose
-    /// body is the ask as the runner built it.
+    /// `isMergeCheckChange`; both draw the two commands, here from `MergeCheckChangePreview`.
     public static func isMergeCheckChange(toolName: String) -> Bool {
         toolName == "orbit_project_update_integration"
+    }
+    /// Letting ONE landing go on without the merge check that stopped it. The other half of the
+    /// merge-check subject and deliberately its own card: a skip is this landing unchecked, a change
+    /// is every later one checked by something else. The server reads the card back by id, so a
+    /// standing rule could answer nothing. Web keys it off `isSkipMergeCheck`; the card reads
+    /// `SkipMergeCheckPreview`.
+    public static func isSkipMergeCheck(toolName: String) -> Bool {
+        toolName == "orbit_integration_skip_merge_check"
     }
     /// Deleting one of the account's runners, or one of its workspaces. The server deletes only on a
     /// card a person answered, so a standing rule could answer nothing. Web keys them off
@@ -67,6 +74,7 @@ public enum Approvals {
         isTaskBatch(toolName: toolName) || isDagChange(toolName: toolName)
             || isTaskCreate(toolName: toolName) || isProjectCreate(toolName: toolName)
             || isBlockerResolve(toolName: toolName) || isMergeCheckChange(toolName: toolName)
+            || isSkipMergeCheck(toolName: toolName)
             || isRunnerDelete(toolName: toolName) || isWorkspaceDelete(toolName: toolName)
             || isWorkspaceCreate(toolName: toolName) || isWorkspaceUpdate(toolName: toolName)
     }
@@ -166,6 +174,19 @@ public enum Approvals {
         return header.isEmpty ? (first?.question ?? "") : header
     }
 
+    /// What a chat reply to a question card answers, for ✦ Optimize (`replyingTo`): each question as
+    /// the card shows it, with its options (web `questionReplyContext`).
+    public static func chatReplyContext(_ questions: [AskQuestion]) -> String {
+        questions.map { q in
+            let title = [trimmed(q.header), q.question].filter { !$0.isEmpty }.joined(separator: ": ")
+                + (q.multiSelect ? " (pick any)" : "")
+            let options = q.options.filter { !$0.label.isEmpty }.map { option in
+                "- \(option.label)" + (option.description.map { $0.isEmpty ? "" : ": \($0)" } ?? "")
+            }
+            return ([title] + options).joined(separator: "\n")
+        }.joined(separator: "\n\n")
+    }
+
     // MARK: declining one of Orbit's own asks
     //
     // Saying no to a batch of tasks, a create or a restructure is a position, not a misfire: the
@@ -223,6 +244,9 @@ public enum Approvals {
             || isOrbitAsk(toolName: toolName) || isProviderWrite(toolName: toolName) { return [] }
         if toolName == "Bash" {
             guard let cmd = input["command"]?.stringValue else { return [] }
+            if input["orbitScheduleCheckOnly"]?.boolValue == true {
+                return cmd.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty ? [] : [PermissionRule(toolName: "Bash", ruleContent: cmd)]
+            }
             return bashCommandRules(cmd)
         }
         return [PermissionRule(toolName: toolName)]

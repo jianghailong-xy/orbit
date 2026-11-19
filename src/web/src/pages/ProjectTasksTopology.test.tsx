@@ -35,6 +35,10 @@ const PROJECT = encodeId(P1);
 // Spelled out rather than imported, like the keys in ProjectsPage.test.tsx: a key the component
 // changes unilaterally should break these tests, which it cannot do if both sides read one
 // constant.
+/** The queries this page made of its own: the rows' `Waiting on you` badge shares one account-wide read. */
+const pageQueryKeys = (qc: QueryClient) =>
+  qc.getQueryCache().getAll().map((q) => q.queryKey).filter((key) => key[0] !== 'owner-requests');
+
 const TASKS_KEY = ['project', PROJECT, 'tasks', 'root'];
 /** The section's second entry: the project's integration line, which a landed row NAMES (§7.3
  *  V10). Shared with the line row on the project page — same key, one request — so mounting the
@@ -231,7 +235,7 @@ describe('ProjectTasks — waits and blocks badges', () => {
       task({ id: T2, unmetCount: 1 }),
       task({ id: T3, unmetCount: 2 }),
     ]);
-    expect(qc.getQueryCache().getAll().map((q) => q.queryKey)).toEqual([
+    expect(pageQueryKeys(qc)).toEqual([
       TASKS_KEY,
       COORDINATOR_STATUS_KEY,
       INTEGRATION_KEY,

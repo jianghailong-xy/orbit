@@ -103,14 +103,14 @@ final class EngineFixLinkWiringTests: XCTestCase {
     // MARK: the page it lands on
 
     /// The engine's page installs what the machine lacks — a sign-in engine through its install section,
-    /// and OpenCode, which signs in nowhere, through the same one (`Infrastructure.installsOpenCode`) — so
+    /// and OpenCode, which signs in nowhere, through the same one (`MachinesAndModels.installsOpenCode`) — so
     /// a row's "Not installed →" lands on the press that keeps it.
     func testTheEnginesPageInstallsEveryEngineARowCanName() throws {
         let page = try source(Self.enginePage)
         for piece in ["} else if let login = RunnerPageFormat.loginEngine(engine) {",
-                      "installable: Infrastructure.installable(runner, login), offline: offline)",
+                      "installable: MachinesAndModels.installable(runner, login), offline: offline)",
                       "} else if engine == \"opencode\" {",
-                      "installable: Infrastructure.installsOpenCode(runner), offline: offline)",
+                      "installable: MachinesAndModels.installsOpenCode(runner), offline: offline)",
                       "Button(kind == .installFailed ? \"Retry\" : \"Install \\(RunnerPageFormat.engineName(engine))\") { install() }",
                       "if let failure = await runners.installEngine(id, engine: slug) { show(failure) }"] {
             XCTAssertTrue(page.contains(piece), "the engine page lost `\(piece)`")

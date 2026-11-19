@@ -26,7 +26,7 @@ import (
 	"orbit/link-gateway/linkpb"
 )
 
-// The test client's drills in MODE_LINK (scripts/runner-link/staging-check-link.sh): a runner's side of each path the
+// The test client's drills (scripts/runner-link/staging-check-link.sh): a runner's side of each path the
 // gateway forwards, against a staging stack's real apiserver, NATS and Postgres. Each step is recorded, with what it
 // saw, in a report the script reads besides the stack's own state. `link-gateway client -drill <name>`:
 //
@@ -46,8 +46,6 @@ import (
 //	         connection closed as a slow consumer.
 //	resume   a session's event stream cut with batches in flight, and the runner back on a new connection resuming
 //	         from the durable_seq its Welcome states (client_resume.go).
-//	switch   against a gateway that follows the server's RUNNER_LINK_REQUIRED switch: an administrator (the owner)
-//	         flips it on, then off in the middle of a session's event stream (client_switch.go).
 //	relay    an Antigravity code and a Cursor key a person's request left in one apiserver process, handed to this
 //	         runner by heartbeats forwarded to another; relay-begin and relay-finish split the sign-in around what the
 //	         script does to the processes in between (client_relay.go).
@@ -144,8 +142,6 @@ func runDrill(ctx context.Context, cl *client, o drillOptions) int {
 		d.slowDrill(ctx, o)
 	case "resume":
 		d.resumeDrill(ctx, o)
-	case "switch":
-		d.switchDrill(ctx, o)
 	case "relay":
 		d.relayDrill(ctx, o)
 	case "relay-begin":

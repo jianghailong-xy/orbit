@@ -5,6 +5,8 @@
  * the readings the session rows and turn cards carry.
  */
 
+import type { OwnerCardTranslation, OwnerWordsTranslation } from './translation';
+
 /**
  * One line of a review. criterionKey / whyNotProven / coordinatorChecked / evidenceRefs are
  * AcceptedGap's fields (project-done.ts), with the same names and meanings: a notChecked line that
@@ -80,6 +82,12 @@ export type OwnerConfirmationNotReviewedReason =
 
 /** The review of one confirmation request, as the card and its receipts draw it. */
 export interface OwnerConfirmationReviewView<Instant = string> {
+  /** §13 A3: coordinator conclusion first on a REVIEWED card; absent on older servers. */
+  lead?: {
+    conclusion: string;
+    points: ConfirmationNeedsYouItem[];
+    checks: { checked: number; notChecked: number; leftOpen: number };
+  } | null;
   reviewId: string;
   state: OwnerConfirmationReviewState;
   /** Set exactly when state is NOT_REVIEWED (T2). */
@@ -94,7 +102,7 @@ export interface OwnerConfirmationReviewView<Instant = string> {
   };
   /** The request's requestedAt: "Reviewing since". */
   since: Instant;
-  dueAt: Instant;
+  dueAt: Instant | null;
   windowSeconds: number;
   /** H2, computed by the server from the record shown: PROBLEMS when there is one, else REVIEW. */
   headline: ConfirmationReviewHeadline | null;
@@ -103,6 +111,9 @@ export interface OwnerConfirmationReviewView<Instant = string> {
     recordedAt: Instant;
     reviewedSha: string | null;
     judgment: string;
+    /** `judgment` and `needsYou` in the owner's language (Settings › Translation); absent until
+     *  translated, on every review translation is off for, and from older servers. */
+    translation?: OwnerCardTranslation;
   } & ConfirmationReviewLists) | null;
   returned: ConfirmationReturnRecordView<Instant> | null;  // the RETURN record (§8)
   problems: ConfirmationReturnRecordView<Instant> | null;  // the PROBLEMS record (§9)
@@ -114,6 +125,9 @@ export interface ConfirmationReturnRecordView<Instant = string> {
   reviewedSha: string | null;
   reason: string;
   problems: ConfirmationReviewItem[];
+  /** A PROBLEMS record's `reason` and `problems` in the owner's language (Settings › Translation);
+   *  absent until translated, on a RETURN record, and from older servers. */
+  translation?: OwnerCardTranslation;
 }
 
 export type ConfirmationReviewHeadline =
@@ -129,6 +143,8 @@ export interface OwnerConfirmationAnswer {
   /** OWNER: the owner chose it on the card. NOT_SHOWN: the client did not know about reviews, so
    *  the recommended option was recorded for them (Q3). */
   source: 'OWNER' | 'NOT_SHOWN';
+  /** `text` as the reviewer was told it, in the agent language, when Settings › Translation translated it. */
+  translation?: OwnerWordsTranslation;
 }
 
 /**
@@ -142,7 +158,7 @@ export interface ConfirmationUnderReview<Instant = string> {
   reviewerTitle: string | null;
   /** The request's requestedAt. */
   since: Instant;
-  dueAt: Instant;
+  dueAt: Instant | null;
 }
 
 /**
@@ -157,7 +173,7 @@ export interface ConfirmationReviewRequestCard {
   runSessionId: string;
   branch: string | null;
   sha: string | null;
-  dueAt: string;
+  dueAt: string | null;
 }
 
 /**
@@ -171,4 +187,26 @@ export interface ConfirmationReturnCard {
   reviewerTitle: string | null;
   reason: string;
   problems: ConfirmationReviewItem[];
+}
+
+/**
+ * The reading the reviewer's `owner-confirmation-answers:v1:` turn carries on its `user` event (§7 Q5):
+ * drawn as "You confirmed" with the owner's answers, never as the owner's own message. Each answer is
+ * the option's label (`choice`), or the owner's own words (`text`) when they wrote them instead.
+ */
+export interface ConfirmationAnswersCard {
+  decisionId: string;
+  taskId: string;
+  title: string;
+  decidedAt: string;
+  answers: ConfirmationAnswersCardLine[];
+}
+
+export interface ConfirmationAnswersCardLine {
+  key: string;
+  question: string;
+  choice: string | null;
+  text: string | null;
+  /** The owner's app did not show this question; the recommended option was recorded (Q3). */
+  notShown: boolean;
 }

@@ -486,6 +486,27 @@ export async function tellCoordinatorProjectReopened(
   );
 }
 
+/** Tell the coordinator once per stale request, using the existing fact-keyed notification door. */
+export async function tellCoordinatorDoneRequestSuperseded(
+  prisma: Pick<PrismaService, 'project'>,
+  sessions: SessionsService,
+  input: { ownerId: string; projectId: string; itemId: string; reason: string },
+): Promise<{ sessionId: string; clientTurnId: string } | null> {
+  const project = await liveCoordinatorProject(prisma, input.ownerId, input.projectId);
+  if (!project) return null;
+  return createCoordinatorNotification(
+    sessions,
+    input.ownerId,
+    project.sessionId,
+    `${PROJECT_STARTED_TURN_PREFIX}done-request-superseded:${input.itemId}`,
+    [
+      'From Orbit · done request went stale',
+      `Your request to record “${project.title}” (${uuidToBase62(input.projectId)}) done was superseded: ${input.reason}.`,
+      'Ask again with project_request_done when the work settles.',
+    ].join('\n\n'),
+  );
+}
+
 /**
  * A project its owner has not started yet, as `task_start` is refused over it.
  *

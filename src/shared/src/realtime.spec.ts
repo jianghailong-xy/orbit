@@ -18,6 +18,8 @@ describe('control-plane protocol', () => {
       RunEventType.PROJECT_CHANGED,
       RunEventType.WATCH_CHANGED,
       RunEventType.WIKI_CHANGED,
+      RunEventType.TERMINALS_CHANGED,
+      RunEventType.TRANSLATION_STATUS_CHANGED,
     ]) {
       expect(isLifecycleType(t)).toBe(true);
     }

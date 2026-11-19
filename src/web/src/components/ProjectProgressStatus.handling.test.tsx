@@ -140,6 +140,7 @@ const HANDLED_LANDING = settled(LANDING, {
   resolution: 'HANDLED',
   resolvedBy: 'COORDINATOR',
   resolvedBySessionId: '34Y7Myo7G89Vk0fVpelbt',
+  resolvedByUserId: null,
   resolvedAt: at(12 * MINUTE),
   note: REASON,
   jobId: '34ZRerunJob0000000001',
@@ -157,6 +158,7 @@ const SUPERSEDED_PROMOTION = settled(PROMOTION, {
   resolution: 'RETRIED',
   resolvedBy: 'COORDINATOR',
   resolvedBySessionId: '34Y7Myo7G89Vk0fVpelbt',
+  resolvedByUserId: null,
   resolvedAt: at(2 * MINUTE),
   note: 'main’s merge-check baseline was repaired',
   jobId: '34ZRecheckJob00000001',
@@ -266,7 +268,7 @@ describe('an item the clock handed to the owner while the coordinator’s rerun 
   it('is the owner’s card — Now yours — and says the rerun is still running, not that it was handled', () => {
     const html = card(ESCALATED_WHILE_HANDLING);
     expect(html).toContain('project-open-item-card is-owner');
-    expect(text(html)).toContain('Now yours — no one acted on this for 2h');
+    expect(text(html)).toContain('Now yours — the coordinator didn’t get to it');
     expect(text(html)).toContain('the rerun of the landing — generation 2 is running');
     expect(html).not.toContain(HANDLED_TAG);
     expect(text(html)).toContain('Ask the coordinator again');
@@ -274,36 +276,32 @@ describe('an item the clock handed to the owner while the coordinator’s rerun 
   });
 });
 
-describe('where the settled cards are drawn', () => {
+describe('where exception cards are drawn', () => {
+  const ownerSettled = { ...settled(ESCALATED_WHILE_HANDLING, SUPERSEDED_PROMOTION.outcome!), itemId: 'owner-settled' };
   const items: ProjectOpenItemsView = {
-    needsYou: [],
+    needsYou: [ESCALATED_WHILE_HANDLING],
     withCoordinator: [HANDLING_PROMOTION],
-    settled: [HANDLED_LANDING, SUPERSEDED_PROMOTION, settled(ESCALATED_WHILE_HANDLING, SUPERSEDED_PROMOTION.outcome!)],
+    settled: [HANDLED_LANDING, SUPERSEDED_PROMOTION, ownerSettled],
   };
 
-  it('keeps them in the conversation, at the moment each happened, beside the open ones', () => {
+  it('keeps only owner items in the conversation, including settled owner items', () => {
     const rows = exceptionCardRows(items, [{ seq: 1, ts: at(60 * MINUTE) }]);
-    expect(rows.map(({ row }) => row.itemId).sort()).toEqual(
-      [
-        HANDLED_LANDING.itemId,
-        SUPERSEDED_PROMOTION.itemId,
-        HANDLING_PROMOTION.itemId,
-        ESCALATED_WHILE_HANDLING.itemId,
-      ].sort(),
-    );
+    expect(rows.map(({ row }) => row.itemId)).toEqual([ESCALATED_WHILE_HANDLING.itemId, ownerSettled.itemId]);
   });
 
-  it('never points the owner’s pinned line at a card that has ended, whoever held it last', () => {
+  it('never points the owner’s pinned line at a card that has ended', () => {
     expect(items.settled!.filter(isOwnerExceptionCard)).toEqual([]);
   });
 
-  it('leaves them off the project page’s Open items, where the handling row says Handling', () => {
+  it('shows only open owner rows on the project page', () => {
     const html = paint(items, () => <ProjectOpenItems projectId={PROJECT_ID} now={NOW} />);
-    expect(text(html)).toContain('0 need you · 1 with the coordinator · oldest first');
-    expect(html).toContain(`project-open-item-state is-handling">${HANDLING_TAG}<`);
-    expect(text(html)).toContain('the re-check of the merge into main — generation 2 is queued');
+    expect(text(html)).toContain('1 need you · oldest first');
+    expect(html).toContain(ESCALATED_WHILE_HANDLING.title);
+    expect(html).not.toContain('With the coordinator');
     expect(html).not.toContain(HANDLED_TAG);
     expect(html).not.toContain(SUPERSEDED_TAG);
+    expect(paint({ needsYou: [], withCoordinator: [HANDLING_PROMOTION], settled: items.settled },
+      () => <ProjectOpenItems projectId={PROJECT_ID} now={NOW} />)).toBe('');
   });
 });
 
@@ -335,7 +333,7 @@ describe('the merge a re-check is of, by the project’s main branch', () => {
     // The project page's row reads the branch off the integration read the page holds.
     const page = (upstreamRef: string): string => {
       const qc = new QueryClient({ defaultOptions: { queries: { retry: false } } });
-      qc.setQueryData(projectOpenItemsQuery(PROJECT_ID).queryKey, { needsYou: [], withCoordinator: [HANDLING_PROMOTION] });
+      qc.setQueryData(projectOpenItemsQuery(PROJECT_ID).queryKey, { needsYou: [{ ...HANDLING_PROMOTION, assignee: 'OWNER' }], withCoordinator: [] });
       qc.setQueryData(projectIntegrationQuery(PROJECT_ID).queryKey, { upstreamRef } as never);
       return text(renderToStaticMarkup(
         <MemoryRouter>

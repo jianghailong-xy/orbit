@@ -62,16 +62,24 @@ public struct ProjectStartSettings: Codable, Equatable, Sendable {
     public let upstreamRef: String?
     public let automatic: Bool
     public let maxConcurrentTasks: Int
+    public let landingCheckCommand: String?
+    public let landingCheckTimeoutSeconds: Int?
+    public let mergeCheckTimeoutSeconds: Int?
     public let mergeCheckCommand: String?
 
     public init(line: IntegrationLine, projectBranchName: String? = nil, upstreamRef: String? = nil,
-                automatic: Bool, maxConcurrentTasks: Int, mergeCheckCommand: String? = nil) {
+                automatic: Bool, maxConcurrentTasks: Int, mergeCheckCommand: String? = nil,
+                landingCheckCommand: String? = nil, landingCheckTimeoutSeconds: Int? = nil,
+                mergeCheckTimeoutSeconds: Int? = nil) {
         self.line = line
         self.projectBranchName = projectBranchName
         self.upstreamRef = upstreamRef
         self.automatic = automatic
         self.maxConcurrentTasks = maxConcurrentTasks
         self.mergeCheckCommand = mergeCheckCommand
+        self.landingCheckCommand = landingCheckCommand
+        self.landingCheckTimeoutSeconds = landingCheckTimeoutSeconds
+        self.mergeCheckTimeoutSeconds = mergeCheckTimeoutSeconds
     }
 
     /// Decoded by hand so that settings naming a line this build does not know are NOT settings:
@@ -93,6 +101,9 @@ public struct ProjectStartSettings: Codable, Equatable, Sendable {
                                                    debugDescription: "a negative count")
         }
         mergeCheckCommand = try c.decodeIfPresent(String.self, forKey: .mergeCheckCommand)
+        landingCheckCommand = try c.decodeIfPresent(String.self, forKey: .landingCheckCommand)
+        landingCheckTimeoutSeconds = try c.decodeIfPresent(Int.self, forKey: .landingCheckTimeoutSeconds)
+        mergeCheckTimeoutSeconds = try c.decodeIfPresent(Int.self, forKey: .mergeCheckTimeoutSeconds)
     }
 
     /// The same reading for a payload carried as JSON rather than decoded — the `projectStarted`
@@ -113,7 +124,10 @@ public struct ProjectStartSettings: Codable, Equatable, Sendable {
                                     projectBranchName: settings["projectBranchName"]?.stringValue,
                                     upstreamRef: settings["upstreamRef"]?.stringValue,
                                     automatic: automatic, maxConcurrentTasks: count,
-                                    mergeCheckCommand: check)
+                                    mergeCheckCommand: check,
+                                    landingCheckCommand: settings["landingCheckCommand"]?.stringValue,
+                                    landingCheckTimeoutSeconds: settings["landingCheckTimeoutSeconds"]?.intValue,
+                                    mergeCheckTimeoutSeconds: settings["mergeCheckTimeoutSeconds"]?.intValue)
     }
 }
 
@@ -197,7 +211,7 @@ public struct ProjectStartFinding: Codable, Equatable, Sendable {
 /// the server and no longer served.
 public struct ProjectStartRequest: Codable, Equatable, Sendable {
     public let settings: ProjectStartSettings
-    public let why: String
+    public var why: String
     public let criteriaDigest: String
     public let planDigest: String
     /// The repository the check found the project integrating into, or nil for a project with none.
@@ -242,6 +256,9 @@ public struct StartProjectRequestBody: Encodable, Equatable, Sendable {
     public let upstreamRef: String?
     public let automatic: Bool
     public let maxConcurrentTasks: Int
+    public let landingCheckCommand: String?
+    public let landingCheckTimeoutSeconds: Int?
+    public let mergeCheckTimeoutSeconds: Int?
     public let mergeCheckCommand: String?
     public let requestId: String?
     /// How the work reaches main (§10.5 O-L1): recorded as the owner's choice; left out, the project
@@ -251,7 +268,8 @@ public struct StartProjectRequestBody: Encodable, Equatable, Sendable {
     public init(criteriaDigest: String, line: IntegrationLine, projectBranchName: String? = nil,
                 upstreamRef: String? = nil, automatic: Bool, maxConcurrentTasks: Int,
                 mergeCheckCommand: String? = nil, requestId: String? = nil,
-                deliveryMode: DeliveryMode? = nil) {
+                deliveryMode: DeliveryMode? = nil, landingCheckCommand: String? = nil,
+                landingCheckTimeoutSeconds: Int? = nil, mergeCheckTimeoutSeconds: Int? = nil) {
         self.criteriaDigest = criteriaDigest
         self.line = line
         self.projectBranchName = projectBranchName
@@ -259,12 +277,16 @@ public struct StartProjectRequestBody: Encodable, Equatable, Sendable {
         self.automatic = automatic
         self.maxConcurrentTasks = maxConcurrentTasks
         self.mergeCheckCommand = mergeCheckCommand
+        self.landingCheckCommand = landingCheckCommand
+        self.landingCheckTimeoutSeconds = landingCheckTimeoutSeconds
+        self.mergeCheckTimeoutSeconds = mergeCheckTimeoutSeconds
         self.requestId = requestId
         self.deliveryMode = deliveryMode
     }
 
     enum CodingKeys: String, CodingKey {
         case criteriaDigest, line, projectBranchName, upstreamRef, automatic, maxConcurrentTasks
+        case landingCheckCommand, landingCheckTimeoutSeconds, mergeCheckTimeoutSeconds
         case mergeCheckCommand, requestId, deliveryMode
     }
 
@@ -272,6 +294,14 @@ public struct StartProjectRequestBody: Encodable, Equatable, Sendable {
         var c = encoder.container(keyedBy: CodingKeys.self)
         try c.encode(criteriaDigest, forKey: .criteriaDigest)
         try c.encode(line, forKey: .line)
+        if line == .projectBranch {
+            if let landingCheckCommand { try c.encode(landingCheckCommand, forKey: .landingCheckCommand) }
+            else { try c.encodeNil(forKey: .landingCheckCommand) }
+            if let landingCheckTimeoutSeconds { try c.encode(landingCheckTimeoutSeconds, forKey: .landingCheckTimeoutSeconds) }
+            else { try c.encodeNil(forKey: .landingCheckTimeoutSeconds) }
+        }
+        if let mergeCheckTimeoutSeconds { try c.encode(mergeCheckTimeoutSeconds, forKey: .mergeCheckTimeoutSeconds) }
+        else { try c.encodeNil(forKey: .mergeCheckTimeoutSeconds) }
         try c.encodeIfPresent(projectBranchName, forKey: .projectBranchName)
         try c.encodeIfPresent(upstreamRef, forKey: .upstreamRef)
         try c.encode(automatic, forKey: .automatic)
@@ -688,7 +718,10 @@ public enum StartProject {
             maxConcurrentTasks: draft.maxConcurrentTasks,
             mergeCheckCommand: check.isEmpty ? nil : check,
             requestId: requestId,
-            deliveryMode: draft.line == .main ? draft.deliveryMode : nil)
+            deliveryMode: draft.line == .main ? draft.deliveryMode : nil,
+            landingCheckCommand: draft.landingCheckCommand.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty ? nil : draft.landingCheckCommand,
+            landingCheckTimeoutSeconds: draft.landingCheckTimeoutSeconds,
+            mergeCheckTimeoutSeconds: draft.mergeCheckTimeoutSeconds)
     }
 
     /// The main branch a start opens with, by name: the first of the one this project's owner
@@ -843,18 +876,25 @@ public struct StartSettingsDraft: Equatable, Sendable {
     public var upstream: String?
     public var automatic: Bool
     public var maxConcurrentTasks: Int
+    public var landingCheckCommand: String
+    public var landingCheckTimeoutSeconds: Int?
+    public var mergeCheckTimeoutSeconds: Int?
     public var mergeCheckCommand: String
     /// How the work reaches main (§10.5 O-L1, A-Q21) — nil where the card offers no choice: a read
     /// that does not say, or a server that predates it. `agentPush` only while the line is main.
     public var deliveryMode: DeliveryMode?
 
     public init(line: IntegrationLine, upstream: String? = nil, automatic: Bool, maxConcurrentTasks: Int,
-                mergeCheckCommand: String = "", deliveryMode: DeliveryMode? = nil) {
+                mergeCheckCommand: String = "", deliveryMode: DeliveryMode? = nil,
+                landingCheckCommand: String = "", landingCheckTimeoutSeconds: Int? = nil, mergeCheckTimeoutSeconds: Int? = nil) {
         self.line = line
         self.upstream = upstream
         self.automatic = automatic
         self.maxConcurrentTasks = maxConcurrentTasks
         self.mergeCheckCommand = mergeCheckCommand
+        self.landingCheckCommand = landingCheckCommand
+        self.landingCheckTimeoutSeconds = landingCheckTimeoutSeconds
+        self.mergeCheckTimeoutSeconds = mergeCheckTimeoutSeconds
         self.deliveryMode = deliveryMode
     }
 
@@ -874,7 +914,10 @@ public struct StartSettingsDraft: Equatable, Sendable {
                   maxConcurrentTasks: settings.maxConcurrentTasks,
                   mergeCheckCommand: settings.mergeCheckCommand ?? "",
                   deliveryMode: standing?.deliveryMode == nil ? nil
-                      : RunSettings.delivery(line: settings.line, mode: standing?.deliveryMode))
+                      : RunSettings.delivery(line: settings.line, mode: standing?.deliveryMode),
+                  landingCheckCommand: settings.landingCheckCommand ?? "",
+                  landingCheckTimeoutSeconds: settings.landingCheckTimeoutSeconds,
+                  mergeCheckTimeoutSeconds: settings.mergeCheckTimeoutSeconds)
     }
 
     /// Whether the agent pushes its own work here: only on a main line (§10.5 O-L2), where no merge
@@ -897,6 +940,12 @@ public struct StartSettingsDraft: Equatable, Sendable {
                                                 hasMergeCheck: hasMergeCheck, main: main)
     }
 
+    /// The merge check's hint for the delivery chosen: while the agent pushes, it runs the check
+    /// before it pushes, and Orbit runs none.
+    public var mergeCheckHint: String {
+        agentPushes ? RunSettings.mergeCheckHintAgentPush(main) : RunSettings.mergeCheckHint(main)
+    }
+
     /// The line under Delivery: why the agent may not push here, or what the chosen way means.
     public var deliveryHint: String {
         RunSettings.deliveryHint(line: line, mode: deliveryMode, main: main)
@@ -912,6 +961,7 @@ public struct StartSettingsDraft: Equatable, Sendable {
     /// tasks in range.
     public var complete: Bool {
         line != .unknown && (1...StartProject.maxConcurrentTasks).contains(maxConcurrentTasks)
+            && (landingCheckTimeoutSeconds.map { $0 > 0 } ?? true)
     }
 
     /// Whether a merge check is set: an empty one is a setting like any other, said as None.
@@ -993,8 +1043,20 @@ public enum RunSettings {
         "The agent doesn’t push to \(main): Orbit lands its branch once the work is accepted."
     }
     public static func deliveryAgentPushHint(_ main: String = defaultMainBranch) -> String {
-        "The agent pushes to \(main) itself, and Orbit checks the commits are there."
+        "No merge card. The agent pushes to \(main) itself, and Orbit records each commit once it sees it there."
     }
+    /// What How it runs asks before the agent takes over a project with a merge into main still live
+    /// (owner decision 2026-11-10): the switch changes what later tasks do, and the waiting card
+    /// stays. Web's `runAgentPushConfirm*` / `RUN_AGENT_PUSH_*`.
+    public static func agentPushConfirmTitle(_ main: String = defaultMainBranch) -> String {
+        "Let the agent push to \(main)?"
+    }
+    public static func agentPushConfirmBody(_ main: String = defaultMainBranch) -> String {
+        "Tasks finished from now on are pushed by their agent: no merge card, and Orbit merges nothing into "
+            + "\(main). Merges already waiting for you stay until you answer them."
+    }
+    public static let agentPushConfirm = "Let the agent push"
+    public static let agentPushCancel = "Cancel"
     /// Why the agent may not push here: the project lands on a project branch, or no line is decided.
     public static func deliveryNeedsMainLine(_ main: String = defaultMainBranch) -> String {
         "The agent can push only on a project that lands directly into \(main). On a project branch, "
@@ -1061,21 +1123,25 @@ public enum RunSettings {
         "The coordinator runs it for you: it decides when each task is done, handles conflicts and "
         + "failed checks, and merges the branch into main once the merge check passes — with a "
         + "receipt you can revert. The criteria and anything irreversible stay yours."
-    /// …and directly into main, where the merging half is the one thing it never does by itself.
+    /// …and directly into main, where the merging half is the one thing it never does by itself —
+    /// and the way to skip that card is Delivery (owner decision 2026-11-10).
     public static let automaticHintMain =
         "The coordinator runs it for you: it decides when each task is done and handles conflicts "
-        + "and failed checks. Merging into main always asks you — a project that lands directly on "
-        + "main never merges by itself. The criteria and anything irreversible stay yours."
+        + "and failed checks. Merging into main always asks you — to skip that card, choose “The agent "
+        + "pushes it” under Delivery. The criteria and anything irreversible stay yours."
     public static let switchOn = "On"
     public static let switchOff = "Off"
     public static let atMost = "At most"
     public static let mergeCheck = "Merge check"
     public static let mergeCheckHint =
-        "Runs on the combined tree before anything lands — on the project branch and again before "
-        + "main."
+        "Runs before merging into main."
     public static func mergeCheckHint(_ main: String) -> String {
-        "Runs on the combined tree before anything lands — on the project branch and again before "
-            + "\(main)."
+        "Runs before merging into \(main)."
+    }
+    /// The merge check while the agent pushes its own work: Orbit runs nothing, the agent runs it
+    /// before it pushes (owner decision 2026-11-10).
+    public static func mergeCheckHintAgentPush(_ main: String = defaultMainBranch) -> String {
+        "Run by the agent before it pushes, on its work rebased onto \(main). Orbit doesn’t run it."
     }
     public static let mergeCheckPlaceholder = "No check — work lands once it rebases cleanly"
     /// Said under an empty merge check while Automatic would merge the branch into main unchecked.
@@ -1097,12 +1163,20 @@ public enum RunSettings {
     public static func automaticHint(_ line: IntegrationLine, main: String = defaultMainBranch) -> String {
         if line == .main {
             return "The coordinator runs it for you: it decides when each task is done and handles conflicts "
-                + "and failed checks. Merging into \(main) always asks you — a project that lands directly on "
-                + "\(main) never merges by itself. The criteria and anything irreversible stay yours."
+                + "and failed checks. Merging into \(main) always asks you — to skip that card, choose “The "
+                + "agent pushes it” under Delivery. The criteria and anything irreversible stay yours."
         }
         return "The coordinator runs it for you: it decides when each task is done, handles conflicts and "
             + "failed checks, and merges the branch into \(main) once the merge check passes — with a "
             + "receipt you can revert. The criteria and anything irreversible stay yours."
+    }
+
+    /// The main-line sentence as it read before Delivery, for a server that reports no delivery mode:
+    /// there is no Delivery row to point to.
+    public static func automaticHintMainNoDelivery(_ main: String = defaultMainBranch) -> String {
+        "The coordinator runs it for you: it decides when each task is done and handles conflicts "
+            + "and failed checks. Merging into \(main) always asks you — a project that lands directly on "
+            + "\(main) never merges by itself. The criteria and anything irreversible stay yours."
     }
 
     /// The start card's one sentence under the switch: who decides what, for the line and merge

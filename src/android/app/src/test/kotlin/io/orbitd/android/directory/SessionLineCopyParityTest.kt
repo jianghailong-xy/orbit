@@ -39,13 +39,14 @@ class SessionLineCopyParityTest {
         listOf(SessionLineCopy.running, SessionLineCopy.queued).forEach { assertLiteral(line, "SessionLine.swift", it) }
         listOf(SessionLineCopy.queued, SessionLineCopy.stateRunning, SessionLineCopy.waitingForReply, SessionLineCopy.succeeded,
             SessionLineCopy.retrying, SessionLineCopy.disconnected, SessionLineCopy.failed, SessionLineCopy.interrupted, SessionLineCopy.ended,
+            SessionLineCopy.waitingToResume,
         ).forEach { assertLiteral(header, "SessionHeader.swift", it) }
         assertDeclares(header, "SessionHeader.swift", "unnamedWord", SessionLineCopy.unnamedWord)
         // Every constant of the copy object is held by one of the lines above: a word added here and not there fails.
         val declared = SessionLineCopy::class.java.declaredFields.filter { it.type == String::class.java }
             .map { it.isAccessible = true; it.get(null) as String }
         assertTrue("a SessionLineCopy word is in neither Swift source: $declared", declared.all { both.contains("\"$it\"") })
-        assertEquals(12, declared.size)
+        assertEquals(14, declared.size)
     }
 
     @Test fun everyBuiltLineIsOneSwiftLiteral() {
@@ -108,6 +109,27 @@ class SessionLineCopyParityTest {
         assertEquals(SessionLineCopy.you, SessionLine.sender(null))
         assertEquals("Build the package", SessionLine.sender(SessionMessageFrom("s", " Build the package ")))
         assertEquals(TaskDetailCopy.untitledSession, SessionLine.sender(SessionMessageFrom("s", " ")))
+    }
+
+    /** Orbit as the sender of its own messages (design §3.5, owner 2026-11-07): the same word at all three ends, the same sentence —
+     * Orbit, then what it says — and the conversation's own sentence for a notification card: OrbitKit's `SessionLine.orbitLine` and the
+     * web's `orbitLine` (WorkspaceView.tsx). A missing counterpart is a failure, never a skip. */
+    @Test fun orbitIsTheSwiftsAndTheWebs() {
+        assertEquals("Orbit", SessionLineCopy.orbit)
+        assertDeclares(line, "SessionLine.swift", "orbit", SessionLineCopy.orbit)
+        assertSentence(line, "SessionLine.swift", SessionLineCopy.sent("\\(orbit)", "\\(said)"))
+        assertTrue("SessionLine.swift no longer says a notification's own sentence",
+            line.contains("mark.coordinatorDelivery.map(CoordinatorDeliveryCard.sentence)"))
+        assertTrue("SessionLine.swift no longer asks Orbit first on both lines that show a pending message",
+            line.split("return orbitLine(u, s.lastUserFromOrbit) ?? externalLine(u, s.lastUserFromExternal) ?? sentLine(u, from: s.lastUserFrom)").size - 1 == 2)
+        val web = File(root, "src/web/src/components/WorkspaceView.tsx").readText()
+        assertTrue("WorkspaceView.tsx no longer calls Orbit \"${SessionLineCopy.orbit}\"",
+            web.contains("export const SENT_BY_ORBIT = '${SessionLineCopy.orbit}';"))
+        val template = SessionLineCopy.sent("\${SENT_BY_ORBIT}", "\${said}")
+        assertTrue("WorkspaceView.tsx no longer says \"$template\"", web.contains("return { text: `$template`, tone: 'preview' };"))
+        assertTrue("WorkspaceView.tsx no longer says the conversation line's own sentence", web.contains("? coordinatorDeliverySentence(card)"))
+        assertTrue("WorkspaceView.tsx no longer asks Orbit first on both lines that show a pending message",
+            web.split("return orbitLine(s) ?? sentLine(s.lastUserText, sentBy(s));").size - 1 == 2)
     }
 
     /** The line's tones are the Swift's, one for one. */

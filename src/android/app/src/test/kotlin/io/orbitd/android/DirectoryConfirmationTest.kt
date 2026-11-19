@@ -64,7 +64,7 @@ class DirectoryConfirmationTest {
         val api = api
         shown = dialog
         compose.activityRule.scenario.onActivity { activity -> activity.setContent { OrbitTheme {
-            shown?.let { DirectoryActionDialog(it, api, DirectoryData(ready = true, fresh = true), { next -> shown = next }, {}) }
+            shown?.let { DirectoryActionDialog(it, api, DirectoryData(ready = true, fresh = true), { next -> shown = next }, onChanged = {}) }
         } } }
         compose.waitForIdle()
     }

@@ -125,7 +125,7 @@ internal fun WikiActivityPage(content: WikiHomeContent, banners: List<WikiSpaceL
                     item(key = "runs-head") { RunsBandHead(content.health?.systemModel) }
                     if (jobs.isNullOrEmpty()) item(key = "runs-empty") { WikiEmptyLine(WikiRunsCopy.none) }
                     else items(jobs, key = { "job:${it.id}" }) { job ->
-                        WikiRunRowView(WikiRunsLogic.row(job, now)) { openJob(job.id) }
+                        WikiRunRowView(WikiRunsLogic.row(job, now), WikiRunsLogic.tier(job)) { openJob(job.id) }
                     }
                 }
                 WikiLogic.ActivityBand.RECENT_DECISIONS -> {

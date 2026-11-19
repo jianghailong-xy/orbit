@@ -93,7 +93,7 @@ public enum OrbitLinkCopy {
         return "\(number(ready)) \(noun) ready, but nothing is running."
     }
 
-    /// "2 runs" — a task's runs, and `never run` for a task nothing has run (`ReferencedTaskNote`).
+    /// "2 runs" — a task's runs, and `never run` for a task nothing has run.
     public static func runs(_ count: Int) -> String {
         if count == 0 { return neverRun }
         return count == 1 ? "1 run" : "\(number(count)) runs"
@@ -305,7 +305,11 @@ public struct OrbitLinkCardContent: Equatable, Sendable {
                                 engineTurnActive: session.engineTurnActive == true,
                                 error: session.error,
                                 retryPending: session.retryPending(now: now),
-                                watchingLabel: session.watchingLabel,
+                                // A wait the server reports beyond the watches counted here — a
+                                // wake-up, a retry — reads as the row does (`Session.resumesOnItsOwn`).
+                                watchingLabel: session.watchingLabel
+                                    ?? (session.effectiveRunState == .awaitingInput && session.activity == "WAITING"
+                                        ? SessionHeader.waitingToResume : nil),
                                 waitingKind: session.waitingKind)
     }
 

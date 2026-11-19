@@ -80,12 +80,12 @@ test('T2: why a request was not reviewed, in its order', () => {
   assert.equal(reason({ reviewerEndedAt: NOW, abandonedAt: NOW }), 'REVIEWER_ENDED');
   assert.equal(reason({ reviewerSessionExists: false }), 'REVIEWER_ENDED', 'a reviewer row that is gone has ended');
   assert.equal(reason({ abandonedAt: NOW, dueAt: NOW }), 'REVIEWER_STOPPED');
-  assert.equal(reason({ deliveredTurn: null }), 'REVIEWER_STOPPED', 'the delivered turn was deleted unread');
-  assert.equal(reason({ deliveredTurn: { status: 'ANSWERED', deliveredAt: null } }), 'REVIEWER_STOPPED',
+  assert.equal(reason({ deliveredTurn: null }), null, 'the delivered turn was deleted unread');
+  assert.equal(reason({ deliveredTurn: { status: 'ANSWERED', deliveredAt: null } }), null,
     'the delivered turn was drained unread');
   assert.equal(reason({ deliveredTurn: { status: 'ANSWERED', deliveredAt: NOW } }), null,
     'a turn the engine read and answered is not a stop');
-  assert.equal(reason({ dueAt: NOW }), 'TIMED_OUT', 'now >= due_at');
+  assert.equal(reason({ dueAt: NOW, deliveredTurn: { status: 'IN_FLIGHT', deliveredAt: NOW } }), 'TIMED_OUT', 'now >= due_at');
   assert.equal(reason({ dueAt: new Date(NOW.getTime() + 1) }), null);
 });
 

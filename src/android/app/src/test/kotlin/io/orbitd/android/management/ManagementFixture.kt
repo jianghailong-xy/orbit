@@ -32,19 +32,31 @@ object ManagementFixture {
     val queries = CopyOnWriteArrayList<String>()
     /** The account's switch for smart model selection as users/me's preferences carry it; null leaves it out, as before it was written. */
     @Volatile var modelRouting: Boolean? = null
+    /** The account-wide Optimize For as users/me's preferences carry it; null leaves it out, which reads as "balance". */
+    @Volatile var optimizeFor: String? = null
     /** The account's Session recaps switch as users/me's preferences carry it; null leaves it out, as before it was written. */
     @Volatile var recaps: Boolean? = null
     /** GET access-tokens' tokens, newest first; DELETE access-tokens/:id revokes one (REVOKED, by its USER). */
     @Volatile var accessTokens: List<JsonObject> = emptyList()
     @Volatile var accessTokensFail = false
+    /** GET terminals' live terminals, newest first; DELETE terminals/:id revokes one, which leaves the list. */
+    @Volatile var terminals: List<JsonObject> = emptyList()
     /** GET providers (the pickers' catalogue, no ids) and GET providers/mine (the account's own, with ids, endpoints and hasApiKey). */
     @Volatile var providerCatalog = "[]"
     @Volatile var providersMine = "[]"
     /** Each DeepSeek key's balance answer by provider id, and a gate that holds a key's read until it completes. */
     val balances = java.util.concurrent.ConcurrentHashMap<String, String>()
     val balanceGates = java.util.concurrent.ConcurrentHashMap<String, CompletableDeferred<Unit>>()
+    /** GET providers/subagent-tiers' body; users/me's preferences.subagentBlockedProviders (null leaves it out); the SubAgents fields
+     * GET workspaces/:id carries (`,"subagentsEnabled":false,…`); and every write's body, as "PATCH path {…}". */
+    @Volatile var subagentTiers = """{"providers":[]}"""
+    @Volatile var subagentBlocked: List<String>? = null
+    @Volatile var workspaceExtra = ""
+    val bodies = CopyOnWriteArrayList<String>()
     /** GET tasks/:id for [TASK]. */
     @Volatile var task = "{}"
+    /** GET tasks/:id/evidence for [TASK]: its evidence versions, oldest first. */
+    @Volatile var evidence = "[]"
     @Volatile var workspaceName = "Alpha"
     @Volatile var runnerAlias = "Old alias"
     @Volatile var runnerCapacity = 2
@@ -64,6 +76,8 @@ object ManagementFixture {
     /** Whether each runner is online; offline, it last checked in yesterday. */
     @Volatile var runnerOnline = true
     @Volatile var runnerTwoOnline = true
+    const val CLOUD_RUNNER = "0198f3a2-7777-7000-8000-000000000008"
+    val reorderRequests = CopyOnWriteArrayList<List<String>>()
     @Volatile var runnerOrder = listOf(RUNNER, RUNNER_TWO)
     @Volatile var removedRunners = emptySet<String>()
     /** The runner's selfUpdate report's state; null is a runner too old to report one. */
@@ -87,8 +101,21 @@ object ManagementFixture {
      * …/default/restore answers ok, or fails while [restoreFails]. Each that goes through runs [onAccountWrite] with its path, as what
      * GET runners serves then changes. */
     @Volatile var defaultRemoveRefusal: String? = null
+    /** POST runners/:id/accounts/:engine/:account/set-default answers [setDefaultAnswer] after [onAccountWrite] — as the server's next GET
+     * runners carries the swap in `claudeAccountSwap` — or, given [setDefaultRefusal], refuses 409 in those words. */
+    @Volatile var setDefaultRefusal: String? = null
+    @Volatile var setDefaultAnswer = """{"account":null,"status":"pending","message":null,"waitingOn":[],"foreignProcesses":[]}"""
     @Volatile var restoreFails = false
     @Volatile var onAccountWrite: (String) -> Unit = {}
+    /** POST runners/:id/engines/:engine/update-warning/dismiss runs this with the engine, then answers `{engine, latest}` with [dismissLatest],
+     * as the server records the engine's current update.latest — so GET runners can serve the dismissal from then on. */
+    @Volatile var onEngineDismiss: (String) -> Unit = {}
+    @Volatile var dismissLatest = "0.169.0"
+    /** POST runners/:id/attention/:kind/fix, as "<kind> <body>" in order: each runs [onAgentFix] with the kind — as the server's next GET
+     * runners carries the fixing entry — and answers the session it started, or, given [agentFixRefusal], refuses 409 in those words. */
+    val agentFixBodies = CopyOnWriteArrayList<String>()
+    @Volatile var onAgentFix: (String) -> Unit = {}
+    @Volatile var agentFixRefusal: String? = null
     /** POST runners/:id/install's bodies, in order; each answers the relay as pending for its engine. */
     val installBodies = CopyOnWriteArrayList<JsonObject>()
     /** Check again (POST runners/:id/region-check, docs/claude-region-check-contract.md §7): answered with when it was asked, after
@@ -106,6 +133,16 @@ object ManagementFixture {
     @Volatile var deviceConflict = false
     @Volatile var deviceLastSeen: String? = null
     @Volatile var deviceGate: CompletableDeferred<Unit>? = null
+    /** GET auth/capabilities' body, or null for a server from before it (404). Without one there is no managed UI and no managed read. */
+    @Volatile var capabilities: String? = null
+    /** The first runner's version; null is one that has never reported (a managed runner still being prepared). */
+    @Volatile var runnerVersion: String? = "0.1.200"
+    /** GET managed-runner's body; POST managed-runner/ensure runs [onEnsure] and answers [ensured] (or refuses 403 with [ensureRefusal]). */
+    @Volatile var managedStatus = "{}"
+    @Volatile var ensured = "{}"
+    @Volatile var ensureRefusal: String? = null
+    @Volatile var onEnsure: () -> Unit = {}
+    val ensureBodies = CopyOnWriteArrayList<JsonObject>()
     /** Completing it drops the control stream; a reconnect then never opens. */
     @Volatile var drop = CompletableDeferred<Unit>()
     @Volatile private var opened = 0
@@ -115,16 +152,30 @@ object ManagementFixture {
         wikiLinks = false
         viewerRole = "ADMIN"; viewerCreates = true; membersCanAdd = false; membersCanAddAccounts = false; loginState = "ACTIVE"
         secondRunner = false; runnerOnline = true; runnerTwoOnline = true; runnerOrder = listOf(RUNNER, RUNNER_TWO); removedRunners = emptySet(); selfUpdate = null
-        runnerEngines = "[]"; runnerExtra = ""; runnerTwoExtra = ""; loginRelay = """{"status":null}"""; loginStarted = """{"status":"pending"}"""
+        reorderRequests.clear(); runnerEngines = "[]"; runnerExtra = ""; runnerTwoExtra = ""; loginRelay = """{"status":null}"""; loginStarted = """{"status":"pending"}"""
         codeSent = """{"status":"done"}"""; onCode = {}; loginBodies.clear(); pauseBodies.clear(); installBodies.clear(); onRegionCheck = {}
-        defaultRemoveRefusal = null; restoreFails = false; onAccountWrite = {}
+        defaultRemoveRefusal = null; setDefaultRefusal = null; restoreFails = false; onAccountWrite = {}; onEngineDismiss = {}; dismissLatest = "0.169.0"
+        agentFixBodies.clear(); onAgentFix = {}; agentFixRefusal = null
         deviceStatus = "PENDING"; deviceConflict = false; deviceLastSeen = null; deviceGate = null
         drop = CompletableDeferred(); opened = 0
-        queries.clear(); modelRouting = null; recaps = null; accessTokens = emptyList(); accessTokensFail = false; providerCatalog = "[]"; providersMine = "[]"
-        balances.clear(); balanceGates.clear(); task = "{}"
+        queries.clear(); modelRouting = null; optimizeFor = null; recaps = null; accessTokens = emptyList(); accessTokensFail = false; terminals = emptyList(); providerCatalog = "[]"; providersMine = "[]"
+        balances.clear(); balanceGates.clear(); task = "{}"; evidence = "[]"
         keyCheckAnswer = """{"ok":true,"keyCheck":"VALID","message":"Cursor accepted this key.","recorded":true,"keyCheckState":"VALID","keyCheckedAt":null}"""
         onKeyCheck = {}
+        subagentTiers = """{"providers":[]}"""; subagentBlocked = null; workspaceExtra = ""; bodies.clear()
+        capabilities = null; runnerVersion = "0.1.200"; managedStatus = "{}"; ensured = "{}"; ensureRefusal = null; onEnsure = {}; ensureBodies.clear()
     }
+
+    /** A managed runner status as GET managed-runner answers it (contract 1). */
+    fun managed(state: String, runnerId: String? = null, canEnsure: Boolean = false, canWake: Boolean = true, usable: Boolean = false,
+                desired: String? = null, initialProvider: String? = null, enabled: Boolean = true, reason: String? = null) =
+        """{"contractVersion":1,"enabled":$enabled,"revision":3,"managementState":"$state","desiredState":${desired?.let { "\"$it\"" } ?: "null"},
+        "runnerId":${runnerId?.let { "\"$it\"" } ?: "null"},"workspaceId":${runnerId?.let { "\"$WORKSPACE\"" } ?: "null"},"usable":$usable,
+        "reason":${reason?.let { "{\"code\":\"$it\",\"message\":null}" } ?: "null"},"initialProvider":${initialProvider?.let { "\"$it\"" } ?: "null"},
+        "firstSessionProvider":null,"actions":{"canEnsure":$canEnsure,"canWake":$canWake,"canRetry":false}}"""
+
+    /** The capability a server with managed runners switched on answers. */
+    const val MANAGED_ON = """{"managedRunners":{"enabled":true,"contractVersion":1}}"""
 
     fun writes(path: String) = calls.filter { it.endsWith(" $path") && !it.startsWith("GET ") }
 
@@ -148,14 +199,20 @@ object ManagementFixture {
 
     private val now get() = Instant.now()
     private fun user() = """{"id":"$ME","email":"a13@example.test","name":"Fixture","role":"MEMBER","avatarUpdatedAt":null,
-        "preferences":{"theme":"$theme","defaultPermissionMode":"auto","enableOrchestration":true${modelRouting?.let { ",\"modelRouting\":$it" }.orEmpty()}${recaps?.let { ",\"recaps\":$it" }.orEmpty()}}}"""
+        "preferences":{"theme":"$theme","defaultPermissionMode":"auto","enableOrchestration":true${modelRouting?.let { ",\"modelRouting\":$it" }.orEmpty()}${optimizeFor?.let { ",\"optimizeFor\":\"$it\"" }.orEmpty()}${recaps?.let { ",\"recaps\":$it" }.orEmpty()}${subagentBlocked?.let { ",\"subagentBlockedProviders\":" + JsonArray(it.map(::JsonPrimitive)) }.orEmpty()}}}"""
     private fun workspace() = """{"id":"$WORKSPACE","name":"$workspaceName","runnerId":"$RUNNER","enabled":true,"workDir":"/srv/alpha",
-        "lastProvider":"claude","effort":"","modelRouting":false,"env":{},"position":0,"createdAt":"2026-09-01T00:00:00Z"}"""
-    private fun runners() = runnerOrder.filter { (it == RUNNER || secondRunner) && it !in removedRunners }.joinToString(",", "[", "]") { if (it == RUNNER) runner() else runnerTwo() }
+        "lastProvider":"claude","effort":"","modelRouting":false,"env":{},"position":0,"createdAt":"2026-09-01T00:00:00Z"$workspaceExtra}"""
+    private fun runners() = runnerOrder.filter { (it == RUNNER || secondRunner) && it !in removedRunners }.joinToString(",", "[", "]") {
+        when (it) {
+            RUNNER -> runner()
+            CLOUD_RUNNER -> """{"id":"$CLOUD_RUNNER","name":"orbit-cloud","managed":true,"online":true,"lastHeartbeatAt":"$now"}"""
+            else -> runnerTwo()
+        }
+    }
     private fun runnerTwo() = """{"id":"$RUNNER_TWO","name":"spare","displayName":"Spare box","hostname":"spare-01","version":"0.1.200","online":$runnerTwoOnline,
         "status":"${if (runnerTwoOnline) "ONLINE" else "OFFLINE"}","lastHeartbeatAt":"${if (runnerTwoOnline) now else now.minusSeconds(86_400)}","maxConcurrent":1,
         "activeSessions":0,"runsAsRoot":false,"minFreeDiskMb":null,"engines":[],"enrolledAt":"2026-09-02T00:00:00Z"$runnerTwoExtra}"""
-    private fun runner() = """{"id":"$RUNNER","name":"box","displayName":"$runnerAlias","hostname":"box-01","version":"0.1.200","online":$runnerOnline,
+    private fun runner() = """{"id":"$RUNNER","name":"box","displayName":"$runnerAlias","hostname":"box-01","version":${runnerVersion?.let { "\"$it\"" } ?: "null"},"online":$runnerOnline,
         "status":"${if (runnerOnline) "ONLINE" else "OFFLINE"}","lastHeartbeatAt":"${if (runnerOnline) now else now.minusSeconds(86_400)}","maxConcurrent":$runnerCapacity,"activeSessions":0,"runsAsRoot":false,"minFreeDiskMb":null,
         "selfUpdate":${selfUpdate?.let { """{"state":"$it"}""" } ?: "null"},"engines":$runnerEngines$runnerExtra,"enrolledAt":"2026-09-01T00:00:00Z"}"""
     private fun sessionRow() = """{"id":"$SESSION","title":"Fixture session","status":"SUCCEEDED","lifecycleState":"OPEN","workspaceId":"$WORKSPACE",
@@ -202,6 +259,7 @@ object ManagementFixture {
         calls += "${api.method} $path"
         if (api.query.isNotEmpty()) queries += "${api.method} $path?" + api.query.joinToString("&") { (k, v) -> "$k=$v" }
         fun body() = Json.parseToJsonElement(api.body!!.decodeToString()).jsonObject
+        if (api.method != HttpMethod.GET) api.body?.let { bodies += "${api.method} $path ${it.decodeToString()}" }
         when (path) {
             "auth/login" -> ok("""{"accessToken":"fixture-access","refreshToken":"fixture-refresh","user":${user()}}""")
             "auth/logout" -> ok("{}")
@@ -209,18 +267,31 @@ object ManagementFixture {
             "users/me/preferences" -> {
                 body()["theme"]?.let { theme = it.jsonPrimitive.content }
                 body()["modelRouting"]?.let { modelRouting = it.jsonPrimitive.boolean }
+                body()["optimizeFor"]?.let { optimizeFor = it.jsonPrimitive.content }
                 body()["recaps"]?.let { recaps = it.jsonPrimitive.boolean }
+                body()["subagentBlockedProviders"]?.let { list -> subagentBlocked = list.jsonArray.map { it.jsonPrimitive.content } }
                 ok(user())
             }
+            "terminals" -> ok("""{"terminals":${JsonArray(terminals)}}""")
             "access-tokens" -> if (accessTokensFail) fail(503, "token list failed") else ok("""{"tokens":${JsonArray(accessTokens)}}""")
             "providers" -> ok(providerCatalog)
             "providers/mine" -> ok(providersMine)
+            "providers/subagent-tiers" -> ok(subagentTiers)
             "tasks/$TASK" -> ok(task)
+            "tasks/$TASK/evidence" -> ok(evidence)
             "users/me/avatar" -> fail(404, "no avatar")
             "workspaces" -> ok("[${workspace()}]")
             "workspaces/$WORKSPACE" -> { if (api.method == HttpMethod.PATCH) workspaceName = body()["name"]!!.jsonPrimitive.content; ok(workspace()) }
             "runners" -> ok(runners())
-            "runners/reorder" -> { runnerOrder = body()["ids"]!!.jsonArray.map { it.jsonPrimitive.content }; ok(runners()) }
+            "auth/capabilities" -> capabilities?.let(::ok) ?: fail(404, "Cannot GET /api/auth/capabilities")
+            "managed-runner" -> ok(managedStatus)
+            "managed-runner/ensure" -> { ensureBodies += body(); ensureRefusal?.let { fail(403, it) } ?: run { onEnsure(); ok(ensured) } }
+            "runners/reorder" -> {
+                val ids = body()["ids"]!!.jsonArray.map { it.jsonPrimitive.content }
+                reorderRequests += ids
+                runnerOrder = ids + runnerOrder.filterNot { it in ids }
+                ok(runners())
+            }
             "runners/$RUNNER_TWO" -> if (api.method == HttpMethod.DELETE) { removedRunners = removedRunners + RUNNER_TWO; ok("{}") } else ok(runnerTwo())
             "runners/$RUNNER" -> {
                 if (api.method == HttpMethod.DELETE) { removedRunners = removedRunners + RUNNER; return@HttpTransport ok("{}") }
@@ -254,12 +325,28 @@ object ManagementFixture {
             "providers/shared-pools" -> ok("[]")
             "providers/shared-pools/$POOL" -> if (accessFails) fail(503, "pool read failed") else ok(access())
             else -> when {
+                path.startsWith("runners/$RUNNER/attention/") && path.endsWith("/fix") && api.method == HttpMethod.POST -> path.split('/')[3].let { kind ->
+                    agentFixBodies += "$kind ${api.body!!.decodeToString()}"
+                    agentFixRefusal?.let { fail(409, it) } ?: run {
+                        onAgentFix(kind)
+                        ok("""{"sessionId":"$SESSION","workspaceId":"$WORKSPACE","workspaceName":"orbit-dev","title":"Fix: $kind"}""")
+                    }
+                }
+                path.startsWith("runners/$RUNNER/engines/") && path.endsWith("/update-warning/dismiss") && api.method == HttpMethod.POST ->
+                    path.split('/')[3].let { engine -> onEngineDismiss(engine); ok("""{"engine":"$engine","latest":"$dismissLatest"}""") }
                 path.startsWith("runners/$RUNNER/accounts/") && path.endsWith("/pause") -> { pauseBodies += "$path ${api.body!!.decodeToString()}"; ok("{}") }
+                path.startsWith("runners/$RUNNER/accounts/") && path.endsWith("/set-default") && api.method == HttpMethod.POST ->
+                    setDefaultRefusal?.let { fail(409, it) } ?: run { onAccountWrite(path); ok(setDefaultAnswer) }
                 path.startsWith("runners/$RUNNER/accounts/") && path.endsWith("/default/restore") ->
                     if (restoreFails) fail(404, "runner not found") else { onAccountWrite(path); ok("""{"ok":true}""") }
                 path.startsWith("runners/$RUNNER/accounts/") && path.endsWith("/default") && api.method == HttpMethod.DELETE ->
                     defaultRemoveRefusal?.let { fail(400, it) }
                         ?: run { onAccountWrite(path); ok("""{"engine":"${path.split('/')[3]}","account":"default","status":"done","message":null}""") }
+                path.startsWith("terminals/") && api.method == HttpMethod.DELETE -> {
+                    val id = path.removePrefix("terminals/")
+                    terminals = terminals.filterNot { it["id"]?.jsonPrimitive?.content == id }
+                    ok("""{"id":"$id","revokedAt":"$now"}""")
+                }
                 path.startsWith("access-tokens/") && api.method == HttpMethod.DELETE -> {
                     val id = path.removePrefix("access-tokens/")
                     accessTokens = accessTokens.map { if (it["id"]?.jsonPrimitive?.content == id) JsonObject(it + mapOf("state" to JsonPrimitive("REVOKED"),

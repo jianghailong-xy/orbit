@@ -17,12 +17,19 @@ import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.alpha
+import androidx.compose.ui.geometry.Rect
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.semantics.Role
+import androidx.compose.ui.text.SpanStyle
+import androidx.compose.ui.text.buildAnnotatedString
+import androidx.compose.ui.text.font.FontFamily
+import androidx.compose.ui.text.font.FontStyle
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.withStyle
+import androidx.compose.ui.unit.sp
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
@@ -37,6 +44,8 @@ import io.orbitd.android.text.LocalReaderResources
 import io.orbitd.android.navigation.ObjectId
 import io.orbitd.android.projects.CoordinatorDoneCard
 import io.orbitd.android.projects.CoordinatorStartCard
+import io.orbitd.android.projects.ProjectApi
+import io.orbitd.android.taskprojects.canWrite
 import io.orbitd.android.projects.RunSettings
 import io.orbitd.android.ui.LocalOrbitColors
 import kotlinx.coroutines.CancellationException
@@ -103,7 +112,7 @@ class SessionCardsModel internal constructor(val handle: SessionHandle, val sess
      * not success. While reconnecting it is what it last saw. */
     fun shown(session: SessionState, current: List<InteractionCard> = current(session)): List<InteractionCard> =
         (if (session.fresh) current + previous.filter { old -> current.none { it.key == old.key } }.map(::stale) else previous.ifEmpty { current })
-            .distinctBy { it.key }.map(::withPlan)
+            .distinctBy { it.key }.filter { CoordinatorCleanStart.drawsCard(session.snapshot?.detail?.text("createdAt"), it) }.map(::withPlan)
     /** The start card reads the project's task graph beside its request (A11b). */
     fun withPlan(card: InteractionCard) =
         if (card.family == CardFamily.START && graph != null) card.copy(context = JsonObject(card.context + ("plan" to graph!!))) else card
@@ -188,6 +197,10 @@ fun SessionCardsReads(cards: SessionCardsModel) {
     }
 }
 
+/** The height of the list the rail is drawn in, in px, less what floats over its top; 0 where nobody says. A card asked for top first is brought in as a span of
+ * nearly that height, which the list scrolls to by the card's top edge, whichever side of the screen the card is on. */
+val LocalCardViewport = compositionLocalOf { 0 }
+
 /** A04 is the only live-state owner. Reconnection/foreground/REST invalidations all feed this rail. */
 @OptIn(ExperimentalFoundationApi::class)
 @Composable
@@ -203,29 +216,38 @@ fun SessionCards(cards: SessionCardsModel, open: (String) -> Unit, discuss: ((St
             TextButton(onClick = { app.realtime.refreshSession() }) { Text("Check status") }
             if (!session.fresh) Text("Reconnecting · actions are unavailable until the server is checked.", style = MaterialTheme.typography.bodySmall)
         }
-        val focus = CardFocus.pending(session.id)
+        val asked = CardFocus.pending(session.id)
+        val focus = CardFocus.resolve(asked, shown)
         // A merge that happened is its record's line below, not a candidate that is no longer on offer (iOS closes its card).
         val mergedIds = cards.merged.mapNotNull { it.text("promotionId") }.toSet()
         // The merge candidate whose line this conversation draws: an exception's Review goes to it, and is drawn only while it is here.
         val mergeCard = shown.firstOrNull { it.family == CardFamily.PROMOTION && it.status != CardPreviews.stale }?.objectId
         // The main branch of the project this conversation coordinates, which an exception's rerun or observation names.
+        // The project's name, which an owner exception card's subline names, and the project page's coordinator reads and writes,
+        // which its coordinator row repairs the coordinator with (board owner-exception-who-fixes).
+        val coordinatedProject = session.snapshot?.standing?.get("project") as? JsonObject
+        val coordinatedTitle = coordinatedProject?.text("title")
+        // The project's escalation window, which Ask again's note names ("with a fresh 2h clock").
+        val escalationSeconds = (coordinatedProject?.get("exceptionEscalationSeconds") as? JsonPrimitive)?.longOrNull
+        val coordinatorDoors = remember(cards.handle) {
+            ProjectCoordinatorDoors(ProjectApi(app.session, cards.handle) { app.canWrite(cards.handle) }) { app.realtime.refreshSession() }
+        }
         val coordinatedMain = RunSettings.mainBranchName((session.snapshot?.standing?.get("project") as? JsonObject)?.obj("integration")?.text("upstreamRef"))
         shown.filterNot { it.family == CardFamily.PROMOTION && it.status == CardPreviews.stale && it.objectId in mergedIds }.forEach { card -> key(cards.handle, card.key, card.binding) {
             // A11 hook: the card a project page opened this conversation onto is brought into view once drawn.
             val requester = remember { BringIntoViewRequester() }
+            val viewport = LocalCardViewport.current
             if (focus != null && CardFocus.matches(focus, card.key)) LaunchedEffect(focus, card.key) {
-                requester.bringIntoView(); CardFocus.spend(session.id)
+                // The waiting card a project row opened onto shows its top, not its foot: a span from its top nearly the list's height.
+                if (asked == CardFocus.WAITING && viewport > 0) requester.bringIntoView(Rect(0f, 0f, 1f, viewport * 0.9f))
+                else requester.bringIntoView()
+                CardFocus.spend(session.id)
             }
             Box(Modifier.bringIntoViewRequester(requester)) {
                 val preview = CardPreviews.preview(card)
                 val fresh = cards.fresh(session, card)
                 val result = results[card.key]?.takeIf { it.binding == card.binding } ?: CardActionState()
-                // Decide it myself opens a revision waiting for the coordinator into its evidence card, here in place, and that
-                // card is what is pressed (`CoordinatorQueue`).
-                var decidingMyself by rememberSaveable { mutableStateOf(false) }
-                val drawn = (if (decidingMyself) CoordinatorQueue.decideMyself(card) else null) ?: card
-                val submit = { verb: CardVerb, input: CardInput ->
-                    if (verb == CardVerb.DECIDE_MYSELF) decidingMyself = true else cards.submit(drawn, verb, input) }
+                val submit = { verb: CardVerb, input: CardInput -> cards.submit(card, verb, input) }
                 when {
                     // A08-13: a question that has ended is the record it became, replayed in its review.
                     card.family == CardFamily.QUESTION_RECORD -> QuestionRecordCard(card) { cards.open(card.key) }
@@ -240,26 +262,29 @@ fun SessionCards(cards: SessionCardsModel, open: (String) -> Unit, discuss: ((St
                     CoordinatorQueue.isSent(card) -> SentToCoordinatorLine(card)
                     // A08-17: an exception that became the owner's, or a pause, is its own card (iOS `OwnerItemCardView`).
                     card.family == CardFamily.EXCEPTION -> ExceptionCard(card, fresh, result, mergeCard, open, discuss,
-                        review = { promotion -> CardFocus.request(session.id, "promotion:$promotion") }, main = coordinatedMain, submit = submit)
-                    else -> CompositionLocalProvider(LocalEvidenceFiles provides cards.evidenceFiles) { BusinessCard(drawn, fresh, result, open, discuss, submit) }
+                        review = { promotion -> CardFocus.request(session.id, "promotion:$promotion") }, main = coordinatedMain,
+                        projectName = coordinatedTitle, escalationSeconds = escalationSeconds, coordinator = coordinatorDoors, submit = submit)
+                    else -> CompositionLocalProvider(LocalEvidenceFiles provides cards.evidenceFiles) { BusinessCard(card, fresh, result, open, discuss, submit) }
                 }
             }
         } }
-        // A11c: the project's closing card, whole, in the conversation that coordinates the project (iOS `ProjectDoneCardView`: a
-        // session's `projectId` is set on coordinators alone).
+        // A11c: the project's closing card in the conversation that coordinates the project (iOS `ProjectDoneCardView`: a
+        // session's `projectId` is set on coordinators alone) — a preview while it asks, whose review sheet is open while [doneReview].
         session.snapshot?.detail?.let { detail -> detail.text("projectId")?.let { coordinated ->
-            // The needs-you bar points at this card while it asks; brought into view as the rail's cards are.
+            // The needs-you bar points at this card while it asks: brought into view, and its review opened, as a press on it does.
             val requester = remember { BringIntoViewRequester() }
             val key = NeedsYouLogic.doneKey(coordinated)
+            var doneReview by rememberSaveable(session.id, coordinated) { mutableStateOf(false) }
             if (focus != null && CardFocus.matches(focus, key)) LaunchedEffect(focus, key) {
-                requester.bringIntoView(); CardFocus.spend(session.id)
+                requester.bringIntoView(); doneReview = true; CardFocus.spend(session.id)
             }
             Box(Modifier.bringIntoViewRequester(requester)) {
-                CoordinatorDoneCard(app, cards.handle, session.id, coordinated, detail, session.snapshot?.standing.orEmpty(), session.fresh)
+                CoordinatorDoneCard(app, cards.handle, session.id, coordinated, detail, session.snapshot?.standing.orEmpty(), session.fresh, open,
+                    reviewing = doneReview, review = { doneReview = it })
             }
         } }
         // A11-9: each merge the project made is one line, opening its receipt (iOS `PromotionReceiptLine`).
-        PromotionCards.receipts(cards.merged).forEach { receipt ->
+        PromotionCards.receipts(cards.merged).filter { CoordinatorCleanStart.drawsRecord(session.snapshot?.detail?.text("createdAt"), it.moment) }.forEach { receipt ->
             PromotionReceiptLine(receipt.promotion, "${receipt.id}:line", Modifier.testTag(receipt.id)) { cards.receipt = receipt.promotion }
         }
         // A08-6: what this conversation created is the Tasks card above the composer (`SessionTasksCard`), with what its watches wait on.
@@ -296,11 +321,15 @@ internal fun PreviewTone.color(): Color = when (this) {
  * preview that asks nothing any more is dimmed and says "View details".
  */
 @Composable
-internal fun CardPreviewView(card: InteractionCard, preview: CardPreview, onOpen: () -> Unit) {
+internal fun CardPreviewView(card: InteractionCard, preview: CardPreview, onOpen: () -> Unit) = CardPreviewView(card.key, preview, onOpen)
+
+/** The same preview for a card that is not one of the session's interaction cards — the project's closing card (`CoordinatorDoneCard`). */
+@Composable
+internal fun CardPreviewView(key: String, preview: CardPreview, onOpen: () -> Unit) {
     val tone = preview.tone.color()
-    Box(Modifier.testTag(card.key)) { Column(Modifier.fillMaxWidth().alpha(if (preview.dimmed) 0.72f else 1f)
+    Box(Modifier.testTag(key)) { Column(Modifier.fillMaxWidth().alpha(if (preview.dimmed) 0.72f else 1f)
         .background(tone.copy(alpha = 0.07f), RoundedCornerShape(14.dp)).border(1.dp, tone.copy(alpha = 0.28f), RoundedCornerShape(14.dp))
-        .clickable(role = Role.Button, onClick = onOpen).testTag("${card.key}:preview").padding(14.dp),
+        .clickable(role = Role.Button, onClick = onOpen).testTag("$key:preview").padding(14.dp),
         verticalArrangement = Arrangement.spacedBy(12.dp)) {
         Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
             Box(Modifier.size(22.dp).background(tone.copy(alpha = 0.16f), RoundedCornerShape(6.dp)))
@@ -457,8 +486,8 @@ private fun RecordFooter(record: CardRecord) {
         CardRecord.Icon.KEPT -> R.drawable.ic_refresh to secondary
         CardRecord.Icon.REFUSED -> R.drawable.ic_x_circle to secondary
     }
-    Column(Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 12.dp).testTag("card-review:footer"),
-        verticalArrangement = Arrangement.spacedBy(2.dp)) {
+    Column(Modifier.fillMaxWidth().heightIn(max = 420.dp).verticalScroll(rememberScrollState()).padding(horizontal = 16.dp, vertical = 12.dp)
+        .testTag("card-review:footer"), verticalArrangement = Arrangement.spacedBy(2.dp)) {
         Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(6.dp)) {
             Icon(painterResource(icon), null, Modifier.size(16.dp), tint = tint)
             Text(record.line, Modifier.testTag("card-review:footer-line"), style = MaterialTheme.typography.bodyMedium.copy(fontWeight = FontWeight.SemiBold))
@@ -466,5 +495,45 @@ private fun RecordFooter(record: CardRecord) {
         record.detail?.let {
             Text(it, Modifier.padding(start = 22.dp).testTag("card-review:footer-detail"), style = MaterialTheme.typography.bodySmall, color = secondary)
         }
+        record.receipt?.let { ReceiptFold(it) }
+    }
+}
+
+/** What a recorded acceptance confirmation opens to (web `AcceptanceReceiptFold`): closed, a brand-coloured reading control; open,
+ * the change rows, the numbered words, a note and the seal. */
+@Composable
+private fun ReceiptFold(receipt: AcceptanceReceipt) {
+    val secondary = MaterialTheme.colorScheme.onSurfaceVariant
+    val colors = LocalOrbitColors.current
+    var open by rememberSaveable { mutableStateOf(false) }
+    Text(if (open) CardPreviews.receiptCloseLabel else receipt.openLabel,
+        Modifier.padding(start = 22.dp, top = 6.dp).clickable { open = !open }.testTag("card-review:receipt-toggle"),
+        style = MaterialTheme.typography.bodySmall.copy(fontWeight = FontWeight.SemiBold), color = MaterialTheme.colorScheme.primary)
+    if (!open) return
+    Column(Modifier.padding(start = 22.dp, top = 6.dp).testTag("card-review:receipt-fold"), verticalArrangement = Arrangement.spacedBy(6.dp)) {
+        receipt.changes.forEach { row ->
+            val tone = when (row.mark) { "+" -> colors.success; "↑" -> colors.needsYou; else -> secondary }
+            Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                Text(row.mark, color = tone, style = MaterialTheme.typography.bodySmall.copy(fontWeight = FontWeight.Bold))
+                Column {
+                    Text(row.kind, color = tone, style = MaterialTheme.typography.labelSmall)
+                    Text(row.text, style = MaterialTheme.typography.bodySmall)
+                    row.was?.let { Text(it, color = secondary, style = MaterialTheme.typography.labelSmall) }
+                }
+            }
+        }
+        receipt.criteria.forEach { item ->
+            Text(buildAnnotatedString {
+                item.ordinal?.let { append("$it. ") }
+                if (item.text != null) append(item.text)
+                else withStyle(SpanStyle(fontStyle = FontStyle.Italic, color = secondary)) { append(CardPreviews.receiptWordsGone) }
+                item.tags.forEach { tag ->
+                    append(" ")
+                    withStyle(SpanStyle(fontSize = 11.sp, color = if (tag == CardPreviews.receiptTagNew) colors.success else colors.needsYou)) { append(tag) }
+                }
+            }, style = MaterialTheme.typography.bodySmall)
+        }
+        receipt.note?.let { Text(it, color = secondary, style = MaterialTheme.typography.bodySmall) }
+        Text(receipt.seal, color = secondary, style = MaterialTheme.typography.labelSmall.copy(fontFamily = FontFamily.Monospace))
     }
 }

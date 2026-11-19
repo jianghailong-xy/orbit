@@ -99,7 +99,8 @@ internal class LastPageMark(private val sid8: String) {
 
 /** The newest event a row draws: its own, its result's, a folded block's or a child's. */
 internal val TranscriptRow.newestSeq: Long get() = maxOf(event.seq, result?.seq ?: 0,
-    folded.maxOfOrNull { it.seq } ?: 0, children.maxOfOrNull { it.newestSeq } ?: 0)
+    folded.maxOfOrNull { it.seq } ?: 0, children.maxOfOrNull { it.newestSeq } ?: 0, steps.maxOfOrNull { it.newestSeq } ?: 0,
+    exchanges.maxOfOrNull { ex -> ex.rows.maxOfOrNull { it.newestSeq } ?: 0 } ?: 0)
 
 /**
  * Tells [mark] after each measure of the transcript list, in the frame being laid out — the list's layout info is written during

@@ -761,16 +761,8 @@ export class WikiImportRepo {
    * reads src/x.
    */
   path(raw: string): string | null {
-    let path = trimChars(goTrimSpace(raw), '`"\'').replace(LINE_SUFFIX, '');
-    if (this.root !== '' && path.startsWith(`${this.root}/`)) path = path.slice(this.root.length + 1);
-    else if (WORKTREE_PREFIX.test(path)) path = path.replace(WORKTREE_PREFIX, '');
-    else if (path.startsWith('/') || path.startsWith('~/')) {
-      const at = path.indexOf(`/${this.name}/`);
-      if (this.name !== '' && at >= 0) path = path.slice(at + this.name.length + 2);
-    }
-    if (path.startsWith('./')) path = path.slice(2);
-    if (path.endsWith('/')) path = path.slice(0, -1);
-    if (path === '' || path.startsWith('/')) return null;
+    const path = repositoryRelativePath(raw, this.root, this.name);
+    if (path === null) return null;
     return this.files.has(path) || this.dirs.has(path) ? path : null;
   }
 
@@ -790,6 +782,54 @@ export class WikiImportRepo {
     }
     return found;
   }
+}
+
+/**
+ * A path the model named, read relative to the repository as `WikiImportRepo.path` reads it, whether or not any tree
+ * has it: an absolute one inside the command's checkout, an Orbit worktree or a directory named for the repository.
+ * Null when it stays absolute or is empty.
+ */
+function repositoryRelativePath(raw: string, root: string, name: string): string | null {
+  let path = trimChars(goTrimSpace(raw), '`"\'').replace(LINE_SUFFIX, '');
+  if (root !== '' && path.startsWith(`${root}/`)) path = path.slice(root.length + 1);
+  else if (WORKTREE_PREFIX.test(path)) path = path.replace(WORKTREE_PREFIX, '');
+  else if (path.startsWith('/') || path.startsWith('~/')) {
+    const at = path.indexOf(`/${name}/`);
+    if (name !== '' && at >= 0) path = path.slice(at + name.length + 2);
+  }
+  if (path.startsWith('./')) path = path.slice(2);
+  if (path.endsWith('/')) path = path.slice(0, -1);
+  if (path === '' || path.startsWith('/')) return null;
+  return path;
+}
+
+const WHOLE_SHA = /^[0-9a-f]{40}$/u;
+
+/**
+ * The model's {paths, commits} as anchors when the run read no snapshot (docs/wiki-repo-tiers-design.md §5.2, contract
+ * `anchorRules.deferred`): every path it names that reads as repository-relative, and every whole sha, each marked
+ * `deferred` — held to no code tree yet, for the first run that reads one to check. A sha shorter than 40 characters
+ * names no commit until a tree says which, and is left out.
+ */
+export function wikiImportDeferredAnchors(raw: unknown, name = ''): Array<Record<string, string | boolean>> {
+  const given = isObject(raw) ? raw : {};
+  const out: Array<Record<string, string | boolean>> = [];
+  const seen = new Set<string>();
+  for (const value of textList(given.paths)) {
+    const path = repositoryRelativePath(value, '', name);
+    if (path !== null && !seen.has(`p:${path}`)) {
+      seen.add(`p:${path}`);
+      out.push({ type: 'path', path, deferred: true });
+    }
+  }
+  for (const value of textList(given.commits)) {
+    const sha = trimChars(goTrimSpace(value), '`"\'').toLowerCase();
+    if (WHOLE_SHA.test(sha) && !seen.has(`c:${sha}`)) {
+      seen.add(`c:${sha}`);
+      out.push({ type: 'commit', sha, deferred: true });
+    }
+  }
+  return capList(out);
 }
 
 /** path.Dir for a repository path. */

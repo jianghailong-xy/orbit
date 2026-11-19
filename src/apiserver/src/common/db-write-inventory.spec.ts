@@ -88,11 +88,23 @@ function withoutComments(source: string): string {
     .join('\n');
 }
 
-/** The template a `$queryRaw` tag opens on this line, to its closing backtick; null when the line opens none. */
+/**
+ * The template a `$queryRaw` on this line opens, to its closing backtick; null when it opens none.
+ *
+ * Read from the `$queryRaw` across lines, because both ways of writing one can open their template further down: the
+ * tag (`$queryRaw<Row[]>`…``) and the call (`$queryRaw<Row[]>(Prisma.sql`…`)`) each take a type argument that may
+ * span lines, and the call's argument may start on the next one. A statement passed in a variable opens none here.
+ */
 function templateFrom(lines: readonly string[], index: number): string | null {
-  const tag = /\$queryRaw(?:<[^`]*>)?`/.exec(lines[index]);
-  if (!tag) return null;
   const code = lines.slice(index).join('\n');
+  const opening = /\$queryRaw(?:Unsafe)?\s*(?:<[^`()]*?>)?\s*(?:\(\s*(?:Prisma\.sql\s*)?)?`/y;
+  let tag: RegExpExecArray | null = null;
+  for (const call of lines[index].matchAll(/\$queryRaw/g)) {
+    opening.lastIndex = call.index;
+    tag = opening.exec(code);
+    if (tag) break;
+  }
+  if (!tag) return null;
   let depth = 0;
   for (let at = tag.index + tag[0].length; at < code.length; at += 1) {
     if (code[at] === '{' && (depth > 0 || code[at - 1] === '$')) depth += 1;
@@ -155,7 +167,10 @@ function scan(): Scanned[] {
         // its end however long it is: a claim's write comes after its WITHs, and a claim is no less a write for that.
         const window = lines.slice(index, index + 16).join('\n');
         const end = window.indexOf('`;');
-        const statement = templateFrom(lines, index) ?? (end >= 0 ? window.slice(0, end + 2) : window);
+        // Without its SQL comments, for the reason `withoutComments` gives: read to its end, a recursive SELECT's
+        // `-- refuses to create the cycle` is a CREATE to WRITES_ROWS.
+        const statement = (templateFrom(lines, index) ?? (end >= 0 ? window.slice(0, end + 2) : window))
+          .replace(/--[^\n]*/g, '');
         if (TAKES_LOCK.test(statement)) add('LOCK');
         else if (WRITES_ROWS.test(statement) || CALLS_WRITE_FUNCTION.test(statement)) add('RAW_WRITE');
       }

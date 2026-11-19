@@ -3,11 +3,14 @@ import { Inject, Injectable, Logger, OnModuleDestroy, OnModuleInit, Optional } f
 import { PrismaService } from '../prisma/prisma.service';
 import { expireSessionRequest } from './session-request';
 import { SessionRequestService } from './session-request.service';
+import { PushService } from '../push/push.service';
+import { RealtimeService, approvalRequestEvent } from '../realtime/realtime.service';
 
 /**
  * The clock of session requests (contract §4, §5): EXPIRED, and the hand-offs nothing else made.
  *
- * Each pass does three things, in this order:
+ * Each pass first closes run questions whose approvals settled (R11), then does these three things
+ * in order, and finally rings terminal run-question/notify fallbacks once (R10/M6):
  *
  *   1. closes EXPIRED every request still OPEN past its `reply_by`, with the recipient as it stood
  *      (`expireSessionRequest`) — a compare-and-set, so an answer that lands first stands;
@@ -58,6 +61,8 @@ export class SessionRequestWorker implements OnModuleInit, OnModuleDestroy {
     private readonly prisma: PrismaService,
     private readonly requests: SessionRequestService,
     @Optional() @Inject(SESSION_REQUEST_WORKER_OPTIONS) options: SessionRequestWorkerOptions = {},
+    @Optional() private readonly push?: PushService,
+    @Optional() private readonly realtime?: RealtimeService,
   ) {
     this.pollIntervalMs = options.pollIntervalMs ?? SESSION_REQUEST_POLL_INTERVAL_MS;
     this.batch = options.batch ?? SESSION_REQUEST_BATCH;
@@ -94,13 +99,27 @@ export class SessionRequestWorker implements OnModuleInit, OnModuleDestroy {
       });
   }
 
-  /** One pass: expire what is due, hand back what is owed, then say what will not be. */
+  /** One pass: close settled questions, expire, hand back MESSAGE outcomes, then ring fallbacks. */
   async drain(now: Date = new Date()): Promise<{
     expired: string[];
     handedOff: string[];
     commented: string[];
     handedBack: string[];
   }> {
+    // R11 runs before expiry: an approval that already has an answer is never a fallback alert.
+    await this.prisma.$executeRaw`
+      UPDATE session_request r SET
+        state = CASE WHEN a.decided_by_id IS NOT NULL THEN 'OWNER_ANSWERED' ELSE 'UNDELIVERED' END,
+        close_reason = CASE WHEN a.decided_by_id IS NOT NULL THEN NULL ELSE 'QUESTION_ABANDONED' END,
+        closed_at = ${now}
+      FROM approval a
+      WHERE r.id IN (
+        SELECT q.id FROM session_request q JOIN approval p ON p.id = q.approval_id
+        WHERE q.kind = 'RUN_QUESTION' AND q.state = 'OPEN' AND p.status <> 'PENDING'
+        ORDER BY q.created_at, q.id LIMIT ${this.batch}
+      ) AND r.kind = 'RUN_QUESTION' AND r.state = 'OPEN'
+        AND a.id = r.approval_id AND a.status <> 'PENDING'
+    `;
     const expired: string[] = [];
     const due = await this.prisma.sessionRequest.findMany({
       where: { state: 'OPEN', replyBy: { lte: now } },
@@ -120,7 +139,7 @@ export class SessionRequestWorker implements OnModuleInit, OnModuleDestroy {
     // refuses a turn for a reason of its own, so a row is left owed only by an error the next pass may
     // not meet.
     const owed = await this.prisma.sessionRequest.findMany({
-      where: { state: { not: 'OPEN' }, replyClientTurnId: null, replyHeldAt: null },
+      where: { kind: 'MESSAGE', state: { not: 'OPEN' }, replyClientTurnId: null, replyHeldAt: null },
       orderBy: [{ closedAt: 'asc' }, { id: 'asc' }],
       take: this.batch,
       select: { id: true },
@@ -136,7 +155,7 @@ export class SessionRequestWorker implements OnModuleInit, OnModuleDestroy {
     const commented: string[] = [];
     const handedBack: string[] = [];
     const unsaid = await this.prisma.sessionRequest.findMany({
-      where: { replyCommentDueAt: { not: null }, replyClientTurnId: null },
+      where: { kind: 'MESSAGE', replyCommentDueAt: { not: null }, replyClientTurnId: null },
       orderBy: [{ replyCommentDueAt: 'asc' }, { id: 'asc' }],
       take: this.batch,
       select: { id: true },
@@ -153,7 +172,54 @@ export class SessionRequestWorker implements OnModuleInit, OnModuleDestroy {
         this.log.error(`session request ${request.id} was not said on its asker's task: ${messageOf(error)}`);
       }
     }
+    await this.ringFallbacks(now);
     return { expired, handedOff, commented, handedBack };
+  }
+
+  /** R10/M6: the existing pass claims each terminal fallback once across replicas. */
+  private async ringFallbacks(now: Date): Promise<void> {
+    if (!this.push || !this.realtime) return;
+    const rows = await this.prisma.$queryRaw<Array<{
+      id: string; kind: string; owner_id: string; from_session_id: string;
+      approval_id: string | null; request_preview: string; state: string;
+    }>>`
+      UPDATE session_request r SET owner_alerted_at = ${now}
+      WHERE r.id IN (
+        SELECT q.id FROM session_request q
+        WHERE q.kind IN ('RUN_QUESTION', 'RUN_NOTIFY') AND q.owner_alerted_at IS NULL
+          AND q.state IN ('NO_REPLY', 'RECIPIENT_ENDED', 'EXPIRED', 'UNDELIVERED')
+          AND (q.kind = 'RUN_NOTIFY' OR EXISTS (
+            SELECT 1 FROM approval a WHERE a.id = q.approval_id AND a.status = 'PENDING'
+          ))
+        ORDER BY q.closed_at, q.id LIMIT ${this.batch}
+      ) AND r.owner_alerted_at IS NULL
+        AND (r.kind = 'RUN_NOTIFY' OR EXISTS (
+          SELECT 1 FROM approval a WHERE a.id = r.approval_id AND a.status = 'PENDING'
+        ))
+      RETURNING r.id, r.kind, r.owner_id, r.from_session_id, r.approval_id, r.request_preview, r.state
+    `;
+    for (const row of rows) {
+      try {
+        if (row.kind === 'RUN_QUESTION') {
+          const reason = row.state === 'EXPIRED' ? 'TIMED_OUT'
+            : row.state === 'RECIPIENT_ENDED' ? 'REVIEWER_ENDED' : 'REVIEWER_STOPPED';
+          await this.prisma.approval.updateMany({
+            where: { id: row.approval_id!, status: 'PENDING' }, data: { coordinatorFallback: reason },
+          });
+          const approval = await this.prisma.approval.findFirst({ where: { id: row.approval_id!, status: 'PENDING' } });
+          if (!approval) continue;
+          this.realtime.publish(row.from_session_id, approvalRequestEvent(approval, now.toISOString()));
+          await this.push.notifyApprovalRequest(row.from_session_id, approval.id, approval.toolName, true);
+        } else {
+          await this.push.notifyAgentMessage({
+            ownerId: row.owner_id, sessionId: row.from_session_id, fallbackTitle: 'Orbit',
+            message: `Not reviewed by the coordinator · ${row.request_preview}`,
+          }, true);
+        }
+      } catch (error) {
+        this.log.error(`session request ${row.id} fallback alert failed: ${messageOf(error)}`);
+      }
+    }
   }
 }
 

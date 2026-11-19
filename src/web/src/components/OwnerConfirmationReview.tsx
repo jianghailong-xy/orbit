@@ -9,6 +9,7 @@ import type {
   OwnerConfirmationNotReviewedReason,
   OwnerConfirmationReviewView,
 } from '@orbit/shared';
+import type { OwnerCardTranslation } from '@orbit/shared';
 import { OTHER_OPTION, RECOMMENDED } from './CoordinatorQuestionCard';
 import { decisionReceiptTime } from './EvidenceDecisionCard';
 import { Textarea } from './ui/Textarea';
@@ -81,6 +82,10 @@ export const ANSWER_NOT_SHOWN = 'Not shown to you — the recommended answer was
 export const BEFORE_REVIEW = 'Before the review came in';
 /** The card the reviewer's own conversation draws for the turn that asks it to review (§2 D7). */
 export const REVIEW_REQUESTED = 'Review requested';
+/** The card the reviewer's conversation draws for the owner's answers handed to it (§7 Q5). */
+export const YOU_CONFIRMED = 'You confirmed';
+export const ANSWERS_SENT_TO_REVIEWER = 'Your answers, sent to this reviewer';
+export const REVIEWER_WAS_TOLD = 'What the reviewer was told';
 
 export function reviewingSince(time: string): string {
   return `${REVIEWING_SINCE} ${time}`;
@@ -334,6 +339,53 @@ export function reviewBar(
         recordLines(review, place === 'CARD'));
     }
   }
+}
+
+/**
+ * The review as the card draws it in the owner's language (board 04-owner-cards.html): the REVIEW
+ * record's judgment and needsYou lines and options, and the PROBLEMS record's reason and problems,
+ * translated index for index. Keys and option indexes stay the original's, so answers go by them.
+ * `t` gives a record's translation while the card is drawn translated, undefined otherwise.
+ */
+export function shownConfirmationReview(
+  review: OwnerConfirmationReviewView,
+  t: (record: OwnerCardTranslation | undefined) => OwnerCardTranslation | undefined,
+): OwnerConfirmationReviewView {
+  const rt = review.review ? t(review.review.translation) : undefined;
+  const pt = review.problems ? t(review.problems.translation) : undefined;
+  if (!rt && !pt) return review;
+  const firstAsked = rt?.needsYou?.[0]?.text;
+  return {
+    ...review,
+    // The server's headline quotes the first needsYou line as written: it reads the translated one.
+    headline: review.headline?.kind === 'NEEDS_YOU' && firstAsked ? { ...review.headline, text: firstAsked } : review.headline,
+    review: review.review && rt
+      ? {
+          ...review.review,
+          judgment: rt.judgment || review.review.judgment,
+          needsYou: review.review.needsYou.map((item, i) => {
+            const ti = rt.needsYou?.[i];
+            if (!ti) return item;
+            return {
+              ...item,
+              text: ti.text || item.text,
+              options: item.options.map((o, j) => {
+                const to = ti.options?.[j];
+                if (!to) return o;
+                return { ...o, label: to.label || o.label, ...(o.description !== undefined ? { description: to.description || o.description } : {}) };
+              }),
+            };
+          }),
+        }
+      : review.review,
+    problems: review.problems && pt
+      ? {
+          ...review.problems,
+          reason: pt.reason || review.problems.reason,
+          problems: review.problems.problems.map((item, i) => ({ ...item, text: pt.problems?.[i]?.text || item.text })),
+        }
+      : review.problems,
+  };
 }
 
 /** Every item the bar's rows can name, by key: the review's lists and the problems of either kind. */

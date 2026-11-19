@@ -55,6 +55,27 @@ describe('nginx: a public share page', () => {
     // Every other path still falls back to the shell.
     expect(locationDirectives('/')).toContain('try_files $uri $uri/ /index.html');
   });
+
+  it('names its link in the shell\'s head for a chat app, and only there', () => {
+    // index.html's SSI include of /api/shared/<token>/card: WeChat read only "Orbit" off the bare shell.
+    // Through `location /share-card/`, whose every refusal is empty: through /api/ a 404 wrote its JSON
+    // into the head instead of the stub (nginx:alpine, 2026-11-13).
+    expect(share).toContain('ssi on');
+    expect(share).toContain('ssi_silent_errors on');
+    expect(locationDirectives('/')).not.toContain('ssi on');
+    const shell = readFileSync(new URL('../index.html', import.meta.url), 'utf8');
+    expect(shell).toContain(
+      '<!--# block name="bare_title" --><title>Orbit</title><!--# endblock -->' +
+        '<!--# include virtual="/share-card/${share_token}/card" stub="bare_title" -->',
+    );
+    const card = locationDirectives('/share-card/');
+    expect(card).toContain('internal');
+    expect(card).toContain('proxy_pass http://apiserver:3000/api/shared/');
+    expect(card).toContain('proxy_intercept_errors on');
+    expect(card).toContain('error_page 400 403 404 429 500 502 503 504 = @no_share_card');
+    expect(locationDirectives('@no_share_card')).toEqual(['return 204']);
+    expect(conf).toMatch(/map \$request_uri \$share_token \{/);
+  });
 });
 
 describe('nginx: hashed assets', () => {
@@ -105,10 +126,9 @@ describe('nginx: the pages\' Content-Security-Policy', () => {
       }),
     );
   const loads = directivesOf(pages[0]);
-  const scriptFiles = directivesOf(pages[1]);
 
   it('is on every answer of both blocks that serve the shell, and says the same in each', () => {
-    expect(pages).toHaveLength(2);
+    expect(pages).toHaveLength(1);
     expect(policyOf(locationDirectives('/s/'))).toEqual(pages);
   });
 
@@ -119,9 +139,8 @@ describe('nginx: the pages\' Content-Security-Policy', () => {
     expect([...loads.keys()].filter((name) => name.startsWith('script-src-'))).toEqual([]);
   });
 
-  it('of those, only the build\'s: nothing a route under /api/ answers', () => {
-    expect([...scriptFiles.keys()]).toEqual(['script-src']);
-    expect(scriptFiles.get('script-src')).toEqual(['*:*/assets/', '*:*/theme-boot.js']);
+  it('is one policy: a second one naming script paths stopped every script on iOS Safari 27.2', () => {
+    expect(conf.replace(/#[^\n]*/g, '')).not.toContain('*:*/');
   });
 
   it('closes what default-src leaves open to a script or a form', () => {
@@ -138,5 +157,59 @@ describe('nginx: the pages\' Content-Security-Policy', () => {
     for (const block of ['/api/', '/assets/', '= /theme-boot.js', '/dl/', '= /healthz']) {
       expect(policyOf(locationDirectives(block))).toEqual([]);
     }
+  });
+});
+
+describe('nginx: the managed runner browser\'s viewer', () => {
+  // docs/runner-browser-design.md §4: a WebSocket on /api/runners/:id/browser/vnc that lasts as long as the owner watches.
+  const VIEWER = '~ ^/api/runners/[^/]+/browser/vnc$';
+  const viewer = locationDirectives(VIEWER);
+  const code = conf.replace(/#[^\n]*/g, '');
+
+  it('is a regex location, so nginx chooses it over the `/api/` prefix that drops the Upgrade header', () => {
+    const pattern = new RegExp(VIEWER.slice(2));
+    expect(pattern.test('/api/runners/34z8OKBXxDRYsIZwzJ35E/browser/vnc')).toBe(true);
+    expect(pattern.test('/api/runners/0190a0b0-0000-7000-8000-000000000001/browser/vnc')).toBe(true);
+    expect(pattern.test('/api/runners/34z8OKBXxDRYsIZwzJ35E')).toBe(false);
+    expect(pattern.test('/api/runners/a/b/browser/vnc')).toBe(false);
+    expect(locationDirectives('/api/')).toContain("proxy_set_header Connection ''");
+  });
+
+  it('passes the upgrade on, and only when the request asks for one', () => {
+    expect(viewer).toContain('proxy_http_version 1.1');
+    expect(viewer).toContain('proxy_set_header Upgrade $http_upgrade');
+    expect(viewer).toContain('proxy_set_header Connection $orbit_vnc_connection');
+    const map = /map \$http_upgrade \$orbit_vnc_connection \{([^}]*)\}/.exec(code)?.[1].replace(/\s+/g, ' ').trim();
+    expect(map).toBe("default upgrade; '' close;");
+  });
+
+  it('writes no access log: the owner\'s login rides in the query, and this image logs the whole request line', () => {
+    expect(viewer).toContain('access_log off');
+    // Nothing at server or http level turns it back on for this location.
+    expect(viewer.filter((d) => d.startsWith('access_log'))).toEqual(['access_log off']);
+  });
+
+  it('does not take a quiet screen for a dead stream: an hour each way, nothing buffered', () => {
+    expect(viewer).toContain('proxy_read_timeout 3600s');
+    expect(viewer).toContain('proxy_send_timeout 3600s');
+    expect(viewer).toContain('proxy_buffering off');
+  });
+
+  it('goes to an upstream of its own that keeps no failure count, so a long stream never marks the apiserver down', () => {
+    // max_fails=1 (the default) lets a failed peer back by one request per fail_timeout and forgives it only when that
+    // request ends: minutes later for a stream, and every other viewer meanwhile gets 502 "no live upstreams".
+    expect(viewer).toContain('proxy_pass http://orbit_browser_vnc');
+    const upstream = /upstream orbit_browser_vnc \{([^}]*)\}/.exec(code)?.[1];
+    const servers = (upstream ?? '').split(';').map((d) => d.replace(/\s+/g, ' ').trim()).filter((d) => d.startsWith('server '));
+    expect(servers).toEqual(['server apiserver:3000 max_fails=0']);
+  });
+
+  it('forwards who asked, as `/api/` does, and adds no header of its own to the answer', () => {
+    for (const header of ['Host $host', 'X-Real-IP $remote_addr', 'X-Forwarded-For $proxy_add_x_forwarded_for', 'X-Forwarded-Proto $scheme',
+      'X-Orbit-Request-Host $http_host', 'X-Orbit-Request-Proto $http_x_forwarded_proto']) {
+      expect(viewer).toContain(`proxy_set_header ${header}`);
+      expect(locationDirectives('/api/')).toContain(`proxy_set_header ${header}`);
+    }
+    expect(viewer.filter((d) => d.startsWith('add_header'))).toEqual([]);
   });
 });

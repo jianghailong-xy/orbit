@@ -209,6 +209,7 @@ private fun WikiEntryPage(detail: WikiEntryDetail, now: Instant, busy: Boolean, 
                         Text("◎", Modifier.clearAndSetSemantics {}, style = WikiType.meta, color = WikiPalette.secondary)
                         Column(verticalArrangement = Arrangement.spacedBy(3.dp)) {
                             SelectionContainer { Text(WikiLogic.anchorLabel(anchor), style = WikiType.mono) }
+                            if (WikiLogic.anchorDeferred(anchor)) Text(WikiCopy.anchorDeferred, style = WikiType.label, color = WikiPalette.secondary)
                             WikiMarkText(WikiLogic.anchorStateMark(anchor))
                         }
                     }

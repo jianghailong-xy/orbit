@@ -180,6 +180,7 @@ describe('background agent and workflow cards', () => {
     expect(container.textContent).toContain('Reader A complete');
     expect(container.textContent).not.toContain('Reader B finding');
     expect(fetchFull).not.toHaveBeenCalled();
+    await act(async () => container.querySelector<HTMLElement>('.agent-progress-transcript .chat-steps-line')!.click());
     await act(async () => container.querySelector<HTMLElement>('.agent-progress-transcript .chat-tool-row')!.click());
     expect(fetchFull).toHaveBeenCalledWith(5);
     expect(container.textContent).toContain('cat src/project.ts');
@@ -223,7 +224,7 @@ describe('the tray', () => {
       container.querySelector<HTMLElement>('.bg-tray-row')!.click();
     });
     const text = container.textContent ?? '';
-    expect(text).toContain('2 running · 2 total');
+    expect(text).toContain('Background processes2 running');
     expect([...container.querySelectorAll('.bg-shell-kind')].map((n) => n.textContent)).toEqual(['Agent', 'Workflow']);
     expect(container.querySelector('.bg-shell-sub')?.textContent).toBe(
       'Design 1/2 · design:entity-graph running · 113 tool calls',

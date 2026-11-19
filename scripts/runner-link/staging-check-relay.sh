@@ -29,7 +29,7 @@
 #   5. Nothing kept: no code or key handed over in this run is in any of the stack's container logs, any row of its
 #      database (pg_dump), or a drill's report or log.
 #
-#   ORBIT_LINK_STAGING_MODE=link ORBIT_LINK_STAGING_BACKENDS=2 ORBIT_LINK_STAGING_LINK_BACKENDS=apiserver-b \
+#   ORBIT_LINK_STAGING_BACKENDS=2 ORBIT_LINK_STAGING_LINK_BACKENDS=apiserver-b \
 #     scripts/runner-link/staging-up.sh --no-build
 #   scripts/runner-link/staging-check-relay.sh
 #   ORBIT_LINK_STAGING_LINK_BACKENDS=all scripts/runner-link/staging-up.sh --no-build
@@ -43,7 +43,6 @@ source "$(dirname "${BASH_SOURCE[0]}")/staging-lib.sh"
 
 [ -f "$env_file" ] || die "no staging stack in $state: run staging-up.sh first"
 [ "$(setting STAGING_TLS files)" = files ] || die "the check runs in the files TLS mode"
-[ "$(setting STAGING_MODE http)" = link ] || die "the stack is not in MODE_LINK: ORBIT_LINK_STAGING_MODE=link ORBIT_LINK_STAGING_BACKENDS=2 $here/staging-up.sh --no-build"
 [ "$(setting STAGING_BACKENDS 1)" = 2 ] || die "the check needs two apiservers: ORBIT_LINK_STAGING_BACKENDS=2 $here/staging-up.sh --no-build"
 command -v go >/dev/null || die "go is required (step 1 runs the gateway's NATS test)"
 case "$(setting STAGING_LINK_BACKENDS all)" in
@@ -78,7 +77,7 @@ steps() {
   node -e 'const s = JSON.parse(require("fs").readFileSync(process.argv[1], "utf8"));
     for (const x of s.steps) console.error(`    ${x.ok ? "ok  " : "FAIL"} ${x.name} (${x.ms} ms): ${x.detail}`);' "$1"
 }
-client() { "$here/staging-client.sh" -http=false -events 0 -mirror=false "$@"; }
+client() { "$here/staging-client.sh" "$@"; }
 # A drill: its report and log under $out, its steps shown, and every one of them holding.
 drill() {
   local name="$1"

@@ -1,0 +1,195 @@
+<!doctype html>
+<html lang="zh">
+<head>
+<meta charset="utf-8">
+<title>会话流 · 正在思考的块默认收起</title>
+<style>
+  :root { --t1: #1f2329; --t2: #4e5969; --t3: #86909c; --t4: #b4bac3; --line: #e5e6eb; --warn: #e8590c; --ok: #2f9e44; --blue: #3370ff; }
+  * { box-sizing: border-box; }
+  body { margin: 0; background: #f2f3f5; font: 15px/1.6 Inter, "Noto Sans SC", sans-serif; color: var(--t1); }
+  code, .mono { font-family: "JetBrains Mono", ui-monospace, monospace; font-size: .86em; }
+  .b-part { width: 1640px; padding: 30px 36px 34px; background: #f2f3f5; font: 15px/1.6 Inter, "Noto Sans SC", sans-serif; }
+  .b-h1 { font-size: 26px; font-weight: 700; margin: 0 0 6px; }
+  .b-sub { font-size: 14px; color: var(--t2); margin: 0 0 22px; line-height: 1.85; }
+  .b-h2 { font-size: 19px; font-weight: 700; margin: 0 0 12px; }
+  .b-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 22px; }
+  .b-stage { background: #fff; border-radius: 14px; padding: 18px 22px 20px; box-shadow: 0 0 0 1px rgba(15,23,42,.08); }
+  .b-stage-t { font-size: 15px; font-weight: 700; margin: 0 0 12px; display: flex; align-items: center; gap: 8px; }
+  .b-tag { font-size: 12px; font-weight: 600; padding: 1px 8px; border-radius: 10px; background: #fff1e6; color: var(--warn); }
+  .b-tag.ok { background: #ebfbee; color: var(--ok); }
+  .b-n { display: inline-flex; width: 22px; height: 22px; border-radius: 11px; background: var(--warn); color: #fff; font-size: 12.5px; font-weight: 700; align-items: center; justify-content: center; flex: none; }
+  .b-n.ok { background: var(--ok); }
+  .b-notes { margin: 14px 0 0; padding: 0; list-style: none; font-size: 13.5px; line-height: 1.8; color: var(--t2); }
+  .b-notes li { display: flex; gap: 8px; align-items: flex-start; }
+  .b-notes li + li { margin-top: 6px; }
+  .b-notes .b-n { margin-top: 3px; }
+
+  /* the transcript pane, drawn at the web's own sizes */
+  .tf-pane { position: relative; border: 1px solid var(--line); border-radius: 10px; padding: 16px 22px 18px; background: #fff; font-family: Inter, "Noto Sans SC", sans-serif; overflow: hidden; }
+  .tf-pane.short { min-height: 0; }
+  .tf-md { font-size: 14px; line-height: 1.7; color: var(--t1); margin: 0 0 8px; }
+  .tf-steps { font-size: 12.5px; color: var(--t3); margin: 4px 0 8px; }
+  .tf-tool { font-size: 12.5px; color: var(--t2); border: 1px solid var(--line); border-radius: 7px; padding: 5px 10px; margin: 6px 0; display: flex; gap: 8px; align-items: center; }
+  .tf-tool .ok { color: var(--ok); }
+  .tf-think { margin: 6px 0; border-left: 2px solid var(--line); padding-left: 10px; position: relative; }
+  .tf-head { font-size: 12.5px; color: var(--t3); display: flex; align-items: center; gap: 6px; height: 22px; cursor: pointer; }
+  .tf-car { display: inline-block; width: 10px; color: var(--t4); font-size: 10px; }
+  .tf-meta { color: var(--t4); font-variant-numeric: tabular-nums; }
+  .tf-shim { background: linear-gradient(90deg, var(--t3) 0%, var(--t3) 35%, #d5d9df 50%, var(--t3) 65%, var(--t3) 100%); -webkit-background-clip: text; background-clip: text; color: transparent; }
+  .tf-port { max-height: 11em; overflow: hidden; font-size: 13px; line-height: 1.55; font-style: italic; color: var(--t3); white-space: pre-wrap; margin-top: 4px; position: relative; }
+  .tf-port.cut { height: 10.6em; }
+  .tf-port.cut > div { margin-top: -0.75em; }
+  .tf-port.fade { -webkit-mask-image: linear-gradient(to bottom, transparent 0, #000 2.6em); mask-image: linear-gradient(to bottom, transparent 0, #000 2.6em); height: 10.6em; display: flex; flex-direction: column; justify-content: flex-end; }
+  .tf-tick { font-size: 12.5px; color: var(--t4); font-style: italic; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; margin-top: 2px; padding-left: 16px; }
+  .tf-caret { display: inline-block; width: 7px; height: 13px; background: #555; vertical-align: -2px; margin-left: 2px; }
+
+  .tf-ring { position: absolute; border: 2px dashed var(--warn); border-radius: 8px; pointer-events: none; }
+  .tf-ring.ok { border-color: var(--ok); }
+  .tf-ring > .b-n { position: absolute; top: -12px; right: -12px; box-shadow: 0 0 0 2px #fff; }
+  .tf-h { font-size: 12px; color: var(--t3); margin: 10px 0 0; }
+  .tf-dim { opacity: .35; }
+
+  .b-ab { display: grid; grid-template-columns: 1fr 1fr; gap: 22px; }
+  .b-ab .b-stage.pick { box-shadow: 0 0 0 2px var(--ok); }
+  .b-rec { display: inline-block; font-size: 12px; font-weight: 700; color: #fff; background: var(--ok); padding: 1px 8px; border-radius: 10px; }
+  table.b-t { border-collapse: collapse; width: 100%; font-size: 13.5px; }
+  .b-t td, .b-t th { border-bottom: 1px solid var(--line); padding: 8px 10px; text-align: left; vertical-align: top; line-height: 1.7; }
+  .b-t th { color: var(--t3); font-weight: 600; font-size: 12.5px; }
+</style>
+</head>
+<body>
+
+<!-- ───────────────────────── part 1: today vs proposal ───────────────────────── -->
+<section class="b-part" id="part-1">
+  <h1 class="b-h1">会话流 · 「正在思考」默认收起成一行</h1>
+  <p class="b-sub">
+    今天：模型思考时，web 在会话尾部画一块约 10 行高的斜体滚动区（<code>ThinkingStream</code>，<code>.chat-think-port</code> max-height 11em），没有收起按钮；
+    macOS / iOS / Android 也是“流式时默认展开”（<code>pinnedOpen ?? !isFinalized</code>、<code>pinned ?: true</code>）。
+    一次 DeepSeek 回合中位数 10 段思考、2.3 万字，这块区域在整个回合里反复出现又消失，是屏幕上最大、动得最多的东西，却是最不需要读的。
+    <br>提议：流式中的思考和结束后的思考<b>长同一个样子</b>——一行灰字，默认收起，点开才看正文。
+  </p>
+
+  <div class="b-grid">
+    <!-- today -->
+    <div class="b-stage">
+      <div class="b-stage-t"><span class="b-n">①</span>今天 · 流式中 <span class="b-tag">占 ~190px，持续滚动</span></div>
+      <div class="tf-pane">
+        <div class="tf-tool"><span class="ok">✓</span> Bash <span class="tf-meta mono">ls -la docs/mocks/</span></div>
+        <div class="tf-think" id="t-live-today">
+          <div class="tf-head">💭 Thinking… <span class="tf-meta">1s</span></div>
+          <div class="tf-port cut"><div>Agents still running (files updated 13:46 local). Now it's ~13:47 local (05:47 UTC). Tick at 13:49 local.
+
+Let me use the remaining time to examine one thing I haven't: the session wakeup loop alerting — if the loop were silent, the owner would get a push. None. Good.
+
+Also, let me check the session's wakeups on the OTHER sessions related to this project — e.g., the task sessions. Maybe the owner meant the coordinator, but the failure they saw was in a task session's wakeup. The project has tasks; their sessions might have relates to the project. That's a lot.
+
+Actually, let me query wakeups for the project's sessions via<span class="tf-caret"></span></div></div>
+        </div>
+      </div>
+      <ul class="b-notes">
+        <li><span class="b-n">1</span><span>顶上那行被视口<b>横腰切掉一半</b>（截图里的 “Agents still running…”），因为跟随到底时 scrollTop 不按行对齐。</span></li>
+        <li><span class="b-n">2</span><span>没有收起入口：头部 “💭 Thinking… 1s” 不可点，只能等它自己结束。</span></li>
+        <li><span class="b-n">3</span><span>每段思考结束时这 ~190px 一下子收成一行，正在看的工具卡片 / 回答跟着跳。一回合跳 10–50 次。</span></li>
+      </ul>
+    </div>
+
+    <!-- proposal default -->
+    <div class="b-stage">
+      <div class="b-stage-t"><span class="b-n ok">②</span>建议 · 流式中默认收起 <span class="b-tag ok">一行 22px</span></div>
+      <div class="tf-pane">
+        <div class="tf-tool"><span class="ok">✓</span> Bash <span class="tf-meta mono">ls -la docs/mocks/</span></div>
+        <div class="tf-think" id="t-live-new">
+          <div class="tf-head"><span class="tf-car">▸</span>💭 <span class="tf-shim">Thinking…</span> <span class="tf-meta">12s · 1.4k chars</span></div>
+        </div>
+      </div>
+      <div class="tf-h">↑ 结束后同一行原地变成：</div>
+      <div class="tf-pane" style="margin-top:8px">
+        <div class="tf-think" id="t-settled">
+          <div class="tf-head"><span class="tf-car">▸</span>💭 Thought for 38s <span class="tf-meta">· 4.2k chars</span></div>
+        </div>
+        <div class="tf-tool"><span class="ok">✓</span> Bash <span class="tf-meta mono">orbit wakeup list --project …</span></div>
+      </div>
+      <ul class="b-notes">
+        <li><span class="b-n ok">1</span><span><b>一行</b>，和已结束的思考行同字号、同灰、同 ▸ 和左边线（复用 <code>.chat-think-head</code>，不新造外观）。</span></li>
+        <li><span class="b-n ok">2</span><span>“还活着”靠三样东西表达：<b>Thinking…</b> 上一道很淡的流光、秒数每秒走、字数跟着涨。不放正文。</span></li>
+        <li><span class="b-n ok">3</span><span>结束时只是文字从 “Thinking… 12s” 换成 “Thought for 38s”，<b>高度不变</b>，下面的内容不再跳。</span></li>
+      </ul>
+    </div>
+  </div>
+</section>
+
+<!-- ───────────────────────── part 2: opened ───────────────────────── -->
+<section class="b-part" id="part-2">
+  <h2 class="b-h2">③ 点开之后（流式中）</h2>
+  <div class="b-grid">
+    <div class="b-stage">
+      <div class="b-stage-t"><span class="b-n ok">③</span>点 ▸ 展开 · 仍跟随最新一行</div>
+      <div class="tf-pane">
+        <div class="tf-think" id="t-open">
+          <div class="tf-head"><span class="tf-car">▾</span>💭 <span class="tf-shim">Thinking…</span> <span class="tf-meta">12s · 1.4k chars</span></div>
+          <div class="tf-port fade"><div>Agents still running (files updated 13:46 local). Now it's ~13:47 local (05:47 UTC). Tick at 13:49 local.
+
+Let me use the remaining time to examine one thing I haven't: the session wakeup loop alerting — if the loop were silent, the owner would get a push. None. Good.
+
+Also, let me check the session's wakeups on the OTHER sessions related to this project — e.g., the task sessions. Maybe the owner meant the coordinator, but the failure they saw was in a task session's wakeup. That's a lot.
+
+Actually, let me query wakeups for the project's sessions via<span class="tf-caret"></span></div></div>
+        </div>
+      </div>
+      <ul class="b-notes">
+        <li><span class="b-n ok">1</span><span>展开后就是今天的 10 行视口（跟随到底、手动上滚就停住，这些行为不变）。</span></li>
+        <li><span class="b-n ok">2</span><span>顶边改成<b>渐隐</b>（mask 2.6em），不再出现半行被切的字。</span></li>
+        <li><span class="b-n ok">3</span><span>点开是“这一回合”的选择：本段结束后保持展开，下一段新思考也保持展开；换一个回合恢复收起。</span></li>
+      </ul>
+    </div>
+    <div class="b-stage">
+      <div class="b-stage-t">四端行为对照</div>
+      <table class="b-t">
+        <tr><th></th><th>今天 · 流式中</th><th>建议 · 流式中</th><th>结束后</th></tr>
+        <tr><td>Web</td><td>展开，<b>不可收起</b></td><td>收起，可点开</td><td>收起（不变）</td></tr>
+        <tr><td>macOS</td><td>展开，可点收起</td><td>收起，可点开</td><td>收起（不变）</td></tr>
+        <tr><td>iOS</td><td>展开，可点收起</td><td>收起，可点开</td><td>收起（不变）</td></tr>
+        <tr><td>Android</td><td>展开（160dp），可点收起</td><td>收起，可点开</td><td>收起（不变）</td></tr>
+      </table>
+      <ul class="b-notes">
+        <li><span class="b-n ok">·</span><span>行文案四端一致：<code>Thinking… 12s · 1.4k chars</code> → <code>Thought for 38s · 4.2k chars</code>。原生端已有 <code>ThinkingSummary</code>，只缺流式时的秒数与字数。</span></li>
+        <li><span class="b-n ok">·</span><span>导出 / 分享页（<code>ExportCtx</code>）照旧全部展开，不受影响。</span></li>
+      </ul>
+    </div>
+  </div>
+</section>
+
+<!-- ───────────────────────── part 3: decisions ───────────────────────── -->
+<section class="b-part" id="part-3">
+  <h2 class="b-h2">待定 · 要你拍板</h2>
+  <div class="b-ab">
+    <div class="b-stage pick">
+      <div class="b-stage-t">方案 A · 只有一行 <span class="b-rec">推荐</span></div>
+      <div class="tf-pane">
+        <div class="tf-think"><div class="tf-head"><span class="tf-car">▸</span>💭 <span class="tf-shim">Thinking…</span> <span class="tf-meta">12s · 1.4k chars</span></div></div>
+      </div>
+      <ul class="b-notes"><li><span>最安静：屏幕上唯一在动的是秒数。想看内容就点开。结束前后高度完全一样。</span></li></ul>
+    </div>
+    <div class="b-stage">
+      <div class="b-stage-t">方案 B · 一行 + 最新一句预览</div>
+      <div class="tf-pane">
+        <div class="tf-think"><div class="tf-head"><span class="tf-car">▸</span>💭 <span class="tf-shim">Thinking…</span> <span class="tf-meta">12s · 1.4k chars</span></div>
+          <div class="tf-tick">Actually, let me query wakeups for the project's sessions via the orbit CLI, filtered to the task sessions that…</div></div>
+      </div>
+      <ul class="b-notes"><li><span>多一行灰色斜体、单行省略，显示正在写的那句。能瞄一眼方向，但这一行每几十毫秒换字，眼睛会被它拉走；结束时少一行，仍有一次小跳动。</span></li></ul>
+    </div>
+  </div>
+
+  <div class="b-stage" style="margin-top:22px">
+    <div class="b-stage-t">落地（按代价排）</div>
+    <table class="b-t">
+      <tr><th>#</th><th>改动</th><th>范围</th></tr>
+      <tr><td>1</td><td>Web：<code>ThinkingStream</code> 头部变成可点的折叠行（▸/▾ + 秒数 + 字数），默认收起；展开态顶边渐隐；“本回合已点开”存在 <code>StreamingDrafts</code> 外层 state</td><td><code>Transcript.tsx</code>、<code>index.css</code>、<code>Transcript.thinking.test.tsx</code></td></tr>
+      <tr><td>2</td><td>macOS / iOS：<code>ThinkingView.expanded</code> 默认由 <code>!isFinalized</code> 改为 <code>false</code>；流式行补秒数与字数</td><td><code>MessageBubbles.swift</code>、<code>ThinkingSummary.swift</code> + 测试</td></tr>
+      <tr><td>3</td><td>Android：<code>LiveThinking</code> 的 <code>pinned ?: true</code> 改为 <code>false</code>；标签补秒数与字数</td><td><code>ThinkingRows.kt</code> + <code>ReaderIncrementsDeviceTest</code></td></tr>
+    </table>
+  </div>
+</section>
+
+</body>
+</html>

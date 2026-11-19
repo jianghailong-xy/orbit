@@ -1,0 +1,66 @@
+# Re-verify a published release's supply chain, from the public repository and without the release's
+# own claims being trusted: the assets are downloaded from the GitHub Release, the manifest's source
+# commit has to be the commit the tag points at, and the checksums, CycloneDX SBOM, SLSA provenance
+# and the GitHub artifact attestation are all re-checked.
+#
+# Run it from the Actions tab ("Verify a release's supply chain" → Run workflow → tag), or run the same
+# two commands locally (docs/supply-chain.md, "Verify a release").
+name: Verify a release's supply chain
+
+on:
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: Release tag to verify, e.g. v0.1.257-beta.1
+        required: true
+        type: string
+
+permissions:
+  contents: read
+  attestations: read
+
+concurrency:
+  group: verify-release-${{ inputs.tag }}
+  cancel-in-progress: true
+
+jobs:
+  verify:
+    name: Verify ${{ inputs.tag }}
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version: 26
+      - name: Download the release assets
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          mkdir -p "$RUNNER_TEMP/release"
+          gh release download "${{ inputs.tag }}" --repo "$GITHUB_REPOSITORY" --dir "$RUNNER_TEMP/release"
+          ls -l "$RUNNER_TEMP/release"
+      - name: Verify the tag, source, checksums, SBOM and provenance
+        run: |
+          set -euo pipefail
+          git fetch --tags --force origin
+          tag="${{ inputs.tag }}"
+          # The manifest names the source commit; the tag has to point at that same commit.
+          source="$(node -e 'process.stdout.write(require(process.argv[1]).source.commit)' \
+            "$RUNNER_TEMP/release/release-manifest.json")"
+          test "$source" = "$(git rev-parse "$tag^{commit}")" \
+            || { echo "::error::$tag points at $(git rev-parse "$tag^{commit}"), the bundle names $source"; exit 1; }
+          node scripts/supply-chain.mjs verify --dir "$RUNNER_TEMP/release" \
+            --tag "$tag" --source-sha "$source" --repository "$GITHUB_REPOSITORY" --require-ci
+      - name: Check GitHub's artifact attestation
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          # gh looks the attestation up by digest, so proving SHA256SUMS proves the file the rest of
+          # the bundle's digests hang off. The manifest binds every artifact to it.
+          gh attestation verify "$RUNNER_TEMP/release/SHA256SUMS" --repo "$GITHUB_REPOSITORY"

@@ -133,13 +133,23 @@ final class PromptSuggestionTests: XCTestCase {
             }
             dir = dir.deletingLastPathComponent()
         }
-        throw XCTSkip("\(path) is not beside this checkout")
+        // Deliberately a failure and not an `XCTSkip`: the touch clients' check reads the web and
+        // Android sources, and one that opts out when they are gone is green on exactly that day.
+        throw MissingFile(path: path)
+    }
+
+    private struct MissingFile: Error, CustomStringConvertible {
+        let path: String
+        var description: String {
+            "\(path) was not found above this test file; if it moved, point this test at it rather than deleting the check"
+        }
     }
 
     func testTheComposerOffersItFillsTheBoxAndSendsNothing() throws {
         let composer = try composerSource()
-        XCTAssertTrue(composer.contains("ComposerLogic.offeredPromptSuggestion(\n            console.state.promptSuggestion,"),
-                      "the offer is the transcript's suggestion, held to ComposerLogic's rule")
+        XCTAssertTrue(composer.contains("ComposerLogic.offeredPromptSuggestion(\n            console.state.shownPromptSuggestion,"),
+                      "the offer is the transcript's suggestion (translated where the server translated it, "
+                          + "Settings › Translation), held to ComposerLogic's rule")
         XCTAssertTrue(composer.contains("PromptSuggestionLine(text: suggestion, accept: acceptSuggestion)"),
                       "the empty field draws it, on a Mac with Use")
         XCTAssertTrue(composer.contains("if offeredSuggestion != nil { return \"\" }"),
@@ -156,7 +166,7 @@ final class PromptSuggestionTests: XCTestCase {
 
     /// A touch screen has no Use (design §4.1, §9 补充二): a double-tap on the field takes the guess,
     /// the field's own taps wait to see whether a second one follows (the keyboard a first tap raised
-    /// would lift the field out from under the second), and "Double-tap to use" always follows the words.
+    /// would lift the field out from under the second), and "Double-tap" always follows the words.
     /// VoiceOver, whose double-tap is "activate", gets an action.
     func testATouchScreenTakesItWithADoubleTapOnTheField() throws {
         let composer = try composerSource()
@@ -187,18 +197,28 @@ final class PromptSuggestionTests: XCTestCase {
 
         let line = try XCTUnwrap(composer.range(of: "private struct PromptSuggestionLine: View {"))
         let lineBody = String(composer[line.lowerBound...].prefix(3_000))
-        XCTAssertTrue(lineBody.contains("Text(\"Double-tap to use\")"))
+        XCTAssertTrue(lineBody.contains("Text(\"Double-tap\")"))
         XCTAssertTrue(lineBody.contains(".accessibilityHidden(true)"), "VoiceOver hears it from the field")
         XCTAssertTrue(lineBody.contains("Text(\"⇥\")"), "the Mac keeps Use ⇥")
+    }
+
+    /// The guess takes the box's line (docs/mocks/prompt-suggestion-room, option B): the translation tag
+    /// gives way while one is on offer, unless it is warning that translation is unavailable.
+    func testASuggestionTakesTheTranslationTagsPlace() throws {
+        let composer = try composerSource()
+        let tag = try XCTUnwrap(composer.range(of: "private var showsTranslationTag: Bool {"))
+        let body = String(composer[tag.upperBound...].prefix(400))
+        XCTAssertTrue(body.contains("if offeredSuggestion == nil { return true }"), "no guess: the tag as before")
+        XCTAssertTrue(body.contains("SessionTranslation.temporarilyUnavailableUntil(app.user)"), "the warning still shows over a guess")
     }
 
     /// Every touch client says it the same way and offers the same action to a screen reader.
     func testTheTouchClientsShareTheHintAndTheAction() throws {
         let web = try repoSource("src/web/src/components/WorkspaceView.tsx")
-        XCTAssertTrue(web.contains("Double-tap to use"), "the phone web's hint")
+        XCTAssertTrue(web.contains("aria-hidden=\"true\">\n            Double-tap\n"), "the phone web's hint")
         XCTAssertTrue(web.contains("Use suggestion: ${offeredSuggestion}"), "and its screen-reader button")
         let android = try repoSource("src/android/app/src/main/kotlin/io/orbitd/android/composer/SessionComposer.kt")
-        XCTAssertTrue(android.contains("\"Double-tap to use\""), "Android's hint")
+        XCTAssertTrue(android.contains("Text(\"Double-tap\", Modifier"), "Android's hint")
         XCTAssertTrue(android.contains("\"Use suggestion\""), "and its TalkBack action")
     }
 }

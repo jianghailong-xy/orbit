@@ -6,100 +6,100 @@ import XCTest
 @testable import OrbitKit
 
 /// Settings' list on iOS — what it holds and what each row says (`SettingsHome`), and the logic of
-/// the pages it opens that is not a view: Shared links (`SharedLinksList`) and Infrastructure's pools
-/// (`ProvidersOverview`; the rest of that page is `InfrastructureTests`').
+/// the pages it opens that is not a view: Shared links (`SharedLinksList`) and Machines & models' pools
+/// (`ProvidersOverview`; the rest of that page is `MachinesAndModelsTests`').
 final class SettingsHomeTests: XCTestCase {
 
     // MARK: - The list
 
-    /// The order the owner picked from docs/mocks/ios-settings-order (1A, 2A): what needs you first —
-    /// the machines and models agents run on — then the app's preferences, Sessions' among them, then
-    /// the account.
-    func testTheGroupsReadInTheOrderTheyWerePicked() {
-        // Machines & models has no header: its one row says that name (docs/mocks/machines-and-models, ⑥-2).
-        XCTAssertEqual(SettingsHome.Group.allCases.map(SettingsHome.header), [nil, "Preferences", "Account"])
-        // One row: the web's Runners and Providers pages are one page, Infrastructure.
-        XCTAssertEqual(SettingsHome.rows(.machines, isAdmin: false), [.infrastructure])
-        // The five session settings are one row's page now (`SessionSettings`), first in Preferences.
-        XCTAssertEqual(SettingsHome.rows(.preferences, isAdmin: false), [.sessions, .notifications, .appearance])
-        XCTAssertEqual(SettingsHome.rows(.account, isAdmin: false),
-                       [.email, .instance, .sharedLinks, .accessTokens, .changePassword])
-    }
-
-    /// Admin is role-gated here as everywhere else, and comes last in Account.
-    func testAdminIsOnlyAnAdminsRow() {
-        XCTAssertEqual(SettingsHome.rows(.account, isAdmin: true).last, .admin)
-        for group in SettingsHome.Group.allCases {
-            XCTAssertFalse(SettingsHome.rows(group, isAdmin: false).contains(.admin), "\(group)")
-        }
+    /// The web Settings nav's groups and rows, in its order (`settingsIndex.ts`, `SettingsLayout.tsx`):
+    /// Personal, then Integrations, then Machines, then Providers — the pages the app has no page for left out.
+    func testTheGroupsReadAsTheWebsNavDoes() {
+        // Machines and Providers have no header: each one row says that name.
+        XCTAssertEqual(SettingsHome.Group.allCases.map(SettingsHome.header), ["Personal", "Integrations", nil, nil])
+        XCTAssertEqual(SettingsHome.rows(.personal),
+                       [.general, .notifications, .appearance, .profile, .sharedLinks, .accessTokens, .terminals])
+        // Integrations, as the web's settings nav groups it: GitHub's page (docs/github-workspace-design.md §8).
+        XCTAssertEqual(SettingsHome.rows(.integrations), [.github])
+        XCTAssertEqual(SettingsHome.page(.github), .github)
+        XCTAssertEqual(SettingsHome.githubValue(nil), nil)
+        XCTAssertEqual(SettingsHome.githubValue(GithubIntegration(available: true, connected: true, login: "ada")), "@ada")
+        XCTAssertEqual(SettingsHome.githubValue(GithubIntegration(available: true, connected: false)), nil)
+        XCTAssertEqual(SettingsHome.rows(.machines), [.machines])
+        XCTAssertEqual(SettingsHome.rows(.providers), [.providers])
     }
 
     /// Every row is in exactly one group, so the list can't drop one or draw one twice.
     func testEveryRowIsInExactlyOneGroup() {
-        let listed = SettingsHome.Group.allCases.flatMap { SettingsHome.rows($0, isAdmin: true) }
+        let listed = SettingsHome.Group.allCases.flatMap { SettingsHome.rows($0) }
         XCTAssertEqual(listed.count, Set(listed).count, "a row is listed twice")
         XCTAssertEqual(Set(listed), Set(SettingsHome.Row.allCases), "a row is in no group")
     }
 
-    /// Each row has a name and a glyph of its own; Infrastructure and Admin keep their sections'.
+    /// Each row has a name and a glyph of its own: the web nav's labels.
     func testEveryRowHasItsOwnNameAndGlyph() {
         let rows = SettingsHome.Row.allCases
         XCTAssertEqual(Set(rows.map(SettingsHome.title)).count, rows.count, "two rows share a name")
         XCTAssertEqual(Set(rows.map(SettingsHome.systemImage)).count, rows.count, "two rows share a glyph")
-        XCTAssertEqual(SettingsHome.title(.infrastructure), "Machines & models")
-        XCTAssertEqual(SettingsHome.title(.infrastructure), AppSection.runners.title)
-        XCTAssertEqual(SettingsHome.systemImage(.infrastructure), AppSection.runners.systemImage)
-        XCTAssertEqual(SettingsHome.title(.admin), AppSection.admin.title)
-        XCTAssertEqual(SettingsHome.systemImage(.admin), AppSection.admin.systemImage)
+        XCTAssertEqual(rows.map(SettingsHome.title),
+                       ["General", "Notifications", "Appearance", "Profile", "Shared links", "Access tokens",
+                        "Terminals", "GitHub", "Machines", "Providers"])
+        XCTAssertEqual(SettingsHome.systemImage(.machines), AppSection.runners.systemImage)
     }
 
-    /// The rows that open a page open their own, titled as the row is; Appearance's menu and the two
-    /// lines that only say something open nothing. Infrastructure is one of them: the runners list's
-    /// frame of its own went with the Providers page.
+    /// The rows that open a page open their own, titled as the row is; Appearance's menu opens nothing,
+    /// and Change password is Profile's page, not the list's.
     func testTheRowsThatOpenAPageOpenTheirOwn() {
         let opening = SettingsHome.Row.allCases.compactMap(SettingsHome.page)
-        XCTAssertEqual(Set(opening), Set(SettingsPage.allCases), "a page no row opens, or a row opening two")
-        XCTAssertEqual(opening.count, SettingsPage.allCases.count)
+        XCTAssertEqual(Set(opening), Set(SettingsPage.allCases).subtracting([.changePassword]),
+                       "a page no row opens, or a row opening two")
+        XCTAssertEqual(opening.count, SettingsPage.allCases.count - 1)
         for row in SettingsHome.Row.allCases {
             if let page = SettingsHome.page(row) {
                 XCTAssertEqual(page.title, SettingsHome.title(row), "the page is called what its row is")
             }
         }
-        for row in [SettingsHome.Row.appearance, .email, .instance] {
-            XCTAssertNil(SettingsHome.page(row), "\(row) opens no SettingsPage")
-        }
-        XCTAssertEqual(SettingsHome.page(.sessions), .sessions)
-        XCTAssertEqual(SettingsPage.sessions.title, "Sessions")
-        XCTAssertEqual(SettingsHome.page(.infrastructure), .infrastructure)
-        XCTAssertEqual(SettingsPage.infrastructure.title, "Machines & models")
-    }
-
-    /// Machines & models says what its one row is for, in the web page's own line; no other group has
-    /// a line under it.
-    func testOnlyMachinesAndModelsHasALineUnderIt() {
-        XCTAssertEqual(SettingsHome.footer(.machines), "Where your agents run, and whose model quota they spend.")
-        XCTAssertEqual(SettingsHome.footer(.machines), Infrastructure.subtitle)
-        for group in [SettingsHome.Group.preferences, .account] {
-            XCTAssertNil(SettingsHome.footer(group), "\(group)")
-        }
+        XCTAssertNil(SettingsHome.page(.appearance))
+        XCTAssertEqual(SettingsPage.changePassword.title, "Change password")
     }
 
     /// Sessions, the page Preferences' first row opens: the web's Session defaults and Session
     /// orchestration cards, a setting a row in the order the list had them, each with the web's hint
-    /// as its footer (docs/mocks/ios-settings-order, 2A).
-    func testTheSessionsPageHoldsTheFiveSettingsWithTheWebsHints() {
+    /// as its footer (docs/mocks/ios-settings-order, 2A). Optimize For sits directly under Smart
+    /// model selection (board docs/mocks/routing-mode-account, approved 2026-11-19).
+    func testTheSessionsPageHoldsTheSixSettingsWithTheWebsHints() {
         XCTAssertEqual(SessionSettings.Row.allCases,
-                       [.defaultPermission, .orchestration, .modelRouting, .promptSuggestions, .recaps])
+                       [.defaultPermission, .orchestration, .modelRouting, .optimizeFor, .promptSuggestions, .recaps])
         XCTAssertEqual(SessionSettings.Row.allCases.map(SessionSettings.title),
-                       ["Default permission", "Session orchestration", "Smart model selection", "Suggested replies",
-                        "Session recaps"])
+                       ["Default permission", "Session orchestration", "Smart model selection", "Optimize For",
+                        "Suggested replies", "Session recaps"])
         XCTAssertEqual(SessionSettings.footer(.defaultPermission), SettingsCopy.defaultPermissionHint)
         XCTAssertEqual(SessionSettings.footer(.orchestration), SettingsCopy.letSessionsOrchestrateHint)
         XCTAssertEqual(SessionSettings.footer(.modelRouting), SettingsCopy.smartModelSelectionHint)
+        XCTAssertEqual(SessionSettings.footer(.optimizeFor), SettingsCopy.optimizeForHint)
         XCTAssertEqual(SessionSettings.footer(.promptSuggestions), SettingsCopy.suggestedRepliesHint)
         XCTAssertEqual(SessionSettings.footer(.recaps), SettingsCopy.sessionRecapsHint)
         let footers = SessionSettings.Row.allCases.map(SessionSettings.footer)
         XCTAssertEqual(Set(footers).count, footers.count, "two rows share a footer")
+    }
+
+    /// Translation is the page's second group: right after Default permission and before Session
+    /// orchestration, as on Android and the web (docs/mocks/session-translation, frame 7); the rows
+    /// keep their order around it.
+    func testTheSessionsPagePutsTranslationAfterDefaultPermission() {
+        XCTAssertEqual(SessionSettings.groups,
+                       [.row(.defaultPermission), .translation, .row(.orchestration), .row(.modelRouting),
+                        .row(.optimizeFor), .row(.promptSuggestions), .promptOptimizer, .row(.recaps)])
+    }
+
+    /// Optimize For is drawn only while smart model selection is on, the one thing that reads it
+    /// (owner, 2026-11-20); every other row always is.
+    func testOptimizeForShowsOnlyWhileSmartModelSelectionIsOn() {
+        XCTAssertTrue(SessionSettings.shows(.optimizeFor, smartModelSelection: true))
+        XCTAssertFalse(SessionSettings.shows(.optimizeFor, smartModelSelection: false))
+        for row in SessionSettings.Row.allCases where row != .optimizeFor {
+            XCTAssertTrue(SessionSettings.shows(row, smartModelSelection: false), row.rawValue)
+        }
     }
 
     // MARK: - What a row says
@@ -116,18 +116,32 @@ final class SettingsHomeTests: XCTestCase {
         XCTAssertEqual(SettingsHome.runnersValue([]), "None")
     }
 
-    /// Infrastructure's row says how many lines its page's Needs you holds (03-ios.png: "1 needs you");
+    /// Machines & models' row says how many lines its page's Needs you holds (03-ios.png: "1 needs you");
     /// with none, how many machines can take work.
-    func testInfrastructureSaysHowManyThingsNeedYou() throws {
+    func testMachinesAndModelsSaysHowManyThingsNeedYou() throws {
         let fleet = try [runner("a", online: true), runner("b", online: false)]
-        XCTAssertEqual(SettingsHome.infrastructureValue(needsYou: 1, runners: fleet), "1 needs you")
-        XCTAssertEqual(SettingsHome.infrastructureValue(needsYou: 3, runners: fleet), "3 need you")
-        XCTAssertEqual(SettingsHome.infrastructureValue(needsYou: 0, runners: fleet), "1 of 2 online")
-        XCTAssertEqual(SettingsHome.infrastructureValue(needsYou: 0, runners: []), "None")
+        XCTAssertEqual(SettingsHome.machinesAndModelsValue(needsYou: 1, runners: fleet), "1 needs you")
+        XCTAssertEqual(SettingsHome.machinesAndModelsValue(needsYou: 3, runners: fleet), "3 need you")
+        XCTAssertEqual(SettingsHome.machinesAndModelsValue(needsYou: 0, runners: fleet), "1 of 2 online")
+        XCTAssertEqual(SettingsHome.machinesAndModelsValue(needsYou: 0, runners: []), "None")
 
         // The count is the page's own list: the machine offline is one line of it.
-        let lines = Infrastructure.attention(runners: fleet, workspaces: [], memberPools: [], ownPools: [])
-        XCTAssertEqual(SettingsHome.infrastructureValue(needsYou: lines.count, runners: fleet), "1 needs you")
+        let lines = MachinesAndModels.attention(runners: fleet, workspaces: [], memberPools: [], ownPools: [])
+        XCTAssertEqual(SettingsHome.machinesAndModelsValue(needsYou: lines.count, runners: fleet), "1 needs you")
+    }
+
+    /// Settings' Machines row counts the machines' lines and its Providers row the pools': a pool no
+    /// session can start on is the Providers page's, and the Providers row says nothing without one.
+    func testMachineAndPoolLinesSplitBetweenTheTwoRows() throws {
+        let fleet = try [runner("a", online: false)]
+        let lines = MachinesAndModels.attention(runners: fleet, workspaces: [], memberPools: [], ownPools: [])
+        XCTAssertEqual(lines.map(\.isMachine), [true])
+        let pool = MachinesAndModels.Attention(kind: .poolUnavailable(poolID: "p", own: true),
+                                               line: "", names: [], detail: "")
+        XCTAssertFalse(pool.isMachine)
+        XCTAssertEqual(SettingsHome.needsYouValue(1), "1 needs you")
+        XCTAssertEqual(SettingsHome.needsYouValue(2), "2 need you")
+        XCTAssertNil(SettingsHome.needsYouValue(0))
     }
 
     /// A machine online where no coding CLI is signed in, and no workspace runs on a key, is one line of
@@ -144,8 +158,8 @@ final class SettingsHomeTests: XCTestCase {
                 #"{"id":"w-\#(runner)","name":"app","runnerId":"\#(runner)"\#(last)}"#.utf8))
         }
         func value(_ runners: [Runner], _ workspaces: [Agent]) -> String {
-            let lines = Infrastructure.attention(runners: runners, workspaces: workspaces, memberPools: [], ownPools: [])
-            return SettingsHome.infrastructureValue(needsYou: lines.count, runners: runners)
+            let lines = MachinesAndModels.attention(runners: runners, workspaces: workspaces, memberPools: [], ownPools: [])
+            return SettingsHome.machinesAndModelsValue(needsYou: lines.count, runners: runners)
         }
         XCTAssertEqual(value([austin], []), "1 needs you")
         XCTAssertEqual(value([austin], [try workspace("claude")]), "1 needs you")
@@ -168,20 +182,6 @@ final class SettingsHomeTests: XCTestCase {
         XCTAssertEqual(SettingsHome.notificationsValue(allowed: true), "On")
         XCTAssertEqual(SettingsHome.notificationsValue(allowed: false), "Off")
         XCTAssertNil(SettingsHome.notificationsValue(allowed: nil), "not asked yet is not Off")
-    }
-
-    /// The instance as the sign-in screen asked for it: the host, and a port only when there is one.
-    func testTheInstanceIsTheHostYouSignedInTo() {
-        XCTAssertEqual(SettingsHome.instanceName(URL(string: "https://orbitd.io")), "orbitd.io")
-        XCTAssertEqual(SettingsHome.instanceName(URL(string: "https://orbitd.io/")), "orbitd.io")
-        XCTAssertEqual(SettingsHome.instanceName(URL(string: "http://10.0.0.5:3000")), "10.0.0.5:3000")
-        XCTAssertNil(SettingsHome.instanceName(nil))
-    }
-
-    func testTheBuildLineNamesVersionAndBuild() {
-        XCTAssertEqual(SettingsHome.versionLine(version: "0.1.2", build: "3581"), "Orbit 0.1.2 (3581)")
-        XCTAssertEqual(SettingsHome.versionLine(version: "0.1.2", build: nil), "Orbit 0.1.2")
-        XCTAssertNil(SettingsHome.versionLine(version: nil, build: "3581"))
     }
 
     // MARK: - Copy that is composed
@@ -320,6 +320,16 @@ final class SettingsHomeTests: XCTestCase {
                        "Project · Expired Sep 20")
     }
 
+    /// Board 13: only an active link's row opens its Share panel, and its ⋯ is named after it.
+    func testOnlyAnActiveLinksRowOpensAndItsMoreNamesIt() {
+        XCTAssertTrue(SharedLinksList.opens(link(.active)))
+        XCTAssertFalse(SharedLinksList.opens(link(.paused)), "a session in the Trash has no panel to change")
+        XCTAssertFalse(SharedLinksList.opens(link(.ended)))
+        XCTAssertEqual(SharedLinksList.moreLabel(link(.active)), "More for Root")
+        XCTAssertEqual(SharedLinksList.moreLabel(link(.active, kind: .wiki, root: ShareRootSummary(id: "w"))), "More for Wiki")
+        XCTAssertEqual([SharedLinksList.settings, SharedLinksList.turnOffMenu], ["Settings…", "Turn off…"])
+    }
+
     func testTurningOffSaysHowManyWent() {
         XCTAssertEqual(SharedLinksList.turnedOff(1), "Link turned off")
         XCTAssertEqual(SharedLinksList.turnedOff(3), "3 links turned off")
@@ -330,7 +340,7 @@ final class SettingsHomeTests: XCTestCase {
         XCTAssertEqual(url.absoluteString, "https://orbitd.io/s/tok")
     }
 
-    // MARK: - Infrastructure's pools
+    // MARK: - Machines & models' pools
 
     func testAPoolsValueSaysWhyItCantRunOrHowManyOfItsAccountsCan() {
         XCTAssertEqual(ProvidersOverview.poolSummary(ProviderPool(id: "p", slug: "p", label: "P",

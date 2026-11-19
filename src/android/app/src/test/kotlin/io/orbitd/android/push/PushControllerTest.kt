@@ -81,20 +81,17 @@ class PushControllerTest {
         assertTrue(fixture.active().isEmpty())
     }
 
-    @Test fun foregroundUsesOneNoticeAndAuthorityClearsIt() = runBlocking {
+    /** A foreground approval stays in the tray, silently; the app notices it from the Open snapshot (`NeedsYouToasts`). */
+    @Test fun foregroundApprovalStaysInTheTrayAndAuthorityClearsIt() = runBlocking {
         fixture.signIn()
         fixture.push.onActivityStarted(Activity())
         val first = fixture.data()
         fixture.push.receive(first)
-        assertEquals(sid, fixture.push.notice.value?.payload?.sessionId)
-        assertEquals(1, fixture.active().size) // Also kept in the tray, silently.
-        fixture.push.dismissNotice()
+        assertEquals(1, fixture.active().size)
         fixture.push.receive(first)
-        assertNull(fixture.push.notice.value)
         fixture.push.receive(fixture.data())
         fixture.pending = false
         fixture.push.receive(fixture.sync())
-        assertNull(fixture.push.notice.value)
         assertTrue(fixture.active().isEmpty())
     }
 
@@ -112,7 +109,6 @@ class PushControllerTest {
         val silent = manager.activeNotifications.single()
         assertEquals(PushNotifications.SILENT_GROUP, silent.notification.group)
         assertEquals(Notification.GROUP_ALERT_SUMMARY, silent.notification.groupAlertBehavior)
-        assertNull(fixture.push.notice.value)
         fixture.push.onActivityStopped(activity)
         assertTrue(fixture.push.receive(fixture.data(kind = "finished", sessionId = settled)))
         val sounding = manager.activeNotifications.single { it.notification.extras.getString(Notification.EXTRA_TITLE) == "Controlled approval" && it.tag != silent.tag }
@@ -211,6 +207,27 @@ class PushControllerTest {
         assertFalse(PushWorker.expired(10_000, 10_001))
     }
 
+    /** An owner request's alert stands while the request waits on the owner; Later's re-post brings it back only then, and one ended
+     * anywhere takes its notification with it. */
+    @Test fun anOwnerRequestAlertsWhileItWaitsAndComesBackAfterLaterOnlyThen() = runBlocking {
+        fixture.signIn()
+        val data = fixture.ownerRequest()
+        assertTrue(fixture.push.receive(data))
+        val shown = fixture.active().single()
+        assertEquals(ownerRequestId, shown.payload.ownerRequestId)
+        assertTrue(fixture.requests.any { it.path == listOf("owner-requests", ownerRequestId) })
+        // Later took it away; the hour is up.
+        fixture.push.notifications.cancel(shown)
+        fixture.push.repost(data)
+        assertEquals(listOf(ownerRequestId), fixture.active().map { it.payload.ownerRequestId })
+        // Ended on another device: the next reconcile removes it, and a due re-post brings nothing back.
+        fixture.ownerRequestState = "DONE"
+        assertTrue(fixture.push.reconcile())
+        assertTrue(fixture.active().isEmpty())
+        fixture.push.repost(data)
+        assertTrue(fixture.active().isEmpty())
+    }
+
     private inner class Fixture {
         val scope = CoroutineScope(SupervisorJob() + Dispatchers.Default)
         val credentials = object : CredentialStore {
@@ -236,6 +253,8 @@ class PushControllerTest {
             while (seen != requests.size) { seen = requests.size; delay(1_500) }
         }
         var pending = true
+        /** The owner request an `owner-request` push names, as its read says it stands. */
+        var ownerRequestState = "PENDING"
         var unavailable = false
         var denied = false
         var available = true
@@ -261,6 +280,10 @@ class PushControllerTest {
         fun data(kind: String = "approval", sessionId: String = sid): Map<String, String> = envelope("alert", buildJsonObject {
             put("kind", kind); put("title", "Controlled approval"); put("body", "Needs your reply · Bash"); put("sessionID", sessionId)
         }, "$kind-$sessionId")
+        fun ownerRequest(): Map<String, String> = envelope("alert", buildJsonObject {
+            put("kind", "owner-request"); put("title", "Key needed"); put("body", "Staging Stripe key"); put("sessionID", sid)
+            put("ownerRequestID", ownerRequestId); put("ownerRequestKind", "SECRET"); put("category", "ORBIT_OWNER_REQUEST_SECRET")
+        }, "owner-request-$ownerRequestId")
         fun sync() = envelope("sync", buildJsonObject { put("badge", 0); put("clearSessions", JsonArray(listOf(JsonPrimitive(sid)))) }, "badge-sync")
         private fun envelope(type: String, payload: JsonObject, key: String) = mapOf("version" to "1", "type" to type,
             "registrationKey" to push.registration.activeBinding()!!.registrationKey, "eventId" to UUID.randomUUID().toString(),
@@ -279,6 +302,7 @@ class PushControllerTest {
                 path == listOf("sessions", sid) -> """{"id":"$sid","status":"RUNNING","lifecycleState":"OPEN"}"""
                 path == listOf("sessions", settled) -> """{"id":"$settled","status":"SUCCEEDED","lifecycleState":"OPEN"}"""
                 path == listOf("users", "me") -> """{"id":"u1","preferences":{}}"""
+                path == listOf("owner-requests", ownerRequestId) -> """{"id":"$ownerRequestId","kind":"SECRET","state":"$ownerRequestState","title":"Staging Stripe key","createdAt":"2026-10-04T00:00:00.000Z"}"""
                 else -> "[]"
             }
             ApiResponse(200, body.encodeToByteArray())
@@ -294,5 +318,6 @@ class PushControllerTest {
     companion object {
         private const val sid = "019a0000-0000-7000-8000-000000000002"
         private const val settled = "019a0000-0000-7000-8000-000000000003"
+        private const val ownerRequestId = "019a0000-0000-7000-8000-000000000004"
     }
 }

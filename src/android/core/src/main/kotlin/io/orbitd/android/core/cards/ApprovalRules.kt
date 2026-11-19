@@ -2,6 +2,8 @@ package io.orbitd.android.core.cards
 
 import kotlinx.serialization.Serializable
 import kotlinx.serialization.json.JsonObject
+import kotlinx.serialization.json.JsonPrimitive
+import kotlinx.serialization.json.booleanOrNull
 
 @Serializable
 data class PermissionRule(val toolName: String, val ruleContent: String? = null)
@@ -13,12 +15,14 @@ object ApprovalRules {
     const val mergeCheckChange = "orbit_project_update_integration"
     private val asks = setOf("AskUserQuestion", "ExitPlanMode", "orbit_task_create", "orbit_project_create",
         "orbit_task_batch", "orbit_dag_change", "orbit_blocker_resolve", "orbit_provider_create",
-        "orbit_provider_update", "orbit_provider_delete", mergeCheckChange, DeleteCards.runnerTool, DeleteCards.workspaceTool,
+        "orbit_provider_update", "orbit_provider_delete", mergeCheckChange, SkipMergeCheckCards.tool, DeleteCards.runnerTool, DeleteCards.workspaceTool,
         WorkspaceWriteCards.createTool, WorkspaceWriteCards.updateTool)
     private val shells = setOf("bash", "/bin/bash", "/usr/bin/bash", "sh", "/bin/sh", "/usr/bin/sh", "zsh", "/bin/zsh", "/usr/bin/zsh")
     private val commandKeywords = setOf("if", "then", "elif", "else", "while", "until", "do", "time", "coproc")
     fun remember(tool: String, input: JsonObject): List<PermissionRule> = when {
         tool.isBlank() || tool in asks -> emptyList()
+        tool == "Bash" && input.flag("orbitScheduleCheckOnly") -> input.text("command")?.takeIf { it.isNotBlank() }
+            ?.let { listOf(PermissionRule("Bash", it)) }.orEmpty()
         tool == "Bash" -> bash(input.text("command") ?: "")
         else -> listOf(PermissionRule(tool))
     }
@@ -29,6 +33,10 @@ object ApprovalRules {
      * server itself, predates the choice and would only create the task. */
     fun offersCreateAndStart(tool: String, input: JsonObject): Boolean = tool == "orbit_task_create" &&
         input.flag("acceptsStartAfterCreate") && input.obj("preview")?.number("needsManualStart") == 1
+    /** Whether Create and start leads the card, ahead of Create task (web `createAndStartLeads`): whenever it is offered, except on
+     * a task the agent filed with `autoRunWhenReady: false`. That is a hold someone asked for, so the first press does not start it. */
+    fun createAndStartLeads(tool: String, input: JsonObject): Boolean = offersCreateAndStart(tool, input) &&
+        (input["autoRunWhenReady"] as? JsonPrimitive)?.booleanOrNull != false
     private class Heredoc(val delimiter: String, val stripTabs: Boolean, val quoted: Boolean)
     /** The heredoc whose `<<` or `<<-` is at [start] and the index just past its word, or null when no word follows. */
     private fun readHeredoc(command: String, start: Int): Pair<Heredoc, Int>? {

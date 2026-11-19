@@ -10,11 +10,6 @@ final class NotificationManager: NSObject, UNUserNotificationCenterDelegate {
     /// Fired (on the main actor) when the user acts on a notification.
     var onIntent: ((AppIntent) -> Void)?
 
-    /// Fired (on the main actor) for an approval that lands while Orbit is the foreground app on
-    /// iOS, where it is re-stated as the app's own card instead of a system banner (see
-    /// `willPresent`). Carries the session and the push's own line, "Needs your reply · Bash".
-    var onForegroundApproval: ((String, String) -> Void)?
-
     /// The session whose console is on screen, kept current by `AppModel.syncConsoleFocus`. The
     /// notification *logic* already skips this session (`SessionDelta.diff`'s `focusedSessionID`) —
     /// but the server's APNs approval push can't know what you are looking at, so on iOS an approval
@@ -43,7 +38,21 @@ final class NotificationManager: NSObject, UNUserNotificationCenterDelegate {
                                               actions: [allow, deny, reply], intentIdentifiers: [], options: [])
         let session = UNNotificationCategory(identifier: Notifications.sessionCategory,
                                              actions: [reply], intentIdentifiers: [], options: [])
-        center.setNotificationCategories([approval, session])
+        // An owner request's alert, one category per kind: its first action opens the card on its input
+        // (foreground, so the app comes up on it), Later puts it off without opening anything. Neither
+        // answers the request, and a secret has no reply path outside its card (secrets design §7.2).
+        let later = UNNotificationAction(identifier: Notifications.actionOwnerRequestLater,
+                                         title: Notifications.ownerRequestLaterTitle, options: [])
+        let ownerRequests = OwnerRequestKind.allCases.map { kind in
+            UNNotificationCategory(
+                identifier: Notifications.ownerRequestCategory(kind),
+                actions: [UNNotificationAction(identifier: Notifications.actionOwnerRequestOpen,
+                                               title: Notifications.ownerRequestActionTitle(kind),
+                                               options: [.foreground, .authenticationRequired]),
+                          later],
+                intentIdentifiers: [], options: [])
+        }
+        center.setNotificationCategories(Set([approval, session] + ownerRequests))
         center.requestAuthorization(options: [.alert, .sound, .badge]) { _, _ in }
     }
 
@@ -58,6 +67,20 @@ final class NotificationManager: NSObject, UNUserNotificationCenterDelegate {
         c.sound = .default
         // Stable identifier → re-posting the same kind for a session replaces, never stacks.
         center.add(UNNotificationRequest(identifier: content.identifier, content: c, trigger: nil))
+    }
+
+    /// The same as `post`, shown `seconds` from now: a reminder the owner asked for.
+    func schedule(_ content: NotificationContent, after seconds: TimeInterval) {
+        guard let center else { return }
+        let c = UNMutableNotificationContent()
+        c.title = content.title
+        c.body = content.body
+        c.categoryIdentifier = content.categoryIdentifier
+        c.threadIdentifier = content.threadIdentifier
+        c.userInfo = content.userInfo
+        c.sound = .default
+        let trigger = UNTimeIntervalNotificationTrigger(timeInterval: max(1, seconds), repeats: false)
+        center.add(UNNotificationRequest(identifier: content.identifier, content: c, trigger: trigger))
     }
 
     func clear(identifier: String) {
@@ -114,6 +137,15 @@ final class NotificationManager: NSObject, UNUserNotificationCenterDelegate {
             return (k, v)
         })
         let text = (response as? UNTextInputNotificationResponse)?.userText
+        // Later: the same alert comes back in an hour, on this device, where its actions still work.
+        if response.actionIdentifier == Notifications.actionOwnerRequestLater,
+           let request = strings[Notifications.keyOwnerRequest], let session = strings[Notifications.keySession],
+           let kind = strings["ownerRequestKind"].flatMap(OwnerRequestKind.init(rawValue:)) {
+            let reminder = Notifications.ownerRequestReminder(
+                requestID: request, kind: kind, title: response.notification.request.content.body,
+                sessionID: session)
+            await MainActor.run { self.schedule(reminder, after: OwnerRequests.laterSeconds) }
+        }
         guard let intent = Notifications.intent(actionId: response.actionIdentifier,
                                                 userInfo: strings, responseText: text) else { return }
         await MainActor.run { self.onIntent?(intent) }
@@ -127,8 +159,8 @@ final class NotificationManager: NSObject, UNUserNotificationCenterDelegate {
     /// upward swipe opposite meanings (a banner tucks itself into Notification Center; a toast is
     /// gone for good). So the foreground speaks one language. The alert is still *delivered* —
     /// `.list` keeps it in Notification Center and the badge still counts it — and an approval,
-    /// the one kind that's blocking somebody, comes back as the app's own card via
-    /// `onForegroundApproval`. A settled run gets no card: in the foreground that outcome is
+    /// the one kind that's blocking somebody, is noticed by the app's own needs-you toast, read from
+    /// the needs-you rows the same snapshot brings (`AppModel.noticeNewlyWaiting`). A settled run gets no card: in the foreground that outcome is
     /// already on screen in the list, the row's status and the transcript itself.
     ///
     /// **macOS keeps the banner.** Its notifications land in a screen corner rather than over the
@@ -148,8 +180,6 @@ final class NotificationManager: NSObject, UNUserNotificationCenterDelegate {
         #if os(iOS)
         if let session, PublicID.storageKey(session) != focused.map(PublicID.storageKey),
            content.categoryIdentifier == Notifications.approvalCategory {
-            let line = content.body
-            await MainActor.run { self.onForegroundApproval?(session, line) }
             // The sound stays, alone of the banner's parts: it's the one that still reaches you
             // with the app open on a desk you aren't looking at, and being audio it can't collide
             // with anything on screen. Nothing else is loud enough to warrant it — a settled run

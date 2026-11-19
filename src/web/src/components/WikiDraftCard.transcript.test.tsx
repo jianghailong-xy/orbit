@@ -136,7 +136,8 @@ describe('a drafting call in a chat’s transcript', () => {
   it('stays a call where no card is drawn: a share link or an export has no card host', async () => {
     await draw(call('mcp__orbit__wiki_propose', { rationale: 'x' }, JSON.stringify(ANSWER)), null);
     expect(cardShown()).toBeNull();
-    expect(container.querySelectorAll('.chat-tool-card')).toHaveLength(1);
+    // A plain call, so it folds into the steps line like any other.
+    expect(container.querySelector('.chat-steps-line')!.textContent).toBe('Used 1 tool');
     expect((globalThis.fetch as ReturnType<typeof vi.fn>).mock.calls).toEqual([]);
   });
 
@@ -157,15 +158,15 @@ describe('a drafting call in a chat’s transcript', () => {
     ];
     await draw(events, HOST);
     expect(cardShown()).toBe(CARD.id);
-    // The three reads after the card fold into one run; the two before it are too few to fold.
-    expect(container.querySelectorAll('.chat-tool-group')).toHaveLength(1);
+    // The card splits the run: the two calls before it and the three reads after it are a steps line each.
+    expect(container.querySelectorAll('.chat-steps')).toHaveLength(2);
     // Outside a chat the same transcript folds the drafting call with the others, as before.
     act(() => root.unmount());
     root = createRoot(container);
     await draw(events, null);
     expect(cardShown()).toBeNull();
-    expect(container.querySelectorAll('.chat-tool-group')).toHaveLength(1);
-    expect(container.querySelector('.chat-tool-group')!.textContent).toMatch(/6|six/u);
+    expect(container.querySelectorAll('.chat-steps')).toHaveLength(1);
+    expect(container.querySelector('.chat-steps-line')!.textContent).toBe('Read 4 files, used 2 tools');
   });
 });
 

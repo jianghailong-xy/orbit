@@ -39,6 +39,9 @@ type natsStandIn struct {
 	ops []string
 	// published is every message a client published, by subject, in order: what the gateway sent on NATS.
 	published map[string][][]byte
+	// tap, when set, sees every message a client publishes, as it arrives; one it says not to keep is not recorded in
+	// published.
+	tap func(subject string, payload []byte) (keep bool)
 }
 
 type natsClient struct {
@@ -162,6 +165,12 @@ func (s *natsStandIn) publish(subject string, payload []byte) int {
 }
 
 func (s *natsStandIn) record(subject string, payload []byte) {
+	s.mu.Lock()
+	tap := s.tap
+	s.mu.Unlock()
+	if tap != nil && !tap(subject, payload) {
+		return
+	}
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	s.published[subject] = append(s.published[subject], slices.Clone(payload))
@@ -396,7 +405,7 @@ func TestHintFixturesDecodeStrictly(t *testing.T) {
 
 func TestHintsReachTheRunnerTheyNameAndNoOther(t *testing.T) {
 	nats := listenNATS(t, "127.0.0.1:0")
-	h := newHarness(t, func(c *config) { c.Mode = linkpb.Mode_MODE_LINK })
+	h := newHarness(t, nil)
 	relayTo(t, h, nats.url())
 	a, _ := h.connect(runnerA, processA)
 	b, _ := h.connect(runnerB, processB)
@@ -443,7 +452,7 @@ func TestHintsReachTheRunnerTheyNameAndNoOther(t *testing.T) {
 
 func TestEveryConnectionOfTheRunnerIsSentItsHints(t *testing.T) {
 	nats := listenNATS(t, "127.0.0.1:0")
-	h := newHarness(t, func(c *config) { c.Mode = linkpb.Mode_MODE_LINK })
+	h := newHarness(t, nil)
 	relayTo(t, h, nats.url())
 	// Two processes of one runner across a self-update: either may be the one to act, and the runner dedupes. The hint
 	// is published the moment the second has its Welcome, on the subscription the first holds: it reaches both.
@@ -466,7 +475,7 @@ func TestEveryConnectionOfTheRunnerIsSentItsHints(t *testing.T) {
 
 func TestTheSubscriptionLastsFromTheFirstConnectionToTheLast(t *testing.T) {
 	nats := listenNATS(t, "127.0.0.1:0")
-	h := newHarness(t, func(c *config) { c.Mode = linkpb.Mode_MODE_LINK })
+	h := newHarness(t, nil)
 	relay := relayTo(t, h, nats.url())
 	eventually(t, 5*time.Second, "the relay connected", func() bool { return h.g.metrics.natsConnected.get() == 1 })
 	if got := relay.subscribed(); len(got) != 0 {
@@ -498,32 +507,9 @@ func TestTheSubscriptionLastsFromTheFirstConnectionToTheLast(t *testing.T) {
 	}
 }
 
-func TestInModeHTTPAHintIsCountedAndNotSent(t *testing.T) {
-	nats := listenNATS(t, "127.0.0.1:0")
-	h := newHarness(t, nil) // MODE_HTTP, as every connection is until the gateway forwards
-	relayTo(t, h, nats.url())
-	a, w := h.connect(runnerA, processA)
-	if w.GetMode() != linkpb.Mode_MODE_HTTP {
-		t.Fatalf("Welcome says %v", w.GetMode())
-	}
-	eventually(t, 5*time.Second, "A's subject subscribed", func() bool { return nats.subscribers("rnr."+runnerA) == 1 })
-	nats.publish("rnr."+runnerA, claimHint())
-	nats.publish("rnr."+runnerA, inboxHint("0190a0b0-0000-7000-8000-0000000000a1"))
-	nats.publish("rnr."+runnerA, approvalHint("0190a0b0-0000-7000-8000-0000000000a1", "0190a0b0-0000-7000-8000-0000000000f1"))
-	eventually(t, 5*time.Second, "the three hints counted", func() bool {
-		return h.g.metrics.hints.get("claim", "mode_http") == 1 && h.g.metrics.hints.get("inbox", "mode_http") == 1 &&
-			h.g.metrics.hints.get("approval", "mode_http") == 1
-	})
-	a.quiet(300 * time.Millisecond)
-	// Logged just after it is counted.
-	eventually(t, 5*time.Second, "the hint in the frame log", func() bool {
-		return strings.Contains(h.logs.String(), "kind=claim result=mode_http")
-	})
-}
-
 func TestWhatIsNotAHintIsCountedAndTheConnectionStays(t *testing.T) {
 	nats := listenNATS(t, "127.0.0.1:0")
-	h := newHarness(t, func(c *config) { c.Mode = linkpb.Mode_MODE_LINK })
+	h := newHarness(t, nil)
 	relayTo(t, h, nats.url())
 	a, _ := h.connect(runnerA, processA)
 	eventually(t, 5*time.Second, "A's subject subscribed", func() bool { return nats.subscribers("rnr."+runnerA) == 1 })
@@ -549,9 +535,10 @@ func TestWhatIsNotAHintIsCountedAndTheConnectionStays(t *testing.T) {
 }
 
 func TestAFullQueueDropsAHintWithoutClosingTheConnection(t *testing.T) {
-	h := newHarness(t, func(c *config) { c.Mode = linkpb.Mode_MODE_LINK })
-	// A connection whose writer never runs, so its queue only fills.
+	h := newHarness(t, nil)
+	// A connection whose writer never runs, so its queue only fills: one is taken to be running, so none starts.
 	c := newConn(h.g, nil, &linkClaims{RunnerID: runnerA, LeaseOwner: processA}, "127.0.0.1")
+	c.queues.writing = true
 	hint := func() *linkpb.Frame {
 		return &linkpb.Frame{Body: &linkpb.Frame_Hint{Hint: &linkpb.Hint{Kind: &linkpb.Hint_Claim{Claim: &linkpb.ClaimHint{}}}}}
 	}
@@ -586,7 +573,7 @@ func TestTheGatewayServesWithoutNATSAndSubscribesOnceItIsBack(t *testing.T) {
 	addr := ln.Addr().String()
 	_ = ln.Close()
 
-	h := newHarness(t, func(c *config) { c.Mode = linkpb.Mode_MODE_LINK })
+	h := newHarness(t, nil)
 	relayTo(t, h, "nats://"+addr)
 	if got := h.g.metrics.natsConnected.get(); got != 0 {
 		t.Fatalf("link_nats_connected = %v with no NATS", got)
@@ -625,7 +612,7 @@ func TestHintsOverARealNATSServer(t *testing.T) {
 	if url == "" {
 		t.Skip("LINK_TEST_NATS_URL is not set")
 	}
-	h := newHarness(t, func(c *config) { c.Mode = linkpb.Mode_MODE_LINK })
+	h := newHarness(t, nil)
 	relayTo(t, h, url)
 	eventually(t, 10*time.Second, "the relay connected", func() bool { return h.g.metrics.natsConnected.get() == 1 })
 	apiserver, err := nats.Connect(url, nats.Name("hints_test apiserver"))

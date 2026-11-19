@@ -31,7 +31,7 @@ func (d *driver) linkDrill(ctx context.Context, o drillOptions) {
 		detail := fmt.Sprintf("mode %s, credit %d events / %d bytes, frames of at most %d bytes", w.GetMode(),
 			w.GetCredit().GetMaxUnackedEvents(), w.GetCredit().GetMaxUnackedBytes(), w.GetLimits().GetMaxFrameBytes())
 		if w.GetMode() != linkpb.Mode_MODE_LINK {
-			return detail, errors.New("the gateway is not in MODE_LINK: start the stack with ORBIT_LINK_STAGING_MODE=link")
+			return detail, errors.New("the gateway did not say MODE_LINK (an older gateway says MODE_HTTP while its server's RUNNER_LINK_REQUIRED is off or unread)")
 		}
 		if w.GetCredit().GetMaxUnackedEvents() == 0 || w.GetLimits().GetMaxFrameBytes() != maxFrameBytes {
 			return detail, errors.New("no credit, or another frame limit")

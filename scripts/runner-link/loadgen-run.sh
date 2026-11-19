@@ -6,7 +6,7 @@
 #   scripts/runner-link/loadgen-run.sh --name full-1h -- -duration 1h -event-rate 2000
 #
 # Arguments after -- go to loadgen; the fleet, the API, the link address and the CA are filled in from the stack. The
-# stack must run in MODE_LINK with the load test's settings (ORBIT_LINK_STAGING_MODE=link ORBIT_LINK_STAGING_LOADGEN=1).
+# stack must run with the load test's settings (ORBIT_LINK_STAGING_LOADGEN=1).
 #
 # Results go to <state>/loadgen/runs/<name>/:
 #   report.md, report.json   the verdict and every figure it rests on (loadgen-report.mjs)
@@ -62,7 +62,6 @@ done
 [ -z "$mark_every" ] || [[ "$mark_every" =~ ^[1-9][0-9]*$ ]] || die "--mark-every is a whole number of seconds"
 [ -z "$watch" ] || [[ "$watch" =~ ^[1-9][0-9]*$ ]] || die "--watch is a number of sessions"
 [ -f "$env_file" ] || die "no staging stack in $state: run staging-up.sh first"
-[ "$(setting STAGING_MODE http)" = link ] || die "the stack is not in MODE_LINK: staging-up.sh with ORBIT_LINK_STAGING_MODE=link"
 [ "$(setting STAGING_LOADGEN 0)" = 1 ] || die "the stack lacks the load test's settings: staging-up.sh with ORBIT_LINK_STAGING_LOADGEN=1"
 fleet="$state/loadgen/fleet.jsonl"
 [ -s "$fleet" ] || die "no fleet in $fleet: run loadgen-seed.sh seed, then arm"

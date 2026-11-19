@@ -1,6 +1,9 @@
 import { describe, expect, it } from 'vitest';
 import {
   bindingPlanUsageRow,
+  claudeExtraUsageLabel,
+  claudeModelLimitRows,
+  claudeResetHint,
   currentPlanUsageRows,
   kimiNoQuotaLimit,
   planUsageRows,
@@ -210,5 +213,51 @@ describe('a login read at a moment', () => {
       binding({ provider: 'claude', fiveHour: { utilization: 100, resetsAt: at(-1) }, sevenDay: { utilization: 59 } }),
     ).toBe('Weekly · all models');
     expect(bindingPlanUsageRow([])).toBeUndefined();
+  });
+});
+
+describe('the Claude extras beside the windows', () => {
+  const NOW = Date.parse('2026-11-10T00:00:00Z');
+
+  it('draws a model-scoped limit as a row, fresh once past its reset, and never for another engine', () => {
+    const usage = {
+      provider: 'claude' as const,
+      modelLimits: [
+        { model: 'Fable', utilization: 40, resetsAt: '2026-11-13T04:00:00Z', active: true },
+        { model: 'Old', utilization: 80, resetsAt: '2026-11-09T00:00:00Z', active: false },
+      ],
+    };
+    const rows = claudeModelLimitRows(usage, NOW);
+    expect(rows.map((r) => [r.label, r.percent, r.window.resetsAt])).toEqual([
+      ['Weekly · Fable', 40, '2026-11-13T04:00:00Z'],
+      ['Weekly · Old', 0, undefined],
+    ]);
+    expect(claudeModelLimitRows({ ...usage, provider: 'codex' }, NOW)).toEqual([]);
+  });
+
+  it('says extra usage is off, on, or what it spent', () => {
+    expect(claudeExtraUsageLabel({ provider: 'claude' })).toBeNull();
+    expect(claudeExtraUsageLabel({ provider: 'claude', extraUsage: { enabled: false, usedMinor: 0 } })).toBe('Off');
+    expect(claudeExtraUsageLabel({ provider: 'claude', extraUsage: { enabled: true } })).toBe('On');
+    const spent = { enabled: true, currency: 'USD', exponent: 2, usedMinor: 120 };
+    expect(claudeExtraUsageLabel({ provider: 'claude', extraUsage: spent })).toBe('$1.20 used');
+    expect(claudeExtraUsageLabel({ provider: 'claude', extraUsage: { ...spent, limitMinor: 5000 } })).toBe('$1.20 of $50.00');
+  });
+
+  it('reminds of a weekly reset only once the week is nearly used and not yet over', () => {
+    const week = (utilization: number, resetsAt = '2026-11-13T04:00:00Z') => ({
+      provider: 'claude' as const,
+      sevenDay: { utilization, resetsAt },
+    });
+    expect(claudeResetHint(week(89), NOW)).toBeNull();
+    expect(claudeResetHint(week(95, '2026-11-09T00:00:00Z'), NOW)).toBeNull();
+    expect(claudeResetHint(week(90), NOW)).toContain('If your plan includes a weekly reset');
+    expect(
+      claudeResetHint({ ...week(100), resetGrants: { eligible: true, resetsLeft: 1 } }, NOW),
+    ).toContain('You have 1 weekly reset to use on claude.ai.');
+    // An ineligible block's count is not a reset Orbit can point to.
+    expect(
+      claudeResetHint({ ...week(100), resetGrants: { eligible: false, resetsLeft: 3 } }, NOW),
+    ).toContain('If your plan includes a weekly reset');
   });
 });

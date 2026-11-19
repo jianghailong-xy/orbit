@@ -110,6 +110,35 @@ class CardContractTest {
         assertTrue(transcriptCards(RunEvent("assistant", 3, source)).isEmpty())
     }
 
+    @Test fun ownerAnswersHandedToTheReviewerAreAYouConfirmedCard() {
+        fun answers(vararg rows: JsonObject, over: JsonObjectBuilder.() -> Unit = {}) = buildJsonObject {
+            putJsonObject("confirmationAnswers") {
+                put("decisionId", "d"); put("taskId", "t"); put("title", "Welcome email"); put("decidedAt", "2026-11-11T05:13:08Z")
+                putJsonArray("answers") { rows.forEach { add(it) } }
+                over()
+            }
+            put("text", "<orbit-confirmation-answers task=\"t\">…</orbit-confirmation-answers>")
+        }
+        val chosen = buildJsonObject { put("key", "n1"); put("question", "How should it reach main?"); put("choice", "Merge to main now"); put("text", JsonNull); put("notShown", false) }
+        val said = buildJsonObject { put("key", "n2"); put("question", "Where should it link?"); put("choice", JsonNull); put("text", "The status page"); put("notShown", false) }
+        val unseen = buildJsonObject { put("key", "n3"); put("question", "Behind a flag?"); put("choice", "No"); put("notShown", true) }
+        val card = transcriptCards(RunEvent("user", 4, answers(chosen, said, unseen))).single()
+        assertEquals(CardFamily.REVIEW, card.family)
+        assertEquals(OwnerReview.youConfirmed, card.title)
+        assertTrue(card.key.endsWith(":confirmationAnswers"))
+        assertEquals(listOf(
+            OwnerReview.ConfirmationAnswer("How should it reach main?", "Merge to main now", false),
+            OwnerReview.ConfirmationAnswer("Where should it link?", "“The status page”", false),
+            OwnerReview.ConfirmationAnswer("Behind a flag?", "No", true),
+        ), OwnerReview.confirmationAnswers(card.source))
+        // Malformed: no answers, an answer with neither choice nor text, or a missing title — no card, so no half a card.
+        assertTrue(transcriptCards(RunEvent("user", 5, answers())).isEmpty())
+        assertTrue(transcriptCards(RunEvent("user", 6, answers(buildJsonObject { put("question", "Q?") }))).isEmpty())
+        assertTrue(transcriptCards(RunEvent("user", 7, answers(chosen) { put("title", JsonNull) })).isEmpty())
+        // Only a user turn carries it.
+        assertTrue(transcriptCards(RunEvent("assistant", 8, answers(chosen))).isEmpty())
+    }
+
     @Test fun ordinaryDiscussionCarriesTheDisplayedSealAndDoesNotAnswerADoor() {
         val card = cardList().single { it.family == CardFamily.ACCEPTANCE }
         val context = CardDiscussion.context(card)!!
@@ -120,83 +149,20 @@ class CardContractTest {
             .forEach { assertNull(CardDiscussion.context(it)) }
     }
 
-    // A revision waiting for a paused coordinator, and one sent to it once back (project 34cygPTQe5LPUT7tdUAzG, `CoordinatorQueue`).
-
-    private val queue get() = fixture().obj("snapshot")!!.obj("standing")!!.obj("evidenceDecisions")!!
-    private fun withQueue(edited: JsonObject): JsonObject {
-        val source = fixture().obj("snapshot")!!
-        return JsonObject(source + ("standing" to JsonObject(source.obj("standing")!! + ("evidenceDecisions" to edited))))
-    }
-    private fun waiting(cards: List<InteractionCard> = cardList()) =
-        cards.single { it.family == CardFamily.COORDINATOR_QUEUE && !CoordinatorQueue.isSent(it) }
-
-    /** Both groups the pending read added are read off the corpus, each under its evidence card's own address; a server that sends
-     * neither, or null for them, has no such card and nothing else moves. */
-    @Test fun theCoordinatorsWaitingAndSentRevisionsAreRead() {
+    @Test fun legacyWaitingRowsAreIgnoredAndSentReceiptsRemain() {
+        val raw = fixture().obj("snapshot")!!
+        val queue = raw.obj("standing")!!.obj("evidenceDecisions")!!
         val cards = cardList()
-        val row = queue.objects("waitingOnCoordinator").single()
-        val waiting = waiting(cards)
-        assertEquals("evidence:${row.text("taskId")}:2", waiting.key)
-        assertEquals(CoordinatorQueue.title, waiting.title)
-        assertEquals(row, waiting.source)
-        assertEquals(row.text("taskId"), waiting.objectId)
-        assertEquals(fixture().text("projectId"), waiting.projectId)
-        assertEquals("2:${fixture().text("sessionId")}", waiting.binding)
-        // What it says of the coordinator is read off the coordinator's own session.
-        assertEquals(snapshot().detail.text("runState"), waiting.context.obj("coordinator")!!.text("runState"))
-        val sentRow = queue.objects("sentToCoordinator").single()
-        val sent = cards.single(CoordinatorQueue::isSent)
-        assertEquals("evidence:${sentRow.text("taskId")}:1", sent.key)
-        assertEquals("2026-10-04T00:05:00.000Z", sent.source.text("deliveredAt"))
-        assertTrue(sent.actions.isEmpty())
-        assertEquals("today's card is still the one evidence card", "evidence:${fixture().text("taskId")}:7",
-            cards.single { it.family == CardFamily.EVIDENCE }.key)
-        val older = cardList(withQueue(JsonObject(queue - "waitingOnCoordinator" - "sentToCoordinator")))
-        val nulls = cardList(withQueue(JsonObject(queue + ("waitingOnCoordinator" to JsonNull) + ("sentToCoordinator" to JsonNull))))
-        for (read in listOf(older, nulls)) assertEquals(cards.filter { it.family != CardFamily.COORDINATOR_QUEUE }, read)
-    }
-
-    /** It asks nothing: its one press is Decide it myself, which builds no request; a row the door would not take from this reader
-     * offers not even that, and neither does a sent one. */
-    @Test fun aWaitingRevisionHasNoDecisionUntilDecideItMyself() {
-        val waiting = waiting()
-        assertEquals(listOf(CardVerb.DECIDE_MYSELF), waiting.actions)
-        assertEquals("Decide it myself", CardVerb.DECIDE_MYSELF.label)
-        assertThrows(IllegalArgumentException::class.java) { CardRequests.build(waiting, CardVerb.CONFIRM_EVIDENCE) }
-        assertThrows(IllegalArgumentException::class.java) { CardRequests.build(waiting, CardVerb.SEND_BACK, CardInput(text = "Why")) }
-        assertThrows(IllegalStateException::class.java) { CardRequests.build(waiting, CardVerb.DECIDE_MYSELF) }
-        assertNull(CoordinatorQueue.decideMyself(cardList().single(CoordinatorQueue::isSent)))
-        assertNull("a copy that no longer asks opens nothing", CoordinatorQueue.decideMyself(waiting.copy(actions = emptyList())))
-        val row = queue.objects("waitingOnCoordinator").single()
-        listOf("independence" to "independent", "decidability" to "decidable").forEach { (field, flag) ->
-            val blocked = JsonObject(row + (field to buildJsonObject { put(flag, false) }))
-            val card = waiting(cardList(withQueue(JsonObject(queue + ("waitingOnCoordinator" to JsonArray(listOf(blocked)))))))
-            assertTrue(field, card.actions.isEmpty())
-            assertNull(field, CoordinatorQueue.decideMyself(card))
+        queue.objects("waitingOnCoordinator").forEach { row ->
+            assertTrue(cards.none { it.key == "evidence:${row.text("taskId")}:${row.text("evidenceRevision")}" })
         }
-    }
-
-    /** Decide it myself opens today's evidence card under the same address and version: Confirm done posts the corpus's evidence
-     * request as the same deciding session, and Chat about this sends it back with the owner's words. */
-    @Test fun decideItMyselfPostsTodaysDecisionAsTheSameDecidingSession() {
-        val waiting = waiting()
-        val opened = CoordinatorQueue.decideMyself(waiting)!!
-        assertEquals(CardFamily.EVIDENCE, opened.family)
-        assertEquals(listOf(CardVerb.CONFIRM_EVIDENCE, CardVerb.SEND_BACK), opened.actions)
-        assertEquals(waiting.key, opened.key); assertEquals(waiting.binding, opened.binding)
-        assertTrue(CoordinatorQueue.isDecidingMyself(opened)); assertFalse(CoordinatorQueue.isDecidingMyself(waiting))
-        val confirm = CardRequests.build(opened, CardVerb.CONFIRM_EVIDENCE)
-        assertEquals(HttpMethod.POST, confirm.method)
-        assertEquals(listOf("tasks", waiting.objectId, "evidence", "decision"), confirm.path)
-        val body = Wire.json.parseToJsonElement(confirm.body!!.decodeToString()).jsonObject
-        assertEquals(buildJsonObject { put("decidingSessionId", queue.text("decidingSessionId")); put("evidenceRevision", "2"); put("decision", "CONFIRM") }, body)
-        val today = fixture().objects("requests").single { it.text("verb") == "CONFIRM_EVIDENCE" }.obj("body")!!
-        assertEquals("the request today's card posts, field for field", today.keys, body.keys)
-        assertEquals(today.text("decidingSessionId"), body.text("decidingSessionId"))
-        assertThrows(IllegalArgumentException::class.java) { CardRequests.build(opened, CardVerb.SEND_BACK) }
-        val back = Wire.json.parseToJsonElement(CardRequests.build(opened, CardVerb.SEND_BACK, CardInput(text = " Rerun the spec ")).body!!.decodeToString()).jsonObject
-        assertEquals(buildJsonObject { put("decidingSessionId", queue.text("decidingSessionId")); put("evidenceRevision", "2")
-            put("decision", "SEND_BACK"); put("note", "Rerun the spec") }, back)
+        val sent = cards.single(CoordinatorQueue::isSent)
+        assertTrue(sent.actions.isEmpty())
+        assertEquals("Sent to the coordinator", sent.title)
+        val web = generateSequence(File(System.getProperty("user.dir"))) { it.parentFile }
+            .map { File(it, "src/web/src/components/EvidenceDecisionCard.tsx") }.first { it.isFile }.readText()
+        assertTrue(web.contains("export const EVIDENCE_DECISION_SENT_TO_COORDINATOR = '${CoordinatorQueue.sent}';"))
+        assertEquals("Sent to the coordinator · 20:05", CoordinatorQueue.sentLine("20:05"))
     }
 
     @Test fun exceptionDiscussionRetainsItemIdentityWithoutChangingItsActions() {

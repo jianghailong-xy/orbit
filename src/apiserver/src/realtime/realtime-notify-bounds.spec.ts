@@ -45,7 +45,7 @@ test('every event run_event never holds but the approval card rides its notifica
   const userScoped = [
     RunEventType.TASK_LIST_CHANGED, RunEventType.TAG_CHANGED, RunEventType.FOLDER_CHANGED, RunEventType.PROVIDER_CHANGED,
     RunEventType.PROJECT_CRITERIA_DECISIONS_CHANGED, RunEventType.PROJECT_CHANGED, RunEventType.WATCH_CHANGED,
-    RunEventType.WIKI_CHANGED,
+    RunEventType.WIKI_CHANGED, RunEventType.TERMINALS_CHANGED,
   ];
   const publishers: Array<[string, Array<() => void>]> = [
     ['session_created', [() => realtime.publishSessionCreated(SESSION)]],
@@ -59,6 +59,7 @@ test('every event run_event never holds but the approval card rides its notifica
     ['agent_changed', [() => realtime.publishWorkspaceChanged(SESSION, id(), true)]],
     ['an owner\'s library event', userScoped.map((type) => () => realtime.publishForUser(OWNER, type, id()))],
     ['everyone\'s provider_changed', [() => realtime.publishForAllUsers(RunEventType.PROVIDER_CHANGED, id())]],
+    ['everyone\'s translation_status_changed', [() => realtime.publishForAllUsers(RunEventType.TRANSLATION_STATUS_CHANGED, 'translation')]],
     // SessionsService.decideApproval's, and a card collected as ABANDONED (RunnerApiController).
     ['approval_resolved', [
       () => realtime.publish(SESSION, { seq: 0, type: RunEventType.APPROVAL_RESOLVED, payload: { id: id(), behavior: 'allow' }, ts: ts() }),

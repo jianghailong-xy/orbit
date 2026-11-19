@@ -86,4 +86,20 @@ class DeliveryModeTest {
         assertEquals(j("""{"line":"PROJECT_BRANCH"}"""), RunSettings.lineWrite(view("PLATFORM"), "PROJECT_BRANCH"))
         assertEquals(j("""{"line":"MAIN"}"""), RunSettings.lineWrite(view("PLATFORM", line = "PROJECT_BRANCH"), "MAIN"))
     }
+
+    /** The owner-approved words (docs/mocks/agent-push-delivery): what each way costs, the merge check the agent runs while it pushes,
+     * and the one question asked before it takes over while a merge into main is still live. */
+    @Test fun theAgentsWayIsSaidWithItsCostsAndAsksWhileAMergeIsLive() {
+        assertEquals("No merge card. The agent pushes to master itself, and Orbit records each commit once it sees it there.",
+            RunSettings.deliveryAgentPushHint("master"))
+        assertEquals("The agent doesn’t push to master: Orbit lands its branch once the work is accepted.", RunSettings.deliveryPlatformHint("master"))
+        assertEquals("Run by the agent before it pushes, on its work rebased onto master. Orbit doesn’t run it.", RunSettings.mergeCheckHintAgentPush("master"))
+        assertEquals("Let the agent push to master?", RunSettings.agentPushConfirmTitle("master"))
+        assertEquals("Tasks finished from now on are pushed by their agent: no merge card, and Orbit merges nothing into master. Merges already " +
+            "waiting for you stay until you answer them.", RunSettings.agentPushConfirmBody("master"))
+        assertEquals("Let the agent push", RunSettings.agentPushConfirm)
+        listOf("CHECKING", "READY", "CONFIRMED", "RECHECKING").forEach { assertTrue(it, RunSettings.mergeLive(j("""{"state":"$it"}"""))) }
+        listOf("MERGED", "BLOCKED", "DECLINED").forEach { assertFalse(it, RunSettings.mergeLive(j("""{"state":"$it"}"""))) }
+        assertFalse("no candidate", RunSettings.mergeLive(null))
+    }
 }

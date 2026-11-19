@@ -45,6 +45,8 @@ import io.orbitd.android.wiki.WikiDate
 import java.time.Instant
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.sync.Mutex
+import kotlinx.coroutines.sync.withLock
 import kotlinx.coroutines.withContext
 import kotlinx.serialization.builtins.ListSerializer
 
@@ -82,6 +84,11 @@ internal object SessionListCopy {
     fun folderSessions(count: Int) = "$count sessions"
 }
 
+internal object ScheduledRunsFolderCopy {
+    const val TITLE = "Scheduled runs"
+    const val EMPTY = "No scheduled runs here."
+}
+
 /** The time on a row's first line (OrbitKit `SessionListTime`): how long the turn has run while its spinner shows, nothing if the
  * server sent no start, and otherwise when it last moved. */
 internal object SessionListTime {
@@ -94,12 +101,13 @@ internal object SessionListTime {
  * A session's row (iOS `AgentSessionRow.compactRow`): the title with its live mark and time, then one line in the tone of what it
  * says. A tap opens it and a long press is its menu. [machine] is the runner it runs on, by name: a session held for the Claude
  * region says Anthropic is unavailable there, where it is known. [deleted] is Trash, where nothing is live. A screen reader hears
- * the state the mark leaves out as the row's value (`SessionHeader.statusWord`).
+ * the state the mark leaves out as the row's value (`SessionHeader.statusWord`). [mark] is the project of a member whose project
+ * has no row in this list (owner 2026-11-07, option A): its progress leads the second line, as it leads a project row's.
  */
 @OptIn(ExperimentalFoundationApi::class)
 @Composable
 internal fun SessionRow(session: DirectorySession, machine: String?, onOpen: () -> Unit,
-    deleted: Boolean = false, watching: WatchSessionSummary? = null, onOptions: () -> Unit) {
+    deleted: Boolean = false, watching: WatchSessionSummary? = null, mark: SessionProjectMark? = null, onOptions: () -> Unit) {
     val muted = MaterialTheme.colorScheme.onSurfaceVariant
     val recaps = LocalSessionRecaps.current
     val line = remember(session, deleted, watching, recaps, machine) {
@@ -116,6 +124,7 @@ internal fun SessionRow(session: DirectorySession, machine: String?, onOpen: () 
             SessionListTime.format(session)?.let { Text(it, style = MaterialTheme.typography.labelMedium, color = muted, maxLines = 1, softWrap = false) }
         }
         Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(7.dp)) {
+            mark?.let { SessionProjectMarkChip(it) }
             if (session.projectMembership?.isCoordinator == true) Text(SessionListCopy.COORDINATOR,
                 Modifier.background(muted.copy(alpha = 0.14f), CircleShape).padding(horizontal = 6.dp, vertical = 1.dp)
                     .clearAndSetSemantics { contentDescription = SessionListCopy.COORDINATOR_LABEL },
@@ -127,8 +136,9 @@ internal fun SessionRow(session: DirectorySession, machine: String?, onOpen: () 
 }
 
 /** iOS `SessionLiveIndicator`: what must never go silent on a row. A working session's spinner, the eye of one a watch will resume, the
- * clock of a report under review, the breathing terminal of a job in flight, an amber dot when it waits on you and a red one when it
- * failed. The calm states draw nothing: the line and the row's value say them. */
+ * clock of a report under review or a session queued for a slot, the terminal of a background process — breathing for a job in flight,
+ * still for one merely left up — an amber dot when it waits on you and a red one when it failed. The settled states draw nothing: the
+ * line and the row's value say them. */
 @Composable
 internal fun SessionLiveMark(session: DirectorySession, watching: WatchSessionSummary?) {
     val muted = MaterialTheme.colorScheme.onSurfaceVariant
@@ -136,9 +146,11 @@ internal fun SessionLiveMark(session: DirectorySession, watching: WatchSessionSu
     when {
         session.pendingApprovals > 0 -> Box(Modifier.size(7.dp).background(LocalOrbitColors.current.needsYou, CircleShape).testTag("session-mark-needs-you"))
         session.confirmationUnderReview != null -> Icon(painterResource(R.drawable.ic_clock), null, Modifier.size(14.dp).testTag("session-mark-review"), tint = muted)
+        session.effectiveRunState == RunState.QUEUED -> Icon(painterResource(R.drawable.ic_clock), null, Modifier.size(14.dp).testTag("session-mark-queued"), tint = muted)
         session.isRunning() -> RowSpinner(Modifier.testTag("session-mark-running"))
-        parked && watching != null -> Icon(painterResource(R.drawable.ic_eye), null, Modifier.size(14.dp).testTag("session-mark-watching"), tint = muted)
+        parked && (watching != null || session.resumesOnItsOwn) -> Icon(painterResource(R.drawable.ic_eye), null, Modifier.size(14.dp).testTag("session-mark-watching"), tint = muted)
         session.isRunningJob(watching) -> BreathingTerminal(Modifier.testTag("session-mark-jobs"))
+        session.hasBackgroundProcess(watching) -> Icon(painterResource(R.drawable.ic_terminal), null, Modifier.size(14.dp).testTag("session-mark-services"), tint = muted)
         session.effectiveRunState == RunState.FAILED && !session.retryPending(Instant.now()) && !session.error.orEmpty().lowercase().contains("offline") ->
             Box(Modifier.size(7.dp).background(MaterialTheme.colorScheme.error, CircleShape).testTag("session-mark-failed"))
     }
@@ -151,33 +163,54 @@ internal fun RowSpinner(modifier: Modifier = Modifier) {
 }
 
 /** A folder's row (iOS `SessionFolderRowView`): its name, what the sessions it holds would have said — how many wait on you, else a
- * spinner, else the breathing mark, by the drawer's rule — their count and a chevron. A tap opens it and a long press is its menu. */
-@OptIn(ExperimentalFoundationApi::class)
+ * spinner, else the breathing mark, by the drawer's rule — their count (unless some wait on you) and a chevron. A tap opens it and a long press is its menu. */
 @Composable
 internal fun FolderRow(folder: Folder, sessions: List<DirectorySession>, runnerOffline: Boolean, watching: Map<String, WatchSessionSummary>,
     onOpen: () -> Unit, onOptions: () -> Unit) {
+    FolderRow(folder.id, folder.name, FolderRowSummary(
+        count = sessions.size,
+        needsYou = sessions.folderNeedsYouCount(),
+        running = !runnerOffline && sessions.any { it.isRunning() },
+        jobs = !runnerOffline && sessions.any { it.isRunningJob(watching[watchKey(it.id)]) },
+    ), onOpen, onOptions)
+}
+
+@OptIn(ExperimentalFoundationApi::class)
+@Composable
+internal fun FolderRow(id: String, name: String, summary: FolderRowSummary, onOpen: () -> Unit, onOptions: (() -> Unit)? = null) {
     val muted = MaterialTheme.colorScheme.onSurfaceVariant
-    val waiting = sessions.count { it.pendingApprovals > 0 && it.waitingKind != "START_REQUEST" }
-    val running = !runnerOffline && sessions.any { it.isRunning() }
-    val jobs = !runnerOffline && sessions.any { it.isRunningJob(watching[watchKey(it.id)]) }
-    val words = when {
-        waiting > 0 -> DrawerCopy.waitingForYou(waiting)
+    val scheduled = id == ScheduledRunsFolder.ID
+    val (count, waiting, running, jobs) = summary
+    val words = if (scheduled) listOfNotNull(
+        SessionListCopy.folderSessions(count),
+        DrawerCopy.waitingForYou(waiting).takeIf { waiting > 0 },
+        SessionListCopy.FOLDER_RUNNING.takeIf { running },
+    ).joinToString(". ") else when {
+        waiting > 0 -> "${DrawerCopy.waitingForYou(waiting)}. ${SessionListCopy.folderSessions(count)}"
         running -> SessionListCopy.FOLDER_RUNNING
         jobs -> SessionListCopy.FOLDER_JOBS
-        else -> SessionListCopy.folderSessions(sessions.size)
+        else -> SessionListCopy.folderSessions(count)
     }
+    val openFolder = if (onOptions == null) Modifier.clickable(role = Role.Button, onClick = onOpen)
+        else Modifier.combinedClickable(role = Role.Button, onLongClickLabel = "Options for $name",
+            onLongClick = onOptions, onClick = onOpen)
     Row(Modifier.fillMaxWidth()
-        .combinedClickable(role = Role.Button, onLongClickLabel = "Options for ${folder.name}", onLongClick = onOptions, onClick = onOpen)
-        .semantics { stateDescription = words }.testTag("folder-row:${folder.id}")
+        .then(openFolder).semantics { stateDescription = words }.testTag("folder-row:$id")
         .padding(horizontal = 16.dp, vertical = 13.dp), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(12.dp)) {
-        Icon(painterResource(R.drawable.ic_folder), null, Modifier.size(22.dp), tint = MaterialTheme.colorScheme.primary)
-        Text(folder.name, Modifier.weight(1f), maxLines = 1, overflow = TextOverflow.Ellipsis, style = MaterialTheme.typography.bodyLarge)
+        Box(Modifier.size(22.dp)) {
+            Icon(painterResource(if (scheduled) R.drawable.ic_clock else R.drawable.ic_folder), null,
+                Modifier.fillMaxSize(), tint = MaterialTheme.colorScheme.primary)
+            if (scheduled && running) Box(Modifier.align(Alignment.BottomEnd).size(7.dp)
+                .background(LocalOrbitColors.current.running, CircleShape))
+        }
+        Text(name, Modifier.weight(1f), maxLines = 1, overflow = TextOverflow.Ellipsis, style = MaterialTheme.typography.bodyLarge)
         when {
             waiting > 0 -> NeedsYouCount(waiting)
-            running -> RowSpinner()
+            running && !scheduled -> RowSpinner()
             jobs -> BreathingTerminal()
         }
-        Text("${sessions.size}", style = MaterialTheme.typography.labelMedium, color = muted, modifier = Modifier.clearAndSetSemantics {})
+        // One number on the row (owner 2026-11-19, as on the web): who waits on you takes the total's place, which `words` still reads.
+        if (waiting == 0) Text("$count", style = MaterialTheme.typography.labelMedium, color = muted, modifier = Modifier.clearAndSetSemantics {})
         Icon(painterResource(R.drawable.ic_chevron_forward), null, Modifier.size(14.dp), tint = muted.copy(alpha = 0.6f))
     }
 }
@@ -311,12 +344,15 @@ internal fun SessionOptionsMenu(view: SessionView, tags: List<Tag>, tag: String?
  * the account's list, as iOS reads it (`AgentsModel.loadSessions`), because a project's row is worded by a coordinator that may be
  * filed in another workspace. iOS reads it again every 4 s; here it is read when the scope is chosen, on a pull and behind a change
  * this phone asked for ([show]'s `asks`), and held meanwhile, so a session opened over the list comes back to its rows.
+ * Scheduled runs use their own instance, scoped to a workspace even when the view is Open.
  */
 @Stable
-internal class SessionScopeList(private val api: DirectoryApi) {
+internal class SessionScopeList(private val api: DirectoryApi, private val scheduledWorkspace: String? = null) {
     private class Read(val view: SessionView, val asks: Long, val rows: List<DirectorySession>)
     private var held by mutableStateOf<Read?>(null)
     private var failed by mutableStateOf<Pair<SessionView, String>?>(null)
+    // A pull may overlap a poll. Keep their snapshots in read order.
+    private val readLock = Mutex()
 
     fun rows(view: SessionView): List<DirectorySession>? = held?.takeIf { it.view == view }?.rows
     fun error(view: SessionView): String? = failed?.takeIf { it.first == view }?.second
@@ -330,11 +366,12 @@ internal class SessionScopeList(private val api: DirectoryApi) {
         if (current == null || current.view != view || current.asks != asks) read(view, asks)
     }
 
-    suspend fun read(view: SessionView, asks: Long) {
+    suspend fun read(view: SessionView, asks: Long) = readLock.withLock {
         failed = null
         try {
             val rows = withContext(Dispatchers.Default) {
-                api.read(listOf("sessions"), ListSerializer(DirectorySession.serializer()), listOf("view" to view.query))
+                if (scheduledWorkspace != null) api.scheduledSessions(scheduledWorkspace, view)
+                else api.read(listOf("sessions"), ListSerializer(DirectorySession.serializer()), listOf("view" to view.query))
             }
             held = Read(view, asks, rows)
         } catch (cancel: CancellationException) { throw cancel }

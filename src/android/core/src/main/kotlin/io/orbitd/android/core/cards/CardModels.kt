@@ -2,6 +2,7 @@ package io.orbitd.android.core.cards
 
 import io.orbitd.android.core.protocol.Wire
 import io.orbitd.android.core.realtime.SessionSnapshot
+import io.orbitd.android.core.translation.Translation
 import kotlinx.serialization.Serializable
 import kotlinx.serialization.json.*
 
@@ -26,9 +27,10 @@ data class CardQuestion(val question: String, val header: String? = null,
 @Serializable
 data class ApprovalDecision(val behavior: String, val message: String? = null,
     val answers: Map<String, List<String>>? = null, val rememberRules: List<PermissionRule>? = null,
-    val startAfterCreate: Boolean? = null)
+    val startAfterCreate: Boolean? = null, val sendAsWritten: Boolean? = null)
 @Serializable
-data class EvidenceDecision(val decidingSessionId: String, val evidenceRevision: String, val decision: String, val note: String? = null)
+data class EvidenceDecision(val decidingSessionId: String, val evidenceRevision: String, val decision: String, val note: String? = null,
+    val sendAsWritten: Boolean? = null)
 @Serializable
 data class CriteriaDecision(val commitToken: String, val decision: String, val baseSeal: String)
 @Serializable
@@ -39,13 +41,14 @@ data class OwnerAnswer(val key: String, val option: Int? = null, val text: Strin
 @Serializable
 data class ProjectStartSettings(val line: String, val automatic: Boolean, val maxConcurrentTasks: Int,
     val mergeCheckCommand: String?, val projectBranchName: String? = null, val upstreamRef: String? = null,
-    val deliveryMode: String? = null)
+    val deliveryMode: String? = null, val landingCheckCommand: String? = null,
+    val landingCheckTimeoutSeconds: Int? = null, val mergeCheckTimeoutSeconds: Int? = null)
 
 enum class CardFamily {
     TOOL, QUESTION, PLAN, CREATE, BATCH, DAG, BLOCKER, PROVIDER, DELETE, WORKSPACE_WRITE,
     EVIDENCE, OWNER_CONFIRMATION, REVIEW, CRITERIA_CHANGE, ACCEPTANCE, START,
     OWNER_QUESTION, EXCEPTION, PROMOTION, WIKI, SESSION_REQUEST, BACKGROUND,
-    /** A revision waiting for its project's paused coordinator, or sent to it once back (`CoordinatorQueue`). */
+    /** Evidence handed to the coordinator (`CoordinatorQueue`). */
     COORDINATOR_QUEUE,
     /** A coordinator's question that has ended, drawn as the record it became (`CoordinatorQuestions`). */
     QUESTION_RECORD,
@@ -57,7 +60,7 @@ enum class CardVerb(val label: String) {
     /** The single-task card's second yes (web `CREATE_AND_START`): the task is created and its run started in the one press. */
     CREATE_AND_START("Create and start"),
     CREATE_PROJECT("Create project"), CREATE_BATCH("Create tasks"), CHANGE_DAG("Apply changes"),
-    RESOLVE_BLOCKER("Resolve blocker"), DELETE_IT("Delete it"), SAVE_CHANGES("Save changes"), CREATE_WORKSPACE("Create it"), CHAT("Chat about this"), CONFIRM_EVIDENCE("Confirm done"),
+    RESOLVE_BLOCKER("Resolve blocker"), DELETE_IT("Delete it"), SAVE_CHANGES("Save changes"), CREATE_WORKSPACE("Create it"), ADD_PROVIDER("Add it"), CHAT("Chat about this"), CONFIRM_EVIDENCE("Confirm done"),
     SEND_BACK("Send back"), CONFIRM_OWNER("Confirm done"), APPROVE_CRITERIA("Approve changes"),
     REJECT_CRITERIA("Keep current criteria"), CONFIRM_CRITERIA("Confirm criteria"), START("Start project"),
     OWNER_ANSWER("Send answer"), RETURN_COORDINATOR("Ask the coordinator again"), RESUME("Resume"),
@@ -71,7 +74,9 @@ enum class CardVerb(val label: String) {
     WIKI_REVERT("Revert run"), WIKI_REJECT_ENTRY("Reject entry"), PLAN_CONFIRM("Confirm plan"), PLAN_ACCEPT("Accept proposal"), PLAN_REJECT("Reject proposal"),
     WIKI_RECONFIRM("Keep entry"), WIKI_AMEND("Amend entry"), WIKI_RETIRE("Retire entry"),
     WATCH_PAUSE("Pause watch"), WATCH_RESUME("Resume watch"), WATCH_CANCEL("Cancel watch"),
-    REOPEN_TASK("Reopen"), DECIDE_MYSELF("Decide it myself"),
+    REOPEN_TASK("Reopen"),
+    /** The owner's own move on evidence nobody else can move (`ownerAction: RESTART_TASK`): the task starts again (`EvidenceRestart`). */
+    RESTART_TASK(EvidenceRestart.action),
 }
 
 /** The server address and the exact version drawn. No action is inferred from an event's prose. */
@@ -85,7 +90,9 @@ data class InteractionCard(
 data class CardInput(val text: String = "", val selections: Map<String, List<String>> = emptyMap(),
     val custom: Map<String, String> = emptyMap(), val ownerAnswers: List<OwnerAnswer> = emptyList(),
     val option: Int? = null, val settings: ProjectStartSettings? = null,
-    val edited: JsonObject? = null, val reason: String? = null, val triggerId: String? = null)
+    val edited: JsonObject? = null, val reason: String? = null, val triggerId: String? = null,
+    /** Settings › Translation (1A): the answer again, untranslated, after the server could not translate it (422 TRANSLATION_FAILED). */
+    val sendAsWritten: Boolean = false)
 
 fun approvalFamily(tool: String): CardFamily = when (tool) {
     "AskUserQuestion" -> CardFamily.QUESTION
@@ -94,7 +101,7 @@ fun approvalFamily(tool: String): CardFamily = when (tool) {
     "orbit_task_batch" -> CardFamily.BATCH
     "orbit_dag_change" -> CardFamily.DAG
     "orbit_blocker_resolve" -> CardFamily.BLOCKER
-    "orbit_provider_create", "orbit_provider_update", "orbit_provider_delete" -> CardFamily.PROVIDER
+    ProviderWriteCards.createTool, ProviderWriteCards.updateTool, ProviderWriteCards.deleteTool -> CardFamily.PROVIDER
     DeleteCards.runnerTool, DeleteCards.workspaceTool -> CardFamily.DELETE
     WorkspaceWriteCards.createTool, WorkspaceWriteCards.updateTool -> CardFamily.WORKSPACE_WRITE
     else -> CardFamily.TOOL
@@ -124,34 +131,53 @@ object CardCatalog {
                 CardFamily.QUESTION -> listOf(CardVerb.ANSWER, CardVerb.CHAT)
                 CardFamily.PLAN -> listOf(CardVerb.APPROVE_PLAN, CardVerb.KEEP_PLANNING)
                 // A task nothing would start by itself, on a card whose runner can act on the choice, is offered its start in the
-                // same press, right after the plain yes.
-                CardFamily.CREATE -> if (approval.toolName == "orbit_task_create") listOfNotNull(CardVerb.CREATE_TASK,
-                    CardVerb.CREATE_AND_START.takeIf { ApprovalRules.offersCreateAndStart(approval.toolName, approval.input) }, CardVerb.CHAT)
-                    else listOf(CardVerb.CREATE_PROJECT, CardVerb.CHAT)
+                // same press, ahead of the plain yes; on a task filed held, right after it.
+                CardFamily.CREATE -> if (approval.toolName != "orbit_task_create") listOf(CardVerb.CREATE_PROJECT, CardVerb.CHAT)
+                    else if (ApprovalRules.createAndStartLeads(approval.toolName, approval.input))
+                        listOf(CardVerb.CREATE_AND_START, CardVerb.CREATE_TASK, CardVerb.CHAT)
+                    else listOfNotNull(CardVerb.CREATE_TASK,
+                        CardVerb.CREATE_AND_START.takeIf { ApprovalRules.offersCreateAndStart(approval.toolName, approval.input) }, CardVerb.CHAT)
                 CardFamily.BATCH -> listOf(CardVerb.CREATE_BATCH, CardVerb.CHAT)
                 CardFamily.DAG -> listOf(CardVerb.CHANGE_DAG, CardVerb.CHAT)
                 CardFamily.BLOCKER -> listOf(CardVerb.RESOLVE_BLOCKER, CardVerb.CHAT)
                 CardFamily.DELETE -> listOf(CardVerb.DELETE_IT, CardVerb.CHAT)
                 CardFamily.WORKSPACE_WRITE -> listOf(if (approval.toolName == WorkspaceWriteCards.createTool) CardVerb.CREATE_WORKSPACE else CardVerb.SAVE_CHANGES, CardVerb.CHAT)
+                // The yes says what it does; the no stays a plain Deny, as on iOS, and there is no standing yes.
+                CardFamily.PROVIDER -> listOf(ProviderWriteCards.verb(approval.toolName), CardVerb.DENY)
                 // One of Orbit's own asks (iOS `Approvals.isOrbitAsk`): saying no is a conversation, and there is no standing yes.
                 // DeepSeek Harness answers each ask once and keeps no rule (iOS cef6c8e0d): there, a card is Allow and Deny alone.
-                else -> if (approval.toolName == ApprovalRules.mergeCheckChange) listOf(CardVerb.ALLOW, CardVerb.CHAT) else listOf(CardVerb.ALLOW, CardVerb.DENY) +
+                else -> if (approval.toolName == ApprovalRules.mergeCheckChange || approval.toolName == SkipMergeCheckCards.tool) listOf(CardVerb.ALLOW, CardVerb.CHAT) else listOf(CardVerb.ALLOW, CardVerb.DENY) +
                     if (!DshRuntime.rememberOffered(engine) || ApprovalRules.remember(approval.toolName, approval.input).isEmpty()) emptyList()
                     else listOf(CardVerb.REMEMBER)
             }
             val title = when (family) {
                 CardFamily.QUESTION -> "Your input is needed"
                 CardFamily.PLAN -> "Plan ready for review"
-                CardFamily.CREATE -> if (approval.toolName == "orbit_task_create") "Create this task?" else "Create this project?"
+                // A task that starts on a condition says so in its title (condition-triggers board frame 2).
+                CardFamily.CREATE -> if (approval.toolName != "orbit_task_create") "Create this project?"
+                    else if (io.orbitd.android.core.schedule.StartWhenCardLines.ofCreateInput(approval.input) != null)
+                        io.orbitd.android.core.schedule.ConditionCopy.createTaskTitle
+                    else "Create this task?"
                 CardFamily.BATCH -> "Create these tasks?"
                 CardFamily.DAG -> "Change dependencies?"
                 CardFamily.BLOCKER -> "Resolve this blocker?"
                 CardFamily.DELETE -> DeleteCards.title(approval.toolName)
                 CardFamily.WORKSPACE_WRITE -> WorkspaceWriteCards.title(approval.toolName)
-                else -> approval.toolName
+                CardFamily.PROVIDER -> ProviderWriteCards.title(approval.toolName)
+                else -> if (approval.toolName == ApprovalRules.mergeCheckChange) LandingCheckCopy.confirmTitle
+                    else if (approval.toolName == SkipMergeCheckCards.tool) SkipMergeCheckCards.heading
+                    else if (ToolCalls.plain(approval.toolName)) ToolCalls.heading(approval.toolName, approval.input) else approval.toolName
             }
-            add(InteractionCard("approval:${approval.id}", family, title, raw, id, projectId, approval.id,
-                approval.input.toString(), actions, if (unexpired) approval.status else "Expired"))
+            // Settings › Translation (3A): the card shows its questions, description and plan in the owner's language once the server
+            // translated them; the binding stays the input the engine asked with, so a translation arriving changes no press.
+            // Orbit's own cards keep the card as it came, so "Show original" can flip back to it (OrbitCardTranslation).
+            val shown = Translation.shownApproval(raw)
+            add(InteractionCard("approval:${approval.id}", family, title, shown, id, projectId, approval.id,
+                approval.input.toString(), actions, if (unexpired) approval.status else "Expired",
+                // A plain call's description line puts the agent's own words beside a translation that replaced them.
+                approval.input.text("description")?.takeIf { family == CardFamily.TOOL }
+                    ?.let { buildJsonObject { put(ToolCalls.originalDescription, it) } }
+                    ?: OrbitCardTranslation.context(approval.toolName, raw, shown)))
         }
         val standing = snapshot.standing
         (standing["evidenceDecisions"] as? JsonObject)?.let { queue ->
@@ -167,20 +193,16 @@ object CardCatalog {
                     projectId, task, "$revision:$deciding", if (allowed) listOf(CardVerb.CONFIRM_EVIDENCE, CardVerb.SEND_BACK) else emptyList(),
                     context = buildJsonObject { put("decidingSessionId", deciding) }))
             }
-            // A revision waiting for this project's paused coordinator, then the line it becomes once sent to it: drawn where its
-            // evidence card would be, under that card's address, so one turns into the next in place (`CoordinatorQueue`).
-            queue.objects("waitingOnCoordinator").forEach { row ->
+            // An undecidable revision only the owner can move (§3, D2 = A): the server places it in this session's `waitingOnYou`
+            // with `ownerAction`, and the card's one press is Restart the task. A row there without it is a run's or nobody's to press.
+            queue.objects("waitingOnYou").forEach { row ->
+                if (!EvidenceRestart.offered(row)) return@forEach
                 val task = row.text("taskId") ?: return@forEach
                 val revision = row.text("evidenceRevision") ?: return@forEach
-                if (projectId == null || row.text("projectId") != projectId) return@forEach
-                val deciding = queue.text("decidingSessionId") ?: return@forEach
-                val allowed = row.obj("decidability")?.flag("decidable") == true && row.obj("independence")?.flag("independent") == true
-                add(InteractionCard("evidence:$task:$revision", CardFamily.COORDINATOR_QUEUE, CoordinatorQueue.title, row, id,
-                    projectId, task, "$revision:$deciding", if (allowed) listOf(CardVerb.DECIDE_MYSELF) else emptyList(),
-                    context = buildJsonObject {
-                        put("decidingSessionId", deciding); put("coordinatorQueue", "waiting")
-                        put("coordinator", JsonObject(detail.filterKeys { it in CoordinatorQueue.coordinatorFields }))
-                    }))
+                val deciding = row.obj("ownerCard")?.text("decidingSessionId") ?: queue.text("decidingSessionId") ?: return@forEach
+                add(InteractionCard("evidence:$task:$revision", CardFamily.EVIDENCE, "Completion evidence", row, id,
+                    projectId, task, "$revision:${EvidenceRestart.ownerAction}", listOf(CardVerb.RESTART_TASK),
+                    context = buildJsonObject { put("decidingSessionId", deciding) }))
             }
             queue.objects("sentToCoordinator").forEach { row ->
                 val task = row.text("taskId") ?: return@forEach
@@ -223,8 +245,8 @@ object CardCatalog {
                     "$requestId:returned", status = "Recorded", context = ownerContext("returned", view)))
             }
         }
-        if (projectId != null) addAll(project(id, projectId, standing, answered))
-    }
+        if (projectId != null) addAll(project(id, projectId, standing, answered, detail.text("createdAt")))
+    }.filter { CoordinatorCleanStart.drawsCard(snapshot.detail.text("createdAt"), it) }
 
     private fun receipt(family: CardFamily, title: String, source: JsonObject, session: String, id: String, revision: String) =
         InteractionCard("receipt:$family:$id:$revision", family, title, source, session, objectId = id, binding = revision, status = "Recorded")
@@ -234,7 +256,7 @@ object CardCatalog {
     private fun ownerContext(kind: String, view: JsonObject) = buildJsonObject { put("ownerCard", kind); put("view", view) }
 
     fun project(session: String, project: String, standing: Map<String, JsonElement>,
-        answered: Map<String, JsonObject> = emptyMap()): List<InteractionCard> = buildList {
+        answered: Map<String, JsonObject> = emptyMap(), createdAt: String? = null): List<InteractionCard> = buildList {
         val document = standing["project"] as? JsonObject
         if (document == null || document.text("id") != project) return@buildList
         (standing["criteriaDecisions"] as? JsonObject)?.let { queue ->
@@ -321,53 +343,12 @@ object CardCatalog {
             add(InteractionCard("promotion:$promotion", CardFamily.PROMOTION, if (merging) PromotionCards.mergingTitle(row) else PromotionCards.mergeTo(PromotionCards.mainBranch(row)), row,
                 session, project, promotion, "${row.text("sourceSha")}:${row.text("state")}", actions, if (merging) PromotionCards.mergingStatusLine(row) else row.text("state")))
         }
-    }
+    }.filter { CoordinatorCleanStart.drawsCard(createdAt, it) }
 }
 
-/**
- * An Automatic project's completion evidence while its coordinator is paused — a usage limit, a 429, an expired sign-in, a runner
- * that went away, a retry it is parked on — or not yet handed it (project 34cygPTQe5LPUT7tdUAzG; the pending read's
- * `waitingOnCoordinator` and `sentToCoordinator`, read for the coordinator's own conversation). Such a revision waits for the
- * coordinator, not for the owner: it is drawn where its evidence card would be and asks nothing — no needs-you count reads this
- * family — until Decide it myself opens the evidence card it still is. Once handed over it is one line saying when. The words are
- * the project's, the same on every client.
- */
+/** Delivery receipts for evidence held by the coordinator. */
 object CoordinatorQueue {
-    const val title = "Waiting for the coordinator"
-    const val explanation = "It goes to the coordinator when it’s back. You can still decide now."
-    const val decideHere = "It gets this when it’s back. Decide here only if you don’t want to wait."
-    const val back = "Coordinator is back · it gets this when its current turn ends"
     const val sent = "Sent to the coordinator"
-    private const val paused = "Coordinator paused"
-
-    /** What the waiting card reads of the coordinator's own session to say why it waits: its run, what it failed with or last
-     * said, and the retry it is parked on. */
-    val coordinatorFields = setOf("status", "runState", "error", "lastAssistantText", "retryAt")
-
-    /** "Coordinator paused · weekly limit · resets 19:00" for the quota [window] that ran out, else "Coordinator paused · retries
-     * 19:00"; without a [time] it names none. */
-    fun pausedLine(window: String?, time: String?): String = when {
-        window != null -> listOfNotNull(paused, window, time?.let { "resets $it" }).joinToString(" · ")
-        time != null -> "$paused · retries $time"
-        else -> paused
-    }
-
-    /** "Sent to the coordinator · 20:05". */
     fun sentLine(time: String?): String = listOfNotNull(sent, time).joinToString(" · ")
-
-    /** Whether the coordinator is still paused, as the server reads it (`conversationIsPaused`): its run failed, or it waits on a
-     * retry it armed. A revision still waiting for one that is neither goes to it when its current turn ends. */
-    fun isPaused(coordinator: JsonObject): Boolean =
-        coordinator.text("retryAt") != null || (coordinator.text("runState") ?: coordinator.text("status")) == "FAILED"
-
     fun isSent(card: InteractionCard) = card.family == CardFamily.COORDINATOR_QUEUE && card.context.text("coordinatorQueue") == "sent"
-
-    /** Whether [card] is a waiting revision that Decide it myself opened (`decideMyself`). */
-    fun isDecidingMyself(card: InteractionCard) = card.context.flag("decidingMyself")
-
-    /** What Decide it myself opens: the evidence card the revision still is — Confirm done and Chat about this, the same request
-     * as the same deciding session — still saying what it waits for. Null for a card that offers no such press. */
-    fun decideMyself(card: InteractionCard): InteractionCard? = if (CardVerb.DECIDE_MYSELF !in card.actions) null
-        else card.copy(family = CardFamily.EVIDENCE, actions = listOf(CardVerb.CONFIRM_EVIDENCE, CardVerb.SEND_BACK),
-            context = JsonObject(card.context + ("decidingMyself" to JsonPrimitive(true))))
 }

@@ -21,8 +21,10 @@
 # =============
 # `node --test` exits 0 on a file whose every case skipped, which is exactly how the hole stayed
 # open. This script exits non-zero when the TAP summary reports ANY skip, any failure, tests=0, or
-# a summary it cannot vouch for. Wrapping the old command without that would be worse than the old
-# command: the same empty green, with the `# skipped 3` no longer in front of whoever reads it.
+# a summary it cannot vouch for. Failed specs are confirmed once after the full first pass,
+# on a fresh PostgreSQL container; a clean confirmation is NOT REPRODUCED and exits 0.
+# Any first-pass skip stays red without confirmation. Wrapping the old command without that
+# would be worse than the old command: the same empty green, with the `# skipped 3` no longer in front of whoever reads it.
 #
 # `RUN_PG_SPEC_CONTROL=omit-url` is the control that holds this to it: everything below happens
 # exactly as it normally does, except that none of the three URL names is handed to the child —
@@ -41,13 +43,10 @@
 #     the PostgreSQL below it, and because a second copy of it here would drift from that one.
 #   * `rm -rf build` before compiling. `tsc` does not delete outputs whose sources are gone, so a
 #     tree left by an earlier branch runs deleted specs and imports deleted modules.
-#   * PGDATA on tmpfs. A throwaway PostgreSQL's data volume is what fills the root disk; on tmpfs
-#     there is nothing to leak, and the `docker rm -f -v` below takes the rest. `-v` is not
-#     optional. The trap fires on the failure paths too — a script that goes red still cleans up.
-#     The trade is that this cluster does not survive `docker restart`, so
-#     COORDINATOR_PG_RESTART_COMMAND is deliberately NOT supplied: a spec that needs a real server
-#     restart will skip, and a skip here is red, which is the honest answer rather than a restart
-#     that silently returns an empty data directory.
+#   * PGDATA on a disposable Docker volume, so a real container restart preserves the cluster.
+#     `docker rm -f -v` removes the volume too; the trap cleans up on failure paths as well.
+#     The child receives the container and restart command, as in project-pg-matrix.sh, so specs
+#     that exercise a real server restart run rather than skip.
 #   * A template database migrated once, cloned per spec. Specs that own schema would otherwise
 #     hand the next one a database they left rearranged.
 #   * Readiness over TCP, from inside the container. The entrypoint runs an init server that
@@ -68,6 +67,8 @@ API="$REPO/src/apiserver"
 . "$REPO/scripts/pg-matrix-summary.lib.sh" || exit 1
 
 IMAGE="${RUN_PG_SPEC_IMAGE:-postgres:16-alpine}"
+# Set this to keep database scratch on a designated filesystem instead of Docker's volume store.
+PGDATA_DIRS=()
 CONTAINER="pccspec-pg-$$-$RANDOM"   # never a fixed name: sibling sessions run their own
 ADMIN=pccspec_          # the pcc_* naming the specs' own isolation guard demands of role and database
 PASSWORD=pccspec_pw
@@ -138,54 +139,70 @@ fi
 cleanup() {
   echo "==> removing $CONTAINER"
   docker rm -f -v "$CONTAINER" >/dev/null 2>&1 || true
+  for data_dir in "${PGDATA_DIRS[@]}"; do rm -rf "$data_dir"; done
   [ "$REMOVE_LOG_DIR" = 0 ] || rm -rf "$LOG_DIR"
 }
 trap cleanup EXIT INT TERM
 
-echo "==> provisioning $CONTAINER ($IMAGE, PGDATA on tmpfs)"
-docker run -d --name "$CONTAINER" \
-  -e "POSTGRES_USER=$ADMIN" -e "POSTGRES_PASSWORD=$PASSWORD" -e POSTGRES_DB=postgres \
-  -e PGDATA=/pgdata --tmpfs /pgdata:size=2g \
-  -p 127.0.0.1::5432 "$IMAGE" >/dev/null || die "docker run failed"
-PORT="$(docker port "$CONTAINER" 5432/tcp | head -1 | sed 's/.*://')"
-[ -n "$PORT" ] || die "docker did not publish a host port"
+provision_server() {
+  echo "==> provisioning $CONTAINER ($IMAGE, disposable PGDATA volume)"
+  # Pin an available host port explicitly: Docker can reassign an automatic port on restart.
+  PORT="$("$NODE" -e 'const s = require("node:net").createServer(); s.listen(0, "127.0.0.1", () => { console.log(s.address().port); s.close(); });')" || die "could not select a host port"
+  pgdata_mount=(-v /pgdata)
+  if [ -n "${RUN_PG_SPEC_PGDATA_ROOT:-}" ]; then
+    mkdir -p "$RUN_PG_SPEC_PGDATA_ROOT" || die "could not create PGDATA root"
+    data_dir="$(mktemp -d "$RUN_PG_SPEC_PGDATA_ROOT/pgdata.XXXXXX")" || die "could not create PGDATA"
+    PGDATA_DIRS+=("$data_dir")
+    pgdata_mount=(-v "$data_dir:/pgdata")
+  fi
+  docker run -d --name "$CONTAINER" \
+    -e "POSTGRES_USER=$ADMIN" -e "POSTGRES_PASSWORD=$PASSWORD" -e POSTGRES_DB=postgres \
+    -e PGDATA=/pgdata "${pgdata_mount[@]}" \
+    -p "127.0.0.1:$PORT:5432" "$IMAGE" >/dev/null || die "docker run failed"
 
-psql_db() {
-  docker exec -e "PGPASSWORD=$PASSWORD" "$CONTAINER" \
-    psql -h 127.0.0.1 -p 5432 -U "$ADMIN" -d "$1" -v ON_ERROR_STOP=1 -tAc "$2"
+  psql_db() {
+    docker exec -e "PGPASSWORD=$PASSWORD" "$CONTAINER" \
+      psql -h 127.0.0.1 -p 5432 -U "$ADMIN" -d "$1" -v ON_ERROR_STOP=1 -tAc "$2"
+  }
+  psql_admin()    { psql_db postgres "$1"; }
+  psql_template() { psql_db "$TEMPLATE" "$1"; }
+  for _ in $(seq 1 120); do psql_admin 'SELECT 1' >/dev/null 2>&1 && break; sleep 1; done
+  psql_admin 'SELECT 1' >/dev/null || die "$CONTAINER never accepted a TCP connection"
+
+  SYSTEM_ID="$(psql_admin 'SELECT system_identifier FROM pg_control_system()' | tr -d '[:space:]')"
+  VERSION="$(psql_admin 'SHOW server_version' | tr -d '[:space:]')"
+  echo "==> PostgreSQL $VERSION on 127.0.0.1:$PORT, system_identifier=$SYSTEM_ID"
+
+  psql_admin "CREATE DATABASE $TEMPLATE" >/dev/null || die "could not create the template database"
+  echo "==> prisma migrate deploy (template $TEMPLATE)"
+  ( cd "$API" && DATABASE_URL="postgresql://$ADMIN:$PASSWORD@127.0.0.1:$PORT/$TEMPLATE" \
+      "$PRISMA" migrate deploy >/dev/null ) || die "prisma migrate deploy failed"
+  echo "==> $(psql_template 'SELECT count(*) FROM _prisma_migrations WHERE finished_at IS NOT NULL') migrations applied"
 }
-psql_admin()    { psql_db postgres "$1"; }
-psql_template() { psql_db "$TEMPLATE" "$1"; }
-for _ in $(seq 1 120); do psql_admin 'SELECT 1' >/dev/null 2>&1 && break; sleep 1; done
-psql_admin 'SELECT 1' >/dev/null || die "$CONTAINER never accepted a TCP connection"
-
-SYSTEM_ID="$(psql_admin 'SELECT system_identifier FROM pg_control_system()' | tr -d '[:space:]')"
-VERSION="$(psql_admin 'SHOW server_version' | tr -d '[:space:]')"
-echo "==> PostgreSQL $VERSION on 127.0.0.1:$PORT, system_identifier=$SYSTEM_ID"
-
-psql_admin "CREATE DATABASE $TEMPLATE" >/dev/null || die "could not create the template database"
-echo "==> prisma migrate deploy (template $TEMPLATE)"
-( cd "$API" && DATABASE_URL="postgresql://$ADMIN:$PASSWORD@127.0.0.1:$PORT/$TEMPLATE" \
-    "$PRISMA" migrate deploy >/dev/null ) || die "prisma migrate deploy failed"
-echo "==> $(psql_template 'SELECT count(*) FROM _prisma_migrations WHERE finished_at IS NOT NULL') migrations applied"
+provision_server
 
 # --- run them -----------------------------------------------------------------------------------
 CONTROL="${RUN_PG_SPEC_CONTROL:-}"
 [ "$CONTROL" = "omit-url" ] &&
   echo "==> CONTROL omit-url: all three URL names withheld; every case should SKIP and this run should be RED"
 
-n=0; RED=()
-for spec in "${SPECS[@]}"; do
-  n=$((n+1))
-  rel="${spec#"$API/src/"}"; js="build/${rel%.ts}.js"; base="$(basename "$spec")"
+# Both passes share database cloning, restart support and all child environment variables.
+run_spec_once() {
+  local spec="$1" index="$2" suffix="$3"
+  local rel="${spec#"$API/src/"}" base="$(basename "$spec")"
+  local js="build/${rel%.ts}.js"
   [ -f "$API/$js" ] || die "$base compiled to no $js"
-  DB="pccspec_$n"
+  DB="pccspec_$index"
   psql_admin "CREATE DATABASE $DB TEMPLATE $TEMPLATE" >/dev/null || die "could not clone $TEMPLATE into $DB"
 
   URL="postgresql://$ADMIN:$PASSWORD@127.0.0.1:$PORT/$DB"
+  # These disposable-database specs inject conflicts deliberately, just like project-pg-matrix.sh.
   child=(COORDINATOR_PG_EXPECTED_DATABASE="$DB"
+         ORBIT_DB_CONFLICT_ORIGIN=fault_injection
          COORDINATOR_PG_EXPECTED_USER="$ADMIN"
          COORDINATOR_PG_EXPECTED_SYSTEM_IDENTIFIER="$SYSTEM_ID"
+         COORDINATOR_PG_CONTAINER="$CONTAINER"
+         COORDINATOR_PG_RESTART_COMMAND="docker restart $CONTAINER"
          NODE_OPTIONS="$(pg_matrix_child_node_options)")
   # One database, under all three names a pg spec in this tree looks for. Of the 113, 111 read
   # COORDINATOR_PG_URL; `runner-api/steer-dequeue.pg.spec` reads ORBIT_TEST_PG_URL and
@@ -202,7 +219,7 @@ for spec in "${SPECS[@]}"; do
     child+=(COORDINATOR_PG_URL="$URL" ORBIT_TEST_PG_URL="$URL" WORK_OVERVIEW_PG_URL="$URL")
 
   echo "########## $base ##########"
-  out_file="$LOG_DIR/$n-${base%.ts}.tap"
+  out_file="$LOG_DIR/$index-${base%.ts}$suffix.tap"
   (cd "$API" && env "${child[@]}" \
     timeout -k 20 "$SPEC_TIMEOUT" "$NODE" "${PG_MATRIX_NODE_TEST_ARGS[@]}" "$js") >"$out_file" 2>&1
   rc=$?
@@ -217,9 +234,43 @@ for spec in "${SPECS[@]}"; do
   [ "$f" -gt 0 ]       && why="${why:+$why; }$f failing"
   # The one this script exists for.
   [ "$s" -gt 0 ]       && why="${why:+$why; }$s SKIPPED — those assertions were not witnessed"
-  [ -n "$why" ] && RED+=("$base: $why")
   printf '==== %s tests=%s pass=%s fail=%s skipped=%s %s\n' "$base" "$t" "$p" "$f" "$s" "$why"
   psql_admin "DROP DATABASE IF EXISTS $DB" >/dev/null 2>&1
+}
+
+n=0; RED=(); RETRY=(); FIRST_WHY=(); FIRST_LOG=()
+for spec in "${SPECS[@]}"; do
+  n=$((n+1))
+  run_spec_once "$spec" "$n" ""
+  if [ -n "$why" ]; then
+    if [ "$s" -eq 0 ] && { [ "$rc" -ne 0 ] || [ "$f" -gt 0 ]; }; then
+      RETRY+=("$n")
+      FIRST_WHY[$n]="$why"
+      FIRST_LOG[$n]="$out_file"
+    else
+      RED+=("$(basename "$spec"): $why")
+    fi
+  fi
+done
+
+# Confirm only after the whole first pass. Each retry gets a new cluster, not just a clone.
+for index in "${RETRY[@]}"; do
+  docker rm -f -v "$CONTAINER" >/dev/null || die "could not remove first-pass server"
+  CONTAINER="pccspec-pg-$$-$RANDOM"
+  provision_server
+  spec="${SPECS[$((index-1))]}"
+  base="$(basename "$spec")"
+  echo "==> confirming $base on a fresh PostgreSQL container"
+  run_spec_once "$spec" "$index" ".rerun"
+  if [ -z "$why" ]; then
+    echo "NOT REPRODUCED: $base: ${FIRST_WHY[$index]}; second run clean, no skips"
+  else
+    RED+=("$base: ${FIRST_WHY[$index]}; REPRODUCED on a second run ($why)")
+    echo "==> $base first-run failure lines:"
+    pg_matrix_failure_tail <"${FIRST_LOG[$index]}"
+    echo "==> $base second-run failure lines:"
+    pg_matrix_failure_tail <"$out_file"
+  fi
 done
 
 for r in ${RED[@]+"${RED[@]}"}; do echo "RED: $r"; done

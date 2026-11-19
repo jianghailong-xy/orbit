@@ -235,6 +235,7 @@ runner ──WebSocket（TLS，protobuf）──▶ 四层负载均衡 ──▶
   - 设一个"有变化"标记：这台 runner 名下有新命令、有取消、或租约有变化时置位。只有置位时，或者每 5 分钟一次，才做完整对账。首版可以每次都完整对账。
   - 命令（merge、commit、登录、安装等）仍然通过 `HeartbeatAck` 至少下发一次，并配合提示立即触发心跳。各类命令现有的合同和去重方式都不变。
 - 按合同靠心跳续租的（codex reset、集成任务），照常更新它们自己的那几行记录。
+- 服务端答得慢不算断线：一条连接上同时只有一个没答的心跳（`beat_id` 标明回答的是哪一个），迟到的回答不断开连接，连接死活只看 ping，见 §15.13。
 
 ### 5.8 持久事件流
 
@@ -295,6 +296,7 @@ runner ──WebSocket（TLS，protobuf）──▶ 四层负载均衡 ──▶
 - `rnr.<runnerId>`：提示、踢连接。
 - `ses.<sessionId>.live`：实时流。
 - `usr.<userId>`：控制面事件，以后给客户端网关用。
+- `vnc.<streamId>.down`、`vnc.<streamId>.up`：托管 runner 浏览器的字节流（`docs/runner-browser-design.md` §4，`src/link-gateway/streams.go`）。apiserver 在 `rnr.<runnerId>` 上发 `StreamOpen` 请求，持有该 runner 连接的网关应答；之后每条消息是一个只带 `stream_data`、`stream_credit` 或 `stream_close` 的二进制 `Frame`。网关的用户可以在 `vnc.>` 上发布和订阅。
 - `api.held`、`api.<instanceId>`：apiserver 进程之间转交只在内存里的登录状态（Antigravity 粘贴的登录码、待检查的 Cursor 密钥；`src/apiserver/src/runners/relay-peers.ts`）。
   - 持有方在 `api.held` 上声明：哪个实例、为哪台 runner、持有哪个登录尝试或检查 ID。声明里不带登录码和密钥，持有期间每 5 秒重发一次，交出或作废后撤回。
   - 心跳落到别的进程时，该进程向 `api.<instanceId>` 发请求，带上自己读到的登录尝试或检查 ID，对得上才交出。登录码和密钥只出现在这一次应答里，发往请求方的 inbox，只交一次；不存库、不写日志、不进事件。
@@ -328,6 +330,7 @@ runner ──WebSocket（TLS，protobuf）──▶ 四层负载均衡 ──▶
 
 - 实时流改走 NATS。
 - 持久事件的跨副本通知，改为写入器提交后按会话发布一次，不再逐条 NOTIFY。
+- **合批调用的通知在提交之后发。** 事务里发了 NOTIFY，提交时就要拿 PostgreSQL 唯一的通知队列锁（`PreCommit_Notify`），一直持有到提交结束、WAL 刷盘也在内，所以所有合批调用只能一个接一个提交；排队超过 `LINK_CALL_LOCK_TIMEOUT_MS`（1 秒）的调用在 COMMIT 上锁超时、整体回滚、每批改为单独发送（C2b 实测一小时 41 次、3,185 批）。现在合批事务里不发 NOTIFY，提交之后用一条只发通知的语句把各批的通知一起发出（`RealtimeService.sendNotices`；这样的事务不写 WAL，只在排进队列的那一刻持锁），发出之后才回答这次调用。进程如果死在提交和通知之间，调用就没有回答：网关把调用重发给另一个 apiserver，或者让各批失败、由 runner 重发；重发的入库发现这些 seq 已经存过，就把它们作为一段 seq 范围重新通知，各个 apiserver（包括接到重发的那个）从 run_event 读回（`restatedBatchNotice`）。单独入库也一样：通知发出之后才回答。见 `runner-link-merged-notify-lock.pg.spec.ts`。
 
 ---
 
@@ -372,6 +375,7 @@ apiserver 进程数和数据库规格按 C2b 在单元规模上的实测补齐�
 |---|---|
 | 网关节点宕机 | runner 带全抖动退避，重连到其他节点并续传；断线的那一批 runner 不因静默被回收（§6.5），避免误判 |
 | 后端发布或宕机 | 网关重试幂等请求，runner 不断线 |
+| 后端变慢（答心跳超过 runner 原来的 15 秒） | runner 不断线，心跳不堆积，在线状态照常刷新；连接死活只看 ping，40 秒内发现死掉的传输（§15.13） |
 | NATS 故障 | 提示和实时流降级，由心跳兜底；持久事件不受影响 |
 | Postgres 主库切换 | 写库返回可重试错误，runner 先缓冲在内存、满了落盘；在线状态有宽限期，配合大面积断线时的保护（§6.5）；主备切换不能丢已确认的提交，见 §15.5 |
 | 在线状态写入异常 | reaper 暂停 |
@@ -395,6 +399,8 @@ apiserver 进程数和数据库规格按 C2b 在单元规模上的实测补齐�
   - 模拟 1.5 万台 runner 同时重连。
 
 ### 11.2 影子期（1–2 周，D7）
+
+> **历史：影子期已在 2026-11-05 的切换后结束，它的代码已删除（§13）。** runner 的影子连接由切换后清理删除（§15.11）；网关的镜像比对、读切换开关的轮询、`LINK_MODE` 和 `MODE_HTTP` 的连接由 34sSqSNx9BHCECKDNblLr 删除（§15.12）。下面是当时的计划和通过标准。
 
 - **过渡版 runner。** 工作仍走 HTTP。另起一个隔离的协程，只做握手和心跳，并把心跳和事件镜像到链路上；网关只解码比对，不落库、不派发。
 - **影子协程必须和工作路径隔离。** 用独立的客户端、有资源上限、任何错误都只记日志，不能影响工作路径。
@@ -420,7 +426,7 @@ apiserver 进程数和数据库规格按 C2b 在单元规模上的实测补齐�
 5. runner 建立链路、接管会话；然后关闭"暂停派发"，排队的消息开始投递。
 6. 观察 1 小时：连接数、确认延迟、错误率、会话恢复情况。
 
-`Welcome` 和 `HeartbeatAck` 都带当前模式。开关关上时，runner 自动退回 HTTP 模式。
+`Welcome` 和 `HeartbeatAck` 都带当前模式。开关关上时，runner 自动退回 HTTP 模式。（历史：开关和退回都已删除，网关只说 `MODE_LINK`，见 §15.11、§15.12。）
 
 ### 11.4 回滚
 
@@ -497,7 +503,7 @@ runner 本地的两种暂存，回滚和降级时这样处理：
 
 ### 15.1 `RUNNER_LINK_REQUIRED` 是运行时开关
 
-> 历史：开关已在切换后清理中删除，见 §15.11。
+> 历史：开关已在切换后清理中删除，见 §15.11；网关读开关的轮询和 `LINK_MODE` 的删除见 §15.12。
 
 出处：D0（34lqlVVjIXZRmKyCWzATR）。涉及 D15、§11.3、§11.4。
 
@@ -638,12 +644,20 @@ runner 本地的两种暂存，回滚和降级时这样处理：
   4. **每次清扫都判断，不再只在有会话要回收时才判断。** 等到有会话要回收时，大部分 runner 已经回来了。启动宽限期内不判断：UNLOGGED 表可能刚被清空，读数不可信；宽限期过后，证据还在表里。
   5. **断线写进数据库，不放在进程内存里。** 选主换了进程以后，接手的进程照样保护，不取决于哪个进程在清扫。
 - 代价（只会推迟回收，不会误回收）：
-  - 令牌续期（每台每小时一次）和 runner 重启也会开新连接，也算失联。1.5 万台的单元每分钟约 1.8%，远低于两成。10 台、几个网关节点的小单元里，两台恰好在同一个 45 秒里续期，就会被算成一次断线，只会推迟同一时段里恰好坏掉的 runner 被回收。
+  - runner 重启也会开新连接，也算失联。令牌续期原来也算，2026-11-10 起不算了（见本节"令牌续期不算失联"）。
   - 1 到 5 台的单元，一台失联就占五分之一，保护 10 分 45 秒，和以前一样。
   - HTTPS 心跳（以及走完整对账的托管 runner 心跳）不记 `lost_at`，没漏心跳就回来的 runner 在那里不留痕迹。HTTPS 下没有握手限速，不会拖出长尾；心跳失败的 runner 要等下一个 tick，静默时会被清扫看到。
 - 测试：
   - `src/apiserver/src/realtime/reaper-mass-disconnect.pg.spec.ts` 起两个 apiserver 进程，模拟网关的调用，按真实时间注入断线。
   - staging 演练是 `scripts/runner-link/drills/mass-disconnect-drill.sh` 的 `node` 场景：两个网关节点，前面一个四层转发，停掉一个，另一个限速。
+
+**令牌续期不算失联（2026-11-10，任务 34uVm05xc8FuCPFDxR3e5）**
+
+- 起因：上面"代价"里原来假设续期分散在一小时里。全量发版后 runner 一起重启，令牌在一两分钟内一起签发，之后每 55 分钟一起续期（make-before-break：新连接经 welcome 打开，旧连接随后以 superseded 关闭）。每个 welcome 都写 `lost_at`，生产 2026-11-08 05:26Z、06:21Z 两次误报大面积断线（6 台里 3–4 台），期间同一时段真掉线的 runner 要到 10 分 45 秒才回收。
+- 现在（`src/apiserver/src/runners/runner-presence.ts` 的 `recordRunnerLinkOpened`）：welcome 时，如果连接用的令牌是 45 秒内签发的（令牌自己的 `iat`，RunnerAuthGuard 读出），presence 行上一次听到的是同一进程、走链路、45 秒内还有心跳，就当作续期，不写 `lost_at`。断线后重连用的是手里的旧令牌（签发于上一条连接打开时），照旧记失联；间隔超过 45 秒的重连，链路心跳本来就会记。
+- 为什么在服务端判，不让 runner 给续期加抖动：只需服务端部署，生产上在跑的 runner（0.1.248–0.1.250）和网关 f8b9964f3 不用换；抖动只能把续期摊开，小单元里两台撞在一起仍会误报，而且要等所有 runner 升级。网关也不必告诉服务端"这个进程已有连接"：网关的登记只在单个节点内，续期可能落到另一个节点，而且要重建网关。
+- 代价：一条连接刚打开 45 秒内就断、又在 45 秒内重连回来，会被当成续期，不记失联。只有恰好和续期同一分钟坏掉的网关节点才会少算这批 runner；回不来的 runner 照样按静默计。
+- 测试：`src/apiserver/src/runner-api/runner-link-renewal.pg.spec.ts`：3 台在同一分钟续期不写 `runner_mass_disconnect`，旁边真掉线的 runner 按时回收；网关节点坏掉、3 台用旧令牌几秒内重连、1 台不回来，仍写记录并保护那台。
 
 **回收线改为 5 分钟，离线展示仍是 90 秒（2026-11-06）**
 
@@ -722,6 +736,82 @@ runner 本地的两种暂存，回滚和降级时这样处理：
 - **能力判断和旧式轮询。** 删了 2026-10-25 统计的 14 处 `runnerSupportsCapability` 和它们守着的旧分支：这些能力最晚由 0.1.232 的 runner 开始声明，而能和这个服务端工作的 runner 都有链路（0.1.237 起），都声明了它们。2026-11-01 加上的第 15 处留着：Claude 地区检查的"再查一次"只交给声明 `claude-region/v1` 的进程，而这个能力从 0.1.242 才有，0.1.237–0.1.241 的 runner 走链路照常工作、却不会检查。11-05 随废弃检出清单加入的 `abandoned-checkout-v1` 判断也留着：到 0.1.246 为止没有 runner 声明它。`RunnersService` 里读已持久化能力的登录门槛不是这种判断，留着。取消息必须带租约代次，不带回 400；`release-leases` 必须带代次和所有者。
 - **写入契约摘要。** 服务端不再读、也不再发摘要 header 和应答里的 `X-Orbit-Server-*`，修订号照旧校验。runner 照旧发摘要和能力声明：清理之前的服务端缺了摘要会拒绝修订（`RUNNER_PROTOCOL_CONTRACT_MISMATCH`），能力声明它也照读。等再也没有清理之前的服务端，下一次清理才能删 runner 这一侧。
 - **runner。** 删了 HTTP 工作路径（`ORBIT_LINK_MODE`、config.json 的 `linkMode`、链路 5 分钟不可达就退回 HTTPS、HTTPS 上的事件补发、`/complete` 回退）、影子连接（`ORBIT_LINK_SHADOW`）和守护进程的 wake 长轮询。守护进程的调用只走链路；`Welcome` 或 `HeartbeatAck` 说 `MODE_HTTP` 时 runner 不退回，留在链路上等。`orbit doctor` 对这种情况和没配链路的服务端都写 ✗。没有链路的传输只留给不是守护进程的进程（`orbit mcp`、CLI、钩子）；单元测试也用它驱动会话循环。
-- **没动。** 网关（`mode.go` 读模式、`LINK_MODE`、`shadow.go`、`MODE_HTTP` 的连接、`client_switch.go` 的演练）和“暂停派发”开关。网关的清理是单独的任务：网关一发布，runner 要断开 4–56 秒。
+- **没动。** 网关（`mode.go` 读模式、`LINK_MODE`、`shadow.go`、`MODE_HTTP` 的连接、`client_switch.go` 的演练）和“暂停派发”开关。网关的清理是单独的任务：网关一发布，runner 要断开 4–56 秒。网关这一部分后来由 34sSqSNx9BHCECKDNblLr 清理，见 §15.12。
 - **发布顺序。** 服务端和 runner 谁先发布都可以：0.1.246 的 runner 在 `MODE_LINK` 下只走链路，对着清理之后的服务端照常工作；清理之后的 runner 对着清理之前、开关打开的服务端也照常工作。清理之后的服务端回滚到清理之前的版本时，开关那一行还是打开的，所以清理之后的 runner 照常工作；有人再把开关关上，这些 runner 就停工，因为它们没有 HTTP 路径。没有链路的部署（开关关着、或没配链路）用不了清理之后的服务端和 runner，所以默认安装和升级要先带上链路（34sREuYT2DCEXiW6qZuOh）。
 - **没有链路的旧 runner（0.1.237 之前）。** 它们的守护进程调用一律得到 426，第一次心跳被拒就以退出码 0 退出（日志 `⏸ interactive run … detached for shutdown (resumable)`），这时不会自更新。由 `orbit register` 装的服务（systemd 的 `Restart=always`、launchd 的 `KeepAlive`）几秒后把它拉起来，启动时的自更新经 `GET /runner/release`（仍走 HTTPS）换成 `/dl` 上的版本，随即走链路、接管会话，手上正在跑的 turn 也接着跑完（case 4c：turn 完成，事件 1..42 连续）；在终端里手动 `orbit run`、或没有重启策略的容器里跑的，会一直停着，直到有人再启动它，手上的 turn 以 runner 离线结束（case 4b，停了 13 分钟）。关了自更新的，每次启动都打印 426 的提示（`Run \`orbit upgrade\``）后退出。生产从 D1 打开开关起就是这样；自托管部署在第一次升级到清理之后的版本时遇到（34sREuYT2DCEXiW6qZuOh 的 case 4b 和 4c，0.1.233 的 runner）。
+
+### 15.12 网关的影子期代码清理
+
+出处：34sSqSNx9BHCECKDNblLr。涉及 §6.1、§11.2、§11.3、§13、§15.1、§15.11、D7、D15。D2 留下的网关部分（§15.11 “没动”）在这里清理；`upgrade.sh` 不重建生产的网关，所以合入本身不改变生产。
+
+- **删了什么。** 网关里：镜像比对（`shadow.go` 和 `link_shadow_*` 指标）；读切换开关的轮询（`mode.go`：每秒读一次 `GET /api/runner/link/mode`，以及 `link_mode_link`、`link_mode_fetches_total`）；`LINK_MODE` 和它的 `link` 覆盖；`MODE_HTTP` 的连接（心跳立即回一个什么也不带的 `HeartbeatAck`、请求回 `LINK_MODE_HTTP`、事件批不存也不确认、提示记作 `mode_http`）；测试客户端的镜像（`-mirror`、`-http`、`-events`、`-corrupt-every`）和 `switch` 演练（`client_switch.go`）。`linkstub` 不再提供 mode 路由。脚本里：删了 `staging-check-switch.sh` 和 `drills/rollback-drill.sh`；四个演练共用的 `rollback-drill.mjs` 改名 `drills/drill-api.mjs`，去掉 `switch` 命令；durable-events 演练删了驱动开关和 HTTPS 路径的 `rollback`、`partition-off` 两个阶段；release-outage 演练的 `https` 阶段改成链路上的 `apiserver` 阶段；`staging-check.sh` 改成检查链路下的网关本身；`ORBIT_LINK_STAGING_MODE` 删除。各演练等的日志改成 D2 的 runner 写的那一行（`carries the work of process`）。
+- **`LINK_MODE` 不再读取，`LINK_INTERNAL_API_URLS` 必填。** 还设着 `LINK_MODE` 的部署照常启动，runner 收到的也是 `MODE_LINK`，和读 D2 服务端的旧网关一样。
+- **留下的：每个 `Welcome` 和 `HeartbeatAck` 都说 `MODE_LINK`。** 0.1.246 的 runner（763df9fab 的 `link_mode.go`、`link_shadow.go`）收到 `MODE_LINK` 把工作放到链路上，`Welcome` 不带模式时当作没说，收到 `MODE_HTTP` 退回 HTTPS；它的影子连接在说了 `MODE_LINK` 的连接上不发镜像，工作连接占住这个进程的连接后就让出来。所以这个网关对 0.1.246 的 runner 和以前的网关一样：D2 的服务端对它的 HTTPS 守护进程调用回 426（进程启动时一到三次），链路接手后不再有。
+- **留下的：协议里的 `MODE_HTTP`。** contracts/runner-link/v1 保留这个值（buf breaking，编号不复用），这个网关不再发它。D2 的 runner 遇到旧网关说 `MODE_HTTP` 时留在链路上继续问（§15.11）。
+- **留下的：服务端的 `GET /api/runner/link/mode`**，D2 让它对网关一直答 `{"required": true}`。清理之前的网关（生产的 f8b9964f3）每秒读它；启动后读不到，就对所有 runner 说 `MODE_HTTP`，什么也不转。自己配了链路域名的部署（`upgrade.sh` 的 `operator`），升级从不重建网关，所以这个路由要留到运维把网关重建成这个版本以后，才能由以后的清理删掉。
+- **三种组合。**
+  - 旧网关对 D2 的服务端：每秒读到 `required: true`，对 runner 说 `MODE_LINK`，照常转发。D2 的复验就是这样跑的；本任务的复验（staging，项目分支 32844320c 的服务端和网关，网关代码与 f8b9964f3 相同）o 阶段又测了一次：3 秒内读了 3 次、零失败，`link_mode_link` 为 1，`Welcome` 和 `HeartbeatAck` 全是 `MODE_LINK`；0.1.246 和 D2 的 runner 各开新会话、发消息，事件连续；HTTPS 上只有 0.1.246 进程启动时的三次调用（`GET /runner/wake`、`GET /runner/sessions/reclaim`、`GET /runner/me`），都回 426。
+  - 0.1.246 的 runner 对这个网关：复验 n 阶段，新会话、消息、中断的 turn、网关重启、apiserver 重启都照常，期间没有 HTTPS 守护进程调用；0.1.246 重启时只有一次 `GET /runner/me` 被拒 426，它的影子连接收到 `MODE_LINK` 的 `Welcome` 后让出（`the shadow stands down`），工作连接接手。D2 的 runner 重启时没有 HTTPS 守护进程调用。
+  - 这个网关对清理之前、开关打开的服务端（生产现在的 b4619320b）：和旧网关读到开关打开时一样。有人在那个服务端上把开关关上，这个网关仍说 `MODE_LINK`，runner 留在链路上（清理之前的服务端从不拒绝经网关转发的调用，`runner-link-required.ts`），关开关不再能把 runner 带回 HTTPS。
+- **生产网关重建会怎样。** 合入之后，生产只有在有人重建网关时才带上它：`docker build` 网关镜像，再只重建 `link-gateway` 这一个容器。旧进程收到 SIGTERM 后 drain：每条连接在 1–30 秒的随机延迟后被要求重连；单节点时这次重连在新进程起来之前被 `503 DRAINING` 拒绝，连接留在旧进程上，到延迟之后再过 15 秒（`LINK_DRAIN_GRACE`）被关掉；连接都关了（最迟到 80 秒的 drain 超时）旧进程才退出，Compose 随后启动新进程，runner 按退避重连上来。正在跑的 turn 不中断，事件不丢。新网关不再读 mode 路由，`/metrics` 少了 `link_shadow_*` 和 `link_mode_*`。复验 g 阶段这样做了一次（只重建 `link-gateway` 一个容器，沿用旧的 compose 文件和环境，环境里还有 `LINK_MODE=http`）：镜像构建 8 秒，从重建容器开始到新网关提供服务约 55 秒；两台 runner 分别有 37 秒（0.1.246）和 60 秒（D2）没有工作连接，各自跨过重建的长 turn 照常完成，事件 1..33 连续，每个 turn 只交给引擎一次，期间没有 HTTPS 守护进程调用。断开多久取决于重连延迟的随机值和 runner 的退避：单节点时旧进程要等到最后一条连接被关掉（延迟最多 30 秒，再加 15 秒宽限）才退出。同一个容器 `docker restart` 时，两台 runner 断开 4 秒和 14 秒。它不改变 runner 能做的任何事，所以可以等到证书或安全修复本来就要重建网关时一起带上；什么时候重建由账号所有者决定，要走审过的步骤。
+- **默认安装（same-origin，`upgrade.sh` 的 `managed`）。** 网关镜像以最后一次改 `src/link-gateway` 的提交命名，所以合入之后默认安装的下一次 `/upgrade` 会重建并重启网关，断开情况同上。
+
+### 15.13 服务端答得慢不是断线：心跳带编号，连接死活只看 ping
+
+出处：34t9dlSrMe6KgsWq8ysTX（账号所有者 2026-11-07 同意修复）。涉及 §5.7、§7、§10。
+
+- **问题。** 2026-11-06 生产主机 CPU 饱和（8 核负载 50–88），apiserver 答链路心跳慢，传输本身没坏。runner 把迟到的回答当成断线：心跳 15 秒内没答，调用放弃；下一次心跳发现上一个还没答，就关掉连接重连（`a heartbeat sent on it was never answered`）。09:44–10:28Z 网关记了 561 次 `connection_lost`（平常每小时 0–1 次）。每次重连多一次 welcome 路由的调用、一次 `Welcome` 和未入库事件的重发，正落在已经过载的服务端上。
+- **顺带发现。** runner 用的 coder/websocket 1.8.15 里，`Ping` 等不到 pong 只返回错误，不关连接，runner 的 pinger 随即停下。所以以前真正发现半开连接的是上面那条心跳规则，要 30–60 秒。
+- **现在**（`src/runner-go/link_heartbeat.go`、`link_work.go`、`transport.go`；网关 `heartbeat.go`、`conn.go`；proto 加两个字段）：
+  - 每个 `Heartbeat` 带 `beat_id`（进程内从 1 递增），网关在回答它的 `HeartbeatAck` 里原样带回：不论这个心跳是对账了、要事实（`want_facts`）、被拒，还是到了 `LINK_RPC_TIMEOUT` 没拿到回答。一条连接上同时最多一个没答的心跳。
+  - 迟到的回答不断开连接。心跳的调用放弃以后，这个心跳在连接上仍算没答；下一个心跳先等它的回答，不应用（和 HTTPS 上超时以后才到的回答一样），再发自己。旧网关的回答不带 `beat_id`，按顺序认：网关对一条连接的心跳逐个转发、逐个回答（排队时较新的一个替换较旧的，runner 一次只有一个，碰不到）。
+  - 链路上心跳的等待由 15 秒放宽到 75 秒，长于网关转发一次心跳的上限（`LINK_RPC_TIMEOUT`，默认 60 秒，到点回一个没拿到回答的 ack）。连接活着，心跳就等得到回答，对账照常应用。心跳不重叠，服务端答得多慢，心跳就来得多慢，不会堆起来；在线状态随每次回答刷新。HTTPS 上仍是 15 秒。
+  - 连接死没死只看传输：每 20 秒 ping 一次，20 秒内没有 pong、其间也没从网关读到任何帧，就关掉重连。pong 由网关自己回，后端多慢都不影响。半开连接、网关冻住、断网，40 秒内发现（以前靠心跳规则，30–60 秒）；网关被杀、连接被重置，立刻发现。接着第一次重连前的等待不到 1 秒（全抖动）；网关一直连不上时，重试照旧按退避拉长，最多 60 秒一次，所以网关恢复后至多 60 秒连回。
+  - 唯一的例外：一个心跳在能答 ping 的连接上 3 分钟（网关上限的三倍）没答，说明这个网关没在转发这条连接的心跳，结束这条连接。
+  - 重连退避只在连接上有心跳被对账以后才清零，不再在每次 `Welcome` 时清零。连接一条接一条地断、链路始终不通时，等待的上限按 1、2、4…60 秒增长（全抖动），不会紧密循环，一批 runner 也不会一起涌向 `POST /api/runner/link-token`。
+- **兼容和发布。**
+  - proto 只加字段：`Heartbeat.beat_id = 7`、`HeartbeatAck.beat_id = 6`；`buf breaking` 对 main 通过。
+  - 修复在 runner，要发 runner 版本。网关的改动（带回 `beat_id`，帧日志记 `beat=`）可有可无，随下一次重建网关带上即可。服务端不改。三者上线顺序任意。
+  - 新 runner 对旧网关（生产的 f8b9964f3）：回答不带编号，按顺序认。0.1.247 对新网关：心跳不带编号，网关回 0，0.1.247 照旧（迟答仍断线重连，直到它升级）。
+- **实测**（2026-11-07，HPC staging，项目分支 e5d72ce54 的服务端，本分支的网关和 runner；hbdelay 夹在网关和 apiserver 之间，把每个心跳扣住一段时间再转发，传输不受影响；0.1.247 和本分支的 runner 同时在跑）：
+  - 心跳扣 20 秒，10 分钟：0.1.247 断开 37 次（网关记 37 次 `connection_lost`、37 次 welcome），37 个心跳只有 1 个到了 apiserver，其余都在它自己断线时被网关放弃，在线状态 118 次采样里 100 次静默，最长 550 秒。本分支的 runner 一次没断，19 个心跳全部对账（每个 20 秒），从未静默。两台的消息都照常回答。
+  - 扣 40 秒，7 分钟：0.1.247 断开 28 次，27 个心跳一个也没到 apiserver；本分支的 runner 不断，10 个心跳全部对账（每个 40 秒）。
+  - 扣 20 秒、每台留一个 12 分钟的长 turn（项目分支的服务端，reaper 90 秒判离线）：0.1.247 断开 45 次，静默过了 645 秒的保护线以后，它的会话被 reaper 以 `runner offline` 判 FAILED；本分支的 runner 不断，长 turn 照常做完，事件 1..54 连续。
+  - 两台 runner 重连都沿用手上的连接令牌，所以这些窗口里 `POST /api/runner/link-token` 一次也没有；唯一的两次是各自 55 分钟时的正常续期。
+  - 传输死掉：杀网关，两台都 0.3 秒发现；冻住网关 75 秒，0.1.247 52.7 秒（心跳规则）、本分支 26.6 秒（ping）；断网 90 秒，55.1 秒对 37.6 秒；旧网关上冻住，49.1 秒对 30.4 秒。
+  - 生产的旧网关（f8b9964f3）上扣 20 秒、8 分钟：0.1.247 断开 29 次；本分支的 runner 不断（回答不带编号，按顺序认），18 个心跳 17 个对账，剩下一个在 55 分钟续期换连接的那一刻在路上，换到新连接上重发了。
+  - 重连治不好答得慢时：心跳扣 90 秒（网关 60 秒放弃，一个也没对账），连杀网关 6 次、间隔 20 秒。0.1.247 断了 14 次（6 次被杀、8 次自己断），每次重连前都等不到 1 秒；本分支的 runner 只在 6 次被杀时断开，重连前的等待依次是 0.03、15.3、17.6、15.2、44.4、34.3 秒，随次数增长，带全抖动。
+  - 合入 main 以后在合并后的服务端上重测（带 114002afb：reaper 静默 5 分钟才判 RUNNING 会话离线，大面积断线的保护 10 分 45 秒不变）。扣 20 秒的前 10 分钟：0.1.247 断开 38 次（38 次 welcome），39 个心跳只有 1 个对账，在线状态 99 次采样 87 次静默；本分支的 runner 不断，20 个心跳全部对账，只在变慢的那一刻静默过一次（50 秒）。两台各留一个 12 分钟的长 turn：reaper 在 0.1.247 静默 321 秒时第一次把它的会话判离线（项目分支的服务端是 90 秒），因为大面积断线的保护连续 11 次不回收，静默到 653 秒、过了 645 秒的保护线后判 FAILED；本分支的 turn 照常做完，reaper 一次也没判它离线。5 分钟的回收线救不了 0.1.247 的 turn：它的心跳到不了服务端，静默一直在涨，只是第一次判离线推后了。
+  - 现有演练照常通过，没有会话被回收：lost-answer（10 次丢失的回答都在 5 秒内拿回、只执行一次）、durable-events（杀网关、杀 apiserver、数据库主备切换和切回、断网 600 秒，seq 1..1275 连续）、mass-disconnect（停网关 180 秒、隔离 10 台中的 2 台 180 秒）。合入 main 以后在合并后的树上再跑 mass-disconnect（main 把停网关和隔离都改成 420 秒）：两次都没有会话被回收。第一次停网关那一段有一次清扫比上一次晚了 39 秒才记下（主机负载约 50，那次清扫照样保护了全部 10 个会话），超过演练要求的 35 秒，判了失败；第二次两段都通过。
+
+### 15.14 自动升级的推迟有上限：推迟满 1 小时后不再领新活，等在跑的 turn 自己结束再升级
+
+出处：项目 34uUvixOgW5SbuNGvkAKA 标准 3，任务 34uVm0u43R1wMQ5D9WfuD。涉及 §7、§11.5。
+
+- **问题。** runner 每 10 分钟查一次自己该跑的版本（`selfUpdateCheckInterval`）。有新版本时，只有在没有 turn、也没有心跳派来的操作（落地检查、引擎安装）在跑时才升级（`updateWhenNoTurnInFlight`，2026-09-25 账号所有者定的规则：自动升级不打断在跑的 turn）。这个等待没有上限：每次检查都忙的 runner 就一直不升级。workstation-gpu 因此停在 0.1.246 好几天，拿不到 0.1.248 的心跳修复。
+- **现在**（`src/runner-go/runloop.go`、`session_pool.go`）：
+  - **时限 1 小时**（`selfUpdateDeferralLimit`），从第一次"有要装的版本、但 runner 正忙"的检查算起，用会话池的时钟（测试里是可控时钟）。时限内照旧：任何一次检查碰上空闲就立即升级，不排空。
+  - **到时限后排空**（`sessionPool.drainForUpdate`）：`admissionIdleCapacity` 返回 0，领取循环不再领新会话，也不再领已有会话的下一个 turn；心跳报 `draining=true`。另一条不经领取的路：turn 结束时会话里已排着下一条消息，服务端把许可直接交给它（`retainsTurnPermit`），排空期间这条后续消息不在这里开始（`holdFollowUpForUpdate`，`waitActive` 挡住），也不算在跑，会话留在 RUNNING，由升级后的进程重新领回——和 `closeForUpdate` 时恰好到达的领取走同一条路。否则一个每次 turn 结束都有新消息排着的会话会让排空永远结束不了。在跑的 turn 和操作一个都不动，等它们自己结束。
+  - 排空期间每 15 秒再查一次（`selfUpdateDrainCheckInterval`，`nudgeWhileDrainingForUpdate`），不再等 10 分钟一次的检查；第一次查到什么都没在跑，就走原来的路：`closeForUpdate` 关池、停领取循环、会话断开交给新进程重新领回、装新版本、重新 exec。
+  - 排空期间的检查不再读版本清单：读失败会把池重新打开，而停下来以后的安装（`selfUpdate`）本来就会重读一次指派的版本。版本在排空期间被撤回，结果是用原来的二进制重启一次，不会装错。
+  - 推迟的起点在进程内不重置：检查失败或一时读不到版本不算"不落后了"。
+  - 心跳的 `selfUpdate` 状态仍是 `waitingForIdle`，排空时 `reason` 写明已推迟多久、在等多少个 turn。
+- **上界。** 版本发布 → 至多 10 分钟内被检查发现（"Update Runner Now"则立即）→ 1 小时 → 排空开始时在跑的最长 turn 结束 → 至多 15 秒 → 重启（几秒）。排空开始后不再有新 turn 开始，所以等待只取决于那一刻已经在跑的 turn。唯一的例外是引擎自己发起的 turn（Monitor 事件、`<task-notification>`，不经领取），排空挡不住它们，只能等它们结束；它们本身受 warm 驻留的 12 小时上限约束（`warmResidencyHardCap`）。
+- **对控制面的影响。** 服务端不改。
+  - 排空期间发给这台 runner 上会话的消息、给它的 agent 新建的会话，留在服务端排队（这些会话的工作区在这台机器上，别的 runner 本来也接不了），新进程起来重新领取后照常开始。等待就是排空的长度。
+  - `draining=true` 的心跳：服务端已有的规则不再派合并、提交、落地任务、仓库操作和 Codex 重置给这个进程（`runner-api.controller.ts` 的 `draining`、`integration-job-relay.ts`、`wiki-repo-ops.ts`），它们等新进程或别的合格 runner。心跳照常，reaper 不会回收它的会话。
+  - 已有的 `idleCapacity` 字段服务端不读，不受影响。
+- **比较过的做法。**
+  - 不设上限（原来）：一直忙的 runner 永远不升级，就是这次的问题。
+  - 到时限强制重启：最简单，但会打断在跑的 turn 和 EXECUTABLE 验收命令（2026-09-25 一天 8 次被判 FAILED 的原因），违反账号所有者的规则。
+  - 到时限只停领新会话、已有会话照常领 turn：一个一直有人在用的会话就能把升级无限拖住，上限不成立。
+  - 由控制面判断时限、下发排空：要改服务端和协议，还要 runner 发布；runner 自己知道何时开始推迟、有什么在跑，`draining` 心跳也已经存在，没必要。
+  - 选了"1 小时后停所有领取、等在跑的结束"：不打断任何 turn，上界只取决于排空开始时在跑的 turn；代价是排空期间这台 runner 的新消息要排队，时间等于最长那个 turn 剩下的部分。
+  - 为什么是 1 小时：是 6 次检查，绝大多数 runner 在这期间总有一次空闲，根本不排空；一直忙的 runner 在一个多小时内拿到修复（workstation-gpu 落后的是好几天）。更短会让忙的 runner 更常为升级暂停接活，而发布频繁时这个代价每次都要付；更长则推迟修复。
+- **兼容和发布。**
+  - proto、服务端、网关都不改。`Heartbeat.draining` 早已存在，生产的旧网关 f8b9964f3 照样转发（它的 README：`draining` 是带类型的字段，原样转给服务端），当前服务端已经按它停发心跳派的工作。
+  - 改动只在 runner，需要发一次 runner 版本才生效；它只在下一次升级（之后的版本）时起作用。0.1.248/0.1.249 等旧 runner 行为不变，与新 runner 混跑没有交互。
+- **2026-11-10 HPC 的 4 个 turn 不是升级打断的，是 OOM 停了整个 runner。**（任务 34vFtgH0L69RYHdWr9ECW）
+  - 经过：16:16:15Z 内核在 HPC 的 runner unit 里 OOM 杀了某个会话的 `tsc`。systemd 默认 `OOMPolicy=stop`，于是停了整个 runner；100 秒的关停排空到 16:17:55Z 结束了 4 个在跑的 turn，`Restart=always` 在 16:18:05Z 把 runner 拉起，启动时的自更新在没有会话的情况下装上了 0.1.252。升级闸门最后一次检查（16:12:21Z）是正确地推迟了的。新进程把 4 个 turn 全部重新领回，都 ANSWERED。
+  - 修复（fe5db828a）：runner 写出的两种 unit（`service.go`、`host_setup.go`）都写入 `OOMPolicy=continue`，OOM 只结束出问题的那个进程，不再连带停掉 runner。已经装好的 unit 只在重新注册时更新；HPC 另加了一次性的 drop-in `/etc/systemd/system/orbit-runner-root.service.d/oom-policy.conf`（任务 34vNE2Z174xCdCn3UfLcc）。
+  - 含义："升级不打断在跑的 turn"还依赖 runner 不被它所在 unit 里的别的事停掉。升级这条路本身只在没有 turn 在跑、或排空结束后才开始；unit 被 systemd 停掉（OOM、手动 stop）走的是关停排空，不受本节约束。

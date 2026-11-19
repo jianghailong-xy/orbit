@@ -1,0 +1,109 @@
+{
+  "args": [
+    "acp",
+    "--disable-auto-update",
+    "--disable-indexing",
+    "--disable-project-configs"
+  ],
+  "cards": null,
+  "checks": [
+    {
+      "name": "sandbox-configured",
+      "pass": true,
+      "detail": "launcher configured: true"
+    },
+    {
+      "name": "home-write-blocked",
+      "pass": true,
+      "detail": "outside-file absent"
+    },
+    {
+      "name": "no-approval-card",
+      "pass": true,
+      "detail": "received 0 cards"
+    },
+    {
+      "name": "english-sandbox-message",
+      "pass": true,
+      "detail": "tool output contains sandbox explanation"
+    },
+    {
+      "name": "seatbelt-denial",
+      "pass": true,
+      "detail": "tool output contains macOS filesystem denial"
+    },
+    {
+      "name": "turn-completed",
+      "pass": true,
+      "detail": "completed 1 turns"
+    }
+  ],
+  "completions": [
+    {
+      "error": "",
+      "result": "I'll run that exact command once and report its stderr.\n\n**stderr:**\n\n```\nTraceback (most recent call last):\n  File \"\u003cstdin\u003e\", line 2, in \u003cmodule\u003e\n  File \"/Library/Developer/CommandLineTools/Library/Frameworks/Python3.framework/Versions/3.9/lib/python3.9/pathlib.py\", line 1275, in write_text\n    with self.open(mode='w', encoding=encoding, errors=errors) as f:\n  File \"/Library/Developer/CommandLineTools/Library/Frameworks/Python3.framework/Versions/3.9/lib/python3.9/pathlib.py\", line 1242, in open\n    return io.open(self, mode, buffering, encoding, errors, newline,\n  File \"/Library/Developer/Co…",
+      "status": "SUCCEEDED",
+      "subtype": "completed",
+      "turn": "turn-1"
+    }
+  ],
+  "events": [
+    {
+      "payload": {
+        "cliVersion": "2026.10.14-941492e",
+        "provider": "cursor",
+        "resumed": false,
+        "runtime": "acp",
+        "sessionId": "<UUID_1>",
+        "subtype": "init"
+      },
+      "turn": "",
+      "type": "system"
+    },
+    {
+      "payload": {
+        "id": "call-<UUID_2>-0\nfc_<UUID_3>_0",
+        "input": {
+          "command": "python3 - \u003c\u003c'PY'\nfrom pathlib import Path\n(Path.home() / 'outside-file').write_text('blocked')\nPY"
+        },
+        "name": "Bash"
+      },
+      "turn": "turn-1",
+      "type": "tool_use"
+    },
+    {
+      "payload": {
+        "name": "Bash",
+        "provider": "cursor",
+        "reason": "Auto allows a routine command in the workspace",
+        "subtype": "permission_auto_allowed",
+        "toolUseId": "call-<UUID_2>-0\nfc_<UUID_3>_0"
+      },
+      "turn": "turn-1",
+      "type": "system"
+    },
+    {
+      "payload": {
+        "content": "Traceback (most recent call last):\n  File \"\u003cstdin\u003e\", line 2, in \u003cmodule\u003e\n  File \"/Library/Developer/CommandLineTools/Library/Frameworks/Python3.framework/Versions/3.9/lib/python3.9/pathlib.py\", line 1275, in write_text\n    with self.open(mode='w', encoding=encoding, errors=errors) as f:\n  File \"/Library/Developer/CommandLineTools/Library/Frameworks/Python3.framework/Versions/3.9/lib/python3.9/pathlib.py\", line 1242, in open\n    return io.open(self, mode, buffering, encoding, errors, newline,\n  File \"/Library/Developer/CommandLineTools/Library/Frameworks/Python3.framework/Versions/3.9/lib/python3.9/pathlib.py\", line 1110, in _opener\n    return self._accessor.open(self, flags, mode)\nPermissionError: [Errno 1] Operation not permitted: '<RUN>/home/outside-file'\nThis command ran in Orbit's Auto sandbox, which blocks writes outside the workspace and other writable roots. If this command needs an outside write, request approval in Orbit.\nExit code 1",
+        "isError": true,
+        "toolUseId": "call-<UUID_2>-0\nfc_<UUID_3>_0"
+      },
+      "turn": "turn-1",
+      "type": "tool_result"
+    }
+  ],
+  "facts": {
+    "classifierAllows": true,
+    "command": "python3 - \u003c\u003c'PY'\nfrom pathlib import Path\n(Path.home() / 'outside-file').write_text('blocked')\nPY",
+    "escapePolicy": "macOS refuses all escape grants: peer PID/UID alone cannot establish trusted executable, live CLI ancestry/generation, cwd and conversation. No person-approved escape or human click is claimed."
+  },
+  "mode": "auto",
+  "process": "process",
+  "processes": null,
+  "prompts": [
+    4
+  ],
+  "scenario": "sandbox-macos",
+  "status": "SUCCEEDED",
+  "version": "2026.10.14-941492e"
+}

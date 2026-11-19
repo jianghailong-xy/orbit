@@ -251,7 +251,9 @@ final class TasksStackWiringTests: XCTestCase {
         let detail = code(try slice(source, from: "struct TaskDetailPage: View {",
                                     to: "private struct TaskDetailContent: View {"))
         XCTAssertTrue(detail.contains("let taskID: String"))
-        XCTAssertTrue(detail.contains("TaskDetailContent(tasks: tasks, taskID: taskID).id(taskID)"))
+        // `overPage` is the wide shells' sheet (owner decision 2026-11-12): the same page, told
+        // that a task press inside it replaces it instead of leaving the page under it.
+        XCTAssertTrue(detail.contains("TaskDetailContent(tasks: tasks, taskID: taskID, overPage: overPage).id(taskID)"))
         XCTAssertFalse(detail.contains("model.selectedTaskID"),
                        "the page does not read back the selection it is the page of")
 

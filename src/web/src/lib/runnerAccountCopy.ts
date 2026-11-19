@@ -14,6 +14,9 @@ export function runnerAccountRemoveTitle(name: string): string {
   return `Remove ${name}?`;
 }
 
+/** Removing an added account while Default is in use. */
+export const RUNNER_ACCOUNT_REMOVE_DETAIL = 'Its sessions move to another account first. Workspaces using it switch to Default.';
+
 /** Removing Default, which only Orbit stops using; `cli` is the CLI's own name (Codex, Claude Code). */
 export function runnerDefaultRemoveDetail(runner: string, cli: string): string {
   return `Orbit stops using it on ${runner}. Its sign-in stays on the machine, and ${cli} in a terminal there keeps working. Workspaces set to it run on Automatic.`;
@@ -21,7 +24,7 @@ export function runnerDefaultRemoveDetail(runner: string, cli: string): string {
 
 /** Removing an added account while Default is removed from Orbit, with another account left. */
 export function runnerAccountRemoveDetailAutomatic(runner: string): string {
-  return `Its sign-in is deleted from ${runner}. Workspaces set to this account run on Automatic.`;
+  return `Its sessions move to another account first, then its sign-in is deleted from ${runner}. Workspaces set to this account run on Automatic.`;
 }
 
 /** Removing the last account Orbit uses while Default is removed: the removal holds only while
@@ -47,3 +50,86 @@ export function runnerDefaultUseAgainFailed(name: string): string {
 export const ACCOUNT_SELECT_DEFAULT_REMOVED = 'removed from Orbit — sessions run on Automatic';
 /** And for one set to an account the runner no longer reports, while its Default is removed. */
 export const ACCOUNT_SELECT_GONE_AUTOMATIC = 'not on this runner — sessions run on Automatic';
+
+/** Over the sessions a refused removal lists, when one session in the account can't move to another —
+ *  no other account is signed in, or its runner can't carry the conversation; `engine` is the CLI's own
+ *  name (Codex, Claude Code). Sessions that can move are moved, and don't refuse it. */
+export function runnerAccountInUseOne(engine: string): string {
+  return `This ${engine} account can’t be removed while a session on it can’t move to another account — sign in another account, or end the session below; then remove the account`;
+}
+
+/** The same, when several sessions in it can't move. */
+export function runnerAccountInUseMany(engine: string, count: number): string {
+  return `This ${engine} account can’t be removed while ${count} sessions on it can’t move to another account — sign in another account, or end them below; then remove the account`;
+}
+
+/** Under an account whose removal is waiting on the one session it moved to another account to leave. */
+export function runnerAccountMovingOne(engine: string): string {
+  return `Moving a session to another ${engine} account — this one is removed once it has left, after its turn if one is running`;
+}
+
+/** The same, when it moved several. */
+export function runnerAccountMovingMany(engine: string, count: number): string {
+  return `Moving ${count} sessions to another ${engine} account — this one is removed once they have left, after their turns if any are running`;
+}
+
+/** Each listed session's way to it. */
+export const RUNNER_ACCOUNT_IN_USE_OPEN = 'Open session';
+/** A listed session in a turn (RUNNING, or PENDING on its way to one). */
+export const RUNNER_ACCOUNT_IN_USE_RUNNING = 'Running';
+/** A listed session between turns (AWAITING_INPUT): its process still holds the account. */
+export const RUNNER_ACCOUNT_IN_USE_WAITING = 'Waiting for input';
+/** A listed session with no title yet. */
+export const RUNNER_ACCOUNT_IN_USE_UNTITLED = 'Untitled session';
+
+/** An added Claude Code account's way to become the Default: the item in its ⋯ menu, and what it does. */
+export const RUNNER_ACCOUNT_SET_DEFAULT = 'Set as default';
+export const RUNNER_ACCOUNT_SET_DEFAULT_HINT = 'Moves this login into ~/.claude, so the terminal uses it too';
+/** Why that item can't be chosen: the runner is offline, too old to swap logins, or swapping already. */
+export const RUNNER_ACCOUNT_SET_DEFAULT_OFFLINE = 'The runner is offline';
+export const RUNNER_ACCOUNT_SET_DEFAULT_UPDATE = 'Update the runner to set a default Claude Code account on it';
+export const RUNNER_ACCOUNT_SET_DEFAULT_BUSY = 'A default is already being set on this runner';
+
+/** The question in front of Set as default. */
+export function runnerAccountSetDefaultTitle(name: string): string {
+  return `Make ${name} the default?`;
+}
+
+/** What Set as default comes to: `name` is the added account and `dir` its folder, `defaultName` and
+ *  `defaultDir` the Default's, each the way a terminal spells it. */
+export function runnerAccountSetDefaultDetail(name: string, defaultDir: string, defaultName: string, dir: string, runner: string): string {
+  return `${name}’s login moves to ${defaultDir}, and ${defaultName}’s to ${dir}. Claude Code in a terminal on ${runner} uses ${name} from then on — restart any that are open. Sessions stay on their accounts, and a turn in progress finishes first. Workspaces keep their account.`;
+}
+
+/** The confirmation's own button. */
+export const RUNNER_ACCOUNT_SET_DEFAULT_CONFIRM = 'Make default';
+
+/** Under the account while it is being made the Default, with no turn left to wait for. */
+export function runnerAccountSettingDefault(name: string): string {
+  return `Making ${name} the default`;
+}
+
+/** The same, while one session on either account finishes its turn. */
+export function runnerAccountSettingDefaultOne(name: string): string {
+  return `Making ${name} the default — waiting for 1 session to finish its turn`;
+}
+
+/** The same, while several do. */
+export function runnerAccountSettingDefaultMany(name: string, count: number): string {
+  return `Making ${name} the default — waiting for ${count} sessions to finish their turns`;
+}
+
+/** Beside it, while Claude Code runs in a terminal on either folder: the swap waits for it to exit. */
+export const RUNNER_ACCOUNT_SETTING_DEFAULT_TERMINAL = 'It also waits for Claude Code running in a terminal there to exit.';
+
+/** A swap that failed, or that the control plane refused: over the reason. */
+export function runnerAccountSetDefaultFailed(name: string): string {
+  return `Couldn’t make ${name} the default`;
+}
+
+/** Under that reason: a failed swap puts both logins back. */
+export const RUNNER_ACCOUNT_SET_DEFAULT_UNCHANGED = 'Both logins are as they were.';
+
+/** What a former Default is called — the account a Set as default moved out of ~/.claude into an added
+ *  folder — while the owner has not named it and no email is known for it. */
+export const RUNNER_ACCOUNT_FORMER_DEFAULT = 'Former default';

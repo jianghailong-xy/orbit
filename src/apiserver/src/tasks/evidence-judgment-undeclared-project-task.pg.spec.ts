@@ -22,7 +22,8 @@
  *    offered to the project's coordinator conversation as decidable, and that conversation records
  *    CONFIRM (which derives DONE) or SEND_BACK (which writes its note and leaves the task OPEN);
  *    the run that did the work is still refused as not independent; criteria rewritten after
- *    submission refuse the old revision as moved; and borrowing the project's criterion is refused;
+ *    submission refuse the old revision as moved; and a quote of the project's criterion is
+ *    dropped, because the server binds the standard (the revision carries its own criteria);
  *  - declaring one (through `criterionKey` on the create door): the project criterion's CONTENT is
  *    still the standard — a rewording refuses the old evidence as moved even though the task's own
  *    criteria still say what the quote says; another live criterion of the project, quoted word
@@ -350,22 +351,20 @@ suite('a project task is decided against the standard it declares, or its own', 
     assert.equal((await taskRow(task)).status, 'DONE');
   });
 
-  // ═══ 4. declaring none: the project's criterion is not a wrapper it can borrow ═════════════
-  await t.test('quoting the project criterion it never declared is refused, and writes nothing',
+  // ═══ 4. declaring none: a quote of the project's criterion is not what it is held to ═══════
+  // Until the server bound the standard (docs/evidence-always-has-an-addressee-design.md §2) this
+  // quote was refused at the door, and on 2026-11-12 such a revision sat undecidable for hours. The
+  // quote is now dropped at submit: the revision carries the task's own criteria and is decided.
+  await t.test('quoting the project criterion it never declared is ignored: the revision is held to its own criteria',
     async () => {
       const task = await file('borrowed', OWN_CRITERIA);
       const submitted = await submit(task, { key: criterionKey, text: PROJECT_CRITERION });
-      assert.equal(submitted.criterionMatch?.matchesLive, false,
-        'a live criterion of the project passed as the standard of a task that declared none');
+      assert.deepEqual(submitted.criterionMatch, { key: task.key, text: OWN_CRITERIA, matchesLive: true },
+        'the revision was not bound to the task\'s own criteria');
 
-      await refusal(
-        decide(task, '1', coordinatorSessionId, 'CONFIRM'),
-        ConflictException,
-        'EVIDENCE_JUDGMENT_CRITERION_MOVED',
-        'ASK_FOR_EVIDENCE_AGAINST_THE_CURRENT_CRITERION',
-      );
-      assert.equal(await decisionCount(task), 0);
-      assert.equal((await taskRow(task)).status, 'OPEN');
+      assert.equal((await decide(task, '1', coordinatorSessionId, 'CONFIRM')).decision, 'CONFIRM');
+      assert.equal(await decisionCount(task), 1);
+      assert.equal((await taskRow(task)).status, 'DONE');
     });
 
   // ═══ 5. declaring one: the project criterion's content, unchanged ══════════════════════════
@@ -402,19 +401,15 @@ suite('a project task is decided against the standard it declares, or its own', 
       assert.equal((await taskRow(task)).status, 'DONE');
     });
 
-  await t.test('a task that declares the criterion refuses evidence quoting its own criteria instead',
+  await t.test('a task that declares the criterion is held to it, whatever the evidence quotes',
     async () => {
       const task = await file('declared-own', OWN_CRITERIA, criterionKey);
       const submitted = await submit(task, { key: task.key, text: OWN_CRITERIA });
-      assert.equal(submitted.criterionMatch?.matchesLive, false,
-        'a task that declared a project criterion was let off with its own criteria');
-      await refusal(
-        decide(task, '1', coordinatorSessionId, 'SEND_BACK', 'quote the criterion this task serves'),
-        ConflictException,
-        'EVIDENCE_JUDGMENT_CRITERION_MOVED',
-        'ASK_FOR_EVIDENCE_AGAINST_THE_CURRENT_CRITERION',
-      );
-      assert.equal(await decisionCount(task), 0);
+      assert.deepEqual(submitted.criterionMatch, { key: criterionKey, text: PROJECT_CRITERION, matchesLive: true },
+        'a task that declared a project criterion was bound to its own criteria');
+      const sent = await decide(task, '1', coordinatorSessionId, 'SEND_BACK', 'show the criterion this task serves');
+      assert.equal(sent.decision, 'SEND_BACK');
+      assert.equal(await decisionCount(task), 1);
     });
 
   await t.test('a task that declares the criterion is not decided on another criterion of the project',
@@ -434,24 +429,29 @@ suite('a project task is decided against the standard it declares, or its own', 
       const otherKey = uuidToBase62(otherId);
       const task = await file('declared-borrow', OWN_CRITERIA, criterionKey);
 
-      // Live, word for word, under its own key — and still not this task's standard.
+      // Live, word for word, under its own key — and still not this task's standard: the server
+      // binds the criterion the task declares, and the quote is dropped.
       const submitted = await submit(task, { key: otherKey, text: OTHER });
-      assert.equal(submitted.criterionMatch?.matchesLive, false,
+      assert.deepEqual(submitted.criterionMatch, { key: criterionKey, text: PROJECT_CRITERION, matchesLive: true },
         'another live criterion of the project stood in for the one this task declares');
+
+      // Declaring another criterion after the submission moves the standard away from the one the
+      // revision was bound to, so it is no longer decidable: the declaration says which standard it is.
+      await tasks.update(ownerId, task.id, { criterionKey: otherKey } as never);
+      assert.equal((await taskRow(task)).criterion_definition_id, otherId);
       const body = await refusal(
         decide(task, '1', coordinatorSessionId, 'CONFIRM'),
         ConflictException,
         'EVIDENCE_JUDGMENT_CRITERION_MOVED',
         'ASK_FOR_EVIDENCE_AGAINST_THE_CURRENT_CRITERION',
       );
-      assert.match(String(body.message), new RegExp(`is not the one this task declares \\(${criterionKey}\\)`));
+      assert.match(String(body.message), new RegExp(`is not the one this task declares \\(${otherKey}\\)`));
       assert.equal(await decisionCount(task), 0);
 
-      // Declaring the criterion the evidence was measured against is the other way out, and then
-      // the same revision is decidable: the declaration says which standard it is, not the quote.
-      await tasks.update(ownerId, task.id, { criterionKey: otherKey } as never);
-      assert.equal((await taskRow(task)).criterion_definition_id, otherId);
-      assert.equal((await decide(task, '1', coordinatorSessionId, 'CONFIRM')).decision, 'CONFIRM');
+      // A revision submitted now is bound to the criterion it declares now, and decided.
+      const again = await submit(task, { key: criterionKey, text: PROJECT_CRITERION });
+      assert.deepEqual(again.criterionMatch, { key: otherKey, text: OTHER, matchesLive: true });
+      assert.equal((await decide(task, again.revision!, coordinatorSessionId, 'CONFIRM')).decision, 'CONFIRM');
       assert.equal((await taskRow(task)).status, 'DONE');
     });
 
@@ -493,11 +493,12 @@ suite('a project task is decided against the standard it declares, or its own', 
       assert.match(String(body.message), /criterionKey: null/);
     }
 
-    // Nor is the project's other, still-live criterion a standard it can borrow in its place.
+    // Nor is the project's other, still-live criterion a standard it can borrow in its place: the
+    // server has no live standard to bind, and drops the quote.
     const borrowed = await submit(task, { key: criterionKey, text: PROJECT_CRITERION });
     assert.equal(borrowed.revision, '2');
-    assert.equal(borrowed.criterionMatch?.matchesLive, false,
-      'a declaration whose criterion is gone passed quoting another criterion of the project');
+    assert.equal(borrowed.criterionMatch, null,
+      'a declaration whose criterion is gone was bound to a standard');
     await refusal(
       decide(task, '2', coordinatorSessionId, 'CONFIRM'),
       ConflictException,

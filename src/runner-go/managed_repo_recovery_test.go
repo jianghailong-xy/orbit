@@ -180,12 +180,18 @@ func TestCheckoutDamageSaysWhyARepositoryCannotBeRead(t *testing.T) {
 		{"a repository whose HEAD reads", healthy, ""},
 		{"a directory inside it", filepath.Join(healthy, "sub"), ""},
 		{"a repository with no commit yet", fresh, ""},
-		{"a directory in no repository", t.TempDir(), ""},
 	} {
 		if got := checkoutDamage(c.dir); got != c.want {
 			t.Errorf("%s: %q, want %q", c.name, got, c.want)
 		}
 	}
+	t.Run("a directory in no repository", func(t *testing.T) {
+		chdirForTest(t, t.TempDir())
+		// enclosingCheckout stops at ".", so repositories above the temp dir cannot affect this case.
+		if got := checkoutDamage("."); got != "" {
+			t.Errorf("%q, want %q", got, "")
+		}
+	})
 
 	broken := func(edit func(gitDir string)) string {
 		repo := initRepo(t)

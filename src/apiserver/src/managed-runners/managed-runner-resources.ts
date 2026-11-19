@@ -37,10 +37,7 @@ export const GENERATION_ANNOTATION = 'orbit.dev/generation';
 export const PVC_UID_ANNOTATION = 'orbit.dev/pvc-uid';
 
 /** The runner name every managed runner reports, and ORBIT_RUNNER_NAME in its Pod. */
-export const MANAGED_RUNNER_NAME = 'orbit-managed';
-/** Where the default workspace works: the image's fixed checkout (deploy/managed-runner/README.md). */
-export const MANAGED_WORKSPACE_DIR = '/var/lib/orbit/home/orbit-repos/default';
-export const MANAGED_WORKSPACE_NAME = 'Default';
+export const MANAGED_RUNNER_NAME = 'Orbit Cloud';
 /**
  * The manager's finalizer on every Pod it creates: taken off by the manager alone, once it has
  * recorded the Pod's stop (kubernetes-backend.ts, `removeInstance`).
@@ -116,7 +113,7 @@ export function buildManagedSecret(identity: ManagedRunnerIdentity, credential: 
     metadata: {
       name: managedSecretName(identity.runnerId),
       namespace: identity.namespace,
-      labels: { 'app.kubernetes.io/name': 'orbit-managed-runner' },
+      labels: { 'app.kubernetes.io/name': 'orbit-cloud-runner' },
       annotations: {
         [OWNER_ANNOTATION]: identity.ownerId,
         [RUNNER_ANNOTATION]: identity.runnerId,
@@ -148,7 +145,7 @@ export function bootstrapCredentialOf(secret: Secret): string | null {
 export function buildManagedPod(identity: ManagedRunnerIdentity, pvcUid: string, profile: ManagedRunnerProfile): Pod {
   const runner = profile.runner;
   const stateMounts = [
-    { name: 'user-state', mountPath: '/var/lib/orbit' },
+    { name: 'user-state', mountPath: '/home/orbit' },
     { name: 'temporary', mountPath: '/tmp' },
   ];
   return {
@@ -159,7 +156,7 @@ export function buildManagedPod(identity: ManagedRunnerIdentity, pvcUid: string,
       namespace: identity.namespace,
       finalizers: [MANAGED_STOP_REPORT_FINALIZER],
       labels: {
-        'app.kubernetes.io/name': 'orbit-managed-runner',
+        'app.kubernetes.io/name': 'orbit-cloud-runner',
         'orbit-test-environment': profile.environmentId,
       },
       annotations: {

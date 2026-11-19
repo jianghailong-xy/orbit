@@ -47,7 +47,7 @@ func TestTheClaimLoopLooksAgainForALateClaim(t *testing.T) {
 
 	// Once due, it reconciles, starts what it finds, and is spent.
 	inLoop := body[loop:]
-	check := strings.Index(inLoop, "if !lateClaimCheckAt.IsZero() && time.Now().After(lateClaimCheckAt) && !claims.kept() {")
+	check := strings.Index(inLoop, "if !lateClaimCheckAt.IsZero() && time.Now().After(lateClaimCheckAt) && !claims.kept() && startupStarts.finished() {")
 	if check < 0 {
 		t.Fatal("the claim loop never runs the late claim check")
 	}

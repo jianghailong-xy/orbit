@@ -42,7 +42,7 @@ test('model-routing report aggregates actual runs, first-run task cohorts and on
   // Both accounts have smart model selection on, as an account whose runs were routed has.
   for (const id of [owner, otherOwner]) {
     await db.user.create({
-      data: { id, email: `${id}@routing-report.invalid`, name: 'report', passwordHash: 'h', preferences: { modelRouting: true } },
+      data: { id, email: `${id}@routing-report.invalid`, name: 'report', passwordHash: 'h', preferences: { modelRouting: true, optimizeFor: 'cost' } },
     });
   }
   const agent = await db.workspace.create({ data: { ownerId: owner, name: 'first agent' } });
@@ -187,6 +187,11 @@ test('model-routing report aggregates actual runs, first-run task cohorts and on
   const poolRun = await run(pool, 1250, 4, { provider: 'claude-pool' });
   await route(pool, poolRun.id, 1250);
 
+  // Same tier/provider/model across policy versions must remain distinct.
+  const newPolicy = await task();
+  const newPolicyRun = await run(newPolicy, 1275, 6);
+  await route(newPolicy, newPolicyRun.id, 1275, { policyVersion: 2 });
+
   const foreign = await task({ ownerId: otherOwner, creatorId: otherOwner, assigneeId: otherAgent.id });
   const foreignRun = await run(foreign, 1300, 100, { costUsd: 10_000 });
   await route(foreign, foreignRun.id, 1300);
@@ -226,7 +231,7 @@ test('model-routing report aggregates actual runs, first-run task cohorts and on
 
   await t.test('shadow uses actual models; first cohorts own later failures and all-run cost, without usage/judgment fan-out', async () => {
     const report = await get();
-    assert.equal(report.shadow.length, 5);
+    assert.equal(report.shadow.length, 6);
     assert.equal(report.applied.length, 2);
     assert.deepEqual(group(report, 'shadow', 1, 'S', 'claude', OPUS), {
       policyVersion: 1, level: 'S', provider: 'claude', model: OPUS, sampleCount: 5,
@@ -238,6 +243,7 @@ test('model-routing report aggregates actual runs, first-run task cohorts and on
       taskCount: 0, completedTaskCount: 0, firstPassTaskCount: 0, firstPassRate: null,
       averageFailureCount: null, tokensPerCompletedTask: null, costUsdPerCompletedTask: null, usageUnknownCompletedTaskCount: 0, durationP50Ms: 50_000,
     });
+    assert.equal(group(report, 'shadow', 2, 'S', 'claude', OPUS).sampleCount, 1);
     assert.equal(group(report, 'shadow', 1, 'S', 'claude', SONNET).sampleCount, 1);
     assert.equal(group(report, 'shadow', 1, 'S', 'claude-pool', OPUS).sampleCount, 1);
   });

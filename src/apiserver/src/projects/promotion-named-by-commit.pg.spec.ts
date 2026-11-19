@@ -1,3 +1,4 @@
+import { seedPromotionRequest } from '../test-support/promotion-request';
 import assert from 'node:assert/strict';
 import { randomUUID } from 'node:crypto';
 import { test } from 'node:test';
@@ -13,6 +14,7 @@ import {
 import type { IntegrationJobCommand } from '@orbit/shared';
 import { Client } from 'pg';
 
+import { receiveOpenItem } from '../test-support/open-item-delivery';
 import { prismaClientFor } from '../prisma/prisma-client';
 import type { PrismaService } from '../prisma/prisma.service';
 import type { PushService } from '../push/push.service';
@@ -843,6 +845,8 @@ async function servedError(stack: Stack, w: World, kind = 'INTEGRATION_ERROR') {
   const [item, ...more] = await itemsOf(stack, w, kind);
   assert.ok(item, 'CONTROL: the failure opened an item');
   assert.equal(more.length, 0, 'one failure, one item');
+  await stack.openItems.deliverOwed(w.projectId);
+  await receiveOpenItem(stack.db, item.id);
   const listed = await stack.openItems.list(w.ownerId, w.projectId);
   const row = [...listed.needsYou, ...listed.withCoordinator].find((each) => each.itemId === item.id);
   assert.ok(row, 'CONTROL: the open items read lists it');
@@ -855,7 +859,7 @@ async function servedError(stack: Stack, w: World, kind = 'INTEGRATION_ERROR') {
   });
   return {
     item, row, card, told,
-    payload: item.payload as { outdatedRunner?: unknown; errorCode?: unknown; failureClass?: unknown; sourceKind?: unknown },
+    payload: item.payload as { outdatedRunner?: unknown; errorCode?: unknown; failureClass?: unknown; sourceKind?: unknown; check?: unknown },
   };
 }
 
@@ -1034,6 +1038,7 @@ test('(7) §10.5 O-L8: every other SOURCE_BRANCH_MISSING from such a runner keep
         testedSha: sha('c'), testedTreeSha: sha('e'), landedSha: sha('c'), landedTreeSha: sha('e'), aheadOfUpstream: 1,
       });
       assert.deepEqual((await receiptsOf(stack, t.taskId)).map((receipt) => receipt.result), ['MERGED'], 'CONTROL: it landed');
+      await seedPromotionRequest(stack.prisma, line.projectId);
       const made = await stack.promotions.considerCandidate(line.projectId);
       assert.ok(made, 'CONTROL: the landing made a candidate');
       const lineCheck = (await dispatch(stack, line.runnerId, 'project-line-2', LEGACY)).find((command) => command.kind === 'CHECK_PROMOTION');
@@ -1159,6 +1164,7 @@ async function failedProjectBranch(stack: Stack, label: string, body: (source: s
     testedSha: sha('c'), testedTreeSha: sha('e'), landedSha: sha('c'), landedTreeSha: sha('e'), aheadOfUpstream: 1,
   });
   assert.deepEqual((await receiptsOf(stack, t.taskId)).map((receipt) => receipt.result), ['MERGED'], 'CONTROL: it landed');
+  await seedPromotionRequest(stack.prisma, w.projectId);
   assert.ok(await stack.promotions.considerCandidate(w.projectId), 'CONTROL: the landing made a candidate');
   const check = (await dispatch(stack, w.runnerId, `${label}-2`, CURRENT)).find((command) => command.kind === 'CHECK_PROMOTION');
   assert.equal(check?.promotionSourceKind, 'PROJECT_BRANCH');
@@ -1186,6 +1192,13 @@ test('(8) §10.5 O-L8: a TASK_BRANCH candidate\'s failure, in each class, says w
         }
         assert.match(served.told, /A task stands behind this item, the one its title names/, what);
         assert.match(served.item.title, /“Backfill order stats” into main$/, what);
+        if (failureClass === 'CHECK_TIMED_OUT') {
+          // The relay records the budget the stopped check ran under, and the item says it beside the run time.
+          const check = served.payload.check as { timeoutSeconds?: unknown } | null;
+          assert.equal(check?.timeoutSeconds, 3_600, `${what}: the limit is recorded on the payload`);
+          assert.match(served.told, /did not finish: the platform stopped it at its 1h limit after running 1h 0m, so it reached no verdict/, what);
+          assert.doesNotMatch(served.told, /exited with code/, what);
+        }
 
         const ofProject = await failedProjectBranch(stack, `words-project-${label}`, body);
         const before = await servedError(stack, ofProject.w, kind);

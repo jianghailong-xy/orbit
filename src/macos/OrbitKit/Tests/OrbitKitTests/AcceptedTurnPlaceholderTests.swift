@@ -542,10 +542,14 @@ final class AcceptedTurnPlaceholderTests: XCTestCase {
             attachments: [QueuedTurnInfo.Attachment(id: "a", mimeType: "image/png")],
             openItemDelivery: .object([:]), ownerAnswer: .object([:]), coordinatorDelivery: .object([:]),
             taskStart: .object([:]), projectStarted: .object([:]),
-            sessionMessage: .object([:]), sessionReplies: .array([]), authoredByOrbit: true,
-            confirmationReviewRequest: .object([:]), confirmationReturn: .object([:]),
+            sessionMessage: .object([:]), externalSender: .object([:]), sessionReplies: .array([]), authoredByOrbit: true,
+            confirmationReviewRequest: .object([:]), confirmationReturn: .object([:]), confirmationAnswers: .object([:]),
+            evidenceReview: .object([:]), evidenceSendBack: .object([:]),
+            runQuestion: .object([:]), runNotice: .object([:]), sessionOpening: .object([:]),
             placement: "accepted", createdAt: Self.filedAt, targetTurnId: "t-a", delivery: "failed",
-            deliveryCode: "CODE", deliveryReason: "reason")
+            deliveryCode: "CODE", deliveryReason: "reason",
+            translation: .object(["state": .string("DONE"), "from": .string("zh-Hans"), "original": .string("w")]),
+            opening: true)
         let object = try XCTUnwrap(JSONSerialization.jsonObject(with: JSONEncoder().encode(full)) as? [String: Any])
         let decoded = Set(object.keys)
         XCTAssertEqual(listed.subtracting(decoded), [], "the server lists a field this end never reads")

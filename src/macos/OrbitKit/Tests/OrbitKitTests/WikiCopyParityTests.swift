@@ -111,6 +111,7 @@ final class WikiCopyParityTests: XCTestCase {
             ("WIKI_SECTION_USED", WikiCopy.whereUsed),
             ("WIKI_SECTION_HISTORY", WikiCopy.history),
             ("WIKI_ANCHORS_NOTE", WikiCopy.anchorsNote),
+            ("WIKI_ANCHOR_DEFERRED", WikiCopy.anchorDeferred),
             ("WIKI_NO_USE_YET", WikiCopy.noUseYet),
             ("WIKI_ACTION_EDIT", WikiCopy.edit),
             ("WIKI_ACTION_SUPERSEDE", WikiCopy.supersede),
@@ -356,12 +357,12 @@ final class WikiCopyParityTests: XCTestCase {
                        "the Wiki follows the work: Projects, Tasks, then Wiki")
     }
 
-    /// The head's buttons, in the web's order: Contents, Activity, Settings (then New entry, which the native
-    /// bar has none of) — the bar's own order (design §12.3.1).
+    /// The head's buttons, in the web's order: Contents, Activity, Settings — the bar's own order (design §12.3.1).
+    /// The web's New entry left with board 45 (owner 11-11); the native bar never had one.
     func testTheHeadsButtonsAreTheWebsInItsOrder() throws {
         let page = try source(Self.page)
         let actions = try slice(page, from: "<div className=\"wk-actions\">", to: "</div>")
-        assertOrder(actions, ["<WikiContentsButton />", "<WikiActivityButton", "<WikiSettingsButton", "<WikiNewEntryButton"],
+        assertOrder(actions, ["<WikiContentsButton />", "<WikiActivityButton", "<WikiSettingsButton"],
                     "the head's buttons")
         let activity = try source(Self.activity)
         assertSays(activity, "icon={<HistoryOutlined />}", in: Self.activity)
@@ -369,14 +370,16 @@ final class WikiCopyParityTests: XCTestCase {
         assertSays(activity, "aria-label={wikiWaitingOnYou(waiting)}", in: Self.activity)
     }
 
-    /// One space is a label and several a picker (§12.3.4, mock 31 ④), by the same names; the rules for
+    /// The space is a picker however many there are (§12.3.4, mock 31 ④; board 47), by the same names; the rules for
     /// names, which space opens and what waits are held to the one fixture both ends read.
     func testTheSpaceRulesAreTheWebs() throws {
         let page = try source(Self.page)
         let head = try slice(page, from: "function WikiHeadSpace(", to: "/** The status row")
-        assertOrder(head, ["const names = useMemo(() => wikiSpaceNames(spaces), [spaces]);", "if (spaces.length < 2) {",
-                           "<span className=\"wk-space-tag\"", "{wikiSpaceOption(names.get(row.id) ?? row.title, row)}"],
-                    "the head's space")
+        assertOrder(head, ["const names = useMemo(() => wikiSpaceNames(spaces), [spaces]);",
+                           "textValue: wikiSpaceOption(names.get(row.id) ?? row.title, row),",
+                           "{ key: 'manage', label: WIKI_MANAGE_SPACES,"],
+                    "the head's space: a menu ending at Manage spaces (board docs/mocks/wiki-space-menu)")
+        XCTAssertFalse(head.contains("spaces.length < 2"), "one space is a menu too, as on this end (board 47)")
         assertSays(page, "wikiDefaultSpace(spaces.data ?? [], { workspaceId: readWikiFromWorkspace(), lastSlug: readWikiLastSpace() })",
                    in: Self.page)
         let rules = try source(Self.spaceLib)
@@ -457,11 +460,14 @@ final class WikiCopyParityTests: XCTestCase {
     func testTheHomeBandsAreTheWebPhonesInItsOrder() throws {
         let page = try source(Self.page)
         let frame = try slice(page, from: "function WikiFrame(", to: "function WikiHeadSpace(")
+        // The search line is one element the page draws twice: over the page on a phone, and at the head of the
+        // desktop's directory column (board docs/mocks/wiki-rail 02 ③). The status row is Activity's alone.
+        assertSays(frame, "<div className=\"wk-search\" role=\"search\">", in: Self.page)
         assertOrder(frame, ["<h1 className=\"page-title\">{WIKI_TITLE}</h1>",
                             "{space && (home || activity) && <WikiHomeState spaceId={space.id} />}",
-                            "<div className=\"wk-search\" role=\"search\">",
-                            "{!home && !activity && <WikiStatusRow space={space} />}",
+                            "{space && search}",
                             "<div className={`wk-layout${home ? ' home' : ''}`}>"], "the web's head, line and search")
+        XCTAssertFalse(frame.contains("<WikiStatusRow"), "the web's frame draws the status row, which is Activity's alone")
         let home = try source(Self.home)
         let body = try slice(home, from: "export function WikiHome(", to: "export function WikiHomeState(")
         assertOrder(body, ["{principles.length > 0 && <HomePrinciples", "{start && <WikiStartCard space={space} />}", "<HomeSkeleton />",

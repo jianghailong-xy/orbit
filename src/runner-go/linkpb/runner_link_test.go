@@ -52,6 +52,7 @@ func samples(t *testing.T) []proto.Message {
 		Hints:               hints,
 		Release:             release,
 		ConnectionId:        "conn-1",
+		Browser:             true,
 	}
 	tokenRefresh := &linkpb.TokenRefresh{Token: "eyJhbGciOiJFZERTQSJ9.e30.c2ln", ExpiresAtUnixMs: 1792900000000}
 	redirect := &linkpb.Redirect{Url: "wss://link-cell-2.example/runner", Token: "eyJhbGciOiJFZERTQSJ9.e30.Y2VsbDI"}
@@ -75,6 +76,7 @@ func samples(t *testing.T) []proto.Message {
 		SessionIds:         []string{"ses-1", "ses-2"},
 		SupportedProviders: []string{"claude", "codex", "cursor"},
 		Facts:              []*linkpb.Fact{fact, {Kind: "repos", Sha256: "2c26b46b68ffc68f"}},
+		BeatId:             17,
 	}
 	heartbeatAck := &linkpb.HeartbeatAck{
 		Mode:          linkpb.Mode_MODE_HTTP,
@@ -82,6 +84,7 @@ func samples(t *testing.T) []proto.Message {
 		WantFacts:     []string{"repos"},
 		Hints:         hints,
 		Release:       release,
+		BeatId:        17,
 	}
 	event := &linkpb.Event{Seq: 41, Type: "assistant", TsUnixMs: 1792900000123, TurnId: "turn-9", PayloadJson: []byte(`{"text":"done"}`)}
 	eventBatch := &linkpb.EventBatch{
@@ -110,6 +113,15 @@ func samples(t *testing.T) []proto.Message {
 		ThroughLiveSeq: 8,
 	}
 	chunk := &linkpb.Chunk{FrameId: 12, Index: 1, Last: true, Data: []byte{0x0a, 0x0b, 0x0c}}
+	streamOpen := &linkpb.StreamOpen{StreamId: "0190a0b0-0000-7000-8000-0000000000e1", Kind: linkpb.StreamKind_STREAM_KIND_VNC}
+	streamOpened := &linkpb.StreamOpened{StreamId: "0190a0b0-0000-7000-8000-0000000000e1"}
+	streamData := &linkpb.StreamData{StreamId: "0190a0b0-0000-7000-8000-0000000000e1", Data: []byte("RFB 003.008\n")}
+	streamCredit := &linkpb.StreamCredit{StreamId: "0190a0b0-0000-7000-8000-0000000000e1", Bytes: 12}
+	streamClose := &linkpb.StreamClose{StreamId: "0190a0b0-0000-7000-8000-0000000000e1",
+		Code: linkpb.StreamCloseCode_STREAM_CLOSE_CODE_NORMAL, Message: "the viewer left"}
+	streamPaste := &linkpb.StreamPaste{StreamId: "0190a0b0-0000-7000-8000-0000000000e1", PasteId: 3, Text: "密码 Pässwörd 🔑"}
+	streamPasted := &linkpb.StreamPasted{StreamId: "0190a0b0-0000-7000-8000-0000000000e1", PasteId: 3,
+		Error: "No page in the browser is open to paste into"}
 
 	messages := []proto.Message{
 		chunk, hello, writeContract, managedInstance, resume, welcome, limits, sessionState, release,
@@ -125,6 +137,7 @@ func samples(t *testing.T) []proto.Message {
 		&linkpb.RpcResult{RequestId: "req-1", Outcome: &linkpb.RpcResult_Failure{Failure: failure}},
 		tunnelResponse, failure, heartbeat, fact, heartbeatAck, eventBatch, event, eventAck, rejected,
 		credit, liveBatch, liveEvent, turnPrefixRequest, turnPrefixResponse,
+		streamOpen, streamOpened, streamData, streamCredit, streamClose, streamPaste, streamPasted,
 	}
 
 	// One Frame per member of its body, each wrapping the first sample of that member's type.

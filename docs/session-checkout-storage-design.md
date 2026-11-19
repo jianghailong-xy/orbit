@@ -1,6 +1,12 @@
 # Session checkout storage: bounded, sparse and copy-on-write checkouts
 
-Status: draft for owner review, 2026-11-06. Decisions D1–D6 (§8) are open; each has a recommended default.
+Status: decided and implemented, 2026-11-07. Decisions D1–D6 (§8) were settled as option A each. Operators and users
+read how it works in `docs/managed-runner-docker-operations.md`, `docs/managed-runner-kubernetes-operations.md`,
+`docs/self-hosting.md` and `docs/runner-troubleshooting.md` (sections D to F).
+
+Revision 2026-11-16: the production managed-runner deployment on 10.66.0.3 uses **D4 = B (XFS)** with the local
+Ceph-CSI reflink patch; see [the deployment record](managed-runner-k3s-xfs-deployment.md). The XFS durability and
+power-cut drills that D4 requires have **not** been run yet. D1–D3, D5 and D6 stand.
 
 Every isolated session gets its own `git worktree` under `$ORBIT_HOME/worktrees/<session>`. Git shares the object
 database between worktrees, but every working tree is a full copy of the checked-out files plus whatever the session
@@ -80,8 +86,10 @@ with driver options are left out of `/system/df` sizes altogether.
   FUSE, no loop devices and no kernel modules inside the container. Nothing in this design may relax that.
 - **Docker volume accounting is logical.** The 20 GiB limit is measured with Docker's sizes. Clones save host disk but do
   not lower the measured size.
-- **Kubernetes backend.** The PVC is an ext4 RBD filesystem of a fixed size (`docs/managed-runner-design.md`), so
-  `statfs` inside the pod already reports the budget. ext4 cannot clone.
+- **Kubernetes backend.** The original baseline is an ext4 RBD filesystem of a fixed size
+  (`docs/managed-runner-design.md`), so `statfs` inside the pod already reports the budget; ext4 cannot clone. The .3
+  deployment (2026-11-16) instead uses XFS with reflink through the local Ceph-CSI patch (D4 B; see the deployment
+  record). Other environments remain on the ext4 baseline.
 - **Self-registered runners** run on linux and darwin, amd64 and arm64 (`scripts/build-binaries.sh`), on whatever
   filesystem the user has, as the user's own account.
 - **Existing reclamation stays the mechanism.** `gcWorktrees` reclaims checkouts of ended sessions;
@@ -197,13 +205,15 @@ the floor.
 ## 6. Layer 2: repository-declared sparse checkouts
 
 - **Declaration (D2).** The repository holds `.orbit/checkout-exclude`, one pattern per line in gitignore syntax, `#`
-  comments allowed. The runner reads it from the session's base commit (`git show <base>:.orbit/checkout-exclude`), so
-  it is versioned with the code and can differ per branch.
-- **Creating a checkout.** If the declaration exists and git is 2.34 or later: `git worktree add --no-checkout …`, then
-  `git sparse-checkout set --no-cone '/*' '!<pattern>' …` in the new worktree, then populate it (`git reset --hard` or
-  the clone path of §7). This applies wherever the runner makes a session checkout: a new session, a source-pinned
-  session (`setupSourceWorktree`), and recreation of a reclaimed checkout (`restoreAbsentCheckout`). Without the
-  declaration, or with an older git, it is a full checkout as today, and the runner logs why.
+  comments and blank lines allowed; a `!` line brings back a path an earlier line left out. The runner reads it from
+  the session's base commit (`git cat-file blob <base>:.orbit/checkout-exclude`, which reads a directory at that path
+  as no declaration), so it is versioned with the code and can differ per branch.
+- **Creating a checkout.** If the declaration names paths and git is 2.34 or later: `git worktree add --no-checkout …`,
+  then `git sparse-checkout set --no-cone '/*' '!<pattern>' …` in the new worktree, where a declared `!<pattern>` goes
+  in as `<pattern>`, then populate it (`git reset --hard` or the clone path of §7). This applies wherever the runner
+  makes a session checkout: a new session, a source-pinned session (`setupSourceWorktree`), and recreation of a
+  reclaimed checkout (`restoreAbsentCheckout`). Without the declaration, or with an older git, it is a full checkout
+  as today, and the runner logs why.
 - **Not sparse:** the workspace's own directory, and the scratch worktrees of integration and merge checks, which run
   test suites that may read anything.
 - **Staging.** In a sparse checkout, every `git add -A` the runner runs on a session checkout gets `--sparse`, so that
@@ -254,6 +264,16 @@ above goes through). Steps 1 to 3 changed; the changes to steps 1 and 3 were mea
 - **Step 3 refreshes before it resets.** `git reset --hard` rewrites every entry whose stat data does not match its
   file. That is every clone, so on its own the reset undoes the cloning. `git update-index -q --refresh` runs first.
   After it, the reset rewrites only the files that differ from the commit.
+- **The index is filled first** (`fillClonedIndexStats`, `index_stat.go`). After the clones and before the refresh,
+  the runner writes the clones' stat data (ctime, mtime, dev, ino, mode, uid, gid, size) into the checkout's index,
+  so the refresh finds those entries clean without reading their contents. It does that only for an entry the checkout
+  keeps with no assume-unchanged or skip-worktree mark, whose template entry has the same mode and blob and no such
+  mark either, whose path the template's working tree has not changed (`git diff-index HEAD`, read-only), and whose
+  cloned file has the commit's size and executable bit. Everything else is left with zero stat data and is hashed by
+  the refresh as before: a template edit, a different base, a mode that the reset must fix, or an index the runner
+  cannot rewrite (version 4, split, sparse, fsmonitor). The index is written through `index.lock` and a rename; a
+  failure leaves it untouched and the refresh runs as if the fast path had not been tried. The clone also takes the
+  template file's mtime, so a just-cloned file is not racily clean when git reads the index.
 - **The reset is to the checkout's own `HEAD`.** That is the commit `git worktree add` put the checkout on. For a
   checkout recreated on an existing branch it is the branch's tip, not the session's fork point.
 - **A failure after `git worktree add`** removes the checkout, which is then made again plainly. A branch the failed
@@ -272,12 +292,16 @@ above goes through). Steps 1 to 3 changed; the changes to steps 1 and 3 were mea
 
   An errno goes by its name: `EOPNOTSUPP` on a Linux filesystem that cannot clone, `ENOTSUP` from macOS. When the
   worktrees root is probed, it gets a line of its own: `checkouts: cloned: ...` or
-  `checkouts: plain: probe failed (<errno>): ...`.
+  `checkouts: plain: probe failed (<errno>): ...`. A cloned checkout whose index entries were filled first adds
+  `checkout index: filled <n> stat entries, left <m> for git`; one whose fast path was refused adds
+  `checkout index: fast path skipped: <reason>`.
 - **On darwin** the clone is `unix.Clonefile` from `golang.org/x/sys` v0.30.0 (`docs/dependency-security.md`).
 
-**Cost.** Step 3 rehashes the checked-out bytes: 15–17 s for the full Orbit tree in the experiments, and about 1 s with
-the Orbit exclusion list in place. A later optimization can write the index stat data directly for files cloned from
-clean template entries (§10).
+**Cost.** Step 3 rehashed the checked-out bytes before the index fast path: 15–17 s for the full Orbit tree in the
+experiments, and about 1 s with the Orbit exclusion list in place. Filling the stat data first leaves only the entries
+the runner cannot prove to be hashed. On the HDD-backed Ceph volume measured on 2026-11-15, the rehash of a
+23,515-file, 890 MiB sparse checkout had not finished after 300 s; the fast path replaces it with one `lstat` per
+cloned file and one `git diff-index` over the template.
 
 **Platforms.** macOS on APFS works out of the box (verified). Linux works on XFS (reflink is the default of `mkfs.xfs`
 since xfsprogs 5.1; check `xfs_info` for `reflink=1`), btrfs, and OpenZFS with block cloning (on by default in 2.3.9,
@@ -295,7 +319,7 @@ Shelling out to `/bin/cp -c` is the fallback design if a new dependency is not w
 | D1 | Where a Docker managed runner gets its budget | The apiserver relays the channel's measurement in the heartbeat; the runner compensates for removals since then | The channel passes the limit in the container environment and the runner walks its own volume | **A**: one measurement, the same one that enforces the limit, and no second walk of the volume |
 | D2 | Where sparse paths are declared | `.orbit/checkout-exclude` in the repository | A workspace setting (API, database column, UI on every client) | **A**: versioned with the code, works on every runner, no client work. B can be added later as an override |
 | D3 | Should the Docker limit count clones once | No: keep logical accounting; clones save host disk only | Yes: the channel measures physical extents (FIEMAP), at a higher cost per measurement | **A** for this project; revisit if hosts adopt XFS |
-| D4 | Kubernetes PVC filesystem | Keep ext4 | Switch the StorageClass to `xfs` so that pods can clone | **A** for now: switching requires re-running the durability and power-cut drills |
+| D4 | Kubernetes PVC filesystem | Keep ext4 | Switch the StorageClass to `xfs` so that pods can clone | **A** for the original project; **B adopted on .3, 2026-11-16**, with the local Ceph-CSI reflink patch. The XFS durability and power-cut drills remain outstanding |
 | D5 | Default floor for managed runners | 25% of the budget | A fixed size (for example 4 GiB) | **A**: it scales with the budget |
 | D6 | The Orbit repository's exclusion list | Start with `docs/mocks/` and the evidence directories that no test reads | Exclude all of `docs/evidence/` and fix tests to fetch fixtures | **A**, settled by the merge check in a sparse checkout |
 
@@ -311,10 +335,9 @@ P1 does not depend on P2 or P3. P3 benefits from P2 (smaller rehash) but does no
 
 ## 10. Later, outside this project
 
-- Write the index stat data for cloned clean entries directly, skipping the rehash.
 - Clone ignored dependency directories (`node_modules` and the like) from a retained checkout with the same lockfile
   hash. The 32 retained checkouts are kept for these directories already.
-- Physical accounting in the channel (D3 B), and `xfs` PVCs (D4 B).
+- Physical accounting in the channel (D3 B). The `xfs` PVC (D4 B) is deployed on .3; the XFS power-cut drills remain.
 - Default floors for self-registered runners.
 - Show in the apps how a session's checkout was made: cloned, or plain and why. The runner keeps this
   (`ClaimedSession.CheckoutCreation`) but reports only `worktree`, which the control plane compares exactly, so showing
@@ -334,8 +357,10 @@ P1 does not depend on P2 or P3. P3 benefits from P2 (smaller rehash) but does no
 
 ## 12. Risks
 
-- **A template on another filesystem** (a repository on a data disk, `$ORBIT_HOME` on the system disk): clones fail
-  with `EXDEV` and the runner falls back. The log says so; moving `$ORBIT_HOME` is the operator's fix.
+- **A template on another filesystem** (a repository on a data disk, `$ORBIT_HOME` on the system disk): clones would
+  fail with `EXDEV`, so the runner, which compares the two device numbers, does not try and makes the checkout plain
+  (`another filesystem (EXDEV)`). On btrfs a template in another subvolume counts as another filesystem, since each
+  subvolume has a device number of its own. The log says so; moving `$ORBIT_HOME` is the operator's fix.
 - **Rehash time** grows with checked-out bytes. Sparse checkouts and the later index fast path address it.
 - **Agents that need an excluded path** must add it. The start note says how, and a missing path shows up as a missing
   file rather than as a wrong result.

@@ -1,5 +1,6 @@
 import { TaskStatus } from '@prisma/client';
 import type { CreatorType, Prisma as PrismaTypes, TaskEvidenceDecisionValue } from '@prisma/client';
+import type { EvidenceGapClause, EvidenceTranslation } from '@orbit/shared';
 import { type CoordinatorEvidencePlace, coordinatorHolds } from '../projects/coordinator-evidence-queue';
 import { ownerEvidenceCard, reviewerHolds, type OwnerEvidenceCard } from './evidence-review';
 import {
@@ -18,6 +19,12 @@ import {
   storedEvidenceEnvelope,
   type EvidenceCitation,
 } from './task-evidence-envelope';
+import {
+  RESTART_TASK_ACTION,
+  undecidableAddressees,
+  type OwnerEvidenceAction,
+  type UndecidableAddressee,
+} from './undecidable-evidence';
 import { taskOfRunBehind } from './verifier-write-authority';
 
 /**
@@ -65,8 +72,7 @@ import { taskOfRunBehind } from './verifier-write-authority';
  * AND WHILE THAT COORDINATOR IS PAUSED, IT WAITS FOR IT (2026-10-09)
  * ------------------------------------------------------------------
  * A coordinator whose run failed on a usage limit, a 429 or a sign-in, or that is parked on a retry,
- * has not ended. A revision owed to it is not the owner's question either: it is listed for the
- * coordinator's conversation in `waitingOnCoordinator`, counted nowhere, and delivered to it once it
+ * has not ended. A revision owed to it is hidden from owner queues and counts, and delivered once it
  * is back (`projects/coordinator-evidence-queue.ts` says which revisions are owed;
  * `CoordinatorEvidenceQueueService` delivers them). One that was delivered after waiting is listed in
  * `sentToCoordinator` while the coordinator holds it, so the owner sees it went.
@@ -124,6 +130,13 @@ export interface JudgmentDecidability {
   refusal: string | null;
   /** The action that would clear it, in the same vocabulary the refusal carries. */
   requiredAction: string | null;
+  /**
+   * Who can clear it now (`undecidableAddressees`): the task's live run (`RUN`, which has been
+   * steered), an Automatic project's coordinator (`COORDINATOR`, which has been told), or the owner
+   * (`OWNER`, offered `ownerAction`). Null when decidable. Added for evidence-always-has-an-addressee
+   * §3; a client that does not know it reads the row as before.
+   */
+  addressee: UndecidableAddressee | null;
 }
 
 /** Whether this reader may answer this row, and — when it may not — the door's own words for why. */
@@ -156,6 +169,13 @@ export interface PendingEvidenceJudgment {
   /** What the submitter says it did NOT establish. Carried on every row because it is the field
    *  most likely to change the answer; no client may drop it to save space. */
   gaps: string[];
+  /** Which of `gaps` name a clause of the task's standard, and the follow-up task for each; empty
+   *  when none do (`EvidenceGapClause` in @orbit/shared). A field of its own beside `gaps`, so a
+   *  client that does not know it still renders every gap as text. */
+  gapClauses: EvidenceGapClause[];
+  /** `claim` and `gaps` in the owner's language (Settings › Translation); absent until translated and on every
+   *  revision translation is off for. */
+  translation?: EvidenceTranslation;
   /** One per cited check, in the submitted order, resolved against the rows as they are NOW. */
   citations: EvidenceCitation[];
   /** Whether the door would refuse every decision about this evidence, whoever is reading. */
@@ -170,6 +190,13 @@ export interface PendingEvidenceJudgment {
    * project's are drawn in its coordinator conversation, by `projectId`.
    */
   ownerCard: OwnerEvidenceCard | null;
+  /**
+   * The action the owner can take on this row when nobody else can move it: `RESTART_TASK` on an
+   * undecidable revision whose task has no live run and no Automatic coordinator — pressed as
+   * `POST /tasks/:taskId/evidence/:revision/restart`, which starts the task so a new run files a
+   * revision against the standard it is held to now. Null on every other row.
+   */
+  ownerAction: OwnerEvidenceAction | null;
 }
 
 /**
@@ -201,11 +228,10 @@ export interface PendingEvidenceJudgment {
  *    further down: a reader chasing the stalled population wants the report of stalled tasks, not
  *    a notice pinned to every screen in the account.
  *
- * Two more groups are read for the conversation an Automatic project is coordinated from, and for no
- * other reader: the revisions waiting for that coordinator (`waitingOnCoordinator`), and the ones
- * that waited and have since been handed to it (`sentToCoordinator`). Neither is a question this
- * reader is asked, so neither is counted; both are where the owner's own card for the revision is
- * drawn, because "Decide it myself" is still the owner's at any moment.
+ * `waitingOnCoordinator` remains empty for compatibility with released clients. Revisions that
+ * waited and have since been handed to this coordinator are listed in `sentToCoordinator` while
+ * held, without contributing to pending or counts. Queued turns start no escalation window until
+ * their `deliveredAt` is written.
  */
 export interface PendingEvidenceJudgmentQueue {
   readAt: Date;
@@ -219,11 +245,7 @@ export interface PendingEvidenceJudgmentQueue {
   pending: PendingEvidenceJudgment[];
   /** Rows waiting on a revision THIS session is the one to file. */
   waitingOnYou: PendingEvidenceJudgment[];
-  /**
-   * Revisions of the project THIS session coordinates that are waiting for it — it is paused, or it
-   * has not been handed them yet — oldest submission first, each shaped as a `pending` row. Read for
-   * the project's coordinator conversation only; empty for every other reader.
-   */
+  /** Compatibility field for released clients; always empty. */
   waitingOnCoordinator: PendingEvidenceJudgment[];
   /** Revisions that waited and have since been delivered to THIS session, which still holds them:
    *  neither decided nor replaced by a later revision. Earliest delivery first. */
@@ -345,6 +367,8 @@ async function unansweredLatestEvidence(
           submittedAt: true,
           sourceSessionId: true,
           evidence: true,
+          // Settings › Translation (migration 1080): the claim and gaps in the owner's language, or null.
+          translation: true,
           decisions: { select: { id: true }, take: 1 },
         },
       },
@@ -437,6 +461,9 @@ export async function readPendingEvidenceJudgments(
   const actsFor = await decidingSessionProject(tx, ownerId, decidingSession.id);
   // Read once, so that a reader who is no run, which nearly all of them are, pays for it once.
   const readsAsARun = await taskOfRunBehind(tx, ownerId, decidingSession.id);
+  // Who can move each undecidable row now, read once: the same answer the shared undecidable path
+  // delivered by, so a row is only shown where its required action is the reader's own.
+  const addressees = await undecidableAddressees(tx, ownerId, unanswered.map(({ task }) => task));
   for (const {
     task, latest, heldByCoordinator, coordinatorPlace, dispatching, heldByReviewer, ownerCard,
   } of unanswered) {
@@ -474,6 +501,8 @@ export async function readPendingEvidenceJudgments(
     // decision can be recorded is the door's question, and a second opinion here is exactly the
     // drift that would put an undecidable row back among the answerable ones.
     const standing = await criterionStandingRefusal(tx, task, latest.evidence);
+    const placed = addressees.get(task.id)!;
+    const addressee = standing === null ? null : placed.addressee;
     const row: PendingEvidenceJudgment = {
       taskId: task.id,
       title: task.title,
@@ -485,6 +514,8 @@ export async function readPendingEvidenceJudgments(
       ageSeconds: ageSeconds(readAt, latest.submittedAt),
       claim: envelope?.claim ?? '',
       gaps: envelope?.gaps ?? [],
+      gapClauses: envelope?.gapClauses ?? [],
+      ...(latest.translation ? { translation: latest.translation as unknown as EvidenceTranslation } : {}),
       citations: envelope
         ? await describeEvidenceCitations(tx, { ownerId, taskId: task.id }, envelope.checks)
         : [],
@@ -492,6 +523,7 @@ export async function readPendingEvidenceJudgments(
         decidable: standing === null,
         refusal: standing?.reason ?? null,
         requiredAction: standing === null ? null : CRITERION_MOVED_ACTION,
+        addressee,
       },
       independence: {
         independent: refusedHere === null,
@@ -503,7 +535,24 @@ export async function readPendingEvidenceJudgments(
             : asARun !== null ? RUN_MAY_NOT_DECIDE_ACTION : null,
       },
       ownerCard,
+      ownerAction: addressee === 'OWNER' ? RESTART_TASK_ACTION : null,
     };
+    // An undecidable row is shown only where its required action is the reader's: to the live run
+    // that has to file the next revision (it was steered), or — when there is no live run and no
+    // Automatic coordinator — where the owner reads the task's work (its runs' conversations, the
+    // project's coordinator conversation, the owner card's), carrying Restart the task. One an
+    // Automatic coordinator has been told to act on is nobody else's, and no row is shown anywhere
+    // whose only action belongs to somebody who is not reading it.
+    if (standing !== null) {
+      const runsRow = addressee === 'RUN' && placed.liveRunIds.has(decidingSession.id);
+      const ownersRow = addressee === 'OWNER' && (
+        disqualification !== null
+        || (task.projectId !== null && placed.coordinatorSessionId === decidingSession.id)
+        || ownerCard?.sessionId === decidingSession.id
+      );
+      if (runsRow || ownersRow) waitingOnYou.push(row);
+      continue;
+    }
     // The placement, in the order the door asks: is there a standard to decide this against at
     // all, and then is this reader one the door would take the decision from. Two of the four
     // answers come back and two go nowhere. A decidable row this reader may not answer is already
@@ -518,39 +567,26 @@ export async function readPendingEvidenceJudgments(
     // an undecidable one is told so as before. One whose card has nowhere left to be drawn is read
     // as every row in no project was before.
     if (ownerCard) {
-      if (standing === null) {
-        if (isCardHere && !heldByReviewer && independenceOf === null) pending.push(row);
-      } else if (disqualification !== null) {
-        waitingOnYou.push(row);
-      }
+      if (isCardHere && !heldByReviewer && independenceOf === null) pending.push(row);
       continue;
     }
     // A row of another project's task is that project's to decide, and is not asked of this reader.
-    // One its project's coordinator holds, or that waits for it, is asked of nobody; the
-    // conversation that coordinator IS is shown which of the two it is, and nobody else.
-    if (standing === null) {
-      if (disqualification === null && elsewhere === null && asARun === null && !heldByCoordinator) pending.push(row);
-      else if (
-        coordinatorPlace?.place === 'WAITING'
-        && coordinatorPlace.coordinatorSessionId === decidingSession.id
-      ) {
-        waitingOnCoordinator.push(row);
-      } else if (
-        coordinatorPlace?.place === 'HELD'
-        && coordinatorPlace.waited
-        && coordinatorPlace.sessionId === decidingSession.id
-        && coordinatorPlace.coordinatorSessionId === decidingSession.id
-      ) {
-        sentToCoordinator.push({
-          taskId: task.id,
-          title: task.title,
-          projectId: task.projectId,
-          evidenceRevision: row.evidenceRevision,
-          deliveredAt: coordinatorPlace.deliveredAt,
-        });
-      }
-    } else if (disqualification !== null) {
-      waitingOnYou.push(row);
+    // One its project's coordinator holds, or that waits for it, is asked of nobody. A delivery
+    // receipt is shown only to the coordinator it reached.
+    if (disqualification === null && elsewhere === null && asARun === null && !heldByCoordinator) pending.push(row);
+    else if (
+      coordinatorPlace?.place === 'HELD'
+      && coordinatorPlace.waited
+      && coordinatorPlace.sessionId === decidingSession.id
+      && coordinatorPlace.coordinatorSessionId === decidingSession.id
+    ) {
+      sentToCoordinator.push({
+        taskId: task.id,
+        title: task.title,
+        projectId: task.projectId,
+        evidenceRevision: row.evidenceRevision,
+        deliveredAt: coordinatorPlace.deliveredAt,
+      });
     }
   }
 
@@ -562,8 +598,6 @@ export async function readPendingEvidenceJudgments(
   );
   pending.sort(oldestFirst);
   waitingOnYou.sort(oldestFirst);
-  // Submission order is the order they are delivered in, too (`CoordinatorEvidenceQueueService`).
-  waitingOnCoordinator.sort(oldestFirst);
   sentToCoordinator.sort((left, right) => (
     left.deliveredAt.getTime() - right.deliveredAt.getTime() || left.taskId.localeCompare(right.taskId)
   ));
@@ -655,8 +689,8 @@ export interface EvidenceWaitingForCoordinator {
 
 /**
  * The revisions of one project that wait for its coordinator, oldest submission first — the order
- * they are handed to it in (`CoordinatorEvidenceQueueService`). The same reading the pending read
- * lists in `waitingOnCoordinator`, so what the owner is shown waiting is exactly what is delivered.
+ * they are handed to it in (`CoordinatorEvidenceQueueService`). Read directly from `coordinatorPlace`;
+ * the public `waitingOnCoordinator` compatibility field is always empty and does not drive redelivery.
  */
 export async function readEvidenceWaitingForCoordinator(
   tx: PrismaTypes.TransactionClient,

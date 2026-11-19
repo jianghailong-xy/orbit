@@ -8,11 +8,10 @@
 # refused event's tombstone holds its seq (task B5); over the link a progress ping and a delta take no durable seq at all
 # (task B8), so neither leaves a hole, and neither may be stored.
 #
-#   durable-events-drill.sh prepare        The stack in the cut-over state, built from this checkout: the link gateway
-#                                          following the server's switch and RUNNER_LINK_REQUIRED on, so the runner's
-#                                          daemon calls go over the link alone and HTTPS refuses them. The runner and
-#                                          the scripted claude built from this checkout; the runner registered and
-#                                          started as a systemd unit of its own, on the link.
+#   durable-events-drill.sh prepare        The stack, built from this checkout, where the runner's daemon calls go over
+#                                          the link alone and HTTPS refuses them. The runner and the scripted claude
+#                                          built from this checkout; the runner registered and started as a systemd unit
+#                                          of its own, on the link.
 #   durable-events-drill.sh stream         Opens the session whose prompt streams ticks until finish.
 #   durable-events-drill.sh gateway        Kills the link gateway for ORBIT_DURABLE_EVENTS_GATEWAY_SECONDS.
 #   durable-events-drill.sh apiserver      Kills the apiserver for ORBIT_DURABLE_EVENTS_APISERVER_SECONDS.
@@ -24,20 +23,7 @@
 #                                          nftables rule drops every packet its unit's processes send.
 #   durable-events-drill.sh finish         Releases the stream's last ticks, waits for its turn to end, and judges the
 #                                          session whole.
-#   durable-events-drill.sh rollback       A second session streams and the link gateway is killed; the runner is stopped
-#                                          as a service manager stops it, with events not acknowledged and its turn's
-#                                          completion unsent; then RUNNER_LINK_REQUIRED goes off and the runner starts
-#                                          again with ORBIT_LINK_MODE=off, as a rollback does: first killed (SIGKILL)
-#                                          while it sends its spool, with run_event locked against writes, then started
-#                                          again, and it answers a message; then the switch goes on and the runner takes
-#                                          the session back on the link. Records what the session stored of what its
-#                                          engine wrote, after each step, and judges each: nothing lost, every tick once
-#                                          and in the order written, every kept event once at its own seq, and the
-#                                          prompt's turn ended once, never handed to the engine again.
-#   durable-events-drill.sh partition-off  The partition with RUNNER_LINK_REQUIRED off and the gateway telling the runner
-#                                          MODE_LINK (ORBIT_LINK_STAGING_MODE=link), on a session of its own: past 5
-#                                          minutes without the link the runner takes its work back to HTTPS. Not in all.
-#   durable-events-drill.sh all            prepare, stream, gateway, apiserver, database, partition, finish, rollback.
+#   durable-events-drill.sh all            prepare, stream, gateway, apiserver, database, partition, finish.
 #   durable-events-drill.sh report         Prints the records' summary.
 #   durable-events-drill.sh stop           Stops the drill runner and the ticker, and undoes what a drill that died left.
 #
@@ -49,28 +35,24 @@
 #   ORBIT_DURABLE_EVENTS_PARTITION_SECONDS  how long the runner is cut off                                  600
 #   ORBIT_DURABLE_EVENTS_CATCHUP            how long the stored ticks may take to catch up with the engine
 #                                           once a fault ends                                               300
-#   ORBIT_DURABLE_EVENTS_ROLLBACK_KILL      1 kills the rollback's runner while it sends its spool; 0 skips
-#                                           that step                                                       1
 #
 # Run it as root on a stack no other runner works on: the runner runs in a mount namespace of its own (as
 # lost-answer-drill.sh's does) and in a systemd unit of its own, whose cgroup the partition's nftables rule matches. It
 # needs docker, systemd, nft, jq, node, go and curl. The records go to <state>/client/durable-events/: timeline.txt is the
-# drill's account, phases.tsv has a line per fault and one for the whole session, rollback.tsv a line per step of the
-# rollback, and summary.txt the judgement; each phase leaves its samples, the ticks' release times and the runner's, the
-# link gateway's and the apiserver's logs over it. The runner, its log, its spool and the scripted claude's records are
-# in <state>/durable-events/; the runner keeps running after the drill until `durable-events-drill.sh stop`. Setting up
-# exits non-zero at the first step that does not hold; a fault is judged whole, and all runs every phase before it exits
-# non-zero for any.
+# drill's account, phases.tsv has a line per fault and one for the whole session, and summary.txt the judgement; each
+# phase leaves its samples, the ticks' release times and the runner's, the link gateway's and the apiserver's logs over
+# it. The runner, its log, its spool and the scripted claude's records are in <state>/durable-events/; the runner keeps
+# running after the drill until `durable-events-drill.sh stop`. Setting up exits non-zero at the first step that does
+# not hold; a fault is judged whole, and all runs every phase before it exits non-zero for any.
 set -euo pipefail
 # shellcheck source=../staging-lib.sh
 source "$(dirname "${BASH_SOURCE[0]}")/../staging-lib.sh"
 
-helper="$here/drills/rollback-drill.mjs"
+helper="$here/drills/drill-api.mjs"
 out="$state/client/durable-events"
 drill="$state/durable-events"
 timeline="$out/timeline.txt"
 table="$out/phases.tsv"
-rollback_table="$out/rollback.tsv"
 summary_file="$out/summary.txt"
 unit="$project-durable-events.service"
 ticker="$project-durable-events-ticker.service"
@@ -86,8 +68,6 @@ apiserver_seconds="${ORBIT_DURABLE_EVENTS_APISERVER_SECONDS:-60}"
 database_seconds="${ORBIT_DURABLE_EVENTS_DATABASE_SECONDS:-20}"
 partition_seconds="${ORBIT_DURABLE_EVENTS_PARTITION_SECONDS:-600}"
 catchup="${ORBIT_DURABLE_EVENTS_CATCHUP:-300}"
-rollback_kill="${ORBIT_DURABLE_EVENTS_ROLLBACK_KILL:-1}"
-case "$rollback_kill" in 0 | 1) ;; *) die "ORBIT_DURABLE_EVENTS_ROLLBACK_KILL must be 0 or 1, not $rollback_kill" ;; esac
 whole() { [[ "$2" =~ ^[1-9][0-9]*$ ]] || die "$1 must be a positive whole number of seconds, not $2"; }
 whole ORBIT_DURABLE_EVENTS_TICK "$tick"
 whole ORBIT_DURABLE_EVENTS_GATEWAY_SECONDS "$gateway_seconds"
@@ -95,14 +75,12 @@ whole ORBIT_DURABLE_EVENTS_APISERVER_SECONDS "$apiserver_seconds"
 whole ORBIT_DURABLE_EVENTS_DATABASE_SECONDS "$database_seconds"
 whole ORBIT_DURABLE_EVENTS_PARTITION_SECONDS "$partition_seconds"
 whole ORBIT_DURABLE_EVENTS_CATCHUP "$catchup"
-# How many ticks each session's prompt streams. The stream's last through every fault, each one's catch-up and the time
-# between them; finish releases what is left at once. The rollback's stream is cut short by the runner's stop.
+# How many ticks the session's prompt streams. The stream's last through every fault, each one's catch-up and the time
+# between them; finish releases what is left at once.
 stream_ticks=$(((gateway_seconds + apiserver_seconds + database_seconds + partition_seconds + 4 * catchup + 600) / tick))
-rollback_ticks=60
-off_ticks=$(((partition_seconds + 2 * catchup + 300) / tick))
-# What the runner logs when it loses events: an HTTPS batch dropped after the server refused it (session.go), and the
-# link's own losses: a stream given up, events not sent or not kept, the spool losing what it held (link_events.go,
-# link_events_spool.go).
+# What the runner logs when it loses events: an HTTPS batch dropped after the server refused it (session.go, in a runner
+# from before the link was all there is), and the link's own losses: a stream given up, events not sent or not kept,
+# the spool losing what it held (link_events.go, link_events_spool.go).
 drop_re='dropping [0-9]+ events'
 loss_re='held events are not sent|are given up|they are not sent|they are not kept|could not be kept|lost so far'
 
@@ -129,7 +107,6 @@ stack_settings() {
   origin="http://$(setting STAGING_BIND 127.0.0.1):$(setting STAGING_HTTP_PORT 18086)"
 }
 api() { node "$helper" "$origin" "$state" "$@"; }
-switch_is() { [ "$(json "$(api switch get)" required)" = "$1" ]; }
 # The database's primary: the stack's own container, but for the standby while the database phase has it promoted.
 db() { cat "$drill/primary" 2>/dev/null || echo "$primary"; }
 psql_value() { docker exec "$(db)" psql -U orbit -d orbit -tAc "$1"; }
@@ -221,22 +198,19 @@ wait_log() {
 }
 
 # --- Sessions and their ticks. ----------------------------------------------------------------------------------------
-# write_script LABEL RUN TICKS KIND: the scripted claude's script for the next session's engine. Its prompt streams TICKS
+# write_script LABEL RUN TICKS: the scripted claude's script for the next session's engine. Its prompt streams TICKS
 # ticks, tick K once the drill releases LABEL-RUN-K (fake_claude_test.go, `await: release`), and ends with a result;
-# every message after it is answered at once. KIND full makes each tick a progress ping (system/status, which nothing
-# stores), a reply delta (live only) and an assistant message; durable makes it the assistant message alone, for a
-# stream part of which may go over HTTPS, where the ping and the delta take a seq each and leave a hole by design. An
-# engine reads its script when it starts, so the sessions opened before keep theirs.
+# every message after it is answered at once. Each tick is a progress ping (system/status, which nothing stores), a
+# reply delta (live only) and an assistant message. An engine reads its script when it starts, so the sessions opened
+# before keep theirs.
 write_script() {
   node -e '
-    const [file, label, run, ticks, kind] = process.argv.slice(1);
+    const [file, label, run, ticks] = process.argv.slice(1);
     const answered = (text) => [{ emit: "assistant", text }, { emit: "result", text }];
     const steps = [{ await: "user" }, { emit: "replay_user" }, { emit: "system_init", version: "2.1.300" }];
     for (let k = 1; k <= Number(ticks); k += 1) {
       steps.push({ await: "release", text: `${label}-${run}-${k}` });
-      if (kind === "full") {
-        steps.push({ emit: "system_status" }, { emit: "text_delta", text: `Durable events drill, ${label}: tick ${k}` });
-      }
+      steps.push({ emit: "system_status" }, { emit: "text_delta", text: `Durable events drill, ${label}: tick ${k}` });
       steps.push({ emit: "assistant", text: `Durable events drill, ${label}: tick ${k}.` });
     }
     steps.push({ emit: "result", text: `Durable events drill, ${label}: the stream is answered.` });
@@ -245,29 +219,15 @@ write_script() {
     }
     require("fs").writeFileSync(file, JSON.stringify(steps));' "$drill/fake/script.json" "$@"
 }
-# write_resume_script LABEL: what an engine the runner resumes (--resume) answers: every message at once, with an
-# assistant message and a result.
-write_resume_script() {
-  node -e '
-    const [file, label] = process.argv.slice(1);
-    const steps = [];
-    for (let n = 1; n <= 30; n += 1) {
-      const text = `Durable events drill, ${label}: message ${n} of the resumed engine is answered.`;
-      steps.push({ await: "user" }, { emit: "replay_user" });
-      if (n === 1) steps.push({ emit: "system_init", version: "2.1.300" });
-      steps.push({ emit: "assistant", text }, { emit: "result", text });
-    }
-    require("fs").writeFileSync(file, JSON.stringify(steps));' "$drill/fake/script-resume.json" "$1"
-}
-# open_session LABEL TICKS KIND PROMPT: a session whose prompt streams TICKS ticks of KIND (write_script), recorded in
+# open_session LABEL TICKS PROMPT: a session whose prompt streams TICKS ticks (write_script), recorded in
 # <drill>/LABEL.session as "ID UUID RUN TICKS" and loaded (load_session). The prompt ends with the session's marker
 # (prompt_marker), which no other session's prompt holds.
 open_session() {
   local created="" stamp _
   stamp="$(date -u +%H%M%S)"
-  write_script "$1" "$stamp" "$2" "$3"
+  write_script "$1" "$stamp" "$2"
   for _ in $(seq 1 12); do
-    created="$(api session "$(workspace_id)" "$4 [$1 run $stamp]" 2>>"$out/api-errors.log")" && break
+    created="$(api session "$(workspace_id)" "$3 [$1 run $stamp]" 2>>"$out/api-errors.log")" && break
     sleep 5
   done
   [ -n "$created" ] || fail "$1: the session could not be created (see $out/api-errors.log)"
@@ -494,37 +454,11 @@ restore_database() {
       rm -rf "$state/postgres-before-failover" ;;
   esac
 }
-# The lock the rollback's kill step holds on run_event while its runner sends its spool: a psql session of its own in the
-# database's container, found and ended by its application name.
-lock_name="durable-events-drill-lock"
-# lock_run_event: run_event locked against writes (SHARE: reads go on, inserts wait), held until unlock_run_event.
-lock_run_event() {
-  docker exec -d "$(db)" psql -U orbit -d orbit -c "SET application_name = '$lock_name'" -c "BEGIN" \
-    -c "LOCK TABLE run_event IN SHARE MODE" -c "SELECT pg_sleep(1800)"
-  wait_until 30 run_event_locked || fail "run_event is not locked within 30 s"
-}
-run_event_locked() {
-  [ "$(psql_value "SELECT count(*) FROM pg_locks l JOIN pg_class c ON c.oid = l.relation JOIN pg_stat_activity a ON a.pid = l.pid
-    WHERE c.relname = 'run_event' AND l.granted AND l.mode = 'ShareLock' AND a.application_name = '$lock_name'")" -ge 1 ] 2> /dev/null
-}
-# writes_wait_on_run_event: some write of run_event waits on the lock.
-writes_wait_on_run_event() {
-  [ "$(psql_value "SELECT count(*) FROM pg_locks l JOIN pg_class c ON c.oid = l.relation
-    WHERE c.relname = 'run_event' AND NOT l.granted")" -ge 1 ] 2> /dev/null
-}
-# unlock_run_event: while the lock is held, the writes still waiting on it ended, rolled back, and then the lock.
-unlock_run_event() {
-  [ "$(psql_value "SELECT count(*) FROM pg_stat_activity WHERE application_name = '$lock_name'")" -ge 1 ] 2> /dev/null || return 0
-  psql_value "SELECT count(pg_terminate_backend(l.pid)) FROM pg_locks l JOIN pg_class c ON c.oid = l.relation
-    WHERE c.relname = 'run_event' AND NOT l.granted" > /dev/null || true
-  psql_value "SELECT count(pg_terminate_backend(pid)) FROM pg_stat_activity WHERE application_name = '$lock_name'" > /dev/null || true
-}
 # restore_faults: every fault a phase that died left, undone: the partition lifted, a killed container started, the
-# database back in the stack's container, run_event unlocked.
+# database back in the stack's container.
 restore_faults() {
   local down
   reconnect
-  unlock_run_event 2> /dev/null || true
   down="$(cat "$drill/down" 2> /dev/null || true)"
   if [ -n "$down" ]; then
     docker start "$down" > /dev/null 2>&1 || true
@@ -534,15 +468,13 @@ restore_faults() {
 }
 
 # --- A fault on a streaming session, judged. --------------------------------------------------------------------------
-# begin PHASE LABEL SWITCH: the session LABEL as the fault PHASE starts from: the runner on the link with
-# RUNNER_LINK_REQUIRED SWITCH (true or false), the session running its prompt, and its stored ticks caught up with its
-# engine's, so that whatever is not stored afterwards is the fault's.
+# begin PHASE LABEL: the session LABEL as the fault PHASE starts from: the runner on the link, the session running its
+# prompt, and its stored ticks caught up with its engine's, so that whatever is not stored afterwards is the fault's.
 begin() {
   phase=$1
   stack_settings
   load_session "$2"
   runner_running || fail "$phase: the drill runner is not running: run prepare"
-  switch_is "$3" || fail "$phase: RUNNER_LINK_REQUIRED is not $3"
   wait_presence LINK 120 || fail "$phase: the runner's presence does not say LINK"
   ticker_running || fail "$phase: the ticker of session $sid has stopped: run $2 again"
   [ "$(session_status)" = RUNNING ] || fail "$phase: session $sid is $(session_status), not RUNNING: run $2 again"
@@ -573,15 +505,14 @@ hold() {
     sleep 2
   done
 }
-# judge FAULT [FALLBACK]: the fault that ended at up_at, with k_down and k_up the ticks released as it began and ended,
-# judged once the session has stored tick k_up (within ORBIT_DURABLE_EVENTS_CATCHUP): every seq up to the session's
-# last held by a row, every tick stored once, those written during the fault among them, the runner reading each off its
-# engine as it came, no ping or live event stored, no event dropped or lost in the runner's log, the work kept on the
-# link (unless FALLBACK is 1), the session RUNNING throughout, and the same runner process before and after. A line in
-# phases.tsv; failed is set when any of it does not hold.
+# judge FAULT: the fault that ended at up_at, with k_down and k_up the ticks released as it began and ended, judged once
+# the session has stored tick k_up (within ORBIT_DURABLE_EVENTS_CATCHUP): every seq up to the session's last held by a
+# row, every tick stored once, those written during the fault among them, the runner reading each off its engine as it
+# came, no ping or live event stored, no event dropped or lost in the runner's log, the session RUNNING throughout, and
+# the same runner process before and after. A line in phases.tsv; failed is set when any of it does not hold.
 judge() {
-  local fault=$1 fallback_ok=${2:-0} caught_at="" caught_s=- verdicts=() s hole_list t missing n_during read_max stored_first
-  local stored_final live drops losses fallbacks retries reconnect_line pid1 process1 apiserver1 verdict reaper
+  local fault=$1 caught_at="" caught_s=- verdicts=() s hole_list t missing n_during read_max stored_first
+  local stored_final live drops losses retries reconnect_line pid1 process1 apiserver1 verdict reaper
   if wait_until "$catchup" caught_up "$k_up"; then
     caught_at="$(now)"
     caught_s="$(seconds "$up_at" "$caught_at")"
@@ -595,7 +526,6 @@ judge() {
   live="$(live_rows)"
   drops="$(log_since_re "$from" "$drop_re" | wc -l)"
   losses="$(log_since_re "$from" "$loss_re" | wc -l)"
-  fallbacks="$(log_since "$from" 'runner link mode: off' | wc -l)"
   retries="$(log_since "$from" 'were not stored (' | wc -l)"
   reconnect_line="$(log_since "$from" 'carries the work of process' | tail -n 1 | sed -E 's/^.*(runner link: )/\1/')"
   # A failover empties runner_presence (UNLOGGED): the runner's next beat writes it again.
@@ -613,14 +543,13 @@ judge() {
   [ "$live" = 0 ] || verdicts+=("$live progress pings or live events stored")
   [ "$drops" = 0 ] || verdicts+=("$drops 'dropping N events' line(s) in the runner log")
   [ "$losses" = 0 ] || verdicts+=("$losses event loss line(s) in the runner log")
-  [ "$fallback_ok" = 1 ] || [ "$fallbacks" = 0 ] || verdicts+=("the runner took its work back to HTTPS ($fallbacks line(s))")
   [ "$statuses" = RUNNING ] || verdicts+=("the session was $statuses during the fault")
   { [ "$pid1" = "$pid0" ] && [ "$process1" = "$process0" ]; } ||
     verdicts+=("the runner is pid $pid1 process $process1 after the fault, pid $pid0 process $process0 before it")
   if [ ${#verdicts[@]} -eq 0 ]; then verdict=PASS; else verdict="$(printf '%s; ' "${verdicts[@]}")"; verdict="${verdict%; }"; fi
   printf '%s\t' "$phase" "$fault" "$down_at" "$up_at" "$(seconds "$down_at" "$up_at")" "$((k_up - k_down))" "$caught_s" \
     "$read_max" "$stored_first..$stored_final" "$s" "${hole_list:-none}" "$t" "${missing:-none}" "$live" "$drops" "$losses" \
-    "$fallbacks" "$retries" "$statuses" >> "$table"
+    "$retries" "$statuses" >> "$table"
   printf '%s\n' "$verdict" >> "$table"
   [ -n "$reconnect_line" ] || reconnect_line="no new link connection carried the work"
   say "$phase: $reconnect_line; $retries resend(s) of the session's events logged; the apiserver (restarts, started) was \"$apiserver0\", is \"$apiserver1\""
@@ -643,20 +572,18 @@ judge() {
 
 # --- Phases. ----------------------------------------------------------------------------------------------------------
 prepare() {
-  local name answer
+  local name
   # A run's records are its own: nothing an earlier run left is read as this one's.
   rm -rf "$out"
   mkdir -p "$out"
-  say "prepare: the stack $project in the cut-over state, built from $(git -C "$repo" rev-parse --short HEAD) ($(git -C "$repo" status --short | wc -l) paths changed)"
+  say "prepare: the stack $project, built from $(git -C "$repo" rev-parse --short HEAD) ($(git -C "$repo" status --short | wc -l) paths changed)"
   stop_ticker
   stop_runner
   restore_faults
-  ORBIT_LINK_STAGING_MODE=http ORBIT_LINK_STAGING_BACKENDS=1 "$here/staging-up.sh" > "$out/prepare-staging-up.log" 2>&1 ||
+  ORBIT_LINK_STAGING_BACKENDS=1 "$here/staging-up.sh" > "$out/prepare-staging-up.log" 2>&1 ||
     fail "staging-up.sh (see $out/prepare-staging-up.log)"
   stack_settings
-  answer="$(api switch on)" || fail "switching RUNNER_LINK_REQUIRED on"
-  [ "$(json "$answer" required)" = true ] || fail "RUNNER_LINK_REQUIRED is not on: $answer"
-  say "stack $project up at $origin, its link gateway following the switch: RUNNER_LINK_REQUIRED $answer"
+  say "stack $project up at $origin"
   rm -rf "$drill"
   mkdir -p "$drill"/{bin,home,orbit,fakebin,fake,empty,tmp,work}
   (cd "$repo/src/runner-go" && go build -o "$drill/bin/orbit" . && go test -c -o "$drill/fake/orbit.test" .) \
@@ -678,13 +605,13 @@ EOF
     fail "registering the drill runner (see $out/prepare-register.log)"
   start_runner
   say "drill runner $name ($(runner_id)) started as $unit, pid $(runner_pid)"
-  wait_log 0 'runner link mode: on' 180
+  wait_log 0 'carries the work of process' 180
   wait_presence LINK 180 || fail "the runner's presence does not say LINK within 180 s"
-  say "runner log: $(log_since 0 'runner link mode: on' | head -n 1 | sed -E 's/^.*(runner link mode: on)/\1/'); presence $(presence)"
+  say "runner log: $(log_since 0 'carries the work of process' | head -n 1 | sed -E 's/^.*(runner link: )/\1/'); presence $(presence)"
   api workspace "$(runner_id)" "$drill/work" "$name" > "$drill/workspace.json" || fail "creating the drill workspace"
   printf '%s\t' phase fault down_at up_at down_s ticks_during caught_up_s read_max_s stored_after_release_s \
-    'seqs(rows,first,last,tombstones)' holes 'ticks(rows,distinct,last)' missing_ticks live_rows drops losses fallbacks \
-    resends statuses > "$table"
+    'seqs(rows,first,last,tombstones)' holes 'ticks(rows,distinct,last)' missing_ticks live_rows drops losses resends \
+    statuses > "$table"
   printf 'verdict\n' >> "$table"
   say "prepare holds: the runner works over the link alone, HTTPS refusing its daemon calls"
 }
@@ -693,10 +620,9 @@ stream_phase() {
   phase=stream
   stack_settings
   runner_running || fail "stream: the drill runner is not running: run prepare"
-  switch_is true || fail "stream: RUNNER_LINK_REQUIRED is off: run prepare"
   wait_presence LINK 120 || fail "stream: the runner's presence does not say LINK"
   stop_ticker
-  open_session stream "$stream_ticks" full "Durable events drill, stream: the prompt, whose answer streams until the drill ends"
+  open_session stream "$stream_ticks" "Durable events drill, stream: the prompt, whose answer streams until the drill ends"
   start_ticker 1
   wait_until 180 caught_up 3 || fail "stream: session $sid stored no third tick within 180 s (it is $(session_status))"
   [ "$(session_status)" = RUNNING ] || fail "stream: session $sid is $(session_status), not RUNNING"
@@ -705,7 +631,7 @@ stream_phase() {
 }
 
 gateway_phase() {
-  begin gateway stream true
+  begin gateway stream
   k_down="$(released)"
   kill_container "$gateway"
   down_at="$(now)"
@@ -719,7 +645,7 @@ gateway_phase() {
 }
 
 apiserver_phase() {
-  begin apiserver stream true
+  begin apiserver stream
   k_down="$(released)"
   kill_container "$apiserver"
   down_at="$(now)"
@@ -734,7 +660,7 @@ apiserver_phase() {
 
 database_phase() {
   local resolved address presence0 up
-  begin database stream true
+  begin database stream
   # Past the reaper's startup grace (3 minutes, reaper.service.ts) by a sweep: an apiserver that started just before,
   # as the apiserver phase's does, would hold every reaping through the failover for a reason of its own.
   up="$(seconds "$(docker inspect -f '{{.State.StartedAt}}' "$apiserver")" "$(now)")"
@@ -762,7 +688,7 @@ database_phase() {
   say "database: the runner's presence after the failover is $(presence)"
 
   # Back into the stack's own container: a planned switchover, under the same stream.
-  begin database-back stream true
+  begin database-back stream
   k_down="$(released)"
   down_at="$(now)"
   switch_back
@@ -773,7 +699,7 @@ database_phase() {
 }
 
 partition_phase() {
-  begin partition stream true
+  begin partition stream
   k_down="$(released)"
   cut_off
   down_at="$(now)"
@@ -784,11 +710,11 @@ partition_phase() {
   up_at="$(now)"
   k_up="$(released)"
   say "partition: the runner's network is back at tick $k_up; the rule dropped ${dropped#packets } packets"
-  judge "the runner cut off the network for $partition_seconds s, RUNNER_LINK_REQUIRED on"
+  judge "the runner cut off the network for $partition_seconds s"
 }
 
 finish_phase() {
-  local k0 s hole_list t missing live drops losses fallbacks turn ran starts runtime st verdicts=() verdict marker first_on
+  local k0 s hole_list t missing live drops losses turn ran starts runtime st verdicts=() verdict marker
   phase=finish
   stack_settings
   load_session stream
@@ -805,11 +731,9 @@ finish_phase() {
   t="$(stored_ticks)"
   missing="$(missing_ticks "$ticks_total")"
   live="$(live_rows)"
-  # The runner's whole log since it went on the link: it has not stopped, so nothing may have left the link.
-  first_on="$(awk 'index($0, "runner link mode: on") { print NR - 1; exit }' "$drill/runner.log")"
+  # The runner's whole log: it has not stopped since prepare.
   drops="$(log_since_re 0 "$drop_re" | wc -l)"
   losses="$(log_since_re 0 "$loss_re" | wc -l)"
-  fallbacks="$(log_since "${first_on:-0}" 'runner link mode: off' | wc -l)"
   turn="$(psql_value "SELECT id FROM conversation_turn WHERE session_id = '$suuid' AND kind = 'message' ORDER BY seq LIMIT 1")"
   marker="$(prompt_marker)"
   ran="$(deliveries "$marker") $(psql_value "SELECT count(*) FILTER (WHERE type = 'user') || ' ' ||
@@ -825,17 +749,16 @@ finish_phase() {
   [ "$live" = 0 ] || verdicts+=("$live progress pings or live events stored")
   [ "$drops" = 0 ] || verdicts+=("$drops 'dropping N events' line(s) in the runner log")
   [ "$losses" = 0 ] || verdicts+=("$losses event loss line(s) in the runner log")
-  [ "$fallbacks" = 0 ] || verdicts+=("the runner took its work back to HTTPS ($fallbacks line(s))")
   [ "$ran" = "1 1 1 1 1" ] || verdicts+=("the prompt ran as \"$ran\" (stdin, user, written, acknowledged, turn_end), not once")
   [ "$starts" = 1 ] || verdicts+=("the session's engine started $starts times")
   [ "$st" = AWAITING_INPUT ] || verdicts+=("the session is $st, not AWAITING_INPUT")
   if [ ${#verdicts[@]} -eq 0 ]; then verdict=PASS; else verdict="$(printf '%s; ' "${verdicts[@]}")"; verdict="${verdict%; }"; fi
   printf '%s\t' whole "session $sid from its prompt to its turn's end" "$(head -n 1 "$out/stream-ticks.tsv" | cut -f2)" \
     "$(now)" - "$ticks_total" - - - "$s" "${hole_list:-none}" "$t" "${missing:-none}" "$live" "$drops" "$losses" \
-    "$fallbacks" - "$st" >> "$table"
+    - "$st" >> "$table"
   printf '%s\n' "$verdict" >> "$table"
   awk -v from=0 'NR > from' "$drill/runner.log" > "$out/finish-runner.log"
-  say "finish: session $sid is $st; seqs (rows first last tombstones) $s, holes ${hole_list:-none}; ticks (rows distinct last) $t; the prompt ran as \"$ran\"; its engine started $starts time(s); the runner log has $drops dropping line(s), $losses loss line(s), $fallbacks turn(s) to HTTPS"
+  say "finish: session $sid is $st; seqs (rows first last tombstones) $s, holes ${hole_list:-none}; ticks (rows distinct last) $t; the prompt ran as \"$ran\"; its engine started $starts time(s); the runner log has $drops dropping line(s), $losses loss line(s)"
   if [ "$verdict" = PASS ]; then
     say "whole session holds: every one of its $(cut -d' ' -f1 <<< "$s") seqs held by a row, all $ticks_total ticks stored once, no ping or delta stored, nothing dropped"
   else
@@ -844,338 +767,22 @@ finish_phase() {
   fi
 }
 
-# spool_events: the events the drill runner's spool holds for the loaded session, a line each: "SEQ<TAB>TYPE<TAB>TEXT".
-spool_events() {
-  local dir
-  for dir in "$drill/orbit/link-spool/"*/; do
-    [ -d "$dir" ] || continue
-    case "$dir" in *"$suuid"* | *"$sid"* | *"${suuid//-/}"*) cat "$dir"*.jsonl 2> /dev/null || true ;; esac
-  done | node -e '
-    const rows = [];
-    for (const line of require("fs").readFileSync(0, "utf8").split("\n").filter(Boolean)) {
-      try {
-        const e = JSON.parse(line);
-        const p = e.payload || {};
-        rows.push([e.seq, e.type, String(p.text ?? p.subtype ?? p.delivery ?? "").replace(/[\t\n]/g, " ")]);
-      } catch {}
-    }
-    rows.sort((a, b) => a[0] - b[0]);
-    for (const r of rows) console.log(r.join("\t"));'
-}
-# spool_fate FILE: of the events in FILE (spool_events), how many the session stores at their seq (the same type and
-# text), how many of their seqs hold another event, and how many no row: "STORED TAKEN NONE".
-spool_fate() {
-  local first last
-  first="$(head -n 1 "$1" | cut -f1)"
-  last="$(tail -n 1 "$1" | cut -f1)"
-  if [ -z "$first" ]; then echo "0 0 0"; return; fi
-  join -t $'\t' -a 1 -e '' -o '1.1,1.2,1.3,2.2,2.3' <(sort -t $'\t' -k1,1 "$1") \
-    <(psql_rows "SELECT seq, type, replace(COALESCE(payload->>'text', payload->>'subtype', payload->>'delivery', ''), E'\t', ' ')
-        FROM run_event WHERE session_id = '$suuid' AND seq BETWEEN $first AND $last" | sort -t $'\t' -k1,1) |
-    awk -F'\t' '{ if ($4 == "") n++; else if ($2 == $4 && $3 == $5) s++; else t++ } END { print s + 0, t + 0, n + 0 }'
-}
-# kept_completions: how many turn completions the drill runner's spool keeps for its next process (runner-go
-# turn_complete_journal.go).
-kept_completions() { find "$drill/orbit/link-spool" -name 'turn-complete-*.json' 2> /dev/null | wc -l; }
-# kept_gone KEPT NOW: of the events in KEPT (spool_events), how many are neither stored at their seq (the same type and
-# text) nor in NOW, the spool as it stands later: what a runner lost.
-kept_gone() {
-  local first last
-  first="$(head -n 1 "$1" | cut -f1)"
-  last="$(tail -n 1 "$1" | cut -f1)"
-  if [ -z "$first" ]; then echo 0; return; fi
-  { psql_rows "SELECT seq, type, replace(COALESCE(payload->>'text', payload->>'subtype', payload->>'delivery', ''), E'\t', ' ')
-      FROM run_event WHERE session_id = '$suuid' AND seq BETWEEN $first AND $last"; cat "$2"; } | sort -u > "$out/.kept-present"
-  sort -u "$1" | comm -23 - "$out/.kept-present" | wc -l
-}
-# The session's first message turn: the prompt's, whose end the stopped runner kept.
-prompt_turn() { psql_value "SELECT id FROM conversation_turn WHERE session_id = '$suuid' AND kind = 'message' ORDER BY seq LIMIT 1"; }
-# turn_end_seqs TURN: the seqs of TURN's turn_end rows, as "S1,S2", or nothing.
-turn_end_seqs() {
-  psql_value "SELECT COALESCE(string_agg(seq::text, ',' ORDER BY seq), '') FROM run_event WHERE session_id = '$suuid'
-    AND type = 'turn_end' AND turn_id = '$1'"
-}
-# others_turn_ends TURN: the most turn_end rows any other turn of the session has.
-others_turn_ends() {
-  psql_value "SELECT COALESCE(max(n), 0) FROM (SELECT count(*) AS n FROM run_event WHERE session_id = '$suuid'
-    AND type = 'turn_end' AND turn_id IS NOT NULL AND turn_id <> '$1' GROUP BY turn_id) t"
-}
-# continuations TURN: TURN's user rows that hold the control plane's resume continuation, as "SEQ@LEASE,...": dequeueTurn
-# hands a turn whose runner restarted, its lease expired by takeoverLeases, back with it (resume-continuation.ts).
-continuations() {
-  psql_value "SELECT COALESCE(string_agg(seq::text || '@' || COALESCE(ingested_under_lease_generation::text, '-'), ','
-      ORDER BY seq), '') FROM run_event WHERE session_id = '$suuid' AND type = 'user' AND turn_id = '$1'
-    AND payload::text LIKE '%was interrupted because its runner restarted%'"
-}
-# ticks_out_of_order: how many stored ticks have a seq below an earlier tick's; 0 when they are stored in the order the
-# engine wrote them.
-ticks_out_of_order() {
-  psql_value "SELECT count(*) FROM (SELECT seq, lag(seq) OVER (ORDER BY k, seq) AS prev FROM ($(ticks_query)) t
-    WHERE k IS NOT NULL) o WHERE prev IS NOT NULL AND prev >= seq"
-}
-# kept_ticks FILE: the ticks a spool file (spool_events) holds, one a line.
-kept_ticks() { sed -nE "s/^[0-9]+\tassistant\tDurable events drill, $label: tick ([0-9]+)\.\$/\1/p" "$1"; }
-# ticks_held_once FILE: of the ticks 1..ticks_total, those not stored nor in FILE's spool, and those both or twice, as
-# "MISSING TWICE" ranges ("-" for none): whether the stopped runner lost or doubled any.
-ticks_held_once() {
-  { psql_value "SELECT k FROM ($(ticks_query)) t WHERE k IS NOT NULL"; kept_ticks "$1"; } | node -e '
-    const n = Number(process.argv[1]);
-    const count = new Map();
-    for (const k of require("fs").readFileSync(0, "utf8").split("\n").filter(Boolean).map(Number)) count.set(k, (count.get(k) ?? 0) + 1);
-    const ranges = (ks) => ks.length ? ks.reduce((r, k) => { const last = r[r.length - 1];
-      if (last && last[1] === k - 1) last[1] = k; else r.push([k, k]); return r; }, []).map(([a, b]) => a === b ? `${a}` : `${a}-${b}`).join(",") : "-";
-    const missing = [], twice = [];
-    for (let k = 1; k <= n; k += 1) { const c = count.get(k) ?? 0; if (c === 0) missing.push(k); if (c > 1) twice.push(k); }
-    console.log(`${ranges(missing)} ${ranges(twice)}`);' "$ticks_total"
-}
-# rollback_redelivery STEP: rollback-redelivery-STEP.tsv, the prompt turn's rows after the last seq the stopped runner
-# kept: seq, type, the lease generation that stored it, and its text, where a re-delivered turn's resume continuation and
-# its answer show; and what the scripted claude was handed and how it was started (stdin.jsonl, spawns.jsonl).
-rollback_redelivery() {
-  local last turn
-  last="$(tail -n 1 "$out/rollback-spool.tsv" | cut -f1)"
-  turn="$(prompt_turn)"
-  psql_rows "SELECT seq, type, COALESCE(ingested_under_lease_generation::text, '-'),
-      left(replace(replace(COALESCE(payload->>'text', payload->>'subtype', payload::text), E'\n', ' '), E'\t', ' '), 160)
-    FROM run_event WHERE session_id = '$suuid' AND turn_id = '$turn' AND seq > ${last:-0} ORDER BY seq" \
-    > "$out/rollback-redelivery-$1.tsv"
-  grep -F -e 'was interrupted because its runner restarted' "$drill/fake/stdin.jsonl" 2> /dev/null | grep -c -F "$(prompt_marker)" \
-    > "$out/rollback-continuations-delivered-$1.txt" || true
-  cp "$drill/fake/spawns.jsonl" "$out/rollback-spawns-$1.jsonl" 2> /dev/null || true
-  say "rollback, $1: the prompt turn's rows after seq ${last:-0} (seq, type, lease, text): $(awk -F'\t' '{ printf "%s%s %s %s \"%s\"", (NR > 1 ? "; " : ""), $1, $2, $3, substr($4, 1, 60) }' "$out/rollback-redelivery-$1.tsv"); resume continuations of the prompt delivered to the engine: $(cat "$out/rollback-continuations-delivered-$1.txt" 2> /dev/null || echo 0)"
-}
-# rollback_step STEP: a line of rollback.tsv for the session as it stands after STEP, and STEP's verdicts. After the stop,
-# every tick the engine wrote is stored or kept, once. Once the runner was killed while it sent its spool, every event
-# the stopped runner kept is stored or in the spool still. Once the runner has started again, whatever its mode: every
-# tick is stored once and in the order it was written; every event the stopped runner kept is stored at its own seq; the
-# spool is empty; no seq is without a row; the prompt's turn has one turn_end, the one the stopped runner kept, and no
-# resume continuation, stored or delivered to the engine: its kept completion settled it, and nothing handed it to an
-# engine again (task 34mwBTpOPo3S9LM2SXs10); and no other turn has more than one.
-rollback_step() {
-  local step=$1 s hole_list t missing order spool_n spool_range fate drops losses turn ends end_seqs conts others held
-  local first_end kept_end gone delivered completions
-  s="$(seqs)"
-  turn="$(prompt_turn)"
-  end_seqs="$(turn_end_seqs "$turn")"
-  ends="$(awk -F, '{ print ($0 == "" ? 0 : NF) }' <<< "$end_seqs")"
-  conts="$(continuations "$turn")"
-  others="$(others_turn_ends "$turn")"
-  hole_list="$(holes)"
-  t="$(stored_ticks)"
-  missing="$(missing_ticks "$ticks_total")"
-  order="$(ticks_out_of_order)"
-  spool_events > "$out/rollback-spool-$step.tsv"
-  spool_n="$(wc -l < "$out/rollback-spool-$step.tsv")"
-  spool_range="$(awk -F'\t' 'NR == 1 { a = $1 } { b = $1 } END { if (NR) print a "-" b; else print "-" }' "$out/rollback-spool-$step.tsv")"
-  fate="$(spool_fate "$out/rollback-spool.tsv")"
-  kept_end="$(awk -F'\t' '$2 == "turn_end" { print $1; exit }' "$out/rollback-spool.tsv")"
-  drops="$(log_since_re "$from0" "$drop_re" | wc -l)"
-  losses="$(log_since_re "$from0" "$loss_re" | wc -l)"
-  completions="$(kept_completions)"
-  printf '%s\t' "$step" "$(now)" "$s" "${hole_list:-none}" "$t" "${missing:-none}" "$order" "$spool_n" "$spool_range" "$fate" \
-    "$ends" "${end_seqs:--}" "${conts:--}" "$others" "$drops" >> "$rollback_table"
-  printf '%s\n' "$losses" >> "$rollback_table"
-  say "rollback, $step: seqs (rows first last tombstones) $s, holes ${hole_list:-none}; ticks (rows distinct last) $t, not stored: ${missing:-none}, $order stored out of order; the prompt's turn has $ends turn_end row(s) (seqs ${end_seqs:--}), resume continuations at ${conts:--} (seq@lease), and no other turn more than $others; the spool holds $spool_n event(s) ($spool_range); of the $(wc -l < "$out/rollback-spool.tsv") the stopped runner kept, (stored, seq taken by another event, no row) = $fate; runner log since the session opened: $drops dropping line(s), $losses loss line(s); turn completions kept for the next process: $completions"
-
-  [ -z "$hole_list" ] || verdicts+=("$step: seqs without a row: $hole_list")
-  [ "$others" -le 1 ] || verdicts+=("$step: a turn other than the prompt's has $others turn_end rows")
-  if [ "$step" = stopped ]; then
-    held="$(ticks_held_once "$out/rollback-spool.tsv")"
-    [ "$held" = "- -" ] || verdicts+=("$step: ticks neither stored nor kept, and ticks stored and kept or twice: $held")
-    [ -n "$kept_end" ] || [ "$ends" -ge 1 ] || verdicts+=("$step: the prompt turn's end is neither stored nor kept")
-    return
-  fi
-  if [ "$step" = killed ]; then
-    gone="$(kept_gone "$out/rollback-spool.tsv" "$out/rollback-spool-$step.tsv")"
-    [ "$gone" = 0 ] || verdicts+=("$step: $gone of the $kept_n events the stopped runner kept are neither stored nor in the spool: the killed runner took them with it")
-    return
-  fi
-  [ -z "$missing" ] || verdicts+=("$step: ticks the engine wrote and the session does not store: $missing")
-  [ "$t" = "$ticks_total $ticks_total $ticks_total" ] || verdicts+=("$step: ticks (rows distinct last) $t, want each of the $ticks_total once")
-  [ "$order" = 0 ] || verdicts+=("$step: $order tick(s) stored at a seq below an earlier tick's")
-  [ "${fate%% *}" = "$kept_n" ] || verdicts+=("$step: of the $kept_n events the stopped runner kept, (stored, seq taken by another event, no row) = $fate")
-  [ "$spool_n" = 0 ] || verdicts+=("$step: the spool still holds $spool_n event(s) ($spool_range)")
-  [ "$completions" = 0 ] || verdicts+=("$step: the spool still keeps $completions turn completion(s) for the next process")
-  first_end="${end_seqs%%,*}"
-  if [ -n "$kept_end" ] && [ "$first_end" != "$kept_end" ]; then
-    verdicts+=("$step: the prompt turn's first turn_end is at seq ${first_end:-none}, not at seq $kept_end, where the stopped runner kept it")
-  fi
-  [ "$ends" = 1 ] || verdicts+=("$step: the prompt's turn has $ends turn_end rows (seqs ${end_seqs:--}), not its one: its engine ran it again")
-  [ -z "$conts" ] || verdicts+=("$step: the prompt's turn holds resume continuations at $conts (seq@lease)")
-  delivered="$(cat "$out/rollback-continuations-delivered-$step.txt" 2> /dev/null || echo 0)"
-  [ "${delivered:-0}" = 0 ] || verdicts+=("$step: $delivered resume continuation(s) of the prompt were delivered to the engine")
-}
-# rollback_kill_step: the runner killed while it sends its spool (task 34mwBTpOPo3S9LM2SXs10). With run_event locked
-# against writes, the runner starts as the rollback starts it, with ORBIT_LINK_MODE=off; its supervisor sends the spool
-# before anything else, and once that batch waits on the lock the runner is killed with SIGKILL, as the OOM killer kills
-# it, and so is the apiserver, which rolls the batch back: none of it is stored. Then the lock goes and the apiserver comes
-# back. rollback_step killed judges what is left.
-rollback_kill_step() {
-  local from_k pid
-  lock_run_event
-  from_k="$(log_lines)"
-  start_runner ORBIT_LINK_MODE=off
-  wait_log "$from_k" 'runner link mode: off (ORBIT_LINK_MODE=off)' 60
-  wait_until 180 writes_wait_on_run_event ||
-    fail "rollback, killed while sending: no write of the runner's waits on the locked run_event within 180 s"
-  pid="$(runner_pid)"
-  say "rollback, killed while sending: the runner (pid $pid) sends its spool, and the batch waits on the locked run_event; runner log: $(log_since "$from_k" "an earlier process could not send" | tail -n 1 | sed -E 's/^.*(runner link: )/\1/')"
-  systemctl kill --signal=SIGKILL "$unit"
-  wait_until 30 runner_gone || fail "rollback, killed while sending: the runner (pid $pid) still runs 30 s after SIGKILL"
-  kill_container "$apiserver"
-  unlock_run_event
-  started_again "$apiserver"
-  say "rollback, killed while sending: the runner (pid $pid) killed with SIGKILL, the apiserver killed and started again, run_event unlocked; the spool holds $(spool_events | wc -l) event(s)"
-}
-runner_gone() { ! runner_running; }
-rollback_phase() {
-  # verdicts is rollback_step's too: it appends each step's.
-  local down_at kept kept_n from1 from2 resent verdict stored verdicts=()
-  phase=rollback
-  stack_settings
-  runner_running || fail "rollback: the drill runner is not running: run prepare"
-  switch_is true || fail "rollback: RUNNER_LINK_REQUIRED is off: run prepare"
-  wait_presence LINK 120 || fail "rollback: the runner's presence does not say LINK"
-  since_at="$(now)"
-  statuses=""
-  : > "$out/rollback-samples.tsv"
-  stop_ticker
-  write_resume_script rollback
-  open_session rollback "$rollback_ticks" full "Durable events drill, rollback: the prompt, whose answer streams across a stop with the link down"
-  from0="$(log_lines)"
-  start_ticker 1
-  wait_until 180 caught_up 5 || fail "rollback: session $sid stored no fifth tick within 180 s (it is $(session_status))"
-  printf '%s\t' step at 'seqs(rows,first,last,tombstones)' holes 'ticks(rows,distinct,last)' missing_ticks \
-    ticks_out_of_order spool_events spool_seqs 'kept_events(stored,taken,none)' prompt_turn_ends prompt_turn_end_seqs \
-    'continuations(seq@lease)' other_turns_max_turn_ends drops > "$rollback_table"
-  printf 'losses\n' >> "$rollback_table"
-
-  # The link gateway goes down; the engine writes on, and ends its turn.
-  k_down="$(released)"
-  kill_container "$gateway"
-  down_at="$(now)"
-  say "rollback: session $sid ($suuid) streaming, $(stored_last) ticks stored; $gateway killed at tick $k_down"
-  hold 20
-  release_rest
-  sleep 5
-  say "rollback: the engine has been released all $ticks_total ticks and the turn's end, the link down since $down_at; $(stored_last) ticks stored"
-
-  # The runner stopped as a service manager stops it: what is not acknowledged goes to its spool.
-  stop_runner
-  kept="$(log_since "$from0" 'unacknowledged events of session' | tail -n 1 | sed -E 's/^.*(runner link: )/\1/')"
-  say "rollback: runner log as it stopped: ${kept:-nothing kept for the next process}; $(log_since "$from0" 'is kept for the runner'"'"'s next process' | tail -n 1 | sed -E 's/^.*(runner link: )/\1/')"
-  spool_events > "$out/rollback-spool.tsv"
-  kept_n="$(wc -l < "$out/rollback-spool.tsv")"
-  rollback_step stopped
-
-  # The rollback: RUNNER_LINK_REQUIRED off, the gateway back, the runner started again with ORBIT_LINK_MODE=off; first
-  # killed while it sends its spool, and started again after that.
-  api switch off > /dev/null || fail "rollback: switching RUNNER_LINK_REQUIRED off"
-  started_again "$gateway"
-  if [ "$rollback_kill" = 1 ]; then
-    rollback_kill_step
-    rollback_step killed
-  fi
-  from1="$(log_lines)"
-  start_runner ORBIT_LINK_MODE=off
-  wait_log "$from1" 'runner link mode: off (ORBIT_LINK_MODE=off)' 60
-  wait_presence HTTP 180 || fail "rollback: the runner started with ORBIT_LINK_MODE=off does not beat over HTTPS within 180 s"
-  say "rollback: RUNNER_LINK_REQUIRED off; the runner started again with ORBIT_LINK_MODE=off (pid $(runner_pid)): $(log_since "$from1" 'runner link mode: off' | head -n 1 | sed -E 's/^.*(runner link mode)/\1/'); presence $(presence)"
-  api turn "$sid" "Durable events drill, rollback: a message after the rollback" > /dev/null ||
-    fail "rollback: sending the message after the rollback"
-  wait_until 300 answered_with "a message after the rollback" ||
-    fail "rollback: the message after the rollback is not answered within 300 s (the session is $(session_status))"
-  resent="$(log_since "$from1" "an earlier process could not send" | grep -F -e "$suuid" -e "$sid" | tail -n 1 | sed -E 's/^.*(runner link: )/\1/' || true)"
-  stored="$(log_since "$from1" "held through seq" | grep -F -e "$suuid" -e "$sid" | tail -n 1 | sed -E 's/^.*(runner link: )/\1/' || true)"
-  say "rollback: runner log after the rollback: ${resent:-no events of session $sid an earlier process could not send}; ${stored:-nothing said of them stored}; $(log_since "$from1" "reclaiming session $sid" | tail -n 1 | sed -E 's/^.*(reclaiming session)/\1/'); $(log_since "$from1" "which an earlier process finished, is settled" | tail -n 1 | sed -E 's/^.*(runner link: )/\1/')"
-  rollback_redelivery after-rollback
-  rollback_step after-rollback
-
-  # On the link again: RUNNER_LINK_REQUIRED on, the runner started again as it was, on the same machine.
-  stop_runner
-  api switch on > /dev/null || fail "rollback: switching RUNNER_LINK_REQUIRED on"
-  from2="$(log_lines)"
-  start_runner
-  wait_log "$from2" 'runner link mode: on' 180
-  wait_presence LINK 180 || fail "rollback: the runner on the link again does not beat over it within 180 s"
-  say "rollback: RUNNER_LINK_REQUIRED on; the runner on the link again (pid $(runner_pid)), presence $(presence)"
-  # The session's next supervisor opens its event stream, which reads the spool: at its next message.
-  api turn "$sid" "Durable events drill, rollback: a message on the link again" > /dev/null ||
-    fail "rollback: sending the message on the link again"
-  wait_until 300 answered_with "a message on the link again" ||
-    fail "rollback: the message on the link again is not answered within 300 s (the session is $(session_status))"
-  wait_until 120 spool_sent || true
-  resent="$(log_since "$from2" "an earlier process could not send" | grep -F -e "$suuid" -e "$sid" | tail -n 1 | sed -E 's/^.*(runner link: )/\1/' || true)"
-  say "rollback: runner log on the link again: ${resent:-no events of session $sid an earlier process could not send}"
-  rollback_redelivery on-link-again
-  rollback_step on-link-again
-
-  if [ ${#verdicts[@]} -eq 0 ]; then verdict=PASS; else verdict="$(printf '%s; ' "${verdicts[@]}")"; verdict="${verdict%; }"; fi
-  printf 'verdict\t%s\n' "$verdict" >> "$rollback_table"
-  awk -v from="$from0" 'NR > from' "$drill/runner.log" > "$out/rollback-runner.log"
-  docker logs --since "$since_at" "$gateway" > "$out/rollback-link-gateway.log" 2>&1 || true
-  docker logs --since "$since_at" "$apiserver" > "$out/rollback-apiserver.log" 2>&1 || true
-  if [ "$verdict" = PASS ]; then
-    say "rollback holds: after the stop, the runner killed while it sent its spool (unless ORBIT_DURABLE_EVENTS_ROLLBACK_KILL=0), the restart with ORBIT_LINK_MODE=off and the link mode again, every event the stopped runner kept is stored once at its own seq, every tick once and in the order written, and the prompt's turn ends once, never handed to the engine again"
-  else
-    say "FAIL: rollback: $verdict"
-    failed=1
-  fi
-}
-spool_sent() { [ -z "$(spool_events | head -n 1)" ]; }
-
-partition_off_phase() {
-  stack_settings
-  runner_running || fail "partition-off: the drill runner is not running: run prepare"
-  # HTTPS still served, and the gateway telling the runner MODE_LINK whatever the switch says.
-  if [ "$(setting STAGING_MODE http)" != link ]; then
-    ORBIT_LINK_STAGING_MODE=link ORBIT_LINK_STAGING_BACKENDS=1 "$here/staging-up.sh" --no-build \
-      > "$out/partition-off-staging-up.log" 2>&1 || fail "staging-up.sh to MODE_LINK (see $out/partition-off-staging-up.log)"
-  fi
-  api switch off > /dev/null || fail "partition-off: switching RUNNER_LINK_REQUIRED off"
-  wait_presence LINK 180 || fail "partition-off: the runner's presence does not say LINK"
-  stop_ticker
-  open_session off "$off_ticks" durable "Durable events drill, off: the prompt, whose answer streams across a partition with RUNNER_LINK_REQUIRED off"
-  start_ticker 1
-  wait_until 180 caught_up 3 || fail "partition-off: session $sid stored no third tick within 180 s"
-  begin partition-off off false
-  k_down="$(released)"
-  cut_off
-  down_at="$(now)"
-  say "partition-off: the runner cut off at tick $k_down, RUNNER_LINK_REQUIRED off and the gateway in MODE_LINK"
-  hold "$partition_seconds"
-  reconnect
-  up_at="$(now)"
-  k_up="$(released)"
-  say "partition-off: the runner's network is back at tick $k_up; runner log meanwhile: $(log_since "$from" 'runner link mode: off' | head -n 1 | sed -E 's/^.*(runner link mode)/\1/')"
-  judge "the runner cut off the network for $partition_seconds s, RUNNER_LINK_REQUIRED off" 1
-  release_rest
-  wait_until 300 answered_with "$(prompt_marker)" || say "partition-off: the turn is not answered within 300 s"
-  hole_list="$(holes)"
-  missing="$(missing_ticks "$ticks_total")"
-  say "partition-off: once its turn ended: seqs (rows first last tombstones) $(seqs), holes ${hole_list:-none}; ticks (rows distinct last) $(stored_ticks), not stored: ${missing:-none}; the runner's presence is $(presence)"
-}
-
 summary() {
   {
     echo "durable-events drill on $project, $(git -C "$repo" rev-parse --short HEAD), written $(now)"
-    awk -F'\t' 'NR > 1 { printf "%s: %s; %s ticks during, caught up %s s after; seqs %s, holes %s; ticks %s; drops %s, losses %s, fallbacks %s; statuses %s: %s\n",
-      $1, $2, $6, $7, $10, $11, $12, $15, $16, $17, $19, $20 }' "$table"
-    if [ -f "$rollback_table" ]; then
-      awk -F'\t' 'NR > 1 && $1 != "verdict" { printf "rollback %s: seqs %s, holes %s; ticks %s, not stored %s, out of order %s; spool %s (%s); kept (stored, taken, none) %s; prompt turn_end rows %s (seqs %s), resume continuations %s, other turns at most %s; drops %s, losses %s\n",
-        $1, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16 } $1 == "verdict" { print "rollback: " $2 }' "$rollback_table"
-    fi
+    awk -F'\t' 'NR > 1 { printf "%s: %s; %s ticks during, caught up %s s after; seqs %s, holes %s; ticks %s; drops %s, losses %s; statuses %s: %s\n",
+      $1, $2, $6, $7, $10, $11, $12, $15, $16, $18, $19 }' "$table"
   } > "$summary_file"
   say "summary: $(tr '\n' '|' < "$summary_file")"
 }
 
 case "${1:-}" in
-  prepare | stream | gateway | apiserver | database | partition | finish | rollback | partition-off | all | stop)
+  prepare | stream | gateway | apiserver | database | partition | finish | all | stop)
     mkdir -p "$out" ;;
 esac
 failed=0
 case "${1:-}" in
-  prepare | stream | gateway | apiserver | database | partition | finish | rollback | partition-off | all)
+  prepare | stream | gateway | apiserver | database | partition | finish | all)
     trap restore_faults EXIT
     trap 'exit 143' TERM INT ;;
 esac
@@ -1187,8 +794,6 @@ case "${1:-}" in
   database) database_phase; summary; exit "$failed" ;;
   partition) partition_phase; summary; exit "$failed" ;;
   finish) finish_phase; summary; exit "$failed" ;;
-  rollback) rollback_phase; summary; exit "$failed" ;;
-  partition-off) partition_off_phase; summary; exit "$failed" ;;
   all)
     prepare
     stream_phase
@@ -1197,11 +802,10 @@ case "${1:-}" in
     database_phase
     partition_phase
     finish_phase
-    rollback_phase
     summary
     exit "$failed" ;;
   report) cat "$summary_file"; column -t -s $'\t' "$table" 2> /dev/null || cat "$table" ;;
   stop) stop_ticker; stop_runner; restore_faults ;;
-  -h | --help | "") sed -n '2,57p' "$0" ;;
+  -h | --help | "") sed -n '2,46p' "$0" ;;
   *) die "unknown phase $1 (see --help)" ;;
 esac

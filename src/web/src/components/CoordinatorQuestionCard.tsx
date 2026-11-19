@@ -5,6 +5,7 @@ import {
   ClockCircleOutlined,
   QuestionCircleFilled,
   RightOutlined,
+  UpOutlined,
   RollbackOutlined,
 } from '@ant-design/icons';
 import Markdown from './Markdown';
@@ -20,7 +21,9 @@ import { decisionReceiptTime } from './EvidenceDecisionCard';
 import { ReviewCard } from './ReviewCard';
 import { Alert } from './ui/Alert';
 import { Textarea } from './ui/Textarea';
+import { RefusedAnswerFoot, useOwnerCardTranslation } from './TranslationParts';
 import { api } from '../api';
+import { answerRefusedUntranslated } from '../lib/translation';
 import { decisionReceiptAnchor, type ReceiptPlacement } from '../lib/decisionReceipt';
 import { rehypeCodeWords } from '../lib/codeWords';
 import { ReferenceLink, referenceUrlTransform } from '../lib/markdownLinks';
@@ -115,10 +118,32 @@ export function coordinatorQuestions(
   );
 }
 
+/** What the answer door takes; `sendAsWritten` is Send as written after a TRANSLATION_FAILED refusal. */
+type AnswerBody = { option?: number; text?: string; sendAsWritten?: boolean };
+
+/** A question's words as the card draws them: translated, index for index, while it is shown
+ *  translated (board 04-owner-cards.html, frame 2); the option picked still goes by index. */
+function shownQuestion(question: CoordinatorQuestion, t: { question?: string; options?: Array<{ label?: string; description?: string }> } | undefined): CoordinatorQuestion {
+  if (!t) return question;
+  return {
+    ...question,
+    question: t.question || question.question,
+    options: question.options.map((o, i) => {
+      const to = t.options?.[i];
+      if (!to) return o;
+      return {
+        ...o,
+        label: to.label || o.label,
+        ...(o.description !== undefined ? { description: to.description || o.description } : {}),
+      };
+    }),
+  };
+}
+
 function answerOpenItem(
   projectId: string,
   itemId: string,
-  body: { option?: number; text?: string },
+  body: AnswerBody,
 ): Promise<OwnerAnswerReceipt> {
   return api<OwnerAnswerReceipt>(
     `/projects/${encodeURIComponent(projectId)}/open-items/${encodeURIComponent(itemId)}/answer`,
@@ -132,11 +157,60 @@ function answerOpenItem(
  * recommended none of its options, nothing at all.
  */
 const OTHER = 'other';
-type Choice = number | typeof OTHER | null;
+export type Choice = number | typeof OTHER | null;
 
 /** The option an answer names, or null when the answer is words alone. */
-function optionIndex(chosen: Choice): number | null {
+export function optionIndex(chosen: Choice): number | null {
   return typeof chosen === 'number' ? chosen : null;
+}
+
+/**
+ * The options as radio rows, the recommendation marked where it was made, then the Other row. A
+ * question asked without options draws nothing here: it is prose only. An owner request's DECISION
+ * card draws the same rows.
+ */
+export function QuestionOptions({
+  name,
+  options,
+  recommendedOption,
+  chosen,
+  onChoose,
+}: {
+  name: string;
+  options: ReadonlyArray<{ label: string; description?: string }>;
+  recommendedOption?: number | null;
+  chosen: Choice;
+  onChoose: (choice: Choice) => void;
+}): JSX.Element | null {
+  if (options.length === 0) return null;
+  return (
+    <>
+      {options.map((option, index) => (
+        <label
+          key={`${index}-${option.label}`}
+          className={`coordinator-question-option${chosen === index ? ' is-chosen' : ''}`}
+        >
+          <input type="radio" name={name} checked={chosen === index} onChange={() => onChoose(index)} />
+          <span className="coordinator-question-option-text">
+            {option.label}
+            {index === recommendedOption ? (
+              <span className="coordinator-question-recommended">{RECOMMENDED}</span>
+            ) : null}
+            {option.description ? (
+              <span className="coordinator-question-option-why">{option.description}</span>
+            ) : null}
+          </span>
+        </label>
+      ))}
+      {/* A row rather than a hint because the owner has to be able to SEE that answering in their
+          own words is allowed before they type them. Choosing it takes the choice off the
+          recommendation: from there the box is the answer. */}
+      <label className={`coordinator-question-option${chosen === OTHER ? ' is-chosen' : ''}`}>
+        <input type="radio" name={name} checked={chosen === OTHER} onChange={() => onChoose(OTHER)} />
+        <span className="coordinator-question-option-text">{OTHER_OPTION}</span>
+      </label>
+    </>
+  );
 }
 
 export function CoordinatorQuestionCard({
@@ -151,12 +225,13 @@ export function CoordinatorQuestionCard({
 }): JSX.Element | null {
   const qc = useQueryClient();
   const [reviewOpen, setReviewOpen] = useState(false);
-  const question = row.question;
+  const original = row.question;
+  const translated = useOwnerCardTranslation(row.translation);
+  const question = original ? shownQuestion(original, translated.shown) : null;
   const [chosen, setChosen] = useState<Choice>(question?.recommendedOption ?? null);
   const [text, setText] = useState('');
   const answer = useMutation({
-    mutationFn: (body: { option?: number; text?: string }) =>
-      answerOpenItem(projectId, row.itemId, body),
+    mutationFn: (body: AnswerBody) => answerOpenItem(projectId, row.itemId, body),
     // Answered or refused, the items are re-read: a question somebody answered in another window
     // leaves this page rather than staying pressable.
     onSettled: () => {
@@ -171,7 +246,7 @@ export function CoordinatorQuestionCard({
   if (answer.data && answer.variables) {
     return (
       <AnsweredQuestionCard
-        record={answeredHere(row, question, answer.variables, answer.data, new Date(answer.submittedAt))}
+        record={answeredHere(row, original!, answer.variables, answer.data, new Date(answer.submittedAt))}
       />
     );
   }
@@ -216,47 +291,14 @@ export function CoordinatorQuestionCard({
             {question.question}
           </Markdown>
         </div>
-        {/* The options are the answer: one tap, with the recommendation marked where it was made
-            rather than as a sentence above them. A question asked without any is prose only. */}
-        {question.options.map((option, index) => (
-          <label
-            key={`${index}-${option.label}`}
-            className={`coordinator-question-option${chosen === index ? ' is-chosen' : ''}`}
-          >
-            <input
-              type="radio"
-              name={`question-${row.itemId}`}
-              checked={chosen === index}
-              onChange={() => setChosen(index)}
-            />
-            <span className="coordinator-question-option-text">
-              {option.label}
-              {index === question.recommendedOption ? (
-                <span className="coordinator-question-recommended">{RECOMMENDED}</span>
-              ) : null}
-              {option.description ? (
-                <span className="coordinator-question-option-why">{option.description}</span>
-              ) : null}
-            </span>
-          </label>
-        ))}
-        {/* The last row is this card's own, and it is a row rather than a hint because the owner
-            has to be able to SEE that answering in their own words is allowed before they type
-            them. Choosing it takes the choice off the recommendation: from there the box is the
-            answer, and the receipt carries the words with no option in front of them. */}
-        {free ? null : (
-          <label
-            className={`coordinator-question-option${chosen === OTHER ? ' is-chosen' : ''}`}
-          >
-            <input
-              type="radio"
-              name={`question-${row.itemId}`}
-              checked={chosen === OTHER}
-              onChange={() => setChosen(OTHER)}
-            />
-            <span className="coordinator-question-option-text">{OTHER_OPTION}</span>
-          </label>
-        )}
+        <QuestionOptions
+          name={`question-${row.itemId}`}
+          options={question.options}
+          recommendedOption={question.recommendedOption}
+          chosen={chosen}
+          onChoose={setChosen}
+        />
+        {translated.foot}
         {/* Always there: none of the options may be what the owner wants, and one that is may
             still need a condition said with it. */}
         <Textarea
@@ -270,12 +312,20 @@ export function CoordinatorQuestionCard({
           onChange={(event) => setText(event.target.value)}
         />
         {/* What it holds up and what happens if nobody answers, in the server's own words — the
-            same line the item's row carries, so the card and the list cannot say different things. */}
-        {row.detailLine ? (
-          <p className="coordinator-question-meta">{row.detailLine}</p>
+            same line the item's row carries, so the card and the list cannot say different things.
+            Drawn translated, the server's line built from the translated ifUnanswered. */}
+        {(translated.shown?.detailLine ?? row.detailLine) ? (
+          <p className="coordinator-question-meta">{translated.shown?.detailLine ?? row.detailLine}</p>
         ) : null}
       </div>
-      {answer.isError ? (
+      {answer.isError && answerRefusedUntranslated(answer.error) && answer.variables ? (
+        <RefusedAnswerFoot
+          error={answer.error}
+          resend={(sendAsWritten) =>
+            answer.mutateAsync({ ...answer.variables!, ...(sendAsWritten ? { sendAsWritten: true } : {}) })
+          }
+        />
+      ) : answer.isError ? (
         <Alert
           type="error"
           className="coordinator-question-error"
@@ -352,6 +402,8 @@ export const YOU_WITHDREW = 'You withdrew it';
 export const YOUR_NOTE = 'Your note';
 /** The card's last row. */
 export const VIEW_DETAILS = 'View details';
+/** The expanded card's last row, folding it back (board card-ui-polish ③). */
+export const HIDE_DETAILS = 'Hide details';
 
 const withdrawn = (record: ProjectClosedQuestion): boolean => record.resolution === 'WITHDRAWN';
 
@@ -450,6 +502,7 @@ export function answeredHere(
     answer: { option: body.option ?? null, text: body.text ?? null },
     delivery: receipt.delivery ? { sessionId: receipt.delivery.sessionId, at: moment } : null,
     withdrawReason: null,
+    ...(row.translation ? { translation: row.translation } : {}),
   };
 }
 
@@ -460,17 +513,19 @@ export interface ClosedQuestionRow {
 }
 
 /** The records an open coordinator conversation draws: every ended question the read carries, at
- *  the moment it ended. A stamp nothing can place is not drawn in the wrong place. Oldest first —
+ *  the moment it ended — except one that ended before the conversation was created (`createdAt`,
+ *  handoff v2 §4). A stamp nothing can place is not drawn in the wrong place. Oldest first —
  *  the read is newest first — because two answered between the same two messages are drawn after
  *  the same row, in this order, and read top-down in the order they happened. */
 export function closedQuestionRows(
   items: ProjectOpenItemsView | null | undefined,
   events: ReadonlyArray<{ seq: number; ts?: string }>,
+  createdAt?: string | null,
 ): ClosedQuestionRow[] {
   return [...(items?.closedQuestions ?? [])]
     .sort((a, b) => Date.parse(a.resolvedAt) - Date.parse(b.resolvedAt))
     .flatMap((record) => {
-      const placement = decisionReceiptAnchor(events, record.resolvedAt);
+      const placement = decisionReceiptAnchor(events, record.resolvedAt, createdAt);
       return placement === null ? [] : [{ record, placement }];
     });
 }
@@ -513,7 +568,7 @@ function RecordOption({ label, why, recommended, chosen, said, saidLabel }: {
  * (docs/mocks/owner-answer-sent-card/tone.html).
  */
 export function AnsweredQuestionCard({
-  record,
+  record: asRecorded,
   now = new Date(),
   handover,
 }: {
@@ -527,6 +582,11 @@ export function AnsweredQuestionCard({
   handover?: { queued: boolean; notice: string | null; told: ReactNode };
 }): JSX.Element {
   const [open, setOpen] = useState(false);
+  // The question in the owner's language as it was translated while open; the owner's words are theirs.
+  const translated = useOwnerCardTranslation(asRecorded.translation);
+  const record = translated.shown
+    ? { ...asRecorded, question: shownQuestion(asRecorded.question, translated.shown) }
+    : asRecorded;
   const isWithdrawn = withdrawn(record);
   const heading = isWithdrawn ? WITHDRAWN_HEADING : ANSWERED_HEADING;
   const lead = closedQuestionLead(record.question);
@@ -536,52 +596,56 @@ export function AnsweredQuestionCard({
   const said = isWithdrawn ? null : wordsOf(record);
   const { question } = record;
   const choseOther = option === null && said !== null && question.options.length > 0;
+  // Opened in place, not in a sheet (board card-ui-polish ③): the record stays in the conversation
+  // it belongs to, and the reader keeps reading around it.
   return (
-    <ReviewCard
-      title={heading}
-      summary={lead}
-      id={`question-record-${record.itemId}`}
-      open={open}
-      onOpenChange={setOpen}
-      preview={{
-        className: `answered-question-card${isWithdrawn ? ' is-withdrawn' : ''}${handover?.queued ? ' is-queued' : ''}`,
-        content: (
-          <>
-            <span className="answered-question-head">
-              <span className="answered-question-icon" aria-hidden="true"><QuestionCircleFilled /></span>
-              <span className="answered-question-heading">{heading}</span>
-              <span className="answered-question-time">{decisionReceiptTime(record.resolvedAt, now)}</span>
-            </span>
-            <span className="answered-question-lead">{lead}</span>
-            {lines.answer ? (
-              <span className="answered-question-answer">
-                <span className="answered-question-tick" aria-hidden="true"><CheckCircleFilled /></span>
-                <span>{lines.answer}</span>
-              </span>
-            ) : null}
-            {lines.note ? <span className="answered-question-note">{lines.note}</span> : null}
-            {lines.waiting ? (
-              <span className="answered-question-waiting">
-                <ClockCircleOutlined aria-hidden="true" /> {lines.waiting}
-              </span>
-            ) : null}
-            {handover?.queued ? (
-              <span className="answered-question-waiting">
-                <ClockCircleOutlined aria-hidden="true" /> {QUEUED_FOR_COORDINATOR}
-              </span>
-            ) : null}
-            {handover?.notice ? <span className="answered-question-waiting">{handover.notice}</span> : null}
-            {lines.withdrew ? <span className="answered-question-withdrew">{lines.withdrew}</span> : null}
-            {lines.reason ? <span className="answered-question-reason">{lines.reason}</span> : null}
-            <span className="answered-question-open">
-              {VIEW_DETAILS}
-              <RightOutlined aria-hidden="true" />
-            </span>
-          </>
-        ),
-      }}
-    >
-      <div className="approval-card coordinator-question answered-question" data-question-record={record.itemId}>
+    <div className={`review-card answered-question-inline${open ? ' is-open' : ''}`} id={`question-record-${record.itemId}`}>
+      <button
+        type="button"
+        className={`review-card-preview answered-question-card${isWithdrawn ? ' is-withdrawn' : ''}${handover?.queued ? ' is-queued' : ''}`}
+        aria-expanded={open}
+        onClick={() => setOpen(!open)}
+      >
+        <span className="answered-question-head">
+          <span className="answered-question-icon" aria-hidden="true"><QuestionCircleFilled /></span>
+          <span className="answered-question-heading">{heading}</span>
+          <span className="answered-question-time">{decisionReceiptTime(record.resolvedAt, now)}</span>
+        </span>
+        <span className="answered-question-lead">{lead}</span>
+        {lines.answer ? (
+          <span className="answered-question-answer">
+            <span className="answered-question-tick" aria-hidden="true"><CheckCircleFilled /></span>
+            <span>{lines.answer}</span>
+          </span>
+        ) : null}
+        {lines.note ? <span className="answered-question-note">{lines.note}</span> : null}
+        {lines.waiting ? (
+          <span className="answered-question-waiting">
+            <ClockCircleOutlined aria-hidden="true" /> {lines.waiting}
+          </span>
+        ) : null}
+        {handover?.queued ? (
+          <span className="answered-question-waiting">
+            <ClockCircleOutlined aria-hidden="true" /> {QUEUED_FOR_COORDINATOR}
+          </span>
+        ) : null}
+        {handover?.notice ? <span className="answered-question-waiting">{handover.notice}</span> : null}
+        {lines.withdrew ? <span className="answered-question-withdrew">{lines.withdrew}</span> : null}
+        {lines.reason ? <span className="answered-question-reason">{lines.reason}</span> : null}
+        {open ? null : (
+          <span className="answered-question-open">
+            {VIEW_DETAILS}
+            <RightOutlined aria-hidden="true" />
+          </span>
+        )}
+      </button>
+      {/* Mounted while folded, as the sheet kept it: what a test or the page reads off the record does
+          not depend on whether it is open. */}
+      <div
+        className="approval-card coordinator-question answered-question"
+        data-question-record={record.itemId}
+        hidden={!open}
+      >
         <div className="approval-body is-questions coordinator-question-body">
           <div className="answered-question-provenance">
             <span className="criteria-provenance prov-brand" title={FROM_COORDINATOR_TITLE}>
@@ -620,6 +684,7 @@ export function AnsweredQuestionCard({
               {said}
             </span>
           ) : null}
+          {translated.foot}
         </div>
         {handover?.told}
         <div className="card-actions approval-actions answered-question-footer">
@@ -633,7 +698,11 @@ export function AnsweredQuestionCard({
             </span>
           ) : null}
         </div>
+        <button type="button" className="answered-question-hide" aria-expanded onClick={() => setOpen(false)}>
+          {HIDE_DETAILS}
+          <UpOutlined aria-hidden="true" />
+        </button>
       </div>
-    </ReviewCard>
+    </div>
   );
 }

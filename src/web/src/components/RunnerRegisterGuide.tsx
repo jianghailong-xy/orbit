@@ -1,11 +1,26 @@
 import { CheckCircleFilled, CheckOutlined, CopyOutlined } from '@ant-design/icons';
 import { useQuery } from '@tanstack/react-query';
 import { useEffect, useRef, useState } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { Link, useNavigate } from 'react-router-dom';
+import { MANAGED_RUNNER_COPY } from '@orbit/shared';
 import { api } from '../api';
 import { copyText } from '../lib/clipboard';
+import { encodeId } from '../lib/idCodec';
 import { machineDraftPath } from '../lib/machineSetup';
-import { REGISTER_NEXT, START_A_SESSION } from '../lib/machineSetupCopy';
+import { useManagedRunner } from '../lib/managedRunner';
+import { REGISTER_NEXT, REGISTER_NEXT_IN_SETTINGS, START_A_SESSION } from '../lib/machineSetupCopy';
+import { Button } from './ui/Button';
+import {
+  WELCOME_AFTER_STEP_ONE,
+  WELCOME_COMPUTER,
+  WELCOME_COMPUTER_OWN,
+  WELCOME_FIRST,
+  WELCOME_HAVING_TROUBLE,
+  WELCOME_MODEL,
+  WELCOME_MODEL_HELP,
+  WELCOME_WAITING_CONNECT,
+} from '../lib/welcomeCopy';
+import { WelcomeHead } from './WelcomeCard';
 import { Segmented } from './ui/Segmented';
 
 type OS = 'macOS' | 'Linux' | 'Windows';
@@ -50,10 +65,15 @@ function CommandBox({ cmd, copied, onCopy }: { cmd: string; copied: boolean; onC
 }
 
 /** Right-pane guide for connecting a new runner machine (shown from the side panel's “Add”). */
-export function RunnerRegisterGuide() {
+export function RunnerRegisterGuide({ inSettings = false }: { inSettings?: boolean } = {}) {
+  // Settings' Register a machine points at the managed runner's Set up page while the server offers one.
+  const { managed } = useManagedRunner(inSettings);
   const navigate = useNavigate();
   const [os, setOs] = useState<OS>('macOS');
   const [copied, setCopied] = useState(false);
+  // The "Copied" reset is cancelled when this goes, so it never updates a component that is gone.
+  const copiedReset = useRef<ReturnType<typeof setTimeout>>(undefined);
+  useEffect(() => () => clearTimeout(copiedReset.current), []);
   const installCmd = buildInstallCommands(__PUBLIC_ORIGIN__);
 
   const copy = (text: string) => {
@@ -61,7 +81,8 @@ export function RunnerRegisterGuide() {
       if (!ok) return;
       setCopied(true);
       // Revert the “✓ Copied” affordance after a beat.
-      setTimeout(() => setCopied(false), 1600);
+      clearTimeout(copiedReset.current);
+      copiedReset.current = setTimeout(() => setCopied(false), 1600);
     });
   };
 
@@ -80,27 +101,89 @@ export function RunnerRegisterGuide() {
   // TODO: switch to a push signal if the API ever exposes one.
   const baselineOnline = useRef<Set<string> | null>(null);
   const [connected, setConnected] = useState<{ id: string; name: string } | null>(null);
+  // An account with no machine at all is a new one: the guide is the first step of its welcome card
+  // (docs/mocks/new-user-onboarding, P3), and moves on to the machine's setup card by itself.
+  const [welcome, setWelcome] = useState(false);
   useEffect(() => {
     if (!list) return;
     if (baselineOnline.current === null) {
       // First load establishes the baseline; nothing to detect yet.
       baselineOnline.current = new Set(list.filter((r) => r.online).map((r) => r.id));
+      setWelcome(!inSettings && list.length === 0);
       return;
     }
     if (connected) return; // latch the first runner we see come online
     const fresh = list.find((r) => r.online && !baselineOnline.current!.has(r.id));
     if (fresh) setConnected({ id: fresh.id, name: fresh.name });
-  }, [list, connected]);
+  }, [list, connected, inSettings]);
+
+  useEffect(() => {
+    if (welcome && connected) navigate(machineDraftPath(connected.id), { replace: true });
+  }, [welcome, connected, navigate]);
+
+  if (welcome) {
+    return (
+      <div className="runner-guide">
+        <div className="msc-draft">
+          <div className="msc welcome-card">
+            <WelcomeHead />
+            <div className="msc-step" data-step="computer">
+              <span className="msc-num">1</span>
+              <div>
+                <div className="msc-step-title">{WELCOME_COMPUTER}</div>
+                <div className="msc-step-help">{WELCOME_COMPUTER_OWN}</div>
+                <Segmented<OS>
+                  className="runner-os"
+                  aria-label="Operating system"
+                  value={os}
+                  onValueChange={setOs}
+                  options={OS_OPTIONS}
+                />
+                <div className="welcome-cmd">
+                  <CommandBox cmd={installCmd[os]} copied={copied} onCopy={() => copy(installCmd[os])} />
+                </div>
+                <div className="msc-verdict wait">{WELCOME_WAITING_CONNECT}</div>
+                <div className="msc-alt">
+                  {/* TODO: link to runner setup/troubleshooting docs when available. */}
+                  <a className="msc-change">{WELCOME_HAVING_TROUBLE}</a>
+                </div>
+              </div>
+            </div>
+            <div className="msc-step" data-step="model">
+              <span className="msc-num">2</span>
+              <div>
+                <div className="msc-step-title">{WELCOME_MODEL}</div>
+                <div className="msc-step-help">{WELCOME_MODEL_HELP}</div>
+                <div className="welcome-later">{WELCOME_AFTER_STEP_ONE}</div>
+              </div>
+            </div>
+            <div className="msc-step" data-step="first">
+              <span className="msc-num">3</span>
+              <div>
+                <div className="msc-step-title">{WELCOME_FIRST}</div>
+                <div className="welcome-later">{WELCOME_AFTER_STEP_ONE}</div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    );
+  }
 
   return (
-    <div className="runner-guide">
-      <div className="runner-center">
-        <h1 className="page-title">Add a runner</h1>
+    <div className={inSettings ? undefined : 'runner-guide'}>
+      <div className={inSettings ? undefined : 'runner-center'}>
+        <h1 className="page-title" style={inSettings ? { marginTop: 8 } : undefined}>Add a runner</h1>
         <p className="runner-sub">
           A runner is a machine that runs Claude Code, Codex, or Kimi tasks for you. Run this one command on the
           machine you want to add — it installs the orbit CLI, then opens your browser to confirm
-          the machine belongs to you. It appears under Machines on the Machines & models page once it comes online.
+          the machine belongs to you. {inSettings ? 'It appears under Machines on the left' : 'It appears under Machines in Settings'} once it comes online.
         </p>
+        {inSettings && managed?.display.ensure && (
+          <p className="runner-sub runner-managed-entry">
+            <Link to="/settings/machines/managed">{MANAGED_RUNNER_COPY.entry.register}</Link>
+          </p>
+        )}
 
         <Segmented<OS>
           className="runner-os"
@@ -117,11 +200,14 @@ export function RunnerRegisterGuide() {
             <CheckCircleFilled className="runner-status-icon" />
             <div className="runner-status-text">
               <div className="runner-status-title">Runner online — “{connected.name}” is ready</div>
-              <div className="runner-status-sub">{REGISTER_NEXT}</div>
+              <div className="runner-status-sub">{inSettings ? REGISTER_NEXT_IN_SETTINGS : REGISTER_NEXT}</div>
             </div>
             {/* The machine alone can't do anything yet: sessions and tasks both hang off a workspace,
                 and run on a CLI signed in there, so the real next step is its new session page, whose
                 card asks for both. */}
+            {inSettings && (
+              <Button onClick={() => navigate(`/settings/machines/${encodeId(connected.id)}`)}>Machine settings</Button>
+            )}
             <button
               className="runner-done-btn"
               onClick={() => navigate(machineDraftPath(connected.id))}

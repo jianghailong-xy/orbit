@@ -113,7 +113,7 @@ def probe_pod(name, pvc, run_id, sleep, node=None):
                 "securityContext": {"allowPrivilegeEscalation": False, "readOnlyRootFilesystem": True,
                                     "capabilities": {"drop": ["ALL"]}},
                 "resources": {"requests": {"cpu": "50m", "memory": "64Mi"}, "limits": {"memory": "256Mi"}},
-                "volumeMounts": [{"name": "data", "mountPath": "/var/lib/orbit"},
+                "volumeMounts": [{"name": "data", "mountPath": "/home/orbit"},
                                  {"name": "probe", "mountPath": "/probe", "readOnly": True},
                                  {"name": "tmp", "mountPath": "/tmp"}],
             }],

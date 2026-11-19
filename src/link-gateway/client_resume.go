@@ -35,7 +35,7 @@ func (d *driver) resumeDrill(ctx context.Context, o drillOptions) {
 	f := d.report.Facts
 	if !d.step("welcome: MODE_LINK", func() (string, error) {
 		if m := d.cc.welcome.GetMode(); m != linkpb.Mode_MODE_LINK {
-			return m.String(), errors.New("the gateway is not in MODE_LINK: start the stack with ORBIT_LINK_STAGING_MODE=link")
+			return m.String(), errors.New("the gateway did not say MODE_LINK (an older gateway says MODE_HTTP while its server's RUNNER_LINK_REQUIRED is off or unread)")
 		}
 		return "connection " + d.cc.id, nil
 	}) {

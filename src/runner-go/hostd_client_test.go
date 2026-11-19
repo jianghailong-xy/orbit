@@ -62,10 +62,12 @@ func TestHostdCallSeparatesARefusalFromNoAnswer(t *testing.T) {
 }
 
 // A broker that accepts the connection and then says nothing must not hold `orbit
-// register` open: hostdCall's own deadline ends the exchange and hands the caller an
-// error to fall back on. Driven through hostdCall rather than re-performed here, so
-// that a deadline dropped from the product is a failure of this test and not of a
-// hand-rolled copy of it that still has one.
+// register` open forever: after hostdCallTimeout it is waited for, saying so, and after
+// hostdAnswerWait hostdCall ends the exchange with an answer of its own — the code
+// hostdNoAnswer, never an error to fall back on, since the broker may still be carrying
+// the request out. Driven through hostdCall rather than re-performed here, so that a
+// deadline dropped from the product is a failure of this test and not of a hand-rolled
+// copy of it that still has one.
 func TestHostdCallGivesUpOnABrokerThatNeverAnswers(t *testing.T) {
 	silent := make(chan struct{})
 	defer close(silent)
@@ -74,26 +76,43 @@ func TestHostdCallGivesUpOnABrokerThatNeverAnswers(t *testing.T) {
 	})
 	shortenHostdTimeout(t)
 
-	answers := make(chan error, 1)
-	if !mustGiveUp(t, "hostdCall", func() {
-		_, err := hostdCall(path, "enable")
-		answers <- err
-	}) {
+	type answer struct {
+		resp hostdResponse
+		err  error
+	}
+	answers := make(chan answer, 1)
+	var out string
+	gaveUp := false
+	out = captureServiceOutput(t, func() {
+		gaveUp = mustGiveUp(t, "hostdCall", func() {
+			resp, err := hostdCall(path, "enable")
+			answers <- answer{resp, err}
+		})
+	})
+	if !gaveUp {
 		return
 	}
-	if err := <-answers; err == nil {
-		t.Fatal("a silent broker must eventually fail the read, not answer")
+	got := <-answers
+	if got.err != nil {
+		t.Fatalf("a broker that took the request and went quiet must not be an error to fall back on: %v", got.err)
+	}
+	if got.resp.OK || got.resp.Code != hostdNoAnswer || !strings.Contains(got.resp.Error, "has not answered within "+hostdAnswerWait.String()) {
+		t.Fatalf("resp = %+v, want the %q answer", got.resp, hostdNoAnswer)
+	}
+	if !strings.Contains(out, `Waiting for the machine broker to finish "enable"`) {
+		t.Errorf("hostdCall did not say it was waiting; got:\n%s", out)
 	}
 }
 
-// shortenHostdTimeout cuts the product's exchange timeout to test speed. Five seconds
-// is the right wait for a real user in front of a wedged broker and the wrong one for a
-// suite; that hostdCall bounds the exchange *at all* is what these tests are about.
+// shortenHostdTimeout cuts the product's exchange timeouts to test speed. Five seconds
+// and a quarter of an hour are the right waits for a real user in front of a busy broker
+// and the wrong ones for a suite; that hostdCall bounds the exchange *at all* is what
+// these tests are about.
 func shortenHostdTimeout(t *testing.T) {
 	t.Helper()
-	prev := hostdCallTimeout
-	hostdCallTimeout = 200 * time.Millisecond
-	t.Cleanup(func() { hostdCallTimeout = prev })
+	prevCall, prevAnswer := hostdCallTimeout, hostdAnswerWait
+	hostdCallTimeout, hostdAnswerWait = 200*time.Millisecond, 400*time.Millisecond
+	t.Cleanup(func() { hostdCallTimeout, hostdAnswerWait = prevCall, prevAnswer })
 }
 
 // mustGiveUp runs fn on its own goroutine and reports whether it returned well within
@@ -153,7 +172,15 @@ func TestPrintServiceFailure(t *testing.T) {
 
 	out.Reset()
 	reason := "refusing to enable orbit-runner@alice.service: it runs alice's own ~/.orbit/bin/orbit, and ...:\n  " + hostdOwnCopyCommand
-	printServiceFailure(&out, &hostdOwnCopyRefusal{reason: reason})
+	printServiceFailure(&out, &hostdRegisterRefusal{code: hostdRefusedOwnCopy, reason: reason})
+	if want := "\n✗ Could not start the background service: " + reason + "\n"; out.String() != want {
+		t.Errorf("printed %q, want %q", out.String(), want)
+	}
+
+	// The older-runner refusal too, every line of it.
+	out.Reset()
+	reason = "refusing to enable orbit-runner@alice.service: alice's older runner orbit-runner-alice.service could not be stopped: ...\nIt is still alice's runner, so orbit-runner@alice.service was neither enabled nor started. Once it can be stopped, run `orbit register` again."
+	printServiceFailure(&out, &hostdRegisterRefusal{code: hostdRefusedOlderRunner, reason: reason})
 	if want := "\n✗ Could not start the background service: " + reason + "\n"; out.String() != want {
 		t.Errorf("printed %q, want %q", out.String(), want)
 	}

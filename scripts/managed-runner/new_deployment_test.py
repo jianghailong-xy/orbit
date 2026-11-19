@@ -34,7 +34,7 @@ import unittest
 REPO = Path(__file__).resolve().parents[2]
 INSTALL = "scripts/install-server.sh"
 UPGRADES = [".claude/skills/upgrade/upgrade.sh", ".agents/skills/upgrade/scripts/upgrade.sh"]
-COPIED = [INSTALL, *UPGRADES, ".env.example", ".gitignore", "docker-compose.yml", "gateway/nginx.conf", "scripts/pg-backup.sh",
+COPIED = [INSTALL, *UPGRADES, "deploy/managed-runner/host.sh", "deploy/managed-runner/docker-channel/info.js", ".env.example", ".gitignore", "docker-compose.yml", "gateway/nginx.conf", "scripts/pg-backup.sh",
           "scripts/runner-link/door-check.js", "deploy/runner-link/behind-web-gateway.env"]
 IMAGE_ID = "sha256:" + "ab" * 32
 GATEWAY = "172.30.0.1"
@@ -46,7 +46,7 @@ SWITCH_LINES = [
 # The same, installed with --no-managed-runner-firewall, as every install before the firewall wrote them.
 SWITCH_LINES_WITHOUT_FIREWALL = [*SWITCH_LINES[:2], "COMPOSE_PROFILES=managed-runners-docker"]
 BRIDGE = "br-0123456789ab"
-FIREWALL_IMAGE = "orbit-managed-runner-firewall:local"
+FIREWALL_IMAGE = "orbit-cloud-runner-firewall:local"
 
 # The fake host. `compose config --services` lists the Docker channel and the managed runners' firewall only where
 # .env switches their profiles on, as Compose does, and `compose config docker-channel` then binds this checkout's
@@ -73,7 +73,13 @@ case "$*" in
     printf '%s\n' 'name: orbit' 'services:' '  docker-channel:' '    image: orbit-docker-channel:local' '    volumes:' \
       '      - type: bind' '        source: /var/run/docker.sock' '        target: /var/run/docker.sock' '        bind:' \
       '          create_host_path: true' '      - type: bind' "        source: $PWD/data/managed-runners" \
-      '        target: /var/lib/orbit-managed-runners' '        bind:' '          create_host_path: true' ;;
+      '        target: /var/lib/orbit-cloud-runners' '        bind:' '          create_host_path: true' ;;
+  "compose config apiserver")
+    # Its managed runners' directory, where FAKE_APISERVER_MR_DIR says .env names one; otherwise Compose's /dev/null.
+    [ -n "${FAKE_APISERVER_MR_DIR:-}" ] || exit 0
+    printf '%s\n' 'name: orbit' 'services:' '  apiserver:' '    volumes:' '      - type: bind' \
+      "        source: $PWD/data/managed-runners" '        target: /var/lib/orbit-cloud-runners' '        read_only: true' ;;
+  "compose exec -T apiserver node -") cat >"$FAKE_DOCKER_LOG.stdin"; echo "    ${FAKE_HOST_LINE:-orbit-far at http://10.66.0.3:7300: image sha256:fixture}" ;;
   "compose ps -q apiserver") cat "$FAKE_DOCKER_LOG.apiserver" 2>/dev/null || echo apiserver-0 ;;
   "compose ps -q pgbackup") echo pgbackup-0 ;;
   "compose ps -q gateway") echo gateway-0 ;;
@@ -99,15 +105,15 @@ case "$*" in
   "network inspect -f {{range .IPAM.Config}}{{.Gateway}} {{end}} "*) echo "$FAKE_GATEWAY " ;;
   "network inspect -f {{.EnableIPv6}} "*) echo "${FAKE_IPV6:-false}" ;;
   "network inspect -f {{with index .Options \"com.docker.network.bridge.name\"}}{{.}}{{else}}br-{{printf \"%.12s\" .Id}}{{end}} "*) echo "$FAKE_BRIDGE" ;;
-  "run --rm --network host "*" orbit-managed-runner-firewall:local preflight")
+  "run --rm --network host "*" orbit-cloud-runner-firewall:local preflight")
     echo "{\"backend\": \"${FAKE_FIREWALL_BACKEND:-nft}\", \"ipv6\": \"present\", \"iptables\": \"iptables v1.8.13\"}" ;;
-  "run --rm --network host "*" orbit-managed-runner-firewall:local apply "*)
+  "run --rm --network host "*" orbit-cloud-runner-firewall:local apply "*)
     : >"$FAKE_DOCKER_LOG.applied"
     echo '{"backend": "nft", "enforced": true, "problems": [], "written": ["IPv4", "IPv6"]}' ;;
-  "run --rm --network orbit-managed-runners "*" orbit-managed-runner-firewall:local probe --resolve "*)
+  "run --rm --network "*"-runners "*" orbit-cloud-runner-firewall:local probe --resolve "*)
     # FAKE_DNS_BROKEN_BY_RULES: names resolve until the rules are applied.
     [ -n "${FAKE_DNS_BROKEN_BY_RULES:-}" ] && [ -e "$FAKE_DOCKER_LOG.applied" ] && exit 1 ;;
-  "run --rm --network orbit-managed-runners "*" orbit-managed-runner-firewall:local docker-dns") echo "${FAKE_DNS:-[]}" ;;
+  "run --rm --network "*"-runners "*" orbit-cloud-runner-firewall:local docker-dns") echo "${FAKE_DNS:-[]}" ;;
   "network inspect "*) [ -e "$FAKE_DOCKER_LOG.network" ] || exit 1 ;;
   "network create "*) : >"$FAKE_DOCKER_LOG.network" ;;
   "inspect --format {{.Image}} orbit-web") exit 1 ;;
@@ -182,7 +188,7 @@ class NewDeploymentTest(unittest.TestCase):
     # ── the fresh install ─────────────────────────────────────────────────────────────────────
 
     def test_a_fresh_install_writes_the_switch_the_directory_and_the_docker_profile(self):
-        run = self.run_script(INSTALL, "--managed-runner-image", "orbit-managed-runner:fixture")
+        run = self.run_script(INSTALL, "--managed-runner-image", "orbit-cloud-runner:fixture")
         self.assertEqual(run.returncode, 0, run.stdout + run.stderr)
         env_file = self.checkout / ".env"
         self.assertEqual(stat.S_IMODE(env_file.stat().st_mode), 0o600)
@@ -209,16 +215,16 @@ class NewDeploymentTest(unittest.TestCase):
         self.assertEqual(channel["image"], IMAGE_ID)
         self.assertEqual(profile["runner"]["image"], IMAGE_ID)
         self.assertEqual(channel["instanceId"], profile["docker"]["instanceId"])
-        self.assertEqual(channel["network"], "orbit-managed-runners")
+        self.assertEqual(channel["network"], "orbit-cloud-runners")
         self.assertEqual(profile["runner"]["serverUrl"], f"http://{GATEWAY}:2086")
         # Both name the files where root Compose mounts the directory.
         self.assertEqual(channel["listen"]["unixSocket"], profile["docker"]["channel"]["socketPath"])
         self.assertEqual(channel["tokenFile"], profile["docker"]["tokenFile"])
-        self.assertTrue(channel["tokenFile"].startswith("/var/lib/orbit-managed-runners/"))
+        self.assertTrue(channel["tokenFile"].startswith("/var/lib/orbit-cloud-runners/"))
         self.assertNotIn(token, (directory / "channel.json").read_text() + (directory / "profile.json").read_text())
 
         calls = self.calls()
-        self.assertIn("network create --driver bridge --ipv6=false --opt com.docker.network.bridge.enable_icc=false orbit-managed-runners", calls)
+        self.assertIn("network create --driver bridge --ipv6=false --opt com.docker.network.bridge.enable_icc=false orbit-cloud-runners", calls)
         # Built, the database up, its migrations applied, then the stack: the apiserver's first boot has none left.
         started = [c for c in calls if c.startswith(("compose build", "compose up", "compose run"))]
         self.assertEqual([c.split(" sh -c ")[0] for c in started], [
@@ -242,8 +248,8 @@ class NewDeploymentTest(unittest.TestCase):
         head = self.git("rev-parse", "HEAD")
         calls = self.calls()
         self.assertIn(f"build --provenance=false -f deploy/managed-runner/image/Dockerfile --build-arg ORBIT_SOURCE_SHA={head} "
-                      "-t orbit-managed-runner:local .", calls)
-        self.assertIn("image inspect -f {{.Id}} orbit-managed-runner:local", calls)
+                      "-t orbit-cloud-runner:local .", calls)
+        self.assertIn("image inspect -f {{.Id}} orbit-cloud-runner:local", calls)
         self.assertFalse([c for c in calls if re.match(r"(image )?push|login|compose up", c)], calls)
         self.assertEqual(json.loads((self.checkout / "data/managed-runners/profile.json").read_text())["runner"]["image"],
                          IMAGE_ID)
@@ -259,6 +265,29 @@ class NewDeploymentTest(unittest.TestCase):
         # Nothing of managed runners: the runner link's own image is test/upgrade-runner-link.test.mjs's.
         self.assertEqual([c for c in self.calls() if not c.startswith("compose version")
                           and "orbit-link-gateway" not in c and c != "build --help"], [])
+
+    def test_no_install_or_upgrade_writes_the_browser_switch(self):
+        # docs/runner-browser-design.md §2: a default deployment has the managed runner browser off, so its .env
+        # carries ORBIT_MANAGED_RUNNER_BROWSER_ENABLED only as .env.example's commented line.
+        def browser_lines():
+            lines = [line for line in (self.checkout / ".env").read_text().splitlines()
+                     if "ORBIT_MANAGED_RUNNER_BROWSER_ENABLED" in line]
+            print(f"\n.env lines naming ORBIT_MANAGED_RUNNER_BROWSER_ENABLED: {lines}")
+            return lines
+
+        for args in ((), ("--no-managed-runners",)):
+            with self.subTest(install=args):
+                (self.checkout / ".env").unlink(missing_ok=True)
+                shutil.rmtree(self.checkout / "data", ignore_errors=True)
+                run = self.run_script(INSTALL, *args, "--no-start")
+                self.assertEqual(run.returncode, 0, run.stdout + run.stderr)
+                self.assertEqual(browser_lines(), ["# ORBIT_MANAGED_RUNNER_BROWSER_ENABLED=true"])
+        for upgrade in UPGRADES:
+            with self.subTest(upgrade=upgrade):
+                self.fresh_install()
+                run = self.run_script(upgrade, "--no-pull")
+                self.assertEqual(run.returncode, 0, run.stdout + run.stderr)
+                self.assertEqual(browser_lines(), ["# ORBIT_MANAGED_RUNNER_BROWSER_ENABLED=true"])
 
     def test_an_install_never_touches_an_existing_deployment(self):
         existing = 'JWT_SECRET="kept"\nPROVIDER_SECRET_KEY="kept too"\n'
@@ -286,7 +315,7 @@ class NewDeploymentTest(unittest.TestCase):
                     "ORBIT_MANAGED_RUNNERS_ENABLED=false\n")
         (self.checkout / ".env").write_text(existing)
         (self.checkout / ".env").chmod(0o600)
-        run = self.run_script(INSTALL, "--enable-managed-runners", "--managed-runner-image", "orbit-managed-runner:fixture")
+        run = self.run_script(INSTALL, "--enable-managed-runners", "--managed-runner-image", "orbit-cloud-runner:fixture")
         self.assertEqual(run.returncode, 0, run.stdout + run.stderr)
         text = (self.checkout / ".env").read_text()
         live = self.live_lines(text)
@@ -313,7 +342,7 @@ class NewDeploymentTest(unittest.TestCase):
                 (self.checkout / ".env").write_text(existing)
                 shutil.rmtree(self.checkout / "data", ignore_errors=True)
                 run = self.run_script(INSTALL, "--enable-managed-runners", *args,
-                                      "--managed-runner-image", "orbit-managed-runner:fixture")
+                                      "--managed-runner-image", "orbit-cloud-runner:fixture")
                 self.assertEqual(run.returncode, 0, run.stdout + run.stderr)
                 live = self.live_lines((self.checkout / ".env").read_text())
                 self.assertEqual([line for line in live if line.startswith("COMPOSE_PROFILES=")],
@@ -329,7 +358,7 @@ class NewDeploymentTest(unittest.TestCase):
         existing = ('JWT_SECRET="kept"\nCOMPOSE_PROFILES="managed-runners-docker, runner-link "\n')
         (self.checkout / ".env").write_text(existing)
         run = self.run_script(INSTALL, "--enable-managed-runners",
-                              "--managed-runner-image", "orbit-managed-runner:fixture")
+                              "--managed-runner-image", "orbit-cloud-runner:fixture")
         self.assertEqual(run.returncode, 0, run.stdout + run.stderr)
         live = self.live_lines((self.checkout / ".env").read_text())
         self.assertEqual([line for line in live if line.startswith("COMPOSE_PROFILES=")],
@@ -339,7 +368,7 @@ class NewDeploymentTest(unittest.TestCase):
         if not Path("/run/xtables.lock").is_file():
             self.skipTest("needs /run/xtables.lock, as the legacy iptables backend does")
         (self.checkout / ".env").write_text('JWT_SECRET="kept"\nCOMPOSE_PROFILES=runner-link\n')
-        run = self.run_script(INSTALL, "--enable-managed-runners", "--managed-runner-image", "orbit-managed-runner:fixture",
+        run = self.run_script(INSTALL, "--enable-managed-runners", "--managed-runner-image", "orbit-cloud-runner:fixture",
                               FAKE_FIREWALL_BACKEND="legacy")
         self.assertEqual(run.returncode, 0, run.stdout + run.stderr)
         live = self.live_lines((self.checkout / ".env").read_text())
@@ -363,7 +392,9 @@ class NewDeploymentTest(unittest.TestCase):
 
     # What each copy of /upgrade asked of Docker for a deployment without managed runners before it kept their
     # image current (both copies at c16d115b3, run exactly as below): that path is unchanged, call for call, but for
-    # where the deployment runs from, asked first, and pgbackup, after the other services (2026-11-02, Orbit Files' T10).
+    # where the deployment runs from, asked first, and pgbackup, after the other services (2026-11-02, Orbit Files' T10),
+    # and the apiserver's managed runners' directory, read for a profile whose channel hosts are all on other machines
+    # (2026-11-13, docs/self-hosting.md "Managed runners on another host"), which without one is /dev/null.
     DEPLOYMENT_PREFLIGHT = [
         "compose config postgres",
         "inspect --format {{range .Mounts}}{{if eq .Destination \"/archive\"}}{{.Source}}{{end}}{{end}} orbit-postgres",
@@ -390,6 +421,7 @@ class NewDeploymentTest(unittest.TestCase):
             *LINK_LOOKED_AT,
             "inspect --format {{.Image}} orbit-web",
             "compose config --services",
+            "compose config apiserver",
             "compose build apiserver wiki-worker web",
             *WEB_GATEWAY_COMPARED,
             "compose up -d --wait apiserver wiki-worker web gateway",
@@ -401,6 +433,7 @@ class NewDeploymentTest(unittest.TestCase):
             *DEPLOYMENT_PREFLIGHT,
             *LINK_LOOKED_AT,
             "compose config --services",
+            "compose config apiserver",
             "compose build apiserver wiki-worker web",
             *WEB_GATEWAY_COMPARED,
             "compose run --rm --no-deps apiserver /bin/sh -c cd src/apiserver && node "
@@ -480,9 +513,9 @@ class NewDeploymentTest(unittest.TestCase):
                 head = self.git("rev-parse", "HEAD")
                 images = "compose build apiserver wiki-worker web docker-channel"
                 runner = (f"build --provenance=false -f deploy/managed-runner/image/Dockerfile --build-arg ORBIT_SOURCE_SHA={head} "
-                          "-t orbit-managed-runner:local .")
+                          "-t orbit-cloud-runner:local .")
                 self.assertLess(calls.index(images), calls.index(runner), calls)
-                self.assertIn("image inspect -f {{.Id}} orbit-managed-runner:local", calls)
+                self.assertIn("image inspect -f {{.Id}} orbit-cloud-runner:local", calls)
                 self.assertFalse([c for c in calls if re.match(r"(image )?(push|tag)\b|login\b", c)], calls)
                 # The other services first, then the apiserver, which that did not recreate, then the channel, last.
                 self.assertRegex(self.ups()[0], r"^compose up -d --wait (--no-deps )?apiserver wiki-worker web gateway$")
@@ -532,7 +565,7 @@ class NewDeploymentTest(unittest.TestCase):
     def test_nothing_is_switched_when_the_upgrade_stops_before_its_services_are_recreated(self):
         head = self.git("rev-parse", "HEAD")
         image = (f"build --provenance=false -f deploy/managed-runner/image/Dockerfile --build-arg ORBIT_SOURCE_SHA={head} "
-                 "-t orbit-managed-runner:local .")
+                 "-t orbit-cloud-runner:local .")
         for upgrade in UPGRADES:
             failures = [image, "compose build *"]
             if upgrade.startswith(".agents/"):
@@ -584,6 +617,100 @@ class NewDeploymentTest(unittest.TestCase):
                     else:
                         self.assertEqual(self.managed_files(), before)
 
+    # ── the upgrade of a deployment whose managed runners are on other hosts ──────────────────────
+
+    def remote_profile(self, channel):
+        """A server whose profile names channel hosts: the runner link's lines, managed runners' profiles as given."""
+        directory = self.checkout / self.DIRECTORY
+        shutil.rmtree(self.checkout / "data", ignore_errors=True)
+        directory.mkdir(parents=True)
+        profile = {"schemaVersion": 1, "valueKind": "actual", "backend": "docker",
+                   "docker": {"hosts": [{"instanceId": "orbit-far", "channel": channel,
+                                         "tokenFile": "/var/lib/orbit-cloud-runners/orbit-far.token"},
+                                        {"instanceId": "orbit-farther", "channel": {"url": "http://10.66.0.4:7300"},
+                                         "tokenFile": "/var/lib/orbit-cloud-runners/orbit-farther.token"}]},
+                   "runner": {"image": "channel", "serverUrl": "https://orbit.example.test"}}
+        (directory / "profile.json").write_text(json.dumps(profile, indent=2))
+        (directory / "orbit-far.token").write_text("a" * 64)
+        return self.managed_files()
+
+    LINK_ENV = ('JWT_SECRET="kept"\nPROVIDER_SECRET_KEY="kept too"\nRUNNER_LINK_URL=same-origin\n'
+                + "".join(f'RUNNER_LINK_{name}="kept"\n' for name in (
+                    "SIGNING_KEY", "PUBLIC_KEY", "GATEWAY_TOKEN", "NATS_APISERVER_SEED", "NATS_APISERVER_KEY",
+                    "NATS_GATEWAY_SEED", "NATS_GATEWAY_KEY")))
+
+    def test_an_upgrade_of_a_server_whose_channel_hosts_are_all_remote_builds_no_runner_image(self):
+        for upgrade in UPGRADES:
+            for profiles in ("runner-link", "managed-runners-docker,managed-runner-firewall,runner-link"):
+                with self.subTest(upgrade=upgrade, profiles=profiles):
+                    before = self.remote_profile({"url": "http://10.66.0.3:7300"})
+                    (self.checkout / ".env").write_text(self.LINK_ENV + f"COMPOSE_PROFILES={profiles}\n")
+                    run = self.run_script(upgrade, "--no-pull", FAKE_APISERVER_MR_DIR="1", FAKE_IMAGE_ID=self.NEW_IMAGE_ID)
+                    self.assertEqual(run.returncode, 0, run.stdout + run.stderr)
+                    self.assertEqual(self.managed_files(), before, "profile.json and the token as they were")
+                    calls = self.calls()
+                    self.assertFalse([c for c in calls if "deploy/managed-runner/image" in c or "orbit-cloud-runner:local" in c], calls)
+                    self.assertFalse([c for c in calls if "docker-channel" in c and re.match(r"compose (build|up) ", c)], calls)
+                    # Each host's image, asked by the apiserver, last.
+                    self.assertIn("compose exec -T apiserver node -", calls)
+                    self.assertEqual(self.log.with_name(self.log.name + ".stdin").read_text(),
+                                     (REPO / "deploy/managed-runner/docker-channel/info.js").read_text())
+                    self.assertIn("names channel hosts on other machines only", run.stdout)
+                    self.assertIn("orbit-far at http://10.66.0.3:7300: image sha256:fixture", run.stdout)
+
+    def test_a_profile_with_a_channel_on_this_host_is_not_taken_for_a_remote_one(self):
+        for upgrade in UPGRADES:
+            for channel in ({"socketPath": "/var/lib/orbit-cloud-runners/channel.sock"}, {"url": "http://127.0.0.1:7300"},
+                            {"url": "http://[::1]:7300"}):
+                with self.subTest(upgrade=upgrade, channel=channel):
+                    self.remote_profile(channel)
+                    (self.checkout / ".env").write_text(self.LINK_ENV + "COMPOSE_PROFILES=runner-link\n")
+                    run = self.run_script(upgrade, "--no-pull", FAKE_APISERVER_MR_DIR="1")
+                    self.assertEqual(run.returncode, 0, run.stdout + run.stderr)
+                    self.assertNotIn("compose exec -T apiserver node -", self.calls())
+                    self.assertNotIn("other machines", run.stdout)
+
+    def test_the_host_report_reads_every_host_of_the_profile(self):
+        if not shutil.which("node"):
+            self.skipTest("needs node")
+        import http.server
+        import threading
+        token = "b" * 64
+        seen = []
+
+        class Channel(http.server.BaseHTTPRequestHandler):
+            def do_GET(self):
+                seen.append((self.path, self.headers.get("authorization")))
+                body = json.dumps({"schemaVersion": 1, "instanceId": "orbit-far", "image": self.server.image}).encode()
+                self.send_response(200)
+                self.send_header("content-type", "application/json")
+                self.send_header("content-length", str(len(body)))
+                self.end_headers()
+                self.wfile.write(body)
+
+            def log_message(self, *args):
+                pass
+
+        server = http.server.ThreadingHTTPServer(("127.0.0.1", 0), Channel)
+        server.image = self.NEW_IMAGE_ID
+        threading.Thread(target=server.serve_forever, daemon=True).start()
+        self.addCleanup(server.shutdown)
+        (self.root / "far.token").write_text(token + "\n")
+        profile = {"docker": {"hosts": [
+            {"instanceId": "orbit-far", "channel": {"url": f"http://127.0.0.1:{server.server_port}"}, "tokenFile": str(self.root / "far.token")},
+            {"instanceId": "orbit-gone", "channel": {"url": "http://127.0.0.1:9"}, "tokenFile": str(self.root / "far.token"), "draining": True}]},
+            "runner": {"image": IMAGE_ID}}
+        (self.root / "profile.json").write_text(json.dumps(profile))
+        run = subprocess.run(["node", "-", str(self.root / "profile.json")], input=(REPO / "deploy/managed-runner/docker-channel/info.js").read_text(),
+                             capture_output=True, text=True, timeout=60)
+        self.assertEqual(run.returncode, 0, run.stderr)
+        lines = run.stdout.splitlines()
+        self.assertEqual(lines[0], f"    orbit-far at http://127.0.0.1:{server.server_port}: image {self.NEW_IMAGE_ID} "
+                                   f"(the profile pins {IMAGE_ID}: the apiserver makes nothing there until they agree)")
+        self.assertRegex(lines[1], r"^    orbit-gone at http://127.0.0.1:9: not reached: .*; draining$")
+        self.assertEqual(seen, [("/v1/info", f"Bearer {token}")])
+        self.assertNotIn(token, run.stdout + run.stderr)
+
     def test_both_copies_keep_the_managed_runners_section_the_same(self):
         sections = []
         for upgrade in UPGRADES:
@@ -602,7 +729,7 @@ class NewDeploymentTest(unittest.TestCase):
         return [c for c in self.calls() if c.startswith(f"run --rm --network {network} ") and FIREWALL_IMAGE in c]
 
     def test_a_fresh_install_checks_the_host_then_applies_the_rules_and_checks_them_from_the_network(self):
-        run = self.run_script(INSTALL, "--managed-runner-image", "orbit-managed-runner:fixture", FAKE_DNS='["10.0.0.2"]')
+        run = self.run_script(INSTALL, "--managed-runner-image", "orbit-cloud-runner:fixture", FAKE_DNS='["10.0.0.2"]')
         self.assertEqual(run.returncode, 0, run.stdout + run.stderr)
         calls = self.calls()
         def at(prefix):
@@ -613,8 +740,8 @@ class NewDeploymentTest(unittest.TestCase):
         self.assertLess(at(f"{FIREWALL_IMAGE} preflight"), at("network create"))
         # The rules applied from the configuration's first copy, refused targets checked from the network, DNS on both
         # sides of them, and only then the stack, and the gateway's port reached from the network once it is up.
-        self.assertLess(at("network create"), at(f"{FIREWALL_IMAGE} apply --config /var/lib/orbit-managed-runner-firewall/config.json.new"))
-        probes = [c.split(f"{FIREWALL_IMAGE} ", 1)[1] for c in self.firewall_runs("orbit-managed-runners")]
+        self.assertLess(at("network create"), at(f"{FIREWALL_IMAGE} apply --config /var/lib/orbit-cloud-runner-firewall/config.json.new"))
+        probes = [c.split(f"{FIREWALL_IMAGE} ", 1)[1] for c in self.firewall_runs("orbit-cloud-runners")]
         self.assertEqual(probes, ["docker-dns", "probe --resolve registry-1.docker.io",
                                   f"probe --blocked {GATEWAY}:1 --blocked 169.254.169.254:80 --blocked 10.255.255.1:9",
                                   "probe --resolve registry-1.docker.io", f"probe --reach {GATEWAY}:2086 --attempts 15"])
@@ -625,11 +752,11 @@ class NewDeploymentTest(unittest.TestCase):
             self.assertRegex(call, r"^run --rm --network host --cap-drop ALL --cap-add NET_ADMIN --cap-add NET_RAW "
                                    r"--security-opt no-new-privileges --read-only ")
             self.assertNotIn("docker.sock", call)
-        for call in self.firewall_runs("orbit-managed-runners"):
+        for call in self.firewall_runs("orbit-cloud-runners"):
             self.assertIn("--cap-drop ALL --security-opt no-new-privileges --read-only --user 65534:65534", call)
         # Its configuration, in place now, for the bridge and gateway of the network and the DNS Docker forwards from it.
         config = json.loads((self.checkout / self.FIREWALL_CONFIG).read_text())
-        self.assertEqual(config, {"schemaVersion": 1, "network": "orbit-managed-runners", "bridge": BRIDGE, "gateway": GATEWAY,
+        self.assertEqual(config, {"schemaVersion": 1, "network": "orbit-cloud-runners", "bridge": BRIDGE, "gateway": GATEWAY,
                                   "apiPort": 2086, "dnsServers": ["10.0.0.2"], "allow": [], "intervalSeconds": 10})
         self.assertFalse((self.checkout / self.FIREWALL_CONFIG).with_suffix(".json.new").exists())
         self.assertEqual(stat.S_IMODE((self.checkout / self.FIREWALL_CONFIG).stat().st_mode), 0o600)
@@ -637,7 +764,7 @@ class NewDeploymentTest(unittest.TestCase):
         module = load_firewall()
         module.parse_config(config)
         # Every command the install gives the program is one it takes.
-        for call in self.firewall_runs("host") + self.firewall_runs("orbit-managed-runners"):
+        for call in self.firewall_runs("host") + self.firewall_runs("orbit-cloud-runners"):
             with self.subTest(call=call):
                 module.command_line().parse_args(shlex.split(call.split(f"{FIREWALL_IMAGE} ", 1)[1]))
         live = self.live_lines((self.checkout / ".env").read_text())
@@ -651,7 +778,7 @@ class NewDeploymentTest(unittest.TestCase):
                 for leftover in (self.checkout / ".env",):
                     leftover.unlink(missing_ok=True)
                 shutil.rmtree(self.checkout / "data", ignore_errors=True)
-                run = self.run_script(INSTALL, "--no-managed-runner-firewall", "--managed-runner-image", "orbit-managed-runner:fixture", *args)
+                run = self.run_script(INSTALL, "--no-managed-runner-firewall", "--managed-runner-image", "orbit-cloud-runner:fixture", *args)
                 self.assertEqual(run.returncode, 0, run.stdout + run.stderr)
                 text = (self.checkout / ".env").read_text()
                 live = self.live_lines(text)
@@ -660,7 +787,7 @@ class NewDeploymentTest(unittest.TestCase):
                 self.assertIn(self.OFF_NOTE, text)
                 self.assertFalse([line for line in live if "FIREWALL" in line], live)
                 self.assertIn("the managed runners' host firewall is off", run.stderr)
-                self.assertFalse(self.firewall_runs("host") + self.firewall_runs("orbit-managed-runners"), self.calls())
+                self.assertFalse(self.firewall_runs("host") + self.firewall_runs("orbit-cloud-runners"), self.calls())
                 self.assertFalse([c for c in self.calls() if "firewall" in c or c.startswith("info ")], self.calls())
                 self.assertFalse((self.checkout / "data/managed-runners/firewall").exists())
 
@@ -672,7 +799,7 @@ class NewDeploymentTest(unittest.TestCase):
         }
         for name, (env, needle) in cases.items():
             with self.subTest(name=name):
-                run = self.run_script(INSTALL, "--managed-runner-image", "orbit-managed-runner:fixture", **env)
+                run = self.run_script(INSTALL, "--managed-runner-image", "orbit-cloud-runner:fixture", **env)
                 self.assertNotEqual(run.returncode, 0)
                 self.assertIn(needle, run.stderr)
                 self.assertIn("--no-managed-runner-firewall", run.stderr, "it says how to go without")
@@ -683,7 +810,7 @@ class NewDeploymentTest(unittest.TestCase):
     def test_rules_that_cannot_be_applied_or_checked_stop_the_install_before_env_and_leave_no_gate(self):
         cases = {
             "apply": f"run --rm --network host *{FIREWALL_IMAGE} apply *",
-            "the refused targets": f"run --rm --network orbit-managed-runners *{FIREWALL_IMAGE} probe --blocked *",
+            "the refused targets": f"run --rm --network orbit-cloud-runners *{FIREWALL_IMAGE} probe --blocked *",
             "the network's IPv6": None,
         }
         for name, failing in cases.items():
@@ -692,7 +819,7 @@ class NewDeploymentTest(unittest.TestCase):
                 shutil.rmtree(self.checkout / "data", ignore_errors=True)
                 self.log.with_name(self.log.name + ".network").unlink(missing_ok=True)
                 env = {"FAKE_FAIL": failing} if failing else {"FAKE_IPV6": "true"}
-                run = self.run_script(INSTALL, "--managed-runner-image", "orbit-managed-runner:fixture", **env)
+                run = self.run_script(INSTALL, "--managed-runner-image", "orbit-cloud-runner:fixture", **env)
                 self.assertNotEqual(run.returncode, 0)
                 self.assertIn("--no-managed-runner-firewall", run.stderr)
                 self.assertFalse((self.checkout / ".env").exists())
@@ -701,26 +828,26 @@ class NewDeploymentTest(unittest.TestCase):
                 self.assertFalse([c for c in self.calls() if c.startswith(("compose build", "compose up"))])
 
     def test_dns_the_rules_break_stops_the_install(self):
-        run = self.run_script(INSTALL, "--managed-runner-image", "orbit-managed-runner:fixture", FAKE_DNS_BROKEN_BY_RULES="1")
+        run = self.run_script(INSTALL, "--managed-runner-image", "orbit-cloud-runner:fixture", FAKE_DNS_BROKEN_BY_RULES="1")
         self.assertNotEqual(run.returncode, 0)
         self.assertIn("broke DNS", run.stderr)
         self.assertFalse((self.checkout / ".env").exists())
         self.assertFalse((self.checkout / self.FIREWALL_CONFIG).exists())
         # A host whose runners resolve nothing before the rules (offline, say) is not asked again after them.
         shutil.rmtree(self.checkout / "data", ignore_errors=True)
-        run = self.run_script(INSTALL, "--managed-runner-image", "orbit-managed-runner:fixture",
-                              FAKE_FAIL=f"run --rm --network orbit-managed-runners *{FIREWALL_IMAGE} probe --resolve *")
+        run = self.run_script(INSTALL, "--managed-runner-image", "orbit-cloud-runner:fixture",
+                              FAKE_FAIL=f"run --rm --network orbit-cloud-runners *{FIREWALL_IMAGE} probe --resolve *")
         self.assertEqual(run.returncode, 0, run.stdout + run.stderr)
         self.assertEqual(len([c for c in self.calls() if c.endswith("probe --resolve registry-1.docker.io")]), 1)
 
     def test_a_gateway_the_runners_do_not_reach_through_the_rules_fails_the_install(self):
-        run = self.run_script(INSTALL, "--managed-runner-image", "orbit-managed-runner:fixture",
-                              FAKE_FAIL=f"run --rm --network orbit-managed-runners *{FIREWALL_IMAGE} probe --reach *")
+        run = self.run_script(INSTALL, "--managed-runner-image", "orbit-cloud-runner:fixture",
+                              FAKE_FAIL=f"run --rm --network orbit-cloud-runners *{FIREWALL_IMAGE} probe --reach *")
         self.assertNotEqual(run.returncode, 0)
         self.assertIn(f"does not reach the gateway at {GATEWAY}:2086", run.stderr)
 
     def test_the_legacy_backend_shares_the_hosts_xtables_lock(self):
-        run = self.run_script(INSTALL, "--managed-runner-image", "orbit-managed-runner:fixture", "--no-start", FAKE_FIREWALL_BACKEND="legacy")
+        run = self.run_script(INSTALL, "--managed-runner-image", "orbit-cloud-runner:fixture", "--no-start", FAKE_FIREWALL_BACKEND="legacy")
         if Path("/run/xtables.lock").is_file():
             self.assertEqual(run.returncode, 0, run.stdout + run.stderr)
             self.assertIn("ORBIT_MANAGED_RUNNER_FIREWALL_XTABLES_LOCK=/run/xtables.lock", self.live_lines((self.checkout / ".env").read_text()))
@@ -736,7 +863,7 @@ class NewDeploymentTest(unittest.TestCase):
             with self.subTest(args=args):
                 (self.checkout / ".env").write_text(existing)
                 shutil.rmtree(self.checkout / "data", ignore_errors=True)
-                run = self.run_script(INSTALL, "--enable-managed-runners", *args, "--managed-runner-image", "orbit-managed-runner:fixture")
+                run = self.run_script(INSTALL, "--enable-managed-runners", *args, "--managed-runner-image", "orbit-cloud-runner:fixture")
                 self.assertEqual(run.returncode, 0, run.stdout + run.stderr)
                 self.assertEqual(self.live_lines((self.checkout / ".env").read_text())[2:], lines)
                 ups = [c for c in self.calls() if c.startswith("compose up")]
@@ -750,7 +877,7 @@ class NewDeploymentTest(unittest.TestCase):
                     self.assertTrue((self.checkout / self.FIREWALL_CONFIG).exists())
 
     def test_an_administrator_adds_the_firewall_to_managed_runners_installed_without_it(self):
-        run = self.run_script(INSTALL, "--no-managed-runner-firewall", "--managed-runner-image", "orbit-managed-runner:fixture", "--no-start")
+        run = self.run_script(INSTALL, "--no-managed-runner-firewall", "--managed-runner-image", "orbit-cloud-runner:fixture", "--no-start")
         self.assertEqual(run.returncode, 0, run.stdout + run.stderr)
         before = (self.checkout / ".env").read_text()
         files = self.managed_files()
@@ -778,6 +905,17 @@ class NewDeploymentTest(unittest.TestCase):
         self.assertNotEqual(run.returncode, 0)
         self.assertIn("on for this deployment already", run.stderr)
 
+    def test_adding_the_firewall_to_an_install_from_before_the_rename_firewalls_the_network_its_runners_are_on(self):
+        run = self.run_script(INSTALL, "--no-managed-runner-firewall", "--managed-runner-image", "orbit-cloud-runner:fixture", "--no-start")
+        self.assertEqual(run.returncode, 0, run.stdout + run.stderr)
+        channel = self.checkout / "data/managed-runners/channel.json"
+        channel.write_text(channel.read_text().replace('"orbit-cloud-runners"', '"orbit-managed-runners"'))
+        run = self.run_script(INSTALL, "--enable-managed-runner-firewall")
+        self.assertEqual(run.returncode, 0, run.stdout + run.stderr)
+        self.assertEqual(json.loads((self.checkout / self.FIREWALL_CONFIG).read_text())["network"], "orbit-managed-runners")
+        self.assertTrue(self.firewall_runs("orbit-managed-runners"), self.calls())
+        self.assertFalse(self.firewall_runs("orbit-cloud-runners"), self.calls())
+
     def test_adding_the_firewall_refuses_what_it_cannot_firewall(self):
         cases = []
         cases.append(("no deployment", None, "no .env here"))
@@ -792,7 +930,7 @@ class NewDeploymentTest(unittest.TestCase):
                 run = self.run_script(INSTALL, "--enable-managed-runner-firewall")
                 self.assertNotEqual(run.returncode, 0)
                 self.assertIn(needle, run.stderr)
-                self.assertFalse(self.firewall_runs("host") + self.firewall_runs("orbit-managed-runners"), self.calls())
+                self.assertFalse(self.firewall_runs("host") + self.firewall_runs("orbit-cloud-runners"), self.calls())
                 self.assertFalse((self.checkout / "data/managed-runners/firewall").exists())
         # A runner server address that is not the gateway's port on the network: the rules would cut runners off.
         (self.checkout / ".env").unlink()

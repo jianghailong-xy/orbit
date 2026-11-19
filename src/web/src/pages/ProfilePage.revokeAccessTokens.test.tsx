@@ -6,7 +6,8 @@ import { MemoryRouter } from 'react-router-dom';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 /**
- * Profile → Change password and personal access tokens (docs/personal-access-token-design.md §11.3):
+ * Profile → Password → Change → the Change password dialog, and personal access tokens
+ * (docs/personal-access-token-design.md §11.3):
  * a password change leaves every token working unless "Also revoke all my access tokens" is ticked,
  * which is never ticked to begin with; ticked, the request asks for it and the page says how many
  * tokens it ended.
@@ -52,13 +53,19 @@ async function open(): Promise<void> {
   });
   await vi.waitFor(() => expect(container!.textContent).toContain(ME.email));
   await settle();
+  await openDialog();
 }
 
-/** The Change password card: a region named by its title. */
-const form = () =>
-  [...container!.querySelectorAll<HTMLElement>('section[aria-labelledby]')].find(
-    (card) => document.getElementById(card.getAttribute('aria-labelledby')!)?.textContent === 'Change password',
-  )!;
+/** The Password row's Change, which opens the dialog. */
+async function openDialog(): Promise<void> {
+  const change = [...container!.querySelectorAll('[data-method="password"] button')].find((b) => b.textContent?.trim() === 'Change');
+  await click(change);
+  expect(dialog()).toBeTruthy();
+}
+
+/** The Change password dialog, while it is open. */
+const dialog = () => document.body.querySelector<HTMLElement>('.change-password-dialog[data-open]');
+const form = () => dialog()!;
 
 async function type(input: HTMLInputElement, value: string): Promise<void> {
   await act(async () => {
@@ -164,7 +171,9 @@ describe('Profile → Change password → Also revoke all my access tokens', { t
     });
     expect(toast.success).toHaveBeenCalledWith('Password changed', '3 access tokens revoked');
     expect(client.getQueryState(['access-tokens'])?.isInvalidated).toBe(true);
-    // The form starts over, the box unticked again.
+    // The dialog closes; opened again, the form starts over, the box unticked again.
+    await vi.waitFor(() => expect(dialog()).toBeNull());
+    await openDialog();
     expect(ticked()).toBe(false);
   });
 

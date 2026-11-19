@@ -11,7 +11,7 @@ import (
 	"orbit/link-gateway/linkpb"
 )
 
-// What a connection in MODE_LINK forwards with (docs/runner-link-design.md §5.6–§5.9, §6.4): requests (forward.go),
+// What a connection forwards with (docs/runner-link-design.md §5.6–§5.9, §6.4): requests (forward.go),
 // heartbeats (heartbeat.go), durable events (events.go), and the live stream and turn prefixes (live.go). The state
 // is the connection's and lives as long as it; nothing here decides what the control plane would decide. Every rule a
 // route applies stays in the route the call is forwarded to.
@@ -32,8 +32,8 @@ const (
 	runnerSchemaRevisionHeader     = "X-Orbit-Runner-Schema-Revision"
 	runnerContractDigestHeader     = "X-Orbit-Runner-Contract-Digest"
 	runnerCLIVersionHeader         = "X-Orbit-CLI-Version"
-	managedGenerationHeader        = "X-Orbit-Managed-Runner-Generation"
-	managedPodUIDHeader            = "X-Orbit-Managed-Runner-Pod-Uid"
+	managedGenerationHeader        = "X-Orbit-Cloud-Runner-Generation"
+	managedPodUIDHeader            = "X-Orbit-Cloud-Runner-Pod-Uid"
 )
 
 type linkState struct {
@@ -44,6 +44,8 @@ type linkState struct {
 	ingestSlots chan struct{}
 	// beats holds the newest heartbeat not yet forwarded; a newer one replaces it (heartbeat.go).
 	beats chan *linkpb.Heartbeat
+	// beating says a heartbeat worker is running (heartbeatWorker).
+	beating atomic.Bool
 	// facts is the last full value of each fact kind, for beats that send a digest only. Only the heartbeat worker
 	// touches it.
 	facts factCache
@@ -94,7 +96,6 @@ func (l *linkState) start(credit creditLevel) {
 		l.setCreditLocked(level)
 	}
 	l.mu.Unlock()
-	go l.heartbeatLoop()
 }
 
 // close lets go of what the connection held: its unacknowledged events no longer count against the gateway's ingest

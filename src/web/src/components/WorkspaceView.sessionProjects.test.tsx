@@ -134,7 +134,9 @@ const mounted = (): HTMLDivElement => {
   return container;
 };
 const projectRows = (): HTMLElement[] => [...mounted().querySelectorAll<HTMLElement>('.session-project-row')];
-const titles = (): string[] => [...mounted().querySelectorAll('.session-row .session-title')].map((el) => el.textContent ?? '');
+// The session list's rows, not the project sessions column's beside the conversation.
+const titles = (): string[] => [...(mounted().querySelector('.session-col:not(.session-project-column)') ?? mounted())
+  .querySelectorAll('.session-row .session-title')].map((el) => el.textContent ?? '');
 const projectRow = (): HTMLElement => {
   const found = projectRows()[0];
   if (!found) throw new Error('no project row');
@@ -314,6 +316,19 @@ describe('project entry typography', () => {
       /\.session-project-row\s+\.session-title\b/u.test(selector) && /\bfont-weight\s*:/u.test(body));
     expect(overrides, '项目条目标题与会话行同一字重（owner 10-04）').toHaveLength(0);
   });
+
+  it('shows keyboard focus as the row tint, not a ring the list edge or the kebab fade would cut', () => {
+    const css = fromRepo('src/index.css', 'src/web/src/index.css').replace(/\/\*[\s\S]*?\*\//gu, '');
+    const rule = [...css.matchAll(/([^{}]+)\{([^{}]*)\}/gu)].find(([, selector]) =>
+      /^\.session-project-row:focus-visible\s*$/u.test(selector.trim()));
+    expect(rule?.[2]).toMatch(/outline\s*:\s*none/u);
+    expect(rule?.[2]).toMatch(/background\s*:\s*var\(--bg-hover\)/u);
+    expect(rule?.[2]).toMatch(/--session-menu-surface\s*:\s*var\(--bg-hover\)/u);
+    const folder = [...css.matchAll(/([^{}]+)\{([^{}]*)\}/gu)].find(([, selector]) =>
+      /^\.session-folder-row:focus-visible\s*$/u.test(selector.trim()));
+    expect(folder?.[2], 'folder rows show focus the same way').toMatch(/outline\s*:\s*none/u);
+    expect(folder?.[2]).toMatch(/background\s*:\s*var\(--bg-hover\)/u);
+  });
 });
 
 describe('project entries in the session list', { timeout: 60_000 }, () => {
@@ -391,11 +406,14 @@ describe('project entries in the session list', { timeout: 60_000 }, () => {
     expect(projectRow().querySelector('.session-project-progress-bar')).toBeNull();
   });
 
-  it('opens the project sessions page when the project entry is clicked', async () => {
+  it('opens the coordinator with the project sessions column when the project entry is clicked', async () => {
     await mount();
     await click(projectRow(), 'the project entry');
-    await until(() => expect(mounted().querySelector('.session-project-page')).not.toBeNull());
+    await until(() => expect(mounted().querySelector('.session-project-column')).not.toBeNull());
+    expect(location.split('?')[0]).toBe(`/sessions/${COORDINATOR.id}`);
     expect(new URLSearchParams(location.split('?')[1]).get('project')).toBeTruthy();
+    expect(mounted().querySelector('.session-project-page')).toBeNull();
+    expect(projectRows()).toHaveLength(1);
   });
 
   it('files all project members under the coordinator folder, including members filed elsewhere', async () => {
@@ -543,6 +561,42 @@ describe('project entry status and second line', { timeout: 60_000 }, () => {
       .toBe('Plan the release: Which branch should I use?');
   });
 
+  // Orbit's own notification to the coordinator says Orbit and the sentence its line in the
+  // conversation says; any other message of Orbit's, its first line (§3.5, owner 11-07).
+  it('says Orbit for the notification the coordinator has not answered yet', async () => {
+    const card = {
+      kind: 'EVIDENCE_SUBMITTED', task: { id: TASK.id, title: 'Build the package' }, revision: 2, count: null,
+      deliveredAt: '2026-11-07T07:30:00.000Z', toCoordinator: true,
+    };
+    rows = [
+      LOOSE,
+      {
+        ...COORDINATOR,
+        lastUserText: 'From Orbit · project “Release” has a revision of completion evidence for you to decide\n\nTask “Build the package” …',
+        lastUserFrom: null,
+        lastUserFromOrbit: { coordinatorDelivery: card },
+      },
+      TASK,
+    ];
+    await mount();
+    expect(preview()?.textContent).toBe('Orbit: Evidence revision 2 submitted: Build the package');
+    expect(preview()?.classList.contains('tone-approval')).toBe(false);
+  });
+
+  it('says Orbit and the first line for a message of Orbit’s with no notification card', async () => {
+    rows = [
+      LOOSE,
+      {
+        ...COORDINATOR,
+        lastUserText: 'Orbit Watch w-1 matched at generation 1: the build finished\n\nThis turn was queued by the watch, not typed by a person.',
+        lastUserFromOrbit: { coordinatorDelivery: null },
+      },
+      TASK,
+    ];
+    await mount();
+    expect(preview()?.textContent).toBe('Orbit: Orbit Watch w-1 matched at generation 1: the build finished');
+  });
+
   it.each([
     ['the owner sent it', { lastUserFrom: null }],
     ['an older server names no sender', {}],
@@ -631,21 +685,25 @@ describe('project members outside the coordinator’s workspace, the arrow keys 
     expect(mark?.getAttribute('title')).toBe('Part of Project Alpha · open its sessions');
   });
 
-  it('opens the project’s sessions page from the mark, and the member from the rest of its row', async () => {
+  it('opens the project’s sessions column from the mark, and the member from the rest of its row', async () => {
     rows = [{ ...LOOSE, lastTurnAt: '2026-10-05T08:00:00Z' }, TASK, OLDER];
     remoteRows = [{ ...COORDINATOR, ...elsewhere }];
     await mount(() => expect(titles()).toEqual(THREE));
     await click(sessionRow('Build the package').querySelector('.session-project-progress'), 'the member’s mark');
-    await until(() => expect(mounted().querySelector('.session-project-page')).not.toBeNull());
-    // The column changes page and the open session stays: the press did not reach the row.
-    const [path, search] = location.split('?');
-    expect(path).toBe(`/sessions/${LOOSE.id}`);
-    expect(new URLSearchParams(search).get('project')).toBe(encodeId(PROJECT_ID));
-    await click(mounted().querySelector('.session-folder-back'), 'the project page back');
-    await until(() => expect(mounted().querySelector('.session-project-page')).toBeNull());
+    const column = (): Element | null => mounted().querySelector('.session-project-column');
+    await until(() => expect(column()).not.toBeNull());
+    // The member opens with its project's column beside it, and the list stays this workspace's.
+    await until(() => expect(location.split('?')[0]).toBe(`/sessions/${TASK.id}`));
+    expect(new URLSearchParams(location.split('?')[1]).get('project')).toBe(encodeId(PROJECT_ID));
+    expect(titles()).toEqual(THREE);
+    // ✕ folds the column; the address keeps the project so the title bar's button can bring it back.
+    await click(column()!.querySelector('.session-folder-back'), 'the column ✕');
+    await until(() => expect(column()).toBeNull());
+    expect(new URLSearchParams(location.split('?')[1]).get('project')).toBe(encodeId(PROJECT_ID));
     await until(() => expect(titles()).toEqual(THREE));
     await click(sessionRow('Build the package').querySelector('.session-title'), 'the member’s title');
-    await until(() => expect(location).toBe(`/sessions/${TASK.id}`));
+    await until(() => expect(location.split('?')[0]).toBe(`/sessions/${TASK.id}`));
+    expect(column()).toBeNull();
   });
 
   it('steps onto a member there with ↓ and ↑, and the list stays in this workspace', async () => {
@@ -705,8 +763,9 @@ describe('project members outside the coordinator’s workspace, the arrow keys 
     rows = [{ ...LOOSE, lastTurnAt: '2026-10-05T08:00:00Z' }, COORDINATOR, TASK];
     await mount();
     expect(titles()).toEqual(['Loose conversation', 'Project Alpha']);
+    // Wider than a phone, stepping onto the project's row opens its column beside the coordinator, as a click does.
     await press('ArrowDown');
-    await until(() => expect(location).toBe(`/sessions/${COORDINATOR.id}`));
+    await until(() => expect(location).toBe(`/sessions/${COORDINATOR.id}?project=${encodeId(PROJECT_ID)}`));
   });
 
   it('stays on a folder’s page when the arrow keys open a coordinator with a question for the owner', async () => {

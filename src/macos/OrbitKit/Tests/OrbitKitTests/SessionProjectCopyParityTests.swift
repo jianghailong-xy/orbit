@@ -40,6 +40,7 @@ final class SessionProjectCopyParityTests: XCTestCase {
         let constants: [(String, String)] = [
             ("noCoordinator", SessionProjectCopy.noCoordinator),
             ("openSession", SessionProjectCopy.openSession),
+            ("complete", SessionProjectCopy.complete),
             ("openCoordinator", SessionProjectCopy.openCoordinator),
             ("sessions", SessionProjectCopy.sessions),
             ("openProject", SessionProjectCopy.openProject),
@@ -96,7 +97,7 @@ final class SessionProjectCopyParityTests: XCTestCase {
 
     /// The words the tests in this file hold to the web's.
     private static let held: Set<String> = [
-        "noCoordinator", "openSession", "openCoordinator", "sessions", "openProject", "pin", "unpin", "move",
+        "noCoordinator", "openSession", "complete", "openCoordinator", "sessions", "openProject", "pin", "unpin", "move",
         "coordinatorSection", "pageSubtitleLoading", "startReview", "startNotAsked", "startHint",
         "progress", "progressHint", "markHint", "waitingSession", "pageSubtitle", "pageProgress", "startAsked",
         "pageNotStarted", "startSuggestion",

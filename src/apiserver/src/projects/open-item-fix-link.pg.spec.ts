@@ -1,3 +1,4 @@
+import { receiveOpenItem } from '../test-support/open-item-delivery';
 import assert from 'node:assert/strict';
 import { randomUUID } from 'node:crypto';
 import { test } from 'node:test';
@@ -157,9 +158,11 @@ async function failedItem(stack: Stack, w: World, label: string) {
   });
   await stack.tasks.update(w.ownerId, task.id, { status: DeclaredTaskStatus.FAILED });
   await stack.openItems.deliverForTasks([task.id]);
-  return stack.db.projectOpenItem.findFirstOrThrow({
+  const item = await stack.db.projectOpenItem.findFirstOrThrow({
     where: { projectId: w.projectId, taskId: task.id, kind: 'TASK_FAILED', state: 'OPEN' },
   });
+  await receiveOpenItem(stack.db, item.id);
+  return item;
 }
 
 async function refusal(run: () => Promise<unknown>): Promise<{ code?: string; status: number }> {
@@ -195,6 +198,7 @@ async function ageItem(stack: Stack, itemId: string, ms: number): Promise<void> 
        SET "created_at" = "created_at" - ${interval},
            "returned_at" = "returned_at" - ${interval}
      WHERE "item_id" = ${itemId}::uuid`);
+  await receiveOpenItem(stack.db, itemId);
 }
 
 test('fix links validate every authority and are visible as handledBy', { skip, timeout: 180_000 }, async () => {
@@ -235,7 +239,10 @@ test('fix links validate every authority and are visible as handledBy', { skip, 
     }));
     assert.equal(wrongKind.code, 'FIXES_OPEN_ITEM_KIND_REFUSED');
 
+    // A live coordinator keeps a taken item; switch off Automatic to exercise escalation.
+    await stack.db.project.update({ where: { id: w.projectId }, data: { coordinatorEnabled: false } });
     await makeDue(stack, item.id);
+    await stack.db.project.update({ where: { id: w.projectId }, data: { coordinatorEnabled: true } });
     const closed = await stack.openItems.resolveOpenItem(
       w.ownerId, w.projectId, item.id, { note: 'closed before fixing' }, { kind: 'OWNER' },
     );
@@ -301,6 +308,8 @@ test('a live fix has no escalation deadline, then one quiet window after it ends
       }, undefined, w.coordinatorSessionId);
       await stack.db.task.update({ where: { id: fix.id }, data: { status: PrismaTaskStatus.IN_PROGRESS } });
       await ageItem(stack, item.id, 3 * 60 * 60 * 1_000);
+      // Keep this case about the live-fix exemption rather than the taken-up exemption.
+      await stack.db.session.update({ where: { id: w.coordinatorSessionId }, data: { status: RunStatus.FAILED } });
       assert.deepEqual(await stack.escalation.sweep(), [], 'an in-progress fix suppresses the clock');
       const liveRead = await stack.openItems.list(w.ownerId, w.projectId);
       assert.equal(liveRead.withCoordinator.find((row) => row.itemId === item.id)?.escalateAt, null,
@@ -319,7 +328,7 @@ test('a live fix has no escalation deadline, then one quiet window after it ends
     }
   });
 
-test('an answered delivery holds the item for its coordinator; unanswered, a generic chat turn does not',
+test('a taken delivery holds the item for its coordinator with or without an answer',
   { skip, timeout: 180_000 }, async () => {
     const stack = await connect();
     try {
@@ -355,8 +364,8 @@ test('an answered delivery holds the item for its coordinator; unanswered, a gen
 
       const escalated = (await stack.escalation.sweep()).map((row) => row.itemId);
       assert.ok(!escalated.includes(taken.id), 'the coordinator that answered the delivery keeps the item');
-      assert.ok(escalated.includes(unanswered.id),
-        'generic chat neither takes an item up nor renews its delivery clock');
+      assert.ok(!escalated.includes(unanswered.id),
+        'taking the ITEM is enough: it needs no answer or generic chat to retain custody');
       const read = await stack.openItems.list(w.ownerId, w.projectId);
       assert.equal(read.withCoordinator.find((row) => row.itemId === taken.id)?.escalateAt, null,
         'the reader agrees that a taken-up item has no deadline');

@@ -1,0 +1,252 @@
+<!doctype html>
+<html lang="zh">
+<head>
+<meta charset="utf-8">
+<title>Claude Code on an OpenAI key, through Orbit's gateway</title>
+<link rel="stylesheet" href="../../../src/web/src/index.css">
+<link rel="stylesheet" href="../project-progress/mock.css">
+<style>
+  /* Board-local classes carry the og- prefix: index.css has bare short class names. */
+  .og-part { background: var(--bg-base); border: 1px solid #dde0e6; border-radius: 12px; padding: 18px 20px 20px; }
+  .og-part + .og-part { margin-top: 22px; }
+  .og-h2 { font-size: 16px; font-weight: 700; margin: 0 0 4px; }
+  .og-lead { font-size: 12.5px; color: var(--text-2); margin: 0 0 14px; line-height: 1.55; }
+  .og-code { font-family: "DejaVu Sans Mono", "WenQuanYi Zen Hei Mono", monospace; font-size: 11px; color: var(--text-1);
+    background: var(--fill-inset); border-radius: 4px; padding: 0 4px; white-space: nowrap; }
+  .og-mini { font-size: 12px; font-weight: 700; color: var(--text-2); margin: 14px 0 6px; }
+
+  /* part 1 */
+  .og-vs { display: grid; grid-template-columns: 1fr 1fr; gap: 18px; }
+  .og-lane { border-radius: 10px; padding: 14px 16px; border: 1px solid var(--border-subtle); background: var(--bg-subtle); }
+  .og-lane.new { border: 1.5px solid var(--brand); background: var(--bg-raised); }
+  .og-lane h3 { margin: 0 0 12px; font-size: 14px; font-weight: 700; }
+  .og-node { border: 1px solid var(--border); background: var(--bg-raised); border-radius: 8px; padding: 7px 10px;
+    font-size: 12.5px; line-height: 1.5; color: var(--text-1); }
+  .og-node small { display: block; font-size: 11.5px; color: var(--text-2); }
+  .og-node.run { border-left: 4px solid #8e6bd8; }
+  .og-node.srv { border-left: 4px solid var(--brand); }
+  .og-node.ext { border-left: 4px solid var(--warning-solid); }
+  .og-node.bad, .og-node.good { font-weight: 400; }
+  .og-node.bad { background: var(--error-bg); border-color: var(--error-border); }
+  .og-node.good { background: var(--success-bg); border-color: var(--success-border); }
+  .og-down { color: var(--text-4); text-align: center; font-size: 15px; line-height: 1; margin: 3px 0; }
+  .og-tags { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 12px; }
+  .og-tag { font-size: 11.5px; padding: 2px 9px; border-radius: 10px; line-height: 18px; }
+  .og-tag.bad { background: var(--error-bg); color: var(--error); border: 1px solid var(--error-border); }
+  .og-tag.good { background: var(--success-bg); color: var(--success); border: 1px solid var(--success-border); }
+
+  /* part 2 */
+  .og-arch { display: grid; grid-template-columns: 1fr 34px 1.9fr 34px 1fr; align-items: stretch; }
+  .og-arrow { display: flex; flex-direction: column; align-items: center; justify-content: center; font-size: 18px; color: var(--text-3); }
+  .og-arrow small { font-size: 10px; color: var(--text-3); writing-mode: vertical-rl; margin-top: 4px; }
+  .og-zone { border-radius: 10px; padding: 10px 12px 12px; display: flex; flex-direction: column; gap: 7px; }
+  .og-zone.run { background: #f6f2ff; border: 1.5px solid #c7b5f2; }
+  .og-zone.srv { background: var(--brand-tint); border: 1.5px solid var(--brand-border); }
+  .og-zone.ext { background: var(--warning-bg); border: 1.5px solid var(--warning-border); }
+  .og-zone h4 { margin: 0; font-size: 13.5px; font-weight: 700; }
+  .og-box { background: var(--bg-raised); border: 1px solid var(--border-subtle); border-radius: 8px; padding: 7px 9px; }
+  .og-box b { font-size: 12.5px; font-weight: 650; display: flex; align-items: center; gap: 6px; flex-wrap: wrap; }
+  .og-box p { margin: 2px 0 0; font-size: 11.5px; color: var(--text-2); line-height: 1.5; }
+  .og-box .og-code { white-space: normal; overflow-wrap: anywhere; }
+  .og-box.key { border: 1.5px solid var(--brand); }
+  .og-srvgrid { display: grid; grid-template-columns: 1fr 1fr; gap: 7px; }
+  .og-new, .og-same { font-size: 10.5px; font-weight: 700; padding: 0 6px; border-radius: 4px; line-height: 17px; white-space: nowrap; }
+  .og-new { background: var(--brand); color: #fff; }
+  .og-same { background: var(--fill-muted); color: var(--text-2); }
+  .og-tbl { width: 100%; border-collapse: collapse; font-size: 12px; }
+  .og-tbl th, .og-tbl td { border: 1px solid var(--border-subtle); padding: 5px 9px; text-align: left; vertical-align: top; line-height: 1.5; }
+  .og-tbl th { background: var(--bg-subtle); font-weight: 700; color: var(--text-2); font-size: 11.5px; }
+  .og-tbl td.n { color: var(--text-2); font-size: 11.5px; }
+
+  /* part 3 */
+  .og-swim { display: grid; grid-template-columns: 34px repeat(4, minmax(0, 1fr)); border: 1px solid var(--border); border-radius: 10px; overflow: hidden; }
+  .og-swim > div { border-top: 1px solid var(--border-subtle); padding: 6px 8px; min-height: 30px; }
+  .og-swim > .hd { border-top: 0; font-size: 12px; font-weight: 700; padding: 8px; }
+  .og-swim > .hd.run { background: #f6f2ff; } .og-swim > .hd.srv { background: var(--brand-tint); }
+  .og-swim > .hd.ext { background: var(--warning-bg); } .og-swim > .hd.ctl { background: var(--bg-subtle); }
+  .og-swim > .no { font-size: 11px; font-weight: 700; color: var(--text-3); text-align: center; padding-top: 9px; }
+  .og-swim > .sep { grid-column: 1 / -1; background: var(--bg-subtle); font-size: 11.5px; font-weight: 700; color: var(--text-2); min-height: 0; padding: 5px 10px; }
+  .og-ev { display: block; border-radius: 7px; padding: 5px 8px; font-size: 11.8px; line-height: 1.45; color: var(--text-1); }
+  .og-ev.run { background: #f6f2ff; border: 1px solid #ddd0fa; }
+  .og-ev.srv { background: var(--brand-tint); border: 1px solid var(--brand-border); }
+  .og-ev.ext { background: var(--warning-bg); border: 1px solid var(--warning-border); }
+  .og-ev.ctl { background: var(--bg-raised); border: 1px solid var(--border); }
+
+  /* part 4 */
+  .og-two { display: grid; grid-template-columns: 1fr 1fr; gap: 14px; }
+  .og-card { border: 1px solid var(--border); border-radius: 10px; padding: 10px 12px; background: var(--bg-raised); }
+  .og-card h5 { margin: 0 0 6px; font-size: 13px; font-weight: 700; }
+  .og-card p, .og-card li { margin: 0; font-size: 12px; line-height: 1.6; color: var(--text-1); }
+  .og-card ul { margin: 0; padding-left: 16px; }
+  .og-card p + p { margin-top: 4px; }
+  .og-rec { color: var(--brand-strong); font-weight: 700; }
+
+  /* part 5 */
+  .og-decide { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
+  .og-phases { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 10px; }
+  .og-phase { border: 1px solid var(--border); border-radius: 10px; padding: 10px 12px; background: var(--bg-raised); }
+  .og-phase h5 { margin: 0 0 6px; font-size: 13px; font-weight: 700; }
+  .og-phase p { margin: 0; font-size: 11.8px; line-height: 1.55; color: var(--text-1); }
+  .og-phase p.done { margin-top: 6px; color: var(--text-2); }
+</style>
+<script>addEventListener('load',()=>{const s=document.querySelector('.m-sheet');document.title='H='+Math.ceil(s.getBoundingClientRect().height)})</script>
+</head>
+<body class="m">
+<div class="m-sheet zh">
+  <h1 class="m-h1">Claude Code 跑在 OpenAI key 上：由 Orbit 自己的网关翻译协议</h1>
+  <p class="m-sub">设计见 <span class="og-code">docs/claude-engine-openai-gateway-design.md</span>。① 今天和新方案对照 · ② 组件和数据 · ③ 一个回合的时序 · ④ 安全、额度和故障 · ⑤ 待定 · 要你拍板，和落地顺序。界面文案仍是英文。</p>
+
+  <!-- ① today vs new -->
+  <section class="og-part" id="part-1">
+    <h2 class="og-h2">① 今天 vs 新方案</h2>
+    <p class="og-lead">今天，想在 Claude Code 里用 GPT 的人得自己架 LiteLLM 之类的代理，再把地址和 key 填进 Orbit；OpenAI key 在 Orbit 里只能跑 Codex 和 OpenCode。新方案里，添加 OpenAI key 就是全部配置，翻译由 API server 完成，key 不再下发到 runner。</p>
+    <div class="og-vs">
+      <div class="og-lane">
+        <h3>今天</h3>
+        <div class="og-node ext">用户自己部署 LiteLLM / claude-code-router<small>维护进程、端口、模型映射、haiku 槽位、上下文窗口</small></div>
+        <div class="og-down">↓</div>
+        <div class="og-node srv">在 Orbit 里加一把「Anthropic 方言」的自定义 key<small><span class="og-code">baseUrl</span> 指向自己的代理，模型手填 GPT id</small></div>
+        <div class="og-down">↓</div>
+        <div class="og-node run bad">runner 拿到 key 和地址，Claude Code 直连代理<small>agent 跑的命令读得到 key；代理挂了会话直接 FAILED</small></div>
+        <div class="og-down">↓</div>
+        <div class="og-node srv bad">报错、额度、用量 Orbit 都看不见<small>429 / 额度用尽是代理自己的措辞，auto-retry 认不出</small></div>
+        <div class="og-tags">
+          <span class="og-tag bad">要自己运维代理</span><span class="og-tag bad">key 下发到 runner</span><span class="og-tag bad">额度和用量不可见</span><span class="og-tag bad">OpenAI key 选不了 Claude Code</span>
+        </div>
+      </div>
+      <div class="og-lane new">
+        <h3>新方案</h3>
+        <div class="og-node srv">在 Infrastructure 页添加 OpenAI key（和今天一样）<small>key 的 engine 列表变成 Codex · Claude Code · OpenCode，默认仍是 Codex</small></div>
+        <div class="og-down">↓</div>
+        <div class="og-node srv">新建会话：选 Claude Code + GPT 模型<small>派发时铸一个会话 token <span class="og-code">orbit-gwk-…</span>，地址指向 <span class="og-code">/api/gw/anthropic</span></small></div>
+        <div class="og-down">↓</div>
+        <div class="og-node run good">runner 只拿到 Orbit token，拿不到 key<small>Claude Code 照常发 Anthropic Messages 请求</small></div>
+        <div class="og-down">↓</div>
+        <div class="og-node srv good">API server 网关：验 token → 翻译 → 用 key 调 OpenAI → 流式翻译回来<small>报错按 Anthropic 格式返回，auto-retry、额度、计费照常</small></div>
+        <div class="og-tags">
+          <span class="og-tag good">零配置</span><span class="og-tag good">key 留在服务端</span><span class="og-tag good">复用 Codex 网关的选 key / 限速 / 计费</span><span class="og-tag good">无状态，多 API server 可用</span>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ② components -->
+  <section class="og-part" id="part-2">
+    <h2 class="og-h2">② 组件和数据</h2>
+    <p class="og-lead">新的只有网关路由、翻译模块和一张 token 表；其余都是 <span class="og-code">/api/gw/codex</span> 和第三方 key 上的 Claude Code 已经有的部件。</p>
+    <div class="og-arch">
+      <div class="og-zone run">
+        <h4>runner</h4>
+        <div class="og-box"><b>claude CLI <span class="og-same">不改</span></b><p>发 <span class="og-code">POST /v1/messages?beta=true</span>（stream），和 <span class="og-code">/v1/messages/count_tokens</span></p></div>
+        <div class="og-box key"><b>会话环境 <span class="og-new">新值</span></b><p><span class="og-code">ANTHROPIC_BASE_URL</span> = PUBLIC_ORIGIN + /api/gw/anthropic<br><span class="og-code">ANTHROPIC_AUTH_TOKEN</span> = orbit-gwk-…<br><span class="og-code">ANTHROPIC_DEFAULT_HAIKU_MODEL</span> = key 的小模型</p></div>
+        <div class="og-box"><b>沿用 <span class="og-same">不改</span></b><p>上下文窗口、inline tools 关、Explore 不升 opus、effort；非 Anthropic 地址跳过区域检查</p></div>
+      </div>
+      <div class="og-arrow">→<small>Messages SSE</small></div>
+      <div class="og-zone srv">
+        <h4>API server</h4>
+        <div class="og-srvgrid">
+          <div class="og-box key"><b><span class="og-code">gw/anthropic</span> 路由 <span class="og-new">新</span></b><p>只放行 messages 和 count_tokens；其余按 Anthropic 错误格式拒绝</p></div>
+          <div class="og-box key"><b>翻译模块 <span class="og-new">新</span></b><p>纯函数：请求 Messages → Responses；流 Responses 事件 → Messages 事件；不做 I/O，拿录制的 fixture 测</p></div>
+          <div class="og-box key"><b>token 校验 <span class="og-new">新</span></b><p><span class="og-code">key_gateway_token</span> → (会话, key, 用户)；账号停用回 403</p></div>
+          <div class="og-box"><b>上游转发 <span class="og-same">复用</span></b><p><span class="og-code">sendUpstream</span> / <span class="og-code">relayStream</span>；去掉调用方的 OpenAI-Organization / Project 头</p></div>
+          <div class="og-box"><b>限速和 key 状态 <span class="og-same">复用</span></b><p><span class="og-code">rateLimitWait</span>、<span class="og-code">spentUntil</span>、401 标 INVALID</p></div>
+          <div class="og-box"><b>用量和计费 <span class="og-same">复用</span></b><p>像 <span class="og-code">responses-stream-tap</span> 一样边流边读 usage，用 <span class="og-code">openai-prices</span> 定价</p></div>
+        </div>
+      </div>
+      <div class="og-arrow">→<small>Responses SSE</small></div>
+      <div class="og-zone ext">
+        <h4>OpenAI</h4>
+        <div class="og-box"><b><span class="og-code">POST /v1/responses</span></b><p><span class="og-code">store: false</span>；带回 <span class="og-code">reasoning.encrypted_content</span></p></div>
+        <div class="og-box"><b>input token 计数</b><p>给 count_tokens 用；不可用时按 字符数÷4 估算（P0 验证）</p></div>
+        <div class="og-box"><b>只允许 <span class="og-code">api.openai.com</span></b><p>加上管理员列出的主机（D3）</p></div>
+      </div>
+    </div>
+    <div class="og-mini">数据：只多一张表</div>
+    <table class="og-tbl">
+      <tr><th style="width:190px">表 / 字段</th><th>内容</th><th style="width:360px">为什么</th></tr>
+      <tr><td><span class="og-code">key_gateway_token</span> <span class="og-new">新</span></td><td>sessionId · providerId（key 行）· userId · tokenHash · expiresAt · revokedAt；前缀 <span class="og-code">orbit-gwk-</span></td><td class="n">照 <span class="og-code">mintPoolGatewayToken</span>：每次领取续 7 天，热进程拿着旧 token 也能用；不给 <span class="og-code">PoolGatewayToken</span> 加可空 poolId，免得动池表的约束</td></tr>
+      <tr><td>兼容表 <span class="og-code">keyEngines</span></td><td>OpenAI 方言 key：<span class="og-code">codex</span>（默认）、<span class="og-code">claude</span>、<span class="og-code">opencode</span></td><td class="n">只在部署打开开关时加 <span class="og-code">claude</span>（D6）；客户端读接口的 <span class="og-code">engines</span> 字段，不用改逻辑</td></tr>
+      <tr><td>推理内容</td><td>不落库：OpenAI 的 reasoning 加密串装进 thinking 块的 signature，<span class="og-code">orbit1.&lt;base64url&gt;</span></td><td class="n">Claude Code 会把 signature 原样发回；网关无状态，重启、多副本、续聊都不丢</td></tr>
+    </table>
+  </section>
+
+  <!-- ③ sequence -->
+  <section class="og-part" id="part-3">
+    <h2 class="og-h2">③ 一个回合的时序</h2>
+    <p class="og-lead">从派发到第二个回合。第二个回合把上一回合的推理原样带回去，网关只做解码，不查库。</p>
+    <div class="og-swim">
+      <div class="hd ctl"></div><div class="hd ctl">派发（API server）</div><div class="hd run">runner · claude CLI</div><div class="hd srv">网关 /api/gw/anthropic</div><div class="hd ext">OpenAI</div>
+      <div class="sep">领取</div>
+      <div class="no">1</div><div><span class="og-ev ctl">会话 engine = claude，凭据 = OpenAI key → 铸 <span class="og-code">orbit-gwk-…</span>，写网关地址和 haiku 小模型</span></div><div><span class="og-ev run">spawn claude；登录预检看到 <span class="og-code">ANTHROPIC_AUTH_TOKEN</span>，不判未登录</span></div><div></div><div></div>
+      <div class="sep">第一个回合</div>
+      <div class="no">2</div><div></div><div><span class="og-ev run">POST /v1/messages?beta=true（tools、system、model = GPT id）</span></div><div><span class="og-ev srv">验 token → 取 key → 翻译：system→instructions，tool_use→function_call …</span></div><div></div>
+      <div class="no">3</div><div></div><div></div><div><span class="og-ev srv">去掉 cache_control / temperature；<span class="og-code">prompt_cache_key</span> = 会话 id</span></div><div><span class="og-ev ext">POST /v1/responses，store:false，流式</span></div>
+      <div class="no">4</div><div></div><div><span class="og-ev run">收到 thinking / text / tool_use 块，执行工具</span></div><div><span class="og-ev srv">事件逐个翻译；reasoning 结束时发 <span class="og-code">signature_delta: orbit1.…</span>；空闲时发 ping</span></div><div><span class="og-ev ext">reasoning、output_text、function_call_arguments 增量</span></div>
+      <div class="no">5</div><div></div><div></div><div><span class="og-ev srv">读 usage → 按 openai-prices 记账；stop_reason = tool_use</span></div><div><span class="og-ev ext">response.completed（usage，cached_tokens）</span></div>
+      <div class="sep">后台小请求（标题、WebFetch 摘要）</div>
+      <div class="no">6</div><div></div><div><span class="og-ev run">走 haiku 槽位 → 已是 key 的小模型 id</span></div><div><span class="og-ev srv">兜底：任何 <span class="og-code">claude-*haiku*</span> 改成小模型，其他 <span class="og-code">claude-*</span> 改成会话模型</span></div><div><span class="og-ev ext">小模型回答</span></div>
+      <div class="sep">第二个回合</div>
+      <div class="no">7</div><div></div><div><span class="og-ev run">带上 tool_result 和上一回合的 thinking 块（signature 原样）</span></div><div><span class="og-ev srv">解 <span class="og-code">orbit1.</span> → reasoning 输入项；不是我们的 signature 就丢掉那块</span></div><div><span class="og-ev ext">接着推理，缓存命中前缀</span></div>
+      <div class="sep">上下文快满</div>
+      <div class="no">8</div><div></div><div><span class="og-ev run">CLI 看到「prompt is too long」→ 自己压缩后重发</span></div><div><span class="og-ev srv">上游 context_length_exceeded → 400「prompt is too long: N tokens &gt; M maximum」</span></div><div><span class="og-ev ext">400 context_length_exceeded</span></div>
+    </div>
+  </section>
+
+  <!-- ④ security & failure -->
+  <section class="og-part" id="part-4">
+    <h2 class="og-h2">④ 安全、额度和故障</h2>
+    <p class="og-lead">key 的边界比今天任何一种 key 会话都紧；新风险是服务端要按 key 行的地址发请求。报错一律换成 Anthropic 的格式，让 CLI 自己的重试和 Orbit 的 auto-retry 照常工作。</p>
+    <div class="og-two">
+      <div class="og-card">
+        <h5>key 和 token</h5>
+        <ul>
+          <li>key 只在 API server 解密，只用于上游请求；不进 runner 环境、会话 env 和日志。今天 Claude Code 跑的命令读得到 key（wiki 34dgAezaocJUDulv5Kc40），新路径读不到。</li>
+          <li>token 只认 (会话, key, 用户)，只能访问网关的两个路径；库里只存哈希。</li>
+          <li>吊销：会话结束、key 删除 / 停用 / 轮换、账号停用。最坏情况是被偷的 token 在会话结束或 7 天内花这把 key。</li>
+          <li>列进 <span class="og-code">tenant-isolation-runner-cases.ts</span>，和 <span class="og-code">gw/codex</span> 并排。</li>
+        </ul>
+      </div>
+      <div class="og-card">
+        <h5>新风险：服务端出站请求（SSRF）</h5>
+        <p>今天 key 的 <span class="og-code">baseUrl</span> 只有 runner 会去连；新路径里 API server 自己连。一把指向内网地址的 key 会让服务器替人访问内网。</p>
+        <p><span class="og-rec">建议（D3）：</span>先只放行 <span class="og-code">api.openai.com</span>，加上管理员在环境变量里列的主机；不跟随重定向。</p>
+        <p>每个回合是一条经过 API server 的长连接：只转发、不缓冲，每条流最多留一个事件；P2 用 20 个并发会话量内存和连接数。</p>
+      </div>
+    </div>
+    <div class="og-mini">报错怎么翻</div>
+    <table class="og-tbl">
+      <tr><th style="width:220px">OpenAI 回</th><th style="width:330px">网关回给 Claude Code</th><th>Orbit 另外做什么</th></tr>
+      <tr><td>401</td><td>401 <span class="og-code">authentication_error</span>，说是哪把 key</td><td class="n">标 key INVALID，和 gw/codex 一样</td></tr>
+      <tr><td>429 <span class="og-code">rate_limit_exceeded</span></td><td>先在网关里等（<span class="og-code">rateLimitWait</span> 的上限），还不行回 429 <span class="og-code">rate_limit_error</span></td><td class="n">CLI 自己重试</td></tr>
+      <tr><td>429 <span class="og-code">insufficient_quota</span></td><td>429，用 Orbit 额度处理认得的措辞（P2 对着 quota-limit-retry 定）</td><td class="n">记 key 用尽到重置时间（<span class="og-code">spentUntil</span>）</td></tr>
+      <tr><td>5xx / 过载</td><td>529 <span class="og-code">overloaded_error</span></td><td class="n">auto-retry 认得「529 … overloaded_error」，会重发</td></tr>
+      <tr><td>403 / 模型不可用</td><td>403 <span class="og-code">permission_error</span> / 404 <span class="og-code">not_found_error</span></td><td class="n">提示里说 key 和模型名</td></tr>
+      <tr><td><span class="og-code">context_length_exceeded</span></td><td>400「prompt is too long: …」</td><td class="n">CLI 自己压缩</td></tr>
+    </table>
+  </section>
+
+  <!-- ⑤ decisions + phases -->
+  <section class="og-part" id="part-5">
+    <h2 class="og-h2">⑤ 待定 · 要你拍板</h2>
+    <p class="og-lead">每项给了建议。D1、D3、D4 决定架构和风险，其余可以先按建议走。</p>
+    <div class="og-decide">
+      <div class="og-card"><h5>D1 谁来翻译</h5><p>A：API server 里自己写的翻译模块 · B：Orbit 运维一个 LiteLLM 容器，网关仍管 token、key 和计费</p><p><span class="og-rec">建议 A：</span>Compose、Kubernetes、自托管都不多一个容器；报错、额度、haiku 映射都在自己代码里。LiteLLM 的映射当测试参照。</p></div>
+      <div class="og-card"><h5>D2 上游用哪个 API</h5><p>A：Responses · B：Chat Completions</p><p><span class="og-rec">建议 A：</span>OpenAI 现行 API；加密推理能跨回合带着；Codex 网关已经在读它。</p></div>
+      <div class="og-card"><h5>D3 哪些 key 能走网关</h5><p>A：主机是 <span class="og-code">api.openai.com</span>，加管理员列出的主机 · B：所有 OpenAI 方言的 key，拦掉内网地址</p><p><span class="og-rec">建议 A：</span>先堵住 SSRF；有人要 Azure 等兼容主机再放到 B。</p></div>
+      <div class="og-card"><h5>D4 ChatGPT 登录（Codex 账号池）能不能跑 Claude Code</h5><p>A：不提供 · B：以后做成可选</p><p><span class="og-rec">建议 A：</span>ChatGPT 的 Codex 后端不是公开 API；多用户托管服务上，封号风险落在你身上。</p></div>
+      <div class="og-card"><h5>D5 Claude Code 的网页搜索（Anthropic 服务端工具）</h5><p>A：首发提示「这个模型不可用」，P3 再映射到 OpenAI 的 web_search · B：P1 就映射</p><p><span class="og-rec">建议 A：</span>它是单项最大的翻译工作，其余都不依赖它。</p></div>
+      <div class="og-card"><h5>D6 怎么上线</h5><p>A：部署开关，默认关，P3 质量对比过了再开 · B：P1 就开</p><p><span class="og-rec">建议 A：</span>确认好用之前，engine 列表里不出现它。</p></div>
+      <div class="og-card"><h5>D7 OpenAI key 的默认 engine</h5><p>A：仍是 <span class="og-code">codex</span> · B：改成 <span class="og-code">claude</span></p><p><span class="og-rec">建议 A：</span>不选 Claude Code 的人什么都不变。</p></div>
+      <div class="og-card"><h5>D8 这类会话的费用显示</h5><p>A：用网关按 openai-prices 算的 · B：用 CLI 自己报的</p><p><span class="og-rec">建议 A：</span>CLI 不知道 GPT 的价格，它的数是猜的。</p></div>
+    </div>
+    <div class="og-mini">落地（按依赖排，后一期依赖前一期）</div>
+    <div class="og-phases">
+      <div class="og-phase"><h5>P0 摸底</h5><p>录 runner 自带版本的 claude 发给假 Anthropic 端点的一切：路径、头、effort 字段、haiku 请求、count_tokens、超长措辞；照录制写翻译模块；脚本里对 OpenAI 跑通。</p><p class="done">完成：录制的 10 回合会话（并行工具、子 agent、跨回合推理、一次压缩）经翻译模块对 OpenAI 跑完；设计文档 §8 的问题都有录制的答案。</p></div>
+      <div class="og-phase"><h5>P1 接线</h5><p>路由、token 表和迁移、派发环境、兼容表（开关后）、契约 §2.1 / §4.2、租户隔离用例。</p><p class="done">完成：开关开时，真 runner 上 OpenAI key + Claude Code 的会话跑通；开关关时，所有现有会话的派发环境和 engines 逐字段不变。</p></div>
+      <div class="og-phase"><h5>P2 生产行为</h5><p>报错和额度映射、限速等待、key 标记、用量计费、count_tokens、haiku 映射、负载。</p><p class="done">完成：④ 表每一行都有用真 CLI 经网关打假上游的测试；20 个并发会话内存在预算内。</p></div>
+      <div class="og-phase"><h5>P3 质量和发布</h5><p>同一组任务分别跑 codex + GPT 和 claude + GPT；网页搜索映射（D5）；文案、文档、连接表单那一行。</p><p class="done">完成：你看对比结果，决定开不开开关。</p></div>
+    </div>
+  </section>
+</div>
+</body>
+</html>

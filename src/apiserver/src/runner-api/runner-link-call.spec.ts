@@ -159,6 +159,8 @@ interface GuardFixture {
   ownerId: string;
   leaseOwner: string;
   token: string;
+  /** The token's iat, which the guard hands on as tokenMintedAt. */
+  tokenMintedAt: number;
   /** What the after_seq read answers: no row is a session of another runner. */
   stored: Array<{ stored: boolean }>;
   disabledAt: Date | null;
@@ -171,12 +173,12 @@ function guardFixture(): GuardFixture {
   const ownerId = randomUUID();
   const leaseOwner = randomUUID();
   const tokenHash = sha256('the runner token');
-  const { token } = signRunnerLinkToken(
+  const { token, claims } = signRunnerLinkToken(
     config,
     { runnerId, ownerId, cellId: 'cell-1', leaseOwner, credential: runnerLinkCredential(tokenHash) },
     new Date(),
   );
-  return { config, runnerId, ownerId, leaseOwner, token, stored: [{ stored: true }], disabledAt: null, tokenHash };
+  return { config, runnerId, ownerId, leaseOwner, token, tokenMintedAt: claims.iat, stored: [{ stored: true }], disabledAt: null, tokenHash };
 }
 
 function guardOf(fixture: GuardFixture, link: 'on' | 'off' | 'absent' = 'on') {
@@ -235,7 +237,8 @@ test('a link call is the runner its link token names, with the process the token
   assert.equal(await guardOf(fixture).canActivate(contextOf(request)), true);
   assert.equal((request.runner as { id: string }).id, fixture.runnerId);
   assert.deepEqual(request.runnerLink, {
-    leaseOwner: fixture.leaseOwner, requestId, afterSeq: { sessionId, seq: 9 }, gatewayId: 'orbit-link-gateway',
+    leaseOwner: fixture.leaseOwner, tokenMintedAt: fixture.tokenMintedAt, requestId, afterSeq: { sessionId, seq: 9 },
+    gatewayId: 'orbit-link-gateway',
   });
   assert.equal(request.managedRunnerInstance, undefined);
 });
@@ -299,6 +302,7 @@ test('a route that admits link calls itself is handed the token\'s word and read
   assert.deepEqual(request.runner, { id: fixture.runnerId, ownerId: fixture.ownerId });
   assert.deepEqual(request.runnerLink, {
     leaseOwner: fixture.leaseOwner,
+    tokenMintedAt: fixture.tokenMintedAt,
     requestId: null,
     afterSeq: null,
     gatewayId: 'orbit-link-gateway',

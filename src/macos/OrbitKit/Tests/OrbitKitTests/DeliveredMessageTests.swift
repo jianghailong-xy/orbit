@@ -83,24 +83,24 @@ final class DeliveredMessageTests: XCTestCase {
     // MARK: naming what delivery appended
 
     func testNamesARecordedNoteByTheBlockItOpensWith() {
-        XCTAssertEqual(describeNote("\n\n\(backgroundJobs)"), "background jobs")
         XCTAssertEqual(describeNote(conditions), "list conditions")
-        XCTAssertEqual(describeNote(coordinator), "project coordinator context")
-        XCTAssertEqual(describeNote(refList), "referenced list")
-        XCTAssertEqual(describeNote(refTask), "referenced task")
+        // Unnamed (owner, 2026-11-14): a coordinator's role and the jobs inventory are Orbit's routine,
+        // and a `#`-reference is already a link in the person's own words.
+        XCTAssertEqual(describeNote(coordinator), "")
+        XCTAssertEqual(describeNote("\n\n\(backgroundJobs)"), "")
+        XCTAssertEqual(describeNote(refList), "")
+        XCTAssertEqual(describeNote(refTask), "")
         XCTAssertEqual(describeNote("\n\n\(sessionMessage)"), "session message")
     }
 
     func testNamesEveryBlockOneDeliveryAppended() {
         // Delivery appends references, then the condition board, then background jobs, then the
         // coordinator's role: a coordinator with a build still running gets two blocks in one note.
-        let appended = "\n\n\(refTask)\n\n\(refTask)\n\n\(backgroundJobs)\n\n\(coordinator)"
+        let appended = "\n\n\(refTask)\n\n\(conditions)\n\n\(conditions)\n\n\(backgroundJobs)\n\n\(coordinator)"
 
-        XCTAssertEqual(describeNote(appended), "referenced task ×2, background jobs, project coordinator context")
-        XCTAssertEqual(describeNote("\n\n\(refList)\n\n\(coordinator)"),
-                       "referenced list, project coordinator context")
-        XCTAssertEqual(describeNote("\n\n\(sessionMessage)\n\n\(backgroundJobs)"),
-                       "session message, background jobs")
+        XCTAssertEqual(describeNote(appended), "list conditions ×2")
+        XCTAssertEqual(describeNote("\n\n\(refList)\n\n\(coordinator)"), "")
+        XCTAssertEqual(describeNote("\n\n\(sessionMessage)\n\n\(backgroundJobs)"), "session message")
     }
 
     func testStillNamesAnOpeningItDoesNotRecogniseGenerically() {
@@ -109,11 +109,11 @@ final class DeliveredMessageTests: XCTestCase {
         XCTAssertEqual(describeNote("[Image #1]"), "context")
     }
 
-    // MARK: the other client, and the view that draws the entry
+    // MARK: label parity and the removed transcript line
     //
     // Neither compiles with OrbitKit: the web module is another language, and the SwiftUI bubble is
     // built only by the macOS and iOS jobs. So both are read as source, and each assertion is
-    // written so that drifting from web, or detaching the view from `attached`, is what turns it red.
+    // written so that label drift or restoring the removed line turns it red.
 
     private enum SourceError: Error, CustomStringConvertible {
         case missing(String)
@@ -121,23 +121,27 @@ final class DeliveredMessageTests: XCTestCase {
             switch self {
             case .missing(let what):
                 return "\(what) was not found. If it moved, move this check with it rather than "
-                    + "deleting it: nothing else on Linux sees whether the entry still reads the same "
-                    + "on both clients and is still drawn inside the bubble."
+                    + "deleting it: nothing else on Linux sees whether the labels still read the same "
+                    + "on both clients and the removed line stays absent."
             }
         }
     }
 
-    /// A file of this repository, found by walking up from this test rather than by counting `..`.
-    private func source(_ relative: String) throws -> String {
+    /// A path in this repository, found by walking up from this test rather than by counting `..`.
+    private func path(_ relative: String) throws -> URL {
         var dir = URL(fileURLWithPath: #filePath).deletingLastPathComponent()
         for _ in 0..<12 {
             let candidate = dir.appendingPathComponent(relative)
             if FileManager.default.fileExists(atPath: candidate.path) {
-                return try String(contentsOf: candidate, encoding: .utf8)
+                return candidate
             }
             dir = dir.deletingLastPathComponent()
         }
         throw SourceError.missing(relative)
+    }
+
+    private func source(_ relative: String) throws -> String {
+        try String(contentsOf: path(relative), encoding: .utf8)
     }
 
     /// From one marker to the next occurrence of another, so a match elsewhere in the file cannot
@@ -161,41 +165,20 @@ final class DeliveredMessageTests: XCTestCase {
         }
 
         XCTAssertEqual(web, injectedTagLabels, "a block goes by the same name on both clients")
-
-        let entry = try section(try source("src/web/src/components/Transcript.tsx"),
-                                from: "function useControlPlaneNote(", to: "\n}\n")
-        XCTAssertTrue(entry.contains("`⊕ Orbit attached: ${kind}`"),
-                      "and web's entry is signed the way the native one is")
     }
 
-    /// The bubble holds the person's words and nothing else; what delivery appended is one line at
-    /// the end of the meta row under it, and opens under that row (owner, 2026-10-27:
-    /// docs/mocks/attached-context-note).
-    func testTheBubbleHoldsTheWordsAndItsMetaRowNamesTheNote() throws {
-        let view = try section(
-            try source("src/macos/OrbitApp/Sources/OrbitApp/Views/Console/MessageBubbles.swift"),
-            from: "struct UserBubbleView: View", to: "struct AssistantBubbleView: View")
-        let tinted = try section(view, from: "if !bubble.text.isEmpty {",
-                                 to: ".background(.tint.opacity(0.15)")
-        let meta = try section(view, from: "private var meta: some View", to: "private var why")
-        let column = try section(view, from: "meta\n", to: ".contentShape(Rectangle())")
-        let entry = try section(
-            try source("src/macos/OrbitApp/Sources/OrbitApp/Views/Console/AttachedNoteView.swift"),
-            from: "struct AttachedNoteEntry", to: "struct BackgroundJobsNoteView")
-
-        XCTAssertFalse(tinted.contains("AttachedNote"), "nothing of the note is in the tinted bubble")
-        XCTAssertTrue(meta.contains("AttachedNoteLine(attached: attached, open: $noteOpen)"),
-                      "the line ends the meta row under the bubble")
-        XCTAssertTrue(column.contains("AttachedNoteBody(attached: attached)"),
-                      "and what it opens to goes under that row, in the bubble's column")
-        XCTAssertTrue(entry.contains(#""⊕ Orbit attached: \(attached.kind)""#),
-                      "signed as web signs it, with the kind its note was named")
-        XCTAssertTrue(entry.contains(#""⊖ Orbit attached: \(attached.kind)""#),
-                      "and the plus is a minus while it is open")
-        XCTAssertTrue(entry.contains("verbatim(attached.text)"),
-                      "and opening to the text the model read")
-        XCTAssertFalse(view.contains("bubble.injected"),
-                       "the entry is what the apiserver recorded and nothing else: the bubble carries "
-                           + "no second reading of its own text to draw from")
+    /// Owner 2026-11-18: the line is drawn nowhere, superseding 2026-10-27.
+    func testAttachedNoteLineIsDrawnNowhere() throws {
+        let root = try path("src/macos/OrbitApp/Sources")
+        XCTAssertFalse(FileManager.default.fileExists(atPath:
+            root.appendingPathComponent("OrbitApp/Views/Console/AttachedNoteView.swift").path))
+        let files = try XCTUnwrap(FileManager.default.enumerator(at: root, includingPropertiesForKeys: nil))
+        var count = 0
+        for case let file as URL in files where file.pathExtension == "swift" {
+            count += 1
+            XCTAssertFalse(try String(contentsOf: file, encoding: .utf8).contains("Orbit attached"),
+                           "\(file.path) still contains the removed attached-note line")
+        }
+        XCTAssertGreaterThan(count, 50, "the walk must cover the app's Swift sources")
     }
 }

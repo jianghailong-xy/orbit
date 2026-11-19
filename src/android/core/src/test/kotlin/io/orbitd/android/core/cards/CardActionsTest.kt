@@ -236,38 +236,4 @@ class CardActionsTest {
         store.close()
     }
 
-    /** Decide it myself (project 34cygPTQe5LPUT7tdUAzG): the closed card has no decision to press; the opened one is re-read at the
-     * press as the revision still waiting, and posts today's request — but not once the revision was sent to the coordinator. */
-    @Test fun decideItMyselfIsPressedAsTheRevisionStillWaiting() = runTest {
-        val queue = fixture().obj("snapshot")!!.obj("standing")!!.obj("evidenceDecisions")!!
-        val row = queue.objects("waitingOnCoordinator").single()
-        fun read(group: String, value: JsonObject) = buildJsonObject {
-            put("decidingSessionId", queue.text("decidingSessionId")); putJsonArray("pending") {}; putJsonArray("decided") {}
-            putJsonArray(group) { add(value) }
-        }.toString()
-        val waitingRead = read("waitingOnCoordinator", row)
-        val rig = Rig(this).apply { pending = false; coordinates = true; evidence = waitingRead; write = { response("{}") } }
-        val (auth, store) = rig.start()
-        val actions = CardActions(auth, store, backgroundScope)
-        val waiting = rig.card(store)
-        assertEquals(CardFamily.COORDINATOR_QUEUE, waiting.family)
-        actions.submit(auth.handle(), waiting, CardVerb.CONFIRM_EVIDENCE); runCurrent()
-        assertEquals("the closed card asks nothing", 0, rig.posted)
-        val opened = CoordinatorQueue.decideMyself(waiting)!!
-        rig.evidence = read("sentToCoordinator", buildJsonObject {
-            put("taskId", row.text("taskId")); put("title", row.text("title")); put("projectId", row.text("projectId"))
-            put("evidenceRevision", "2"); put("deliveredAt", "2026-10-04T00:05:00.000Z")
-        })
-        actions.submit(auth.handle(), opened, CardVerb.CONFIRM_EVIDENCE); runCurrent(); advanceTimeBy(101); runCurrent()
-        assertEquals("sent to the coordinator meanwhile: no longer the owner's to press here", 0, rig.posted)
-        assertTrue(actions.state.value[opened.key]!!.message!!.contains("handled elsewhere"))
-        rig.evidence = waitingRead
-        actions.submit(auth.handle(), opened, CardVerb.CONFIRM_EVIDENCE); runCurrent(); advanceTimeBy(101); runCurrent()
-        assertEquals(1, rig.posted)
-        assertEquals(listOf("tasks", row.text("taskId"), "evidence", "decision"), rig.lastPost!!.path)
-        assertEquals(buildJsonObject { put("decidingSessionId", queue.text("decidingSessionId")); put("evidenceRevision", "2"); put("decision", "CONFIRM") },
-            Wire.json.parseToJsonElement(rig.lastPost!!.body!!.decodeToString()))
-        assertTrue(actions.state.value[opened.key]!!.settled)
-        store.close()
-    }
 }

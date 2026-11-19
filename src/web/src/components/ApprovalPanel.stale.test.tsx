@@ -225,6 +225,7 @@ beforeEach(() => {
     if (path.startsWith('/tasks/page')) return reply({ items: [], nextCursor: null });
     if (path.startsWith('/tasks')) return reply({ items: [], total: 0, counts: {} });
     if (path === '/providers' || path === '/providers/pools' || path === '/providers/shared-pools' || path === '/session-tags' || path === '/session-folders' || path === '/task-lists' || path === '/runners' || path === '/watches' || path === '/watches?state=ACTIVE' || path === '/watches?state=PAUSED' || path === '/watches?needsAttention=true' || path === '/wiki/spaces') return reply([]);
+    if (path.startsWith('/owner-requests')) return reply({ requests: [] });
     unstubbed.push(path);
     return reply([]);
   });
@@ -305,8 +306,9 @@ const cardFor = (command: string): HTMLElement => {
   return found as HTMLElement;
 };
 
+// The card's answers. Copy and the folds in its body read the call and stay pressable on a dead card.
 const actionsOf = (card: HTMLElement): HTMLButtonElement[] => [
-  ...card.querySelectorAll<HTMLButtonElement>('button'),
+  ...card.querySelectorAll<HTMLButtonElement>('.approval-actions button'),
 ];
 
 /** The card's own primary action — Approve here, Submit on a question. */

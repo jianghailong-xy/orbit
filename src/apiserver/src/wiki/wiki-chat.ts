@@ -2,11 +2,12 @@ import { BadRequestException, ConflictException, Injectable, NotFoundException, 
 import { Prisma, RunStatus } from '@prisma/client';
 import {
   WIKI_CHAT_COPY,
-  WIKI_CHAT_RULES,
   wikiChatFabCounts,
+  wikiChatListPage,
   wikiSpaceSettings,
   type WikiChatCreateAnswer,
   type WikiChatList,
+  type WikiChatListPage,
   type WikiChatRow,
 } from '@orbit/shared';
 import type { AuthCredential } from '../common/current-user.decorator';
@@ -49,6 +50,8 @@ const CHAT_SELECT = {
   engineTurnActive: true,
   createdAt: true,
   updatedAt: true,
+  lastTurnAt: true,
+  completedAt: true,
 } satisfies Prisma.SessionSelect;
 
 type ChatSession = Prisma.SessionGetPayload<{ select: typeof CHAT_SELECT }>;
@@ -84,12 +87,17 @@ export class WikiChat {
 
   /**
    * `POST /api/wiki/spaces/:id/chats` (contract `chat.create`): `{ workspaceId?, content, clientTurnId, wikiContext?,
-   * engine?, model?, permissionMode? }`.
+   * attachmentIds?, engine?, model?, permissionMode?, effort?, fastMode? }`.
    *
    * The workspace is the one named — which must be one the space's chats may run in, and which the space then
    * remembers (Runs in) — or else the one the space remembers; with neither, 400 says to choose one. No default is
    * worked out (contract `chat.workspace.choose`): the workspace a space's sessions last ran in could carry the chat
    * onto a production machine. An offline machine is no reason to move: the chat is made and waits for its runner.
+   *
+   * The first message's pictures and files (board 43): `attachmentIds` are uploads of the owner's not yet used by any
+   * session (`POST /api/attachments` with none named), held to that as a new session's are; they join the first turn
+   * in the transaction that files it (`SessionsService.writeChat`). The model, effort, speed and mode are the ones the
+   * composer's toolbar shows, each defaulting as a session of that workspace does.
    */
   async create(
     ownerId: string,
@@ -106,10 +114,17 @@ export class WikiChat {
     if (typeof input.clientTurnId !== 'string' || !UUID.test(input.clientTurnId)) {
       throw new BadRequestException('clientTurnId must be a UUID the client made for this message');
     }
-    for (const field of ['workspaceId', 'engine', 'model', 'permissionMode'] as const) {
+    for (const field of ['workspaceId', 'engine', 'model', 'permissionMode', 'effort'] as const) {
       if (input[field] !== undefined && input[field] !== null && typeof input[field] !== 'string') {
         throw new BadRequestException(`${field} must be a string`);
       }
+    }
+    if (input.fastMode !== undefined && input.fastMode !== null && typeof input.fastMode !== 'boolean') {
+      throw new BadRequestException('fastMode must be true or false');
+    }
+    const attachmentIds = input.attachmentIds ?? [];
+    if (!Array.isArray(attachmentIds) || attachmentIds.some((id) => typeof id !== 'string' || id === '')) {
+      throw new BadRequestException('attachmentIds must be a list of the ids of files the owner uploaded');
     }
     const wikiContext = readWikiChatContext(input.wikiContext);
     const space = await this.requireSpace(ownerId, spaceId);
@@ -131,9 +146,13 @@ export class WikiChat {
       ...(typeof input.engine === 'string' ? { engine: input.engine } : {}),
       ...(typeof input.model === 'string' ? { model: input.model } : {}),
       ...(typeof input.permissionMode === 'string' ? { permissionMode: input.permissionMode } : {}),
+      ...(typeof input.effort === 'string' ? { effort: input.effort } : {}),
+      ...(typeof input.fastMode === 'boolean' ? { fastMode: input.fastMode } : {}),
+      ...(attachmentIds.length > 0 ? { attachmentIds: attachmentIds as string[] } : {}),
     } as CreateSessionDto;
     const session = await this.sessions.create(ownerId, dto, {
       credential,
+      openedBy: 'WIKI_CHAT',
       wikiChat: {
         spaceId: space.id,
         clientTurnId: input.clientTurnId,
@@ -152,7 +171,7 @@ export class WikiChat {
       this.realtime?.publishWikiChanged(ownerId, space.id);
     }
     const created = await this.prisma.session.findUniqueOrThrow({ where: { id: session.id }, select: CHAT_SELECT });
-    return { sessionId: created.id, chat: chatRow(created, 0) };
+    return { sessionId: created.id, chat: chatRow(created, 0, 0, created.status === RunStatus.PENDING || isSessionGenerating(created)) };
   }
 
   /**
@@ -182,9 +201,10 @@ export class WikiChat {
   /**
    * `GET /api/wiki/spaces/:id/chats` (contract `chat.list`): the remembered workspace as it stands, every workspace
    * the chats may run in, the round button's three counts over every chat of the space not in Trash — its approvals and
-   * questions, and its cards (`wiki-chat-cards.ts`) — and the newest chats, each with its cards and its share of needsYou.
+   * questions, and its cards (`wiki-chat-cards.ts`) — and one page of the chats (`chat.list.page`): those whose title
+   * holds `q`, the one last spoken in first, each with its cards and its share of needsYou.
    */
-  async list(ownerId: string, spaceId: string, actingSessionId: string | null): Promise<WikiChatList> {
+  async list(ownerId: string, spaceId: string, actingSessionId: string | null, page: WikiChatListPage = {}): Promise<WikiChatList> {
     refuseActingSession(actingSessionId, "reading where a space's chats run");
     const space = await this.requireSpace(ownerId, spaceId);
     const remembered = wikiSpaceSettings(space.settings).chat.workspaceId;
@@ -218,7 +238,10 @@ export class WikiChat {
       workspace: await this.rememberedWorkspace(ownerId, remembered, choices),
       choices: choices.map(({ id, name, runner, online }) => ({ id, name, runner, online })),
       fab,
-      chats: counted.slice(0, WIKI_CHAT_RULES.chatsListed).map((one) => chatRow(one.chat, wikiChatFabCounts([fabOf(one)]).needsYou, one.cards.length)),
+      ...wikiChatListPage(
+        counted.map((one) => chatRow(one.chat, wikiChatFabCounts([fabOf(one)]).needsYou, one.cards.length, fabOf(one).turnActive)),
+        page,
+      ),
     };
   }
 
@@ -243,14 +266,17 @@ export class WikiChat {
 }
 
 /** One chat as the list names it (contract `chat.list.chats`): how many cards it holds, and how much of `needsYou` is its. */
-function chatRow(chat: ChatSession, needsYou: number, drafts = 0): WikiChatRow {
+function chatRow(chat: ChatSession, needsYou: number, drafts = 0, working = false): WikiChatRow {
   return {
     sessionId: chat.id,
     title: chat.title,
     status: chat.status,
     open: OPEN_SESSION_STATUSES.includes(chat.status),
+    completed: chat.completedAt !== null,
+    working,
     createdAt: chat.createdAt.toISOString(),
     updatedAt: chat.updatedAt.toISOString(),
+    lastActiveAt: (chat.lastTurnAt ?? chat.createdAt).toISOString(),
     drafts,
     needsYou,
   };

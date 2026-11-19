@@ -30,7 +30,10 @@ const (
 	// to restart a service.
 	hostdIdleTimeout = 30 * time.Second
 	// One request in, one response out. A peer that stalls mid-exchange must not pin a
-	// handler forever.
+	// handler forever: it has this long to send its request, and then to take the answer.
+	// The verb in between is not bounded by it — enable and disable drain the account's
+	// older runners, each for up to its TimeoutStopSec=180, and the client waits for them
+	// (hostdAnswerWait).
 	hostdConnTimeout = 10 * time.Second
 )
 
@@ -292,5 +295,6 @@ func hostdServeConn(conn net.Conn, verbs map[string]hostdVerb) {
 			resp = hostdHandle(raw, peer, verbs)
 		}
 	}
+	_ = conn.SetDeadline(time.Now().Add(hostdConnTimeout))
 	_ = json.NewEncoder(conn).Encode(resp)
 }

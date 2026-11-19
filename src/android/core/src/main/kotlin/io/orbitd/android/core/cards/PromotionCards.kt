@@ -96,6 +96,16 @@ object PromotionCards {
     /** The head's clause while a stop has been asked for and the runner has not answered. */
     const val stopRequestedClause = "stop requested"
 
+    /** Why the asking card asks although Automatic is on: the project lands directly on main, where Automatic never merges. */
+    fun askReason(main: String) = "Asks you because this project lands directly on $main, where Automatic never merges by itself."
+    /** The press under it, to How it runs, where Delivery skips the card. */
+    const val letAgentPushInstead = "Let the agent push instead…"
+    /** [askReason] for [view], only while it asks and the project's facts say why: a main line, Orbit landing the work, and
+     * Automatic on. Any of them unknown — not read yet, or a server that does not say — draws nothing. */
+    fun askReason(view: JsonObject?, line: String?, deliveryMode: String?, automatic: Boolean?): String? =
+        if (view?.text("state") == "READY" && line == "MAIN" && deliveryMode == "PLATFORM" && automatic == true) askReason(mainBranch(view))
+        else null
+
     /** `refs/heads/x` and `x` are the same branch. */
     fun shortRef(ref: String) = ref.removePrefix("refs/heads/")
     /** Confirmed, or re-checking before it merges: the card's merging stage. */

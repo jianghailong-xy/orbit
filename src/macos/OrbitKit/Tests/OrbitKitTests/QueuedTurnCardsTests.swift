@@ -42,6 +42,9 @@ final class QueuedTurnCardsTests: XCTestCase {
         ("sessionMessage", "sessionMessage", """
             {"fromSessionId": "s-sender", "fromTitle": "统一排队与已投递消息的卡片渲染", "fromAgentName": "orbit-develop"}
             """),
+        ("externalSender", "externalSender", """
+            {"source": "FEISHU", "name": "Li Lei"}
+            """),
         ("sessionReplies", "sessionReplies", """
             [{"requestId": "req1", "outcome": "REPLIED", "fromSessionId": "s-asked",
               "fromTitle": "分析 session 列表页性能", "requestPreview": "再跑一组只读探针", "replyText": "全部只读执行"}]
@@ -54,13 +57,46 @@ final class QueuedTurnCardsTests: XCTestCase {
             {"requestId": "cr-1", "recordId": "rec-1", "reviewerTitle": "Reviewer",
              "reason": "The evidence cites no run", "problems": [{"key": "p1", "text": "No TOOL_CALL resolves"}]}
             """),
+        ("reviewAnswers", "confirmationAnswers", """
+            {"decisionId": "dc-1", "taskId": "task-1", "title": "Welcome email for new accounts",
+             "decidedAt": "2026-11-11T05:13:08.000Z",
+             "answers": [{"key": "n1", "question": "How should it reach main?", "choice": "Merge to main now",
+                          "text": null, "notShown": false}]}
+            """),
+        ("evidenceReview", "evidenceReview", """
+            {"evidenceId": "ev-1", "taskId": "task-2", "title": "iOS/macOS: new account welcome card",
+             "revision": "1", "runSessionId": "s-run", "dueAt": "2026-11-11T05:35:30.000Z",
+             "claim": "The card shows in all three states.", "state": "OPEN", "latestRevision": "1", "decision": null}
+            """),
+        ("evidenceSendBack", "evidenceSendBack", """
+            {"decisionId": "dc-2", "taskId": "task-2", "title": "iOS/macOS: new account welcome card",
+             "revision": "1", "note": "The macOS screenshot is missing.", "by": "SESSION",
+             "bySessionId": "s-dispatcher", "byTitle": "新用户欢迎卡片"}
+            """),
+        ("runQuestion", "runQuestion", """
+            {"requestId": "rq-1", "approvalId": "ap-1", "taskId": "task-3", "taskTitle": "K4 baseline hold",
+             "runSessionId": "s-run", "replyBy": "2026-11-11T06:10:00.000Z", "state": "OPEN", "approvalStatus": "PENDING",
+             "questions": [{"question": "Keep its place?", "options": [{"label": "Keep"}, {"label": "Back"}]}],
+             "answers": null, "answeredBy": null}
+            """),
+        ("runNotice", "runNotice", """
+            {"requestId": "rn-1", "taskId": "task-4", "taskTitle": "Three clients", "runSessionId": "s-run",
+             "message": "Android emulator is down.", "state": "OPEN"}
+            """),
+        ("sessionOpening", "sessionOpening", """
+            {"kind": "COORDINATOR", "target": {"kind": "PROJECT", "id": "01a0cca0-aeaa-7618-bd5a-caccc089108c",
+             "title": "Landing checks"}, "mention": null}
+            """),
     ]
 
     /// Everything on a `UserBubble` that is not a card: the turn's words and inputs, and how far it got.
     private static let notCards: Set<String> = [
         "id", "text", "attachments", "ts", "clientTurnId", "turnId", "pending", "queued", "undelivered",
         "note", "authoredByOrbit", "steer", "delivery", "withdrawable", "shell",
-        "receipt", "deliveryCode", "deliveryReason",
+        "receipt", "deliveryCode", "deliveryReason", "opensTurn",
+        // Settings › Translation: how far the owner's own message got in translation — their words,
+        // not a card (`TranslationTests` covers it off the queue).
+        "translation",
     ]
 
     /// What the agent reads on such a turn: words written for it, which no card is read out of.
@@ -170,10 +206,17 @@ final class QueuedTurnCardsTests: XCTestCase {
             XCTAssertEqual(b.startedCard?.projectTitle, "统一排队与已投递消息的卡片渲染")
             XCTAssertEqual(b.startedCard?.criteriaCount, 4)
             XCTAssertEqual(b.sessionMessage?.fromSessionId, "s-sender")
+            XCTAssertEqual(b.externalSender, ExternalMessageFrom(name: "Li Lei"))
             XCTAssertEqual(b.sessionReplies?.map(\.requestId), ["req1"])
             XCTAssertEqual(b.sessionReplies?.first?.replyText, "全部只读执行")
             XCTAssertEqual(b.reviewRequest?.runSessionId, "s-run")
             XCTAssertEqual(b.reviewReturn?.problems.map(\.text), ["No TOOL_CALL resolves"])
+            XCTAssertEqual(b.reviewAnswers?.answers.map(\.shown), ["Merge to main now"])
+            XCTAssertEqual(b.evidenceReview?.dueAt, "2026-11-11T05:35:30.000Z")
+            XCTAssertEqual(b.evidenceSendBack?.byTitle, "新用户欢迎卡片")
+            XCTAssertEqual(b.runQuestion?.questions.first?.options, ["Keep", "Back"])
+            XCTAssertEqual(b.runNotice?.message, "Android emulator is down.")
+            XCTAssertEqual(b.sessionOpening?.target?.title, "Landing checks")
         }
     }
 

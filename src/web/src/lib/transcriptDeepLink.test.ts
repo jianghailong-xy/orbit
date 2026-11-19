@@ -75,6 +75,21 @@ describe('where the record is on screen', () => {
     expect(elementForSeq(root, 3)).toBeNull();
   });
 
+  it('reads by seq where a fold draws turns out of order, as a task tree does', () => {
+    const root = document.createElement('div');
+    root.innerHTML = `
+      <div class="orbit-exchanges" data-seq="20">
+        <div class="orbit-exchange" data-seq="20">B1, evidence</div>
+        <div class="orbit-exchange" data-seq="40">B1, watch</div>
+        <div class="orbit-exchange" data-seq="30">B4, can start</div>
+      </div>
+      <div class="chat-user" data-seq="50">the question</div>`;
+    expect(elementForSeq(root, 33)?.textContent).toBe('B4, can start');
+    expect(elementForSeq(root, 45)?.textContent).toBe('B1, watch');
+    // Two stamps on one seq: the later in the document, the innermost.
+    expect(elementForSeq(root, 25)?.textContent).toBe('B1, evidence');
+  });
+
   it('is scrolled to the middle of the view when it fits, and to just under its top when it does not', () => {
     const view = { top: 100, height: 800 };
     // A 200px row whose top is 1,000px down the content lands centred: 300px above and below it.

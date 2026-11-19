@@ -11,6 +11,10 @@ import {
   wikiChatResultLine,
   wikiChatRewrites,
   wikiChatWhere,
+  wikiDocSentenceDiff,
+  wikiDocsFollowCardResult,
+  wikiDocsFollowWaiting,
+  WIKI_DOCS_FOLLOW,
   type WikiChatCard,
   type WikiChatContext,
   type WikiChatDraftKind,
@@ -20,14 +24,20 @@ import {
   type WikiChatDraftSectionView,
   type WikiChatDraftState,
   type WikiChatDraftView,
+  type WikiChatPlanChangeView,
   type WikiChatSectionRef,
+  type WikiDocsFollowWaiting,
+  type WikiJobKind,
   type WikiSimilar,
 } from '@orbit/shared';
 import { OPEN_SESSION_STATUSES } from '../common/session-scheduling';
 import type { PrismaService } from '../prisma/prisma.service';
-import { readWikiDocsFollowRewrites, type WikiDocsFollowRewrite } from './wiki-docs-follow';
+import { readWikiRepoReadiness } from '../wiki-worker/wiki-repo-ops';
+import { readWikiDocsFollowRewrites, type WikiDocsFollowRewrite, type WikiDocsFollowRewriteSection } from './wiki-docs-follow';
 import { numbering, PLAN_SELECT, type PlanRow } from './wiki-docs';
 import { anchorPathsOf, sectionFit, storedSessionCondition } from './wiki-docs-material';
+import { wikiPlanCardBase, wikiPlanCardChangeOf, type WikiPlanCardChange } from './wiki-plan';
+import { WikiSystemModelReads } from './wiki-system-model';
 import { ENTRY_SELECT, entryView } from './wiki.service';
 
 /**
@@ -94,6 +104,33 @@ export function storedSections(raw: unknown): WikiChatSectionRef[] {
   });
 }
 
+/**
+ * A plan card's change as its row keeps it (`wiki_chat_draft.change`, contract `chat.drafts.kinds.plan`); null on any
+ * other card. A card drafted before one card changed several documents (C12) kept `{ doc, category }`: its one document.
+ */
+export function storedPlanChange(row: Pick<DraftRow, 'kind' | 'change'>): WikiPlanCardChange | null {
+  if (row.kind !== 'plan' || row.change === null || typeof row.change !== 'object' || Array.isArray(row.change)) return null;
+  const change = row.change as Partial<WikiPlanCardChange> & { doc?: WikiPlanCardChange['docs'][number]; category?: WikiPlanCardChange['categories'][number] | null };
+  const docs = Array.isArray(change.docs) ? change.docs : change.doc && typeof change.doc === 'object' ? [change.doc] : [];
+  if (typeof change.baseVersion !== 'number' || docs.length === 0) return null;
+  return {
+    baseVersion: change.baseVersion,
+    version: typeof change.version === 'number' ? change.version : null,
+    docs,
+    categories: Array.isArray(change.categories) ? change.categories : change.category ? [change.category] : [],
+    build: typeof change.build === 'string' ? change.build : null,
+    undoVersion: typeof change.undoVersion === 'number' ? change.undoVersion : null,
+  };
+}
+
+/**
+ * The sections a card's press writes (contract `chat.drafts.rewrites`): its Rewrites — or, for a plan card, the sections
+ * its change adds or changes, which its rebuild writes and its row keeps in `sections` (`chat.drafts.kinds.plan`).
+ */
+export function pressedSections(row: Pick<DraftRow, 'kind' | 'rewrites' | 'sections'>): WikiChatSectionRef[] {
+  return row.kind === 'plan' ? storedSections(row.sections) : storedSections(row.rewrites);
+}
+
 /** The label a card is drawn with after `Draft · ` (design §6, board 42 ②④). */
 export function draftLabel(row: Pick<DraftRow, 'kind' | 'ops'>): string {
   return wikiChatDraftLabel(row.kind as WikiChatDraftKind, storedOps(row.ops).map((op) => ({
@@ -114,6 +151,11 @@ export interface DraftFacts {
   replacedBy: ReadonlyMap<string, string>;
   /** Each card whose base moved since it was drafted (contract `chat.drafts.states.changed`). */
   moved: ReadonlySet<string>;
+  /**
+   * Each applied plan card the plan moved on from since its press: a version stored after the one it made, a draft or a
+   * confirmed one. Undo is off for it (contract `chat.presses.undo`; C17).
+   */
+  planMoved: ReadonlySet<string>;
 }
 
 /**
@@ -123,7 +165,7 @@ export interface DraftFacts {
  * the press decides an applied or discarded card's state whatever moved after it.
  */
 export async function draftFacts(db: Reader, ownerId: string, rows: readonly DraftRow[]): Promise<DraftFacts> {
-  if (rows.length === 0) return { openChats: new Set(), replacedBy: new Map(), moved: new Set() };
+  if (rows.length === 0) return { openChats: new Set(), replacedBy: new Map(), moved: new Set(), planMoved: new Set() };
   const chats = await db.session.findMany({
     where: { ownerId, id: { in: [...new Set(rows.map((row) => row.sessionId))] } },
     select: { id: true, status: true, deletedAt: true },
@@ -148,6 +190,18 @@ export async function draftFacts(db: Reader, ownerId: string, rows: readonly Dra
         if (op.entryId === null) continue;
         const entry = entryOf.get(op.entryId);
         if (!entry || entry.status !== 'active' || (op.baseRevision !== null && entry.currentRevision !== op.baseRevision)) moved.add(row.id);
+      }
+    }
+    // A plan card's base: the plan moved off the version it was drafted on — a newer one, a draft or a confirmed one, stored.
+    for (const spaceId of new Set(open.filter((row) => row.kind === 'plan').map((row) => row.spaceId))) {
+      const newest = await db.wikiPlan.findFirst({
+        where: { ownerId, spaceId, status: { in: ['draft', 'confirmed'] } },
+        orderBy: { version: 'desc' },
+        select: { version: true, status: true },
+      });
+      for (const row of open.filter((one) => one.kind === 'plan' && one.spaceId === spaceId)) {
+        const base = storedPlanChange(row)?.baseVersion ?? null;
+        if (!newest || newest.status !== 'confirmed' || newest.version !== base) moved.add(row.id);
       }
     }
     // A section it would rewrite, written since it was drafted: a section's own write (generated_at), or any write that
@@ -181,7 +235,21 @@ export async function draftFacts(db: Reader, ownerId: string, rows: readonly Dra
       }
     }
   }
-  return { openChats, replacedBy, moved };
+  // An applied plan card's Undo stands while the plan does where its press left it: the newest version, confirmed (C17).
+  const planMoved = new Set<string>();
+  const applied = rows.filter((row) => row.kind === 'plan' && row.decision === 'applied' && row.undoneAt === null);
+  for (const spaceId of new Set(applied.map((row) => row.spaceId))) {
+    const newest = await db.wikiPlan.findFirst({
+      where: { ownerId, spaceId, status: { in: ['draft', 'confirmed'] } },
+      orderBy: { version: 'desc' },
+      select: { version: true, status: true },
+    });
+    for (const row of applied.filter((one) => one.spaceId === spaceId)) {
+      const made = storedPlanChange(row)?.version ?? null;
+      if (!newest || newest.status !== 'confirmed' || made === null || newest.version !== made) planMoved.add(row.id);
+    }
+  }
+  return { openChats, replacedBy, moved, planMoved };
 }
 
 /** A card's state (contract `chat.drafts.derivation`), from its own columns and its facts. */
@@ -213,6 +281,44 @@ export function sectionViews(plan: PlanRow | null, sections: readonly WikiChatSe
   });
 }
 
+/**
+ * A plan card's sections (contract `chat.drafts.kinds.plan`; C17): each as the confirmed plan numbers it when it has it —
+ * the version a press confirmed, or the one a changed section stands in before the press — else where the change puts
+ * it, under the number its document has in the change (`3.5 §1` for a section of a new document, or one moved into it).
+ */
+export function planCardSectionViews(plan: PlanRow | null, change: WikiChatPlanChangeView, sections: readonly WikiChatSectionRef[]): WikiChatDraftSectionView[] {
+  return sections.map((section) => {
+    const [confirmed] = sectionViews(plan, [section]);
+    if (confirmed!.title !== null) return confirmed!;
+    const doc = change.docs.find((one) => one.slug === section.doc);
+    const one = doc?.sections.find((s) => s.key === section.key && s.edit !== 'removed');
+    const moved = change.moves.find((move) => move.to.doc === section.doc && move.to.key === section.key);
+    const n = one?.number ?? moved?.to.section ?? null;
+    if (!doc || n === null) return confirmed!;
+    return { doc: section.doc, key: section.key, where: wikiChatWhere(doc.number, n), title: one?.title ?? moved?.title ?? null };
+  });
+}
+
+/** Each plan card's change as the read serves it, from the version it was drafted on, and its sections; by card. */
+async function planCardViews(
+  db: Reader,
+  ownerId: string,
+  rows: readonly DraftRow[],
+  plans: ReadonlyMap<string, PlanRow | null>,
+): Promise<Map<string, { change: WikiChatPlanChangeView; sections: WikiChatDraftSectionView[] }>> {
+  const out = new Map<string, { change: WikiChatPlanChangeView; sections: WikiChatDraftSectionView[] }>();
+  const bases = new Map<string, Awaited<ReturnType<typeof wikiPlanCardBase>>>();
+  for (const row of rows) {
+    const change = storedPlanChange(row);
+    if (!change) continue;
+    const at = `${row.spaceId}#${change.baseVersion}`;
+    if (!bases.has(at)) bases.set(at, await wikiPlanCardBase(db, ownerId, row.spaceId, change.baseVersion));
+    const view = wikiPlanCardChangeOf(bases.get(at) ?? null, change);
+    out.set(row.id, { change: view, sections: planCardSectionViews(plans.get(row.spaceId) ?? null, view, storedSections(row.sections)) });
+  }
+  return out;
+}
+
 /** An applied card's rewrite, as its follow job says it, with each section's place and whether the owner opened it. */
 export function rewriteView(rewrite: WikiDocsFollowRewrite, plan: PlanRow | null, seen: boolean): WikiChatDraftRewriteView {
   const where = new Map(sectionViews(plan, rewrite.sections).map((view) => [sectionId(view.doc, view.key), view.where]));
@@ -241,7 +347,12 @@ export async function draftRewrites(
   rows: readonly DraftRow[],
 ): Promise<Map<string, WikiDocsFollowRewrite>> {
   const out = new Map<string, WikiDocsFollowRewrite>();
-  const pressed = rows.filter((row) => (row.decision === 'applied' || row.decision === 'edited') && storedSections(row.rewrites).length > 0);
+  const plans = rows.filter((row) => row.decision === 'applied' && storedPlanChange(row)?.version != null && storedSections(row.sections).length > 0);
+  for (const spaceId of new Set(plans.map((row) => row.spaceId))) {
+    const read = await readPlanCardRewrites(db, ownerId, spaceId, plans.filter((row) => row.spaceId === spaceId));
+    for (const [id, rewrite] of read) out.set(id, rewrite);
+  }
+  const pressed = rows.filter((row) => row.kind !== 'plan' && (row.decision === 'applied' || row.decision === 'edited') && storedSections(row.rewrites).length > 0);
   for (const spaceId of new Set(pressed.map((row) => row.spaceId))) {
     const ids = pressed.filter((row) => row.spaceId === spaceId).map((row) => row.id);
     // The follow's read takes the service's client and reads through model delegates and $queryRaw alone, which a
@@ -252,13 +363,158 @@ export async function draftRewrites(
   return out;
 }
 
+/** One section of a docs_build job's report (wiki-worker/wiki-docs-build-job.ts): how the build left it. */
+interface BuildReportSection {
+  key?: unknown;
+  outcome?: unknown;
+}
+
+/**
+ * The rewrites of some applied plan cards of one space (contract `chat.drafts.results.plan`): the build each one's press —
+ * or its Try again — asked for (`wiki_plan_job`, kind build, named on the card; until it is, the newest build of the
+ * version the press confirmed made since the press), read for the card's sections — rewriting while it is
+ * on its way and nothing holds it up; waiting while it is held (no_workspace) or its job is held up, with
+ * `docs.follow.waiting`'s reason; and once it has ended, each section as its job's report says it: written, updated or
+ * the same by the version it kept (or updated, written for the first time); left as it was, the same; failed, or not
+ * reached, failed — gone when the confirmed plan no longer has it. A card whose build was never asked for reads failed.
+ */
+async function readPlanCardRewrites(
+  db: Reader,
+  ownerId: string,
+  spaceId: string,
+  rows: readonly DraftRow[],
+): Promise<Map<string, WikiDocsFollowRewrite>> {
+  const out = new Map<string, WikiDocsFollowRewrite>();
+  const versions = [...new Set(rows.map((row) => storedPlanChange(row)!.version!))];
+  const named = rows.map((row) => storedPlanChange(row)!.build).filter((id): id is string => typeof id === 'string');
+  const builds = await db.wikiPlanJob.findMany({
+    where: { ownerId, spaceId, kind: 'build', OR: [{ version: { in: versions } }, { id: { in: named } }] },
+    orderBy: [{ createdAt: 'desc' }, { id: 'desc' }],
+    select: { id: true, version: true, state: true, heldReason: true, jobId: true, endedAt: true, createdAt: true },
+  });
+  const jobIds = builds.map((build) => build.jobId).filter((id): id is string => id !== null);
+  const jobs = jobIds.length === 0
+    ? []
+    : await db.wikiJob.findMany({ where: { ownerId, id: { in: jobIds } }, select: { id: true, state: true, waitingFor: true, report: true, progress: true, endedAt: true } });
+  const jobOf = new Map(jobs.map((job) => [job.id, job]));
+  let holding: { writer: WikiJobKind | null; model: Awaited<ReturnType<WikiSystemModelReads['read']>>['state']; repo: Awaited<ReturnType<typeof readWikiRepoReadiness>>['look'] } | null = null;
+  const holdUp = async () => {
+    if (holding) return holding;
+    // Another job that writes documents running in the space, or the System model or the runner not there.
+    const running = await db.wikiJob.findFirst({
+      where: { ownerId, spaceId, state: 'running', kind: { in: [...WIKI_DOCS_FOLLOW.writers] } },
+      orderBy: [{ startedAt: 'asc' }, { id: 'asc' }],
+      select: { kind: true },
+    });
+    const now = new Date();
+    const [model, repo] = await Promise.all([
+      new WikiSystemModelReads(db as unknown as PrismaService).read(now),
+      readWikiRepoReadiness(db as unknown as PrismaService, { ownerId, spaceId, now }),
+    ]);
+    holding = { writer: (running?.kind as WikiJobKind | undefined) ?? null, model: model.state, repo: repo.look };
+    return holding;
+  };
+  const plan = await confirmedPlanOf(db, ownerId, spaceId);
+  for (const row of rows) {
+    const change = storedPlanChange(row)!;
+    const asked = storedSections(row.sections);
+    const unsettled = (result: 'rewriting' | 'waiting', reason: WikiDocsFollowWaiting | null, jobId: string, sha: string | null): WikiDocsFollowRewrite => ({
+      jobId,
+      result,
+      reason,
+      sha,
+      sections: asked.map((s) => ({ doc: s.doc, key: s.key, result: null, changed: null, versionId: null })),
+      settledAt: null,
+    });
+    // Its own build: a later build of the same version — the owner's rebuild on the plan page — is not this card's.
+    const build = change.build
+      ? builds.find((one) => one.id === change.build)
+      : builds.find((one) => one.version === change.version && row.decidedAt !== null && one.createdAt >= row.decidedAt);
+    if (!build) {
+      // Asked for once the press committed, and never failing it: one that was not asked for is a rewrite that failed.
+      out.set(row.id, { jobId: row.id, result: 'failed', reason: null, sha: null, sections: asked.map((s) => ({ doc: s.doc, key: s.key, result: 'failed', changed: null, versionId: null })), settledAt: row.decidedAt?.toISOString() ?? null });
+      continue;
+    }
+    const job = build.jobId ? jobOf.get(build.jobId) : undefined;
+    const progress = (job?.progress ?? {}) as { sha?: unknown };
+    const sha = typeof progress.sha === 'string' && progress.sha !== '' ? progress.sha : null;
+    if (build.state === 'held') {
+      out.set(row.id, unsettled('waiting', 'no_workspace', build.jobId ?? build.id, null));
+      continue;
+    }
+    const ended = build.state === 'ended' || (job !== undefined && ['succeeded', 'failed', 'cancelled'].includes(job.state));
+    if (!ended) {
+      let reason: WikiDocsFollowWaiting | null = null;
+      if (!job || job.state !== 'running') {
+        const held = await holdUp();
+        reason = wikiDocsFollowWaiting({
+          state: job?.state === 'waiting' ? 'waiting' : 'queued',
+          waitingFor: (job?.waitingFor as 'repo' | 'model' | null | undefined) ?? null,
+          writerRunning: held.writer,
+          model: held.model,
+          repo: held.repo,
+        });
+      }
+      out.set(row.id, unsettled(reason ? 'waiting' : 'rewriting', reason, build.jobId ?? build.id, sha));
+      continue;
+    }
+    const report = (job?.report ?? null) as { repoSha?: unknown; docs?: Array<{ slug?: unknown; sections?: BuildReportSection[] }> } | null;
+    // Each section by its own document's part of the report: a card may rebuild several (C17).
+    const reportedOf = (slug: string) => (Array.isArray(report?.docs) ? report!.docs : []).find((doc) => doc.slug === slug)?.sections ?? [];
+    const sections: WikiDocsFollowRewriteSection[] = [];
+    for (const s of asked) {
+      const one = reportedOf(s.doc).find((section) => section.key === s.key);
+      const inPlan = plan?.docs.some((doc) => doc.slug === s.doc && doc.sections.some((section) => section.key === s.key)) ?? false;
+      if (!one || (one.outcome !== 'written' && one.outcome !== 'unchanged')) {
+        sections.push({ doc: s.doc, key: s.key, result: !one && !inPlan ? 'gone' : 'failed', changed: null, versionId: null });
+        continue;
+      }
+      if (one.outcome === 'unchanged') {
+        sections.push({ doc: s.doc, key: s.key, result: 'same', changed: 0, versionId: null });
+        continue;
+      }
+      // Written: what it replaced is the version this build kept, compared sentence by sentence with what stands now.
+      const kept = build.jobId
+        ? await db.wikiDocSectionVersion.findFirst({
+          where: { ownerId, spaceId, docSlug: s.doc, sectionKey: s.key, jobId: build.jobId },
+          orderBy: { seq: 'desc' },
+          select: { id: true, sentences: true },
+        })
+        : null;
+      const now = await db.wikiDocSentence.findMany({
+        where: { ownerId, section: { key: s.key, doc: { ownerId, spaceId, slug: s.doc } } },
+        orderBy: { position: 'asc' },
+        select: { text: true },
+      });
+      const texts = (raw: unknown): string[] => (Array.isArray(raw) ? raw.map((one) => String((one as { text?: unknown }).text ?? '')) : []);
+      const changed = kept ? wikiDocSentenceDiff(texts(kept.sentences), now.map((one) => one.text)).changed : now.length;
+      sections.push({ doc: s.doc, key: s.key, result: kept && changed === 0 ? 'same' : 'updated', changed, versionId: kept?.id ?? null });
+    }
+    out.set(row.id, {
+      jobId: build.jobId ?? build.id,
+      result: wikiDocsFollowCardResult(sections.map((one) => one.result ?? 'failed')),
+      reason: null,
+      sha: typeof report?.repoSha === 'string' && report.repoSha !== '' ? report.repoSha : sha,
+      sections,
+      settledAt: (build.endedAt ?? job?.endedAt)?.toISOString() ?? null,
+    });
+  }
+  return out;
+}
+
 /** A card as what it offers and what it counts are read from (`wikiChatCardActions`, `wikiChatFabCounts`, `wikiChatWaiting`). */
-export function cardOf(row: DraftRow, state: WikiChatDraftState, rewrite: WikiDocsFollowRewrite | undefined, plan: PlanRow | null): WikiChatCard {
+export function cardOf(
+  row: DraftRow,
+  state: WikiChatDraftState,
+  rewrite: WikiDocsFollowRewrite | undefined,
+  plan: PlanRow | null,
+  planMoved = false,
+): WikiChatCard {
   const view = rewrite ? rewriteView(rewrite, plan, row.seenAt !== null) : null;
   return {
     kind: row.kind as WikiChatDraftKind,
     state,
-    undoable: wikiChatDraftUndoable(row.kind as WikiChatDraftKind, state, storedOps(row.ops)),
+    undoable: wikiChatDraftUndoable(row.kind as WikiChatDraftKind, state, storedOps(row.ops), planMoved),
     rewrite: view
       ? { result: view.result, reason: view.reason, sha: view.sha, seen: view.seen, sections: view.sections.map((s) => ({ where: s.where, result: s.result, ...(s.changed !== null ? { changed: s.changed } : {}) })) }
       : null,
@@ -279,6 +535,7 @@ export async function draftViews(db: Reader, ownerId: string, rows: readonly Dra
   const rewrites = await draftRewrites(db, ownerId, rows);
   const plans = new Map<string, PlanRow | null>();
   for (const spaceId of new Set(rows.map((row) => row.spaceId))) plans.set(spaceId, await confirmedPlanOf(db, ownerId, spaceId));
+  const planViews = await planCardViews(db, ownerId, rows, plans);
   const changesetIds = rows.map((row) => row.changesetId).filter((id): id is string => id !== null);
   const decided = changesetIds.length === 0
     ? []
@@ -335,8 +592,9 @@ export async function draftViews(db: Reader, ownerId: string, rows: readonly Dra
       label: draftLabel(row),
       rationale: row.rationale,
       ops,
-      sections: sectionViews(plan, storedSections(row.sections)),
-      rewrites: sectionViews(plan, storedSections(row.rewrites)),
+      sections: planViews.get(row.id)?.sections ?? sectionViews(plan, storedSections(row.sections)),
+      // A plan card's rewrites are the sections its rebuild writes (`chat.drafts.kinds.plan`).
+      rewrites: planViews.get(row.id)?.sections ?? sectionViews(plan, storedSections(row.rewrites)),
       similar: [...similar.values()].sort((a, b) => b.score - a.score),
       tainted: row.tainted,
       // Spelled as every id of an answer is, by hand: `replaces` names other things elsewhere, so it is no codec field.
@@ -345,9 +603,10 @@ export async function draftViews(db: Reader, ownerId: string, rows: readonly Dra
       decision: (row.decision as WikiChatDraftView['decision']) ?? null,
       decidedAt: row.decidedAt?.toISOString() ?? null,
       undoneAt: row.undoneAt?.toISOString() ?? null,
-      undoable: wikiChatDraftUndoable(row.kind as WikiChatDraftKind, state, storedOps(row.ops)),
+      undoable: wikiChatDraftUndoable(row.kind as WikiChatDraftKind, state, storedOps(row.ops), facts.planMoved.has(row.id)),
       changesetId: row.changesetId,
       rewrite: rewrite ? rewriteView(rewrite, plan, row.seenAt !== null) : null,
+      change: planViews.get(row.id)?.change ?? null,
       createdAt: row.createdAt.toISOString(),
     };
   });
@@ -371,7 +630,7 @@ export async function cardsOfChats(db: Reader, ownerId: string, chatIds: readonl
   for (const row of rows) {
     if (!plans.has(row.spaceId)) plans.set(row.spaceId, rewrites.size > 0 ? await confirmedPlanOf(db, ownerId, row.spaceId) : null);
     const cards = out.get(row.sessionId) ?? [];
-    cards.push(cardOf(row, draftStateOf(row, facts), rewrites.get(row.id), plans.get(row.spaceId) ?? null));
+    cards.push(cardOf(row, draftStateOf(row, facts), rewrites.get(row.id), plans.get(row.spaceId) ?? null, facts.planMoved.has(row.id)));
     out.set(row.sessionId, cards);
   }
   return out;
@@ -380,7 +639,7 @@ export async function cardsOfChats(db: Reader, ownerId: string, chatIds: readonl
 /**
  * Each space's `chatWaiting` (contract `space.list.chatWaiting`, `wikiChatWaiting`): its applied cards whose rewrite
  * waits on the owner — held up, or read the same or failed and not yet seen — one each, over its chats not in Trash.
- * Only an applied card not undone, not seen and with Rewrites can wait, so only those are read.
+ * Only an applied card not undone, not seen and with Rewrites — or a plan card with sections — can wait, so only those are read.
  */
 export async function chatWaitingOfSpaces(db: Reader, ownerId: string, spaceIds: readonly string[]): Promise<Map<string, number>> {
   const out = new Map<string, number>(spaceIds.map((id) => [id, 0]));
@@ -389,7 +648,7 @@ export async function chatWaitingOfSpaces(db: Reader, ownerId: string, spaceIds:
     where: { ownerId, spaceId: { in: [...spaceIds] }, decision: { in: ['applied', 'edited'] }, undoneAt: null, seenAt: null },
     select: DRAFT_SELECT,
   });
-  const candidates = rows.filter((row) => storedSections(row.rewrites).length > 0);
+  const candidates = rows.filter((row) => pressedSections(row).length > 0);
   if (candidates.length === 0) return out;
   const trashed = new Set((await db.session.findMany({
     where: { ownerId, id: { in: [...new Set(candidates.map((row) => row.sessionId))] }, deletedAt: { not: null } },
@@ -550,7 +809,11 @@ export async function draftsNote(db: Reader, input: { ownerId: string; sessionId
       continue;
     }
     if (what === 'undone') {
-      lines.push(`- ${id} ${view.label}: undone. What its Apply wrote was taken back, and the sections it rewrote were restored where nothing wrote them since.`);
+      // A plan card's Undo put the plan back as a version of its own (C17): the agent drafts from that one next.
+      const undid = view.kind === 'plan' ? storedPlanChange(byId.get(view.id)!)?.undoVersion ?? null : null;
+      lines.push(undid !== null && view.change
+        ? `- ${id} ${view.label}: undone. The plan is back to what version ${view.change.baseVersion} said, stored and confirmed as version ${undid}, and the sections its rebuild wrote were restored where nothing wrote them since.`
+        : `- ${id} ${view.label}: undone. What its Apply wrote was taken back, and the sections it rewrote were restored where nothing wrote them since.`);
       continue;
     }
     const written = view.ops
@@ -560,7 +823,10 @@ export async function draftsNote(db: Reader, input: { ownerId: string; sessionId
         const how = op.decision === 'pending' && op.op === 'challenge' ? 'challenged, waiting for the owner in Review' : trust;
         return `entry ${uuidToBase62(op.entryId!)} (${op.op}, ${how})`;
       });
-    const wrote = written.length > 0 ? ` It wrote ${written.join(', ')}.` : view.kind === 'rewrite' ? ' It wrote no entry.' : '';
+    const made = view.kind === 'plan' && view.change?.version != null
+      ? ` It made version ${view.change.version} of the plan from version ${view.change.baseVersion} and confirmed it; the documents are rebuilt from it.`
+      : '';
+    const wrote = written.length > 0 ? ` It wrote ${written.join(', ')}.` : view.kind === 'rewrite' ? ' It wrote no entry.' : made;
     const rewrite = view.rewrite
       ? ` Rewrite: ${wikiChatResultLine({ result: view.rewrite.result, reason: view.rewrite.reason, sha: view.rewrite.sha, seen: view.rewrite.seen, sections: view.rewrite.sections.map((s) => ({ where: s.where, result: s.result, ...(s.changed !== null ? { changed: s.changed } : {}) })) })}.`
       : view.rewrites.length > 0 ? ' Its rewrite has not been queued.' : '';

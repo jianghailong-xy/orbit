@@ -14,6 +14,7 @@ import { PROVIDER_GLYPHS } from '../lib/providerGlyphs';
 import { runnersQuery } from '../lib/queries';
 import { webShowsEngine } from '../lib/runnerEngines';
 import { brandForProvider, ENGINE_PRESET } from '../lib/sessionProviderChoices';
+import { useMachineName } from '../lib/managedRunner';
 
 /** Just the part of a runner this gallery reads: which engines it is signed into, and its name — and
  *  what it declares, which says whether Cursor CLI is drawn at all (webShowsEngine). */
@@ -149,7 +150,7 @@ function connectedCounts(rows: readonly ProviderRow[]): Map<string, number> {
 }
 
 /** The vendor picker. Every card is a link into the connect page, so a vendor's onboarding is
- *  deep-linkable (/providers/new/anthropic) and the browser's back button works.
+ *  deep-linkable (/settings/providers/new/anthropic) and the browser's back button works.
  *
  *  A card is a vendor, never an engine — DeepSeek Harness is one of the engines a DeepSeek key runs
  *  on, so it has no card of its own; until a vendor is connected, its card says which engines its key
@@ -159,9 +160,11 @@ function connectedCounts(rows: readonly ProviderRow[]): Map<string, number> {
 export function ProviderGallery() {
   const providers = useQuery({
     queryKey: PROVIDERS_LIST_KEY,
+    meta: { entities: ['provider'] },
     queryFn: () => api<ProviderRow[]>(PROVIDERS_BASE),
   });
   const runners = useQuery(runnersQuery());
+  const machineNameOf = useMachineName();
   const connected = connectedCounts(providers.data ?? []);
   // Three of these vendors are also engines the user may already be signed into on a machine of
   // their own. Say so on the card: buying a key for a subscription you already pay for is the one
@@ -173,7 +176,7 @@ export function ProviderGallery() {
       const preset = ENGINE_PRESET[engine.engine];
       if (!preset || signedInOn.has(preset)) continue;
       if (engine.installed && engine.auth === 'yes') {
-        signedInOn.set(preset, runner.displayName || runner.name);
+        signedInOn.set(preset, machineNameOf(runner));
       }
     }
   }
@@ -185,7 +188,7 @@ export function ProviderGallery() {
         return (
           <Link
             key={p.slug}
-            to={`/providers/new/${p.slug}`}
+            to={`/settings/providers/new/${p.slug}`}
             className={`provider-card${count ? ' connected' : ''}`}
           >
             {/* The check rides on the logo's corner rather than the row, so marking a card costs
@@ -215,43 +218,12 @@ export function ProviderGallery() {
           </Link>
         );
       })}
-      <Link to="/providers/new/custom" className="provider-card custom">
+      <Link to="/settings/providers/new/custom" className="provider-card custom">
         <ProviderTile slug="custom" label="Custom" muted />
         <div style={{ minWidth: 0 }}>
           <div className="pc-name">Custom</div>
           <div className="pc-sub">Manual endpoint</div>
         </div>
-      </Link>
-    </div>
-  );
-}
-
-/**
- * The vendor picker under the keys there are (docs/mocks/infrastructure-focus): one line, a pill for each
- * vendor with no key yet and one for Custom, each a link into its connect page as the gallery's cards are.
- * A vendor already connected takes another key from its own card's + Add key.
- */
-export function ProviderPills() {
-  const providers = useQuery({
-    queryKey: PROVIDERS_LIST_KEY,
-    queryFn: () => api<ProviderRow[]>(PROVIDERS_BASE),
-  });
-  const runners = useQuery(runnersQuery());
-  const connected = connectedCounts(providers.data ?? []);
-  return (
-    <div className="pv-more">
-      <span className="pv-more-l">Connect another provider</span>
-      {offeredPresets((runners.data ?? []) as SignedInRunner[])
-        .filter((p) => !connected.has(p.slug))
-        .map((p) => (
-          <Link key={p.slug} to={`/providers/new/${p.slug}`} className="pv-pill">
-            <ProviderTile slug={p.slug} label={vendorName(p.slug)} size={18} />
-            {vendorName(p.slug)}
-          </Link>
-        ))}
-      <Link to="/providers/new/custom" className="pv-pill">
-        <ProviderTile slug="custom" label="Custom" size={18} muted />
-        Custom
       </Link>
     </div>
   );

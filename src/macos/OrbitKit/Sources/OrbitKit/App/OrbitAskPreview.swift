@@ -48,6 +48,9 @@ public struct BatchPreviewTask: Equatable, Sendable {
     /// Ids of tasks that already exist — not drawn, so a task carrying one is a root in this
     /// picture without being one overall, and the row says so.
     public let dependsOnTaskIds: [String]?
+    /// A task that starts when its condition holds: the card's Starts when, Today and If never (condition-triggers
+    /// board frame 2). Nil on a task without one.
+    public var startWhen: StartWhenCardLines? = nil
 }
 
 public struct BatchApprovalPreview: Equatable, Sendable {
@@ -117,6 +120,12 @@ public struct CreateApprovalPreview: Equatable, Sendable {
         isProject ? criteria.map { "- \($0)" }.joined(separator: "\n") : criteria.joined(separator: "\n")
     }
 
+    /// A task that starts when its condition holds: the server's Starts when, Today and If never lines (condition-
+    /// triggers board frame 2). Nil for a project or a task without one.
+    public var startWhen: StartWhenCardLines? {
+        isProject ? nil : preview?.tasks.first?.startWhen
+    }
+
     /// The noun the fold's label names, so a project's goal is never called a description.
     public var foldNoun: String { isProject ? "goal" : "description" }
 }
@@ -149,6 +158,88 @@ public struct BlockerResolvePreview: Equatable, Sendable {
         if !kind.isEmpty { return kind }
         return "this blocker"
     }
+}
+
+/// What a merge-check change would write, read off the `orbit_project_update_integration` ask. The
+/// runner reads the CURRENT check from the project and puts the proposal beside it
+/// (`runner-go/mcp.go`, `projectMergeCheckCard`), and the server writes only what this card carried —
+/// so the two commands are the whole decision. Web draws the same pair (`MergeCheckChangeBody`).
+public struct MergeCheckChangePreview: Equatable, Sendable {
+    public let snapshot: JSONValue
+    public let projectTitle: String
+    /// The check as the project stands, or nil when it has none.
+    public let current: String?
+    /// What it would become; nil clears it.
+    public let next: String?
+    /// False when the proposal names only a timeout: the command stays as it is.
+    public let changesCommand: Bool
+    /// The budget the proposal names, in seconds; nil leaves it as it is.
+    public let timeoutSeconds: Int?
+
+    public func value(_ key: String, after: Bool) -> JSONValue? {
+        if after, let proposed = snapshot[key] { return proposed }
+        return snapshot["current" + key.prefix(1).uppercased() + key.dropFirst()]
+    }
+    public func commandLine(_ layer: String, after: Bool) -> String {
+        if let command = value(layer + "CheckCommand", after: after)?.stringValue { return command }
+        return layer == "landing" ? LandingCheckCopy.inheritedCommand(value("mergeCheckCommand", after: after)?.stringValue)
+            : "no check configured"
+    }
+    public func budgetLine(_ layer: String, after: Bool) -> String {
+        if let seconds = value(layer + "CheckTimeoutSeconds", after: after)?.intValue { return "\(seconds) seconds" }
+        return layer == "landing" ? LandingCheckCopy.inheritedTimeout(value("mergeCheckTimeoutSeconds", after: after)?.intValue)
+            : "3600 seconds"
+    }
+
+    /// The header holds one line beside its badge, so the project's name takes the row under it.
+    public static let heading = LandingCheckCopy.confirmTitle
+    public var projectLine: String { projectTitle.isEmpty ? "This project" : projectTitle }
+    public static let note = "Run on the combined tree before this project's work lands. "
+        + "Nothing else about the project's integration line changes."
+    public static let action = LandingCheckCopy.confirmAction
+    /// An empty line reads as a loading state, so a missing check is said in words.
+    public var currentLine: String { current ?? "no check configured" }
+    public var nextLine: String {
+        guard changesCommand else { return "\(currentLine) (unchanged)" }
+        return next ?? "no check — nothing runs on the combined tree"
+    }
+    public var timeoutLine: String? { timeoutSeconds.map { "killed after \($0)s" } }
+    /// What a refusal names, ahead of the reason to be typed. Web computes the same name.
+    public var declineName: String { "\(projectTitle.isEmpty ? "this project" : projectTitle)'s merge check" }
+}
+
+/// What a skip would let through, read off the `orbit_integration_skip_merge_check` ask. The runner
+/// reads it from the project and the landing before it files the card (`runner-go/mcp.go`,
+/// `skipMergeCheckFacts`): the command that would NOT run, verbatim, what it said last time, and the
+/// agent's reason. Web draws the same fields (`SkipMergeCheckBody`).
+public struct SkipMergeCheckPreview: Equatable, Sendable {
+    public let projectTitle: String
+    /// The DONE task whose landing this is.
+    public let taskTitle: String
+    /// The check command that will not run, as the project has it configured.
+    public let checkCommand: String
+    /// What that check said the last time, in the landing read's own words; empty when none.
+    public let failure: String
+    /// Why the agent says this red is the check's rather than the delivery's.
+    public let reason: String
+    /// The project's main branch by name; `main` where the card names none.
+    public let mainBranch: String
+
+    /// The header holds one line beside its "merge check" badge, so the task's name takes the row
+    /// under it, and the heading leaves "merge" to the badge: at .body bold on a phone the longer
+    /// "Land without the merge check?" was cut short.
+    public static let heading = "Land without the check?"
+    public var taskLine: String { taskTitle.isEmpty ? "This task" : taskTitle }
+    public var projectLine: String? { projectTitle.isEmpty ? nil : "In \(projectTitle)" }
+    public static let commandCaption = "This landing runs without the merge check"
+    public static let reasonCaption = "The agent says this red is the check’s, not the work’s"
+    public var note: String {
+        "Once, and only this landing: the project’s check command is unchanged, and the next "
+            + "landing and every merge into \(mainBranch) are checked as before."
+    }
+    public static let action = "Land it without the check"
+    /// What a refusal names, ahead of the reason to be typed. Web computes the same name.
+    public var declineName: String { taskTitle.isEmpty ? "this landing" : taskTitle }
 }
 
 /// What a delete would take away, read off the card the server filed for it. The asker sends only
@@ -243,6 +334,13 @@ public extension Approvals {
     static func workspaceWriteRawInput(toolName: String, from input: JSONValue) -> String? {
         guard isWorkspaceCreate(toolName: toolName) || isWorkspaceUpdate(toolName: toolName),
               workspaceWritePreview(toolName: toolName, from: input) == nil else { return nil }
+        return rawInput(input)
+    }
+
+    /// A call's whole input as indented JSON: the plain card's body when no field of it says what the
+    /// call does — web's plain card prints the same. Without it a provider write, or any tool with
+    /// neither a command nor a path, asked for a yes with nothing on it.
+    static func rawInput(_ input: JSONValue) -> String? {
         let encoder = JSONEncoder()
         encoder.outputFormatting = [.prettyPrinted, .sortedKeys, .withoutEscapingSlashes]
         return (try? encoder.encode(input)).flatMap { String(data: $0, encoding: .utf8) }
@@ -267,8 +365,8 @@ public extension Approvals {
             }
         }
         written("workDir", "Working directory")
-        written("systemPrompt", "System prompt")
-        written("appendSystemPrompt", "Appended system prompt")
+        written("systemPrompt", "Base instructions")
+        written("appendSystemPrompt", "Runtime instructions")
         if let runner = runnerName(changes?["runner"]) { fields.append(.init(caption: "Runner", value: runner)) }
         if let worktree = changes?["enableWorktree"]?.boolValue {
             fields.append(.init(caption: "Worktree", value: worktree
@@ -395,6 +493,13 @@ public extension Approvals {
         return batchPreview(from: input)?.needsManualStart == 1
     }
 
+    /// Whether Create and start is the card's filled answer, with Create it beside it: whenever it is
+    /// offered, except on a task the agent filed with `autoRunWhenReady: false`. That is a hold
+    /// someone asked for, so the prominent press does not start it. Web's `createAndStartLeads`.
+    static func createAndStartLeads(toolName: String, input: JSONValue?) -> Bool {
+        offersCreateAndStart(toolName: toolName, input: input) && input?["autoRunWhenReady"]?.boolValue != false
+    }
+
     /// What Create and start sends: the yes and the start, and nothing else — no message, answers or
     /// remember rules, none of which a create card carries.
     static let createAndStartRequest = ApprovalDecisionRequest(behavior: .allow, startAfterCreate: true)
@@ -422,6 +527,40 @@ public extension Approvals {
             reason: input["reason"]?.stringValue ?? "",
             kind: blocker?["kind"]?.stringValue ?? "",
             subjectTitle: blocker?["subjectTitle"]?.stringValue ?? "")
+    }
+
+    /// The merge-check change carried on an `orbit_project_update_integration` ask, or nil for any
+    /// other approval. A blank command counts as none, the way web reads it.
+    static func mergeCheckChangePreview(toolName: String,
+                                        from input: JSONValue) -> MergeCheckChangePreview? {
+        guard isMergeCheckChange(toolName: toolName) else { return nil }
+        func command(_ key: String) -> String? {
+            guard let s = input[key]?.stringValue,
+                  !s.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else { return nil }
+            return s
+        }
+        return MergeCheckChangePreview(
+            snapshot: input,
+            projectTitle: input["projectTitle"]?.stringValue ?? "",
+            current: command("currentMergeCheckCommand"),
+            next: command("mergeCheckCommand"),
+            changesCommand: input["mergeCheckCommand"] != nil,
+            timeoutSeconds: input["mergeCheckTimeoutSeconds"]?.intValue)
+    }
+
+    /// The skip carried on an `orbit_integration_skip_merge_check` ask, or nil for any other
+    /// approval. A missing field reads as empty, the way web reads it.
+    static func skipMergeCheckPreview(toolName: String,
+                                      from input: JSONValue) -> SkipMergeCheckPreview? {
+        guard isSkipMergeCheck(toolName: toolName) else { return nil }
+        func text(_ key: String) -> String { input[key]?.stringValue ?? "" }
+        return SkipMergeCheckPreview(
+            projectTitle: text("projectTitle"),
+            taskTitle: text("taskTitle"),
+            checkCommand: text("checkCommand"),
+            failure: text("failure"),
+            reason: text("reason"),
+            mainBranch: RunSettings.mainBranchName(input["mainBranch"]?.stringValue))
     }
 
     /// The restructure preview carried on an `orbit_dag_change` approval, or nil when absent.
@@ -468,7 +607,8 @@ public extension Approvals {
             }
             return BatchPreviewTask(title: title, ref: t["ref"]?.stringValue,
                                     dependsOnRefs: strings("dependsOnRefs"),
-                                    dependsOnTaskIds: strings("dependsOnTaskIds"))
+                                    dependsOnTaskIds: strings("dependsOnTaskIds"),
+                                    startWhen: StartWhenCardLines(json: t["startWhen"]))
         }
     }
 
@@ -520,5 +660,132 @@ public extension Approvals {
         }
         if lines.isEmpty { lines.append("No task changes state — this only rewrites edges") }
         return lines
+    }
+}
+
+/// A provider write (`orbit_provider_create` / `_update` / `_delete`) as the card reads it: the fields
+/// by name, then the model list one model a row. The runner files only what the write sets
+/// (`providerCard` in runner-go), so a change shows its changes and nothing it leaves alone. Web reads
+/// the same card (`providerWriteInput`).
+public struct ProviderWritePreview: Equatable, Sendable {
+    public enum Verb: Equatable, Sendable { case add, change, delete }
+
+    public struct Field: Equatable, Sendable, Identifiable {
+        public let caption: String
+        public let value: String
+        /// A value the agent types exactly — a URL, a model id — set in monospace.
+        public let mono: Bool
+        public var id: String { caption }
+    }
+
+    public struct Model: Equatable, Sendable, Identifiable {
+        public let value: String
+        public let label: String
+        /// "64K context", or empty when the model names no window.
+        public let context: String
+        public let isDefault: Bool
+        public var id: String { value }
+        /// The line under the id: its display name and its window.
+        public var detail: String { [label, context].filter { !$0.isEmpty }.joined(separator: " · ") }
+    }
+
+    public let verb: Verb
+    /// The label on an add, the slug otherwise.
+    public let name: String
+    public let fields: [Field]
+    /// The model list it writes, or nil when the write leaves the list alone.
+    public let models: [Model]?
+
+    /// The header; the name is the row under it, as on a delete.
+    public var heading: String {
+        switch verb {
+        case .add: return "Add this provider?"
+        case .change: return "Change this provider?"
+        case .delete: return "Delete this provider?"
+        }
+    }
+    public var badge: String { "provider" }
+    /// The yes. Web's card says the same (`PROVIDER_ACTIONS`).
+    public var action: String {
+        switch verb {
+        case .add: return "Add it"
+        case .change: return "Save changes"
+        case .delete: return "Delete it"
+        }
+    }
+    /// The caption over the models: a change replaces the whole list, which is easy to miss.
+    public var modelsCaption: String { verb == .change ? "Models · replaces the current list" : "Models" }
+    /// The line at the foot, nil on an add. Web's card says the same.
+    public var note: String? {
+        switch verb {
+        case .add: return nil
+        case .change: return "Only the fields shown change. Everything else stays as it is."
+        case .delete: return "The provider and its key are removed from your account."
+        }
+    }
+
+    /// 65536 → "64K", 1048576 → "1M". Web's `contextSize` says the same.
+    public static func contextSize(_ tokens: Int) -> String {
+        if tokens >= 1_048_576 && tokens % 1_048_576 == 0 { return "\(tokens / 1_048_576)M" }
+        if tokens >= 1_000_000 {
+            let millions = (Double(tokens) / 100_000).rounded() / 10
+            return millions == millions.rounded() ? "\(Int(millions))M" : "\(millions)M"
+        }
+        if tokens % 1024 == 0 { return "\(tokens / 1024)K" }
+        if tokens >= 1000 { return "\(Int((Double(tokens) / 1000).rounded()))K" }
+        return String(tokens)
+    }
+}
+
+public extension Approvals {
+    /// What the endpoint speaks, by the `runtime` a provider is written with.
+    private static let providerProtocols: [String: String] = [
+        "claude": "Anthropic Messages", "codex": "OpenAI Responses", "kimi": "Moonshot",
+        "antigravity": "Gemini", "cursor": "Cursor User API Key",
+    ]
+
+    /// The provider write on an `orbit_provider_*` card, or nil for any other approval.
+    static func providerWritePreview(toolName: String, from input: JSONValue) -> ProviderWritePreview? {
+        let verb: ProviderWritePreview.Verb
+        switch toolName {
+        case "orbit_provider_create": verb = .add
+        case "orbit_provider_update": verb = .change
+        case "orbit_provider_delete": verb = .delete
+        default: return nil
+        }
+        guard case .object(let object) = input else { return nil }
+        func text(_ key: String) -> String { object[key]?.stringValue ?? "" }
+        var known: Set<String> = ["slug", "models"]
+        var fields: [ProviderWritePreview.Field] = []
+        func field(_ key: String, _ caption: String, _ value: String, mono: Bool) {
+            known.insert(key)
+            if object[key] != nil { fields.append(.init(caption: caption, value: value, mono: mono)) }
+        }
+        // On an add the label is the name under the header; on a change it is one of the things written.
+        if verb == .add { known.insert("label") } else { field("label", "Label", text("label"), mono: false) }
+        let runtime = text("runtime")
+        field("runtime", "Protocol", providerProtocols[runtime].map { "\($0) (\(runtime))" } ?? runtime, mono: false)
+        field("baseUrl", "Base URL", text("baseUrl"), mono: true)
+        field("apiKey", "API key", "Set — not shown", mono: false)
+        field("defaultModel", "Default model", text("defaultModel"), mono: true)
+        // Anything a later runner sends that this card has no name for is still shown, never dropped.
+        for key in object.keys.sorted() where !known.contains(key) {
+            let value = object[key].flatMap { $0.asString ?? rawInput($0) } ?? ""
+            fields.append(.init(caption: key, value: value, mono: true))
+        }
+        var models: [ProviderWritePreview.Model]?
+        if case .array(let rows)? = object["models"] {
+            let defaultModel = text("defaultModel")
+            models = rows.map { row in
+                let value = row["value"]?.stringValue ?? ""
+                return .init(value: value,
+                             label: row["label"]?.stringValue ?? "",
+                             context: row["contextWindow"]?.intValue
+                                 .map { "\(ProviderWritePreview.contextSize($0)) context" } ?? "",
+                             isDefault: !value.isEmpty && value == defaultModel)
+            }
+        }
+        return ProviderWritePreview(verb: verb, name: verb == .add ? text("label") : text("slug"),
+                                    fields: fields, models: models)
     }
 }

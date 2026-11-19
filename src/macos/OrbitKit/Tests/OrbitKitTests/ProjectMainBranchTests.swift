@@ -219,7 +219,7 @@ final class ProjectMainBranchTests: XCTestCase {
                        "This project started integrating, so the line it lands on and its main branch can no longer "
                            + "change. Merge it into master, or give up the branch, to start another.")
         XCTAssertTrue(RunSettings.automaticHint(.main, main: "develop").contains(
-            "Merging into develop always asks you — a project that lands directly on develop never merges by itself."))
+            "Merging into develop always asks you — to skip that card, choose “The agent pushes it” under Delivery."))
     }
 
     func testTheLinesOwnLockSentenceKeepsItsWordsForAProjectWithNoMainBranchRow() {

@@ -10,7 +10,7 @@ import (
 	"time"
 )
 
-// acquireWikiFetchLock takes the wiki fetch lock at path (fetchWikiOriginMain), waiting at most wait
+// acquireWikiFetchLock takes the wiki fetch lock at path (fetchWikiOriginRef), waiting at most wait
 // for whoever holds it. flock is tied to the open descriptor, not to the process: two goroutines of the
 // runner exclude each other exactly as two processes do, and a holder that dies lets go with its
 // descriptors. held is false when the wait ran out or no lock could be taken at all, and the caller

@@ -57,10 +57,16 @@ const CONFIRMATION_INDEXES = [
  * decision than 0226's. The criterion's own wiring towards the work went in 0233, and the
  * evaluation-plan lane those columns fed went in 0234: two more later decisions. What 0226 was
  * protecting, and what came through all of it column for column, is the authored declaration.
+ *
+ * `0545_criterion_confirmation` then added `satisfied_by` (TASKS or CONFIRMATION, owner decision
+ * 2026-11-11): how the criterion is met, authored with its text and folded into its revision and
+ * hashes. It does not bring back 0226's standard-set confirmation: a confirmation of a single
+ * criterion lives in its own table, `project_criterion_confirmation`, outside this family, and this
+ * column only says that the criterion is one a confirmation can meet.
  */
 const PROJECT_ACCEPTANCE_COLUMNS: Readonly<Record<string, string>> = {
   project_acceptance_criterion_definition:
-    'id:uuid!, project_id:uuid!, ordinal:integer!, text:text!, revision:integer!, content_hash:character(64)!, created_at:timestamp(3) without time zone!, updated_at:timestamp(3) without time zone!, verification_method:text!, completion_criterion_override_reason:text, semantic_revision:integer!, semantic_hash:character(64)!',
+    'id:uuid!, project_id:uuid!, ordinal:integer!, text:text!, revision:integer!, content_hash:character(64)!, created_at:timestamp(3) without time zone!, updated_at:timestamp(3) without time zone!, verification_method:text!, completion_criterion_override_reason:text, semantic_revision:integer!, semantic_hash:character(64)!, satisfied_by:criterion_satisfied_by!',
 };
 
 
@@ -176,7 +182,8 @@ suite('(c) the guards on the acceptance family and on `project` are untouched by
   // takes, and the only one it takes), minus
   // `project_acceptance_run|project_acceptance_run_closure_guard`, which 0227 removed with 0215's
   // closing move, and minus the six that went with the judgment tables in 0229. Each of those is
-  // a later and separate account-owner decision, and none of them is 0226's.
+  // a later and separate account-owner decision, and none of them is 0226's. 0484 then added the
+  // Open list's three version counters to the criterion definitions, which guard nothing.
   const family = await client.query(`
     SELECT c.relname || '|' || t.tgname AS name
       FROM pg_trigger t JOIN pg_class c ON c.oid = t.tgrelid
@@ -185,6 +192,9 @@ suite('(c) the guards on the acceptance family and on `project` are untouched by
        AND c.relname LIKE 'project\\_acceptance\\_%'
      ORDER BY 1`);
   assert.deepEqual(family.rows.map((row) => row.name), [
+    'project_acceptance_criterion_definition|project_acceptance_criterion_definition_open_list_epoch_delete',
+    'project_acceptance_criterion_definition|project_acceptance_criterion_definition_open_list_epoch_insert',
+    'project_acceptance_criterion_definition|project_acceptance_criterion_definition_open_list_epoch_update',
     'project_acceptance_criterion_definition|project_acceptance_definition_normalize',
     'project_acceptance_criterion_definition|zz_project_completion_contract_definition',
   ]);

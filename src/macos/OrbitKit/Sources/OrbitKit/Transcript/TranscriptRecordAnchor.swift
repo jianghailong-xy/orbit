@@ -41,14 +41,19 @@ public enum TranscriptRecordAnchor {
         return before ?? items.first?.id
     }
 
-    /// The row an item is drawn in: its own, or the folded run of tool calls it went into
+    /// The row an item is drawn in: its own, or the steps line it went into
     /// (`TranscriptRows.groupToolRuns`) — the id a `scrollTo` has to aim at to reach it.
     public static func rowID(containing itemID: String, in rows: [TranscriptRow]) -> String? {
         for row in rows {
             switch row {
             case .item(let item) where item.id == itemID:
                 return row.id
-            case .toolGroup(let cards) where cards.contains(where: { $0.id == itemID }):
+            case .steps(let items) where items.contains(where: { $0.id == itemID }):
+                return row.id
+            case .agents(let cards) where cards.contains(where: { $0.id == itemID }):
+                return row.id
+            // A turn Orbit opened, folded (`OrbitExchangeFold`): the fold's row, which opens to it.
+            case .exchanges(let turns) where turns.contains(where: { $0.itemIDs.contains(itemID) }):
                 return row.id
             default:
                 continue
@@ -63,9 +68,9 @@ public enum TranscriptRecordAnchor {
         case .assistant(let b):        return b.seq.map { [$0] } ?? []
         case .thinking(let b):         return b.seq.map { [$0] } ?? []
         case .toolCall(let c):         return [c.inputSeq] + (c.resultSeq.map { [$0] } ?? [])
-        case .interrupt(_, let seq, _): return [seq]
+        case .interrupt(_, let seq, _, _): return [seq]
         case .autoRetry(let n):        return [n.seq]
-        case .user, .error, .authError, .notice, .diagnostic: return []
+        case .user, .error, .authError, .notice, .diagnostic, .mainCheckout: return []
         }
     }
 }

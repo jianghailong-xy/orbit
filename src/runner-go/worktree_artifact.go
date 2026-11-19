@@ -84,6 +84,8 @@ func uploadWorktreeArtifact(ctx context.Context, t *Transport, req ArtifactComma
 			} else if os.IsNotExist(err) {
 				out.Status = "missing"
 				out.Message = "File is no longer available in this session's worktree"
+			} else if errors.Is(err, errFileHoldsOwnerSecret) {
+				out.Message = "This file holds the value of a secret the owner delivered to this runner, so it is not sent"
 			} else {
 				out.Message = "File could not be uploaded"
 			}

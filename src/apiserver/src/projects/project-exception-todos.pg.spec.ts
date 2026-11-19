@@ -1,3 +1,5 @@
+import { seedPromotionRequest } from '../test-support/promotion-request';
+import { receiveOpenItem } from '../test-support/open-item-delivery';
 import assert from 'node:assert/strict';
 import { spawnSync } from 'node:child_process';
 import { randomUUID } from 'node:crypto';
@@ -53,6 +55,7 @@ import {
 } from './project-integration-job';
 import { ProjectOpenItemEscalationService } from './open-item-escalation.service';
 import { configureProjectIntegration } from './project-integration-line';
+import { readTaskIntegrationViews } from './project-task-integration';
 import { ProjectOpenItemService } from './project-open-item.service';
 import { ProjectPromotionService } from './project-promotion.service';
 import { ProjectTasksSettledProducer } from './project-tasks-settled.producer';
@@ -330,6 +333,8 @@ async function attempt(
     criterion?: 'EVIDENCE_JUDGMENT' | 'OWNER_CONFIRMED';
     /** Whether a Project's own release pass may pick this task up when something else completes. */
     autoRun?: boolean;
+    /** The open item this task is filed to fix, linked by the coordinator that files it (X-D4). */
+    fixesOpenItemId?: string;
   } = {},
 ): Promise<Attempt> {
   const db = stack.db;
@@ -347,7 +352,8 @@ async function attempt(
           acceptanceExpectedExitCode: options.acceptance.expectedExitCode,
         }
       : {}),
-  });
+    ...(options.fixesOpenItemId ? { fixesOpenItemId: options.fixesOpenItemId } : {}),
+  }, undefined, options.fixesOpenItemId ? w.coordinatorSessionId ?? undefined : undefined);
   if (options.taskStatus) {
     await db.task.update({ where: { id: declared.id }, data: { status: options.taskStatus } });
   }
@@ -618,10 +624,16 @@ async function claimedLanding(
 }
 
 /** `claimedLanding` up to the heartbeat: the task DONE, its session finished, its landing queued. */
-async function queuedLanding(stack: Stack, w: World, label: string): Promise<Attempt> {
+async function queuedLanding(
+  stack: Stack,
+  w: World,
+  label: string,
+  options: { fixesOpenItemId?: string } = {},
+): Promise<Attempt> {
   const a = await attempt(stack, w, label, {
     acceptance: { command: 'exit 0', expectedExitCode: 0 },
     branch: `orbit/${label}`,
+    ...options,
   });
   await answerTurn(stack, w.runnerId, a.sessionId, a.turnId, 'the work is on the branch');
   await stack.api.turnComplete({ id: w.runnerId }, a.sessionId, {
@@ -1608,6 +1620,132 @@ test('a MAIN_SYNC conflict holds the line\'s other landings, but not the next la
     }
   });
 
+test('a task filed to fix the MAIN_SYNC conflict lands past it, and nothing else on the line does',
+  { skip, timeout: 300_000 }, async () => {
+    const stack = await connect();
+    try {
+      // §3.1 M2 and M3, the second way the absorb reaches the line. The coordinator files a separate
+      // fix task (fixesOpenItemId = the item) whose branch is the merge commit of both tips. Its
+      // landing is on the same repository-and-ref, so before this it waited on the very item it was
+      // filed to close, and the line never moved again.
+      const w = await integratingWorld(stack, 'main-sync-fix', 'PARKED');
+      const heartbeat = (lease: string) => stack.jobs.dispatch({
+        runnerId: w.runnerId,
+        leaseOwner: lease,
+        draining: false,
+        capabilities: [INTEGRATION_JOB_CLAIM],
+      });
+      const taskOf = async (jobId: string) => (await stack.db.projectIntegrationJob.findUniqueOrThrow({
+        where: { id: jobId },
+        select: { taskId: true },
+      })).taskId;
+
+      // Another item of the same project first: a REBASE conflict, which holds nothing.
+      const rebased = await claimedLanding(stack, w, 'main-sync-fix-rebase');
+      await reportFailure(stack, w, rebased.job, {
+        state: 'CONFLICT',
+        phase: 'REBASE',
+        sourceSha: 'a'.repeat(40),
+        targetShaBefore: 'c'.repeat(40),
+        conflicts: ['src/shared/src/dto.ts'],
+      });
+      const otherItem = await onlyItemFor(stack.db, w, rebased.task.taskId, 'the rebase conflicted');
+
+      // Then the absorb of the upstream conflicts.
+      const { task: conflicted, job } = await claimedLanding(stack, w, 'main-sync-fix-conflicted');
+      await reportFailure(stack, w, job, {
+        state: 'CONFLICT',
+        phase: 'MAIN_SYNC',
+        sourceSha: 'a'.repeat(40),
+        targetShaBefore: 'c'.repeat(40),
+        conflicts: ['src/apiserver/src/runner-api/integration-job-relay.ts'],
+      });
+      const item = await onlyItemFor(stack.db, w, conflicted.taskId, 'the absorb conflicted');
+      assert.equal(item.state, 'OPEN');
+      assert.equal(item.assignee, 'COORDINATOR');
+
+      // Three landings queue behind it: an unrelated task's, a fix for the other item, and the fix
+      // for this one. The two that are not this item's fix go first, so a claim that hands out the
+      // oldest claimable row would reach them before the fix if it let them through.
+      await stack.db.projectCodebase.updateMany({
+        where: { projectId: w.projectId },
+        data: { integrationStartedAt: new Date(Date.now() - 60_000) },
+      });
+      const unrelated = await queuedLanding(stack, w, 'main-sync-fix-unrelated');
+      const otherFix = await queuedLanding(stack, w, 'main-sync-fix-other-fix', { fixesOpenItemId: otherItem.id });
+      const fix = await queuedLanding(stack, w, 'main-sync-fix-fix', { fixesOpenItemId: item.id });
+
+      // What the readers say about each row, read before the claim and checked after it, so a claim
+      // that holds the fix fails on the claim itself.
+      const prisma = stack.db as unknown as PrismaService;
+      const views = await readTaskIntegrationViews(prisma, w.ownerId, w.projectId,
+        [unrelated.taskId, otherFix.taskId, fix.taskId]);
+
+      const first = await heartbeat('lease-fix-1');
+      assert.deepEqual(
+        await Promise.all(first.map((row) => taskOf(row.jobId))),
+        [fix.taskId],
+        `the fix's landing is claimed, and only it — ${await jobsOf(stack.db, w.projectId)}`,
+      );
+      assert.equal(views.get(unrelated.taskId)?.landTask?.blockingReason?.code, 'WAITING_MAIN_SYNC');
+      assert.equal(views.get(otherFix.taskId)?.landTask?.blockingReason?.code, 'WAITING_MAIN_SYNC');
+      assert.notEqual(views.get(fix.taskId)?.landTask?.blockingReason?.code, 'WAITING_MAIN_SYNC',
+        'the fix\'s landing is not reported as waiting on the item it fixes');
+
+      // Without both tips it meets the same conflict: an item of its own, on the fix task and
+      // handed to the coordinator like any other, and the original stays open.
+      await reportFailure(stack, w, first[0]!, {
+        state: 'CONFLICT',
+        phase: 'MAIN_SYNC',
+        sourceSha: 'a'.repeat(40),
+        targetShaBefore: 'c'.repeat(40),
+        conflicts: ['src/apiserver/src/runner-api/integration-job-relay.ts'],
+      });
+      const fixItem = await onlyItemFor(stack.db, w, fix.taskId, 'the fix met the same conflict');
+      assert.equal(fixItem.kind, 'INTEGRATION_CONFLICT');
+      assert.equal(fixItem.state, 'OPEN');
+      assert.equal(fixItem.assignee, 'COORDINATOR', 'the second conflict item has an owner');
+      assert.deepEqual(await heartbeat('lease-fix-held'), [],
+        'nothing else is claimed while both items are open');
+
+      // The fix is reworked onto the merge commit, and its next landing is claimed past both items.
+      await stack.tasks.update(w.ownerId, fix.taskId, { status: DeclaredTaskStatus.IN_PROGRESS });
+      await rework(stack, w, fix, 'main-sync-fix-fix');
+      const second = await heartbeat('lease-fix-2');
+      assert.deepEqual(
+        await Promise.all(second.map((row) => taskOf(row.jobId))),
+        [fix.taskId],
+        `the fix's next landing is claimed, and only it — ${await jobsOf(stack.db, w.projectId)}`,
+      );
+      const before = await itemNow(stack, w, item.id);
+      assert.equal((await reportLanding(stack, w, second[0]!)).accepted, true);
+
+      // Its landing answers its own item (J-T5). The one it fixes is handed back to the coordinator
+      // (X-D4 (5)) and not closed: it is also the record that the conflicted task's work is not on
+      // the line, and only the coordinator can say whether the fix carried it.
+      assert.equal((await itemNow(stack, w, fixItem.id)).resolution, 'LANDED');
+      const after = await itemNow(stack, w, item.id);
+      assert.equal(after.state, 'OPEN');
+      assert.ok(after.assignedAt.getTime() > before.assignedAt.getTime(), 'the item was handed back');
+      assert.deepEqual(await heartbeat('lease-still-held'), [],
+        'the line stays held until the coordinator answers the item');
+
+      // The coordinator closes it, and the line moves on its own: both held landings are claimed in
+      // turn, the oldest first.
+      await stack.openItems.resolveOpenItem(w.ownerId, w.projectId, item.id,
+        { note: 'the fix carried the conflicted task\'s work' },
+        { kind: 'SESSION', sessionId: w.coordinatorSessionId! });
+      const next = await heartbeat('lease-after');
+      assert.deepEqual(
+        await Promise.all(next.map((row) => taskOf(row.jobId))),
+        [unrelated.taskId],
+        `the oldest held landing is claimed once the item closes — ${await jobsOf(stack.db, w.projectId)}`,
+      );
+    } finally {
+      await stack.db.$disconnect();
+    }
+  });
+
 test('cancelling the task closes the integration item its conflict left open',
   { skip, timeout: 180_000 }, async () => {
     const stack = await connect();
@@ -1755,6 +1893,7 @@ test('an item a job with no task opened still reaches the coordinator', { skip, 
     const landed = await reportLanding(stack, w, job);
     assert.equal(landed.accepted, true, 'the landing that leaves something to promote');
 
+    await seedPromotionRequest(stack.db, w.projectId);
     const candidate = await stack.promotions.considerCandidate(w.projectId);
     assert.ok(
       candidate,
@@ -2154,14 +2293,19 @@ test('delivering an item spends nothing of the coordinator\'s fuse budget', { sk
 async function escalate(stack: Stack, w: World, a: Attempt): Promise<ItemRow> {
   const opened = await onlyItemFor(stack.db, w, a.taskId, 'the failure opened one item');
   assert.equal(opened.assignee, 'COORDINATOR');
+  await stack.openItems.deliverForTasks([a.taskId]);
+  await receiveOpenItem(stack.db, opened.id);
   assert.ok(opened.escalateAt, 'a coordinator item is opened with the project\'s window on it');
   await stack.db.$executeRaw(
     Prisma.sql`UPDATE "project_open_item" SET "escalate_at" = now() - interval '1 minute'
                 WHERE "id" = ${opened.id}::uuid`,
   );
+  // A live coordinator retains a taken ITEM; exercise escalation with Automatic switched off.
+  await stack.db.project.update({ where: { id: w.projectId }, data: { coordinatorEnabled: false } });
   const swept = await new ProjectOpenItemEscalationService(
     stack.db as unknown as PrismaService,
   ).sweep();
+  await stack.db.project.update({ where: { id: w.projectId }, data: { coordinatorEnabled: true } });
   assert.deepEqual(swept.map((row) => row.itemId), [opened.id]);
   const item = (await items(stack.db, w.projectId)).find((row) => row.id === opened.id)!;
   assert.equal(item.assignee, 'OWNER');
@@ -2468,6 +2612,7 @@ test('the owner closes what is theirs, and the two kinds that have a press of th
       const promoted = await integratingWorld(stack, 'promotion-card', 'PARKED');
       const { job } = await claimedLanding(stack, promoted, 'promotion-card');
       await reportLanding(stack, promoted, job);
+      await seedPromotionRequest(stack.db, promoted.projectId);
       const candidate = await stack.promotions.considerCandidate(promoted.projectId);
       assert.ok(candidate, `the landing left no candidate to promote — ${await jobsOf(stack.db, promoted.projectId)}`);
       const [check] = await stack.jobs.dispatch({
@@ -2564,10 +2709,6 @@ test('hands it back with the window restarted, and queues it on the coordinator 
       const a = await attempt(stack, w, 'return-back', { taskStatus: TaskStatus.IN_PROGRESS });
       await failTurn(stack, w, a);
       const before = await escalate(stack, w, a);
-      const project = await stack.db.project.findUniqueOrThrow({
-        where: { id: w.projectId },
-        select: { exceptionEscalationSeconds: true },
-      });
 
       const returned = await stack.openItems.returnToCoordinator(w.ownerId, w.projectId, before.id);
       assert.equal(returned.assignee, 'COORDINATOR');
@@ -2582,12 +2723,9 @@ test('hands it back with the window restarted, and queues it on the coordinator 
         after.assignedAt.getTime() > before.assignedAt.getTime(),
         'the assignment moved, which is what makes the delivery a new turn',
       );
-      // The clock the project set, restarted rather than kept: the two hours it already spent
-      // are the ones that ran out (§4.6 X-E2).
-      assert.equal(
-        after.escalateAt!.getTime() - after.waitingSince.getTime(),
-        project.exceptionEscalationSeconds * 1_000,
-      );
+      // A fresh assignment waits for pickup before starting a new window.
+      assert.equal(after.escalateAt, null);
+      assert.equal(returned.escalateAt, null);
 
       const turns = await itemTurns(stack.db, w.coordinatorSessionId!);
       const fresh = turns.filter(

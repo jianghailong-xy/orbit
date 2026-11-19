@@ -41,6 +41,8 @@ export interface ProjectStartSettings {
   maxConcurrentTasks: number;
   mergeCheckCommand: string | null;
   mergeCheckTimeoutSeconds?: number | null;
+  landingCheckCommand?: string | null;
+  landingCheckTimeoutSeconds?: number | null;
 }
 
 /** One of the settings above, as a difference names it. `line` covers the branch name and the
@@ -121,6 +123,8 @@ export type ProjectStartRequestBody = Omit<
   automatic?: boolean;
   mergeCheckCommand?: string | null;
   mergeCheckTimeoutSeconds?: number | null;
+  landingCheckCommand?: string | null;
+  landingCheckTimeoutSeconds?: number | null;
   why: string;
 };
 

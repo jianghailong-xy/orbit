@@ -214,7 +214,7 @@ func TestATurnPrefixIsAskedOfTheProcessThatSupervisesTheSession(t *testing.T) {
 
 func TestATurnPrefixRequestWithNoConnectionToAskIsAnsweredEmptyAtOnce(t *testing.T) {
 	nats := listenNATS(t, "127.0.0.1:0")
-	h := newHarness(t, nil) // MODE_HTTP: the runner works over HTTPS and is asked nothing
+	h := newHarness(t, nil) // no backends: the connection forwards nothing and is asked nothing
 	relayTo(t, h, nats.url())
 	tc, _ := h.connect(runnerA, processA)
 	eventually(t, 5*time.Second, "A's subject subscribed", func() bool { return nats.subscribers("rnr."+runnerA) == 1 })
@@ -229,7 +229,7 @@ func TestATurnPrefixRequestWithNoConnectionToAskIsAnsweredEmptyAtOnce(t *testing
 		t.Fatalf("answer %v", r)
 	}
 	tc.quiet(300 * time.Millisecond)
-	if h.g.metrics.prefixRequests.get("mode_http") != 1 {
+	if h.g.metrics.prefixRequests.get("no_connection") != 1 {
 		t.Fatal("not counted")
 	}
 }

@@ -22,6 +22,9 @@
  *   (7) every §5.2 rule about the target workspace, the same way; an offline runner is no refusal;
  *   (8) the rules are asked again under the locks: a session that wakes up, or a workspace that is
  *       disabled, while the move waits for its lock is refused for the reason true when it gets it.
+ *   (9) a project's coordinator moves, and the same transaction moves its project's coordination
+ *       workspace; the panel names the project and where a new coordinator could open instead; a
+ *       refused move writes neither; a coordinator the project has since replaced moves alone.
  *
  *   bash scripts/run-pg-spec.sh src/apiserver/src/sessions/session-move-workspace.pg.spec.ts
  *
@@ -368,11 +371,12 @@ test('moving a session to another workspace: the panel, the move, its refusals a
       {
         workspaceId: rest.workspaceId, folderId: rest.folderId, reason: rest.reason, needsEnd: rest.needsEnd,
         branch: rest.branch, changedFiles: rest.changedFiles, unmergedFiles: rest.unmergedFiles,
-        mergeTarget: rest.mergeTarget,
+        mergeTarget: rest.mergeTarget, coordinates: rest.coordinates,
       },
       {
         workspaceId: pub(ws.home), folderId: pub(here), reason: null, needsEnd: false,
         branch: (await row(panel)).branch, changedFiles: 3, unmergedFiles: 3, mergeTarget: 'main',
+        coordinates: null,
       },
     );
     // (PublicIdInterceptor answers every `id` with a `publicId` beside it, which is not this spec's.)
@@ -381,7 +385,7 @@ test('moving a session to another workspace: the panel, the move, its refusals a
     const pick = (w: Json) => ({
       workspaceId: w.workspaceId, name: w.name, provider: w.provider, runnerId: w.runnerId,
       runnerName: w.runnerName, runnerOnline: w.runnerOnline, workDir: w.workDir, reason: w.reason,
-      conversation: w.conversation, folders: folderView(w.folders),
+      conversation: w.conversation, folders: folderView(w.folders), startsCoordinator: w.startsCoordinator,
     });
     const target = (
       id: string, label: string, runnerId: string | null, runnerName: string | null,
@@ -389,7 +393,8 @@ test('moving a session to another workspace: the panel, the move, its refusals a
     ) => ({
       workspaceId: pub(id), name: `${label} ${RUN}`, provider: 'claude', runnerId: runnerId && pub(runnerId),
       runnerName, runnerOnline: runnerId != null, workDir: `/srv/${label}`, reason: null,
-      conversation: runnerId === runners.wikova ? 'continues' : 'rebuilt', folders: [], ...extra,
+      conversation: runnerId === runners.wikova ? 'continues' : 'rebuilt', folders: [], startsCoordinator: false,
+      ...extra,
     });
     // In the sidebar's order; deleted workspaces, another owner's and the session's own are not offered.
     assert.deepEqual((targets as Json[]).map(pick), [
@@ -576,15 +581,9 @@ test('moving a session to another workspace: the panel, the move, its refusals a
       ['in Trash', 'Restore the session from Trash first.', { deletedAt: new Date() }],
       ['still importing', 'The session is still being imported.', { importSourceCwd: '/home/orbit/old-project' }],
       ['a task run', "A task run stays in its task's workspace.", { taskId }],
-      ['a project coordinator', "A project's coordinator stays in its project's workspace.", {}, async (id) => {
-        const projectId = randomUUID();
-        await db.project.create({
-          data: {
-            id: projectId, ownerId, title: `coordinated ${RUN}`, coordinatorEnabled: true,
-            coordinatorWorkspaceId: ws.home, coordinatorSessionId: id,
-          } as never,
-        });
-        await db.projectRuntime.upsert({ where: { projectId }, create: { projectId }, update: {} });
+      // A judgment session a project opened for one fact. Its project's coordinator moves (9).
+      ['a project judgment session', "A project's coordinator stays in its project's workspace.", {
+        dispatchOrigin: SessionDispatchOrigin.PROJECT_COORDINATOR,
       }],
       ['a merge in progress', 'A merge is in progress. Try again when it finishes.', { mergeStatus: 'pending' }],
       ['a commit in progress', 'A commit is in progress. Try again when it finishes.', { commitStatus: 'pending', commitRequestedAt: new Date() }],
@@ -732,5 +731,63 @@ test('moving a session to another workspace: the panel, the move, its refusals a
       await holder.query('UPDATE workspace SET enabled = true WHERE id = $1::uuid', [ws.sibling]).catch(() => undefined);
       await holder.end().catch(() => undefined);
     }
+  });
+
+  await t.test('(9) a project\'s coordinator moves, and its project is coordinated from where it went', async () => {
+    const coordinated = async (title: string, extra: Record<string, unknown> = {}) => {
+      const id = await conversation(title, extra);
+      const projectId = randomUUID();
+      await db.project.create({
+        data: {
+          id: projectId, ownerId, title: `${title} project ${RUN}`, coordinatorEnabled: true,
+          coordinatorWorkspaceId: ws.home, coordinatorSessionId: id,
+        } as never,
+      });
+      await db.projectRuntime.upsert({ where: { projectId }, create: { projectId }, update: {} });
+      return { id, projectId };
+    };
+    const landing = async (projectId: string) =>
+      (await sql.query('SELECT coordinator_workspace_id, coordinator_session_id FROM project WHERE id = $1::uuid', [projectId])).rows[0];
+
+    // The panel names the project, and where a new coordinator could open instead.
+    const claude = await coordinated('Coordinator');
+    const shown = await targetsOf(claude.id);
+    assert.equal(shown.status, 200, shown.text);
+    assert.equal(shown.json.reason, null);
+    assert.deepEqual(
+      { projectId: shown.json.coordinates?.projectId, title: shown.json.coordinates?.title },
+      { projectId: pub(claude.projectId), title: `Coordinator project ${RUN}` },
+    );
+    const starts = Object.fromEntries((shown.json.targets as Json[]).map((w) => [w.workspaceId, w.startsCoordinator]));
+    assert.deepEqual(
+      [starts[pub(ws.sibling)], starts[pub(ws.old)], starts[pub(ws.off)], starts[pub(ws.bare)]],
+      [true, true, false, false],
+      'a usable workspace takes a new coordinator even where this conversation cannot go; a disabled or unbound one does not',
+    );
+
+    // The move writes the project's coordination workspace with the session, in one transaction.
+    const moved = await move(claude.id, { workspaceId: pub(ws.sibling) });
+    assert.equal(moved.status, 201, moved.text);
+    assert.equal((await row(claude.id)).workspace_id, ws.sibling);
+    assert.deepEqual(await landing(claude.projectId), { coordinator_workspace_id: ws.sibling, coordinator_session_id: claude.id });
+    announced();
+
+    // A refusal writes neither: Codex cannot leave its runner, and the project stays put too.
+    const codex = await coordinated('Codex coordinator', { provider: 'codex', runtimeSessionId: `thread-${RUN}-c` });
+    const refusal = await move(codex.id, { workspaceId: pub(ws.site) });
+    assert.equal(refusal.status, 409, refusal.text);
+    assert.equal((await row(codex.id)).workspace_id, ws.home);
+    assert.deepEqual(await landing(codex.projectId), { coordinator_workspace_id: ws.home, coordinator_session_id: codex.id });
+    assert.deepEqual(announced(), []);
+
+    // A conversation the project has since replaced is an ordinary session: it moves, the project does not.
+    const replaced = await coordinated('Replaced coordinator');
+    const next = await conversation('Next coordinator');
+    await db.project.update({ where: { id: replaced.projectId }, data: { coordinatorSessionId: next } });
+    const old = await move(replaced.id, { workspaceId: pub(ws.notes) });
+    assert.equal(old.status, 201, old.text);
+    assert.equal((await row(replaced.id)).workspace_id, ws.notes);
+    assert.deepEqual(await landing(replaced.projectId), { coordinator_workspace_id: ws.home, coordinator_session_id: next });
+    announced();
   });
 });

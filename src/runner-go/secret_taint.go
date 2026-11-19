@@ -1,0 +1,821 @@
+package main
+
+import (
+	"crypto/sha1"
+	"crypto/sha256"
+	"encoding/hex"
+	"encoding/json"
+	"errors"
+	"fmt"
+	"os"
+	"os/exec"
+	"path/filepath"
+	"runtime"
+	"strings"
+	"sync"
+	"time"
+)
+
+// A value is forgotten when its grant ends, but a commit that holds it does not go away with it. So while a value is
+// still known — at the end of each turn of a session on a runner that holds any grant, and just before a grant is
+// removed — every session checkout's own history (its tip, not its base) is scanned (secretHistoryScan), and a commit
+// whose history holds a value is recorded here: the repository, the commit id and the paths, never the value or any
+// hash of it. Every merge and push guard refuses a tip from which a recorded commit is reachable and the target is not
+// (secretPushRefusal), with no grant held at all.
+
+// secretTaintEntry is one recorded commit, and the objects in its history that hold a value.
+//
+// Objects are recorded by their git object id so that a rewritten copy of the commit — rebased, amended, squashed,
+// cherry-picked, Orbit's own integration rebase and merge-recovery replay included — is still recognised: it carries
+// the same blob. A git object id is a hash of the object's content, but it is no new exposure of the value: git itself
+// already stores that id, beside the object it names, in this same repository on this same disk, so this 0600 file
+// says nothing anyone who can read the repository cannot read there. It is never a hash of the value alone.
+type secretTaintEntry struct {
+	Repo       string              `json:"repo"` // the repository's common git directory
+	Commit     string              `json:"commit"`
+	Paths      []string            `json:"paths"`
+	Objects    []secretTaintObject `json:"objects,omitempty"`
+	RecordedAt time.Time           `json:"recordedAt"`
+}
+
+// secretTaintObject is one object holding a value: its git object id and the path it was found at.
+type secretTaintObject struct {
+	ID   string `json:"id"`
+	Path string `json:"path,omitempty"`
+}
+
+type secretTaintFile struct {
+	Version int                `json:"version"`
+	Entries []secretTaintEntry `json:"entries"`
+}
+
+var secretTaintMu sync.Mutex
+
+func secretTaintPath() string { return filepath.Join(machineHome(), "secret-grants", "taint.json") }
+
+func readSecretTaint() ([]secretTaintEntry, error) {
+	data, err := os.ReadFile(secretTaintPath())
+	if errors.Is(err, os.ErrNotExist) {
+		return nil, nil
+	}
+	if err != nil {
+		return nil, err
+	}
+	var file secretTaintFile
+	if err := json.Unmarshal(data, &file); err != nil {
+		return nil, err
+	}
+	return file.Entries, nil
+}
+
+// writeSecretTaint writes the record whole (dir 0700, file 0600), through a renamed temporary file.
+func writeSecretTaint(entries []secretTaintEntry) error {
+	path := secretTaintPath()
+	dir := filepath.Dir(path)
+	if err := os.MkdirAll(dir, 0o700); err != nil {
+		return err
+	}
+	if err := os.Chmod(dir, 0o700); err != nil {
+		return err
+	}
+	data, err := json.MarshalIndent(secretTaintFile{Version: 1, Entries: entries}, "", "  ")
+	if err != nil {
+		return err
+	}
+	tmp, err := os.CreateTemp(dir, "taint-*.tmp")
+	if err != nil {
+		return err
+	}
+	defer os.Remove(tmp.Name())
+	if err := tmp.Chmod(0o600); err != nil {
+		tmp.Close()
+		return err
+	}
+	if _, err := tmp.Write(data); err != nil {
+		tmp.Close()
+		return err
+	}
+	// On disk before it replaces the old record: a rename that a crash leaves pointing at unflushed bytes would leave
+	// an empty record, and an empty record has forgotten what it was for.
+	if err := tmp.Sync(); err != nil {
+		tmp.Close()
+		return err
+	}
+	if err := tmp.Close(); err != nil {
+		return err
+	}
+	if err := os.Rename(tmp.Name(), path); err != nil {
+		return err
+	}
+	if d, err := os.Open(dir); err == nil {
+		_ = d.Sync()
+		d.Close()
+	}
+	return nil
+}
+
+// secretRepoKey is the repository a checkout belongs to: its common git directory, the same for every worktree of it.
+func secretRepoKey(dir string) string {
+	if common := gitCommonDir(dir); common != "" {
+		return realPath(common)
+	}
+	return ""
+}
+
+// recordSecretTaint scans dir's history from tip, not from exclude, for r's values, and records tip and the objects
+// holding one. An entry of the same repository none of whose objects, its commit included, is still in the
+// repository is pruned on the way: nothing of it is left to publish. (An entry is not pruned because its commit is no
+// longer on a branch: that is what a rewrite does, and the rewritten copy still carries the objects.)
+func recordSecretTaint(dir, tip string, r *integrationOutputRedactor, exclude ...string) error {
+	if r == nil || tip == "" {
+		return nil
+	}
+	commit, err := git(dir, "rev-parse", "--verify", "--quiet", tip+"^{commit}")
+	if err != nil && !taintObjectMissing(err) {
+		// git could not be asked: that is not "no commit here", and a removal must not take it for one.
+		return err
+	}
+	if commit == "" {
+		return nil
+	}
+	repo := secretRepoKey(dir)
+	if repo == "" {
+		return errors.New("the repository of " + dir + " could not be read")
+	}
+	hits, err := secretHistoryObjects(dir, commit, r, exclude...)
+	paths := objectHitPaths(hits)
+	if err != nil {
+		logln("secret grants: the history of", dir, "could not be scanned:", firstLine(err.Error()))
+		return err
+	}
+	secretTaintMu.Lock()
+	defer secretTaintMu.Unlock()
+	entries, err := readSecretTaint()
+	if err != nil {
+		logln("secret grants: the taint record is unreadable:", err)
+		return err
+	}
+	kept := entries[:0]
+	changed := false
+	merged := false
+	for _, entry := range entries {
+		// An entry of objects alone (recordTaintObjects) stays: its blob may be gone from the object store and still
+		// be made again by the next `git add` of a file that holds it.
+		if entry.Repo == repo && entry.Commit != "" && entry.Commit != commit && !taintEntryPresent(dir, entry) {
+			changed = true
+			continue
+		}
+		if entry.Repo == repo && entry.Commit == commit {
+			// Only ever added to. A commit never changes, so a scan that finds nothing in it now means only that the
+			// value recorded earlier is no longer held — never that the commit stopped holding it. What this scan
+			// found (another grant's value, say) joins what was recorded before.
+			merged = true
+			if added := mergeTaintHits(&entry, paths, hits); added {
+				changed = true
+			}
+		}
+		kept = append(kept, entry)
+	}
+	if !merged && len(paths) > 0 {
+		objects := make([]secretTaintObject, 0, len(hits))
+		for _, hit := range hits {
+			objects = append(objects, secretTaintObject{ID: hit.id, Path: hit.path})
+		}
+		kept = append(kept, secretTaintEntry{Repo: repo, Commit: commit, Paths: paths, Objects: objects, RecordedAt: time.Now().UTC()})
+		changed = true
+		logln("secret grants: commit", commit, "in", repo, "holds a secret's value; it will not be merged or pushed")
+	}
+	if changed {
+		if err := writeSecretTaint(kept); err != nil {
+			logln("secret grants: cannot write the taint record:", err)
+			return err
+		}
+	}
+	return nil
+}
+
+// taintedPaths is the paths of every recorded commit reachable from tip and from none of exclude, in dir's repository.
+// A record that cannot be read refuses everything: it is the only memory of what was there.
+func taintedPaths(dir, tip string, exclude ...string) []string {
+	secretTaintMu.Lock()
+	entries, err := readSecretTaintChecked()
+	secretTaintMu.Unlock()
+	if err != nil {
+		return []string{"(the runner's record of commits holding a secret could not be read: " + firstLine(err.Error()) + ")"}
+	}
+	return taintedPathsOf(entries, dir, tip, exclude...)
+}
+
+// taintedPathsOf is taintedPaths over entries already read.
+func taintedPathsOf(entries []secretTaintEntry, dir, tip string, exclude ...string) []string {
+	if len(entries) == 0 {
+		return nil
+	}
+	repo := secretRepoKey(dir)
+	var paths []string
+	// Any recorded object among what tip would publish: a rewritten copy of a recorded commit carries them.
+	objects := map[string]string{}
+	for _, entry := range entries {
+		if entry.Repo != repo {
+			continue
+		}
+		for _, object := range entry.Objects {
+			objects[object.ID] = object.Path
+		}
+	}
+	if len(objects) > 0 {
+		ids, names, err := listPublishedObjects(dir, tip, exclude...)
+		if err != nil {
+			return []string{"(what this would publish could not be listed: " + firstLine(err.Error()) + ")"}
+		}
+		for _, id := range ids {
+			if path, tainted := objects[id]; tainted {
+				if names[id] != "" {
+					path = names[id]
+				}
+				if path == "" {
+					path = "object " + id
+				}
+				paths = append(paths, path)
+			}
+		}
+	}
+	for _, entry := range entries {
+		if entry.Repo != repo || entry.Commit == "" || !gitIsAncestor(dir, entry.Commit, tip) {
+			continue
+		}
+		published := false
+		for _, ref := range exclude {
+			if ref != "" && gitIsAncestor(dir, entry.Commit, ref) {
+				published = true
+				break
+			}
+		}
+		if !published {
+			paths = append(paths, entry.Paths...)
+		}
+	}
+	// Each path once, whether the object or the commit named it.
+	seen := map[string]bool{}
+	unique := paths[:0]
+	for _, path := range paths {
+		if !seen[path] {
+			seen[path] = true
+			unique = append(unique, path)
+		}
+	}
+	return unique
+}
+
+// taintEntryPresent reports whether anything an entry recorded is still an object of dir's repository.
+// Only git's own answer that an object is missing (`cat-file -e` exits 1) counts as gone. Any other failure — git not
+// starting, the repository unreadable — keeps the entry: pruning is the one thing here that must never guess.
+func taintEntryPresent(dir string, entry secretTaintEntry) bool {
+	ids := make([]string, 0, len(entry.Objects)+1)
+	if entry.Commit != "" {
+		ids = append(ids, entry.Commit)
+	}
+	for _, object := range entry.Objects {
+		ids = append(ids, object.ID)
+	}
+	if len(ids) == 0 {
+		return true
+	}
+	for _, id := range ids {
+		_, err := git(dir, "cat-file", "-e", id)
+		if err == nil || !taintObjectMissing(err) {
+			return true
+		}
+	}
+	return false
+}
+
+// taintObjectMissing reports whether err is `git cat-file -e` saying the object does not exist (exit status 1).
+func taintObjectMissing(err error) bool {
+	var exit *exec.ExitError
+	return errors.As(err, &exit) && exit.ExitCode() == 1
+}
+
+// taintAppliesTo reports whether any recorded entry is of dir's repository, or whether the record cannot be read.
+func taintAppliesTo(dir string) bool {
+	secretTaintMu.Lock()
+	entries, err := readSecretTaintChecked()
+	secretTaintMu.Unlock()
+	if err != nil {
+		return true
+	}
+	repo := secretRepoKey(dir)
+	for _, entry := range entries {
+		if entry.Repo == repo {
+			return true
+		}
+	}
+	return false
+}
+
+// gitIsAncestor reports whether commit is reachable from tip. An object that is not there is reachable from nothing.
+func gitIsAncestor(dir, commit, tip string) bool {
+	_, err := git(dir, "merge-base", "--is-ancestor", commit, tip)
+	return err == nil
+}
+
+// recordWorktreeTaint scans one session checkout's own history, its tip not its base, for the values held now.
+func recordWorktreeTaint(wt *Worktree) {
+	retryPendingTaint()
+	r := runnerSecrets().scrubber()
+	if r == nil || wt == nil {
+		return
+	}
+	recordSecretTaint(wt.Path, "HEAD", r, wt.baseSha())
+}
+
+// taintAllCheckouts scans every session checkout on this runner for r's values: what a grant's removal is about to
+// make unrecognisable.
+func taintAllCheckouts(r *integrationOutputRedactor) error {
+	if r == nil {
+		return nil
+	}
+	entries, err := os.ReadDir(worktreesDir())
+	if err != nil {
+		if os.IsNotExist(err) {
+			return nil
+		}
+		return err
+	}
+	// The checkouts are scanned a few at a time: a removal on a runner with hundreds of them otherwise keeps the
+	// record pending, and every reader refusing, for minutes. Each record write takes secretTaintMu on its own.
+	var (
+		mu     sync.Mutex
+		failed error
+		wg     sync.WaitGroup
+	)
+	fail := func(err error) {
+		mu.Lock()
+		if failed == nil {
+			failed = err
+		}
+		mu.Unlock()
+	}
+	work := make(chan os.DirEntry)
+	for i := 0; i < min(secretTaintScanWorkers, runtime.NumCPU()); i++ {
+		wg.Add(1)
+		go func() {
+			defer wg.Done()
+			for entry := range work {
+				if err := taintCheckout(filepath.Join(worktreesDir(), entry.Name()), entry.Name(), r); err != nil {
+					fail(err)
+				}
+			}
+		}()
+	}
+	for _, entry := range entries {
+		if entry.IsDir() {
+			work <- entry
+		}
+	}
+	close(work)
+	wg.Wait()
+	return failed
+}
+
+// secretTaintScanWorkers is how many checkouts a removal scan reads at once.
+const secretTaintScanWorkers = 8
+
+// taintCheckout records what one session checkout, named name under worktreesDir, holds of r's values: its own
+// history and what is not committed yet.
+func taintCheckout(dir, name string, r *integrationOutputRedactor) error {
+	if _, err := os.Lstat(filepath.Join(dir, ".git")); err != nil {
+		return nil
+	}
+	// A checkout git cannot read is not one with nothing in it.
+	if !isGitRepo(dir) {
+		return errors.New("the checkout " + dir + " could not be read by git")
+	}
+	var failed error
+	base, _ := git(dir, "rev-parse", "--verify", "--quiet", baseRefName(name))
+	if err := recordCheckoutSecretHistory(dir, base, r); err != nil {
+		failed = err
+	}
+	// What is not committed yet: a file held back from a commit stays in the working tree, and the next
+	// `git add -A` after the value is forgotten would stage it.
+	objects, scanErr := uncommittedObjectsHolding(dir, r)
+	if err := recordTaintObjects(dir, objects); err != nil && failed == nil {
+		failed = err
+	}
+	if scanErr != nil && failed == nil {
+		failed = scanErr
+	}
+	return failed
+}
+
+func recordCheckoutSecretHistory(dir, base string, r *integrationOutputRedactor) error {
+	tip, err := checkoutSecretHistoryTip(dir, base)
+	if err != nil || tip == "" {
+		return err
+	}
+	// Remote-tracking origin refs describe objects already published, including
+	// scratch checkouts with no orbit-base. IntegrationJobCommand.RemoteName can
+	// select another remote (ordinary merges push origin), but sending an already
+	// public object elsewhere does not newly disclose its value. As with base,
+	// leave those objects out only here; push guards retain destination exclusions.
+	return recordSecretTaint(dir, tip, r, base, "--remotes=origin")
+}
+
+// No cache of index stats can prove untracked files unchanged. Skip only the
+// history proven empty by HEAD == base, and always scan index/working tree again.
+// Resolve the tip once so a concurrent HEAD change cannot change this proof.
+func checkoutSecretHistoryTip(dir, base string) (string, error) {
+	tip, err := git(dir, "rev-parse", "--verify", "--quiet", "HEAD^{commit}")
+	if err != nil {
+		if taintObjectMissing(err) {
+			return "", nil
+		}
+		return "", err
+	}
+	if tip == base {
+		return "", nil
+	}
+	return tip, nil
+}
+
+// uncommittedObjectsHolding is every file of dir's index and working tree that a `git add -A` could stage with content
+// other than HEAD's (secretScanCandidates) and whose content holds one of r's values, with the blob id
+// `git hash-object` gives its content: the id a `git add` of it makes. Staged blobs that differ from HEAD are taken too.
+func uncommittedObjectsHolding(dir string, r *integrationOutputRedactor) ([]secretTaintObject, error) {
+	if r == nil {
+		return nil, nil
+	}
+	var hits []secretTaintObject
+	names, err := secretScanCandidates(dir)
+	if err != nil {
+		return hits, err
+	}
+	// Candidates include differences between HEAD and the index too. With no
+	// candidates there are no staged blobs to read; still query git every time
+	// rather than reusing index metadata that says nothing about untracked files.
+	if len(names) == 0 {
+		return nil, nil
+	}
+	hits = append(hits, stagedFilesHoldingSecrets(dir, nil, r, nil)...)
+	for _, name := range names {
+		path := filepath.Join(dir, name)
+		info, err := os.Lstat(path)
+		if err != nil || !info.Mode().IsRegular() || info.Size() > secretScanFileMax {
+			continue
+		}
+		file, err := os.Open(path)
+		if err != nil {
+			continue
+		}
+		holds, scanErr := readerHoldsSecret(file, r)
+		file.Close()
+		if scanErr != nil {
+			return hits, scanErr
+		}
+		if !holds {
+			continue
+		}
+		id, err := git(dir, "hash-object", "--", name)
+		if err != nil || id == "" {
+			return hits, fmt.Errorf("%s holds the value and its blob id could not be computed: %v", name, err)
+		}
+		hits = append(hits, secretTaintObject{ID: id, Path: name})
+		// The upload door hashes the bytes as they are on disk; git's id applies the checkout's filters (CRLF,
+		// text=auto). Both are recorded, so the same unchanged file is known by either.
+		if raw, err := rawBlobIDs(path); err == nil {
+			for _, rawID := range raw {
+				if rawID != id {
+					hits = append(hits, secretTaintObject{ID: rawID, Path: name})
+				}
+			}
+		}
+	}
+	return hits, nil
+}
+
+// secretScanCandidates is every path of dir whose working-tree file may differ from HEAD's blob at that path: what
+// git reports (changed against the index or HEAD, untracked and not ignored), and every entry flagged
+// assume-unchanged or skip-worktree, which status does not look at.
+//
+// A path left out has, as git's own stat check (racily clean entries included) finds, the same content as its blob in
+// HEAD. That blob is either in the checkout's base, which the taint design leaves out on purpose (recordSecretTaint
+// scans the tip's history excluding the base), or in a commit of the checkout's own, which the history scan just before
+// this one reads. So reading the file again cannot find anything the record does not already get, and the 300 checkouts
+// of a busy runner are no longer read file by file, docs and screenshots included, at every removal.
+//
+// Use plumbing for working-tree differences: unlike status it need not refresh
+// stat-dirty entries just to present a clean answer. A conservative extra candidate
+// is fine: we read it ourselves. Staged differences and untracked paths are separate
+// queries. No fsmonitor, untracked cache or optional index writes are trusted.
+func secretScanCandidates(dir string) ([]string, error) {
+	seen := map[string]bool{}
+	var names []string
+	add := func(name string) {
+		if name != "" && !seen[name] {
+			seen[name] = true
+			names = append(names, name)
+		}
+	}
+	for _, args := range [][]string{
+		{"diff-files", "--name-only", "-z", "--no-renames", "--ignore-submodules=all"},
+		// No explicit HEAD: diff --cached also handles an unborn checkout.
+		{"diff", "--cached", "--name-only", "-z", "--no-renames", "--ignore-submodules=all"},
+		{"ls-files", "--others", "--exclude-standard", "-z"},
+	} {
+		out, err := gitNulOutput(dir, append([]string{"-c", "core.fsmonitor=false", "-c", "core.untrackedCache=false"}, args...)...)
+		if err != nil {
+			return nil, err
+		}
+		for _, name := range strings.Split(string(out), "\x00") {
+			add(name)
+		}
+	}
+	flagged, err := gitNulOutput(dir, "ls-files", "-z", "-v")
+	if err != nil {
+		return nil, err
+	}
+	for _, entry := range strings.Split(string(flagged), "\x00") {
+		// "T path": a lower-case tag is assume-unchanged, S is skip-worktree.
+		if len(entry) > 2 && entry[1] == ' ' && (entry[0] == 'S' || (entry[0] >= 'a' && entry[0] <= 'z')) {
+			add(entry[2:])
+		}
+	}
+	return names, nil
+}
+
+// rawBlobIDs is the git blob id, SHA-1 and SHA-256, of path's bytes as they are, with no filter applied.
+func rawBlobIDs(path string) ([]string, error) {
+	data, err := os.ReadFile(path)
+	if err != nil {
+		return nil, err
+	}
+	return rawBlobIDsOf(data), nil
+}
+
+// rawBlobIDsOf is the git blob id, SHA-1 and SHA-256, of data.
+func rawBlobIDsOf(data []byte) []string {
+	header := []byte(fmt.Sprintf("blob %d\x00", len(data)))
+	full := append(header, data...)
+	one := sha1.Sum(full)
+	two := sha256.Sum256(full)
+	return []string{hex.EncodeToString(one[:]), hex.EncodeToString(two[:])}
+}
+
+// secretScanFileMax bounds the working-tree files read at a removal; a bigger one is no file a value is pasted into.
+const secretScanFileMax = 64 << 20
+
+// recordTaintObjects records objects, ids and paths only, as dir's repository's entry of objects alone.
+func recordTaintObjects(dir string, objects []secretTaintObject) error {
+	if len(objects) == 0 {
+		return nil
+	}
+	repo := secretRepoKey(dir)
+	if repo == "" {
+		return nil
+	}
+	secretTaintMu.Lock()
+	defer secretTaintMu.Unlock()
+	entries, err := readSecretTaint()
+	if err != nil {
+		logln("secret grants: the taint record is unreadable:", err)
+		return err
+	}
+	at := -1
+	for i, entry := range entries {
+		if entry.Repo == repo && entry.Commit == "" {
+			at = i
+		}
+	}
+	if at < 0 {
+		entries = append(entries, secretTaintEntry{Repo: repo, RecordedAt: time.Now().UTC()})
+		at = len(entries) - 1
+	}
+	known := map[string]bool{}
+	for _, object := range entries[at].Objects {
+		known[object.ID] = true
+	}
+	changed := false
+	for _, object := range objects {
+		if object.ID == "" || known[object.ID] {
+			continue
+		}
+		known[object.ID] = true
+		entries[at].Objects = append(entries[at].Objects, object)
+		entries[at].Paths = appendUnique(entries[at].Paths, object.Path)
+		changed = true
+	}
+	if changed {
+		if err := writeSecretTaint(entries); err != nil {
+			logln("secret grants: cannot write the taint record:", err)
+			return err
+		}
+	}
+	return nil
+}
+
+// taintObjectIDs is every recorded object id of dir's repository, with its path.
+func taintObjectIDs(dir string) map[string]string {
+	return taintObjects(secretRepoKey(dir))
+}
+
+// taintObjects is every recorded object id of repo, or of every repository when repo is "". An unreadable record is
+// none: a caller that must fail closed asks taintObjectsChecked.
+func taintObjects(repo string) map[string]string {
+	ids, _ := taintObjectsChecked(repo)
+	return ids
+}
+
+// taintObjectsChecked is taintObjects, and whether the record could be read at all.
+func taintObjectsChecked(repo string) (map[string]string, bool) {
+	ids, err := taintObjectsRead(repo)
+	return ids, err == nil
+}
+
+// taintObjectsRead is taintObjects, and why the record could not be read (errSecretTaintScanning while a removal's
+// scan runs, errSecretTaintPending when one failed).
+func taintObjectsRead(repo string) (map[string]string, error) {
+	secretTaintMu.Lock()
+	entries, err := readSecretTaintChecked()
+	secretTaintMu.Unlock()
+	if err != nil {
+		return nil, err
+	}
+	ids := map[string]string{}
+	for _, entry := range entries {
+		if repo != "" && entry.Repo != repo {
+			continue
+		}
+		for _, object := range entry.Objects {
+			ids[object.ID] = object.Path
+		}
+	}
+	return ids, nil
+}
+
+// secretBeforeForget runs just before a grant's value is forgotten. A variable for the store's tests.
+var secretBeforeForget = taintAllCheckouts
+
+// secretTaintPending holds, in memory only, a matcher for each value whose removal scan has not recorded yet: one still
+// running (a removal's scan runs off the delivery path, secretStore.scanThenOwe) or one that failed (a full disk, git
+// failing). Forgetting the value then would forget too what it was in. Nothing hands it to a command; it is kept only to
+// record with, and while any is kept every reader of the record fails closed (readSecretTaintChecked). A failed one is
+// retried every minute and at every turn end; one still running is left to the scan running it. It is lost with the
+// process, as an ENV value is.
+var secretTaintPending struct {
+	sync.Mutex
+	list    []*integrationOutputRedactor
+	running map[*integrationOutputRedactor]bool
+}
+
+// pendingTaintScanRunningLocked reports whether a pending matcher's scan is running. secretTaintPending is held.
+func pendingTaintScanRunningLocked() bool {
+	for _, r := range secretTaintPending.list {
+		if secretTaintPending.running[r] {
+			return true
+		}
+	}
+	return false
+}
+
+// pendingTaintMatchers is every matcher still pending, its scan running or failed.
+func pendingTaintMatchers() []*integrationOutputRedactor {
+	secretTaintPending.Lock()
+	defer secretTaintPending.Unlock()
+	return append([]*integrationOutputRedactor(nil), secretTaintPending.list...)
+}
+
+// holdPendingTaint keeps r pending, marked as being recorded, and reports whether there is a scan to run for it. It is
+// called while the value is still held, so no reader sees a moment in which the value is known to neither.
+func holdPendingTaint(r *integrationOutputRedactor) bool {
+	if r == nil || secretBeforeForget == nil {
+		return false
+	}
+	secretTaintPending.Lock()
+	defer secretTaintPending.Unlock()
+	secretTaintPending.list = append(secretTaintPending.list, r)
+	if secretTaintPending.running == nil {
+		secretTaintPending.running = map[*integrationOutputRedactor]bool{}
+	}
+	secretTaintPending.running[r] = true
+	return true
+}
+
+// recordPendingTaint runs secretBeforeForget for a matcher holdPendingTaint (or retryPendingTaint) marked as being
+// recorded. It leaves the pending list only once its record is written; a failure leaves it there for the retries.
+func recordPendingTaint(r *integrationOutputRedactor) error {
+	err := secretBeforeForget(r)
+	secretTaintPending.Lock()
+	defer secretTaintPending.Unlock()
+	delete(secretTaintPending.running, r)
+	if err != nil {
+		return err
+	}
+	for i, kept := range secretTaintPending.list {
+		if kept == r {
+			secretTaintPending.list = append(secretTaintPending.list[:i], secretTaintPending.list[i+1:]...)
+			break
+		}
+	}
+	return nil
+}
+
+// recordBeforeForget runs secretBeforeForget, and keeps r pending while it runs and when it could not finish.
+func recordBeforeForget(r *integrationOutputRedactor) {
+	if !holdPendingTaint(r) {
+		return
+	}
+	logPendingTaintFailure(recordPendingTaint(r))
+}
+
+func logPendingTaintFailure(err error) {
+	if err != nil {
+		logln("secret grants: what a removed secret was in could not be recorded yet; Orbit publishes nothing from this runner until it is:", firstLine(err.Error()))
+	}
+}
+
+// retryPendingTaint records again what could not be recorded, and keeps what still cannot be. A matcher whose scan is
+// running already is not scanned a second time beside it.
+func retryPendingTaint() {
+	// The matchers stay pending while they are tried: a reader that looked in the meantime would otherwise see neither
+	// the pending state nor the entry still being written. Each leaves the list only once its record is written.
+	secretTaintPending.Lock()
+	var pending []*integrationOutputRedactor
+	for _, r := range secretTaintPending.list {
+		if secretTaintPending.running[r] {
+			continue
+		}
+		if secretTaintPending.running == nil {
+			secretTaintPending.running = map[*integrationOutputRedactor]bool{}
+		}
+		secretTaintPending.running[r] = true
+		pending = append(pending, r)
+	}
+	secretTaintPending.Unlock()
+	for _, r := range pending {
+		_ = recordPendingTaint(r)
+	}
+}
+
+// secretTaintIsPending reports whether a removal's record is still to be written.
+func secretTaintIsPending() bool {
+	secretTaintPending.Lock()
+	defer secretTaintPending.Unlock()
+	return len(secretTaintPending.list) > 0
+}
+
+// errSecretTaintPending is what every reader of the record sees while a removal's record could not be written: its
+// scan failed, and is retried.
+var errSecretTaintPending = errors.New("a removed secret's record could not be written yet")
+
+// errSecretTaintScanning is what every reader of the record sees while a removal's scan is still running: the record
+// is being written, and is readable again when the scan ends.
+var errSecretTaintScanning = errors.New("a removed secret's removal scan is still running on this runner")
+
+// readSecretTaintChecked is the record as a reader that decides what may leave this machine sees it: unreadable, and
+// so refusing, while anything is pending. A failed scan wins over a running one: it does not end by itself.
+func readSecretTaintChecked() ([]secretTaintEntry, error) {
+	secretTaintPending.Lock()
+	pending := len(secretTaintPending.list) > 0
+	failed := false
+	for _, r := range secretTaintPending.list {
+		if !secretTaintPending.running[r] {
+			failed = true
+		}
+	}
+	secretTaintPending.Unlock()
+	switch {
+	case failed:
+		return nil, errSecretTaintPending
+	case pending:
+		return nil, errSecretTaintScanning
+	}
+	return readSecretTaint()
+}
+
+// mergeTaintHits adds to entry the paths and objects of hits it does not already hold, and reports whether it added any.
+func mergeTaintHits(entry *secretTaintEntry, paths []string, hits []objectHit) bool {
+	added := false
+	havePath := map[string]bool{}
+	for _, path := range entry.Paths {
+		havePath[path] = true
+	}
+	for _, path := range paths {
+		if !havePath[path] {
+			entry.Paths = append(entry.Paths, path)
+			havePath[path] = true
+			added = true
+		}
+	}
+	haveObject := map[string]bool{}
+	for _, object := range entry.Objects {
+		haveObject[object.ID] = true
+	}
+	for _, hit := range hits {
+		if !haveObject[hit.id] {
+			entry.Objects = append(entry.Objects, secretTaintObject{ID: hit.id, Path: hit.path})
+			haveObject[hit.id] = true
+			added = true
+		}
+	}
+	return added
+}

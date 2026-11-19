@@ -1,3 +1,4 @@
+import { seedPromotionRequest } from '../test-support/promotion-request';
 /**
  * DONE ENDS A MERGE RECOVERY THAT FOUND THE SESSION ALREADY ON ORIGIN, AND A LANDING FROM ELSEWHERE CLEARS
  * ONE — OVER A REAL POSTGRESQL.
@@ -359,6 +360,10 @@ async function onlyClaim(s: Stack, w: World, kind: string): Promise<IntegrationJ
 
 /** The result a runner posts for an integration job it holds, over the route it posts it on. */
 async function report(s: Stack, w: World, job: IntegrationJobCommand, result: Result): Promise<void> {
+  if (job.kind === 'LAND_TASK') {
+    const row = await s.db.projectIntegrationJob.findUniqueOrThrow({ where: { id: job.jobId } });
+    await seedPromotionRequest(s.db, row.projectId);
+  }
   const answer = await s.api.integrationJobResult({ id: w.runnerId }, job.jobId, {
     claimGeneration: job.claimGeneration, leaseOwner: job.leaseOwner, ...result,
   });

@@ -26,6 +26,8 @@ import {
   type WikiChatDraftOp,
   type WikiChatFabChat,
   type WikiChatNote,
+  type WikiChatDraftSectionView,
+  type WikiChatPlanChangeView,
   type WikiChatRewritesInput,
   type WikiDocChange,
   type WikiDocsFollowFacts,
@@ -38,7 +40,13 @@ import {
   wikiChatDraftState,
   wikiChatFabCounts,
   wikiChatFabState,
+  wikiChatListPage,
+  WIKI_CHAT_LIST_QUERY_MAX,
+  type WikiChatRow,
   wikiChatNoteLabel,
+  wikiChatPlanFace,
+  wikiChatPlanMovedNote,
+  wikiChatRewriteLinks,
   wikiChatResultLine,
   wikiChatRewrites,
   wikiChatRewriteWaits,
@@ -177,7 +185,15 @@ describe('wiki chat contract', () => {
     expect(draft.cli).toBe('orbit wiki draft');
     expect(surface.doors.runner.routes).toContain(draft.route);
     expect(draft.who).toMatch(/WIKI_SESSION_EXCLUDED/u);
-    expect(draft.plan).toMatch(/WIKI_SCHEMA at kind/u);
+    // The plan kind opened with the plan card (C12): gated as a proposal is, its errors back to the agent that wrote it.
+    expect(draft.plan).toMatch(/opened with the plan card \(C12/u);
+    for (const said of ['WIKI_PLAN_GATE', 'WIKI_PLAN_UNCONFIRMED', 'WIKI_PLAN_STALE', 'plan.gate.author', 'covers']) expect(draft.plan).toContain(said);
+    // One card, several documents (C17): { docs, categories? }, a split's two documents in one edit; a proposal's shape is one.
+    expect(draft.params.change).toMatch(/\{ docs, categories\? \}/u);
+    expect(draft.params.change).toMatch(/A plan proposal's \{ doc, category\? \} is taken as one document/u);
+    expect(draft.params.change).toMatch(/A writing requirement goes into the covers of the sections it is for/u);
+    expect(draft.plan).toMatch(/gated once/u);
+    expect(draft.plan).toContain('change.docs[1].sections[2].covers');
     expect(draft.description).toMatch(/Works only in a wiki chat\.$/u);
     expect(draft.description).toMatch(/never call a draft applied/u);
     for (const tool of [draft.tool, ...surface.tools]) expect(tool).not.toMatch(/accept|confirm|decide|delete|doc/u);
@@ -192,6 +208,31 @@ describe('wiki chat contract', () => {
     expect(surface.chat.unchanged).toMatch(/Outside a chat nothing here applies/u);
     const excluded = CONTRACT.refusals.find((r: { code: string }) => r.code === 'WIKI_SESSION_EXCLUDED');
     expect(excluded.when).toMatch(/wiki_draft from a session that is not a wiki chat/u);
+  });
+
+  it('lists one page of chats: the title search, the one last spoken in first, offset and more (chat.list.page)', () => {
+    const page = CONTRACT.chat.list.page as string;
+    expect(page).toContain(`at most ${WIKI_CHAT_LIST_QUERY_MAX} characters`);
+    expect(CONTRACT.chat.list.answer).toBe('{ spaceId, workspace, choices, fab, chats, more }');
+    for (const field of ['completed', 'working', 'lastActiveAt']) expect(CONTRACT.chat.list.chats).toContain(field);
+    const row = (sessionId: string, title: string, lastActiveAt: string): WikiChatRow => ({
+      sessionId, title, status: 'AWAITING_INPUT', open: true, completed: false, working: false,
+      createdAt: '2026-11-01T00:00:00.000Z', updatedAt: lastActiveAt, lastActiveAt, drafts: 0, needsYou: 0,
+    });
+    const rows = [
+      row('a', 'Heartbeat rationale', '2026-11-10T08:00:00.000Z'),
+      row('b', 'Split chapter 4', '2026-11-11T08:00:00.000Z'),
+      row('c', 'heartbeat again', '2026-11-10T08:00:00.000Z'),
+    ];
+    expect(wikiChatListPage(rows).chats.map((r) => r.sessionId), 'last spoken in first, ties by the newer id').toEqual(['b', 'c', 'a']);
+    expect(wikiChatListPage(rows, { q: '  HEARTBEAT ' }).chats.map((r) => r.sessionId), 'words of the title, without case').toEqual(['c', 'a']);
+    expect(wikiChatListPage(rows, { q: '' }).chats).toHaveLength(3);
+    expect(wikiChatListPage(rows, { offset: 1 }).chats.map((r) => r.sessionId)).toEqual(['c', 'a']);
+    const many = Array.from({ length: WIKI_CHAT_RULES.chatsListed + 1 }, (_, i) => row(String(i).padStart(3, '0'), `chat ${i}`, `2026-11-${String(1 + (i % 9)).padStart(2, '0')}T00:00:00.000Z`));
+    expect(wikiChatListPage(many)).toMatchObject({ more: true });
+    expect(wikiChatListPage(many).chats).toHaveLength(WIKI_CHAT_RULES.chatsListed);
+    expect(wikiChatListPage(many, { offset: WIKI_CHAT_RULES.chatsListed })).toMatchObject({ more: false });
+    expect(wikiChatListPage(many, { offset: WIKI_CHAT_RULES.chatsListed }).chats).toHaveLength(1);
   });
 
   it('presses only on the owner door, writes confirmed (a principle the owner\'s), and lets no mode touch a card', () => {
@@ -220,6 +261,22 @@ describe('wiki chat contract', () => {
     expect(chat.presses.undo).toMatch(/revert:<changeset id>/u);
     expect(chat.presses.undo).toMatch(/docs\.versions\.restore/u);
     expect(chat.presses.undo).toMatch(/every op is an add or an amend/u);
+    // A plan card's press (C12): the plan's own edit, confirmation and build, all or nothing — every document of it at once (C17).
+    for (const door of ['plan.routes.edit', 'plan.routes.confirm', 'plan.jobs.request', 'plan.proposals.accept']) expect(chat.presses.apply).toContain(door);
+    expect(chat.presses.apply).toMatch(/nothing is written — no version, no confirmation, no build and no press/u);
+    expect(chat.presses.apply).toMatch(/every error, of every document/u);
+    // A plan card's Undo (C17): the plan back as a new confirmed version of the owner's, the sections its builds wrote
+    // restored with no model asked, and refused once the plan moved on.
+    expect(chat.presses.undo).not.toMatch(/A plan card never is/u);
+    for (const said of ['WIKI_REVISION_CONFLICT', "plan.routes.edit's storeIn", "plan.routes.confirm's confirmIn", 'docs.versions.restore', 'no model asked', 'reason restore', 'plan.jobs.request']) {
+      expect(chat.presses.undo).toContain(said);
+    }
+    expect(chat.drafts.states.applied).toContain('copy.card.planMovedNote');
+    expect(chat.drafts.actions).toMatch(/Open in Plan for a plan card/u);
+    expect(CONTRACT.docs.versions.kept).toMatch(/A write that drops a section/u);
+    expect(chat.presses.retry).toMatch(/plan\.jobs\.rebuild/u);
+    expect(chat.drafts.read).toContain('changesetId, rewrite, change, createdAt');
+    expect(chat.drafts.results.plan).toMatch(/kind build, of the version the press confirmed/u);
     const modes = CONTRACT.reviewModes.chat;
     expect(modes.rule).toMatch(/in manual, tiered and automatic alike/u);
     expect(modes.rule).toMatch(/no verification even in automatic/u);
@@ -294,7 +351,7 @@ describe('wiki chat contract', () => {
       WIKI_CHAT_COPY.panel.mergeNote, WIKI_CHAT_COPY.card.wouldRewrite, WIKI_CHAT_COPY.card.replacedNote,
       WIKI_CHAT_COPY.card.webNote, WIKI_CHAT_COPY.card.yourMessage, WIKI_CHAT_COPY.card.rewrites, WIKI_CHAT_COPY.card.sources,
       WIKI_CHAT_COPY.card.sectionUpdated, WIKI_CHAT_COPY.actions.rewrite, WIKI_CHAT_COPY.actions.open_in_plan,
-      WIKI_CHAT_COPY.actions.settings, WIKI_CHAT_COPY.fab.needsYouOne,
+      WIKI_CHAT_COPY.actions.settings, WIKI_CHAT_COPY.fab.needsYouOne, WIKI_CHAT_COPY.card.planCovers,
     ]) {
       expect(BOARD, sentence).toContain(sentence.replace('&', '&amp;'));
     }
@@ -389,10 +446,17 @@ describe('wiki chat contract', () => {
     const { panel, fab, boundaries } = CONTRACT.chat;
     expect(panel.address).toContain('?chat=<session>');
     expect(DESIGN).toContain('带 `?chat=<session>`，翻页不关，刷新还在');
-    expect(panel.composer).toMatch(/text, the attachments \(notes\.wikiContext\), send and Stop/u);
+    // Board 43 (owner 11-07): the session page's composer, the page and the selection first in its attachment row.
+    expect(panel.composer).toMatch(/^The session page's composer, the same component/u);
+    expect(panel.composer).toMatch(/holds the page and the selection \(notes\.wikiContext\) first, each with its cross, beside the pictures and files/u);
+    expect(panel.header).toMatch(/Runs in, which holds only the workspace and folds once the first message goes/u);
+    expect(CONTRACT.chat.create.body).toContain('attachmentIds?');
+    expect(DESIGN).toContain('就是 session 页的 composer，是同一个组件');
     expect(keysOf(panel.widths)).toEqual(['atLeast1440', 'from1200', 'from640', 'below640']);
-    expect(panel.widths.atLeast1440).toMatch(/400 wide by default, dragged between 320 and 560/u);
-    for (const row of ['| ≥ 1440 | 右侧停靠，默认 400，可拖 320–560 | 照旧 |', '| 1200–1439 | 右侧停靠 |', '| 640–1199 | 从右滑出，盖住正文右侧，不加遮罩 |', '| < 640 | 底部 sheet，半屏与全屏两档 |']) {
+    expect(panel.widths.atLeast1440).toMatch(/a third of the window wide by default but never under 400 nor over 720, dragged between 320 and half the window/u);
+    expect(panel.widths.atLeast1440).toMatch(/a column of the page from the window's top to its foot, not a layer over it/u);
+    expect(panel.widths.from1200).toMatch(/the contents column stays and the app sidebar shows as its icon rail/u);
+    for (const row of ['| ≥ 1440 | 页面最右的一栏，从窗口顶到底，不是盖在页面上的浮层（owner 11-13 定，效果图 `docs/mocks/wiki-rail` 03 Ⓑ）；默认窗口宽的 1/3（400–720），可拖 320 到窗口宽的一半（owner 11-11 定） | 照旧 |', '| 1200–1439 | 同上，一栏，默认宽度同上（这一档是 400–480）；应用侧栏收成图标条（03 C2）', '| 640–1199 | 从右滑出，盖住正文右侧，不加遮罩 |', '| < 640 | 底部 sheet，半屏与全屏两档 |']) {
       expect(DESIGN).toContain(row);
     }
     expect(panel.drawer).toMatch(/The entry drawer opens to the left of the panel/u);
@@ -424,7 +488,7 @@ describe('wiki chat contract', () => {
 
 describe('wiki chat vectors', () => {
   it('names every case once, and covers every state, result, look, reason and note', () => {
-    for (const group of ['cards', 'results', 'fab', 'waiting', 'followWaiting', 'rewrites', 'sentenceDiff', 'notes', 'contexts', 'changes']) {
+    for (const group of ['cards', 'results', 'fab', 'waiting', 'followWaiting', 'rewrites', 'sentenceDiff', 'notes', 'contexts', 'changes', 'planFaces', 'rewriteLinks']) {
       const cases = FIXTURE[group] as Array<{ name: string }>;
       expect(cases.length, group).toBeGreaterThan(0);
       expect(new Set(names(cases)).size, `${group} names a case twice`).toBe(cases.length);
@@ -443,7 +507,7 @@ describe('wiki chat vectors', () => {
   it.each(cases('cards'))('card: %s', (_name, vector) => {
     const v = vector as {
       facts: WikiChatDraftFacts; kind: WikiChatDraftKind; ops: Array<WikiChatDraftOp & { decision?: string }>; undoable: boolean; state: string;
-      label: string; title: string; actions: string[]; needsYou: boolean;
+      label: string; title: string; actions: string[]; needsYou: boolean; note?: string | null;
     };
     const state = wikiChatDraftState(v.facts);
     expect(state).toBe(v.state);
@@ -452,6 +516,8 @@ describe('wiki chat vectors', () => {
     const card: WikiChatCard = { kind: v.kind, state, undoable: v.undoable, rewrite: null };
     expect(wikiChatCardActions(card)).toEqual(v.actions);
     expect(wikiChatCardNeedsYou(card)).toBe(v.needsYou);
+    // The line an applied plan card that can no longer be undone carries (C17); every other card carries none of it.
+    expect(wikiChatPlanMovedNote(card)).toBe(v.note ?? null);
   });
 
   it.each(cases('results'))('result: %s', (_name, vector) => {
@@ -500,6 +566,16 @@ describe('wiki chat vectors', () => {
   it.each(cases('contexts'))('wikiContext: %s', (_name, vector) => {
     const v = vector as { value: WikiChatContext | unknown; errors: string[] };
     expect(wikiChatContextErrors(v.value).sort()).toEqual([...v.errors].sort());
+  });
+
+  it.each(cases('planFaces'))('plan card face: %s', (_name, vector) => {
+    const v = vector as { change: WikiChatPlanChangeView; heading: string; rows: unknown[] };
+    expect(wikiChatPlanFace(v.change)).toEqual({ heading: v.heading, rows: v.rows });
+  });
+
+  it.each(cases('rewriteLinks'))('Rewrites row: %s', (_name, vector) => {
+    const v = vector as { kind: WikiChatDraftKind; rewrites: WikiChatDraftSectionView[]; links: unknown[] };
+    expect(wikiChatRewriteLinks(v.kind, v.rewrites)).toEqual(v.links);
   });
 
   it.each(cases('changes'))('Docs row: %s', (_name, vector) => {

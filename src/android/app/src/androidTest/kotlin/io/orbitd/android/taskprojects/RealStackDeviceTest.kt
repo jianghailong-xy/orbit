@@ -236,21 +236,21 @@ class RealStackDeviceTest {
         compose.waitUntil(30_000) { taskRecord(id).text("acceptanceCriteria") == "The stack keeps this sentence ($stamp)." }
         record("acceptanceCriteria", taskRecord(id).text("acceptanceCriteria"))
         // A scheduled start, then cancelled.
-        tap("task-start-at", "task-detail"); awaitTag("task-schedule-sheet"); tap("task-save-schedule"); awaitGone("task-schedule-sheet")
+        tap("task-runs-with", "task-detail"); awaitTag("task-runs-with-sheet"); tap("task-start-at"); awaitTag("task-schedule-sheet"); tap("task-save-schedule"); awaitGone("task-schedule-sheet")
         compose.waitUntil(30_000) { taskRecord(id).text("runAt") != null }
         record("runAt after Save", taskRecord(id).text("runAt"))
-        tap("task-start-at", "task-detail"); awaitTag("task-schedule-sheet"); tap("task-cancel-schedule"); awaitGone("task-schedule-sheet")
+        tap("task-runs-with", "task-detail"); awaitTag("task-runs-with-sheet"); tap("task-start-at"); awaitTag("task-schedule-sheet"); tap("task-cancel-schedule"); awaitGone("task-schedule-sheet")
         compose.waitUntil(30_000) { taskRecord(id).text("runAt") == null }
         record("runAt after Cancel", taskRecord(id)["runAt"])
         // A prerequisite, picked from the server's own candidates.
-        tap("task-add-prerequisite", "task-detail"); awaitTag("task-dependency-picker")
+        tap("task-menu", "task-detail"); tap("task-add-prerequisite"); awaitTag("task-dependency-picker")
         compose.onNodeWithTag("task-dependency-search").performTextInput(task("prereq").text("title")!!)
         awaitTag("candidate:$prerequisite"); tap("candidate:$prerequisite")
         compose.waitUntil(30_000) { taskRecord(id).objects("dependsOn").any { it.obj("dependsOnTask")?.text("id") == prerequisite } }
         record("dependsOn", taskRecord(id).objects("dependsOn").map { it.obj("dependsOnTask")?.text("title") })
-        awaitScrollTo("task-detail", hasTestTag("task-dependencies-section")); capture("stack-task-prerequisite")
+        awaitScrollTo("task-detail", hasTestTag("task-dependencies-section")); tap("task-plan-toggle", "task-detail"); capture("stack-task-prerequisite")
         // Follow: a watch on this task.
-        tap("task-follow", "task-detail"); awaitTag("task-follow-sheet"); capture("stack-task-follow")
+        tap("task-menu", "task-detail"); tap("task-follow"); awaitTag("task-follow-sheet"); capture("stack-task-follow")
         tap("task-follow-confirm"); awaitGone("task-follow-sheet")
         compose.waitUntil(30_000) { get("/watches").toString().contains(id) }
         record("GET /watches mentions the task", true)
@@ -584,6 +584,9 @@ class RealStackDeviceTest {
         val request = row.obj("doneRequest")!!
         signIn(); open("orbit-session:${asked.text("coordinatorSessionId")}")
         awaitScrollTo("transcript-list", hasTestTag("done:$id"), 60_000)
+        // The conversation shows the question as a preview; a press opens the whole card in its review sheet.
+        compose.onNodeWithTag("done:$id:preview").performClick(); compose.waitUntil(20_000) {
+            compose.onAllNodesWithTag("done:$id-judgment").fetchSemanticsNodes().isNotEmpty() }
         compose.onNodeWithTag("done:$id-judgment").assertTextEquals(request.text("judgment")!!)
         compose.onNodeWithTag("done:$id-meta").assertTextContains("${asked.text("title")} · asked by the coordinator · waiting ", substring = true)
         compose.onNodeWithTag("done:$id-meta").performScrollTo(); capture("stack-done-asked-0-card")
@@ -595,6 +598,9 @@ class RealStackDeviceTest {
         record("after Record as done", "status=${done.text("status")} doneBy=${done.text("doneBy")} acceptedGaps=${done.objects("acceptedGaps").map { it.text("criterionKey") }}")
         assertEquals("OWNER", done.text("doneBy"))
         record("GET /projects/$id/open-items → doneRequest after", get("/projects/$id/open-items").jsonObject["doneRequest"])
+        // The review shows the receipt in the question's place; closed, the receipt left in the conversation.
+        compose.waitUntil(20_000) { compose.onAllNodesWithTag("done:$id-receipt").fetchSemanticsNodes().isNotEmpty() }
+        compose.onNodeWithTag("done:$id:close").performClick(); awaitGone("done:$id:review")
         awaitScrollTo("transcript-list", hasTestTag("done:$id-receipt"))
         compose.onNodeWithTag("done:$id-receipt-line").assertTextContains("You recorded this project done · ", substring = true)
         capture("stack-done-asked-1-receipt")

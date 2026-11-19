@@ -87,12 +87,23 @@ final class ProjectDoneCopyParityTests: XCTestCase {
     /// also ask the other question: does the web declare a word this client has not got?
     private static let declarations: [(String, String)] = [
         ("DONE_CARD_HEADING", ProjectDone.heading),
+        ("DONE_REQUEST_STALE_HEADING", ProjectDone.staleHeading),
+        ("DONE_REQUEST_STALE_DETAIL", ProjectDone.staleDetail),
         ("DONE_CARD_COORDINATOR_CALL", ProjectDone.coordinatorCall),
         ("DONE_CARD_DONE_WHEN", ProjectDone.doneWhen),
         ("DONE_CARD_WHAT_ORBIT_CANT_PROVE", ProjectDone.whatOrbitCantProve),
         ("DONE_CARD_COORDINATOR_CHECKED", ProjectDone.coordinatorChecked),
         ("DONE_CARD_ORBIT_CHECKED", ProjectDone.orbitChecked),
         ("DONE_CARD_RECORD", ProjectDone.recordAsDone),
+        ("DONE_CHECK_NO_CRITERIA", ProjectDone.checkNoCriteria),
+        ("DONE_CHECK_UNMET", ProjectDone.checkUnmet),
+        ("DONE_CHECK_UNLANDED", ProjectDone.checkUnlanded),
+        ("DONE_CHECK_TASKS", ProjectDone.checkTasks),
+        ("DONE_CHECK_TASK", ProjectDone.checkTask),
+        ("DONE_CHECK_OWNER_ITEMS", ProjectDone.checkOwnerItems),
+        ("DONE_CHECK_LANDINGS", ProjectDone.checkLandings),
+        ("DONE_CARD_FINDINGS_HEADING", ProjectDone.findingsHeading),
+        ("DONE_CARD_FINDINGS_ACCEPTED", ProjectDone.findingsAccepted),
         ("DONE_CARD_RECORD_ANYWAY", ProjectDone.recordAsDoneAnyway),
         ("DONE_CARD_NOT_YET", ProjectDone.notYet),
         ("DONE_CARD_MISSING", ProjectDone.missingBeforeDone),
@@ -100,6 +111,8 @@ final class ProjectDoneCopyParityTests: XCTestCase {
         ("DONE_CARD_GAPS_ACCEPTED", ProjectDone.gapsAccepted),
         ("DONE_CARD_SEE_ACCEPTED", ProjectDone.seeWhatAccepted),
         ("DONE_CARD_REOPEN", ProjectDone.reopenProject),
+        ("DONE_CARD_DERIVED_FROM", ProjectDone.derivedFrom),
+        ("DONE_CARD_DERIVED_REOPEN_HINT", ProjectDone.derivedReopenHint),
         ("DONE_CARD_EXPLANATION", ProjectDone.recordingExplanation),
         ("DONE_CARD_NOT_YET_HINT", ProjectDone.notYetHint),
         ("DONE_CARD_ASKED_BY_COORDINATOR", ProjectDone.askedByCoordinator),
@@ -131,6 +144,149 @@ final class ProjectDoneCopyParityTests: XCTestCase {
         ("PROJECT_DONE_GAPS_IT_COULDNT_PROVE", ProjectDone.gapsItCouldntProve),
         ("PROJECT_DONE_NOT_ASKED_YET", ProjectDone.notAskedYet),
         ("PROJECT_DONE_RECORD_AS_DONE_ROW", ProjectDone.recordAsDoneRow),
+        ("DONE_DECLINE_HEADING", ProjectDone.declineHeading),
+        ("DONE_DECLINE_HINT", ProjectDone.declineHint),
+        // The done card's follow-ups (`ProjectDoneFollowUps.swift`).
+        ("NON_CODE_BADGE", ProjectDone.nonCodeBadge),
+        ("NON_CODE_LEAD", ProjectDone.nonCodeLead),
+        ("NON_CODE_BODY", ProjectDone.nonCodeBody),
+        ("NON_CODE_PROJECT_LINE", ProjectDone.nonCodeProjectLine),
+        ("NON_CODE_MARKED_BY_COORDINATOR", ProjectDone.nonCodeMarkedByCoordinator),
+        ("NON_CODE_MARKED_BY_YOU", ProjectDone.nonCodeMarkedByYou),
+        ("NON_CODE_CHANGE", ProjectDone.nonCodeChange),
+        ("NON_CODE_ANCHOR", ProjectDone.nonCodeAnchor),
+        ("RUN_DELIVERS", ProjectDone.runDelivers),
+        ("RUN_DELIVERS_CODE", ProjectDone.runDeliversCode),
+        ("RUN_DELIVERS_CODE_HINT", ProjectDone.runDeliversCodeHint),
+        ("RUN_DELIVERS_NOT_CODE", ProjectDone.runDeliversNotCode),
+        ("RUN_DELIVERS_NOT_CODE_HINT", ProjectDone.runDeliversNotCodeHint),
+        ("RUN_LANDING", ProjectDone.runLanding),
+        ("RUN_LANDING_OFF_HINT", ProjectDone.runLandingOffHint),
+        ("RUN_TO_NOT_CODE", ProjectDone.runToNotCode),
+        ("RUN_TO_CODE", ProjectDone.runToCode),
+        ("RUN_TO_NOT_CODE_TITLE", ProjectDone.runToNotCodeTitle),
+        ("RUN_TO_NOT_CODE_ACTION", ProjectDone.runToNotCodeAction),
+        ("RUN_TO_CODE_TITLE", ProjectDone.runToCodeTitle),
+        ("RUN_TO_CODE_ACTION", ProjectDone.runToCodeAction),
+        ("NON_CODE_REASON", ProjectDone.nonCodeReasonTemplate),
+        ("MOVED_OUT_CRITERION", ProjectDone.movedOutCriterion),
+        ("MOVED_OUT_UNNUMBERED", ProjectDone.movedOutUnnumbered),
+        ("MOVED_FROM", ProjectDone.movedFrom),
+        ("MOVED_BY_YOU", ProjectDone.movedByYou),
+        ("CONFIRM_SHEET_SCREENSHOT", ProjectDone.confirmSheetScreenshot),
+        ("CONFIRM_SHEET_ATTACH", ProjectDone.confirmSheetAttach),
+        ("CONFIRM_SHEET_DROP", ProjectDone.confirmSheetDrop),
+        ("CONFIRM_SHEET_UPLOADING", ProjectDone.confirmSheetUploading),
+        ("CONFIRM_SHEET_REMOVE", ProjectDone.confirmSheetRemove),
+        ("CONFIRM_SHEET_NOT_AN_IMAGE", ProjectDone.confirmSheetNotAnImage),
+        ("CONFIRM_SHEET_NOT_UPLOADED", ProjectDone.confirmSheetNotUploaded),
+        ("CRITERION_SCREENSHOT", ProjectDone.criterionScreenshot),
+        ("CRITERION_ONE_SCREENSHOT", ProjectDone.criterionOneScreenshot),
+        ("CRITERION_SCREENSHOTS", ProjectDone.criterionScreenshots),
+        ("CRITERION_WHAT_CHANGED", ProjectDone.criterionWhatChanged),
+        ("CRITERION_HIDE_CHANGES", ProjectDone.criterionHideChanges),
+        ("CRITERION_WORDING_CONFIRMED", ProjectDone.criterionWordingConfirmed),
+        ("CRITERION_WORDING_NOW", ProjectDone.criterionWordingNow),
+        ("CRITERION_WORDING_NOT_KEPT", ProjectDone.criterionWordingNotKept),
+        ("DONE_CARD_STANDS_IN_WAY_ONE", ProjectDone.standsInWayOne),
+        ("DONE_CARD_STANDS_IN_WAY", ProjectDone.standsInWay),
+        ("DONE_CARD_FINDINGS_HEADING_ONE", ProjectDone.findingsHeadingOne),
+        ("DONE_CHECK_UNMET_OPEN_TASK", ProjectDone.checkUnmetOpenTask),
+        ("DONE_CHECK_UNMET_OPEN_TASKS", ProjectDone.checkUnmetOpenTasks),
+        ("DONE_CHECK_UNMET_NO_TASK", ProjectDone.checkUnmetNoTask),
+        ("DONE_CHECK_UNMET_UNCONFIRMED", ProjectDone.checkUnmetUnconfirmed),
+        ("DONE_CHECK_NO_BRANCH", ProjectDone.checkNoBranch),
+        ("DONE_CHECK_ON_PROJECT_BRANCH", ProjectDone.checkOnProjectBranch),
+        ("DONE_CHECK_IN_FLIGHT", ProjectDone.checkInFlight),
+        ("DONE_CHECK_NOTHING_TO_LAND", ProjectDone.checkNothingToLand),
+        ("DONE_CHECK_CODELESS", ProjectDone.checkCodeless),
+        ("DONE_CARD_OPEN", ProjectDone.cardOpen),
+        ("DONE_CARD_MOVE_TO_FOLLOW_UP", ProjectDone.moveToFollowUp),
+        ("DONE_CARD_MOVE_HINT", ProjectDone.moveHint),
+        ("DONE_CARD_ANYWAY_KEEPS", ProjectDone.anywayKeeps),
+        ("DONE_CARD_TALLY_OF", ProjectDone.cardTallyOf),
+        ("DONE_CARD_WAIT_CONFIRMATION", ProjectDone.cardWaitConfirmation),
+        ("LANDING_RAN_WITHOUT_BRANCH", ProjectDone.landingRanWithoutBranch),
+        ("LANDING_NO_CODE_TO_LAND", ProjectDone.landingNoCodeToLand),
+        ("CRITERION_MET_BY", ProjectDone.criterionMetBy),
+        ("CRITERION_MET_BY_TASKS", ProjectDone.criterionMetByTasks),
+        ("CRITERION_MET_BY_CONFIRMATION", ProjectDone.criterionMetByConfirmation),
+        ("CRITERION_MODE_TASKS", ProjectDone.criterionModeTasks),
+        ("CRITERION_MODE_TASKS_HINT", ProjectDone.criterionModeTasksHint),
+        ("CRITERION_MODE_CONFIRMATION", ProjectDone.criterionModeConfirmation),
+        ("CRITERION_MODE_CONFIRMATION_HINT", ProjectDone.criterionModeConfirmationHint),
+        ("CRITERION_MODE_NOT_CHANGED", ProjectDone.criterionModeNotChanged),
+        ("CRITERION_CONFIRMED_BY_YOU", ProjectDone.criterionConfirmedByYou),
+        ("CRITERION_CONFIRMED_BY_COORDINATOR", ProjectDone.criterionConfirmedByCoordinator),
+        ("CRITERION_CHECK_PASSED", ProjectDone.criterionCheckPassed),
+        ("CRITERION_CHECK_FAILED", ProjectDone.criterionCheckFailed),
+        ("CRITERION_CHECK_RUNNING", ProjectDone.criterionCheckRunning),
+        ("CRITERION_STALE", ProjectDone.criterionStale),
+        ("CRITERION_STALE_DETAIL", ProjectDone.criterionStaleDetail),
+        ("CRITERION_WAITS_CONFIRMATION", ProjectDone.criterionWaitsConfirmation),
+        ("CRITERION_CHECK_STARTED", ProjectDone.criterionCheckStarted),
+        ("CRITERION_PASS_NOTE", ProjectDone.criterionPassNote),
+        ("CRITERION_FAIL_NOTE", ProjectDone.criterionFailNote),
+        ("CRITERION_WHO_YOU", ProjectDone.criterionWhoYou),
+        ("CRITERION_WHO_COORDINATOR", ProjectDone.criterionWhoCoordinator),
+        ("CRITERION_WHO_CHECK", ProjectDone.criterionWhoCheck),
+        ("DONE_CHECK_ITS_WORK", ProjectDone.checkItsWork),
+        ("CRITERION_WITHDRAW", ProjectDone.criterionWithdraw),
+        ("CRITERION_VIEW_RUN", ProjectDone.criterionViewRun),
+        ("CRITERION_OPEN_CONVERSATION", ProjectDone.criterionOpenConversation),
+        ("CRITERION_CONFIRM", ProjectDone.criterionConfirm),
+        ("CRITERION_CONFIRM_AGAIN", ProjectDone.criterionConfirmAgain),
+        ("CRITERION_RUN_CHECK", ProjectDone.criterionRunCheck),
+        ("CRITERION_RUN_CHECK_AGAIN", ProjectDone.criterionRunCheckAgain),
+        ("CRITERION_ACTION_FAILED", ProjectDone.criterionActionFailed),
+        ("CONFIRM_SHEET_TITLE", ProjectDone.confirmSheetTitle),
+        ("CONFIRM_SHEET_HOW_CHECKED", ProjectDone.confirmSheetHowChecked),
+        ("CONFIRM_SHEET_WHAT_CHECKED", ProjectDone.confirmSheetWhatChecked),
+        ("CONFIRM_SHEET_OPTIONAL", ProjectDone.confirmSheetOptional),
+        ("CONFIRM_SHEET_PLACEHOLDER", ProjectDone.confirmSheetPlaceholder),
+        ("CONFIRM_SHEET_FOOTNOTE", ProjectDone.confirmSheetFootnote),
+        ("CONFIRM_SHEET_CONFIRM", ProjectDone.confirmSheetConfirm),
+        ("CONFIRM_SHEET_CANCEL", ProjectDone.confirmSheetCancel),
+        ("CONFIRM_SHEET_NOT_RECORDED", ProjectDone.confirmSheetNotRecorded),
+        ("DONE_ROW_BY_YOU", ProjectDone.rowByYou),
+        ("DONE_ROW_BY_COORDINATOR", ProjectDone.rowByCoordinator),
+        ("DONE_ROW_CHECK_PASS", ProjectDone.rowCheckPass),
+        ("DONE_ROW_CHECK_FAILED", ProjectDone.rowCheckFailed),
+        ("DONE_ROW_WAITS", ProjectDone.rowWaits),
+        ("DONE_ROW_STALE", ProjectDone.rowStale),
+        ("DONE_ROW_CHECKING", ProjectDone.rowChecking),
+        ("DONE_ROW_CONFIRMED_BY_YOU", ProjectDone.rowConfirmedByYou),
+        ("DONE_ROW_CONFIRMED_BY_COORDINATOR", ProjectDone.rowConfirmedByCoordinator),
+        ("DONE_ROW_CONFIRMED_BY_CHECK", ProjectDone.rowConfirmedByCheck),
+        ("ACCEPTANCE_STANDING_MIXED", ProjectDone.acceptanceStandingMixed),
+        ("ACCEPTANCE_NOTE_MIXED", ProjectDone.acceptanceNoteMixed),
+        ("MOVE_TITLE", ProjectDone.moveTitle),
+        ("MOVE_MOVES", ProjectDone.moveMoves),
+        ("MOVE_AND_ONE_OPEN_TASK", ProjectDone.moveAndOneOpenTask),
+        ("MOVE_AND_OPEN_TASKS", ProjectDone.moveAndOpenTasks),
+        ("MOVE_STAYS", ProjectDone.moveStays),
+        ("MOVE_KEEPS", ProjectDone.moveKeeps),
+        ("MOVE_KEEPS_ALL_MET", ProjectDone.moveKeepsAllMet),
+        ("MOVE_TO", ProjectDone.moveTo),
+        ("MOVE_NEW_PROJECT", ProjectDone.moveNewProject),
+        ("MOVE_EXISTING_PROJECT", ProjectDone.moveExistingProject),
+        ("MOVE_FOLLOW_UP_TITLE", ProjectDone.moveFollowUpTitle),
+        ("MOVE_FOLLOW_UP_GOAL", ProjectDone.moveFollowUpGoal),
+        ("MOVE_NEW_HINT", ProjectDone.moveNewHint),
+        ("MOVE_SEARCH", ProjectDone.moveSearch),
+        ("MOVE_OPEN_ONLY", ProjectDone.moveOpenOnly),
+        ("MOVE_PROJECT_TASKS", ProjectDone.moveProjectTasks),
+        ("MOVE_NO_OPEN_PROJECTS", ProjectDone.moveNoOpenProjects),
+        ("MOVE_NEXT", ProjectDone.moveNext),
+        ("MOVE_CANCEL", ProjectDone.moveCancel),
+        ("MOVE_BACK", ProjectDone.moveBack),
+        ("MOVE_CONFIRM_TITLE", ProjectDone.moveConfirmTitle),
+        ("MOVE_CONFIRM_THIS_ALL_MET", ProjectDone.moveConfirmThisAllMet),
+        ("MOVE_CONFIRM_NEW", ProjectDone.moveConfirmNew),
+        ("MOVE_CONFIRM_EXISTING", ProjectDone.moveConfirmExisting),
+        ("MOVE_CONFIRM_RECORD", ProjectDone.moveConfirmRecord),
+        ("MOVE_CONFIRM_ACTION", ProjectDone.moveConfirmAction),
+        ("MOVE_NOT_MOVED", ProjectDone.moveNotMoved),
     ]
 
     // MARK: the words
@@ -153,6 +309,12 @@ final class ProjectDoneCopyParityTests: XCTestCase {
                           "\(Self.words) declares \(name), which this client does not hold — add it to "
                               + "`ProjectDone` and to this table")
         }
+    }
+
+    func testDerivedReceiptNamesTheConfirmationDate() {
+        XCTAssertEqual(ProjectDone.derivedLine("2026-10-02T12:00:00Z", timeZone: TimeZone(secondsFromGMT: 0)!),
+                       "From the criteria you confirmed on Oct 2. Not right? Reopen it.")
+        XCTAssertNil(ProjectDone.derivedLine(nil))
     }
 
     func testTheWordsTheCopyObjectSpellsInlineAreThisClients() throws {
@@ -200,18 +362,24 @@ final class ProjectDoneCopyParityTests: XCTestCase {
         let order = ProjectDone.reasonOrder.map { "  '\($0.rawValue)',\n" }.joined()
         XCTAssertTrue(web.contains("const REASON_ORDER: readonly CriterionLandingReason[] = [\n\(order)];"),
                       "the order the tallies say the reasons in drifted")
-        for reason in ProjectDone.reasonOrder where reason != .nothingToLand {
+        for reason in ProjectDone.reasonOrder where ![.nothingToLand, .noBranch, .codeless].contains(reason) {
             XCTAssertTrue(web.contains("  \(reason.rawValue): '\(ProjectDone.reasonLabel(reason))',"),
                           "the tally's word for \(reason.rawValue) drifted")
         }
         XCTAssertTrue(web.contains("  NOTHING_TO_LAND: PROJECT_DONE_COPY.nothingToLand,"))
+        // The two said by the row's own words, in lower case.
+        XCTAssertTrue(web.contains("  NO_BRANCH: LANDING_RAN_WITHOUT_BRANCH.toLowerCase(),"))
+        XCTAssertTrue(web.contains("  CODELESS: LANDING_NO_CODE_TO_LAND.toLowerCase(),"))
+        XCTAssertEqual(ProjectDone.reasonLabel(.noBranch), "ran without a branch")
+        XCTAssertEqual(ProjectDone.reasonLabel(.codeless), "no code to land")
         // One row's reason, as `landingReasonLabel` says it.
         let rows: [(CriterionLandingReason?, String)] = [
             (.inFlight, "case 'IN_FLIGHT': return 'In flight';"),
             (.onProjectBranch, "case 'ON_PROJECT_BRANCH': return PROJECT_DONE_COPY.onProjectBranch;"),
             (.noReceipt, "case 'NO_RECEIPT': return PROJECT_DONE_COPY.mergedOutsideOrbit;"),
             (.nothingToLand, "case 'NOTHING_TO_LAND': return PROJECT_DONE_COPY.nothingToLand;"),
-            (.codeless, "case 'CODELESS': return 'No code to land';"),
+            (.noBranch, "case 'NO_BRANCH': return LANDING_RAN_WITHOUT_BRANCH;"),
+            (.codeless, "case 'CODELESS': return LANDING_NO_CODE_TO_LAND;"),
             // Landed on the project's main branch, by name: main, on a project on main.
             (nil, "default: return `\(Self.onMainBranch(ProjectDone.landingReasonLabel(nil)))`;"),
         ]
@@ -220,6 +388,7 @@ final class ProjectDoneCopyParityTests: XCTestCase {
         }
         XCTAssertEqual(ProjectDone.landingReasonLabel(.inFlight), "In flight")
         XCTAssertEqual(ProjectDone.landingReasonLabel(.codeless), "No code to land")
+        XCTAssertEqual(ProjectDone.landingReasonLabel(.noBranch), "Ran without a branch")
         XCTAssertEqual(ProjectDone.landingReasonLabel(nil), "Landed on main")
         XCTAssertTrue(web.contains("return reason === 'IN_FLIGHT' || reason === 'ON_PROJECT_BRANCH';"),
                       "what counts as waiting on work drifted")
@@ -248,7 +417,11 @@ final class ProjectDoneCopyParityTests: XCTestCase {
                       "the Why-not-done tally's on-main words are no longer said of the project's main branch")
         for part in [
             "`${counts.criteria} criteria`,\n    `${counts.met} met`,\n    `${counts.onMain} ${landedOn(main)}`,\n    ...reasonParts(counts),",
-            "`${counts.met} met`,\n    `${counts.onMain} ${landedOn(main)}`,\n    `${nothingToLandCount(counts)} ${PROJECT_DONE_COPY.nothingToLand}`,",
+            "`${counts.met} met`,\n    `${counts.onMain} ${landedOn(main)}`,\n    ...(noBranch > 0 ? [`${noBranch} ${REASON_LABELS.NO_BRANCH}`] : []),\n    ...(nothing > 0 ? [`${nothing} ${PROJECT_DONE_COPY.nothingToLand}`] : []),\n    ...waitPart,",
+            "DONE_CARD_TALLY_OF.replace('{met}', String(counts.met)).replace('{n}', String(counts.criteria)),\n      ...waitPart,",
+            "const waitPart = waiting > 0 ? [DONE_CARD_WAIT_CONFIRMATION.replace('{n}', String(waiting))] : [];",
+            "return [`${counts.criteria} criteria met`, `${acceptedGaps} ${PROJECT_DONE_COPY.gapsAccepted}`].join(' · ');",
+            "`${derivedDone.criteria.length} criteria`,\n      `${met.length} met`,\n      ...(notMet > 0 ? [`${notMet} ${PROJECT_DONE_COPY.notMet}`] : []),",
             "if (!counts) return `${acceptedGaps} ${PROJECT_DONE_COPY.gapsAccepted}`;",
             "`${counts.criteria} criteria met`,\n    `${counts.onMain} ${landedOn(main)}`,\n    `${nothingToLandCount(counts)} ${PROJECT_DONE_COPY.nothingToLand}`,\n    `${acceptedGaps} ${PROJECT_DONE_COPY.gapsAccepted}`,",
             "const met = derivedDone.criteria.filter((criterion) => criterion.satisfied);\n  const notMet = derivedDone.criteria.length - met.length;",
@@ -305,11 +478,12 @@ final class ProjectDoneCopyParityTests: XCTestCase {
         ] {
             XCTAssertTrue(card.contains(part), "the Orbit checked line drifted: no \(part.debugDescription)")
         }
-        // A card nobody asked for carries Orbit's own gaps, in these two sentences — the first said of
-        // the project's main branch, main on a project on main.
-        XCTAssertTrue(card.contains("? `Orbit cannot prove this criterion is on ${main}: ${reason}.`"))
-        XCTAssertTrue(card.contains("const reason = landingReasonLabel(criterion.landingReason, main);"))
-        XCTAssertTrue(card.contains(": 'Orbit cannot prove this criterion is met by its work yet.',"))
+        // An unrequested card shows the server's findings rather than inferred criterion gaps.
+        XCTAssertTrue(card.contains("doneCheck.findings.length > 0"))
+        XCTAssertTrue(card.contains("{doneFindingLine(finding, main, { confirmation: confirmationMode(finding) })}"))
+        XCTAssertTrue(card.contains("<li key={index}>{doneFindingLine(finding, main)}</li>"))
+        XCTAssertTrue(card.contains("PROJECT_DONE_COPY.findingsAccepted"))
+        XCTAssertTrue(card.contains("acceptedGaps: doneRequest?.gaps ?? []"))
         // The section heads, the toggle, the gap's checked line and the record press.
         XCTAssertEqual(ProjectDone.doneWhenHead(Self.criteria), "Done when · 23 criteria")
         XCTAssertTrue(card.contains("{PROJECT_DONE_COPY.doneWhen} · {criteriaCount} criteria"))
@@ -323,11 +497,17 @@ final class ProjectDoneCopyParityTests: XCTestCase {
         XCTAssertEqual(ProjectDone.checkedLine(AcceptedGap(criterionKey: "c", coordinatorChecked: "main has it",
                                                            evidenceRefs: ["a", "b"])),
                        "main has it · evidence a, b")
-        XCTAssertTrue(card.contains("{criterion.satisfied ? 'met' : 'not met'} · {landingReasonLabel(criterion.landingReason, main)}"))
+        XCTAssertTrue(card.contains("const state = doneCriterionRowState(criterion, { nonCode, main });"))
+        // Anyway while a criterion is unmet — and, unasked, while the check found something or
+        // has not answered (board 02 ⑤ H).
+        XCTAssertTrue(card.contains("{(counts && counts.met < counts.criteria)"))
         XCTAssertTrue(card.contains(
-            "counts && counts.met < counts.criteria ? PROJECT_DONE_COPY.recordAsDoneAnyway : DONE_CARD_RECORD"))
+            "|| (!doneRequest && (!counts || !doneCheck || doneCheck.findings.length > 0))\n              ? PROJECT_DONE_COPY.recordAsDoneAnyway : DONE_CARD_RECORD}"))
         XCTAssertEqual(ProjectDone.recordLabel(counts()), ProjectDone.recordAsDoneAnyway)
         XCTAssertEqual(ProjectDone.recordLabel(all), ProjectDone.recordAsDone)
+        XCTAssertEqual(ProjectDone.recordLabel(all, asked: false), ProjectDone.recordAsDoneAnyway)
+        XCTAssertEqual(ProjectDone.recordLabel(all, asked: false, check: ProjectDoneCheck(findings: [])),
+                       ProjectDone.recordAsDone)
         // The meta line: who asked and how long the request has waited — or nobody.
         XCTAssertTrue(card.contains("{project.title} · {doneRequest\n"), "the asked meta line drifted")
         XCTAssertTrue(card.contains(
@@ -360,7 +540,7 @@ final class ProjectDoneCopyParityTests: XCTestCase {
                       "the owner's receipt line drifted")
         XCTAssertTrue(card.contains(": `${PROJECT_DONE_COPY.thisProjectIsDone} · ${PROJECT_DONE_COPY.recordedByOrbit}`}"),
                       "Orbit's receipt line drifted")
-        XCTAssertTrue(card.contains("{projectDoneReceiptTally(counts, accepted.length, mainBranchName(project.integration?.upstreamRef))}"))
+        XCTAssertTrue(card.contains("{projectDoneReceiptTally(counts, accepted.length, mainBranchName(project.integration?.upstreamRef), nonCode)}"))
         XCTAssertTrue(card.contains("<summary>{DONE_CARD_SEE_ACCEPTED}</summary>"))
         XCTAssertTrue(card.contains("{DONE_CARD_REOPEN}"))
 
@@ -576,6 +756,11 @@ final class ProjectDoneCopyParityTests: XCTestCase {
         }
         XCTAssertEqual(SessionHeader.waitingWord(for: session(.doneRequest)), ProjectDone.readyToClose)
         XCTAssertEqual(SessionHeader.waitingWord(for: session(.recordAsDone)), ProjectDone.recordAsDoneRow)
+        // An owner request the session filed: the web row's word, and its card's.
+        XCTAssertTrue(workspace.contains("if (s.waitingKind === 'OWNER_REQUEST') return WAITING_ON_YOU;"),
+                      "the web session row no longer says Waiting on you for an owner request")
+        XCTAssertEqual(SessionLine.make(for: session(.ownerRequest), live: true),
+                       SessionLine(text: "Waiting on you", tone: .approval))
         XCTAssertEqual(SessionLine.make(for: session(.doneRequest), live: true),
                        SessionLine(text: "Ready to close", tone: .approval))
 

@@ -37,7 +37,7 @@ const DEAD_SHARE = 'k3Qx9vR2mT7wLpN8sYdF0aBcE1gHjKuZ';
 /** Every address of the app, as a signed-out visitor might have kept one. */
 const APP_ADDRESSES = [
   '/tasks', `/tasks/${ID}`, `/lists/${ID}`,
-  '/settings', '/settings/profile', '/settings/account', '/settings/shared-links', '/settings/access-tokens',
+  '/settings', '/settings/profile', '/settings/account', '/settings/shared-links', '/settings/access-tokens', '/settings/terminals',
   '/admin', '/admin/sign-in', '/admin/providers',
   '/infrastructure', '/providers', '/providers/new', '/providers/new/deepseek', `/providers/${ID}`, `/providers/pools/${ID}`,
   '/following',
@@ -45,7 +45,7 @@ const APP_ADDRESSES = [
   '/wiki', '/wiki/review', '/wiki/s', '/wiki/s/review', '/wiki/s/activity', '/wiki/s/t/x', '/wiki/s/t/x/y', '/wiki/s/d/x',
   '/wiki/s/plan', '/wiki/s/plan/d/x', '/wiki/s/plan/d/x/y', '/wiki/s/browse', '/wiki/s/az', '/wiki/s/e/x', '/wiki/s/settings',
   '/wiki/s/run/x',
-  '/runners', '/runners/register', `/runners/${ID}`, `/runners/${ID}/new`,
+  '/runners', '/runners/register', `/runners/${ID}`, `/runners/${ID}/new`, `/runners/${ID}/browser`,
   `/workspaces/${ID}`, `/workspaces/${ID}/new`, `/agents/${ID}`, `/agents/${ID}/new`, `/sessions/${ID}`,
   `/workspaces/${ID}/sessions/${ID}`, `/agents/${ID}/sessions/${ID}`,
   '/enroll', '/cli-login',
@@ -199,6 +199,15 @@ describe('what the page must not take over', { timeout: 60_000 }, () => {
     await visit('/');
     expect(addressBar()).toBe('/login');
     expect(notFound()).toBe(false);
+  });
+
+  it('the guest page’s first address goes to the one address a session has, then to log in (board 11, D8)', async () => {
+    await visit(`/g/${ID}`);
+    expect(addressBar()).toBe(`/login?next=${encodeURIComponent(`/sessions/${ID}`)}`);
+    signIn();
+    await visit(`/g/${ID}`);
+    expect(addressBar()).toBe(`/sessions/${ID}`);
+    expect(container.textContent).toContain('the console');
   });
 
   it('signed out, an address’s query still rides along', async () => {

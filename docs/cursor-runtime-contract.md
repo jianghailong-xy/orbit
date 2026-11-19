@@ -564,6 +564,20 @@ plan/ask 两列见 [`analysis/plan-and-ask-modes-concurrent.json`](evidence/curs
 
 ### 5.4 对 Orbit 权限模式的含义（本节给事实，P5c 的映射见 §16.5）
 
+Cursor Auto sandbox policy (2026-11-08): when the session's command sandbox is in force,
+Orbit may answer `allow-once` for inline interpreter scripts (`python3 -c`, `node -e`,
+and Python/Node/Ruby/Perl/shell heredocs). The sandbox enforces writable roots.
+Without the sandbox, Auto retains the original conservative classifier: interpreter
+heredocs and the previously refused inline forms still get an approval card.
+In both cases, git push/fetch/pull/clone, remote curl/wget, package installs, ssh/scp,
+sudo, recursive deletes outside temporary directories, secret files, other systems
+(`dshToolGateMatch`), and containers still require a card. Sandboxed Auto scans the
+entire script body for these markers, including quoted command arguments; an
+unterminated heredoc also gets a card. This does not change DSH's classifier.
+Owner decision (2026-11-08): the workspace's standing "Always allow" rule counts
+as owner approval. Such an answer escapes the sandbox through the same one-use,
+exact-command grant as a person's click (§8.5); runner classifier allows stay sandboxed.
+
 | Orbit 模式 | 能否强制 | 依据 |
 | --- | --- | --- |
 | `bypassPermissions` | 能：`--force`（团队否决时退回白名单，见上） | 【实测；`p5c/bypass`：没有任何权限请求】 |
@@ -795,6 +809,291 @@ plan/ask 两列见 [`analysis/plan-and-ask-modes-concurrent.json`](evidence/curs
 **建议**：Linux 用 A（P4b）。A 在 macOS 上不成立时，再请所有者为 macOS 在 B 和 D 之间选。
 
 ---
+
+### 8.5 Linux Auto sandbox：shell 入参与逃逸授权【实测 + 设计，2026-11-08】
+
+**范围**：HPC/Linux，固定 `2026.10.14-941492e`；macOS 不在本次任务范围。这里记录的是进入
+`orbit-bash`、尚未还原 HOME/删除凭据时的环境，不是命令最后看到的环境。探针只改测试会话的临时包装；
+产品 `writeCursorShellWrapper` 没有改动。[复现、脱敏规则和限制](evidence/cursor-cli/2026.10.14-941492e/sandbox-shell-linux/README.md)、
+[探针原文](evidence/cursor-cli/2026.10.14-941492e/sandbox-shell-linux/probe.go.txt)、
+[离线断言](evidence/cursor-cli/2026.10.14-941492e/sandbox-shell-linux/check.py)。
+
+**实测入参**：下表每个 JSON 保留完整 `argv`（含包装路径）、`cwd`、全部环境键值、时间、PID，以及 fd 5 的载荷。
+凭据值为 `<REDACTED>`，路径/UUID 按实测工具脱敏；不能把占位符当成原值。
+
+| 路径 | 记录 | argv / cwd / 环境的差异 |
+|---|---|---|
+| 登录环境快照 | [00](evidence/cursor-cli/2026.10.14-941492e/sandbox-shell-linux/00-snapshot.json) | `[orbit-bash, -O, extglob, -ilc, <4793 字节快照脚本>]`；cwd 为 `<RUN>/work`；34 个环境变量，没有 `CURSOR_REQUEST_ID` / `CURSOR_CONVERSATION_ID`，没有 fd 5 |
+| CLI 未询问的 `ls` | [01](evidence/cursor-cli/2026.10.14-941492e/sandbox-shell-linux/01-unasked-ls.json) | 以下命令均为 `[orbit-bash, -O, extglob, -c, <固定 loader>, --]`；cwd 同快照；39 个环境变量 |
+| Orbit Auto 允许的 `touch auto-allowed.txt` | [02](evidence/cursor-cli/2026.10.14-941492e/sandbox-shell-linux/02-auto-allowed-touch.json) | 与 01 的 argv、cwd、env 完全相同；实际命令在 fd 5 |
+| 经卡片路径允许的前台 `python3 -c 'print(424242)'` | [03](evidence/cursor-cli/2026.10.14-941492e/sandbox-shell-linux/03-card-path-python.json) | 与 01、02 的 argv、cwd、env 完全相同；**本次 ALLOWED 由测试 harness 提供，没有生产 UI 的人点卡片记录** |
+| 请求 `block_until_ms: 0` 的后台命令及随后前台命令 | [04](evidence/cursor-cli/2026.10.14-941492e/sandbox-shell-linux/04-background.json)、[05](evidence/cursor-cli/2026.10.14-941492e/sandbox-shell-linux/05-foreground.json) | fd 5 分别为 `sleep 4; printf background\0`、`printf foreground\0`；同一轮共用 request ID |
+| 两个不同文本的并发后台命令 | [06](evidence/cursor-cli/2026.10.14-941492e/sandbox-shell-linux/06-concurrent-a.json)、[07](evidence/cursor-cli/2026.10.14-941492e/sandbox-shell-linux/07-concurrent-b.json) | argv、cwd、env 完全相同；fd 5 分别带 A/B 文本；PID 和 socket inode 不同 |
+| 两个相同文本的并发后台命令 | [08](evidence/cursor-cli/2026.10.14-941492e/sandbox-shell-linux/08-identical-a.json)、[09](evidence/cursor-cli/2026.10.14-941492e/sandbox-shell-linux/09-identical-b.json) | argv、cwd、env、fd 5 文本完全相同；PID 和 socket inode 不同；两次进入包装间隔小于 3 秒（命令各 sleep 3 秒） |
+
+- **快照次数**：本次一次会话、四轮、九条命令只记录到启动时一次 `-ilc`；不能把 §8.3 的旧描述理解为本次每条命令都重新拍快照。
+- **实际命令不在 argv**：所有 `-c` 的 loader 相同，以 `IFS= builtin read -r -d '' __cursor_command <&5` 开头，
+  随后关闭 fd 5、从 fd 3 还原快照、执行命令、向 fd 4 写回状态。fd 5 是 socket，内容为命令文本加 NUL。
+  探针用 `recv(MSG_PEEK)` 读取副本，未消耗 Bash 要读的数据。仅 hash `argv[-2]` 会把所有命令认成同一条。
+- **env 没有授权身份**：`CURSOR_REQUEST_ID` 在同一轮不同命令、相同并发命令之间共用；
+  `CURSOR_CONVERSATION_ID` 标识会话；`__CURSOR_SANDBOX_ENV_RESTORE` 只还原这些变量，没有 toolCallId 或人批标志。
+  34→39 新增的是 `CURSOR_AGENT`、`CURSOR_CONVERSATION_ID`、`CURSOR_REQUEST_ID`、`AGENT_TRANSCRIPTS`、
+  `__CURSOR_SANDBOX_ENV_RESTORE`；完整继承值见各 JSON。快照和命令在包装入口仍带 CLI 凭据，包装稍后才删掉。
+- **协议与卡片**：[stdout](evidence/cursor-cli/2026.10.14-941492e/sandbox-shell-linux/process/stdout.jsonl) 中 `ls` 无
+  `session/request_permission`；其余八次有请求；[stdin](evidence/cursor-cli/2026.10.14-941492e/sandbox-shell-linux/process/stdin.jsonl)
+  对八次都回 `allow-once`。[summary](evidence/cursor-cli/2026.10.14-941492e/sandbox-shell-linux/summary.json) 只有 Python 一张卡，
+  其余请求有 `permission_auto_allowed`。toolCallId 在 ACP 中可见，未出现在包装的 argv/env/fd 5 中。
+  ACP `rawInput` 只保留 command，**没有独立记录到模型工具参数中的数值 `block_until_ms: 0`**；该值是探针 prompt 的要求。
+  sleep 命令尚未经过等待时间就报告完成且 stdout 为空，前台 printf 报告输出，是本次后台执行的可见证据。
+  [timeline](evidence/cursor-cli/2026.10.14-941492e/sandbox-shell-linux/process/timeline.jsonl) 保留请求、答复和完成顺序；
+  它的相对毫秒时间与包装的绝对纳秒不是同一时基，不能相减声称测得了答复到 exec 的延迟。
+
+**选择：精确匹配、计数受限的 runner grant，由包装决定是否逃逸【设计，未实现】**。
+
+本次没有发现从 ACP toolCallId 到某个包装 PID 的可靠关联键；但本方案授权的单位是同一会话、同一 cwd 的
+精确命令，不是指定 PID。08/09 的命令字节、cwd、env 完全相同，哪个实例消费批准不影响这个授权单位。
+安全性质为：对每个 X，`unsandboxed execs(X) ≤ owner approvals(X)`；不是“批准的那个 PID 必须逃逸”。
+这些记录证明了可观察输入的相等性，没有实现或压测下面的 grant 协议。
+
+1. **Grant creation (owner decision, 2026-11-08)**: an `ALLOWED` answer from a person
+   or the owner's standing workspace "Always allow" rule creates one grant before
+   the runner replies `allow-once` to the ACP request. The remaining exact-match,
+   count, TTL, and revocation requirements apply equally to both sources.
+   原子记录一个 grant。键为 `(conversation id, cwd, exact command bytes)`；命令字节必须与 Cursor 放进 fd 5 的
+   NUL 终止载荷严格对应，不 trim、不重排、不重新 quote、不按 shell 语义归一化；拒绝缺失/多余 NUL 或无法识别的编码。
+   如索引使用 hash，仍核对完整键，不能仅凭 hash 相等授权。cwd 从该调用的执行上下文取得，不能总是假设为 workspace。
+   无法确定 cwd/载荷时不创建 grant。每次批准对应独立的一份计数，重复答复按 permission request 去重，不能重复加数。
+   Runner classifier allows, unasked CLI commands, denials, and cancellations create no grant.
+2. **存储与消费**：grant 放在 runner 管理、sandbox 不可写且在可写 roots 以外的会话私有存储中，带短 TTL 和会话代次。
+   `orbit-bash` 识别固定 loader 后读取完整 fd 5 命令，在执行前向 broker 请求原子消费一份精确匹配且未过期的 grant。
+   读取不能丢失或改变载荷：必须把同样的字节重新接回 fd 5，使原 loader 仍得到同一命令；不认识布局就不读取/不消费，走 sandbox。
+   broker 成功扣减一份才回允许逃逸，包装随后自行启动该命令；没有匹配 grant 就走 sandbox。不需要第二张卡，runner 不必代为执行命令。
+   消费不因重试、连接断开或包装崩溃而回滚；答复丢失会损失一次逃逸机会，不能再次发放同一份批准。
+3. **broker 的信任边界**：不能相信请求 JSON 声称的 PID、会话、cwd、命令或 env。须用本地 socket 的 peer 凭据和进程启动身份，
+   验证调用者是该存活会话中 runner 安装的、不可被 sandbox 改写的 `orbit-bash`，且是受信 CLI 直接启动的有效包装调用；
+   嵌套 shell、其它会话和任意同 UID 客户端不能靠自报字段通过。还须核对实际 cwd、完整 fd 5 载荷、受支持的 argv/loader，
+   并保证消费成功后执行的就是核对过的命令；在决定前还原 HOME、清除 CLI 凭据，并防止请求者替换启动文件、载荷或执行环境。
+   Unix socket 同 UID 检查本身不足以做到这些。只消费未过期 grant，锁内检查/扣减且仅回一次决定，旧会话代次不可重用。
+4. **并发、相同命令、后台**：不同键分别计数；相同键用同一个原子计数器，N 份批准最多容许 N 次逃逸，08/09 中只有一份批准时
+   最多一个逃逸，其余仍 sandbox。`cursorAutoAllows(command, workspace)` 是确定性的；在同一个 workspace/policy 下，同文本的
+   sibling 若走 permission request 也会得到同样分类，不能仅靠调度把 Auto 文本变成高风险文本，拒绝的请求也不会执行。
+   这个论证不是 PID 关联；env 相等是本次记录的事实，不是关于以后所有调用的保证。broker 必须执行上一条的身份和上下文检查，
+   不得把同文本当作允许任意 caller/环境冒充该会话的理由。后台执行只在启动时消费一次，子进程不继承可复用的 grant，后续调用另行匹配。
+5. **失败与残余竞争**：快照、未知 argv/fd 布局、broker 不可达、身份/上下文不确定、没有 grant、过期或会话结束，一律 sandbox。
+   结束/重启清空旧代次，取消撤销尚未消费的关联 grant；已经消费并启动的后台命令不能靠删除 grant 撤回。
+   一个伪造的消费请求若竟被允许扣减，只能提前花掉同一精确键的一份批准，使合法调用得不到 grant、继续 sandbox；
+   不能增加逃逸总数，也不能把这个答复变成另一命令的逃逸权。这个“提前花掉”是可用性损失，不是新的批准；
+   它以可信包装执行核对后的命令、答复绑定到该连接且不可转给任意 exec 为前提，不能以此省略 caller 检查。
+   先写 grant 再回 allow-once 解决“命令先 exec、批准还没落盘”的竞争；原子消费解决并发超发，TTL 限制未消费批准的存活期。
+
+这是对同一授权文本的次数约束，不保证原卡片对应的特定 PID 成功逃逸，也不保证授权后可写文件的内容不变。
+本任务不实现 broker 或 sandbox。实施时须验证 fd 5 无损重放、载荷/环境替换防护、并发相同文本的计数不超发、
+重复 permission 答复、消费答复丢失、取消/过期/重启，以及后台生命周期；不能把本节的设计要求当作已有实测。
+本次没有证明 wrapper 自行执行不安全，因此不选择复杂度更高的 runner 代执行变体。
+
+#### 8.5.1 Linux implementation and fresh-shell decision (2026-11-08)
+
+The preceding text records task 1's proposed design. Task 4 implements the Linux
+path in `cursor_shell.go` and `cursor_shell_linux.go`; the coordinator's decision
+changes the approved path to **fresh Bash**, rather than escaping with Cursor's loader.
+[Real CLI recording and reproduction](evidence/cursor-cli/2026.10.14-941492e/sandbox-execution-linux/README.md).
+
+Cursor's recorded state dumper captures all functions (`index.js`, byte 7412753
+on the pinned build), and its loader evaluates that snapshot before the command
+(byte 7373068). A prior command can define `printf` to perform another write.
+The local producer/consumer replay `snapshot-state-replay.py` reproduces that
+additional write without changing the later command bytes. This was first
+recorded in runner job `bgj_5bc8ee3a6de0`; it is a Bash replay, not a real CLI escape.
+
+In Auto with a usable OS sandbox, `orbit-bash` keeps its existing HOME/environment
+restoration, then invokes the runner's shell helper. Unknown invocations, snapshots,
+unasked commands and runner classifier Auto approvals all stay sandboxed.
+The helper recognizes the pinned argv/loader and a single NUL-terminated UTF-8
+fd-5 payload; it replays those exact bytes when no grant is available. Invalid,
+oversized, or ambiguous payloads fail without executing. Failed sandbox commands
+include an English explanation of the writable-root restriction on stderr.
+
+Owner decision (2026-11-08): a workspace standing "Always allow" answer counts
+as owner approval, exactly like a person's click. A card-path `ALLOWED` response
+with the server's `decidedById` or `standingGrant: true` creates one grant under
+the bridge's turn lock and before `allow-once` is queued. The server sends the
+standing marker only for an allowed row with no decider and the exact stored
+`AUTO_ALLOWED_MESSAGE`; coordinator task-create allows do not qualify. An older
+server without the marker retains today's behavior: an answer with neither
+owner-approval field creates no grant. Grants live in runner
+memory, are deduplicated by the server's approval ID (including a repeated RPC
+for the same answered card), expire after one minute, and are
+cleared at turn cancellation/settlement, policy change, or process exit. Exact
+conversation/cwd/command comparison and consumption share one mutex. A lost
+response consumes the approval; no retry restores it.
+
+The private Unix socket is hidden behind a read-only empty mount in sandboxed
+commands. The Linux broker checks kernel peer credentials, helper executable
+identity, pinned argv/config, the pinned CLI as direct parent, the live runner
+scope ancestry and process generation, plus `/proc` cwd and conversation env.
+An arbitrary same-UID client or a nested shell is insufficient. Launch files and
+their writable ancestors are sealed; writable workspace/cache/temp mounts remain
+available. No grant token or broker connection is inherited by command children.
+
+After a successful consumption, the helper drains fd 3 as **inert bytes** and runs
+only the matched command with `bash --noprofile --norc -c`, from the wrapper's
+startup cwd and restored environment. It removes shell startup injection variables
+and imported function env entries. It never evaluates the snapshot, its functions,
+aliases, options, variables, or restore snippets. Stdout/stderr and the exit code
+go to Cursor normally. The original snapshot is framed back onto fd 4 without
+executing it, preserving state for subsequent **sandboxed** commands. Approved
+commands do not persist new shell state or `cd` changes.
+
+Limits: permission events expose command text but no independently trusted current
+cwd. Grants are therefore restricted to the runner's known checkout cwd; a wrapper
+started elsewhere stays sandboxed. Snapshot cwd tracking is not implemented.
+The committed recording uses the real CLI and the runner's real card path against
+a controlled server, which supplies person-decision provenance for the approved
+command; it does **not** establish a production human UI click. The blocked Python
+and function-definition requests receive `ALLOWED` without person provenance and
+remain sandboxed; task 5 still owns relaxing Auto's inline-script classifier.
+Linux and macOS now authenticate escape callers (Darwin details in §8.5.3).
+Other permission modes retain their existing wrappers; entering or leaving Auto
+restarts the CLI process.
+
+
+#### 8.5.2 macOS invocation matrix and escalation verdict (2026-11-09)
+
+Follow-up verification: the [Seatbelt recording](evidence/cursor-cli/2026.10.14-941492e/sandbox-macos-verification/README.md)
+shows a real Auto-allowed Python heredoc denied writing `$HOME/outside-file`, with
+the English sandbox message, zero cards and an independent file-absence check
+(`bgj_3edf5266b5ca`). Runner-hosted Mac tests pass unskipped, including writable
+roots, network, inherited descriptors, shell replay and launch-file protection
+(`bgj_87694540ac51`). The profile now protects sealed ancestors against rename;
+launch paths use canonical paths and long Darwin broker socket paths use short,
+temporary private aliases. Detection still uses the unchanged real Seatbelt trial.
+**Historical result (2026-11-09): macOS escapes were explicitly refused.** The
+recording predates the authenticated Darwin backend in §8.5.3 and documents the
+then-current limitation, rather than the current capability.
+
+Recorded on `longdeMac-mini.local`, macOS 27.2 / Darwin arm64, with the same
+pinned Cursor CLI `2026.10.14-941492e`. The [recording README](evidence/cursor-cli/2026.10.14-941492e/sandbox-shell-macos/README.md)
+contains reproduction steps, probe limitations and redaction rules; the
+[native probe source](evidence/cursor-cli/2026.10.14-941492e/sandbox-shell-macos/probe.go.txt)
+and [offline assertions](evidence/cursor-cli/2026.10.14-941492e/sandbox-shell-macos/check.py)
+are retained. This measures wrapper entry, before HOME restoration and credential
+removal. No product sandbox code was changed.
+
+| Case | macOS recording | Observed invocation |
+|---|---|---|
+| Environment snapshot | [00](evidence/cursor-cli/2026.10.14-941492e/sandbox-shell-macos/00-snapshot.json) | `orbit-bash -O extglob -ilc <4793-byte script>`; 34 environment entries; no request/conversation ID or fd 5 |
+| Unasked `ls` | [01](evidence/cursor-cli/2026.10.14-941492e/sandbox-shell-macos/01-unasked-ls.json) | `orbit-bash -O extglob -c <loader> --`; 39 environment entries |
+| Orbit Auto allows `touch auto-allowed.txt` | [02](evidence/cursor-cli/2026.10.14-941492e/sandbox-shell-macos/02-auto-allowed-touch.json) | Same argv, cwd and environment as 01; different fd-5 command |
+| Foreground Python through controlled card path | [03](evidence/cursor-cli/2026.10.14-941492e/sandbox-shell-macos/03-harness-card-python.json) | Same argv, cwd and environment as 01/02; harness supplies ALLOWED; this row alone is not a person click |
+| Background requested with `block_until_ms: 0`, then foreground | [04](evidence/cursor-cli/2026.10.14-941492e/sandbox-shell-macos/04-background.json), [05](evidence/cursor-cli/2026.10.14-941492e/sandbox-shell-macos/05-foreground.json) | `sleep 4; printf background`, then `printf foreground`; same request ID and entry environment |
+| Two different concurrent commands | [06 B](evidence/cursor-cli/2026.10.14-941492e/sandbox-shell-macos/06-concurrent-b.json), [07 A](evidence/cursor-cli/2026.10.14-941492e/sandbox-shell-macos/07-concurrent-a.json) | Separate PIDs; identical argv/cwd/env; distinct fd-5 text; wrapper entries less than three seconds apart |
+| Two identical concurrent commands | [08](evidence/cursor-cli/2026.10.14-941492e/sandbox-shell-macos/08-identical-a.json), [09](evidence/cursor-cli/2026.10.14-941492e/sandbox-shell-macos/09-identical-b.json) | Separate PIDs; identical argv/cwd/env/payload; entries 0.044 ms apart, for two three-second sleeps |
+| Actual person approves a card | [shell entries](evidence/cursor-cli/2026.10.14-941492e/sandbox-shell-macos/person-card/shell.json), [decision and checks](evidence/cursor-cli/2026.10.14-941492e/sandbox-shell-macos/person-card/summary.json) | Separate real-CLI session; Python's loader argv and environment key set match 03. The harness relays the pending command to a production Orbit `CursorShellRecording` card, waits for ALLOWED with `decidedById`, then releases ACP `allow-once` |
+
+All ten primary entries have the same `<RUN>/work` cwd. The native entry probe
+records every environment key/value and the complete argv, plus non-consuming
+`MSG_PEEK` of the fd-5 Unix socket. Credentials are masked and temporary paths/UUIDs
+use stable placeholders. macOS has no recorded Linux socket inode; distinct wrapper
+PIDs and entry times establish the two invocations. The only environment-key
+platform difference from the Linux snapshot is `__CF_USER_TEXT_ENCODING` replacing
+`LANG`; values such as PATH and TMPDIR are host-specific. The command environment
+adds the same five keys as Linux: `CURSOR_AGENT`, `CURSOR_CONVERSATION_ID`,
+`CURSOR_REQUEST_ID`, `AGENT_TRANSCRIPTS`, `__CURSOR_SANDBOX_ENV_RESTORE`.
+
+The [primary ACP stdout](evidence/cursor-cli/2026.10.14-941492e/sandbox-shell-macos/process/stdout.jsonl),
+[stdin](evidence/cursor-cli/2026.10.14-941492e/sandbox-shell-macos/process/stdin.jsonl),
+[timeline](evidence/cursor-cli/2026.10.14-941492e/sandbox-shell-macos/process/timeline.jsonl)
+and [runner summary](evidence/cursor-cli/2026.10.14-941492e/sandbox-shell-macos/summary.json)
+show no permission request for `ls`, eight `allow-once` replies, and one controlled
+Python card; the other seven requests are Orbit Auto allows. Background numerical
+`block_until_ms` arguments are requested in the retained prompts but not independently
+exposed by ACP rawInput. Each sleep reports completion with empty stdout before its
+sleep duration, while foreground printf returns output. Entry wall-clock times and
+ACP relative times are separate time bases.
+
+The first production relay matched the workspace's standing grant:
+[decision and shell recording](evidence/cursor-cli/2026.10.14-941492e/sandbox-shell-macos/standing-grant/summary.json)
+records `standingGrant: true` and no person decider. The explicit-person run uses a
+separate, honestly labeled recording tool name so that the existing Bash standing
+rule does not answer it. This is a production card decision relayed by a test harness,
+not an ordinary production Cursor session; the CLI, wrapper and ACP execution are real.
+
+**Verdict: the exact-command, counted-grant design carries over; the Linux
+implementation cannot be used unchanged.** The recorded loader and fd-5 NUL framing
+match Linux. Request IDs are shared within a turn, and argv/env contain neither
+an approval flag nor the ACP toolCallId. Thus approval must still be recorded before
+`allow-once`, matched against the complete conversation/cwd/command key, and consumed
+atomically once; unasked and classifier-approved commands receive no escape grant.
+Identical concurrent commands still require count semantics rather than PID attribution.
+The fresh-Bash approved path in §8.5.1 must remain independent of Cursor's persisted
+snapshot. This is an input-compatibility finding, not a successful macOS broker test.
+
+The historical [host diagnostic](evidence/cursor-cli/2026.10.14-941492e/sandbox-shell-macos/detection.json)
+records the old empty `cursorShellStartIdentity` result. The replacement Darwin
+backend in §8.5.3 now establishes peer PID/UID, executable identity, parent CLI
+generation, live session ancestry, cwd and conversation context without trusting
+client-supplied JSON. UID alone remains insufficient.
+
+**Sandbox detection depends on execution context.** The same host diagnostic calls
+`detectCursorSandbox` and records the exact Seatbelt profile/argv: available, empty
+reason, and successful `/bin/sh -c 'exit 0'` trial. Removing `--` also succeeds;
+this recording does not support blaming that separator. The
+[same trial inside Codex's sandbox](evidence/cursor-cli/2026.10.14-941492e/sandbox-shell-macos/engine-sandbox-trial.json)
+exits 71 with `sandbox-exec: sandbox_apply: Operation not permitted`. Run availability
+checks on the runner host, not inside an already confined engine. This distinguishes
+the task-history failure report from the successful host trial observed now.
+The primary controlled CLI fixture's summary records another explicit fallback:
+its temporary ORBIT_HOME has no `caches` directory, so writable-root resolution
+fails before a Seatbelt trial. Its
+[original wrapper](evidence/cursor-cli/2026.10.14-941492e/sandbox-shell-macos/person-card/process/original-orbit-bash)
+therefore execs Bash directly. These recordings establish invocation compatibility
+and detection diagnostics, not write confinement or successful macOS escalation;
+those remain the macOS sandbox verification task's responsibility.
+
+---
+
+#### 8.5.3 Darwin grant authentication and capability (2026-11-10)
+
+`cursor_shell_darwin.go` mirrors the Linux broker checks using kernel interfaces.
+It calls the `proc_info` syscall used by libproc's `proc_pidinfo` and `proc_pidpath`,
+without cgo, using the fixed layouts in Darwin's `sys/proc_info.h`. An error,
+short result, missing value, unexpected argv or changed process generation refuses
+an escape. The broker never authenticates a PID, UID, cwd or conversation asserted
+by the request body.
+
+| Linux check | Darwin equivalent |
+| --- | --- |
+| Unix `SO_PEERCRED`, runner UID | `LOCAL_PEERPID` and version-checked `LOCAL_PEERCRED` on the accepted Unix socket; compare UID with `os.Getuid()` and process UID |
+| Positive CLI PID and nonempty matching `/proc/<cli>/stat` start time | `PROC_PIDTBSDINFO` PID and start seconds/microseconds; compare with the launch-time anchor |
+| `/proc/<peer>/exe` matches installed helper inode | `PROC_PIDPATHINFO` (the `proc_pidpath` kernel operation), then `os.Stat`/`os.SameFile` against the sealed helper |
+| Exact helper argv, config path and byte-for-byte loader | `KERN_PROCARGS2` argc/argv; exactly eight arguments, including the same config and five loader arguments |
+| Direct parent is pinned CLI `node` or `cursor-agent-sea` | `PROC_PIDTBSDINFO` parent PID plus `PROC_PIDPATHINFO`; canonical pinned CLI directory |
+| CLI anchor reached within 16 ancestors; only runner executables bridge the chain; no shell helper bridge | Walk BSD parent PIDs; executable inode matches the runner and argv excludes `internal-cursor-shell`; reject unknown or excessive ancestry |
+| `/proc/<peer>/cwd` | `PROC_PIDVNODEPATHINFO` current-directory vnode path |
+| Nonempty `CURSOR_CONVERSATION_ID` from `/proc/<peer>/environ` | `KERN_PROCARGS2` environment; reject empty or duplicate conversation entries |
+| JSON cwd/conversation must match authenticated context | Unchanged shared broker comparison before looking up a grant |
+| Exact conversation/cwd/command, expiry, revocation and single consumption | Unchanged runner-owned ledger under its mutex; deletion precedes the response, including a lost response |
+
+Darwin also rechecks PID/start time, UID, parent and executable path after each
+process snapshot and again across the completed ancestry walk. The CLI generation
+is rechecked before returning authenticated context. A stale cached generation
+cannot authorize a new process at that PID.
+
+`cursorEscapeAuthSupported()` now returns true for Linux and Darwin. Auto uses
+Seatbelt on macOS when the existing detection trial succeeds; inline scripts may
+run without a card inside that sandbox. Person approvals and standing rules alone
+create escape grants. A successful Mac backend no longer emits the old notice
+about unavailable caller authentication. A failed sandbox detection still emits
+the English unavailable-backend notice and retains the existing approval policy.
+
+Native Mac tests exercise a copied native `node` parent and the real internal
+shell helper over Unix sockets, successful authorization, refusal after one grant
+consumption, wrong executable/start time/UID, a stale generation paired with a
+live PID, unknown callers, wrong config, wrong parent path and unrelated ancestry.
+The UID and stale-generation negative tests supply mismatched expected kernel
+identities to the verifier; they do not change the host user's UID or force the
+kernel to wrap its PID allocator. The real-Cursor live verification is a separate
+follow-up; these native tests do not claim that recording.
 
 ## 9. 登录、API key 与 token（覆盖要求 7）
 
@@ -1267,7 +1566,7 @@ env:  三层，后面的覆盖前面的（见下）：白名单（PATH、LANG、
 | Orbit 模式 | 启动参数（`acp --disable-auto-update --disable-indexing` 之后） | Cursor 模式 | Orbit 对权限请求的处理 | 实测 |
 | --- | --- | --- | --- | --- |
 | `acceptEdits`（没指定模式时的默认，D6） | `--disable-project-configs` | agent | 审批卡；卡上的「总是允许」回 `allow-once`（§5.2） | `p5c/accept-edits-allow-deny`、`p5c/allow-always` |
-| `auto` | 同上，**不用** `--force` | agent | Orbit 自己的请求级分类：例行命令由 runner 直接 `allow-once`，其余出卡。例行指：按 Codex Auto 的规则是例行的（`codexAutoApproval`：不 push、fetch、install，没有远程 shell、内联解释器、密钥文件、递归删除），不作用于别的系统（DSH 的工具闸 `dshToolGateMatch`），不起容器，路径不出工作区和临时目录（`cursorAutoAllows`） | `p5c/auto` |
+| `auto` | Same as above; no `--force` | agent | Routine commands receive `allow-once`; all others get a card. With the session sandbox in force, inline scripts and heredocs may run after high-impact marker checks over the full body. Without it, the original Codex Auto and workspace checks apply, including refusal of interpreter heredocs. See §5.4 for the retained card boundaries. | `p5c/auto`; `TestCursorAutoSandboxInline` |
 | `plan` | 同上 | plan，每轮发 prompt 前核对 | 一律 `reject-once`，不出卡；提问和计划照常出卡；看到 `switch_mode` 工具卡就终止这一轮（§4.2） | `p5c/plan`、`p5c/plan-switch-mode` |
 | `dontAsk` | 同上 | agent | 一律 `reject-once`，不出卡；提问回 `skipped`，计划回 `rejected`；工作区内的写照样发生，模式说明如实写明 | `p5c/dont-ask` |
 | `bypassPermissions` | `--force --disable-project-configs` | agent | 不会来请求；团队否决 Run Everything 时来了就出卡问人，每个进程提示一次（§5.3） | `p5c/bypass`；团队否决只有回放 |

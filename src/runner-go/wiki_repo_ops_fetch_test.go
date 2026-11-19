@@ -12,7 +12,7 @@ import (
 	"testing"
 )
 
-// Fetches of one checkout racing each other (fetchWikiOriginMain). On 2026-10-09 the canary's docs
+// Fetches of one checkout racing each other (fetchWikiOriginRef). On 2026-10-09 the canary's docs
 // build 79620f23 lost two reads to it: each read fetched origin's main before it read, two were in
 // flight, main moved between them, and the slower fetch's update of refs/remotes/origin/main was refused —
 //
@@ -108,7 +108,7 @@ func TestWikiFetchInAnotherProcessAndTheRunnersOperationsAllAnswerWhileMainMoves
 	if repo := os.Getenv("ORBIT_WIKI_FETCH_RACE_REPO"); os.Getenv("ORBIT_WIKI_FETCH_RACE_CHILD") == "1" {
 		// The other process. "ready" is the parent's cue to start its own operations.
 		fmt.Println("ready")
-		if err := fetchWikiOriginMain(repo); err != nil {
+		if _, err := fetchWikiOriginRef(repo); err != nil {
 			t.Fatalf("the other process's fetch: %v", err)
 		}
 		return

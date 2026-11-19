@@ -1,0 +1,96 @@
+{
+  "args": [
+    "acp",
+    "--disable-auto-update",
+    "--disable-indexing",
+    "--disable-project-configs"
+  ],
+  "cards": [
+    {
+      "input": {
+        "command": "python3 -c 'print(424242)'"
+      },
+      "toolName": "Bash",
+      "toolUseId": "call-<UUID_2>-0\nfc_<UUID_3>_0",
+      "withdrawn": false
+    }
+  ],
+  "checks": [
+    {
+      "name": "person-approved",
+      "pass": false,
+      "detail": "production decision has ALLOWED and a person decider"
+    }
+  ],
+  "completions": [
+    {
+      "error": "",
+      "result": "Running the exact measurement command once.\n\n`424242`",
+      "status": "SUCCEEDED",
+      "subtype": "completed",
+      "turn": "turn-1"
+    }
+  ],
+  "events": [
+    {
+      "payload": {
+        "cliVersion": "2026.10.14-941492e",
+        "provider": "cursor",
+        "resumed": false,
+        "runtime": "acp",
+        "sessionId": "<UUID_1>",
+        "subtype": "init"
+      },
+      "turn": "",
+      "type": "system"
+    },
+    {
+      "payload": {
+        "notice": "Cursor Auto asks for approval for inline scripts because the command sandbox is unavailable: Cursor sandbox writable root is unavailable: lstat /private<RUN>/home/.orbit/caches: no such file or directory",
+        "noticeKind": "cursor-sandbox-unavailable",
+        "provider": "cursor"
+      },
+      "turn": "turn-1",
+      "type": "system"
+    },
+    {
+      "payload": {
+        "id": "call-<UUID_2>-0\nfc_<UUID_3>_0",
+        "input": {
+          "command": "python3 -c 'print(424242)'"
+        },
+        "name": "Bash"
+      },
+      "turn": "turn-1",
+      "type": "tool_use"
+    },
+    {
+      "payload": {
+        "content": "424242",
+        "isError": false,
+        "toolUseId": "call-<UUID_2>-0\nfc_<UUID_3>_0"
+      },
+      "turn": "turn-1",
+      "type": "tool_result"
+    }
+  ],
+  "facts": {
+    "approvalSource": "Real production Orbit approval relayed from the controlled CLI harness; no decision is fabricated.",
+    "productionDecision": {
+      "standingGrant": true,
+      "id": "<UUID_4>",
+      "status": "ALLOWED",
+      "behavior": "allow",
+      "message": "Allowed automatically — this workspace has a standing grant for this call."
+    }
+  },
+  "mode": "auto",
+  "process": "process",
+  "processes": null,
+  "prompts": [
+    10
+  ],
+  "scenario": "macos-person-card",
+  "status": "SUCCEEDED",
+  "version": "2026.10.14-941492e"
+}

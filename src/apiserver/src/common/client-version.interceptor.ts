@@ -18,8 +18,11 @@ import { AuthUser } from './current-user.decorator';
  * Three rules, all of them about never being worth an incident:
  *  - It cannot fail a request. A malformed header is ignored rather than 400'd (a header is
  *    telemetry, not a contract), and the write is fire-and-forget.
- *  - It cannot flood the database. One row per (user, kind) is rewritten at most hourly while the
- *    version is unchanged, so a client polling every 4s still writes once an hour.
+ *  - It cannot flood the database. Each version a (user, kind) reports is written at most hourly, so
+ *    a client polling every 4s still writes once an hour, and so do two of them on different builds
+ *    (an old tab beside a new one). Throttled on the pair alone, two builds took turns rewriting the
+ *    one row on every request: production, 2026-11-19, ~4 upserts a second queued on a single row,
+ *    15 ms each, the database's most expensive statement by total time.
  *  - It cannot grow without bound. The throttle map is capped and dropped wholesale when full;
  *    losing it costs one extra upsert per active client, which is the cheap direction to fail in.
  */
@@ -59,10 +62,11 @@ export class ClientVersionInterceptor implements NestInterceptor {
     const version = raw.slice(slash + 1);
     if (!KINDS.has(kind) || !VERSION_RE.test(version)) return;
 
-    const key = `${userId}:${kind}`;
+    // Per version, not per (user, kind): see "It cannot flood the database" above.
+    const key = `${userId}:${kind}:${version}`;
     const seen = this.lastWrite.get(key);
     const now = Date.now();
-    if (seen && seen.version === version && now - seen.at < WRITE_EVERY_MS) return;
+    if (seen && now - seen.at < WRITE_EVERY_MS) return;
 
     if (this.lastWrite.size >= MAX_TRACKED) this.lastWrite.clear();
     this.lastWrite.set(key, { version, at: now });

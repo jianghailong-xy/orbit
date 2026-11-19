@@ -137,11 +137,10 @@ describe('the turn that starts a task run', () => {
     expect(el!.querySelector('details.tsc-raw pre')?.textContent).toBe(BRIEF);
   });
 
-  it('names itself on the sticky bar the way every card that is nobody\'s message does', async () => {
+  it('marks a round Orbit opened, which the sticky bar hides over', async () => {
     await mount([started(CARD)]);
 
-    expect(card()!.getAttribute('data-sticky-label')).toBe('Task started');
-    expect(card()!.getAttribute('data-sticky-text')).toBe(CARD.title);
+    expect(card()!.hasAttribute('data-orbit-round'), 'Orbit opened this round: the sticky bar hides over it').toBe(true);
     expect(card()!.getAttribute('data-seq')).toBe('1');
   });
 
@@ -190,8 +189,8 @@ describe('the turn that starts a task run', () => {
     expect(card()!.querySelector('.tsc-command')).toBeNull();
   });
 
-  it('carries the task\'s inputs and whatever delivery appended inside the card, not in a bubble beside it', async () => {
-    const note = '\n\n<background-jobs>\n- bgj_1 completed\n</background-jobs>';
+  it('keeps the task\'s inputs and brief inside the card without the appended note', async () => {
+    const note = `\n\n${'<list-conditions list="3Hq9fVbYmP2kQhZ8aNcW4x" title="FineWeb">\n  Quota held dispatch\n</list-conditions>'}`;
     await mount([started(CARD, {
       // The echo is the brief and then what delivery appended; the note says where the brief ends.
       text: BRIEF + note,
@@ -201,12 +200,14 @@ describe('the turn that starts a task run', () => {
 
     expect(container.querySelector('.chat-user')).toBeNull();
     expect(card()!.querySelector('.chat-files')?.textContent).toContain('design-notes.md');
-    expect(card()!.querySelector('.chat-injected')).not.toBeNull();
-    // The fold holds the brief alone: the appended block is its own entry, not part of the brief.
+    expect(card()!.querySelector('.chat-injected')).toBeNull();
+    expect(card()!.textContent).not.toContain('Orbit attached');
+    expect(card()!.textContent).not.toContain('Quota held dispatch');
+    // The fold holds the brief alone: the appended block is not shown.
     expect(card()!.querySelector('details.tsc-raw pre')?.textContent).toBe(BRIEF);
   });
 
-  it('stays a card when the wiki handed the run its context, and opens onto what it read', async () => {
+  it('stays a card when the wiki handed the run context, without drawing that context', async () => {
     // What T6 appends at delivery (apiserver wiki/wiki-push.ts), as the runner echoes it: the brief,
     // then the block. `taskStart` is read off the payload, so the note changes nothing about which
     // turn this is — the failure this pins is a start card that falls back to a bubble the moment
@@ -224,21 +225,11 @@ describe('the turn that starts a task run', () => {
 
     // Still the task, not a bubble — and the brief is still folded whole behind it.
     expect(container.querySelector('.chat-user')).toBeNull();
-    const fold = card()!.querySelector('button.chat-injected-head')!;
-    expect(fold.textContent).toBe('⊕ Orbit attached: Wiki context · 2 entries');
     expect(card()!.querySelector('details.tsc-raw pre')?.textContent).toBe(BRIEF);
-
-    await act(async () => {
-      fold.dispatchEvent(new MouseEvent('click', { bubbles: true }));
-    });
-    expect([...card()!.querySelectorAll('.wkctx-kind')].map((el) => el.textContent)).toEqual([
-      'Principle',
-      'Pitfall',
-    ]);
-    expect([...card()!.querySelectorAll('.wkctx-title')].map((el) => el.textContent)).toEqual([
-      'A clock never starts agent work',
-      'Piping a test run into grep hides its exit code',
-    ]);
+    expect(card()!.querySelector('.chat-injected')).toBeNull();
+    expect(card()!.textContent).not.toContain('Orbit attached');
+    expect(card()!.textContent).not.toContain('A clock never starts agent work');
+    expect(card()!.textContent).not.toContain('Piping a test run into grep hides its exit code');
   });
 
   it('keeps a retried task brief as the same card after a provider failure', async () => {

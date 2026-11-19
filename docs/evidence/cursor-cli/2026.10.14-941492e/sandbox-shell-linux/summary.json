@@ -1,0 +1,410 @@
+{
+  "args": [
+    "acp",
+    "--disable-auto-update",
+    "--disable-indexing",
+    "--disable-project-configs"
+  ],
+  "cards": [
+    {
+      "input": {
+        "command": "python3 -c 'print(424242)'"
+      },
+      "toolName": "Bash",
+      "toolUseId": "call-<UUID_2>-2\nfc_<UUID_3>_2",
+      "withdrawn": false
+    }
+  ],
+  "checks": null,
+  "completions": [
+    {
+      "error": "",
+      "result": "Running the three Shell commands exactly as specified.\n\nAll three finished:\n\n1. `ls` — `README.md`\n2. `touch auto-allowed.txt` — created\n3. `python3 -c 'print(424242)'` — `424242`",
+      "status": "SUCCEEDED",
+      "subtype": "completed",
+      "turn": "turn-1"
+    },
+    {
+      "error": "",
+      "result": "Starting the background sleep command, then running the foreground printf.\n\nBackground `sleep 4; printf background` started; `printf foreground` printed `foreground`.",
+      "status": "SUCCEEDED",
+      "subtype": "completed",
+      "turn": "turn-2"
+    },
+    {
+      "error": "",
+      "result": "Both started in the background: `sleep 3; printf concurrent-A` and `sleep 3; printf concurrent-B`.\n\nChecking the background command output.\n\nThe background command finished successfully and printed `background` (exit 0).\n\nBoth concurrent jobs finished successfully: `concurrent-A` and `concurrent-B` (exit 0).",
+      "status": "SUCCEEDED",
+      "subtype": "completed",
+      "turn": "turn-3"
+    },
+    {
+      "error": "",
+      "result": "Both identical `sleep 3; printf identical` invocations are running in the background.",
+      "status": "SUCCEEDED",
+      "subtype": "completed",
+      "turn": "turn-4"
+    }
+  ],
+  "events": [
+    {
+      "payload": {
+        "cliVersion": "2026.10.14-941492e",
+        "provider": "cursor",
+        "resumed": false,
+        "runtime": "acp",
+        "sessionId": "<UUID_1>",
+        "subtype": "init"
+      },
+      "turn": "",
+      "type": "system"
+    },
+    {
+      "payload": {
+        "id": "call-<UUID_2>-0\nfc_<UUID_3>_0",
+        "input": {
+          "command": "ls"
+        },
+        "name": "Bash"
+      },
+      "turn": "turn-1",
+      "type": "tool_use"
+    },
+    {
+      "payload": {
+        "id": "call-<UUID_2>-1\nfc_<UUID_3>_1",
+        "input": {
+          "command": "touch auto-allowed.txt"
+        },
+        "name": "Bash"
+      },
+      "turn": "turn-1",
+      "type": "tool_use"
+    },
+    {
+      "payload": {
+        "id": "call-<UUID_2>-2\nfc_<UUID_3>_2",
+        "input": {
+          "command": "python3 -c 'print(424242)'"
+        },
+        "name": "Bash"
+      },
+      "turn": "turn-1",
+      "type": "tool_use"
+    },
+    {
+      "payload": {
+        "name": "Bash",
+        "provider": "cursor",
+        "reason": "Auto allows a routine command in the workspace",
+        "subtype": "permission_auto_allowed",
+        "toolUseId": "call-<UUID_2>-1\nfc_<UUID_3>_1"
+      },
+      "turn": "turn-1",
+      "type": "system"
+    },
+    {
+      "payload": {
+        "content": "README.md",
+        "isError": false,
+        "toolUseId": "call-<UUID_2>-0\nfc_<UUID_3>_0"
+      },
+      "turn": "turn-1",
+      "type": "tool_result"
+    },
+    {
+      "payload": {
+        "content": "",
+        "isError": false,
+        "toolUseId": "call-<UUID_2>-1\nfc_<UUID_3>_1"
+      },
+      "turn": "turn-1",
+      "type": "tool_result"
+    },
+    {
+      "payload": {
+        "content": "424242",
+        "isError": false,
+        "toolUseId": "call-<UUID_2>-2\nfc_<UUID_3>_2"
+      },
+      "turn": "turn-1",
+      "type": "tool_result"
+    },
+    {
+      "payload": {
+        "id": "call-<UUID_4>-3\nfc_<UUID_5>_0",
+        "input": {
+          "command": "sleep 4; printf background"
+        },
+        "name": "Bash"
+      },
+      "turn": "turn-2",
+      "type": "tool_use"
+    },
+    {
+      "payload": {
+        "name": "Bash",
+        "provider": "cursor",
+        "reason": "Auto allows a routine command in the workspace",
+        "subtype": "permission_auto_allowed",
+        "toolUseId": "call-<UUID_4>-3\nfc_<UUID_5>_0"
+      },
+      "turn": "turn-2",
+      "type": "system"
+    },
+    {
+      "payload": {
+        "id": "call-<UUID_4>-4\nfc_<UUID_5>_1",
+        "input": {
+          "command": "printf foreground"
+        },
+        "name": "Bash"
+      },
+      "turn": "turn-2",
+      "type": "tool_use"
+    },
+    {
+      "payload": {
+        "name": "Bash",
+        "provider": "cursor",
+        "reason": "Auto allows a routine command in the workspace",
+        "subtype": "permission_auto_allowed",
+        "toolUseId": "call-<UUID_4>-4\nfc_<UUID_5>_1"
+      },
+      "turn": "turn-2",
+      "type": "system"
+    },
+    {
+      "payload": {
+        "content": "",
+        "isError": false,
+        "toolUseId": "call-<UUID_4>-3\nfc_<UUID_5>_0"
+      },
+      "turn": "turn-2",
+      "type": "tool_result"
+    },
+    {
+      "payload": {
+        "content": "foreground",
+        "isError": false,
+        "toolUseId": "call-<UUID_4>-4\nfc_<UUID_5>_1"
+      },
+      "turn": "turn-2",
+      "type": "tool_result"
+    },
+    {
+      "payload": {
+        "id": "call-<UUID_6>-5\nfc_<UUID_7>_0",
+        "input": {
+          "command": "sleep 3; printf concurrent-A"
+        },
+        "name": "Bash"
+      },
+      "turn": "turn-3",
+      "type": "tool_use"
+    },
+    {
+      "payload": {
+        "name": "Bash",
+        "provider": "cursor",
+        "reason": "Auto allows a routine command in the workspace",
+        "subtype": "permission_auto_allowed",
+        "toolUseId": "call-<UUID_6>-5\nfc_<UUID_7>_0"
+      },
+      "turn": "turn-3",
+      "type": "system"
+    },
+    {
+      "payload": {
+        "content": "",
+        "isError": false,
+        "toolUseId": "call-<UUID_6>-5\nfc_<UUID_7>_0"
+      },
+      "turn": "turn-3",
+      "type": "tool_result"
+    },
+    {
+      "payload": {
+        "id": "call-<UUID_6>-6\nfc_<UUID_7>_1",
+        "input": {
+          "command": "sleep 3; printf concurrent-B"
+        },
+        "name": "Bash"
+      },
+      "turn": "turn-3",
+      "type": "tool_use"
+    },
+    {
+      "payload": {
+        "name": "Bash",
+        "provider": "cursor",
+        "reason": "Auto allows a routine command in the workspace",
+        "subtype": "permission_auto_allowed",
+        "toolUseId": "call-<UUID_6>-6\nfc_<UUID_7>_1"
+      },
+      "turn": "turn-3",
+      "type": "system"
+    },
+    {
+      "payload": {
+        "content": "",
+        "isError": false,
+        "toolUseId": "call-<UUID_6>-6\nfc_<UUID_7>_1"
+      },
+      "turn": "turn-3",
+      "type": "tool_result"
+    },
+    {
+      "payload": {
+        "id": "call-<UUID_8>-7\nfc_<UUID_9>_0",
+        "input": {
+          "file_path": "<RUN>/session/data/projects/tmp-TestCursorSandboxProbe1346616534-007-work/terminals/921674.txt"
+        },
+        "name": "Read"
+      },
+      "turn": "turn-3",
+      "type": "tool_use"
+    },
+    {
+      "payload": {
+        "content": "---\npid: 2443659\ncwd: \"<RUN>/work\"\ncommand: \"sleep 4; printf background\"\ntitle: \"Background sleep then print\"\nstatus: succeeded\nstarted_at: 2026-11-07T17:15:18.698Z\nrunning_for_ms: 4085     \n---\nbackground\n---\nexit_code: 0\nelapsed_ms: 4085\nended_at: 2026-11-07T17:15:22.783Z\n---\n",
+        "isError": false,
+        "toolUseId": "call-<UUID_8>-7\nfc_<UUID_9>_0"
+      },
+      "turn": "turn-3",
+      "type": "tool_result"
+    },
+    {
+      "payload": {
+        "id": "call-<UUID_10>-8\nfc_<UUID_11>_0",
+        "input": {
+          "file_path": "<RUN>/session/data/projects/tmp-TestCursorSandboxProbe1346616534-007-work/terminals/921675.txt"
+        },
+        "name": "Read"
+      },
+      "turn": "turn-3",
+      "type": "tool_use"
+    },
+    {
+      "payload": {
+        "content": "---\npid: 2444226\ncwd: \"<RUN>/work\"\ncommand: \"sleep 3; printf concurrent-A\"\ntitle: \"Background concurrent-A\"\nstatus: succeeded\nstarted_at: 2026-11-07T17:15:22.687Z\nrunning_for_ms: 3613     \n---\nconcurrent-A\n---\nexit_code: 0\nelapsed_ms: 3613\nended_at: 2026-11-07T17:15:26.300Z\n---\n",
+        "isError": false,
+        "toolUseId": "call-<UUID_10>-8\nfc_<UUID_11>_0"
+      },
+      "turn": "turn-3",
+      "type": "tool_result"
+    },
+    {
+      "payload": {
+        "id": "call-<UUID_10>-9\nfc_<UUID_11>_1",
+        "input": {
+          "file_path": "<RUN>/session/data/projects/tmp-TestCursorSandboxProbe1346616534-007-work/terminals/921676.txt"
+        },
+        "name": "Read"
+      },
+      "turn": "turn-3",
+      "type": "tool_use"
+    },
+    {
+      "payload": {
+        "content": "---\npid: 2444329\ncwd: \"<RUN>/work\"\ncommand: \"sleep 3; printf concurrent-B\"\ntitle: \"Background concurrent-B\"\nstatus: succeeded\nstarted_at: 2026-11-07T17:15:22.785Z\nrunning_for_ms: 3448     \n---\nconcurrent-B\n---\nexit_code: 0\nelapsed_ms: 3447\nended_at: 2026-11-07T17:15:26.232Z\n---\n",
+        "isError": false,
+        "toolUseId": "call-<UUID_10>-9\nfc_<UUID_11>_1"
+      },
+      "turn": "turn-3",
+      "type": "tool_result"
+    },
+    {
+      "payload": {
+        "id": "call-<UUID_12>-10\nfc_<UUID_13>_0",
+        "input": {
+          "command": "sleep 3; printf identical"
+        },
+        "name": "Bash"
+      },
+      "turn": "turn-4",
+      "type": "tool_use"
+    },
+    {
+      "payload": {
+        "name": "Bash",
+        "provider": "cursor",
+        "reason": "Auto allows a routine command in the workspace",
+        "subtype": "permission_auto_allowed",
+        "toolUseId": "call-<UUID_12>-10\nfc_<UUID_13>_0"
+      },
+      "turn": "turn-4",
+      "type": "system"
+    },
+    {
+      "payload": {
+        "content": "",
+        "isError": false,
+        "toolUseId": "call-<UUID_12>-10\nfc_<UUID_13>_0"
+      },
+      "turn": "turn-4",
+      "type": "tool_result"
+    },
+    {
+      "payload": {
+        "id": "call-<UUID_12>-11\nfc_<UUID_13>_1",
+        "input": {
+          "command": "sleep 3; printf identical"
+        },
+        "name": "Bash"
+      },
+      "turn": "turn-4",
+      "type": "tool_use"
+    },
+    {
+      "payload": {
+        "name": "Bash",
+        "provider": "cursor",
+        "reason": "Auto allows a routine command in the workspace",
+        "subtype": "permission_auto_allowed",
+        "toolUseId": "call-<UUID_12>-11\nfc_<UUID_13>_1"
+      },
+      "turn": "turn-4",
+      "type": "system"
+    },
+    {
+      "payload": {
+        "content": "",
+        "isError": false,
+        "toolUseId": "call-<UUID_12>-11\nfc_<UUID_13>_1"
+      },
+      "turn": "turn-4",
+      "type": "tool_result"
+    }
+  ],
+  "facts": {
+    "approval_source": "Controlled harness returns ALLOWED through the runner card path; not a human UI click.",
+    "kernel": "Linux; real pinned CLI; temporary shell instrumentation only"
+  },
+  "mode": "auto",
+  "process": "process",
+  "processes": [
+    "<CLI>/cursor-agent --use-system-ca <CLI>/index.js acp --disable-auto-update --disable-indexing --disable-project-configs",
+    "<ORBIT> mcp",
+    "<CLI>/node <CLI>/index.js worker-server",
+    "/bin/sh <RUN>/session/bin/orbit-bash -O extglob -ilc #!/usr/bin/env bash\n\n# Usage:\n#   source dump_bash_state.bash\n#   dump_bash_state OUTPUT_FILE\n# Or execute directly (captures a subshell's state):\n#   ./dump_bash_state.bash OUTPUT_FILE\n\ndump_bash_state() {\n  set -euo pipefail\n\n  # Require base64 for safe encoding of emitted sections\n  if ! command -v base64 \u003e/dev/null 2\u003e\u00261; then\n    echo \"Error: base64 command is required\" \u003e\u00262\n    return 1\n  fi\n\n  # Helper to log timing, only if DUMP_BASH_STATE_TIMING is set\n  if [[ -n \"${DUMP_BASH_STATE_TIMING:-}\" ]]; then\n    # Timing setup\n    if [[ \"${BASH_VERSION%%.*}\" -ge 5 ]]; then\n      # Use EPOCHREALTIME if available (bash 5+)\n      local start_time=${EPOCHREALTIME}\n      local step_start=${EPOCHREALTIME}\n      _log_timing() {\n        local step_name=\"$1\"\n        local now=${EPOCHREALTIME}\n        local step_duration=$(command awk \"BEGIN {printf \"%.3f\", $now - $step_start}\")\n        local total_duration=$(command awk \"BEGIN {printf \"%.3f\", $now - $start_time}\")\n        builtin printf \"[TIMING] %-20s: %6.3fs (total: %6.3fs)\n\" \"$step_name\" \"$step_duration\" \"$total_duration\" \u003e\u00262\n        step_start=$now\n      }\n    else\n      # Fallback for older bash versions\n      local start_time=$(command date +%s.%N)\n      local step_start=$(command date +%s.%N)\n      _log_timing() {\n        local step_name=\"$1\"\n        local now=$(command date +%s.%N)\n        local step_duration=$(command awk \"BEGIN {printf \"%.3f\", $now - $step_start}\")\n        local total_duration=$(command awk \"BEGIN {printf \"%.3f\", $now - $start_time}\")\n        builtin printf \"[TIMING] %-20s: %6.3fs (total: %6.3fs)\n\" \"$step_name\" \"$step_duration\" \"$total_duration\" \u003e\u00262\n        step_start=$now\n      }\n    fi\n  else\n    _log_timing() { :; }\n  fi\n\n  # Helper to append a line to output file\n  _emit() {\n    builtin printf '%s\n' \"$1\"\n  }\n\n  # Helper to safely encode and emit unsafe values\n  _emit_encoded() {\n    local content=\"$1\"\n    local var_name=\"$2\"\n    if [[ -n \"$content\" ]]; then\n      # Builtin printf, not a here-document: no argument length limit, and no temp file\n      builtin printf 'cursor_snap_%s=$(builtin printf %%s '\"'\"'%s'\"'\"' | command base64 -d)\n' \"$var_name\" \"$(command base64 \u003c\u003c\u003c\"$content\" | command tr -d '\n')\"\n      builtin printf 'eval \"$cursor_snap_%s\"\n' \"$var_name\"\n    fi\n  }\n\n  # Start fresh\n  _log_timing \"file_init\"\n\n  # Emit start marker at the very beginning of the output\n  _emit \"__CURSOR_BASH_STATE_START__\"\n\n  # Working directory\n  _emit \"$PWD\"\n  _log_timing \"working_dir\"\n\n  # Drop ELECTRON_RUN_AS_NODE by exact name so one command exporting it can't\n  # bake it into the snapshot that every later command re-evals (IDE-2911:\n  # Cypress boots as plain Node until a new chat). Exact unset rather than the\n  # line-based grep below, which would also eat vars whose name or multiline\n  # value merely contains the token. The shell exits right after the dump.\n  builtin unset ELECTRON_RUN_AS_NODE 2\u003e/dev/null || true\n\n  # Environment variables (export statements)\n  # Filter out: proxy settings plus request/session-scoped vars that must not\n  # leak across shell executions.\n  local env_vars\n  env_vars=$(builtin export -p 2\u003e/dev/null | command grep -viE '_proxy=|CURSOR_SANDBOX|SUDO_ASKPASS|CURSOR_ASKPASS|CURSOR_CONVERSATION_ID|CURSOR_REQUEST_ID|CURSOR_AGENT_STORE' || true)\n  if [[ -n \"${__CURSOR_SANDBOX_OWNED_ENV:-}\" ]]; then\n    env_vars=$(builtin printf '%s\n' \"$env_vars\" | command grep -vE \"^(export|declare|typeset)( -[a-zA-Z]+)* (${__CURSOR_SANDBOX_OWNED_ENV// /|})=\" || true)\n  fi\n  _emit_encoded \"$env_vars\" \"ENV_VARS_B64\"\n  _log_timing \"environment\"\n\n  # POSIX shell options (replayable as set +/-o lines). Exclude the errexit/nounset/\n  # pipefail this function force-enables above, so they are not baked into the restored\n  # snapshot and leaked onto every subsequent command (a stray pipefail makes a\n  # successful 'cmd | head' report exit 141).\n  local posix_opts\n  posix_opts=$(builtin shopt -po 2\u003e/dev/null | command grep -vE '^set [-+]o (errexit|nounset|pipefail)$' || true)\n  _emit_encoded \"$posix_opts\" \"POSIX_OPTS_B64\"\n  _log_timing \"posix_options\"\n\n  # Bash shopt options (replayable as shopt -s/-u lines)\n  local bash_opts\n  bash_opts=$(builtin shopt -p 2\u003e/dev/null || true)\n  _emit_encoded \"$bash_opts\" \"BASH_OPTS_B64\"\n  _log_timing \"bash_options\"\n\n  # Functions: capture all functions\n  local all_functions\n  all_functions=$(builtin declare -f 2\u003e/dev/null || true)\n  _emit_encoded \"$all_functions\" \"FUNCTIONS_B64\"\n  _log_timing \"functions\"\n\n  # Aliases\n  local aliases\n  aliases=$(builtin alias -p 2\u003e/dev/null || true)\n  _emit_encoded \"$aliases\" \"ALIASES_B64\"\n  _log_timing \"aliases\"\n\n  # Done\n  _emit \"# end of bash state dump\"\n  _emit \"__CURSOR_BASH_STATE_END__\"\n  _log_timing \"finalize\"\n}\n builtin printf '__CURSOR_STATE_MARKER__\\n'; dump_bash_state",
+    "/usr/bin/python3 <RUN>/proxy/shell-record.py <RUN>/proxy <RUN>/session/bin/orbit-bash -O extglob -ilc #!/usr/bin/env bash\n\n# Usage:\n#   source dump_bash_state.bash\n#   dump_bash_state OUTPUT_FILE\n# Or execute directly (captures a subshell's state):\n#   ./dump_bash_state.bash OUTPUT_FILE\n\ndump_bash_state() {\n  set -euo pipefail\n\n  # Require base64 for safe encoding of emitted sections\n  if ! command -v base64 \u003e/dev/null 2\u003e\u00261; then\n    echo \"Error: base64 command is required\" \u003e\u00262\n    return 1\n  fi\n\n  # Helper to log timing, only if DUMP_BASH_STATE_TIMING is set\n  if [[ -n \"${DUMP_BASH_STATE_TIMING:-}\" ]]; then\n    # Timing setup\n    if [[ \"${BASH_VERSION%%.*}\" -ge 5 ]]; then\n      # Use EPOCHREALTIME if available (bash 5+)\n      local start_time=${EPOCHREALTIME}\n      local step_start=${EPOCHREALTIME}\n      _log_timing() {\n        local step_name=\"$1\"\n        local now=${EPOCHREALTIME}\n        local step_duration=$(command awk \"BEGIN {printf \"%.3f\", $now - $step_start}\")\n        local total_duration=$(command awk \"BEGIN {printf \"%.3f\", $now - $start_time}\")\n        builtin printf \"[TIMING] %-20s: %6.3fs (total: %6.3fs)\n\" \"$step_name\" \"$step_duration\" \"$total_duration\" \u003e\u00262\n        step_start=$now\n      }\n    else\n      # Fallback for older bash versions\n      local start_time=$(command date +%s.%N)\n      local step_start=$(command date +%s.%N)\n      _log_timing() {\n        local step_name=\"$1\"\n        local now=$(command date +%s.%N)\n        local step_duration=$(command awk \"BEGIN {printf \"%.3f\", $now - $step_start}\")\n        local total_duration=$(command awk \"BEGIN {printf \"%.3f\", $now - $start_time}\")\n        builtin printf \"[TIMING] %-20s: %6.3fs (total: %6.3fs)\n\" \"$step_name\" \"$step_duration\" \"$total_duration\" \u003e\u00262\n        step_start=$now\n      }\n    fi\n  else\n    _log_timing() { :; }\n  fi\n\n  # Helper to append a line to output file\n  _emit() {\n    builtin printf '%s\n' \"$1\"\n  }\n\n  # Helper to safely encode and emit unsafe values\n  _emit_encoded() {\n    local content=\"$1\"\n    local var_name=\"$2\"\n    if [[ -n \"$content\" ]]; then\n      # Builtin printf, not a here-document: no argument length limit, and no temp file\n      builtin printf 'cursor_snap_%s=$(builtin printf %%s '\"'\"'%s'\"'\"' | command base64 -d)\n' \"$var_name\" \"$(command base64 \u003c\u003c\u003c\"$content\" | command tr -d '\n')\"\n      builtin printf 'eval \"$cursor_snap_%s\"\n' \"$var_name\"\n    fi\n  }\n\n  # Start fresh\n  _log_timing \"file_init\"\n\n  # Emit start marker at the very beginning of the output\n  _emit \"__CURSOR_BASH_STATE_START__\"\n\n  # Working directory\n  _emit \"$PWD\"\n  _log_timing \"working_dir\"\n\n  # Drop ELECTRON_RUN_AS_NODE by exact name so one command exporting it can't\n  # bake it into the snapshot that every later command re-evals (IDE-2911:\n  # Cypress boots as plain Node until a new chat). Exact unset rather than the\n  # line-based grep below, which would also eat vars whose name or multiline\n  # value merely contains the token. The shell exits right after the dump.\n  builtin unset ELECTRON_RUN_AS_NODE 2\u003e/dev/null || true\n\n  # Environment variables (export statements)\n  # Filter out: proxy settings plus request/session-scoped vars that must not\n  # leak across shell executions.\n  local env_vars\n  env_vars=$(builtin export -p 2\u003e/dev/null | command grep -viE '_proxy=|CURSOR_SANDBOX|SUDO_ASKPASS|CURSOR_ASKPASS|CURSOR_CONVERSATION_ID|CURSOR_REQUEST_ID|CURSOR_AGENT_STORE' || true)\n  if [[ -n \"${__CURSOR_SANDBOX_OWNED_ENV:-}\" ]]; then\n    env_vars=$(builtin printf '%s\n' \"$env_vars\" | command grep -vE \"^(export|declare|typeset)( -[a-zA-Z]+)* (${__CURSOR_SANDBOX_OWNED_ENV// /|})=\" || true)\n  fi\n  _emit_encoded \"$env_vars\" \"ENV_VARS_B64\"\n  _log_timing \"environment\"\n\n  # POSIX shell options (replayable as set +/-o lines). Exclude the errexit/nounset/\n  # pipefail this function force-enables above, so they are not baked into the restored\n  # snapshot and leaked onto every subsequent command (a stray pipefail makes a\n  # successful 'cmd | head' report exit 141).\n  local posix_opts\n  posix_opts=$(builtin shopt -po 2\u003e/dev/null | command grep -vE '^set [-+]o (errexit|nounset|pipefail)$' || true)\n  _emit_encoded \"$posix_opts\" \"POSIX_OPTS_B64\"\n  _log_timing \"posix_options\"\n\n  # Bash shopt options (replayable as shopt -s/-u lines)\n  local bash_opts\n  bash_opts=$(builtin shopt -p 2\u003e/dev/null || true)\n  _emit_encoded \"$bash_opts\" \"BASH_OPTS_B64\"\n  _log_timing \"bash_options\"\n\n  # Functions: capture all functions\n  local all_functions\n  all_functions=$(builtin declare -f 2\u003e/dev/null || true)\n  _emit_encoded \"$all_functions\" \"FUNCTIONS_B64\"\n  _log_timing \"functions\"\n\n  # Aliases\n  local aliases\n  aliases=$(builtin alias -p 2\u003e/dev/null || true)\n  _emit_encoded \"$aliases\" \"ALIASES_B64\"\n  _log_timing \"aliases\"\n\n  # Done\n  _emit \"# end of bash state dump\"\n  _emit \"__CURSOR_BASH_STATE_END__\"\n  _log_timing \"finalize\"\n}\n builtin printf '__CURSOR_STATE_MARKER__\\n'; dump_bash_state",
+    "/bin/bash -O extglob -ilc #!/usr/bin/env bash\n\n# Usage:\n#   source dump_bash_state.bash\n#   dump_bash_state OUTPUT_FILE\n# Or execute directly (captures a subshell's state):\n#   ./dump_bash_state.bash OUTPUT_FILE\n\ndump_bash_state() {\n  set -euo pipefail\n\n  # Require base64 for safe encoding of emitted sections\n  if ! command -v base64 \u003e/dev/null 2\u003e\u00261; then\n    echo \"Error: base64 command is required\" \u003e\u00262\n    return 1\n  fi\n\n  # Helper to log timing, only if DUMP_BASH_STATE_TIMING is set\n  if [[ -n \"${DUMP_BASH_STATE_TIMING:-}\" ]]; then\n    # Timing setup\n    if [[ \"${BASH_VERSION%%.*}\" -ge 5 ]]; then\n      # Use EPOCHREALTIME if available (bash 5+)\n      local start_time=${EPOCHREALTIME}\n      local step_start=${EPOCHREALTIME}\n      _log_timing() {\n        local step_name=\"$1\"\n        local now=${EPOCHREALTIME}\n        local step_duration=$(command awk \"BEGIN {printf \"%.3f\", $now - $step_start}\")\n        local total_duration=$(command awk \"BEGIN {printf \"%.3f\", $now - $start_time}\")\n        builtin printf \"[TIMING] %-20s: %6.3fs (total: %6.3fs)\n\" \"$step_name\" \"$step_duration\" \"$total_duration\" \u003e\u00262\n        step_start=$now\n      }\n    else\n      # Fallback for older bash versions\n      local start_time=$(command date +%s.%N)\n      local step_start=$(command date +%s.%N)\n      _log_timing() {\n        local step_name=\"$1\"\n        local now=$(command date +%s.%N)\n        local step_duration=$(command awk \"BEGIN {printf \"%.3f\", $now - $step_start}\")\n        local total_duration=$(command awk \"BEGIN {printf \"%.3f\", $now - $start_time}\")\n        builtin printf \"[TIMING] %-20s: %6.3fs (total: %6.3fs)\n\" \"$step_name\" \"$step_duration\" \"$total_duration\" \u003e\u00262\n        step_start=$now\n      }\n    fi\n  else\n    _log_timing() { :; }\n  fi\n\n  # Helper to append a line to output file\n  _emit() {\n    builtin printf '%s\n' \"$1\"\n  }\n\n  # Helper to safely encode and emit unsafe values\n  _emit_encoded() {\n    local content=\"$1\"\n    local var_name=\"$2\"\n    if [[ -n \"$content\" ]]; then\n      # Builtin printf, not a here-document: no argument length limit, and no temp file\n      builtin printf 'cursor_snap_%s=$(builtin printf %%s '\"'\"'%s'\"'\"' | command base64 -d)\n' \"$var_name\" \"$(command base64 \u003c\u003c\u003c\"$content\" | command tr -d '\n')\"\n      builtin printf 'eval \"$cursor_snap_%s\"\n' \"$var_name\"\n    fi\n  }\n\n  # Start fresh\n  _log_timing \"file_init\"\n\n  # Emit start marker at the very beginning of the output\n  _emit \"__CURSOR_BASH_STATE_START__\"\n\n  # Working directory\n  _emit \"$PWD\"\n  _log_timing \"working_dir\"\n\n  # Drop ELECTRON_RUN_AS_NODE by exact name so one command exporting it can't\n  # bake it into the snapshot that every later command re-evals (IDE-2911:\n  # Cypress boots as plain Node until a new chat). Exact unset rather than the\n  # line-based grep below, which would also eat vars whose name or multiline\n  # value merely contains the token. The shell exits right after the dump.\n  builtin unset ELECTRON_RUN_AS_NODE 2\u003e/dev/null || true\n\n  # Environment variables (export statements)\n  # Filter out: proxy settings plus request/session-scoped vars that must not\n  # leak across shell executions.\n  local env_vars\n  env_vars=$(builtin export -p 2\u003e/dev/null | command grep -viE '_proxy=|CURSOR_SANDBOX|SUDO_ASKPASS|CURSOR_ASKPASS|CURSOR_CONVERSATION_ID|CURSOR_REQUEST_ID|CURSOR_AGENT_STORE' || true)\n  if [[ -n \"${__CURSOR_SANDBOX_OWNED_ENV:-}\" ]]; then\n    env_vars=$(builtin printf '%s\n' \"$env_vars\" | command grep -vE \"^(export|declare|typeset)( -[a-zA-Z]+)* (${__CURSOR_SANDBOX_OWNED_ENV// /|})=\" || true)\n  fi\n  _emit_encoded \"$env_vars\" \"ENV_VARS_B64\"\n  _log_timing \"environment\"\n\n  # POSIX shell options (replayable as set +/-o lines). Exclude the errexit/nounset/\n  # pipefail this function force-enables above, so they are not baked into the restored\n  # snapshot and leaked onto every subsequent command (a stray pipefail makes a\n  # successful 'cmd | head' report exit 141).\n  local posix_opts\n  posix_opts=$(builtin shopt -po 2\u003e/dev/null | command grep -vE '^set [-+]o (errexit|nounset|pipefail)$' || true)\n  _emit_encoded \"$posix_opts\" \"POSIX_OPTS_B64\"\n  _log_timing \"posix_options\"\n\n  # Bash shopt options (replayable as shopt -s/-u lines)\n  local bash_opts\n  bash_opts=$(builtin shopt -p 2\u003e/dev/null || true)\n  _emit_encoded \"$bash_opts\" \"BASH_OPTS_B64\"\n  _log_timing \"bash_options\"\n\n  # Functions: capture all functions\n  local all_functions\n  all_functions=$(builtin declare -f 2\u003e/dev/null || true)\n  _emit_encoded \"$all_functions\" \"FUNCTIONS_B64\"\n  _log_timing \"functions\"\n\n  # Aliases\n  local aliases\n  aliases=$(builtin alias -p 2\u003e/dev/null || true)\n  _emit_encoded \"$aliases\" \"ALIASES_B64\"\n  _log_timing \"aliases\"\n\n  # Done\n  _emit \"# end of bash state dump\"\n  _emit \"__CURSOR_BASH_STATE_END__\"\n  _log_timing \"finalize\"\n}\n builtin printf '__CURSOR_STATE_MARKER__\\n'; dump_bash_state",
+    "/bin/bash -O extglob -c IFS= builtin read -r -d '' __cursor_command \u003c\u00265 2\u003e/dev/null || { builtin printf '%s\\n' 'The command did not run: a shell startup file ($BASH_ENV or .zshenv) closed or replaced file descriptor 5, which carries the command. Run it again; this shell now passes commands as arguments.' \u003e\u00262; builtin exit 126; }; exec 5\u003c\u0026-; builtin set -- \"$__cursor_command\"; builtin unset __cursor_command; snap=$(command cat \u003c\u00263) \u0026\u0026 builtin shopt -s extglob \u0026\u0026 builtin eval -- \"$snap\" \u0026\u0026 { builtin set +u 2\u003e/dev/null || true; builtin eval \"${__CURSOR_SANDBOX_ENV_RESTORE:-}\" 2\u003e/dev/null; builtin eval \"${__CURSOR_SANDBOX_TEMP_RESTORE:-}\" 2\u003e/dev/null; builtin export PWD=\"$(builtin pwd)\"; builtin shopt -s expand_aliases 2\u003e/dev/null; builtin eval \"$1\" \u003c /dev/null; }; COMMAND_EXIT_CODE=$?; dump_bash_state \u003e\u00264; builtin exit $COMMAND_EXIT_CODE --",
+    "/bin/sh <RUN>/session/bin/orbit-bash -O extglob -c IFS= builtin read -r -d '' __cursor_command \u003c\u00265 2\u003e/dev/null || { builtin printf '%s\\n' 'The command did not run: a shell startup file ($BASH_ENV or .zshenv) closed or replaced file descriptor 5, which carries the command. Run it again; this shell now passes commands as arguments.' \u003e\u00262; builtin exit 126; }; exec 5\u003c\u0026-; builtin set -- \"$__cursor_command\"; builtin unset __cursor_command; snap=$(command cat \u003c\u00263) \u0026\u0026 builtin shopt -s extglob \u0026\u0026 builtin eval -- \"$snap\" \u0026\u0026 { builtin set +u 2\u003e/dev/null || true; builtin eval \"${__CURSOR_SANDBOX_ENV_RESTORE:-}\" 2\u003e/dev/null; builtin eval \"${__CURSOR_SANDBOX_TEMP_RESTORE:-}\" 2\u003e/dev/null; builtin export PWD=\"$(builtin pwd)\"; builtin shopt -s expand_aliases 2\u003e/dev/null; builtin eval \"$1\" \u003c /dev/null; }; COMMAND_EXIT_CODE=$?; dump_bash_state \u003e\u00264; builtin exit $COMMAND_EXIT_CODE --",
+    "/usr/bin/python3 <RUN>/proxy/shell-record.py <RUN>/proxy <RUN>/session/bin/orbit-bash -O extglob -c IFS= builtin read -r -d '' __cursor_command \u003c\u00265 2\u003e/dev/null || { builtin printf '%s\\n' 'The command did not run: a shell startup file ($BASH_ENV or .zshenv) closed or replaced file descriptor 5, which carries the command. Run it again; this shell now passes commands as arguments.' \u003e\u00262; builtin exit 126; }; exec 5\u003c\u0026-; builtin set -- \"$__cursor_command\"; builtin unset __cursor_command; snap=$(command cat \u003c\u00263) \u0026\u0026 builtin shopt -s extglob \u0026\u0026 builtin eval -- \"$snap\" \u0026\u0026 { builtin set +u 2\u003e/dev/null || true; builtin eval \"${__CURSOR_SANDBOX_ENV_RESTORE:-}\" 2\u003e/dev/null; builtin eval \"${__CURSOR_SANDBOX_TEMP_RESTORE:-}\" 2\u003e/dev/null; builtin export PWD=\"$(builtin pwd)\"; builtin shopt -s expand_aliases 2\u003e/dev/null; builtin eval \"$1\" \u003c /dev/null; }; COMMAND_EXIT_CODE=$?; dump_bash_state \u003e\u00264; builtin exit $COMMAND_EXIT_CODE --",
+    "sleep 4",
+    "sleep 3",
+    "git --no-optional-locks status --short --branch",
+    "cat"
+  ],
+  "prompts": [
+    9,
+    10,
+    11,
+    12
+  ],
+  "scenario": "sandbox-shell-linux-socket",
+  "status": "SUCCEEDED",
+  "version": "2026.10.14-941492e"
+}

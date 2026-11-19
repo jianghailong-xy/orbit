@@ -52,6 +52,7 @@ func setupService(orbitHome string, proxyVars []envVar) (*runnerService, error) 
 
 	switch runtime.GOOS {
 	case "linux":
+		placeOwnCopyForBroker(serviceBrokerSocket, exe)
 		return setupServiceLinux(serviceBrokerSocket, proxyVars, func() (*runnerService, error) {
 			return installSystemd(exe, orbitHome, systemdService, proxyVars)
 		})
@@ -66,10 +67,12 @@ func setupService(orbitHome string, proxyVars []envVar) (*runnerService, error) 
 // `orbit host setup` done, that is the machine broker: enabling this user's instance is
 // a socket call that needs no root at all. Anything else — no broker, or a broker that
 // will not answer — installs a unit of our own through sudo, so a host that was never
-// set up (or was set up badly) still ends a registration with a live runner. Except one
-// answer: a broker that refuses because this account has no copy of its own for its
-// instance to run (hostdOwnCopyRefusal) ends the registration's service step with its
-// reason and command, since the sudo path's unit would run another binary instead.
+// set up (or was set up badly) still ends a registration with a live runner. Except the
+// answers in hostdStopsRegister (hostdRegisterRefusal): this account has no copy of its
+// own for its instance to run, an older runner unit of the account could not be taken
+// down, or the broker took the request and is still working on it. Each ends the
+// registration's service step with the broker's reason, since the sudo path's unit would
+// be a second runner.
 func setupServiceLinux(socketPath string, proxyVars []envVar, installLegacy func() (*runnerService, error)) (*runnerService, error) {
 	unit, err := registerViaHostd(socketPath, proxyVars)
 	switch {
@@ -252,9 +255,9 @@ func installSystemd(exe, orbitHome, svc string, proxyVars []envVar) (*runnerServ
 		return run(sudo, append([]string{"systemctl"}, args...)...)
 	}
 
-	// The unit runs the copy in the user's ~/.orbit/bin — moved there first if it still sits
+	// The unit runs the copy in the user's ~/.orbit/bin — copied there first if the binary sits
 	// in root's /usr/local/bin — so the runner can replace it when it updates itself.
-	exe = adoptUserBin(exe, u, systemdServicesRunning(serviceUnitDir, exe), root, sudo)
+	exe = adoptUserBin(exe, u, root, sudo)
 	unit := renderSystemdUnit(u.Username, grp, exe, u.HomeDir, orbitHome, pathEnv, proxyVars)
 
 	// Write the unit file (root writes it directly; non-root installs it via sudo).
@@ -322,6 +325,10 @@ RestartSec=5
 # provider drain + lease release + event flush + a racing finalization + margin.
 KillMode=mixed
 TimeoutStopSec=180
+# An OOM kill of one process in this unit — a session's tsc, chrome or Gradle, which run in the
+# runner's cgroup — must not stop the runner. systemd's default, stop, would drain and tear down
+# every running turn, and the restart would install a deferred release past the turn gate.
+OOMPolicy=continue
 Environment=HOME=%s
 Environment=ORBIT_HOME=%s
 Environment=PATH=%s
@@ -538,14 +545,14 @@ func installLaunchd(exe, orbitHome, label string, proxyVars []envVar) (*runnerSe
 	// run would make it unreadable/unwritable.
 	ensureOwnedByUser(orbitHome)
 
-	// The agent runs the copy in the user's ~/.orbit/bin — moved there first if it still sits
+	// The agent runs the copy in the user's ~/.orbit/bin — copied there first if the binary sits
 	// in root's /usr/local/bin — so the runner can replace it when it updates itself.
 	if u, err := registeringUser(); err == nil {
 		sudo := ""
 		if s, err := exec.LookPath("sudo"); err == nil && interactive() {
 			sudo = s
 		}
-		exe = adoptUserBin(exe, u, nil, processEUID() == 0, sudo)
+		exe = adoptUserBin(exe, u, processEUID() == 0, sudo)
 	}
 
 	// launchd starts agents with a minimal PATH and no HOME, so the `claude` CLI

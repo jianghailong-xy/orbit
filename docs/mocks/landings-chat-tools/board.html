@@ -1,0 +1,104 @@
+<!doctype html><html lang="zh"><meta charset="utf-8">
+<title>Landings 窗口 · 照会话聊天的画法（2026-11-11）</title>
+<style>
+:root { --mark:#FF7A00; }
+* { box-sizing:border-box; }
+body { margin:0; background:#F3F3F6; font-family:-apple-system,"PingFang SC",sans-serif; color:#1c1c1e; -webkit-font-smoothing:antialiased; }
+.board { padding:30px 44px 36px; width:1500px; background:#F3F3F6; }
+h1 { font-size:25px; margin:0 0 8px; }
+h2 { font-size:19px; margin:26px 0 12px; display:flex; gap:10px; align-items:center; }
+h2 .no { display:inline-grid; place-items:center; width:28px; height:28px; border-radius:50%; background:#1c1c1e; color:#fff; font-size:15px; }
+h2 .sub { font-size:14px; font-weight:500; color:#6b6b72; }
+.lede { font-size:15px; line-height:1.7; color:#3a3a40; margin:0 0 10px; }
+.tag { display:inline-block; font-size:13px; font-weight:700; border-radius:7px; padding:3px 10px; margin-bottom:10px; }
+.tag.today { background:#FFE3E0; color:#B42318; } .tag.after { background:#DDE7FF; color:#2447B8; } .tag.ref { background:#E7E7EC; color:#45454c; }
+.shot { position:relative; background:#fff; border-radius:12px; box-shadow:0 0 0 1px rgba(0,0,0,.1); overflow:hidden; }
+.shot img { display:block; width:100%; }
+.row { display:flex; gap:36px; align-items:flex-start; }
+.col { flex:1; min-width:0; }
+.notes { font-size:14.5px; line-height:1.68; color:#2c2c31; }
+.notes ol { margin:0; padding:0; list-style:none; }
+.notes li { margin:8px 0; position:relative; padding-left:30px; }
+.notes li .n { position:absolute; left:0; top:1px; }
+.n { display:inline-grid; place-items:center; width:21px; height:21px; border-radius:50%; background:var(--mark); color:#fff; font:700 12.5px/1 -apple-system,sans-serif; }
+.pin { position:absolute; box-shadow:0 0 0 2px #fff; z-index:5; }
+.ring { position:absolute; border:2px dashed var(--mark); border-radius:10px; z-index:4; }
+i.en { font-style:italic; }
+code { font:12.5px "JetBrains Mono",monospace; background:rgba(0,0,0,.06); border-radius:4px; padding:0 4px; }
+table { border-collapse:separate; border-spacing:0; width:100%; background:#fff; border-radius:12px; overflow:hidden; box-shadow:0 0 0 1px rgba(0,0,0,.07); font-size:14px; line-height:1.55; }
+th,td { text-align:left; vertical-align:top; padding:9px 13px; border-bottom:1px solid #EEEEF1; }
+th { background:#FAFAFC; color:#6b6b72; font-weight:600; font-size:13px; }
+td:first-child { font-weight:650; width:150px; }
+tr:last-child td { border-bottom:0; }
+.ask { background:#FFFBEA; box-shadow:0 0 0 1.5px #F2CF63; border-radius:12px; padding:6px 18px 12px; margin-top:18px; }
+.rec { color:#1E7B34; font-weight:650; }
+</style><body>
+<div class="board" data-png="01-history">
+<h1>Landings 窗口 · 照会话聊天的画法（web，2026-11-11 · 按 main bc4b41465）</h1>
+<p class="lede"><b>owner 11-11</b>：「图 1 的 landing 效果，是否可以和图 2 里的聊天效果保持一致的 UI 效果，先给我设计图」。<br>
+做法：<b>不加新部件，只用会话里已有的三样</b>——后台任务那一行（<code>bgwake</code>：标记 · 灰字 · 名字 · 小胶囊 · 时刻 · <i class="en">Details ›</i>）、工具行（<code>chat-tool-card</code>：图标块 · 粗体名 · 说明 · 状态）、回合头（<i class="en">Working for …</i>）。改后的三帧是真实 web 控制台截图：会话页本身，换上落地的内容，用的就是会话的 class 和样式。英文是上线文案，中文是说明；任务名照你的截图。</p>
+<div class="row">
+ <div class="col"><span class="tag ref">⓪ 参照 · 会话里的样子（你的图 2）</span><div class="shot"><img src="frames/chat-ref.png"></div></div>
+</div>
+<h2><span class="no">1</span>往上翻历史<span class="sub">每次落地、每轮合入 main 都是一行，像会话里的「Background job finished」</span></h2>
+<div class="row">
+ <div class="col" style="flex:1.15"><span class="tag today">a · 现在（你的图 1）</span><div class="shot"><img src="frames/today-web.png"></div>
+   <div class="notes" style="margin-top:12px">现在：落地是灰色气泡，点开是一整块 15 行的时间线；合入 main 是居中的一行。和会话的样子是两套。</div></div>
+ <div class="col"><span class="tag after">b · 改后（同样的几条，都收着）</span><div class="shot" id="s-hist"><img src="frames/p-history.png"></div>
+  <div class="notes" style="margin-top:12px"><ol>
+   <li><span class="n">1</span><b>一次落地 = 一行后台任务行</b>：<i class="en">✓ Landed</i>（灰）· 任务名 · <code>check 0m 16s</code> 胶囊 · 时刻 · <i class="en">Details ›</i>。和会话里 <i class="en">✓ Background job finished · 名字 · exit 0 · just now · Job details ›</i> 一个样。</li>
+   <li><span class="n">2</span><b>合入 main 也是这一行</b>：<i class="en">⇢ Merged into main · 1fec9fb · 2 tasks</i> · <code>automatically</code> · 时刻；点开是回执。</li>
+   <li><span class="n">3</span>没东西可落的是 <i class="en">◌ Nothing to land</i>；没落成的是红 <i class="en">✗ Not landed</i>（见 d）。日期胶囊不变。</li>
+  </ol></div></div>
+</div>
+</div>
+
+<div class="board" data-png="02-open-and-now">
+<h2><span class="no">2</span>点开一次落地 · 窗口最底<span class="sub">步骤用会话的工具行；正在跑的是一个 Working for 回合</span></h2>
+<div class="row">
+ <div class="col"><span class="tag after">c · 改后 · 点开 23:26 那条</span><div class="shot" id="s-open"><img src="frames/p-open.png"></div>
+  <div class="notes" style="margin-top:12px"><ol>
+   <li><span class="n">1</span><b>15 行时间线并成 5 个工具行</b>：<i class="en">Queue · Claim · Sync · Merge check · Push</i>，每行是会话的工具行（图标块、粗体名、一句说明、时刻胶囊、✓）。原来的每一行还在，点开那一步看。</li>
+   <li><span class="n">3</span><b>Merge check 点开就是会话里 Bash 的样子</b>：<code>$ 命令</code> 和 <i class="en">OUTPUT</i>（失败是红底 <i class="en">ERROR</i>）。原来的 <i class="en">Log ›</i> 不再单独跳。</li>
+   <li>底下照旧 <i class="en">Open Task › · Open Source Session ›</i>；长按 / 右键菜单不变。</li>
+  </ol></div></div>
+ <div class="col"><span class="tag after">d · 改后 · 窗口最底（Now）</span><div class="shot" id="s-bottom"><img src="frames/p-bottom.png"></div>
+  <div class="notes" style="margin-top:12px"><ol>
+   <li><span class="n">4</span><b>等决定的</b>：红 <i class="en">✗ Not landed</i> 行，默认展开：失败那一步带错误输出，下面一块写谁来定（<i class="en">The coordinator decides · waiting 18m</i>）和两个门 <i class="en">Open Coordinator · Open Task</i>。</li>
+   <li><span class="n">5</span><b>正在跑的</b>：会话的回合头 <i class="en">Working for 6m 12s</i>，一句 <i class="en">Landing &lt;任务名&gt;</i>，下面工具行一步步亮；当前那步转圈，展开是预算条、活跃度和实时输出。</li>
+   <li>底栏照 11-10 上线的那一行，不变。</li>
+  </ol></div></div>
+</div>
+<h2><span class="no">3</span>规则、改动、待定</h2>
+<table>
+<tr><th>东西</th><th>现在</th><th>改后（会话里已有的部件）</th></tr>
+<tr><td>一次落地（收着）</td><td>灰色气泡：任务名 + ✓ Landed + 时刻</td><td><code>bgwake</code> 行：✓ Landed · 任务名 · check 时长胶囊 · 时刻 · Details ›</td></tr>
+<tr><td>合入 main</td><td>居中一行</td><td>同一种行：⇢ Merged into main · sha · N tasks · automatically · 时刻</td></tr>
+<tr><td>点开的记录</td><td>灰底面板里 15 行时间线（时刻 · 图标 · 句子）</td><td>5 个工具行（Queue / Claim / Sync / Merge check / Push），每行可再点开看原来的几行；检查的输出像 Bash</td></tr>
+<tr><td>等决定的</td><td>状态卡（红框）</td><td>红 ✗ Not landed 行，展开带错误输出 + 谁来定 + 两个门</td></tr>
+<tr><td>正在跑的</td><td>状态卡（预算条、活跃度）</td><td>Working for 回合 + 工具行，当前步转圈，预算条放进那一步里</td></tr>
+<tr><td>不变</td><td colspan="2">日期胶囊、标题栏、底栏、长按 / 右键菜单、数据和接口（只换画法，服务端不动）</td></tr>
+</table>
+<div class="ask"><h3 style="margin:10px 0 6px;font-size:16px">待你定</h3><ol style="margin:0;padding-left:20px;line-height:1.75;font-size:14.5px">
+<li><b>步骤分几行</b>：并成 5 个工具行（<span class="rec">推荐</span>），还是 15 行时间线每行一个工具行（更细，但一次落地点开就很长）。</li>
+<li><b>收着那行的胶囊放什么</b>：检查时长 <code>check 0m 16s</code>（<span class="rec">推荐</span>，像 <code>exit 0</code>），还是推上去的 sha <code>9afb7d1</code>。</li>
+<li><b>等决定的那条默认展开</b>（<span class="rec">推荐</span>，要人看的东西不藏），还是也收着、只露红行。</li>
+<li><b>先改哪端</b>：web 先（<span class="rec">推荐</span>，你的两张图都是 web），iPhone / Android 照同一套再出图。</li>
+</ol></div>
+<p class="notes" style="margin-top:14px;color:#6b6b72">要动的文件：<code>src/web/src/components/ProjectLandingsWindow.tsx</code>（行、步骤分组、Now）、<code>src/web/src/lib/landingSession.ts</code>（把时间线并成步骤）、<code>index.css</code>（少量，复用 <code>bgwake</code>、<code>chat-tool-*</code>），及其测试。</p>
+</div>
+<script>
+const MARKS = {"p-history": {"clip": {"x": 601, "y": 0, "width": 1099, "height": 640}, "boxes": {"1": {"x": 20, "y": 157, "w": 1059, "h": 26}, "2": {"x": 20, "y": 129, "w": 1059, "h": 26}, "3": {"x": 20, "y": 243, "w": 1059, "h": 26}}}, "p-open": {"clip": {"x": 601, "y": 0, "width": 1099, "height": 1150}, "boxes": {"1": {"x": 20, "y": 186, "w": 1059, "h": 525}, "3": {"x": 46, "y": 368, "w": 1033, "h": 255}}}, "p-bottom": {"clip": {"x": 601, "y": 0, "width": 1099, "height": 1400}, "boxes": {"4": {"x": 20, "y": 230, "w": 1059, "h": 483}, "5": {"x": 20, "y": 723, "w": 1059, "h": 419}}}};
+const place = (id, scene) => {
+  const box = document.getElementById(id); if (!box) return;
+  const m = MARKS[scene]; const k = box.clientWidth / m.clip.width;
+  for (const [n, b] of Object.entries(m.boxes)) {
+    const r = document.createElement('div'); r.className = 'ring';
+    Object.assign(r.style, { left: (b.x*k-3)+'px', top: (b.y*k-3)+'px', width: (b.w*k+6)+'px', height: (b.h*k+6)+'px' });
+    const p = document.createElement('span'); p.className = 'n pin'; p.textContent = n;
+    Object.assign(p.style, { left: ((b.x+b.w)*k - 10)+'px', top: (b.y*k - 10)+'px' });
+    box.append(r, p);
+  }
+};
+window.drawMarks = () => { place('s-hist','p-history'); place('s-open','p-open'); place('s-bottom','p-bottom'); };
+</script></body></html>

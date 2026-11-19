@@ -15,14 +15,19 @@ export interface TextareaProps extends ComponentPropsWithRef<'textarea'> {
    * Off leaves the height to `rows` and `style` — which is how a caller holds a height the user dragged.
    */
   autoSize?: boolean | TextareaAutoSize;
+  /**
+   * With `autoSize`, measure again whenever this changes, as a value change does. The placeholder is no trigger of its
+   * own (see useAutoSize); a field whose placeholder changes while it may be empty can pass the placeholder here.
+   */
+  measureKey?: unknown;
 }
 
 export function Textarea({
-  invalid = false, variant = 'outlined', autoSize = false, className, style, disabled, ref,
+  invalid = false, variant = 'outlined', autoSize = false, measureKey, className, style, disabled, ref,
   ...props
 }: TextareaProps) {
   const field = useRef<HTMLTextAreaElement | null>(null);
-  const fitted = useAutoSize(field, autoSize, props.value);
+  const fitted = useAutoSize(field, autoSize, props.value, measureKey);
   return (
     <textarea
       {...props}
@@ -43,7 +48,12 @@ export function Textarea({
   );
 }
 
-function useAutoSize(field: { current: HTMLTextAreaElement | null }, autoSize: TextareaProps['autoSize'], value: unknown) {
+function useAutoSize(
+  field: { current: HTMLTextAreaElement | null },
+  autoSize: TextareaProps['autoSize'],
+  value: unknown,
+  measureKey: unknown,
+) {
   const enabled = !!autoSize;
   const minRows = typeof autoSize === 'object' ? autoSize.minRows : undefined;
   const maxRows = typeof autoSize === 'object' ? autoSize.maxRows : undefined;
@@ -55,10 +65,11 @@ function useAutoSize(field: { current: HTMLTextAreaElement | null }, autoSize: T
     setFitted((current) => sameFit(current, next) ? current : next);
   };
   // Measure before paint whenever the drawn text or the row bounds change. The placeholder is
-  // not a trigger: like the field this replaces, it is picked up by the next value or width change.
+  // not a trigger: like the field this replaces, it is picked up by the next value or width change —
+  // unless the caller names it as `measureKey`.
   useLayoutEffect(() => {
     if (enabled) measure.current();
-  }, [enabled, value, minRows, maxRows]);
+  }, [enabled, value, minRows, maxRows, measureKey]);
   // A width change re-wraps the same text; measure again on the next frame.
   useEffect(() => {
     const node = field.current;

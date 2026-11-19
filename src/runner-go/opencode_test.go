@@ -498,6 +498,40 @@ func TestHandleOpenCodeProviderAuthError(t *testing.T) {
 	}
 }
 
+func TestHandleOpenCodeAPIError(t *testing.T) {
+	tests := []struct {
+		name     string
+		event    string
+		wantAuth bool
+	}{
+		{
+			name:     "unauthorized",
+			event:    `{"type":"error","sessionID":"ses_x","error":{"name":"APIError","data":{"message":"Unauthorized: {\"error\": {\"message\": \"Authentication Fails, Your api key: ****abcd is invalid\", \"type\": \"authentication_error\", \"code\": \"invalid_request_error\"}}","statusCode":401,"isRetryable":false,"responseBody":"{...}","metadata":{"url":"http://127.0.0.1:18401/v1/messages"}}}}`,
+			wantAuth: true,
+		},
+		{
+			name:  "forbidden",
+			event: `{"type":"error","sessionID":"ses_x","error":{"name":"APIError","data":{"message":"Model access denied","statusCode":403}}}`,
+		},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			var event map[string]interface{}
+			if err := json.Unmarshal([]byte(tt.event), &event); err != nil {
+				t.Fatal(err)
+			}
+			result := openCodeTurnResult{Status: stSucceeded}
+			handleOpenCodeEvent(event, func(string, map[string]interface{}) {}, &result)
+			if result.Status != stFailed || result.Error == "" {
+				t.Fatalf("result = %#v, want a failed turn with an error", result)
+			}
+			if strings.HasPrefix(result.Error, "Failed to authenticate") != tt.wantAuth || isAuthError(result.Error) != tt.wantAuth {
+				t.Fatalf("result error = %q, want auth error = %t", result.Error, tt.wantAuth)
+			}
+		})
+	}
+}
+
 func TestReplaceEnvRemovesDuplicateKeys(t *testing.T) {
 	got := replaceEnv([]string{"A=old", "B=keep", "A=older"}, map[string]string{"A": "new"})
 	if !reflect.DeepEqual(got, []string{"B=keep", "A=new"}) {

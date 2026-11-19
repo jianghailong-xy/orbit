@@ -1,8 +1,7 @@
 #!/usr/bin/env bash
 # Runs the link gateway's test client (link-gateway client, src/link-gateway/README.md) against the staging stack, as
 # the probe runner staging-up.sh registered: from the stack's own link gateway image, with the seeded runner token and
-# the staging CA. Arguments go to the client; the defaults send heartbeats over HTTPS and mirror them with a small event
-# batch each.
+# the staging CA. Arguments go to the client, which heartbeats over the link and follows Drain, or runs a drill (-drill).
 #
 #   scripts/runner-link/staging-client.sh -duration 60s
 #   scripts/runner-link/staging-client.sh -until-drains 1 -summary /tmp/summary.json
@@ -34,8 +33,7 @@ else
   ca="$state/tls/ca.pem"
 fi
 
-# The defaults come first, so an argument given here overrides them (-http=false, -events 0).
 exec docker run --rm "${network[@]}" \
   -v "$state/client:$state/client" -v "$ca:/etc/orbit-link-staging/ca.pem:ro" -v "$state/secrets:$state/secrets:ro" \
   -e LINK_CLIENT_RUNNER_TOKEN="$(cat "$token_file")" \
-  "$image" client -api "$api" -ca /etc/orbit-link-staging/ca.pem -http -events 2 "$@"
+  "$image" client -api "$api" -ca /etc/orbit-link-staging/ca.pem "$@"

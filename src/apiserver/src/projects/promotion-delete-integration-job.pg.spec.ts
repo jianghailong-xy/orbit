@@ -1,3 +1,4 @@
+import { seedPromotionRequest } from '../test-support/promotion-request';
 /**
  * Deleting the TASK or the SESSION a promotion was about, on real PostgreSQL: the task through
  * `TasksService.remove`, the session through the owner's purge from Trash (`SessionsService.remove`,
@@ -344,6 +345,7 @@ async function onlyClaim(stack: Stack, w: World, kind: string): Promise<Integrat
 
 /** The result a runner posts for a job it holds, over the route it posts it on. */
 async function report(stack: Stack, w: World, job: IntegrationJobCommand, result: Result): Promise<void> {
+  if (job.kind === 'LAND_TASK') await seedPromotionRequest(stack.db, w.projectId);
   const answer = await stack.api.integrationJobResult({ id: w.runnerId }, job.jobId, {
     claimGeneration: job.claimGeneration,
     leaseOwner: job.leaseOwner,

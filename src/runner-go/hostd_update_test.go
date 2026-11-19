@@ -105,6 +105,9 @@ func newHostdUpdateHarness(t *testing.T, installed string, latest rolloutRelease
 			lookupUID: func(uid string) (*user.User, error) {
 				return &user.User{Uid: uid, Gid: uid, Username: "user" + uid}, nil
 			},
+			// Where the runner template above sits, which says whether instances run their
+			// accounts' own copies (namesInstances).
+			unitDir: filepath.Dir(h.templatePath),
 		},
 		configPath:      h.configPath,
 		serviceUnitPath: h.serviceUnitPath,
@@ -258,17 +261,19 @@ func gzipped(t *testing.T, payload []byte) []byte {
 
 // The whole path: a newer release is read from the public manifest, downloaded, checked against
 // its sha256, its version and its write contract — each asked of the download as the caller —
-// swapped in atomically, and only then are the machine's runner instances rolled: the ones
-// systemd actually reports, one at a time. The same on a host set up before instances were named
-// after accounts, whose instances all run the machine's binary: there the roll is what moves them
-// onto the release.
+// swapped in atomically into the binary orbit-hostd.service names. On a host whose instances run
+// their accounts' own copies, that is hostd's binary alone, and no runner is restarted: not one
+// systemctl command runs. On a host set up before instances were named after accounts (setup not
+// run again), whose instances all run the machine's binary, the instances are then rolled as
+// before: the ones systemd actually reports, one at a time, which is what moves them onto the
+// release.
 func TestHostdUpdateInstallsAndRollsEveryRunnerInstance(t *testing.T) {
 	for _, layout := range []struct {
 		name    string
 		arrange func(*hostdUpdateHarness)
 		want    []string
 	}{
-		{"name template", func(*hostdUpdateHarness) {}, []string{"orbit-runner@alice.service", "orbit-runner@test.user.service"}},
+		{"name template", func(*hostdUpdateHarness) {}, nil},
 		{"uid template", (*hostdUpdateHarness).onUidTemplate, []string{"orbit-runner@1000.service", "orbit-runner@1001.service"}},
 	} {
 		t.Run(layout.name, func(t *testing.T) {
@@ -595,6 +600,8 @@ func TestHostdUpdateIsRateLimited(t *testing.T) {
 // runner on a machine that just booted checks at the same moment.
 func TestHostdUpdateRateLimitHoldsForCallersArrivingTogether(t *testing.T) {
 	h := newHostdUpdateHarness(t, rolloutTestPrevious, newRolloutRelease(t, rolloutTestLatest))
+	// The uid template, whose roll restarts each instance: so a second install would show twice.
+	h.onUidTemplate()
 
 	const callers = 8
 	answers := make(chan hostdResponse, callers)
@@ -631,23 +638,23 @@ func TestHostdUpdateRateLimitHoldsForCallersArrivingTogether(t *testing.T) {
 	}
 }
 
-// The ironclad rule, from the side where dropping privileges cannot work: root asking a root
-// daemon leaves nothing to drop to, so there is no way to verify the download without running it
-// as root — and so it is not done at all.
-func TestHostdUpdateRefusesToVerifyADownloadAsRoot(t *testing.T) {
-	h := newHostdUpdateHarness(t, rolloutTestPrevious, newRolloutRelease(t, rolloutTestLatest))
-	before := h.sideEffects()
-
-	resp := h.ask(0)
-	if resp.OK {
-		t.Fatal("hostd accepted an update on behalf of uid 0")
-	}
-	if !strings.Contains(resp.Error, "uid 0") {
-		t.Errorf("error = %q, want it to name the refusal", resp.Error)
-	}
-	h.assertNoSideEffects(before)
-	if _, err := os.Stat(h.stampPath); err == nil {
-		t.Error("a refused update consumed the rate-limit window")
+func TestHostdUpdateRefusesMissingOrRootNobody(t *testing.T) {
+	for _, uid := range []string{"missing", "0", "invalid"} {
+		t.Run(uid, func(t *testing.T) {
+			h := newHostdUpdateHarness(t, rolloutTestPrevious, newRolloutRelease(t, rolloutTestLatest))
+			h.update.lookupUser = func(string) (*user.User, error) {
+				if uid == "missing" {
+					return nil, fmt.Errorf("no nobody")
+				}
+				return &user.User{Uid: uid, Gid: "65534", Username: "nobody"}, nil
+			}
+			before := h.sideEffects()
+			resp := h.ask(0)
+			if resp.OK || !strings.Contains(resp.Error, "nobody") {
+				t.Fatalf("response: %+v", resp)
+			}
+			h.assertNoSideEffects(before)
+		})
 	}
 }
 
@@ -870,4 +877,86 @@ func TestHostdServeStaysUpWhileAnAcceptedUpdateIsStillRunning(t *testing.T) {
 	case <-time.After(10 * time.Second):
 		t.Fatal("hostd did not exit once the update had finished")
 	}
+}
+
+// The update verb's scope (decision 2 A): on a host whose instances run their accounts' own
+// copies, it replaces the binary orbit-hostd.service names and nothing else — no other file under
+// the machine's root changes, no systemctl command runs and systemd is not even asked which runner
+// instances there are — and says in the journal that no runner was restarted. (a) On a host where
+// this binary was installed at /usr/local/bin/orbit while the old template is still on disk (setup
+// not run again), the same verb keeps today's behaviour: the uid instances run that binary, so
+// they are rolled onto it, one at a time.
+func TestHostdUpdateReplacesOnlyHostdsBinaryAndRestartsNoRunner(t *testing.T) {
+	for _, tc := range []struct {
+		name    string
+		arrange func(*hostdUpdateHarness)
+		roll    []string
+		log     string
+	}{
+		{"name template", func(*hostdUpdateHarness) {}, nil, "; no runner restarted: each runs its account's own copy"},
+		{"(a) the old template still on disk", (*hostdUpdateHarness).onUidTemplate,
+			[]string{"orbit-runner@1000.service", "orbit-runner@1001.service"}, "; restarting this machine's runners"},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			latest := newRolloutRelease(t, rolloutTestLatest)
+			h := newHostdUpdateHarness(t, rolloutTestPrevious, latest)
+			tc.arrange(h)
+			others := machineFilesBut(t, h.root, h.installed, h.stampPath)
+
+			var resp hostdResponse
+			logged := captureRunnerStdout(t, func() { resp = h.ask(1000) })
+
+			if !resp.OK || resp.Data["accepted"] != true {
+				t.Fatalf("update = %+v, want accepted", resp)
+			}
+			assertInstalled(t, h.installed, latest.binary)
+			if got := machineFilesBut(t, h.root, h.installed, h.stampPath); !equalStrings(got, others) {
+				t.Errorf("files other than hostd's binary changed:\n  before %v\n  after  %v", others, got)
+			}
+			if got := h.restarts(); !equalStrings(got, tc.roll) {
+				t.Errorf("restarted %v, want %v", got, tc.roll)
+			}
+			listed := 0
+			for _, argv := range h.queries {
+				if argv[0] == "systemctl" {
+					listed++
+				}
+			}
+			if tc.roll == nil && (len(h.runs) != 0 || listed != 0) {
+				t.Errorf("ran %v and asked systemd %d times, want neither", h.runs, listed)
+			}
+			want := "installed orbit " + rolloutTestLatest + " at " + h.installed + " (verified as uid 1000)" + tc.log
+			if !strings.Contains(logged, want) {
+				t.Errorf("the journal lacks %q:\n%s", want, logged)
+			}
+		})
+	}
+}
+
+// machineFilesBut is every file under root with its content's length and mode, leaving out skip.
+func machineFilesBut(t *testing.T, root string, skip ...string) []string {
+	t.Helper()
+	var files []string
+	err := filepath.Walk(root, func(p string, info os.FileInfo, err error) error {
+		if err != nil {
+			return err
+		}
+		for _, s := range skip {
+			if p == s {
+				return nil
+			}
+		}
+		if info.Mode().IsRegular() {
+			b, err := os.ReadFile(p)
+			if err != nil {
+				return err
+			}
+			files = append(files, fmt.Sprintf("%s %s %x", p, info.Mode(), b))
+		}
+		return nil
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	return files
 }

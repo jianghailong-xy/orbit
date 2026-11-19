@@ -77,7 +77,6 @@ func TestEveryGatewayRouteGetsTheSmallestValidAnswer(t *testing.T) {
 		{"merged", "POST", "/api/runner/link/events",
 			`{"connections":[{"linkToken":"t"}],"batches":[{"connection":0,"sessionId":"a","events":[{"seq":1},{"seq":2}]},{"connection":0,"sessionId":"b","events":[{"seq":40}]}]}`,
 			answer{200, `{"results":[{"ok":true,"durableSeq":2,"rejected":[]},{"ok":true,"durableSeq":40,"rejected":[]}],"heldMs":0}`}},
-		{"mode", "GET", "/api/runner/link/mode", "", answer{200, `{"required":true}`}},
 		{"a tunnelled request", "POST", "/api/runner/sessions/" + session + "/inbox/ack", `{"ids":["x"]}`, answer{200, `{}`}},
 		{"a tunnelled read", "GET", "/api/runner/sessions/" + session + "/events?after=3", "", answer{200, `{}`}},
 	} {
@@ -108,7 +107,7 @@ func TestEveryGatewayRouteGetsTheSmallestValidAnswer(t *testing.T) {
 		t.Errorf("a route that is not a runner's: %d", status)
 	}
 	st := s.stats()
-	for route, calls := range map[string]int64{routeWelcome: 2, routeHeartbeat: 2, routeEvents: 2, routeEventsMerged: 3, routeMode: 2,
+	for route, calls := range map[string]int64{routeWelcome: 2, routeHeartbeat: 2, routeEvents: 2, routeEventsMerged: 3,
 		routeRPC: 4, routeRevocations: 1, routeUnknown: 1} {
 		if got := st.Routes[route].Calls; got != calls {
 			t.Errorf("stats: %d calls of %s, want %d", got, route, calls)

@@ -78,6 +78,7 @@ class CardActions(private val auth: AuthSession, private val store: RealtimeStor
                     "EXPIRED" -> "This approval expired."
                     else -> "Request answered. Refresh to read the server record."
                 }
+                verb == CardVerb.RESTART_TASK -> EvidenceRestart.started
                 verb == CardVerb.OWNER_ANSWER -> if (objectBody?.obj("delivery") != null) "Answer recorded and delivered." else "Answer recorded. Waiting for a coordinator."
                 else -> "Request accepted. Refreshing the server's current state…"
             }
@@ -106,6 +107,7 @@ class CardActions(private val auth: AuthSession, private val store: RealtimeStor
                 // card says so, whatever else refused it says "Not recorded".
                 error is ApiError && card.family == CardFamily.OWNER_CONFIRMATION && verb in setOf(CardVerb.CONFIRM_OWNER, CardVerb.SEND_BACK) ->
                     "${OwnerReview.refusalTitle(error.code)} — $reason."
+                error is ApiError && verb == CardVerb.RESTART_TASK -> "${EvidenceRestart.refusalTitle(error.code)} — $reason."
                 error is ApiError && verb == CardVerb.REOPEN_TASK -> "Task status was not changed — $reason."
                 // An exception card's doors say which one refused, in the browser's headline (`ExceptionCards`).
                 error is ApiError && card.family == CardFamily.EXCEPTION && ExceptionCards.refusalHeadline(verb) != null ->
@@ -140,10 +142,7 @@ class CardAuthority(private val api: OrbitApi, private val handle: SessionHandle
         if (card.family == CardFamily.WIKI || card.family == CardFamily.BACKGROUND) return readAuxiliary(card)
         // Session REST verifies ownership, active approvals, queues and standing questions together.
         val snapshot = RealtimeRest(api).session(handle, card.sessionId)
-        val current = CardCatalog.session(card.sessionId, snapshot).firstOrNull { it.key == card.key }
-        // A revision waiting for the coordinator is pressed as the evidence card Decide it myself opened it into, while it still
-        // waits; one that has since become the owner's card is that card, and one sent to the coordinator meanwhile is no longer it.
-        return if (CoordinatorQueue.isDecidingMyself(card)) current?.let { CoordinatorQueue.decideMyself(it) ?: it } else current
+        return CardCatalog.session(card.sessionId, snapshot).firstOrNull { it.key == card.key }
     }
 
     private suspend fun readAuxiliary(card: InteractionCard): InteractionCard? = when (card.context.text("resource")) {

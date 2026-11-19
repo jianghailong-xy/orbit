@@ -1,0 +1,251 @@
+<!doctype html>
+<html lang="zh">
+<head>
+<meta charset="utf-8">
+<title>A task that starts from my session's work</title>
+<link rel="stylesheet" href="../../../src/web/src/index.css">
+<link rel="stylesheet" href="../project-progress/mock.css">
+<style>
+<style>
+  /* Board-local classes carry the og- prefix: index.css has bare short class names. */
+  .og-part { background: var(--bg-base); border: 1px solid #dde0e6; border-radius: 12px; padding: 18px 20px 20px; }
+  .og-part + .og-part { margin-top: 22px; }
+  .og-h2 { font-size: 16px; font-weight: 700; margin: 0 0 4px; }
+  .og-lead { font-size: 12.5px; color: var(--text-2); margin: 0 0 14px; line-height: 1.55; }
+  .og-code { font-family: "DejaVu Sans Mono", "WenQuanYi Zen Hei Mono", monospace; font-size: 11px; color: var(--text-1);
+    background: var(--fill-inset); border-radius: 4px; padding: 0 4px; white-space: nowrap; }
+  .og-mini { font-size: 12px; font-weight: 700; color: var(--text-2); margin: 14px 0 6px; }
+
+  /* part 1 */
+  .og-vs { display: grid; grid-template-columns: 1fr 1fr; gap: 18px; }
+  .og-lane { border-radius: 10px; padding: 14px 16px; border: 1px solid var(--border-subtle); background: var(--bg-subtle); }
+  .og-lane.new { border: 1.5px solid var(--brand); background: var(--bg-raised); }
+  .og-lane h3 { margin: 0 0 12px; font-size: 14px; font-weight: 700; }
+  .og-node { border: 1px solid var(--border); background: var(--bg-raised); border-radius: 8px; padding: 7px 10px;
+    font-size: 12.5px; line-height: 1.5; color: var(--text-1); }
+  .og-node small { display: block; font-size: 11.5px; color: var(--text-2); }
+  .og-node.run { border-left: 4px solid #8e6bd8; }
+  .og-node.srv { border-left: 4px solid var(--brand); }
+  .og-node.ext { border-left: 4px solid var(--warning-solid); }
+  .og-node.bad, .og-node.good { font-weight: 400; }
+  .og-node.bad { background: var(--error-bg); border-color: var(--error-border); }
+  .og-node.good { background: var(--success-bg); border-color: var(--success-border); }
+  .og-down { color: var(--text-4); text-align: center; font-size: 15px; line-height: 1; margin: 3px 0; }
+  .og-tags { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 12px; }
+  .og-tag { font-size: 11.5px; padding: 2px 9px; border-radius: 10px; line-height: 18px; }
+  .og-tag.bad { background: var(--error-bg); color: var(--error); border: 1px solid var(--error-border); }
+  .og-tag.good { background: var(--success-bg); color: var(--success); border: 1px solid var(--success-border); }
+
+  /* part 2 */
+  .og-arch { display: grid; grid-template-columns: 1fr 34px 1.9fr 34px 1fr; align-items: stretch; }
+  .og-arrow { display: flex; flex-direction: column; align-items: center; justify-content: center; font-size: 18px; color: var(--text-3); }
+  .og-arrow small { font-size: 10px; color: var(--text-3); writing-mode: vertical-rl; margin-top: 4px; }
+  .og-zone { border-radius: 10px; padding: 10px 12px 12px; display: flex; flex-direction: column; gap: 7px; }
+  .og-zone.run { background: #f6f2ff; border: 1.5px solid #c7b5f2; }
+  .og-zone.srv { background: var(--brand-tint); border: 1.5px solid var(--brand-border); }
+  .og-zone.ext { background: var(--warning-bg); border: 1.5px solid var(--warning-border); }
+  .og-zone h4 { margin: 0; font-size: 13.5px; font-weight: 700; }
+  .og-box { background: var(--bg-raised); border: 1px solid var(--border-subtle); border-radius: 8px; padding: 7px 9px; }
+  .og-box b { font-size: 12.5px; font-weight: 650; display: flex; align-items: center; gap: 6px; flex-wrap: wrap; }
+  .og-box p { margin: 2px 0 0; font-size: 11.5px; color: var(--text-2); line-height: 1.5; }
+  .og-box .og-code { white-space: normal; overflow-wrap: anywhere; }
+  .og-box.key { border: 1.5px solid var(--brand); }
+  .og-srvgrid { display: grid; grid-template-columns: 1fr 1fr; gap: 7px; }
+  .og-new, .og-same { font-size: 10.5px; font-weight: 700; padding: 0 6px; border-radius: 4px; line-height: 17px; white-space: nowrap; }
+  .og-new { background: var(--brand); color: #fff; }
+  .og-same { background: var(--fill-muted); color: var(--text-2); }
+  .og-tbl { width: 100%; border-collapse: collapse; font-size: 12px; }
+  .og-tbl th, .og-tbl td { border: 1px solid var(--border-subtle); padding: 5px 9px; text-align: left; vertical-align: top; line-height: 1.5; }
+  .og-tbl th { background: var(--bg-subtle); font-weight: 700; color: var(--text-2); font-size: 11.5px; }
+  .og-tbl td.n { color: var(--text-2); font-size: 11.5px; }
+
+  /* part 3 */
+  .og-swim { display: grid; grid-template-columns: 34px repeat(4, minmax(0, 1fr)); border: 1px solid var(--border); border-radius: 10px; overflow: hidden; }
+  .og-swim > div { border-top: 1px solid var(--border-subtle); padding: 6px 8px; min-height: 30px; }
+  .og-swim > .hd { border-top: 0; font-size: 12px; font-weight: 700; padding: 8px; }
+  .og-swim > .hd.run { background: #f6f2ff; } .og-swim > .hd.srv { background: var(--brand-tint); }
+  .og-swim > .hd.ext { background: var(--warning-bg); } .og-swim > .hd.ctl { background: var(--bg-subtle); }
+  .og-swim > .no { font-size: 11px; font-weight: 700; color: var(--text-3); text-align: center; padding-top: 9px; }
+  .og-swim > .sep { grid-column: 1 / -1; background: var(--bg-subtle); font-size: 11.5px; font-weight: 700; color: var(--text-2); min-height: 0; padding: 5px 10px; }
+  .og-ev { display: block; border-radius: 7px; padding: 5px 8px; font-size: 11.8px; line-height: 1.45; color: var(--text-1); }
+  .og-ev.run { background: #f6f2ff; border: 1px solid #ddd0fa; }
+  .og-ev.srv { background: var(--brand-tint); border: 1px solid var(--brand-border); }
+  .og-ev.ext { background: var(--warning-bg); border: 1px solid var(--warning-border); }
+  .og-ev.ctl { background: var(--bg-raised); border: 1px solid var(--border); }
+
+  /* part 4 */
+  .og-two { display: grid; grid-template-columns: 1fr 1fr; gap: 14px; }
+  .og-card { border: 1px solid var(--border); border-radius: 10px; padding: 10px 12px; background: var(--bg-raised); }
+  .og-card h5 { margin: 0 0 6px; font-size: 13px; font-weight: 700; }
+  .og-card p, .og-card li { margin: 0; font-size: 12px; line-height: 1.6; color: var(--text-1); }
+  .og-card ul { margin: 0; padding-left: 16px; }
+  .og-card p + p { margin-top: 4px; }
+  .og-rec { color: var(--brand-strong); font-weight: 700; }
+
+  /* part 5 */
+  .og-decide { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
+  .og-phases { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 10px; }
+  .og-phase { border: 1px solid var(--border); border-radius: 10px; padding: 10px 12px; background: var(--bg-raised); }
+  .og-phase h5 { margin: 0 0 6px; font-size: 13px; font-weight: 700; }
+  .og-phase p { margin: 0; font-size: 11.8px; line-height: 1.55; color: var(--text-1); }
+  .og-phase p.done { margin-top: 6px; color: var(--text-2); }
+</style>
+  .og-git { display: block; width: 100%; max-width: 860px; height: auto; }
+  .og-part { background: #fff; }
+  .og-git text { font-family: "DejaVu Sans Mono", monospace; font-size: 12px; fill: #333; }
+  .og-git .lb { font-family: Inter, "Noto Sans SC", sans-serif; font-size: 12px; fill: #555; }
+</style>
+</head>
+<body class="m">
+<div class="m-sheet zh">
+  <h1 class="m-h1">Task 从「我这个会话的现场」起步；codeless 任务不留空分支</h1>
+  <p class="m-sub">设计见 <span class="og-code">docs/task-fork-from-session-design.md</span>。① 今天和新方案对照 · ② 快照和组件 · ③ 一次 fork 的时序和 git 历史 · ④ codeless 任务 · ⑤ 待定 · 要你拍板，和落地顺序。界面文案仍是英文。</p>
+
+  <section class="og-part" id="part-1">
+    <h2 class="og-h2">① 今天 vs 新方案</h2>
+    <p class="og-lead">不给 agent「新 worktree / 在我的 worktree 里跑」的二选一：两个会话写同一个目录会互相覆盖，Project 契约刚把退回共享目录的路都堵上。要接着谁的工作干，就开一个<b>从那份工作起步</b>的独立 checkout。A（接着我的分支）和 C（接着我还没 commit 的改动）是同一个机制。</p>
+    <div class="og-vs">
+      <div class="og-lane">
+        <h3>今天</h3>
+        <div class="og-node srv">会话 X 在自己的 worktree 里改了一半，调 <span class="og-code">task_create</span><small>参数里没有任何关于 worktree 或起点的字段</small></div>
+        <div class="og-down">↓</div>
+        <div class="og-node run bad">新任务从 workspace 的 workDir HEAD 分出来<small>看不到 X 的分支，更看不到 X 没 commit 的改动</small></div>
+        <div class="og-down">↓</div>
+        <div class="og-node run bad">绕路：X 先 commit、合进主 checkout，再建任务<small>半成品进了主线；或者干脆不拆任务，自己做完</small></div>
+        <div class="og-down">↓</div>
+        <div class="og-node srv bad">codeless 任务照样建 worktree 和分支<small>跑完留下一条空分支，runner 从不删分支，看着像没做完的活</small></div>
+        <div class="og-tags">
+          <span class="og-tag bad">拆不出「接着改」的子任务</span><span class="og-tag bad">半成品被迫进主线</span><span class="og-tag bad">空分支堆积</span>
+        </div>
+      </div>
+      <div class="og-lane new">
+        <h3>新方案</h3>
+        <div class="og-node srv"><span class="og-code">task_create { …, forkFromSession: true }</span><small>只能 fork 调用者自己这个会话（D6）</small></div>
+        <div class="og-down">↓</div>
+        <div class="og-node run good">runner 给 X 的 checkout 拍快照 S，X 一个字节都不动<small>临时 index：HEAD + 未 commit 的改动 + 未跟踪文件；干净时 S 就是 HEAD</small></div>
+        <div class="og-down">↓</div>
+        <div class="og-node run good">新任务在同一台 runner 上开自己的 worktree，从 S 起步<small>SOURCE 钉死在 S：重试也从 S 起，找不到 S 就拒绝，不退回 workDir</small></div>
+        <div class="og-down">↓</div>
+        <div class="og-node srv good">做完：X 自己 <span class="og-code">git merge</span> 任务分支，记 merge_receipt<small>codeless 任务：独立 checkout，没改动就不建分支（B2）</small></div>
+        <div class="og-tags">
+          <span class="og-tag good">A 和 C 一个机制</span><span class="og-tag good">发起会话不被打扰</span><span class="og-tag good">起点可复现</span><span class="og-tag good">不留空分支</span>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <section class="og-part" id="part-2">
+    <h2 class="og-h2">② 快照和组件</h2>
+    <p class="og-lead">快照在 <span class="og-code">orbit mcp</span> 进程里同步完成：它就跑在发起会话的 runner 上，checkout 路径是确定的 <span class="og-code">worktreesDir()/&lt;sessionId&gt;</span>，不需要新的 runner 指令。服务端只是在 SOURCE 表里多一行。</p>
+    <div class="og-arch">
+      <div class="og-zone run">
+        <h4>runner · 发起会话 X</h4>
+        <div class="og-box key"><b>快照 <span class="og-new">新</span></b><p><span class="og-code">GIT_INDEX_FILE=tmp git add -A</span> → <span class="og-code">write-tree</span> → <span class="og-code">commit-tree -p HEAD</span> = S</p></div>
+        <div class="og-box key"><b>保活 ref <span class="og-new">新</span></b><p><span class="og-code">refs/orbit/fork/&lt;id&gt;</span> → S，防 gc；没有未结束的任务引用 S 时由现有 gc 删</p></div>
+        <div class="og-box"><b>X 的 checkout <span class="og-same">不动</span></b><p>index、暂存区、工作文件、分支、历史全不变</p></div>
+      </div>
+      <div class="og-arrow">→<small>task_create</small></div>
+      <div class="og-zone srv">
+        <h4>API server</h4>
+        <div class="og-srvgrid">
+          <div class="og-box key"><b>任务上的 fork 事实 <span class="og-new">新列</span></b><p><span class="og-code">forkSessionId</span> · <span class="og-code">forkSha</span> · <span class="og-code">forkIncludesUncommitted</span>，创建时写入，之后不变</p></div>
+          <div class="og-box key"><b>SOURCE 表 PF 行 <span class="og-new">新</span></b><p>无 codebase 且 <span class="og-code">forkSha</span> 非空 → <span class="og-code">SESSION_FORK</span>，SHA 值，<span class="og-code">RUNNER_LOCAL</span> 指向 X 的 runner</p></div>
+          <div class="og-box key"><b>放置约束 <span class="og-new">新</span></b><p>只派到 X 的 runner；别的 runner → <span class="og-code">FORK_SOURCE_NOT_REACHABLE</span>；绑了代码库的 Project → <span class="og-code">FORK_IN_BOUND_PROJECT</span></p></div>
+          <div class="og-box"><b>pin / 拒绝 / 理由 <span class="og-same">复用</span></b><p>SR12 不换基线、SR19 不回退、SR18 理由：「Forked from session … at abc1234 (includes uncommitted changes)」</p></div>
+        </div>
+      </div>
+      <div class="og-arrow">→<small>claim</small></div>
+      <div class="og-zone run">
+        <h4>runner · 新任务的会话</h4>
+        <div class="og-box"><b><span class="og-code">setupSourceWorktree</span> <span class="og-same">复用</span></b><p>在 S 上 <span class="og-code">worktree add</span>；仓库里没有 S 就拒绝，不去 fetch</p></div>
+        <div class="og-box key"><b>强制有分支 <span class="og-new">新</span></b><p>workspace 关了 worktree 也开：和 X 共用目录正是要禁的</p></div>
+      </div>
+    </div>
+    <div class="og-mini">快照覆盖什么</div>
+    <table class="og-tbl">
+      <tr><th style="width:230px">X 的 checkout 里</th><th style="width:200px">进不进 S</th><th>说明</th></tr>
+      <tr><td>已 commit</td><td>进（S 的父提交就是 HEAD）</td><td class="n">干净的 checkout：S = HEAD，不新建提交</td></tr>
+      <tr><td>已暂存 / 未暂存的修改、删除、改名</td><td>进</td><td class="n">临时 index 从工作区重新读，X 自己的暂存状态不受影响</td></tr>
+      <tr><td>未跟踪的新文件</td><td>进</td><td class="n"><span class="og-code">add -A</span>；P0 验证大文件和子模块</td></tr>
+      <tr><td><span class="og-code">.gitignore</span> 掉的文件（node_modules、构建产物、.env）</td><td>不进</td><td class="n">和 X 自己 commit 时一样；新任务要依赖就自己装</td></tr>
+    </table>
+  </section>
+
+  <section class="og-part" id="part-3">
+    <h2 class="og-h2">③ 一次 fork 的时序和 git 历史</h2>
+    <p class="og-lead">X 有未 commit 的改动时调 task_create；之后 X 继续干活，回合结束时自己 commit 了同样的改动；任务做完，X 把任务分支合回来。</p>
+    <div class="og-swim">
+      <div class="hd ctl"></div><div class="hd run">会话 X（发起者）</div><div class="hd run">orbit mcp（X 的 runner）</div><div class="hd srv">API server</div><div class="hd run">任务 T 的会话（同一台 runner）</div>
+      <div class="sep">创建</div>
+      <div class="no">1</div><div><span class="og-ev ctl">改了 a.ts、新建 b.ts，没 commit；调 <span class="og-code">task_create {forkFromSession: true}</span></span></div><div><span class="og-ev run">临时 index 拍快照 → S（父 = H0）；写 <span class="og-code">refs/orbit/fork/…</span></span></div><div></div><div></div>
+      <div class="no">2</div><div></div><div><span class="og-ev run">POST 任务，带 <span class="og-code">fork {sessionId, sha: S, baseHead: H0}</span></span></div><div><span class="og-ev srv">校验 X 是调用者、assignee 在同一台 runner、不在绑代码库的 Project → 建任务</span></div><div></div>
+      <div class="sep">运行</div>
+      <div class="no">3</div><div><span class="og-ev ctl">继续干活；回合结束自动 commit → C1（含 a.ts、b.ts 和后来的改动）</span></div><div></div><div><span class="og-ev srv">派发：PF 行 → <span class="og-code">SESSION_FORK</span>，pin = S</span></div><div><span class="og-ev run">在 S 上开 worktree，分支 <span class="og-code">orbit/T</span>；跑，commit → K</span></div>
+      <div class="no">4</div><div></div><div></div><div><span class="og-ev srv">T 达到 DONE；<span class="og-code">task_await</span> 的回执带分支、S 和合并命令</span></div><div></div>
+      <div class="sep">合回</div>
+      <div class="no">5</div><div><span class="og-ev ctl"><span class="og-code">git merge --no-ff orbit/T</span> → M；调 <span class="og-code">merge_receipt</span></span></div><div></div><div><span class="og-ev srv">记录：T 的工作已进 X 的分支</span></div><div></div>
+    </div>
+    <div class="og-mini">git 历史</div>
+    <svg class="og-git" viewBox="0 0 900 150">
+      <line x1="60" y1="40" x2="820" y2="40" stroke="#8e6bd8" stroke-width="3"/>
+      <line x1="140" y1="40" x2="300" y2="110" stroke="#2f6fde" stroke-width="3"/>
+      <line x1="300" y1="110" x2="560" y2="110" stroke="#2f6fde" stroke-width="3"/>
+      <line x1="560" y1="110" x2="720" y2="40" stroke="#2f6fde" stroke-width="3" stroke-dasharray="6 4"/>
+      <circle cx="140" cy="40" r="9" fill="#fff" stroke="#8e6bd8" stroke-width="3"/><text x="132" y="22">H0</text>
+      <circle cx="420" cy="40" r="9" fill="#fff" stroke="#8e6bd8" stroke-width="3"/><text x="412" y="22">C1</text>
+      <circle cx="720" cy="40" r="9" fill="#8e6bd8"/><text x="714" y="22">M</text>
+      <circle cx="300" cy="110" r="9" fill="#fff" stroke="#2f6fde" stroke-width="3"/><text x="296" y="138">S</text>
+      <circle cx="560" cy="110" r="9" fill="#fff" stroke="#2f6fde" stroke-width="3"/><text x="556" y="138">K</text>
+      <text class="lb" x="830" y="45">X 的分支</text>
+      <text class="lb" x="600" y="138">orbit/T（任务分支）</text>
+    </svg>
+    <p class="og-lead" style="margin:6px 0 0">S = H0 + X 当时没 commit 的改动。C1 也含同样的改动，合并时两边相同，git 不报冲突。只有 X 在 fork 之后又改了 T 也改的同一处，合并才冲突。那是真冲突，由 X 处理。</p>
+  </section>
+
+  <section class="og-part" id="part-4">
+    <h2 class="og-h2">④ codeless 任务：不留空分支</h2>
+    <p class="og-lead">任务声明 <span class="og-code">codeless</span>（调研、核对、发布这类不产出代码的）时怎么跑。</p>
+    <div class="og-two">
+      <div class="og-card">
+        <h5>B1 不开 worktree</h5>
+        <ul>
+          <li>和「在任务里 @ 开的对话」一样传 <span class="og-code">noWorktree</span>，直接在 workDir 里跑。</li>
+          <li>改动最小：一行。</li>
+          <li>agent 真写了文件，就写进主 checkout，和那里正在跑的别的会话混在一起。</li>
+        </ul>
+      </div>
+      <div class="og-card">
+        <h5>B2 独立 checkout，有改动才建分支 <span class="og-rec">建议</span></h5>
+        <ul>
+          <li><span class="og-code">git worktree add --detach &lt;base&gt;</span>：照样隔离，但没有分支。</li>
+          <li>结束时没改动：删 checkout，什么都不留。</li>
+          <li>有改动：这时才建 <span class="og-code">orbit/&lt;name&gt;</span>、commit、上报分支和改动文件，不丢东西。</li>
+          <li>代价：服务端要接受「结束时才报上来的分支」，只对这一类会话。</li>
+        </ul>
+      </div>
+    </div>
+    <p class="og-lead" style="margin:10px 0 0">另记一个现有缺口，不在本设计里改：创建时就声明 codeless、后来又写了代码的任务，今天没有任何检查拦它；<span class="og-code">task-codeless.ts</span> 只拦「事后改成 codeless」。</p>
+  </section>
+
+  <section class="og-part" id="part-5">
+    <h2 class="og-h2">⑤ 待定 · 要你拍板</h2>
+    <p class="og-lead">每项给了建议。D1、D3 决定会不会动到发起会话的 checkout；其余可以先按建议走。</p>
+    <div class="og-decide">
+      <div class="og-card"><h5>D1 未 commit 的改动怎么带过去</h5><p>A：快照提交放在旁路 ref 上，X 不动 · B：先在 X 的分支上真 commit 一次</p><p><span class="og-rec">建议 A：</span>X 可能正改到一半，或有子 agent 在写；替它 commit 会改它的 index 和历史。</p></div>
+      <div class="og-card"><h5>D2 fork 出的任务能在哪跑</h5><p>A：只在 X 的 runner · B：把 S 推到远端，别的 runner 也能跑</p><p><span class="og-rec">建议 A：</span>B 要可写的远端，还会把半成品推出去。</p></div>
+      <div class="og-card"><h5>D3 谁把结果合回来</h5><p>A：X 自己合，<span class="og-code">task_await</span> 回执里给命令 · B：X 空闲时 Orbit 替它合</p><p><span class="og-rec">建议 A：</span>B 要一个在活着的 checkout 上合并的新 runner 操作，还要冲突策略。</p></div>
+      <div class="og-card"><h5>D4 绑了代码库的 Project 里能不能 fork</h5><p>A：v1 拒绝 · B：允许，但要求 S 包含 Project 线</p><p><span class="og-rec">建议 A：</span>否则协调者没落地的改动会绕过落地进入 Project 线。先在 Project 外用起来再说。</p></div>
+      <div class="og-card"><h5>D5 codeless 任务怎么跑</h5><p>B1：不开 worktree · B2：独立 checkout，有改动才建分支</p><p><span class="og-rec">建议 B2：</span>保住隔离，常见情况什么都不留。</p></div>
+      <div class="og-card"><h5>D6 能 fork 哪个会话</h5><p>A：只能是调用者自己 · B：本账号任意会话（按 id）</p><p><span class="og-rec">建议 A：</span>mcp 进程只读得到自己的 checkout；B 会让一个 agent 拿走另一个的半成品。</p></div>
+    </div>
+    <div class="og-mini">落地（按依赖排，后一期依赖前一期）</div>
+    <div class="og-phases">
+      <div class="og-phase"><h5>P0 摸底</h5><p>真 runner 上：临时 index 拍脏 worktree（未跟踪、忽略、暂存、改名、子模块、X 持有 index 锁）；另一个 checkout 在 S 上开 worktree；X 自己 commit 同样改动后合回。</p><p class="done">完成：每种情况有录下的过程；合回除故意制造的重叠修改外都无冲突。</p></div>
+      <div class="og-phase"><h5>P1 服务端</h5><p>列和迁移；两个创建入口的 <span class="og-code">forkFromSession</span>；PF 行和契约章节、交集用例；放置拒绝；理由文本。</p><p class="done">完成：pg spec 建 fork 任务、领取，看到 <span class="og-code">SESSION_FORK</span> pin 在 S、派到对的 runner；每种拒绝一个 spec。</p></div>
+      <div class="og-phase"><h5>P2 runner</h5><p>mcp 里的快照；保活 ref 和 gc；fork 任务强制有分支。</p><p class="done">完成：真 runner 演练：X 有未 commit 改动时 fork，T 再改一个文件，X 合回后两处改动都在；fork 前后 X 的 checkout 逐字节相同。</p></div>
+      <div class="og-phase"><h5>P3 codeless 和客户端</h5><p>B2（runner 和结束上报）；web、macOS/iOS、Android 的任务和会话页显示 fork 来源（英文文案）；task_await 回执。</p><p class="done">完成：没改动的 codeless 运行不留分支，有改动的留下分支和改动文件；各客户端都显示 fork 来源。</p></div>
+    </div>
+  </section>
+</div>
+</body>
+</html>

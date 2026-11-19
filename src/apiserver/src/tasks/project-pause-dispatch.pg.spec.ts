@@ -1,3 +1,4 @@
+import { seedPromotionRequest } from '../test-support/promotion-request';
 /**
  * "Does this project move" is started and not paused — asserted against real PostgreSQL.
  *
@@ -952,12 +953,13 @@ function heartbeat(stack: Stack, w: LineWorld): Promise<IntegrationJobCommand[]>
   return stack.jobs.dispatch({ runnerId: w.runnerId, leaseOwner: `lease-${w.label}`, draining: false, capabilities: CAPABLE });
 }
 
-function report(
+async function report(
   stack: Stack,
   w: LineWorld,
   job: IntegrationJobCommand,
   result: Omit<IntegrationJobResultRequest, 'claimGeneration' | 'leaseOwner'>,
 ) {
+  if (job.kind === 'LAND_TASK') await seedPromotionRequest(stack.db, w.projectId);
   return stack.api.integrationJobResult({ id: w.runnerId }, job.jobId, {
     claimGeneration: job.claimGeneration, leaseOwner: job.leaseOwner, ...result,
   });

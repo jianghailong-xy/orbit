@@ -1,9 +1,14 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
+import { Prisma } from '@prisma/client';
 import { uuidToBase62 } from '@orbit/shared';
 import { controlPlaneNoteOf, withSessionMessage } from '../runner-api/control-plane-note';
 import {
   appendSessionMessageContext,
+  lastUserFromExternalOf,
+  lastUserFromOf,
+  lastUserFromOrbitOf,
+  pendingMessageColumns,
   readSessionMessageCard,
   sessionMessageBlock,
 } from './session-message';
@@ -183,4 +188,21 @@ test('a card arriving from the runner is dropped: who sent a message is the cont
   // Not a user echo at all: left exactly as it came.
   const other = { message: 'x' };
   assert.equal(withSessionMessage(other, card), other);
+});
+
+test('a row names one sender per message: another session, then Orbit, then a Feishu group member', () => {
+  const session = { sessionId: SENDER, title: 'Build the package' };
+  const orbit = { coordinatorDelivery: null };
+  const feishu = { source: 'FEISHU' as const, name: 'Lin Mei' };
+  const read = (cols: ReturnType<typeof pendingMessageColumns>) => ({
+    from: lastUserFromOf(cols),
+    orbit: lastUserFromOrbitOf({ lastUserFromOrbit: cols.lastUserFromOrbit === Prisma.DbNull ? null : cols.lastUserFromOrbit as Prisma.JsonValue }),
+    external: lastUserFromExternalOf(cols),
+  });
+  assert.deepEqual(read(pendingMessageColumns('hi', session, orbit, feishu)), { from: session, orbit: null, external: null });
+  assert.deepEqual(read(pendingMessageColumns('hi', null, orbit, feishu)), { from: null, orbit, external: null });
+  assert.deepEqual(read(pendingMessageColumns('hi', null, null, feishu)), { from: null, orbit: null, external: feishu });
+  assert.deepEqual(read(pendingMessageColumns('hi', null, null)), { from: null, orbit: null, external: null });
+  // Cleared with the text: no sender survives a null message.
+  assert.deepEqual(read(pendingMessageColumns(null, session, orbit, feishu)), { from: null, orbit: null, external: null });
 });

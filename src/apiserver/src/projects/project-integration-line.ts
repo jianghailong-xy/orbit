@@ -27,6 +27,7 @@ import {
 } from '@orbit/shared';
 
 import type { PrismaService } from '../prisma/prisma.service';
+import { baselineHoldSql } from './baseline-hold';
 import { runnerOfflineSql } from '../runners/runner-presence';
 import { branchName, canonicalRepoUrl, workOnProjectRepository } from './project-criterion-landing';
 import {
@@ -48,6 +49,7 @@ import {
 import { readProjectIntegrationLog } from './project-integration-log';
 import { queueLandingObservationIfPending } from './landing-observation';
 import { medianMs } from './project-promotion';
+import { SKIP_CHECK_STOP_CAUSE, inFlightSkipRefusal } from './project-integration-skip-check';
 import {
   queueBlockingSummary,
   type QueueBlockingFacts,
@@ -145,6 +147,8 @@ const LINE_COLUMNS = {
   integrationRef: true,
   integrationRefSource: true,
   integrationStartedAt: true,
+  landingCheckCommand: true,
+  landingCheckTimeoutSeconds: true,
   mergeCheckCommand: true,
   mergeCheckTimeoutSeconds: true,
   deliveryMode: true,
@@ -284,6 +288,9 @@ export function projectIntegrationView(
     source: row && line ? (row.integrationRefSource as IntegrationRefSource) : null,
     locked: !!row?.integrationStartedAt,
     startedAt: row?.integrationStartedAt ?? null,
+    landingCheckCommand: row?.landingCheckCommand ?? null,
+    landingCheckTimeoutSeconds: row?.landingCheckTimeoutSeconds ?? null,
+    landingCheckCommandAbsentReason: row?.landingCheckCommand == null ? 'FALLS_BACK_TO_MERGE_CHECK' : null,
     mergeCheckCommand: row?.mergeCheckCommand ?? null,
     mergeCheckCommandAbsentReason: row?.mergeCheckCommand ? null : 'NOT_CONFIGURED',
     mergeCheckTimeoutSeconds: row?.mergeCheckTimeoutSeconds ?? null,
@@ -560,6 +567,10 @@ interface InFlightJobRow extends IntegrationCheckSource {
   outputMovedAt: Date | null;
   currentCheck: unknown;
   cancelRequestedAt: Date | null;
+  /** The claim generation a v2 claim reported PUSH under (§2.2 J-T4), or null. */
+  pushReportedGeneration: bigint | null;
+  /** The stop this generation was asked for is a skip's (`SKIP_CHECK_STOP_CAUSE`). */
+  stoppingToSkip: boolean;
   confirmedAutomatically: boolean;
   upstreamRef: string;
   createdAt: Date;
@@ -583,6 +594,10 @@ interface InFlightJobRow extends IntegrationCheckSource {
   runnerWaitName: string | null;
   /** Whether that runner declares `promotion-automatic-land/v1` (M-T12). */
   runnerLandsAutomatically: boolean | null;
+  /** The shared baseline item holding this queued landing (K4). */
+  baselineBlockItemId: string | null;
+  baselineBlockOwnerId: string | null;
+  baselineHeldCount: number | null;
   /** The OPEN MAIN_SYNC item holding every later landing on this serial key (M2). */
   syncBlockJobId: string | null;
   syncBlockOwnerId: string | null;
@@ -604,7 +619,7 @@ interface InFlightJobRow extends IntegrationCheckSource {
 function currentCheckOf(raw: unknown): ProjectIntegrationCheck<Date> | null {
   if (!raw || typeof raw !== 'object') return null;
   const check = raw as Record<string, unknown>;
-  if ((check.name !== 'TASK_ACCEPTANCE' && check.name !== 'MERGE_CHECK')
+  if ((check.name !== 'TASK_ACCEPTANCE' && check.name !== 'MERGE_CHECK' && check.name !== 'LANDING_CHECK')
     || typeof check.index !== 'number' || typeof check.count !== 'number'
     || typeof check.budgetSeconds !== 'number' || typeof check.startedAt !== 'string') return null;
   const startedAt = new Date(check.startedAt);
@@ -653,6 +668,13 @@ function blockingReasonOf(row: InFlightJobRow): IntegrationJobBlockingReason | n
   }
   if (row.workHeld) {
     return { code: 'WAITING_TASK_WORK', summary: queueBlockingSummary('WAITING_TASK_WORK', queueFacts(row)) };
+  }
+  if (row.baselineBlockItemId) {
+    const itemId = mine(row.baselineBlockOwnerId) ? row.baselineBlockItemId : null;
+    return { code: 'WAITING_BASELINE',
+      summary: queueBlockingSummary('WAITING_BASELINE', {
+        ...queueFacts(row), baselineItemId: itemId, baselineHeldCount: row.baselineHeldCount,
+      }), ...(itemId ? { openItemId: itemId } : {}) };
   }
   if (row.syncBlockJobId) {
     const mineSync = row.syncBlockOwnerId === row.ownerId;
@@ -738,10 +760,23 @@ function inFlightJobOf(row: InFlightJobRow, typicalMs: Map<string, number>): Pro
     check,
     stepStartedAt: running ? row.stepStartedAt : null,
     outputMovedAt: running ? row.outputMovedAt : null,
-    typicalMs: check?.name === 'MERGE_CHECK' ? typicalMs.get(row.projectId) ?? null : null,
+    typicalMs: (check?.name === 'MERGE_CHECK' || check?.name === 'LANDING_CHECK') ? typicalMs.get(row.projectId) ?? null : null,
     liveness: livenessOf(row, timedOut),
     blockingReason: blockingReasonOf(row),
     retryable: timedOut && row.kind === 'LAND_TASK',
+    skippable: row.taskId !== null && inFlightSkipRefusal({
+      kind: row.kind,
+      state: row.state,
+      phase: row.phase,
+      cancelRequestedAt: row.cancelRequestedAt,
+      skipMergeCheck: row.skipMergeCheck,
+      progressProtocol: row.progressProtocol,
+      pushReportedGeneration: row.pushReportedGeneration,
+      claimGeneration: row.claimGeneration,
+      landingCheckCommand: row.landingCheckCommand ?? null,
+      mergeCheckCommand: row.mergeCheckCommand,
+    }) === null,
+    skipCheck: row.skipMergeCheck ? 'SKIPPED' : row.stoppingToSkip ? 'STOPPING' : null,
   };
 }
 
@@ -821,7 +856,7 @@ async function readTypicalCheckMs(
             FROM jsonb_array_elements(
                    CASE WHEN jsonb_typeof(finished."checks") = 'array'
                         THEN finished."checks" ELSE '[]'::jsonb END) c
-           WHERE c->>'name' = 'MERGE_CHECK'
+           WHERE c->>'name' IN ('MERGE_CHECK', 'LANDING_CHECK')
              AND c->>'timedOut' = 'false'
              AND (c->>'exitCode') ~ '^[0-9]+$'
              AND (c->>'expectedExitCode') ~ '^[0-9]+$'
@@ -898,9 +933,16 @@ async function readInFlightJobsForProjects(
            st."acceptance_command" AS "acceptanceCommand",
            st."acceptance_expected_exit_code" AS "acceptanceExpectedExitCode",
            st."acceptance_timeout_seconds" AS "acceptanceTimeoutSeconds",
+           cb."landing_check_command" AS "landingCheckCommand",
+           cb."landing_check_timeout_seconds" AS "landingCheckTimeoutSeconds",
            cb."merge_check_command" AS "mergeCheckCommand",
            cb."merge_check_timeout_seconds" AS "mergeCheckTimeoutSeconds",
            j."skip_merge_check" AS "skipMergeCheck",
+           j."push_reported_generation" AS "pushReportedGeneration",
+           (j."cancel_requested_at" IS NOT NULL AND EXISTS (
+              SELECT 1 FROM "project_integration_job_event" stop
+               WHERE stop."job_id" = j."id" AND stop."kind" = 'STOP_REQUESTED'
+                 AND stop."data"->>'cause' = ${SKIP_CHECK_STOP_CAUSE})) AS "stoppingToSkip",
            j."progress_protocol" AS "progressProtocol",
            EXTRACT(EPOCH FROM now() - COALESCE(j."heartbeat_at", j."claimed_at"))::float8 AS "silentSeconds",
            EXTRACT(EPOCH FROM now() - j."output_moved_at")::float8 AS "outputIdleSeconds",
@@ -922,6 +964,8 @@ async function readInFlightJobsForProjects(
                  AND work."deleted_at" IS NULL AND work."finished_at" IS NULL)) AS "workHeld",
            runner_wait."wait" AS "runnerWait", runner_wait."name" AS "runnerWaitName",
            runner_wait."landsAutomatically" AS "runnerLandsAutomatically",
+           baseline_block."openItemId" AS "baselineBlockItemId",
+           baseline_block."ownerId" AS "baselineBlockOwnerId", baseline_block."heldCount" AS "baselineHeldCount",
            sync_block."jobId" AS "syncBlockJobId", sync_block."ownerId" AS "syncBlockOwnerId",
            sync_block."openItemId" AS "syncBlockOpenItemId", sync_block."taskTitle" AS "syncBlockTaskTitle",
            sync_block."handlingGeneration" AS "syncHandlingGeneration",
@@ -958,8 +1002,9 @@ async function readInFlightJobsForProjects(
            AND j."kind" <> 'OBSERVE_LANDING'
       ) runner_wait ON true
       -- M2: an OPEN item about another landing's failed absorb of upstream into the same target
-      -- holds every later landing on it; the conflicted job's own later generations are exempt (M3).
-      -- The claim reads the item, not a handling generation (T17), so this does too.
+      -- holds every later landing on it; the conflicted job's own later generations are exempt (M3),
+      -- and so are the landings of a task filed to fix that item (fixes_open_item_id), as in the
+      -- claim. The claim reads the item, not a handling generation (T17), so this does too.
       LEFT JOIN LATERAL (
         SELECT f."id" AS "jobId", i."id" AS "openItemId", i."owner_id" AS "ownerId",
                ft."title" AS "taskTitle",
@@ -973,8 +1018,20 @@ async function readInFlightJobsForProjects(
            AND f."serial_key" = j."serial_key" AND f."phase" = 'MAIN_SYNC'
            AND i."kind" = 'INTEGRATION_CONFLICT' AND i."state" = 'OPEN'
            AND f."task_id" IS DISTINCT FROM j."task_id"
+           AND NOT EXISTS (
+             SELECT 1 FROM "task" fix
+              WHERE fix."id" = j."task_id" AND fix."fixes_open_item_id" = i."id")
          ORDER BY i."created_at", i."id" LIMIT 1
       ) sync_block ON true
+      LEFT JOIN LATERAL (
+        SELECT i."id" AS "openItemId", i."owner_id" AS "ownerId",
+               (SELECT count(DISTINCT held."task_id")::int FROM "project_integration_job" held
+                 WHERE held."state" = 'QUEUED' AND ${baselineHoldSql('held')}) AS "heldCount"
+          FROM "project_open_item" i
+          JOIN "project_integration_job" f ON f."id" = i."integration_job_id"
+         WHERE j."state" = 'QUEUED' AND ${baselineHoldSql('j')}
+         ORDER BY i."created_at", i."id" LIMIT 1
+      ) baseline_block ON true
       -- J1: one RUNNING job per repository and target ref, whichever project queued it.
       LEFT JOIN LATERAL (
         SELECT r."id" AS "jobId", r."owner_id" AS "ownerId", r."kind" AS "kind", rt."title" AS "taskTitle"
@@ -993,7 +1050,7 @@ async function readInFlightJobsForProjects(
               COALESCE(j."claimed_at", j."created_at") ASC, j."id" ASC`);
   const typical = await readTypicalCheckMs(prisma, [...new Set(rows
     .filter((row) => row.state === 'RUNNING'
-      && currentCheckOf(row.currentCheck)?.name === 'MERGE_CHECK')
+      && ['MERGE_CHECK', 'LANDING_CHECK'].includes(currentCheckOf(row.currentCheck)?.name ?? ''))
     .map((row) => row.projectId))]);
   const byProject = new Map<string, ProjectIntegrationJob<Date>[]>();
   for (const row of rows) {
@@ -1335,6 +1392,7 @@ export function lastLandingCheck(checks: unknown): 'PASSING' | 'FAILING' | 'UNKN
   let complete = true;
   for (const check of checks) {
     if (!check || typeof check !== 'object') { complete = false; continue; }
+    if (check.name === 'LANDING_CHECK' && check.skipped === 'PATHS_EXEMPT') continue;
     if (check.timedOut === true) return 'FAILING';
     if (typeof check.expectedExitCode !== 'number' || typeof check.exitCode !== 'number'
       || check.timedOut !== false) { complete = false; continue; }
@@ -1390,6 +1448,9 @@ export async function stopInFlightJob(
     /** Who pressed, when a person or a conversation did; the platform otherwise. */
     actor?: IntegrationTimelineActorInput;
     reason?: string | null;
+    /** More of what the stop asked, kept on its line: a skip's `SkipCheckStopData`, which the
+     *  result transaction reads back when the runner answers (`queueSkippedLandingAfterStop`). */
+    data?: Record<string, unknown>;
   },
 ): Promise<InFlightStop> {
   const [job] = await readInFlightJobs(tx, input.projectId, input.jobId);
@@ -1445,7 +1506,7 @@ export async function stopInFlightJob(
       phase: job.phase,
       actor: input.actor ?? { type: 'PLATFORM' },
       reason: input.reason ?? null,
-      data: { cause: input.cause ?? 'STOP' },
+      data: { cause: input.cause ?? 'STOP', ...input.data },
       text: stopRequestedText(job.claim ?? null),
       at: input.now,
     });
@@ -1465,6 +1526,8 @@ export interface IntegrationSettings {
   projectBranchName?: string;
   /** A full `refs/heads/…` ref. */
   upstreamRef?: string;
+  landingCheckCommand?: string | null;
+  landingCheckTimeoutSeconds?: number | null;
   mergeCheckCommand?: string | null;
   mergeCheckTimeoutSeconds?: number | null;
   /** This project's escalation window in seconds (§4.6). The column's CHECK bounds it, 300 to a week. */
@@ -1484,6 +1547,8 @@ async function lockCodebase(
            "integration_ref" AS "integrationRef",
            "integration_ref_source" AS "integrationRefSource",
            "integration_started_at" AS "integrationStartedAt",
+           "landing_check_command" AS "landingCheckCommand",
+           "landing_check_timeout_seconds" AS "landingCheckTimeoutSeconds",
            "merge_check_command" AS "mergeCheckCommand",
            "merge_check_timeout_seconds" AS "mergeCheckTimeoutSeconds",
            "delivery_mode" AS "deliveryMode",
@@ -1621,6 +1686,8 @@ export async function configureProjectIntegration(
   const bindingNamed = settings.line !== undefined
     || settings.projectBranchName !== undefined
     || settings.upstreamRef !== undefined
+    || settings.landingCheckCommand !== undefined
+    || settings.landingCheckTimeoutSeconds !== undefined
     || settings.mergeCheckCommand !== undefined
     || settings.mergeCheckTimeoutSeconds !== undefined
     || settings.deliveryMode !== undefined;
@@ -1685,6 +1752,10 @@ export async function configureProjectIntegration(
       ...(settings.upstreamRef !== undefined ? { upstreamRefChosenAt: new Date() } : {}),
       integrationRef,
       ...(chosen ? { integrationRefSource: 'EXPLICIT' } : {}),
+      ...(settings.landingCheckCommand !== undefined
+        ? { landingCheckCommand: settings.landingCheckCommand?.trim() || null } : {}),
+      ...(settings.landingCheckTimeoutSeconds !== undefined
+        ? { landingCheckTimeoutSeconds: settings.landingCheckTimeoutSeconds } : {}),
       ...(settings.mergeCheckCommand !== undefined
         ? { mergeCheckCommand: settings.mergeCheckCommand?.trim() || null }
         : {}),
@@ -1802,6 +1873,8 @@ export interface StartLineSettings {
    * project stands on once the start is done — absent only for a project with no binding.
    */
   upstreamRef?: string;
+  landingCheckCommand?: string | null;
+  landingCheckTimeoutSeconds?: number | null;
   mergeCheckCommand: string | null;
   /**
    * The check's budget in seconds. Asked for, it is written — null once more running the check on
@@ -1831,16 +1904,21 @@ export async function defaultStartLine(
   const row = await readProjectCodebase(tx, projectId);
   const mergeCheckCommand = row?.mergeCheckCommand ?? null;
   const mergeCheckTimeoutSeconds = row?.mergeCheckTimeoutSeconds ?? null;
+  const landingSettings = {
+    ...(row?.landingCheckCommand != null ? { landingCheckCommand: row.landingCheckCommand } : {}),
+    ...(row?.landingCheckTimeoutSeconds != null
+      ? { landingCheckTimeoutSeconds: row.landingCheckTimeoutSeconds } : {}),
+  };
   const decided = row ? decidedLine(row) : null;
   if (row && decided) {
     return decided === 'PROJECT_BRANCH'
-      ? { line: decided, projectBranchName: row.integrationRef, mergeCheckCommand, mergeCheckTimeoutSeconds }
-      : { line: decided, mergeCheckCommand, mergeCheckTimeoutSeconds };
+      ? { line: decided, projectBranchName: row.integrationRef, mergeCheckCommand, mergeCheckTimeoutSeconds, ...landingSettings }
+      : { line: decided, mergeCheckCommand, mergeCheckTimeoutSeconds, ...landingSettings };
   }
   if (!row && !(await coordinationRepository(tx, ownerId, projectId))) {
-    return { line: 'MAIN', mergeCheckCommand, mergeCheckTimeoutSeconds };
+    return { line: 'MAIN', mergeCheckCommand, mergeCheckTimeoutSeconds, ...landingSettings };
   }
-  return { line: await projectDefaultLine(tx, projectId), mergeCheckCommand, mergeCheckTimeoutSeconds };
+  return { line: await projectDefaultLine(tx, projectId), mergeCheckCommand, mergeCheckTimeoutSeconds, ...landingSettings };
 }
 
 /**
@@ -1876,6 +1954,11 @@ export async function startProjectLine(
   // Only when the start NAMED a budget: absent is a client that does not know the field, and
   // reading that as "no budget" would clear one its owner never saw (`StartProjectDto`). `null` is
   // the naming that says "back to the default", and it is written like any other value.
+  const namedLanding = {
+    ...(settings.landingCheckCommand !== undefined ? { landingCheckCommand: settings.landingCheckCommand } : {}),
+    ...(settings.landingCheckTimeoutSeconds !== undefined
+      ? { landingCheckTimeoutSeconds: settings.landingCheckTimeoutSeconds } : {}),
+  };
   const namedTimeout = settings.mergeCheckTimeoutSeconds !== undefined
     ? { mergeCheckTimeoutSeconds: settings.mergeCheckTimeoutSeconds }
     : {};
@@ -1883,7 +1966,8 @@ export async function startProjectLine(
   const locked = !!row?.integrationStartedAt;
   if (!row && !(await coordinationRepository(tx, ownerId, projectId))) {
     if (settings.line === 'PROJECT_BRANCH' || mergeCheckCommand !== null
-      || settings.mergeCheckTimeoutSeconds != null || settings.upstreamRef !== undefined
+      || settings.mergeCheckTimeoutSeconds != null || settings.landingCheckCommand != null
+      || settings.landingCheckTimeoutSeconds != null || settings.upstreamRef !== undefined
       || settings.deliveryMode === 'AGENT_PUSH') {
       throw repositoryUnknown('this project has no repository to integrate into, so it can have '
         + 'no project branch, main branch, merge check or AGENT_PUSH delivery: its coordination '
@@ -1898,7 +1982,7 @@ export async function startProjectLine(
     ownerId,
     projectId,
     settings: locked
-      ? { mergeCheckCommand, ...namedTimeout, ...namedDelivery }
+      ? { mergeCheckCommand, ...namedLanding, ...namedTimeout, ...namedDelivery }
       : {
         line: settings.line,
         ...(settings.line === 'PROJECT_BRANCH' && settings.projectBranchName !== undefined
@@ -1906,6 +1990,7 @@ export async function startProjectLine(
           : {}),
         ...(settings.upstreamRef !== undefined ? { upstreamRef: settings.upstreamRef } : {}),
         mergeCheckCommand,
+        ...namedLanding,
         ...namedTimeout,
         ...namedDelivery,
       },
@@ -1914,6 +1999,8 @@ export async function startProjectLine(
   const line = decidedLine(written)!;
   const stands = {
     upstreamRef: written.upstreamRef,
+    landingCheckCommand: written.landingCheckCommand,
+    landingCheckTimeoutSeconds: written.landingCheckTimeoutSeconds,
     mergeCheckCommand: written.mergeCheckCommand,
     mergeCheckTimeoutSeconds: written.mergeCheckTimeoutSeconds,
     locked,

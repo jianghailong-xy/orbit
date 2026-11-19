@@ -212,6 +212,44 @@ final class WikiChatCopyParityTests: XCTestCase {
         XCTAssertEqual(WikiChatCopy.faceSummary, "Summary")
     }
 
+    /// The panel's composer follows the web panel's rules (board 43, C18): the session page's composer with the page
+    /// and the selection leading its attachment row, the new chat's placeholder and a running chat's (the draft's when
+    /// a card is open), Runs in holding the workspace alone for a new chat only, and a new chat's files going with its
+    /// create. A rule the web keeps and the native panel lost — or the reverse — is a failure here.
+    func testThePanelsComposerFollowsTheWebsRules() throws {
+        let web = try String(contentsOf: find("src/web/src/components/WikiChatPanel.tsx"), encoding: .utf8)
+        let native = try String(contentsOf: find("src/macos/OrbitApp/Sources/OrbitApp/Views/WikiChatViews.swift"), encoding: .utf8)
+        let model = try String(contentsOf: find("src/macos/OrbitApp/Sources/OrbitApp/WikiChatModel.swift"), encoding: .utf8)
+        let pairs: [(web: String, native: String, rule: String)] = [
+            ("<SessionComposer", "ComposerView(console: console,", "the session page's composer"),
+            ("attachmentsBefore={wikiChatChips(attachments, dispatch)}", "AnyView(WikiChatChips(chat: chat))",
+             "the page and the selection lead the attachment row"),
+            ("aria-label={wikiChatRemove(page.label)} onClick={() => dispatch({ type: 'crossPage' })}",
+             "chip(remove: WikiChatCopy.remove(page.label), cross: { chat.crossPage() })", "the page's cross"),
+            ("aria-label={wikiChatRemove(quote.first)} onClick={() => dispatch({ type: 'crossQuote' })}",
+             "chip(remove: WikiChatCopy.remove(quote.first), cross: { chat.crossQuote() })", "the selection's cross"),
+            ("composerPlaceholder={WIKI_CHAT_PLACEHOLDER}", "creates == nil ? chat.placeholder : WikiChatCopy.placeholder",
+             "a new chat's placeholder"),
+            ("composerPlaceholder={draftOpen ? WIKI_CHAT_PLACEHOLDER_DRAFT : WIKI_CHAT_PLACEHOLDER}",
+             "? WikiChatCopy.placeholderDraft : WikiChatCopy.placeholder", "a running chat's placeholder"),
+            ("<span className=\"k\">{WIKI_CHAT_RUNS_IN}</span>", "Text(WikiChatCopy.runsIn)", "Runs in"),
+            ("shown={wikiChatWorkspaceName(runsIn.workspace)}", "Text(WikiChatLogic.workspaceName(workspace))",
+             "Runs in names the workspace"),
+            ("...(vars.images.length > 0 ? { attachmentIds: vars.images.map((image) => image.id!) } : {}),",
+             "WikiChatLogic.createRequest(", "a new chat's files go with its create"),
+        ]
+        for pair in pairs {
+            XCTAssertTrue(web.contains(pair.web), "the web panel no longer says \(pair.rule) this way: `\(pair.web)`")
+            XCTAssertTrue(native.contains(pair.native) || model.contains(pair.native),
+                          "the native panel lost \(pair.rule) (the web's `\(pair.web)`)")
+        }
+        // Runs in is a new chat's: the web draws it in WikiChatNew alone, and so does the native panel.
+        let webRunning = try XCTUnwrap(web.range(of: "// ── A chat that runs").map { String(web[$0.lowerBound...]) })
+        XCTAssertFalse(webRunning.contains("WIKI_CHAT_RUNS_IN"), "the web's running chat shows Runs in again")
+        let nativeRunning = try XCTUnwrap(native.range(of: "private struct WikiChatRunningBody: View {").map { String(native[$0.lowerBound...]) })
+        XCTAssertFalse(nativeRunning.contains("WikiChatCopy.runsIn"), "the native running chat shows Runs in")
+    }
+
     /// The words the web lib's own test pins (`lib/wikiChat.test.ts`, "the words"), said here.
     func testTheWordsTheWebPins() {
         XCTAssertEqual(WikiChatCopy.fabIdle, "Chat")

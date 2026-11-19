@@ -9,11 +9,11 @@ import type { CodexLogin } from '../lib/codexLogin';
 import { encodeId } from '../lib/idCodec';
 import type { ProviderPool } from '../lib/providerPools';
 import type { SharedPool, SharedPoolKey, SharedPoolPerson } from '../lib/sharedPools';
-import { InfrastructurePage } from './InfrastructurePage';
+import { SettingsPoolsPage } from '../components/settings/SettingsProviderPages';
 import { ProviderPoolPage } from './ProviderPoolPage';
 
 /**
- * One Codex pool (scheme A, docs/mocks/account-pool-access/) on its own page and on /infrastructure, mounted
+ * One Codex pool (scheme A, docs/mocks/account-pool-access/) on its own page and on Settings' Account pools page, mounted
  * for real against a fake API, as its owner and as somebody they added read it: the owner's ChatGPT
  * accounts — "Everyone here" once the pool is shared, read the same way by everybody it runs the
  * sessions of (2026-10-03) — its API keys (also "Everyone here"), "Who can use it" with its two settings
@@ -35,7 +35,7 @@ const LIN = id(3);
 const NAMES: Record<string, string> = { [JIANG]: 'jianghailong', [ZHANG]: 'Zhang Min', [LIN]: 'Lin Wei' };
 const POOL_ID = id(800);
 const AT = `/providers/shared-pools/${POOL_ID}`;
-const PAGE = `/providers/pools/${POOL_ID}`;
+const PAGE = `/settings/providers/pools/${POOL_ID}`;
 const IN_AN_HOUR = new Date(Date.now() + 60 * 60 * 1000).toISOString();
 const IN_THREE_DAYS = new Date(Date.now() + 3 * 24 * 60 * 60 * 1000).toISOString();
 
@@ -197,8 +197,8 @@ describe('a Codex pool, as its owner and as somebody they added read it', { time
         <QueryClientProvider client={client}>
           <MemoryRouter initialEntries={[at]}>
             <Routes>
-              <Route path="/infrastructure" element={<InfrastructurePage />} />
-              <Route path="/providers/pools/:id" element={<ProviderPoolPage />} />
+              <Route path="/settings/providers/pools" element={<SettingsPoolsPage />} />
+              <Route path="/settings/providers/pools/:id" element={<ProviderPoolPage />} />
             </Routes>
           </MemoryRouter>
         </QueryClientProvider>,
@@ -226,6 +226,21 @@ describe('a Codex pool, as its owner and as somebody they added read it', { time
   const button = (words: string, scope: ParentNode = document.body) =>
     Array.from(scope.querySelectorAll<HTMLButtonElement>('button')).find((el) => el.textContent?.trim() === words) ??
     null;
+  /** What the ⋯ of `name`'s row holds (settings-buttons board 02), read and closed again. */
+  const menuOf = async (name: string) => {
+    const trigger = () => labelled(`More for ${name}`)[0];
+    const items = () =>
+      Array.from(document.querySelectorAll<HTMLElement>('[role="menuitem"]')).map((el) => el.textContent?.trim() ?? '');
+    await click(trigger());
+    await act(async () => {
+      await vi.waitFor(() => {
+        if (items().length === 0) throw new Error(`no menu for ${name} yet`);
+      });
+    });
+    const read = items();
+    await click(trigger());
+    return read;
+  };
   const labelled = (label: string, scope: ParentNode = document.body) =>
     Array.from(scope.querySelectorAll<HTMLElement>('[aria-label]')).filter((el) => el.getAttribute('aria-label') === label);
   const dialog = () => {
@@ -333,7 +348,7 @@ describe('a Codex pool, as its owner and as somebody they added read it', { time
 
   it('draws its owner’s page once it is shared: whose sessions each account runs, and who can use it on what (02, owner)', async () => {
     await mount(PAGE);
-    expect(text(container.querySelector('.pool-page-title .pool-shared-chip'))).toBe('SHARED');
+    expect(text(container.querySelector('.pool-page-title .pool-shared-chip'))).toBe('Shared');
     expect(text(container.querySelector('.pool-sub'))).toBe(
       'Codex pool · Me and 2 people · 4 of 4 accounts available · each session starts on your ChatGPT accounts; the API keys when none of them can run.',
     );
@@ -355,18 +370,16 @@ describe('a Codex pool, as its owner and as somebody they added read it', { time
     expect(text(rowOf('zm-proj').querySelector('.pool-status'))).toBe('Running now');
     expect(text(rowOf('zm-proj').querySelector('.pool-key-money .re-quota-head'))).toBe('Others$3.10');
     expect(text(rowOf('orbit-org-1').querySelector('.pool-key-money .re-quota-head'))).toBe('Others$12.40 of $50');
-    // His own key he switches off and takes out; anybody's he takes out.
-    expect(labelled('Disable orbit-org-1')).toHaveLength(1);
-    expect(labelled('Remove orbit-org-1 from this pool')).toHaveLength(1);
-    expect(labelled('Disable zm-proj')).toHaveLength(0);
-    expect(labelled('Remove zm-proj from this pool')).toHaveLength(1);
+    // His own key he switches off and takes out; anybody's he takes out — each from the key's ⋯.
+    expect(await menuOf('orbit-org-1')).toEqual(['Pause…', 'Disable', 'Remove from pool']);
+    expect(await menuOf('zm-proj')).toEqual(['Pause…', 'Remove from pool']);
 
     expect(text(who().querySelector('.re-runner'))).toBe('Who can use it3');
     expect(text(who().querySelector('.pool-head-note'))).toBe('Share of this month’s API key use');
     expect(button('Add people', who())).not.toBeNull();
     expect(setting()).toBe('Me and people I add');
     expect(text(who().querySelector('.who-mode-h'))).toBe(
-      'They see Codex Pool on their Machines & models page and in the session picker.',
+      'They see Codex Pool under Account pools in their Settings and in the session picker.',
     );
     expect(
       ['jianghailong', 'Zhang Min', 'Lin Wei'].map((name) => [
@@ -404,7 +417,7 @@ describe('a Codex pool, as its owner and as somebody they added read it', { time
   it('draws the same pool for somebody its owner added: his ChatGPT accounts as theirs to run on too, and its keys beside them (02, member)', async () => {
     asZhang();
     await mount(PAGE);
-    expect(text(container.querySelector('.pool-page-title .pool-shared-chip'))).toBe('SHARED');
+    expect(text(container.querySelector('.pool-page-title .pool-shared-chip'))).toBe('Shared');
     expect(text(container.querySelector('.pool-sub'))).toBe(
       'Codex pool · jianghailong’s · 3 people · 4 of 4 accounts and keys you can run on available · each session starts on its ChatGPT accounts; the API keys when none of them can run.',
     );
@@ -427,13 +440,13 @@ describe('a Codex pool, as its owner and as somebody they added read it', { time
       ['zm-projyou', 'Zhang Min · sk-…7K2P'],
       ['orbit-org-1', 'jianghailong · sk-…AB12'],
     ]);
-    expect(labelled('Sign out jianghailong.rd@gmail.com')).toHaveLength(0);
-    expect(labelled('Sign out hl.work@gmail.com')).toHaveLength(0);
+    // Nothing of the owner's accounts is theirs to pause or sign out: no ⋯ on either.
+    expect(labelled('More for jianghailong.rd@gmail.com')).toHaveLength(0);
+    expect(labelled('More for hl.work@gmail.com')).toHaveLength(0);
     expect(text(rowOf('jianghailong.rd@gmail.com').querySelector('.pool-login-quota'))).toContain('Weekly');
     // Their own key first, as their sessions take them; neither says whose sessions it runs.
-    expect(labelled('Disable zm-proj')).toHaveLength(1);
-    expect(labelled('Remove zm-proj from this pool')).toHaveLength(1);
-    expect(labelled('Remove orbit-org-1 from this pool')).toHaveLength(0);
+    expect(await menuOf('zm-proj')).toEqual(['Pause…', 'Disable', 'Remove from pool']);
+    expect(labelled('More for orbit-org-1')).toHaveLength(0);
 
     expect(text(who().querySelector('.re-runner'))).toBe('Who can use it3');
     expect(text(who().querySelector('.pool-head-note'))).toBe('Set by jianghailong · share of this month’s API key use');
@@ -490,7 +503,7 @@ describe('a Codex pool, as its owner and as somebody they added read it', { time
     expect(nameOf(modal)).toBe('Share Codex Pool');
     expect(text(modal.querySelector('.np-field-l'))).toBe('Emails of their Orbit accounts');
     expect(Array.from(modal.querySelectorAll('.pa-facts li')).map((li) => li.textContent)).toEqual([
-      'They see Codex Pool on their Machines & models page and in the session picker, and can start sessions on it.',
+      'They see Codex Pool under Account pools in their Settings and in the session picker, and can start sessions on it.',
       'Their sessions start on your ChatGPT accounts, and fall to the pool’s API keys — orbit-org-1 — when none of them can run.',
       'They can sign in ChatGPT accounts of their own, which then run everyone’s sessions here too — theirs and yours — until they take them out again.',
       'Everyone sees each person’s share of this month’s API key use.',
@@ -520,7 +533,7 @@ describe('a Codex pool, as its owner and as somebody they added read it', { time
     expect(nameOf(modal)).toBe('Share Codex Pool');
     expect(modal.querySelector('.pa-risk')).toBeNull();
     expect(Array.from(modal.querySelectorAll('.pa-facts li')).map((li) => li.textContent)).toEqual([
-      'They see Codex Pool on their Machines & models page and in the session picker, and can start sessions on it.',
+      'They see Codex Pool under Account pools in their Settings and in the session picker, and can start sessions on it.',
       'Their sessions start on your ChatGPT accounts, and wait when none of them can run — the pool has no API key to fall to yet.',
       'They can sign in ChatGPT accounts of their own, which then run everyone’s sessions here too — theirs and yours — until they take them out again.',
       'Everyone sees each person’s share of this month’s API key use.',
@@ -576,7 +589,7 @@ describe('a Codex pool, as its owner and as somebody they added read it', { time
   it('heads the pool’s card on the Infrastructure page by who reads it (03-6)', async () => {
     const head = () => container.querySelector<HTMLElement>('.pool-sec .pool-card .re-head')!;
     asOwner([], []);
-    await mount('/infrastructure');
+    await mount('/settings/providers/pools');
     expect(head().querySelector('.pool-shared-chip')).toBeNull();
     expect(text(head().querySelector('.re-summary'))).toBe('Just me · 2 of 2 accounts available');
     expect(head().querySelector('.pool-people')).toBeNull();
@@ -585,8 +598,8 @@ describe('a Codex pool, as its owner and as somebody they added read it', { time
     container.remove();
 
     asOwner([ZHANG, LIN]);
-    await mount('/infrastructure');
-    expect(text(head().querySelector('.pool-shared-chip'))).toBe('SHARED');
+    await mount('/settings/providers/pools');
+    expect(text(head().querySelector('.pool-shared-chip'))).toBe('Shared');
     expect(text(head().querySelector('.re-summary'))).toBe('4 of 4 accounts available');
     expect(Array.from(head().querySelectorAll('.pool-people .pool-av')).map((el) => el.textContent)).toEqual([
       'J',
@@ -598,8 +611,8 @@ describe('a Codex pool, as its owner and as somebody they added read it', { time
     container.remove();
 
     asZhang();
-    await mount('/infrastructure');
-    expect(text(head().querySelector('.pool-shared-chip'))).toBe('SHARED');
+    await mount('/settings/providers/pools');
+    expect(text(head().querySelector('.pool-shared-chip'))).toBe('Shared');
     expect(text(head().querySelector('.re-summary'))).toBe(
       'jianghailong’s · 4 accounts and keys you can run on',
     );
