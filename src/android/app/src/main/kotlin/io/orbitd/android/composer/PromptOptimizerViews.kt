@@ -51,31 +51,32 @@ internal fun promptOptimizationText(optimization: PromptOptimization): Annotated
     }
 }
 
-/** Frame 2's ✦ Optimize beside Send, and frame 3's busy "Optimizing…", which cancels when pressed. */
+/** Frame 2's ✦ Optimize beside Send, and frame 3's busy "Optimizing…", which cancels when pressed. Drawn as iOS's `pill`: 13 sp medium
+ * words in a 26 dp capsule, the accent at 10% under a 25% hairline, or — busy — the text colour at 5% and 12%. Where the toolbar has
+ * no room for the words (board composer-usage-tap 04, option C), [compact] is the same capsule 32 dp wide with ✦ alone, or the spinner;
+ * said aloud as the full button is. Its press reaches the full 48 dp height of the toolbar, and in compact form the 40 dp cell around
+ * the capsule ([OPTIMIZE_COMPACT]). */
 @Composable
 internal fun PromptOptimizeButton(busy: Boolean, enabled: Boolean, compact: Boolean = false, press: () -> Unit) {
     val accent = MaterialTheme.colorScheme.primary
     val muted = MaterialTheme.colorScheme.onSurfaceVariant
-    // Where the toolbar has no room for the words (board composer-usage-tap 04, option C), a 36 dp circle with ✦ alone — or the
-    // spinner while busy — said aloud as the full button is.
-    Row(Modifier.padding(horizontal = 2.dp).testTag("composer-optimize")
+    val text = MaterialTheme.colorScheme.onSurface
+    val ink = if (busy) muted else accent
+    val style = MaterialTheme.typography.labelMedium
+    val capsule = RoundedCornerShape(50)
+    Box(Modifier.height(48.dp).then(if (compact) Modifier.width(OPTIMIZE_COMPACT.dp) else Modifier.padding(horizontal = 2.dp))
+        .clip(RoundedCornerShape(12.dp)).clickable(enabled = enabled, role = Role.Button, onClick = press)
         .semantics { contentDescription = if (busy) "${PromptOptimizerCopy.OPTIMIZING} ${PromptOptimizerCopy.CANCEL_HELP}" else PromptOptimizerCopy.OPTIMIZE_HELP }
-        .clip(RoundedCornerShape(50))
-        .background(if (busy) muted.copy(alpha = 0.08f) else accent.copy(alpha = 0.10f), RoundedCornerShape(50))
-        .border(1.dp, if (busy) muted.copy(alpha = 0.25f) else accent.copy(alpha = 0.25f), RoundedCornerShape(50))
-        .clickable(enabled = enabled, role = Role.Button, onClick = press)
-        .then(if (compact) Modifier.size(36.dp) else Modifier.heightIn(min = 32.dp).padding(horizontal = 10.dp)),
-        verticalAlignment = Alignment.CenterVertically,
-        horizontalArrangement = if (compact) Arrangement.Center else Arrangement.spacedBy(5.dp)) {
-        if (compact) {
-            if (busy) CircularProgressIndicator(Modifier.size(14.dp), strokeWidth = 1.5.dp, color = muted)
-            else Text("✦", color = accent, style = MaterialTheme.typography.labelLarge)
-        } else if (busy) {
-            CircularProgressIndicator(Modifier.size(12.dp), strokeWidth = 1.5.dp, color = muted)
-            Text(PromptOptimizerCopy.OPTIMIZING, color = muted, style = MaterialTheme.typography.labelLarge, maxLines = 1)
-        } else {
-            Text("✦", color = accent, style = MaterialTheme.typography.labelLarge)
-            Text(PromptOptimizerCopy.OPTIMIZE, color = accent, style = MaterialTheme.typography.labelLarge, maxLines = 1)
+        .testTag("composer-optimize"), contentAlignment = Alignment.Center) {
+        Row(Modifier.height(26.dp).then(if (compact) Modifier.width(32.dp) else Modifier)
+            .background(if (busy) text.copy(alpha = 0.05f) else accent.copy(alpha = 0.10f), capsule)
+            .border(1.dp, if (busy) text.copy(alpha = 0.12f) else accent.copy(alpha = 0.25f), capsule)
+            .then(if (compact) Modifier else Modifier.padding(horizontal = 9.dp)),
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = if (compact) Arrangement.Center else Arrangement.spacedBy(4.dp)) {
+            if (busy) CircularProgressIndicator(Modifier.size(12.dp), strokeWidth = 1.5.dp, color = muted)
+            else Text("✦", color = ink, style = style)
+            if (!compact) Text(if (busy) PromptOptimizerCopy.OPTIMIZING else PromptOptimizerCopy.OPTIMIZE, color = ink, style = style, maxLines = 1, softWrap = false)
         }
     }
 }

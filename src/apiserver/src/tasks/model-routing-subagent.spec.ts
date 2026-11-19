@@ -28,11 +28,14 @@ const CATALOG: RunnerModelCatalog = {
   kimi: [{ value: 'kimi-code', label: 'Kimi Code' }],
 };
 
+// A sign-in whose quota was read and has every window free, unless `over` says otherwise.
 const claude = (over: Partial<SubagentProvider> = {}): SubagentProvider => ({
-  slug: 'claude', billing: 'subscription', inScope: true, credential: { kind: 'login', engine: 'claude' }, engines: [{ engine: 'claude' }], ...over,
+  slug: 'claude', billing: 'subscription', inScope: true, credential: { kind: 'login', engine: 'claude' }, engines: [{ engine: 'claude' }],
+  account: { quota: null }, ...over,
 });
 const codex = (over: Partial<SubagentProvider> = {}): SubagentProvider => ({
-  slug: 'codex', billing: 'subscription', inScope: true, credential: { kind: 'login', engine: 'codex' }, engines: [{ engine: 'codex' }], ...over,
+  slug: 'codex', billing: 'subscription', inScope: true, credential: { kind: 'login', engine: 'codex' }, engines: [{ engine: 'codex' }],
+  account: { quota: null }, ...over,
 });
 const key = (slug: string, models: SubagentModelRow[], over: Partial<SubagentProvider> = {}): SubagentProvider => ({
   slug, billing: 'key', inScope: true, credential: { kind: 'key', presetSlug: null }, engines: [{ engine: 'claude', models }], ...over,
@@ -179,9 +182,9 @@ test('each removal is recorded with its reason', () => {
   assert.deepEqual(why('opencode-key'), ["opencode is not installed on the parent's runner"]);
   assert.deepEqual(why('claude'), ["claude is signed out on the parent's runner"]);
   assert.deepEqual(why('codex'), ['The account is at 93% of its 5-hour quota']);
-  assert.deepEqual(why('kimi'), ['The model has no tier']);
-  assert.deepEqual(decision.candidates.find((c) => c.provider === 'kimi')!.model, 'kimi-code');
-  assert.deepEqual(why('custom-endpoint'), ['The model has no tier']);
+  // An engine or key with no tiers is not removed: its default model joins, after every tiered candidate above it.
+  assert.deepEqual(why('kimi'), []);
+  assert.deepEqual(why('custom-endpoint'), []);
   // claude-team is signed out through the same engine report before its pause is read; a pause alone:
   const paused = route(input({ providers: [claude({ account: { paused: true } }), DEEPSEEK] }));
   assert.deepEqual(paused.candidates.map((c) => [c.provider, c.reason]), [['claude', 'The account is paused']]);
@@ -225,6 +228,120 @@ test('each removal is recorded with its reason', () => {
   assert.deepEqual(atLimit.candidates.map((c) => c.reason), ['The account is at 90% of its weekly quota'], 'at the limit is out');
   assert.equal(atLimit.model, null, 'an empty pool picks nothing');
   assert.match(atLimit.reasons.at(-1)!, /NO_SUBAGENT_PROVIDER/);
+});
+
+test("Kimi's sign-in is routed through the built-in tier table, weighed by its quota like the others", () => {
+  const kimi = (quota: number): SubagentProvider => ({
+    slug: 'kimi', billing: 'subscription', inScope: true, credential: { kind: 'login', engine: 'kimi' }, engines: [{ engine: 'kimi' }],
+    account: { quota: { utilization: quota, window: '5-hour' }, paused: false },
+  });
+  const catalog = (...values: string[]): RunnerModelCatalog => ({ ...CATALOG, kimi: values.map((value) => ({ value, label: value })) });
+  const at = (level: 'S' | 'M' | 'L' | 'XL', modelCatalog: RunnerModelCatalog) => route(input({
+    caller: { size: level },
+    providers: [codex({ account: { quota: { utilization: 40, window: '5-hour' } } }), kimi(10)],
+    engines: { claude: { installed: true }, codex: { installed: true }, kimi: { installed: true } },
+    modelCatalog,
+  }));
+  const full = catalog('kimi-code/kimi-for-coding', 'kimi-code/k3', 'kimi-code/k3.1-pro');
+  assert.deepEqual(['S', 'M', 'L', 'XL'].map((level) => {
+    const d = at(level as 'S', full);
+    return [d.provider, d.model, d.effort];
+  }), [
+    ['kimi', 'kimi-code/k3', 'low'],
+    ['kimi', 'kimi-code/k3', 'high'],
+    ['kimi', 'kimi-code/k3.1-pro', 'high'],
+    ['kimi', 'kimi-code/k3.1-pro', 'max'],
+  ], 'more headroom than Codex: Kimi is picked at every tier');
+  // Without K3.1 Pro on the runner, L and XL fall back to K3.
+  const k3Only = at('XL', catalog('kimi-code/k3'));
+  assert.deepEqual([k3Only.model, k3Only.effort], ['kimi-code/k3', 'max']);
+  // Less headroom than Codex: Codex first, Kimi its fallback.
+  const busy = route(input({
+    caller: { size: 'M' },
+    providers: [codex({ account: { quota: { utilization: 40, window: '5-hour' } } }), kimi(70)],
+    engines: { claude: { installed: true }, codex: { installed: true }, kimi: { installed: true } },
+    modelCatalog: full,
+  }));
+  assert.equal(busy.provider, 'codex');
+  assert.deepEqual(busy.fallbacks.map((f) => [f.provider, f.model, f.effort]), [
+    ['kimi', 'kimi-code/k3', 'high'],
+    ['codex', GPT, 'high'], ['kimi', 'kimi-code/k3.1-pro', 'high'],
+    ['codex', GPT, 'xhigh'], ['kimi', 'kimi-code/k3.1-pro', 'max'],
+    ['codex', GPT, 'low'], ['kimi', 'kimi-code/k3', 'low'],
+  ]);
+  // At the quota limit, or signed out, it is removed with the reason, as Claude and Codex are.
+  const spent = route(input({ caller: { size: 'M' }, providers: [codex(), kimi(95)], engines: { codex: { installed: true }, kimi: { installed: true } }, modelCatalog: full }));
+  assert.deepEqual(spent.candidates.filter((c) => c.provider === 'kimi').map((c) => c.reason), ['The account is at 95% of its 5-hour quota']);
+  const out = route(input({ caller: { size: 'M' }, providers: [codex(), kimi(0)], engines: { codex: { installed: true }, kimi: { installed: true, signedOut: true } }, modelCatalog: full }));
+  assert.deepEqual(out.candidates.filter((c) => c.provider === 'kimi').map((c) => c.reason), ["kimi is signed out on the parent's runner"]);
+});
+
+test('every registered provider joins: the asked tier, then higher tiers, then untiered defaults, then lower tiers', () => {
+  const engines = { claude: { installed: true }, codex: { installed: true }, cursor: { installed: true }, opencode: { installed: true } };
+  const cursor: SubagentProvider = {
+    slug: 'cursor', billing: 'subscription', inScope: true, credential: { kind: 'login', engine: 'cursor' }, engines: [{ engine: 'cursor' }],
+    account: { quota: null },
+  };
+  const opencode: SubagentProvider = {
+    slug: 'opencode', billing: 'key', inScope: true, credential: { kind: 'opencode' }, engines: [{ engine: 'opencode' }],
+  };
+  const local = key('local-vllm', [
+    { model: 'qwen-a', effort: null, level: null },
+    { model: 'qwen-b', effort: null, level: null },
+  ], { engines: [{ engine: 'claude', defaultModel: 'qwen-b', models: [
+    { model: 'qwen-a', effort: null, level: null },
+    { model: 'qwen-b', effort: null, level: null },
+  ] }] });
+  const lonely = key('l-only', [{ model: 'big', effort: null, level: 'L', outputPricePerMTok: 5 }]);
+  const small = key('s-only', [{ model: 'tiny', effort: null, level: 'S', outputPricePerMTok: 0.1 }]);
+  const modelCatalog: RunnerModelCatalog = {
+    ...CATALOG,
+    cursor: [{ value: 'default', label: 'Auto' }, { value: 'composer-2.5', label: 'Composer' }],
+    opencode: [{ value: 'opencode/free-a', label: 'A' }, { value: 'opencode/free-b', label: 'B' }],
+  };
+  const decision = route(input({
+    caller: { size: 'M' }, providers: [small, cursor, opencode, local, lonely], engines, modelCatalog,
+    runtimeDefaultModels: { codex: GPT, opencode: 'opencode/free-b' },
+  }));
+  // No M candidate: the nearest tier above wins over an untiered subscription.
+  assert.deepEqual([decision.provider, decision.model], ['l-only', 'big']);
+  assert.equal(decision.reasons[1], 'Nothing in tier M can run: the nearest tier above that can is L');
+  assert.deepEqual(decision.fallbacks.map((f) => [f.provider, f.model]), [
+    ['cursor', 'default'],
+    ['opencode', 'opencode/free-b'],
+    ['local-vllm', 'qwen-b'],
+    ['s-only', 'tiny'],
+  ], 'untiered: the subscription first (Cost), then the keys by owner order; the runner default, else the provider default; S last');
+  // The rest of an untiered engine's list is recorded, reachable by name.
+  assert.deepEqual(decision.candidates.map((c) => [c.provider, c.model, c.reason]), [
+    ['cursor', 'composer-2.5', 'The model has no tier; cursor runs default'],
+    ['opencode', 'opencode/free-a', 'The model has no tier; opencode runs opencode/free-b'],
+    ['local-vllm', 'qwen-a', 'The model has no tier; local-vllm runs qwen-b'],
+  ]);
+  const untiered = route(input({ caller: { size: 'L' }, providers: [small, cursor], engines, modelCatalog }));
+  assert.deepEqual([untiered.provider, untiered.model, untiered.effort], ['cursor', 'default', null]);
+  assert.equal(untiered.reasons[1], 'Nothing in tier L or above can run: default is the default model of cursor (cursor), which has no tiers');
+  const lower = route(input({ caller: { size: 'XL' }, providers: [small], engines, modelCatalog }));
+  assert.equal(lower.reasons[1], 'Nothing in tier XL or above, and no untiered model, can run: the nearest tier below is S');
+  assert.equal(lower.model, 'tiny');
+});
+
+test('a subscription whose quota was not read ranks after those whose headroom is known, before metered keys in Cost', () => {
+  const blind = codex({ account: { quota: null, unreadable: true } });
+  const half = claude({ account: { quota: { utilization: 50, window: '5-hour' } } });
+  const cost = route(input({ providers: [blind, half, DEEPSEEK] }));
+  assert.equal(cost.provider, 'claude', 'known headroom first, even half spent');
+  assert.deepEqual(cost.fallbacks.slice(0, 2).map((f) => [f.provider, f.note]), [
+    ['codex', 'subscription, quota unknown'],
+    ['deepseek', 'key at $0.6/M output tokens'],
+  ]);
+  // No account read at all (an engine whose quota no runner reports) is unknown too.
+  const unread = route(input({ providers: [codex({ account: undefined }), DEEPSEEK] }));
+  assert.equal(unread.provider, 'codex');
+  assert.match(unread.reasons.find((r) => r.startsWith('Picked'))!, /a subscription whose quota was not read, used before any metered key/);
+  // Balance puts it after the keys too: their headroom is known.
+  const balance = route(input({ optimizeFor: 'balance', providers: [blind, DEEPSEEK] }));
+  assert.equal(balance.provider, 'deepseek');
 });
 
 test('Cost: a subscription with headroom before a cheaper metered key; subscriptions by headroom; keys by price', () => {
@@ -314,7 +431,7 @@ test('Cost: an account pool with headroom before a single subscription with less
   assert.equal(route(input({ providers: [pausedBest, tight] })).provider, 'claude');
 });
 
-test('an exhausted account pool, and one whose quota cannot be read, is removed with its reason', () => {
+test('an exhausted account pool is removed with its reason; one whose quota cannot be read still runs', () => {
   const spent = pool('spent-pool', [
     { label: 'alice@team', quota: { utilization: 95, window: 'weekly' } },
     { label: 'bob@team', quota: { utilization: 40, window: 'weekly' }, paused: true },
@@ -325,10 +442,10 @@ test('an exhausted account pool, and one whose quota cannot be read, is removed 
   const why = (provider: string) => decision.candidates.filter((c) => c.provider === provider).map((c) => [c.engine, c.reason]);
   assert.deepEqual(why('spent-pool'), [['claude',
     'Every account in the pool is at or above 90% of its quota or paused: alice@team at 95% of its weekly quota; bob@team paused']]);
-  assert.deepEqual(why('blind-pool'), [['codex',
-    "The pool's quota cannot be read for carol@team, and no other account in it can run"]]);
+  assert.deepEqual(why('blind-pool'), []);
   assert.deepEqual(why('empty-pool'), [['claude', 'The pool has no account that can run']]);
-  assert.equal(decision.provider, 'deepseek');
+  assert.deepEqual([decision.provider, decision.note], ['blind-pool', 'subscription pool, carol@team with quota unknown'],
+    'Cost: a subscription of unknown quota still goes before a metered key');
   // A pool on an engine the parent's runner lacks goes for that first.
   const missing = route(input({ providers: [pool('far-pool', [{ label: 'x', quota: null }], 'kimi')] }));
   assert.deepEqual(missing.candidates.map((c) => c.reason), ["kimi is not installed on the parent's runner"]);
@@ -355,7 +472,7 @@ test('Cost: a key on its native engine is ordered by its models.dev price among 
   assert.ok(last.reasons.includes(`No price known for ${SONNET} on unpriced-key; ordered after priced keys`), last.reasons.join('\n'));
 });
 
-test('fallbacks: the rest of the tier after the pick, in rank order (§4.3); none for a named model', () => {
+test('fallbacks: the rest of the pool after the pick, in rank order (§4.3); none for a named model', () => {
   const cheap = key('cheap-key', [{ model: 'cheap', effort: null, level: 'M', outputPricePerMTok: 0.1 }]);
   const dear = key('dear-key', [{ model: 'dear', effort: null, level: 'M', outputPricePerMTok: 9 }]);
   const decision = route(input({ providers: [dear, codex({ account: { quota: { utilization: 60, window: 'weekly' } } }), cheap] }));
@@ -363,6 +480,10 @@ test('fallbacks: the rest of the tier after the pick, in rank order (§4.3); non
   assert.deepEqual(decision.fallbacks.map((f) => [f.provider, f.engine, f.model, f.effort]), [
     ['cheap-key', 'claude', 'cheap', null],
     ['dear-key', 'claude', 'dear', null],
+    // Then the tiers above M, nearest first, then the one below.
+    ['codex', 'codex', GPT, 'high'],
+    ['codex', 'codex', GPT, 'xhigh'],
+    ['codex', 'codex', GPT, 'low'],
   ]);
   assert.deepEqual(route(input({ caller: { model: 'deepseek-v4-pro' } })).fallbacks, []);
 });

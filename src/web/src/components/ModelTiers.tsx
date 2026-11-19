@@ -9,7 +9,7 @@ import { Menu, type MenuItem } from './ui/Menu';
 /**
  * The Providers page's Tier column (docs/subagent-design.md §7, board docs/mocks/subagent/05.png): every model
  * SubAgents can be routed onto, with its tier. A preset's tier and price follow the catalogue; a custom
- * endpoint's model reads Not set, and the owner sets one here. Until then routing skips it.
+ * endpoint's model reads Not set, and the owner sets one here. Until then it ranks after every tiered model.
  */
 export function ModelTiers() {
   const tiers = useQuery(subagentTiersQuery());
@@ -43,8 +43,8 @@ export function ModelTiers() {
         </tbody>
       </table>
       <div className="model-tiers-foot">
-        Preset tiers and prices follow the catalogue. A custom endpoint's model stays out of automatic routing until it
-        has a tier.
+        Preset tiers and prices follow the catalogue. A model with no tier still runs SubAgents, after every model whose
+        tier fits.
       </div>
     </div>
   );

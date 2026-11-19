@@ -24,7 +24,7 @@ import { isPoolCandidate } from '../providers/pool-admission';
 import { followsRuntimeCatalog, withPreset } from '../providers/preset-overlay';
 import { COMPATIBILITY_GUARD_SLUGS } from '../providers/providers.service';
 import {
-  MODEL_ROUTING_ENGINES,
+  DEFAULT_MODEL_TIER_TABLE,
   MODEL_ROUTING_LEVELS,
   routeSubagent,
   subagentEngineRows,
@@ -133,11 +133,13 @@ export async function subagentRouteInput(
   const agent = args.workspaceId ? await reads.workspace(args.workspaceId) : null;
   const runner = args.runnerId ? await reads.runner(args.runnerId) : null;
 
-  // The runner's word on each engine; for Claude and Codex the account a run there would use, as a task run reads it.
+  // The runner's word on each engine; for Claude, Codex and Kimi the account a run there would use, as a task run reads it.
   const health = sanitizeRunnerEngines(runner?.engines);
   const states: Record<string, ModelRoutingEngineState> = {};
   if (agent && runner) {
-    for (const engine of [AgentProvider.CLAUDE, AgentProvider.CODEX] as const) states[engine] = engineState(engine, agent, runner, reads.now);
+    for (const engine of [AgentProvider.CLAUDE, AgentProvider.CODEX, AgentProvider.KIMI] as const) {
+      states[engine] = engineState(engine, agent, runner, reads.now);
+    }
   }
   const engines: Record<string, SubagentEngineReport> | null = health
     ? Object.fromEntries(health.map((entry) => {
@@ -158,7 +160,9 @@ export async function subagentRouteInput(
     inScope: true,
     credential: builtinCredential(slug),
     engines: [{ engine: slug }],
-    ...(states[slug] ? { account: { quota: states[slug].quota ?? null, paused: states[slug].paused === true } } : {}),
+    ...(states[slug] ? {
+      account: { quota: states[slug].quota ?? null, paused: states[slug].paused === true, unreadable: states[slug].quotaUnread === true },
+    } : {}),
   }));
 
   const catalog = (runner?.modelCatalog ?? null) as RunnerModelCatalog | null;
@@ -215,7 +219,8 @@ async function readConfiguredProviders(
     const credential = keyCredential(row);
     const runsOn = credentialEngines(credential);
     const shipped = providerPreset(row.presetSlug);
-    const own = withPreset(row).models as unknown as ProviderPresetModel[];
+    const overlaid = withPreset(row);
+    const own = overlaid.models as unknown as ProviderPresetModel[];
     const presetModels = shipped ? catalogModels(shipped) : [];
     const subscription = credential.kind === 'key' && credential.subscriptionToken;
     // A subscription token's quota is the credential's own, read through the same cache as a pool member's.
@@ -238,7 +243,11 @@ async function readConfiguredProviders(
         // Priced from models.dev like every other preset (an Anthropic key on Claude Code, an OpenAI key on Codex).
         index === 0 && row.runtime !== AgentProvider.DSH && followsRuntimeCatalog(row)
           ? { engine, prices: catalogPrices(shipped, catalog, engine) }
-          : { engine, models: (Array.isArray(own) ? own : []).map((model) => keyModelRow(model, presetModels, row.modelTiers)) }
+          : {
+            engine,
+            models: (Array.isArray(own) ? own : []).map((model) => keyModelRow(model, presetModels, row.modelTiers)),
+            defaultModel: overlaid.defaultModel,
+          }
       )),
     };
     return { provider, label: row.label, kind: 'key', providerId: row.ownerId === ownerId ? row.id : null };
@@ -334,7 +343,7 @@ export async function subagentTierView(db: Prisma.TransactionClient, ownerId: st
         for (const engine of entry.provider.engines) {
           // A built-in engine outside the tier table has no tiered rows: listing its whole catalogue as Not set would
           // offer tiers the owner cannot give it.
-          if (!engine.models && !MODEL_ROUTING_ENGINES.includes(engine.engine)) continue;
+          if (!engine.models && !Object.hasOwn(DEFAULT_MODEL_TIER_TABLE, engine.engine)) continue;
           for (const row of subagentEngineRows(engine, catalogInput) as Array<SubagentModelRow & Partial<KeyModelRow>>) {
             const seen = models.get(row.model) ?? {
               model: row.model,

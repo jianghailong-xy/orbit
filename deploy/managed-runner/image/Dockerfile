@@ -25,7 +25,7 @@ FROM node:26.10.0-trixie-slim@sha256:ec7758ee051e457b468b32bde57b0879010b325bb98
 # postinstall only copies its platform package's native binary over a stub: take that binary
 # directly, so no Node wrapper sits in the signal path either.
 RUN test "$(node --version)" = v26.10.0 \
- && npm install --global --ignore-scripts --no-audit --no-fund @anthropic-ai/claude-code@2.1.327 \
+ && npm install --global --ignore-scripts --no-audit --no-fund @anthropic-ai/claude-code@2.1.328 \
  && install -D -m 0755 \
       "/usr/local/lib/node_modules/@anthropic-ai/claude-code/node_modules/@anthropic-ai/claude-code-linux-$(node -p process.arch)/claude" \
       /opt/claude/bin/claude
@@ -74,10 +74,10 @@ RUN case "$TARGETARCH" in \
  && install -D -m 0755 /tmp/kimi /opt/kimi-code/bin/kimi \
  && rm /tmp/kimi
 RUN case "$TARGETARCH" in \
-      amd64) path=linux-x64/cli_linux_x64.tar.gz sum=dad3c015e8964fcdc1639b13b7152f4cb84cb1bde385707e2bcdf095d6f1831f4f6521199aec499cc052f9e99906b7fdbc52c273df064d5cb7c84b068ba3ce50 ;; \
-      arm64) path=linux-arm/cli_linux_arm64.tar.gz sum=5f703c88e01851061c87c07b1a4ca54c1f5a6826ffada9fb005974a099e9a552ddb1f9ba2fe1194e2829803482c86084babf8cf91530a528bc7f659613600585 ;; \
+      amd64) path=linux-x64/cli_linux_x64.tar.gz sum=26de25fccb3fbf0b093e090ce14a14ac1df1ec3e90ef4ea6106887d3a81b0cc9edb0dadea7b9101d07f9606eba159062a6fb7b78e91b73f7520684a24db73428 ;; \
+      arm64) path=linux-arm/cli_linux_arm64.tar.gz sum=1030d89ce9e5cb39509e272cb89b71fde0e0d5d6527b7392525d5ef2683da54fb49230449107486d91c02ded39a678faaa649b2041304a6cf82a3a332d5819d9 ;; \
       *) exit 1 ;; esac \
- && curl -fsSL -o /tmp/agy.tar.gz "https://storage.googleapis.com/antigravity-public/antigravity-cli/1.5.11-6132547114106880/$path" \
+ && curl -fsSL -o /tmp/agy.tar.gz "https://storage.googleapis.com/antigravity-public/antigravity-cli/1.5.12-5281398513336320/$path" \
  && echo "$sum  /tmp/agy.tar.gz" | sha512sum -c - \
  && mkdir /tmp/agy && tar -xzf /tmp/agy.tar.gz -C /tmp/agy --no-same-owner \
  && install -D -m 0755 /tmp/agy/antigravity /opt/agy/bin/agy \
@@ -220,7 +220,7 @@ if platform.machine() == 'x86_64':
     actual['cursor'] = version(str(store / 'cursor/versions/2026.10.14-941492e/cursor-agent'), '--version')
     actual['dsh'] = version(str(store / 'engines/dsh/0.2.0-rc.2/node_modules/.bin/dsh'), '--version')
 expected_versions = {'go': 'go1.27.1', 'node': 'v26.10.0', 'codex': 'codex-cli 0.170.0',
-                     'claude': '2.1.327 (Claude Code)', 'opencode': '1.19.6', 'kimi': '2.6.3', 'agy': '1.5.11'}
+                     'claude': '2.1.328 (Claude Code)', 'opencode': '1.19.6', 'kimi': '2.6.3', 'agy': '1.5.12'}
 expected_versions.update(chromium='Chromium 154.0.8037.57 built on Debian GNU/Linux 13 (trixie)',
                          xvfb='2:21.1.16-1.3+deb13u4', x11vnc='x11vnc: 0.9.17 lastmod: 2025-04-11',
                          fontsNotoCjk='1:20240730+repack1-1', fontsNotoColorEmoji='2.051-0+deb13u1',
