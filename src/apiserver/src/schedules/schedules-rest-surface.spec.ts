@@ -1,7 +1,8 @@
 /**
  * The shape of the scheduled tasks' doors (docs/scheduled-tasks-design.md §9.1), read off the controllers themselves:
  *
- *   (a) REST has exactly the read and control routes, the drafts of the Scheduled page, and the two card presses:
+ *   (a) REST has exactly the read and control routes, the drafts of the Scheduled page, Change…'s conversation
+ *       (which opens a session, as a draft does; the session changes the schedule), and the two card presses:
  *       no route creates or changes a schedule (no POST /schedules, no PATCH or PUT anywhere under it), and no other
  *       controller in the server serves a path under /schedules or /schedule-*.
  *   (b) The two card presses are owner channel only: closed to every access token (OWNER_INTERACTIVE), not open to
@@ -48,12 +49,14 @@ test('(a) REST is read, control, drafts and the two presses: nothing creates or 
     'GET /schedule-requests/:id',
     'GET /schedules',
     'GET /schedules/:id',
+    'GET /schedules/:id/change',
     'GET /schedules/:id/runs',
     'GET /schedules/drafts',
     'GET /sessions/:id/schedule-cards',
     'POST /schedule-requests/:id/allow',
     'POST /schedule-requests/:id/decline',
     'POST /schedule-runs/:id/stop',
+    'POST /schedules/:id/change',
     'POST /schedules/:id/pause',
     'POST /schedules/:id/resume',
     'POST /schedules/:id/run',

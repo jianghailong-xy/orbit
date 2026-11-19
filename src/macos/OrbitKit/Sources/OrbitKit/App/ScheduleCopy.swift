@@ -295,6 +295,21 @@ public enum ScheduleCopy {
             "workspaceId": "Workspace",
         ]
     }
+    /// A schedule's change conversation (§8.2, board 03-change): Orbit's opening, its strip, its input.
+    public enum ChangeConversation {
+        public static let title = "Change {title}"
+        public static let lead = "What should change about {title}? This is what it does now:"
+        public static let does = "Does"
+        public static let when = "When"
+        public static let runsIn = "Runs in"
+        public static let may = "May"
+        public static let costs = "Costs"
+        public static let tail = "I can change the time, the days, what it checks and how it reports right away, and you can undo it. More runs, longer runs, more access or another workspace need your Allow."
+        public static let placeholder = "Say what to change…"
+        public static let openSchedule = "Open"
+        public static let openInScheduled = "Open in Scheduled"
+        public static let conversation = "conversation"
+    }
     public enum Record {
         public static let changed = "Changed {title}: {change}"
         public static let ended = "Ended {title}: {reason} · {by}"
@@ -616,6 +631,18 @@ public enum ScheduleCopy {
         "history.fields.accessLevel": ScheduleCopy.History.fields["accessLevel"]!,
         "history.fields.runLimitMinutes": ScheduleCopy.History.fields["runLimitMinutes"]!,
         "history.fields.workspaceId": ScheduleCopy.History.fields["workspaceId"]!,
+        "changeConversation.title": ScheduleCopy.ChangeConversation.title,
+        "changeConversation.lead": ScheduleCopy.ChangeConversation.lead,
+        "changeConversation.does": ScheduleCopy.ChangeConversation.does,
+        "changeConversation.when": ScheduleCopy.ChangeConversation.when,
+        "changeConversation.runsIn": ScheduleCopy.ChangeConversation.runsIn,
+        "changeConversation.may": ScheduleCopy.ChangeConversation.may,
+        "changeConversation.costs": ScheduleCopy.ChangeConversation.costs,
+        "changeConversation.tail": ScheduleCopy.ChangeConversation.tail,
+        "changeConversation.placeholder": ScheduleCopy.ChangeConversation.placeholder,
+        "changeConversation.openSchedule": ScheduleCopy.ChangeConversation.openSchedule,
+        "changeConversation.openInScheduled": ScheduleCopy.ChangeConversation.openInScheduled,
+        "changeConversation.conversation": ScheduleCopy.ChangeConversation.conversation,
         "record.changed": ScheduleCopy.Record.changed,
         "record.ended": ScheduleCopy.Record.ended,
         "record.byThisRun": ScheduleCopy.Record.byThisRun,

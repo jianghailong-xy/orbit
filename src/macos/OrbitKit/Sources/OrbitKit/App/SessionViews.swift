@@ -131,7 +131,11 @@ public enum SessionFilter {
     /// (`if view === 'completed' return rows`). Without these two rules the clients disagree on order.
     public static func forAgent(_ sessions: [Session], agentID: String, view: SessionView,
                                 scheduled: Bool = false) -> [Session] {
-        let scoped = forAgent(sessions, agentID: agentID).filter { ($0.runSource == "SCHEDULE") == scheduled }
+        // A schedule's change conversation (runSource SCHEDULE_CHANGE, §8.2) is in no list: it is reached from
+        // the schedule (its history, Change…) and from Waiting on you, exactly as the web's list reads it.
+        let scoped = forAgent(sessions, agentID: agentID).filter {
+            $0.runSource != "SCHEDULE_CHANGE" && ($0.runSource == "SCHEDULE") == scheduled
+        }
         return view == .completed ? scoped : consoleSorted(scoped)
     }
 
