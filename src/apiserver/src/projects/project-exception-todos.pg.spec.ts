@@ -2300,9 +2300,12 @@ async function escalate(stack: Stack, w: World, a: Attempt): Promise<ItemRow> {
     Prisma.sql`UPDATE "project_open_item" SET "escalate_at" = now() - interval '1 minute'
                 WHERE "id" = ${opened.id}::uuid`,
   );
+  // A live coordinator retains a taken ITEM; exercise escalation with Automatic switched off.
+  await stack.db.project.update({ where: { id: w.projectId }, data: { coordinatorEnabled: false } });
   const swept = await new ProjectOpenItemEscalationService(
     stack.db as unknown as PrismaService,
   ).sweep();
+  await stack.db.project.update({ where: { id: w.projectId }, data: { coordinatorEnabled: true } });
   assert.deepEqual(swept.map((row) => row.itemId), [opened.id]);
   const item = (await items(stack.db, w.projectId)).find((row) => row.id === opened.id)!;
   assert.equal(item.assignee, 'OWNER');
