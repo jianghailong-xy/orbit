@@ -65,11 +65,16 @@ FROM golang:1.27.1-trixie@sha256:3b77fc618ec235a1ab412de7737f120dd507c57e8d87de4
 # Native builds fetched by URL, each checked against the digest its publisher's manifest gives for the pinned
 # version (pins.json names the manifests). One RUN per engine, so a new pin refetches only its own engine.
 ARG TARGETARCH
+# How each of them is fetched. A download that stops moving is ended and started again: below 4 KB/s for a minute
+# is a stall, and a stall is retried, five times. There is no total time limit, so a slow download that is still
+# moving finishes. Without these, curl waits on a dead connection forever: on 2026-11-19 the release build sat 18
+# minutes at 81.7 MB of the Kimi binary until it was killed by hand.
+ARG FETCH="curl -fsSL --connect-timeout 30 --speed-limit 4096 --speed-time 60 --retry 5 --retry-delay 10 --retry-all-errors"
 RUN case "$TARGETARCH" in \
       amd64) target=linux-x64 sum=5999b710b1a34c19e93989973c54a8f1c167df8f8bec2fbf3171bfc304f6bdb9 ;; \
       arm64) target=linux-arm64 sum=4e97ef1e7c32abad5fd581a4884111e11348677aa51207490c0568e9af028eae ;; \
       *) exit 1 ;; esac \
- && curl -fsSL -o /tmp/kimi "https://code.kimi.com/kimi-code/binaries/2.6.3/kimi-code-$target" \
+ && $FETCH -o /tmp/kimi "https://code.kimi.com/kimi-code/binaries/2.6.3/kimi-code-$target" \
  && echo "$sum  /tmp/kimi" | sha256sum -c - \
  && install -D -m 0755 /tmp/kimi /opt/kimi-code/bin/kimi \
  && rm /tmp/kimi
@@ -77,7 +82,7 @@ RUN case "$TARGETARCH" in \
       amd64) path=linux-x64/cli_linux_x64.tar.gz sum=26de25fccb3fbf0b093e090ce14a14ac1df1ec3e90ef4ea6106887d3a81b0cc9edb0dadea7b9101d07f9606eba159062a6fb7b78e91b73f7520684a24db73428 ;; \
       arm64) path=linux-arm/cli_linux_arm64.tar.gz sum=1030d89ce9e5cb39509e272cb89b71fde0e0d5d6527b7392525d5ef2683da54fb49230449107486d91c02ded39a678faaa649b2041304a6cf82a3a332d5819d9 ;; \
       *) exit 1 ;; esac \
- && curl -fsSL -o /tmp/agy.tar.gz "https://storage.googleapis.com/antigravity-public/antigravity-cli/1.5.12-5281398513336320/$path" \
+ && $FETCH -o /tmp/agy.tar.gz "https://storage.googleapis.com/antigravity-public/antigravity-cli/1.5.12-5281398513336320/$path" \
  && echo "$sum  /tmp/agy.tar.gz" | sha512sum -c - \
  && mkdir /tmp/agy && tar -xzf /tmp/agy.tar.gz -C /tmp/agy --no-same-owner \
  && install -D -m 0755 /tmp/agy/antigravity /opt/agy/bin/agy \
@@ -87,7 +92,7 @@ RUN case "$TARGETARCH" in \
 # Measured on Linux x64 only, so an arm64 image ships an empty store, as the runner would install nothing there.
 RUN install -d /opt/orbit-engines/cursor/versions \
  && if [ "$TARGETARCH" = amd64 ]; then \
-      curl -fsSL -o /tmp/cursor.tar.gz https://downloads.cursor.com/lab/2026.10.14-941492e/linux/x64/agent-cli-package.tar.gz \
+      $FETCH -o /tmp/cursor.tar.gz https://downloads.cursor.com/lab/2026.10.14-941492e/linux/x64/agent-cli-package.tar.gz \
       && echo "6f6bf39dd2df29dcd38643cdfab0155ce71699953889f732deec123f6562bb2d  /tmp/cursor.tar.gz" | sha256sum -c - \
       && test "$(stat -c %s /tmp/cursor.tar.gz)" = 183861376 \
       && mkdir /tmp/cursor && tar -xzf /tmp/cursor.tar.gz -C /tmp/cursor --no-same-owner \
