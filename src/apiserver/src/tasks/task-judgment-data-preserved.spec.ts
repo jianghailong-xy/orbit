@@ -3137,10 +3137,6 @@ test('the ledger stays append-only, and every later migration is accounted for',
       // project_handoff_approval, and creates project_criteria_change_translation. No INSERT/UPDATE/DELETE, and
       // no trigger, function or DONE fence changes.
       '1080_owner_card_translation_more',
-      // 1090 adds nullable translated_note and translation_lang TEXT columns to task_evidence_decision
-      // so queued send-backs retain their translated text. No constraints or defaults are added,
-      // no existing rows are written, and no preserved relation, trigger, function or DONE fence changes.
-      '1090_evidence_send_back_translation',
       // 1100 adds nullable conversation_turn.translation_failure_reason and translation_http_status with a CHECK
       // every stored row passes (both NULL); conversation_turn is none of the preserved relations, no row is written,
       // and no trigger, function or DONE fence changes.
@@ -3150,7 +3146,11 @@ test('the ledger stays append-only, and every later migration is accounted for',
       // 1110 restates three CHECKs on project_open_item (kind, resolution, owner-only) to admit EVIDENCE_UNDECIDED,
       // DECIDED and REVISED; catalog-only, no row is written, and no preserved relation, trigger, function or DONE
       // fence changes.
-      '1110_evidence_undecided_item'],
+      '1110_evidence_undecided_item',
+      // 1120 adds nullable translated_note and translation_lang TEXT columns to task_evidence_decision
+      // so queued send-backs retain their translated text. No constraints or defaults are added,
+      // no existing rows are written, and no preserved relation, trigger, function or DONE fence changes.
+      '1120_evidence_send_back_translation'],
     'a later migration exists; re-read it before trusting the assertions above');
   // Stated rather than described: 0230's fence differs from 0228's by exactly one added lane.
   const later = readFileSync(
