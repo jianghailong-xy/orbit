@@ -45,7 +45,7 @@ const APP_ADDRESSES = [
   '/wiki', '/wiki/review', '/wiki/s', '/wiki/s/review', '/wiki/s/activity', '/wiki/s/t/x', '/wiki/s/t/x/y', '/wiki/s/d/x',
   '/wiki/s/plan', '/wiki/s/plan/d/x', '/wiki/s/plan/d/x/y', '/wiki/s/browse', '/wiki/s/az', '/wiki/s/e/x', '/wiki/s/settings',
   '/wiki/s/run/x',
-  '/runners', '/runners/register', `/runners/${ID}`, `/runners/${ID}/new`,
+  '/runners', '/runners/register', `/runners/${ID}`, `/runners/${ID}/new`, `/runners/${ID}/browser`,
   `/workspaces/${ID}`, `/workspaces/${ID}/new`, `/agents/${ID}`, `/agents/${ID}/new`, `/sessions/${ID}`,
   `/workspaces/${ID}/sessions/${ID}`, `/agents/${ID}/sessions/${ID}`,
   '/enroll', '/cli-login',

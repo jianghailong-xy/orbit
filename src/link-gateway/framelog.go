@@ -61,6 +61,10 @@ func bodyName(f *linkpb.Frame) string {
 		return "stream_credit"
 	case *linkpb.Frame_StreamClose:
 		return "stream_close"
+	case *linkpb.Frame_StreamPaste:
+		return "stream_paste"
+	case *linkpb.Frame_StreamPasted:
+		return "stream_pasted"
 	default:
 		return "unknown"
 	}
@@ -196,6 +200,15 @@ func summarize(f *linkpb.Frame) string {
 		kv("stream", body.StreamClose.GetStreamId())
 		kv("code", body.StreamClose.GetCode())
 		kv("message", fmt.Sprintf("%q", body.StreamClose.GetMessage()))
+	case *linkpb.Frame_StreamPaste:
+		// The text's length only: a paste is often a password.
+		kv("stream", body.StreamPaste.GetStreamId())
+		kv("paste", body.StreamPaste.GetPasteId())
+		kv("text", len(body.StreamPaste.GetText()))
+	case *linkpb.Frame_StreamPasted:
+		kv("stream", body.StreamPasted.GetStreamId())
+		kv("paste", body.StreamPasted.GetPasteId())
+		kv("error", fmt.Sprintf("%q", body.StreamPasted.GetError()))
 	}
 	return b.String()
 }

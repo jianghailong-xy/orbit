@@ -59,6 +59,8 @@ export const FEISHU_OPEN_DIRECT_REPLIES = {
 /** The app as the router read it, with where the owner's new sessions open. */
 export interface FeishuDirectApp extends FeishuOwnerApp {
   defaultWorkspaceId: string | null;
+  /** "Show Orbit in Feishu" (§15.2): off, the status card has no Open in Orbit. */
+  showOrbit: boolean;
 }
 
 /** The app as the router read it, with the settings sessions other people open use (§14.1). */
@@ -464,7 +466,7 @@ export class FeishuDirectService {
       ownerItems: (decisions.get(s.id)?.ownerItems ?? []).map((item) => item.title),
       url: orbitUrl({ sessionId: s.id }),
     }));
-    await this.replyCard(app, message.messageId, 'status', renderStatusCard(entries));
+    await this.replyCard(app, message.messageId, 'status', renderStatusCard(entries, app.showOrbit));
   }
 
   /**

@@ -2,6 +2,7 @@ import assert from 'node:assert/strict';
 import { test } from 'node:test';
 import type { FeishuMessageDetail } from '@orbit/shared';
 import {
+  ANSWER_IN_ORBIT,
   CUT_NOTE,
   DETAILS_HIDDEN,
   FEISHU_CARD_ACTIONS,
@@ -25,7 +26,8 @@ import {
  */
 
 const URL = 'https://orbit.example/sessions/s1';
-const ctx = (detail: FeishuMessageDetail, approvalsInFeishu = true): FeishuCardContext => ({ detail, approvalsInFeishu, openUrl: URL });
+const ctx = (detail: FeishuMessageDetail, approvalsInFeishu = true, showOrbit = true): FeishuCardContext =>
+  ({ detail, approvalsInFeishu, showOrbit, openUrl: URL });
 
 /** Every string the card holds, keys aside: what Feishu would store. */
 function strings(value: unknown): string[] {
@@ -348,4 +350,61 @@ test('who started a session the owner did not start: in a group or a direct mess
       assert.ok(!holds(card, 'Started by'), `${detail}: the owner's own session says nothing of who started it`);
     }
   }
+});
+
+/** Neither the button nor anywhere Orbit lives: no Open in Orbit, no open_url, no Orbit URL in any string (§15.2). */
+function assertNoOrbit(card: FeishuCard, what: string): void {
+  const json = JSON.stringify(card);
+  assert.ok(!json.includes('Open in Orbit'), `${what}: no Open in Orbit`);
+  assert.ok(!json.includes('open_url'), `${what}: no link button`);
+  assert.ok(!json.includes('orbit.example'), `${what}: no Orbit URL`);
+  assert.deepEqual(openUrls(card), [], what);
+}
+
+for (const c of CASES) {
+  test(`${c.name}: Show Orbit in Feishu on and off, live and settled, in both modes (§15.2)`, () => {
+    for (const detail of ['TITLES_ONLY', 'FULL'] as const) {
+      const on = renderFeishuCard(c.alert, ctx(detail, true, true));
+      assert.deepEqual(openUrls(on), [URL], `${detail} on: Open in Orbit, as before`);
+      assert.ok(!holds(on, ANSWER_IN_ORBIT), `${detail} on: the button says it`);
+      assert.ok(holds(renderFeishuTerminalCard(c.alert, ctx(detail, true, true), 'Allowed in Orbit · 10:32'), URL), `${detail} on: settled links`);
+
+      const off = renderFeishuCard(c.alert, ctx(detail, true, false));
+      assertNoOrbit(off, `${detail} off`);
+      // What can be answered on the card still is: Allow once and Deny, the question's form.
+      assert.deepEqual(callbacks(off), c.actions[detail], `${detail} off: the same answers on the card`);
+      for (const title of c.titles) {
+        if (detail === 'FULL' && title === DETAILS_HIDDEN) continue;
+        assert.ok(holds(off, title), `${detail} off: still has ${title}`);
+      }
+      // A card answered only in Orbit says so in one line instead of the button; the others say nothing more.
+      const orbitOnly = (c.alert.kind === 'approval' || c.alert.kind === 'owner-item') && c.actions[detail].length === 0;
+      assert.equal(holds(off, ANSWER_IN_ORBIT), orbitOnly, `${detail} off: ${orbitOnly ? 'one line' : 'no line'}`);
+      const settled = renderFeishuTerminalCard(c.alert, ctx(detail, true, false), 'Allowed in Feishu · 10:32');
+      assertNoOrbit(settled, `${detail} off, settled`);
+      assert.ok(holds(settled, 'Allowed in Feishu · 10:32'));
+      assert.ok(!holds(settled, ANSWER_IN_ORBIT), `${detail} off, settled: nothing left to answer`);
+    }
+  });
+}
+
+test('Show Orbit off: a tool approval still has Allow once and Deny; with approvals in Feishu off it says to answer in Orbit', () => {
+  const alert = CASES[0].alert;
+  const off = renderFeishuCard(alert, ctx('TITLES_ONLY', true, false));
+  assert.deepEqual(tagged(off, 'button').map((b) => (b.text as { content: string }).content), ['Allow once', 'Deny']);
+  assert.ok(holds(off, DETAILS_HIDDEN));
+  const neither = renderFeishuCard(alert, ctx('TITLES_ONLY', false, false));
+  assertNoOrbit(neither, 'approvals off');
+  assert.deepEqual(tagged(neither, 'button'), []);
+  assert.ok(holds(neither, ANSWER_IN_ORBIT));
+});
+
+test('Show Orbit off: a card too long for Feishu keeps its title and no button', () => {
+  const alert: FeishuAlert = {
+    kind: 'approval', sessionTitle: 's',
+    approvals: Array.from({ length: 400 }, (_, i) => ({ id: `approval-${i}`, toolName: 'Bash', input: {} })),
+  };
+  const card = renderFeishuCard(alert, ctx('TITLES_ONLY', true, false));
+  assert.ok(holds(card, 'too long for a Feishu card'));
+  assertNoOrbit(card, 'too long');
 });

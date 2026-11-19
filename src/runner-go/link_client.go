@@ -557,7 +557,7 @@ func linkHello(processID string) *linkpb.Hello {
 	}
 	// Byte streams to the managed runner browser (link_streams.go): declared only by a managed runner.
 	if linkStreamsDeclared() {
-		hello.Capabilities = append(hello.Capabilities, linkStreamCapability)
+		hello.Capabilities = append(hello.Capabilities, linkStreamCapability, linkStreamPasteCapability)
 	}
 	return hello
 }

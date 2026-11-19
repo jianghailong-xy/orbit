@@ -136,7 +136,7 @@ export class FeishuOutboxService implements OnApplicationBootstrap, OnModuleDest
     try {
       const app = await this.prisma.feishuApp.findFirst({
         where: { appId: row.appId, ownerId: row.ownerId },
-        select: { platform: true, appId: true, appSecretEnc: true, enabled: true },
+        select: { platform: true, appId: true, appSecretEnc: true, enabled: true, showOrbit: true },
       });
       const credentials = app ? credentialsOf(app) : null;
       if (!app || !app.enabled || !credentials || !(await this.apps.allowed())) {
@@ -148,11 +148,15 @@ export class FeishuOutboxService implements OnApplicationBootstrap, OnModuleDest
       const group = row.sessionId === feishuDerivedUuid('feishu-group-session', row.appId, row.rootMessageId)
         || (await this.prisma.feishuChatRoute.count({ where: { appId: row.appId, ownerId: row.ownerId, chatId: row.chatId } })) > 0;
       // A chain someone other than the owner opened while the bot was open (§14.2, O3) is read by them: the words alone,
-      // with no Orbit link, as in a group, but as a reply in the direct chat rather than in a topic.
+      // with no Orbit link whatever Show Orbit in Feishu says (§15.1), as in a group, but as a reply in the direct chat
+      // rather than in a topic.
       const open = !group && (await this.prisma.feishuThread.count({
         where: { appId: row.appId, ownerId: row.ownerId, chatId: row.chatId, rootMessageId: row.rootMessageId, openAccessOpenId: { not: null } },
       })) > 0;
-      const body = renderSessionReply(row.text, group || open ? null : orbitUrl({ sessionId: row.sessionId }));
+      // The owner's direct chat carries Open in Orbit, or with Show Orbit in Feishu off the words alone (§15.2).
+      const owners = !group && !open;
+      const linked = owners && app.showOrbit;
+      const body = renderSessionReply(row.text, linked ? orbitUrl({ sessionId: row.sessionId }) : null, owners && !app.showOrbit);
       const result = await this.outbound.reply(credentials, row.rootMessageId, body, {
         replyInThread: group,
         uuid: feishuDedupeUuid('session-reply', row.appId, row.id),

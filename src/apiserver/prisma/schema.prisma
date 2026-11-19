@@ -9646,6 +9646,9 @@ model FeishuApp {
   openSessionsPerDayPerPerson Int @default(10) @map("open_sessions_per_day_per_person")
   openMaxRunningTotal         Int @default(3) @map("open_max_running_total")
   openSessionsPerDayTotal     Int @default(50) @map("open_sessions_per_day_total")
+  /// "Show Orbit in Feishu" (migration 1150, §15.2): off, the owner's cards and replies carry no Open in Orbit button
+  /// and no Orbit link.
+  showOrbit          Boolean    @default(true) @map("show_orbit")
   createdAt          DateTime   @default(now()) @map("created_at") @db.Timestamptz(3)
   updatedAt          DateTime   @default(now()) @updatedAt @map("updated_at") @db.Timestamptz(3)
   inboundEvents      FeishuInboundEvent[]

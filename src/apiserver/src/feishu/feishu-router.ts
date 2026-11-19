@@ -169,8 +169,10 @@ export class FeishuRouter {
   async route(event: InboundEvent): Promise<RouteDecision | null> {
     const app = await this.prisma.feishuApp.findUnique({
       where: { appId: event.appId },
-      select: { ownerId: true, appId: true, platform: true, appSecretEnc: true, ownerOpenId: true, botName: true, defaultWorkspaceId: true, accessMode: true,
-        openWorkspaceId: true, openPermissionMode: true },
+      select: {
+        ownerId: true, appId: true, platform: true, appSecretEnc: true, ownerOpenId: true, botName: true, defaultWorkspaceId: true, accessMode: true,
+        showOrbit: true, openWorkspaceId: true, openPermissionMode: true,
+      },
     });
     if (!app) {
       this.logger.log(`feishu event ${event.eventId} of app ${event.appId} dropped: the app is no longer connected`);
