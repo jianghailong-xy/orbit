@@ -448,4 +448,20 @@ final class OwnerRequestsTests: XCTestCase {
         XCTAssertEqual(OwnerRequests.waitingCount([], questions: [q, question("q3", project: asking, waiting: "x")],
                                                   snoozes: [:], now: now), 2)
     }
+
+    /// The turn Orbit queues when a request ends is a divider, not the owner's bubble (web: `resolutionTurnLabel`).
+    func testResolutionTurnIsADividerNotTheOwnersBubble() {
+        let turn = { (head: String) in
+            [head, "", OwnerRequests.resolutionMark + " The request is final and will not wake this session again.",
+             "", "```json", "{}", "```"].joined(separator: "\n")
+        }
+        let done = turn("Orbit owner request 34uabc (MANUAL_STEP) ended DONE: the owner did what was asked.")
+        XCTAssertEqual(OwnerRequests.resolutionTurnLabel(done), "Owner action resolved · turn started automatically")
+        XCTAssertEqual(OwnerRequests.resolutionTurnLabel(turn("Orbit owner request 34uabc (CONFIRM) ended DECLINED: x.")),
+                       "Owner declined the request · turn started automatically")
+        XCTAssertEqual(OwnerRequests.resolutionTurnLabel(turn("Orbit owner request 34uabc (WIKI_CREATE) ended DONE. The owner created the wiki w.")),
+                       "Owner action resolved · turn started automatically")
+        XCTAssertNil(OwnerRequests.resolutionTurnLabel("Orbit owner request 34uabc (SECRET) ended DONE: looks wrong to me"))
+        XCTAssertNil(OwnerRequests.resolutionTurnLabel("hello"))
+    }
 }

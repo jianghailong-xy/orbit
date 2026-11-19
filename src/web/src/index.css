@@ -29273,7 +29273,7 @@ button.agent-progress-agent:hover {
 }
 
 /* The Agents line (SessionAgentsStrip.tsx), in the Background processes tray's shell and rows: the band's
-   words truncate before the title does; opened, Running and Done over the tray's own rows, each a run's name
+   words truncate before the title does; opened, the tray's own rows in one list (running first, no headings), each a run's name
    then its facts. */
 .ag-head {
   flex: none;
@@ -29291,14 +29291,6 @@ button.agent-progress-agent:hover {
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
-}
-.ag-section {
-  flex: none;
-  padding: 4px 2px 0;
-  font-size: 11px;
-  font-weight: 600;
-  text-transform: uppercase;
-  color: var(--text-3);
 }
 .ag-row .ag-title {
   font-family: inherit;
