@@ -163,7 +163,6 @@ type cliOfferFacts struct {
 	orchestration bool
 	watches       bool
 	wiki          bool
-	browser       bool
 }
 
 func currentCLIOfferFacts(identity cliIdentity) cliOfferFacts {
@@ -174,7 +173,6 @@ func currentCLIOfferFacts(identity cliIdentity) cliOfferFacts {
 		orchestration: !service && mcpOrchestrationEnabled() && inSession,
 		watches:       watchesEnabledFromEnv(),
 		wiki:          wikiEnabledFromEnv(),
-		browser:       browserToolsEnabledFromEnv(),
 	}
 }
 
@@ -249,8 +247,6 @@ func cliWithheldReason(op *operation, facts cliOfferFacts) string {
 		return watchesOffMessage(command)
 	case op.CLIFamily == "wiki" && !facts.wiki:
 		return wikiOffMessage(command)
-	case op.CLIFamily == "browser" && !facts.browser:
-		return browserOffMessage(command)
 	case cliOrchestrationGated(op) && facts.inSession && !facts.orchestration:
 		return orchestrationOffMsg
 	case cliOrchestrationGated(op):
@@ -313,7 +309,7 @@ func (d *cliDiscovery) cliOperations() []*operation {
 		}
 	}
 	for _, op := range d.built.Ops {
-		if op.CLI != nil && !listed[op.Tool] {
+		if op.CLI != nil && !listed[op.Tool] && !browserOpAbsent(op) {
 			ops = append(ops, op)
 		}
 	}
@@ -401,7 +397,7 @@ func (d *cliDiscovery) family(name string) (capabilityFamilyDocument, error) {
 // does not have), or an error pointing at the summary.
 func (d *cliDiscovery) id(tool string) (capabilityIDDocument, error) {
 	op := d.built.ByTool[tool]
-	if op == nil {
+	if op == nil || browserOpAbsent(op) {
 		return capabilityIDDocument{}, fmt.Errorf("no operation %q in the catalogue; `%s capabilities --summary --json` lists them", tool, d.exe)
 	}
 	return capabilityIDDocument{discoveryHeader: d.header("capability"), Capability: d.view(op, true)}, nil

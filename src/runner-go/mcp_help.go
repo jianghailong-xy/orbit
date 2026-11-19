@@ -89,7 +89,12 @@ func mcpHelpOrchestratedTools(ops []*operation) []string {
 }
 
 func mcpHelp() string {
-	ops := operationCatalog().Ops
+	var ops []*operation
+	for _, op := range operationCatalog().Ops {
+		if !browserOpAbsent(op) {
+			ops = append(ops, op)
+		}
+	}
 	served := mcpHelpServedObjects(ops)
 	orchestrated := mcpHelpOrchestratedTools(ops)
 	paragraphs := []string{

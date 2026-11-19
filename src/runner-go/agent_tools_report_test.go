@@ -43,6 +43,9 @@ func claudeInitFrame(t *testing.T, status string, withSkill bool) map[string]int
 func agentToolsServedForTest(sw agentToolsSwitches) []string {
 	var names []string
 	for _, op := range operationCatalog().Ops {
+		if op.Object == objectBrowser && !sw.Browser {
+			continue // off means absent (browser_tools.go)
+		}
 		if agentToolsFamilyOf(op) != "" && agentToolsWithheldBy(op, sw) == "" && op.Tool != scheduleRunReportTool {
 			names = append(names, op.Tool)
 		}
@@ -80,10 +83,8 @@ func TestClaudeInitBecomesTheAgentToolsReport(t *testing.T) {
 				t.Errorf("orchestration family = %+v, want none served, said why", f)
 			}
 		case f.ID == "browser":
-			// The session was spawned with the browser switch off, so its tools are absent and the report says why.
-			if f.Served != 0 || f.Total == 0 || f.Reason != "browser" {
-				t.Errorf("browser family = %+v, want none served, said why", f)
-			}
+			// The session was spawned with the browser switch off: off means absent, so the report has no such family.
+			t.Errorf("browser family = %+v, want none with the switch off", f)
 		case f.Served != f.Total || f.Reason != "":
 			t.Errorf("family %s = %+v, want all served", f.ID, f)
 		}

@@ -3679,6 +3679,10 @@ func buildCLICapabilities(executable string) cliCapabilitiesDocument {
 		if op.CLI == nil || listed[op.Tool] {
 			continue
 		}
+		// Off means absent: not withheld with a reason, not there (browser_tools.go).
+		if browserOpAbsent(op) {
+			continue
+		}
 		if allDescriptors == nil {
 			allDescriptors = make(map[string]map[string]interface{})
 			for _, d := range toolDescriptors(false, true) {

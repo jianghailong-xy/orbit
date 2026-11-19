@@ -42,8 +42,6 @@ const (
 	capabilityWatchesOff = "WATCHES_OFF"
 	// The session was spawned with the wiki off.
 	capabilityWikiOff = "WIKI_OFF"
-	// The session was spawned with the Orbit Cloud browser off (browser_tools.go).
-	capabilityBrowserOff = "BROWSER_OFF"
 )
 
 // capabilityUnavailableCodes is the closed set, in the order docs/orbit-agent-contract.md lists it.
@@ -51,7 +49,7 @@ var capabilityUnavailableCodes = []string{
 	capabilityOrchestrationDisabled, capabilityNoSessionContext, capabilityServiceTokenScopeMissing,
 	capabilityTokenInvalid, capabilityTokenExpired, capabilityRunnerNotRegistered,
 	capabilityRunnerCredentialUnusable, capabilityNotAvailableAsUser, capabilityRequiresUserLogin,
-	capabilityHumanOnly, capabilityWatchesOff, capabilityWikiOff, capabilityBrowserOff,
+	capabilityHumanOnly, capabilityWatchesOff, capabilityWikiOff,
 }
 
 // How a capability involves somebody besides the caller.
@@ -214,7 +212,7 @@ type capabilityScope struct {
 	service       *serviceTokenClaims
 	// Why the service token in effect cannot be used, when it cannot.
 	serviceCode, serviceDetail string
-	watches, wiki, browser     bool
+	watches, wiki              bool
 	// Outside a session, why the runner credential every non-account command sends with cannot be
 	// used. Inside one the runner that spawned the session holds it.
 	runnerCode, runnerDetail string
@@ -228,7 +226,6 @@ func newCapabilityScope(identity cliIdentity, sessionID string, orchestration bo
 		asUser:        identity.Kind == identityUser,
 		watches:       watchesEnabledFromEnv(),
 		wiki:          wikiEnabledFromEnv(),
-		browser:       browserToolsEnabledFromEnv(),
 	}
 	if identity.Kind == identityService {
 		s.service, s.serviceCode, s.serviceDetail = serviceTokenState(identity.token)
@@ -315,8 +312,6 @@ func (s capabilityScope) withheld(op *operation) (string, string) {
 		return capabilityWatchesOff, "this session was spawned with watches off"
 	case op.CLIFamily == "wiki" && !s.wiki:
 		return capabilityWikiOff, "this session was spawned with the wiki off"
-	case op.CLIFamily == "browser" && !s.browser:
-		return capabilityBrowserOff, "this session was spawned with the Orbit Cloud browser off"
 	}
 	return "", ""
 }

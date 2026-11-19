@@ -3,6 +3,7 @@ package main
 import (
 	"bytes"
 	"encoding/json"
+	"fmt"
 	"net/http"
 	"net/http/httptest"
 	"os"
@@ -115,8 +116,8 @@ func TestOrbitBrowserStatusCommandIsPresentOnlyWithTheSwitchOn(t *testing.T) {
 
 	for _, env := range []string{"", "off"} {
 		t.Setenv(envBrowser, env)
-		if offered, code := offersCommand(t, "browser_status"); offered || code != capabilityBrowserOff {
-			t.Errorf("ORBIT_BROWSER=%q: browser_status offered=%v code=%q, want not offered, %s", env, offered, code, capabilityBrowserOff)
+		if offered, code := offersCommand(t, "browser_status"); offered || code != "" {
+			t.Errorf("ORBIT_BROWSER=%q: browser_status offered=%v code=%q, want in neither list", env, offered, code)
 		}
 		seen = http.Request{}
 		out.Reset()
@@ -203,5 +204,57 @@ func TestBrowserReportSaysOnlyWhetherSavedLoginsExist(t *testing.T) {
 	}
 	if b.Report().SavedLogins {
 		t.Fatal("cleared: saved logins still reported")
+	}
+}
+
+// Off means absent in every listing a session reads, not only in tools/list and the CLI's routing: the capabilities
+// document (both lists), its --summary, --family and --id views, `orbit mcp help`, Claude Code's pre-approved CLI rules,
+// and the agent tools report's families. With the switch on, each of them names the browser.
+func TestBrowserIsAbsentFromEveryListingWithTheSwitchOff(t *testing.T) {
+	catalogFullestCLIContext(t)
+	const exe = "/usr/local/bin/orbit"
+	rule := "Bash(" + exe + " browser status *)"
+	for _, on := range []bool{true, false} {
+		env := map[bool]string{true: "on", false: ""}[on]
+		t.Setenv(envBrowser, env)
+		where := fmt.Sprintf("ORBIT_BROWSER=%q", env)
+		names := func(what string, present bool) {
+			t.Helper()
+			if present != on {
+				t.Errorf("%s: %s names the browser: %v, want %v", where, what, present, on)
+			}
+		}
+
+		doc := buildCLICapabilities(exe)
+		inDoc := false
+		for _, c := range append(append([]cliCapability{}, doc.Capabilities...), doc.UnavailableCapabilities...) {
+			inDoc = inDoc || c.ID == "browser_status"
+		}
+		names("`orbit capabilities --json`", inDoc)
+
+		d := newCLIDiscovery(exe)
+		summary, _ := json.Marshal(d.summary())
+		names("`orbit capabilities --summary`", strings.Contains(string(summary), "browser"))
+		_, familyErr := d.family("browser")
+		names("`orbit capabilities --family browser`", familyErr == nil)
+		_, idErr := d.id("browser_status")
+		names("`orbit capabilities --id browser_status`", idErr == nil)
+
+		names("`orbit mcp help`", strings.Contains(mcpHelp(), "Orbit Cloud browser"))
+		names("tools/list", listsTool(&mcpServer{sessionID: "s", browserOn: browserToolsEnabledFromEnv()}, "browser_status"))
+
+		allowed := false
+		for _, r := range orbitCLIAllowedTools(exe, true, on) {
+			allowed = allowed || r == rule
+		}
+		names("Claude Code's pre-approved CLI rules", allowed)
+
+		job := agentToolsJob()
+		job.BrowserEnabled = on
+		family := false
+		for _, f := range newAgentToolsReport(job, providerClaude, carrierAppendSystemPrompt).Families {
+			family = family || f.ID == "browser"
+		}
+		names("the agent tools report's families", family)
 	}
 }

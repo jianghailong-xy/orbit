@@ -690,7 +690,6 @@ var agentToolsSwitchReasons = map[string]string{
 	"orchestration": "Session orchestration is off for this account.",
 	"watches":       "Watch is off for this account on this Orbit server.",
 	"wiki":          "The wiki is off for this account on this Orbit server.",
-	"browser":       "The Orbit Cloud browser is off on this Orbit server.",
 	"not_connected": "The MCP server is not connected.",
 }
 

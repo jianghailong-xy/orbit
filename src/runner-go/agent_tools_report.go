@@ -165,9 +165,6 @@ func agentToolsWithheldBy(op *operation, sw agentToolsSwitches) string {
 	if wikiToolNames[op.Tool] && !sw.Wiki {
 		return "wiki"
 	}
-	if browserToolNames[op.Tool] && !sw.Browser {
-		return "browser"
-	}
 	return ""
 }
 
@@ -185,6 +182,10 @@ func (r *agentToolsReport) countFamilies(listed map[string]bool) {
 	for _, op := range operationCatalog().Ops {
 		family := agentToolsFamilyOf(op)
 		if family == "" {
+			continue
+		}
+		// Off means absent: a session spawned with the browser off has no browser family at all (browser_tools.go).
+		if op.Object == objectBrowser && !r.Switches.Browser {
 			continue
 		}
 		// No session but a scheduled run's has schedule_run_report, whatever the switches (schedule_tools.go).
@@ -213,6 +214,9 @@ func (r *agentToolsReport) countFamilies(listed map[string]bool) {
 	r.Families = r.Families[:0]
 	for _, def := range agentToolsFamilyDefs {
 		c := counts[def.ID]
+		if def.ID == "browser" && !r.Switches.Browser {
+			continue
+		}
 		c.Reason = mostFrequent(reasons[def.ID])
 		r.Families = append(r.Families, *c)
 	}

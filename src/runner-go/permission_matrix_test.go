@@ -202,7 +202,7 @@ func matrixCell(t *testing.T, surface, mode string, call matrixCall) string {
 	case surfaceClaudeCLI:
 		op := catalogOperation(call.Tool)
 		rule := "Bash(" + matrixExecutable + " " + strings.Join(op.CLI.Argv[1:], " ") + " *)"
-		if !stringSet(orbitCLIAllowedTools(matrixExecutable, true))[rule] {
+		if !stringSet(orbitCLIAllowedTools(matrixExecutable, true, true))[rule] {
 			return cellEngineCard
 		}
 		return orbitCallCell(t, mode, call, true, providerClaude)

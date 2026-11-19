@@ -2290,6 +2290,7 @@ func kimiAutomaticPermissionOption(job *ClaimedSession, toolName string, input i
 		orbitCLIAllowedTools(
 			orbitCLIPermissionExecutable(orbitCLIExecutable()),
 			job.AllowOrchestration && strings.TrimSpace(job.OrchestrationToken) != "",
+			job.BrowserEnabled,
 		)...)
 	for _, rule := range allowed {
 		if kimiToolMatchesRule(rule, toolName, input) {

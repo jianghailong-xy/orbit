@@ -1088,7 +1088,6 @@
     "purpose": "Orbit's long recipes: keeping a worked-out plan as one batch, filing many tasks from a file with the CLI, handing work off now, and finding out why an Orbit tool is missing or refused. Optional: guide and the tools' own descriptions are enough for any single call."
   },
   "switchReasons": {
-    "browser": "The Orbit Cloud browser is off on this Orbit server.",
     "not_connected": "The MCP server is not connected.",
     "orchestration": "Session orchestration is off for this account.",
     "watches": "Watch is off for this account on this Orbit server.",

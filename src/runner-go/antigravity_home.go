@@ -154,6 +154,7 @@ func antigravityPermissionRules(job *ClaimedSession, orbitExe string) (allow, de
 	rules := appendUnique(job.Agent.AllowedTools, orbitCLIAllowedTools(
 		orbitCLIPermissionExecutable(orbitExe),
 		job.AllowOrchestration && strings.TrimSpace(job.OrchestrationToken) != "",
+		job.BrowserEnabled,
 	)...)
 	for _, rule := range rules {
 		allow = appendUnique(allow, antigravityRule(rule, false)...)

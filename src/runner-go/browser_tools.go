@@ -59,6 +59,13 @@ func withoutBrowserTools(tools []map[string]interface{}) []map[string]interface{
 	return kept
 }
 
+// browserOpAbsent: op is one of the browser's operations and this process was spawned with the browser off. Every
+// listing of the catalogue a session reads leaves it out then — `orbit capabilities` and its --summary, --family and --id
+// views, `orbit mcp help` — as tools/list does (withoutBrowserTools) and the CLI does (`orbit browser` is unknown).
+func browserOpAbsent(op *operation) bool {
+	return op != nil && op.Object == objectBrowser && !browserToolsEnabledFromEnv()
+}
+
 // browserOffMessage is what a browser tool or command says in a session spawned with the browser off, for the doors
 // that answer for a catalogued operation by name (`orbit capabilities --id`, a stray tools/call).
 func browserOffMessage(what string) string {
