@@ -14,6 +14,7 @@ import androidx.compose.ui.test.isDialog
 import androidx.compose.ui.test.junit4.createAndroidComposeRule
 import androidx.compose.ui.test.onAllNodesWithText
 import androidx.compose.ui.test.onNodeWithContentDescription
+import androidx.compose.ui.test.onNodeWithTag
 import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.performClick
 import androidx.compose.ui.test.performScrollTo
@@ -124,7 +125,7 @@ class LoginRealStackDeviceTest {
             assertEquals(email, AndroidEmailStore(context).load(canonical))
         }
         compose.onNodeWithContentDescription("Open navigation").performClick()
-        compose.onNodeWithText("Settings").performScrollTo().performClick()
+        compose.onNodeWithTag("drawer:settings").performClick()
         compose.waitUntil(10_000) { compose.onAllNodesWithText("Sign out").fetchSemanticsNodes().isNotEmpty() }
         compose.onNodeWithText("Sign out").performScrollTo().performClick()
         compose.onNode(hasText("Sign out") and hasAnyAncestor(isDialog())).performClick()

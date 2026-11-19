@@ -279,7 +279,7 @@ class PushDeviceTest {
         val first = fixture.registrations.last()
         foreground()
         compose.onNodeWithContentDescription("Open navigation").performClick()
-        compose.onNodeWithText("Settings").performScrollTo().performClick()
+        compose.onNodeWithTag("drawer:settings").performClick()
         // A13's Settings asks "Sign out?" first, as iOS does.
         compose.onNodeWithText("Sign out").performScrollTo().performClick()
         compose.onNode(hasText("Sign out") and hasAnyAncestor(isDialog())).performClick()

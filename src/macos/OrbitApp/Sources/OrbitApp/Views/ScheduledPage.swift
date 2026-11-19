@@ -149,6 +149,8 @@ struct ScheduleRowModel: Identifiable {
     var scheduleID: String? = nil
     /// A condition's row: the newest reading and its age, where a timed row shows its time (board ④ ②).
     var reading: ConditionDisplay.RowReading? = nil
+    /// What the row stands for: its swipes and long-press menu act on it.
+    let kind: ScheduleRowKind
     let open: () -> Void
 }
 
@@ -168,6 +170,7 @@ enum ScheduleTimelineRows {
                     title: t.title, line: ConditionDisplay.taskRowLine(t), repeats: false, time: "",
                     draft: false, paused: false,
                     reading: t.condition.cantRead ? nil : ConditionDisplay.rowReading(t.condition, now: now),
+                    kind: .task(t.id),
                     open: { openTask(t.id) })
             case .draft(let card, let at):
                 let rule = card.when?.rule ?? .daily(time: "")
@@ -183,6 +186,7 @@ enum ScheduleTimelineRows {
                                                        accessLevel: accessLevel, state: "ACTIVE", heldReason: nil,
                                                        draft: true),
                     repeats: ScheduleDisplay.ruleRepeats(rule), time: scheduleClock(at), draft: true, paused: false,
+                    kind: .draft(card),
                     open: {
                         scheduled.inspectedID = nil
                         scheduled.draftPanel = ScheduledModel.DraftPanel(sessionID: card.askedBySessionId ?? card.id,
@@ -216,6 +220,7 @@ enum ScheduleTimelineRows {
                     repeats: underWay && ScheduleDisplay.ruleRepeats(s.rule), time: scheduleClock(run.plannedAt),
                     // A past run is drawn faint, as the web's `is-past` row.
                     draft: false, paused: wide && !underWay, scheduleID: wide ? nil : s.id,
+                    kind: .run(s, run),
                     open: { Self.select(s.id, scheduled) })
             case .schedule(let s, let at):
                 let inPaused = group.key == .paused
@@ -237,6 +242,7 @@ enum ScheduleTimelineRows {
                         title: s.title, line: parts.joined(separator: SC.separator), repeats: true,
                         time: "", draft: false, paused: inPaused, scheduleID: s.id,
                         reading: cantRead || inPaused ? nil : s.condition.flatMap { ConditionDisplay.rowReading($0, now: now) },
+                        kind: .schedule(s),
                         open: { Self.select(s.id, scheduled) })
                 }
                 return ScheduleRowModel(
@@ -253,6 +259,7 @@ enum ScheduleTimelineRows {
                                                        timezone: scheduled.timezone),
                     repeats: ScheduleDisplay.ruleRepeats(s.rule), time: time, draft: false, paused: inPaused,
                     scheduleID: s.id,
+                    kind: .schedule(s),
                     open: { Self.select(s.id, scheduled) })
             }
         }
@@ -276,6 +283,12 @@ struct ScheduledPage: View {
     @State private var typed = ""
     @State private var asking = false
     @State private var chosenWorkspace: String?
+    /// The schedule a row's swipe or menu asked to delete, and the run it asked to stop, while the question is up.
+    @State private var deleting: ScheduleView?
+    @State private var stopping: ScheduleRunView?
+    /// The round swipe buttons need the compact list (as the session list's do); a regular-width one keeps the system's.
+    @Environment(\.horizontalSizeClass) private var hSize
+    @State private var rowSwipe = RowSwipeState()
     @FocusState private var typing: Bool
 
     var body: some View {
@@ -311,7 +324,7 @@ struct ScheduledPage: View {
                 case .group(let group):
                     groupHeader(group).listRowSeparator(.hidden)
                 case .item(let item):
-                    rowView(item)
+                    rowView(item, scheduled)
                 case .quickAdd:
                     quickAdd(scheduled).listRowSeparator(.hidden)
                 case .error(let text):
@@ -322,6 +335,28 @@ struct ScheduledPage: View {
         .listStyle(.plain)
         .softTopEdgeEffect()
         .environment(\.defaultMinListRowHeight, 0)
+        .rowSwipeList(rowSwipe)
+        // A row's Delete and Stop ask first, as the detail panel's ⋯ → Delete does.
+        .orbitConfirmation({ ScheduleDisplay.deleteTitle($0.title) },
+                           isPresented: Binding(get: { deleting != nil }, set: { if !$0 { deleting = nil } }),
+                           presenting: deleting) { schedule in
+            Button(SC.DeleteConfirm.confirm, role: .destructive) {
+                Task { @MainActor in await scheduled.delete(schedule.id) }
+            }
+            Button(SC.DeleteConfirm.cancel, role: .cancel) {}
+        } message: { _ in
+            Text(SC.DeleteConfirm.body)
+        }
+        .orbitConfirmation({ _ in SC.StopConfirm.title },
+                           isPresented: Binding(get: { stopping != nil }, set: { if !$0 { stopping = nil } }),
+                           presenting: stopping) { run in
+            Button(SC.StopConfirm.confirm, role: .destructive) {
+                Task { @MainActor in await scheduled.stop(runID: run.id, scheduleID: run.scheduleId) }
+            }
+            Button(SC.StopConfirm.cancel, role: .cancel) {}
+        } message: { _ in
+            Text(SC.StopConfirm.body)
+        }
         .toolbar {
             ToolbarItem(placement: .topBarTrailing) {
                 Menu {
@@ -450,8 +485,8 @@ struct ScheduledPage: View {
                                   openTask: { id in model.route(to: .task(id)) })
     }
 
-    private func rowView(_ row: ScheduleRowModel) -> some View {
-        Button(action: row.open) {
+    private func rowView(_ row: ScheduleRowModel, _ scheduled: ScheduledModel) -> some View {
+        swipeable(Button(action: row.open) {
             HStack(alignment: .top, spacing: 12) {
                 ScheduleCircleGlyph(view: row.circle).padding(.top, 1)
                 VStack(alignment: .leading, spacing: 3) {
@@ -496,7 +531,40 @@ struct ScheduledPage: View {
         }
         .buttonStyle(.plain)
         .accessibilityElement(children: .combine)
-        .accessibilityIdentifier("schedule-row")
+        .accessibilityIdentifier("schedule-row"), row, scheduled)
+    }
+
+    /// The row's swipes and long-press menu, by its kind (`ScheduleRowActions`), on the row the List hosts: a
+    /// `Button` does not pass them up from its label. iOS 26's compact list draws the session list's round buttons;
+    /// elsewhere the system's.
+    @ViewBuilder
+    private func swipeable<V: View>(_ content: V, _ row: ScheduleRowModel, _ scheduled: ScheduledModel) -> some View {
+        let actions = ScheduleRowActions(row.kind, model: model, scheduled: scheduled,
+                                         askDelete: { deleting = $0 }, askStop: { stopping = $0 },
+                                         openTask: { id in model.route(to: .task(id)) })
+        if #available(iOS 26.0, *), hSize == .compact, !(actions.leading.isEmpty && actions.trailing.isEmpty) {
+            content
+                .contextMenu { actions.menuContent }
+                .circleSwipeActions(id: row.id, leading: actions.leading, trailing: actions.trailing,
+                                    leadingFullSwipe: actions.leadingFullSwipe)
+        } else {
+            content
+                .swipeActions(edge: .leading, allowsFullSwipe: actions.leadingFullSwipe) {
+                    ForEach(actions.leading) { swipeButton($0) }
+                }
+                .swipeActions(edge: .trailing, allowsFullSwipe: false) {
+                    ForEach(actions.trailing) { swipeButton($0) }
+                }
+                .contextMenu { actions.menuContent }
+        }
+    }
+
+    /// A system swipe button: tinted, never `.destructive`, which would take the row away before Delete's or
+    /// Stop's question is answered.
+    private func swipeButton(_ action: RowSwipeAction) -> some View {
+        Button(action: action.perform) { Label(action.title, systemImage: action.systemImage) }
+            .tint(action.tint)
+            .disabled(!action.isEnabled)
     }
 
     /// The line at the end (board 01 ② 3, ⑧): one sentence and the workspace it goes to. Not a form: an agent sets
