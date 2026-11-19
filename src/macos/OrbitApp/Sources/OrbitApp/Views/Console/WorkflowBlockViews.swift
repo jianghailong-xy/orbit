@@ -90,23 +90,10 @@ struct WorkflowCallsSheet: View {
     var body: some View {
         let block = WorkflowBlockView.block(card, taskActivity)
         NavigationStack {
+            // One flat array of rows (`ListRowShapeTests`): each phase's head, its calls, its `N more`.
             List {
-                ForEach(block.sections) { section in
-                    Section {
-                        let all = unfolded.contains(section.id)
-                        ForEach(all ? section.calls : Array(section.calls.prefix(section.shown))) { call in
-                            NavigationLink(value: call.id) { WorkflowCallRow(call: call) }
-                        }
-                        if let more = section.more, !all {
-                            Button(more) { unfolded.insert(section.id) }
-                                .buttonStyle(.plain).foregroundStyle(.secondary)
-                        }
-                    } header: {
-                        Text(section.header.uppercased()).font(.orbitSectionLabel.weight(.semibold))
-                    }
-                }
-                if block.sections.isEmpty {
-                    Text("No calls yet").foregroundStyle(.secondary)
+                ForEach(rows(block)) { row in
+                    WorkflowCallsListRow(row: row) { unfolded.insert($0) }
                 }
             }
             .navigationTitle(block.title.isEmpty ? WorkflowBlock.label : block.title)
@@ -114,9 +101,7 @@ struct WorkflowCallsSheet: View {
             .navigationBarTitleDisplayMode(.inline)
             #endif
             .navigationDestination(for: String.self) { id in
-                if let call = block.calls.first(where: { $0.id == id }) {
-                    WorkflowCallDetail(call: call, fullPayload: fullPayload)
-                }
+                WorkflowCallDetailSlot(call: block.calls.first(where: { $0.id == id }), fullPayload: fullPayload)
             }
             .toolbar {
                 ToolbarItem(placement: .confirmationAction) { Button("Done") { dismiss() } }
@@ -126,6 +111,64 @@ struct WorkflowCallsSheet: View {
         .frame(minWidth: 480, minHeight: 460)
         #endif
         .accessibilityIdentifier("workflow-calls")
+    }
+
+    private func rows(_ block: WorkflowBlock) -> [WorkflowCallsRow] {
+        var rows: [WorkflowCallsRow] = []
+        for section in block.sections {
+            rows.append(.head(section.header.uppercased(), first: rows.isEmpty))
+            let all = unfolded.contains(section.id)
+            for call in all ? section.calls : Array(section.calls.prefix(section.shown)) { rows.append(.call(call)) }
+            if let more = section.more, !all { rows.append(.more(more, section: section.id)) }
+        }
+        return rows.isEmpty ? [.empty] : rows
+    }
+}
+
+enum WorkflowCallsRow: Identifiable {
+    case head(String, first: Bool)
+    case call(WorkflowBlock.Call)
+    case more(String, section: String)
+    case empty
+
+    var id: String {
+        switch self {
+        case .head(let title, _): return "head:" + title
+        case .call(let call): return "call:" + call.id
+        case .more(_, let section): return "more:" + section
+        case .empty: return "empty"
+        }
+    }
+}
+
+/// One row of the calls page, whatever it is.
+private struct WorkflowCallsListRow: View {
+    let row: WorkflowCallsRow
+    let unfold: (String) -> Void
+
+    var body: some View {
+        switch row {
+        case .head(let title, let first):
+            Text(title).font(.orbitSectionLabel.weight(.semibold)).foregroundStyle(.secondary)
+                .padding(.top, first ? 0 : 10)
+                .listRowSeparator(.hidden)
+        case .call(let call):
+            NavigationLink(value: call.id) { WorkflowCallRow(call: call) }
+        case .more(let words, let section):
+            Button(words) { unfold(section) }.buttonStyle(.plain).foregroundStyle(.secondary)
+        case .empty:
+            Text("No calls yet").foregroundStyle(.secondary)
+        }
+    }
+}
+
+/// The detail a row opens to, or nothing once its call has left the transcript's window.
+private struct WorkflowCallDetailSlot: View {
+    let call: WorkflowBlock.Call?
+    var fullPayload: (@MainActor (Int) async -> JSONValue?)? = nil
+
+    var body: some View {
+        if let call { WorkflowCallDetail(call: call, fullPayload: fullPayload) }
     }
 }
 
