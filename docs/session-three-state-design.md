@@ -355,8 +355,6 @@ Decided on 2026-11-19, each as recommended below: **D1**, **D5** and **D8**. The
 - The largest files were read around their status sites, not end to end:
   `sessions.service.ts`, `runner-api.controller.ts`, `tasks.service.ts`,
   `projects.service.ts`, `WorkspaceView.tsx`, `ConsoleModel.swift`.
-- Which database objects are live comes from replaying the migration files, not from a real
-  database catalog. Triggers in migrations 0350, 0352 and 0366 were read by one reader only.
 - Whether `finishedAt` is set by every terminal write and by nothing else was not audited. If
   it is, it can be the release column and stage 2 needs only `releaseCause`.
 - When a runner finalizes a plain conversation as `SUCCEEDED` was not traced (D2).

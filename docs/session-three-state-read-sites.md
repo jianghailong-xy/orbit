@@ -8,6 +8,14 @@ plus the sites the readers added by hand; comment lines are included.
 
 ## A. Database objects live at HEAD
 
+Confirmed against the catalog of a Postgres 16 database with every migration applied (plan
+step 0.4, 2026-11-19, at `ae4d62ebd0`): `../scripts/session-status-db-objects.sql` lists the
+same 16 objects and nothing else. No CHECK constraint, view or generated column reads the
+status or `end_reason`; the only partial index that does is the claim index. The triggers
+`session_request_asker_stopped` (function in 0352:63) and
+`task_owner_confirmation_review_reviewer_ended` read the status in their WHEN clauses only;
+their functions do not. Line numbers stay at `a1282659a4`.
+
 | Object defined in | Lines | R/W | Facts | After | What it does with the status |
 |---|---|---|---|---|---|
 | `apiserver/prisma/migrations/0035_add_parked_run_status/migration.sql` | 7 | R | WIRE | RENAME | Enum type run_status: PENDING, RUNNING, SUCCEEDED, FAILED, CANCELLED, AWAITING_INPUT, INTERRUPTED, PARKED (dead label). Only session.status uses it; default PENDING. Labels cannot be dropped. |
@@ -26,7 +34,7 @@ plus the sites the readers added by hand; comment lines are included.
 | `apiserver/prisma/migrations/0426_cursor_engine/migration.sql` | 284, 323 | R | ACT, REL | MOVE | Function guard_cursor_runner_acquisition, trigger on session: gates PENDING to RUNNING and lease takeover on runner cursor capability; same SUCCEEDED, FAILED, CANCELLED to PENDING revive exemption. |
 | `apiserver/prisma/migrations/0507_confirmation_review_waits_for_pickup/migration.sql` | 5 | R | REL, TURN, CAUSE, LIFE | MOVE | Trigger task_owner_confirmation_review_reviewer_ended WHEN SUCCEEDED, CANCELLED, or FAILED/INTERRUPTED with end_reason: stamps reviewer_ended_at on an unanswered confirmation review. |
 | `apiserver/prisma/migrations/0610_project_handoff_move_out/migration.sql` | 44 | R | REL | MOVE | Function task_claimed_project_move_guard (trigger 0122:404 on task): moving a task to another project needs an approved handoff while a session in PENDING, RUNNING, AWAITING_INPUT, INTERRUPTED holds it. |
-| `apiserver/prisma/schema.prisma` | 2090, 2529, 2533, 2536, 2538-2539 | R | WIRE | MOVE | Enum RunStatus (7 values, PARKED omitted), Session.status default PENDING, endReason, cancelRequestedAt, finishedAt, five plain indexes with status as a key column. Cannot express the partial unique index. |
+| `apiserver/prisma/schema.prisma` | 16, 2057, 2088, 2090, 2098, 2529, 2533, 2536, 2538-2539 | R | WIRE | MOVE | Enum RunStatus (7 values, PARKED omitted), Session.status default PENDING, cancelRequestedAt, finishedAt, endReason, five plain indexes with status as a key column (session_status_idx and the assigned_runner_id, batch_id, root_session_id and owner_id/task_id ones). Cannot express the partial unique index. |
 
 ## B. apiserver: sessions, realtime, queue, runners, managed-runners
 
