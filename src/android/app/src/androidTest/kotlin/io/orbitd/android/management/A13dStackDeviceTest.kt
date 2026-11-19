@@ -115,7 +115,7 @@ class A13dStackDeviceTest {
     }
     private fun settings() {
         compose.onAllNodesWithContentDescription("Open navigation").onFirst().performClick()
-        click(hasText("Settings") and hasClickAction()); await("Appearance")
+        click(hasTestTag("drawer:settings")); await("Appearance")
     }
 
     @Test fun a13dWritesAreReadBackFromTheServer() {

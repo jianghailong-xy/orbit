@@ -787,7 +787,7 @@ class ManagementDeviceTest {
                 compose.waitUntil(5_000) { compose.onAllNodes(isDialog()).fetchSemanticsNodes().isEmpty() }
                 // Between pages: semantics actions and the back key. On each page: TalkBack's gestures only.
                 compose.onAllNodesWithContentDescription("Open navigation").onFirst().performSemanticsAction(SemanticsActions.OnClick)
-                compose.onNode(hasText("Settings") and hasClickAction()).performSemanticsAction(SemanticsActions.OnClick)
+                compose.onNodeWithTag("drawer:settings").performSemanticsAction(SemanticsActions.OnClick)
                 await("Appearance")
                 page("settings-home", report, problems)
                 activate("Machines & models", "talkback-settings-machines-and-models", report, problems); await("Controlled remote")
@@ -1139,7 +1139,7 @@ class ManagementDeviceTest {
     }
     private fun settings() {
         compose.onAllNodesWithContentDescription("Open navigation").onFirst().performClick()
-        click(hasText("Settings") and hasClickAction())
+        click(hasTestTag("drawer:settings"))
         await("Appearance")
     }
     private fun await(text: String) {
