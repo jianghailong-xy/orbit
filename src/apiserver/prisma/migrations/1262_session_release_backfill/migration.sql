@@ -1,11 +1,11 @@
 -- ══════════════════════════════════════════════════════════════════════════════════════════════
--- 1242: validate 1241's CHECK, and backfill the release fact on every terminal session
+-- 1262: validate 1261's CHECK, and backfill the release fact on every terminal session
 -- (docs/session-three-state-plan.md §6 step 3.3).
 --
 -- THE BACKFILL
 -- ------------
 -- Only terminal rows (SUCCEEDED, FAILED, CANCELLED) are written, and only the column that is still null, so a
--- value a writer recorded after 1241 is never overwritten.
+-- value a writer recorded after 1261 is never overwritten.
 --
 -- finished_at, where null: completed_at, else deleted_at, else updated_at. The three writers that did not set it
 -- were the LANDING container (its completed_at is the moment its landing settled) and the failed transcript
@@ -40,7 +40,7 @@
 -- --------------
 -- Can run twice: VALIDATE on a valid constraint is a no-op, CREATE OR REPLACE, the backfill writes null columns
 -- only, DROP PROCEDURE IF EXISTS. If a statement_timeout or a crash stops it halfway, the batches already
--- committed stay: `prisma migrate resolve --rolled-back 1242_session_release_backfill`, then deploy again.
+-- committed stay: `prisma migrate resolve --rolled-back 1262_session_release_backfill`, then deploy again.
 -- ══════════════════════════════════════════════════════════════════════════════════════════════
 
 SET lock_timeout = 0;
@@ -49,7 +49,7 @@ ALTER TABLE "session" VALIDATE CONSTRAINT "session_release_cause_chk";
 
 RESET lock_timeout;
 
-CREATE OR REPLACE PROCEDURE "orbit_1242_backfill_session_release"()
+CREATE OR REPLACE PROCEDURE "orbit_1262_backfill_session_release"()
 LANGUAGE plpgsql
 AS $$
 DECLARE
@@ -93,8 +93,8 @@ $$;
 
 SET statement_timeout = 0;
 
-CALL "orbit_1242_backfill_session_release"();
+CALL "orbit_1262_backfill_session_release"();
 
 RESET statement_timeout;
 
-DROP PROCEDURE IF EXISTS "orbit_1242_backfill_session_release"();
+DROP PROCEDURE IF EXISTS "orbit_1262_backfill_session_release"();

@@ -1,5 +1,5 @@
 -- ══════════════════════════════════════════════════════════════════════════════════════════════
--- 1241: why a session was released (docs/session-three-state-plan.md §6 step 3.2, design §4.2 and §6.3,
+-- 1261: why a session was released (docs/session-three-state-plan.md §6 step 3.2, design §4.2 and §6.3,
 -- decision D1; project 3508bDBDE5xPH43TYuiqP). `session.finished_at` is the release column: set when no
 -- runner holds the session, null while one does. This adds the cause beside it.
 --
@@ -13,18 +13,18 @@
 -- session_release_cause_chk holds it to those values (common/session-release.ts SESSION_RELEASE_CAUSES).
 --
 -- Written by every write that sets a terminal status, in the same statement, and cleared with finished_at by
--- the revive. end_reason is written exactly as before. 1242 validates the CHECK and backfills.
+-- the revive. end_reason is written exactly as before. 1262 validates the CHECK and backfills.
 --
 -- LOCKS
 -- -----
 -- As 1201: ADD COLUMN without a default is a catalogue change, no rewrite. The lock is asked for in one DO
--- statement, 2 s at a time, 1 s apart, up to 45 tries. The CHECK is added NOT VALID here and validated by 1242,
+-- statement, 2 s at a time, 1 s apart, up to 45 tries. The CHECK is added NOT VALID here and validated by 1262,
 -- a file with no DO, so the validating scan does not run inside the transaction holding this ACCESS EXCLUSIVE
 -- lock. No function, trigger or type is created, replaced or dropped. No INSERT, UPDATE or DELETE.
 --
 -- NUMBERING, RE-RUNNABILITY
 -- -------------------------
--- 1241: main and origin/orbit/* and origin/project/* use up to 1240 (scanned 2026-11-20). Not a multiple of 10,
+-- 1261: main, origin/orbit/* and origin/project/* use up to 1260 (rescanned 2026-11-20). Not a multiple of 10,
 -- by the project rule. Can run twice: ADD COLUMN IF NOT EXISTS, DROP CONSTRAINT IF EXISTS.
 -- ══════════════════════════════════════════════════════════════════════════════════════════════
 

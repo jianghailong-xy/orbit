@@ -4,7 +4,7 @@ import { Prisma, RunStatus } from '@prisma/client';
  * "Released" and "held", the release fact of docs/session-three-state-design.md §4.2 (decision D1, plan
  * phase 3). A session is RELEASED when no runner holds it: it holds no task claim and no slot, and its
  * next message must be claimed again. It is HELD otherwise. `session.finished_at` is the release column:
- * set by every write that releases a session (with `release_cause`, migration 1241), cleared by the
+ * set by every write that releases a session (with `release_cause`, migration 1261), cleared by the
  * revive.
  *
  * Today both are still spelled as status sets, the same members every hand-copied live/terminal set
@@ -63,7 +63,7 @@ export function heldSql(column: string): Prisma.Sql {
 
 /**
  * Why a session was released: `session.release_cause`, held to these values by
- * `session_release_cause_chk` (migration 1241). Today's end reasons (SessionEndReason in @orbit/shared,
+ * `session_release_cause_chk` (migration 1261). Today's end reasons (SessionEndReason in @orbit/shared,
  * and the two legacy ones stored rows still carry), plus the causes no end reason records.
  */
 export const SESSION_RELEASE_CAUSES = [

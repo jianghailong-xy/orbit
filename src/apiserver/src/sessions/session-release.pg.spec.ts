@@ -2,7 +2,7 @@
  * EVERY WRITE THAT RELEASES A SESSION SETS THE RELEASE COLUMN AND A CAUSE, AND THE REVIVE CLEARS BOTH.
  *
  * docs/session-three-state-plan.md §6 steps 3.1-3.3, design §4.2 and §6.3: `session.finished_at` is the release
- * column and `session.release_cause` (migration 1241) says why. Each case drives a real writer against PostgreSQL
+ * column and `session.release_cause` (migration 1261) says why. Each case drives a real writer against PostgreSQL
  * and reads the row back:
  *
  *   (1) runner finalize, no end requested            → the runner's status, engine_exited
@@ -13,7 +13,7 @@
  *   (6) the reaper's other three causes              → runner_lost, setup_failed, turn_failed
  *   (7) ending a session still queued                → CANCELLED, ended
  *   (8) the revive                                   → PENDING, finished_at and release_cause both null
- *   (9) migration 1242's backfill, one session per rule, then the two counts of plan step 3.3 over the database
+ *   (9) migration 1262's backfill, one session per rule, then the two counts of plan step 3.3 over the database
  *
  * The other three writers are asserted where they are already driven: turn-complete's failed turn in
  * runner-api/turn-complete-outcome.pg.spec.ts (2), the landing container in projects/landing-session.pg.spec.ts
@@ -300,10 +300,10 @@ test('every release writes the release column and its cause, and the revive clea
     assert.equal(row.release_cause, null, 'and no cause');
   });
 
-  await t.test('(9) migration 1242 backfills every terminal row, and the two counts are zero', async () => {
+  await t.test('(9) migration 1262 backfills every terminal row, and the two counts are zero', async () => {
     const w = await world(s.db, 'backfill');
     const now = new Date();
-    // One row per rule of 1242's table, written as a row from before 1241: no cause, and no release column where
+    // One row per rule of 1262's table, written as a row from before 1261: no cause, and no release column where
     // the old writer set none. Three of each, so the counts are counts.
     const cases: Array<{ name: string; data: Record<string, unknown>; cause: string | null }> = [
       { name: 'landing', cause: 'landing_settled', data: {
@@ -353,10 +353,10 @@ test('every release writes the release column and its cause, and the revive clea
         });
       }
     }
-    // A cause a writer recorded after 1241 is not the backfill's to change.
+    // A cause a writer recorded after 1261 is not the backfill's to change.
     const written = await session(s.db, w, { status: RunStatus.FAILED, finishedAt: now, releaseCause: 'runner_lost' });
 
-    const file = join(__dirname, '..', '..', 'prisma', 'migrations', '1242_session_release_backfill', 'migration.sql');
+    const file = join(__dirname, '..', '..', 'prisma', 'migrations', '1262_session_release_backfill', 'migration.sql');
     for (const statement of statementsOf(file)) await sql.query(statement);
 
     for (const m of made) {
@@ -367,7 +367,7 @@ test('every release writes the release column and its cause, and the revive clea
     }
     assert.equal((await released(sql, written)).release_cause, 'runner_lost', 'a recorded cause is kept');
     const gone = (await sql.query(
-      `SELECT count(*)::int AS n FROM pg_proc WHERE proname = 'orbit_1242_backfill_session_release'`,
+      `SELECT count(*)::int AS n FROM pg_proc WHERE proname = 'orbit_1262_backfill_session_release'`,
     )).rows[0] as { n: number };
     assert.equal(gone.n, 0, 'the backfill procedure is dropped after its CALL');
 
