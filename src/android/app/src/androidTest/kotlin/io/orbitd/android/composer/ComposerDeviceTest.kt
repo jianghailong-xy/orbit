@@ -442,6 +442,11 @@ class ComposerDeviceTest {
         assertNull(request["clientTurnId"])
         assertNull(request["codexAccount"])
         capture("created-session")
+        // Back from the session it created goes to the page the draft was opened from, not the draft again (iOS `replaceTop`).
+        compose.onNodeWithContentDescription("Back").performClick()
+        compose.waitUntil(10000) { compose.onAllNodes(hasTestTag("new-session-engine")).fetchSemanticsNodes().isEmpty() }
+        compose.waitForIdle()
+        capture("after-back")
     }
 
     @Test fun explicitRejectionRestoresMessageAndAttachmentThenResumes() = journey("rejected-send") {
