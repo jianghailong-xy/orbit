@@ -73,13 +73,17 @@ $ANDROID_HOME/platform-tools/adb start-server 9>&- 3>&-   # before the lock, or 
 flock -w 1800 /var/lib/orbit/android/ui.lock sh -c \
   'systemctl is-active --quiet orbit-android-emulator.service || systemctl start orbit-android-emulator.service'
 out=<this session's uploads dir>/android-shots-$(date -u +%Y%m%dT%H%M%SZ)   # must not exist yet
+A07_DISPLAY=1280x2856@480 \
 A07_TEST='io.orbitd.android.composer.ComposerDeviceTest#newSessionUsesWorkspaceDraftAndNavigatesAfterCreation' \
   bash src/android/scripts/composer-device-test.sh 36 \
   src/android/app/build/outputs/apk/debug/app-debug.apk \
   src/android/app/build/outputs/apk/androidTest/debug/app-debug-androidTest.apk "$out"
 ```
 
-- The display is 720×1280 at 320 dpi, light mode. Use `A07_NIGHT=yes` for dark and `A07_FONT_SCALE=1.3` for large text.
+- Screenshots use a Pixel 10 Pro display: `A07_DISPLAY=1280x2856@480` (427×952 dp). The SDK has no Pixel 11 Pro profile;
+  the owner chose this on 2026-11-20. It sets the shared emulator's size and density for the run and puts them back after. It
+  has no rounded corners or camera cutout. Without `A07_DISPLAY`, the script uses 720×1280 at 320 dpi, which the device tests
+  were written for. Light mode is the default. Use `A07_NIGHT=yes` for dark and `A07_FONT_SCALE=1.3` for large text.
 - `$out/result.txt` with `exit_code=0` means it passed. A failed journey still writes `<journey>-failure.png`. A name in
   `missing-captures.txt` means the system returned no screenshot under load: rerun into a new directory.
 
