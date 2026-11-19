@@ -42,6 +42,8 @@ const RUN = randomUUID().slice(0, 8);
 const INSTANCE_CAPABILITY = 'managed-runner-instance-v1';
 const BROWSER_CLEAR = 'browser-clear/v1';
 const STATUS_FIELDS = ['enabled', 'runnerId', 'state', 'running', 'holderSessionId', 'holderTitle', 'viewers', 'savedLogins', 'reportedAt'];
+/** The answer's fields, less the second spelling every public id goes out in (`runnerPublicId`, main.ts). */
+const fieldsOf = (answer: Record<string, unknown>) => Object.keys(answer).filter((k) => !k.endsWith('PublicId')).sort();
 
 test('browser_status: the account\'s Orbit Cloud browser for any session of it, another account\'s refused, absent when off', {
   skip: !URL_, concurrency: 1, timeout: 600_000,
@@ -135,7 +137,7 @@ test('browser_status: the account\'s Orbit Cloud browser for any session of it, 
     for (const [who, token, sessionId] of [['SR on R', r.token, sr], ['SM on M', m.token, sm]] as const) {
       const before = await status(on, token, sessionId);
       assert.equal(before.status, 200, `${who}: ${before.text}`);
-      assert.deepEqual(Object.keys(before.json).sort(), [...STATUS_FIELDS].sort(), who);
+      assert.deepEqual(fieldsOf(before.json), [...STATUS_FIELDS].sort(), who);
       assert.equal(before.json.enabled, true);
       assert.equal(before.json.state, 'UNKNOWN');
       assert.equal(before.json.running, false);
@@ -154,7 +156,7 @@ test('browser_status: the account\'s Orbit Cloud browser for any session of it, 
     for (const [who, token, sessionId] of [['SR on R', r.token, sr], ['SM on M', m.token, sm]] as const) {
       const held = await status(on, token, sessionId);
       assert.equal(held.status, 200, `${who}: ${held.text}`);
-      assert.deepEqual(Object.keys(held.json).sort(), [...STATUS_FIELDS].sort(), who);
+      assert.deepEqual(fieldsOf(held.json), [...STATUS_FIELDS].sort(), who);
       assert.equal(held.json.enabled, true);
       assert.equal(toUuid(held.json.runnerId as string), r.id, 'the account\'s Orbit Cloud runner');
       assert.equal(held.json.state, 'RUNNING');
