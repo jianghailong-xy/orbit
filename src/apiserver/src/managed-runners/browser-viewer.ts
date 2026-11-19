@@ -23,6 +23,7 @@ import {
   encodeStreamClose,
   encodeStreamCredit,
   encodeStreamData,
+  encodeStreamPaste,
   streamOpenMessage,
 } from './browser-stream-frames';
 import { BROWSER_STREAMS_PER_RUNNER, BrowserStreamSlots, type BrowserStreamSlot } from './browser-stream-slots';
@@ -49,6 +50,11 @@ import { MANAGED_RUNNER_BROWSER_GATE, type ManagedRunnerBrowserGate } from './ma
  *     the runner's StreamData on vnc.<streamId>.up to the WebSocket. Each direction keeps the stream's window: this
  *     side sends at most STREAM_WINDOW past what the runner credited back, pausing the WebSocket meanwhile, and credits
  *     the runner's bytes back once the WebSocket has taken them.
+ *   - Paste (§5; the owner's choice, 2026-11-19): besides RFB's binary messages, a viewer sends text messages of JSON.
+ *     `{"type":"control","on":bool}` says whether it is in control (it starts not), and `{"type":"paste","id":n,
+ *     "text":…}` is a paste. A paste is sent to the runner as a StreamPaste only while the viewer is in control, at
+ *     most MAX_PASTE_BYTES of UTF-8 and one at a time; the runner inserts it with Chrome DevTools. Each is answered
+ *     with a text message `{"type":"pasted","id":n,"error"?:…}`. The text is often a password: it is never logged.
  *   - Closing either side closes the other: a viewer that leaves sends StreamClose NORMAL; the runner's StreamClose
  *     closes the WebSocket (1000 for NORMAL, 1011 with the reason otherwise). A stopping apiserver ends its streams
  *     with 1012, so the viewer can open the stream again on another one.
@@ -65,6 +71,19 @@ const OPEN_TIMEOUT_MS = 15_000;
 const PING_MS = 30_000;
 /** The largest message a viewer may send: RFB's own messages are a few bytes, a pasted clipboard more. */
 const MAX_VIEWER_MESSAGE = 1 << 20;
+/** The largest paste, in bytes of UTF-8 (src/link-gateway/streams.go, maxPasteBytes; runner-go's browserPasteMaxBytes). */
+export const MAX_PASTE_BYTES = 64 << 10;
+/** How long the runner has to answer a paste: it reads Chrome's targets and inserts the text in at most 10 s. */
+const PASTE_TIMEOUT_MS = 15_000;
+
+/** What a viewer is told of a paste it made (English, shown in its bar). */
+export const PASTE_REFUSALS = {
+  notInControl: 'Take control to paste',
+  tooLarge: `The text is too long to paste (more than ${MAX_PASTE_BYTES >> 10} KB)`,
+  busy: 'Wait for the last paste to finish',
+  noAnswer: 'The runner did not answer the paste',
+  lost: 'The paste could not reach the runner',
+} as const;
 
 // The `ws` package, as far as this file uses it (it ships no types of its own).
 interface WsSocket {
@@ -74,7 +93,7 @@ interface WsSocket {
   on(event: 'close', listener: (code: number, reason: Buffer) => void): this;
   on(event: 'error', listener: (error: Error) => void): this;
   on(event: 'pong', listener: () => void): this;
-  send(data: Uint8Array, options: { binary: boolean }, cb?: (error?: Error) => void): void;
+  send(data: Uint8Array | string, options: { binary: boolean }, cb?: (error?: Error) => void): void;
   close(code?: number, reason?: string): void;
   ping(): void;
   pause(): void;
@@ -157,6 +176,11 @@ class ViewerStream {
   private alive = true;
   private bytesUp = 0;
   private bytesDown = 0;
+  /** Whether the viewer says it is in control: only then does a paste go to the runner. */
+  private control = false;
+  /** The paste waiting for the runner's answer: the viewer's id for it, this side's id, and its timeout. */
+  private pasting: { viewerId: number; pasteId: number; timer: ReturnType<typeof setTimeout> } | null = null;
+  private pasteSeq = 0;
   private readonly began = Date.now();
   private readonly stopUp: () => void;
 
@@ -179,7 +203,7 @@ class ViewerStream {
       return;
     }
     this.ws = ws;
-    ws.on('message', (data) => this.fromViewer(asBuffer(data)));
+    ws.on('message', (data, isBinary) => (isBinary ? this.fromViewer(asBuffer(data)) : this.fromViewerText(asBuffer(data))));
     ws.on('close', () => this.end('viewer', STREAM_CLOSE.NORMAL, 'The viewer closed the stream'));
     ws.on('error', () => this.end('viewer', STREAM_CLOSE.NORMAL, 'The viewer\'s connection failed'));
     ws.on('pong', () => {
@@ -205,6 +229,8 @@ class ViewerStream {
     if (this.ended) return;
     this.ended = true;
     if (this.ping) clearInterval(this.ping);
+    if (this.pasting) clearTimeout(this.pasting.timer);
+    this.pasting = null;
     this.stopUp();
     this.slot.current?.release();
     this.slot.current = null;
@@ -255,7 +281,54 @@ class ViewerStream {
       case 'close':
         this.end('runner', frame.code, frame.message || 'The runner closed the stream');
         break;
+      case 'pasted':
+        if (this.pasting && this.pasting.pasteId === frame.pasteId) {
+          const { viewerId, timer } = this.pasting;
+          clearTimeout(timer);
+          this.pasting = null;
+          this.answerPaste(viewerId, frame.error || undefined);
+        }
+        break;
     }
+  }
+
+  /** A text message from the viewer: whether it is in control, or a paste. Anything else is ignored. */
+  private fromViewerText(data: Buffer): void {
+    if (this.ended) return;
+    let message: { type?: unknown; on?: unknown; id?: unknown; text?: unknown };
+    try {
+      message = JSON.parse(data.toString('utf8'));
+    } catch {
+      return;
+    }
+    if (message?.type === 'control' && typeof message.on === 'boolean') {
+      this.control = message.on;
+      return;
+    }
+    if (message?.type !== 'paste' || typeof message.id !== 'number' || typeof message.text !== 'string') return;
+    const viewerId = message.id;
+    if (!this.control) return this.answerPaste(viewerId, PASTE_REFUSALS.notInControl);
+    if (Buffer.byteLength(message.text, 'utf8') > MAX_PASTE_BYTES) return this.answerPaste(viewerId, PASTE_REFUSALS.tooLarge);
+    if (this.pasting) return this.answerPaste(viewerId, PASTE_REFUSALS.busy);
+    const pasteId = ++this.pasteSeq;
+    try {
+      this.bus.publish(`vnc.${this.id}.down`, encodeStreamPaste(this.id, pasteId, message.text));
+    } catch {
+      return this.answerPaste(viewerId, PASTE_REFUSALS.lost);
+    }
+    const timer = setTimeout(() => {
+      if (this.pasting?.pasteId !== pasteId) return;
+      this.pasting = null;
+      this.answerPaste(viewerId, PASTE_REFUSALS.noAnswer);
+    }, PASTE_TIMEOUT_MS);
+    timer.unref?.();
+    this.pasting = { viewerId, pasteId, timer };
+  }
+
+  private answerPaste(id: number, error?: string): void {
+    const ws = this.ws;
+    if (!ws || ws.readyState !== WS_OPEN) return;
+    ws.send(JSON.stringify(error ? { type: 'pasted', id, error } : { type: 'pasted', id }), { binary: false });
   }
 
   private fromViewer(data: Buffer): void {

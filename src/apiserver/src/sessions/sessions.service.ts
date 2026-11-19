@@ -4645,7 +4645,13 @@ export class SessionsService {
             -- full runner its list of running turns does not show.
             CASE g.reason WHEN 'runner_at_capacity' THEN g.runner_held END AS held
         ) n
-      ) q ON s.status = 'PENDING' AND s.cancel_requested_at IS NULL
+        -- Asked inside, behind OFFSET 0, rather than on the join: as a join condition the planner flattened
+        -- this subquery and computed every gate's counts for every row of the list, then dropped all but the
+        -- PENDING ones (production, 2026-11-19: 1,297 rows for 15, 130k of the statement's 154k buffers and
+        -- 175 ms of its 289). Here it is a one-time filter, so the counts run only for a PENDING row.
+        WHERE s.status = 'PENDING' AND s.cancel_requested_at IS NULL
+        OFFSET 0
+      ) q ON true
       WHERE s.owner_id = ${ownerId}::uuid
         ${scope}
         AND (${visibility})
