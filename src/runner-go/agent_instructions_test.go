@@ -491,7 +491,7 @@ func TestOnlyATopLevelSessionIsToldWhenToDelegate(t *testing.T) {
 		}
 	}
 	for _, want := range []string{"cheaper or stronger model", "another machine", `needs: ["os:darwin"]`, "workspace",
-		"in the background", "built-in subagent or Agent tool", "record the cost", "ToolSearch select:mcp__orbit__delegate"} {
+		"in the background", "built-in subagent or Agent tool", "records the cost", "ToolSearch select:mcp__orbit__delegate"} {
 		if !strings.Contains(orbitDelegateInstructions, want) {
 			t.Errorf("the delegate paragraph lacks %q", want)
 		}
