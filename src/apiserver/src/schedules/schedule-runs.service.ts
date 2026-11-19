@@ -8,7 +8,7 @@
  * One transaction per due schedule, under the per-account lock and the schedule row FOR UPDATE (the order
  * SchedulesService takes them in): the slots from `nextDueAt` up to now are read from the rule; the latest is the
  * one that runs — SCHEDULED when it is on time, CATCH_UP (with its own `plannedAt`) when it is late — and every
- * earlier one is written MISSED; a latest slot older than one period (24 hours for ONCE) is MISSED too. The new run
+ * earlier one is written MISSED; a latest slot older than one period (24 hours for ONCE, one interval for EVERY) is MISSED too. The new run
  * is QUEUED, and an older QUEUED run is SKIPPED, so at most one waits. `nextDueAt` moves to the first slot after now,
  * and a rule with none left ENDS the schedule (END_REACHED). The slot's unique index is the belt to the lock: two
  * workers, or one after a restart, write one run for a slot.
@@ -242,6 +242,8 @@ export function waitedOnCards(cards: Array<{ createdAt: Date; decidedAt: Date | 
 export function catchUpWindowMs(rule: ScheduleRule, timezone: string, slot: Date): number {
   // A WHEN run's slot is its firing: like a ONCE slot, it may start for a day, and is MISSED after.
   if (rule.kind === 'ONCE' || rule.kind === 'WHEN') return SCHEDULE_ONCE_CATCH_UP_MS;
+  // An EVERY rule's period is its interval, also for a day's last slot, whose next one is the next morning.
+  if (rule.kind === 'EVERY') return rule.minutes * MINUTE;
   const next = nextDueAt(rule, timezone, slot);
   return next ? next.getTime() - slot.getTime() : 7 * 24 * HOUR;
 }

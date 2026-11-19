@@ -315,6 +315,23 @@ function checkRunLimit(minutes: number): void {
   }
 }
 
+/** An EVERY rule's run ends before its next slot is due: its run limit is shorter than its interval. */
+function checkRunLimitFitsRule(rule: ScheduleRule, runLimitMinutes: number): void {
+  if (rule.kind === 'EVERY' && runLimitMinutes >= rule.minutes) {
+    throw refusal(
+      'BAD_REQUEST',
+      'SCHEDULE_RUN_LIMIT_NOT_SHORTER_THAN_INTERVAL',
+      `A run limit of ${runLimitMinutes} minutes is not shorter than the ${rule.minutes}-minute interval: ` +
+        `give a run limit under ${rule.minutes} minutes, or a longer interval.`,
+    );
+  }
+}
+
+/** The run limit a schedule gets when it names none: half an EVERY rule's interval, at most the default (30). */
+function defaultRunLimit(rule: ScheduleRule): number {
+  return rule.kind === 'EVERY' ? Math.min(DEFAULT_RUN_LIMIT_MINUTES, rule.minutes / 2) : DEFAULT_RUN_LIMIT_MINUTES;
+}
+
 function checkAccessLevel(level: unknown): asserts level is AccessLevel {
   if (level !== 'CHECK_ONLY' && level !== 'OPEN_PR' && level !== 'LAND') {
     throw refusal('BAD_REQUEST', 'SCHEDULE_ACCESS_LEVEL_INVALID', 'An access level is CHECK_ONLY, OPEN_PR or LAND.');
@@ -1329,10 +1346,11 @@ export class SchedulesService {
     if (input.findings != null && (typeof input.findings !== 'string' || input.findings.length > 60)) {
       throw refusal('BAD_REQUEST', 'SCHEDULE_FIELD_INVALID', 'findings is a plural noun of at most 60 characters.');
     }
-    const runLimitMinutes = input.runLimitMinutes ?? DEFAULT_RUN_LIMIT_MINUTES;
-    checkRunLimit(runLimitMinutes);
+    if (input.runLimitMinutes != null) checkRunLimit(input.runLimitMinutes);
     if (input.baseline) checkText('baseline key', input.baseline.key);
     const rule = ruleOf(input.rule);
+    const runLimitMinutes = input.runLimitMinutes ?? defaultRunLimit(rule);
+    checkRunLimitFitsRule(rule, runLimitMinutes);
     if (rule.kind === 'WHEN') {
       // docs/condition-triggers-design.md §4.1, §8: the agent ran the probe once; that reading is the card's Today.
       if (!input.baseline) {
@@ -1409,6 +1427,7 @@ export class SchedulesService {
       checkText('workspace', patch.workspaceId);
       next.workspaceId = patch.workspaceId;
     }
+    if (patch.rule !== undefined || patch.runLimitMinutes !== undefined) checkRunLimitFitsRule(next.rule, next.runLimitMinutes);
     return next;
   }
 
