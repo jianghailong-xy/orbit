@@ -258,3 +258,118 @@ func TestBrowserIsAbsentFromEveryListingWithTheSwitchOff(t *testing.T) {
 		names("the agent tools report's families", family)
 	}
 }
+
+// browser_clear_logins and `orbit browser clear-logins` (browser_tools.go): the card first, filed under
+// orbit_browser_clear_logins with nothing of the asker's in it (the server writes what the owner reads); the clear
+// (POST /runner/browser/clear, naming the card) only on the owner's yes; a declined or expired card sends no clear.
+func TestBrowserClearLoginsClearsOnlyOnTheOwnersYes(t *testing.T) {
+	for _, tc := range []struct {
+		name, decision, outcome string
+		cleared                 bool
+	}{
+		{"confirmed", `{"id":"ap1","status":"ALLOWED","behavior":"allow","decidedById":"owner"}`, "CONFIRMED", true},
+		{"declined", `{"id":"ap1","status":"DENIED","behavior":"deny","decidedById":"owner"}`, "DECLINED", false},
+		{"expired", `{"id":"ap1","status":"ABANDONED","behavior":"deny"}`, "EXPIRED", false},
+	} {
+		for _, door := range []string{"mcp", "cli"} {
+			t.Run(tc.name+"/"+door, func(t *testing.T) {
+				var hits []string
+				filed := map[string]interface{}{}
+				clearBody := map[string]interface{}{}
+				var clearSession string
+				srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+					hits = append(hits, r.Method+" "+r.URL.Path)
+					switch {
+					case strings.Contains(r.URL.Path, "/approvals/"):
+						_, _ = w.Write([]byte(tc.decision))
+					case strings.HasSuffix(r.URL.Path, "/approvals"):
+						_ = json.NewDecoder(r.Body).Decode(&filed)
+						_, _ = w.Write([]byte(`{"id":"ap1","status":"PENDING"}`))
+					case r.URL.Path == "/api/runner/browser/clear":
+						clearSession = r.Header.Get("X-Orbit-Session-Id")
+						_ = json.NewDecoder(r.Body).Decode(&clearBody)
+						w.WriteHeader(http.StatusAccepted)
+						_, _ = w.Write([]byte(`{"runnerId":"R1","approvalId":"ap1","requestedAt":"2026-11-19T12:00:00.000Z"}`))
+					default:
+						http.NotFound(w, r)
+					}
+				}))
+				defer srv.Close()
+
+				var got browserClearLogins
+				if door == "mcp" {
+					t.Setenv(envBgJobID, "")
+					s := &mcpServer{t: NewTransport(srv.URL, "tok"), sessionID: "sess-asking", browserOn: true}
+					result := s.callTool("browser_clear_logins", map[string]interface{}{})
+					if result["isError"] == true {
+						t.Fatalf("failed: %v", result["content"])
+					}
+					data, _ := result["structuredContent"].(*browserClearLogins)
+					if data == nil {
+						t.Fatalf("structuredContent = %#v", result["structuredContent"])
+					}
+					got = *data
+				} else {
+					catalogFullestCLIContext(t)
+					configureCLITestRunner(t, srv.URL)
+					t.Setenv(envBrowser, "on")
+					t.Setenv("ORBIT_SESSION_ID", "sess-asking")
+					t.Setenv(envBgJobID, "")
+					var out bytes.Buffer
+					if err := runOrbitCLI([]string{"browser", "clear-logins", "--json"}, strings.NewReader(""), &out, &bytes.Buffer{}); err != nil {
+						t.Fatalf("orbit browser clear-logins: %v", err)
+					}
+					if err := json.Unmarshal(out.Bytes(), &got); err != nil {
+						t.Fatalf("output %q: %v", out.String(), err)
+					}
+				}
+
+				if len(hits) < 2 || hits[0] != "POST /api/runner/sessions/sess-asking/approvals" {
+					t.Fatalf("the card was not filed first: %v", hits)
+				}
+				if filed["toolName"] != browserClearApprovalToolName {
+					t.Errorf("card toolName = %v", filed["toolName"])
+				}
+				if input, _ := filed["input"].(map[string]interface{}); len(input) != 0 {
+					t.Errorf("the card carries the asker's words: %v", filed["input"])
+				}
+				sentClear := hits[len(hits)-1] == "POST /api/runner/browser/clear"
+				if sentClear != tc.cleared {
+					t.Fatalf("clear sent = %v, want %v: %v", sentClear, tc.cleared, hits)
+				}
+				if got.Outcome != tc.outcome || got.Cleared != tc.cleared {
+					t.Fatalf("answer = %+v, want outcome %s cleared %v", got, tc.outcome, tc.cleared)
+				}
+				if tc.cleared {
+					if clearSession != "sess-asking" || clearBody["approvalId"] != "ap1" {
+						t.Errorf("clear sent as session %q with %v", clearSession, clearBody)
+					}
+					if got.RequestedAt == nil || got.RunnerID == nil || *got.RunnerID != "R1" {
+						t.Errorf("answer = %+v", got)
+					}
+				} else if !strings.Contains(got.Message, "nothing was cleared") {
+					t.Errorf("message = %q", got.Message)
+				}
+			})
+		}
+	}
+}
+
+// Headless there is nobody to ask: the clear is refused before anything reaches the server, and a switched-off session
+// reaches nothing either.
+func TestBrowserClearLoginsNeedsASessionAndTheSwitch(t *testing.T) {
+	var reached bool
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) { reached = true }))
+	defer srv.Close()
+	s := &mcpServer{t: NewTransport(srv.URL, "tok"), sessionID: "", browserOn: true}
+	if result := s.callTool("browser_clear_logins", map[string]interface{}{}); result["isError"] != true || reached {
+		t.Fatalf("headless: %#v (reached the server: %v)", result, reached)
+	}
+	s = &mcpServer{t: NewTransport(srv.URL, "tok"), sessionID: "sess", browserOn: false}
+	if result := s.callTool("browser_clear_logins", map[string]interface{}{}); result["isError"] != true || reached {
+		t.Fatalf("switch off: %#v (reached the server: %v)", result, reached)
+	}
+	if !waitsForTheOwner("browser_clear_logins", map[string]interface{}{}) {
+		t.Fatal("browser_clear_logins is not handed off as a wait for the owner")
+	}
+}

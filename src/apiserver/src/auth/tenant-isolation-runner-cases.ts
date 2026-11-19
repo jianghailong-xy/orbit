@@ -1591,9 +1591,17 @@ export const RUNNER_ISOLATION_FIELDS_BY_HAND: Readonly<Record<string, string>> =
     'must be a session of the runner\'s owner that this runner hosts, else 403 (runner-api/runner-owner-requests.controller.ts:66), and must be the session that filed the request (owner-requests/owner-requests.service.ts:233)',
   // ── the Orbit Cloud browser's agent tools ─────────────────────────────────────────────────────────
   'GET /runner/browser header x-orbit-session-id':
-    'must be a session of the runner\'s owner that this runner hosts, else 403 (runner-api/runner-browser.controller.ts:55), '
+    'must be a session of the runner\'s owner that this runner hosts, else 403 (runner-api/runner-browser.controller.ts:80), '
     + 'and what is read is that owner\'s own managed runner, found by the owner (managed-runners/browser-state.ts accountStatus); '
     + 'runner-browser-status.pg.spec.ts (3) sends another account\'s session both ways',
+  'POST /runner/browser/clear header x-orbit-session-id':
+    'must be a session of the runner\'s owner that this runner hosts, else 403 (runner-api/runner-browser.controller.ts:80), '
+    + 'and what is cleared is that owner\'s own managed runner, found by the owner (runner-api/runner-browser-clear-approval.ts '
+    + 'accountBrowserRunner); runner-browser-clear-logins.pg.spec.ts (4) sends another account\'s session',
+  'POST /runner/browser/clear body approvalId':
+    'spent only when it names a card filed by the asking session, under orbit_browser_clear_logins, ALLOWED by a person, about '
+    + 'that owner\'s managed runner and not spent before (runner-api/runner-browser-clear-approval.ts claimBrowserClearApproval); '
+    + 'anything else is 403 and nothing is sent; runner-browser-clear-logins.pg.spec.ts (4) sends another session\'s card',
   // ── the wiki's import on the server ──────────────────────────────────────────────────────────────
   'POST /runner/wiki/spaces/:id/import-jobs body id':
     'the id the command names for the job it is making: the insert does nothing when the id is taken, and the job '

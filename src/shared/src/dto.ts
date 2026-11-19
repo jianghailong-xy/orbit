@@ -953,6 +953,15 @@ export interface RunnerBrowserClearResponse {
   requestedAt: string;
 }
 
+/**
+ * `POST /runner/browser/clear` (browser_clear_logins, `orbit browser clear-logins`): the clear the owner's card allowed,
+ * requested of the account's Orbit Cloud runner, and the card it spent.
+ */
+export interface RunnerBrowserClearLoginsResponse extends RunnerBrowserClearResponse {
+  runnerId: string;
+  approvalId: string;
+}
+
 /** What a runner's self-updater last found:
  *  - `enabled`: nothing in the way — on its assigned release, or about to install it.
  *  - `disabledByEnv`: turned off — ORBIT_NO_SELFUPDATE, a development build, or a platform no

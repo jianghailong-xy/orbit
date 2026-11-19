@@ -1,11 +1,12 @@
-import { BadRequestException, Controller, ForbiddenException, Get, Headers, UseGuards } from '@nestjs/common';
+import { BadRequestException, Body, Controller, ForbiddenException, Get, Headers, HttpCode, Post, UseGuards } from '@nestjs/common';
 import { Runner } from '@prisma/client';
-import { toUuid, type RunnerBrowserStatus } from '@orbit/shared';
+import { toUuid, type RunnerBrowserClearLoginsResponse, type RunnerBrowserStatus } from '@orbit/shared';
 
 import { ManagedRunnerBrowserEnabledGuard, ManagedRunnerBrowserService } from '../managed-runners/browser-state';
 import { PrismaService } from '../prisma/prisma.service';
 import { CurrentRunner } from './current-runner.decorator';
 import { RunnerAuthGuard } from './runner-auth.guard';
+import { accountBrowserRunner, claimBrowserClearApproval } from './runner-browser-clear-approval';
 
 /**
  * browser_status and `orbit browser status` (docs/mocks/runner-browser/03-agent-tools.html ②): the account's Orbit
@@ -19,6 +20,14 @@ import { RunnerAuthGuard } from './runner-auth.guard';
  *     account's session is refused 403 (P4 = A). What is read is the runner owner's own managed runner, found by the
  *     account, so no request can name another account's.
  *   - Reads through ManagedRunnerBrowserService, the service behind GET /runners/:id/browser.
+ *
+ * browser_clear_logins and `orbit browser clear-logins` (②), for any session of the account, only after the owner's yes:
+ *
+ *   POST /runner/browser/clear   { approvalId }: the clear POST /runners/:id/browser/clear makes (the runner's next
+ *                                heartbeat is handed clearBrowserProfile; it stops Chrome and deletes the profile), for
+ *                                the account's Orbit Cloud runner, against the card the asking session filed and a person
+ *                                ALLOWED, spent by this clear (runner-browser-clear-approval.ts). Any other card — declined,
+ *                                expired, already used, another session's — is 403, and nothing is sent to the runner.
  */
 @UseGuards(ManagedRunnerBrowserEnabledGuard, RunnerAuthGuard)
 @Controller('runner/browser')
@@ -35,6 +44,22 @@ export class RunnerBrowserController {
   ): Promise<RunnerBrowserStatus> {
     await this.callingSession(runner, sessionHeader);
     return this.browser.accountStatus(runner.ownerId);
+  }
+
+  @Post('clear')
+  @HttpCode(202)
+  async clear(
+    @CurrentRunner() runner: Runner,
+    @Headers('x-orbit-session-id') sessionHeader: string | undefined,
+    @Body() body: { approvalId?: unknown } | undefined,
+  ): Promise<RunnerBrowserClearLoginsResponse> {
+    const sessionId = await this.callingSession(runner, sessionHeader);
+    const target = await accountBrowserRunner(this.prisma, runner.ownerId);
+    let approvalId = '';
+    const { requestedAt } = await this.browser.clear(runner.ownerId, target.id, async () => {
+      approvalId = await claimBrowserClearApproval(this.prisma, sessionId, body?.approvalId, target.id);
+    });
+    return { runnerId: target.id, approvalId, requestedAt };
   }
 
   private async callingSession(runner: Pick<Runner, 'id' | 'ownerId'>, header: string | undefined): Promise<string> {

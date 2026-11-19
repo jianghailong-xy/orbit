@@ -78,6 +78,7 @@ const ORBIT_CARD_KINDS: Readonly<Record<string, string>> = {
   orbit_agent_update: 'Change a workspace',
   orbit_agent_delete: 'Delete a workspace',
   orbit_runner_delete: 'Delete a runner',
+  orbit_browser_clear_logins: 'Clear saved logins',
   orbit_dag_change: 'Restructure dependencies',
   orbit_blocker_resolve: 'Resolve a blocker',
   orbit_integration_skip_merge_check: 'Land without the merge check',

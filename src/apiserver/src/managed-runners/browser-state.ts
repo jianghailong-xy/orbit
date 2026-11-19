@@ -39,6 +39,8 @@ import { MANAGED_RUNNER_BROWSER_GATE, type ManagedRunnerBrowserGate } from './ma
  *                                         as the runner's last heartbeat reported them (RunnerBrowserState)
  *   GET  /api/runner/browser              the same for a session of the account, by its runner's credential: browser_status
  *                                         and `orbit browser status` (runner-api/runner-browser.controller.ts)
+ *   POST /api/runner/browser/clear        the same clear for a session of the account, only against the owner's yes on a
+ *                                         card: browser_clear_logins and `orbit browser clear-logins`
  *   POST /api/runners/:id/browser/clear   Clear saved logins: the runner's next heartbeat is handed
  *                                         `clearBrowserProfile`, and the runner stops Chrome and deletes its profile
  *                                         (~/.orbit/browser/profile); its next report's profileClearedAt is the answer
@@ -172,11 +174,16 @@ export class ManagedRunnerBrowserService {
     };
   }
 
-  async clear(ownerId: string, rawId: string): Promise<RunnerBrowserClearResponse> {
+  /**
+   * `beforeRequest` runs once the clear is known to be deliverable and before it is requested: browser_clear_logins
+   * spends the owner's card there (runner-api/runner-browser-clear-approval.ts), and a refusal from it requests nothing.
+   */
+  async clear(ownerId: string, rawId: string, beforeRequest?: () => Promise<unknown>): Promise<RunnerBrowserClearResponse> {
     const runner = await this.ownManagedRunner(ownerId, rawId);
     if (!runner.capabilities.includes(BROWSER_CLEAR_V1)) {
       throw new ConflictException('This runner is too old to clear saved logins: it does not declare browser-clear/v1');
     }
+    await beforeRequest?.();
     const requestedAt = new Date();
     await this.prisma.runner.update({ where: { id: runner.id }, data: { browserClearRequestedAt: requestedAt } });
     this.realtime?.notifyRunnerWake(runner.id);

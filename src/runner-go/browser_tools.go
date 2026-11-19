@@ -44,8 +44,13 @@ func browserToolsEnabledFromEnv() bool {
 
 // browserToolNames is the set callBrowserTool answers for, and what `orbit mcp` leaves out while the switch is off.
 var browserToolNames = map[string]bool{
-	"browser_status": true,
+	"browser_status":       true,
+	"browser_clear_logins": true,
 }
+
+// browserClearApprovalToolName keys the card browser_clear_logins asks on. The server files it with its own copy and
+// clears only against it (apiserver runner-api/runner-browser-clear-approval.ts), so both ends spell it alike.
+const browserClearApprovalToolName = "orbit_browser_clear_logins"
 
 // withoutBrowserTools is tools without the browser tools: what `orbit mcp` lists while the browser is off.
 func withoutBrowserTools(tools []map[string]interface{}) []map[string]interface{} {
@@ -70,7 +75,7 @@ func browserOpAbsent(op *operation) bool {
 // that answer for a catalogued operation by name (`orbit capabilities --id`, a stray tools/call).
 func browserOffMessage(what string) string {
 	return what + ": the Orbit Cloud browser is switched off on this Orbit server (ORBIT_BROWSER is not on for this " +
-		"session), so there is no browser to read or open"
+		"session), so there is no browser to read, open or clear"
 }
 
 func browserToolDescriptors(obj func(map[string]interface{}, ...string) map[string]interface{}) []map[string]interface{} {
@@ -99,6 +104,25 @@ func browserToolDescriptors(obj func(map[string]interface{}, ...string) map[stri
 			}, "enabled"),
 			"annotations": map[string]interface{}{"readOnlyHint": true},
 		},
+		{
+			"name": "browser_clear_logins",
+			"description": "Clear the saved logins of this account's Orbit Cloud browser: stop the browser and delete its " +
+				"saved profile, signing every site out for the owner and for every agent on the runner. It first puts a " +
+				"confirmation card in front of the account owner and waits for their answer; nothing is cleared unless " +
+				"they confirm. Returns outcome CONFIRMED (the runner was asked to stop the browser and delete the " +
+				"profile, which it does within seconds), DECLINED (the owner said no: nothing was cleared) or EXPIRED " +
+				"(the card went away unanswered: nothing was cleared). Any session of the account may call it.",
+			"inputSchema": obj(map[string]interface{}{}),
+			"outputSchema": obj(map[string]interface{}{
+				"outcome":     map[string]interface{}{"type": "string", "enum": []string{"CONFIRMED", "DECLINED", "EXPIRED"}, "description": "CONFIRMED: the owner said yes and the clear was sent to the runner. DECLINED or EXPIRED: nothing was sent and nothing deleted."},
+				"cleared":     map[string]interface{}{"type": "boolean", "description": "The clear was sent to the runner: true only when outcome is CONFIRMED."},
+				"runnerId":    nullableStr,
+				"requestedAt": nullableStr,
+				"approvalId":  nullableStr,
+				"message":     str,
+			}, "outcome", "cleared", "message"),
+			"annotations": map[string]interface{}{"readOnlyHint": false, "destructiveHint": true, "idempotentHint": false},
+		},
 	}
 }
 
@@ -112,6 +136,14 @@ var browserCLICapabilities = []cliCapabilitySpec{
 		Arguments:   []string{"--json"},
 		SessionOnly: true,
 	},
+	{
+		Tool:        "browser_clear_logins",
+		Argv:        []string{"orbit", "browser", "clear-logins"},
+		Usage:       "orbit browser clear-logins [--json]",
+		Arguments:   []string{"--json"},
+		SessionOnly: true,
+		Mutates:     true,
+	},
 }
 
 // callBrowserTool runs one browser tool for the session this server runs in, and reports whether it handled the name.
@@ -122,12 +154,77 @@ func (s *mcpServer) callBrowserTool(name string, args map[string]interface{}) (m
 	if !s.browserOn {
 		return toolResult(browserOffMessage(name), true), true
 	}
+	if name == "browser_clear_logins" {
+		cleared, err := runBrowserClearLogins(s.t, s.sessionID)
+		if err != nil {
+			return toolResult(err.Error(), true), true
+		}
+		text, _ := json.MarshalIndent(cleared, "", "  ")
+		return toolResultWithData(string(text), cleared, false), true
+	}
 	status, err := runBrowserStatus(s.t, s.sessionID)
 	if err != nil {
 		return toolResult(err.Error(), true), true
 	}
 	text, _ := json.MarshalIndent(status, "", "  ")
 	return toolResultWithData(string(text), status, false), true
+}
+
+// browserClearLogins is browser_clear_logins' answer: which of the card's three ends happened, and on a yes what the
+// server requested of the runner.
+type browserClearLogins struct {
+	Outcome     string  `json:"outcome"`
+	Cleared     bool    `json:"cleared"`
+	RunnerID    *string `json:"runnerId"`
+	RequestedAt *string `json:"requestedAt"`
+	ApprovalID  *string `json:"approvalId"`
+	Message     string  `json:"message"`
+}
+
+// runBrowserClearLogins is one browser_clear_logins call, from either door: the owner's card, and only on their yes
+// the clear (POST /runner/browser/clear, naming the card). A declined or expired card sends nothing to the server.
+func runBrowserClearLogins(t *Transport, sessionID string) (*browserClearLogins, error) {
+	sessionID = strings.TrimSpace(sessionID)
+	if sessionID == "" {
+		// askCreateCard goes ahead headless; a clear never does: without a session there is nobody to ask.
+		return nil, errors.New("browser_clear_logins asks the account owner on a card in the conversation it is called " +
+			"from, and this is not running inside one (ORBIT_SESSION_ID is unset); nothing was cleared")
+	}
+	dec, err := askCreateCard(t, sessionID, browserClearApprovalToolName, map[string]interface{}{}, nil)
+	var httpErr *transportHTTPError
+	if errors.As(err, &httpErr) && httpErr.statusCode == http.StatusNotFound {
+		return nil, fmt.Errorf("browser_clear_logins: no card was filed and nothing was cleared: %w", err)
+	}
+	if err != nil {
+		return nil, fmt.Errorf("browser_clear_logins: %w; nothing was cleared", err)
+	}
+	if dec == nil || dec.Status != "ALLOWED" {
+		out := &browserClearLogins{Outcome: "DECLINED", Message: "The owner declined: nothing was cleared, and no clear was sent to the runner."}
+		if dec != nil && dec.Status == "ABANDONED" {
+			out.Outcome, out.Message = "EXPIRED", "The card expired unanswered: nothing was cleared, and no clear was sent to the runner."
+		} else if dec != nil {
+			if reason := declinedReason(dec); strings.HasPrefix(reason, ownerChatLead) {
+				out.Message = reason
+			} else if reason != "" {
+				out.Message += " Their answer: " + reason
+			}
+		}
+		return out, nil
+	}
+	var sent struct {
+		RunnerID    string `json:"runnerId"`
+		ApprovalID  string `json:"approvalId"`
+		RequestedAt string `json:"requestedAt"`
+	}
+	if err := t.doHeaders(nil, "POST", "/runner/browser/clear", map[string]interface{}{"approvalId": dec.ID}, &sent, taskOpTimeout, sessionHeader(sessionID)); err != nil {
+		return nil, fmt.Errorf("browser_clear_logins: the owner confirmed, but the clear was refused: %w", err)
+	}
+	return &browserClearLogins{
+		Outcome: "CONFIRMED", Cleared: true,
+		RunnerID: &sent.RunnerID, RequestedAt: &sent.RequestedAt, ApprovalID: &sent.ApprovalID,
+		Message: "The owner confirmed. The runner was asked to stop the browser and delete its saved profile, which it " +
+			"does when it next checks in (within seconds); browser_status then reports savedLogins false.",
+	}, nil
 }
 
 // browserStatus is browser_status's answer: RunnerBrowserStatus as GET /runner/browser sends it, or `enabled: false`
@@ -171,9 +268,12 @@ const browserHelp = `orbit browser — the account's Orbit Cloud browser
 
 Usage:
   orbit browser status [--json]
+  orbit browser clear-logins [--json]
 
-  status   Whether the browser is running, which session holds it, how many viewers are
-           connected, and whether saved logins exist (never which sites).
+  status         Whether the browser is running, which session holds it, how many viewers are
+                 connected, and whether saved logins exist (never which sites).
+  clear-logins   Stop the browser and delete every saved login on the runner, after the
+                 account owner confirms on a card.
 
 Acts for the Orbit session it runs in (ORBIT_SESSION_ID). Present only while the Orbit Cloud
 browser is switched on on this Orbit server.
@@ -188,6 +288,17 @@ Usage:
 Prints whether the browser feature is on, whether the browser is running, which session holds it
 (one session uses it at a time), how many viewers are connected, and whether saved logins exist.
 It never says which sites the logins are for. Read-only; any session of the account may run it.
+`,
+	"clear-logins": `orbit browser clear-logins — clear the saved logins of the account's Orbit Cloud browser
+
+Usage:
+  orbit browser clear-logins [--json]
+
+Puts a confirmation card in front of the account owner and waits for their answer. Only if they
+confirm is the runner asked to stop the browser and delete its saved profile: every site signed
+in to there is signed out, for the owner and for every agent on the runner. Prints the outcome:
+CONFIRMED, DECLINED or EXPIRED (the card went away unanswered); only CONFIRMED clears anything.
+Any session of the account may run it.
 `,
 }
 
@@ -232,6 +343,25 @@ func cmdBrowserCLI(args []string, out io.Writer) error {
 			return err
 		}
 		raw, _ := json.Marshal(status)
+		return writeCLIRawJSON(out, raw, *jsonOut)
+	case "clear-logins":
+		fs := newCLIFlagSet("orbit browser clear-logins")
+		jsonOut := fs.Bool("json", false, "emit compact JSON")
+		if err := fs.Parse(args[1:]); err != nil {
+			return err
+		}
+		if err := rejectTrailing(fs); err != nil {
+			return err
+		}
+		t, err := cliTransport()
+		if err != nil {
+			return err
+		}
+		cleared, err := runBrowserClearLogins(t, os.Getenv("ORBIT_SESSION_ID"))
+		if err != nil {
+			return err
+		}
+		raw, _ := json.Marshal(cleared)
 		return writeCLIRawJSON(out, raw, *jsonOut)
 	}
 	return fmt.Errorf("unknown command %q", action)

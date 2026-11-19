@@ -5350,6 +5350,15 @@ var catalogMetadata = map[string]operationMeta{
 		SuccessEvidence: "Whether the browser is running, the session holding it, the viewers and whether saved logins exist.",
 		Returns:         "The browser's status (JSON): enabled, runnerId, state, running, holderSessionId, holderTitle, viewers, savedLogins, reportedAt.",
 	},
+	"browser_clear_logins": {
+		Object:          objectBrowser,
+		Intent:          "Stop the account's Orbit Cloud browser and delete its saved logins, after the owner confirms.",
+		Approval:        approvalKindCard,
+		ApprovalKey:     "orbit_browser_clear_logins",
+		Destructive:     true,
+		SuccessEvidence: "outcome CONFIRMED with the requestedAt the clear was sent to the runner at; DECLINED or EXPIRED cleared nothing.",
+		Returns:         "The outcome (JSON): outcome (CONFIRMED, DECLINED or EXPIRED), cleared, runnerId, requestedAt, approvalId, message.",
+	},
 
 	// ── the guide ──
 	"guide": {

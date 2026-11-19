@@ -550,6 +550,7 @@ import {
 import { storedBrowserState } from '../managed-runners/browser-state';
 import { refuseManagedRunnerDeletion } from '../managed-runners/managed-runner-delete';
 import { DELETE_APPROVAL_TOOL_NAMES, deleteCardInput } from './runner-delete-approval';
+import { BROWSER_CLEAR_APPROVAL_TOOL_NAME, browserClearCardInput } from './runner-browser-clear-approval';
 import { sanitizeWorkspaceWrite } from './runner-agents.controller';
 import { workspaceWriteCardInput } from './runner-workspace-approval';
 import { authorizeManagedRunnerInstance, type ManagedRunnerInstance } from '../managed-runners/managed-runner-instance';
@@ -6495,6 +6496,9 @@ export class RunnerApiController {
     // session's own, is refused before it is filed, since no answer to it could be acted on.
     const deleting = await deleteCardInput(this.prisma, { ownerId, ...asker }, toolName, input);
     if (deleting) return deleting as unknown as Prisma.InputJsonValue;
+    // So does browser_clear_logins' card, and the clear goes through only against it (runner-browser-clear-approval.ts).
+    const clearing = await browserClearCardInput(this.prisma, this.browserGate, ownerId, toolName);
+    if (clearing) return clearing as unknown as Prisma.InputJsonValue;
     // So does a workspace write's, and the write goes through only against it (runner-workspace-approval.ts).
     if (WORKSPACE_WRITE_APPROVAL_TOOL_NAMES.has(toolName)) {
       const write = sanitizeWorkspaceWrite(PublicIdPipe.forFields('runnerId').transform(input, { type: 'body' }));
@@ -6557,6 +6561,8 @@ export class RunnerApiController {
     // Deleting a runner or a workspace is asked every time; the delete routes refuse a card no person
     // answered, so a rule that answered it would only turn the owner's "always" into a refusal.
     if (DELETE_APPROVAL_TOOL_NAMES.has(dto.toolName)) return false;
+    // And clearing the browser's saved logins: the clear route refuses a card no person answered.
+    if (dto.toolName === BROWSER_CLEAR_APPROVAL_TOOL_NAME) return false;
     // The same for a workspace write: each one is its own question, about values no rule has read.
     if (WORKSPACE_WRITE_APPROVAL_TOOL_NAMES.has(dto.toolName)) return false;
     // A card that names only a server may be about any of its tools, and a rule cannot have been
