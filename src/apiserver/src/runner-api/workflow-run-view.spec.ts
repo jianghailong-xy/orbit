@@ -32,6 +32,10 @@ test("a running workflow's counts and spend are its calls' so far: done, ended o
   });
 });
 
+test('a workflow opened with an empty description has none', () => {
+  assert.equal(workflowRunView({ ...row, description: '' }, []).description, null);
+});
+
 test("an ended workflow reads what the runner reported for the whole script, and a finished one's empty error is none", () => {
   const ended = { ...row, status: 'DONE', callsDone: 3, callsFailed: 1, costUsd: 1.5, error: '', endedAt: new Date('2026-11-19T10:04:00.000Z') };
   const view = workflowRunView(ended, [{ status: 'DONE', costUsd: 9 }]);

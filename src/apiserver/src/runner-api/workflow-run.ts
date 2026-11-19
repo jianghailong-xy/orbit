@@ -106,7 +106,8 @@ export function workflowRunView(
     id: row.id,
     toolUseId: row.toolUseId,
     name: row.name,
-    description: row.description,
+    // The runner sends the call's description, else the script's, "" when neither has one.
+    description: row.description || null,
     phases: row.phases,
     status: row.status as SubagentRunStatus,
     callsDone: running ? ended.filter((call) => call.status === 'DONE').length : row.callsDone,
