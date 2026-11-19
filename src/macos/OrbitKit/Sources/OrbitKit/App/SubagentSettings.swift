@@ -108,7 +108,6 @@ public enum SubagentSettings {
     public static let groupTitle = "SubAgents"
     public static let enabledTitle = "SubAgents"
     public static let enabledDetail = "Let this agent hand work to other providers in the same folder"
-    public static let optimizeFor = "Optimize For"
     public static let providers = "Providers"
     public static let providersDetail = "All enabled providers. Block one to keep SubAgents off it."
     public static let edit = "Edit"
@@ -135,21 +134,6 @@ public enum SubagentSettings {
     public static let tiers = ["S", "M", "L", "XL"]
 
     // MARK: workspace fields
-
-    /// `modelRoutingOptimizeFor`'s values, in the segmented control's order.
-    public enum OptimizeFor: String, CaseIterable, Identifiable, Sendable {
-        case cost, balance, intelligence
-        public var id: String { rawValue }
-        public var label: String {
-            switch self {
-            case .cost: return "Cost"
-            case .balance: return "Balance"
-            case .intelligence: return "Intelligence"
-            }
-        }
-        /// An absent or unknown value reads as Cost, the server's default.
-        public init(stored: String?) { self = OptimizeFor(rawValue: stored ?? "") ?? .cost }
-    }
 
     public static let defaultMaxRunning = 4
     public static let maxRunningRange = 1...16

@@ -129,9 +129,13 @@ Optimize For 只在第 5 条（没人给档位）时抬档：Balance 至少 M，
 
 | Optimize For | 规则 |
 |---|---|
-| Cost（默认） | 订阅先于计费 key；订阅里额度已知的先、余量多的先；key 里便宜的先 |
-| Balance | 额度已知的先（key 算已知），余量多的先，并列时便宜的先 |
-| Intelligence | 档位上限高的模型先（例如 L 档里 Opus 先于 Sonnet-high），再额度已知的先，并列时便宜的先 |
+| Cost（默认） | 订阅先于计费 key；订阅里额度已知的先，再**先过期的先**，再余量多的先；key 里便宜的先 |
+| Balance | 额度已知的先（key 算已知），再**先过期的先**（key 和不知道何时重置的订阅算永不过期），再余量多的先，并列时便宜的先 |
+| Intelligence | 档位上限高的模型先（例如 L 档里 Opus 先于 Sonnet-high），再额度已知的先，再先过期的先，并列时便宜的先 |
+
+**先过期的先**（owner，2026-11-19）：和 runner 上选账号同一条规则（`planUsage.ts` `rankAccounts`）——快用完的
+（`quotaNearLimit`：5 小时窗口 ≥ 80%，更长的 ≥ 90%）排最后，其余按额度作废的时刻（`quotaExpiresAt`：最长那个窗口的重置，
+有周窗口就是周窗口）早的先。号池选它的成员也按这条。Kimi 的月窗口算在内。
 
 最后按 owner 在 Providers 页排的顺序打破平局。结果和理由冻结在 `subagent_run` 里，续跑不重算。
 
@@ -240,7 +244,8 @@ Optimize For 只在第 5 条（没人给档位）时抬档：Balance 至少 M，
 - 路由：`model-routing.ts` 增加 `routeSubagent(input)`，与 `routeTaskRun` 共用档位表和引擎状态读取；档位表扩成按模型。
 - 审批：`ApprovalCreateRequest` 加 `subagentRunId`；`reapApprovalsOfReturnedCalls` 跳过它。
 - 设置：Agent（workspace）上加 `subagentsEnabled`、`subagentsMaxRunning`；屏蔽列表放 owner 级
-  `UserPreferences.subagentBlockedProviders`；Optimize For 复用 `modelRoutingOptimizeFor`。
+  `UserPreferences.subagentBlockedProviders`；Optimize For 是账号级的 `UserPreferences.optimizeFor`（没设过 = Balance，owner，2026-11-19；
+  原先复用 Agent 的 `modelRoutingOptimizeFor`，已不再读）。
 
 ### 6.3 runner
 
@@ -259,7 +264,9 @@ Optimize For 只在第 5 条（没人给档位）时抬档：Balance 至少 M，
 
 ## 7. 设置与界面
 
-- **Agent 设置 → SubAgents**：开关、Optimize For（Cost / Balance / Intelligence）、Providers（默认全部，点进去屏蔽）、
+- **设置 → General → New sessions**：Optimize For（Cost / Balance / Intelligence），账号级，紧跟 Smart model selection
+  （owner，2026-11-19，board `docs/mocks/routing-mode-account`）。
+- **Agent 设置 → SubAgents**：开关、Providers（默认全部，点进去屏蔽）、
   Running at once。
 - **Providers 页**：每个模型多一列 Tier；preset 的档位和价格跟目录走，自定义 endpoint 显示 `Not set`，点开可以标。
 - **报告**：沿用 model routing 报告页，加一个 SubAgents 视图：按档位、模型统计次数、成功率、花费、额度换候选次数、
@@ -307,8 +314,19 @@ P1 不路由，所以可以先把最难的部分（同 cwd 子进程、事件内
 ### 10.2 在哪里跑、改动去哪
 
 - 服务端把 SubAgent 派给目标 runner；目标 runner 在该 workspace 的 workDir 上建一个**临时的、detached 的 worktree**
-  （目标 workspace 自己的 HEAD），子引擎在里面跑；结束后整个删掉。workDir 不是 git 仓库时直接拒绝
-  （`SUBAGENT_WORKSPACE_NOT_GIT`），不在别人的工作目录里乱写。
+  （目标 workspace 自己的 HEAD），子引擎在里面跑；结束后整个删掉。
+- **workDir 不是 git 仓库**（owner 决策 2026-11-19）：
+  - **只读的 SubAgent**（`type: explore`，或定义文件 `readonly: true`）**就地跑**：子引擎直接在 workDir 里跑，不建也不删
+    worktree。claim 带 `inPlace: true`；目标 runner 不管自己读到的定义怎么写，一律按只读起子引擎（Claude 去掉
+    Edit/MultiEdit/Write/NotebookEdit，Bash 仍按父会话的模式；Codex 用只读沙箱，**不能联网**，连数据库这类检查要用 Claude）。
+    run.json 记 `inPlace`、`tree` 为空，恢复和 GC 都不会删 workDir。续跑时 workDir 是不是 git 仓库变了就失败，提示重开。
+    目标 runner 要声明 `subagent-remote-in-place/v1`（`SUBAGENT_REMOTE_IN_PLACE_V1`），否则不派（`SUBAGENT_WORKSPACE_LACKS_NEEDS`，
+    按 `needs` 选时列为不满足）。
+  - **可能改文件的 SubAgent** 仍拒绝（`SUBAGENT_WORKSPACE_NOT_GIT`），不在别人的工作目录里乱写。拒绝文案指出两条不改目录的路：
+    改成只读委派，或在那个 workspace 上开会话；并明确劝阻 `git init`：它会改动那个目录，第一次提交还会把里面的东西（含密钥）
+    一起提交。
+  - 已知边界：就地只读挡住的是编辑工具，不是 shell；Claude 子引擎的 Bash 写下的东西不会被丢弃。worktree 本来也只隔离文件，
+    挡不住数据库写入和网络请求。
 - **只交回文字结果**：不把任何文件带回父会话，也不留在目标 workspace。结果末尾由 runner 附一行
   `Discarded changes: <n> files (<paths…>)`，让父 Agent 知道它改过什么但没有带回。
 - 看不到父会话未提交的改动：工具描述里写明「remote SubAgents run on that workspace's own HEAD and return text only」，

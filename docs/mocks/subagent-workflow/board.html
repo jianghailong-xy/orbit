@@ -1,0 +1,373 @@
+<!doctype html>
+<html lang="zh">
+<head>
+<meta charset="utf-8">
+<title>SubAgent Workflow · design board</title>
+<link rel="stylesheet" href="../../../src/web/src/index.css">
+<link rel="stylesheet" href="../../../src/web/src/components/ui/foundation.css">
+<link rel="stylesheet" href="../project-progress/mock.css">
+<style>
+  /* Board chrome only; every board class is prefixed wf- so nothing collides with index.css. */
+  .wf-part { margin-top: 22px; }
+  .wf-part:first-of-type { margin-top: 0; }
+  .wf-three { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 16px; }
+  .wf-two { display: grid; grid-template-columns: 1fr 1fr; gap: 18px; }
+  .wf-col { display: flex; flex-direction: column; gap: 8px; min-width: 0; }
+  .wf-col-h { font-size: 13px; font-weight: 700; margin: 0 0 2px; display: flex; align-items: center; gap: 8px; }
+  .wf-box { background: var(--bg-raised); border: 1px solid var(--border-subtle); border-radius: 10px; padding: 9px 12px; }
+  .wf-box h4 { margin: 0 0 3px; font-size: 13px; font-weight: 650; display: flex; align-items: center; gap: 6px; flex-wrap: wrap; }
+  .wf-box p { margin: 0; font-size: 12px; color: var(--text-2); line-height: 1.55; }
+  .wf-box.wf-new { border: 1.5px solid var(--brand); background: var(--brand-tint); }
+  .wf-box.wf-new h4 { color: var(--brand-strong); }
+  .wf-box.wf-bad { border-color: var(--error-border); background: var(--error-bg); }
+  .wf-box.wf-warn { border-color: var(--warning-border); background: var(--warning-bg); }
+  .wf-down { text-align: center; color: var(--text-4); font-size: 16px; line-height: 14px; }
+  .wf-tag { font-size: 10.5px; font-weight: 700; padding: 0 6px; border-radius: 4px; line-height: 17px; white-space: nowrap; }
+  .wf-tag.p1 { background: #e8f5e9; color: #2e7d32; }
+  .wf-tag.p2 { background: #fff3e0; color: #b35c00; }
+  .wf-tag.p3 { background: #f3e5f5; color: #6a1b9a; }
+  .wf-mono { font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; font-size: 11.5px; }
+  .wf-tbl { width: 100%; border-collapse: collapse; font-size: 12.5px; }
+  .wf-tbl th, .wf-tbl td { text-align: left; padding: 7px 10px; border-bottom: 1px solid var(--border-subtle); vertical-align: top; line-height: 1.5; }
+  .wf-tbl th { font-size: 11.5px; color: var(--text-3); font-weight: 700; }
+  .wf-tbl td.wf-em { font-weight: 650; color: var(--text-1); }
+
+  /* The transcript pane: real chat classes from index.css inside a plain frame. */
+  .wf-pane { background: var(--bg-base); border: 1px solid var(--border); border-radius: 10px; padding: 14px 18px; font-family: Inter, "Noto Sans SC", sans-serif; }
+  .wf-pane .chat-user-wrap { display: flex; justify-content: flex-end; margin: 4px 0 10px; }
+  .wf-pane .chat-user { max-width: 80%; }
+  .wf-pane .chat-assistant { margin: 6px 0; font-size: 14px; line-height: 1.6; }
+  .wf-pane .chat-tool-meta { margin-left: auto; }
+  .wf-ok { color: var(--success-solid); font-weight: 700; }
+  .wf-spin { display: inline-block; width: 11px; height: 11px; border-radius: 50%; border: 2px solid #c9b8f5; border-top-color: #7c3aed; }
+  .wf-bg { font-size: 11px; font-weight: 600; padding: 0 6px; border-radius: 4px; background: #f1ebfd; color: #6d28d9; line-height: 18px; }
+  .wf-why { font-size: 12px; color: var(--text-3); padding: 2px 10px 8px 40px; line-height: 1.55; }
+  .wf-why b { color: var(--text-2); font-weight: 600; }
+  .wf-step { font-size: 12.5px; color: var(--text-2); padding: 2px 0; }
+  .wf-step .wf-mono { color: var(--text-1); }
+  .wf-result { font-size: 13px; color: var(--text-1); padding: 6px 0 2px; border-top: 1px dashed var(--border-subtle); margin-top: 6px; line-height: 1.6; }
+
+  /* Phone frame (393 pt wide, drawn at 1:1 px). */
+  .wf-phone { width: 393px; border-radius: 44px; border: 10px solid #111; background: #fff; overflow: hidden; font-family: -apple-system, Inter, "Noto Sans SC", sans-serif; }
+  .wf-ph-bar { height: 44px; display: flex; align-items: center; justify-content: space-between; padding: 0 26px; font-size: 15px; font-weight: 600; }
+  .wf-ph-nav { padding: 4px 16px 10px; font-size: 17px; font-weight: 600; text-align: center; border-bottom: .5px solid #e3e3e8; }
+  .wf-ph-body { padding: 10px 14px 18px; font-size: 15px; line-height: 1.45; }
+  .wf-ph-user { margin: 4px 0 12px auto; max-width: 78%; background: #f0f0f3; border-radius: 18px; padding: 8px 13px; width: fit-content; }
+  .wf-ph-card { border-left: 3px solid #7c3aed; padding: 7px 10px; margin: 8px 0; background: #faf8ff; border-radius: 0 10px 10px 0; }
+  .wf-ph-row { display: flex; align-items: center; gap: 7px; font-size: 14px; }
+  .wf-ph-row .t { font-weight: 600; }
+  .wf-ph-row .s { color: #6b6b70; overflow: hidden; white-space: nowrap; text-overflow: ellipsis; flex: 1; }
+  .wf-ph-sub { font-size: 12.5px; color: #8a8a8d; margin-top: 3px; padding-left: 22px; }
+  .wf-ph-live { font-size: 12.5px; color: #6b6b70; margin-top: 3px; padding-left: 22px; font-style: italic; }
+
+  .wf-qs { display: grid; grid-template-columns: 1fr 1fr; gap: 14px; }
+  .wf-q { background: var(--bg-raised); border: 1px solid var(--border-subtle); border-radius: 10px; padding: 10px 12px; }
+  .wf-q h4 { margin: 0 0 6px; font-size: 13px; font-weight: 650; }
+  .wf-opt { font-size: 12px; color: var(--text-2); line-height: 1.55; padding: 6px 8px; border-radius: 8px; border: 1px solid var(--border-subtle); margin-top: 6px; }
+  .wf-opt b { color: var(--text-1); }
+  .wf-opt.wf-rec { border: 1.5px solid var(--brand); background: var(--brand-tint); }
+  .wf-rec-l { font-size: 10.5px; font-weight: 700; color: var(--brand-strong); margin-left: 4px; }
+  .wf-phases { display: grid; grid-template-columns: repeat(4, 1fr); gap: 10px; }
+  .wf-ph { background: var(--bg-raised); border: 1px solid var(--border-subtle); border-radius: 10px; padding: 9px 11px; }
+  .wf-ph h4 { margin: 0 0 4px; font-size: 13px; font-weight: 650; }
+  .wf-ph p { margin: 0; font-size: 12px; color: var(--text-2); line-height: 1.55; }
+
+  .wf-set { width: 100%; }
+  .wf-set-row { display: flex; align-items: center; justify-content: space-between; gap: 14px; padding: 9px 0; border-top: 1px solid var(--border-subtle); font-size: 13px; }
+  .wf-set-row:first-child { border-top: 0; }
+  .wf-set-row .wf-hint { color: var(--text-3); font-size: 12px; }
+  .wf-seg { display: inline-flex; border: 1px solid var(--border); border-radius: 7px; overflow: hidden; font-size: 12.5px; }
+  .wf-seg span { padding: 3px 11px; }
+  .wf-seg span.on { background: var(--text-1); color: #fff; }
+  .wf-sw { width: 34px; height: 20px; border-radius: 10px; background: #34c759; position: relative; flex: none; }
+  .wf-sw::after { content: ""; position: absolute; right: 2px; top: 2px; width: 16px; height: 16px; border-radius: 50%; background: #fff; }
+  .wf-sw.off { background: #d1d5db; }
+  .wf-sw.off::after { right: auto; left: 2px; }
+</style>
+<style>
+  /* Workflow-only additions. */
+  .wf-grp { margin: 6px 0 4px 30px; }
+  .wf-grp-h { display: flex; align-items: center; gap: 8px; font-size: 12px; font-weight: 650; color: var(--text-2); padding: 4px 0; }
+  .wf-grp-h .c { font-weight: 500; color: var(--text-3); font-size: 11.5px; }
+  .wf-sub { display: flex; align-items: center; gap: 7px; font-size: 12.5px; padding: 4px 8px; border-left: 2px solid #ddd2fb; margin-left: 4px; }
+  .wf-sub .n { font-weight: 600; color: var(--text-1); }
+  .wf-sub .s { color: var(--text-2); overflow: hidden; white-space: nowrap; text-overflow: ellipsis; flex: 1; min-width: 0; }
+  .wf-sub .m { color: var(--text-3); font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; font-size: 11px; white-space: nowrap; }
+  .wf-queued { color: var(--text-4); font-size: 11px; font-weight: 600; }
+  .wf-in > .m-n { right: -4px; top: -11px; }
+  .wf-ph-body.wf-in > .m-n { right: 2px; top: 2px; }
+  .wf-cache { font-size: 10.5px; font-weight: 700; padding: 0 5px; border-radius: 4px; background: #eef2f6; color: #52606d; line-height: 16px; }
+  .wf-fail { color: var(--error-solid, #d92d20); font-weight: 700; }
+  .wf-log { font-size: 12px; color: var(--text-3); font-style: italic; margin: 2px 0 2px 34px; }
+  .wf-obj { font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; font-size: 11px; color: var(--text-2); background: var(--bg-raised); border: 1px solid var(--border-subtle); border-radius: 6px; padding: 5px 8px; margin: 3px 0 4px 38px; white-space: pre; line-height: 1.5; }
+  .wf-wake { margin: 12px 0 4px; padding: 8px 12px; border-radius: 8px; background: #f6f3ff; border: 1px solid #e4dafc; font-size: 12.5px; color: var(--text-2); }
+  .wf-wake b { color: var(--text-1); }
+  .wf-ban { margin: 6px 10px 6px 30px; padding: 7px 10px; border-radius: 7px; font-size: 12.5px; line-height: 1.5; }
+  .wf-ban.warn { background: var(--warning-bg); border: 1px solid var(--warning-border); }
+  .wf-ban.bad { background: var(--error-bg); border: 1px solid var(--error-border); }
+  .wf-ban.info { background: #f5f6f8; border: 1px solid var(--border-subtle); }
+  .wf-code { font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; font-size: 11.5px; line-height: 1.55; background: #fbfbfc; border: 1px solid var(--border-subtle); border-radius: 8px; padding: 10px 12px; white-space: pre; color: var(--text-1); }
+  .wf-code .k { color: #7c3aed; } .wf-code .c { color: #8a8f98; }
+</style>
+</head>
+<body class="m">
+<div class="m-sheet zh">
+
+<!-- ───────────────────────── part 1 ───────────────────────── -->
+<section id="part-1" class="wf-part">
+  <h1 class="m-h1">Workflow · 父会话交一段脚本，Orbit 按脚本把一批 SubAgent 跑完，只唤醒一次</h1>
+  <p class="m-sub">父模型调用 <span class="a-mono">workflow</span>，交一段 JavaScript（接口与 Claude Workflow 相同：<span class="a-mono">agent</span> / <span class="a-mono">parallel</span> / <span class="a-mono">pipeline</span> / <span class="a-mono">phase</span> / <span class="a-mono">log</span>）。脚本在父会话的 runner 上执行，<b>每次 <span class="a-mono">agent()</span> 就是一次 SubAgent</b>：路由、换候选、跨 workspace、审批、花费全部沿用。设计：<span class="a-mono">docs/subagent-workflow-design.md</span>。</p>
+  <div class="m-stage">
+    <div class="m-stage-l"><span class="m-k">今天</span> vs <span class="m-k new">Workflow</span></div>
+    <div class="wf-two">
+      <div class="wf-col">
+        <div class="wf-col-h"><span class="m-k">① 今天</span>后台 <span class="a-mono">delegate</span> × N，靠唤醒逐轮推进</div>
+        <div class="wf-box"><h4>能用</h4><p>父模型派 4 个后台 SubAgent，结束一轮；每个结束都唤醒父会话，父模型看结果再派下一批</p></div>
+        <div class="wf-down">↓</div>
+        <div class="wf-box wf-bad"><h4>控制流在模型脑子里</h4><p>同样的输入两次扇出不同；12 个 SubAgent = 12 轮父模型，上下文越滚越长；返回值是自由文本；runner 重启后父模型凭记忆重派，常常重复或漏掉</p></div>
+      </div>
+      <div class="wf-col">
+        <div class="wf-col-h"><span class="m-k new">② Workflow</span>脚本决定控制流</div>
+        <div class="wf-box wf-new"><h4>确定、可复现</h4><p>循环、条件、<span class="a-mono">pipeline</span> 无屏障的流水线都写在脚本里；整个 workflow 结束只唤醒父会话<b>一次</b></p></div>
+        <div class="wf-down">↓</div>
+        <div class="wf-box wf-new"><h4>schema 校验的返回值</h4><p>子 Agent 的 <span class="a-mono">orbit mcp</span> 多一个 <span class="a-mono">return_result</span> 工具，inputSchema 就是这次的 schema；所有引擎同一条路</p></div>
+        <div class="wf-down">↓</div>
+        <div class="wf-box wf-new"><h4>服务端日志，可重放</h4><p>每次调用记进 <span class="a-mono">subagent_run</span>；<span class="a-mono">resumeFrom</span> 时没变的前缀直接取结果、花费 0</p></div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ───────────────────────── part 2 ───────────────────────── -->
+<section id="part-2" class="wf-part">
+  <div class="m-stage">
+    <div class="m-stage-l"><span class="m-k new">③ Web 消息流</span>Workflow 是一个块，里面按 phase 分组列出它的 SubAgent；每个 SubAgent 点开和今天的 SubAgent 块一样</div>
+    <div class="wf-two">
+      <div class="wf-pane">
+        <div class="chat-user-wrap"><div class="chat-user">Review the scheduler change for bugs. Check every finding before you tell me.</div></div>
+        <div class="chat-assistant">I'll run a review workflow: four reviewers by dimension, each finding checked by a skeptic.</div>
+
+        <div class="m-mark" style="margin-top:14px"><span class="m-n">1</span><div class="chat-tool-card chat-tone-agent chat-tool-task">
+          <div class="chat-tool-row">
+            <span class="chat-tool-caret">›</span><span class="chat-tool-icon">✦</span>
+            <span class="chat-tool-name">Workflow</span>
+            <span class="chat-tool-summary">review-changes · Review the scheduler diff</span>
+            <span class="chat-tool-meta">7 / 12 · $0.84</span><span class="wf-spin"></span>
+          </div>
+          <div class="chat-tool-live">Verify · 3 running, 2 queued</div>
+        </div></div>
+
+        <div class="chat-assistant" style="margin-top:12px">It runs in the background. I'll pick it up when it finishes.</div>
+
+        <div class="m-mark" style="margin-top:18px"><span class="m-n">2</span><div class="wf-wake">
+          <b>Workflow finished</b> · review-changes · 12 calls (11 done, 1 failed) · 6m 40s · $1.37<br>
+          Returned 3 confirmed findings.
+        </div></div>
+        <div class="chat-assistant" style="margin-top:8px">Three findings held up. The worst: <code>nextRun()</code> skips a day when the clock moves back an hour…</div>
+      </div>
+
+      <div class="wf-pane">
+        <div class="m-mark"><span class="m-n">3</span><div class="chat-tool-card chat-tone-agent chat-tool-task is-open">
+          <div class="chat-tool-row">
+            <span class="chat-tool-caret">⌄</span><span class="chat-tool-icon">✦</span>
+            <span class="chat-tool-name">Workflow</span>
+            <span class="chat-tool-summary">review-changes · Review the scheduler diff</span>
+            <span class="chat-tool-meta">7 / 12 · $0.84 · 4m 05s</span><span class="wf-spin"></span>
+          </div>
+          <div class="chat-tool-detail">
+            <div class="wf-grp m-mark wf-in" style="margin-right:6px"><span class="m-n">4</span>
+              <div class="wf-grp-h">Review <span class="c">4 done</span></div>
+              <div class="wf-sub"><span class="chat-tool-icon">✦</span><span class="n">review:correctness</span><span class="s">2 findings</span><span class="m">M · DeepSeek Chat · $0.09</span><span class="wf-ok">✓</span></div>
+              <div class="wf-sub"><span class="chat-tool-icon">✦</span><span class="n">review:timezones</span><span class="s">2 findings</span><span class="m">M · GPT-5.6 Sol · $0.18</span><span class="wf-ok">✓</span></div>
+              <div class="wf-sub"><span class="chat-tool-icon">✦</span><span class="n">review:concurrency</span><span class="s">1 finding</span><span class="m">M · DeepSeek Chat · $0.07</span><span class="wf-ok">✓</span></div>
+              <div class="wf-sub"><span class="chat-tool-icon">✦</span><span class="n">review:migrations</span><span class="s">3 findings</span><span class="m">M · Kimi K3 · $0.11</span><span class="wf-ok">✓</span></div>
+            </div>
+            <div class="wf-grp m-mark wf-in" style="margin-right:6px;margin-top:14px"><span class="m-n">5</span>
+              <div class="wf-grp-h">Verify <span class="c">3 done · 3 running · 2 queued</span></div>
+              <div class="wf-sub"><span class="chat-tool-icon">✦</span><span class="n">verify</span><span class="s">nextRun() skips a day at DST end</span><span class="m">S · DeepSeek Chat · $0.03</span><span class="wf-ok">✓</span></div>
+              <div class="wf-obj">{ "real": true, "why": "Reproduced with Europe/Berlin, 2026-10-25" }</div>
+              <div class="wf-sub"><span class="chat-tool-icon">✦</span><span class="n">verify</span><span class="s">Lock released before the row write</span><span class="m">S · DeepSeek Chat · $0.02</span><span class="wf-ok">✓</span></div>
+              <div class="wf-sub"><span class="chat-tool-icon">✦</span><span class="n">verify</span><span class="s">Migration drops an index in a transaction</span><span class="m">S · Claude Haiku 5.5</span><span class="wf-fail">✕</span></div>
+              <div class="wf-sub"><span class="chat-tool-icon">✦</span><span class="n">verify</span><span class="s">Cron parse accepts 61 minutes</span><span class="m">S · DeepSeek Chat</span><span class="wf-spin"></span></div>
+              <div class="wf-sub"><span class="chat-tool-icon">✦</span><span class="n">verify</span><span class="s">pause() races resume()</span><span class="m">S · GPT-5.6 Sol</span><span class="wf-spin"></span></div>
+              <div class="wf-sub"><span class="chat-tool-icon">✦</span><span class="n">verify</span><span class="s">runAt stored without zone</span><span class="m">S · DeepSeek Chat</span><span class="wf-spin"></span></div>
+              <div class="wf-sub" style="opacity:.6"><span class="chat-tool-icon">✦</span><span class="n">verify</span><span class="s">Retry counter never resets</span><span class="wf-queued">Queued</span></div>
+              <div class="wf-sub" style="opacity:.6"><span class="chat-tool-icon">✦</span><span class="n">verify</span><span class="s">Backfill loads every row</span><span class="wf-queued">Queued</span></div>
+            </div>
+            <div class="wf-log m-mark wf-in" style="margin-top:12px;margin-right:6px"><span class="m-n">6</span>8 findings from 4 reviewers; verifying each one</div>
+          </div>
+        </div></div>
+      </div>
+    </div>
+    <ul class="m-notes">
+      <li><span class="m-n">1</span><span><b>折叠态一行</b>：名字 <span class="a-mono">Workflow</span> · 脚本 <span class="a-mono">meta.name</span> · description；右侧「完成数 / 发起数 · 花费」。<b>没有上限时只显示花费</b>；父模型给了 <span class="a-mono">maxCostUsd</span> 时写成 <span class="a-mono">$0.84 of $5.00</span>。下面一行是此刻在跑的 phase 和计数。</span></li>
+      <li><span class="m-n">2</span><span><b>结束唤醒</b>：整个 workflow 结束只起父会话一轮，消息流里一张淡紫条：调用数（完成 / 失败）、用时、花费、返回值一句话。父模型拿到的是脚本的返回值本身。</span></li>
+      <li><span class="m-n">3</span><span><b>展开态</b>：块头补上用时。内容不是子 Agent 的步骤，而是它的 SubAgent 列表，按 phase 分组。</span></li>
+      <li><span class="m-n">4</span><span><b>每个 SubAgent 一行</b>：<span class="a-mono">label</span>（脚本给的，没给就是类型）· 结果一句 · 右侧「档位 · 模型 · 花费」。点一行展开成今天的 SubAgent 块（步骤 + Why + 结果），三层嵌套。</span></li>
+      <li><span class="m-n">5</span><span><b>运行中的 phase</b>：在跑的转圈，排队的变淡写 <span class="a-mono">Queued</span>（并发与 SubAgent 共用上限，默认 8）。有 schema 的调用在行下显示校验过的对象（截断）；失败的打 ✕，脚本里它是 <span class="a-mono">null</span>。</span></li>
+      <li><span class="m-n">6</span><span><b><span class="a-mono">log()</span></b> 是块里的一行灰色斜体，出现在它被调用时的位置。</span></li>
+    </ul>
+  </div>
+</section>
+
+<!-- ───────────────────────── part 3 ───────────────────────── -->
+<section id="part-3" class="wf-part">
+  <div class="m-stage">
+    <div class="m-stage-l"><span class="m-k new">④ 状态</span>中断与重放、花费上限、失败、隔离调用的补丁</div>
+    <div class="wf-two">
+      <div class="wf-pane">
+        <div class="m-mark"><span class="m-n">1</span><div class="chat-tool-card chat-tone-agent chat-tool-task is-open">
+          <div class="chat-tool-row"><span class="chat-tool-caret">⌄</span><span class="chat-tool-icon">✦</span><span class="chat-tool-name">Workflow</span><span class="chat-tool-summary">review-changes · Review the scheduler diff</span><span class="chat-tool-meta">5 / 12 · $0.61</span><span class="wf-fail">■</span></div>
+          <div class="wf-ban warn">Interrupted: the runner restarted. 5 calls finished and are kept; resume to run the other 7.</div>
+        </div></div>
+        <div class="m-mark" style="margin-top:20px"><span class="m-n">2</span><div class="chat-tool-card chat-tone-agent chat-tool-task is-open">
+          <div class="chat-tool-row"><span class="chat-tool-caret">⌄</span><span class="chat-tool-icon">✦</span><span class="chat-tool-name">Workflow</span><span class="chat-tool-summary">review-changes · Resume the review</span><span class="chat-tool-meta">9 / 12 · $0.29</span><span class="wf-spin"></span></div>
+          <div class="chat-tool-detail">
+            <div class="wf-ban info">Resumed from the interrupted run · 5 calls reused, 7 running again</div>
+            <div class="wf-grp">
+              <div class="wf-grp-h">Review <span class="c">4 reused</span></div>
+              <div class="wf-sub"><span class="chat-tool-icon">✦</span><span class="n">review:correctness</span><span class="s">2 findings</span><span class="wf-cache">Reused</span><span class="m">$0</span></div>
+              <div class="wf-sub"><span class="chat-tool-icon">✦</span><span class="n">review:timezones</span><span class="s">2 findings</span><span class="wf-cache">Reused</span><span class="m">$0</span></div>
+              <div class="wf-sub" style="color:var(--text-3)">… 2 more reused</div>
+              <div class="wf-grp-h" style="margin-top:4px">Verify <span class="c">1 reused · 4 done · 3 running</span></div>
+            </div>
+          </div>
+        </div></div>
+      </div>
+      <div class="wf-pane">
+        <div class="m-mark"><span class="m-n">3</span><div class="chat-tool-card chat-tone-agent chat-tool-task is-open">
+          <div class="chat-tool-row"><span class="chat-tool-caret">⌄</span><span class="chat-tool-icon">✦</span><span class="chat-tool-name">Workflow</span><span class="chat-tool-summary">find-flaky · Hunt flaky specs until dry</span><span class="chat-tool-meta">23 / 23 · $5.00 of $5.00</span><span class="wf-ok">✓</span></div>
+          <div class="wf-ban warn">Stopped starting calls at the $5.00 limit the caller set. The 3 calls already running finished; the script returned what it had.</div>
+        </div></div>
+        <div class="m-mark" style="margin-top:20px"><span class="m-n">4</span><div class="chat-tool-card chat-tone-agent chat-tool-task is-open">
+          <div class="chat-tool-row"><span class="chat-tool-caret">⌄</span><span class="chat-tool-icon">✦</span><span class="chat-tool-name">Workflow</span><span class="chat-tool-summary">port-handlers · Port 4 handlers in parallel</span><span class="chat-tool-meta">4 / 4 · $1.02</span><span class="wf-ok">✓</span></div>
+          <div class="chat-tool-detail"><div class="wf-grp">
+            <div class="wf-grp-h">Port <span class="c">4 done · own worktree each</span></div>
+            <div class="wf-sub"><span class="chat-tool-icon">✦</span><span class="n">port:create</span><span class="s">Patch applied · 2 files</span><span class="m">M · GPT-5.6 Sol</span><span class="wf-ok">✓</span></div>
+            <div class="wf-sub"><span class="chat-tool-icon">✦</span><span class="n">port:update</span><span class="s">Patch applied · 2 files</span><span class="m">M · DeepSeek Chat</span><span class="wf-ok">✓</span></div>
+            <div class="wf-sub"><span class="chat-tool-icon">✦</span><span class="n">port:delete</span><span class="s">Patch applied · 1 file</span><span class="m">M · DeepSeek Chat</span><span class="wf-ok">✓</span></div>
+            <div class="wf-sub"><span class="chat-tool-icon">✦</span><span class="n">port:list</span><span class="s" style="color:var(--warning-solid)">Patch not applied · conflicts in handlers/index.ts</span><span class="m">M · Kimi K3</span><span class="wf-ok">✓</span></div>
+          </div></div>
+        </div></div>
+        <div class="m-mark" style="margin-top:20px"><span class="m-n">5</span><div class="chat-tool-card chat-tone-agent chat-tool-task is-open">
+          <div class="chat-tool-row"><span class="chat-tool-caret">⌄</span><span class="chat-tool-icon">✦</span><span class="chat-tool-name">Workflow</span><span class="chat-tool-summary">audit-routes · Audit every route</span><span class="chat-tool-meta">0 / 0</span><span class="wf-fail">✕</span></div>
+          <div class="wf-ban bad">The script threw before any call: TypeError: args.routes is undefined (line 4)</div>
+        </div></div>
+      </div>
+    </div>
+    <ul class="m-notes">
+      <li><span class="m-n">1</span><span><b>中断</b>（runner 重启、升级）：块头红色方块，一行说明保留了几个、还剩几个。父会话被唤醒，唤醒文本提示可以 <span class="a-mono">resumeFrom</span>。</span></li>
+      <li><span class="m-n">2</span><span><b>重放</b>是一个新的 Workflow 块，顶部一行说明续自哪次、重用几个；重用的行带灰色 <span class="a-mono">Reused</span>、花费 $0。位置相同、prompt 和参数没变的前缀才重用，第一个不同的及其之后全部重跑。</span></li>
+      <li><span class="m-n">3</span><span><b>花费上限</b>只在父模型给了 <span class="a-mono">maxCostUsd</span> 时存在（默认没有）。到了不再起新调用，在跑的跑完，脚本照常返回。</span></li>
+      <li><span class="m-n">4</span><span><b>隔离调用</b>（<span class="a-mono">isolation: 'worktree'</span>）各在自己的临时 worktree 里改，交回补丁；脚本 <span class="a-mono">applyPatch</span> 应用。冲突时不抛错，行里写明冲突文件，补丁留给父模型处理。</span></li>
+      <li><span class="m-n">5</span><span><b>脚本错误</b>：块头 ✕，一行写出错误和行号；已经发起的调用照常结束并保留，可以改脚本后 <span class="a-mono">resumeFrom</span>。</span></li>
+    </ul>
+  </div>
+</section>
+
+<!-- ───────────────────────── part 4 ───────────────────────── -->
+<section id="part-4" class="wf-part">
+  <div class="m-stage">
+    <div class="m-stage-l"><span class="m-k new">⑤ iOS / macOS / Android</span>折叠一行，第二行灰色「phase · 计数 · 花费」；点开是 SubAgent 列表</div>
+    <div style="display:flex;gap:40px;align-items:flex-start">
+      <div class="wf-phone">
+        <div class="wf-ph-bar"><span>9:41</span><span>●●● ▮</span></div>
+        <div class="wf-ph-nav">Scheduler review</div>
+        <div class="wf-ph-body">
+          <div class="wf-ph-user">Review the scheduler change for bugs.</div>
+          <div>I'll run a review workflow and check each finding.</div>
+          <div class="wf-ph-card m-mark"><span class="m-n">1</span>
+            <div class="wf-ph-row"><span style="color:#7c3aed">✦</span><span class="t">Workflow</span><span class="s">Review the scheduler diff</span><span class="wf-spin"></span></div>
+            <div class="wf-ph-sub">Verify · 7 of 12 · $0.84</div>
+            <div class="wf-ph-live">3 running, 2 queued</div>
+          </div>
+          <div class="wf-ph-card m-mark" style="margin-top:16px;background:#f6f3ff"><span class="m-n">2</span>
+            <div class="wf-ph-row"><span class="t">Workflow finished</span></div>
+            <div class="wf-ph-sub" style="padding-left:0">12 calls · 1 failed · 6m 40s · $1.37</div>
+          </div>
+          <div style="margin-top:10px">Three findings held up. The worst: nextRun() skips a day at DST end.</div>
+        </div>
+      </div>
+      <div class="wf-phone">
+        <div class="wf-ph-bar"><span>9:41</span><span>●●● ▮</span></div>
+        <div class="wf-ph-nav">‹ Review the scheduler diff</div>
+        <div class="wf-ph-body m-mark wf-in" style="outline-offset:-6px"><span class="m-n">3</span>
+          <div style="font-size:13px;font-weight:600;color:#6b6b70;margin:4px 0">REVIEW · 4 DONE</div>
+          <div class="wf-ph-row" style="padding:6px 0"><span class="t">review:correctness</span><span class="s">2 findings</span><span class="wf-ok">✓</span></div>
+          <div class="wf-ph-row" style="padding:6px 0"><span class="t">review:timezones</span><span class="s">2 findings</span><span class="wf-ok">✓</span></div>
+          <div class="wf-ph-row" style="padding:6px 0;color:#8a8a8d">2 more</div>
+          <div style="font-size:13px;font-weight:600;color:#6b6b70;margin:12px 0 4px">VERIFY · 3 DONE · 3 RUNNING · 2 QUEUED</div>
+          <div class="wf-ph-row" style="padding:6px 0"><span class="t">verify</span><span class="s">nextRun() skips a day</span><span class="wf-ok">✓</span></div>
+          <div class="wf-ph-row" style="padding:6px 0"><span class="t">verify</span><span class="s">Migration drops an index</span><span class="wf-fail">✕</span></div>
+          <div class="wf-ph-row" style="padding:6px 0"><span class="t">verify</span><span class="s">Cron parse accepts 61</span><span class="wf-spin"></span></div>
+          <div class="wf-ph-row" style="padding:6px 0;opacity:.55"><span class="t">verify</span><span class="s">Retry counter never resets</span><span class="wf-queued">Queued</span></div>
+        </div>
+      </div>
+      <ul class="m-notes" style="flex:1;margin-top:0">
+        <li><span class="m-n">1</span><span>窄屏把「phase · 计数 · 花费」放第二行，第三行斜体是在跑 / 排队数。没有上限时只写花费。</span></li>
+        <li><span class="m-n">2</span><span>结束唤醒同 Web：一张淡紫条，下面是父模型的回答。</span></li>
+        <li><span class="m-n">3</span><span>点开进入一页 SubAgent 列表，按 phase 分节；再点一行进入今天的 SubAgent 详情（步骤 + Why）。三端共用同一份事件形状，不各自解析。</span></li>
+        <li><span class="m-n">·</span><span>会话列表行沿用 <span class="a-mono">Running Agent</span>：workflow 在跑时 <span class="a-mono">runningSubagentCount</span> 把它的调用算进去。</span></li>
+      </ul>
+    </div>
+  </div>
+</section>
+
+<!-- ───────────────────────── part 5 ───────────────────────── -->
+<section id="part-5" class="wf-part">
+  <div class="m-stage">
+    <div class="m-stage-l"><span class="m-k new">⑥ Agent 设置 → SubAgents</span>只多一个开关；Running at once 改成 8，同时管 workflow 的调用；不加花费上限</div>
+    <div class="wf-two">
+      <div class="wf-box" style="padding:6px 16px">
+        <div class="wf-set">
+          <div class="wf-set-row"><span>SubAgents<br><span class="wf-hint">Let this agent hand work to other providers in the same folder</span></span><span class="wf-sw"></span></div>
+          <div class="wf-set-row m-mark" style="outline-offset:2px"><span class="m-n">1</span><span>Workflows<br><span class="wf-hint">Let this agent run a script that starts many SubAgents and wakes it once</span></span><span class="wf-sw"></span></div>
+          <div class="wf-set-row"><span>Optimize For</span><span class="wf-seg"><span class="on">Cost</span><span>Balance</span><span>Intelligence</span></span></div>
+          <div class="wf-set-row"><span>Providers<br><span class="wf-hint">All enabled providers. Block one to keep SubAgents off it.</span></span><span class="a-btn" style="padding:2px 10px">5 of 6 · Edit</span></div>
+          <div class="wf-set-row m-mark" style="outline-offset:2px"><span class="m-n">2</span><span>Running at once<br><span class="wf-hint">Per session: delegated SubAgents and workflow calls together</span></span><span class="a-btn" style="padding:2px 10px">8</span></div>
+        </div>
+      </div>
+      <div class="wf-col">
+        <div class="wf-code"><span class="c">// The parent model's call: no card, no default cost limit</span>
+<span class="k">workflow</span>({
+  description: <span class="k">'Review the scheduler diff'</span>,
+  scriptPath: <span class="k">'.orbit/workflows/review-changes.js'</span>,
+  args: { dimensions: [<span class="k">'correctness'</span>, <span class="k">'timezones'</span>,
+                       <span class="k">'concurrency'</span>, <span class="k">'migrations'</span>] },
+  <span class="c">// maxCostUsd: 5   ← optional; set only when the caller wants one</span>
+})
+<span class="c">→ { workflowRunId: "3Ab…", status: "running" }</span></div>
+        <ul class="m-notes" style="margin-top:6px">
+          <li><span class="m-n">1</span><span><b>Workflows 开关</b>：默认跟随 SubAgents（开）。关掉后工具列表里没有 <span class="a-mono">workflow</span>，<span class="a-mono">delegate</span> 不受影响。</span></li>
+          <li><span class="m-n">2</span><span><b>共用一个上限</b>，默认从 4 改成 8；已有仍是 4 的 Agent 一并迁移。满了 workflow 的调用排队（<span class="a-mono">Queued</span>），不算失败。</span></li>
+          <li><span class="m-n">·</span><span>没有「Workflow cost limit」这一行：花费上限只由父模型在调用时可选地给出。失控循环由每次 1000 个调用的兜底挡住。</span></li>
+        </ul>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ───────────────────────── part 6 ───────────────────────── -->
+<section id="part-6" class="wf-part">
+  <div class="m-stage">
+    <div class="m-stage-l"><span class="m-k">已定</span>owner，2026-11-19 · 分期</div>
+    <table class="wf-tbl">
+      <tr><th style="width:150px">项</th><th>决定</th></tr>
+      <tr><td class="wf-em">D1 脚本形态</td><td>JavaScript，接口与 Claude Workflow 相同（runner 内嵌 goja）；不做声明式 JSON DAG</td></tr>
+      <tr><td class="wf-em">D2 谁能发起</td><td>开了 SubAgents 和 Workflows 的会话都能发起，不发确认卡，与 <span class="a-mono">delegate</span> 一致</td></tr>
+      <tr><td class="wf-em">D3 并发</td><td>与 SubAgent <b>共用</b> <span class="a-mono">subagentsMaxRunning</span>，默认从 4 改成 <b>8</b></td></tr>
+      <tr><td class="wf-em">D4 花费上限</td><td><b>没有默认值</b>；<span class="a-mono">maxCostUsd</span> 可选，给了才生效；设置里不加</td></tr>
+      <tr><td class="wf-em">D5 隔离调用的补丁</td><td>只交回，由脚本 <span class="a-mono">applyPatch</span> 或父模型决定，不自动应用</td></tr>
+    </table>
+    <div class="wf-phases" style="margin-top:16px">
+      <div class="wf-ph"><h4><span class="wf-tag p1">P1</span> 编排</h4><p><span class="a-mono">workflow</span> 工具、goja 沙箱、agent / parallel / pipeline / phase / log、后台 + 一次唤醒、可选上限、并发默认 8</p></div>
+      <div class="wf-ph"><h4><span class="wf-tag p2">P2</span> schema 与重放</h4><p><span class="a-mono">return_result</span>（各引擎）、服务端日志、<span class="a-mono">resumeFrom</span></p></div>
+      <div class="wf-ph"><h4><span class="wf-tag p3">P3</span> 隔离</h4><p><span class="a-mono">isolation: 'worktree'</span>、补丁、<span class="a-mono">applyPatch</span> 与冲突列表</p></div>
+      <div class="wf-ph"><h4><span class="wf-tag p1">P4</span> 三端界面</h4><p>本效果图定稿后：Web、iOS / macOS、Android；SubAgents 报告加 Workflow 视图</p></div>
+    </div>
+  </div>
+</section>
+
+</div>
+</body>
+</html>

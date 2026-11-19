@@ -23,7 +23,13 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.semantics.Role
+import androidx.compose.ui.text.SpanStyle
+import androidx.compose.ui.text.buildAnnotatedString
+import androidx.compose.ui.text.font.FontFamily
+import androidx.compose.ui.text.font.FontStyle
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.withStyle
+import androidx.compose.ui.unit.sp
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
@@ -480,8 +486,8 @@ private fun RecordFooter(record: CardRecord) {
         CardRecord.Icon.KEPT -> R.drawable.ic_refresh to secondary
         CardRecord.Icon.REFUSED -> R.drawable.ic_x_circle to secondary
     }
-    Column(Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 12.dp).testTag("card-review:footer"),
-        verticalArrangement = Arrangement.spacedBy(2.dp)) {
+    Column(Modifier.fillMaxWidth().heightIn(max = 420.dp).verticalScroll(rememberScrollState()).padding(horizontal = 16.dp, vertical = 12.dp)
+        .testTag("card-review:footer"), verticalArrangement = Arrangement.spacedBy(2.dp)) {
         Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(6.dp)) {
             Icon(painterResource(icon), null, Modifier.size(16.dp), tint = tint)
             Text(record.line, Modifier.testTag("card-review:footer-line"), style = MaterialTheme.typography.bodyMedium.copy(fontWeight = FontWeight.SemiBold))
@@ -489,5 +495,45 @@ private fun RecordFooter(record: CardRecord) {
         record.detail?.let {
             Text(it, Modifier.padding(start = 22.dp).testTag("card-review:footer-detail"), style = MaterialTheme.typography.bodySmall, color = secondary)
         }
+        record.receipt?.let { ReceiptFold(it) }
+    }
+}
+
+/** What a recorded acceptance confirmation opens to (web `AcceptanceReceiptFold`): closed, a brand-coloured reading control; open,
+ * the change rows, the numbered words, a note and the seal. */
+@Composable
+private fun ReceiptFold(receipt: AcceptanceReceipt) {
+    val secondary = MaterialTheme.colorScheme.onSurfaceVariant
+    val colors = LocalOrbitColors.current
+    var open by rememberSaveable { mutableStateOf(false) }
+    Text(if (open) CardPreviews.receiptCloseLabel else receipt.openLabel,
+        Modifier.padding(start = 22.dp, top = 6.dp).clickable { open = !open }.testTag("card-review:receipt-toggle"),
+        style = MaterialTheme.typography.bodySmall.copy(fontWeight = FontWeight.SemiBold), color = MaterialTheme.colorScheme.primary)
+    if (!open) return
+    Column(Modifier.padding(start = 22.dp, top = 6.dp).testTag("card-review:receipt-fold"), verticalArrangement = Arrangement.spacedBy(6.dp)) {
+        receipt.changes.forEach { row ->
+            val tone = when (row.mark) { "+" -> colors.success; "↑" -> colors.needsYou; else -> secondary }
+            Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                Text(row.mark, color = tone, style = MaterialTheme.typography.bodySmall.copy(fontWeight = FontWeight.Bold))
+                Column {
+                    Text(row.kind, color = tone, style = MaterialTheme.typography.labelSmall)
+                    Text(row.text, style = MaterialTheme.typography.bodySmall)
+                    row.was?.let { Text(it, color = secondary, style = MaterialTheme.typography.labelSmall) }
+                }
+            }
+        }
+        receipt.criteria.forEach { item ->
+            Text(buildAnnotatedString {
+                item.ordinal?.let { append("$it. ") }
+                if (item.text != null) append(item.text)
+                else withStyle(SpanStyle(fontStyle = FontStyle.Italic, color = secondary)) { append(CardPreviews.receiptWordsGone) }
+                item.tags.forEach { tag ->
+                    append(" ")
+                    withStyle(SpanStyle(fontSize = 11.sp, color = if (tag == CardPreviews.receiptTagNew) colors.success else colors.needsYou)) { append(tag) }
+                }
+            }, style = MaterialTheme.typography.bodySmall)
+        }
+        receipt.note?.let { Text(it, color = secondary, style = MaterialTheme.typography.bodySmall) }
+        Text(receipt.seal, color = secondary, style = MaterialTheme.typography.labelSmall.copy(fontFamily = FontFamily.Monospace))
     }
 }

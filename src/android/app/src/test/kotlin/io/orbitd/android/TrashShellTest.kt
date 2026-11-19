@@ -48,13 +48,13 @@ class TrashShellTest {
         signIn(); openAlpha()
         await { exists(hasRowMenu("Options for Plain notes")) }
         // The drawer is composed while it is closed: its Alpha row counts the run.
-        await { exists(hasText("Fixture runner · 1 running")) }
+        await { exists(hasStateDescription("1 running") and hasText("Alpha")) }
         val answer = CompletableDeferred<Unit>()
         NavShell.holdDelete = answer
         rowAction("Plain notes", "Move to Trash")
         await { NavShell.calls.any { it == "DELETE sessions/${NavShell.PLAIN}" } }
         compose.onAllNodes(hasRowMenu("Options for Plain notes")).assertCountEquals(0)
-        compose.onAllNodesWithText("Fixture runner · 1 running").assertCountEquals(0)
+        compose.onAllNodes(hasStateDescription("1 running") and hasText("Alpha")).assertCountEquals(0)
         assertFalse(toastShows("Moved to Trash"))
         assertTrue("the server still has it", snapshotHasPlain())
         // The server takes the move: the toast at once, and the row held out while the lists are read again behind it.

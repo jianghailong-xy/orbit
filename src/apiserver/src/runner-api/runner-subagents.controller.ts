@@ -1,3 +1,4 @@
+import { createHash } from 'node:crypto';
 import {
   BadRequestException,
   Body,
@@ -74,6 +75,7 @@ import { planSubagentRoute } from './subagent-route';
 import {
   chooseSubagentWorkspace,
   neededCapabilities,
+  notGitRefusal,
   planRemoteSubagent,
   readRelayBatch,
   remoteFactsOf,
@@ -86,7 +88,9 @@ import {
   type SubagentRemoteFacts,
   type SubagentWorkspacePick,
 } from './subagent-remote';
-import { fileSubagentWake } from './subagent-wake';
+import { sessionHasEnded } from './background-job-wake';
+import { fileSubagentWake, fileWorkflowWake } from './subagent-wake';
+import { WORKFLOW_SCRIPT_MAX_BYTES, WorkflowRunCreateDto, WorkflowRunUpdateDto } from './workflow-run';
 
 const TERMINAL: RunStatus[] = [RunStatus.SUCCEEDED, RunStatus.FAILED, RunStatus.CANCELLED];
 
@@ -126,6 +130,27 @@ const SUBAGENT_PARENT_SELECT = {
   owner: { select: { preferences: true } },
 } satisfies Prisma.SessionSelect;
 type SubagentParent = Prisma.SessionGetPayload<{ select: typeof SUBAGENT_PARENT_SELECT }>;
+
+function assertSubagentsEnabled(workspace: { subagentsEnabled: boolean } | null): void {
+  if (workspace?.subagentsEnabled === false) {
+    throw new ForbiddenException({
+      code: 'SUBAGENTS_DISABLED',
+      message: 'SubAgents are turned off for this agent. Do the work in this session instead.',
+    });
+  }
+}
+
+/** Called under the session lock shared by workflow completion and SubAgent admission. */
+async function assertWorkflowRunning(tx: Prisma.TransactionClient, sessionId: string, workflowRunId?: string): Promise<void> {
+  if (!workflowRunId) return;
+  const workflow = await tx.subagentWorkflowRun.findFirst({
+    where: { id: workflowRunId, sessionId, status: 'RUNNING' },
+    select: { id: true },
+  });
+  if (!workflow) {
+    throw new ConflictException({ code: 'WORKFLOW_NOT_RUNNING', message: 'This session has no running workflow by that ID.' });
+  }
+}
 
 /**
  * SubAgent runs (docs/subagent-design.md §5.1, §6.2), reached by `orbit mcp`'s `delegate` tool with the
@@ -182,6 +207,93 @@ export class RunnerSubagentsController {
     }
   }
 
+  @Post('sessions/:id/workflows')
+  @HttpCode(200)
+  async openWorkflowRun(
+    @CurrentRunner() runner: Runner,
+    @Param('id', PublicIdPipe) sessionId: string,
+    @Body() dto: WorkflowRunCreateDto,
+  ): Promise<{ workflowRunId: string; status: SubagentRunStatus }> {
+    await this.assertParentOfRunner(sessionId, runner);
+    if (Buffer.byteLength(dto.script, 'utf8') > WORKFLOW_SCRIPT_MAX_BYTES) {
+      throw new BadRequestException('Workflow scripts must be at most 512 KB.');
+    }
+    if (dto.script.includes('\0')) {
+      throw new BadRequestException('Workflow scripts must not contain null characters.');
+    }
+    return withTransactionRetry(this.prisma, async (tx) => {
+      await tx.$queryRaw`SELECT 1 FROM "session" WHERE "id" = ${sessionId}::uuid FOR UPDATE`;
+      const where = { sessionId_toolUseId: { sessionId, toolUseId: dto.toolUseId } };
+      const opened = await tx.subagentWorkflowRun.findUnique({ where, select: { id: true, status: true } });
+      if (opened) return { workflowRunId: opened.id, status: opened.status as SubagentRunStatus };
+      const session = await tx.session.findUniqueOrThrow({
+        where: { id: sessionId },
+        select: {
+          ownerId: true, status: true, endReason: true, completedAt: true, archivedAt: true, deletedAt: true,
+          workspace: { select: { subagentsEnabled: true } },
+        },
+      });
+      if (sessionHasEnded(session)) throw new ConflictException('the session has ended');
+      assertSubagentsEnabled(session.workspace);
+      const row = await tx.subagentWorkflowRun.create({
+        data: {
+          ownerId: session.ownerId,
+          sessionId,
+          toolUseId: dto.toolUseId,
+          name: stripNul(dto.name),
+          description: stripNul(dto.description),
+          phases: stripNul(dto.phases ?? []),
+          script: dto.script,
+          scriptSha256: createHash('sha256').update(dto.script).digest('hex'),
+          args: dto.args === null ? Prisma.JsonNull : stripNul(dto.args) as Prisma.InputJsonValue | undefined,
+          maxCostUsd: dto.maxCostUsd,
+        },
+        select: { id: true, status: true },
+      });
+      return { workflowRunId: row.id, status: row.status as SubagentRunStatus };
+    }, loggedRetry(this.logger, 'runnerSubagents.openWorkflowRun'));
+  }
+
+  @Patch('sessions/:id/workflows/:workflowRunId')
+  async updateWorkflowRun(
+    @CurrentRunner() runner: Runner,
+    @Param('id', PublicIdPipe) sessionId: string,
+    @Param('workflowRunId', PublicIdPipe) workflowRunId: string,
+    @Body() dto: WorkflowRunUpdateDto,
+  ): Promise<{ workflowRunId: string; status: SubagentRunStatus; applied: boolean }> {
+    await this.assertParentOfRunner(sessionId, runner);
+    const answer = await withTransactionRetry(this.prisma, async (tx) => {
+      await tx.$queryRaw`SELECT 1 FROM "session" WHERE "id" = ${sessionId}::uuid FOR UPDATE`;
+      const where = { id: workflowRunId, sessionId };
+      const ended = await tx.subagentWorkflowRun.updateMany({
+        where: { ...where, status: 'RUNNING' },
+        data: {
+          status: dto.status,
+          result: truncateResultSummary(dto.result ?? undefined),
+          error: truncateResultSummary(dto.error ?? undefined),
+          costUsd: dto.costUsd ?? 0,
+          callsDone: dto.callsDone ?? 0,
+          callsFailed: dto.callsFailed ?? 0,
+          wakeOwed: dto.wake === true,
+          endedAt: new Date(),
+        },
+      });
+      // Each SubAgent call already charged the session when it ended.
+      if (ended.count === 1) return { workflowRunId, status: dto.status, applied: true };
+      const row = await tx.subagentWorkflowRun.findFirst({ where, select: { status: true } });
+      if (!row) throw new NotFoundException('Workflow run not found');
+      return { workflowRunId, status: row.status as SubagentRunStatus, applied: false };
+    }, loggedRetry(this.logger, 'runnerSubagents.updateWorkflowRun'));
+    if (answer.applied && dto.wake && this.sessions) {
+      try {
+        await fileWorkflowWake(this.prisma, this.sessions, workflowRunId);
+      } catch (error) {
+        this.logger.warn(`the wake for workflow run ${workflowRunId} was not filed yet: ${(error as Error).message}`);
+      }
+    }
+    return answer;
+  }
+
   /**
    * A parent session's `mcp__orbit__delegate` call opens a SubAgent run (docs/subagent-design.md §5.1 step 2).
    * Refused when the session's Agent has SubAgents turned off (403 SUBAGENTS_DISABLED) or already runs as many
@@ -221,6 +333,7 @@ export class RunnerSubagentsController {
         parentWorkspaceId: parent.workspaceId,
         workspace: dto.workspace,
         needs: dto.needs,
+        readonly: dto.readonly === true,
       });
       if (pick.kind === 'remote') return this.openRemoteSubagentRun(sessionId, dto, pick);
       return this.createSubagentRun(runner, sessionId, dto, pick.reason);
@@ -245,13 +358,9 @@ export class RunnerSubagentsController {
         where: { sessionId_toolUseId: { sessionId, toolUseId: dto.toolUseId } },
       });
       if (!opened) {
-        if (session.workspace?.subagentsEnabled === false) {
-          throw new ForbiddenException({
-            code: 'SUBAGENTS_DISABLED',
-            message: 'SubAgents are turned off for this agent. Do the work in this session instead.',
-          });
-        }
-        const limit = session.workspace?.subagentsMaxRunning ?? 4;
+        assertSubagentsEnabled(session.workspace);
+        await assertWorkflowRunning(tx, sessionId, dto.workflowRunId);
+        const limit = session.workspace?.subagentsMaxRunning ?? 8;
         const running = await tx.subagentRun.count({ where: { sessionId, status: 'RUNNING' } });
         if (running >= limit) {
           throw new ConflictException({
@@ -310,7 +419,7 @@ export class RunnerSubagentsController {
       if (dto.readonly) decision.readonly = true;
       // A call that asked for a workspace or capabilities and was placed here says why first (§10.1).
       if (workspaceReason) decision.reasons = [workspaceReason, ...decision.reasons];
-      const { note: _note, ...target } = chosen.target;
+      const { note: _note, level: _level, ...target } = chosen.target;
       const row = await tx.subagentRun.create({
         data: {
           ownerId: session.ownerId,
@@ -320,7 +429,11 @@ export class RunnerSubagentsController {
           definitionSource: dto.definitionSource,
           background: dto.background ?? false,
           // A background run is answered by the wake its end sends; nobody waits for it inline.
-          wakeOwed: dto.background ?? false,
+          wakeOwed: !dto.workflowRunId && (dto.background ?? false),
+          workflowRunId: dto.workflowRunId,
+          callIndex: dto.callIndex,
+          label: stripNul(dto.label),
+          phase: stripNul(dto.phase),
           ...(dto.description ? { description: stripNul(dto.description) } : {}),
           status: 'RUNNING',
           decision: decision as unknown as Prisma.InputJsonValue,
@@ -371,7 +484,7 @@ export class RunnerSubagentsController {
     }
     const workspace = await this.prisma.workspace.findUnique({
       where: { id: original.workspaceId },
-      select: { id: true, name: true, workDir: true, runnerId: true, runner: { select: { capabilities: true } } },
+      select: { id: true, name: true, workDir: true, workDirIsGit: true, runnerId: true, runner: { select: { capabilities: true } } },
     });
     if (!workspace) throw refuse('SUBAGENT_RESUME_GONE', 'The workspace that SubAgent ran on is gone, and its conversation with it.');
     if (workspace.runnerId !== original.targetRunnerId || !workspace.runner) {
@@ -381,13 +494,15 @@ export class RunnerSubagentsController {
     if (!workspace.runner.capabilities.includes(SUBAGENT_REMOTE_RESUME_V1)) {
       throw refuse('SUBAGENT_RESUME_UNSUPPORTED', `${workspace.name}'s runner is too old to continue a SubAgent's conversation.`);
     }
+    const inPlace = workspace.workDirIsGit === false;
+    if (inPlace && !dto.readonly) throw notGitRefusal(workspace.name);
     // The model it last ran on, unless the call names one: the conversation is that engine's, and a model named is
     // run as named on the target (planRemoteSubagent), so the resume is not routed onto another engine.
     const lastModel = attemptsOf(original.attempts).at(-1)?.model;
     const pinned = dto.model?.trim() || !lastModel ? dto : Object.assign(new SubagentRunCreateDto(), dto, { model: lastModel });
     return this.openRemoteSubagentRun(sessionId, pinned, {
       kind: 'remote',
-      workspace: { id: workspace.id, name: workspace.name, runnerId: original.targetRunnerId, workDir: workspace.workDir },
+      workspace: { id: workspace.id, name: workspace.name, runnerId: original.targetRunnerId, workDir: workspace.workDir, inPlace },
       reason: `Continues the SubAgent that ran on ${workspace.name}, with its conversation`,
     });
   }
@@ -431,13 +546,9 @@ export class RunnerSubagentsController {
       if (TERMINAL.includes(session.status)) throw new ConflictException('the session has ended');
       const opened = await tx.subagentRun.findUnique({ where: { sessionId_toolUseId: { sessionId, toolUseId: dto.toolUseId } } });
       if (opened) return this.remoteAnswer(opened);
-      if (session.workspace?.subagentsEnabled === false) {
-        throw new ForbiddenException({
-          code: 'SUBAGENTS_DISABLED',
-          message: 'SubAgents are turned off for this agent. Do the work in this session instead.',
-        });
-      }
-      const limit = session.workspace?.subagentsMaxRunning ?? 4;
+      assertSubagentsEnabled(session.workspace);
+      await assertWorkflowRunning(tx, sessionId, dto.workflowRunId);
+      const limit = session.workspace?.subagentsMaxRunning ?? 8;
       const running = await tx.subagentRun.count({ where: { sessionId, status: 'RUNNING' } });
       if (running >= limit) {
         throw new ConflictException({
@@ -451,7 +562,10 @@ export class RunnerSubagentsController {
         ...(dto.permissionMode ? { permissionMode: dto.permissionMode } : {}),
         ...(dto.needs?.length ? { needs: neededCapabilities(dto.needs) } : {}),
         ...(dto.resumeOf ? { resumeOf: dto.resumeOf } : {}),
+        ...(pick.workspace.inPlace ? { inPlace: true } : {}),
       };
+      // Only a read-only run goes in a work dir that is not a git repository (§10.2): nothing would discard its changes.
+      if (facts.inPlace && !facts.readonly) throw notGitRefusal(pick.workspace.name);
       // What it runs on, judged on the target runner (§10.3); the refusals are thrown before anything is written.
       const { decision, target: chosen, built } = await planRemoteSubagent(tx, {
         ownerId: session.ownerId, sessionId, dto, facts, pick, planUsage: this.planUsage,
@@ -464,7 +578,7 @@ export class RunnerSubagentsController {
         throw widerModeRefusal(parentMode, dto.permissionMode, childEngine,
           "Remove permissionMode from the SubAgent's definition to run it in this session's mode.");
       }
-      const { note: _note, ...target } = chosen;
+      const { note: _note, level: _level, ...target } = chosen;
       const row = await tx.subagentRun.create({
         data: {
           ownerId: session.ownerId,
@@ -473,7 +587,11 @@ export class RunnerSubagentsController {
           type: dto.type,
           definitionSource: dto.definitionSource,
           background: dto.background ?? false,
-          wakeOwed: dto.background ?? false,
+          wakeOwed: !dto.workflowRunId && (dto.background ?? false),
+          workflowRunId: dto.workflowRunId,
+          callIndex: dto.callIndex,
+          label: stripNul(dto.label),
+          phase: stripNul(dto.phase),
           ...(dto.description ? { description: stripNul(dto.description) } : {}),
           status: 'RUNNING',
           decision: decision as unknown as Prisma.InputJsonValue,
@@ -542,6 +660,7 @@ export class RunnerSubagentsController {
         prompt: facts.prompt,
         exec: built.exec,
         resumeOf: facts.resumeOf ?? null,
+        inPlace: facts.inPlace === true && facts.readonly === true,
       };
       return { claim };
     }, loggedRetry(this.logger, 'runnerSubagents.claimRemoteSubagentRun'));
@@ -820,7 +939,7 @@ export class RunnerSubagentsController {
             ? `Moved to ${next.model} on ${next.provider} after ${from}'s login failed`
             : `Moved to ${next.model} on ${next.provider} after ${from}'s account hit its limit`;
         const attempt = attempts.length + 1;
-        const { note: _note, ...target } = next;
+        const { note: _note, level: _level, ...target } = next;
         attempts.push({
           ...target, attempt, outcome: 'RUNNING', startedAt: now,
           ...(built.poolMember ? { poolMember: built.poolMember } : {}),

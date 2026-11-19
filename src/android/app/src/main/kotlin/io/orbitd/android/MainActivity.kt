@@ -19,7 +19,6 @@ import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.saveable.rememberSaveableStateHolder
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.Alignment
-import androidx.compose.ui.layout.onSizeChanged
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.LocalFocusManager
 import androidx.compose.ui.platform.LocalSoftwareKeyboardController
@@ -158,7 +157,7 @@ private fun OrbitShell(auth: AuthViewModel, app: OrbitApplication, incoming: Pai
     val saver = remember { Saver<OrbitNavigation, String>(save = { Wire.json.encodeToString(it) }, restore = { Wire.json.decodeFromString<OrbitNavigation>(it) }) }
     var navigation by rememberSaveable(stateSaver = saver) { mutableStateOf(OrbitNavigation()) }
     var showBuild by rememberSaveable { mutableStateOf(false) }
-    val drawer = rememberDrawerState(DrawerValue.Closed)
+    val drawer = rememberOrbitDrawerState()
     val scope = rememberCoroutineScope()
     val focus = LocalFocusManager.current
     val keyboard = LocalSoftwareKeyboardController.current
@@ -201,12 +200,6 @@ private fun OrbitShell(auth: AuthViewModel, app: OrbitApplication, incoming: Pai
     key(accountKey) {
         val api = remember(signedIn.handle) { DirectoryApi(app.session, signedIn.handle) }
         val management = remember(signedIn.handle) { ManagementApi(app.session, signedIn.handle, app.processScope) }
-        // Admin is a drawer row for an admin, as iOS's is, since Settings' list took the web nav's groups and lost its row.
-        var admin by remember(signedIn.handle) { mutableStateOf(false) }
-        LaunchedEffect(management) {
-            admin = try { (management.get("users/me") as? kotlinx.serialization.json.JsonObject)?.text("role") == "ADMIN" }
-                catch (e: kotlinx.coroutines.CancellationException) { throw e } catch (_: Exception) { false }
-        }
         val scopeList = remember(api) { SessionScopeList(api) }
         val data by rememberDirectoryData(app, signedIn.handle)
         val live by remember(app) { app.realtime.state.map { it.handle to it.invalidationRevision }.distinctUntilChanged() }
@@ -361,21 +354,17 @@ private fun OrbitShell(auth: AuthViewModel, app: OrbitApplication, incoming: Pai
             if (live.first === signedIn.handle && route.destination != Destination.SESSION) app.realtime.selectSession(null)
         }
         // iOS `NavigationDrawer(live: progress > 0)`: the drawer's animated marks move only while any of it is on screen. The closed
-        // drawer stays composed, one sheet's width off screen (Material's closed anchor), where a spinner would redraw every frame.
-        var sheetWidth by remember { mutableIntStateOf(0) }
-        val drawerLive by remember { derivedStateOf { sheetWidth > 0 && drawer.currentOffset > -sheetWidth } }
-        ModalNavigationDrawer(drawerState = drawer,
-            drawerContent = {
-                ModalDrawerSheet(modifier = Modifier.onSizeChanged { sheetWidth = it.width }, drawerContainerColor = LocalOrbitColors.current.drawer,
-                    drawerContentColor = MaterialTheme.colorScheme.onSurface) {
-                    Column(Modifier.fillMaxHeight().widthIn(max = 360.dp).verticalScroll(rememberScrollState()).imePadding().padding(12.dp)) {
-                        val projects = rememberDrawerProjects(app, signedIn.handle, api)
-                        Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween, verticalAlignment = Alignment.CenterVertically) {
-                            Text("Orbit", style = MaterialTheme.typography.headlineMedium)
-                            IconButton(onClick = { scope.launch { drawer.close() }; open(OrbitRoute(Destination.SEARCH, origin = Origin.DRAWER)) }) {
-                                Icon(painterResource(R.drawable.ic_search), "Search sessions")
-                            }
-                        }
+        // drawer stays composed behind the page, where a spinner would redraw every frame.
+        val drawerLive by remember { derivedStateOf { drawer.progress > 0f } }
+        OrbitDrawerShell(drawer,
+            drawer = {
+                val projects = rememberDrawerProjects(app, signedIn.handle, api)
+                DrawerPanel(
+                    header = { DrawerHeader { scope.launch { drawer.close() }; open(OrbitRoute(Destination.SEARCH, origin = Origin.DRAWER)) } },
+                    actions = {
+                        DrawerActionBar(onNewSession = { scope.launch { drawer.close() }; openNewSession(Origin.DRAWER) },
+                            onSettings = { scope.launch { drawer.close() }; open(OrbitRoute(Destination.SETTINGS, origin = Origin.DRAWER)) })
+                    }) {
                         // Scheduled (board 01 ①): account-wide, right under Tasks and nowhere in a workspace's list; away while the
                         // server predates scheduled tasks.
                         val scheduled = remember(signedIn.handle) { ScheduledStore.of(app.session, signedIn.handle, app.processScope) }
@@ -385,61 +374,55 @@ private fun OrbitShell(auth: AuthViewModel, app: OrbitApplication, incoming: Pai
                             Triple(ScheduleCopy.Nav.scheduled, Destination.SCHEDULED, R.drawable.ic_calendar).takeUnless { scheduledState.unsupported },
                             Triple("Wiki", Destination.WIKI, R.drawable.ic_wiki)).forEach { (name, dest, icon) ->
                             val row = @Composable {
-                                NavigationDrawerItem(label = { Text(name) }, selected = navigation.section == name,
-                                    icon = { Icon(painterResource(icon), null) }, onClick = {
+                                DrawerRow(selected = navigation.section == name, icon = icon, onClick = {
                                         // Coming into the Wiki from another section, it opens the space bound to where the reader was.
                                         if (dest == Destination.WIKI && navigation.section != name) wikiEntered(app, signedIn.handle, navigation)
                                         select(name, OrbitRoute(dest, origin = Origin.DRAWER))
                                     },
-                                    badge = when (dest) {
+                                    trailing = when (dest) {
                                         Destination.WIKI -> ({ WikiDrawerCount(app, signedIn.handle) })
                                         Destination.PROJECTS -> ({ ProjectsDrawerCount(projects) })
                                         Destination.SCHEDULED -> ({ ScheduledDrawerCount(scheduledState.needsYouCount) })
                                         else -> null
-                                    }, modifier = if (dest == Destination.SCHEDULED) Modifier.testTag("drawer:scheduled") else Modifier)
+                                    }, modifier = if (dest == Destination.SCHEDULED) Modifier.testTag("drawer:scheduled") else Modifier) { DrawerLabel(name) }
                             }
                             if (dest == Destination.WIKI) WikiDrawerRow(app, signedIn.handle, drawer.isOpen, row) else row()
                         }
                         // What sessions asked the owner to do (web `WaitingOnYouPage`), with how many are waiting.
-                        NavigationDrawerItem(label = { Text(WAITING_ON_YOU) }, selected = navigation.section == WAITING_ON_YOU,
-                            icon = { Icon(painterResource(R.drawable.ic_bell), null) },
+                        DrawerRow(selected = navigation.section == WAITING_ON_YOU, icon = R.drawable.ic_bell,
                             onClick = { select(WAITING_ON_YOU, OrbitRoute(Destination.WAITING_ON_YOU, origin = Origin.DRAWER)) },
-                            badge = { WaitingOnYouDrawerCount(remember(signedIn.handle) { OwnerRequestStore.of(app.session, signedIn.handle, app.processScope) }, projects.projects, revision, terminalsChanged) },
-                            modifier = Modifier.testTag("drawer:waiting-on-you"))
-                        if (admin) NavigationDrawerItem(label = { Text("Admin") }, selected = route.destination == Destination.SETTINGS && route.id == "admin",
-                            icon = { Icon(painterResource(R.drawable.ic_admin), null) }, modifier = Modifier.testTag("drawer:admin"),
-                            onClick = { scope.launch { drawer.close() }; open(OrbitRoute(Destination.SETTINGS, "admin", origin = Origin.DRAWER)) })
-                        SectionHeading("Workspaces")
+                            trailing = { WaitingOnYouDrawerCount(remember(signedIn.handle) { OwnerRequestStore.of(app.session, signedIn.handle, app.processScope) }, projects.projects, revision, terminalsChanged) },
+                            modifier = Modifier.testTag("drawer:waiting-on-you")) { DrawerLabel(WAITING_ON_YOU) }
+                        DrawerWorkspacesHeading("Workspaces")
                         DrawerUnreachableRow(data) { app.realtime.refreshDirectory() }
                         if (data.ready && data.workspaces.isEmpty() && machinesToSetUp.isEmpty()) Text(MachineSetupCopy.NO_WORKSPACES_YET, Modifier.padding(16.dp))
                         workspaces.forEach { workspace ->
                             val runner = data.runners.firstOrNull { ObjectId.same(it.id, workspace.runnerId) }
                             val sessions = data.sessions["open"].orEmpty().filter { ObjectId.same(it.workspace, workspace.id) }
-                            NavigationDrawerItem(selected = navigation.section == workspace.id,
-                                label = { Column { Text(workspace.name); Text(listOfNotNull(runner?.let { if (RunnerPage.isManaged(it.id, managed = it.managed)) RunnerCopy.MANAGED_RUNNER_LABEL else it.name },
-                                    if (!workspace.enabled) "Disabled" else if (runner?.online == false)
-                                        ManagedRunner.row(runner.id, managedForLanding.shown?.status)?.label ?: "Offline" else null,
-                                    sessions.sumOf { it.pendingApprovals }.takeIf { it > 0 }?.let { "$it need you" },
-                                    sessions.count { it.runState == "RUNNING" || it.status == "RUNNING" }.takeIf { it > 0 }?.let { "$it running" }).joinToString(" · "), style = MaterialTheme.typography.bodySmall) } },
-                                icon = { Icon(painterResource(R.drawable.ic_workspace), null) },
+                            DrawerWorkspaceRow(name = workspace.name,
+                                runner = runner?.let { if (RunnerPage.isManaged(it.id, managed = it.managed)) RunnerCopy.MANAGED_RUNNER_LABEL else it.name },
+                                disabled = !workspace.enabled,
+                                stateLabel = if (runner?.online == false) ManagedRunner.row(runner.id, managedForLanding.shown?.status)?.label ?: "Offline" else null,
+                                waiting = sessions.sumOf { it.pendingApprovals },
+                                running = sessions.count { it.runState == "RUNNING" || it.status == "RUNNING" }, live = drawerLive,
+                                selected = navigation.section == workspace.id,
                                 onClick = { select(workspace.id, OrbitRoute(Destination.WORKSPACE, workspace.id, workspace.id, origin = Origin.DRAWER)) })
                         }
                         machinesToSetUp.forEachIndexed { index, machine ->
                             val dest = machineDraftDestination(machine.id)
                             val selected = navigation.section == dest ||
                                 (route.destination == Destination.DRAFT && route.workspaceId == null && ObjectId.same(route.id, machine.id))
-                            NavigationDrawerItem(selected = selected,
-                                label = { Text(MachineSetupCopy.setupTitle(machine.name), color = MaterialTheme.colorScheme.primary,
-                                    fontWeight = FontWeight.SemiBold.takeIf { machine.managed }) },
-                                icon = {
-                                    if (machine.managed) Icon(painterResource(R.drawable.ic_cloud), null,
-                                        Modifier.testTag("setup-managed-runner-icon"), tint = MaterialTheme.colorScheme.primary)
-                                    else Icon(painterResource(R.drawable.ic_folder_plus), null, tint = MaterialTheme.colorScheme.primary)
-                                },
+                            DrawerRow(selected = selected,
+                                icon = if (machine.managed) R.drawable.ic_cloud else R.drawable.ic_folder_plus,
+                                iconTint = MaterialTheme.colorScheme.primary,
                                 onClick = { select(dest, OrbitRoute(Destination.DRAFT, id = machine.id, origin = Origin.DRAWER)) },
-                                modifier = Modifier.testTag("setup-machine:${machine.id}"))
+                                modifier = Modifier.testTag("setup-machine:${machine.id}")) {
+                                Text(MachineSetupCopy.setupTitle(machine.name), color = MaterialTheme.colorScheme.primary, maxLines = 1,
+                                    fontWeight = FontWeight.SemiBold.takeIf { machine.managed })
+                            }
                             if (machine.managed && index < machinesToSetUp.lastIndex) {
-                                HorizontalDivider(Modifier.testTag("setup-managed-runner-divider"), thickness = with(LocalDensity.current) { 1f.toDp() })
+                                HorizontalDivider(Modifier.padding(horizontal = DrawerMetrics.textLeading).testTag("setup-managed-runner-divider"),
+                                    thickness = with(LocalDensity.current) { 1f.toDp() })
                             }
                         }
                         // A drawer project row: the project's sessions page as its root, over its coordinator's workspace — or the one
@@ -452,12 +435,6 @@ private fun OrbitShell(auth: AuthViewModel, app: OrbitApplication, incoming: Pai
                         DrawerSharedWithMe(sharedWithMe, route.id?.takeIf {
                             (route.destination == Destination.GUEST_SESSION || route.destination == Destination.SESSION) && sharedWithMeContains(sharedWithMe, it)
                         }) { key, root -> select(key, root) }
-                        Spacer(Modifier.height(24.dp))
-                        Button(onClick = { scope.launch { drawer.close() }; openNewSession(Origin.DRAWER) }) { Text("New session") }
-                        TextButton(onClick = { scope.launch { drawer.close() }; open(OrbitRoute(Destination.SETTINGS, origin = Origin.DRAWER)) }) {
-                            Icon(painterResource(R.drawable.ic_settings), null); Spacer(Modifier.width(8.dp)); Text("Settings")
-                        }
-                    }
                 }
             }) {
             Scaffold(topBar = {

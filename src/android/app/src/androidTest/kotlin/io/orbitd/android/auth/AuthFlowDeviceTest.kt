@@ -8,6 +8,7 @@ import androidx.compose.ui.test.isDialog
 import androidx.compose.ui.test.junit4.createAndroidComposeRule
 import androidx.compose.ui.test.onAllNodesWithText
 import androidx.compose.ui.test.onNodeWithContentDescription
+import androidx.compose.ui.test.onNodeWithTag
 import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.performClick
 import androidx.compose.ui.test.performScrollTo
@@ -70,7 +71,7 @@ class AuthFlowDeviceTest {
             compose.pressSignIn()
             compose.waitUntil(10_000) { session.state.value is AuthState.SignedIn }
             compose.onNodeWithContentDescription("Open navigation").performClick()
-            compose.onNodeWithText("Settings").performScrollTo().performClick()
+            compose.onNodeWithTag("drawer:settings").performClick()
             // Settings opens on the signed-in account (A13's SettingsHome, from users/me).
             awaitAccount()
             val handle = (session.state.value as AuthState.SignedIn).handle

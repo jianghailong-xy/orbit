@@ -1421,7 +1421,7 @@ model Workspace {
   // SubAgents (docs/subagent-design.md §6.2): whether this Agent's sessions may delegate, and how
   // many of one session's SubAgents may run at once. On by default (§9 B).
   subagentsEnabled    Boolean   @default(true) @map("subagents_enabled")
-  subagentsMaxRunning Int       @default(4) @map("subagents_max_running")
+  subagentsMaxRunning Int       @default(8) @map("subagents_max_running")
   // Default reasoning effort a new session inherits when its create request omits one
   // ('' / null = the model's default). Claude: low|medium|high|xhigh|max; codex adds minimal.
   effort              String?   @map("effort")
@@ -2467,6 +2467,7 @@ model Session {
   turns                 ConversationTurn[]
   backgroundJobWakes    BackgroundJobWake[]
   subagentRuns          SubagentRun[]
+  subagentWorkflowRuns  SubagentWorkflowRun[]
   scheduledWakeups      SessionScheduledWakeup[]
   wakeupLoops           SessionWakeupLoop[]
   /// The requests other sessions have asked of this one (session_request.to_session_id).
@@ -3109,6 +3110,39 @@ model BackgroundJobWake {
   @@map("background_job_wake")
 }
 
+/// A runner-hosted workflow, opened once per tool call. Its SubAgent calls carry their own usage.
+model SubagentWorkflowRun {
+  id           String    @id @default(uuid(7)) @db.Uuid
+  ownerId      String    @map("owner_id") @db.Uuid
+  sessionId    String    @map("session_id") @db.Uuid
+  session      Session   @relation(fields: [sessionId], references: [id], onDelete: Cascade, onUpdate: NoAction)
+  toolUseId    String    @map("tool_use_id")
+  name         String
+  description  String?
+  phases       String[]  @default([])
+  script       String
+  scriptSha256 String    @map("script_sha256")
+  args         Json?
+  /// RUNNING | DONE | FAILED | INTERRUPTED | STOPPED
+  status       String    @default("RUNNING")
+  result       String?
+  error        String?
+  maxCostUsd   Float?    @map("max_cost_usd")
+  costUsd      Float     @default(0) @map("cost_usd")
+  callsDone    Int       @default(0) @map("calls_done")
+  callsFailed  Int       @default(0) @map("calls_failed")
+  wakeOwed     Boolean   @default(false) @map("wake_owed")
+  /// Partial index subagent_workflow_run_wake_unfiled_idx (migration 1180) serves the sweep.
+  wakeFiledAt  DateTime? @map("wake_filed_at") @db.Timestamptz(3)
+  createdAt    DateTime  @default(now()) @map("created_at") @db.Timestamptz(3)
+  endedAt      DateTime? @map("ended_at") @db.Timestamptz(3)
+  calls        SubagentRun[]
+
+  @@unique([sessionId, toolUseId])
+  @@index([sessionId, status])
+  @@map("subagent_workflow_run")
+}
+
 /// One SubAgent run (docs/subagent-design.md §6.1): a parent session's `mcp__orbit__delegate` call, run by
 /// the runner in the parent's cwd. Not a Session: its events go into the parent's stream, and this row keeps
 /// the routing decision, status and spend. Its cost is added to the parent's `cost_usd` when it ends
@@ -3161,10 +3195,16 @@ model SubagentRun {
   /// When the parent asked a remote run to stop; the target's heartbeat is told until it reports an end.
   stopRequestedAt  DateTime? @map("stop_requested_at") @db.Timestamptz(3)
   relayEvents      SubagentRelayEvent[]
+  workflowRunId    String?   @map("workflow_run_id") @db.Uuid
+  workflowRun      SubagentWorkflowRun? @relation(fields: [workflowRunId], references: [id], onDelete: SetNull, onUpdate: NoAction)
+  callIndex        Int?      @map("call_index")
+  label            String?
+  phase            String?
 
   @@unique([sessionId, toolUseId])
   @@index([sessionId, status])
   @@index([targetRunnerId, status])
+  @@unique([workflowRunId, callIndex])
   @@map("subagent_run")
 }
 
@@ -4729,6 +4769,14 @@ model ProjectStandardSetConfirmation {
   /// that only confirmed. The "Project started" card is drawn from it, so the card shows the start
   /// as it happened rather than whatever the settings say by the time somebody reads it.
   startedWith Json? @map("started_with")
+  /// The words each criterion had when this was written (migration 1200): `definitionId`,
+  /// `ordinal`, `text`, `verificationMethod`, one object per criterion. Null on an older row; the
+  /// receipt then shows today's words only where the content hash still matches.
+  criteriaWording Json? @map("criteria_wording")
+  /// What the confirmed set changed since the confirmation before it (`@orbit/shared`
+  /// `CriteriaChangesSinceConfirmed`), as the card that asked showed it. Null when there was none
+  /// before it, and on a row older than 1200.
+  criteriaChanges Json? @map("criteria_changes")
 
   @@index([projectId, confirmedAt(sort: Desc)], map: "project_standard_set_confirmation_recent_idx")
   @@map("project_standard_set_confirmation")

@@ -118,7 +118,7 @@ class ManagementLiveTest {
     }
     private fun settings() {
         compose.onAllNodesWithContentDescription("Open navigation").onFirst().performClick()
-        click(hasText("Settings") and hasClickAction())
+        click(hasTestTag("drawer:settings"))
         await("Appearance")
     }
     private fun providers() { settings(); click(hasText("Machines & models") and hasClickAction()); await("Account pools") }

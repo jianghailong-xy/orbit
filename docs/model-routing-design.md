@@ -171,7 +171,7 @@ Keep `reasons` a string array for existing clients. Prefix source reasons with s
 
 #### 3.5.3 Optimize For: Cost / Balance / Intelligence
 
-Use an owner-editable Agent setting `modelRoutingOptimizeFor` with values `cost`, `balance`, `intelligence`; absent means `cost`. Agent scope is sufficient for this project; no account inheritance is introduced. Settings copy is **Optimize For**, **Cost**, **Balance**, **Intelligence**. Only subsequent CREATE plans read a changed setting; the resolved value is frozen in decision features and the run target. This preference neither enables Smart model selection nor authorizes extra engines.
+**Superseded 2026-11-19 (owner):** Optimize For is one account-wide preference, `preferences.optimizeFor` (`cost`, `balance`, `intelligence`; absent means `balance`), set in Settings → General and read for every Agent (`common/model-routing-switch.ts` `optimizeForOf`); the Agent column `modelRoutingOptimizeFor` is no longer read. The original text: use an owner-editable Agent setting `modelRoutingOptimizeFor` with values `cost`, `balance`, `intelligence`; absent means `cost`. Agent scope is sufficient for this project; no account inheritance is introduced. Settings copy is **Optimize For**, **Cost**, **Balance**, **Intelligence**. Only subsequent CREATE plans read a changed setting; the resolved value is frozen in decision features and the run target. This preference neither enables Smart model selection nor authorizes extra engines.
 
 | Mode | Missing-hint candidate | Failure escalation |
 |---|---|---|

@@ -9,6 +9,10 @@ public enum RunnerPageCopy {
     public static let RUNNER_ENGINE_NO_PROVIDER_KEY = "no provider key found"
 
     public static func runnerOfflineLastSeen(when: String) -> String { "Offline · last seen \(when)" }
+    /// The country a machine's IP is in, first in the line under a machine page's title: `📍 Japan`.
+    public static func runnerLocation(place: String) -> String { "📍 \(place)" }
+    /// The same, when the check went through a proxy: the country is the proxy's, not the machine's.
+    public static func runnerLocationViaProxy(place: String) -> String { "📍 \(place) (via proxy)" }
     public static func runnerVersionTag(version: String) -> String { "v\(version)" }
     public static func runnerRunningOf(active: Int, max: Int) -> String { "\(active) of \(max) running" }
     public static func runnerSlots(active: Int, max: Int) -> String { "\(active)/\(max)" }
