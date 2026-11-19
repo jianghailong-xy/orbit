@@ -2300,9 +2300,12 @@ async function escalate(stack: Stack, w: World, a: Attempt): Promise<ItemRow> {
     Prisma.sql`UPDATE "project_open_item" SET "escalate_at" = now() - interval '1 minute'
                 WHERE "id" = ${opened.id}::uuid`,
   );
+  // A live coordinator retains a taken ITEM; exercise escalation with Automatic switched off.
+  await stack.db.project.update({ where: { id: w.projectId }, data: { coordinatorEnabled: false } });
   const swept = await new ProjectOpenItemEscalationService(
     stack.db as unknown as PrismaService,
   ).sweep();
+  await stack.db.project.update({ where: { id: w.projectId }, data: { coordinatorEnabled: true } });
   assert.deepEqual(swept.map((row) => row.itemId), [opened.id]);
   const item = (await items(stack.db, w.projectId)).find((row) => row.id === opened.id)!;
   assert.equal(item.assignee, 'OWNER');
@@ -2706,10 +2709,6 @@ test('hands it back with the window restarted, and queues it on the coordinator 
       const a = await attempt(stack, w, 'return-back', { taskStatus: TaskStatus.IN_PROGRESS });
       await failTurn(stack, w, a);
       const before = await escalate(stack, w, a);
-      const project = await stack.db.project.findUniqueOrThrow({
-        where: { id: w.projectId },
-        select: { exceptionEscalationSeconds: true },
-      });
 
       const returned = await stack.openItems.returnToCoordinator(w.ownerId, w.projectId, before.id);
       assert.equal(returned.assignee, 'COORDINATOR');
@@ -2724,12 +2723,9 @@ test('hands it back with the window restarted, and queues it on the coordinator 
         after.assignedAt.getTime() > before.assignedAt.getTime(),
         'the assignment moved, which is what makes the delivery a new turn',
       );
-      // The clock the project set, restarted rather than kept: the two hours it already spent
-      // are the ones that ran out (§4.6 X-E2).
-      assert.equal(
-        after.escalateAt!.getTime() - after.waitingSince.getTime(),
-        project.exceptionEscalationSeconds * 1_000,
-      );
+      // A fresh assignment waits for pickup before starting a new window.
+      assert.equal(after.escalateAt, null);
+      assert.equal(returned.escalateAt, null);
 
       const turns = await itemTurns(stack.db, w.coordinatorSessionId!);
       const fresh = turns.filter(

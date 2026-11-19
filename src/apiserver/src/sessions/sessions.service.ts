@@ -5454,11 +5454,19 @@ export class SessionsService {
       },
     });
     if (!session) throw linkNotFound();
+    // Shared readers may know that the owner must answer, but never what the card asks.
+    // Keep this in the shared header so public and guest roots and live polling agree.
+    const cards = await this.prisma.approval.findMany({
+      where: { sessionId, status: 'PENDING' },
+      select: { id: true, toolName: true },
+    });
+    const waitingOnOwner = cards.length > 0 && (await visibleQuestions(this.prisma, cards)).length > 0;
     const stateful = withSessionState(session);
     // A parked session can still be working (a self-driven turn, a sub-agent, a job, a wait that
     // wakes it): without this the page read its AWAITING_INPUT as idle and said "Awaiting reply".
     const activity = (await readSessionActivities(this.prisma, [session.id])).get(session.id) ?? null;
     return {
+      waitingOnOwner,
       title: session.title,
       workspaceName: session.workspace?.name ?? null,
       status: stateful.status,

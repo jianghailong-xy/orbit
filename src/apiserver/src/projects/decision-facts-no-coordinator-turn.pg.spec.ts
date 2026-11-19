@@ -156,6 +156,7 @@ function builtByDeclaredTypes<T>(
 function connect(url: string): Stack {
   const db = prismaClientFor(url);
   const prisma = db as unknown as PrismaService;
+  const push = new Proxy({}, { get: () => () => Promise.resolve() }) as unknown as PushService;
   const realtime = new Proxy({}, { get: () => () => undefined }) as unknown as RealtimeService;
   const queue = { notifySessionQueued: () => undefined } as unknown as QueueService;
   const sessions = new SessionsService(prisma, queue, realtime);
@@ -186,8 +187,7 @@ function connect(url: string): Stack {
       new ProjectSettledUnmergedProducer(prisma, convergence, deliveries)],
     [CompletionEvidenceProducer, producer],
     [CoordinatorEvidenceQueueService, new CoordinatorEvidenceQueueService(prisma, producer)],
-    // @Optional on ProjectsService (9afb7d156): no push transport here, as in a module without one.
-    [PushService, undefined],
+    [PushService, push],
   ]);
   return {
     db,
