@@ -16,6 +16,7 @@ import type { QueueService } from '../queue/queue.service';
 import type { RealtimeService } from '../realtime/realtime.service';
 import { RunnerApiController } from '../runner-api/runner-api.controller';
 import { SessionsService } from './sessions.service';
+import { pastCreateAllowance } from '../test-support/past-create-allowance';
 
 /**
  * The single-task create card's "Create and start", from the owner's press to the runner's poll.
@@ -89,6 +90,7 @@ async function conversation(stack: Stack, label: string): Promise<Fixture> {
       status: RunStatus.AWAITING_INPUT, dispatchOrigin: SessionDispatchOrigin.USER,
     },
   });
+  await pastCreateAllowance(db, ownerId, sessionId);
   return { ownerId, runnerId, sessionId };
 }
 

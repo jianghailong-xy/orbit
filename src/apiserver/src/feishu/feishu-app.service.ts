@@ -64,6 +64,7 @@ function settingsOf(row: FeishuApp, connectedReplicas: number): FeishuAppSetting
     enabled: row.enabled,
     messageDetail: row.messageDetail as FeishuMessageDetail,
     approvalsInFeishu: row.approvalsInFeishu,
+    showOrbit: row.showOrbit,
     defaultWorkspaceId: row.defaultWorkspaceId,
     ownerOpenId: row.ownerOpenId,
     ownerName: row.ownerName,
@@ -180,7 +181,7 @@ export class FeishuAppService {
    * keeps its row and takes the new secret: the owner's identity and the status stand, and the last failure is
    * cleared. Another app replaces the row: open_ids are per app (§4.1), so the owner's identity and the status go
    * with the old one, and so will whatever later hangs off it; the account's own choices — the switch, the detail,
-   * approvals in Feishu, the default workspace, the settings of others' sessions — carry over. Who can use the bot does
+   * approvals in Feishu, Show Orbit in Feishu, the default workspace, the settings of others' sessions — carry over. Who can use the bot does
    * not (§14.1): another app is available to other people, so it starts as Only you. An App ID another account holds
    * fails the insert on its unique key, and the old row stays.
    */
@@ -199,6 +200,7 @@ export class FeishuAppService {
             enabled: current.enabled,
             messageDetail: current.messageDetail,
             approvalsInFeishu: current.approvalsInFeishu,
+            showOrbit: current.showOrbit,
             defaultWorkspaceId: current.defaultWorkspaceId,
             openWorkspaceId: current.openWorkspaceId,
             openPermissionMode: current.openPermissionMode,
@@ -214,9 +216,10 @@ export class FeishuAppService {
 
   /**
    * `PATCH /integrations/feishu`: the app's own switch, how much an alert card carries (§6.4), whether a tool approval
-   * is answered on its card (§7.2), and the default workspace the owner's direct messages open sessions in (§7.3). 404
-   * while the account has no app, and for a workspace that is not the account's own (another account's is answered as
-   * one that does not exist); nothing asked, nothing written.
+   * is answered on its card (§7.2), whether the owner's cards and replies carry Open in Orbit and Orbit links (§15.2),
+   * and the default workspace the owner's direct messages open sessions in (§7.3). 404 while the account has no app,
+   * and for a workspace that is not the account's own (another account's is answered as one that does not exist);
+   * nothing asked, nothing written.
    */
   async change(ownerId: string, change: FeishuAppChange): Promise<FeishuIntegration> {
     if (change.defaultWorkspaceId) {
@@ -230,6 +233,7 @@ export class FeishuAppService {
       ...(change.enabled !== undefined ? { enabled: change.enabled } : {}),
       ...(change.messageDetail !== undefined ? { messageDetail: change.messageDetail } : {}),
       ...(change.approvalsInFeishu !== undefined ? { approvalsInFeishu: change.approvalsInFeishu } : {}),
+      ...(change.showOrbit !== undefined ? { showOrbit: change.showOrbit } : {}),
       ...(change.defaultWorkspaceId !== undefined ? { defaultWorkspaceId: change.defaultWorkspaceId } : {}),
     };
     if (Object.keys(data).length > 0) {

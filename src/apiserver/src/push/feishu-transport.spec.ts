@@ -34,6 +34,7 @@ const TARGET: FeishuTarget = {
   openId: 'ou_owner',
   detail: 'TITLES_ONLY',
   approvalsInFeishu: true,
+  showOrbit: true,
 };
 
 interface Posted { spec: FeishuCardSpec; alert: FeishuAlert | null; card: FeishuCard | null }
@@ -46,7 +47,7 @@ function fakeFeishu(prisma: unknown, target: FeishuTarget | null = TARGET) {
     target: async () => target,
     post: async (t: FeishuTarget, spec: FeishuCardSpec) => {
       const alert = await spec.render();
-      posted.push({ spec, alert, card: alert ? renderFeishuCard(alert, { detail: t.detail, approvalsInFeishu: t.approvalsInFeishu, openUrl: spec.openUrl }) : null });
+      posted.push({ spec, alert, card: alert ? renderFeishuCard(alert, { detail: t.detail, approvalsInFeishu: t.approvalsInFeishu, showOrbit: t.showOrbit, openUrl: spec.openUrl }) : null });
       return alert !== null;
     },
     joinApprovalStretch: async (_t: FeishuTarget, sessionId: string, approvalId: string) => {
@@ -486,7 +487,7 @@ test('an approval card of a session someone else started says who and where; the
   const draw = async (prisma: unknown) => {
     const alert = await FeishuTransport.prototype.approvalCard.call({ prisma } as unknown as FeishuTransport, TARGET, sessionId, null).render();
     assert.ok(alert && alert.kind === 'approval');
-    return { alert, card: texts(renderFeishuCard(alert, { detail: 'TITLES_ONLY', approvalsInFeishu: true, openUrl: 'u' })) };
+    return { alert, card: texts(renderFeishuCard(alert, { detail: 'TITLES_ONLY', approvalsInFeishu: true, showOrbit: true, openUrl: 'u' })) };
   };
   const someone = { externalSenderSource: 'FEISHU', externalSenderName: 'Li Lei' };
 

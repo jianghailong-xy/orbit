@@ -180,7 +180,10 @@ func delegateToolDescriptor(obj func(map[string]interface{}, ...string) map[stri
 		// delegate up front, and only it; measured on Claude Code 2.1.325: about 692 o200k tokens per request.
 		"_meta": map[string]interface{}{"anthropic/alwaysLoad": true},
 		"description": "Hand a self-contained piece of work to a SubAgent: another coding engine that Orbit starts in this" +
-			" session's own working directory. It sees your uncommitted changes, edits files directly and never commits;" +
+			" session's own working directory. Use it instead of your engine's built-in subagent or Agent tool whenever" +
+			" you would start a subagent or run work in the background: Orbit picks its model (or runs the one you name)," +
+			" records its cost and brings its result back even if this engine is recycled." +
+			" It sees your uncommitted changes, edits files directly and never commits;" +
 			" its edits stay in your working tree for you to review and commit. Its progress is shown nested under this" +
 			" call. In the foreground (the default) the call returns { runId, status, result, changedFiles, model, costUsd }" +
 			" when it ends; if it runs longer than this call may wait, the call returns status \"running\" and Orbit starts" +

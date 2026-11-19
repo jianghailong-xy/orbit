@@ -791,6 +791,27 @@ open_id；主人的消息链和接入过的群的话题这一列为空，不计�
 - 发给主人的文字仍然可以提到 Orbit，比如 `Answer this in Orbit.`，因为只有主人看得到。
 - 审批照样能在卡片上答复。
 
+落地（P2）：
+
+- 数据：`feishu_app.show_orbit`（迁移 1150，`BOOLEAN NOT NULL DEFAULT true`），新建与升级后的应用都读回开着；换一个应用（§4.1）时和其他开关一样带过去。
+- 接口：`GET /integrations/feishu` 返回 `showOrbit`；`PATCH /integrations/feishu` 收 `{ showOrbit: boolean }`，和
+  `approvalsInFeishu` 一样，不走所有者通道。
+- 设置页：「Your app」卡片里，「Answer approvals in Feishu」下面一行 `Show Orbit in Feishu`，说明是
+  `Off, cards have no Open in Orbit button and the bot sends nobody a link to Orbit. Your alerts still arrive and approvals can still be answered on the card; open Orbit yourself for anything else.`
+- 关掉后实际覆盖的卡片：
+  | 卡片 | 关掉后 | 代码 |
+  | --- | --- | --- |
+  | 提醒卡：审批（工具、提问、编排确认）、finished / failed、agent-message、owner item、其他 kind | 没有 Open in Orbit 按钮；卡太长时的 `This alert is too long…` 卡也没有。Allow once / Deny 与提问表单照旧 | cards/feishu-cards.ts `renderFeishuCard`，经 push/feishu-transport.ts（`FeishuTarget.showOrbit`） |
+  | 只能在 Orbit 里处理的提醒卡：owner item、编排确认、没有表单的提问（TITLES_ONLY 或审批关掉）、审批关掉时的工具审批 | 按钮换成一句 `Answer this in Orbit.` | 同上，`answeredOnlyInOrbit` |
+  | 终态卡（§6.2，`closeSettled` 与点击后重画的 `answerCard`） | 没有 `[Open in Orbit](<url>)` 那行，只剩结果 | `renderFeishuTerminalCard` |
+  | 私聊 `status` 卡（§7.3） | 列表照旧，每个会话下没有 Open in Orbit | cards/feishu-direct-cards.ts `renderStatusCard` |
+  | 私聊里会话的回复（§7.5，outbox） | 纯文本消息，只有正文，没有按钮，也没有 `Open in Orbit: <url>` 一行；超过 150 KB 截断时的说明照旧写 `The rest is in Orbit.` | cards/feishu-reply-cards.ts `renderSessionReply`，feishu/feishu-outbox.ts |
+- 不受开关影响的：
+  - 群里的回复本来就没有链接（§8.3、§15.1）。
+  - 群接入卡片（`renderConnectGroupCard`，§15.1）照旧带 `Choose settings`，它指向 Orbit 的确认页：只私发给发 connect 的主人，
+    是接入群唯一的路，所以不收起。
+  - 卡上的文字可以提 Orbit（`Allowed in Orbit · …`、`Already answered in Orbit.`、截断说明），只有主人看得到。
+
 ### 15.3 agent 前言（P3）
 
 开关关掉时，runner 给飞书来源的轮次的前言加一句英文：`Your reply goes to people in Feishu; do not mention Orbit.`
