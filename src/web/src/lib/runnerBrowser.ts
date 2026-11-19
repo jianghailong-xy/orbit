@@ -11,16 +11,26 @@ export const RUNNER_BROWSER_COPY = {
   title: 'Browser',
   viewOnly: 'View only',
   takeControl: 'Take control',
-  handBack: 'Hand back',
   done: 'Done',
-  controllingFromSession: 'You are controlling the browser · the agent keeps running',
+  openInNewTab: 'Open in new tab',
   controlling: 'You are controlling the browser',
-  inputGoes: "Your pointer and keys go to the runner's browser",
+  agentKeepsRunning: 'the agent keeps running',
+  watching: 'Watching the browser',
+  usedBy: 'used by',
   heldByThis: 'Used by this session',
   heldByNone: 'Not in use by any session',
   heldBy: (title: string) => `Used by “${title}” · it keeps running`,
   heldByUntitled: 'Used by another session · it keeps running',
-  scaled: 'Scaled to fit',
+  untitledSession: 'another session',
+  fit: 'Fit',
+  actualSize: '100%',
+  scaled: 'Fit',
+  size: (percent: number | null) => `1280 × 800${percent ? ` · ${percent}%` : ''}`,
+  pasteHint: (mac: boolean) => (mac ? 'Paste with ⌘V' : 'Paste with Ctrl+V'),
+  pasting: 'Pasting…',
+  pasteTooLarge: 'The text is too long to paste (more than 64 KB)',
+  pasteNoAnswer: 'The paste did not reach the runner',
+  tabTitle: 'Browser · Orbit Cloud',
   live: 'Live',
   connecting: 'Connecting…',
   disconnected: 'Disconnected',
@@ -29,7 +39,6 @@ export const RUNNER_BROWSER_COPY = {
   idle: 'Idle · not running',
   running: 'Running',
   runningHeldBy: (title: string) => `Running · used by “${title}”`,
-  runningInControl: 'Running · you are in control',
   unknown: 'Not reported yet',
   openBrowser: 'Open browser',
   savedLogins: 'Saved logins',
@@ -73,19 +82,50 @@ export function runnerBrowserVncUrl(runnerId: string, origin: Location = window.
   return `${scheme}//${origin.host}/api/runners/${runnerId}/browser/vnc?access_token=${encodeURIComponent(getToken() ?? '')}`;
 }
 
+/** The largest paste the server takes, in bytes of UTF-8 (browser-viewer.ts, MAX_PASTE_BYTES). */
+export const MAX_PASTE_BYTES = 64 << 10;
+
+/** The runner browser's tab of its own (board 02-control-view, option C): `/runners/:id/browser`. */
+export function runnerBrowserTabPath(runnerId: string, control = false): string {
+  return `/runners/${runnerId}/browser${control ? '?control=1' : ''}`;
+}
+
+/**
+ * Opens the runner's browser in its tab, already in control or view only. One tab per runner (a named window), so
+ * pressing twice does not take both of the runner's two streams. Called on the click, so no pop-up blocker stops it.
+ */
+export function openRunnerBrowserTab(runnerId: string, control: boolean): void {
+  window.open(runnerBrowserTabPath(runnerId, control), `orbit-browser-${runnerId}`);
+}
+
+/** Whether the viewer runs on a Mac (or an iPad), whose paste key is ⌘V. */
+export const isMacLike = (): boolean =>
+  typeof navigator !== 'undefined' && /Mac|iPhone|iPad|iPod/i.test(navigator.platform || navigator.userAgent);
+
+/**
+ * What the viewer says over its stream besides RFB, as text messages of JSON (browser-viewer.ts): whether it is in
+ * control, and a paste; the server answers each paste.
+ */
+export type ViewerMessage = { type: 'control'; on: boolean } | { type: 'paste'; id: number; text: string };
+export type ViewerAnswer = { type: 'pasted'; id: number; error?: string };
+
 /** The part of noVNC's RFB this viewer uses (@novnc/novnc ships no types). */
 export interface VncClient {
   viewOnly: boolean;
   scaleViewport: boolean;
+  clipViewport: boolean;
   resizeSession: boolean;
   focusOnClick: boolean;
   /** The CSS background around the scaled picture. */
   background: string;
   addEventListener(type: 'connect' | 'disconnect', listener: (event: Event) => void): void;
+  /** Text copied in the remote (RFB cut text, Latin-1), as `detail.text`. */
+  addEventListener(type: 'clipboard', listener: (event: CustomEvent<{ text: string }>) => void): void;
   disconnect(): void;
   focus(): void;
 }
-export type VncClientClass = new (target: HTMLElement, url: string, options?: { shared?: boolean }) => VncClient;
+/** noVNC's RFB, given the viewer's own WebSocket: it then carries the viewer's text messages too. */
+export type VncClientClass = new (target: HTMLElement, channel: WebSocket, options?: { shared?: boolean }) => VncClient;
 
 /** noVNC, loaded only when a viewer opens: its module probes the browser's codecs at load. */
 export async function loadVnc(): Promise<VncClientClass> {

@@ -406,9 +406,12 @@ func (b *browserSupervisor) ensureStartedLocked() error {
 	}
 	steps := []step{
 		{browserXvfbBinary, []string{browserDisplay, "-screen", "0", browserScreen, "-nolisten", "tcp"}, true},
-		{browserX11vncBinary, []string{"-display", browserDisplay, "-unixsock", b.VNCSocket(), "-rfbport", "0", "-shared", "-forever", "-nopw", "-quiet"}, false},
+		// -noprimary: only what is copied (CLIPBOARD) goes back to the viewer's clipboard, not every selection.
+		{browserX11vncBinary, []string{"-display", browserDisplay, "-unixsock", b.VNCSocket(), "-rfbport", "0", "-shared", "-forever", "-nopw", "-quiet", "-noprimary"}, false},
+		// --no-sandbox: the container is the boundary (§3). --test-type keeps Chrome from drawing its "unsupported
+		// command-line flag" bar over the page for it, which the owner would otherwise see in every viewer.
 		{browserChromeBinary, []string{
-			"--no-sandbox", "--disable-dev-shm-usage",
+			"--no-sandbox", "--test-type", "--disable-dev-shm-usage",
 			"--user-data-dir=" + b.ProfileDir(),
 			"--remote-debugging-address=" + browserDevToolsHost,
 			"--remote-debugging-port=" + strconv.Itoa(browserDevToolsPort),
