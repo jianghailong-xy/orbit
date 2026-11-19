@@ -235,7 +235,9 @@ transcript reducer 里加三行，按 seq 顺序回放，结果天然正确：
 - **位置**：输入卡片里文字那一行，也就是 placeholder「Message…」的位置。有建议时 placeholder 换成建议原文，
   行尾没有按钮。卡片高度不变（空闲 91pt），对话区一点不动。
 - **样式**：建议文字用系统 placeholder 色（`.placeholderText`），单行，尾部截断。灰字后面紧跟一行小字
-  **Double-tap to use**（`.footnote`，同一个灰），一直在（2026-10-11 前是拍中一次后不再出现，§9 补充三）。
+  **Double-tap**（`.footnote`，同一个灰），一直在（2026-10-11 前是拍中一次后不再出现，§9 补充三；2026-11-19 前写作
+  Double-tap to use，§9 补充四）。有建议时翻译标签（6A 的「Chinese → English」）让位，整行给建议；标签在报
+  「unavailable」时照旧显示（补充四）。
   发送键保持灰色：空输入框不会因为有建议就能发。
 - **拍两下**：在输入框那一行拍两下，把文字填进输入框，光标放在末尾，键盘起来，轻震一下；**不发送**。
   可以接着改，也可以直接点发送。有建议时，输入框自己的点按要等双击判定落空（约 0.3 秒）才生效：键盘若在第一下
@@ -271,7 +273,7 @@ transcript reducer 里加三行，按 seq 顺序回放，结果天然正确：
   placeholder 让空，`.composer-suggestion` 叠在 `.composer-field` 第一行上：灰字单行截断，后面紧跟一个 `Tab`
   键帽（左栏 Search 的 `⌘K` 那种），没有按钮。键帽只在有鼠标的设备上（`hover: hover`）、光标在输入框里时出现：
   光标在别处时按 Tab 是切焦点，不会填入。触屏（`hover: none`）没有 Tab 键，和 iPhone 一样拍两下填入：灰字后面
-  跟 Double-tap to use（一直在，§9 补充三），
+  跟 Double-tap（一直在，§9 补充三、补充四），
   textarea 上两次点按相隔 ≤ 300 ms、相距 ≤ 24 px 算拍两下，第二下 `preventDefault`。输入框还没聚焦时第一下也先
   扣住（`preventDefault`，理由同 §4.1），300 ms 内没有第二下再交还给输入框（`focus()`：这么短的定时器还带着这次
   点按的用户手势，键盘照样起来）；已聚焦时第一下照常。`.composer-field` 加
@@ -419,3 +421,13 @@ P2（2026-10-11，非 Claude 引擎）：
 实现时偏离效果图两处：④ 画的是第一下就起键盘。键盘一起，输入卡片跟着上移，快速的第二下会落到键盘上，
 所以有建议时第一下先等双击判定（约 0.3 秒）再起键盘（§4.1）。⑥ 画的是点两次出 Paste；iPhone 上输入框的点按
 被扣住后不再开关编辑菜单，有建议、输入框为空时粘贴改为长按（§4.1）。
+
+**补充四（owner，2026-11-17，按 `docs/mocks/prompt-suggestion-room/01-board.png` 的方案 B）**：iPhone 上建议一行被翻译
+标签（约 130pt）和「Double-tap to use」（约 120pt）挤得只剩 5–7 个字。改为：
+
+- 有建议时不画输入框里的翻译标签（iOS / iPad / Mac 的 `ComposerView.showsTranslationTag`，Android 的 `trailingIcon`），
+  整行给建议；440pt 宽时中文建议从 7 字到 18 字。标签在报「unavailable, messages will wait」时照旧显示（翻译失败策略 B
+  的警示比建议要紧），这一点是效果图之后补的。
+- 触屏提示缩成 **Double-tap**（iPhone、iPad、手机网页、Android）。Mac 的 Use ⇥、桌面网页的 Tab 键帽不变。
+- Web 的翻译标签在工具栏里，不和建议抢那一行，所以 Web 只改提示字，标签不动（效果图写的是所有端都让位）。
+- 卡片高度不变（§4.1）。没选的：A 建议折成两行（卡片高一行）；C 提示挪到输入框下方。

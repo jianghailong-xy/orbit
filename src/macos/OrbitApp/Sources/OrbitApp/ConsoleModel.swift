@@ -327,6 +327,12 @@ final class ConsoleModel {
         return keysSection?.url ?? page
     }
 
+    /// The web app's keys, where another provider's key is connected (the new-session hero's way out
+    /// when nothing on the machine runs the draft).
+    func webProvidersURL() -> URL {
+        api.baseURL.appendingPathComponent("providers")
+    }
+
     /// A key's own page in the web app, where it is changed or turned back on.
     func webKeyURL(_ providerID: String) -> URL {
         api.baseURL.appendingPathComponent("providers/\(providerID)")
@@ -2179,7 +2185,9 @@ final class ConsoleModel {
     }
 
     var availability: SendAvailability {
-        isDraft ? .sendNow
+        // Nothing on the machine runs the draft (board new-session-usable-default ④): it would only be refused.
+        if draftCantRun { return .blocked }
+        return isDraft ? .sendNow
                 : ComposerLogic.availability(status: sessionStatus, capabilities: sendCapabilities)
     }
 
@@ -2784,6 +2792,12 @@ final class ConsoleModel {
     func pickDraft(engine: String, provider slug: String) {
         guard isDraft, engine != self.engine || slug != provider else { return }
         draftPick = EnginePick(engine: engine, provider: slug)
+        landDraft(engine: engine, provider: slug)
+    }
+
+    /// Put the draft on `engine` and `slug`, re-seeding the model and re-clamping the pills to the pair
+    /// (`pickDraft`, and the fallback `settleDraftDefault` lands on).
+    private func landDraft(engine: String, provider slug: String) {
         recordedEngine = engine
         provider = slug
         modelID = draftModelSeed(AgentDefaults.defaultModel(
@@ -2798,6 +2812,52 @@ final class ConsoleModel {
         effort = AgentDefaults.normalizedEffort(effort, for: engine, provider: slug, model: modelID,
                                                 catalog: modelCatalog,
                                                 configured: configuredProviders)
+    }
+
+    /// Draft only: what the workspace last ran on, as the hero judges it on this machine (web's
+    /// `rememberedDraftEngine`): carrying its reason when it can't run here.
+    var rememberedDraftEngine: EngineChoice? {
+        guard isDraft, let agent = draftAgent else { return nil }
+        let pick = EnginePick(engine: agent.defaultEngine(configured: configuredProviders), provider: agent.defaultProvider)
+        let sources = choiceSources
+        let engines = SessionProviderChoices.engines(sources: sources, preferred: [pick])
+        return SessionProviderChoices.currentEngine(engine: pick.engine, provider: pick.provider, engines: engines,
+                                                    sources: sources)
+    }
+
+    /// Draft only: where the draft goes when nobody picked and what the workspace last ran on can't run
+    /// on this machine (`SessionProviderChoices.draftFallback`; board
+    /// docs/mocks/new-session-usable-default). Nil while it can, and after an explicit pick.
+    var draftFallbackTarget: EnginePick? {
+        guard isDraft, draftPick == nil, let remembered = rememberedDraftEngine else { return nil }
+        let engines = SessionProviderChoices.engines(
+            sources: choiceSources, preferred: [EnginePick(engine: remembered.slug, provider: remembered.provider?.slug ?? remembered.slug)])
+        return SessionProviderChoices.draftFallback(remembered: remembered, engines: engines, engineHealth: runnerEngines)
+    }
+
+    /// Draft only: the fallback the draft is on now. Unlike `draftPick` it is no one's choice, so it
+    /// moves with what the machine reports; the create request carries it all the same, since the
+    /// workspace's own pair is the one that can't run.
+    private(set) var draftFallback: EnginePick?
+
+    /// Land the draft on `draftFallbackTarget`, or back on what the workspace last ran on once that runs
+    /// again. Called whenever the target changes (AgentsView's hero).
+    func settleDraftDefault() {
+        guard isDraft, draftPick == nil else { return }
+        let target = draftFallbackTarget
+        guard target != draftFallback else { return }
+        if let target {
+            landDraft(engine: target.engine, provider: target.provider)
+        } else if let agent = draftAgent {
+            landDraft(engine: agent.defaultEngine(configured: configuredProviders), provider: agent.defaultProvider)
+        }
+        draftFallback = target
+    }
+
+    /// Draft only: nothing on this machine can run what the workspace last ran on and nobody picked
+    /// anything else, so the send waits while the hero says why (board frame ④).
+    var draftCantRun: Bool {
+        isDraft && draftPick == nil && draftFallback == nil && rememberedDraftEngine?.unavailable != nil
     }
 
     /// Pick one of the runner's accounts of `slug` — an engine's own sign-in — for this draft, or
@@ -2870,7 +2930,7 @@ final class ConsoleModel {
             // `defaultModel` is the parent's, computed for the WORKSPACE's engine and provider. Once
             // this draft has been pointed somewhere else, that value belongs to a different model space
             // — resolve the picked pair's own default instead of dragging the workspace's back in.
-            let fallback = draftPick == nil
+            let fallback = draftPick == nil && draftFallback == nil
                 ? defaultModel
                 : AgentDefaults.defaultModel(engine: engine, provider: provider, catalog: modelCatalog,
                                              configured: configuredProviders, runtimeDefaults: runtimeDefaultModels)
@@ -3691,8 +3751,9 @@ final class ConsoleModel {
             // Only an explicit pick travels, and it is the pair — the engine the hero picked and the
             // credential of it (contract §3.2). Leaving both off keeps the server's
             // inherit-from-workspace path, which re-checks that pair as it starts the session.
-            engine: draftPick?.engine,
-            provider: draftPick?.provider,
+            // A fallback travels too: the workspace's pair is the one that can't run here.
+            engine: (draftPick ?? draftFallback)?.engine,
+            provider: (draftPick ?? draftFallback)?.provider,
             model: providerCapabilitiesResolved ? modelID : nil,
             permissionMode: permissionMode.rawValue, effort: effort.rawValue,
             // Sent only when on, like every other override that has an "off" default: a
@@ -3721,6 +3782,7 @@ final class ConsoleModel {
         // The pick was this session's binding; nothing to write back. The next draft here
         // opens on it anyway, because the default is read from what the project last ran.
         draftPick = nil
+        draftFallback = nil
         draftCodexAccount = nil
         draftClaudeAccount = nil
         draftAntigravityAccount = nil

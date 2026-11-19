@@ -180,6 +180,7 @@ import {
   SESSION_PROJECT_COPY,
   landingsRowSummary,
   listShowsProjects,
+  projectSessionsButtonActive,
   sessionProjectListing,
   sourceLandingLabel,
   type SessionProjectRow,
@@ -268,6 +269,7 @@ import { managedRowOf, managedRunnerStatusQuery, useManagedRunnerId, type Manage
 import { MANAGED_RUNNER_COPY } from '@orbit/shared';
 import {
   currentEngineChoice,
+  draftFallback,
   currentProviderChoice,
   engineChoices,
   engineTitleFor,
@@ -3449,13 +3451,16 @@ export function WorkspaceView({
   // The button's count is the column header's "Project · N sessions". Where the column shows another
   // project or none, the same two reads (one cache entry with the column's) count it.
   const titleBarOwnRead = !!titleBarProjectId && titleBarProjectId !== openProjectId;
+  // Polled as the page polls its own two, so the button's spinner follows them while the page is shut.
   const titleBarOpenQ = useQuery({
     ...projectSessionsQuery({ projectId: titleBarProjectId ?? '', view: 'open', includeLanding: true }),
     enabled: titleBarOwnRead,
+    refetchInterval: (query) => listPollMs(controlLive, query),
   });
   const titleBarCompletedQ = useQuery({
     ...projectSessionsQuery({ projectId: titleBarProjectId ?? '', view: 'completed', includeLanding: true }),
     enabled: titleBarOwnRead,
+    refetchInterval: (query) => listPollMs(controlLive, query),
   });
   const titleBarSessionCount = !titleBarProjectId ? null
     : !titleBarOwnRead ? (projectSessionsQ.isSuccess || completedProjectSessionsQ.isSuccess ? projectMembers.length : null)
@@ -3720,6 +3725,28 @@ export function WorkspaceView({
   useEffect(() => {
     if (!projectColumnCrowds || !showProjectColumn) setProjectColumnOnDemand(false);
   }, [projectColumnCrowds, showProjectColumn]);
+  // The title bar's Project sessions button spins while anything its page shows is active (owner
+  // 2026-11-17, docs/mocks/project-sessions-button-running, option C). Its landing line and merge are
+  // read here only while that page is shut: open, the page reads them itself (the same cache entries),
+  // and these stop.
+  const titleBarPageShown = !!titleBarProjectId && (isMobile ? sheetProjectId === titleBarProjectId
+    : titleBarProjectId === columnProjectId && projectColumnOpen);
+  const titleBarReadsLine = !!titleBarProjectId && !selectedTrashed && !titleBarPageShown;
+  const titleBarIntegrationQ = useQuery({
+    ...projectIntegrationQuery(titleBarProjectId ?? ''),
+    enabled: titleBarReadsLine,
+  });
+  const titleBarPromotionQ = useQuery({
+    ...projectPromotionQuery(titleBarProjectId ?? ''),
+    enabled: titleBarReadsLine,
+    refetchInterval: pollWhileInFlight(20_000, (query) => promotionInFlight(query.state.data)),
+  });
+  const titleBarActive = !!titleBarProjectId && projectSessionsButtonActive(
+    titleBarOwnRead ? [...(titleBarOpenQ.data ?? []), ...(titleBarCompletedQ.data ?? [])] : allProjectMembers,
+    (s) => statusGlyphMotion(s, sessionWatching(watchingBySession, s.id)?.word),
+    titleBarIntegrationQ.data,
+    titleBarPromotionQ.data,
+  );
   // Esc folds the column too, unless focus is in a field, a dialog or a menu, which own the key.
   useEffect(() => {
     if (!projectColumnOpen) return;
@@ -3972,8 +3999,59 @@ export function WorkspaceView({
   const lastWorkspaceProvider =
     pickedWorkspace?.lastProvider ?? pickedWorkspace?.provider ?? (bareMachine ? (managedSetup && managed && firstSessionProvider(managed.status)) || firstEngineOn(runner.engines) : 'claude');
   const lastWorkspaceEngine = sessionEngineOf(pickedWorkspace?.lastEngine, lastWorkspaceProvider, configuredProviders);
-  const pickedEngine: AgentProvider = draftHere?.engine ?? lastWorkspaceEngine;
-  const pickedProvider: string = draftHere?.provider ?? lastWorkspaceProvider;
+  const rememberedEngine: AgentProvider = draftHere?.engine ?? lastWorkspaceEngine;
+  const rememberedProvider: string = draftHere?.provider ?? lastWorkspaceProvider;
+  // Everything that could run a session on this machine, by engine — with the health this runner
+  // reported, since the session runs there — and under each engine the credentials it runs on. The
+  // New Session hero offers the engines; the composer's Provider menu offers the credentials of the
+  // session's engine.
+  const providerWorkspace = selected
+    ? (workspacesQ.data ?? []).find((workspace) => workspace.id === selected.workspace?.id)
+    : pickedWorkspace;
+  const antigravityKeyAvailable = providerWorkspace
+    ? providerWorkspace.antigravityKeyAvailableByRunner?.[runner.id] === true
+    : runner.antigravity?.envKeyAvailable === true;
+  const choiceSources = useMemo<ChoiceSources>(
+    () => ({
+      configured: configuredProviders,
+      modelCatalog: runner.modelCatalog,
+      runtimeDefaultModels: runner.runtimeDefaultModels,
+      engineHealth: runner.engines,
+      pools: accountPools,
+      planUsage: runner.planUsage,
+      antigravity: runner.antigravity,
+      antigravityKeyAvailable,
+      dshRunner: runner,
+      fleet,
+      region: runner.region,
+    }),
+    [configuredProviders, runner, accountPools, antigravityKeyAvailable, fleet],
+  );
+  // The New Session hero's engines, each landing on the draft's pick when it is that engine's, else on
+  // what this workspace last ran there. The current one is the pick's own engine on the pick's own
+  // provider — drawn as it is even when that provider is no longer on offer (a key since removed).
+  const draftEngines = useMemo(
+    () =>
+      engineChoices(choiceSources, [
+        { engine: rememberedEngine, provider: rememberedProvider },
+        { engine: lastWorkspaceEngine, provider: lastWorkspaceProvider },
+      ]),
+    [choiceSources, rememberedEngine, rememberedProvider, lastWorkspaceEngine, lastWorkspaceProvider],
+  );
+  const rememberedDraftEngine = useMemo(
+    () => currentEngineChoice(rememberedEngine, rememberedProvider, draftEngines, choiceSources),
+    [rememberedEngine, rememberedProvider, draftEngines, choiceSources],
+  );
+  // Nobody picked in this draft and what the workspace last ran on can't run on this machine (the
+  // runner's Claude region, a sign-in gone, a CLI missing): the draft lands on what can, and the hero
+  // says why (draftFallback; board docs/mocks/new-session-usable-default). An explicit pick is never
+  // moved.
+  const fallback = useMemo(
+    () => (draftHere ? null : draftFallback(rememberedDraftEngine, draftEngines, runner.engines)),
+    [draftHere, rememberedDraftEngine, draftEngines, runner.engines],
+  );
+  const pickedEngine: AgentProvider = fallback?.engine ?? rememberedEngine;
+  const pickedProvider: string = fallback?.provider ?? rememberedProvider;
   // The Codex, Claude, Antigravity or Kimi account picked for the draft on the New Session hero, scoped to
   // its workspace like the provider pick. Without one a new session starts where Automatic or its
   // workspace says.
@@ -4149,47 +4227,14 @@ export function WorkspaceView({
     configuredProvidersLoaded,
   );
 
-  // Everything that could run a session on this machine, by engine — with the health this runner
-  // reported, since the session runs there — and under each engine the credentials it runs on. The
-  // New Session hero offers the engines; the composer's Provider menu offers the credentials of the
-  // session's engine.
-  const providerWorkspace = selected
-    ? (workspacesQ.data ?? []).find((workspace) => workspace.id === selected.workspace?.id)
-    : pickedWorkspace;
-  const antigravityKeyAvailable = providerWorkspace
-    ? providerWorkspace.antigravityKeyAvailableByRunner?.[runner.id] === true
-    : runner.antigravity?.envKeyAvailable === true;
-  const choiceSources = useMemo<ChoiceSources>(
-    () => ({
-      configured: configuredProviders,
-      modelCatalog: runner.modelCatalog,
-      runtimeDefaultModels: runner.runtimeDefaultModels,
-      engineHealth: runner.engines,
-      pools: accountPools,
-      planUsage: runner.planUsage,
-      antigravity: runner.antigravity,
-      antigravityKeyAvailable,
-      dshRunner: runner,
-      fleet,
-      region: runner.region,
-    }),
-    [configuredProviders, runner, accountPools, antigravityKeyAvailable, fleet],
-  );
-  // The New Session hero's engines, each landing on the draft's pick when it is that engine's, else on
-  // what this workspace last ran there. The current one is the pick's own engine on the pick's own
-  // provider — drawn as it is even when that provider is no longer on offer (a key since removed).
-  const draftEngines = useMemo(
-    () =>
-      engineChoices(choiceSources, [
-        { engine: pickedEngine, provider: pickedProvider },
-        { engine: lastWorkspaceEngine, provider: lastWorkspaceProvider },
-      ]),
-    [choiceSources, pickedEngine, pickedProvider, lastWorkspaceEngine, lastWorkspaceProvider],
-  );
   const currentDraftEngine = useMemo(
-    () => currentEngineChoice(pickedEngine, pickedProvider, draftEngines, choiceSources),
-    [pickedEngine, pickedProvider, draftEngines, choiceSources],
+    () =>
+      fallback ? currentEngineChoice(pickedEngine, pickedProvider, draftEngines, choiceSources) : rememberedDraftEngine,
+    [fallback, pickedEngine, pickedProvider, draftEngines, choiceSources, rememberedDraftEngine],
   );
+  // Nothing on this machine can run the draft and nobody picked anything else: sending would only be
+  // refused, so the send waits while the hero says why (board frame ④).
+  const draftCantRun = !selected && !machineDraft && !draftHere && !fallback && !!rememberedDraftEngine.unavailable;
   const newAccount = useNewAccount(composing && bareMachine);
   const machineWelcome = newAccount && bareMachine;
   // The credentials the composer's engine runs on here — the Provider menu's rows — and how any one
@@ -6044,7 +6089,8 @@ export function WorkspaceView({
         // Only an explicit pick travels, and it is the pair — the engine the hero picked and the
         // credential of it (docs/provider-engine-contract.md §3.2). Leaving both off keeps the
         // server's inherit-from-workspace path, which re-checks that pair as it starts the session.
-        ...(draftHere ? { engine: pickedEngine, provider: pickedProvider } : {}),
+        // A fallback travels too: the workspace's pair is the one that can't run here.
+        ...(draftHere || fallback ? { engine: pickedEngine, provider: pickedProvider } : {}),
         model: createModel,
         permissionMode: createPermissionMode,
         // Send even '' (Default) explicitly: the composer already seeds the pill from the workspace's
@@ -7407,6 +7453,7 @@ export function WorkspaceView({
       !send.isPending &&
       !uploading &&
       runnerTakesWork &&
+      !draftCantRun &&
       !selectedTrashed &&
       !sameSessionSendBlocked &&
       !selectedMissing &&
@@ -10353,10 +10400,11 @@ export function WorkspaceView({
             <>
               {titleBarProjectId && !selectedTrashed && (
                 <Button variant="text" className="workspace-header-project"
-                  icon={<SidebarNavIcon name="projects" />}
+                  icon={titleBarActive
+                    ? <LoadingOutlined spin style={{ color: 'var(--brand)' }} />
+                    : <SidebarNavIcon name="projects" />}
                   title={PROJECT_COLUMN_COPY.label} aria-label={PROJECT_COLUMN_COPY.label}
-                  aria-pressed={isMobile ? sheetProjectId === titleBarProjectId
-                    : titleBarProjectId === columnProjectId && projectColumnOpen}
+                  aria-pressed={titleBarPageShown}
                   onClick={isMobile ? () => setSheetProjectId(titleBarProjectId) : toggleProjectColumn}>
                   {titleBarSessionCount ?? undefined}
                 </Button>
@@ -11198,6 +11246,9 @@ export function WorkspaceView({
                 <NewSessionProviderHero
                   current={currentDraftEngine}
                   engines={draftEngines}
+                  fellBackFrom={fallback ? rememberedDraftEngine : null}
+                  machine={machineName(runner)}
+                  cantRun={draftCantRun}
                   onPick={pickDraft}
                   runnerId={runner.id}
                   currentModelLabel={shownModelLabel}
@@ -12445,7 +12496,7 @@ export function SessionComposer({
             Tab
           </kbd>
           <span className="composer-suggestion-tap" aria-hidden="true">
-            Double-tap to use
+            Double-tap
           </span>
           {/* For a screen reader on a touch screen, whose own double-tap is "activate": hidden
               from the eye there, and gone with a keyboard, which has Tab. */}

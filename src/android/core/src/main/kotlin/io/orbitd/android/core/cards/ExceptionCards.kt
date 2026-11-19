@@ -635,10 +635,11 @@ object ExceptionCards {
     private fun bool(row: JsonObject, key: String): Boolean? = (row[key] as? JsonPrimitive)?.booleanOrNull
 
     /** The kinds the card draws once they are the owner's by escalation, a hand-over, an ended or missing coordinator. A failed
-     * chain's 3rd failure and a silent landing claim keep cards of their own. */
+     * chain's 3rd failure, a silent landing claim, and a failing landing baseline keep cards of their own. */
     private val whoFixesKinds = setOf("INTEGRATION_CONFLICT", "INTEGRATION_CHECK_FAILED", "INTEGRATION_ERROR", "TASK_FAILED", "DELIVERY_REVIEW")
 
-    fun whoFixesIt(row: JsonObject): Boolean = row.text("assignee") == "OWNER" && row.text("kind") in whoFixesKinds &&
+    fun whoFixesIt(row: JsonObject): Boolean = row.obj("baseline") == null &&
+        row.text("assignee") == "OWNER" && row.text("kind") in whoFixesKinds &&
         row.text("assigneeReason") != "CHAIN_LIMIT" && row.text("assigneeReason") != "DEFAULT"
 
     /** Whether the server drew Ask again: the coordinator can take it, and the status is not read. */

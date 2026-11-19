@@ -174,7 +174,7 @@ public struct ScheduleConditionReading: Codable, Equatable, Hashable, Sendable {
         lastSampleAt = try? c.decodeIfPresent(String.self, forKey: .lastSampleAt)
     }
 
-    /// The probe cannot be read: the row goes under Needs you (§5.3).
+    /// The probe cannot be read: the row is tagged Can't read, at the head of Waiting for a condition (§5.3).
     public var cantRead: Bool { state == "UNKNOWN" }
 }
 

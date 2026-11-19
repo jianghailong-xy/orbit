@@ -1,7 +1,7 @@
 import { useState } from 'react';
 import { Link } from 'react-router-dom';
 import type { AgentProvider } from '@orbit/shared';
-import { CLAUDE_REGION_DETAILS } from '../lib/claudeRegionCopy';
+import { CLAUDE_REGION_DETAILS, CLAUDE_REGION_USE_ANOTHER_PROVIDER, anthropicUnavailableOn } from '../lib/claudeRegionCopy';
 import { encodeId } from '../lib/idCodec';
 import { PROVIDER_GLYPHS } from '../lib/providerGlyphs';
 import { providerNameOn, type EngineChoice } from '../lib/sessionProviderChoices';
@@ -69,6 +69,9 @@ export function NewSessionProviderHero({
   note,
   currentModelLabel,
   projectIntent = false,
+  fellBackFrom = null,
+  machine,
+  cantRun = false,
 }: {
   /** The engine the draft runs on, landing on the provider it will spend. */
   current: EngineChoice;
@@ -82,6 +85,13 @@ export function NewSessionProviderHero({
   disabled?: boolean;
   /** Transient line under the summary (what a switch just changed, and where it was saved). */
   note?: string | null;
+  /** What the workspace last ran on, when it can't run on this machine and the draft moved off it
+   *  (draftFallback): the hero says what it uses instead, and why. */
+  fellBackFrom?: EngineChoice | null;
+  /** This machine's name, as the reasons above say it. */
+  machine?: string;
+  /** Nothing on this machine can run the draft: the send waits, and the hero offers the way out. */
+  cantRun?: boolean;
   /** The model this draft will actually send with; engine rows carry the runner default instead. */
   currentModelLabel?: string;
   /** The Projects entry point still uses this same picker; only its framing copy changes. */
@@ -177,6 +187,41 @@ export function NewSessionProviderHero({
     </div>
   );
 
+  // The draft moved off what the workspace last ran on (board docs/mocks/new-session-usable-default
+  // ② ③): which credential it uses now, or which engine could not run, and why — said where the
+  // default is read, so the move is never silent. The reason's link is the one the blocked line had.
+  const from = fellBackFrom?.provider?.unavailable ? fellBackFrom.provider : null;
+  // Only a reason this machine has names it (OrbitKit's `fallbackLine` says the same).
+  const where = !from?.fixEngine ? '' : machine ? ` on ${machine}` : ' on this runner';
+  const fallbackSummary = fellBackFrom && from && current.provider && (
+    <div className="np-summary np-fallback">
+      {fellBackFrom.slug === current.slug ? (
+        <>
+          <span>
+            Using <b>{providerNameOn(current.slug, current.provider)}</b>
+          </span>
+          <span className="np-dot">·</span>
+          {from.regionBlocked && machine
+            ? anthropicUnavailableOn(machine)
+            : `${providerNameOn(fellBackFrom.slug, from)}: ${from.unavailable}${where}`}
+        </>
+      ) : (
+        <span>{`${fellBackFrom.label} can’t run${where}: ${from.unavailable}`}</span>
+      )}
+      <span className="np-dot">·</span>
+      <Link to={fixLink({ slug: fellBackFrom.slug, fixEngine: from.fixEngine, fixHref: from.fixHref })}>
+        {from.regionBlocked ? CLAUDE_REGION_DETAILS : 'Fix it'}
+      </Link>
+    </div>
+  );
+  // Nothing here runs it (board ④): another provider's key is the way out on this machine.
+  const cantRunNote = cantRun && (
+    <div className="np-cant-run">
+      {machine ? `Nothing on ${machine} can run a session yet.` : 'Nothing on this runner can run a session yet.'}{' '}
+      <Link to="/settings/providers">{CLAUDE_REGION_USE_ANOTHER_PROVIDER}</Link>
+    </div>
+  );
+
   return (
     <div className="np-hero">
       {projectIntent && (
@@ -203,6 +248,7 @@ export function NewSessionProviderHero({
         </Popover>
       )}
       {fixSummary ??
+        fallbackSummary ??
         (projectIntent ? (
           <div className="np-summary">
             <b>{current.provider ? providerNameOn(current.slug, current.provider) : current.label}</b>
@@ -217,6 +263,7 @@ export function NewSessionProviderHero({
             <div className="np-current-model">{modelLabel}</div>
           </>
         ))}
+      {cantRunNote}
       {note && <div className="np-note">{note}</div>}
     </div>
   );

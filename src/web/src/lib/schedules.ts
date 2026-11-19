@@ -79,10 +79,13 @@ export const sessionScheduleCardsQuery = (sessionId: string) =>
     refetchInterval: streamPoll(20_000),
   });
 
-/** The count beside Scheduled in the drawer: the failing and the held (§9.2). */
+/** The count beside Scheduled in the drawer: the held, and the failing with no run under way (§9.2). */
 export function useScheduledNeedsCount(): number {
   const list = useQuery(schedulesQuery());
-  return useMemo(() => (list.data?.schedules ?? []).filter(scheduleNeedsYou).length, [list.data]);
+  return useMemo(() => {
+    const runs = list.data?.runs ?? [];
+    return (list.data?.schedules ?? []).filter((s) => scheduleNeedsYou(s, runs)).length;
+  }, [list.data]);
 }
 
 /**

@@ -28,7 +28,6 @@ public enum ScheduleCopy {
         public static let showPastRuns = "Show past runs"
     }
     public static let groups: [String: String] = [
-        "NEEDS_YOU": "Needs you",
         "TODAY": "Today",
         "TOMORROW": "Tomorrow",
         "LATER": "Later",
@@ -342,7 +341,6 @@ public enum ScheduleCopy {
         "page.title": ScheduleCopy.Page.title,
         "page.allWorkspaces": ScheduleCopy.Page.allWorkspaces,
         "page.showPastRuns": ScheduleCopy.Page.showPastRuns,
-        "groups.NEEDS_YOU": ScheduleCopy.groups["NEEDS_YOU"]!,
         "groups.TODAY": ScheduleCopy.groups["TODAY"]!,
         "groups.TOMORROW": ScheduleCopy.groups["TOMORROW"]!,
         "groups.LATER": ScheduleCopy.groups["LATER"]!,
