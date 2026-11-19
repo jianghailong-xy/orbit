@@ -69,7 +69,7 @@ test('managed runners switched off with existing state: nothing is stopped, dele
   const sql = new Client({ connectionString: url, connectionTimeoutMillis: 5_000 });
   await sql.connect();
   await verifyCoordinatorPgIdentity(sql);
-  const scratch = mkdtempSync(path.join(tmpdir(), 'orbit-managed-existing-'));
+  const scratch = mkdtempSync(path.join(tmpdir(), 'orbit-cloud-existing-'));
   t.after(async () => {
     await sql.end().catch(() => undefined);
     rmSync(scratch, { recursive: true, force: true });
@@ -104,7 +104,7 @@ test('managed runners switched off with existing state: nothing is stopped, dele
     )).rows[0].id as string;
     const columns = {
       id: randomUUID(), owner_id: ownerId, runner_id: runnerId, default_workspace_id: workspaceId,
-      cluster_key: 'previous-cluster', namespace: 'orbit-managed-test', pvc_name: managedPvcName(runnerId),
+      cluster_key: 'previous-cluster', namespace: 'orbit-cloud-test', pvc_name: managedPvcName(runnerId),
       resource_profile_id: 'invited-test-v1', last_request_key: 'ensure-before-the-switch', updated_at: new Date(),
       ...mapping,
     } as Record<string, unknown>;

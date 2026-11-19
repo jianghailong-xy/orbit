@@ -25,7 +25,7 @@ runner image all sit on the deployment's own host:
 | --- | --- | --- |
 | Channel listener | unix socket, or TCP on 127.0.0.1 / ::1 only | `deploy/managed-runner/docker-channel/channel.py:200` |
 | Apiserver's channel address | `socketPath`, or `http://127.0.0.1:<port>` / `http://[::1]:<port>` only | `src/apiserver/src/managed-runners/managed-runner-profile.ts:395` |
-| Image | `/upgrade` builds `orbit-managed-runner:local` on this host and writes its ID into `channel.json` and `profile.json`; the apiserver refuses a channel whose image differs | `.claude/skills/upgrade/upgrade.sh:66-180`, `docker-backend.ts:194` |
+| Image | `/upgrade` builds `orbit-cloud-runner:local` on this host and writes its ID into `channel.json` and `profile.json`; the apiserver refuses a channel whose image differs | `.claude/skills/upgrade/upgrade.sh:66-180`, `docker-backend.ts:194` |
 | Firewall | `managed-runner-firewall` keeps iptables rules on the host whose bridge the runners use | `deploy/managed-runner/firewall` |
 | Install | `scripts/install-server.sh` prepares all of it on the deployment's host | `docs/self-hosting.md`, "Managed runners" |
 
@@ -51,7 +51,7 @@ orbit-prod (10.66.0.1)                         10.66.0.3 ("channel host")
 apiserver ── HTTP + bearer token over wg1 ───▶ docker-channel  (listens on 10.66.0.3:<port> only,
   profile.json: channel.url = http://10.66.0.3:<port>        answers only peer 10.66.0.1)
                                                managed-runner-firewall (rules on this host)
-                                               orbit-managed-runner image (built here)
+                                               orbit-cloud-runner image (built here)
                                                mr-<uuid> containers ── https://orbitd.io ──▶ gateway
                                                                   └── wss://c1.link.orbitd.io ─▶ link gateway
 ```
@@ -65,7 +65,7 @@ apiserver ── HTTP + bearer token over wg1 ───▶ docker-channel  (list
    (a runner then talks to the server over the internet, never plain HTTP to another machine).
 3. **Channel-host kit.** `deploy/managed-runner/remote-host/` with a Compose file of two services
    (`docker-channel` in the host network namespace, `managed-runner-firewall`) and one script with
-   `install`, `upgrade <sha>` and `status`. `install` makes the `orbit-managed-runners` network, the token,
+   `install`, `upgrade <sha>` and `status`. `install` makes the `orbit-cloud-runners` network, the token,
    `channel.json`, the firewall's `config.json`, builds the image, and prints the `profile.json` fragment and token
    path to copy to the server. `upgrade` checks out a reviewed commit, rebuilds the image and switches `channel.json`
    the way `/upgrade` does today.

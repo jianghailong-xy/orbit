@@ -3,7 +3,7 @@
 
     python3 scripts/managed-runner/docker-backend-it.py --work /mnt/data/tmp/<task>/it \
         --evidence /mnt/data/tmp/<task>/it/evidence [--build-image [--image-source <checkout>]] \
-        [--image orbit-managed-runner:d2]
+        [--image orbit-cloud-runner:d2]
 
 What it sets up, every piece labelled `orbit.test=<run label>` and removed afterwards:
   - the managed runner image, from deploy/managed-runner/image of this checkout or of --image-source
@@ -58,7 +58,7 @@ def main():
     parser = argparse.ArgumentParser(description=__doc__.splitlines()[0])
     parser.add_argument("--work", required=True, type=Path, help="scratch directory for this run")
     parser.add_argument("--evidence", required=True, type=Path, help="where the test writes its records")
-    parser.add_argument("--image", default="orbit-managed-runner:d2")
+    parser.add_argument("--image", default="orbit-cloud-runner:d2")
     parser.add_argument("--build-image", action="store_true", help="build the managed runner image first")
     parser.add_argument("--image-source", type=Path, default=REPO, help="the checkout whose deploy/managed-runner/image is built")
     parser.add_argument("--keep", action="store_true", help="leave everything in place for inspection")
