@@ -140,6 +140,13 @@ final class RunnerPageFormatTests: XCTestCase {
         XCTAssertEqual(RunnerPageFormat.managedFirst(runners, managedRunnerID: nil), runners)
     }
 
+    func testOSReadsTheReportedCapabilityAndNothingWithoutOne() throws {
+        XCTAssertEqual(RunnerPageFormat.os(try runner(Self.wikovaJSON, ["capabilities": ["session-worktree-ops-v1", "os:linux"]])), "linux")
+        XCTAssertEqual(RunnerPageFormat.os(try runner(Self.macMiniJSON, ["capabilities": ["os:darwin"]])), "darwin")
+        XCTAssertNil(RunnerPageFormat.os(try runner(Self.wikovaJSON, ["capabilities": ["provider:dsh"]])))
+        XCTAssertNil(RunnerPageFormat.os(try runner(Self.wikovaJSON, ["capabilities": NSNull()])))
+    }
+
     func testTheHeadAndTheRowSayWhereTheMachineStands() throws {
         let wikova = try wikova()
         XCTAssertEqual(RunnerPageFormat.presence(wikova, now: now), .online)

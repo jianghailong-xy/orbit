@@ -217,6 +217,32 @@ describe('Machines in the account menu', () => {
     expect(accountRow('MacBook Pro')!.querySelector('.tp-account-machine-cloud')).toBeNull();
   });
 
+  it('marks every other machine by the OS it reported, a monitor when it has not said', async () => {
+    runners = [
+      { id: 'r2', name: 'orbit-managed', online: true, managed: true, capabilities: ['os:linux'] },
+      { id: 'r1', name: 'mini', online: true, capabilities: ['session-worktree-ops-v1', 'os:darwin'] },
+      { id: 'r3', name: 'hpc', online: true, capabilities: ['os:linux'] },
+      { id: 'r4', name: 'win-box', online: true, capabilities: ['os:windows'] },
+      { id: 'r5', name: 'old-runner', online: true },
+    ];
+    serve();
+    await visit('/projects');
+    await openAccountMenu();
+    await press(accountRow('Machines'));
+    await act(async () => {
+      await vi.waitFor(() => expect(accountRow('Orbit Cloud')).toBeDefined(), { timeout: 5_000, interval: 20 });
+    });
+
+    const osOf = (label: string) => accountRow(label)!.querySelector('.tp-account-machine-os > .anticon')?.getAttribute('data-os');
+    expect(osOf('mini')).toBe('darwin');
+    expect(osOf('hpc')).toBe('linux');
+    expect(osOf('win-box')).toBe('windows');
+    expect(osOf('old-runner')).toBe('unknown');
+    // Orbit Cloud keeps its cloud, whatever OS it runs.
+    expect(accountRow('Orbit Cloud')!.querySelector('.tp-account-machine-os')).toBeNull();
+    expect(accountRow('Orbit Cloud')!.querySelector('.anticon-cloud')).not.toBeNull();
+  });
+
   it('draws no line under Orbit Cloud when it is the only machine', async () => {
     runners = [{ id: 'r2', name: 'orbit-managed', online: true, managed: true }];
     serve();

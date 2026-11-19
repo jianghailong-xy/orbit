@@ -648,6 +648,23 @@ describe('reordering machines in the nav', () => {
     expect(toast.error).toHaveBeenCalledWith("Couldn't reorder the machines", 'Machine order is stale');
   });
 
+  it('draws each machine by the OS it reported, a monitor when it has not said', async () => {
+    runners = [
+      { ...RUNNERS[0], capabilities: ['os:linux'] },
+      RUNNERS[1],
+      { ...RUNNERS[2], capabilities: ['os:darwin'] },
+    ] as typeof RUNNERS;
+    await visit('/settings/general');
+    const osOf = (label: string) =>
+      [...group('Machines').querySelectorAll('.settings-nav-row')]
+        .find((row) => row.querySelector('.settings-nav-label')?.textContent === label)!
+        .querySelector('.settings-nav-icon .anticon')!
+        .getAttribute('data-os');
+    expect(osOf('gpu-box')).toBe('linux');
+    expect(osOf('old-laptop')).toBe('unknown');
+    expect(osOf('Studio Mac')).toBe('darwin');
+  });
+
   describe('with Orbit Cloud among them', () => {
     // The account's managed runner, saved second: the nav pins it first all the same.
     const WITH_CLOUD = [RUNNERS[0], { id: 'cloud', name: 'orbit-managed', online: true, engines: [signedIn], managed: true }, ...RUNNERS.slice(1)];

@@ -95,12 +95,12 @@ final class CreatedTasksWiringTests: XCTestCase {
     func testTheWordsAreOrbitKits() throws {
         let card = code(try source("Views/CreatedTasksCard.swift"))
         for word in ["Tasks created here", "View all in Tasks", "Open project ›", "Replaces ", " running", " done",
-                     "elsewhere"] {
+                     " failed", "elsewhere"] {
             XCTAssertFalse(card.contains("\"\(word)") || card.contains("\(word)\""),
                            "the card spells \(word.debugDescription) itself")
         }
         for use in ["SessionTaskCard(created: console.createdTasks.snapshot", "SessionCreatedTasksCopy.title",
-                    "SessionCreatedTasksCopy.elsewhere", "card.countParts",
+                    "SessionCreatedTasksCopy.elsewhere", "card.band", "band.failedPart",
                     "SessionCreatedTasksCopy.replaces(", "SessionCreatedTasksCopy.separator"] {
             XCTAssertTrue(card.contains(use), "the card no longer reads \(use)")
         }
