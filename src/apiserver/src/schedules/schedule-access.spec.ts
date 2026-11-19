@@ -62,6 +62,7 @@ test('a CHECK_ONLY run on Claude Code is allowed what a check needs and nothing 
     'mcp__orbit__wiki_get',
     'mcp__orbit__file_fetch',
     'mcp__orbit__file_list',
+    'mcp__orbit__browser_status',
     'mcp__orbit__guide',
     'WebFetch',
     'WebSearch',

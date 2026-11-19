@@ -1,7 +1,7 @@
 # Orbit operation catalogue v1.9.0
 
 > Generated from `src/runner-go/operation_catalog.go` — do not edit by hand.
-> Content hash: `01098db1035ad6304692a2c82d9e1a06d137938a2ac6fbbf4893d52e8508f217`.
+> Content hash: `a9be75fe377ede496cf7e85851b359cc0c5ea52e017efa2722d60b4c62fd8f45`.
 
 Every operation an Orbit agent can call is declared once in the operation catalogue. This table is that catalogue rendered for a person: `orbit capabilities --json` and the MCP `tools/list` payload are its two machine surfaces, and the leaf `--help` texts are held to it by tests. `MCP` and `CLI` say how each surface reaches the operation — `always`, an `orchestration` grant, an engine `permission_prompt` bridge, `session`-only, `headless`-only, or a `watch_switch`/`wiki_switch` — and `absent` when that surface deliberately has no door. Gates that must hold together are joined with `+` (for example `orchestration+watch_switch`). `Idempotency` is `read` (safe to repeat), `caller_key` (retry with the same key), `server_key` (a redelivered turn deduplicates) or `none` (re-read before retrying). `Plan` is what a session in Plan mode gets: the call `runs`, is `refused` with what to do instead, or its `own_gate` decides; the per-engine matrix is docs/permission-matrix.md.
 
@@ -37,6 +37,7 @@ Every operation an Orbit agent can call is declared once in the operation catalo
 | `bg_list` | background_job | low | no | none | no | read | runs | always | absent | See this session's background jobs. |
 | `bg_output` | background_job | low | no | none | no | read | runs | always | absent | Read a background job's output. |
 | `bg_run` | background_job | high | yes | none | no | none | own_gate | always | absent | Run a command in the background on this runner. |
+| `browser_status` | browser | low | no | none | no | read | runs | browser_switch | session+browser_switch — `orbit browser status` | Read the state of the account's Orbit Cloud browser. |
 | `condition_get` | schedule | low | no | none | no | read | runs | always | absent | Read a task's or a schedule's condition: its state, newest samples and events. |
 | `criterion_check_report` | project | high | yes | none | no | none | refused | always | absent | Report the Agent check this session is running. |
 | `criterion_check_start` | project | high | yes | none | no | none | refused | always | absent | Start a criterion check as the project's coordinator. |

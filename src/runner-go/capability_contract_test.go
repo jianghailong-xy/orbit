@@ -396,7 +396,7 @@ func TestTheAllowlistIsTheCapabilitySpecInEverySessionShape(t *testing.T) {
 				for _, c := range r.doc.UnavailableCapabilities {
 					rule := "Bash(" + strings.Join(c.Argv, " ") + " *)"
 					switch c.UnavailableCode {
-					case capabilityWatchesOff, capabilityWikiOff:
+					case capabilityWatchesOff, capabilityWikiOff, capabilityBrowserOff:
 						want[rule] = true
 					default:
 						forbidden[rule] = c.UnavailableCode

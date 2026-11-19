@@ -163,6 +163,7 @@ type cliOfferFacts struct {
 	orchestration bool
 	watches       bool
 	wiki          bool
+	browser       bool
 }
 
 func currentCLIOfferFacts(identity cliIdentity) cliOfferFacts {
@@ -173,6 +174,7 @@ func currentCLIOfferFacts(identity cliIdentity) cliOfferFacts {
 		orchestration: !service && mcpOrchestrationEnabled() && inSession,
 		watches:       watchesEnabledFromEnv(),
 		wiki:          wikiEnabledFromEnv(),
+		browser:       browserToolsEnabledFromEnv(),
 	}
 }
 
@@ -247,6 +249,8 @@ func cliWithheldReason(op *operation, facts cliOfferFacts) string {
 		return watchesOffMessage(command)
 	case op.CLIFamily == "wiki" && !facts.wiki:
 		return wikiOffMessage(command)
+	case op.CLIFamily == "browser" && !facts.browser:
+		return browserOffMessage(command)
 	case cliOrchestrationGated(op) && facts.inSession && !facts.orchestration:
 		return orchestrationOffMsg
 	case cliOrchestrationGated(op):

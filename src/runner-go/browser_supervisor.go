@@ -318,6 +318,9 @@ type BrowserReport struct {
 	HolderTitle      string `json:"holderTitle,omitempty"`
 	Viewers          int    `json:"viewers"`
 	ProfileClearedAt string `json:"profileClearedAt,omitempty"`
+	// SavedLogins: the profile holds a cookie store, so saved logins may exist. A boolean only: which sites they are
+	// for is never read, reported or logged.
+	SavedLogins bool `json:"savedLogins"`
 }
 
 // Report is what the next heartbeat says of the browser: nil on a runner that has none.
@@ -334,7 +337,25 @@ func (b *browserSupervisor) Report() *BrowserReport {
 	if !b.clearedAt.IsZero() {
 		r.ProfileClearedAt = b.clearedAt.UTC().Format(time.RFC3339Nano)
 	}
+	r.SavedLogins = b.savedLoginsLocked()
 	return r
+}
+
+// browserCookieStores are where Chrome keeps a profile's cookies, newest layout first: what a login leaves behind.
+var browserCookieStores = []string{
+	filepath.Join("Default", "Network", "Cookies"),
+	filepath.Join("Default", "Cookies"),
+}
+
+// savedLoginsLocked reports whether the profile holds a non-empty cookie store. Only the files' sizes are read, never
+// their contents: which sites are signed in is not this runner's to say.
+func (b *browserSupervisor) savedLoginsLocked() bool {
+	for _, rel := range browserCookieStores {
+		if info, err := os.Stat(filepath.Join(b.ProfileDir(), rel)); err == nil && info.Mode().IsRegular() && info.Size() > 0 {
+			return true
+		}
+	}
+	return false
 }
 
 func (l *browserLease) name() string {

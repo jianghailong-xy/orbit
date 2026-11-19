@@ -14,7 +14,14 @@ import {
   Post,
   UseGuards,
 } from '@nestjs/common';
-import { BROWSER_CLEAR_V1, toUuid, type RunnerBrowserClearResponse, type RunnerBrowserReport, type RunnerBrowserState } from '@orbit/shared';
+import {
+  BROWSER_CLEAR_V1,
+  toUuid,
+  type RunnerBrowserClearResponse,
+  type RunnerBrowserReport,
+  type RunnerBrowserState,
+  type RunnerBrowserStatus,
+} from '@orbit/shared';
 
 import { AuthModule } from '../auth/auth.module';
 import { JwtAuthGuard } from '../auth/jwt-auth.guard';
@@ -30,6 +37,8 @@ import { MANAGED_RUNNER_BROWSER_GATE, type ManagedRunnerBrowserGate } from './ma
  *
  *   GET  /api/runners/:id/browser         whether Chrome is running, the session holding the lease, open viewers,
  *                                         as the runner's last heartbeat reported them (RunnerBrowserState)
+ *   GET  /api/runner/browser              the same for a session of the account, by its runner's credential: browser_status
+ *                                         and `orbit browser status` (runner-api/runner-browser.controller.ts)
  *   POST /api/runners/:id/browser/clear   Clear saved logins: the runner's next heartbeat is handed
  *                                         `clearBrowserProfile`, and the runner stops Chrome and deletes its profile
  *                                         (~/.orbit/browser/profile); its next report's profileClearedAt is the answer
@@ -80,6 +89,8 @@ export function storedBrowserState(report: unknown, beatAt: Date): StoredBrowser
   const title = holder ? text(r.holderTitle) : undefined;
   if (title) out.holderTitle = title;
   if (cleared && !Number.isNaN(Date.parse(cleared))) out.profileClearedAt = new Date(cleared).toISOString();
+  // A boolean and nothing more: which sites the profile holds logins for is never reported, so never stored.
+  if (typeof r.savedLogins === 'boolean') out.savedLogins = r.savedLogins;
   return out;
 }
 
@@ -99,6 +110,7 @@ export function browserStateOf(
     reportedAt,
     clearRequestedAt: row.browserClearRequestedAt?.toISOString() ?? null,
     profileClearedAt: stored?.profileClearedAt ?? null,
+    savedLogins: stored?.savedLogins ?? null,
   };
 }
 
@@ -132,6 +144,32 @@ export class ManagedRunnerBrowserService {
   async state(ownerId: string, rawId: string): Promise<RunnerBrowserState> {
     const runner = await this.ownManagedRunner(ownerId, rawId);
     return browserStateOf(rawId, runner);
+  }
+
+  /**
+   * browser_status (`GET /runner/browser`): the account's own Orbit Cloud runner's browser, found by the account rather
+   * than by an id, since an account has at most one. No managed runner: `runnerId` null and state UNKNOWN.
+   */
+  async accountStatus(ownerId: string): Promise<RunnerBrowserStatus> {
+    const managed = await this.prisma.managedRunner.findUnique({ where: { ownerId }, select: { runnerId: true } });
+    const runner = managed
+      ? await this.prisma.runner.findFirst({
+        where: { id: managed.runnerId, ownerId },
+        select: { browserState: true, browserClearRequestedAt: true },
+      })
+      : null;
+    const state = runner ? browserStateOf(managed!.runnerId, runner) : null;
+    return {
+      enabled: true,
+      runnerId: state?.runnerId ?? null,
+      state: state?.state ?? 'UNKNOWN',
+      running: state?.state === 'RUNNING',
+      holderSessionId: state?.holderSessionId ?? null,
+      holderTitle: state?.holderTitle ?? null,
+      viewers: state?.viewers ?? 0,
+      savedLogins: state?.savedLogins ?? null,
+      reportedAt: state?.reportedAt ?? null,
+    };
   }
 
   async clear(ownerId: string, rawId: string): Promise<RunnerBrowserClearResponse> {
@@ -169,5 +207,7 @@ export class ManagedRunnerBrowserController {
   imports: [AuthModule],
   controllers: [ManagedRunnerBrowserController],
   providers: [ManagedRunnerBrowserService, ManagedRunnerBrowserEnabledGuard],
+  // The runner's door (runner-api/runner-browser.controller.ts) reads through the same service and guard.
+  exports: [ManagedRunnerBrowserService, ManagedRunnerBrowserEnabledGuard],
 })
 export class ManagedRunnerBrowserModule {}

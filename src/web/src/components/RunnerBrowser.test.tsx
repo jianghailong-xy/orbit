@@ -65,6 +65,7 @@ const running = (over: Partial<RunnerBrowserState> = {}): RunnerBrowserState => 
   reportedAt: '2026-11-18T05:00:00.000Z',
   clearRequestedAt: null,
   profileClearedAt: null,
+  savedLogins: null,
   ...over,
 });
 

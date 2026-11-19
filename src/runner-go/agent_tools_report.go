@@ -78,6 +78,7 @@ type agentToolsSwitches struct {
 	Orchestration bool `json:"orchestration"`
 	Watches       bool `json:"watches"`
 	Wiki          bool `json:"wiki"`
+	Browser       bool `json:"browser"`
 }
 
 // agentToolsInstructions is how Orbit's runtime instructions reached the model: the carrier (Claude Code's
@@ -136,7 +137,7 @@ func newAgentToolsReport(job *ClaimedSession, engine, carrier string) *agentTool
 		MCP: agentToolsMCP{Status: "starting"},
 	}
 	if job != nil {
-		r.Switches = agentToolsSwitches{Orchestration: job.AllowOrchestration, Watches: job.watchesOn(), Wiki: !job.WikiDisabled}
+		r.Switches = agentToolsSwitches{Orchestration: job.AllowOrchestration, Watches: job.watchesOn(), Wiki: !job.WikiDisabled, Browser: job.BrowserEnabled}
 		r.scheduleRun = job.ScheduleRun
 		r.PermissionMode = job.Agent.PermissionMode
 		workspace := strings.TrimSpace(job.Agent.AppendSystemPrompt)
@@ -163,6 +164,9 @@ func agentToolsWithheldBy(op *operation, sw agentToolsSwitches) string {
 	}
 	if wikiToolNames[op.Tool] && !sw.Wiki {
 		return "wiki"
+	}
+	if browserToolNames[op.Tool] && !sw.Browser {
+		return "browser"
 	}
 	return ""
 }

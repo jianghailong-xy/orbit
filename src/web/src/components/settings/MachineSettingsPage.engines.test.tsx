@@ -422,6 +422,7 @@ describe('the machine’s own controls over its engines', () => {
       reportedAt: '2026-11-18T05:00:00.000Z',
       clearRequestedAt: null,
       profileClearedAt: null,
+      savedLogins: null,
     };
     await mount(machine(), { ...MANAGED_READY, runnerId: RUNNER_ID });
     expect($$('.machine-section-browser')).toHaveLength(1);

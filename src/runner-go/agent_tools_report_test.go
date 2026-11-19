@@ -79,6 +79,11 @@ func TestClaudeInitBecomesTheAgentToolsReport(t *testing.T) {
 			if f.Served != 0 || f.Total == 0 || f.Reason != "orchestration" {
 				t.Errorf("orchestration family = %+v, want none served, said why", f)
 			}
+		case f.ID == "browser":
+			// The session was spawned with the browser switch off, so its tools are absent and the report says why.
+			if f.Served != 0 || f.Total == 0 || f.Reason != "browser" {
+				t.Errorf("browser family = %+v, want none served, said why", f)
+			}
 		case f.Served != f.Total || f.Reason != "":
 			t.Errorf("family %s = %+v, want all served", f.ID, f)
 		}

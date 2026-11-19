@@ -261,6 +261,7 @@ func spawnClaude(ctx context.Context, job *ClaimedSession, execDir string, args 
 		"ORBIT_ALLOW_ORCHESTRATION="+orchestrationEnv(job.AllowOrchestration),
 		envWatches+"="+watchesEnv(job.WatchesDisabled),
 		envWiki+"="+wikiEnv(job.WikiDisabled),
+		envBrowser+"="+browserEnv(job.BrowserEnabled),
 		envScheduleRun+"="+scheduleRunEnv(job.ScheduleRun),
 		envScheduledCheckOnly+"="+scheduledCheckOnlyEnv(job.Agent.ScheduledCheckOnly),
 		"ORBIT_SPAWN_DEPTH="+strconv.Itoa(job.SpawnDepth),

@@ -468,6 +468,7 @@ var agentToolsFamilyDefs = []struct {
 	{"background", "Background jobs", []string{"background_job", "session"}},
 	{"owner", "Questions for you", []string{"owner"}},
 	{"wiki", "Wiki", []string{"wiki"}},
+	{"browser", "Orbit Cloud browser", []string{"browser"}},
 	{"providers", "Providers", []string{"provider"}},
 	{"merge-receipts", "Merge receipts", []string{"merge_receipt"}},
 	{"guide", "Guide", []string{"catalog"}},
@@ -689,6 +690,7 @@ var agentToolsSwitchReasons = map[string]string{
 	"orchestration": "Session orchestration is off for this account.",
 	"watches":       "Watch is off for this account on this Orbit server.",
 	"wiki":          "The wiki is off for this account on this Orbit server.",
+	"browser":       "The Orbit Cloud browser is off on this Orbit server.",
 	"not_connected": "The MCP server is not connected.",
 }
 
