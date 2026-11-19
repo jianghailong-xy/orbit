@@ -129,9 +129,13 @@ Optimize For 只在第 5 条（没人给档位）时抬档：Balance 至少 M，
 
 | Optimize For | 规则 |
 |---|---|
-| Cost（默认） | 订阅先于计费 key；订阅里额度已知的先、余量多的先；key 里便宜的先 |
-| Balance | 额度已知的先（key 算已知），余量多的先，并列时便宜的先 |
-| Intelligence | 档位上限高的模型先（例如 L 档里 Opus 先于 Sonnet-high），再额度已知的先，并列时便宜的先 |
+| Cost（默认） | 订阅先于计费 key；订阅里额度已知的先，再**先过期的先**，再余量多的先；key 里便宜的先 |
+| Balance | 额度已知的先（key 算已知），再**先过期的先**（key 和不知道何时重置的订阅算永不过期），再余量多的先，并列时便宜的先 |
+| Intelligence | 档位上限高的模型先（例如 L 档里 Opus 先于 Sonnet-high），再额度已知的先，再先过期的先，并列时便宜的先 |
+
+**先过期的先**（owner，2026-11-19）：和 runner 上选账号同一条规则（`planUsage.ts` `rankAccounts`）——快用完的
+（`quotaNearLimit`：5 小时窗口 ≥ 80%，更长的 ≥ 90%）排最后，其余按额度作废的时刻（`quotaExpiresAt`：最长那个窗口的重置，
+有周窗口就是周窗口）早的先。号池选它的成员也按这条。Kimi 的月窗口算在内。
 
 最后按 owner 在 Providers 页排的顺序打破平局。结果和理由冻结在 `subagent_run` 里，续跑不重算。
 
