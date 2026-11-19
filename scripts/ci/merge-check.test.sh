@@ -21,8 +21,10 @@ expect_plan $'  src/runner-go/integrate.go -> runner-go\nSuites: runner-go' src/
 expect_plan $'  src/web/src/App.tsx -> web\nSuites: web' src/web/src/App.tsx
 expect_plan $'  src/android/core/build.gradle.kts -> android\nSuites: android' src/android/core/build.gradle.kts
 expect_plan $'  src/macos/OrbitKit/Package.swift -> orbitkit\nSuites: orbitkit' src/macos/OrbitKit/Package.swift
-expect_plan $'  src/shared/src/index.ts -> apiserver web\n  src/web/src/App.tsx -> web\nSuites: apiserver web' \
+expect_plan $'  src/shared/src/index.ts -> shared apiserver web\n  src/web/src/App.tsx -> web\nSuites: shared apiserver web' \
   src/shared/src/index.ts src/web/src/App.tsx
+expect_plan $'  docker-compose.yml -> compose\n  src/link-gateway/nats.conf -> compose\nSuites: compose' \
+  docker-compose.yml src/link-gateway/nats.conf
 expect_plan 'Suites: none (no code changes)' docs/example.ts README.md site/logo.svg
 expect_plan $'  src/ios/Orbit.swift -> apiserver (fallback for an unmapped path)\nSuites: apiserver' \
   src/ios/Orbit.swift
