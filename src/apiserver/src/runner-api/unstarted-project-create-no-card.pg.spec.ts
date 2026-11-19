@@ -627,10 +627,10 @@ test('a coordinator’s creates in a project nobody has started, or one that is 
   });
 
   // ── 11 ───────────────────────────────────────────────────────────────────────────────────────
-  await t.test('a session under 8 created tasks files without a card, and the create that reaches 8 is asked', async () => {
+  await t.test('by default a session files 8 tasks without a card, and the create that goes past 8 is asked', async () => {
     const someone = await conversation('an ordinary session, first creates', { fresh: true });
 
-    const batch = Array.from({ length: 6 }, (_, i) => taskBody(`step ${i + 1}`, null));
+    const batch = Array.from({ length: 7 }, (_, i) => taskBody(`step ${i + 1}`, null));
     const batchCard = await askBatch(someone, batch);
     assert.equal(batchCard.status, 'ALLOWED');
     assert.deepEqual(await approvalRow(batchCard.id), {
@@ -641,15 +641,42 @@ test('a coordinator’s creates in a project nobody has started, or one that is 
     });
     await write(someone, '/runner/tasks/batch-create', { tasks: batch });
 
-    // The seventh is still under 8.
-    const seventh = taskBody('step 7', null);
-    const seventhCard = await ask(someone, 'orbit_task_create', seventh);
-    assert.equal(seventhCard.status, 'ALLOWED');
-    await write(someone, '/runner/tasks', seventh);
+    // The eighth is still within the default 8.
+    const eighth = taskBody('step 8', null);
+    const eighthCard = await ask(someone, 'orbit_task_create', eighth);
+    assert.equal(eighthCard.status, 'ALLOWED');
+    await write(someone, '/runner/tasks', eighth);
     assert.deepEqual(await raised(someone), { cards: 0, pushes: 0, pending: 0 });
 
-    // The eighth would make 8: a person is asked.
-    const eighth = await ask(someone, 'orbit_task_create', taskBody('step 8', null));
-    await assertAsked(someone, eighth);
+    // The ninth would go past 8: a person is asked.
+    const ninth = await ask(someone, 'orbit_task_create', taskBody('step 9', null));
+    await assertAsked(someone, ninth);
+  });
+
+  // ── 12 ───────────────────────────────────────────────────────────────────────────────────────
+  await t.test("the account's cardFreeTaskCreates replaces the default, and 0 cards every create", async () => {
+    const before = await prisma.user.findUniqueOrThrow({ where: { id: ownerId }, select: { preferences: true } });
+    const withAllowance = async (n: number) =>
+      prisma.user.update({
+        where: { id: ownerId },
+        data: { preferences: { ...((before.preferences ?? {}) as object), cardFreeTaskCreates: n } },
+      });
+    try {
+      await withAllowance(2);
+      const two = await conversation('an account that allows 2', { fresh: true });
+      const pair = [taskBody('one', null), taskBody('two', null)];
+      assert.equal((await askBatch(two, pair)).status, 'ALLOWED');
+      await write(two, '/runner/tasks/batch-create', { tasks: pair });
+      await assertAsked(two, await ask(two, 'orbit_task_create', taskBody('three', null)));
+
+      await withAllowance(0);
+      const none = await conversation('an account that allows none', { fresh: true });
+      await assertAsked(none, await ask(none, 'orbit_task_create', taskBody('the first', null)));
+    } finally {
+      await prisma.user.update({
+        where: { id: ownerId },
+        data: { preferences: (before.preferences ?? {}) as object },
+      });
+    }
   });
 });

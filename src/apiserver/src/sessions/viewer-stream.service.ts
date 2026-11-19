@@ -38,12 +38,6 @@ import { HEAD_FRAME, HEAD_TRIGGERS, type ViewerAudience, viewerFrame } from './v
 /** How long a session's head triggers are gathered before its head is read again (§4: one read per 250 ms). */
 export const HEAD_COALESCE_MS = 250;
 
-/** Who is watching, as the stream needs to know it: the projection, and for a guest how to ask whether the agent
- *  waits on the owner (SessionGuestsService.waitingOnOwner — passed in, as that service sits on top of this module). */
-export type ViewerStreamAudience =
-  | { kind: 'GUEST'; waitingOnOwner: (sessionId: string) => Promise<boolean> }
-  | { kind: 'PUBLIC'; toolOutput: boolean };
-
 type Head = Record<string, unknown>;
 
 /**
@@ -87,13 +81,12 @@ export class ViewerStreamService {
 
   stream(
     sessionId: string,
-    audience: ViewerStreamAudience,
+    audience: ViewerAudience,
     access: ViewerAccess,
     opts: { sinceSeq?: string; maxPayload?: number },
   ): Observable<MessageEvent> {
-    const projection: ViewerAudience = audience.kind === 'GUEST' ? { kind: 'GUEST' } : audience;
     const key = `${audience.kind}:${sessionId}`;
-    const readHead = (): Promise<Head> => this.readHead(sessionId, audience);
+    const readHead = (): Promise<Head> => this.sessions.sharedHead(sessionId);
     const poke = () => this.poke(key);
 
     const since = Number(opts.sinceSeq);
@@ -126,7 +119,7 @@ export class ViewerStreamService {
     );
     const events$ = replayThenLive(history$, live$, () => this.realtime.turnPrefix(sessionId)).pipe(
       mergeMap((e) => {
-        const frame = viewerFrame(projection, cut(e, opts.maxPayload));
+        const frame = viewerFrame(audience, cut(e, opts.maxPayload));
         return frame ? of(toMessage(frame)) : EMPTY;
       }),
     );
@@ -205,13 +198,6 @@ export class ViewerStreamService {
         clearTimeout(lapse);
       };
     });
-  }
-
-  /** The head as the `events?after=` answer states it: SessionsService.sharedHead, and a guest's `waitingOnOwner`. */
-  private async readHead(sessionId: string, audience: ViewerStreamAudience): Promise<Head> {
-    if (audience.kind === 'PUBLIC') return this.sessions.sharedHead(sessionId);
-    const [head, waitingOnOwner] = await Promise.all([this.sessions.sharedHead(sessionId), audience.waitingOnOwner(sessionId)]);
-    return { ...head, waitingOnOwner };
   }
 
   /** The heads read for `key`'s gathered triggers, while this stream is open: one read per session and audience

@@ -43,6 +43,9 @@ var agentPrimerHashes = map[string]string{
 	// session-create-allowance.ts, 2026-11-19); "a provider change or an agent change" became "a provider or
 	// agent change" and "what you are about to create" "what you will create", to stay in the byte budget.
 	"1.4.2": "5e18f70ef459f0f1afcf68aaa64890089ac70a1c58c174e163e5611c8dda3988",
+	// 1.4.3: "first 7 tasks" became "first few tasks": the number is the account's cardFreeTaskCreates, 8 by
+	// default (2026-11-20), and task_create / task_create_batch say so.
+	"1.4.3": "c3448ac46513b451f958748518b6e6a0cfdacb7a5d02b4083167ed2ebec35eb9",
 }
 
 // The snapshots: the primer exactly as `initialize` sends it, and the four shapes of the instructions
