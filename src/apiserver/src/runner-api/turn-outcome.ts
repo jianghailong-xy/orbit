@@ -1,6 +1,6 @@
 import { RunStatus } from '@prisma/client';
 
-/** `conversation_turn.outcome` and `session.last_turn_outcome` (migration 1180 and its CHECKs). */
+/** `conversation_turn.outcome` and `session.last_turn_outcome` (migration 1200 and its CHECKs). */
 export type TurnOutcome = 'ANSWERED' | 'FAILED' | 'INTERRUPTED' | 'CANCELLED';
 
 /** What the turn-complete handler has already read about the completion it is applying. */

@@ -2,7 +2,7 @@
  * EVERY TURN THE RUNNER REPORTS COMPLETE HAS ITS OUTCOME ON THE TURN, AND ITS COPY ON THE SESSION.
  *
  * docs/session-three-state-plan.md §5, design §4.2: `conversation_turn.outcome` and `.error`, and
- * `session.last_turn_outcome` (migration 1180). Each case posts a real turn-complete through the controller
+ * `session.last_turn_outcome` (migration 1200). Each case posts a real turn-complete through the controller
  * and reads both rows back over a second connection:
  *
  *   (1) SUCCEEDED with a reply             → ANSWERED, no error
@@ -12,7 +12,7 @@
  *   (5) a `!`-shell turn                   → ANSWERED: a turn of work, answered by its exit code
  *   (6) a steer folded into a running turn → nothing: it is not a turn of its own
  *   (7) a retried completion               → the first one's outcome stands
- *   (8) migration 1181's backfill over one session per status, counted per status against design §4.3
+ *   (8) migration 1201's backfill over one session per status, counted per status against design §4.3
  *
  *     bash scripts/run-pg-spec.sh src/apiserver/src/runner-api/turn-complete-outcome.pg.spec.ts
  *
@@ -139,7 +139,7 @@ function say(api: RunnerApiController, f: Fixture, seq: number, type: RunEventTy
 }
 
 /**
- * Migration 1181 split as Prisma's migrate deploy sends it: one statement at a time, `--` lines dropped, a
+ * Migration 1201 split as Prisma's migrate deploy sends it: one statement at a time, `--` lines dropped, a
  * `$$ … $$` body kept whole. One simple query of the whole file would be one implicit transaction, in which
  * the procedure's COMMIT is refused.
  */
@@ -299,8 +299,8 @@ test('turn-complete records the turn outcome on the turn and on the session', {
     assert.equal(session.last_turn_outcome, 'ANSWERED');
   });
 
-  await t.test('(8) migration 1181 backfills last_turn_outcome per status as design §4.3 says', async () => {
-    // One session per row of the table, the outcome cleared as on a row written before 1180.
+  await t.test('(8) migration 1201 backfills last_turn_outcome per status as design §4.3 says', async () => {
+    // One session per row of the table, the outcome cleared as on a row written before 1200.
     const cases: Array<{ status: RunStatus; endReason: string | null; expected: string | null }> = [
       { status: RunStatus.PENDING, endReason: null, expected: null },
       { status: RunStatus.RUNNING, endReason: null, expected: null },
@@ -320,13 +320,13 @@ test('turn-complete records the turn outcome on the turn and on the session', {
         made.push({ id: f.sessionId, expected: c.expected });
       }
     }
-    // A value turn-complete wrote after 1180 is not the backfill's to change.
+    // A value turn-complete wrote after 1200 is not the backfill's to change.
     const written = await fixture(db, 'backfill-written', 'message', { status: RunStatus.FAILED });
     await sql.query(`UPDATE "session" SET last_turn_outcome = 'CANCELLED' WHERE id = $1::uuid`, [written.sessionId]);
     const ids = made.map((m) => m.id);
     await sql.query(`UPDATE "session" SET last_turn_outcome = NULL WHERE id = ANY($1::uuid[])`, [ids]);
 
-    const file = join(__dirname, '..', '..', 'prisma', 'migrations', '1181_turn_outcome_backfill', 'migration.sql');
+    const file = join(__dirname, '..', '..', 'prisma', 'migrations', '1201_turn_outcome_backfill', 'migration.sql');
     for (const statement of statementsOf(file)) await sql.query(statement);
 
     const counts = (await sql.query(
@@ -347,7 +347,7 @@ test('turn-complete records the turn outcome on the turn and on the session', {
     const kept = (await sql.query(`SELECT last_turn_outcome FROM "session" WHERE id = $1::uuid`, [written.sessionId])).rows[0];
     assert.equal(kept.last_turn_outcome, 'CANCELLED', 'a value already written is kept');
     const gone = (await sql.query(
-      `SELECT count(*)::int AS n FROM pg_proc WHERE proname = 'orbit_1151_backfill_last_turn_outcome'`,
+      `SELECT count(*)::int AS n FROM pg_proc WHERE proname = 'orbit_1201_backfill_last_turn_outcome'`,
     )).rows[0];
     assert.equal(gone.n, 0, 'the backfill procedure is dropped after its CALL');
   });

@@ -2104,7 +2104,7 @@ model Session {
   endReason            String?   @map("end_reason")
   // How the session's latest completed turn ended: ANSWERED | FAILED | INTERRUPTED | CANCELLED, the same
   // value as that turn's `outcome`, written by runner turn-complete in the write that parks the session
-  // (migration 1180, CHECK session_last_turn_outcome_chk). Backfilled from status and endReason (1181); null
+  // (migration 1200, CHECK session_last_turn_outcome_chk). Backfilled from status and endReason (1201); null
   // when no turn has settled since, or when the old row could not say.
   lastTurnOutcome      String?   @map("last_turn_outcome")
   // Denormalized preview: the text of the most recent `assistant` RunEvent, written on
@@ -3064,10 +3064,10 @@ model ConversationTurn {
   /// the control plane's note, so `content` stays the owner's words. Null for every other turn.
   wikiContext     Json?     @map("wiki_context")
   answeredAt      DateTime? @map("answered_at")
-  /// How this turn's latest completion ended (migration 1180, CHECK conversation_turn_outcome_chk):
+  /// How this turn's latest completion ended (migration 1200, CHECK conversation_turn_outcome_chk):
   /// ANSWERED | FAILED | INTERRUPTED | CANCELLED, written by runner turn-complete in the write that settles
   /// `status`. Null on a turn no completion has settled, on a kind that is not a turn of work (steer, withdraw,
-  /// control turns), and on every turn written before 1180. `error` is what it failed or was stopped with.
+  /// control turns), and on every turn written before 1200. `error` is what it failed or was stopped with.
   outcome         String?
   error           String?
   createdAt       DateTime  @default(now()) @map("created_at")
