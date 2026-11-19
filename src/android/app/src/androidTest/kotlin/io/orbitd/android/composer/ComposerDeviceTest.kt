@@ -109,8 +109,8 @@ class ComposerDeviceTest {
 
     @Test fun realModelAccountQueueStopPermissionsAndRefresh() = journey("controls") {
         login()
-        compose.onNodeWithText("Context: 0 tokens · Usage").performClick()
-        awaitText("Primary: 23%");compose.onNodeWithText("Close").performClick()
+        compose.onNodeWithTag("composer-context").performClick()
+        awaitText("Primary: 23%"); closeSheet()
         appClick("fixture-model")
         awaitText("Fixture Two"); appClick("Fixture Two")
         compose.waitUntil(5000) { stats()["config"]!!.jsonObject["model"]?.jsonPrimitive?.content == "fixture-model-2" }
@@ -131,7 +131,7 @@ class ComposerDeviceTest {
         // Queued for the next turn while this one runs — Send held offers it — the message waits in the tray above the composer
         // (A07-22/23, b0f32ebbd), no longer in the + menu's "Queued messages"; withdrawn there, its words come back to the composer.
         compose.onNodeWithTag("composer-input").performTextInput("queued message")
-        compose.waitUntil(10000) { compose.onAllNodes(hasTestTag("composer-send") and isEnabled() and hasText("Send")).fetchSemanticsNodes().isNotEmpty() }
+        compose.waitUntil(10000) { compose.onAllNodes(hasTestTag("composer-send") and isEnabled() and hasContentDescription("Send")).fetchSemanticsNodes().isNotEmpty() }
         compose.onNodeWithTag("composer-send").performTouchInput { longClick() }
         compose.waitUntil(10000) { compose.onAllNodesWithTag("composer-queue-next-turn").fetchSemanticsNodes().isNotEmpty() }
         compose.onNodeWithTag("composer-queue-next-turn").performClick()
@@ -217,17 +217,22 @@ class ComposerDeviceTest {
         resolver.openOutputStream(uri)!!.use { it.write(bytes) }
         try {
             control("""{"uploadFailures":1,"uploadDelay":0.3}""")
-            compose.onNodeWithText("+").performClick(); compose.onNodeWithText("File",useUnmergedTree=true).performClick()
-            selectFilesRoot("Downloads")
-            if (systemNode("List view") != null) systemClick("List view")
-            compose.waitUntil(10000) { systemNode(fileName) != null }
-            capture("system-files")
-            clickNode(systemNode(fileName)!!)
-            capture("system-file-selected")
-            compose.waitUntil(5000) { model.state.value.draft.attachments.isNotEmpty() || systemNode("Select") != null || systemNode("Open") != null }
-            if (model.state.value.draft.attachments.isEmpty()) systemClick(if (systemNode("Select") != null) "Select" else "Open")
-            compose.waitUntil(15000) { model.state.value.failures.isNotEmpty() }
-            compose.onNodeWithText("Retry upload").performClick()
+            fun pick(shots: Boolean) {
+                compose.onNodeWithTag("composer-plus").performClick(); compose.onNodeWithText("File",useUnmergedTree=true).performClick()
+                selectFilesRoot("Downloads")
+                if (systemNode("List view") != null) systemClick("List view")
+                compose.waitUntil(10000) { systemNode(fileName) != null }
+                if (shots) capture("system-files")
+                clickNode(systemNode(fileName)!!)
+                if (shots) capture("system-file-selected")
+                compose.waitUntil(5000) { model.state.value.draft.attachments.isNotEmpty() || systemNode("Select") != null || systemNode("Open") != null }
+                if (model.state.value.draft.attachments.isEmpty()) systemClick(if (systemNode("Select") != null) "Select" else "Open")
+            }
+            pick(shots = true)
+            // As iOS: the failed upload's chip goes and the error line above the box says why; picking the file again is the retry.
+            compose.waitUntil(15000) { model.state.value.error?.startsWith("Upload failed — $fileName: ") == true && model.state.value.draft.attachments.isEmpty() }
+            capture("upload-failed")
+            pick(shots = false)
             compose.waitUntil(15000) { model.state.value.draft.attachments.singleOrNull()?.remoteId!=null }
             val staged=model.state.value.draft.attachments.single()
             assertArrayEquals(bytes,runBlocking { model.attachmentBytes(staged.id) })
@@ -326,7 +331,7 @@ class ComposerDeviceTest {
         android.media.MediaScannerConnection.scanFile(app,arrayOf(path),arrayOf("image/jpeg")) { _,_ -> scanned.countDown() }
         assertTrue(scanned.await(10,java.util.concurrent.TimeUnit.SECONDS))
         try {
-            compose.onNodeWithText("+").performClick();compose.onNodeWithText("Image",useUnmergedTree=true).performClick()
+            compose.onNodeWithTag("composer-plus").performClick();compose.onNodeWithText("Image",useUnmergedTree=true).performClick()
             if (Build.VERSION.SDK_INT < 33) {
                 selectFilesRoot("Images")
                 if (systemNode("List view") != null) systemClick("List view")
@@ -370,7 +375,7 @@ class ComposerDeviceTest {
             File(evidence,"photo-save-sha256.txt").writeText(sha(bytes))
             appClick("Close attachment")
             app.getSystemService(ClipboardManager::class.java).setPrimaryClip(ClipData.newUri(resolver,"test photo",uri))
-            compose.onNodeWithText("+").performClick();compose.onNodeWithText("Paste image",useUnmergedTree=true).performClick()
+            compose.onNodeWithTag("composer-plus").performClick();compose.onNodeWithText("Paste image",useUnmergedTree=true).performClick()
             compose.waitUntil(10000) { model.state.value.draft.attachments.size==2 && model.state.value.draft.attachments.all { it.remoteId!=null } }
             assertTrue(model.state.value.draft.attachments.any { it.source=="paste" })
             val pasted=model.state.value.draft.attachments.single { it.source=="paste" }
@@ -497,9 +502,9 @@ class ComposerDeviceTest {
             compose.onNodeWithText("Close").performClick()
         }
         fun quota(label:String) {
-            appClick("Context: 0 tokens · Usage"); awaitText(label)
+            compose.onNodeWithTag("composer-context").performClick(); awaitText(label)
             compose.onNodeWithText(label).assertIsDisplayed(); capture("usage-${label.hashCode()}")
-            compose.onNodeWithText("Close").performClick()
+            closeSheet()
         }
         choose("Second account"); quota("Primary: 71%")
         choose("Default"); quota("Primary: 23%")
@@ -526,7 +531,7 @@ class ComposerDeviceTest {
             val pid=Process.myPid()
             compose.runOnIdle { for (source in listOf("photo","paste")) importAttachment(app,model,Uri.fromFile(input),source) }
             compose.waitUntil(30000) { model.state.value.uploads.isEmpty() && model.state.value.draft.attachments.size==2 }
-            assertTrue(model.state.value.failures.toString(),model.state.value.failures.isEmpty())
+            assertTrue("no upload failed: ${model.state.value.error}", model.state.value.error?.startsWith("Upload failed") != true)
             for (attachment in model.state.value.draft.attachments) {
                 assertNotNull(attachment.remoteId)
                 val bytes=runBlocking { model.attachmentBytes(attachment.id) }
@@ -751,9 +756,9 @@ class ComposerDeviceTest {
         compose.waitUntil(15000) { compose.onAllNodesWithTag("composer-pool-account").fetchSemanticsNodes().isNotEmpty() }
         compose.onNodeWithTag("composer-pool-account").assertTextEquals("second@example.test")
         capture("a07c-pool-account")
-        appClick("Context: 0 tokens · Usage"); awaitText("Primary: 41%"); awaitText("Account")
+        compose.onNodeWithTag("composer-context").performClick(); awaitText("Primary: 41%"); awaitText("Account")
         capture("a07c-pool-usage-sheet")
-        compose.onNodeWithText("Close").performClick()
+        closeSheet()
         fun resetRunner(available: Int) = """{"runnerExtra":{"capabilities":["codex-account-move/v1","codex-rate-limit-reset-v1"],
             "heartbeatLeaseOwner":"7c9e6679-7425-40de-944b-e07fc1f90ae7","heartbeatDraining":false,
             "planUsage":{"codex":{"provider":"codex","primary":{"utilization":23},"rateLimitReset":{"protocolVersion":1,"support":"SUPPORTED",
@@ -762,7 +767,7 @@ class ComposerDeviceTest {
                 {"id":"c2","resetType":"weekly","status":"available","grantedAt":"2026-10-02T00:00:00Z","expiresAt":"2027-01-05T09:30:00Z"}]},
               "fetchedAt":"${now(-120)}","generation":"3f2b8c1e-9d4a-4b7e-8c2f-1a2b3c4d5e6f","sequence":3}}}}}"""
         login(resetRunner(2))
-        appClick("Context: 0 tokens · Usage"); awaitText("Reset credit"); awaitText("2 available")
+        compose.onNodeWithTag("composer-context").performClick(); awaitText("Reset credit"); awaitText("2 available")
         compose.onNodeWithText("Use reset credit").performScrollTo()
         capture("a07c-reset-credit")
         compose.waitUntil(10000) { compose.onNode(hasText("Use reset credit") and hasClickAction()).fetchSemanticsNode().config.getOrNull(SemanticsProperties.Disabled) == null }
@@ -774,7 +779,7 @@ class ComposerDeviceTest {
         capture("a07c-reset-pending")
         compose.onNodeWithText("Close").performClick()
         login(resetRunner(0))
-        appClick("Context: 0 tokens · Usage"); awaitText("Primary: 23%")
+        compose.onNodeWithTag("composer-context").performClick(); awaitText("Primary: 23%")
         assertTrue("A07-9: no reset section for an account with no credit left", compose.onAllNodesWithText("Reset credit").fetchSemanticsNodes().isEmpty())
         capture("a07c-reset-none-left")
     }
@@ -786,7 +791,7 @@ class ComposerDeviceTest {
         // What the pick will do, and when (A07-19 (a)): the session has ended, so its next message.
         awaitText("Your next message uses Custom account.")
         compose.onNodeWithText("Close").performClick()
-        compose.onNodeWithText("+").performClick(); awaitText("Retry last failed message"); appClick("Retry last failed message")
+        compose.onNodeWithTag("composer-plus").performClick(); awaitText("Retry last failed message"); appClick("Retry last failed message")
         compose.waitUntil(10000) { controls().any { it["action"]?.jsonPrimitive?.content == "retry-message" } }
         val retry = controls().last { it["action"]?.jsonPrimitive?.content == "retry-message" }
         assertEquals("custom-codex", retry["body"]!!.jsonObject["provider"]!!.jsonPrimitive.content)
@@ -824,6 +829,8 @@ class ComposerDeviceTest {
         compose.waitUntil(10000) { compose.onNodeWithTag("composer-send").fetchSemanticsNode().config.getOrNull(SemanticsProperties.Disabled)==null }
         compose.onNodeWithTag("composer-send").performSemanticsAction(SemanticsActions.OnClick) { assertTrue(it()) }
     }
+    /** The usage sheet the toolbar's ring opens goes with the system back, as a bottom sheet does. */
+    private fun closeSheet() { InstrumentationRegistry.getInstrumentation().sendKeyDownUpSync(android.view.KeyEvent.KEYCODE_BACK); compose.waitForIdle() }
     private fun appClick(label:String) {
         compose.onNode((hasText(label) or hasContentDescription(label)) and hasClickAction()).performSemanticsAction(SemanticsActions.OnClick) { assertTrue(it()) }
     }

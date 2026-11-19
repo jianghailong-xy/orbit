@@ -34,7 +34,8 @@ export const CLAUDE_REGION_USE_ANOTHER_PROVIDER = 'Use another provider';
 export const CLAUDE_REGION_MOVE_TO_ANOTHER_MACHINE = 'Move to another machine';
 export const CLAUDE_REGION_CHECK_AGAIN = 'Check again';
 
-/** A held session's status words, in the session list and the header. */
+/** A held session's status words, in the session list and the header; and the new session hero's
+ *  reason when the draft moved off an Anthropic credential (board new-session-usable-default ②). */
 export const anthropicUnavailableOn = (machine: string): string => `Anthropic unavailable on ${machine}`;
 
 /** The machine page: the attention line, the Claude Code row's badge and the note under the row. */

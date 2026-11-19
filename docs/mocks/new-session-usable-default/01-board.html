@@ -1,0 +1,231 @@
+<!doctype html>
+<html lang="zh">
+<head>
+<meta charset="utf-8">
+<title>New session: preselect a usable default</title>
+<style>
+@font-face { font-family: 'MockInter'; src: url('file:///mnt/tmp/01a1-usable-default/Inter.ttf'); font-weight: 100 900; }
+@font-face { font-family: 'MockNoto'; src: url('file:///mnt/tmp/01a1-usable-default/NotoSansSC.ttf'); font-weight: 100 900; }
+@font-face { font-family: 'MockMono'; src: url('file:///mnt/tmp/01a1-usable-default/JetBrainsMono.ttf'); font-weight: 100 900; }
+* { box-sizing: border-box; }
+body { margin: 0; background: #eceef2; font-family: -apple-system, BlinkMacSystemFont, 'MockInter', 'PingFang SC', 'MockNoto', sans-serif; color: #1d1d1f; }
+.board { width: 1460px; padding: 36px 40px 44px; }
+h1 { font-size: 26px; margin: 0 0 6px; }
+.lede { font-size: 14.5px; color: #515154; margin: 0 0 26px; line-height: 1.6; max-width: 1300px; }
+.row { display: flex; gap: 24px; margin-bottom: 24px; align-items: flex-start; }
+.frame { background: #fff; border-radius: 14px; box-shadow: 0 1px 3px rgba(0,0,0,.08); overflow: hidden; flex: 1; }
+.fhead { padding: 12px 18px; border-bottom: 1px solid #ececf0; font-size: 14px; font-weight: 600; display: flex; gap: 10px; align-items: baseline; }
+.fhead .tag { font-size: 12px; font-weight: 600; padding: 2px 8px; border-radius: 6px; }
+.tag.today { background: #fdecea; color: #b3261e; }
+.tag.new { background: #e6f4ea; color: #1e7e34; }
+.tag.edge { background: #eef2ff; color: #3949ab; }
+.fhead .sub { font-weight: 400; color: #6e6e73; font-size: 13px; }
+.fnote { padding: 10px 18px 14px; font-size: 13px; color: #3a3a3c; line-height: 1.65; border-top: 1px solid #ececf0; background: #fafafb; }
+.fnote b { color: #1d1d1f; }
+.today-img { display: block; width: 100%; }
+
+/* ---- drawn app (prefix ap-) ---- */
+.ap { position: relative; height: 470px; background: #fff; font-family: -apple-system, BlinkMacSystemFont, 'MockInter', sans-serif; }
+.ap-hero { position: absolute; left: 0; right: 0; top: 46px; display: flex; flex-direction: column; align-items: center; }
+.ap-mark { width: 54px; height: 54px; border-radius: 14px; display: grid; place-items: center; color: #fff; font-size: 30px; }
+.ap-mark.claude { background: linear-gradient(135deg, #d97757, #c2613f); box-shadow: 0 8px 22px rgba(194,97,63,.34); }
+.ap-mark.codex { background: linear-gradient(135deg, #2b2b2e, #0d0d0f); box-shadow: 0 8px 22px rgba(13,13,15,.3); font-size: 26px; }
+.ap-mark.dim { filter: grayscale(1); opacity: .45; box-shadow: none; }
+.ap-name { margin-top: 12px; font-size: 17px; font-weight: 650; }
+.ap-name .chev { font-size: 9px; color: #8e8e93; margin-left: 5px; vertical-align: 2px; }
+.ap-sum { margin-top: 12px; font-size: 12.5px; color: #6e6e73; display: flex; gap: 6px; align-items: center; }
+.ap-sum b { color: #3a3a3c; font-weight: 600; }
+.ap-sum a { color: #2563eb; text-decoration: none; }
+.ap-sum .dot { color: #b0b0b5; }
+.ap-sum.warn { color: #8a5a00; }
+.ap-comp { position: absolute; left: 18px; right: 18px; bottom: 16px; height: 74px; border: 1px solid #d2d2d7; border-radius: 18px; background: #fff; }
+.ap-comp .ph { position: absolute; left: 18px; top: 14px; font-size: 13.5px; color: #a1a1a6; }
+.ap-comp .bar { position: absolute; right: 10px; bottom: 9px; display: flex; gap: 8px; align-items: center; font-size: 12px; }
+.ap-pill { background: #f2f2f4; border-radius: 8px; padding: 4px 9px; }
+.ap-pill b { font-weight: 650; }
+.ap-pill span { color: #6e6e73; }
+.ap-send { width: 28px; height: 28px; border-radius: 50%; background: #1d1d1f; color: #fff; display: grid; place-items: center; font-size: 14px; }
+.ap-send.off { background: #e0e0e4; color: #fff; }
+.ap-comp.off { background: #fafafa; }
+.ap-menu { position: absolute; background: #fff; border-radius: 12px; box-shadow: 0 10px 34px rgba(0,0,0,.16), 0 0 0 1px rgba(0,0,0,.05); padding: 6px; font-size: 13px; }
+.ap-menu .sec { font-size: 11.5px; color: #8e8e93; padding: 7px 10px 4px; }
+.ap-menu .it { display: flex; align-items: center; gap: 8px; padding: 6px 10px; border-radius: 7px; white-space: nowrap; }
+.ap-menu .it.on { background: #f2f2f4; }
+.ap-menu .it.dim { color: #a1a1a6; }
+.ap-menu .it .chk { margin-left: auto; padding-left: 16px; color: #3a3a3c; }
+.ap-menu .ic { width: 16px; height: 16px; border-radius: 4px; display: grid; place-items: center; color: #fff; font-size: 9px; font-weight: 700; flex: none; }
+.ic.ds { background: #4d6bfe; } .ic.cl { background: #d97757; } .ic.lo { background: #8e8e93; }
+.it.dim .ic { opacity: .5; }
+.ap-fix { position: absolute; left: 34px; right: 34px; bottom: 104px; background: #fff8e6; border: 1px solid #f3dfa8; border-radius: 10px; padding: 10px 14px; font-size: 12.5px; color: #5c4400; line-height: 1.55; }
+.ap-fix .acts { margin-top: 7px; display: flex; gap: 8px; }
+.ap-fix .btn { border: 1px solid #d9c27f; border-radius: 7px; padding: 3px 10px; background: #fff; color: #3a3a3c; font-size: 12px; }
+
+/* numbered marks */
+.mk { position: absolute; width: 22px; height: 22px; border-radius: 50%; background: #e8590c; color: #fff; font-size: 12px; font-weight: 700; display: grid; place-items: center; box-shadow: 0 0 0 2px #fff; z-index: 5; font-family: 'MockInter', sans-serif; }
+.mk.pc { transform: translate(-50%, -50%); }
+.n { display: inline-grid; place-items: center; width: 18px; height: 18px; border-radius: 50%; background: #e8590c; color: #fff; font-size: 11px; font-weight: 700; margin-right: 4px; vertical-align: 1px; }
+
+/* tables */
+.panel { background: #fff; border-radius: 14px; box-shadow: 0 1px 3px rgba(0,0,0,.08); padding: 18px 22px; flex: 1; }
+.panel h2 { font-size: 16px; margin: 0 0 12px; }
+table { border-collapse: collapse; width: 100%; font-size: 13px; line-height: 1.55; }
+th, td { text-align: left; vertical-align: top; padding: 8px 10px; border-bottom: 1px solid #ececf0; }
+th { font-size: 12px; color: #6e6e73; font-weight: 600; background: #fafafb; }
+td.k { white-space: nowrap; font-weight: 600; }
+.files td:first-child { white-space: nowrap; }
+.files code { font-size: 11px; }
+code { font-family: 'SF Mono', 'MockMono', monospace; font-size: 12px; background: #f2f2f4; padding: 1px 5px; border-radius: 4px; }
+.todo { background: #fff8e6; border: 1px solid #f3dfa8; border-radius: 12px; padding: 16px 20px; flex: 1; }
+.todo h2 { font-size: 16px; margin: 0 0 10px; color: #8a5a00; }
+.todo ol { margin: 0; padding-left: 20px; font-size: 13.5px; line-height: 1.7; }
+.todo li { margin-bottom: 8px; }
+.todo .rec { color: #1e7e34; font-weight: 600; }
+</style>
+</head>
+<body>
+<div class="board">
+  <h1>新会话：默认选一个能跑的</h1>
+  <p class="lede">
+    今天草稿的 (引擎, 凭据) = 这个 workspace 最近一条人开的会话，<b>不看它在这台机器上能不能跑</b>（<code>currentEngineChoice</code> 刻意"原样画出"）。
+    jdcloud 上 Anthropic 因地区不可用，于是预选的 "Default" 发出去就 409。
+    方案：记住的选择是<b>偏好</b>，不是命令——能跑就用；不能跑就落到最近的能跑的，并在原地说一句为什么。
+    已有的 <code>landingOf</code>（在列表里换引擎时用）本来就会跳过不能跑的凭据，只是"记住的那一个"没走这条路。<b>不加存储、不加设置、不动服务端。</b>
+  </p>
+
+  <div class="row">
+    <div class="frame" style="flex: 1.05">
+      <div class="fhead"><span class="tag today">① 今天</span> jdcloud，workspace 上次用的是 Claude Code · Default <span class="sub">你的截图</span></div>
+      <div style="position: relative">
+        <img class="today-img" src="today.png" alt="">
+        <div class="mk pc" style="left: 35.5%; top: 19%">1</div>
+        <div class="mk pc" style="left: 61.5%; top: 58.5%">2</div>
+        <div class="mk pc" style="left: 91%; top: 90%">3</div>
+      </div>
+      <div class="fnote">
+        <span class="n">1</span>Hero 只陈述问题："Region not supported on this runner · Details"，没有给出能用的选择。<br>
+        <span class="n">2</span>菜单里 Default 仍是黑字带 ✓，两个 Claude 账号却是灰的——同一个原因，画法不一致。<br>
+        <span class="n">3</span>发送没被拦：发出去才收到 409，下面明明有 DeepSeek / Local vLLM / Ollama 可以跑。
+      </div>
+    </div>
+
+    <div class="frame">
+      <div class="fhead"><span class="tag new">② 方案</span> 同一引擎，换到能跑的凭据 <span class="sub">最常见的情形</span></div>
+      <div class="ap" style="height: 530px">
+        <div class="ap-hero">
+          <div class="ap-mark claude">✳</div>
+          <div class="ap-name">Claude Code<span class="chev">▼</span></div>
+          <div class="ap-sum warn"><span>Using <b>DeepSeek</b></span><span class="dot">·</span><span>Anthropic isn’t available on jdcloud</span><span class="dot">·</span><a>Details</a></div>
+        </div>
+        <div class="mk" style="right: 34px; top: 152px">4</div>
+        <div class="ap-menu" style="left: 168px; top: 192px; width: 350px">
+          <div class="sec">On jdcloud</div>
+          <div class="it dim"><span class="ic cl">✳</span>Default — Region not supported</div>
+          <div class="sec">API keys</div>
+          <div class="it on"><span class="ic ds">D</span>DeepSeek<span class="chk">✓</span></div>
+          <div class="it dim"><span class="ic cl">✳</span>jianghailong.rd@Claude — Region not supported</div>
+          <div class="it"><span class="ic lo">L</span>Local vLLM</div>
+          <div class="it"><span class="ic lo">O</span>Ollama HPC (Messages)</div>
+        </div>
+        <div class="mk" style="left: 140px; top: 214px">5</div>
+        <div class="ap-comp">
+          <div class="ph">Ask anything…</div>
+          <div class="bar"><span class="ap-pill"><b>DeepSeek V4 Pro</b> <span>Default</span></span><span class="ap-send">↑</span></div>
+        </div>
+        <div class="mk" style="right: 64px; bottom: 74px">6</div>
+      </div>
+      <div class="fnote">
+        <span class="n">4</span>Hero 一句话：用的是哪个、为什么换。Details 仍指向地区说明（地区不是在这页能修的东西）。<br>
+        <span class="n">5</span>菜单不变，只是 Default 也和账号一样画灰、带原因；✓ 落在实际要用的 DeepSeek 上。<br>
+        <span class="n">6</span>模型丸子跟着凭据走，发送可用。想换就在这个菜单里点——显式点过的永远不会被改掉。
+      </div>
+    </div>
+  </div>
+
+  <div class="row">
+    <div class="frame">
+      <div class="fhead"><span class="tag edge">③ 边界</span> 记住的引擎在这台机器上一个能跑的凭据都没有 <span class="sub">例：只有 Anthropic 账号，但 Codex 已登录</span></div>
+      <div class="ap" style="height: 380px">
+        <div class="ap-hero">
+          <div class="ap-mark codex">◎</div>
+          <div class="ap-name">Codex<span class="chev">▼</span></div>
+          <div class="ap-sum warn"><span>Claude Code can’t run on jdcloud: Region not supported</span><span class="dot">·</span><a>Details</a></div>
+        </div>
+        <div class="mk" style="left: 70px; top: 150px">7</div>
+        <div class="ap-comp">
+          <div class="ph">Ask anything…</div>
+          <div class="bar"><span class="ap-pill"><b>GPT-5.5</b> <span>Default</span></span><span class="ap-send">↑</span></div>
+        </div>
+      </div>
+      <div class="fnote">
+        <span class="n">7</span>换引擎比换凭据大（引擎跟会话一辈子），所以只在本引擎<b>完全</b>没路时才换；按 hero 列表的顺序取第一个有能跑凭据的引擎，并点名原来那个为什么不行。
+      </div>
+    </div>
+
+    <div class="frame">
+      <div class="fhead"><span class="tag edge">④ 边界</span> 这台机器上什么都跑不了 <span class="sub">例：只有 Anthropic 凭据</span></div>
+      <div class="ap" style="height: 380px">
+        <div class="ap-hero">
+          <div class="ap-mark claude dim">✳</div>
+          <div class="ap-name" style="color: #8e8e93">Claude Code<span class="chev">▼</span></div>
+          <div class="ap-sum"><span>Claude Code</span><span class="dot">·</span><span>Region not supported on this runner</span><span class="dot">·</span><a>Details</a></div>
+        </div>
+        <div class="ap-fix" style="bottom: 104px">
+          Nothing on jdcloud can run a session yet.
+          <div class="acts"><span class="btn">Use another provider</span><span class="btn">Move to another machine</span></div>
+        </div>
+        <div class="mk" style="left: 22px; top: 196px">8</div>
+        <div class="ap-comp off">
+          <div class="ph">Ask anything…</div>
+          <div class="bar"><span class="ap-pill"><b>Opus 5</b> <span>Default</span></span><span class="ap-send off">↑</span></div>
+        </div>
+        <div class="mk" style="right: 10px; bottom: 74px">9</div>
+      </div>
+      <div class="fnote">
+        <span class="n">8</span>只有这种情况保留今天的"问题陈述"，再加两条出路（复用会话卡上已有的 <code>Use another provider</code> / <code>Move to another machine</code> 文案）。<br>
+        <span class="n">9</span>发送置灰：在客户端就拦下，不再等 409。
+      </div>
+    </div>
+  </div>
+
+  <div class="row">
+    <div class="panel" style="flex: 1">
+      <h2>规则</h2>
+      <table>
+        <tr><th style="width: 120px">项</th><th>规则</th></tr>
+        <tr><td class="k">选择顺序</td><td>① 显式点过的（<code>draftPick</code>）→ 原样，哪怕不能跑（显示原因）。<br>② 记住的 (引擎, 凭据) 能跑 → 用它。<br>③ 不能跑 → 同引擎走 <code>landingOf</code>：引擎自己的登录 → 不在池里的第一个 → 第一个能跑的。<br>④ 本引擎全不能跑 → hero 列表顺序里第一个有能跑凭据的引擎。<br>⑤ 都没有 → 停在记住的那个，显示原因，发送置灰（帧 ④）。</td></tr>
+        <tr><td class="k">什么算"不能跑"</td><td>只认已知的坏状态，即凭据上已有的 <code>unavailable</code>：地区不支持、未安装、已登出、池里没有可用账号、key 被拒。<b>没检查过 / 还没加载 = 能跑</b>，不因不确定而跳。</td></tr>
+        <tr><td class="k">什么时候定</td><td>派生值，不存：数据到齐后每次渲染算一遍。数据晚到可能让预选变一次，但 hero 那句话会同时出现，说明为什么。</td></tr>
+        <tr><td class="k">存什么</td><td>什么都不新存。发出去的会话就是这个 workspace 的"最近一条"，下次草稿自然记住 DeepSeek。</td></tr>
+        <tr><td class="k">无人值守的工作</td><td>本方案<b>不动</b>：任务运行、协调者等仍按 <code>docs/workspace-default-model-design.md</code> 的来源，碰到地区问题照旧失败并报出来，不会悄悄从 Anthropic 换到别家（见待定 1）。</td></tr>
+      </table>
+    </div>
+    <div class="panel" style="flex: 1.15">
+      <h2>会动的文件</h2>
+      <table class="files">
+        <tr><th>文件</th><th>改什么</th></tr>
+        <tr><td><code>web/src/lib/sessionProviderChoices.ts</code></td><td>新增 <code>usableDraftChoice</code>：记住的不能跑 → <code>landingOf</code>，再不行 → 下一个引擎</td></tr>
+        <tr><td><code>web/src/components/WorkspaceView.tsx</code></td><td>没有 <code>draftPick</code> 时，<code>pickedEngine/pickedProvider</code> 取上面的结果（发送也用它）；帧 ④ 发送置灰</td></tr>
+        <tr><td><code>web/src/components/NewSessionProviderHero.tsx</code></td><td>换过时的那句话（帧 ② ③）；帧 ④ 的两条出路</td></tr>
+        <tr><td><code>web/src/lib/claudeRegionCopy.ts</code></td><td>新文案：<code>Using {provider}</code>、<code>Anthropic isn’t available on {machine}</code>、<code>{engine} can’t run on {machine}: {reason}</code>、<code>Nothing on {machine} can run a session yet.</code></td></tr>
+        <tr><td>Provider 菜单</td><td>地区被挡时 Default 行也画灰 + "— Region not supported"（帧 ② 5）</td></tr>
+        <tr><td><code>OrbitKit/App/SessionProviderChoices.swift</code></td><td>同一规则（它也有 <code>landingOf</code>），加 parity 测试</td></tr>
+        <tr><td>Android</td><td>没找到对应的引擎 hero；实现时先确认它的新会话默认从哪来</td></tr>
+        <tr><td>服务端</td><td>不改。上一轮我提议放服务端，读代码后收回：能不能跑的判断（地区、安装、登录、池）只在客户端汇总，<code>landingOf</code> 也已在客户端</td></tr>
+      </table>
+    </div>
+  </div>
+
+  <div class="row">
+    <div class="todo">
+      <h2>待你定</h2>
+      <ol>
+        <li><b>无人值守的工作</b>碰到地区问题：照旧失败并报出来（<span class="rec">建议</span>），还是也自动换凭据？自动换会在没人看的时候改变成本和质量。</li>
+        <li><b>同引擎里落到哪个凭据</b>：按现有 <code>landingOf</code> 顺序（<span class="rec">建议</span>，零新数据，截图里结果是 DeepSeek），还是"我在这个引擎上最近用过的"（更聪明，但要新查一份数据）？</li>
+        <li><b>帧 ③ 换引擎</b>要不要做？不做的话，本引擎全挂时直接走帧 ④，让人自己在 hero 里换。（<span class="rec">建议做</span>，hero 已有现成的引擎顺序）</li>
+        <li><b>"Default" 这个名字</b>：菜单里它指"这台机器上 Claude 的登录"，和"默认选中"撞词。这次一起改成如 <code>Claude sign-in</code>，还是另开一件事？（<span class="rec">建议另开</span>，三端文案都要动）</li>
+      </ol>
+    </div>
+  </div>
+</div>
+</body>
+</html>

@@ -53,18 +53,24 @@ internal fun promptOptimizationText(optimization: PromptOptimization): Annotated
 
 /** Frame 2's ✦ Optimize beside Send, and frame 3's busy "Optimizing…", which cancels when pressed. */
 @Composable
-internal fun PromptOptimizeButton(busy: Boolean, enabled: Boolean, press: () -> Unit) {
+internal fun PromptOptimizeButton(busy: Boolean, enabled: Boolean, compact: Boolean = false, press: () -> Unit) {
     val accent = MaterialTheme.colorScheme.primary
     val muted = MaterialTheme.colorScheme.onSurfaceVariant
-    Row(Modifier.padding(end = 6.dp).testTag("composer-optimize")
+    // Where the toolbar has no room for the words (board composer-usage-tap 04, option C), a 36 dp circle with ✦ alone — or the
+    // spinner while busy — said aloud as the full button is.
+    Row(Modifier.padding(horizontal = 2.dp).testTag("composer-optimize")
         .semantics { contentDescription = if (busy) "${PromptOptimizerCopy.OPTIMIZING} ${PromptOptimizerCopy.CANCEL_HELP}" else PromptOptimizerCopy.OPTIMIZE_HELP }
         .clip(RoundedCornerShape(50))
         .background(if (busy) muted.copy(alpha = 0.08f) else accent.copy(alpha = 0.10f), RoundedCornerShape(50))
         .border(1.dp, if (busy) muted.copy(alpha = 0.25f) else accent.copy(alpha = 0.25f), RoundedCornerShape(50))
         .clickable(enabled = enabled, role = Role.Button, onClick = press)
-        .heightIn(min = 32.dp).padding(horizontal = 10.dp),
-        verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(5.dp)) {
-        if (busy) {
+        .then(if (compact) Modifier.size(36.dp) else Modifier.heightIn(min = 32.dp).padding(horizontal = 10.dp)),
+        verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = if (compact) Arrangement.Center else Arrangement.spacedBy(5.dp)) {
+        if (compact) {
+            if (busy) CircularProgressIndicator(Modifier.size(14.dp), strokeWidth = 1.5.dp, color = muted)
+            else Text("✦", color = accent, style = MaterialTheme.typography.labelLarge)
+        } else if (busy) {
             CircularProgressIndicator(Modifier.size(12.dp), strokeWidth = 1.5.dp, color = muted)
             Text(PromptOptimizerCopy.OPTIMIZING, color = muted, style = MaterialTheme.typography.labelLarge, maxLines = 1)
         } else {

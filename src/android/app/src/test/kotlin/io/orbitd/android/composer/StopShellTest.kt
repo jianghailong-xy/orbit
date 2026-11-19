@@ -26,21 +26,21 @@ class StopShellTest : ComposerShellTest() {
 
     @Test fun stopIsOfferedWhereverThereIsSomethingToStopAndItsPressEndsTheBackgroundWork() {
         signIn(); openSession()
-        await { has(button and hasText("Send")) }
+        await { has(button and hasContentDescription("Send")) }
         compose.onNode(button).assertIsNotEnabled()
         // Parked, with a dev server the turn left running: Stop, and its press asks for that to end too.
         becomes("""{"runningBgShells":["bg-1"]}""")
-        await { has(button and hasText("Stop") and isEnabled()) }
+        await { has(button and hasContentDescription("Stop") and isEnabled()) }
         compose.onNode(button).performClick()
         await { ComposerShell.body(interrupt) != null }
         assertEquals(buildJsonObject { put("stopBackgroundWork", true) }, ComposerShell.body(interrupt))
         for (fields in listOf("""{"runningSubagents":["agent-1"]}""", """{"engineTurnActive":true}""", """{"status":"RUNNING","runState":"RUNNING"}""")) {
             becomes(fields)
-            await { has(button and hasText("Stop") and isEnabled()) }
+            await { has(button and hasContentDescription("Stop") and isEnabled()) }
         }
         // Nothing left running: Send again, with nothing to send.
         becomes("""{"runningBgShells":[]}""")
-        await { has(button and hasText("Send")) }
+        await { has(button and hasContentDescription("Send")) }
         compose.onNode(button).assertIsNotEnabled()
         assertEquals(1, ComposerShell.bodies.count { it.first == interrupt })
     }
@@ -53,21 +53,21 @@ class StopShellTest : ComposerShellTest() {
             "kind":"message","placement":"queued","content":"and update the changelog","attachments":[],"createdAt":"2026-10-16T09:42:00.000Z"}]""".encodeToByteArray()) }
         signIn(); openSession()
         await { has(hasText("and update the changelog") and hasAnyAncestor(hasTestTag("pending-tray"))) }
-        await { has(button and hasText("Stop") and isEnabled()) }
+        await { has(button and hasContentDescription("Stop") and isEnabled()) }
         assertFalse(has(hasTestTag("pending-tray-steer")))
         compose.onNodeWithTag("composer-input").performTextInput("and tag the release")
-        await { has(button and hasText("Send") and isEnabled()) }
+        await { has(button and hasContentDescription("Send") and isEnabled()) }
         // Held, Send is only Send: the message goes as any send does, and nothing offered to queue it for the next turn.
         compose.onNode(button).performTouchInput { longClick() }
         await { ComposerShell.body(turns) != null }
         assertFalse(has(hasTestTag("composer-queue-next-turn")))
         assertNull(ComposerShell.body(turns)!!["intent"])
-        await { has(button and hasText("Stop")) }
+        await { has(button and hasContentDescription("Stop")) }
         // The session runs a turn: both are offered.
         becomes("""{"status":"RUNNING","runState":"RUNNING"}""")
         await { has(hasTestTag("pending-tray-steer")) }
         compose.onNodeWithTag("composer-input").performTextInput("and write the notes")
-        await { has(button and hasText("Send") and isEnabled()) }
+        await { has(button and hasContentDescription("Send") and isEnabled()) }
         compose.onNode(button).performTouchInput { longClick() }
         await { has(hasTestTag("composer-queue-next-turn")) }
     }

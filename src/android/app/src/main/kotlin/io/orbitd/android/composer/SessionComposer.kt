@@ -1,7 +1,6 @@
 package io.orbitd.android.composer
 
 import android.content.ClipboardManager
-import android.net.Uri
 import android.view.ViewTreeObserver
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.PickVisualMediaRequest
@@ -14,6 +13,7 @@ import androidx.compose.foundation.gestures.waitForUpOrCancellation
 import androidx.compose.foundation.layout.*
 import androidx.compose.ui.draw.clip
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.text.BasicTextField
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
@@ -24,6 +24,7 @@ import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.focus.onFocusChanged
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.SolidColor
 import androidx.compose.ui.input.key.*
 import androidx.compose.ui.input.pointer.PointerEventPass
 import androidx.compose.ui.input.pointer.pointerInput
@@ -62,6 +63,7 @@ import io.orbitd.android.management.LocalSmartSelection
 import io.orbitd.android.management.LocalTranslation
 import io.orbitd.android.management.LocalPromptOptimizer
 import io.orbitd.android.core.promptoptimizer.PromptOptimizer
+import io.orbitd.android.core.promptoptimizer.PromptOptimizerCopy
 import io.orbitd.android.core.translation.Translation
 import io.orbitd.android.management.RunnerPage
 import io.orbitd.android.management.personalPermissions
@@ -71,13 +73,12 @@ import io.orbitd.android.reader.UnreadSteer
 import io.orbitd.android.reader.queuedTail
 import io.orbitd.android.tasks.TaskDetailCopy
 import io.orbitd.android.ui.LocalOrbitColors
-import io.orbitd.android.ui.typingFold
 import kotlinx.coroutines.flow.first
 import kotlinx.serialization.json.*
 
 @Composable
 internal fun SessionComposer(app: OrbitApplication, handle: SessionHandle, sessionId: String, session: SessionState?, target: DraftTarget? = null, focusRequest: Int = 0,
-    inputFocusChanged: (Boolean) -> Unit = {}, foldsChrome: Boolean = false,
+    inputFocusChanged: (Boolean) -> Unit = {},
     openTask: ((String) -> Unit)? = null, openRunner: ((runner: String, engine: String) -> Unit)? = null,
     openTranslationSettings: (() -> Unit)? = null,
     /** The page's own placeholder, over the composer's: a new account's welcome card (WelcomeCopy.WELCOME_PLACEHOLDER). */
@@ -203,8 +204,42 @@ internal fun SessionComposer(app: OrbitApplication, handle: SessionHandle, sessi
             focusField()
         }
     }
+    // Board docs/mocks/android-composer-parity (iOS ComposerView's card): what the toolbar shows, worked out before it is drawn.
+    val hasDraft = draft.text.isNotBlank() || draft.attachments.isNotEmpty()
+    // With nothing typed, Send is Stop wherever there is something to stop — a turn running, one the engine started for
+    // itself, or work left running under a parked turn (A07-20, iOS 593920cea). Steer and Queue for next turn still ask for
+    // a running turn.
+    val stop = hasSomethingToStop(detail) && !hasDraft
+    val sendEnabled = usable && !state.busy && !state.waiting && draft.createdSessionId == null && (if (stop) true else hasDraft && draft.pending == null)
+    // Held while a turn runs, Send offers the other way to send it: queued for the next turn instead of into this one (decided
+    // 2026-10-16, docs/mocks/steer-tray; iOS's context menu on Send, the web's ⌥Enter). Only where the engine would otherwise
+    // take it into the turn, and never for a `!cmd`, which always waits.
+    val queueOffered = target == null && running && hasDraft && midTurn && sendEnabled && !draft.text.trim().startsWith("!")
+    // Cursor CLI's model by its catalogue's name, its effort and what the session set (iOS 5 ①②) — one name, its effort inside it.
+    val cursorModel = if (shownEngine == CursorRuntime.ENGINE) CursorRuntime.modelName(state.catalog,
+        effective.text("provider") ?: shownEngine, effective.text("model").orEmpty(), effective.text("effort")) else null
+    // Any other model by its catalogue's name too (web and iOS do), and a Claude id the catalogue has no row for
+    // as Claude Code names it — a signed-out runner whose probe failed showed the bare `claude-opus-5-5`.
+    val modelName = effective.text("model")?.let { id ->
+        if (id.isBlank()) "Runtime default"
+        else state.catalog?.modelLabel(shownEngine, effective.text("provider") ?: shownEngine, id)
+            ?: if (shownEngine == ProviderEngines.CLAUDE) ProviderEngines.claudeModelName(id) else id
+    }
+    val dshPicks = dsh && effective.text("model").isNullOrBlank()
+    val chipName = cursorModel ?: if (dshPicks) DshRuntime.PICKED_BY else modelName ?: "Model"
+    // The effort after the name (decided 2026-11-19, iOS `chipEffortLabel`): "High", and " · Fast" with the fast lane on. Cursor CLI's
+    // name already carries its effort and settings; a model DeepSeek Harness picks has none to name.
+    val chipEffort = if (cursorModel != null || dshPicks) null else effortLabel(effective.text("effort")) +
+        if (effective.flag("fastMode") == true && state.catalog?.fast(shownEngine, effective.text("provider") ?: shownEngine, effective.text("model").orEmpty()) == true) " · Fast" else ""
+    // The permission mode beside `+` (iOS `modeMenu`): what the session runs in, by the shared table's name.
+    val modeValue = effective.text("permissionMode")
+    val modeLabel = modeValue?.let { mode -> personalPermissions.firstOrNull { it.first == mode }?.second ?: mode }
+    // The plan's binding window, which the gauge draws beside the ring once the catalogue that reports it is in.
+    val planRow = state.catalog?.usage(effective)?.let { io.orbitd.android.management.bindingRow(it, System.currentTimeMillis()) }
+    var modeMenu by remember { mutableStateOf(false) }
+    val focused = inputFocused && imeUp
     Surface(tonalElevation = 2.dp) {
-        Column(Modifier.fillMaxWidth().padding(horizontal = 12.dp, vertical = 4.dp).testTag("session-composer")) {
+        Column(Modifier.fillMaxWidth().padding(horizontal = 10.dp, vertical = 6.dp).testTag("session-composer")) {
             Column(Modifier.weight(1f, fill = false).verticalScroll(rememberScrollState())) {
                 state.error?.let { Text(it, color = MaterialTheme.colorScheme.error); TextButton(onClick = model::clearError) { Text("Dismiss error") } }
                 if (!state.loaded && !state.busy) TextButton(onClick = model::restore) { Text("Retry draft restore") }
@@ -226,138 +261,149 @@ internal fun SessionComposer(app: OrbitApplication, handle: SessionHandle, sessi
                     if (pending.endpoint == "create") Text("Creation is unconfirmed. Check this workspace's sessions before creating another session.")
                     else Button(enabled = !state.busy && !state.waiting && session?.accessDenied != true, onClick = model::retrySend) { Text("Retry saved send") }
                 }
-                draft.attachments.forEach { att ->
-                    Row(Modifier.fillMaxWidth(), verticalAlignment = androidx.compose.ui.Alignment.CenterVertically) {
-                        TextButton(onClick = { preview = att }, enabled = att.size > 0, modifier = Modifier.weight(1f)) {
-                            Text("${att.name} · ${att.size / 1024} KB", maxLines = 2)
-                        }
-                        if (att.id in state.failures) TextButton(onClick = {
-                            if (att.uri != null) {
-                                model.removeAttachment(att.id)
-                                importAttachment(context, model, Uri.parse(att.uri), att.source)
-                            } else model.retryUpload(att.id)
-                        }) { Text("Retry upload") }
-                        TextButton(onClick = { model.removeAttachment(att.id) }) { Text("Remove") }
-                    }
-                    state.uploads[att.id]?.let { LinearProgressIndicator(progress = { it }, modifier = Modifier.fillMaxWidth()) }
-                    state.failures[att.id]?.let { Text(it, color = MaterialTheme.colorScheme.error, style = MaterialTheme.typography.bodySmall) }
-                }
-                // The context line folds away with the page's chrome while this box holds a phone's keyboard
-                // (`foldsChrome`), as the reader's rows above do; the input and its buttons stay where they are.
-                Box(Modifier.fillMaxWidth().typingFold(foldsChrome)) { ComposerUsage(model, state, effective, session) }
                 // Frame 6: the press failed; the draft below is untouched.
                 if (optimizer.failed) PromptOptimizationFailureLine(retry = model::retryOptimize, dismiss = model::dismissOptimization)
-            SuggestionTaps(suggestion != null, inputFocused, focusField, useSuggestion) { taps ->
-                OutlinedTextField(field, onValueChange = { field = it; model.edit(it.text, it.selection.start, it.selection.end) },
-                    modifier = Modifier.fillMaxWidth().focusRequester(focus).onFocusChanged { inputFocused = it.isFocused; inputFocusChanged(it.isFocused) }
-                        .testTag("composer-input")
-                        .then(taps)
-                        // TalkBack's own double-tap is "activate": it takes the guess with this action.
-                        .semantics { if (suggestion != null) customActions = listOf(CustomAccessibilityAction("Use suggestion") { useSuggestion(); true }) }
-                        .onPreviewKeyEvent {
-                            if (it.type == KeyEventType.KeyDown && it.key == Key.Enter && (it.isCtrlPressed || it.isMetaPressed) && field.composition == null && usable) {
-                                send(false); true
-                            } else false
-                        }, enabled = state.loaded && !handingOver,
-                    placeholder = {
-                        if (suggestion != null) SuggestionPlaceholder(suggestion)
-                        // Cursor CLI takes no message mid-turn: one written now waits for the turn to end (iOS 5 ⑥).
-                        else Text(when {
-                            placeholder != null -> placeholder
-                            handingOver -> CoordinatorHandoffCopy.HANDING_OVER
-                            target?.isMachineDraft == true || (target != null && MachineSetup.standsInForMachine(detail)) ->
-                                detail.text("name")?.takeIf { it.isNotEmpty() }?.let(MachineSetupCopy::composerPlaceholderFor) ?: "Message…"
-                            target == null && running && engine == CursorRuntime.ENGINE -> CursorRuntime.RUNNING_PLACEHOLDER
-                            else -> "Message…"
-                        }, maxLines = 1, overflow = TextOverflow.Ellipsis)
-                    },
+            }
+            // The card: staged attachments, the text across its whole width, and the toolbar pinned to its foot. The text grows
+            // upward and the toolbar never moves, so `+` and Send stay where the thumb left them however long the message gets.
+            Column(Modifier.weight(1f, fill = false).fillMaxWidth().clip(ComposerCardShape).background(composerCardColor())
+                .border(1.dp, composerCardBorder(focused), ComposerCardShape).testTag("composer-card")) {
+                Column(Modifier.weight(1f, fill = false).verticalScroll(rememberScrollState())) {
+                    // Decided 2026-11-19: inside the card, above the text, as iOS draws them.
+                    AttachmentStrip(draft.attachments, state.uploads, bytes = { model.attachmentBytes(it) },
+                        open = { preview = it }, remove = { model.removeAttachment(it.id) })
                     // Settings › Translation (6A): while it is on, the box says which way its words go — "Chinese → English" —
                     // and the tag opens Settings › Sessions, where the switch and the language are. Like the placeholder, it
                     // shows only while the box is empty, so typed text gets the whole width. A suggestion on offer takes the line
                     // instead (docs/mocks/prompt-suggestion-room), unless the tag is warning that translation is unavailable.
-                    trailingIcon = translation.takeIf { it.on && field.text.isEmpty() && (suggestion == null || translationUnavailable) }?.let { on -> {
-                        Text(io.orbitd.android.translation.TranslationFailureCopy.composerTag(on.language, on.agentLanguage, translationUnavailable),
-                            Modifier.padding(end = 8.dp).testTag("composer-translation-tag")
-                            .clip(RoundedCornerShape(50)).background(MaterialTheme.colorScheme.surfaceVariant)
-                            .then(if (openTranslationSettings != null) Modifier.clickable(role = Role.Button, onClick = openTranslationSettings) else Modifier)
-                            .padding(horizontal = 8.dp, vertical = 2.dp),
-                            style = MaterialTheme.typography.labelSmall,
-                            color = if (translationUnavailable) LocalOrbitColors.current.needsYou else MaterialTheme.colorScheme.onSurfaceVariant)
-                    } },
-                    minLines = 1, maxLines = 4,
-                    keyboardOptions = KeyboardOptions(imeAction = ImeAction.Default))
-            }
-            }
-            Row(Modifier.fillMaxWidth(), verticalAlignment = androidx.compose.ui.Alignment.CenterVertically) {
-                Box {
-                    TextButton(enabled = state.loaded, onClick = { menu = true }) { Text("+") }
-                    DropdownMenu(menu, onDismissRequest = { menu = false }) {
-                        DropdownMenuItem(text = { Text("Image") }, onClick = { menu = false; photos.launch(PickVisualMediaRequest(ActivityResultContracts.PickVisualMedia.ImageOnly)) })
-                        DropdownMenuItem(text = { Text("File") }, onClick = { menu = false; files.launch(arrayOf("*/*")) })
-                        val clip = clipboard.primaryClip
-                        if (clip != null && clip.itemCount > 0 && clip.description.hasMimeType("image/*")) {
-                            DropdownMenuItem(text = { Text("Paste image") }, onClick = {
-                                menu = false; clip.getItemAt(0).uri?.let { importAttachment(context, model, it, "paste") }
-                            })
+                    val tag = translation.takeIf { it.on && field.text.isEmpty() && (suggestion == null || translationUnavailable) }
+                    Row(Modifier.fillMaxWidth().padding(start = 16.dp, end = if (tag != null) 10.dp else 16.dp, top = 14.dp, bottom = 6.dp),
+                        verticalAlignment = Alignment.Top) {
+                        Box(Modifier.weight(1f)) {
+                            SuggestionTaps(suggestion != null, inputFocused, focusField, useSuggestion) { taps ->
+                                val textStyle = MaterialTheme.typography.bodyLarge.copy(color = MaterialTheme.colorScheme.onSurface)
+                                BasicTextField(field, onValueChange = { field = it; model.edit(it.text, it.selection.start, it.selection.end) },
+                                    modifier = Modifier.fillMaxWidth().focusRequester(focus).onFocusChanged { inputFocused = it.isFocused; inputFocusChanged(it.isFocused) }
+                                        .testTag("composer-input")
+                                        .then(taps)
+                                        // TalkBack's own double-tap is "activate": it takes the guess with this action.
+                                        .semantics { if (suggestion != null) customActions = listOf(CustomAccessibilityAction("Use suggestion") { useSuggestion(); true }) }
+                                        .onPreviewKeyEvent {
+                                            if (it.type == KeyEventType.KeyDown && it.key == Key.Enter && (it.isCtrlPressed || it.isMetaPressed) && field.composition == null && usable) {
+                                                send(false); true
+                                            } else false
+                                        }, enabled = state.loaded && !handingOver,
+                                    textStyle = textStyle, cursorBrush = SolidColor(MaterialTheme.colorScheme.primary),
+                                    minLines = 1, maxLines = 6,
+                                    keyboardOptions = KeyboardOptions(imeAction = ImeAction.Default),
+                                    decorationBox = { inner ->
+                                        Box {
+                                            if (field.text.isEmpty()) CompositionLocalProvider(LocalContentColor provides MaterialTheme.colorScheme.onSurfaceVariant,
+                                                LocalTextStyle provides textStyle.copy(color = MaterialTheme.colorScheme.onSurfaceVariant)) {
+                                                if (suggestion != null) SuggestionPlaceholder(suggestion)
+                                                // Cursor CLI takes no message mid-turn: one written now waits for the turn to end (iOS 5 ⑥).
+                                                else Text(when {
+                                                    placeholder != null -> placeholder
+                                                    handingOver -> CoordinatorHandoffCopy.HANDING_OVER
+                                                    target?.isMachineDraft == true || (target != null && MachineSetup.standsInForMachine(detail)) ->
+                                                        detail.text("name")?.takeIf { it.isNotEmpty() }?.let(MachineSetupCopy::composerPlaceholderFor) ?: "Message…"
+                                                    target == null && running && engine == CursorRuntime.ENGINE -> CursorRuntime.RUNNING_PLACEHOLDER
+                                                    else -> "Message…"
+                                                }, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                                            }
+                                            inner()
+                                        }
+                                    })
+                            }
                         }
-                        listOf("command" to "Command", "skill" to "Skill").forEach { (kind, label) ->
-                            DropdownMenuItem(text = { Text(label) }, enabled = usable, onClick = { menu = false; slashScope = kind; model.loadCatalog() })
+                        tag?.let { on ->
+                            Text(io.orbitd.android.translation.TranslationFailureCopy.composerTag(on.language, on.agentLanguage, translationUnavailable),
+                                Modifier.padding(start = 8.dp, top = 1.dp).testTag("composer-translation-tag")
+                                .clip(RoundedCornerShape(50)).background(MaterialTheme.colorScheme.surfaceVariant)
+                                .then(if (openTranslationSettings != null) Modifier.clickable(role = Role.Button, onClick = openTranslationSettings) else Modifier)
+                                .padding(horizontal = 8.dp, vertical = 2.dp),
+                                style = MaterialTheme.typography.labelSmall,
+                                color = if (translationUnavailable) LocalOrbitColors.current.needsYou else MaterialTheme.colorScheme.onSurfaceVariant)
                         }
-                        DropdownMenuItem(text = { Text("Shell command") }, onClick = {
-                            menu = false
-                            if (dsh) model.refuse(DshRuntime.SHELL_REFUSAL) else if (!draft.text.startsWith("!")) model.edit("!${draft.text}", 1, 1)
-                        })
-                        if (target == null) DropdownMenuItem(text = { Text("Queued messages (${waiting.size})") }, onClick = { menu = false; queued = true })
-                        // A pick held for this session travels with the re-send, which would otherwise run on what it already has.
-                        if (target == null) DropdownMenuItem(text = { Text("Retry last failed message") }, enabled = usable && !state.busy,
-                            onClick = { menu = false; model.retryFailed() })
-                        if (detail.text("retryAt") != null) DropdownMenuItem(text = { Text("Cancel automatic retry") }, enabled = usable && !state.busy,
-                            onClick = { menu = false; model.control("auto-retry", HttpMethod.DELETE) })
                     }
                 }
-                // Cursor CLI's model by its catalogue's name, its effort and what the session set (iOS 5 ①②).
-                val cursorModel = if (shownEngine == CursorRuntime.ENGINE) CursorRuntime.modelName(state.catalog,
-                    effective.text("provider") ?: shownEngine, effective.text("model").orEmpty(), effective.text("effort")) else null
-                // Any other model by its catalogue's name too (web and iOS do), and a Claude id the catalogue has no row for
-                // as Claude Code names it — a signed-out runner whose probe failed showed the bare `claude-opus-5-5`.
-                val modelName = effective.text("model")?.let { id ->
-                    if (id.isBlank()) "Runtime default"
-                    else state.catalog?.modelLabel(shownEngine, effective.text("provider") ?: shownEngine, id)
-                        ?: if (shownEngine == ProviderEngines.CLAUDE) ProviderEngines.claudeModelName(id) else id
-                }
-                ModelChip(cursorModel ?: if (dsh && effective.text("model").isNullOrBlank()) DshRuntime.PICKED_BY else modelName ?: "Model",
-                    effortLabel(effective.text("effort")), smart != null,
-                    enabled = usable && !state.busy && draft.pending == null && draft.createdSessionId == null, modifier = Modifier.weight(1f),
-                    // …and aloud with its effort said once (iOS `chipAccessibilityLabel`): the name above already holds it.
-                    spokenName = if (cursorModel == null) null else CursorRuntime.spokenName(state.catalog,
-                        effective.text("provider") ?: shownEngine, effective.text("model").orEmpty(), effective.text("effort"))) {
-                    models = true; model.loadCatalog()
-                }
-                // Frame 2's ✦ Optimize beside Send; frame 3's busy "Optimizing…", which cancels when pressed.
-                if (showsOptimize) PromptOptimizeButton(busy = optimizer.isOptimizing, enabled = state.loaded, press = model::optimize)
-                val hasDraft = draft.text.isNotBlank() || draft.attachments.isNotEmpty()
-                // With nothing typed, Send is Stop wherever there is something to stop — a turn running, one the engine started for
-                // itself, or work left running under a parked turn (A07-20, iOS 593920cea). Steer and Queue for next turn still ask for
-                // a running turn.
-                val stop = hasSomethingToStop(detail) && !hasDraft
-                val sendEnabled = usable && !state.busy && !state.waiting && draft.createdSessionId == null && (if (stop) true else hasDraft && draft.pending == null)
-                // Held while a turn runs, Send offers the other way to send it: queued for the next turn instead of into this one (decided
-                // 2026-10-16, docs/mocks/steer-tray; iOS's context menu on Send, the web's ⌥Enter). Only where the engine would otherwise
-                // take it into the turn, and never for a `!cmd`, which always waits.
-                val queueOffered = target == null && running && hasDraft && midTurn && sendEnabled && !draft.text.trim().startsWith("!")
-                var queueMenu by remember { mutableStateOf(false) }
-                LaunchedEffect(queueOffered) { if (!queueOffered) queueMenu = false }
-                Box {
-                    Button(enabled = sendEnabled, onClick = { if (stop) model.stop() else send(false) },
-                        modifier = Modifier.testTag("composer-send").holdToOffer(queueOffered) { queueMenu = true }.semantics {
-                            if (queueOffered) customActions = listOf(CustomAccessibilityAction(PendingTray.QUEUE_FOR_NEXT_TURN) { send(true); true })
-                        }) {
-                        Text(if (state.waiting) "Uploading…" else if (state.busy) "Sending…" else if (stop) "Stop" else "Send")
-                    }
-                    DropdownMenu(queueMenu, onDismissRequest = { queueMenu = false }) {
-                        DropdownMenuItem(text = { Text(PendingTray.QUEUE_FOR_NEXT_TURN) }, modifier = Modifier.testTag("composer-queue-next-turn"),
-                            leadingIcon = { Icon(painterResource(R.drawable.ic_queue_next), null, Modifier.size(16.dp)) },
-                            onClick = { queueMenu = false; send(true) })
+                // The toolbar: `+` and the mode on the left; the model, the gauge, Optimize and Send on the right. Only the model's name
+                // gives way, and only after Optimize has folded to ✦ and the effort has left the chip ([toolbarFit]).
+                val measure = rememberToolbarMeasure()
+                val toolbarStyle = toolbarTextStyle()
+                val optimizeStyle = MaterialTheme.typography.labelLarge
+                BoxWithConstraints(Modifier.fillMaxWidth().padding(horizontal = (TOOLBAR_EDGE / 2).dp).padding(bottom = 4.dp)) {
+                    val fixed = TOOLBAR_PLUS + TOOLBAR_SEND + (if (planRow != null) TOOLBAR_CAPSULE else TOOLBAR_RING) +
+                        (modeLabel?.let { measure(it, toolbarStyle.copy(fontWeight = FontWeight.Medium)) + TOOLBAR_TEXT_PAD } ?: 0f)
+                    val chipWithEffort = measure(chipName, toolbarStyle.copy(fontWeight = FontWeight.SemiBold)) + TOOLBAR_TEXT_PAD +
+                        (chipEffort?.let { 5f + measure(it, toolbarStyle) } ?: 0f) + (if (smart != null) 30f else 0f)
+                    val optimizeWidth = if (!showsOptimize) null else measure("✦", optimizeStyle) + 5f +
+                        measure(if (optimizer.isOptimizing) PromptOptimizerCopy.OPTIMIZING else PromptOptimizerCopy.OPTIMIZE, optimizeStyle) + 24f
+                    val fit = toolbarFit(maxWidth.value - fixed, chipWithEffort, optimizeWidth)
+                    Row(Modifier.fillMaxWidth().height(48.dp), verticalAlignment = Alignment.CenterVertically) {
+                        Box {
+                            ToolbarPlus(enabled = state.loaded) { menu = true }
+                            DropdownMenu(menu, onDismissRequest = { menu = false }) {
+                                DropdownMenuItem(text = { Text("Image") }, onClick = { menu = false; photos.launch(PickVisualMediaRequest(ActivityResultContracts.PickVisualMedia.ImageOnly)) })
+                                DropdownMenuItem(text = { Text("File") }, onClick = { menu = false; files.launch(arrayOf("*/*")) })
+                                val clip = clipboard.primaryClip
+                                if (clip != null && clip.itemCount > 0 && clip.description.hasMimeType("image/*")) {
+                                    DropdownMenuItem(text = { Text("Paste image") }, onClick = {
+                                        menu = false; clip.getItemAt(0).uri?.let { importAttachment(context, model, it, "paste") }
+                                    })
+                                }
+                                listOf("command" to "Command", "skill" to "Skill").forEach { (kind, label) ->
+                                    DropdownMenuItem(text = { Text(label) }, enabled = usable, onClick = { menu = false; slashScope = kind; model.loadCatalog() })
+                                }
+                                DropdownMenuItem(text = { Text("Shell command") }, onClick = {
+                                    menu = false
+                                    if (dsh) model.refuse(DshRuntime.SHELL_REFUSAL) else if (!draft.text.startsWith("!")) model.edit("!${draft.text}", 1, 1)
+                                })
+                                if (target == null) DropdownMenuItem(text = { Text("Queued messages (${waiting.size})") }, onClick = { menu = false; queued = true })
+                                // A pick held for this session travels with the re-send, which would otherwise run on what it already has.
+                                if (target == null) DropdownMenuItem(text = { Text("Retry last failed message") }, enabled = usable && !state.busy,
+                                    onClick = { menu = false; model.retryFailed() })
+                                if (detail.text("retryAt") != null) DropdownMenuItem(text = { Text("Cancel automatic retry") }, enabled = usable && !state.busy,
+                                    onClick = { menu = false; model.control("auto-retry", HttpMethod.DELETE) })
+                            }
+                        }
+                        modeLabel?.let { label ->
+                            Box {
+                                ToolbarMode(label, enabled = usable && !state.busy && draft.pending == null && draft.createdSessionId == null) {
+                                    modeMenu = true; model.loadCatalog()
+                                }
+                                DropdownMenu(modeMenu, onDismissRequest = { modeMenu = false }) {
+                                    PermissionModeItems(model, state, effective, usable) { modeMenu = false }
+                                }
+                            }
+                        }
+                        Box(Modifier.weight(1f), contentAlignment = Alignment.CenterEnd) {
+                            ModelChip(chipName, effortLabel(effective.text("effort")), smart != null,
+                                enabled = usable && !state.busy && draft.pending == null && draft.createdSessionId == null,
+                                shownEffort = chipEffort?.takeIf { fit.showsEffort },
+                                // …and aloud with its effort said once (iOS `chipAccessibilityLabel`): the name above already holds it.
+                                spokenName = if (cursorModel == null) null else CursorRuntime.spokenName(state.catalog,
+                                    effective.text("provider") ?: shownEngine, effective.text("model").orEmpty(), effective.text("effort"))) {
+                                models = true; model.loadCatalog()
+                            }
+                        }
+                        ComposerUsage(model, state, effective, session, planRow)
+                        // Frame 2's ✦ Optimize beside Send; frame 3's busy "Optimizing…", which cancels when pressed.
+                        if (showsOptimize) PromptOptimizeButton(busy = optimizer.isOptimizing, enabled = state.loaded, compact = fit.compactOptimize, press = model::optimize)
+                        var queueMenu by remember { mutableStateOf(false) }
+                        LaunchedEffect(queueOffered) { if (!queueOffered) queueMenu = false }
+                        Box {
+                            RoundSend(stop = stop, waiting = state.waiting || state.busy, enabled = sendEnabled,
+                                label = if (state.waiting) "Uploading…" else if (state.busy) "Sending…" else if (stop) "Stop" else "Send",
+                                modifier = Modifier.testTag("composer-send").holdToOffer(queueOffered) { queueMenu = true }.semantics {
+                                    if (queueOffered) customActions = listOf(CustomAccessibilityAction(PendingTray.QUEUE_FOR_NEXT_TURN) { send(true); true })
+                                }, press = { if (stop) model.stop() else send(false) })
+                            DropdownMenu(queueMenu, onDismissRequest = { queueMenu = false }) {
+                                DropdownMenuItem(text = { Text(PendingTray.QUEUE_FOR_NEXT_TURN) }, modifier = Modifier.testTag("composer-queue-next-turn"),
+                                    leadingIcon = { Icon(painterResource(R.drawable.ic_queue_next), null, Modifier.size(16.dp)) },
+                                    onClick = { queueMenu = false; send(true) })
+                            }
+                        }
                     }
                 }
             }
@@ -514,20 +560,52 @@ internal fun Modifier.holdToOffer(enabled: Boolean, offer: () -> Unit): Modifier
     }
 }
 
-/** The model chip (iOS `modelChipLabel`): the model's name, and — on a task run still on the model smart selection picked — a ✦ before
- * it on a light tint of the accent. Named aloud "Model X, effort Y" — or [spokenName], where the name already says its effort — and
- * ", picked by smart selection" while it carries the ✦. */
+/** The model chip (iOS `modelChipLabel`): the model's name in semibold, then [shownEffort] in the secondary colour ("Opus 5.5 High"),
+ * which the toolbar leaves out where the row has no room for it before the name truncates; on a task run still on the model smart
+ * selection picked, a ✦ before it all on a light tint of the accent. Named aloud "Model X, effort Y" — or [spokenName], where the
+ * name already says its effort — and ", picked by smart selection" while it carries the ✦. */
 @Composable
 internal fun ModelChip(name: String, effort: String, smart: Boolean, enabled: Boolean, modifier: Modifier = Modifier, spokenName: String? = null,
-    open: () -> Unit) {
+    shownEffort: String? = null, open: () -> Unit) {
     val accent = MaterialTheme.colorScheme.primary
     val spoken = (spokenName ?: "Model $name, effort $effort") + if (smart) TaskDetailCopy.chipPickedBySmartSelection else ""
-    TextButton(enabled = enabled, modifier = modifier.testTag("composer-model").semantics { contentDescription = spoken }, onClick = open) {
+    val alpha = if (enabled) 1f else 0.38f
+    Box(modifier.height(48.dp).clip(RoundedCornerShape(12.dp)).clickable(enabled = enabled, role = Role.Button, onClick = open)
+        .testTag("composer-model").semantics { contentDescription = spoken }.padding(horizontal = 6.dp), contentAlignment = Alignment.Center) {
         Row(if (smart) Modifier.background(accent.copy(alpha = 0.12f), RoundedCornerShape(50)).padding(horizontal = 7.dp, vertical = 2.dp) else Modifier,
             verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(5.dp)) {
             // Said by the chip's spoken name rather than read out as a symbol.
-            if (smart) Text("✦", Modifier.testTag("composer-model-smart"), color = accent)
-            Text(name, maxLines = 1, overflow = TextOverflow.Ellipsis)
+            if (smart) Text("✦", Modifier.testTag("composer-model-smart"), color = accent.copy(alpha = alpha), style = toolbarTextStyle())
+            Text(name, Modifier.weight(1f, fill = false), maxLines = 1, overflow = TextOverflow.Ellipsis, style = toolbarTextStyle(),
+                fontWeight = FontWeight.SemiBold, color = MaterialTheme.colorScheme.onSurface.copy(alpha = alpha))
+            shownEffort?.let { Text(it, Modifier.testTag("composer-model-effort"), maxLines = 1, softWrap = false, style = toolbarTextStyle(),
+                color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = alpha)) }
+        }
+    }
+}
+
+/**
+ * The toolbar's permission mode menu (iOS `modeMenu`): the modes the engine offers for this model, ✓ on the one in use, each written
+ * to the session as the model menu's Permissions rows do. Cursor CLI lists Default too, greyed with why (D6, iOS 6 ①); the menu waits
+ * for the catalogue that says which modes there are.
+ */
+@Composable
+internal fun PermissionModeItems(model: ComposerModel, state: ComposerState, detail: JsonObject, usable: Boolean, close: () -> Unit) {
+    val catalog = state.catalog
+    if (catalog == null) {
+        DropdownMenuItem(text = { Text(state.catalogError ?: "Loading…") }, enabled = state.catalogError != null, onClick = model::loadCatalog)
+        return
+    }
+    val engine = catalog.engineOf(detail)
+    val modes = catalog.permissions(engine, detail.text("provider").orEmpty(), detail.text("model").orEmpty())
+    val listed = if (engine == CursorRuntime.ENGINE && modes.isNotEmpty()) listOf("default") + modes else modes
+    val current = detail.text("permissionMode")
+    val enabled = usable && !state.busy && state.draft.pending == null
+    listed.forEach { mode ->
+        ModeMenuItem(personalPermissions.firstOrNull { it.first == mode }?.second ?: mode, mode == current,
+            if (engine == CursorRuntime.ENGINE) CursorRuntime.modeNote(mode) else null, enabled && mode in modes,
+            Modifier.testTag("composer-toolbar-mode:$mode")) {
+            close(); if (mode != current) model.config(buildJsonObject { put("permissionMode", mode) })
         }
     }
 }

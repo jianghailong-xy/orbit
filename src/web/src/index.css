@@ -19875,6 +19875,20 @@ button.chat-jump-start:hover {
 .np-summary a:hover {
   color: var(--brand-strong);
 }
+/* The draft moved off what its workspace last ran on (board new-session-usable-default ② ③). */
+.np-summary.np-fallback {
+  color: var(--warning);
+}
+/* Nothing on the machine runs the draft (board ④): the way out, under the reason. */
+.np-cant-run {
+  margin-top: 10px;
+  font-size: 12px;
+  color: var(--text-2);
+}
+.np-cant-run a {
+  color: var(--brand);
+  text-decoration: none;
+}
 .np-note {
   margin-top: 9px;
   padding: 4px 10px;

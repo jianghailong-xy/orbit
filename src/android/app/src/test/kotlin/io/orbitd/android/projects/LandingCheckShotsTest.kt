@@ -110,15 +110,21 @@ class LandingCheckShotsTest {
     }
     @Test fun baseline() {
         val row = json("""{"itemId":"b1","kind":"INTEGRATION_CHECK_FAILED","title":"Baseline red",
-          "assignee":"OWNER","assigneeReason":"DEFAULT","waitingSince":"2026-11-11T09:00:00Z","actions":[],
+          "assignee":"OWNER","assigneeReason":"ESCALATED","waitingSince":"2026-11-11T09:00:00Z","actions":[],
           "baseline":{"upstreamSha":"c81d795","targetSha":"3c25e06","mergeTreeSha":"b1719dc","check":{"command":"make test-fast"}},
           "heldTaskIds":["t1","t2"],"facts":{"targetRef":"refs/heads/project/payments"}}""")
         val card = CardCatalog.project("s1", "p1", mapOf("project" to json("""{"id":"p1"}"""),
             "openItems" to buildJsonObject { putJsonArray("needsYou") { add(row) }; putJsonArray("withCoordinator") {} })).single()
         show { ExceptionCard(card, true, CardActionState(), null, {}, null, {}) { _, _ -> } }
+        // Escalated to the owner, the item keeps the baseline card rather than "Who fixes it?".
+        compose.onNodeWithText("Who fixes it?").assertDoesNotExist()
         compose.onNodeWithText("Baseline checks failing on project/payments").assertExists()
-        compose.onNodeWithText("Landings on hold").assertExists()
-        compose.onNodeWithText("View held tasks").assertExists()
+        for (text in listOf("The project branch with the latest main fails its checks without this task.", "Landings on hold",
+            "Upstream", "Project tip", "Combined baseline", "Landing check", "c81d795", "3c25e06", "b1719dc", "make test-fast",
+            "Landings resume automatically when this open item is resolved.")) compose.onAllNodesWithText(text).onFirst().assertExists()
+        compose.onNodeWithText("View held tasks").assertExists().performClick()
+        compose.onNodeWithText("t1").assertExists()
+        compose.onNodeWithText("t2").assertExists()
         shot("baseline")
     }
 }

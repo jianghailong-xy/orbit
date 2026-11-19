@@ -1,6 +1,7 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
 import type { PrismaService } from '../prisma/prisma.service';
+import { encryptSecret } from '../providers/provider-crypto';
 import { RunnersService } from './runners.service';
 
 const RUNNER_ORDER = [
@@ -9,6 +10,53 @@ const RUNNER_ORDER = [
   { id: 'runner-3', position: 2 },
   { id: 'runner-4', position: 3 },
 ];
+
+test('runner views hide the OpenCode no-key flag only when the owner can spend an Orbit key', async (t) => {
+  const secretKey = process.env.PROVIDER_SECRET_KEY;
+  process.env.PROVIDER_SECRET_KEY = 'test-master-key';
+  t.after(() => {
+    if (secretKey === undefined) delete process.env.PROVIDER_SECRET_KEY;
+    else process.env.PROVIDER_SECRET_KEY = secretKey;
+  });
+
+  const openCode = { engine: 'opencode', installed: true, version: '1.19.6', auth: 'unknown' };
+  const reported = { ...openCode, openCodeNoKey: true };
+  const runners = RUNNER_ORDER.slice(0, 2).map(({ id }) => ({ id, status: 'OFFLINE', engines: [reported] }));
+  const keys = [
+    { runtime: 'claude', enabled: true, apiKeyEnc: encryptSecret('sk-ant-oat01-test') },
+  ];
+  const findKeys = t.mock.fn(async (args: unknown) => {
+    assert.deepEqual(args, { where: { enabled: true, ownerId: 'owner-1' } });
+    return keys;
+  });
+  const prisma = {
+    runner: {
+      findMany: async ({ where }: { where: { ownerId: string; id?: string } }) => {
+        assert.equal(where.ownerId, 'owner-1');
+        return runners.filter(({ id }) => !where.id || id === where.id);
+      },
+    },
+    user: {
+      findUnique: async (args: unknown) => {
+        assert.deepEqual(args, { where: { id: 'owner-1' }, select: { role: true } });
+        return { role: 'MEMBER' };
+      },
+    },
+    modelProvider: { findMany: findKeys },
+    session: { groupBy: async () => [] },
+    $queryRaw: async () => [],
+  } as unknown as PrismaService;
+  const service = new RunnersService(prisma);
+
+  assert.deepEqual((await service.listRunners('owner-1')).map(({ engines }) => engines), [[reported], [reported]]);
+  assert.equal(findKeys.mock.callCount(), 1);
+
+  keys.push({ runtime: 'claude', enabled: true, apiKeyEnc: encryptSecret('sk-deepseek-test') });
+  assert.deepEqual((await service.listRunners('owner-1')).map(({ engines }) => engines), [[openCode], [openCode]]);
+  assert.equal(findKeys.mock.callCount(), 2);
+  assert.deepEqual((await service.getRunner('owner-1', 'runner-1')).engines, [openCode]);
+  assert.equal(reported.openCodeNoKey, true);
+});
 
 test('reorderRunners handles workspaceless runners, filters invalid ids, and appends omissions', async () => {
   const positions = new Map(RUNNER_ORDER.map(({ id, position }) => [id, position]));
