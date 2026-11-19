@@ -29,7 +29,11 @@ import (
 
 const (
 	// streamCapability is the Hello capability of a runner that speaks byte streams.
-	streamCapability    = "link-stream-v1"
+	streamCapability = "link-stream-v1"
+	// streamPasteCapability is the Hello capability of a runner that takes StreamPaste.
+	streamPasteCapability = "link-stream-paste-v1"
+	// maxPasteBytes bounds a StreamPaste's text, as the apiserver does (browser-viewer.ts, MAX_PASTE_BYTES).
+	maxPasteBytes       = 64 << 10
 	streamSubjectPrefix = "vnc."
 	// streamWindow is each direction's window per stream, in bytes.
 	streamWindow = 256 << 10
@@ -146,6 +150,13 @@ func (c *conn) streamable() bool {
 	c.mu.Lock()
 	defer c.mu.Unlock()
 	return c.browser && c.hello.GetManagedInstance() != nil && slices.Contains(c.hello.GetCapabilities(), streamCapability)
+}
+
+// pastable reports whether the connection's runner takes StreamPaste (link-stream-paste-v1).
+func (c *conn) pastable() bool {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	return slices.Contains(c.hello.GetCapabilities(), streamPasteCapability)
 }
 
 // openStream takes a StreamOpen request from NATS for runner, answered on reply.
@@ -279,6 +290,8 @@ func (c *conn) onStreamFrame(f *linkpb.Frame) {
 		id = body.StreamCredit.GetStreamId()
 	case *linkpb.Frame_StreamClose:
 		id = body.StreamClose.GetStreamId()
+	case *linkpb.Frame_StreamPasted:
+		id = body.StreamPasted.GetStreamId()
 	}
 	canonical, _ := sessionUUID(id)
 	s := c.g.streams.of(c, canonical)
@@ -325,6 +338,12 @@ func (c *conn) onStreamFrame(f *linkpb.Frame) {
 		s.relayUp(&linkpb.Frame{Body: &linkpb.Frame_StreamCredit{StreamCredit: &linkpb.StreamCredit{StreamId: s.id, Bytes: uint32(n)}}})
 	case *linkpb.Frame_StreamClose:
 		s.endLocked(body.StreamClose.GetCode(), body.StreamClose.GetMessage(), false, true, "closed_by_runner")
+	case *linkpb.Frame_StreamPasted:
+		if s.opened {
+			s.relayUp(&linkpb.Frame{Body: &linkpb.Frame_StreamPasted{StreamPasted: &linkpb.StreamPasted{
+				StreamId: s.id, PasteId: body.StreamPasted.GetPasteId(), Error: body.StreamPasted.GetError(),
+			}}})
+		}
 	}
 }
 
@@ -395,6 +414,32 @@ func (s *stream) fromViewer(data []byte) {
 			code = linkpb.StreamCloseCode_STREAM_CLOSE_CODE_NORMAL
 		}
 		s.endLocked(code, body.StreamClose.GetMessage(), true, false, "closed_by_viewer")
+	case *linkpb.Frame_StreamPaste:
+		// Text the owner pasted (docs/runner-browser-design.md §5): outside the stream's window, on the control tier,
+		// and never logged. A runner that does not take it is answered here, so the viewer is not left waiting.
+		paste := body.StreamPaste
+		switch {
+		case !s.opened:
+			violation("StreamPaste before the stream opened")
+			return
+		case len(paste.GetText()) > maxPasteBytes:
+			violation(fmt.Sprintf("a paste of more than %d bytes", maxPasteBytes))
+			return
+		}
+		answer := func(message string) {
+			s.relayUp(&linkpb.Frame{Body: &linkpb.Frame_StreamPasted{StreamPasted: &linkpb.StreamPasted{
+				StreamId: s.id, PasteId: paste.GetPasteId(), Error: message,
+			}}})
+		}
+		if !s.c.pastable() {
+			answer("This runner cannot take a paste yet; it needs an update")
+			return
+		}
+		if !s.c.offer(&linkpb.Frame{Body: &linkpb.Frame_StreamPaste{StreamPaste: &linkpb.StreamPaste{
+			StreamId: s.id, PasteId: paste.GetPasteId(), Text: paste.GetText(),
+		}}}) {
+			answer("The runner's connection did not take the paste")
+		}
 	}
 }
 

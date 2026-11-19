@@ -528,6 +528,7 @@ import {
   withProviderDeclarations,
 } from './runner-provider-support';
 import { coordinatorCreateAllowedBy } from './unstarted-project-create';
+import { sessionCreateAllowedBy } from './session-create-allowance';
 import {
   freezeSessionSourcePin,
   forkAuthorityBindings, sessionSourceSnapshot,
@@ -6324,7 +6325,9 @@ export class RunnerApiController {
       ? AUTO_ALLOWED_MESSAGE
       : existing || refused
         ? null
-        : await coordinatorCreateAllowedBy(this.prisma, session, dto.toolName, dto.input);
+        : (await coordinatorCreateAllowedBy(this.prisma, session, dto.toolName, dto.input)) ??
+          // And any session's first few creates (`session-create-allowance.ts`).
+          (await sessionCreateAllowedBy(this.prisma, session, dto.toolName, dto.input));
     // Which turn is asking. Derived here rather than sent by the runner: the MCP server knows only
     // its session, and the server already knows which turn it leased to that session — the runner
     // has been polling inside it since the dequeue. It is what makes an abandoned call provable

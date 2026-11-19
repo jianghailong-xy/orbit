@@ -272,7 +272,8 @@ func (g *fakeWorkGateway) serve(w http.ResponseWriter, r *http.Request) {
 			g.onLiveBatch(c, body.LiveBatch)
 		case *linkpb.Frame_TurnPrefixResponse:
 			g.onTurnPrefixAnswer(c, body.TurnPrefixResponse)
-		case *linkpb.Frame_StreamOpened, *linkpb.Frame_StreamData, *linkpb.Frame_StreamCredit, *linkpb.Frame_StreamClose:
+		case *linkpb.Frame_StreamOpened, *linkpb.Frame_StreamData, *linkpb.Frame_StreamCredit, *linkpb.Frame_StreamClose,
+			*linkpb.Frame_StreamPasted:
 			g.mu.Lock()
 			onStream := g.onStream
 			g.mu.Unlock()
