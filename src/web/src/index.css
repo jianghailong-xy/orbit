@@ -28982,6 +28982,42 @@ button.agent-progress-agent:hover {
   flex-shrink: 0;
 }
 
+/* Who can use the bot (docs/feishu-bot-design.md §14.1): the settings of sessions other people start, under the open choice. */
+.feishu-open {
+  display: grid;
+  gap: 18px;
+  margin-left: 24px;
+  padding: 14px 16px 16px;
+  border-left: 2px solid var(--brand-border);
+  border-radius: 0 8px 8px 0;
+  background: var(--bg-subtle);
+}
+.feishu-open .admin-signin-row > div:first-child {
+  flex: 1;
+  min-width: 0;
+}
+.feishu-open-limits {
+  display: grid;
+  grid-template-columns: 150px auto;
+  align-items: center;
+  gap: 8px 0;
+  margin-top: 10px;
+  font-size: 14px;
+}
+.feishu-open-limit {
+  display: inline-flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+}
+.feishu-open-limit .orbit-number-input {
+  width: 72px;
+}
+.feishu-actions .feishu-access-note {
+  margin-right: auto;
+  align-self: center;
+}
+
 .feishu-members {
   display: grid;
   grid-template-columns: repeat(auto-fill, minmax(180px, 1fr));

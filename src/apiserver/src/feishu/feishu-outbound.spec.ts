@@ -97,3 +97,67 @@ test("a 429's wait: Feishu's reset header, retry-after, or the default", () => {
   assert.equal(rateLimitWaitMs({}, timing), timing.rateLimitDefaultMs);
   assert.equal(rateLimitWaitMs(undefined, timing), timing.rateLimitDefaultMs);
 });
+
+test("the availability check (§14.3): its path and parameters, and every answer that is not a plain yes counts as no", async (t) => {
+  // An app of its own: the SDK caches tenant_access_tokens per App ID across clients, and the test above handed this
+  // App ID tokens from another fake.
+  const APP = { platform: 'FEISHU' as const, appId: 'cli_availability0001', appSecret: 'availability-secret' };
+  const fake = new FakeOpenPlatform();
+  fake.addApp(APP);
+  const before = process.env[FEISHU_TEST_OPEN_PLATFORM_ENV];
+  process.env[FEISHU_TEST_OPEN_PLATFORM_ENV] = await fake.start();
+  t.after(async () => {
+    if (before === undefined) delete process.env[FEISHU_TEST_OPEN_PLATFORM_ENV]; else process.env[FEISHU_TEST_OPEN_PLATFORM_ENV] = before;
+    await fake.stop();
+  });
+  const outbound = new FeishuOutbound();
+  const PATH = `/open-apis/application/v6/applications/${APP.appId}/visibility/check_white_black_list`;
+  const asked = () => fake.requestsTo(PATH);
+
+  await t.test('one POST per check, as the app, naming the sender by open_id', async () => {
+    fake.availability.set('ou_in', 'IN');
+    assert.equal(await outbound.availability(APP, 'ou_in'), 'IN_SCOPE');
+    assert.equal(await outbound.availability(APP, 'ou_in'), 'IN_SCOPE');
+    const [first, again] = asked();
+    assert.equal(asked().length, 2, 'asked every time: nothing is cached');
+    for (const r of [first!, again!]) {
+      assert.equal(r.platform, 'FEISHU');
+      assert.equal(r.method, 'POST');
+      assert.equal(r.path, PATH);
+      assert.deepEqual([...r.query.entries()], [['user_id_type', 'open_id']]);
+      assert.deepEqual(r.body, { user_ids: ['ou_in'] });
+      assert.ok(fake.tenantAccessTokens.includes(String(r.headers.authorization).replace('Bearer ', '')), 'with a tenant_access_token');
+    }
+  });
+
+  await t.test('the paid list counts as in; the black list, neither list and no entry do not', async () => {
+    fake.availability.set('ou_paid', 'PAID');
+    fake.availability.set('ou_blocked', 'BLOCKED');
+    fake.availability.set('ou_out', 'OUT');
+    assert.equal(await outbound.availability(APP, 'ou_paid'), 'IN_SCOPE');
+    assert.equal(await outbound.availability(APP, 'ou_blocked'), 'NOT_IN_SCOPE');
+    assert.equal(await outbound.availability(APP, 'ou_out'), 'NOT_IN_SCOPE');
+    assert.equal(await outbound.availability(APP, 'ou_never_heard_of'), 'NOT_IN_SCOPE', 'the fake answers any id as on neither list');
+    const asks = asked().length;
+    assert.equal(await outbound.availability(APP, ''), 'UNKNOWN', 'no sender: nothing to ask');
+    assert.equal(asked().length, asks);
+  });
+
+  await t.test("Feishu not saying is UNKNOWN: a 5xx, the permission not granted, a non-zero code, no entry, no answer", async () => {
+    fake.availability.set('ou_5xx', 'SERVER_ERROR');
+    assert.equal(await outbound.availability(APP, 'ou_5xx'), 'UNKNOWN');
+    fake.route('POST', '/open-apis/application/v6/applications/:app_id/visibility/check_white_black_list', () => ({
+      status: 400, body: { code: 99991672, msg: 'Access denied. One of the following scopes is required: [application:application:self_manage]' },
+    }));
+    assert.equal(await outbound.availability(APP, 'ou_in'), 'UNKNOWN');
+    fake.route('POST', '/open-apis/application/v6/applications/:app_id/visibility/check_white_black_list', () => ({ status: 200, body: { code: 210001, msg: 'param is invalid' } }));
+    assert.equal(await outbound.availability(APP, 'ou_in'), 'UNKNOWN');
+    fake.route('POST', '/open-apis/application/v6/applications/:app_id/visibility/check_white_black_list', () => ({
+      status: 200, body: { code: 0, msg: 'success', data: { user_visibility_list: [{ user_id: 'ou_someone_else', in_white_list: true }] } },
+    }));
+    assert.equal(await outbound.availability(APP, 'ou_in'), 'UNKNOWN');
+    fake.mode = 'unreachable';
+    assert.equal(await outbound.availability(APP, 'ou_in'), 'UNKNOWN');
+    fake.mode = 'ok';
+  });
+});

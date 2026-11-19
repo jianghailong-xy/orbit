@@ -3,7 +3,7 @@ import { JwtAuthGuard } from '../auth/jwt-auth.guard';
 import { PatForbidden } from '../auth/pat-scope.decorator';
 import { AuthUser, CurrentUser } from '../common/current-user.decorator';
 import { PublicIdPipe } from '../common/public-id';
-import { ChangeFeishuAppDto, ChangeFeishuChatDto, ConfirmFeishuChatDto, ConnectFeishuAppDto } from './dto';
+import { ChangeFeishuAppDto, ChangeFeishuChatDto, ConfirmFeishuChatDto, ConnectFeishuAppDto, SaveFeishuAccessDto } from './dto';
 import { FeishuAppService } from './feishu-app.service';
 import { FeishuChatRouteService } from './feishu-chat-route.service';
 import { FeishuOwnerService } from './feishu-owner.service';
@@ -15,7 +15,7 @@ import { FeishuOwnerService } from './feishu-owner.service';
  *
  * The group routes (§8.1): reading them is the account's (ACCOUNT); connecting a group, changing and removing one are
  * the owner channel's (OWNER_INTERACTIVE, auth/pat-owner-channel-routes.ts), since they let people in a group start
- * agents on the account's machines.
+ * agents on the account's machines. So is who can use the bot (§14.1), for the same reason.
  */
 @UseGuards(JwtAuthGuard)
 @PatForbidden('ACCOUNT')
@@ -45,6 +45,13 @@ export class FeishuController {
     return this.apps.change(user.userId, dto);
   }
 
+  /** Who can use the bot, and what the sessions other people start run with (§14.1). */
+  @Put('access')
+  @PatForbidden('OWNER_INTERACTIVE')
+  saveAccess(@CurrentUser() user: AuthUser, @Body() dto: SaveFeishuAccessDto) {
+    return this.apps.saveAccess(user.userId, dto);
+  }
+
   /** Remove the app. */
   @Delete()
   remove(@CurrentUser() user: AuthUser) {
@@ -70,7 +77,10 @@ export class FeishuController {
     return this.owner.sendTest(user.userId);
   }
 
-  /** The connected groups; with `ticket`, also the group that ticket would connect, while it works (§8.1). */
+  /**
+   * The connected groups and those using the settings above (§14.2); with `ticket`, also the group that ticket would
+   * connect, while it works (§8.1).
+   */
   @Get('chats')
   chatRoutes(@CurrentUser() user: AuthUser, @Query('ticket') ticket?: string) {
     return this.chats.list(user.userId, typeof ticket === 'string' && ticket !== '' ? ticket.slice(0, 128) : undefined);
@@ -83,7 +93,7 @@ export class FeishuController {
     return this.chats.confirm(user.userId, dto);
   }
 
-  /** Switch a connected group off or on, or change what it was confirmed with. */
+  /** Switch a group off or on, or change what a connected one was confirmed with. */
   @Patch('chats/:id')
   @PatForbidden('OWNER_INTERACTIVE')
   changeChat(@CurrentUser() user: AuthUser, @Param('id', PublicIdPipe) id: string, @Body() dto: ChangeFeishuChatDto) {
