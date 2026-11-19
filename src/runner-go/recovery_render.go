@@ -451,6 +451,9 @@ func (s *mcpServer) listedToolDescriptors() []map[string]interface{} {
 	}
 	if !s.browserOn {
 		tools = withoutBrowserTools(tools)
+	} else if !onOrbitCloudRunner() {
+		// browser_request_sign_in is the Orbit Cloud runner's sessions' only (browser_tools.go).
+		tools = withoutBrowserSignIn(tools)
 	}
 	// schedule_run_report is a scheduled run's own (schedule_tools.go).
 	if !s.scheduleRun {

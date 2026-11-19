@@ -5350,6 +5350,12 @@ var catalogMetadata = map[string]operationMeta{
 		SuccessEvidence: "Whether the browser is running, the session holding it, the viewers and whether saved logins exist.",
 		Returns:         "The browser's status (JSON): enabled, runnerId, state, running, holderSessionId, holderTitle, viewers, savedLogins, reportedAt.",
 	},
+	"browser_request_sign_in": {
+		Object:          objectBrowser,
+		Intent:          "Ask the account owner to sign in to a site in the Orbit Cloud runner's browser, and wait for their answer.",
+		SuccessEvidence: "A Waiting-on-you card the owner answered: signed in, or not now.",
+		Returns:         "The answer (JSON): requestId, site, answer (SIGNED_IN, NOT_NOW, EXPIRED or WITHDRAWN), leaseReleased, leaseRetaken, message.",
+	},
 
 	// ── the guide ──
 	"guide": {

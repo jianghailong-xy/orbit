@@ -3625,7 +3625,7 @@ func buildCLICapabilities(executable string) cliCapabilitiesDocument {
 	// The browser commands only while the server's browser switch is on, as the engine was spawned with it: off, the
 	// `orbit browser` family is absent (browser_tools.go).
 	if browserToolsEnabledFromEnv() {
-		specs = append(specs, browserCLICapabilities...)
+		specs = append(specs, browserCLICapabilitiesHere()...)
 	}
 	// The guide reads the catalogue and asks the server nothing, so every process is offered it.
 	specs = append(specs, guideCLICapabilities...)

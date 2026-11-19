@@ -44,7 +44,9 @@ servers whose tools the engine offered (mcpServers).
       "FAKE-GET <session id> <word>": mcp__orbit__session_get of that session;
       "FAKE-NAV <url> <word>": mcp__browser__browser_navigate to <url>, which takes the runner's browser lease (with
         FAKE-HOLD in the same message, the answer to its result is held open, and the turn with the lease);
-      "FAKE-BSTATUS <word>": mcp__orbit__browser_status.
+      "FAKE-BSTATUS <word>": mcp__orbit__browser_status;
+      "FAKE-SIGNIN <site> <word>": mcp__orbit__browser_request_sign_in({site, reason}), the reason a fixed sentence naming
+        <word>; the call waits for the owner's answer, and the answer to its result quotes it.
     A call is made only in a request that offers its tool, or once a ToolSearch call of this conversation has loaded it
     (Claude Code defers MCP tools: the request lists only their names, and the answer calls ToolSearch with
     "select:<tool>" first). The log keeps those tools' results whole (toolResults), and
@@ -135,9 +137,9 @@ def loop_state(messages):
 
 
 PLAN_TOOLS = ('mcp__orbit__schedule_wakeup', 'mcp__orbit__bg_run', 'mcp__orbit__session_get', 'mcp__orbit__browser_status',
-              'mcp__browser__browser_navigate')
+              'mcp__browser__browser_navigate', 'mcp__orbit__browser_request_sign_in')
 PLAN = re.compile(r'FAKE-RECUR (\d+) (\d+) (\w+)(?: (\d+) (\d+)\b)?|FAKE-STALL (\d+) (\d+) (\w+)|FAKE-STOP (\d+) (\w+)|'
-                  r'FAKE-GET (\S+) (\w+)|FAKE-NAV (\S+) (\w+)|FAKE-BSTATUS (\w+)')
+                  r'FAKE-GET (\S+) (\w+)|FAKE-NAV (\S+) (\w+)|FAKE-BSTATUS (\w+)|FAKE-SIGNIN (\S+) (\w+)')
 
 
 def turn_message(messages):
@@ -173,6 +175,9 @@ def plan_steps(text, now):
             steps.append(('mcp__orbit__session_get', {'sessionId': hit[11]}))
         elif hit[13]:
             steps.append(('mcp__browser__browser_navigate', {'url': hit[13]}))
+        elif hit[16]:
+            steps.append(('mcp__orbit__browser_request_sign_in', {
+                'site': hit[16], 'reason': f'Sign in to the account that owns acme/billing, so I can export the report ({hit[17].upper()}).'}))
         else:
             steps.append(('mcp__orbit__browser_status', {}))
     return steps

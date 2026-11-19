@@ -21,6 +21,11 @@ import (
 // The lease: the first session to call a browser tool holds the browser until its turn ends or browserLeaseIdle
 // passes without a browser call from it. Another session's call meanwhile is refused with an error naming the
 // holder. The owner's viewer never takes the lease and is never refused.
+//
+// A sign-in (browser_request_sign_in, board 03-agent-tools ①, Q2 = A): while the owner is asked to sign in, the asking
+// session gives the lease up (YieldForSignIn) so the owner's clicks and an agent's do not collide. Until the answer no
+// session's browser call is taken, the asker's own included, and the browser does not stop for idleness, so the page
+// the agent was on is there when the owner opens it. After the answer the asker takes the lease back (EndSignIn).
 const (
 	browserIdleStop  = 15 * time.Minute
 	browserLeaseIdle = 5 * time.Minute
@@ -91,6 +96,8 @@ type browserSupervisor struct {
 	idle          poolTimer
 	// clearedAt is when the owner last cleared the saved logins (zero: not since this process started).
 	clearedAt time.Time
+	// signIn is the session waiting for the owner to sign in (nil: none). Nothing of the site is kept here.
+	signIn *browserLease
 }
 
 // newRunnerBrowser is this runner's browser supervisor: nil unless the managed image's entrypoint started it
@@ -185,6 +192,14 @@ func (b *browserSupervisor) Acquire(sessionID, title string) error {
 	if !b.offered && !(b.stopAfterTurn && b.lease != nil && b.lease.sessionID == sessionID) {
 		return errBrowserUnavailable
 	}
+	if b.signIn != nil {
+		return fmt.Errorf("The browser is waiting for the owner to sign in, asked by session %s; try again after they answer", b.signIn.name())
+	}
+	return b.acquireLocked(sessionID, title)
+}
+
+// acquireLocked takes or renews sessionID's lease once Acquire's refusals are past.
+func (b *browserSupervisor) acquireLocked(sessionID, title string) error {
 	if b.lease != nil && b.lease.sessionID != sessionID {
 		return fmt.Errorf("The browser is in use by session %s; try again after it finishes", b.lease.name())
 	}
@@ -203,6 +218,82 @@ func (b *browserSupervisor) Acquire(sessionID, title string) error {
 	lease.timer = b.clock.AfterFunc(browserLeaseIdle, func() { b.expireLease(lease) })
 	b.touchLocked()
 	return nil
+}
+
+// YieldForSignIn is the start of sessionID's sign-in request: it gives up the lease if sessionID holds it (held says
+// whether it did) and reserves the browser for the owner until EndSignIn. The browser is not stopped, so its page
+// stays. Refused while another session holds the lease or another sign-in is waiting: the owner would sign in under
+// someone else's clicks.
+func (b *browserSupervisor) YieldForSignIn(sessionID, title string) (held bool, err error) {
+	if b == nil {
+		return false, errBrowserUnavailable
+	}
+	sessionID = publicID(sessionID)
+	b.mu.Lock()
+	defer b.mu.Unlock()
+	if !b.offered {
+		return false, errBrowserUnavailable
+	}
+	if b.signIn != nil {
+		return false, fmt.Errorf("The browser is already waiting for the owner to sign in, asked by session %s; try again after they answer", b.signIn.name())
+	}
+	if b.lease != nil && b.lease.sessionID != sessionID {
+		return false, fmt.Errorf("The browser is in use by session %s; try again after it finishes", b.lease.name())
+	}
+	held = b.lease != nil
+	if held {
+		if title == "" {
+			title = b.lease.title
+		}
+		b.lease.timer.Stop()
+		b.lease = nil
+	}
+	b.signIn = &browserLease{sessionID: sessionID, title: title}
+	b.touchLocked()
+	b.log("browser: lease released while the owner is asked to sign in")
+	return held, nil
+}
+
+// EndSignIn ends sessionID's sign-in wait, once the owner answered (or the request could not be filed). With retake the
+// session takes the lease back, as Acquire would; an error says why it could not.
+func (b *browserSupervisor) EndSignIn(sessionID, title string, retake bool) error {
+	if b == nil {
+		return errBrowserUnavailable
+	}
+	sessionID = publicID(sessionID)
+	b.mu.Lock()
+	defer b.mu.Unlock()
+	if b.signIn != nil && b.signIn.sessionID == sessionID {
+		if title == "" {
+			title = b.signIn.title
+		}
+		b.signIn = nil
+		b.touchLocked()
+	}
+	if !retake {
+		return nil
+	}
+	if !b.offered && !b.stopAfterTurn {
+		return errBrowserUnavailable
+	}
+	if err := b.acquireLocked(sessionID, title); err != nil {
+		return err
+	}
+	b.log("browser: lease taken back after the owner answered")
+	return nil
+}
+
+// SignInWaiting is the session waiting for the owner to sign in ("" when none).
+func (b *browserSupervisor) SignInWaiting() string {
+	if b == nil {
+		return ""
+	}
+	b.mu.Lock()
+	defer b.mu.Unlock()
+	if b.signIn == nil {
+		return ""
+	}
+	return b.signIn.sessionID
 }
 
 // Release ends sessionID's lease, if it holds it: at the end of its turn, or when the session ends.
@@ -387,14 +478,15 @@ func (b *browserSupervisor) touchLocked() {
 		b.idle.Stop()
 		b.idle = nil
 	}
-	if b.procs == nil || b.viewers > 0 {
+	// Nor while the owner is asked to sign in: the page the agent was on waits for them.
+	if b.procs == nil || b.viewers > 0 || b.signIn != nil {
 		return
 	}
 	var t poolTimer
 	t = b.clock.AfterFunc(browserIdleStop, func() {
 		b.mu.Lock()
 		defer b.mu.Unlock()
-		if b.idle != t || b.viewers > 0 {
+		if b.idle != t || b.viewers > 0 || b.signIn != nil {
 			return
 		}
 		b.idle = nil

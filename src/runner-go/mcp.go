@@ -2175,6 +2175,8 @@ var ownerWaitTools = map[string]bool{
 	"task_create": true, "task_create_batch": true, "project_create": true, "project_blocker_resolve": true,
 	"tasklist_propose_dag": true, "provider_create": true, "provider_update": true, "provider_delete": true,
 	"integration_skip_merge_check": true, "runner_delete": true, "agent_delete": true,
+	// The owner signing in to a site in the Orbit Cloud browser (browser_tools.go).
+	browserRequestSignInTool: true,
 }
 
 // The merge-check fields, in the spelling the server's DTO and the card both use. Everything else

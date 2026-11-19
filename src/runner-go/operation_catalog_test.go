@@ -37,6 +37,8 @@ func catalogFullestCLIContext(t *testing.T) {
 	t.Setenv(envWatches, "on")
 	t.Setenv(envWiki, "on")
 	t.Setenv(envBrowser, "on")
+	// On the Orbit Cloud runner: browser_request_sign_in is offered only there (browser_tools.go).
+	t.Setenv(envManagedRunnerGeneration, "3")
 	t.Setenv("ORBIT_USER_TOKEN", "")
 	t.Setenv("ORBIT_SERVICE_TOKEN", "")
 }
@@ -418,6 +420,7 @@ func TestEveryAdvertisedArgvAndHelpArgvRuns(t *testing.T) {
 			t.Setenv(envWatches, "on")
 			t.Setenv(envWiki, "on")
 			t.Setenv(envBrowser, "on")
+			t.Setenv(envManagedRunnerGeneration, "3")
 			for key, value := range tc.env {
 				t.Setenv(key, value)
 			}
