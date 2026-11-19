@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import {
+  orbitWorkflowLaunchReceipt,
   isApiErrorText,
   isAsyncAgentLaunchAck,
   isAuthErrorText,
@@ -374,5 +375,16 @@ describe('isBenignEngineStderr', () => {
     expect(isBenignEngineStderr('API Error: 400 model "deepseek-v4-pro" not found')).toBe(false);
     expect(isBenignEngineStderr('')).toBe(false);
     expect(isBenignEngineStderr(null)).toBe(false);
+  });
+});
+
+describe('orbitWorkflowLaunchReceipt', () => {
+  it('reads the workflow tool\'s launch receipt, and nothing else', () => {
+    const receipt = JSON.stringify({ status: 'running', workflowRunId: 'wf1' }, null, 2);
+    expect(orbitWorkflowLaunchReceipt(receipt)).toEqual({ workflowRunId: 'wf1' });
+    expect(orbitWorkflowLaunchReceipt([{ type: 'text', text: receipt }])).toEqual({ workflowRunId: 'wf1' });
+    expect(orbitWorkflowLaunchReceipt(JSON.stringify({ status: 'DONE', workflowRunId: 'wf1' }))).toBeNull();
+    expect(orbitWorkflowLaunchReceipt(JSON.stringify({ status: 'running', runId: 'r1' }))).toBeNull();
+    expect(orbitWorkflowLaunchReceipt('workflow failed: no script')).toBeNull();
   });
 });
