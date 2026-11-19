@@ -61,6 +61,7 @@ func claudeCommandArgs(job *ClaimedSession, scratchDir string, firstSpawn bool) 
 		job.AllowOrchestration,
 		job.insideRecordedWork(),
 		job.watchesOn(),
+		job.BrowserEnabled,
 	)
 	// Orbit ships its own task tools via the `orbit` MCP server (mcp__orbit__task_*).
 	// Claude's built-in Task* tools collide by intent: an agent told to "create tasks"
@@ -261,6 +262,7 @@ func spawnClaude(ctx context.Context, job *ClaimedSession, execDir string, args 
 		"ORBIT_ALLOW_ORCHESTRATION="+orchestrationEnv(job.AllowOrchestration),
 		envWatches+"="+watchesEnv(job.WatchesDisabled),
 		envWiki+"="+wikiEnv(job.WikiDisabled),
+		envBrowser+"="+browserEnv(job.BrowserEnabled),
 		envScheduleRun+"="+scheduleRunEnv(job.ScheduleRun),
 		envScheduledCheckOnly+"="+scheduledCheckOnlyEnv(job.Agent.ScheduledCheckOnly),
 		"ORBIT_SPAWN_DEPTH="+strconv.Itoa(job.SpawnDepth),

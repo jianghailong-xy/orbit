@@ -554,6 +554,7 @@ import { sanitizeWorkspaceWrite } from './runner-agents.controller';
 import { workspaceWriteCardInput } from './runner-workspace-approval';
 import { authorizeManagedRunnerInstance, type ManagedRunnerInstance } from '../managed-runners/managed-runner-instance';
 import { MANAGED_RUNNER_GATE, type ManagedRunnerGate } from '../managed-runners/managed-runner-gate';
+import { browserClaimFields, MANAGED_RUNNER_BROWSER_GATE, type ManagedRunnerBrowserGate } from '../managed-runners/managed-runner-browser-gate';
 import {
   managedRunnerHeartbeat,
   sanitizeManagedWorkload,
@@ -1712,6 +1713,8 @@ export class RunnerApiController {
      */
     @Optional() private readonly coordinatorHandoffs?: CoordinatorHandoffService,
     @Optional() private readonly conditions?: ConditionsService,
+    /** The browser switch, said on every reclaim as on a claim (browserClaimFields); absent in hand-built specs: off. */
+    @Optional() @Inject(MANAGED_RUNNER_BROWSER_GATE) private readonly browserGate?: ManagedRunnerBrowserGate,
   ) {
     this.files = files ?? new FilesService(prisma);
   }
@@ -4531,6 +4534,8 @@ export class RunnerApiController {
         ...watchClaimFields(watchRollout, s.ownerId),
         // And the wiki, on the same rule (wiki/wiki-rollout.ts).
         ...wikiClaimFields(wikiRollout, s.ownerId),
+        // And the browser switch (managed-runner-browser-gate.ts), read as the claim path reads it.
+        ...browserClaimFields(this.browserGate),
         // cf. the claim path: a scheduled run's session lists schedule_run_report.
         ...(s.scheduleRunId ? { scheduleRun: true } : {}),
         // Read, never re-derived (SR29). A session already PINNED comes back on the SHA its first

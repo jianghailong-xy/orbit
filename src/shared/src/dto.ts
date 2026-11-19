@@ -900,6 +900,9 @@ export interface RunnerBrowserReport {
   viewers: number;
   /** When this runner last cleared the saved logins (RFC 3339); absent if it never has since it started. */
   profileClearedAt?: string;
+  /** Whether the saved profile holds a cookie store, so saved logins may exist. Only that: never which sites. Absent
+   *  from a runner that predates it. */
+  savedLogins?: boolean;
 }
 
 /** GET /runners/:id/browser: the owner's managed runner browser, as its last heartbeat reported it. */
@@ -917,6 +920,32 @@ export interface RunnerBrowserState {
   clearRequestedAt: string | null;
   /** When the runner last reported clearing the saved logins. */
   profileClearedAt: string | null;
+  /** Whether saved logins exist, as the last report said (RunnerBrowserReport.savedLogins); null when no report said
+   *  it. Never which sites. */
+  savedLogins: boolean | null;
+}
+
+/**
+ * GET /runner/browser: browser_status and `orbit browser status`, the account's Orbit Cloud browser for any session of
+ * the account. Answered only while the browser switch is on (404 otherwise), so `enabled` is always true here; a client
+ * that gets a 404 reports it off.
+ */
+export interface RunnerBrowserStatus {
+  enabled: true;
+  /** The account's Orbit Cloud (managed) runner, or null when the account has none. */
+  runnerId: string | null;
+  state: RunnerBrowserState['state'];
+  /** Chrome is started. */
+  running: boolean;
+  /** The session holding the browser lease (public id), or null. */
+  holderSessionId: string | null;
+  holderTitle: string | null;
+  /** How many viewers are connected. */
+  viewers: number;
+  /** Whether saved logins exist; null when the runner has not said. Never which sites. */
+  savedLogins: boolean | null;
+  /** When the heartbeat this was read from arrived, or null. */
+  reportedAt: string | null;
 }
 
 /** POST /runners/:id/browser/clear: Clear saved logins, accepted and waiting for the runner's next heartbeat. */
@@ -3046,6 +3075,10 @@ export interface ClaimedSession {
    *  ORBIT_WIKI, wiki/wiki-rollout.ts). Injected as ORBIT_WIKI=off so `orbit mcp` and the CLI leave out the wiki
    *  tools. Absent means on. */
   wikiDisabled?: boolean;
+  /** Present, and true, only while the Orbit Cloud browser is switched on on this server
+   *  (ORBIT_MANAGED_RUNNER_BROWSER_ENABLED with managed runners on, managed-runner-browser-gate.ts). Injected as
+   *  ORBIT_BROWSER=on so `orbit mcp` and the CLI offer the browser tools; absent, they are not there at all. */
+  browserEnabled?: boolean;
   /** Present, and true, only for the session of a scheduled task's run (`Session.scheduleRunId`, docs/scheduled-
    *  tasks-design.md §7.1). Injected as ORBIT_SCHEDULE_RUN=1 so `orbit mcp` lists schedule_run_report. */
   scheduleRun?: boolean;
@@ -3522,6 +3555,8 @@ export interface ReclaimSession {
   watchesDisabled?: boolean;
   /** The wiki not switched on for the owner, cf. ClaimedSession.wikiDisabled. */
   wikiDisabled?: boolean;
+  /** The Orbit Cloud browser switched on, cf. ClaimedSession.browserEnabled. */
+  browserEnabled?: boolean;
   /** A scheduled task's run, cf. ClaimedSession.scheduleRun. */
   scheduleRun?: boolean;
   /** Fresh runner/session-bound proof for the runner's private credential store. */

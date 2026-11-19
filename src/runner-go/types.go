@@ -1517,6 +1517,10 @@ type ClaimedSession struct {
 	// ORBIT_WIKI=off, which leaves the wiki tools out of the MCP server and the wiki commands out of
 	// `orbit capabilities` (wiki_tools.go). Absent means on.
 	WikiDisabled bool `json:"wikiDisabled,omitempty"`
+	// BrowserEnabled is set while the Orbit Cloud browser is switched on on the server (its
+	// ORBIT_MANAGED_RUNNER_BROWSER_ENABLED with managed runners on); injected as ORBIT_BROWSER=on, which is what puts the
+	// browser tools in the MCP server and `orbit browser` in the CLI (browser_tools.go). Absent means off: absent tools.
+	BrowserEnabled bool `json:"browserEnabled,omitempty"`
 	// ScheduleRun is set for the session of a scheduled task's run (Session.scheduleRunId); injected as
 	// ORBIT_SCHEDULE_RUN=1, which lists schedule_run_report in its `orbit mcp` (schedule_tools.go).
 	ScheduleRun bool `json:"scheduleRun,omitempty"`
@@ -1774,6 +1778,8 @@ type ReclaimSession struct {
 	// may have moved since the session was first claimed.
 	WatchesDisabled bool `json:"watchesDisabled,omitempty"`
 	WikiDisabled    bool `json:"wikiDisabled,omitempty"`
+	// BrowserEnabled, cf. ClaimedSession.BrowserEnabled, said on reclaim for the same reason.
+	BrowserEnabled bool `json:"browserEnabled,omitempty"`
 	// ScheduleRun, cf. ClaimedSession.ScheduleRun.
 	ScheduleRun bool `json:"scheduleRun,omitempty"`
 	// OrchestrationToken is freshly persisted for the reclaimed runtime, cf. ClaimedSession.

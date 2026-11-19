@@ -468,6 +468,7 @@ var agentToolsFamilyDefs = []struct {
 	{"background", "Background jobs", []string{"background_job", "session"}},
 	{"owner", "Questions for you", []string{"owner"}},
 	{"wiki", "Wiki", []string{"wiki"}},
+	{"browser", "Orbit Cloud browser", []string{"browser"}},
 	{"providers", "Providers", []string{"provider"}},
 	{"merge-receipts", "Merge receipts", []string{"merge_receipt"}},
 	{"guide", "Guide", []string{"catalog"}},

@@ -32,13 +32,13 @@ type discoveryContext struct {
 // off, one with Watch and the wiki off, and a headless process on the runner credential.
 var discoveryContexts = []discoveryContext{
 	{"session-fullest", map[string]string{"ORBIT_SESSION_ID": "s-test", "ORBIT_AGENT_ID": "a-test", "ORBIT_TASK_ID": "t-test",
-		envMCPOrchestration: "true", envOrchestrationToken: "token", envWatches: "on", envWiki: "on"}},
+		envMCPOrchestration: "true", envOrchestrationToken: "token", envWatches: "on", envWiki: "on", envBrowser: "on"}},
 	{"session-orchestration-off", map[string]string{"ORBIT_SESSION_ID": "s-test", "ORBIT_AGENT_ID": "a-test", "ORBIT_TASK_ID": "",
-		envMCPOrchestration: "", envOrchestrationToken: "", envWatches: "on", envWiki: "on"}},
+		envMCPOrchestration: "", envOrchestrationToken: "", envWatches: "on", envWiki: "on", envBrowser: "on"}},
 	{"session-switches-off", map[string]string{"ORBIT_SESSION_ID": "s-test", "ORBIT_AGENT_ID": "a-test", "ORBIT_TASK_ID": "t-test",
-		envMCPOrchestration: "true", envOrchestrationToken: "token", envWatches: "off", envWiki: "off"}},
+		envMCPOrchestration: "true", envOrchestrationToken: "token", envWatches: "off", envWiki: "off", envBrowser: "off"}},
 	{"headless", map[string]string{"ORBIT_SESSION_ID": "", "ORBIT_AGENT_ID": "", "ORBIT_TASK_ID": "",
-		envMCPOrchestration: "", envOrchestrationToken: "", envWatches: "on", envWiki: "on"}},
+		envMCPOrchestration: "", envOrchestrationToken: "", envWatches: "on", envWiki: "on", envBrowser: "on"}},
 }
 
 func enterDiscoveryContext(t *testing.T, c discoveryContext) {
@@ -114,7 +114,8 @@ func TestGradedViewsAnswerForExactlyWhatTheFullDocumentOffers(t *testing.T) {
 				}
 			}
 			for _, op := range operationCatalog().Ops {
-				if op.CLI == nil {
+				// With the browser off its commands are absent, neither offered nor explained (browser_tools.go).
+				if op.CLI == nil || browserOpAbsent(op) {
 					continue
 				}
 				_, isOffered := offered[op.Tool]
@@ -149,6 +150,12 @@ func TestGradedViewsAnswerForExactlyWhatTheFullDocumentOffers(t *testing.T) {
 				}
 			}
 			for _, op := range operationCatalog().Ops {
+				if browserOpAbsent(op) {
+					if _, err := d.id(op.Tool); err == nil {
+						t.Errorf("id %s: the browser is off and its view still answers", op.Tool)
+					}
+					continue
+				}
 				doc, err := d.id(op.Tool)
 				if err != nil {
 					t.Fatalf("id %s: %v", op.Tool, err)
@@ -668,6 +675,9 @@ func TestEveryGradedAnswerIsBounded(t *testing.T) {
 				checkDiscoveryAnswer(t, "family "+family, encode(doc))
 			}
 			for _, op := range operationCatalog().Ops {
+				if browserOpAbsent(op) {
+					continue
+				}
 				doc, err := d.id(op.Tool)
 				if err != nil {
 					t.Fatal(err)

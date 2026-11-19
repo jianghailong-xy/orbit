@@ -45,10 +45,10 @@ controllers and their decorators, so it lists what the server mounts, not what a
 | `public` | 37 |
 | `user` | 480 |
 | `admin` | 31 |
-| `runner` | 204 |
+| `runner` | 205 |
 | `channel` | 1 |
 | `link gateway` | 3 |
-| **Total** | **756** |
+| **Total** | **757** |
 
 ## Public routes
 
@@ -622,6 +622,7 @@ controllers and their decorators, so it lists what the server mounts, not what a
 | `GET` | `/api/runner/agents` | — | `RunnerAgentsController.listWorkspaces` |
 | `POST` | `/api/runner/agents` | body `Object` | `RunnerAgentsController.createWorkspace` |
 | `PATCH` | `/api/runner/agents/:id` | body `Object`; path `id` | `RunnerAgentsController.updateWorkspace` |
+| `GET` | `/api/runner/browser` | — | `RunnerBrowserController.status` |
 | `POST` | `/api/runner/claude-history-result` | body `Object` | `RunnerApiController.claudeHistoryResult` |
 | `POST` | `/api/runner/codex-account-remove-result` | body `Object` | `RunnerApiController.codexAccountRemoveResult` |
 | `POST` | `/api/runner/codex-rate-limit-reset-result` | body `Object` | `RunnerApiController.codexRateLimitResetResult` |

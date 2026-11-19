@@ -3622,6 +3622,11 @@ func buildCLICapabilities(executable string) cliCapabilitiesDocument {
 	// Ungated too: keeping and reading back your own files is no power over anybody else's session. Upload and fetch
 	// are SessionOnly, because a file stays with the session that uploads it.
 	specs = append(specs, fileCLICapabilities...)
+	// The browser commands only while the server's browser switch is on, as the engine was spawned with it: off, the
+	// `orbit browser` family is absent (browser_tools.go).
+	if browserToolsEnabledFromEnv() {
+		specs = append(specs, browserCLICapabilities...)
+	}
 	// The guide reads the catalogue and asks the server nothing, so every process is offered it.
 	specs = append(specs, guideCLICapabilities...)
 	if includeOrchestration {
@@ -3672,6 +3677,10 @@ func buildCLICapabilities(executable string) cliCapabilitiesDocument {
 	var allDescriptors map[string]map[string]interface{}
 	for _, op := range built.Ops {
 		if op.CLI == nil || listed[op.Tool] {
+			continue
+		}
+		// Off means absent: not withheld with a reason, not there (browser_tools.go).
+		if browserOpAbsent(op) {
 			continue
 		}
 		if allDescriptors == nil {

@@ -449,6 +449,9 @@ func (s *mcpServer) listedToolDescriptors() []map[string]interface{} {
 	if s.wikiOff {
 		tools = withoutWikiTools(tools)
 	}
+	if !s.browserOn {
+		tools = withoutBrowserTools(tools)
+	}
 	// schedule_run_report is a scheduled run's own (schedule_tools.go).
 	if !s.scheduleRun {
 		tools = withoutScheduleRunReport(tools)
@@ -631,7 +634,7 @@ var recoveryUtilityCLI = []cliCapabilitySpec{
 }
 
 func recoveryCLISpecGroups() [][]cliCapabilitySpec {
-	return [][]cliCapabilitySpec{baseCLICapabilities, projectCLICapabilities, sessionCLICapabilities, agentCLICapabilities, runnerCLICapabilities, providerCLICapabilities, notifyCLICapabilities, watchCLICapabilities, wikiCLICapabilities, wikiImportCLICapabilities, fileCLICapabilities, userCLICapabilities, mergeReceiptCLICapabilities, guideCLICapabilities, recoveryUtilityCLI}
+	return [][]cliCapabilitySpec{baseCLICapabilities, projectCLICapabilities, sessionCLICapabilities, agentCLICapabilities, runnerCLICapabilities, providerCLICapabilities, notifyCLICapabilities, watchCLICapabilities, wikiCLICapabilities, wikiImportCLICapabilities, fileCLICapabilities, browserCLICapabilities, userCLICapabilities, mergeReceiptCLICapabilities, guideCLICapabilities, recoveryUtilityCLI}
 }
 
 func recoveryCLIOptions(argv []string) (map[string]bool, int, int) {

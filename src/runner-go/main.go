@@ -331,6 +331,8 @@ var leafHelpFamilies = map[string]bool{
 	// same omission, found while checking that provider's was reachable.
 	"agent":  true,
 	"runner": true,
+	// Only routed while the browser switch is on (browser_tools.go); off, `orbit browser --help` is an unknown command.
+	"browser": true,
 }
 
 func ownsLeafHelp(cmd string) bool { return leafHelpFamilies[cmd] }
@@ -509,6 +511,12 @@ func runOrbitCLI(args []string, in io.Reader, out, errW io.Writer) error {
 		cmdHook(args[1:])
 	case "version", "--version", "-v":
 		fmt.Fprintln(out, version)
+	case "browser":
+		// Off means absent (browser_tools.go): with the browser switch off this is an unknown command like any other.
+		if !browserToolsEnabledFromEnv() {
+			return fmt.Errorf("unknown command: %s\n\n%s", cmd, usage)
+		}
+		return runCLICommand("orbit browser", args, true, in, out, errW, func(in io.Reader, out io.Writer) error { return cmdBrowserCLI(args[1:], out) })
 	default:
 		return fmt.Errorf("unknown command: %s\n\n%s", cmd, usage)
 	}

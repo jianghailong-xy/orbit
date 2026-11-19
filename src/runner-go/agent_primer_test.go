@@ -529,6 +529,12 @@ func TestThePrimerDoesNotComeFromTheRepository(t *testing.T) {
 // `orbit mcp help` is the help, not a server reading stdin.
 func TestOrbitMCPHelpMatchesTheRuntimesAndTheCatalogue(t *testing.T) {
 	t.Setenv("ORBIT_HOME", t.TempDir())
+	// Off means absent: with the browser off the help does not name it (browser_tools.go).
+	t.Setenv(envBrowser, "off")
+	if flat := strings.Join(strings.Fields(mcpHelp()), " "); strings.Contains(flat, "Orbit Cloud browser") {
+		t.Errorf("the browser is off and the help names it")
+	}
+	t.Setenv(envBrowser, "on")
 	help := mcpHelp()
 	for _, argv := range [][]string{{"mcp", "help"}, {"mcp", "--help"}, {"mcp", "-h"}, {"help", "mcp"}} {
 		var out, errW bytes.Buffer

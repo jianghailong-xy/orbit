@@ -777,6 +777,13 @@ let agentToolsGuideJSON = #"""
       ]
     },
     {
+      "id": "browser",
+      "label": "Orbit Cloud browser",
+      "tools": [
+        "browser_status"
+      ]
+    },
+    {
       "id": "providers",
       "label": "Providers",
       "tools": [

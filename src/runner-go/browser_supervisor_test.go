@@ -442,7 +442,7 @@ func TestBrowserClearWireNamesAndCapability(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if !strings.Contains(string(body), `"browser":{"running":true,"holderSessionId":"s","viewers":2}`) {
+	if !strings.Contains(string(body), `"browser":{"running":true,"holderSessionId":"s","viewers":2,"savedLogins":false}`) {
 		t.Fatalf("heartbeat body: %s", body)
 	}
 }

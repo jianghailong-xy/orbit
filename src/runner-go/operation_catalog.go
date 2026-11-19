@@ -56,6 +56,7 @@ const (
 	objectPermission    operationObject = "permission"
 	objectMergeReceipt  operationObject = "merge_receipt"
 	objectSchedule      operationObject = "schedule"
+	objectBrowser       operationObject = "browser"
 	// The catalogue itself: what the guide reads to say which operation answers a request.
 	objectCatalog operationObject = "catalog"
 )
@@ -3108,6 +3109,9 @@ func buildOperationCatalog() []*operation {
 	// (wiki_tools.go; they are left out entirely when the wiki is off).
 	add(gateAlways, wikiToolDescriptors(obj)...)
 	add(gateAlways, fileToolDescriptors(obj)...)
+	// The Orbit Cloud browser (browser_tools.go): any session of the account may read it, and the tools are left out
+	// entirely while the server's browser switch is off.
+	add(gateAlways, browserToolDescriptors(obj)...)
 	// Always advertised: an agent that cannot see the tool falls back to
 	// Bash(run_in_background), and a session without the runner socket gets a
 	// refusal that says why rather than a silently engine-owned process.
@@ -4485,6 +4489,7 @@ func finishOperationCatalog(ops []*operation) []*operation {
 		{"wiki", wikiCLICapabilities},
 		{"wiki", wikiImportCLICapabilities},
 		{"file", fileCLICapabilities},
+		{"browser", browserCLICapabilities},
 		{"account", userCLICapabilities},
 		{"guide", guideCLICapabilities},
 	}
@@ -5338,6 +5343,14 @@ var catalogMetadata = map[string]operationMeta{
 		Risk:   riskHigh,
 	},
 
+	// ── the Orbit Cloud browser ──
+	"browser_status": {
+		Object:          objectBrowser,
+		Intent:          "Read the state of the account's Orbit Cloud browser.",
+		SuccessEvidence: "Whether the browser is running, the session holding it, the viewers and whether saved logins exist.",
+		Returns:         "The browser's status (JSON): enabled, runnerId, state, running, holderSessionId, holderTitle, viewers, savedLogins, reportedAt.",
+	},
+
 	// ── the guide ──
 	"guide": {
 		Object:          objectCatalog,
@@ -5403,6 +5416,8 @@ func catalogSurfaceSwitch(parts []string, op *operation) []string {
 		parts = append(parts, "watch_switch")
 	case op.CLIFamily == "wiki":
 		parts = append(parts, "wiki_switch")
+	case op.CLIFamily == "browser":
+		parts = append(parts, "browser_switch")
 	}
 	if len(parts) > 1 && parts[0] == "always" {
 		return parts[1:]

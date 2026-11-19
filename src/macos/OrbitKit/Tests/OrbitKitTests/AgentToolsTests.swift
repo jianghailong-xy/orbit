@@ -67,8 +67,8 @@ final class AgentToolsTests: XCTestCase {
         XCTAssertEqual(decoded.examples.count, 4)
         XCTAssertFalse(decoded.troubleshooting.isEmpty)
         XCTAssertEqual(decoded.families.map(\.id), [
-            "tasks", "projects", "task-lists", "schedules", "waits", "files", "background", "owner", "wiki", "providers",
-            "merge-receipts", "guide", "orchestration",
+            "tasks", "projects", "task-lists", "schedules", "waits", "files", "background", "owner", "wiki", "browser",
+            "providers", "merge-receipts", "guide", "orchestration",
         ])
         XCTAssertEqual(Set(decoded.instructions.keys), ["claude", "codex"])
         XCTAssertEqual(Set(decoded.permissionModes.map(\.mode)),
