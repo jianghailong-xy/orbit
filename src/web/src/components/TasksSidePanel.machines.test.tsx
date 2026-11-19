@@ -246,6 +246,23 @@ describe('Machines in the account menu', () => {
     expect(accountRow('Orbit Cloud')!.querySelector('.anticon-cloud')).not.toBeNull();
   });
 
+  it('draws Appearance\'s choices with their marks before them, as the machines are drawn', async () => {
+    serve();
+    await visit('/projects');
+    await openAccountMenu();
+    await press(accountRow('Appearance'));
+    await act(async () => {
+      await vi.waitFor(() => expect(accountRow('Light')).toBeDefined(), { timeout: 5_000, interval: 20 });
+    });
+    const markOf = (label: string) =>
+      [...accountRow(label)!.querySelector('.tp-account-machine-os > .anticon')!.classList].find((c) => c.startsWith('anticon-'));
+    expect(markOf('System')).toBe('anticon-desktop');
+    expect(markOf('Light')).toBe('anticon-sun');
+    expect(markOf('Dark')).toBe('anticon-moon');
+    // The current choice keeps its check at the row's end.
+    expect(accountRow('System')!.querySelector('.orbit-menu-icon .anticon-check')).not.toBeNull();
+  });
+
   it('draws no line under Orbit Cloud when it is the only machine', async () => {
     runners = [{ id: 'r2', name: 'orbit-managed', online: true, managed: true }];
     serve();
