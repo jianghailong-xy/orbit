@@ -777,10 +777,13 @@ func (s *bgJobService) startSubagent(args map[string]interface{}) (subagentRepor
 		toolUseID = "delegate_" + strings.TrimPrefix(id, "bgj_")
 	}
 	body := subagentStartBody(args, def, toolUseID, background)
-	if resumeFrom != nil && resumeFrom.Workspace != "" {
-		// The server sends it to the workspace and runner that ran it, which continues its conversation (§10.2).
+	if resumeFrom != nil {
+		// The server opens it where it ran: on another workspace's runner (§10.2), or here on the engine, provider and model
+		// its last attempt ran on, which hold its conversation, rather than routing it again.
 		body["resumeOf"] = resumeFrom.RunID
-		body["prompt"] = prompt
+		if resumeFrom.Workspace != "" {
+			body["prompt"] = prompt
+		}
 	}
 	if description := strings.TrimSpace(getString(args, "description")); description != "" {
 		body["description"] = description
@@ -836,6 +839,14 @@ func (s *bgJobService) startSubagent(args map[string]interface{}) (subagentRepor
 	}
 	engine := subagentEngine(created.Exec, s.job)
 	if resumeFrom != nil && resumeFrom.Engine != "" {
+		if engine != resumeFrom.Engine {
+			// A control plane that routed the resume afresh, onto another engine: that engine would get the model and
+			// credential without the conversation, and the conversation's engine a model it cannot run.
+			why := fmt.Sprintf("the control plane would resume it on %s, but its conversation is %s's. Start a new SubAgent with the full brief instead",
+				engine, resumeFrom.Engine)
+			s.patchSubagent(created.RunID, subagentReport{RunID: created.RunID, Status: subagentStatusFailed, Result: "The SubAgent failed: " + why + "."}, nil, false)
+			return subagentReport{}, errors.New(why)
+		}
 		engine = resumeFrom.Engine
 	}
 	engineSession, stateDir := "", subagentDir(s.sessionID, created.RunID)
