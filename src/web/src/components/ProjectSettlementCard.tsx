@@ -51,6 +51,7 @@ import {
   landingReasonLabel,
   orbitCheckedOpenItemCount,
   projectDoneCardTally,
+  criteriaInFlightCount,
   projectDoneReceiptTally,
   projectWhyNotDoneTally,
   whyNotDoneNeedsCallDetail,
@@ -835,7 +836,7 @@ export function SessionProjectSettlementCard({
         notYetRefusal={decline.error}
         notYetBusy={decline.isPending}
         openItemsCount={orbitCheckedOpenItemCount(openItemsRead.data)}
-        runningCount={doneProject.derivedDone?.counts?.byReason?.IN_FLIGHT ?? 0}
+        runningCount={criteriaInFlightCount(doneProject.derivedDone)}
         onRecordDone={() => done.mutate()}
         onNotYet={(note) => {
           if (doneRequestRow) decline.mutate({ note });
@@ -1442,7 +1443,7 @@ export function ProjectDoneDialog({
   const request = row?.doneRequest ?? null;
   const standing = standingRead.data ?? null;
   const criteriaDigest = request?.criteriaDigest ?? standing?.currentVersion.digest;
-  const runningCount = project?.derivedDone?.counts.byReason.IN_FLIGHT ?? 0;
+  const runningCount = criteriaInFlightCount(project?.derivedDone);
   const openItemsCount = orbitCheckedOpenItemCount(openItemsRead.data);
   const submit = (): void => {
     if (!project || !criteriaDigest || record.isPending) return;
