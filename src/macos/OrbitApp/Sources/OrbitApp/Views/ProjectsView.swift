@@ -796,10 +796,6 @@ struct ProjectDetailView: View {
                     if let done = section.done { doneItem(done, store: store, now: now) }
                     ForEach(section.needsYou) { row in openItem(row, store: store, now: now) }
                 }
-                if !section.withCoordinator.isEmpty {
-                    groupLabel(ProjectPage.withCoordinatorGroup)
-                    ForEach(section.withCoordinator) { row in openItem(row, store: store, now: now) }
-                }
             } header: {
                 HStack(alignment: .firstTextBaseline, spacing: 8) {
                     Text(ProjectPage.openItemsHeading)
