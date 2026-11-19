@@ -1129,21 +1129,20 @@ public enum ProjectPage {
     /// row of their own to press (Start…, Record as done… · not asked yet), which an open project
     /// always has once the read is in. Nil while there is nothing to draw, as web's returns null.
     public struct OpenItemsSection: Equatable, Sendable {
-        /// The header's detail: "0 need you · 0 with the coordinator · oldest first".
+        /// The header's detail: "0 need you · oldest first".
         public let hint: String
         public let start: StartProject.PageRow?
         public let done: ProjectDone.PageRow?
         public let needsYou: [ProjectOpenItemRow]
-        public let withCoordinator: [ProjectOpenItemRow]
 
         /// Whether the Needs you group is drawn: anything in it, or the owner's own rows.
         public var drawsNeedsYou: Bool { !needsYou.isEmpty || start != nil || done != nil }
     }
 
-    /// The header's detail, in web's words. The pause is drawn as a card and counted in neither, as
-    /// web keeps it out of both groups.
-    public static func openItemsHint(needsYou: Int, withCoordinator: Int) -> String {
-        "\(needsYou) need you · \(withCoordinator) with the coordinator · oldest first"
+    /// The header's detail, in web's words. The pause is drawn as a card and not counted, as web
+    /// keeps it out of the group; the coordinator's items are not drawn here, as web's are not.
+    public static func openItemsHint(needsYou: Int) -> String {
+        "\(needsYou) need you · oldest first"
     }
 
     public static func openItemsSection(status: ProjectStatus, started: Bool?, derivedDone: ProjectDerivedDone?,
@@ -1156,9 +1155,8 @@ public enum ProjectPage {
             + (start?.request == nil ? 0 : 1)
             + (ProjectDone.live(openItems: items, status: status.rawValue) == nil ? 0 : 1)
         let section = OpenItemsSection(
-            hint: openItemsHint(needsYou: counted, withCoordinator: items.withCoordinator.count),
-            start: start, done: done, needsYou: needsYou, withCoordinator: items.withCoordinator)
-        return section.drawsNeedsYou || !section.withCoordinator.isEmpty ? section : nil
+            hint: openItemsHint(needsYou: counted), start: start, done: done, needsYou: needsYou)
+        return section.drawsNeedsYou ? section : nil
     }
 
     /// The owner's rows, without the request to record the project done should a server ever list

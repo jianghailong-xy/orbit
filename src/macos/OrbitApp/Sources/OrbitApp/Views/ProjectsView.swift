@@ -781,9 +781,8 @@ struct ProjectDetailView: View {
     }
 
     /// Open items on the page itself, at all times (D3 A), where web's mobile page draws them: after
-    /// the title area, before Work overview — the header's "N need you · N with the coordinator ·
-    /// oldest first", then the Needs you rows (the owner's own Record as done… · not asked yet among
-    /// them) and the coordinator's. The toolbar's Open items stays, a way here from anywhere.
+    /// the title area, before Work overview — the header's "N need you · oldest first", then the Needs
+    /// you rows (the owner's own Record as done… · not asked yet among them). The toolbar's Open items stays, a way here from anywhere.
     @ViewBuilder
     private func openItemsPageSection(_ store: ProjectDetailModel, _ document: ProjectDocument,
                                       now: Date) -> some View {

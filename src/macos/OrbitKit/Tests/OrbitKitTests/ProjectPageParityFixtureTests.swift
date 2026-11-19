@@ -104,48 +104,53 @@ final class ProjectPageParityFixtureTests: XCTestCase {
     func testOpenItemsIsDrawnForAStartedProjectWithNothingOpen() throws {
         let section = try XCTUnwrap(ProjectPage.openItemsSection(status: .open, started: true, derivedDone: counted,
                                                                  items: ProjectOpenItemsView()))
-        XCTAssertEqual(section.hint, "0 need you · 0 with the coordinator · oldest first")
+        XCTAssertEqual(section.hint, "0 need you · oldest first")
         XCTAssertTrue(section.drawsNeedsYou)
         XCTAssertEqual(section.done, .own, "its Needs you row is the owner's own Record as done…")
         XCTAssertEqual(ProjectDone.recordAsDoneRow, "Record as done…")
         XCTAssertEqual(ProjectDone.notAskedYet, "not asked yet")
         XCTAssertNil(section.start)
         XCTAssertTrue(section.needsYou.isEmpty)
-        XCTAssertTrue(section.withCoordinator.isEmpty)
         // The order does not depend on what is open: one row per block, the same for every project.
         XCTAssertEqual(ProjectPageListLogic.rows, [.header] + (try webMobileOrder()))
     }
 
     func testOpenItemsIsDrawnForAProjectWithTwoOpen() throws {
-        let items = ProjectOpenItemsView(needsYou: [row("q", .coordinatorQuestion, assignee: .owner)],
+        let items = ProjectOpenItemsView(needsYou: [row("q", .coordinatorQuestion, assignee: .owner),
+                                                    row("r", .taskFailed, assignee: .owner)],
                                          withCoordinator: [row("f", .taskFailed, assignee: .coordinator)])
         let section = try XCTUnwrap(ProjectPage.openItemsSection(status: .open, started: true, derivedDone: counted,
                                                                  items: items))
-        XCTAssertEqual(section.hint, "1 need you · 1 with the coordinator · oldest first")
-        XCTAssertEqual(section.needsYou.map(\.itemId), ["q"])
-        XCTAssertEqual(section.withCoordinator.map(\.itemId), ["f"])
+        // The coordinator's item is neither counted nor drawn, as web's page does since c85d2d7ab7.
+        XCTAssertEqual(section.hint, "2 need you · oldest first")
+        XCTAssertEqual(section.needsYou.map(\.itemId), ["q", "r"])
         XCTAssertEqual(section.done, .own)
         XCTAssertEqual(ProjectPageListLogic.rows, [.header] + (try webMobileOrder()))
-        // The pause is a card, counted in neither group, as web's is.
+        // The pause is a card, not counted, as web's is.
         let paused = ProjectOpenItemsView(needsYou: [row("p", .fusePaused, assignee: .owner)])
         XCTAssertEqual(ProjectPage.openItemsSection(status: .open, started: true, derivedDone: counted,
                                                     items: paused)?.hint,
-                       "0 need you · 0 with the coordinator · oldest first")
+                       "0 need you · oldest first")
     }
 
     func testOpenItemsDrawsNothingUntilItsReadIsInOrWhenAClosedProjectHasNothingOpen() {
         XCTAssertNil(ProjectPage.openItemsSection(status: .open, started: true, derivedDone: counted, items: nil))
         XCTAssertNil(ProjectPage.openItemsSection(status: .done, started: true, derivedDone: counted,
                                                   items: ProjectOpenItemsView()))
+        // Only the coordinator's items open: nothing for the owner here, as web's returns null.
+        XCTAssertNil(ProjectPage.openItemsSection(
+            status: .done, started: true, derivedDone: counted,
+            items: ProjectOpenItemsView(withCoordinator: [row("f", .taskFailed, assignee: .coordinator)])))
     }
 
     /// Web's header detail, read back from its source.
     func testTheHeaderDetailIsWebs() throws {
         let web = String(decoding: try repoFile("src/web/src/components/ProjectProgressStatus.tsx"), as: UTF8.self)
         XCTAssertTrue(web.contains(
-            "{`${needsYou.length + signIns.length} need you · ${withCoordinator.length} with the coordinator · oldest first`}"))
-        XCTAssertEqual(ProjectPage.openItemsHint(needsYou: 3, withCoordinator: 2),
-                       "3 need you · 2 with the coordinator · oldest first")
+            "{`${needsYou.length + signIns.length} need you · oldest first`}"))
+        XCTAssertFalse(web.contains("with the coordinator · oldest first"))
+        XCTAssertEqual(ProjectPage.openItemsHint(needsYou: 0), "0 need you · oldest first")
+        XCTAssertEqual(ProjectPage.openItemsHint(needsYou: 2), "2 need you · oldest first")
     }
 
     // MARK: - How it runs' summary
