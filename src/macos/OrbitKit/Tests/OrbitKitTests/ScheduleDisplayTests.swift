@@ -325,8 +325,7 @@ final class ScheduleDisplayTests: XCTestCase {
         XCTAssertEqual(ScheduleDisplay.createNotice(findings: "findings"), ScheduleCopy.CreateCard.notice)
     }
 
-    /// S5's schedule names its agent and engine: a hold says which agent, and a run's head line has its engine
-    /// before the session's own read.
+    /// S5's schedule names the agent and engine it uses in its workspace.
     func testTheScheduleNamesItsAgentAndEngine() throws {
         let row = """
         {"id":"a","title":"Weekly dependency audit","rule":{"kind":"WEEKLY","time":"09:00","weekdays":["MON"]},
@@ -341,10 +340,7 @@ final class ScheduleDisplayTests: XCTestCase {
                                                    now: ScheduleDisplay.parse(sh("2025-11-10T09:01"))!, timezone: Self.tz).body,
                        "It could not start on Monday 09:00: the agent \"auditor\" in workspace web is disabled. "
                         + "Nothing runs until it is enabled and you resume.")
-        let run = ScheduleRunView(id: "r", scheduleId: "a", plannedAt: sh("2025-11-13T10:00"), state: "RUNNING",
-                                  startedAt: sh("2025-11-14T12:15"))
-        XCTAssertEqual(ScheduleDisplay.runHeadText(session: nil, run: run, scheduleEngine: s.engine, now: Self.now),
-                       "Codex agent · 4 min")
+        XCTAssertEqual(s.engine, "codex")
         let card = try JSONDecoder().decode(ScheduleCard.self, from: Data(
             #"{"id":"c","kind":"CREATE","notice":"You'll hear about new versions and failures only."}"#.utf8))
         XCTAssertEqual(card.notice, "You'll hear about new versions and failures only.")
@@ -367,19 +363,6 @@ final class ScheduleDisplayTests: XCTestCase {
         XCTAssertEqual(ScheduleDisplay.pressFailure(APIError.unauthorized), "You're signed out. Sign in and try again.")
     }
 
-    /// The web's `scheduleRunAgentName`: the schedule view's engine first, else the session's own.
-    func testTheRunHeadNamesTheSchedulesEngineFirst() throws {
-        XCTAssertEqual(ScheduleDisplay.runAgentName(scheduleEngine: "codex", sessionEngine: "claude"), "Codex")
-        XCTAssertEqual(ScheduleDisplay.runAgentName(scheduleEngine: nil, sessionEngine: "claude"), "Claude Code")
-        XCTAssertNil(ScheduleDisplay.runAgentName(scheduleEngine: nil, sessionEngine: nil))
-        let json = #"{"id":"R9","status":"AWAITING_INPUT","engine":"claude","lifecycleState":"OPEN"}"#
-        let session = try JSONDecoder().decode(Session.self, from: Data(json.utf8))
-        let run = ScheduleRunView(id: "r", scheduleId: "S", plannedAt: sh("2025-11-13T10:00"), state: "CHANGED",
-                                  startedAt: sh("2025-11-13T10:01"), endedAt: sh("2025-11-13T10:06"))
-        XCTAssertEqual(ScheduleDisplay.runHeadText(session: session, run: run, scheduleEngine: "codex", now: Self.now),
-                       "Open · Codex agent · 5 min")
-    }
-
     func testTheRunsSession() {
         XCTAssertEqual(ScheduleDisplay.runStripText(plannedAt: sh("2025-11-13T10:00"), startedAt: sh("2025-11-13T10:01"),
                                                     accessLevel: "CHECK_ONLY", timezone: Self.tz),
@@ -390,32 +373,17 @@ final class ScheduleDisplayTests: XCTestCase {
         XCTAssertEqual(ScheduleDisplay.reportedText(state: "NO_CHANGE", key: nil), "Reported: No change")
     }
 
-    /// `scheduleRunHeadText`: state · agent · how long, the unknown parts left out; at least a minute.
-    func testTheRunHeadLine() {
-        XCTAssertEqual(ScheduleDisplay.runHeadText(state: "Open", engine: "Codex", startedAt: sh("2025-11-13T10:01"),
-                                                   endedAt: sh("2025-11-13T10:05"), now: Self.now),
-                       "Open · Codex agent · 4 min")
-        XCTAssertEqual(ScheduleDisplay.runHeadText(state: nil, engine: nil, startedAt: sh("2025-11-14T12:19"),
-                                                   endedAt: nil, now: Self.now), "1 min")
-        XCTAssertEqual(ScheduleDisplay.runHeadText(state: "Completed", engine: nil, startedAt: nil, endedAt: nil,
-                                                   now: Self.now), "Completed")
+    func testDeleteTitle() {
         XCTAssertEqual(ScheduleDisplay.deleteTitle("Codex stable check"), "Delete “Codex stable check”?")
     }
 
-    /// A run's session opened from a push or a link is in none of the app's lists: its head line comes from the
-    /// session's own read (the console's detail), whatever the lists hold.
-    func testTheRunHeadLineFromASessionNotInAnyList() throws {
+    func testSessionDecodesScheduleRunID() throws {
         let json = """
         {"id":"R9","title":"Codex stable check","status":"AWAITING_INPUT","engine":"codex","lifecycleState":"OPEN",
          "scheduleRunId":"SR9"}
         """
         let session = try JSONDecoder().decode(Session.self, from: Data(json.utf8))
         XCTAssertEqual(session.scheduleRunId, "SR9")
-        let run = ScheduleRunView(id: "SR9", scheduleId: "S3", plannedAt: sh("2025-11-13T10:00"), state: "CHANGED",
-                                  startedAt: sh("2025-11-13T10:01"), endedAt: sh("2025-11-13T10:06"))
-        XCTAssertEqual(ScheduleDisplay.runHeadText(session: session, run: run, now: Self.now), "Open · Codex agent · 5 min")
-        XCTAssertEqual(ScheduleDisplay.runHeadText(session: nil, run: run, now: Self.now), "5 min",
-                       "with no read of the session yet, only what the run itself knows")
     }
 
     /// The list's own timeline runs (W2) and a run's session's `run` decode, with the facts the list worked out.

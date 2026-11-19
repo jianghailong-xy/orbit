@@ -564,10 +564,11 @@ internal fun ProjectDoneSheet(api: ProjectApi, id: String, state: ProjectPageSta
     val itemId = row?.text("itemId")
     // The last "Not yet…" note was refused untranslated (422 TRANSLATION_FAILED): the card offers Retry and Send as written.
     var notTranslated by remember { mutableStateOf(false) }
+    var notTranslatedWhy by remember { mutableStateOf<Pair<io.orbitd.android.core.translation.Translation.FailureReason, Int?>?>(null) }
     val notYet: (suspend (String, Boolean) -> Boolean)? = if (itemId == null) null else { note, asWritten ->
         press("${ProjectDone.notDeclined} — ") {
             try { api.declineDone(id, itemId, note, asWritten); notTranslated = false }
-            catch (failure: Exception) { notTranslated = Translation.refused(failure); throw failure }
+            catch (failure: Exception) { notTranslated = Translation.refused(failure); notTranslatedWhy = Translation.refusalReason(failure); throw failure }
         }.also { if (it) close() else if (notTranslated) error = null }
     }
     Dialog(onDismissRequest = { if (!writing) close() }, properties = DialogProperties(usePlatformDefaultWidth = false)) {
@@ -581,7 +582,7 @@ internal fun ProjectDoneSheet(api: ProjectApi, id: String, state: ProjectPageSta
                         var answer: JsonObject? = null
                         if (body != null && press("${ProjectDone.notRecorded} — ") { answer = api.done(id, body) }) record = answer ?: buildJsonObject { put("status", "DONE") }
                     },
-                    onNotYet = notYet, notTranslated = notTranslated,
+                    onNotYet = notYet, notTranslated = notTranslated, notTranslatedWhy = notTranslatedWhy,
                     onReopen = { if (press("${ProjectDone.notReopened} — ") { api.setStatus(id, "OPEN", "reopen:${doc.text("updatedAt")}") }) { record = null; close() } },
                     trailing = { TextButton(onClick = close, enabled = !writing, modifier = Modifier.testTag("project-done-cancel")) {
                         Text(if (record == null) "Cancel" else "Done") } })

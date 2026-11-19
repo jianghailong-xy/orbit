@@ -324,37 +324,15 @@ struct ScheduleRecordLineView: View {
     }
 }
 
-/// The head of a run's session (board 02 ④, 01 ⑦): the crumb back to its schedule, what run this is, its head line
-/// (state · agent · how long), and when it was planned and started with what access. Drawn from the conversation's
-/// own reads, so it is the same opened from the schedule, a push or a link.
+/// The run's timing and access, shown in the conversation.
 struct ScheduleRunStripView: View {
     @Environment(AppModel.self) private var appModel
-    let console: ConsoleModel
     let schedule: ScheduleView
     let run: ScheduleRunView
 
     var body: some View {
         let zone = TimeZone.current.identifier
-        let session = console.scheduleRunSession ?? appModel.session(id: console.sessionID)
-        let head = ScheduleDisplay.runHeadText(session: session, run: run, scheduleEngine: schedule.engine, now: Date())
         VStack(alignment: .leading, spacing: 6) {
-            Button {
-                appModel.openSchedule(schedule.id)
-            } label: {
-                HStack(spacing: 3) {
-                    Image(systemName: "chevron.left").font(.orbitLabel.weight(.semibold))
-                    Text(schedule.title).lineLimit(1)
-                }
-                .font(.orbitSubtext)
-                .foregroundStyle(Color.scheduleAccent)
-            }
-            .buttonStyle(.plain)
-            .accessibilityIdentifier("schedule-run-crumb")
-            Text(ScheduleDisplay.capitalizedRunOf(plannedAt: run.plannedAt, timezone: zone))
-                .font(.title3.weight(.bold))
-            if !head.isEmpty {
-                Text(head).font(.orbitLabel).foregroundStyle(.secondary)
-            }
             if fired {
                 // A run its condition started names the firing, not a planned time (condition-triggers board ⑤ ②).
                 Label {
@@ -460,7 +438,7 @@ struct ScheduleConsoleCard: View {
             }
         case .scheduleRunStrip:
             if let found = console.scheduleRun {
-                ScheduleRunStripView(console: console, schedule: found.schedule, run: found.run)
+                ScheduleRunStripView(schedule: found.schedule, run: found.run)
             }
         case .scheduleRunReport:
             if let found = console.scheduleRun {
@@ -596,8 +574,11 @@ struct ScheduleWaitingCardView: View {
             switch item.kind {
             case "SCHEDULE_FAILED":
                 primary(SC.Actions.openRun) {
-                    if let session = schedule?.lastRun?.sessionId { appModel.openScheduleRun(sessionID: session, scheduleID: item.scheduleId) }
-                    else { appModel.openSchedule(item.scheduleId) }
+                    if let session = schedule?.lastRun?.sessionId {
+                        appModel.openScheduleRun(sessionID: session)
+                    } else {
+                        appModel.openSchedule(item.scheduleId)
+                    }
                     return nil
                 }
                 secondary(SC.Actions.pauseSchedule) { await appModel.scheduled?.pause(item.scheduleId) }

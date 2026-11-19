@@ -16,30 +16,39 @@ struct PromptOptimizeButton: View {
 
     var body: some View {
         Button(action: action) {
-            HStack(spacing: 4) {
-                if busy {
-                    ProgressView().controlSize(.mini)
-                    Text(PromptOptimizerCopy.optimizing)
-                } else {
-                    Text("✦")
-                    Text(PromptOptimizerCopy.optimize)
-                }
+            // A full footer folds the word away first (board composer-usage-tap 04): ✦ alone, or the
+            // spinner alone while busy, in a 32pt pill, so the model name keeps its room.
+            ViewThatFits(in: .horizontal) {
+                pill(compact: false)
+                pill(compact: true)
             }
-            .font(.orbitLabel.weight(.medium))
-            .foregroundStyle(busy ? Color.secondary : Color.accentColor)
-            .lineLimit(1)
-            .fixedSize()
-            .padding(.horizontal, 9)
-            .frame(height: 26)
-            .background(busy ? Color.primary.opacity(0.05) : Color.accentColor.opacity(0.10), in: Capsule())
-            .overlay(Capsule().strokeBorder(busy ? Color.primary.opacity(0.12) : Color.accentColor.opacity(0.25),
-                                            lineWidth: 1))
-            .contentShape(Capsule())
         }
         .buttonStyle(.plain)
         .help(busy ? PromptOptimizerCopy.cancelHelp : PromptOptimizerCopy.optimizeHelpWithKeys)
         .accessibilityIdentifier(PromptOptimizerCopy.buttonIdentifier)
         .accessibilityLabel(busy ? PromptOptimizerCopy.optimizing : PromptOptimizerCopy.optimize)
+    }
+
+    private func pill(compact: Bool) -> some View {
+        HStack(spacing: 4) {
+            if busy {
+                ProgressView().controlSize(.mini)
+                if !compact { Text(PromptOptimizerCopy.optimizing) }
+            } else {
+                Text("✦")
+                if !compact { Text(PromptOptimizerCopy.optimize) }
+            }
+        }
+        .font(.orbitLabel.weight(.medium))
+        .foregroundStyle(busy ? Color.secondary : Color.accentColor)
+        .lineLimit(1)
+        .fixedSize()
+        .padding(.horizontal, compact ? 0 : 9)
+        .frame(width: compact ? 32 : nil, height: 26)
+        .background(busy ? Color.primary.opacity(0.05) : Color.accentColor.opacity(0.10), in: Capsule())
+        .overlay(Capsule().strokeBorder(busy ? Color.primary.opacity(0.12) : Color.accentColor.opacity(0.25),
+                                        lineWidth: 1))
+        .contentShape(Capsule())
     }
 }
 
