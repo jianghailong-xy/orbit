@@ -3669,12 +3669,12 @@ button.toast--pill:focus-visible {
   text-overflow: ellipsis;
   white-space: nowrap;
   color: var(--text-1);
-  font-family: var(--font-mono, ui-monospace, monospace);
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
 }
 .bg-shell-id {
   flex: none;
   color: var(--text-3);
-  font-family: var(--font-mono, ui-monospace, monospace);
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
 }
 .bg-shell-age {
   flex: none;
@@ -3699,7 +3699,7 @@ button.toast--pill:focus-visible {
 }
 .bg-shell-meta {
   color: var(--text-3);
-  font-family: var(--font-mono, ui-monospace, monospace);
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
   font-size: 11px;
   overflow: hidden;
   text-overflow: ellipsis;
@@ -3859,7 +3859,7 @@ button.toast--pill:focus-visible {
   border-radius: 6px;
   background: var(--bg-raised);
   color: var(--text-1);
-  font-family: var(--font-mono, ui-monospace, monospace);
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
   cursor: pointer;
 }
 .wt-branch:hover {
@@ -3885,7 +3885,7 @@ button.toast--pill:focus-visible {
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
-  font-family: var(--font-mono, ui-monospace, monospace);
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
   color: var(--text-3);
 }
 .wt-add {
@@ -3928,7 +3928,7 @@ button.toast--pill:focus-visible {
   align-items: center;
   gap: 8px;
   padding: 1px 0;
-  font-family: var(--font-mono, ui-monospace, monospace);
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
   font-size: 12px;
 }
 .session-file-status {
@@ -4056,7 +4056,7 @@ button.toast--pill:focus-visible {
   gap: 12px;
   padding: 9px 14px;
   border-bottom: 1px solid var(--border-subtle);
-  font-family: var(--font-mono, ui-monospace, monospace);
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
   font-size: 12.5px;
 }
 .wt-diff-pane-path {
@@ -4225,7 +4225,7 @@ button.toast--pill:focus-visible {
 }
 .wt-merge-cmd {
   align-self: flex-start;
-  font-family: var(--font-mono, ui-monospace, monospace);
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
   background: var(--bg-sunken);
   color: var(--text-2);
   padding: 2px 7px;
@@ -4336,7 +4336,7 @@ button.toast--pill:focus-visible {
   gap: 8px;
 }
 .wt-merge-target-name {
-  font-family: var(--font-mono, ui-monospace, monospace);
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
   font-size: 12px;
 }
 .wt-merge-target-tag {
@@ -4495,7 +4495,7 @@ button.toast--pill:focus-visible {
 }
 /* The folder, named in the notice's headline: long paths wrap anywhere rather than overflow. */
 .wt-notice-path {
-  font-family: var(--font-mono, ui-monospace, monospace);
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
   font-weight: 500;
   overflow-wrap: anywhere;
 }
@@ -4531,7 +4531,7 @@ button.toast--pill:focus-visible {
   min-width: 0;
 }
 .wt-wedge-root {
-  font-family: var(--font-mono, ui-monospace, monospace);
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
   flex: none;
 }
 .wt-wedge-files {
@@ -4593,7 +4593,7 @@ button.toast--pill:focus-visible {
   border-radius: 6px;
   background: var(--bg-sunken);
   color: var(--text-2);
-  font-family: var(--font-mono, ui-monospace, monospace);
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
   font-size: 11px;
   line-height: 1.5;
   white-space: pre-wrap;
@@ -7136,7 +7136,7 @@ button.toast--pill:focus-visible {
 .composer-box .composer-shell-btn.orbit-button,
 .composer-box .composer-shell-btn.orbit-button:hover {
   color: var(--error);
-  font-family: var(--font-mono, ui-monospace, monospace);
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
   font-weight: 700;
 }
 .composer-box .composer-shell-btn.orbit-button:hover {
@@ -7341,7 +7341,7 @@ button.toast--pill:focus-visible {
 .composer-box textarea.composer-shell {
   color: var(--error);
   caret-color: var(--error);
-  font-family: var(--font-mono, ui-monospace, monospace);
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
 }
 /* Top-edge grip to drag the composer taller/shorter; double-click resets to auto-grow.
    Sits over the box's top border so it reads as an affordance without stealing text room.
@@ -9617,7 +9617,7 @@ button.chat-jump-start:hover {
    and dark values are already contrast-checked. */
 .chat-queued-cmd {
   color: var(--error);
-  font-family: var(--font-mono, ui-monospace, monospace);
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
   font-size: 13px;
   white-space: pre-wrap;
   word-break: break-word;
@@ -10035,7 +10035,7 @@ button.chat-jump-start:hover {
   border-radius: 7px;
   background: var(--bg-subtle);
   color: var(--text-1);
-  font-family: var(--font-mono, ui-monospace, monospace);
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
   font-size: 19px;
   font-weight: 600;
   letter-spacing: 2px;
@@ -10332,7 +10332,7 @@ button.chat-jump-start:hover {
      what is behind this text, and leaving it one step paler than the body copy on a darker
      ground would have taken it from 3:1 to 2.7:1 in light mode. */
   color: var(--text-2);
-  font-family: var(--font-mono, ui-monospace, monospace);
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
   font-size: 11.5px;
   line-height: 1.45;
   overflow-wrap: anywhere;
@@ -16455,7 +16455,7 @@ button.chat-jump-start:hover {
   margin: 0 -6px;
   cursor: pointer;
   text-align: left;
-  font-family: var(--font-mono, ui-monospace, monospace);
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
   font-size: 11.5px;
   color: var(--text-3);
 }
@@ -22583,7 +22583,7 @@ div.landing-jobs-open {
 }
 .following-count {
   color: var(--text-3);
-  font-family: var(--font-mono, ui-monospace, monospace);
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
   font-size: 11px;
 }
 .following-count.is-alert {
@@ -23191,7 +23191,7 @@ div.landing-jobs-open {
   font-size: 12px;
 }
 .access-token-hint {
-  font-family: var(--font-mono, ui-monospace, monospace);
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
 }
 .access-token-ended td {
   color: var(--text-3);
@@ -23232,7 +23232,7 @@ div.landing-jobs-open {
   border: 1px solid var(--border);
   border-radius: 6px;
   background: var(--bg-raised);
-  font-family: var(--font-mono, ui-monospace, monospace);
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
   word-break: break-all;
   user-select: all;
 }
@@ -23601,13 +23601,13 @@ div.landing-jobs-open {
 .watch-delivery-error {
   margin-top: 2px;
   color: var(--error);
-  font-family: var(--font-mono, ui-monospace, monospace);
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
   font-size: 11px;
   word-break: break-word;
 }
 .watch-details-id {
   color: var(--text-3);
-  font-family: var(--font-mono, ui-monospace, monospace);
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
   font-size: 11px;
 }
 .watch-row-list {
@@ -28343,13 +28343,13 @@ button.agent-progress-agent:hover {
 }
 .ac-branch {
   flex: none;
-  font-family: var(--font-mono, ui-monospace, monospace);
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
   font-size: 12px;
   color: var(--text-2);
 }
 .ac-stat {
   flex: none;
-  font-family: var(--font-mono, ui-monospace, monospace);
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
   font-size: 12px;
   color: var(--text-3);
 }
@@ -28377,7 +28377,7 @@ button.agent-progress-agent:hover {
 }
 .ac-file-path {
   margin: 10px 0 4px;
-  font-family: var(--font-mono, ui-monospace, monospace);
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
   font-size: 12px;
   color: var(--text-2);
 }
@@ -28387,7 +28387,7 @@ button.agent-progress-agent:hover {
   border: 1px solid var(--border-subtle);
   border-radius: 6px;
   background: var(--bg-raised);
-  font-family: var(--font-mono, ui-monospace, monospace);
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
   font-size: 12px;
   line-height: 1.45;
   white-space: pre-wrap;
@@ -28866,7 +28866,7 @@ button.agent-progress-agent:hover {
 .mck-card-hint code,
 .mck-result-text code,
 .wt-iso-body code {
-  font-family: var(--font-mono, ui-monospace, monospace);
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
   font-size: 0.95em;
   color: var(--text-1);
 }
@@ -28885,7 +28885,7 @@ button.agent-progress-agent:hover {
   border: 0;
   background: none;
   color: var(--text-1);
-  font-family: var(--font-mono, ui-monospace, monospace);
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
   font-size: 12.5px;
   text-align: left;
   cursor: pointer;
@@ -29432,4 +29432,61 @@ button.agent-progress-agent:hover {
   .ag-line .ag-chip {
     padding-right: 3px;
   }
+}
+/* What a confirmation was about, folded under its record (`AcceptanceReceiptFold`,
+   docs/mocks/acceptance-receipt-fold). The toggle is the change card's own reading control; the
+   marker is drawn after the words, and the summary says "Hide" while open. */
+.settlement-receipt-fold {
+  margin-top: 6px;
+}
+.settlement-receipt-fold > summary {
+  display: inline-block;
+  list-style: none;
+}
+.settlement-receipt-fold > summary::-webkit-details-marker {
+  display: none;
+}
+.settlement-receipt-fold > summary::after {
+  content: ' ▸';
+}
+.settlement-receipt-fold[open] > summary::after {
+  content: ' ▾';
+}
+.settlement-receipt-fold .settlement-receipt-when-open,
+.settlement-receipt-fold[open] .settlement-receipt-when-closed {
+  display: none;
+}
+.settlement-receipt-fold[open] .settlement-receipt-when-open {
+  display: inline;
+}
+.settlement-receipt-unnumbered {
+  list-style: none;
+}
+.settlement-receipt-gone {
+  color: var(--text-3);
+  font-style: italic;
+}
+.settlement-receipt-tag {
+  display: inline-block;
+  margin-left: 8px;
+  padding: 0 6px;
+  border-radius: 4px;
+  font-size: 11px;
+  font-weight: 600;
+  line-height: 18px;
+  vertical-align: 1px;
+}
+.settlement-receipt-tag.is-new {
+  color: var(--success);
+  background: var(--success-bg);
+}
+.settlement-receipt-tag.is-moved {
+  color: var(--warning);
+  background: var(--warning-bg);
+}
+.settlement-receipt-seal {
+  margin: 8px 0 0;
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+  font-size: 12px;
+  color: var(--text-3);
 }

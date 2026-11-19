@@ -195,7 +195,7 @@ class CursorDeviceTest {
     private fun machinesAndModels(pass: String) {
         back()
         compose.onAllNodesWithContentDescription("Open navigation").onFirst().performClick()
-        click(hasText("Settings") and hasClickAction())
+        click(hasTestTag("drawer:settings"))
         click(hasText("Machines & models") and hasClickAction())
         compose.waitUntil(15_000) { compose.onAllNodes(hpcRow).fetchSemanticsNodes().isNotEmpty() }
         compose.onNode(hpcRow).performScrollTo()

@@ -5,6 +5,7 @@ import {
   PermissionMode,
   RunEventType,
   type RemoteSubagentEvent,
+  SUBAGENT_REMOTE_IN_PLACE_V1,
   type SubagentCandidateTarget,
   type SubagentDecision,
   type SubagentRunCreateRequest,
@@ -53,6 +54,7 @@ interface WorkspaceCandidate {
   name: string;
   runnerId: string | null;
   workDir: string | null;
+  inPlace: boolean;
   /** What it lacks, English; empty when it can run the SubAgent. */
   lacks: string[];
   /** Quota headroom of its default engine's account, in percent left; null when unknown. */
@@ -61,7 +63,12 @@ interface WorkspaceCandidate {
 
 export type SubagentWorkspacePick =
   | { kind: 'local'; reason: string | null }
-  | { kind: 'remote'; workspace: { id: string; name: string; runnerId: string; workDir: string | null }; reason: string };
+  | {
+    kind: 'remote';
+    /** inPlace: its work dir is not a git repository, so the read-only run goes in the work dir itself (§10.2). */
+    workspace: { id: string; name: string; runnerId: string; workDir: string | null; inPlace: boolean };
+    reason: string;
+  };
 
 const CANDIDATE_SELECT = {
   id: true,
@@ -91,16 +98,41 @@ export function neededCapabilities(needs: readonly string[] | undefined): string
   return [...new Set((needs ?? []).map((need) => need.trim()).filter(Boolean))];
 }
 
+/**
+ * The refusal for a SubAgent that may change files, handed to a workspace whose work dir is not a git repository
+ * (§10.2). It names the ways that leave that directory as it is, and warns off the one that does not: `git init` and a
+ * first commit would change it, and commit whatever it holds, its secrets included.
+ */
+export function notGitRefusal(name: string): HttpException {
+  return refusal(
+    HttpStatus.CONFLICT,
+    'SUBAGENT_WORKSPACE_NOT_GIT',
+    `${name}'s work directory is not a git repository. A SubAgent that may change files runs in a worktree of its own, ` +
+      `so it cannot run there; a read-only one (type "explore", or a definition with readonly: true) runs in the work ` +
+      `directory itself. Delegate the work as read-only, or open a session on ${name}. Do not make that directory a git ` +
+      'repository to get round this: git init and a first commit change it, and commit whatever it holds, secrets included.',
+  );
+}
+
+/** Why a target runner cannot run a read-only SubAgent in a work dir that is not a git repository; null when it can. */
+function inPlaceLack(row: Pick<CandidateRow, 'runner'>): string | null {
+  return row.runner?.capabilities?.includes(SUBAGENT_REMOTE_IN_PLACE_V1)
+    ? null
+    : 'its work directory is not a git repository, and its runner is too old to run a read-only SubAgent in it';
+}
+
 /** What one workspace lacks for this SubAgent, English, in the order a person would fix them. */
-function lacksOf(row: CandidateRow, needs: readonly string[], now: number): string[] {
+function lacksOf(row: CandidateRow, needs: readonly string[], readonly: boolean, now: number): string[] {
   const lacks: string[] = [];
-  if (row.workDirIsGit === false) lacks.push('its work directory is not a git repository');
+  if (row.workDirIsGit === false && !readonly) lacks.push('its work directory is not a git repository, and the SubAgent may change files');
   if (!row.subagentsEnabled) lacks.push('SubAgents are turned off for it');
   if (!row.runner || !runnerIsOnline(row.runner, now)) lacks.push('its runner is offline');
   else {
     const reported = new Set(row.runner.capabilities ?? []);
     const missing = needs.filter((need) => !reported.has(need));
     if (missing.length) lacks.push(`its runner does not report ${missing.join(', ')}`);
+    const inPlace = row.workDirIsGit === false && readonly ? inPlaceLack(row) : null;
+    if (inPlace) lacks.push(inPlace);
   }
   return lacks;
 }
@@ -124,8 +156,17 @@ async function headroomOf(db: Prisma.TransactionClient, ownerId: string, workspa
  */
 export async function chooseSubagentWorkspace(
   db: Prisma.TransactionClient,
-  args: { ownerId: string; parentWorkspaceId: string | null; workspace?: string; needs?: readonly string[]; now?: Date },
+  args: {
+    ownerId: string;
+    parentWorkspaceId: string | null;
+    workspace?: string;
+    needs?: readonly string[];
+    /** A read-only SubAgent may run in a work dir that is not a git repository, in that directory itself (§10.2). */
+    readonly?: boolean;
+    now?: Date;
+  },
 ): Promise<SubagentWorkspacePick> {
+  const readonly = args.readonly === true;
   const named = args.workspace?.trim() ?? '';
   const needs = neededCapabilities(args.needs);
   if (!named && needs.length === 0) return { kind: 'local', reason: null };
@@ -144,13 +185,7 @@ export async function chooseSubagentWorkspace(
     if (row.id === args.parentWorkspaceId) {
       return { kind: 'local', reason: null };
     }
-    if (row.workDirIsGit === false) {
-      throw refusal(
-        HttpStatus.CONFLICT,
-        'SUBAGENT_WORKSPACE_NOT_GIT',
-        `${row.name}'s work directory is not a git repository, so a SubAgent cannot run there in a worktree of its own.`,
-      );
-    }
+    if (row.workDirIsGit === false && !readonly) throw notGitRefusal(row.name);
     if (!row.subagentsEnabled) {
       throw refusal(
         HttpStatus.FORBIDDEN,
@@ -164,14 +199,15 @@ export async function chooseSubagentWorkspace(
     if (!row.runner || !row.runnerId || !runnerIsOnline(row.runner, now.getTime())) {
       throw refusal(HttpStatus.CONFLICT, 'SUBAGENT_WORKSPACE_OFFLINE', `${row.name}'s runner is offline.`);
     }
-    const lacks = lacksOf(row, needs, now.getTime());
+    const lacks = lacksOf(row, needs, readonly, now.getTime());
     if (lacks.length) {
       throw refusal(HttpStatus.CONFLICT, 'SUBAGENT_WORKSPACE_LACKS_NEEDS', `${row.name} cannot run this SubAgent: ${lacks.join('; ')}.`);
     }
     return {
       kind: 'remote',
-      workspace: { id: row.id, name: row.name, runnerId: row.runnerId, workDir: row.workDir },
-      reason: `Named by the delegate call: ${row.name}` + (needs.length ? `, whose runner reports ${needText}` : ''),
+      workspace: { id: row.id, name: row.name, runnerId: row.runnerId, workDir: row.workDir, inPlace: row.workDirIsGit === false },
+      reason: `Named by the delegate call: ${row.name}` + (needs.length ? `, whose runner reports ${needText}` : '') +
+        (row.workDirIsGit === false ? ', read-only in its work directory, which is not a git repository' : ''),
     };
   }
 
@@ -188,7 +224,7 @@ export async function chooseSubagentWorkspace(
   });
   const candidates: WorkspaceCandidate[] = [];
   for (const row of rows) {
-    const lacks = lacksOf(row, needs, now.getTime());
+    const lacks = lacksOf(row, needs, readonly, now.getTime());
     const repo = repoOf(row.repoUrl);
     if (!parentRepo || !repo) lacks.unshift(repo ? "this session's workspace has no repository URL" : 'it has no repository URL');
     else if (repo !== parentRepo) lacks.unshift(`it works on another repository (${repo})`);
@@ -197,6 +233,7 @@ export async function chooseSubagentWorkspace(
       name: row.name,
       runnerId: row.runnerId,
       workDir: row.workDir,
+      inPlace: row.workDirIsGit === false,
       lacks,
       headroom: lacks.length ? null : await headroomOf(db, args.ownerId, row.id, now),
     });
@@ -229,7 +266,11 @@ export async function chooseSubagentWorkspace(
       : `Needs ${needText}: ${pick.name} comes first in the Agents list of the ${able.length} workspaces of this ` +
         'repository whose runners report it, none of whose quota is known';
   if (pick.id === args.parentWorkspaceId) return { kind: 'local', reason };
-  return { kind: 'remote', workspace: { id: pick.id, name: pick.name, runnerId: pick.runnerId!, workDir: pick.workDir }, reason };
+  return {
+    kind: 'remote',
+    workspace: { id: pick.id, name: pick.name, runnerId: pick.runnerId!, workDir: pick.workDir, inPlace: pick.inPlace },
+    reason,
+  };
 }
 
 /** What a remote run keeps of the delegate call that the target runner needs (`subagent_run.remote`). */
@@ -240,6 +281,8 @@ export interface SubagentRemoteFacts {
   needs?: string[];
   /** The earlier remote run whose conversation this one continues (§10.2). */
   resumeOf?: string;
+  /** Read-only, in the target's work dir itself, which is not a git repository (§10.2). */
+  inPlace?: boolean;
 }
 
 export function remoteFactsOf(value: unknown): SubagentRemoteFacts {
@@ -250,6 +293,7 @@ export function remoteFactsOf(value: unknown): SubagentRemoteFacts {
     ...(typeof facts.permissionMode === 'string' ? { permissionMode: facts.permissionMode } : {}),
     ...(Array.isArray(facts.needs) ? { needs: facts.needs.filter((n): n is string => typeof n === 'string') } : {}),
     ...(typeof facts.resumeOf === 'string' ? { resumeOf: facts.resumeOf } : {}),
+    ...(facts.inPlace === true ? { inPlace: true } : {}),
   };
 }
 

@@ -11,6 +11,7 @@ import { ModuleRef } from '@nestjs/core';
 import { PushService } from '../push/push.service';
 import { Prisma, ProjectStatus } from '@prisma/client';
 import {
+  type CriteriaChangesSinceConfirmed,
   type DoneRequest,
   type ProjectDoneCheck,
   type ProjectDoneBy,
@@ -32,8 +33,11 @@ import {
   StandardSetConfirmationView,
   StandardSetVersion,
   StatedAcceptanceCriterion,
+  type ConfirmedCriterionWording,
+  confirmedCriteriaReadings,
   criteriaChangesSinceConfirmed,
   criteriaFromDefinitions,
+  criteriaWordingOf,
   standardSetConfirmationStanding,
   standardSetVersion,
 } from './project-acceptance';
@@ -334,8 +338,14 @@ export class ProjectAcceptanceService {
       }
     }
 
+    const words = await ProjectAcceptanceService.confirmationWords(
+      this.prisma as unknown as Prisma.TransactionClient,
+      projectId,
+      stated,
+    );
     await this.prisma.projectStandardSetConfirmation.create({
       data: {
+        ...words,
         projectId,
         // The credentialed actor. On the owner door this is the same row as `ownerId` — the
         // controller passes the authenticated user as both — and it is stored separately because
@@ -649,9 +659,8 @@ export class ProjectAcceptanceService {
            FOR NO KEY UPDATE`);
       if (!project) throw new NotFoundException('project not found');
       if (project.startedAt) throw projectAlreadyStarted(project.startedAt);
-      const version = standardSetVersion(
-        await ProjectAcceptanceService.statedCriteria(tx, projectId),
-      );
+      const stated = await ProjectAcceptanceService.statedCriteria(tx, projectId);
+      const version = standardSetVersion(stated);
       if (criteriaDigest !== version.digest) throw criteriaVersionMoved(version.digest);
       // The request the card was drawn from, whatever has become of it since: its settings are
       // what the card showed as suggested, which is what the owner's changes are measured against.
@@ -708,8 +717,10 @@ export class ProjectAcceptanceService {
         settings,
         differsFromRequest: differingStartSettings(suggested ?? asked, settings),
       };
+      const words = await ProjectAcceptanceService.confirmationWords(tx, projectId, stated);
       const confirmation = await tx.projectStandardSetConfirmation.create({
         data: {
+          ...words,
           projectId,
           ownerId,
           confirmedById: ownerId,
@@ -791,6 +802,8 @@ export class ProjectAcceptanceService {
         confirmedAt: true,
         confirmedById: true,
         startedWith: true,
+        criteriaWording: true,
+        criteriaChanges: true,
       },
     });
     return row === null ? null : {
@@ -801,6 +814,38 @@ export class ProjectAcceptanceService {
       // What a start left the project with, for the receipt of it; null on a confirmation that
       // started nothing, which is how a receipt tells the two apart.
       startedWith: (row.startedWith as unknown as ProjectStartRecord | null) ?? null,
+      criteriaWording: (row.criteriaWording as unknown as ConfirmedCriterionWording[] | null) ?? null,
+      changes: (row.criteriaChanges as unknown as CriteriaChangesSinceConfirmed | null) ?? null,
+    };
+  }
+
+  /**
+   * What a confirmation of `stated` stores beside its seal (1200): the words, and what they changed
+   * since the confirmation before — the same comparison the "Confirm the new criteria?" card showed,
+   * made against the same row, so the receipt says what the card said. Read in the writer's
+   * transaction, before its INSERT, so "the confirmation before" is never the row being written.
+   * Every writer of `project_standard_set_confirmation` calls this.
+   */
+  static async confirmationWords(
+    tx: Prisma.TransactionClient,
+    projectId: string,
+    stated: StatedAcceptanceCriterion[],
+  ): Promise<{ criteriaWording: Prisma.InputJsonValue; criteriaChanges: Prisma.InputJsonValue | typeof Prisma.DbNull }> {
+    const before = await tx.projectStandardSetConfirmation.findFirst({
+      where: { projectId },
+      orderBy: [{ confirmedAt: 'desc' }, { id: 'desc' }],
+      select: { criteriaMaterial: true },
+    });
+    const confirmed = (before?.criteriaMaterial ?? null) as unknown as ConfirmedCriterionVersion[] | null;
+    return {
+      criteriaWording: criteriaWordingOf(stated) as unknown as Prisma.InputJsonValue,
+      criteriaChanges: confirmed === null
+        ? Prisma.DbNull
+        : criteriaChangesSinceConfirmed(
+          stated,
+          confirmed,
+          await ProjectAcceptanceService.confirmedVerificationMethods(tx, stated, confirmed),
+        ) as unknown as Prisma.InputJsonValue,
     };
   }
 
@@ -818,12 +863,25 @@ export class ProjectAcceptanceService {
       };
     }
     const confirmed = standing.confirmation.criteriaMaterial;
+    // The receipt's half: what the confirmation on record said, resolved here so every client
+    // draws the same list. The stored words themselves are not published a second time.
+    const { criteriaWording, ...confirmation } = standing.confirmation;
     return {
       ...standing,
+      confirmation: {
+        ...confirmation,
+        changes: confirmation.changes ?? null,
+        criteria: confirmedCriteriaReadings(confirmed, criteriaWording ?? null, stated),
+        wordingRecorded: criteriaWording != null,
+      },
       changesSinceConfirmed: criteriaChangesSinceConfirmed(
         stated,
         confirmed,
-        await this.confirmedVerificationMethods(stated, confirmed),
+        await ProjectAcceptanceService.confirmedVerificationMethods(
+          this.prisma as unknown as Prisma.TransactionClient,
+          stated,
+          confirmed,
+        ),
       ),
       changesSinceConfirmedAbsentReason: null,
     };
@@ -840,7 +898,8 @@ export class ProjectAcceptanceService {
    * other way round — which rung, beside the words stored on the row, hashes to what was confirmed
    * — and a criterion whose words moved, or whose confirmed method was prose, gets no answer.
    */
-  private async confirmedVerificationMethods(
+  static async confirmedVerificationMethods(
+    tx: Prisma.TransactionClient,
     stated: StatedAcceptanceCriterion[],
     confirmed: ConfirmedCriterionVersion[],
   ): Promise<Map<string, string>> {
@@ -848,7 +907,7 @@ export class ProjectAcceptanceService {
     const moved = confirmed.filter((item) =>
       current.has(item.definitionId) && current.get(item.definitionId) !== item.contentHash);
     if (moved.length === 0) return new Map();
-    const rows = await this.prisma.$queryRaw<Array<{
+    const rows = await tx.$queryRaw<Array<{
       definitionId: string;
       verificationMethod: string;
     }>>(Prisma.sql`

@@ -157,6 +157,7 @@ import {
 import { GithubConnectionService } from '../github/github-connection.service';
 import { githubRepoUrl } from '../github/github-workspace.service';
 import { PrismaService } from '../prisma/prisma.service';
+import { PREPARED_STATEMENT } from '../prisma/prisma-client';
 import { RUNNER_DISK_BELOW_FLOOR, sessionDiskHoldSql } from '../common/runner-disk-gate';
 import { workspaceCloneHoldSql, workspaceCloneReasonSql } from '../common/workspace-clone-gate';
 import {
@@ -4355,7 +4356,12 @@ export class SessionsService {
       queuedRunnerTurns: Array<{ id: string; title: string | null }> | null;
       queuedSince: Date | null;
     };
-    const rows = await this.prisma.$queryRaw<Row[]>(Prisma.sql`
+    // A named prepared statement (PREPARED_STATEMENT): planning this text took ~20 ms on every call on a warm
+    // connection (production, 2026-11-19), as much as the read itself for a 50-row page and ~90% of a project's.
+    // Its text is fixed per filter combination, every value being a parameter, and PostgreSQL's generic plan was
+    // measured there on the open list, a workspace page and a project page: the same rows, no slower, planned in
+    // 0.1 ms. Each variant a connection has run holds ~3.4 MB of cached plan for the connection's life.
+    const rows = await this.prisma.$queryRaw<Row[]>(Prisma.sql`${Prisma.raw(PREPARED_STATEMENT)}
       SELECT
         s.id, s.status, s.title,
         -- What drives the session (LS6): a LANDING row is never in the flat list, but a reader that

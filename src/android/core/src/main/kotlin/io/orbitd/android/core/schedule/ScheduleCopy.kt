@@ -206,11 +206,19 @@ object ScheduleCopy {
         const val alwaysAllow = "Always allow"
         const val allowOnce = "Allow once"
         const val deny = "Deny"
+        const val stop = "Stop"
+        const val openLastRun = "Open last run"
     }
     object DeleteConfirm {
         const val title = "Delete “{title}”?"
         const val body = "It stops running: a run waiting to start is cancelled, and one under way finishes. Its runs and their sessions are kept, but the Scheduled page no longer shows it or its history, and you cannot undo this here."
         const val confirm = "Delete"
+        const val cancel = "Cancel"
+    }
+    object StopConfirm {
+        const val title = "Stop this run?"
+        const val body = "It ends where it is and counts as stopped by you. Its session is kept, and the schedule runs again at its next time."
+        const val confirm = "Stop"
         const val cancel = "Cancel"
     }
     val keep: Map<String, String> = mapOf(
@@ -512,10 +520,16 @@ object ScheduleCopy {
         "actions.alwaysAllow" to Actions.alwaysAllow,
         "actions.allowOnce" to Actions.allowOnce,
         "actions.deny" to Actions.deny,
+        "actions.stop" to Actions.stop,
+        "actions.openLastRun" to Actions.openLastRun,
         "deleteConfirm.title" to DeleteConfirm.title,
         "deleteConfirm.body" to DeleteConfirm.body,
         "deleteConfirm.confirm" to DeleteConfirm.confirm,
         "deleteConfirm.cancel" to DeleteConfirm.cancel,
+        "stopConfirm.title" to StopConfirm.title,
+        "stopConfirm.body" to StopConfirm.body,
+        "stopConfirm.confirm" to StopConfirm.confirm,
+        "stopConfirm.cancel" to StopConfirm.cancel,
         "keep.ACCESS_LEVEL" to keep.getValue("ACCESS_LEVEL"),
         "keep.RUNS_PER_WEEK" to keep.getValue("RUNS_PER_WEEK"),
         "keep.RUN_LIMIT" to keep.getValue("RUN_LIMIT"),
