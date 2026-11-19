@@ -14,6 +14,7 @@ import androidx.compose.ui.test.click
 import androidx.compose.ui.test.junit4.AndroidComposeTestRule
 import androidx.compose.ui.test.junit4.createAndroidComposeRule
 import androidx.compose.ui.test.onNodeWithContentDescription
+import androidx.compose.ui.test.onNodeWithTag
 import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.performClick
 import androidx.compose.ui.test.performCustomAccessibilityActionWithLabel
@@ -149,7 +150,7 @@ class MainActivityTest {
         assertEquals("https://example.test/", app().instance)
         assertEquals(mapOf("https://example.test/" to "fixture@example.test"), app().emails.toMap())
         compose.onNodeWithContentDescription("Open navigation").performClick()
-        compose.onNodeWithText("Settings").performScrollTo().performClick()
+        compose.onNodeWithTag("drawer:settings").performClick()
         compose.onNodeWithText("Sign out").performScrollTo().performClick()
         compose.onNode(hasText("Sign out") and hasAnyAncestor(isDialog())).performClick()
         awaitLogin()
@@ -197,7 +198,7 @@ class MainActivityTest {
         compose.signIn("https://example.test", "fixture@example.test", "fixture-password")
         compose.waitUntil(60_000) { appSession().state.value is AuthState.SignedIn }
         compose.onNodeWithContentDescription("Open navigation").performClick()
-        compose.onNodeWithText("Settings").performScrollTo().performClick()
+        compose.onNodeWithTag("drawer:settings").performClick()
         compose.onNodeWithContentDescription("Edit profile").assertIsDisplayed()
         compose.activityRule.scenario.recreate()
         compose.onNodeWithContentDescription("Edit profile").assertIsDisplayed()
