@@ -376,7 +376,11 @@ describe('compact review dialogs', () => {
     await click(preview());
     await click(dialog()!.querySelector<HTMLButtonElement>('.approval-actions button:last-child')!);
     expect(dialog()).toBeNull();
-    expect(chat).toHaveBeenCalledWith('AskUserQuestion', 'Which branch should receive the change?');
+    expect(chat).toHaveBeenCalledWith(
+      'AskUserQuestion',
+      'Which branch should receive the change?',
+      'Which branch should receive the change?\n- Main\n- Release',
+    );
   });
 
   it('scrolls the details independently of the action row', async () => {
