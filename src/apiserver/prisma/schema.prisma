@@ -1080,6 +1080,20 @@ model Runner {
   // abandoned one is swept by.
   codexAccountRemoveAt      DateTime? @map("codex_account_remove_at")
 
+  // Making an added Claude account the Default (migration 1000, docs/claude-default-swap-contract.md §5):
+  // the runner swaps that account's login with the one in ~/.claude. The removal's relay again — one
+  // request per runner, redelivered every heartbeat while `pending`:
+  //   NULL | pending | done | failed — claudeAccountSwapMessage explains a failure
+  claudeAccountSwapAccount String?   @map("claude_account_swap_account")
+  claudeAccountSwapStatus  String?   @map("claude_account_swap_status")
+  claudeAccountSwapMessage String?   @map("claude_account_swap_message")
+  // While pending: the sessions with a turn in progress the swap waits on, as the runner last named them.
+  claudeAccountSwapWaiting String[]  @default([]) @map("claude_account_swap_waiting") @db.Uuid
+  // While pending: Claude processes on either folder that are not Orbit sessions ({ pid, command }[]).
+  claudeAccountSwapForeign Json?     @map("claude_account_swap_foreign")
+  // When it was asked: the attempt every report names, and the deadline an abandoned one is swept by.
+  claudeAccountSwapAt      DateTime? @map("claude_account_swap_at")
+
   // Per-engine health on this machine — installed / version / signed in — reported by heartbeat
   // from the same probe `orbit doctor` prints. Shape: @orbit/shared RunnerEngineHealth[].
   engines        Json?     @map("engines")
@@ -1556,7 +1570,9 @@ model Workspace {
   /// Main checkout reads and actions this workspace asked its runner for (migration 0534).
   mainCheckoutRequests MainCheckoutRequest[]
   /// The Feishu app whose direct-message sessions open here, when its owner chose this one (migration 0489).
-  feishuAppDefaults FeishuApp[]
+  feishuAppDefaults FeishuApp[] @relation("FeishuAppDefaultWorkspace")
+  /// The Feishu app whose sessions other people start open here (migration 1140, docs/feishu-bot-design.md §14).
+  feishuAppOpenAccess FeishuApp[] @relation("FeishuAppOpenWorkspace")
   /// Feishu groups whose sessions open here (migration 0496).
   feishuChatRoutes FeishuChatRoute[]
 
@@ -2309,6 +2325,9 @@ model Session {
   workSubdir           String?   @map("work_subdir")
   baseSha              String?   @map("base_sha")
   changedFiles         Json?     @map("changed_files")
+  /// The commits of `branch` from `baseSha` to its tip, newest first (@orbit/shared BranchCommit[]), as the runner
+  /// last read them. Like changedFiles, not selected by the list query.
+  branchCommits        Json?     @map("branch_commits")
   isolationStatus      String?   @map("isolation_status")
   // ── "Merge to main" (UI button on the worktree status bar) ──────────────────
   // The user can ask the runner to merge this session's `branch` into a target branch.
@@ -6556,6 +6575,9 @@ model TaskEvidenceDecision {
   /// Why the work is coming back. Required on SEND_BACK by the door: a rejection with nothing to
   /// act on is the state the next revision cannot get out of. Optional on CONFIRM.
   note     String?
+  /// The translated SEND_BACK note stays on the decision until its run can receive it.
+  translatedNote  String? @map("translated_note")
+  translationLang String? @map("translation_lang")
 
   decidedAt         DateTime    @default(now()) @map("decided_at")
   decidedByType     CreatorType @map("decided_by_type")
@@ -9668,7 +9690,7 @@ model FeishuApp {
   approvalsInFeishu  Boolean    @default(true) @map("approvals_in_feishu")
   /// Where a session started in the owner's direct messages opens (§7.3).
   defaultWorkspaceId String?    @map("default_workspace_id") @db.Uuid
-  defaultWorkspace   Workspace? @relation(fields: [defaultWorkspaceId], references: [id], onDelete: SetNull, map: "feishu_app_default_workspace_id_fkey")
+  defaultWorkspace   Workspace? @relation("FeishuAppDefaultWorkspace", fields: [defaultWorkspaceId], references: [id], onDelete: SetNull, map: "feishu_app_default_workspace_id_fkey")
   /// The owner's open_id in this app, once they bound it (§5); open_ids are per app.
   ownerOpenId        String?    @map("owner_open_id")
   /// Read when the owner bound it, for display only.
@@ -9679,6 +9701,22 @@ model FeishuApp {
   lastEventAt        DateTime?  @map("last_event_at") @db.Timestamptz(3)
   /// Feishu's error code and message, never a credential.
   lastError          String?    @map("last_error")
+  /// Who can use the bot (migration 1140, §14.1): `OWNER_ONLY` (the default) | `AVAILABILITY_SCOPE`, everyone the app is
+  /// available to in Feishu, who start sessions with the five settings below.
+  accessMode         String     @default("OWNER_ONLY") @map("access_mode")
+  /// Where sessions other people start open; required to open the bot, cleared when the workspace is dropped.
+  openWorkspaceId    String?    @map("open_workspace_id") @db.Uuid
+  openWorkspace      Workspace? @relation("FeishuAppOpenWorkspace", fields: [openWorkspaceId], references: [id], onDelete: SetNull, map: "feishu_app_open_workspace_id_fkey")
+  /// The PermissionMode those sessions run in.
+  openPermissionMode String     @default("auto") @map("open_permission_mode")
+  /// The four limits (§14.4): one person's sessions at a time and a day, and everyone's together.
+  openMaxRunningPerPerson     Int @default(1) @map("open_max_running_per_person")
+  openSessionsPerDayPerPerson Int @default(10) @map("open_sessions_per_day_per_person")
+  openMaxRunningTotal         Int @default(3) @map("open_max_running_total")
+  openSessionsPerDayTotal     Int @default(50) @map("open_sessions_per_day_total")
+  /// "Show Orbit in Feishu" (migration 1150, §15.2): off, the owner's cards and replies carry no Open in Orbit button
+  /// and no Orbit link.
+  showOrbit          Boolean    @default(true) @map("show_orbit")
   createdAt          DateTime   @default(now()) @map("created_at") @db.Timestamptz(3)
   updatedAt          DateTime   @default(now()) @updatedAt @map("updated_at") @db.Timestamptz(3)
   inboundEvents      FeishuInboundEvent[]
@@ -9688,6 +9726,7 @@ model FeishuApp {
   threads            FeishuThread[]
   outbox             FeishuOutbox[]
 
+  @@index([openWorkspaceId], map: "feishu_app_open_workspace_id_idx")
   @@map("feishu_app")
 }
 
@@ -9726,6 +9765,13 @@ model FeishuChatRoute {
   /// The event that issued the ticket: the same event processed again issues the same one.
   ticketEventId         String?    @map("ticket_event_id")
   ticketExpiresAt       DateTime?  @map("ticket_expires_at") @db.Timestamptz(3)
+  /// `CONNECT` (the owner's connect) | `OPEN_ACCESS`: an implicit route, made the first time someone mentioned the bot in
+  /// an unconnected internal group while it was open (migration 1140, §14.2). It uses the app's settings, not its own.
+  source                String     @default("CONNECT")
+  /// Who used the group first, and when: set on an implicit route.
+  firstUsedByOpenId     String?    @map("first_used_by_open_id")
+  firstUsedByName       String?    @map("first_used_by_name")
+  firstUsedAt           DateTime?  @map("first_used_at") @db.Timestamptz(3)
   createdAt             DateTime   @default(now()) @map("created_at") @db.Timestamptz(3)
   updatedAt             DateTime   @default(now()) @updatedAt @map("updated_at") @db.Timestamptz(3)
 
@@ -9820,6 +9866,9 @@ model FeishuThread {
   sessionId     String    @map("session_id") @db.Uuid
   /// When someone last spoke in the chain: its opening, or the owner's latest reply in it.
   lastSpokenAt  DateTime  @default(now()) @map("last_spoken_at") @db.Timestamptz(3)
+  /// The non-owner whose request opened this chain's session while the bot was open (migration 1140, §14.4); null for
+  /// every other chain. The open-access limits count these. Their partial index lives in the migration.
+  openAccessOpenId String? @map("open_access_open_id")
   createdAt     DateTime  @default(now()) @map("created_at") @db.Timestamptz(3)
   updatedAt     DateTime  @default(now()) @updatedAt @map("updated_at") @db.Timestamptz(3)
 

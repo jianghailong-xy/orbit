@@ -554,7 +554,8 @@ private fun routeTitle(route: OrbitRoute, data: DirectoryData): String = when (r
     Destination.FOLDER -> if (route.id == ScheduledRunsFolder.ID) ScheduledRunsFolderCopy.TITLE
         else data.folders.firstOrNull { ObjectId.same(it.id, route.id) }?.name ?: "Folder unavailable"
     Destination.SEARCH -> "Search sessions"
-    Destination.DRAFT -> "New session"
+    // The workspace the draft will run in names the page, as iOS's bar does (`WorkspaceTitle`); a machine's setup card has none yet.
+    Destination.DRAFT -> route.workspaceId?.let { id -> data.workspaces.firstOrNull { ObjectId.same(it.id, id) }?.name } ?: "New session"
     Destination.PROJECT_SESSIONS -> "Project"
     Destination.LANDINGS -> SessionLandingsCopy.title
     Destination.WIKI, Destination.WIKI_ENTRY -> "Wiki"

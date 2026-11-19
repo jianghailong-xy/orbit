@@ -290,3 +290,41 @@ describe('runner-hosted bg_run jobs', () => {
     );
   });
 });
+
+describe('Orbit workflow (mcp__orbit__workflow)', () => {
+  const RECEIPT = JSON.stringify({ status: 'running', workflowRunId: '350PhFyB3FxEUt9iEImF5' }, null, 2);
+  const events: BgDeriveEvent[] = [
+    { seq: 1, type: RunEventType.TOOL_USE, payload: { id: 'tu_owf', name: 'mcp__orbit__workflow', input: { description: 'Phase 1 smoke test', script: 'export const meta = {}' } } },
+    { seq: 2, type: RunEventType.TOOL_RESULT, payload: { toolUseId: 'tu_owf', content: [{ type: 'text', text: RECEIPT }] } },
+    // One of its agent() calls, drawn as a delegate call nested under it: not a workflow of its own.
+    { seq: 3, type: RunEventType.TOOL_USE, payload: { id: 'tu_owf#0', name: 'mcp__orbit__delegate', parentToolUseId: 'tu_owf', input: { description: 'find:workflow-tool' } } },
+  ];
+
+  it('runs from its receipt, as a workflow named by its description, until its terminal background_task', () => {
+    const [shell, ...rest] = deriveBackgroundShells(events);
+    expect(rest).toEqual([]);
+    expect(shell).toMatchObject({
+      shellId: '350PhFyB3FxEUt9iEImF5', kind: 'workflow', toolUseId: 'tu_owf', description: 'Phase 1 smoke test', status: 'running',
+    });
+    const ended = deriveBackgroundShells([
+      ...events,
+      { seq: 4, type: RunEventType.BACKGROUND_TASK, payload: { toolUseId: 'tu_owf', status: 'completed', workflowRunId: '350PhFyB3FxEUt9iEImF5' } },
+    ]);
+    expect(ended[0].status).toBe('done');
+  });
+
+  it('stays a workflow when the runner re-announces it after a resume', () => {
+    const [shell] = deriveBackgroundShells([
+      ...events,
+      { seq: 4, type: RunEventType.BACKGROUND_TASK, payload: { toolUseId: 'tu_owf', status: 'running', kind: 'subagent', workflowRunId: '350PhFyB3FxEUt9iEImF5' } },
+    ]);
+    expect([shell.kind, shell.status]).toEqual(['workflow', 'running']);
+  });
+
+  it('is nothing until its receipt lands, and nothing for a call the tool refused', () => {
+    expect(deriveBackgroundShells(events.slice(0, 1))).toEqual([]);
+    expect(deriveBackgroundShells([events[0], {
+      seq: 2, type: RunEventType.TOOL_RESULT, payload: { toolUseId: 'tu_owf', content: 'workflow: the script must begin with `export const meta`', isError: true },
+    }])).toEqual([]);
+  });
+});

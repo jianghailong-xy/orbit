@@ -152,7 +152,6 @@ final class ProjectPageCopyParityTests: XCTestCase {
         let web = try source(Self.progress)
         assertSays(web, "OPEN_ITEMS_HEADING = '\(ProjectPage.openItemsHeading)'", in: Self.progress)
         assertSays(web, "NEEDS_YOU_GROUP = '\(ProjectPage.needsYouGroup)'", in: Self.progress)
-        assertSays(web, "WITH_COORDINATOR_GROUP = '\(ProjectPage.withCoordinatorGroup)'", in: Self.progress)
         for (action, key) in [(ProjectOpenItemAction.review, "REVIEW"), (.answer, "ANSWER"), (.resume, "RESUME"),
                               (.openCoordinator, "OPEN_COORDINATOR"), (.openTaskSession, "OPEN_TASK_SESSION")] {
             assertSays(web, "\(key): '\(ProjectPage.actionLabel(action)!)'", in: Self.progress)
@@ -198,7 +197,7 @@ final class ProjectPageCopyParityTests: XCTestCase {
         assertSays(web, "is-owner is-own-start is-hint project-open-item-done-own", in: Self.progress)
         // The web counts its sign-in waits among what needs the owner (5cd4114e6, `signIns`); this app draws
         // no sign-in rows yet, so its own count below is the requests alone.
-        assertSays(web, "`${needsYou.length + signIns.length} need you · ${withCoordinator.length} with the coordinator · oldest first`",
+        assertSays(web, "`${needsYou.length + signIns.length} need you · oldest first`",
                    in: Self.progress)
         XCTAssertEqual(ProjectPage.openItemsSummary(status: .open, started: true, items: ProjectOpenItemsView())?.needsYou, 0,
                        "nobody asked: the owner's own row needs nobody")

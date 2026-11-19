@@ -45,6 +45,26 @@ class ExceptionCardsTest {
         "project" to buildJsonObject { put("id", "p1") },
         "openItems" to buildJsonObject { putJsonArray("needsYou") { rows.forEach { add(it) } }; putJsonArray("withCoordinator") {} }))
 
+    @Test fun onlyOwnerExceptionsBecomeConversationCards() {
+        val owner = row()
+        val coordinator = JsonObject(row(assignee = "COORDINATOR", reason = "DEFAULT", escalatedAt = null) +
+            ("itemId" to JsonPrimitive("coordinator")))
+        val settled = JsonObject(coordinator + mapOf(
+            "itemId" to JsonPrimitive("coordinator-settled"),
+            "outcome" to buildJsonObject { put("state", "RESOLVED"); put("resolution", "HANDLED") },
+        ))
+        val items = buildJsonObject {
+            put("needsYou", JsonArray(listOf(owner)))
+            put("withCoordinator", JsonArray(listOf(coordinator)))
+            put("settled", JsonArray(listOf(settled)))
+        }
+        val cards = CardCatalog.project("s1", "p1", mapOf(
+            "project" to buildJsonObject { put("id", "p1") },
+            "openItems" to items,
+        ))
+        assertEquals(listOf("item:${owner.text("itemId")}"), cards.map { it.key })
+    }
+
     private fun body(request: ApiRequest) = Wire.json.parseToJsonElement(request.body!!.decodeToString()).jsonObject
 
     private fun root() = generateSequence(File(System.getProperty("user.dir"))) { it.parentFile }

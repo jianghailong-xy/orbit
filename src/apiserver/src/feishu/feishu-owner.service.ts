@@ -28,16 +28,19 @@ export const FEISHU_OWNER_REPLIES = {
     'This code has expired. Generate a new one in Orbit (Settings → Feishu → Connect your Feishu account) and send it here within 10 minutes.',
   invalid:
     "This code isn't valid: it may have been used already, or mistyped. Generate a new one in Orbit (Settings → Feishu → Connect your Feishu account).",
+  /** Read in a group, so it names no Orbit (§15.1). */
   group:
-    'Owner codes are only accepted in a direct message with the bot. This code no longer works: generate a new one in Orbit and send it to the bot directly.',
+    'Owner codes are only accepted in a direct message with the bot. This code no longer works: generate a new one and send it to the bot directly.',
   disconnected:
     "You're no longer the owner of this Orbit bot. Orbit stops sending you alerts here; the app stays connected. To connect again, generate a new code in Orbit.",
   test: 'This is a test message from Orbit. Your alerts will arrive here.',
   /** A direct message from someone other than the owner (§7.3). */
   stranger: 'This bot only takes direct messages from its owner.',
-  /** A direct message while nobody is the owner yet (§7.3): how to become it. */
-  noOwner:
-    'This bot has no owner yet. To become its owner, generate a code in Orbit (Settings → Feishu → Connect your Feishu account) and send it here.',
+  /**
+   * A direct message while nobody is the owner yet (§7.3). Anyone may send it, so it names no Orbit and says nothing of
+   * how to become the owner (§15.1): the one who set the app up knows, from the settings page.
+   */
+  noOwner: "This bot isn't set up yet.",
   /** The toast for a click on a card by someone other than the owner, e.g. on a forwarded card (§7.4). */
   strangerCard: 'Only the owner of this bot can answer this card.',
 } as const;
