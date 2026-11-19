@@ -62,7 +62,7 @@ class ShareDeliveryTest {
             val state = withTimeout(60_000) { model.state.first { s -> s.uploads.isEmpty() && s.draft.attachments.size == 2 && s.draft.attachments.all { it.remoteId != null } } }
             assertEquals("My notes\n\nhttps://example.com/a", state.draft.text)
             assertEquals(setOf(16, 64), state.draft.attachments.map { it.size }.toSet())
-            assertTrue(state.failures.isEmpty())
+            assertNull("no upload failed", state.error)
             // Uploads only: no message, no session created.
             val sent = paths.filterNot { it.contains("auth/") || it.endsWith("attachments") }
             assertEquals(emptyList<String>(), sent)
@@ -92,8 +92,10 @@ class ShareDeliveryTest {
             withTimeout(60_000) { model.state.first { it.loaded } }
             val big = file("huge.bin", ByteArray(25 * 1024 * 1024 + 1))
             deliverShare(RuntimeEnvironment.getApplication(), model, ShareHandoff(ShareTarget.Session("s1", "w1"), listOf(big), null))
-            val state = withTimeout(60_000) { model.state.first { it.uploads.isEmpty() && it.failures.isNotEmpty() } }
-            assertEquals("File exceeds the 25MB limit", state.failures.values.single())
+            // Refused as iOS refuses it (Attachments.rejectReason): the chip goes and the error line above the box gives the reason.
+            val state = withTimeout(60_000) { model.state.first { it.uploads.isEmpty() && it.error != null } }
+            assertEquals("File exceeds the 25MB limit", state.error)
+            assertTrue(state.draft.attachments.isEmpty())
         } finally { model.close(); scope.cancel() }
     }
 }

@@ -51,7 +51,7 @@ class AttachmentImportReviewTest {
                 assertTrue(input.exists())
                 importAttachment(RuntimeEnvironment.getApplication(), model, Uri.fromFile(input), source)
                 val state = withTimeout(60_000) { model.state.first { it.uploads.isEmpty() && it.draft.attachments.size == orientation } }
-                assertTrue(state.failures.toString(), state.failures.isEmpty())
+                assertNull("no upload failed", state.error)
                 val data = model.attachmentBytes(state.draft.attachments.last().id)
                 val image = BitmapFactory.decodeByteArray(data, 0, data.size)!!
                 try {

@@ -60,7 +60,7 @@ class WatchWakeQueueShellTest : ComposerShellTest() {
         assertFalse("solid", has(hasTestTag("watch-wake:queued"), unmerged = true))
         assertFalse("nothing withdraws it", has(hasTestTag("watch-wake:withdraw"), unmerged = true))
         assertFalse(shows(WatchWakeQueue.status))
-        compose.onNode(hasText("+") and hasClickAction()).performClick()
+        compose.onNodeWithTag("composer-plus").performClick()
         await { shows("Queued messages (0)") }
     }
 
@@ -69,7 +69,7 @@ class WatchWakeQueueShellTest : ComposerShellTest() {
         signIn(); openSession()
         await { has(hasTestTag("watch-wake:withdraw")) }
         // The composer's queue counts it, and its Withdraw asks the line's question.
-        compose.onNode(hasText("+") and hasClickAction()).performClick()
+        compose.onNodeWithTag("composer-plus").performClick()
         await { shows("Queued messages (1)") }
         compose.onNodeWithText("Queued messages (1)").performClick()
         await { has(inDialog("Withdraw")) }

@@ -288,6 +288,10 @@ func (s *bgJobService) handle(req bgSocketRequest) bgSocketResponse {
 		}
 		return bgSocketResponse{OK: true, Result: status}
 
+	case browserMCPAcquireOp:
+		// One browser tool call by this session (browser_mcp.go).
+		return s.serveBrowserAcquire()
+
 	case "secret_scan":
 		return s.secretScan(getString(args, "path"))
 

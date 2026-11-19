@@ -3138,6 +3138,9 @@ test('the ledger stays append-only, and every later migration is accounted for',
       // project_handoff_approval, and creates project_criteria_change_translation. No INSERT/UPDATE/DELETE, and
       // no trigger, function or DONE fence changes.
       '1080_owner_card_translation_more',
+      // 1090 adds two nullable runner columns, browser_state (JSONB) and browser_clear_requested_at, with no default;
+      // runner is not a preserved relation, no row is written, and no trigger, function or DONE fence changes.
+      '1090_runner_browser_state',
       // 1100 adds nullable conversation_turn.translation_failure_reason and translation_http_status with a CHECK
       // every stored row passes (both NULL); conversation_turn is none of the preserved relations, no row is written,
       // and no trigger, function or DONE fence changes.

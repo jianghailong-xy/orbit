@@ -894,7 +894,7 @@ fun SessionReader(app: OrbitApplication, handle: SessionHandle, route: OrbitRout
                     ManagedRunnerAsleepLine(data.workspaces.firstOrNull { ObjectId.same(it.id, workspaceOfSession) }?.runnerId,
                         composerLocked = handoff?.locksComposer == true)
                     Box(Modifier.heightIn(max = composerHeight).clipToBounds()) { SessionComposer(app, handle, route.id!!, state.session,
-                    focusRequest = composeFocus, inputFocusChanged = { composerFocused = it }, foldsChrome = foldsChrome,
+                    focusRequest = composeFocus, inputFocusChanged = { composerFocused = it },
                     openTask = { open(OrbitRoute(Destination.TASK, it)) },
                     openRunner = { runner, engine -> open(OrbitRoute(Destination.RUNNER, runner, recordId = "engine:$engine")) },
                     openTranslationSettings = { open(OrbitRoute(Destination.SETTINGS, "sessions")) }) }
