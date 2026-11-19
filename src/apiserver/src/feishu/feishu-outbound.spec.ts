@@ -99,6 +99,9 @@ test("a 429's wait: Feishu's reset header, retry-after, or the default", () => {
 });
 
 test("the availability check (§14.3): its path and parameters, and every answer that is not a plain yes counts as no", async (t) => {
+  // An app of its own: the SDK caches tenant_access_tokens per App ID across clients, and the test above handed this
+  // App ID tokens from another fake.
+  const APP = { platform: 'FEISHU' as const, appId: 'cli_availability0001', appSecret: 'availability-secret' };
   const fake = new FakeOpenPlatform();
   fake.addApp(APP);
   const before = process.env[FEISHU_TEST_OPEN_PLATFORM_ENV];
