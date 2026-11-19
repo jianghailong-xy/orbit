@@ -4,7 +4,7 @@
  *   1. POST /runner/sessions/:id/subagents opens a run on the model routing picked (routing applies, §8 P3),
  *      PATCH …/:runId ends it DONE, and the one `subagent_run` row holds what was posted, the status, the
  *      changed files — while the parent's `cost_usd` rises by exactly the run's cost, once.
- *   2. The fifth POST on a session with four RUNNING is refused, and a POST for an agent with SubAgents
+ *   2. The ninth POST on a session with eight RUNNING is refused, and a POST for an agent with SubAgents
  *      turned off is refused.
  *   3. A top-level `mcp__orbit__delegate` tool_use joins `runningSubagents`, its `{ runId, status: "running" }`
  *      receipt leaves it there, and its terminal background_task removes it.
@@ -214,20 +214,20 @@ test('SubAgent runs: the row, the cost roll-up, the refusals and runningSubagent
     assert.deepEqual(writeView.changedFiles, ['src/quota/poller.ts']);
   });
 
-  await t.test('the fifth concurrent POST is refused once four are RUNNING, and a disabled agent is refused', async () => {
+  await t.test('the ninth concurrent POST is refused once eight are RUNNING, and a disabled agent is refused', async () => {
     const sessionId = await parentSession();
-    for (let i = 1; i <= 4; i++) {
+    for (let i = 1; i <= 8; i++) {
       const run = await subagents.createSubagentRun(runner, sessionId, create({ toolUseId: `toolu_01Parallel${i}`, background: true }));
       assert.equal(run.status, 'RUNNING');
     }
     await assert.rejects(
-      subagents.createSubagentRun(runner, sessionId, create({ toolUseId: 'toolu_01Parallel5', background: true })),
+      subagents.createSubagentRun(runner, sessionId, create({ toolUseId: 'toolu_01Parallel9', background: true })),
       (e: unknown) =>
         e instanceof ConflictException &&
         (e.getResponse() as { code?: string }).code === 'SUBAGENT_LIMIT_REACHED',
-      'the fifth is refused while four run',
+      'the ninth is refused while eight run',
     );
-    assert.equal(await prisma.subagentRun.count({ where: { sessionId } }), 4, 'and wrote no row');
+    assert.equal(await prisma.subagentRun.count({ where: { sessionId } }), 8, 'and wrote no row');
 
     const disabled = await parentSession({ subagentsEnabled: false });
     await assert.rejects(

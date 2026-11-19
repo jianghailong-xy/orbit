@@ -633,8 +633,8 @@ export const TARGET_OFFLINE_SUBAGENT_RESULT =
 export const STOPPED_BEFORE_CLAIM_RESULT = 'The SubAgent was stopped before the runner it was handed to took it up.';
 
 /**
- * End every RUNNING remote run whose target runner is offline (or gone) as INTERRUPTED, owing the parent a wake
- * (§10.3), which the wake sweep files. Returns the runs, with their parents, so the caller can reap their cards.
+ * End every RUNNING remote run whose target runner is offline (or gone) as INTERRUPTED (§10.3). The sweep wakes
+ * the parent for standalone runs. Returns the runs, with their parents, so the caller can reap their cards.
  */
 export async function interruptRunsOfOfflineTargets(db: Prisma.TransactionClient): Promise<Array<{ id: string; sessionId: string }>> {
   return db.$queryRaw<Array<{ id: string; sessionId: string }>>`
@@ -642,7 +642,7 @@ export async function interruptRunsOfOfflineTargets(db: Prisma.TransactionClient
     SET "status" = 'INTERRUPTED',
         "result_summary" = ${TARGET_OFFLINE_SUBAGENT_RESULT},
         "ended_at" = now(),
-        "wake_owed" = true
+        "wake_owed" = (r."workflow_run_id" IS NULL)
     WHERE r."status" = 'RUNNING' AND r."target_runner_id" IS NOT NULL
       AND NOT EXISTS (
         SELECT 1 FROM "runner" ru WHERE ru."id" = r."target_runner_id" AND NOT ${runnerOfflineSql('ru')}

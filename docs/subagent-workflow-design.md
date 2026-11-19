@@ -174,7 +174,7 @@ runner 重启时在跑的 workflow 记 `INTERRUPTED` 并唤醒父会话，唤醒
 ### 4.4 花费上限
 
 - 默认**没有上限**（§9 D4）。父模型可以给 `maxCostUsd`；不给时 workflow 只在花费显示上可见，不会因花费停下。
-- 给了上限时：已花费 = 结束的调用的 `cost_usd` + 在跑的调用的实时花费（runner 已经从各引擎的用量事件里算）。
+- 给了上限时：已花费 = 结束的调用的 `cost_usd`（P1；在跑调用的实时花费以后再计入，所以并行时可能略超上限）。
   达到上限后在跑的调用让它们跑完（不硬杀，避免写一半的文件），之后的 `agent()` 抛 `WorkflowBudgetSpent`；脚本可以
   `try/catch` 后交回已有结果。
 - 失控循环的兜底不按花费：一次 workflow 最多 1000 次 `agent()`（与 Claude 相同），超了抛 `WorkflowCallLimit`。

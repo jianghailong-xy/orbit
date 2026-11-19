@@ -366,6 +366,12 @@ const RUNNER_DRIVERS: Readonly<Record<string, Drive>> = {
     s.runnerSubagents.createSubagentRun({ id: w.runnerId, ownerId: w.ownerId } as never, id, {
       toolUseId: 'toolu_guard', type: 'general', definitionSource: 'builtin',
     } as never),
+  'POST /runner/sessions/:id/workflows': (s, w, id) =>
+    s.runnerSubagents.openWorkflowRun({ id: w.runnerId, ownerId: w.ownerId } as never, id, {
+      toolUseId: 'toolu_guard', name: 'review', script: 'return 1',
+    }),
+  'PATCH /runner/sessions/:id/workflows/:workflowRunId': (s, w, id) =>
+    s.runnerSubagents.updateWorkflowRun({ id: w.runnerId, ownerId: w.ownerId } as never, id, randomUUID(), { status: 'DONE' }),
   'POST /runner/sessions/:id/cursor-key-check': (s, w, id) =>
     s.providers.recordCursorKeyCheck(w.runnerId, id, { state: 'INVALID', keyFingerprint: '0123456789abcdef' }, w.ownerId),
   'POST /runner/sessions/:id/turns/:turnId/suggestion': (s, w, id) =>
