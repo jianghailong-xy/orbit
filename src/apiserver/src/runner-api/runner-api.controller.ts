@@ -1018,6 +1018,8 @@ interface HandedTurn {
 // is swallowing the message, and a fourth hand-over asks the same question the last three asked.
 // See the delivery count in `turnComplete` for what it bounds and how it is spent.
 const UNANSWERED_DELIVERY_BUDGET = 3;
+// `conversation_turn.outcome` and `session.last_turn_outcome` (migration 1150 and its CHECKs).
+type TurnOutcome = 'ANSWERED' | 'FAILED' | 'INTERRUPTED' | 'CANCELLED';
 // What a run whose message was swallowed is reported failed with, kept in the session's `error` — the
 // list shows it under the title and the failure card reads it. Two halves: what the control plane
 // watched happen (deliveries with no answer under any of them) and what it did about it (the ladder),
@@ -7495,6 +7497,36 @@ export class RunnerApiController {
             : unanswered && noEngineTurnRan && current.retryAt == null
               ? nextAutoRetryAt(current.retryAttempts, new Date())
               : null;
+      // How the turn ended, for the turn row and the session's copy of it (docs/session-three-state-design.md
+      // §4.2): what the runner reported, except where this handler has already read the turn otherwise. Only a
+      // turn of work has an outcome, a `message` or a `!`-shell turn: a steer and a withdraw settled above, and
+      // a control turn or a kind this build does not know gets none. A region stop ends the turn as an
+      // interrupt does (§10 above), and a swallowed delivery is a failure. A success nothing answered is put
+      // back in the queue and has not ended: the completion that answers it says how it did.
+      const turnOutcome: TurnOutcome | null =
+        completedTurn?.kind !== 'message' && completedTurn?.kind !== 'shell'
+          ? null
+          : regionStopped
+            ? 'INTERRUPTED'
+            : swallowed || dto.status === RunStatus.FAILED
+              ? 'FAILED'
+              : dto.status === RunStatus.INTERRUPTED
+                ? 'INTERRUPTED'
+                : dto.status === RunStatus.CANCELLED
+                  ? 'CANCELLED'
+                  : dto.status === RunStatus.SUCCEEDED && !unanswered
+                    ? 'ANSWERED'
+                    : null;
+      // The words it ended with: the runner's failure (in the session error's own form, without the acceptance
+      // comparison, which is about the task rather than the turn), the region's stopped sentence, or the error a
+      // stop was reported with. An answered turn has none.
+      const turnError = turnOutcome === 'FAILED'
+        ? (swallowed ? swallowedMessageError(failureText) : failureText) || 'run failed'
+        : turnOutcome === 'ANSWERED'
+          ? null
+          : regionStopped
+            ? dto.error || dto.result || null
+            : dto.error || null;
       // Idempotent ack: only the first turn-complete for this turn applies. `deliveredAt` is the
       // other half of that compare-and-set now that a completion can leave the row un-ANSWERED: a
       // turn put back in the queue is no longer out on a delivery, so a retried completion for it
@@ -7524,6 +7556,14 @@ export class RunnerApiController {
           await tx.session.update({ where: { id: sessionId }, data: { ...CLEARED_MERGE_STATE } });
         }
         return { applied: false, steer: false, requeued: false, status: current.status, failSession, retryAt: current.retryAt };
+      }
+      // Beside the status the ack just wrote, in its transaction and only when it won, so a retried completion
+      // records nothing twice. The session's copy rides on the park below, the one Session write (I3).
+      if (turnOutcome) {
+        await tx.conversationTurn.update({
+          where: { id: dto.turnId },
+          data: { outcome: turnOutcome, error: turnError },
+        });
       }
       let acceptanceTaskChanged = false;
       let acceptanceTaskCompleted = false;
@@ -7881,6 +7921,9 @@ export class RunnerApiController {
             : {}),
           // The stopped sentence a region stop ends the turn with (§10), which the claim clears once the hold releases.
           ...(regionStopped && !failSession ? { error: dto.error || dto.result || null } : {}),
+          // The outcome just written on the turn, copied for list rows (design §4.2). A turn with none leaves the
+          // last one that had one.
+          ...(turnOutcome ? { lastTurnOutcome: turnOutcome } : {}),
           // Live worktree state for the composer's status bar, refreshed each turn (the
           // runner reports the worktree's uncommitted diff and the exact healed base used to
           // compute it on every turn-complete). Keep both in this one write so a rebase cannot
@@ -7930,8 +7973,9 @@ export class RunnerApiController {
       });
       if (parked.count === 0) {
         // Nothing was written above — an UPDATE that matches no row leaves the tuple, and its
-        // xmin, exactly as it was — so this is still this transaction's first Session write.
-        if (clearsMergedState || acknowledgedCoordinatorContextKey) {
+        // xmin, exactly as it was — so this is still this transaction's first Session write. A turn that
+        // ended while its session was being ended still ended, so its outcome is the session's latest too.
+        if (clearsMergedState || acknowledgedCoordinatorContextKey || turnOutcome) {
           await tx.session.update({
             where: { id: sessionId },
             data: {
@@ -7939,6 +7983,7 @@ export class RunnerApiController {
               ...(acknowledgedCoordinatorContextKey
                 ? { coordinatorContextAckKey: acknowledgedCoordinatorContextKey }
                 : {}),
+              ...(turnOutcome ? { lastTurnOutcome: turnOutcome } : {}),
             },
           });
         }
