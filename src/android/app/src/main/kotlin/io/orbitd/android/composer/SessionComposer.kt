@@ -273,8 +273,9 @@ internal fun SessionComposer(app: OrbitApplication, handle: SessionHandle, sessi
                     },
                     // Settings › Translation (6A): while it is on, the box says which way its words go — "Chinese → English" —
                     // and the tag opens Settings › Sessions, where the switch and the language are. Like the placeholder, it
-                    // shows only while the box is empty, so typed text gets the whole width.
-                    trailingIcon = translation.takeIf { it.on && field.text.isEmpty() }?.let { on -> {
+                    // shows only while the box is empty, so typed text gets the whole width. A suggestion on offer takes the line
+                    // instead (docs/mocks/prompt-suggestion-room), unless the tag is warning that translation is unavailable.
+                    trailingIcon = translation.takeIf { it.on && field.text.isEmpty() && (suggestion == null || translationUnavailable) }?.let { on -> {
                         Text(io.orbitd.android.translation.TranslationFailureCopy.composerTag(on.language, on.agentLanguage, translationUnavailable),
                             Modifier.padding(end = 8.dp).testTag("composer-translation-tag")
                             .clip(RoundedCornerShape(50)).background(MaterialTheme.colorScheme.surfaceVariant)
@@ -450,13 +451,13 @@ internal fun SessionPendingTray(model: ComposerModel, session: SessionState?, un
         note = if (engine == CursorRuntime.ENGINE) CursorRuntime.QUEUE_NOTE else null, held = held)
 }
 
-/** The engine's guess in the empty box (docs/prompt-suggestions-design.md §4.3): the words, cut at the end, and "Double-tap to use"
+/** The engine's guess in the empty box (docs/prompt-suggestions-design.md §4.3): the words, cut at the end, and "Double-tap"
  * right after them. TalkBack skips the hint: its own double-tap is "activate", and it takes the guess with the field's
  * "Use suggestion" action. */
 @Composable
 internal fun SuggestionPlaceholder(suggestion: String) = Row(verticalAlignment = Alignment.CenterVertically) {
     Text(suggestion, Modifier.weight(1f, fill = false), maxLines = 1, overflow = TextOverflow.Ellipsis)
-    Text("Double-tap to use", Modifier.padding(start = 8.dp).testTag("composer-suggestion-hint").clearAndSetSemantics {},
+    Text("Double-tap", Modifier.padding(start = 8.dp).testTag("composer-suggestion-hint").clearAndSetSemantics {},
         style = MaterialTheme.typography.bodySmall, maxLines = 1)
 }
 

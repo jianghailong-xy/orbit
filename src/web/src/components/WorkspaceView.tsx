@@ -12445,7 +12445,7 @@ export function SessionComposer({
             Tab
           </kbd>
           <span className="composer-suggestion-tap" aria-hidden="true">
-            Double-tap to use
+            Double-tap
           </span>
           {/* For a screen reader on a touch screen, whose own double-tap is "activate": hidden
               from the eye there, and gone with a keyboard, which has Tab. */}

@@ -254,6 +254,29 @@ class TranslationConversationTest : ComposerShellTest() {
         shot("11-held-timeout-wrapped-320dp")
     }
 
+    /** docs/mocks/prompt-suggestion-room (option B): the engine's guess takes the box's line, so the tag gives way while one is on
+     *  offer, and only its "unavailable" warning stays beside the guess. */
+    @Test fun aSuggestionTakesTheTagsPlaceUnlessTheTagWarns() {
+        translatedConversation()
+        fun me(until: String?) = ApiResponse(200, """{"id":"u1","email":"owner@a07c.test","name":"Owner",
+            "preferences":{"translationEnabled":true,"translationLanguage":"zh-Hans","promptSuggestions":true},"translationAvailable":true,
+            "translationUnavailableUntil":${until?.let { "\"$it\"" } ?: "null"}}""".encodeToByteArray())
+        ComposerShell.answers["GET users/me"] = { me(null) }
+        ComposerShell.events = ComposerShell.events +
+            ComposerShell.obj("""{"type":"prompt_suggestion","seq":4,"turnId":"t-1","payload":{"text":"再跑一遍全部测试","source":"engine"}}""")
+        signIn(); openSession()
+        val tag = hasTestTag("composer-translation-tag")
+        await { has(hasTestTag("composer-suggestion-hint"), unmerged = true) }
+        assertFalse("the guess has the line", has(tag, unmerged = true))
+        shot("12-suggestion-without-tag")
+
+        val later = java.time.Instant.now().plusSeconds(600).toString()
+        ComposerShell.answers["GET users/me"] = { me(later) }
+        ComposerShell.pushControl("""{"type":"translation.status_changed","data":{}}""")
+        await { has(tag and hasText("Chinese → English · unavailable, messages will wait"), unmerged = true) }
+        assertTrue("the guess stays beside the warning", has(hasTestTag("composer-suggestion-hint"), unmerged = true))
+    }
+
     @Test fun theComposerTagNamesANonEnglishAgentLanguage() {
         translatedConversation()
         ComposerShell.answers["GET users/me"] = { ApiResponse(200, """{"id":"u1","email":"owner@a07c.test","name":"Owner",
