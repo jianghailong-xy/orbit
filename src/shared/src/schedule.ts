@@ -1211,6 +1211,22 @@ export function scheduleNeedsYou(
   return schedule.state === 'ACTIVE' && schedule.consecutiveFailures > 0 && !scheduleRunUnderWay(schedule, runs);
 }
 
+/**
+ * The count beside Scheduled in the drawer, the same on every client (owner 2026-11-19): the schedules that need you
+ * (scheduleNeedsYou), the ACTIVE ones whose condition cannot be read, and the tasks waiting on a condition that cannot
+ * be read.
+ */
+export function scheduleNeedsCount(
+  list: Pick<ScheduleListResponse, 'schedules' | 'runs' | 'waitingTasks'> | null | undefined,
+): number {
+  if (!list) return 0;
+  const runs = list.runs ?? [];
+  const cantRead = (reading: Pick<ScheduleConditionReading, 'state'> | null | undefined) => reading?.state === 'UNKNOWN';
+  const schedules = (list.schedules ?? []).filter((s) =>
+    scheduleNeedsYou(s, runs) || (s.state === 'ACTIVE' && cantRead(s.condition))).length;
+  return schedules + (list.waitingTasks ?? []).filter((t) => cantRead(t.condition)).length;
+}
+
 /** A schedule's row circle on the page: its Failed tag stays off while a run of it is under way. */
 export function scheduleRowCircle(
   schedule: Pick<ScheduleView, 'id' | 'state' | 'consecutiveFailures'>,
