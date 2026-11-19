@@ -232,8 +232,9 @@ internal fun SessionComposer(app: OrbitApplication, handle: SessionHandle, sessi
     val chipEffort = if (cursorModel != null || dshPicks) null else effortLabel(effective.text("effort")) +
         if (effective.flag("fastMode") == true && state.catalog?.fast(shownEngine, effective.text("provider") ?: shownEngine, effective.text("model").orEmpty()) == true) " · Fast" else ""
     // The permission mode beside `+` (iOS `modeMenu`): what the session runs in, by the shared table's name.
-    val modeValue = effective.text("permissionMode")
-    val modeLabel = modeValue?.let { mode -> personalPermissions.firstOrNull { it.first == mode }?.second ?: mode }
+    // Always shown, as iOS's: one the session names, else the mode it runs in with none named (Default; Cursor CLI's Accept Edits).
+    val modeValue = shownPermissionMode(effective, shownEngine)
+    val modeLabel = personalPermissions.firstOrNull { it.first == modeValue }?.second ?: modeValue
     // The plan's binding window, which the gauge draws beside the ring once the catalogue that reports it is in.
     val planRow = state.catalog?.usage(effective)?.let { io.orbitd.android.management.bindingRow(it, System.currentTimeMillis()) }
     var modeMenu by remember { mutableStateOf(false) }
@@ -331,14 +332,15 @@ internal fun SessionComposer(app: OrbitApplication, handle: SessionHandle, sessi
                 // gives way, and only after Optimize has folded to ✦ and the effort has left the chip ([toolbarFit]).
                 val measure = rememberToolbarMeasure()
                 val toolbarStyle = toolbarTextStyle()
-                val optimizeStyle = MaterialTheme.typography.labelLarge
+                val optimizeStyle = MaterialTheme.typography.labelMedium
                 BoxWithConstraints(Modifier.fillMaxWidth().padding(horizontal = (TOOLBAR_EDGE / 2).dp).padding(bottom = 4.dp)) {
                     val fixed = TOOLBAR_PLUS + TOOLBAR_SEND + (if (planRow != null) TOOLBAR_CAPSULE else TOOLBAR_RING) +
-                        (modeLabel?.let { measure(it, toolbarStyle.copy(fontWeight = FontWeight.Medium)) + TOOLBAR_TEXT_PAD } ?: 0f)
+                        measure(modeLabel, toolbarStyle.copy(fontWeight = FontWeight.Medium)) + TOOLBAR_TEXT_PAD
                     val chipWithEffort = measure(chipName, toolbarStyle.copy(fontWeight = FontWeight.SemiBold)) + TOOLBAR_TEXT_PAD +
                         (chipEffort?.let { 5f + measure(it, toolbarStyle) } ?: 0f) + (if (smart != null) 30f else 0f)
-                    val optimizeWidth = if (!showsOptimize) null else measure("✦", optimizeStyle) + 5f +
-                        measure(if (optimizer.isOptimizing) PromptOptimizerCopy.OPTIMIZING else PromptOptimizerCopy.OPTIMIZE, optimizeStyle) + 24f
+                    // PromptOptimizeButton's full pill: its mark (✦, or the 12 dp spinner), 4 dp, the word, 9 dp each side, 2 dp around.
+                    val optimizeWidth = if (!showsOptimize) null else (if (optimizer.isOptimizing) 12f else measure("✦", optimizeStyle)) + 4f +
+                        measure(if (optimizer.isOptimizing) PromptOptimizerCopy.OPTIMIZING else PromptOptimizerCopy.OPTIMIZE, optimizeStyle) + 22f
                     val fit = toolbarFit(maxWidth.value - fixed, chipWithEffort, optimizeWidth)
                     Row(Modifier.fillMaxWidth().height(48.dp), verticalAlignment = Alignment.CenterVertically) {
                         Box {
@@ -367,7 +369,7 @@ internal fun SessionComposer(app: OrbitApplication, handle: SessionHandle, sessi
                                     onClick = { menu = false; model.control("auto-retry", HttpMethod.DELETE) })
                             }
                         }
-                        modeLabel?.let { label ->
+                        modeLabel.let { label ->
                             Box {
                                 ToolbarMode(label, enabled = usable && !state.busy && draft.pending == null && draft.createdSessionId == null) {
                                     modeMenu = true; model.loadCatalog()
@@ -584,6 +586,10 @@ internal fun ModelChip(name: String, effort: String, smart: Boolean, enabled: Bo
     }
 }
 
+/** The permission mode the toolbar names: the one [detail] holds, else the one a session that names none runs in. */
+internal fun shownPermissionMode(detail: JsonObject, engine: String): String =
+    detail.text("permissionMode")?.takeIf { it.isNotEmpty() } ?: CursorRuntime.fallbackMode(engine)
+
 /**
  * The toolbar's permission mode menu (iOS `modeMenu`): the modes the engine offers for this model, ✓ on the one in use, each written
  * to the session as the model menu's Permissions rows do. Cursor CLI lists Default too, greyed with why (D6, iOS 6 ①); the menu waits
@@ -599,7 +605,7 @@ internal fun PermissionModeItems(model: ComposerModel, state: ComposerState, det
     val engine = catalog.engineOf(detail)
     val modes = catalog.permissions(engine, detail.text("provider").orEmpty(), detail.text("model").orEmpty())
     val listed = if (engine == CursorRuntime.ENGINE && modes.isNotEmpty()) listOf("default") + modes else modes
-    val current = detail.text("permissionMode")
+    val current = shownPermissionMode(detail, engine)
     val enabled = usable && !state.busy && state.draft.pending == null
     listed.forEach { mode ->
         ModeMenuItem(personalPermissions.firstOrNull { it.first == mode }?.second ?: mode, mode == current,
