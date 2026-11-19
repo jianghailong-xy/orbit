@@ -2,6 +2,7 @@ import assert from 'node:assert/strict';
 import { afterEach, mock, test } from 'node:test';
 import { RunStatus } from '@prisma/client';
 
+import { renderRawQuery } from '../test-support/prisma-transaction-double';
 import { RUNNER_SILENT_AFTER_MS, RunnerPresenceService, type CellLosses } from '../runners/runner-presence';
 import { MASS_SILENCE_WINDOW_MS, ReaperService } from './reaper.service';
 
@@ -70,8 +71,8 @@ function world(opts: {
   });
   const tx = {
     runner: { findUnique: async () => ({ status: 'ONLINE', lastHeartbeatAt: lastBeat(), presence: { lastBeatAt: lastBeat() } }) },
-    $queryRaw: async (strings: TemplateStringsArray, ...values: unknown[]) => {
-      const text = strings.join('?');
+    $queryRaw: async (...args: unknown[]) => {
+      const { text, values } = renderRawQuery(args);
       if (text.includes('FOR UPDATE')) {
         const id = values[0] as string;
         locked.push(id);
