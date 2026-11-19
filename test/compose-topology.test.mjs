@@ -155,6 +155,11 @@
 // stuck → Report on GitHub opens an issue). Each is one optional apiserver environment line, empty unless the host's .env
 // sets it. No service, mount or port is added. The account owner approved all six lines on 2026-11-19 (in session
 // 34zBKhFsZ22eRi985pbrK: "Approve them and add them to the baseline"), and the blocks below pin them.
+//
+// On 2026-11-19 the Orbit Cloud browser's switch (project 34z8OKBXxDRYsIZwzJ35E, docs/runner-browser-design.md §2)
+// gained its apiserver environment line, ORBIT_MANAGED_RUNNER_BROWSER_ENABLED, off unless the host's .env says true,
+// right after the managed runners' switch (Orbit task 3507XXbnib94qfwmCPaOA, filed by that project's coordinator).
+// No service, mount or port is added; the managed runners' block below pins the line.
 import assert from 'node:assert/strict';
 import { execFileSync, spawnSync } from 'node:child_process';
 import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
@@ -515,6 +520,7 @@ const APPROVED_APISERVER_BLOCKS = [
   // existing deployment gains nothing on its disk.
   [
     '      ORBIT_MANAGED_RUNNERS_ENABLED: "${ORBIT_MANAGED_RUNNERS_ENABLED:-false}"',
+    '      ORBIT_MANAGED_RUNNER_BROWSER_ENABLED: "${ORBIT_MANAGED_RUNNER_BROWSER_ENABLED:-false}"',
     '      ORBIT_MANAGED_RUNNERS_PROFILE: /var/lib/orbit-managed-runners/profile.json',
     '    volumes:',
     '      - "${ORBIT_MANAGED_RUNNERS_DIR:-/dev/null}:/var/lib/orbit-managed-runners:ro"',

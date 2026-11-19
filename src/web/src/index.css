@@ -29324,3 +29324,98 @@ button.agent-progress-agent:hover {
 .ag-row .ag-title {
   font-family: inherit;
 }
+/* Where the work went (docs/mocks/agents-band-models): a machine fact and model chips, as Apple's
+   AgentFact and AgentEngineChip draw them. Always one line: under 720px the models after the first fold
+   into "+n", under 520px the words go and the marks keep their counts. */
+.ag-tray {
+  container-type: inline-size;
+}
+.ag-line .ag-band {
+  flex: 0 1 auto;
+}
+.ag-chip,
+.ag-fact,
+.ag-more {
+  flex: none;
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  border-radius: 5px;
+  padding: 0 5px;
+  line-height: 18px;
+  white-space: nowrap;
+  font-size: 12px;
+}
+.ag-fact,
+.ag-more {
+  background: var(--bg-hover);
+  color: var(--text-2);
+}
+.ag-fact .anticon {
+  font-size: 11px;
+}
+.ag-chip {
+  --ag-tint: var(--text-3);
+  background: color-mix(in srgb, var(--ag-tint) 13%, transparent);
+  color: var(--text-1);
+  padding-left: 2px;
+  min-width: 0;
+}
+.ag-chip[data-engine='claude'] { --ag-tint: #d97857; }
+.ag-chip[data-engine='dsh'] { --ag-tint: #4d6bff; }
+.ag-chip[data-engine='kimi'] { --ag-tint: #1a73f2; }
+.ag-chip[data-engine='antigravity'] { --ag-tint: #4285f5; }
+.ag-chip[data-engine='codex'],
+.ag-chip[data-engine='cursor'],
+.ag-chip[data-engine='opencode'] { --ag-tint: var(--text-1); }
+.ag-chip-mark {
+  font-style: normal;
+  width: 14px;
+  height: 14px;
+  border-radius: 4px;
+  background: var(--ag-tint);
+  color: var(--bg-base, #fff);
+  font-size: 9px;
+  font-weight: 800;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+}
+.ag-chip-name {
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.ag-chip-n {
+  color: var(--text-3);
+}
+.ag-more {
+  display: none;
+}
+.ag-failed {
+  flex: none;
+  color: var(--error);
+  font-weight: 600;
+  white-space: nowrap;
+}
+.ag-facts {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+@container (max-width: 720px) {
+  .ag-line .ag-chip-extra {
+    display: none;
+  }
+  .ag-line .ag-more {
+    display: inline-flex;
+  }
+}
+@container (max-width: 520px) {
+  .ag-line .ag-word,
+  .ag-line .ag-chip-name {
+    display: none;
+  }
+  .ag-line .ag-chip {
+    padding-right: 3px;
+  }
+}

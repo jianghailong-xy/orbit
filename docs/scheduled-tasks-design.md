@@ -680,8 +680,8 @@ Agents have the same five as tools, so "pause the Codex check until Monday" work
 
 As decided in revision 3, modelled on Reminders' *Scheduled* list:
 
-- **Left drawer:** a **Scheduled** item with a count of schedules that need the person (held, or failing with no
-  run under way).
+- **Left drawer:** a **Scheduled** item with a count of what needs the person, the same on every client: schedules
+  that are held, or failing with no run under way, and schedules and waiting tasks whose condition cannot be read.
 - **Timeline:** occurrences grouped as **Today**, **Tomorrow**, the rest of the week, **Later**, **Paused**. A row is
   a circle that carries the state, the title, a line with the rule, the workspace and the access, and the time.
   There is no group of errors (owner 2026-11-19, replacing revision 3's **Needs you**): the page lists the schedules,
