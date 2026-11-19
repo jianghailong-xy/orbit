@@ -9,14 +9,18 @@ import { createHash } from 'node:crypto';
  *
  * A row is far more than the `session` table: runner liveness, tags, the queue gate, the share
  * globe, approvals and background-job freshness are joined or derived at read time, some of them
- * from `now`. No column-level clock can say which rows moved, so the delta is taken where the list
- * is already whole — on the mapped rows, by content. A cursor names a snapshot of what the caller
- * was last sent (each row's content hash, and the order); the next read is the same full query,
- * answered with only the rows whose hash moved, the ids that left, and the order when it changed.
- * A read that builds pays the full read's database cost; what the delta saves there is the wire,
- * the decode and the client's per-poll rework. A snapshot also keeps the data version read before
- * its rows were built, and a read that finds that version still standing is answered with an empty
- * delta without building anything (`unchanged`).
+ * from `now`. No column-level clock can say which rows moved, so the delta is taken on the mapped
+ * rows, by content. A cursor names a snapshot of what the caller was last sent (each row's content
+ * hash, and the order), answered with only the rows whose hash moved, the ids that left, and the
+ * order when it changed. A snapshot also keeps the data version read before its rows were built,
+ * and a read that finds that version still standing is answered with an empty delta without
+ * building anything (`unchanged`).
+ *
+ * The version is the account's, and moves with every write of it. So a snapshot also keeps marks
+ * (`OpenListMarks`): the version's parts, and per row a mark of everything the row reads. A read
+ * whose version moved reads the marks again (SessionsService.openListProbe, much cheaper than the
+ * rows) and builds only the rows whose mark moved; every other row keeps the hash the snapshot
+ * holds (`answerFrom`). When something moved that no mark can see, it builds the whole list.
  *
  * Snapshots live in this process only. A cursor this process does not hold — too old, evicted,
  * issued before a restart, or for another scope — is answered with the whole list (`full: true`)
@@ -36,14 +40,31 @@ export type OpenListDelta<T> =
       cursor: string;
     };
 
+/**
+ * What a `since=` read that builds only the rows that moved (`SessionsService.listOpenSince`) keeps
+ * beside a snapshot: the version parts read before its rows were built, and per row a mark that moves
+ * whenever anything that row reads moved (its own columns, the rows it joins, its overlay).
+ */
+export type OpenListMarks = {
+  epochs: Record<string, string>;
+  steady: string;
+  /** What, besides its sources' counters, can move a row's overlay with no row of its own moving. */
+  overlayInputs: string;
+  rows: ReadonlyMap<string, string>;
+};
+
 type Snapshot = {
   scope: string;
   order: string[];
   hashes: Map<string, string>;
   /** The scoped data version (`openListEtag`) read before these rows were built, if the read had one. */
   version?: string;
+  marks?: OpenListMarks;
   usedAt: number;
 };
+
+/** A held snapshot, as a reader deciding what to rebuild sees it. */
+export type OpenListBase = Readonly<Pick<Snapshot, 'order' | 'hashes' | 'marks'>>;
 
 export class OpenListDeltaStore {
   /** ownerId → cursor → snapshot, each inner map kept in least-recently-used order. */
@@ -70,15 +91,70 @@ export class OpenListDeltaStore {
     fingerprint: (row: T) => unknown = (row) => row,
     /** The version read before `rows` were built, which `unchanged` compares the next read's with. */
     version?: string,
+    marks?: OpenListMarks,
+  ): OpenListDelta<T> {
+    const order = rows.map((row) => row.id);
+    const hashes = new Map(rows.map((row) => [row.id, hashRow(fingerprint(row))]));
+    return this.record(ownerId, scope, since, rows, order, hashes, version, marks);
+  }
+
+  /**
+   * The snapshot `since` names, for a reader that will answer it with `answerFrom` after building only
+   * the rows that moved. Read-only and not marked used; `answerFrom` does that.
+   */
+  base(ownerId: string, scope: string, since: string): OpenListBase | undefined {
+    const now = this.now();
+    this.sweep(now);
+    return this.held(this.owners.get(ownerId), scope, since, now);
+  }
+
+  /**
+   * The delta against `base` when only `rebuilt` were built: every other id of `order` is a row the
+   * caller found unmoved since `base` was recorded, and keeps the hash it had there. An id of `order`
+   * neither rebuilt nor in `base` is a caller's bug, and throws rather than answer a list with a hole.
+   */
+  answerFrom<T extends { id: string }>(
+    ownerId: string,
+    scope: string,
+    since: string,
+    base: OpenListBase,
+    order: string[],
+    rebuilt: T[],
+    fingerprint: (row: T) => unknown,
+    version: string | undefined,
+    marks: OpenListMarks,
+  ): OpenListDelta<T> {
+    const fresh = new Map(rebuilt.map((row) => [row.id, hashRow(fingerprint(row))]));
+    const hashes = new Map<string, string>();
+    for (const id of order) {
+      const hash = fresh.get(id) ?? base.hashes.get(id);
+      if (hash === undefined) throw new Error(`open list delta: ${id} was neither rebuilt nor held`);
+      hashes.set(id, hash);
+    }
+    const byId = new Map(rebuilt.map((row) => [row.id, row]));
+    const rows = order.flatMap((id) => byId.get(id) ?? []);
+    return this.record(ownerId, scope, since, rows, order, hashes, version, marks, base);
+  }
+
+  private record<T extends { id: string }>(
+    ownerId: string,
+    scope: string,
+    since: string | undefined,
+    rows: T[],
+    order: string[],
+    hashes: Map<string, string>,
+    version: string | undefined,
+    marks: OpenListMarks | undefined,
+    given?: OpenListBase,
   ): OpenListDelta<T> {
     const now = this.now();
     this.sweep(now);
-    const order = rows.map((row) => row.id);
-    const hashes = new Map(rows.map((row) => [row.id, hashRow(fingerprint(row))]));
     const cursor = cursorOf(scope, order, hashes);
 
     let snapshots = this.owners.get(ownerId);
-    const usable = this.held(snapshots, scope, since, now);
+    const held = this.held(snapshots, scope, since, now);
+    // A base the caller read may have been evicted while it built; the client still holds it.
+    const usable = held ?? given;
 
     if (!snapshots) {
       snapshots = new Map();
@@ -86,15 +162,15 @@ export class OpenListDeltaStore {
     }
     // Re-insert to mark both as recently used. The base stays too: a client whose response was
     // lost retries with the same cursor, and a second device may still be on it.
-    if (usable) {
+    if (held) {
       snapshots.delete(since!);
-      usable.usedAt = now;
-      snapshots.set(since!, usable);
+      held.usedAt = now;
+      snapshots.set(since!, held);
     }
     // A device on the same list may have recorded another version under this cursor. Each was read
     // before its own build of these same rows, so either is safe to keep; this read's replaces it.
     snapshots.delete(cursor);
-    snapshots.set(cursor, { scope, order, hashes, version, usedAt: now });
+    snapshots.set(cursor, { scope, order, hashes, version, marks, usedAt: now });
     while (snapshots.size > this.perOwner) snapshots.delete(snapshots.keys().next().value!);
 
     if (!usable) return { full: true, sessions: rows, cursor };
