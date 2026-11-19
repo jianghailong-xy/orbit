@@ -88,7 +88,7 @@ internal fun TranscriptCardView(card: InteractionCard, open: (String) -> Unit, e
         SessionMessageBubble(card.source, event, open); return
     }
     // Orbit's cards on the left stop at 720 dp, as the message bubble beside them does (owner 2026-11-12).
-    val capped = listOf(":taskStart", ":projectStarted", ":openItemDelivery").any { card.key.endsWith(it) }
+    val capped = listOf(":taskStart", ":openItemDelivery").any { card.key.endsWith(it) }
     Surface(if (capped) Modifier.widthIn(max = 720.dp) else Modifier, shape = MaterialTheme.shapes.medium, color = MaterialTheme.colorScheme.secondaryContainer) {
         Column(Modifier.fillMaxWidth().padding(12.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
             Text(card.title, style = MaterialTheme.typography.titleSmall)
