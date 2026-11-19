@@ -186,6 +186,7 @@ import {
   readDoneState,
   supersedeStaleDoneRequest,
 } from './project-done-request';
+import { heldSql } from '../common/session-release';
 
 /**
  * Who is asking for an item to be put in front of the project's coordinator conversation.
@@ -3438,7 +3439,7 @@ export class ProjectOpenItemService {
                   SELECT 1 FROM "session" s
                    WHERE s."task_id" = t."id"
                      AND s."starts_task_work"
-                     AND s."status" IN ('PENDING', 'RUNNING', 'AWAITING_INPUT', 'INTERRUPTED')
+                     AND ${heldSql('s."status"')}
                      AND (s."id" IS DISTINCT FROM i."session_id"
                           -- The failing attempt itself is not "in flight" merely because the turn
                           -- that wrote FAILED is still running; a message written to it afterwards

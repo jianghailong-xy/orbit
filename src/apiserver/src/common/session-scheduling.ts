@@ -1,5 +1,7 @@
 import { RunStatus } from '@prisma/client';
 
+import { HELD_SESSION_STATUSES } from './session-release';
+
 /**
  * A runner slot represents active execution, not a resident (warm) runtime process.
  * Keep this separate from the broader "open/live session" sets used by streaming,
@@ -7,13 +9,8 @@ import { RunStatus } from '@prisma/client';
  */
 export const ACTIVE_TURN_STATUSES: RunStatus[] = [RunStatus.RUNNING];
 
-/** Non-terminal sessions retained across runner restart (active ones plus cold/warm state). */
-export const OPEN_SESSION_STATUSES: RunStatus[] = [
-  RunStatus.PENDING,
-  RunStatus.RUNNING,
-  RunStatus.AWAITING_INPUT,
-  RunStatus.INTERRUPTED,
-];
+/** Non-terminal sessions retained across runner restart (active ones plus cold/warm state): the held ones. */
+export const OPEN_SESSION_STATUSES: RunStatus[] = [...HELD_SESSION_STATUSES];
 
 /**
  * A session that still owes an answer: queued for a turn, or running one. NOT the same as

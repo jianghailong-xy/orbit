@@ -306,6 +306,11 @@ import {
   UNSETTLED_SESSION_STATUSES,
   statusAfterTurnEnqueued,
 } from '../common/session-scheduling';
+import {
+  HELD_SESSION_STATUSES,
+  RELEASED_SESSION_STATUSES,
+  releaseCauseOfEndReason,
+} from '../common/session-release';
 import { GENERATING_SESSION_FILTER, isSessionGenerating } from '../common/session-generating';
 import {
   countLiveApprovals,
@@ -5883,11 +5888,7 @@ export class SessionsService {
   // A background shell with no terminal signal is still "running" only while the session is live;
   // once it's settled the shell can't still be running, so it reads as "unknown" (see
   // classifyShellStatus). Mirrors the web tray's liveness (WorkspaceView `TERMINAL`).
-  private static readonly TERMINAL_STATUSES: RunStatus[] = [
-    RunStatus.SUCCEEDED,
-    RunStatus.FAILED,
-    RunStatus.CANCELLED,
-  ];
+  private static readonly TERMINAL_STATUSES: RunStatus[] = [...RELEASED_SESSION_STATUSES];
 
   /**
    * The authoritative, complete list of background shells the session ever launched — every
@@ -6356,20 +6357,13 @@ export class SessionsService {
   // needs a short prefix of the (potentially multi-KB) denormalized preview text.
   private static readonly PREVIEW_LEN = 200;
 
-  static readonly LIVE: RunStatus[] = [
-    RunStatus.RUNNING,
-    RunStatus.AWAITING_INPUT,
-    RunStatus.INTERRUPTED,
-  ];
+  // Held by a runner past its claim (common/session-release.ts).
+  static readonly LIVE: RunStatus[] = HELD_SESSION_STATUSES.filter((status) => status !== RunStatus.PENDING);
 
   // Not live: resume() revives these (and complete/delete/config treat them as
   // already-ended). CANCELLED covers both a hard stop and a graceful, still-resumable end
   // (idle recycle / user end) — `endReason` is what tells those apart for display.
-  static readonly TERMINAL: RunStatus[] = [
-    RunStatus.SUCCEEDED,
-    RunStatus.FAILED,
-    RunStatus.CANCELLED,
-  ];
+  static readonly TERMINAL: RunStatus[] = [...RELEASED_SESSION_STATUSES];
 
   private static resumeBlocked(
     reason: SessionResumeBlockedReason,
@@ -9751,6 +9745,8 @@ export class SessionsService {
           endReason: reason,
           cancelRequestedAt: now,
           finishedAt: now,
+          // Released for the reason the end recorded (design §4.2).
+          releaseCause: releaseCauseOfEndReason(reason),
           // A queued session can still be holding what its last run left running — a job parked
           // with the session and never reaped — and CANCELLED is the end of the line for it
           // (CLEARED_RUNNING_WORK). The runner is told to stop by the same cancelRequestedAt,
@@ -10966,7 +10962,9 @@ export class SessionsService {
           inboxLeaseOwner: newTerminalResumeHandoffOwner(),
           cancelRequestedAt: null,
           endReason: null,
+          // Held again: the release column and its cause go together.
           finishedAt: null,
+          releaseCause: null,
           error: null,
           result: null,
           lastTurnAt: new Date(),

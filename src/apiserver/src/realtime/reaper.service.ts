@@ -15,6 +15,11 @@ import { randomUUID } from 'crypto';
 import { initializesRuntimeDynamically } from '../common/runtime-provider';
 import { sessionEngine } from '../providers/session-engine';
 import { runnerOfflineIsFatal } from '../common/session-scheduling';
+import {
+  HELD_SESSION_STATUSES,
+  releaseCauseOfEndReason,
+  type SessionReleaseCause,
+} from '../common/session-release';
 import { retireSessionInboxGeneration } from '../common/session-inbox-fence';
 import { PrismaService } from '../prisma/prisma.service';
 import { postRunFailureComment, reclaimStalledTask } from '../tasks/reclaim-stalled-task';
@@ -194,7 +199,8 @@ const DYNAMIC_RUNTIME_STARTUP_GRACE_MS = 2 * 60_000;
 // timeout; this is only the control-plane backstop for a live-but-wedged runner.
 const CODEX_SHARED_STATE_STARTUP_GRACE_MS = 25 * 60_000;
 
-const LIVE: RunStatus[] = [RunStatus.RUNNING, RunStatus.AWAITING_INPUT, RunStatus.INTERRUPTED];
+// Held by a runner past its claim (common/session-release.ts).
+const LIVE: RunStatus[] = HELD_SESSION_STATUSES.filter((status) => status !== RunStatus.PENDING);
 // What one sweep reads. Wider than LIVE by PENDING, and only so the cancel-grace branch can
 // reach a queued session: claim requires `cancel_requested_at IS NULL`, so a cancel that lands
 // on a PENDING row takes it out of the queue for good, and with LIVE alone nothing would ever
@@ -502,9 +508,12 @@ export class ReaperService implements OnModuleInit, OnModuleDestroy {
               : queued
                 ? 'cancelled while queued'
                 : 'cancel not honored',
-            status
-              ? { status, expectedStatuses: [s.status] }
-              : { expectedStatuses: [s.status] },
+            {
+              ...(status ? { status } : {}),
+              expectedStatuses: [s.status],
+              // An end somebody asked for, released for the reason it recorded.
+              releaseCause: releaseCauseOfEndReason(s.endReason),
+            },
           );
           continue;
         }
@@ -597,6 +606,7 @@ export class ReaperService implements OnModuleInit, OnModuleDestroy {
               // work left behind in the old one.
               armRetry: !s.taskId || !s.task?.autoRunWhenReady,
               taskFailure: 'ATTEMPT_LOST_RUNNER_OFFLINE',
+              releaseCause: 'runner_lost',
             });
           }
           continue;
@@ -634,6 +644,7 @@ export class ReaperService implements OnModuleInit, OnModuleDestroy {
               expectedStatuses: [RunStatus.RUNNING],
               onlyIfNotCancelling: true,
               taskFailure: 'ATTEMPT_LOST_RUNTIME_NOT_INITIALIZED',
+              releaseCause: 'setup_failed',
             },
           );
           continue;
@@ -660,6 +671,7 @@ export class ReaperService implements OnModuleInit, OnModuleDestroy {
               expectedStatuses: [RunStatus.AWAITING_INPUT],
               onlyIfNotCancelling: true,
               taskFailure: 'REAPED_API_ERROR',
+              releaseCause: 'turn_failed',
             });
             continue;
           }
@@ -845,7 +857,9 @@ export class ReaperService implements OnModuleInit, OnModuleDestroy {
        * for: that ending says nothing about the work.
        */
       taskFailure?: TaskFailureHow;
-    } = {},
+      /** Why the session is released (`session.release_cause`), written with the status. */
+      releaseCause: SessionReleaseCause;
+    },
   ): Promise<void> {
     const status = opts.status ?? RunStatus.FAILED;
     const failed = status === RunStatus.FAILED;
@@ -894,6 +908,7 @@ export class ReaperService implements OnModuleInit, OnModuleDestroy {
           // rather than a fixed delay guessing when the runner returns.
           ...(retryAt ? { retryAt } : {}),
           finishedAt: new Date(),
+          releaseCause: opts.releaseCause,
           cancelRequestedAt: new Date(),
           // Every status this writes is terminal, so the run this reaps stops being live here and
           // what it had running goes with it (CLEARED_RUNNING_WORK). A runner that is merely

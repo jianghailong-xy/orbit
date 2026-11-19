@@ -180,8 +180,9 @@ test('turn-complete records the turn outcome on the turn and on the session', {
       `SELECT status, outcome, error FROM "conversation_turn" WHERE id = $1::uuid`, [turnId],
     )).rows[0] as { status: string; outcome: string | null; error: string | null };
     const session = (await sql.query(
-      `SELECT status::text AS status, last_turn_outcome FROM "session" WHERE id = $1::uuid`, [f.sessionId],
-    )).rows[0] as { status: string; last_turn_outcome: string | null };
+      `SELECT status::text AS status, last_turn_outcome, finished_at, release_cause FROM "session" WHERE id = $1::uuid`,
+      [f.sessionId],
+    )).rows[0] as { status: string; last_turn_outcome: string | null; finished_at: Date | null; release_cause: string | null };
     console.log(`# ${JSON.stringify({ turn, session })}`);
     return { turn, session };
   }
@@ -199,6 +200,8 @@ test('turn-complete records the turn outcome on the turn and on the session', {
     assert.equal(turn.error, null, 'an answered turn carries no error');
     assert.equal(session.last_turn_outcome, 'ANSWERED');
     assert.equal(session.status, 'AWAITING_INPUT', 'the status write is the one it always was');
+    assert.equal(session.finished_at, null, 'a parked session is held: no release column');
+    assert.equal(session.release_cause, null);
   });
 
   await t.test('(2) FAILED: FAILED, with the error the runtime reported', async () => {
@@ -219,6 +222,9 @@ test('turn-complete records the turn outcome on the turn and on the session', {
     assert.equal(turn.error, 'API Error: 500 Internal server error', 'the failure, not the last reply');
     assert.equal(session.last_turn_outcome, 'FAILED');
     assert.equal(session.status, 'FAILED', 'the status write is the one it always was');
+    // Released by the failed turn, in the same write (plan step 3.2).
+    assert.ok(session.finished_at instanceof Date, 'the failed turn sets the release column');
+    assert.equal(session.release_cause, 'turn_failed');
   });
 
   await t.test('(3) INTERRUPTED after a Stop: INTERRUPTED', async () => {
