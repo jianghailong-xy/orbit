@@ -48,7 +48,8 @@ interface ClaimedRow {
  * The outbox's worker (docs/feishu-bot-design.md §7.5, `feishu_outbox`, migration 0501): on every replica, claims due
  * rows — PENDING, or FAILED with its wait over — with FOR UPDATE SKIP LOCKED, `due_at` moved on as the claim's lease and
  * the attempt counted, and replies to the chain's root message with the session's words: in its thread in a group (a
- * chat with a feishu_chat_route), with Open in Orbit in a direct chat. A row waits while an earlier row of its session
+ * chat with a feishu_chat_route), with Open in Orbit in the owner's direct chat, and as the words alone in the direct
+ * chat of someone else who opened the chain while the bot was open (§14.2). A row waits while an earlier row of its session
  * has still to go, so a session's replies arrive in order. Sent in either detail mode (§6.4): the conversation is the
  * owner's own, held in Feishu already.
  *
@@ -135,7 +136,7 @@ export class FeishuOutboxService implements OnApplicationBootstrap, OnModuleDest
     try {
       const app = await this.prisma.feishuApp.findFirst({
         where: { appId: row.appId, ownerId: row.ownerId },
-        select: { platform: true, appId: true, appSecretEnc: true, enabled: true },
+        select: { platform: true, appId: true, appSecretEnc: true, enabled: true, showOrbit: true },
       });
       const credentials = app ? credentialsOf(app) : null;
       if (!app || !app.enabled || !credentials || !(await this.apps.allowed())) {
@@ -146,7 +147,16 @@ export class FeishuOutboxService implements OnApplicationBootstrap, OnModuleDest
       // its message derived (feishu-group.service.ts), so a reply after the route was removed still carries no link (§8.3).
       const group = row.sessionId === feishuDerivedUuid('feishu-group-session', row.appId, row.rootMessageId)
         || (await this.prisma.feishuChatRoute.count({ where: { appId: row.appId, ownerId: row.ownerId, chatId: row.chatId } })) > 0;
-      const body = renderSessionReply(row.text, group ? null : orbitUrl({ sessionId: row.sessionId }));
+      // A chain someone other than the owner opened while the bot was open (§14.2, O3) is read by them: the words alone,
+      // with no Orbit link whatever Show Orbit in Feishu says (§15.1), as in a group, but as a reply in the direct chat
+      // rather than in a topic.
+      const open = !group && (await this.prisma.feishuThread.count({
+        where: { appId: row.appId, ownerId: row.ownerId, chatId: row.chatId, rootMessageId: row.rootMessageId, openAccessOpenId: { not: null } },
+      })) > 0;
+      // The owner's direct chat carries Open in Orbit, or with Show Orbit in Feishu off the words alone (§15.2).
+      const owners = !group && !open;
+      const linked = owners && app.showOrbit;
+      const body = renderSessionReply(row.text, linked ? orbitUrl({ sessionId: row.sessionId }) : null, owners && !app.showOrbit);
       const result = await this.outbound.reply(credentials, row.rootMessageId, body, {
         replyInThread: group,
         uuid: feishuDedupeUuid('session-reply', row.appId, row.id),

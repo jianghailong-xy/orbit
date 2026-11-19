@@ -62,7 +62,7 @@ test('status lists each waiting session with its owner items and Open in Orbit; 
   const card = renderStatusCard([
     { title: 'Fix the build', ownerItems: [], url: 'https://orbit.example/sessions/a' },
     { title: 'Feishu project', ownerItems: ['Approve merge to main'], url: 'https://orbit.example/sessions/b' },
-  ]);
+  ], true);
   assert.equal(card.header.title.content, 'Waiting on you · 2');
   const texts = card.body.elements.filter((e) => e.tag === 'div').map((e) => e.text.content);
   assert.deepEqual(texts, ['Fix the build', 'Feishu project', '• Approve merge to main']);
@@ -71,9 +71,24 @@ test('status lists each waiting session with its owner items and Open in Orbit; 
     ['Open in Orbit', 'https://orbit.example/sessions/a'],
     ['Open in Orbit', 'https://orbit.example/sessions/b'],
   ]);
-  const empty = renderStatusCard([]);
+  const empty = renderStatusCard([], true);
   assert.equal(empty.header.title.content, 'Nothing is waiting on you');
   assert.ok(!JSON.stringify(empty).includes('"button"'));
+});
+
+test('status with Show Orbit in Feishu off: the same list, no Open in Orbit and no Orbit URL (§15.2)', () => {
+  const entries = [
+    { title: 'Fix the build', ownerItems: [], url: 'https://orbit.example/sessions/a' },
+    { title: 'Feishu project', ownerItems: ['Approve merge to main'], url: 'https://orbit.example/sessions/b' },
+  ];
+  const on = renderStatusCard(entries, true);
+  const off = renderStatusCard(entries, false);
+  assert.ok(JSON.stringify(on).includes('Open in Orbit'));
+  assert.equal(off.header.title.content, 'Waiting on you · 2');
+  assert.deepEqual(off.body.elements.map((e) => e.text?.content), ['Fix the build', 'Feishu project', '• Approve merge to main']);
+  const json = JSON.stringify(off);
+  assert.ok(!json.includes('Open in Orbit') && !json.includes('open_url') && !json.includes('orbit.example'));
+  assert.deepEqual(renderStatusCard([], false), renderStatusCard([], true), 'nothing waiting has no button either way');
 });
 
 test('a Feishu turn\'s key is the same for the same event, and never reads as a turn Orbit wrote itself', () => {

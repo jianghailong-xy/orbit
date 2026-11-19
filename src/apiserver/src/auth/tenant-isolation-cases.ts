@@ -1129,6 +1129,11 @@ export const TENANT_ISOLATION_FIELD_CASES: Readonly<Record<string, TenantFieldCa
   // The default workspace of the owner's Feishu direct messages (docs/feishu-bot-design.md §7.3): the workspace is read
   // before the app, so A's is answered as one that names nothing (404) and nothing is written.
   'PATCH /integrations/feishu body defaultWorkspaceId': { request: (of) => ({ params: {}, body: { defaultWorkspaceId: of.workspaceId } }) },
+  // The workspace sessions other people start open in (§14.1, owner channel): read before the app, so A's is answered as
+  // one that names nothing (404) and nothing is written. Saved as Only you, so the census opens the bot to nobody.
+  'PUT /integrations/feishu/access body workspaceId': {
+    request: (of) => ({ params: {}, body: { mode: 'OWNER_ONLY', workspaceId: of.workspaceId } }),
+  },
 
   ...workspaceFieldCases('agents'),
   ...workspaceFieldCases('workspaces'),

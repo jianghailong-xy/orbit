@@ -239,7 +239,8 @@ internal fun SessionComposer(app: OrbitApplication, handle: SessionHandle, sessi
     val planRow = state.catalog?.usage(effective)?.let { io.orbitd.android.management.bindingRow(it, System.currentTimeMillis()) }
     var modeMenu by remember { mutableStateOf(false) }
     val focused = inputFocused && imeUp
-    Surface(tonalElevation = 2.dp) {
+    // The band under the card is the page's own colour (iOS `ComposerBand`): a tonal elevation tinted it grey-blue apart from the page.
+    Surface {
         Column(Modifier.fillMaxWidth().padding(horizontal = 10.dp, vertical = 6.dp).testTag("session-composer")) {
             Column(Modifier.weight(1f, fill = false).verticalScroll(rememberScrollState())) {
                 state.error?.let { Text(it, color = MaterialTheme.colorScheme.error); TextButton(onClick = model::clearError) { Text("Dismiss error") } }
