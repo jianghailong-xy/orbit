@@ -379,3 +379,19 @@ test('who started a session the owner did not start: in a group or a direct mess
     }
   }
 });
+
+test('a settled approval of a session someone else started keeps who started it beside where it was answered', () => {
+  const line = 'Started by Li Lei in Release crew';
+  const alert: FeishuAlert = { kind: 'approval', sessionTitle: 'Fix the build', approvals: [{ id: 'a', toolName: 'Bash', input: { command: 'ls' } }], startedBy: line };
+  for (const outcome of ['Allowed in Feishu · 10:32 UTC', 'Denied in Orbit · 10:40 UTC']) {
+    for (const detail of ['TITLES_ONLY', 'FULL'] as const) {
+      const card = renderFeishuTerminalCard(alert, ctx(detail), outcome);
+      assert.ok(strings(card.body).includes(outcome), `${detail}: the outcome`);
+      assert.ok(strings(card.body).includes(line), `${detail}: who started it`);
+      assert.equal(card.header.subtitle.content, 'Bash');
+      assert.ok(!strings(card.body).includes('Bash'), `${detail}: the subtitle is not repeated`);
+      assert.ok(!/needs? your reply/i.test(JSON.stringify(card)), `${detail}: asks for nothing`);
+      assert.equal(tagged(card, 'button').length, 0);
+    }
+  }
+});
