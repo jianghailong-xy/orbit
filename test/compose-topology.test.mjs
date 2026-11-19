@@ -160,6 +160,10 @@
 // gained its apiserver environment line, ORBIT_MANAGED_RUNNER_BROWSER_ENABLED, off unless the host's .env says true,
 // right after the managed runners' switch (Orbit task 3507XXbnib94qfwmCPaOA, filed by that project's coordinator).
 // No service, mount or port is added; the managed runners' block below pins the line.
+//
+// ce80000db8 then added one apiserver environment line, ORBIT_RUN_STOPPED_WAKE (on unless the host's .env sets
+// ORBIT_RUN_STOPPED_WAKE_MODE to off), and the three comment lines that explain it; the account owner approved it as a
+// deployment setting on 2026-11-20. No service, mount or port is added; the block below pins the line.
 import assert from 'node:assert/strict';
 import { execFileSync, spawnSync } from 'node:child_process';
 import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
@@ -436,6 +440,11 @@ const APPROVED_APISERVER_BLOCKS = [
   // because the line comes right after `logging`, before the environment.
   [
     '    stop_grace_period: 30s',
+  ],
+  // The Run stopped wake's switch (2026-11-20, ce80000db8, the top of this file): on unless the host's .env sets
+  // ORBIT_RUN_STOPPED_WAKE_MODE to off. It comes right after the Wiki's canary owners in the file, before PORT.
+  [
+    '      ORBIT_RUN_STOPPED_WAKE: "${ORBIT_RUN_STOPPED_WAKE_MODE:-on}"',
   ],
   // Claude Code on an OpenAI key (2026-11-11, the top of this file): its flag, the flag of the owner's own Codex login
   // pool, and the upstream hosts an admin lists besides api.openai.com, each empty unless the host's .env sets it. They

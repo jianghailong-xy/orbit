@@ -219,7 +219,7 @@ services:
       ORBIT_WIKI: "${ORBIT_WIKI_MODE:-on}"
       ORBIT_WIKI_CANARY_OWNERS: "${ORBIT_WIKI_CANARY_OWNERS:-}"
       # Optional: off stops the "Run stopped" wake (TASK_RUN_STOPPED, projects/task-run-stopped.producer.ts), which tells
-      # a project's coordinator when a task's run parks with nothing to wake it; on (default) keeps it. Takes effect on
+      # a project's lead session when a task's run parks with nothing to wake it; on (default) keeps it. Takes effect on
       # `docker compose up -d apiserver`. Set it on the host as ORBIT_RUN_STOPPED_WAKE_MODE.
       ORBIT_RUN_STOPPED_WAKE: "${ORBIT_RUN_STOPPED_WAKE_MODE:-on}"
       PORT: "3000"
