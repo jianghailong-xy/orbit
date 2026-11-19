@@ -14,6 +14,7 @@ import {
   encodeStreamClose,
   encodeStreamCredit,
   encodeStreamData,
+  encodeStreamPaste,
   streamOpenMessage,
 } from './browser-stream-frames';
 
@@ -47,6 +48,12 @@ test('what this side writes, the generated code reads as the same frame', () => 
   assert.equal(close.body.value.code, pb.StreamCloseCode.NORMAL);
   assert.equal(close.body.value.message, 'The viewer closed the stream');
 
+  const paste = protobuf.fromBinary(pb.FrameSchema, encodeStreamPaste(ID, 300, '密码 Pässwörd 🔑'));
+  assert.equal(paste.body.case, 'streamPaste');
+  assert.equal(paste.body.value.streamId, ID);
+  assert.equal(paste.body.value.pasteId, 300);
+  assert.equal(paste.body.value.text, '密码 Pässwörd 🔑');
+
   const open = protobuf.fromJson(pb.FrameSchema, JSON.parse(streamOpenMessage(ID)));
   assert.equal(open.body.case, 'streamOpen');
   assert.equal(open.body.value.streamId, ID);
@@ -69,6 +76,18 @@ test('what the generated code writes, this side reads', () => {
     decodeStreamFrame(generated({ case: 'streamClose', value: { streamId: ID, code: pb.StreamCloseCode.FLOW_VIOLATION, message: 'past the window' } })),
     { kind: 'close', streamId: ID, code: STREAM_CLOSE.FLOW_VIOLATION, message: 'past the window' },
   );
+  assert.deepEqual(decodeStreamFrame(generated({ case: 'streamPasted', value: { streamId: ID, pasteId: 300, error: 'Click a text field in the browser first' } })), {
+    kind: 'pasted',
+    streamId: ID,
+    pasteId: 300,
+    error: 'Click a text field in the browser first',
+  });
+  assert.deepEqual(decodeStreamFrame(generated({ case: 'streamPasted', value: { streamId: ID, pasteId: 1 } })), {
+    kind: 'pasted',
+    streamId: ID,
+    pasteId: 1,
+    error: '',
+  });
   // Every close code means the same on both sides.
   for (const [name, code] of Object.entries(STREAM_CLOSE)) assert.equal(pb.StreamCloseCode[name], code, name);
 

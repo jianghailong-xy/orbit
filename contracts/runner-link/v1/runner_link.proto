@@ -14,6 +14,8 @@
 // Minor revisions of v1 (each only adds, §5.11; a peer learns of one from a Hello capability):
 //   - Byte streams (StreamOpen, StreamOpened, StreamData, StreamCredit, StreamClose), capability
 //     `link-stream-v1` (docs/runner-browser-design.md §4).
+//   - Paste into the browser of a stream (StreamPaste, StreamPasted), capability
+//     `link-stream-paste-v1` (docs/runner-browser-design.md §5).
 //
 // Units: times are Unix milliseconds (`*_unix_ms`), durations are milliseconds (`*_ms`).
 syntax = "proto3";
@@ -81,6 +83,10 @@ message Frame {
     StreamCredit stream_credit = 23;
     // Either way: a stream is closed, or was refused.
     StreamClose stream_close = 24;
+    // Gateway to runner: text the owner pasted in a viewer of an open VNC stream, for the browser.
+    StreamPaste stream_paste = 25;
+    // Runner to gateway: how a StreamPaste ended.
+    StreamPasted stream_pasted = 26;
   }
 }
 
@@ -723,6 +729,29 @@ message StreamClose {
   StreamCloseCode code = 2;
   // Detail for logs, in English; never parsed.
   string message = 3;
+}
+
+// Gateway to runner: text the owner pasted while in control of a viewer, which the runner inserts into
+// the page that has focus in its browser (Chrome DevTools Input.insertText), as typed text. It is
+// not one of the stream's bytes and takes no room in its window; it is sent only to a runner whose
+// Hello declared `link-stream-paste-v1`. The text is often a password: no side logs or stores it.
+message StreamPaste {
+  // The open stream the paste came from.
+  string stream_id = 1;
+  // Names the paste in its StreamPasted: chosen by the apiserver, unique within the stream.
+  uint32 paste_id = 2;
+  // The text, at most 64 KiB of UTF-8.
+  string text = 3;
+}
+
+// Runner to gateway: the answer to one StreamPaste.
+message StreamPasted {
+  // The stream_id of the StreamPaste this answers.
+  string stream_id = 1;
+  // The paste_id of the StreamPaste this answers.
+  uint32 paste_id = 2;
+  // Empty when the text was inserted; otherwise why not, in English, shown to the owner.
+  string error = 3;
 }
 
 // Why a stream closed.

@@ -14,10 +14,12 @@ import {
   LogoutOutlined,
   MenuFoldOutlined,
   MenuUnfoldOutlined,
+  MoonOutlined,
   MoreOutlined,
   PlusOutlined,
   QuestionCircleOutlined,
   SettingOutlined,
+  SunOutlined,
   TeamOutlined,
   UserOutlined,
 } from '@ant-design/icons';
@@ -1263,14 +1265,21 @@ export function TasksSidePanel({ open = false, onNavigate }: { open?: boolean; o
                 </span>
               ),
               children: (
+                // Each with its mark before it, as the Machines level draws its rows (docs/mocks/machine-menu-icons/03-appearance-icons, A).
                 [
-                  { key: 'system', label: 'System' },
-                  { key: 'light', label: 'Light' },
-                  { key: 'dark', label: 'Dark' },
-                ] as { key: ThemeMode; label: string }[]
+                  { key: 'system', label: 'System', mark: <DesktopOutlined aria-hidden /> },
+                  { key: 'light', label: 'Light', mark: <SunOutlined aria-hidden /> },
+                  { key: 'dark', label: 'Dark', mark: <MoonOutlined aria-hidden /> },
+                ] as { key: ThemeMode; label: string; mark: ReactNode }[]
               ).map((it) => ({
                 key: `theme-${it.key}`,
-                label: it.label,
+                textValue: it.label,
+                label: (
+                  <span className="tp-account-machine-os">
+                    {it.mark}
+                    {it.label}
+                  </span>
+                ),
                 icon:
                   mode === it.key ? (
                     <CheckOutlined />

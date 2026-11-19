@@ -135,7 +135,7 @@ export class FeishuOutboxService implements OnApplicationBootstrap, OnModuleDest
     try {
       const app = await this.prisma.feishuApp.findFirst({
         where: { appId: row.appId, ownerId: row.ownerId },
-        select: { platform: true, appId: true, appSecretEnc: true, enabled: true },
+        select: { platform: true, appId: true, appSecretEnc: true, enabled: true, showOrbit: true },
       });
       const credentials = app ? credentialsOf(app) : null;
       if (!app || !app.enabled || !credentials || !(await this.apps.allowed())) {
@@ -146,7 +146,9 @@ export class FeishuOutboxService implements OnApplicationBootstrap, OnModuleDest
       // its message derived (feishu-group.service.ts), so a reply after the route was removed still carries no link (§8.3).
       const group = row.sessionId === feishuDerivedUuid('feishu-group-session', row.appId, row.rootMessageId)
         || (await this.prisma.feishuChatRoute.count({ where: { appId: row.appId, ownerId: row.ownerId, chatId: row.chatId } })) > 0;
-      const body = renderSessionReply(row.text, group ? null : orbitUrl({ sessionId: row.sessionId }));
+      // The owner's direct chat carries Open in Orbit, or with Show Orbit in Feishu off the words alone (§15.2).
+      const linked = !group && app.showOrbit;
+      const body = renderSessionReply(row.text, linked ? orbitUrl({ sessionId: row.sessionId }) : null, !group && !app.showOrbit);
       const result = await this.outbound.reply(credentials, row.rootMessageId, body, {
         replyInThread: group,
         uuid: feishuDedupeUuid('session-reply', row.appId, row.id),
