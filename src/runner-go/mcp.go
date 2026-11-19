@@ -273,6 +273,10 @@ func (s *mcpServer) handle(req *rpcRequest) (rpcResponse, bool) {
 			// Claude Code names the call this is; its SubAgent's events nest under that id.
 			return s.ok(req.ID, s.callDelegate(p.Arguments, asString(p.Meta["claudecode/toolUseId"]))), true
 		}
+		if p.Name == workflowToolName {
+			// Its calls' events nest under this id, as a delegate call's do.
+			return s.ok(req.ID, s.callWorkflow(p.Arguments, asString(p.Meta["claudecode/toolUseId"]))), true
+		}
 		return s.ok(req.ID, s.invokeTool(p.Name, p.Arguments)), true
 	default:
 		if isNotification {

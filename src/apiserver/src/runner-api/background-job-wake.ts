@@ -578,6 +578,7 @@ export function buildBackgroundStallBlock(wakes: StoredWake[], turnKind: string 
 
 /** The kind a SubAgent's wake is filed under (runner-api/subagent-wake.ts): delivered in its own block. */
 export const SUBAGENT_WAKE_KIND = 'subagent';
+export const WORKFLOW_WAKE_KIND = 'workflow';
 
 /** What each end of a run means for the agent that sent it. */
 const ENDED_BECAUSE: Record<string, string> = {
@@ -620,6 +621,30 @@ export function buildSubagentFinishedBlock(wakes: StoredWake[], turnKind: string
   return lines.join('\n');
 }
 
+/** The block a workflow's completion wake is delivered in. */
+export function buildWorkflowFinishedBlock(wakes: StoredWake[], turnKind: string = 'message'): string {
+  const lines = ['<orbit-workflow-finished>'];
+  for (const wake of wakes) {
+    const description = wake.description ? ` — ${wake.description}` : '';
+    lines.push(`  Workflow ${wake.command}${description} (run ${wake.jobId}) finished: ${wake.status}`);
+    if (wake.status === 'INTERRUPTED') {
+      lines.push(
+        '  The runner process stopped before the workflow finished. What its SubAgents changed so far is in the ' +
+          'working tree, uncommitted. A workflow cannot be resumed yet: start one for the work that is left, or ' +
+          'finish it yourself.',
+      );
+    }
+    for (const line of wake.outputExcerpt.replace(/\r\n?/g, '\n').trimEnd().split('\n')) lines.push(`    ${line}`);
+  }
+  lines.push(
+    turnKind === 'steer'
+      ? '  It ended while you were working, so this was added to the turn you are in.'
+      : '  The control plane opened this turn for it.',
+    '</orbit-workflow-finished>',
+  );
+  return lines.join('\n');
+}
+
 /**
  * Write a wake turn's wakes into the content being delivered.
  *
@@ -644,11 +669,13 @@ export async function appendBackgroundWakeContext(
   // A SubAgent's end reads as a SubAgent's, in a block of its own; a stall goes in a block of its own, after the
   // exits and output beside it.
   const subagents = wakes.filter((wake) => wake.kind === SUBAGENT_WAKE_KIND);
-  const jobs = wakes.filter((wake) => wake.kind !== SUBAGENT_WAKE_KIND);
+  const workflows = wakes.filter((wake) => wake.kind === WORKFLOW_WAKE_KIND);
+  const jobs = wakes.filter((wake) => wake.kind !== SUBAGENT_WAKE_KIND && wake.kind !== WORKFLOW_WAKE_KIND);
   const news = jobs.filter((wake) => wake.trigger !== 'stall');
   const stalls = jobs.filter((wake) => wake.trigger === 'stall');
   const blocks = [
     ...(subagents.length > 0 ? [buildSubagentFinishedBlock(subagents, turnKind)] : []),
+    ...(workflows.length > 0 ? [buildWorkflowFinishedBlock(workflows, turnKind)] : []),
     ...(news.length > 0 ? [buildBackgroundWakeBlock(news, turnKind)] : []),
     ...(stalls.length > 0 ? [buildBackgroundStallBlock(stalls, turnKind)] : []),
   ];

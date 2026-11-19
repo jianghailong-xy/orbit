@@ -162,7 +162,7 @@ export class WorkspacesService {
         modelRoutingOptimizeFor: dto.modelRoutingOptimizeFor ?? 'cost',
         modelRoutingProviders: modelRoutingEngines(dto.modelRoutingProviders) ?? [],
         subagentsEnabled: dto.subagentsEnabled ?? true,
-        subagentsMaxRunning: dto.subagentsMaxRunning ?? 4,
+        subagentsMaxRunning: dto.subagentsMaxRunning ?? 8,
         // A clone (§5.3): its repository and PENDING, which the runner's next reconcile asks it to clone, and which
         // holds the workspace's sessions until it is READY.
         ...(cloned?.clone ? { ...cloned.clone, cloneState: 'PENDING' as const } : {}),

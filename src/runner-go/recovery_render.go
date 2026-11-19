@@ -459,7 +459,7 @@ func (s *mcpServer) listedToolDescriptors() []map[string]interface{} {
 	// A SubAgent cannot hand work on again (subagent.go).
 	if os.Getenv(envSubagentRunID) == "" {
 		cwd, _ := os.Getwd()
-		tools = append(tools, delegateToolDescriptor(schemaObject, sessionSubagentDefinitions(cwd)))
+		tools = append(tools, delegateToolDescriptor(schemaObject, sessionSubagentDefinitions(cwd)), workflowToolDescriptor(schemaObject))
 	}
 	if s.onlyTools != nil {
 		tools = onlyMCPTools(tools, s.onlyTools)

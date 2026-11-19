@@ -45,10 +45,10 @@ controllers and their decorators, so it lists what the server mounts, not what a
 | `public` | 37 |
 | `user` | 480 |
 | `admin` | 31 |
-| `runner` | 203 |
+| `runner` | 205 |
 | `channel` | 1 |
 | `link gateway` | 3 |
-| **Total** | **755** |
+| **Total** | **757** |
 
 ## Public routes
 
@@ -753,6 +753,8 @@ controllers and their decorators, so it lists what the server mounts, not what a
 | `POST` | `/api/runner/sessions/:id/turn-complete` | body `Object`; path `id` | `RunnerApiController.turnComplete` |
 | `POST` | `/api/runner/sessions/:id/turns` | body `Object`; path `id` | `RunnerSessionsController.sendMessage` |
 | `POST` | `/api/runner/sessions/:id/turns/:turnId/suggestion` | path `id`, `turnId` | `RunnerApiController.turnSuggestion` |
+| `POST` | `/api/runner/sessions/:id/workflows` | body `WorkflowRunCreateDto`; path `id` | `RunnerSubagentsController.openWorkflowRun` |
+| `PATCH` | `/api/runner/sessions/:id/workflows/:workflowRunId` | body `WorkflowRunUpdateDto`; path `id`, `workflowRunId` | `RunnerSubagentsController.updateWorkflowRun` |
 | `GET` | `/api/runner/sessions/claim` | query `drainScope` | `RunnerApiController.claim` |
 | `POST` | `/api/runner/sessions/import` | body `Object` | `RunnerSessionsController.importSession` |
 | `GET` | `/api/runner/sessions/reclaim` | — | `RunnerApiController.reclaim` |

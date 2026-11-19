@@ -859,6 +859,9 @@ func codexToolItemName(item map[string]interface{}) string {
 			// (delegateEngineToolName), as every other engine spells it.
 			return delegateEngineToolName
 		}
+		if server == codexOrbitMCPServer && tool == workflowToolName {
+			return workflowEngineToolName
+		}
 		return server + "__" + tool
 	}
 	return tool

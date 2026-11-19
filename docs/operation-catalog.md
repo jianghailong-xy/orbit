@@ -1,7 +1,7 @@
 # Orbit operation catalogue v1.9.0
 
 > Generated from `src/runner-go/operation_catalog.go` — do not edit by hand.
-> Content hash: `a9be75fe377ede496cf7e85851b359cc0c5ea52e017efa2722d60b4c62fd8f45`.
+> Content hash: `5d5438a9b9d69926e81ed7252155d5da4bb445a940402dced72cd40cc185cf0d`.
 
 Every operation an Orbit agent can call is declared once in the operation catalogue. This table is that catalogue rendered for a person: `orbit capabilities --json` and the MCP `tools/list` payload are its two machine surfaces, and the leaf `--help` texts are held to it by tests. `MCP` and `CLI` say how each surface reaches the operation — `always`, an `orchestration` grant, an engine `permission_prompt` bridge, `session`-only, `headless`-only, or a `watch_switch`/`wiki_switch` — and `absent` when that surface deliberately has no door. Gates that must hold together are joined with `+` (for example `orchestration+watch_switch`). `Idempotency` is `read` (safe to repeat), `caller_key` (retry with the same key), `server_key` (a redelivered turn deduplicates) or `none` (re-read before retrying). `Plan` is what a session in Plan mode gets: the call `runs`, is `refused` with what to do instead, or its `own_gate` decides; the per-engine matrix is docs/permission-matrix.md.
 
