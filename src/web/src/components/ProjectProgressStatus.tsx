@@ -112,7 +112,6 @@ export const FROM_ORBIT_TITLE =
 
 export const OPEN_ITEMS_HEADING = 'Open items';
 export const NEEDS_YOU_GROUP = 'Needs you';
-export const WITH_COORDINATOR_GROUP = 'With the coordinator';
 
 /**
  * The word an exception card wears for where the coordinator's handling of it stands (§4.7 H1–H5).
@@ -2905,7 +2904,7 @@ export function isOwnerExceptionCard(row: ProjectOpenItemRow): boolean {
 }
 
 /**
- * Every open exception of this project, as cards, wherever a transcript wants them: the project's
+ * The owner’s exceptions for this project, as cards, wherever a transcript wants them: the project's
  * coordinator conversation draws these INTO its own turns, at the moment each one happened, and the
  * project page expands the same components (§7.5).
  *
@@ -2943,14 +2942,9 @@ export function exceptionCardRows(
  * the thing that stopped the project.
  */
 function ordered(items: ProjectOpenItemsView | undefined): ProjectOpenItemRow[] {
-  // The settled ones too (§4.7 H5): a card the conversation drew while the coordinator handled it
-  // stays at the moment it happened and says how it ended, rather than vanishing from under the
-  // reader the moment its rerun lands.
-  const all = [
-    ...(items?.needsYou ?? []),
-    ...(items?.withCoordinator ?? []),
-    ...(items?.settled ?? []),
-  ];
+  // Keep settled cards for items the owner could see before they ended.
+  const all = [...(items?.needsYou ?? []), ...(items?.settled ?? [])]
+    .filter((row) => row.assignee === 'OWNER');
   const paused = all.filter((row) => row.kind === 'FUSE_PAUSED');
   const rest = all
     .filter((row) => row.kind !== 'FUSE_PAUSED')
@@ -3260,13 +3254,12 @@ export function ProjectOpenItems({
     ...(doneRequest ? [doneRequest] : []),
     ...(items.data?.needsYou ?? []).filter((row) => row.kind !== 'FUSE_PAUSED' && row.kind !== 'DONE_REQUEST'),
   ];
-  const withCoordinator = items.data?.withCoordinator ?? [];
   const signIns = items.data?.signIns ?? [];
   const ownStart = start?.kind === 'own' && onStartProject ? onStartProject : null;
   const ownDone = items.data !== undefined && !doneRequest && onRecordDone ? onRecordDone : null;
   if (
     !projectId
-    || (paused.length + needsYou.length + signIns.length + withCoordinator.length === 0 && !ownStart && !ownDone)
+    || (paused.length + needsYou.length + signIns.length === 0 && !ownStart && !ownDone)
   ) return null;
 
   return (
@@ -3274,7 +3267,7 @@ export function ProjectOpenItems({
       <header className="project-open-items-head">
         <span className="project-open-items-title">{OPEN_ITEMS_HEADING}</span>
         <span className="project-open-items-hint">
-          {`${needsYou.length + signIns.length} need you · ${withCoordinator.length} with the coordinator · oldest first`}
+          {`${needsYou.length + signIns.length} need you · oldest first`}
         </span>
       </header>
       {paused.map((row) => (
@@ -3317,22 +3310,6 @@ export function ProjectOpenItems({
                 />
               ),
             )}
-          </ul>
-        </>
-      ) : null}
-      {withCoordinator.length > 0 ? (
-        <>
-          <div className="project-open-items-group">{WITH_COORDINATOR_GROUP}</div>
-          <ul className="project-open-items-list">
-            {withCoordinator.map((row) => (
-              <OpenItemRowView
-                key={row.itemId}
-                row={row}
-                now={now}
-                currentPromotionId={currentPromotionId}
-                main={main}
-              />
-            ))}
           </ul>
         </>
       ) : null}

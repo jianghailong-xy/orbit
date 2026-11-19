@@ -44,6 +44,7 @@ import { SetupPage } from './pages/SetupPage';
 import { ProjectDetailPage, ProjectsPage } from './pages/ProjectsPage';
 import { SharedLinksPage } from './pages/SharedLinksPage';
 import { AccessTokensPage } from './pages/AccessTokensPage';
+import { SecretsPage } from './pages/SecretsPage';
 import { TerminalsPage } from './pages/TerminalsPage';
 import { FeishuConnectGroupPage } from './pages/FeishuConnectGroupPage';
 import { FeishuIntegrationPage } from './pages/FeishuIntegrationPage';
@@ -314,6 +315,8 @@ export function App() {
             <Route path="shared-links" element={<SharedLinksPage />} />
             {/* The personal access tokens this account has issued: issue, list, revoke. */}
             <Route path="access-tokens" element={<AccessTokensPage />} />
+            {/* Every copy of a secret on a machine, and the saved secrets (project "Secrets management page"). */}
+            <Route path="secrets" element={<SecretsPage />} />
             {/* The terminals this account has approved: list, revoke (docs/terminal-session-design.md). */}
             <Route path="terminals" element={<TerminalsPage />} />
             {/* The account's own Feishu or Lark app (docs/feishu-bot-design.md §4.1, §4.2). */}

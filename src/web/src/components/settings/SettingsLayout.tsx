@@ -29,6 +29,7 @@ import {
   FolderOutlined,
   HolderOutlined,
   KeyOutlined,
+  LockOutlined,
   LeftOutlined,
   LinkOutlined,
   PlusOutlined,
@@ -74,6 +75,7 @@ const PERSONAL_ICONS: Record<(typeof PERSONAL_PAGES)[number]['path'], ReactNode>
   '/settings/storage': <DatabaseOutlined />,
   '/settings/shared-links': <LinkOutlined />,
   '/settings/access-tokens': <KeyOutlined />,
+  '/settings/secrets': <LockOutlined />,
   '/settings/terminals': <CodeOutlined />,
 };
 

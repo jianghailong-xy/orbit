@@ -965,7 +965,7 @@ export class PushService {
             select: {
               title: true,
               coordinatorSessionId: true,
-              coordinatorSession: { select: SESSION_ENDING_SELECT },
+              coordinatorSession: { select: { ...SESSION_ENDING_SELECT, retryAt: true } },
             },
           },
         },

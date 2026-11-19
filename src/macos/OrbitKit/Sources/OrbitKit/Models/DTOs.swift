@@ -318,6 +318,9 @@ public struct Runner: Codable, Equatable, Sendable, Identifiable {
     /// so a newer control plane cannot make the runner list undecodable.
     public let install: RunnerInstallState?
     public let accountRemove: RunnerAccountRemoveState?
+    /// Set as default for Claude Code: which added account is becoming the Default, and where that
+    /// stands (shared `RunnerClaudeAccountSwapState`). Nil from an older server, and when nothing was asked.
+    public var claudeAccountSwap: RunnerClaudeAccountSwapState? = nil
     /// Where this runner's Claude connection to Anthropic last came out, with the effective verdict
     /// (docs/claude-region-check-contract.md §6). Nil for a runner that does not check, one no check
     /// has decided yet, or an older server: never gated, drawn as before.
@@ -1635,8 +1638,11 @@ public struct BgShellDTO: Decodable, Sendable {
     public let status: String
     public let latestOutput: String?
     public let startedTs: String?
-    /// `shell`, `agent` or `workflow` — what launched it. Absent from older servers, which list shells only.
+    /// `shell`, `agent`, `workflow` or `job` (a runner-hosted bg_run) — what launched it. Absent from
+    /// older servers, which list shells only; a kind this client does not know is drawn as a shell.
     public let kind: String?
+    /// When its end was reported; absent while it runs and from older servers.
+    public let endedAt: String?
     /// An agent's or workflow's last progress, carried by the notification that ended it.
     public let progress: JSONValue?
 
@@ -1650,7 +1656,8 @@ public struct BgShellDTO: Decodable, Sendable {
                        outputTail: latestOutput ?? "",
                        startedAt: startedTs,
                        kind: kind,
-                       taskId: shellId)
+                       taskId: shellId,
+                       endedAt: endedAt)
     }
 
     /// The progress this row ended with, for `seedBackground`.

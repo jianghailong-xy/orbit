@@ -45,6 +45,8 @@ import { RunnerOrchestrationAuthorizer } from '../runner-api/runner-orchestratio
 import { SessionsService } from '../sessions/sessions.service';
 import { TasksService } from '../tasks/tasks.service';
 import { CompletionInputRouter } from './completion-input-router.service';
+import { DependentReadyProducer } from './dependent-ready.producer';
+import { CoordinatorFactQueueService } from './coordinator-fact-queue.service';
 import { CoordinatorConvergenceService } from './coordinator-convergence.service';
 import {
   CoordinatorDeliveryService,
@@ -110,7 +112,16 @@ async function connect() {
     undefined,
     new TaskRunStoppedProducer(prisma, convergence, delivery),
   );
+  const recoveryDelivery = new CoordinatorDeliveryService(prisma, new CoordinatorWakeService(prisma), sessions);
+  const recovery = new CoordinatorFactQueueService(
+    prisma, recoveryDelivery,
+    new TaskRunStoppedProducer(prisma, convergence, recoveryDelivery),
+    new DependentReadyProducer(prisma, convergence, recoveryDelivery),
+    new ProjectTasksSettledProducer(prisma,
+      new CoordinatorJudgmentService(prisma, new CoordinatorWakeService(prisma), sessions), convergence, recoveryDelivery),
+  );
   const tasks = new TasksService(prisma, sessions, realtime as never, undefined, router);
+  Object.assign(tasks, { coordinatorFacts: recovery });
   const api = new RunnerApiController(
     prisma,
     queue as never,
@@ -125,7 +136,8 @@ async function connect() {
     undefined,
     sessions,
   );
-  return { db, sessions, api };
+  Object.assign(api, { coordinatorFacts: recovery });
+  return { db, sessions, api, tasks };
 }
 
 type Stack = Awaited<ReturnType<typeof connect>>;
@@ -493,4 +505,49 @@ test('a run that stops under a switched-off coordinator is refused once, told no
     assert.equal(row!.subjectId, taskId);
     assert.deepEqual(await w.told(), [], 'the switched-off coordinator was told anyway');
     assert.equal(await stack.db.projectConvergenceDecision.count({ where: { projectId: w.projectId } }), 0);
+  }));
+
+test('a stopped-run fact refused during FAILED recovers on the reconcile tick without another event',
+  { skip, timeout: 120_000 }, () => withStack(async (stack) => {
+    const w = await world(stack, 'stopped-recovery');
+    const run = await w.run('submit the missing evidence');
+    await stack.db.session.update({ where: { id: w.coordinator }, data: { status: RunStatus.FAILED } });
+    await w.oneTurn(run.sessionId, `platform:${randomUUID()}`, 'The work still needs evidence.');
+    assert.equal((await w.wakes())[0]?.status, 'REFUSED');
+    assert.equal((await w.told()).length, 0);
+    const before = (await w.wakes()).length;
+    await stack.tasks.reconcileTick();
+    assert.equal((await w.wakes()).length, before, 'a paused coordinator causes no new write');
+    await stack.db.session.update({ where: { id: w.coordinator }, data: { status: RunStatus.AWAITING_INPUT } });
+    await Promise.all([stack.tasks.reconcileTick(), stack.tasks.reconcileTick()]);
+    assert.equal((await w.told()).length, 1);
+    assert.equal((await w.wakes()).filter((wake) => wake.status === 'DELIVERED').length, 1);
+
+    // Failure drains the queued message without the coordinator ever taking it.
+    await stack.db.conversationTurn.updateMany({
+      where: { sessionId: w.coordinator }, data: { status: 'ANSWERED', deliveredAt: null },
+    });
+    await stack.db.session.update({ where: { id: w.coordinator }, data: { status: RunStatus.AWAITING_INPUT } });
+    await Promise.all([stack.tasks.reconcileTick(), stack.tasks.reconcileTick()]);
+    const resent = await w.told();
+    assert.equal(resent.length, 2);
+    assert.notEqual(resent[0]!.clientTurnId, resent[1]!.clientTurnId);
+    await stack.tasks.reconcileTick();
+    assert.equal((await w.told()).length, 2);
+  }));
+
+test('the coordinator turn ending delivers the stopped-run fact that waited during FAILED',
+  { skip, timeout: 120_000 }, () => withStack(async (stack) => {
+    const w = await world(stack, 'turn-end-recovery');
+    const run = await w.run('work waiting for evidence');
+    await stack.db.session.update({ where: { id: w.coordinator }, data: { status: RunStatus.FAILED } });
+    await w.oneTurn(run.sessionId, `platform:${randomUUID()}`);
+    assert.equal((await w.wakes())[0]?.status, 'REFUSED');
+    await stack.db.session.update({ where: { id: w.coordinator }, data: { status: RunStatus.AWAITING_INPUT } });
+    // Only the coordinator's recovery turn ends: no task write, receipt or second run stop.
+    await w.oneTurn(w.coordinator, randomUUID(), 'I am back.');
+    assert.equal((await w.wakes()).filter((wake) => wake.status === 'DELIVERED').length, 1);
+    assert.equal((await w.told()).filter((turn) => turn.content?.includes('has a task nobody is working on')).length, 1);
+    await stack.tasks.reconcileTick();
+    assert.equal((await w.told()).filter((turn) => turn.content?.includes('has a task nobody is working on')).length, 1);
   }));
