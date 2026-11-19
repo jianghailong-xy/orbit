@@ -367,7 +367,9 @@ struct UserBubbleView: View {
                 if stateOrTimeDrawn {
                     Text("·").font(.orbitMeta).foregroundStyle(.tertiary).opacity(timeShown ? 1 : 0)
                 }
-                translationFoot
+                // Held to one line here, so a row that has no room for it doesn't fit and `meta`
+                // moves the foot under the time instead of letting it wrap beside it.
+                translationFoot.fixedSize(horizontal: true, vertical: false)
             }
             // What holds this message (web `QueuedFootCtx`): always shown, unlike the time.
             if let heldFoot {
