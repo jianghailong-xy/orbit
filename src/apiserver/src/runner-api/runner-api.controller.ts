@@ -259,7 +259,8 @@ import {
   stopOvertookTarget,
   terminalizePendingCurrentWorkSteers,
 } from '../sessions/current-work-delivery';
-import { fileSubagentWake, interruptOrphanedSubagentRuns } from './subagent-wake';
+import { fileSubagentWake, fileWorkflowWake, interruptOrphanedSubagentRuns, interruptOrphanedWorkflowRuns } from './subagent-wake';
+import { orbitWorkflowLaunchReceipt } from './workflow-run';
 import { remoteSubagentHeartbeat } from './subagent-remote';
 import { CLEARED_RUNNING_WORK } from '../sessions/running-work';
 import { deadLetterQueuedWatchWakes } from '../watches/watch-wake-drain';
@@ -1064,7 +1065,7 @@ const QUOTA_RETRY_JITTER_MS = 60_000;
 // The runtime tools whose call starts work that outlives it — see subStarted in the events ingest.
 // Claude Code's own names: Agent (Task before 2.x) runs one sub-agent, Workflow a team of them; and
 // Orbit's own SubAgent (docs/subagent-design.md §6.2), whatever engine the parent runs.
-const RUNTIME_SUBAGENT_TOOLS = new Set(['Task', 'Agent', 'Workflow', 'mcp__orbit__delegate']);
+const RUNTIME_SUBAGENT_TOOLS = new Set(['Task', 'Agent', 'Workflow', 'mcp__orbit__delegate', 'mcp__orbit__workflow']);
 const LEASE_GENERATION_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
 // Session primary keys are UUIDv7, while older rows may still be UUIDv4. Keep
 // entity-ID validation separate from the stricter runner-generated lease UUID
@@ -4688,7 +4689,7 @@ export class RunnerApiController {
       }
       const currentOwner = owned[0].inboxLeaseOwner;
       if (currentOwner === leaseOwner) {
-        return { status: owned[0].status, orphanedApprovals: [], interruptedSubagents: [] as string[] };
+        return { status: owned[0].status, orphanedApprovals: [], interruptedSubagents: [] as string[], interruptedWorkflows: [] as string[] };
       }
       if (
         (pendingWorktreeOperationMayBeExecuting(
@@ -4777,7 +4778,8 @@ export class RunnerApiController {
       // (subagent-wake.ts), filed once this commits. A predecessor that stopped in good order reported them
       // itself, and none is left RUNNING.
       const interruptedSubagents = currentOwner ? await interruptOrphanedSubagentRuns(tx, sessionId) : [];
-      return { status: owned[0].status, orphanedApprovals, interruptedSubagents };
+      const interruptedWorkflows = currentOwner ? await interruptOrphanedWorkflowRuns(tx, sessionId) : [];
+      return { status: owned[0].status, orphanedApprovals, interruptedSubagents, interruptedWorkflows };
     }, loggedRetry(this.logger, 'runnerApi.takeoverLeases'));
     if (taken.interruptedSubagents.length > 0 && this.sessions) {
       for (const runId of taken.interruptedSubagents) {
@@ -4786,6 +4788,15 @@ export class RunnerApiController {
         } catch (error) {
           // The wake sweep files it on its next pass.
           this.logger.warn(`the wake for interrupted SubAgent run ${runId} was not filed yet: ${(error as Error).message}`);
+        }
+      }
+    }
+    if (this.sessions) {
+      for (const runId of taken.interruptedWorkflows) {
+        try {
+          await fileWorkflowWake(this.prisma, this.sessions, runId);
+        } catch (error) {
+          this.logger.warn(`the wake for interrupted workflow run ${runId} was not filed yet: ${(error as Error).message}`);
         }
       }
     }
@@ -9412,6 +9423,7 @@ export class RunnerApiController {
             !(e.payload as { parentToolUseId?: string }).parentToolUseId &&
             !isAsyncAgentLaunchAck((e.payload as { content?: unknown }).content) &&
             !workflowLaunchReceipt((e.payload as { content?: unknown }).content) &&
+            !orbitWorkflowLaunchReceipt((e.payload as { content?: unknown }).content) &&
             // A background SubAgent's `{ runId, status: "running" }`: it runs on, and its terminal
             // background_task clears it.
             !delegateLaunchReceipt((e.payload as { content?: unknown }).content),
@@ -9447,16 +9459,21 @@ export class RunnerApiController {
       const subRunning = events
         .filter((e) => {
           if (e.type !== RunEventType.BACKGROUND_TASK) return false;
-          const { status, subagentRunId } = e.payload as { status?: unknown; subagentRunId?: unknown };
-          return status === 'running' && typeof subagentRunId === 'string' && subagentRunId !== '';
+          // A workflow (runner-go subagent_workflow.go) is re-announced by its own id, and runs SubAgents as one.
+          const { status, subagentRunId, workflowRunId } = e.payload as { status?: unknown; subagentRunId?: unknown; workflowRunId?: unknown };
+          const runId = subagentRunId || workflowRunId;
+          return status === 'running' && typeof runId === 'string' && runId !== '';
         })
         .map((e) => String((e.payload as { toolUseId?: unknown }).toolUseId ?? ''))
         .filter(Boolean);
       const bgRunningReports = events
         .filter((e) => {
           if (e.type !== RunEventType.BACKGROUND_TASK) return false;
-          const { status, kind, subagentRunId } = e.payload as { status?: unknown; kind?: unknown; subagentRunId?: unknown };
+          const { status, kind, subagentRunId, workflowRunId } = e.payload as {
+            status?: unknown; kind?: unknown; subagentRunId?: unknown; workflowRunId?: unknown;
+          };
           if (typeof subagentRunId === 'string' && subagentRunId !== '') return false;
+          if (typeof workflowRunId === 'string' && workflowRunId !== '') return false;
           return status === 'running' && typeof kind === 'string' && kind !== '';
         })
         .map((e) => {

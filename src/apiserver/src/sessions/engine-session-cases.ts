@@ -42,7 +42,7 @@ export function routesNamingSession(
  *  did not have). */
 export const ENGINE_SESSION_USER_ROUTES = routesNamingSession(TENANT_ISOLATION_CASES, '/sessions');
 
-/** The runner door: 32 routes today (naming, a turn suggestion, the Cursor key check, a job's alert and the two file doors included). */
+/** Runner routes that act on an engine session. */
 export const ENGINE_SESSION_RUNNER_ROUTES = routesNamingSession(RUNNER_ISOLATION_CASES, '/runner/sessions');
 
 /**
@@ -380,6 +380,8 @@ export const ENGINE_SESSION_DOORS: Readonly<Record<string, string>> = {
   'POST /runner/sessions/:id/scheduled-wakeup': 'RunnerApiController.assertSessionOwnership',
   'POST /runner/sessions/:id/naming': 'RunnerApiController.assertSessionOwnership',
   'POST /runner/sessions/:id/subagents': 'RunnerSubagentsController.assertParentOfRunner',
+  'POST /runner/sessions/:id/workflows': 'RunnerSubagentsController.assertParentOfRunner',
+  'PATCH /runner/sessions/:id/workflows/:workflowRunId': 'RunnerSubagentsController.assertParentOfRunner',
   'POST /runner/sessions/:id/cursor-key-check': 'ProvidersService.recordCursorKeyCheck',
   'POST /runner/sessions/:id/turns/:turnId/suggestion': 'RunnerApiController.assertSessionOwnership',
   'POST /runner/sessions/:id/turn-complete': 'RunnerApiController.assertEngineSessionById',

@@ -485,5 +485,6 @@ test('fallbacks: the rest of the pool after the pick, in rank order (§4.3); non
     ['codex', 'codex', GPT, 'xhigh'],
     ['codex', 'codex', GPT, 'low'],
   ]);
+  assert.deepEqual(decision.fallbacks.map((f) => f.level), ['M', 'M', 'L', 'XL', 'S'], 'each fallback carries its own tier');
   assert.deepEqual(route(input({ caller: { model: 'deepseek-v4-pro' } })).fallbacks, []);
 });
