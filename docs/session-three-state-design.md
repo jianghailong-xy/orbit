@@ -325,6 +325,44 @@ Decided on 2026-11-19, each as recommended below: **D1**, **D5** and **D8**. The
   "Succeeded" and the "Finished" push mean? Options: the last turn was answered and the engine
   exited; or drop the word for plain conversations and show "Ended". Not recommended either
   way until it is known when a runner finalizes a plain session as `SUCCEEDED`.
+
+  Traced 2026-11-19 (plan step 0.2): **a plain conversation is never stored as `SUCCEEDED` by
+  current code.** It always ends `CANCELLED` (or `FAILED`). The chain:
+  - Every session the runner runs is interactive: `runInteractiveSession` is the only caller
+    of `finalizeRun` (`runner-go/runloop.go:2766`, `runner-go/session.go:1936`), so there is
+    no separate one-shot mode to look at.
+  - The runner reports `SUCCEEDED` in a finalize only when the engine returned with an inbox
+    `end` turn. For Claude: `case "end": endSession()` (`session.go:2984-2985`), then
+    `case <-endedCh: return stSucceeded, true, false // user ended the session`
+    (`session.go:3329-3330`), then `if ended { status = st }` (`session.go:1758-1760`) and
+    `RunFinalizeRequest{Status: status, ...}` (`session.go:1913`). The other engines return
+    `stSucceeded` only from their own `case "end"`: `codex.go:229-230`,
+    `codex_appserver.go:865-871`, `kimi_acp.go:2198-2200`, `cursor_acp.go:1555-1561`,
+    `dsh_acp.go:913-919`, `opencode.go:259` and `:268`/`:278`/`:319`,
+    `antigravity.go:1244-1245` and `:1260`. Every other exit path (crash after the respawn
+    budget, startup refusal, missing engine, region refusal, given-up events) is `FAILED`,
+    and a cancel or shutdown is `CANCELLED`. Even an `end` is overwritten on the runner if
+    the heartbeat's cancel for the same end lands first: `snapshot.cancel()`
+    (`runloop.go:2124-2127`) makes `if ctx.Err() != nil ... status = stCancelled`
+    (`session.go:1813-1815`).
+  - The server writes an `end` turn in exactly two places, and both set `cancelRequestedAt`
+    in the same transaction: the person/agent end path (`sessions/sessions.service.ts:9759`
+    and `:9774`) and the reaper's `endParked`, which requires the session's task to be
+    terminal (`realtime/reaper.service.ts:1045`) and so never runs for a plain session.
+  - The finalize handler ignores the runner's status whenever `cancelRequestedAt` is set:
+    `current.cancelRequestedAt ? (gracefulEndStatus(current.endReason) ?? RunStatus.CANCELLED)
+    : dto.status` (`runner-api/runner-api.controller.ts:9748-9750`). `gracefulEndStatus`
+    answers `SUCCEEDED` only for `TASK_DONE` (`shared/src/enums.ts:238-241`), a reason
+    written only by the reaper for a session whose task is `DONE` (`reaper.service.ts:515-517`,
+    `:1051`).
+  - `/turn-complete` never writes `SUCCEEDED` to the session: its next status is `FAILED`,
+    `PENDING` or `AWAITING_INPUT` (`runner-api.controller.ts:7776-7780`).
+
+  So the green "Succeeded" on a plain conversation can only be an old row or a landing
+  container (`sessions/sessions.service.ts:5141`), and D2 is a question about wording for
+  `CANCELLED` with `endReason` `ENDED`/`CANCELLED`, not about a success path. Not checked: how
+  many stored plain rows read `SUCCEEDED` today. For plan step 4.6: no plain-session
+  `SUCCEEDED` case needs to be kept.
 - **D3. Failed badge.** A session whose last turn failed keeps a visible "Failed" mark in
   lists, drawn from the turn outcome. Recommended: yes.
 - **D4. Machine wake-ups.** Keep today's rule, expressed on the cause: a released session
@@ -357,7 +395,6 @@ Decided on 2026-11-19, each as recommended below: **D1**, **D5** and **D8**. The
   `projects.service.ts`, `WorkspaceView.tsx`, `ConsoleModel.swift`.
 - Whether `finishedAt` is set by every terminal write and by nothing else was not audited. If
   it is, it can be the release column and stage 2 needs only `releaseCause`.
-- When a runner finalizes a plain conversation as `SUCCEEDED` was not traced (D2).
 - Nothing was built or run; this is a reading of the code.
 
 ## 11. Review: where the status misclassifies a session
@@ -425,7 +462,42 @@ session is working on one screen and idle on another.
    consumes no slot" (`realtime/reaper.service.ts:532-535`). If that session had a job or a
    subagent on the lost machine, its sets are cleared only when the session leaves the open
    statuses (`sessions/running-work.ts`), so its task can keep reading as running with nothing
-   left to wake it. Whether a restarted runner reports those jobs as ended was not traced.
+   left to wake it.
+
+   Traced 2026-11-19 (plan step 0.3). **A runner that comes back reports nothing for the work
+   it lost; the server clears all three sets anyway, at the takeover. A runner that never
+   comes back leaves them set.**
+   - On start the runner reclaims every open session assigned to it, `AWAITING_INPUT`
+     included (`status: { in: OPEN }`, `runner-api/runner-api.controller.ts:4196`), and takes
+     the idle ones over in the background (`runner-go/reclaim_starter.go:22-25`,
+     `runloop.go:2837`). The takeover, single or batched, writes `running_bg_shells`,
+     `running_bg_jobs`, `running_bg_job_activity` and `running_subagents` empty and
+     `engine_turn_active = false` while the session stays `AWAITING_INPUT`
+     (`runner-api.controller.ts:4743-4749`, `:4952-4956`). That is the message that clears
+     them: `POST /runner/sessions/:id/takeover-leases` or its batch form, not an end report.
+   - `bg_run` jobs: after a crash or reboot no end report is sent. Only a self-update hands
+     jobs on; a recorded job whose pid is not the new process's child is dropped with "not
+     adopted, no end report" (`background_job_adopt_unix.go:17-23`, `:33-37`). A job that
+     was adopted re-reports `running` and goes back into `running_bg_jobs`
+     (`runner-api.controller.ts:9428-9435`, `:9504`). No wake is owed for a lost job.
+   - Background shells: they died with the engine; the takeover clears them and nothing puts
+     them back (an engine shell's report carries no `kind`, `runner-api.controller.ts:9434-9435`).
+   - Subagents: the set is cleared by both takeover forms, but only the single
+     `takeover-leases` also ends the `subagent_run` rows still `RUNNING` as `INTERRUPTED` and
+     files the parent's wake (`runner-api.controller.ts:4776`, `:4779-4787`). The batch form
+     the startup reclaim uses for idle sessions does not (`:4985-4989` reaps approvals only),
+     so those runs stay `RUNNING` with no wake. Not checked whether another sweep ends them.
+   - What the task reads afterwards: the carrier counts an `AWAITING_INPUT` session only with
+     a wake source (`sessions/task-work-carrier.ts:91-95`); with the sets empty and
+     `engine_turn_active` false (`:48-55`), and no watch, wake-up or retry, the task is no
+     longer carried and reads Ready, and Run continues that session.
+   - The runner never comes back: no takeover happens, `runnerOfflineIsFatal` is `RUNNING`
+     only (`common/session-scheduling.ts:114-116`), so the reaper leaves the session
+     (`realtime/reaper.service.ts:532-535`) and the task reads running with reason `TURN`
+     or `BACKGROUND_JOB` for good.
+
+   For plan step 1.7: a runner that comes back already clears the sets; 1.7 has to cover the
+   runner that stays offline, and the batch takeover leaving subagent runs `RUNNING`.
 5. **One job, two verdicts.** The task carrier counts any job in `runningBgJobs`; the session
    row and the workspace rail count only jobs that wrote output in the last ten minutes
    (`sessions/background-job-activity.ts`). After ten quiet minutes the task says running and
