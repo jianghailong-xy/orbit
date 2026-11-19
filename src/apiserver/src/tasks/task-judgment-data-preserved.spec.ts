@@ -3174,7 +3174,12 @@ test('the ledger stays append-only, and every later migration is accounted for',
       '1220_run_event_text_trgm_fastupdate_off',
       // 1240 adds a plain index on project_coordinator_wake (idempotency_key); no row is written, and no preserved
       // relation, trigger, function or DONE fence changes.
-      '1240_project_coordinator_wake_key_idx'],
+      '1240_project_coordinator_wake_key_idx',
+      // 1261 adds nullable session.release_cause with a CHECK every stored row passes (all NULL); 1262 validates it and
+      // writes session.finished_at and release_cause on terminal rows only. Session is not a preserved relation, and no
+      // trigger, function or DONE fence changes.
+      '1261_session_release_cause',
+      '1262_session_release_backfill'],
     'a later migration exists; re-read it before trusting the assertions above');
   // Stated rather than described: 0230's fence differs from 0228's by exactly one added lane.
   const later = readFileSync(
