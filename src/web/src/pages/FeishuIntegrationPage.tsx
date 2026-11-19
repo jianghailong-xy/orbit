@@ -55,6 +55,7 @@ export const FEISHU_SCOPE_PURPOSES: Readonly<Record<(typeof FEISHU_APP_SCOPES)[n
   'im:message.group_at_msg:readonly': 'Read group messages that @mention the bot',
   'im:chat:readonly': 'Read group information',
   'contact:user.base:readonly': "Read people's basic information, to show their names",
+  'application:application:self_manage': "Check that a person is in the app's availability before the bot answers them",
 };
 
 /** §6.4: what the detail switch says, off (the default) and on. Feishu keeps whatever a card carries. */

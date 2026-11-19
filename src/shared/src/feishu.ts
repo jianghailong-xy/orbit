@@ -180,6 +180,7 @@ export const FEISHU_APP_SCOPES = [
   'im:message.group_at_msg:readonly',
   'im:chat:readonly',
   'contact:user.base:readonly',
+  'application:application:self_manage',
 ] as const;
 export const FEISHU_APP_EVENTS = ['im.message.receive_v1', 'im.chat.member.bot.deleted_v1'] as const;
 export const FEISHU_APP_CALLBACKS = ['card.action.trigger'] as const;
