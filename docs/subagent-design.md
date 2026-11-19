@@ -307,8 +307,19 @@ P1 不路由，所以可以先把最难的部分（同 cwd 子进程、事件内
 ### 10.2 在哪里跑、改动去哪
 
 - 服务端把 SubAgent 派给目标 runner；目标 runner 在该 workspace 的 workDir 上建一个**临时的、detached 的 worktree**
-  （目标 workspace 自己的 HEAD），子引擎在里面跑；结束后整个删掉。workDir 不是 git 仓库时直接拒绝
-  （`SUBAGENT_WORKSPACE_NOT_GIT`），不在别人的工作目录里乱写。
+  （目标 workspace 自己的 HEAD），子引擎在里面跑；结束后整个删掉。
+- **workDir 不是 git 仓库**（owner 决策 2026-11-19）：
+  - **只读的 SubAgent**（`type: explore`，或定义文件 `readonly: true`）**就地跑**：子引擎直接在 workDir 里跑，不建也不删
+    worktree。claim 带 `inPlace: true`；目标 runner 不管自己读到的定义怎么写，一律按只读起子引擎（Claude 去掉
+    Edit/MultiEdit/Write/NotebookEdit，Bash 仍按父会话的模式；Codex 用只读沙箱，**不能联网**，连数据库这类检查要用 Claude）。
+    run.json 记 `inPlace`、`tree` 为空，恢复和 GC 都不会删 workDir。续跑时 workDir 是不是 git 仓库变了就失败，提示重开。
+    目标 runner 要声明 `subagent-remote-in-place/v1`（`SUBAGENT_REMOTE_IN_PLACE_V1`），否则不派（`SUBAGENT_WORKSPACE_LACKS_NEEDS`，
+    按 `needs` 选时列为不满足）。
+  - **可能改文件的 SubAgent** 仍拒绝（`SUBAGENT_WORKSPACE_NOT_GIT`），不在别人的工作目录里乱写。拒绝文案指出两条不改目录的路：
+    改成只读委派，或在那个 workspace 上开会话；并明确劝阻 `git init`：它会改动那个目录，第一次提交还会把里面的东西（含密钥）
+    一起提交。
+  - 已知边界：就地只读挡住的是编辑工具，不是 shell；Claude 子引擎的 Bash 写下的东西不会被丢弃。worktree 本来也只隔离文件，
+    挡不住数据库写入和网络请求。
 - **只交回文字结果**：不把任何文件带回父会话，也不留在目标 workspace。结果末尾由 runner 附一行
   `Discarded changes: <n> files (<paths…>)`，让父 Agent 知道它改过什么但没有带回。
 - 看不到父会话未提交的改动：工具描述里写明「remote SubAgents run on that workspace's own HEAD and return text only」，

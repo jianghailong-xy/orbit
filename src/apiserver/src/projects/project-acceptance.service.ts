@@ -820,7 +820,7 @@ export class ProjectAcceptanceService {
   }
 
   /**
-   * What a confirmation of `stated` stores beside its seal (1170): the words, and what they changed
+   * What a confirmation of `stated` stores beside its seal (1200): the words, and what they changed
    * since the confirmation before — the same comparison the "Confirm the new criteria?" card showed,
    * made against the same row, so the receipt says what the card said. Read in the writer's
    * transaction, before its INSERT, so "the confirmation before" is never the row being written.

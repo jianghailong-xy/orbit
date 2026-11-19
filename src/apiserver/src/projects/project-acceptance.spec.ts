@@ -144,7 +144,7 @@ test('the judging half of the criteria module is gone', () => {
   }
 });
 
-// The receipt of a confirmation reads what each confirmed criterion SAID (1170). Kept words win;
+// The receipt of a confirmation reads what each confirmed criterion SAID (1200). Kept words win;
 // a record older than keeping them shows today's words only where the content hash still matches,
 // because a matching hash is the same words, and nothing where it does not.
 test('a recorded confirmation reads as the words it confirmed, and says what moved since', () => {

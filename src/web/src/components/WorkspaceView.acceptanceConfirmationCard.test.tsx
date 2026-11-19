@@ -357,7 +357,7 @@ beforeEach(() => {
           confirmedAt: '2026-09-11T03:10:40.000Z',
           confirmedById: 'user-1',
           startedWith: null,
-          // What the press changed, kept on the record as the server keeps it (1170).
+          // What the press changed, kept on the record as the server keeps it (1200).
           changes: confirmationStanding.changesSinceConfirmed,
         },
         changesSinceConfirmed: { added: [], stricter: [], revised: [], removed: [], unchanged: [1, 2] },

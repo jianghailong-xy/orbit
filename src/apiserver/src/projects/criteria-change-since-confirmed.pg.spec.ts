@@ -37,7 +37,7 @@
  *   (6) confirming clears that too
  *   (7) a loosening is held and so is no change; approved while the confirmation is behind, it
  *       lands without carrying the confirmation — and is listed, not counted as unchanged
- *   (8) a confirmation older than keeping its words (1170) reads today's words where the hash
+ *   (8) a confirmation older than keeping its words (1200) reads today's words where the hash
  *       matches and none where it moved
  *
  *   bash scripts/run-pg-spec.sh src/apiserver/src/projects/criteria-change-since-confirmed.pg.spec.ts
@@ -211,7 +211,7 @@ test('the confirmation read says what changed since the owner last confirmed, an
     assert.deepEqual(confirmed.changesSinceConfirmed, onlyUnchanged(1, 2, 3));
     assert.equal(confirmed.changesSinceConfirmedAbsentReason, null);
 
-    // Its receipt (1170): the words it confirmed, kept with it, and no changes — there was no
+    // Its receipt (1200): the words it confirmed, kept with it, and no changes — there was no
     // confirmation before it to have changed anything against.
     assert.equal(confirmed.confirmation?.wordingRecorded, true);
     assert.equal(confirmed.confirmation?.changes, null);

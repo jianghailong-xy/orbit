@@ -19,6 +19,10 @@
  *      is asked for.
  *   3. A on R opens: the WebSocket carries the runner's bytes to A and A's to the runner, both in order, and credits
  *      back what it took; a 100 KiB burst arrives whole.
+ *   3b. Paste (§5): a paste from a viewer not in control is refused without reaching the runner; in control it reaches
+ *      the runner once as a StreamPaste with the exact text, non-ASCII included, and the runner's answer comes back;
+ *      over 64 KiB is refused, as is a second paste while one is waiting; after Done (control off) it is refused again.
+ *      The text never appears in the apiserver's output. Another account never has a stream to paste on (2.).
  *   4. A second stream of R opens on the other apiserver; a third is 429 on both, and the runner is never asked: the
  *      count is the apiserver's, across processes.
  *   5. Closing either side closes the other: A leaving sends the runner StreamClose NORMAL and frees the slot for a new
@@ -58,7 +62,7 @@ const RFB_VERSION = Buffer.from('RFB 003.008\n');
 
 /** What a WebSocket to the route came to. */
 type Outcome =
-  | { kind: 'open'; ws: any; received: Buffer[]; closed: Promise<{ code: number; reason: string }> }
+  | { kind: 'open'; ws: any; received: Buffer[]; texts: any[]; closed: Promise<{ code: number; reason: string }> }
   | { kind: 'refused'; status: number; body: string }
   | { kind: 'error'; error: Error };
 
@@ -67,11 +71,14 @@ function viewer(server: Apiserver, runner: string, token?: string): Promise<Outc
     const query = token === undefined ? '' : `?access_token=${encodeURIComponent(token)}`;
     const ws = new WebSocket(`ws://127.0.0.1:${server.port}/api/runners/${runner}/browser/vnc${query}`);
     const received: Buffer[] = [];
+    const texts: any[] = [];
     let closed: (value: { code: number; reason: string }) => void = () => undefined;
     const closing = new Promise<{ code: number; reason: string }>((r) => (closed = r));
-    ws.on('message', (data: Buffer) => received.push(Buffer.from(data)));
+    ws.on('message', (data: Buffer, isBinary: boolean) =>
+      isBinary ? received.push(Buffer.from(data)) : texts.push(JSON.parse(Buffer.from(data).toString('utf8'))),
+    );
     ws.on('close', (code: number, reason: Buffer) => closed({ code, reason: reason.toString('utf8') }));
-    ws.on('open', () => resolve({ kind: 'open', ws, received, closed: closing }));
+    ws.on('open', () => resolve({ kind: 'open', ws, received, texts, closed: closing }));
     ws.on('unexpected-response', (_req: unknown, res: any) => {
       let body = '';
       res.on('data', (chunk: Buffer) => (body += chunk.toString('utf8')));
@@ -307,6 +314,50 @@ test('the viewer route: owner only, two streams per runner across apiservers, bo
     // Every byte the viewer took is credited back to the runner.
     const credited = () => g1.down.filter((f) => f.case === 'streamCredit').reduce((n, f) => n + f.value.bytes, 0);
     await until(10_000, 'the credits', () => credited() === RFB_VERSION.length + burst.length);
+  });
+
+  await t.test('3b. a paste reaches the runner only from a viewer in control, exactly, capped, one at a time, unlogged', async () => {
+    const g1 = gateway.last();
+    const pastes = () => g1.down.filter((f) => f.case === 'streamPaste');
+    const answered = async (id: number) => {
+      await until(10_000, `the answer to paste ${id}`, () => first.texts.some((m) => m.id === id));
+      return first.texts.find((m) => m.id === id);
+    };
+    const SECRET = '密码 Pässwörd 🔑';
+    // View only (the viewer has not said it is in control): refused, and nothing goes to the runner.
+    first.ws.send(JSON.stringify({ type: 'paste', id: 1, text: SECRET }));
+    assert.deepEqual(await answered(1), { type: 'pasted', id: 1, error: 'Take control to paste' });
+
+    // In control: one StreamPaste with the exact text, and the runner's answer comes back.
+    first.ws.send(JSON.stringify({ type: 'control', on: true }));
+    first.ws.send(JSON.stringify({ type: 'paste', id: 2, text: SECRET }));
+    await until(10_000, 'the paste reaching the runner', () => pastes().length === 1);
+    const sent = pastes()[0].value;
+    assert.equal(sent.text, SECRET);
+    assert.equal(sent.streamId, g1.id);
+    // A second paste while the first waits for its answer is refused, not queued.
+    first.ws.send(JSON.stringify({ type: 'paste', id: 3, text: 'again' }));
+    assert.deepEqual(await answered(3), { type: 'pasted', id: 3, error: 'Wait for the last paste to finish' });
+    g1.up({ case: 'streamPasted', value: { streamId: g1.id, pasteId: sent.pasteId } });
+    assert.deepEqual(await answered(2), { type: 'pasted', id: 2 });
+    // The runner's refusal reaches the viewer as it said it.
+    first.ws.send(JSON.stringify({ type: 'paste', id: 4, text: 'x' }));
+    await until(10_000, 'the second paste reaching the runner', () => pastes().length === 2);
+    g1.up({ case: 'streamPasted', value: { streamId: g1.id, pasteId: pastes()[1].value.pasteId, error: 'Click a text field in the browser first' } });
+    assert.deepEqual(await answered(4), { type: 'pasted', id: 4, error: 'Click a text field in the browser first' });
+
+    // Over 64 KiB of UTF-8 (a CJK character is 3 bytes): refused before the runner.
+    first.ws.send(JSON.stringify({ type: 'paste', id: 5, text: '密'.repeat(((64 << 10) / 3 | 0) + 1) }));
+    assert.deepEqual(await answered(5), { type: 'pasted', id: 5, error: 'The text is too long to paste (more than 64 KB)' });
+
+    // Done: control off, and a paste is refused again.
+    first.ws.send(JSON.stringify({ type: 'control', on: false }));
+    first.ws.send(JSON.stringify({ type: 'paste', id: 6, text: SECRET }));
+    assert.deepEqual(await answered(6), { type: 'pasted', id: 6, error: 'Take control to paste' });
+    await sleep(200);
+    assert.equal(pastes().length, 2, 'only the two pastes made in control reached the runner');
+    // The text is never logged.
+    assert.ok(!x.output().includes('Pässwörd') && !x.output().includes('密码'), 'the paste appears in the apiserver output');
   });
 
   await t.test('4. a second stream opens on the other apiserver; a third is refused on both, without asking the runner', async () => {

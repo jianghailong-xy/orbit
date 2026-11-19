@@ -1,4 +1,4 @@
--- 1170 — what a confirmation of a project's criteria said, kept with the confirmation.
+-- 1200 — what a confirmation of a project's criteria said, kept with the confirmation.
 --
 -- `project_standard_set_confirmation` recorded WHICH version was confirmed (`criteria_material`: each
 -- criterion's id, revision and content hash) and nothing a person can read. Its receipt in the
