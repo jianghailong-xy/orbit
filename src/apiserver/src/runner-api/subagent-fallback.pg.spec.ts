@@ -151,8 +151,11 @@ test('SubAgent quota fallback: moves, attempts, the reason, the bound and the re
     const opened = await subagents.createSubagentRun(runner, sessionId, create({ toolUseId: 'toolu_limit_once', size: 'M' }));
     t.diagnostic(`decision pick ${opened.decision.provider}/${opened.decision.model}, fallbacks ${JSON.stringify(opened.decision.fallbacks)}`);
     assert.equal(opened.decision.provider, 'claude', 'Cost: the subscription first');
-    assert.deepEqual(opened.decision.fallbacks?.map((f) => [f.provider, f.model]), [[first, 'a-coder'], [second, 'b-coder']],
-      'the rest of tier M, cheapest first');
+    assert.deepEqual(opened.decision.fallbacks?.map((f) => [f.provider, f.model]), [
+      [first, 'a-coder'], [second, 'b-coder'],
+      // Then the other tiers: L and XL above, S below.
+      ['claude', 'claude-opus-5-5'], ['claude', 'claude-opus-5-5'], ['claude', 'claude-sonnet-5-5'],
+    ], 'the rest of tier M, cheapest first, then the other tiers');
     assert.deepEqual((await rowOf(opened.runId)).attempts.map(brief), [[1, 'claude', 'claude', 'claude-sonnet-5-5', 'RUNNING']]);
 
     const moved = await subagents.nextSubagentCandidate(runner, sessionId, opened.runId, fallback(SESSION_LIMIT));
@@ -303,7 +306,7 @@ test('SubAgent quota fallback: moves, attempts, the reason, the bound and the re
     const before = await prisma.session.findUniqueOrThrow({ where: { id: sessionId }, select: poolFields });
     const opened = await withPools.createSubagentRun(runner, sessionId, create({ toolUseId: 'toolu_to_pool', size: 'M' }));
     assert.equal(opened.decision.provider, 'claude', 'the sign-in first, with more room');
-    assert.deepEqual(opened.decision.fallbacks?.map((f) => f.provider), [pool.slug], 'then the pool');
+    assert.equal(opened.decision.fallbacks?.[0]?.provider, pool.slug, 'then the pool, before the other tiers');
     const moved = await withPools.nextSubagentCandidate(runner, sessionId, opened.runId, fallback(SESSION_LIMIT));
     t.diagnostic(`moved to the pool: ${moved.reason}; env names ${JSON.stringify(Object.keys(moved.exec.env ?? {}))}`);
     assert.equal(moved.attempt, 2);
@@ -368,7 +371,7 @@ test('SubAgent quota fallback: moves, attempts, the reason, the bound and the re
     const opened = await subagents.createSubagentRun(machine, sessionId, create({ toolUseId: 'toolu_to_codex_pool', size: 'M' }));
     t.diagnostic(`opened on ${opened.decision.provider}; fallbacks ${JSON.stringify(opened.decision.fallbacks?.map((f) => f.provider))}`);
     assert.equal(opened.decision.provider, 'claude', 'the sign-in first, with more room');
-    assert.deepEqual(opened.decision.fallbacks?.map((f) => f.provider), [pool.slug], 'then the Codex pool');
+    assert.equal(opened.decision.fallbacks?.[0]?.provider, pool.slug, 'then the Codex pool, before the other tiers');
     const moved = await subagents.nextSubagentCandidate(machine, sessionId, opened.runId, fallback(SESSION_LIMIT));
     t.diagnostic(`moved to the Codex pool: ${moved.reason}; env names ${JSON.stringify(Object.keys(moved.exec.env ?? {}))}`);
     assert.equal(moved.attempt, 2);
