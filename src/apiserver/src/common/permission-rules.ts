@@ -184,6 +184,20 @@ const SHELL_TOOLS: ReadonlySet<string> = new Set(['Bash', 'Terminal']);
  */
 const UNREADABLE_SHELL_SYNTAX = ['$(', '${', '`', '>', '<', '&'];
 
+/**
+ * The redirections agents append to almost every command, which only discard output or merge
+ * stderr into stdout: `2>/dev/null`, `>/dev/null`, `1>/dev/null`, `&>/dev/null` and `2>&1`.
+ * They write no file and run nothing, so they are taken out of a sub-command before the syntax
+ * check — otherwise no saved rule would ever answer an agent's command. Each must stand as a word
+ * of its own (`12>/dev/null`, `>/dev/nullx` and `>>/dev/null` stay), and anything else that
+ * redirects is still refused by `UNREADABLE_SHELL_SYNTAX`.
+ */
+const HARMLESS_REDIRECTION = /(^|[ \t])(?:(?:[12]|&)?>[ \t]*\/dev\/null|2>&1)(?=[ \t]|$)/g;
+
+function withoutHarmlessRedirections(text: string): string {
+  return text.replace(HARMLESS_REDIRECTION, '$1').trim();
+}
+
 /** Does one stored rule's prefix cover this sub-command's prefix? `git:*` covers `git commit`,
  *  and `git commit:*` does not cover `git push` — the same widening claude's own matcher does
  *  for a trailing-star rule, and no more. */
@@ -215,7 +229,7 @@ function commandCovered(command: string, rules: readonly StoredPermissionRule[])
   const segments = readableBashSegments(command);
   if (!segments) return false;
   return segments.every((segment) => {
-    const text = segment.trim();
+    const text = withoutHarmlessRedirections(segment.trim());
     if (!text) return false;
     // A keyword on a line of its own runs nothing, and no rule can name one. What it leads to is
     // the next sub-command, judged like any other.

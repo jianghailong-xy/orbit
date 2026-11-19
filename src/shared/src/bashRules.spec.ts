@@ -114,6 +114,14 @@ describe('readableBashSegments', () => {
     expect(trimmed('  ls  \n')).toEqual(['ls']);
   });
 
+  it("keeps a redirection's `&` inside its sub-command: only `&&` separates", () => {
+    expect(trimmed('ls 2>&1 | head')).toEqual(['ls 2>&1', 'head']);
+    expect(trimmed('ls &>/dev/null; rg x 2>/dev/null')).toEqual(['ls &>/dev/null', 'rg x 2>/dev/null']);
+    expect(trimmed('ls >/dev/null 2>&1 && head x 1>/dev/null')).toEqual(['ls >/dev/null 2>&1', 'head x 1>/dev/null']);
+    // A trailing `&` is no separator either, so the matcher still sees it in the sub-command.
+    expect(trimmed('ls 2>&1 &')).toEqual(['ls 2>&1 &']);
+  });
+
   it('refuses an assignment ahead of a program, in any sub-command', () => {
     expect(trimmed('PATH=/tmp/x ls')).toBeNull();
     expect(trimmed('LD_PRELOAD=/tmp/x.so ls')).toBeNull();
