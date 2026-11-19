@@ -45,7 +45,6 @@ const ALL = '';
  */
 export function SecretsPage(): JSX.Element {
   const qc = useQueryClient();
-  const message = useToast();
   const grantsQ = useQuery(secretGrantsQuery());
   const savedQ = useQuery(savedSecretsQuery());
   const [machine, setMachine] = useState(ALL);
@@ -65,17 +64,7 @@ export function SecretsPage(): JSX.Element {
   const shown = machine === ALL ? listed : listed.filter((grant) => machineName(grant) === machine);
 
   const refresh = () => void qc.invalidateQueries({ queryKey: ['account-secrets'] });
-  const revoke = useMutation({
-    mutationFn: (grant: SecretGrant) => revokeGrant(grant.id),
-    onSuccess: (_, grant) => {
-      refresh();
-      message.success(
-        grant.state === 'PENDING_DELIVERY' ? 'Delivery cancelled' : 'Copy revoked',
-        `“${grant.label}” on ${machineName(grant)}.`,
-      );
-    },
-    onError: (e: Error) => message.error("Couldn't end the copy", e.message),
-  });
+  const revoke = useEndGrant();
 
   return (
     <div className="settings-page settings-page--wide secrets-page">
@@ -136,12 +125,7 @@ export function SecretsPage(): JSX.Element {
             </Button>
           </div>
         ) : (
-          <GrantsTable
-            grants={shown}
-            now={now}
-            endingId={revoke.isPending ? revoke.variables?.id : null}
-            onEnd={(grant) => revoke.mutate(grant)}
-          />
+          <GrantsTable grants={shown} now={now} revoke={revoke} />
         )}
       </section>
 
@@ -220,12 +204,31 @@ function Table({ head, empty, children }: { head: string[]; empty: string | null
   );
 }
 
-function GrantsTable({ grants, now, endingId, onEnd }: {
+/** Revoke a live copy, or Cancel one still waiting for delivery: the one way this page and a machine page end a copy. */
+export function useEndGrant() {
+  const qc = useQueryClient();
+  const message = useToast();
+  return useMutation({
+    mutationFn: (grant: SecretGrant) => revokeGrant(grant.id),
+    onSuccess: (_, grant) => {
+      void qc.invalidateQueries({ queryKey: ['account-secrets'] });
+      message.success(
+        grant.state === 'PENDING_DELIVERY' ? 'Delivery cancelled' : 'Copy revoked',
+        `“${grant.label}” on ${machineName(grant)}.`,
+      );
+    },
+    onError: (e: Error) => message.error("Couldn't end the copy", e.message),
+  });
+}
+
+/** The On machines now table, also shown filtered to one runner on its machine page (MachineSecrets.tsx). */
+export function GrantsTable({ grants, now, revoke }: {
   grants: SecretGrant[];
   now: number;
-  endingId: string | null | undefined;
-  onEnd: (grant: SecretGrant) => void;
+  revoke: ReturnType<typeof useEndGrant>;
 }) {
+  const endingId = revoke.isPending ? revoke.variables?.id : null;
+  const onEnd = (grant: SecretGrant) => revoke.mutate(grant);
   return (
     <Table
       head={['Secret', 'Exposed as', 'Machine', 'Used by', 'State', '']}
