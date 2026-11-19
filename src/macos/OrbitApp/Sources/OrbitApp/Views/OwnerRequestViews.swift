@@ -78,6 +78,7 @@ struct OwnerRequestCard: View {
     @FocusState private var field: Field?
     /// Closes the review sheet this card may be drawn in, so the composer it arms is in view.
     @Environment(\.dismissApprovalReview) private var dismissReview
+    @Environment(\.openURL) private var openURL
 
     init(model: OwnerRequestsModel, request: OwnerRequest, focus: OwnerRequestLink.Focus? = nil,
          onChat: ((OwnerRequest) -> Void)? = nil) {
@@ -98,9 +99,12 @@ struct OwnerRequestCard: View {
             header
             Divider().overlay(Color.ownerRequestAccent.opacity(0.35))
             VStack(alignment: .leading, spacing: 12) {
+                if request.kind == .browserSignIn {
+                    Text(BrowserSignInCopy.eyebrow).font(.orbitLabel.weight(.semibold)).foregroundStyle(.secondary)
+                }
                 titleRow
                 if !request.why.isEmpty {
-                    Text(Self.markdown(request.why))
+                    Text(Self.markdown(request.kind == .browserSignIn ? "“\(request.why)”" : request.why))
                         .font(.orbitProse)
                         .foregroundStyle(.secondary)
                         .fixedSize(horizontal: false, vertical: true)
@@ -218,6 +222,15 @@ struct OwnerRequestCard: View {
             EmptyView()
         case .wikiCreate:
             OwnerRequestWikiCreateFacts(request: request)
+        case .browserSignIn:
+            VStack(alignment: .leading, spacing: 6) {
+                if let from = BrowserSignInCopy.fromSessionLine(request) {
+                    Text(from).font(.orbitSubtext).foregroundStyle(.secondary)
+                }
+                Label { Text(BrowserSignInCopy.note) } icon: { Image(systemName: "lock.fill") }
+                    .font(.orbitLabel).foregroundStyle(.secondary)
+                    .fixedSize(horizontal: false, vertical: true)
+            }
         }
     }
 
@@ -321,7 +334,9 @@ struct OwnerRequestCard: View {
     /// one row on a Mac), Chat about this after the press; then the ways out, as links. A WIKI_CREATE card's
     /// are its own three (design §3.6): Create wiki, Change settings…, Not for this repository.
     @ViewBuilder private var actions: some View {
-        if request.kind == .wikiCreate { wikiCreateActions } else { kindActions }
+        if request.kind == .wikiCreate { wikiCreateActions }
+        else if request.kind == .browserSignIn { browserSignInActions }
+        else { kindActions }
     }
 
     private var kindActions: some View {
@@ -440,6 +455,35 @@ struct OwnerRequestCard: View {
                 WikiCreateSheet(wiki: wiki, workspaceID: request.workspaceId, created: { await model.load() })
             }
         }
+    }
+
+    /// A BROWSER_SIGN_IN card's (Orbit Cloud browser board): Open browser opens the runner's browser tab on the web and
+    /// answers nothing, since Signed in is pressed there; Not now declines.
+    private var browserSignInActions: some View {
+        VStack(alignment: .leading, spacing: 10) {
+            ApprovalActions {
+                Button {
+                    if let base = appModel.baseURL,
+                       let url = BrowserSignInCopy.browserURL(baseURL: base, runnerId: request.browserRunnerId) {
+                        openURL(url)
+                    }
+                } label: {
+                    Text(BrowserSignInCopy.openBrowser).bold().approvalActionLabel()
+                }
+                .buttonStyle(.borderedProminent)
+                .keyboardShortcut(.defaultAction)
+                .disabled(busy || closed || request.browserRunnerId == nil)
+                .accessibilityIdentifier("owner-request-primary")
+                Button { run { try await model.decline(request, reason: BrowserSignInCopy.notNow) } } label: {
+                    Text(BrowserSignInCopy.notNow).approvalActionLabel()
+                }
+                .buttonStyle(.bordered)
+                .disabled(busy || closed)
+                .accessibilityIdentifier("owner-request-not-now")
+                chat
+            }
+        }
+        .lineLimit(1)
     }
 
     private var declineForm: some View {

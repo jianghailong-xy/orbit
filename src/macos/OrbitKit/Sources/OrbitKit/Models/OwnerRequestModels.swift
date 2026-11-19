@@ -10,6 +10,8 @@ public enum OwnerRequestKind: String, Codable, Sendable, CaseIterable {
     case confirm = "CONFIRM"
     /// An agent asking the owner to create a wiki for its workspace's repository (docs/wiki-explicit-creation-design.md §3.6).
     case wikiCreate = "WIKI_CREATE"
+    /// An agent on an Orbit Cloud runner asking the owner to sign in to a site in that runner's browser.
+    case browserSignIn = "BROWSER_SIGN_IN"
 }
 
 public enum OwnerRequestState: String, Codable, Sendable, CaseIterable {
@@ -119,6 +121,11 @@ public struct OwnerRequest: Codable, Equatable, Sendable, Identifiable {
     /// WIKI_CREATE: the repository the wiki is asked for, and the asking session's workspace it would read it from.
     public let repoUrlNorm: String?
     public let workspaceId: String?
+    /// BROWSER_SIGN_IN: the site to sign in to, and the Orbit Cloud runner whose browser it is.
+    public let browserSite: String?
+    public let browserRunnerId: String?
+    /// The asking session's title, when the server serves it.
+    public let askedBySessionTitle: String?
     public let expiresAt: String?
     public let askedBySessionId: String
     public let projectId: String?
@@ -139,6 +146,7 @@ public struct OwnerRequest: Codable, Equatable, Sendable, Identifiable {
                 steps: [OwnerRequestStep]? = nil, secretSpec: OwnerRequestSecretSpec? = nil,
                 secretScope: String? = nil, secretGrant: OwnerRequestSecretGrant? = nil,
                 verifyHint: String? = nil, repoUrlNorm: String? = nil, workspaceId: String? = nil,
+                browserSite: String? = nil, browserRunnerId: String? = nil, askedBySessionTitle: String? = nil,
                 expiresAt: String? = nil, askedBySessionId: String,
                 projectId: String? = nil, resolvedAt: String? = nil, resolvedByUserId: String? = nil,
                 resolutionNote: String? = nil, answer: OwnerRequestAnswer? = nil,
@@ -160,6 +168,9 @@ public struct OwnerRequest: Codable, Equatable, Sendable, Identifiable {
         self.verifyHint = verifyHint
         self.repoUrlNorm = repoUrlNorm
         self.workspaceId = workspaceId
+        self.browserSite = browserSite
+        self.browserRunnerId = browserRunnerId
+        self.askedBySessionTitle = askedBySessionTitle
         self.expiresAt = expiresAt
         self.askedBySessionId = askedBySessionId
         self.projectId = projectId
@@ -175,6 +186,7 @@ public struct OwnerRequest: Codable, Equatable, Sendable, Identifiable {
     private enum CodingKeys: String, CodingKey {
         case id, kind, state, title, why, blocksTaskIds, ifUnanswered, options, recommendedOption, steps
         case secretSpec, secretScope, secretGrant, verifyHint, repoUrlNorm, workspaceId, expiresAt, askedBySessionId, projectId
+        case browserSite, browserRunnerId, askedBySessionTitle
         case resolvedAt, resolvedByUserId, resolutionNote, answer, resolvedClient, createdAt, translation
     }
 
@@ -196,6 +208,9 @@ public struct OwnerRequest: Codable, Equatable, Sendable, Identifiable {
         verifyHint = try? c.decodeIfPresent(String.self, forKey: .verifyHint)
         repoUrlNorm = try? c.decodeIfPresent(String.self, forKey: .repoUrlNorm)
         workspaceId = try? c.decodeIfPresent(String.self, forKey: .workspaceId)
+        browserSite = try? c.decodeIfPresent(String.self, forKey: .browserSite)
+        browserRunnerId = try? c.decodeIfPresent(String.self, forKey: .browserRunnerId)
+        askedBySessionTitle = try? c.decodeIfPresent(String.self, forKey: .askedBySessionTitle)
         expiresAt = try? c.decodeIfPresent(String.self, forKey: .expiresAt)
         askedBySessionId = try c.decode(String.self, forKey: .askedBySessionId)
         projectId = try? c.decodeIfPresent(String.self, forKey: .projectId)
