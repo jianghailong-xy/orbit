@@ -7,6 +7,7 @@ import assert from 'node:assert/strict';
 import { test } from 'node:test';
 import type { RunnerModelCatalog } from '@orbit/shared';
 import {
+  familyTier,
   routeSubagent,
   SUBAGENT_ROUTING_POLICY_VERSION,
   type SubagentModelRow,
@@ -103,6 +104,27 @@ test('row 2: the definition\'s model id, or inherit, is used, not routed', () =>
   const unknown = route(input({ definitionName: 'spec-writer.md', definition: { model: 'gpt-9-ultra' } }));
   assert.equal(unknown.tierSource, 'type-default', 'an id no provider lists is routed as auto');
   assert.match(unknown.reasons[0], /names gpt-9-ultra, which no enabled provider lists — routed as auto/);
+});
+
+test('smart model selection off: no tier is routed, a named model still is', () => {
+  // A size, a definition's size, the type's default: none is routed — the SubAgent runs on the parent's.
+  for (const over of [{ caller: { size: 'S' as const } }, { definition: { size: 'XL' as const } }, {}]) {
+    const off = route(input({ ...over, smartSelection: false }));
+    assert.equal(off.tierSource, 'not-routed');
+    assert.equal(off.level, null);
+    assert.deepEqual([off.provider, off.engine, off.model, off.effort], ['claude', 'claude', OPUS, 'high']);
+    assert.deepEqual(off.fallbacks, []);
+    assert.deepEqual(off.reasons, [`Smart model selection is off: runs on the parent's ${OPUS}`]);
+  }
+  // A model the caller or the definition names is not a tier: it is used as named.
+  const named = route(input({ caller: { model: GPT }, smartSelection: false }));
+  assert.equal(named.tierSource, 'named-model');
+  assert.deepEqual([named.provider, named.model], ['codex', GPT]);
+  const byDefinition = route(input({ definitionName: 'spec-writer.md', definition: { model: GPT }, smartSelection: false }));
+  assert.equal(byDefinition.tierSource, 'definition-model');
+  assert.equal(byDefinition.model, GPT);
+  // Absent reads on, as every input before the switch reached the router.
+  assert.equal(route(input({ caller: { size: 'S' } })).tierSource, 'size');
 });
 
 test("row 3: the caller's size, over the definition's", () => {
@@ -296,7 +318,8 @@ test('every registered provider joins: the asked tier, then higher tiers, then u
   const small = key('s-only', [{ model: 'tiny', effort: null, level: 'S', outputPricePerMTok: 0.1 }]);
   const modelCatalog: RunnerModelCatalog = {
     ...CATALOG,
-    cursor: [{ value: 'default', label: 'Auto' }, { value: 'composer-2.5', label: 'Composer' }],
+    // No model of a known family (MODEL_FAMILY_TIERS): Cursor stays untiered here.
+    cursor: [{ value: 'default', label: 'Auto' }, { value: 'grok-4.7', label: 'Grok 4.7' }],
     opencode: [{ value: 'opencode/free-a', label: 'A' }, { value: 'opencode/free-b', label: 'B' }],
   };
   const decision = route(input({
@@ -314,7 +337,7 @@ test('every registered provider joins: the asked tier, then higher tiers, then u
   ], 'untiered: the subscription first (Cost), then the keys by owner order; the runner default, else the provider default; S last');
   // The rest of an untiered engine's list is recorded, reachable by name.
   assert.deepEqual(decision.candidates.map((c) => [c.provider, c.model, c.reason]), [
-    ['cursor', 'composer-2.5', 'The model has no tier; cursor runs default'],
+    ['cursor', 'grok-4.7', 'The model has no tier; cursor runs default'],
     ['opencode', 'opencode/free-a', 'The model has no tier; opencode runs opencode/free-b'],
     ['local-vllm', 'qwen-a', 'The model has no tier; local-vllm runs qwen-b'],
   ]);
@@ -324,6 +347,58 @@ test('every registered provider joins: the asked tier, then higher tiers, then u
   const lower = route(input({ caller: { size: 'XL' }, providers: [small], engines, modelCatalog }));
   assert.equal(lower.reasons[1], 'Nothing in tier XL or above, and no untiered model, can run: the nearest tier below is S');
   assert.equal(lower.model, 'tiny');
+});
+
+test('an engine with no tier table of its own is tiered by family: the newest of each, at the effort its model takes', () => {
+  const login = (slug: string): SubagentProvider => ({
+    slug, billing: 'subscription', inScope: true, credential: { kind: 'login', engine: slug as 'cursor' }, engines: [{ engine: slug }],
+    account: { quota: null },
+  });
+  const ladder = ['low', 'medium', 'high', 'xhigh', 'max'];
+  const modelCatalog: RunnerModelCatalog = {
+    // Cursor's order is not a version order; a release the table never named (5-6) is still the newest Opus.
+    cursor: [
+      { value: 'default', label: 'Auto' },
+      { value: 'claude-opus-5-5', label: 'Opus 5.5', reasoningLevels: ladder },
+      { value: 'claude-opus-5-6', label: 'Opus 5.6', reasoningLevels: ladder },
+      { value: 'claude-opus-4-8', label: 'Opus 4.8', reasoningLevels: ladder },
+      { value: 'claude-sonnet-5-5', label: 'Sonnet 5.5', reasoningLevels: ['low', 'medium', 'high'] },
+      { value: 'composer-2.5', label: 'Composer 2.5' },
+    ],
+    // agy takes low, medium and high only: XL's max comes down to high.
+    antigravity: [
+      { value: 'gemini-4-neon', label: 'Gemini 4 Neon', reasoningLevels: ['low', 'medium', 'high'] },
+      { value: 'gemini-3.8-flash', label: 'Gemini 3.8 Flash', reasoningLevels: ['low', 'medium', 'high'] },
+      { value: 'gemini-3.5-flash', label: 'Gemini 3.5 Flash', reasoningLevels: ['low', 'medium', 'high'] },
+      { value: 'gemini-pro-orchestrator-neon', label: 'Orchestrator' },
+    ],
+  };
+  const engines = { cursor: { installed: true }, antigravity: { installed: true } };
+  const at = (size: 'S' | 'M' | 'L' | 'XL', slug: string) => {
+    const d = route(input({ caller: { size }, providers: [login(slug)], engines, modelCatalog }));
+    return [d.model, d.effort, d.pickLevel];
+  };
+  assert.deepEqual(at('XL', 'cursor'), ['claude-opus-5-6', 'max', 'XL']);
+  assert.deepEqual(at('L', 'cursor'), ['claude-opus-5-6', 'high', 'L']);
+  assert.deepEqual(at('M', 'cursor'), ['claude-sonnet-5-5', 'medium', 'M']);
+  assert.deepEqual(at('S', 'cursor'), ['claude-sonnet-5-5', 'low', 'S'], 'Sonnet before Composer in the same tier');
+  assert.deepEqual(at('XL', 'antigravity'), ['gemini-4-neon', 'high', 'XL']);
+  assert.deepEqual(at('M', 'antigravity'), ['gemini-3.8-flash', 'medium', 'M']);
+  // A tiered engine now meets Claude in the same tier rather than after every higher one.
+  const both = route(input({ caller: { size: 'L' }, providers: [claude(), login('cursor')], engines: { ...engines, claude: { installed: true } }, modelCatalog: { ...CATALOG, ...modelCatalog } }));
+  assert.deepEqual(both.fallbacks.map((f) => [f.provider, f.model, f.level]).slice(0, 1), [['cursor', 'claude-opus-5-6', 'L']]);
+  // Models of no family stay untiered, reachable by name.
+  const cursorDrop = route(input({ caller: { size: 'M' }, providers: [login('cursor')], engines, modelCatalog })).candidates;
+  assert.ok(cursorDrop.some((c) => c.model === 'default' && c.reason === 'The model has no tier'));
+});
+
+test('familyTier: a key's model of a known family takes the family's lowest tier; any other none', () => {
+  assert.equal(familyTier('claude-opus-5-6'), 'L');
+  assert.equal(familyTier('claude-sonnet-4-5'), 'S');
+  assert.equal(familyTier('gemini-3.8-flash'), 'S');
+  assert.equal(familyTier('gemini-4-argon'), 'L');
+  assert.equal(familyTier('qwen3.8-27b-uncensored-fp8'), null);
+  assert.equal(familyTier('gemini-pro-orchestrator-neon'), null);
 });
 
 test('a subscription whose quota was not read ranks after those whose headroom is known, before metered keys in Cost', () => {

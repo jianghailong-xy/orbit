@@ -197,7 +197,7 @@ so a deployment installed before them keeps managed runners off.
 
 `profile.json` chooses the Docker backend (`"backend": "docker"`) and sets each runner's CPU, memory, process and
 volume limits, its image (by local image ID) and the address it reaches the deployment at. `channel.json` names
-the same image and the network `orbit-managed-runners`, and caps what a runner may be given. After editing either,
+the same image and the network `orbit-cloud-runners`, and caps what a runner may be given. After editing either,
 run `docker compose up -d --force-recreate docker-channel apiserver`.
 
 ### Runner link
@@ -303,7 +303,7 @@ network.
 | `8443/tcp` | `link-gateway` | The host, bound by `RUNNER_LINK_BIND`, published as `RUNNER_LINK_PORT` | The link gateway's own WebSocket listener on a link with a host name of its own. A same-origin link sets `RUNNER_LINK_PORT=0` and binds loopback, so nothing useful is published. |
 | `9464/tcp` | `link-gateway` | Host loopback only | `/metrics`. Keep it closed to the internet. |
 | `7300/tcp` | `docker-channel` on a channel host | Only the private addresses named by `--allow-peer` | The remote channel host's control API, over a private link. |
-| none | managed runner containers | The `orbit-managed-runners` network | Runners reach the deployment through the gateway's published port; they publish nothing themselves. |
+| none | managed runner containers | The `orbit-cloud-runners` network | Runners reach the deployment through the gateway's published port; they publish nothing themselves. |
 
 On the runner machine, Orbit publishes no port: the runner makes outbound HTTPS and WebSocket connections only.
 

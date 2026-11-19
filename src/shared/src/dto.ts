@@ -1789,7 +1789,7 @@ export interface RunnerRegion {
  *  clients fall back to comparing the id with the managed status's runnerId. */
 export interface RunnerRowIdentity {
   id: string;
-  /** The name it registered with. A managed runner's is `orbit-managed`, which no client shows. */
+  /** The name it registered with. A managed runner's is `Orbit Cloud` (`orbit-managed` before migration 1250). */
   name: string;
   /** The name its owner gave it, which wins over both. */
   displayName: string | null;

@@ -41,6 +41,7 @@ fun NewSessionComposer(
     data: DirectoryData,
     open: (OrbitRoute) -> Unit,
     land: (String, OrbitRoute) -> Unit = { _, next -> open(next) },
+    replace: (OrbitRoute) -> Unit = open,
 ) {
     val workspaceId = route.workspaceId
     if (workspaceId == null) {
@@ -68,7 +69,8 @@ fun NewSessionComposer(
     }
     LaunchedEffect(state.draft.createdSessionId, state.acknowledgementPending) {
         state.draft.createdSessionId?.takeUnless { state.acknowledgementPending }?.let { id ->
-            open(OrbitRoute(Destination.SESSION, id, workspaceId = workspaceId, origin = route.origin))
+            // The draft's page becomes the session's, as on iOS (`openCreatedAgentSession`): Back leaves for the page under it.
+            replace(OrbitRoute(Destination.SESSION, id, workspaceId = workspaceId, origin = route.origin))
             model.consumeCreated()
         }
     }

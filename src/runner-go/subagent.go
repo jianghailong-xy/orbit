@@ -1608,6 +1608,17 @@ func subagentChildJob(parent *ClaimedSession, exec AgentExecConfig, def subagent
 			// The server already narrows a read-only run on any other engine to plan mode (§5.3); kept here so the
 			// child never reads wider.
 			child.Agent.PermissionMode = "plan"
+			// Plan mode asks about every shell call; the parent's mode, read when one is asked, answers it instead
+			// (owner, 2026-11-20; kimiReadonlyShellFollowsParent).
+			parentLive, parentMode := parent.liveMode, parent.Agent.PermissionMode
+			child.readonlyParentMode = func() string {
+				if parentLive != nil {
+					if mode := parentLive.current(); mode != "" {
+						return mode
+					}
+				}
+				return parentMode
+			}
 		}
 	}
 	child.RuntimeSessionID = engineSession

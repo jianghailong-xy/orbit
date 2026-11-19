@@ -69,7 +69,8 @@ export const SETTING_DEFAULTS: Readonly<Record<TieredSettingKey, unknown>> = {
   defaultModel: null,
   defaultModels: {},
   defaultEffort: '',
-  modelRouting: false,
+  // On unless explicitly false, as the apiserver reads it (common/model-routing-switch.ts).
+  modelRouting: true,
   optimizeFor: 'balance',
   enableOrchestration: true,
   // The apiserver's DEFAULT_PERMISSION_MODE (common/permission-mode.ts).

@@ -39,6 +39,76 @@ export const DEFAULT_MODEL_TIER_TABLE = {
   },
 } as const;
 
+/**
+ * Tiers by model family, for every catalogue the table above does not describe (Cursor, Antigravity, and any
+ * engine after them) and for a key's model that neither its preset nor the owner tiers. A family, not a model
+ * list, so a release the catalogue adds later (`claude-opus-5-6`, `gemini-4-xenon`) is tiered with no edit
+ * here: each tier takes the family's newest model the catalogue reports (familyNewest). In order of preference
+ * within a tier. The efforts are what each tier asks for; a model runs at the highest of its own reported levels
+ * at or below it (clampEffort), at its own default when it reports none.
+ */
+export const MODEL_FAMILY_TIERS: ReadonlyArray<{
+  family: string;
+  match: RegExp;
+  tiers: Partial<Record<ModelRoutingLevel, string>>;
+}> = [
+  { family: 'Claude Sonnet', match: /^claude-sonnet-\d/, tiers: { S: 'low', M: 'medium' } },
+  { family: 'Claude Opus', match: /^claude-opus-\d/, tiers: { L: 'high', XL: 'max' } },
+  { family: 'Gemini Flash', match: /^gemini-\d[\d.]*-flash$/, tiers: { S: 'low', M: 'medium' } },
+  { family: 'Gemini', match: /^gemini-\d[\d.]*-(?!flash$)[a-z]+$/, tiers: { L: 'high', XL: 'max' } },
+  { family: 'Composer', match: /^composer-\d/, tiers: { S: 'low' } },
+];
+
+const EFFORT_ORDER = ['minimal', 'low', 'medium', 'high', 'xhigh', 'max'];
+
+/** The version numbers in a model id, for ordering a family newest first: `claude-opus-5-5` is [5, 5]. */
+function versionOf(model: string): number[] {
+  return (model.match(/\d+/g) ?? []).map(Number);
+}
+
+function newerFirst(a: string, b: string): number {
+  const x = versionOf(a);
+  const y = versionOf(b);
+  for (let i = 0; i < Math.max(x.length, y.length); i += 1) {
+    if (x[i] === undefined || y[i] === undefined) return x[i] === undefined ? 1 : -1;
+    if (x[i] !== y[i]) return y[i] - x[i];
+  }
+  return 0;
+}
+
+/** The highest of a model's own levels at or below `wanted`, else its lowest; null when it reports none. */
+function clampEffort(wanted: string, levels: readonly string[] | undefined): string | null {
+  if (!levels?.length) return null;
+  const rank = (level: string) => EFFORT_ORDER.indexOf(level.toLowerCase());
+  const ranked = levels.filter((level) => rank(level) >= 0).sort((a, b) => rank(a) - rank(b));
+  if (ranked.length === 0) return null;
+  return [...ranked].reverse().find((level) => rank(level) <= rank(wanted)) ?? ranked[0];
+}
+
+/** A catalogue's tier rows by family: each family's newest model at each of its tiers, then every other model
+ *  untiered (reachable by name). Ties in version go by catalogue order. */
+function familyTierRows(catalog: readonly RunnerModelInfo[]): SubagentModelRow[] {
+  const rows: SubagentModelRow[] = [];
+  const tiered = new Set<string>();
+  for (const level of MODEL_ROUTING_LEVELS) {
+    for (const { match, tiers } of MODEL_FAMILY_TIERS) {
+      const wanted = tiers[level];
+      if (!wanted) continue;
+      const newest = catalog.filter((row) => match.test(row.value)).sort((a, b) => newerFirst(a.value, b.value))[0];
+      if (!newest) continue;
+      rows.push({ model: newest.value, effort: clampEffort(wanted, newest.reasoningLevels), level });
+      tiered.add(newest.value);
+    }
+  }
+  return [...rows, ...catalog.filter((row) => !tiered.has(row.value)).map((row) => ({ model: row.value, effort: null, level: null }))];
+}
+
+/** The lowest tier a model's family takes, for a key's model with one tier and no effort; null for no family. */
+export function familyTier(model: string): ModelRoutingLevel | null {
+  const rule = MODEL_FAMILY_TIERS.find(({ match }) => match.test(model));
+  return rule ? MODEL_ROUTING_LEVELS.find((level) => rule.tiers[level]) ?? null : null;
+}
+
 /** The built-in engines with a tier table: the only ones a run can be routed onto from another (§4.3, §6). */
 export const MODEL_ROUTING_ENGINES: readonly string[] = [AgentProvider.CLAUDE, AgentProvider.CODEX];
 
@@ -165,15 +235,13 @@ export interface ModelRoutingInput {
     defaultPermissionMode?: string | null;
     planUsage?: PlanUsage | null;
   };
-  /** Cross-engine routing (§6). Absent, or no other engine allowed: the run stays on its own engine. */
   engines?: {
-    /** `workspace.modelRoutingProviders`: the other engines the owner lets this Agent's task runs use. */
-    allowed?: readonly string[];
-    /** The target runner's report on each engine, by slug; an engine absent here is not ruled out. */
-    states?: Readonly<Record<string, ModelRoutingEngineState>>;
-    /** For a verification task: the engine the task it verifies last ran on. */
+    /** For a verification task: the engine the task it verifies last ran on, which the pick moves off when it can. */
     verifiedRunEngine?: string | null;
   };
+  /** What the SubAgent router reads for the Agent's runner (runner-api/subagent-route.ts subagentRouteInput): the
+   *  pool a tiered run is picked from. Absent: nothing was read, and the run keeps the agent's model. */
+  pool?: SubagentRoutingInput | null;
 }
 
 export interface ModelRoutingDecision extends ModelRoutingSelection {
@@ -190,7 +258,6 @@ const FAILURE_WORDING = {
   VERIFICATION_FAILED: 'was failed by its verifier',
   SENT_BACK: 'was sent back by the owner',
 } as const;
-const EFFORT_ORDER = ['none', 'minimal', 'low', 'medium', 'high', 'xhigh', 'max'];
 
 export function priorLevel(run: ModelRoutingRun, runtime: string): ModelRoutingLevel | null {
   if (run.level) return run.level;
@@ -203,71 +270,6 @@ export function priorLevel(run: ModelRoutingRun, runtime: string): ModelRoutingL
     ) ?? null;
   }
   return null;
-}
-
-/**
- * The engine a routed run starts on (§6), with a reason for each step. The candidates are this
- * Agent's own engine and the ones the owner allowed, and an engine or provider pin is the only
- * candidate there is. An engine signed out on the target runner or at ENGINE_QUOTA_LIMIT of a window is
- * not picked, nor one whose models that runner has not reported. A verification task looks first for an
- * engine other than the one the task it verifies last ran on; any other run stays on this Agent's
- * engine and moves only when that engine is ruled out.
- *
- * A run moved to another engine keeps the baseline's credential when that engine can run it, and
- * otherwise spends that engine's own sign-in on the runner (docs/provider-engine-contract.md §4.4).
- * Which is also what the runner's report is about: it rules out an engine only for a run that would
- * spend the runner's sign-in to it, never for one on a key or an account pool.
- */
-function chooseEngine(
-  input: ModelRoutingInput,
-  own: string,
-  provider: string,
-): { engine: string; provider: string; reasons: string[] } {
-  const { task, engines, environment, baseline } = input;
-  if (task.engine || task.provider) return { engine: own, provider, reasons: [`Engine ${own}: pinned on the task`] };
-  const ownLine = `Engine ${own}: this agent's own engine`;
-  const others = MODEL_ROUTING_ENGINES.filter((engine) =>
-    engine !== own && (engines?.allowed ?? []).includes(engine));
-  if (others.length === 0) return { engine: own, provider, reasons: [ownLine] };
-
-  // The credential a run on `engine` spends: the baseline's where it runs, else that engine's sign-in.
-  const runsOn = baseline.engines ?? [own];
-  const credentialOn = (engine: string) => (engine === own || runsOn.includes(engine) ? provider : engine);
-  const ruledOut = (engine: string): string | null => {
-    if (credentialOn(engine) !== engine) return null;
-    const state = engines?.states?.[engine];
-    if (state?.signedOut) return `${engine} is signed out on this runner`;
-    if (state?.regionBlocked) return `${engine} can’t use Anthropic on this runner`;
-    if (state?.quota && state.quota.utilization >= ENGINE_QUOTA_LIMIT) {
-      return `${engine} is at ${state.quota.utilization}% of its ${state.quota.window} quota`;
-    }
-    return null;
-  };
-  const ownOut = ruledOut(own);
-  const notes = ownOut ? [ownOut] : [];
-  const usable: string[] = [];
-  for (const engine of others) {
-    const out = ruledOut(engine)
-      ?? (environment.modelCatalog?.[engine as AgentProvider]?.length ? null : `${engine} has not reported its models on this runner`);
-    if (out) notes.push(out);
-    else usable.push(engine);
-  }
-  const move = (engine: string, why: string) => ({
-    engine,
-    provider: credentialOn(engine),
-    reasons: [`Engine ${engine}: ${why}`, ...notes.filter((note) => note !== why)],
-  });
-  const stay = (line: string, explained: boolean) => ({ engine: own, provider, reasons: explained ? [line, ...notes] : [line] });
-  const verified = engines?.verifiedRunEngine ?? null;
-  if (verified) {
-    if (own !== verified && !ownOut) return stay(`${ownLine} — the task it verifies last ran on ${verified}`, false);
-    const fresh = usable.find((engine) => engine !== verified);
-    if (fresh) return move(fresh, `the task it verifies last ran on ${verified}`);
-  }
-  if (!ownOut) return verified ? stay(`${ownLine} — no other engine it may use is available`, true) : stay(ownLine, false);
-  return usable.length > 0
-    ? move(usable[0], ownOut)
-    : stay(`${ownLine} — no other engine it may use is available`, true);
 }
 
 /** No I/O or writes to the task: every decision depends only on these value snapshots. */
@@ -286,12 +288,6 @@ export function routeTaskRun(input: ModelRoutingInput): ModelRoutingDecision {
     reasons: reasons.map((reason) => reason.startsWith('[') ? reason : `[not-routed] ${reason}`),
   });
   if (task.model != null) return unchanged([`Task pin: ${task.model}`]);
-  if (
-    environment.hasOwnModelSpace ||
-    (runtime !== AgentProvider.CLAUDE && runtime !== AgentProvider.CODEX)
-  ) {
-    return unchanged([`No tier table for ${provider} — keeps the agent's model`]);
-  }
 
   const skipped: string[] = [];
   let last: ModelRoutingRun | undefined;
@@ -346,77 +342,105 @@ export function routeTaskRun(input: ModelRoutingInput): ModelRoutingDecision {
     reasons.push(`Engine ${own}: ${task.engine || task.provider ? 'pinned on the task' : "this agent's own engine"}`);
     return unchanged(reasons);
   }
-  // The tier stays what it is wherever the run goes: it maps onto the chosen engine's tier table.
-  const engine = chooseEngine(input, own, provider);
-  reasons.push(...engine.reasons);
-  const { engine: chosen } = engine;
-
-  const catalog = environment.modelCatalog?.[chosen as AgentProvider] ?? [];
-  if (catalog.length === 0) {
-    return unchanged([...reasons, "This runner has not reported its models — keeps the agent's model"]);
+  if (!input.pool) return unchanged([...reasons, "No providers were read — keeps the agent's model"]);
+  // The pick is the SubAgent router's (§4.2), at this tier: every provider × engine × model the owner has.
+  const pool = taskRunPool(input, input.pool, level, mode);
+  const route = routeSubagent(pool);
+  const candidates = fallbackOrder(route);
+  const runnable = candidates.filter((c) => autoEligible(c, environment));
+  if (runnable.length < candidates.length || pool.modelCatalog !== input.pool.modelCatalog) {
+    reasons.push('Models without Auto permission support were excluded');
   }
-  let model: RunnerModelInfo | undefined;
-  let effort: string | null;
-  if (chosen === AgentProvider.CODEX) {
-    const defaultModel = environment.runtimeDefaultModels?.codex;
-    model = catalog.find((row) => row.value === defaultModel) ?? catalog[0];
-    effort = DEFAULT_MODEL_TIER_TABLE.codex[level].effort;
-    if (defaultModel && model.value !== defaultModel) {
-      reasons.push(`Runner default ${defaultModel} is not in its model catalog — using ${model.label}`);
-    }
+  const verified = input.engines?.verifiedRunEngine ?? null;
+  const fresh = verified ? runnable.find((c) => c.engine !== verified) : undefined;
+  // The Agent's own engine and credential keep the run while they can take it at this tier (owner, 2026-11-20): the
+  // router's ranking only decides where it goes when they cannot. A verification's fresh pair of eyes comes first.
+  const credential = task.provider ?? baseline.provider;
+  const ownPick = runnable.find((c) => c.engine === own && c.provider === credential && c.level === level);
+  const pick = fresh ?? ownPick ?? runnable[0];
+  // The router's own words, less what only a SubAgent says: the caller that set the tier, and its refusal.
+  const lines = route.reasons.filter((r) =>
+    !r.startsWith(`Tier ${level}, set by the caller`) && !r.startsWith('No provider can run a SubAgent'));
+  if (!pick) {
+    return unchanged([...reasons, ...lines, "No provider can run it at this tier — keeps the agent's model"]);
+  }
+  if (!fresh && ownPick && pick === ownPick) {
+    reasons.push(`Engine ${own}: this agent's own engine, which can take the run at tier ${level}`);
+  }
+  if (verified) {
+    reasons.push(fresh
+      ? `Engine ${pick.engine}: the task it verifies last ran on ${verified}`
+      : `Engine ${pick.engine}: no other engine it may use is available; the task it verifies last ran on ${verified}`);
+  }
+  if (pick !== candidates[0]) {
+    // The router's "Picked …" names the candidate it ranked first, not this one.
+    reasons.push(...lines.filter((r) => !r.startsWith('Picked ')));
+    reasons.push(`Runs on ${pick.model}${pick.effort ? ` · ${pick.effort}` : ''} on ${pick.provider}${pick.note ? `, ${pick.note}` : ''}`);
   } else {
-    const eligible = catalog.filter((row) =>
-      environment.defaultPermissionMode !== PermissionMode.AUTO ||
-      autoAvailable(chosen, row.value, false, environment.modelCatalog),
-    );
-    if (eligible.length < catalog.length) {
-      reasons.push('Models without Auto permission support were excluded');
-    }
-    const utilization = environment.planUsage?.claude?.sevenDayOpus?.utilization;
-    const opusBlocked = utilization != null && utilization >= 90;
-    const family = (prefix: string): RunnerModelInfo | undefined => eligible
-      .filter((row) => row.value.startsWith(prefix) && !(opusBlocked && prefix === 'claude-opus-'))
-      .reduce<RunnerModelInfo | undefined>((best, row) =>
-        !best || (row.priority ?? Infinity) < (best.priority ?? Infinity) ? row : best,
-      undefined);
-    const tier = DEFAULT_MODEL_TIER_TABLE.claude[level];
-    effort = tier.effort;
-    model = family(tier.prefix);
-    if (opusBlocked) {
-      reasons.push(`Opus weekly quota at ${utilization}% — Opus is unavailable for this run`);
-    } else if (tier.prefix === 'claude-opus-' && utilization != null) {
-      reasons.push(`Opus weekly quota at ${utilization}% — no quota step-down needed`);
-    }
-    if (!model) {
-      const wantedOpus = tier.prefix === 'claude-opus-';
-      model = family(wantedOpus ? 'claude-sonnet-' : 'claude-opus-');
-      if (wantedOpus) effort = 'xhigh';
-      if (!model) {
-        return unchanged([...reasons, "Neither Sonnet nor Opus is available — keeps the agent's model"]);
-      }
-      reasons.push(`${wantedOpus ? 'Opus' : 'Sonnet'} is unavailable — using ${model.label} · ${effort} at tier ${level}`);
-    }
-  }
-
-  if (model.reasoningLevels && !model.reasoningLevels.includes(effort)) {
-    const requested = effort;
-    const accepted = EFFORT_ORDER.filter((entry) => model.reasoningLevels!.includes(entry));
-    const distance = (entry: string) => Math.abs(EFFORT_ORDER.indexOf(entry) - EFFORT_ORDER.indexOf(requested));
-    // Lowest first; <= selects the higher effort when two accepted levels are equally close.
-    effort = accepted.length ? accepted.reduce((best, entry) =>
-      distance(entry) <= distance(best) ? entry : best,
-    ) : null;
-    reasons.push(`${model.label} does not support ${requested} effort — ${effort ? `using ${effort}` : 'no effort will be sent'}`);
+    reasons.push(...lines);
   }
   return {
     policyVersion: MODEL_ROUTING_POLICY_VERSION,
     level,
-    engine: chosen,
-    provider: engine.provider,
-    model: model.value,
-    effort,
+    engine: pick.engine,
+    provider: pick.provider,
+    model: pick.model,
+    effort: pick.effort,
     reasons,
   };
+}
+
+/** The SubAgent router's input for one task run at `level`: the owner's providers as read for the Agent's runner,
+ *  less what the task's engine or provider pin rules out, and in Auto mode less the runner's Claude models that
+ *  cannot use Auto, so a tier's family is picked among the ones that can. */
+function taskRunPool(
+  input: ModelRoutingInput,
+  pool: SubagentRoutingInput,
+  level: ModelRoutingLevel,
+  mode: ModelRoutingOptimizeFor,
+): SubagentRoutingInput {
+  const { engine, provider } = input.task;
+  const providers = pool.providers
+    .filter((p) => !provider || p.slug === provider)
+    .map((p) => (engine ? { ...p, engines: p.engines.filter((spec) => spec.engine === engine) } : p))
+    .filter((p) => p.engines.length > 0);
+  const claude = pool.modelCatalog?.[AgentProvider.CLAUDE];
+  const auto = claude?.filter((row) => autoEligible(
+    { engine: AgentProvider.CLAUDE, provider: '', model: row.value, effort: null }, input.environment));
+  const modelCatalog = claude && auto && auto.length < claude.length
+    ? { ...pool.modelCatalog, [AgentProvider.CLAUDE]: auto }
+    : pool.modelCatalog;
+  return {
+    ...pool,
+    modelCatalog,
+    type: 'task',
+    definitionName: 'the task',
+    caller: { size: level },
+    definition: {},
+    optimizeFor: mode,
+    providers,
+    smartSelection: true,
+    strictNamedModel: false,
+    runnerLabel: "this agent's runner",
+  };
+}
+
+/** The pick and then its fallbacks, in the router's order. */
+function fallbackOrder(route: SubagentRoutingDecision): SubagentFallback[] {
+  const first = route.engine && route.provider && route.model
+    ? [{
+      engine: route.engine, provider: route.provider, model: route.model, effort: route.effort, level: route.pickLevel ?? null,
+      ...(route.note ? { note: route.note } : {}),
+    }]
+    : [];
+  return [...first, ...route.fallbacks];
+}
+
+/** A Claude model a run in Auto permission mode can use: Auto has to be available for it. */
+function autoEligible(c: SubagentFallback, environment: ModelRoutingInput['environment']): boolean {
+  return c.engine !== AgentProvider.CLAUDE
+    || environment.defaultPermissionMode !== PermissionMode.AUTO
+    || autoAvailable(c.engine, c.model, false, environment.modelCatalog);
 }
 
 // ─────────────────────────── SubAgent routing (docs/subagent-design.md §4.1, §4.2) ───────────────────────────
@@ -424,8 +448,9 @@ export function routeTaskRun(input: ModelRoutingInput): ModelRoutingDecision {
 /** What a recorded SubAgent decision was made under: bump when a rule below changes what it picks. */
 export const SUBAGENT_ROUTING_POLICY_VERSION = 'p5-expiry-first-1';
 
-/** Which row of §4.1 set the tier — or, for the first two, the model. */
-export type SubagentTierSource = 'named-model' | 'definition-model' | 'size' | 'definition-size' | 'type-default';
+/** Which row of §4.1 set the tier — or, for the first two, the model; `not-routed`: smart model selection is off. */
+export type SubagentTierSource =
+  'not-routed' | 'named-model' | 'definition-model' | 'size' | 'definition-size' | 'type-default';
 
 /** One row of the tier table: a model on one engine at one effort, its tier and its price (§4.2). */
 export interface SubagentModelRow {
@@ -441,7 +466,7 @@ export interface SubagentModelRow {
 export interface SubagentProviderEngine {
   engine: string;
   /** The rows of a model space of the provider's own. Absent: the engine's runner-reported catalogue,
-   *  which only the built-in tier table (DEFAULT_MODEL_TIER_TABLE) describes. */
+   *  which the built-in tier table (DEFAULT_MODEL_TIER_TABLE) or the family tiers (MODEL_FAMILY_TIERS) describe. */
   models?: readonly SubagentModelRow[];
   /** For a key on that catalogue: USD per million output tokens by model id (models.dev). */
   prices?: Readonly<Record<string, number>>;
@@ -513,6 +538,9 @@ export interface SubagentRoutingInput {
    *  passes the §4.2 filters is a candidate, the rest are removed with their reason, and none left is no pick at
    *  all — never the parent's model. Absent: the first provider in the owner's order that lists it, else the parent's. */
   strictNamedModel?: boolean;
+  /** The account's smart model selection switch (common/model-routing-switch.ts). False: no tier is routed —
+   *  a named model is still used, anything else runs on the parent's. Absent: on. */
+  smartSelection?: boolean;
 }
 
 /** A candidate taken out of the pool, and why. Null model: the whole provider or engine went. */
@@ -544,6 +572,9 @@ export interface SubagentRoutingDecision {
   tierNote: string;
   /** Why the pick, in a few words (its billing and headroom); absent for a model that was named. */
   note?: string;
+  /** The pick's own tier, which may differ from `level` when none in that tier could run; null when untiered.
+   *  Absent for a model that was named or not routed. */
+  pickLevel?: ModelRoutingLevel | null;
 }
 
 /** One candidate a SubAgent may move to after a usage-limit or capacity failure (§4.3). */
@@ -565,7 +596,7 @@ const OPTIMIZE_LABEL = { cost: 'Cost', balance: 'Balance', intelligence: 'Intell
  * The built-in tier table's rows for an engine's runner-reported catalogue: Claude's families at the
  * table's efforts, the family's first model by catalogue priority (as routeTaskRun picks it), and Codex's
  * runner default at each effort, and Kimi's first reported model of each tier. Every other engine's
- * catalogue has no tier, model by model.
+ * catalogue is tiered by family (MODEL_FAMILY_TIERS); a model of no family has no tier.
  */
 type SubagentCatalogInput = Pick<SubagentRoutingInput, 'modelCatalog' | 'runtimeDefaultModels'>;
 
@@ -604,7 +635,7 @@ function builtinRows(engine: string, input: SubagentCatalogInput): SubagentModel
       return model ? [{ model, effort: tier.effort, level }] : [];
     });
   }
-  return catalog.map((row) => ({ model: row.value, effort: null, level: null }));
+  return familyTierRows(catalog);
 }
 
 /**
@@ -949,6 +980,10 @@ export function routeSubagent(input: SubagentRoutingInput): SubagentRoutingDecis
     }
     autoNotes.push(`${input.definitionName} names ${definitionModel}, which no enabled provider lists — routed as auto`);
   }
+  if (input.smartSelection === false) {
+    return { ...base, level: null, tierSource: 'not-routed', tierNote: 'Smart model selection is off', ...parentPick,
+      reasons: [...autoNotes, `Smart model selection is off: runs on the parent's ${input.parent.model}`] };
+  }
 
   // Rows 3 to 5: the tier.
   let level: ModelRoutingLevel;
@@ -1051,6 +1086,6 @@ export function routeSubagent(input: SubagentRoutingInput): SubagentRoutingDecis
   }));
   return {
     ...decision, engine: best.engine, provider: best.provider.slug, model: best.model, effort: best.effort,
-    note: candidateNote(best), reasons, fallbacks,
+    note: candidateNote(best), pickLevel: best.level, reasons, fallbacks,
   };
 }

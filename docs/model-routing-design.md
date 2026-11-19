@@ -254,6 +254,21 @@ Changing an owner's mode selection or enabled flag selects existing policy behav
 
 ## 6. 跨引擎（P5）
 
+> **Superseded 2026-11-20 (owner).** The pick no longer uses `chooseEngine` and the per-Agent
+> `modelRoutingProviders` list. Once §3 has set a tier, `routeTaskRun` hands it to the SubAgent router
+> (`routeSubagent`, docs/subagent-design.md §4.2). The pool is the one a SubAgent on the Agent's runner would
+> get: every provider × engine × model the owner has, less the providers blocked in the SubAgents settings.
+> It also drops what the runner cannot sign in to or lacks, and accounts at 90% of a window or paused, all
+> ranked by Optimize For. The Agent's own engine and credential keep the run whenever they can take it at the
+> tier (owner, 2026-11-20); the ranking only decides where it goes when they cannot. On top of that pool: a task's
+> provider or engine pin limits it to that pin; in Auto
+> permission mode, Claude models without Auto are left out; a verification run moves off the engine the
+> verified task last ran on when another candidate can take it. No candidate keeps the Agent's model
+> (`level: null`). The Opus-weekly step-down (§5) and the Codex `reasoningLevels` effort clamp went with the
+> old pick. `modelRoutingProviders` is still stored but no longer read. The account switch is now on unless
+> turned off. With it off, SubAgents are not routed either: a named model is used, anything else runs on
+> the parent's model. The text below describes the P5 design as it was.
+
 契约 §7.4 R1–R4 定边界，这里定做法：
 
 - **候选引擎** = 本 Agent 的引擎 ∪ `workspace.modelRoutingProviders`（只算有档位表的）。默认空数组 = 只有本 Agent 的引擎，

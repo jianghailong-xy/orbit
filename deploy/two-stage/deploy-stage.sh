@@ -13,7 +13,7 @@
 #                            the base images by digest, from that commit's deploy/two-stage/base-images.env (postgres,
 #                            pgbackup and db-proxy are pinned by deploy/postgres-pinned.yml and deploy/db-proxy.yml)
 #   ORBIT_MANAGED_RUNNER_IMAGE
-#                            the hosted runners' image by digest, <registry>/orbit-managed-runner@sha256:<64 hex>, or
+#                            the hosted runners' image by digest, <registry>/orbit-cloud-runner@sha256:<64 hex>, or
 #                            empty for a release without one. Where this host runs managed runners on Kubernetes, their
 #                            profile's runner.image is set to it before the apiserver is replaced, and the apiserver's
 #                            manager moves each runner onto it once that runner is idle (rollPreviousImage)

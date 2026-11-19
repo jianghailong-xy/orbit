@@ -482,7 +482,8 @@ class ManagementDeviceTest {
         MockWebServer().use { server ->
             server.dispatcher = dispatcher()
             try {
-                role = "ADMIN"; modelRouting = null; revoked = emptySet(); deepSeekLow = false
+                // Turned off on the server, so the switch has something to turn on.
+                role = "ADMIN"; modelRouting = false; revoked = emptySet(); deepSeekLow = false
                 signIn(server); settings()
                 await("2 active")
                 // Smart model selection is on Sessions' page (docs/mocks/ios-settings-order).

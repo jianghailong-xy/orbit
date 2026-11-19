@@ -36,13 +36,13 @@ export const PERSONAL_SETTINGS = {
     'modelRouting',
     '/settings/general',
     'Smart model selection',
-    'Coordinators suggest a tier for each task; Agents you turn this on for run on that tier.',
+    'Task runs and SubAgents get a model matched to how hard the work is.',
   ),
   optimizeFor: setting(
     'optimizeFor',
     '/settings/general',
     'Optimize For',
-    'How SubAgents and smart-selected tasks pick a provider, on every Agent.',
+    'What to favour when a model is picked at a tier.',
   ),
   promptSuggestions: setting(
     'promptSuggestions',

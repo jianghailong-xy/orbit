@@ -1527,6 +1527,10 @@ type ClaimedSession struct {
 	// every engine but Claude, whose child keeps the parent's mode without edit tools; Codex alone reads this too, since its plan mode refuses every command and a shell
 	// is the only way Codex reads a repository (codexPermissionMode).
 	readonlySubagent bool
+	// readonlyParentMode is the parent session's permission mode as it stands now, on a read-only SubAgent's
+	// child claim on an engine other than Claude (subagentChildJob); nil on every other claim. Kimi reads it to
+	// answer its plan mode's shell requests the way the parent runs (kimiReadonlyShellFollowsParent).
+	readonlyParentMode func() string
 	// WorkDir is the coding engine's cwd for this session, from the session's agent.
 	WorkDir string `json:"workDir,omitempty"`
 	// HelpAsk marks the help center's Ask (help_ask.go): started read-only in a scratch folder of help articles,
