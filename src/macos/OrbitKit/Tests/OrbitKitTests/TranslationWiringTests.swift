@@ -96,7 +96,28 @@ final class TranslationWiringTests: XCTestCase {
         XCTAssertTrue(composer.contains("ComposerTranslationTag(language: SessionTranslation.language(app.user?.preferences),"))
         XCTAssertTrue(composer.contains("agentLanguage: SessionTranslation.agentLanguage(app.user?.preferences),"))
         let tag = try source(app + "Views/Console/TranslationViews.swift")
-        XCTAssertTrue(tag.contains("Text(language.tag(to: agentLanguage))"), "the tag names the agent language")
+        XCTAssertTrue(tag.contains("Text(language.tag(to: agentLanguage, unavailable: unavailable))"),
+                      "the tag names the agent language, and says when messages will wait")
+        // Frame 6 of docs/ux/translation-failure-policy.html: the tag reads the account's skip, redraws when it
+        // passes, and the account is read again when the server announces a change.
+        XCTAssertTrue(composer.contains("unavailableUntil: SessionTranslation.temporarilyUnavailableUntil(app.user),"))
+        XCTAssertTrue(tag.contains("TimelineView(.explicit([until])) { context in"))
+        let appModel = try source(app + "AppModel.swift")
+        XCTAssertTrue(appModel.contains("case .account:\n            Task { @MainActor [weak self] in\n                if let self, let me = try? await self.api?.me() { self.assignIfChanged(\\.user, me) }"))
+        // A refused card answer draws the reason its 422 gave.
+        XCTAssertTrue(cards.contains("if let refusedFoot = console.answersRefusedUntranslated[row.itemId] {"))
+        XCTAssertTrue(tag.contains("TranslationFootView(parts: held.foot) { action in"))
+        // A reason's sentence wraps under the bubble, its presses on the line below, instead of being cut off.
+        XCTAssertTrue(tag.contains("ViewThatFits(in: .horizontal) {"))
+        XCTAssertTrue(tag.contains(".fixedSize(horizontal: false, vertical: true)"))
+        XCTAssertFalse(tag.contains(".minimumScaleFactor(0.85)"))
+        // The project done card's "Not yet" refusal is a card answer too: it draws the reason its 422 gave.
+        let done = try source(app + "Views/ProjectDoneCards.swift")
+        XCTAssertTrue(done.contains("if let refusedFoot = notYetRefused, let onNotYet {"))
+        XCTAssertTrue(done.contains("TranslationFootView(parts: refusedFoot) { action in"))
+        for file in ["ConsoleModel.swift", "ProjectsModel.swift"] {
+            XCTAssertTrue(try source(app + file).contains("? SessionTranslation.refusedAnswerFoot(after: error) : nil"), file)
+        }
         XCTAssertTrue(composer.contains("app.nav.openSettings(at: .general)"))
     }
 

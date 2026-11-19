@@ -401,6 +401,9 @@ export class RealtimeService implements OnModuleInit, OnModuleDestroy {
   private listenerLostAt?: number;
   /** sessionId → how many of this replica's streams of the session are open (streamForRun), for listenerBack. */
   private readonly openStreams = new Map<string, number>();
+  /** sessionId → how many of those streams are the owner's own (GET /sessions/:id/events): whether the owner is
+   *  viewing the session, for the held-message push (`heldMessageUnseen`). This replica's only. */
+  private readonly ownerStreams = new Map<string, number>();
   /** sessionId → {ownerId, workspaceId}, for scoping the user-stream (GET /api/events) without a
    *  DB hit per event. Bounded LRU; the control subset is low-volume so it's near-100% hits. */
   private readonly ownerCache = new Map<string, { ownerId: string; workspaceId: string | null }>();
@@ -1014,7 +1017,7 @@ export class RealtimeService implements OnModuleInit, OnModuleDestroy {
     }
   }
 
-  streamForRun(runId: string): Observable<NormalizedRunEvent> {
+  streamForRun(runId: string, opts?: { owner?: boolean }): Observable<NormalizedRunEvent> {
     const hub$ = this.hub.asObservable().pipe(
       // Lifecycle signals (session_created/ended) are control-plane-internal: they ride the hub
       // for the NOTIFY bridge but must never leak into a per-session transcript stream.
@@ -1024,16 +1027,39 @@ export class RealtimeService implements OnModuleInit, OnModuleDestroy {
     // Without the runner link the stream is the hub alone, exactly as before.
     const stream$ = this.hints?.enabled ? merge(hub$, this.linkStream(this.hints, runId)) : hub$;
     // Counted while it is open: a listener that comes back tells the sessions streamed here to re-fetch (listenerBack).
+    // The owner's own streams are counted apart as well: that is the owner viewing the session (ownerIsViewing).
+    const counts = opts?.owner ? [this.openStreams, this.ownerStreams] : [this.openStreams];
     return defer(() => {
-      this.openStreams.set(runId, (this.openStreams.get(runId) ?? 0) + 1);
+      for (const count of counts) count.set(runId, (count.get(runId) ?? 0) + 1);
       return stream$.pipe(
         finalize(() => {
-          const left = (this.openStreams.get(runId) ?? 1) - 1;
-          if (left > 0) this.openStreams.set(runId, left);
-          else this.openStreams.delete(runId);
+          for (const count of counts) {
+            const left = (count.get(runId) ?? 1) - 1;
+            if (left > 0) count.set(runId, left);
+            else count.delete(runId);
+          }
         }),
       );
     });
+  }
+
+  /**
+   * Whether the owner is viewing the session: a stream of it opened through the owner's door (GET
+   * /sessions/:id/events) is open on THIS replica. No push decided "is the owner looking" before the held-message
+   * push, so this is the session's live-stream subscription presence; a stream held open on another replica is
+   * not seen here.
+   */
+  ownerIsViewing(sessionId: string): boolean {
+    return (this.ownerStreams.get(sessionId) ?? 0) > 0;
+  }
+
+  /**
+   * A held message's translation failed 60 s ago (SessionsService.scheduleHeldMessagePush): unless the owner is
+   * viewing the session, PushService tells them it wasn't sent, if it is still held and failed by then.
+   */
+  heldMessageUnseen(sessionId: string, turnId: string): Promise<void> {
+    if (this.ownerIsViewing(sessionId)) return Promise.resolve();
+    return this.push.notifyHeldMessage(sessionId, turnId);
   }
 
   /**

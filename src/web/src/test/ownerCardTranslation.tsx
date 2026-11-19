@@ -23,9 +23,15 @@ export function clientWithMe(me: Me | null = ownerMe()): QueryClient {
   return client;
 }
 
-/** The refusal an answer door sends when the owner's words could not be translated. */
-export function translationRefused(): ApiError {
-  return new ApiError("Couldn't translate", 422, TRANSLATION_FAILED_CODE);
+/** The refusal an answer door sends when the owner's words could not be translated; `why` is the
+ *  TranslationFailedBody's failureReason (and httpStatus), absent for a server that sends none. */
+export function translationRefused(why?: { failureReason: string; httpStatus?: number }): ApiError {
+  return new ApiError(
+    "Couldn't translate",
+    422,
+    TRANSLATION_FAILED_CODE,
+    why ? { code: TRANSLATION_FAILED_CODE, message: "Couldn't translate", ...why } : undefined,
+  );
 }
 
 /** A jsdom host a card is drawn into, with the presses the tests make. */

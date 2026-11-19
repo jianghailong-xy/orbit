@@ -3,7 +3,8 @@ import { randomUUID } from 'node:crypto';
 import { mkdtempSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
-import { after, afterEach, before, test } from 'node:test';
+import { after, afterEach, before, beforeEach, test } from 'node:test';
+import { resetTranslationBreaker } from './translation';
 import { RunStatus } from '@prisma/client';
 import { RunEventType, type NormalizedRunEvent } from '@orbit/shared';
 import { prismaClientFor } from '../prisma/prisma-client';
@@ -14,6 +15,9 @@ import { SessionsService } from './sessions.service';
 import { translationLanguages } from './turn-translation';
 import { SessionsController } from './sessions.controller';
 import { EMPTY, firstValueFrom, take, toArray } from 'rxjs';
+
+// The translator's circuit breaker is the process's: each test starts with it closed and nothing counted.
+beforeEach(() => resetTranslationBreaker());
 
 /**
  * Settings › Translation, what the agent says (task A2), against the real schema (migration 0550) and the
@@ -89,6 +93,7 @@ before(async () => {
 
 afterEach(async () => {
   failing = false;
+  resetTranslationBreaker();
   asked = 0;
   published.length = 0;
   await replyTranslationsSettled();
@@ -188,12 +193,14 @@ scenario('a failed reply translation is stored as failed, and Retry writes the t
   const sessionId = await liveSession();
   const events = await store(sessionId, [{ seq: 4, type: RunEventType.ASSISTANT, payload: { text: 'Done.' } }]);
   failing = true;
+  resetTranslationBreaker();
   translateStoredEvents(deps, sessionId, await languages(), events);
   await replyTranslationsSettled();
   const failed = await prisma.runEvent.findUnique({ where: { sessionId_seq: { sessionId, seq: 4 } } });
   assert.deepEqual((failed!.payload as { translation?: unknown }).translation, { lang: 'zh-Hans', failed: true });
 
   failing = false;
+  resetTranslationBreaker();
   assert.deepEqual(await sessions.retryReplyTranslation(ownerId, sessionId, 4), { of: 4, lang: 'zh-Hans' });
   await replyTranslationsSettled();
   const page = await sessions.getEventPage(ownerId, sessionId, { tail: 10 });

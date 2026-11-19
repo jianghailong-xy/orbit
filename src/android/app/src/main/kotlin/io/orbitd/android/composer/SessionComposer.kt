@@ -156,6 +156,9 @@ internal fun SessionComposer(app: OrbitApplication, handle: SessionHandle, sessi
     // it before its `user` event arrives, so the one standing at the send is held back until the transcript moves on.
     val standing = session?.transcript?.promptSuggestion
     val translation = LocalTranslation.current
+    // Frame 6 of the failure policy board: while the server skips a failing translator, the tag warns that messages will wait — until
+    // the instant passes, which the server does not announce, so a timer here draws the ordinary tag again.
+    val translationUnavailable = translationUnavailable(translation)
     var spent by remember(model) { mutableStateOf<String?>(null) }
     LaunchedEffect(standing) { if (standing == null) spent = null }
     val suggestion = if (target != null || standing == spent) null else offeredPromptSuggestion(standing, detail,
@@ -272,11 +275,13 @@ internal fun SessionComposer(app: OrbitApplication, handle: SessionHandle, sessi
                     // and the tag opens Settings › Sessions, where the switch and the language are. Like the placeholder, it
                     // shows only while the box is empty, so typed text gets the whole width.
                     trailingIcon = translation.takeIf { it.on && field.text.isEmpty() }?.let { on -> {
-                        Text(Translation.tag(on.language, on.agentLanguage), Modifier.padding(end = 8.dp).testTag("composer-translation-tag")
+                        Text(io.orbitd.android.translation.TranslationFailureCopy.composerTag(on.language, on.agentLanguage, translationUnavailable),
+                            Modifier.padding(end = 8.dp).testTag("composer-translation-tag")
                             .clip(RoundedCornerShape(50)).background(MaterialTheme.colorScheme.surfaceVariant)
                             .then(if (openTranslationSettings != null) Modifier.clickable(role = Role.Button, onClick = openTranslationSettings) else Modifier)
                             .padding(horizontal = 8.dp, vertical = 2.dp),
-                            style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                            style = MaterialTheme.typography.labelSmall,
+                            color = if (translationUnavailable) LocalOrbitColors.current.needsYou else MaterialTheme.colorScheme.onSurfaceVariant)
                     } },
                     minLines = 1, maxLines = 4,
                     keyboardOptions = KeyboardOptions(imeAction = ImeAction.Default))
@@ -816,4 +821,18 @@ internal fun EngineChoices(model: ComposerModel, state: ComposerState, detail: J
                 color = MaterialTheme.colorScheme.onSurfaceVariant)
         }
     }, confirmButton = { TextButton(onClick = close) { Text("Done") } })
+}
+
+/** Whether [translation] is unavailable now, flipping back by itself the moment its `translationUnavailableUntil` passes. */
+@Composable
+internal fun translationUnavailable(translation: io.orbitd.android.management.AccountTranslation): Boolean {
+    val until = translation.unavailableUntil
+    var unavailable by remember(until) { mutableStateOf(translation.unavailableAt(java.time.Instant.now())) }
+    LaunchedEffect(until) {
+        if (until == null) return@LaunchedEffect
+        val left = java.time.Duration.between(java.time.Instant.now(), until).toMillis()
+        if (left > 0) kotlinx.coroutines.delay(left)
+        unavailable = false
+    }
+    return unavailable
 }

@@ -95,6 +95,28 @@ describe('a Not yet note the server could not translate', () => {
     await h.press(TRANSLATION_COPY.sendAsWritten);
     expect(resent).toEqual([false, true]);
   });
+
+  it('says why when the refusal did (docs/ux/translation-failure-policy.html, frames 5 and 7)', async () => {
+    function Host() {
+      const [refused, setRefused] = useState(false);
+      return (
+        <ProjectDoneCard
+          project={project}
+          doneRequest={request}
+          onRecordDone={() => {}}
+          onNotYet={() => setRefused(true)}
+          notYetRefused={refused ? async () => {} : null}
+          notYetRefusal={refused ? translationRefused({ failureReason: 'HTTP', httpStatus: 503 }) : null}
+        />
+      );
+    }
+    await h.draw(<Host />);
+    await h.press(PROJECT_DONE_COPY.notYet);
+    await h.type('Il manque la vérification');
+    await h.press(PROJECT_DONE_COPY.sendToCoordinator);
+    expect(h.text()).toContain("The translator was unreachable, so your answer wasn't sent·Retry·Send as written");
+    expect(h.text()).not.toContain(TRANSLATION_COPY.sendFailed);
+  });
 });
 
 describe('the project page’s done dialog', () => {
@@ -128,5 +150,26 @@ describe('the project page’s done dialog', () => {
     expect(posts[0]![0]).toBe('/projects/p1/done-requests/done1/decline');
     expect(posts[0]![1]).toEqual({ method: 'POST', body: { note: 'Il manque la vérification' } });
     expect(posts[1]![1]).toEqual({ method: 'POST', body: { note: 'Il manque la vérification', sendAsWritten: true } });
+  });
+
+  it("draws the refusal's reason: a damaged translation", async () => {
+    apiMock.mockImplementation((async (path: string) => {
+      if (path.endsWith('/decline')) throw translationRefused({ failureReason: 'MANGLED' });
+      if (path.endsWith('/acceptance/confirmation')) return { state: 'CONFIRMED', confirmed: true, currentVersion: { digest: 'digest-1', material: [] }, confirmation: null };
+      return {};
+    }) as never);
+    const row = {
+      itemId: 'done1', kind: 'DONE_REQUEST', title: 'Is this project done?', detailLine: '', assignee: 'OWNER', assigneeReason: 'DEFAULT',
+      escalateAt: null, escalatedAt: null, taskId: null, sessionId: null, promotionId: null, fuseEpisodeId: null,
+      delivery: { state: 'NOT_REQUIRED', sessionId: null, at: null }, actions: [], facts: null, question: null,
+      waitingSince: new Date(0).toISOString(), doneRequest: request, translation,
+    } as never;
+    await h.draw(<ProjectDoneDialog projectId="p1" open onClose={() => {}} project={project as never} doneRequestRow={row} />);
+    await h.press(PROJECT_DONE_COPY.notYet);
+    await h.type('Il manque la vérification');
+    await h.press(PROJECT_DONE_COPY.sendToCoordinator);
+    const line = "The translation came back damaged, so your answer wasn't sent";
+    await h.until(() => h.text().includes(line), 'the reason');
+    expect(h.text()).toContain(`${line}·Retry·Send as written`);
   });
 });

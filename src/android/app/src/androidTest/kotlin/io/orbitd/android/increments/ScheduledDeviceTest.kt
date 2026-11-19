@@ -138,7 +138,7 @@ class ScheduledDeviceTest : IncrementDeviceTest() {
           "before":{"rule":${rule("DAILY", "10:00")}},"after":{"rule":${rule("DAILY", "09:00")}},"createdAt":"${ago(3)}",
           "undo":{"path":"/schedules/$codex/undo","body":{"revision":4}}}]}"""
 
-    /** Board 01 ⑦: a run's own session — its crumb, title, head line, strip, what it said, and its report. */
+    /** A run's session shows its strip, what it said, and its report. */
     private val runPlanned get() = ago(12)
     private fun runDetail() = conversationDetail().replace(conversation, runSession).replace("Codex release watch", "Codex stable check")
         .replace("\"tags\":[]", "\"tags\":[],\"scheduleRunId\":\"r-run\",\"runSource\":\"SCHEDULE\"")
@@ -256,8 +256,8 @@ class ScheduledDeviceTest : IncrementDeviceTest() {
         signIn()
         open("orbit-session:$runSession")
         await("the run's strip") { exists(hasTestTag("schedule-run-strip"), unmerged = true) }
-        verify("the crumb names its schedule", exists(hasTestTag("schedule-run-crumb"), unmerged = true))
-        verify("the head line says state, agent and duration", exists(hasText("Open · Codex agent · 4 min"), unmerged = true))
+        verify("the strip has no schedule breadcrumb", !exists(hasTestTag("schedule-run-crumb"), unmerged = true))
+        verify("the session has no run-specific header line", !exists(hasText("Open · Codex agent · 4 min"), unmerged = true))
         await("the report") { exists(hasTestTag("schedule-run-report"), unmerged = true) }
         verify("the report says what it found", exists(hasText("Reported: Changed · codex@0.49.0 · you were notified"), unmerged = true))
         compose.onNodeWithTag("transcript-list").performScrollToNode(hasTestTag("schedule-run-strip"))
