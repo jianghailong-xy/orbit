@@ -85,4 +85,32 @@ class ComposerToolbarTest : ComposerShellTest() {
         assertNull(ComposerShell.body("POST sessions/${ComposerShell.SESSION}/turns"))
         compose.onNodeWithTag("composer-input").assertTextEquals("Here is the file")
     }
+
+    /** As iOS: a session that names no mode still shows the one it runs in. */
+    @Test fun aSessionWithNoModeNamedShowsDefault() {
+        signIn(); openSession()
+        compose.onNodeWithTag("composer-mode").assertTextEquals("Default")
+    }
+
+    /** As iOS's ByteCountFormatter (file style): decimal units. */
+    @Test fun aFileSizeReadsAsIosWritesIt() {
+        assertEquals("Zero KB", fileSize(0)); assertEquals("512 bytes", fileSize(512)); assertEquals("212 KB", fileSize(212_000))
+        assertEquals("1.5 MB", fileSize(1_500_000)); assertEquals("2.00 GB", fileSize(2_000_000_000))
+    }
+
+    /** The plan's bar is read with the composer, as iOS reads its runner's plan usage: no menu needs opening first. */
+    @Test fun theCatalogueIsReadAsTheComposerOpens() {
+        signIn(); openSession()
+        await { ComposerShell.calls.any { it.startsWith("GET runners") } }
+    }
+
+    /** As iOS: the plan's binding window beside the ring from the start, in one capsule the ring opens; nothing needs opening first. */
+    @Test fun thePlanBarSitsBesideTheRingFromTheStart() {
+        ComposerShell.runner = ComposerShell.obj("""{"id":"${ComposerShell.RUNNER}","name":"Fixture runner","online":true,"status":"ONLINE",
+            "engines":[{"engine":"codex","installed":true,"auth":"yes"}],"modelCatalog":{"codex":[{"value":"gpt-6","label":"GPT-6"}]},
+            "planUsage":{"codex":{"provider":"codex","primary":{"utilization":23,"windowDurationMins":300}}}}""")
+        ComposerShell.session = mapOf("provider" to JsonPrimitive("codex"), "model" to JsonPrimitive("gpt-6"))
+        signIn(); openSession()
+        await { has(hasTestTag("composer-context") and hasContentDescription("23%", substring = true)) }
+    }
 }

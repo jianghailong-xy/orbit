@@ -148,32 +148,40 @@ internal fun RoundSend(stop: Boolean, waiting: Boolean, enabled: Boolean, label:
     }
 }
 
-/** The context window's ring (iOS `UsageRing`): the share used, from the top; empty with no reading yet, dashed where the engine never
- * reports one. */
+/** The context window's ring (iOS `UsageRing`): the share used, from the top, in the accent until 75%, amber from there and red from
+ * 90%; a solid empty ring while no reading has come yet, a dashed one where the engine never reports one. */
 @Composable
-internal fun UsageRingIcon(fraction: Float, unavailable: Boolean, size: Dp = 18.dp) {
-    val track = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.30f)
-    val ink = MaterialTheme.colorScheme.onSurfaceVariant
-    Canvas(Modifier.size(size)) {
-        val width = 2.2.dp.toPx()
+internal fun UsageRingIcon(percent: Int, unavailable: Boolean, size: Dp = 16.dp) {
+    val track = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.18f)
+    val ink = when {
+        percent >= 90 -> MaterialTheme.colorScheme.error
+        percent >= 75 -> io.orbitd.android.ui.LocalOrbitColors.current.needsYou
+        else -> MaterialTheme.colorScheme.primary
+    }
+    val dashed = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.6f)
+    Canvas(Modifier.size(size).padding(1.25.dp)) {
+        val width = (if (unavailable) 1.5.dp else 2.5.dp).toPx()
         val inset = width / 2
         val arc = androidx.compose.ui.geometry.Size(this.size.width - width, this.size.height - width)
         val topLeft = androidx.compose.ui.geometry.Offset(inset, inset)
-        drawArc(track, 0f, 360f, false, topLeft, arc, style = Stroke(width,
-            pathEffect = if (unavailable) PathEffect.dashPathEffect(floatArrayOf(2.dp.toPx(), 2.dp.toPx())) else null))
-        if (!unavailable && fraction > 0f) drawArc(ink, -90f, 360f * fraction.coerceIn(0f, 1f), false, topLeft, arc,
-            style = Stroke(width, cap = StrokeCap.Round))
+        if (unavailable) {
+            drawArc(dashed, 0f, 360f, false, topLeft, arc, style = Stroke(width, pathEffect = PathEffect.dashPathEffect(floatArrayOf(2.2.dp.toPx(), 2.2.dp.toPx()))))
+            return@Canvas
+        }
+        drawArc(track, 0f, 360f, false, topLeft, arc, style = Stroke(width))
+        if (percent > 0) drawArc(ink, -90f, 360f * percent.coerceIn(0, 100) / 100f, false, topLeft, arc, style = Stroke(width, cap = StrokeCap.Round))
     }
 }
 
-/** A plan window as the gauge's capsule draws it (iOS `UsageBar`): 24 × 5 dp, red once spent, the needs-you colour near the limit. */
+/** A plan window as the gauge's capsule draws it (iOS `UsageBar`): 24 × 5 dp, in the accent; amber near its limit — from 90% used,
+ * or, for a reading of what is left, where the row says so — and red once spent. */
 @Composable
 internal fun UsageBarIcon(row: UsageRow) {
-    val track = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.30f)
+    val track = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.18f)
     val ink = when {
-        row.spent -> Ink.red
-        row.nearLimit && !row.remaining -> io.orbitd.android.ui.LocalOrbitColors.current.needsYou
-        else -> MaterialTheme.colorScheme.onSurfaceVariant
+        row.spent -> MaterialTheme.colorScheme.error
+        (if (row.remaining) row.nearLimit else row.percent >= 90) -> io.orbitd.android.ui.LocalOrbitColors.current.needsYou
+        else -> MaterialTheme.colorScheme.primary
     }
     Box(Modifier.size(width = 24.dp, height = 5.dp).clip(RoundedCornerShape(3.dp)).background(track)) {
         Box(Modifier.fillMaxHeight().fillMaxWidth(row.gaugeFraction.coerceIn(0f, 1f)).clip(RoundedCornerShape(3.dp)).background(ink))
@@ -181,57 +189,86 @@ internal fun UsageBarIcon(row: UsageRow) {
 }
 
 /**
- * The staged attachments, inside the card above the text (iOS `ComposerAttachmentsView`): an image as a 58 dp thumbnail, any other
- * file as its name and size; × removes one. One uploading shows its progress along its foot. One whose upload failed is not here:
- * the model drops it and says why in the error line above the card, as iOS does.
+ * The staged attachments, inside the card above the text, as iOS's `ComposerAttachmentsView` draws them: an image as a 48 dp thumbnail
+ * (8 dp corners) with its × out on the corner, dimmed with a spinner while it uploads; any other file as a one-line chip — paperclip,
+ * name, size, × — whose paperclip is the spinner while it uploads. One whose upload failed is not here: the model drops it and says why
+ * in the error line above the card.
  */
 @Composable
 internal fun AttachmentStrip(attachments: List<StagedAttachment>, uploads: Map<String, Float>,
     bytes: suspend (String) -> ByteArray, open: (StagedAttachment) -> Unit, remove: (StagedAttachment) -> Unit) {
     if (attachments.isEmpty()) return
-    Row(Modifier.fillMaxWidth().padding(start = 12.dp, end = 12.dp, top = 12.dp).horizontalScroll(rememberScrollState())
-        .testTag("composer-attachments"), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-        attachments.forEach { att -> AttachmentTile(att, uploads[att.id], bytes, open, remove) }
+    // The padding is inside the scroller, so an image's × that sits out past its corner is not cut off by the strip's edge.
+    Row(Modifier.fillMaxWidth().horizontalScroll(rememberScrollState()).padding(start = 12.dp, end = 12.dp, top = 12.dp)
+        .testTag("composer-attachments"), horizontalArrangement = Arrangement.spacedBy(8.dp), verticalAlignment = Alignment.Top) {
+        attachments.forEach { att ->
+            val uploading = att.id in uploads
+            if (att.mime.startsWith("image/")) ImageChip(att, uploading, bytes, open, remove) else FileChip(att, uploading, open, remove)
+        }
     }
 }
 
 @Composable
-private fun AttachmentTile(att: StagedAttachment, progress: Float?, bytes: suspend (String) -> ByteArray,
+private fun ImageChip(att: StagedAttachment, uploading: Boolean, bytes: suspend (String) -> ByteArray,
     open: (StagedAttachment) -> Unit, remove: (StagedAttachment) -> Unit) {
-    val shape = RoundedCornerShape(14.dp)
-    val image = att.mime.startsWith("image/")
+    val shape = RoundedCornerShape(8.dp)
     val bitmap by produceState<android.graphics.Bitmap?>(null, att.id, att.size) {
-        if (!image || att.size <= 0) return@produceState
+        if (att.size <= 0) return@produceState
         value = try {
             val data = bytes(att.id)
-            withContext(Dispatchers.Default) { decodeAttachmentImage({ data.inputStream() }, maxDimension = 240) }
+            withContext(Dispatchers.Default) { decodeAttachmentImage({ data.inputStream() }, maxDimension = 192) }
         } catch (cancel: CancellationException) { throw cancel } catch (_: Exception) { null }
     }
-    val described = "${att.name} · ${att.size / 1024} KB"
-    Box(Modifier.height(58.dp).then(if (image) Modifier.width(58.dp) else Modifier.widthIn(min = 96.dp, max = 180.dp))
-        .clip(shape).background(MaterialTheme.colorScheme.surfaceVariant)
-        .border(1.dp, MaterialTheme.colorScheme.outline.copy(alpha = 0.25f), shape)
-        .clickable(enabled = att.size > 0, role = Role.Button, onClick = { open(att) })
-        .semantics { contentDescription = described }.testTag("composer-attachment:${att.id}")) {
-        if (image) bitmap?.let { Image(it.asImageBitmap(), null, Modifier.fillMaxSize(), contentScale = ContentScale.Crop) }
-        else Column(Modifier.align(Alignment.CenterStart).padding(start = 12.dp, end = 28.dp)) {
-            Text(att.name, style = MaterialTheme.typography.bodySmall, maxLines = 1, overflow = TextOverflow.MiddleEllipsis)
-            Text(io.orbitd.android.tasks.TaskDetailLogic.humanSize(att.size.toLong()), style = MaterialTheme.typography.labelSmall,
-                color = MaterialTheme.colorScheme.onSurfaceVariant)
-        }
-        progress?.let { done ->
-            Box(Modifier.align(Alignment.BottomCenter).padding(horizontal = 6.dp, vertical = 6.dp).fillMaxWidth().height(3.dp)
-                .clip(RoundedCornerShape(2.dp)).background(Color.White.copy(alpha = 0.3f))) {
-                Box(Modifier.fillMaxHeight().fillMaxWidth(done.coerceIn(0f, 1f)).background(MaterialTheme.colorScheme.primary))
+    Box(Modifier.size(48.dp)) {
+        Box(Modifier.fillMaxSize().clip(shape).background(MaterialTheme.colorScheme.surfaceVariant)
+            .border(1.dp, MaterialTheme.colorScheme.onSurface.copy(alpha = 0.08f), shape)
+            .clickable(enabled = att.size > 0, role = Role.Button, onClick = { open(att) })
+            .semantics { contentDescription = attachmentLabel(att) }.testTag("composer-attachment:${att.id}"), contentAlignment = Alignment.Center) {
+            bitmap?.let { Image(it.asImageBitmap(), null, Modifier.fillMaxSize(), contentScale = ContentScale.Crop) }
+            if (uploading) {
+                Box(Modifier.fillMaxSize().background(Color.Black.copy(alpha = 0.35f)))
+                CircularProgressIndicator(Modifier.size(16.dp), strokeWidth = 2.dp, color = Color.White)
             }
         }
-        Box(Modifier.align(Alignment.TopEnd).padding(2.dp).size(24.dp).clip(CircleShape)
+        // iOS's 30 pt target round a small ✕ badge, nudged up and out so it reaches past the thumbnail rather than over it.
+        Box(Modifier.align(Alignment.TopEnd).offset(x = 8.dp, y = (-8).dp).size(30.dp).clip(CircleShape)
             .clickable(role = Role.Button, onClick = { remove(att) }).semantics { contentDescription = "Remove ${att.name}" }
             .testTag("composer-attachment-remove:${att.id}"), contentAlignment = Alignment.Center) {
-            Box(Modifier.size(18.dp).clip(CircleShape).background(Color.Black.copy(alpha = 0.55f)).clearAndSetSemantics {},
+            Box(Modifier.size(16.dp).clip(CircleShape).background(Color.Black.copy(alpha = 0.55f)).clearAndSetSemantics {},
                 contentAlignment = Alignment.Center) {
-                Icon(painterResource(R.drawable.ic_close), null, Modifier.size(12.dp), tint = Color.White)
+                Icon(painterResource(R.drawable.ic_close), null, Modifier.size(9.dp), tint = Color.White)
             }
         }
     }
+}
+
+@Composable
+private fun FileChip(att: StagedAttachment, uploading: Boolean, open: (StagedAttachment) -> Unit, remove: (StagedAttachment) -> Unit) {
+    val secondary = MaterialTheme.colorScheme.onSurfaceVariant
+    val style = MaterialTheme.typography.bodySmall
+    Row(Modifier.widthIn(max = 220.dp).clip(RoundedCornerShape(8.dp)).background(Color.Gray.copy(alpha = 0.12f))
+        .clickable(enabled = att.size > 0, role = Role.Button, onClick = { open(att) })
+        .semantics { contentDescription = attachmentLabel(att) }.testTag("composer-attachment:${att.id}")
+        .padding(start = 8.dp, top = 4.dp, bottom = 4.dp), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+        if (uploading) CircularProgressIndicator(Modifier.size(14.dp), strokeWidth = 1.5.dp, color = secondary)
+        else Icon(painterResource(R.drawable.ic_paperclip), null, Modifier.size(14.dp), tint = secondary)
+        Text(att.name, Modifier.weight(1f, fill = false), style = style, maxLines = 1, overflow = TextOverflow.MiddleEllipsis)
+        Text(fileSize(att.size.toLong()), style = style, color = secondary, maxLines = 1, softWrap = false)
+        Box(Modifier.size(26.dp).clip(CircleShape).clickable(role = Role.Button, onClick = { remove(att) })
+            .semantics { contentDescription = "Remove ${att.name}" }.testTag("composer-attachment-remove:${att.id}"), contentAlignment = Alignment.Center) {
+            Icon(painterResource(R.drawable.ic_x_circle), null, Modifier.size(16.dp), tint = secondary)
+        }
+    }
+}
+
+/** What an attachment is called aloud, and what the composer's tests find it by: its name and size, as the old rows read. */
+private fun attachmentLabel(att: StagedAttachment) = "${att.name} · ${att.size / 1024} KB"
+
+/** A file's size as iOS's ByteCountFormatter writes it in the file count style: decimal units, "212 KB", "1.5 MB". */
+internal fun fileSize(bytes: Long): String = when {
+    bytes <= 0 -> "Zero KB"
+    bytes < 1_000 -> "$bytes bytes"
+    bytes < 1_000_000 -> "${Math.round(bytes / 1_000.0)} KB"
+    bytes < 1_000_000_000 -> String.format(java.util.Locale.US, "%.1f MB", bytes / 1_000_000.0)
+    else -> String.format(java.util.Locale.US, "%.2f GB", bytes / 1_000_000_000.0)
 }
