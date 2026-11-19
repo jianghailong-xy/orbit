@@ -181,7 +181,7 @@ fun ScheduledPage(store: ScheduledStore, workspaces: List<Pair<String, String>>,
         } else {
             groups.forEach { group ->
                 item(key = "group-${group.id}") { GroupHeader(group) }
-                val rows = rows(group, state, store, zone, now, openRun, openTask)
+                val rows = rows(group, state, store, zone, now, openRun, openTask, state.pageRuns)
                 items(rows, key = { it.id }) { row -> ScheduleRow(row) }
             }
             item(key = "quick-add") { QuickAddLine(store, typed, { typed = it }, workspaces, preferredWorkspace) }
@@ -233,11 +233,10 @@ private fun ScheduledHeader(store: ScheduledStore, state: ScheduledStore.State) 
     }
 }
 
-/** "Today  Fri, Nov 14"; Needs you in red (board 01 ② 1). */
+/** "Today  Fri, Nov 14"; Paused in grey. No group is red: there is no Needs you group (owner 2026-11-19). */
 @Composable
 private fun GroupHeader(group: ScheduleDisplay.TimelineGroup) {
     val color = when (group.key) {
-        ScheduleDisplay.GroupKey.needsYou -> scheduleRed()
         ScheduleDisplay.GroupKey.paused -> MaterialTheme.colorScheme.onSurfaceVariant
         else -> MaterialTheme.colorScheme.onSurface
     }
@@ -251,7 +250,7 @@ private fun GroupHeader(group: ScheduleDisplay.TimelineGroup) {
 }
 
 private fun rows(group: ScheduleDisplay.TimelineGroup, state: ScheduledStore.State, store: ScheduledStore, zone: String,
-    now: Instant, openRun: (String) -> Unit, openTask: (String) -> Unit): List<ScheduleRowModel> = group.items.map { item ->
+    now: Instant, openRun: (String) -> Unit, openTask: (String) -> Unit, runs: List<ScheduleRunView>): List<ScheduleRowModel> = group.items.map { item ->
     when (item) {
         // A task that starts when its condition holds (board ④ ①): "Task · once, when 3 or more OSDs are in · HPC".
         is ScheduleDisplay.TimelineItem.Task -> {
@@ -286,31 +285,25 @@ private fun rows(group: ScheduleDisplay.TimelineGroup, state: ScheduledStore.Sta
         }
         is ScheduleDisplay.TimelineItem.Schedule -> {
             val s = item.schedule
-            val inNeeds = group.key == ScheduleDisplay.GroupKey.needsYou
             val inPaused = group.key == ScheduleDisplay.GroupKey.paused
-            val failing = inNeeds && s.state == "ACTIVE" && s.lastRun != null
-            val time = when {
-                failing -> scheduleClock(s.lastRun?.plannedAt, zone)
-                !inNeeds && !inPaused -> scheduleClock(item.at, zone)
-                else -> ""
-            }
+            // Tagged on its own row (owner 2026-11-19): Failed, unless a run of it is under way; held, in Paused.
+            val circle = ScheduleDisplay.rowCircle(s, runs)
+            val time = if (inPaused) "" else scheduleClock(item.at, zone)
             val pausedAt = s.pausedAt?.let(ScheduleDisplay::parse) ?: pausedAt(state.detail(s.id))
             if (s.rule is ScheduleRule.When) {
                 // A WHEN rule (board ④): "↻ When raw used above 90% · HPC", a gauge, and the newest reading with its age where a
-                // timed row has its time; "Can't read" under Needs you.
+                // timed row has its time; "Can't read" at the head of Waiting for a condition.
                 val parts = mutableListOf(ScheduleDisplay.ruleText(s.rule, ScheduleDisplay.RuleForm.long))
                 s.workspaceName?.takeIf { it.isNotEmpty() }?.let { parts += it }
                 if (s.accessLevel != "CHECK_ONLY") parts += ScheduleDisplay.accessCopy(s.accessLevel).label
                 val cantRead = s.condition?.cantRead == true
-                return@map ScheduleRowModel("${group.id}-${item.id}", ScheduleDisplay.scheduleCircle(s), s.title,
-                    parts.joinToString(SC.separator), repeats = true, time = if (failing) time else "", draft = false, paused = inPaused,
-                    reading = if (cantRead || inPaused || failing) null else s.condition?.let { ConditionDisplay.rowReading(it, now) }) {
+                return@map ScheduleRowModel("${group.id}-${item.id}", circle, s.title,
+                    parts.joinToString(SC.separator), repeats = true, time = "", draft = false, paused = inPaused,
+                    reading = if (cantRead || inPaused) null else s.condition?.let { ConditionDisplay.rowReading(it, now) }) {
                     store.inspect(s.id); store.loadDetail(s.id)
                 }
             }
-            ScheduleRowModel("${group.id}-${item.id}",
-                if (inNeeds || inPaused) ScheduleDisplay.scheduleCircle(s) else ScheduleDisplay.CircleView(ScheduleDisplay.Circle.open),
-                s.title, ScheduleDisplay.phoneRowLine(s.rule, s.workspaceName, s.accessLevel, s.state, s.heldReason, pausedAt, zone),
+            ScheduleRowModel("${group.id}-${item.id}", circle, s.title, ScheduleDisplay.phoneRowLine(s.rule, s.workspaceName, s.accessLevel, s.state, s.heldReason, pausedAt, zone),
                 ScheduleDisplay.ruleRepeats(s.rule), time, draft = false, paused = inPaused) {
                 store.inspect(s.id); store.loadDetail(s.id)
             }
@@ -626,8 +619,8 @@ private fun ScheduleDraftSheet(store: ScheduledStore, panel: ScheduledStore.Draf
     }
 }
 
-/** The drawer's number beside Scheduled (board 01 ① 2): the schedules that need the owner — failing or held — in the orange the
- * Projects row writes its own in, and nothing at zero. */
+/** The drawer's number beside Scheduled (board 01 ① 2): the schedules that need the owner — held, failing with no run under way,
+ * or a condition that cannot be read — in the orange the Projects row writes its own in, and nothing at zero. */
 @Composable
 fun ScheduledDrawerCount(count: Int) {
     if (count > 0) Text("$count", Modifier.testTag("scheduled-drawer-count").semantics { contentDescription = "$count need you" },

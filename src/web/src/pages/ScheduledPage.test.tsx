@@ -143,29 +143,46 @@ describe('the Scheduled page: a timeline by date (board 1/2 ①)', () => {
     expect(host.querySelector('.sched-past-toggle')!.textContent).toBe('Show past runs');
   });
 
-  it('groups Needs you, Today, Tomorrow, the days of the week, then Paused, in the viewer’s zone', async () => {
+  it('groups Today, Tomorrow, the days of the week, then Paused, in the viewer’s zone: no group of errors', async () => {
     serve();
     await open();
     expect(SCHEDULE_TZ).toBe('Asia/Shanghai');
     expect(groups().map((g) => g.querySelector('h2')!.textContent)).toEqual([
-      'Needs you2', 'TodayFri, Nov 14', 'TomorrowSat, Nov 15', 'MondayNov 17', 'Paused1',
+      'TodayFri, Nov 14', 'TomorrowSat, Nov 15', 'MondayNov 17', 'Paused2',
     ]);
   });
 
-  it('draws Needs you red, failing before held, each with its tag', async () => {
+  it('tags a failing schedule on its own row, on the day of its next run, and lists a held one under Paused', async () => {
     serve();
     await open();
-    const needs = group('NEEDS_YOU');
-    expect(rows(needs).map(describeRow)).toEqual([
-      { circle: 'failed', title: 'Nightly pg spec sweep', line: '↻Every day at 02:00 · apiserver · Check only', tag: 'Failed 3 in a row', time: 'Today 02:00' },
+    expect(describeRow(row(group('TOMORROW'), 'Nightly pg spec sweep'))).toEqual({
+      circle: 'failed', title: 'Nightly pg spec sweep', line: '↻Every day at 02:00 · apiserver · Check only', tag: 'Failed 3 in a row', time: '02:00',
+    });
+    expect(rows(group('PAUSED')).map(describeRow)).toEqual([
       { circle: 'held', title: 'Weekly dependency audit', line: '↻Every Monday at 09:00 · web · the agent "auditor" is disabled', tag: 'Held', time: '' },
+      { circle: 'paused', title: 'Gateway CSP report digest', line: '↻Every day at 08:00 · web · paused Nov 7', tag: null, time: '' },
     ]);
+  });
+
+  it('drops the Failed tag while a run of the schedule is under way (Run now, owner 2026-11-19)', async () => {
+    const list = listAnswer();
+    const pg = LIST_ROWS.find((s) => s.title === 'Nightly pg spec sweep')!;
+    const retry = {
+      id: 'run-pg-retry', scheduleId: pg.id, scheduleRevision: pg.revision, plannedAt: '2025-11-14T04:27:00.000Z',
+      trigger: 'MANUAL' as const, state: 'RUNNING' as const, attempt: 1, startedAt: '2025-11-14T04:27:00.000Z', endedAt: null,
+      sessionId: null, key: null, summary: null, links: [], failureReason: null, heldReason: null, newFinding: false, notified: false,
+    };
+    serve({ list: { ...list, runs: [...(list.runs ?? []), retry] } });
+    await open();
+    const retryRow = rows(group('TODAY')).find((r) => r.querySelector('.sched-row-title')!.textContent === 'Nightly pg spec sweep')!;
+    expect(describeRow(retryRow)).toMatchObject({ circle: 'running', tag: null, time: '12:27' });
+    expect(describeRow(row(group('TOMORROW'), 'Nightly pg spec sweep'))).toMatchObject({ circle: 'open', tag: null, time: '02:00' });
   });
 
   it('says “its agent” for a hold whose view names no agent', async () => {
     serve({ schedules: LIST_ROWS.map((s) => (s.id === 'sch-audit' ? { ...s, agentName: null } : s)) });
     await open();
-    expect(describeRow(row(group('NEEDS_YOU'), 'Weekly dependency audit')).line)
+    expect(describeRow(row(group('PAUSED'), 'Weekly dependency audit')).line)
       .toBe('↻Every Monday at 09:00 · web · its agent is disabled');
   });
 

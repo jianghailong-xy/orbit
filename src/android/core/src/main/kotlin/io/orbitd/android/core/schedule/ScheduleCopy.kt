@@ -22,7 +22,6 @@ object ScheduleCopy {
         const val showPastRuns = "Show past runs"
     }
     val groups: Map<String, String> = mapOf(
-        "NEEDS_YOU" to "Needs you",
         "TODAY" to "Today",
         "TOMORROW" to "Tomorrow",
         "LATER" to "Later",
@@ -337,7 +336,6 @@ object ScheduleCopy {
         "page.title" to Page.title,
         "page.allWorkspaces" to Page.allWorkspaces,
         "page.showPastRuns" to Page.showPastRuns,
-        "groups.NEEDS_YOU" to groups.getValue("NEEDS_YOU"),
         "groups.TODAY" to groups.getValue("TODAY"),
         "groups.TOMORROW" to groups.getValue("TOMORROW"),
         "groups.LATER" to groups.getValue("LATER"),

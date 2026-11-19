@@ -153,12 +153,13 @@ struct ScheduleRowModel: Identifiable {
 }
 
 /// The timeline's rows, the web's `rowOf`: one builder for the phone and the Mac. `wide` is the Mac's (and the
-/// web's) long row line, `scheduleRowLine`, and a failing row's time with its day; the phone keeps its short line.
+/// web's) long row line, `scheduleRowLine`; the phone keeps its short line.
 enum ScheduleTimelineRows {
     @MainActor
     static func rows(_ group: ScheduleDisplay.TimelineGroup, scheduled: ScheduledModel, now: Date,
                      wide: Bool, openTask: @escaping (String) -> Void = { _ in }) -> [ScheduleRowModel] {
-        group.items.map { item -> ScheduleRowModel in
+        let runs = scheduled.timelineRuns
+        return group.items.map { item -> ScheduleRowModel in
             switch item {
             case .task(let t):
                 return ScheduleRowModel(
@@ -217,37 +218,30 @@ enum ScheduleTimelineRows {
                     draft: false, paused: wide && !underWay, scheduleID: wide ? nil : s.id,
                     open: { Self.select(s.id, scheduled) })
             case .schedule(let s, let at):
-                let inNeeds = group.key == .needsYou
                 let inPaused = group.key == .paused
-                let failing = inNeeds && s.state == "ACTIVE" && s.lastRun != nil
-                let time: String
-                if failing, let last = s.lastRun?.plannedAt {
-                    // The web says when it last failed with its day ("Today 02:00"); the phone has room for the clock.
-                    time = wide
-                        ? ScheduleDisplay.parse(last).map { ScheduleDisplay.whenText($0, now: now, timezone: scheduled.timezone) } ?? ""
-                        : scheduleClock(last)
-                }
-                else if let at, !inNeeds && !inPaused { time = scheduleClock(at) }
-                else { time = "" }
+                // A failing schedule is tagged on its own row on the day of its next run (owner 2026-11-19), with
+                // that run's time; the circle drops the tag while a run of it is under way.
+                let circle = ScheduleDisplay.scheduleCircle(s, runs: runs)
+                let time = inPaused ? "" : scheduleClock(at)
                 let pausedAt = s.pausedAt.flatMap(ScheduleDisplay.parse) ?? Self.pausedAt(scheduled.detail(s.id))
                 if case .when = s.rule {
                     // A WHEN rule (condition-triggers board ④): "↻ When raw used above 90% · HPC", a gauge, and the
-                    // newest reading with its age where a timed row has its time; "Can't read" under Needs you.
+                    // newest reading with its age where a timed row has its time; "Can't read" at the head of its group.
                     var parts = [ScheduleDisplay.ruleText(s.rule, form: .long)]
                     if let name = s.workspaceName, !name.isEmpty { parts.append(name) }
                     if s.accessLevel != "CHECK_ONLY" { parts.append(ScheduleDisplay.accessCopy(s.accessLevel).label) }
                     let cantRead = s.condition?.cantRead == true
                     return ScheduleRowModel(
                         id: "\(group.id)-\(item.id)",
-                        circle: ScheduleDisplay.scheduleCircle(s),
+                        circle: circle,
                         title: s.title, line: parts.joined(separator: SC.separator), repeats: true,
-                        time: failing ? time : "", draft: false, paused: inPaused, scheduleID: s.id,
-                        reading: cantRead || inPaused || failing ? nil : s.condition.flatMap { ConditionDisplay.rowReading($0, now: now) },
+                        time: "", draft: false, paused: inPaused, scheduleID: s.id,
+                        reading: cantRead || inPaused ? nil : s.condition.flatMap { ConditionDisplay.rowReading($0, now: now) },
                         open: { Self.select(s.id, scheduled) })
                 }
                 return ScheduleRowModel(
                     id: "\(group.id)-\(item.id)",
-                    circle: inNeeds || inPaused ? ScheduleDisplay.scheduleCircle(s) : .init(.open),
+                    circle: circle,
                     title: s.title,
                     line: wide
                         ? ScheduleDisplay.rowLine(rule: s.rule, workspaceName: s.workspaceName, accessLevel: s.accessLevel,
@@ -435,12 +429,12 @@ struct ScheduledPage: View {
         .padding(.top, 4)
     }
 
-    /// "Today  Fri, Nov 14"; Needs you in red (board 01 ② 1).
+    /// "Today  Fri, Nov 14"; Paused grey.
     private func groupHeader(_ group: ScheduleDisplay.TimelineGroup) -> some View {
         HStack(alignment: .firstTextBaseline, spacing: 8) {
             Text(group.title)
                 .font(.title3.weight(.bold))
-                .foregroundStyle(group.key == .needsYou ? Color.red : group.key == .paused ? Color.secondary : Color.primary)
+                .foregroundStyle(group.key == .paused ? Color.secondary : Color.primary)
             if let subtitle = group.subtitle {
                 Text(subtitle).font(.orbitSubtext).foregroundStyle(Color.secondary)
             }
