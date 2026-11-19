@@ -746,7 +746,8 @@ func (s *bgJobService) followRemoteSubagent(ctx context.Context, run *subagentRu
 	run.status, run.result = status, result
 	answeredElsewhere := run.background || run.detached
 	s.subagents.mu.Unlock()
-	if answeredElsewhere || status == subagentStatusStopped || status == subagentStatusInterrupted {
+	// A workflow's call is answered to its script (subagent_workflow.go), not as a background_task.
+	if run.workflowID == "" && (answeredElsewhere || status == subagentStatusStopped || status == subagentStatusInterrupted) {
 		bgStatus := map[string]string{subagentStatusDone: bgStatusCompleted, subagentStatusFailed: bgStatusFailed}[status]
 		if bgStatus == "" {
 			bgStatus = bgStatusKilled

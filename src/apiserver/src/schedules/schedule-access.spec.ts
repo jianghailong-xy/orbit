@@ -157,13 +157,13 @@ test('every Orbit tool orbit mcp serves is allowed or denied by name for a CHECK
   assert.ok(served.length > 100, `read ${served.length} tools off the catalogue`);
   // Served beside the catalogue (runner-go subagent.go); runner-go TestEveryServedOrbitToolIsOnACheckOnlyList checks
   // every tool `orbit mcp` lists, these included, against this file.
-  served.push('mcp__orbit__delegate');
+  served.push('mcp__orbit__delegate', 'mcp__orbit__workflow');
   const denied = scheduleRunDisallowedTools([], 'CHECK_ONLY', 'claude');
   for (const tool of served) {
     assert.ok(CHECK_ONLY_CLAUDE_ALLOWED_TOOLS.includes(tool) !== denied.includes(tool), `${tool}: allowed xor denied`);
   }
   for (const tool of CHECK_ONLY_CLAUDE_DENIED_ORBIT_TOOLS) assert.ok(served.includes(tool), `${tool} is served`);
-  for (const tool of ['bg_run', 'bg_kill', 'task_update', 'session_merge', 'task_start', 'session_send', 'ask_owner', 'delegate']) {
+  for (const tool of ['bg_run', 'bg_kill', 'task_update', 'session_merge', 'task_start', 'session_send', 'ask_owner', 'delegate', 'workflow']) {
     assert.ok(denied.includes(`mcp__orbit__${tool}`), tool);
   }
   // permission_prompt is the engine's door for every ask, a shell command's included: never denied.
