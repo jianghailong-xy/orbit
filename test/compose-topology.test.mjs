@@ -148,6 +148,18 @@
 // unless set. The upgrade skill sets both. No service, mount, port or environment is added. It reached main without a
 // pin here, which left this file red there. The owner approved these two lines on 2026-11-14 (22:40Z, Orbit item
 // 34xf9Nns4Dnab9eXTNyCa, project 34w2hTuJ3qOR1aQWnyGbS), and the block below pins them.
+//
+// Three more reached main without a pin, which left this file red there: VIEWER_STREAMS_MAX (92190ad890, the anonymous
+// viewer stream caps; unset, 2000), APNS_SANDBOX_KEY/_KEY_ID and APNS_PRODUCTION_KEY/_KEY_ID (27cab27299, one APNs key
+// per environment, falling back to APNS_KEY/APNS_KEY_ID) and ORBIT_RELEASE_REPOSITORY (6447f03346, where Help → Still
+// stuck → Report on GitHub opens an issue). Each is one optional apiserver environment line, empty unless the host's .env
+// sets it. No service, mount or port is added. The account owner approved all six lines on 2026-11-19 (in session
+// 34zBKhFsZ22eRi985pbrK: "Approve them and add them to the baseline"), and the blocks below pin them.
+//
+// On 2026-11-19 the Orbit Cloud browser's switch (project 34z8OKBXxDRYsIZwzJ35E, docs/runner-browser-design.md §2)
+// gained its apiserver environment line, ORBIT_MANAGED_RUNNER_BROWSER_ENABLED, off unless the host's .env says true,
+// right after the managed runners' switch (Orbit task 3507XXbnib94qfwmCPaOA, filed by that project's coordinator).
+// No service, mount or port is added; the managed runners' block below pins the line.
 import assert from 'node:assert/strict';
 import { execFileSync, spawnSync } from 'node:child_process';
 import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
@@ -438,6 +450,19 @@ const APPROVED_APISERVER_BLOCKS = [
   [
     '      TRUSTED_PROXIES: "${TRUSTED_PROXIES:-}"',
   ],
+  // The live viewer streams' cap (2026-11-19, the top of this file), empty unless the host's .env sets it. The line comes
+  // right after the proxies', before the push channels.
+  [
+    '      VIEWER_STREAMS_MAX: "${VIEWER_STREAMS_MAX:-}"',
+  ],
+  // One APNs key per environment (2026-11-19, the top of this file), each empty unless the host's .env sets it. The lines
+  // come right after APNS_KEY_ID, before the runner link's.
+  [
+    '      APNS_SANDBOX_KEY: "${APNS_SANDBOX_KEY:-}"',
+    '      APNS_SANDBOX_KEY_ID: "${APNS_SANDBOX_KEY_ID:-}"',
+    '      APNS_PRODUCTION_KEY: "${APNS_PRODUCTION_KEY:-}"',
+    '      APNS_PRODUCTION_KEY_ID: "${APNS_PRODUCTION_KEY_ID:-}"',
+  ],
   // The runner link's connection tokens (2026-10-25, the top of this file): the Ed25519 signing key, the link
   // gateway's address and the secret the gateway reads revocations with, each empty unless the host's .env sets it.
   // Listed before the managed runners' because the lines come before theirs in the file.
@@ -466,6 +491,11 @@ const APPROVED_APISERVER_BLOCKS = [
   [
     '      RUNNER_RELEASE_DL_URL: "${RUNNER_RELEASE_DL_URL:-http://web/dl/}"',
   ],
+  // The repository a report opens its issue in (2026-11-19, the top of this file), empty unless the host's .env sets it.
+  // The line comes right after the releases', before Orbit Files' store.
+  [
+    '      ORBIT_RELEASE_REPOSITORY: "${ORBIT_RELEASE_REPOSITORY:-}"',
+  ],
   // Orbit Files' store (2026-11-02, the top of this file): local unless the host's .env says s3, and the S3-compatible
   // bucket's endpoint, bucket, key pair and region, each empty unless .env sets it. It comes after the releases' line in
   // the file, and before the managed runners'.
@@ -490,6 +520,7 @@ const APPROVED_APISERVER_BLOCKS = [
   // existing deployment gains nothing on its disk.
   [
     '      ORBIT_MANAGED_RUNNERS_ENABLED: "${ORBIT_MANAGED_RUNNERS_ENABLED:-false}"',
+    '      ORBIT_MANAGED_RUNNER_BROWSER_ENABLED: "${ORBIT_MANAGED_RUNNER_BROWSER_ENABLED:-false}"',
     '      ORBIT_MANAGED_RUNNERS_PROFILE: /var/lib/orbit-managed-runners/profile.json',
     '    volumes:',
     '      - "${ORBIT_MANAGED_RUNNERS_DIR:-/dev/null}:/var/lib/orbit-managed-runners:ro"',
