@@ -246,6 +246,10 @@ test('the trigger reads the settled tasks after the cursor by index, answering w
         { name: 'a settled task', sessionIds: [] as string[], taskIds: [lonely.id], answers: 1 },
       ];
       for (const hint of hints) {
+        // A hint that finds the space due makes a run, and the next hint would then stop at "unfinished" before
+        // the read this spec is about. Each hint asks of a space with no run in flight.
+        await db.wikiMaintenanceRun.deleteMany({ where: { ownerId, spaceId } });
+        await db.wikiJob.deleteMany({ where: { ownerId, spaceId } });
         sent.length = 0;
         await considerWikiMaintenance(prisma, ownerId, spaceId, { sessionIds: hint.sessionIds, taskIds: hint.taskIds });
         const issued = sent.find((entry) => entry.text.includes('AS "one"') && entry.text.includes('"session_merge_receipt"'));
