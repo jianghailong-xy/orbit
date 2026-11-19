@@ -26,7 +26,7 @@ let package = Package(
         ),
         // Share to Orbit's macOS Share-menu extension (docs/share-to-orbit-design.md §3.3). SPM has no
         // app-extension product, so this is an executable whose main hands over to Foundation's
-        // NSExtensionMain; build-dmg.sh wraps it into Orbit.app/Contents/PlugIns/OrbitShare.appex.
+        // NSExtensionMain; build-dmg.sh wraps it into Orbitd.app/Contents/PlugIns/OrbitShare.appex.
         // ShareModel.swift and ShareView.swift are symlinks to the iOS extension's sources: one picker.
         .executableTarget(
             name: "OrbitShare",

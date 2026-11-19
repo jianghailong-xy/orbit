@@ -489,6 +489,9 @@ type HeartbeatResponse struct {
 	// every engine whose accounts this runner can remove, including Codex. The codex-named field
 	// above stays for a control plane older than accounts-per-engine.
 	AccountRemoveRequest *AccountRemoveCommand `json:"accountRemoveRequest,omitempty"`
+	// ClaudeAccountSwapRequest makes an added Claude account the Default (claude-account-swap/v1,
+	// docs/claude-default-swap-contract.md §5): redelivered on every heartbeat while the swap is pending.
+	ClaudeAccountSwapRequest *ClaudeAccountSwapCommand `json:"claudeAccountSwapRequest,omitempty"`
 	// An engine CLI the user asked to install from the web. Nil on older control planes, and
 	// whenever no install is in flight for this runner.
 	InstallRequest *InstallCommand `json:"installRequest,omitempty"`
@@ -1106,6 +1109,52 @@ type AccountRemoveResultRequest struct {
 	// With a removal refused because the account is in use: the sessions using it, so the control
 	// plane can name them in Message.
 	SessionIDs []string `json:"sessionIds,omitempty"`
+}
+
+// ClaudeAccountSwapCommand mirrors the contract's ClaudeAccountSwapCommand: the added Claude account to
+// make the Default. Carrying it out twice is the same as carrying it out once.
+type ClaudeAccountSwapCommand struct {
+	// The added account's slot id under claude-accounts.
+	Account string `json:"account"`
+	// Identifies this swap; echoed in every result.
+	Attempt string `json:"attempt"`
+	// The accountUuid each folder held when the server asked: tells a redelivery of a swap this runner
+	// already finished from a new request.
+	Expect *ClaudeAccountSwapExpect `json:"expect,omitempty"`
+}
+
+type ClaudeAccountSwapExpect struct {
+	DefaultAccountUUID string `json:"defaultAccountUuid"`
+	AccountAccountUUID string `json:"accountAccountUuid"`
+}
+
+// ClaudeAccountSwapResult is the runner's word on a swap (POST /runner/claude-account-swap-result), the
+// same body every time, latest wins.
+type ClaudeAccountSwapResult struct {
+	Account string `json:"account"`
+	Attempt string `json:"attempt"`
+	Status  string `json:"status"` // "pending" | "done" | "failed"
+	// failed: the one line the page shows.
+	Message string `json:"message,omitempty"`
+	// pending: the Orbit sessions with a turn in progress on either folder.
+	WaitingOn []string `json:"waitingOn,omitempty"`
+	// pending: Claude processes on either folder that are not Orbit's (a terminal `claude`).
+	ForeignProcesses []ClaudeSwapProcess `json:"foreignProcesses,omitempty"`
+	// done: the accountUuid now in each folder.
+	Now *ClaudeAccountSwapNow `json:"now,omitempty"`
+}
+
+type ClaudeSwapProcess struct {
+	PID     int    `json:"pid"`
+	Command string `json:"command"`
+}
+
+type ClaudeAccountSwapNow struct {
+	DefaultAccountUUID string `json:"defaultAccountUuid"`
+	AccountAccountUUID string `json:"accountAccountUuid"`
+	// AccountEmail is the emailAddress of the account now in the added folder — the former Default —
+	// which the page names it by until the owner renames it. Empty when its .claude.json names none.
+	AccountEmail string `json:"accountEmail,omitempty"`
 }
 
 // LoginResultRequest is the runner's progress report for a sign-in, POSTed back so the web card

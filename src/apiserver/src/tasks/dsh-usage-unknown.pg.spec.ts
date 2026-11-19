@@ -33,7 +33,7 @@ test('F1 dsh usage is unknown in the routing report and attempt budget', {
 
   const owner = randomUUID();
   await db.user.create({
-    data: { id: owner, email: `${owner}@dsh-usage.invalid`, name: 'dsh usage', passwordHash: 'h', preferences: { modelRouting: true } },
+    data: { id: owner, email: `${owner}@dsh-usage.invalid`, name: 'dsh usage', passwordHash: 'h', preferences: { modelRouting: true, optimizeFor: 'cost' } },
   });
   const agent = await db.workspace.create({ data: { ownerId: owner, name: 'dsh usage agent' } });
   const harnessSlug = `deepseek-harness-${owner.slice(0, 8)}`;

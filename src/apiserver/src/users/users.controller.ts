@@ -168,6 +168,7 @@ export class UsersController {
     if (dto.notifyAgentMessage !== undefined) merged.notifyAgentMessage = dto.notifyAgentMessage;
     if (dto.enableOrchestration !== undefined) merged.enableOrchestration = dto.enableOrchestration;
     if (dto.modelRouting !== undefined) merged.modelRouting = dto.modelRouting;
+    if (dto.optimizeFor !== undefined) merged.optimizeFor = dto.optimizeFor;
     if (dto.promptSuggestions !== undefined) merged.promptSuggestions = dto.promptSuggestions;
     if (dto.recaps !== undefined) merged.recaps = dto.recaps;
     if (dto.translationEnabled !== undefined) merged.translationEnabled = dto.translationEnabled;

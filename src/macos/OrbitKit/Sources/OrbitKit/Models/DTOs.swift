@@ -154,9 +154,6 @@ public struct Agent: Codable, Equatable, Sendable, Identifiable {
     /// model and effort of its tier; off (the default), routing is only recorded in shadow. Only the
     /// owner's user API writes it.
     public let modelRouting: Bool?
-    /// What smart model selection and SubAgents rank by: `cost`, `balance` or `intelligence`. Nil from an
-    /// older server reads as Cost (`SubagentSettings.OptimizeFor(stored:)`).
-    public var modelRoutingOptimizeFor: String? = nil
     /// Whether this Agent's sessions may hand work to SubAgents (docs/subagent-design.md §7). Nil reads as on.
     public var subagentsEnabled: Bool? = nil
     /// How many of one session's SubAgents run at once. Nil reads as 4 (`SubagentSettings.maxRunning`).
@@ -181,7 +178,7 @@ public struct Agent: Codable, Equatable, Sendable, Identifiable {
         case maxTurns, maxBudgetUsd, targetRunnerId, targetLabels, runnerId, env, enabled
         case antigravityKeyAvailableByRunner
         case autoInitGit, codexAccount, claudeAccount, antigravityAccount, kimiAccount, cursorAccount
-        case enableWorktree, modelRouting, modelRoutingOptimizeFor, subagentsEnabled, subagentsMaxRunning
+        case enableWorktree, modelRouting, subagentsEnabled, subagentsMaxRunning
         case workDirExists, workDirIsGit
         case workDirFreeBytes, workDirTotalBytes, repoHealth, repoCleanup, mainCheckoutActions
     }
@@ -220,7 +217,6 @@ public struct Agent: Codable, Equatable, Sendable, Identifiable {
         cursorAccount = try c.decodeIfPresent(String.self, forKey: .cursorAccount)
         enableWorktree = try c.decodeIfPresent(Bool.self, forKey: .enableWorktree)
         modelRouting = try c.decodeIfPresent(Bool.self, forKey: .modelRouting)
-        modelRoutingOptimizeFor = try c.decodeIfPresent(String.self, forKey: .modelRoutingOptimizeFor)
         subagentsEnabled = try c.decodeIfPresent(Bool.self, forKey: .subagentsEnabled)
         subagentsMaxRunning = try c.decodeIfPresent(Int.self, forKey: .subagentsMaxRunning)
         workDirExists = try c.decodeIfPresent(Bool.self, forKey: .workDirExists)
@@ -322,6 +318,9 @@ public struct Runner: Codable, Equatable, Sendable, Identifiable {
     /// so a newer control plane cannot make the runner list undecodable.
     public let install: RunnerInstallState?
     public let accountRemove: RunnerAccountRemoveState?
+    /// Set as default for Claude Code: which added account is becoming the Default, and where that
+    /// stands (shared `RunnerClaudeAccountSwapState`). Nil from an older server, and when nothing was asked.
+    public var claudeAccountSwap: RunnerClaudeAccountSwapState? = nil
     /// Where this runner's Claude connection to Anthropic last came out, with the effective verdict
     /// (docs/claude-region-check-contract.md §6). Nil for a runner that does not check, one no check
     /// has decided yet, or an older server: never gated, drawn as before.

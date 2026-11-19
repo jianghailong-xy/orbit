@@ -32,6 +32,8 @@ object ManagementFixture {
     val queries = CopyOnWriteArrayList<String>()
     /** The account's switch for smart model selection as users/me's preferences carry it; null leaves it out, as before it was written. */
     @Volatile var modelRouting: Boolean? = null
+    /** The account-wide Optimize For as users/me's preferences carry it; null leaves it out, which reads as "balance". */
+    @Volatile var optimizeFor: String? = null
     /** The account's Session recaps switch as users/me's preferences carry it; null leaves it out, as before it was written. */
     @Volatile var recaps: Boolean? = null
     /** GET access-tokens' tokens, newest first; DELETE access-tokens/:id revokes one (REVOKED, by its USER). */
@@ -99,6 +101,10 @@ object ManagementFixture {
      * …/default/restore answers ok, or fails while [restoreFails]. Each that goes through runs [onAccountWrite] with its path, as what
      * GET runners serves then changes. */
     @Volatile var defaultRemoveRefusal: String? = null
+    /** POST runners/:id/accounts/:engine/:account/set-default answers [setDefaultAnswer] after [onAccountWrite] — as the server's next GET
+     * runners carries the swap in `claudeAccountSwap` — or, given [setDefaultRefusal], refuses 409 in those words. */
+    @Volatile var setDefaultRefusal: String? = null
+    @Volatile var setDefaultAnswer = """{"account":null,"status":"pending","message":null,"waitingOn":[],"foreignProcesses":[]}"""
     @Volatile var restoreFails = false
     @Volatile var onAccountWrite: (String) -> Unit = {}
     /** POST runners/:id/engines/:engine/update-warning/dismiss runs this with the engine, then answers `{engine, latest}` with [dismissLatest],
@@ -148,11 +154,11 @@ object ManagementFixture {
         secondRunner = false; runnerOnline = true; runnerTwoOnline = true; runnerOrder = listOf(RUNNER, RUNNER_TWO); removedRunners = emptySet(); selfUpdate = null
         reorderRequests.clear(); runnerEngines = "[]"; runnerExtra = ""; runnerTwoExtra = ""; loginRelay = """{"status":null}"""; loginStarted = """{"status":"pending"}"""
         codeSent = """{"status":"done"}"""; onCode = {}; loginBodies.clear(); pauseBodies.clear(); installBodies.clear(); onRegionCheck = {}
-        defaultRemoveRefusal = null; restoreFails = false; onAccountWrite = {}; onEngineDismiss = {}; dismissLatest = "0.169.0"
+        defaultRemoveRefusal = null; setDefaultRefusal = null; restoreFails = false; onAccountWrite = {}; onEngineDismiss = {}; dismissLatest = "0.169.0"
         agentFixBodies.clear(); onAgentFix = {}; agentFixRefusal = null
         deviceStatus = "PENDING"; deviceConflict = false; deviceLastSeen = null; deviceGate = null
         drop = CompletableDeferred(); opened = 0
-        queries.clear(); modelRouting = null; recaps = null; accessTokens = emptyList(); accessTokensFail = false; terminals = emptyList(); providerCatalog = "[]"; providersMine = "[]"
+        queries.clear(); modelRouting = null; optimizeFor = null; recaps = null; accessTokens = emptyList(); accessTokensFail = false; terminals = emptyList(); providerCatalog = "[]"; providersMine = "[]"
         balances.clear(); balanceGates.clear(); task = "{}"; evidence = "[]"
         keyCheckAnswer = """{"ok":true,"keyCheck":"VALID","message":"Cursor accepted this key.","recorded":true,"keyCheckState":"VALID","keyCheckedAt":null}"""
         onKeyCheck = {}
@@ -193,7 +199,7 @@ object ManagementFixture {
 
     private val now get() = Instant.now()
     private fun user() = """{"id":"$ME","email":"a13@example.test","name":"Fixture","role":"MEMBER","avatarUpdatedAt":null,
-        "preferences":{"theme":"$theme","defaultPermissionMode":"auto","enableOrchestration":true${modelRouting?.let { ",\"modelRouting\":$it" }.orEmpty()}${recaps?.let { ",\"recaps\":$it" }.orEmpty()}${subagentBlocked?.let { ",\"subagentBlockedProviders\":" + JsonArray(it.map(::JsonPrimitive)) }.orEmpty()}}}"""
+        "preferences":{"theme":"$theme","defaultPermissionMode":"auto","enableOrchestration":true${modelRouting?.let { ",\"modelRouting\":$it" }.orEmpty()}${optimizeFor?.let { ",\"optimizeFor\":\"$it\"" }.orEmpty()}${recaps?.let { ",\"recaps\":$it" }.orEmpty()}${subagentBlocked?.let { ",\"subagentBlockedProviders\":" + JsonArray(it.map(::JsonPrimitive)) }.orEmpty()}}}"""
     private fun workspace() = """{"id":"$WORKSPACE","name":"$workspaceName","runnerId":"$RUNNER","enabled":true,"workDir":"/srv/alpha",
         "lastProvider":"claude","effort":"","modelRouting":false,"env":{},"position":0,"createdAt":"2026-09-01T00:00:00Z"$workspaceExtra}"""
     private fun runners() = runnerOrder.filter { (it == RUNNER || secondRunner) && it !in removedRunners }.joinToString(",", "[", "]") {
@@ -261,6 +267,7 @@ object ManagementFixture {
             "users/me/preferences" -> {
                 body()["theme"]?.let { theme = it.jsonPrimitive.content }
                 body()["modelRouting"]?.let { modelRouting = it.jsonPrimitive.boolean }
+                body()["optimizeFor"]?.let { optimizeFor = it.jsonPrimitive.content }
                 body()["recaps"]?.let { recaps = it.jsonPrimitive.boolean }
                 body()["subagentBlockedProviders"]?.let { list -> subagentBlocked = list.jsonArray.map { it.jsonPrimitive.content } }
                 ok(user())
@@ -328,6 +335,8 @@ object ManagementFixture {
                 path.startsWith("runners/$RUNNER/engines/") && path.endsWith("/update-warning/dismiss") && api.method == HttpMethod.POST ->
                     path.split('/')[3].let { engine -> onEngineDismiss(engine); ok("""{"engine":"$engine","latest":"$dismissLatest"}""") }
                 path.startsWith("runners/$RUNNER/accounts/") && path.endsWith("/pause") -> { pauseBodies += "$path ${api.body!!.decodeToString()}"; ok("{}") }
+                path.startsWith("runners/$RUNNER/accounts/") && path.endsWith("/set-default") && api.method == HttpMethod.POST ->
+                    setDefaultRefusal?.let { fail(409, it) } ?: run { onAccountWrite(path); ok(setDefaultAnswer) }
                 path.startsWith("runners/$RUNNER/accounts/") && path.endsWith("/default/restore") ->
                     if (restoreFails) fail(404, "runner not found") else { onAccountWrite(path); ok("""{"ok":true}""") }
                 path.startsWith("runners/$RUNNER/accounts/") && path.endsWith("/default") && api.method == HttpMethod.DELETE ->

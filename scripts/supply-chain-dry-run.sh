@@ -59,13 +59,13 @@ ORBIT_SOURCE_SHA="$SOURCE_SHA" bash scripts/build-binaries.sh "$ARTIFACTS" >"$WO
 tail -3 "$WORK/runner-build.log"
 say ""
 
-# 2. A Sparkle-shaped zip: a real zip whose Orbit.app/Contents/Info.plist carries the release version
+# 2. A Sparkle-shaped zip: a real zip whose Orbitd.app/Contents/Info.plist carries the release version
 #    and commit-count build number, exactly the fields the generator checks.
 say "== macOS payload (representative) =="
-APP="$WORK/Orbit.app/Contents"
+APP="$WORK/Orbitd.app/Contents"
 mkdir -p "$APP/MacOS"
-printf '#!/bin/sh\necho Orbit %s\n' "$VERSION" >"$APP/MacOS/Orbit"
-chmod +x "$APP/MacOS/Orbit"
+printf '#!/bin/sh\necho Orbit %s\n' "$VERSION" >"$APP/MacOS/Orbitd"
+chmod +x "$APP/MacOS/Orbitd"
 cat >"$APP/Info.plist" <<PLIST
 <?xml version="1.0" encoding="UTF-8"?>
 <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
@@ -75,11 +75,11 @@ cat >"$APP/Info.plist" <<PLIST
   <key>CFBundleIdentifier</key><string>io.orbitd.app</string>
 </dict></plist>
 PLIST
-python3 - "$WORK" "$ARTIFACTS/Orbit-v$VERSION-arm64.zip" <<'PY'
+python3 - "$WORK" "$ARTIFACTS/Orbitd-v$VERSION-arm64.zip" <<'PY'
 import os, sys, zipfile
 work, target = sys.argv[1], sys.argv[2]
 with zipfile.ZipFile(target, 'w', zipfile.ZIP_DEFLATED) as archive:
-    for directory, _, files in os.walk(os.path.join(work, 'Orbit.app')):
+    for directory, _, files in os.walk(os.path.join(work, 'Orbitd.app')):
         for name in sorted(files):
             absolute = os.path.join(directory, name)
             archive.write(absolute, os.path.relpath(absolute, work))
@@ -87,9 +87,9 @@ PY
 # A Linux host cannot build a UDIF DMG; this file stands in for the signed, notarized one so the
 # DMG/Sparkle surface is present in the manifest and checksums.
 printf 'DMG stand-in for the dry run; the macOS job builds the signed, notarized image on macOS.\n' \
-  >"$ARTIFACTS/Orbit-v$VERSION-arm64.dmg"
+  >"$ARTIFACTS/Orbitd-v$VERSION-arm64.dmg"
 printf '<rss version="2.0"><channel><title>Orbit</title></channel></rss>\n' >"$ARTIFACTS/appcast.xml"
-ls -l "$ARTIFACTS/Orbit-v$VERSION-arm64.zip" "$ARTIFACTS/Orbit-v$VERSION-arm64.dmg" | sed 's/^/  /'
+ls -l "$ARTIFACTS/Orbitd-v$VERSION-arm64.zip" "$ARTIFACTS/Orbitd-v$VERSION-arm64.dmg" | sed 's/^/  /'
 say ""
 
 # 3. The Android APK and the build identity the release publishes beside it. A signed APK needs the
@@ -182,7 +182,7 @@ expect_refused() {
 }
 
 cp -a "$BUNDLE" "$WORK/tampered"
-printf 'tampered\n' >>"$WORK/tampered/Orbit-v$VERSION-arm64.dmg"
+printf 'tampered\n' >>"$WORK/tampered/Orbitd-v$VERSION-arm64.dmg"
 expect_refused 'a changed DMG byte' "$WORK/tampered"
 
 cp -a "$BUNDLE" "$WORK/wrong-sbom"

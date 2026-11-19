@@ -3111,6 +3111,9 @@ test('the ledger stays append-only, and every later migration is accounted for',
       '0990_runner_keep_free_default',
       // 0990 adds LAND and nullable schedule_run landing status/SHA; no preserved relations or fences change.
       '0990_schedule_land',
+      // 1000 adds the Claude account swap relay's columns to runner (nullable, and one UUID[] with a constant
+      // default); runner is not one of the preserved relations, and no trigger, function or DONE fence changes.
+      '1000_claude_account_swap',
       // 1030 adds the condition, condition_sample and condition_event tables with their enum types, a nullable
       // owner_request.condition_id with a partial index, and widens owner_request_kind_chk by CONDITION_UNKNOWN;
       // `owner_request` is none of the preserved relations, no trigger, function or DONE fence changes, and no row is
@@ -3166,7 +3169,10 @@ test('the ledger stays append-only, and every later migration is accounted for',
       '1200_standard_set_confirmation_wording',
       // 1220 sets fastupdate = off on run_event's trigram index and merges its pending list; no row is written, and
       // no preserved relation, trigger, function or DONE fence changes.
-      '1220_run_event_text_trgm_fastupdate_off'],
+      '1220_run_event_text_trgm_fastupdate_off',
+      // 1240 adds a plain index on project_coordinator_wake (idempotency_key); no row is written, and no preserved
+      // relation, trigger, function or DONE fence changes.
+      '1240_project_coordinator_wake_key_idx'],
     'a later migration exists; re-read it before trusting the assertions above');
   // Stated rather than described: 0230's fence differs from 0228's by exactly one added lane.
   const later = readFileSync(

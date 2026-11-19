@@ -20,6 +20,16 @@ export function modelRoutingEnabled(owner: { preferences: unknown } | null): boo
 }
 
 /**
+ * The account's Optimize For (owner, 2026-11-19): one for every Agent, SubAgents and smart-selected task runs
+ * alike. Absent, or anything else, is Balance. The per-Agent column (workspace.model_routing_optimize_for)
+ * is no longer read.
+ */
+export function optimizeForOf(owner: { preferences: unknown } | null): 'cost' | 'balance' | 'intelligence' {
+  const value = ((owner?.preferences ?? {}) as { optimizeFor?: unknown }).optimizeFor;
+  return value === 'cost' || value === 'intelligence' ? value : 'balance';
+}
+
+/**
  * The same switch read in SQL, for a scan that wants it beside its rows rather than as a query of
  * its own: `ownerId` names the column holding the account's id. Exactly `modelRoutingEnabled` —
  * the JSON value `true` and nothing else.

@@ -55,6 +55,10 @@ public struct UserPreferences: Codable, Equatable, Sendable {
     /// ✦ Optimize. Absent means on; only an explicit `false` turns it off (owner's decision of
     /// 2026-11-16) — read it through `PromptOptimizer.switchedOn`. Tolerant like the switches above.
     public let promptOptimizer: Bool?
+    /// Settings › Optimize For (board docs/mocks/routing-mode-account, approved 2026-11-19): the one
+    /// account-wide pick SubAgents and smart-selected tasks rank providers by — "cost", "balance" or
+    /// "intelligence". Absent means Balance; kept as a String so an unknown future value decodes.
+    public let optimizeFor: String?
 
     /// Whether smart model selection is on for this account — only an explicit `true` turns it on.
     public var smartModelSelection: Bool { modelRouting == true }
@@ -66,7 +70,7 @@ public struct UserPreferences: Codable, Equatable, Sendable {
     private enum CodingKeys: String, CodingKey {
         case theme, defaultModel, defaultPermissionMode, defaultEffort
         case enableOrchestration, notifySessionFinished, notifyAgentMessage, modelRouting, promptSuggestions
-        case recaps, translationEnabled, translationLanguage, translationAgentLanguage, translationBilingual, subagentBlockedProviders, promptOptimizer
+        case recaps, translationEnabled, translationLanguage, translationAgentLanguage, translationBilingual, subagentBlockedProviders, promptOptimizer, optimizeFor
     }
 
     public init(from decoder: Decoder) throws {
@@ -87,7 +91,24 @@ public struct UserPreferences: Codable, Equatable, Sendable {
         translationBilingual = (try? c.decodeIfPresent(Bool.self, forKey: .translationBilingual)) ?? nil
         subagentBlockedProviders = (try? c.decodeIfPresent([String].self, forKey: .subagentBlockedProviders)) ?? nil
         promptOptimizer = (try? c.decodeIfPresent(Bool.self, forKey: .promptOptimizer)) ?? nil
+        optimizeFor = (try? c.decodeIfPresent(String.self, forKey: .optimizeFor)) ?? nil
     }
+}
+
+/// The account-wide "Optimize For" pick (`UserPreferences.optimizeFor`): what SubAgents and
+/// smart-selected tasks rank providers by, in the segmented control's order.
+public enum OptimizeFor: String, CaseIterable, Identifiable, Sendable {
+    case cost, balance, intelligence
+    public var id: String { rawValue }
+    public var label: String {
+        switch self {
+        case .cost: return "Cost"
+        case .balance: return "Balance"
+        case .intelligence: return "Intelligence"
+        }
+    }
+    /// An absent or unknown value reads as Balance, the server's default.
+    public init(stored: String?) { self = OptimizeFor(rawValue: stored ?? "") ?? .balance }
 }
 
 /// PATCH /users/me/preferences — only the present keys are merged; nil omits (synthesized
@@ -111,6 +132,8 @@ public struct UpdatePreferencesRequest: Encodable, Sendable {
     public var subagentBlockedProviders: [String]?
     /// Settings › Prompt optimizer's switch.
     public var promptOptimizer: Bool?
+    /// Settings › Optimize For: an `OptimizeFor` raw value.
+    public var optimizeFor: String?
     public init(theme: String? = nil, defaultModel: String? = nil,
                 defaultPermissionMode: String? = nil,
                 defaultEffort: String? = nil, enableOrchestration: Bool? = nil,
@@ -119,8 +142,10 @@ public struct UpdatePreferencesRequest: Encodable, Sendable {
                 translationEnabled: Bool? = nil, translationLanguage: String? = nil,
                 translationAgentLanguage: String? = nil,
                 translationBilingual: Bool? = nil,
-                subagentBlockedProviders: [String]? = nil, promptOptimizer: Bool? = nil) {
+                subagentBlockedProviders: [String]? = nil, promptOptimizer: Bool? = nil,
+                optimizeFor: String? = nil) {
         self.promptOptimizer = promptOptimizer
+        self.optimizeFor = optimizeFor
         self.theme = theme
         self.defaultModel = defaultModel
         self.defaultPermissionMode = defaultPermissionMode

@@ -1477,3 +1477,107 @@ func TestKimiAuthMessageLeavesNonAuthFailureAlone(t *testing.T) {
 		t.Fatalf("kimiAuthMessage = %q, want no sign-in prefix on a non-auth failure", got)
 	}
 }
+
+// 2026-11-19: Kimi's session/request_permission toolCall carries no rawInput — the engine builds it
+// from the approval's title and action text only, and the update that carries rawInput is sent when
+// the call starts executing, after the permission answer. The arguments a card must show reached
+// the wire earlier, as the call's streamed tool_call/tool_call_update content. The bridge joins
+// them by toolCallId.
+func TestKimiToolInputJoinsStreamedArgs(t *testing.T) {
+	app := &kimiACPClient{done: make(chan struct{}), notifications: make(chan kimiInboundItem, 8)}
+	wire := strings.Join([]string{
+		`{"jsonrpc":"2.0","method":"session/update","params":{"sessionId":"s","update":{"sessionUpdate":"tool_call","toolCallId":"0:tool_1","title":"Bash","status":"pending","rawInput":null,"content":[{"type":"content","content":{"type":"text","text":"{\"command\":\"git grep"}}]}}}`,
+		`{"jsonrpc":"2.0","method":"session/update","params":{"sessionId":"s","update":{"sessionUpdate":"tool_call_update","toolCallId":"0:tool_1","status":"in_progress","content":[{"type":"content","content":{"type":"text","text":"{\"command\":\"git grep -rn 'foo' -- src/ | head\",\"timeout\":60000}"}}]}}}`,
+	}, "\n") + "\n"
+	app.readLoop(strings.NewReader(wire))
+
+	got := app.kimiPermissionToolInput(map[string]interface{}{
+		"title": "Bash", "toolCallId": "0:tool_1", "rawInput": nil,
+	}, "0:tool_1")
+	input := mapValue(got)
+	if firstString(input, "command") != "git grep -rn 'foo' -- src/ | head" {
+		t.Fatalf("joined input = %#v, want the streamed command", got)
+	}
+	if n, ok := input["timeout"].(float64); !ok || n != 60000 {
+		t.Fatalf("joined input timeout = %#v, want 60000", input["timeout"])
+	}
+}
+
+// A completed update's content is the tool's result, not its arguments; one whose output happens
+// to parse as a JSON object must not replace the joined input.
+func TestKimiToolInputIgnoresResultContent(t *testing.T) {
+	app := &kimiACPClient{done: make(chan struct{}), notifications: make(chan kimiInboundItem, 8)}
+	wire := strings.Join([]string{
+		`{"jsonrpc":"2.0","method":"session/update","params":{"sessionId":"s","update":{"sessionUpdate":"tool_call_update","toolCallId":"0:tool_1","status":"in_progress","content":[{"type":"content","content":{"type":"text","text":"{\"command\":\"cat go.mod\"}"}}]}}}`,
+		`{"jsonrpc":"2.0","method":"session/update","params":{"sessionId":"s","update":{"sessionUpdate":"tool_call_update","toolCallId":"0:tool_1","status":"completed","content":[{"type":"content","content":{"type":"text","text":"{\"module\":\"example.com/x\"}"}}],"rawOutput":"{\"module\":\"example.com/x\"}"}}}`,
+	}, "\n") + "\n"
+	app.readLoop(strings.NewReader(wire))
+
+	if got := firstString(app.kimiToolInputLookup("0:tool_1"), "command"); got != "cat go.mod" {
+		t.Fatalf("joined input command = %q, want the streamed args, not the result", got)
+	}
+}
+
+// A rawInput the request does carry wins over the joined stream.
+func TestKimiPermissionToolInputPrefersRawInput(t *testing.T) {
+	app := &kimiACPClient{}
+	app.noteKimiToolInput(map[string]interface{}{"update": map[string]interface{}{
+		"sessionUpdate": "tool_call_update", "toolCallId": "0:tool_1", "status": "in_progress",
+		"content": []interface{}{map[string]interface{}{"type": "content",
+			"content": map[string]interface{}{"type": "text", "text": `{"command":"from stream"}`}}},
+	}})
+	got := app.kimiPermissionToolInput(map[string]interface{}{
+		"title": "Bash", "toolCallId": "0:tool_1",
+		"rawInput": map[string]interface{}{"command": "from request"},
+	}, "0:tool_1")
+	if firstString(mapValue(got), "command") != "from request" {
+		t.Fatalf("input = %#v, want the request's rawInput", got)
+	}
+}
+
+// When the stream had nothing to join, the card still gets a body it can be told apart by: the
+// diff a file approval carries, else the engine's action line as the description — never the raw
+// toolCall map, which rendered as an empty "$" box.
+func TestKimiPermissionFallbackInput(t *testing.T) {
+	action := kimiPermissionFallbackInput(map[string]interface{}{
+		"content": []interface{}{map[string]interface{}{"type": "content",
+			"content": map[string]interface{}{"type": "text", "text": "Requesting approval to Running: git status"}}},
+	})
+	if firstString(action, "description") != "Running: git status" {
+		t.Fatalf("action fallback = %#v, want the description", action)
+	}
+
+	diff := kimiPermissionFallbackInput(map[string]interface{}{
+		"content": []interface{}{
+			map[string]interface{}{"type": "diff", "path": "/repo/a.go", "oldText": "x", "newText": "y"},
+			map[string]interface{}{"type": "content",
+				"content": map[string]interface{}{"type": "text", "text": "Requesting approval to Edit /repo/a.go"}},
+		},
+	})
+	if firstString(diff, "file_path") != "/repo/a.go" || firstString(diff, "old_string") != "x" || firstString(diff, "new_string") != "y" {
+		t.Fatalf("diff fallback = %#v, want the file fields", diff)
+	}
+
+	if got := kimiPermissionFallbackInput(map[string]interface{}{"title": "Bash", "toolCallId": "0:tool_9"}); len(got) != 0 {
+		t.Fatalf("empty fallback = %#v, want no fields", got)
+	}
+}
+
+// The join is keyed by toolCallId: another call's arguments never leak into a card.
+func TestKimiPermissionToolInputMissesUnknownCall(t *testing.T) {
+	app := &kimiACPClient{}
+	app.noteKimiToolInput(map[string]interface{}{"update": map[string]interface{}{
+		"sessionUpdate": "tool_call_update", "toolCallId": "0:tool_1", "status": "in_progress",
+		"content": []interface{}{map[string]interface{}{"type": "content",
+			"content": map[string]interface{}{"type": "text", "text": `{"command":"ls"}`}}},
+	}})
+	got := app.kimiPermissionToolInput(map[string]interface{}{
+		"title":      "Bash",
+		"toolCallId": "0:tool_2",
+		"content": []interface{}{map[string]interface{}{"type": "content",
+			"content": map[string]interface{}{"type": "text", "text": "Requesting approval to Running: pwd"}}},
+	}, "0:tool_2")
+	if firstString(mapValue(got), "description") != "Running: pwd" {
+		t.Fatalf("input = %#v, want the request's own action line", got)
+	}
+}

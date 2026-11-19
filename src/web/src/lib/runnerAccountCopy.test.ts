@@ -26,6 +26,27 @@ describe('runnerAccountCopy', () => {
     expect(copy.ACCOUNT_SELECT_GONE_AUTOMATIC).toBe('not on this runner — sessions run on Automatic');
   });
 
+  it('says what Set as default does, what it waits on, and what became of it', () => {
+    expect(copy.RUNNER_ACCOUNT_SET_DEFAULT).toBe('Set as default');
+    expect(copy.RUNNER_ACCOUNT_SET_DEFAULT_HINT).toBe('Moves this login into ~/.claude, so the terminal uses it too');
+    expect(copy.RUNNER_ACCOUNT_SET_DEFAULT_OFFLINE).toBe('The runner is offline');
+    expect(copy.RUNNER_ACCOUNT_SET_DEFAULT_UPDATE).toBe('Update the runner to set a default Claude Code account on it');
+    expect(copy.RUNNER_ACCOUNT_SET_DEFAULT_BUSY).toBe('A default is already being set on this runner');
+    expect(copy.runnerAccountSetDefaultTitle('Work')).toBe('Make Work the default?');
+    expect(copy.runnerAccountSetDefaultDetail('Work', '~/.claude', 'Default', '~/.orbit/claude-accounts/3fa91c2e', 'wikova')).toBe(
+      'Work’s login moves to ~/.claude, and Default’s to ~/.orbit/claude-accounts/3fa91c2e. Claude Code in a terminal on ' +
+        'wikova uses Work from then on — restart any that are open. Sessions stay on their accounts, and a turn in ' +
+        'progress finishes first. Workspaces keep their account.',
+    );
+    expect(copy.RUNNER_ACCOUNT_SET_DEFAULT_CONFIRM).toBe('Make default');
+    expect(copy.runnerAccountSettingDefault('Work')).toBe('Making Work the default');
+    expect(copy.runnerAccountSettingDefaultOne('Work')).toBe('Making Work the default — waiting for 1 session to finish its turn');
+    expect(copy.runnerAccountSettingDefaultMany('Work', 3)).toBe('Making Work the default — waiting for 3 sessions to finish their turns');
+    expect(copy.RUNNER_ACCOUNT_SETTING_DEFAULT_TERMINAL).toBe('It also waits for Claude Code running in a terminal there to exit.');
+    expect(copy.runnerAccountSetDefaultFailed('Work')).toBe('Couldn’t make Work the default');
+    expect(copy.RUNNER_ACCOUNT_SET_DEFAULT_UNCHANGED).toBe('Both logins are as they were.');
+  });
+
   // The native clients' parity tests read this file as text, as OrbitKit's reads runnerCopy.ts, so its
   // shape is part of the contract.
   it('declares each fixed sentence as one quoted constant', () => {

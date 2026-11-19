@@ -206,6 +206,11 @@ test('reorderRunners handles workspaceless runners, filters invalid ids, and app
       codexAccountRemoveStatus: true,
       codexAccountRemoveMessage: true,
       codexAccountRemoveSessions: true,
+      claudeAccountSwapAccount: true,
+      claudeAccountSwapStatus: true,
+      claudeAccountSwapMessage: true,
+      claudeAccountSwapWaiting: true,
+      claudeAccountSwapForeign: true,
       // Where its Claude connection to Anthropic comes out (docs/claude-region-check-contract.md §6).
       region: true,
       // Whether it is the account's managed runner: `managed` on the row (Orbit Cloud on every client).

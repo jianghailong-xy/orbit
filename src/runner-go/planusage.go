@@ -648,6 +648,12 @@ func refreshClaudeToken(ctx context.Context, configDir string) error {
 		delete(claudeRefreshing.dirs, configDir)
 		claudeRefreshing.Unlock()
 	}()
+	return runClaudeTokenRefresh(ctx, configDir)
+}
+
+// runClaudeTokenRefresh is the refresh run itself, for a caller that already keeps every other refresh
+// of configDir out (refreshClaudeToken, or a login swap that fenced both folders).
+func runClaudeTokenRefresh(ctx context.Context, configDir string) error {
 	// Not cut off with the read: a refresh stopped once the server has rotated the token leaves the
 	// login holding a spent one, so a runner shutting down or an account being removed lets it end.
 	cctx, cancel := context.WithTimeout(context.WithoutCancel(ctx), claudeTokenRefreshTimeout)
