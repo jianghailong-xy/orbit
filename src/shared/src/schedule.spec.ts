@@ -10,6 +10,7 @@ import {
   scheduleCreateWhen,
   scheduleFailedWaiting,
   scheduleHeldWaiting,
+  scheduleNeedsCount,
   scheduleNeedsYou,
   scheduleReportedText,
   scheduleRowCircle,
@@ -251,6 +252,23 @@ describe('circles', () => {
     expect(scheduleCircle({ state: 'ENDED', consecutiveFailures: 0 }).circle).toBe('muted');
     expect(scheduleCircle({ state: 'ACTIVE', consecutiveFailures: 0 }, { draft: true }).circle).toBe('draft');
     expect(scheduleNeedsYou({ id: 's', state: 'PAUSED', consecutiveFailures: 2 })).toBe(false);
+  });
+
+  it('counts for the drawer as Apple and Android do: needs-you schedules, then conditions that cannot be read', () => {
+    const reading = (state: 'WAITING' | 'UNKNOWN') =>
+      ({ id: `c-${state}`, text: 'raw used above 90%', unit: '%', state, lastValue: null, lastSampleAt: null });
+    const failing = schedule({ consecutiveFailures: 1 });
+    const held = schedule({ state: 'HELD', heldReason: 'AGENT_DISABLED' });
+    const unread = schedule({ condition: reading('UNKNOWN') });
+    const unreadPaused = schedule({ state: 'PAUSED', condition: reading('UNKNOWN') });
+    const readable = schedule({ condition: reading('WAITING') });
+    const task = (state: 'WAITING' | 'UNKNOWN') =>
+      ({ id: `t-${state}`, title: 'Set pool size', workspaceId: 'ws', workspaceName: null, condition: reading(state) });
+    const schedules = [failing, held, unread, unreadPaused, readable, schedule()];
+    expect(scheduleNeedsCount({ schedules, waitingTasks: [task('UNKNOWN'), task('WAITING')] })).toBe(4);
+    // A failing schedule whose retry is under way is left out until that run ends.
+    expect(scheduleNeedsCount({ schedules, runs: [run(failing, 'RUNNING', sh('2025-11-14T12:27'))] })).toBe(2);
+    expect(scheduleNeedsCount(undefined)).toBe(0);
   });
 
   it('a failing schedule with a run under way waits for that run: no tag, not counted (owner 2026-11-19)', () => {
