@@ -77,6 +77,9 @@ export const PUBLIC_ID_FIELDS: ReadonlySet<string> = new Set([
   'codebaseId',
   // `project_criterion_confirmation.check_task_id` — the task an Agent check of a criterion ran as (0545).
   'checkTaskId',
+  // `owner_request_secret.saved_secret_id` (1250): the saved secret "Use saved" made a grant from, the id the owner's
+  // card already sends in a submit body. An address, not a fence.
+  'savedSecretId',
   'id',
   'ownerId',
   'userId',

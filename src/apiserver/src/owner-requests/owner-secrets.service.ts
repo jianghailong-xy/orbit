@@ -463,7 +463,7 @@ export class OwnerSecretsService implements OnModuleInit, OnModuleDestroy {
    * from it is missed and none is made from it after.
    */
   async deleteSaved(ownerId: string, id: string, revokeCopies = false): Promise<void> {
-    const live = await this.prisma.$transaction(async (tx) => {
+    const live = await withTransactionRetry(this.prisma, async (tx) => {
       const locked = await tx.$queryRaw<Array<{ id: string }>>`
         SELECT "id"::text AS id FROM "account_secret" WHERE "id" = ${id}::uuid AND "owner_id" = ${ownerId}::uuid FOR UPDATE`;
       if (locked.length === 0) throw new NotFoundException('saved secret not found');
@@ -475,7 +475,7 @@ export class OwnerSecretsService implements OnModuleInit, OnModuleDestroy {
         : [];
       await tx.accountSecret.delete({ where: { id } });
       return grants;
-    });
+    }, loggedRetry(this.logger, 'ownerSecrets.deleteSaved'));
     for (const grant of live) {
       try {
         await this.revoke(ownerId, grant.requestId);
