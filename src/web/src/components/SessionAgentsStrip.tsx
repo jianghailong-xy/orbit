@@ -32,7 +32,8 @@ const delegateBlockOf = (toolUseId: string): HTMLElement | null =>
  * branch bar: Apple's `AgentsBandRow` and `AgentsSheet` (docs/mocks/agents-band-models; no cost, as the Apple
  * clients dropped it). Folded, it says what the running one is doing and where it runs: its machine and its
  * model, when either is not the session's own. With none running it says where the work went: how many
- * machines, then each model with how many runs took it; a failure is the only thing at its right edge. Always
+ * machines, then each model with how many runs took it. Failures are counted in red at its right edge in
+ * every state, before the spinner while one runs. Always
  * one line: narrower, the models after the first fold into "+n", then the words give way to the marks. It
  * opens in place, as Background processes does, to every run, the running ones first, in one list with no
  * headings. A row folds the list, scrolls the conversation to the run's block and opens it. Absent until the
@@ -101,15 +102,12 @@ export function SessionAgentsStrip({
         </span>
         <Spread summary={summary} parent={parent} />
         <span className="wt-spacer" />
-        {summary.running > 0 ? (
-          <RunGlyph running failed={false} />
-        ) : (
-          summary.failed > 0 && (
-            <span className="ag-failed">
-              <CloseCircleFilled /> {summary.failed} failed
-            </span>
-          )
+        {summary.failed > 0 && (
+          <span className="ag-failed">
+            <CloseCircleFilled /> {summary.failed} failed
+          </span>
         )}
+        {summary.running > 0 && <RunGlyph running failed={false} />}
         <button
           type="button"
           className="wt-expand"
@@ -272,7 +270,7 @@ function spokenLine(summary: SubagentSessionSummary): string {
       for (const m of summary.models)
         parts.push(`${m.label} ${m.count === 1 ? "1 run" : `${m.count} runs`}`);
     }
-    if (summary.failed > 0) parts.push(`${summary.failed} failed`);
   }
+  if (summary.failed > 0) parts.push(`${summary.failed} failed`);
   return parts.join(", ");
 }
