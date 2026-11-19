@@ -578,6 +578,30 @@ test('the count is taken for a live reader: the turn, or the job a card names', 
     OR: [{ backgroundJobId: null }, { backgroundJobId: { in: [] } }],
   }]);
 
+  // The same turn with a job still running: that job's card is read by it, so it is counted beside
+  // the turn's own.
+  const wakingJobbed = serviceWith({
+    pendingApprovals: 2,
+    project: projectRow({
+      coordinatorSessionId: SESSION_ID,
+      coordinatorWorkspaceId: WORKSPACE_ID,
+      coordinatorSession: sessionRow({
+        status: RunStatus.AWAITING_INPUT, engineTurnActive: true, runningBgShells: ['bgj_still_polling'],
+      }),
+      coordinatorWorkspace: workspaceRow(),
+      members: COORDINATOR_MEMBER,
+    }),
+  });
+  const wakingJobbedStatus = await wakingJobbed.service.coordinatorStatus(OWNER_ID, PROJECT_ID);
+  assert.equal(wakingJobbedStatus.coordination.session?.pendingApprovals, 2);
+  assert.deepEqual(wakingJobbed.approvalWheres, [
+    {
+      sessionId: SESSION_ID,
+      status: 'PENDING',
+      OR: [{ backgroundJobId: null }, { backgroundJobId: { in: ['bgj_still_polling'] } }],
+    },
+  ]);
+
   // And the second reader, on the conversation shape a runner-hosted job asks on: PARKED, with the
   // runner still reporting the job up. The card that job is polling for is a question the owner has
   // to be shown — the count that was blind to it is the one the card went dark under.
