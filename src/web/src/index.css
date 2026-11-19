@@ -1374,6 +1374,15 @@ button.toast--pill:focus-visible {
 .tp-account-machine-cloud > .anticon {
   color: var(--brand);
 }
+/* Every other machine, by the OS it reported (docs/mocks/machine-menu-icons, A): its mark in grey, the name as is. */
+.tp-account-machine-os {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+}
+.tp-account-machine-os > .anticon {
+  color: var(--text-3);
+}
 /* Log out: the label in the menu's own danger colour, its icon in --error, as the replaced menu drew them (the
    page rule reached only the icon there). */
 .tp-account-menu .orbit-menu-item[data-danger] .orbit-menu-icon {
