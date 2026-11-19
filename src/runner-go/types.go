@@ -1362,6 +1362,9 @@ type DiffResultRequest struct {
 	BaseSha string `json:"baseSha,omitempty"`
 	// BranchSha is the tip of the effective branch (see SessionLiveState.BranchSha).
 	BranchSha string `json:"branchSha,omitempty"`
+	// BranchCommits are the branch's commits from its base to BranchSha, newest first (branch_commits.go); null
+	// when the runner could not read them, which leaves the stored list as it was.
+	BranchCommits []BranchCommit `json:"branchCommits"`
 	// BranchMerged: the branch already landed in the default merge target (see SessionLiveState).
 	// Recomputed with the diff, so opening the drawer refreshes it for an idle session.
 	BranchMerged bool `json:"branchMerged"`
@@ -1835,6 +1838,9 @@ type TurnCompleteRequest struct {
 	BaseSha string `json:"baseSha,omitempty"`
 	// BranchSha is the tip of the effective branch (see SessionLiveState.BranchSha).
 	BranchSha string `json:"branchSha,omitempty"`
+	// BranchCommits are the branch's commits from its base to BranchSha, newest first (branch_commits.go); null
+	// when the runner could not read them, which leaves the stored list as it was.
+	BranchCommits []BranchCommit `json:"branchCommits"`
 	// Per-file unified diffs (capped) for the same uncommitted worktree state, so the web
 	// can open a file's diff on demand without a round-trip back to this runner.
 	ChangedDiff []FilePatch `json:"changedDiff,omitempty"`
@@ -1938,6 +1944,9 @@ type RunFinalizeRequest struct {
 	// (contract §10.5 O-L4). Empty on a park checkpoint (a CANCELLED end), which the next resume
 	// undoes, and whenever git cannot resolve the tip.
 	BranchSha string `json:"branchSha,omitempty"`
+	// BranchCommits are the branch's commits from its base to BranchSha, newest first (branch_commits.go); null
+	// when the runner could not read them, which leaves the stored list as it was.
+	BranchCommits []BranchCommit `json:"branchCommits"`
 	// CaptureError is why the session's work did NOT reach its branch: finalizeWorktree could not
 	// stage or could not commit. Empty on every finalize that captured the work.
 	//

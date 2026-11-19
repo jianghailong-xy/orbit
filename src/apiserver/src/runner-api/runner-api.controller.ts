@@ -581,6 +581,7 @@ import {
   scheduleRunAllowedTools,
   scheduleRunDisallowedTools,
 } from '../schedules/schedule-access';
+import { storableBranchCommits } from './branch-commits';
 
 // Must stay >= the runner's own loginRelayTimeout (login.go): the runner kills its CLI at that
 // point, so anything still marked in-flight past this window has no process behind it.
@@ -7900,6 +7901,8 @@ export class RunnerApiController {
           ...(dto.worktreeBranch !== undefined ? { worktreeBranch: dto.worktreeBranch } : {}),
           // The branch tip a confirmation review is held to (0370): written when reported.
           ...(storableBranchSha(dto.branchSha) ? { branchSha: dto.branchSha } : {}),
+          // The branch's commits, for the status bar's commit list: written when reported, beside its tip.
+          ...branchCommitsData(dto.branchCommits),
           runtimeSessionId: dto.runtimeSessionId ?? undefined,
           lastTurnAt: new Date(),
           numTurns: { increment: turnInc },
@@ -9892,6 +9895,8 @@ export class RunnerApiController {
           // task is frozen from below (§10.5 O-L4). Written when reported: an older runner, and a park
           // checkpoint the next resume undoes, leave the tip the last live report gave.
           ...(storableBranchSha(dto.branchSha) ? { branchSha: dto.branchSha } : {}),
+          // The branch's commits, for the status bar's commit list: written when reported, beside its tip.
+          ...branchCommitsData(dto.branchCommits),
           isolationStatus: dto.isolationStatus ?? undefined,
           ...(dto.changedFiles !== undefined
             ? {
@@ -10176,6 +10181,8 @@ export class RunnerApiController {
         baseSha: dto.baseSha ?? undefined,
         ...(dto.worktreeBranch !== undefined ? { worktreeBranch: dto.worktreeBranch } : {}),
         ...(storableBranchSha(dto.branchSha) ? { branchSha: dto.branchSha } : {}),
+        // The branch's commits, for the status bar's commit list: written when reported, beside its tip.
+        ...branchCommitsData(dto.branchCommits),
         isolationStatus: dto.isolationStatus ?? undefined,
         ...(dto.changedFiles !== undefined ? { changedFiles: dto.changedFiles as unknown as Prisma.InputJsonValue } : {}),
         ...(dto.mergeTargets !== undefined ? { mergeTargets: dto.mergeTargets } : {}),
@@ -10921,6 +10928,8 @@ export class RunnerApiController {
         // The branch tip a confirmation review is held to (0370) — moved by a Commit, which is what
         // pushes this diff: written when reported.
         ...(storableBranchSha(dto.branchSha) ? { branchSha: dto.branchSha } : {}),
+        // The branch's commits, for the status bar's commit list: written when reported, beside its tip.
+        ...branchCommitsData(dto.branchCommits),
       },
     });
     if (updated.count > 0 && dto.branchMerged === true) {
@@ -11612,4 +11621,10 @@ const DRAIN_SCOPE_ID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f
 /** The session ids of a `drainScope` claim parameter: the UUIDs in it, at most DRAIN_SCOPE_MAX. */
 export function parseDrainScope(raw: string): string[] {
   return raw.split(',').map((id) => id.trim()).filter((id) => DRAIN_SCOPE_ID.test(id)).slice(0, DRAIN_SCOPE_MAX);
+}
+
+/** The session-row write for a report's `branchCommits`: nothing when it carried no list. */
+function branchCommitsData(value: unknown): { branchCommits?: Prisma.InputJsonValue } {
+  const commits = storableBranchCommits(value);
+  return commits === undefined ? {} : { branchCommits: commits as unknown as Prisma.InputJsonValue };
 }

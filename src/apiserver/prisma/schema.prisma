@@ -2309,6 +2309,9 @@ model Session {
   workSubdir           String?   @map("work_subdir")
   baseSha              String?   @map("base_sha")
   changedFiles         Json?     @map("changed_files")
+  /// The commits of `branch` from `baseSha` to its tip, newest first (@orbit/shared BranchCommit[]), as the runner
+  /// last read them. Like changedFiles, not selected by the list query.
+  branchCommits        Json?     @map("branch_commits")
   isolationStatus      String?   @map("isolation_status")
   // ── "Merge to main" (UI button on the worktree status bar) ──────────────────
   // The user can ask the runner to merge this session's `branch` into a target branch.

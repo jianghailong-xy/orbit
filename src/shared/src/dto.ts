@@ -3597,6 +3597,9 @@ export interface TurnCompleteRequest {
   branchMerged?: boolean;
   /** Exact tip SHA of the effective worktree branch (see SessionLiveState.branchSha). */
   branchSha?: string;
+  /** The branch's commits from its base to `branchSha`, newest first (runner branch_commits.go). Null or
+   *  absent when the runner did not read them, which keeps the stored list. */
+  branchCommits?: BranchCommit[] | null;
   /** The worktree's actual current HEAD branch (see SessionLiveState.worktreeBranch). */
   worktreeBranch?: string;
 }
@@ -3702,6 +3705,22 @@ export interface ChangedFile {
   status: string;
 }
 
+/** One commit of a session's branch, as the runner reads it between the branch's base and tip
+ *  (runner branch_commits.go). The status bar lists these, newest first. */
+export interface BranchCommit {
+  sha: string;
+  subject: string;
+  body?: string;
+  /** ISO 8601, the committer date. */
+  committedAt: string;
+  /** Set when the runner made the commit itself: 'session-end' (work left uncommitted when the
+   *  session ended), 'commit-button' (the owner's Commit), 'checkpoint' (a park checkpoint undone
+   *  on resume). Absent for a commit the agent made. */
+  savedBy?: string;
+  files: Array<{ path: string; additions: number; deletions: number }>;
+  filesTruncated?: boolean;
+}
+
 /** One changed file's full unified-diff text (git diff vs base), reported by the runner
  *  alongside the ChangedFile stats so the web can show a file's diff on demand. `patch` is
  *  absent for binary/omitted files; `truncated` marks a diff dropped for exceeding the size
@@ -3763,6 +3782,9 @@ export interface RunFinalizeRequest {
    *  park checkpoint, which the next resume undoes, and from older runners — the tip the last live
    *  report gave then stands. */
   branchSha?: string;
+  /** The branch's commits from its base to `branchSha`, newest first (runner branch_commits.go). Null or
+   *  absent when the runner did not read them, which keeps the stored list. */
+  branchCommits?: BranchCommit[] | null;
   /** Why the session's work did NOT reach its branch — the runner could not stage or could not
    *  commit it. Absent on every finalize that captured the work, and from runners too old to say.
    *
@@ -3907,6 +3929,9 @@ export interface SessionDiffResultRequest {
   branchMerged?: boolean;
   /** Exact tip SHA of the effective worktree branch (see SessionLiveState.branchSha). */
   branchSha?: string;
+  /** The branch's commits from its base to `branchSha`, newest first (runner branch_commits.go). Null or
+   *  absent when the runner did not read them, which keeps the stored list. */
+  branchCommits?: BranchCommit[] | null;
   /** The worktree's actual current HEAD branch (see SessionLiveState.worktreeBranch). */
   worktreeBranch?: string;
 }

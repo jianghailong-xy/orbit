@@ -3897,6 +3897,194 @@ button.toast--pill:focus-visible {
 .wt-spacer {
   flex: 1 1 auto;
 }
+/* The bar counted in commits (SessionCommits.tsx, docs/mocks/session-commits-first). */
+.wt-commits-lead {
+  display: inline-flex;
+  align-items: baseline;
+  gap: 6px;
+  min-width: 0;
+  overflow: hidden;
+  white-space: nowrap;
+}
+.wt-commits-count {
+  flex: none;
+  font-weight: 600;
+  color: var(--text-1);
+}
+.wt-commits-subject {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  color: var(--text-1);
+}
+.wt-commits-caret {
+  flex: none;
+  width: 14px;
+  text-align: center;
+  font-size: 10px;
+  color: var(--text-3);
+}
+.wt-commits-panel {
+  border-top: 1px solid var(--border-subtle);
+  background: var(--bg-raised);
+  padding: 4px 0 0;
+  max-height: 260px;
+  overflow: auto;
+}
+.wt-commit-row {
+  display: grid;
+  grid-template-columns: 14px minmax(0, 1fr) auto;
+  gap: 10px;
+  align-items: center;
+  width: 100%;
+  padding: 5px 12px;
+  border: none;
+  background: transparent;
+  text-align: left;
+  font: inherit;
+  font-size: 12.5px;
+  color: var(--text-1);
+  cursor: pointer;
+}
+.wt-commit-row:hover {
+  background: var(--bg-hover);
+}
+.wt-commit-row.active {
+  background: var(--brand-tint);
+}
+.wt-commit-dot {
+  justify-self: center;
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: var(--text-3);
+}
+.wt-commit-dot-auto {
+  background: transparent;
+  border: 1.5px solid var(--text-4);
+}
+.wt-commit-dot-pending {
+  background: transparent;
+  border: 1.5px dashed var(--warning);
+}
+.wt-commit-text {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+}
+.wt-commit-subject {
+  font-weight: 550;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.wt-commit-meta {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px;
+  font-size: 11.5px;
+  color: var(--text-3);
+}
+.wt-commit-sha {
+  font-family: var(--font-mono, ui-monospace, monospace);
+  font-size: 11px;
+}
+.wt-commit-stat {
+  display: inline-flex;
+  gap: 4px;
+  font-family: var(--font-mono, ui-monospace, monospace);
+  font-size: 11.5px;
+}
+.wt-commit-tag {
+  flex: none;
+  border-radius: 4px;
+  padding: 0 5px;
+  font-size: 11px;
+  background: var(--bg-hover);
+  color: var(--text-2);
+}
+.wt-commit-tag-pending {
+  background: var(--warning-bg);
+  color: var(--warning);
+}
+.wt-commits-foot {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin-top: 4px;
+  padding: 6px 12px;
+  border-top: 1px solid var(--border-subtle);
+  font-size: 12px;
+}
+.wt-commits-all {
+  border: none;
+  background: none;
+  padding: 0;
+  font: inherit;
+  color: var(--brand);
+  cursor: pointer;
+}
+.wt-commits-all:hover {
+  text-decoration: underline;
+}
+.wt-rail-tabs {
+  display: flex;
+  gap: 4px;
+  padding: 0 0 6px;
+}
+.wt-rail-tab {
+  flex: 1 1 0;
+  border: 1px solid transparent;
+  border-radius: 6px;
+  background: none;
+  padding: 3px 8px;
+  font: inherit;
+  font-size: 12px;
+  color: var(--text-2);
+  cursor: pointer;
+}
+.wt-rail-tab.on {
+  border-color: var(--border);
+  background: var(--bg-raised);
+  color: var(--text-1);
+  font-weight: 600;
+}
+.wt-rail-commits {
+  display: flex;
+  flex-direction: column;
+  margin: 0 -8px 8px;
+  padding-bottom: 6px;
+  border-bottom: 1px solid var(--border-subtle);
+}
+.wt-commit-head {
+  flex: none;
+  padding: 12px 16px 10px;
+  border-bottom: 1px solid var(--border-subtle);
+  max-height: 40%;
+  overflow: auto;
+}
+.wt-commit-head-subject {
+  font-size: 15px;
+  font-weight: 650;
+  color: var(--text-1);
+  margin-bottom: 4px;
+}
+.wt-commit-head .wt-commit-meta {
+  font-size: 12px;
+}
+.wt-commit-head-body {
+  margin-top: 8px;
+  font-size: 13px;
+  line-height: 1.5;
+  color: var(--text-2);
+  white-space: pre-wrap;
+}
+.wt-commit-head-note {
+  margin-top: 8px;
+  font-size: 12px;
+  color: var(--text-3);
+}
 .wt-expand {
   flex: none;
   width: 22px;
