@@ -196,13 +196,14 @@ private fun FoldedRow(row: BackgroundRow.Row, item: BackgroundRow.Item, open: ()
                 color = MaterialTheme.colorScheme.primary, maxLines = 1,
                 overflow = if (shown.truncate == BackgroundRow.Truncate.MIDDLE) TextOverflow.MiddleEllipsis else TextOverflow.Ellipsis)
         }
-        Mark(item.mark)
+        // The count, then the mark, at the right edge before the chevron, as the web and Apple Agents rows end.
         if (row.countParts.isNotEmpty()) Text(buildAnnotatedString {
             row.countParts.forEachIndexed { i, part ->
                 if (i > 0) withStyle(SpanStyle(color = secondary)) { append(" · ") }
                 withStyle(SpanStyle(color = if (part.kind == "failed") MaterialTheme.colorScheme.error else secondary)) { append(part.text) }
             }
         }, style = MaterialTheme.typography.labelSmall, maxLines = 1)
+        Mark(item.mark)
         Icon(WatchIcons.chevronRight, null, Modifier.size(14.dp), tint = secondary)
     }
 }

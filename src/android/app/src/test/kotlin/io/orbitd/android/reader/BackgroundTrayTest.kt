@@ -266,5 +266,15 @@ class BackgroundTrayTest {
         assertEquals("one Background row", tray, reader.lastIndexOf("BackgroundTray("))
     }
 
+    @Test fun theFoldedRowEndsCountThenMarkThenChevronAsTheAgentsRow() {
+        // The row's semantics are cleared to its one label, so its children's order is read from the source.
+        val tray = generateSequence(File(System.getProperty("user.dir")).absoluteFile) { it.parentFile }
+            .map { File(it, "app/src/main/kotlin/io/orbitd/android/reader/BackgroundTray.kt") }.first { it.isFile }.readText()
+        val folded = tray.substring(tray.indexOf("private fun FoldedRow("), tray.indexOf("private fun Mark("))
+        val at = listOf("AnimatedContent(item, Modifier.weight(1f)", "row.countParts.isNotEmpty()", "Mark(item.mark)",
+            "Icon(WatchIcons.chevronRight").map { piece -> folded.indexOf(piece).also { assertTrue("no $piece", it > 0) } }
+        assertEquals("name, count, mark, chevron", at.sorted(), at)
+    }
+
     private companion object { const val FIXTURE = "src/shared/src/background-row.fixture.json" }
 }
