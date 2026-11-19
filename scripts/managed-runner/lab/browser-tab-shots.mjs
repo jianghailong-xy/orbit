@@ -38,7 +38,7 @@ const [method, params] = JSON.parse(process.argv[1]);
 // Chrome may still be starting: the viewer goes live on x11vnc before its DevTools listen.
 let pages = [];
 for (let i = 0; i < 120 && !pages.length; i++) {
-  try { pages = (await (await fetch('http://127.0.0.1:9222/json/list')).json()).filter((t) => t.type === 'page'); }
+  try { pages = (await (await fetch('http://127.0.0.1:9222/json/list')).json()).filter((t) => t.type === 'page' && !t.url.startsWith('devtools://')); }
   catch { await new Promise((r) => setTimeout(r, 500)); }
 }
 if (!pages.length) throw new Error('no page');
@@ -127,7 +127,7 @@ try {
   await until('the field focused through VNC', 10_000, () => evaluate("document.activeElement && document.activeElement.id === 'paste'"));
   step('the viewer clicked the remote field through VNC', { screen: at, scale: Math.round(scale * 100) });
   await tab.evaluate((t) => navigator.clipboard.writeText(t), PASTE_TEXT);
-  await tab.keyboard.press('ControlOrMeta+V');
+  await tab.keyboard.press('ControlOrMeta+v');
   const pasted = await until('the paste in the remote field', 20_000, () => {
     const value = evaluate("document.getElementById('paste').value");
     return value ? { value } : null;
@@ -148,7 +148,8 @@ try {
   await tab.evaluate(() => navigator.clipboard.writeText('-'));
   evaluate("(() => { const c = document.getElementById('copy'); c.focus(); c.select(); return true; })()");
   await canvas.focus();
-  await tab.keyboard.press('Control+C');
+  // Lowercase: an uppercase C reaches X as Shift+C, and Ctrl+Shift+C opens Chrome's inspector.
+  await tab.keyboard.press('Control+c');
   const copied = await until('the remote copy in the local clipboard', 20_000, async () => {
     const value = await tab.evaluate(() => navigator.clipboard.readText());
     return value === COPY_TEXT ? value : null;
@@ -174,13 +175,13 @@ try {
   evaluate("(() => { const p = document.getElementById('paste'); p.value = ''; p.focus(); return true; })()");
   await tab.evaluate(() => navigator.clipboard.writeText('VIEW-ONLY-MUST-NOT-ARRIVE'));
   await canvas.focus();
-  await tab.keyboard.press('ControlOrMeta+V');
+  await tab.keyboard.press('ControlOrMeta+v');
   await tab.waitForTimeout(3000);
   report.viewOnly = {
     bar: await text(tab, '.rb-tab-title'),
     foot: await text(tab, '.rb-tab-foot'),
     takeControl: await tab.getByRole('button', { name: 'Take control' }).count(),
-    remoteFieldAfterPaste: evaluate("document.getElementById('paste').value"),
+    remoteFieldAfterPaste: evaluate("JSON.stringify(document.getElementById('paste').value)"),
     streamsStillLive: await tab.locator('.rb-tab-foot .rb-link.is-live').count(),
   };
   step('Done: view only, and a paste reached nothing', report.viewOnly);
