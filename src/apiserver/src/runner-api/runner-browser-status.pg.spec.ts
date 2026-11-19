@@ -106,14 +106,19 @@ test('browser_status: the account\'s Orbit Cloud browser for any session of it, 
     servers.push(server);
     return server;
   };
+  /** R's own credential is a managed runner's: its calls name the instance, as `orbit mcp` in R's Pod does. */
+  const instance = () => ({
+    'x-orbit-runner-capabilities': `${INSTANCE_CAPABILITY},${BROWSER_CLEAR}`,
+    'x-orbit-managed-runner-generation': '1',
+    'x-orbit-managed-runner-pod-uid': podUid,
+  });
   const status = (server: Apiserver, runnerToken: string | undefined, sessionId?: string) =>
-    call(server, 'GET', '/api/runner/browser', runnerToken, undefined, sessionId ? { 'x-orbit-session-id': sessionId } : {});
-  const beat = async (server: Apiserver, body: object) => {
-    const reply = await call(server, 'POST', '/api/runner/heartbeat', r.token, { version: '0.1.0', ...body }, {
-      'x-orbit-runner-capabilities': `${INSTANCE_CAPABILITY},${BROWSER_CLEAR}`,
-      'x-orbit-managed-runner-generation': '1',
-      'x-orbit-managed-runner-pod-uid': podUid,
+    call(server, 'GET', '/api/runner/browser', runnerToken, undefined, {
+      ...(runnerToken === r.token ? instance() : {}),
+      ...(sessionId ? { 'x-orbit-session-id': sessionId } : {}),
     });
+  const beat = async (server: Apiserver, body: object) => {
+    const reply = await call(server, 'POST', '/api/runner/heartbeat', r.token, { version: '0.1.0', ...body }, instance());
     assert.equal(reply.status, 201, `R's heartbeat: ${reply.text}`);
   };
   await t.test('1. with the browser switch off, the route is absent', async () => {
