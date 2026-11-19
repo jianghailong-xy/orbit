@@ -3164,14 +3164,14 @@ test('the ledger stays append-only, and every later migration is accounted for',
       // each that NULL passes to project_standard_set_confirmation, which is not a preserved relation; no row is
       // written, and no trigger, function or DONE fence changes.
       '1200_standard_set_confirmation_wording',
+      // 1201 adds nullable conversation_turn.outcome and error and session.last_turn_outcome, with CHECKs every
+      // stored row passes (all NULL); 1202 validates them and writes session.last_turn_outcome only. Neither is a
+      // preserved relation, and no trigger, function or DONE fence changes.
+      '1201_turn_outcome',
+      '1202_turn_outcome_backfill',
       // 1220 sets fastupdate = off on run_event's trigram index and merges its pending list; no row is written, and
       // no preserved relation, trigger, function or DONE fence changes.
-      '1220_run_event_text_trgm_fastupdate_off',
-      // 1200 adds nullable conversation_turn.outcome and error and session.last_turn_outcome, with CHECKs every
-      // stored row passes (all NULL); 1201 validates them and writes session.last_turn_outcome only. Neither is a
-      // preserved relation, and no trigger, function or DONE fence changes.
-      '1200_turn_outcome',
-      '1201_turn_outcome_backfill'],
+      '1220_run_event_text_trgm_fastupdate_off'],
     'a later migration exists; re-read it before trusting the assertions above');
   // Stated rather than described: 0230's fence differs from 0228's by exactly one added lane.
   const later = readFileSync(
