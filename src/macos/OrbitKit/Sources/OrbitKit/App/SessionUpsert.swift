@@ -219,6 +219,7 @@ public extension Session {
                 permissionMode: permissionMode,
                 effort: effort,
                 source: source,
+                runSource: runSource,
                 projectId: mergedProjectId,
                 // A cleared id always clears its label too, even if a malformed/mixed-version
                 // summary omitted projectTitle while explicitly removing the relation.
@@ -238,6 +239,7 @@ public extension Session {
                 runningBgJobCount: runningBgJobCount,
                 // The same: the list's count, which no event carries.
                 runningSubagentCount: runningSubagentCount,
+                runningSubagentTitle: runningSubagentTitle,
                 engineTurnActive: engineTurnActive,
                 // The list's, which no event carries either.
                 activity: activity,

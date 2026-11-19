@@ -99,6 +99,33 @@ final class MachineSetupCopyParityTests: XCTestCase {
         ("CREATED_RENAME_FAILED", MachineSetupCopy.CREATED_RENAME_FAILED),
         ("START_A_SESSION", MachineSetupCopy.START_A_SESSION),
         ("REGISTER_NEXT", MachineSetupCopy.REGISTER_NEXT),
+        ("SETUP_FROM_GITHUB", MachineSetupCopy.SETUP_FROM_GITHUB),
+        ("SETUP_NEW_TAG", MachineSetupCopy.SETUP_NEW_TAG),
+        ("SETUP_GITHUB_META", MachineSetupCopy.SETUP_GITHUB_META),
+        ("SETUP_OR", MachineSetupCopy.SETUP_OR),
+        ("SETUP_FOLDER_NAME_INSTEAD", MachineSetupCopy.SETUP_FOLDER_NAME_INSTEAD),
+        ("SETUP_CONNECT_GITHUB", MachineSetupCopy.SETUP_CONNECT_GITHUB),
+        ("SETUP_CONNECT_GITHUB_META", MachineSetupCopy.SETUP_CONNECT_GITHUB_META),
+        ("SETUP_RECONNECT_GITHUB", MachineSetupCopy.SETUP_RECONNECT_GITHUB),
+        ("SETUP_GITHUB_SEARCH", MachineSetupCopy.SETUP_GITHUB_SEARCH),
+        ("SETUP_GITHUB_NOT_LISTED", MachineSetupCopy.SETUP_GITHUB_NOT_LISTED),
+        ("SETUP_GITHUB_ADD_REPOSITORIES", MachineSetupCopy.SETUP_GITHUB_ADD_REPOSITORIES),
+        ("SETUP_GITHUB_LOADING", MachineSetupCopy.SETUP_GITHUB_LOADING),
+        ("SETUP_GITHUB_NONE", MachineSetupCopy.SETUP_GITHUB_NONE),
+        ("SETUP_GITHUB_PRIVATE", MachineSetupCopy.SETUP_GITHUB_PRIVATE),
+        ("SETUP_GITHUB_CLONED_META", MachineSetupCopy.SETUP_GITHUB_CLONED_META),
+        ("SETUP_OTHER_BRANCH", MachineSetupCopy.SETUP_OTHER_BRANCH),
+        ("SETUP_DEFAULT_BRANCH", MachineSetupCopy.SETUP_DEFAULT_BRANCH),
+        ("SETUP_BRANCH", MachineSetupCopy.SETUP_BRANCH),
+        ("SETUP_GITHUB_DONE", MachineSetupCopy.SETUP_GITHUB_DONE),
+        ("CLONE_CLONING", MachineSetupCopy.CLONE_CLONING),
+        ("CLONE_WAITING", MachineSetupCopy.CLONE_WAITING),
+        ("CLONE_INSTALL_ON_GITHUB", MachineSetupCopy.CLONE_INSTALL_ON_GITHUB),
+        ("CLONE_SIGN_IN_EXPIRED", MachineSetupCopy.CLONE_SIGN_IN_EXPIRED),
+        ("CLONE_RECONNECT", MachineSetupCopy.CLONE_RECONNECT),
+        ("CLONE_RETRY", MachineSetupCopy.CLONE_RETRY),
+        ("CLONE_RETRY_FAILED", MachineSetupCopy.CLONE_RETRY_FAILED),
+        ("CLONE_STARTS_WHEN_DONE", MachineSetupCopy.CLONE_STARTS_WHEN_DONE),
     ]
 
     /// Each template rendered with the web's own interpolations for its values.
@@ -119,7 +146,18 @@ final class MachineSetupCopyParityTests: XCTestCase {
         ("setupCreateFailed", MachineSetupCopy.setupCreateFailed(why: "${why}")),
         ("composerPlaceholderFor", MachineSetupCopy.composerPlaceholderFor(machine: "${machine}")),
         ("heldWaiting", MachineSetupCopy.heldWaiting(machine: "${machine}")),
+        ("setupGithubSignInAgain", MachineSetupCopy.setupGithubSignInAgain(login: "${login}")),
+        ("setupGithubConnectFailed", MachineSetupCopy.setupGithubConnectFailed(why: "${why}")),
+        ("setupGithubListFailed", MachineSetupCopy.setupGithubListFailed(why: "${why}")),
+        ("setupGithubFolderExists", MachineSetupCopy.setupGithubFolderExists(machine: "${machine}")),
+        ("setupGithubDonePath", MachineSetupCopy.setupGithubDonePath(repository: "${repository}", path: "${path}")),
+        ("setupCloneUpdating", MachineSetupCopy.setupCloneUpdating(machine: "${machine}")),
+        ("setupCloneNeedsUpdate", MachineSetupCopy.setupCloneNeedsUpdate(machine: "${machine}")),
+        ("cloneAppRemoved", MachineSetupCopy.cloneAppRemoved(repository: "${repository}")),
     ]
+
+    /// The web's templates with a condition in them, read as what they render, each named here.
+    private static let conditional: Set<String> = ["setupGit", "setupGithubAccount", "cloneCouldNot", "pushedAgo"]
 
     func testEveryConstantIsTheWebDeclarationOfTheSameName() throws {
         let web = try webConstants()
@@ -149,6 +187,45 @@ final class MachineSetupCopyParityTests: XCTestCase {
         XCTAssertEqual(MachineSetupCopy.setupGit(branch: nil), "git repository")
     }
 
+    /// The account line leaves the count out when GitHub wasn't asked, and says one repository in the singular.
+    func testTheGithubAccountLineIsTheWebs() throws {
+        let raw = try source(Self.webCopy)
+        XCTAssertTrue(raw.contains("? `Signed in to GitHub as @${login}`"), "setupGithubAccount changed shape on the web")
+        XCTAssertTrue(raw.contains(": `Signed in to GitHub as @${login} · ${repositories} ${repositories === 1 ? 'repository' : 'repositories'}`"))
+        XCTAssertEqual(MachineSetupCopy.setupGithubAccount(login: "ada", repositories: nil), "Signed in to GitHub as @ada")
+        XCTAssertEqual(MachineSetupCopy.setupGithubAccount(login: "ada", repositories: 1), "Signed in to GitHub as @ada · 1 repository")
+        XCTAssertEqual(MachineSetupCopy.setupGithubAccount(login: "ada", repositories: 12),
+                       "Signed in to GitHub as @ada · 12 repositories")
+    }
+
+    /// A failed clone whose reason hasn't been read yet ends at the repository, with no colon left hanging.
+    func testCouldNotCloneIsTheWebsWithAndWithoutAReason() throws {
+        let raw = try source(Self.webCopy)
+        XCTAssertTrue(raw.contains("why ? `Couldn’t clone ${repository}: ${why}` : `Couldn’t clone ${repository}.`"))
+        XCTAssertEqual(MachineSetupCopy.cloneCouldNot(repository: "o/r", why: "git said no."), "Couldn’t clone o/r: git said no.")
+        XCTAssertEqual(MachineSetupCopy.cloneCouldNot(repository: "o/r", why: ""), "Couldn’t clone o/r.")
+    }
+
+    /// When a repository was pushed, in the web's words at each step.
+    func testPushedAgoIsTheWebsAtEachStep() throws {
+        let raw = try source(Self.webCopy)
+        for words in ["'pushed just now'", "`pushed ${minutes} ${minutes === 1 ? 'minute' : 'minutes'} ago`",
+                      "`pushed ${hours} ${hours === 1 ? 'hour' : 'hours'} ago`", "'pushed yesterday'"] {
+            XCTAssertTrue(raw.contains(words), "pushedAgo no longer says \(words) on the web")
+        }
+        let now = try XCTUnwrap(RelativeTime.parse("2026-11-16T12:00:00Z"))
+        func ago(_ seconds: TimeInterval) -> String {
+            MachineSetupCopy.pushedAgo(ISO8601DateFormatter().string(from: now.addingTimeInterval(-seconds)), now: now)
+        }
+        XCTAssertEqual(MachineSetupCopy.pushedAgo(nil, now: now), "")
+        XCTAssertEqual(ago(20), "pushed just now")
+        XCTAssertEqual(ago(60), "pushed 1 minute ago")
+        XCTAssertEqual(ago(59 * 60), "pushed 59 minutes ago")
+        XCTAssertEqual(ago(3600), "pushed 1 hour ago")
+        XCTAssertEqual(ago(30 * 3600), "pushed yesterday")
+        XCTAssertTrue(ago(30 * 86_400).hasPrefix("pushed Oct "))
+    }
+
     /// The web's sentence for an empty machine ends on the form its page has and these don't: everything
     /// before that is this client's sentence, word for word.
     func testAnEmptyMachineSaysTheWebsSentenceUpToItsForm() throws {
@@ -175,7 +252,7 @@ final class MachineSetupCopyParityTests: XCTestCase {
     /// Every sentence at either end has its counterpart, or is named above as one client's own.
     func testBothEndsDeclareTheSameSentencesUnderTheSameNames() throws {
         let raw = try source(Self.webCopy)
-        let web = Set(try webConstants().keys).union(try webTemplates().keys).union(["setupGit", "machineEmpty"])
+        let web = Set(try webConstants().keys).union(try webTemplates().keys).union(Self.conditional).union(["machineEmpty"])
         XCTAssertEqual(web, Set(try captures(raw, "^export const (\\w+)").map { $0[0] }),
                        "machineSetupCopy.ts declares a sentence this check can't read")
 
@@ -187,7 +264,7 @@ final class MachineSetupCopyParityTests: XCTestCase {
         for name in here.subtracting(web).subtracting(Self.thisClientsOwn).sorted() {
             XCTFail("MachineSetupCopy declares \(name), which machineSetupCopy.ts does not")
         }
-        let listed = Set(Self.constants.map(\.name)).union(Self.templates.map(\.name)).union(["setupGit"])
+        let listed = Set(Self.constants.map(\.name)).union(Self.templates.map(\.name)).union(Self.conditional)
         XCTAssertEqual(listed, here.subtracting(Self.thisClientsOwn), "list every shared sentence above")
     }
 }

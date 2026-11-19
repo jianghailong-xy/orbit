@@ -12,6 +12,7 @@ import { CoordinatorQuestionCard, coordinatorQuestions, type ProjectOpenItemRow 
 import { OwnerRequestCard, OwnerRequestResolved } from '../components/OwnerRequestCard';
 import { TerminalApproveCard } from '../components/TerminalApproveCard';
 import { isScheduleWaitingKind } from '../components/ScheduleWaitingCard';
+import { isConditionWaitingKind } from '../components/ConditionWaitingCard';
 import { Spinner } from '../components/ui/Spinner';
 import { formatSpan, ago } from '../lib/watches';
 import { markdownToPlainText } from '../lib/markdownText';
@@ -116,6 +117,11 @@ type OpenRow =
   | { at: string; request: OwnerRequest }
   | { at: string; project: SidebarProject; question: ProjectOpenItemRow };
 
+/** A scheduled task's or a condition's item: drawn whole, with its own doors, above the folded rows. */
+function drawnWhole(kind: string): boolean {
+  return isScheduleWaitingKind(kind) || isConditionWaitingKind(kind);
+}
+
 /**
  * Everything agents have asked the owner to do, in one place: owner requests, and the questions
  * coordinators filed through `ask_owner`, which stay on their own table but are one list to the owner.
@@ -142,11 +148,11 @@ export function WaitingOnYouPage(): JSX.Element {
   // A scheduled task's items are drawn whole, as the board draws them (docs/mocks/scheduled-tasks/web/02-board.png ④):
   // each is a card with its own doors, newest first.
   const scheduleItems = (open.data?.requests ?? [])
-    .filter((request) => isScheduleWaitingKind(request.kind))
+    .filter((request) => drawnWhole(request.kind))
     .sort((a, b) => Date.parse(b.createdAt) - Date.parse(a.createdAt));
   const rows: OpenRow[] = [
     ...(open.data?.requests ?? [])
-      .filter((request) => !isScheduleWaitingKind(request.kind))
+      .filter((request) => !drawnWhole(request.kind))
       .map((request) => ({ at: request.createdAt, request })),
     ...asking.flatMap((project, index) =>
       coordinatorQuestions(items[index]?.data).map((question) => ({ at: question.waitingSince, project, question }))),

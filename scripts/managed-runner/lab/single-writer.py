@@ -73,7 +73,7 @@ GUEST_ADMISSION_DIR = '/etc/rancher/k3s/orbit-admission'
 GUEST_K3S_DROP_IN = '/etc/rancher/k3s/config.yaml.d/50-orbit-admission.yaml'
 PAYLOAD = REPO / 'scripts/managed-runner/ceph-rbd-payload.py'
 # The runner runs as UID 10001 and owns only its home on the volume; the volume's root is root's.
-PAYLOAD_ROOT = '/var/lib/orbit/home/storage-verification'
+PAYLOAD_ROOT = '/home/orbit/storage-verification'
 PAYLOAD_IN_POD = '/tmp/t02a-payload.py'
 IMAGE_NAME = 'docker.io/library/orbit-managed-runner-lab'
 PG = 'orbit-mr-lab-pg'
@@ -597,8 +597,8 @@ def contender(name, mapping, pod, labelled=False):
     return {'apiVersion': 'v1', 'kind': 'Pod', 'metadata': {'name': name, 'namespace': NAMESPACE},
             'spec': {'restartPolicy': 'Never', 'nodeName': NODE,
                      'containers': [{'name': 'second-writer', 'image': ENV['PROBE_IMAGE'],
-                                     'command': ['sh', '-c', 'echo second > /var/lib/orbit/second-pod.txt; sleep 3600'],
-                                     'volumeMounts': [{'name': 'data', 'mountPath': '/var/lib/orbit'}]}],
+                                     'command': ['sh', '-c', 'echo second > /home/orbit/second-pod.txt; sleep 3600'],
+                                     'volumeMounts': [{'name': 'data', 'mountPath': '/home/orbit'}]}],
                      'volumes': [{'name': 'data', 'persistentVolumeClaim': {'claimName': mapping['pvc_name']}}]}}
 
 
@@ -664,7 +664,7 @@ def cmd_contenders(_args):
     # An ephemeral container would share the authorized Pod's volumes.
     patch = {'spec': {'ephemeralContainers': [{'name': 't02a-debug', 'image': ENV['PROBE_IMAGE'], 'command': ['sleep', '3600'],
                                                'targetContainerName': 'runner',
-                                               'volumeMounts': [{'name': 'user-state', 'mountPath': '/var/lib/orbit'}]}]}}
+                                               'volumeMounts': [{'name': 'user-state', 'mountPath': '/home/orbit'}]}]}}
     result = kubectl('patch', 'pod', pod['metadata']['name'], '--subresource', 'ephemeralcontainers', '--type', 'strategic',
                      '-p', json.dumps(patch), check=False)
     attempts.append({'case': 'an ephemeral container mounting the volume, added to the authorized Pod by the cluster admin', 'at': now(),
@@ -704,16 +704,16 @@ def cmd_outage(args):
 # ---- data on the volume ----------------------------------------------------------------------
 
 def payload_source():
+    # The payload's root is already under the runner's home, the volume's root.
     text = PAYLOAD.read_text()
-    old = 'Path("/var/lib/orbit/storage-verification")'
-    if text.count(old) != 1:
+    if text.count(f'Path("{PAYLOAD_ROOT}")') != 1:
         raise SystemExit(f'{PAYLOAD} no longer names its root once')
-    return text.replace(old, f'Path({PAYLOAD_ROOT!r})')
+    return text
 
 
 IDENTITY = r'''
 import json, pathlib
-orbit = pathlib.Path('/var/lib/orbit/home/.orbit')
+orbit = pathlib.Path('/home/orbit/.orbit')
 def read(name):
     p = orbit / name
     return json.loads(p.read_text()) if p.exists() else None

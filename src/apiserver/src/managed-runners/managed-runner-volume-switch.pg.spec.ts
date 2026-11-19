@@ -124,7 +124,12 @@ test('managed runner volume switch: an administrator puts a restored volume back
   app.useGlobalPipes(new ValidationPipe({ whitelist: true, transform: true, forbidNonWhitelisted: false }));
   app.useGlobalInterceptors(new PublicIdInterceptor());
   await app.listen(0, '127.0.0.1');
-  const server = { port: Number(new globalThis.URL((await app.getUrl()).replace('[::1]', '127.0.0.1')).port) } as Apiserver;
+  // Nest runs the lifecycle hooks of a useValue provider too, so listen() ran the world's ManagedRunnerService.onModuleInit:
+  // it started the worker, which every ensure and switch then kicks, and the signed-in pass. Their passes reconciled the
+  // mappings the cases drive by hand, on the real clock and under the same lease holder, and now and then took a step
+  // first (a case read SUPERSEDED where it drove FAILED). Every pass here is the case's own.
+  await w.service.onModuleDestroy();
+  const server ={ port: Number(new globalThis.URL((await app.getUrl()).replace('[::1]', '127.0.0.1')).port) } as Apiserver;
   t.after(async () => {
     await app.close().catch(() => undefined);
     await db.$disconnect().catch(() => undefined);

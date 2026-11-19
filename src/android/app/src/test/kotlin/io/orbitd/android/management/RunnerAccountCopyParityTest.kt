@@ -38,6 +38,8 @@ class RunnerAccountCopyParityTest {
             "runnerDefaultUseAgainFailed" to RunnerAccountCopy.useAgainFailed("{name}"),
             "runnerAccountInUseOne" to RunnerAccountCopy.inUseOne("{engine}"),
             "runnerAccountInUseMany" to RunnerAccountCopy.inUseMany("{engine}", 7).replace("7", "{count}"),
+            "runnerAccountMovingOne" to RunnerAccountCopy.movingOne("{engine}"),
+            "runnerAccountMovingMany" to RunnerAccountCopy.movingMany("{engine}", 7).replace("7", "{count}"),
             "RUNNER_ACCOUNT_IN_USE_OPEN" to RunnerAccountCopy.IN_USE_OPEN,
             "RUNNER_ACCOUNT_IN_USE_RUNNING" to RunnerAccountCopy.IN_USE_RUNNING,
             "RUNNER_ACCOUNT_IN_USE_WAITING" to RunnerAccountCopy.IN_USE_WAITING,

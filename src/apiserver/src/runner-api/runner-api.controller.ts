@@ -3,8 +3,10 @@ import { appendRunQuestionContext, questionRecipient, RUN_QUESTION_PREFIX } from
 import { DRAIN_SKIPS_HELD, translationLanguages, turnTranslationOf } from '../sessions/turn-translation';
 import { isRunNotifyTurn, runNotifyContent } from '../sessions/run-notify';
 import { acceptedFinalizeBranch, codelessClaimFields } from '../sessions/codeless-checkout';
-import { readMergeRecovery, mergeRecoveryReady, RUNNER_RESTART_INTERRUPT_REASON, RUNNER_UPDATE_INTERRUPT_REASON, type MergeRecovery } from '@orbit/shared';
+import { CONDITION_PROBE_CAPABILITY, readMergeRecovery, mergeRecoveryReady, RUNNER_RESTART_INTERRUPT_REASON, RUNNER_UPDATE_INTERRUPT_REASON, type MergeRecovery } from '@orbit/shared';
 import { OWNER_SECRET_CAPABILITY, OwnerSecretsService } from '../owner-requests/owner-secrets.service';
+import { ConditionsService } from '../conditions/conditions.service';
+import { GithubWorkspaceService } from '../github/github-workspace.service';
 import {
   BadRequestException,
   Body,
@@ -55,6 +57,7 @@ import { FileInterceptor } from '@nestjs/platform-express';
 import { CreatorType, Prisma, RunStatus, TaskStatus, type Runner } from '@prisma/client';
 import { randomUUID } from 'crypto';
 import { PLAN_USAGE_CAS_ATTEMPTS, storeHeartbeatPlanUsage } from './codex-reset-plan-usage';
+import { latestAgentToolsReport } from './agent-tools-report';
 import { withActiveSessions } from '../providers/active-sessions';
 import { accountAfterSignOut, accountAfterUsageLimit, accountAfterUsageLimitAt, accountSwitchNotice, runAccount, waitsForWarmCache } from '../providers/plan-usage-accounts';
 import {
@@ -118,6 +121,7 @@ import {
   RunnerHeartbeatRequest,
   RunnerHeartbeatResponse,
   AccountRemoveCommand,
+  AccountRemoveMove,
   AccountRemoveResult,
   CodexAccountRemoveResult,
   InstallCommand,
@@ -184,6 +188,7 @@ import {
   type ExternalMessageFrom,
   type OrbitMessageFrom,
   type SessionMessageFrom,
+  CLONE_WORKDIR_CAPABILITY,
 } from '@orbit/shared';
 import { lastProviderByWorkspace, withProviderSeed } from '../workspaces/workspace-provider';
 import type { TaskRunsWith } from '../workspaces/start-anchor';
@@ -314,6 +319,7 @@ import {
   takeJobOffNextTurnQueue,
   undeliveredWakeTurn,
 } from './background-job-wake';
+import { forwardedDescription, handoffSuccessorOf } from './handoff-wake-forward';
 import { settleUnrunWakeTurns, signalDrainedWakeups, type DrainedWakeupDrop } from './wake-turn-withdraw';
 import {
   appendScheduledWakeupContext,
@@ -563,6 +569,8 @@ import { ownBackgroundJobSessionIds, sanitizeBackgroundJobSessionIds } from '../
 import {
   CHECK_ONLY_REFUSED_MESSAGE,
   checkOnlyRefusesApproval,
+  scheduleRunDeniesApproval,
+  checkOnlyRuleCoversApproval,
   runAccessLevel,
   scheduleRunAgentFields,
   scheduleRunPermissionMode,
@@ -578,6 +586,9 @@ export const LOGIN_RELAY_TIMEOUT_MS = 11 * 60_000;
 // measured, docs/cursor-runtime-contract.md §9) and then gives up by itself, which is what tells the
 // runner the link expired. Its sign-in is not swept before that: this must stay >= the runner's own
 // wait for it.
+/** How long an account removal waits for the sessions it moved off the account to leave it: a running
+ *  turn moves once it ends (RunnerApiController.applyAccountRemoveResult). */
+const ACCOUNT_REMOVE_MOVE_TIMEOUT_MS = 6 * 60 * 60_000;
 export const CURSOR_LOGIN_RELAY_TIMEOUT_MS = 30 * 60_000;
 
 /** How long a sign-in of `engine` may stay in flight before it is swept as timed out. */
@@ -907,6 +918,7 @@ const INGESTED_SESSION_COLUMNS: Record<string, { column: string; type: 'text' | 
   runningBgJobs: { column: 'running_bg_jobs', type: 'text[]' },
   runningSubagents: { column: 'running_subagents', type: 'text[]' },
   runningBgJobActivity: { column: 'running_bg_job_activity', type: 'jsonb' },
+  agentTools: { column: 'agent_tools', type: 'jsonb' },
 };
 
 /** A value of an ingested Session column as text, or undefined when it is not one writeCallSessions carries. */
@@ -1684,11 +1696,18 @@ export class RunnerApiController {
      */
     @Optional() private readonly mainCheckout?: MainCheckoutService,
     /**
+     * GitHub workspaces' clones (github/github-workspace.service.ts, docs/github-workspace-design.md §5.4): the reports
+     * a heartbeat brings are applied, and every full answer to a runner that declares clone-workdir/v1 lists what it is
+     * to clone. `@Optional()` like the rest: without it nothing is applied and nothing is listed.
+     */
+    @Optional() private readonly githubWorkspaces?: GithubWorkspaceService,
+    /**
      * A coordinator's handoff (projects/coordinator-handoff.service.ts): the end of its note turn is
      * settled from turnComplete. `@Optional()` like the rest: without it a note turn's end is settled
      * by the handoff sweep instead.
      */
     @Optional() private readonly coordinatorHandoffs?: CoordinatorHandoffService,
+    @Optional() private readonly conditions?: ConditionsService,
   ) {
     this.files = files ?? new FilesService(prisma);
   }
@@ -2635,7 +2654,33 @@ export class RunnerApiController {
         unwritten.add('agentDirProbes');
       }
     }
+    // What the runner read for its conditions (docs/condition-triggers-design.md §4.2): stored and evaluated for a
+    // condition whose workspace this runner serves, refused for any other (conditions.service.ts intake).
+    if (this.conditions && Array.isArray(dto?.conditionSamples) && dto.conditionSamples.length > 0) {
+      try {
+        await this.conditions.intake({ id: runner.id, ownerId: updated.ownerId }, dto.conditionSamples);
+      } catch (error) {
+        this.logger.warn(`condition samples of runner ${runner.id} were not taken: ${error instanceof Error ? error.message : String(error)}`);
+        unwritten.add('conditionSamples');
+      }
+    }
+    // Where each clone the runner was asked for stands (§5.4): moves this runner's own GitHub workspaces only, before
+    // the answer below lists what is still to clone, so a clone reported done is not handed out again.
+    if (this.githubWorkspaces && Array.isArray(dto?.cloneReports) && dto.cloneReports.length > 0) {
+      try {
+        await this.githubWorkspaces.applyCloneReports({ id: runner.id, ownerId: updated.ownerId }, dto.cloneReports);
+      } catch {
+        // A report not applied is sent again by the runner until its clone is no longer listed.
+        unwritten.add('cloneReports');
+      }
+    }
+    let cloneRequests: RunnerHeartbeatResponse['cloneRequests'];
+    if (this.githubWorkspaces && runnerSupportsCapability(capabilities, CLONE_WORKDIR_CAPABILITY)) {
+      // A read that fails leaves the field out, which the runner reads as "nothing stated", never as "stop every clone".
+      cloneRequests = await this.githubWorkspaces.cloneRequestsFor(runner.id).catch(() => undefined);
+    }
     let cancelSessionIds: string[] = [];
+    let keepWorkSessionIds: string[] = [];
     let mergeRequests: RunnerHeartbeatResponse['mergeRequests'] = [];
     let commitRequests: RunnerHeartbeatResponse['commitRequests'] = [];
     let artifactRequests: RunnerHeartbeatResponse['artifactRequests'] = [];
@@ -2644,6 +2689,7 @@ export class RunnerApiController {
     let accountRemoveRequest: RunnerHeartbeatResponse['accountRemoveRequest'];
     let installRequest: RunnerHeartbeatResponse['installRequest'];
     let agentDirs: RunnerHeartbeatResponse['agentDirs'] = [];
+    let conditionProbes: RunnerHeartbeatResponse['conditionProbes'];
     let repoCleanupRequest: RunnerHeartbeatResponse['repoCleanupRequest'];
     let claudeHistoryRequest: RunnerHeartbeatResponse['claudeHistoryRequest'];
     let dirProbeRequest: RunnerHeartbeatResponse['dirProbeRequest'];
@@ -2681,10 +2727,18 @@ export class RunnerApiController {
       // engine names itself. An old runner handed the generic field would remove a path under its
       // own codex-accounts that never existed and report done.
       if (removeRequest?.engine === 'codex' || removeRequest === undefined) {
-        // The codex-named field keeps the exact shape it always had: an older runner reads only
-        // account and attempt, and the engine it is about is the field's own name.
+        // The codex-named field keeps the shape it always had: an older runner reads only account and
+        // attempt, and the engine it is about is the field's own name. `moves` rides along for a runner
+        // that carries sessions with no engine running (runner-go account_cold_move.go); an older one
+        // ignores it.
         codexAccountRemoveRequest =
-          removeRequest === undefined ? undefined : { account: removeRequest.account, attempt: removeRequest.attempt };
+          removeRequest === undefined
+            ? undefined
+            : {
+                account: removeRequest.account,
+                attempt: removeRequest.attempt,
+                ...(removeRequest.moves ? { moves: removeRequest.moves } : {}),
+              };
       } else {
         accountRemoveRequest = removeRequest;
       }
@@ -2704,6 +2758,11 @@ export class RunnerApiController {
           take: 200,
         })
       ).map((a) => ({ agentId: a.id, workDir: a.workDir as string }));
+      // The conditions of this runner's workspaces, the whole list on every full answer, like agentDirs; only to a
+      // runner that declares condition-probe/v1. A read that fails leaves the field out: "keep what you have".
+      if (this.conditions && runnerSupportsCapability(capabilities, CONDITION_PROBE_CAPABILITY)) {
+        conditionProbes = await this.conditions.probesFor(runner.id).catch(() => undefined);
+      }
       // Last, after everything this beat owes the runner anyway. It is the one entry here whose
       // request survives being skipped — the timestamp stays on the row until a beat claims it —
       // so a hiccup while draining it costs a heartbeat, where a hiccup IN it, drained earlier,
@@ -2721,6 +2780,13 @@ export class RunnerApiController {
     } catch {
       // A transient DB hiccup shouldn't fail the heartbeat; all arrive next cycle.
     }
+    // Which of those cancels are a coordinator handing over (RealtimeService.keepingWork), read apart: a read that
+    // fails leaves the field out and drops nothing else, and the runner still learns it from the session's end turn.
+    // A read that answers nothing at all is read as none kept, as one that throws is.
+    keepWorkSessionIds = await Promise.resolve()
+      .then(() => this.realtime.keepingWork(cancelSessionIds))
+      .then((ids) => (Array.isArray(ids) ? ids : []))
+      .catch(() => []);
     // The secrets this runner may hold (design §6.3). A read that fails leaves both fields out, which the runner reads
     // as "nothing stated" — never as "remove everything".
     let secretReconcile: Awaited<ReturnType<OwnerSecretsService['reconcileFor']>> | undefined;
@@ -2757,6 +2823,7 @@ export class RunnerApiController {
     // runner's floor is the owner's too when set; otherwise its storage answer's default.
     const answer: RunnerHeartbeatResponse & { linkHints?: RunnerLinkHints } = {
       cancelSessionIds,
+      ...(keepWorkSessionIds.length > 0 ? { keepWorkSessionIds } : {}),
       leaseLostSessionIds: ownershipLostSessionIds,
       maxConcurrent: updated.maxConcurrent,
       minFreeDiskMb: managedStorage ? managedStorage.minFreeDiskMb : updated.minFreeDiskMb,
@@ -2768,6 +2835,7 @@ export class RunnerApiController {
       accountRemoveRequest,
       installRequest,
       agentDirs,
+      ...(conditionProbes ? { conditionProbes } : {}),
       repoCleanupRequest,
       refreshModelCatalog,
       checkSelfUpdate,
@@ -2803,6 +2871,8 @@ export class RunnerApiController {
       ...(forkSnapshotsOpen ? { forkSnapshotsOpen } : {}),
       // Only to a runner that declared owner-secret/v1: ids and expiries, never a value.
       ...(secretReconcile ?? {}),
+      // Only to a runner that declared clone-workdir/v1: every GitHub workspace it is to clone, URLs without a credential.
+      ...(cloneRequests ? { cloneRequests } : {}),
       // Only on a link call, which the gateway takes it out of: an HTTPS response keeps its shape.
       ...(linkHints ? { linkHints } : {}),
     };
@@ -3190,7 +3260,8 @@ export class RunnerApiController {
    * The snapshots this runner's open forked tasks start from (docs/task-fork-from-session-design.md §2.6, SR55): the
    * distinct `fork_sha` of every OPEN or IN_PROGRESS task forked on this runner. The runner deletes each keep-alive ref
    * whose snapshot is not listed, so a task that closed lets its snapshot go. Only to a process that declares
-   * task-fork/v1; undefined otherwise, which deletes nothing. Reads only, through the owner's status index.
+   * task-fork/v1; undefined otherwise, which deletes nothing. Reads only, through `task_fork_snapshot_idx` (1130),
+   * which holds only forked tasks: the owner's status index is no entry when one owner holds nearly every task.
    */
   private async forkSnapshotsOpen(
     ownerId: string,
@@ -3699,16 +3770,22 @@ export class RunnerApiController {
         codexAccountRemoveAccount: true,
         codexAccountRemoveStatus: true,
         codexAccountRemoveAt: true,
+        codexAccountRemoveSessions: true,
       },
     });
     if (r?.codexAccountRemoveStatus !== 'pending') return undefined;
     const started = r.codexAccountRemoveAt?.getTime() ?? 0;
-    if (started && Date.now() - started > LOGIN_RELAY_TIMEOUT_MS) {
+    // A removal waiting on its sessions to move to another account waits out their turns, too.
+    const moving = (r.codexAccountRemoveSessions?.length ?? 0) > 0;
+    if (started && Date.now() - started > (moving ? ACCOUNT_REMOVE_MOVE_TIMEOUT_MS : LOGIN_RELAY_TIMEOUT_MS)) {
       await this.prisma.runner.update({
         where: { id: runnerId },
         data: {
           codexAccountRemoveStatus: 'failed',
-          codexAccountRemoveMessage: 'This runner did not answer — try again.',
+          codexAccountRemoveMessage: moving
+            ? 'Its sessions did not leave this account in time — try again once their turns finish.'
+            : 'This runner did not answer — try again.',
+          codexAccountRemoveSessions: [],
         },
       });
       return undefined;
@@ -3717,7 +3794,27 @@ export class RunnerApiController {
     if (!account) return undefined;
     // A row written before accounts-per-engine meant Codex.
     const engine = (r.accountRemoveEngine as LoginCommand['engine']) ?? 'codex';
-    return { engine, account, attempt: r.codexAccountRemoveAt?.toISOString() ?? '' };
+    const moves = moving ? await this.accountRemoveMoves(runnerId, engine, account, r.codexAccountRemoveSessions ?? []) : [];
+    return { engine, account, attempt: r.codexAccountRemoveAt?.toISOString() ?? '', ...(moves.length > 0 ? { moves } : {}) };
+  }
+
+  /**
+   * Where each session a removal moved off `account` now is: the account its row names for `engine`,
+   * which moveOffRemovedAccount wrote. A session with no engine running takes its reload only at its
+   * next claim, so the runner carries it there itself (runner-go account_cold_move.go). Only this
+   * runner's sessions, and only those moved to another account.
+   */
+  private async accountRemoveMoves(runnerId: string, engine: string, account: string, sessionIds: string[]): Promise<AccountRemoveMove[]> {
+    if (!isAccountEngine(engine) || sessionIds.length === 0) return [];
+    const column = ACCOUNT_CHOICE[engine];
+    const rows = (await this.prisma.session.findMany({
+      where: { id: { in: sessionIds }, assignedRunnerId: runnerId },
+      select: { id: true, [column]: true },
+    })) as unknown as Array<{ id: string } & Record<string, unknown>>;
+    return rows.flatMap((row) => {
+      const to = row[column];
+      return typeof to === 'string' && to !== account ? [{ sessionId: row.id, account: to }] : [];
+    });
   }
 
   /**
@@ -3781,23 +3878,41 @@ export class RunnerApiController {
     // Of the ids a refusal names, only sessions this runner runs are kept: a machine's report must not put
     // another account's session ids on its row, even though the page reads only the viewer's back.
     const named = status === 'failed' ? accountInUseSessionIds(body) : [];
-    const sessionIds = named.length === 0 ? [] : (await this.prisma.session.findMany({
+    let sessionIds = named.length === 0 ? [] : (await this.prisma.session.findMany({
       where: { id: { in: named }, assignedRunnerId: runnerId },
       select: { id: true },
     })).map((row) => row.id).sort((x, y) => named.indexOf(x) - named.indexOf(y));
+    // The removal this report is about, engine included: a report from a runner that carried out a
+    // Claude removal must not close out a Codex one. A row asked for before this build (no engine
+    // stored) therefore matches nothing — the relay's window then fails it with "This runner did not
+    // answer — try again", which for a request the previous build handed over is the honest outcome,
+    // and the person who pressed it can press it again.
+    const asked = {
+      id: runnerId,
+      codexAccountRemoveStatus: 'pending',
+      accountRemoveEngine: engine,
+      ...(body.account ? { codexAccountRemoveAccount: body.account } : {}),
+      ...(attempt ? { codexAccountRemoveAt: attempt } : {}),
+    };
+    // Sessions in the account do not keep it: each moves to another of the runner's accounts, and the
+    // removal stays pending — redelivered every heartbeat — until the last has left (an idle one at its
+    // reload, a running one after its turn). Only those that cannot leave refuse it.
+    if (sessionIds.length > 0 && this.sessions && isAccountEngine(engine)) {
+      const row = await this.prisma.runner.findFirst({ where: asked, select: { codexAccountRemoveAccount: true } });
+      if (row?.codexAccountRemoveAccount) {
+        const stuck = await this.sessions.moveOffRemovedAccount(runnerId, engine, row.codexAccountRemoveAccount, sessionIds);
+        if (stuck.length === 0) {
+          const { count } = await this.prisma.runner.updateMany({
+            where: asked,
+            data: { codexAccountRemoveMessage: null, codexAccountRemoveSessions: sessionIds },
+          });
+          return { ok: true, applied: count > 0 };
+        }
+        sessionIds = stuck;
+      }
+    }
     const { count } = await this.prisma.runner.updateMany({
-      where: {
-        id: runnerId,
-        codexAccountRemoveStatus: 'pending',
-        // The removal this report is about, engine included: a report from a runner that carried
-        // out a Claude removal must not close out a Codex one. A row asked for before this build
-        // (no engine stored) therefore matches nothing — the relay's window then fails it with
-        // "This runner did not answer — try again", which for a request the previous build handed
-        // over is the honest outcome, and the person who pressed it can press it again.
-        accountRemoveEngine: engine,
-        ...(body.account ? { codexAccountRemoveAccount: body.account } : {}),
-        ...(attempt ? { codexAccountRemoveAt: attempt } : {}),
-      },
+      where: asked,
       data: {
         codexAccountRemoveStatus: status,
         // Only a failure carries one; a success clears whatever the last one said.
@@ -4289,17 +4404,14 @@ export class RunnerApiController {
           (workspace?.disallowedTools as string[] | null) ?? [],
           runAccessLevel(s.scheduleRun),
           provider,
-          runner.capabilities,
         ),
         // A CHECK_ONLY run's Plan runs Codex in its read-only sandbox (design §6.2); absent for every other session.
         ...scheduleRunAgentFields(runAccessLevel(s.scheduleRun)),
         permissionMode: normalizeBuiltinPermissionMode(
           provider,
           runnerModel,
-          // A CHECK_ONLY run on Claude Code asks only on a runner that closes the rest (schedule-access.ts).
-          scheduleRunPermissionMode(
-            permissionMode, runAccessLevel(s.scheduleRun), provider, runner.capabilities,
-          ),
+          // A scheduled run on Claude Code runs in Auto, whatever its level (schedule-access.ts).
+          scheduleRunPermissionMode(permissionMode, runAccessLevel(s.scheduleRun), provider),
           customRow?.enabled === true,
           runner.runsAsRoot,
           s.assignedRunner?.modelCatalog,
@@ -6165,11 +6277,16 @@ export class RunnerApiController {
     if (existing) return { id: existing.id, status: existing.status as ApprovalStatus };
     // A scheduled CHECK_ONLY run on Claude Code may ask only about a shell command (schedule-access.ts): anything
     // else it asks about is answered DENY here and never becomes a card, a Waiting on you item or a push.
-    const refused = await this.checkOnlyRunRefuses(session, dto);
+    const accessLevel = await this.scheduledRunLevel(session);
+    const checkOnly = accessLevel === 'CHECK_ONLY';
+    const deniedByLevel = !!accessLevel && scheduleRunDeniesApproval(
+      accessLevel, await sessionEngine(this.prisma, session), stripNul(dto.toolName), dto.input,
+    );
+    const refused = deniedByLevel || checkOnly && checkOnlyRefusesApproval('CHECK_ONLY', await sessionEngine(this.prisma, session), stripNul(dto.toolName), stripNul(dto.backgroundJobId ?? ''));
     // A call this workspace has permanently allowed is answered here instead of waking a human
     // to re-answer a settled question. Recorded as a decided approval with no decider, which is
     // what makes an automatic allow tellable from a human one afterwards.
-    const autoAllowed = existing || refused ? false : await this.standingGrantCovers(session, dto);
+    const autoAllowed = existing || refused ? false : await this.standingGrantCovers(session, dto, checkOnly);
     // The same shape for a coordinator's task creates in its own project when nobody has started it
     // (the start card reviews them) or its Automatic is on (the coordinator decides them): none of
     // them is a question on its own (`unstarted-project-create.ts`).
@@ -6208,7 +6325,8 @@ export class RunnerApiController {
       // 22P05, and the runner retries a 5xx forever. An approval that cannot be written is an
       // agent that waits for a card nobody can ever be shown.
       toolName: stripNul(dto.toolName),
-      input: await this.cardInput(session.ownerId, stripNul(dto.toolName), dto.input, { runnerId: runner.id, sessionId },
+      input: await this.cardInput(session.ownerId, stripNul(dto.toolName),
+        checkOnly ? { ...(dto.input as object), orbitScheduleCheckOnly: true } : dto.input, { runnerId: runner.id, sessionId },
         dto.acceptsStartAfterCreate === true),
       // Empty is no id at all, as the lookup above reads it. Stored as '', the session's second such
       // card would fail on approval_session_id_tool_use_id_key, and the runner answers a card it
@@ -6220,7 +6338,9 @@ export class RunnerApiController {
       ...(allowedMessage
         ? { status: 'ALLOWED', decidedAt: new Date(), message: allowedMessage }
         : {}),
-      ...(refused ? { status: 'DENIED', decidedAt: new Date(), message: CHECK_ONLY_REFUSED_MESSAGE } : {}),
+      ...(refused ? { status: 'DENIED', decidedAt: new Date(), message: deniedByLevel && !checkOnly
+        ? 'Not run: this tool or command is denied by the scheduled run’s access level.'
+        : CHECK_ONLY_REFUSED_MESSAGE } : {}),
     };
     let held = false;
     let fallback: string | null = null;
@@ -6276,9 +6396,9 @@ export class RunnerApiController {
       else void this.push.notifyApprovalRequest(sessionId, approval.id, approval.toolName);
       // Settings › Translation (3A, reply-translation.ts): the card goes out in the agent's words at once, and again in
       // the owner's language once it is translated.
-      if (cardHasText(approval.input)) {
+      if (cardHasText(approval.input, approval.toolName)) {
         const langs = await translationLanguages(this.prisma, session.ownerId).catch(() => null);
-        translateApprovalCard(this.translationDeps(), sessionId, approval.id, approval.input, langs);
+        translateApprovalCard(this.translationDeps(), sessionId, approval.id, approval.input, langs, approval.toolName);
       }
     }
     return { id: approval.id, status: approval.status as ApprovalStatus };
@@ -6357,21 +6477,18 @@ export class RunnerApiController {
     }
   }
 
-  /** Whether this session serves a scheduled CHECK_ONLY run whose engine may not ask about this call (schedule-access.ts). */
-  private async checkOnlyRunRefuses(
+  /** The level this session's scheduled run started with, even if its schedule has since changed. */
+  private async scheduledRunLevel(
     session: SessionEngineFacts & { scheduleRunId: string | null },
-    dto: ApprovalCreateRequest,
-  ): Promise<boolean> {
-    if (!session.scheduleRunId) return false;
+  ): Promise<ReturnType<typeof runAccessLevel>> {
+    if (!session.scheduleRunId) return null;
     // The level the run started with, not the schedule's now: moving the schedule to OPEN_PR, or deleting it, mid-run
     // does not open this check to cards for other tools (runAccessLevel).
     const run = await this.prisma.scheduleRun.findUnique({
       where: { id: session.scheduleRunId },
       select: { accessLevel: true, schedule: { select: { accessLevel: true } } },
     });
-    if (runAccessLevel(run) !== 'CHECK_ONLY') return false;
-    return checkOnlyRefusesApproval('CHECK_ONLY', await sessionEngine(this.prisma, session), stripNul(dto.toolName),
-      stripNul(dto.backgroundJobId ?? ''));
+    return runAccessLevel(run);
   }
 
   /** The MCP tool name a single create asks under — the card this controller enriches with a preview. */
@@ -6387,6 +6504,7 @@ export class RunnerApiController {
   private async standingGrantCovers(
     session: SessionEngineFacts & { workspaceId: string | null },
     dto: ApprovalCreateRequest,
+    checkOnly = false,
   ): Promise<boolean> {
     if (!session.workspaceId) return false;
     // Deleting a runner or a workspace is asked every time; the delete routes refuse a card no person
@@ -6405,11 +6523,12 @@ export class RunnerApiController {
     // It is the engine that will run the command, so the grant is judged by the session's own —
     // not by the label its credential was given. One nobody can place is asked about.
     const runtime = backgroundJob ? null : await sessionEngine(this.prisma, session);
-    if (!backgroundJob && (!runtime || !serverMatchedRuntime(runtime))) return false;
+    if (!checkOnly && !backgroundJob && (!runtime || !serverMatchedRuntime(runtime))) return false;
     const rules = await this.prisma.workspacePermissionRule.findMany({
       where: { workspaceId: session.workspaceId },
-      select: { toolName: true, ruleContent: true },
+      select: { toolName: true, ruleContent: true, fromScheduleRun: true },
     });
+    if (checkOnly) return checkOnlyRuleCoversApproval(dto, rules);
     return runtime
       ? ruleCoversApproval(runtime, dto.toolName, dto.input, rules)
       : ruleCoversBackgroundJobCard(dto.input, rules);
@@ -6476,7 +6595,9 @@ export class RunnerApiController {
    *
    * Wakes nobody has been handed yet are one turn: a wake arriving while one is queued files itself
    * onto it (MERGED). A session that has ended is neither woken nor revived (DROPPED), answered with a
-   * 200 because there is nothing for the runner to try again.
+   * 200 because there is nothing for the runner to try again — unless it ended by a COMPLETED coordinator
+   * handoff: then the wake is filed onto the last successor of the handoff chain, its description saying the
+   * previous coordinator started the job (handoff-wake-forward.ts).
    *
    * A job's exit is written into the turn the session is running, when it is running one this runtime
    * and runner can steer (`steerIfLive`): the agent reads it at its next tool call instead of after
@@ -6503,38 +6624,63 @@ export class RunnerApiController {
     const receivedAt = new Date();
     await this.assertSessionOwnership(sessionId, runner.id, (runner as { ownerId?: string }).ownerId);
     if (!this.sessions) throw new Error('background wakes are filed through SessionsService, which this controller was built without');
-    const clientTurnId = `${BACKGROUND_WAKE_TURN_PREFIX}${dto.wakeId}`;
-    let merged = false;
     try {
-      const turn = await this.sessions.createTurn(
-        runner.ownerId,
-        sessionId,
-        { clientTurnId, content: '', intent: 'NEXT_TURN' },
-        {
-          steerIfLive: dto.trigger === 'exit',
-          coalesce: async (tx, session, route) => {
-            if (sessionHasEnded(session)) throw new SessionNotSendable('the session has ended');
-            if (dto.trigger !== 'exit' && (await jobExitFiled(tx, sessionId, dto.jobId))) {
-              throw new StaleBackgroundWake(dto.jobId, dto.trigger);
-            }
-            const queued = await undeliveredWakeTurn(tx, sessionId, route);
-            merged = queued !== null;
-            const filedOn = queued?.clientTurnId ?? clientTurnId;
-            await fileBackgroundJobWake(tx, sessionId, filedOn, dto, receivedAt);
-            if (route.kind === 'steer') await takeJobOffNextTurnQueue(tx, sessionId, filedOn, dto.jobId);
-            return queued;
-          },
-        },
-      );
-      return { outcome: merged ? 'MERGED' : 'ENQUEUED', turnId: turn.turnId };
+      return await this.fileBackgroundWakeOn(runner.ownerId, sessionId, dto, receivedAt);
     } catch (e) {
       // Ended (SessionNotSendable), no longer there to wake (NotFoundException), or output or a stall
       // its job's exit already reported (StaleBackgroundWake).
+      if (e instanceof StaleBackgroundWake) return { outcome: 'DROPPED' };
+      if (!(e instanceof SessionNotSendable || e instanceof NotFoundException)) throw e;
+    }
+    // The session has ended. One that ended by a COMPLETED coordinator handoff forwards the wake to its last
+    // successor, naming that the previous coordinator started the job (docs/coordinator-handoff-v2-design.md
+    // §1); a handoff still HANDING_OVER answers 503 (HandoffInFlight), which the runner asks again for. A
+    // session that ended any other way drops it.
+    const successor = await handoffSuccessorOf(this.prisma, sessionId);
+    if (!successor) return { outcome: 'DROPPED' };
+    try {
+      return await this.fileBackgroundWakeOn(runner.ownerId, successor, {
+        ...dto,
+        description: forwardedDescription(dto.description, dto.command),
+      }, receivedAt);
+    } catch (e) {
       if (e instanceof SessionNotSendable || e instanceof NotFoundException || e instanceof StaleBackgroundWake) {
         return { outcome: 'DROPPED' };
       }
       throw e;
     }
+  }
+
+  /** File one background job's wake as a turn of `sessionId`: its own session, or the successor a handoff forwards it to. */
+  private async fileBackgroundWakeOn(
+    ownerId: string,
+    sessionId: string,
+    dto: BackgroundWakeDto,
+    receivedAt: Date,
+  ): Promise<BackgroundWakeReceipt> {
+    const clientTurnId = `${BACKGROUND_WAKE_TURN_PREFIX}${dto.wakeId}`;
+    let merged = false;
+    const turn = await this.sessions!.createTurn(
+      ownerId,
+      sessionId,
+      { clientTurnId, content: '', intent: 'NEXT_TURN' },
+      {
+        steerIfLive: dto.trigger === 'exit',
+        coalesce: async (tx, session, route) => {
+          if (sessionHasEnded(session)) throw new SessionNotSendable('the session has ended');
+          if (dto.trigger !== 'exit' && (await jobExitFiled(tx, sessionId, dto.jobId))) {
+            throw new StaleBackgroundWake(dto.jobId, dto.trigger);
+          }
+          const queued = await undeliveredWakeTurn(tx, sessionId, route);
+          merged = queued !== null;
+          const filedOn = queued?.clientTurnId ?? clientTurnId;
+          await fileBackgroundJobWake(tx, sessionId, filedOn, dto, receivedAt);
+          if (route.kind === 'steer') await takeJobOffNextTurnQueue(tx, sessionId, filedOn, dto.jobId);
+          return queued;
+        },
+      },
+    );
+    return { outcome: merged ? 'MERGED' : 'ENQUEUED', turnId: turn.turnId };
   }
 
   /**
@@ -9051,6 +9197,8 @@ export class RunnerApiController {
       // it: a turn the runtime started for itself never reaches /turn-complete, so the session
       // stays AWAITING_INPUT for its whole duration.
       const engineTurnActive = engineTurnActiveAfter(durable);
+      // The session's Agent Tools report (Session.agentTools): the newest one in the batch, kept whole.
+      const agentTools = latestAgentToolsReport(durable);
       // What the engine is doing in a stretch where it produces nothing else — see
       // Session.enginePhase. Reduced separately from engineTurnActive above because the two
       // answer different questions off overlapping events: a compaction is not a turn, and the
@@ -9075,6 +9223,7 @@ export class RunnerApiController {
         ...(context ? { contextTokens: context.tokens } : {}),
         ...(context?.window ? { contextWindow: context.window } : {}),
         ...(engineTurnActive !== undefined ? { engineTurnActive } : {}),
+        ...(agentTools ? { agentTools: agentTools as Prisma.InputJsonValue } : {}),
         // null is a decision here (the phase is over), undefined is "this batch said nothing
         // about it" — so only the first may be written over the stored value.
         ...(enginePhase !== undefined ? { enginePhase } : {}),

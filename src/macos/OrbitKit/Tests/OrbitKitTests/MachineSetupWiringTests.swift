@@ -53,10 +53,10 @@ final class MachineSetupWiringTests: XCTestCase {
     func testTheDrawerDrawsTheRowAfterEveryWorkspace() throws {
         let shell = try app("Views/CompactShell.swift")
         let rows = try slice(shell, from: "private var agentsRows: some View {", to: "private func unreachableRow(")
-        try assertInOrder(rows, ["ForEach(agents.orderedItems)", "ForEach(agents.machinesToSetUp)", "setUpRow(machine)"],
+        try assertInOrder(rows, ["ForEach(agents.orderedItems)", "ForEach(agents.machinesToSetUp)", "setUpRow(machine, separates:"],
                           "the Set up rows come last")
         try assertInOrder(rows, ["model.drawerDestination == .machine(runnerID: machine.id)",
-                                 "open(.machine(runnerID: machine.id))", "Image(systemName: \"folder.badge.plus\")",
+                                 "open(.machine(runnerID: machine.id))", "Image(systemName: machine.isManaged ? \"cloud\" : \"folder.badge.plus\")",
                                  "MachineSetupCopy.setupTitle(machine: machine.name)", ".foregroundStyle(Color.accentColor)"],
                           "the row is board 03's")
     }
@@ -70,14 +70,15 @@ final class MachineSetupWiringTests: XCTestCase {
         // if/else or a second ForEach under the section is the row shape the outline list's reload aborted on.
         let rows = try slice(sidebar, from: "private func workspaceRows(", to: "private func setUpRow(")
         try assertInOrder(rows, ["ForEach(AgentListLogic.sidebarRows(agents?.orderedItems ?? [], machines: agents?.machinesToSetUp ?? []))",
-                                 "case .agent(let agent):", "case .setUp(let machine):", "setUpRow(machine)",
+                                 "case .agent(let agent):", "case .setUp(let machine):", "setUpRow(machine, separates:",
                                  ".tag(SidebarSelection.machine(machine.id))", "case .placeholder:"],
                           "the workspaces, then the machines to set up")
         XCTAssertEqual(rows.components(separatedBy: "ForEach(").count - 1, 1, "one ForEach under the section")
         XCTAssertFalse(rows.contains("} else {"), "no if/else swapping the placeholder for the rows")
-        let row = try slice(main, from: "private func setUpRow(_ machine: MachineToSetUp) -> some View {", to: "\n    }\n")
+        let row = try slice(main, from: "private func setUpRow(_ machine: MachineToSetUp, separates: Bool) -> some View {", to: "\n    }\n")
         try assertInOrder(row, ["model.machineDraftRunnerID == machine.id ? AnyShapeStyle(.primary) : AnyShapeStyle(Color.accentColor)",
-                                "MachineSetupCopy.setupTitle(machine: machine.name)", "Image(systemName: \"folder.badge.plus\")"],
+                                "MachineSetupCopy.setupTitle(machine: machine.name)",
+                                "Image(systemName: machine.isManaged ? \"cloud\" : \"folder.badge.plus\")"],
                           "tinted, until it is the row selected")
         // The selection is ONE stored value; its actions run in `.onChange`, after the List's update.
         XCTAssertTrue(main.contains("SidebarLogic.selection(section: model.selectedSection, agentID: model.selectedAgentID,"),
@@ -161,7 +162,7 @@ final class MachineSetupWiringTests: XCTestCase {
         let press = try slice(setup, from: "func create(", to: "\n    }\n")
         try assertInOrder(press, ["guard !creating else { return }", "creating = true", "createError = nil",
                                   "await app.createMachineWorkspace(runnerID: runnerID, folder: pick,",
-                                  "name: name.name(folder: folder))", "creating = false", "createError = why"],
+                                  "name: name.name(folder: followed))", "creating = false", "createError = why"],
                           "one at a time, and a refusal kept")
         XCTAssertTrue(setup.contains("var busy: Bool { creating }"), "the page doesn't move on under a create still out")
     }
@@ -187,16 +188,16 @@ final class MachineSetupWiringTests: XCTestCase {
     func testTheCardIsAFolderAndANameAskedAboutWhereItWouldGo() throws {
         let page = try app("Views/MachineSetupCard.swift")
         let card = try slice(page, from: "private struct MachineSetupCard: View {", to: "private func noAnswer(again:")
-        XCTAssertTrue(card.contains("private var root: String { MachineSetup.newFolderRoot(runner) }"))
-        XCTAssertTrue(card.contains("private var disabled: Bool { offline || !checksFolders }"),
+        XCTAssertTrue(card.contains("private var root: String { MachineSetup.setupFolderRoot(runner, managedState: managedState) }"))
+        XCTAssertTrue(card.contains("private var disabled: Bool { managedState == nil && (offline || !checksFolders) }"),
                       "a machine that can't make a folder can't be typed into")
-        try assertInOrder(card, ["guard !disabled, MachineSetup.isValidNewFolder(folder) else { return nil }",
+        try assertInOrder(card, ["guard managedState == nil, !disabled, MachineSetup.isValidNewFolder(folder) else { return nil }",
                                  "return MachineSetup.newFolderPath(root: root, name: folder)"],
                           "the name's question")
         try assertInOrder(card, ["guard let answer, let question, answer.path == question else { return nil }",
                                  "case .answered(let probe)? = current",
                                  "MachineSetup.newFolderPick(found, name: folder, root: root, machine: machine)",
-                                 "MachineSetup.canCreate(pick: candidate, name: setup.name.name(folder: folder), online: !offline,"],
+                                 "MachineSetup.canCreate(pick: candidate, name: setup.name.name(folder: followed), online: !offline,"],
                           "the folder is picked on the machine's answer to this name")
         try assertInOrder(card, [".task(id: Question(path: question, attempt: attempt)) {",
                                  "await app.probeDir(runnerID: runner.id, path: asked, ask: true)",
@@ -206,16 +207,47 @@ final class MachineSetupWiringTests: XCTestCase {
                                  "MachineSetup.folderLine(folder: folder, createError: setup.createError, found: found,",
                                  "noAnswer { attempt += 1 }"],
                           "the field after its fixed root, and what it says")
-        try assertInOrder(card, ["Text(MachineSetupCopy.SETUP_NAME)", "WorkspaceNameField.placeholder(folder: folder)",
-                                 "setup.name.shown(folder: folder)", "setup.name.edit($0, folder: folder)",
+        try assertInOrder(card, ["Text(MachineSetupCopy.SETUP_NAME)", "WorkspaceNameField.placeholder(folder: followed)",
+                                 "setup.name.shown(folder: followed)", "setup.name.edit($0, folder: followed)",
                                  ".onSubmit { create() }", ".accessibilityLabel(MachineSetupCopy.SETUP_NAME)",
-                                 ".disabled(disabled || setup.creating)", "Button(action: create)",
+                                 ".disabled((fromGithub ? offline : disabled) || setup.creating)", "Button(action: create)",
                                  "if setup.creating { ProgressView()", "Text(MachineSetupCopy.SETUP_CREATE)",
-                                 ".disabled(!canCreate)", "setup.name.line(folder: folder)"],
+                                 ".disabled(!canCreate)", "setup.name.line(folder: followed)"],
                           "the name, with Create workspace beside it")
         for gone in ["SETUP_REGISTER_DIR", "setupOtherFolder", "FolderChoice", "registerDir", "FolderName("] {
             XCTAssertFalse(page.contains(gone), "the card still has \(gone)")
         }
+    }
+
+    /// Board 04 A on the one-field card: under the folder and its Name, an "or" rule and the From GitHub row, locked only
+    /// offline; pressing it swaps the folder field for the repository picker, whose pick the Name follows and Create
+    /// workspace sends; "Type a folder name instead" swaps back. Which is open is kept with the page.
+    func testFromGithubIsARowUnderTheNameThatSwapsTheFolderFieldForThePicker() throws {
+        let page = try app("Views/MachineSetupCard.swift")
+        XCTAssertTrue(page.contains("private var github: GithubIntegration? { app.github?.available == true ? app.github : nil }"),
+                      "offered only where the deployment has a GitHub App")
+        let card = try slice(page, from: "private struct MachineSetupCard: View {", to: "private func noAnswer(again:")
+        try assertInOrder(card, ["if fromGithub { return setup.repository }", "checksFolders: fromGithub || checksFolders"],
+                          "the picked repository is what Create workspace makes, locked only offline")
+        try assertInOrder(card, ["if let github, setup.githubOpen { githubField(github) } else { folderField }", "nameField",
+                                 "if github != nil, !setup.githubOpen {", "githubRow"],
+                          "the picker in the folder field's place, and the row under the Name")
+        let row = try slice(card, from: "@ViewBuilder private var githubRow: some View {", to: "private func githubField(")
+        try assertInOrder(row, ["MachineSetupCopy.SETUP_OR", "setup.githubOpen = true", "MachineSetupCopy.SETUP_FROM_GITHUB",
+                                "SetupNewTag()", "MachineSetupCopy.SETUP_GITHUB_META", ".disabled(offline || setup.creating)"],
+                          "the or rule, then the row")
+        let field = try slice(card, from: "private func githubField(", to: "private func noAnswer(again:")
+        try assertInOrder(field, ["MachineSetupCopy.SETUP_FOLDER", "MachineSetupCopy.SETUP_FROM_GITHUB", "SetupNewTag()",
+                                  "GithubFolderOption(runner: runner, integration: integration,",
+                                  "onCandidate: { setup.repository = $0 }, onEnter: { create() })",
+                                  "MachineSetupCopy.setupGithubDonePath(", "MachineSetupCopy.SETUP_GITHUB_DONE",
+                                  "MachineSetupCopy.SETUP_FOLDER_NAME_INSTEAD", "setup.githubOpen = false", "setup.repository = nil"],
+                          "the picker, what it makes, and the way back")
+        XCTAssertFalse(page.contains("SETUP_USE_REPOSITORY"), "Create workspace sends the clone: no Use button of its own")
+        let model = try app("MachineSetupModel.swift")
+        XCTAssertTrue(model.contains("var githubOpen = false"), "kept with the page, so GitHub's sign-in comes back to it")
+        try assertInOrder(model, ["var followed: String {", "if case .github(let pick)? = repository { return pick.name }",
+                                  "name: name.name(folder: followed)"], "the Name follows the picked repository's folder")
     }
 
     // MARK: the line a created workspace opens with
@@ -225,8 +257,8 @@ final class MachineSetupWiringTests: XCTestCase {
         XCTAssertTrue(view.contains("createdWorkspace: console.createdWorkspaceLine)"))
         XCTAssertTrue(view.contains("case .createdWorkspace(let line):\n            CreatedWorkspaceLineView(line: line, console: console)"))
         let model = try app("ConsoleModel.swift")
-        XCTAssertTrue(model.contains("if session.createdWorkspace == true { madeWorkspace = session.agent }"),
-                      "only the detail moves it: a list row's nil says nothing")
+        XCTAssertTrue(model.contains("if session.createdWorkspace == true {\n            madeWorkspace = session.agent\n            madeWorkspaceReadAt = Date()"),
+                      "only the detail moves it: a list row's nil says nothing; when it was read weighs a clone frame against it")
         let line = try slice(try app("Views/MachineSetupCard.swift"), from: "struct CreatedWorkspaceLineView: View {", to: "private var made: AttributedString")
         try assertInOrder(line, ["if line.live {", "MachineSetupCopy.CREATED_RENAME", "MachineSetupCopy.CREATED_SETTINGS"],
                           "Rename and Settings, while there is a workspace to change")

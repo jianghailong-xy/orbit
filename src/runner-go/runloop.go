@@ -1884,6 +1884,18 @@ func runLoop(cfg *RunnerConfig) (bool, func()) {
 	// in the background, and the answer rides the next heartbeat.
 	agentDirs := newAgentDirProbe(agentDirProbeTimeout)
 	go agentDirs.run(loopCtx)
+	// The GitHub workspaces the control plane asks this runner to clone (clone_workdir.go). A clone that starts or
+	// ends has its work directory probed again and is reported at once. Their credential, and the landing's in
+	// such a checkout, is Orbit's when the machine's own cannot authenticate (github_credential.go).
+	clones := newCloner(loopCtx, cfg.Name, func() {
+		agentDirs.rescan()
+		beatNow()
+	})
+	// Condition probes (condition_probe.go): the heartbeat answer names them, each runs on its own interval, and
+	// what they read rides the next beat.
+	conditions := newConditionProber(loopCtx)
+	setOrbitGitCredentialSource(t.gitCredential)
+	defer setOrbitGitCredentialSource(nil)
 
 	// The root this machine reports as where it keeps checkouts. A fact of the account this
 	// process runs as, so it is resolved once rather than on every beat.
@@ -1978,7 +1990,9 @@ func runLoop(cfg *RunnerConfig) (bool, func()) {
 			}
 			probes := agentDirs.snapshot()
 			resources := machineResources(probes, machineReposRoot)
+			cloneReports, cloneSeq := clones.snapshot()
 			storage.diskResources(&resources)
+			conditionSamples := conditions.take()
 			resp, supervisors, err := sendHeartbeatCycle(pool, telemetry, HeartbeatRequest{
 				Status: "ONLINE", Version: version,
 				LeaseOwner: t.leaseOwner, Draining: draining,
@@ -1994,8 +2008,12 @@ func runLoop(cfg *RunnerConfig) (bool, func()) {
 				ReposRoot:            machineReposRoot,
 				SelfUpdate:           selfUpdateReport(),
 				ManagedWorkload:      workload,
+				CloneReports:         cloneReports,
+				ConditionSamples:     conditionSamples,
 			}, t.heartbeat)
 			if err != nil {
+				// Kept for the next beat (bounded per condition).
+				conditions.requeue(conditionSamples)
 				// No reconcile is coming from this beat; sessions do not wait on one (secretStore.waitReady).
 				secrets.markReady()
 				logln("heartbeat failed:", err)
@@ -2032,6 +2050,10 @@ func runLoop(cfg *RunnerConfig) (bool, func()) {
 			// Scan the directories this response named, ready for the next heartbeat. An older
 			// control plane sends none, which parks the scanner rather than clearing what it
 			// last found.
+			// Clones: start what is newly listed, stop what is no longer. A draining process starts none.
+			clones.reconcile(resp.CloneRequests, cloneSeq, !draining)
+			// Condition probes: start what is newly listed, stop what is no longer.
+			conditions.reconcile(resp.ConditionProbes)
 			if resp.AgentDirs != nil {
 				agentDirs.trigger(resp.AgentDirs)
 				// Where an owner-request secret file may not go (secret_path.go).
@@ -2089,6 +2111,13 @@ func runLoop(cfg *RunnerConfig) (bool, func()) {
 					if _, detached := pool.detachExpectedForTakeover(snapshot.supervisor); detached {
 						logln("detaching supervisor after lease ownership changed:", id)
 					}
+				}
+			}
+			// Before the cancel: a coordinator handing over may be heard of here before its inbox hands over the
+			// end turn that says the same (session_keep_work.go). Only a session this process supervises.
+			for _, id := range resp.KeepWorkSessionIDs {
+				if _, ok := supervisors[id]; ok {
+					markSessionKeepsWork(id)
 				}
 			}
 			for _, id := range resp.CancelSessionIDs {
@@ -2539,7 +2568,7 @@ func runLoop(cfg *RunnerConfig) (bool, func()) {
 					logln("account-remove: unknown engine", rr.Engine)
 				} else {
 					res := AccountRemoveResultRequest{Engine: rr.Engine, Account: rr.Account, Attempt: rr.Attempt, Status: "done"}
-					if err := removeAccount(kind, claudeUsage, codexUsage, kimiUsage, cursorUsage, rr.Account, kind.liveDirs(pool.sessionIDs())); err != nil {
+					if err := removeAccount(kind, claudeUsage, codexUsage, kimiUsage, cursorUsage, rr.Account, accountLiveDirsAfterColdCarry(kind, rr, pool)); err != nil {
 						res.Status, res.Message, res.SessionIDs = "failed", firstLine(err.Error()), accountInUseSessions(err)
 					} else {
 						// Re-probe this engine and beat at once, so the account leaves the page's list
@@ -2555,7 +2584,7 @@ func runLoop(cfg *RunnerConfig) (bool, func()) {
 				}
 			} else if rr := resp.CodexAccountRemoveRequest; rr != nil {
 				res := AccountRemoveResultRequest{Engine: providerCodex, Account: rr.Account, Attempt: rr.Attempt, Status: "done"}
-				if err := removeAccount(codexAccountKind, claudeUsage, codexUsage, kimiUsage, cursorUsage, rr.Account, codexSessionAccountHomes(pool.sessionIDs())); err != nil {
+				if err := removeAccount(codexAccountKind, claudeUsage, codexUsage, kimiUsage, cursorUsage, rr.Account, accountLiveDirsAfterColdCarry(codexAccountKind, rr, pool)); err != nil {
 					res.Status, res.Message, res.SessionIDs = "failed", firstLine(err.Error()), accountInUseSessions(err)
 				} else {
 					go func() {
@@ -2673,9 +2702,15 @@ func runLoop(cfg *RunnerConfig) (bool, func()) {
 		// The branch this session merges into, so branchMergedInto's "already merged" check
 		// judges the target the Merge button names rather than main (see mergeTargetBySession).
 		rememberMergeTarget(job.SessionID, job.MergeTarget)
-		execDir := pool.setupSupervisorCheckout(job, sessionExecDir(job.WorkDir), initiallyActive)
-		settleSessionCheckout(job, execDir)
-		reportSessionCheckout(&runnerAgents, repoHealth, beatNow, job.AgentID, job.WorkDir)
+		var execDir string
+		if job.HelpAsk != nil {
+			// An Ask runs in no workspace and no repository: a scratch folder of help articles (help_ask.go).
+			execDir = prepareHelpAskDir(cfg.ServerURL, job)
+		} else {
+			execDir = pool.setupSupervisorCheckout(job, sessionExecDir(job.WorkDir), initiallyActive)
+			settleSessionCheckout(job, execDir)
+			reportSessionCheckout(&runnerAgents, repoHealth, beatNow, job.AgentID, job.WorkDir)
+		}
 		jobCtx, cancel := context.WithCancel(context.Background())
 		s, added := pool.register(job, cancel, initiallyActive)
 		if !added {

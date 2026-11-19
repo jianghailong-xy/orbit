@@ -1,14 +1,15 @@
 import {
   DEFAULT_AGENT_LANGUAGE,
   DEFAULT_TRANSLATION_LANGUAGE,
+  isTranslationFailureReason,
   isTranslationLanguage,
   type TranslationLanguage,
   type TurnTranslation,
   type TurnTranslationState,
 } from '@orbit/shared';
-import { BadRequestException } from '@nestjs/common';
+import { BadRequestException, Logger } from '@nestjs/common';
 import { AsyncWorkQueue } from '../common/async-work-queue';
-import { translationAvailable } from './translation';
+import { TranslationFailed, translationAvailable } from './translation';
 
 /**
  * The owner's messages under Settings › Translation (@orbit/shared translation.ts, migration 0532).
@@ -23,6 +24,18 @@ import { translationAvailable } from './translation';
  * session's, are held the same way; the claim does not hand out a PENDING session whose only work is
  * held (queue.service trySessionClaim).
  */
+
+/**
+ * A slash command (`/compact`, `/review the login fix`) goes to the engine as written and is never held for
+ * translation: the engine runs it by name, so translating it can only delay it or reword its arguments. The rule
+ * is web's `slashCommandName` (lib/slashCommands.ts): a single bare word after the slash, so text that merely
+ * starts with one, such as an absolute path (`/tmp/foo 删掉吧`) or a comment (`// TODO`), is prose and is translated.
+ */
+const SLASH_COMMAND = /^\/[A-Za-z0-9][A-Za-z0-9_.:-]*(?:\s|$)/;
+
+export function isSlashCommand(content: string): boolean {
+  return SLASH_COMMAND.test(content.trim());
+}
 
 /** The status of a turn that must not be delivered: being translated, or its translation failed. */
 export const HELD_TURN_STATUS = 'HELD';
@@ -110,18 +123,65 @@ export function heldTurnColumns(content: string, from: TranslationLanguage) {
   };
 }
 
-/** A turn row's `translation` as the wire carries it, or undefined when translation was not involved. */
+/** A turn row's `translation` as the wire carries it, or undefined when translation was not involved. A FAILED
+ *  turn carries why (`failureReason`, and `httpStatus` beside HTTP) when it was stored. */
 export function turnTranslationOf(turn: {
   displayPrompt?: string | null;
   translationState?: string | null;
   translationLang?: string | null;
+  translationFailureReason?: string | null;
+  translationHttpStatus?: number | null;
 }): TurnTranslation | undefined {
   if (turn.displayPrompt == null || !turn.translationState || !isTranslationLanguage(turn.translationLang)) return undefined;
-  return {
+  const translation: TurnTranslation = {
     state: turn.translationState as TurnTranslationState,
     from: turn.translationLang,
     original: turn.displayPrompt,
   };
+  if (turn.translationState === 'FAILED' && isTranslationFailureReason(turn.translationFailureReason)) {
+    translation.failureReason = turn.translationFailureReason;
+    if (turn.translationFailureReason === 'HTTP' && turn.translationHttpStatus != null) {
+      translation.httpStatus = turn.translationHttpStatus;
+    }
+  }
+  return translation;
+}
+
+/** The columns a held turn whose translation failed is written with: FAILED and why, when the error says. */
+export function failedTurnColumns(error: unknown) {
+  const failed = error instanceof TranslationFailed ? error : null;
+  return {
+    translationState: 'FAILED' as TurnTranslationState,
+    translationFailureReason: failed?.reason ?? null,
+    translationHttpStatus: failed?.reason === 'HTTP' ? (failed.httpStatus ?? null) : null,
+  };
+}
+
+/** What every write that moves a turn out of FAILED (Retry, a translation, Send as written) clears. */
+export const CLEARED_FAILURE_COLUMNS = { translationFailureReason: null, translationHttpStatus: null } as const;
+
+const translationLogger = new Logger('OwnerTranslation');
+
+/**
+ * The one log line of an owner → agent translation that failed: the reason, the translator's HTTP status, how long it
+ * took and where (`door`, the session and turn when there is one). Never the owner's words, nor the translator's
+ * answer. Called once per failure, by whoever decided the failure's outcome (held turn or 422 answer).
+ */
+export function logOwnerTranslationFailure(
+  error: unknown,
+  where: { door: string; sessionId?: string | null; turnId?: string | null },
+): void {
+  const failed = error instanceof TranslationFailed ? error : null;
+  const fields = [
+    `door=${where.door}`,
+    `reason=${failed?.reason ?? 'UNKNOWN'}`,
+    `httpStatus=${failed?.httpStatus ?? '-'}`,
+    `durationMs=${failed?.durationMs ?? '-'}`,
+    `sessionId=${where.sessionId ?? '-'}`,
+  ];
+  if (where.turnId) fields.push(`turnId=${where.turnId}`);
+  if (!failed) fields.push(`error=${error instanceof Error ? error.name : typeof error}`);
+  translationLogger.warn(`owner translation failed: ${fields.join(' ')}`);
 }
 
 /** How many translations run at once on one apiserver; the rest wait their turn in memory. */

@@ -121,8 +121,8 @@ export const RUNNER_KEEP_FREE_10_GB = '10 GB';
 export const RUNNER_KEEP_FREE_20_GB = '20 GB';
 export const RUNNER_KEEP_FREE_50_GB = '50 GB';
 export const RUNNER_CAPACITY_FOOTER =
-  'Max Concurrent applies to the next session it picks up — no restart. Below Keep Free, task ' +
-  'runs stop being sent here and finished worktrees are cleaned up sooner.';
+  'Max Concurrent applies to the next session it picks up — no restart. Below Keep Free, new sessions and ' +
+  'task runs wait until space frees up, and finished worktrees are cleaned up sooner.';
 
 /** An amount of disk, already formatted by runnerAttention's formatDiskGb (`9.4`, `197`). */
 export function runnerGb(amount: string): string {
@@ -148,11 +148,17 @@ export const RUNNER_ENGINE_NO_QUOTA_LIMIT = 'No quota limit';
 export const RUNNER_ENGINE_COULDNT_CHECK = 'Couldn’t check';
 /** The quota column when the sign-in check gave no answer — no reading at all, rather than a zero. */
 export const RUNNER_ENGINE_NO_READING = 'No reading';
+/** OpenCode's Unknown line when its CLI listed no provider key at all. */
+export const RUNNER_ENGINE_NO_PROVIDER_KEY = 'no provider key found';
 export const RUNNER_SIGN_IN = 'Sign In';
 export const RUNNER_UPDATE_ENGINES_NOW = 'Update Engines Now';
 export const RUNNER_REFRESH_MODEL_LISTS = 'Refresh Model Lists';
 export const RUNNER_ENGINES_FOOTER =
   'Orbit keeps these CLIs updated every 30 min. Sign-ins live on this machine — a session spends ' +
+  'that subscription, nothing to paste.';
+/** A hosted runner's: its CLIs are fixed in Orbit's image, which moves with each Orbit release, not every 30 min. */
+export const RUNNER_ENGINES_MANAGED_FOOTER =
+  'Orbit updates these CLIs with each Orbit release. Sign-ins live on this runner — a session spends ' +
   'that subscription, nothing to paste.';
 export const RUNNER_ENGINES_OFFLINE_FOOTER = 'Signing in and updating need the runner online.';
 
@@ -242,6 +248,13 @@ export const RUNNER_VERSION_NOT_ROLLED_OUT = 'not rolled out to it yet';
 export function runnerVersionUpdatingTo(version: string): string {
   return `updating to ${version}`;
 }
+/** A managed runner — the machine Orbit runs for the account — wherever its name is shown, unless the owner
+ *  renamed it. Its stored name (`orbit-managed`) is the server's, not a word for anyone to read. */
+export const MANAGED_RUNNER_LABEL = 'Orbit Cloud';
+/** A managed runner's version, when it reports none that is a release (its image is `managed-<sha>`). */
+export const MANAGED_RUNNER_KEPT_UP_TO_DATE = 'Kept up to date by Orbit';
+/** About's Version note on a managed runner: Orbit rolls its image, so it neither updates itself nor needs to. */
+export const MANAGED_RUNNER_UPDATED_BY_ORBIT = 'Orbit updates this machine for you.';
 export const RUNNER_RUNS_AS_ROOT = 'root';
 export const RUNNER_RUNS_AS_REGULAR_USER = 'regular user';
 export const RUNNER_ROOT_NO_BYPASS = 'Runs as root, so sessions here can’t use Bypass permissions.';
@@ -462,7 +475,7 @@ export function attentionDiskNoReserve(free: string, total: string): string {
 }
 
 export function attentionDiskBelowReserve(free: string, total: string, reserve: string): string {
-  return `${free} GB free of ${total} GB, under the ${reserve} GB it keeps free — task runs stop being sent here until space frees up.`;
+  return `${free} GB free of ${total} GB, under the ${reserve} GB it keeps free — new sessions and task runs wait until space frees up.`;
 }
 
 // MARK: Needs Attention — the runner can't replace its own binary

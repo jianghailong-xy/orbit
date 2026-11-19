@@ -53,20 +53,33 @@ data class DirProbeAnswer(
 
 /**
  * The folder `POST /workspaces` makes a machine's workspace in (docs/first-workspace-contract.md §3).
- * Exactly one of [workDir] or [newFolder] is set.
+ * Exactly one of the three is set. [workDir] is a folder the runner has confirmed, as it resolved it; [newFolder] is one path segment the
+ * server joins to the runner's folder root; [github] is a clone of one of the person's repositories into its Repos Folder
+ * (docs/github-workspace-design.md §5.3).
  */
 data class NewWorkspaceRequest(
     val workDir: String? = null,
     val newFolder: String? = null,
+    val github: GithubClone? = null,
 ) {
+    /** `github`: the repository by GitHub's id, the branch when it isn't the default one, and the folder under the Repos Folder. */
+    data class GithubClone(val repoId: Long, val ref: String? = null, val folder: String? = null)
+
     fun toJson(): JsonObject = buildJsonObject {
         workDir?.let { put("workDir", it) }
         newFolder?.let { put("newFolder", it) }
+        github?.let { clone ->
+            put("github", buildJsonObject {
+                put("repoId", clone.repoId)
+                clone.folder?.let { put("folder", it) }
+                clone.ref?.let { put("ref", it) }
+            })
+        }
     }
 }
 
 /** A machine as a Set up row names it (rule 9). */
-data class MachineToSetUp(val id: String, val name: String)
+data class MachineToSetUp(val id: String, val name: String, val managed: Boolean = false)
 
 /**
  * How a checked path reads, and whether it may be used. Rule 4: what isn't there can't be picked; a folder that is not a git
@@ -88,14 +101,31 @@ sealed interface PickedFolder {
 
     data class Existing(override val path: String, val note: String) : PickedFolder
     data class New(val name: String, override val path: String) : PickedFolder
+    /** A clone of one of the person's GitHub repositories into `<reposRoot>/<name>` (docs/github-workspace-design.md §5.3). */
+    data class Github(val pick: GithubPick) : PickedFolder {
+        override val path: String get() = pick.path
+    }
 
     /** What `POST /workspaces` is told. An existing folder is sent as the runner resolved it. */
     val newWorkspace: NewWorkspaceRequest
         get() = when (this) {
             is Existing -> NewWorkspaceRequest(workDir = path)
             is New -> NewWorkspaceRequest(newFolder = name)
+            is Github -> NewWorkspaceRequest(github = NewWorkspaceRequest.GithubClone(pick.repoId, pick.ref, pick.name))
         }
 }
+
+/** The repository From GitHub picked, and the folder it is cloned into. [ref] null is the repository's default branch, which
+ *  [defaultBranch] names. */
+data class GithubPick(
+    val repoId: Long,
+    val repository: String,
+    val isPrivate: Boolean,
+    val defaultBranch: String,
+    val ref: String?,
+    val name: String,
+    val path: String,
+)
 
 /** The second step's answer for the draft's engine and credential. */
 sealed interface SetupCredential {
@@ -119,6 +149,9 @@ data class EnginePick(val engine: String, val provider: String)
 object MachineSetup {
     const val DIR_PROBE_CAPABILITY = "dir-probe/v1"
     const val CREATE_WORKDIR_CAPABILITY = "create-workdir/v1"
+    /** What a runner declares when it clones a GitHub repository on request (docs/github-workspace-design.md §6). */
+    const val CLONE_WORKDIR_CAPABILITY = "clone-workdir/v1"
+
     /** A runner that makes a new folder in its home, the directory its reposRoot (`<home>/orbit-repos`) sits in. */
     const val CREATE_WORKDIR_HOME_CAPABILITY = "create-workdir/v2"
 
@@ -129,6 +162,40 @@ object MachineSetup {
     /** Whether it can make a new folder: the capability, and the Repos Folder it goes in (§3.1). */
     fun makesNewFolders(runner: JsonObject): Boolean =
         CREATE_WORKDIR_CAPABILITY in runner.strings("capabilities") && !runner.text("reposRoot")?.trim().isNullOrEmpty()
+
+    /**
+     * Whether a machine clones a GitHub repository on request: it declares clone-workdir/v1 and has reported the Repos Folder the clone
+     * goes in. POST /sessions refuses either missing.
+     */
+    fun clonesRepositories(runner: JsonObject): Boolean =
+        CLONE_WORKDIR_CAPABILITY in runner.strings("capabilities") && !runner.text("reposRoot")?.trim().isNullOrEmpty()
+
+    private val homePrefix = Regex("""^(?:/Users/[^/]+|/home/[^/]+|/root)(?=/|$)""")
+
+    /** A path as the board writes it: the home folder as `~` (`/Users/austin/orbit-repos/x` → `~/orbit-repos/x`). */
+    fun homeShortPath(path: String): String = homePrefix.replaceFirst(path, "~")
+
+    /** The folder a repository is cloned into by default, as the server derives it: its name, when that is a folder name. */
+    fun repositoryFolder(fullName: String): String {
+        val name = fullName.split('/').last()
+        return if (isValidNewFolder(name)) name else ""
+    }
+
+    /** The branch a clone is asked for: what was typed under Other branch, unless it is empty or the default. */
+    fun cloneRef(typed: String?, defaultBranch: String): String? {
+        val ref = typed?.trim().orEmpty()
+        return if (ref.isEmpty() || ref == defaultBranch) null else ref
+    }
+
+    /** How many repositories the picker shows before anything is typed (board 01, note 4). */
+    const val FIRST_REPOSITORIES = 8
+
+    /** What From GitHub would pick, on the machine's answer about the folder: only a folder that isn't there yet can be cloned into. */
+    fun githubPick(repository: GithubRepository, name: String, ref: String?, reposRoot: String, probe: DirProbe?): PickedFolder? {
+        if (!isValidNewFolder(name) || probe == null || !probe.error.isNullOrEmpty() || probe.exists) return null
+        return PickedFolder.Github(GithubPick(repository.id, repository.fullName, repository.private, repository.defaultBranch, ref, name,
+            newFolderPath(reposRoot, name)))
+    }
 
     /**
      * The directory a runner's new folders go in: its home, the parent of its reposRoot, when it declares create-workdir/v2, else
@@ -318,31 +385,33 @@ object MachineSetup {
     }
 
     /**
-     * Rule 9: the machines that get a Set up row in the drawer, in the runner list's order. Online, with no workspace of this account
-     * on them: an offline one is already what Machines & models says needs you.
+     * Rule 9: the machines that get a Set up row in the drawer, managed first and the rest in the runner list's order. Online, with no
+     * workspace of this account on them: an offline one is already what Machines & models says needs you.
      */
     fun machinesToSetUp(
         runners: List<JsonObject>?,
         workspaces: List<JsonObject>,
         nowMs: Long = System.currentTimeMillis(),
+        managedStatus: ManagedRunner.Status? = null,
     ): List<MachineToSetUp> {
         if (runners == null) return emptyList()
-        return runners.mapNotNull { runner ->
+        val managedId = managedStatus?.runnerId ?: ManagedRunnerIdentity.runnerId
+        return RunnerPage.managedRunnerFirst(runners, managedId).mapNotNull { runner ->
             val id = runner.text("id") ?: return@mapNotNull null
-            if (RunnerPage.isOffline(runner, nowMs)) return@mapNotNull null
+            if (RunnerPage.isOffline(runner, nowMs) && ManagedRunner.managedSetupState(id, managedStatus) == null) return@mapNotNull null
             if (workspaces.any {
                     (it["deletedAt"] == null || it["deletedAt"] is JsonNull) && ObjectId.same(it.text("runnerId"), id)
                 }
             ) return@mapNotNull null
-            MachineToSetUp(id = id, name = RunnerPage.displayName(runner))
+            MachineToSetUp(id = id, name = RunnerPage.displayName(runner, managedId), managed = RunnerPage.isManaged(runner, managedId))
         }
     }
 
     /**
      * Rule 11: the first online machine in the runner list's order, for landing or New session when the account has no workspaces.
      */
-    fun firstOnlineRunnerId(runners: List<JsonObject>, nowMs: Long = System.currentTimeMillis()): String? =
-        runners.firstOrNull { !RunnerPage.isOffline(it, nowMs) }?.text("id")
+    fun firstOnlineRunnerId(runners: List<JsonObject>, nowMs: Long = System.currentTimeMillis(), managedStatus: ManagedRunner.Status? = null): String? =
+        runners.firstOrNull { !RunnerPage.isOffline(it, nowMs) || ManagedRunner.managedSetupState(it.text("id"), managedStatus) != null }?.text("id")
 
     /**
      * What a machine's first draft stands on (`Agent.machineDraft` in OrbitKit). The composer's engine, model and account pickers
@@ -368,6 +437,11 @@ data class CreatedWorkspaceLine(
     val machine: String,
     val path: String?,
     val live: Boolean,
+    /** A workspace cloned from GitHub (docs/github-workspace-design.md §8): its `owner/name`, and where its clone stood when the detail
+     *  was read ([cloneError] is why it failed). All null for one that is not. */
+    val repository: String? = null,
+    val cloneState: String? = null,
+    val cloneError: String? = null,
 ) {
     companion object {
         fun fromSession(
@@ -395,12 +469,18 @@ data class CreatedWorkspaceLine(
             val path = liveWorkspace?.text("workDir")?.takeIf { it.isNotEmpty() }
                 ?: agent?.text("workDir")?.takeIf { it.isNotEmpty() }
             val deleted = agent != null && agent["deletedAt"] != null && agent["deletedAt"] !is JsonNull
+            // The clone's fields ride on the detail's workspace; the web reads them as `workspace`, OrbitKit as `agent`.
+            val made = listOfNotNull(agent, detail["workspace"] as? JsonObject)
+            fun cloneField(key: String) = made.firstNotNullOfOrNull { it.text(key)?.takeIf(String::isNotEmpty) }
             return CreatedWorkspaceLine(
                 workspaceId = workspaceId,
                 name = name,
                 machine = machine,
                 path = path,
                 live = !deleted,
+                repository = WorkspaceClone.repositoryOf(cloneField("repoUrl")),
+                cloneState = cloneField("cloneState"),
+                cloneError = cloneField("cloneError"),
             )
         }
     }

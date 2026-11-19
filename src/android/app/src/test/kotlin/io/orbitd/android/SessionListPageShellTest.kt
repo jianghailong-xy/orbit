@@ -9,6 +9,7 @@ import androidx.compose.ui.test.junit4.createAndroidComposeRule
 import io.orbitd.android.core.auth.AuthState
 import io.orbitd.android.core.realtime.ConnectionState
 import io.orbitd.android.directory.SessionListCopy
+import io.orbitd.android.navigation.ObjectId
 import java.time.Instant
 import java.time.temporal.ChronoUnit
 import kotlinx.coroutines.CompletableDeferred
@@ -305,6 +306,58 @@ class SessionListPageShellTest {
         await { exists(hasTestTag("folder-row:34A05cFolderEmpty0001")) }
         compose.onNodeWithTag("folder-row:34A05cFolderEmpty0001").performClick()
         await { exists(hasText("Nothing in this folder")) }
+    }
+
+    @Test fun scheduledRunsKeepTheirFolderAndViewWhenReturningFromTheSession() {
+        val run = NavShell.row(NavShell.RUN, "Completed run", fields = ""","runSource":"SCHEDULE"""")
+        NavShell.lifecycle = NavShell.lifecycle + (NavShell.RUN to "COMPLETED")
+        NavShell.scheduled = mapOf("completed" to listOf(run))
+        NavShell.extra = mapOf("completed" to listOf(run))
+        signIn()
+        val folder = hasTestTag("folder-row:scheduled")
+        val session = hasRowMenu("Options for Completed run")
+        await { exists(review) }
+        compose.onNode(folder).assertDoesNotExist()
+        compose.pickFromSessionOptions("Completed")
+        await { exists(folder) }
+        compose.onNode(session).assertDoesNotExist()
+        compose.onNode(folder).assert(SemanticsMatcher.keyNotDefined(SemanticsActions.OnLongClick)).performClick()
+        await { exists(session) }
+        compose.onNode(hasText("Scheduled runs") and hasAnyAncestor(hasTestTag("app-bar")), useUnmergedTree = true).assertExists()
+        compose.onNode(hasText("Alpha") and hasAnyAncestor(hasTestTag("app-bar")), useUnmergedTree = true).assertExists()
+        compose.onNodeWithContentDescription("Folder actions").assertDoesNotExist()
+        compose.onNode(session).performClick()
+        await { exists(hasContentDescription("Session actions")) }
+        compose.onNodeWithContentDescription("Back").performClick()
+        await { exists(session) }
+
+        NavShell.scheduled = emptyMap()
+        app().realtime.refreshDirectory()
+        await { exists(hasText("No scheduled runs here.")) }
+    }
+
+    @Test fun scheduleHistoryOpensTheSessionInItsOwnWorkspacesScheduledRunsFolder() {
+        NavShell.scheduleHistory = true
+        NavShell.lifecycle = NavShell.lifecycle + (NavShell.RUN to "COMPLETED")
+        NavShell.scheduled = mapOf("completed" to listOf(NavShell.row(
+            NavShell.RUN, "Completed run", fields = ""","runSource":"SCHEDULE"""")))
+        signIn()
+        await { exists(review) }
+        openDrawer()
+        compose.onNodeWithTag("drawer:scheduled").performClick()
+        val schedule = hasTestTag("schedule-row") and hasText("Daily check")
+        await { exists(schedule) }
+        compose.onNode(schedule).performClick()
+        await { exists(hasTestTag("schedule-history-run")) }
+        compose.onNodeWithTag("schedule-history-run").performClick()
+        await { exists(hasContentDescription("Session actions")) && ObjectId.same(app().realtime.state.value.session?.id, NavShell.RUN) }
+        openDrawer()
+        await { exists(drawerRow("Alpha") and isSelected()) }
+        compose.onNodeWithTag("drawer:scheduled").assertIsNotSelected()
+        compose.onNode(drawerRow("Alpha")).assertIsSelected().performClick()
+        compose.onNodeWithContentDescription("Back").performClick()
+        await { exists(hasRowMenu("Options for Completed run")) }
+        compose.onNode(hasText("Scheduled runs") and hasAnyAncestor(hasTestTag("app-bar")), useUnmergedTree = true).assertExists()
     }
 
     /** No connection: the rows stay and the list says nothing. The drawer heads its workspaces with why, in iOS's words. */

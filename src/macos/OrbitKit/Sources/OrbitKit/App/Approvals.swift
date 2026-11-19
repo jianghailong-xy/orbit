@@ -174,6 +174,19 @@ public enum Approvals {
         return header.isEmpty ? (first?.question ?? "") : header
     }
 
+    /// What a chat reply to a question card answers, for ✦ Optimize (`replyingTo`): each question as
+    /// the card shows it, with its options (web `questionReplyContext`).
+    public static func chatReplyContext(_ questions: [AskQuestion]) -> String {
+        questions.map { q in
+            let title = [trimmed(q.header), q.question].filter { !$0.isEmpty }.joined(separator: ": ")
+                + (q.multiSelect ? " (pick any)" : "")
+            let options = q.options.filter { !$0.label.isEmpty }.map { option in
+                "- \(option.label)" + (option.description.map { $0.isEmpty ? "" : ": \($0)" } ?? "")
+            }
+            return ([title] + options).joined(separator: "\n")
+        }.joined(separator: "\n\n")
+    }
+
     // MARK: declining one of Orbit's own asks
     //
     // Saying no to a batch of tasks, a create or a restructure is a position, not a misfire: the
@@ -231,6 +244,9 @@ public enum Approvals {
             || isOrbitAsk(toolName: toolName) || isProviderWrite(toolName: toolName) { return [] }
         if toolName == "Bash" {
             guard let cmd = input["command"]?.stringValue else { return [] }
+            if input["orbitScheduleCheckOnly"]?.boolValue == true {
+                return cmd.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty ? [] : [PermissionRule(toolName: "Bash", ruleContent: cmd)]
+            }
             return bashCommandRules(cmd)
         }
         return [PermissionRule(toolName: toolName)]

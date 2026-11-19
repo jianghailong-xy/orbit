@@ -270,6 +270,9 @@ export const TENANT_ISOLATION_CASES: Readonly<Record<string, TenantCase>> = {
   // ── workspaces, under both of their names ────────────────────────────────────────────────────
   ...workspaceRoutes('agents', (t) => t.agentRuleId, (t) => t.spare.agentId),
   ...workspaceRoutes('workspaces', (t) => t.workspaceRuleId, (t) => t.spare.workspaceId),
+  // A GitHub workspace's Retry (docs/github-workspace-design.md §5.3): read by (id, the caller, not deleted), so another
+  // account's id is 404 with nothing written; the owner's own workspace, which has no failed clone, is 409.
+  'POST /workspaces/:id/clone/retry': { request: (of) => ({ params: { id: of.workspaceId }, body: {} }) },
 
   // ── attachments ──────────────────────────────────────────────────────────────────────────────
   'GET /attachments/:id': { request: (of) => ({ params: { id: of.attachmentId } }) },
@@ -876,6 +879,21 @@ export const TENANT_ISOLATION_CASES: Readonly<Record<string, TenantCase>> = {
  * that shows the route finds its object only under the caller's own account. Kept as short as it can be.
  */
 export const TENANT_ISOLATION_BY_HAND: Readonly<Record<string, string>> = {
+  // ── Still stuck (help center board 02 ②): the id is an Ask, which the census's fixture account has none of ──
+  'GET /help/ask/:id/stuck':
+    'the Ask is read by (id, the caller, help_ask set, not deleted) before anything else, so another account\'s Ask answers 404 (help/help-ask.ts:207, :238); help-ask-stuck.pg.spec.ts "another account" sends it with the owner\'s Ask',
+  'POST /help/ask/:id/admin':
+    'the Ask is read by (id, the caller, help_ask set, not deleted) before the admin is looked up or the task made, so another account\'s Ask answers 404 and no task or hand-off row is written (help/help-ask.ts:207, :271); help-ask-stuck.pg.spec.ts "another account" sends it and counts both',
+  'GET /integrations/github/repos/:id/branches':
+    '`:id` is GitHub\'s repository id, not an Orbit object: the repository is looked up only in the caller\'s own listing, '
+    + 'read from GitHub with the caller\'s own user-to-server token (github/github-connection.service.ts:241), and '
+    + 'another account\'s repository that the caller cannot see on GitHub is answered 404 GITHUB_REPO_NOT_FOUND before '
+    + 'GitHub is asked for its branches. The census server has no GitHub; github-connection.pg.spec.ts sends it across '
+    + 'two accounts against a fake GitHub',
+  // ── conditions (docs/condition-triggers-design.md §8) ─────────────────────────────────────────────
+  'GET /conditions/:id':
+    "read by (id, the caller) and nothing else, 404 CONDITION_NOT_FOUND for another account's id (conditions/conditions.service.ts:354); "
+    + 'conditions.pg.spec.ts reads one across two accounts',
   // ── scheduled tasks (docs/scheduled-tasks-design.md §9.1) ─────────────────────────────────────────
   'GET /schedules/:id':
     "read by (id, the caller) and nothing else, 404 for another account's id (schedules/schedule-reads.service.ts:98)",
@@ -926,6 +944,8 @@ export const TENANT_ISOLATION_BY_HAND: Readonly<Record<string, string>> = {
     "every guest route reads the caller's live session_guest row on that session first (session-guests/session-guests.service.ts:236) and answers the one 404 without it, so a session B was never invited to — A's included — is refused before anything is read or written; A, its owner, is no guest of it either, so neither account's request can be stood up from the census fixture. session-guests.pg.spec.ts (1) sends the invited guest's and a stranger's",
   'GET /guest-sessions/:id/events/:seq':
     "every guest route reads the caller's live session_guest row on that session first (session-guests/session-guests.service.ts:236) and answers the one 404 without it, so a session B was never invited to — A's included — is refused before anything is read or written; A, its owner, is no guest of it either, so neither account's request can be stood up from the census fixture. session-guests.pg.spec.ts (1) sends the invited guest's and a stranger's",
+  'GET /guest-sessions/:id/stream':
+    "GuestInvitationGuard (session-guests/guest-invitation.guard.ts:24) reads the caller's live session_guest row on that session (session-guests/session-guests.service.ts:246) before the stream reads or subscribes to anything, and answers the one 404 without it, so a session B was never invited to — A's included — is refused as a status, not inside a 200; A, its owner, is no guest of it either, so neither account's request can be stood up from the census fixture. viewer-stream.pg.spec.ts sends the invited guest's and a stranger's",
   'POST /guest-sessions/:id/attachments':
     "every guest route reads the caller's live session_guest row on that session first (session-guests/session-guests.service.ts:236) and answers the one 404 without it, so a session B was never invited to — A's included — is refused before anything is read or written; A, its owner, is no guest of it either, so neither account's request can be stood up from the census fixture. session-guests.pg.spec.ts (1) sends the invited guest's and a stranger's; the image is then kept on that session only, naming the guest (session-guests/session-guests.service.ts uploadImage), and a turn names only the guest's own (guestImages; session-guests-images.pg.spec.ts)",
   'POST /guest-sessions/:id/turns':
@@ -1412,6 +1432,10 @@ export const TENANT_ISOLATION_FIELD_CASES: Readonly<Record<string, TenantFieldCa
   // The probe of another account's workspace: no such workspace for this one, and no runner is asked.
   'POST /wiki/spaces/:id/maintenance/probe body workspaceId': {
     request: (of, mine) => ({ params: { id: mine.wikiSpaceId }, body: { workspaceId: of.workspaceId } }),
+  },
+  // An Ask on another account's machine: no such machine for this one (HelpAsk.create).
+  'POST /help/ask body runnerId': {
+    request: (of) => ({ params: {}, body: { content: 'from the census', runnerId: of.runnerId, engine: 'claude' } }),
   },
   // A chat named into another account's workspace: no such workspace for this one (WikiChat.chosenWorkspace).
   'POST /wiki/spaces/:id/chats body workspaceId': {

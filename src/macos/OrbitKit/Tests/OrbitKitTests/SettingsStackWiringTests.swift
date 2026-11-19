@@ -135,7 +135,7 @@ final class SettingsStackWiringTests: XCTestCase {
     /// lands on Settings' stack, not the route's — so the sheet goes down before anything moves.
     func testARouteClosesSettingsBeforeItMoves() throws {
         let app = code(try appSource("AppModel.swift"))
-        let route = try slice(app, from: "func route(to route: Route) {", to: "switch route {")
+        let route = try slice(app, from: "func route(to route: Route,", to: "switch route {")
         let close = try XCTUnwrap(route.range(of: "settingsPresented = false"))
         let move = try XCTUnwrap(route.range(of: "selectedSection = AppSection.forRoute(route)"))
         XCTAssertLessThan(close.lowerBound, move.lowerBound)
@@ -215,7 +215,7 @@ final class SettingsStackWiringTests: XCTestCase {
         for control in ["$permMode", "$orchestration", "$modelRouting", "$promptSuggestions", "$recaps"] {
             XCTAssertFalse(list.contains(control), "the list still draws \(control)")
         }
-        XCTAssertTrue(rows.contains("case .general, .notifications, .profile, .sharedLinks, .accessTokens, .terminals:"))
+        XCTAssertTrue(rows.contains("case .general, .notifications, .profile, .sharedLinks, .accessTokens, .terminals, .github:"))
         // Signing out asks first, in the shape the width calls for — `ConfirmationStyle` asks a phone
         // for an alert and a tablet for the anchored panel, and every confirmation in the app goes
         // through it rather than naming one of the two itself.

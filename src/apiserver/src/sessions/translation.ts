@@ -1,6 +1,10 @@
 import {
+  TRANSLATION_BREAKER_OPEN_MS,
+  TRANSLATION_BREAKER_THRESHOLD,
+  TRANSLATION_BREAKER_WINDOW_MS,
   TRANSLATION_LANGUAGE_NAMES,
   TRANSLATION_TIMEOUT_MS,
+  type TranslationFailureReason,
   type TranslationLanguage,
 } from '@orbit/shared';
 import { deepSeekCall } from './naming';
@@ -21,9 +25,23 @@ export function translationAvailable(): boolean {
   return Boolean(process.env.DEEPSEEK_API_KEY?.trim());
 }
 
-/** Why a translation did not happen. Its message is English and safe to show or log. */
+/**
+ * Why a translation did not happen (TranslationFailureReason, @orbit/shared translation.ts). Its message is English
+ * and safe to show or log: it never carries the text being translated. UNAVAILABLE is raised by the circuit breaker
+ * below, which skips a translator that has been failing.
+ */
 export class TranslationFailed extends Error {
-  constructor(readonly reason: 'NO_KEY' | 'TIMEOUT' | 'HTTP' | 'EMPTY' | 'TRUNCATED' | 'MANGLED' | 'NETWORK', message: string) {
+  /** How long translate() ran before it gave up, retries included; set by translate() on the way out. */
+  durationMs?: number;
+
+  constructor(
+    readonly reason: TranslationFailureReason,
+    message: string,
+    /** An HTTP answer worth asking again: 429 or 5xx. */
+    readonly transient = false,
+    /** The translator's HTTP status, with reason HTTP only. */
+    readonly httpStatus?: number,
+  ) {
     super(message);
     this.name = 'TranslationFailed';
   }
@@ -93,10 +111,107 @@ function maxTokensFor(text: string): number {
 }
 
 /**
+ * The circuit breaker (policy board docs/ux/translation-failure-policy.html, frame 6). PER APISERVER PROCESS: each
+ * replica counts its own failures and opens on its own, so two replicas may disagree for up to a minute.
+ *
+ * BREAKER_THRESHOLD (3) transient failures (NETWORK, TIMEOUT, or HTTP 429/5xx — each counted once, after translate()'s own
+ * retries) within BREAKER_WINDOW_MS (60 s) open it for BREAKER_OPEN_MS (60 s). While it is open translate() rejects at once with
+ * UNAVAILABLE and asks nothing. Once those 60 s are up, ONE call is let through (any other call still meets
+ * UNAVAILABLE while it runs): a translation, or a non-transient failure (the translator answered), closes it; a
+ * transient failure opens it for another 60 s. Any success also clears the count. Non-transient failures (4xx,
+ * TRUNCATED, MANGLED, EMPTY) never count: they say something about the message or the key, not that the
+ * translator is down.
+ */
+const BREAKER_THRESHOLD = TRANSLATION_BREAKER_THRESHOLD;
+const BREAKER_WINDOW_MS = TRANSLATION_BREAKER_WINDOW_MS;
+const BREAKER_OPEN_MS = TRANSLATION_BREAKER_OPEN_MS;
+
+const breaker = {
+  /** When each transient failure still inside the window happened (ms). */
+  failures: [] as number[],
+  /** While set, the breaker is open until then (ms); past it, the next call is the trial. */
+  openUntil: null as number | null,
+  /** The one trial call after the open period is in flight. */
+  trialRunning: false,
+};
+const breakerListeners = new Set<() => void>();
+
+/** Until when owner → agent translation is skipped (MeTranslation.translationUnavailableUntil), or null. */
+export function translationUnavailableUntil(now = Date.now()): Date | null {
+  return breaker.openUntil !== null && now < breaker.openUntil ? new Date(breaker.openUntil) : null;
+}
+
+/** Called whenever the breaker opens (or opens again) and when it closes. Returns the unsubscribe. */
+export function onTranslationAvailabilityChange(listener: () => void): () => void {
+  breakerListeners.add(listener);
+  return () => breakerListeners.delete(listener);
+}
+
+/** Back to closed with nothing counted, telling no one. For specs. */
+export function resetTranslationBreaker(): void {
+  breaker.failures = [];
+  breaker.openUntil = null;
+  breaker.trialRunning = false;
+}
+
+function announceBreaker(): void {
+  for (const listener of breakerListeners) {
+    try {
+      listener();
+    } catch {
+      // An announcement is an accelerant: a listener that throws changes nothing about translating.
+    }
+  }
+}
+
+/** Whether this call may ask the translator; true for the trial call, which the caller must settle. */
+function breakerAdmit(now: number): { trial: boolean } | null {
+  if (breaker.openUntil === null) return { trial: false };
+  if (now < breaker.openUntil || breaker.trialRunning) return null;
+  breaker.trialRunning = true;
+  return { trial: true };
+}
+
+/** What one call that asked the translator came to. */
+function breakerSettle(trial: boolean, error: unknown, now: number): void {
+  if (trial) breaker.trialRunning = false;
+  const transient = error instanceof TranslationFailed &&
+    (error.reason === 'NETWORK' || error.reason === 'TIMEOUT' || (error.reason === 'HTTP' && error.transient));
+  if (!transient) {
+    // It answered: a success, or a failure that says nothing about the translator being down.
+    if (error === undefined) breaker.failures = [];
+    if (trial || (error === undefined && breaker.openUntil !== null)) {
+      breaker.failures = [];
+      breaker.openUntil = null;
+      announceBreaker();
+    }
+    return;
+  }
+  if (trial) {
+    breaker.openUntil = now + BREAKER_OPEN_MS;
+    announceBreaker();
+    return;
+  }
+  if (breaker.openUntil !== null) return; // already open: a call that started before it opened.
+  breaker.failures = breaker.failures.filter((at) => now - at < BREAKER_WINDOW_MS);
+  breaker.failures.push(now);
+  if (breaker.failures.length >= BREAKER_THRESHOLD) {
+    breaker.failures = [];
+    breaker.openUntil = now + BREAKER_OPEN_MS;
+    announceBreaker();
+  }
+}
+
+/** The pauses before the second and third try of a transiently failed call. */
+const RETRY_DELAYS_MS = [500, 1500];
+
+/**
  * Translate `text` from `from` into `to`. Resolves with the translation; rejects with
  * TranslationFailed on anything else — no key, a non-2xx answer, a reply cut off by its token limit,
  * a reply with no text, one that mangled the protected spans, or the timeout (20 s by default,
- * decision 4A). The race is a hard outer bound even if a fetch implementation ignores abort.
+ * decision 4A). A network failure or a 429/5xx answer is tried up to three times in all, within that
+ * same timeout. The race is a hard outer bound even if a fetch implementation ignores abort. While the circuit
+ * breaker above is open it rejects at once with UNAVAILABLE and asks nothing.
  */
 export async function translate(
   text: string,
@@ -105,16 +220,25 @@ export async function translate(
   opts: { timeoutMs?: number } = {},
 ): Promise<string> {
   const apiKey = process.env.DEEPSEEK_API_KEY?.trim();
-  if (!apiKey) throw new TranslationFailed('NO_KEY', 'This server has no DeepSeek key, so it cannot translate.');
+  if (!apiKey) throw Object.assign(new TranslationFailed('NO_KEY', 'This server has no DeepSeek key, so it cannot translate.'), { durationMs: 0 });
+  const startedAt = Date.now();
   const { masked, spans } = protectVerbatim(text);
   // Nothing but code and links: there is nothing to translate.
   if (!masked.replace(PLACEHOLDER_RE, '').trim()) return text;
+  const admitted = breakerAdmit(startedAt);
+  if (!admitted) {
+    throw Object.assign(
+      new TranslationFailed('UNAVAILABLE', 'The translator has been failing, so it is skipped for now.'),
+      { durationMs: 0 },
+    );
+  }
   const call = deepSeekCall(apiKey, systemPrompt(from, to), masked, { json: false, maxTokens: maxTokensFor(masked) });
   // Deterministic as a translation can be.
   call.body.temperature = 0;
   const controller = new AbortController();
   let timer: ReturnType<typeof setTimeout> | undefined;
-  const request = (async (): Promise<string> => {
+  /** One call. A network failure or a 429/5xx answer is transient and marked so; the rest are final. */
+  const attempt = async (): Promise<string> => {
     let resp: Response;
     try {
       resp = await fetch(call.url, {
@@ -129,7 +253,7 @@ export async function translate(
     }
     if (!resp.ok) {
       await resp.body?.cancel().catch(() => undefined);
-      throw new TranslationFailed('HTTP', `The translator answered ${resp.status}.`);
+      throw new TranslationFailed('HTTP', `The translator answered ${resp.status}.`, resp.status === 429 || resp.status >= 500, resp.status);
     }
     const data = (await resp.json().catch(() => null)) as
       | { choices?: { finish_reason?: unknown; message?: { content?: unknown } }[] }
@@ -141,6 +265,19 @@ export async function translate(
     const content = typeof choice?.message?.content === 'string' ? choice.message.content.trim() : '';
     if (!content) throw new TranslationFailed('EMPTY', 'The translator returned nothing.');
     return restoreVerbatim(content, spans);
+  };
+  // Transient failures are tried again after a short pause, all inside the one timeout below.
+  const request = (async (): Promise<string> => {
+    for (let n = 0; ; n++) {
+      try {
+        return await attempt();
+      } catch (e) {
+        const transient = e instanceof TranslationFailed && (e.reason === 'NETWORK' || e.transient);
+        if (!transient || n >= RETRY_DELAYS_MS.length || controller.signal.aborted) throw e;
+      }
+      await new Promise((resolve) => setTimeout(resolve, RETRY_DELAYS_MS[n]));
+      if (controller.signal.aborted) throw new TranslationFailed('TIMEOUT', 'Translation took longer than 20 seconds.');
+    }
   })();
   const timedOut = new Promise<never>((_resolve, reject) => {
     timer = setTimeout(() => {
@@ -149,7 +286,13 @@ export async function translate(
     }, Math.max(0, opts.timeoutMs ?? TRANSLATION_TIMEOUT_MS));
   });
   try {
-    return await Promise.race([request, timedOut]);
+    const translated = await Promise.race([request, timedOut]);
+    breakerSettle(admitted.trial, undefined, Date.now());
+    return translated;
+  } catch (error) {
+    if (error instanceof TranslationFailed) error.durationMs = Date.now() - startedAt;
+    breakerSettle(admitted.trial, error, Date.now());
+    throw error;
   } finally {
     if (timer) clearTimeout(timer);
   }

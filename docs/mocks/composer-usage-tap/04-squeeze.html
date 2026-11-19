@@ -1,0 +1,172 @@
+<!doctype html>
+<!-- Design mock: what gives way in the iPhone composer footer once ✦ Optimize appears, so the model
+     name stops shrinking to one letter. Widths in pt are the iPhone 17 Pro simulator's accessibility
+     frames (commit 2f437e668f) and the owner's Pro Max screenshot; drawn at 2×. Not shipped code. -->
+<html lang="zh">
+<head>
+<meta charset="utf-8">
+<title>Composer footer · what gives way beside Optimize</title>
+<link rel="stylesheet" href="../../../src/web/src/index.css">
+<link rel="stylesheet" href="../project-progress/mock.css">
+<link rel="stylesheet" href="board.css">
+<style>
+  .m-sheet { width: 2000px; }
+  .b-part { padding: 24px 28px; font: 15px/1.6 Inter, "Noto Sans SC", sans-serif; }
+  .q-grid { display: grid; grid-template-columns: 150px 850px 780px; gap: 18px 22px; align-items: center; }
+  .q-col { font-size: 13px; font-weight: 650; color: var(--text-2); }
+  .q-row { font-size: 13px; line-height: 1.55; color: var(--text-2); }
+  .q-row b { display: block; color: var(--text-1); font-size: 14px; margin-bottom: 2px; }
+  .q-cell .zoom { padding: 14px 12px; }
+  .q-cell .card { padding: 10px 16px 14px; }
+  .q-cell .ph { color: #f2f2f7; font-size: 28px; padding: 4px 20px 22px; }
+  .q-cap { font-size: 12.5px; color: var(--text-2); margin: 6px 4px 0; }
+  .q-cap .bad { color: #cf1322; font-weight: 600; }
+  .q-cap .ok { color: #389e0d; font-weight: 600; }
+  .tb { gap: 16px; }
+  .tb > * { flex: none; }
+  .tb .grow { flex: 1 1 auto; min-width: 16px; }
+  .tb .q-mode { color: #8e8e93; }
+  .tb .q-model { display: flex; align-items: baseline; gap: 10px; overflow: hidden; }
+  .tb .q-model b { color: #f2f2f7; font-weight: 600; min-width: 0; overflow: hidden; white-space: nowrap; text-overflow: ellipsis; }
+  .tb .q-model b.clip { text-overflow: clip; }
+  .tb .q-model span { color: #8e8e93; flex: none; }
+  .tb .gp.line { box-sizing: border-box; justify-content: center; }
+  .q-opt { box-sizing: border-box; height: 52px; border-radius: 26px; display: inline-flex; align-items: center; justify-content: center;
+           gap: 8px; color: #0a84ff; font-weight: 500; background: rgba(10, 132, 255, .10); border: 2px solid rgba(10, 132, 255, .25); }
+  .q-opt.busy { color: #8e8e93; background: rgba(255, 255, 255, .05); border-color: rgba(255, 255, 255, .12); }
+  .q-spin { width: 22px; height: 22px; border-radius: 50%; border: 3px solid #48484a; border-top-color: #aeaeb2; }
+  .tb .send.go { background: #0a84ff; color: #fff; }
+  .q-hl { outline: 3px dashed #ff9f0a; outline-offset: 5px; border-radius: 8px; }
+  .q-rule { display: grid; grid-template-columns: repeat(4, 1fr); gap: 14px; margin-top: 6px; }
+  .q-step { background: #f5f6f8; border-radius: 10px; padding: 12px 14px; font-size: 13px; line-height: 1.6; color: var(--text-2); }
+  .q-step b { display: block; color: var(--text-1); font-size: 14px; }
+  .q-step .n { display: inline-block; font-weight: 700; color: #d46b08; margin-right: 6px; }
+  .q-tbl { border-collapse: collapse; font-size: 13px; margin-top: 10px; }
+  .q-tbl td, .q-tbl th { border: 1px solid #e5e7eb; padding: 5px 10px; text-align: right; font-variant-numeric: tabular-nums; }
+  .q-tbl th { background: #f5f6f8; font-weight: 600; }
+  .q-tbl td:first-child, .q-tbl th:first-child { text-align: left; }
+  .q-tbl .over { color: #cf1322; font-weight: 600; }
+  .q-tbl .fit { color: #389e0d; font-weight: 600; }
+  .q-two { display: grid; grid-template-columns: 1fr 1fr; gap: 22px; }
+  .q-two h3 { font-size: 15px; margin: 0 0 8px; }
+  .q-two ul, .q-two ol { margin: 0; padding-left: 20px; font-size: 13.5px; line-height: 1.75; color: var(--text-2); }
+  .q-two b { color: var(--text-1); }
+</style>
+</head>
+<body class="m">
+<svg width="0" height="0" style="position:absolute" aria-hidden="true">
+  <symbol id="i-up" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round"><path d="M12 19V5M5 12l7-7 7 7"/></symbol>
+</svg>
+
+<div class="m-sheet">
+<section class="b-part" id="part-1">
+  <h1 class="m-h1 zh">04 · 出现 ✦ Optimize 后，底栏谁先让位</h1>
+  <p class="m-sub zh">重叠已修（胶囊不再被挤压）。现在挤不下时只剩模型控件在缩：iPhone 17 Pro 上 “Opus 5.5” 缩成一个字母。所有宽度按模拟器读出的 pt 画（2 倍放大）：+ 32 · 模式 · 模型 · 用量胶囊 57 · Optimize 88 · 发送 32，间距 8。</p>
+  <div class="q-grid" id="grid"></div>
+</section>
+
+<section class="b-part" id="part-2">
+  <h2 class="m-h2 zh" style="margin-top:0">方案 C 的让位顺序（推荐）</h2>
+  <div class="q-rule zh">
+    <div class="q-step"><b><span class="n">0</span>放得下</b>什么都不变：Optimize 带字，模型名 + 推理强度都显示。iPad、Mac、无草稿时都是这一档。</div>
+    <div class="q-step"><b><span class="n">1</span>先收 Optimize 的字</b>变成 32pt 的 ✦ 圆钮，和 + / 发送同大。省 56pt。无障碍标签、Tab 键、⌘⇧O 都不变；忙碌时圆钮里转圈。</div>
+    <div class="q-step"><b><span class="n">2</span>再藏推理强度</b>“High / Default” 这个词从底栏拿掉（模型菜单里仍可见、可改）。省约 38–53pt。</div>
+    <div class="q-step"><b><span class="n">3</span>最后才截断模型名</b>只有特别长的名字（如 deepseek-v4-flash）才会出现 “deepseek-v…”。权限模式永远不截。</div>
+  </div>
+  <table class="q-tbl zh">
+    <tr><th>底栏需要的宽度（pt）</th><th>全显示</th><th>① 收 Optimize 字</th><th>② 再藏推理强度</th><th>可用宽度</th></tr>
+    <tr><td>iPhone 17 Pro · Default · Opus 5.5 High</td><td class="over">420</td><td class="over">365</td><td class="fit">327</td><td>354</td></tr>
+    <tr><td>iPhone Pro Max · Auto · Opus 5.5 Default</td><td class="over">420</td><td class="fit">365</td><td>—</td><td>391</td></tr>
+  </table>
+  <p class="q-cap zh">两台手机都要走到第 ① 档；17 Pro 还要走第 ② 档，模型名才能完整显示。每一档都是“放不下才用”，名字短、强度短时会停在更早的档。</p>
+</section>
+
+<section class="b-part" id="part-3">
+  <div class="q-two zh">
+    <div>
+      <h3>待定 · 要你拍板</h3>
+      <ol>
+        <li><b>Optimize 收起后的样子</b>：<b>A ✦ 圆钮（推荐）</b>，留在原位、颜色不变，只是去掉字；或 <b>B 移进输入框右上角</b>，底栏完全不占位，但离发送远，Mac/Web 也得跟着改。</li>
+        <li><b>推理强度藏起来还是缩写</b>：<b>A 藏（推荐）</b>，菜单里还在；或 <b>B 缩成首字母</b>“H / M / L”，省得少（约 25pt），17 Pro 上仍放不下全名。</li>
+        <li><b>顺序要不要反过来</b>（先藏强度、再收 Optimize）：Pro Max 上只藏强度就够（见右侧 A 行），Optimize 能保住字；但 17 Pro 上光藏强度只剩 “Op…”。推荐先收 Optimize：它是临时按钮，✦ 本身就认得出；模型名是常驻信息。</li>
+      </ol>
+    </div>
+    <div>
+      <h3>落地（按代价排）</h3>
+      <ol>
+        <li><b>ComposerView.swift 一处</b>：iPhone 底栏右侧用 <code>ViewThatFits(in: .horizontal)</code> 依次试三档（全显示 → Optimize 只留 ✦ → 再去掉强度），最后一档允许截断名字。iPad / Mac 不走这条。</li>
+        <li><b>PromptOptimizerViews.swift</b>：<code>PromptOptimizeButton</code> 加一个 compact 参数（32pt 圆、✦ 或转圈），无障碍标签保持 “Optimize / Optimizing”。</li>
+        <li><b>验证</b>：Mac mini 模拟器上 17 Pro 与 Pro Max 各截一张，读出各控件 frame，确认无重叠、名字完整。</li>
+        <li><b>Android</b> 的底栏照 iOS 跟进（另起一个任务）。</li>
+      </ol>
+    </div>
+  </div>
+</section>
+</div>
+
+<script>
+// One footer at 2×: widths in pt as read off the simulator / screenshot.
+const PT = 2;
+function ring() {
+  return '<span class="ring" style="width:32px;height:32px"><svg viewBox="0 0 36 36"><circle cx="18" cy="18" r="14" fill="none" stroke="#8e8e93" stroke-width="3" stroke-dasharray="4.4 4.4"/></svg></span>';
+}
+function footer({ cw, mode, modeW, name, effort, modelW, opt, hl = [], clip = false, busy = false }) {
+  const h = (k) => (hl.includes(k) ? ' q-hl' : '');
+  const optEl = opt === 'full'
+    ? `<span class="q-opt${h('opt')}" style="width:${88 * PT}px">✦ Optimize</span>`
+    : busy
+      ? `<span class="q-opt busy${h('opt')}" style="width:${32 * PT}px"><span class="q-spin"></span></span>`
+      : `<span class="q-opt${h('opt')}" style="width:${32 * PT}px;font-size:28px">✦</span>`;
+  return `<div class="zoom" style="width:fit-content"><div class="card" style="box-sizing:border-box;width:${cw * PT + 34}px"><div class="ph">Check the gauge</div><div class="tb">
+    <span class="plus">+</span>
+    <span class="q-mode" style="width:${modeW * PT}px">${mode}</span>
+    <span class="grow"></span>
+    <span class="q-model${h('model')}" style="width:${modelW * PT + 2}px"><b class="${clip ? 'clip' : ''}">${name}</b>${effort ? `<span data-w="${{ Default: 48, High: 33 }[effort]}">${effort}</span>` : ''}</span>
+    <span class="gp line tight" style="width:${57 * PT}px"><span class="gbar" style="width:48px;height:10px;border-radius:5px;background:#3a3a3c;overflow:hidden"><i style="display:block;height:100%;width:42%;background:#0a84ff"></i></span>${ring()}</span>
+    ${optEl}
+    <span class="send go"><svg><use href="#i-up"/></svg></span>
+  </div></div></div>`;
+}
+// Card content widths: Pro Max 391pt, 17 Pro 354pt; the spacer takes what is left.
+const max = { cw: 391, mode: 'Auto', modeW: 32 };
+const pro = { cw: 354, mode: 'Default', modeW: 51 };
+const rows = [
+  ['今天（已修重叠）', '只剩模型控件在缩，名字先没。',
+    [footer({ ...max, name: 'Opus 5.5', effort: 'Default', modelW: 87, opt: 'full', hl: ['model'] }), '<span class="bad">“Op…” Default</span>：强度保住了，名字没了。'],
+    [footer({ ...pro, name: 'O', effort: 'High', modelW: 38, opt: 'full', hl: ['model'], clip: true }), '<span class="bad">一个被裁的字母 + High</span>（模拟器实测 38pt）。']],
+  ['A · 只先藏推理强度', 'Optimize 不动。',
+    [footer({ ...max, name: 'Opus 5.5', effort: '', modelW: 87, opt: 'full', hl: ['model'] }), '<span class="ok">“Opus 5.5” 完整</span>，但强度不见了。'],
+    [footer({ ...pro, name: 'Opus 5.5', effort: '', modelW: 38, opt: 'full', hl: ['model'] }), '<span class="bad">“Op…”</span>：17 Pro 上不够。']],
+  ['B · 只先收 Optimize 的字', '✦ 圆钮，32pt。',
+    [footer({ ...max, name: 'Opus 5.5', effort: 'Default', modelW: 116, opt: 'icon', hl: ['opt'] }), '<span class="ok">全部显示</span>，还多出 26pt。'],
+    [footer({ ...pro, name: 'Opus 5.5', effort: 'High', modelW: 94, opt: 'icon', hl: ['opt', 'model'] }), '<span class="bad">“Opus 5…” High</span>：差 8pt。']],
+  ['C · 先 B，仍放不下再 A（推荐）', '按需逐档让位，见下一张。',
+    [footer({ ...max, name: 'Opus 5.5', effort: 'Default', modelW: 116, opt: 'icon', hl: ['opt'] }), '<span class="ok">停在第 ① 档</span>：名字 + 强度都在。'],
+    [footer({ ...pro, name: 'Opus 5.5', effort: '', modelW: 64, opt: 'icon', hl: ['opt', 'model'] }), '<span class="ok">走到第 ② 档</span>：“Opus 5.5” 完整。']],
+  ['C · 优化中', '圆钮里转圈，点一下取消。',
+    [footer({ ...max, name: 'Opus 5.5', effort: 'Default', modelW: 116, opt: 'icon', busy: true }), '和带字的 “Optimizing…” 同一状态。'],
+    [footer({ ...pro, name: 'Opus 5.5', effort: '', modelW: 64, opt: 'icon', busy: true }), '']],
+];
+const grid = document.getElementById('grid');
+// The board's font is wider than SF Pro: scale the footer text so "Opus 5.5" semibold is its real 63pt.
+function fitFont() {
+  const probe = document.createElement('b');
+  probe.textContent = 'Opus 5.5';
+  probe.style.cssText = 'position:absolute;visibility:hidden;font-size:30px;font-weight:600;white-space:nowrap';
+  document.querySelector('.tb').appendChild(probe);
+  const f = (63 * PT) / probe.getBoundingClientRect().width;
+  probe.remove();
+  for (const tb of document.querySelectorAll('.tb')) tb.style.fontSize = (30 * f).toFixed(1) + 'px';
+  // Effort words at their measured SF widths (Default 48pt, High 33pt on the owner's screenshot / simulator).
+  for (const el of document.querySelectorAll('[data-w]')) {
+    const size = parseFloat(getComputedStyle(el).fontSize);
+    el.style.fontSize = (size * (Number(el.dataset.w) * PT) / el.getBoundingClientRect().width).toFixed(1) + 'px';
+  }
+}
+grid.innerHTML = '<div></div><div class="q-col zh">iPhone Pro Max（440pt，你的截图）</div><div class="q-col zh">iPhone 17 Pro（402pt，模拟器）</div>' +
+  rows.map(([t, s, a, b]) => `<div class="q-row zh"><b>${t}</b>${s}</div>` +
+    [a, b].map(([f, c]) => `<div class="q-cell">${f}<p class="q-cap zh">${c}</p></div>`).join('')).join('');
+fitFont();
+</script>
+</body>
+</html>

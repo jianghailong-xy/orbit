@@ -1,0 +1,43 @@
+{
+  "$comment": "One rule, three clients (docs/coordinator-handoff-v2-design.md §4): a coordinator conversation does not draw a record (answered question, decision receipt, merge line, blocked promotion) stamped before the conversation was created. 'head' stays for a record after its creation but older than its oldest loaded row. Open items are not records and are drawn as before. A successor's handoff note card counts the decisions and merges before it. Read by web decisionReceipt.test.ts, OrbitKit CoordinatorCleanStartTests and Android CoordinatorCleanStartTest.",
+  "createdAt": "2026-11-16T15:00:00.000Z",
+  "loaded": [
+    { "id": "e10", "seq": 10, "ts": "2026-11-16T15:10:00.000Z" },
+    { "id": "e11", "seq": 11, "ts": "2026-11-16T15:20:00.000Z" },
+    { "id": "e12", "seq": 12, "ts": "2026-11-16T15:30:00.000Z" }
+  ],
+  "records": [
+    { "name": "a record from the day before the conversation", "stamp": "2026-11-15T09:00:00.000Z", "expect": "hidden" },
+    { "name": "a record a millisecond before the conversation was created", "stamp": "2026-11-16T14:59:59.999Z", "expect": "hidden" },
+    { "name": "a record at the conversation's creation, older than the loaded page", "stamp": "2026-11-16T15:00:00.000Z", "expect": "head" },
+    { "name": "a record after creation but older than the loaded page", "stamp": "2026-11-16T15:05:00.000Z", "expect": "head" },
+    { "name": "a record inside the loaded page", "stamp": "2026-11-16T15:25:00.000Z", "expect": { "after": "e11" } },
+    { "name": "a record after the newest loaded row", "stamp": "2026-11-16T16:00:00.000Z", "expect": { "after": "e12" } },
+    { "name": "a stamp nothing can read", "stamp": "not a stamp", "expect": "hidden" }
+  ],
+  "openItems": [
+    { "name": "an open question asked before the conversation was created", "stamp": "2026-11-15T09:00:00.000Z", "expect": "head" },
+    { "name": "an open question asked inside the loaded page", "stamp": "2026-11-16T15:25:00.000Z", "expect": { "after": "e11" } }
+  ],
+  "counts": [
+    {
+      "name": "records before the conversation are counted, the ones after are not",
+      "decisions": ["2026-11-14T18:41:00.000Z", "2026-11-15T04:00:00.000Z", "2026-11-16T14:59:59.999Z", "2026-11-16T15:00:00.000Z", "2026-11-16T15:25:00.000Z", "not a stamp"],
+      "merges": ["2026-11-15T07:33:00.000Z", "2026-11-16T15:40:00.000Z"],
+      "expect": { "decisions": 3, "merges": 1 }
+    },
+    {
+      "name": "nothing before the conversation",
+      "decisions": ["2026-11-16T15:25:00.000Z"],
+      "merges": [],
+      "expect": { "decisions": 0, "merges": 0 }
+    }
+  ],
+  "noteLine": [
+    { "decisions": 12, "merges": 3, "expect": "12 decisions and 3 merges before this conversation" },
+    { "decisions": 1, "merges": 0, "expect": "1 decision and 0 merges before this conversation" },
+    { "decisions": 0, "merges": 1, "expect": "0 decisions and 1 merge before this conversation" },
+    { "decisions": 0, "merges": 0, "expect": null }
+  ],
+  "openPrevious": "Open previous coordinator"
+}

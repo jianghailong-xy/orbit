@@ -215,6 +215,18 @@ public final class APIClient: @unchecked Sendable {
                                       projectId: projectId, includeLanding: includeLanding)
     }
 
+    /// The scheduled folder always reads a plain array, independent of the Open list cursor.
+    public func listScheduledRuns(workspaceID: String, view: SessionView) async throws -> [Session] {
+        // Every list row carries runSource, and the folder keeps only SCHEDULE rows, so a server that ignores
+        // `scheduled` (an older one answers its whole list) shows an empty folder rather than a person's sessions.
+        let rows: [Session] = try await getCancellable("sessions", query: [
+            URLQueryItem(name: "workspaceId", value: workspaceID),
+            URLQueryItem(name: "view", value: view.queryValue),
+            URLQueryItem(name: "scheduled", value: "1"),
+        ])
+        return SessionFilter.forAgent(rows, agentID: workspaceID, view: view, scheduled: true)
+    }
+
     /// How many rows `GET /sessions?view=<view>&limit=1` answers: 0 or 1. The welcome card's read of
     /// whether an account has ever had a session (docs/mocks/new-user-onboarding, board 03 rule 1), the
     /// web's `useNewAccount`. Rows are counted, never decoded: an answer that isn't an array throws.
@@ -761,6 +773,12 @@ public final class APIClient: @unchecked Sendable {
         try await get("sessions/\(sessionID)/approvals", query: [URLQueryItem(name: "status", value: status)])
     }
 
+    /// Every AskUserQuestion card of the session, decided or not: an answered question's record
+    /// shows the questions as its card did, in the owner's language (web: `listQuestionApprovals`).
+    public func questionApprovals(sessionID: String) async throws -> [ApprovalInfo] {
+        try await get("sessions/\(sessionID)/approvals", query: [URLQueryItem(name: "toolName", value: "AskUserQuestion")])
+    }
+
     /// Prompt optimizer: DeepSeek improves a composer draft (docs/prompt-optimizer-design.md). One call
     /// per press; 409 PROMPT_OPTIMIZER_OFF, 404, 400 and 422 PROMPT_OPTIMIZATION_FAILED throw.
     public func optimizePrompt(_ req: PromptOptimizationRequest) async throws -> PromptOptimization {
@@ -967,9 +985,9 @@ public final class APIClient: @unchecked Sendable {
     /// "Not yet…" on the coordinator's request to record the project done: the request is ended and
     /// the owner's note goes to the coordinator conversation with the card's facts.
     public func declineDoneRequest(projectID: String, itemID: String,
-                                   note: String) async throws -> ProjectDoneRequestDeclined {
+                                   note: String, sendAsWritten: Bool = false) async throws -> ProjectDoneRequestDeclined {
         try await post("projects/\(projectID)/done-requests/\(itemID)/decline",
-                       body: ProjectDoneDeclineBody(note: note))
+                       body: ProjectDoneDeclineBody(note: note, sendAsWritten: sendAsWritten))
     }
 
     // MARK: the done card's follow-ups (`ProjectDoneFollowUps.swift`)
@@ -1027,8 +1045,16 @@ public final class APIClient: @unchecked Sendable {
         try await post("owner-requests/\(id)/done", body: body)
     }
 
-    public func declineOwnerRequest(_ id: String, reason: String) async throws -> OwnerRequest {
-        try await post("owner-requests/\(id)/decline", body: OwnerRequestDeclineBody(reason: reason))
+    /// A condition's 30-day question answered by its option (0 Keep waiting, 1 Stop). The answer is a kind
+    /// `OwnerRequest` does not read, so it is taken as it comes and the list is read again.
+    @discardableResult
+    public func answerConditionItem(_ id: String, option: Int) async throws -> JSONValue {
+        try await post("owner-requests/\(id)/done", body: OwnerRequestDoneBody(option: option))
+    }
+
+    public func declineOwnerRequest(_ id: String, reason: String, sendAsWritten: Bool = false) async throws -> OwnerRequest {
+        try await post("owner-requests/\(id)/decline",
+                       body: OwnerRequestDeclineBody(reason: reason, sendAsWritten: sendAsWritten))
     }
 
     /// A WIKI_CREATE card's Create wiki (docs/wiki-explicit-creation-design.md §3.6): the owner's door that makes the
@@ -1263,6 +1289,14 @@ public final class APIClient: @unchecked Sendable {
     /// silent generation ends and the next one is queued. Answers the integration view read again.
     public func retryIntegrationJob(_ projectID: String, jobID: String) async throws -> ProjectIntegrationView {
         try await postEmpty("projects/\(projectID)/integration/jobs/\(jobID)/retry")
+    }
+
+    /// The owner's "Land without the check" on a landing in flight (§2.4 J-S5): the server stops it
+    /// and lands it again with the landing check not run, recorded as skipped by the owner. The
+    /// answer is not read: the card redraws from the integration view read again.
+    public func skipLandingCheck(_ projectID: String, taskID: String) async throws {
+        try await postRaw("projects/\(projectID)/tasks/\(taskID)/integration/skip-merge-check",
+                          body: ["reason": ProjectPage.landingSkipCheckReason])
     }
 
     /// One page of the project's top-level tasks, newest first.
@@ -1917,6 +1951,43 @@ public final class APIClient: @unchecked Sendable {
         try await getCancellable("runners/\(runnerID)/dir-probe", query: [URLQueryItem(name: "path", value: path)])
     }
 
+    // MARK: GitHub (docs/github-workspace-design.md §5.2, §5.3)
+
+    /// `GET /integrations/github`: whether the deployment has the App, and the account's connection.
+    public func githubIntegration() async throws -> GithubIntegration {
+        try await get("integrations/github")
+    }
+
+    /// `GET /integrations/github/repos?q=`: the repositories the person can pick, most recently pushed first.
+    public func githubRepositories(query: String) async throws -> GithubRepositoryPage {
+        try await getCancellable("integrations/github/repos",
+                                 query: query.isEmpty ? [] : [URLQueryItem(name: "q", value: query)])
+    }
+
+    /// `GET /integrations/github/repos/:id/branches`: asked only once Other branch is opened.
+    public func githubBranches(repoID: Int64) async throws -> GithubBranches {
+        try await getCancellable("integrations/github/repos/\(repoID)/branches")
+    }
+
+    /// `GET /integrations/github/start?return=`: where to send the person to sign in to GitHub. `returnTo` is the
+    /// Orbit path the callback comes back to.
+    public func githubStart(returnTo: String) async throws -> URL {
+        let start: GithubStart = try await get("integrations/github/start",
+                                               query: [URLQueryItem(name: "return", value: returnTo)])
+        guard let url = URL(string: start.authorizationUrl) else { throw URLError(.badURL) }
+        return url
+    }
+
+    /// `DELETE /integrations/github`: forget the connection; answers the view as it now stands.
+    public func disconnectGithub() async throws -> GithubIntegration {
+        try await delete("integrations/github")
+    }
+
+    /// `POST /workspaces/:id/clone/retry`: a FAILED clone goes back to PENDING, and the runner is told.
+    public func retryClone(workspaceID: String) async throws -> CloneRetryAnswer {
+        try await post("workspaces/\(workspaceID)/clone/retry", body: [String: String]())
+    }
+
     // MARK: managed runner (docs/managed-runner-design.md, "Server and three client interfaces")
 
     /// `GET /api/auth/capabilities`. A server from before the feature answers 404: nil, which is no
@@ -1957,8 +2028,8 @@ public final class APIClient: @unchecked Sendable {
         try await post("runners/\(runnerID)/codex-rate-limit-reset", body: request)
     }
     public func updateRunner(_ id: String, _ req: UpdateRunnerRequest) async throws -> Runner { try await patch("runners/\(id)", body: req) }
-    /// Persist the list's drag order: `ids` is every runner, in order. Answers with the list as the
-    /// server now orders it (omitted runners appended, foreign ids dropped).
+    /// Persist the list's drag order. The server answers with the full order, with omitted runners
+    /// appended and foreign ids dropped.
     @discardableResult
     public func reorderRunners(_ ids: [String]) async throws -> [Runner] {
         try await post("runners/reorder", body: ReorderRunnersRequest(ids: ids))
@@ -2349,6 +2420,11 @@ public final class APIClient: @unchecked Sendable {
     /// The inspector: the schedule, its last runs, findings, this month's use, history and pending cards.
     public func schedule(_ id: String) async throws -> ScheduleDetailResponse {
         try await get("schedules/\(id)")
+    }
+
+    /// `GET /conditions/:id`: a condition's state, newest samples and events (docs/condition-triggers-design.md §8).
+    public func condition(_ id: String) async throws -> ConditionView {
+        try await get("conditions/\(id)")
     }
 
     public func scheduleRuns(_ id: String, limit: Int = 20) async throws -> [ScheduleRunView] {

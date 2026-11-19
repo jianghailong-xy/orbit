@@ -10,6 +10,8 @@ import io.orbitd.android.core.net.ApiError
 import io.orbitd.android.core.net.ApiRequest
 import io.orbitd.android.core.net.HttpMethod
 import io.orbitd.android.core.protocol.Wire
+import io.orbitd.android.core.schedule.ConditionView
+import io.orbitd.android.core.schedule.ConditionWaitingItem
 import io.orbitd.android.core.schedule.ScheduleApi
 import io.orbitd.android.core.schedule.ScheduleCard
 import io.orbitd.android.core.schedule.ScheduleDecisionOutcome
@@ -17,6 +19,7 @@ import io.orbitd.android.core.schedule.ScheduleDetailResponse
 import io.orbitd.android.core.schedule.ScheduleDisplay
 import io.orbitd.android.core.schedule.ScheduleRunView
 import io.orbitd.android.core.schedule.ScheduleView
+import io.orbitd.android.core.schedule.ScheduleWaitingTask
 import io.orbitd.android.core.schedule.SessionScheduleCardsResponse
 import io.orbitd.android.navigation.ObjectId
 import java.time.Instant
@@ -55,6 +58,11 @@ class ScheduledStore internal constructor(private val auth: AuthSession, val han
         val listRuns: List<ScheduleRunView>? = null,
         /** The account's PENDING create cards: the timeline's dashed rows and the draft panel. */
         val drafts: List<ScheduleCard> = emptyList(),
+        /** The OPEN tasks waiting for their startWhen condition: the "Waiting for a condition" group's task rows, tagged Can't read
+         * at its head when one cannot be read (docs/condition-triggers-design.md §9). */
+        val waitingTasks: List<ScheduleWaitingTask> = emptyList(),
+        /** Conditions read on their own (the inspector's Condition block, a run's firing, a Waiting on you card), by canonical id. */
+        val conditions: Map<String, ConditionView> = emptyMap(),
         /** The detail sheet's reads, by canonical schedule id. */
         val details: Map<String, ScheduleDetailResponse> = emptyMap(),
         /** Cards read on their own (a widen item's), by canonical request id. */
@@ -78,17 +86,27 @@ class ScheduledStore internal constructor(private val auth: AuthSession, val han
         /** The last refusal a press came back with, said once under what was pressed. */
         val errorText: String? = null,
     ) {
-        /** The drawer's number: failing or held, nothing at zero. */
-        val needsYouCount get() = ScheduleDisplay.needsYouCount(schedules)
+        /** The drawer's number: held, failing with no run under way, or a condition that cannot be read; nothing at zero. */
+        val needsYouCount get() = ScheduleDisplay.needsYouCount(schedules, waitingTasks, pageRuns)
+
+        /** The runs the page knows of: the list's, or, from a server that sends none, each schedule's last and its detail's recent. */
+        val pageRuns: List<ScheduleRunView> get() = listRuns ?: schedules.flatMap { s ->
+            listOfNotNull(s.lastRun) + detail(s.id)?.recentRuns.orEmpty()
+        }.distinctBy { it.id }
 
         val shownSchedules get() = schedules.filter { it.state != "ENDED" && (workspaceFilter == null || ObjectId.same(it.workspaceId, workspaceFilter)) }
 
-        /** The count beside the page title (board ②): what the timeline lists. */
-        val listedCount get() = shownSchedules.size + drafts.size
+        val shownWaitingTasks get() = waitingTasks.filter { workspaceFilter == null || ObjectId.same(it.workspaceId, workspaceFilter) }
 
-        /** The workspaces the filter offers: the ones a schedule runs in, by name. */
-        val workspaces: List<Pair<String, String>> get() = schedules.distinctBy { key(it.workspaceId) }
-            .map { it.workspaceId to (it.workspaceName ?: it.workspaceId) }.sortedBy { it.second }
+        /** The count beside the page title (board ②): what the timeline lists. */
+        val listedCount get() = shownSchedules.size + drafts.size + shownWaitingTasks.size
+
+        /** The workspaces the filter offers: the ones a schedule, or a waiting task, runs in, by name. */
+        val workspaces: List<Pair<String, String>> get() = (schedules.map { it.workspaceId to it.workspaceName } +
+            waitingTasks.map { it.workspaceId to it.workspaceName }).distinctBy { key(it.first) }
+            .map { (id, name) -> id to (name ?: id) }.sortedBy { it.second }
+
+        fun condition(id: String?): ConditionView? = id?.let { conditions[key(it)] }
 
         fun detail(id: String): ScheduleDetailResponse? = details[key(id)]
         fun schedule(id: String): ScheduleView? = detail(id)?.schedule ?: schedules.firstOrNull { ObjectId.same(it.id, id) }
@@ -102,11 +120,9 @@ class ScheduledStore internal constructor(private val auth: AuthSession, val han
         fun timeline(now: Instant, timezone: String): List<ScheduleDisplay.TimelineGroup> {
             val shown = shownSchedules
             val ids = shown.map { key(it.id) }.toSet()
-            val runs = listRuns?.filter { key(it.scheduleId) in ids } ?: shown.flatMap { s ->
-                listOfNotNull(s.lastRun) + detail(s.id)?.recentRuns.orEmpty()
-            }.distinctBy { it.id }
+            val runs = pageRuns.filter { key(it.scheduleId) in ids }
             val drafts = if (workspaceFilter == null) drafts else drafts.filter { ObjectId.same(it.runsIn?.workspaceId, workspaceFilter) }
-            return ScheduleDisplay.timeline(shown, runs, drafts, showPastRuns, now, timezone)
+            return ScheduleDisplay.timeline(shown, runs, drafts, showPastRuns, now, timezone, shownWaitingTasks)
         }
     }
 
@@ -138,7 +154,8 @@ class ScheduledStore internal constructor(private val auth: AuthSession, val han
             if (!live()) return
             val drafts = try { api.drafts() } catch (cancel: CancellationException) { throw cancel } catch (_: Exception) { mutable.value.drafts }
             if (!live()) return
-            mutable.update { it.copy(schedules = list.schedules, listRuns = list.runs, drafts = drafts, loaded = true) }
+            mutable.update { it.copy(schedules = list.schedules, listRuns = list.runs, drafts = drafts, waitingTasks = list.waitingTasks.orEmpty(),
+                loaded = true) }
             // A server that sends no window of runs: each schedule's detail stands in.
             if (list.runs == null) list.schedules.forEach { loadDetailNow(it.id) }
         } catch (cancel: CancellationException) { throw cancel }
@@ -152,6 +169,20 @@ class ScheduledStore internal constructor(private val auth: AuthSession, val han
         val detail = try { api.detail(id) } catch (cancel: CancellationException) { throw cancel } catch (_: Exception) { return }
         if (live()) mutable.update { it.copy(details = it.details + (key(id) to detail)) }
     }
+
+    /** A condition's own read: its state, newest samples and events. */
+    fun loadCondition(id: String) { scope.launch { loadConditionNow(id) } }
+
+    suspend fun loadConditionNow(id: String) {
+        val condition = try { api.condition(id) } catch (cancel: CancellationException) { throw cancel } catch (_: Exception) { return }
+        if (live()) mutable.update { it.copy(conditions = it.conditions + (key(id) to condition)) }
+    }
+
+    /** The 30-day question answered: Keep waiting (0) or Stop (1). The server's refusal in its own words, or null. */
+    suspend fun answerCondition(item: ConditionWaitingItem, option: Int): String? = try {
+        api.answerConditionItem(item.id, option)
+        null
+    } catch (cancel: CancellationException) { throw cancel } catch (error: Exception) { ScheduleApi.refusal(error) }
 
     fun loadCard(id: String) {
         scope.launch {
@@ -191,7 +222,7 @@ class ScheduledStore internal constructor(private val auth: AuthSession, val han
         }
     }
 
-    /** The run a session's read names, for a server whose schedule-cards read names none: a run's session is in no list. */
+    /** The run a session's read names, for a server whose schedule-cards read names none. */
     private suspend fun findRun(runId: String): ScheduleRunView? {
         val schedules = try { api.list(state = "all").schedules } catch (cancel: CancellationException) { throw cancel } catch (_: Exception) { return null }
         for (s in schedules) {

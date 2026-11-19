@@ -83,6 +83,7 @@ export function MoveCriterionDialog({
   const [picked, setPicked] = useState<string | null>(null);
   const projects = useQuery({
     queryKey: ['projects'],
+    meta: { entities: ['project', 'task'] },
     queryFn: () => api<ProjectRow[]>('/projects'),
     enabled: open && target === 'EXISTING',
   });

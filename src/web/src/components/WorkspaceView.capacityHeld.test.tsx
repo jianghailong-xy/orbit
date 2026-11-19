@@ -34,12 +34,21 @@ function mount(node: React.ReactNode) {
 }
 
 describe('a session a full runner, run or batch holds', () => {
-  it('reads Runner full in the list and the header', () => {
+  // Board session-row-runner-full, the owner's pick C: the list says it in plain words with no clock (the
+  // row's own time counts the wait); its tooltip says what is full. The header keeps the gate's name.
+  it('reads Waiting for a free slot in the list, with the gate in its tooltip, and Runner full in the header', () => {
     const row = { status: 'PENDING', ...gate };
-    expect(sessionLine(row, true)).toEqual({ text: 'Runner full', tone: 'queued' });
+    expect(sessionLine(row, true, null, true, 'HPC')).toEqual({
+      text: 'Waiting for a free slot',
+      tone: 'queued',
+      hint:
+        'Runner full\nHPC is using all 16 slots: 10 sessions are running a turn and 6 hold a slot with a background job. This message is sent as soon as one frees up.\nWaiting 15 min',
+    });
     expect(statusLabel(row)).toBe('Runner full');
-    expect(sessionLine({ status: 'PENDING', queuedReason: 'tree_at_capacity' }, true).text).toBe('Run full');
-    expect(sessionLine({ status: 'PENDING', queuedReason: 'batch_at_capacity' }, true).text).toBe('Batch full');
+    const run = sessionLine({ status: 'PENDING', queuedReason: 'tree_at_capacity' }, true);
+    expect([run.text, run.hint?.split('\n')[0]]).toEqual(['Waiting for a free slot', 'Run full']);
+    const batch = sessionLine({ status: 'PENDING', queuedReason: 'batch_at_capacity' }, true);
+    expect([batch.text, batch.hint?.split('\n')[0]]).toEqual(['Waiting for a free slot', 'Batch full']);
   });
 
   it('tags the waiting message `Queued · runner full`, and a press opens how the slots are taken', async () => {

@@ -49,6 +49,10 @@ struct ConsoleView: View {
     /// and the session's workspace list the Move panel counts its folders over.
     @State private var movingSession: Session?
     @State private var moveListed: [Session] = []
+    #if os(macOS)
+    /// Agent Tools, from the window toolbar (docs/mocks/agent-tools board ⑤).
+    @State private var showAgentTools = false
+    #endif
     /// The session whose Settings sheet is open (`SessionSettingsSheet`), from Settings… in the ⋯ menu
     /// or the Mac toolbar.
     @State private var settingsSession: Session?
@@ -244,7 +248,7 @@ struct ConsoleView: View {
     /// tray's waiting rows say which (`PendingTrayView.held`).
     private func trayHeld(_ console: ConsoleModel) -> Session? {
         guard let session = appModel.session(id: console.sessionID),
-              RunnerUpdating.holds(session) || QueuedCapacity.holds(session) else { return nil }
+              RunnerUpdating.holds(session) || QueuedCapacity.holds(session) || QueuedDiskLow.holds(session) else { return nil }
         return session
     }
 
@@ -425,6 +429,8 @@ struct ConsoleView: View {
                 .environment(\.sessionImagePreview, sessionImagePreview(console))
                 // The workspace's background agents and workflows, for the cards that draw them.
                 .environment(\.taskActivity, taskActivity(console))
+                // Settings › Translation: an answered question keeps the language its card was in.
+                .environment(\.questionTranslations, console.questionTranslations)
                 // Settings › Translation: what a translated message's foot can do (frames 4–6).
                 .environment(\.translationActions, TranslationActions(
                     on: SessionTranslation.isOn(appModel.user),
@@ -560,9 +566,34 @@ struct ConsoleView: View {
         }
         .sessionRenameAlert(isPresented: $renaming, draft: $renameDraft, sessionID: sessionID)
         // The project's sessions page read as the conversation opens, so the button's count is the
-        // one the sheet will show before the sheet is ever opened (`projectSessionCount`).
-        .task(id: projectSheetAddress) {
-            if let address = projectSheetAddress { await appModel.loadProjectSessions(address) }
+        // one the sheet will show before the sheet is ever opened (`projectSessionCount`). Its
+        // members, landing line and merge are then polled as the page polls them, so the button's
+        // spinner (`projectActive`) follows them with the sheet closed. While the sheet is open the
+        // page polls them itself, so these stop, and read again when it closes.
+        .task(id: projectButtonReadAddress) {
+            if let address = projectButtonReadAddress { await appModel.loadProjectSessions(address) }
+            guard let address = projectButtonReadAddress else { return }
+            await withTaskGroup(of: Void.self) { group in
+                group.addTask { @MainActor in
+                    await ViewPoll.run(appModel, every: 4, inFlight: { 4 }) {
+                        await appModel.pollProjectSessions(address)
+                    }
+                }
+                group.addTask { @MainActor in
+                    await appModel.loadProjectIntegration(address)
+                    await ViewPoll.run(appModel, every: 15, hints: { appModel.projectHints },
+                                       inFlight: { appModel.projectSessionsLandingRunning ? 4 : nil }) {
+                        await appModel.loadProjectIntegration(address)
+                    }
+                }
+                group.addTask { @MainActor in
+                    await appModel.loadProjectMerge(address)
+                    await ViewPoll.run(appModel, every: 15, hints: { appModel.projectHints },
+                                       inFlight: { appModel.projectSessionsMergeRunning ? 4 : nil }) {
+                        await appModel.loadProjectMerge(address)
+                    }
+                }
+            }
         }
         .sheet(item: $projectSheet, onDismiss: {
             let action = afterProjectSheet
@@ -620,6 +651,29 @@ struct ConsoleView: View {
                     .help("Session settings: labels, public link, environment, notifications and info")
                 }
             }
+            // Agent Tools (docs/mocks/agent-tools board ⑤): what the agent here can reach in Orbit and what
+            // it was told, read-only. None on a landing session (LS6), which runs no engine.
+            ToolbarItem(placement: .primaryAction) {
+                if appModel.session(id: sessionID)?.isLanding != true {
+                    Button { showAgentTools = true } label: {
+                        Label(AgentToolsCopy.title, systemImage: "puzzlepiece.extension")
+                    }
+                    .help(AgentToolsCopy.sessionLead)
+                }
+            }
+        }
+        .sheet(isPresented: $showAgentTools) {
+            let session = appModel.session(id: sessionID)
+            ConsoleAgentToolsSheet(
+                worktree: registry.peek(sessionID)?.worktree,
+                engine: session?.engine,
+                // The mode the server resolves for the session: its own, else the account's default.
+                permissionMode: AgentDefaults.resolvePermissionMode(
+                    session: session?.permissionMode,
+                    accountDefault: appModel.user?.preferences?.defaultPermissionMode).rawValue,
+                // Settings' reading of the switch: absent is on.
+                orchestrationOn: appModel.user?.preferences?.enableOrchestration ?? true,
+                onDone: { showAgentTools = false })
         }
         #endif
         // Settings… (docs/mocks/session-settings native.html ①–④), on every platform.
@@ -670,27 +724,41 @@ struct ConsoleView: View {
         return SessionProjectSheet.projectID(of: session).map { appModel.projectSheetAddress($0, session: session) }
     }
 
+    /// What the conversation reads for its project sessions button: the sheet's address, while the
+    /// sheet is closed. Open, the page in it reads the same things.
+    private var projectButtonReadAddress: SessionProjectAddress? {
+        projectSheet == nil ? projectSheetAddress : nil
+    }
+
     /// The project sessions sheet's subject, as `.sheet(item:)` needs it.
     private struct ProjectSheetTarget: Identifiable {
         let address: SessionProjectAddress
         var id: SessionProjectAddress { address }
     }
 
-    /// The project glyph and the project's session count ("⊞ 11"); a press puts the project's
-    /// sessions page up as a sheet, opening at medium height.
+    /// The project glyph and the project's session count ("⊞ 11"); while anything the sheet shows is
+    /// active the glyph gives its place to the session rows' spinner, in the accent (owner
+    /// 2026-11-17, docs/mocks/project-sessions-button-running, option C). A press puts the
+    /// project's sessions page up as a sheet, opening at medium height.
     private func projectSessionsButton(_ projectID: String) -> some View {
         let count = appModel.projectSessionCount(projectID)
+        let active = appModel.projectActive(projectID)
         return Button {
             projectSheet = ProjectSheetTarget(
                 address: appModel.projectSheetAddress(projectID, session: appModel.session(id: sessionID)))
         } label: {
             HStack(spacing: 4) {
-                Image(systemName: SessionProjectSheet.glyph)
+                if active {
+                    SpinnerGlyph(color: .accentColor).frame(width: 20, height: 20)
+                } else {
+                    Image(systemName: SessionProjectSheet.glyph)
+                }
                 if let count { Text("\(count)").monospacedDigit() }
             }
         }
         .accessibilityLabel(SessionProjectSheet.buttonLabel)
-        .accessibilityValue(count.map { "\($0) sessions" } ?? "")
+        .accessibilityValue([count.map { "\($0) sessions" }, active ? "Active" : nil]
+            .compactMap { $0 }.joined(separator: ", "))
         .accessibilityIdentifier("project-sessions-button")
     }
     #endif
@@ -814,6 +882,27 @@ struct ConsoleView: View {
     #endif
 }
 
+#if os(macOS)
+/// The console's Agent Tools sheet. The sheet holds values only; this reads the one that moves: the session's
+/// report, off the detail (GET /sessions/:id) the worktree bar keeps current while the session runs, read once
+/// more as the sheet opens, since a settled session's bar does not poll and its runner may have reported since.
+private struct ConsoleAgentToolsSheet: View {
+    let worktree: WorktreeModel?
+    let engine: String?
+    let permissionMode: String
+    let orchestrationOn: Bool
+    let onDone: () -> Void
+
+    var body: some View {
+        AgentToolsSheet(
+            mode: .session(report: worktree?.detail?.agentTools, engine: engine, permissionMode: permissionMode,
+                           orchestrationOn: orchestrationOn, now: Date()),
+            onDone: onDone)
+            .task { await worktree?.loadDetail() }
+    }
+}
+#endif
+
 /// The band's cards while a phone's composer holds the keyboard (`foldsChrome`): folded to no
 /// height, not removed, so an open list, the branch bar's sheet host and a "View tasks ›" press made
 /// meanwhile all keep their state, and the cards come back as they were when the keyboard goes.
@@ -865,6 +954,8 @@ struct TranscriptView: View {
     /// The bar was tapped open; the reader's next drag folds the band again.
     var bandOpened: Binding<Bool> = .constant(false)
     @State private var reviewSessionID: String?
+    /// The settled-items folds the reader opened, by their first card's row id (D1 = A).
+    @State private var settledFoldsOpen: Set<String> = []
     /// Which session's Recap card has stepped aside for this visit. It is set once that conversation
     /// starts a new turn, because the reader is in it now and a card arriving under each answer
     /// would push the answer up. It is cleared when this view opens another session: the Mac and
@@ -1003,7 +1094,7 @@ struct TranscriptView: View {
     /// run or batch, which is said in the same places by the same rules (docs/mocks/queued-card-runner-full).
     private var runnerUpdatingSession: Session? {
         guard let session = app.session(id: console.sessionID),
-              RunnerUpdating.holds(session) || QueuedCapacity.holds(session) else { return nil }
+              RunnerUpdating.holds(session) || QueuedCapacity.holds(session) || QueuedDiskLow.holds(session) else { return nil }
         return session
     }
 
@@ -1040,9 +1131,12 @@ struct TranscriptView: View {
     /// The transcript itself: one flat `ForEach` over the pre-assembled rows, with the row-level
     /// preferences that must sit on the outermost row view.
     private var rowsList: some View {
-        List {
+        // One build of the rows, and the settled-items folds among them (D1 = A).
+        let folded = foldedRows
+        let rows = folded.rows
+        return List {
             ForEach(rows) { row in
-                transcriptRow(row)
+                transcriptRow(row, folds: folded.folds)
                     // Row-level preferences must sit OUT here, not inside `transcriptRow`'s
                     // switch (or inside `AnchorRow`'s `if #available`): `listRow*` set inside a
                     // `_ConditionalContent` branch aren't hoisted to the List on iOS — the
@@ -1407,7 +1501,24 @@ struct TranscriptView: View {
     /// The List's rows, assembled from ONE read of each source so the snapshot the List diffs is
     /// always internally consistent (`console.state` publishes on a 200ms coalescing timer while
     /// `localStatusCards` / `showWorkingIndicator` publish immediately).
-    private var rows: [TranscriptRow] {
+    private var rows: [TranscriptRow] { foldedRows.rows }
+
+    /// The rows drawn, and the settled-items folds among them by their first card's row id.
+    /// Settled exception cards directly above an open one fold into one row on a phone (board
+    /// owner-card-ios-text, D1 = A): `settledFoldRow` draws it in the first one's place.
+    private var foldedRows: (rows: [TranscriptRow], folds: [String: SettledExceptionFold.Run]) {
+        let built = builtRows
+        #if os(iOS)
+        let runs = SettledExceptionFold.runs(built) { console.settledFoldStanding($0) }
+        guard !runs.isEmpty else { return (built, [:]) }
+        return (SettledExceptionFold.fold(built, runs: runs, expanded: settledFoldsOpen),
+                Dictionary(uniqueKeysWithValues: runs.map { ($0.headID, $0) }))
+        #else
+        return (built, [:])
+        #endif
+    }
+
+    private var builtRows: [TranscriptRow] {
         TranscriptRows.build(state: console.state,
                              statusCards: console.localStatusCards,
                              canPageOlder: canPageOlder,
@@ -1415,6 +1526,7 @@ struct TranscriptView: View {
                              running: console.state.status == .running,
                              decisionCards: console.decisionCards,
                              clocks: console.receiptClocks,
+                             conversationCreatedAt: app.session(id: console.sessionID)?.createdAt,
                              recap: recapCard,
                              watchName: watchWakeName,
                              handoffReceived: app.session(id: console.sessionID)?.coordinatorHandoffReceived,
@@ -1495,14 +1607,18 @@ struct TranscriptView: View {
     }
 
     @ViewBuilder
-    private func transcriptRow(_ row: TranscriptRow) -> some View {
+    private func transcriptRow(_ row: TranscriptRow,
+                               folds: [String: SettledExceptionFold.Run] = [:]) -> some View {
         switch row {
         case .createdWorkspace(let line):
             // No `AnchorRow`: what the conversation made is no "Your question".
             CreatedWorkspaceLineView(line: line, console: console)
         case .handoffReceived(let received):
             // The note this coordinator opened with, linking back to the one that wrote it.
-            CoordinatorHandoffNoteCardView(received: received) {
+            CoordinatorHandoffNoteCardView(
+                received: received,
+                counts: console.coordinatorHistoryCounts(
+                    createdAt: app.session(id: console.sessionID)?.createdAt)) {
                 app.route(to: .session(received.handoffFromSessionId))
             }
         case .loadOlder:
@@ -1523,7 +1639,14 @@ struct TranscriptView: View {
         case .steps(let items):
             // No `AnchorRow`: a steps line is never the "Your question" the sticky header names,
             // so it has no business moving that anchor.
-            StepsRowView(items: items, live: console.state.status == .running, fullPayload: console.fullPayload)
+            // Live while the turn is at work (docs/mocks/session-compact-steps: a call in flight sits
+            // under the line until it answers; once the turn is over it joins the line). Read off the
+            // session row, as Stop and "Working for…" are: the stream status never returns to
+            // `.running` — no event says a turn started, and an earlier turn's `turn_end` leaves it
+            // `.awaitingInput` — so it folded a second turn's running call into "Ran 2 shell commands".
+            StepsRowView(items: items,
+                         live: app.session(id: console.sessionID)?.isGenerating ?? (console.state.status == .running),
+                         fullPayload: console.fullPayload)
         case .agents(let cards):
             // No `AnchorRow`, for the steps line's reason: a group of Agents is no "Your question".
             AgentGroupView(cards: cards, fullPayload: console.fullPayload)
@@ -1540,7 +1663,15 @@ struct TranscriptView: View {
             // No `AnchorRow`: a question about the project's ruler isn't a "Your question" the
             // sticky header names. Unlike an approval it stops no turn, so later messages render
             // BELOW it — which is why the bar at the top of this console points down at it.
+            #if os(iOS)
+            if let run = folds[card.id] {
+                settledFoldRow(run, card: card)
+            } else {
+                DeliveredDecisionCardView(console: console, card: card)
+            }
+            #else
             DeliveredDecisionCardView(console: console, card: card)
+            #endif
         case .approval(let approval):
             // No `AnchorRow`: an approval isn't a "Your question" the sticky header names.
             ApprovalCard(console: console, approval: approval)
@@ -1585,6 +1716,42 @@ struct TranscriptView: View {
         }
     }
 
+    #if os(iOS)
+    /// "✓ 2 sent back to the coordinator · Show": the settled exception cards above an open one, in
+    /// one row that opens in place (board owner-card-ios-text, D1 = A). Opened, the first card is
+    /// drawn under it here and the others in their own rows.
+    @ViewBuilder private func settledFoldRow(_ run: SettledExceptionFold.Run,
+                                             card: DeliveredDecisionCard) -> some View {
+        let open = settledFoldsOpen.contains(run.headID)
+        VStack(alignment: .leading, spacing: 8) {
+            Button {
+                PlatformHaptics.tap()
+                withAnimation(.smooth(duration: 0.25)) {
+                    if open { settledFoldsOpen.remove(run.headID) } else { settledFoldsOpen.insert(run.headID) }
+                }
+            } label: {
+                HStack(alignment: .firstTextBaseline, spacing: 8) {
+                    Text("✓ \(run.line)")
+                        .font(.subheadline).foregroundStyle(.secondary)
+                        .lineLimit(2)
+                        .frame(maxWidth: .infinity, alignment: .leading)
+                    Text(open ? SettledExceptionFold.hide : SettledExceptionFold.show)
+                        .font(.subheadline).foregroundStyle(.tint)
+                }
+                .padding(.horizontal, 12).padding(.vertical, 9)
+                .background(Color.orange.opacity(0.06), in: RoundedRectangle(cornerRadius: 12))
+                .overlay { RoundedRectangle(cornerRadius: 12).strokeBorder(Color.orange.opacity(0.22)) }
+                .contentShape(Rectangle())
+            }
+            .buttonStyle(.plain)
+            .accessibilityIdentifier("settled-fold")
+            if open {
+                DeliveredDecisionCardView(console: console, card: card)
+            }
+        }
+    }
+    #endif
+
     /// Carry a scroll into the next update rather than making it from here (see `heldScroll`). A new
     /// tick each time, so asking twice for the same row scrolls twice.
     private func holdScroll(to rowID: String, anchor: UnitPoint, opensReview: Bool = false, animated: Bool = true) {
@@ -1599,7 +1766,7 @@ struct TranscriptView: View {
         case .promotionApproval(let promotionID):
             openPromotionReview(promotionID)
         case .criteriaDecision, .acceptanceConfirmation, .startProject, .criteriaChange,
-             .ownerConfirmation, .coordinatorQuestion, .crossingBatch:
+             .ownerConfirmation, .coordinatorQuestion, .crossingBatch, .projectDone:
             openApprovalReview(.delivered(card))
         default:
             break

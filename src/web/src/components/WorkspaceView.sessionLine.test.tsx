@@ -537,10 +537,14 @@ describe('sessionLine names the gate holding a queued session', () => {
     });
   });
 
-  it('says the runner is full when a slot really is what is missing', () => {
+  it('says it waits for a free slot when a slot really is what is missing, and names the gate in the tooltip', () => {
     expect(
       sessionLine({ status: 'PENDING', queuedReason: 'runner_at_capacity' }, true),
-    ).toEqual({ text: 'Runner full', tone: 'queued' });
+    ).toEqual({
+      text: 'Waiting for a free slot',
+      tone: 'queued',
+      hint: 'Runner full\nThe runner is using all its slots. This message is sent as soon as one frees up.',
+    });
   });
 });
 
@@ -562,6 +566,36 @@ describe('statusLabel over a session parked on a watch', () => {
     // A shell left up is not what the session is waiting on: the wake is.
     expect(statusLabel({ ...parked, runningBgCount: 1 })).toBe('Background process running');
     expect(statusLabel({ ...parked, runningBgCount: 1 }, 'Watching 1 target')).toBe('Watching 1 target');
+  });
+
+  it("names what a running agent is doing when the server knows its title", () => {
+    const one = { ...parked, runningSubagentCount: 1, runningSubagentTitle: 'Deploy dacad7403 to production' };
+    expect(sessionLine(one, true)).toEqual({ text: 'Agent: Deploy dacad7403 to production…', tone: 'running' });
+    expect(sessionLine({ ...one, runningSubagentCount: 2 }, true)).toEqual({
+      text: 'Running 2 agents · Deploy dacad7403 to production…',
+      tone: 'running',
+    });
+    // The generating branch says the same.
+    expect(sessionLine({ ...one, status: 'RUNNING', lastToolUse: null }, true)).toEqual({
+      text: 'Agent: Deploy dacad7403 to production…',
+      tone: 'running',
+    });
+    // A foreground delegate (or synchronous Agent) is still the tool in flight: its work, not the tool.
+    expect(sessionLine({ ...one, status: 'RUNNING', lastToolUse: 'mcp__orbit__delegate' }, true)).toEqual({
+      text: 'Agent: Deploy dacad7403 to production…',
+      tone: 'running',
+    });
+    // Any other tool still says itself.
+    expect(sessionLine({ ...one, status: 'RUNNING', lastToolUse: 'Bash' }, true)).toEqual({
+      text: 'Running Bash…',
+      tone: 'running',
+    });
+    // No title (an older server, an undescribed call): the label it always said.
+    expect(sessionLine({ ...one, runningSubagentTitle: '  ' }, true)).toEqual({ text: 'Running Agent…', tone: 'running' });
+    expect(sessionLine({ ...one, runningSubagentTitle: null, runningSubagentCount: 2 }, true)).toEqual({
+      text: 'Running 2 agents…',
+      tone: 'running',
+    });
   });
 
   it('never hides work of its own or a question for the reader behind the wait', () => {

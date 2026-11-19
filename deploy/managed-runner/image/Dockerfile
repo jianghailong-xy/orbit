@@ -15,7 +15,7 @@ FROM node:26.10.0-trixie-slim@sha256:ec7758ee051e457b468b32bde57b0879010b325bb98
 # Preserve the whole native layout, including codex-path/rg and package resources.
 # Invoke its native binary directly so there is no npm wrapper in the signal path.
 RUN test "$(node --version)" = v26.10.0 \
- && npm install --global --ignore-scripts --no-audit --no-fund @openai/codex@0.158.0 \
+ && npm install --global --ignore-scripts --no-audit --no-fund @openai/codex@0.170.0 \
  && mv /usr/local/lib/node_modules/@openai/codex/node_modules/@openai/codex-linux-*/vendor/*-unknown-linux-musl /opt/codex \
  && test -x /opt/codex/bin/codex \
  && test -x /opt/codex/codex-path/rg
@@ -25,7 +25,7 @@ FROM node:26.10.0-trixie-slim@sha256:ec7758ee051e457b468b32bde57b0879010b325bb98
 # postinstall only copies its platform package's native binary over a stub: take that binary
 # directly, so no Node wrapper sits in the signal path either.
 RUN test "$(node --version)" = v26.10.0 \
- && npm install --global --ignore-scripts --no-audit --no-fund @anthropic-ai/claude-code@2.1.300 \
+ && npm install --global --ignore-scripts --no-audit --no-fund @anthropic-ai/claude-code@2.1.327 \
  && install -D -m 0755 \
       "/usr/local/lib/node_modules/@anthropic-ai/claude-code/node_modules/@anthropic-ai/claude-code-linux-$(node -p process.arch)/claude" \
       /opt/claude/bin/claude
@@ -36,7 +36,7 @@ FROM node:26.10.0-trixie-slim@sha256:ec7758ee051e457b468b32bde57b0879010b325bb98
 ARG TARGETARCH
 RUN test "$(node --version)" = v26.10.0 \
  && case "$TARGETARCH" in amd64) package=opencode-linux-x64-baseline ;; arm64) package=opencode-linux-arm64 ;; *) exit 1 ;; esac \
- && npm install --prefix /tmp/opencode --ignore-scripts --no-audit --no-fund "$package@1.19.5" \
+ && npm install --prefix /tmp/opencode --ignore-scripts --no-audit --no-fund "$package@1.19.6" \
  && install -D -m 0755 "/tmp/opencode/node_modules/$package/bin/opencode" /opt/opencode/bin/opencode
 
 FROM node:26.10.0-trixie-slim@sha256:ec7758ee051e457b468b32bde57b0879010b325bb9862718e9615225ce4aaae1 AS dsh
@@ -58,18 +58,18 @@ FROM golang:1.27.1-trixie@sha256:3b77fc618ec235a1ab412de7737f120dd507c57e8d87de4
 # version (pins.json names the manifests). One RUN per engine, so a new pin refetches only its own engine.
 ARG TARGETARCH
 RUN case "$TARGETARCH" in \
-      amd64) target=linux-x64 sum=c2070d77947b000016d1bc9c189f2e258c51f29d5f9eb537388cc44fa61c5856 ;; \
-      arm64) target=linux-arm64 sum=f8fe55edacfb3dd96e230f86e56da1392cb3aaa8f7b95712e2c8d786c6d61350 ;; \
+      amd64) target=linux-x64 sum=5999b710b1a34c19e93989973c54a8f1c167df8f8bec2fbf3171bfc304f6bdb9 ;; \
+      arm64) target=linux-arm64 sum=4e97ef1e7c32abad5fd581a4884111e11348677aa51207490c0568e9af028eae ;; \
       *) exit 1 ;; esac \
- && curl -fsSL -o /tmp/kimi "https://code.kimi.com/kimi-code/binaries/2.6.2/kimi-code-$target" \
+ && curl -fsSL -o /tmp/kimi "https://code.kimi.com/kimi-code/binaries/2.6.3/kimi-code-$target" \
  && echo "$sum  /tmp/kimi" | sha256sum -c - \
  && install -D -m 0755 /tmp/kimi /opt/kimi-code/bin/kimi \
  && rm /tmp/kimi
 RUN case "$TARGETARCH" in \
-      amd64) path=linux-x64/cli_linux_x64.tar.gz sum=d01eb13ba7750eed18907f1ae8860864371e0ad9064415e8d033d22b4bd7b9b4e4c7f962058520b452d67db1c33163d9a889d55a7dffa159596ec6cd91a87b79 ;; \
-      arm64) path=linux-arm/cli_linux_arm64.tar.gz sum=16c632a09b81f598f7652bc11180861f9d2ee4408ffa161dadc83b2010de7a9cd055e97b4b46cd01903e35c0e8bf21d8262462ba7c5f168cc6dada9ac3d522c0 ;; \
+      amd64) path=linux-x64/cli_linux_x64.tar.gz sum=dad3c015e8964fcdc1639b13b7152f4cb84cb1bde385707e2bcdf095d6f1831f4f6521199aec499cc052f9e99906b7fdbc52c273df064d5cb7c84b068ba3ce50 ;; \
+      arm64) path=linux-arm/cli_linux_arm64.tar.gz sum=5f703c88e01851061c87c07b1a4ca54c1f5a6826ffada9fb005974a099e9a552ddb1f9ba2fe1194e2829803482c86084babf8cf91530a528bc7f659613600585 ;; \
       *) exit 1 ;; esac \
- && curl -fsSL -o /tmp/agy.tar.gz "https://storage.googleapis.com/antigravity-public/antigravity-cli/1.5.9-4515810895593472/$path" \
+ && curl -fsSL -o /tmp/agy.tar.gz "https://storage.googleapis.com/antigravity-public/antigravity-cli/1.5.11-6132547114106880/$path" \
  && echo "$sum  /tmp/agy.tar.gz" | sha512sum -c - \
  && mkdir /tmp/agy && tar -xzf /tmp/agy.tar.gz -C /tmp/agy --no-same-owner \
  && install -D -m 0755 /tmp/agy/antigravity /opt/agy/bin/agy \
@@ -105,8 +105,8 @@ RUN mkdir -p /etc/ssl/certs \
       bash ca-certificates curl git openssh-client ripgrep sqlite3 python3 procps tini \
  && rm -rf /var/lib/apt/lists/* \
  && groupadd --gid 10001 orbit \
- && useradd --uid 10001 --gid 10001 --home-dir /var/lib/orbit/home --no-create-home --shell /bin/bash orbit \
- && install -d -o 10001 -g 10001 -m 0700 /var/lib/orbit /var/lib/orbit/home
+ && useradd --uid 10001 --gid 10001 --home-dir /home/orbit --no-create-home --shell /bin/bash orbit \
+ && install -d -o 10001 -g 10001 -m 0700 /home/orbit
 
 COPY --from=orbit-build /usr/local/go/ /usr/local/go/
 COPY --from=codex /opt/codex/ /opt/codex/
@@ -118,10 +118,10 @@ COPY --from=downloads /opt/orbit-engines/ /opt/orbit-engines/
 COPY --from=dsh /opt/orbit-engines/engines/ /opt/orbit-engines/engines/
 COPY --chmod=0644 deploy/managed-runner/image/pins.json /usr/local/share/orbit/pins.json
 ENV PATH="/usr/local/go/bin:${PATH}" \
-    HOME=/var/lib/orbit/home \
-    ORBIT_HOME=/var/lib/orbit/home/.orbit \
-    CODEX_HOME=/var/lib/orbit/home/.codex \
-    CLAUDE_CONFIG_DIR=/var/lib/orbit/home/.claude \
+    HOME=/home/orbit \
+    ORBIT_HOME=/home/orbit/.orbit \
+    CODEX_HOME=/home/orbit/.codex \
+    CLAUDE_CONFIG_DIR=/home/orbit/.claude \
     ORBIT_ENGINE_STORE=/opt/orbit-engines \
     ORBIT_NO_SELFUPDATE=1 \
     ORBIT_NO_ENGINE_UPDATE=1 \
@@ -190,8 +190,8 @@ store = Path(os.environ['ORBIT_ENGINE_STORE'])
 if platform.machine() == 'x86_64':
     actual['cursor'] = version(str(store / 'cursor/versions/2026.10.14-941492e/cursor-agent'), '--version')
     actual['dsh'] = version(str(store / 'engines/dsh/0.2.0-rc.2/node_modules/.bin/dsh'), '--version')
-expected_versions = {'go': 'go1.27.1', 'node': 'v26.10.0', 'codex': 'codex-cli 0.158.0',
-                     'claude': '2.1.300 (Claude Code)', 'opencode': '1.19.5', 'kimi': '2.6.2', 'agy': '1.5.9'}
+expected_versions = {'go': 'go1.27.1', 'node': 'v26.10.0', 'codex': 'codex-cli 0.170.0',
+                     'claude': '2.1.327 (Claude Code)', 'opencode': '1.19.6', 'kimi': '2.6.3', 'agy': '1.5.11'}
 if platform.machine() == 'x86_64':
     expected_versions.update(cursor='2026.10.14-941492e', dsh='0.2.0-rc.2')
 for tool, expected in expected_versions.items():
@@ -229,7 +229,7 @@ PY
 rm -rf /tmp/orbit-version-check
 SH
 
-WORKDIR /var/lib/orbit
+WORKDIR /home/orbit
 USER 10001:10001
 STOPSIGNAL SIGTERM
 ENTRYPOINT ["/usr/bin/tini", "--", "/usr/local/bin/orbit-container"]

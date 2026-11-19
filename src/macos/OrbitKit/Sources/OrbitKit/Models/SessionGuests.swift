@@ -184,6 +184,25 @@ public struct GuestSessionNow: Decodable, Equatable, Sendable {
     }
 }
 
+/// A `head` frame of the guest stream (docs/session-viewer-stream-design.md §4): the head fields the
+/// `events?after=` answer carries — title, how the session stands and whether it waits on its owner —
+/// sent when the stream opens and whenever they change.
+public struct GuestSessionHead: Decodable, Equatable, Sendable {
+    public let title: String?
+    public let state: GuestSessionState
+
+    public init(title: String?, state: GuestSessionState) {
+        self.title = title
+        self.state = state
+    }
+
+    public init(from decoder: Decoder) throws {
+        let c = try decoder.container(keyedBy: GuestHeadKeys.self)
+        title = (try? c.decodeIfPresent(String.self, forKey: .title)) ?? nil
+        state = c.guestState()
+    }
+}
+
 /// An older page of the guest's transcript (`events?before=`).
 public struct GuestEventPage: Decodable, Equatable, Sendable {
     public let events: [RunEvent]

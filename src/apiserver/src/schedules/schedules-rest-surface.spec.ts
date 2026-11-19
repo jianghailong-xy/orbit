@@ -127,11 +127,17 @@ test('(c) nothing under /runner answers a card, and orbit mcp has no tool that d
   assert.match(goSource, /"name": scheduleRunReportTool/);
 });
 
-test('(d) schedule_create and schedule_wakeup carry the choice between the four timers', () => {
+test('(d) schedule_create and schedule_wakeup carry the choice between the five timers', () => {
   const goDir = join(__dirname, '..', '..', '..', 'runner-go');
   const tools = readFileSync(join(goDir, 'schedule_tools.go'), 'utf8');
   for (const words of ['schedule_wakeup with recurring: true', 'task_await, session_await or watch_create', "the task's runAt", 'schedule_create']) {
     assert.ok(tools.includes(words), `the timer choice names ${words}`);
+  }
+  // The fifth (docs/condition-triggers-design.md §8): something outside Orbit becoming true is a condition.
+  assert.match(tools, /outlives this conversation\. " \+ conditionTimerCase/);
+  const conditions = readFileSync(join(goDir, 'condition_tools.go'), 'utf8');
+  for (const words of ['When something outside Orbit becomes true', 'not a bg_run poll and not a daily', 'wait until X']) {
+    assert.ok(conditions.includes(words), `the condition timer names ${words}`);
   }
   assert.match(tools, /"description": "Propose a scheduled task[^]*?scheduleTimerChoice/);
   const catalog = readFileSync(join(goDir, 'operation_catalog.go'), 'utf8');

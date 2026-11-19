@@ -1363,6 +1363,17 @@ button.toast--pill:focus-visible {
 .tp-account-machine-dot[data-online='true'] {
   background: var(--success-solid);
 }
+/* Orbit Cloud, pinned first in that level (docs/mocks/orbit-cloud-pinned, A): its cloud in the brand colour and
+   its name in semibold. */
+.tp-account-machine-cloud {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  font-weight: 600;
+}
+.tp-account-machine-cloud > .anticon {
+  color: var(--brand);
+}
 /* Log out: the label in the menu's own danger colour, its icon in --error, as the replaced menu drew them (the
    page rule reached only the icon there). */
 .tp-account-menu .orbit-menu-item[data-danger] .orbit-menu-icon {
@@ -5449,6 +5460,28 @@ button.toast--pill:focus-visible {
   flex-basis: 100%;
   color: var(--error);
 }
+/* "Land without the check", asked once before it stops anything: the sentence takes the whole line,
+   and the two answers sit under it. */
+.session-project-landing .spl-confirm {
+  display: flex;
+  flex-basis: 100%;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px 14px;
+}
+.session-project-landing .spl-confirm-text {
+  flex-basis: 100%;
+  color: var(--text-2);
+}
+/* What a skip of this landing's check has started: in the note's place, in the note's ink, because
+   it is a fact about the landing rather than something wanted of the reader. */
+.session-project-landing .spl-skip {
+  color: var(--text-2);
+}
+/* A refusal under the foot says something is wrong; "Nothing to do" above it would say the opposite. */
+.session-project-landing:has(.spl-error) .spl-note {
+  display: none;
+}
 /* The merge into main on a project's sessions page, under the progress strip (owner decision
    2026-10-06): one card at four moments. Only the asking card is warm — it is the one thing on the
    page waiting on the reader. */
@@ -8156,6 +8189,20 @@ button.chat-jump-start:hover {
   height: 18px;
   white-space: nowrap;
 }
+/* Held because its translation failed (docs/ux/translation-failure-policy.html, frames 4B and 7): the reason's
+   sentence can outrun the column and wrap, so the row grows downward from under the bubble instead of being held
+   to one 18px line, which drew a wrapped first line up over the bubble's border. Right-aligned like the bubble. */
+.chat-user-meta.has-failure-foot {
+  height: auto;
+  min-height: 18px;
+  align-items: flex-start;
+  white-space: normal;
+}
+.chat-user-meta.has-failure-foot > .chat-translate-foot.is-error {
+  min-width: 0;
+  justify-content: flex-end;
+  text-align: right;
+}
 .chat-user-meta > .chat-copy,
 .chat-user-meta > .chat-time,
 .chat-user-meta > .chat-meta-sep {
@@ -8265,6 +8312,19 @@ button.chat-jump-start:hover {
   color: var(--text-3);
   white-space: nowrap;
 }
+.chat-translate-foot.is-card {
+  display: flex;
+  margin: 6px 0 0;
+}
+/* On an approval card (frame 5) the line sits inside the card's own 14px inset, as .approval-stale does. */
+.approval-untranslated-row {
+  padding: 8px 14px 0;
+}
+/* A send-back the composer finished and the server could not translate: above the composer. */
+.composer-translate-refused {
+  margin-bottom: 8px;
+  padding: 0 2px;
+}
 .chat-translate-foot.is-reply {
   display: flex;
   margin: 2px 0 6px;
@@ -8300,7 +8360,11 @@ button.chat-jump-start:hover {
     opacity: 1;
   }
 }
+/* A failure line says why (docs/ux/translation-failure-policy.html, frame 7), which can outrun a narrow column:
+   it wraps rather than running out of its card, and Retry and Send as written each stay whole. */
 .chat-translate-foot.is-error {
+  flex-wrap: wrap;
+  white-space: normal;
   color: var(--error-solid);
 }
 .chat-translate-sep {
@@ -8316,6 +8380,7 @@ button.chat-jump-start:hover {
   cursor: pointer;
 }
 .chat-translate-foot.is-error .chat-translate-action {
+  white-space: nowrap;
   color: var(--error-solid);
 }
 .chat-translate-action:disabled {
@@ -8407,6 +8472,21 @@ button.chat-jump-start:hover {
 }
 .composer-translation-tag:hover {
   color: var(--text-1);
+}
+/* Translation unavailable (docs/ux/translation-failure-policy.html, frame 6): the warning style, before a send.
+   Longer than the plain tag, so in a narrow toolbar it gives way before the model picker does (the whole of it
+   stays in the title). */
+.composer-translation-tag.is-unavailable {
+  flex: 0 100 auto;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  color: var(--warning);
+  background: var(--warning-bg);
+  border-color: var(--warning-border);
+}
+.composer-translation-tag.is-unavailable:hover {
+  color: var(--warning);
 }
 /* Prompt optimizer (docs/mocks/prompt-optimizer, frames 2–6): ✦ Optimize beside Send, and the
    suggestion card (or the failure line) above the composer, as the slash menu sits. */
@@ -8916,223 +8996,6 @@ button.chat-jump-start:hover {
   text-overflow: ellipsis;
   white-space: nowrap;
 }
-/* What delivery appended to a message (useControlPlaneNote): one quiet line in the meta voice — the
-   size and grey of the time under a message, no colour, no frame — so what the person typed stays
-   what the eye lands on. ⊕ while shut, ⊖ once open. Under a person's bubble the line ends the meta
-   row and the opened rows go under that row; at the foot of a card that is Orbit's own, the line
-   opens in place (ControlPlaneNote). */
-.chat-injected {
-  margin-top: 6px;
-}
-.chat-injected-head {
-  max-width: 100%;
-  padding: 0;
-  border: 0;
-  background: none;
-  color: var(--text-3);
-  font: inherit;
-  font-size: 12px;
-  line-height: 18px;
-  text-align: left;
-  cursor: pointer;
-}
-.chat-injected-head:hover {
-  color: var(--text-2);
-}
-.chat-injected-mark {
-  font-size: 10px;
-  vertical-align: 1px;
-}
-/* Drop the focus ring on mouse click; keep it for keyboard navigation. */
-.chat-injected-head:focus {
-  outline: none;
-}
-.chat-injected-head:focus-visible {
-  border-radius: 4px;
-  outline: 2px solid var(--brand);
-  outline-offset: 2px;
-}
-.chat-injected-panel {
-  margin-top: 2px;
-}
-.chat-injected-panel > :first-child {
-  margin-top: 0;
-}
-/* Under a person's bubble the opened rows take the column's width, on a quiet panel of their own. */
-.chat-user-wrap > .chat-injected-panel {
-  align-self: stretch;
-  margin-top: 4px;
-  padding: 8px 10px;
-  border-radius: 10px;
-  background: var(--bg-sunken);
-}
-.chat-injected-body {
-  max-height: 320px;
-  margin: 6px 0 0;
-  padding: 8px 10px;
-  overflow: auto;
-  border-radius: 8px;
-  /* Translucent, as the rows above it are: it may sit on a tinted card. */
-  background: var(--fill-inset);
-  color: var(--text-2);
-  font-size: 11px;
-  line-height: 1.5;
-  white-space: pre-wrap;
-  word-break: break-word;
-}
-/* The background-jobs block opened as rows (BackgroundJobsNote): the wake card's own row language
-   (.bgwake-job*), one step quieter, because this sits inside someone's bubble rather than standing
-   as a card of its own. */
-.bgjobs {
-  margin-top: 6px;
-}
-.bgjobs-group {
-  margin-bottom: 4px;
-  color: var(--text-2);
-  font-weight: 600;
-}
-.bgjobs-list {
-  margin: 0 0 8px;
-  padding: 0;
-  list-style: none;
-}
-.bgjobs-job {
-  padding: 6px 8px;
-  border-radius: 8px;
-  /* Translucent: the bubble this sits in is already tinted, and an opaque panel lands as a hole. */
-  background: var(--fill-inset);
-}
-.bgjobs-job + .bgjobs-job {
-  margin-top: 4px;
-}
-.bgjobs-head {
-  display: flex;
-  align-items: baseline;
-  gap: 6px;
-}
-.bgjobs-mark {
-  flex: none;
-}
-.bgjobs-mark.is-ok {
-  color: var(--success-solid);
-}
-.bgjobs-mark.is-failed {
-  color: var(--error-solid);
-}
-.bgjobs-mark.is-running {
-  color: var(--text-3);
-}
-/* The command is the row. Two lines of it, because a job's command can be a whole heredoc and the
-   fold below holds the rest. */
-.bgjobs-name {
-  display: -webkit-box;
-  flex: 1;
-  min-width: 0;
-  overflow: hidden;
-  -webkit-box-orient: vertical;
-  -webkit-line-clamp: 2;
-  color: var(--text-1);
-  font-family: var(--font-mono, ui-monospace, SFMono-Regular, Menlo, monospace);
-  overflow-wrap: anywhere;
-}
-.bgjobs-outcome {
-  flex: none;
-  padding: 0 6px;
-  border-radius: 4px;
-  background: var(--fill-inset);
-  color: var(--text-2);
-  font-family: var(--font-mono, ui-monospace, SFMono-Regular, Menlo, monospace);
-}
-/* The ids line up under the command, not under its icon. */
-.bgjobs-meta {
-  margin-top: 2px;
-  padding-left: 20px;
-  color: var(--text-3);
-  font-family: var(--font-mono, ui-monospace, SFMono-Regular, Menlo, monospace);
-  overflow-wrap: anywhere;
-}
-.bgjobs-raw summary {
-  color: var(--text-3);
-  cursor: pointer;
-}
-.bgjobs-raw pre {
-  max-height: 320px;
-  margin: 4px 0 0;
-  padding: 8px;
-  overflow: auto;
-  border-radius: 6px;
-  background: var(--fill-inset);
-  color: var(--text-2);
-  white-space: pre-wrap;
-  word-break: break-word;
-}
-
-/* The `#`-referenced tasks opened as cards (ReferencedTaskNote): the background-jobs row language
-   (.bgjobs-*), since the two sit one above the other in the same fold whenever a note carries both.
-   The title is the link, so the task is one click from the message that referenced it. */
-.reftask {
-  margin: 6px 0 0;
-  padding: 0;
-  list-style: none;
-}
-.reftask-task {
-  padding: 6px 8px;
-  border-radius: 8px;
-  /* Translucent: the bubble this sits in is already tinted, and an opaque panel lands as a hole. */
-  background: var(--fill-inset);
-}
-.reftask-task + .reftask-task {
-  margin-top: 4px;
-}
-.reftask-head {
-  display: flex;
-  align-items: baseline;
-  gap: 6px;
-}
-.reftask-head .status-pill {
-  flex: none;
-}
-/* What the status line said after the status: the kind of task it is, not its lifecycle. */
-.reftask-suffix {
-  flex: none;
-  padding: 0 6px;
-  border-radius: 4px;
-  background: var(--fill-inset);
-  color: var(--text-2);
-}
-/* The title is the row, and the row is the link. Two lines of it — a task title runs long and the
-   id is under it. Named twice so it wins over `.chat-user a`, which underlines links in a person's
-   own message: this one is a whole row rather than a link mid-sentence, and the `#`-pill in the
-   same bubble (.md-reference) drops the underline for the same reason. */
-.reftask .reftask-title {
-  display: -webkit-box;
-  flex: 1;
-  min-width: 0;
-  overflow: hidden;
-  -webkit-box-orient: vertical;
-  -webkit-line-clamp: 2;
-  color: var(--brand);
-  text-decoration: none;
-  overflow-wrap: anywhere;
-}
-.reftask .reftask-title:hover {
-  text-decoration: underline;
-}
-.reftask-outcome {
-  flex: none;
-  padding: 0 6px;
-  border-radius: 4px;
-  background: var(--fill-inset);
-  color: var(--text-2);
-  font-family: var(--font-mono, ui-monospace, SFMono-Regular, Menlo, monospace);
-}
-.reftask-meta {
-  margin-top: 2px;
-  color: var(--text-3);
-  font-family: var(--font-mono, ui-monospace, SFMono-Regular, Menlo, monospace);
-  overflow-wrap: anywhere;
-}
-
 /* A `#`-reference in a message, styled to read as the same object the composer chipped — the
    user typed a pill and should recognise it in their own bubble. Inline, not a block chip: it
    sits mid-sentence and must not disturb the line box. */
@@ -13598,6 +13461,94 @@ button.chat-jump-start:hover {
   word-break: break-word;
   font-size: 12.5px;
   margin: 8px 0;
+}
+/* A plain tool call (ToolCallBody): the command, path or URL itself, not the input as JSON. */
+.approval-tool {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding: 6px 0 4px;
+}
+.approval-tool .approval-translated-desc {
+  margin-bottom: 0;
+}
+.approval-desc-original {
+  margin-left: 8px;
+  font-size: 12px;
+  color: var(--text-3);
+}
+.approval-tool-chip {
+  margin-left: 8px;
+  padding: 1px 7px;
+  border-radius: 5px;
+  background: var(--brand-border);
+  color: var(--brand-strong);
+  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  font-size: 11.5px;
+  font-weight: 500;
+  vertical-align: 1px;
+}
+.approval-cmd {
+  position: relative;
+}
+.approval-cmd .chat-pre-wrap.cmd .chat-pre {
+  background: var(--bg-raised);
+  padding-right: 56px;
+}
+.approval-copy {
+  position: absolute;
+  top: 6px;
+  right: 8px;
+  z-index: 1;
+  padding: 1px 7px;
+  border: 1px solid var(--border);
+  border-radius: 5px;
+  background: var(--bg-raised);
+  color: var(--text-3);
+  font-size: 11px;
+  cursor: pointer;
+}
+.approval-copy:hover {
+  color: var(--text-1);
+}
+.approval-path {
+  padding: 6px 10px;
+  border: 1px solid var(--border-subtle);
+  border-radius: 6px;
+  background: var(--bg-raised);
+  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  font-size: 12.5px;
+  word-break: break-all;
+}
+.approval-path-dir {
+  color: var(--text-3);
+}
+.approval-meta {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+.approval-meta span {
+  padding: 1px 9px;
+  border: 1px solid var(--border);
+  border-radius: 999px;
+  background: var(--bg-raised);
+  color: var(--text-2);
+  font-size: 11.5px;
+}
+.approval-meta span.is-warn {
+  border-color: var(--warning-border);
+  background: var(--warning-bg);
+  color: var(--warning-solid);
+}
+.approval-raw-toggle {
+  align-self: flex-start;
+  padding: 0;
+  border: none;
+  background: none;
+  color: var(--brand);
+  font-size: 12px;
+  cursor: pointer;
 }
 /* ---- Card actions: one size, wherever a card asks the reader for something ----
    The approval card settled these numbers over three rounds of beta — default control size, not a
@@ -22846,6 +22797,87 @@ div.landing-jobs-open {
 }
 /* Settings → Integrations → Feishu (FeishuIntegrationPage): the account's own app, then the steps in Feishu's
    console. Its fields reuse the admin Sign-in settings' rows, labels and hints. */
+/* Admin → Integrations → GitHub App: the steps on GitHub, and the private key file picker (board 02). */
+.github-app-file {
+  color: var(--brand);
+  cursor: pointer;
+}
+.github-app-step-list {
+  margin: 0;
+  padding-left: 18px;
+  color: var(--text-2);
+  font-size: 13px;
+  line-height: 1.65;
+}
+.github-app-step-list b {
+  color: var(--text-1);
+  font-weight: 500;
+}
+.github-app-step-list code {
+  font-size: 12px;
+  background: var(--fill-muted);
+  border-radius: 4px;
+  padding: 0 5px;
+}
+
+/* Settings → Integrations → GitHub. */
+.github-alert {
+  margin-bottom: 16px;
+}
+.github-card + .github-card {
+  margin-top: 16px;
+}
+.github-account {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+.github-account-text {
+  flex: 1;
+  min-width: 0;
+}
+.github-avatar {
+  width: 32px;
+  height: 32px;
+  flex: none;
+  border-radius: 50%;
+  background: var(--fill-muted);
+  display: grid;
+  place-items: center;
+  color: var(--text-2);
+  font-weight: 600;
+}
+.github-login {
+  font-weight: 500;
+}
+.github-hint {
+  color: var(--text-3);
+  font-size: 12px;
+  margin-top: 2px;
+}
+.github-warn {
+  color: var(--warning);
+}
+.github-installations {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+.github-installation {
+  display: grid;
+  grid-template-columns: 1fr auto;
+  gap: 2px 12px;
+  padding: 10px 0;
+  border-top: 1px solid var(--border-subtle);
+}
+.github-installation:first-child {
+  border-top: 0;
+  padding-top: 0;
+}
+.github-installation-name {
+  font-weight: 500;
+}
+
 .feishu-page {
   max-width: 720px;
   margin: 0 auto;
@@ -23901,10 +23933,6 @@ div.landing-jobs-open {
   white-space: pre-wrap;
   word-break: break-word;
 }
-/* Whatever else the same note carried, folded in with the rest of what the line carried. */
-.bgwake-body > .chat-injected {
-  margin-top: 8px;
-}
 .bgwake-tail {
   margin: 6px 0 6px 22px;
   padding: 10px 12px;
@@ -24599,7 +24627,7 @@ a.smc-from:hover {
   font-size: 13px;
   cursor: pointer;
 }
-/* One grey foot row: time · its task · the request and where it stands · what Orbit attached. Items
+/* One grey foot row: time · its task · the request and where it stands. Items
    keep whole and the row wraps between them. */
 .smc-meta {
   margin-top: 3px;
@@ -24620,13 +24648,6 @@ a.smc-from:hover {
 }
 .smc-meta a:hover {
   color: var(--brand);
-}
-.smc-meta > .chat-injected {
-  display: inline;
-  margin: 0;
-}
-.smc-meta > .chat-injected > .chat-injected-panel {
-  white-space: normal;
 }
 /* A sender that runs narrower than this session: in the foot row's voice, under it. */
 .smc-narrower {
@@ -25605,6 +25626,153 @@ button.project-open-item-action:disabled {
   border-top: 1px solid var(--border-subtle);
   font-size: 12px;
   color: var(--text-2);
+}
+
+/* ── The owner exception card, organised around "Who fixes it?" (board
+   docs/mocks/owner-exception-who-fixes ②): the same amber card, ordered heading → what it is → who
+   fixes it → how it ends → Details (folded) → divider → the two ways to end it unfixed. */
+.project-open-item-clock {
+  margin-left: auto;
+  flex: none;
+  font-size: 12px;
+  font-weight: 400;
+  color: var(--text-3);
+}
+.project-open-item-subline {
+  margin: 0 0 10px;
+  font-size: 13px;
+  line-height: 1.55;
+  color: var(--text-2);
+}
+.project-open-item-whofixes {
+  margin: 0 0 10px;
+  padding: 10px 12px;
+  background: var(--warning-bg);
+  border: 1px solid var(--warning-border);
+  border-radius: 8px;
+}
+.project-open-item-who-label,
+.project-open-item-settled-label {
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--warning);
+}
+.project-open-item-settled-label {
+  font-weight: 400;
+  letter-spacing: 0;
+  text-transform: none;
+  color: var(--text-3);
+}
+.project-open-item-who-row {
+  display: grid;
+  grid-template-columns: 110px minmax(0, 1fr);
+  gap: 4px 12px;
+  padding: 10px 0 4px;
+}
+.project-open-item-who-row + .project-open-item-who-row {
+  border-top: 1px dashed var(--warning-border);
+}
+.project-open-item-who-name {
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--text-1);
+}
+.project-open-item-who-status {
+  margin: 0;
+  font-size: 13px;
+  line-height: 1.55;
+  color: var(--text-2);
+}
+.project-open-item-who-status b {
+  color: var(--text-1);
+}
+/* The coordinator's hand-over note, under its caption, in the coordinator row. */
+.project-open-item-handover {
+  margin: 6px 0 0;
+}
+.project-open-item-handover-caption {
+  display: block;
+  font-size: 11px;
+  font-weight: 600;
+  color: var(--text-3);
+}
+.project-open-item-handover-note {
+  margin: 2px 0 0;
+  font-size: 13px;
+  line-height: 1.55;
+  color: var(--text-1);
+  white-space: pre-wrap;
+}
+.project-open-item-actions.project-open-item-who-presses {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+  margin: 7px 0 5px;
+}
+.project-open-item-who-presses .project-open-item-error {
+  flex-basis: 100%;
+}
+.project-open-item-chat-first {
+  height: auto;
+  padding: 0 2px;
+}
+.project-open-item-closes {
+  margin: 0 0 10px;
+  padding: 8px 12px;
+  background: var(--success-bg);
+  border: 1px solid var(--success-border);
+  border-radius: 8px;
+  font-size: 12.5px;
+  line-height: 1.5;
+  color: var(--text-1);
+}
+.project-open-item-closes > span {
+  color: var(--success);
+  font-weight: 700;
+}
+.project-open-item-details-toggle {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 2px 0;
+  border: 0;
+  background: none;
+  font: inherit;
+  font-size: 12.5px;
+  color: var(--text-2);
+  cursor: pointer;
+}
+.project-open-item-details-toggle:hover {
+  color: var(--text-1);
+}
+.project-open-item-details-caret {
+  font-size: 10px;
+  color: var(--text-3);
+}
+.project-open-item-details-body {
+  margin: 6px 0 2px;
+  padding: 8px 10px;
+  background: var(--fill-inset);
+  border-radius: 6px;
+}
+.project-open-item-settled {
+  margin-top: 10px;
+  padding-top: 10px;
+  border-top: 1px solid var(--border-subtle);
+}
+.project-open-item-settled .project-open-item-actions {
+  margin-top: 6px;
+}
+.project-open-item-settled .project-open-item-door > .project-open-item-quiet {
+  justify-self: start;
+}
+@media (max-width: 600px) {
+  .project-open-item-who-row {
+    grid-template-columns: 1fr;
+  }
 }
 
 /* ── The coordinator card's two progress rows (mock 2 ③) ───────────────────────────────────
@@ -27176,34 +27344,6 @@ button.project-open-item-action:disabled {
   .wk-browse-doc .h .n { margin-left: auto; }
 }
 
-/* ── The wiki in a conversation: the context a session was handed ──────────────────────────────
-   Mock 05 (docs/mocks/wiki/05-session-touchpoints). One of its panels needs rules of its own: the
-   entries under the task start card's folded Wiki context line. The link card borrows the Wiki's
-   own marks and the search palette borrows `.ssearch-*`, so neither has a block here beyond the
-   group heading. */
-
-.wkctx { margin-top: 6px; }
-.wkctx-list {
-  list-style: none;
-  margin: 0;
-  padding: 6px 8px;
-  border-radius: 8px;
-  background: var(--fill-inset);
-}
-.wkctx-row { display: flex; align-items: center; gap: 7px; height: 23px; font-size: 12.5px; }
-/* One word wide, the kind column, so the titles line up whatever they are filed as. */
-.wkctx-kind { flex: none; width: 70px; color: var(--text-3); font-size: 12px; }
-.wkctx-title {
-  min-width: 0;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-  color: var(--brand);
-  text-decoration: none;
-}
-a.wkctx-title:hover { text-decoration: underline; }
-.wkctx-foot { margin-top: 6px; font-size: 11.5px; line-height: 1.5; color: var(--text-3); }
-
 /* The ⌘K palette's Wiki group: one heading, then rows that are `.ssearch-row`s like any other, so
    the cursor, the title line and the meta line stay the palette's rather than a second palette's. */
 .wk-pal-group {
@@ -27223,10 +27363,6 @@ a.wkctx-title:hover { text-decoration: underline; }
    status glyph, and the anchor's tick where a hit says what it matched on. */
 .ssearch-row > .wk-kind { flex: none; }
 .ssearch-meta .ok { color: var(--success); }
-
-@media (max-width: 600px) {
-  .wkctx-kind { width: 58px; }
-}
 
 /* Background agent / workflow progress (TaskProgressBlock): the agents by phase, then the totals.
    Opens under a Workflow card in the conversation and under its row in the tray. */
@@ -28359,13 +28495,6 @@ button.agent-progress-agent:hover {
 .wk-chat-choice:hover { border-color: var(--brand); background: var(--brand-tint); }
 .wk-chat-choice .m { font-size: 12px; color: var(--text-3); }
 .wk-chat-body { flex: 1; min-height: 0; overflow-y: auto; overflow-anchor: none; display: flex; flex-direction: column; gap: 10px; padding: 12px 14px; }
-/* A person's meta row runs out to the left of the bubble's column on one line (.chat-user-meta), but the panel is 320 wide
-   and up and its body is a scroll box, which cuts off whatever runs past its left edge (C15). Here the attachment line
-   takes a line of its own under the bubble and wraps there, whole, as board 42 ① shows it; the copy and the time keep
-   their line under it, where the dot that led into the attachment line has nothing left to lead into. */
-.wk-chat-body .chat-user-meta { flex-wrap: wrap; height: auto; min-height: 18px; }
-.wk-chat-body .chat-user-meta > .chat-injected-head { order: -1; flex: 1 1 100%; white-space: normal; text-align: right; }
-.wk-chat-body .chat-user-meta > .chat-meta-sep:has(+ .chat-injected-head) { display: none; }
 .wk-chat-empty { margin: 34px 16px; text-align: center; font-size: 13.5px; line-height: 1.7; color: var(--text-2); }
 /* The panel's composer is the session page's (board 43): its box 12px in from the panel's edges, as the short one it
    replaced was — 374 wide in the default panel, where its toolbar keeps one line as it is. Dragged narrower (to 320),
@@ -28582,6 +28711,10 @@ button.agent-progress-agent:hover {
   font-size: 12.5px;
 }
 
+.landing-check-confirmation { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 16px; }
+@media (max-width: 600px) { .landing-check-confirmation { grid-template-columns: 1fr; } }
+
+.orbit-number-input.project-check-timeout { width: min(100%, 24rem); max-width: 100%; }
 /* The Providers page's Tier column (docs/subagent-design.md §7, board docs/mocks/subagent/05.png). */
 .model-tiers {
   width: 100%;
@@ -29037,6 +29170,12 @@ button.agent-progress-agent:hover {
 .project-done-moved-out, .acceptance-moved-out { list-style: none; margin: 8px 0 0; padding: 0; display: grid; gap: 4px;
   font-size: 12px; color: var(--text-3); }
 .project-done-moved-out a, .acceptance-moved-out a, .acceptance-moved a { color: var(--brand); }
+.acceptance-rulings { padding: 12px 24px; border-top: 1px solid var(--border-subtle); }
+.acceptance-rulings-title { margin: 0 0 6px; font-size: 13px; font-weight: 600; color: var(--text-1); }
+.acceptance-rulings ul { list-style: none; margin: 0; padding: 0; display: grid; gap: 8px; }
+.acceptance-ruling { display: grid; gap: 2px; font-size: 13px; line-height: 1.5; color: var(--text-1); }
+.acceptance-ruling-quote { color: var(--text-2); font-style: italic; }
+.acceptance-ruling-meta { font-size: 12px; color: var(--text-3); }
 .project-done-blockers { margin-top: 10px; padding: 10px 12px; border: 1px solid var(--error); border-radius: 10px;
   background: color-mix(in srgb, var(--error) 6%, transparent); font-size: 13px; line-height: 1.5; color: var(--text-1); }
 .project-done-blockers > b { display: block; margin-bottom: 6px; }
@@ -29145,4 +29284,28 @@ button.agent-progress-agent:hover {
    `open question below` capsule that points at it (the owner's pick, 2026-11-13). */
 .approval-card.coordinator-question {
   border: 1.5px solid var(--warning-solid);
+}
+
+/* The Agents line (SessionAgentsStrip.tsx), in the Background processes tray's shell and rows: the band's
+   words truncate before the title does; opened, the tray's own rows in one list (running first, no headings), each a run's name
+   then its facts. */
+.ag-head {
+  flex: none;
+}
+/* The Agent tone's purple, as Apple draws the band's sparkle. */
+.bg-tray-ico.ag-mark {
+  color: #7c3aed;
+}
+:root[data-theme='dark'] .bg-tray-ico.ag-mark {
+  color: #a78bfa;
+}
+.ag-band {
+  flex: 0 1 auto;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.ag-row .ag-title {
+  font-family: inherit;
 }

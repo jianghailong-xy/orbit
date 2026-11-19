@@ -1,6 +1,7 @@
 package io.orbitd.android.management
 
 import io.orbitd.android.composer.CursorRuntime
+import io.orbitd.android.composer.ManagedRunnerIdentity
 import io.orbitd.android.composer.ProviderEngines
 import io.orbitd.android.core.cards.ClaudeRegion
 import io.orbitd.android.core.cards.ClaudeRegionCopy
@@ -73,7 +74,15 @@ internal object RunnerCopy {
     /** A managed runner that has not reported yet (preparing, waiting for capacity, failed to start): its Resources and Engines say
      * only this (web runnerCopy MANAGED_RUNNER_NOT_REPORTED). */
     const val MANAGED_NOT_REPORTED = "Available once the runner is ready."
+    /** The account's managed runner wherever its name is shown, unless its owner renamed it: its stored name (`orbit-managed`) is
+     * the server's, not a word for anyone to read (web runnerCopy MANAGED_RUNNER_LABEL). */
+    const val MANAGED_RUNNER_LABEL = "Orbit Cloud"
+    /** A managed runner's version when it reports none that is a release (its image is `managed-<sha>`). */
+    const val MANAGED_RUNNER_KEPT_UP_TO_DATE = "Kept up to date by Orbit"
+    /** About's Version note on a managed runner: Orbit rolls its image, so it neither updates itself nor needs to. */
+    const val MANAGED_RUNNER_UPDATED_BY_ORBIT = "Orbit updates this machine for you."
     const val SEP = " · "
+    const val NO_PROVIDER_KEY = "no provider key found"
     fun offlineLastSeen(whenText: String) = "Offline · last seen $whenText"
     fun versionTag(version: String) = "v$version"
     fun runningOf(active: Int, max: Int) = "$active of $max running"
@@ -89,8 +98,8 @@ internal object RunnerCopy {
     const val EDIT = "Edit"
     const val DISK = "Disk"
     const val KEEP_FREE = "Keep Free"
-    const val CAPACITY_FOOTER = "Max Concurrent applies to the next session it picks up — no restart. Below Keep Free, task " +
-        "runs stop being sent here and finished worktrees are cleaned up sooner."
+    const val CAPACITY_FOOTER = "Max Concurrent applies to the next session it picks up — no restart. Below Keep Free, new sessions and " +
+        "task runs wait until space frees up, and finished worktrees are cleaned up sooner."
     fun gb(amount: String) = "$amount GB"
     fun diskUsed(used: String, total: String) = "$used of $total GB used"
     // Resources (web runnerCopy.ts "MARK: Resources", docs/mocks/runner-resource-monitor)
@@ -121,11 +130,15 @@ internal object RunnerCopy {
     const val REFRESH_MODEL_LISTS = "Refresh Model Lists"
     const val ENGINES_FOOTER = "Orbit keeps these CLIs updated every 30 min. Sign-ins live on this machine — a session spends " +
         "that subscription, nothing to paste."
+    /** A hosted runner's: its CLIs are fixed in Orbit's image, which moves with each Orbit release, not every 30 min. */
+    const val ENGINES_MANAGED_FOOTER = "Orbit updates these CLIs with each Orbit release. Sign-ins live on this runner — a session spends " +
+        "that subscription, nothing to paste."
     const val ENGINES_OFFLINE_FOOTER = "Signing in and updating need the runner online."
     /** DeepSeek Harness has no sign-in: its row, its page and the footer under it say what it runs on instead (board 1 ⑤⑥⑦). */
     const val USES_API_KEYS = "Uses API keys"
     const val DSH_READY = "Ready · each session uses the DeepSeek key it was started with"
     const val DSH_FOOTER = "Orbit keeps DeepSeek Harness updated every 30 min. It has no sign-in: every session runs on a DeepSeek key."
+    const val DSH_MANAGED_FOOTER = "Orbit updates DeepSeek Harness with each Orbit release. It has no sign-in: every session runs on a DeepSeek key."
     fun enginesChecked(whenText: String) = "Checked $whenText"
     fun enginesReported(whenText: String) = "Reported $whenText"
     fun accountsSignedIn(count: Int) = "$count accounts signed in"
@@ -257,12 +270,13 @@ internal object RunnerAccountCopy {
     /** The question in front of Default's Remove…, and an added account's while Default is removed. */
     fun removeTitle(name: String) = "Remove $name?"
     /** Removing an added account while Default is in use. */
-    const val REMOVE_DETAIL = "Workspaces using it switch to Default."
+    const val REMOVE_DETAIL = "Its sessions move to another account first. Workspaces using it switch to Default."
     /** Removing Default, which only Orbit stops using; [cli] is the CLI's own name (Codex, Claude Code). */
     fun defaultRemoveDetail(runner: String, cli: String) = "Orbit stops using it on $runner. Its sign-in stays on the machine, and $cli in a " +
         "terminal there keeps working. Workspaces set to it run on Automatic."
     /** Removing an added account while Default is removed from Orbit, with another account left. */
-    fun removeDetailAutomatic(runner: String) = "Its sign-in is deleted from $runner. Workspaces set to this account run on Automatic."
+    fun removeDetailAutomatic(runner: String) = "Its sessions move to another account first, then its sign-in is deleted from $runner. " +
+        "Workspaces set to this account run on Automatic."
     /** Removing the last account Orbit uses while Default is removed: the removal holds only while another account is there, so Default
      * ([name]) comes back into use. */
     fun removeDetailLast(runner: String, name: String) = "Its sign-in is deleted from $runner. Without it, Orbit uses $name there again, " +
@@ -272,11 +286,15 @@ internal object RunnerAccountCopy {
     /** That line's button, which brings Default back. */
     const val USE_AGAIN = "Use again"
     fun useAgainFailed(name: String) = "Couldn’t use $name again"
-    /** Over the sessions a refused removal lists, when one session is in the account — running or between turns, either holds it;
-     * [engine] is the CLI's own name (Codex, Claude Code). */
-    fun inUseOne(engine: String) = "This $engine account can’t be removed while a session is on it — to keep the session, switch it to another account and send it a message, or end it below; then remove the account"
-    /** The same, when several sessions are in it. */
-    fun inUseMany(engine: String, count: Int) = "This $engine account can’t be removed while $count sessions are on it — to keep them, switch each to another account and send it a message, or end them; then remove the account"
+    /** Over the sessions a refused removal lists, when one session in the account can't move to another — no other account is signed in,
+     * or its runner can't carry the conversation; [engine] is the CLI's own name (Codex, Claude Code). Sessions that can move are moved. */
+    fun inUseOne(engine: String) = "This $engine account can’t be removed while a session on it can’t move to another account — sign in another account, or end the session below; then remove the account"
+    /** The same, when several sessions in it can't move. */
+    fun inUseMany(engine: String, count: Int) = "This $engine account can’t be removed while $count sessions on it can’t move to another account — sign in another account, or end them below; then remove the account"
+    /** Under an account whose removal is waiting on the one session it moved to another account to leave. */
+    fun movingOne(engine: String) = "Moving a session to another $engine account — this one is removed once it has left, after its turn if one is running"
+    /** The same, when it moved several. */
+    fun movingMany(engine: String, count: Int) = "Moving $count sessions to another $engine account — this one is removed once they have left, after their turns if any are running"
     /** Each listed session's way to it. */
     const val IN_USE_OPEN = "Open session"
     /** A listed session in a turn (RUNNING, or PENDING on its way to one). */
@@ -952,7 +970,7 @@ internal object RunnerPage {
         val free = formatDiskGb(disk.freeBytes); val total = formatDiskGb(disk.totalBytes)
         val summary = "Disk ${disk.usedPercent}% full"
         return AttentionItem("diskLow", "warn", summary, summary,
-            reserve?.let { "$free GB free of $total GB, under the ${formatDiskGb(it * MIB)} GB it keeps free — task runs stop being sent here until space frees up." }
+            reserve?.let { "$free GB free of $total GB, under the ${formatDiskGb(it * MIB)} GB it keeps free — new sessions and task runs wait until space frees up." }
                 ?: "$free GB free of $total GB. No reserve is set, so task runs keep landing here until the disk fills.",
             AttentionAction("setReserve"))
     }
@@ -1022,7 +1040,7 @@ internal object RunnerPage {
     }
 
     /** Everything about this runner that needs a person, most severe first. */
-    fun attention(runner: JsonObject, workspaces: List<JsonObject>, nowMs: Long, latestVersion: String?): List<AttentionItem> {
+    fun attention(runner: JsonObject, workspaces: List<JsonObject>, nowMs: Long, latestVersion: String?, managed: Boolean = false): List<AttentionItem> {
         val offline = isOffline(runner, nowMs)
         val items = mutableListOf<AttentionItem>()
         if (offline) items += offlineItem(runner, nowMs)
@@ -1033,7 +1051,8 @@ internal object RunnerPage {
             items += quotaItems(runner, workspaces, nowMs)
             diskItem(runner, workspaces)?.let { items += it }
         }
-        cannotSelfUpdateItem(runner, latestVersion, offline)?.let { items += it }
+        // Orbit rolls the managed runner's image: it is never told to update itself.
+        if (!managed) cannotSelfUpdateItem(runner, latestVersion, offline)?.let { items += it }
         if (!offline) items += engineUpdateItems(runner, nowMs)
         return items
     }
@@ -1044,22 +1063,60 @@ internal object RunnerPage {
         return items.take(2).map { it.short }.takeIf { it.isNotEmpty() }?.joinToString(RunnerCopy.SEP)
     }
 
-    fun displayName(runner: JsonObject) = runner.str("displayName")?.trim()?.takeIf { it.isNotEmpty() } ?: runner.text("name")
+    /**
+     * The name a machine is shown by everywhere: its owner's own name for it, else Orbit Cloud for the account's managed runner — told
+     * by its row's `managed` (GET /runners), else by [managedRunnerId], the managed status's runnerId (by default the one the
+     * signed-in shell last read), never by its stored name — else the name it registered with (web machineName).
+     */
+    fun displayName(runner: JsonObject, managedRunnerId: String? = ManagedRunnerIdentity.runnerId): String =
+        runner.str("displayName")?.trim()?.takeIf { it.isNotEmpty() }
+            ?: if (isManaged(runner, managedRunnerId)) RunnerCopy.MANAGED_RUNNER_LABEL else runner.text("name")
 
-    /** Online: `<hostname> · v<version>`; offline: `Offline · last seen 14d ago · v<version>`. */
-    fun listSubtitle(runner: JsonObject, nowMs: Long): String {
-        val version = runner.str("version")?.trim()?.takeIf { it.isNotEmpty() }?.let(RunnerCopy::versionTag)
+    /** The same from a runner's fields, for a row that is not a runner's own JSON (a directory runner, a session's assignedRunner).
+     *  [managed] is the row's own flag where it has one (a GET /runners row); null leaves it to the id. */
+    fun nameOf(id: String?, name: String?, displayName: String?, managedRunnerId: String? = ManagedRunnerIdentity.runnerId, managed: Boolean? = null): String =
+        displayName?.trim()?.takeIf { it.isNotEmpty() }
+            ?: if (isManaged(id, managedRunnerId, managed)) RunnerCopy.MANAGED_RUNNER_LABEL
+            else name.orEmpty()
+
+    /** Whether [runner] is the account's managed runner: its row says so (`managed`), or (an older server, which sends no flag) its
+     *  id is the managed status's runnerId. */
+    fun isManaged(runner: JsonObject, managedRunnerId: String? = ManagedRunnerIdentity.runnerId): Boolean =
+        isManaged(runner.str("id"), managedRunnerId, runner.bool("managed"))
+
+    /** The same from a runner's id and its row's flag (null where the row has none). */
+    fun isManaged(id: String?, managedRunnerId: String? = ManagedRunnerIdentity.runnerId, managed: Boolean? = null): Boolean =
+        managed == true || (!id.isNullOrEmpty() && !managedRunnerId.isNullOrEmpty() && ObjectId.same(id, managedRunnerId))
+
+    /** Pin the account's managed runner, keeping the order the server sent for the other machines. */
+    fun managedRunnerFirst(runners: List<JsonObject>, managedRunnerId: String? = ManagedRunnerIdentity.runnerId): List<JsonObject> =
+        runners.sortedByDescending { isManaged(it, managedRunnerId) }
+
+    /** Whether a version is a release number, not a managed image's `managed-<sha>` or a `dev` build. */
+    fun isReleaseVersion(version: String?): Boolean = version != null && Regex("^[vV]?[0-9]").containsMatchIn(version.trim())
+
+    /** A version beside a runner's name: `v<version>`. A managed runner shows its release when it reports one, and otherwise says
+     * Orbit keeps it up to date — never its image hash (web runnerVersionLine). */
+    fun versionLine(version: String?, managed: Boolean = false): String? {
+        val v = version?.trim()?.takeIf { it.isNotEmpty() }
+        if (managed) return if (isReleaseVersion(v)) RunnerCopy.versionTag(v!!) else RunnerCopy.MANAGED_RUNNER_KEPT_UP_TO_DATE
+        return v?.let(RunnerCopy::versionTag)
+    }
+
+    /** Online: `<hostname> · v<version>`; offline: `Offline · last seen 14d ago · v<version>`. A managed runner's version is [versionLine]'s. */
+    fun listSubtitle(runner: JsonObject, nowMs: Long, managed: Boolean = false): String {
+        val version = versionLine(runner.str("version"), managed)
         if (isOffline(runner, nowMs)) {
             val status = runner.str("lastHeartbeatAt")?.takeIf { it.isNotEmpty() }?.let { RunnerCopy.offlineLastSeen(ago(it, nowMs)) } ?: RunnerCopy.OFFLINE
             return listOfNotNull(status, version).joinToString(RunnerCopy.SEP)
         }
-        return hostLine(runner)
+        return hostLine(runner, managed)
     }
 
-    fun hostLine(runner: JsonObject): String {
-        val host = runner.str("hostname")?.trim()?.takeIf { it.isNotEmpty() && it != displayName(runner) }
-        val version = runner.str("version")?.trim()?.takeIf { it.isNotEmpty() }?.let(RunnerCopy::versionTag)
-        return listOfNotNull(host, version).joinToString(RunnerCopy.SEP)
+    fun hostLine(runner: JsonObject, managed: Boolean = false): String {
+        val shown = runner.str("displayName")?.trim()?.takeIf { it.isNotEmpty() } ?: if (managed) RunnerCopy.MANAGED_RUNNER_LABEL else runner.text("name")
+        val host = runner.str("hostname")?.trim()?.takeIf { it.isNotEmpty() && it != shown }
+        return listOfNotNull(host, versionLine(runner.str("version"), managed)).joinToString(RunnerCopy.SEP)
     }
 
     /** green online, amber while it drains, grey offline. */
@@ -1154,6 +1211,10 @@ internal object RunnerPage {
      * first sign-in — and with several accounts, which can be on different sites: each says its own on the engine page. */
     fun engineSite(health: JsonObject): String? =
         if (health.str("engine") != "kimi" || health.list("accounts").size >= 2) null else KimiSite.of(health.str("kimiRegion"))?.domain
+    /** OpenCode's note after its version when its CLI listed no provider key (`1.19.5 · no provider key found`): its
+     * unknown sign-in is about a key, never the version. Null otherwise. */
+    fun engineKeyNote(health: JsonObject): String? =
+        if (health.str("engine") == "opencode" && health.bool("openCodeNoKey") == true && health.str("auth") != "yes") RunnerCopy.NO_PROVIDER_KEY else null
     /** The engines whose quota a runner reads: the ones Orbit signs in. */
     fun reportsQuota(engine: String) = isLoginEngine(engine)
 
@@ -1378,6 +1439,18 @@ internal object RunnerPage {
         return state.list("sessions").mapNotNull { session -> session.str("id")?.let { InUseSession(it, session.str("title").orEmpty(), session.str("status")) } }
     }
 
+    /** Under an account whose removal is under way and waiting on the sessions it moved to another account (`moving`) to leave it;
+     * null otherwise, and from a server older than the move. */
+    fun movingLine(state: JsonObject?, engine: String, account: String): String? {
+        if (state == null || state.str("engine") != engine || state.str("account") != account || state.str("status") != "pending") return null
+        val count = state.int("moving") ?: return null
+        return when {
+            count < 1 -> null
+            count == 1 -> RunnerAccountCopy.movingOne(engineName(engine))
+            else -> RunnerAccountCopy.movingMany(engineName(engine), count)
+        }
+    }
+
     /** What stands over those sessions in place of the machine's sentence, the engine named as its CLI is. */
     fun inUseHeading(engine: String, count: Int) =
         if (count == 1) RunnerAccountCopy.inUseOne(engineName(engine)) else RunnerAccountCopy.inUseMany(engineName(engine), count)
@@ -1477,7 +1550,10 @@ internal object RunnerPage {
     // about
     /** `0.1.197 · Latest`; a runner behind that installs the release itself says so, and so does one a staged rollout holds
      * back. One that reports where its updates stand says which it is; an older one is judged by runsAsRoot, as before. */
-    fun versionValue(runner: JsonObject, latest: String?): String? {
+    fun versionValue(runner: JsonObject, latest: String?, managed: Boolean = false): String? {
+        // Orbit rolls the managed runner's image: its release and that Orbit updates it, or that Orbit keeps it up to date.
+        if (managed) return runner.str("version")?.trim()?.takeIf(::isReleaseVersion)?.let { it + RunnerCopy.SEP + RunnerCopy.MANAGED_RUNNER_UPDATED_BY_ORBIT }
+            ?: RunnerCopy.MANAGED_RUNNER_KEPT_UP_TO_DATE
         val version = runner.str("version")?.trim()?.takeIf { it.isNotEmpty() } ?: return null
         val newest = latest?.trim()?.takeIf { it.isNotEmpty() } ?: return version
         if (compareRunnerVersions(version, newest) >= 0) return version + RunnerCopy.SEP + "Latest"

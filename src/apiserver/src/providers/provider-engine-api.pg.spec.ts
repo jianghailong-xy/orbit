@@ -480,12 +480,23 @@ test('T3 provider-engine API on PostgreSQL', { timeout: 600_000 }, async (t) => 
     const takenOver = await tasks.execute(owner, mixed, undefined, mixedPress);
     assert.equal(takenOver.sessionId, desiredIdFor(mixed, mixedPress));
     assert.deepEqual(await stored(takenOver.sessionId!), { engine: AgentProvider.OPENCODE, provider: codexKey.slug, providerBuiltin: false });
-    // …and one naming another credential runs where that credential alone runs, as it was bound to.
+    // …one naming a credential the task is not pinned to runs where that credential alone runs, as it
+    // was bound to, while it still describes the task (here a task pinned to that credential only)…
+    const onCredential = (await db.task.create({ data: {
+      ownerId: owner, projectId, assigneeId: at.workspaceId, title: 'pinned on the login', creatorType: CreatorType.USER,
+      creatorId: owner, completionCriterion: 'EVIDENCE_JUDGMENT', provider: AgentProvider.CLAUDE,
+    } })).id;
+    const loginPress = randomUUID();
+    await bind(onCredential, loginPress, { ...v2(onCredential, loginPress, AgentProvider.CLAUDE), model: null });
+    const onLogin = await tasks.execute(owner, onCredential, undefined, loginPress);
+    assert.deepEqual(await stored(onLogin.sessionId!), { engine: AgentProvider.CLAUDE, provider: AgentProvider.CLAUDE, providerBuiltin: true });
+    // …and one whose credential the task has since been re-pinned away from, with no run made yet, is
+    // planned afresh on the task's pins (abandonStaleCreatePlan; task-auto-run-stale-bound-plan.pg.spec).
     const other = await task();
     const otherPress = randomUUID();
     await bind(other, otherPress, { ...v2(other, otherPress, AgentProvider.CLAUDE), model: null });
-    const onLogin = await tasks.execute(owner, other, undefined, otherPress);
-    assert.deepEqual(await stored(onLogin.sessionId!), { engine: AgentProvider.CLAUDE, provider: AgentProvider.CLAUDE, providerBuiltin: true });
+    const replanned = await tasks.execute(owner, other, undefined, otherPress);
+    assert.deepEqual(await stored(replanned.sessionId!), { engine: AgentProvider.OPENCODE, provider: codexKey.slug, providerBuiltin: false });
   });
 
   await t.test("T3 the built-in dsh is DeepSeek Harness on the first enabled DeepSeek key, or refused, and a workspace key's sessions keep theirs", async () => {

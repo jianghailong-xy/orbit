@@ -1,12 +1,13 @@
 import assert from 'node:assert/strict';
 import { randomUUID } from 'node:crypto';
-import { test } from 'node:test';
+import { mock, test } from 'node:test';
 import { Module, ValidationPipe } from '@nestjs/common';
 import { NestFactory, Reflector } from '@nestjs/core';
 import { JwtService } from '@nestjs/jwt';
 import { JwtAuthGuard } from '../auth/jwt-auth.guard';
 import { DEFAULT_AGENT_LANGUAGE, TRANSLATION_LANGUAGES } from '@orbit/shared';
 import { PrismaService } from '../prisma/prisma.service';
+import { resetTranslationBreaker, translate } from '../sessions/translation';
 import { UsersController } from './users.controller';
 
 const USER_ID = randomUUID();
@@ -230,4 +231,44 @@ test('me says whether the server can translate: without DEEPSEEK_API_KEY it cann
   assert.equal(account.translationAvailable, false);
   // The preference is kept as chosen; it simply does nothing until the server has a key.
   assert.equal(account.preferences.translationEnabled, true);
+});
+
+test('GET /users/me reports translationUnavailableUntil while the translator breaker is open, and null after its 60 s', async (t) => {
+  const originalKey = process.env.DEEPSEEK_API_KEY;
+  const realFetch = globalThis.fetch;
+  t.after(() => {
+    globalThis.fetch = realFetch;
+    mock.timers.reset();
+    resetTranslationBreaker();
+    if (originalKey === undefined) delete process.env.DEEPSEEK_API_KEY;
+    else process.env.DEEPSEEK_API_KEY = originalKey;
+  });
+  process.env.DEEPSEEK_API_KEY = 'test-key';
+  resetTranslationBreaker();
+  await boot(t);
+  const closed = await (await me()).json() as { translationUnavailableUntil: string | null };
+  assert.equal(closed.translationUnavailableUntil, null);
+
+  // Three unreachable translations (each after its retries, the clock stepped past their pauses) open it.
+  const opened = Date.now();
+  mock.timers.enable({ apis: ['setTimeout', 'Date'], now: opened });
+  globalThis.fetch = (async () => { throw new TypeError('fetch failed'); }) as typeof fetch;
+  for (let i = 0; i < 3; i++) {
+    let done = false;
+    translate('你好', 'zh-Hans', 'en').catch(() => undefined).finally(() => { done = true; });
+    while (!done) {
+      await new Promise((resolve) => setImmediate(resolve));
+      if (!done) mock.timers.tick(250);
+    }
+  }
+  const until = Date.now() + 60_000;
+  mock.timers.reset();
+  globalThis.fetch = realFetch;
+
+  const open = await (await me()).json() as { translationUnavailableUntil: string | null };
+  assert.equal(open.translationUnavailableUntil, new Date(until).toISOString());
+
+  mock.timers.enable({ apis: ['Date'], now: until });
+  const after = await (await me()).json() as { translationUnavailableUntil: string | null };
+  assert.equal(after.translationUnavailableUntil, null);
 });

@@ -1,5 +1,5 @@
 import { readSessionCoordinatorHandoffs } from '../projects/coordinator-handoff';
-import type { SubagentRunView } from '@orbit/shared';
+import type { HelpAskMarker, SubagentRunView } from '@orbit/shared';
 import { modelLabels, subagentRunView } from '../runner-api/subagent-run';
 import { checkedWorkSubdir } from './work-subdir';
 import { visibleQuestions, questionsWithCoordinator } from './run-question';
@@ -32,12 +32,12 @@ import {
 } from '@prisma/client';
 import { appendBackgroundWakeContext, isBackgroundWakeTurn } from '../runner-api/background-job-wake';
 import { appendScheduledWakeupContext, endWakeupLoop, readSessionWakeups } from '../runner-api/scheduled-wakeup';
-import { checkOnlyRuleRefusal, runAccessLevel, SCHEDULE_CHECK_ONLY_RULE_REFUSED } from '../schedules/schedule-access';
+import { checkOnlyCommandRules, checkOnlyRuleRefusal, runAccessLevel, SCHEDULE_CHECK_ONLY_RULE_REFUSED } from '../schedules/schedule-access';
 import { settleUnrunWakeTurns } from '../runner-api/wake-turn-withdraw';
 import { linkNotFound } from '../share-links/share-link';
 import { freshRunningBgJobs } from './background-job-activity';
 import { readSessionActivities, sessionActivitySql } from './task-work-carrier';
-import { CLEARED_RUNNING_WORK } from './running-work';
+import { CLEARED_RUNNING_WORK, KEEP_BACKGROUND_WORK_END_CONTENT } from './running-work';
 import { resolveLegacyArtifactPath, runEventPayloadMentions } from './legacy-artifact-path';
 import { isWorktreeArtifactPath, readWorktreeArtifactRequest, worktreeFileAnswerKey } from './worktree-artifact';
 import { isOrbitAuthoredTurn, isOrbitAuthoredTurnOf, openingTurnId, openingTurnKey } from './orbit-authored-turn';
@@ -130,6 +130,7 @@ import {
   withEnginePlanUsage,
   type AccountEngine,
   type PlanUsage,
+  CLONE_WORKDIR_CAPABILITY,
   credentialIsAnthropicBound,
   type WikiChatContext,
   type TranslationActionResponse,
@@ -153,7 +154,11 @@ import {
   type AgentProviderSeed,
   type SessionOpenedBy,
 } from '../workspaces/workspace-provider';
+import { GithubConnectionService } from '../github/github-connection.service';
+import { githubRepoUrl } from '../github/github-workspace.service';
 import { PrismaService } from '../prisma/prisma.service';
+import { RUNNER_DISK_BELOW_FLOOR, sessionDiskHoldSql } from '../common/runner-disk-gate';
+import { workspaceCloneHoldSql, workspaceCloneReasonSql } from '../common/workspace-clone-gate';
 import {
   reprojectAfterSettledChecks,
   settleChecksOfEndedRun,
@@ -248,9 +253,12 @@ import {
 } from './dto';
 import {
   folderNameOf,
+  folderOfRepoName,
   freeWorkspaceName,
+  newFolderWorkDir,
   newFolderWorkDirOn,
   readNewWorkspace,
+  type NewWorkspaceGithubAsk,
   type NewWorkspaceTarget,
 } from './new-workspace';
 import {
@@ -263,13 +271,17 @@ import {
   titleFromPrompt,
 } from './naming';
 import { enqueueRecap, type RecapOutcome } from './recap';
-import { translate, TranslationFailed } from './translation';
+import { translate } from './translation';
 import { agentDecision, retranslateEvent, translatableText, type TranslationDeps } from './reply-translation';
 import {
   DRAIN_SKIPS_HELD,
   HELD_TURN_STATUS,
   accountAgentLanguage,
+  CLEARED_FAILURE_COLUMNS,
+  failedTurnColumns,
   heldTurnColumns,
+  isSlashCommand,
+  logOwnerTranslationFailure,
   readOptimizedTranslation,
   translationLanguages,
   turnTranslationOf,
@@ -352,7 +364,7 @@ import {
   resumeBlockedRefusal, sessionRecoveryBody, sessionRefusal,
 } from './session-recovery';
 import { claudeRegionCreateRefusal, isClaudeRegionError, regionCredentialOf } from '../runners/runner-region';
-import { assertManagedFirstSessionRuntime } from '../managed-runners/managed-runner-supply';
+import { assertManagedFirstSessionRuntime, managedFirstSessionKey } from '../managed-runners/managed-runner-supply';
 import {
   MANAGED_RUNNER_DEMAND,
   NOT_MANAGED,
@@ -380,6 +392,7 @@ import {
   ACCOUNT_CHOICE,
   ACCOUNT_PINNED,
   DEFAULT_ACCOUNT,
+  accountInPlaceOf,
   defaultRemovedOn,
   remainingAccount,
   type AccountRunner,
@@ -991,6 +1004,12 @@ export class SessionsService {
      * their own over the same prisma and the same environment, which behaves the same.
      */
     @Optional() files?: FilesService,
+    /**
+     * Each account's GitHub connection (github/github-connection.service.ts): a `newWorkspace.github` asks it whether
+     * the caller can see the repository now. Absent in the specs that build this service by hand, where a GitHub
+     * workspace is refused as GitHub not being connected.
+     */
+    @Optional() private readonly githubConnections?: GithubConnectionService,
   ) {
     this.files = files ?? new FilesService(prisma);
   }
@@ -1187,6 +1206,12 @@ export class SessionsService {
        */
       externalSender?: ExternalTurnSender;
       /**
+       * The help center's Ask (help/help-ask.ts, migration 0850): this session answers a question read-only. Internal,
+       * set only by the Ask door, which checked the machine. It belongs to no workspace, executes no task and opens with
+       * words; `session.help_ask` is written in the row's own INSERT, and 0850's guard refuses every later write of it.
+       */
+      helpAsk?: HelpAskMarker;
+      /**
        * The owner's own door (POST /sessions): with Settings › Translation on, the opening message is
        * laid down HELD in the session's own INSERT transaction and translated before the claim may hand
        * the session out (turn-translation.ts). Words typed by a person only: a task run, a shell-first
@@ -1229,6 +1254,10 @@ export class SessionsService {
     // workspace and opens with words (wiki contract `chat.create`). The door never asks for more.
     if (wikiChat && (dto.taskId || dto.newWorkspace != null || dto.shell || !dto.workspaceId || noWorktree)) {
       throw new Error('a wiki chat is a session of its workspace that executes no task and opens with words');
+    }
+    // An Ask is a question on a machine and nothing else: no workspace, no task, no shell (help/help-ask.ts).
+    if (opts?.helpAsk && (dto.taskId || dto.workspaceId || dto.newWorkspace != null || dto.shell || !dto.assignedRunnerId)) {
+      throw new Error('an Ask is a session of a machine, in no workspace, that executes no task and opens with words');
     }
     // Attachments with no words are a whole opening message, as they are on any later turn: the
     // runtime is handed the files either way. A shell command is nothing without its words.
@@ -1278,8 +1307,9 @@ export class SessionsService {
     // enough to know which machine + project dir to run in.
     let assignedRunnerId: string | undefined = dto.assignedRunnerId;
     // Per-workspace worktree toggle: default off. A workspace with it turned off (the default)
-    // makes its sessions run with no branch, so the runner runs them in the shared workDir.
-    let enableWorktree = false;
+    // makes its sessions run with no branch, so the runner runs them in the shared workDir. A workspace this
+    // request clones from GitHub starts with it on (createInNewWorkspace), and so does its first session.
+    let enableWorktree = !!newWorkspace?.clone;
     // The owner's account-level permission default, materialized onto the session below when the
     // caller picked none (MCP spawns, task runs — the web/native composers always send one).
     // The claim resolves session ?? account ?? auto anyway, so this doesn't change what the
@@ -1318,9 +1348,6 @@ export class SessionsService {
     let workspaceEnv: unknown;
     // The accounts the workspace pins its sessions to, whose sign-ins the preflight below judges.
     let accountChoices: WorkspaceAccountChoices | undefined;
-    // Set when the workspace is a managed runner's default workspace: that runner, whose first
-    // session is held to the runtimes it has ready (see the preflight below).
-    let managedRunnerId: string | undefined;
     if (!assignedRunnerId && dto.workspaceId) {
       const workspace = await this.prisma.workspace.findFirst({
         where: { id: dto.workspaceId, ownerId, deletedAt: null },
@@ -1334,7 +1361,6 @@ export class SessionsService {
           antigravityAccount: true,
           kimiAccount: true,
           cursorAccount: true,
-          managedRunnerDefault: { select: { runnerId: true } },
         },
       });
       if (!workspace) throw new ForbiddenException('workspace not found');
@@ -1350,14 +1376,12 @@ export class SessionsService {
       enableWorktree = workspace.enableWorktree;
       workspaceEnv = workspace.env;
       accountChoices = workspace;
-      managedRunnerId = workspace.managedRunnerDefault?.runnerId;
     } else if (dto.workspaceId) {
       const workspace = await this.prisma.workspace.findFirst({
         where: { id: dto.workspaceId, ownerId, deletedAt: null },
         select: {
           enableWorktree: true, enabled: true, env: true, codexAccount: true, claudeAccount: true, antigravityAccount: true,
           kimiAccount: true, cursorAccount: true,
-          managedRunnerDefault: { select: { runnerId: true } },
         },
       });
       if (!workspace) throw new ForbiddenException('workspace not found');
@@ -1365,7 +1389,6 @@ export class SessionsService {
       enableWorktree = workspace.enableWorktree;
       workspaceEnv = workspace.env;
       accountChoices = workspace;
-      managedRunnerId = workspace.managedRunnerDefault?.runnerId;
     }
     if (!assignedRunnerId) {
       throw new BadRequestException('pick a workspace bound to a runner, or pass assignedRunnerId');
@@ -1380,7 +1403,16 @@ export class SessionsService {
     // caller changes engine) — else where this project last started, derived rather than stored (see
     // workspace-provider.ts for why a workspace holds no provider of its own). Anything named is
     // resolved rather than trusted: a command-line caller typed it, and no picker checked it first.
-    const resolved = await this.startResolution(ownerId, { ...dto, anchor: opts?.anchor });
+    // A workspace made with this session has no id for workspace-provider to seed yet. Give an
+    // unnamed start on a managed runner the same initial provider as an existing empty workspace.
+    let newWorkspaceProvider: string | undefined;
+    if (newWorkspace && !dto.engine && !dto.provider && !opts?.anchor) {
+      const managed = await this.prisma.managedRunner.findUnique({
+        where: { runnerId: newWorkspace.runnerId }, select: { initialProvider: true },
+      });
+      if (managed) newWorkspaceProvider = managed.initialProvider ?? await managedFirstSessionKey(this.prisma, ownerId) ?? undefined;
+    }
+    const resolved = await this.startResolution(ownerId, { ...dto, provider: dto.provider ?? newWorkspaceProvider, anchor: opts?.anchor });
     const { provider, providerBuiltin } = resolved;
     // The model as asked; an old OpenCode request's `orbit-<key>/<model>` is stored as its bare id.
     const model = resolved.model ?? undefined;
@@ -1548,6 +1580,8 @@ export class SessionsService {
         accountPauses: true, defaultRemoved: true, planUsage: true, capabilities: true, capabilitiesReportedAt: true,
         // The region check's verdict (docs/claude-region-check-contract.md §12, below).
         region: true,
+        // Set on a managed runner, whose first session is held to the runtimes it has ready (below).
+        managedRunner: { select: { id: true } },
       },
     });
     if (runtime === AgentProvider.DSH) {
@@ -1646,12 +1680,13 @@ export class SessionsService {
     if (refusal && targetRunner) {
       throw new EngineSignedOutConflict(runtime, refusal, assignedRunnerId, engineSignInAction(runtime, targetRunner));
     }
-    // A managed runner installs no engine on demand, so its default workspace's first session runs on
-    // a runtime it reported ready — the default derived above is the one it became READY with — or is
-    // refused MODEL_UNAVAILABLE here (docs/managed-runner-design.md, "Provisioning retry wake and sleep" 3).
-    if (managedRunnerId && managedRunnerId === assignedRunnerId && targetRunner && dto.workspaceId) {
+    // A managed runner installs no engine on demand, so its first session runs on a runtime it reported
+    // ready — the default derived above is the one it became READY with — or is refused MODEL_UNAVAILABLE
+    // here (docs/managed-runner-design.md, "Provisioning retry wake and sleep" 3). Keyed on the runner,
+    // whichever workspace the session is in or makes (docs/managed-runner-no-default-workspace.md).
+    if (targetRunner?.managedRunner) {
       await assertManagedFirstSessionRuntime(this.prisma, {
-        workspaceId: dto.workspaceId,
+        runnerId: assignedRunnerId,
         runtime,
         bringsOwnCredentials,
         workspaceEnv,
@@ -1747,12 +1782,14 @@ export class SessionsService {
         // A chat for its whole life, from this statement (wiki contract `chat.binding`); 0476's guard
         // refuses every later write of it.
         ...(wikiChat ? { wikiChatSpaceId: wikiChat.spaceId } : {}),
+        // An Ask for its whole life, from this statement (migration 0850); the guard refuses every later write of it.
+        ...(opts?.helpAsk ? { helpAsk: opts.helpAsk as unknown as Prisma.InputJsonValue } : {}),
       },
     });
     // Settings › Translation: the language the opening message is translated from, or null.
     const optimizedTranslation = readOptimizedTranslation(dto.optimizedTranslation);
-    const heldFrom = opts?.translate && dto.skipTranslation !== true && !dto.taskId && !wikiChat && !dto.shell && !attachmentsAlone
-      && !opts.externalSender && !opts.fence && dto.prompt.trim()
+    const heldFrom = opts?.translate && dto.skipTranslation !== true && !dto.taskId && !wikiChat && !opts.helpAsk && !dto.shell && !attachmentsAlone
+      && !opts.externalSender && !opts.fence && dto.prompt.trim() && !isSlashCommand(dto.prompt)
       ? (await translationLanguages(this.prisma, ownerId))?.owner ?? null
       : null;
     const session = await (newWorkspace
@@ -1884,17 +1921,71 @@ export class SessionsService {
     }
     const runner = await this.prisma.runner.findFirst({
       where: { id: ask.runnerId, ownerId },
-      select: { id: true, reposRoot: true, capabilities: true, capabilitiesReportedAt: true },
+      select: { id: true, reposRoot: true, capabilities: true, capabilitiesReportedAt: true, managedRunner: { select: { id: true } } },
     });
     if (!runner) throw new ForbiddenException('runner not found');
     if (ask.workDir !== undefined) {
       return { runnerId: runner.id, workDir: ask.workDir, name: folderNameOf(ask.workDir), autoCreateWorkDir: false };
     }
+    if (ask.github !== undefined) return this.githubWorkspaceFor(ownerId, runner, ask.github);
     return {
       runnerId: runner.id,
       workDir: newFolderWorkDirOn(runner, ask.newFolder),
       name: ask.newFolder,
       autoCreateWorkDir: true,
+    };
+  }
+
+  /**
+   * `newWorkspace.github` (docs/github-workspace-design.md §5.3), after readNewWorkspace's 400s and the machine's 403,
+   * refused in the design's order and reading only: 409 GITHUB_NOT_CONNECTED (none, or one GitHub no longer takes; GitHub
+   * off on this Orbit is the 409 GITHUB_NOT_CONFIGURED in its place), 403 GITHUB_REPO_FORBIDDEN (GitHub, asked now with
+   * the caller's own user token, does not show the caller this repository), 409 CLONE_UNSUPPORTED (the runner has not
+   * reported its reposRoot, or does not declare clone-workdir/v1). What is left is refused by `create` as for any other
+   * new workspace. The folder is the one asked for, else the repository's name; the URL is the repository's current
+   * one, without a credential. POST /workspaces `github` (WorkspacesService.create) is held to the same refusals.
+   */
+  async githubWorkspaceFor(
+    ownerId: string,
+    runner: { id: string; reposRoot: string | null; capabilities: string[]; capabilitiesReportedAt: Date | null },
+    ask: NewWorkspaceGithubAsk,
+  ): Promise<NewWorkspaceTarget> {
+    if (!this.githubConnections) {
+      throw new ConflictException({ code: 'GITHUB_NOT_CONNECTED', message: 'Connect GitHub in Settings → Integrations first.' });
+    }
+    const repo = await this.githubConnections.reachableRepository(ownerId, ask.repoId, { fresh: true });
+    if (!repo) {
+      throw new ForbiddenException({
+        code: 'GITHUB_REPO_FORBIDDEN',
+        message: 'Your GitHub account cannot reach that repository through Orbit\'s GitHub App. Add it to the App on GitHub, or pick another.',
+      });
+    }
+    const reposRoot = runner.reposRoot?.trim();
+    const clones = !!runner.capabilitiesReportedAt && runner.capabilities.includes(CLONE_WORKDIR_CAPABILITY);
+    if (!clones || !reposRoot) {
+      throw new ConflictException({
+        code: 'CLONE_UNSUPPORTED',
+        message: clones
+          ? 'This runner has not reported its Repos Folder, so it cannot clone a repository. Choose an existing folder.'
+          : 'This runner is too old to clone a repository — update it, or choose an existing folder.',
+      });
+    }
+    const name = repo.fullName.split('/').pop() ?? '';
+    const folder = ask.folder ?? folderOfRepoName(name);
+    if (!folder) {
+      throw new BadRequestException(`The repository's name ${JSON.stringify(name)} is not a folder name: send newWorkspace.github.folder`);
+    }
+    return {
+      runnerId: runner.id,
+      workDir: newFolderWorkDir(reposRoot, folder),
+      name: folder,
+      autoCreateWorkDir: false,
+      clone: {
+        repoUrl: githubRepoUrl(repo.fullName),
+        githubRepoId: BigInt(repo.id),
+        githubInstallationId: BigInt(repo.installationId),
+        cloneRef: ask.ref,
+      },
     };
   }
 
@@ -1979,9 +2070,12 @@ export class SessionsService {
           name: freeWorkspaceName(target.name, taken.map((w) => w.name)),
           runnerId: target.runnerId,
           workDir: target.workDir,
-          // Isolation off, as every new workspace starts (board 04, settled item 3).
-          enableWorktree: false,
+          // Isolation off, as every new workspace starts (board 04, settled item 3) — except a clone from GitHub, whose
+          // point is landing work back to the repository, which needs each session on its own branch.
+          enableWorktree: !!target.clone,
           autoCreateWorkDir: target.autoCreateWorkDir,
+          // A clone (docs/github-workspace-design.md §5.3): PENDING until the runner reports it, and its sessions with it.
+          ...(target.clone ? { ...target.clone, cloneState: 'PENDING' } : {}),
         },
         select: { id: true, name: true },
       });
@@ -3962,6 +4056,8 @@ export class SessionsService {
       confinedTo?: readonly string[];
       view?: 'open' | 'completed' | 'trash' | 'active' | 'archived' | 'deleted' | 'system';
       limit?: number;
+      /** A workspace's Scheduled runs folder: its scheduled runs' sessions alone, which every other read leaves out. */
+      scheduled?: boolean;
     },
     /** The Open list's data version the caller read for this list (`openListVersion`). Given, a flat
      *  Open read is shared with every other read of the same version and filters (`sharedOpenList`). */
@@ -4040,16 +4136,21 @@ export class SessionsService {
       view === 'completed'
         ? Prisma.sql`COALESCE(s.completed_at, s.archived_at) DESC NULLS LAST, s.created_at DESC`
         : Prisma.sql`(s.pinned_at IS NOT NULL) DESC, COALESCE(s.last_turn_at, s.created_at) DESC, s.created_at DESC`;
+    // An Ask (migration 0850) is in no session list: it is listed under /help → Your questions (help/help-ask.ts).
     const build = () => this.listRows(ownerId, {
-      scope: Prisma.sql`${runnerFilter} ${workspaceFilter} ${confinedFilter} ${tagFilter} ${projectFilter}`,
-      // A scheduled task's run is reached from its schedule's history and its notification, never from a list
-      // (docs/scheduled-tasks-design.md §7.4): every view, folder and project read, and the delta that reads this.
-      // `listRowsByIds` names its sessions and is left as it is: a link card to a run is by id.
-      visibility: view === 'system' ? visibility : Prisma.sql`(${visibility}) AND s.run_source <> 'SCHEDULE'`,
+      scope: Prisma.sql`AND s.help_ask IS NULL ${runnerFilter} ${workspaceFilter} ${confinedFilter} ${tagFilter} ${projectFilter}`,
+      // A scheduled task's run is listed only in its workspace's Scheduled runs folder (`scheduled`), never among
+      // a workspace's own sessions (docs/scheduled-tasks-design.md §7.4): every other view, folder and project read,
+      // and the delta that reads this, leave it out. `listRowsByIds` names its sessions: a link card to a run is by id.
+      visibility: view === 'system'
+        ? visibility
+        : filters.scheduled
+          ? Prisma.sql`(${visibility}) AND s.run_source = 'SCHEDULE'`
+          : Prisma.sql`(${visibility}) AND s.run_source <> 'SCHEDULE'`,
       orderBy,
       pageLimit,
     });
-    if (version === undefined || view !== 'open' || filters.projectId !== undefined) return build();
+    if (version === undefined || view !== 'open' || filters.projectId !== undefined || filters.scheduled) return build();
     return this.sharedOpenList(JSON.stringify([
       ownerId, version, filters.runnerId ?? null, filters.workspaceId ?? null, filters.tagId ?? null,
       filters.confinedTo ?? null,
@@ -4189,6 +4290,8 @@ export class SessionsService {
       permissionMode: string | null;
       effort: string | null;
       fastMode: boolean;
+      /** SCHEDULE marks a scheduled run's session, which only a workspace's Scheduled runs folder lists. */
+      runSource: string;
       lastAssistantText: string | null;
       lastToolUse: string | null;
       lastUserText: string | null;
@@ -4217,7 +4320,9 @@ export class SessionsService {
       // background-job-activity.ts), so it cannot be a cardinality in the query.
       runningBgJobs: string[];
       runningBgJobActivity: Prisma.JsonValue;
-      runningSubagentCount: number;      engineTurnActive: boolean;
+      runningSubagentCount: number;
+      runningSubagentTitle: string | null;
+      engineTurnActive: boolean;
       activity: SessionActivity | null;
       engineStartedAt: Date | null;
       enginePhase: string | null;
@@ -4292,6 +4397,7 @@ export class SessionsService {
         s.permission_mode AS "permissionMode",
         s.effort,
         s.fast_mode       AS "fastMode",
+        s.run_source      AS "runSource",
         left(s.last_assistant_text, ${SessionsService.PREVIEW_LEN}::int) AS "lastAssistantText",
         s.last_tool_use   AS "lastToolUse",
         left(s.last_user_text, ${SessionsService.PREVIEW_LEN}::int) AS "lastUserText",
@@ -4358,6 +4464,18 @@ export class SessionsService {
         s.running_bg_jobs AS "runningBgJobs",
         s.running_bg_job_activity AS "runningBgJobActivity",
         cardinality(s.running_subagents)::int AS "runningSubagentCount",
+        -- What the newest of those is doing, as its launch call described it (the Agent tool's and
+        -- delegate's \`description\`): the row says "Agent: <this>…" rather than only that one runs.
+        -- Launches are appended, so the last id is the newest; an id with no described call is null
+        -- and the row keeps "Running Agent…". One indexed lookup, on the few rows with one in flight.
+        (
+          SELECT NULLIF(btrim(tc.input->>'description'), '')
+          FROM tool_call tc
+          WHERE tc.session_id = s.id
+            AND tc.tool_use_id = s.running_subagents[cardinality(s.running_subagents)]
+          ORDER BY tc.started_at DESC NULLS LAST
+          LIMIT 1
+        ) AS "runningSubagentTitle",
         s.engine_turn_active AS "engineTurnActive",
         -- What it is doing beyond its status (sessionActivitySql): the one answer to whether a parked
         -- session is still working, so no client has to rebuild it from the columns around it.
@@ -4470,6 +4588,14 @@ export class SessionsService {
               -- offline there.
               WHEN r.id IS NULL OR ${runnerOfflineSql('r')}
                 THEN 'runner_offline'
+              -- A GitHub workspace whose clone is not READY (docs/github-workspace-design.md §6): the claim's own gate,
+              -- named before capacity, because a slot coming free would not start this session.
+              WHEN ${workspaceCloneHoldSql(Prisma.sql`s.workspace_id`)}
+                THEN ${workspaceCloneReasonSql(Prisma.sql`s.workspace_id`)}
+              -- Keep Free (runner-disk-gate.ts): the claim's own gate on a session that has never run. Before capacity,
+              -- because a slot coming free would not start it; it lifts when the runner reports space above its floor.
+              WHEN ${sessionDiskHoldSql('s')}
+                THEN ${RUNNER_DISK_BELOW_FLOOR}::text
               -- Second, for the offline gate's reason: a runner draining for a self-update claims
               -- nothing whatever its counts say (runner drainForUpdate), so naming a capacity gate
               -- here would send the reader to the wrong cause. Ends only when the update does.
@@ -4557,6 +4683,7 @@ export class SessionsService {
         permissionMode: r.permissionMode,
         effort: r.effort,
         fastMode: r.fastMode,
+        runSource: r.runSource,
         lastAssistantText: r.lastAssistantText,
         lastToolUse: r.lastToolUse,
         lastUserText: r.lastUserText,
@@ -4582,6 +4709,7 @@ export class SessionsService {
         runningBgCount: r.runningBgCount,
         runningBgJobCount: freshRunningBgJobs(r.runningBgJobs, r.runningBgJobActivity).length,
         runningSubagentCount: r.runningSubagentCount,
+        runningSubagentTitle: r.runningSubagentTitle,
         engineTurnActive: r.engineTurnActive,
         activity: r.activity,
         engineStartedAt: r.engineStartedAt,
@@ -5298,7 +5426,7 @@ export class SessionsService {
 
   /** A shared session's header — what its public page says of it above the transcript — and nothing
    *  else about it (see getSharedTranscript). A trashed session is the link's 404. */
-  private async sharedHead(sessionId: string) {
+  async sharedHead(sessionId: string) {
     const session = await this.prisma.session.findFirst({
       where: { id: sessionId, deletedAt: null },
       select: {
@@ -6860,9 +6988,19 @@ export class SessionsService {
        * `dto`; every platform delivery and every session-to-session door leaves it unset.
        */
       translate?: boolean;
+      /**
+       * The owner's words this turn carries were translated already, by a door that refuses them whole when
+       * translation fails (reply-translation.ts ownerWordsForAgent): `dto.content` is the message as the owner's
+       * words make it — what the transcript shows and what a replay of the key compares — and `content` the same
+       * message in the agent language, which is what the engine receives. Written as a translated turn that was
+       * never held (display_prompt, translation_state DONE, translation_lang `from`). An option of this call and
+       * never a field of `dto`.
+       */
+      translated?: { content: string; from: TranslationLanguage };
     },
   ) {
     assertPromptSize(dto.content, 'message');
+    if (opts?.translated) assertPromptSize(opts.translated.content, 'message');
     if (dto.intent !== undefined && dto.intent !== 'CURRENT_WORK' && dto.intent !== 'NEXT_TURN') {
       throw new BadRequestException('intent must be CURRENT_WORK or NEXT_TURN');
     }
@@ -6874,9 +7012,10 @@ export class SessionsService {
     // and taken only by a chat, which is decided under the lock below.
     const wikiContext = readWikiChatContext(dto.wikiContext);
     // Settings › Translation: the language this message is translated from, or null when it goes as
-    // written. Words only — a `!cmd` is a command, and attachments alone carry no words.
+    // written. Words only — a `!cmd` and a `/command` are commands, and attachments alone carry no words.
     const optimizedTranslation = readOptimizedTranslation(dto.optimizedTranslation);
     const translateFrom = opts?.translate && dto.skipTranslation !== true && dto.kind !== 'shell' && dto.content?.trim()
+      && !isSlashCommand(dto.content)
       ? (await translationLanguages(this.prisma, ownerId))?.owner ?? null
       : null;
     // Retried whole. This is where a user turn serializes against the runner's claim and against
@@ -7165,7 +7304,10 @@ export class SessionsService {
       const turn = await this.insertTurnLocked(tx, id, {
         // Whitelist: this endpoint cannot manufacture control turns.
         kind,
-        content: dto.content,
+        content: opts?.translated && dto.content ? opts.translated.content : dto.content,
+        ...(opts?.translated && dto.content
+          ? { displayPrompt: dto.content, translationState: 'DONE', translationLang: opts.translated.from }
+          : {}),
         clientTurnId: dto.clientTurnId,
         ...(opts?.requestFingerprint ? { requestFingerprint: opts.requestFingerprint } : {}),
         // A server-routed steer is the CURRENT_WORK shape the row constraints accept for one.
@@ -7365,7 +7507,7 @@ export class SessionsService {
     if (!turn) return;
     const original = turnTranslationOf({ ...turn, translationState: 'TRANSLATING' });
     let translated: string | null = null;
-    let why = 'the message could not be read';
+    let failure: unknown = new Error('the held message could not be read');
     if (original && prepared !== null) {
       translated = prepared;
     } else if (original) {
@@ -7374,7 +7516,7 @@ export class SessionsService {
         const agent = await accountAgentLanguage(this.prisma, ownerId);
         translated = await translate(original.original, original.from, agent);
       } catch (error) {
-        why = error instanceof TranslationFailed ? `${error.reason}: ${error.message}` : String(error);
+        failure = error;
       }
     }
     if (translated !== null) {
@@ -7382,12 +7524,41 @@ export class SessionsService {
       await this.releaseHeldTurn(sessionId, turnId, translated, 'DONE', ['TRANSLATING', 'FAILED']);
       return;
     }
+    // FAILED with why (TranslationFailureReason, and the HTTP status beside HTTP): what the turn list and Retry answer.
     const failed = await this.prisma.conversationTurn.updateMany({
       where: { id: turnId, sessionId, status: HELD_TURN_STATUS, translationState: 'TRANSLATING' },
-      data: { translationState: 'FAILED' },
+      data: failedTurnColumns(failure),
     });
-    this.logger.warn(`turn ${turnId} of session ${sessionId} was not translated, so it was not sent (${why})`);
-    if (failed.count > 0) this.realtime.publishQueuedTurnsChanged(sessionId);
+    logOwnerTranslationFailure(failure, { door: 'held-turn', sessionId, turnId });
+    if (failed.count > 0) {
+      this.realtime.publishQueuedTurnsChanged(sessionId);
+      this.scheduleHeldMessagePush(sessionId, turnId);
+    }
+  }
+
+  /** How long a held message stays FAILED before its owner is pushed (frame 4B of translation-failure-policy.html). */
+  static readonly HELD_MESSAGE_PUSH_DELAY_MS = 60_000;
+
+  /** turnId → its pending held-message check, one per turn: a Retry that fails again replaces the earlier one. */
+  private readonly heldMessagePushes = new Map<string, ReturnType<typeof setTimeout>>();
+
+  /**
+   * One check, HELD_MESSAGE_PUSH_DELAY_MS after a held message's translation failed: RealtimeService.heldMessageUnseen
+   * pushes the owner unless they are viewing the session, and PushService.notifyHeldMessage only while the turn is
+   * still HELD and FAILED — so a Retry, Send as written, withdrawal or translation before then sends nothing.
+   * The check lives in this process's memory: a restart (or a deploy) inside the 60 s loses it, and that message
+   * is not pushed; the message itself stays held with Retry and Send as written, so only the reminder is lost.
+   */
+  private scheduleHeldMessagePush(sessionId: string, turnId: string): void {
+    clearTimeout(this.heldMessagePushes.get(turnId));
+    const timer = setTimeout(() => {
+      this.heldMessagePushes.delete(turnId);
+      void Promise.resolve().then(() => this.realtime.heldMessageUnseen(sessionId, turnId)).catch((error: unknown) => {
+        this.logger.warn(`held message push for turn ${turnId} failed: ${(error as Error)?.message ?? error}`);
+      });
+    }, SessionsService.HELD_MESSAGE_PUSH_DELAY_MS);
+    timer.unref?.();
+    this.heldMessagePushes.set(turnId, timer);
   }
 
   /**
@@ -7427,6 +7598,7 @@ export class SessionsService {
           content,
           status: 'PENDING',
           translationState: state,
+          ...CLEARED_FAILURE_COLUMNS,
           ...(steerTarget ? { kind: 'steer', sendIntent: 'CURRENT_WORK', targetTurnId: steerTarget.id } : {}),
         },
       });
@@ -7455,7 +7627,10 @@ export class SessionsService {
     assertEngineSessionRow(session);
     const turn = await this.prisma.conversationTurn.findFirst({
       where: { id: turnId, sessionId },
-      select: { id: true, status: true, displayPrompt: true, translationState: true, translationLang: true },
+      select: {
+        id: true, status: true, displayPrompt: true, translationState: true, translationLang: true,
+        translationFailureReason: true, translationHttpStatus: true,
+      },
     });
     if (!turn) throw new NotFoundException('message not found');
     return turn;
@@ -7474,7 +7649,7 @@ export class SessionsService {
     await this.ownHeldTurn(ownerId, sessionId, turnId);
     const retried = await this.prisma.conversationTurn.updateMany({
       where: { id: turnId, sessionId, status: HELD_TURN_STATUS, translationState: { in: ['FAILED', 'TRANSLATING'] } },
-      data: { translationState: 'TRANSLATING' },
+      data: { translationState: 'TRANSLATING', ...CLEARED_FAILURE_COLUMNS },
     });
     if (retried.count === 0) throw SessionsService.notHeld();
     this.realtime.publishQueuedTurnsChanged(sessionId);
@@ -7574,7 +7749,7 @@ export class SessionsService {
     const content = dto?.content ?? '';
     const followUp = content.trim().length > 0 || (dto?.attachmentIds?.length ?? 0) > 0;
     // Settings › Translation: the follow-up's words are held until translated; the interrupt is not.
-    const heldFrom = opts?.translate && content.trim() ? (await translationLanguages(this.prisma, ownerId))?.owner ?? null : null;
+    const heldFrom = opts?.translate && content.trim() && !isSlashCommand(content) ? (await translationLanguages(this.prisma, ownerId))?.owner ?? null : null;
     // The runner's copy of the request, and the only thing it reads off an interrupt turn: the
     // follow-up the server filed separately, and the flag that says this interrupt also ends the
     // session's background work. Shaped like `setconfig`'s payload — a JSON object in `content`,
@@ -7880,6 +8055,8 @@ export class SessionsService {
         displayPrompt: true,
         translationState: true,
         translationLang: true,
+        translationFailureReason: true,
+        translationHttpStatus: true,
         attachments: { select: { id: true, mimeType: true } },
       },
     });
@@ -8085,6 +8262,8 @@ export class SessionsService {
       displayPrompt: null,
       translationState: null,
       translationLang: null,
+      translationFailureReason: null,
+      translationHttpStatus: null,
       attachments,
     }];
   }
@@ -9397,12 +9576,13 @@ export class SessionsService {
     reason: SessionEndReason,
     lifecycle?: 'completedAt' | 'deletedAt',
     requireNoProjectBinding = false,
+    endTurnContent?: string,
   ) {
     // Retried whole. Every terminal transition is decided from the Session row under its lock, so a
     // re-run sees whichever end actually committed rather than re-applying one that did not.
     const ended = await withTransactionRetry(
       this.prisma,
-      (tx) => this.transitionEndLocked(tx, ownerId, sessionId, reason, lifecycle, requireNoProjectBinding),
+      (tx) => this.transitionEndLocked(tx, ownerId, sessionId, reason, lifecycle, requireNoProjectBinding, endTurnContent),
       loggedRetry(this.logger, 'sessions.transitionEnd'),
     );
     await reprojectAfterSettledChecks(this.prisma, ended.checksSettled, this.logger);
@@ -9420,6 +9600,8 @@ export class SessionsService {
     reason: SessionEndReason,
     lifecycle?: 'completedAt' | 'deletedAt',
     requireNoProjectBinding = false,
+    /** What the `end` turn says, when it says anything: KEEP_BACKGROUND_WORK_END_CONTENT for a handover (complete). */
+    endTurnContent?: string,
   ): Promise<{
     changed: boolean;
     runnerId: string | null;
@@ -9592,6 +9774,7 @@ export class SessionsService {
       await this.insertTurnLocked(tx, sessionId, {
         kind: 'end',
         clientTurnId: randomUUID(),
+        ...(endTurnContent !== undefined ? { content: endTurnContent } : {}),
       });
     }
     return {
@@ -9657,18 +9840,19 @@ export class SessionsService {
    * asks for any other status is untouched, and the question an unanswered evidence card was about
    * is still on the decision rail's derived read (`pending-evidence-judgments.ts`).
    */
-  async listApprovals(ownerId: string, id: string, status?: string): Promise<ApprovalInfo[]> {
+  async listApprovals(ownerId: string, id: string, status?: string, toolName?: string): Promise<ApprovalInfo[]> {
     const session = await this.prisma.session.findFirst({
       where: { id, ownerId },
-      select: { id: true, status: true, engineTurnActive: true, runningBgShells: true },
+      select: { id: true, status: true, engineTurnActive: true, runningBgShells: true,
+        scheduleRun: { select: { accessLevel: true, schedule: { select: { accessLevel: true } } } } },
     });
     if (!session) throw new NotFoundException('session not found');
     const approvals = await this.prisma.approval.findMany({
-      where: { sessionId: id, ...(status ? { status } : {}) },
+      where: { sessionId: id, ...(status ? { status } : {}), ...(toolName ? { toolName } : {}) },
       orderBy: { createdAt: 'asc' },
     });
     const answerable = status === 'PENDING' ? await this.stillBeingAsked(session, approvals) : approvals;
-    return (await visibleQuestions(this.prisma, answerable)).map((a) => this.toApprovalInfo(a));
+    return (await visibleQuestions(this.prisma, answerable)).map((a) => this.toApprovalInfo(a, runAccessLevel(session.scheduleRun) === 'CHECK_ONLY'));
   }
 
   /**
@@ -9807,6 +9991,13 @@ export class SessionsService {
             'create the task with the plain yes, then start it',
         );
       }
+      // A startWhen task starts when its condition fires (docs/condition-triggers-design.md §6.2); "and start" would
+      // write a runAt beside it, which a task may not have.
+      if ((asked.input as { startWhen?: unknown } | null)?.startWhen != null) {
+        throw new BadRequestException(
+          'startAfterCreate does not apply to a task that starts when its condition holds: create it with the plain yes',
+        );
+      }
     }
     const status = dto.behavior === 'allow' ? 'ALLOWED' : 'DENIED';
     // A workspace write's card holds its variables' values only while it asks (workspace-write-card-values.ts).
@@ -9814,16 +10005,15 @@ export class SessionsService {
       where: { id: approvalId, sessionId: id },
       select: { toolName: true, input: true, translation: true, status: true },
     });
-    // A scheduled CHECK_ONLY run on Claude Code (design §6.2): Always allow on its card writes only that card's command's
-    // rules, computed here, and only those rules are marked for later checks to carry (from_schedule_run). A rule from
-    // any other card, an OPEN_PR run's included, is the client's choice and is never carried by a check.
+    // CHECK_ONLY scheduled approvals remember only the complete command, computed here. Older clients'
+    // prefixes express intent but never become the stored grant. Other approvals keep the client's rules.
     const checkOnlyRules = dto.behavior === 'allow' && !!dto.rememberRules?.length && !!answering
-      && runAccessLevel(session.scheduleRun) === 'CHECK_ONLY'
-      && (await sessionEngine(this.prisma, session)) === AgentProvider.CLAUDE;
+      && runAccessLevel(session.scheduleRun) === 'CHECK_ONLY';
     if (checkOnlyRules) {
       const refused = checkOnlyRuleRefusal(answering!, dto.rememberRules!);
       if (refused) throw new BadRequestException({ code: SCHEDULE_CHECK_ONLY_RULE_REFUSED, message: refused });
     }
+    const rememberRules = checkOnlyRules ? checkOnlyCommandRules(answering!) : dto.rememberRules;
     // Settings › Translation (3A, reply-translation.ts): what the engine reads is in the account's agent language —
     // options the owner picked in translation mapped back to the card's own, their own words translated. A failed translation
     // records nothing (422 TRANSLATION_FAILED). Only for a card still asking: a late click is a no-op anyway.
@@ -9835,6 +10025,7 @@ export class SessionsService {
         answering.translation as unknown as ApprovalTranslation | null,
         dto,
         langs,
+        { door: 'approval-decision', sessionId: id },
       );
     }
     // Only the first decision on a still-PENDING approval applies (idempotent). A Feishu card's
@@ -9853,12 +10044,12 @@ export class SessionsService {
           : {}),
         message: english.message ?? null,
         answers: english.answers ? (english.answers as Prisma.InputJsonValue) : Prisma.DbNull,
-        // Only an allow can carry "remember same kind" rules; the runner reads them off
-        // that read and adds them to claude's session permissions. Stored as a JSON
-        // array (the schemaless `remember_rule` column holds either shape).
+        // Literal scheduled grants are matched here on every request. Never send them back as
+        // engine patterns: wildcard characters in the approved command must remain literal.
+        // Other approvals keep their existing session permission updates.
         rememberRule:
-          dto.behavior === 'allow' && dto.rememberRules?.length
-            ? (dto.rememberRules as unknown as Prisma.InputJsonValue)
+          dto.behavior === 'allow' && !checkOnlyRules && rememberRules?.length
+            ? (rememberRules as unknown as Prisma.InputJsonValue)
             : Prisma.DbNull,
         decidedById: ownerId,
         decidedCredentialKind: credential?.kind ?? null,
@@ -9904,7 +10095,7 @@ export class SessionsService {
       // click on an already-answered approval must not widen anything.
       if (dto.behavior === 'allow' && session.workspaceId) {
         await this.rememberForWorkspace(
-          session.workspaceId, ownerId, approvalId, dto.rememberRules, checkOnlyRules,
+          session.workspaceId, ownerId, approvalId, rememberRules, checkOnlyRules,
         );
       }
       this.realtime.publish(id, {
@@ -9929,7 +10120,10 @@ export class SessionsService {
     rules: PermissionRule[] | undefined,
     fromScheduleRun = false,
   ): Promise<void> {
-    const stored = normalizePermissionRules(rules).filter((rule) => !reachesPastOneMcpTool(rule.toolName));
+    // Scheduled commands stay literal data: never normalize them into engine rule syntax.
+    const stored = fromScheduleRun
+      ? (rules ?? []).map((rule) => ({ toolName: rule.toolName, ruleContent: rule.ruleContent! }))
+      : normalizePermissionRules(rules).filter((rule) => !reachesPastOneMcpTool(rule.toolName));
     if (!stored.length) return;
     await this.prisma.workspacePermissionRule.createMany({
       data: stored.map((rule) => ({
@@ -9942,18 +10136,6 @@ export class SessionsService {
       })),
       skipDuplicates: true,
     });
-    // A rule an interactive session wrote first is the same row: answering a CHECK_ONLY run's card for it marks it, so
-    // a CHECK_ONLY run carries it from now on (schedule-access.ts scheduleRunAllowedTools).
-    if (fromScheduleRun) {
-      await this.prisma.workspacePermissionRule.updateMany({
-        where: {
-          workspaceId,
-          fromScheduleRun: false,
-          OR: stored.map((rule) => ({ toolName: rule.toolName, ruleContent: rule.ruleContent })),
-        },
-        data: { fromScheduleRun: true },
-      });
-    }
   }
 
   private toApprovalInfo(a: {
@@ -9971,12 +10153,13 @@ export class SessionsService {
     decidedCredentialKind?: string | null;
     coordinatorFallback?: string | null;
     translation?: Prisma.JsonValue | null;
-  }): ApprovalInfo {
+  }, checkOnly = false): ApprovalInfo {
     return {
       id: a.id,
       sessionId: a.sessionId,
       toolName: a.toolName,
-      input: a.input,
+      input: checkOnly && a.toolName === 'Bash' && a.input && typeof a.input === 'object' && !Array.isArray(a.input)
+        ? { ...a.input, orbitScheduleCheckOnly: true } : a.input,
       toolUseId: a.toolUseId ?? undefined,
       backgroundJobId: a.backgroundJobId ?? undefined,
       ...(a.subagentRunId ? { subagentRunId: a.subagentRunId } : {}),
@@ -10449,6 +10632,7 @@ export class SessionsService {
     // Settings › Translation on the revive: its message is laid down HELD (insertHeldOpeningLocked's rule).
     const reviveOptimizedTranslation = readOptimizedTranslation(dto.optimizedTranslation);
     const reviveHeldFrom = opts?.translate && dto.skipTranslation !== true && dto.kind !== 'shell' && dto.content?.trim()
+      && !isSlashCommand(dto.content)
       ? (await translationLanguages(this.prisma, ownerId))?.owner ?? null
       : null;
     const revived = await withTransactionRetry(this.prisma, async (tx) => {
@@ -10935,12 +11119,17 @@ export class SessionsService {
    * `end` control turn + signal the runner to cancel) so a live claude isn't orphaned.
    * The status settles to CANCELLED async while the row already sits in Completed.
    */
-  async complete(ownerId: string, id: string) {
+  async complete(ownerId: string, id: string, opts: { handingOver?: boolean } = {}) {
+    // A coordinator handing over (ProjectsService.coordinator's replace with a handoff) ends the same way, but its
+    // `end` turn says to leave the session's SubAgent runs and bg_run jobs running: their wake goes to the successor
+    // (docs/coordinator-handoff-v2-design.md §1). Every other Complete stops them.
     const ended = await this.transitionEnd(
       ownerId,
       id,
       SessionEndReason.COMPLETED,
       'completedAt',
+      false,
+      opts.handingOver ? KEEP_BACKGROUND_WORK_END_CONTENT : undefined,
     );
     // Everything below is deliberately post-commit. A failed end-turn insert rolls back
     // both the intent and completedAt, and therefore produces no runner/realtime signal.
@@ -11644,6 +11833,103 @@ export class SessionsService {
   }
 
   /**
+   * Move the sessions a runner named as keeping account `account` of `engine` from being removed onto
+   * another of its accounts — Automatic's pick among the rest (accountInPlaceOf), unpinned — the way
+   * switchAccount moves one: a live session gets a `reload`, which re-spawns it there with its
+   * conversation carried once no turn is in flight, and the runner can then remove the account.
+   *
+   * Answers the sessions that cannot leave: no other signed-in account to go to, a runner that cannot
+   * carry the conversation, a Cursor CLI conversation that has talked. A session already off the
+   * account (moved by an earlier report, its turn still running) or no longer the runner's is not one.
+   */
+  async moveOffRemovedAccount(
+    runnerId: string,
+    engine: AccountEngine,
+    account: string,
+    sessionIds: string[],
+  ): Promise<string[]> {
+    const stuck: string[] = [];
+    for (const id of sessionIds) {
+      const outcome = await withTransactionRetry(this.prisma, async (tx) => {
+        const locked = await tx.$queryRaw<Array<{ id: string }>>`
+          SELECT id FROM "session"
+          WHERE id = ${id}::uuid AND "assigned_runner_id" = ${runnerId}::uuid
+          FOR UPDATE`;
+        if (locked.length === 0) return 'gone' as const;
+        const session = await tx.session.findUniqueOrThrow({
+          where: { id },
+          select: {
+            status: true,
+            engine: true,
+            provider: true,
+            providerBuiltin: true,
+            retryAt: true,
+            numTurns: true,
+            runtimeSessionId: true,
+            engineTurnActive: true,
+            poolSwitchNotice: true,
+            codexAccount: true,
+            claudeAccount: true,
+            antigravityAccount: true,
+            kimiAccount: true,
+            cursorAccount: true,
+            workspace: {
+              select: {
+                env: true, codexAccount: true, claudeAccount: true, antigravityAccount: true, kimiAccount: true, cursorAccount: true,
+              },
+            },
+            assignedRunner: {
+              select: { engines: true, accountNames: true, accountPauses: true, defaultRemoved: true, planUsage: true, capabilities: true },
+            },
+          },
+        });
+        const runner = session.assignedRunner;
+        if (
+          !runner ||
+          session.provider !== engine ||
+          !isBuiltinProvider(session.provider, session.providerBuiltin) ||
+          (recordedEngine(session.engine) ?? engine) !== engine
+        ) {
+          return 'stuck' as const;
+        }
+        const column = ACCOUNT_CHOICE[engine];
+        const choice = { [column]: session[column] ?? session.workspace?.[column] };
+        if (reportedRunAccount(engine, session.workspace?.env, choice, runner.engines) !== account) {
+          return 'leaving' as const;
+        }
+        const now = new Date();
+        const to = accountInPlaceOf(engine, runner, account, now);
+        if (!to) return 'stuck' as const;
+        if (engine === AgentProvider.CURSOR ? cursorMoveRefusal(session, runner) : !runnerCarriesAccounts(runner, engine)) {
+          return 'stuck' as const;
+        }
+        await tx.session.update({
+          where: { id },
+          data: {
+            [column]: to,
+            [ACCOUNT_PINNED[engine]]: false,
+            ...(session.poolSwitchNotice
+              ? {}
+              : { poolSwitchNotice: accountSwitchNotice(engine, { from: account, to, removed: true }, runner) }),
+            ...(session.retryAt && session.retryAt > now ? { retryAt: now } : {}),
+          },
+        });
+        // An ended or unclaimed session just stores it, for the claim that runs it next.
+        if (SessionsService.TERMINAL.includes(session.status) || session.status === RunStatus.PENDING) return 'leaving' as const;
+        await this.insertTurnLocked(tx, id, {
+          kind: 'reload',
+          content: JSON.stringify({ provider: engine }),
+          clientTurnId: randomUUID(),
+        });
+        return 'reloaded' as const;
+      }, loggedRetry(this.logger, 'sessions.moveOffRemovedAccount'));
+      if (outcome === 'stuck') stuck.push(id);
+      if (outcome === 'reloaded') this.realtime.notifyInbox(id);
+    }
+    return stuck;
+  }
+
+  /**
    * Rename a session's display title. Unlike updateConfig this carries no runner side
    * effects and is allowed in any status (a dormant/ended session can still be renamed),
    * so there's no terminal guard and no reload turn.
@@ -11812,6 +12098,8 @@ export class SessionsService {
    */
   async remove(ownerId: string, id: string) {
     const ended = await this.transitionEnd(ownerId, id, SessionEndReason.DELETED, 'deletedAt');
+    // Nobody watches a session in the Trash: its guests' and links' viewer streams end (viewer-stream.service.ts).
+    this.realtime.publishViewerRevoked({ sessionId: id });
     this.publishEndIntent(id, ended);
     // Soft-delete is a list-membership change with no STATUS event — signal the control plane.
     this.realtime.publishSessionLifecycleChanged(
@@ -11835,6 +12123,7 @@ export class SessionsService {
       true,
     );
     if (ended.projectBound) return false;
+    this.realtime.publishViewerRevoked({ sessionId: id });
     this.publishEndIntent(id, ended);
     this.realtime.publishSessionLifecycleChanged(
       id,
@@ -12317,6 +12606,7 @@ export class SessionsService {
       }
       await tx.session.delete({ where: { id: session.id } });
     }, loggedRetry(this.logger, 'sessions.purge'));
+    this.realtime.publishViewerRevoked({ sessionId: id });
     return { ok: true };
   }
 }

@@ -296,7 +296,8 @@ struct AgentContentColumn: View {
         .sessionListSearch(text: $searchQuery,
                            fromBottom: SessionListPresentation.resolve(
                                isCompactWidth: horizontalSizeClass == .compact).searchesFromBottom,
-                           isEnabled: app.projectSessionsColumn == nil || rowNavigation != .selection)
+                           isEnabled: rowNavigation != .selection ||
+                               (app.projectSessionsColumn == nil && app.folderColumn?.isScheduledRuns != true))
         // The query outlives `AgentPanes`' rebuild on a workspace switch (`.id(a.id)`), and a switch
         // keeps it: search mode ends only at the field's close button, and the hits span every
         // workspace anyway.
@@ -426,6 +427,12 @@ struct AgentPanes: View {
     // without a click; the binding also tracks click-to-focus.
     @FocusState private var listFocused: Bool
 
+    private var scheduledRunsAddress: SessionFolderAddress? {
+        let byTag = tagFilter != nil || groupByTag
+        guard !isSearching, SessionFolderGrouping.listShowsFolders(view: view, byTag: byTag) else { return nil }
+        return .scheduledRuns(agentID: agent.id, view: view)
+    }
+
     var body: some View {
         // The column is the session list with its Open / Completed / Trash scope over it (macOS: a
         // top inset; regular iPad: the same picker in its refresh-safe top inset). The scope used to
@@ -444,6 +451,10 @@ struct AgentPanes: View {
         let timeSections = grouping.timeSections
         let projectRows = grouping.projectRows
         let projectMarks = grouping.projectListing.marks
+        let scheduledAddress = scheduledRunsAddress
+        let scheduledRuns = scheduledAddress.flatMap {
+            ScheduledRunsFolder.summary(agents.scheduledRuns(in: $0) ?? [], view: view, byTag: false)
+        }
         List(selection: listSelection) {
             // Recency sections (Pinned / Today / Yesterday / 2–7 days ago / …), as web's list draws
             // them, on every platform. Bucketing is the pure, tested `SessionTimeGrouping`.
@@ -459,11 +470,13 @@ struct AgentPanes: View {
                 }
             } else {
                 groupedSections(folderListing: folderListing, timeSections: timeSections,
-                                projectRows: projectRows, projectMarks: projectMarks)
+                                projectRows: projectRows, projectMarks: projectMarks,
+                                scheduledAddress: scheduledAddress, scheduledRuns: scheduledRuns)
             }
             #else
             groupedSections(folderListing: folderListing, timeSections: timeSections,
-                            projectRows: projectRows, projectMarks: projectMarks)
+                            projectRows: projectRows, projectMarks: projectMarks,
+                            scheduledAddress: scheduledAddress, scheduledRuns: scheduledRuns)
             #endif
         }
         .orbitRevealSurface()   // macOS: reveal the unified `orbitSurface`
@@ -491,7 +504,7 @@ struct AgentPanes: View {
                                            description: Text("Nothing matches \u{201C}\(hitsQuery)\u{201D}."))
                 }
                 #endif
-            } else if agents.agentSessions.isEmpty {
+            } else if agents.agentSessions.isEmpty && scheduledRuns == nil {
                 #if os(iOS)
                 // No list saved yet (a fresh install, a new account): grey rows where the sessions
                 // will be, while the title's line says "Loading sessions…" (board 02 ④).
@@ -509,7 +522,10 @@ struct AgentPanes: View {
         // Pull-to-refresh reloads the current agent + scope's sessions on demand (matching the
         // Open/Tasks/Runners lists). The pull control shows its own spinner, so reload *without*
         // `reset:` to update the rows in place rather than blanking the list mid-gesture.
-        .refreshable { await agents.loadSessions(agentID: agent.id, view: view) }
+        .refreshable {
+            await agents.loadSessions(agentID: agent.id, view: view)
+            if let scheduledAddress { await agents.loadScheduledRuns(scheduledAddress) }
+        }
         // Typing in the column's search field (declared on `AgentContentColumn`) searches the server —
         // every workspace, scope and message text — and the hits show here in place of the sections;
         // clearing the field restores them.
@@ -563,6 +579,9 @@ struct AgentPanes: View {
             await ViewPoll.run(app, every: 4, hints: { app.lifecycleHints }) {
                 await agents.loadSessions(agentID: agent.id, view: view)
             }
+        }
+        .task(id: scheduledAddress) {
+            if let scheduledAddress { await app.pollScheduledRuns(scheduledAddress) }
         }
         #if os(macOS)
         // The scope over the list it filters, centred and content-width; the pane's own surface
@@ -706,13 +725,24 @@ struct AgentPanes: View {
     /// neither searching nor grouped by tag, on every platform (web's list draws the same).
     @ViewBuilder private func groupedSections(folderListing: SessionFolderListing, timeSections: [SessionTimeSection],
                                               projectRows: [String: SessionProjectRow],
-                                              projectMarks: [String: SessionProjectMark]) -> some View {
+                                              projectMarks: [String: SessionProjectMark],
+                                              scheduledAddress: SessionFolderAddress?,
+                                              scheduledRuns: ScheduledRunsFolder.Summary?) -> some View {
+        if let scheduledAddress, let scheduledRuns {
+            Button {
+                app.openFolder(scheduledAddress)
+            } label: {
+                SessionFolderRowView(scheduledRuns: scheduledRuns)
+            }
+            .buttonStyle(.plain)
+            .listRowSeparator(.hidden, edges: .top)
+        }
         // The workspace's folders, at the very top of the list (docs/session-folders-move-design.md
         // §3.3): the sessions filed in one are drawn behind its row and not in the time
         // sections below. Trash, a tag filter and Group by Tag all leave this empty — see
         // `folderListing` — so the list goes on flat there.
         ForEach(Array(folderListing.folders.enumerated()), id: \.element.id) { index, row in
-            folderListRow(row, first: index == 0)
+            folderListRow(row, first: index == 0 && scheduledRuns == nil)
         }
         // The leading "Today" keeps no title. A list that opens on today — which is nearly
         // always — would be saying something its rows already say (each carries its own time
@@ -723,7 +753,7 @@ struct AgentPanes: View {
         // decision is the one the mock put second, `docs/mocks/ios-session-list-first-header.html`
         // — the reporter picked the first: never draw it, rather than only once it pins.)
         ForEach(Array(timeSections.enumerated()), id: \.element.id) { index, section in
-            timeSection(index: index, section: section, foldersEmpty: folderListing.folders.isEmpty,
+            timeSection(index: index, section: section, foldersEmpty: folderListing.folders.isEmpty && scheduledRuns == nil,
                         projectRows: projectRows, projectMarks: projectMarks)
         }
     }
@@ -1283,6 +1313,7 @@ struct AgentConsoleDetail: View {
     /// placeholder.
     private var showsDraft: Bool {
         #if os(iOS)
+        if app.folderColumn?.isScheduledRuns == true { return app.composingAgentSession }
         return app.composingAgentSession || app.sectionAtRoot || app.folderPage != nil
         #else
         return app.composingAgentSession
@@ -1349,7 +1380,7 @@ struct AgentConsoleDetail: View {
                 } description: {
                     Text("The session transcript appears here.")
                 } actions: {
-                    if app.selectedAgentID != nil {
+                    if app.selectedAgentID != nil, app.folderColumn?.isScheduledRuns != true {
                         Button {
                             app.startComposingSession()
                         } label: {
@@ -1451,33 +1482,7 @@ struct NewSessionView: View {
 
     var body: some View {
         VStack(spacing: 0) {
-            if managedWelcome, let managed = draft.managed {
-                // A new account's first draft here (docs/mocks/new-user-onboarding, board 02 P1/P2): the
-                // welcome card stands where the runner's state and the engine hero stand for everybody else.
-                ScrollView {
-                    ManagedWelcomeCard(draft: draft, managed: managed, runner: managedRunnerRow,
-                                       engine: welcomeEngine, credential: welcomeCredential,
-                                       keyToUse: MachineSetup.firstKey(in: engines, preferring: welcomeEngine.rawValue),
-                                       machine: managedRunnerRow.map(RunnerPageFormat.displayName) ?? "")
-                        .frame(maxWidth: 620)
-                        .frame(maxWidth: .infinity)
-                        .padding([.horizontal, .top], 14)
-                    Color.clear.frame(height: .composerBandFade)
-                }
-                .fadesIntoComposerBand()
-                #if os(iOS)
-                .scrollDismissesKeyboard(.interactively)
-                #endif
-            } else if let managed = draft.managed, managed.blocksNewSession {
-                // The managed runner's default workspace before its runner was ever ready: there is
-                // no engine for a first session yet (the server would refuse it), so the runner's
-                // state stands where the engine would, and the composer below sends nothing.
-                ManagedRunnerBanner(display: managed.display, runnerID: managed.runnerID)
-                    .padding(.horizontal, 24)
-                    .frame(maxWidth: .infinity, maxHeight: .infinity)
-                    // The same room above the band as the hero it stands in for.
-                    .padding(.bottom, .composerBandFade)
-            } else if draft.localStatusCards.isEmpty {
+            if draft.localStatusCards.isEmpty {
                 VStack(spacing: 18) {
                     // Which engine runs this session is the hero — the native port of web's
                     // `NewSessionProviderHero`: the vendor's own mark, then the engine's name as the
@@ -1602,8 +1607,7 @@ struct NewSessionView: View {
             ComposerBand {
                 // The managed runner's state, as the live console shows it, unless it already stands
                 // in the hero's place above, or in the welcome card's first step.
-                if !managedWelcome {
-                    if let managed = draft.managed, managed.showsBanner, !managed.blocksNewSession {
+                    if let managed = draft.managed, managed.showsBanner {
                         if managed.display.kind == .sleeping {
                             // Asleep is not a fault: the shared calm line, and sending wakes it.
                             Text(ManagedRunnerCopy.Asleep.composer)
@@ -1617,7 +1621,6 @@ struct NewSessionView: View {
                                 .padding(.bottom, .composerBandGap)
                         }
                     }
-                }
                 // createSession failures surface on the draft's statusMessage (mirrors ConsoleView).
                 if let msg = draft.statusMessage {
                     HStack {
@@ -1644,13 +1647,12 @@ struct NewSessionView: View {
             if let pick = app.consoleRegistry?.takeDraftAccount(agentID: agent.id) {
                 draft.pickDraftAccount(pick.engine, pick.account)
             }
+            // Items shared to Orbit for a new session here (ShareHandoff.swift).
+            if let stage = app.consoleRegistry?.takeDraftStaging(agentID: agent.id) {
+                stage(draft)
+            }
             await draft.prepareDraft()
         }
-        // Whether this account has never had a session, read as the managed default draft appears.
-        .task(id: managedDraft) {
-            if managedDraft { await app.readNewAccount() }
-        }
-        .onChange(of: managedWelcome, initial: true) { _, now in draft.welcomes = now }
         // @State keeps this ConsoleModel alive while the parent AgentsModel finishes its
         // best-effort provider/runner requests. Push those later snapshots into the draft so a
         // custom provider adopts its real default even if the draft's own request failed.
@@ -1741,35 +1743,6 @@ struct NewSessionView: View {
             ?? SessionProviderChoices.current(engine: draft.engine, provider: draft.provider, in: [], sources: sources)
     }
 
-    // MARK: a new account's welcome card (docs/mocks/new-user-onboarding)
-
-    /// This draft is in the managed runner's default workspace (web `managedDraft`).
-    private var managedDraft: Bool {
-        Welcome.isManagedDefaultDraft(status: app.managedRunner?.status, workspaceID: agent.id)
-    }
-
-    /// The welcome card stands here: the managed default draft of an account that never had a session.
-    private var managedWelcome: Bool {
-        managedDraft && draft.managed != nil && app.newAccount == true
-    }
-
-    private var managedRunnerRow: Runner? {
-        (draft.managed?.runnerID ?? agent.runnerId).flatMap { app.agents?.runnerRow($0) }
-    }
-
-    /// Before a first session can start there is no draft engine to sign in, so the runner's own first one.
-    private var welcomeEngine: LoginEngine {
-        Welcome.engine(draftEngine: draft.engine, startsNow: draft.managed?.blocksNewSession != true,
-                       runner: managedRunnerRow)
-    }
-
-    /// The model step's answer: the draft's provider once a first session can start, else none.
-    private var welcomeCredential: SetupCredential {
-        guard let runner = managedRunnerRow else { return .signIn }
-        let provider: ProviderChoice? = draft.managed?.blocksNewSession == true ? nil : currentProviderChoice
-        return MachineSetup.credential(runner: runner, engine: welcomeEngine.rawValue, provider: provider)
-    }
-
     /// The full model name (the composer footer only carries a truncated one). No funding label:
     /// for a configured provider it's a constant the user already set and isn't actionable here, so
     /// the credential earns a line only when it's broken — matching web, where it surfaces solely as
@@ -1830,6 +1803,8 @@ struct AgentSessionRow: View {
                         SessionCoordinatorBadge(session: session)
                         Text(line.text).font(.orbitListSubtitle)
                             .foregroundStyle(lineColor(line.tone)).lineLimit(1)
+                            // A full runner, run or batch: which one, and how its slots are taken.
+                            .help(QueuedCapacity.rowHint(session, machine: machine, now: Date()) ?? "")
                     }
                 }
                 Spacer()
@@ -2148,6 +2123,13 @@ struct AgentFormContent: View {
     @State private var optimizeFor = SubagentSettings.OptimizeFor.cost
     @State private var subagentsMaxRunning = SubagentSettings.defaultMaxRunning
     @State private var confirmingDelete = false
+    #if os(macOS)
+    /// Agent Tools for this workspace (docs/mocks/agent-tools board ⑤), and whether its Edit asked for the
+    /// Instructions editor, which takes the focus once the sheet has gone.
+    @State private var showingAgentTools = false
+    @State private var editInstructionsAfterAgentTools = false
+    @FocusState private var instructionsFocused: Bool
+    #endif
 
     /// Not editable fields: an agent holds no engine or provider. This is what the project last ran
     /// on, and it is here only because the effort vocabulary below genuinely differs by engine. The
@@ -2196,9 +2178,23 @@ struct AgentFormContent: View {
                 TextEditor(text: $instructions)
                     .frame(minHeight: 90)
                     .font(.body)
-                Text("Added to this agent's system prompt on every run (optional).")
+                    #if os(macOS)
+                    .focused($instructionsFocused)
+                    #endif
+                Text("Added to every run's runtime instructions (optional).")
                     .font(.orbitLabel).foregroundStyle(.secondary)
             }
+
+            #if os(macOS)
+            // Agent Tools (docs/mocks/agent-tools board ⑤): what a session here is given — Orbit's tools, the
+            // instructions it reads and in what order, the playbooks — in the read-only sheet a session's toolbar
+            // opens, without the session's own connection. The Mac only this round; iOS changed only the copy.
+            Section {
+                Button(AgentToolsCopy.settingsButton) { showingAgentTools = true }
+            } footer: {
+                Text(AgentToolsCopy.workspaceRow)
+            }
+            #endif
 
             Section("Working directory") {
                 TextField("Path", text: $workDir,
@@ -2255,6 +2251,25 @@ struct AgentFormContent: View {
             }
         }
         .formStyle(.grouped)
+        #if os(macOS)
+        // The instructions it lays out are the ones in the editor above, so what is typed shows before Done.
+        .sheet(isPresented: $showingAgentTools, onDismiss: {
+            if editInstructionsAfterAgentTools { instructionsFocused = true }
+            editInstructionsAfterAgentTools = false
+        }) {
+            AgentToolsSheet(
+                mode: .workspace(
+                    name: agent.name, instructions: instructions,
+                    baseInstructions: !(agent.systemPrompt ?? "").trimmingCharacters(in: .whitespacesAndNewlines).isEmpty,
+                    // Settings' reading of the switch: absent is on.
+                    orchestrationOn: app.user?.preferences?.enableOrchestration ?? true),
+                onDone: { showingAgentTools = false },
+                onEditInstructions: {
+                    editInstructionsAfterAgentTools = true
+                    showingAgentTools = false
+                })
+        }
+        #endif
         .onAppear(perform: prefill)
         // Cancel/Done pair (the iOS editing-sheet idiom, e.g. Contacts): "Done" commits the working
         // copy and closes, "Cancel" discards and closes — a discoverable exit that also works on

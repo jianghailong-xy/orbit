@@ -119,6 +119,8 @@ export function sanitizeRunnerEngines(value: unknown): RunnerEngineHealth[] | nu
       : undefined;
     // Kimi alone says which of its two sites its login is on (kimi.com or kimi.ai).
     const kimiRegion = entry.engine === 'kimi' && isKimiRegion(entry.kimiRegion) ? entry.kimiRegion : undefined;
+    // OpenCode alone says its CLI listed no provider key — beside a yes it would contradict itself.
+    const openCodeNoKey = entry.engine === 'opencode' && entry.openCodeNoKey === true && auth !== 'yes';
     byEngine.set(entry.engine, {
       engine: entry.engine,
       installed: entry.installed === true,
@@ -129,6 +131,7 @@ export function sanitizeRunnerEngines(value: unknown): RunnerEngineHealth[] | nu
       ...(authSource ? { authSource } : {}),
       ...(planUsage ? { planUsage } : {}),
       ...(kimiRegion ? { kimiRegion } : {}),
+      ...(openCodeNoKey ? { openCodeNoKey } : {}),
       ...(dsh ? { dsh } : {}),
       ...(installationError ? { installationError } : {}),
     });

@@ -144,6 +144,11 @@ function triggers(source, name) {
       assert.ok(event, `${name}: unsupported event line ${line}`);
       events[event] = {};
       filter = null;
+    } else if (indent === 4 && event && /^    - /.test(line)) {
+      // An event that takes a list rather than filters: schedule's `- cron: '…'` entries. They say
+      // when the workflow runs, never which pushes start it.
+      (events[event].entries ??= []).push(scalar(line.replace(/^    - /, '')));
+      filter = null;
     } else if (indent === 4 && event) {
       const [, key, rest] = line.match(/^    ([a-z_-]+):\s*(.*)$/) ?? [];
       assert.ok(key, `${name}: unsupported filter line ${line}`);
@@ -290,6 +295,17 @@ test('only a v* tag push publishes, and only after the supply chain has verified
   for (const name of ['Generate Sparkle appcast', 'Upload the Sparkle appcast']) {
     assert.match(step('dmg', name), /^        if: github\.event_name == 'push' && github\.ref_type == 'tag' && startsWith\(github\.ref, 'refs\/tags\/v'\)$/m, name);
   }
+  // The dmg job's appcast holds this release alone. Seeded from the feed live when it built, a release that
+  // waited for a macOS runner wrote back a feed without the release published meanwhile (beta.22 over beta.23).
+  assert.doesNotMatch(job('dmg'), /github\.io\/orbit\/appcast\.xml|gh-pages/);
+  // publish merges that entry into gh-pages as it stands at publish time, and merges again if it lost a race.
+  const merge = step('publish', 'Merge the appcast into GitHub Pages');
+  assert.match(merge, /git clone --quiet --depth 1 --branch gh-pages/);
+  assert.match(merge, /node scripts\/sparkle-appcast\.mjs merge --feed "\$pages\/appcast\.xml"/);
+  assert.match(merge, /--release "\$RUNNER_TEMP\/supply-chain\/appcast\.xml"/);
+  assert.match(merge, /git -C "\$pages" push --quiet origin HEAD:gh-pages/);
+  assert.match(merge, /reset --quiet --hard FETCH_HEAD/);
+  assert.doesNotMatch(job('publish'), /peaceiris|SPARKLE_ED_PRIVATE_KEY/);
   const guard = job('publish').match(/^    if: (.+)$/m)?.[1];
   assert.ok(guard, 'publish has no guard');
   for (const [event, ref] of scenarios) {

@@ -54,6 +54,10 @@ import io.orbitd.android.composer.HandedOverBanner
 import io.orbitd.android.composer.HandoffNoteCard
 import io.orbitd.android.composer.HandoffStatus
 import io.orbitd.android.composer.CreatedWorkspaceLineView
+import io.orbitd.android.composer.CloneHeard
+import io.orbitd.android.composer.CloneState
+import io.orbitd.android.composer.ManagementGithub
+import io.orbitd.android.composer.WorkspaceClone
 import io.orbitd.android.composer.DraftTarget
 import io.orbitd.android.composer.MachineSetupCopy
 import io.orbitd.android.composer.ProviderChoices
@@ -223,7 +227,8 @@ fun SessionReader(app: OrbitApplication, handle: SessionHandle, route: OrbitRout
     // QueuedCapacity's words; only the queued page and Later… are the update's alone.
     val runnerUpdatingGate = listRow?.takeIf {
         it.effectiveLifecycleState != "TRASH" && it.effectiveRunState == RunState.QUEUED && !it.regionHeld &&
-            (RunnerUpdating.isRunnerUpdating(it.queuedGate) || QueuedCapacity.isCapacityHeld(it.queuedGate))
+            (RunnerUpdating.isRunnerUpdating(it.queuedGate) || QueuedCapacity.isCapacityHeld(it.queuedGate) ||
+                QueuedDiskLow.isDiskHeld(it.queuedGate))
     }?.queuedGate
     val runnerUpdatingMachine = listRow?.let { data.machineName(it.workspace) }
     // Later… for the runner the update holds this session on (its workspace's runner), and Update Now… when that runner takes it: the
@@ -231,6 +236,7 @@ fun SessionReader(app: OrbitApplication, handle: SessionHandle, route: OrbitRout
     // that is stopping, not updating, has nothing to postpone or install: neither (board runner-stopping ①).
     val runnerUpdatingRunner = listRow?.let { row -> data.workspaces.firstOrNull { ObjectId.same(it.id, row.workspace) }?.runnerId }
     val runnerUpdatingRow = runnerUpdatingRunner?.let { runnerId -> data.runnerRows.firstOrNull { ObjectId.same(it.text("id"), runnerId) } }
+    val updateNowScope = rememberCoroutineScope()
     val runnerUpdatingLater: (@Composable () -> Unit)? = runnerUpdatingRunner?.takeIf { !RunnerUpdating.isRunnerStopping(runnerUpdatingGate) }?.let { runnerId -> {
         RunnerUpdateLaterButton(runnerUpdatingGate?.queuedRunnerUpdate?.targetVersion, runnerUpdatingMachine, { until ->
             runCatching { api.mutate(RunnerUpdateLater.path(runnerId), body = RunnerUpdateLater.body(until)) }
@@ -240,7 +246,16 @@ fun SessionReader(app: OrbitApplication, handle: SessionHandle, route: OrbitRout
             val version = RunnerUpdateNow.version(runner)
             RunnerUpdateNowButton(RunnerPage.displayName(runner), version, { RunnerPage.updateTurns(runner, System.currentTimeMillis()) }, {
                 runCatching { api.mutate(RunnerUpdateNow.path(runnerId), body = RunnerUpdateNow.request()) }
-                    .fold({ app.realtime.refreshDirectory(); OrbitToasts.show(RunnerUpdateNow.toast(version), tone = ToastTone.INFO); null },
+                    .fold({
+                        app.realtime.refreshDirectory(); OrbitToasts.show(RunnerUpdateNow.toast(version), tone = ToastTone.INFO)
+                        // The runner answers on its next heartbeat, after that read: read again until it reports the restart.
+                        updateNowScope.launch {
+                            RunnerUpdateNow.awaitAnswer({
+                                app.realtime.state.value.directory?.runners?.firstOrNull { ObjectId.same(it.text("id"), runnerId) }
+                            }) { app.realtime.rereadDirectory() }
+                        }
+                        null
+                    },
                         { it.message ?: RunnerUpdateNow.FAILED })
             })
         }
@@ -252,10 +267,11 @@ fun SessionReader(app: OrbitApplication, handle: SessionHandle, route: OrbitRout
         data.sessions.values.firstNotNullOfOrNull { rows -> rows.firstOrNull { ObjectId.same(it.id, route.id) }?.projectMembership?.projectId }
     }
     // The button's number is the sheet's head's: the project's Open and Completed sessions as the page reads them, read as the
-    // conversation opens, then what the sheet itself last counted. No number until the first read answers.
-    val readCount by rememberProjectSessionCount(app, api, projectId)
-    var sheetCount by remember(projectId) { mutableStateOf<Int?>(null) }
+    // conversation opens and kept current while it shows, or what the sheet itself last counted while its reads pause. No number until
+    // the first read answers. It spins while anything the sheet shows is active (owner 2026-11-17, option C).
     var projectSheet by remember(handle, route.id) { mutableStateOf(false) }
+    val projectButton by rememberProjectSessionsButton(app, handle, api, projectId, paused = projectSheet)
+    var sheetCount by remember(projectId) { mutableStateOf<Int?>(null) }
     val link = remember(handle, route.id) { "${handle.account.server.trimEnd('/')}/sessions/${ObjectId.toPublic(route.id!!)}" }
     val currentRows by rememberUpdatedState(shownRows)
     val nested = remember { object : NestedScrollConnection {
@@ -332,17 +348,16 @@ fun SessionReader(app: OrbitApplication, handle: SessionHandle, route: OrbitRout
     DisposableEffect(crossingStore) { onDispose { crossingStore.close() } }
     val crossingBatches = remember(crossingState.rows, coordinated) { coordinated?.let { crossingState.batches(it) }.orEmpty() }
     // The scheduled tasks' cards this conversation asked and the changes it made, each where it happened; a run's own session gets
-    // its strip at its head and its report after its end (docs/scheduled-tasks-design.md §8.1, §4, §7.4). Read behind each of the
+    // its strip at its planned time and its report after its end (docs/scheduled-tasks-design.md §8.1, §4, §7.4). Read behind each of the
     // session's snapshot reads, as the owner requests are.
     val scheduled = remember(handle) { ScheduledStore.of(app.session, handle, app.processScope) }
     val scheduledState by scheduled.state.collectAsState()
     val scheduleRunId = snapshotDetail?.text("scheduleRunId")
     LaunchedEffect(scheduled, route.id, scheduleRunId, state.session?.snapshotReads) { scheduled.loadSession(route.id!!, scheduleRunId) }
     val scheduleInserts = remember(scheduledState.sessions, scheduledState.runs, route.id) { ScheduleInsert.of(scheduledState, route.id!!) }
-    val scheduleSessionState = when (snapshotDetail?.text("lifecycleState")) { "COMPLETED" -> "Completed"; "TRASH" -> "Trash"; else -> "Open" }
     val drawSchedule: @Composable (ScheduleInsert) -> Unit = { insert ->
         key(insert.key) {
-            ScheduleConversationInsert(insert, scheduled, route.id!!, scheduleSessionState, snapshotDetail?.text("engine")) { id ->
+            ScheduleConversationInsert(insert, scheduled, route.id!!) { id ->
                 open(OrbitRoute(Destination.SCHEDULED, ObjectId.canonical(id) ?: id, origin = Origin.LINK))
             }
         }
@@ -595,7 +610,7 @@ fun SessionReader(app: OrbitApplication, handle: SessionHandle, route: OrbitRout
                 else if (offTail) question.value?.let { QuestionCapsule(it) { row -> model.show(row.event.seq) } }
             }
         }, actions = {
-            if (projectId != null) ProjectSessionsButton(sheetCount ?: readCount) { projectSheet = true }
+            if (projectId != null) ProjectSessionsButton(projectButton.count ?: sheetCount, projectButton.active) { projectSheet = true }
             SessionMenu(listed.takeUnless { state.denied }, state.session?.snapshot?.detail, link, state.session?.fresh == true && data.fresh,
                 actions, open, { action = it }, { settings = true }, leave)
         })
@@ -608,6 +623,9 @@ fun SessionReader(app: OrbitApplication, handle: SessionHandle, route: OrbitRout
             val session = state.session
             val detail = session?.snapshot?.detail
             var renamedWorkspaceName by remember(handle, route.id) { mutableStateOf<String?>(null) }
+            // When the detail the created line draws from was read: a clone frame heard before it is older news than its cloneState.
+            val madeReadAt = remember(worktreeState.detail ?: detail) { System.currentTimeMillis() }
+            val github = remember(handle) { ManagementGithub(io.orbitd.android.management.ManagementApi(app.session, handle, app.processScope)) }
             val createdWorkspaceLine = remember(detail, worktreeState.detail, data.effectiveRunnerRows, data.effectiveWorkspaceRows, renamedWorkspaceName) {
                 val source = worktreeState.detail ?: detail ?: return@remember null
                 CreatedWorkspaceLine.fromSession(source, data.effectiveRunnerRows, data.effectiveWorkspaceRows)?.let { line ->
@@ -662,11 +680,25 @@ fun SessionReader(app: OrbitApplication, handle: SessionHandle, route: OrbitRout
                     // Board 02 ③: a successor opens with the note its predecessor wrote, and the waits that moved here.
                     val receivedHandoff = CoordinatorHandoff.received(detail)
                     if (receivedHandoff != null && displayedWindow.seeded && !displayedWindow.hasOlder) item(key = "handoff-note") {
-                        HandoffNoteCard(receivedHandoff) { open(OrbitRoute(Destination.SESSION, it)) }
+                        HandoffNoteCard(receivedHandoff, io.orbitd.android.core.cards.CoordinatorCleanStart.history(
+                            detail?.text("createdAt"), session?.snapshot?.standing.orEmpty(), cards.merged)) { open(OrbitRoute(Destination.SESSION, it)) }
                     }
                     if (createdWorkspaceLine != null && !displayedWindow.hasOlder) {
                         item(key = "created-workspace") {
+                            // A workspace cloned from GitHub: where its clone stands, from the detail (read at `madeReadAt`) and the stream.
+                            val heardClones by app.clones.all.collectAsState()
+                            val clone = createdWorkspaceLine.cloneState?.let { stored ->
+                                WorkspaceClone.now(stored, heardClones[WorkspaceClone.keyOf(createdWorkspaceLine.workspaceId)], madeReadAt)
+                            }
                             CreatedWorkspaceLineView(
+                                clone = clone,
+                                github = github,
+                                onRetry = {
+                                    github.retryClone(createdWorkspaceLine.workspaceId)
+                                    app.clones.hear(createdWorkspaceLine.workspaceId, CloneHeard(CloneState.PENDING))
+                                    app.realtime.refreshSession()
+                                    worktree.loadDetail()
+                                },
                                 line = createdWorkspaceLine,
                                 settingsEnabled = data.workspaces.any { ObjectId.same(it.id, createdWorkspaceLine.workspaceId) } ||
                                     data.effectiveWorkspaceRows.any { ObjectId.same(it.string("id"), createdWorkspaceLine.workspaceId) },
@@ -885,7 +917,7 @@ fun SessionReader(app: OrbitApplication, handle: SessionHandle, route: OrbitRout
 }
 
 @Composable
-private fun LiveMessage(label: String, parent: String, text: String, open: (String) -> Unit) {
+internal fun LiveMessage(label: String, parent: String, text: String, open: (String) -> Unit) {
     // A06-11: reasoning still being written is open and held to a few self-scrolling lines (iOS 471b2afbb).
     if (label == "Thinking") return LiveThinking(parent, text, open)
     // Settings › Translation (2A): the agent's own reply, streaming with translation on, is the English greyed with its chip until

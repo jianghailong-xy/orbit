@@ -62,7 +62,7 @@ Every request needs `Authorization: Bearer <token>`. Anything else is refused wi
   cgroup namespace, CPU (`NanoCpus`), memory (swap not beyond it), PIDs, `/tmp` as a sized,
   executable tmpfs (`nosuid` and `nodev`, which Docker keeps on every tmpfs; below),
   restart policy `no`, bounded json-file logs, the one configured network, and exactly three mounts:
-  the runner's data volume at `/var/lib/orbit`, its bootstrap volume at `/run/orbit-bootstrap`, and
+  the runner's data volume at `/home/orbit`, its bootstrap volume at `/run/orbit-bootstrap`, and
   `/tmp`. The spec is checked against those rules before it is sent, and what Docker made of it is
   inspected and checked again before it starts (`TEMPLATE_VIOLATION`, removed unstarted).
 - **One container per data volume.** Creates are serialized per runner; only `mr-<runner uuid>` may

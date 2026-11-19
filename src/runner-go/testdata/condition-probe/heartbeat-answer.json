@@ -1,0 +1,15 @@
+{
+  "conditionProbes": [
+    {
+      "id": "01937a6e-0000-7000-8000-00000000c0de",
+      "command": "ceph df -f json | jq '.stats.total_used_raw_ratio * 100'",
+      "commandHash": "c5240cfd919c7ccf8887cb8af4e52c19f396cb3e3c4d615aac4faa47952cd07a",
+      "timeoutSeconds": 20,
+      "intervalSeconds": 300,
+      "workDir": "/srv/wire",
+      "env": {
+        "CEPH_CONF": "/etc/ceph/ceph.conf"
+      }
+    }
+  ]
+}

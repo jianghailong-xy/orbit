@@ -18,6 +18,7 @@ import {
 } from '@nestjs/common';
 import {
   type AgentExecConfig,
+  AgentProvider,
   PermissionMode,
   type RemoteSubagentClaim,
   type RemoteSubagentEventBatch,
@@ -49,6 +50,7 @@ import { QueueService } from '../queue/queue.service';
 import { CurrentRunner } from './current-runner.decorator';
 import { RunnerAuthGuard } from './runner-auth.guard';
 import { reapApprovalsOfEndedSubagents } from '../sessions/abandoned-approvals';
+import { runAccessLevel, scheduleRunDisallowedTools, scheduleRunPermissionMode } from '../schedules/schedule-access';
 import { assertEngineSession } from '../sessions/engine-session';
 import { SessionsService } from '../sessions/sessions.service';
 import { RealtimeService } from '../realtime/realtime.service';
@@ -113,6 +115,7 @@ const SUBAGENT_PARENT_SELECT = {
   provider: true,
   effort: true,
   permissionMode: true,
+  scheduleRun: { select: { accessLevel: true, schedule: { select: { accessLevel: true } } } },
   workspace: {
     select: {
       subagentsEnabled: true, subagentsMaxRunning: true, effort: true, permissionRules: true,
@@ -193,7 +196,7 @@ export class RunnerSubagentsController {
    * it opened, whose decision is frozen, on the candidate its last attempt runs on.
    *
    * A call that names a `workspace` or `needs` capabilities is placed first (docs/subagent-design.md §10.1,
-   * chooseSubagentWorkspace): on another workspace of the parent's repository it is opened there
+   * chooseSubagentWorkspace): on another workspace of the owner's account it is opened there
    * (openRemoteSubagentRun), and answered without `exec`; on the parent's own it is opened here, the choice's
    * reason heading the Why. The refusals of §10.1 are thrown before anything is written.
    */
@@ -711,16 +714,23 @@ export class RunnerSubagentsController {
           `run in (${modesASubagentMayRunIn({ mode: parentMode, engine: provider }, provider).join(', ')}).`,
       );
     }
-    const childMode = (dto.readonly ? PermissionMode.PLAN : dto.permissionMode ?? parentMode) as PermissionMode;
+    // A read-only Claude child keeps the parent's mode: the runner withholds its edit tools, and Plan would ask
+    // about every Bash call. Every other engine keeps Plan, its read-only (Codex and DSH read their own sandboxes).
+    const childMode = (dto.readonly
+      ? (provider === AgentProvider.CLAUDE ? parentMode : PermissionMode.PLAN)
+      : dto.permissionMode ?? parentMode) as PermissionMode;
+    // A scheduled run's SubAgent is held to the run's level, as the run is: Auto on Claude Code, the level's denials
+    // on every engine (schedule-access.ts). It never waits on a card nobody is there to answer.
+    const level = runAccessLevel(session.scheduleRun);
     const exec: AgentExecConfig = {
       provider,
       model: runnerModel,
       allowedTools: dispatchAllowedTools(provider, ALWAYS_ALLOWED_TOOLS, workspace?.permissionRules ?? []),
-      disallowedTools: (workspace?.disallowedTools as string[] | null) ?? [],
+      disallowedTools: scheduleRunDisallowedTools((workspace?.disallowedTools as string[] | null) ?? [], level, provider),
       permissionMode: normalizeBuiltinPermissionMode(
         provider,
         runnerModel,
-        childMode,
+        scheduleRunPermissionMode(childMode, level, provider),
         customRow?.enabled === true,
         runner.runsAsRoot,
         session.assignedRunner?.modelCatalog,

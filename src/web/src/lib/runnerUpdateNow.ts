@@ -1,4 +1,5 @@
 import { RUNNER_UPDATE_RESUME_NOTE, SELF_UPDATE_NOW_V1, type RunnerSelfUpdateNowRequest, type RunnerSelfUpdateNowResponse } from '@orbit/shared';
+import type { QueryClient } from '@tanstack/react-query';
 import type { Runner } from '../components/TasksSidePanel';
 import { api } from '../api';
 import {
@@ -38,6 +39,32 @@ export function runnerUpdateNowTurns(runner: Pick<Runner, 'updateTurns'>, nowMs:
 export function updateRunnerNow(runnerId: string): Promise<RunnerSelfUpdateNowResponse> {
   const body: RunnerSelfUpdateNowRequest = { interruptTurns: true };
   return api<RunnerSelfUpdateNowResponse>(`/runners/${runnerId}/self-update/now`, { method: 'POST', body });
+}
+
+/**
+ * The press is one timestamp the runner's next heartbeat takes, and its report (phase `restarting`) the
+ * answer: once taken, the runners are read again this often, for up to the wait, so the Update card
+ * turns to Restarting without a reload.
+ */
+export const RUNNER_UPDATE_NOW_ANSWER_POLL_MS = 2_000;
+export const RUNNER_UPDATE_NOW_ANSWER_WAIT_MS = 30_000;
+
+/** Whether the runner has answered an Update Now: it no longer reports a release waiting, or is gone. */
+export function runnerUpdateNowAnswered(runner: Pick<Runner, 'capabilities' | 'selfUpdate'> | undefined): boolean {
+  return !runner || !runnerTakesUpdateNow(runner);
+}
+
+/** Read the runners again until `runnerId` answers its Update Now, for up to the wait. */
+export async function awaitRunnerUpdateNowAnswer(
+  qc: QueryClient,
+  runnerId: string,
+  sleep: (ms: number) => Promise<void> = (ms) => new Promise((resolve) => setTimeout(resolve, ms)),
+): Promise<void> {
+  const runner = () => qc.getQueryData<Runner[]>(['runners'])?.find((r) => r.id === runnerId);
+  for (let waited = 0; waited < RUNNER_UPDATE_NOW_ANSWER_WAIT_MS && !runnerUpdateNowAnswered(runner()); waited += RUNNER_UPDATE_NOW_ANSWER_POLL_MS) {
+    await sleep(RUNNER_UPDATE_NOW_ANSWER_POLL_MS);
+    await qc.refetchQueries({ queryKey: ['runners'] });
+  }
 }
 
 /** Whether a user turn is the one Orbit sent to continue a turn the owner's Update Now cut (D4). */

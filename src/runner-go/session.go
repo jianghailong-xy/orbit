@@ -1052,11 +1052,17 @@ func runInteractiveSession(t *Transport, job *ClaimedSession, ctx context.Contex
 	// The tool calls each turn has open, so a runner stop that cuts the turn answers them in the
 	// transcript before its interrupt (interrupted_tool_calls.go): every engine's events pass here.
 	toolCalls := &interruptedToolCalls{}
+	// How the turn used Orbit, in counts and codes only, filed ahead of its turn_end (agent_contract_telemetry.go).
+	contractTelemetry := newSessionAgentContractTelemetry(job)
 	// emitThrough buffers one event, filed against turnID, if gate still admits it — preceded, for a
-	// runner stop's interrupt, by the synthetic results of the calls that turn leaves open.
+	// runner stop's interrupt, by the synthetic results of the calls that turn leaves open, and for a
+	// turn_end by the turn's agent-contract telemetry.
 	emitThrough := func(gate *eventEmissionGate, turnID, eventType string, payload map[string]interface{}) {
 		for _, result := range toolCalls.observe(turnID, eventType, payload) {
 			emitOne(gate, turnID, evToolResult, result)
+		}
+		if summary := contractTelemetry.observe(turnID, eventType, payload); summary != nil {
+			emitOne(gate, turnID, evSystem, summary)
 		}
 		emitOne(gate, turnID, eventType, payload)
 	}
@@ -1094,7 +1100,11 @@ func runInteractiveSession(t *Transport, job *ClaimedSession, ctx context.Contex
 	}
 	emit := emitOn(emissionGate)
 	// Where a file left out of a commit for holding a secret is told about (secretUnstagedWarning).
-	defer registerSecretWarnings(sessionID, emit)()
+	defer registerSecretWarnings(sessionID, emit, func() string {
+		curTurnMu.Lock()
+		defer curTurnMu.Unlock()
+		return curTurn
+	})()
 	// Where a main checkout result line the control plane queued as a `notice` turn is written (main_checkout_notice.go).
 	defer registerMainCheckoutNotices(sessionID, emitFor)()
 
@@ -1163,6 +1173,10 @@ func runInteractiveSession(t *Transport, job *ClaimedSession, ctx context.Contex
 	// A session another runner process took over ends here without being ended: its SubAgents are stopped owing
 	// the parent a wake, which the server delivers in the session's new home (subagent.go).
 	bg.subagentHandoff = func() bool { return ownershipLost.Load() && ctx.Err() == nil }
+	// A coordinator handing over ends here leaving its SubAgents and jobs running (session_keep_work.go). What an
+	// earlier run of this session was told is not this run's: it is cleared as this one starts.
+	clearSessionKeepsWork(sessionID)
+	bg.endKeepsWork = func() bool { return sessionKeepsWork(sessionID) }
 	// A Monitor watches from inside this engine, so the pool's warm timer and LRU order are what
 	// end it — between turns, where the agent is not there to see the events stop coming, and
 	// where Claude writes no terminal notification for it. Lend the pool the one fact that defers
@@ -2233,6 +2247,10 @@ func runClaudeSessionProcess(ctx context.Context, shutdownCtx context.Context, t
 			firstSpawn = true
 		}
 	}
+	// Set while the conversation this process continues was compacted or resumed and no message has carried
+	// the note that says so yet (context_reset_note.go): from the start for a resume, and on each compaction.
+	var contextReset atomic.Bool
+	contextReset.Store(!firstSpawn)
 	args := claudeCommandArgs(job, scratchDir, firstSpawn)
 	// What this process's running totals start from, read from the transcript --resume is about to
 	// read, before it reads it: every completion it sends carries it (claude_running_totals.go).
@@ -2557,6 +2575,10 @@ func runClaudeSessionProcess(ctx context.Context, shutdownCtx context.Context, t
 					// NOT cleared here: a message the runtime refuses below is never fed, and
 					// the shell output it was carrying still belongs to whatever is fed next.
 				}
+				// A conversation compacted or resumed since the last message: this one says so first. Like the
+				// shell output, the flag is cleared only once the message is accepted below.
+				carriesReset := !steer && contextReset.Load()
+				feedText = withContextResetNote(feedText, carriesReset, job.insideRecordedWork())
 				// Tell claude where the written-to-disk uploads landed (absolute paths outside
 				// the worktree), so it reads them with its tools instead of expecting inline
 				// content it never received.
@@ -2622,6 +2644,9 @@ func runClaudeSessionProcess(ctx context.Context, shutdownCtx context.Context, t
 				// answered.
 				deliveries.accept(delivery, slot.receipt)
 				pendingShellCtx = nil // this message carries it now
+				if carriesReset {
+					contextReset.Store(false)
+				}
 				userEv["delivery"] = string(deliveryEnqueued)
 				if steer {
 					// Which kind this message was filed as, on the one event that survives a
@@ -3007,6 +3032,8 @@ func runClaudeSessionProcess(ctx context.Context, shutdownCtx context.Context, t
 	// The turn the latest `result` answered, which a prompt_suggestion arriving after it is filed
 	// against. Empty when that result failed or closed a turn the engine started on its own.
 	var lastAnsweredTurnID string
+	// What this process's engine says about Orbit's tools, sent when it changes (agent_tools_report.go).
+	var agentTools agentToolsReporter
 	// Whether a compaction boundary has gone by since the last result: what tells a `/compact`
 	// turn's result from the resume carrier it otherwise looks exactly like.
 	var compactedThisTurn bool
@@ -3049,6 +3076,9 @@ scanLoop:
 		}
 		handleMessage(msg, emit, bg)
 		claudeNoteEngineMode(job, msg)
+		if msg["type"] == "system" && msg["subtype"] == "compact_boundary" && msg["parent_tool_use_id"] == nil {
+			contextReset.Store(true)
+		}
 		// The init handshake is where the CLI names its own version, and it is the only place
 		// it does. One control frame has to know it — apply_flag_settings answers `success`
 		// whether or not it acted, so the version is all there is to gate on (claude_setconfig.go)
@@ -3057,6 +3087,11 @@ scanLoop:
 		if msg["type"] == "system" && msg["subtype"] == "init" {
 			version, _ := msg["claude_code_version"].(string)
 			rt.noteAnnouncedVersion(version)
+			// The same frame names the MCP servers it started and the tools and skills it has: the
+			// session's Agent Tools report, in the engine's own words. A subagent's init is not the session's.
+			if msg["parent_tool_use_id"] == nil {
+				agentTools.send(claudeAgentToolsReport(job, msg), emit)
+			}
 		}
 		if msg["type"] == "system" && msg["subtype"] == "compact_boundary" {
 			compactedThisTurn = true

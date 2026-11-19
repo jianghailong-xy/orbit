@@ -1,0 +1,352 @@
+<!doctype html>
+<html><head><meta charset="utf-8">
+<title>Share to Orbit — iOS / Android / macOS</title>
+<style>
+@font-face{font-family:Inter;src:url(/var/tmp/landing-mock-render/fonts/Inter.ttf)}
+@font-face{font-family:SC;src:url(/var/tmp/landing-mock-render/fonts/NotoSansSC.ttf)}
+@font-face{font-family:Mono;src:url(/var/tmp/landing-mock-render/fonts/JetBrainsMono.ttf)}
+*{box-sizing:border-box}
+body{margin:0;background:#fff;font-family:Inter,SC,sans-serif;color:#1f2329}
+.b-part{padding:28px 32px 34px;width:1800px;font:15px/1.6 Inter,SC,sans-serif}
+.b-h{display:flex;align-items:center;gap:12px;margin:0 0 18px;font-size:19px;font-weight:600;color:#3b3f45}
+.b-h b{background:#e8efff;color:#1d4fd8;padding:3px 12px;border-radius:6px;font-size:16px}
+.b-row{display:flex;gap:30px;align-items:flex-start}
+.b-cap{width:393px;font-size:14px;color:#646a73;margin:10px 2px 0;line-height:1.55}
+.b-cap strong{color:#1f2329}
+.b-notes{margin-top:22px;background:#f5f6f8;border-radius:12px;padding:16px 22px;font-size:15px;line-height:1.95}
+.b-n{display:inline-flex;width:22px;height:22px;border-radius:50%;background:#f08c00;color:#fff;font-size:12px;font-weight:700;align-items:center;justify-content:center;margin-right:8px;vertical-align:1px}
+code{font-family:Mono,monospace;font-size:.86em;background:#f2f3f5;padding:0 5px;border-radius:4px}
+/* phone */
+.ph{width:393px;height:852px;border-radius:52px;border:10px solid #1c1c1e;position:relative;overflow:hidden;background:#d8d8dc;flex:none}
+.ph .sb{height:50px;display:flex;justify-content:space-between;align-items:flex-end;padding:0 30px 6px;font-weight:600;font-size:15px}
+.sheet{position:absolute;left:0;right:0;bottom:0;top:62px;background:#f2f2f7;border-radius:30px 30px 0 0;padding:18px 16px}
+.sheet.white{background:#fff}
+.head{display:flex;align-items:center;gap:12px;padding-bottom:14px;border-bottom:1px solid #e1e1e6}
+.doc{width:42px;height:54px;border-radius:6px;background:#fff;border:1px solid #ddd;font:6px/1.3 Mono;color:#999;padding:4px;overflow:hidden}
+.ttl{font-weight:600;font-size:15px}.sub{font-size:13px;color:#8a8a8e}
+.x{margin-left:auto;width:36px;height:36px;border-radius:50%;background:#e9e9ee;display:flex;align-items:center;justify-content:center;font-size:18px;color:#555}
+.apps{display:flex;gap:18px;padding:16px 4px;border-bottom:1px solid #e1e1e6}
+.app{width:70px;text-align:center;font-size:12px}
+.ic{width:62px;height:62px;border-radius:15px;margin:0 auto 6px;display:flex;align-items:center;justify-content:center;font-size:26px;color:#fff}
+.orb{background:radial-gradient(circle at 35% 35%,#5b8cff,#2747c9);position:relative}
+.orb:after{content:"";width:30px;height:30px;border:3px solid #fff;border-radius:50%;}
+.ring{outline:3px dashed #f5a524;outline-offset:4px;border-radius:16px;position:relative}
+.pin{position:absolute;right:-14px;top:-14px;width:24px;height:24px;border-radius:50%;background:#f08c00;color:#fff;font-size:13px;font-weight:700;display:flex;align-items:center;justify-content:center;z-index:5}
+.list{background:#fff;border-radius:12px;margin-top:14px;overflow:hidden}
+.li{display:flex;align-items:center;gap:10px;padding:11px 14px;border-bottom:1px solid #ececf0;font-size:15px}
+.li:last-child{border-bottom:0}
+.li .meta{font-size:12px;color:#8a8a8e}
+.li .chk{margin-left:auto;color:#2a64f6;font-weight:700}
+.dot{width:8px;height:8px;border-radius:50%;background:#2ea121;flex:none}
+.grp{font-size:12px;color:#8a8a8e;margin:14px 6px -6px;text-transform:uppercase;letter-spacing:.03em}
+.nav{display:flex;align-items:center;justify-content:space-between;font-size:16px;margin-bottom:10px}
+.nav .t{font-weight:600}.nav .a{color:#2a64f6}.nav .a.b{font-weight:600}
+.search{background:#e3e3e8;border-radius:10px;padding:8px 12px;color:#8a8a8e;font-size:15px}
+.chips{display:flex;gap:8px;flex-wrap:wrap}
+.chip{display:flex;align-items:center;gap:8px;background:#fff;border:1px solid #e1e1e6;border-radius:10px;padding:6px 10px;font-size:13px}
+.chip .fi{width:26px;height:30px;border-radius:4px;background:#eef2ff;color:#2a64f6;font-size:10px;font-weight:700;display:flex;align-items:center;justify-content:center}
+.chip .img{width:30px;height:30px;border-radius:6px;background:linear-gradient(135deg,#9ec5ff,#f8c9a4)}
+.note{background:#fff;border-radius:12px;padding:11px 14px;color:#8a8a8e;font-size:15px;margin-top:14px}
+.done{position:absolute;left:16px;right:16px;top:40%;background:#fff;border-radius:16px;padding:26px;text-align:center}
+.done .ok{width:54px;height:54px;border-radius:50%;background:#2ea121;color:#fff;font-size:30px;margin:0 auto 10px;display:flex;align-items:center;justify-content:center}
+.banner{position:absolute;left:10px;right:10px;top:56px;background:rgba(245,245,247,.97);border-radius:20px;padding:12px 14px;display:flex;gap:10px;box-shadow:0 6px 24px rgba(0,0,0,.18);font-size:14px}
+.banner .ic{width:38px;height:38px;border-radius:9px;margin:0}
+.banner .orb:after{width:17px;height:17px;border-width:2px}
+/* app screen */
+.scr{position:absolute;inset:50px 0 0;background:#fff}
+.tb{display:flex;align-items:center;gap:8px;padding:8px 14px;border-bottom:1px solid #eee;font-weight:600}
+.msg{margin:12px 14px;font-size:14px;line-height:1.55;color:#333}
+.bub{margin:10px 14px 10px 80px;background:#eef1f6;border-radius:16px;padding:9px 13px;font-size:14px}
+.cmp{position:absolute;left:10px;right:10px;bottom:28px;border:1px solid #dcdce0;border-radius:22px;padding:10px 12px;background:#fff;box-shadow:0 2px 12px rgba(0,0,0,.06)}
+.cmp .tx{font-size:15px;color:#1f2329;margin:8px 2px 10px}
+.cmp .tx.ph2{color:#a0a0a6}
+.cmp .bar{display:flex;align-items:center;gap:10px;color:#8a8a8e;font-size:13px}
+.send{margin-left:auto;width:32px;height:32px;border-radius:50%;background:#2a64f6;color:#fff;display:flex;align-items:center;justify-content:center}
+.toast{position:absolute;left:50%;transform:translateX(-50%);bottom:170px;background:#1f2329;color:#fff;border-radius:18px;padding:7px 14px;font-size:13px;white-space:nowrap}
+/* android */
+.an{border-radius:36px}
+.an .sheet{border-radius:28px 28px 0 0;background:#f3f1f8}
+.an .apps .ic{border-radius:50%}
+.an .nav .t{font-size:20px;font-weight:500}
+.an .li{font-size:15px}
+.an .send{border-radius:14px;width:40px;height:40px;background:#3f5bd8}
+/* mac */
+.mac{width:820px;height:520px;border-radius:12px;border:1px solid #c9c9cf;background:linear-gradient(#f6f6f8,#ececf0);position:relative;overflow:hidden;flex:none;box-shadow:0 10px 40px rgba(0,0,0,.12)}
+.mac .tbar{height:38px;display:flex;align-items:center;gap:8px;padding:0 14px;border-bottom:1px solid #ddd;background:#ebebef}
+.lt{width:12px;height:12px;border-radius:50%}
+.menu{position:absolute;background:rgba(246,246,248,.98);border:1px solid #ccc;border-radius:9px;box-shadow:0 10px 30px rgba(0,0,0,.2);padding:5px;font-size:13px;width:200px}
+.menu div{padding:4px 10px;border-radius:5px;display:flex;gap:8px;align-items:center}
+.menu .hl{background:#2a64f6;color:#fff}
+.mi{width:16px;height:16px;border-radius:4px;display:inline-block}
+.pop{position:absolute;width:340px;background:#fff;border:1px solid #d0d0d6;border-radius:12px;box-shadow:0 14px 40px rgba(0,0,0,.22);padding:14px;font-size:13px}
+.pop .li{padding:7px 10px;font-size:13px}
+.btn{display:inline-block;padding:4px 14px;border-radius:6px;background:#2a64f6;color:#fff;font-size:13px}
+.btn.g{background:#e6e6ea;color:#1f2329}
+/* diagram */
+.dg{display:flex;align-items:center;gap:14px;margin:6px 0 4px}
+.box{border:1.5px solid #c8ccd4;border-radius:12px;padding:12px 16px;background:#fafbfc;font-size:14px;line-height:1.55;min-width:200px}
+.box h5{margin:0 0 4px;font-size:15px}
+.box.new{border-color:#2a64f6;background:#f2f6ff}
+.box.ex{border-style:dashed}
+.arr{font-size:22px;color:#8a8f99}
+.lab{font-size:12px;color:#8a8f99;text-align:center}
+table{border-collapse:collapse;font-size:14px;width:100%}
+td,th{border:1px solid #e1e3e8;padding:7px 12px;text-align:left;vertical-align:top}
+th{background:#f5f6f8}
+.dec{display:grid;grid-template-columns:1fr 1fr;gap:18px}
+.dec>div{border:1px solid #dee0e3;border-radius:12px;padding:14px 18px;font-size:14.5px;line-height:1.75}
+.dec h5{margin:0 0 6px;font-size:16px}
+.rec{color:#1a7f37;font-weight:600}
+.opt{margin:4px 0}
+.cost{counter-reset:c}
+.cost li{margin:6px 0}
+</style></head><body>
+
+<!-- ───────────── 1 iOS ───────────── -->
+<section class="b-part" id="part-1">
+<div class="b-h"><b>① iOS · 分享到 Orbit</b> 今天分享面板里没有 Orbit → 建议：选会话 → 附件放进它的输入框，用户回 App 补一句再发</div>
+<div class="b-row">
+  <div>
+  <div class="ph">
+    <div class="sb"><span>6:56</span><span>▂▄▆ ◠ 82</span></div>
+    <div class="sheet white">
+      <div class="head"><div class="doc">Orbit export<br>"session": …<br>"turns": …</div>
+        <div><div class="ttl">Orbit-2026-11-16-064906</div><div class="sub">Text Document · 25 KB</div></div><div class="x">✕</div></div>
+      <div class="apps">
+        <div class="app"><div class="ic ring orb"><span class="pin">1</span></div>Orbit</div>
+        <div class="app"><div class="ic" style="background:#2a7cf6">◉</div>AirDrop</div>
+        <div class="app"><div class="ic" style="background:#4cd964">💬</div>Messages</div>
+        <div class="app"><div class="ic" style="background:#2f86f6">✉</div>Mail</div>
+      </div>
+      <div class="apps" style="border:0;color:#555">
+        <div class="app"><div class="ic" style="background:#e9e9ee;color:#333;border-radius:50%">⧉</div>Copy</div>
+        <div class="app"><div class="ic" style="background:#e9e9ee;color:#333;border-radius:50%">▭</div>Save to Files</div>
+      </div>
+    </div>
+  </div>
+  <div class="b-cap"><strong>图 1 · 系统分享面板</strong>：Orbit 出现在 App 一排（iOS 按使用频率排序，图里画在第一位只为指认）。文件、图片、文本、链接都能分享，单次最多 10 项。</div>
+  </div>
+
+  <div>
+  <div class="ph">
+    <div class="sb"><span>6:56</span><span>▂▄▆ ◠ 82</span></div>
+    <div class="sheet">
+      <div class="nav"><span class="a">Cancel</span><span class="t">Add to Orbit</span><span class="a b ring" style="border-radius:6px">Add<span class="pin">4</span></span></div>
+      <div class="chips ring" style="border-radius:10px"><span class="pin">2</span>
+        <div class="chip"><span class="fi">TXT</span>Orbit-2026-11-16-064906.txt · 25 KB</div>
+      </div>
+      <div class="search" style="margin-top:14px">⌕ Search sessions</div>
+      <div class="ring" style="border-radius:12px;margin-top:2px"><span class="pin">3</span>
+      <div class="list">
+        <div class="li"><span style="color:#2a64f6;font-size:18px">＋</span>New session<span class="meta" style="margin-left:auto">orbit-develop ›</span></div>
+      </div>
+      <div class="grp">Recent</div>
+      <div class="list">
+        <div class="li"><span class="dot"></span><div>Fix login redirect<div class="meta">orbit-develop · 3m ago</div></div><span class="chk">✓</span></div>
+        <div class="li"><span class="dot" style="background:#c7c7cc"></span><div>Release notes for 0.9<div class="meta">orbit-develop · 1h ago</div></div></div>
+        <div class="li"><span class="dot" style="background:#c7c7cc"></span><div>Android cold-start crash<div class="meta">orbit-android · 2h ago</div></div></div>
+        <div class="li"><span class="dot" style="background:#c7c7cc"></span><div>Wiki search latency<div class="meta">orbit-prod · yesterday</div></div></div>
+      </div></div>
+      <div class="note">Add a note (optional)</div>
+    </div>
+  </div>
+  <div class="b-cap"><strong>图 2 · Orbit 的分享页</strong>（Share Extension）：上面是要带过去的东西，下面选会话。最近会话来自 App 写好的快照，扩展里没有登录态、不联网。</div>
+  </div>
+
+  <div>
+  <div class="ph">
+    <div class="sb"><span>6:57</span><span>▂▄▆ ◠ 82</span></div>
+    <div class="banner ring" style="border-radius:20px"><span class="pin">5</span><div class="ic orb"></div>
+      <div><b>Orbit</b> <span style="color:#8a8a8e">· now</span><br>1 file ready in “Fix login redirect” — tap to finish</div></div>
+    <div class="sheet" style="top:200px;opacity:.55"></div>
+    <div class="done"><div class="ok">✓</div><b style="font-size:17px">Added to “Fix login redirect”</b>
+      <div class="sub" style="margin-top:6px">Open Orbit to write your message and send.</div></div>
+  </div>
+  <div class="b-cap"><strong>图 3 · 加好了</strong>：扩展没法用正式 API 直接打开 App，所以发一条本地通知，点它就进那个会话。10 分钟内用别的方式打开 Orbit，也会直接进这个会话。</div>
+  </div>
+
+  <div>
+  <div class="ph">
+    <div class="sb"><span>6:57</span><span>▂▄▆ ◠ 82</span></div>
+    <div class="scr">
+      <div class="tb">‹ <span>Fix login redirect</span></div>
+      <div class="bub">The redirect after Google sign-in lands on /login again.</div>
+      <div class="msg">Fixed: the callback now keeps <code>next</code> through the token swap. Tests added in <code>auth.spec.ts</code>.</div>
+      <div class="toast">1 shared file added</div>
+      <div class="cmp ring" style="border-radius:22px"><span class="pin">6</span>
+        <div class="chips"><div class="chip"><span class="fi">TXT</span>Orbit-2026-11-16-064906.txt</div></div>
+        <div class="tx ph2">Message</div>
+        <div class="bar">＋ <span>Opus 5.5 ⌄</span><span class="send">↑</span></div>
+      </div>
+    </div>
+  </div>
+  <div class="b-cap"><strong>图 4 · 回到 App</strong>：附件就是 <code>+</code> 菜单那种 chip，正在上传、失败、移除都走现有路径。不会自动发出去。</div>
+  </div>
+</div>
+<div class="b-notes">
+<span class="b-n">1</span>新增 <code>OrbitShare</code> Share Extension target（<code>project.yml</code>），和主 App 共享 OrbitKit。<br>
+<span class="b-n">2</span>文件按 URL 拷进 App Group 收件箱，不整份读进内存（扩展内存上限约 120 MB）。超过 25 MB 或类型不支持的，那一行划掉并写 “Too large (max 25 MB)”，其它照常带过去。<br>
+<span class="b-n">3</span>第一行是 <b>New session</b>（默认工作区，可点开换）；下面是最近的进行中会话，可搜索。数据来自 App 每次加载会话列表时写进 App Group 的快照。<br>
+<span class="b-n">4</span>Add 只写一个收件箱条目 <code>{target, items, note}</code>，此时不上传、不发送。<br>
+<span class="b-n">5</span>本地通知深链 <code>orbit-session://&lt;id&gt;?share=&lt;entry&gt;</code>。没开通知权限时，完成页写 “Open Orbit to finish”。<br>
+<span class="b-n">6</span>App 认领条目后，对每一项调用现有的 <code>attachFile(url:)</code>（大小和类型检查、上传、chip 都复用），然后删掉条目；24 小时没人认领的自动清掉。短文本和链接进输入框的文字，见 D3。
+</div>
+</section>
+
+<!-- ───────────── 2 Android ───────────── -->
+<section class="b-part" id="part-2">
+<div class="b-h"><b>② Android · ACTION_SEND</b> 分享进来的是 App 里的一个页面，有真实登录态，会话列表是实时的，不需要快照和通知</div>
+<div class="b-row">
+  <div>
+  <div class="ph an">
+    <div class="sb"><span>6:56</span><span>▾ ▮ 82%</span></div>
+    <div class="sheet">
+      <div class="head" style="border:0"><div class="chip"><span class="img"></span>Screenshot_20261116.png</div></div>
+      <div class="grp" style="margin:4px 6px 8px">Share</div>
+      <div class="apps" style="border:0">
+        <div class="app"><div class="ic ring orb" style="border-radius:50%"><span class="pin">1</span></div>Orbit</div>
+        <div class="app"><div class="ic" style="background:#34a853">✉</div>Gmail</div>
+        <div class="app"><div class="ic" style="background:#4285f4">▲</div>Drive</div>
+        <div class="app"><div class="ic" style="background:#6a6a6a">⇄</div>Nearby</div>
+      </div>
+    </div>
+  </div>
+  <div class="b-cap"><strong>图 5 · 系统分享面板</strong>：Orbit 声明 <code>SEND</code> / <code>SEND_MULTIPLE</code>，接收 <code>*/*</code> 和 <code>text/plain</code>。</div>
+  </div>
+  <div>
+  <div class="ph an">
+    <div class="sb"><span>6:56</span><span>▾ ▮ 82%</span></div>
+    <div class="scr" style="background:#fbf9ff;padding:8px 16px">
+      <div class="nav"><span>✕</span><span class="t">Add to session</span><span></span></div>
+      <div class="chips"><div class="chip"><span class="img"></span>Screenshot_20261116.png · 1.2 MB</div></div>
+      <div class="search ring" style="margin-top:14px;border-radius:24px;background:#ece8f4"><span class="pin">2</span>⌕ Search sessions</div>
+      <div class="list"><div class="li"><span style="color:#3f5bd8;font-size:18px">＋</span>New session<span class="meta" style="margin-left:auto">orbit-develop ›</span></div></div>
+      <div class="grp">Recent</div>
+      <div class="list">
+        <div class="li"><span class="dot"></span><div>Fix login redirect<div class="meta">orbit-develop · 3m ago</div></div></div>
+        <div class="li"><span class="dot" style="background:#c7c7cc"></span><div>Release notes for 0.9<div class="meta">orbit-develop · 1h ago</div></div></div>
+        <div class="li"><span class="dot" style="background:#c7c7cc"></span><div>Android cold-start crash<div class="meta">orbit-android · 2h ago</div></div></div>
+      </div>
+    </div>
+  </div>
+  <div class="b-cap"><strong>图 6 · ShareActivity</strong>：点一行就进去，不另设 Add 按钮（Android 习惯）。没登录时先走登录，再回到这里。</div>
+  </div>
+  <div>
+  <div class="ph an">
+    <div class="sb"><span>6:57</span><span>▾ ▮ 82%</span></div>
+    <div class="scr">
+      <div class="tb">← <span>Fix login redirect</span></div>
+      <div class="bub">The redirect after Google sign-in lands on /login again.</div>
+      <div class="msg">Fixed: the callback now keeps <code>next</code> through the token swap.</div>
+      <div class="cmp ring" style="border-radius:22px"><span class="pin">3</span>
+        <div class="chips"><div class="chip"><span class="img"></span>Screenshot_20261116.png</div></div>
+        <div class="tx ph2">Message</div>
+        <div class="bar">＋ <span>Opus 5.5 ⌄</span><span class="send">↑</span></div>
+      </div>
+    </div>
+  </div>
+  <div class="b-cap"><strong>图 7 · 会话输入框</strong>：<code>ComposerModel.importAttachment</code> 先把内容 URI 持久拷进草稿再上传，App 被杀掉草稿也还在。</div>
+  </div>
+</div>
+<div class="b-notes">
+<span class="b-n">1</span>新增 exported 的 <code>ShareActivity</code>，带两个 intent-filter；多于 10 项时只取前 10 项，toast 说明。<br>
+<span class="b-n">2</span>复用会话列表的行和搜索，数据是实时的。<br>
+<span class="b-n">3</span>带着读授权启动 <code>MainActivity</code>，目标会话的输入框按 URI 调用 <code>importAttachment</code>。不改服务端。
+</div>
+</section>
+
+<!-- ───────────── 3 macOS ───────────── -->
+<section class="b-part" id="part-3">
+<div class="b-h"><b>③ macOS · 共享菜单</b> 和 iOS 共用 OrbitShare 源码；扩展可以直接打开 App，不用通知</div>
+<div class="b-row">
+  <div>
+  <div class="mac">
+    <div class="tbar"><span class="lt" style="background:#ff5f57"></span><span class="lt" style="background:#febc2e"></span><span class="lt" style="background:#28c840"></span><span style="margin-left:16px;font-size:13px;color:#555">Finder — Downloads</span></div>
+    <div style="padding:30px 40px;display:flex;gap:40px">
+      <div style="text-align:center;font-size:12px"><div class="doc" style="width:64px;height:80px;margin:0 auto 6px;outline:3px solid #2a64f6;outline-offset:2px"></div><span style="background:#2a64f6;color:#fff;padding:1px 6px;border-radius:4px">crash-report.log</span></div>
+    </div>
+    <div class="menu" style="left:130px;top:150px">
+      <div>Open</div><div>Quick Look</div><div class="hl">Share ›</div><div>Copy</div>
+    </div>
+    <div class="menu ring" style="left:338px;top:200px;border-radius:9px"><span class="pin">1</span>
+      <div><span class="mi" style="background:#2a7cf6"></span>AirDrop</div><div><span class="mi" style="background:#2f86f6"></span>Mail</div>
+      <div class="hl"><span class="mi orb" style="border-radius:50%"></span>Orbit</div><div><span class="mi" style="background:#4cd964"></span>Messages</div>
+    </div>
+  </div>
+  <div class="b-cap" style="width:820px"><strong>图 8 · Finder 右键 → 共享</strong>：Safari、照片、预览等所有带共享按钮的地方也都能用。</div>
+  </div>
+  <div>
+  <div class="mac" style="width:560px">
+    <div class="tbar"><span class="lt" style="background:#ff5f57"></span><span class="lt" style="background:#febc2e"></span><span class="lt" style="background:#28c840"></span></div>
+    <div class="pop ring" style="left:110px;top:60px;border-radius:12px"><span class="pin">2</span>
+      <div style="font-weight:600;margin-bottom:8px">Add to Orbit</div>
+      <div class="chips"><div class="chip"><span class="fi">LOG</span>crash-report.log · 48 KB</div></div>
+      <div class="search" style="margin-top:10px;font-size:13px;padding:5px 10px">⌕ Search sessions</div>
+      <div class="li"><span style="color:#2a64f6">＋</span>New session<span class="meta" style="margin-left:auto">orbit-develop</span></div>
+      <div class="li" style="background:#eaf0ff;border-radius:6px"><span class="dot"></span>Android cold-start crash<span class="meta" style="margin-left:auto">2h</span></div>
+      <div class="li"><span class="dot" style="background:#c7c7cc"></span>Fix login redirect<span class="meta" style="margin-left:auto">3m</span></div>
+      <div style="display:flex;justify-content:flex-end;gap:8px;margin-top:10px"><span class="btn g">Cancel</span><span class="btn">Add</span></div>
+    </div>
+  </div>
+  <div class="b-cap" style="width:560px"><strong>图 9 · 共享弹窗</strong>：和 iOS 是同一个 SwiftUI 选择页。Add 之后 <code>NSWorkspace.open(orbit-session://…)</code>，直接切到 App 那个会话。</div>
+  </div>
+</div>
+<div class="b-notes">
+<span class="b-n">1</span>macOS App 是 SPM 构建，没有 Xcode 工程，所以 <code>build-dmg.sh</code> 要新增一步：用 swiftc 编译扩展、组装 <code>Contents/PlugIns/OrbitShare.appex</code>、先签 appex（sandbox + App Group <code>&lt;TEAMID&gt;.io.orbitd.app</code>）再签 App，然后验证公证能过。三个平台里这部分最贵，排在最后。<br>
+<span class="b-n">2</span>收件箱、认领、清理和 iOS 完全一样，都在 OrbitKit 的 <code>ShareInbox</code> 里，可以在 Linux 上跑单测。
+</div>
+</section>
+
+<!-- ───────────── 4 architecture ───────────── -->
+<section class="b-part" id="part-4">
+<div class="b-h"><b>④ 组件与数据</b> 蓝框是新的，虚线是复用的现有部分；服务端不用改</div>
+<div class="dg">
+  <div class="box">系统分享面板<div class="lab">iOS / macOS</div></div><span class="arr">→</span>
+  <div class="box new"><h5>OrbitShare 扩展</h5>选择页 · 读会话快照<br>文件拷进收件箱<br><b>不带 token，不联网</b></div><span class="arr">→</span>
+  <div class="box new"><h5>App Group 容器</h5><code>ShareInbox/&lt;uuid&gt;/entry.json</code><br><code>RecentSessions.json</code>（App 写）</div><span class="arr">→</span>
+  <div class="box new"><h5>App · ShareInbox 认领</h5>通知深链 / 打开 App<br>打开目标会话或新会话草稿</div><span class="arr">→</span>
+  <div class="box ex"><h5>ConsoleModel.attachFile</h5>chip → <code>POST /attachments</code></div>
+</div>
+<div class="dg" style="margin-top:18px">
+  <div class="box">系统分享面板<div class="lab">Android</div></div><span class="arr">→</span>
+  <div class="box new"><h5>ShareActivity</h5>实时会话列表<br>（复用列表行 + 搜索）</div><span class="arr">→</span>
+  <div class="box ex"><h5>MainActivity → 会话</h5>content URI + 读授权</div><span class="arr">→</span>
+  <div class="box ex"><h5>ComposerModel.importAttachment</h5>持久化草稿 → 上传</div>
+</div>
+<table style="margin-top:22px">
+<tr><th style="width:280px">情况</th><th>处理</th></tr>
+<tr><td>单项超过 25 MB / 类型不支持</td><td>选择页那一行划掉，写 “Too large (max 25 MB)”；其它照常带过去</td></tr>
+<tr><td>超过 10 项</td><td>iOS/macOS 用激活规则直接不显示 Orbit；Android 只取前 10 项并用 toast 说明</td></tr>
+<tr><td>未登录</td><td>iOS/macOS 没有快照 → 扩展显示 “Sign in to Orbit first”；Android 先登录，再回到选择页</td></tr>
+<tr><td>目标会话这期间被删除或结束</td><td>在同一工作区开一个新会话草稿，带着这些附件，toast 说明原因</td></tr>
+<tr><td>App 里上传失败</td><td>现有 chip 失败路径（“Upload failed — name”）</td></tr>
+<tr><td>安全</td><td>用户在 App 里点发送之前，什么都不会离开设备；收件箱在 App Group 内，只有 Orbit 自己签名的 target 能读，认领后删除，24 小时后清掉</td></tr>
+</table>
+</section>
+
+<!-- ───────────── 5 decisions ───────────── -->
+<section class="b-part" id="part-5">
+<div class="b-h"><b>⑤ 待定 · 要你拍板</b></div>
+<div class="dec">
+  <div><h5>D1 · 在哪选会话</h5>
+    <div class="opt"><b>A</b> 在分享页里选（图 2）→ 回到 App 时已经在那个会话里。<span class="rec">推荐</span></div>
+    <div class="opt"><b>B</b> 分享页只收下东西（“Saved — open Orbit”），打开 App 后再问放进哪个会话。扩展更薄，但多一步，而且离开分享的那一刻还不知道东西去了哪。</div></div>
+  <div><h5>D2 · iOS/macOS 选择页的数据从哪来</h5>
+    <div class="opt"><b>A</b> App 写一份最近会话快照（id、标题、工作区、时间）到 App Group，扩展只读这份快照。<span class="rec">推荐</span>：扩展里没有凭证，也不用改 Keychain。代价是列表可能旧几分钟。</div>
+    <div class="opt"><b>B</b> 共享 Keychain（<code>keychain-access-groups</code>），扩展实时拉 <code>GET /sessions</code>。列表是新的，但多一个持有 token 的进程，还要处理 token 刷新的竞争。</div></div>
+  <div><h5>D3 · 分享的是一段文字或一个链接</h5>
+    <div class="opt"><b>A</b> 链接和 2,000 字以内的文字放进输入框的文字里（接在已有草稿后面），更长的变成 <code>shared-text.txt</code> 附件。<span class="rec">推荐</span></div>
+    <div class="opt"><b>B</b> 一律变成 .txt 附件。规则更简单，但分享一个链接也会变成一个文件。</div></div>
+  <div><h5>D4 · macOS 做到哪</h5>
+    <div class="opt"><b>A</b> 真的共享菜单扩展（图 8–9），放第 4 阶段，按你选的做。<span class="rec">推荐</span></div>
+    <div class="opt"><b>B</b> 先做便宜的入口：把文件拖到 Dock 图标上，加一个 Services 菜单项。不用改签名流程，但不在 “共享” 菜单里。</div></div>
+</div>
+<div class="b-h" style="margin-top:26px"><b>落地（按代价排）</b></div>
+<ol class="cost" style="font-size:15px;line-height:1.8">
+<li><b>Android 分享入口</b>：ShareActivity + manifest + 选择页复用 + importAttachment 衔接。最便宜，可以独立上线。</li>
+<li><b>OrbitKit ShareInbox + 会话快照</b>：数据模型、认领、清理，在 Linux 上跑单测。</li>
+<li><b>iOS Share Extension</b>：新 target、App Group entitlements（Debug 和 release 都要，CI 的描述文件要更新）、选择页、通知深链、App 端认领。</li>
+<li><b>macOS 共享扩展</b>：build-dmg 新增扩展步骤、签名顺序、公证验证、App 端认领。</li>
+</ol>
+</section>
+</body></html>

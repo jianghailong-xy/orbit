@@ -11,7 +11,7 @@ import { TASK_OCCUPYING } from '../tasks/reclaim-stalled-task';
 
 /**
  * What a session may do to another session that already exists: give it a turn, or end, complete,
- * delete or merge it (docs/session-request-reply-contract.md §2.5).
+ * delete, merge or move it (docs/session-request-reply-contract.md §2.5).
  *
  * A session runs a turn in its own mode, whoever asked for the turn. So a session that may do less than
  * another reaches it only as far as this says, by the comparison that holds a session to what it may
@@ -61,6 +61,7 @@ const ACTS = {
   complete: { words: 'complete it', carriesMessage: false },
   delete: { words: 'delete it', carriesMessage: false },
   merge: { words: 'merge it', carriesMessage: false },
+  move: { words: 'move it', carriesMessage: false },
   resumeRun: { words: 'hand it this task', carriesMessage: false },
   cancelTask: { words: 'end it by cancelling its task', carriesMessage: false },
   deleteTask: { words: 'end it by deleting its task', carriesMessage: false },

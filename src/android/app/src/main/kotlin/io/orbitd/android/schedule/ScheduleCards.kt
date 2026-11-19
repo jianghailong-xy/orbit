@@ -2,7 +2,6 @@ package io.orbitd.android.schedule
 
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
-import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.*
@@ -22,6 +21,8 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.text.withStyle
 import androidx.compose.ui.unit.dp
 import io.orbitd.android.R
+import io.orbitd.android.core.schedule.ConditionDisplay
+import io.orbitd.android.core.schedule.ConditionView
 import io.orbitd.android.core.schedule.ScheduleCard
 import io.orbitd.android.core.schedule.ScheduleChangeRecord
 import io.orbitd.android.core.schedule.ScheduleCopy
@@ -104,16 +105,35 @@ fun ScheduleCreateCard(card: ScheduleCard, panel: Boolean = false, decide: suspe
     val press = remember(card.id) { CardPress() }
     val zone = java.util.TimeZone.getDefault().id
     val whenText = card.`when`?.let { ScheduleDisplay.createWhen(it, Instant.now(), zone) }
+    // A WHEN rule's When lines: the server's, else worked out from the rule.
+    val conditionLines = card.`when`?.let { w -> w.rule.condition?.let { w.condition ?: ConditionDisplay.whenLines(it, runner = null) } }
     CardBox(tag = "schedule-create-card") {
         Column(Modifier.padding(14.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
             Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                Icon(painterResource(R.drawable.ic_calendar), null, Modifier.size(18.dp), tint = MaterialTheme.colorScheme.primary)
+                // A WHEN rule's card carries the gauge (condition-triggers board ③).
+                Icon(painterResource(if (conditionLines == null) R.drawable.ic_calendar else R.drawable.ic_gauge), null, Modifier.size(18.dp),
+                    tint = MaterialTheme.colorScheme.primary)
                 Text(SC.CreateCard.title, style = MaterialTheme.typography.bodyLarge.copy(fontWeight = FontWeight.SemiBold))
             }
             if (!panel) card.title?.let { Text(it, style = MaterialTheme.typography.bodyLarge.copy(fontWeight = FontWeight.SemiBold)) }
             card.readBack?.takeIf { it.isNotEmpty() }?.let { Text(it, style = MaterialTheme.typography.bodyMedium) }
             Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                whenText?.let { w ->
+                if (conditionLines != null) {
+                    // When, for a WHEN rule (board ③): the condition in bold with its hold, the repeat, the re-arm and how it is
+                    // checked, and the command verbatim — what Create approves.
+                    val (lead, rest) = ConditionDisplay.whenTextParts(conditionLines, card.`when`?.rule?.condition)
+                    Box(Modifier.testTag("schedule-create-when-condition")) {
+                        FactRow(SC.CreateCard.`when`) {
+                            Text(bold(lead, rest), style = MaterialTheme.typography.bodyMedium)
+                            val secondary = MaterialTheme.colorScheme.onSurfaceVariant
+                            conditionLines.repeat?.let { Text(it, style = MaterialTheme.typography.bodyMedium, color = secondary) }
+                            Text(conditionLines.detail, style = MaterialTheme.typography.bodyMedium, color = secondary)
+                            conditionLines.awake?.let { Text(it, style = MaterialTheme.typography.bodyMedium, color = secondary) }
+                            Spacer(Modifier.height(2.dp))
+                            ConditionCommandBox(conditionLines.command)
+                        }
+                    }
+                } else whenText?.let { w ->
                     FactRow(SC.CreateCard.`when`) {
                         Text(listOf(w.rule, w.zone).joinToString(SC.separator), style = MaterialTheme.typography.bodyMedium)
                         w.firstRun?.let { Text(it, style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant) }
@@ -158,11 +178,18 @@ fun ScheduleEnvelopeCard(card: ScheduleCard, scheduleTitle: String?, ruleNow: Sc
                 Text(text.title, style = MaterialTheme.typography.bodyLarge.copy(fontWeight = FontWeight.SemiBold), color = warn)
             }
             Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                text.now?.let { now -> FactRow(SC.EnvelopeCard.now) { Text(now.text, style = MaterialTheme.typography.bodyMedium) } }
-                FactRow(SC.EnvelopeCard.asked) {
-                    val asked = text.asked
-                    Text(if (asked.lead.isNotEmpty() && asked.text.startsWith(asked.lead)) bold(asked.lead, asked.text.removePrefix(asked.lead))
-                        else AnnotatedString(asked.text), style = MaterialTheme.typography.bodyMedium)
+                if (card.envelope?.widens?.contains("PROBE_COMMAND") == true) {
+                    // A new probe command (condition-triggers board ⑥ ③): both commands verbatim, since changing the command is
+                    // changing what was approved.
+                    text.now?.let { now -> FactRow(SC.EnvelopeCard.now) { ConditionCommandBox(now.text) } }
+                    FactRow(SC.EnvelopeCard.asked) { ConditionCommandBox(text.asked.text) }
+                } else {
+                    text.now?.let { now -> FactRow(SC.EnvelopeCard.now) { Text(now.text, style = MaterialTheme.typography.bodyMedium) } }
+                    FactRow(SC.EnvelopeCard.asked) {
+                        val asked = text.asked
+                        Text(if (asked.lead.isNotEmpty() && asked.text.startsWith(asked.lead)) bold(asked.lead, asked.text.removePrefix(asked.lead))
+                            else AnnotatedString(asked.text), style = MaterialTheme.typography.bodyMedium)
+                    }
                 }
             }
             Text(text.note, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
@@ -203,22 +230,18 @@ fun ScheduleRecordLine(record: ScheduleChangeRecord, undo: (suspend () -> String
     }
 }
 
-/** A run's head (board 01 ⑦): "‹ Codex stable check", "Run of Nov 13", "Open · Codex agent · 4 min", and the strip that says it is a
- * scheduled run and not in the session list. */
+/** The run's timing and access in its conversation. */
 @Composable
-fun ScheduleRunStrip(schedule: ScheduleView, run: ScheduleRunView, sessionState: String?, sessionEngine: String?, openSchedule: () -> Unit) {
+fun ScheduleRunStrip(schedule: ScheduleView, run: ScheduleRunView, condition: ConditionView? = null) {
     val zone = java.util.TimeZone.getDefault().id
-    val head = ScheduleDisplay.runHeadText(sessionState, ScheduleDisplay.runAgentName(schedule.engine,
-        // The session's engine as the engine lists name it (OrbitKit `ProviderEngines.cliName`): "Claude Code".
-        sessionEngine?.let { io.orbitd.android.composer.ProviderEngines.ENGINE_CLI_NAMES[it] ?: it }), run.startedAt, run.endedAt, Instant.now())
     Column(Modifier.fillMaxWidth().padding(vertical = 6.dp).testTag("schedule-run-strip"), verticalArrangement = Arrangement.spacedBy(6.dp)) {
-        Row(Modifier.clickable(onClick = openSchedule).testTag("schedule-run-crumb"), verticalAlignment = Alignment.CenterVertically) {
-            Text("‹ ", color = MaterialTheme.colorScheme.primary, style = MaterialTheme.typography.bodyMedium)
-            Text(schedule.title, color = MaterialTheme.colorScheme.primary, style = MaterialTheme.typography.bodyMedium, maxLines = 1, overflow = TextOverflow.Ellipsis)
-        }
-        Text(ScheduleDisplay.capitalizedRunOf(run.plannedAt, zone), style = MaterialTheme.typography.titleLarge)
-        if (head.isNotEmpty()) Text(head, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
-        Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+        if (run.trigger == "CONDITION") {
+            // A run its condition started names the firing, not a planned time (condition-triggers board ⑤ ②).
+            Row(Modifier.testTag("schedule-run-fired"), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                Icon(painterResource(R.drawable.ic_gauge), null, Modifier.size(16.dp).padding(top = 2.dp), tint = MaterialTheme.colorScheme.primary)
+                Text(ConditionDisplay.runFiredText(run, condition, schedule.accessLevel, zone), style = MaterialTheme.typography.bodyMedium)
+            }
+        } else Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
             Icon(painterResource(R.drawable.ic_calendar), null, Modifier.size(16.dp).padding(top = 2.dp), tint = MaterialTheme.colorScheme.primary)
             Text(ScheduleDisplay.runStripText(run.plannedAt, run.startedAt, schedule.accessLevel, zone), style = MaterialTheme.typography.bodyMedium,
                 color = MaterialTheme.colorScheme.onSurfaceVariant)
@@ -288,9 +311,9 @@ sealed class ScheduleInsert {
     }
 }
 
-/** One [ScheduleInsert] drawn in its conversation. [sessionState] and [sessionEngine] are the session's own read, for a run's head. */
+/** One [ScheduleInsert] drawn in its conversation. */
 @Composable
-fun ScheduleConversationInsert(insert: ScheduleInsert, store: ScheduledStore, sessionId: String, sessionState: String?, sessionEngine: String?,
+fun ScheduleConversationInsert(insert: ScheduleInsert, store: ScheduledStore, sessionId: String,
     openSchedule: (String) -> Unit) {
     val state by store.state.collectAsState()
     when (insert) {
@@ -314,8 +337,12 @@ fun ScheduleConversationInsert(insert: ScheduleInsert, store: ScheduledStore, se
                 store.loadSessionNow(sessionId)
                 said
             }, open = { openSchedule(insert.record.scheduleId) })
-        is ScheduleInsert.RunStrip -> ScheduleRunStrip(insert.context.schedule, insert.context.run, sessionState, sessionEngine) {
-            openSchedule(insert.context.schedule.id)
+        is ScheduleInsert.RunStrip -> {
+            val schedule = insert.context.schedule
+            val conditionId = (schedule.rule as? ScheduleRule.When)?.conditionId ?: schedule.condition?.id
+            val fired = insert.context.run.trigger == "CONDITION"
+            LaunchedEffect(conditionId, fired) { if (fired) conditionId?.let(store::loadCondition) }
+            ScheduleRunStrip(schedule, insert.context.run, state.condition(conditionId))
         }
         is ScheduleInsert.RunReport -> ScheduleRunReport(insert.context.run, insert.context.detail?.findings.orEmpty())
     }

@@ -1,5 +1,6 @@
 docs/90-second-demo.md
 docs/README.md
+docs/agent-tools-guide.md
 docs/api-reference.md
 docs/architecture.md
 docs/article-durable-agent-work.md

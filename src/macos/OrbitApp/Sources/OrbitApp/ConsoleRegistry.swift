@@ -113,6 +113,14 @@ final class ConsoleRegistry {
     /// Words the next draft opened for a workspace starts with, by workspace id (a main checkout line's
     /// Open in a new session). Taken by that draft, once.
     var pendingDraftText: [String: String] = [:]
+    /// What the next draft shown for a workspace is handed, by workspace id: shared items to stage
+    /// in its composer (Share to Orbit). Taken by the draft on screen as it appears, once — not as a
+    /// draft model is made, since a view may make several and keep only the first.
+    var pendingDraftStaging: [String: (ConsoleModel) -> Void] = [:]
+
+    func takeDraftStaging(agentID: String) -> ((ConsoleModel) -> Void)? {
+        pendingDraftStaging.removeValue(forKey: agentID)
+    }
 
     func draftModel(for agent: Agent, defaultModel: String,
                     configuredProviders: [ConfiguredProvider] = [],
@@ -217,6 +225,14 @@ final class ConsoleRegistry {
         for model in models.values {
             guard let own = model.projectID, key == nil || PublicID.storageKey(own) == key else { continue }
             Task { await model.refreshRulerQuestions(force: true) }
+        }
+    }
+
+    /// A GitHub workspace's clone moved to another state: the cached consoles whose conversation made that workspace
+    /// read their detail again, which carries the state the server stored and, for a failure, why.
+    func cloneStateMoved(workspaceID: String) {
+        for model in models.values where WorkspaceClone.sameWorkspace(model.madeWorkspaceID, workspaceID) {
+            Task { await model.refreshMadeWorkspace() }
         }
     }
 

@@ -18,7 +18,8 @@
     ],
     "accessLevels": [
       "CHECK_ONLY",
-      "OPEN_PR"
+      "OPEN_PR",
+      "LAND"
     ],
     "changedBy": [
       "USER",
@@ -33,7 +34,8 @@
     "runTriggers": [
       "SCHEDULED",
       "CATCH_UP",
-      "MANUAL"
+      "MANUAL",
+      "CONDITION"
     ],
     "runStates": [
       "QUEUED",
@@ -57,7 +59,8 @@
       "APPROVAL_TIMEOUT",
       "RUN_LIMIT",
       "CANCELLED_BY_OWNER",
-      "OVER_BUDGET"
+      "OVER_BUDGET",
+      "LANDING_FAILED"
     ],
     "heldReasons": [
       "WORKSPACE_NOT_OWNED",
@@ -69,13 +72,15 @@
       "ACCESS_NOT_ENFORCEABLE",
       "MODE_WIDER_THAN_ACCOUNT_DEFAULT",
       "NO_REPOSITORY",
-      "SESSION_REFUSED"
+      "SESSION_REFUSED",
+      "WORKTREE_DISABLED"
     ],
     "envelopeParts": [
       "WORKSPACE",
       "ACCESS_LEVEL",
       "RUNS_PER_WEEK",
-      "RUN_LIMIT"
+      "RUN_LIMIT",
+      "PROBE_COMMAND"
     ],
     "requestKinds": [
       "CREATE",
@@ -150,7 +155,6 @@
       "showPastRuns": "Show past runs"
     },
     "groups": {
-      "NEEDS_YOU": "Needs you",
       "TODAY": "Today",
       "TOMORROW": "Tomorrow",
       "LATER": "Later",
@@ -234,6 +238,11 @@
         "label": "Open a PR",
         "detail": "edits in its own worktree and opens a PR. It can't merge or deploy.",
         "brief": "edits in its own worktree and opens a PR. It can't merge or deploy."
+      },
+      "LAND": {
+        "label": "Edit and land on main",
+        "detail": "edits in its own worktree, then Orbit merges it into main after the run. It can't release or deploy.",
+        "brief": "edits in its own worktree, then Orbit merges it into main after the run. It can't release or deploy."
       }
     },
     "costs": {
@@ -284,13 +293,15 @@
       "APPROVAL_TIMEOUT": "waited 2 hours for an approval with no answer",
       "RUN_LIMIT": "ran past its run limit",
       "CANCELLED_BY_OWNER": "was stopped by you",
-      "OVER_BUDGET": "was over what you allowed this week"
+      "OVER_BUDGET": "was over what you allowed this week",
+      "LANDING_FAILED": "could not land on main"
     },
     "runReasonTexts": {
       "OVER_BUDGET": "Not started: it had already started as many runs in the past 7 days as you allowed."
     },
     "failureReasonsWithSummary": {
-      "REPORTED_FAILED": "reported a failure: {summary}"
+      "REPORTED_FAILED": "reported a failure: {summary}",
+      "LANDING_FAILED": "could not land on main: {summary}"
     },
     "heldReasons": {
       "WORKSPACE_NOT_OWNED": {
@@ -332,6 +343,10 @@
       "SESSION_REFUSED": {
         "clause": "its run's session could not be opened",
         "until": "that is fixed"
+      },
+      "WORKTREE_DISABLED": {
+        "clause": "the workspace {workspace} has worktrees disabled",
+        "until": "worktrees are enabled"
       }
     },
     "heldWhere": " in workspace {workspace}",
@@ -345,7 +360,8 @@
       "ACCESS_NOT_ENFORCEABLE": "access not enforceable",
       "MODE_WIDER_THAN_ACCOUNT_DEFAULT": "wider than your default mode",
       "NO_REPOSITORY": "no repository",
-      "SESSION_REFUSED": "session refused"
+      "SESSION_REFUSED": "session refused",
+      "WORKTREE_DISABLED": "worktrees disabled"
     },
     "endedReasons": {
       "DELETED": "deleted",
@@ -419,7 +435,8 @@
         "endAt": "Ends",
         "accessLevel": "Access",
         "runLimitMinutes": "Run limit",
-        "workspaceId": "Workspace"
+        "workspaceId": "Workspace",
+        "readBack": "Read-back"
       },
       "change": "{field} {before} → {after}",
       "changeTo": "{field} → {after}",
@@ -458,13 +475,15 @@
         "ACCESS_LEVEL": "Let {title} open PRs?",
         "RUNS_PER_WEEK": "Let {title} run more often?",
         "RUN_LIMIT": "Let {title} run longer?",
+        "PROBE_COMMAND": "Let {title} check with a new command?",
         "WORKSPACE": "Let {title} run in {workspace}?"
       },
       "now": "Now",
       "asked": "Asked",
       "accessJoin": " — ",
       "appliesFromNextRun": "Applies from the next run.",
-      "checkedEachRun": "Each run checks this again before it starts."
+      "checkedEachRun": "Each run checks this again before it starts.",
+      "landTitle": "Let {title} land on main?"
     },
     "sessionPreview": {
       "create": "Waiting for you to confirm",
@@ -513,10 +532,14 @@
     "runSession": {
       "crumb": "Scheduled",
       "runOf": "run of {date}",
-      "strip": "Scheduled run · planned {planned}, started {started} · access {access} · this session is not in your session list",
+      "strip": "Scheduled run · planned {planned}, started {started} · access {access}",
       "reported": "Reported: {state}",
       "agent": "{engine} agent",
       "duration": "{minutes} min"
+    },
+    "landing": {
+      "landed": "Landed on main: {sha}.",
+      "failed": "Could not land on main: {reason}"
     }
   },
   "boardPhrases": {
@@ -664,6 +687,10 @@
         "accessLevel": "CHECK_ONLY",
         "text": "Check only · reads and reports, edits nothing",
         "board": "1/2 ④, 2/2 ① May"
+      },
+      {
+        "accessLevel": "LAND",
+        "text": "Edit and land on main · edits in its own worktree, then Orbit merges it into main after the run. It can't release or deploy."
       }
     ],
     "envelope": [

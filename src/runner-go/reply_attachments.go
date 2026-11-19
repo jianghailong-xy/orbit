@@ -2,6 +2,7 @@ package main
 
 import (
 	"context"
+	"fmt"
 	"os"
 	"path/filepath"
 	"strings"
@@ -99,7 +100,9 @@ func missingReplyFilesNote(paths []string) string {
 // replyAttachmentIDs remembers what a path uploaded to, for the life of one session run. A flush
 // that fails is retried with its batch restored (flushWithContext), and an agent may link the same
 // mock in two replies; without this, each attempt uploads another copy of the file and mints
-// another id for the same bytes.
+// another id for the same bytes. A path is remembered with the size and modification time of the
+// file it was: an agent that redraws a mock in place and links it again in a later turn of the same
+// warm run has written new bytes, and must not get the first drawing's id back.
 type replyAttachmentIDs struct {
 	mu  sync.Mutex
 	ids map[string]string
@@ -111,8 +114,9 @@ func newReplyAttachmentIDs() *replyAttachmentIDs {
 
 func (a *replyAttachmentIDs) uploader(t *Transport, sessionID string) artifactUploader {
 	return func(ctx context.Context, file *os.File, path, mimeType string) (string, error) {
+		key := replyFileVersion(file, path)
 		a.mu.Lock()
-		id, cached := a.ids[path]
+		id, cached := a.ids[key]
 		a.mu.Unlock()
 		if cached {
 			return id, nil
@@ -122,8 +126,18 @@ func (a *replyAttachmentIDs) uploader(t *Transport, sessionID string) artifactUp
 			return "", err
 		}
 		a.mu.Lock()
-		a.ids[path] = id
+		a.ids[key] = id
 		a.mu.Unlock()
 		return id, nil
 	}
+}
+
+// replyFileVersion names the bytes an opened reply file holds: its path, with the size and
+// modification time of the file that is open. Without a stat, the path alone.
+func replyFileVersion(file *os.File, path string) string {
+	info, err := file.Stat()
+	if err != nil {
+		return path
+	}
+	return fmt.Sprintf("%s\x00%d\x00%d", path, info.Size(), info.ModTime().UnixNano())
 }

@@ -148,7 +148,7 @@ describe('Machines in the account menu', () => {
     const labels = [...document.querySelectorAll<HTMLElement>('[role="menu"].tp-account-menu > [role="menuitem"]')]
       .filter((row) => !row.classList.contains('tp-account-profile'))
       .map((row) => row.textContent);
-    expect(labels).toEqual(['AppearanceSystem', 'Machines2 of 3 online', 'Settings', 'Log out']);
+    expect(labels).toEqual(['AppearanceSystem', 'Machines2 of 3 online', 'Settings', 'Help center', 'Log out']);
     expect(accountRow('Machines')!.getAttribute('aria-haspopup')).toBe('menu');
   });
 
@@ -178,8 +178,8 @@ describe('Machines in the account menu', () => {
   });
 
   it.each([
-    ['available', 'true', 'orbit-managed'],
-    ['sleeping', 'false', 'orbit-managedAsleep'],
+    ['available', 'true', 'Orbit Cloud'],
+    ['sleeping', 'false', 'Orbit CloudAsleep'],
   ])('shows the managed runner %s by its own state, never Ready', async (name, dot, text) => {
     managed = name;
     const id = managedState(name).runnerId!;
@@ -189,9 +189,45 @@ describe('Machines in the account menu', () => {
     await openAccountMenu();
     await press(accountRow('Machines'));
     await act(async () => {
-      await vi.waitFor(() => expect(accountRow('orbit-managed')?.textContent).toBe(text), { timeout: 5_000, interval: 20 });
+      await vi.waitFor(() => expect(accountRow('Orbit Cloud')?.textContent).toBe(text), { timeout: 5_000, interval: 20 });
     });
-    expect(accountRow('orbit-managed')!.querySelector('.tp-account-machine-dot')!.getAttribute('data-online')).toBe(dot);
+    expect(accountRow('Orbit Cloud')!.querySelector('.tp-account-machine-dot')!.getAttribute('data-online')).toBe(dot);
+  });
+
+  it('pins Orbit Cloud first, marked, with a line before your own machines in their order', async () => {
+    runners = [
+      { id: 'r1', name: 'mbp', displayName: 'MacBook Pro', online: true },
+      { id: 'r2', name: 'orbit-managed', online: true, managed: true },
+      { id: 'r3', name: 'old-linux', online: false },
+    ];
+    serve();
+    await visit('/projects');
+    await openAccountMenu();
+    await press(accountRow('Machines'));
+    await act(async () => {
+      await vi.waitFor(() => expect(accountRow('Orbit Cloud')).toBeDefined(), { timeout: 5_000, interval: 20 });
+    });
+
+    const level = accountRow('Orbit Cloud')!.closest('[role="menu"]')!;
+    const rows = [...level.children].map((row) =>
+      row.getAttribute('role') === 'separator' ? '—' : (row.textContent ?? ''),
+    );
+    expect(rows).toEqual(['Orbit Cloud', '—', 'MacBook Pro', 'old-linuxOffline', '—', 'Add a machine']);
+    expect(accountRow('Orbit Cloud')!.querySelector('.tp-account-machine-cloud .anticon-cloud')).not.toBeNull();
+    expect(accountRow('MacBook Pro')!.querySelector('.tp-account-machine-cloud')).toBeNull();
+  });
+
+  it('draws no line under Orbit Cloud when it is the only machine', async () => {
+    runners = [{ id: 'r2', name: 'orbit-managed', online: true, managed: true }];
+    serve();
+    await visit('/projects');
+    await openAccountMenu();
+    await press(accountRow('Machines'));
+    await act(async () => {
+      await vi.waitFor(() => expect(accountRow('Orbit Cloud')).toBeDefined(), { timeout: 5_000, interval: 20 });
+    });
+    const level = accountRow('Orbit Cloud')!.closest('[role="menu"]')!;
+    expect(level.querySelectorAll('[role="separator"]').length).toBe(1);
   });
 
   it('reads All online when none is down', async () => {

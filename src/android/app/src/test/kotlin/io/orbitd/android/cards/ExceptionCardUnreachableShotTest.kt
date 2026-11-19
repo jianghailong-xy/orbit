@@ -10,18 +10,24 @@ import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
+import androidx.compose.runtime.Composable
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.test.assertTextEquals
+import androidx.compose.ui.test.hasText
 import androidx.compose.ui.test.junit4.createAndroidComposeRule
 import androidx.compose.ui.test.onNodeWithTag
+import androidx.compose.ui.test.performClick
 import androidx.compose.ui.unit.dp
 import io.orbitd.android.MainActivity
 import io.orbitd.android.TestOrbitApplication
 import io.orbitd.android.core.cards.CardActionState
 import io.orbitd.android.core.cards.CardCatalog
 import io.orbitd.android.core.cards.ExceptionCards
+import io.orbitd.android.projects.CoordinatorChange
 import io.orbitd.android.ui.OrbitTheme
 import java.io.File
+import java.time.Duration
+import java.time.Instant
 import kotlinx.serialization.json.*
 import org.junit.Rule
 import org.junit.Test
@@ -31,16 +37,18 @@ import org.robolectric.annotation.Config
 import org.robolectric.annotation.GraphicsMode
 
 /**
- * The 2026-11-15 card as the conversation draws it: an escalated landing conflict whose coordinator could not be reached. Its heading
- * names that, and its sentence offers only what the owner can do; with the coordinator reachable the card is what it was. Each frame
- * is written as `<scene>.png` under `src/android/build/evidence/exception-unreachable-android/`.
+ * The owner exception card organised around "Who fixes it?" (board docs/mocks/owner-exception-who-fixes ⑤, Android proposal) as the
+ * conversation draws it: board ②'s escalated merge conflict in Checkout v2 — 9 files, waiting 3h 1m, 2h 56m of it with the
+ * coordinator — (a) with its coordinator's workspace mac-mini disabled, and (b) with the coordinator reachable. Each frame is written as
+ * `<scene>.png` under `src/android/build/evidence/exception-unreachable-android/`, and as `android-a.png` / `android-b.png` into the
+ * directory `ORBIT_SHOTS_UPLOADS` names when it is set.
  */
 @RunWith(RobolectricTestRunner::class)
-@Config(sdk = [29], application = TestOrbitApplication::class, qualifiers = "w411dp-h891dp-xhdpi")
+@Config(sdk = [29], application = TestOrbitApplication::class, qualifiers = "w411dp-h1180dp-xhdpi")
 @GraphicsMode(GraphicsMode.Mode.NATIVE)
 class ExceptionCardUnreachableShotTest {
     @get:Rule val compose = createAndroidComposeRule<MainActivity>()
-    private val key = "item:01a1de3b-4e36-7479-9f5b-c34f709d7551"
+    private val key = "item:35aItem0000000000000001"
 
     private val output: File by lazy {
         val root = generateSequence(File(System.getProperty("user.dir"))) { it.parentFile }
@@ -48,61 +56,160 @@ class ExceptionCardUnreachableShotTest {
         File(root, "src/android/build/evidence/exception-unreachable-android").also { it.mkdirs() }
     }
 
+    private val now = Instant.now()
+    private fun ago(minutes: Long) = now.minus(Duration.ofMinutes(minutes)).toString()
+
     private fun row(unreachable: Boolean) = buildJsonObject {
-        put("itemId", "01a1de3b-4e36-7479-9f5b-c34f709d7551"); put("kind", "INTEGRATION_CONFLICT")
-        put("title", "Merge conflict: Managed runner entry on Android: Machines & models section, confirmation, machine row")
-        put("detailLine", "the merge stopped on a conflict"); put("assignee", "OWNER"); put("assigneeReason", "ESCALATED")
-        put("waitingSince", "2026-11-15T08:03:11.030Z"); put("escalatedAt", "2026-11-15T10:59:29.158Z")
-        put("taskId", "t1"); put("sessionId", "s9"); put("promotionId", JsonNull); put("fuseEpisodeId", JsonNull)
-        put("landingSessionId", "L1"); put("integrationJobId", JsonNull)
-        putJsonObject("delivery") { put("state", "NOT_REQUIRED"); put("sessionId", JsonNull); put("at", JsonNull) }
+        put("itemId", "35aItem0000000000000001"); put("kind", "INTEGRATION_CONFLICT")
+        put("title", "Merge conflict: Retry failed webhook deliveries"); put("detailLine", "9 files conflict with project/35aK2xQm")
+        put("assignee", "OWNER"); put("assigneeReason", "ESCALATED")
+        put("waitingSince", ago(181)); put("escalatedAt", ago(5))
+        put("taskId", "35aTask00000000000001"); put("sessionId", "35aSession000000000001"); put("promotionId", JsonNull); put("fuseEpisodeId", JsonNull)
+        put("landingSessionId", "35aLanding00000000001"); put("integrationJobId", JsonNull)
+        putJsonObject("delivery") { put("state", "DELIVERED"); put("sessionId", "35aCoord0000000000001"); put("at", ago(180)) }
         putJsonArray("actions") {
-            (if (unreachable) listOf("OPEN_TASK_SESSION", "CANCEL_TASK", "OPEN_LANDING")
-            else listOf("ASK_COORDINATOR_AGAIN", "OPEN_TASK_SESSION", "CANCEL_TASK", "OPEN_LANDING")).forEach { add(it) }
+            (if (unreachable) listOf("OPEN_TASK_SESSION", "OPEN_LANDING", "CANCEL_TASK")
+            else listOf("ASK_COORDINATOR_AGAIN", "OPEN_TASK_SESSION", "OPEN_LANDING", "CANCEL_TASK")).forEach { add(it) }
         }
-        put("requiredAction", if (unreachable)
-            "This task cannot reach the project branch until its merge conflict is repaired — fix the task branch."
-        else "This task cannot reach the project branch until its merge conflict is repaired — fix the task branch or ask the coordinator to do it.")
-        put("question", JsonNull); put("facts", JsonNull); put("lease", JsonNull)
+        put("requiredAction", "This task cannot reach the project branch until its merge conflict is repaired — fix the task branch.")
+        put("question", JsonNull); put("lease", JsonNull)
+        putJsonObject("facts") {
+            putJsonObject("task") { put("id", "35aTask00000000000001"); put("title", "Retry failed webhook deliveries") }
+            put("targetRef", "refs/heads/project/35aK2xQm8LrT0vHcE1pZq"); put("targetSha", "9f3c2e1aa0b1c2d3e4f5a6b7c8d9e0f1a2b3c4d5")
+            putJsonArray("files") {
+                listOf("src/webhooks/sender.ts", "src/webhooks/sender.test.ts", "src/webhooks/retry-policy.ts", "src/queue/backoff.ts",
+                    "src/queue/backoff.test.ts", "src/config/defaults.ts", "docs/webhooks.md", "package.json", "package-lock.json").forEach { add(it) }
+            }
+            put("nothingLanded", false); put("check", JsonNull); put("branchUnchanged", false); put("errorCode", JsonNull); put("failure", JsonNull)
+        }
+        putJsonObject("chat") {
+            put("sessionId", "35aCoord0000000000001"); put("stage", "WITH_OWNER"); put("refusal", if (unreachable) "COORDINATOR_UNAVAILABLE" else null)
+        }
         put("coordinatorUnreachable", unreachable)
     }
 
-    private fun show(unreachable: Boolean) {
-        val card = CardCatalog.project("s1", "p1", mapOf("project" to buildJsonObject { put("id", "p1") },
-            "openItems" to buildJsonObject { putJsonArray("needsYou") { add(row(unreachable)) }; putJsonArray("withCoordinator") {} })).single()
+    /** The coordinator as board (a) has it: a LIVE conversation whose workspace, mac-mini, the workspace list says is disabled. */
+    private val disabledMacMini = object : CoordinatorDoors {
+        override suspend fun status(projectId: String) = buildJsonObject {
+            put("projectId", projectId); put("state", "LIVE")
+            putJsonObject("coordination") {
+                put("sessionId", "35aCoord0000000000001")
+                putJsonObject("session") { put("id", "35aCoord0000000000001"); put("lifecycleState", "OPEN") }
+                put("workspaceId", "35aWorkspace0000000001"); put("workspaceName", "mac-mini")
+            }
+            putJsonObject("openability") { put("canOpen", true); put("refusalDetail", JsonNull) }
+        }
+        override suspend fun workspaces() = listOf(buildJsonObject {
+            put("id", "35aWorkspace0000000001"); put("name", "mac-mini"); put("enabled", false); put("runnerId", "r1")
+        })
+        override suspend fun replace(projectId: String, revision: String, workspaceId: String?) = Unit
+        @Composable override fun ChangeSheet(currentWorkspaceId: String?, close: () -> Unit, pick: (CoordinatorChange.Row) -> Unit) = Unit
+    }
+
+    /** A project-branch-to-main check that timed out after 4h, as the server serves it: `branchLine` is the promotion's sentence. */
+    private fun promotionRow() = buildJsonObject {
+        put("itemId", "35aItem0000000000000001"); put("kind", "INTEGRATION_CHECK_FAILED")
+        put("title", "Checks failed on the combined tree: merging the project branch into main"); put("detailLine", "the merge check timed out")
+        put("assignee", "OWNER"); put("assigneeReason", "ESCALATED")
+        put("waitingSince", ago(181)); put("escalatedAt", ago(5))
+        put("taskId", JsonNull); put("sessionId", JsonNull); put("promotionId", "35aPromo0000000000001"); put("fuseEpisodeId", JsonNull)
+        put("landingSessionId", "35aLanding00000000001"); put("integrationJobId", JsonNull)
+        putJsonObject("delivery") { put("state", "DELIVERED"); put("sessionId", "35aCoord0000000000001"); put("at", ago(180)) }
+        putJsonArray("actions") { listOf("ASK_COORDINATOR_AGAIN", "OPEN_LANDING").forEach { add(it) } }
+        put("requiredAction", "The project branch cannot reach main until this check finishes — re-run it with a reason or ask the coordinator to fix it.")
+        put("question", JsonNull); put("lease", JsonNull)
+        putJsonObject("facts") {
+            put("task", JsonNull); put("targetRef", JsonNull); put("targetSha", JsonNull); putJsonArray("files") {}
+            put("nothingLanded", false)
+            putJsonObject("check") {
+                put("name", "MERGE_CHECK"); put("command", "npm run test -w @orbit/apiserver"); put("expectedExitCode", 0); put("exitCode", JsonNull)
+                put("timedOut", true); put("durationMs", 14_400_000); put("outputTail", "")
+            }
+            put("branchUnchanged", true); put("branchLine", PROJECT_BRANCH_LINE); put("errorCode", JsonNull); put("failure", JsonNull)
+        }
+        putJsonObject("chat") { put("sessionId", "35aCoord0000000000001"); put("stage", "WITH_OWNER"); put("refusal", JsonNull) }
+        put("coordinatorUnreachable", false)
+    }
+
+    private fun show(unreachable: Boolean, item: JsonObject = row(unreachable)) {
+        val project = buildJsonObject { put("id", "p1"); put("title", "Checkout v2"); put("exceptionEscalationSeconds", 7200) }
+        val card = CardCatalog.project("s1", "p1", mapOf("project" to project,
+            "openItems" to buildJsonObject { putJsonArray("needsYou") { add(item) }; putJsonArray("withCoordinator") {} })).single()
         compose.runOnUiThread { compose.activity.setContent { OrbitTheme(darkTheme = false) {
             Surface(Modifier.fillMaxSize(), color = MaterialTheme.colorScheme.background) {
                 Column(Modifier.verticalScroll(rememberScrollState()).padding(12.dp)) {
-                    ExceptionCard(card, fresh = true, result = CardActionState(), mergeCard = null, open = {}, discuss = null,
-                        review = {}, main = "main") { _, _ -> }
+                    ExceptionCard(card, fresh = true, result = CardActionState(), mergeCard = null, open = {}, discuss = {},
+                        review = {}, main = "main", projectName = project["title"]?.jsonPrimitive?.content,
+                        escalationSeconds = project["exceptionEscalationSeconds"]?.jsonPrimitive?.longOrNull, coordinator = disabledMacMini) { _, _ -> }
                 }
             }
         } } }
         compose.waitForIdle()
     }
 
-    private fun shot(name: String) {
+    private fun shot(name: String, upload: String) {
         compose.waitForIdle()
         val decor = compose.activity.window.decorView
         val bitmap = Bitmap.createBitmap(decor.width, decor.height, Bitmap.Config.ARGB_8888)
         decor.draw(Canvas(bitmap))
         File(output, "$name.png").outputStream().use { bitmap.compress(Bitmap.CompressFormat.PNG, 100, it) }
+        System.getenv("ORBIT_SHOTS_UPLOADS")?.takeIf { it.isNotBlank() }?.let { dir ->
+            File(dir).mkdirs()
+            File(dir, upload).outputStream().use { bitmap.compress(Bitmap.CompressFormat.PNG, 100, it) }
+        }
         bitmap.recycle()
     }
 
+    private fun assertText(tag: String, text: String) = compose.onNodeWithTag(tag, useUnmergedTree = true).assertTextEquals(text)
+
     @Test fun unreachableCoordinator() {
         show(unreachable = true)
-        compose.onNodeWithTag("$key:heading", useUnmergedTree = true).assertTextEquals(ExceptionCards.escalatedUnreachableHeading)
-        compose.onNodeWithTag("$key:required", useUnmergedTree = true)
-            .assertTextEquals("This task cannot reach the project branch until its merge conflict is repaired — fix the task branch.")
+        compose.waitUntil(5_000) { compose.onAllNodes(hasText("Enable mac-mini")).fetchSemanticsNodes().isNotEmpty() }
+        assertText("$key:heading", ExceptionCards.escalatedUnreachableHeading)
+        assertText("$key:clock", "waiting 3h 1m")
+        assertText("$key:subline", "Merge conflict · Retry failed webhook deliveries → Checkout v2")
+        assertText("$key:who:status", "Its workspace mac-mini is disabled, so it can’t take messages.")
+        assertText("$key:who:note", ExceptionCards.askAgainOnceBack)
+        compose.onNodeWithTag("$key:who:FIX").assertExists()
+        compose.onNodeWithTag("$key:who:CHANGE_WORKSPACE").assertExists()
+        // D1: no Ask again until it is back. D2: no chat at all.
         compose.onNodeWithTag("$key:RETURN_COORDINATOR").assertDoesNotExist()
-        shot("unreachable")
+        compose.onNodeWithTag("$key:who:CHAT_FIRST").assertDoesNotExist()
+        compose.onNode(hasText("Chat about this")).assertDoesNotExist()
+        // D3: no footer; no requiredAction paragraph.
+        compose.onNodeWithTag("$key:owner").assertDoesNotExist()
+        compose.onNodeWithTag("$key:required").assertDoesNotExist()
+        assertText("$key:closes", "✓ ${ExceptionCards.closesByItself}")
+        assertText("$key:details", "› Details · 9 files · Open landing")
+        shot("unreachable", "android-a.png")
     }
 
     @Test fun reachableCoordinator() {
         show(unreachable = false)
-        compose.onNodeWithTag("$key:heading", useUnmergedTree = true).assertTextEquals("Now yours — no one acted on this for 2h 56m")
+        assertText("$key:heading", "Now yours — the coordinator didn’t get to it")
+        assertText("$key:clock", "waiting 3h 1m")
+        assertText("$key:who:status", "Reachable. It had this for 2h 56m and didn’t get to it.")
         compose.onNodeWithTag("$key:RETURN_COORDINATOR").assertExists()
-        shot("reachable")
+        compose.onNodeWithTag("$key:who:CHAT_FIRST").assertExists()
+        compose.onNode(hasText("Chat about this")).assertDoesNotExist()
+        assertText("$key:who:note", "It goes back to the coordinator with a fresh 2h clock.")
+        compose.onNodeWithTag("$key:MARK_HANDLED").assertExists()
+        compose.onNodeWithTag("$key:CANCEL_TASK").assertExists()
+        shot("reachable", "android-b.png")
+    }
+
+    /** A project-branch promotion check's Details: the Branch row says the project branch did not move and nothing reached main. */
+    @Test fun promotionCheckBranchLine() {
+        show(unreachable = false, item = promotionRow())
+        compose.onNodeWithTag("$key:details").performClick()
+        compose.waitForIdle()
+        compose.onNodeWithTag("$key:details-body").assertExists()
+        compose.onNode(hasText(PROJECT_BRANCH_LINE)).assertExists()
+        compose.onNode(hasText(ExceptionCards.branchUnchanged)).assertDoesNotExist()
+        shot("promotion-branch", "android-promotion-branch.png")
+    }
+
+    private companion object {
+        const val PROJECT_BRANCH_LINE = "unchanged — the project branch did not move, and nothing reached main"
     }
 }

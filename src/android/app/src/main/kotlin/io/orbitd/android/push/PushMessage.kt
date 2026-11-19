@@ -35,6 +35,9 @@ data class PushPayload(
     /** `schedule`: the schedule an alert is about, and which of its alerts it is (a finding, a failure, a hold...). */
     val scheduleId: String? = null,
     val scheduleKind: String? = null,
+    /** `condition`: the condition that cannot be read (docs/condition-triggers-design.md §5.3); its Waiting on you item is
+     * [ownerRequestId] when it filed one. */
+    val conditionId: String? = null,
 ) {
     val isOwnerItem get() = kind in ownerItemKinds
     val isReminder get() = kind == "approval" || isOwnerItem
@@ -55,6 +58,8 @@ data class PushPayload(
         kind == "watch-matched" -> watchId?.let { "orbit://watch/$it" }
         // A scheduled task's alert: its run's session when it names one, else the schedule's detail on the Scheduled page.
         kind == SCHEDULE -> sessionId?.let { "orbit-session:$it" } ?: scheduleId?.let { "orbit://schedule/$it" }
+        // A condition that cannot be read: the conversation it came from, which draws its card, else the card in Waiting on you.
+        kind == CONDITION -> sessionId?.let { "orbit-session:$it" } ?: ownerRequestId?.let { "orbit://owner-request/$it" }
         // About a machine: its sign-in lapsed, its Claude connection to Anthropic is in a region Anthropic does not offer Claude in,
         // or it drains for an update with the owner's work waiting on it.
         kind == "engine-signed-out" || kind == "claude-region-blocked" || kind == "runner-updating" -> runnerId?.let { "orbit://runner/$it" }
@@ -81,6 +86,8 @@ data class PushPayload(
         const val CROSSING_REQUEST = "crossing-request"
         const val CONFIRMATION_RAISED = "confirmation-raised"
         const val SCHEDULE = "schedule"
+        /** A condition that cannot be read (apiserver `notifyCondition`). A condition that fires rings as its run's `schedule` push. */
+        const val CONDITION = "condition"
     }
 }
 
@@ -100,7 +107,7 @@ data class PushMessage(
             "engine-signed-out", "confirmation-problems", "watch-matched", "wiki-review-mode-manual",
             "wiki-review-mode-tiered", "wiki-maintenance-failing", "loop-missed", "wakeup-dropped", "claude-region-blocked",
             "runner-updating", PushPayload.OWNER_REQUEST, PushPayload.TERMINAL_LOGIN, PushPayload.CROSSING_REQUEST,
-            PushPayload.CONFIRMATION_RAISED, PushPayload.SCHEDULE)
+            PushPayload.CONFIRMATION_RAISED, PushPayload.SCHEDULE, PushPayload.CONDITION)
 
         /** No unknown version, malformed identifier, or partial route can become a notification. */
         fun parse(data: Map<String, String>): PushMessage? = try {
@@ -135,7 +142,7 @@ data class PushMessage(
                 id("taskID"), id("recordID"), id("runnerID"), string("engine"), id("watchID"),
                 number("generation"), id("wikiSpaceID"), ownerRequestId = id("ownerRequestID"), ownerRequestKind = string("ownerRequestKind"),
                 terminalLoginId = id("terminalLoginID"), handoffId = id("handoffID"), scheduleId = id("scheduleID"),
-                scheduleKind = string("scheduleKind"))
+                scheduleKind = string("scheduleKind"), conditionId = id("conditionID"))
             if (type == PushType.ALERT) {
                 require(!payload.title.isNullOrBlank() && payload.body != null && payload.kind in kinds)
                 when (payload.kind) {
@@ -153,6 +160,8 @@ data class PushMessage(
                     PushPayload.CONFIRMATION_RAISED -> require(payload.sessionId != null && payload.taskId != null && payload.recordId != null)
                     // A scheduled task's alert names its schedule; the run's session only when it opens one.
                     PushPayload.SCHEDULE -> require(payload.scheduleId != null)
+                    // A condition that cannot be read names the condition; its session and item only when it has them.
+                    PushPayload.CONDITION -> require(payload.conditionId != null)
                     "confirmation-problems" -> require(payload.sessionId != null && payload.taskId != null && payload.recordId != null)
                     // A confirmed region flip is about its runner's Claude Code, as a sign-out is about its runner's engine.
                     "engine-signed-out", "claude-region-blocked" -> require(payload.runnerId != null && !payload.engine.isNullOrBlank())

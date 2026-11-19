@@ -12,6 +12,7 @@ import {
 } from '@orbit/shared';
 import { api } from '../api';
 import { streamPoll } from './listBudget';
+import { SCHEDULED_RUNS_FOLDER } from './sessionFolders';
 
 /**
  * Scheduled tasks on the web (docs/scheduled-tasks-design.md §9.2): the REST reads the Scheduled page, the inspector,
@@ -36,6 +37,7 @@ export function scheduleClock(at: string | Date, timezone: string): string {
 export const schedulesQuery = (workspaceId?: string | null, state?: 'all') =>
   queryOptions({
     queryKey: ['schedules', 'list', workspaceId ?? 'any', state ?? 'open'] as const,
+    meta: { entities: ['session', 'workspace'] },
     queryFn: () => {
       const params = new URLSearchParams();
       if (workspaceId) params.set('workspaceId', workspaceId);
@@ -49,6 +51,7 @@ export const schedulesQuery = (workspaceId?: string | null, state?: 'all') =>
 export const scheduleDetailQuery = (id: string) =>
   queryOptions({
     queryKey: ['schedules', 'detail', id] as const,
+    meta: { entities: ['session', 'workspace'] },
     queryFn: () => api<ScheduleDetailResponse>(`/schedules/${encodeURIComponent(id)}`),
     refetchInterval: streamPoll(30_000),
   });
@@ -56,6 +59,7 @@ export const scheduleDetailQuery = (id: string) =>
 export const scheduleDraftsQuery = () =>
   queryOptions({
     queryKey: ['schedules', 'drafts'] as const,
+    meta: { entities: ['session'] },
     queryFn: () => api<ScheduleDraftsResponse>('/schedules/drafts'),
     refetchInterval: streamPoll(15_000),
   });
@@ -63,26 +67,34 @@ export const scheduleDraftsQuery = () =>
 export const scheduleRequestQuery = (id: string) =>
   queryOptions({
     queryKey: ['schedules', 'request', id] as const,
+    meta: { entities: ['session'] },
     queryFn: () => api<ScheduleCard>(`/schedule-requests/${encodeURIComponent(id)}`),
   });
 
 export const sessionScheduleCardsQuery = (sessionId: string) =>
   queryOptions({
     queryKey: ['schedules', 'session', sessionId] as const,
+    meta: { entities: ['session'] },
     queryFn: () => api<SessionScheduleCardsResponse>(`/sessions/${encodeURIComponent(sessionId)}/schedule-cards`),
     refetchInterval: streamPoll(20_000),
   });
 
-/** The count beside Scheduled in the drawer: the failing and the held (§9.2). */
+/** The count beside Scheduled in the drawer: the held, and the failing with no run under way (§9.2). */
 export function useScheduledNeedsCount(): number {
   const list = useQuery(schedulesQuery());
-  return useMemo(() => (list.data?.schedules ?? []).filter(scheduleNeedsYou).length, [list.data]);
+  return useMemo(() => {
+    const runs = list.data?.runs ?? [];
+    return (list.data?.schedules ?? []).filter((s) => scheduleNeedsYou(s, runs)).length;
+  }, [list.data]);
 }
 
-/** A run's session, reached from the schedule's history: run sessions are in no list, only here (§7.4). */
-export function scheduleRunSessionPath(run: Pick<ScheduleRunView, 'sessionId' | 'scheduleId' | 'id'>): string | null {
+/**
+ * A run's session, reached from the schedule's history: the ordinary session page, with its workspace's list on the
+ * Scheduled runs folder, the one list that holds it (owner 2026-11-19).
+ */
+export function scheduleRunSessionPath(run: Pick<ScheduleRunView, 'sessionId'>): string | null {
   if (!run.sessionId) return null;
-  return `/sessions/${encodeURIComponent(run.sessionId)}?schedule=${encodeURIComponent(run.scheduleId)}&run=${encodeURIComponent(run.id)}`;
+  return `/sessions/${encodeURIComponent(run.sessionId)}?folder=${SCHEDULED_RUNS_FOLDER}`;
 }
 
 /** The Scheduled page with one schedule open in the inspector. */

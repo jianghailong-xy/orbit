@@ -15,6 +15,11 @@ final class ScheduledModel {
     /// The runs of the page's window the list carried (each under way, and the ended ones of the last 24 hours);
     /// nil from a server that sends none, where each schedule's detail read stands in.
     private(set) var listRuns: [ScheduleRunView]?
+    /// The OPEN tasks waiting for their startWhen condition: the "Waiting for a condition" group's task rows, or Needs
+    /// you when one cannot be read (docs/condition-triggers-design.md §9).
+    private(set) var waitingTasks: [ScheduleWaitingTask] = []
+    /// Conditions read on their own (the inspector's Condition block, a run's firing, a Waiting on you card), by id.
+    private(set) var conditions: [String: ConditionView] = [:]
     /// The account's PENDING create cards: the timeline's dashed rows and the draft panel.
     private(set) var drafts: [ScheduleCard] = []
     /// The inspector's reads, by schedule id.
@@ -60,11 +65,19 @@ final class ScheduledModel {
 
     // MARK: reads
 
-    /// The drawer's number: failing or held, nothing at zero.
-    var needsYouCount: Int { ScheduleDisplay.needsYouCount(schedules) }
+    /// The drawer's number: held, failing with no run under way, or a condition that cannot be read; nothing at zero.
+    /// The list's runs say which failing ones are already running again (owner 2026-11-19).
+    var needsYouCount: Int {
+        ScheduleDisplay.needsYouCount(schedules, waitingTasks: waitingTasks,
+                                      runs: listRuns ?? schedules.compactMap(\.lastRun))
+    }
 
     /// The count beside the page title (board ②): what the timeline lists.
-    var listedCount: Int { shownSchedules.count + drafts.count }
+    var listedCount: Int { shownSchedules.count + drafts.count + shownWaitingTasks.count }
+
+    var shownWaitingTasks: [ScheduleWaitingTask] {
+        waitingTasks.filter { workspaceFilter == nil || $0.workspaceId == workspaceFilter }
+    }
 
     var shownSchedules: [ScheduleView] {
         schedules.filter { $0.state != "ENDED" && (workspaceFilter == nil || $0.workspaceId == workspaceFilter) }
@@ -74,24 +87,32 @@ final class ScheduledModel {
     var workspaces: [(id: String, name: String)] {
         var seen: [String: String] = [:]
         for s in schedules where seen[s.workspaceId] == nil { seen[s.workspaceId] = s.workspaceName ?? s.workspaceId }
+        for t in waitingTasks where seen[t.workspaceId] == nil { seen[t.workspaceId] = t.workspaceName ?? t.workspaceId }
         return seen.map { (id: $0.key, name: $0.value) }.sorted { $0.name < $1.name }
     }
 
-    func timeline(now: Date = Date()) -> [ScheduleDisplay.TimelineGroup] {
+    /// The runs the timeline places: the list's, or else each schedule's last run and the recent runs its detail read
+    /// brought (Show past runs lists today's). A row reads them too, to keep a Failed tag off while a run is under way.
+    var timelineRuns: [ScheduleRunView] {
         let shown = shownSchedules
-        // Each schedule's last run, and the recent runs its detail read brought (Show past runs lists today's).
+        let ids = Set(shown.map(\.id))
+        if let listRuns { return listRuns.filter { ids.contains($0.scheduleId) } }
         var runs: [ScheduleRunView] = []
         var seen = Set<String>()
-        let ids = Set(shown.map(\.id))
-        if let listRuns { runs = listRuns.filter { ids.contains($0.scheduleId) } }
-        for s in shown where listRuns == nil {
+        for s in shown {
             for run in [s.lastRun].compactMap({ $0 }) + (detail(s.id)?.recentRuns ?? []) where seen.insert(run.id).inserted {
                 runs.append(run)
             }
         }
+        return runs
+    }
+
+    func timeline(now: Date = Date()) -> [ScheduleDisplay.TimelineGroup] {
+        let shown = shownSchedules
+        let runs = timelineRuns
         let drafts = workspaceFilter == nil ? self.drafts : self.drafts.filter { $0.runsIn?.workspaceId == workspaceFilter }
-        return ScheduleDisplay.timeline(schedules: shown, runs: runs, drafts: drafts, showPastRuns: showPastRuns,
-                                        now: now, timezone: timezone)
+        return ScheduleDisplay.timeline(schedules: shown, runs: runs, drafts: drafts, waitingTasks: shownWaitingTasks,
+                                        showPastRuns: showPastRuns, now: now, timezone: timezone)
     }
 
     func schedule(_ id: String) -> ScheduleView? {
@@ -111,6 +132,8 @@ final class ScheduledModel {
             let list = try await api.scheduleList()
             if list.schedules != schedules { schedules = list.schedules }
             if list.runs != listRuns { listRuns = list.runs }
+            let waiting = list.waitingTasks ?? []
+            if waiting != waitingTasks { waitingTasks = waiting }
             if let drafts = try? await api.scheduleDrafts(), drafts != self.drafts { self.drafts = drafts }
             loaded = true
         } catch APIError.http(let status, _) where status == 404 {
@@ -123,6 +146,18 @@ final class ScheduledModel {
     func loadDetail(_ id: String) async {
         guard let detail = try? await api.schedule(id) else { return }
         if details[id] != detail { details[id] = detail }
+    }
+
+    /// A condition's own read: its state, newest samples and events.
+    func loadCondition(_ id: String) async {
+        guard let condition = try? await api.condition(id) else { return }
+        if conditions[id] != condition { conditions[id] = condition }
+    }
+
+    func condition(_ id: String?) -> ConditionView? {
+        guard let id else { return nil }
+        let key = PublicID.storageKey(id)
+        return conditions.first { PublicID.storageKey($0.key) == key }?.value
     }
 
     func loadCard(_ id: String) async {
@@ -280,16 +315,11 @@ final class ScheduledModel {
         }
     }
 
-    /// The server's own sentence for a refusal, else a plain one.
+    /// The server's own sentence for a refusal, else what went wrong in plain words.
     static func refusal(_ error: Error) -> String {
-        if case APIError.http(_, let body?) = error, let data = body.data(using: .utf8),
-           let object = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
-           let message = object["message"] as? String, !message.isEmpty {
-            return message
-        }
-        return unreachable
+        ScheduleDisplay.pressFailure(error)
     }
 
-    static let unreachable = "Couldn't reach Orbit. Try again."
+    static let unreachable = ScheduleDisplay.PressFailure.unreachable
     static let withdrawn = "This card was withdrawn."
 }

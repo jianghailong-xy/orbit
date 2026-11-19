@@ -1,20 +1,20 @@
 import { useMemo, useState, type JSX, type ReactNode } from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import { Link, useNavigate } from 'react-router-dom';
+import { useNavigate } from 'react-router-dom';
 import {
   SCHEDULE_COPY,
   scheduleChangeLineText,
   scheduleCostsParts,
   scheduleCreateNotice,
   scheduleCreateWhen,
-  scheduleEngineName,
+  scheduleDurationText,
+  scheduleFill,
   scheduleEnvelopeNote,
   scheduleEnvelopeSides,
   scheduleEnvelopeTitle,
   scheduleKeepLabel,
   scheduleReportedText,
   scheduleRunLine,
-  scheduleRunOfText,
   scheduleRunStripText,
   scheduleRunsInText,
   type ScheduleCard,
@@ -28,10 +28,13 @@ import {
   type ScheduleRule,
   type ScheduleRunView,
   type ScheduleView,
+  type ScheduleWhenLines,
 } from '@orbit/shared';
 import { api, ApiError } from '../api';
 import { decisionReceiptAnchor } from '../lib/decisionReceipt';
+import { CONDITION_COPY, conditionQuery, firingOfRun, readingText } from '../lib/conditions';
 import {
+  scheduleClock,
   scheduleDetailQuery,
   scheduleRecordUndoable,
   schedulePath,
@@ -52,6 +55,17 @@ export function CalendarIcon(): JSX.Element {
     <svg className="sched-icon" viewBox="0 0 16 16" aria-hidden="true" focusable="false">
       <rect x="2" y="3" width="12" height="11" rx="2" fill="none" stroke="currentColor" strokeWidth="1.4" />
       <path d="M2 6.5h12M5.5 1.6v2.6M10.5 1.6v2.6" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round" />
+    </svg>
+  );
+}
+
+/** The gauge a condition's row, card and line carry in place of the circle or the calendar (condition-triggers ④). */
+export function GaugeIcon(): JSX.Element {
+  return (
+    <svg className="sched-icon" viewBox="0 0 16 16" aria-hidden="true" focusable="false">
+      <path d="M2.2 11.6a6 6 0 1 1 11.6 0" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" />
+      <path d="M8 10.2 10.9 6.4" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" />
+      <circle cx="8" cy="10.4" r="1.2" fill="currentColor" />
     </svg>
   );
 }
@@ -113,6 +127,23 @@ function MayText({ level }: { level: ScheduleCreateCard['may']['accessLevel'] })
   return <><b>{access.label}</b>{C.separator}{access.detail}</>;
 }
 
+/**
+ * A WHEN rule's When lines (condition-triggers ③): the condition with its hold, the condition itself in bold; the
+ * re-arm and how it is checked; the repeat and the keeps-awake line when there are; then the command verbatim.
+ */
+function WhenConditionText({ lines, condition }: { lines: ScheduleWhenLines; condition: string }): JSX.Element {
+  const bold = lines.text.startsWith(condition) ? condition : lines.text;
+  return (
+    <>
+      <b>{bold}</b>{lines.text.slice(bold.length)}
+      <div className="sched-card-sub" data-when-detail="">{lines.detail}</div>
+      {lines.repeat ? <div className="sched-card-sub" data-when-repeat="">{lines.repeat}</div> : null}
+      {lines.awake ? <div className="sched-card-sub" data-when-awake="">{lines.awake}</div> : null}
+      <code className="sched-command" data-when-command="">{lines.command}</code>
+    </>
+  );
+}
+
 /** "Up to 7 runs a week, 30 min each", the runs in bold. */
 function CostsText({ runsPerWeek, runLimitMinutes }: { runsPerWeek: number; runLimitMinutes: number }): JSX.Element {
   const parts = scheduleCostsParts(runsPerWeek, runLimitMinutes);
@@ -133,15 +164,18 @@ export function ScheduleCreateCardView({ card, layout = 'chat', onOpenConversati
   const when = scheduleCreateWhen(card, now, viewerTimezone());
   const pending = card.state === 'PENDING' && !decide.isSuccess;
   const error = scheduleErrorText(decide.error);
+  const condition = card.when.rule.kind === 'WHEN' && card.when.condition
+    ? { lines: card.when.condition, text: card.when.rule.condition.text }
+    : null;
   return (
     <section className="sched-card" data-schedule-card="create" data-state={card.state}>
-      <div className="sched-card-head"><CalendarIcon />{C.createCard.title}</div>
+      <div className="sched-card-head">{condition ? <GaugeIcon /> : <CalendarIcon />}{C.createCard.title}</div>
       {layout === 'chat' ? <div className="sched-card-title">{card.title}</div> : null}
       <div className="sched-card-readback">{card.readBack}</div>
       <dl className="sched-card-facts">
         <dt>{C.createCard.when}</dt>
-        <dd>
-          {layout === 'panel' ? (
+        <dd data-fact="when">
+          {condition ? <WhenConditionText lines={condition.lines} condition={condition.text} /> : layout === 'panel' ? (
             <>
               {[when.rule, when.zone].join(C.separator)}
               {when.firstRun ? <><br /><span className="sched-card-sub">{when.firstRun}</span></> : null}
@@ -226,18 +260,23 @@ export function ScheduleEnvelopeCardView({ card }: { card: ScheduleEnvelopeCard 
   const nowName = now ? names[now.workspaceId] : undefined;
   const pending = card.state === 'PENDING' && !decide.isSuccess;
   const error = scheduleErrorText(decide.error);
+  // A new probe command: both sides are the command verbatim, what was approved and what Allow would approve.
+  const command = widens.includes('PROBE_COMMAND') && !widens.includes('ACCESS_LEVEL') && !widens.includes('WORKSPACE');
+  const side = (s: typeof sides.asked, bold: boolean) => (command
+    ? <code className="sched-command">{s.text}</code>
+    : <SideText {...s} bold={bold} />);
   return (
     <section className="sched-card is-widen" data-schedule-card="envelope" data-state={card.state}>
-      <div className="sched-card-head"><WarnIcon />{scheduleEnvelopeTitle(title, widens, askedName)}</div>
+      <div className="sched-card-head"><WarnIcon />{scheduleEnvelopeTitle(title, widens, askedName, asked.accessLevel)}</div>
       <dl className="sched-card-facts">
         {sides.now ? (
           <>
             <dt>{C.envelopeCard.now}</dt>
-            <dd data-fact="now"><SideText {...sides.now} bold={false} /></dd>
+            <dd data-fact="now">{side(sides.now, false)}</dd>
           </>
         ) : null}
         <dt>{C.envelopeCard.asked}</dt>
-        <dd data-fact="asked"><SideText {...sides.asked} bold /></dd>
+        <dd data-fact="asked">{side(sides.asked, true)}</dd>
       </dl>
       <div className="sched-card-note">{scheduleEnvelopeNote(widens)}</div>
       {error ? <div className="sched-card-error" role="alert">{error}</div> : null}
@@ -316,11 +355,6 @@ export interface ScheduleRunOfSession {
   detail: ScheduleDetailResponse | undefined;
 }
 
-/** The agent a run's header names: the engine its schedule's view carries, else the session's own ("Codex"). */
-export function scheduleRunAgentName(of: Pick<ScheduleRunOfSession, 'schedule'>, sessionEngine: string | null): string | null {
-  return of.schedule.engine ? scheduleEngineName(of.schedule.engine) : sessionEngine;
-}
-
 /**
  * The schedule and run a run's session belongs to, read from the session alone: its schedule-cards answer names the
  * run it serves however old (`run`), and the run names its schedule. Nothing else is searched.
@@ -333,21 +367,55 @@ export function useScheduleRunOfSession(sessionId: string | null | undefined): S
   return { schedule: detail.data.schedule, run, detail: detail.data };
 }
 
-/** Scheduled › Codex stable check › run of Nov 13 (board 2/2 ⑤ ⑥). */
-export function ScheduleRunCrumb({ of }: { of: ScheduleRunOfSession }): JSX.Element {
+/**
+ * A run its condition started names the firing instead of a planned time (condition-triggers ⑤):
+ * "Fired 03:12 · 90.4% for 10 min · Check only".
+ */
+export function scheduleRunFiringText(input: {
+  run: Pick<ScheduleRunView, 'plannedAt'>;
+  value: number | null;
+  repeat: boolean;
+  unit: string | null;
+  holdSeconds: number;
+  accessLevel: ScheduleView['accessLevel'];
+  timezone: string;
+}): string {
+  const time = scheduleClock(input.run.plannedAt, input.timezone);
+  const parts = [scheduleFill(input.repeat ? CONDITION_COPY.firedAgainAt : CONDITION_COPY.firedAt, { time })];
+  if (input.value !== null) {
+    parts.push(readingText(input.value, input.unit)
+      + (input.holdSeconds > 0 ? scheduleFill(CONDITION_COPY.held, { duration: scheduleDurationText(input.holdSeconds) }) : ''));
+  }
+  parts.push(C.access[input.accessLevel].label);
+  return parts.join(C.separator);
+}
+
+function ScheduleRunFiringStrip({ of }: { of: ScheduleRunOfSession }): JSX.Element {
+  const rule = of.schedule.rule.kind === 'WHEN' ? of.schedule.rule : null;
+  const id = rule?.conditionId ?? of.schedule.condition?.id ?? '';
+  const condition = useQuery({ ...conditionQuery(id), enabled: Boolean(id) }).data;
+  const firing = firingOfRun(condition, of.run.id);
   return (
-    <div className="sched-crumb" data-schedule-crumb="">
-      <Link to="/scheduled">{C.runSession.crumb}</Link>
-      {' › '}
-      <Link to={schedulePath(of.schedule.id)}>{of.schedule.title}</Link>
-      {' › '}
-      {scheduleRunOfText(of.run, viewerTimezone())}
+    <div className="sched-strip is-condition" data-schedule-strip="condition">
+      <GaugeIcon />
+      <span>
+        {scheduleRunFiringText({
+          run: of.run,
+          value: firing?.value ?? null,
+          repeat: firing?.repeat ?? false,
+          unit: condition?.unit ?? rule?.condition.unit ?? null,
+          holdSeconds: condition?.holdSeconds ?? rule?.condition.holdSeconds ?? 0,
+          accessLevel: of.schedule.accessLevel,
+          timezone: viewerTimezone(),
+        })}
+      </span>
     </div>
   );
 }
 
 /** The strip at the top of a run's session. */
 export function ScheduleRunStrip({ of }: { of: ScheduleRunOfSession }): JSX.Element {
+  if (of.run.trigger === 'CONDITION') return <ScheduleRunFiringStrip of={of} />;
   return (
     <div className="sched-strip" data-schedule-strip="">
       <CalendarIcon />

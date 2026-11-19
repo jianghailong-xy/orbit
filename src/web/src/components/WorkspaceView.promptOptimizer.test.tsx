@@ -27,6 +27,8 @@ vi.mock('../api', async (importOriginal) => {
     optimizePrompt: vi.fn(),
     sendTurn: vi.fn(),
     uploadAttachment: vi.fn(),
+    listApprovals: vi.fn(),
+    decideApproval: vi.fn(),
   };
 });
 vi.mock('../lib/transcriptStore', () => ({
@@ -34,7 +36,7 @@ vi.mock('../lib/transcriptStore', () => ({
   saveTranscript: async () => {},
 }));
 
-const { api, getSessionEventPage, listQueuedTurns, retryTurnTranslation, sendTurnAsWritten, optimizePrompt, sendTurn, uploadAttachment } =
+const { api, getSessionEventPage, listQueuedTurns, listApprovals, decideApproval, retryTurnTranslation, sendTurnAsWritten, optimizePrompt, sendTurn, uploadAttachment } =
   await import('../api');
 const optimizeMock = vi.mocked(optimizePrompt);
 const sendMock = vi.mocked(sendTurn);
@@ -81,6 +83,7 @@ let preferences: Record<string, unknown> = {};
 let translationAvailable = true;
 let promptOptimizerAvailable = true;
 let queue: unknown[] = [];
+let approvals: unknown[] = [];
 let locations: string[] = [];
 let stored: Record<string, string> = {};
 
@@ -143,6 +146,10 @@ beforeEach(() => {
   preferences = { translationEnabled: true, translationLanguage: 'zh-Hans', promptOptimizer: true };
   translationAvailable = true;
   promptOptimizerAvailable = true;
+  approvals = [];
+  vi.mocked(listApprovals).mockImplementation((async () => approvals) as never);
+  vi.mocked(decideApproval).mockReset();
+  vi.mocked(decideApproval).mockImplementation((async () => ({})) as never);
   optimizeMock.mockReset();
   optimizeMock.mockImplementation(async () => RESULT);
   sendMock.mockReset();
@@ -535,6 +542,44 @@ describe('the suggestion card (frame 4)', () => {
     const undo = [...document.querySelectorAll<HTMLButtonElement>('button')].find((b) => b.textContent?.trim() === 'Undo')!;
     await act(async () => undo.click());
     await waitForUi(() => expect(box().value).toBe(DRAFT));
+  });
+
+  it('stays on a reply to a question card, tells the optimizer the question, and what Use puts in the box answers the card', async () => {
+    approvals = [{
+      id: encodeId('0195c0de-0000-7000-8000-000000000081'),
+      sessionId: SESSION_PUBLIC,
+      toolName: 'AskUserQuestion',
+      toolUseId: 'toolu_q1',
+      status: 'PENDING',
+      createdAt: '2026-10-08T03:05:00Z',
+      input: { questions: [{ question: 'Which way?', header: 'Runner full', multiSelect: false,
+        options: [{ label: 'Yes', description: 'Go ahead' }, { label: 'No', description: 'Leave it' }] }] },
+    }];
+    session = { ...PARKED, status: 'RUNNING', runStatus: 'RUNNING', runState: 'RUNNING', engineTurnActive: true, pendingApprovals: 1 };
+    await mount();
+    let chat: HTMLButtonElement | undefined;
+    await waitForUi(() => {
+      chat = [...mounted().querySelectorAll<HTMLButtonElement>('button')].find((b) => b.textContent?.includes('Chat about this'));
+      expect(chat).toBeTruthy();
+    });
+    await act(async () => chat!.click());
+    await waitForUi(() => expect(mounted().querySelector('.composer-replyto-text')).toBeTruthy());
+    await typeDraft(DRAFT);
+    await waitForUi(() => expect(optimizeButton()?.disabled).toBe(false));
+    await openCard();
+    expect(optimizeMock.mock.calls[0]![0]).toMatchObject({
+      draft: DRAFT,
+      replyingTo: 'Runner full: Which way?\n- Yes: Go ahead\n- No: Leave it',
+    });
+    await act(async () => cardButton('Use').click());
+    expect(box().value).toBe(GLOSS);
+    const button = mounted().querySelector<HTMLButtonElement>('.composer-send')!;
+    await waitForUi(() => expect(button.disabled).toBe(false));
+    await act(async () => button.click());
+    await waitForUi(() => expect(vi.mocked(decideApproval)).toHaveBeenCalled());
+    const [, approvalId, behavior, message] = vi.mocked(decideApproval).mock.calls[0]!;
+    expect([approvalId, behavior, message]).toEqual([encodeId('0195c0de-0000-7000-8000-000000000081'), 'deny', GLOSS]);
+    expect(sendMock).not.toHaveBeenCalled();
   });
 
   it('Edit, then use replaces the draft and puts the caret at the end', async () => {

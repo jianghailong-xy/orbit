@@ -70,6 +70,7 @@ import {
 } from '../lib/claudeRegionCopy';
 import {
   RUNNER_ENGINE_COULDNT_CHECK,
+  RUNNER_ENGINE_NO_PROVIDER_KEY,
   RUNNER_ENGINE_NO_QUOTA_LIMIT,
   RUNNER_ENGINE_NO_READING,
   RUNNER_ENGINE_RENEW,
@@ -87,6 +88,8 @@ import {
   RUNNER_DEFAULT_USE_AGAIN,
   runnerAccountInUseMany,
   runnerAccountInUseOne,
+  runnerAccountMovingMany,
+  runnerAccountMovingOne,
   runnerAccountRemoveDetailAutomatic,
   RUNNER_ACCOUNT_REMOVE_DETAIL,
   runnerAccountRemoveDetailLast,
@@ -111,6 +114,7 @@ import { DshRunnerStatus } from './DshRunnerStatus';
 import { ProviderTile } from './ProviderGallery';
 import { GoogleSignInTerms, KIMI_SITE, RunnerSignIn } from './RunnerSignIn';
 import type { Runner } from './TasksSidePanel';
+import { useMachineName } from '../lib/managedRunner';
 
 /** An engine this page has a row for: one a runner signs in with, or OpenCode — which it does not. */
 type RowEngine = LoginEngine | 'opencode';
@@ -267,9 +271,11 @@ function metaFor(kind: RowKind, engine: RowEngine, health?: RunnerEngineHealth, 
     return kind === 'missing' ? 'Not installed — Orbit can install it here' : 'Not installed';
   }
   // With a sign-in, the badge says the check failed and the line keeps the version alone rather
-  // than saying it twice. Without one (OpenCode), the CLI's own answer is the whole story.
+  // than saying it twice. Without one (OpenCode), the line says what the Unknown is about — the
+  // sign-in, not the version beside it — and, when the CLI listed no key at all, that it found none.
   if (kind === 'unknown') {
-    return signIn ? versionOf(engine, health) : `${versionOf(engine, health)} · the CLI wouldn't say`;
+    if (signIn) return versionOf(engine, health);
+    return `${versionOf(engine, health)} · ${health.openCodeNoKey ? RUNNER_ENGINE_NO_PROVIDER_KEY : 'sign-in unknown'}`;
   }
   // Which of Kimi's two sites the login is on: the same CLI signs in to either, and a session spends
   // that site's subscription.
@@ -628,6 +634,7 @@ function EngineRow({
   open: boolean;
   onFold: (open: boolean) => void;
 }) {
+  const machineNameOf = useMachineName();
   const message = useToast();
   const qc = useQueryClient();
   const kind = rowKindOf(health, runner.install, engine);
@@ -1031,7 +1038,7 @@ function EngineRow({
       {kind === 'installing' && (
         <div className="re-panel">
           <div className="re-panel-row">
-            Installing {engineNameOf(engine)} on {runner.displayName || runner.name}…
+            Installing {engineNameOf(engine)} on {machineNameOf(runner)}…
           </div>
           {runner.install?.command && <code className="re-cmd">{runner.install.command}</code>}
           <div className="re-panel-hint">
@@ -1292,6 +1299,7 @@ function AccountRow({
   signIn: string | null;
   onSignIn: (panel: string | null) => void;
 }) {
+  const machineNameOf = useMachineName();
   const message = useToast();
   const qc = useQueryClient();
   const kind = envKey ? 'in' : accountKindOf(account);
@@ -1307,6 +1315,8 @@ function AccountRow({
   const refused = mine?.status === 'failed' ? mine.message : null;
   // The sessions the machine named as running in it, when that is why it refused.
   const blocking = mine?.status === 'failed' ? (mine.sessions ?? []) : [];
+  // The sessions a removal under way moved to another account and waits on to leave this one.
+  const moving = mine?.status === 'pending' ? (mine.moving ?? 0) : 0;
   const remove = useMutation({
     mutationFn: () =>
       api<RunnerAccountRemoveState>(
@@ -1332,7 +1342,7 @@ function AccountRow({
   // Default comes off Orbit's list, not the machine, and only while another account is there to
   // run on (RunnersService.removeAccount).
   const removable = !isDefault || others > 0;
-  const runnerName = runner.displayName || runner.name;
+  const runnerName = machineNameOf(runner);
   // Removing deletes the slot's sign-in from the machine, and only signing in again brings it back;
   // removing Default stops only Orbit using it, until Use again. Either is asked first, wherever it is
   // offered — anchored to More once its menu has closed, or to the duplicate panel's own Remove.
@@ -1469,6 +1479,15 @@ function AccountRow({
       )}
       {/* The machine would not do it, and its reason is the only thing that can explain why: a
           session is running on that account, or the runner is too old to remove one at all. */}
+      {moving > 0 && (
+        <div className="re-dup">
+          <span>
+            {moving === 1
+              ? runnerAccountMovingOne(engineNameOf(engine))
+              : runnerAccountMovingMany(engineNameOf(engine), moving)}
+          </span>
+        </div>
+      )}
       {(refused || blocking.length > 0) && (
         <div className="re-panel bad">
           <div className="re-panel-row">
@@ -1480,7 +1499,7 @@ function AccountRow({
           </div>
           {blocking.length > 0 && <BlockingSessions sessions={blocking} />}
           <div className="re-panel-hint">
-            {tildePath(accountDir(account))} on {runner.displayName || runner.name} is untouched.
+            {tildePath(accountDir(account))} on {machineNameOf(runner)} is untouched.
           </div>
         </div>
       )}

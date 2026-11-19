@@ -325,6 +325,16 @@ final class OwnerRequestsTests: XCTestCase {
         XCTAssertEqual(OwnerRequests.find(PublicID.toPublic(requestID), in: open)?.kind, .secret)
     }
 
+    /// A press on a session's needs-you notice opens the oldest request it asked that is still
+    /// pending: not one that ended, and not another session's.
+    func testANoticeOpensTheSessionsOldestPendingRequest() {
+        let ended = OwnerRequest(id: "old", kind: .manualStep, state: .withdrawn, title: "Earlier steps", why: "",
+                                 blocksTaskIds: [], askedBySessionId: sessionID, createdAt: "2026-11-05T09:00:00Z")
+        let read = [ended, secret(), decision(), confirm()]
+        XCTAssertEqual(OwnerRequests.oldestPending(read, sessionID: sessionID)?.id, "c4")
+        XCTAssertNil(OwnerRequests.oldestPending([ended, decision()], sessionID: sessionID))
+    }
+
     func testSnoozesLiveOnThisDeviceAndLapse() {
         let defaults = UserDefaults(suiteName: "owner-request-snoozes-\(UUID().uuidString)")!
         let store = OwnerRequestSnoozes(defaults: defaults)
@@ -437,5 +447,21 @@ final class OwnerRequestsTests: XCTestCase {
         XCTAssertEqual(OwnerRequests.waitingCount(pending, questions: [q], snoozes: later, now: now), 3)
         XCTAssertEqual(OwnerRequests.waitingCount([], questions: [q, question("q3", project: asking, waiting: "x")],
                                                   snoozes: [:], now: now), 2)
+    }
+
+    /// The turn Orbit queues when a request ends is a divider, not the owner's bubble (web: `resolutionTurnLabel`).
+    func testResolutionTurnIsADividerNotTheOwnersBubble() {
+        let turn = { (head: String) in
+            [head, "", OwnerRequests.resolutionMark + " The request is final and will not wake this session again.",
+             "", "```json", "{}", "```"].joined(separator: "\n")
+        }
+        let done = turn("Orbit owner request 34uabc (MANUAL_STEP) ended DONE: the owner did what was asked.")
+        XCTAssertEqual(OwnerRequests.resolutionTurnLabel(done), "Owner action resolved · turn started automatically")
+        XCTAssertEqual(OwnerRequests.resolutionTurnLabel(turn("Orbit owner request 34uabc (CONFIRM) ended DECLINED: x.")),
+                       "Owner declined the request · turn started automatically")
+        XCTAssertEqual(OwnerRequests.resolutionTurnLabel(turn("Orbit owner request 34uabc (WIKI_CREATE) ended DONE. The owner created the wiki w.")),
+                       "Owner action resolved · turn started automatically")
+        XCTAssertNil(OwnerRequests.resolutionTurnLabel("Orbit owner request 34uabc (SECRET) ended DONE: looks wrong to me"))
+        XCTAssertNil(OwnerRequests.resolutionTurnLabel("hello"))
     }
 }

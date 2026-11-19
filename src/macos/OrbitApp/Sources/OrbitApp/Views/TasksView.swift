@@ -1703,6 +1703,22 @@ private struct TaskDetailContent: View {
     @ViewBuilder
     private func actions(_ task: TaskItem) -> some View {
         let row = actionRow(task)
+        // A task that starts when its condition holds says so where a task says why it has not started
+        // (docs/condition-triggers-design.md §6.2): "Waiting for: 3 or more OSDs are in", and the newest reading.
+        if let waiting = ConditionDisplay.taskWaiting(task.startWhen, now: Date()) {
+            HStack(alignment: .firstTextBaseline, spacing: 8) {
+                Image(systemName: "gauge.with.dots.needle.33percent").foregroundStyle(Color.accentColor)
+                VStack(alignment: .leading, spacing: 2) {
+                    Text(waiting.line).font(.orbitSubtext)
+                    if let reading = waiting.reading {
+                        Text(reading).font(.orbitLabel).foregroundStyle(.secondary)
+                    }
+                }
+            }
+            .accessibilityElement(children: .combine)
+            .accessibilityIdentifier("task-waiting-line")
+            .listRowInsets(EdgeInsets(top: 8, leading: 0, bottom: 4, trailing: 0))
+        }
         if !row.isEmpty {
             VStack(alignment: .leading, spacing: 8) {
                 if row.stacked {

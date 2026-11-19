@@ -9,6 +9,15 @@ Orbit uses `docker-compose.yml` with `postgres`, `apiserver`, `wiki-worker`, `we
 
 Database migrations are not a separate step: the apiserver container runs `prisma migrate deploy` during startup.
 
+## Who runs it
+
+An upgrade is mostly waiting on builds and reading their output, which needs no expensive model. On one, such as an
+Opus, Fable or GPT-6.x Sol model, hand the run to DeepSeek V4.1 Flash with Orbit's `delegate` (`model:
+"deepseek-flash"`, Orbit's id for it; `background: true`) instead of running it yourself. If `delegate` refuses the
+model (`SUBAGENT_TARGET_CANNOT_RUN`), take another flash model from the list the refusal prints. Settle every choice
+before handing it off (the checkout, the exact command and flags), since the SubAgent cannot ask anyone; have it stop
+at the first failure without retrying or rolling back, and end the turn: Orbit wakes this session with the result.
+
 ## Workflow
 
 1. Run in the installed checkout, the one the deployment runs from, and never from a worktree (see "Where to run it" below). Check the current branch, worktree status, and Compose availability. On `main` the helper runs `git pull --ff-only` before building, so the deploy is origin's main and not a stale checkout; it never overwrites or discards local changes and stops if a fast-forward is impossible.
@@ -117,7 +126,8 @@ ORBIT_REGISTRY=10.66.0.1:5000 ORBIT_DEPLOY_HOST=root@10.66.0.4 .agents/skills/up
 - The target's `.env` is its own, made once before the first deploy; a deploy writes only the block between `# >>> The release this host runs` and `# <<< The release this host runs`, so a later `docker compose` there renders the release that runs. Its `COMPOSE_FILE` lists `docker-compose.yml:deploy/postgres-pinned.yml`, and `:deploy/db-proxy.yml` where the apiserver connects through the proxy (10.66.0.4's does); the release ships those. Any other Compose file it lists, or its `docker-compose.override.yml`, is rendered with each release and otherwise left alone.
 - Base images run by digest: postgres and pgbackup as `deploy/postgres-pinned.yml` pins them (PostgreSQL 16.14), db-proxy as `deploy/db-proxy.yml` does, nginx and nats as `deploy/two-stage/base-images.env` does. A target that does not list `deploy/postgres-pinned.yml` is refused.
 - Hosted runners on Kubernetes (the target's `.env` sets `ORBIT_MANAGED_RUNNERS_ENABLED=true` and the `profile.json` in `ORBIT_MANAGED_RUNNERS_DIR` says `"backend": "kubernetes"`): the plan prints the profile's `runner.image` against the release's image by digest, or `unchanged`. A deploy sets `runner.image` to it by a rename, keeps the profile it replaces beside it as `profile.json.bak-<time>-before-<commit>`, and replaces the apiserver, which reads the profile only as it starts, even when the release does not otherwise. Its manager then moves each hosted runner onto the new image once that runner is idle: drained like a sleep and woken at once on the same volume. The node pulls the image from the registry, so k3s there lists it in `/etc/rancher/k3s/registries.yaml`.
-- Rollback: `--deploy <earlier commit>`, which builds nothing (`--plan <earlier commit>` first shows what it changes); the target's `.upgrade/history` lists what it ran. Code older than a migration the database has applied may not run on it.
+- Earlier release images: after each deploy the target removes its `orbit-apiserver`, `orbit-web` and `orbit-link-gateway` images except those of the last 3 releases in `.upgrade/history` (Docker refuses any a container uses), with or without `--prune`. Before this they were never removed: production kept 77 releases' images, 137 GB, until 6.6 GB of its disk was left (2026-11-18).
+- Rollback: `--deploy <earlier commit>`, which builds nothing (`--plan <earlier commit>` first shows what it changes); the target's `.upgrade/history` lists what it ran. A release older than the last 3 is pulled from the registry again. Code older than a migration the database has applied may not run on it.
 - Both hosts' Docker must trust the registry (`insecure-registries` in `/etc/docker/daemon.json` for a plain-HTTP one, applied with `systemctl reload docker`). `docker buildx du` and `docker image ls` on the target show that nothing was built there.
 
 ## Production from another workspace

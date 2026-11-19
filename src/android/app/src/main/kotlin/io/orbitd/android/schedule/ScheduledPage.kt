@@ -30,7 +30,10 @@ import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.semantics.clearAndSetSemantics
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
+import androidx.compose.ui.text.SpanStyle
+import androidx.compose.ui.text.buildAnnotatedString
 import androidx.compose.ui.text.font.FontStyle
+import androidx.compose.ui.text.withStyle
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.text.style.TextOverflow
@@ -38,6 +41,10 @@ import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import io.orbitd.android.R
+import io.orbitd.android.core.schedule.ConditionCopy
+import io.orbitd.android.core.schedule.ConditionDisplay
+import io.orbitd.android.core.schedule.ConditionEventView
+import io.orbitd.android.core.schedule.ConditionView
 import io.orbitd.android.core.schedule.ScheduleChangeRecord
 import io.orbitd.android.core.schedule.ScheduleCopy
 import io.orbitd.android.core.schedule.ScheduleCopy as SC
@@ -72,6 +79,17 @@ fun ScheduleCircleGlyph(view: ScheduleDisplay.CircleView, size: Dp = 22.dp) {
     val secondary = MaterialTheme.colorScheme.onSurfaceVariant
     val accent = MaterialTheme.colorScheme.primary
     val red = scheduleRed(); val warn = scheduleWarn(); val green = scheduleGreen()
+    if (view.gauge) {
+        // A condition's row (condition-triggers board ④ ③): a gauge in place of the circle, amber when it cannot be read, faint
+        // when paused.
+        val tint = when (view.circle) {
+            ScheduleDisplay.Circle.held -> warn
+            ScheduleDisplay.Circle.paused -> secondary.copy(alpha = 0.5f)
+            else -> accent
+        }
+        Icon(painterResource(R.drawable.ic_gauge), null, Modifier.size(size).testTag("schedule-gauge").clearAndSetSemantics { }, tint = tint)
+        return
+    }
     Box(Modifier.size(size).clearAndSetSemantics { }, contentAlignment = Alignment.Center) {
         Canvas(Modifier.fillMaxSize()) {
             val w = 1.5.dp.toPx()
@@ -100,8 +118,12 @@ fun ScheduleCircleGlyph(view: ScheduleDisplay.CircleView, size: Dp = 22.dp) {
                 ScheduleDisplay.Circle.muted -> secondary.copy(alpha = 0.5f)
                 else -> secondary
             }
-            if (mark == ScheduleDisplay.Mark.check) Icon(painterResource(R.drawable.ic_check), null, Modifier.size(size * 0.6f), tint = tint)
-            else Text("!", color = tint, fontWeight = FontWeight.Black, fontSize = (size.value * 0.55f).sp)
+            when (mark) {
+                ScheduleDisplay.Mark.check -> Icon(painterResource(R.drawable.ic_check), null, Modifier.size(size * 0.6f), tint = tint)
+                // A queued run: clock hands inside the ring, which is the clock's face.
+                ScheduleDisplay.Mark.clock -> Icon(painterResource(R.drawable.ic_clock_hands), null, Modifier.size(size * 0.6f), tint = tint)
+                ScheduleDisplay.Mark.alert -> Text("!", color = tint, fontWeight = FontWeight.Black, fontSize = (size.value * 0.55f).sp)
+            }
         }
     }
 }
@@ -120,17 +142,19 @@ internal fun scheduleClock(iso: String?, timezone: String): String =
 
 /** One row of the timeline. */
 private data class ScheduleRowModel(val id: String, val circle: ScheduleDisplay.CircleView, val title: String, val line: String,
-    val repeats: Boolean, val time: String, val draft: Boolean, val paused: Boolean, val open: () -> Unit)
+    val repeats: Boolean, val time: String, val draft: Boolean, val paused: Boolean,
+    /** A condition's row: the newest reading and its age, where a timed row shows its time (board ④ ②). */
+    val reading: ConditionDisplay.RowReading? = null, val open: () -> Unit)
 
 /**
  * The Scheduled page: "Scheduled 6" and the workspace filter, the timeline's groups, the line at the end, and the detail sheet of
  * the row pressed. [focused] — a schedule a push or a card named — opens its sheet. [workspaces] are the quick-add line's choices,
- * [preferredWorkspace] the one it starts on. [openSession] opens a run's or a draft's conversation over the page; [change] starts a
- * conversation in a schedule's workspace (Change… is no form).
+ * [preferredWorkspace] is the initial choice. [openSession] opens a draft's conversation, and [openRun] opens a run's session.
+ * [change] starts a conversation in the schedule's workspace.
  */
 @Composable
 fun ScheduledPage(store: ScheduledStore, workspaces: List<Pair<String, String>>, preferredWorkspace: String?, focused: String?,
-    openSession: (String) -> Unit, change: (ScheduleView) -> Unit) {
+    openSession: (String) -> Unit, openRun: (String) -> Unit, change: (ScheduleView) -> Unit, openTask: (String) -> Unit = {}) {
     val state by store.state.collectAsState()
     val zone = store.timezone
     LaunchedEffect(store) { store.loadNow() }
@@ -139,7 +163,8 @@ fun ScheduledPage(store: ScheduledStore, workspaces: List<Pair<String, String>>,
     LaunchedEffect(store) { while (true) { delay(60_000); store.loadNow() } }
     val now = Instant.now()
     val groups = remember(state, now.epochSecond / 60) { state.timeline(now, zone) }
-    val empty = state.loaded && state.shownSchedules.isEmpty() && state.drafts.isEmpty() && state.workspaceFilter == null
+    val empty = state.loaded && state.shownSchedules.isEmpty() && state.drafts.isEmpty() && state.shownWaitingTasks.isEmpty() &&
+        state.workspaceFilter == null
     var typed by rememberSaveable { mutableStateOf("") }
     LazyColumn(Modifier.fillMaxSize().testTag("scheduled-page"), contentPadding = PaddingValues(horizontal = 16.dp, vertical = 8.dp)) {
         item(key = "header") { ScheduledHeader(store, state) }
@@ -156,7 +181,7 @@ fun ScheduledPage(store: ScheduledStore, workspaces: List<Pair<String, String>>,
         } else {
             groups.forEach { group ->
                 item(key = "group-${group.id}") { GroupHeader(group) }
-                val rows = rows(group, state, store, zone, now)
+                val rows = rows(group, state, store, zone, now, openRun, openTask, state.pageRuns)
                 items(rows, key = { it.id }) { row -> ScheduleRow(row) }
             }
             item(key = "quick-add") { QuickAddLine(store, typed, { typed = it }, workspaces, preferredWorkspace) }
@@ -164,7 +189,7 @@ fun ScheduledPage(store: ScheduledStore, workspaces: List<Pair<String, String>>,
         state.errorText?.let { error -> item(key = "error") { Text(error, color = scheduleRed(), style = MaterialTheme.typography.bodySmall) } }
     }
     state.inspectedId?.let { id ->
-        ScheduleDetailSheet(store, id, close = { store.inspect(null) }, openSession = { session -> store.inspect(null); openSession(session) },
+        ScheduleDetailSheet(store, id, close = { store.inspect(null) }, openSession = { session -> store.inspect(null); openRun(session) },
             change = { s -> store.inspect(null); change(s) })
     }
     state.draftPanel?.let { panel ->
@@ -181,7 +206,7 @@ private fun ScheduledHeader(store: ScheduledStore, state: ScheduledStore.State) 
         Row(verticalAlignment = Alignment.CenterVertically) {
             Text(SC.Page.title, Modifier.weight(1f), style = MaterialTheme.typography.headlineLarge.copy(fontSize = 32.sp, lineHeight = 38.sp),
                 color = MaterialTheme.colorScheme.primary)
-            Text("${state.shownSchedules.size}", Modifier.testTag("scheduled-count"), style = MaterialTheme.typography.headlineLarge.copy(
+            Text("${state.shownSchedules.size + state.shownWaitingTasks.size}", Modifier.testTag("scheduled-count"), style = MaterialTheme.typography.headlineLarge.copy(
                 fontSize = 32.sp, lineHeight = 38.sp, fontWeight = FontWeight.SemiBold), color = MaterialTheme.colorScheme.onSurfaceVariant)
             Box {
                 IconButton(onClick = { moreOpen = true }, Modifier.testTag("scheduled-more")) { Icon(painterResource(R.drawable.ic_more), "More") }
@@ -208,11 +233,10 @@ private fun ScheduledHeader(store: ScheduledStore, state: ScheduledStore.State) 
     }
 }
 
-/** "Today  Fri, Nov 14"; Needs you in red (board 01 ② 1). */
+/** "Today  Fri, Nov 14"; Paused in grey. No group is red: there is no Needs you group (owner 2026-11-19). */
 @Composable
 private fun GroupHeader(group: ScheduleDisplay.TimelineGroup) {
     val color = when (group.key) {
-        ScheduleDisplay.GroupKey.needsYou -> scheduleRed()
         ScheduleDisplay.GroupKey.paused -> MaterialTheme.colorScheme.onSurfaceVariant
         else -> MaterialTheme.colorScheme.onSurface
     }
@@ -226,8 +250,15 @@ private fun GroupHeader(group: ScheduleDisplay.TimelineGroup) {
 }
 
 private fun rows(group: ScheduleDisplay.TimelineGroup, state: ScheduledStore.State, store: ScheduledStore, zone: String,
-    now: Instant): List<ScheduleRowModel> = group.items.map { item ->
+    now: Instant, openRun: (String) -> Unit, openTask: (String) -> Unit, runs: List<ScheduleRunView>): List<ScheduleRowModel> = group.items.map { item ->
     when (item) {
+        // A task that starts when its condition holds (board ④ ①): "Task · once, when 3 or more OSDs are in · HPC".
+        is ScheduleDisplay.TimelineItem.Task -> {
+            val t = item.task
+            ScheduleRowModel("${group.id}-${item.id}", ConditionDisplay.circle(t.condition.cantRead), t.title, ConditionDisplay.taskRowLine(t),
+                repeats = false, time = "", draft = false, paused = false,
+                reading = if (t.condition.cantRead) null else ConditionDisplay.rowReading(t.condition, now)) { openTask(t.id) }
+        }
         is ScheduleDisplay.TimelineItem.Draft -> {
             val card = item.card
             val rule = card.`when`?.rule ?: ScheduleRule.Daily("")
@@ -247,23 +278,32 @@ private fun rows(group: ScheduleDisplay.TimelineGroup, state: ScheduledStore.Sta
                 if (underWay) ScheduleDisplay.phoneRowLine(s.rule, s.workspaceName, s.accessLevel, s.state, s.heldReason, runningMinutes = minutes)
                 else ScheduleDisplay.runLine(run.state, run.summary, run.failureReason, run.reasonText, facts.notified),
                 underWay && ScheduleDisplay.ruleRepeats(s.rule), scheduleClock(run.plannedAt, zone), draft = false, paused = false) {
-                store.inspect(s.id); store.loadDetail(s.id)
+                val session = run.sessionId
+                if (session != null) openRun(session)
+                else { store.inspect(s.id); store.loadDetail(s.id) }
             }
         }
         is ScheduleDisplay.TimelineItem.Schedule -> {
             val s = item.schedule
-            val inNeeds = group.key == ScheduleDisplay.GroupKey.needsYou
             val inPaused = group.key == ScheduleDisplay.GroupKey.paused
-            val failing = inNeeds && s.state == "ACTIVE" && s.lastRun != null
-            val time = when {
-                failing -> scheduleClock(s.lastRun?.plannedAt, zone)
-                !inNeeds && !inPaused -> scheduleClock(item.at, zone)
-                else -> ""
-            }
+            // Tagged on its own row (owner 2026-11-19): Failed, unless a run of it is under way; held, in Paused.
+            val circle = ScheduleDisplay.rowCircle(s, runs)
+            val time = if (inPaused) "" else scheduleClock(item.at, zone)
             val pausedAt = s.pausedAt?.let(ScheduleDisplay::parse) ?: pausedAt(state.detail(s.id))
-            ScheduleRowModel("${group.id}-${item.id}",
-                if (inNeeds || inPaused) ScheduleDisplay.scheduleCircle(s) else ScheduleDisplay.CircleView(ScheduleDisplay.Circle.open),
-                s.title, ScheduleDisplay.phoneRowLine(s.rule, s.workspaceName, s.accessLevel, s.state, s.heldReason, pausedAt, zone),
+            if (s.rule is ScheduleRule.When) {
+                // A WHEN rule (board ④): "↻ When raw used above 90% · HPC", a gauge, and the newest reading with its age where a
+                // timed row has its time; "Can't read" at the head of Waiting for a condition.
+                val parts = mutableListOf(ScheduleDisplay.ruleText(s.rule, ScheduleDisplay.RuleForm.long))
+                s.workspaceName?.takeIf { it.isNotEmpty() }?.let { parts += it }
+                if (s.accessLevel != "CHECK_ONLY") parts += ScheduleDisplay.accessCopy(s.accessLevel).label
+                val cantRead = s.condition?.cantRead == true
+                return@map ScheduleRowModel("${group.id}-${item.id}", circle, s.title,
+                    parts.joinToString(SC.separator), repeats = true, time = "", draft = false, paused = inPaused,
+                    reading = if (cantRead || inPaused) null else s.condition?.let { ConditionDisplay.rowReading(it, now) }) {
+                    store.inspect(s.id); store.loadDetail(s.id)
+                }
+            }
+            ScheduleRowModel("${group.id}-${item.id}", circle, s.title, ScheduleDisplay.phoneRowLine(s.rule, s.workspaceName, s.accessLevel, s.state, s.heldReason, pausedAt, zone),
                 ScheduleDisplay.ruleRepeats(s.rule), time, draft = false, paused = inPaused) {
                 store.inspect(s.id); store.loadDetail(s.id)
             }
@@ -290,7 +330,13 @@ private fun ScheduleRow(row: ScheduleRowModel) {
                     val tag = row.circle.tag
                     if (tag != null && row.circle.circle != ScheduleDisplay.Circle.done && row.circle.circle != ScheduleDisplay.Circle.muted)
                         Text(tag.text, style = MaterialTheme.typography.labelSmall.copy(fontWeight = FontWeight.SemiBold), color = tagColor(tag.tone), maxLines = 1)
-                    if (row.time.isNotEmpty()) Text(row.time, style = MaterialTheme.typography.bodySmall, color = secondary, maxLines = 1)
+                    val reading = row.reading
+                    // "6.9% · 1 min ago": how far from firing, and whether the probe is still alive.
+                    if (reading != null) Text(buildAnnotatedString {
+                        withStyle(SpanStyle(fontWeight = FontWeight.SemiBold, color = MaterialTheme.colorScheme.onSurface)) { append(reading.value) }
+                        reading.age?.let { append("${SC.separator}$it") }
+                    }, Modifier.testTag("schedule-row-reading"), style = MaterialTheme.typography.bodySmall, color = secondary, maxLines = 1)
+                    else if (row.time.isNotEmpty()) Text(row.time, style = MaterialTheme.typography.bodySmall, color = secondary, maxLines = 1)
                 }
                 // One line, the phone's short grammar; the tail gives way if it must.
                 Text((if (row.repeats) "↻ " else "") + row.line, style = MaterialTheme.typography.bodySmall, color = secondary,
@@ -370,8 +416,12 @@ private fun ScheduleDetailSheet(store: ScheduledStore, id: String, close: () -> 
             val now = Instant.now()
             val lastRun = detail?.lastRun ?: s.lastRun
             val lastFacts = lastRun?.let { ScheduleDisplay.runFindingFacts(it, detail?.findings.orEmpty()) }
-            val meta = listOfNotNull(ScheduleDisplay.ruleText(s.rule, ScheduleDisplay.RuleForm.short), s.timezone, s.workspaceName,
-                ScheduleDisplay.accessCopy(s.accessLevel).label).joinToString(SC.separator)
+            val conditionId = (s.rule as? ScheduleRule.When)?.conditionId ?: s.condition?.id
+            val condition = state.condition(conditionId)
+            LaunchedEffect(conditionId) { conditionId?.let(store::loadCondition) }
+            // A WHEN rule has no time, so its zone says nothing.
+            val meta = listOfNotNull(ScheduleDisplay.ruleText(s.rule, ScheduleDisplay.RuleForm.short), s.timezone.takeIf { conditionId == null },
+                s.workspaceName, ScheduleDisplay.accessCopy(s.accessLevel).label).joinToString(SC.separator)
             val next = s.nextDueAt?.let(ScheduleDisplay::parse)?.let { ScheduleDisplay.whenText(it, now, zone) } ?: "—"
             val lastLine = lastRun?.let { run ->
                 val at = ScheduleDisplay.parse(run.startedAt ?: run.plannedAt)?.let { ScheduleDisplay.whenText(it, now, zone) }.orEmpty()
@@ -383,7 +433,12 @@ private fun ScheduleDetailSheet(store: ScheduledStore, id: String, close: () -> 
                 Text((if (ScheduleDisplay.ruleRepeats(s.rule)) "↻ " else "") + meta, style = MaterialTheme.typography.bodySmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant)
             }
-            Block {
+            if (conditionId != null) {
+                // A WHEN rule (board ⑥ ② ③): how far the reading is from firing, and how it is checked, in place of the next run.
+                if (condition != null) ConditionBlocks(condition, zone, now)
+                else CircularProgressIndicator(Modifier.align(Alignment.CenterHorizontally))
+                lastLine?.let { Text(it, Modifier.padding(start = 4.dp), style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant) }
+            } else Block {
                 Text(SC.Inspector.nextRun, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
                 Text(next, style = MaterialTheme.typography.headlineMedium.copy(fontWeight = FontWeight.Bold))
                 lastLine?.let { Text(it, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant) }
@@ -411,7 +466,7 @@ private fun ScheduleDetailSheet(store: ScheduledStore, id: String, close: () -> 
                 Text(ScheduleDisplay.allowedText(s.envelope.runsPerWeek, s.envelope.runLimitMinutes), style = MaterialTheme.typography.bodySmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant)
             }
-            HistorySection(store, s, detail, now, zone, openSession)
+            HistorySection(store, s, detail, condition, now, zone, openSession)
         }
     }
     if (confirmingDelete && s != null) AlertDialog(onDismissRequest = { confirmingDelete = false },
@@ -429,13 +484,13 @@ private fun DoorButton(title: String, modifier: Modifier, prominent: Boolean = f
 }
 
 @Composable
-private fun Block(content: @Composable ColumnScope.() -> Unit) {
+internal fun Block(content: @Composable ColumnScope.() -> Unit) {
     Column(Modifier.fillMaxWidth().background(MaterialTheme.colorScheme.surface, RoundedCornerShape(12.dp)).padding(14.dp),
         verticalArrangement = Arrangement.spacedBy(4.dp), content = content)
 }
 
 @Composable
-private fun Section(title: String, content: @Composable ColumnScope.() -> Unit) {
+internal fun Section(title: String, content: @Composable ColumnScope.() -> Unit) {
     Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
         Text(title.uppercase(), Modifier.padding(start = 4.dp), style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
         Block(content)
@@ -447,12 +502,22 @@ private sealed class HistoryEntry {
     abstract val id: String
     data class Run(val run: ScheduleRunView) : HistoryEntry() { override val at get() = run.startedAt ?: run.plannedAt; override val id get() = "run-${run.id}" }
     data class Record(val record: ScheduleChangeRecord) : HistoryEntry() { override val at get() = record.createdAt; override val id get() = "rev-${record.revision}" }
+    /** A condition's line (board ⑥ ③): Fired, Ready again; a FIRED's run is drawn by its line, not twice. */
+    data class Event(val event: ConditionEventView, val line: ConditionDisplay.HistoryLine, val index: Int) : HistoryEntry() {
+        override val at get() = event.at; override val id get() = "event-$index-${event.at}"
+    }
 }
 
 @Composable
-private fun HistorySection(store: ScheduledStore, s: ScheduleView, detail: ScheduleDetailResponse?, now: Instant, zone: String, openSession: (String) -> Unit) {
+private fun HistorySection(store: ScheduledStore, s: ScheduleView, detail: ScheduleDetailResponse?, condition: ConditionView?, now: Instant,
+    zone: String, openSession: (String) -> Unit) {
     val scope = rememberCoroutineScope()
-    val entries = (detail?.recentRuns.orEmpty().map { HistoryEntry.Run(it) } + detail?.history.orEmpty().map { HistoryEntry.Record(it) })
+    val events = condition?.events.orEmpty().mapIndexedNotNull { index, e ->
+        ConditionDisplay.historyLine(e, condition!!)?.let { HistoryEntry.Event(e, it, index) }
+    }
+    val firedRuns = condition?.events.orEmpty().mapNotNull { it.runId?.let(ScheduledStore::key) }.toSet()
+    val runs = detail?.recentRuns.orEmpty().filter { ScheduledStore.key(it.id) !in firedRuns }
+    val entries = (runs.map { HistoryEntry.Run(it) } + events + detail?.history.orEmpty().map { HistoryEntry.Record(it) })
         .sortedByDescending { ScheduleDisplay.parse(it.at) ?: Instant.MIN }
     if (entries.isEmpty()) return
     Section(SC.Inspector.history) {
@@ -476,6 +541,24 @@ private fun HistorySection(store: ScheduledStore, s: ScheduleView, detail: Sched
                         view.tag?.let { Chip(it.text, it.tone) }
                         if (run.sessionId != null) Icon(painterResource(R.drawable.ic_chevron_forward), null, Modifier.size(14.dp),
                             tint = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.6f))
+                    }
+                }
+                is HistoryEntry.Event -> {
+                    val line = entry.line
+                    val run = line.runId?.let { id -> detail?.recentRuns?.firstOrNull { ScheduledStore.key(it.id) == ScheduledStore.key(id) } }
+                    val at = ScheduleDisplay.parse(entry.event.at)?.let { "${ScheduleDisplay.dateText(it, zone)} ${ScheduleDisplay.localParts(it, zone).time}" }.orEmpty()
+                    val sub = listOfNotNull(at, run?.let { ScheduleDisplay.capitalizedRunOf(it.plannedAt, zone) }).joinToString(SC.separator)
+                    Row(Modifier.fillMaxWidth().clickable(enabled = run?.sessionId != null) { run?.sessionId?.let(openSession) }
+                        .testTag("schedule-history-event"), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                        Column(Modifier.weight(1f)) {
+                            Text(line.text, style = MaterialTheme.typography.bodyMedium)
+                            Text(sub, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                        }
+                        if (line.runId != null) {
+                            val accent = MaterialTheme.colorScheme.primary
+                            Text(line.chip, Modifier.background(accent.copy(alpha = 0.12f), RoundedCornerShape(50)).padding(horizontal = 7.dp, vertical = 2.dp),
+                                style = MaterialTheme.typography.labelSmall.copy(fontWeight = FontWeight.Medium), color = accent)
+                        } else Chip(line.chip, ScheduleDisplay.TagTone.mute)
                     }
                 }
                 is HistoryEntry.Record -> {
@@ -536,8 +619,8 @@ private fun ScheduleDraftSheet(store: ScheduledStore, panel: ScheduledStore.Draf
     }
 }
 
-/** The drawer's number beside Scheduled (board 01 ① 2): the schedules that need the owner — failing or held — in the orange the
- * Projects row writes its own in, and nothing at zero. */
+/** The drawer's number beside Scheduled (board 01 ① 2): the schedules that need the owner — held, failing with no run under way,
+ * or a condition that cannot be read — in the orange the Projects row writes its own in, and nothing at zero. */
 @Composable
 fun ScheduledDrawerCount(count: Int) {
     if (count > 0) Text("$count", Modifier.testTag("scheduled-drawer-count").semantics { contentDescription = "$count need you" },

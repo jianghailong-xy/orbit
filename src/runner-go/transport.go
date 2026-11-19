@@ -32,7 +32,7 @@ const (
 	sessionWorktreeOpsV1             = "session-worktree-ops-v1"
 	sessionMergeRecoveryV1           = "session-merge-recovery-v1"
 	// A merge runs whether or not a turn holds the session's checkout, and holds no turn back
-	// (heartbeatMerge); a commit is refused while a background job is still changing it.
+	// (heartbeatMerge); a commit runs beside a live background job.
 	sessionMergeBesideTurnV1 = "session-merge-beside-turn-v1"
 	// The commit relay may also carry `discard`, and this runner reports which finished
 	// sessions' checkouts still hold uncommitted work (abandoned_checkout.go).
@@ -118,6 +118,8 @@ func init() {
 		cursorKeyCheckCapabilityV1,
 		dirProbeCapabilityV1,
 		createWorkDirCapabilityV1,
+		cloneWorkDirCapabilityV1,
+		conditionProbeCapabilityV1,
 		createWorkDirCapabilityV2,
 		claudeRegionCapabilityV1,
 		mainCheckoutGitCapabilityV1,
@@ -127,6 +129,7 @@ func init() {
 		taskForkCapabilityV1,
 		codelessCheckoutCapabilityV1,
 		machineResourcesCapabilityV1,
+		helpAskCapabilityV1,
 		subagentRemoteResumeCapabilityV1,
 	}, cursorAccountCapabilities()...), declaredSteerCapabilities()...), ",")
 	// Where 0600 means something (secret_file_unix.go); a Windows runner is never handed a secret.
@@ -470,6 +473,16 @@ func (t *Transport) deregister() error {
 	return t.do(nil, "POST", "/runner/deregister", nil, nil, 15*time.Second)
 }
 
+// gitCredential is POST /runner/git-credential: Orbit's GitHub App token for one workspace's repository
+// (github_credential.go). Never logged.
+func (t *Transport) gitCredential(ctx context.Context, request RunnerGitCredentialRequest) (*RunnerGitCredentialAnswer, error) {
+	var answer RunnerGitCredentialAnswer
+	if err := t.do(ctx, "POST", "/runner/git-credential", request, &answer, orbitGitCredentialTimeout); err != nil {
+		return nil, err
+	}
+	return &answer, nil
+}
+
 func (t *Transport) heartbeat(b HeartbeatRequest) (*HeartbeatResponse, error) {
 	timeout := 15 * time.Second
 	if t.link != nil {
@@ -637,6 +650,11 @@ func (t *Transport) inbox(ctx context.Context, sessionID, leaseGeneration string
 	}
 	if r.TurnID == "" {
 		return nil, nil
+	}
+	// The end of a coordinator handing over leaves the session's background work running; noted before any loop
+	// acts on the turn, whichever engine's loop that is (session_keep_work.go).
+	if r.Kind == "end" && keepBackgroundWorkRequested(r.Content) {
+		markSessionKeepsWork(sessionID)
 	}
 	r.Content = withExternalSenderBlock(r.Kind, r.Content, r.ExternalSender)
 	return &r, nil
@@ -2117,6 +2135,19 @@ func (t *Transport) handOverOpenItem(sessionID, id, itemID, note string) (json.R
 	return out, err
 }
 
+// recordProjectRuling records an owner ruling on the project (`project_ruling_record`, coordinator
+// handoff v2 §2). The session header is the authority: the server checks it against the project's
+// coordinator pointer and the quote against the named turn's owner text.
+func (t *Transport) recordProjectRuling(sessionID, id string, body map[string]interface{}) (json.RawMessage, error) {
+	if err := validatePathSegmentID(id); err != nil {
+		return nil, err
+	}
+	var out json.RawMessage
+	err := t.doHeaders(nil, "POST", "/runner/projects/"+url.PathEscape(id)+"/rulings",
+		body, &out, taskOpTimeout, sessionHeader(sessionID))
+	return out, err
+}
+
 // retryIntegration asks for the next generation of a DONE task's failed landing, as the acting
 // session (contract §2.3 J-T1b). The session header is the authority the server checks against the
 // project's coordinator pointer; the reason travels as the body and is kept on the new generation and
@@ -2807,6 +2838,17 @@ func (t *Transport) endSession(callerSessionID, orchestrationToken, id string) (
 	}
 	var out json.RawMessage
 	err := t.doOrchestration("POST", "/runner/sessions/"+url.PathEscape(id)+"/end", nil, &out, callerSessionID, orchestrationToken)
+	return out, err
+}
+
+// moveSession files a session in a folder of its workspace (or in none), or moves an ended one to
+// another workspace: the Move panel's rules, refusals as a 409 with the reason.
+func (t *Transport) moveSession(callerSessionID, orchestrationToken, id string, body interface{}) (json.RawMessage, error) {
+	if err := validatePathSegmentID(id); err != nil {
+		return nil, err
+	}
+	var out json.RawMessage
+	err := t.doOrchestration("POST", "/runner/sessions/"+url.PathEscape(id)+"/move", body, &out, callerSessionID, orchestrationToken)
 	return out, err
 }
 

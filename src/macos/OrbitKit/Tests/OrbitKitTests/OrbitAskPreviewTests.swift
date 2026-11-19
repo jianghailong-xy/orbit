@@ -156,7 +156,7 @@ final class OrbitAskPreviewTests: XCTestCase {
              "name":"renamed","description":"builds at night","defaultMergeTarget":"develop"}
             """))
         XCTAssertNil(card.env, "a write that leaves the variables alone says nothing of them")
-        XCTAssertEqual(card.fields.map(\.caption), ["Working directory", "System prompt", "Appended system prompt", "Runner",
+        XCTAssertEqual(card.fields.map(\.caption), ["Working directory", "Base instructions", "Runtime instructions", "Runner",
                                                     "Worktree", "Name", "Description", "Merge target"])
         XCTAssertEqual(card.fields.map(\.value), ["/srv/other", "Answer in French.", "And briefly.", "gpu-2",
                                                   "Sessions run in the shared folder", "renamed", "builds at night", "develop"])
@@ -166,7 +166,7 @@ final class OrbitAskPreviewTests: XCTestCase {
         let card = try XCTUnwrap(workspaceWrite(changes: #"{"env":{},"systemPrompt":""}"#, removed: #"["A","B"]"#))
         XCTAssertEqual(card.env, [])
         XCTAssertEqual(card.envRemoved, ["A", "B"])
-        XCTAssertEqual(card.fields, [.init(caption: "System prompt", value: "Cleared")])
+        XCTAssertEqual(card.fields, [.init(caption: "Base instructions", value: "Cleared")])
     }
 
     func testACreateReadsAsACreate() throws {
@@ -343,7 +343,8 @@ final class OrbitAskPreviewTests: XCTestCase {
     func testAMergeCheckCardIsDrawnFromThePreview() throws {
         let card = try source("src/macos/OrbitApp/Sources/OrbitApp/Views/ApprovalCards.swift")
         for shown in ["Approvals.mergeCheckChangePreview(toolName:",
-                      "mergeCheck.projectLine", "mergeCheck.currentLine", "mergeCheck.nextLine", "mergeCheck.timeoutLine",
+                      "mergeCheck.projectLine", "checkLayer(mergeCheck, layer: \"landing\")",
+                      "checkLayer(mergeCheck, layer: \"merge\")", "preview.commandLine(layer, after: after)", "preview.budgetLine(layer, after: after)",
                       "MergeCheckChangePreview.action", "mergeCheck.declineName"] {
             XCTAssertTrue(card.contains(shown), "\(shown) is part of what this card shows and the press it offers")
         }

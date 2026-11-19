@@ -1,0 +1,151 @@
+/* Mock-only: the iPhone composer footer and its usage sheet in iOS dark appearance, drawn to match
+   ComposerView.swift's toolbar (32pt + and Send, 8pt spacing, 24pt card radius). Not shipped code. */
+body.m { font-family: -apple-system, BlinkMacSystemFont, "SF Pro Text", "Segoe UI", Roboto, Helvetica, Arial, "PingFang SC", "Noto Sans CJK SC", sans-serif; }
+.m-sheet { width: 1560px; }
+.m-grid2 { gap: 20px; }
+.m-grid3 { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 20px; align-items: start; }
+.m-h2 { font-size: 15px; font-weight: 650; margin: 26px 0 10px; }
+
+/* ── footer close-ups (2× scale of a 390pt phone) ───────────────────── */
+.zoom { background: #000; border-radius: 14px; padding: 22px 20px; }
+.card { background: #1c1c1e; border: 1px solid #2c2c2e; border-radius: 48px; padding: 18px 16px 14px; }
+.card .ph { color: #6e6e73; font-size: 28px; padding: 6px 20px 26px; }
+.tb { white-space: nowrap; display: flex; align-items: center; gap: 16px; font-size: 30px; color: #8e8e93; }
+.tb .grow { flex: 1; }
+.tb .plus { width: 64px; height: 64px; display: grid; place-items: center; font-size: 46px; font-weight: 200; color: #8e8e93; }
+.tb .model b { color: #f2f2f7; font-weight: 600; }
+.tb .model span { color: #8e8e93; margin-left: 10px; }
+.tb .send { width: 64px; height: 64px; border-radius: 50%; background: #3a3a3c; display: grid; place-items: center; color: #8e8e93; }
+.tb .send svg { width: 30px; height: 30px; }
+.hit { position: relative; display: grid; place-items: center; flex: none; }
+.hit::after { content: ''; position: absolute; inset: 0; border: 2px dashed #ff453a; border-radius: 6px; }
+.hit.ok::after { border-color: #30d158; border-radius: 50%; }
+.hit .lab { position: absolute; top: calc(100% + 10px); left: 50%; transform: translateX(-50%); white-space: nowrap;
+            font: 600 14px/1 -apple-system, "Segoe UI", sans-serif; color: #ff453a; }
+.hit.ok .lab { color: #30d158; }
+.zbar { width: 40px; height: 8px; border-radius: 4px; background: #3a3a3c; overflow: hidden; }
+.zbar i { display: block; height: 100%; background: #0a84ff; }
+.under { height: 34px; }
+
+/* ── the ring (UsageRing) and its plan dot ───────────────────────────── */
+.ring { position: relative; display: inline-block; flex: none; }
+.ring svg { display: block; width: 100%; height: 100%; transform: rotate(-90deg); }
+.ring .dot { position: absolute; right: -2px; top: -2px; width: 34%; height: 34%; border-radius: 50%; box-shadow: 0 0 0 2.5px #1c1c1e; }
+.states { display: flex; gap: 14px; flex-wrap: wrap; }
+.rs { flex: 1; min-width: 150px; background: #1c1c1e; border-radius: 12px; padding: 16px 12px 12px; text-align: center; color: #f2f2f7; }
+.rs .ring { width: 40px; height: 40px; }
+.rs p { margin: 12px 0 0; font-size: 12px; line-height: 1.5; color: #aeaeb2; }
+.rs p b { display: block; color: #f2f2f7; font-weight: 600; font-size: 12.5px; }
+
+/* ── dark phones ─────────────────────────────────────────────────────── */
+.phone { width: 300px; height: 640px; margin: 0 auto; border-radius: 40px; background: #2a2a2c; padding: 10px; }
+.screen { position: relative; height: 100%; border-radius: 31px; overflow: hidden; background: #000; color: #f2f2f7; }
+.screen .chat { padding: 54px 16px 0; font-size: 13px; line-height: 1.6; color: #d1d1d6; }
+.screen .dim { position: absolute; inset: 0; background: rgba(0, 0, 0, .45); }
+.pcomp { position: absolute; left: 10px; right: 10px; bottom: 22px; background: #1c1c1e; border: 1px solid #2c2c2e; border-radius: 22px; padding: 8px 8px 7px; }
+.pcomp .ph { color: #6e6e73; font-size: 13px; padding: 2px 10px 12px; }
+.ptb { display: flex; align-items: center; gap: 6px; font-size: 11.5px; color: #8e8e93; white-space: nowrap; }
+.ptb .grow { flex: 1; }
+.ptb .plus { width: 28px; text-align: center; font-size: 22px; font-weight: 200; line-height: 26px; }
+.ptb .model { overflow: hidden; text-overflow: ellipsis; min-width: 0; }
+.ptb .model b { color: #f2f2f7; font-weight: 600; }
+.ptb .send { flex: none; width: 28px; height: 28px; border-radius: 50%; background: #3a3a3c; display: grid; place-items: center; }
+.ptb .send svg { width: 13px; height: 13px; color: #8e8e93; }
+.ptb .tap { flex: none; width: 28px; height: 28px; display: grid; place-items: center; border-radius: 50%; }
+.ptb .tap.press { background: #3a3a3c; }
+.ptb .ring { width: 16px; height: 16px; }
+
+.sheet { position: absolute; left: 0; right: 0; bottom: 0; top: 64px; background: #1c1c1e; border-radius: 14px 14px 0 0; padding: 8px 14px 24px; overflow: hidden; }
+.grab { width: 36px; height: 5px; border-radius: 3px; background: #48484a; margin: 0 auto 10px; }
+.sh-h { display: flex; align-items: center; margin: 2px 2px 12px; }
+.sh-h b { flex: 1; font-size: 16px; font-weight: 600; }
+.sh-h span { color: #0a84ff; font-size: 15px; font-weight: 600; }
+.sec { font-size: 11.5px; color: #8e8e93; text-transform: uppercase; letter-spacing: .02em; margin: 0 6px 5px; }
+.grp { background: #2c2c2e; border-radius: 10px; overflow: hidden; margin-bottom: 14px; }
+.row { display: flex; align-items: center; gap: 10px; padding: 9px 12px; font-size: 13.5px; }
+.row + .row { border-top: .5px solid #3a3a3c; }
+.row .v { margin-left: auto; color: #8e8e93; font-variant-numeric: tabular-nums; }
+.row.col { flex-direction: column; align-items: stretch; gap: 5px; }
+.row.col .top { display: flex; }
+.row.col .sub { font-size: 11.5px; color: #636366; }
+.bar { height: 5px; border-radius: 3px; background: #3a3a3c; overflow: hidden; }
+.bar i { display: block; height: 100%; background: #0a84ff; }
+.bar.amber i { background: #ff9f0a; }
+.bar.red i { background: #ff453a; }
+.act { display: flex; gap: 11px; align-items: center; padding: 9px 12px; }
+.act + .act { border-top: .5px solid #3a3a3c; }
+.act svg { width: 18px; height: 18px; color: #0a84ff; flex: none; }
+.act b { display: block; font-weight: 500; font-size: 14px; color: #0a84ff; }
+.act span span { display: block; font-size: 11.5px; color: #8e8e93; line-height: 15px; }
+.act.dis b, .act.dis svg { color: #545458; }
+.amber-t { color: #ff9f0a !important; }
+.red-t { color: #ff453a !important; }
+
+/* ── the merged gauge button: bar + ring in one 32pt-tall target ─────── */
+.gp { display: inline-flex; align-items: center; gap: 6px; flex: none; }
+.gp .gbar { width: 24px; height: 5px; border-radius: 3px; background: #3a3a3c; overflow: hidden; }
+.gp .gbar i { display: block; height: 100%; background: #0a84ff; }
+.gp .gbar.amber i { background: #ff9f0a; }
+.gp .gbar.red i { background: #ff453a; }
+.gp .ring { width: 16px; height: 16px; }
+.zoom .gp { gap: 12px; }
+.zoom .gp .gbar { width: 48px; height: 10px; border-radius: 5px; }
+.zoom .gp .ring { width: 32px; height: 32px; }
+.rs .gp { transform: scale(1.8); margin: 8px 0 6px; }
+.hit.pill::after { border-radius: 32px; }
+.ptb .tap.wide { width: auto; padding: 0 7px; border-radius: 14px; }
+.tb .send { flex: none; }
+.tb .model { min-width: 0; overflow: hidden; text-overflow: ellipsis; }
+
+/* ── board 02: the capsule behind the merged gauge (tertiarySystemFill, dark) ── */
+.m-grid3z { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 20px; align-items: start; }
+.cap { background: rgba(118, 118, 128, .24); border-radius: 999px; }
+.cap.press { background: rgba(118, 118, 128, .40); }
+.zoom .gp.capd { height: 64px; padding: 0 16px; }
+.ptb .gp.capd { height: 28px; padding: 0 8px; }
+.rs .gp.capd { height: 32px; padding: 0 8px; }
+.hint { margin: 10px 2px 0; font-size: 12.5px; color: var(--text-2); }
+.hint b { color: var(--text-1); }
+.m-grid3z { grid-template-columns: 1fr; gap: 14px; }
+.m-grid3z .m-stage { display: grid; grid-template-columns: 820px 1fr; column-gap: 26px; align-items: center; }
+.m-grid3z .m-stage-l { grid-column: 1 / -1; }
+.m-grid3z .zoom { width: 820px; box-sizing: border-box; }
+.m-grid3z .hint { margin: 0; font-size: 14px; line-height: 1.7; }
+.zoom .tb .send { flex: none; }
+
+/* ── board 03: lighter ways to read as one control ───────────────────── */
+.opt { display: grid; grid-template-columns: 760px 1fr 300px; column-gap: 24px; align-items: center; }
+.opt + .opt { margin-top: 14px; }
+.opt .zoom { padding: 16px; }
+.opt .card { padding: 14px 16px; }
+.strip { display: flex; flex-direction: column; gap: 10px; }
+.mini { border-radius: 18px; padding: 8px; }
+.mini.dk { background: #1c1c1e; border: 1px solid #2c2c2e; }
+.mini.lt { background: #fff; border: 1px solid #e5e5ea; }
+.mini.lt .ptb .model b { color: #1c1c1e; }
+.mini.lt .ptb .send { background: #e5e5ea; }
+.desc { font-size: 13.5px; line-height: 1.7; color: var(--text-2); }
+.desc b { color: var(--text-1); }
+.desc .pro { color: #389e0d; }
+.desc .con { color: #cf1322; }
+.gp.tight { gap: 3px !important; }
+.zoom .gp.tight { gap: 6px !important; }
+.gp.line { border: .5px solid rgba(118, 118, 128, .45); border-radius: 999px; padding: 0 7px; height: 26px; }
+.zoom .gp.line { border-width: 1.5px; padding: 0 14px; height: 54px; }
+.mini.lt .gp.line { border-color: rgba(60, 60, 67, .22); }
+.ring2 { position: relative; display: inline-block; width: 20px; height: 20px; flex: none; }
+.zoom .ring2 { width: 40px; height: 40px; }
+.ring2 svg { display: block; width: 100%; height: 100%; transform: rotate(-90deg); }
+.stack { display: inline-flex; flex-direction: column; align-items: center; gap: 2px; flex: none; }
+.stack .gbar { width: 16px !important; height: 3px !important; }
+.zoom .stack { gap: 4px; }
+.zoom .stack .gbar { width: 32px !important; height: 6px !important; }
+.stack .ring { width: 16px; height: 16px; }
+.zoom .stack .ring { width: 32px; height: 32px; }
+.stack .gbar { border-radius: 2px; background: #3a3a3c; overflow: hidden; }
+.stack .gbar i { display: block; height: 100%; background: #0a84ff; }
+.stack .gbar.amber i { background: #ff9f0a; }
+.mini.lt .gbar { background: #e5e5ea !important; }
+.desc .pro, .desc .con { display: block; font-weight: 400; color: var(--text-2); margin-top: 4px; }
+.desc .pro::before { content: '优点  '; color: #389e0d; font-weight: 600; }
+.desc .con::before { content: '缺点  '; color: #cf1322; font-weight: 600; }

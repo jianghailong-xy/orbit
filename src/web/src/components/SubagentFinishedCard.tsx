@@ -109,7 +109,6 @@ export function SubagentFinishedCard({
   undelivered,
   queued,
   steer,
-  attached,
 }: {
   wake: SubagentFinished;
   /** Unset while the wake is still queued: it is no event yet. */
@@ -120,8 +119,6 @@ export function SubagentFinishedCard({
   queued?: ReactNode;
   /** How far a wake written into the running turn has got (`steerDeliveryState(...).label`). */
   steer?: string;
-  /** Whatever else the same note carried, as its own folded entry. */
-  attached?: ReactNode;
 }) {
   const several = wake.runs.length > 1;
   const lone = several ? null : wake.runs[0];
@@ -177,7 +174,6 @@ export function SubagentFinishedCard({
             <summary>What the agent read</summary>
             <pre>{wake.text}</pre>
           </details>
-          {attached}
         </div>
       </details>
       {lone ? (

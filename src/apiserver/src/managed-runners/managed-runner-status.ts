@@ -95,7 +95,8 @@ export function managedRunnerStatus(input: ManagedRunnerStatusInput): ManagedRun
     managementState: mapping.managementState,
     desiredState: mapping.desiredState,
     runnerId: mapping.runnerId,
-    workspaceId: mapping.defaultWorkspaceId,
+    // Always null since 0930: a managed runner has no default workspace. Kept for clients that still read it.
+    workspaceId: null,
     heartbeatStatus: runner?.status ?? null,
     lastHeartbeatAt: beat?.toISOString() ?? null,
     usable: mapping.managementState === 'READY' && fresh && runner?.status !== 'OFFLINE' && !disabled,

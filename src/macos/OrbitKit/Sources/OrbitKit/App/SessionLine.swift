@@ -59,11 +59,16 @@ public struct SessionLine: Equatable, Sendable {
             return SessionLine(text: OwnerConfirmations.underReviewLine(review.reviewerTitle), tone: .review)
         }
         if live && s.isGenerating {
+            // A sub-agent launch still in flight (a synchronous Agent, a foreground delegate) names
+            // the sub-agent's work rather than the tool (web parity).
+            if let t = s.lastToolUse, subagentLaunchTools.contains(fmtTool(t)), let n = s.runningSubagentCount, n > 0 {
+                return SessionLine(text: subagentRunningLine(n, title: s.runningSubagentTitle), tone: .running)
+            }
             if let t = s.lastToolUse, !t.isEmpty { return SessionLine(text: "Running \(fmtTool(t))…", tone: .running) }
             // A sub-agent or workflow in flight: its launch result cleared the tool line at once, so
             // say it rather than fall through to a preview that reads as idle (web parity).
             if let n = s.runningSubagentCount, n > 0 {
-                return SessionLine(text: "\(subagentRunningLabel(n))…", tone: .running)
+                return SessionLine(text: subagentRunningLine(n, title: s.runningSubagentTitle), tone: .running)
             }
             // The agent hasn't answered yet: show the message it was sent (server-kept from the moment
             // it is enqueued until a reply lands) rather than the previous turn's reply, which
@@ -78,15 +83,18 @@ public struct SessionLine: Equatable, Sendable {
             // A runner draining for its update is the one queue word in the warning colour (board 5,
             // web `sessionLine`): it can last hours, and only the owner can shorten it.
             if RunnerUpdating.holds(s) { return SessionLine(text: RunnerUpdating.title(s), tone: .warning) }
-            // A full runner, run or batch names itself, in the queue's own colour (web `queuedLabel`).
-            if QueuedCapacity.holds(s) { return SessionLine(text: QueuedCapacity.title(s), tone: .queued) }
+            // A full runner, run or batch reads in plain words, in the queue's own colour (board
+            // session-row-runner-full, web `sessionLine`); the Mac row's tooltip says which is full.
+            if QueuedCapacity.holds(s) { return SessionLine(text: QueuedCapacity.CAPACITY_HELD_LINE, tone: .queued) }
+            // Keep Free holds a new session on a runner short of disk (web `queuedLabel`).
+            if QueuedDiskLow.holds(s) { return SessionLine(text: QueuedDiskLow.title, tone: .queued) }
             return SessionLine(text: "Queued", tone: .queued)
         }
         // Parked while a sub-agent or workflow it started works on: the workspace itself still
         // working, so it outranks the wait it is parked on and anything it left running (web's
         // `parkedWorkLabel`, subagent first). Its turn has ended, so this is where it surfaces.
         if live, let n = s.runningSubagentCount, n > 0 {
-            return SessionLine(text: "\(subagentRunningLabel(n))…", tone: .running)
+            return SessionLine(text: subagentRunningLine(n, title: s.runningSubagentTitle), tone: .running)
         }
         // Parked on a live watch that will resume it: not idle, not waiting on you, and — whatever
         // else it left running — not a background process (contract §9.2). Said in the strip's own
@@ -207,6 +215,9 @@ public struct SessionLine: Equatable, Sendable {
         return s.trimmingCharacters(in: .whitespacesAndNewlines)
     }
 
+    /// The calls that launch a sub-agent (the server's RUNTIME_SUBAGENT_TOOLS, shortened by fmtTool).
+    static let subagentLaunchTools: Set<String> = ["Task", "Agent", "Workflow", "delegate"]
+
     /// Shorten a tool id for the live status line: mcp__orbit__task_create -> task_create; plain
     /// tool names (Bash, Read, Edit) pass through unchanged.
     static func fmtTool(_ name: String) -> String {
@@ -217,6 +228,16 @@ public struct SessionLine: Equatable, Sendable {
     /// word web's `subagentRunningLabel`.
     static func subagentRunningLabel(_ n: Int) -> String {
         n > 1 ? "Running \(n) agents" : "Running Agent"
+    }
+
+    /// The row's words for the same, naming what the newest one is doing when the server knows
+    /// (`runningSubagentTitle`): "Agent: Deploy …" for one, "Running 2 agents · Deploy …" for
+    /// several, the bare label without a title. The row only — the header and the glyph keep the
+    /// short label. Word for word web's `subagentRunningLine`.
+    static func subagentRunningLine(_ n: Int, title: String?) -> String {
+        let t = title?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+        if t.isEmpty { return "\(subagentRunningLabel(n))…" }
+        return n > 1 ? "\(subagentRunningLabel(n)) · \(t)…" : "Agent: \(t)…"
     }
 
     /// "Background process running" / "N background processes running".

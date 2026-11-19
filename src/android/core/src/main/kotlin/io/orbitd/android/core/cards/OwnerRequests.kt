@@ -66,6 +66,8 @@ data class OwnerRequest(
     val resolutionNote: String? = null,
     val answer: OwnerRequestAnswer? = null,
     val resolvedClient: String? = null,
+    /** The agent-written fields in the owner's language (Settings › Translation; `OwnerCardTranslation`); absent until translated. */
+    val translation: JsonElement? = null,
     val createdAt: String,
 ) {
     val pending get() = state == OwnerRequests.PENDING
@@ -131,6 +133,24 @@ object OwnerRequests {
         SECRET -> "Provide key"; DECISION -> "Answer"; MANUAL_STEP -> "Mark done"; CONFIRM, WIKI_CREATE -> "Review"; else -> null
     }
     fun declineLabel(kind: String) = if (kind == MANUAL_STEP) "Can’t do this…" else "Decline…"
+
+    /** Orbit's mark on the turn it queues when a request ends (apiserver `ownerRequestResolutionTurn`). */
+    const val RESOLUTION_MARK = "This turn was queued by Orbit when the request ended, not typed by a person."
+    private val resolutionHead = Regex("""^Orbit owner request \S+ \([A-Z_]+\) ended (DONE|DECLINED|EXPIRED|WITHDRAWN)[:.] """)
+    private val resolutionLabels = mapOf(
+        "DONE" to "Owner action resolved", "DECLINED" to "Owner declined the request",
+        "EXPIRED" to "Owner request expired", "WITHDRAWN" to "Owner request withdrawn",
+    )
+
+    /**
+     * The divider drawn for the turn Orbit starts when a request ends, or null for any other turn: nobody typed it, so it is not a
+     * bubble in the owner's name. The web's `resolutionTurnLabel` and OrbitKit's `OwnerRequests.resolutionTurnLabel`.
+     */
+    fun resolutionTurnLabel(text: String?): String? {
+        if (text == null || !text.contains(RESOLUTION_MARK)) return null
+        val ending = resolutionHead.find(text)?.groupValues?.get(1) ?: return null
+        return "${resolutionLabels.getValue(ending)} · turn started automatically"
+    }
 
     /** Talking about a request rather than answering it, as every card that hands a reply to the composer says it. */
     const val chatAction = "Chat about this"
@@ -290,6 +310,9 @@ object OwnerRequests {
             (if (waited >= Duration.ofDays(1)) " for ${BackgroundWakeCard.duration(waited.seconds)}" else "")
     }
 
+    /** The row's title: the request's, in [owner]'s language when its card would be drawn translated ([OwnerCardTranslation.ownerRequest]). */
+    fun rowTitle(request: OwnerRequest, owner: String?): String = OwnerCardTranslation.ownerRequest(request, owner)?.title ?: request.title
+
     /** The row's detail line: the kind's own words, then what it holds up. */
     fun rowDetail(request: OwnerRequest, now: Instant): String = listOfNotNull(requestDetail(request), holdsText(request, now)).joinToString(" · ")
 
@@ -365,6 +388,11 @@ object OwnerRequests {
         return byId.values.sortedBy { parse(it.createdAt) ?: Instant.MIN }
     }
 
+    /** The request a press on a session's needs-you notice opens: the oldest it asked that is still pending, or null when this
+     * device holds none of them yet (OrbitKit `oldestPending`). */
+    fun oldestPending(sessionId: String, vararg lists: List<OwnerRequest>): OwnerRequest? =
+        forSession(sessionId, *lists).firstOrNull { it.pending }
+
     /**
      * Where each request goes in a conversation (web `decisionReceiptAnchor`): after the last row stamped at or before it was filed,
      * by the row's index, or -1 ahead of every row. Requests with no readable moment are left out.
@@ -407,22 +435,34 @@ class OwnerRequestsApi(private val api: OrbitApi, private val handle: SessionHan
 
     /** The list, and apart from it the scheduled tasks' four kinds (SCHEDULE_FAILED, _HELD, _APPROVAL, _WIDEN), which no session
      * files and [OwnerRequest] does not draw: they are answered at the schedule's own doors (docs/scheduled-tasks-design.md §6.4). */
-    suspend fun listWithSchedules(state: String): Pair<List<OwnerRequest>, List<io.orbitd.android.core.schedule.ScheduleWaitingItem>> {
+    suspend fun listWithSchedules(state: String): Pair<List<OwnerRequest>, List<io.orbitd.android.core.schedule.ScheduleWaitingItem>> =
+        listWithConditions(state).let { it.first to it.second }
+
+    /** A condition's two kinds off the same list (CONDITION_UNKNOWN, CONDITION_STILL_WAITING): written by the condition, drawn by
+     * its own card, answered at its own doors (docs/condition-triggers-design.md §5.3, §6.2). */
+    suspend fun listWithConditions(state: String): Triple<List<OwnerRequest>, List<io.orbitd.android.core.schedule.ScheduleWaitingItem>,
+        List<io.orbitd.android.core.schedule.ConditionWaitingItem>> {
         val body = api.request(handle, ApiRequest(listOf("owner-requests"), query = listOf("state" to state))).requireSuccess().body
         val requests = Wire.decode(body, OwnerRequestList.serializer()).requests
-        val rows = (Wire.decode(body, JsonObject.serializer())["requests"] as? JsonArray).orEmpty()
-        return requests.filterNot { it.kind in io.orbitd.android.core.schedule.ScheduleWaitingItem.KINDS } to
-            rows.mapNotNull { io.orbitd.android.core.schedule.ScheduleWaitingItem.parse(it) }
+        val list = Wire.decode(body, JsonObject.serializer())
+        val rows = (list["requests"] as? JsonArray).orEmpty()
+        return Triple(requests.filterNot { it.kind in io.orbitd.android.core.schedule.ScheduleWaitingItem.KINDS ||
+            it.kind in io.orbitd.android.core.schedule.ConditionWaitingItem.KINDS },
+            rows.mapNotNull { io.orbitd.android.core.schedule.ScheduleWaitingItem.parse(it) },
+            io.orbitd.android.core.schedule.ConditionWaitingItem.fromRequestList(list))
     }
 
     suspend fun get(id: String): OwnerRequest =
         Wire.decode(api.request(handle, ApiRequest(listOf("owner-requests", id))).requireSuccess().body, OwnerRequest.serializer())
 
-    suspend fun done(id: String, option: Int? = null, text: String? = null): OwnerRequest = post(id, listOf("done"), buildJsonObject {
-        option?.let { put("option", it) }; text?.let { put("text", it) }
+    /** [sendAsWritten]: the owner's words again, untranslated, after the door refused them 422 TRANSLATION_FAILED (Settings › Translation). */
+    suspend fun done(id: String, option: Int? = null, text: String? = null, sendAsWritten: Boolean = false): OwnerRequest = post(id, listOf("done"), buildJsonObject {
+        option?.let { put("option", it) }; text?.let { put("text", it) }; if (sendAsWritten) put("sendAsWritten", true)
     })
 
-    suspend fun decline(id: String, reason: String): OwnerRequest = post(id, listOf("decline"), buildJsonObject { put("reason", reason) })
+    suspend fun decline(id: String, reason: String, sendAsWritten: Boolean = false): OwnerRequest = post(id, listOf("decline"), buildJsonObject {
+        put("reason", reason); if (sendAsWritten) put("sendAsWritten", true)
+    })
 
     /** WIKI_CREATE's Create wiki: the owner's door that makes the wiki with the card's settings and settles the card (design §3.6). */
     suspend fun createWiki(id: String): OwnerRequest = post(id, listOf("create-wiki"), buildJsonObject { })

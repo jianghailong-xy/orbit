@@ -42,6 +42,7 @@ import {
   type ScheduleRule,
 } from '@orbit/shared';
 import type { Prisma } from '@prisma/client';
+import { createHash } from 'node:crypto';
 
 export const SCHEDULE_ITEM_KINDS = ['SCHEDULE_FAILED', 'SCHEDULE_HELD', 'SCHEDULE_APPROVAL', 'SCHEDULE_WIDEN'] as const;
 export type ScheduleItemKind = (typeof SCHEDULE_ITEM_KINDS)[number];
@@ -199,11 +200,12 @@ export function heldCopy(input: {
 }
 
 /** What Always allow would write for a card, as the card's rule names it ("psql:*", "WebFetch"); '' for none. */
-export function approvalPattern(toolName: string, input: unknown): string {
+export function approvalPattern(toolName: string, input: unknown, checkOnly = false): string {
   if (toolName === 'AskUserQuestion') return '';
   if (toolName !== 'Bash') return toolName;
   const command = input && typeof input === 'object' ? (input as { command?: unknown }).command : undefined;
-  return typeof command === 'string' ? bashCommandRules(command).map((r) => r.ruleContent || r.toolName).join(', ') : '';
+  const exact = checkOnly || (input as { orbitScheduleCheckOnly?: boolean } | null)?.orbitScheduleCheckOnly === true;
+  return typeof command === 'string' ? exact ? command : bashCommandRules(command).map((r) => r.ruleContent || r.toolName).join(', ') : '';
 }
 
 /**
@@ -240,8 +242,17 @@ export function widenCopy(input: {
   workspaceNames: Record<string, string>;
 }): ScheduleCopy {
   const text = scheduleWidenWaitingText({ ...input, reason: input.reason ?? '' });
-  const title = scheduleEnvelopeTitle(input.title, input.widens, input.workspaceNames[input.asked.workspaceId]);
+  const title = scheduleEnvelopeTitle(input.title, input.widens, input.workspaceNames[input.asked.workspaceId], input.asked.accessLevel);
   return { title: line(title, 120), body: line(text), why: line(text, WHY_MAX) };
+}
+
+/**
+ * The collapse id of a finding's push. The key is free text up to 200 characters, so it is digested with the
+ * schedule's id: the same key on the same schedule still collapses to one banner, and the id stays at 49 bytes,
+ * inside APNs's 64.
+ */
+export function findingCollapseId(scheduleId: string, key: string): string {
+  return `schedule-finding-${createHash('sha256').update(JSON.stringify([scheduleId, key])).digest('hex').slice(0, 32)}`;
 }
 
 export function findingCopy(title: string, summary: string): { title: string; body: string } {

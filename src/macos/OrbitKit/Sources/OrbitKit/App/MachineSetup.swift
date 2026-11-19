@@ -10,10 +10,12 @@ import Foundation
 public struct MachineToSetUp: Equatable, Sendable, Identifiable {
     public let id: String
     public let name: String
+    public let isManaged: Bool
 
-    public init(id: String, name: String) {
+    public init(id: String, name: String, isManaged: Bool = false) {
         self.id = id
         self.name = name
+        self.isManaged = isManaged
     }
 }
 
@@ -33,10 +35,14 @@ public struct FolderVerdict: Equatable, Sendable {
 public enum PickedFolder: Equatable, Sendable {
     case existing(path: String, note: String)
     case new(name: String, path: String)
+    /// A clone of one of the person's GitHub repositories into `<reposRoot>/<name>` (docs/github-workspace-design.md
+    /// §5.3).
+    case github(GithubPick)
 
     public var path: String {
         switch self {
         case .existing(let path, _), .new(_, let path): return path
+        case .github(let pick): return pick.path
         }
     }
 
@@ -46,7 +52,32 @@ public enum PickedFolder: Equatable, Sendable {
         switch self {
         case .existing(let path, _): return NewWorkspaceRequest(workDir: path)
         case .new(let name, _): return NewWorkspaceRequest(newFolder: name)
+        case .github(let pick):
+            return NewWorkspaceRequest(github: .init(repoId: pick.repoId, ref: pick.ref, folder: pick.name))
         }
+    }
+}
+
+/// The repository From GitHub picked, and the folder it is cloned into. `ref` nil is the repository's default
+/// branch, which `defaultBranch` names.
+public struct GithubPick: Equatable, Sendable {
+    public let repoId: Int64
+    public let repository: String
+    public let isPrivate: Bool
+    public let defaultBranch: String
+    public let ref: String?
+    public let name: String
+    public let path: String
+
+    public init(repoId: Int64, repository: String, isPrivate: Bool, defaultBranch: String, ref: String?, name: String,
+                path: String) {
+        self.repoId = repoId
+        self.repository = repository
+        self.isPrivate = isPrivate
+        self.defaultBranch = defaultBranch
+        self.ref = ref
+        self.name = name
+        self.path = path
     }
 }
 
@@ -72,6 +103,8 @@ public enum MachineSetup {
     /// What a runner declares when it answers the directory probe, and when it makes a new folder.
     public static let dirProbeCapability = "dir-probe/v1"
     public static let createWorkDirCapability = "create-workdir/v1"
+    /// What a runner declares when it clones a GitHub repository on request (docs/github-workspace-design.md §6).
+    public static let cloneWorkDirCapability = "clone-workdir/v1"
     /// What a runner declares when it makes a new folder in its home, the directory its reposRoot sits in
     /// (`<home>/orbit-repos`): `newFolder` is then `<home>/<name>` rather than `<reposRoot>/<name>`.
     public static let createWorkDirHomeCapability = "create-workdir/v2"
@@ -95,6 +128,19 @@ public enum MachineSetup {
         newFolderRoot(reposRoot: runner.reposRoot ?? "", capabilities: runner.capabilities)
     }
 
+    /// A managed runner can take a new folder before its first heartbeat.
+    public static func setupFolderRoot(_ runner: Runner, managedState: ManagedSetupState?) -> String {
+        if managedState != nil, (runner.reposRoot ?? "").trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+            return ManagedRunnerCopy.Setup.reposRoot
+        }
+        return newFolderRoot(runner)
+    }
+
+    public static func uncheckedFolder(name: String, root: String) -> PickedFolder? {
+        guard isValidNewFolder(name) else { return nil }
+        return .new(name: name, path: newFolderPath(root: root, name: name))
+    }
+
     /// Whether a machine can be asked about a path at all: the capability it declares (§2).
     public static func answersDirProbe(_ runner: Runner) -> Bool {
         runner.capabilities?.contains(dirProbeCapability) == true
@@ -104,6 +150,44 @@ public enum MachineSetup {
     public static func makesNewFolders(_ runner: Runner) -> Bool {
         runner.capabilities?.contains(createWorkDirCapability) == true
             && !(runner.reposRoot ?? "").trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+    }
+
+    /// Whether a machine clones a GitHub repository on request: it declares clone-workdir/v1 and has reported the
+    /// Repos Folder the clone goes in. POST /sessions refuses either missing.
+    public static func clonesRepositories(_ runner: Runner) -> Bool {
+        runner.capabilities?.contains(cloneWorkDirCapability) == true
+            && !(runner.reposRoot ?? "").trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+    }
+
+    /// A path as the board writes it: the home folder as `~` (`/Users/austin/orbit-repos/x` → `~/orbit-repos/x`).
+    public static func homeShortPath(_ path: String) -> String {
+        path.replacingOccurrences(of: #"^(?:/Users/[^/]+|/home/[^/]+|/root)(?=/|$)"#, with: "~", options: .regularExpression)
+    }
+
+    /// The folder a repository is cloned into by default, as the server derives it: its name, when that is a folder
+    /// name.
+    public static func repositoryFolder(_ fullName: String) -> String {
+        let name = fullName.split(separator: "/", omittingEmptySubsequences: false).last.map(String.init) ?? ""
+        return isValidNewFolder(name) ? name : ""
+    }
+
+    /// The branch a clone is asked for: what was typed under Other branch, unless it is empty or the default.
+    public static func cloneRef(typed: String?, defaultBranch: String) -> String? {
+        let ref = (typed ?? "").trimmingCharacters(in: .whitespacesAndNewlines)
+        return ref.isEmpty || ref == defaultBranch ? nil : ref
+    }
+
+    /// How many repositories the picker shows before anything is typed (board 01, note 4).
+    public static let firstRepositories = 8
+
+    /// What From GitHub would pick, on the machine's answer about the folder: only a folder that isn't there yet can
+    /// be cloned into.
+    public static func githubPick(_ repository: GithubRepository, name: String, ref: String?, reposRoot: String,
+                                  probe: DirProbe?) -> PickedFolder? {
+        guard isValidNewFolder(name), let probe, (probe.error ?? "").isEmpty, !probe.exists else { return nil }
+        return .github(GithubPick(repoId: repository.id, repository: repository.fullName, isPrivate: repository.private,
+                                  defaultBranch: repository.defaultBranch, ref: ref, name: name,
+                                  path: newFolderPath(root: reposRoot, name: name)))
     }
 
     /// Whether the card's folder can be checked and made here at all: both of the above.
@@ -248,11 +332,14 @@ public enum MachineSetup {
     /// `found` the machine's answer about `<root>/<folder>` (nil while there is none for it), and `unanswered`
     /// that the machine gave no answer to that question.
     public static func folderLine(folder: String, createError: String?, found: DirProbe?, unanswered: Bool,
-                                  machine: String) -> SetupFolderLine {
+                                  machine: String, managedState: ManagedSetupState? = nil) -> SetupFolderLine {
         // Why the last Create workspace was refused stands in for the rest until the next try.
         if let createError { return .createFailed(MachineSetupCopy.setupCreateFailed(why: createError)) }
         if folder.isEmpty { return .meta(MachineSetupCopy.SETUP_FOLDER_HINT) }
         if !isValidNewFolder(folder) { return .verdict(MachineSetupCopy.SETUP_NEW_FOLDER_INVALID, .bad) }
+        if let state = managedState {
+            return .meta(state == .preparing ? ManagedRunnerCopy.Setup.FolderUnchecked.preparing : ManagedRunnerCopy.Setup.FolderUnchecked.asleep)
+        }
         if let found {
             let verdict = newFolderVerdict(found, machine: machine)
             // Nothing there yet reads as a note; anything there says what it is, and so does a check that failed.
@@ -265,8 +352,8 @@ public enum MachineSetup {
     /// Create workspace can be pressed: the folder has an answer to make it in, the workspace a name, and the
     /// machine is here and can check and make folders, with no create already out.
     public static func canCreate(pick: PickedFolder?, name: String, online: Bool, checksFolders: Bool,
-                                 creating: Bool) -> Bool {
-        pick != nil && !name.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty && online && checksFolders
+                                 creating: Bool, managedState: ManagedSetupState? = nil) -> Bool {
+        pick != nil && !name.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty && (managedState != nil || (online && checksFolders))
             && !creating
     }
 
@@ -275,7 +362,7 @@ public enum MachineSetup {
     public static func createRequest(folder: PickedFolder, name: String, runnerID: String) -> CreateAgentRequest {
         let target = folder.newWorkspace
         return CreateAgentRequest(name: name.trimmingCharacters(in: .whitespacesAndNewlines), runnerId: runnerID,
-                                  workDir: target.workDir, newFolder: target.newFolder)
+                                  workDir: target.workDir, newFolder: target.newFolder, github: target.github)
     }
 }
 
@@ -341,13 +428,22 @@ public struct CreatedWorkspaceLine: Equatable, Sendable {
     public let path: String?
     /// A workspace deleted since is still what this conversation made; it just has nothing to change.
     public let live: Bool
+    /// A workspace cloned from GitHub (docs/github-workspace-design.md §8): its `owner/name`, and where its clone
+    /// stood when the detail was read (`cloneError` is why it failed).
+    public let repository: String?
+    public let cloneState: String?
+    public let cloneError: String?
 
-    public init(workspaceID: String, name: String, machine: String, path: String?, live: Bool) {
+    public init(workspaceID: String, name: String, machine: String, path: String?, live: Bool,
+                repository: String? = nil, cloneState: String? = nil, cloneError: String? = nil) {
         self.workspaceID = workspaceID
         self.name = name
         self.machine = machine
         self.path = path
         self.live = live
+        self.repository = repository
+        self.cloneState = cloneState
+        self.cloneError = cloneError
     }
 }
 

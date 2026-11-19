@@ -1,6 +1,7 @@
 package io.orbitd.android.increments
 
 import androidx.compose.ui.test.*
+import io.orbitd.android.composer.ManagedRunner
 import androidx.test.ext.junit.runners.AndroidJUnit4
 import io.orbitd.android.composer.MachineSetupCopy
 import io.orbitd.android.composer.WelcomeCopy
@@ -23,11 +24,11 @@ class WelcomeCardDeviceTest : IncrementDeviceTest() {
     private val wid = "2zQeDGWFFAgN2112jNTf8"
     override val ids get() = listOf(rid, wid)
 
-    private enum class Fleet { MANAGED_PREPARING, MANAGED_MODEL, MANAGED_READY, MACHINE, NONE }
+    private enum class Fleet { MANAGED_PREPARING, MANAGED_KEY, MANAGED_ASLEEP, MANAGED_MODEL, MANAGED_READY, MACHINE, NONE }
     @Volatile private var fleet = Fleet.NONE
     @Volatile private var hadSession = false
 
-    private val managedOn get() = fleet in setOf(Fleet.MANAGED_PREPARING, Fleet.MANAGED_MODEL, Fleet.MANAGED_READY)
+    private val managedOn get() = fleet in setOf(Fleet.MANAGED_PREPARING, Fleet.MANAGED_KEY, Fleet.MANAGED_ASLEEP, Fleet.MANAGED_MODEL, Fleet.MANAGED_READY)
 
     private fun eng(engine: String, version: String, auth: String) =
         """{"engine":"$engine","installed":true,"auth":"$auth","version":"$version","accounts":[{"id":"default","name":"Default","auth":"$auth"}]}"""
@@ -38,35 +39,38 @@ class WelcomeCardDeviceTest : IncrementDeviceTest() {
             Fleet.MANAGED_READY -> "[${eng("claude", "2.1.302", "yes")},${eng("codex", "0.164.0", "no")}]"
             else -> "[${eng("claude", "2.1.302", "no")},${eng("codex", "0.164.0", "no")}]"
         }
-        val online = fleet != Fleet.MANAGED_PREPARING
+        val online = fleet !in setOf(Fleet.MANAGED_PREPARING, Fleet.MANAGED_KEY, Fleet.MANAGED_ASLEEP)
         val name = if (fleet == Fleet.MACHINE) "mia-macbook" else "managed-mia"
         return """{"id":"$rid","name":"$name","displayName":null,"hostname":"$name","version":"0.1.250","online":$online,
             "status":"${if (online) "ONLINE" else "OFFLINE"}","activeSessions":0,"lastHeartbeatAt":${if (online) "\"${ago(0)}\"" else "null"},
             "runsAsRoot":false,"capabilities":["dir-probe/v1","create-workdir/v1"],"labels":[],
             "registerDir":${if (fleet == Fleet.MACHINE) "\"/Users/mia\"" else "null"},"maxConcurrent":4,"enrolledAt":"${ago(2)}",
-            "reposRoot":"/var/lib/orbit/home/orbit-repos","selfUpdate":{"state":"enabled","installDir":"/usr/local/bin"},
+            "reposRoot":"/home/orbit/orbit-repos","selfUpdate":{"state":"enabled","installDir":"/usr/local/bin"},
             "commands":[],"skills":[],"engines":$engines}"""
     }
 
     private fun workspaceRow() = """{"id":"$wid","name":"default","runnerId":"$rid","runner":{"id":"$rid","name":"managed-mia"},
         "createdAt":"${ago(2)}","position":null,"lastProvider":${if (fleet == Fleet.MANAGED_READY) "\"claude\"" else "null"},"provider":null,
-        "model":null,"workDir":"/var/lib/orbit/home/orbit-repos/default","enableWorktree":true,"enabled":true,"workDirExists":true,"workDirIsGit":true}"""
+        "model":null,"workDir":"/home/orbit/orbit-repos/default","enableWorktree":true,"enabled":true,"workDirExists":true,"workDirIsGit":true}"""
 
     /** The fixture's `preparing: starting`, `model unavailable: started without a signed-in runtime` and `available` bodies. */
     private fun managedStatus(): String = when (fleet) {
-        Fleet.MANAGED_PREPARING -> """{"contractVersion":1,"enabled":true,"revision":5,"managementState":"STARTING","desiredState":"RUNNING",
-            "runnerId":"$rid","workspaceId":"$wid","heartbeatStatus":"OFFLINE","lastHeartbeatAt":null,"usable":false,"reason":null,
-            "retryAfter":null,"initialProvider":null,"firstSessionProvider":null,"actions":{"canEnsure":false,"canWake":false,"canSleep":false,
-            "canRetry":false,"canDelete":false},"workspacePublicId":"$wid","runnerPublicId":"$rid"}"""
+        Fleet.MANAGED_PREPARING, Fleet.MANAGED_KEY -> """{"contractVersion":1,"enabled":true,"revision":5,"managementState":"STARTING","desiredState":"RUNNING",
+            "runnerId":"$rid","workspaceId":null,"heartbeatStatus":"OFFLINE","lastHeartbeatAt":null,"usable":false,"reason":null,
+            "retryAfter":null,"initialProvider":null,"firstSessionProvider":${if (fleet == Fleet.MANAGED_KEY) "\"deepseek\"" else "null"},"actions":{"canEnsure":false,"canWake":false,"canSleep":false,
+            "canRetry":false,"canDelete":false},"runnerPublicId":"$rid"}"""
+        Fleet.MANAGED_ASLEEP -> """{"contractVersion":1,"enabled":true,"revision":9,"managementState":"SLEEPING","desiredState":"SLEEPING",
+            "runnerId":"$rid","workspaceId":null,"usable":false,"initialProvider":"claude","firstSessionProvider":"claude",
+            "actions":{"canWake":true}}"""
         Fleet.MANAGED_MODEL -> """{"contractVersion":1,"enabled":true,"revision":6,"managementState":"STARTING","desiredState":"RUNNING",
-            "runnerId":"$rid","workspaceId":"$wid","heartbeatStatus":"ONLINE","lastHeartbeatAt":"${ago(0)}","usable":false,
+            "runnerId":"$rid","workspaceId":null,"heartbeatStatus":"ONLINE","lastHeartbeatAt":"${ago(0)}","usable":false,
             "reason":{"code":"MODEL_UNAVAILABLE","message":"The runner is up, but none of its runtimes is signed in and none of your model keys runs on it, so it cannot start a session. Sign one in, or add a model key, from the Machines & models page; it waits for one and becomes ready by itself.","retryable":true},
             "retryAfter":null,"initialProvider":null,"firstSessionProvider":null,"actions":{"canEnsure":false,"canWake":false,"canSleep":false,
-            "canRetry":false,"canDelete":false},"workspacePublicId":"$wid","runnerPublicId":"$rid"}"""
+            "canRetry":false,"canDelete":false},"runnerPublicId":"$rid"}"""
         else -> """{"contractVersion":1,"enabled":true,"revision":8,"managementState":"READY","desiredState":"RUNNING","runnerId":"$rid",
-            "workspaceId":"$wid","heartbeatStatus":"ONLINE","lastHeartbeatAt":"${ago(0)}","usable":true,"reason":null,"retryAfter":null,
+            "workspaceId":null,"heartbeatStatus":"ONLINE","lastHeartbeatAt":"${ago(0)}","usable":true,"reason":null,"retryAfter":null,
             "initialProvider":"claude","firstSessionProvider":"claude","actions":{"canEnsure":false,"canWake":false,"canSleep":true,
-            "canRetry":false,"canDelete":false},"workspacePublicId":"$wid","runnerPublicId":"$rid"}"""
+            "canRetry":false,"canDelete":false},"runnerPublicId":"$rid"}"""
     }
 
     private val old = "34WelcomeOldSession001"
@@ -84,7 +88,8 @@ class WelcomeCardDeviceTest : IncrementDeviceTest() {
         req.path == "runners" -> json(if (fleet == Fleet.NONE) "[]" else "[${runnerRow()}]")
         req.path == "runners/$rid" -> json(runnerRow())
         req.path == "runners/$rid/login" -> json("""{"status":null,"engine":null,"url":null,"userCode":null,"message":null}""")
-        req.path == "workspaces" -> json(if (managedOn) "[${workspaceRow()}]" else "[]")
+        req.path == "workspaces" && req.method == "POST" -> json(workspaceRow())
+        req.path == "workspaces" -> json(if (managedOn && hadSession) "[${workspaceRow()}]" else "[]")
         req.path == "workspaces/$wid" -> json(workspaceRow())
         else -> null
     }
@@ -97,8 +102,8 @@ class WelcomeCardDeviceTest : IncrementDeviceTest() {
      *  workspace's draft with the welcome card, with no tap at all (the web's DefaultLanding + WorkspaceView). */
     private fun landOnManagedDraft() {
         signIn()
-        awaitTag("welcome-card")
-        verify("the launch landed on the draft, not the session list", !exists(startSession) && says("New session"))
+        awaitTag("machine-setup-card")
+        verify("the launch landed on machine setup", !exists(startSession))
     }
 
     /** An account that has had a session: the launch lands on the default workspace's list, as today; New session opens its draft. */
@@ -110,14 +115,6 @@ class WelcomeCardDeviceTest : IncrementDeviceTest() {
         capture("6-history-managed-landing")
         compose.onNode(startSession).performClick()
         settle()
-    }
-
-    /** Step 2's sign-in as the web's RunnerSignIn draws it on the welcome card. */
-    private fun verifyWebSignIn(engine: String) {
-        await("Sign in to $engine") { says("Sign in to $engine") }
-        verify("Use an API key instead beside it", says(WelcomeSignInCopy.USE_API_KEY_INSTEAD))
-        verify("the key hint under them", says(WelcomeSignInCopy.KEY_HINT))
-        verify("no bare Sign In", !says(RunnerCopy.SIGN_IN))
     }
 
     /** The two reads that decide whether the account is new have both been answered. */
@@ -133,49 +130,67 @@ class WelcomeCardDeviceTest : IncrementDeviceTest() {
         verify("the lead says what Orbit is", says(WelcomeCopy.WELCOME_LEAD))
     }
 
-    private fun verifyPlaceholder() = verify("the composer asks for a task", says(WelcomeCopy.WELCOME_PLACEHOLDER))
+    private fun verifyWorkspaceOnlyCard() {
+        verify("no composer, sign-in or examples", !exists(hasTestTag("composer-input"), unmerged = true) &&
+            !exists(hasTestTag("welcome-example"), unmerged = true) && !says("Sign in to Claude Code"))
+        verify("name field", exists(hasTestTag("setup-workspace-name") and isEnabled(), unmerged = true))
+    }
+
+    private fun typeManagedFolder(state: String) {
+        compose.onNodeWithTag("setup-new-folder-name").performTextInput("my-project")
+        awaitText(ManagedRunner.Setup.FOLDER_UNCHECKED.getValue(state))
+        verify("the name follows the folder", exists(hasTestTag("setup-workspace-name") and hasText("my-project"), unmerged = true))
+        verify("Create is enabled", exists(hasTestTag("setup-create") and isEnabled(), unmerged = true))
+        verify("no probe is sent", calls.none { "dir-probe" in it })
+    }
 
     @Test fun managedPreparing() = journey {
         fleet = Fleet.MANAGED_PREPARING
         landOnManagedDraft()
         verifyHead()
-        verify("step 1 says Orbit is starting one", says(WelcomeCopy.WELCOME_COMPUTER) && says(WelcomeCopy.WELCOME_COMPUTER_MANAGED))
-        verify("step 1 holds the managed runner's own state", says("Preparing your managed runner"))
-        verify("step 1 offers the user's own computer", says(WelcomeCopy.WELCOME_OWN_INSTEAD))
-        verify("step 2 opens once the computer is up", says(WelcomeCopy.WELCOME_MODEL) && says(WelcomeCopy.WELCOME_AFTER_COMPUTER))
-        verify("step 3 offers the three examples", WelcomeCopy.WELCOME_EXAMPLES.all { says(it) })
-        verify("the foot waits for steps 1 and 2", says(WelcomeCopy.WELCOME_FOOT_WAIT))
-        verify("no engine row stands beside the card", !exists(hasTestTag("new-session-engine"), unmerged = true))
-        verifyPlaceholder()
+        awaitText(ManagedRunner.Setup.NOTICE.getValue("preparing"))
+        verifyWorkspaceOnlyCard()
+        typeManagedFolder("preparing")
         capture("1-managed")
-        // The list the launch landed on is still under the draft.
-        back()
-        await("Back reaches the default workspace's list") { exists(startSession) }
+    }
+
+    @Test fun managedPreparingWithKey() = journey {
+        fleet = Fleet.MANAGED_KEY
+        landOnManagedDraft()
+        verifyWorkspaceOnlyCard()
+        typeManagedFolder("preparing")
+    }
+
+    @Test fun managedAsleep() = journey {
+        fleet = Fleet.MANAGED_ASLEEP
+        landOnManagedDraft()
+        awaitText(ManagedRunner.Setup.NOTICE.getValue("asleep"))
+        verifyWorkspaceOnlyCard()
+        typeManagedFolder("asleep")
+        compose.onNodeWithTag("setup-workspace-name").performTextReplacement("My project")
+        compose.onNodeWithTag("setup-create").performClick()
+        awaitTag("new-session-engine")
+        val posted = bodies.single { it.first.startsWith("POST workspaces") }.second
+        val body = kotlinx.serialization.json.Json.parseToJsonElement(posted) as kotlinx.serialization.json.JsonObject
+        verify("only a new folder is sent", body["newFolder"].toString() == "\"my-project\"" && body["workDir"] == null)
+        verify("the edited name is sent", body["name"].toString() == "\"My project\"")
+        verify("creating did not start a session", bodies.none { it.first.startsWith("POST sessions") })
     }
 
     @Test fun managedModel() = journey {
         fleet = Fleet.MANAGED_MODEL
         landOnManagedDraft()
-        await("step 1 done") { says(WelcomeCopy.WELCOME_COMPUTER_DONE) && says(WelcomeCopy.welcomeComputerReady("managed-mia")) }
-        verify("step 2 asks for a model", says(WelcomeCopy.WELCOME_MODEL) && says(WelcomeCopy.WELCOME_MODEL_HELP))
-        verifyWebSignIn("Claude Code")
-        verify("step 2 no longer waits for the computer", !says(WelcomeCopy.WELCOME_AFTER_COMPUTER))
-        verify("the foot waits for steps 1 and 2", says(WelcomeCopy.WELCOME_FOOT_WAIT))
-        verifyPlaceholder()
+        verifyHead()
+        verifyWorkspaceOnlyCard()
+        typeManagedFolder("preparing")
         capture("2-model")
     }
 
     @Test fun managedReady() = journey {
         fleet = Fleet.MANAGED_READY
         landOnManagedDraft()
-        await("step 2 done") { says(WelcomeCopy.WELCOME_MODEL_DONE) && says("Claude Code signed in on managed-mia") }
-        compose.onAllNodesWithTag("welcome-example", useUnmergedTree = true).onFirst().performClick()
-        settle()
-        val first = WelcomeCopy.WELCOME_EXAMPLES.first()
-        await("the example in the composer") { exists(hasTestTag("composer-input") and hasText(first), unmerged = true) }
-        verify("the foot says all set", says(WelcomeCopy.WELCOME_FOOT_READY))
+        verifyWorkspaceOnlyCard()
         verify("nothing was sent", bodies.none { it.first.startsWith("POST sessions") })
-        dropFocus()
         capture("3-ready")
     }
 

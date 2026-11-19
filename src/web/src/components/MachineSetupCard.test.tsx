@@ -5,10 +5,11 @@ import { join } from 'node:path';
 import { act } from 'react';
 import { createRoot, type Root } from 'react-dom/client';
 import { MemoryRouter } from 'react-router-dom';
-import type { DirProbe } from '@orbit/shared';
+import { MANAGED_RUNNER_COPY, managedRunnerDisplay, managedSetupState, type DirProbe, type ManagedRunnerStatus } from '@orbit/shared';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { encodeId } from '../lib/idCodec';
 import type { PickedFolder } from '../lib/machineSetup';
+import type { ManagedRunner } from '../lib/managedRunner';
 
 /**
  * The card on a machine's new session page that makes its first workspace
@@ -71,11 +72,14 @@ let host: HTMLDivElement | null = null;
 let client: QueryClient | null = null;
 const onCreate = vi.fn();
 
-function render(runner: never, { creating = false, createError = null as string | null, welcome = false } = {}) {
+function render(
+  runner: never,
+  { creating = false, createError = null as string | null, welcome = false, managed = null as ManagedRunner | null } = {},
+) {
   return (
     <QueryClientProvider client={client!}>
       <MemoryRouter>
-        <MachineSetupCard runner={runner} onCreate={onCreate} creating={creating} createError={createError} welcome={welcome} />
+        <MachineSetupCard runner={runner} managed={managed} onCreate={onCreate} creating={creating} createError={createError} welcome={welcome} />
       </MemoryRouter>
     </QueryClientProvider>
   );
@@ -91,7 +95,7 @@ async function settle(): Promise<void> {
 
 async function open(
   runner: never = machine(),
-  options: { creating?: boolean; createError?: string | null; welcome?: boolean } = {},
+  options: { creating?: boolean; createError?: string | null; welcome?: boolean; managed?: ManagedRunner | null } = {},
 ): Promise<HTMLDivElement> {
   client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
   host = document.createElement('div');
@@ -478,5 +482,50 @@ describe('what lands under the card', () => {
     const rule = /\.msc-revealed \{([^}]*)\}/.exec(css)?.[1] ?? '';
     const margin = Number(/scroll-margin-bottom: (\d+)px/.exec(rule)?.[1] ?? 0);
     expect(margin).toBeGreaterThanOrEqual(20);
+  });
+});
+
+/** The account's managed runner while it is not up (docs/managed-runner-no-default-workspace.md): it cannot check a
+ *  folder, so the card takes the name unchecked and makes the workspace all the same. */
+const managedFixture = JSON.parse(readFileSync(join(process.cwd(), '../shared/src/managed-runner-states.fixture.json'), 'utf8')) as {
+  states: { name: string; status: ManagedRunnerStatus; setupState: string | null }[];
+};
+const managedIn = (name: string): ManagedRunner => {
+  const status = { ...managedFixture.states.find((s) => s.name === name)!.status, runnerId: RUNNER_ID } as ManagedRunnerStatus;
+  return { status, display: managedRunnerDisplay(status)! } as ManagedRunner;
+};
+
+describe('the managed runner before it is up', () => {
+  for (const [name, root] of [
+    // Never reported: the image's fixed repos folder.
+    ['preparing: starting', '/home/orbit/orbit-repos/'],
+    // Asleep after it had reported its home.
+    ['sleeping', '/home/orbit/'],
+  ] as const) {
+    it(`${name}: says why, takes an unchecked new folder, and makes the workspace`, async () => {
+      const managed = managedIn(name);
+      const state = managedSetupState(RUNNER_ID, managed.status)!;
+      const runner = name === 'sleeping'
+        ? machine({ online: false, status: 'OFFLINE', reposRoot: '/home/orbit/orbit-repos' })
+        : machine({ online: false, status: 'OFFLINE', reposRoot: null, capabilities: [], engines: null, lastHeartbeatAt: null });
+      const page = await open(runner, { managed });
+      expect(said(page.querySelector('.msc-notice'))).toBe(MANAGED_RUNNER_COPY.setup.notice[state]);
+      expect(field('folder').disabled).toBe(false);
+      expect(said(page.querySelector('.msc-prefix'))).toBe(root);
+      await checkFolder('my-project');
+      expect(line('folder')).toBe(MANAGED_RUNNER_COPY.setup.folderUnchecked[state]);
+      expect(askDirProbe).not.toHaveBeenCalled();
+      expect(field('name').value).toBe('my-project');
+      await press(createButton());
+      expect(onCreate).toHaveBeenCalledWith({ kind: 'new', name: 'my-project', path: `${root}my-project` }, 'my-project');
+    });
+  }
+
+  it('reads any other runner as before: offline, with nothing to type', async () => {
+    const managed = managedIn('sleeping');
+    const other = machine({ id: encodeId('0199f0a8-3c2e-7b51-9a6e-000000000000'), online: false, status: 'OFFLINE' });
+    const page = await open(other, { managed });
+    expect(said(page.querySelector('.msc-notice'))).not.toBe(MANAGED_RUNNER_COPY.setup.notice.asleep);
+    expect(field('folder').disabled).toBe(true);
   });
 });

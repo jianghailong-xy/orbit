@@ -26,6 +26,7 @@ export * from './project-progress';
 export * from './project-done';
 export * from './project-start';
 export * from './coordinator-handoff';
+export * from './project-ruling';
 export * from './providerPresets';
 export * from './openCodeKeys';
 export * from './providerEngines';
@@ -55,7 +56,9 @@ export * from './wikiRepoOps';
 export * from './wikiSystemModel';
 export * from './wikiChat';
 export * from './feishu';
+export * from './github';
 export * from './translation';
+export * from './help';
 export * from './prompt-optimizer';
 
 /** Hard cap on a single user prompt / turn message, in characters. An oversized input
@@ -75,3 +78,4 @@ export * from './push';
 export * from './orbit-turn-cards';
 export * from './mainCheckoutGit';
 export * from './schedule';
+export * from './condition';

@@ -312,4 +312,10 @@ describe('subagentRuns helpers', () => {
     expect(delegateResultText('{"runId":"r","status":"running"}', undefined)).toBeNull();
     expect(delegateResultText('plain text', undefined)).toBe('plain text');
   });
+
+  it("reads the run's text when the call's JSON was clipped to a preview, never the opening brace", () => {
+    const clipped = '{\n  "changedFiles": [],\n  "result": "Route 1 worked: the transcript is';
+    expect(delegateResultText(clipped, run({ resultSummary: 'Route 1 worked.' }))).toBe('Route 1 worked.');
+    expect(delegateResultText(clipped, undefined)).toBeNull();
+  });
 });

@@ -1,0 +1,20 @@
+Test Case '-[CtMacProbeUITests.ConditionShotTests test2TaskCreateCard]' started.
+Test Case '-[CtMacProbeUITests.ConditionShotTests test2TaskCreateCard]' passed (63.184 seconds).
+Test Case '-[CtMacProbeUITests.ConditionShotTests test3ScheduleCreateCard]' started.
+Test Case '-[CtMacProbeUITests.ConditionShotTests test3ScheduleCreateCard]' passed (57.430 seconds).
+Test Case '-[CtMacProbeUITests.ConditionShotTests test3WidenCard]' started.
+Test Case '-[CtMacProbeUITests.ConditionShotTests test3WidenCard]' passed (31.219 seconds).
+Test Case '-[CtMacProbeUITests.ConditionShotTests test4ScheduledPage]' started.
+Test Case '-[CtMacProbeUITests.ConditionShotTests test4ScheduledPage]' passed (29.668 seconds).
+Test Case '-[CtMacProbeUITests.ConditionShotTests test5RunHeader]' started.
+Test Case '-[CtMacProbeUITests.ConditionShotTests test5RunHeader]' passed (31.159 seconds).
+Test Case '-[CtMacProbeUITests.ConditionShotTests test6Inspector]' started.
+Test Case '-[CtMacProbeUITests.ConditionShotTests test6Inspector]' passed (55.121 seconds).
+Test Case '-[CtMacProbeUITests.ConditionShotTests test6WaitingOnYou]' started.
+Test Case '-[CtMacProbeUITests.ConditionShotTests test6WaitingOnYou]' passed (28.945 seconds).
+Test Case '-[CtMacProbeUITests.ConditionShotTests test7TaskWaitingLine]' started.
+Test Case '-[CtMacProbeUITests.ConditionShotTests test7TaskWaitingLine]' passed (28.811 seconds).
+	 Executed 8 tests, with 0 failures (0 unexpected) in 325.537 (325.543) seconds
+	 Executed 8 tests, with 0 failures (0 unexpected) in 325.537 (325.544) seconds
+	 Executed 8 tests, with 0 failures (0 unexpected) in 325.537 (325.545) seconds
+** TEST SUCCEEDED **

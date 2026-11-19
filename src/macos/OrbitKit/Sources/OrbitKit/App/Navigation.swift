@@ -542,7 +542,7 @@ public struct NavState: Equatable, Sendable {
         if let from { foldersLeftOpen[from] = nil }
         if let folder = folderColumn { foldersLeftOpen[folder.agentID] = folder }
         let back = foldersLeftOpen.removeValue(forKey: to).flatMap { address in
-            folders.contains { $0.id == address.folderID } ? address : nil
+            address.isScheduledRuns || folders.contains { $0.id == address.folderID } ? address : nil
         }
         path = back.map { [.folder($0)] } ?? []
     }
@@ -729,9 +729,24 @@ public enum DrawerDestination: Hashable, Sendable {
 /// sessions it creates there), and the scope of the list it was opened from — Open's page lists the
 /// open sessions in the folder, Completed's the completed ones, for as long as the page is up.
 public struct SessionFolderAddress: Hashable, Sendable {
+    // Server folder IDs are public IDs, so this route cannot collide with a user folder.
+    private static let scheduledRunsID = "builtin:scheduled"
+
     public let folderID: String
     public let agentID: String
     public let view: SessionView
+
+    public var isScheduledRuns: Bool { folderID == Self.scheduledRunsID }
+
+    public static func scheduledRuns(agentID: String, view: SessionView) -> Self {
+        Self(folderID: scheduledRunsID, agentID: agentID, view: view)
+    }
+
+    public static func scheduledRuns(for session: Session) -> Self? {
+        guard let agentID = session.agent?.id ?? session.agentId else { return nil }
+        let view = SessionView.allCases.first { $0.lifecycleState == session.effectiveLifecycleState } ?? .open
+        return scheduledRuns(agentID: agentID, view: view)
+    }
 
     public init(folderID: String, agentID: String, view: SessionView) {
         self.folderID = folderID

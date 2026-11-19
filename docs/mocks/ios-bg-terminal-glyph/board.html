@@ -126,11 +126,11 @@ function phone(variant) {
   <p class="b-sub">图标位置不变：标题右侧、时间前面，也就是今天 spinner 所在的位置。绿底 = 比今天多出图标的行。iPhone 已有的灰色 spinner、琥珀点、红点保持不变。</p>
   <div class="b-stage">
     <div class="b-col">
-      <div class="b-cap">方案 A · 和 Web 一样，每行都有 <small>推荐</small></div>
+      <div class="b-cap">方案 A · 和 Web 一样，每行都有</div>
       <div class="b-host" id="a"></div>
     </div>
     <div class="b-col">
-      <div class="b-cap">方案 B · 只补“还有事在进行”的两种</div>
+      <div class="b-cap">方案 B · 只补“还有事在进行”的两种 <small>已选 · 已上线</small></div>
       <div class="b-host" id="b"></div>
     </div>
   </div>
@@ -143,18 +143,18 @@ function phone(variant) {
 </section>
 
 <section class="b-part" id="part-4">
-  <h2>④ 待定 · 要你拍板</h2>
+  <h2>④ 决定：方案 B（iOS 与 Android 同改）</h2>
   <div class="b-stage" style="gap:20px">
-    <div class="opt rec">
-      <h3>方案 A：完全按 Web 画 <span class="tag">推荐</span></h3>
+    <div class="opt">
+      <h3>方案 A：完全按 Web 画</h3>
       <p>每一行都有图标，形状和 Web、macOS 一样。一眼扫过去就能分出排队、后台、等你、结束、成功。图标都是灰色，只有成功是绿色，所以不会比今天吵太多。代价是列表右侧不再有“空”的行，“没图标 = 没事”这层含义没了，改成看图标形状。</p>
     </div>
-    <div class="opt">
-      <h3>方案 B：只补排队和后台进程</h3>
+    <div class="opt rec">
+      <h3>方案 B：只补排队和后台进程 <span class="tag">已选</span></h3>
       <p>只给“还有事在进行、但 Agent 不在生成”的两种状态补图标：排队 → 时钟，service → 静止终端。等你回复、结束、成功这些“已经停下”的行还是空的，靠文字说明。列表更轻，但和 Web 仍然不完全一样。</p>
     </div>
   </div>
-  <p style="margin:18px 0 6px"><b>Android</b>：<code>SessionLiveMark</code> 是照着 iPhone 做的，问题一样。默认跟 iOS 用同一个方案，你也可以只改 iOS。</p>
+  <p style="margin:18px 0 6px"><b>Android</b>：<code>SessionLiveMark</code> 是照着 iPhone 做的，问题一样，和 iOS 一起按方案 B 改了。</p>
   <h2 style="margin-top:22px">落地（按代价排）</h2>
   <ol class="land">
     <li><b>iOS</b>：<code>SessionLiveIndicator</code> 的 <code>default: EmptyView()</code> 换成画 glyph 自己的 SF Symbol（灰色，成功为绿色）。方案 A 就是这一处。方案 B 只放行 <code>clock</code> 和 <code>terminal</code>。抽屉 Recents 共用这个视图，一起生效。<code>SessionStatusGlyph</code> 和 OrbitKit 测试都不用动。</li>

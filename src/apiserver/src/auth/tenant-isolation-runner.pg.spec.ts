@@ -267,6 +267,12 @@ test('tenant isolation: past the runner gate and through the share links, anothe
     const runningTaskSessionId = await open('session running a task', { status: 'RUNNING', taskId: runningTaskId });
     const allowedApprovalId = randomUUID();
     await db.approval.create({ data: { id: allowedApprovalId, sessionId: machineSessionId, toolName: 'Bash', input: { command: 'true' }, status: 'ALLOWED' } });
+    // A SubAgent run of the machine's session that ran on a workspace and runner of the account's and has ended: what
+    // a delegate call's `resumeOf` names. Remote, so that the account's own resume is answered past the lookup.
+    const { id: subagentRunId } = await db.subagentRun.create({ data: {
+      ownerId, sessionId: machineSessionId, toolUseId: 'toolu_census_resumable', type: 'general',
+      definitionSource: 'builtin', decision: {}, status: 'DONE', workspaceId: of.workspaceId, targetRunnerId: of.runnerId,
+    }, select: { id: true } });
     // The owner's yes, in the calling session, to deleting the spare runner and the spare workspace:
     // the cards the delete doors go through on (runner-api/runner-delete-approval.ts).
     for (const [toolName, input] of [
@@ -424,6 +430,14 @@ test('tenant isolation: past the runner gate and through the share links, anothe
     // ── the wiki: a workspace bound to the space, a session in it, and an import job of the space's ──
     ok(await as('POST', `/wiki/spaces/${of.wikiSpaceId}/workspaces`, { workspaceId: of.workspaceId }), 'binding the space');
     const wikiSessionId = await open('wiki session');
+    // ── an Ask: a session of the machine's in no workspace, made an Ask by its INSERT (0850's guard refuses an UPDATE) ──
+    const helpAskSessionId = randomUUID();
+    await db.session.create({
+      data: {
+        id: helpAskSessionId, title: `${name} help ask`, prompt: 'Why is my machine offline?', ownerId, creatorId: ownerId,
+        assignedRunnerId: of.runnerId, engine: 'claude', helpAsk: { page: null },
+      },
+    });
     const wikiImportJobId = randomUUID();
     await db.wikiJob.create({
       data: { id: wikiImportJobId, ownerId, spaceId: of.wikiSpaceId, kind: 'import', input: {}, state: 'succeeded', report: {}, endedAt: new Date() },
@@ -451,11 +465,11 @@ test('tenant isolation: past the runner gate and through the share links, anothe
       landingSessionId,
       takeoverSessionId, activateSessionId, leaseOwner, leaseGeneration, inboxSessionId, inboxLeaseGeneration, turnSessionId, shellTurnId,
       finalizeSessionId, sessionAttachmentId, uploadedFileId, evidenceRevisionId, runningTaskId, runningTaskSessionId, allowedApprovalId,
-      artifactRequestId, integrationJobId, landingTaskId, secretGrantId, removingSecretGrantId,
+      subagentRunId, artifactRequestId, integrationJobId, landingTaskId, secretGrantId, removingSecretGrantId,
       codexOperationId, wikiRepoOpId, spareServiceTokenId, replyRequestId, interruptSessionId, endSessionId, completedSessionId,
       deletedSessionId, archivedSessionId, coordinatorItemId, handOverItemId, failedTaskId, watchId, verifierTaskId, verifiedTaskId,
       providerSlug: await slugOf(of.providerId), spareProviderSlug: await slugOf(of.spare.providerId), listTaskId,
-      confirmTaskId, confirmRunSessionId, confirmRequestId, reviewerSessionId, wikiSessionId,
+      confirmTaskId, confirmRunSessionId, confirmRequestId, reviewerSessionId, wikiSessionId, helpAskSessionId,
       wikiImportJobId, sharedSessionId, sharedSessionAttachmentId, sharedTaskId,
       sharedTaskRunSessionId, sharedTaskAttachmentId, sharedProjectId, sharedProjectTaskId, sharedProjectRunSessionId,
       sharedProjectAttachmentId,

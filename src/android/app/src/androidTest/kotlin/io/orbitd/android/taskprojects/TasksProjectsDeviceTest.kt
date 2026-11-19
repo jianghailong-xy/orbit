@@ -882,17 +882,22 @@ class TasksProjectsDeviceTest {
         capture("a11c-done-not-yet-sent")
     }
 
-    /** A11-2, the conversation: "Is this project done?" drawn whole where it arrived, and Record as done turns it into its receipt. */
+    /** A11-2, the conversation: "Is this project done?" a preview where it arrived, opening the whole card in its review sheet; Record as
+     * done turns it into its receipt, there and — once the sheet is closed — in the conversation. */
     @Test fun a11cDoneRequestInTheCoordinatorConversation() = journey("a11c-done-conversation") {
         login(case = "done-request"); http("/__control", """{"closeOut":true}""")
         // The conversation's cards follow its messages, below the fold of a fresh open: scrolled to, not awaited in view.
         open("orbit-session:$sessionId"); awaitScrollTo("transcript-list", hasTestTag("done:$projectId"))
+        compose.onNodeWithTag("done:$projectId:preview").assertTextContains("View details & act", substring = true).performClick()
+        compose.waitUntil(20_000) { compose.onAllNodesWithTag("done:$projectId-meta").fetchSemanticsNodes().isNotEmpty() }
         compose.onNodeWithTag("done:$projectId-meta").assertTextContains("A11 Android launch · asked by the coordinator · waiting ", substring = true)
         compose.onNodeWithTag("done:$projectId-record").assertTextEquals(ProjectDone.recordAsDone)
         compose.onNodeWithTag("done:$projectId-not-yet").assertTextEquals(ProjectDone.notYet)
         capture("a11c-conversation-done-card")
         val mark = journal().size
-        compose.onNodeWithTag("done:$projectId-record").performScrollTo().performClick()
+        compose.onNodeWithTag("done:$projectId-record").performClick()
+        compose.waitUntil(20_000) { compose.onAllNodesWithTag("done:$projectId-receipt").fetchSemanticsNodes().isNotEmpty() }
+        compose.onNodeWithTag("done:$projectId:close").performClick(); awaitGone("done:$projectId:review")
         awaitScrollTo("transcript-list", hasTestTag("done:$projectId-receipt"))
         compose.onNodeWithTag("done:$projectId-receipt-line").assertTextContains("You recorded this project done · ", substring = true)
         val done = journal().drop(mark).single { it.text("path") == "/api/projects/$projectId/done" }.obj("body")!!

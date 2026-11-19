@@ -1,4 +1,5 @@
 import type { ComponentProps, ContextType } from 'react';
+import type { SubagentRunView } from '@orbit/shared';
 import { useNavigate } from 'react-router-dom';
 import { encodeId } from '../lib/idCodec';
 import { useSubagentRuns } from '../lib/subagentRuns';
@@ -24,6 +25,7 @@ import {
 } from './Transcript';
 
 const NO_SUBAGENT_WAITING: ReadonlyMap<string, string> = new Map();
+const NO_EVENTS: SessionStream['transcriptEvents'] = [];
 
 /**
  * A session's live conversation: the transcript of what `useSessionStream` holds, inside the
@@ -51,6 +53,7 @@ export function SessionConversation({
   answeredQuestions,
   wikiChat = null,
   subagentWaiting = NO_SUBAGENT_WAITING,
+  subagentRuns: givenRuns,
 }: {
   sessionId: string;
   stream: SessionStream;
@@ -73,9 +76,12 @@ export function SessionConversation({
   wikiChat?: WikiDraftCardHost | null;
   /** What each SubAgent waits for a person to approve, by its delegate call (`SubagentWaitingCtx`). */
   subagentWaiting?: ReadonlyMap<string, string>;
+  /** The session's SubAgent runs, when the page already reads them (`useSubagentRuns`); else read here. */
+  subagentRuns?: ReadonlyMap<string, SubagentRunView>;
 }) {
   const navigate = useNavigate();
-  const subagentRuns = useSubagentRuns(sessionId, stream.transcriptEvents);
+  const ownRuns = useSubagentRuns(sessionId, givenRuns ? NO_EVENTS : stream.transcriptEvents);
+  const subagentRuns = givenRuns ?? ownRuns;
   return (
     <SessionNavCtx.Provider value={(rawId) => navigate(`/sessions/${encodeId(rawId)}`)}>
       <EventFullCtx.Provider value={stream.fetchEventFull}>

@@ -63,6 +63,7 @@ import io.orbitd.android.taskprojects.canWrite
 import io.orbitd.android.taskprojects.writable
 import io.orbitd.android.ui.LocalOrbitColors
 import io.orbitd.android.wiki.PageBar
+import io.orbitd.android.watch.WatchSessionSummary
 import io.orbitd.android.watch.WatchStore
 import io.orbitd.android.watch.watchKey
 import io.orbitd.android.wiki.WikiDate
@@ -114,17 +115,26 @@ internal fun SessionProjectRowView(row: SessionProjectRow, onOpen: () -> Unit, o
 internal object ProjectSessionsSheetCopy {
     const val button = "Project sessions"
     const val close = "Close"
+    /** What the button says, beside its name, while anything in the sheet is active. */
+    const val active = "Active"
 }
 
 /** The conversation bar's button for its project's sessions (owner 2026-11-11, docs/mocks/project-sessions-column board 5): the
- * project glyph and how many sessions the project has, left of the ⋮, on the coordinator's conversation and on every member's alike. */
+ * project glyph and how many sessions the project has, left of the ⋮, on the coordinator's conversation and on every member's alike.
+ * While anything its sheet shows is [active] the glyph gives its place to the running spinner (owner 2026-11-17,
+ * docs/mocks/project-sessions-button-running, option C). */
 @Composable
-internal fun ProjectSessionsButton(count: Int?, onClick: () -> Unit) {
+internal fun ProjectSessionsButton(count: Int?, active: Boolean, onClick: () -> Unit) {
     TextButton(onClick, Modifier.heightIn(min = 48.dp).testTag("project-sessions-button")
-        .semantics(mergeDescendants = true) { contentDescription = ProjectSessionsSheetCopy.button },
+        .semantics(mergeDescendants = true) {
+            contentDescription = ProjectSessionsSheetCopy.button
+            if (active) stateDescription = ProjectSessionsSheetCopy.active
+        },
         contentPadding = PaddingValues(horizontal = 8.dp),
         colors = ButtonDefaults.textButtonColors(contentColor = MaterialTheme.colorScheme.onSurfaceVariant)) {
-        Icon(painterResource(R.drawable.ic_grid), null, Modifier.size(18.dp))
+        if (active) CircularProgressIndicator(Modifier.size(18.dp).padding(1.dp).testTag("project-sessions-button-active"),
+            color = MaterialTheme.colorScheme.primary, strokeWidth = 2.dp)
+        else Icon(painterResource(R.drawable.ic_grid), null, Modifier.size(18.dp))
         if (count != null) {
             Spacer(Modifier.width(4.dp))
             Text("$count", style = MaterialTheme.typography.labelLarge, modifier = Modifier.testTag("project-sessions-button-count"))
@@ -132,22 +142,60 @@ internal fun ProjectSessionsButton(count: Int?, onClick: () -> Unit) {
     }
 }
 
-/** How many sessions [projectId] has as its sessions page counts them — Open and Completed, read across workspaces, never a landing nor
- * one on its way to Trash — read once as the conversation carrying the button opens, so the button says from its first number what
- * the sheet's head will. Null until that read answers, and kept as it was when a read fails. */
+/** What the conversation bar's project sessions button says: how many sessions the project has, and whether anything is active. */
+internal data class ProjectSessionsButtonState(val count: Int? = null, val active: Boolean = false)
+
+/** Whether the project sessions button spins: anything its sheet shows as active — a member or landing session at work (the spinner)
+ * or with a background job in flight (the breathing terminal), a landing job running or queued, or a merge into main being checked
+ * or landing. Waiting on a decision is not activity. iOS `AppModel.projectActive`. */
+internal object ProjectSessionsButtonActivity {
+    private val activeMergeStates = setOf("CHECKING", "CONFIRMED", "RECHECKING")
+    fun active(sessions: List<DirectorySession>, watching: (DirectorySession) -> WatchSessionSummary?, integration: JsonObject?,
+        promotion: JsonObject?): Boolean =
+        ProjectPage.landingInFlight(integration) || integration?.let { ProjectPage.inFlightJobs(it) }.orEmpty().isNotEmpty() ||
+            promotion?.text("state") in activeMergeStates ||
+            sessions.any { it.isRunning() || it.isRunningJob(watching(it)) }
+}
+
+/** The project sessions button's reading of [projectId], kept current while the conversation carrying it shows: its sessions — Open and
+ * Completed, read across workspaces, landings among them, never one on its way to Trash — counted as the sessions page counts them
+ * (no landing), and with its landing line and merge, whether anything is active. Each follows the account stream as the page does, the
+ * line and the merge every 4 s while a job is in flight. While the sheet is [paused] the page in it reads the same things, so these
+ * stop, and read again when it closes. The count is null until the first read answers, and a failed read keeps the last answer. */
 @Composable
-internal fun rememberProjectSessionCount(app: OrbitApplication, api: DirectoryApi, projectId: String?): State<Int?> {
-    val count = remember(projectId) { mutableStateOf<Int?>(null) }
-    LaunchedEffect(projectId) {
-        val id = projectId ?: return@LaunchedEffect
-        suspend fun read(view: String): List<DirectorySession> =
-            api.read(listOf("sessions"), ListSerializer(DirectorySession.serializer()), listOf("view" to view, "projectId" to id, "includeLanding" to "1"))
-        try {
-            val rows = coroutineScope { val open = async { read("open") }; val completed = async { read("completed") }; open.await() + completed.await() }
-            count.value = SessionProjectMembers.members(id, app.trashing.without(rows) { it.id }).size
-        } catch (cancel: CancellationException) { throw cancel } catch (_: Exception) { }
+internal fun rememberProjectSessionsButton(app: OrbitApplication, handle: SessionHandle, api: DirectoryApi, projectId: String?,
+    paused: Boolean): State<ProjectSessionsButtonState> {
+    val projects = remember(handle) { ProjectApi(app.session, handle) { app.canWrite(handle) } }
+    val watches by remember(handle) { WatchStore.of(app.session, handle, app.processScope).state }.collectAsState()
+    var rows by remember(projectId) { mutableStateOf<List<DirectorySession>?>(null) }
+    var integration by remember(projectId) { mutableStateOf<JsonObject?>(null) }
+    var promotion by remember(projectId) { mutableStateOf<JsonObject?>(null) }
+    if (projectId != null && !paused) {
+        PagePoll(app, handle, PagePolls.PROJECT_EVENTS, projectId) {
+            suspend fun read(view: String): List<DirectorySession> =
+                api.read(listOf("sessions"), ListSerializer(DirectorySession.serializer()), listOf("view" to view, "projectId" to projectId, "includeLanding" to "1"))
+            try {
+                val read = coroutineScope { val open = async { read("open") }; val completed = async { read("completed") }; open.await() + completed.await() }
+                val kept = app.trashing.without(read) { it.id }
+                rows = SessionProjectMembers.members(projectId, kept) + SessionProjectMembers.landings(projectId, kept)
+            } catch (cancel: CancellationException) { throw cancel } catch (_: Exception) { }
+        }
+        PagePoll(app, handle, PagePolls.PROJECT_EVENTS, projectId, inFlightMs = {
+            if (ProjectSessionsButtonActivity.active(emptyList(), { null }, integration, promotion)) LANDING_READ_MS else null
+        }) {
+            coroutineScope {
+                launch { try { integration = projects.integration(projectId) } catch (cancel: CancellationException) { throw cancel } catch (_: Exception) { } }
+                launch { try { promotion = projects.currentPromotion(projectId) } catch (cancel: CancellationException) { throw cancel } catch (_: Exception) { } }
+            }
+        }
     }
-    return count
+    val hidden by app.trashing.ids.collectAsState()
+    return remember(projectId) { derivedStateOf {
+        val shown = rows?.let { all -> TrashingSessions.without(all, hidden) { it.id } }
+        ProjectSessionsButtonState(
+            count = shown?.count { !it.isLanding },
+            active = ProjectSessionsButtonActivity.active(shown.orEmpty(), { watches.summaries[watchKey(it.id)] }, integration, promotion))
+    } }
 }
 
 /** The project's sessions over a phone's conversation (board 5): today's sessions page in a bottom sheet that opens at half height and
@@ -457,6 +505,13 @@ internal fun SessionProjectPage(app: OrbitApplication, handle: SessionHandle, ro
         try { projects.retryJob(projectId, jobId)?.let { view -> state.integration = view; state.integrationReadAt = Instant.now(); state.integrationReadFailed = false }; null }
         catch (cancel: CancellationException) { throw cancel }
         catch (failure: Exception) { "${ProjectPage.landingRetryFailed} — ${failureReason(failure).trimEnd('.')}." }
+    suspend fun skipLandingCheck(taskId: String): String? {
+        val error = try { projects.skipLandingCheck(projectId, taskId); null }
+        catch (cancel: CancellationException) { throw cancel }
+        catch (failure: Exception) { failureReason(failure) }
+        loadIntegration()
+        return error
+    }
     /** One of the timed-out merge card's doors — Re-run the check (J-T9) or Abandon (J-T10): the page's landing read and the
      *  candidate are read again when it answers; a refusal comes back in the server's words. */
     suspend fun landingDoor(press: suspend () -> Unit): String? =
@@ -534,7 +589,7 @@ internal fun SessionProjectPage(app: OrbitApplication, handle: SessionHandle, ro
                     item(key = "landing") {
                         ProjectLandingCardView(card, onOpenJobs = if (ProjectPage.inFlightJobs(integration) != null) ({ showsJobs = true }) else null,
                             onOpenProject = ::openProject, openLanding = { id -> open(OrbitRoute(Destination.SESSION, id, route.workspaceId, origin = Origin.LIST)) },
-                            retry = { retryJob(it) }, modifier = Modifier.padding(horizontal = 16.dp, vertical = 4.dp))
+                            retry = { retryJob(it) }, skipCheck = { skipLandingCheck(it) }, modifier = Modifier.padding(horizontal = 16.dp, vertical = 4.dp))
                     }
                 }
             }

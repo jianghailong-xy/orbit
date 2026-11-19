@@ -1,13 +1,16 @@
 package main
 
 import (
+	"crypto/sha256"
 	"errors"
+	"fmt"
 	"os"
 	"os/exec"
 	"path/filepath"
 	"strings"
 	"syscall"
 	"testing"
+	"time"
 )
 
 const hostSetupChildEnv = "ORBIT_TEST_HOST_SETUP_CHILD"
@@ -46,6 +49,10 @@ func TestHostSetupWithoutRootExitsOne(t *testing.T) {
 			Credential: &syscall.Credential{Uid: hostSetupChildUID, Gid: hostSetupChildGID},
 		}
 	}
+	// The host may legitimately have the runner installed already, so what is checked is
+	// what the refused setup did to these paths, not what the machine had beforehand.
+	unitPaths := []string{hostRunnerTemplatePath, hostdSocketUnitPath, hostdServiceUnitPath}
+	before := snapshotUnitFiles(t, unitPaths)
 	out, err := cmd.CombinedOutput()
 
 	var exit *exec.ExitError
@@ -65,7 +72,108 @@ func TestHostSetupWithoutRootExitsOne(t *testing.T) {
 		t.Errorf("the CLI must print the command to re-run, %q, got:\n%s", want, out)
 	}
 	// Refusing early is the whole point: the machine must be exactly as it was.
-	if _, err := os.Stat(hostRunnerTemplatePath); !os.IsNotExist(err) {
-		t.Errorf("a refused setup left %s behind (%v)", hostRunnerTemplatePath, err)
+	for _, change := range unitFileChanges(before, snapshotUnitFiles(t, unitPaths)) {
+		t.Errorf("a refused setup changed the host: %s", change)
+	}
+}
+
+// unitFileState is what a path looked like at one moment: absent, or its size, mtime and
+// content hash.
+type unitFileState struct {
+	exists  bool
+	size    int64
+	modTime int64
+	sum     [sha256.Size]byte
+}
+
+func snapshotUnitFiles(t *testing.T, paths []string) map[string]unitFileState {
+	t.Helper()
+	states := make(map[string]unitFileState, len(paths))
+	for _, path := range paths {
+		info, err := os.Stat(path)
+		if os.IsNotExist(err) {
+			states[path] = unitFileState{}
+			continue
+		}
+		if err != nil {
+			t.Fatal(err)
+		}
+		b, err := os.ReadFile(path)
+		if err != nil {
+			t.Fatal(err)
+		}
+		states[path] = unitFileState{exists: true, size: info.Size(), modTime: info.ModTime().UnixNano(), sum: sha256.Sum256(b)}
+	}
+	return states
+}
+
+// unitFileChanges names every path whose state differs between the two snapshots: one
+// absent before must still be absent, one present before must be byte-identical with the
+// same mtime.
+func unitFileChanges(before, after map[string]unitFileState) []string {
+	var changes []string
+	for path, was := range before {
+		now := after[path]
+		switch {
+		case !was.exists && now.exists:
+			changes = append(changes, fmt.Sprintf("%s was created", path))
+		case was.exists && !now.exists:
+			changes = append(changes, fmt.Sprintf("%s was removed", path))
+		case was != now:
+			changes = append(changes, fmt.Sprintf("%s was modified", path))
+		}
+	}
+	return changes
+}
+
+// The before/after comparison above is the only thing standing between a setup that writes
+// a unit and a green test, so prove it notices each way a unit file can change.
+func TestHostSetupUnitSnapshotSeesChanges(t *testing.T) {
+	dir := t.TempDir()
+	absent := filepath.Join(dir, "absent.service")
+	present := filepath.Join(dir, "present.service")
+	if err := os.WriteFile(present, []byte("[Unit]\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	paths := []string{absent, present}
+	before := snapshotUnitFiles(t, paths)
+	if changes := unitFileChanges(before, snapshotUnitFiles(t, paths)); len(changes) != 0 {
+		t.Fatalf("an untouched host reported changes: %v", changes)
+	}
+
+	if err := os.WriteFile(absent, []byte("[Unit]\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if changes := unitFileChanges(before, snapshotUnitFiles(t, paths)); len(changes) != 1 || !strings.Contains(changes[0], "absent.service was created") {
+		t.Errorf("a created unit must be reported, got %v", changes)
+	}
+	if err := os.Remove(absent); err != nil {
+		t.Fatal(err)
+	}
+
+	// Same size, different bytes, mtime restored: only the hash can see it.
+	info, err := os.Stat(present)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(present, []byte("[Unix]\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.Chtimes(present, info.ModTime(), info.ModTime()); err != nil {
+		t.Fatal(err)
+	}
+	if changes := unitFileChanges(before, snapshotUnitFiles(t, paths)); len(changes) != 1 || !strings.Contains(changes[0], "present.service was modified") {
+		t.Errorf("a rewritten unit must be reported, got %v", changes)
+	}
+
+	// Same bytes, new mtime: rewritten in place still counts.
+	if err := os.WriteFile(present, []byte("[Unit]\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.Chtimes(present, info.ModTime().Add(time.Second), info.ModTime().Add(time.Second)); err != nil {
+		t.Fatal(err)
+	}
+	if changes := unitFileChanges(before, snapshotUnitFiles(t, paths)); len(changes) != 1 || !strings.Contains(changes[0], "present.service was modified") {
+		t.Errorf("a re-touched unit must be reported, got %v", changes)
 	}
 }

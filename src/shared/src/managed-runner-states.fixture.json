@@ -22,7 +22,7 @@
     "carries one. `retry` offers Retry (POST /managed-runner/retry with the read revision), `ensure` offers",
     "Set up (POST /managed-runner/ensure), `signIn` points at the runner's runtimes on the Machines & models page.",
     "`acceptsWork`: a message or turn sent now is accepted and waits for the runner, so a client does not",
-    "refuse it as offline. `startsNewSession`: a first session in the managed default workspace can start:",
+    "refuse it as offline. `startsNewSession`: a first session on the managed runner can start:",
     "the server names what it starts on (`firstSessionProvider`: `initialProvider` once the runner was READY,",
     "before that the owner's key the session waits for the runner on); with none, no client offers a default",
     "engine there. `moving`: read the status again soon (MANAGED_RUNNER_STATUS_POLL_SECONDS).",
@@ -45,7 +45,14 @@
     "`attention` orange). `entry` is the list's Managed runner · Set up entry, its subtitle, the web Set up",
     "page's sentence and Register a machine's line; `confirm` the question asked before Set up on an",
     "account that already has a runner or a workspace; `asleep` the calm row line and the composer line",
-    "for a managed runner asleep, which sending wakes."
+    "for a managed runner asleep, which sending wakes.",
+    "",
+    "`setupState` (per state): how a machine's setup card treats the managed runner (`managedSetupState`,",
+    "docs/managed-runner-no-default-workspace.md): `preparing` or `asleep` while it is not up, so the card takes a",
+    "new folder and makes the workspace; null when the card reads the runner as any machine. `setup` is",
+    "MANAGED_RUNNER_COPY.setup, the card's words for those two states, and `reposRoot` MANAGED_RUNNER_REPOS_ROOT, where",
+    "a new folder goes on a managed runner that has never reported. `status.workspaceId` is always null: a managed",
+    "runner has no default workspace."
   ],
   "now": "2026-10-09T08:00:00.000Z",
   "heartbeatFreshMs": 90000,
@@ -98,13 +105,24 @@
   },
   "confirm": {
     "title": "Set up a managed runner?",
-    "body": "Orbit will start a runner for you on this server and add a workspace for it. Your own machines and workspaces stay as they are.",
+    "body": "Orbit will start a runner for you on this server. Your own machines and workspaces stay as they are.",
     "cancel": "Cancel",
     "confirm": "Set up"
   },
   "asleep": {
     "row": "Wakes automatically when you start a session",
     "composer": "Your managed runner is asleep. Sending wakes it (about 10 s)."
+  },
+  "setup": {
+    "notice": {
+      "preparing": "Orbit is setting up your managed runner. You can create the workspace now; your first session starts when it’s ready.",
+      "asleep": "Your managed runner is asleep. Your first message wakes it (about 10 s)."
+    },
+    "folderUnchecked": {
+      "preparing": "Not checked until your managed runner is up: used if it’s there, created if not.",
+      "asleep": "Not checked while it’s asleep: used if it’s there, created if not."
+    },
+    "reposRoot": "/home/orbit/orbit-repos"
   },
   "capabilities": [
     {
@@ -189,6 +207,7 @@
         "startsNewSession": false,
         "moving": false
       },
+      "setupState": null,
       "status": {
         "contractVersion": 1,
         "enabled": true,
@@ -235,6 +254,7 @@
         "startsNewSession": false,
         "moving": false
       },
+      "setupState": null,
       "status": {
         "contractVersion": 1,
         "enabled": true,
@@ -284,6 +304,7 @@
         "startsNewSession": false,
         "moving": false
       },
+      "setupState": null,
       "status": {
         "contractVersion": 1,
         "enabled": true,
@@ -340,6 +361,7 @@
         "startsNewSession": false,
         "moving": true
       },
+      "setupState": "preparing",
       "status": {
         "contractVersion": 1,
         "enabled": true,
@@ -347,7 +369,7 @@
         "managementState": "REQUESTED",
         "desiredState": "RUNNING",
         "runnerId": "2zQeDGWFFAgN2112jNTf7",
-        "workspaceId": "2zQeDGWFFAgN2112jNTf8",
+        "workspaceId": null,
         "heartbeatStatus": "OFFLINE",
         "lastHeartbeatAt": null,
         "usable": false,
@@ -362,7 +384,7 @@
           "canRetry": false,
           "canDelete": false
         },
-        "workspacePublicId": "2zQeDGWFFAgN2112jNTf8",
+        "workspacePublicId": null,
         "runnerPublicId": "2zQeDGWFFAgN2112jNTf7"
       }
     },
@@ -395,6 +417,7 @@
         "startsNewSession": false,
         "moving": true
       },
+      "setupState": "preparing",
       "status": {
         "contractVersion": 1,
         "enabled": true,
@@ -402,7 +425,7 @@
         "managementState": "PROVISIONING",
         "desiredState": "RUNNING",
         "runnerId": "2zQeDGWFFAgN2112jNTf7",
-        "workspaceId": "2zQeDGWFFAgN2112jNTf8",
+        "workspaceId": null,
         "heartbeatStatus": "OFFLINE",
         "lastHeartbeatAt": null,
         "usable": false,
@@ -421,7 +444,7 @@
           "canRetry": false,
           "canDelete": false
         },
-        "workspacePublicId": "2zQeDGWFFAgN2112jNTf8",
+        "workspacePublicId": null,
         "runnerPublicId": "2zQeDGWFFAgN2112jNTf7"
       }
     },
@@ -452,6 +475,7 @@
         "startsNewSession": false,
         "moving": true
       },
+      "setupState": "preparing",
       "status": {
         "contractVersion": 1,
         "enabled": true,
@@ -459,7 +483,7 @@
         "managementState": "STARTING",
         "desiredState": "RUNNING",
         "runnerId": "2zQeDGWFFAgN2112jNTf7",
-        "workspaceId": "2zQeDGWFFAgN2112jNTf8",
+        "workspaceId": null,
         "heartbeatStatus": "OFFLINE",
         "lastHeartbeatAt": null,
         "usable": false,
@@ -474,7 +498,7 @@
           "canRetry": false,
           "canDelete": false
         },
-        "workspacePublicId": "2zQeDGWFFAgN2112jNTf8",
+        "workspacePublicId": null,
         "runnerPublicId": "2zQeDGWFFAgN2112jNTf7"
       }
     },
@@ -509,6 +533,7 @@
         "startsNewSession": true,
         "moving": true
       },
+      "setupState": "preparing",
       "status": {
         "contractVersion": 1,
         "enabled": true,
@@ -516,7 +541,7 @@
         "managementState": "STARTING",
         "desiredState": "RUNNING",
         "runnerId": "2zQeDGWFFAgN2112jNTf7",
-        "workspaceId": "2zQeDGWFFAgN2112jNTf8",
+        "workspaceId": null,
         "heartbeatStatus": "OFFLINE",
         "lastHeartbeatAt": null,
         "usable": false,
@@ -531,7 +556,7 @@
           "canRetry": false,
           "canDelete": false
         },
-        "workspacePublicId": "2zQeDGWFFAgN2112jNTf8",
+        "workspacePublicId": null,
         "runnerPublicId": "2zQeDGWFFAgN2112jNTf7"
       }
     },
@@ -568,6 +593,7 @@
         "startsNewSession": true,
         "moving": true
       },
+      "setupState": "preparing",
       "status": {
         "contractVersion": 1,
         "enabled": true,
@@ -575,7 +601,7 @@
         "managementState": "STARTING",
         "desiredState": "RUNNING",
         "runnerId": "2zQeDGWFFAgN2112jNTf7",
-        "workspaceId": "2zQeDGWFFAgN2112jNTf8",
+        "workspaceId": null,
         "heartbeatStatus": "OFFLINE",
         "lastHeartbeatAt": null,
         "usable": false,
@@ -594,7 +620,7 @@
           "canRetry": false,
           "canDelete": false
         },
-        "workspacePublicId": "2zQeDGWFFAgN2112jNTf8",
+        "workspacePublicId": null,
         "runnerPublicId": "2zQeDGWFFAgN2112jNTf7"
       }
     },
@@ -626,6 +652,7 @@
         "startsNewSession": false,
         "moving": true
       },
+      "setupState": "preparing",
       "status": {
         "contractVersion": 1,
         "enabled": true,
@@ -633,7 +660,7 @@
         "managementState": "STARTING",
         "desiredState": "RUNNING",
         "runnerId": "2zQeDGWFFAgN2112jNTf7",
-        "workspaceId": "2zQeDGWFFAgN2112jNTf8",
+        "workspaceId": null,
         "heartbeatStatus": "ONLINE",
         "lastHeartbeatAt": "2026-10-09T07:59:50.000Z",
         "usable": false,
@@ -652,7 +679,7 @@
           "canRetry": false,
           "canDelete": false
         },
-        "workspacePublicId": "2zQeDGWFFAgN2112jNTf8",
+        "workspacePublicId": null,
         "runnerPublicId": "2zQeDGWFFAgN2112jNTf7"
       }
     },
@@ -700,6 +727,7 @@
         "startsNewSession": false,
         "moving": true
       },
+      "setupState": "preparing",
       "status": {
         "contractVersion": 1,
         "enabled": true,
@@ -707,7 +735,7 @@
         "managementState": "STARTING",
         "desiredState": "RUNNING",
         "runnerId": "2zQeDGWFFAgN2112jNTf7",
-        "workspaceId": "2zQeDGWFFAgN2112jNTf8",
+        "workspaceId": null,
         "heartbeatStatus": "ONLINE",
         "lastHeartbeatAt": "2026-10-09T07:59:50.000Z",
         "usable": false,
@@ -726,7 +754,7 @@
           "canRetry": false,
           "canDelete": false
         },
-        "workspacePublicId": "2zQeDGWFFAgN2112jNTf8",
+        "workspacePublicId": null,
         "runnerPublicId": "2zQeDGWFFAgN2112jNTf7"
       }
     },
@@ -761,6 +789,7 @@
         "startsNewSession": false,
         "moving": true
       },
+      "setupState": "preparing",
       "status": {
         "contractVersion": 1,
         "enabled": true,
@@ -768,7 +797,7 @@
         "managementState": "WAITING_CAPACITY",
         "desiredState": "RUNNING",
         "runnerId": "2zQeDGWFFAgN2112jNTf7",
-        "workspaceId": "2zQeDGWFFAgN2112jNTf8",
+        "workspaceId": null,
         "heartbeatStatus": "OFFLINE",
         "lastHeartbeatAt": null,
         "usable": false,
@@ -787,7 +816,7 @@
           "canRetry": false,
           "canDelete": false
         },
-        "workspacePublicId": "2zQeDGWFFAgN2112jNTf8",
+        "workspacePublicId": null,
         "runnerPublicId": "2zQeDGWFFAgN2112jNTf7"
       }
     },
@@ -826,6 +855,7 @@
         "startsNewSession": true,
         "moving": true
       },
+      "setupState": "preparing",
       "status": {
         "contractVersion": 1,
         "enabled": true,
@@ -833,7 +863,7 @@
         "managementState": "WAITING_CAPACITY",
         "desiredState": "RUNNING",
         "runnerId": "2zQeDGWFFAgN2112jNTf7",
-        "workspaceId": "2zQeDGWFFAgN2112jNTf8",
+        "workspaceId": null,
         "heartbeatStatus": "OFFLINE",
         "lastHeartbeatAt": null,
         "usable": false,
@@ -852,7 +882,7 @@
           "canRetry": false,
           "canDelete": false
         },
-        "workspacePublicId": "2zQeDGWFFAgN2112jNTf8",
+        "workspacePublicId": null,
         "runnerPublicId": "2zQeDGWFFAgN2112jNTf7"
       }
     },
@@ -884,6 +914,7 @@
         "startsNewSession": true,
         "moving": false
       },
+      "setupState": null,
       "status": {
         "contractVersion": 1,
         "enabled": true,
@@ -891,7 +922,7 @@
         "managementState": "READY",
         "desiredState": "RUNNING",
         "runnerId": "2zQeDGWFFAgN2112jNTf7",
-        "workspaceId": "2zQeDGWFFAgN2112jNTf8",
+        "workspaceId": null,
         "heartbeatStatus": "ONLINE",
         "lastHeartbeatAt": "2026-10-09T07:59:45.000Z",
         "usable": true,
@@ -906,7 +937,7 @@
           "canRetry": false,
           "canDelete": false
         },
-        "workspacePublicId": "2zQeDGWFFAgN2112jNTf8",
+        "workspacePublicId": null,
         "runnerPublicId": "2zQeDGWFFAgN2112jNTf7"
       }
     },
@@ -938,6 +969,7 @@
         "startsNewSession": true,
         "moving": false
       },
+      "setupState": null,
       "status": {
         "contractVersion": 1,
         "enabled": true,
@@ -945,7 +977,7 @@
         "managementState": "READY",
         "desiredState": "RUNNING",
         "runnerId": "2zQeDGWFFAgN2112jNTf7",
-        "workspaceId": "2zQeDGWFFAgN2112jNTf8",
+        "workspaceId": null,
         "heartbeatStatus": "ONLINE",
         "lastHeartbeatAt": "2026-10-09T07:59:45.000Z",
         "usable": true,
@@ -960,7 +992,7 @@
           "canRetry": false,
           "canDelete": false
         },
-        "workspacePublicId": "2zQeDGWFFAgN2112jNTf8",
+        "workspacePublicId": null,
         "runnerPublicId": "2zQeDGWFFAgN2112jNTf7"
       }
     },
@@ -992,6 +1024,7 @@
         "startsNewSession": true,
         "moving": true
       },
+      "setupState": null,
       "status": {
         "contractVersion": 1,
         "enabled": true,
@@ -999,7 +1032,7 @@
         "managementState": "READY",
         "desiredState": "RUNNING",
         "runnerId": "2zQeDGWFFAgN2112jNTf7",
-        "workspaceId": "2zQeDGWFFAgN2112jNTf8",
+        "workspaceId": null,
         "heartbeatStatus": "OFFLINE",
         "lastHeartbeatAt": "2026-10-09T07:55:00.000Z",
         "usable": false,
@@ -1014,7 +1047,7 @@
           "canRetry": false,
           "canDelete": false
         },
-        "workspacePublicId": "2zQeDGWFFAgN2112jNTf8",
+        "workspacePublicId": null,
         "runnerPublicId": "2zQeDGWFFAgN2112jNTf7"
       }
     },
@@ -1046,6 +1079,7 @@
         "startsNewSession": true,
         "moving": true
       },
+      "setupState": "asleep",
       "status": {
         "contractVersion": 1,
         "enabled": true,
@@ -1053,7 +1087,7 @@
         "managementState": "DRAINING",
         "desiredState": "SLEEPING",
         "runnerId": "2zQeDGWFFAgN2112jNTf7",
-        "workspaceId": "2zQeDGWFFAgN2112jNTf8",
+        "workspaceId": null,
         "heartbeatStatus": "ONLINE",
         "lastHeartbeatAt": "2026-10-09T07:59:55.000Z",
         "usable": false,
@@ -1068,7 +1102,7 @@
           "canRetry": false,
           "canDelete": false
         },
-        "workspacePublicId": "2zQeDGWFFAgN2112jNTf8",
+        "workspacePublicId": null,
         "runnerPublicId": "2zQeDGWFFAgN2112jNTf7"
       }
     },
@@ -1100,6 +1134,7 @@
         "startsNewSession": true,
         "moving": false
       },
+      "setupState": "asleep",
       "status": {
         "contractVersion": 1,
         "enabled": true,
@@ -1107,7 +1142,7 @@
         "managementState": "SLEEPING",
         "desiredState": "SLEEPING",
         "runnerId": "2zQeDGWFFAgN2112jNTf7",
-        "workspaceId": "2zQeDGWFFAgN2112jNTf8",
+        "workspaceId": null,
         "heartbeatStatus": "OFFLINE",
         "lastHeartbeatAt": "2026-10-09T06:00:00.000Z",
         "usable": false,
@@ -1122,7 +1157,7 @@
           "canRetry": false,
           "canDelete": false
         },
-        "workspacePublicId": "2zQeDGWFFAgN2112jNTf8",
+        "workspacePublicId": null,
         "runnerPublicId": "2zQeDGWFFAgN2112jNTf7"
       }
     },
@@ -1154,6 +1189,7 @@
         "startsNewSession": false,
         "moving": false
       },
+      "setupState": "preparing",
       "status": {
         "contractVersion": 1,
         "enabled": true,
@@ -1161,7 +1197,7 @@
         "managementState": "SLEEPING",
         "desiredState": "SLEEPING",
         "runnerId": "2zQeDGWFFAgN2112jNTf7",
-        "workspaceId": "2zQeDGWFFAgN2112jNTf8",
+        "workspaceId": null,
         "heartbeatStatus": "OFFLINE",
         "lastHeartbeatAt": "2026-10-09T06:00:00.000Z",
         "usable": false,
@@ -1180,7 +1216,7 @@
           "canRetry": false,
           "canDelete": false
         },
-        "workspacePublicId": "2zQeDGWFFAgN2112jNTf8",
+        "workspacePublicId": null,
         "runnerPublicId": "2zQeDGWFFAgN2112jNTf7"
       }
     },
@@ -1212,6 +1248,7 @@
         "startsNewSession": true,
         "moving": true
       },
+      "setupState": "asleep",
       "status": {
         "contractVersion": 1,
         "enabled": true,
@@ -1219,7 +1256,7 @@
         "managementState": "SLEEPING",
         "desiredState": "RUNNING",
         "runnerId": "2zQeDGWFFAgN2112jNTf7",
-        "workspaceId": "2zQeDGWFFAgN2112jNTf8",
+        "workspaceId": null,
         "heartbeatStatus": "OFFLINE",
         "lastHeartbeatAt": "2026-10-09T06:00:00.000Z",
         "usable": false,
@@ -1234,7 +1271,7 @@
           "canRetry": false,
           "canDelete": false
         },
-        "workspacePublicId": "2zQeDGWFFAgN2112jNTf8",
+        "workspacePublicId": null,
         "runnerPublicId": "2zQeDGWFFAgN2112jNTf7"
       }
     },
@@ -1266,6 +1303,7 @@
         "startsNewSession": true,
         "moving": true
       },
+      "setupState": "asleep",
       "status": {
         "contractVersion": 1,
         "enabled": true,
@@ -1273,7 +1311,7 @@
         "managementState": "STARTING",
         "desiredState": "RUNNING",
         "runnerId": "2zQeDGWFFAgN2112jNTf7",
-        "workspaceId": "2zQeDGWFFAgN2112jNTf8",
+        "workspaceId": null,
         "heartbeatStatus": "OFFLINE",
         "lastHeartbeatAt": "2026-10-09T06:00:00.000Z",
         "usable": false,
@@ -1288,7 +1326,7 @@
           "canRetry": false,
           "canDelete": false
         },
-        "workspacePublicId": "2zQeDGWFFAgN2112jNTf8",
+        "workspacePublicId": null,
         "runnerPublicId": "2zQeDGWFFAgN2112jNTf7"
       }
     },
@@ -1323,6 +1361,7 @@
         "startsNewSession": true,
         "moving": true
       },
+      "setupState": "asleep",
       "status": {
         "contractVersion": 1,
         "enabled": true,
@@ -1330,7 +1369,7 @@
         "managementState": "REQUESTED",
         "desiredState": "RUNNING",
         "runnerId": "2zQeDGWFFAgN2112jNTf7",
-        "workspaceId": "2zQeDGWFFAgN2112jNTf8",
+        "workspaceId": null,
         "heartbeatStatus": "OFFLINE",
         "lastHeartbeatAt": "2026-10-09T07:55:00.000Z",
         "usable": false,
@@ -1349,7 +1388,7 @@
           "canRetry": false,
           "canDelete": false
         },
-        "workspacePublicId": "2zQeDGWFFAgN2112jNTf8",
+        "workspacePublicId": null,
         "runnerPublicId": "2zQeDGWFFAgN2112jNTf7"
       }
     },
@@ -1383,6 +1422,7 @@
         "startsNewSession": true,
         "moving": true
       },
+      "setupState": "asleep",
       "status": {
         "contractVersion": 1,
         "enabled": true,
@@ -1390,7 +1430,7 @@
         "managementState": "STARTING",
         "desiredState": "RUNNING",
         "runnerId": "2zQeDGWFFAgN2112jNTf7",
-        "workspaceId": "2zQeDGWFFAgN2112jNTf8",
+        "workspaceId": null,
         "heartbeatStatus": "OFFLINE",
         "lastHeartbeatAt": "2026-10-09T07:55:00.000Z",
         "usable": false,
@@ -1409,7 +1449,7 @@
           "canRetry": false,
           "canDelete": false
         },
-        "workspacePublicId": "2zQeDGWFFAgN2112jNTf8",
+        "workspacePublicId": null,
         "runnerPublicId": "2zQeDGWFFAgN2112jNTf7"
       }
     },
@@ -1442,6 +1482,7 @@
         "startsNewSession": true,
         "moving": true
       },
+      "setupState": "asleep",
       "status": {
         "contractVersion": 1,
         "enabled": true,
@@ -1449,7 +1490,7 @@
         "managementState": "STARTING",
         "desiredState": "RUNNING",
         "runnerId": "2zQeDGWFFAgN2112jNTf7",
-        "workspaceId": "2zQeDGWFFAgN2112jNTf8",
+        "workspaceId": null,
         "heartbeatStatus": "OFFLINE",
         "lastHeartbeatAt": "2026-10-09T07:55:00.000Z",
         "usable": false,
@@ -1468,7 +1509,7 @@
           "canRetry": false,
           "canDelete": false
         },
-        "workspacePublicId": "2zQeDGWFFAgN2112jNTf8",
+        "workspacePublicId": null,
         "runnerPublicId": "2zQeDGWFFAgN2112jNTf7"
       }
     },
@@ -1502,6 +1543,7 @@
         "startsNewSession": true,
         "moving": true
       },
+      "setupState": "asleep",
       "status": {
         "contractVersion": 1,
         "enabled": true,
@@ -1509,7 +1551,7 @@
         "managementState": "STARTING",
         "desiredState": "RUNNING",
         "runnerId": "2zQeDGWFFAgN2112jNTf7",
-        "workspaceId": "2zQeDGWFFAgN2112jNTf8",
+        "workspaceId": null,
         "heartbeatStatus": "OFFLINE",
         "lastHeartbeatAt": "2026-10-09T07:55:00.000Z",
         "usable": false,
@@ -1528,7 +1570,7 @@
           "canRetry": false,
           "canDelete": false
         },
-        "workspacePublicId": "2zQeDGWFFAgN2112jNTf8",
+        "workspacePublicId": null,
         "runnerPublicId": "2zQeDGWFFAgN2112jNTf7"
       }
     },
@@ -1562,6 +1604,7 @@
         "startsNewSession": true,
         "moving": true
       },
+      "setupState": "asleep",
       "status": {
         "contractVersion": 1,
         "enabled": true,
@@ -1569,7 +1612,7 @@
         "managementState": "STARTING",
         "desiredState": "RUNNING",
         "runnerId": "2zQeDGWFFAgN2112jNTf7",
-        "workspaceId": "2zQeDGWFFAgN2112jNTf8",
+        "workspaceId": null,
         "heartbeatStatus": "OFFLINE",
         "lastHeartbeatAt": "2026-10-09T07:55:00.000Z",
         "usable": false,
@@ -1588,7 +1631,7 @@
           "canRetry": false,
           "canDelete": false
         },
-        "workspacePublicId": "2zQeDGWFFAgN2112jNTf8",
+        "workspacePublicId": null,
         "runnerPublicId": "2zQeDGWFFAgN2112jNTf7"
       }
     },
@@ -1622,6 +1665,7 @@
         "startsNewSession": true,
         "moving": true
       },
+      "setupState": "asleep",
       "status": {
         "contractVersion": 1,
         "enabled": true,
@@ -1629,7 +1673,7 @@
         "managementState": "WAITING_CAPACITY",
         "desiredState": "RUNNING",
         "runnerId": "2zQeDGWFFAgN2112jNTf7",
-        "workspaceId": "2zQeDGWFFAgN2112jNTf8",
+        "workspaceId": null,
         "heartbeatStatus": "OFFLINE",
         "lastHeartbeatAt": "2026-10-09T06:00:00.000Z",
         "usable": false,
@@ -1648,7 +1692,7 @@
           "canRetry": false,
           "canDelete": false
         },
-        "workspacePublicId": "2zQeDGWFFAgN2112jNTf8",
+        "workspacePublicId": null,
         "runnerPublicId": "2zQeDGWFFAgN2112jNTf7"
       }
     },
@@ -1681,6 +1725,7 @@
         "startsNewSession": false,
         "moving": false
       },
+      "setupState": null,
       "status": {
         "contractVersion": 1,
         "enabled": true,
@@ -1688,7 +1733,7 @@
         "managementState": "FENCING",
         "desiredState": "RUNNING",
         "runnerId": "2zQeDGWFFAgN2112jNTf7",
-        "workspaceId": "2zQeDGWFFAgN2112jNTf8",
+        "workspaceId": null,
         "heartbeatStatus": "OFFLINE",
         "lastHeartbeatAt": "2026-10-09T07:50:00.000Z",
         "usable": false,
@@ -1707,7 +1752,7 @@
           "canRetry": false,
           "canDelete": false
         },
-        "workspacePublicId": "2zQeDGWFFAgN2112jNTf8",
+        "workspacePublicId": null,
         "runnerPublicId": "2zQeDGWFFAgN2112jNTf7"
       }
     },
@@ -1739,6 +1784,7 @@
         "startsNewSession": false,
         "moving": false
       },
+      "setupState": null,
       "status": {
         "contractVersion": 1,
         "enabled": true,
@@ -1746,7 +1792,7 @@
         "managementState": "FAILED",
         "desiredState": "RUNNING",
         "runnerId": "2zQeDGWFFAgN2112jNTf7",
-        "workspaceId": "2zQeDGWFFAgN2112jNTf8",
+        "workspaceId": null,
         "heartbeatStatus": "OFFLINE",
         "lastHeartbeatAt": null,
         "usable": false,
@@ -1765,7 +1811,7 @@
           "canRetry": true,
           "canDelete": false
         },
-        "workspacePublicId": "2zQeDGWFFAgN2112jNTf8",
+        "workspacePublicId": null,
         "runnerPublicId": "2zQeDGWFFAgN2112jNTf7"
       }
     },
@@ -1797,6 +1843,7 @@
         "startsNewSession": false,
         "moving": false
       },
+      "setupState": null,
       "status": {
         "contractVersion": 1,
         "enabled": true,
@@ -1804,7 +1851,7 @@
         "managementState": "FAILED",
         "desiredState": "RUNNING",
         "runnerId": "2zQeDGWFFAgN2112jNTf7",
-        "workspaceId": "2zQeDGWFFAgN2112jNTf8",
+        "workspaceId": null,
         "heartbeatStatus": "ONLINE",
         "lastHeartbeatAt": "2026-10-09T07:59:40.000Z",
         "usable": false,
@@ -1823,7 +1870,7 @@
           "canRetry": true,
           "canDelete": false
         },
-        "workspacePublicId": "2zQeDGWFFAgN2112jNTf8",
+        "workspacePublicId": null,
         "runnerPublicId": "2zQeDGWFFAgN2112jNTf7"
       }
     },
@@ -1854,6 +1901,7 @@
         "startsNewSession": false,
         "moving": false
       },
+      "setupState": null,
       "status": {
         "contractVersion": 1,
         "enabled": true,
@@ -1861,7 +1909,7 @@
         "managementState": "FAILED",
         "desiredState": "RUNNING",
         "runnerId": "2zQeDGWFFAgN2112jNTf7",
-        "workspaceId": "2zQeDGWFFAgN2112jNTf8",
+        "workspaceId": null,
         "heartbeatStatus": "OFFLINE",
         "lastHeartbeatAt": null,
         "usable": false,
@@ -1880,7 +1928,7 @@
           "canRetry": false,
           "canDelete": false
         },
-        "workspacePublicId": "2zQeDGWFFAgN2112jNTf8",
+        "workspacePublicId": null,
         "runnerPublicId": "2zQeDGWFFAgN2112jNTf7"
       }
     },
@@ -1914,6 +1962,7 @@
         "startsNewSession": false,
         "moving": false
       },
+      "setupState": null,
       "status": {
         "contractVersion": 1,
         "enabled": true,
@@ -1921,7 +1970,7 @@
         "managementState": "FAILED",
         "desiredState": "RUNNING",
         "runnerId": "2zQeDGWFFAgN2112jNTf7",
-        "workspaceId": "2zQeDGWFFAgN2112jNTf8",
+        "workspaceId": null,
         "heartbeatStatus": "OFFLINE",
         "lastHeartbeatAt": "2026-10-09T07:55:00.000Z",
         "usable": false,
@@ -1940,7 +1989,7 @@
           "canRetry": true,
           "canDelete": false
         },
-        "workspacePublicId": "2zQeDGWFFAgN2112jNTf8",
+        "workspacePublicId": null,
         "runnerPublicId": "2zQeDGWFFAgN2112jNTf7"
       }
     },
@@ -1974,6 +2023,7 @@
         "startsNewSession": false,
         "moving": false
       },
+      "setupState": null,
       "status": {
         "contractVersion": 1,
         "enabled": true,
@@ -1981,7 +2031,7 @@
         "managementState": "FAILED",
         "desiredState": "RUNNING",
         "runnerId": "2zQeDGWFFAgN2112jNTf7",
-        "workspaceId": "2zQeDGWFFAgN2112jNTf8",
+        "workspaceId": null,
         "heartbeatStatus": "OFFLINE",
         "lastHeartbeatAt": "2026-10-09T07:55:00.000Z",
         "usable": false,
@@ -2000,7 +2050,7 @@
           "canRetry": true,
           "canDelete": false
         },
-        "workspacePublicId": "2zQeDGWFFAgN2112jNTf8",
+        "workspacePublicId": null,
         "runnerPublicId": "2zQeDGWFFAgN2112jNTf7"
       }
     },
@@ -2033,6 +2083,7 @@
         "startsNewSession": false,
         "moving": false
       },
+      "setupState": null,
       "status": {
         "contractVersion": 1,
         "enabled": true,
@@ -2040,7 +2091,7 @@
         "managementState": "FAILED",
         "desiredState": "RUNNING",
         "runnerId": "2zQeDGWFFAgN2112jNTf7",
-        "workspaceId": "2zQeDGWFFAgN2112jNTf8",
+        "workspaceId": null,
         "heartbeatStatus": "OFFLINE",
         "lastHeartbeatAt": "2026-10-08T21:00:00.000Z",
         "usable": false,
@@ -2059,7 +2110,7 @@
           "canRetry": true,
           "canDelete": false
         },
-        "workspacePublicId": "2zQeDGWFFAgN2112jNTf8",
+        "workspacePublicId": null,
         "runnerPublicId": "2zQeDGWFFAgN2112jNTf7"
       }
     },
@@ -2094,6 +2145,7 @@
         "startsNewSession": false,
         "moving": true
       },
+      "setupState": "preparing",
       "status": {
         "contractVersion": 1,
         "enabled": true,
@@ -2101,7 +2153,7 @@
         "managementState": "REQUESTED",
         "desiredState": "RUNNING",
         "runnerId": "2zQeDGWFFAgN2112jNTf7",
-        "workspaceId": "2zQeDGWFFAgN2112jNTf8",
+        "workspaceId": null,
         "heartbeatStatus": "OFFLINE",
         "lastHeartbeatAt": null,
         "usable": false,
@@ -2120,7 +2172,7 @@
           "canRetry": false,
           "canDelete": false
         },
-        "workspacePublicId": "2zQeDGWFFAgN2112jNTf8",
+        "workspacePublicId": null,
         "runnerPublicId": "2zQeDGWFFAgN2112jNTf7"
       }
     },
@@ -2155,6 +2207,7 @@
         "startsNewSession": false,
         "moving": false
       },
+      "setupState": null,
       "status": {
         "contractVersion": 1,
         "enabled": true,
@@ -2162,7 +2215,7 @@
         "managementState": "FAILED",
         "desiredState": "RUNNING",
         "runnerId": "2zQeDGWFFAgN2112jNTf7",
-        "workspaceId": "2zQeDGWFFAgN2112jNTf8",
+        "workspaceId": null,
         "heartbeatStatus": "OFFLINE",
         "lastHeartbeatAt": null,
         "usable": false,
@@ -2181,7 +2234,7 @@
           "canRetry": false,
           "canDelete": false
         },
-        "workspacePublicId": "2zQeDGWFFAgN2112jNTf8",
+        "workspacePublicId": null,
         "runnerPublicId": "2zQeDGWFFAgN2112jNTf7"
       }
     },
@@ -2213,6 +2266,7 @@
         "startsNewSession": false,
         "moving": true
       },
+      "setupState": null,
       "status": {
         "contractVersion": 1,
         "enabled": true,
@@ -2220,7 +2274,7 @@
         "managementState": "DELETING",
         "desiredState": "DELETED",
         "runnerId": "2zQeDGWFFAgN2112jNTf7",
-        "workspaceId": "2zQeDGWFFAgN2112jNTf8",
+        "workspaceId": null,
         "heartbeatStatus": "OFFLINE",
         "lastHeartbeatAt": "2026-10-08T08:00:00.000Z",
         "usable": false,
@@ -2235,7 +2289,7 @@
           "canRetry": false,
           "canDelete": false
         },
-        "workspacePublicId": "2zQeDGWFFAgN2112jNTf8",
+        "workspacePublicId": null,
         "runnerPublicId": "2zQeDGWFFAgN2112jNTf7"
       }
     },
@@ -2268,6 +2322,7 @@
         "startsNewSession": false,
         "moving": false
       },
+      "setupState": null,
       "status": {
         "contractVersion": 1,
         "enabled": true,
@@ -2275,7 +2330,7 @@
         "managementState": "DELETED",
         "desiredState": "DELETED",
         "runnerId": "2zQeDGWFFAgN2112jNTf7",
-        "workspaceId": "2zQeDGWFFAgN2112jNTf8",
+        "workspaceId": null,
         "heartbeatStatus": "OFFLINE",
         "lastHeartbeatAt": "2026-10-08T08:00:00.000Z",
         "usable": false,
@@ -2290,7 +2345,7 @@
           "canRetry": false,
           "canDelete": false
         },
-        "workspacePublicId": "2zQeDGWFFAgN2112jNTf8",
+        "workspacePublicId": null,
         "runnerPublicId": "2zQeDGWFFAgN2112jNTf7"
       }
     },
@@ -2312,6 +2367,7 @@
         }
       },
       "display": null,
+      "setupState": null,
       "status": {
         "contractVersion": 1,
         "enabled": false,
@@ -2319,7 +2375,7 @@
         "managementState": "READY",
         "desiredState": "RUNNING",
         "runnerId": "2zQeDGWFFAgN2112jNTf7",
-        "workspaceId": "2zQeDGWFFAgN2112jNTf8",
+        "workspaceId": null,
         "heartbeatStatus": "ONLINE",
         "lastHeartbeatAt": "2026-10-09T07:59:45.000Z",
         "usable": true,
@@ -2338,7 +2394,7 @@
           "canRetry": false,
           "canDelete": false
         },
-        "workspacePublicId": "2zQeDGWFFAgN2112jNTf8",
+        "workspacePublicId": null,
         "runnerPublicId": "2zQeDGWFFAgN2112jNTf7"
       }
     },
@@ -2370,6 +2426,7 @@
         "startsNewSession": false,
         "moving": false
       },
+      "setupState": null,
       "status": {
         "contractVersion": 1,
         "enabled": true,
@@ -2377,7 +2434,7 @@
         "managementState": "SLEEPING",
         "desiredState": "SLEEPING",
         "runnerId": "2zQeDGWFFAgN2112jNTf7",
-        "workspaceId": "2zQeDGWFFAgN2112jNTf8",
+        "workspaceId": null,
         "heartbeatStatus": "OFFLINE",
         "lastHeartbeatAt": "2026-10-09T06:00:00.000Z",
         "usable": false,
@@ -2396,7 +2453,7 @@
           "canRetry": false,
           "canDelete": false
         },
-        "workspacePublicId": "2zQeDGWFFAgN2112jNTf8",
+        "workspacePublicId": null,
         "runnerPublicId": "2zQeDGWFFAgN2112jNTf7"
       }
     },
@@ -2429,6 +2486,7 @@
         "startsNewSession": false,
         "moving": false
       },
+      "setupState": null,
       "status": {
         "contractVersion": 1,
         "enabled": true,
@@ -2436,7 +2494,7 @@
         "managementState": "SLEEPING",
         "desiredState": "SLEEPING",
         "runnerId": "2zQeDGWFFAgN2112jNTf7",
-        "workspaceId": "2zQeDGWFFAgN2112jNTf8",
+        "workspaceId": null,
         "heartbeatStatus": "OFFLINE",
         "lastHeartbeatAt": "2026-10-09T06:00:00.000Z",
         "usable": false,
@@ -2455,7 +2513,7 @@
           "canRetry": false,
           "canDelete": false
         },
-        "workspacePublicId": "2zQeDGWFFAgN2112jNTf8",
+        "workspacePublicId": null,
         "runnerPublicId": "2zQeDGWFFAgN2112jNTf7"
       }
     }

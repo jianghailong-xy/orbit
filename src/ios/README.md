@@ -81,6 +81,19 @@ with the macOS DMG job), using an App Store Connect API key for both signing
    - `ASC_KEY_P8_BASE64` — `base64 -i AuthKey_XXXXXXXXXX.p8` output
    - `APPLE_TEAM_ID` — already present (shared with the macOS release)
 
+**Share Extension (`OrbitShare`) signing** — the app embeds a Share Extension that hands items to
+the app through the App Group `group.io.orbitd.app` (docs/share-to-orbit-design.md §3.1), so
+TestFlight signs two targets, each with its own App Store profile:
+1. *Certificates, Identifiers & Profiles → Identifiers*: register the App Group
+   `group.io.orbitd.app`; enable **App Groups** on the `io.orbitd.app` App ID and tick that group;
+   register a new App ID `io.orbitd.app.OrbitShare` with **App Groups** (same group).
+2. Regenerate the app's App Store profile (it must now carry the group) and update
+   `IOS_PROVISION_PROFILE_BASE64`; create an App Store profile for `io.orbitd.app.OrbitShare` and
+   add it as `IOS_SHARE_PROVISION_PROFILE_BASE64` (`base64 -i OrbitShare.mobileprovision`).
+3. The `testflight` job refuses to run when either profile is missing or lacks the group, and
+   passes each profile to its own target (`ORBIT_APP_PROFILE` / `ORBIT_SHARE_PROFILE` in
+   `project.yml`).
+
 **Cut a build**
 ```sh
 .claude/skills/release/release.sh 0.1.2   # pushes v0.1.2 → macOS DMG + iOS TestFlight + Android APK

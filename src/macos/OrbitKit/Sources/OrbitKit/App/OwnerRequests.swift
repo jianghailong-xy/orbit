@@ -132,6 +132,29 @@ public enum OwnerRequests {
             + "It is still open: not marked done and not declined. Their message:"
     }
 
+    // MARK: How a resolution turn reads
+
+    /// Orbit's mark on the turn it queues when a request ends (`ownerRequestResolutionTurn` on the server).
+    static let resolutionMark = "This turn was queued by Orbit when the request ended, not typed by a person."
+    private static let resolutionHead =
+        try? NSRegularExpression(pattern: #"^Orbit owner request \S+ \([A-Z_]+\) ended (DONE|DECLINED|EXPIRED|WITHDRAWN)[:.] "#)
+    private static let resolutionLabels: [String: String] = [
+        "DONE": "Owner action resolved",
+        "DECLINED": "Owner declined the request",
+        "EXPIRED": "Owner request expired",
+        "WITHDRAWN": "Owner request withdrawn",
+    ]
+
+    /// The divider drawn for the turn Orbit starts when a request ends, or nil for any other turn
+    /// (web parity: `resolutionTurnLabel`). Nobody typed it, so it is not the owner's bubble.
+    public static func resolutionTurnLabel(_ text: String) -> String? {
+        guard text.contains(resolutionMark), let head = resolutionHead,
+              let match = head.firstMatch(in: text, range: NSRange(text.startIndex..., in: text)),
+              let range = Range(match.range(at: 1), in: text),
+              let label = resolutionLabels[String(text[range])] else { return nil }
+        return "\(label) · turn started automatically"
+    }
+
     public static func usingSaved(_ label: String) -> String { "Using saved “\(label)”" }
     public static func useSaved(_ label: String) -> String { "Use saved “\(label)”" }
     public static func verifyHint(_ hint: String) -> String { "How to check: \(hint)" }
@@ -339,6 +362,12 @@ public enum OwnerRequests {
         return requests
             .filter { PublicID.storageKey($0.askedBySessionId) == key }
             .sorted { (RelativeTime.parse($0.createdAt) ?? .distantPast) < (RelativeTime.parse($1.createdAt) ?? .distantPast) }
+    }
+
+    /// The request a press on a session's needs-you notice opens: the oldest one it asked that is still
+    /// pending, or nil when this device holds none of them yet.
+    public static func oldestPending(_ requests: [OwnerRequest], sessionID: String) -> OwnerRequest? {
+        forSession(requests, sessionID: sessionID).first { $0.state == .pending }
     }
 
     /// Two reads (open, and every state) as one list by id, the newer read of a request winning.

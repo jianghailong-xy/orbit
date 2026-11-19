@@ -1,5 +1,6 @@
+import { readFileSync } from 'node:fs';
 import { describe, expect, it } from 'vitest';
-import type { DirProbe, RunnerEngineHealth } from '@orbit/shared';
+import { type ManagedRunnerStatus, type DirProbe, type RunnerEngineHealth } from '@orbit/shared';
 import { encodeId } from './idCodec';
 import {
   answersDirProbe,
@@ -10,6 +11,7 @@ import {
   isConnecting,
   isValidNewFolder,
   machineDraftPath,
+  isManagedRunner,
   machineName,
   machinesToSetUp,
   makesNewFolders,
@@ -53,6 +55,16 @@ describe('a machine’s new session page', () => {
     expect(machineName({ name: 'orbit@austin', displayName: null })).toBe('orbit@austin');
     expect(machineName({ name: 'orbit@austin', displayName: '' })).toBe('orbit@austin');
   });
+
+  it("says Orbit Cloud for the row GET /runners marks managed, with no managed status yet; the owner's name still wins", () => {
+    expect(machineName({ id: RUNNER, name: 'orbit-managed', displayName: null, managed: true })).toBe('Orbit Cloud');
+    expect(machineName({ id: RUNNER, name: 'orbit-managed', displayName: 'Team cloud', managed: true })).toBe('Team cloud');
+    expect(machineName({ id: 'r2', name: 'build-box', displayName: null, managed: false })).toBe('build-box');
+    // An older server sends no flag: the managed status's runnerId still says which runner it is.
+    expect(machineName({ id: RUNNER, name: 'orbit-managed', displayName: null }, RUNNER)).toBe('Orbit Cloud');
+    expect(isManagedRunner({ id: RUNNER, managed: true }, null)).toBe(true);
+    expect(isManagedRunner({ id: 'r2', managed: false }, RUNNER)).toBe(false);
+  });
 });
 
 describe('rule 9: which machines get a Set up row', () => {
@@ -62,6 +74,16 @@ describe('rule 9: which machines get a Set up row', () => {
 
   it('an online machine with no workspace on it', () => {
     expect(machinesToSetUp([austin, hpc], [{ id: 'w', createdAt: '', runnerId: 'hpc' }])).toEqual([austin]);
+  });
+
+  it('offers the managed machine while preparing or asleep, but still excludes ordinary offline machines', () => {
+    const fixture = JSON.parse(readFileSync('../shared/src/managed-runner-states.fixture.json', 'utf8'));
+    for (const sample of fixture.states) {
+      const status = sample.status as ManagedRunnerStatus;
+      const managed = { id: status.runnerId ?? 'unmapped', online: false };
+      expect(machinesToSetUp([gone, managed], [], status)).toEqual(sample.setupState ? [managed] : []);
+      expect(machinesToSetUp([managed], [{ id: 'w', createdAt: '', runnerId: managed.id }], status)).toEqual([]);
+    }
   });
 
   it('not one that is offline, whatever it holds', () => {

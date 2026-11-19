@@ -600,6 +600,7 @@ func startKimiACP(ctx context.Context, t *Transport, job *ClaimedSession, execDi
 		envWiki+"="+wikiEnv(job.WikiDisabled),
 		envScheduleRun+"="+scheduleRunEnv(job.ScheduleRun),
 		envMCPPermissionPrompt+"=0",
+		envSpawnDepth+"="+strconv.Itoa(job.SpawnDepth),
 		// Kimi's own deadline for a call of `orbit mcp` (kimiMCPConfigRecord): a wait ends inside it.
 		envMCPCallTimeout+"="+strconv.Itoa(int(kimiOrbitMCPToolTimeout/time.Second)),
 	)

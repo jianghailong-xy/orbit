@@ -35,7 +35,7 @@ import {
   type ManagedRunnerEligibility,
 } from './managed-runner-eligibility';
 import { MANAGED_RUNNER_GATE, managedRunnerDisabledError, type ManagedRunnerGate } from './managed-runner-gate';
-import { MANAGED_RUNNER_NAME, MANAGED_WORKSPACE_DIR, MANAGED_WORKSPACE_NAME } from './managed-runner-resources';
+import { MANAGED_RUNNER_NAME } from './managed-runner-resources';
 import { placeNewMapping } from './managed-runner-placement';
 import { MANAGED_RUNNER_RUNTIME, type ManagedRunnerRuntime } from './managed-runner-runtime';
 import type { ManagedRunnerSignIn } from './managed-runner-sign-in';
@@ -143,7 +143,7 @@ export class ManagedRunnerService implements OnModuleInit, OnModuleDestroy, Mana
   /**
    * A sign-in (ManagedRunnerSignIn): AuthService.completeLogin calls this after it has issued the
    * tokens, and nothing else does. Off, it returns before reading anything. On, an eligible owner
-   * without a mapping gets one — its runner row and default workspace with it, once — and the manager
+   * without a mapping gets one — its runner row with it, once — and the manager
    * is woken to provision it in the background: the sign-in waits for no instance and makes no
    * Kubernetes call. A mapping that exists is left as it is, whatever its state: a sign-in neither
    * retries a FAILED one nor recreates a deleted one. Nothing here throws. A sign-in whose intent
@@ -199,7 +199,7 @@ export class ManagedRunnerService implements OnModuleInit, OnModuleDestroy, Mana
   }
 
   /**
-   * Record RUNNING intent: the owner's one mapping, with its runner row and default workspace,
+   * Record RUNNING intent: the owner's one mapping, with its runner row,
    * created together if it does not exist yet. Idempotent per owner — a repeated or concurrent
    * ensure answers with the same mapping. Creating one is for an eligible owner only.
    */
@@ -423,8 +423,9 @@ export class ManagedRunnerService implements OnModuleInit, OnModuleDestroy, Mana
   }
 
   /**
-   * The mapping, the runner row and the default workspace, in one retriable transaction. The runner
-   * row starts OFFLINE with a credential nobody holds: the manager issues the real one with the
+   * The mapping and the runner row, in one retriable transaction. No workspace: the managed runner starts
+   * with none, like any machine, and its first is made from the setup card
+   * (docs/managed-runner-no-default-workspace.md). The runner row starts OFFLINE with a credential nobody holds: the manager issues the real one with the
    * bootstrap credential. The data volume's location and name are the run backend's, and so is the
    * mapping: only that backend's manager drives it. With several Docker channel hosts the backend is the
    * one placement chose (managed-runner-placement.ts), and the mapping stays on its location for good. A
@@ -449,24 +450,15 @@ export class ManagedRunnerService implements OnModuleInit, OnModuleDestroy, Mana
               tokenHash: sha256(generateToken(32)),
               status: 'OFFLINE',
               maxConcurrent: profile.runner.maxConcurrent,
-            },
-          });
-          const workspace = await tx.workspace.create({
-            data: {
-              ownerId,
-              name: MANAGED_WORKSPACE_NAME,
-              runnerId: runner.id,
-              targetRunnerId: runner.id,
-              workDir: MANAGED_WORKSPACE_DIR,
-              autoInitGit: true,
-              enableWorktree: true,
+              // Not the column's 10 GB default: with no floor set, a managed runner keeps a share of its volume free
+              // (managed-runner-storage.ts).
+              minFreeDiskMb: null,
             },
           });
           return tx.managedRunner.create({
             data: {
               ownerId,
               runnerId: runner.id,
-              defaultWorkspaceId: workspace.id,
               backend: backend.name,
               clusterKey: backend.location.clusterKey,
               namespace: backend.location.namespace,

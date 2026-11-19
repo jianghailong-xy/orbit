@@ -56,20 +56,10 @@ export function sessionMessageNarrower(from: string, to: string): string {
   return `Sender runs in ${modeLabel(from)}, narrower than this session's ${modeLabel(to)}: not taken as your approval`;
 }
 
-/**
- * A session message's recorded note without its own block, which only tells the agent what the card
- * already shows the reader — who sent it, its task, the request (owner, 2026-11-12; board
- * docs/mocks/session-message-attached-line). `rest` is whatever else delivery appended, still folded
- * under the card; empty when there is nothing else. The one thing the block says that the card does
- * not — that the sender runs in a narrower mode than this session — comes back as `narrower`, the
- * card's own line.
- */
-export function splitSessionMessageNote(note: string | null | undefined): { rest: string; narrower: string | null } {
-  if (!note) return { rest: '', narrower: null };
+/** The sender's narrower permission mode, read only from the recorded session-message block. */
+export function parseSessionMessageNarrower(note: string | null | undefined): string | null {
+  if (!note) return null;
   const blocks = note.match(SESSION_MESSAGE_BLOCK) ?? [];
   const narrower = blocks.map((block) => NARROWER_SENDER.exec(block)).find((m) => m != null);
-  return {
-    rest: note.replace(SESSION_MESSAGE_BLOCK, '').trim(),
-    narrower: narrower ? sessionMessageNarrower(narrower[1], narrower[2]) : null,
-  };
+  return narrower ? sessionMessageNarrower(narrower[1], narrower[2]) : null;
 }

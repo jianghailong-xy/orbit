@@ -1,5 +1,6 @@
 import type { OwnerConfirmationNotReviewedReason } from './owner-confirmation-review';
 import type { MainCheckoutRunnerRequest } from './mainCheckoutGit';
+import type { ConditionProbe, ConditionSampleReport } from './condition';
 // The wire contract shared by the control plane, the Go runner, the web app and the native
 // clients.
 //
@@ -847,10 +848,17 @@ export interface RunnerHeartbeatRequest {
    *  AWAITING_INPUT session whose runtime is warm or has gone cold. Absent from older
    *  runners (the bar then waits for the first turn-complete as before). */
   sessions?: SessionLiveState[];
+  /** Where each clone the runner was asked for stands (RunnerHeartbeatResponse.cloneRequests,
+   *  docs/github-workspace-design.md §5.4). Absent on runners without clone-workdir/v1. */
+  cloneReports?: CloneReport[];
   /** What the runner found at each agent working directory it was asked about last heartbeat
    *  (see RunnerHeartbeatResponse.agentDirs). Absent on older runners, which leaves the stored
    *  snapshot alone — "never probed" and "probed, missing" have to stay distinguishable. */
   agentDirProbes?: AgentDirProbe[];
+  /** What the runner read for the conditions it was handed (RunnerHeartbeatResponse.conditionProbes,
+   *  docs/condition-triggers-design.md §4.2). Only from a runner that declares condition-probe/v1; a
+   *  sample for a condition whose workspace this runner does not serve is refused and stored nowhere. */
+  conditionSamples?: ConditionSampleReport[];
   /** State of the shared checkouts this machine's agents work in. Absent on older runners,
    *  which leaves the stored snapshot alone rather than claiming every checkout is clean. */
   repos?: RunnerRepoHealth[];
@@ -1136,6 +1144,10 @@ export const CREATE_WORKDIR_HOME_CAPABILITY = 'create-workdir/v2';
 
 /** The directory a runner's new folders go in: its home, the parent of its reposRoot, when it declares
  *  CREATE_WORKDIR_HOME_CAPABILITY, else reposRoot itself. The separator is the one the root is written with. */
+/** A managed runner's repos folder, fixed by its image (deploy/managed-runner/image/entrypoint.py). A new folder on a
+ *  managed runner that has not reported yet goes here: every runner version can make one inside its reposRoot. */
+export const MANAGED_RUNNER_REPOS_ROOT = '/home/orbit/orbit-repos';
+
 export function newFolderRoot(reposRoot: string, capabilities: readonly string[] | null | undefined): string {
   const root = reposRoot.trim().replace(/(?<=.)[\\/]+$/, '');
   if (!capabilities?.includes(CREATE_WORKDIR_HOME_CAPABILITY)) return root;
@@ -1243,13 +1255,86 @@ export interface DirProbeAnswer {
 
 /** POST /sessions `newWorkspace`: the workspace a session makes in its own transaction, on its
  *  `assignedRunnerId`, when the request names no workspace (docs/first-workspace-contract.md §3).
- *  Exactly one of the two. */
+ *  Exactly one of the three. */
 export interface NewWorkspaceRequest {
   /** A folder on that machine, already confirmed there through the directory probe relay. */
   workDir?: string;
   /** A new folder in the runner's newFolderRoot (home, or reposRoot on an older runner): one path segment of 1–64 characters from
    *  [A-Za-z0-9._-], not `.` or `..`. The runner makes it before the session's engine starts. */
   newFolder?: string;
+  /** A clone of one of the caller's GitHub repositories into `<reposRoot>/<folder>`
+   *  (docs/github-workspace-design.md §5.3). The session is not dispatched until the clone is READY. */
+  github?: NewWorkspaceGithub;
+}
+
+/** `newWorkspace.github` (docs/github-workspace-design.md §5.3). */
+export interface NewWorkspaceGithub {
+  /** GitHub's repository id, as GET /integrations/github/repos answers it (a number, or its decimal string). */
+  repoId: number | string;
+  /** The branch or tag to check out; absent clones the default branch. */
+  ref?: string;
+  /** The folder under reposRoot, by newFolder's rule; absent takes the repository's name. */
+  folder?: string;
+}
+
+/** What a runner declares when it clones a GitHub workspace's repository on request (cloneRequests,
+ *  docs/github-workspace-design.md §6). POST /sessions makes a GitHub workspace only on a runner that declares it. */
+export const CLONE_WORKDIR_CAPABILITY = 'clone-workdir/v1';
+
+/** A workspace's clone state (Workspace.cloneState); null for a workspace that does not come from GitHub. */
+export type WorkspaceCloneState = 'PENDING' | 'CLONING' | 'READY' | 'FAILED';
+
+/** Control plane → runner: a GitHub workspace to clone (RunnerHeartbeatResponse.cloneRequests, §5.4). Every
+ *  full answer lists every PENDING and CLONING workspace of the runner, so the list is a full reconcile: the runner
+ *  handles each one idempotently, and a workspace missing from it is no longer the runner's to clone. */
+export interface CloneRequest {
+  workspaceId: string;
+  /** The absolute directory to clone into, `<reposRoot>/<folder>`. */
+  workDir: string;
+  /** `https://github.com/<owner>/<name>.git`, without any credential. */
+  url: string;
+  /** The branch or tag to check out; null clones the default branch. */
+  ref: string | null;
+  /** Where the control plane holds it: PENDING (not started) or CLONING (a report said it started). */
+  state: 'PENDING' | 'CLONING';
+}
+
+/** Runner → control plane: where one clone stands (RunnerHeartbeatRequest.cloneReports, §5.4). A report answers the
+ *  request the runner saw last: once a workspace is listed PENDING again (a Retry), the runner forgets any outcome it
+ *  had for it. */
+export interface CloneReport {
+  workspaceId: string;
+  state: 'CLONING' | 'READY' | 'FAILED';
+  /** Why it failed, in English; FAILED only. Redacted and cut to 500 characters before it is stored. */
+  error?: string;
+  /** Git's progress, 0–100. Relayed to the account's clients and never stored. */
+  progress?: number;
+  /** Which credential the clone used: the machine's own or Orbit's GitHub App (§6 step 4). */
+  credential?: 'machine' | 'github-app';
+}
+
+/** POST /runner/git-credential (§5.4): the runner's credential helper asking for one workspace's token. */
+export interface RunnerGitCredentialRequest {
+  workspaceId: string;
+  /** The host git is asking about: only `github.com` is answered. */
+  host: string;
+  /** The repository path git is asking about, `<owner>/<name>` with or without `.git`. */
+  path: string;
+}
+
+/** The answer: an installation token for that repository alone, contents:write and metadata:read. Never stored. */
+export interface RunnerGitCredentialAnswer {
+  username: 'x-access-token';
+  password: string;
+  /** ISO-8601. */
+  expiresAt: string;
+}
+
+/** A clone's progress, relayed to the owner's clients as it is reported (realtime `workspace.clone_progress`). */
+export interface WorkspaceCloneProgress {
+  workspaceId: string;
+  state: WorkspaceCloneState;
+  progress: number | null;
 }
 
 /** Runner → control plane: how the repair went, and where the checkout's old content lives now. */
@@ -1350,6 +1435,10 @@ export interface StorageBudget {
 export interface RunnerHeartbeatResponse {
   /** Session IDs the control plane wants the runner to interrupt / end. */
   cancelSessionIds: string[];
+  /** Those of cancelSessionIds whose end is a coordinator handing over (docs/coordinator-handoff-v2-design.md §1):
+   *  the runner ends the session but leaves its running SubAgent runs and bg_run jobs to end by themselves, their
+   *  wake forwarded to the successor. The same fact the session's `end` turn carries; absent when there are none. */
+  keepWorkSessionIds?: string[];
   /** Remote SubAgent runs this runner is the target of and has not claimed (docs/subagent-design.md §10.2):
    *  claim each with POST /runner/subagent-runs/:runId/claim. Absent when there are none. */
   remoteSubagentRuns?: string[];
@@ -1395,6 +1484,14 @@ export interface RunnerHeartbeatResponse {
    *  RunnerHeartbeatRequest.agentDirProbes. Absent on older control planes (the runner then
    *  probes nothing and the form simply shows no path status). */
   agentDirs?: AgentDirTarget[];
+  /** The conditions of the workspaces this runner serves, to probe on their intervals and answer with
+   *  RunnerHeartbeatRequest.conditionSamples (docs/condition-triggers-design.md §4.2). On every full answer to a
+   *  runner that declares condition-probe/v1, the whole list ([] for none); absent otherwise, which the runner reads
+   *  as "keep probing what you have". */
+  conditionProbes?: ConditionProbe[];
+  /** Every PENDING and CLONING GitHub workspace of this runner (docs/github-workspace-design.md §5.4), on every full
+   *  answer to a runner that declared clone-workdir/v1: a full reconcile, answered by cloneReports. Absent otherwise. */
+  cloneRequests?: CloneRequest[];
   /** A checkout repair the user started after seeing it reported wedged. Absent on older control
    *  planes, and whenever no repair is in flight for this runner. */
   repoCleanupRequest?: RepoCleanupCommand;
@@ -1626,6 +1723,20 @@ export interface RunnerRegion {
   checkedAt: string;
   /** Consecutive blocked results. An allowed one resets it; an unknown one leaves it. */
   blockedChecks: number;
+}
+
+/** How a row of GET /runners and GET /runners/:id names its machine. Every client labels the account's
+ *  managed runner Orbit Cloud unless its owner named it; `managed` says which row that is, so no client
+ *  shows its stored name while GET /managed-runner is still on its way. Absent from an older server, whose
+ *  clients fall back to comparing the id with the managed status's runnerId. */
+export interface RunnerRowIdentity {
+  id: string;
+  /** The name it registered with. A managed runner's is `orbit-managed`, which no client shows. */
+  name: string;
+  /** The name its owner gave it, which wins over both. */
+  displayName: string | null;
+  /** True on the account's managed runner (it has a ManagedRunner mapping), false on every other. */
+  managed?: boolean;
 }
 
 /** `region` on GET /runners and GET /runners/:id (contract §6). null for a runner that does not
@@ -1994,6 +2105,16 @@ export interface AccountRemoveCommand {
   /** Identifies this removal (Runner.codexAccountRemoveAt), so a report can be matched to the
    *  request it answers. */
   attempt?: string;
+  /** While the removal waits on sessions it moved to another account: each one's new account
+   *  (`default` or a slot id), so the runner carries a session with no engine running there now
+   *  rather than at its next claim. Absent otherwise. */
+  moves?: AccountRemoveMove[];
+}
+
+/** One session of a removal under way and the account it was moved to. */
+export interface AccountRemoveMove {
+  sessionId: string;
+  account: string;
 }
 
 /** @deprecated The same command on the codex-named field; read AccountRemoveCommand, whose `engine`
@@ -2088,6 +2209,10 @@ export interface RunnerEngineHealth {
    *  on this machine (an installer's default is not a sign-in), after a logout, and from an older
    *  runner. */
   kimiRegion?: KimiRegion;
+  /** OpenCode only: `opencode auth list` listed no provider key, neither in its auth store nor in its
+   *  environment. `auth` stays `unknown`: OpenCode runs its own free models without a key, and a key in
+   *  its config file is not listed. Absent otherwise, and from an older runner. */
+  openCodeNoKey?: true;
   /** Codex, Claude Code, Antigravity, Kimi Code and Cursor CLI: the Default the owner removed from
    *  Orbit on this runner (`DELETE /runners/:id/accounts/:engine/default`), which `POST
    *  /runners/:id/accounts/:engine/default/restore` brings back. Present only while the runner reports
@@ -2385,6 +2510,10 @@ export interface RunnerAccountRemoveState {
    *  as far as the viewer can see them, oldest first. Absent otherwise (and from an older server),
    *  and then `message` alone says what happened. */
   sessions?: RunnerAccountRemoveSession[];
+  /** With `pending`: how many sessions the removal moved to another account and is waiting on to leave
+   *  it — one between turns at once, one in a turn when that turn ends. Absent while it waits on none
+   *  (and from an older server). */
+  moving?: number;
 }
 
 /** A session that keeps an account from being removed: what the runner's page lists and opens. */
@@ -2507,7 +2636,7 @@ export interface SubagentDecision {
   readonly?: boolean;
 }
 
-/** Where a remote SubAgent runs (docs/subagent-design.md §10.1): another workspace of the parent's repository. */
+/** Where a remote SubAgent runs (docs/subagent-design.md §10.1): another workspace of the owner's account. */
 export interface SubagentWorkspaceChoice {
   /** The workspace's id, as the runner has it (a UUID). */
   id: string;
@@ -2631,7 +2760,7 @@ export interface SubagentRunCreateRequest {
   permissionMode?: string;
   /** The delegate call's description, which the wake for the run's end names. */
   description?: string;
-  /** A workspace to run on, by name (§10.1 row 1): another workspace of the parent's repository. */
+  /** A workspace to run on, by name (§10.1 row 1): any workspace of the owner's account, in its own repository. */
   workspace?: string;
   /** Runner capabilities the work needs, e.g. `os:darwin` (§10.1 row 2): the call's and its definition's. */
   needs?: string[];
@@ -2782,6 +2911,9 @@ export interface ClaimedSession {
   agent: AgentExecConfig;
   /** Project directory to run claude in (claude's cwd), from the session's agent. */
   workDir?: string;
+  /** An Ask (migration 0850, help.ts): start this session read-only, in a scratch folder holding the help article
+   *  library, never in workDir. Only to a runner that declares HELP_ASK_V1. Absent for every other session. */
+  helpAsk?: import('./help').HelpAskMarker;
   /** Git branch for this session's worktree (e.g. "orbit/fix-login-500-a1b2c3"). When set
    *  and workDir is a git repo, the runner runs claude in a per-session `git worktree` on
    *  this branch instead of the shared workDir. Generated server-side at session creation. */
@@ -3859,6 +3991,8 @@ export interface IntegrationCheckSpec {
 /** What one check came to. `exitCode` is null when the command never produced one. */
 export interface IntegrationCheckResult extends Omit<IntegrationCheckSpec, 'timeoutSeconds'> {
   scope?: 'COMBINED' | 'BASELINE';
+  /** The exact tree measured by the baseline check, before it ran (K4). */
+  treeSha?: string;
   skipped?: 'PATHS_EXEMPT';
   files?: string[];
   exitCode: number | null;

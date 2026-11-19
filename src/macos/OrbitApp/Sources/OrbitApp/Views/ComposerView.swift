@@ -349,8 +349,12 @@ struct ComposerView: View {
     }
 
     /// The "Chinese → English" tag shows while the account translates and the box is empty.
+    /// A suggestion on offer takes the line instead (docs/mocks/prompt-suggestion-room): the tag is about
+    /// words typed, and the guess needs the width. Its "unavailable" warning still shows over a guess.
     private var showsTranslationTag: Bool {
-        SessionTranslation.isOn(app.user) && console.composerText.isEmpty
+        guard SessionTranslation.isOn(app.user), console.composerText.isEmpty else { return false }
+        if offeredSuggestion == nil { return true }
+        return (SessionTranslation.temporarilyUnavailableUntil(app.user) ?? .distantPast) > Date()
     }
 
     /// The engine's guess at the next message, when the empty box offers it (`ComposerLogic`,
@@ -542,6 +546,7 @@ struct ComposerView: View {
                         if showsTranslationTag {
                             ComposerTranslationTag(language: SessionTranslation.language(app.user?.preferences),
                                                    agentLanguage: SessionTranslation.agentLanguage(app.user?.preferences),
+                                                   unavailableUntil: SessionTranslation.temporarilyUnavailableUntil(app.user),
                                                    open: openTranslationSettings)
                             .onGeometryChange(for: CGFloat.self) { $0.size.width } action: { translationTagWidth = $0 }
                         }
@@ -749,7 +754,7 @@ struct ComposerView: View {
             Spacer(minLength: 8).layoutPriority(-1)
             // No model to show where a first session cannot start yet: the managed default workspace
             // before its runner was ever ready (`ConsoleModel.managed`), as on the web.
-            if console.managed?.blocksNewSession != true { modelMenu }
+            modelMenu
             // A session on an account pool spends one of its accounts at a time: name that account
             // beside the quota, which is that account's own (web parity — the pool's name is the
             // model control's provider row, and says nothing about whose quota this is). Beside
@@ -763,18 +768,23 @@ struct ComposerView: View {
                     .help(help)
                     .accessibilityLabel(help)
             }
-            if let usage = console.planUsage {
-                // Which of the runner's Codex or Claude accounts this quota is, named in the gauge's
-                // detail rather than beside it, where a phone's footer has no room for an email (web
-                // parity).
-                PlanUsageIndicator(usage: usage, model: console.modelID,
-                                   account: (console.accountLabel ?? console.poolAccountLabel).map {
-                                       PlanUsageAccount(label: $0, note: console.accountNote)
-                                   }, resetConsole: console)
+            // Which of the runner's Codex or Claude accounts this quota is, named in the gauge's
+            // detail rather than beside it, where a phone's footer has no room for an email (web
+            // parity).
+            let plan = console.planUsage.map { usage in
+                FooterPlanUsage(usage: usage, model: console.modelID,
+                                account: (console.accountLabel ?? console.poolAccountLabel).map {
+                                    PlanUsageAccount(label: $0, note: console.accountNote)
+                                }, resetConsole: console)
+            }
+            let showsContext = !(console.engine == "opencode" && console.modelID.isEmpty)
+            if let plan {
+                // On a phone the context gauge carries this bar in its own button (below).
+                PlanUsageIndicator(plan: plan, foldsIntoContext: showsContext)
             }
             // Context stays visible even before the first turn reports tokens — a New Session
             // reads 0%. Rightmost gauge, next to Send.
-            if !(console.engine == "opencode" && console.modelID.isEmpty) {
+            if showsContext {
                 ContextWindowIndicator(tokens: console.state.contextTokens ?? 0,
                                        reportedWindow: console.state.contextWindow,
                                        model: console.modelID, provider: console.provider,
@@ -783,7 +793,7 @@ struct ComposerView: View {
                                        unavailable: console.engine == CursorRuntime.engine
                                            ? CursorRuntime.contextUnavailable : nil,
                                        modelLine: console.engine == CursorRuntime.engine ? cursorModelLine : nil,
-                                       actions: contextActions)
+                                       actions: contextActions, plan: plan)
             }
             // Frame 2: ✦ Optimize beside Send once there is a draft; frame 3: busy, it cancels.
             if showsOptimize {
@@ -791,7 +801,9 @@ struct ComposerView: View {
                     #if os(macOS)
                     .keyboardShortcut("o", modifiers: [.command, .shift])
                     #endif
-                    .layoutPriority(1)
+                    // Below the model control's 1: the model is offered its room first, so on a full
+                    // phone footer Optimize folds to ✦ before the model gives up its effort or name.
+                    .layoutPriority(0.5)
             }
             sendControls
         }
@@ -1289,23 +1301,11 @@ struct ComposerView: View {
     private var modelChipLabel: some View {
         let smart = smartRoute != nil
         #if os(iOS)
-        HStack(alignment: .firstTextBaseline, spacing: 5) {
-            if smart {
-                Text("✦")
-                    .foregroundStyle(Color.accentColor)
-                    .accessibilityHidden(true)
-            }
-            Text(modelDisplayName)
-                .fontWeight(.semibold)
-                .foregroundStyle(Color.primary)
-                .lineLimit(1)
-                .truncationMode(.tail)
-            if !chipEffortLabel.isEmpty {
-                Text(chipEffortLabel)
-                    .foregroundStyle(Color.secondary)
-                    .lineLimit(1)
-                    .fixedSize()
-            }
+        // Where the name and the effort don't both fit, the effort leaves the footer (it stays in
+        // the menu) before the name truncates (board composer-usage-tap 04).
+        ViewThatFits(in: .horizontal) {
+            chipRow(smart: smart, effort: !chipEffortLabel.isEmpty)
+            if !chipEffortLabel.isEmpty { chipRow(smart: smart, effort: false) }
         }
         .padding(.horizontal, smart ? 7 : 0)
         .padding(.vertical, smart ? 2 : 0)
@@ -1319,6 +1319,30 @@ struct ComposerView: View {
             .lineLimit(1)
         #endif
     }
+
+    #if os(iOS)
+    /// One of the phone chip's two widths: the name with the effort after it, or the name alone.
+    private func chipRow(smart: Bool, effort: Bool) -> some View {
+        HStack(alignment: .firstTextBaseline, spacing: 5) {
+            if smart {
+                Text("✦")
+                    .foregroundStyle(Color.accentColor)
+                    .accessibilityHidden(true)
+            }
+            Text(modelDisplayName)
+                .fontWeight(.semibold)
+                .foregroundStyle(Color.primary)
+                .lineLimit(1)
+                .truncationMode(.tail)
+            if effort {
+                Text(chipEffortLabel)
+                    .foregroundStyle(Color.secondary)
+                    .lineLimit(1)
+                    .fixedSize()
+            }
+        }
+    }
+    #endif
 
     /// The effort half of the chip, with the fast lane appended while the session is in one —
     /// "Max · Fast". Web parity (`.composer-model-effort`); the lane is named there too rather than
@@ -1841,7 +1865,7 @@ struct ComposerView: View {
 /// placeholder would be (docs/prompt-suggestions-design.md §4.1). On a Mac, Use at its end (or Tab)
 /// takes it, and only Use takes the click. A touch screen has no button: a double-tap on the line
 /// takes it (`GrowingTextEditor`), and the words are followed by
-/// "Double-tap to use". Either way a tap anywhere else lands in the field, to type something else.
+/// "Double-tap". Either way a tap anywhere else lands in the field, to type something else.
 private struct PromptSuggestionLine: View {
     let text: String
     #if !os(iOS)
@@ -1854,7 +1878,7 @@ private struct PromptSuggestionLine: View {
         // field's own line height and the words sit exactly where typed ones would.
         HStack(alignment: .firstTextBaseline, spacing: 8) {
             words
-            Text("Double-tap to use")
+            Text("Double-tap")
                 .font(.orbitLabel)
                 .foregroundStyle(Self.placeholderColor)
                 .fixedSize()
@@ -2210,12 +2234,30 @@ private struct PlanUsageAccount {
 /// Compact plan-usage pill for the composer footer. Limit items mirror Codex TUI,
 /// while percentages retain Orbit's percent-consumed semantics — but for an Antigravity
 /// bucket's, which says what is left, as agy does, and says so ("4% left").
-private struct PlanUsageIndicator: View {
+/// The footer's plan usage: the runner's snapshot, the model whose quota the gauge reads
+/// (`bindingRow(model:)`), whose account it is, and the console that can spend a Codex reset credit.
+private struct FooterPlanUsage {
     let usage: PlanUsageSnapshot
-    /// The model the session runs: the pill's number is the quota it spends (`bindingRow(model:)`).
     let model: String
-    var account: PlanUsageAccount?
+    let account: PlanUsageAccount?
     let resetConsole: ConsoleModel?
+
+    /// The row the footer's bar draws, nil when the snapshot has none for this model.
+    var row: PlanUsageRow? { usage.bindingRow(model: model) }
+}
+
+/// A plan usage row's reading. An Antigravity bucket counts what is left, as agy does: said so, or
+/// 100% would read spent (web parity). Cursor's included allowance prefers "$12.34 left" when Cursor
+/// sent cents.
+private func planReading(_ row: PlanUsageRow) -> String {
+    row.headline ?? "\(row.percent)%\(row.remaining ? " left" : "")"
+}
+
+private struct PlanUsageIndicator: View {
+    let plan: FooterPlanUsage
+    /// Whether a phone's context gauge draws this bar inside its own button (board
+    /// composer-usage-tap): then this one draws nothing there.
+    var foldsIntoContext = false
     @State private var showDetail = false
     #if os(iOS)
     @Environment(\.horizontalSizeClass) private var horizontalSizeClass
@@ -2231,14 +2273,11 @@ private struct PlanUsageIndicator: View {
     }
 
     var body: some View {
-        if let row = usage.bindingRow(model: model) {
-            let pct = row.percent
-            // An Antigravity bucket counts what is left, as agy does: said so, or 100% would read spent
-            // (web parity). Cursor's included allowance prefers "$12.34 left" when Cursor sent cents.
-            let reading = row.headline ?? "\(pct)%\(row.remaining ? " left" : "")"
+        if let row = plan.row, !(foldsIntoContext && !gaugeShowsNumber) {
+            let reading = planReading(row)
             Button { showDetail.toggle() } label: {
                 HStack(spacing: 5) {
-                    UsageBar(percent: pct, warn: row.remaining ? row.nearLimit : nil, spent: row.spent)
+                    UsageBar(percent: row.percent, warn: row.remaining ? row.nearLimit : nil, spent: row.spent)
                         .frame(width: gaugeShowsNumber ? 26 : 20, height: 4)
                     if gaugeShowsNumber {
                         // fixedSize keeps the pill at its ideal width: an unbounded Text is the most
@@ -2251,8 +2290,8 @@ private struct PlanUsageIndicator: View {
             .buttonStyle(.plain)
             .help("Plan usage \(reading)")
             .accessibilityLabel("Plan usage \(reading)")
-            .modifier(PlanUsageDetailPresentation(isPresented: $showDetail, usage: usage,
-                                                   account: account, resetConsole: resetConsole))
+            .modifier(PlanUsageDetailPresentation(isPresented: $showDetail, usage: plan.usage,
+                                                   account: plan.account, resetConsole: plan.resetConsole))
         }
     }
 }
@@ -2299,7 +2338,14 @@ private struct ContextWindowIndicator: View {
     var modelLine: String? = nil
     /// Compact and Start a new coordinator, under the reading (boards 01 and 03).
     var actions = ContextActions()
+    /// The session's plan usage. A phone's footer has room for neither number, and two gauges a few
+    /// points wide are hard to hit, so there this button carries the plan bar beside the ring and its
+    /// sheet reads both (board composer-usage-tap); elsewhere the plan has its own gauge.
+    var plan: FooterPlanUsage? = nil
     @State private var showDetail = false
+
+    /// The plan row this button draws, only where it carries the plan (a phone).
+    private var foldedPlanRow: PlanUsageRow? { gaugeShowsNumber ? nil : plan?.row }
     /// The waits the confirm names, once read: non-nil is the confirm on screen (board 02 ①; a system
     /// Alert on a phone, board 03 iOS 2).
     @State private var confirmWaits: [CoordinatorPendingWait]?
@@ -2321,8 +2367,14 @@ private struct ContextWindowIndicator: View {
     private var headline: String { !known ? "—" : sized ? "\(pct)%" : fmtTokens(tokens) }
 
     var body: some View {
+        let planRow = foldedPlanRow
         Button { showDetail.toggle() } label: {
-            HStack(spacing: 5) {
+            HStack(spacing: gaugeShowsNumber ? 5 : planRow == nil ? 6 : 3) {
+                if let planRow {
+                    UsageBar(percent: planRow.percent, warn: planRow.remaining ? planRow.nearLimit : nil,
+                             spent: planRow.spent)
+                        .frame(width: 24, height: 5)
+                }
                 UsageRing(percent: pct, unavailable: unavailable != nil)
                     .frame(width: gaugeShowsNumber ? 14 : 16, height: gaugeShowsNumber ? 14 : 16)
                 if gaugeShowsNumber {
@@ -2331,16 +2383,32 @@ private struct ContextWindowIndicator: View {
                     Text(headline).foregroundStyle(.secondary).fixedSize()
                 }
             }
+            // With the plan bar in it, the pair sits close inside a hairline capsule, so the two
+            // read as one control without a fill no other footer control has (board
+            // composer-usage-tap 03, option C).
+            .padding(.horizontal, planRow == nil ? 0 : 7)
+            .frame(height: planRow == nil ? nil : 26)
+            .overlay {
+                if planRow != nil { Capsule().strokeBorder(.separator, lineWidth: 0.5) }
+            }
+            // A phone's gauge is a 32pt-tall target like + and Send beside it, never narrower than
+            // it is tall.
+            .frame(minWidth: gaugeShowsNumber ? nil : 32, minHeight: gaugeShowsNumber ? nil : 32)
+            // A min-only frame lets a full toolbar squeeze it down to 32pt, narrower than the bar,
+            // ring and capsule inside it, which then draw over the model name and ✦ Optimize. Pinned
+            // to its ideal width, the gauge holds its room and the model name truncates instead.
+            .fixedSize()
             // The ring is only a stroke — dashed when there is no reading — and a plain button takes
             // a tap only where it draws: the whole gauge opens the detail, its hollow centre too.
             .contentShape(Rectangle())
         }
         .buttonStyle(.plain)
-        .help(helpText)
-        .accessibilityLabel(helpText)
+        .help(accessibilityText)
+        .accessibilityLabel(accessibilityText)
         .modifier(ContextWindowDetailPresentation(isPresented: $showDetail, tokens: tokens, window: window, pct: pct,
                                                   known: known, unavailable: unavailable, modelLine: modelLine,
-                                                  actions: actions, startNewCoordinator: startNewCoordinator))
+                                                  actions: actions, plan: planRow == nil ? nil : plan,
+                                                  startNewCoordinator: startNewCoordinator))
         .modifier(CoordinatorHandoffConfirmPresentation(waits: $confirmWaits, actions: actions))
     }
 
@@ -2356,6 +2424,12 @@ private struct ContextWindowIndicator: View {
             #endif
             confirmWaits = waits
         }
+    }
+
+    /// Both readings when the button carries the plan bar, the plan's first as it draws first.
+    private var accessibilityText: String {
+        guard let planRow = foldedPlanRow else { return helpText }
+        return "Plan usage \(planReading(planRow)), \(helpText)"
     }
 
     private var helpText: String {
@@ -2407,6 +2481,9 @@ private struct ContextWindowDetailPresentation: ViewModifier {
     var modelLine: String? = nil
     /// The action rows under the reading, and what Start a new coordinator does.
     var actions = ContextActions()
+    /// The plan usage the phone sheet reads between the context and the actions, when the footer's
+    /// button carries the plan bar (`ContextWindowIndicator.plan`).
+    var plan: FooterPlanUsage? = nil
     var startNewCoordinator: () -> Void = {}
     #if os(iOS)
     @Environment(\.horizontalSizeClass) private var horizontalSizeClass
@@ -2488,12 +2565,13 @@ private struct ContextWindowDetailPresentation: ViewModifier {
                 .padding(16)
                 .frame(width: ComposerFooterDetailLayout.popoverWidth)
             }
-        } else if !actions.isEmpty {
-            // Board 03 iOS 1: a medium sheet, the reading in one group and the actions in another.
+        } else if !actions.isEmpty || plan != nil {
+            // Board 03 iOS 1: a medium sheet, the reading in one group and the actions in another;
+            // board composer-usage-tap puts the plan usage group between them.
             content.sheet(isPresented: $isPresented) {
                 ContextActionsSheet(reading: reading, pct: pct,
                                     showsBar: sized && unavailable == nil, caption: detailCaption,
-                                    modelLine: modelLine, actions: actions,
+                                    modelLine: modelLine, actions: actions, plan: plan,
                                     dismiss: { isPresented = false },
                                     startNewCoordinator: startNewCoordinator)
             }
@@ -2841,18 +2919,26 @@ private struct ContextActionsSheet: View {
     let caption: String
     let modelLine: String?
     let actions: ContextActions
+    /// The plan usage group, when the footer's button carries the plan bar.
+    var plan: FooterPlanUsage? = nil
     let dismiss: () -> Void
     let startNewCoordinator: () -> Void
 
     /// The sheet's groups, in the order they draw. The groups are the List's one row array; each row
     /// draws its section and that section's rows.
-    private enum Group: Hashable { case reading, actions }
+    private enum Group: Hashable { case reading, plan, actions }
 
-    private var groups: [Group] { [.reading, .actions] }
+    private var groups: [Group] {
+        var groups: [Group] = [.reading]
+        if plan != nil { groups.append(.plan) }
+        if !actions.isEmpty { groups.append(.actions) }
+        return groups
+    }
 
     var body: some View {
         VStack(spacing: 0) {
-            Text(CoordinatorContextCopy.title)
+            // Android's dialog names both readings the same way (ComposerUsage.kt).
+            Text(plan == nil ? CoordinatorContextCopy.title : "Context and plan usage")
                 .font(.headline)
                 .padding(.top, 22)
                 .padding(.bottom, 4)
@@ -2862,6 +2948,8 @@ private struct ContextActionsSheet: View {
                     case .reading:
                         ContextReadingSection(reading: reading, pct: pct, showsBar: showsBar,
                                               caption: caption, modelLine: modelLine)
+                    case .plan:
+                        PlanUsageSection(plan: plan)
                     case .actions:
                         ContextActionSection(actions: actions, dismiss: dismiss,
                                              startNewCoordinator: startNewCoordinator)
@@ -2871,8 +2959,43 @@ private struct ContextActionsSheet: View {
             .listStyle(.insetGrouped)
         }
         .background(Color(uiColor: .systemGroupedBackground))
-        .presentationDetents([.medium])
+        // With the plan's windows (and a Codex reset card) the groups can outgrow half the screen.
+        .presentationDetents(plan == nil ? [.medium] : [.medium, .large])
         .presentationDragIndicator(.visible)
+    }
+}
+
+/// The plan usage group: whose quota it is, each window with its bar and reset, and a Codex reset
+/// credit when the runner has one — what the phone's own Plan usage sheet reads. Its rows are one
+/// flat array, as `ContextReadingSection`'s are (ListRowShapeTests).
+private struct PlanUsageSection: View {
+    /// Never nil where the sheet draws this group (`ContextActionsSheet.groups`); nil draws no rows.
+    let plan: FooterPlanUsage?
+
+    private enum Row: Hashable { case windows, resetCard }
+
+    private var rows: [Row] {
+        guard let plan else { return [] }
+        var rows: [Row] = [.windows]
+        if plan.resetConsole?.codexResetCardVisible == true { rows.append(.resetCard) }
+        return rows
+    }
+
+    var body: some View {
+        Section("Plan usage") {
+            ForEach(rows, id: \.self) { row in
+                switch row {
+                case .windows:
+                    VStack(alignment: .leading, spacing: 18) {
+                        plan?.account.map { PlanUsageAccountRow(account: $0) }
+                        PlanUsageDetailRows(rows: plan?.usage.currentRows() ?? [])
+                    }
+                    .padding(.vertical, 6)
+                case .resetCard:
+                    plan?.resetConsole.map { CodexResetCreditCard(console: $0) }
+                }
+            }
+        }
     }
 }
 
@@ -3006,7 +3129,7 @@ private struct CoordinatorHandoffConfirmPresentation: ViewModifier {
                 .keyboardShortcut(.defaultAction)
             Button(CoordinatorHandoffCopy.cancel, role: .cancel) {}
         } message: {
-            Text(CoordinatorContextCopy.phoneConfirmBody(waits: waits?.count ?? 0, running: actions.running))
+            Text(CoordinatorContextCopy.phoneConfirmMessage(waits: waits ?? [], running: actions.running))
         }
         #endif
     }
