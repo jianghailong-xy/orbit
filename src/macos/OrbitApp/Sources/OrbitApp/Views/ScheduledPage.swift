@@ -276,6 +276,8 @@ struct ScheduledPage: View {
     @State private var typed = ""
     @State private var asking = false
     @State private var chosenWorkspace: String?
+    /// The row whose swipe asked to delete its schedule, while the question is up.
+    @State private var deleting: ScheduleRowModel?
     @FocusState private var typing: Bool
 
     var body: some View {
@@ -322,6 +324,18 @@ struct ScheduledPage: View {
         .listStyle(.plain)
         .softTopEdgeEffect()
         .environment(\.defaultMinListRowHeight, 0)
+        // A row's swipe asks first, as the detail panel's ⋯ → Delete does.
+        .orbitConfirmation({ ScheduleDisplay.deleteTitle($0.title) },
+                           isPresented: Binding(get: { deleting != nil }, set: { if !$0 { deleting = nil } }),
+                           presenting: deleting) { row in
+            Button(SC.DeleteConfirm.confirm, role: .destructive) {
+                guard let id = row.scheduleID else { return }
+                Task { @MainActor in await scheduled.delete(id) }
+            }
+            Button(SC.DeleteConfirm.cancel, role: .cancel) {}
+        } message: { _ in
+            Text(SC.DeleteConfirm.body)
+        }
         .toolbar {
             ToolbarItem(placement: .topBarTrailing) {
                 Menu {
@@ -495,6 +509,13 @@ struct ScheduledPage: View {
             .contentShape(Rectangle())
         }
         .buttonStyle(.plain)
+        // A schedule's row (or its run's) swipes to Delete; a draft or a waiting task has no schedule to delete.
+        // Tinted rather than `.destructive`, which would take the row away before the question is answered.
+        .swipeActions(edge: .trailing, allowsFullSwipe: false) {
+            if row.scheduleID != nil {
+                Button(SC.Actions.delete) { deleting = row }.tint(.red)
+            }
+        }
         .accessibilityElement(children: .combine)
         .accessibilityIdentifier("schedule-row")
     }
