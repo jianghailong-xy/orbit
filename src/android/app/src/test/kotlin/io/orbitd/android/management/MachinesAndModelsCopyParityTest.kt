@@ -50,7 +50,9 @@ class MachinesAndModelsCopyParityTest {
      * form's SubAgents group's (docs/mocks/subagent/05.png), the providers SubAgents may use; and Settings' own, the pools' half of
      * Machines & models, as the web's Settings nav and iOS name it (docs/mocks/ios-settings-web-groups). */
     @Test fun noProductStringSaysProviders() {
-        val literal = Regex("\"(?:[^\"\\\\\\n]|\\\\.)*\"")
+        // Unrolled, not `"(?:[^"\\\n]|\\.)*"`: that alternation recurses once per character in java.util.regex and
+        // overflows the stack on a long literal (ProviderMark.kt's SVG paths). The same strings match.
+        val literal = Regex("\"[^\"\\\\\\n]*(?:\\\\.[^\"\\\\\\n]*)*\"")
         val found = listOf("app", "core").flatMap { module ->
             File(root, "src/android/$module/src/main").walk().filter { it.extension == "kt" }.toList().flatMap { file ->
                 file.readLines().withIndex().filterNot { (_, line) -> line.trimStart().let { it.startsWith("*") || it.startsWith("/*") || it.startsWith("//") } }
