@@ -75,7 +75,7 @@ const (
 		"until they say so, pass autoRunWhenReady: false and do not call task_start."
 
 	agentPrimerCards = "A create, a batch, a project, a provider or agent change puts a confirmation card " +
-		"in front of the user (not for a session's first 7 tasks) and writes nothing until they confirm it, so first " +
+		"in front of the user (not for a session's first few tasks) and writes nothing until they confirm it, so first " +
 		"say in a sentence or two what you will create and why. A declined card (APPROVAL_DECLINED) is a refusal: do " +
 		"not create it another way. A chat is not a no: answer the owner's words, then call the tool again, changed as agreed. A card still " +
 		"waiting is not a no either, and an owner-only decision is never yours to answer."

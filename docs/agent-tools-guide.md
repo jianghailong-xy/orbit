@@ -240,7 +240,7 @@ Try asking: *"File this for later: the staging API key needs rotating."* · *"So
 | Step | MCP | CLI | Approval | Why |
 | --- | --- | --- | --- | --- |
 | 1? | `task_list` | `orbit task list` | none | When the work may already be recorded, or you are not sure which project it belongs to, read before you write (R4). |
-| 2 | `task_create` | `orbit task create` | card | Write it. The call puts a confirmation card in front of the user and waits for their answer; nothing is written if they decline. A session's first 7 tasks are answered at once, with no one asked. |
+| 2 | `task_create` | `orbit task create` | card | Write it. The call puts a confirmation card in front of the user and waits for their answer; nothing is written if they decline. A session's first 8 tasks (or the number the account owner set) are answered at once, with no one asked. |
 | 3? | `task_get` | `orbit task get` | none | Read it back when the claim matters. |
 
 **Done when:** The task_create receipt reads ok: true and outcome: written, with the task's id and status. Name it to the user as [title](orbit-task:<id>).
