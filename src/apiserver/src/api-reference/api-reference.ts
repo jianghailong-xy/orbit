@@ -53,6 +53,7 @@ const GUARD_CALLERS: Record<string, Caller> = {
   GuestInvitationGuard: 'user',
   WikiRolloutGuard: 'user',
   ManagedRunnerEnabledGuard: 'user',
+  ManagedRunnerBrowserEnabledGuard: 'user',
   RunnerAuthGuard: 'runner',
   RunnerSessionAuthGuard: 'runner',
   ManagedRunnerAdmissionGuard: 'channel',

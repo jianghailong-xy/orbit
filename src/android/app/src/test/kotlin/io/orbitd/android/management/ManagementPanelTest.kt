@@ -158,6 +158,10 @@ class ManagementPanelTest {
         assertTrue(top("Orbit Cloud") < top("Old alias"))
         assertTrue(top("Old alias") < top("Spare box"))
         compose.onNodeWithTag("managed-runner-icon", useUnmergedTree = true).assertExists()
+        // Each of your own machines wears its OS mark; Orbit Cloud keeps its cloud and has none (docs/mocks/machine-menu-icons, A).
+        compose.onAllNodes(androidx.compose.ui.test.SemanticsMatcher("an OS mark") {
+            it.config.getOrElseNullable(androidx.compose.ui.semantics.SemanticsProperties.TestTag) { null }?.startsWith("runner-os-icon:") == true
+        }, useUnmergedTree = true).assertCountEquals(2)
         compose.onNodeWithTag("managed-runner-divider").assertExists()
         compose.onNodeWithTag("runner-handle:${fixture.CLOUD_RUNNER}").assertDoesNotExist()
         row("Orbit Cloud").assert(!hasCustomAction("Move up")).assert(!hasCustomAction("Move down"))

@@ -95,6 +95,14 @@ class RunnerPageTest {
         }
     }
 
+    @Test fun osReadsTheReportedCapabilityAndNothingWithoutOne() {
+        fun row(vararg capabilities: String) = buildJsonObject { put("capabilities", JsonArray(capabilities.map { JsonPrimitive(it) })) }
+        assertEquals("linux", RunnerPage.os(row("session-worktree-ops-v1", "os:linux")))
+        assertEquals("darwin", RunnerPage.os(row("os:darwin")))
+        assertNull(RunnerPage.os(row("provider:dsh")))
+        assertNull(RunnerPage.os(buildJsonObject { put("id", "r1") }))
+    }
+
     @Test fun managedRunnerFirstKeepsTheOtherMachinesInServerOrder() {
         fun row(id: String, managed: Boolean? = null) = buildJsonObject {
             put("id", id)

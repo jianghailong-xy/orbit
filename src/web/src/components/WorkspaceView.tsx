@@ -258,6 +258,7 @@ import {
   type ContextSeedState,
 } from '../lib/contextSeed';
 import { InitializeGitSteps, SessionOutputs } from './SessionOutputs';
+import { SessionBrowserChip } from './SessionBrowserChip';
 import { mergeRepairLoopLive } from './MergeRecoveryPanel';
 import { BrandMark, NewSessionProviderHero } from './NewSessionProviderHero';
 import { CreatedWorkspaceLine } from './CreatedWorkspaceLine';
@@ -11332,6 +11333,10 @@ export function WorkspaceView({
             kinds of output next to each other. Hidden until it has created one. */}
         {selectedId && !selectedTrashed && (
           <SessionCreatedTasksStrip sessionId={selectedId} openRequest={createdTasksOpenRequest} />
+        )}
+        {/* The Orbit Cloud runner's browser, while it runs: opens the live view (docs/runner-browser-design.md §5). */}
+        {selectedId && !selectedTrashed && (
+          <SessionBrowserChip managedRunnerId={managedHeadRow ? runner.id : null} sessionId={selectedId} />
         )}
         {/* Every Agent this session started, beside the branch below as iOS draws it: one line that opens
             their list. Hidden until it has started one. */}

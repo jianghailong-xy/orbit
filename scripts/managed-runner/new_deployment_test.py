@@ -266,6 +266,29 @@ class NewDeploymentTest(unittest.TestCase):
         self.assertEqual([c for c in self.calls() if not c.startswith("compose version")
                           and "orbit-link-gateway" not in c and c != "build --help"], [])
 
+    def test_no_install_or_upgrade_writes_the_browser_switch(self):
+        # docs/runner-browser-design.md §2: a default deployment has the managed runner browser off, so its .env
+        # carries ORBIT_MANAGED_RUNNER_BROWSER_ENABLED only as .env.example's commented line.
+        def browser_lines():
+            lines = [line for line in (self.checkout / ".env").read_text().splitlines()
+                     if "ORBIT_MANAGED_RUNNER_BROWSER_ENABLED" in line]
+            print(f"\n.env lines naming ORBIT_MANAGED_RUNNER_BROWSER_ENABLED: {lines}")
+            return lines
+
+        for args in ((), ("--no-managed-runners",)):
+            with self.subTest(install=args):
+                (self.checkout / ".env").unlink(missing_ok=True)
+                shutil.rmtree(self.checkout / "data", ignore_errors=True)
+                run = self.run_script(INSTALL, *args, "--no-start")
+                self.assertEqual(run.returncode, 0, run.stdout + run.stderr)
+                self.assertEqual(browser_lines(), ["# ORBIT_MANAGED_RUNNER_BROWSER_ENABLED=true"])
+        for upgrade in UPGRADES:
+            with self.subTest(upgrade=upgrade):
+                self.fresh_install()
+                run = self.run_script(upgrade, "--no-pull")
+                self.assertEqual(run.returncode, 0, run.stdout + run.stderr)
+                self.assertEqual(browser_lines(), ["# ORBIT_MANAGED_RUNNER_BROWSER_ENABLED=true"])
+
     def test_an_install_never_touches_an_existing_deployment(self):
         existing = 'JWT_SECRET="kept"\nPROVIDER_SECRET_KEY="kept too"\n'
         (self.checkout / ".env").write_text(existing)

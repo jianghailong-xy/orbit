@@ -359,6 +359,17 @@ private fun RunnerRow(runner: JsonObject, workspaces: List<JsonObject>, latest: 
             verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(10.dp)) {
             if (pinned) Icon(painterResource(R.drawable.ic_cloud), null, Modifier.size(18.dp).testTag("managed-runner-icon"),
                 tint = MaterialTheme.colorScheme.primary)
+            // Every other machine by the OS it reported, a monitor when it has not said (docs/mocks/machine-menu-icons, A).
+            else {
+                val os = RunnerPage.os(runner)
+                val mark = when (os) {
+                    "darwin" -> R.drawable.ic_os_apple
+                    "linux" -> R.drawable.ic_os_linux
+                    "windows" -> R.drawable.ic_os_windows
+                    else -> R.drawable.ic_runner
+                }
+                Icon(painterResource(mark), null, Modifier.size(16.dp).testTag("runner-os-icon:${os ?: "unknown"}"), tint = Ink.muted)
+            }
             if (managed != null) ManagedRunnerMark(managed.tone) else StatusDot(RunnerPage.presence(runner, now), ringed = true)
             Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(2.dp)) {
                 Row(verticalAlignment = Alignment.CenterVertically) {

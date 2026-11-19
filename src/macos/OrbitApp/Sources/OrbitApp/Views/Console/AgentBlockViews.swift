@@ -319,11 +319,10 @@ struct AgentsSheet: View {
 
     var body: some View {
         NavigationStack {
+            // One list, the running ones first (`summary.rows`' order), with no Running / Done headings:
+            // each row's status mark already tells them apart.
             List {
-                let running = summary.rows.filter(\.isRunning)
-                let ended = summary.rows.filter { !$0.isRunning }
-                if !running.isEmpty { Section("Running") { ForEach(running) { row($0) } } }
-                if !ended.isEmpty { Section("Done") { ForEach(ended) { row($0) } } }
+                ForEach(summary.rows) { row($0) }
             }
             .navigationTitle("Agents")
             #if os(iOS)
