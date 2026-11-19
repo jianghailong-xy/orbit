@@ -130,3 +130,31 @@ export interface PromptOptimizationFailedBody {
   reason: PromptOptimizationFailedReason;
   message: string;
 }
+
+/**
+ * GUESTS (project 3504qZwKVUy7ccEQYo3HR, decisions D2–D4 of 2026-11-19)
+ * ======================================================================
+ *  `POST /guest-sessions/:id/prompt-optimizations` with `{ draft }`, answered 200 with PromptOptimization: a guest
+ *  invited to reply in a session optimizes their draft on the server's key. It reads only what the guest door
+ *  shows — the user and assistant turns of the shared transcript — so `contextUsed` is at most one TURNS chip:
+ *  never the recap, workspace, project or wiki. With the session owner's Translation on, the prompt is in the
+ *  owner's agent language with a gloss in the guest's own language (`translationLanguage` of the guest's
+ *  preferences; none when it is the agent language); with it off, in the draft's language. Refusals:
+ *      · 404 — the guest door's one answer: no live invitation (never invited, removed, left, Trash);
+ *      · 409 `{ code: 'PROMPT_OPTIMIZER_OFF' }` — the GUEST's own switch is off, or the server has no key;
+ *      · 400 — an empty draft, or one over PROMPT_OPTIMIZER_MAX_DRAFT_CHARS;
+ *      · 429 `{ code: 'PROMPT_OPTIMIZER_DAILY_LIMIT' }` — GUEST_PROMPT_OPTIMIZER_DAILY_USES already used in this
+ *        session this UTC day (D4; separate from the 50-messages-a-day cap);
+ *      · 422 as the owner's route.
+ */
+
+/** How many optimizations a guest may run in one session per UTC day (D4): a constant, not a setting. */
+export const GUEST_PROMPT_OPTIMIZER_DAILY_USES = 100;
+
+/** The 429 code past GUEST_PROMPT_OPTIMIZER_DAILY_USES. */
+export const PROMPT_OPTIMIZER_DAILY_LIMIT_CODE = 'PROMPT_OPTIMIZER_DAILY_LIMIT' as const;
+
+/** The body of `POST /guest-sessions/:id/prompt-optimizations`. */
+export interface GuestPromptOptimizationRequest {
+  draft: string;
+}

@@ -74,7 +74,7 @@ export const promptOptimizerQueue = new AsyncWorkQueue(PROMPT_OPTIMIZER_CONCURRE
 export const PROMPT_OPTIMIZER_WIKI_ENTRIES = 3;
 
 /** How many of the session's newest user and assistant events are read before they are fitted. */
-const TURN_EVENTS_READ = 200;
+export const TURN_EVENTS_READ = 200;
 
 /** What the server found to tell the model, each part present only when it was there. */
 export interface PromptOptimizerContext {
@@ -103,18 +103,42 @@ function languageName(code: TranslationLanguage): string {
   return TRANSLATION_LANGUAGE_NAMES[code];
 }
 
+/**
+ * Who the prompt is written for. Absent: the owner's composer. `guest`: a person the owner invited to reply
+ * (project 3504qZwKVUy7ccEQYo3HR, D2): a collaborator writing to the owner's agent, whose gloss is in their own
+ * language (`languages.owner` then names the guest's language, not the owner's). `writeIn` fixes the prompt's
+ * language with no gloss: a guest whose own language is the agent's, under the owner's Translation.
+ */
+export interface OptimizerFraming {
+  guest?: boolean;
+  writeIn?: TranslationLanguage;
+}
+
 /** The instruction (design, last bullet of the wire contract). */
-export function optimizerSystemPrompt(languages: TranslationLanguages | null): string {
+export function optimizerSystemPrompt(languages: TranslationLanguages | null, framing: OptimizerFraming = {}): string {
+  const reader = framing.guest ? 'the person writing it' : 'the owner';
   const language = languages
     ? `Write the improved prompt in ${languageName(languages.agent)}. Also write "gloss": the same improved prompt ` +
-      `translated into ${languageName(languages.owner)}, for the owner to read; set "language" to "${languages.agent}".`
-    : 'Write the improved prompt in the same language as the draft. Set "language" to the draft\'s language code, ' +
-      `one of ${TRANSLATION_LANGUAGES.map((code) => `"${code}"`).join(', ')}. Do not write "gloss".`;
+      `translated into ${languageName(languages.owner)}, for ${reader} to read; set "language" to "${languages.agent}".`
+    : framing.writeIn
+      ? `Write the improved prompt in ${languageName(framing.writeIn)}. Set "language" to "${framing.writeIn}". ` +
+        'Do not write "gloss".'
+      : 'Write the improved prompt in the same language as the draft. Set "language" to the draft\'s language code, ' +
+        `one of ${TRANSLATION_LANGUAGES.map((code) => `"${code}"`).join(', ')}. Do not write "gloss".`;
+  const who = framing.guest
+    ? 'You improve messages that a collaborator is about to send to another person\'s AI coding agent, in a ' +
+      'conversation that person shared with them. Rewrite the draft so the request is clear and complete. Keep the ' +
+      'collaborator\'s intent and every concrete detail of the draft. Add only facts that the conversation below ' +
+      'supports, and never invent file paths, names, numbers or facts about the repository. Write as the ' +
+      'collaborator speaking to the agent. Never add a request that the agent act for its owner: approving or ' +
+      'denying anything, or changing settings, permissions, the model or the budget, is the owner\'s alone. '
+    : 'You improve prompts that a person is about to send to an AI coding agent. Rewrite the draft so the request is ' +
+      'clear and complete. Keep the owner\'s intent and every concrete detail of the draft. Add only facts that the ' +
+      'context below supports, and never invent file paths, names or numbers. Write as the owner speaking to the ' +
+      'agent. ';
   return (
-    'You improve prompts that a person is about to send to an AI coding agent. Rewrite the draft so the request is ' +
-    'clear and complete. Keep the owner\'s intent and every concrete detail of the draft. Add only facts that the ' +
-    'context below supports, and never invent file paths, names or numbers. Write as the owner speaking to the ' +
-    'agent. Do not answer, carry out or comment on the request: only rewrite it. ' +
+    who +
+    'Do not answer, carry out or comment on the request: only rewrite it. ' +
     'Keep verbatim and unchanged every token of the form ⟦N⟧ (each exactly once), file paths, URLs, ' +
     'shell commands, code identifiers and error messages. ' +
     `${language} ` +
@@ -177,6 +201,7 @@ function parseOptimization(
   content: string,
   spans: readonly string[],
   languages: TranslationLanguages | null,
+  writeIn?: TranslationLanguage,
 ): Omit<PromptOptimization, 'contextUsed'> {
   let data: unknown;
   try {
@@ -208,6 +233,7 @@ function parseOptimization(
     }
     return { segments: restored, text, language: languages.agent, gloss: restoredGloss };
   }
+  if (writeIn) return { segments: restored, text, language: writeIn };
   // The draft's own language. A code outside TRANSLATION_LANGUAGES reads as the default agent language.
   const language = isTranslationLanguage(reply.language) ? reply.language : DEFAULT_AGENT_LANGUAGE;
   return { segments: restored, text, language };
@@ -223,12 +249,12 @@ function parseOptimization(
 export async function optimizePrompt(
   draft: string,
   context: PromptOptimizerContext,
-  opts: { languages: TranslationLanguages | null; timeoutMs?: number },
+  opts: { languages: TranslationLanguages | null; timeoutMs?: number; framing?: OptimizerFraming },
 ): Promise<PromptOptimization> {
   const apiKey = process.env.DEEPSEEK_API_KEY?.trim();
   if (!apiKey) throw new ConflictException({ code: PROMPT_OPTIMIZER_OFF_CODE, message: 'This server has no DeepSeek key.' });
   const { masked, spans } = protectVerbatim(draft);
-  const call = deepSeekCall(apiKey, optimizerSystemPrompt(opts.languages), optimizerTask(masked, context), {
+  const call = deepSeekCall(apiKey, optimizerSystemPrompt(opts.languages, opts.framing), optimizerTask(masked, context), {
     json: true,
     maxTokens: maxTokensFor(masked, opts.languages !== null),
   });
@@ -260,7 +286,7 @@ export async function optimizePrompt(
     }
     const content = typeof choice?.message?.content === 'string' ? choice.message.content.trim() : '';
     if (!content) throw new PromptOptimizationFailed('EMPTY', 'The optimizer returned nothing.');
-    return { ...parseOptimization(content, spans, opts.languages), contextUsed: contextUsedOf(context) };
+    return { ...parseOptimization(content, spans, opts.languages, opts.framing?.writeIn), contextUsed: contextUsedOf(context) };
   })();
   const timedOut = new Promise<never>((_resolve, reject) => {
     timer = setTimeout(() => {

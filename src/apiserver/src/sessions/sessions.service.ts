@@ -5423,6 +5423,24 @@ export class SessionsService {
     return { ...head, ...(await this.eventPageAfter(sessionId, opts)) };
   }
 
+  /**
+   * The user and assistant events of a shared transcript, the newest `take` of them, oldest first: the turns a
+   * guest reads (getSharedTranscript's projection), behind the same replay fence (`replayableEventSql`), with
+   * nothing else of the session. What a guest's ✦ Optimize may read (session-guests, project 3504qZwKVUy7ccEQYo3HR).
+   */
+  async getSharedTurnEvents(sessionId: string, take: number): Promise<{ seq: number; type: string; payload: unknown }[]> {
+    const rows = await this.prisma.$queryRaw<{ seq: number; type: string; payload: unknown }[]>`
+      SELECT seq, type, payload
+      FROM run_event
+      WHERE session_id = ${sessionId}::uuid
+        AND type IN (${RunEventType.USER}, ${RunEventType.ASSISTANT})
+        AND ${replayableEventSql}
+      ORDER BY seq DESC
+      LIMIT ${Math.max(1, Math.trunc(take))}
+    `;
+    return rows.reverse();
+  }
+
   /** A shared session's header — what its public page says of it above the transcript — and nothing
    *  else about it (see getSharedTranscript). A trashed session is the link's 404. */
   async sharedHead(sessionId: string) {

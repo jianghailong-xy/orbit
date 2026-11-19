@@ -1,5 +1,6 @@
 import type {
   ApprovalTranslation,
+  GuestSessionLimits,
   GuestSessionSummary,
   MainCheckoutActionAnswer,
   MainCheckoutActionPost,
@@ -1847,11 +1848,11 @@ export const removeSessionGuest = (sessionId: string, userId: string) =>
 export const listGuestSessions = () => api<{ sessions: GuestSessionSummary[] }>('/guest-sessions');
 
 /** What the guest door adds to the public page's reads: who shared it, and whether its agent waits on them. */
-export interface GuestSession extends SharedSession {
+export interface GuestSession extends SharedSession, GuestSessionLimits {
   ownerName: string;
   waitingOnOwner?: boolean;
 }
-export type GuestSessionNow = SharedSessionNow & { waitingOnOwner?: boolean };
+export type GuestSessionNow = SharedSessionNow & GuestSessionLimits & { waitingOnOwner?: boolean };
 
 const guestPath = (id: string) => `/guest-sessions/${encodeURIComponent(id)}`;
 /** The guest page's root: the header and the newest `limit` events, as a session link's page reads them. */

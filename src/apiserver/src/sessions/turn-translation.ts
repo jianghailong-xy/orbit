@@ -89,6 +89,26 @@ export async function translationLanguages(db: PreferencesDb, ownerId: string): 
   return owner === agent ? null : { owner, agent };
 }
 
+/**
+ * The languages a guest's ✦ Optimize writes (project 3504qZwKVUy7ccEQYo3HR, D2): with the session OWNER's
+ * Translation on (a key, and the owner's switch), the owner's agent language, glossed in the guest's own language
+ * (the guest's `translationLanguage`, absent = DEFAULT_TRANSLATION_LANGUAGE) — `languages` null and `writeIn` the
+ * agent language when the two are equal. With it off, neither: the draft's own language.
+ */
+export async function guestOptimizerLanguages(
+  db: PreferencesDb,
+  ownerId: string,
+  guestId: string,
+): Promise<{ languages: TranslationLanguages | null; writeIn?: TranslationLanguage }> {
+  if (!translationAvailable()) return { languages: null };
+  const owner = await preferencesOf(db, ownerId);
+  if (owner?.translationEnabled !== true) return { languages: null };
+  const agent = agentLanguageOf(owner);
+  const guest = await preferencesOf(db, guestId);
+  const own = isTranslationLanguage(guest?.translationLanguage) ? guest.translationLanguage : DEFAULT_TRANSLATION_LANGUAGE;
+  return own === agent ? { languages: null, writeIn: agent } : { languages: { owner: own, agent } };
+}
+
 /** The account's agent language alone, whatever the switch says: what a held message is translated into
  *  when its translation runs (a held turn records only the language it was written in). */
 export async function accountAgentLanguage(db: PreferencesDb, ownerId: string): Promise<TranslationLanguage> {

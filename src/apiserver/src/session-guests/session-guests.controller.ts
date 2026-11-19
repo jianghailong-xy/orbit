@@ -1,5 +1,5 @@
 import {
-  Body, Controller, Delete, Get, MessageEvent, Param, Post, Query, Res, Sse, StreamableFile, UploadedFile, UseGuards, UseInterceptors,
+  Body, Controller, Delete, Get, HttpCode, MessageEvent, Param, Post, Query, Res, Sse, StreamableFile, UploadedFile, UseGuards, UseInterceptors,
 } from '@nestjs/common';
 import { FileInterceptor } from '@nestjs/platform-express';
 import type { Observable } from 'rxjs';
@@ -193,6 +193,13 @@ export class GuestSessionsController {
     @Param('turnId', PublicIdPipe) turnId: string,
   ) {
     return this.guests.steerTurn(user.userId, id, turnId);
+  }
+
+  /** ✦ Optimize a draft (SessionGuestsService.optimize). Nothing is sent: the composer shows the answer as a card. */
+  @Post(':id/prompt-optimizations')
+  @HttpCode(200)
+  optimize(@CurrentUser() user: AuthUser, @Param('id', PublicIdPipe) id: string, @Body() body: { draft?: unknown }) {
+    return this.guests.optimize(user.userId, id, body);
   }
 
   @Post(':id/leave')

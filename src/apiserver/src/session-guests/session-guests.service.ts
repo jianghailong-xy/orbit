@@ -1,10 +1,14 @@
 import { open } from 'node:fs/promises';
 import {
   BadRequestException, ConflictException, HttpException, HttpStatus, Injectable, Logger, NotFoundException, Optional,
-  PayloadTooLargeException,
+  PayloadTooLargeException, UnprocessableEntityException,
 } from '@nestjs/common';
 import { Prisma, RunStatus } from '@prisma/client';
-import { uuidToBase62, type GuestSessionSummary, type SessionGuestPerson, type SessionGuestSuggestion } from '@orbit/shared';
+import {
+  GUEST_PROMPT_OPTIMIZER_DAILY_USES, PROMPT_OPTIMIZATION_FAILED_CODE, PROMPT_OPTIMIZER_DAILY_LIMIT_CODE,
+  PROMPT_OPTIMIZER_MAX_DRAFT_CHARS, PROMPT_OPTIMIZER_OFF_CODE, uuidToBase62, type GuestSessionSummary,
+  type PromptOptimization, type SessionGuestPerson, type SessionGuestSuggestion,
+} from '@orbit/shared';
 import {
   assertValidUpload, COMPOSER_IMAGE_TYPES, GUEST_IMAGE_TOO_LARGE, GUEST_IMAGE_TYPE_REFUSED, imageBytesMatch,
   MAX_COMPOSER_IMAGE_BYTES,
@@ -23,6 +27,12 @@ import { withSessionState } from '../sessions/session-state';
 import { readSessionActivities } from '../sessions/task-work-carrier';
 import { parseMaxPayload } from '../sessions/truncate-payload';
 import { visibleQuestions } from '../sessions/run-question';
+import {
+  optimizePrompt, optimizerSystemPrompt, optimizerTask, PromptOptimizationFailed, promptOptimizerAvailable,
+  promptOptimizerQueue, TURN_EVENTS_READ, type PromptOptimizerContext,
+} from '../sessions/prompt-optimizer';
+import { estimateTokens, fitRecapActivity, RECAP_INPUT_TOKEN_BUDGET } from '../sessions/recap';
+import { guestOptimizerLanguages } from '../sessions/turn-translation';
 
 /** The one answer a guest door gives when there is no live invitation: never invited, removed, left, or Trash. */
 export const GUEST_SESSION_NOT_SHARED = 'This conversation is no longer shared with you.';
@@ -59,6 +69,11 @@ export const guestFieldRefused = (field: string) => `A guest can't set ${field} 
 /** What a guest turn naming an attachment that is not one of the guest's own images of this session answers, 400. */
 export const guestAttachmentRefused = (publicId: string) =>
   `Attachment ${publicId} isn't an image you uploaded to this conversation.`;
+
+/** What a guest's ✦ Optimize past the day's last answers, 429 with PROMPT_OPTIMIZER_DAILY_LIMIT (D4). */
+export const GUEST_OPTIMIZER_DAILY_LIMIT_REACHED =
+  `You’ve optimized ${GUEST_PROMPT_OPTIMIZER_DAILY_USES} drafts in this conversation today, the most a guest can. ` +
+  'Try again after midnight UTC.';
 
 /** Midnight UTC of today: a guest's day (§6 rule 5). */
 /** A guest's live invitation to a session: not removed, not left, and the session not in the Trash. */
@@ -361,7 +376,22 @@ export class SessionGuestsService {
       limit: num(query.limit),
       maxPayload: parseMaxPayload(query.maxPayload),
     });
-    return { ...transcript, ownerName: owner.name, waitingOnOwner: await this.waitingOnOwner(sessionId) };
+    return {
+      ...transcript,
+      ownerName: owner.name,
+      waitingOnOwner: await this.waitingOnOwner(sessionId),
+      permissionMode: await this.permissionMode(sessionId),
+    };
+  }
+
+  /**
+   * The session's permission mode, the same value the owner's own session read carries, for the guest composer's
+   * read-only limits line (project 3504qZwKVUy7ccEQYo3HR, D3). Nothing else of the owner's limits: no model,
+   * account, provider or cost.
+   */
+  private async permissionMode(sessionId: string): Promise<string | null> {
+    const row = await this.prisma.session.findUnique({ where: { id: sessionId }, select: { permissionMode: true } });
+    return row?.permissionMode ?? null;
   }
 
   /** A page of the transcript, as `/shared/:token/events` pages it: after `after`, or before `before`, or the tail. */
@@ -371,7 +401,7 @@ export class SessionGuestsService {
     const after = num(query.after);
     if (after === undefined) return this.sessions.getSharedEventPage(sessionId, { ...opts, before: num(query.before) });
     const page = await this.sessions.getSharedEventsAfter(sessionId, { ...opts, after });
-    return { ...page, waitingOnOwner: await this.waitingOnOwner(sessionId) };
+    return { ...page, waitingOnOwner: await this.waitingOnOwner(sessionId), permissionMode: await this.permissionMode(sessionId) };
   }
 
   /** The guest door's 404 unless the caller has a live invitation to the session: what GuestInvitationGuard asks
@@ -577,6 +607,69 @@ export class SessionGuestsService {
   async steerTurn(guestId: string, sessionId: string, turnId: string) {
     const invitation = await this.ownTurn(guestId, sessionId, turnId);
     return this.sessions.steerQueuedTurn(invitation.ownerId, sessionId, turnId);
+  }
+
+  /**
+   * A guest's ✦ Optimize (project 3504qZwKVUy7ccEQYo3HR; @orbit/shared prompt-optimizer.ts, GUESTS): the live
+   * invitation first (the door's one 404), then the GUEST's own switch and the server's key (409), the draft (400),
+   * one use of the day's cap (429), and one optimizer call on the server's key. It reads only what the guest door
+   * shows — the shared transcript's user and assistant turns — so the answer's `contextUsed` is at most TURNS.
+   */
+  async optimize(guestId: string, sessionId: string, body: { draft?: unknown } | null | undefined, opts: { timeoutMs?: number } = {}): Promise<PromptOptimization> {
+    const invitation = await this.invitation(guestId, sessionId);
+    const guest = await this.prisma.user.findUnique({ where: { id: guestId }, select: { preferences: true } });
+    const preferences = (guest?.preferences ?? null) as { promptOptimizer?: unknown } | null;
+    if (!promptOptimizerAvailable() || preferences?.promptOptimizer === false) {
+      throw new ConflictException({ code: PROMPT_OPTIMIZER_OFF_CODE, message: 'The prompt optimizer is off for this account.' });
+    }
+    const draft = typeof body?.draft === 'string' ? body.draft : '';
+    if (!draft.trim()) throw new BadRequestException('The draft is empty.');
+    if (draft.length > PROMPT_OPTIMIZER_MAX_DRAFT_CHARS) {
+      throw new BadRequestException(`The draft is longer than ${PROMPT_OPTIMIZER_MAX_DRAFT_CHARS} characters.`);
+    }
+    await this.countOptimizerUse(invitation.guestRowId);
+    const { languages, writeIn } = await guestOptimizerLanguages(this.prisma, invitation.ownerId, guestId);
+    const framing = { guest: true, ...(writeIn ? { writeIn } : {}) };
+    // The turns get what the budget leaves once the instruction and the draft are in, as the owner's do.
+    const budget = RECAP_INPUT_TOKEN_BUDGET
+      - estimateTokens(optimizerSystemPrompt(null, framing))
+      - estimateTokens(optimizerTask(draft, {}));
+    const events = await this.sessions.getSharedTurnEvents(sessionId, TURN_EVENTS_READ);
+    const activity = fitRecapActivity(events, Math.max(0, budget));
+    const context: PromptOptimizerContext = {};
+    if (activity.text) context.turns = { text: activity.text, count: activity.text.split('\n').length };
+    try {
+      return await promptOptimizerQueue.run(() => optimizePrompt(draft, context, { languages, framing, timeoutMs: opts.timeoutMs }));
+    } catch (err) {
+      if (err instanceof PromptOptimizationFailed) {
+        throw new UnprocessableEntityException({ code: PROMPT_OPTIMIZATION_FAILED_CODE, reason: err.reason, message: err.message });
+      }
+      throw err;
+    }
+  }
+
+  /**
+   * Count one ✦ Optimize against the guest's day (D4), before the optimizer is called: one conditional UPDATE of the
+   * guest's live session_guest row, as countGuestTurn counts messages, so two requests at 99 cannot both pass.
+   * Matching nothing is 404 if the invitation ended meanwhile, else 429 PROMPT_OPTIMIZER_DAILY_LIMIT.
+   */
+  private async countOptimizerUse(guestRowId: string) {
+    const counted = await this.prisma.$executeRaw`
+      UPDATE "session_guest"
+      SET "optimizer_uses_on_day" = CASE WHEN "optimizer_day" = (now() AT TIME ZONE 'UTC')::date
+                                         THEN "optimizer_uses_on_day" + 1 ELSE 1 END,
+          "optimizer_day" = (now() AT TIME ZONE 'UTC')::date
+      WHERE "id" = ${guestRowId}::uuid
+        AND "removed_at" IS NULL
+        AND ("optimizer_day" IS DISTINCT FROM (now() AT TIME ZONE 'UTC')::date
+             OR "optimizer_uses_on_day" < ${GUEST_PROMPT_OPTIMIZER_DAILY_USES})`;
+    if (counted === 1) return;
+    const live = await this.prisma.sessionGuest.count({ where: { id: guestRowId, removedAt: null } });
+    if (live === 0) throw notShared();
+    throw new HttpException(
+      { code: PROMPT_OPTIMIZER_DAILY_LIMIT_CODE, message: GUEST_OPTIMIZER_DAILY_LIMIT_REACHED },
+      HttpStatus.TOO_MANY_REQUESTS,
+    );
   }
 
   /** The guest leaves: the session leaves their Shared with me, and their door answers 404. */

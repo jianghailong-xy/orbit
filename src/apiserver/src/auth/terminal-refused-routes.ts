@@ -291,6 +291,7 @@ export const TERMINAL_REFUSED_ROUTES: readonly string[] = [
   'POST /auth/google/link/confirm',
   'POST /guest-sessions/:id/attachments',
   'POST /guest-sessions/:id/leave',
+  'POST /guest-sessions/:id/prompt-optimizations',
   'POST /guest-sessions/:id/turns',
   'POST /guest-sessions/:id/turns/:turnId/steer',
   'POST /help/ask',

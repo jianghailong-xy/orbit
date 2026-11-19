@@ -30,6 +30,16 @@ export interface SessionGuestSuggestion {
   lastInvitedAt: string;
 }
 
+/**
+ * What the guest page's root (`GET /guest-sessions/:id`) and its following read (`GET /guest-sessions/:id/events?after=`)
+ * say of the owner's limits, for the guest composer's one read-only line (project 3504qZwKVUy7ccEQYo3HR, D3): the
+ * session's permission mode, the same value the owner's session carries (`default`, `acceptEdits`, `auto`, `plan`,
+ * ...), which the client says in words. Never the model, account, provider or cost. Absent from an older server.
+ */
+export interface GuestSessionLimits {
+  permissionMode?: string | null;
+}
+
 /** One row of the guest's Shared with me (`GET /guest-sessions`). */
 export interface GuestSessionSummary {
   id: string;
