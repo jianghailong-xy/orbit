@@ -34,7 +34,8 @@ import io.orbitd.android.watch.*
 /**
  * The session's one Tasks card above its composer (A08-6; iOS 516ac3389 `CreatedTasksCard`): the tasks this conversation created and
  * the tasks its watches wait on, one row per task. Folded, it reads "Tasks", the eye with how many rows are watched — orange while a
- * watch over them goes unchecked — and the count sentence (or the one task by name and pill); opened, each row's pill, eye, title and
+ * watch over them goes unchecked — and what the Agents line would say of them (the newest running task, or the count and the newest
+ * task, with that task's pill and a red "N failed" first while any failed), or the one task by name and pill; opened, each row's pill, eye, title and
  * age ("elsewhere" for a watched task created elsewhere), each opening its task. The Watching card keeps only the waits on anything
  * else. Nothing at all when the session neither created nor waits on any task.
  */
@@ -68,7 +69,11 @@ fun SessionTasksCard(app: OrbitApplication, handle: SessionHandle, sessionId: St
                     Eye(card.stale)
                     Text("${card.watching}", style = MaterialTheme.typography.labelSmall, color = if (card.stale) LocalOrbitColorsNeedsYou() else accent)
                 }
-                CountSentence(card, Modifier.weight(1f))
+                val band = card.band
+                if (band != null) {
+                    BandLine(band, Modifier.weight(1f))
+                    band.row.pill?.let { WatchTaskStatusPill(it) }
+                } else Spacer(Modifier.weight(1f))
             }
             Icon(if (opened) WatchIcons.chevronDown else WatchIcons.chevronRight, null, Modifier.size(14.dp), tint = secondary)
         }
@@ -99,17 +104,17 @@ private fun Eye(stale: Boolean) {
         tint = if (stale) LocalOrbitColorsNeedsYou() else MaterialTheme.colorScheme.primary)
 }
 
-/** "2 running · 1 failed · 4/8 done", the failed part red. */
+/** "1 failed · 3 running · Deploy the gateway", the failed part red; the task's name is what truncates. */
 @Composable
-private fun CountSentence(card: SessionTaskCard, modifier: Modifier) {
+private fun BandLine(band: SessionTaskCard.Band, modifier: Modifier) {
     val secondary = MaterialTheme.colorScheme.onSurfaceVariant
     val red = MaterialTheme.colorScheme.error
-    val parts = WatchCountCopy.parts(card.running, card.failed, card.done, card.total)
     Text(buildAnnotatedString {
-        parts.forEachIndexed { index, part ->
-            if (index > 0) withStyle(SpanStyle(color = secondary)) { append(WatchCountCopy.SEPARATOR) }
-            withStyle(SpanStyle(color = if (part.failed) red else secondary)) { append(part.text) }
+        if (band.failed > 0) {
+            withStyle(SpanStyle(color = red)) { append("${band.failed} failed") }
+            withStyle(SpanStyle(color = secondary)) { append(WatchCountCopy.SEPARATOR) }
         }
+        withStyle(SpanStyle(color = secondary)) { append(band.text) }
     }, modifier.testTag("session-tasks:count"), style = MaterialTheme.typography.labelSmall, maxLines = 1, overflow = TextOverflow.Ellipsis)
 }
 

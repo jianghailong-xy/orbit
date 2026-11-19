@@ -383,8 +383,11 @@ describe('folders in the session list', { timeout: 60_000 }, () => {
     expect(folderNames()).toEqual(['Release', 'Wiki']);
     expect(sessionTitles()).toEqual(['Loose one']);
     const release = folderRow('Release');
-    expect(release.querySelector('.session-folder-count')?.textContent).toBe('2');
+    // One number: who waits on you takes the total's place, and the total moves into its label.
+    expect(release.querySelector('.session-folder-count')).toBeNull();
     expect(release.querySelector('.session-folder-needs')?.textContent).toBe('1');
+    expect(release.querySelector('.session-folder-needs')?.getAttribute('aria-label'))
+      .toBe('1 session needs your reply · 2 sessions');
     expect(release.querySelector('.session-folder-activity:not(.jobs)'), 'a running session lights the folder').not.toBeNull();
     const wiki = folderRow('Wiki');
     expect(wiki.querySelector('.session-folder-count')?.textContent).toBe('1');

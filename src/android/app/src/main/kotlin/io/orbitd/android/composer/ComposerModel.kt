@@ -47,8 +47,9 @@ class ComposerModel(val auth: AuthSession, val handle: SessionHandle, val sessio
             val bytes = auth.readData(handle, DataKind.DRAFT, key)
             val draft = bytes?.let { Wire.decode(it, ComposerDraft.serializer()) } ?: ComposerDraft()
             mutable.value = ComposerState(draft = draft, loaded = true,
-                notice = if (draft.pending != null) "Delivery is unconfirmed. Retry the saved message." else null,
-                failures = draft.attachments.filter { it.remoteId == null }.associate { it.id to "Upload interrupted · Retry" })
+                notice = if (draft.pending != null) "Delivery is unconfirmed. Retry the saved message." else null)
+            // An upload the last run left unfinished goes again from its saved copy: the chip spins, then lands or goes with why.
+            draft.attachments.filter { it.remoteId == null }.forEach { retryUpload(it.id) }
         } catch (cancel: CancellationException) { throw cancel }
         catch (_: Exception) { mutable.value = ComposerState(error = "Couldn't restore the draft. Retry to read the saved copy.") }
       }
@@ -152,7 +153,10 @@ class ComposerModel(val auth: AuthSession, val handle: SessionHandle, val sessio
             try {
                 persist()
                 uploadSlots.withPermit {
-                    val (metadata, bytes) = read()
+                    // A file that can't be read or isn't allowed (over the size limit) is refused with its reason alone, as iOS refuses one
+                    // before staging it (`Attachments.rejectReason`): there was no upload to fail.
+                    val (metadata, bytes) = try { read() } catch (cancel: CancellationException) { throw cancel }
+                        catch (e: Exception) { uploadFailed(attachment, e, upload = false); return@withPermit }
                     auth.writeData(handle, DataKind.DRAFT, "$key:attachment:${attachment.id}", bytes)
                     if (state.value.draft.attachments.none { it.id == attachment.id }) return@withPermit
                     mutable.update { it.copy(draft = it.draft.copy(attachments = it.draft.attachments.map { a ->
@@ -161,7 +165,7 @@ class ComposerModel(val auth: AuthSession, val handle: SessionHandle, val sessio
                     uploadBytes(metadata, bytes)
                 }
             } catch (cancel: CancellationException) { throw cancel }
-            catch (e: Exception) { mutable.update { it.copy(failures = it.failures + (attachment.id to (e.message ?: "Upload failed"))) } }
+            catch (e: Exception) { uploadFailed(attachment, e) }
             finally { release(); uploads.remove(attachment.id); mutable.update { it.copy(uploads = it.uploads - attachment.id) } }
         }
         uploads[attachment.id] = task; task.start()
@@ -172,25 +176,42 @@ class ComposerModel(val auth: AuthSession, val handle: SessionHandle, val sessio
         }
         // A removed chip must never be brought back by a delayed successful upload.
         mutable.update { it.copy(draft = it.draft.copy(attachments = it.draft.attachments.map { a ->
-            if (a.id == attachment.id) a.copy(remoteId = remote) else a }), failures = it.failures - attachment.id) }
+            if (a.id == attachment.id) a.copy(remoteId = remote) else a })) }
         persist()
     }
-    fun retryUpload(id: String) {
+    private fun retryUpload(id: String) {
         if (id in uploads) return
         val attachment = state.value.draft.attachments.firstOrNull { it.id == id && it.remoteId == null } ?: return
-        mutable.update { it.copy(uploads = it.uploads + (id to 0f), failures = it.failures - id) }
+        mutable.update { it.copy(uploads = it.uploads + (id to 0f)) }
         val task = scope.launch(start = CoroutineStart.LAZY) {
             try { uploadSlots.withPermit { uploadBytes(attachment, attachmentBytes(id)) } }
             catch (cancel: CancellationException) { throw cancel }
-            catch (e: Exception) { mutable.update { it.copy(failures = it.failures + (id to (e.message ?: "Upload failed"))) } }
+            catch (e: Exception) { uploadFailed(attachment, e) }
             finally { uploads.remove(id); mutable.update { it.copy(uploads = it.uploads - id) } }
         }
         uploads[id] = task; task.start()
     }
+    /** Uploads that failed since the composer opened: a send waiting on its uploads stops when one fails while it waits. */
+    private var uploadFailures = 0
+    /** A failed upload drops its chip and says so in the error line above the box, as iOS does (ConsoleModel.attach): "Upload failed —
+     * notes.pdf: the connection dropped". Picking the file again is the retry. */
+    private fun uploadFailed(attachment: StagedAttachment, e: Exception, upload: Boolean = true) {
+        val name = state.value.draft.attachments.firstOrNull { it.id == attachment.id }?.name ?: return
+        uploadFailures++
+        uploads.remove(attachment.id) // this upload's own job: removing the chip must not cancel the job reporting it
+        removeAttachment(attachment.id)
+        mutable.update { it.copy(error = if (upload) "Upload failed — $name: ${uploadFailure(e)}" else uploadFailure(e)) }
+    }
+    /** Why, in APIClient.failureReason's words: the server's own, a dropped connection, or what the device said (a file it can't read). */
+    private fun uploadFailure(e: Exception): String = when (e) {
+        is ApiError, is NetworkException -> io.orbitd.android.management.personalFailure(e)
+        is IllegalStateException, is IllegalArgumentException -> e.message?.trimEnd('.') ?: io.orbitd.android.management.personalFailure(e)
+        else -> io.orbitd.android.management.personalFailure(e)
+    }
     fun removeAttachment(id: String) {
         uploads.remove(id)?.cancel()
         mutable.update { it.copy(draft = it.draft.copy(attachments = it.draft.attachments.filterNot { a -> a.id == id }),
-            uploads = it.uploads - id, failures = it.failures - id) }
+            uploads = it.uploads - id) }
         launch { persist(); auth.writeData(handle, DataKind.DRAFT, "$key:attachment:$id", ByteArray(0)) }
     }
 
@@ -204,8 +225,11 @@ class ComposerModel(val auth: AuthSession, val handle: SessionHandle, val sessio
         mutable.update { it.copy(waiting = true, error = null, notice = null) }
         launch {
             try {
-                // Keep text editable while uploads finish. Failed or removed uploads cannot be silently sent.
+                // Keep text editable while uploads finish. Failed or removed uploads cannot be silently sent: an upload that fails while
+                // this waits stops the send, its chip gone and the error line saying why, and the words stay in the box.
+                val failedBefore = uploadFailures
                 while (uploads.isNotEmpty()) uploads.values.toList().joinAll()
+                if (uploadFailures != failedBefore) { mutable.update { it.copy(waiting = false) }; return@launch }
                 mutable.update { it.copy(busy = true, waiting = false) }
                 val draft = state.value.draft
                 check(draft.attachments.all { it.remoteId != null }) { "Retry or remove failed uploads before sending." }

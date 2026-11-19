@@ -4,12 +4,14 @@ import { createRoot, type Root } from 'react-dom/client';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { MemoryRouter, useLocation } from 'react-router-dom';
 import { afterEach, describe, expect, it, vi } from 'vitest';
+import type { ScheduleListResponse } from '@orbit/shared';
 import { LIST_ROWS } from '../test/scheduleFixtures';
 import { TasksSidePanel } from './TasksSidePanel';
 
 /**
  * Scheduled in the left navigation (docs/mocks/scheduled-tasks/web/01-board.png ①): after Tasks, with the count of
- * what needs the owner — the failing and the held schedules — and nowhere else in the sidebar.
+ * what needs the owner — the held schedules, the failing ones with no run under way, and the conditions that cannot be
+ * read, as on Apple and Android — and nowhere else in the sidebar.
  */
 
 vi.mock('../api', async (importOriginal) => ({
@@ -32,9 +34,9 @@ function RouterProbe() {
   return null;
 }
 
-function serve(schedules = LIST_ROWS) {
+function serve(schedules = LIST_ROWS, more: Omit<ScheduleListResponse, 'schedules'> = {}) {
   vi.mocked(api).mockImplementation((async (path: string) => {
-    if (path === '/schedules') return { schedules };
+    if (path === '/schedules') return { schedules, ...more };
     if (path === '/projects/sidebar') return [];
     if (path === '/runners') return [];
     if (path === '/workspaces') return [WORKSPACE];
@@ -81,6 +83,22 @@ describe('the sidebar’s Scheduled entry', () => {
     await visit('/projects');
     const labels = [...container!.querySelectorAll('.tp-section .tp-item .tp-label')].map((l) => l.textContent);
     expect(labels.indexOf('Scheduled')).toBe(labels.indexOf('Tasks') + 1);
+    expect(entry().querySelector('[data-scheduled-count]')!.textContent).toBe('2');
+  });
+
+  it('counts a condition that cannot be read, and leaves out a failing schedule whose run is under way', async () => {
+    const unread = { id: 'c-unread', text: 'root disk below 5%', unit: '%', state: 'UNKNOWN' as const, lastValue: null, lastSampleAt: null };
+    const pg = LIST_ROWS.find((s) => s.consecutiveFailures > 0)!;
+    serve(LIST_ROWS, {
+      waitingTasks: [{ id: 'task-osd', title: 'Set pool size', workspaceId: WORKSPACE.id, workspaceName: WORKSPACE.name, condition: unread }],
+      runs: [{
+        id: 'run-retry', scheduleId: pg.id, scheduleRevision: pg.revision, plannedAt: '2025-11-14T04:27:00.000Z', trigger: 'MANUAL',
+        state: 'RUNNING', attempt: 1, startedAt: '2025-11-14T04:27:00.000Z', endedAt: null, sessionId: null, key: null, summary: null,
+        links: [], failureReason: null, heldReason: null, newFinding: false, notified: false,
+      }],
+    });
+    await visit('/projects');
+    // The held schedule and the task that cannot be read; the failing one waits for its run.
     expect(entry().querySelector('[data-scheduled-count]')!.textContent).toBe('2');
   });
 

@@ -159,3 +159,57 @@ describe('nginx: the pages\' Content-Security-Policy', () => {
     }
   });
 });
+
+describe('nginx: the managed runner browser\'s viewer', () => {
+  // docs/runner-browser-design.md §4: a WebSocket on /api/runners/:id/browser/vnc that lasts as long as the owner watches.
+  const VIEWER = '~ ^/api/runners/[^/]+/browser/vnc$';
+  const viewer = locationDirectives(VIEWER);
+  const code = conf.replace(/#[^\n]*/g, '');
+
+  it('is a regex location, so nginx chooses it over the `/api/` prefix that drops the Upgrade header', () => {
+    const pattern = new RegExp(VIEWER.slice(2));
+    expect(pattern.test('/api/runners/34z8OKBXxDRYsIZwzJ35E/browser/vnc')).toBe(true);
+    expect(pattern.test('/api/runners/0190a0b0-0000-7000-8000-000000000001/browser/vnc')).toBe(true);
+    expect(pattern.test('/api/runners/34z8OKBXxDRYsIZwzJ35E')).toBe(false);
+    expect(pattern.test('/api/runners/a/b/browser/vnc')).toBe(false);
+    expect(locationDirectives('/api/')).toContain("proxy_set_header Connection ''");
+  });
+
+  it('passes the upgrade on, and only when the request asks for one', () => {
+    expect(viewer).toContain('proxy_http_version 1.1');
+    expect(viewer).toContain('proxy_set_header Upgrade $http_upgrade');
+    expect(viewer).toContain('proxy_set_header Connection $orbit_vnc_connection');
+    const map = /map \$http_upgrade \$orbit_vnc_connection \{([^}]*)\}/.exec(code)?.[1].replace(/\s+/g, ' ').trim();
+    expect(map).toBe("default upgrade; '' close;");
+  });
+
+  it('writes no access log: the owner\'s login rides in the query, and this image logs the whole request line', () => {
+    expect(viewer).toContain('access_log off');
+    // Nothing at server or http level turns it back on for this location.
+    expect(viewer.filter((d) => d.startsWith('access_log'))).toEqual(['access_log off']);
+  });
+
+  it('does not take a quiet screen for a dead stream: an hour each way, nothing buffered', () => {
+    expect(viewer).toContain('proxy_read_timeout 3600s');
+    expect(viewer).toContain('proxy_send_timeout 3600s');
+    expect(viewer).toContain('proxy_buffering off');
+  });
+
+  it('goes to an upstream of its own that keeps no failure count, so a long stream never marks the apiserver down', () => {
+    // max_fails=1 (the default) lets a failed peer back by one request per fail_timeout and forgives it only when that
+    // request ends: minutes later for a stream, and every other viewer meanwhile gets 502 "no live upstreams".
+    expect(viewer).toContain('proxy_pass http://orbit_browser_vnc');
+    const upstream = /upstream orbit_browser_vnc \{([^}]*)\}/.exec(code)?.[1];
+    const servers = (upstream ?? '').split(';').map((d) => d.replace(/\s+/g, ' ').trim()).filter((d) => d.startsWith('server '));
+    expect(servers).toEqual(['server apiserver:3000 max_fails=0']);
+  });
+
+  it('forwards who asked, as `/api/` does, and adds no header of its own to the answer', () => {
+    for (const header of ['Host $host', 'X-Real-IP $remote_addr', 'X-Forwarded-For $proxy_add_x_forwarded_for', 'X-Forwarded-Proto $scheme',
+      'X-Orbit-Request-Host $http_host', 'X-Orbit-Request-Proto $http_x_forwarded_proto']) {
+      expect(viewer).toContain(`proxy_set_header ${header}`);
+      expect(locationDirectives('/api/')).toContain(`proxy_set_header ${header}`);
+    }
+    expect(viewer.filter((d) => d.startsWith('add_header'))).toEqual([]);
+  });
+});

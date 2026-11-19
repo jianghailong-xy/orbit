@@ -127,12 +127,12 @@ struct ScheduledMacPage: View {
         .padding(.top, 6)
     }
 
-    /// "Today  Fri, Nov 14"; Needs you in red, Paused grey (web board ① 2–3).
+    /// "Today  Fri, Nov 14"; Paused grey (web board ① 2–3).
     private func groupHeader(_ group: ScheduleDisplay.TimelineGroup) -> some View {
         HStack(alignment: .firstTextBaseline, spacing: 8) {
             Text(group.title)
                 .font(.title3.weight(.bold))
-                .foregroundStyle(group.key == .needsYou ? Color.red : group.key == .paused ? Color.secondary : Color.primary)
+                .foregroundStyle(group.key == .paused ? Color.secondary : Color.primary)
             if let subtitle = group.subtitle {
                 Text(subtitle).font(.orbitSubtext).foregroundStyle(.secondary)
             }

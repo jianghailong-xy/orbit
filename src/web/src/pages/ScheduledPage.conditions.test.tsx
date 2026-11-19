@@ -122,9 +122,9 @@ describe('the Scheduled page: a group of its own for conditions (board ④)', ()
   it('lists the WHEN schedules and the startWhen task above Today, each with its newest reading and its age', async () => {
     await mount(<ScheduledPage />, '/scheduled');
     const keys = [...host.querySelectorAll<HTMLElement>('.sched-group')].map((g) => g.dataset.group);
-    expect(keys).toEqual(['NEEDS_YOU', 'CONDITION', 'TODAY', 'TOMORROW']);
-    expect(text(group('CONDITION').querySelector('h2'))).toBe('Waiting for a condition3');
-    expect(rows(group('CONDITION'))).toEqual([
+    expect(keys).toEqual(['CONDITION', 'TODAY', 'TOMORROW']);
+    expect(text(group('CONDITION').querySelector('h2'))).toBe('Waiting for a condition4');
+    expect(rows(group('CONDITION')).slice(1)).toEqual([
       { gauge: 'waiting', title: 'Ceph capacity guard', line: '↻When raw used above 90% · HPC', tag: null, right: '6.9% · 1 min ago' },
       { gauge: 'waiting', title: 'Gateway 5xx guard', line: '↻When 5xx rate above 2% · Orbit Cloud', tag: null, right: '3.4% · just now' },
       { gauge: 'waiting', title: 'Set kubernetes pool to 3 copies', line: 'Task · once, when 3 or more OSDs are in · HPC', tag: null, right: '2 in · 3 min ago' },
@@ -133,12 +133,11 @@ describe('the Scheduled page: a group of its own for conditions (board ④)', ()
     expect(text(host.querySelector('[data-schedule-total]'))).toBe('7');
   });
 
-  it("puts a condition that can't be read under Needs you, with the gauge and Can't read", async () => {
+  it("leads Waiting for a condition with a condition that can't be read, with the gauge and Can't read", async () => {
     await mount(<ScheduledPage />, '/scheduled');
-    expect(rows(group('NEEDS_YOU'))).toEqual([
+    expect(rows(group('CONDITION'))[0]).toEqual(
       { gauge: 'cant-read', title: 'Mon disk guard', line: '↻When root disk below 5% · HPC', tag: "Can't read", right: '' },
-    ]);
-    expect(text(group('NEEDS_YOU').querySelector('h2'))).toBe('Needs you1');
+    );
   });
 
   it('opens the task, not an inspector, from its row', async () => {

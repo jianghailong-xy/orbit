@@ -1,7 +1,7 @@
 import { useMemo } from 'react';
 import { queryOptions, useQuery } from '@tanstack/react-query';
 import {
-  scheduleNeedsYou,
+  scheduleNeedsCount,
   type ScheduleCard,
   type ScheduleChangeRecord,
   type ScheduleDetailResponse,
@@ -79,10 +79,10 @@ export const sessionScheduleCardsQuery = (sessionId: string) =>
     refetchInterval: streamPoll(20_000),
   });
 
-/** The count beside Scheduled in the drawer: the failing and the held (§9.2). */
+/** The count beside Scheduled in the drawer, as on Apple and Android: scheduleNeedsCount. */
 export function useScheduledNeedsCount(): number {
   const list = useQuery(schedulesQuery());
-  return useMemo(() => (list.data?.schedules ?? []).filter(scheduleNeedsYou).length, [list.data]);
+  return useMemo(() => scheduleNeedsCount(list.data), [list.data]);
 }
 
 /**

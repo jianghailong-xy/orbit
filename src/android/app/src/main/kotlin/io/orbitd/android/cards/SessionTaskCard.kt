@@ -29,6 +29,26 @@ internal data class SessionTaskCard(val rows: List<Row>, val running: Int, val f
     /** What the collapsed row says when it names one task instead of the sentence. */
     val single: Row? get() = if (total == 1 && rows.size == 1) rows[0] else null
 
+    /** What the collapsed row says past one task, as the Agents line says it of its runs (OrbitKit `SessionTaskCard.band`, web
+     * `sessionTaskBand`, all held to the fixture's `band` cases): the newest running task by name, after "N running · " when more than
+     * one runs, or with none running "total · " and the newest task's name. [row] is the task whose pill closes the line; [failed],
+     * above zero, is written red as "N failed · " before [text], so an older failure is not hidden behind the newest task's Done. */
+    data class Band(val failed: Int, val text: String, val row: Row)
+
+    /** Newest is the latest `createdAt`; a watched task created elsewhere has none and is the oldest; a tie goes to the earlier row.
+     * Null with one row, which [single] names. */
+    val band: Band? get() {
+        if (single != null || rows.isEmpty()) return null
+        fun newest(of: List<Row>) = of.reduce { best, row -> if ((row.createdAt ?: "") > (best.createdAt ?: "")) row else best }
+        val going = rows.filter { it.pill?.kind == WatchTaskPill.Kind.RUNNING }
+        if (going.isNotEmpty()) {
+            val row = newest(going)
+            return Band(failed, if (running > 1) "$running running · ${row.title}" else row.title, row)
+        }
+        val row = newest(rows)
+        return Band(failed, "$total · ${row.title}", row)
+    }
+
     companion object {
         const val title = "Tasks"
         const val elsewhere = "elsewhere"

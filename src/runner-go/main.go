@@ -352,6 +352,11 @@ func main() {
 	if len(os.Args) > 1 && os.Args[1] == sessionScopeCommand {
 		os.Exit(runSessionScope(os.Args[2:]))
 	}
+	// The browser tool's stdio proxy (browser_mcp.go), a child of the engine like `orbit mcp`.
+	if len(os.Args) > 1 && os.Args[1] == browserMCPCommand {
+		cmdBrowserMCP()
+		return
+	}
 	// The credential helper every network git command is given (network_git.go). git runs it, and it
 	// answers git and does nothing else.
 	if len(os.Args) > 1 && os.Args[1] == gitCredentialReadOnlyCommand {

@@ -45,6 +45,11 @@ export interface RunnerLinkWelcomeAnswer {
   sessions: RunnerLinkSessionState[];
   /** The release the runner is assigned (runner-release-feed.ts); absent when none can be stated now. */
   release?: { version: string; rollback: boolean };
+  /**
+   * Whether the runner is offered the managed runner browser (Welcome.browser, docs/runner-browser-design.md §2): the
+   * browser switch on and the runner a managed instance the manager authorized.
+   */
+  browser: boolean;
 }
 
 /** As many sessions as a heartbeat may name (RunnerApiController.heartbeat). */

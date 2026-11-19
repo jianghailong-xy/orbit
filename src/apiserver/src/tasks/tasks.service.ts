@@ -12775,6 +12775,14 @@ export class TasksService implements OnModuleInit, OnModuleDestroy {
     // them held 109,878 of the deployment's 112k tasks, and this scan reads its ~82k OPEN auto-run
     // tasks to find the ~55 with no edge (0.7–1.4s, through `task_project_id_idx`).
     //
+    // Once that project was paused (2026-10-08) the planner stopped entering through the projects at
+    // all: the gate is on another table, so it cannot know the 109k rows behind the one paused project
+    // are the ones the join removes, and it read every OPEN task and joined afterwards (2026-11-19: a
+    // sequential scan of all 32,829 pages, 105 ms, every pass). `t.project_id = ANY(...)` hands it the
+    // moving projects as the task's own predicate, so it enters through `task_project_id_idx` again
+    // (4,502 buffers, 29 ms, the same rows). The join below stays the gate; this only narrows, in the
+    // same statement and so the same snapshot.
+    //
     // The project's budget is counted ONCE per sweep, for every project together (`occupied`), and
     // not per candidate row. As a correlated subquery beside `rank` it was evaluated once for each
     // row the window emitted, re-counting the same project every time — measured 2026-09-29: 53
@@ -12814,7 +12822,8 @@ export class TasksService implements OnModuleInit, OnModuleDestroy {
           FROM task t
           JOIN project p ON p.id = t.project_id AND ${Prisma.raw(projectMovesSql('p'))}
           LEFT JOIN occupied ON occupied.project_id = p.id
-         WHERE ${PROJECT_INDEPENDENT_READY_SQL}${narrowed}
+         WHERE t.project_id = ANY(ARRAY(SELECT mp.id FROM project mp WHERE ${Prisma.raw(projectMovesSql('mp'))}))
+           AND ${PROJECT_INDEPENDENT_READY_SQL}${narrowed}
       ) c
       LEFT JOIN workspace a ON a.id = c.assignee_id
       LEFT JOIN runner r ON r.id = a.runner_id

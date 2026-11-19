@@ -4645,7 +4645,13 @@ export class SessionsService {
             -- full runner its list of running turns does not show.
             CASE g.reason WHEN 'runner_at_capacity' THEN g.runner_held END AS held
         ) n
-      ) q ON s.status = 'PENDING' AND s.cancel_requested_at IS NULL
+        -- Asked inside, behind OFFSET 0, rather than on the join: as a join condition the planner flattened
+        -- this subquery and computed every gate's counts for every row of the list, then dropped all but the
+        -- PENDING ones (production, 2026-11-19: 1,297 rows for 15, 130k of the statement's 154k buffers and
+        -- 175 ms of its 289). Here it is a one-time filter, so the counts run only for a PENDING row.
+        WHERE s.status = 'PENDING' AND s.cancel_requested_at IS NULL
+        OFFSET 0
+      ) q ON true
       WHERE s.owner_id = ${ownerId}::uuid
         ${scope}
         AND (${visibility})
@@ -4761,9 +4767,9 @@ export class SessionsService {
     // Rows rather than a `groupBy`, because the second class is not a predicate the query can
     // carry: the question is whether a card's `background_job_id` is IN its session's
     // `running_bg_shells`. The candidate set is the sessions that are generating plus the ones with
-    // a shell up — a handful even on a busy account — so this stays a lookup. What the turn half
-    // counts is unchanged from when it was the only half: every PENDING card of a generating
-    // session, which is the signal this number has always been, and the door re-reads the facts.
+    // a shell up — a handful even on a busy account — so this stays a lookup. The turn half counts
+    // every PENDING card of a generating session except a job's, which only its live job holds open,
+    // and the door re-reads the facts.
     const generating = new Set(sessions.filter(isSessionGenerating).map((s) => s.id));
     // Off the raw rows, not the mapped ones: the shell ids are read here and deliberately not
     // shipped to the client, so they do not survive into the payload above.
@@ -4794,11 +4800,10 @@ export class SessionsService {
     const heldQuestions = await questionsWithCoordinator(this.prisma, sessions.filter(s => s.taskId).map(s => s.id));
     const byId = new Map<string, number>();
     for (const card of await visibleQuestions(this.prisma, cards)) {
-      if (
-        !generating.has(card.sessionId) &&
-        !readByLiveBackgroundJob(card, shells.get(card.sessionId) ?? []) &&
-        !readBySubagent.has(card.id)
-      ) {
+      // A job's card is read by its job, not the turn: it counts while the job is up, as the card
+      // listing (`stillBeingAsked`) shows it, whether or not the session is generating.
+      const readByJob = readByLiveBackgroundJob(card, shells.get(card.sessionId) ?? []);
+      if (card.backgroundJobId !== null ? !readByJob : !generating.has(card.sessionId) && !readBySubagent.has(card.id)) {
         continue;
       }
       byId.set(card.sessionId, (byId.get(card.sessionId) ?? 0) + 1);

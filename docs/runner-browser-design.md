@@ -69,13 +69,14 @@ runner over the existing link, and a viewer in the client.
 - **Shared state is accepted.** Sessions see each other's tabs, history and logins. Every agent on the runner can act
   on any site the profile is signed in to; the UI says so where the owner signs in (§5).
 - **Chrome flags.** `--no-sandbox` (the container drops every capability and sets `no-new-privileges`, so Chrome's
-  own sandbox cannot start; the container is the boundary), `--disable-dev-shm-usage` (small `/dev/shm` in a private
+  own sandbox cannot start; the container is the boundary) with `--test-type`, which keeps Chrome from drawing its
+  "unsupported command-line flag" bar over every page for it, `--disable-dev-shm-usage` (small `/dev/shm` in a private
   IPC namespace). The profile on the volume, not on `/tmp`, so it does not eat the memory limit.
 - **The agent's tool.** The runner gives each engine a `browser` MCP server (`@playwright/mcp --cdp-endpoint` at the
   runner's Chrome, behind the lease), the way it already gives `orbit mcp` (`claude_spawn.go`, `codex.go`,
   `cursor_mcp.go`, `dsh_mcp.go`). Only when the switch is on.
-- **VNC.** `x11vnc -display :1 -unixsock /home/orbit/.orbit/browser/vnc.sock -shared -forever -nopw`, started with the
-  display. Unix socket only: no TCP port, not even loopback. The runner is the only thing that connects to it.
+- **VNC.** `x11vnc -display :1 -unixsock /home/orbit/.orbit/browser/vnc.sock -shared -forever -nopw -noprimary`,
+  started with the display (`-noprimary`: only what is copied, the CLIPBOARD selection, goes back to the viewer). Unix socket only: no TCP port, not even loopback. The runner is the only thing that connects to it.
 - **Budget.** One Chrome, about 0.5–1.5 GiB, so the operator raises the runner's memory limit by about 1.5 GiB.
 
 ## 4. The stream
@@ -97,8 +98,9 @@ owner's browser ──WSS──▶ nginx ──▶ apiserver /api/runners/:id/br
   `StreamCredit{stream_id, bytes}` (both). Data rides the lowest write tier, below live deltas, and never blocks
   control frames; a window of 256 KiB per stream, refilled by `StreamCredit`. A runner that did not announce the
   capability in `Hello` is never sent `StreamOpen`.
-- **Gateway.** Answers the apiserver's `StreamOpen` request on `rnr.<runnerId>` only if it holds that runner's
-  connection, then relays `vnc.<streamId>.*` to and from link frames. At most 2 open streams per runner (two
+- **Gateway.** Answers the apiserver's `StreamOpen` request on `rnr.<runnerId>` only if it holds a connection of that
+  runner whose `Hello` named a `ManagedInstance` and whose `Welcome` offered the browser (the welcome route's verdict
+  on that instance against the manager's record, §2), then relays `vnc.<streamId>.*` to and from link frames. At most 2 open streams per runner (two
   tabs or devices watching). The gateway's NATS user gets `vnc.>`; nothing else changes in its permissions.
 - **Apiserver.** A WebSocket route behind the new gate. It authenticates the owner's web session, checks the
   runner is the caller's managed runner, opens the stream, and pipes bytes. A viewer that
@@ -108,7 +110,32 @@ owner's browser ──WSS──▶ nginx ──▶ apiserver /api/runners/:id/br
 
 ## 5. The viewer (web first)
 
-Two ways in, one viewer (the existing right-side `Drawer` with a noVNC canvas, `@novnc/novnc` pinned, scaled to fit):
+**Revised 2026-11-19 (owner, option C; board `docs/mocks/runner-browser/02-control-view.html`).** The drawer squeezed
+the 1280×800 screen to about 37%, too small to act in, and paste never reached the remote Chrome. Now:
+
+- **A tab of its own**, `/runners/:id/browser` (web route; `Browser · Orbit Cloud`): only the viewer and a slim bar.
+  In control the bar says "You are controlling the browser · the agent keeps running", with **Fit / 100%** (noVNC
+  `scaleViewport`; 100% scrolls) and **Done**, which only stops sending input and stays view only; the footer says who
+  uses the browser, "Paste with ⌘V" (Ctrl+V elsewhere), `1280 × 800 · <scale>%` and Live. View only, the bar says
+  "Watching the browser · used by <session>", linking to the session, with **Take control**. Closing the tab closes
+  the stream. Not found while the switch is off.
+- **Settings' Open browser** and **a session's Take control** open that tab already in control (`window.open` on the
+  click, one named window per runner). The session's drawer stays as a view-only quick look with **↗ Open in new
+  tab** and **Take control**; either closes the drawer, and its stream, before the tab opens its own, so the two never
+  hold both of the runner's streams.
+- **Paste through Chrome's DevTools**, not the VNC clipboard (RFB cut text is Latin-1; x11vnc is not known to speak
+  the UTF-8 Extended Clipboard). In control, the viewer keeps ⌘V / Ctrl+V from noVNC (the keystroke never reaches the
+  runner, so nothing pastes twice), takes the browser's own `paste` event, and sends the text as a text message on its
+  viewer WebSocket. The apiserver passes it on only while that viewer said it is in control, at most 64 KiB, one at a
+  time, as a `StreamPaste` link frame (capability `link-stream-paste-v1`); the runner inserts it with
+  `Input.insertText` into the page that has focus, without the session lease (P3 = B), and answers `StreamPasted`.
+  A refusal ("Click a text field in the browser first", too long, no answer) shows in the bar. The text is never
+  logged or stored anywhere on the way: it is often a password.
+- **Copy back**, best effort: noVNC's `clipboard` event (x11vnc's cut text from the remote CLIPBOARD) is written with
+  `navigator.clipboard.writeText`, or at the next key or click if the browser wants a gesture. Only in control. Being
+  RFB cut text, it is Latin-1: other text does not come back whole. Not fixed here.
+
+The original v1 viewer, for the record (the drawer parts are superseded above):
 
 - **From a session.** A **Browser** chip in the outputs bar, shown when the switch is on, the session runs on the
   managed runner and the browser is running. The drawer's header says which session holds the browser.

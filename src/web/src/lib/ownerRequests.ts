@@ -204,7 +204,7 @@ export function ownerRequestChatContext(request: Pick<OwnerRequest, 'id' | 'titl
 
 /* ── How a resolution turn reads ──────────────────────────────────────────────────────────────── */
 
-const RESOLUTION_HEAD = /^Orbit owner request \S+ \([A-Z_]+\) ended (DONE|DECLINED|EXPIRED|WITHDRAWN): /;
+const RESOLUTION_HEAD = /^Orbit owner request \S+ \([A-Z_]+\) ended (DONE|DECLINED|EXPIRED|WITHDRAWN)[:.] /;
 const RESOLUTION_MARK = 'This turn was queued by Orbit when the request ended, not typed by a person.';
 
 const RESOLUTION_LABELS: Readonly<Record<string, string>> = {
