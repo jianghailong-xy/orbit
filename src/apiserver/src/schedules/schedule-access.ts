@@ -156,6 +156,8 @@ export const CHECK_ONLY_CLAUDE_DENIED_ORBIT_TOOLS: readonly string[] = [
   'mcp__orbit__delegate',
   // Served beside it (runner-go subagent_workflow.go): it starts SubAgents from a script, work outside this check.
   'mcp__orbit__workflow',
+  // Puts a sign-in card in front of the owner and waits for it (runner-go browser_tools.go): not a check's to ask.
+  'mcp__orbit__browser_request_sign_in',
 ];
 
 /**

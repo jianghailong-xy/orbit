@@ -8088,6 +8088,10 @@ model OwnerRequest {
   scheduleChangeRequestId String?   @map("schedule_change_request_id") @db.Uuid
   /// CONDITION_UNKNOWN (migration 1030): the condition that cannot be read. History, no FK.
   conditionId             String?   @map("condition_id") @db.Uuid
+  /// BROWSER_SIGN_IN (migration 1233): the site the agent asked the owner to sign in to, and the Orbit Cloud runner
+  /// whose browser they sign in on. Nothing else of the browser is stored. History, no FK.
+  browserSite             String?   @map("browser_site")
+  browserRunnerId         String?   @map("browser_runner_id") @db.Uuid
   expiresAt           DateTime? @map("expires_at") @db.Timestamptz(3)
   clientRequestId     String?   @map("client_request_id")
   resolvedAt          DateTime? @map("resolved_at") @db.Timestamptz(3)

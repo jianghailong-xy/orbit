@@ -1594,6 +1594,11 @@ export const RUNNER_ISOLATION_FIELDS_BY_HAND: Readonly<Record<string, string>> =
     'must be a session of the runner\'s owner that this runner hosts, else 403 (runner-api/runner-browser.controller.ts:55), '
     + 'and what is read is that owner\'s own managed runner, found by the owner (managed-runners/browser-state.ts accountStatus); '
     + 'runner-browser-status.pg.spec.ts (3) sends another account\'s session both ways',
+  'POST /runner/browser/sign-in-requests header x-orbit-session-id':
+    'must be a session of the runner\'s owner that this runner hosts, else 403 (runner-api/runner-browser.controller.ts '
+    + 'callingSession), and the runner must be that owner\'s own managed runner, else 403 BROWSER_SIGN_IN_NOT_ORBIT_CLOUD; '
+    + 'the card is filed for that owner and session only (owner-requests.service.ts fileBrowserSignIn); '
+    + 'runner-browser-sign-in.pg.spec.ts (3) sends another account\'s session both ways',
   // ── the wiki's import on the server ──────────────────────────────────────────────────────────────
   'POST /runner/wiki/spaces/:id/import-jobs body id':
     'the id the command names for the job it is making: the insert does nothing when the id is taken, and the job '
