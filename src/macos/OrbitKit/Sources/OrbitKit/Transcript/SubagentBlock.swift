@@ -319,7 +319,8 @@ public struct SubagentSessionSummary: Equatable, Sendable {
     public let capsule: String
     /// The runs, the running ones first, then the rest newest first.
     public let rows: [SubagentRunView]
-    /// How many ended without finishing: the only thing the band's right edge says while nothing runs.
+    /// How many ended without finishing, in every state: red at the band's right edge, before the
+    /// spinner while one runs.
     public let failed: Int
     /// The models the runs took, most runs first.
     public let models: [ModelCount]
@@ -373,8 +374,8 @@ public struct SubagentSessionSummary: Equatable, Sendable {
                 if elsewhere { parts.append("\(machines.count) machines") }
                 parts += models.map { "\($0.label) \($0.count == 1 ? "1 run" : "\($0.count) runs")" }
             }
-            if failed > 0 { parts.append("\(failed) failed") }
         }
+        if failed > 0 { parts.append("\(failed) failed") }
         return parts.joined(separator: ", ")
     }
 
@@ -427,7 +428,7 @@ public struct SubagentSessionSummary: Equatable, Sendable {
             }
         }
         let own = { (run: SubagentRunView) in ownModel(run, parentEngine: parentEngine, parentModel: parentModel) }
-        let failed = running > 0 ? 0 : rows.filter {
+        let failed = rows.filter {
             SubagentBlock.describe(input: .object([:]), run: $0, status: .ok).outcomeIsFailure
         }.count
         let current = rows.first(where: \.isRunning)
