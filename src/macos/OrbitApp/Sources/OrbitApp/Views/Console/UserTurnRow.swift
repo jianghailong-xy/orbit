@@ -224,6 +224,21 @@ struct UserTurnRow: View {
             WatchWakeCardView(wake: wake, text: b.text, ts: b.ts,
                               undelivered: undelivered, onWithdraw: cancel,
                               queued: queued != nil)
+        } else if queued == nil, let workflow = WorkflowFinishedText.parse(wakeNote) {
+            // An Orbit workflow's end: one pale purple strip (board subagent-workflow part 4 ②); the
+            // parent's answer follows as its own reply. Anything else the note carried keeps its line.
+            VStack(alignment: .leading, spacing: 6) {
+                WorkflowFinishedStripView(wake: workflow)
+                if let subagent = SubagentFinishedText.parse(workflow.rest) {
+                    SubagentFinishedLineView(wake: subagent, ts: b.ts)
+                } else if let jobs = BackgroundWakeText.parse(workflow.rest) {
+                    BackgroundWakeCardView(wake: jobs, ts: b.ts)
+                }
+                if undelivered {
+                    Text(BackgroundWakeCard.undelivered).font(.orbitMeta).foregroundStyle(.orange)
+                }
+                if BackgroundWakeCard.drawsBubble(text: b.text) { UserBubbleView(bubble: b) }
+            }
         } else if let subagent = SubagentFinishedText.parse(wakeNote) {
             // A SubAgent's end is the same kind of turn, in a block of its own: one line in the
             // agent's stream (web parity: `SubagentFinishedCard.tsx`). A note that carries a

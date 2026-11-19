@@ -1122,6 +1122,10 @@ final class ConsoleModel {
     /// transcript's SubAgent block draws its tier, model, duration and Why from. Re-read when one
     /// starts or ends (`SubagentRuns.signature`); empty for a session that never delegated.
     private(set) var subagentRuns: [String: SubagentRunView] = [:]
+    /// The session's Orbit workflows by `mcp__orbit__workflow` call (GET /sessions/:id/workflows), re-read
+    /// with the runs whenever a workflow, or one of its calls, moves (`WorkflowRuns.signature`); its calls'
+    /// runs are in `subagentRuns`, under `<workflow call>#<callIndex>`.
+    private(set) var workflowRuns: [String: WorkflowRunView] = [:]
     private var subagentRunsSignature = ""
     /// Settings › Translation (3A) after the answer: the owner-language text of the session's question
     /// cards, by the call's tool_use id, so an answered question's record shows what its card showed.
@@ -1786,18 +1790,30 @@ final class ConsoleModel {
     /// `useSubagentRuns`). The signature makes this a no-op on the many publishes that move nothing
     /// about a SubAgent; a failed read is not retried until the transcript moves again.
     private func refreshSubagentRunsIfNeeded() {
-        let signature = SubagentRuns.signature(items: state.items, background: state.background)
+        let delegates = SubagentRuns.signature(items: state.items, background: state.background)
+        let workflows = WorkflowRuns.signature(items: state.items, nested: state.subagentItems,
+                                               background: state.background)
+        let signature = delegates + "|" + workflows
         guard signature != subagentRunsSignature else { return }
         subagentRunsSignature = signature
-        guard !signature.isEmpty else {
+        guard !delegates.isEmpty || !workflows.isEmpty else {
             subagentRuns = [:]
+            workflowRuns = [:]
             return
         }
         subagentRunsFetch?.cancel()
         subagentRunsFetch = Task { [weak self] in
-            guard let self, let rows = try? await self.api.sessionSubagents(sessionID: self.sessionID) else { return }
+            guard let self else { return }
+            let sessionID = self.sessionID
+            async let runs = self.api.sessionSubagents(sessionID: sessionID)
+            async let flows: [WorkflowRunView]? = workflows.isEmpty ? [] : try? await self.api.sessionWorkflows(sessionID: sessionID)
+            guard let rows = try? await runs else { return }
+            let workflowRows = await flows
             guard !Task.isCancelled else { return }
             self.subagentRuns = Dictionary(rows.map { ($0.toolUseId, $0) }, uniquingKeysWith: { _, last in last })
+            if let workflowRows {
+                self.workflowRuns = Dictionary(workflowRows.map { ($0.toolUseId, $0) }, uniquingKeysWith: { _, last in last })
+            }
         }
     }
 
