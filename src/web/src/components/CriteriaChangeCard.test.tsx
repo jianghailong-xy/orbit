@@ -14,7 +14,6 @@ import {
   CRITERIA_CHANGE_EXPLAINS,
   CRITERIA_CHANGE_TITLE,
   CRITERIA_CHANGE_WHAT_CHANGED,
-  confirmedChangesKey,
   criteriaChangeConfirmLabel,
   criteriaChangeMeta,
   criteriaChangeShowAll,
@@ -344,14 +343,13 @@ describe('what the card says', () => {
 });
 
 describe('the press', () => {
-  it('confirms the version it is drawn from, leaves what it confirmed for the receipt, and goes', async () => {
+  it('confirms the version it is drawn from and goes', async () => {
     const { node, qc, card } = await delivered();
     await act(async () => {
       actionsOf(card())[0]!.click();
     });
     await until(() => cardIn(node) === null, 'the answered card to go');
     expect(presses).toEqual([CURRENT]);
-    expect(qc.getQueryData(confirmedChangesKey(PROJECT, CURRENT))).toBe('1 new, 1 stricter');
     expect(qc.getQueryData<StandardSetConfirmationStanding>(acceptanceConfirmationKey(PROJECT))?.state).toBe('CONFIRMED');
     await until(() => reports[reports.length - 1] === false, 'the page to be told');
   });

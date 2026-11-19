@@ -1,4 +1,5 @@
 import type {
+  ConfirmedCriterionReading,
   CriteriaChangesSinceConfirmed,
   CriteriaChangesSinceConfirmedAbsentReason,
   ProjectStartRecord,
@@ -42,6 +43,14 @@ export interface RecordedStandardSetConfirmation {
    *  that started nothing — a re-confirmation, or one made before starts recorded their settings.
    *  The receipt reads it: a start says "started" and what with, anything else says "confirmed". */
   startedWith?: ProjectStartRecord | null;
+  /** What this confirmation changed since the one before it, as the card that asked showed it; null
+   *  when there was none before it or the record predates keeping it. Absent from an older server. */
+  changes?: CriteriaChangesSinceConfirmed | null;
+  /** The confirmed set, criterion by criterion: the words confirmed and whether each moved since.
+   *  Absent from an older server. */
+  criteria?: ConfirmedCriterionReading[];
+  /** Whether the words were kept with the confirmation; false on a record older than that. */
+  wordingRecorded?: boolean;
 }
 
 /**
