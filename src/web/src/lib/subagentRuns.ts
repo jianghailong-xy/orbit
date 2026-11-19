@@ -201,9 +201,42 @@ export function subagentDuration(run: SubagentRunView): string | null {
   return wikiDuration((Date.parse(run.endedAt) - Date.parse(run.createdAt)) / 1000);
 }
 
+/** An engine as an Agent's chip names it: short, since the model follows it (OrbitKit's `SubagentBlock.shortName`). */
+export function agentShortName(engine: string): string {
+  switch (engine) {
+    case 'claude': return 'Claude';
+    case 'codex': return 'Codex';
+    case 'kimi': return 'Kimi';
+    case 'antigravity': return 'Antigravity';
+    case 'opencode': return 'OpenCode';
+    case 'dsh': return 'DeepSeek';
+    case 'cursor': return 'Cursor';
+    default: return engine.charAt(0).toUpperCase() + engine.slice(1);
+  }
+}
+
+/** The session an Agent was started from: its own engine and model. */
+export interface AgentParent {
+  engine: string | null;
+  model: string | null;
+}
+
+/** One model the session's Agents ran on, with how many runs took it; `engine` gives the chip its mark. */
+export interface AgentModelCount {
+  label: string;
+  engine: string | null;
+  count: number;
+}
+
+/** One place the session's Agents ran: a workspace by name, or null for the session's own machine. */
+export interface AgentMachineCount {
+  name: string | null;
+  count: number;
+}
+
 /**
  * The session's Agents, as the composer band's line and its list draw them — the web's copy of OrbitKit's
- * `SubagentSessionSummary` (docs/mocks/subagent-ios-highlight ③). No cost anywhere.
+ * `SubagentSessionSummary` (docs/mocks/agents-band-models, revision 3). No cost anywhere.
  */
 export interface SubagentSessionSummary {
   count: number;
@@ -212,17 +245,46 @@ export interface SubagentSessionSummary {
   rows: SubagentRunView[];
   /** The words after "Agents" (see `subagentSessionSummary`). */
   band: string;
-  /** How the newest run ended, for the band's right edge while nothing runs; null while one does. */
-  last: { failed: boolean; duration: string | null } | null;
+  /** How many ended without finishing: the only thing the band's right edge says while nothing runs. */
+  failed: number;
+  /** The models the runs took, most runs first. */
+  models: AgentModelCount[];
+  /** Every place the runs ran, most runs first; the session's own machine is `name: null`. */
+  machines: AgentMachineCount[];
+  /** Whether any run went to another workspace. */
+  elsewhere: boolean;
+  /** Whether any run went to another workspace or another model than the session's: the band shows where
+   *  the work went only then, so a session whose Agents all ran on its own model and machine stays quiet. */
+  spread: boolean;
+  /** The newest running run, which the band names while one runs; null while none does. */
+  current: SubagentRunView | null;
+}
+
+/** The model a run took, as its chip names it: the catalogue's label, the id, else its engine's name. */
+export function agentModelLabel(run: SubagentRunView): string | null {
+  return run.modelLabel ?? run.model ?? (run.engine ? agentShortName(run.engine) : null);
+}
+
+/**
+ * Whether a run ran on the session's own machine and model: a shadow row (no engine of its own) runs on the
+ * parent's, and a run on the parent's engine with the parent's model is no different from the parent.
+ */
+export function agentRunIsOwn(run: SubagentRunView, parent: AgentParent | undefined): boolean {
+  if (run.workspaceName) return false;
+  if (!run.engine) return true;
+  return !!parent && run.engine === parent.engine && (run.model ?? null) === (parent.model ?? null);
 }
 
 /**
  * Null when the session started no Agent. While one runs the band says what it is doing, by its `delegate`
  * description; several running lead with how many (`2 running · Deploy …`), naming the newest; a running run
- * with no description keeps the counts (`2 · 1 running`). With none running it is the count and the newest
- * run's description (`2 · Deploy …`), or the count alone when that run has none.
+ * with no description keeps the counts (`2 · 1 running`). With none running it is the count alone: the
+ * models and machines say what was done, and each run's title is on its row in the list.
  */
-export function subagentSessionSummary(runs: Iterable<SubagentRunView>): SubagentSessionSummary | null {
+export function subagentSessionSummary(
+  runs: Iterable<SubagentRunView>,
+  parent?: AgentParent,
+): SubagentSessionSummary | null {
   const all = [...runs];
   if (all.length === 0) return null;
   const newestFirst = (a: SubagentRunView, b: SubagentRunView) => (a.createdAt < b.createdAt ? 1 : a.createdAt > b.createdAt ? -1 : 0);
@@ -233,12 +295,39 @@ export function subagentSessionSummary(runs: Iterable<SubagentRunView>): Subagen
   const described = (run: SubagentRunView | undefined) => run?.description?.trim() ?? '';
   let band: string;
   if (running === 0) {
-    const newest = described(rows[0]);
-    band = newest ? `${count} · ${newest}` : `${count}`;
+    band = `${count}`;
   } else {
     const newest = described(going[0]);
     band = !newest ? `${count} · ${running} running` : running > 1 ? `${running} running · ${newest}` : newest;
   }
-  const last = running === 0 ? { failed: subagentRunFailed(rows[0]), duration: subagentDuration(rows[0]) } : null;
-  return { count, running, rows, band, last };
+  const models = new Map<string, AgentModelCount>();
+  const machines = new Map<string | null, AgentMachineCount>();
+  // Oldest first, so a tie keeps the order the runs were started in.
+  for (const run of [...rows].reverse()) {
+    const label = agentModelLabel(run);
+    if (label) {
+      const engine = run.engine ?? parent?.engine ?? null;
+      const key = `${engine ?? ''}\u0000${label}`;
+      const seen = models.get(key);
+      if (seen) seen.count++;
+      else models.set(key, { label, engine, count: 1 });
+    }
+    const name = run.workspaceName ?? null;
+    const place = machines.get(name);
+    if (place) place.count++;
+    else machines.set(name, { name, count: 1 });
+  }
+  const byCount = <T extends { count: number }>(list: T[]) => list.sort((a, b) => b.count - a.count);
+  return {
+    count,
+    running,
+    rows,
+    band,
+    failed: running === 0 ? all.filter(subagentRunFailed).length : 0,
+    models: byCount([...models.values()]),
+    machines: byCount([...machines.values()]),
+    elsewhere: all.some((run) => !!run.workspaceName),
+    spread: all.some((run) => !agentRunIsOwn(run, parent)),
+    current: going[0] ?? null,
+  };
 }

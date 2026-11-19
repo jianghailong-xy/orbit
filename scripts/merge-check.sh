@@ -3,7 +3,7 @@ set -euo pipefail
 
 repo=$(git rev-parse --show-toplevel)
 cd "$repo"
-suites=(apiserver runner-go web android orbitkit)
+suites=(shared apiserver runner-go web android orbitkit compose)
 selected=' '
 plan=false
 range=''
@@ -17,12 +17,15 @@ plan_path() {
   local path=$1 suite note=''
   local matches
   case "$path" in
-    src/shared/*) matches=(apiserver web) ;;
+    src/shared/*) matches=(shared apiserver web) ;;
     src/apiserver/*) matches=(apiserver) ;;
     src/runner-go/*) matches=(runner-go) ;;
     src/web/*) matches=(web) ;;
     src/android/*) matches=(android) ;;
     src/macos/OrbitKit/*) matches=(orbitkit) ;;
+    # What test/compose-topology.test.mjs reads: the compose file, images, deploy overlays and their configs.
+    docker-compose*.yml|Dockerfile*|*/Dockerfile*|deploy/*|test/compose-topology*|src/link-gateway/*|scripts/pg-backup.sh)
+      matches=(compose) ;;
     docs/*|release-notes/*|*.md|*.mdx|*.rst|*.txt|*.png|*.jpg|*.jpeg|*.gif|*.webp|*.svg|*.pdf|LICENSE|NOTICE|.gitignore|.gitattributes)
       return 0 ;;
     *)
@@ -55,7 +58,7 @@ if [[ -n ${MERGE_CHECK_SUITES:-} ]]; then
   IFS=, read -r -a forced <<< "$MERGE_CHECK_SUITES"
   for suite in "${forced[@]}"; do
     case "$suite" in
-      apiserver|runner-go|web|android|orbitkit) selected+="$suite " ;;
+      shared|apiserver|runner-go|web|android|orbitkit|compose) selected+="$suite " ;;
       *) die "Unknown suite in MERGE_CHECK_SUITES: $suite" ;;
     esac
   done
@@ -104,6 +107,10 @@ fi
 if $plan; then
   exit 0
 fi
+
+run_shared() (
+  npm test -w @orbit/shared
+)
 
 run_apiserver() (
   cd src/apiserver
@@ -166,6 +173,10 @@ run_orbitkit() (
       swift test --scratch-path "$scratch"
     '
   fi
+)
+
+run_compose() (
+  npm run test:compose-topology
 )
 
 active=''
