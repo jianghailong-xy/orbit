@@ -49,7 +49,12 @@ describe('settings tier census', () => {
   });
 
   it('has the table of design §3.1', () => {
-    expect(SETTING_TIER_KEYS[3]).toEqual(['enableOrchestration', 'defaultPermissionMode', 'subagentBlockedProviders']);
+    expect(SETTING_TIER_KEYS[3]).toEqual([
+      'enableOrchestration',
+      'defaultPermissionMode',
+      'subagentBlockedProviders',
+      'cardFreeTaskCreates',
+    ]);
     expect(SETTING_TIERS.theme).toBe(1);
     expect(SETTING_TIERS.translationAgentLanguage).toBe(1);
     expect(SETTING_TIERS.defaultModels).toBe(2);
@@ -85,6 +90,14 @@ describe('direction rules (design §3.2)', () => {
     ['defaultPermissionMode', 'acceptEdits', 'dontAsk', true],
     ['defaultPermissionMode', 'dontAsk', 'acceptEdits', true],
     ['defaultPermissionMode', 'auto', 'bypassPermissions', true],
+    ['cardFreeTaskCreates', 8, 3, false],
+    ['cardFreeTaskCreates', 8, 0, false],
+    ['cardFreeTaskCreates', null, 0, false],
+    ['cardFreeTaskCreates', 20, null, false],
+    ['cardFreeTaskCreates', 3, 8, true],
+    ['cardFreeTaskCreates', 0, 1, true],
+    ['cardFreeTaskCreates', null, 9, true],
+    ['cardFreeTaskCreates', 3, null, true],
   ];
   for (const [key, from, to, widens] of rows) {
     it(`${key} ${JSON.stringify(from)} → ${JSON.stringify(to)} ${widens ? 'widens' : 'narrows'}`, () => {
@@ -103,6 +116,8 @@ describe('direction rules (design §3.2)', () => {
     expect(settingValueInForce('defaultPermissionMode', {})).toBe('auto');
     expect(settingValueInForce('enableOrchestration', { enableOrchestration: false })).toBe(false);
     expect(settingValueInForce('subagentBlockedProviders', {})).toEqual([]);
+    expect(settingValueInForce('cardFreeTaskCreates', {})).toBe(8);
+    expect(settingValueInForce('cardFreeTaskCreates', { cardFreeTaskCreates: 0 })).toBe(0);
   });
 });
 

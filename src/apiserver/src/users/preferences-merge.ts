@@ -5,7 +5,8 @@ import { isTieredSettingKey, type TieredSettingKey } from '@orbit/shared';
  * `PATCH /users/me/preferences` and the owner's approval of a SETTINGS_CHANGE card
  * (`POST /owner-requests/:id/apply-settings`, docs/settings-from-conversation-design.md §5.2): each key given is
  * shallow-merged, so omitted keys keep their value; `defaultModels` merges its provider entries, keeping choices for
- * other providers; `subagentBlockedProviders` is stored with one entry per provider. `values` has been validated with
+ * other providers; `subagentBlockedProviders` is stored with one entry per provider; a null `cardFreeTaskCreates`
+ * removes the key, its default. `values` has been validated with
  * `UpdatePreferencesDto`'s rules and its `defaultModels` normalised (`normalizeDefaultModels`).
  */
 export function mergePreferences(
@@ -18,6 +19,9 @@ export function mergePreferences(
     if (value === undefined || !isTieredSettingKey(key)) continue;
     if (key === 'defaultModels') {
       merged.defaultModels = { ...((merged.defaultModels ?? {}) as Record<string, string>), ...(value as Record<string, string>) };
+    } else if (key === 'cardFreeTaskCreates' && value === null) {
+      // null goes back to the default (runner-api/session-create-allowance.ts), which is an absent key.
+      delete merged.cardFreeTaskCreates;
     } else if (key === 'subagentBlockedProviders') {
       merged.subagentBlockedProviders = [...new Set(value as string[])];
     } else {

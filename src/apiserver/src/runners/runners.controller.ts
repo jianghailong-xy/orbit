@@ -173,6 +173,21 @@ export class RunnersController {
     return this.runners.removeAccount(user.userId, id, engine, account);
   }
 
+  // Making an added account the Default on a runner (Set as default, Claude Code only): the runner swaps its login
+  // with the one in ~/.claude, and Orbit's records of the two accounts follow them. Owner-scoped in the service like
+  // the removal, because it changes which login the machine uses; refused on a runner too old to swap logins.
+  @PatForbidden('RUNNER_CONTROL')
+  @Post(':id/accounts/:engine/:account/set-default')
+  setDefaultAccount(
+    @CurrentUser() user: AuthUser,
+    @Param('id', PublicIdPipe) id: string,
+    @Param('engine') engine: string,
+    @Param('account') account: string,
+  ) {
+    if (!isLoginEngine(engine)) throw new BadRequestException('Unknown engine');
+    return this.runners.setDefaultAccount(user.userId, id, engine, account);
+  }
+
   // Bringing back a Default the removal above took out of Orbit. Orbit's own record again, so the
   // runner need not be online; owner-scoped in the service like the removal.
   @PatForbidden('RUNNER_CONTROL')

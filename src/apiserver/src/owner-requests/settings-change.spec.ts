@@ -2,6 +2,7 @@ import assert from 'node:assert/strict';
 import { test } from 'node:test';
 import { SETTING_DEFAULTS, settingOwnerOnlyBody } from '@orbit/shared';
 import { DEFAULT_PERMISSION_MODE } from '../common/permission-mode';
+import { DEFAULT_CARD_FREE_TASK_CREATES } from '../runner-api/session-create-allowance';
 import { ownerRequestAlert, ownerRequestPushCategory } from './owner-request';
 import {
   SettingsProposalInvalid,
@@ -53,6 +54,22 @@ test('defaultPermissionMode: plan or default may be proposed, any other mode is 
     const { refused } = await judge({ defaultPermissionMode: 'plan' }, { defaultPermissionMode: to });
     assert.deepEqual(refused, ['defaultPermissionMode'], to);
   }
+});
+
+test('the shared default of cardFreeTaskCreates is the server’s', () => {
+  assert.equal(SETTING_DEFAULTS.cardFreeTaskCreates, DEFAULT_CARD_FREE_TASK_CREATES);
+});
+
+test('cardFreeTaskCreates: lowering it, to 0 too, may be proposed, raising it is the owner’s', async () => {
+  const lower = await judge({}, { cardFreeTaskCreates: 0 });
+  assert.deepEqual(lower.entries, [{ key: 'cardFreeTaskCreates', from: 8, to: 0, tier: 3 }]);
+  assert.deepEqual(lower.refused, []);
+  assert.deepEqual((await judge({ cardFreeTaskCreates: 20 }, { cardFreeTaskCreates: 5 })).refused, []);
+  const raise = await judge({ cardFreeTaskCreates: 3 }, { cardFreeTaskCreates: 8 });
+  assert.deepEqual(raise.entries, [{ key: 'cardFreeTaskCreates', from: 3, to: 8, tier: 3 }]);
+  assert.deepEqual(raise.refused, ['cardFreeTaskCreates']);
+  assert.deepEqual((await judge({}, { cardFreeTaskCreates: 9 })).refused, ['cardFreeTaskCreates']);
+  assert.deepEqual((await judge({}, { cardFreeTaskCreates: 8 })).entries, []);
 });
 
 test('a mixed proposal is judged per key and refused whole when any key widens', async () => {

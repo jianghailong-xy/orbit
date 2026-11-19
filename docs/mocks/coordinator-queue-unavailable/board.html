@@ -1,0 +1,89 @@
+<!DOCTYPE html>
+<html lang="zh">
+<head>
+<meta charset="utf-8">
+<style>
+  * { box-sizing: border-box; margin: 0; }
+  body { background: #ececf1; font-family: -apple-system, "Helvetica Neue", "PingFang SC", sans-serif; padding: 56px 64px; width: 1640px; }
+  h1 { font-size: 30px; color: #1c1c1e; margin-bottom: 10px; }
+  .sub { font-size: 16px; color: #6b6b70; margin-bottom: 36px; line-height: 1.6; }
+  .row { display: flex; gap: 40px; align-items: flex-start; }
+  .panel { flex: 1; }
+  .tag { display: inline-block; font-size: 13px; font-weight: 700; padding: 3px 10px; border-radius: 6px; margin-bottom: 14px; }
+  .tag.before { background: #ffe4e0; color: #c4422f; }
+  .tag.after  { background: #ddf3e4; color: #1d7a3d; }
+  .phone { background: #fff; border-radius: 28px; border: 1px solid #d9d9de; box-shadow: 0 12px 32px rgba(0,0,0,.08); overflow: hidden; }
+  .ptitle { padding: 18px 22px 12px; font-size: 15px; font-weight: 600; color: #1c1c1e; border-bottom: 1px solid #f0f0f2; display: flex; justify-content: space-between; align-items: center; }
+  .ptime { font-size: 12px; color: #9a9aa0; font-weight: 400; }
+  .pbody { padding: 18px 22px 26px; min-height: 560px; }
+  .needsyou { font-size: 12px; font-weight: 700; letter-spacing: .04em; color: #9a9aa0; text-transform: uppercase; margin-bottom: 12px; }
+  .card { border-radius: 14px; padding: 16px 16px 14px; font-size: 14px; line-height: 1.55; }
+  .card.escalated { background: #fff4e5; border: 1.5px dashed #e8a33d; }
+  .card .kicker { font-size: 12px; font-weight: 700; color: #b06000; margin-bottom: 6px; }
+  .card .title { font-weight: 650; color: #1c1c1e; margin-bottom: 6px; }
+  .card .meta { font-size: 12px; color: #8a8a90; margin-top: 10px; }
+  .empty { border: 1.5px dashed #d5d5da; border-radius: 14px; padding: 34px 16px; text-align: center; color: #9a9aa0; font-size: 13.5px; line-height: 1.7; }
+  .queue-note { margin-top: 14px; background: #f2f4fb; border: 1px solid #dde3f5; border-radius: 12px; padding: 12px 14px; font-size: 12.5px; color: #4a5578; line-height: 1.6; }
+  .queue-note b { color: #2f3b63; }
+  .timer { display: inline-block; margin-top: 8px; font-size: 12px; background: #ffe9e6; color: #c4422f; border-radius: 6px; padding: 2px 8px; font-weight: 600; }
+  .nolock { display: inline-block; margin-top: 8px; font-size: 12px; background: #e6f4ea; color: #1d7a3d; border-radius: 6px; padding: 2px 8px; font-weight: 600; }
+  .caption { margin-top: 16px; font-size: 13.5px; color: #5b5b62; line-height: 1.65; }
+  .caption b { color: #1c1c1e; }
+</style>
+</head>
+<body>
+  <h1>协调者暂时不可用：待办排队，不丢、不转 owner</h1>
+  <div class="sub">同一个事实：S4 的落地检查红了，协调者会话 FAILED（未结束，会自动重试）。三屏都是 owner 的手机。规则：FAILED 未结束 / retryAt / 等账号 / 忙 → 只排队；真的结束 / 回收站 / 关 Automatic → 立刻转 owner。</div>
+  <div class="row">
+
+    <div class="panel">
+      <span class="tag before">之前</span>
+      <div class="phone">
+        <div class="ptitle">Needs you <span class="ptime">协调者 14:02 FAILED</span></div>
+        <div class="pbody">
+          <div class="needsyou">Needs you · 1</div>
+          <div class="card escalated">
+            <div class="kicker">⚠ Escalated to you</div>
+            <div class="title">Checks failed on the combined tree</div>
+            <div>S4 · 「Ask the coordinator again」… exit 1 after 1h 49m</div>
+            <div class="meta">Owner: you · came to you the moment the run failed</div>
+            <span class="timer">clock ran from the write, not the pickup</span>
+          </div>
+          <div class="caption">协调者一挂，待办立刻转到 owner，窗口从<b>写入时刻</b>起算——owner 被叫来处理一件协调者两分钟后就会自己看到的事。</div>
+        </div>
+      </div>
+    </div>
+
+    <div class="panel">
+      <span class="tag after">之后 · 暂时不可用</span>
+      <div class="phone">
+        <div class="ptitle">Needs you <span class="ptime">协调者 14:02 FAILED</span></div>
+        <div class="pbody">
+          <div class="needsyou">Needs you · 0</div>
+          <div class="empty">协调者 FAILED 的两个小时里，owner 这里<b>什么都没有</b>。<br>没有卡、没有提醒、没有计时。</div>
+          <div class="queue-note">待办在协调者一侧排队：会话 14:04 被自动重试救回，turn 完成的那一刻补投<b>恰好一条</b>；取走（delivered_at）才开始计升级窗口。<br><span class="nolock">queued · no card · no clock until picked up</span></div>
+          <div class="caption">协调者回来，在<b>自己</b>的会话里收到这条待办（带 Retry / Cancel 的门），处理期间不再升级。owner 全程无感。</div>
+        </div>
+      </div>
+    </div>
+
+    <div class="panel">
+      <span class="tag after">之后 · 真的结束</span>
+      <div class="phone">
+        <div class="ptitle">Needs you <span class="ptime">协调者会话已结束</span></div>
+        <div class="pbody">
+          <div class="needsyou">Needs you · 1</div>
+          <div class="card escalated">
+            <div class="kicker">⚠ Now yours — the coordinator ended</div>
+            <div class="title">Checks failed on the combined tree</div>
+            <div>S4 · 「Ask the coordinator again」… exit 1 after 1h 49m</div>
+            <div class="meta">Owner: you · the moment the session ended, not before</div>
+          </div>
+          <div class="caption">会话真的结束（或进回收站、项目关掉 Automatic）才立刻转 owner——这一刻卡出现得<b>毫不延迟</b>，因为排队的前提已经不存在。</div>
+        </div>
+      </div>
+    </div>
+
+  </div>
+</body>
+</html>

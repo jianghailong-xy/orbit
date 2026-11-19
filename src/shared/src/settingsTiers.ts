@@ -29,7 +29,9 @@ export const SETTING_TIER_KEYS = {
   // `optimizeFor` landed after the design's table was written (2026-11-19, account-wide Optimize For). Like
   // `modelRouting` it decides how new work is routed, and it gives agents no more reach, so it is tier 2.
   2: ['defaultModel', 'defaultModels', 'defaultEffort', 'modelRouting', 'optimizeFor'],
-  3: ['enableOrchestration', 'defaultPermissionMode', 'subagentBlockedProviders'],
+  // `cardFreeTaskCreates` landed after the table too (Settings › General, "Tasks a session files without asking"). It
+  // decides how many tasks a session files without asking the owner, so it is agent reach: tier 3.
+  3: ['enableOrchestration', 'defaultPermissionMode', 'subagentBlockedProviders', 'cardFreeTaskCreates'],
 } as const satisfies Record<SettingTier, readonly string[]>;
 
 export type TieredSettingKey = (typeof SETTING_TIER_KEYS)[SettingTier][number];
@@ -73,6 +75,8 @@ export const SETTING_DEFAULTS: Readonly<Record<TieredSettingKey, unknown>> = {
   // The apiserver's DEFAULT_PERMISSION_MODE (common/permission-mode.ts).
   defaultPermissionMode: 'auto',
   subagentBlockedProviders: [],
+  // The apiserver's DEFAULT_CARD_FREE_TASK_CREATES (runner-api/session-create-allowance.ts).
+  cardFreeTaskCreates: 8,
 };
 
 /** A key's value in force: the stored one, or its default when the account never wrote it. */
@@ -91,6 +95,8 @@ export const NARROWING_PERMISSION_MODES: readonly string[] = ['plan', 'default']
  *   enableOrchestration       true → false narrows; false → true widens
  *   subagentBlockedProviders  adding providers and removing none narrows; removing any provider widens
  *   defaultPermissionMode     a new value of plan or default narrows; any other new value widens
+ *   cardFreeTaskCreates       the count in force after the change (null or absent is the default) greater than the
+ *                             count before it widens; an equal or lower count, 0 included, narrows
  *
  * `defaultPermissionMode` is ranked by those two values on purpose, not by an order of all six modes: whether
  * `dontAsk` is stricter than `acceptEdits` depends on the engine and the allow-list.
@@ -105,9 +111,15 @@ export function widensAgentReach(key: TieredSettingKey, from: unknown, to: unkno
     }
     case 'defaultPermissionMode':
       return !NARROWING_PERMISSION_MODES.includes(to as string);
+    case 'cardFreeTaskCreates':
+      return cardFreeTaskCreatesInForce(to) > cardFreeTaskCreatesInForce(from);
     default:
       return false;
   }
+}
+
+function cardFreeTaskCreatesInForce(value: unknown): number {
+  return typeof value === 'number' ? value : (SETTING_DEFAULTS.cardFreeTaskCreates as number);
 }
 
 /**
@@ -143,6 +155,7 @@ export const SETTING_ROWS: Readonly<Record<TieredSettingKey, SettingRow>> = {
   enableOrchestration: row(PERSONAL_SETTINGS.enableOrchestration),
   defaultPermissionMode: row(PERSONAL_SETTINGS.defaultPermissionMode),
   subagentBlockedProviders: { title: 'SubAgent providers', path: null, anchor: null },
+  cardFreeTaskCreates: row(PERSONAL_SETTINGS.cardFreeTaskCreates),
 };
 
 /** The link a reply puts on a setting's name; clients open Settings on its row (design §6). */
