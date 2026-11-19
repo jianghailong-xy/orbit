@@ -150,12 +150,12 @@ class CursorDeviceTest {
         val named = "Claude Opus 5.5 High · 1M · Fast"
         compose.waitUntil(15_000) { compose.onAllNodes(hasText(named)).fetchSemanticsNodes().isNotEmpty() }
         capture("ios5-chip-$pass")
-        click(hasText("Context: Unavailable", substring = true) and hasClickAction())
+        click(hasTestTag("composer-context") and hasContentDescription("Context: Unavailable") and hasClickAction())
         await("Context window")
         // The sheet reads the catalogue afresh: its model is named once that is in.
-        compose.waitUntil(15_000) { compose.onAllNodes(hasText(named) and hasAnyAncestor(isDialog())).fetchSemanticsNodes().isNotEmpty() }
+        compose.waitUntil(15_000) { compose.onAllNodes(hasText(named) and hasAnyAncestor(hasTestTag("composer-context-sheet"))).fetchSemanticsNodes().isNotEmpty() }
         capture("ios5-context-$pass")
-        closeDialog()
+        back()
         model = "default"; effort = ""; running = true
         reopen()
         compose.waitUntil(15_000) { compose.onAllNodesWithTag("pending-tray-note").fetchSemanticsNodes().isNotEmpty() }

@@ -154,7 +154,7 @@ class ComposerModelTest {
         assertEquals(1, rig.sends.size)
     }
 
-    @Test fun uploadWaitRemovalAndFailureDoNotDropAttachmentsOrResurrectRemovedChips() = runTest {
+    @Test fun uploadWaitRemovalAndAFailedUploadDropsOnlyItsOwnChip() = runTest {
         val rig = Rig(this); val model = rig.start(); rig.uploadHeld = CompletableDeferred()
         repeat(3) { i -> model.importAttachment(StagedAttachment("a$i", "f$i", "text/plain"),
             { StagedAttachment("a$i", "f$i", "text/plain", 1) to byteArrayOf(1) }, {}) }
@@ -167,9 +167,14 @@ class ComposerModelTest {
         assertEquals(1, rig.sends.size)
         assertEquals(2, Wire.json.parseToJsonElement(rig.sends.values.single()).jsonObject["attachmentIds"]!!.jsonArray.size)
         assertTrue(model.state.value.draft.attachments.isEmpty())
+        // A file that can't be read drops its chip and gives the reason, as iOS refuses one; a send after that carries the words alone.
         model.importAttachment(StagedAttachment("bad", "bad", "text/plain"), { error("permission revoked") }, {}); runCurrent()
+        assertTrue(model.state.value.draft.attachments.isEmpty())
+        assertEquals("permission revoked", model.state.value.error)
         model.edit("failure", 0, 0); model.send(); runCurrent()
-        assertEquals(1, rig.sends.size); assertEquals("bad", model.state.value.draft.attachments.single().id)
+        model.state.first { !it.waiting && !it.busy }
+        assertEquals(2, rig.sends.size)
+        assertNull(Wire.json.parseToJsonElement(rig.sends.values.last()).jsonObject["attachmentIds"]?.jsonArray?.takeIf { it.isNotEmpty() })
     }
 
     @Test fun diskFailurePreventsSendAndLongDraftRestoresSelectionAndNamespace() = runTest {

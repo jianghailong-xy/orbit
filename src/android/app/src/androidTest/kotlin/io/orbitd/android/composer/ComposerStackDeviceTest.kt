@@ -288,7 +288,7 @@ class ComposerStackDeviceTest {
         awaitText("Your next message uses DeepSeek.")
         capture("a07c-stack-retry-pick")
         if (has(hasText("Close") and hasClickAction())) appClick("Close")
-        compose.onNodeWithText("+").performClick(); awaitText("Retry last failed message"); appClick("Retry last failed message")
+        compose.onNodeWithTag("composer-plus").performClick(); awaitText("Retry last failed message"); appClick("Retry last failed message")
         val deepseek = seeded("keys", "deepseek").field("slug")!!
         val resumed = awaitServer("/sessions/${seeded("sessions", "fail").field("id")}", "re-sent on the pick") { d ->
             d.jsonObject.field("provider") == deepseek && d.jsonObject.field("status") == "AWAITING_INPUT" }
@@ -307,12 +307,13 @@ class ComposerStackDeviceTest {
         val pool = seeded("sharedPool")
         val label = pool["keys"]!!.jsonArray.map { it.jsonObject }.first { it.field("id") == key }.field("label")!!
         signIn(); openSession("pool")
+        // The account is named in the usage sheet the toolbar's ring opens (board android-composer-parity).
+        compose.onNode(hasTestTag("composer-context") and hasClickAction()).performClick()
+        awaitText("Context and plan usage")
         compose.waitUntil(60_000) { has(hasTestTag("composer-pool-account")) }
         compose.onNodeWithTag("composer-pool-account").assertTextEquals(label)
         compose.onNodeWithContentDescription("${pool.field("label")} is running this session on $label").assertExists()
         capture("a07c-stack-pool-account")
-        compose.onNode(hasText("Usage", substring = true) and hasClickAction()).performClick()
-        awaitText("Context and plan usage"); awaitText(label)
         capture("a07c-stack-pool-usage")
     }
 
@@ -321,8 +322,8 @@ class ComposerStackDeviceTest {
     @Test fun s5_aCodexResetCreditIsSpentThroughTheRelayUntilNoneIsLeft() = journey("a07c-stack-reset") {
         val runner = seeded("enginesRunner").field("id")!!
         signIn(); openSession("codex")
-        compose.waitUntil(30_000) { has(hasText("Usage", substring = true) and hasClickAction()) }
-        compose.onNode(hasText("Usage", substring = true) and hasClickAction()).performClick()
+        compose.waitUntil(30_000) { has(hasTestTag("composer-context") and hasClickAction()) }
+        compose.onNode(hasTestTag("composer-context") and hasClickAction()).performClick()
         awaitText("Reset credit"); awaitText("2 available"); awaitText("Primary: 23%")
         capture("a07c-stack-reset-two")
         fun spend(left: Int) {
