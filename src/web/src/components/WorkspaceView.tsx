@@ -8613,7 +8613,8 @@ export function WorkspaceView({
   // breathing one while only a background job does. Its ⋯ takes the chevron's place on hover.
   const folderRowView = (row: SessionFolderRow): ReactNode => {
     const enter = (): void => enterFolder(row.folder);
-    const waiting = `${row.needsYou} ${row.needsYou === 1 ? 'session needs' : 'sessions need'} your reply`;
+    // One number on the row: who waits on you takes the total's place, which moves into its label.
+    const waiting = `${row.needsYou} ${row.needsYou === 1 ? 'session needs' : 'sessions need'} your reply · ${row.sessionCount} ${row.sessionCount === 1 ? 'session' : 'sessions'}`;
     return (
       <div
         key={row.folder.id}
@@ -8636,12 +8637,13 @@ export function WorkspaceView({
           ) : null}
         </span>
         <span className="session-folder-name">{row.folder.name}</span>
-        {row.needsYou > 0 && (
+        {row.needsYou > 0 ? (
           <span className="session-folder-needs" title={waiting} aria-label={waiting}>
             {row.needsYou}
           </span>
+        ) : (
+          <span className="session-folder-count">{row.sessionCount}</span>
         )}
-        <span className="session-folder-count">{row.sessionCount}</span>
         <span className="session-folder-end">
           <RightOutlined className="session-folder-chev" />
           <Menu
@@ -8671,7 +8673,7 @@ export function WorkspaceView({
   const scheduledRunsRowView = (): ReactNode => {
     const needsYou = scheduledRuns.filter(sessionNeedsYou).length;
     const running = scheduledRuns.some((s) => s.status === 'RUNNING');
-    const waiting = `${needsYou} ${needsYou === 1 ? 'run needs' : 'runs need'} your reply`;
+    const waiting = `${needsYou} ${needsYou === 1 ? 'run needs' : 'runs need'} your reply · ${scheduledRuns.length} ${scheduledRuns.length === 1 ? 'run' : 'runs'}`;
     return (
       <div
         key="scheduled-runs"
@@ -8690,12 +8692,13 @@ export function WorkspaceView({
           {running && <span className="session-folder-activity" title="Running" />}
         </span>
         <span className="session-folder-name">{SCHEDULED_RUNS_COPY.title}</span>
-        {needsYou > 0 && (
+        {needsYou > 0 ? (
           <span className="session-folder-needs" title={waiting} aria-label={waiting}>
             {needsYou}
           </span>
+        ) : (
+          <span className="session-folder-count">{scheduledRuns.length}</span>
         )}
-        <span className="session-folder-count">{scheduledRuns.length}</span>
         <span className="session-folder-end">
           <RightOutlined className="session-folder-chev" />
         </span>
