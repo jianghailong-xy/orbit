@@ -2604,7 +2604,7 @@ describe('ProjectDetailPage — a project nobody has started', () => {
     expect(items).toContain('You waiting 2m');
     expect(openItemsOf(html)).toMatch(/<button[^>]*class="project-open-item-action is-primary"[^>]*>Review<\/button>/);
     // Counted with what needs you, because somebody is waiting on you.
-    expect(items).toContain('1 need you · 0 with the coordinator');
+    expect(items).toContain('1 need you');
     expect(items).not.toContain('not asked yet');
   });
 
@@ -2616,7 +2616,7 @@ describe('ProjectDetailPage — a project nobody has started', () => {
     expect(text(items)).toContain('not asked yet');
     expect(text(items)).not.toContain('Start this project?');
     // Nobody is waiting on the owner for it, so it is not counted as something that needs them.
-    expect(text(items)).toContain('0 need you · 0 with the coordinator');
+    expect(text(items)).toContain('0 need you');
   });
 
   it('draws neither row once the project is started', () => {

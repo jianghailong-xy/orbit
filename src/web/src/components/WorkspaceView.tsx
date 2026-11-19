@@ -5385,7 +5385,7 @@ export function WorkspaceView({
     currentPromotion.data?.upstreamRef ?? mergedPromotions.data?.[0]?.upstreamRef,
   );
 
-  // The exceptions this project still owes somebody, drawn into the transcript at the moment each
+  // The owner’s exceptions, drawn into the transcript at the moment each
   // became the owner's (`exceptionCardRows`) instead of as a block under it — where a card that
   // happened thirty-four minutes ago sat under the newest message saying `waiting 34m`, which is
   // two different stories about when it happened. The moment is the item's own (`escalatedAt`, else
