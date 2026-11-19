@@ -310,7 +310,7 @@ unchanged. The codes:
 | `NOT_AVAILABLE_AS_USER` | The CLI acts as the person, and the command has no form that does. |
 | `REQUIRES_USER_LOGIN` | `orbit api`: it acts only as the person, and this process does not. |
 | `HUMAN_ONLY` | A person's own terminal command (`login`, `logout`, `whoami`, `api`). A running agent is never offered one. |
-| `WATCHES_OFF` / `WIKI_OFF` | The session was spawned with that switch off. |
+| `WATCHES_OFF` / `WIKI_OFF` / `BROWSER_OFF` | The session was spawned with that switch off. |
 
 A token's validity is read from the token itself (its shape and `exp`), without asking the server.
 A token the server has revoked still reads as valid here; `orbit whoami` asks the server. A recovery

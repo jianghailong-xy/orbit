@@ -106,6 +106,7 @@ export const CHECK_ONLY_CLAUDE_ALLOWED_TOOLS: readonly string[] = [
   'mcp__orbit__wiki_get',
   'mcp__orbit__file_fetch',
   'mcp__orbit__file_list',
+  'mcp__orbit__browser_status',
   'mcp__orbit__guide',
   'WebFetch',
   'WebSearch',

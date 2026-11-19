@@ -613,7 +613,7 @@ the runner credential while you are logged in: the machine's other commands — 
 and a stable `unavailableCode`. `unavailableCapabilities` lists every command this process cannot run, each with
 its code: `ORCHESTRATION_DISABLED`, `SESSION_CONTEXT_MISSING`, `SERVICE_TOKEN_SCOPE_MISSING`, `TOKEN_INVALID`,
 `TOKEN_EXPIRED`, `RUNNER_NOT_REGISTERED`, `RUNNER_CREDENTIAL_UNUSABLE`, `NOT_AVAILABLE_AS_USER`,
-`REQUIRES_USER_LOGIN`, `HUMAN_ONLY`, `WATCHES_OFF` or `WIKI_OFF` (docs/orbit-agent-contract.md §2.5).
+`REQUIRES_USER_LOGIN`, `HUMAN_ONLY`, `WATCHES_OFF`, `WIKI_OFF` or `BROWSER_OFF` (docs/orbit-agent-contract.md §2.5).
 
 Inside a session the session decides for every command, the session commands included: a service token in the
 session's environment is not used there.

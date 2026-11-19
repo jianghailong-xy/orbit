@@ -301,6 +301,8 @@ var advertisedCapabilityFamilies = []struct {
 	{"wikiImportCLICapabilities", wikiImportCLICapabilities, false},
 	// Ungated, for the same reason: keeping and reading back your own files.
 	{"fileCLICapabilities", fileCLICapabilities, false},
+	// Ungated too: any session of the account reads the Orbit Cloud browser (Q3 = A), behind the browser switch.
+	{"browserCLICapabilities", browserCLICapabilities, false},
 	// Ungated and offered everywhere: the guide reads the catalogue and asks the server nothing.
 	{"guideCLICapabilities", guideCLICapabilities, false},
 	// The person's own commands: every one HeadlessOnly, so no running agent is offered any of them.

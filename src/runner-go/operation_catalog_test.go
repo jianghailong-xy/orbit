@@ -36,6 +36,7 @@ func catalogFullestCLIContext(t *testing.T) {
 	t.Setenv(envOrchestrationToken, "catalog-test-token")
 	t.Setenv(envWatches, "on")
 	t.Setenv(envWiki, "on")
+	t.Setenv(envBrowser, "on")
 	t.Setenv("ORBIT_USER_TOKEN", "")
 	t.Setenv("ORBIT_SERVICE_TOKEN", "")
 }
@@ -197,7 +198,7 @@ func TestEveryOperationHasCatalogMetadata(t *testing.T) {
 		objectAgent: true, objectRunner: true, objectProvider: true, objectWatch: true,
 		objectWiki: true, objectFile: true, objectOwner: true, objectAccount: true,
 		objectBackgroundJob: true, objectPermission: true, objectMergeReceipt: true, objectSchedule: true,
-		objectCatalog: true,
+		objectCatalog: true, objectBrowser: true,
 	}
 	validRisks := map[operationRisk]bool{riskLow: true, riskMedium: true, riskHigh: true}
 	validApprovals := map[operationApproval]bool{approvalKindNone: true, approvalKindCard: true, approvalKindOwner: true}
@@ -416,6 +417,7 @@ func TestEveryAdvertisedArgvAndHelpArgvRuns(t *testing.T) {
 			t.Setenv("ORBIT_SERVICE_TOKEN", "")
 			t.Setenv(envWatches, "on")
 			t.Setenv(envWiki, "on")
+			t.Setenv(envBrowser, "on")
 			for key, value := range tc.env {
 				t.Setenv(key, value)
 			}

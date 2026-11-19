@@ -1,0 +1,207 @@
+package main
+
+import (
+	"bytes"
+	"encoding/json"
+	"net/http"
+	"net/http/httptest"
+	"os"
+	"path/filepath"
+	"strings"
+	"testing"
+)
+
+// The browser tools' one gate (browser_tools.go): with ORBIT_BROWSER on, browser_status is in `orbit mcp`'s tool list,
+// `orbit browser status` is offered by `orbit capabilities` and runs; with it off or unset, the tool is not listed, the
+// command is not offered and `orbit browser` is an unknown command, rather than an error from the server.
+
+func listsTool(s *mcpServer, name string) bool {
+	for _, tool := range s.listedToolDescriptors() {
+		if tool["name"] == name {
+			return true
+		}
+	}
+	return false
+}
+
+func offersCommand(t *testing.T, tool string) (offered bool, unavailableCode string) {
+	t.Helper()
+	doc := buildCLICapabilities("/usr/local/bin/orbit")
+	for _, c := range doc.Capabilities {
+		if c.ID == tool {
+			return c.Available, c.UnavailableCode
+		}
+	}
+	for _, c := range doc.UnavailableCapabilities {
+		if c.ID == tool {
+			return false, c.UnavailableCode
+		}
+	}
+	return false, ""
+}
+
+func browserStatusServer(t *testing.T, status int, body string, seen *http.Request) *httptest.Server {
+	t.Helper()
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if seen != nil {
+			*seen = *r.Clone(r.Context())
+		}
+		if r.Method != http.MethodGet || r.URL.Path != "/api/runner/browser" {
+			http.NotFound(w, r)
+			return
+		}
+		w.WriteHeader(status)
+		_, _ = w.Write([]byte(body))
+	}))
+	t.Cleanup(srv.Close)
+	return srv
+}
+
+const browserStatusHeld = `{"enabled":true,"runnerId":"R1","state":"RUNNING","running":true,"holderSessionId":"sess-holder",` +
+	`"holderTitle":"Export the monthly report","viewers":2,"savedLogins":true,"reportedAt":"2026-11-19T08:00:00.000Z"}`
+
+func TestBrowserStatusToolIsListedOnlyWithTheSwitchOn(t *testing.T) {
+	for _, env := range []string{"on", "1", "true"} {
+		t.Setenv(envBrowser, env)
+		if !listsTool(&mcpServer{sessionID: "s", browserOn: browserToolsEnabledFromEnv()}, "browser_status") {
+			t.Errorf("ORBIT_BROWSER=%s: browser_status is not listed", env)
+		}
+	}
+	for _, env := range []string{"", "off", "0", "false", "yes please"} {
+		t.Setenv(envBrowser, env)
+		if listsTool(&mcpServer{sessionID: "s", browserOn: browserToolsEnabledFromEnv()}, "browser_status") {
+			t.Errorf("ORBIT_BROWSER=%q: browser_status is listed", env)
+		}
+	}
+	os.Unsetenv(envBrowser)
+	if browserToolsEnabledFromEnv() {
+		t.Error("an engine spawned by a runner that predates ORBIT_BROWSER has the browser tools")
+	}
+}
+
+func TestOrbitBrowserStatusCommandIsPresentOnlyWithTheSwitchOn(t *testing.T) {
+	var seen http.Request
+	srv := browserStatusServer(t, http.StatusOK, browserStatusHeld, &seen)
+	catalogFullestCLIContext(t)
+	configureCLITestRunner(t, srv.URL)
+	t.Setenv("ORBIT_SESSION_ID", "sess-asking")
+
+	t.Setenv(envBrowser, "on")
+	if offered, code := offersCommand(t, "browser_status"); !offered {
+		t.Fatalf("switch on: `orbit capabilities` does not offer browser_status (%s)", code)
+	}
+	var out bytes.Buffer
+	if err := runOrbitCLI([]string{"browser", "status", "--json"}, strings.NewReader(""), &out, &bytes.Buffer{}); err != nil {
+		t.Fatalf("switch on: orbit browser status: %v", err)
+	}
+	if seen.Header.Get("X-Orbit-Session-Id") != "sess-asking" {
+		t.Errorf("the command did not ask as its session: %q", seen.Header.Get("X-Orbit-Session-Id"))
+	}
+	var got map[string]interface{}
+	if err := json.Unmarshal(out.Bytes(), &got); err != nil {
+		t.Fatalf("output is not JSON: %v (%s)", err, out.String())
+	}
+	want := map[string]interface{}{"enabled": true, "runnerId": "R1", "state": "RUNNING", "running": true,
+		"holderSessionId": "sess-holder", "holderTitle": "Export the monthly report", "viewers": float64(2),
+		"savedLogins": true, "reportedAt": "2026-11-19T08:00:00.000Z"}
+	for k, v := range want {
+		if got[k] != v {
+			t.Errorf("%s = %#v, want %#v", k, got[k], v)
+		}
+	}
+	if len(got) != len(want) {
+		t.Errorf("the status says more than its fields: %s", out.String())
+	}
+
+	for _, env := range []string{"", "off"} {
+		t.Setenv(envBrowser, env)
+		if offered, code := offersCommand(t, "browser_status"); offered || code != capabilityBrowserOff {
+			t.Errorf("ORBIT_BROWSER=%q: browser_status offered=%v code=%q, want not offered, %s", env, offered, code, capabilityBrowserOff)
+		}
+		seen = http.Request{}
+		out.Reset()
+		err := runOrbitCLI([]string{"browser", "status"}, strings.NewReader(""), &out, &bytes.Buffer{})
+		if err == nil || !strings.HasPrefix(err.Error(), "unknown command: browser") {
+			t.Errorf("ORBIT_BROWSER=%q: `orbit browser status` = %v, want an unknown command", env, err)
+		}
+		if seen.URL != nil {
+			t.Errorf("ORBIT_BROWSER=%q: the command reached the server", env)
+		}
+	}
+}
+
+func TestBrowserStatusToolAnswersTheFields(t *testing.T) {
+	var seen http.Request
+	srv := browserStatusServer(t, http.StatusOK, browserStatusHeld, &seen)
+	s := &mcpServer{t: NewTransport(srv.URL, "tok"), sessionID: "sess-asking", browserOn: true}
+	result := s.callTool("browser_status", map[string]interface{}{})
+	if result["isError"] == true {
+		t.Fatalf("browser_status failed: %v", result["content"])
+	}
+	if seen.Header.Get("X-Orbit-Session-Id") != "sess-asking" {
+		t.Errorf("session header = %q", seen.Header.Get("X-Orbit-Session-Id"))
+	}
+	data, _ := result["structuredContent"].(*browserStatus)
+	if data == nil || !data.Enabled || !data.Running || data.Viewers != 2 || data.SavedLogins == nil || !*data.SavedLogins ||
+		data.HolderSessionID == nil || *data.HolderSessionID != "sess-holder" || data.RunnerID == nil || *data.RunnerID != "R1" {
+		t.Fatalf("structuredContent = %#v", result["structuredContent"])
+	}
+
+	// The switch turned off on the server since this engine was spawned: the route is a 404, and the tool says off.
+	off := browserStatusServer(t, http.StatusNotFound, `{"message":"Cannot GET /api/runner/browser","statusCode":404}`, nil)
+	s.t = NewTransport(off.URL, "tok")
+	result = s.callTool("browser_status", map[string]interface{}{})
+	if data, _ := result["structuredContent"].(*browserStatus); result["isError"] == true || data == nil || data.Enabled {
+		t.Fatalf("a 404 is not reported as off: %#v", result)
+	}
+
+	// Another account's session is the server's to refuse (403), and the tool reports the refusal as a failure.
+	refused := browserStatusServer(t, http.StatusForbidden, `{"message":"X-Orbit-Session-Id names no session this runner hosts","statusCode":403}`, nil)
+	s.t = NewTransport(refused.URL, "tok")
+	if result = s.callTool("browser_status", map[string]interface{}{}); result["isError"] != true {
+		t.Fatalf("a refusal is not a failure: %#v", result)
+	}
+
+	// Spawned with the switch off, a stray call reaches nothing.
+	s.browserOn = false
+	seen = http.Request{}
+	s.t = NewTransport(srv.URL, "tok")
+	if result = s.callTool("browser_status", map[string]interface{}{}); result["isError"] != true || seen.URL != nil {
+		t.Fatalf("switch off: %#v (reached the server: %v)", result, seen.URL != nil)
+	}
+}
+
+func TestBrowserReportSaysOnlyWhetherSavedLoginsExist(t *testing.T) {
+	home := t.TempDir()
+	b := newRunnerBrowser(managedEnv, home, newFakePoolClock(), &fakeBrowserStarter{}, nil)
+	if b.Report().SavedLogins {
+		t.Fatal("no profile: saved logins reported")
+	}
+	store := filepath.Join(b.ProfileDir(), "Default", "Network", "Cookies")
+	if err := os.MkdirAll(filepath.Dir(store), 0o700); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(store, nil, 0o600); err != nil {
+		t.Fatal(err)
+	}
+	if b.Report().SavedLogins {
+		t.Fatal("an empty cookie store: saved logins reported")
+	}
+	if err := os.WriteFile(store, []byte("SQLite format 3\x00 cookies for some-site.example"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	r := b.Report()
+	if !r.SavedLogins {
+		t.Fatal("a cookie store: no saved logins reported")
+	}
+	body, _ := json.Marshal(r)
+	if strings.Contains(string(body), "some-site") {
+		t.Fatalf("the report names a site: %s", body)
+	}
+	if err := b.ClearProfile(); err != nil {
+		t.Fatal(err)
+	}
+	if b.Report().SavedLogins {
+		t.Fatal("cleared: saved logins still reported")
+	}
+}

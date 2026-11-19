@@ -277,6 +277,7 @@ func prepareCursorLaunch(job *ClaimedSession, execDir, exe, dir string) (CursorL
 		"ORBIT_ALLOW_ORCHESTRATION":      orchestrationEnv(job.AllowOrchestration),
 		envWatches:                       watchesEnv(job.WatchesDisabled),
 		envWiki:                          wikiEnv(job.WikiDisabled),
+		envBrowser:                       browserEnv(job.BrowserEnabled),
 		envScheduleRun:                   scheduleRunEnv(job.ScheduleRun),
 		envSpawnDepth:                    strconv.Itoa(job.SpawnDepth),
 	}
