@@ -323,6 +323,29 @@ class SessionProjectsTest {
         assertEquals(Indicator.RUNNING, listing(listOf(coord, session("subagent", subagents = 1))).projects.first().indicator)
     }
 
+    /** `GET /projects/sidebar`'s pause fields (design §4.2 2a/2b): Pause project, the older Automatic switch and the daily limit, and a
+     * row without them — an older server, or no sidebar row at all — is not paused. */
+    @Test fun sidebarRowsCarryThePauseAndOlderReadsAreNotPaused() {
+        fun with(extra: JsonObjectBuilder.() -> Unit) = JsonObject(project() + buildJsonObject(extra))
+        val coord = coordinator()
+        fun pause(summary: JsonObject?) = listing(listOf(coord), projects = listOfNotNull(summary)).projects.first().pause
+
+        assertEquals(ProjectPause("2026-11-19T10:00:00.000Z", "OWNER"), pause(with {
+            put("pausedAt", "2026-11-19T10:00:00.000Z"); put("pausedReason", "OWNER")
+            putJsonObject("fuse") { put("paused", false); put("episodeId", JsonNull); put("observed", JsonNull); put("limit", JsonNull) }
+        }))
+        assertEquals("LEGACY_AUTOMATIC_OFF", pause(with {
+            put("pausedAt", "2026-11-19T10:00:00.000Z"); put("pausedReason", "LEGACY_AUTOMATIC_OFF")
+        }).pausedReason)
+        assertEquals(ProjectPause(fusePaused = true, fuseEpisodeId = "350N4oGD3euQuPJ0VT9TD", fuseObserved = 6, fuseLimit = 6), pause(with {
+            put("pausedAt", JsonNull); put("pausedReason", JsonNull)
+            putJsonObject("fuse") { put("paused", true); put("episodeId", "350N4oGD3euQuPJ0VT9TD"); put("observed", 6); put("limit", 6) }
+        }))
+        assertEquals(ProjectPause.NONE, pause(project()))
+        assertEquals(ProjectPause.NONE, pause(with { put("fuse", JsonNull) }))
+        assertEquals(ProjectPause.NONE, pause(null))
+    }
+
     @Test fun sidebarRunningCountsNeverCreateLocalMotionAndOfflineSuppressesMotionOnly() {
         val coord = coordinator()
         assertEquals(2, listing(listOf(coord)).projects.first().runningCount)

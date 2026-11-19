@@ -20,6 +20,8 @@ import kotlin.math.max
 import kotlinx.coroutines.CancellationException
 import kotlinx.serialization.json.JsonArray
 import kotlinx.serialization.json.JsonObject
+import kotlinx.serialization.json.JsonPrimitive
+import kotlinx.serialization.json.booleanOrNull
 
 // A05-6: one row per project in a workspace's session list, in place of its member sessions — OrbitKit's SessionProjectGrouping,
 // SessionProjectCopy and SessionProjectMembers (the web's sessionProjects.ts), over the directory's sessions and
@@ -28,13 +30,32 @@ import kotlinx.serialization.json.JsonObject
 /** A project's progress as `GET /projects/sidebar` stores it, CANCELLED left out of the total (`ProjectSidebarTaskCounts`). */
 data class ProjectTaskCounts(val done: Int, val failed: Int, val total: Int)
 
+/** A project's pause as its `GET /projects/sidebar` row says it (OrbitKit `ProjectSummary.pausedAt` / `fuse`): Pause project (or the
+ * older Automatic switch) in [pausedAt] and [pausedReason], and the daily limit's pause in [fusePaused], lifted through
+ * `/fuse/[fuseEpisodeId]/resume`, with the reading it was taken on. A row without the fields — an older server — is not paused. */
+data class ProjectPause(
+    val pausedAt: String? = null, val pausedReason: String? = null,
+    val fusePaused: Boolean = false, val fuseEpisodeId: String? = null, val fuseObserved: Int? = null, val fuseLimit: Int? = null,
+) {
+    companion object {
+        val NONE = ProjectPause()
+        fun of(summary: JsonObject?): ProjectPause {
+            if (summary == null) return NONE
+            val fuse = summary.obj("fuse")
+            return ProjectPause(summary.text("pausedAt"), summary.text("pausedReason"),
+                (fuse?.get("paused") as? JsonPrimitive)?.takeIf { !it.isString }?.booleanOrNull == true,
+                fuse?.text("episodeId"), fuse?.number("observed"), fuse?.number("limit"))
+        }
+    }
+}
+
 /** One project in place of its member sessions (OrbitKit `SessionProjectRow`), at its coordinator's place and in its words. Its
  * activity, folder and indicator are this workspace's and this view's; sessions elsewhere only supply what its line says. */
 data class SessionProjectRow(
     val projectId: String, val title: String, val status: String, val members: List<DirectorySession>, val sessionCount: Int,
     val coordinator: DirectorySession?, val folderId: String?, val pinnedAt: String?, val lastTurnAt: String?, val createdAt: String?,
     val needsYou: Boolean, val running: Boolean, val jobs: Boolean, val indicator: Indicator?, val line: SessionLine, val target: Target,
-    val taskCounts: ProjectTaskCounts?, val runningCount: Int,
+    val taskCounts: ProjectTaskCounts?, val runningCount: Int, val pause: ProjectPause = ProjectPause.NONE,
 ) {
     enum class Indicator { NEEDS_YOU, RUNNING, JOBS }
     /** Whether the row's menu leads with Complete (design §4.3, owner 2026-11-07; iOS `offersComplete(in:)`): only a DONE or
@@ -191,7 +212,7 @@ object SessionProjectGrouping {
                 members, content.size, coordinator, rowFolder, coordinator?.pinnedAt, latest.lastTurnAt ?: latest.createdAt, coordinator?.createdAt ?: latest.createdAt,
                 needsYou, runningCount > 0, jobs, when { needsYou -> SessionProjectRow.Indicator.NEEDS_YOU; runningCount > 0 -> SessionProjectRow.Indicator.RUNNING
                     jobs -> SessionProjectRow.Indicator.JOBS; else -> null }, selected, target, counts,
-                if (summary != null) summary.obj("buckets")?.number("running") ?: 0 else runningCount)
+                if (summary != null) summary.obj("buckets")?.number("running") ?: 0 else runningCount, ProjectPause.of(summary))
         }
         val entries = (loose.map { SessionProjectEntry.Session(it) } + rows.map { SessionProjectEntry.Project(it) })
             .map { it to instant(it.lastTurnAt ?: it.createdAt) }

@@ -24,6 +24,7 @@ import {
   deriveSessionLifecycleState,
   type ProjectIntegrationRead,
   type ProjectListCoordinatorActivity,
+  type ProjectSidebarFuse,
   type ProjectPauseState,
   RunEventType,
   SessionLifecycleState,
@@ -166,7 +167,7 @@ import { tellEvidenceUndecidable } from '../tasks/undecidable-evidence';
 import { CoordinatorConvergenceService } from './coordinator-convergence.service';
 import { CoordinatorEvidenceQueueService } from './coordinator-evidence-queue.service';
 import { coordinatorFuseUsage, readCoordinatorWakeups } from './coordinator-progress';
-import { openFuseEpisodeId } from './project-fuse';
+import { type OpenFuseEpisode, openFuseEpisodeId, readOpenFuseEpisodes } from './project-fuse';
 import { ProjectPanorama, readProjectPanorama } from './project-panorama';
 import { readTaskIntegrationViews } from './project-task-integration';
 import {
@@ -552,6 +553,9 @@ const SIDEBAR_PROJECT_SELECT = {
   status: true,
   createdAt: true,
   startedAt: true,
+  // The row's pause line and its Pause / Resume action (design §4.2 2b, §4.3).
+  pausedAt: true,
+  pausedReason: true,
   coordinatorSession: { select: COORDINATOR_ACTIVITY_SELECT },
 } satisfies Prisma.ProjectSelect;
 
@@ -712,6 +716,13 @@ function coordinatorActivityOf(
     (isSessionGenerating(session) ||
       (session.status === RunStatus.AWAITING_INPUT && session.runningSubagents.length > 0));
   return { working, lastTurnAt: session.lastTurnAt };
+}
+
+/** A sidebar row's `fuse`: never absent, so a client reads one shape whether or not it is paused. */
+function sidebarFuse(episode: OpenFuseEpisode | undefined): ProjectSidebarFuse {
+  return episode
+    ? { paused: true, episodeId: episode.id, observed: episode.observed, limit: episode.limit }
+    : { paused: false, episodeId: null, observed: null, limit: null };
 }
 
 type WithAcceptanceDefinitions = {
@@ -3115,12 +3126,15 @@ export class ProjectsService {
       select: SIDEBAR_PROJECT_SELECT,
     });
     if (projects.length === 0) return [];
-    const [rollups, attention, bindings] = await Promise.all([
+    const projectIds = projects.map((project) => project.id);
+    const [rollups, attention, bindings, fuses] = await Promise.all([
       readProjectSidebarRollups(this.prisma, ownerId),
       // The same reader the index folds, narrowed to the projects this read returns, so the rail
       // and the page cannot disagree about what waits on the reader.
       readProjectListAttention(this.prisma, ownerId, ProjectStatus.OPEN),
-      readProjectListBindings(this.prisma, projects.map((project) => project.id)),
+      readProjectListBindings(this.prisma, projectIds),
+      // One statement for the whole page, never one per project: this read is the 15-second poll.
+      readOpenFuseEpisodes(this.prisma, projectIds),
     ]);
     return projects.map(({ coordinatorSession, ...project }) => ({
       ...project,
@@ -3136,6 +3150,9 @@ export class ProjectsService {
       integration: bindings.get(project.id)?.integration ?? null,
       // The main branch the session list's landing line names; null with no repository bound.
       mainBranch: bindings.get(project.id)?.mainBranch ?? null,
+      // The daily limit's pause (design §4.2 2a), lifted by `/fuse/:episodeId/resume`; apart from
+      // `pausedAt`, which is the owner's Pause (or the older Automatic switch) and `/resume`'s.
+      fuse: sidebarFuse(fuses.get(project.id)),
     }));
   }
 
