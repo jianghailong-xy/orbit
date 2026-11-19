@@ -22,12 +22,13 @@ import { ReaperService } from './reaper.service';
  *   bash scripts/run-pg-spec.sh src/apiserver/src/realtime/reaper-lost-runner-work.pg.spec.ts
  *
  * A runner last heard from ten minutes ago holds three sessions, each parked at AWAITING_INPUT on a task of its own:
- *   - one with a runner-hosted job running (`bgj_lost`) and a SubAgent run, whose task reads BACKGROUND_JOB;
+ *   - one with a runner-hosted job running (`bgj_lost`), whose task reads BACKGROUND_JOB;
+ *   - one with a SubAgent run, whose task reads TURN;
  *   - one with nothing executing;
  *   - one with only an engine turn of its own.
- * After one sweep, the first has empty sets, its SubAgent run ended INTERRUPTED with its wake filed, and the exit wake
- * of `bgj_lost` filed as a turn (killed, `runner_offline`), so its task no longer reads as carried by a background job;
- * the second is untouched to the column; the third has its turn cleared and nothing filed. None is failed.
+ * After one sweep, the first has empty sets and the exit wake of `bgj_lost` filed as a turn (killed, `runner_offline`),
+ * so its task no longer reads as carried by a background job; the second has its SubAgent run ended INTERRUPTED with its
+ * wake filed; the idle one is untouched to the column; the last has its turn cleared and nothing filed. None is failed.
  *
  * The sweep is narrowed to this run's sessions (the reaper reads every session; other specs share the database).
  */
@@ -82,8 +83,8 @@ test('a lost runner: the idle-looking session with a job and a SubAgent is settl
 
       const withJob = await parked('with a job', {
         runningBgShells: ['bgj_lost'], runningBgJobs: ['bgj_lost'], runningBgJobActivity: { bgj_lost: Date.now() - 60_000 },
-        runningSubagents: ['toolu_sub'],
       });
+      const withSubagent = await parked('with a SubAgent', { runningSubagents: ['toolu_sub'] });
       await db.runEvent.create({
         data: {
           sessionId: withJob.sessionId, seq: 1, type: RunEventType.BACKGROUND_TASK,
@@ -92,15 +93,16 @@ test('a lost runner: the idle-looking session with a job and a SubAgent is settl
       });
       const subRun = await db.subagentRun.create({
         data: {
-          ownerId, sessionId: withJob.sessionId, toolUseId: 'toolu_sub', type: 'general', definitionSource: 'builtin',
+          ownerId, sessionId: withSubagent.sessionId, toolUseId: 'toolu_sub', type: 'general', definitionSource: 'builtin',
           background: true, decision: {}, description: 'look into the flake',
         },
       });
       const idle = await parked('idle', {});
       const engineOnly = await parked('engine turn only', { engineTurnActive: true });
 
-      const before = await tasks.withRunning(ownerId, [{ id: withJob.taskId }], true);
-      assert.equal(before[0]?.runReason, 'BACKGROUND_JOB', 'the control: before the sweep the task reads carried by its job');
+      const before = await tasks.withRunning(ownerId, [{ id: withJob.taskId }, { id: withSubagent.taskId }], true);
+      assert.deepEqual(before.map((t) => t.runReason), ['BACKGROUND_JOB', 'TURN'],
+        'the control: before the sweep one task reads carried by its job, the other by its SubAgent');
       const idleBefore = await db.session.findUniqueOrThrow({ where: { id: idle.sessionId } });
 
       // The sweep, narrowed to this run's sessions.
@@ -136,8 +138,14 @@ test('a lost runner: the idle-looking session with a job and a SubAgent is settl
         'the wake a killed job would have sent is recorded',
       );
       const wakeTurns = await db.conversationTurn.findMany({ where: { sessionId: withJob.sessionId, clientTurnId: { startsWith: 'bg-wake:' } } });
-      assert.equal(wakeTurns.length, 1, 'the job and the SubAgent wake the session by one queued wake turn');
-      assert.equal(wakeTurns[0].status, 'PENDING');
+      assert.deepEqual(wakeTurns.map((t) => [t.clientTurnId, t.status]), [['bg-wake:bgj_lost:lost', 'PENDING']], 'one queued wake turn');
+
+      // The session with a SubAgent: its set emptied, the run ended INTERRUPTED and its wake filed onto a turn.
+      const sub = await db.session.findUniqueOrThrow({ where: { id: withSubagent.sessionId } });
+      assert.deepEqual(sub.runningSubagents, []);
+      assert.notEqual(sub.status, RunStatus.FAILED);
+      assert.equal(await db.conversationTurn.count({ where: { sessionId: withSubagent.sessionId, clientTurnId: { startsWith: 'bg-wake:' } } }), 1,
+        'the SubAgent\'s wake is a queued turn of its parent');
       const run = await db.subagentRun.findUniqueOrThrow({ where: { id: subRun.id } });
       assert.equal(run.status, 'INTERRUPTED');
       assert.equal(run.resultSummary, RUNNER_OFFLINE_SUBAGENT_RESULT);
