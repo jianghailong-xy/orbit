@@ -1,0 +1,197 @@
+<!doctype html>
+<html lang="zh">
+<head>
+<meta charset="utf-8">
+<title>SubAgent Workflow · design board</title>
+<link rel="stylesheet" href="../../../src/web/src/index.css">
+<link rel="stylesheet" href="../../../src/web/src/components/ui/foundation.css">
+<link rel="stylesheet" href="../project-progress/mock.css">
+<style>
+  /* Board chrome only; every board class is prefixed wf- so nothing collides with index.css. */
+  .wf-part { margin-top: 22px; }
+  .wf-part:first-of-type { margin-top: 0; }
+  .wf-three { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 16px; }
+  .wf-two { display: grid; grid-template-columns: 1fr 1fr; gap: 18px; }
+  .wf-col { display: flex; flex-direction: column; gap: 8px; min-width: 0; }
+  .wf-col-h { font-size: 13px; font-weight: 700; margin: 0 0 2px; display: flex; align-items: center; gap: 8px; }
+  .wf-box { background: var(--bg-raised); border: 1px solid var(--border-subtle); border-radius: 10px; padding: 9px 12px; }
+  .wf-box h4 { margin: 0 0 3px; font-size: 13px; font-weight: 650; display: flex; align-items: center; gap: 6px; flex-wrap: wrap; }
+  .wf-box p { margin: 0; font-size: 12px; color: var(--text-2); line-height: 1.55; }
+  .wf-box.wf-new { border: 1.5px solid var(--brand); background: var(--brand-tint); }
+  .wf-box.wf-new h4 { color: var(--brand-strong); }
+  .wf-box.wf-bad { border-color: var(--error-border); background: var(--error-bg); }
+  .wf-box.wf-warn { border-color: var(--warning-border); background: var(--warning-bg); }
+  .wf-down { text-align: center; color: var(--text-4); font-size: 16px; line-height: 14px; }
+  .wf-tag { font-size: 10.5px; font-weight: 700; padding: 0 6px; border-radius: 4px; line-height: 17px; white-space: nowrap; }
+  .wf-tag.p1 { background: #e8f5e9; color: #2e7d32; }
+  .wf-tag.p2 { background: #fff3e0; color: #b35c00; }
+  .wf-tag.p3 { background: #f3e5f5; color: #6a1b9a; }
+  .wf-mono { font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; font-size: 11.5px; }
+  .wf-tbl { width: 100%; border-collapse: collapse; font-size: 12.5px; }
+  .wf-tbl th, .wf-tbl td { text-align: left; padding: 7px 10px; border-bottom: 1px solid var(--border-subtle); vertical-align: top; line-height: 1.5; }
+  .wf-tbl th { font-size: 11.5px; color: var(--text-3); font-weight: 700; }
+  .wf-tbl td.wf-em { font-weight: 650; color: var(--text-1); }
+
+  /* The transcript pane: real chat classes from index.css inside a plain frame. */
+  .wf-pane { background: var(--bg-base); border: 1px solid var(--border); border-radius: 10px; padding: 14px 18px; font-family: Inter, "Noto Sans SC", sans-serif; }
+  .wf-pane .chat-user-wrap { display: flex; justify-content: flex-end; margin: 4px 0 10px; }
+  .wf-pane .chat-user { max-width: 80%; }
+  .wf-pane .chat-assistant { margin: 6px 0; font-size: 14px; line-height: 1.6; }
+  .wf-pane .chat-tool-meta { margin-left: auto; }
+  .wf-ok { color: var(--success-solid); font-weight: 700; }
+  .wf-spin { display: inline-block; width: 11px; height: 11px; border-radius: 50%; border: 2px solid #c9b8f5; border-top-color: #7c3aed; }
+  .wf-bg { font-size: 11px; font-weight: 600; padding: 0 6px; border-radius: 4px; background: #f1ebfd; color: #6d28d9; line-height: 18px; }
+  .wf-why { font-size: 12px; color: var(--text-3); padding: 2px 10px 8px 40px; line-height: 1.55; }
+  .wf-why b { color: var(--text-2); font-weight: 600; }
+  .wf-step { font-size: 12.5px; color: var(--text-2); padding: 2px 0; }
+  .wf-step .wf-mono { color: var(--text-1); }
+  .wf-result { font-size: 13px; color: var(--text-1); padding: 6px 0 2px; border-top: 1px dashed var(--border-subtle); margin-top: 6px; line-height: 1.6; }
+
+  /* Phone frame (393 pt wide, drawn at 1:1 px). */
+  .wf-phone { width: 393px; border-radius: 44px; border: 10px solid #111; background: #fff; overflow: hidden; font-family: -apple-system, Inter, "Noto Sans SC", sans-serif; }
+  .wf-ph-bar { height: 44px; display: flex; align-items: center; justify-content: space-between; padding: 0 26px; font-size: 15px; font-weight: 600; }
+  .wf-ph-nav { padding: 4px 16px 10px; font-size: 17px; font-weight: 600; text-align: center; border-bottom: .5px solid #e3e3e8; }
+  .wf-ph-body { padding: 10px 14px 18px; font-size: 15px; line-height: 1.45; }
+  .wf-ph-user { margin: 4px 0 12px auto; max-width: 78%; background: #f0f0f3; border-radius: 18px; padding: 8px 13px; width: fit-content; }
+  .wf-ph-card { border-left: 3px solid #7c3aed; padding: 7px 10px; margin: 8px 0; background: #faf8ff; border-radius: 0 10px 10px 0; }
+  .wf-ph-row { display: flex; align-items: center; gap: 7px; font-size: 14px; }
+  .wf-ph-row .t { font-weight: 600; }
+  .wf-ph-row .s { color: #6b6b70; overflow: hidden; white-space: nowrap; text-overflow: ellipsis; flex: 1; }
+  .wf-ph-sub { font-size: 12.5px; color: #8a8a8d; margin-top: 3px; padding-left: 22px; }
+  .wf-ph-live { font-size: 12.5px; color: #6b6b70; margin-top: 3px; padding-left: 22px; font-style: italic; }
+
+  .wf-qs { display: grid; grid-template-columns: 1fr 1fr; gap: 14px; }
+  .wf-q { background: var(--bg-raised); border: 1px solid var(--border-subtle); border-radius: 10px; padding: 10px 12px; }
+  .wf-q h4 { margin: 0 0 6px; font-size: 13px; font-weight: 650; }
+  .wf-opt { font-size: 12px; color: var(--text-2); line-height: 1.55; padding: 6px 8px; border-radius: 8px; border: 1px solid var(--border-subtle); margin-top: 6px; }
+  .wf-opt b { color: var(--text-1); }
+  .wf-opt.wf-rec { border: 1.5px solid var(--brand); background: var(--brand-tint); }
+  .wf-rec-l { font-size: 10.5px; font-weight: 700; color: var(--brand-strong); margin-left: 4px; }
+  .wf-phases { display: grid; grid-template-columns: repeat(4, 1fr); gap: 10px; }
+  .wf-ph { background: var(--bg-raised); border: 1px solid var(--border-subtle); border-radius: 10px; padding: 9px 11px; }
+  .wf-ph h4 { margin: 0 0 4px; font-size: 13px; font-weight: 650; }
+  .wf-ph p { margin: 0; font-size: 12px; color: var(--text-2); line-height: 1.55; }
+
+  .wf-set { width: 100%; }
+  .wf-set-row { display: flex; align-items: center; justify-content: space-between; gap: 14px; padding: 9px 0; border-top: 1px solid var(--border-subtle); font-size: 13px; }
+  .wf-set-row:first-child { border-top: 0; }
+  .wf-set-row .wf-hint { color: var(--text-3); font-size: 12px; }
+  .wf-seg { display: inline-flex; border: 1px solid var(--border); border-radius: 7px; overflow: hidden; font-size: 12.5px; }
+  .wf-seg span { padding: 3px 11px; }
+  .wf-seg span.on { background: var(--text-1); color: #fff; }
+  .wf-sw { width: 34px; height: 20px; border-radius: 10px; background: #34c759; position: relative; flex: none; }
+  .wf-sw::after { content: ""; position: absolute; right: 2px; top: 2px; width: 16px; height: 16px; border-radius: 50%; background: #fff; }
+  .wf-sw.off { background: #d1d5db; }
+  .wf-sw.off::after { right: auto; left: 2px; }
+</style>
+<style>
+  /* Workflow-only additions. */
+  .wf-grp { margin: 6px 0 4px 30px; }
+  .wf-grp-h { display: flex; align-items: center; gap: 8px; font-size: 12px; font-weight: 650; color: var(--text-2); padding: 4px 0; }
+  .wf-grp-h .c { font-weight: 500; color: var(--text-3); font-size: 11.5px; }
+  .wf-sub { display: flex; align-items: center; gap: 7px; font-size: 12.5px; padding: 4px 8px; border-left: 2px solid #ddd2fb; margin-left: 4px; }
+  .wf-sub .n { font-weight: 600; color: var(--text-1); }
+  .wf-sub .s { color: var(--text-2); overflow: hidden; white-space: nowrap; text-overflow: ellipsis; flex: 1; min-width: 0; }
+  .wf-sub .m { color: var(--text-3); font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; font-size: 11px; white-space: nowrap; }
+  .wf-queued { color: var(--text-4); font-size: 11px; font-weight: 600; }
+  .wf-in > .m-n { right: -4px; top: -11px; }
+  .wf-ph-body.wf-in > .m-n { right: 2px; top: 2px; }
+  .wf-cache { font-size: 10.5px; font-weight: 700; padding: 0 5px; border-radius: 4px; background: #eef2f6; color: #52606d; line-height: 16px; }
+  .wf-fail { color: var(--error-solid, #d92d20); font-weight: 700; }
+  .wf-log { font-size: 12px; color: var(--text-3); font-style: italic; margin: 2px 0 2px 34px; }
+  .wf-obj { font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; font-size: 11px; color: var(--text-2); background: var(--bg-raised); border: 1px solid var(--border-subtle); border-radius: 6px; padding: 5px 8px; margin: 3px 0 4px 38px; white-space: pre; line-height: 1.5; }
+  .wf-wake { margin: 12px 0 4px; padding: 8px 12px; border-radius: 8px; background: #f6f3ff; border: 1px solid #e4dafc; font-size: 12.5px; color: var(--text-2); }
+  .wf-wake b { color: var(--text-1); }
+  .wf-ban { margin: 6px 10px 6px 30px; padding: 7px 10px; border-radius: 7px; font-size: 12.5px; line-height: 1.5; }
+  .wf-ban.warn { background: var(--warning-bg); border: 1px solid var(--warning-border); }
+  .wf-ban.bad { background: var(--error-bg); border: 1px solid var(--error-border); }
+  .wf-ban.info { background: #f5f6f8; border: 1px solid var(--border-subtle); }
+  .wf-code { font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; font-size: 11.5px; line-height: 1.55; background: #fbfbfc; border: 1px solid var(--border-subtle); border-radius: 8px; padding: 10px 12px; white-space: pre; color: var(--text-1); }
+  .wf-code .k { color: #7c3aed; } .wf-code .c { color: #8a8f98; }
+</style>
+</head>
+<body class="m">
+<style>.wf-two > .wf-pane { min-width: 0; overflow: hidden; } .wf-pane .chat-tool-row { min-width: 0; } .wf-pane .chat-tool-summary { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }</style>
+<div class="m-sheet zh">
+
+<section id="part-7" class="wf-part">
+  <h1 class="m-h1">⑦ P1 补丁：Web 今天就把 <span class="a-mono">mcp__orbit__workflow</span> 画成 Workflow 块（P4 之前）</h1>
+  <p class="m-sub">问题来自生产冒烟测试（2026-11-19）：Web 不认识这个工具名，当成普通 MCP 卡。启动回执一到，卡就显示成已结束，并把回执 JSON 当结果展示，而它的 5 个 SubAgent 还要跑约 2 分钟。补丁沿用 Claude 自带 <span class="a-mono">Workflow</span> 卡的现成画法，不加新组件；③ 的阶段分组、进度、花费头仍是 P4。</p>
+  <div class="m-stage">
+    <div class="m-stage-l"><span class="m-k">今天</span> vs <span class="m-k new">P1 补丁</span>同一时刻：5 个调用里 3 个已完成、2 个在跑</div>
+    <div class="wf-two">
+      <div class="wf-pane">
+        <div class="wf-col-h" style="margin-bottom:10px"><span class="m-k">① 今天</span>当成普通 MCP 工具</div>
+        <div class="m-mark"><span class="m-n">1</span><div class="chat-tool-card chat-tone-default is-open">
+          <div class="chat-tool-row">
+            <span class="chat-tool-caret">⌄</span><span class="chat-tool-icon">⌁</span>
+            <span class="chat-tool-name">orbit · workflow</span>
+            <span class="chat-tool-summary mono">description=Phase 1 smoke test script=export const meta = { name: 'wf-p1-smoke'…</span>
+            <span class="wf-ok">✓</span>
+          </div>
+          <div class="chat-tool-detail">
+            <div class="wf-code" style="margin:4px 10px 8px 30px;max-height:96px;overflow:hidden">description  Phase 1 smoke test
+script       export const meta = { name: 'wf-p1-smoke', description: …
+             phase('Explore')
+             const found = await parallel([ …</div>
+            <div class="chat-subagent" style="margin-left:30px">
+              <div class="wf-sub"><span class="chat-tool-icon">✦</span><span class="n">SubAgent</span><span class="s">find:workflow-tool</span><span class="m">S · GPT-5.6 Sol</span><span class="wf-ok">✓</span></div>
+              <div class="wf-sub"><span class="chat-tool-icon">✦</span><span class="n">SubAgent</span><span class="s">find:migration</span><span class="m">S · GPT-5.6 Sol</span><span class="wf-ok">✓</span></div>
+              <div class="wf-sub"><span class="chat-tool-icon">✦</span><span class="n">SubAgent</span><span class="s">read:call-cap</span><span class="m">S · GPT-5.6 Sol</span><span class="wf-ok">✓</span></div>
+              <div class="wf-sub"><span class="chat-tool-icon">✦</span><span class="n">SubAgent</span><span class="s">which:delegate</span><span class="m">S · GPT-5.6 Sol</span><span class="wf-spin"></span></div>
+              <div class="wf-sub"><span class="chat-tool-icon">✦</span><span class="n">SubAgent</span><span class="s">which:workflow</span><span class="m">S · GPT-5.6 Sol</span><span class="wf-spin"></span></div>
+            </div>
+            <div class="m-mark" style="margin:10px 10px 6px 30px"><span class="m-n">2</span><div class="wf-code">{
+  "status": "running",
+  "workflowRunId": "350PhFyB3FxEUt9iEImF5"
+}</div></div>
+          </div>
+        </div></div>
+      </div>
+
+      <div class="wf-pane">
+        <div class="wf-col-h" style="margin-bottom:10px"><span class="m-k new">② P1 补丁</span>和 Claude 的 Workflow 卡同一画法</div>
+        <div class="m-mark"><span class="m-n">3</span><div class="chat-tool-card chat-tone-agent chat-tool-task is-open">
+          <div class="chat-tool-row">
+            <span class="chat-tool-caret">⌄</span><span class="chat-tool-icon">✦</span>
+            <span class="chat-tool-name">Workflow</span>
+            <span class="chat-tool-summary">wf-p1-smoke · Phase 1 smoke test</span>
+            <span class="wf-spin"></span>
+          </div>
+          <div class="chat-tool-detail">
+            <div class="chat-subagent" style="margin-left:30px">
+              <div class="wf-sub"><span class="chat-tool-icon">✦</span><span class="n">SubAgent</span><span class="s">find:workflow-tool</span><span class="m">S · GPT-5.6 Sol</span><span class="wf-ok">✓</span></div>
+              <div class="wf-sub"><span class="chat-tool-icon">✦</span><span class="n">SubAgent</span><span class="s">find:migration</span><span class="m">S · GPT-5.6 Sol</span><span class="wf-ok">✓</span></div>
+              <div class="wf-sub"><span class="chat-tool-icon">✦</span><span class="n">SubAgent</span><span class="s">read:call-cap</span><span class="m">S · GPT-5.6 Sol</span><span class="wf-ok">✓</span></div>
+              <div class="wf-sub"><span class="chat-tool-icon">✦</span><span class="n">SubAgent</span><span class="s">which:delegate</span><span class="m">S · GPT-5.6 Sol</span><span class="wf-spin"></span></div>
+              <div class="wf-sub"><span class="chat-tool-icon">✦</span><span class="n">SubAgent</span><span class="s">which:workflow</span><span class="m">S · GPT-5.6 Sol</span><span class="wf-spin"></span></div>
+            </div>
+            <div class="m-mark" style="margin:10px 10px 6px 30px"><span class="m-n">4</span><details><summary style="font-size:12.5px;color:var(--text-3)">Workflow source</summary></details></div>
+          </div>
+        </div></div>
+
+        <div class="wf-col-h" style="margin:22px 0 10px">结束后</div>
+        <div class="m-mark"><span class="m-n">5</span><div class="chat-tool-card chat-tone-agent chat-tool-task">
+          <div class="chat-tool-row">
+            <span class="chat-tool-caret">›</span><span class="chat-tool-icon">✦</span>
+            <span class="chat-tool-name">Workflow</span>
+            <span class="chat-tool-summary">wf-p1-smoke · Phase 1 smoke test</span>
+            <span class="wf-ok">✓</span>
+          </div>
+        </div></div>
+      </div>
+    </div>
+    <ul class="m-notes">
+      <li><span class="m-n">1</span><span><b>今天</b>：标签是工具原名 <span class="a-mono">orbit · workflow</span>，摘要和正文把整段脚本当键值对摊开；一有回执就打 ✓，下面的调用还在转圈。</span></li>
+      <li><span class="m-n">2</span><span><b>回执被当成结果</b>：<span class="a-mono">{ status: "running", workflowRunId }</span> 是启动回执，不是结果，却作为卡的输出显示在最下面。</span></li>
+      <li><span class="m-n">3</span><span><b>补丁</b>：标签 <span class="a-mono">Workflow</span>、紫色 agent 色调、摘要 = 脚本 <span class="a-mono">meta.name</span> · 调用的 description（与 Claude 的 Workflow 卡一样不加 Background 标，它总在后台）；在终态 <span class="a-mono">background_task</span> 到达前一直转圈（和 Claude 的 Workflow、后台 delegate 一样，走 <span class="a-mono">isBackgroundTaskCall</span>）。回执不再显示（<span class="a-mono">isLaunchReceipt</span> 认它）。</span></li>
+      <li><span class="m-n">4</span><span><b>脚本折叠</b>在卡底的 <span class="a-mono">Workflow source</span> 里，和 Claude 的 Workflow 卡一样；嵌套的 SubAgent 块不变（今天就对）。</span></li>
+      <li><span class="m-n">5</span><span><b>结束后</b>：转圈换成 ✓（失败 ✕、停止 ■），由终态 <span class="a-mono">background_task</span> 决定（<span class="a-mono">TaskBadgeAndStatus</span>）。完成数、花费、阶段分组和进度头都是 P4（③），本补丁不加。</span></li>
+      <li><span class="m-n">·</span><span><b>改动面</b>：只有 Web：<span class="a-mono">Transcript.tsx</span>（工具名常量、<span class="a-mono">describeTool</span> 一个分支、<span class="a-mono">isBackgroundTaskCall</span> / <span class="a-mono">isLaunchReceipt</span> 各加一项）和 <span class="a-mono">@orbit/shared</span> 的回执判断（与服务端 <span class="a-mono">orbitWorkflowLaunchReceipt</span> 同一规则）。iOS / macOS / Android 留给 P4。</span></li>
+    </ul>
+  </div>
+</section>
+
+</div>
+</body>
+</html>

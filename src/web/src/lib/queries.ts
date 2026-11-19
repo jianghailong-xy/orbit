@@ -201,6 +201,8 @@ export interface UserPreferences {
    *  workspace, enforced by the server on each claim, spawn and call. Absent means on; only
    *  opting out is ever written. */
   enableOrchestration?: boolean;
+  /** How many tasks a session creates before each create is carded; absent = 8, 0 = every one. */
+  cardFreeTaskCreates?: number | null;
   /** Smart model selection for the whole account — the Suggested tiers and the Agent switch that
    *  routes task runs onto them. Absent means OFF; only turning it on has to be written. */
   modelRouting?: boolean;

@@ -98,6 +98,30 @@ test('the session-recap switch writes only when sent, and absent stays absent', 
   assert.equal(preferences.recaps, false);
 });
 
+test('cardFreeTaskCreates: a whole number from 0 to 50 persists, absent stays absent, null resets, anything else is refused', async (t) => {
+  const patch = await boot(t);
+  const unrelated = await patch({ recaps: true });
+  assert.equal(unrelated.status, 200, await unrelated.text());
+  assert.equal('cardFreeTaskCreates' in preferences, false);
+
+  for (const value of [0, 12, 50]) {
+    const ok = await patch({ cardFreeTaskCreates: value });
+    assert.equal(ok.status, 200, await ok.clone().text());
+    assert.equal(((await ok.json()) as { preferences: Record<string, unknown> }).preferences.cardFreeTaskCreates, value);
+  }
+  for (const value of [-1, 51, 2.5, '8']) {
+    const refused = await patch({ cardFreeTaskCreates: value });
+    assert.equal(refused.status, 400, `${JSON.stringify(value)}: ${await refused.text()}`);
+  }
+  // The refused writes changed nothing.
+  assert.equal(preferences.cardFreeTaskCreates, 50);
+
+  // null is back to the default: the key goes.
+  const reset = await patch({ cardFreeTaskCreates: null });
+  assert.equal(reset.status, 200, await reset.text());
+  assert.equal('cardFreeTaskCreates' in preferences, false);
+});
+
 test('model preferences reject malformed maps and unauthenticated writes', async (t) => {
   const patch = await boot(t);
   for (const defaultModels of ['gpt-6.1-sol', ['gpt-6.1-sol'], { codex: 42 }, { codex: { model: 'gpt-6.1-sol' } }]) {

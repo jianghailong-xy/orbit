@@ -39,7 +39,7 @@ class AutomaticAccountTest : ComposerShellTest() {
         compose.onNodeWithTag("new-session-engine").performClick()
         await { has(hasTestTag("engine:codex") and hasClickAction()) }
         compose.onNodeWithTag("engine:codex").performClick()
-        await { has(hasText("Codex ⌄")) }
+        await { has((hasTestTag("new-session-engine") and hasText("Codex"))) }
         openModelMenu()
         assertEquals(listOf("Signed in on Fixture runner", "✓ Automatic\nSwitches to soonest reset", "Default\n5h 23%", "Second account\n5h 95%"),
             providerRows())

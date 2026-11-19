@@ -560,21 +560,16 @@ object ProjectPage {
     // MARK: open items
     const val openItemsHeading = "Open items"
     const val needsYouGroup = "Needs you"
-    const val withCoordinatorGroup = "With the coordinator"
     const val noOpenItems = "No open items"
-    const val noActionNeeded = "No action needed from you"
-    const val nothingWaiting = "Nothing is waiting on you or the coordinator."
     const val openItemsUnread = "Open items couldn't be loaded"
     /** What the toolbar's Open items says aloud before its read has answered, or once it has failed. */
     const val openItemsLoading = "Loading"
     const val openItemsCantLoad = "Couldn't load open items"
     const val closeOpenItems = "Close open items"
-    /** The toolbar counts every open item; only the owner's share raises a reminder on the page (`OpenItemsSummary`). */
-    data class OpenItemsSummary(val needsYou: Int, val withCoordinator: Int) {
-        val count get() = needsYou + withCoordinator
+    data class OpenItemsSummary(val needsYou: Int) {
+        val count get() = needsYou
         val attention get() = if (needsYou <= 0) null else if (needsYou == 1) "1 item needs you" else "$needsYou items need you"
-        val subtitle get() = if (count == 0) noOpenItems
-            else (attention ?: noActionNeeded).let { if (withCoordinator > 0) "$it · $withCoordinator with the coordinator" else it }
+        val subtitle get() = attention ?: noOpenItems
     }
     /** A missing read is not an empty inbox. A start request counts only while the page can answer it, and the coordinator's
      * request to record the project done while it is OPEN; the owner's own Start… and Record as done… are actions nobody waits on. */
@@ -582,7 +577,7 @@ object ProjectPage {
         if (items == null) return null
         val asked = StartProjectCopy.pageRow(ProjectDoc.status(doc), ProjectDoc.started(doc), items) is StartProjectCopy.PageRow.Asked
         val done = ProjectDone.live(items, ProjectDoc.status(doc)) != null
-        return OpenItemsSummary(needsYouRows(items).size + (if (asked) 1 else 0) + (if (done) 1 else 0), items.objects("withCoordinator").size)
+        return OpenItemsSummary(needsYouRows(items).size + (if (asked) 1 else 0) + (if (done) 1 else 0))
     }
     /** The owner's rows, without the request to record the project done should a server ever list it there too: it has a row of
      * its own (`ProjectDone.PageRow`). */

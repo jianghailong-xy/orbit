@@ -781,9 +781,8 @@ struct ProjectDetailView: View {
     }
 
     /// Open items on the page itself, at all times (D3 A), where web's mobile page draws them: after
-    /// the title area, before Work overview — the header's "N need you · N with the coordinator ·
-    /// oldest first", then the Needs you rows (the owner's own Record as done… · not asked yet among
-    /// them) and the coordinator's. The toolbar's Open items stays, a way here from anywhere.
+    /// the title area, before Work overview — the header's "N need you · oldest first", then the Needs
+    /// you rows (the owner's own Record as done… · not asked yet among them). The toolbar's Open items stays, a way here from anywhere.
     @ViewBuilder
     private func openItemsPageSection(_ store: ProjectDetailModel, _ document: ProjectDocument,
                                       now: Date) -> some View {
@@ -795,10 +794,6 @@ struct ProjectDetailView: View {
                     if let start = section.start { startItem(start, store: store, now: now) }
                     if let done = section.done { doneItem(done, store: store, now: now) }
                     ForEach(section.needsYou) { row in openItem(row, store: store, now: now) }
-                }
-                if !section.withCoordinator.isEmpty {
-                    groupLabel(ProjectPage.withCoordinatorGroup)
-                    ForEach(section.withCoordinator) { row in openItem(row, store: store, now: now) }
                 }
             } header: {
                 HStack(alignment: .firstTextBaseline, spacing: 8) {
@@ -892,7 +887,6 @@ struct ProjectDetailView: View {
         let done = ProjectDone.pageRow(status: document.status, derivedDone: document.derivedDone,
                                        openItems: store.openItems)
         let needsYou = store.openItems.map(ProjectPage.needsYouRows) ?? []
-        let withCoordinator = store.openItems?.withCoordinator ?? []
         if !needsYou.isEmpty || start != nil || done != nil {
             Section {
                 if let start { startItem(start, store: store, now: now) }
@@ -900,13 +894,6 @@ struct ProjectDetailView: View {
                 ForEach(needsYou) { row in openItem(row, store: store, now: now) }
             } header: {
                 groupLabel(ProjectPage.needsYouGroup)
-            }
-        }
-        if !withCoordinator.isEmpty {
-            Section {
-                ForEach(withCoordinator) { row in openItem(row, store: store, now: now) }
-            } header: {
-                groupLabel(ProjectPage.withCoordinatorGroup)
             }
         }
     }

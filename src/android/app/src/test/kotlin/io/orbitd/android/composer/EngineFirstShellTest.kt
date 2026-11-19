@@ -119,7 +119,7 @@ class EngineFirstShellTest : ComposerShellTest() {
         engineList()
         assertEquals(emptyList<String>(), names.mapNotNull { (engine, name) -> misfit(engine, name) })
         compose.onNodeWithTag("engine:dsh").performClick()
-        await { has(hasText("DeepSeek Harness ⌄")) }
+        await { has((hasTestTag("new-session-engine") and hasText("DeepSeek Harness"))) }
         engineList()
         assertTrue(has(hasTestTag("engine:dsh") and hasText("✓")))
         assertEquals(emptyList<String>(), names.mapNotNull { (engine, name) -> misfit(engine, name) })
@@ -136,12 +136,12 @@ class EngineFirstShellTest : ComposerShellTest() {
         compose.onNodeWithTag("new-session-engine").performClick()
         await { has(hasTestTag("engine:codex") and hasClickAction()) }
         compose.onNodeWithTag("engine:codex").performClick()
-        await { has(hasText("Codex ⌄")) }
+        await { has((hasTestTag("new-session-engine") and hasText("Codex"))) }
         await { has(hasContentDescription("Model GPT-6, effort Default")) }
         compose.onNodeWithTag("new-session-engine").performClick()
         await { has(hasTestTag("engine:claude") and hasClickAction()) }
         compose.onNodeWithTag("engine:claude").performClick()
-        await { has(hasText("Claude Code ⌄")) }
+        await { has((hasTestTag("new-session-engine") and hasText("Claude Code"))) }
         await { has(hasContentDescription("Model Sonnet 5.5, effort Default")) }
     }
 }
