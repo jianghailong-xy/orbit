@@ -5414,7 +5414,7 @@ export function WorkspaceView({
     currentPromotion.data?.upstreamRef ?? mergedPromotions.data?.[0]?.upstreamRef,
   );
 
-  // The exceptions this project still owes somebody, drawn into the transcript at the moment each
+  // The owner’s exceptions, drawn into the transcript at the moment each
   // became the owner's (`exceptionCardRows`) instead of as a block under it — where a card that
   // happened thirty-four minutes ago sat under the newest message saying `waiting 34m`, which is
   // two different stories about when it happened. The moment is the item's own (`escalatedAt`, else
@@ -9145,7 +9145,7 @@ export function WorkspaceView({
   // without smart selection has one that was not applied, so both look as they always have — and
   // with the account's switch off (the default), so does every run.
   const smartRoute = (() => {
-    if (me.data?.preferences?.modelRouting !== true) return null;
+    if (me.data?.preferences?.modelRouting === false) return null;
     const route = detailForSelected?.route;
     return selected?.taskId && route?.applied && route.level && route.model === shownModel ? route : null;
   })();

@@ -27,7 +27,6 @@ import { assertEngineSession } from '../sessions/engine-session';
 import { withSessionState } from '../sessions/session-state';
 import { readSessionActivities } from '../sessions/task-work-carrier';
 import { parseMaxPayload } from '../sessions/truncate-payload';
-import { visibleQuestions } from '../sessions/run-question';
 import {
   optimizePrompt, optimizerSystemPrompt, optimizerTask, PromptOptimizationFailed, promptOptimizerAvailable,
   promptOptimizerQueue, TURN_EVENTS_READ, type PromptOptimizerContext,
@@ -381,12 +380,7 @@ export class SessionGuestsService {
       limit: num(query.limit),
       maxPayload: parseMaxPayload(query.maxPayload),
     });
-    return {
-      ...transcript,
-      ownerName: owner.name,
-      waitingOnOwner: await this.waitingOnOwner(sessionId),
-      permissionMode: await this.permissionMode(sessionId),
-    };
+    return { ...transcript, ownerName: owner.name, permissionMode: await this.permissionMode(sessionId) };
   }
 
   /**
@@ -406,7 +400,7 @@ export class SessionGuestsService {
     const after = num(query.after);
     if (after === undefined) return this.sessions.getSharedEventPage(sessionId, { ...opts, before: num(query.before) });
     const page = await this.sessions.getSharedEventsAfter(sessionId, { ...opts, after });
-    return { ...page, waitingOnOwner: await this.waitingOnOwner(sessionId), permissionMode: await this.permissionMode(sessionId) };
+    return { ...page, permissionMode: await this.permissionMode(sessionId) };
   }
 
   /** The guest door's 404 unless the caller has a live invitation to the session: what GuestInvitationGuard asks
@@ -420,18 +414,6 @@ export class SessionGuestsService {
   async isInvited(guestId: string, sessionId: string): Promise<boolean> {
     const row = await this.prisma.sessionGuest.findFirst({ where: liveInvitationWhere(guestId, sessionId), select: { id: true } });
     return row !== null;
-  }
-
-  /**
-   * Whether the agent is waiting on the owner — a permission card or a question still pending — which the guest page
-   * says as `Waiting for <owner> to approve` (§4). Only that it waits: what the card asks is the owner's alone.
-   */
-  async waitingOnOwner(sessionId: string): Promise<boolean> {
-    const cards = await this.prisma.approval.findMany({
-      where: { sessionId, status: 'PENDING' },
-      select: { id: true, toolName: true },
-    });
-    return cards.length > 0 && (await visibleQuestions(this.prisma, cards)).length > 0;
   }
 
   /** One event, whole: what an expanded `truncated` card fetches. */

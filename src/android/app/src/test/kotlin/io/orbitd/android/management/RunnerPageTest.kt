@@ -64,7 +64,7 @@ class RunnerPageTest {
     }
 
     /** GET /runners says `managed` on the managed runner's row, so it is Orbit Cloud with no managed status read yet (or one that
-     * failed) — the drawer's Set up row included, never its stored name `orbit-managed`; the owner's name still wins, and a row marked
+     * failed) — the drawer's Set up row included, never its stored name `orbit-cloud`; the owner's name still wins, and a row marked
      * false keeps its own name. */
     @Test fun theRowsManagedFlagMakesItOrbitCloudWithNoManagedStatus() {
         val id = "0199a0c4-7a1e-7c3e-9d4f-2a6b8c0d1e99"
@@ -72,18 +72,18 @@ class RunnerPageTest {
             put("id", rowId); put("name", name); put("online", true); put("lastHeartbeatAt", java.time.Instant.now().toString())
             displayName?.let { put("displayName", it) }; managed?.let { put("managed", it) }
         }
-        val flagged = row("orbit-managed", true)
+        val flagged = row("orbit-cloud", true)
         assertTrue(RunnerPage.isManaged(flagged, managedRunnerId = null))
         assertEquals("Orbit Cloud", RunnerPage.displayName(flagged, managedRunnerId = null))
-        assertEquals("Orbit Cloud", RunnerPage.nameOf(id, "orbit-managed", null, managedRunnerId = null, managed = true))
-        assertEquals("Team cloud", RunnerPage.displayName(row("orbit-managed", true, "Team cloud"), managedRunnerId = null))
-        assertEquals("Team cloud", RunnerPage.nameOf(id, "orbit-managed", "Team cloud", managedRunnerId = null, managed = true))
+        assertEquals("Orbit Cloud", RunnerPage.nameOf(id, "orbit-cloud", null, managedRunnerId = null, managed = true))
+        assertEquals("Team cloud", RunnerPage.displayName(row("orbit-cloud", true, "Team cloud"), managedRunnerId = null))
+        assertEquals("Team cloud", RunnerPage.nameOf(id, "orbit-cloud", "Team cloud", managedRunnerId = null, managed = true))
         val other = row("build-box", false, rowId = "0199a0c4-7a1e-7c3e-9d4f-2a6b8c0d1e10")
         assertFalse(RunnerPage.isManaged(other, managedRunnerId = null))
         assertEquals("build-box", RunnerPage.displayName(other, managedRunnerId = null))
         // An older server sends no flag: the managed status's runnerId still decides.
-        assertEquals("orbit-managed", RunnerPage.displayName(row("orbit-managed", null), managedRunnerId = null))
-        assertEquals("Orbit Cloud", RunnerPage.displayName(row("orbit-managed", null), managedRunnerId = id))
+        assertEquals("orbit-cloud", RunnerPage.displayName(row("orbit-cloud", null), managedRunnerId = null))
+        assertEquals("Orbit Cloud", RunnerPage.displayName(row("orbit-cloud", null), managedRunnerId = id))
         // The drawer's Set up rows, with the runner list in and no managed status.
         val previous = io.orbitd.android.composer.ManagedRunnerIdentity.runnerId
         io.orbitd.android.composer.ManagedRunnerIdentity.runnerId = null
@@ -126,30 +126,30 @@ class RunnerPageTest {
         fun runner(name: String, displayName: String? = null, version: String = "managed-95884b154feb3d4e2a575fb012c4185b20c282ac") = buildJsonObject {
             put("id", id); put("name", name); displayName?.let { put("displayName", it) }; put("version", version)
         }
-        assertEquals("Orbit Cloud", RunnerPage.displayName(runner("orbit-managed"), managedRunnerId = id))
-        // By id, not by name: any stored name is Orbit Cloud, and orbit-managed on a runner that isn't the account's stays as it is.
+        assertEquals("Orbit Cloud", RunnerPage.displayName(runner("orbit-cloud"), managedRunnerId = id))
+        // By id, not by name: any stored name is Orbit Cloud, and orbit-cloud on a runner that isn't the account's stays as it is.
         assertEquals("Orbit Cloud", RunnerPage.displayName(runner("some-pod"), managedRunnerId = id))
-        assertEquals("orbit-managed", RunnerPage.displayName(runner("orbit-managed"), managedRunnerId = null))
-        assertEquals("orbit-managed", RunnerPage.displayName(runner("orbit-managed"), managedRunnerId = "0199a0c4-0000-7c3e-9d4f-2a6b8c0d1e99"))
-        assertEquals("Lab pod", RunnerPage.displayName(runner("orbit-managed", "Lab pod"), managedRunnerId = id))
-        assertEquals("Orbit Cloud", RunnerPage.nameOf(id, "orbit-managed", null, managedRunnerId = id))
-        assertEquals("orbit-managed", RunnerPage.nameOf(id, "orbit-managed", " ", managedRunnerId = null))
+        assertEquals("orbit-cloud", RunnerPage.displayName(runner("orbit-cloud"), managedRunnerId = null))
+        assertEquals("orbit-cloud", RunnerPage.displayName(runner("orbit-cloud"), managedRunnerId = "0199a0c4-0000-7c3e-9d4f-2a6b8c0d1e99"))
+        assertEquals("Lab pod", RunnerPage.displayName(runner("orbit-cloud", "Lab pod"), managedRunnerId = id))
+        assertEquals("Orbit Cloud", RunnerPage.nameOf(id, "orbit-cloud", null, managedRunnerId = id))
+        assertEquals("orbit-cloud", RunnerPage.nameOf(id, "orbit-cloud", " ", managedRunnerId = null))
 
         // The head's line and About's Version: never the image hash.
-        assertEquals("Kept up to date by Orbit", RunnerPage.hostLine(runner("orbit-managed"), managed = true))
-        assertEquals("Kept up to date by Orbit", RunnerPage.versionValue(runner("orbit-managed"), "0.1.197", managed = true))
-        assertEquals("v0.1.190", RunnerPage.hostLine(runner("orbit-managed", version = "0.1.190"), managed = true))
-        assertEquals("0.1.190 · Orbit updates this machine for you.", RunnerPage.versionValue(runner("orbit-managed", version = "0.1.190"), "0.1.197", managed = true))
-        assertFalse(RunnerPage.hostLine(runner("orbit-managed"), managed = true).contains("managed-"))
+        assertEquals("Kept up to date by Orbit", RunnerPage.hostLine(runner("orbit-cloud"), managed = true))
+        assertEquals("Kept up to date by Orbit", RunnerPage.versionValue(runner("orbit-cloud"), "0.1.197", managed = true))
+        assertEquals("v0.1.190", RunnerPage.hostLine(runner("orbit-cloud", version = "0.1.190"), managed = true))
+        assertEquals("0.1.190 · Orbit updates this machine for you.", RunnerPage.versionValue(runner("orbit-cloud", version = "0.1.190"), "0.1.197", managed = true))
+        assertFalse(RunnerPage.hostLine(runner("orbit-cloud"), managed = true).contains("managed-"))
 
         // The head's line leads with the country its IP is in, once a check has decided one; the words are OrbitKit's.
         fun located(viaProxy: Boolean) = buildJsonObject {
-            put("id", id); put("name", "orbit-managed"); put("version", "0.1.190")
+            put("id", id); put("name", "orbit-cloud"); put("version", "0.1.190")
             put("region", buildJsonObject { put("verdict", "allowed"); put("country", "JP"); put("name", "Japan"); put("viaProxy", viaProxy); put("checkedAt", "2026-09-28T11:57:00Z") })
         }
         assertEquals("📍 Japan · v0.1.190", RunnerPage.headLine(located(false), managed = true))
         assertEquals("📍 Japan (via proxy) · v0.1.190", RunnerPage.headLine(located(true), managed = true))
-        assertEquals("v0.1.190", RunnerPage.headLine(runner("orbit-managed", version = "0.1.190"), managed = true))
+        assertEquals("v0.1.190", RunnerPage.headLine(runner("orbit-cloud", version = "0.1.190"), managed = true))
         val root = generateSequence(File(System.getProperty("user.dir"))) { it.parentFile }.first { File(it, "src/macos/OrbitKit/Sources/OrbitKit").isDirectory }
         val swift = File(root, "src/macos/OrbitKit/Sources/OrbitKit/App/RunnerPageCopy.swift").readText()
         assertTrue(swift.contains("static func runnerLocation(place: String) -> String { \"${RunnerCopy.location("\\(place)")}\" }"))

@@ -612,8 +612,8 @@ def cmd_cross_user(args):
     # B's runner credential, from B's bootstrap Secret, as A's instance at the runner door (a read only).
     secret = sw.kget('secret', f"mr-boot-{b['runner_id']}")
     credential = base64.b64decode(secret['data']['token']).decode()
-    instance = {'X-Orbit-Runner-Capabilities': sw.INSTANCE_CAPABILITY, 'X-Orbit-Managed-Runner-Generation': str(a['generation']),
-                'X-Orbit-Managed-Runner-Pod-Uid': a['pod_uid'] or str(uuid.uuid4())}
+    instance = {'X-Orbit-Runner-Capabilities': sw.INSTANCE_CAPABILITY, 'X-Orbit-Cloud-Runner-Generation': str(a['generation']),
+                'X-Orbit-Cloud-Runner-Pod-Uid': a['pod_uid'] or str(uuid.uuid4())}
     ask("B's runner credential naming A's instance", 'GET', '/runner/me', token=credential, headers=instance)
     ask("B's runner credential naming A's instance, claiming", 'GET', '/runner/sessions/claim', token=credential, headers=instance)
     # A Pod in B's name on A's volume, and one under A's name with B's identity: what the admission guard says (dry runs, as the manager).

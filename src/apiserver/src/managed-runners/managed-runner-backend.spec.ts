@@ -12,7 +12,7 @@ import { MemoryRunBackend } from '../test-support/memory-run-backend';
 import { testManagedRunnerProfile } from '../test-support/managed-runner-profile.fixture';
 import { KubeAmbiguousError, KubeApiError, KubeUnreachableError, type PersistentVolumeClaim, type Pod } from './kube-client';
 import { KubernetesBackend } from './kubernetes-backend';
-import { MANAGED_ADMISSION_DENIAL_MARKER } from './managed-runner-admission';
+import { LEGACY_MANAGED_ADMISSION_DENIAL_MARKER, MANAGED_ADMISSION_DENIAL_MARKER } from './managed-runner-admission';
 import { MANAGED_RUNNER_BACKENDS, ManagedRunnerConflict } from './managed-runner-backend';
 import { capacityBudget, computeShare, storageShare } from './managed-runner-capacity';
 import { ManagedRunnerManager } from './managed-runner-manager';
@@ -34,7 +34,7 @@ const KUBERNETES_SECTION = /^kubernetes belongs to the kubernetes backend; a doc
 
 function mapping(change: Partial<ManagedRunner> = {}): ManagedRunner {
   return {
-    id: 'mapping', ownerId: OWNER, runnerId: RUNNER, generation: 1, namespace: 'orbit-managed-test', pvcName: managedPvcName(RUNNER),
+    id: 'mapping', ownerId: OWNER, runnerId: RUNNER, generation: 1, namespace: 'orbit-cloud-test', pvcName: managedPvcName(RUNNER),
     pvcUid: null, pvUid: null, volumeHandle: null, podName: null, podUid: null, nodeName: null, ...change,
   } as ManagedRunner;
 }
@@ -298,6 +298,9 @@ test('KubernetesBackend proves the admission guard before a Pod, and words failu
   await assert.rejects(backend.requireInstanceGuard(recorded), (e: unknown) => e instanceof ManagedRunnerConflict && e.code === 'ADMISSION_GUARD_MISSING');
   assert.deepEqual(cluster.calls, [{ op: 'dryRunCreate', kind: 'pods', name: probe }]);
   cluster.admission = async () => ({ allowed: false, message: `${MANAGED_ADMISSION_DENIAL_MARKER}: NOT_RESERVED: no` });
+  await backend.requireInstanceGuard(recorded);
+  // An apiserver from before the rename answering the webhook: still the guard.
+  cluster.admission = async () => ({ allowed: false, message: `${LEGACY_MANAGED_ADMISSION_DENIAL_MARKER}: NOT_RESERVED: no` });
   await backend.requireInstanceGuard(recorded);
   cluster.admission = async () => ({ allowed: false, message: 'some other policy' });
   await assert.rejects(backend.requireInstanceGuard(recorded), (e: unknown) => e instanceof ManagedRunnerConflict && e.code === 'ADMISSION_GUARD_UNVERIFIED');

@@ -245,6 +245,11 @@ export class CompletionInputRouter {
     return delivered ?? this.route(fact, 'JUDGMENT_REQUEST_DERIVER');
   }
 
+  /** Retry finished-looking notifications after recovery and on the leader's tick. */
+  async deliverLooksFinishedOwedTo(sessionId?: string): Promise<void> {
+    await this.settled.deliverOwedTo(sessionId);
+  }
+
   /**
    * The second door: the projects whose task set one committed task write may have closed.
    *

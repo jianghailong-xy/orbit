@@ -400,6 +400,7 @@ import {
 } from '../providers/account';
 import { sanitizeRunnerEngines, usedRunnerEngines } from '../common/runner-engines';
 import { runnerAccountPausedUntil } from '../common/account-pause';
+import { swapClaudeAccountRecords, type ClaudeAccountSwapApplied } from '../runners/claude-account-swap';
 import { ACCOUNT_MOVE_CAPABILITY, cursorMoveRefusal } from '../providers/account-move-capability';
 import { sessionPoolCodexLogin } from '../providers/codex-login';
 import {
@@ -5471,11 +5472,19 @@ export class SessionsService {
       },
     });
     if (!session) throw linkNotFound();
+    // Shared readers may know that the owner must answer, but never what the card asks.
+    // Keep this in the shared header so public and guest roots and live polling agree.
+    const cards = await this.prisma.approval.findMany({
+      where: { sessionId, status: 'PENDING' },
+      select: { id: true, toolName: true },
+    });
+    const waitingOnOwner = cards.length > 0 && (await visibleQuestions(this.prisma, cards)).length > 0;
     const stateful = withSessionState(session);
     // A parked session can still be working (a self-driven turn, a sub-agent, a job, a wait that
     // wakes it): without this the page read its AWAITING_INPUT as idle and said "Awaiting reply".
     const activity = (await readSessionActivities(this.prisma, [session.id])).get(session.id) ?? null;
     return {
+      waitingOnOwner,
       title: session.title,
       workspaceName: session.workspace?.name ?? null,
       status: stateful.status,
@@ -11971,6 +11980,28 @@ export class SessionsService {
       if (outcome === 'reloaded') this.realtime.notifyInbox(id);
     }
     return stuck;
+  }
+
+  /**
+   * Apply a finished Set as default swap of Claude accounts on a runner (docs/claude-default-swap-contract.md §5): in one
+   * transaction, every record Orbit keys by the two account ids follows its account (swapClaudeAccountRecords), and
+   * each live session on either account is given a reload, so its next turn starts in its account's new folder. The
+   * former Default is named by `formerDefaultEmail`, the runner's `now.accountEmail`, until the owner renames it. After
+   * the commit, each is hinted, which delivers what the swap held. Null when the swap is not the pending one.
+   */
+  async applyClaudeAccountSwap(
+    runnerId: string, added: string, attempt: Date, formerDefaultEmail: string | null = null,
+  ): Promise<ClaudeAccountSwapApplied | null> {
+    const applied = await withTransactionRetry(this.prisma, (tx) => swapClaudeAccountRecords(tx, runnerId, added, attempt, async (lockTx, id) => {
+      await lockTx.$queryRaw`SELECT id FROM "session" WHERE id = ${id}::uuid FOR UPDATE`;
+      await this.insertTurnLocked(lockTx, id, {
+        kind: 'reload',
+        content: JSON.stringify({ provider: AgentProvider.CLAUDE }),
+        clientTurnId: randomUUID(),
+      });
+    }, formerDefaultEmail), loggedRetry(this.logger, 'sessions.applyClaudeAccountSwap'));
+    for (const id of applied?.release ?? []) this.realtime.notifyInbox(id);
+    return applied;
   }
 
   /**

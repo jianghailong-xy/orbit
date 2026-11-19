@@ -101,6 +101,10 @@ object ManagementFixture {
      * …/default/restore answers ok, or fails while [restoreFails]. Each that goes through runs [onAccountWrite] with its path, as what
      * GET runners serves then changes. */
     @Volatile var defaultRemoveRefusal: String? = null
+    /** POST runners/:id/accounts/:engine/:account/set-default answers [setDefaultAnswer] after [onAccountWrite] — as the server's next GET
+     * runners carries the swap in `claudeAccountSwap` — or, given [setDefaultRefusal], refuses 409 in those words. */
+    @Volatile var setDefaultRefusal: String? = null
+    @Volatile var setDefaultAnswer = """{"account":null,"status":"pending","message":null,"waitingOn":[],"foreignProcesses":[]}"""
     @Volatile var restoreFails = false
     @Volatile var onAccountWrite: (String) -> Unit = {}
     /** POST runners/:id/engines/:engine/update-warning/dismiss runs this with the engine, then answers `{engine, latest}` with [dismissLatest],
@@ -150,7 +154,7 @@ object ManagementFixture {
         secondRunner = false; runnerOnline = true; runnerTwoOnline = true; runnerOrder = listOf(RUNNER, RUNNER_TWO); removedRunners = emptySet(); selfUpdate = null
         reorderRequests.clear(); runnerEngines = "[]"; runnerExtra = ""; runnerTwoExtra = ""; loginRelay = """{"status":null}"""; loginStarted = """{"status":"pending"}"""
         codeSent = """{"status":"done"}"""; onCode = {}; loginBodies.clear(); pauseBodies.clear(); installBodies.clear(); onRegionCheck = {}
-        defaultRemoveRefusal = null; restoreFails = false; onAccountWrite = {}; onEngineDismiss = {}; dismissLatest = "0.169.0"
+        defaultRemoveRefusal = null; setDefaultRefusal = null; restoreFails = false; onAccountWrite = {}; onEngineDismiss = {}; dismissLatest = "0.169.0"
         agentFixBodies.clear(); onAgentFix = {}; agentFixRefusal = null
         deviceStatus = "PENDING"; deviceConflict = false; deviceLastSeen = null; deviceGate = null
         drop = CompletableDeferred(); opened = 0
@@ -201,7 +205,7 @@ object ManagementFixture {
     private fun runners() = runnerOrder.filter { (it == RUNNER || secondRunner) && it !in removedRunners }.joinToString(",", "[", "]") {
         when (it) {
             RUNNER -> runner()
-            CLOUD_RUNNER -> """{"id":"$CLOUD_RUNNER","name":"orbit-managed","managed":true,"online":true,"lastHeartbeatAt":"$now"}"""
+            CLOUD_RUNNER -> """{"id":"$CLOUD_RUNNER","name":"orbit-cloud","managed":true,"online":true,"lastHeartbeatAt":"$now"}"""
             else -> runnerTwo()
         }
     }
@@ -331,6 +335,8 @@ object ManagementFixture {
                 path.startsWith("runners/$RUNNER/engines/") && path.endsWith("/update-warning/dismiss") && api.method == HttpMethod.POST ->
                     path.split('/')[3].let { engine -> onEngineDismiss(engine); ok("""{"engine":"$engine","latest":"$dismissLatest"}""") }
                 path.startsWith("runners/$RUNNER/accounts/") && path.endsWith("/pause") -> { pauseBodies += "$path ${api.body!!.decodeToString()}"; ok("{}") }
+                path.startsWith("runners/$RUNNER/accounts/") && path.endsWith("/set-default") && api.method == HttpMethod.POST ->
+                    setDefaultRefusal?.let { fail(409, it) } ?: run { onAccountWrite(path); ok(setDefaultAnswer) }
                 path.startsWith("runners/$RUNNER/accounts/") && path.endsWith("/default/restore") ->
                     if (restoreFails) fail(404, "runner not found") else { onAccountWrite(path); ok("""{"ok":true}""") }
                 path.startsWith("runners/$RUNNER/accounts/") && path.endsWith("/default") && api.method == HttpMethod.DELETE ->

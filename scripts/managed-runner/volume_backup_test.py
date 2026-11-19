@@ -60,7 +60,7 @@ class VolumeBackupTest(unittest.TestCase):
         self.root = Path(scratch.name)
         self.checkout = self.root / "checkout"
         (self.checkout / "data/managed-runners").mkdir(parents=True)
-        (self.checkout / "data/managed-runners/channel.json").write_text(f'{{\n  "schemaVersion": 1,\n  "image": "{IMAGE}",\n  "network": "orbit-managed-runners"\n}}\n')
+        (self.checkout / "data/managed-runners/channel.json").write_text(f'{{\n  "schemaVersion": 1,\n  "image": "{IMAGE}",\n  "network": "orbit-cloud-runners"\n}}\n')
         self.state = self.root / "state"
         self.state.mkdir()
         bin_dir = self.root / "bin"

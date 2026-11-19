@@ -1,5 +1,6 @@
 import { TRANSLATION_LANGUAGE_NAMES, TRANSLATION_LANGUAGES, type TranslationLanguage } from '@orbit/shared';
 import { SettingsCard, SettingsHeader, SettingsRow, SettingsSection } from '../../components/settings';
+import { NumberInput } from '../../components/ui/NumberInput';
 import { Segmented } from '../../components/ui/Segmented';
 import { Select } from '../../components/ui/Select';
 import { Switch } from '../../components/ui/Switch';
@@ -19,11 +20,11 @@ export const GENERAL_HINTS = {
   },
   modelRouting: {
     short: S.modelRouting.description,
-    full: "Coordinators suggest a tier for each task, and Agents you turn this on for run their tasks on that tier's model and effort. Off: tasks run exactly as before.",
+    full: "Coordinators suggest a tier for each task, and a SubAgent's size sets its own. Every SubAgent, and the task runs of Agents you turn this on for, run on a model of that tier from your providers. Off: tasks keep their Agent's model and SubAgents their parent session's.",
   },
   optimizeFor: {
     short: S.optimizeFor.description,
-    full: 'Cost spends subscriptions before metered keys. Balance spends the quota that expires first, then the most room. Intelligence puts the strongest model first. For every Agent, its SubAgents and its smart-selected task runs.',
+    full: 'Cost spends subscriptions before metered keys. Balance spends the quota that expires first, then the most room. Intelligence puts the strongest model first.',
   },
   promptSuggestions: {
     short: S.promptSuggestions.description,
@@ -36,6 +37,10 @@ export const GENERAL_HINTS = {
   enableOrchestration: {
     short: S.enableOrchestration.description,
     full: 'Sessions in every workspace can start and manage other sessions, and manage your agents and runners, through the orbit MCP tools and CLI: create, change and delete agents, install engines on runners and delete them. Off → those tools are hidden and refused.',
+  },
+  cardFreeTaskCreates: {
+    short: S.cardFreeTaskCreates.description,
+    full: "A session's first tasks are created without a confirmation card; the one after, and every one after that, waits for you. Every task the session created counts, including ones you approved. A session in a narrower mode than your default always asks. 8 unless you set another number, up to 50.",
   },
 } as const;
 
@@ -80,7 +85,7 @@ export function GeneralSettingsPage() {
               />
             }
           />
-          {/* Absent means OFF, unlike the switches below — only turning it on has to be written. */}
+          {/* Absent means on, like the switches below. */}
           <SettingsRow
             anchor={S.modelRouting.anchor}
             title={S.modelRouting.title}
@@ -89,31 +94,35 @@ export function GeneralSettingsPage() {
             control={
               <Switch
                 aria-label="Smart model selection"
-                checked={prefs.modelRouting === true}
+                checked={prefs.modelRouting !== false}
                 onCheckedChange={(v) => save.mutate({ modelRouting: v })}
                 loading={save.isPending}
               />
             }
           />
-          {/* Account-wide since 2026-11-19 (board docs/mocks/routing-mode-account); absent means Balance. */}
-          <SettingsRow
-            anchor={S.optimizeFor.anchor}
-            title={S.optimizeFor.title}
-            description={h.optimizeFor.short}
-            tooltip={h.optimizeFor.full}
-            control={
-              <Segmented<'cost' | 'balance' | 'intelligence'>
-                aria-label="Optimize For"
-                value={prefs.optimizeFor ?? 'balance'}
-                onValueChange={(v) => save.mutate({ optimizeFor: v })}
-                options={[
-                  { value: 'cost', label: 'Cost' },
-                  { value: 'balance', label: 'Balance' },
-                  { value: 'intelligence', label: 'Intelligence' },
-                ]}
-              />
-            }
-          />
+          {/* Account-wide since 2026-11-19 (board docs/mocks/routing-mode-account); absent means Balance. Only
+              smart model selection reads it, so it shows only while that is on (owner, 2026-11-20); the saved
+              value is kept while it is off. */}
+          {prefs.modelRouting !== false && (
+            <SettingsRow
+              anchor={S.optimizeFor.anchor}
+              title={S.optimizeFor.title}
+              description={h.optimizeFor.short}
+              tooltip={h.optimizeFor.full}
+              control={
+                <Segmented<'cost' | 'balance' | 'intelligence'>
+                  aria-label="Optimize For"
+                  value={prefs.optimizeFor ?? 'balance'}
+                  onValueChange={(v) => save.mutate({ optimizeFor: v })}
+                  options={[
+                    { value: 'cost', label: 'Cost' },
+                    { value: 'balance', label: 'Balance' },
+                    { value: 'intelligence', label: 'Intelligence' },
+                  ]}
+                />
+              }
+            />
+          )}
           {/* Absent means on, like the switches below. The engine reads it when it starts, so a
               session already running keeps what it started with. */}
           <SettingsRow
@@ -266,6 +275,25 @@ export function GeneralSettingsPage() {
                 checked={prefs.enableOrchestration ?? true}
                 onCheckedChange={(v) => save.mutate({ enableOrchestration: v })}
                 loading={save.isPending}
+              />
+            }
+          />
+          {/* docs/mocks/card-free-task-creates: absent reads as the server's default, 8; 0 cards every create. */}
+          <SettingsRow
+            anchor={S.cardFreeTaskCreates.anchor}
+            title={S.cardFreeTaskCreates.title}
+            description={h.cardFreeTaskCreates.short}
+            tooltip={h.cardFreeTaskCreates.full}
+            control={
+              <NumberInput
+                aria-label="Tasks a session files without asking"
+                style={{ width: 96 }}
+                value={prefs.cardFreeTaskCreates ?? 8}
+                min={0}
+                max={50}
+                step={1}
+                precision={0}
+                onValueChange={(v) => v !== null && v !== (prefs.cardFreeTaskCreates ?? 8) && save.mutate({ cardFreeTaskCreates: v })}
               />
             }
           />

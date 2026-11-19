@@ -1904,9 +1904,9 @@ func runKimiSessionProcess(ctx context.Context, shutdownCtx context.Context, t *
 			ChangedDiff:      livePatches,
 			BaseSha:          liveBaseSha,
 			WorktreeDirty:    worktreeIsDirty(job.WT),
-			BranchSha:        effectiveBranchSha(job.WT),
-			BranchMerged:     branchMergedInto(job.WT),
-			WorktreeBranch:   currentBranch(job.WT),
+			BranchSha:        effectiveBranchSha(job.WT), BranchCommits: branchCommits(job.WT),
+			BranchMerged:   branchMergedInto(job.WT),
+			WorktreeBranch: currentBranch(job.WT),
 		}); completeErr != nil {
 			logln("turn-complete failed for", job.SessionID+":", completeErr)
 		}
@@ -2124,7 +2124,7 @@ func runKimiSessionProcess(ctx context.Context, shutdownCtx context.Context, t *
 					runShellTurnBackground(bg, execDir, scratchDir, shellCommand, resp.TurnID, emit, job.Agent.Env)
 					if err := completeTurn(TurnCompleteRequest{
 						TurnID: resp.TurnID, Status: stSucceeded, Result: "started in background", Subtype: "shell",
-						RuntimeSessionID: sessionID, BranchSha: effectiveBranchSha(job.WT),
+						RuntimeSessionID: sessionID, BranchSha: effectiveBranchSha(job.WT), BranchCommits: branchCommits(job.WT),
 					}); err != nil {
 						logln("shell turn-complete failed for", job.SessionID+":", err)
 					}
@@ -2206,7 +2206,7 @@ func runKimiSessionProcess(ctx context.Context, shutdownCtx context.Context, t *
 					ChangedFiles: liveFiles, ChangedDiff: livePatches,
 					BaseSha:       liveBaseSha,
 					WorktreeDirty: worktreeIsDirty(job.WT), BranchMerged: branchMergedInto(job.WT),
-					BranchSha: effectiveBranchSha(job.WT), WorktreeBranch: currentBranch(job.WT),
+					BranchSha: effectiveBranchSha(job.WT), BranchCommits: branchCommits(job.WT), WorktreeBranch: currentBranch(job.WT),
 				}); err != nil {
 					logln("diff-result failed for", job.SessionID+":", err)
 				}
@@ -2437,6 +2437,9 @@ func kimiAutomaticPermissionOption(job *ClaimedSession, toolName string, input i
 			return selectDecision(true)
 		}
 	}
+	if kimiReadonlyShellFollowsParent(job, toolName) {
+		return selectDecision(true)
+	}
 	if job.Agent.PermissionMode == "acceptEdits" && (toolName == "Edit" || toolName == "Write") {
 		return selectDecision(true)
 	}
@@ -2444,6 +2447,23 @@ func kimiAutomaticPermissionOption(job *ClaimedSession, toolName string, input i
 		return selectDecision(false)
 	}
 	return "", false
+}
+
+// kimiReadonlyShellFollowsParent reports whether a read-only SubAgent's shell request is answered without a card:
+// its plan mode keeps Kimi's edit tools off but asks about every shell call, so a parent session that runs
+// without asking (Auto, Bypass) would get a card for each `git grep` its read-only helper makes. The owner chose,
+// on 2026-11-20, that such a request follows the parent's mode. Nothing here checks the command: a shell call
+// that writes runs too, so a read-only Kimi child is read-only by its plan-mode instructions alone, under those
+// two parent modes. Under any other parent mode the card is filed as before.
+func kimiReadonlyShellFollowsParent(job *ClaimedSession, toolName string) bool {
+	if !job.readonlySubagent || job.readonlyParentMode == nil || (toolName != "Bash" && toolName != "Terminal") {
+		return false
+	}
+	switch job.readonlyParentMode() {
+	case "auto", "bypassPermissions":
+		return true
+	}
+	return false
 }
 
 // kimiToolMatchesRule recognizes the conservative subset shared by Orbit's

@@ -288,7 +288,7 @@ final class ModelRoutingLogicTests: XCTestCase {
         XCTAssertNil(ComposerLogic.smartRoute(taskID: "T", route: nil, modelID: "claude-opus-5-5", smartSelection: true))
     }
 
-    // MARK: the account's switch (preferences.modelRouting, off by default)
+    // MARK: the account's switch (preferences.modelRouting, on by default)
 
     /// Off, every run reads as it did before routing — no tier, no shadow line, no Why — and its
     /// model line is its own row alone (web parity: `route` in TaskDetailPanel.tsx is null).

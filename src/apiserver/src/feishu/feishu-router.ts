@@ -4,7 +4,9 @@ import { PrismaService } from '../prisma/prisma.service';
 import { FeishuChatRouteService } from './feishu-chat-route.service';
 import { directMessageOf, FeishuDirectService } from './feishu-direct.service';
 import { FeishuGroupService } from './feishu-group.service';
-import { FEISHU_OWNER_REPLIES, FeishuOwnerService, type FeishuTextMessage } from './feishu-owner.service';
+import { FEISHU_OPEN_REPLIES } from './feishu-open-limits';
+import { FeishuOutbound } from './feishu-outbound';
+import { credentialsOf, FEISHU_OWNER_REPLIES, FeishuOwnerService, type FeishuTextMessage } from './feishu-owner.service';
 
 /** Who a Feishu event acts as (docs/feishu-bot-design.md §7.2): always the account its app belongs to. */
 export interface FeishuActor {
@@ -113,7 +115,15 @@ export function textMessageOf(payload: unknown): FeishuTextMessage | null {
  * belongs to — read from feishu_app as the event is routed, so an event of an app that is gone acts nowhere. A text
  * message that is an owner code, or the owner's `disconnect`, goes to FeishuOwnerService (§5).
  *
- * Only the owner is served (§7.3, §7.4). Any other direct message is answered with one English sentence — that the bot
+ * Under AVAILABILITY_SCOPE (§14.3), a direct message or group mention from anyone but the owner is first checked with
+ * Feishu (FeishuOutbound.availability): outside the app's availability scope, or when Feishu cannot say, it is answered
+ * `FEISHU_OPEN_REPLIES.notAvailable` and writes nothing; inside it, it goes on as below.
+ *
+ * Under AVAILABILITY_SCOPE, a direct message from someone in the scope, once the bot has an owner, goes to
+ * FeishuDirectService.handleOpenMessage (§14.2, task O3): a session in the open settings' workspace and mode, owned by
+ * the account, within the limits of §14.4.
+ *
+ * Otherwise only the owner is served (§7.3, §7.4). Any other direct message is answered with one English sentence — that the bot
  * takes direct messages only from its owner, or, while nobody is the owner, how to become it — and writes nothing. A
  * card click is checked first of all: a clicker whose open_id is not the app's ownerOpenId (a forwarded card) is
  * answered with a toast and writes nothing. Every later card action goes through that same check. The owner's own
@@ -135,6 +145,7 @@ export class FeishuRouter {
     private readonly chats: FeishuChatRouteService,
     private readonly direct: FeishuDirectService,
     private readonly group: FeishuGroupService,
+    private readonly outbound: FeishuOutbound,
   ) {}
 
   /** Who answers the owner's card clicks from now on. */
@@ -158,7 +169,10 @@ export class FeishuRouter {
   async route(event: InboundEvent): Promise<RouteDecision | null> {
     const app = await this.prisma.feishuApp.findUnique({
       where: { appId: event.appId },
-      select: { ownerId: true, appId: true, platform: true, appSecretEnc: true, ownerOpenId: true, botName: true, defaultWorkspaceId: true },
+      select: {
+        ownerId: true, appId: true, platform: true, appSecretEnc: true, ownerOpenId: true, botName: true, defaultWorkspaceId: true, accessMode: true,
+        showOrbit: true, openWorkspaceId: true, openPermissionMode: true,
+      },
     });
     if (!app) {
       this.logger.log(`feishu event ${event.eventId} of app ${event.appId} dropped: the app is no longer connected`);
@@ -181,12 +195,30 @@ export class FeishuRouter {
       return { route, actor };
     }
     if (route === 'DIRECT_MESSAGE' || route === 'GROUP_MENTION') {
+      // Open to the app's availability scope (§14.3): a message from anyone but the owner is checked with Feishu first,
+      // every time, before anything else reads or writes for it. Outside the scope, or when Feishu cannot say, it is
+      // answered one sentence and nothing is written. Under OWNER_ONLY nothing is asked.
+      if (app.accessMode === 'AVAILABILITY_SCOPE' && messageId && (!app.ownerOpenId || openId !== app.ownerOpenId)) {
+        const credentials = credentialsOf(app);
+        const availability = credentials ? await this.outbound.availability(credentials, openId) : 'UNKNOWN';
+        if (availability !== 'IN_SCOPE') {
+          this.logger.log(`feishu event ${event.eventId} of app ${event.appId}: the sender is not in the app's availability (${availability}), refused`);
+          await this.owner.replyTo(app, messageId, FEISHU_OPEN_REPLIES.notAvailable);
+          return { route, actor };
+        }
+      }
       const message = textMessageOf(event.payload);
       // An owner code is taken from anyone (§5.1): it is how someone becomes the owner.
       if (message && (await this.owner.handleMessage(app, message))) return { route, actor };
       if (route === 'DIRECT_MESSAGE' && messageId && (!app.ownerOpenId || openId !== app.ownerOpenId)) {
-        this.logger.log(`feishu event ${event.eventId} of app ${event.appId}: a direct message from someone other than the owner, refused`);
-        await this.owner.replyTo(app, messageId, app.ownerOpenId ? FEISHU_OWNER_REPLIES.stranger : FEISHU_OWNER_REPLIES.noOwner);
+        // Open to the app's availability scope (§14.2, O3): someone in it, once the bot has an owner, is served by
+        // FeishuDirectService; it answers false when the app is not open after all, and today's sentence follows.
+        const served = app.accessMode === 'AVAILABILITY_SCOPE' && app.ownerOpenId !== null
+          && (await this.direct.handleOpenMessage(app, actor, event.eventId, event.payload));
+        if (!served) {
+          this.logger.log(`feishu event ${event.eventId} of app ${event.appId}: a direct message from someone other than the owner, refused`);
+          await this.owner.replyTo(app, messageId, app.ownerOpenId ? FEISHU_OWNER_REPLIES.stranger : FEISHU_OWNER_REPLIES.noOwner);
+        }
       } else if (route === 'DIRECT_MESSAGE') {
         await this.direct.handleMessage(app, actor, event.eventId, event.payload);
       }

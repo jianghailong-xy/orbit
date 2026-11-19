@@ -113,11 +113,11 @@ final class PreferencesCodableTests: XCTestCase {
         XCTAssertEqual(try prefs(#"{"modelRouting":false}"#)?.smartModelSelection, false)
         let bare = try prefs(#"{"theme":"light"}"#)
         XCTAssertNil(bare?.modelRouting)
-        XCTAssertEqual(bare?.smartModelSelection, false, "absent is off")
+        XCTAssertEqual(bare?.smartModelSelection, true, "absent is on")
         for odd in [#""true""#, "1", "null", #"{"on":true}"#] {
             let p = try prefs(#"{"theme":"dark","modelRouting":\#(odd)}"#)
             XCTAssertNil(p?.modelRouting, odd)
-            XCTAssertEqual(p?.smartModelSelection, false, odd)
+            XCTAssertEqual(p?.smartModelSelection, true, odd)
             XCTAssertEqual(p?.theme, "dark", "the rest of the preferences still decode")
         }
     }

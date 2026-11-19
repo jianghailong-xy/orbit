@@ -1,5 +1,6 @@
 import type {
   ApprovalTranslation,
+  BranchCommit,
   GuestSessionLimits,
   GuestSessionSummary,
   MainCheckoutActionAnswer,
@@ -2155,6 +2156,9 @@ export interface SessionDetail {
   branch?: string | null;
   baseSha?: string | null;
   changedFiles?: SessionChangedFile[] | null;
+  /** The branch's commits, base to tip, newest first, as the runner last read them. Null/absent from a
+   *  runner too old to report them: the bar then counts files, as it did before. */
+  branchCommits?: BranchCommit[] | null;
   isolationStatus?: string | null;
   // "Merge to main" outcome (see mergeSessionToMain): 'pending' while the runner works,
   // then 'merged' (mergedAt set) | 'conflict' | 'error' (mergeError carries why). Null

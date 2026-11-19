@@ -114,6 +114,9 @@ export const OWNER_INTERACTIVE_ROUTES: readonly string[] = [
   'POST /integrations/feishu/chats/confirm',
   'PATCH /integrations/feishu/chats/:id',
   'DELETE /integrations/feishu/chats/:id',
+  // Who can use the Feishu bot (docs/feishu-bot-design.md §14.1): opening it lets everyone the app is available to in
+  // Feishu start agents on the owner's machines, in the workspace and mode chosen here.
+  'PUT /integrations/feishu/access',
   // A terminal asking to be approved (docs/terminal-session-design.md, "The terminal credential"): approving mints a
   // credential that answers this machine's approval cards for 30 days, so the card, its Approve and its Deny are the
   // owner's own, signed in to the app — never a token's, a runner's or another terminal's.

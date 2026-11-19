@@ -323,7 +323,8 @@ export function subagentWhyLine(decision: Partial<SubagentDecision>): string | n
   if (decision.model) {
     const engine = decision.engine && decision.engine !== decision.provider ? ` (${decision.engine})` : '';
     const where = `${decision.model}${decision.effort ? ` · ${decision.effort}` : ''} on ${decision.provider}${engine}`;
-    const routed = decision.tierSource !== 'named-model' && decision.tierSource !== 'definition-model';
+    const routed = decision.tierSource !== 'named-model' && decision.tierSource !== 'definition-model'
+      && decision.tierSource !== 'not-routed';
     const mode = routed && decision.optimizeFor ? OPTIMIZE_LABEL[decision.optimizeFor] : undefined;
     const lead = mode ? `${mode}: ${where}` : where;
     parts.push(decision.note ? `${lead}, ${decision.note}` : lead);
