@@ -47,6 +47,44 @@ class TranslationTest {
         assertEquals("Bengali → Ukrainian", Translation.tag("bn", "uk"))
     }
 
+    @Test fun aFailedTurnAndARefusalSayWhyInSharedsReasons() {
+        val shared = java.io.File(generateSequence(java.io.File(System.getProperty("user.dir"))) { it.parentFile }
+            .first { java.io.File(it, "src/shared/src/translation.ts").isFile }, "src/shared/src/translation.ts").readText()
+        val sharedReasons = Regex("TRANSLATION_FAILURE_REASONS = \\[([^\\]]*)\\] as const").find(shared)!!.groupValues[1]
+            .split(',').map { it.trim().trim('\'') }.filter { it.isNotEmpty() }
+        assertEquals(sharedReasons, Translation.FailureReason.entries.map { it.name })
+        // OrbitKit's copy (TranslationFailureReason in Translation.swift) lists the same raw values in the same order.
+        val root = generateSequence(java.io.File(System.getProperty("user.dir"))) { it.parentFile }
+            .first { java.io.File(it, "src/shared/src/translation.ts").isFile }
+        val swift = java.io.File(root, "src/macos/OrbitKit/Sources/OrbitKit/Models/Translation.swift").readText()
+        val swiftEnum = Regex("enum TranslationFailureReason[^{]*\\{([^}]*)\\}").find(swift)!!.groupValues[1]
+        assertEquals(sharedReasons, Regex("case \\w+ = \"([A-Z_]+)\"").findAll(swiftEnum).map { it.groupValues[1] }.toList())
+        assertTrue(shared.contains("failureReason?: TranslationFailureReason;"))
+        assertTrue(shared.contains("httpStatus?: number;"))
+
+        val http = Translation.turn(obj("""{"state":"FAILED","from":"ja","original":"x","failureReason":"HTTP","httpStatus":503}"""))!!
+        assertEquals(Translation.FailureReason.HTTP, http.failureReason)
+        assertEquals(503, http.httpStatus)
+        Translation.FailureReason.entries.forEach { reason ->
+            val t = Translation.turn(obj("""{"state":"FAILED","from":"ja","original":"x","failureReason":"${reason.name}"}"""))!!
+            assertEquals(reason, t.failureReason)
+            assertNull(t.httpStatus)
+        }
+        // No reason (a turn that failed before it was stored), or one this client does not know: the generic line.
+        assertNull(Translation.turn(obj("""{"state":"FAILED","from":"ja","original":"x"}"""))!!.failureReason)
+        assertNull(Translation.turn(obj("""{"state":"FAILED","from":"ja","original":"x","failureReason":"COSMIC_RAY"}"""))!!.failureReason)
+        assertNull(Translation.turn(obj("""{"state":"FAILED","from":"ja","original":"x","httpStatus":"503"}"""))!!.httpStatus)
+
+        val refusal = io.orbitd.android.core.net.ApiError.parse(422,
+            """{"code":"TRANSLATION_FAILED","message":"x","failureReason":"HTTP","httpStatus":429}""".toByteArray())
+        assertEquals(Translation.FailureReason.HTTP to 429, Translation.refusalReason(refusal))
+        val timeout = io.orbitd.android.core.net.ApiError.parse(422, """{"code":"TRANSLATION_FAILED","failureReason":"TIMEOUT"}""".toByteArray())
+        assertEquals(Translation.FailureReason.TIMEOUT to null, Translation.refusalReason(timeout))
+        assertNull(Translation.refusalReason(io.orbitd.android.core.net.ApiError.parse(422, """{"code":"TRANSLATION_FAILED"}""".toByteArray())))
+        assertNull(Translation.refusalReason(io.orbitd.android.core.net.ApiError.parse(422, """{"code":"OTHER","failureReason":"TIMEOUT"}""".toByteArray())))
+        assertNull(Translation.refusalReason(RuntimeException("x")))
+    }
+
     @Test fun preferencesReadOffUnlessSwitchedOnAndTheDefaultLanguageWhenAbsent() {
         assertFalse(Translation.enabled(null))
         assertFalse(Translation.enabled(obj("""{}""")))
@@ -65,6 +103,16 @@ class TranslationTest {
         assertFalse("an older server says nothing: unable", Translation.available(obj("""{"id":"u1"}""")))
         assertFalse(Translation.available(obj("""{"translationAvailable":false}""")))
         assertTrue(Translation.available(obj("""{"translationAvailable":true}""")))
+    }
+
+    @Test fun translationUnavailableUntilIsReadWhileItLiesAhead() {
+        val until = java.time.Instant.parse("2026-11-18T06:01:00.000Z")
+        val me = obj("""{"translationAvailable":true,"translationUnavailableUntil":"2026-11-18T06:01:00.000Z"}""")
+        assertEquals(until, Translation.unavailableUntil(me, until.minusMillis(1)))
+        assertNull("past it, the ordinary tag again", Translation.unavailableUntil(me, until))
+        assertNull(Translation.unavailableUntil(obj("""{"translationUnavailableUntil":null}""")))
+        assertNull("an older server says nothing", Translation.unavailableUntil(obj("""{"translationAvailable":true}""")))
+        assertNull(Translation.unavailableUntil(obj("""{"translationUnavailableUntil":"soon"}""")))
     }
 
     @Test fun aTurnsTranslationParsesEachStateAndRefusesWhatIsNotOne() {

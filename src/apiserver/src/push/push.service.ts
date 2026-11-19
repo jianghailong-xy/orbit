@@ -35,7 +35,7 @@ import { FcmTransport } from './fcm-transport';
 import { FeishuTransport, orbitUrl, type FeishuTarget } from './feishu-transport';
 import { fcmData } from './fcm-payload';
 import { claudeRegionPushBody, regionMachineName } from '../runners/runner-region';
-import { translationLanguages } from '../sessions/turn-translation';
+import { HELD_TURN_STATUS, translationLanguages } from '../sessions/turn-translation';
 import { waitForCardTranslation } from '../sessions/card-translation-wait';
 import { cardHasText } from '../sessions/reply-translation';
 import { isScheduleItemKind } from '../schedules/schedule-attention';
@@ -61,6 +61,9 @@ function agentNotifyWait(rang: Date | null, now: Date): number | null {
   const left = AGENT_NOTIFY_MIN_INTERVAL_MS - (now.getTime() - rang.getTime());
   return left > 0 ? Math.ceil(left / 1000) : null;
 }
+
+/** The held-message push's body (frame 4B of docs/ux/translation-failure-policy.html). */
+export const HELD_MESSAGE_PUSH_BODY = "Your message wasn't sent: it couldn't be translated.";
 
 /** Engine names as the user sees them elsewhere in Orbit (matches the web's RunnerSignIn). */
 const ENGINE_LABELS: Record<LoginEngine, string> = {
@@ -119,6 +122,7 @@ const FEISHU_EVENT_KINDS: Readonly<Record<string, string>> = {
   'wiki-review-mode-tiered': 'Wiki switched to Tiered',
   'wiki-maintenance-failing': 'Wiki maintenance needs attention',
   'project-orphan': 'Nobody has this',
+  'held-message': 'Message not sent',
   schedule: 'Scheduled task',
   condition: 'Condition',
 };
@@ -617,6 +621,42 @@ export class PushService {
       await this.deliver(tokens, body, 'alert', '10', `settled-${sessionId}`);
     } catch (err) {
       this.log.warn(`settle notify failed: ${(err as Error).message}`);
+    }
+  }
+
+  /**
+   * The owner's message — or a new session's opening message — has been held 60 s after its translation failed, and
+   * the owner is not viewing the session (RealtimeService.heldMessageUnseen): one push titled with the session, which
+   * opens it. Nothing when the turn is no longer held and FAILED by now (retried, sent as written, withdrawn or
+   * translated), or the session is muted. Collapsed on the turn, so a second ring of one turn replaces the first.
+   * Fire-and-forget, like the others.
+   */
+  async notifyHeldMessage(sessionId: string, turnId: string): Promise<void> {
+    if (!this.enabled) return;
+    try {
+      const turn = await this.prisma.conversationTurn.findFirst({
+        where: { id: turnId, sessionId, status: HELD_TURN_STATUS, translationState: 'FAILED' },
+        select: { id: true },
+      });
+      if (!turn) return;
+      const session = await this.prisma.session.findFirst({
+        where: { id: sessionId, deletedAt: null },
+        select: { title: true, ownerId: true, notificationsMuted: true },
+      });
+      if (!session || session.notificationsMuted) return;
+      const { tokens, feishu } = await this.channels(session.ownerId);
+      if (tokens.length === 0 && !feishu) return;
+      const title = session.title || 'Orbit';
+      const body = JSON.stringify({
+        aps: { alert: { title, body: HELD_MESSAGE_PUSH_BODY }, sound: 'default', 'thread-id': sessionId },
+        sessionID: sessionId, // OrbitKit Notifications.keySession — routes the tap to this session
+        kind: 'held-message',
+      });
+      const collapseId = `held-${turnId}`;
+      this.background(this.feishuOther(feishu, { kind: 'held-message', title, body: HELD_MESSAGE_PUSH_BODY, collapseId, sessionId }));
+      await this.deliver(tokens, body, 'alert', '10', collapseId);
+    } catch (err) {
+      this.log.warn(`held message notify failed: ${(err as Error).message}`);
     }
   }
 

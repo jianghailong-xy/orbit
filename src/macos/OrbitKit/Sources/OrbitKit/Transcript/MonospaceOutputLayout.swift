@@ -17,9 +17,13 @@ public struct MonospaceOutputLayout: Equatable, Sendable {
     public let utf8Count: Int
     public let previewText: String
     public let previewByteClipped: Bool
+    /// Lines shown before the fold: the transcript's 16, or a tool-call approval's 12
+    /// (`ToolCallPreview.foldLines`).
+    public let foldLines: Int
 
-    public init(text: String) {
+    public init(text: String, foldLines: Int = MonospaceOutputLayout.previewLineLimit) {
         self.text = text
+        self.foldLines = foldLines
 
         guard !text.isEmpty else {
             lineCount = 0
@@ -29,7 +33,7 @@ public struct MonospaceOutputLayout: Equatable, Sendable {
             return
         }
 
-        let stats = Self.stats(for: text)
+        let stats = Self.stats(for: text, foldLines: foldLines)
         lineCount = stats.separatorCount + 1
         utf8Count = stats.utf8Count
 
@@ -38,7 +42,7 @@ public struct MonospaceOutputLayout: Equatable, Sendable {
     }
 
     public var hiddenLineCount: Int {
-        max(0, lineCount - Self.previewLineLimit)
+        max(0, lineCount - foldLines)
     }
 
     /// A many-line result and a giant unbroken line are both collapsible. The latter has no useful
@@ -62,7 +66,7 @@ public struct MonospaceOutputLayout: Equatable, Sendable {
         return expanded ? text : previewText
     }
 
-    private static func stats(for text: String) -> (
+    private static func stats(for text: String, foldLines: Int) -> (
         separatorCount: Int,
         utf8Count: Int,
         previewEnd: String.Index?
@@ -96,7 +100,7 @@ public struct MonospaceOutputLayout: Equatable, Sendable {
 
             if isSeparator {
                 separatorCount += 1
-                if separatorCount == previewLineLimit {
+                if separatorCount == foldLines {
                     previewEnd = index
                 }
             }

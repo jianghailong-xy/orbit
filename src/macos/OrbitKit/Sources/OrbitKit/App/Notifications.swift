@@ -148,6 +148,9 @@ public enum AppIntent: Equatable, Sendable {
     /// A scheduled task's alert (push kind `schedule`, apiserver `PushService.notifySchedule`): the run's session when
     /// it names one, else the schedule's detail on the Scheduled page (docs/scheduled-tasks-design.md §7.3).
     case openSchedule(scheduleID: String, sessionID: String?)
+    /// The Share Extension's "N files ready … tap to finish": claim that inbox entry and stage its
+    /// items in the session it names (docs/share-to-orbit-design.md §3.1).
+    case openShare(entryID: String)
 }
 
 public enum Notifications {
@@ -264,6 +267,10 @@ public enum Notifications {
     /// `UNNotificationDefaultActionIdentifier` (→ open) or one of the action constants above.
     public static func intent(actionId: String, userInfo: [String: String],
                               responseText: String? = nil) -> AppIntent? {
+        if let link = userInfo[ShareHandoffLink.userInfoKey].flatMap(URL.init(string:)),
+           let entry = ShareHandoffLink.entryID(in: link) {
+            return .openShare(entryID: entry)
+        }
         // Project done and a project nobody has (`project-orphan`) both open the project.
         if userInfo[keyKind] == "project-done" || userInfo[keyKind] == "project-orphan",
            let project = userInfo[keyProject] {

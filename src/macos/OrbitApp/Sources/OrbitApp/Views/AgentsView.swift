@@ -1621,6 +1621,10 @@ struct NewSessionView: View {
             if let pick = app.consoleRegistry?.takeDraftAccount(agentID: agent.id) {
                 draft.pickDraftAccount(pick.engine, pick.account)
             }
+            // Items shared to Orbit for a new session here (ShareHandoff.swift).
+            if let stage = app.consoleRegistry?.takeDraftStaging(agentID: agent.id) {
+                stage(draft)
+            }
             await draft.prepareDraft()
         }
         // @State keeps this ConsoleModel alive while the parent AgentsModel finishes its

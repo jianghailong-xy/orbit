@@ -19,7 +19,7 @@ provenance stops the release there, and nothing becomes public.
 | `orbit-<platform>.gz`, `version.json` | Reference runner build from the tag for `linux-x64`, `linux-arm64`, `darwin-x64`, `darwin-arm64`; `version.json` names each file's SHA-256 |
 | `android-update.json`, `orbit-android-<version>.apk`, `…apk.sha256` | Attached by the Android publishing job after the Release exists; the manifest is what installed Android apps read |
 | `android-identity.json` | The Android build's identity: application id, versionName/versionCode, APK SHA-256, signing certificate SHA-256, source commit |
-| `appcast.xml` | The Sparkle feed published to GitHub Pages; its entry names the same version, build and tag |
+| `appcast.xml` | This release's Sparkle entry: the same version, build and tag. The publish job merges it into the feed on GitHub Pages as that feed stands when the release publishes |
 | `SHA256SUMS` | GNU `sha256sum` format over the DMG, Sparkle payload, runner assets, APK, Android identity, appcast, `release-manifest.json`, the SBOM and the provenance. The APK's own `.sha256` and `android-update.json` are attached later and check themselves |
 | `orbit-v<version>-sbom.cdx.json` | CycloneDX 1.6 software bill of materials for the release |
 | `orbit-v<version>-provenance.intoto.jsonl` | in-toto statement with a SLSA v1 provenance predicate |

@@ -23,7 +23,7 @@ import { AVATAR_MAX_BYTES, readAvatar } from './avatar';
 import { UpdatePreferencesDto, UpdateProfileDto } from './dto';
 import { SIGN_IN_METHODS_SELECT, signInMethodsOf } from './sign-in-methods';
 import { normalizeDefaultModels } from '../providers/engine-provider';
-import { translationAvailable } from '../sessions/translation';
+import { translationAvailable, translationUnavailableUntil } from '../sessions/translation';
 import { promptOptimizerAvailable } from '../sessions/prompt-optimizer';
 
 /** What every answer about one's own account reads: the account, when its photo was set, and how
@@ -54,6 +54,9 @@ function asMe<T extends { avatar?: { updatedAt: Date } | null; passwordHash: str
     // Whether the server can translate at all (MeTranslation, @orbit/shared translation.ts): without its
     // DeepSeek key Settings › Translation is drawn disabled with the board frame 2 notice.
     translationAvailable: translationAvailable(),
+    // Set while this process's translator circuit breaker skips a failing translator (board frame 6): the composer
+    // tag reads "unavailable, messages will wait" until then.
+    translationUnavailableUntil: translationUnavailableUntil()?.toISOString() ?? null,
     // Whether the server can optimize a draft (MePromptOptimizer, @orbit/shared prompt-optimizer.ts): without its
     // DeepSeek key the Prompt optimizer switch is drawn disabled with the board frame 1b notice.
     promptOptimizerAvailable: promptOptimizerAvailable(),

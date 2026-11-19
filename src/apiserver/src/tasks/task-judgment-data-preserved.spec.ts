@@ -3138,6 +3138,10 @@ test('the ledger stays append-only, and every later migration is accounted for',
       // project_handoff_approval, and creates project_criteria_change_translation. No INSERT/UPDATE/DELETE, and
       // no trigger, function or DONE fence changes.
       '1080_owner_card_translation_more',
+      // 1100 adds nullable conversation_turn.translation_failure_reason and translation_http_status with a CHECK
+      // every stored row passes (both NULL); conversation_turn is none of the preserved relations, no row is written,
+      // and no trigger, function or DONE fence changes.
+      '1100_conversation_turn_translation_failure',
       // 1101 widens the enqueue event cause CHECK to admit SKIP_CHECK; no preserved rows or DONE fence changes.
       '1101_integration_enqueue_skip_check',
       // 1110 restates three CHECKs on project_open_item (kind, resolution, owner-only) to admit EVIDENCE_UNDECIDED,

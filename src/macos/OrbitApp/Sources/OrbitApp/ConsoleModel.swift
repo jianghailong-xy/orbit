@@ -81,6 +81,17 @@ struct QuestionReply: Equatable, Sendable {
     let banner: String
     /// What the empty composer asks for while this is armed.
     let placeholder: String
+    /// What ✦ Optimize is told the draft answers; absent, the banner and the context carried.
+    var about: String? = nil
+
+    /// `replyingTo` of a press of ✦ Optimize while this is armed (web: the same rule).
+    var optimizerContext: String {
+        if let about, !about.isEmpty { return about }
+        switch target {
+        case .planChange(let context), .ownerItem(let context): return banner + "\n\n" + context
+        case .approval, .ownerConfirmation, .evidenceDecision: return banner
+        }
+    }
 }
 
 // `LocalStatusCard` lives in OrbitKit (Transcript/TranscriptRows.swift) — the transcript's row
@@ -1153,6 +1164,8 @@ final class ConsoleModel {
         let behavior: ApprovalBehavior
         let answers: [String: [String]]?
         let remember: Bool
+        /// The line the card draws: why (the 422's `failureReason`), then Retry and Send as written.
+        let foot: [SessionTranslation.FootPart]
     }
 
     /// An approval as it was answered here: the card as it was asked, and the press that answered
@@ -2110,7 +2123,8 @@ final class ConsoleModel {
         promptOptimizer.start(draft: draft)
         let request = PromptOptimizationRequest(draft: String(trimmed.prefix(ComposerLogic.maxPromptChars)),
                                                 sessionId: isDraft ? nil : sessionID,
-                                                workspaceId: isDraft ? draftAgent?.id : nil)
+                                                workspaceId: isDraft ? draftAgent?.id : nil,
+                                                replyingTo: replyContext?.optimizerContext)
         let api = self.api
         optimizeTask?.cancel()
         optimizeTask = Task { [weak self] in
@@ -4192,18 +4206,22 @@ final class ConsoleModel {
 
     /// `+` menu → Image / File: read a picked file, enforce the size cap (web
     /// parity), and upload it via the existing attachment path.
-    func attachFile(url: URL) async {
+    /// `name` is the chip's file name when the file on disk is named otherwise — a shared item's
+    /// inbox copy (Share to Orbit).
+    func attachFile(url: URL, name: String? = nil) async {
+        let filename = name ?? url.lastPathComponent
         guard let data = try? Data(contentsOf: url) else {
-            statusMessage = "Couldn't read \(url.lastPathComponent)"
+            statusMessage = "Couldn't read \(filename)"
             return
         }
-        let mime = UTType(filenameExtension: url.pathExtension)?.preferredMIMEType
+        let ext = (filename as NSString).pathExtension.isEmpty ? url.pathExtension : (filename as NSString).pathExtension
+        let mime = UTType(filenameExtension: ext)?.preferredMIMEType
             ?? "application/octet-stream"
         if let reason = Attachments.rejectReason(mimeType: mime, byteCount: data.count) {
             statusMessage = reason
             return
         }
-        attach(filename: url.lastPathComponent, mimeType: mime, data: data)
+        attach(filename: filename, mimeType: mime, data: data)
     }
 
     /// Clipboard ⌘V of an image (e.g. a screenshot): the view normalizes it to PNG, then this
@@ -4273,12 +4291,13 @@ final class ConsoleModel {
 
     /// Begin a "Chat about this" reply to a pending question: the next composer send resolves it
     /// as a deny+message instead of a fresh turn (see send()). The card stays until then.
-    func startChatReply(approvalID: String, question: String) {
+    func startChatReply(approvalID: String, question: String, about: String? = nil) {
         replyContext = QuestionReply(
             target: .approval(id: approvalID),
             banner: question.isEmpty ? "Replying to Claude’s question"
                                      : "Replying to Claude’s question: \(question)",
-            placeholder: "Type your reply to Claude…")
+            placeholder: "Type your reply to Claude…",
+            about: about)
     }
 
     /// Decline one of Orbit's own asks — a batch, a create, a restructure — with the reason beside
@@ -4411,7 +4430,8 @@ final class ConsoleModel {
             // back with Retry / Send as written rather than a failure line.
             approvalAnswers[approval.id] = nil
             untranslatedDecisions[approval.id] = UntranslatedDecision(behavior: behavior, answers: answers,
-                                                                      remember: remember)
+                                                                      remember: remember,
+                                                                      foot: SessionTranslation.refusedAnswerFoot(after: error))
             await refreshApprovals()
         }
         catch {
@@ -5081,11 +5101,12 @@ final class ConsoleModel {
         do {
             _ = try await api.declineDoneRequest(projectID: projectID, itemID: row.itemId, note: note,
                                                  sendAsWritten: sendAsWritten)
-            doneDeclineRefusedUntranslated = false
+            doneDeclineRefusedUntranslated = nil
         } catch {
-            // A note that could not be translated was not sent: the card offers Retry and Send as written.
+            // A note that could not be translated was not sent: the card says why, with Retry and Send as written.
             doneDeclineRefusedUntranslated = OwnerCardTranslations.refused(error)
-            if !doneDeclineRefusedUntranslated {
+                ? SessionTranslation.refusedAnswerFoot(after: error) : nil
+            if doneDeclineRefusedUntranslated == nil {
                 statusMessage = "\(ProjectDone.notDeclined) — \(APIClient.failureReason(error))."
             }
             return false
@@ -5094,8 +5115,9 @@ final class ConsoleModel {
         return true
     }
 
-    /// The last "Not yet…" note was refused with 422 TRANSLATION_FAILED and not sent.
-    var doneDeclineRefusedUntranslated = false
+    /// The last "Not yet…" note was refused with 422 TRANSLATION_FAILED and not sent: the line the
+    /// card draws (why, then Retry and Send as written), nil otherwise.
+    var doneDeclineRefusedUntranslated: [SessionTranslation.FootPart]? = nil
 
     /// Move to a follow-up…, from the done card in this conversation. Nil when it moved; otherwise
     /// the door's own words.
@@ -6231,7 +6253,7 @@ final class ConsoleModel {
         do {
             let receipt = try await api.answerOpenItem(projectID: projectID, itemID: row.itemId,
                                                        request)
-            answersRefusedUntranslated.remove(row.itemId)
+            answersRefusedUntranslated[row.itemId] = nil
             questionsAnsweredHere.insert(row.itemId)
             adoptQuestionRecord(CoordinatorQuestions.answeredHere(row: row, question: question,
                                                                   request: request, receipt: receipt))
@@ -6241,18 +6263,19 @@ final class ConsoleModel {
             // Words that could not be translated were not sent (decision 2A): the card offers Retry and
             // Send as written in place of a failure line.
             if OwnerCardTranslations.refused(error) {
-                answersRefusedUntranslated.insert(row.itemId)
+                answersRefusedUntranslated[row.itemId] = SessionTranslation.refusedAnswerFoot(after: error)
                 return nil
             }
-            answersRefusedUntranslated.remove(row.itemId)
+            answersRefusedUntranslated[row.itemId] = nil
             statusMessage = "That answer was not recorded — \(APIClient.failureReason(error))."
             return nil
         }
     }
 
-    /// The coordinator questions whose last answer was refused with 422 TRANSLATION_FAILED: their
-    /// card shows "Couldn't translate, so it wasn't sent · Retry · Send as written".
-    var answersRefusedUntranslated: Set<String> = []
+    /// The coordinator questions whose last answer was refused with 422 TRANSLATION_FAILED, with the
+    /// line their card shows: why ("…, so your answer wasn't sent", or the generic "Couldn't translate,
+    /// so it wasn't sent"), then Retry and Send as written.
+    var answersRefusedUntranslated: [String: [SessionTranslation.FootPart]] = [:]
 
     /// Ask the coordinator again (§4.7, mock 5): the item goes back to the conversation that
     /// should have had it, with the project's clock for it restarted. Nothing is retried and
