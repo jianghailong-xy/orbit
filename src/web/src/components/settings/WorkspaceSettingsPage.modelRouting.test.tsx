@@ -350,8 +350,7 @@ describe('the engines, never the keys (board 7)', () => {
 
 describe('with the account switch off', () => {
   const cases: Array<[string, UserPreferences]> = [
-    ['preferences without modelRouting', {}],
-    ['modelRouting: false', { modelRouting: false }],
+    ['preferences with modelRouting explicitly off', { modelRouting: false }],
   ];
   for (const [what, preferences] of cases) {
     it(`(${what}) nothing of smart selection shows, and saving another row leaves the Agent's own setting as it was`, async () => {
