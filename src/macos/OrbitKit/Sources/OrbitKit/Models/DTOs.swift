@@ -1638,8 +1638,11 @@ public struct BgShellDTO: Decodable, Sendable {
     public let status: String
     public let latestOutput: String?
     public let startedTs: String?
-    /// `shell`, `agent` or `workflow` — what launched it. Absent from older servers, which list shells only.
+    /// `shell`, `agent`, `workflow` or `job` (a runner-hosted bg_run) — what launched it. Absent from
+    /// older servers, which list shells only; a kind this client does not know is drawn as a shell.
     public let kind: String?
+    /// When its end was reported; absent while it runs and from older servers.
+    public let endedAt: String?
     /// An agent's or workflow's last progress, carried by the notification that ended it.
     public let progress: JSONValue?
 
@@ -1653,7 +1656,8 @@ public struct BgShellDTO: Decodable, Sendable {
                        outputTail: latestOutput ?? "",
                        startedAt: startedTs,
                        kind: kind,
-                       taskId: shellId)
+                       taskId: shellId,
+                       endedAt: endedAt)
     }
 
     /// The progress this row ended with, for `seedBackground`.
