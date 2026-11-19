@@ -15,6 +15,7 @@ import type {
   TranslationActionResponse,
   TurnTranslation,
   SubagentRunView,
+  WorkflowRunView,
 } from '@orbit/shared';
 import type {
   BgShell,
@@ -488,6 +489,10 @@ export const getBackgroundShells = (id: string): Promise<BgShell[]> =>
 /** The session's SubAgent runs, oldest first: what each `delegate` block shows beside its call. */
 export const getSessionSubagents = (id: string): Promise<SubagentRunView[]> =>
   api<SubagentRunView[]>(`/sessions/${id}/subagents`);
+
+/** The session's Orbit workflows, oldest first: what each `mcp__orbit__workflow` block shows beside its call. */
+export const getSessionWorkflows = (id: string): Promise<WorkflowRunView[]> =>
+  api<WorkflowRunView[]>(`/sessions/${id}/workflows`);
 
 // ── Interactive sessions (Route B) ──
 
