@@ -89,3 +89,86 @@ Web, iOS/macOS (OrbitKit) and Android draw board frames 1–6. Android follows i
 board leaves open. Each client keeps the button in its slot whenever the switch is on, and disabled when the box is
 empty, in shell mode, and for a draft that is only a `/command`; busy, a spinner takes the same slot, so
 the toolbar never shifts. The web shortcut is ⌘⇧O / Ctrl⇧O.
+
+## Guests
+
+A person invited into a session writes to the owner's agent through the owner's own composer, in a
+guest role. The board is `docs/mocks/guest-composer/01-board.png`. The owner approved it with every
+recommendation (D1–D5 all A) on 2026-11-19 ("As suggested"). Project: "Guest composer as a
+collaborator's composer".
+
+### Three rules
+
+1. **The owner sets the limits.** Machine, engine, model, permission mode, budget and approvals
+   belong to the owner. A guest never sees a control for them and never widens them.
+2. **Inside those limits, everyone says what they want.** Text, images, ✦ Optimize, reply-to quote,
+   ↑ recall of one's own messages, and queue/steer/cancel of one's own message work the same for
+   owner and guest.
+3. **What was shared is all anyone can read.** The guest, and every tool working for the guest (the
+   optimizer, later suggestions), reads only the conversation as the guest door shows it. Never the
+   recap, the workspace, the project or the wiki.
+
+### Decisions (owner, 2026-11-19, all A)
+
+- **D1 A: one composer, two roles.** The guest page composes the owner's `SessionComposer`
+  (`src/web/src/components/WorkspaceView.tsx`) in a guest role, replacing `GuestSessionPage`'s own
+  form. On for guests: text, images (PNG/JPEG/WebP/GIF up to 5 MB, as today), ✦ Optimize, reply-to
+  quote, ↑ recall of the guest's own earlier messages, and queue/steer and cancel of the guest's own
+  queued message (the guest door's `POST /guest-sessions/:id/turns/:turnId/steer` and
+  `DELETE /guest-sessions/:id/turns/:turnId`). Off for guests: permission mode,
+  engine/model/effort/fast/provider/account, `!` shell, `/` commands, context actions (compact,
+  clear), Stop, approval cards, the plan-usage and context-window meters, non-image files and
+  @ references. Suggested replies for guests are a later follow-up, not part of this work.
+- **D2 A: a guest's message goes in the session's language.** When the owner's Translation is on, a
+  guest turn is held and translated into the owner's agent language
+  (`preferences.translationAgentLanguage`) exactly as an owner turn is. A guest's ✦ writes the
+  owner's agent language, with a gloss in the guest's own language (no gloss when the two are the
+  same). With the owner's Translation off there is no translation, and ✦ keeps the draft's language.
+- **D3 A: one read-only line about the owner's limits.** The guest composer shows whose agent it is,
+  the permission mode in words and who approves, e.g. "Lin Wei's agent · Auto · Lin approves risky
+  steps". It shows no model, account or cost.
+- **D4 A: a daily cap on the owner's server key.** A guest's ✦ uses (and, later, guest suggestions)
+  share a server-held cap of 100 a UTC day per guest per session. Past it, the card says the daily
+  limit is reached. The cap is separate from the 50-messages-a-day guest cap (`GUEST_DAILY_TURNS`).
+- **D5 A: no mark.** An optimized guest message carries no "optimized" tag. As with the owner's own
+  messages, the words are the sender's once they press Send.
+
+The owner's own composer and `POST /prompt-optimizations` do not change.
+
+### Guest route: `POST /guest-sessions/:id/prompt-optimizations`
+
+- Body: `{ draft: string }`, the draft limited to `PROMPT_OPTIMIZER_MAX_DRAFT_CHARS`
+  (8,000). No `sessionId`, `workspaceId` or `projectId`: the session is the path's, and nothing
+  else is readable.
+- `200` answers the same `PromptOptimization` as the owner's route (`segments`, `text`, `language`,
+  `gloss?`, `contextUsed`). `contextUsed` can only be `{ kind: 'TURNS', count }`.
+- Checks, in order:
+  1. **Live invitation first.** A guest who was removed or left, or a session in Trash, gets the
+     same `404` as every guest route.
+  2. `409 { code: 'PROMPT_OPTIMIZER_OFF' }` when the guest's own `preferences.promptOptimizer` is
+     `false` (absent means on) or the server holds no DeepSeek key.
+  3. `400` for an empty or oversized draft.
+  4. `429 { code: 'PROMPT_OPTIMIZER_DAILY_LIMIT' }` past 100 uses in the UTC day by this guest in this
+     session (D4). The card shows "You've reached today's limit for ✦ Optimize." A refused press does
+     not count.
+  5. `422 { code: 'PROMPT_OPTIMIZATION_FAILED', reason }` with the owner route's reasons.
+- Context is only the user and assistant turns of the shared transcript projection, behind the same
+  replay fence as `getSharedTranscript`. No recap, workspace, project or wiki in the prompt or in
+  `contextUsed`.
+- The instruction frames the writer as a collaborator messaging the owner's agent. It adds no repo
+  facts that the visible turns don't support, and never acts for the owner (approvals, settings).
+- The route reuses `src/apiserver/src/sessions/prompt-optimizer.ts` and is listed in
+  `terminal-refused-routes.ts` and the tenant-isolation census.
+
+### Guest-turn translation fields
+
+`POST /guest-sessions/:id/turns` accepts `skipTranslation?: boolean` and
+`optimizedTranslation?: string`, with the same meaning as on `POST /sessions/:id/turns`:
+
+- With the owner's Translation on, a guest turn is held and released translated into the owner's
+  agent language. Sent with `optimizedTranslation` (the guest pressed Use on a glossed card and sent
+  the gloss unedited), it is held and released with that text, with no translator call. Sent with
+  `skipTranslation: true` (Use with no gloss, unedited), it is never held and carries no
+  `translation`. A non-boolean `skipTranslation` or a non-string `optimizedTranslation` is a 400.
+- With the owner's Translation off, both fields are ignored and the turn goes as written.
+- Whether translation applies is decided by the owner's preferences, never the guest's.
