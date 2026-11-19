@@ -60,18 +60,6 @@ final class ConsoleRegistry {
     func takeDraftAccount(agentID: String) -> (engine: String, account: String)? {
         pendingDraftAccounts.removeValue(forKey: agentID)
     }
-
-    /// What waited on a machine that got a workspace some other way: the next draft there starts with
-    /// it in the composer, rather than it vanishing with the page.
-    private var pendingDraftMessages: [String: HeldMessage] = [:]
-
-    func queueDraftMessage(agentID: String, message: HeldMessage) {
-        pendingDraftMessages[agentID] = message
-    }
-
-    func takeDraftMessage(agentID: String) -> HeldMessage? {
-        pendingDraftMessages.removeValue(forKey: agentID)
-    }
     /// Merges and commits a console here asked for that the runner hasn't answered yet. They're
     /// followed here, not in the console: its poll stops with its focus, so leaving the session
     /// meant the result card never came — or came late, the next time the session was opened. From
@@ -88,6 +76,12 @@ final class ConsoleRegistry {
         self.attachments = AttachmentImageStore(baseURL: baseURL, tokenStore: tokenStore)
         self.lru = LRUOrder(capacity: capacity)
         self.api = APIClient(baseURL: baseURL, tokenStore: tokenStore)
+    }
+
+    /// The image store of a guest view: one session's files, read through the guest door. Its own, not
+    /// `attachments`, so a guest's ids never sit in the owner-route cache as files it won't serve.
+    func guestAttachments(_ sessionID: String) -> AttachmentImageStore {
+        AttachmentImageStore(baseURL: baseURL, tokenStore: tokenStore, guestSessionID: sessionID)
     }
 
     /// Application Support/Orbit/Transcripts/<host> — scoped per instance so two servers never
@@ -119,6 +113,14 @@ final class ConsoleRegistry {
     /// Words the next draft opened for a workspace starts with, by workspace id (a main checkout line's
     /// Open in a new session). Taken by that draft, once.
     var pendingDraftText: [String: String] = [:]
+    /// What the next draft shown for a workspace is handed, by workspace id: shared items to stage
+    /// in its composer (Share to Orbit). Taken by the draft on screen as it appears, once — not as a
+    /// draft model is made, since a view may make several and keep only the first.
+    var pendingDraftStaging: [String: (ConsoleModel) -> Void] = [:]
+
+    func takeDraftStaging(agentID: String) -> ((ConsoleModel) -> Void)? {
+        pendingDraftStaging.removeValue(forKey: agentID)
+    }
 
     func draftModel(for agent: Agent, defaultModel: String,
                     configuredProviders: [ConfiguredProvider] = [],
@@ -223,6 +225,14 @@ final class ConsoleRegistry {
         for model in models.values {
             guard let own = model.projectID, key == nil || PublicID.storageKey(own) == key else { continue }
             Task { await model.refreshRulerQuestions(force: true) }
+        }
+    }
+
+    /// A GitHub workspace's clone moved to another state: the cached consoles whose conversation made that workspace
+    /// read their detail again, which carries the state the server stored and, for a failure, why.
+    func cloneStateMoved(workspaceID: String) {
+        for model in models.values where WorkspaceClone.sameWorkspace(model.madeWorkspaceID, workspaceID) {
+            Task { await model.refreshMadeWorkspace() }
         }
     }
 

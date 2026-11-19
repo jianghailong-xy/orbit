@@ -21,7 +21,8 @@
  *      which the gateway sends on in place of the session's own; the account is recorded on the run's attempt; the
  *      parent session's pool fields are unchanged and it holds no pool token of its own. Another account's Codex
  *      pools — one of its own, and one it shared without adding this owner — are never candidates, and naming one
- *      is refused.
+ * *      is refused. The token stops at the parent's ordinary end; after a coordinator handover it keeps serving the
+ *      run left RUNNING, and stops once that run has ended.
  *
  *   bash scripts/run-pg-spec.sh src/apiserver/src/runner-api/subagent-run.pg.spec.ts
  *
@@ -47,7 +48,7 @@ import { PoolLoginGatewayService } from '../providers/pool-login-gateway.service
 import { RunnerApiController } from './runner-api.controller';
 import { subagentPoolMember } from './session-provider-exec';
 import { RunnerSubagentsController } from './runner-subagents.controller';
-import { SubagentRunCreateDto, SubagentRunUpdateDto } from './subagent-run';
+import { SubagentRunCreateDto, SubagentRunUpdateDto, subagentRunView } from './subagent-run';
 
 const URL = process.env.COORDINATOR_PG_URL;
 process.env.PROVIDER_SECRET_KEY ??= 'subagent-run-spec';
@@ -101,6 +102,7 @@ test('SubAgent runs: the row, the cost roll-up, the refusals and runningSubagent
   /** A live parent session of that runner, under an agent with SubAgents on or off. */
   async function parentSession(opts: {
     subagentsEnabled?: boolean; costUsd?: number; runnerId?: string; model?: string; effort?: string; optimizeFor?: string;
+    permissionMode?: string;
   } = {}) {
     const workspaceId = randomUUID();
     const onRunner = opts.runnerId ?? runnerId;
@@ -118,6 +120,7 @@ test('SubAgent runs: the row, the cost roll-up, the refusals and runningSubagent
         title: 'split the parser work', prompt: 'split the parser work', provider: 'claude', engine: 'claude',
         model: opts.model ?? 'claude-opus-5-5', effort: opts.effort ?? 'high', status: RunStatus.AWAITING_INPUT, numTurns: 1,
         dispatchOrigin: SessionDispatchOrigin.USER, startsTaskWork: false, costUsd: opts.costUsd ?? 0,
+        ...(opts.permissionMode ? { permissionMode: opts.permissionMode } : {}),
       },
     });
     return sessionId;
@@ -184,6 +187,31 @@ test('SubAgent runs: the row, the cost roll-up, the refusals and runningSubagent
     assert.equal(repeated.applied, false, 'a repeated report changes nothing');
     assert.equal((await prisma.session.findUniqueOrThrow({ where: { id: sessionId } })).costUsd, after,
       'and adds no cost again');
+  });
+
+  await t.test("a read-only run keeps its flag, and the client's view names its engine, flag, files and description", async () => {
+    const sessionId = await parentSession({ permissionMode: 'acceptEdits' });
+    const reader = await subagents.createSubagentRun(runner, sessionId, create({
+      toolUseId: 'toolu_01ReadOnly', type: 'explore', readonly: true, description: 'Find every caller',
+    }));
+    assert.equal(reader.decision.readonly, true, 'the decision keeps the definition\'s read-only flag');
+    assert.equal(reader.exec.permissionMode, 'acceptEdits',
+      "a read-only Claude child runs in the parent's mode, not plan: the runner withholds its edit tools");
+    const writer = await subagents.createSubagentRun(runner, sessionId, create({ toolUseId: 'toolu_01Writer', type: 'general' }));
+    assert.equal(writer.decision.readonly, undefined, 'and a writer has none');
+    await subagents.updateSubagentRun(runner, sessionId, writer.runId, update({
+      status: 'DONE', changedFiles: ['src/quota/poller.ts'], costUsd: 0.01,
+    }));
+    const rows = await prisma.subagentRun.findMany({
+      where: { sessionId }, orderBy: { createdAt: 'asc' }, include: { workspace: { select: { name: true } } },
+    });
+    const [readView, writeView] = rows.map((row) => subagentRunView(row));
+    assert.equal(readView.readonly, true);
+    assert.equal(readView.engine, 'claude', 'the engine its attempt runs on');
+    assert.equal(readView.description, 'Find every caller');
+    assert.deepEqual(readView.changedFiles, []);
+    assert.equal(writeView.readonly, false);
+    assert.deepEqual(writeView.changedFiles, ['src/quota/poller.ts']);
   });
 
   await t.test('the fifth concurrent POST is refused once four are RUNNING, and a disabled agent is refused', async () => {
@@ -381,13 +409,13 @@ test('SubAgent runs: the row, the cost roll-up, the refusals and runningSubagent
     assert.equal(decision.model, 'claude-opus-5-5');
     assert.equal(decision.effort, 'high');
     assert.equal(decision.applied, true);
-    assert.equal(decision.policyVersion, 'p3-applied-1');
+    assert.equal(decision.policyVersion, 'p4-every-provider-1');
     assert.equal(decision.tierNote, 'Tier L, set by the caller');
     assert.equal(decision.note, 'subscription pool, Bob with 80% quota left');
     assert.deepEqual(decision.reasons, [
       'Tier L, set by the caller: one service plus its spec',
       `Picked claude-opus-5-5 · high on ${team.slug} (claude) (Cost): a subscription pool whose account Bob has 80% of its quota left, used before any metered key`,
-      '3 candidates in tier L; ties go by the owner\'s provider order',
+      '3 candidates in tier L, 8 more in other tiers or untiered; ties go by the owner\'s provider order',
       `${decision.candidates.length} candidates removed, each with its reason`,
     ]);
     const why = (provider: string) => decision.candidates
@@ -396,14 +424,12 @@ test('SubAgent runs: the row, the cost roll-up, the refusals and runningSubagent
     assert.deepEqual(why('kimi'), [['kimi', null, "kimi is not installed on the parent's runner"]]);
     assert.deepEqual(why(glm), [[null, null, 'Blocked in the SubAgents settings']]);
     assert.deepEqual(why(shared), [[null, null, 'A shared provider, which only admins may use']]);
-    assert.deepEqual(why(custom), [
-      ['claude', 'house-coder', 'The model has no tier'],
-      ['opencode', null, "opencode is not installed on the parent's runner"],
-    ]);
+    // Its only model has no tier, so it joins as its default model, after every tiered candidate.
+    assert.deepEqual(why(custom), [['opencode', null, "opencode is not installed on the parent's runner"]]);
     assert.deepEqual(why(spent.slug), [['codex', null,
       'Every account in the pool is at or above 90% of its quota or paused: carol@team.invalid at 96% of its weekly quota']]);
-    // The members are listed on their own too; with no model list of their own they have no tier.
-    assert.deepEqual(why(alice), [['claude', null, 'No models with a tier on claude']]);
+    // The members are listed on their own too, with an empty model list of their own.
+    assert.deepEqual(why(alice), [['claude', null, 'No models listed for claude']]);
     assert.deepEqual(why(deepseek), [
       ['opencode', null, "opencode is not installed on the parent's runner"],
       ['dsh', null, "dsh is not installed on the parent's runner"],
@@ -444,7 +470,7 @@ test('SubAgent runs: the row, the cost roll-up, the refusals and runningSubagent
     t.diagnostic(`empty pool: ${JSON.stringify(refusal)}`);
     assert.equal(refusal?.code, 'NO_SUBAGENT_PROVIDER');
     assert.match(refusal!.message!, /^No provider is left to run this SubAgent in tier M\. Each provider's reason:/);
-    assert.ok(refusal!.message!.includes('- claude (claude): No models with a tier on claude'), 'the parent\'s own engine, with its reason');
+    assert.ok(refusal!.message!.includes('- claude (claude): No models listed for claude'), 'the parent\'s own engine, with its reason');
     assert.ok(refusal!.message!.includes("- codex (codex): codex is not installed on the parent's runner"), 'and every other provider');
     assert.equal(await prisma.subagentRun.count({ where: { sessionId } }), 0, 'no run was opened on the parent\'s model');
   });
@@ -523,6 +549,29 @@ test('SubAgent runs: the row, the cost roll-up, the refusals and runningSubagent
     assert.ok(caller && typeof caller === 'object', 'the gateway takes the token');
     assert.deepEqual([caller.accountId, caller.keyId, caller.sessionId, caller.subagent], [`acct-frank-${tag}`, null, sessionId, true]);
     assert.equal(await gateway.caller(token!, 'claude' as never), null, 'and only on the codex gateway');
+
+    // The parent ends while the run is RUNNING. By an ordinary end its token is refused; by a coordinator handover
+    // it keeps serving the run left running (kept-subagent-gateway.ts), until that run ends.
+    await prisma.session.update({
+      where: { id: sessionId }, data: { status: RunStatus.CANCELLED, completedAt: new Date(), endReason: 'completed' },
+    });
+    assert.equal(await gateway.caller(token!), null, 'an ordinary end refuses the token at once');
+    const projectId = (await prisma.project.create({ data: { ownerId, title: 'handover keeps the SubAgent' } })).id;
+    t.after(async () => { await prisma.project.deleteMany({ where: { id: projectId } }); });
+    // A COMPLETED handoff names its successor (coordinator_handoff_successor_chk).
+    const successorId = await parentSession({ runnerId: machineId });
+    const handoff = await prisma.coordinatorHandoff.create({
+      data: { ownerId, projectId, fromSessionId: sessionId, toSessionId: successorId, state: 'COMPLETED' },
+    });
+    const kept = await gateway.caller(token!);
+    assert.ok(kept && typeof kept === 'object', 'a handed-over parent still serves the SubAgent it left running');
+    assert.deepEqual([kept.accountId, kept.sessionId, kept.subagent], [`acct-frank-${tag}`, sessionId, true]);
+    await prisma.subagentRun.update({ where: { id: opened.runId }, data: { status: 'DONE', endedAt: new Date() } });
+    assert.equal(await gateway.caller(token!), null, 'and stops once the run has ended');
+    await prisma.subagentRun.update({ where: { id: opened.runId }, data: { status: 'RUNNING', endedAt: null } });
+    await prisma.coordinatorHandoff.update({ where: { id: handoff.id }, data: { state: 'FAILED', failureCode: 'TURN_FAILED', toSessionId: null } });
+    assert.equal(await gateway.caller(token!), null, 'a handoff that did not complete keeps nothing');
+    await prisma.coordinatorHandoff.delete({ where: { id: handoff.id } });
     const attempts = (await prisma.subagentRun.findUniqueOrThrow({ where: { id: opened.runId } })).attempts as unknown as Array<Record<string, unknown>>;
     t.diagnostic(`subagent_run.attempts ${JSON.stringify(attempts)}`);
     assert.deepEqual(attempts[0].poolMember, { accountId: `acct-frank-${tag}`, label: 'frank@own.invalid' }, 'the account is recorded on the run');

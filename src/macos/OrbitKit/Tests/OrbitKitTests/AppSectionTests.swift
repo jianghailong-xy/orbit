@@ -24,7 +24,7 @@ final class AppSectionTests: XCTestCase {
     func testTheRunnersSectionIsMachinesAndModels() {
         XCTAssertEqual(AppSection.runners.title, "Machines & models")
         XCTAssertEqual(AppSection.runners.systemImage, "desktopcomputer")
-        XCTAssertEqual(SettingsHome.title(.machinesAndModels), AppSection.runners.title)
+        XCTAssertEqual(SettingsHome.systemImage(.machines), AppSection.runners.systemImage)
         XCTAssertFalse(AppSection.allCases.map(\.title).contains("Runners"))
         XCTAssertFalse(AppSection.allCases.map(\.title).contains("Providers"))
     }
@@ -45,12 +45,6 @@ final class AppSectionTests: XCTestCase {
         XCTAssertEqual(DrawerWorkLogic.rows(AppSection.workSections, wiki: false, waitingOnYou: false),
                        [.projects, .section(.tasks), .workspacesHeader, .agents, .openProjects,
                         .sharedWithMe])
-        // New wiki… is a row of its own under the Wiki row once there is a wiki, and never without the Wiki row.
-        XCTAssertEqual(DrawerWorkLogic.rows(AppSection.workSections, wiki: true, newWiki: true, waitingOnYou: false),
-                       [.projects, .section(.tasks), .wiki, .newWiki, .workspacesHeader, .agents, .openProjects,
-                        .sharedWithMe])
-        XCTAssertEqual(DrawerWorkLogic.rows(AppSection.workSections, wiki: false, newWiki: true, waitingOnYou: false),
-                       [.projects, .section(.tasks), .workspacesHeader, .agents, .openProjects, .sharedWithMe])
     }
 
     /// Routing/notifications must land in the right section so the shell follows a deep link. There's

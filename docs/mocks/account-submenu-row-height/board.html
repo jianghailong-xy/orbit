@@ -1,0 +1,21 @@
+<!doctype html>
+<meta charset="utf-8">
+<title>Account menu: submenu rows as tall as the menu's own</title>
+<style>
+  body { margin: 0; background: #f4f5f7; font: 15px/1.5 Inter, "Noto Sans SC", sans-serif; color: #1f2329; }
+  .b-board { display: inline-block; padding: 28px 32px 32px; }
+  h1 { font-size: 20px; margin: 0 0 4px; }
+  .b-sub { color: #646a73; margin: 0 0 20px; }
+  .b-row { display: flex; gap: 28px; align-items: flex-start; }
+  .b-col h2 { font-size: 15px; margin: 0 0 8px; }
+  .b-col h2 span { font-weight: 400; color: #646a73; }
+  .b-col img { width: 452px; display: block; border: 1px solid #dee0e3; border-radius: 8px; background: #fff; }
+</style>
+<div class="b-board">
+  <h1>Account menu: a level down has the menu's own row height</h1>
+  <p class="b-sub">The real web page at 2×, with the Machines level open. Main-menu rows are 44 px in both.</p>
+  <div class="b-row">
+    <div class="b-col"><h2>Before <span>· submenu rows 32 px</span></h2><img src="before.png"></div>
+    <div class="b-col"><h2>After <span>· submenu rows 44 px (Machines and Appearance)</span></h2><img src="after.png"></div>
+  </div>
+</div>

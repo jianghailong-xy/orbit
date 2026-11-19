@@ -2,7 +2,7 @@ import assert from 'node:assert/strict';
 import { test } from 'node:test';
 import { AgentProvider } from '@orbit/shared';
 import type { PrismaService } from '../prisma/prisma.service';
-import type { SessionsService } from '../sessions/sessions.service';
+import { SessionsService as SessionsServiceClass, type SessionsService } from '../sessions/sessions.service';
 import { WorkspacesService } from './workspaces.service';
 import { renderRawQuery } from '../test-support/prisma-transaction-double';
 
@@ -333,7 +333,7 @@ test('GET /workspaces/:id says when the workspace was last used and how many con
   assert.deepEqual(read.lastActiveAt, lastActive);
   // Conversations only: not the sessions spawned from another, and not the trashed ones.
   assert.deepEqual(counted, [
-    { where: { workspaceId: 'workspace-1', sessionKind: 'CONVERSATION', parentSessionId: null, deletedAt: null } },
+    { where: { workspaceId: 'workspace-1', sessionKind: 'CONVERSATION', parentSessionId: null, deletedAt: null, runSource: { not: 'SCHEDULE' } } },
   ]);
 
   // A save reads the workspace back without counting.
@@ -366,4 +366,141 @@ test('the workspace list carries when each was last used, and never counts sessi
       ['workspace-2', null, false],
     ],
   );
+});
+
+// The setup card's Create workspace (docs/first-workspace-contract.md §3, outside a session): a new folder under
+// the runner's reposRoot, made by the runner at the first session's claim, as POST /sessions `newWorkspace` makes one.
+function newFolderStub(writes: Record<string, unknown>[], runner: Record<string, unknown>) {
+  const prisma = prismaStub(writes) as unknown as Record<string, Record<string, unknown>>;
+  prisma.runner = {
+    ...prisma.runner,
+    findFirst: async () => ({ id: 'runner-1' }),
+    findFirstOrThrow: async () => runner,
+  };
+  return new WorkspacesService(prisma as unknown as PrismaService);
+}
+const MAKES_FOLDERS = { reposRoot: '/root/orbit-repos/', capabilities: ['create-workdir/v1'], capabilitiesReportedAt: new Date() };
+
+test('newFolder makes the workspace in a folder under reposRoot that its first session creates', async () => {
+  const writes: Record<string, unknown>[] = [];
+  await newFolderStub(writes, MAKES_FOLDERS).create('owner-1', { name: 'app', runnerId: 'runner-1', newFolder: 'app' });
+  assert.equal(writes[0].workDir, '/root/orbit-repos/app');
+  assert.equal(writes[0].autoCreateWorkDir, true);
+  assert.equal('newFolder' in writes[0], false);
+});
+
+test('a workDir workspace never has its folder made', async () => {
+  const writes: Record<string, unknown>[] = [];
+  await newFolderStub(writes, MAKES_FOLDERS).create('owner-1', { name: 'app', runnerId: 'runner-1', workDir: '/srv/app' });
+  assert.equal(writes[0].workDir, '/srv/app');
+  assert.equal(writes[0].autoCreateWorkDir, false);
+});
+
+test('newFolder is refused without a runner, beside a workDir, with a bad name, or on a runner that cannot make one', async () => {
+  const writes: Record<string, unknown>[] = [];
+  const service = newFolderStub(writes, MAKES_FOLDERS);
+  await assert.rejects(service.create('owner-1', { name: 'a', newFolder: 'a' }), /needs runnerId/);
+  await assert.rejects(service.create('owner-1', { name: 'a', runnerId: 'runner-1', newFolder: 'a', workDir: '/a' }), /one of workDir and newFolder/);
+  await assert.rejects(service.create('owner-1', { name: 'a', runnerId: 'runner-1', newFolder: '../a' }), /one folder name/);
+  const old = newFolderStub(writes, { ...MAKES_FOLDERS, capabilities: [] });
+  await assert.rejects(old.create('owner-1', { name: 'a', runnerId: 'runner-1', newFolder: 'a' }), (e: { response?: { code?: string } }) => e.response?.code === 'NEW_FOLDER_UNSUPPORTED');
+  assert.equal(writes.length, 0);
+});
+
+// From GitHub on the setup card's Create workspace (docs/mocks/github-workspace board 04): POST /workspaces `github`
+// makes the workspace that POST /sessions `newWorkspace.github` makes, through the same SessionsService.githubWorkspaceFor
+// and so the same refusals, and the runner's next reconcile clones it (cloneRequestsFor reads PENDING).
+const REPO = { id: 4242, fullName: 'orbit-labs/orbit-web', installationId: 77, private: true, defaultBranch: 'main' };
+const CLONES = { id: 'runner-1', reposRoot: '/Users/austin/orbit-repos', capabilities: ['clone-workdir/v1'], capabilitiesReportedAt: new Date() };
+function githubStub(
+  writes: Record<string, unknown>[],
+  runner: Record<string, unknown>,
+  connections: { reachableRepository: (ownerId: string, repoId: string) => Promise<unknown> } | undefined,
+  asked: string[] = [],
+) {
+  const prisma = prismaStub(writes) as unknown as Record<string, Record<string, unknown>>;
+  prisma.runner = {
+    ...prisma.runner,
+    findFirst: async () => ({ id: 'runner-1' }),
+    findFirstOrThrow: async () => runner,
+  };
+  // The real door, on a stand-in for the GitHub connection it asks.
+  const githubConnections = connections && {
+    reachableRepository: async (ownerId: string, repoId: string) => {
+      asked.push(repoId);
+      return connections.reachableRepository(ownerId, repoId);
+    },
+  };
+  const sessions = {
+    githubWorkspaceFor: SessionsServiceClass.prototype.githubWorkspaceFor.bind({ githubConnections } as unknown as SessionsService),
+  } as unknown as SessionsService;
+  return new WorkspacesService(prisma as unknown as PrismaService, sessions);
+}
+const reaches = { reachableRepository: async (_o: string, id: string) => (id === String(REPO.id) ? REPO : null) };
+const codeOf = (code: string) => (e: { response?: { code?: string } }) => e.response?.code === code;
+
+test('github makes a worktree workspace under reposRoot whose clone is PENDING, with no folder of its own to make', async () => {
+  const writes: Record<string, unknown>[] = [];
+  const asked: string[] = [];
+  await githubStub(writes, CLONES, reaches, asked).create('owner-1', {
+    name: 'orbit-web',
+    runnerId: 'runner-1',
+    github: { repoId: 4242, ref: 'release/2', folder: 'web' },
+  });
+  assert.deepEqual(asked, ['4242']);
+  assert.equal(writes[0].workDir, '/Users/austin/orbit-repos/web');
+  assert.equal(writes[0].autoCreateWorkDir, false);
+  assert.equal(writes[0].enableWorktree, true);
+  assert.equal(writes[0].cloneState, 'PENDING');
+  assert.equal(writes[0].cloneRef, 'release/2');
+  assert.equal(writes[0].githubRepoId, 4242n);
+  assert.equal(writes[0].githubInstallationId, 77n);
+  assert.equal(writes[0].repoUrl, 'https://github.com/orbit-labs/orbit-web.git');
+  assert.equal('github' in writes[0], false);
+});
+
+test('github without a folder takes the repository name, and the default branch when no ref is named', async () => {
+  const writes: Record<string, unknown>[] = [];
+  await githubStub(writes, CLONES, reaches).create('owner-1', { name: 'orbit-web', runnerId: 'runner-1', github: { repoId: '4242' } });
+  assert.equal(writes[0].workDir, '/Users/austin/orbit-repos/orbit-web');
+  assert.equal(writes[0].cloneRef, null);
+});
+
+test('github is refused as newWorkspace.github is: its 400s, then not connected, then not reachable, then a runner that cannot clone', async () => {
+  const writes: Record<string, unknown>[] = [];
+  const service = githubStub(writes, CLONES, reaches);
+  // 400s, named by the field this body carries.
+  await assert.rejects(service.create('owner-1', { name: 'a', github: { repoId: 4242 } }), /github needs runnerId/);
+  await assert.rejects(
+    service.create('owner-1', { name: 'a', runnerId: 'runner-1', github: { repoId: 4242 }, workDir: '/a' }),
+    /one of workDir, newFolder and github/,
+  );
+  await assert.rejects(
+    service.create('owner-1', { name: 'a', runnerId: 'runner-1', github: { repoId: 4242 }, newFolder: 'a' }),
+    /one of workDir, newFolder and github/,
+  );
+  await assert.rejects(service.create('owner-1', { name: 'a', runnerId: 'runner-1', github: { repoId: 'x' } }), /^BadRequestException: github\.repoId must be/);
+  await assert.rejects(service.create('owner-1', { name: 'a', runnerId: 'runner-1', github: { repoId: 1, ref: '-x' } }), /github\.ref must be a branch/);
+  await assert.rejects(service.create('owner-1', { name: 'a', runnerId: 'runner-1', github: { repoId: 1, folder: '..' } }), /github\.folder must be one folder name/);
+  await assert.rejects(service.create('owner-1', { name: 'a', runnerId: 'runner-1', github: { repoId: 1, url: 'x' } }), /github takes repoId, ref and folder, not url/);
+  // 409 GITHUB_NOT_CONNECTED: this Orbit has no GitHub connection to ask.
+  await assert.rejects(
+    githubStub(writes, CLONES, undefined).create('owner-1', { name: 'a', runnerId: 'runner-1', github: { repoId: 4242 } }),
+    codeOf('GITHUB_NOT_CONNECTED'),
+  );
+  // 403 GITHUB_REPO_FORBIDDEN: GitHub does not show the caller that repository, even on a runner that cannot clone.
+  await assert.rejects(
+    githubStub(writes, { ...CLONES, capabilities: [] }, reaches).create('owner-1', { name: 'a', runnerId: 'runner-1', github: { repoId: 9 } }),
+    codeOf('GITHUB_REPO_FORBIDDEN'),
+  );
+  // 409 CLONE_UNSUPPORTED: a runner without clone-workdir/v1, and one that has not reported its reposRoot.
+  await assert.rejects(
+    githubStub(writes, { ...CLONES, capabilities: [] }, reaches).create('owner-1', { name: 'a', runnerId: 'runner-1', github: { repoId: 4242 } }),
+    codeOf('CLONE_UNSUPPORTED'),
+  );
+  await assert.rejects(
+    githubStub(writes, { ...CLONES, reposRoot: null }, reaches).create('owner-1', { name: 'a', runnerId: 'runner-1', github: { repoId: 4242 } }),
+    codeOf('CLONE_UNSUPPORTED'),
+  );
+  assert.equal(writes.length, 0);
 });

@@ -1,4 +1,5 @@
 import { parseBackgroundWake } from './backgroundWake';
+import { parseSubagentFinished } from './subagentFinished';
 import { parseWatchWake } from './watches';
 
 /** What of a queued turn decides whether its words go back to the composer. */
@@ -27,7 +28,8 @@ export function returnsToComposer(turn: QueuedTurnOrigin): boolean {
     && !turn.projectStarted
     && !turn.sessionMessage
     && !parseWatchWake(turn.content)
-    && !parseBackgroundWake(turn.content);
+    && !parseBackgroundWake(turn.content)
+    && !parseSubagentFinished(turn.content);
 }
 
 /**

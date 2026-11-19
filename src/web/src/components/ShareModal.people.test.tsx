@@ -4,25 +4,28 @@ import { createRoot, type Root } from 'react-dom/client';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { MemoryRouter } from 'react-router-dom';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import type { SessionGuestPerson } from '@orbit/shared';
+import type { SessionGuestPerson, SessionGuestSuggestion } from '@orbit/shared';
 
 /**
  * People who can reply, the Share dialog's section on a session (docs/session-guests-design.md §3; board
  * docs/mocks/share-links/10-session-guests-2), in a real document: inviting by email, the answer when no account uses
  * it, Remove, the consequence line, and — in a mode that does not ask — the amber line and the tick the first invite
- * needs. The server's side is session-guests.pg.spec.
+ * needs; and the people invited before, suggested under the email field (board share-links/14). The server's side is
+ * session-guests.pg.spec.
  */
 
 vi.mock('../api', async (importOriginal) => ({
   ...(await importOriginal<typeof import('../api')>()),
   getShareLink: vi.fn(),
   getSessionGuests: vi.fn(),
+  getSessionGuestSuggestions: vi.fn(),
   inviteSessionGuest: vi.fn(),
   removeSessionGuest: vi.fn(),
 }));
 const toast = { success: vi.fn(), error: vi.fn(), info: vi.fn(), warning: vi.fn() };
 vi.mock('../lib/toast', () => ({ useToast: () => toast }));
-const { ApiError, getShareLink, getSessionGuests, inviteSessionGuest, removeSessionGuest } = await import('../api');
+const { ApiError, getShareLink, getSessionGuests, getSessionGuestSuggestions, inviteSessionGuest, removeSessionGuest } =
+  await import('../api');
 const { ShareModal } = await import('./ShareModal');
 
 const SESSION = '34ToZJmiOG8Ym1MR6ingQ';
@@ -33,14 +36,23 @@ const RAVI: SessionGuestPerson = {
   userId: 'u-ravi', name: 'Ravi Kumar', email: 'ravi@example.com', addedAt: '2026-11-12T02:00:00.000Z', messagesToday: 0, opened: false, emailSentAt: null,
 };
 
+const invitedBefore = (name: string, email: string, lastInvitedAt: string): SessionGuestSuggestion => ({ name, email, lastInvitedAt });
+const PAULA = invitedBefore('Paula Ortiz', 'paula.ortiz@example.com', '2026-11-13T02:00:00.000Z');
+const PAT = invitedBefore('Pat Lee', 'patlee@example.net', '2026-10-30T02:00:00.000Z');
+const SAM = invitedBefore('Sam Wu', 'sam@example.org', '2026-11-09T02:00:00.000Z');
+
 /** The owner's guest routes, as far as the section reaches them: one session's people, by email. */
 let people: SessionGuestPerson[];
-function serve(initial: SessionGuestPerson[]): void {
+function serve(initial: SessionGuestPerson[], before: SessionGuestSuggestion[] = []): void {
   people = [...initial];
+  vi.mocked(getSessionGuestSuggestions).mockImplementation(async () => ({
+    people: before.filter((b) => !people.some((p) => p.email === b.email)),
+  }));
   vi.mocked(getShareLink).mockResolvedValue({ link: null, counts: { messages: 3, toolCalls: 1 } });
   vi.mocked(getSessionGuests).mockImplementation(async () => ({ guests: structuredClone(people) }));
   vi.mocked(inviteSessionGuest).mockImplementation(async (_id, email) => {
-    const known = [ALICE, RAVI].find((p) => p.email === email);
+    const paula = { ...RAVI, userId: 'u-paula', name: PAULA.name, email: PAULA.email };
+    const known = [ALICE, RAVI, paula].find((p) => p.email === email);
     if (!known) throw new ApiError('No Orbit account uses this email.', 404);
     if (!people.some((p) => p.userId === known.userId)) people.push(known);
     return { guests: structuredClone(people) };
@@ -106,6 +118,34 @@ async function type(value: string): Promise<void> {
     input.dispatchEvent(new Event('input', { bubbles: true }));
   });
 }
+const emailField = () => section()!.querySelector<HTMLInputElement>('input[type="email"]')!;
+const suggestions = () =>
+  [...document.body.querySelectorAll<HTMLElement>('.share-suggestion')].map((row) => ({
+    name: row.querySelector('.share-suggestion-name')?.innerHTML,
+    email: row.querySelector('.share-suggestion-email')?.innerHTML,
+    when: row.querySelector('.share-suggestion-when')?.textContent,
+  }));
+/** A mouse press as a browser delivers it (as MainBranchSelect.test): what opens the list and picks from it. */
+async function press(element: Element | null | undefined, what: string): Promise<void> {
+  expect(element, `${what} is on screen`).toBeTruthy();
+  await act(async () => {
+    const init = { bubbles: true, cancelable: true, button: 0, buttons: 1, detail: 1 };
+    element!.dispatchEvent(new PointerEvent('pointerdown', { ...init, pointerType: 'mouse', isPrimary: true }));
+    element!.dispatchEvent(new MouseEvent('mousedown', init));
+    (element as HTMLElement).focus?.();
+    element!.dispatchEvent(new PointerEvent('pointerup', { ...init, buttons: 0, pointerType: 'mouse', isPrimary: true }));
+    element!.dispatchEvent(new MouseEvent('mouseup', { ...init, buttons: 0 }));
+    element!.dispatchEvent(new MouseEvent('click', { ...init, buttons: 0 }));
+  });
+  await settle();
+}
+async function key(name: string): Promise<void> {
+  await act(async () => {
+    emailField().dispatchEvent(new KeyboardEvent('keydown', { key: name, bubbles: true, cancelable: true }));
+  });
+  await settle();
+}
+
 async function click(element: Element | null | undefined, what: string): Promise<void> {
   expect(element, `${what} is on screen`).toBeTruthy();
   await act(async () => {
@@ -122,7 +162,9 @@ beforeEach(() => {
     dispatchEvent: () => false,
   }));
   vi.stubGlobal('ResizeObserver', class { observe() {} unobserve() {} disconnect() {} });
-  for (const fn of [getShareLink, getSessionGuests, inviteSessionGuest, removeSessionGuest]) vi.mocked(fn).mockReset();
+  for (const fn of [getShareLink, getSessionGuests, getSessionGuestSuggestions, inviteSessionGuest, removeSessionGuest]) {
+    vi.mocked(fn).mockReset();
+  }
   for (const fn of Object.values(toast)) fn.mockReset();
 });
 
@@ -236,5 +278,67 @@ describe('People who can reply', { timeout: 60_000 }, () => {
     expect(consequence().classList.contains('is-warn')).toBe(true);
     // Alice is already invited: no tick to ask for.
     expect(acknowledge()).toBeNull();
+  });
+
+  describe('people invited before (board share-links/14)', () => {
+    it('clicking the empty field lists them, newest first, with when they were last invited', async () => {
+      serve([RAVI], [PAULA, SAM, PAT]);
+      await open('auto');
+      expect(suggestions()).toEqual([]);
+      await press(emailField(), 'the email field');
+      expect(document.body.querySelector('.share-suggestion-head')?.textContent).toBe('People you’ve invited before');
+      expect(suggestions()).toEqual([
+        { name: 'Paula Ortiz', email: 'paula.ortiz@example.com', when: 'Nov 13' },
+        { name: 'Sam Wu', email: 'sam@example.org', when: 'Nov 9' },
+        { name: 'Pat Lee', email: 'patlee@example.net', when: 'Oct 30' },
+      ]);
+    });
+
+    it('typing narrows them, in bold; picking one fills the email and invites nobody', async () => {
+      serve([], [PAULA, SAM, PAT]);
+      await open('auto');
+      await press(emailField(), 'the email field');
+      await type('pa');
+      await settle();
+      expect(document.body.querySelector('.share-suggestion-head')).toBeNull();
+      expect(suggestions().map((r) => [r.name, r.email])).toEqual([
+        ['<b>Pa</b>ula Ortiz', '<b>pa</b>ula.ortiz@example.com'],
+        ['<b>Pa</b>t Lee', '<b>pa</b>tlee@example.net'],
+      ]);
+      await press(document.body.querySelector('.share-suggestion')?.closest('[role="option"]'), 'Paula');
+      expect(emailField().value).toBe('paula.ortiz@example.com');
+      expect(suggestions()).toEqual([]);
+      expect(vi.mocked(inviteSessionGuest)).not.toHaveBeenCalled();
+      // In Auto the first invite still needs the tick.
+      expect(inviteButton().disabled).toBe(true);
+    });
+
+    it('↓ and Enter pick one; with the list closed, Enter invites as before', async () => {
+      serve([], [PAULA, SAM]);
+      await open('acceptEdits');
+      await press(emailField(), 'the email field');
+      await type('s');
+      await settle();
+      expect(suggestions().map((r) => r.when)).toEqual(['Nov 9']);
+      await key('ArrowDown');
+      await key('Enter');
+      expect(emailField().value).toBe('sam@example.org');
+      expect(vi.mocked(inviteSessionGuest)).not.toHaveBeenCalled();
+      await act(async () => {
+        emailField().form!.requestSubmit();
+      });
+      await settle();
+      expect(vi.mocked(inviteSessionGuest)).toHaveBeenCalledWith(SESSION, 'sam@example.org');
+    });
+
+    it('someone invited here leaves the suggestions', async () => {
+      serve([], [PAULA, SAM]);
+      await open('acceptEdits');
+      await type('paula.ortiz@example.com');
+      await click(inviteButton(), 'Invite');
+      expect(rows().map((r) => r.name)).toEqual(['Paula Ortiz']);
+      await press(emailField(), 'the email field');
+      expect(suggestions().map((r) => r.name)).toEqual(['Sam Wu']);
+    });
   });
 });

@@ -76,6 +76,17 @@ final class KimiSiteTests: XCTestCase {
         XCTAssertNil(try XCTUnwrap(RunnerPageFormat.accountLines(RunnerEngineHealth(engine: "kimi", auth: "no")).first).subtitle)
     }
 
+    /// OpenCode's row says after its version that its CLI listed no provider key (web's
+    /// `1.19.5 · no provider key found`) — only for OpenCode, and never beside a yes.
+    func testOpenCodeRowSaysItFoundNoKey() throws {
+        let noKey = try JSONDecoder().decode(RunnerEngineHealth.self, from: Data(
+            #"{"engine":"opencode","installed":true,"version":"1.19.5","auth":"unknown","openCodeNoKey":true}"#.utf8))
+        XCTAssertEqual(RunnerPageFormat.engineKeyNote(noKey), "no provider key found")
+        XCTAssertNil(RunnerPageFormat.engineKeyNote(RunnerEngineHealth(engine: "opencode", installed: true, auth: "unknown")))
+        XCTAssertNil(RunnerPageFormat.engineKeyNote(RunnerEngineHealth(engine: "opencode", installed: true, auth: "yes", openCodeNoKey: true)))
+        XCTAssertNil(RunnerPageFormat.engineKeyNote(RunnerEngineHealth(engine: "codex", installed: true, auth: "unknown", openCodeNoKey: true)))
+    }
+
     // MARK: the web's words
 
     private func web(_ relative: String) throws -> String {

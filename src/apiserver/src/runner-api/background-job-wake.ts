@@ -515,6 +515,12 @@ export function buildBackgroundWakeBlock(wakes: StoredWake[], turnKind: string =
   const lines = ['<background-job-wake>', WAKE_HEADS[turnKind === 'steer' ? 'steer' : 'message']];
   for (const wake of wakes) lines.push(...jobLines(wake, (job) => [describeTrigger(job)]));
   lines.push('  The control plane recorded this for you; the user did not say it. Read the full output with mcp__orbit__bg_output by id; pass sinceOffset to read only what is new.');
+  // The moment a "tell me when it's done" comes due. On 2026-11-17 an agent asked exactly that woke here, answered
+  // in the conversation and stopped, so the person heard nothing until they opened it. Two-space narration, which
+  // the clients' parsers skip as they skip the lines around it.
+  if (wakes.some((wake) => wake.trigger === 'exit')) {
+    lines.push('  If the person asked to hear when this was done, tell them with mcp__orbit__notify: a reply here reaches them only when they next look.');
+  }
   // Not for one the owner refused: nothing was cut short, and asking again is what they just answered.
   if (wakes.some((wake) => wake.status === 'killed' && wake.reason !== BACKGROUND_JOB_NOT_ALLOWED)) {
     lines.push('  A killed job does not come back on its own: to keep waiting, start it again with bg_run.');

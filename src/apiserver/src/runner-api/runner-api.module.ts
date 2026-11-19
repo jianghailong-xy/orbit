@@ -10,6 +10,7 @@ import { RunnerApiController } from './runner-api.controller';
 import { RunnerAuthGuard } from './runner-auth.guard';
 import { RunnerFilesController } from './runner-files.controller';
 import { RunnerProjectsController } from './runner-projects.controller';
+import { CreateRequestReceipts } from './create-request-receipts';
 import { RunnerTasksController } from './runner-tasks.controller';
 import { RunnerTaskCompletionEvidenceController } from './runner-task-completion-evidence.controller';
 import { RunnerTaskOwnerConfirmationController } from './runner-task-owner-confirmation.controller';
@@ -25,7 +26,14 @@ import { RunnerNotifyController } from './runner-notify.controller';
 import { RunnerServiceTokensController } from './runner-service-tokens.controller';
 import { RunnerWatchesController } from './runner-watches.controller';
 import { RunnerOwnerRequestsController } from './runner-owner-requests.controller';
+import { RunnerConditionsController } from './runner-conditions.controller';
+import { RunnerSchedulesController } from './runner-schedules.controller';
+import { SchedulesModule } from '../schedules/schedules.module';
+import { ScheduleRunsModule } from '../schedules/schedule-runs.module';
+import { ConditionsModule } from '../conditions/conditions.module';
 import { RunnerSecretGrantsController } from './runner-secret-grants.controller';
+import { RunnerGitCredentialController } from './runner-git-credential.controller';
+import { GithubModule } from '../github/github.module';
 import { RunnerReleaseController } from './runner-release.controller';
 import { RunnerLinkGatewayGuard, RunnerLinkTokenController } from './runner-link-token.controller';
 import { RunnerLinkWelcomeController } from './runner-link-welcome.controller';
@@ -91,6 +99,14 @@ import { AdminRoleGuard } from '../users/admin-role.guard';
     // RunnerEngineInstallController starts and reads the engine relay through the RunnersService the
     // web's Install uses.
     RunnersModule,
+    // RunnerGitCredentialController mints a GitHub workspace's token, and the heartbeat reconciles its clone, through
+    // the one GithubWorkspaceService, whose in-memory token cache is the only place a token is kept.
+    GithubModule,
+    // RunnerSchedulesController: a session's schedule_* tools, through the services the REST doors use.
+    SchedulesModule,
+    ScheduleRunsModule,
+    // The heartbeat hands out conditionProbes and takes conditionSamples through the one ConditionsService.
+    ConditionsModule,
   ],
   // RunnerSessionsController is listed last so its GET sessions/:id can't shadow
   // RunnerApiController's static sessions/claim | sessions/reclaim routes.
@@ -101,6 +117,10 @@ import { AdminRoleGuard } from '../users/admin-role.guard';
     RunnerTaskCompletionEvidenceController,
     RunnerTaskOwnerConfirmationController,
     RunnerTaskProgressController,
+    // A session's schedule_* tools (docs/scheduled-tasks-design.md §9.1).
+    RunnerSchedulesController,
+    // A session's condition_get (docs/condition-triggers-design.md §8).
+    RunnerConditionsController,
     // SubAgent runs a session's `delegate` opens and ends (runner-subagents.controller.ts).
     RunnerSubagentsController,
     RunnerServiceTokensController,
@@ -120,6 +140,8 @@ import { AdminRoleGuard } from '../users/admin-role.guard';
     RunnerWatchesController,
     RunnerOwnerRequestsController,
     RunnerSecretGrantsController,
+    // A GitHub workspace's installation token, for the runner's own git commands (docs/github-workspace-design.md §5.4).
+    RunnerGitCredentialController,
     // Which runner release each runner is to run (runner-release.ts).
     RunnerReleaseController,
     RunnerWikiController,
@@ -169,6 +191,8 @@ import { AdminRoleGuard } from '../users/admin-role.guard';
     IntegrationJobRelay,
     WikiRepoOps,
     MainCheckoutService,
+    // The project_create / session_create receipts (create-request-receipts.ts).
+    CreateRequestReceipts,
   ],
 })
 export class RunnerApiModule {}

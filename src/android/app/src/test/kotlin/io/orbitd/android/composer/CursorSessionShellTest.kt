@@ -152,14 +152,16 @@ class CursorSessionShellTest : ComposerShellTest() {
         ComposerShell.events = listOf(ComposerShell.obj("""{"type":"user","seq":1,"payload":{"text":"Fix the flaky export test"}}"""),
             ComposerShell.obj("""{"type":"assistant","seq":2,"payload":{"text":"Done."},"contextTokens":0}"""))
         signIn(); openSession()
-        await { has(hasText("Context: Unavailable · Usage")) }
-        compose.onNode(hasText("Context: Unavailable · Usage") and hasClickAction()).performClick()
+        // The ring is dashed, with no reading, and says why (board android-composer-parity); it opens the usage sheet.
+        await { has(hasTestTag("composer-context") and hasContentDescription("Context: Unavailable")) }
+        compose.onNodeWithTag("composer-context").performClick()
         await { has(hasTestTag("composer-context-unavailable")) }
-        assertTrue(has(inDialog("Cursor CLI doesn’t report how much of the window a session has used, so there is no reading to show.")))
-        assertFalse(has(inDialog("tokens")))
+        val sheet = hasAnyAncestor(hasTestTag("composer-context-sheet"))
+        assertTrue(has(hasText("Cursor CLI doesn’t report how much of the window a session has used, so there is no reading to show.", substring = true) and sheet))
+        assertFalse(has(hasText("tokens", substring = true) and sheet))
         // The model by the chip's words, never its raw value (iOS 5 ④: Model, Auto).
-        assertTrue(has(hasText("Auto") and hasAnyAncestor(isDialog())))
-        assertFalse(has(inDialog("cursor · ")))
+        assertTrue(has(hasText("Auto") and sheet))
+        assertFalse(has(hasText("cursor · ", substring = true) and sheet))
     }
 
     /** iOS 5 ⑤⑥: while a turn runs, a message waits for the next one, and the tray and the box say why. */

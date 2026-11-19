@@ -638,6 +638,13 @@ public struct ProjectIntegrationJob: Codable, Equatable, Sendable {
     public let limitSeconds: Int?
     /// Whether the owner's Retry takes this job now.
     public let retryable: Bool
+    /// Whether the owner's "Land without the check" takes this landing now (§2.4 J-S5): a task's
+    /// landing in flight, before its push, that runs a landing check and was not already asked to
+    /// stop. False from a server that does not send it.
+    public let skippable: Bool
+    /// Where a skip of this landing's check stands: `STOPPING` while the skipped generation is still
+    /// answering its stop, `SKIPPED` on the generation that runs without the check; nil otherwise.
+    public let skipCheck: String?
     /// The candidate a promotion job checks or lands; nil for a task landing.
     public let promotionId: String?
     /// The claim generation the job is on: 0 before its first claim, one more per takeover.
@@ -666,7 +673,8 @@ public struct ProjectIntegrationJob: Codable, Equatable, Sendable {
                 promotionId: String? = nil, claim: Int? = nil, round: Int? = nil,
                 check: ProjectIntegrationCheck? = nil, stepStartedAt: String? = nil,
                 outputMovedAt: String? = nil, typicalMs: Int? = nil, liveness: String? = nil,
-                blockingReason: LandTaskBlockingReason? = nil, landingSessionId: String? = nil) {
+                blockingReason: LandTaskBlockingReason? = nil, landingSessionId: String? = nil,
+                skippable: Bool = false, skipCheck: String? = nil) {
         self.jobId = jobId
         self.kind = kind
         self.state = state
@@ -692,6 +700,8 @@ public struct ProjectIntegrationJob: Codable, Equatable, Sendable {
         self.liveness = liveness
         self.blockingReason = blockingReason
         self.landingSessionId = landingSessionId
+        self.skippable = skippable
+        self.skipCheck = skipCheck
     }
 
     public init(from decoder: Decoder) throws {
@@ -721,6 +731,8 @@ public struct ProjectIntegrationJob: Codable, Equatable, Sendable {
         liveness = try? c.decodeIfPresent(String.self, forKey: .liveness)
         blockingReason = try? c.decodeIfPresent(LandTaskBlockingReason.self, forKey: .blockingReason)
         landingSessionId = try? c.decodeIfPresent(String.self, forKey: .landingSessionId)
+        skippable = (try? c.decodeIfPresent(Bool.self, forKey: .skippable)) ?? false
+        skipCheck = try? c.decodeIfPresent(String.self, forKey: .skipCheck)
     }
 }
 
@@ -782,6 +794,10 @@ public struct ProjectIntegrationView: Codable, Equatable, Sendable {
     /// When the project started integrating — what the locked line's reason says "since".
     public let startedAt: String?
     /// The check run on the combined tree before a landing; nil when there is none.
+    public let landingCheckCommand: String?
+    public let landingCheckTimeoutSeconds: Int?
+    public let landingCheckCommandAbsentReason: String?
+    public let mergeCheckTimeoutSeconds: Int?
     public let mergeCheckCommand: String?
     /// How long an exception may wait on the coordinator before it becomes the owner's. Nil from a
     /// server that predates it.
@@ -817,6 +833,8 @@ public struct ProjectIntegrationView: Codable, Equatable, Sendable {
                 integratingCount: Int = 0, queuedCount: Int = 0, mergeCheckOnTip: String = "UNKNOWN",
                 inFlight: ProjectIntegrationInFlight? = nil, locked: Bool = false,
                 startedAt: String? = nil, mergeCheckCommand: String? = nil,
+                landingCheckCommand: String? = nil, landingCheckTimeoutSeconds: Int? = nil,
+                landingCheckCommandAbsentReason: String? = nil, mergeCheckTimeoutSeconds: Int? = nil,
                 escalationSeconds: Int? = nil, landTasks: [ProjectLandTask] = [],
                 inFlightJobs: [ProjectIntegrationJob]? = nil, deliveryMode: DeliveryMode? = nil) {
         self.line = line
@@ -829,6 +847,10 @@ public struct ProjectIntegrationView: Codable, Equatable, Sendable {
         self.locked = locked
         self.startedAt = startedAt
         self.mergeCheckCommand = mergeCheckCommand
+        self.landingCheckCommand = landingCheckCommand
+        self.landingCheckTimeoutSeconds = landingCheckTimeoutSeconds
+        self.landingCheckCommandAbsentReason = landingCheckCommandAbsentReason
+        self.mergeCheckTimeoutSeconds = mergeCheckTimeoutSeconds
         self.escalationSeconds = escalationSeconds
         self.commitsAheadOfUpstream = commitsAheadOfUpstream
         self.lastUpstreamSyncAt = lastUpstreamSyncAt
@@ -855,6 +877,10 @@ public struct ProjectIntegrationView: Codable, Equatable, Sendable {
         locked = try c.decodeIfPresent(Bool.self, forKey: .locked) ?? false
         startedAt = try c.decodeIfPresent(String.self, forKey: .startedAt)
         mergeCheckCommand = try c.decodeIfPresent(String.self, forKey: .mergeCheckCommand)
+        landingCheckCommand = try c.decodeIfPresent(String.self, forKey: .landingCheckCommand)
+        landingCheckTimeoutSeconds = try c.decodeIfPresent(Int.self, forKey: .landingCheckTimeoutSeconds)
+        landingCheckCommandAbsentReason = try c.decodeIfPresent(String.self, forKey: .landingCheckCommandAbsentReason)
+        mergeCheckTimeoutSeconds = try c.decodeIfPresent(Int.self, forKey: .mergeCheckTimeoutSeconds)
         escalationSeconds = try? c.decodeIfPresent(Int.self, forKey: .escalationSeconds)
         commitsAheadOfUpstream = try c.decodeIfPresent(Int.self, forKey: .commitsAheadOfUpstream)
         lastUpstreamSyncAt = try c.decodeIfPresent(String.self, forKey: .lastUpstreamSyncAt)
@@ -1354,16 +1380,21 @@ public struct UpdateProjectIntegrationRequest: Encodable, Equatable, Sendable {
     public let upstreamRef: String?
     /// `.some(nil)` removes the check; nil leaves it alone.
     public let mergeCheckCommand: String??
+    public let landingCheckCommand: String??
+    public let landingCheckTimeoutSeconds: Int??
     public let exceptionEscalationSeconds: Int?
     /// How the work reaches main (§10.5 O-L1); nil leaves it alone. `agentPush` only with a main
     /// line, which a line leaving main answers with `platform` in the same write.
     public let deliveryMode: DeliveryMode?
 
     public init(line: IntegrationLine? = nil, upstreamRef: String? = nil, mergeCheckCommand: String?? = nil,
+                landingCheckCommand: String?? = nil, landingCheckTimeoutSeconds: Int?? = nil,
                 exceptionEscalationSeconds: Int? = nil, deliveryMode: DeliveryMode? = nil) {
         self.line = line
         self.upstreamRef = upstreamRef
         self.mergeCheckCommand = mergeCheckCommand
+        self.landingCheckCommand = landingCheckCommand
+        self.landingCheckTimeoutSeconds = landingCheckTimeoutSeconds
         self.exceptionEscalationSeconds = exceptionEscalationSeconds
         self.deliveryMode = deliveryMode
     }
@@ -1371,10 +1402,11 @@ public struct UpdateProjectIntegrationRequest: Encodable, Equatable, Sendable {
     /// Whether it says anything at all — a Save with nothing changed at this door sends nothing.
     public var isEmpty: Bool {
         line == nil && upstreamRef == nil && mergeCheckCommand == nil && exceptionEscalationSeconds == nil
-            && deliveryMode == nil
+            && deliveryMode == nil && landingCheckCommand == nil && landingCheckTimeoutSeconds == nil
     }
 
     enum CodingKeys: String, CodingKey {
+        case landingCheckCommand, landingCheckTimeoutSeconds
         case line, upstreamRef, mergeCheckCommand, exceptionEscalationSeconds, deliveryMode
     }
 
@@ -1384,6 +1416,12 @@ public struct UpdateProjectIntegrationRequest: Encodable, Equatable, Sendable {
         try c.encodeIfPresent(upstreamRef, forKey: .upstreamRef)
         if let check = mergeCheckCommand {
             if let check { try c.encode(check, forKey: .mergeCheckCommand) } else { try c.encodeNil(forKey: .mergeCheckCommand) }
+        }
+        if let value = landingCheckCommand {
+            if let value { try c.encode(value, forKey: .landingCheckCommand) } else { try c.encodeNil(forKey: .landingCheckCommand) }
+        }
+        if let value = landingCheckTimeoutSeconds {
+            if let value { try c.encode(value, forKey: .landingCheckTimeoutSeconds) } else { try c.encodeNil(forKey: .landingCheckTimeoutSeconds) }
         }
         try c.encodeIfPresent(exceptionEscalationSeconds, forKey: .exceptionEscalationSeconds)
         try c.encodeIfPresent(deliveryMode, forKey: .deliveryMode)

@@ -232,6 +232,23 @@ test('the owner channel refuses a personal access token door by door and field b
 
   // ── (1) the owner channel, door by door ────────────────────────────────────────────────────
 
+  // Scheduled tasks' create cards (docs/scheduled-tasks-design.md §4, §8.1), as a session's schedule_create leaves them.
+  const scheduleCard = async () => (await db.scheduleChangeRequest.create({
+    data: {
+      ownerId: userId, kind: 'CREATE', askedBy: 'SESSION', askedBySessionId: sessionId,
+      proposed: {
+        workspaceId, intent: 'check it daily', title: 'Owner channel check', prompt: 'check it', readBack: null,
+        rule: { kind: 'DAILY', time: '10:00' }, timezone: 'UTC', accessLevel: 'CHECK_ONLY', runLimitMinutes: 30,
+        startAt: null, endAt: null, baseline: null,
+      },
+      envelopeAsked: { workspaceId, accessLevel: 'CHECK_ONLY', runsPerWeek: 7, runLimitMinutes: 30 },
+    },
+  })).id;
+  const cardToAllow = await scheduleCard();
+  const cardToDecline = await scheduleCard();
+  const cardForASession = await scheduleCard();
+  const cardState = async (id: string) => (await db.scheduleChangeRequest.findUniqueOrThrow({ where: { id } })).state;
+
   const doors: Door[] = [
     {
       route: 'POST /owner-requests/:id/secret', path: `/owner-requests/${secretToSubmit}/secret`,
@@ -275,6 +292,7 @@ test('the owner channel refuses a personal access token door by door and field b
     },
     // Session guests (docs/session-guests-design.md §3): the People list, inviting by email, removing.
     { route: 'GET /sessions/:id/guests', path: `/sessions/${sessionId}/guests`, login: 200 },
+    { route: 'GET /sessions/:id/guests/suggestions', path: `/sessions/${sessionId}/guests/suggestions`, login: 200 },
     {
       route: 'POST /sessions/:id/guests', path: `/sessions/${sessionId}/guests`,
       body: { email: guestEmail }, login: 201,
@@ -489,6 +507,18 @@ test('the owner channel refuses a personal access token door by door and field b
       login: 200,
       observe: async () => (await chatRow(chatToRemove)) !== null,
     },
+    // Opening the Feishu bot to everyone the app is available to (§14.1): the token writes no column of the app.
+    {
+      route: 'PUT /integrations/feishu/access',
+      path: '/integrations/feishu/access',
+      body: { mode: 'AVAILABILITY_SCOPE', workspaceId, permissionMode: 'acceptEdits', maxRunningPerPerson: 2, sessionsPerDayTotal: 40 },
+      login: 200,
+      observe: async () => {
+        const app = await db.feishuApp.findUniqueOrThrow({ where: { appId: feishuAppId } });
+        return [app.accessMode, app.openWorkspaceId, app.openPermissionMode, app.openMaxRunningPerPerson, app.openSessionsPerDayPerPerson,
+          app.openMaxRunningTotal, app.openSessionsPerDayTotal, app.updatedAt.toISOString()];
+      },
+    },
     // A terminal asking to be approved (docs/terminal-session-design.md): two real requests on the account's runner.
     { route: 'GET /terminals/requests', path: '/terminals/requests', login: 200 },
     {
@@ -498,6 +528,15 @@ test('the owner channel refuses a personal access token door by door and field b
     {
       route: 'POST /terminals/requests/:id/deny', path: `/terminals/requests/${terminalToDeny}/deny`,
       login: 200, observe: () => terminalStatus(terminalToDeny),
+    },
+    // A scheduled task's create cards, pressed for real: the token writes nothing, the login's press decides the card.
+    {
+      route: 'POST /schedule-requests/:id/allow', path: `/schedule-requests/${cardToAllow}/allow`, body: {},
+      login: 200, observe: () => cardState(cardToAllow),
+    },
+    {
+      route: 'POST /schedule-requests/:id/decline', path: `/schedule-requests/${cardToDecline}/decline`,
+      login: 200, observe: () => cardState(cardToDecline),
     },
   ];
 
@@ -521,6 +560,18 @@ test('the owner channel refuses a personal access token door by door and field b
       if (door.observe) assert.notDeepEqual(await door.observe(), before, "the login did the door's work");
     });
   }
+
+  await t.test('POST /schedule-requests/:id/{allow,decline}: a login carrying an acting session is refused, over HTTP', async () => {
+    for (const verb of ['allow', 'decline']) {
+      const reply = await call(server!, 'POST', `/api/schedule-requests/${cardForASession}/${verb}`, login, {}, {
+        'x-orbit-session-id': sessionId,
+      });
+      assert.equal(reply.status, 403, `${verb} with a session answered ${reply.status}: ${reply.text}`);
+      assert.equal(reply.json?.code, 'SCHEDULE_DECISION_OWNER_CHANNEL_ONLY');
+    }
+    assert.equal(await cardState(cardForASession), 'PENDING', 'a session pressed nothing');
+    assert.equal(await db.schedule.count({ where: { ownerId: userId } }), 1, 'only the login\'s Create wrote a schedule');
+  });
 
   // ── (2) auth/*, admin/*, runner credentials, share links ────────────────────────────────────
 

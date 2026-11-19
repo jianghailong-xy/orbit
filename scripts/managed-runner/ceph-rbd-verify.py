@@ -259,7 +259,7 @@ def pod_manifest(env, reservation, run_id, existing=False):
     command += ["--expected-pod-name", env["verification"]["podNamePrefix"] + "-" + env["storage"]["runnerID"]]
     if existing:
         command += ["--require-existing", "--initially-quiesced"]
-    ready_code = "import json,pathlib,sys; p=pathlib.Path('/var/lib/orbit/storage-verification/" + run_id + "/acknowledged.json'); sys.exit(0 if p.exists() and json.loads(p.read_text())['committedRows']>=10 else 1)"
+    ready_code = "import json,pathlib,sys; p=pathlib.Path('/home/orbit/storage-verification/" + run_id + "/acknowledged.json'); sys.exit(0 if p.exists() and json.loads(p.read_text())['committedRows']>=10 else 1)"
     return {"apiVersion": "v1", "kind": "Pod", "metadata": {"name": reservation["podName"], "namespace": env["kubernetes"]["namespace"],
             "annotations": {"orbit.dev/owner-id": env["storage"]["ownerID"], "orbit.dev/runner-id": env["storage"]["runnerID"],
                             env["verification"]["reservationAnnotation"]: str(reservation["generation"])}},
@@ -275,7 +275,7 @@ def pod_manifest(env, reservation, run_id, existing=False):
                             "securityContext": {"allowPrivilegeEscalation": False, "readOnlyRootFilesystem": True, "capabilities": {"drop": ["ALL"]}},
                             "resources": {"requests": {"cpu": "100m", "memory": "128Mi", "ephemeral-storage": "100Mi"},
                                           "limits": {"cpu": "500m", "memory": "256Mi", "ephemeral-storage": "200Mi"}},
-                            "volumeMounts": [{"name": "data", "mountPath": "/var/lib/orbit"}, {"name": "tmp", "mountPath": "/tmp"}]}],
+                            "volumeMounts": [{"name": "data", "mountPath": "/home/orbit"}, {"name": "tmp", "mountPath": "/tmp"}]}],
             "volumes": [{"name": "data", "persistentVolumeClaim": {"claimName": env["storage"]["pvcName"]}}, {"name": "tmp", "emptyDir": {}}]}}
 
 
@@ -329,7 +329,7 @@ def probe(kube, identity, run_id, operation="snapshot", previous=None, recover=F
     if operation == "resume-writer":
         return result
     require(result["sqliteIntegrity"] == ["ok"] and result["sqliteJournalMode"].lower() == "wal" and not result["gitStatus"], "probe integrity/WAL/Git status failed")
-    require(any(re.search(r" - ext4 /dev/rbd[0-9]+ ", line) for line in result["mountInfo"]), "actual /var/lib/orbit mount must be ext4 on a kernel /dev/rbd device")
+    require(any(re.search(r" - ext4 /dev/rbd[0-9]+ ", line) for line in result["mountInfo"]), "actual /home/orbit mount must be ext4 on a kernel /dev/rbd device")
     expected_kernel = kube.env["versions"]["nodeKernelA" if identity["nodeName"] == kube.env["kubernetes"]["nodeA"]["name"] else "nodeKernelB"]
     require(result["kernel"] == expected_kernel, "mounted probe kernel differs from reviewed node")
     if previous:

@@ -175,6 +175,7 @@ internal object ProjectShell {
     @Volatile var onDecision: ((String, String) -> ApiResponse)? = null
 
     fun reset() {
+        now = Instant.now()
         calls.clear(); started = true; startRequest = false; quietStatus = 200
         done = false; doneBy = "DERIVED"; doneCounts = true; completedMembers = emptySet()
         promotion = null; merged = "[]"; mergeCheck = false; mergeJobKind = "CHECK_PROMOTION"; holder = null; criteria = null; pressStatus = 200; mergeWaiting = false; bodies.clear()
@@ -200,7 +201,10 @@ internal object ProjectShell {
     /** One account event of [type] on the account stream, as the server sends it. */
     fun event(type: String, sessionId: String = "") { accountEvents.trySend("""{"type":"$type","sessionId":"$sessionId","data":{}}""") }
 
-    private fun ago(minutes: Long) = Instant.now().minusSeconds(minutes * 60).toString()
+    /** One "now" per test: a row read twice says the same instants, as the server's do — a waiting session's last turn does not move
+     * while it waits, and the needs-you notice keys a wait by it (`NeedsYouLogic.waitKey`). */
+    @Volatile private var now: Instant = Instant.now()
+    private fun ago(minutes: Long) = now.minusSeconds(minutes * 60).toString()
     private val workspaces = """[
         {"id":"$ALPHA","name":"Alpha","runnerId":"r1","enabled":true,"position":0,"createdAt":"2026-10-01T01:00:00.000Z"},
         {"id":"$BETA","name":"Beta","runnerId":"r1","enabled":true,"position":1,"createdAt":"2026-10-01T02:00:00.000Z"}]"""
@@ -334,6 +338,7 @@ internal object ProjectShell {
             path == "users/me" -> ok("""{"id":"u1","email":"owner@a05d.test","name":"Owner"}""")
             path == "workspaces" -> ok(workspaces)
             path == "runners" -> ok("""[{"id":"r1","name":"Fixture runner","online":true}]""")
+            path == "sessions" && ("scheduled" to "1") in api.query -> ok("[]")
             path == "sessions" && scoped == QUIET -> if (quietStatus == 200) ok("[]") else ApiResponse(quietStatus, """{"message":"The project's sessions are unavailable"}""".encodeToByteArray())
             path == "sessions" && scoped == LAUNCH -> {
                 // The page's own widening (§2.9 LS6): its Landings group's rows ride on this read and no other.

@@ -9,6 +9,9 @@
  *   2. A second limit moves it once more; a third is refused SUBAGENT_FALLBACK_SPENT after 2 moves, and the
  *      run's end closes it FAILED.
  *   3. A plain failure is not moved (SUBAGENT_NOT_A_LIMIT_FAILURE): one attempt, closed with the run's end.
+ *   3a. A failed login (`Failed to authenticate: OAuth session expired …`, `Not logged in`) moves like a limit: the
+ *      attempt closes AUTH_FAILED, the Why gains "Moved to <model> after <model>'s login failed", at most 2 moves.
+ *   3b. A failed login on a model the caller named is not moved (SUBAGENT_NAMED_MODEL_NOT_MOVED).
  *   4. No candidate left is NO_SUBAGENT_PROVIDER, listing each provider's reason.
  *   5. Another account's runner is answered as for an id that names nothing.
  *   6. An account pool is a fallback target: the run moves onto the pool's member with room, on that member's
@@ -56,6 +59,8 @@ const update = (fields: Partial<SubagentRunUpdateDto>): SubagentRunUpdateDto => 
 const SESSION_LIMIT = "You've hit your session limit · resets 6:20pm (Europe/Berlin)";
 const USAGE_LIMIT = "You've hit your usage limit. Visit https://chatgpt.com/codex/settings/usage to purchase more credits";
 const WEEKLY_LIMIT = "You've hit your weekly limit · resets 1pm (Europe/Berlin)";
+const OAUTH_EXPIRED = 'Failed to authenticate: OAuth session expired and could not be refreshed';
+const NOT_LOGGED_IN = 'Not logged in · Please run /login';
 
 /** The refusal a call was answered with: its code and message. */
 async function refused(call: Promise<unknown>): Promise<{ code: string; message: string }> {
@@ -146,8 +151,11 @@ test('SubAgent quota fallback: moves, attempts, the reason, the bound and the re
     const opened = await subagents.createSubagentRun(runner, sessionId, create({ toolUseId: 'toolu_limit_once', size: 'M' }));
     t.diagnostic(`decision pick ${opened.decision.provider}/${opened.decision.model}, fallbacks ${JSON.stringify(opened.decision.fallbacks)}`);
     assert.equal(opened.decision.provider, 'claude', 'Cost: the subscription first');
-    assert.deepEqual(opened.decision.fallbacks?.map((f) => [f.provider, f.model]), [[first, 'a-coder'], [second, 'b-coder']],
-      'the rest of tier M, cheapest first');
+    assert.deepEqual(opened.decision.fallbacks?.map((f) => [f.provider, f.model]), [
+      [first, 'a-coder'], [second, 'b-coder'],
+      // Then the other tiers: L and XL above, S below.
+      ['claude', 'claude-opus-5-5'], ['claude', 'claude-opus-5-5'], ['claude', 'claude-sonnet-5-5'],
+    ], 'the rest of tier M, cheapest first, then the other tiers');
     assert.deepEqual((await rowOf(opened.runId)).attempts.map(brief), [[1, 'claude', 'claude', 'claude-sonnet-5-5', 'RUNNING']]);
 
     const moved = await subagents.nextSubagentCandidate(runner, sessionId, opened.runId, fallback(SESSION_LIMIT));
@@ -208,6 +216,46 @@ test('SubAgent quota fallback: moves, attempts, the reason, the bound and the re
     assert.equal(row.decision.reasons.some((r) => r.startsWith('Moved to')), false);
   });
 
+  await t.test("a failed login moves the run like a limit: the next candidate, AUTH_FAILED, the reason and the bound", async () => {
+    const sessionId = await parentSession();
+    const opened = await subagents.createSubagentRun(runner, sessionId, create({ toolUseId: 'toolu_login_failed', size: 'M' }));
+    assert.equal(opened.decision.provider, 'claude');
+    const moved = await subagents.nextSubagentCandidate(runner, sessionId, opened.runId, fallback(OAUTH_EXPIRED));
+    t.diagnostic(`moved after a failed login: attempt ${moved.attempt}, reason "${moved.reason}"`);
+    assert.equal(moved.attempt, 2);
+    assert.equal(moved.reason, `Moved to a-coder on ${first} after claude-sonnet-5-5's login failed`);
+    assert.equal(moved.exec.model, 'a-coder');
+    const again = await subagents.nextSubagentCandidate(runner, sessionId, opened.runId, fallback(NOT_LOGGED_IN));
+    assert.equal(again.reason, `Moved to b-coder on ${second} after a-coder's login failed`);
+    const spent = await refused(subagents.nextSubagentCandidate(runner, sessionId, opened.runId, fallback(OAUTH_EXPIRED)));
+    t.diagnostic(`third failed login: ${spent.code}: ${spent.message}`);
+    assert.equal(spent.code, 'SUBAGENT_FALLBACK_SPENT', 'at most 2 switches');
+    const row = await rowOf(opened.runId);
+    t.diagnostic(`subagent_run.attempts ${JSON.stringify(row.attempts.map(brief))}`);
+    assert.deepEqual(row.attempts.map(brief), [
+      [1, 'claude', 'claude', 'claude-sonnet-5-5', 'AUTH_FAILED'],
+      [2, first, 'claude', 'a-coder', 'AUTH_FAILED'],
+      [3, second, 'claude', 'b-coder', 'AUTH_FAILED'],
+    ]);
+    assert.equal(row.attempts[0].error, OAUTH_EXPIRED, "each attempt keeps the engine's words");
+    assert.deepEqual(row.decision.moves, [moved.reason, again.reason], 'the Why line carries both moves');
+  });
+
+  await t.test('a failed login on a model the caller named is not moved: the failure goes back to the parent', async () => {
+    const sessionId = await parentSession();
+    const opened = await subagents.createSubagentRun(runner, sessionId, create({ toolUseId: 'toolu_named_login', model: 'claude-opus-5-5' }));
+    assert.equal(opened.decision.tierSource, 'named-model');
+    assert.equal(opened.decision.model, 'claude-opus-5-5');
+    const kept = await refused(subagents.nextSubagentCandidate(runner, sessionId, opened.runId, fallback(OAUTH_EXPIRED)));
+    t.diagnostic(`named model, failed login: ${kept.code}: ${kept.message}`);
+    assert.equal(kept.code, 'SUBAGENT_NAMED_MODEL_NOT_MOVED');
+    assert.match(kept.message, /login failed on claude-opus-5-5, which the delegate call named/);
+    const row = await rowOf(opened.runId);
+    assert.deepEqual(row.attempts.map(brief), [[1, 'claude', 'claude', 'claude-opus-5-5', 'AUTH_FAILED']],
+      'one attempt, closed with the failed login; nothing moved');
+    assert.equal(row.decision.reasons.some((r) => r.startsWith('Moved to')), false);
+  });
+
   await t.test('another account\'s runner is answered as for an id that names nothing', async () => {
     const sessionId = await parentSession();
     const opened = await subagents.createSubagentRun(runner, sessionId, create({ toolUseId: 'toolu_foreign', size: 'M' }));
@@ -258,7 +306,7 @@ test('SubAgent quota fallback: moves, attempts, the reason, the bound and the re
     const before = await prisma.session.findUniqueOrThrow({ where: { id: sessionId }, select: poolFields });
     const opened = await withPools.createSubagentRun(runner, sessionId, create({ toolUseId: 'toolu_to_pool', size: 'M' }));
     assert.equal(opened.decision.provider, 'claude', 'the sign-in first, with more room');
-    assert.deepEqual(opened.decision.fallbacks?.map((f) => f.provider), [pool.slug], 'then the pool');
+    assert.equal(opened.decision.fallbacks?.[0]?.provider, pool.slug, 'then the pool, before the other tiers');
     const moved = await withPools.nextSubagentCandidate(runner, sessionId, opened.runId, fallback(SESSION_LIMIT));
     t.diagnostic(`moved to the pool: ${moved.reason}; env names ${JSON.stringify(Object.keys(moved.exec.env ?? {}))}`);
     assert.equal(moved.attempt, 2);
@@ -323,7 +371,7 @@ test('SubAgent quota fallback: moves, attempts, the reason, the bound and the re
     const opened = await subagents.createSubagentRun(machine, sessionId, create({ toolUseId: 'toolu_to_codex_pool', size: 'M' }));
     t.diagnostic(`opened on ${opened.decision.provider}; fallbacks ${JSON.stringify(opened.decision.fallbacks?.map((f) => f.provider))}`);
     assert.equal(opened.decision.provider, 'claude', 'the sign-in first, with more room');
-    assert.deepEqual(opened.decision.fallbacks?.map((f) => f.provider), [pool.slug], 'then the Codex pool');
+    assert.equal(opened.decision.fallbacks?.[0]?.provider, pool.slug, 'then the Codex pool, before the other tiers');
     const moved = await subagents.nextSubagentCandidate(machine, sessionId, opened.runId, fallback(SESSION_LIMIT));
     t.diagnostic(`moved to the Codex pool: ${moved.reason}; env names ${JSON.stringify(Object.keys(moved.exec.env ?? {}))}`);
     assert.equal(moved.attempt, 2);

@@ -2,6 +2,8 @@ package main
 
 import (
 	"context"
+	"os"
+	"path/filepath"
 	"reflect"
 	"strings"
 	"testing"
@@ -229,6 +231,10 @@ func TestSubagentResumeRefusalSaysWhy(t *testing.T) {
 	if err := subagentResumeRefusal(&subagentRecord{RunID: "r3", Engine: providerCodex, EngineSession: "thr"}); err != nil {
 		t.Fatalf("a Codex run with its thread was refused: %v", err)
 	}
+	// A remote run's conversation is on its workspace's runner, which answers for it.
+	if err := subagentResumeRefusal(&subagentRecord{RunID: "r4", Workspace: "orbit-op"}); err != nil {
+		t.Fatalf("a remote run was refused here: %v", err)
+	}
 }
 
 // Kimi opens a call with rawInput null and completes its arguments in a tool_call_update: the child runner tells
@@ -276,5 +282,29 @@ func TestCodexDelegateCardTakesTheCanonicalName(t *testing.T) {
 	}
 	if got := codexToolItemName(map[string]interface{}{"server": "orbit", "tool": "task_list"}); got != "orbit__task_list" {
 		t.Fatalf("task_list card = %q", got)
+	}
+}
+
+// A remote run's record names where it ran, whether this process still holds it or only its run.json is left after a
+// restart, so its resume goes there.
+func TestSubagentRecordOfARemoteRunNamesItsWorkspace(t *testing.T) {
+	t.Setenv("ORBIT_HOME", t.TempDir())
+	s := &bgJobService{sessionID: "sess1"}
+	s.subagents.add(&subagentRun{id: "run1", kind: "general", workspace: "orbit-op", status: subagentStatusDone, done: make(chan struct{})})
+	dir := subagentDir("sess1", "run2")
+	if err := os.MkdirAll(dir, 0o700); err != nil {
+		t.Fatal(err)
+	}
+	if err := writeJSONFile(filepath.Join(dir, "run.json"), subagentRecord{RunID: "run2", Type: "general", Workspace: "orbit-op"}); err != nil {
+		t.Fatal(err)
+	}
+	for _, id := range []string{"run1", "run2"} {
+		rec, err := s.subagentRecord(id)
+		if err != nil {
+			t.Fatalf("%s: %v", id, err)
+		}
+		if rec.Workspace != "orbit-op" || subagentResumeRefusal(rec) != nil {
+			t.Fatalf("%s: record %+v, refusal %v", id, rec, subagentResumeRefusal(rec))
+		}
 	}
 }

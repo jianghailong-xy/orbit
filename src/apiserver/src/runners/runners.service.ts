@@ -15,6 +15,7 @@ import type {
   InstallEngine,
   LoginEngine,
   ReportedEngine,
+  RunnerAccountRemoveSession,
   RunnerAccountRemoveState,
   RunnerEngineAccount,
   RunnerInstallState,
@@ -70,6 +71,7 @@ import { DIR_PROBE_MAX_PATH, dirProbeAnswerOf } from './dir-probe';
 import { isInternalAddress } from '../shared/public-surface.guard';
 import { blockedRunnerRegion, claudeRegionSignInRefusal, regionMachineName, runnerRegionView } from './runner-region';
 import { activeSessionsOn, engineHealthWithActiveSessions } from '../providers/active-sessions';
+import { openCodeKeyRows, runsOnOpenCode } from '../providers/custom-provider';
 
 /** The statuses an abandoned checkout can belong to: a session that has stopped running for good.
  *  A parked one can be dirty between turns and is not abandoned, so it is not listed. */
@@ -204,9 +206,13 @@ export class RunnersService {
         codexAccountRemoveAccount: true,
         codexAccountRemoveStatus: true,
         codexAccountRemoveMessage: true,
+        codexAccountRemoveSessions: true,
         // Where this machine's Claude connection to Anthropic comes out (docs/claude-region-check-contract.md §6), read
         // with the capabilities above: only a runner that declares claude-region/v1 has a region to show.
         region: true,
+        // Whether this is the account's managed runner, which every client labels Orbit Cloud: said on
+        // the row, so a client never has to wait for GET /managed-runner to name it.
+        managedRunner: { select: { id: true } },
       },
     });
     // How many slots each runner is currently using, so the list can show
@@ -222,11 +228,18 @@ export class RunnersService {
     // Each account says how many sessions are at work on it, so that a client's "starts on" is the server's.
     const atWork = await activeSessionsOn(this.prisma, runners, new Date(now));
     const used = runners.map((runner) => engineHealthWithActiveSessions(usedRunnerEngines(runner), atWork.get(runner.id)));
+    // The runner's local auth probe cannot see keys Orbit injects at session dispatch.
+    const openCodeNoKeyEntries = used.flatMap((engines) => engines?.filter((entry) => entry.openCodeNoKey) ?? []);
+    if (openCodeNoKeyEntries.length && (await openCodeKeyRows(this.prisma, where.ownerId)).some(runsOnOpenCode)) {
+      for (const entry of openCodeNoKeyEntries) delete entry.openCodeNoKey;
+    }
     const updateTurns = await this.updateTurnsOf(where.ownerId, runners);
     const drainWaiting = await drainWaitingOf(this.prisma, where.ownerId, runners);
     // Fix with an agent: where a press would start its session on each runner, or why it can't, and the
     // agents already at work there (attention-fix.ts, the same answer the fix endpoint acts on).
     const agentFixes = await agentFixesOf(this.prisma, where.ownerId, runners, now);
+    // The sessions a refused account removal named, by title, for the row that asked.
+    const removalSessions = await accountRemoveSessionsOf(this.prisma, where.ownerId, runners);
     return runners.map(({
       availableCommands,
       availableSkills,
@@ -246,12 +259,15 @@ export class RunnersService {
       codexAccountRemoveAccount,
       codexAccountRemoveStatus,
       codexAccountRemoveMessage,
+      codexAccountRemoveSessions: removalSessionIds,
       selfUpdate,
       presence,
       region,
+      managedRunner,
       ...r
     }, index) => ({
       ...r,
+      managed: !!managedRunner,
       // Its last beat, from either record of it: what every client reads "last seen" from.
       lastHeartbeatAt: runnerLastBeatAt({ lastHeartbeatAt: r.lastHeartbeatAt, presence }),
       // Without the part of a removed Default, as the engines are.
@@ -278,6 +294,8 @@ export class RunnersService {
         codexAccountRemoveAccount,
         codexAccountRemoveStatus,
         codexAccountRemoveMessage,
+        codexAccountRemoveSessions: removalSessionIds,
+        sessions: removalSessions.get(r.id),
       }),
       online: runnerIsOnline({ status: r.status, lastHeartbeatAt: r.lastHeartbeatAt, presence }, now),
       activeSessions: activeByRunner.get(r.id) ?? 0,
@@ -836,6 +854,7 @@ export class RunnersService {
         codexAccountRemoveAccount: account,
         codexAccountRemoveStatus: 'pending',
         codexAccountRemoveMessage: null,
+        codexAccountRemoveSessions: [],
         codexAccountRemoveAt: new Date(),
       },
     });
@@ -1488,14 +1507,53 @@ export function accountRemoveStateOf(r: {
   codexAccountRemoveAccount?: string | null;
   codexAccountRemoveStatus?: string | null;
   codexAccountRemoveMessage?: string | null;
+  codexAccountRemoveSessions?: string[] | null;
+  sessions?: RunnerAccountRemoveSession[];
 }): RunnerAccountRemoveState {
+  // Only a refusal over sessions in the account lists any; every other state leaves the field out.
+  const sessions = r.codexAccountRemoveStatus === 'failed' ? (r.sessions ?? []) : [];
+  // A pending removal that names sessions is waiting on them to move off the account
+  // (RunnerApiController.applyAccountRemoveResult).
+  const moving = r.codexAccountRemoveStatus === 'pending' ? (r.codexAccountRemoveSessions?.length ?? 0) : 0;
   return {
     // A row written before accounts-per-engine meant Codex.
     engine: (r.accountRemoveEngine as LoginEngine) ?? 'codex',
     account: r.codexAccountRemoveStatus ? (r.codexAccountRemoveAccount ?? null) : null,
     status: (r.codexAccountRemoveStatus as RunnerAccountRemoveState['status']) ?? null,
     message: r.codexAccountRemoveStatus ? (r.codexAccountRemoveMessage ?? null) : null,
+    ...(sessions.length > 0 ? { sessions } : {}),
+    ...(moving > 0 ? { moving } : {}),
   };
+}
+
+/**
+ * The sessions each runner's refused account removal named, by runner: only the viewer's own and only
+ * those assigned to that runner, so a report cannot name anyone else's. Read live, so a title renamed
+ * since the refusal reads as it is now; a session deleted since is left out.
+ */
+export async function accountRemoveSessionsOf(
+  db: Pick<PrismaService, 'session'>,
+  ownerId: string,
+  runners: Array<{ id: string; codexAccountRemoveStatus?: string | null; codexAccountRemoveSessions?: string[] | null }>,
+): Promise<Map<string, RunnerAccountRemoveSession[]>> {
+  const out = new Map<string, RunnerAccountRemoveSession[]>();
+  const named = runners.filter((r) => r.codexAccountRemoveStatus === 'failed' && (r.codexAccountRemoveSessions?.length ?? 0) > 0);
+  if (named.length === 0) return out;
+  const rows = await db.session.findMany({
+    where: {
+      ownerId,
+      OR: named.map((r) => ({ assignedRunnerId: r.id, id: { in: r.codexAccountRemoveSessions ?? [] } })),
+    },
+    select: { id: true, title: true, status: true, assignedRunnerId: true },
+    orderBy: { createdAt: 'asc' },
+  });
+  for (const row of rows) {
+    if (!row.assignedRunnerId) continue;
+    const list = out.get(row.assignedRunnerId) ?? [];
+    list.push({ id: row.id, title: row.title, status: row.status as RunnerAccountRemoveSession['status'] });
+    out.set(row.assignedRunnerId, list);
+  }
+  return out;
 }
 
 /** Project a runner row onto the browser-facing relay view (no code, ever). */

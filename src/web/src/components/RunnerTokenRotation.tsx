@@ -1,6 +1,6 @@
 import { CheckOutlined, CopyOutlined } from '@ant-design/icons';
 import { useMutation } from '@tanstack/react-query';
-import { useState, type RefObject } from 'react';
+import { useEffect, useRef, useState, type RefObject } from 'react';
 import { api } from '../api';
 import { copyText } from '../lib/clipboard';
 import { useToast } from '../lib/toast';
@@ -8,6 +8,7 @@ import type { Runner } from './TasksSidePanel';
 import { Button } from './ui/Button';
 import { useConfirm } from './ui/ConfirmDialog';
 import { Dialog } from './ui/Dialog';
+import { useMachineName } from '../lib/managedRunner';
 
 /**
  * Rotating a runner's token: the confirmation that says what it breaks, then the new token, shown
@@ -17,10 +18,14 @@ import { Dialog } from './ui/Dialog';
  */
 export function useRunnerTokenRotation() {
   const message = useToast();
+  const machineNameOf = useMachineName();
   const [confirm, confirmation] = useConfirm();
   // The freshly minted token from a rotation, shown exactly once.
   const [revealed, setRevealed] = useState<{ name: string; token: string } | null>(null);
   const [copied, setCopied] = useState(false);
+  // The "Copied" reset is cancelled when this goes, so it never updates a component that is gone.
+  const copiedReset = useRef<ReturnType<typeof setTimeout>>(undefined);
+  useEffect(() => () => clearTimeout(copiedReset.current), []);
   // Where focus goes once the token is put away: the menu's button the rotation was asked from.
   const [returnFocus, setReturnFocus] = useState<RefObject<HTMLElement | null> | undefined>();
 
@@ -38,12 +43,12 @@ export function useRunnerTokenRotation() {
   const confirmRotate = (r: Runner, from?: RefObject<HTMLElement | null>) => {
     setReturnFocus(from);
     void confirm({
-      title: `Rotate token for “${r.displayName || r.name}”?`,
+      title: `Rotate token for “${machineNameOf(r)}”?`,
       description:
         'This immediately invalidates the runner’s current credential. The runner will go offline until you set the new token as runnerToken in its ~/.orbit/config.json and restart it.',
       confirmText: 'Rotate token',
       cancelText: 'Cancel',
-      onConfirm: () => rotateMut.mutateAsync({ id: r.id, name: r.displayName || r.name }),
+      onConfirm: () => rotateMut.mutateAsync({ id: r.id, name: machineNameOf(r) }),
       returnFocus: from,
     });
   };
@@ -53,7 +58,8 @@ export function useRunnerTokenRotation() {
     void copyText(revealed.token).then((ok) => {
       if (!ok) return;
       setCopied(true);
-      setTimeout(() => setCopied(false), 1600);
+      clearTimeout(copiedReset.current);
+      copiedReset.current = setTimeout(() => setCopied(false), 1600);
     });
   };
 

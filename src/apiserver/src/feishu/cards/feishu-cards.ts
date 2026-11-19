@@ -1,4 +1,4 @@
-import type { FeishuMessageDetail, OwnerItemPushKind } from '@orbit/shared';
+import type { ApprovalTranslation, FeishuMessageDetail, OwnerItemPushKind } from '@orbit/shared';
 import type { OwnerItemAlert } from '../../push/owner-item-alert';
 import { toolInputPreview } from './tool-input-preview';
 
@@ -7,7 +7,8 @@ import { toolInputPreview } from './tool-input-preview';
  * Pure: an alert and the app's settings in, the card out. Sending, collapsing and updating are the transport's.
  *
  * WHAT A CARD CARRIES IS THE POINT (§6.4). A card is stored on Feishu's servers, so in the default TITLES_ONLY mode
- * it carries the session's or project's title, the kind of event, and a tool's name, and nothing else: no tool
+ * it carries the session's or project's title, the kind of event, a tool's name, and who started a session the owner did
+ * not (`startedByLine`), and nothing else: no tool
  * input, recap, failure reason, `notify` text, owner item body or question. FULL adds the third column of §6.1.
  * What anyone wrote (titles, an agent's words) is forwarded as it was, always as plain text, never as markdown.
  */
@@ -26,12 +27,18 @@ export interface FeishuApprovalItem {
   id: string;
   toolName: string;
   input: unknown;
+  /** What the card shows, in the owner's language (Settings › Translation, reply-translation.ts); absent or null
+   *  until translated, and on every card translation is off for. */
+  translation?: ApprovalTranslation | null;
 }
 
 /** What a card is about: one row of §6.1's table. */
 export type FeishuAlert =
-  /** One stretch of a session's pending approvals: one card, each approval with its own buttons (§6.2). */
-  | { kind: 'approval'; sessionTitle: string; approvals: FeishuApprovalItem[] }
+  /**
+   * One stretch of a session's pending approvals: one card, each approval with its own buttons (§6.2). `startedBy` is
+   * `startedByLine`'s words when someone other than the owner started the session, absent for the owner's own.
+   */
+  | { kind: 'approval'; sessionTitle: string; approvals: FeishuApprovalItem[]; startedBy?: string | null }
   /** `settleAlert`'s answer: `body` is the recap or the failure line. */
   | { kind: 'finished' | 'failed'; sessionTitle: string; body: string }
   /** An agent's `notify`: `message` is what it wrote. */
@@ -87,6 +94,18 @@ const ORBIT_CARD_FALLBACK = 'Orbit confirmation';
 
 /** Which of §6.1's three approval rows an approval is. A server-filed card is `orbit_<name>`; an engine's MCP prompt is not. */
 export type FeishuApprovalClass = 'tool' | 'question' | 'orbit';
+/**
+ * Who started a session the owner did not start, and where (§6.1): `Started by <name> in <group>` or `Started by <name>
+ * in a direct message`. Shown in TITLES_ONLY too: a name and a group's name are what a title is, not what anyone asked.
+ */
+export const STARTED_BY_SOMEONE = 'a Feishu user';
+export const STARTED_BY_SOME_GROUP = 'a group';
+export function startedByLine(name: string | null, place: { group: string | null } | 'direct-message'): string {
+  const who = name?.trim() || STARTED_BY_SOMEONE;
+  const where = place === 'direct-message' ? 'a direct message' : place.group?.trim() || STARTED_BY_SOME_GROUP;
+  return `Started by ${who} in ${where}`;
+}
+
 export function approvalClass(toolName: string): FeishuApprovalClass {
   if (toolName === 'AskUserQuestion') return 'question';
   if (/^orbit_[a-z]/.test(toolName)) return 'orbit';
@@ -136,21 +155,32 @@ const openInOrbit = (url: string): Element => ({
   tag: 'button', text: plain('Open in Orbit'), type: 'default', behaviors: [{ type: 'open_url', default_url: url }],
 });
 
-/** The card the bot answers the owner's `@<bot> connect` in a group with (§8.1): one button, to Orbit's confirm page. */
-export const CONNECT_GROUP_TITLE = 'Connect this group to Orbit';
-export const CONNECT_GROUP_BUTTON = 'Connect in Orbit';
+/**
+ * The card the owner gets in their direct chat with the bot after sending `@<bot> connect` in a group (§8.1, §15.1):
+ * one button, to the confirm page. Sent to the owner alone, never into the group, so the group reads no link and no
+ * name but the bot's own.
+ */
+export const CONNECT_GROUP_TITLE = 'Connect this group';
+export const CONNECT_GROUP_BUTTON = 'Choose settings';
+export const CONNECT_GROUP_BODY =
+  'Choose the workspace, the permission mode, who in this group can start sessions, and the limits. '
+  + 'Nothing runs from this group until you confirm.';
+
+/** `Connect <group name>`, or `Connect this group` when Feishu gave no name. */
+export function connectGroupTitle(chatName: string | null): string {
+  return chatName ? `Connect ${chatName}` : CONNECT_GROUP_TITLE;
+}
+
 export function renderConnectGroupCard(chatName: string | null, confirmUrl: string, ttlMinutes: number): FeishuCard {
+  const title = connectGroupTitle(chatName);
   return {
     schema: '2.0',
-    config: { update_multi: true, summary: { content: CONNECT_GROUP_TITLE } },
-    header: { title: plain(CONNECT_GROUP_TITLE), subtitle: plain(chatName ?? ''), template: 'blue' },
+    config: { update_multi: true, summary: { content: title } },
+    header: { title: plain(title), subtitle: plain(''), template: 'blue' },
     body: {
       direction: 'vertical',
       elements: [
-        text(
-          'Open Orbit to choose the workspace, the permission mode, who in this group can start sessions, and the limits. '
-          + 'Nothing runs from this group until you confirm there.',
-        ),
+        text(CONNECT_GROUP_BODY),
         note(`Only you can use this link, once, within ${ttlMinutes} minutes.`),
         row([{ tag: 'button', text: plain(CONNECT_GROUP_BUTTON), type: 'primary', behaviors: [{ type: 'open_url', default_url: confirmUrl }] }]),
       ],
@@ -217,6 +247,7 @@ function build(
       subtitle = single ? approvalLine(alert.approvals[0], live)
         : live ? `${alert.approvals.length} approvals need your reply` : `${alert.approvals.length} approvals`;
       template = 'orange';
+      if (alert.startedBy) elements.push(note(alert.startedBy));
       alert.approvals.forEach((approval, index) => {
         if (index > 0) elements.push(hr);
         // One approval's line is the subtitle already; several each keep theirs, to tell them apart.
@@ -326,6 +357,34 @@ export function questionsOf(input: unknown): FeishuQuestion[] {
 }
 
 /**
+ * The questions as the card shows them: `questionsOf(input)` with each question's words, header and options in the
+ * owner's language when the approval carries a translation of them (`approval.translation.questions`, index for index
+ * with the input's). A failed translation, or one that does not line up with the input, shows the original. Only the
+ * words change: an option's place in the list, which is what the form sends back, is the input's.
+ */
+export function shownQuestionsOf(input: unknown, translation: ApprovalTranslation | null | undefined): FeishuQuestion[] {
+  const questions = questionsOf(input);
+  const raw = (input as { questions?: unknown } | null)?.questions;
+  const translated = translation && translation.failed !== true ? translation.questions : undefined;
+  if (!translated || !Array.isArray(raw) || translated.length !== raw.length || questions.length !== raw.length) return questions;
+  return questions.map((q, index) => {
+    const t = translated[index];
+    const rawOptions = (raw[index] as { options?: unknown } | null)?.options;
+    const rawCount = Array.isArray(rawOptions) ? rawOptions.length : 0;
+    if (!t || !Array.isArray(t.options) || t.options.length !== q.options.length || rawCount !== q.options.length) return q;
+    return {
+      ...q,
+      question: t.question || q.question,
+      header: q.header ? t.header || q.header : '',
+      options: q.options.map((o, at) => ({
+        label: t.options[at]?.label || o.label,
+        description: o.description ? t.options[at]?.description || o.description : '',
+      })),
+    };
+  });
+}
+
+/**
  * The answer form's field names (§7.2's "answer the agent's question"). Feishu wants a component's name unique within
  * the card, and one card can hold several questions' forms, so each name carries the approval's place on the card;
  * a submission carries only its own form's fields, so the handler reads them by their suffix alone.
@@ -364,7 +423,7 @@ function approvalSection(
     return out;
   }
   if (!full) return out;
-  const questions = questionsOf(approval.input);
+  const questions = shownQuestionsOf(approval.input, approval.translation);
   questions.forEach((q) => {
     const options = q.options.map((o) => `• ${o.label}${o.description ? ` — ${o.description}` : ''}`).join('\n');
     out.push(text(cut([q.header ? `${q.header}: ${q.question}` : q.question, options].filter(Boolean).join('\n'))));

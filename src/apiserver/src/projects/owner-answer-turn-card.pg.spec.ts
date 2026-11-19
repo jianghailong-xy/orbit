@@ -354,8 +354,8 @@ test('the turn telling a coordinator the owner’s answer carries an ownerAnswer
 
   await t.test('(4) the card’s time is this conversation’s delivery, also after a rotation', async () => {
     const { projectId, coordinator: first } = await coordinatedProject('the project that rotates its coordinator');
-    // The question blocks open work, which is what makes R11 tell the next coordinator an answer the
-    // first one already read.
+    // The first coordinator's engine never takes the answer's turn before the next one takes over,
+    // which is what makes R11 tell the next coordinator too: nobody has read it yet.
     const taskId = randomUUID();
     await prisma.task.create({
       data: {
@@ -383,7 +383,7 @@ test('the turn telling a coordinator the owner’s answer carries an ownerAnswer
     const next = await conversation('the coordinator rotated in');
     const ahead = await ownerSays(next, 'the new coordinator has work queued');
     await prisma.project.update({ where: { id: projectId }, data: { coordinatorSessionId: next } });
-    await openItems.deliverOwed(projectId, first);
+    await openItems.deliverOwed(projectId);
     const toldNext = await turnKeyed(next, OWNER_ANSWER_TURN_PREFIX);
     assert.equal(toldNext.clientTurnId, ownerAnswerTurnId(asked.itemId, next));
 

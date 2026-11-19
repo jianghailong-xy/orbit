@@ -37,3 +37,12 @@ test('a job that was really killed beside it still gets the line about starting 
   const block = buildBackgroundWakeBlock([wake({}), wake({ jobId: 'bgj_ba9876543210', reason: 'runner_shutdown' })]);
   assert.match(block, /start it again with bg_run/);
 });
+
+// A "tell me when it's done" comes due when a job ends. The wake says where the person hears it: notify, not a
+// reply they will read only when they next look. Only for an exit: output and stall wakes are news on the way.
+test('an ended job points at notify for a person who asked to hear about it', () => {
+  const ended = buildBackgroundWakeBlock([wake({ status: 'exited', exitCode: 0, reason: null })]);
+  assert.match(ended, /^ {2}If the person asked to hear when this was done, tell them with mcp__orbit__notify/m);
+  const news = buildBackgroundWakeBlock([wake({ trigger: 'output', status: 'running', reason: null })]);
+  assert.doesNotMatch(news, /mcp__orbit__notify/);
+});

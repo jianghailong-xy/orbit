@@ -880,6 +880,7 @@ done`
 
 type fakeAgySession struct {
 	dir         string
+	scratch     string // the session's run directory, where its meta.json is
 	inbox       chan RunInboxResponse
 	completions chan TurnCompleteRequest
 	done        chan struct{}
@@ -917,6 +918,7 @@ func startFakeAgySession(t *testing.T, job *ClaimedSession) *fakeAgySession {
 	t.Cleanup(srv.Close)
 	ctx, cancel := context.WithCancel(context.Background())
 	scratch := t.TempDir()
+	f.scratch = scratch
 	go func() {
 		defer close(f.done)
 		runAntigravitySessionProcess(ctx, context.Background(), NewTransport(srv.URL, "token"), job, "", scratch, scratch,

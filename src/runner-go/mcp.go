@@ -40,8 +40,10 @@ func cmdMcp() {
 		allowOrchestration:    mcpOrchestrationEnabled(),
 		watchesOff:            !watchesEnabledFromEnv(),
 		wikiOff:               !wikiEnabledFromEnv(),
+		scheduleRun:           scheduleRunFromEnv(),
 		onlyTools:             mcpToolsFromEnv(),
 		callTimeout:           mcpCallTimeoutFromEnv(),
+		helpAsk:               helpAskModeFromEnv(),
 	}
 	srv.serve(os.Stdin, os.Stdout)
 }
@@ -56,12 +58,16 @@ type mcpServer struct {
 	allowOrchestration    bool   // L3: expose session_* tools (the account's orchestration switch)
 	watchesOff            bool   // spawned with ORBIT_WATCHES=off: no watch tools (watch_rollout.go)
 	wikiOff               bool   // spawned with ORBIT_WIKI=off: no wiki tools (wiki_tools.go)
+	scheduleRun           bool   // spawned with ORBIT_SCHEDULE_RUN=1: a scheduled run's session (schedule_tools.go)
 	// Spawned with ORBIT_MCP_TOOLS: these tools and no others, listed or called (the runner-hosted job an
 	// owner's wait is handed to, handOffOwnerWait). Nil serves every tool.
 	onlyTools map[string]bool
 	// How long the engine lets one tool call run before it reports the call failed (ORBIT_MCP_CALL_TIMEOUT_SECONDS);
 	// 0 when it waits for as long as the call takes. See handOffOwnerWait.
 	callTimeout time.Duration
+	// helpAsk: spawned with ORBIT_HELP_ASK=1 for the help center's Ask, it serves the four help reads and nothing else
+	// (mcp_help_ask.go).
+	helpAsk bool
 	// rec is what the tool call being answered did, for its receipt (tool_receipt.go); nil outside one.
 	rec *callRecord
 	// Reads the session's live permission mode for Orbit's Plan gate (plan_gate.go); nil reads it from the runner
@@ -225,33 +231,26 @@ func (s *mcpServer) handle(req *rpcRequest) (rpcResponse, bool) {
 		}
 		// The agent primer, versioned in its first line, is the one set of instructions every engine's
 		// MCP client is handed; each engine's own instructions carry it too (agent_primer.go).
+		instructions := agentPrimer
+		if s.helpAsk {
+			instructions = helpAskInstructions
+		}
 		return s.ok(req.ID, map[string]interface{}{
 			"protocolVersion": pv,
 			"capabilities":    map[string]interface{}{"tools": map[string]interface{}{}},
 			"serverInfo":      map[string]interface{}{"name": "orbit", "version": version},
-			"instructions":    agentPrimer,
+			"instructions":    instructions,
 		}), true
 	case "notifications/initialized", "notifications/cancelled":
 		return rpcResponse{}, false // notifications get no response
 	case "ping":
 		return s.ok(req.ID, struct{}{}), true
 	case "tools/list":
-		tools := toolDescriptors(s.allowPermissionPrompt, s.orchestrationEnabled())
-		if s.watchesOff {
-			tools = withoutWatchTools(tools)
+		if s.helpAsk {
+			return s.ok(req.ID, map[string]interface{}{"tools": helpAskToolDescriptors()}), true
 		}
-		if s.wikiOff {
-			tools = withoutWikiTools(tools)
-		}
-		// A SubAgent cannot hand work on again (subagent.go).
-		if os.Getenv(envSubagentRunID) == "" {
-			cwd, _ := os.Getwd()
-			tools = append(tools, delegateToolDescriptor(schemaObject, sessionSubagentDefinitions(cwd)))
-		}
-		if s.onlyTools != nil {
-			tools = onlyMCPTools(tools, s.onlyTools)
-		}
-		return s.ok(req.ID, map[string]interface{}{"tools": tools}), true
+		// schedule_run_report's filter lives in listedToolDescriptors, so recovery's listedTools counts what this lists.
+		return s.ok(req.ID, map[string]interface{}{"tools": s.listedToolDescriptors()}), true
 	case "tools/call":
 		var p struct {
 			Name      string                 `json:"name"`
@@ -261,8 +260,12 @@ func (s *mcpServer) handle(req *rpcRequest) (rpcResponse, bool) {
 		if json.Unmarshal(req.Params, &p) != nil {
 			return s.err(req.ID, -32602, "invalid params"), true
 		}
+		if s.helpAsk {
+			return s.ok(req.ID, s.callHelpAskTool(p.Name)), true
+		}
 		if s.onlyTools != nil && !s.onlyTools[p.Name] {
-			return s.ok(req.ID, toolResult(p.Name+" is not served in this session", true)), true
+			result := toolResult(p.Name+" is not served in this session", true)
+			return s.ok(req.ID, s.withRecovery(p.Name, p.Arguments, markTransportActivity(), result)), true
 		}
 		if p.Name == delegateToolName {
 			// Claude Code names the call this is; its SubAgent's events nest under that id.
@@ -366,6 +369,7 @@ const maxProjectAcceptanceCriteriaChars = 4000
 const maxProjectAcceptanceCriteriaItems = 100
 const maxProjectAcceptanceVerificationMethodChars = 4000
 
+// callTool runs one tool. A failed call also carries the recovery report (recovery_render.go).
 func (s *mcpServer) callTool(name string, args map[string]interface{}) map[string]interface{} {
 	// A session in Plan mode changes nothing until the plan is approved, whichever engine it runs on: a call Plan
 	// refuses is answered with what to do instead, before anything is filed or written (plan_gate.go). Ahead of the
@@ -373,6 +377,11 @@ func (s *mcpServer) callTool(name string, args map[string]interface{}) map[strin
 	if refusal := s.planRefusal(name, args); refusal != "" {
 		return toolResult(refusal, true)
 	}
+	mark := markTransportActivity()
+	return s.withRecovery(name, args, mark, s.runTool(name, args))
+}
+
+func (s *mcpServer) runTool(name string, args map[string]interface{}) map[string]interface{} {
 	// Runner-hosted background jobs are not a control-plane call at all: they are
 	// forwarded to the local runner over this session's socket (mcp_bg.go).
 	if result, handled := s.callBgTool(name, args); handled {
@@ -391,6 +400,19 @@ func (s *mcpServer) callTool(name string, args map[string]interface{}) map[strin
 	// So are the file tools: `orbit file` runs the same runFileTool (file_tools.go).
 	if result, handled := s.callFileTool(name, args); handled {
 		return result
+	}
+	// And the scheduled tasks' tools, which act as this session (schedule_tools.go).
+	if result, handled := s.callScheduleTool(name, args); handled {
+		return result
+	}
+	// condition_get reads a task's or a schedule's condition (condition_tools.go).
+	if result, handled := s.callConditionTool(name, args); handled {
+		return result
+	}
+	// The guide reads the catalogue and this session's switches, and asks the control plane nothing
+	// (agent_guide.go); `orbit guide` answers the same document.
+	if name == "guide" {
+		return s.callGuide(args)
 	}
 	if s.callTimeout > 0 && s.sessionID != "" && waitsForTheOwner(name, args) {
 		return s.handOffOwnerWait(name, args)
@@ -650,6 +672,10 @@ func (s *mcpServer) callTool(name string, args map[string]interface{}) map[strin
 			return toolResult("title is required", true)
 		}
 		_, structuredCriteria := args["acceptanceCriteriaItems"]
+		requestID, err := createRequestID(getString(args, "requestId"))
+		if err != nil {
+			return toolResult(err.Error(), true)
+		}
 		body := map[string]interface{}{"title": title}
 		copyIfPresent(body, args, "goal", "instructions", "workspaceId")
 		if structuredCriteria {
@@ -668,9 +694,10 @@ func (s *mcpServer) callTool(name string, args map[string]interface{}) map[strin
 		// server can bind THIS session as the new project's coordinator, which is what makes
 		// opening the project later come back to this conversation instead of starting another.
 		s.rec.sentBody(body)
-		raw, err := s.t.createProject(s.sessionID, s.orchestrationToken, body)
+		// The request id names this call (create_request.go), so a repeat of it never makes a second project.
+		raw, err := s.t.createProject(s.sessionID, s.orchestrationToken, requestID, body)
 		if err != nil {
-			return toolResult("create project failed: "+err.Error(), true)
+			return toolResult(describeCreateFailure("project", "project_create", "task_list or the project list in Orbit", requestID, err).Error(), true)
 		}
 		return toolResult(prettyJSON(raw), false)
 
@@ -814,14 +841,20 @@ func (s *mcpServer) callTool(name string, args map[string]interface{}) map[strin
 		// No sessionId in the body: the PROJECT is the address, and the conversation it resolves to
 		// is decided by the server at the moment of delivery. The acting session travels as the
 		// header it already is, which is also what makes the delivery the caller's own.
-		body := map[string]interface{}{"message": message}
-		copyIfPresent(body, args, "clientTurnId")
-		copySessionRequestArgs(body, args)
-		raw, err := s.t.sendProjectCoordinator(s.sessionID, s.orchestrationToken, id, body)
+		// Keyed per logical call, so an answer that never arrives can be replayed under the same
+		// key. Not resent here: the coordinator it resolves to can change between deliveries.
+		key, err := callIDOrNew(getString(args, "clientTurnId"))
 		if err != nil {
 			return toolResult("send to project coordinator failed: "+err.Error(), true)
 		}
-		return toolResult(prettyJSON(raw), false)
+		body := map[string]interface{}{"message": message, "clientTurnId": key}
+		copySessionRequestArgs(body, args)
+		raw, err := s.t.sendProjectCoordinator(s.sessionID, s.orchestrationToken, id, body)
+		if err != nil {
+			return toolResult("send to project coordinator failed: "+
+				messageReplayError(err, true, "project_send", "projectId", id, body).Error(), true)
+		}
+		return toolResult(prettyJSON(withCallID(raw, "clientTurnId", key)), false)
 
 	case "ask_owner":
 		id := getString(args, "projectId")
@@ -997,6 +1030,29 @@ func (s *mcpServer) callTool(name string, args map[string]interface{}) map[strin
 		}
 		return toolResult("The item is now with the account owner, with your explanation on it.\n"+
 			prettyJSON(raw), false)
+
+	case "project_ruling_record":
+		id := getString(args, "projectId")
+		if id == "" {
+			return toolResult("projectId is required", true)
+		}
+		ruling := strings.TrimSpace(getString(args, "ruling"))
+		quote := strings.TrimSpace(getString(args, "quote"))
+		turnID := strings.TrimSpace(getString(args, "sourceTurnId"))
+		if ruling == "" || quote == "" || turnID == "" {
+			return toolResult("ruling, quote and sourceTurnId are required", true)
+		}
+		body := map[string]interface{}{"ruling": ruling, "quote": quote, "sourceTurnId": turnID}
+		if supersedes := strings.TrimSpace(getString(args, "supersedes")); supersedes != "" {
+			body["supersedes"] = supersedes
+		}
+		// The acting session IS the authority, as it is for ask_owner: the server checks it against the
+		// project's coordinator pointer, and checks the quote against the turn's owner text.
+		raw, err := s.t.recordProjectRuling(s.sessionID, id, body)
+		if err != nil {
+			return toolResult("record project ruling failed: "+err.Error(), true)
+		}
+		return toolResult("The ruling is recorded on the project.\n"+prettyJSON(raw), false)
 
 	case "integration_retry":
 		id := getString(args, "projectId")
@@ -1192,7 +1248,7 @@ func (s *mcpServer) callTool(name string, args map[string]interface{}) map[strin
 			return toolResult("title is required", true)
 		}
 		body := map[string]interface{}{"title": title}
-		copyIfPresent(body, args, "description", "attachmentIds", "listId", "projectId", "fixesOpenItemId", "parentTaskId", "verifiesTaskId", "verification", "acceptanceCriteria", "criterionKey", "codeless", "completionCriterion", "completionCriterionOverrideReason", "ownerConfirmationReason", "ownerConfirmationReasonNote", "acceptanceCommand", "acceptanceExpectedExitCode", "acceptanceTimeoutSeconds", "assigneeId", "dueDate", "runAt", "engine", "provider", "model", "modelHint", "modelHintReason", "dependsOnTaskIds", "autoRunWhenReady", "completionPolicy", "labels", "supersedesTaskId", "handoff", "idempotencyKey")
+		copyIfPresent(body, args, "description", "attachmentIds", "listId", "projectId", "fixesOpenItemId", "parentTaskId", "verifiesTaskId", "verification", "acceptanceCriteria", "criterionKey", "codeless", "completionCriterion", "completionCriterionOverrideReason", "ownerConfirmationReason", "ownerConfirmationReasonNote", "acceptanceCommand", "acceptanceExpectedExitCode", "acceptanceTimeoutSeconds", "assigneeId", "dueDate", "runAt", "startWhen", "engine", "provider", "model", "modelHint", "modelHintReason", "dependsOnTaskIds", "autoRunWhenReady", "completionPolicy", "labels", "supersedesTaskId", "handoff", "idempotencyKey")
 		// Before the card, so the card's forecast says what the yes will do (task_start_now.go).
 		startNow := getBool(args, "startNow")
 		if startNow {
@@ -1253,10 +1309,8 @@ func (s *mcpServer) callTool(name string, args map[string]interface{}) map[strin
 			}
 			s.rec.setEntity(raw)
 			s.rec.startOutcome(by, started, deferred)
-			if deferred == "" {
-				s.rec.note(startedAtOnceNote)
-			}
-			return toolResult(startedTaskResult(raw, started, deferred), false)
+			s.rec.note(createStartNote(by, started, deferred))
+			return toolResult(startedTaskResult(raw, started, deferred, by), false)
 		}
 		return toolResult(prettyJSON(raw), false)
 
@@ -1280,7 +1334,7 @@ func (s *mcpServer) callTool(name string, args map[string]interface{}) map[strin
 				return toolResult(fmt.Sprintf("tasks[%d]: title is required", i), true)
 			}
 			body := map[string]interface{}{"title": title}
-			copyIfPresent(body, item, "description", "attachmentIds", "listId", "projectId", "fixesOpenItemId", "parentTaskId", "verifiesTaskId", "acceptanceCriteria", "criterionKey", "codeless", "completionCriterion", "completionCriterionOverrideReason", "ownerConfirmationReason", "ownerConfirmationReasonNote", "acceptanceCommand", "acceptanceExpectedExitCode", "acceptanceTimeoutSeconds", "assigneeId", "dueDate", "runAt", "engine", "provider", "model", "modelHint", "modelHintReason", "dependsOnTaskIds", "autoRunWhenReady", "completionPolicy", "labels", "supersedesTaskId", "ref", "dependsOnRefs", "parentRef", "verifiesRef", "handoff")
+			copyIfPresent(body, item, "description", "attachmentIds", "listId", "projectId", "fixesOpenItemId", "parentTaskId", "verifiesTaskId", "acceptanceCriteria", "criterionKey", "codeless", "completionCriterion", "completionCriterionOverrideReason", "ownerConfirmationReason", "ownerConfirmationReasonNote", "acceptanceCommand", "acceptanceExpectedExitCode", "acceptanceTimeoutSeconds", "assigneeId", "dueDate", "runAt", "startWhen", "engine", "provider", "model", "modelHint", "modelHintReason", "dependsOnTaskIds", "autoRunWhenReady", "completionPolicy", "labels", "supersedesTaskId", "ref", "dependsOnRefs", "parentRef", "verifiesRef", "handoff")
 			// An item's startNow is its schedule alone: runAt = now, which the batch card already
 			// counts as starting within the minute. No item is started one by one — the server's
 			// once-a-minute scan starts them, so a batch stays one decision about how many runs begin.
@@ -1400,18 +1454,19 @@ func (s *mcpServer) callTool(name string, args map[string]interface{}) map[strin
 		if !ok {
 			return toolResult(noTaskMsg, true)
 		}
-		// One name for THIS tool call, drawn once here: everything below — a redirect, any retry
-		// of the POST — is the same request, and a second task_start is a second run. A draw that
+		// One name for THIS tool call: the caller's triggerId when it is replaying one it was
+		// handed, otherwise drawn once here. Everything below — a redirect, any resend of the POST —
+		// is the same request, and a second call without a triggerId is a second run. A draw that
 		// fails stops the call rather than starting an unnamed run the model could not retry.
-		token, err := newRunRequestToken()
+		token, err := callIDOrNew(getString(args, "triggerId"))
 		if err != nil {
 			return toolResult("start task failed: "+err.Error(), true)
 		}
 		raw, err := s.t.startTask(id, token)
 		if err != nil {
-			return toolResult("start task failed: "+err.Error(), true)
+			return toolResult("start task failed: "+taskStartReplayError(err, true, id, token).Error(), true)
 		}
-		return toolResult(prettyJSON(raw), false)
+		return toolResult(prettyJSON(withCallID(raw, "triggerId", token)), false)
 
 	case "task_comment":
 		id, ok := s.resolveTaskID(args)
@@ -1523,7 +1578,7 @@ func (s *mcpServer) callTool(name string, args map[string]interface{}) map[strin
 		return toolResult(prettyJSON(raw), false)
 
 	case "provider_list":
-		raw, err := s.t.listProviders()
+		raw, err := s.t.listProviders(strings.TrimSpace(getString(args, "workspace")))
 		if err != nil {
 			return toolResult("list providers failed: "+err.Error(), true)
 		}
@@ -1659,10 +1714,14 @@ func (s *mcpServer) callTool(name string, args map[string]interface{}) map[strin
 		} else if s.agentID != "" {
 			body["agentId"] = s.agentID
 		}
-		s.rec.sentBody(body)
-		raw, err := s.t.createSession(s.sessionID, s.orchestrationToken, body)
+		requestID, err := createRequestID(getString(args, "requestId"))
 		if err != nil {
-			return toolResult("create session failed: "+err.Error(), true)
+			return toolResult(err.Error(), true)
+		}
+		s.rec.sentBody(body)
+		raw, err := s.t.createSession(s.sessionID, s.orchestrationToken, requestID, body)
+		if err != nil {
+			return toolResult(describeCreateFailure("session", "session_create", "session_list with parentSessionId", requestID, err).Error(), true)
 		}
 		if getBool(args, "wait") {
 			return s.waitForSession(raw)
@@ -1722,19 +1781,27 @@ func (s *mcpServer) callTool(name string, args map[string]interface{}) map[strin
 		if id == "" || msg == "" {
 			return toolResult("sessionId and message are required", true)
 		}
-		body := map[string]interface{}{"message": msg}
-		copyIfPresent(body, args, "clientTurnId")
+		// Keyed per logical call (call_identity.go): the caller's key when it is replaying one,
+		// otherwise a new one, returned in the answer and in any error.
+		key, err := callIDOrNew(getString(args, "clientTurnId"))
+		if err != nil {
+			return toolResult("send message failed: "+err.Error(), true)
+		}
+		body := map[string]interface{}{"message": msg, "clientTurnId": key}
 		// Sent only when true. Omitted, the request is the one every installed client sends, so a
 		// server that predates the flag cannot read anything into its absence.
 		if getBool(args, "resumeIfEnded") {
 			body["resumeIfEnded"] = true
 		}
 		copySessionRequestArgs(body, args)
-		raw, err := s.t.sendSessionMessage(s.sessionID, s.orchestrationToken, id, body)
+		raw, err := deliverKeyed(func() (json.RawMessage, error) {
+			return s.t.sendSessionMessage(s.sessionID, s.orchestrationToken, id, body)
+		}, isUnansweredSessionWrite)
 		if err != nil {
-			return toolResult("send message failed: "+err.Error(), true)
+			return toolResult("send message failed: "+
+				messageReplayError(err, true, "session_send", "sessionId", id, body).Error(), true)
 		}
-		return toolResult(prettyJSON(raw), false)
+		return toolResult(prettyJSON(withCallID(raw, "clientTurnId", key)), false)
 
 	case "session_reply":
 		if !s.orchestrationEnabled() {
@@ -1772,17 +1839,30 @@ func (s *mcpServer) callTool(name string, args map[string]interface{}) map[strin
 		// With a message this is one operation, not an interrupt followed by a send: the
 		// interrupt drops what was queued behind the running turn, so a message sent as a
 		// second call would be racing that delete.
-		var body interface{}
-		if follow := strings.TrimSpace(getString(args, "message")); follow != "" {
-			req := map[string]interface{}{"message": follow}
-			copyIfPresent(req, args, "clientTurnId")
-			body = req
+		follow := strings.TrimSpace(getString(args, "message"))
+		if follow == "" {
+			// A plain interrupt carries no key and is not resent.
+			raw, err := s.t.interruptSession(s.sessionID, s.orchestrationToken, id, nil)
+			if err != nil {
+				return toolResult("interrupt session failed: "+err.Error(), true)
+			}
+			return toolResult(prettyJSON(raw), false)
 		}
-		raw, err := s.t.interruptSession(s.sessionID, s.orchestrationToken, id, body)
+		// With a follow-up the call is keyed like session_send: a replay under the same key
+		// re-files neither the interrupt nor the message.
+		key, err := callIDOrNew(getString(args, "clientTurnId"))
 		if err != nil {
 			return toolResult("interrupt session failed: "+err.Error(), true)
 		}
-		return toolResult(prettyJSON(raw), false)
+		body := map[string]interface{}{"message": follow, "clientTurnId": key}
+		raw, err := deliverKeyed(func() (json.RawMessage, error) {
+			return s.t.interruptSession(s.sessionID, s.orchestrationToken, id, body)
+		}, isUnansweredSessionWrite)
+		if err != nil {
+			return toolResult("interrupt session failed: "+
+				messageReplayError(err, true, "session_interrupt", "sessionId", id, body).Error(), true)
+		}
+		return toolResult(prettyJSON(withCallID(raw, "clientTurnId", key)), false)
 
 	case "session_merge":
 		if !s.orchestrationEnabled() {
@@ -1812,7 +1892,7 @@ func (s *mcpServer) callTool(name string, args map[string]interface{}) map[strin
 		if err != nil {
 			return toolResult("merge session failed: "+err.Error(), true)
 		}
-		return toolResult(prettyJSON(raw), false)
+		return toolResult(prettyJSON(withMergePendingCall(raw)), false)
 
 	case "session_end":
 		if !s.orchestrationEnabled() {
@@ -1825,6 +1905,29 @@ func (s *mcpServer) callTool(name string, args map[string]interface{}) map[strin
 		raw, err := s.t.endSession(s.sessionID, s.orchestrationToken, id)
 		if err != nil {
 			return toolResult("end session failed: "+err.Error(), true)
+		}
+		return toolResult(prettyJSON(raw), false)
+
+	case "session_move":
+		if !s.orchestrationEnabled() {
+			return toolResult(orchestrationOffMsg, true)
+		}
+		id := getString(args, "sessionId")
+		if id == "" {
+			return toolResult("sessionId is required", true)
+		}
+		body := map[string]interface{}{}
+		copyIfPresent(body, args, "workspaceId")
+		// folderId null is an answer of its own: out of any folder.
+		if folder, ok := args["folderId"]; ok {
+			body["folderId"] = folder
+		}
+		if len(body) == 0 {
+			return toolResult("pass workspaceId, folderId, or folderId null to take the session out of its folder", true)
+		}
+		raw, err := s.t.moveSession(s.sessionID, s.orchestrationToken, id, body)
+		if err != nil {
+			return toolResult("move session failed: "+err.Error(), true)
 		}
 		return toolResult(prettyJSON(raw), false)
 
@@ -2155,15 +2258,20 @@ func askBeforeCreate(t *Transport, sessionID, toolName string, input interface{}
 // in the body the create sends). Clients offer the button, and the server takes the choice, only on a
 // card that says so — a runner that predates it would read the yes and only create the task.
 func askBeforeTaskCreate(t *Transport, sessionID string, body map[string]interface{}) (declined *ApprovalDecisionResponse, startAfterCreate bool, err error) {
-	dec, err := askCreateCard(t, sessionID, taskCreateApprovalToolName, body,
-		map[string]interface{}{"acceptsStartAfterCreate": true})
+	// A task that starts when its condition holds offers no "Create and start": a start now would
+	// be a runAt beside the startWhen the card approved, which a task cannot have.
+	var extra map[string]interface{}
+	if _, conditioned := body["startWhen"]; !conditioned {
+		extra = map[string]interface{}{"acceptsStartAfterCreate": true}
+	}
+	dec, err := askCreateCard(t, sessionID, taskCreateApprovalToolName, body, extra)
 	if err != nil || dec == nil {
 		return nil, false, err
 	}
 	if dec.Status != "ALLOWED" {
 		return dec, false, nil
 	}
-	return nil, dec.StartAfterCreate, nil
+	return nil, dec.StartAfterCreate && extra != nil, nil
 }
 
 // declinedReason is "" for a yes, and otherwise what to hand back in place of the write.
@@ -2842,6 +2950,11 @@ func (s *mcpServer) answerOrbitToolPrompt(args map[string]interface{}) (map[stri
 	if !ours {
 		return nil, false
 	}
+	// A scheduled CHECK_ONLY run: an Orbit tool its allow rules do not cover is refused, whatever the catalogue says
+	// of it, and asks nobody (schedule_check_only.go).
+	if scheduledCheckOnlyFromEnv() {
+		return toolResult(denyJSON(checkOnlyOrbitToolRefusal), false), true
+	}
 	if entry, declared := planGateTable()[tool]; !declared || !entry.mcp {
 		return nil, false
 	}
@@ -3134,13 +3247,11 @@ func spawnDepthFromEnv() int {
 // reaching AWAITING_INPUT once its first turn produced a result, or a terminal state — behind a watch
 // that keeps waiting on the server whenever this call cannot (session_wait.go).
 func (s *mcpServer) waitForSession(created json.RawMessage) map[string]interface{} {
-	wait, err := waitForSessionDurably(s.t, cliOrchestrationContext{
+	// Never an error: the session exists, and an error reads as a create to try again (session_wait.go).
+	wait := waitForSessionDurably(s.t, cliOrchestrationContext{
 		sessionID: s.sessionID,
 		token:     s.orchestrationToken,
 	}, created)
-	if err != nil {
-		return toolResult("wait: "+err.Error(), true)
-	}
 	return toolResult(wait.text(), false)
 }
 

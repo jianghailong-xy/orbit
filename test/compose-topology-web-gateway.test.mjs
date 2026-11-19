@@ -68,10 +68,12 @@ test('gateway/nginx.conf includes the routes for several apiservers by globs, wh
     `include ${MOUNT}/server/*.conf;`,
     // The run events' stream: a release handing over (the case below).
     `include ${HANDOVER}/apiserver*.conf;`,
-    // Inside the /api/events and /api/ locations: the first apiserver with the others behind it, then a release
-    // handing over.
+    // Inside the /api/events location: the first apiserver with the others behind it, then a release handing over.
     `include ${MOUNT}/first/*.conf;`,
     `include ${HANDOVER}/apiserver*.conf;`,
+    // The managed runner browser's viewer: a release handing over, and no upstream, so no max_fails (nginx.conf).
+    `include ${HANDOVER}/apiserver*.conf;`,
+    // Inside the /api/ location, as in /api/events.
     `include ${MOUNT}/first/*.conf;`,
     `include ${HANDOVER}/apiserver*.conf;`,
     // The web app.
@@ -88,6 +90,7 @@ test('a release hands each route to the apiserver or web over by the variable it
   const routes = [
     [/^\s*location ~ \^\/api\/runs\/\[\^\/\]\+\/events\$ \{/m, 'apiserver', 'apiserver:3000'],
     [/^\s*location = \/api\/events \{/m, 'apiserver', 'apiserver:3000'],
+    [/^\s*location ~ \^\/api\/runners\/\[\^\/\]\+\/browser\/vnc\$ \{/m, 'apiserver', 'apiserver:3000'],
     [/^\s*location \/api\/ \{/m, 'apiserver', 'apiserver:3000'],
     [/^\s*location \/ \{/m, 'web', 'orbit-web:80'],
   ];
@@ -158,6 +161,32 @@ test('the session stream route takes /api/sessions/:id/events alone, and hashes 
   }
 });
 
+// The viewer streams' locations (task 34yQEOwNFB5lKxKxGQmAY): a guest's and a public link visitor's, over the session
+// streams' upstream and keyed by the same variable.
+const GUEST_STREAM = /^location ~ \^\/api\/guest-sessions\/\S+ \{/m;
+const SHARED_STREAM = /^location ~ \^\/api\/shared\/\S+ \{/m;
+
+test('the viewer stream routes take the guest and public link streams alone: a guest\'s by its session, a link\'s by its token', () => {
+  const key = (header) => {
+    const pattern = new RegExp(uncommented(routes).match(header)[0].replace(/^location ~ (\S+) \{$/, '$1'));
+    return (uri) => pattern.exec(uri)?.groups?.orbit_stream_session ?? null;
+  };
+  const guest = key(GUEST_STREAM);
+  assert.equal(guest('/api/guest-sessions/343dlzsYWKo5z8l2M8tsB/stream'), '343dlzsYWKo5z8l2M8tsB');
+  // The query, where a guest's access_token rides, is not part of the URI a location matches.
+  for (const other of ['/api/guest-sessions/s1', '/api/guest-sessions/s1/events', '/api/guest-sessions/s1/stream/x',
+    '/api/guest-sessions//stream', '/api/x/guest-sessions/s1/stream', '/api/sessions/s1/stream']) {
+    assert.equal(guest(other), null, `${other} stays on the first apiserver`);
+  }
+  const shared = key(SHARED_STREAM);
+  assert.equal(shared('/api/shared/tok_AbC-123/stream'), 'tok_AbC-123');
+  assert.equal(shared('/api/shared/tok_AbC-123/sessions/343dlzsYWKo5z8l2M8tsB/stream'), 'tok_AbC-123');
+  for (const other of ['/api/shared/t1', '/api/shared/t1/events', '/api/shared/t1/sessions/s1', '/api/shared/t1/sessions/s1/events',
+    '/api/shared/t1/sessions//stream', '/api/shared/t1/sessions/s1/x/stream', '/api/shared//stream', '/api/x/shared/t1/stream']) {
+    assert.equal(shared(other), null, `${other} stays on the first apiserver`);
+  }
+});
+
 test('both routes proxy exactly as the /api/ location does, to their upstream, and give up on a gone apiserver within 2 s', () => {
   // The /api/ location's settings, less what picks the upstream and the upload limit, which no stream or token needs.
   const api = directives(block(main, /^\s*location \/api\/ \{/m))
@@ -165,6 +194,8 @@ test('both routes proxy exactly as the /api/ location does, to their upstream, a
   const cases = [
     [/^location ~ \S+ \{/m, 'proxy_pass http://orbit_session_streams$request_uri'],
     [/^location = \/api\/runner\/link-token \{/m, 'proxy_pass http://orbit_link_tokens$request_uri'],
+    [GUEST_STREAM, 'proxy_pass http://orbit_session_streams$request_uri'],
+    [SHARED_STREAM, 'proxy_pass http://orbit_session_streams$request_uri'],
   ];
   for (const [header, pass] of cases) {
     const d = directives(block(routes, header));
@@ -172,8 +203,11 @@ test('both routes proxy exactly as the /api/ location does, to their upstream, a
     assert.ok(d.includes('proxy_connect_timeout 2s'));
     assert.deepEqual(d.filter((x) => !/^(proxy_pass|error_page) /.test(x) && x !== 'proxy_connect_timeout 2s').sort(), api);
   }
-  // Nothing else is routed there: the two locations, and the streams' fallback, which only nginx sends to.
-  assert.deepEqual(uncommented(routes).match(/^location \S+/gm), ['location ~', 'location @orbit_stream_any_apiserver', 'location =']);
+  // Nothing else is routed there: the four locations, and the streams' fallback, which only nginx sends to.
+  assert.deepEqual(uncommented(routes).match(/^location \S+ \S+/gm), ['location ~ ^/api/sessions/(?<orbit_stream_session>[^/]+)/events$',
+    'location ~ ^/api/guest-sessions/(?<orbit_stream_session>[^/]+)/stream$',
+    'location ~ ^/api/shared/(?<orbit_stream_session>[^/]+)(?:/sessions/[^/]+)?/stream$',
+    'location @orbit_stream_any_apiserver {', 'location = /api/runner/link-token']);
 });
 
 test('a stream the gateway could not open is opened once more on any apiserver, a GET only (task 34wTlHHwbkvPyPDtw1Z88)', () => {
@@ -182,6 +216,8 @@ test('a stream the gateway could not open is opened once more on any apiserver, 
   // proxy_intercept_errors is off, so an apiserver's own answer passes through.
   const stream = directives(block(routes, /^location ~ \S+ \{/m));
   assert.ok(stream.includes('error_page 502 504 = @orbit_stream_any_apiserver'));
+  // The viewer streams fall back alike, and are proxied exactly as the session's stream is.
+  for (const header of [GUEST_STREAM, SHARED_STREAM]) assert.deepEqual(directives(block(routes, header)).sort(), [...stream].sort());
   assert.ok(!uncommented(routes).includes('proxy_intercept_errors'));
   const body = block(routes, /^location @orbit_stream_any_apiserver \{/m);
   // Nothing but a GET is sent again: anything else answers the 502 it had.
@@ -197,4 +233,33 @@ test('the directory is mounted where gateway/nginx.conf includes it: the staging
   const line = `./gateway/several-apiservers:${MOUNT}:ro`;
   assert.ok(read('docs/self-hosting.md').includes(`- ${line}`), 'docs/self-hosting.md shows the mount');
   assert.ok(read('scripts/runner-link/staging.spread.compose.yml').includes(`\${STAGING_REPO}/gateway/several-apiservers:${MOUNT}:ro`));
+});
+
+// The managed runner browser's viewer (src/apiserver/src/managed-runners/browser-viewer.ts): the owner's web login rides
+// in the query as ?access_token=, since a browser's WebSocket cannot set a header. Its location writes the server's
+// access log, whose line is $logged_request: the map drops the query of any request that carries access_token=.
+test('the viewer\'s access_token never reaches the gateway\'s access log', () => {
+  const code = uncommented(main);
+  // The server logs with the orbit format, and that format writes $logged_request, never the raw request or its query.
+  assert.match(block(main, /^server\s*\{/m), /^\s*access_log \/var\/log\/nginx\/access\.log orbit;/m);
+  const format = code.slice(code.indexOf('log_format orbit'), code.indexOf(';', code.indexOf('log_format orbit')));
+  assert.ok(format.includes('"$logged_request"'), format);
+  for (const raw of ['$request ', '$request"', '$request_uri', '$args', '$query_string', '$arg_access_token']) {
+    assert.ok(!format.includes(raw), `the log format writes ${raw}`);
+  }
+  // The viewer's location keeps the server's log: no access_log of its own, which would replace it.
+  const viewer = directives(block(main, /^\s*location ~ \^\/api\/runners\/\[\^\/\]\+\/browser\/vnc\$ \{/m));
+  assert.deepEqual(viewer.filter((d) => d.startsWith('access_log')), []);
+  // The map, applied to the viewer's request line as nginx's PCRE does: the query is gone, method and path stay.
+  const map = block(main, /^map \$request \$logged_request\s*\{/m);
+  const entry = /"~(.+?)"\s+"([^"]+)"/.exec(map);
+  assert.ok(entry, map);
+  const pattern = new RegExp(entry[1].replace(/\(\?<(\w+)>/g, '(?<$1>'));
+  const token = 'eyJhbGciOiJIUzI1NiJ9.eyJzdWIiOiJvd25lciJ9.c2lnbmF0dXJl';
+  const line = `GET /api/runners/34z8OKBXxDRYsIZwzJ35E/browser/vnc?access_token=${token} HTTP/1.1`;
+  const m = pattern.exec(line);
+  assert.ok(m, `the map does not match ${line}`);
+  const logged = entry[2].replace('$method', m.groups.method).replace('$path', m.groups.path).replace('$server_protocol', 'HTTP/1.1');
+  assert.equal(logged, 'GET /api/runners/34z8OKBXxDRYsIZwzJ35E/browser/vnc HTTP/1.1');
+  assert.ok(!logged.includes(token));
 });

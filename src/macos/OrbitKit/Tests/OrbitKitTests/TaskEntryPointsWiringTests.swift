@@ -79,11 +79,6 @@ final class TaskEntryPointsWiringTests: XCTestCase {
         XCTAssertTrue(itsTask.contains("app?.openOrbitLink(url, overConsole: overConsole, overPage: opensTasksOverPage)"),
                       "the delivery line's `Its task` is pushed over the conversation, not routed")
 
-        let referenced = code(try source("Views/Console/AttachedNoteView.swift"))
-        XCTAssertTrue(referenced.contains("@Environment(\\.opensPagesOverConsole) private var overConsole"))
-        XCTAssertTrue(referenced.contains("app?.openOrbitLink(url, overConsole: overConsole, overPage: opensTasksOverPage) != true"),
-                      "a referenced task's card opens over the conversation it was named in")
-
         let wake = code(try source("Views/WatchWakeCardView.swift"))
         XCTAssertTrue(wake.contains("@Environment(\\.opensPagesOverConsole) private var overConsole"))
         // On a wide shell the same door opens a task over the page instead of pushing it

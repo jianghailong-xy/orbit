@@ -15,6 +15,7 @@ import {
   approvalOutcome,
   FEISHU_ALERT_ATTEMPTS,
   FeishuTransport,
+  feishuStartedBy,
   ownerItemOutcome,
   type FeishuCardSpec,
   type FeishuTarget,
@@ -482,4 +483,41 @@ test('the badge reconcile runs with Feishu as the only channel, and hands the tr
   const quiet = new PushService(prisma as never, NO_DEVICES);
   quiet.scheduleBadgeSync(OWNER);
   await new Promise((r) => setTimeout(r, 400));
+});
+
+test('an approval card of a session someone else started says who and where; the owner\'s own says nothing', async () => {
+  const sessionId = randomUUID();
+  const world = (turn: { externalSenderSource: string | null; externalSenderName: string | null } | null, chatId: string | null, chatName: string | null | undefined) => ({
+    session: { findFirst: async () => ({ title: 'Fix the build' }) },
+    approval: { findMany: async () => [{ id: randomUUID(), toolName: 'Bash', input: { command: 'ls' } }] },
+    conversationTurn: { findFirst: async (q: { orderBy: unknown }) => {
+      assert.deepEqual(q.orderBy, [{ seq: 'asc' }], 'the session\'s first turn');
+      return turn;
+    } },
+    feishuThread: { findFirst: async () => (chatId ? { chatId } : null) },
+    feishuChatRoute: { findFirst: async (q: { where: { chatId: string; appId: string } }) => {
+      assert.equal(q.where.appId, TARGET.appId);
+      return chatName === undefined ? null : { chatName };
+    } },
+  });
+  const draw = async (prisma: unknown) => {
+    const alert = await FeishuTransport.prototype.approvalCard.call({ prisma } as unknown as FeishuTransport, TARGET, sessionId, null).render();
+    assert.ok(alert && alert.kind === 'approval');
+    return { alert, card: texts(renderFeishuCard(alert, { detail: 'TITLES_ONLY', approvalsInFeishu: true, openUrl: 'u' })) };
+  };
+  const someone = { externalSenderSource: 'FEISHU', externalSenderName: 'Li Lei' };
+
+  const group = await draw(world(someone, 'oc_group', 'Release crew'));
+  assert.equal(group.alert.startedBy, 'Started by Li Lei in Release crew');
+  assert.match(group.card, /Started by Li Lei in Release crew/, 'TITLES_ONLY shows it');
+
+  const direct = await draw(world(someone, 'oc_p2p', undefined));
+  assert.equal(direct.alert.startedBy, 'Started by Li Lei in a direct message');
+
+  const own = await draw(world({ externalSenderSource: null, externalSenderName: null }, 'oc_group', 'Release crew'));
+  assert.equal(own.alert.startedBy, undefined);
+  assert.doesNotMatch(own.card, /Started by/);
+
+  // A lookup that fails costs the card the line, not the card.
+  assert.equal(await feishuStartedBy({ conversationTurn: { findFirst: async () => { throw new Error('gone'); } } } as never, TARGET, sessionId), null);
 });

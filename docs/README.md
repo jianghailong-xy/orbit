@@ -31,11 +31,14 @@ This is the entry point for Orbit's user, operator, contributor, and maintainer 
 | Understand the system and trust boundaries | [Architecture overview](architecture.md) |
 | Build or change Orbit | [Development guide](development.md) and [contribution guide](../CONTRIBUTING.md) |
 | Automate tasks and sessions | [Runner CLI and automation](runner-cli.md) |
+| Learn how agents use Orbit — MCP first, your record vs their plan, which object, create vs start, the CLI, troubleshooting, examples to ask | [How agents use Orbit](agent-tools-guide.md) |
 | Look up every operation an agent can call, with its risk, approval and receipt | [Operation catalogue](operation-catalog.md) |
 | See what each permission mode does with Orbit's own calls on Claude Code and Codex | [Permission matrix](permission-matrix.md) |
+| Check that agents still use Orbit correctly on the supported Claude Code and Codex versions, read an eval report, or ship an agent-facing change | [Agent-contract eval, telemetry and release gate](agent-contract-eval.md) |
 | Restore or validate a backup | [Postgres backup and restore](postgres-backup-restore.md) |
 | Back up, restore or recover managed runners on Docker | [Managed runners on Docker: operations](managed-runner-docker-operations.md) |
 | Deploy, back up, restore, roll back or fail over managed runners on Kubernetes (test environments) | [Managed runners on Kubernetes: operations](managed-runner-kubernetes-operations.md) |
+| Run and operate the .3 managed-runner environment (k3s, Ceph RBD, XFS reflink) | [Managed runners on .3: k3s, Ceph RBD and XFS reflink](managed-runner-k3s-xfs-deployment.md) |
 | Diagnose database conflicts, or deploy and roll back the code that handles them | [PostgreSQL conflict runbook](postgres-conflict-runbook.md) |
 | Understand project direction | [Project maturity and brand roadmap](project-maturity.md) |
 
@@ -75,6 +78,9 @@ This is the entry point for Orbit's user, operator, contributor, and maintainer 
   — an authorized test environment's deployment order, finding an account's runner, when the stop-report finalizer may
   and may not be removed, an independent RBD backup checked off the cluster and restored to a new PVC, switching off and
   rolling back, and fencing a node that stops reporting.
+- [Managed runners on .3: k3s, Ceph RBD and XFS reflink](managed-runner-k3s-xfs-deployment.md) — the production
+  deployment record: who is eligible and the capacity budget, the patched Ceph-CSI XFS class with `rbd-nbd`, the runner
+  image and checkout index fast path, the admission guard, the Docker cutover, and the outstanding XFS drills.
 - [Verifiable release supply chain](supply-chain.md) — the checksums, CycloneDX SBOM, SLSA provenance and
   signing identities every release publishes, the commands that verify them, and the rollback path when a
   check fails.
@@ -104,6 +110,9 @@ This is the entry point for Orbit's user, operator, contributor, and maintainer 
   Codex agent uses Orbit: the five objects and their routing, MCP-first and the CLI boundary,
   create-vs-start, permissions and approvals, errors and retries, success receipts, the eight black-box
   scenarios, and the measured baseline with its confirmed gaps.
+- [Agent-contract eval, telemetry and release gate](agent-contract-eval.md) — the contract's scenarios played on
+  the real Claude Code and Codex with real models and by a scripted agent in CI, the comparable report and its
+  metrics, the counts-only per-turn telemetry, version drift, and the release gate with its rollback conditions.
 - [Session search](session-search-design.md) — server-side multilingual search.
 - [Rate-limit retry](quota-limit-retry-design.md) — usage-limit detection and automatic retry.
 - [Cross-platform badge sync](cross-platform-badge-sync.md) — attention state across clients.

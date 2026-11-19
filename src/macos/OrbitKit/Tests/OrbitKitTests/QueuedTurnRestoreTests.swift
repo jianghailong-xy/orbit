@@ -224,7 +224,7 @@ final class QueuedTurnRestoreTests: XCTestCase {
     func testTheConsoleFoldsBackOnlyWhatAStopDroppedAndSomebodyTyped() throws {
         let console = try source(Self.consolePath)
         let fold = try section(console, from: "private func foldQueuedBackIntoComposer(before ev: RunEvent) {",
-                               to: "func attachFile(url: URL) async {")
+                               to: "func attachFile(url: URL")
         XCTAssertTrue(fold.contains("guard TranscriptReducer.dropsQueue(ev),"),
                       "folds back only on an interrupt that dropped the queue — not a runner restart")
         XCTAssertTrue(fold.contains(".compactMap(ComposerLogic.restorableText(of:))"),
@@ -232,8 +232,8 @@ final class QueuedTurnRestoreTests: XCTestCase {
 
         let cancel = try section(console, from: "func cancelQueued(_ bubble: UserBubble) async {",
                                  to: "private func foldQueuedBackIntoComposer")
-        XCTAssertTrue(cancel.contains("if let words = ComposerLogic.restorableText(of: bubble) {"),
-                      "a withdrawn turn comes back only when somebody typed it")
+        XCTAssertTrue(cancel.contains("if let words = ComposerLogic.withdrawnText(of: bubble) {"),
+                      "a withdrawn turn comes back only when somebody typed it, as they wrote it")
         XCTAssertFalse(cancel.contains("WatchWakeText.parse") || fold.contains("WatchWakeText.parse"),
                        "one rule for both paths, not a list of exceptions kept in two places")
     }

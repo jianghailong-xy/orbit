@@ -2,6 +2,7 @@ package io.orbitd.android.core.cards
 
 import kotlinx.serialization.json.JsonObject
 import kotlinx.serialization.json.JsonPrimitive
+import kotlinx.serialization.json.booleanOrNull
 import kotlinx.serialization.json.doubleOrNull
 import java.time.Duration
 import java.time.Instant
@@ -295,8 +296,18 @@ object ExceptionCards {
 
     // MARK: the heading and the footer
 
+    /** An escalated item's heading while its coordinator cannot be reached — web's `ESCALATED_UNREACHABLE_HEADING`, verbatim. */
+    const val escalatedUnreachableHeading = "Now yours — the coordinator can’t take messages"
+    /** The same item while its coordinator can be asked again, with no number: the card's one clock is the total wait at its top right
+     * (board owner-exception-who-fixes, D3 = A), and how long the coordinator had it is in Details. Web's `ESCALATED_REACHABLE_HEADING`. */
+    const val escalatedReachableHeading = "Now yours — the coordinator didn’t get to it"
+    const val coordinatorEndedHeading = "Now yours — the coordinator conversation ended"
+    const val handedOverHeading = "Now yours — the coordinator handed it over"
+    const val noCoordinatorHeading = "Now yours — this project has no coordinator"
+
     /** How the item became the owner's, one sentence per way; null for an item that was the owner's from the start. */
     fun heading(row: JsonObject, now: Instant = Instant.now()): String? {
+        if (row.obj("baseline") != null) return LandingCheckCopy.title(row.obj("facts")?.text("targetRef")?.removePrefix("refs/heads/") ?: "the project branch")
         // §4.6 X-E5 (revision 23): the item is escalated at birth, so `waitedBeforeEscalation` would only ever say "1s". Its heading
         // is the fact it is about — how long the claim has been silent, counted from the last report the runner made (board v4 06).
         if (row.text("kind") == "LANDING_LEASE_EXPIRED") {
@@ -308,11 +319,13 @@ object ExceptionCards {
     }
 
     private fun headingByReason(row: JsonObject, now: Instant): String? = when (row.text("assigneeReason")) {
-        "ESCALATED" -> "Now yours — no one acted on this for ${waitedBeforeEscalation(row)}"
-        "COORDINATOR_ENDED" -> "Now yours — the coordinator conversation ended"
+        // The clock moved it, but with no coordinator to ask or message (the server's reading, which the doors already show), "no one
+        // acted" would point at somebody who cannot.
+        "ESCALATED" -> if (row.flag("coordinatorUnreachable")) escalatedUnreachableHeading else escalatedReachableHeading
+        "COORDINATOR_ENDED" -> coordinatorEndedHeading
         "CHAIN_LIMIT" -> "Now yours — the 3rd failure in this chain"
-        "HANDED_OVER" -> "Now yours — the coordinator handed it over"
-        "NO_COORDINATOR" -> "Now yours — this project has no coordinator (waiting ${waited(row, now)})"
+        "HANDED_OVER" -> handedOverHeading
+        "NO_COORDINATOR" -> noCoordinatorHeading
         else -> null
     }
 
@@ -430,6 +443,15 @@ object ExceptionCards {
     /** The rows of the item's payload, in the browser's order (`ItemFactRows`), field for field. X-E5 draws the claim it is about in
      * three rows instead of the item's sentence; an item an older build opened carries no lease and keeps that sentence. */
     fun facts(row: JsonObject): Facts {
+        row.obj("baseline")?.let { baseline -> return Facts.Rows(listOf(
+            FactRow("", LandingCheckCopy.baselineBody),
+            FactRow(LandingCheckCopy.held, row.strings("heldTaskIds").size.toString()),
+            FactRow(LandingCheckCopy.upstream, baseline.text("upstreamSha").orEmpty(), mono = true),
+            FactRow(LandingCheckCopy.tip, baseline.text("targetSha").orEmpty(), mono = true),
+            FactRow(LandingCheckCopy.baseline, baseline.text("mergeTreeSha").orEmpty(), mono = true),
+            FactRow(LandingCheckCopy.label, baseline.obj("check")?.text("command").orEmpty(), mono = true),
+            FactRow("", LandingCheckCopy.resumes))) }
+
         if (row.text("kind") == "LANDING_LEASE_EXPIRED") row.obj("lease")?.let { return Facts.Rows(leaseFacts(row, it)) }
         val facts = row.obj("facts") ?: return Facts.DetailLine(row.text("detailLine").orEmpty())
         val rows = mutableListOf<FactRow>()
@@ -450,7 +472,9 @@ object ExceptionCards {
                 Run(" after ${checkDuration((check["durationMs"] as? JsonPrimitive)?.doubleOrNull ?: 0.0)}")),
                 CheckTail.of(check.text("outputTail")))
         }
-        if (facts.flag("branchUnchanged")) rows += FactRow(branchLabel, branchUnchanged)
+        // The server writes the sentence by the job the check failed in (a task's landing, or a promotion of the project branch or of one
+        // task's branch to main); a server older than `branchLine` leaves the task's.
+        if (facts.flag("branchUnchanged")) rows += FactRow(branchLabel, facts.text("branchLine") ?: branchUnchanged)
         facts.obj("failure")?.let { failure ->
             rows += FactRow(howLabel, howFailed(failure))
             chainStanding(failure)?.let { rows += FactRow(retriesLabel, it) }
@@ -522,5 +546,268 @@ object ExceptionCards {
     fun ordinal(n: Int): String {
         if (n % 100 in 11..13) return "${n}th"
         return when (n % 10) { 1 -> "${n}st"; 2 -> "${n}nd"; 3 -> "${n}rd"; else -> "${n}th" }
+    }
+
+    // MARK: "Who fixes it?" (board docs/mocks/owner-exception-who-fixes, D1–D4 = A; web `WhoFixesItCard`)
+    //
+    // The owner exception card organised around the owner's first question: the heading is the live cause, a subline says what it is,
+    // then WHO FIXES IT? — the coordinator (why it can or cannot, and the one press that brings it back or hands this to it) and you
+    // (the task session) — then how it ends, the facts folded into Details, and after a divider the two ways to end it without fixing
+    // it. One clock: the total wait at the top right. D1 = A: a repair press only repairs the coordinator; once it is back the item
+    // reads askable and the card turns into the reachable card where it is. Every word is web's (`ExceptionCardsTest` reads it).
+
+    const val whoFixesIt = "Who fixes it?"
+    const val whoFixesCoordinator = "The coordinator"
+    const val whoFixesYou = "You"
+    const val fixItMyself = "Fix it myself"
+    const val startNewCoordinator = "Start a new coordinator"
+    const val setUpCoordinator = "Set up a coordinator…"
+    const val chatFirstLink = "or Chat about this first"
+    const val askAgainOnceBack = "Once it’s back, Ask the coordinator again hands this to it with a fresh clock."
+    const val runnerDownSentence = "Its runner is offline. Ask again comes back here as soon as it is."
+    const val coordinatorEndedSentence = "Its conversation was completed."
+    const val noCoordinatorSentence = "This project isn’t coordinated."
+    const val handedOverSentence = "It handed this to you on purpose."
+    /** The web's `HANDOVER_NOTE_CAPTION`: the caption over the coordinator's hand-over note, in the coordinator row. */
+    const val handoverNoteCaption = "Why the coordinator handed it over"
+    const val closesByItself = "Closes by itself once this work lands — push a fix to the task branch and you’re done."
+    const val alreadySettled = "Already settled?"
+    const val markHandledSettledConsequence = "The work landed another way. Your reason goes on the record."
+    const val cancelTaskSettledConsequence = "Stops the task. This item closes with it."
+    const val detailsLabel = "Details"
+    const val openLandingDetail = "every attempt, step by step"
+    const val cameToYouLabel = "Came to you"
+    /** How many files Details lists before "and N more". */
+    const val detailFilesShown = 5
+    /** The coordinator card's Change workspace… press (web `CHANGE_COPY.button`). */
+    const val changeWorkspace = "Change workspace…"
+
+    /** The subline's word for what kind of exception this is (web `WHO_FIXES_KIND`). */
+    val whoFixesKind = mapOf("INTEGRATION_CONFLICT" to "Merge conflict", "INTEGRATION_CHECK_FAILED" to "Checks failed",
+        "INTEGRATION_ERROR" to "Integration error", "TASK_FAILED" to "Task failed", "DELIVERY_REVIEW" to "Delivery review")
+    /** A delivery review's subline word, by the reason it was opened (web `REVIEW_HEADING`); else the item's title. */
+    private val reviewHeading = mapOf("CRITERION_EXEMPTION_ARGUED" to "Kept the judgment method Orbit questioned",
+        "OUTSIDE_DECLARED_SCOPE" to "Changed files it didn’t declare", "MERGE_REFUSED_BY_GIT" to "Git refused to merge it")
+    /** What "Fix it myself" opens and what the owner does there, by kind (web `FIX_IT_MYSELF_CONSEQUENCE`). */
+    val fixItMyselfConsequence = mapOf(
+        "INTEGRATION_CONFLICT" to "Opens the task session. Fix the conflict there and push to the task branch.",
+        "INTEGRATION_CHECK_FAILED" to "Opens the task session. Fix the check there and push to the task branch.",
+        "DEFAULT" to "Opens the task session.")
+
+    fun fixItMyselfLine(row: JsonObject): String = fixItMyselfConsequence[row.text("kind")] ?: fixItMyselfConsequence.getValue("DEFAULT")
+
+    /** The one fix a broken coordinator workspace has (web `COORDINATOR_FIX_LABEL`). */
+    fun fixLabel(cause: CoordinatorCause, workspace: String): String? = when (cause) {
+        CoordinatorCause.WORKSPACE_DISABLED -> "Enable $workspace"
+        CoordinatorCause.WORKSPACE_TRASHED -> "Restore $workspace"
+        CoordinatorCause.WORKSPACE_UNBOUND -> "Bind $workspace to a runner"
+        else -> null
+    }
+
+    /** Why the coordinator can or cannot take this item right now (board part 6's rows). */
+    enum class CoordinatorCause { WORKSPACE_DISABLED, WORKSPACE_TRASHED, WORKSPACE_UNBOUND, RUNNER_DOWN, COORDINATOR_ENDED, NO_COORDINATOR, ESCALATED, HANDED_OVER }
+
+    data class CoordinatorReading(val cause: CoordinatorCause, val workspaceId: String? = null, val workspaceName: String? = null)
+
+    /** What the card reads of `GET /projects/:id/coordinator/status` (docs/project-coordinator-status-contract.md) — only this. */
+    data class CoordinatorStatus(val state: String?, val workspaceId: String?, val workspaceName: String?, val sessionLifecycleState: String?,
+        val refusalDetail: String?) {
+        companion object {
+            fun of(view: JsonObject?): CoordinatorStatus? {
+                val state = view?.text("state") ?: return null
+                val coordination = view.obj("coordination")
+                return CoordinatorStatus(state, coordination?.text("workspaceId"), coordination?.text("workspaceName"),
+                    coordination?.obj("session")?.text("lifecycleState"), view.obj("openability")?.text("refusalDetail"))
+            }
+        }
+    }
+
+    /** The two facts of the coordinator's workspace a LIVE status does not carry, from `GET /workspaces`: [bound] is null where the
+     * list does not say (no `runnerId` key), so an older read never claims a workspace is unbound. */
+    data class WorkspaceFacts(val enabled: Boolean?, val bound: Boolean?) {
+        companion object {
+            fun of(workspace: JsonObject?): WorkspaceFacts? = workspace?.let {
+                WorkspaceFacts(bool(it, "enabled"), if (it.containsKey("runnerId")) it.text("runnerId") != null else null)
+            }
+        }
+    }
+
+    private fun bool(row: JsonObject, key: String): Boolean? = (row[key] as? JsonPrimitive)?.booleanOrNull
+
+    /** The kinds the card draws once they are the owner's by escalation, a hand-over, an ended or missing coordinator. A failed
+     * chain's 3rd failure, a silent landing claim, and a failing landing baseline keep cards of their own. */
+    private val whoFixesKinds = setOf("INTEGRATION_CONFLICT", "INTEGRATION_CHECK_FAILED", "INTEGRATION_ERROR", "TASK_FAILED", "DELIVERY_REVIEW")
+
+    fun whoFixesIt(row: JsonObject): Boolean = row.obj("baseline") == null &&
+        row.text("assignee") == "OWNER" && row.text("kind") in whoFixesKinds &&
+        row.text("assigneeReason") != "CHAIN_LIMIT" && row.text("assigneeReason") != "DEFAULT"
+
+    /** Whether the server drew Ask again: the coordinator can take it, and the status is not read. */
+    fun askable(row: JsonObject): Boolean = "ASK_COORDINATOR_AGAIN" in row.strings("actions")
+
+    /**
+     * The live cause, board part 6 (web `readCoordinatorCause`). Askable first; otherwise what the coordinator status says is wrong —
+     * the bound workspace (UNAVAILABLE's refusal detail, or for a LIVE conversation the workspace list), no coordinator ever, a
+     * conversation that ended — and, when nothing else is wrong, its run is down. Without a status read yet, the row decides.
+     */
+    fun readCoordinatorCause(row: JsonObject, status: CoordinatorStatus? = null, workspace: WorkspaceFacts? = null): CoordinatorReading {
+        fun read(cause: CoordinatorCause) = CoordinatorReading(cause, status?.workspaceId, status?.workspaceName)
+        if (askable(row)) return read(if (row.text("assigneeReason") == "HANDED_OVER") CoordinatorCause.HANDED_OVER else CoordinatorCause.ESCALATED)
+        val unreachable = bool(row, "coordinatorUnreachable")
+        if (status != null) {
+            if (status.state == "UNAVAILABLE") return read(when (status.refusalDetail) {
+                "WORKSPACE_DISABLED" -> CoordinatorCause.WORKSPACE_DISABLED
+                "WORKSPACE_TRASHED" -> CoordinatorCause.WORKSPACE_TRASHED
+                "WORKSPACE_UNBOUND" -> CoordinatorCause.WORKSPACE_UNBOUND
+                else -> CoordinatorCause.COORDINATOR_ENDED
+            })
+            if (status.state == "NEVER_OPENED") return read(CoordinatorCause.NO_COORDINATOR)
+            if (status.state == "TRASHED") return read(CoordinatorCause.COORDINATOR_ENDED)
+            if (status.sessionLifecycleState == "COMPLETED") return read(CoordinatorCause.COORDINATOR_ENDED)
+            // It takes a message but cannot be asked: the conversation is over.
+            if (unreachable == false) return read(CoordinatorCause.COORDINATOR_ENDED)
+            if (workspace?.enabled == false) return read(CoordinatorCause.WORKSPACE_DISABLED)
+            if (workspace?.bound == false) return read(CoordinatorCause.WORKSPACE_UNBOUND)
+            return read(CoordinatorCause.RUNNER_DOWN)
+        }
+        if (row.text("assigneeReason") == "NO_COORDINATOR" || row.obj("chat")?.text("refusal") == "NO_COORDINATOR") return read(CoordinatorCause.NO_COORDINATOR)
+        if (unreachable == false || row.text("assigneeReason") == "COORDINATOR_ENDED") return read(CoordinatorCause.COORDINATOR_ENDED)
+        return read(CoordinatorCause.RUNNER_DOWN)
+    }
+
+    /** The card's heading for each cause (board part 6, first column). */
+    fun whoFixesHeading(cause: CoordinatorCause): String = when (cause) {
+        CoordinatorCause.COORDINATOR_ENDED -> coordinatorEndedHeading
+        CoordinatorCause.NO_COORDINATOR -> noCoordinatorHeading
+        CoordinatorCause.ESCALATED -> escalatedReachableHeading
+        CoordinatorCause.HANDED_OVER -> handedOverHeading
+        else -> escalatedUnreachableHeading
+    }
+
+    /** The coordinator row's status sentence (board part 6, second column). */
+    fun coordinatorRowSentence(row: JsonObject, reading: CoordinatorReading): String {
+        val its = reading.workspaceName?.let { "Its workspace $it" } ?: "Its workspace"
+        return when (reading.cause) {
+            CoordinatorCause.WORKSPACE_DISABLED -> "$its is disabled, so it can’t take messages."
+            CoordinatorCause.WORKSPACE_TRASHED -> "$its is in Trash, so it can’t take messages."
+            CoordinatorCause.WORKSPACE_UNBOUND -> "$its isn’t bound to a runner."
+            CoordinatorCause.RUNNER_DOWN -> runnerDownSentence
+            CoordinatorCause.COORDINATOR_ENDED -> coordinatorEndedSentence
+            CoordinatorCause.NO_COORDINATOR -> noCoordinatorSentence
+            CoordinatorCause.ESCALATED -> "Reachable. It had this for ${waitedBeforeEscalation(row)} and didn’t get to it."
+            // The coordinator's own note is drawn under its caption (OwnerCardTranslation.handoverNote), not in here.
+            CoordinatorCause.HANDED_OVER -> handedOverSentence
+        }
+    }
+
+    /** What a coordinator-row press does. */
+    enum class RowPressKind { ASK_AGAIN, CHAT_FIRST, FIX, CHANGE_WORKSPACE, START_NEW_COORDINATOR, SET_UP_COORDINATOR }
+
+    /** One coordinator-row press: what it does, its weight (LINK is a text link) and its label. */
+    data class RowPress(val kind: RowPressKind, val tier: PressTier, val label: String)
+
+    /** The coordinator row's presses (board part 6, third column), in order, with their weight. */
+    fun coordinatorRowPresses(reading: CoordinatorReading): List<RowPress> {
+        val ask = actionLabels.getValue("ASK_COORDINATOR_AGAIN")
+        val chat = RowPress(RowPressKind.CHAT_FIRST, PressTier.LINK, chatFirstLink)
+        return when (reading.cause) {
+            CoordinatorCause.WORKSPACE_DISABLED, CoordinatorCause.WORKSPACE_TRASHED, CoordinatorCause.WORKSPACE_UNBOUND -> reading.workspaceName
+                ?.let { listOf(RowPress(RowPressKind.FIX, PressTier.PRIMARY, fixLabel(reading.cause, it)!!),
+                    RowPress(RowPressKind.CHANGE_WORKSPACE, PressTier.LINK, changeWorkspace)) }
+                ?: listOf(RowPress(RowPressKind.CHANGE_WORKSPACE, PressTier.SECONDARY, changeWorkspace))
+            CoordinatorCause.RUNNER_DOWN -> listOf(RowPress(RowPressKind.CHANGE_WORKSPACE, PressTier.SECONDARY, changeWorkspace))
+            CoordinatorCause.COORDINATOR_ENDED -> listOf(RowPress(RowPressKind.START_NEW_COORDINATOR, PressTier.PRIMARY, startNewCoordinator))
+            CoordinatorCause.NO_COORDINATOR -> listOf(RowPress(RowPressKind.SET_UP_COORDINATOR, PressTier.PRIMARY, setUpCoordinator))
+            CoordinatorCause.ESCALATED -> listOf(RowPress(RowPressKind.ASK_AGAIN, PressTier.PRIMARY, ask), chat)
+            // D4 = A: the owner was handed this on purpose, so "Fix it myself" leads and Ask again is the second weight.
+            CoordinatorCause.HANDED_OVER -> listOf(RowPress(RowPressKind.ASK_AGAIN, PressTier.SECONDARY, ask), chat)
+        }
+    }
+
+    /** Ask again's note naming the project's escalation window (web `askAgainFreshClock`): "… with a fresh 2h clock." */
+    fun askAgainFreshClock(escalationSeconds: Long): String =
+        "It goes back to the coordinator with a fresh ${span(Duration.ofSeconds(escalationSeconds))} clock."
+
+    /** The line under the coordinator row's presses. [escalationSeconds] is the project's window (`exceptionEscalationSeconds` on the
+     * project document); without one, Ask again keeps its standing consequence. */
+    fun coordinatorRowNote(row: JsonObject, reading: CoordinatorReading, escalationSeconds: Long? = null): String? = when (reading.cause) {
+        CoordinatorCause.ESCALATED, CoordinatorCause.HANDED_OVER ->
+            if (escalationSeconds != null && escalationSeconds > 0) askAgainFreshClock(escalationSeconds) else actionConsequence(row, "ASK_COORDINATOR_AGAIN")
+        CoordinatorCause.RUNNER_DOWN -> null
+        else -> askAgainOnceBack
+    }
+
+    /** D4 = A: a hand-over leads with the owner's own row; everything else with the coordinator's. */
+    fun youLead(reading: CoordinatorReading): Boolean = reading.cause == CoordinatorCause.HANDED_OVER
+
+    /** "Fix it myself" is the primary press where nothing in the coordinator row is: a hand-over, and a run that is only down. */
+    fun fixItMyselfLeads(reading: CoordinatorReading): Boolean =
+        reading.cause == CoordinatorCause.HANDED_OVER || reading.cause == CoordinatorCause.RUNNER_DOWN
+
+    /** The green line: an integration item with a task branch closes by itself once a fix lands there. A candidate's failed check has
+     * no task branch to push to. */
+    fun closesByItself(row: JsonObject): Boolean =
+        row.text("kind") in setOf("INTEGRATION_CONFLICT", "INTEGRATION_CHECK_FAILED", "INTEGRATION_ERROR") &&
+            row.text("taskId") != null && row.text("promotionId") == null
+
+    /** "<kind> · <task title> → <project name>", from what the row carries. */
+    fun whoFixesSubline(row: JsonObject, projectName: String?): String {
+        val kind = if (row.text("kind") == "DELIVERY_REVIEW") row.obj("facts")?.obj("review")?.text("reason")?.let { reviewHeading[it] } ?: row.text("title").orEmpty()
+            else whoFixesKind[row.text("kind")] ?: row.text("title").orEmpty()
+        val task = row.obj("facts")?.obj("task")?.text("title") ?: return kind
+        return if (projectName != null) "$kind · $task → $projectName" else "$kind · $task"
+    }
+
+    /** The folded Details summary: "Details · 9 files · Open landing". */
+    fun detailsSummary(row: JsonObject, landing: Boolean): String {
+        val files = row.obj("facts")?.strings("files")?.size ?: 0
+        return listOfNotNull(detailsLabel, if (files > 0) "$files file${if (files == 1) "" else "s"}" else null, if (landing) openLanding else null)
+            .joinToString(" · ")
+    }
+
+    /** The "Came to you" fact: how long the coordinator had it, which the heading no longer says. */
+    fun cameToYouLine(row: JsonObject): String? = if (row.text("escalatedAt") == null) null else "after ${waitedBeforeEscalation(row)} with the coordinator"
+
+    /** A target ref as Details draws it: the branch name, its long id cut short. */
+    fun shortRef(ref: String): String {
+        val name = ref.removePrefix("refs/heads/")
+        return if (name.length > 18) "${name.take(16)}…" else name
+    }
+
+    /** The card's one clock (D3 = A): the total wait, from `waitingSince`. */
+    fun whoFixesClock(row: JsonObject, now: Instant = Instant.now()): String = "waiting ${waited(row, now)}"
+
+    /** The facts Details unfolds into (web `ItemFactRows` folded): the task is already on the subline, the branch is the project's by
+     * name, the files stop at five, and "After a fix" gives way to the card's own line about how it ends; then how long the coordinator
+     * had it. The landing row is the view's, because it is a link. */
+    fun detailRows(row: JsonObject, projectName: String?): List<FactRow> {
+        val all = when (val facts = facts(row)) {
+            is Facts.Rows -> facts.rows
+            is Facts.DetailLine -> emptyList()
+        }
+        val payload = row.obj("facts")
+        val rows = mutableListOf<FactRow>()
+        all.forEach { fact ->
+            when (fact.label) {
+                taskLabel, afterAFixLabel -> Unit
+                intoLabel -> payload?.text("targetRef")?.let { ref ->
+                    val runs = mutableListOf<Run>()
+                    projectName?.let { runs += Run("$it’s branch ") }
+                    runs += Run(shortRef(ref), Face.MONO)
+                    var tail = payload.text("targetSha")?.let { " at ${it.take(7)}" }.orEmpty()
+                    if (payload.flag("nothingLanded")) tail += nothingLanded
+                    if (tail.isNotEmpty()) runs += Run(tail)
+                    rows += FactRow(intoLabel, runs)
+                }
+                filesLabel -> payload?.strings("files")?.let { files ->
+                    val runs = mutableListOf(Run(files.take(detailFilesShown).joinToString(" · "), Face.MONO))
+                    if (files.size > detailFilesShown) runs += Run(" and ${files.size - detailFilesShown} more")
+                    rows += FactRow("$filesLabel (${files.size})", runs)
+                }
+                else -> rows += fact
+            }
+        }
+        cameToYouLine(row)?.let { rows += FactRow(cameToYouLabel, it) }
+        return rows
     }
 }

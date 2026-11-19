@@ -295,7 +295,10 @@ describe('the Settings window', () => {
       ['Access tokens', '/settings/access-tokens'],
       ['Terminals', '/settings/terminals'],
     ]);
-    expect(rows('Integrations').map((r) => [r.label, r.href])).toEqual([['Feishu', '/settings/integrations/feishu']]);
+    expect(rows('Integrations').map((r) => [r.label, r.href])).toEqual([
+      ['Feishu', '/settings/integrations/feishu'],
+      ['GitHub', '/settings/integrations/github'],
+    ]);
     expect(rows('Machines').map((r) => [r.label, r.href, r.dot])).toEqual([
       ['gpu-box', '/settings/machines/gpuBox', 'Online'],
       ['old-laptop', '/settings/machines/oldLaptop', 'Needs you'],
@@ -643,6 +646,64 @@ describe('reordering machines in the nav', () => {
     await settle();
     expect(machineOrder()).toEqual(['gpu-box', 'old-laptop', 'Studio Mac']);
     expect(toast.error).toHaveBeenCalledWith("Couldn't reorder the machines", 'Machine order is stale');
+  });
+
+  it('draws each machine by the OS it reported, a monitor when it has not said', async () => {
+    runners = [
+      { ...RUNNERS[0], capabilities: ['os:linux'] },
+      RUNNERS[1],
+      { ...RUNNERS[2], capabilities: ['os:darwin'] },
+    ] as typeof RUNNERS;
+    await visit('/settings/general');
+    const osOf = (label: string) =>
+      [...group('Machines').querySelectorAll('.settings-nav-row')]
+        .find((row) => row.querySelector('.settings-nav-label')?.textContent === label)!
+        .querySelector('.settings-nav-icon .anticon')!
+        .getAttribute('data-os');
+    expect(osOf('gpu-box')).toBe('linux');
+    expect(osOf('old-laptop')).toBe('unknown');
+    expect(osOf('Studio Mac')).toBe('darwin');
+  });
+
+  describe('with Orbit Cloud among them', () => {
+    // The account's managed runner, saved second: the nav pins it first all the same.
+    const WITH_CLOUD = [RUNNERS[0], { id: 'cloud', name: 'orbit-managed', online: true, engines: [signedIn], managed: true }, ...RUNNERS.slice(1)];
+    beforeEach(() => {
+      runners = WITH_CLOUD as typeof RUNNERS;
+      reorder = async (ids) => {
+        runners = ids.map((id) => WITH_CLOUD.find((r) => r.id === id)!) as typeof RUNNERS;
+        return runners;
+      };
+    });
+
+    it('pins it first with its cloud, no grip, and a line before the machines you drag', async () => {
+      await visit('/settings/general');
+      expect(machineOrder()).toEqual(['Orbit Cloud', 'gpu-box', 'old-laptop', 'Studio Mac']);
+      const pinned = group('Machines').querySelector('.settings-nav-cloud')!;
+      expect(pinned.querySelector('.settings-nav-label')!.textContent).toBe('Orbit Cloud');
+      expect(pinned.querySelector('.settings-nav-icon .anticon-cloud')).not.toBeNull();
+      expect(pinned.querySelector('.settings-nav-divider')).not.toBeNull();
+      expect(pinned.closest('.settings-nav-sortable')).toBeNull();
+      expect([...group('Machines').querySelectorAll('button.settings-nav-grip')].map((g) => g.getAttribute('aria-label'))).toEqual([
+        'Reorder gpu-box',
+        'Reorder old-laptop',
+        'Reorder Studio Mac',
+      ]);
+    });
+
+    it('a drag moves only your machines, and keeps Orbit Cloud first in the order it saves', async () => {
+      await visit('/settings/general');
+      await dragRow('gpu-box', 2 * ROW_HEIGHT);
+      expect(reorderCalls()).toEqual([{ method: 'POST', body: { ids: ['cloud', 'oldLaptop', 'studioMac', 'gpuBox'] } }]);
+      expect(machineOrder()).toEqual(['Orbit Cloud', 'old-laptop', 'Studio Mac', 'gpu-box']);
+    });
+
+    it('draws no line when Orbit Cloud is the only machine', async () => {
+      runners = [WITH_CLOUD[1]] as typeof RUNNERS;
+      await visit('/settings/general');
+      expect(machineOrder()).toEqual(['Orbit Cloud']);
+      expect(group('Machines').querySelector('.settings-nav-divider')).toBeNull();
+    });
   });
 
   it('a plain click on a machine still opens its page, and sends no reorder', async () => {

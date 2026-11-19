@@ -391,7 +391,7 @@ func (u *cursorAccountUsage) forget(id string) {
 
 // removeCursorAccount carries out one removal of added account id: its directory and record, and the read
 // of its quota with them.
-func removeCursorAccount(usage *cursorAccountUsage, id string, liveDirs map[string]bool) error {
+func removeCursorAccount(usage *cursorAccountUsage, id string, liveDirs accountDirSessions) error {
 	if err := cursorAccountKind.remove(id, liveDirs); err != nil {
 		return err
 	}

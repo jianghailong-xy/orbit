@@ -1,0 +1,15 @@
+/* The runner browser's chip and drawer (docs/mocks/runner-browser/01-board-2.png, frames 4–7 and 9). */
+.rb-drawer > .orbit-overlay-body { display: flex; padding: 12px 16px; }
+.rb-drawer.is-controlling > .orbit-overlay-header { background: var(--warning-bg); }
+.rb-drawer.is-controlling > .orbit-overlay-header > .orbit-overlay-title { color: var(--orbit-badge-orange); font-size: 14px; }
+.rb-head-actions { display: inline-flex; align-items: center; gap: 8px; }
+.rb-view-only { padding: 2px 10px; border-radius: 999px; background: var(--fill-muted); color: var(--text-2); font-size: 13px; }
+.rb-screen { flex: 1; min-height: 0; border: 1px solid var(--border-subtle); border-radius: 8px; overflow: hidden; background: var(--bg-sunken); }
+.rb-screen.is-controlling { border: 2px solid var(--orbit-badge-warning); }
+.rb-foot { display: flex; align-items: center; gap: 12px; font-size: 12px; color: var(--text-2); }
+.rb-holder { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.rb-link.is-live { color: var(--success); }
+.rb-chip-row { display: flex; margin: 0 0 8px; }
+.rb-chip { display: inline-flex; align-items: center; gap: 6px; padding: 2px 10px; border: 1px solid var(--border); border-radius: 999px; background: var(--bg-raised); color: inherit; font: inherit; font-size: 13px; cursor: pointer; }
+.rb-chip:hover { border-color: var(--brand); }
+.rb-chip-dot { width: 7px; height: 7px; border-radius: 50%; background: var(--error-solid); }

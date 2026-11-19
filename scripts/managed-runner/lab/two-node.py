@@ -41,7 +41,7 @@ NODES = {1: ENV["LAB_NAME"], 2: ENV["LAB2_NAME"]}
 SSH_PORTS = {1: ENV["LAB_SSH_PORT"], 2: ENV["LAB2_SSH_PORT"]}
 UNITS = {1: ENV["LAB_UNIT"], 2: ENV["LAB2_UNIT"]}
 QMP = {1: LAB_DIR / "run/qmp.sock", 2: LAB_DIR / "run/node2-qmp.sock"}
-DATA = "/var/lib/orbit/storage-verification"
+DATA = "/home/orbit/storage-verification"
 SNAPSHOT_KEYS = ("ordinarySHA256", "gitCommit", "gitFsck", "sqliteIntegrity", "sqliteJournalMode", "committedRows",
                  "rowSHA256", "prefixRows", "prefixSHA256", "acknowledgedRows", "mountInfo")
 

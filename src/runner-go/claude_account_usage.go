@@ -77,7 +77,7 @@ func (u *claudeAccountUsage) forget(id string) {
 // so does everything this runner reads for it — the probe loop of that account's plan usage is
 // stopped with the directory it reads, or a read that outlived it would go on reporting an account
 // the runner no longer has.
-func removeClaudeAccount(usage *claudeAccountUsage, id string, liveDirs map[string]bool) error {
+func removeClaudeAccount(usage *claudeAccountUsage, id string, liveDirs accountDirSessions) error {
 	if err := claudeAccountKind.remove(id, liveDirs); err != nil {
 		return err
 	}

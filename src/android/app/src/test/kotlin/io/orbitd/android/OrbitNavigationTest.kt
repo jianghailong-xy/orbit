@@ -175,6 +175,21 @@ class OrbitNavigationTest {
         assertEquals(publicId, ObjectId.toPublic(publicId))
     }
 
+    /** Answers are remembered per spelling: asked again, each is the same, an id with no canonical form included. */
+    @Test fun anIdsCanonicalFormIsTheSameAskedAgain() {
+        repeat(2) {
+            assertEquals(uuid, ObjectId.canonical(publicId))
+            assertEquals(uuid, ObjectId.canonical(uuid.uppercase()))
+            assertNull(ObjectId.canonical("not-an-id"))
+            assertNull(ObjectId.canonical(""))
+            assertTrue(ObjectId.same(publicId, uuid))
+            assertTrue(ObjectId.same(uuid.uppercase(), publicId))
+            assertFalse(ObjectId.same("not-an-id", "not-an-id!"))
+            assertFalse(ObjectId.same(publicId, null))
+            assertTrue(ObjectId.same(null, null))
+        }
+    }
+
     @Test fun accountAndInstanceChangesDiscardEveryOldPathAndPendingObject() {
         val nav = OrbitNavigation().bindAccount("server1|user1").push(OrbitRoute(Destination.TASK, uuid))
         listOf(null, "server2|user1", "server1|user2").forEach { scope ->

@@ -96,6 +96,17 @@ class OwnerRequestsTest {
         assertEquals(listOf(secret), OwnerRequests.forSession("s", listOf(secret), listOf(secret.copy(id = OwnerRequests.key(secret.id)))).map { it.copy(id = secret.id) })
     }
 
+    /** A press on a session's needs-you notice opens the oldest request it asked that is still pending (OrbitKit's twin). */
+    @Test fun aNoticeOpensTheSessionsOldestPendingRequest() {
+        val asked = OwnerRequest(id = "new", kind = "MANUAL_STEP", state = "PENDING", title = "t", askedBySessionId = "s",
+            createdAt = "2026-11-17T22:36:15Z")
+        val older = asked.copy(id = "older", createdAt = "2026-11-17T19:07:30Z")
+        val ended = asked.copy(id = "ended", state = "WITHDRAWN", createdAt = "2026-11-17T14:12:35Z")
+        val elsewhere = asked.copy(id = "other", askedBySessionId = "x", createdAt = "2026-11-17T04:55:08Z")
+        assertEquals("older", OwnerRequests.oldestPending("s", listOf(asked, ended, elsewhere), listOf(older))?.id)
+        assertNull(OwnerRequests.oldestPending("s", listOf(ended, elsewhere)))
+    }
+
     /** The inbox's Open tab and its one count (web `WaitingOnYouPage`, `waitingCount`): the coordinators' questions beside the requests. */
     @Test fun questionsJoinTheRequestsNewestFirstAndInTheCount() {
         val project = Wire.json.parseToJsonElement("""{"id":"p1","title":"Payments rollout","attention":{"ownerItems":[
@@ -124,5 +135,18 @@ class OwnerRequestsTest {
         assertEquals(3, OwnerRequests.waitingCount(listOf(secret, early), listOf(project, quiet), snoozed, now))
         assertEquals(4, OwnerRequests.waitingCount(listOf(secret, early), listOf(project, quiet), emptyMap(), now))
         assertEquals(0, OwnerRequests.waitingCount(emptyList(), listOf(quiet), emptyMap(), now))
+    }
+
+    @Test fun theResolutionTurnIsADividerNotTheOwnersBubble() {
+        fun turn(head: String) = listOf(head, "", OwnerRequests.RESOLUTION_MARK + " The request is final and will not wake this session again.",
+            "", "```json", "{}", "```").joinToString("\n")
+        assertEquals("Owner action resolved · turn started automatically",
+            OwnerRequests.resolutionTurnLabel(turn("Orbit owner request 34uabc (MANUAL_STEP) ended DONE: the owner did what was asked.")))
+        assertEquals("Owner request expired · turn started automatically",
+            OwnerRequests.resolutionTurnLabel(turn("Orbit owner request 34uabc (DECISION) ended EXPIRED: its deadline passed.")))
+        assertEquals("Owner action resolved · turn started automatically",
+            OwnerRequests.resolutionTurnLabel(turn("Orbit owner request 34uabc (WIKI_CREATE) ended DONE. The owner created the wiki w.")))
+        assertNull(OwnerRequests.resolutionTurnLabel("Orbit owner request 34uabc (SECRET) ended DONE: looks wrong to me"))
+        assertNull(OwnerRequests.resolutionTurnLabel(null))
     }
 }

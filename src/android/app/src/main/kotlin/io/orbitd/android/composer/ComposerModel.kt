@@ -4,6 +4,10 @@ import io.orbitd.android.core.auth.*
 import io.orbitd.android.core.cards.ClaudeRegion
 import io.orbitd.android.core.cards.DshRuntime
 import io.orbitd.android.core.net.*
+import io.orbitd.android.core.promptoptimizer.PromptOptimizationRequest
+import io.orbitd.android.core.promptoptimizer.PromptOptimizer
+import io.orbitd.android.core.promptoptimizer.PromptOptimizerState
+import io.orbitd.android.core.promptoptimizer.optimizePrompt
 import io.orbitd.android.core.protocol.Wire
 import io.orbitd.android.directory.directoryError
 import io.orbitd.android.management.RunnerPage
@@ -27,8 +31,6 @@ class ComposerModel(val auth: AuthSession, val handle: SessionHandle, val sessio
     private val job = SupervisorJob(parent.coroutineContext[Job])
     private val scope = CoroutineScope(parent.coroutineContext + job)
     internal val api = ComposerApi(auth, handle, sessionId, target)
-    /** Set by a bare machine's new session page to decide whether Send holds the message or creates the workspace and session. */
-    var machineSend: ((HeldMessage) -> MachineSend)? = null
     private val key = "composer-v1:${ObjectId.canonical(sessionId) ?: sessionId}"
     private val disk = Mutex()
     private val uploadSlots = Semaphore(2)
@@ -45,8 +47,9 @@ class ComposerModel(val auth: AuthSession, val handle: SessionHandle, val sessio
             val bytes = auth.readData(handle, DataKind.DRAFT, key)
             val draft = bytes?.let { Wire.decode(it, ComposerDraft.serializer()) } ?: ComposerDraft()
             mutable.value = ComposerState(draft = draft, loaded = true,
-                notice = if (draft.pending != null) "Delivery is unconfirmed. Retry the saved message." else null,
-                failures = draft.attachments.filter { it.remoteId == null }.associate { it.id to "Upload interrupted · Retry" })
+                notice = if (draft.pending != null) "Delivery is unconfirmed. Retry the saved message." else null)
+            // An upload the last run left unfinished goes again from its saved copy: the chip spins, then lands or goes with why.
+            draft.attachments.filter { it.remoteId == null }.forEach { retryUpload(it.id) }
         } catch (cancel: CancellationException) { throw cancel }
         catch (_: Exception) { mutable.value = ComposerState(error = "Couldn't restore the draft. Retry to read the saved copy.") }
       }
@@ -70,6 +73,65 @@ class ComposerModel(val auth: AuthSession, val handle: SessionHandle, val sessio
         launch { persist() }
     }
     fun clearError() { mutable.update { it.copy(error = null) } }
+
+    // Prompt optimizer (docs/prompt-optimizer-design.md, board docs/mocks/prompt-optimizer), iOS ConsoleModel's. Every rule is
+    // PromptOptimizerState's; this runs the request and puts text in the box.
+    private var optimizeJob: Job? = null
+    private fun optimizer(change: (PromptOptimizerState) -> PromptOptimizerState) = mutable.update { it.copy(optimizer = change(it.optimizer)) }
+
+    /** ✦ Optimize pressed (frame 2): the draft goes to the server with this session — or, for a new session, the workspace picked (a
+     * bare machine's has none yet). Pressed while busy (frame 3), it cancels. Nothing in the box changes until Use. */
+    fun optimize() {
+        if (state.value.optimizer.isOptimizing) { cancelOptimize(); return }
+        val draft = state.value.draft.text
+        val trimmed = draft.trim()
+        if (trimmed.isEmpty()) return
+        optimizer { it.start(draft) }
+        val request = PromptOptimizationRequest(trimmed.take(PromptOptimizer.MAX_DRAFT_CHARS),
+            sessionId = if (target == null) sessionId else null, workspaceId = target?.workspaceId?.takeIf { it.isNotEmpty() })
+        optimizeJob?.cancel()
+        optimizeJob = scope.launch {
+            try {
+                val result = auth.optimizePrompt(handle, request)
+                optimizer { it.succeeded(result) }
+            } catch (cancel: CancellationException) { throw cancel }
+            catch (_: Exception) { optimizer { it.failedNow() } }
+        }
+    }
+
+    /** The busy button pressed again: the press is dropped, the draft is as it was. */
+    fun cancelOptimize() {
+        optimizeJob?.cancel(); optimizeJob = null
+        optimizer { it.cancel() }
+    }
+
+    /** Try again (frame 4's, or frame 6's failure line): the box's draft as it is now goes out again. */
+    fun retryOptimize() { optimizer { it.dismiss() }; optimize() }
+
+    /** × / back / swipe down: the sheet (or the failure line) goes; the draft is kept. */
+    fun dismissOptimization() = optimizer { it.dismiss() }
+
+    fun toggleOptimizationGloss() = optimizer { it.toggleGloss() }
+
+    /** Use, or Edit, then use: the suggestion replaces the draft's words (attachments stay), the caret at its end. */
+    fun useOptimization() {
+        val text = state.value.optimizer.suggestion?.insertText ?: return
+        val current = state.value.draft.text
+        optimizer { it.use(current) }
+        edit(text, text.length, text.length)
+    }
+
+    /** Frame 5's Undo: the owner's own draft comes back. */
+    fun undoOptimization() {
+        val o = state.value.optimizer
+        val current = state.value.draft.text
+        val draft = o.undoDraft?.takeIf { o.offersUndo(current) } ?: return
+        optimizer { it.undo(current) }
+        edit(draft, draft.length, draft.length)
+    }
+
+    /** The Undo toast went: Undo is no longer offered; a send of the unedited text still skips translation. */
+    fun forgetOptimizationUndo() = optimizer { it.forgetUndo() }
     /** Why the box won't do what was asked of it, said as an error: there until dismissed. */
     fun refuse(message: String) { mutable.update { it.copy(error = message) } }
     /** Whether [effective] — a session's detail, or a draft's workspace, under the picks held for it — runs on DeepSeek Harness: its
@@ -91,7 +153,10 @@ class ComposerModel(val auth: AuthSession, val handle: SessionHandle, val sessio
             try {
                 persist()
                 uploadSlots.withPermit {
-                    val (metadata, bytes) = read()
+                    // A file that can't be read or isn't allowed (over the size limit) is refused with its reason alone, as iOS refuses one
+                    // before staging it (`Attachments.rejectReason`): there was no upload to fail.
+                    val (metadata, bytes) = try { read() } catch (cancel: CancellationException) { throw cancel }
+                        catch (e: Exception) { uploadFailed(attachment, e, upload = false); return@withPermit }
                     auth.writeData(handle, DataKind.DRAFT, "$key:attachment:${attachment.id}", bytes)
                     if (state.value.draft.attachments.none { it.id == attachment.id }) return@withPermit
                     mutable.update { it.copy(draft = it.draft.copy(attachments = it.draft.attachments.map { a ->
@@ -100,7 +165,7 @@ class ComposerModel(val auth: AuthSession, val handle: SessionHandle, val sessio
                     uploadBytes(metadata, bytes)
                 }
             } catch (cancel: CancellationException) { throw cancel }
-            catch (e: Exception) { mutable.update { it.copy(failures = it.failures + (attachment.id to (e.message ?: "Upload failed"))) } }
+            catch (e: Exception) { uploadFailed(attachment, e) }
             finally { release(); uploads.remove(attachment.id); mutable.update { it.copy(uploads = it.uploads - attachment.id) } }
         }
         uploads[attachment.id] = task; task.start()
@@ -111,25 +176,42 @@ class ComposerModel(val auth: AuthSession, val handle: SessionHandle, val sessio
         }
         // A removed chip must never be brought back by a delayed successful upload.
         mutable.update { it.copy(draft = it.draft.copy(attachments = it.draft.attachments.map { a ->
-            if (a.id == attachment.id) a.copy(remoteId = remote) else a }), failures = it.failures - attachment.id) }
+            if (a.id == attachment.id) a.copy(remoteId = remote) else a })) }
         persist()
     }
-    fun retryUpload(id: String) {
+    private fun retryUpload(id: String) {
         if (id in uploads) return
         val attachment = state.value.draft.attachments.firstOrNull { it.id == id && it.remoteId == null } ?: return
-        mutable.update { it.copy(uploads = it.uploads + (id to 0f), failures = it.failures - id) }
+        mutable.update { it.copy(uploads = it.uploads + (id to 0f)) }
         val task = scope.launch(start = CoroutineStart.LAZY) {
             try { uploadSlots.withPermit { uploadBytes(attachment, attachmentBytes(id)) } }
             catch (cancel: CancellationException) { throw cancel }
-            catch (e: Exception) { mutable.update { it.copy(failures = it.failures + (id to (e.message ?: "Upload failed"))) } }
+            catch (e: Exception) { uploadFailed(attachment, e) }
             finally { uploads.remove(id); mutable.update { it.copy(uploads = it.uploads - id) } }
         }
         uploads[id] = task; task.start()
     }
+    /** Uploads that failed since the composer opened: a send waiting on its uploads stops when one fails while it waits. */
+    private var uploadFailures = 0
+    /** A failed upload drops its chip and says so in the error line above the box, as iOS does (ConsoleModel.attach): "Upload failed —
+     * notes.pdf: the connection dropped". Picking the file again is the retry. */
+    private fun uploadFailed(attachment: StagedAttachment, e: Exception, upload: Boolean = true) {
+        val name = state.value.draft.attachments.firstOrNull { it.id == attachment.id }?.name ?: return
+        uploadFailures++
+        uploads.remove(attachment.id) // this upload's own job: removing the chip must not cancel the job reporting it
+        removeAttachment(attachment.id)
+        mutable.update { it.copy(error = if (upload) "Upload failed — $name: ${uploadFailure(e)}" else uploadFailure(e)) }
+    }
+    /** Why, in APIClient.failureReason's words: the server's own, a dropped connection, or what the device said (a file it can't read). */
+    private fun uploadFailure(e: Exception): String = when (e) {
+        is ApiError, is NetworkException -> io.orbitd.android.management.personalFailure(e)
+        is IllegalStateException, is IllegalArgumentException -> e.message?.trimEnd('.') ?: io.orbitd.android.management.personalFailure(e)
+        else -> io.orbitd.android.management.personalFailure(e)
+    }
     fun removeAttachment(id: String) {
         uploads.remove(id)?.cancel()
         mutable.update { it.copy(draft = it.draft.copy(attachments = it.draft.attachments.filterNot { a -> a.id == id }),
-            uploads = it.uploads - id, failures = it.failures - id) }
+            uploads = it.uploads - id) }
         launch { persist(); auth.writeData(handle, DataKind.DRAFT, "$key:attachment:$id", ByteArray(0)) }
     }
 
@@ -137,25 +219,21 @@ class ComposerModel(val auth: AuthSession, val handle: SessionHandle, val sessio
      * [queueForNextTurn]: Send's other way while a turn runs (decided 2026-10-16, docs/mocks/steer-tray) — queued for the next turn
      * (`intent: NEXT_TURN`) instead of into this one. Otherwise no intent goes out and the server places the message as it always has. */
     fun send(seedModel: String? = null, queueForNextTurn: Boolean = false) {
+        // A machine with no workspace sends nothing: its page is the setup card, which makes the workspace.
+        if (target?.isMachineDraft == true) return
         if (!state.value.loaded || state.value.busy || state.value.waiting || state.value.draft.pending != null || state.value.draft.createdSessionId != null) return
         mutable.update { it.copy(waiting = true, error = null, notice = null) }
         launch {
             try {
-                // Keep text editable while uploads finish. Failed or removed uploads cannot be silently sent.
+                // Keep text editable while uploads finish. Failed or removed uploads cannot be silently sent: an upload that fails while
+                // this waits stops the send, its chip gone and the error line saying why, and the words stay in the box.
+                val failedBefore = uploadFailures
                 while (uploads.isNotEmpty()) uploads.values.toList().joinAll()
+                if (uploadFailures != failedBefore) { mutable.update { it.copy(waiting = false) }; return@launch }
                 mutable.update { it.copy(busy = true, waiting = false) }
                 val draft = state.value.draft
                 check(draft.attachments.all { it.remoteId != null }) { "Retry or remove failed uploads before sending." }
-                val detail = if (target?.isMachineDraft == true) {
-                    runCatching { api.detail() }.getOrElse {
-                        val runner = state.value.catalog?.runner
-                        MachineSetup.machineDraft(
-                            target.runnerId.orEmpty(),
-                            runner?.let(RunnerPage::displayName) ?: target.runnerId.orEmpty(),
-                            runner?.let(MachineSetup::firstEngineOn) ?: ProviderEngines.CLAUDE,
-                        )
-                    }
-                } else api.detail() // Revalidate resume/capabilities at the actual send, not from cache.
+                val detail = api.detail() // Revalidate resume/capabilities at the actual send, not from cache.
                 if (draft.text.trim().takeWhile { !it.isWhitespace() } == "/status") {
                     // The engine first, as the rows of iOS's status card name it (A07-19 (c), iOS cef3c3f83 `statusRows`).
                     val engine = ProviderEngines.cliName(ProviderChoices.engine(JsonObject(detail + draft.resumeConfig),
@@ -174,33 +252,13 @@ class ComposerModel(val auth: AuthSession, val handle: SessionHandle, val sessio
                 if (shell && executesDsh(JsonObject(detail + draft.resumeConfig))) { refuse(DshRuntime.SHELL_REFUSAL); return@launch }
                 val content = if (shell) raw.drop(1).trim() else raw
                 if (content.isEmpty() && (shell || draft.attachments.isEmpty())) return@launch
-                var newWorkspace: NewWorkspaceRequest? = null
-                if (target?.isMachineDraft == true) {
-                    val decision = machineSend?.invoke(HeldMessage(content = content, shell = shell, attachments = draft.attachments))
-                        ?: MachineSend.Hold
-                    when (decision) {
-                        MachineSend.Nothing -> return@launch
-                        MachineSend.AlreadyWaiting -> {
-                            OrbitToasts.show(MachineSetupCopy.HELD_ALREADY_WAITING, detail = MachineSetupCopy.HELD_ALREADY_WAITING_DETAIL, tone = ToastTone.INFO)
-                            return@launch
-                        }
-                        MachineSend.Hold -> {
-                            mutable.update {
-                                it.copy(
-                                    draft = it.draft.copy(text = "", selectionStart = 0, selectionEnd = 0, attachments = emptyList()),
-                                    error = null,
-                                    notice = null,
-                                )
-                            }
-                            persist()
-                            return@launch
-                        }
-                        is MachineSend.Create -> newWorkspace = decision.newWorkspace
-                    }
-                }
                 val id = UUID.randomUUID().toString()
-                val body = if (target != null) {
-                    buildCreateBody(detail, content, shell, draft.attachments, seedModel, newWorkspace)
+                // D2: the unedited gloss goes with the optimizer's agent-language prompt as its translation — on a turn, a revive and
+                // a new session's opening message alike. Send never waits for the optimizer: a press still out, or a sheet still open, goes.
+                val optimizedTranslation = state.value.optimizer.optimizedTranslation(draft.text)
+                cancelOptimize(); dismissOptimization()
+                val body = PromptOptimizer.withOptimizedTranslation(if (target != null) {
+                    buildCreateBody(detail, content, shell, draft.attachments, seedModel)
                 } else buildJsonObject {
                     if (endpoint == "resume") {
                         draft.resumeConfig.filterKeys { it != "account" }.forEach { (k, v) -> put(k, v) }
@@ -209,7 +267,7 @@ class ComposerModel(val auth: AuthSession, val handle: SessionHandle, val sessio
                     put("clientTurnId", id); put("content", content); put("kind", if (shell) "shell" else "message")
                     if (queueForNextTurn && endpoint == "turns") put("intent", "NEXT_TURN")
                     putJsonArray("attachmentIds") { draft.attachments.forEach { add(it.remoteId!!) } }
-                }
+                }, optimizedTranslation)
                 val pending = PendingSend(id, endpoint, body, draft.text, draft.attachments)
                 mutable.update { it.copy(draft = it.draft.copy(text = "", selectionStart = 0, selectionEnd = 0, attachments = emptyList(), pending = pending)) }
                 try { persist() } catch (e: Exception) {
@@ -218,6 +276,8 @@ class ComposerModel(val auth: AuthSession, val handle: SessionHandle, val sessio
                     throw e
                 }
                 transmit(pending, firstAttempt = true)
+                // The optimized text is spent.
+                optimizer { it.sent() }
             } finally { mutable.update { it.copy(busy = false, waiting = false) } }
         }
     }
@@ -240,6 +300,8 @@ class ComposerModel(val auth: AuthSession, val handle: SessionHandle, val sessio
             transmit(pending, firstAttempt = true)
         } finally { mutable.update { it.copy(busy = false) } }
     }
+    /** The context dialog's Compact (board 03): the engine's `/compact`, sent as [sendMessage] sends, a refusal shown as the box's. */
+    fun compact() { launch { sendMessage(CoordinatorHandoffCopy.COMPACT_COMMAND) } }
     fun retrySend() {
         if (state.value.busy || state.value.waiting) return
         if (state.value.acknowledgementPending) {
@@ -466,25 +528,13 @@ class ComposerModel(val auth: AuthSession, val handle: SessionHandle, val sessio
         shell: Boolean,
         attachments: List<StagedAttachment>,
         seedModel: String?,
-        newWorkspace: NewWorkspaceRequest?,
     ): JsonObject {
         val config = state.value.draft.resumeConfig
         return buildJsonObject {
             config.filterKeys { it != "account" }.forEach { (k, v) -> put(k, v) }
             if (config["model"] == null) seedModel?.let { put("model", it) }
-            if (newWorkspace != null) {
-                put("assignedRunnerId", target?.runnerId ?: detail.text("runnerId").orEmpty())
-                put("newWorkspace", newWorkspace.toJson())
-                val effective = JsonObject(detail + config)
-                val engine = config.text("engine") ?: state.value.catalog?.engineOf(effective)
-                    ?: detail.text("lastEngine") ?: ProviderEngines.CLAUDE
-                val provider = config.text("provider") ?: detail.text("lastProvider") ?: engine
-                put("engine", engine)
-                put("provider", provider)
-            } else {
-                put("workspaceId", target!!.workspaceId)
-                target.folderId?.let { put("folderId", it) }
-            }
+            put("workspaceId", target!!.workspaceId)
+            target.folderId?.let { put("folderId", it) }
             put("prompt", content)
             put("shell", shell)
             config.text("account")?.let { account ->
@@ -494,59 +544,6 @@ class ComposerModel(val auth: AuthSession, val handle: SessionHandle, val sessio
                 }
             }
             putJsonArray("attachmentIds") { attachments.mapNotNull { it.remoteId }.forEach { add(it) } }
-        }
-    }
-
-    /**
-     * The message that waited under a machine's setup card, going by itself (rule 6): the composer's current draft is untouched.
-     * Answers null on success, or why it was refused.
-     */
-    suspend fun sendHeld(held: HeldMessage, newWorkspace: NewWorkspaceRequest, seedModel: String? = null): String? {
-        if (target == null) return null
-        mutable.update { it.copy(busy = true, error = null, notice = null) }
-        return try {
-            val detail = draftOrSessionDetail()
-            val body = buildCreateBody(detail, held.content, held.shell, held.attachments, seedModel, newWorkspace)
-            val accepted = api.mutation("create", body)
-            val created = accepted.text("id") ?: error("Creation response has no session id.")
-            mutable.update {
-                it.copy(
-                    draft = it.draft.copy(resumeConfig = JsonObject(emptyMap()), createdSessionId = created),
-                    notice = "Message accepted.",
-                    error = null,
-                    acknowledgementPending = false,
-                    switchNote = null,
-                )
-            }
-            held.attachments.forEach { auth.writeData(handle, DataKind.DRAFT, "$key:attachment:${it.id}", ByteArray(0)) }
-            persist()
-            refresh()
-            null
-        } catch (cancel: CancellationException) {
-            throw cancel
-        } catch (e: Exception) {
-            failure(e)
-        } finally {
-            mutable.update { it.copy(busy = false) }
-        }
-    }
-
-    /** A waiting message taken back: its words and files return to the composer under any draft. */
-    fun restoreHeld(held: HeldMessage) {
-        val body = if (held.shell) "!${held.content}" else held.content
-        fun apply(draft: ComposerDraft): ComposerDraft {
-            val next = if (held.content.isEmpty()) draft else draft.under(body)
-            return next.copy(attachments = next.attachments + held.attachments)
-        }
-        if (state.value.loaded) {
-            mutable.update { it.copy(draft = apply(it.draft)) }
-            launch { persist() }
-        } else {
-            launch {
-                withTimeoutOrNull(10_000) { state.first { it.loaded } } ?: return@launch
-                mutable.update { it.copy(draft = apply(it.draft)) }
-                persist()
-            }
         }
     }
 

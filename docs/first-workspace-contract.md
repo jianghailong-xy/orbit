@@ -158,7 +158,7 @@ workspace, the session and its first message are made together.
 ```ts
 interface NewWorkspaceRequest {
   workDir?: string;    // a folder on the machine, already confirmed there through §2
-  newFolder?: string;  // a new folder under the runner's reposRoot, made by the runner (§4)
+  newFolder?: string;  // a new folder in the runner's home (reposRoot on a v1-only runner), made by the runner (§4)
 }
 // CreateSessionDto gains: newWorkspace?: NewWorkspaceRequest
 ```
@@ -182,8 +182,11 @@ Checked in this order. None of them writes anything.
 
 1. **The workspace**, owned by the caller:
    - `runnerId` = `assignedRunnerId`;
-   - `workDir` = `newWorkspace.workDir` (trimmed), or `<reposRoot>/<newFolder>` (the runner's reported
-     `reposRoot`, any trailing separator dropped, joined with the separator it uses);
+   - `workDir` = `newWorkspace.workDir` (trimmed), or `<root>/<newFolder>`, joined with the separator the
+     root uses. `root` is `newFolderRoot` (@orbit/shared): on a runner that declares `create-workdir/v2`
+     (`CREATE_WORKDIR_HOME_CAPABILITY`), its home, the directory its reported `reposRoot` sits in
+     (`<home>/orbit-repos`); on one that declares only v1, `reposRoot` itself. Any trailing separator
+     is dropped;
    - `name` = the folder's name: `newFolder`, or the last segment of `workDir` (the whole of it for `/`).
      When the caller has a workspace that is not deleted with that name, ` 2`, ` 3`, … is added: the
      smallest number free. Picked under a per-account lock (`pg_advisory_xact_lock`), so two requests at
@@ -215,16 +218,27 @@ published; and the runner is marked changed, so its next heartbeat lists the new
   from it, with Rename (`PATCH /workspaces/:id`) and Settings. The name and path are the workspace's
   (`GET /sessions/:id` includes it), the machine is the session's runner.
 
+### 3.4 The workspace alone: `POST /workspaces`
+
+The web setup card makes the workspace by itself, with no session (owner 2026-11-16): the page draws the card
+alone, with no composer, and its Create workspace button sends `POST /workspaces` with `name` (the folder's
+name), `runnerId`, and one of `workDir` (a folder already there) and `newFolder` (§3's rule: one path segment,
+made under the runner's reposRoot). `newFolder` gets the same 400s and the same 409 `NEW_FOLDER_UNSUPPORTED`
+as `newWorkspace`, and writes `workDir = <reposRoot>/<newFolder>` with `autoCreateWorkDir`, so the folder is
+made at the first session's claim (§4). Unlike §3.2 the name is taken as sent, not numbered. The native
+clients still make the first workspace with the first session (§3).
+
 ## 4. Claim: `createWorkDir`
 
 `ClaimedSession.createWorkDir?: true` (`GET /runner/sessions/claim`) and `ReclaimSession.createWorkDir?: true`
 (`GET /runner/sessions/reclaim`): present, and true, only when the session's workspace has
 `autoCreateWorkDir` (a workspace made with `newFolder`). Absent otherwise, never false.
 
-The runner (`create-workdir/v1`), before it spawns the engine: when `workDir` does not exist and
-`createWorkDir` is true, `mkdir -p` it with mode 0755, but only when the path, resolved (symlinks
-evaluated), lies inside its own resolved `reposRoot`. A path that resolves outside it, through a symlink or
-otherwise, is not created, and the session fails to start with the error it fails with today. The control
+The runner (`create-workdir/v1`, and since v2 also in home), before it spawns the engine: when `workDir`
+does not exist and `createWorkDir` is true, `mkdir -p` it with mode 0755, but only when the path, resolved
+(symlinks evaluated), lies inside its own resolved home directory (never home itself, which is never made)
+or its own resolved `reposRoot`. A path that resolves outside both, through a symlink or otherwise, is not
+created, and the session fails to start with the error it fails with today. The control
 plane never gives `newFolder` to a runner that does not declare `create-workdir/v1` (§3.1); a runner that
 ignores the field starts the session as it always has.
 

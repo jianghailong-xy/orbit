@@ -23,6 +23,8 @@ import '../components/ui/Card.css';
 import { SettingsHeader } from '../components/settings';
 import { workspacesQuery } from '../lib/queries';
 import { useToast } from '../lib/toast';
+import { machineName } from '../lib/machineSetup';
+import { useManagedRunnerId } from '../lib/managedRunner';
 
 /** `GET /integrations/feishu/chats`, with the ticket the page was opened with (docs/feishu-bot-design.md §8.1). */
 export const feishuChatsQuery = (ticket?: string) =>
@@ -47,14 +49,19 @@ export const modeLabel = (mode: string) => FEISHU_GROUP_MODES.find((m) => m.valu
 export const groupConsequence = (runner: string, mode: string) =>
   `People in this group can make agents act on ${runner} in ${modeLabel(mode)} mode.`;
 
-interface WorkspaceRow {
+export interface WorkspaceRow {
   id: string;
   name: string;
   enabled?: boolean;
   deletedAt?: string | null;
-  runner?: { name?: string | null; displayName?: string | null } | null;
+  runnerId?: string | null;
+  runner?: { id?: string; name?: string | null; displayName?: string | null } | null;
 }
-const runnerName = (w: WorkspaceRow | undefined) => w?.runner?.displayName || w?.runner?.name || 'its runner';
+/** Its machine as the app names it (Orbit Cloud for the managed runner, machineName). */
+export const runnerName =(w: WorkspaceRow | undefined, managedRunnerId: string | null) =>
+  (w?.runner
+    ? machineName({ ...w.runner, id: w.runner.id ?? w.runnerId ?? undefined, name: w.runner.name ?? undefined }, managedRunnerId)
+    : '') || 'its runner';
 
 /**
  * Orbit's confirm page for connecting a Feishu group (docs/feishu-bot-design.md §8.1, §8.3), opened from the bot's
@@ -100,8 +107,11 @@ function ConnectForm({
   const qc = useQueryClient();
   const navigate = useNavigate();
   const message = useToast();
+  const managedRunnerId = useManagedRunnerId();
   const [workspaceId, setWorkspaceId] = useState<string | null>(workspaces.length === 1 ? workspaces[0].id : null);
-  const [mode, setMode] = useState<PermissionMode>(PermissionMode.DEFAULT);
+  // Auto by default (the owner, 2026-11-18). A model that cannot run Auto still opens the session:
+  // dispatch narrows it to Default (normalizeBuiltinPermissionMode), as for any Auto session.
+  const [mode, setMode] = useState<PermissionMode>(PermissionMode.AUTO);
   const [who, setWho] = useState<'everyone' | 'listed'>('everyone');
   const [chosen, setChosen] = useState<ReadonlySet<string>>(new Set());
   const [maxConcurrent, setMaxConcurrent] = useState<number | null>(FEISHU_CHAT_DEFAULT_MAX_CONCURRENT);
@@ -164,7 +174,7 @@ function ConnectForm({
               aria-labelledby={ids.workspace}
               value={workspaceId}
               placeholder="Choose a workspace"
-              options={workspaces.map((w) => ({ value: w.id, label: `${w.name} · ${runnerName(w)}` }))}
+              options={workspaces.map((w) => ({ value: w.id, label: `${w.name} · ${runnerName(w, managedRunnerId)}` }))}
               onValueChange={setWorkspaceId}
             />
             <div className="admin-signin-hint">
@@ -186,7 +196,7 @@ function ConnectForm({
             </RadioGroup>
             <Alert
               type={mode === PermissionMode.BYPASS || mode === PermissionMode.AUTO ? 'warning' : 'info'}
-              title={groupConsequence(runnerName(workspace), mode)}
+              title={groupConsequence(runnerName(workspace, managedRunnerId), mode)}
               description="Approvals and agents' questions come to you in Feishu, never to the group. People in the group can't change the mode."
               className="feishu-consequence"
             />

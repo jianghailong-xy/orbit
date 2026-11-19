@@ -1,6 +1,7 @@
 package io.orbitd.android.cards
 
 import io.orbitd.android.core.cards.*
+import io.orbitd.android.directory.SessionHeader
 import io.orbitd.android.core.realtime.SessionSnapshot
 import io.orbitd.android.navigation.ObjectId
 import io.orbitd.android.projects.ProjectDoc
@@ -26,6 +27,13 @@ data class NeedsYouBanner(val count: Int, val target: JsonObject, val text: Stri
     /** How many other conversations wait behind the one the bar names — its "+2"; none when the first line is itself the
      * count ("2 sessions need you"). */
     val more: Int get() = if (ownerItem == null) 0 else maxOf(0, count - 1)
+}
+
+/** One notice that a conversation has just started waiting on the reader (OrbitKit `NeedsYouToast`; the owner, 2026-11-15,
+ * `docs/mocks/needs-you-capsule/12-once`): [title] the conversation, [line] what it waits on and its workspace. [id] is the wait it
+ * announces (`NeedsYouLogic.waitKey`): one notice per wait. */
+data class NeedsYouToast(val id: String, val target: JsonObject, val title: String, val line: String, val ownerItem: OwnerItem? = null) {
+    val glyph: NeedsYouGlyph get() = ownerItem?.let { NeedsYouGlyph.of(it.kind) } ?: NeedsYouGlyph.HAND
 }
 
 /** Which mark the needs-you bar draws in its circle (OrbitKit `NeedsYouGlyph`): one per owner item kind — work that landed without
@@ -63,10 +71,6 @@ object NeedsYouLogic {
     const val belowHint = "Shows what is waiting in this conversation"
     const val sessionHint = "Opens the session waiting on you"
     const val itemHint = "Opens the card waiting on you"
-    /** What the press does while several wait and the bar is folded (iOS `NeedsYouBannerView`). */
-    fun unfoldHint(count: Int) = "Shows all $count waiting on you"
-    /** The ↑ that folds the unfolded bar (iOS's "Collapse"). */
-    const val foldLabel = "Collapse"
 
     /** The bar for what is waiting in this conversation, or null when nothing is. The press goes to the first row. */
     fun below(rows: List<BelowRow>, side: ReaderSide?): WaitingBelow? {
@@ -164,28 +168,48 @@ object NeedsYouLogic {
             since = target.text("lastTurnAt") ?: target.text("updatedAt") ?: target.text("createdAt"))
     }
 
-    /** What a swipe on the bar puts away (OrbitKit `dismissalKeys`; the owner, 2026-11-15,
-     * `docs/mocks/needs-you-capsule/06-list-floats`): each conversation waiting then, keyed by when it started waiting — its oldest
-     * owner item's instant, or its last turn's. A swipe is "not now": nothing is sent and no session changes. */
-    fun dismissalKeys(open: List<JsonObject>): Set<String> = open.filter(::needsYou).mapNotNull { row ->
-        val id = row.text("id") ?: return@mapNotNull null
-        val since = oldestOwnerItem(listOf(row))?.second?.since?.takeIf { it.isNotEmpty() }
-            ?: row.text("lastTurnAt") ?: row.text("updatedAt") ?: row.text("createdAt") ?: ""
-        "$id|$since"
-    }.toSet()
-
-    /** Whether the bar stays put away: everything waiting elsewhere was already waiting when it was swiped. Something new —
-     * another conversation, or one that stopped again — brings it back. */
-    fun isDismissed(open: List<JsonObject>, focused: String?, dismissed: Set<String>): Boolean {
-        val keys = dismissalKeys(open.filter { !(focused != null && ObjectId.same(it.text("id"), focused)) })
-        return keys.isNotEmpty() && dismissed.containsAll(keys)
+    /** One wait: the conversation, and when it started waiting — its oldest owner item's instant, or its last turn's (OrbitKit
+     * `waitKey`). The same conversation stopping again is a new wait. A wait the server names a kind for (an owner request, a
+     * confirmation, …) is keyed by that kind instead: it stops no turn, so keying it by the last turn announced the same request
+     * again after every turn the conversation took while it waited. */
+    fun waitKey(row: JsonObject): String {
+        oldestOwnerItem(listOf(row))?.second?.since?.takeIf { it.isNotEmpty() }?.let { return "${row.text("id")}|$it" }
+        row.text("waitingKind")?.takeIf { it.isNotEmpty() && it != "UNKNOWN" }?.let { return "${row.text("id")}|$it" }
+        val since = row.text("lastTurnAt") ?: row.text("updatedAt") ?: row.text("createdAt") ?: ""
+        return "${row.text("id")}|$since"
     }
 
-    /** TalkBack's action that puts the bar away (iOS `accessibilityAction(named: "Dismiss")`). */
-    const val dismissLabel = "Dismiss"
+    /** The notices for what has started waiting since [seen] (the keys of the last look), leaving out the conversation on screen
+     * — its own card is in front of the reader (OrbitKit `newlyWaiting`). Each names the conversation and what it waits on: an
+     * owner item's word, or a reply to a tool call, then the workspace. */
+    fun newlyWaiting(open: List<JsonObject>, seen: Set<String>, focused: String? = null): List<NeedsYouToast> =
+        entries(open, focused).mapNotNull { entry ->
+            val key = waitKey(entry.target)
+            if (key in seen) return@mapNotNull null
+            val session = entry.target
+            val workspace = named(session.obj("agent")?.text("name"))
+            NeedsYouToast(key, session, named(session.text("title")) ?: workspace ?: "A session",
+                listOfNotNull(entry.ownerItem?.let(::ownerItemWord) ?: noticeWord(session), workspace).joinToString(" · "), entry.ownerItem)
+        }
 
-    /** At most this many capsules unfolded (the owner, 2026-11-13); the last says "+N" for the rest. */
-    const val unfoldedLimit = 5
+    /** What a blocked tool call waits on, in the push's own words. */
+    const val replyWord = "Needs your reply"
+
+    /** What a conversation with no owner item waits on (OrbitKit `noticeWord`): the row's own words for a wait the server names a
+     * kind for, and the push's for a blocked tool call. */
+    fun noticeWord(row: JsonObject): String {
+        val kind = row.text("waitingKind")?.takeIf { it.isNotEmpty() && it != "UNKNOWN" } ?: return replyWord
+        return SessionHeader.waitingWord(kind, ownerItems(row))
+    }
+
+    /** At most this many notices at once; the rest are said as "and N more" (12-once). */
+    const val toastLimit = 3
+
+    /** How long a notice stays, unpressed (12-once). */
+    const val toastMillis = 6_000L
+
+    /** TalkBack's action that sends a notice away (iOS `accessibilityAction(named: "Dismiss")`). */
+    const val dismissLabel = "Dismiss"
 
     /** The bar unfolded (OrbitKit `entries`; the owner, 2026-11-13, option B of `docs/mocks/needs-you-capsule/03-expand.html`):
      * one line per waiting conversation, in the order the folded bar picks its target by, so the first is the one it names. The

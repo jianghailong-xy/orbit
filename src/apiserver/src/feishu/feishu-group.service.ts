@@ -9,20 +9,35 @@ import { FeishuOutbound, feishuDedupeUuid } from './feishu-outbound';
 import { credentialsOf, type FeishuOwnerApp } from './feishu-owner.service';
 import type { FeishuActor } from './feishu-router';
 
-/** What the bot answers in a connected group (§8.2). English, as every word the bot sends (CLAUDE.md §5). */
+/**
+ * What the bot answers in a connected group (§8.2). English, as every word the bot sends (CLAUDE.md §5); and, since
+ * everyone in the group reads it, never naming Orbit (§15.1) — the bot's own name aside.
+ */
 export const FEISHU_GROUP_WORK_REPLIES = {
   started: (title: string) => `Started · ${title}`,
-  notAllowed: "This group's Orbit connection doesn't take requests from you, so nothing was started. Ask the bot's owner to add you in Orbit.",
+  notAllowed: "This group's connection doesn't take requests from you, so nothing was started. Ask the bot's owner to add you.",
   empty: (bot: string) => `Say what you want done after @${bot}, for example: @${bot} fix the failing test.`,
-  notLinked: (bot: string) => `This topic isn't linked to an Orbit session. To start one, send "@${bot} <request>" in the group, not in a topic.`,
-  notStarted: (reason: string) => `Orbit didn't start a session: ${reason}.`,
-  notSent: (reason: string) => `Orbit didn't send this to the session: ${reason}.`,
+  notLinked: (bot: string) => `This topic isn't linked to a session. To start one, send "@${bot} <request>" in the group, not in a topic.`,
+  notStarted: (reason: string) => `Nothing was started: ${groupReason(reason)}.`,
+  notSent: (reason: string) => `This wasn't sent to the session: ${groupReason(reason)}.`,
   busy: (limit: number) =>
-    `Orbit didn't start a session: this group already has ${sessionsWord(limit)} running, the most its connection allows at a time. Try again when one finishes.`,
+    `Nothing was started: this group already has ${sessionsWord(limit)} running, the most its connection allows at a time. Try again when one finishes.`,
   dailyLimit: (limit: number) =>
-    `Orbit didn't start a session: this group has started ${sessionsWord(limit)} today, the most its connection allows in a day. Try again after midnight UTC.`,
-  gone: "Orbit didn't start a session: this group is no longer connected to Orbit.",
+    `Nothing was started: this group has started ${sessionsWord(limit)} today, the most its connection allows in a day. Try again after midnight UTC.`,
+  gone: 'Nothing was started: this group is no longer connected.',
 } as const;
+
+/** What a group reads in place of a server's refusal that names Orbit (§15.1). */
+export const FEISHU_GROUP_NEUTRAL_REASON = "the bot's owner needs to look into it";
+
+/**
+ * A server's refusal as the group reads it (§15.1). Refusals are written for the account owner and may name Orbit, its
+ * pages or its tools; one that does is replaced whole by a neutral reason rather than edited, so no half-sentence about
+ * Orbit reaches the group.
+ */
+export function groupReason(reason: string): string {
+  return /orbit/i.test(reason) ? FEISHU_GROUP_NEUTRAL_REASON : reason;
+}
 
 function sessionsWord(n: number): string {
   return n === 1 ? '1 session' : `${n} sessions`;

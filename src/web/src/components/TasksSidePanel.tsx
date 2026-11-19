@@ -2,8 +2,10 @@ import {
   BgColorsOutlined,
   CaretDownOutlined,
   CheckOutlined,
+  CloudOutlined,
   CodeOutlined,
   DeleteOutlined,
+  DesktopOutlined,
   DisconnectOutlined,
   FolderAddOutlined,
   FolderOutlined,
@@ -14,6 +16,7 @@ import {
   MenuUnfoldOutlined,
   MoreOutlined,
   PlusOutlined,
+  QuestionCircleOutlined,
   SettingOutlined,
   TeamOutlined,
   UserOutlined,
@@ -55,8 +58,9 @@ import type {
   SlashCommandInfo,
   ManagedRunnerRow,
 } from '@orbit/shared';
+import { SCHEDULE_COPY } from '@orbit/shared';
 import { api, clearToken, logoutSession } from '../api';
-import { managedRowOf, useManagedRunner } from '../lib/managedRunner';
+import { managedFirst, managedRowOf, useManagedRunner, useManagedRunnerId } from '../lib/managedRunner';
 import { routeId, encodeId } from '../lib/idCodec';
 import { SharedWithMeGroup } from './SharedWithMe';
 import { useIsMobile } from '../lib/useMediaQuery';
@@ -74,6 +78,7 @@ import { listPollMs, streamDown, streamPoll } from '../lib/listBudget';
 import { workspaceListPath } from '../lib/workspaceListFolder';
 import { orderWorkspaces, reorderedWorkspaceIds, workspaceRunnerId } from '../lib/workspaceOrder';
 import { machineDraftPath, machineName, machinesToSetUp } from '../lib/machineSetup';
+import { MachineOsIcon } from '../lib/machineOs';
 import { setupTitle } from '../lib/machineSetupCopy';
 import { useThemeMode, type ThemeMode } from '../lib/theme';
 import { useToast } from '../lib/toast';
@@ -85,6 +90,7 @@ import {
 } from '../lib/projectAttention';
 import { WIKI_PATH, wikiShown, wikiSpacePath, wikiWaitingOnYou, type WikiSpaceRow } from '../lib/wiki';
 import { WAITING_ON_YOU, useWaitingOnYouCount } from '../lib/ownerRequests';
+import { useScheduledNeedsCount } from '../lib/schedules';
 import { WIKI_SETTINGS_TITLE, WIKI_TRASH_OPEN, wikiSettingsPath } from '../lib/wikiReviewMode';
 import {
   readWikiFromWorkspace,
@@ -100,9 +106,8 @@ import { Avatar } from './ui/Avatar';
 import { useConfirm } from './ui/ConfirmDialog';
 import { Menu, type MenuItem } from './ui/Menu';
 import { useMoveWikiToTrash } from './WikiTrashDialog';
-import { WikiCreateDialog } from './WikiSetUpDialog';
-import { WIKI_NEW } from '../lib/wikiStart';
 import { Tooltip } from './ui/Tooltip';
+import { HELP_PATH, useHelpDrawer } from '../lib/helpDrawer';
 
 const IS_MAC_PLATFORM =
   typeof navigator !== 'undefined' &&
@@ -170,6 +175,9 @@ const TOP: TopNavItem[] = [
   // Tasks under Projects, in the iPhone drawer's order (Projects · Tasks · Wiki). It is the way into
   // the task lists too: they are picked from the Tasks page's title, as they are on the phone.
   { key: 'tasks', icon: <SidebarNavIcon name="tasks" />, label: 'Tasks' },
+  // Scheduled tasks live here and only here: no workspace's session list carries them (owner ruling). Its count is
+  // the failing and the held schedules, the page's Needs you.
+  { key: 'scheduled', icon: <SidebarNavIcon name="scheduled" />, label: SCHEDULE_COPY.nav.scheduled },
   // Every thing an agent has asked the owner to do, in one inbox. Its amber count follows the rule the
   // Wiki's states below: a row carrying an amber number shows no shortcut.
   { key: 'waiting', icon: <SidebarNavIcon name="waiting" />, label: WAITING_ON_YOU },
@@ -287,6 +295,9 @@ export interface Runner {
   // The directory `orbit register` ran in: a suggestion for its first workspace, to be checked on the
   // machine before it is offered (docs/first-workspace-contract.md §1). null = nothing registered one.
   registerDir?: string | null;
+  // The account's managed runner, labelled Orbit Cloud (RunnerRowIdentity). Absent from an older server,
+  // where the managed status's runnerId says which runner it is.
+  managed?: boolean;
   // Per-engine health this runner reported (installed / version / signed in). null when it has
   // never reported — which is not the same as "nothing installed", so the two stay distinct.
   engines?: RunnerEngineHealth[] | null;
@@ -371,6 +382,7 @@ export function TasksSidePanel({ open = false, onNavigate }: { open?: boolean; o
   const avatar = useQuery(avatarQuery(me.data?.avatarUpdatedAt));
   const { mode, setMode } = useThemeMode();
   const [accountMenuOpen, setAccountMenuOpen] = useState(false);
+  const help = useHelpDrawer();
   // The Wiki's amber count: what waits on the owner across every space — the proposals in Review and
   // what each plan waits for (design §12.3.3) — the number the Wiki head's Activity badge shows, from the
   // same function. Its own key root, so the control plane's `wiki.changed` refresh reaches it and nothing
@@ -385,7 +397,6 @@ export function TasksSidePanel({ open = false, onNavigate }: { open?: boolean; o
   const wikiNames = useMemo(() => wikiSpaceNames(wikiSpaces.data ?? []), [wikiSpaces.data]);
   const [wikiOpen, setWikiOpen] = useState(true);
   // New wiki… (docs/wiki-explicit-creation-design.md §3.4): the Create wiki form, opened from the group's last row.
-  const [creatingWiki, setCreatingWiki] = useState(false);
 
   // The open workspace comes from /workspaces/<id>; behind a /sessions/<id> link, resolve
   // it from that session so its row highlights there too. The session query reuses
@@ -417,6 +428,8 @@ export function TasksSidePanel({ open = false, onNavigate }: { open?: boolean; o
   // would jump back there until the new detail arrived (and Cmd/Ctrl + Up/Down step from there).
   // While the placeholder stands, the row already active holds.
   const [heldWorkspaceId, setHeldWorkspaceId] = useState<string | null>(null);
+  // A scheduled task's run is a session of its workspace like any other (owner 2026-11-19): it lights that workspace's
+  // row, whose list holds it in the Scheduled runs folder.
   const activeWorkspaceId =
     openWorkspaceId ??
     (sessionId
@@ -429,6 +442,7 @@ export function TasksSidePanel({ open = false, onNavigate }: { open?: boolean; o
   // The open projects, which close the rail the way they close the iPhone drawer (below).
   const projects = useQuery(openProjectsQuery());
   const waitingOnYou = useWaitingOnYouCount();
+  const scheduledNeeds = useScheduledNeedsCount();
   const openProjects = useMemo(() => sidebarProjects(projects.data ?? []), [projects.data]);
   // A project's own page lights its row in that group rather than the Projects entry, which stands
   // for the index — the drawer's rule. A project the group does not list (a closed one) keeps the
@@ -589,6 +603,8 @@ export function TasksSidePanel({ open = false, onNavigate }: { open?: boolean; o
   // The account's managed runner is never Offline here: asleep is Asleep, coming up is Waking up…
   // (docs/managed-runner-existing-account-entry-design.md, D4). Nothing is read with the feature off.
   const { managed: accountManaged } = useManagedRunner();
+  // Which runner is Orbit Cloud: its row's `managed`, else the status's runnerId (an older server).
+  const managedRunnerId = useManagedRunnerId();
   const runnerOnlineById = useMemo(
     () => new Map((runners.data ?? []).map((runner) => [runner.id, runner.online])),
     [runners.data],
@@ -597,12 +613,20 @@ export function TasksSidePanel({ open = false, onNavigate }: { open?: boolean; o
   // machine. Reuses the already-loaded ['runners'] cache, so the group headers cost no extra request.
   const runnerLabels = useMemo(() => {
     const m = new Map<string, string>();
-    for (const r of runners.data ?? []) m.set(r.id, r.displayName || r.name);
+    for (const r of runners.data ?? []) m.set(r.id, machineName(r, managedRunnerId));
     return m;
-  }, [runners.data]);
+  }, [runners.data, managedRunnerId]);
+
+  // The account menu's Machines row: every machine, Orbit Cloud first, and how many of them are online.
+  const machineList = managedFirst(runners.data ?? [], managedRunnerId);
+  const onlineMachines = machineList.filter((runner) => runner.online).length;
 
   // The "Workspaces" list is the user's workspace definitions (model + tools).
-  const workspaces = useQuery({ queryKey: ['workspaces'], queryFn: () => api<Workspace[]>('/workspaces') });
+  const workspaces = useQuery({
+    queryKey: ['workspaces'],
+    meta: { entities: ['workspace', 'checkout'] },
+    queryFn: () => api<Workspace[]>('/workspaces'),
+  });
   // One order, the user's: the rows below, ⌘1‒9 and ⌘↑/↓ all read it (lib/workspaceOrder). The
   // runner is metadata on each row, not a sort key.
   const orderedWorkspaces = useMemo(() => orderWorkspaces(workspaces.data ?? []), [workspaces.data]);
@@ -610,8 +634,8 @@ export function TasksSidePanel({ open = false, onNavigate }: { open?: boolean; o
   // session page, where its setup card is (board rule 9). Not before the list is known: every machine
   // would read as bare until it lands.
   const bareMachines = useMemo(
-    () => (workspaces.isSuccess ? machinesToSetUp(runners.data ?? [], workspaces.data) : []),
-    [runners.data, workspaces.data, workspaces.isSuccess],
+    () => (workspaces.isSuccess ? machinesToSetUp(runners.data ?? [], workspaces.data, accountManaged?.status) : []),
+    [runners.data, workspaces.data, workspaces.isSuccess, accountManaged],
   );
 
   // Each drop is saved at once, the machine cards' way: the rows (and their ⌘N) move immediately,
@@ -854,14 +878,16 @@ export function TasksSidePanel({ open = false, onNavigate }: { open?: boolean; o
   // so the workspace only decides where the page's back leads), or the first one; with no
   // workspace to show it over, the project's own page. Beside an open conversation on a wide screen
   // only the list column changes and the conversation stays, as the iPad's sidebar has it; a phone
-  // shows one pane, so there the page is what opens.
+  // shows one pane, so there the page is what opens. A session shared with you is drawn as the guest
+  // view, which has no project column (its owner's read fails for you), so from there the page opens too.
   const openProject = (project: SidebarProject) => {
     onNavigate?.();
     const key = encodeId(project.id);
+    const besideConversation = !!sessionId && !narrow && !sessionQ.isError;
     // Wider than a phone the workspace's row stays lit (above), so the project's is not lit ahead.
-    if (sel === `project:${key}` || (!narrow && projectPageId === key)) return;
+    if (sel === `project:${key}` || (besideConversation && projectPageId === key)) return;
     if (narrow) setSel(`project:${key}`);
-    if (sessionId && !narrow) {
+    if (besideConversation) {
       navigate(`/sessions/${encodeId(sessionId)}?project=${key}`);
       return;
     }
@@ -936,6 +962,11 @@ export function TasksSidePanel({ open = false, onNavigate }: { open?: boolean; o
                 {waitingOnYou}
               </span>
             )}
+            {t.key === 'scheduled' && scheduledNeeds > 0 && (
+              <span className="tp-rail-badge needs-you" data-scheduled-count="">
+                {scheduledNeeds}
+              </span>
+            )}
             {t.key === 'wiki' && wikiWaitingCount > 0 && (
               <span
                 className="tp-rail-badge needs-you"
@@ -956,8 +987,7 @@ export function TasksSidePanel({ open = false, onNavigate }: { open?: boolean; o
           const shortcutLabel = workspaceShortcutLabel(i);
           const runnerLabel =
             (runnerId ? runnerLabels.get(runnerId) : null) ??
-            a.runner?.displayName ??
-            a.runner?.name ??
+            (a.runner ? machineName(a.runner, managedRunnerId) || null : null) ??
             'Shared';
           return (
             <div
@@ -1005,6 +1035,10 @@ export function TasksSidePanel({ open = false, onNavigate }: { open?: boolean; o
                   aria-label={wikiWaitingOnYou(waitingOnYou)}
                 >
                   {waitingOnYou}
+                </span>
+              ) : t.key === 'scheduled' && scheduledNeeds > 0 ? (
+                <span className="tp-count needs-you" data-scheduled-count="">
+                  {scheduledNeeds}
                 </span>
               ) : t.key === 'wiki' && wikiWaitingCount > 0 ? (
                 <span
@@ -1066,8 +1100,7 @@ export function TasksSidePanel({ open = false, onNavigate }: { open?: boolean; o
                     const runnerId = workspaceRunnerId(a);
                     const runnerLabel =
                       (runnerId ? runnerLabels.get(runnerId) : null) ??
-                      a.runner?.displayName ??
-                      a.runner?.name ??
+                      (a.runner ? machineName(a.runner, managedRunnerId) || null : null) ??
                       'Shared';
                     const row = (dragHandle?: ReactNode) => (
                       <WorkspaceRow
@@ -1117,7 +1150,7 @@ export function TasksSidePanel({ open = false, onNavigate }: { open?: boolean; o
                     <FolderAddOutlined aria-hidden="true" />
                   </span>
                   <span className="tp-label tp-workspace-label">
-                    <span className="tp-workspace-name">{setupTitle(machineName(runner))}</span>
+                    <span className="tp-workspace-name">{setupTitle(machineName(runner, managedRunnerId))}</span>
                   </span>
                 </div>
               ))}
@@ -1148,23 +1181,8 @@ export function TasksSidePanel({ open = false, onNavigate }: { open?: boolean; o
                     menu={wikiMenu(space)}
                   />
                 ))}
-              {wikiOpen && (
-                <div
-                  className="tp-item tp-wiki-new"
-                  onClick={() => setCreatingWiki(true)}
-                  onKeyDown={(event) => handleNavActivation(event, () => setCreatingWiki(true))}
-                  role="button"
-                  tabIndex={0}
-                >
-                  <span className="tp-ico">
-                    <PlusOutlined aria-hidden="true" />
-                  </span>
-                  <span className="tp-label">{WIKI_NEW}</span>
-                </div>
-              )}
             </div>
           )}
-          {creatingWiki && <WikiCreateDialog onClose={() => setCreatingWiki(false)} />}
 
           {(hasWorkspaceRows || hasWikis) && hasProjects && <div className="tp-divider" />}
 
@@ -1263,12 +1281,106 @@ export function TasksSidePanel({ open = false, onNavigate }: { open?: boolean; o
                   if (mode !== it.key) setMode(it.key);
                 },
               })),
+              popupClassName: 'tp-account-submenu',
             },
+            // Every machine, a level down with its state, as Settings lists them: there is no one Machines page to
+            // open, so the row picks one. With none yet it is the way to add the first.
+            machineList.length > 0
+              ? {
+                  key: 'machines',
+                  icon: <DesktopOutlined />,
+                  label: (
+                    <span className="tp-account-appearance-label">
+                      <span>Machines</span>
+                      <span className="tp-account-current-theme">
+                        {onlineMachines === machineList.length
+                          ? 'All online'
+                          : `${onlineMachines} of ${machineList.length} online`}
+                      </span>
+                    </span>
+                  ),
+                  children: [
+                    ...machineList.flatMap((runner, index) => {
+                      // The managed runner's own state stands for Online/Offline; Ready says no more than its green dot.
+                      const managedRow = managedRowOf(accountManaged, runner.id);
+                      const ready = managedRow ? managedRow.tone === 'ready' : runner.online;
+                      // Orbit Cloud, pinned first: its cloud and a semibold name, then a line before your own machines
+                      // (docs/mocks/orbit-cloud-pinned, A).
+                      const cloud = index === 0 && !!managedRunnerId && routeId(runner.id) === routeId(managedRunnerId);
+                      const row = {
+                        key: `machine-${runner.id}`,
+                        textValue: machineName(runner, managedRunnerId),
+                        icon: (
+                          <span
+                            className="tp-account-machine-dot"
+                            data-online={ready}
+                          />
+                        ),
+                        label: (
+                          <span className="tp-account-appearance-label">
+                            {cloud ? (
+                              <span className="tp-account-machine-cloud">
+                                <CloudOutlined aria-hidden />
+                                {machineName(runner, managedRunnerId)}
+                              </span>
+                            ) : (
+                              // Every other machine by the OS it reported (docs/mocks/machine-menu-icons, A).
+                              <span className="tp-account-machine-os">
+                                <MachineOsIcon runner={runner} />
+                                {machineName(runner, managedRunnerId)}
+                              </span>
+                            )}
+                            {!ready && (
+                              <span className="tp-account-current-theme">{managedRow?.label ?? 'Offline'}</span>
+                            )}
+                          </span>
+                        ),
+                        onSelect: () => navigate(`/settings/machines/${encodeId(runner.id)}`),
+                      };
+                      return cloud && machineList.length > 1
+                        ? [row, { type: 'separator' as const, key: 'machines-cloud-separator' }]
+                        : [row];
+                    }),
+                    { type: 'separator' as const, key: 'machines-add-separator' },
+                    {
+                      key: 'machines-add',
+                      // Its + leads, in the machines' icon column, so the words start where their names do; the end column
+                      // is the machines' state alone (docs/mocks/machine-menu-icons/02-add-machine-align, A).
+                      textValue: 'Add a machine',
+                      label: (
+                        <span className="tp-account-machine-os">
+                          <PlusOutlined aria-hidden />
+                          Add a machine
+                        </span>
+                      ),
+                      onSelect: () => navigate('/settings/machines/new'),
+                    },
+                  ],
+                  popupClassName: 'tp-account-submenu',
+                }
+              : {
+                  key: 'machines',
+                  icon: <DesktopOutlined />,
+                  label: (
+                    <span className="tp-account-appearance-label">
+                      <span>Machines</span>
+                      <span className="tp-account-current-theme">None</span>
+                    </span>
+                  ),
+                  onSelect: () => navigate('/settings/machines/new'),
+                },
             {
               key: 'settings',
               icon: <SettingOutlined />,
               label: 'Settings',
               onSelect: () => navigate('/settings'),
+            },
+            // The full help center (board help-center 01 ⓪②), where a reader who looks in the account menu finds it.
+            {
+              key: 'help',
+              icon: <QuestionCircleOutlined />,
+              label: 'Help center',
+              onSelect: () => navigate(HELP_PATH),
             },
             // User management, for admins only. It opens a settings page as the row above does, so
             // it sits in that row's group. The menu opens from the collapsed rail's avatar too, so
@@ -1310,6 +1422,25 @@ export function TasksSidePanel({ open = false, onNavigate }: { open?: boolean; o
             </button>
           }
         />
+        {/* Help, beside the avatar (board help-center 01 ⓪①); above it on the collapsed rail. */}
+        <Tooltip
+          side="top"
+          content={
+            <>
+              Help<kbd className="tp-help-key">?</kbd>
+            </>
+          }
+        >
+          <button
+            type="button"
+            className={`tp-help${help.open ? ' is-open' : ''}`}
+            aria-label="Help"
+            aria-pressed={help.open}
+            onClick={help.toggleHelp}
+          >
+            <QuestionCircleOutlined />
+          </button>
+        </Tooltip>
       </div>
 
       <div

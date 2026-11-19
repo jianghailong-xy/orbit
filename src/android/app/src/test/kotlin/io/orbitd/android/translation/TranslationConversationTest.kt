@@ -3,6 +3,7 @@ package io.orbitd.android.translation
 import android.graphics.Bitmap
 import android.graphics.Canvas
 import androidx.compose.ui.test.*
+import androidx.compose.ui.unit.dp
 import io.orbitd.android.composer.ComposerShell
 import io.orbitd.android.composer.ComposerShellTest
 import io.orbitd.android.core.net.ApiResponse
@@ -14,7 +15,7 @@ import org.robolectric.annotation.GraphicsMode
 /**
  * Settings › Translation in an Android conversation (docs/mocks/session-translation/01-board.png, frames 4–6 and 10), in the production
  * shell over [ComposerShell]: the owner's message shown as they wrote it and the agent's reply in their language, each with its own
- * Show original; the composer's "Chinese → English" tag; a message held while it is translated and one that failed, with Retry and
+ * Show original; the composer's "<Language> → <Agent language>" tag ("Chinese → English", or "Chinese → Japanese"); a message held while it is translated and one that failed, with Retry and
  * Send as written; a reply streaming, one waiting for its translation, one whose translation failed with Retry, and the live
  * translation landing. The NATIVE frames go under `src/android/build/evidence/session-translation-android/` beside their semantics.
  */
@@ -72,12 +73,17 @@ class TranslationConversationTest : ComposerShellTest() {
         assertTrue(has(text("原因找到了") and row(2), unmerged = true))
         assertFalse("the English is not drawn", has(text("does nothing in Safari"), unmerged = true))
         assertFalse(has(text("Safari blocks popups"), unmerged = true))
-        assertTrue(has(text(TranslationCopy.TRANSLATED, substring = false) and row(1), unmerged = true))
+        assertFalse("the owner's message has the press alone", has(text(TranslationCopy.TRANSLATED, substring = false) and row(1), unmerged = true))
         assertTrue(has(action(TranslationCopy.SHOW_ORIGINAL, 1), unmerged = true))
         assertTrue(has(action(TranslationCopy.SHOW_ORIGINAL, 2), unmerged = true))
         // Frame 10's composer: the tag says which way the words go.
         assertTrue(has(hasTestTag("composer-translation-tag") and hasText("Chinese → English"), unmerged = true))
         shot("1-conversation-translated")
+        // Like the placeholder, the tag gives way once the owner types, and comes back when the box is empty.
+        compose.onNodeWithTag("composer-input").performTextInput("hi")
+        await { !has(hasTestTag("composer-translation-tag"), unmerged = true) }
+        compose.onNodeWithTag("composer-input").performTextClearance()
+        await { has(hasTestTag("composer-translation-tag"), unmerged = true) }
 
         // Frame 10: the reply flipped to the English the agent wrote — "Original · Show translation" — and only that one.
         compose.onNode(action(TranslationCopy.SHOW_ORIGINAL, 2), useUnmergedTree = true).performClick()
@@ -91,7 +97,7 @@ class TranslationConversationTest : ComposerShellTest() {
         // The owner's message flips to what reached the agent.
         compose.onNode(action(TranslationCopy.SHOW_ORIGINAL, 1), useUnmergedTree = true).performClick()
         await { has(text("does nothing in Safari") and row(1), unmerged = true) }
-        assertTrue(has(text(TranslationCopy.SENT_IN_ENGLISH) and row(1), unmerged = true))
+        assertTrue(has(action(TranslationCopy.SHOW_TRANSLATION, 1), unmerged = true))
         // And back.
         compose.onNode(action(TranslationCopy.SHOW_TRANSLATION, 2), useUnmergedTree = true).performClick()
         await { has(text("原因找到了") and row(2), unmerged = true) }
@@ -175,6 +181,112 @@ class TranslationConversationTest : ComposerShellTest() {
         await { has(text("改好了") and row(5), unmerged = true) }
         assertFalse(has(text(TranslationCopy.REPLY_FAILED) and row(5), unmerged = true))
         assertTrue(has(action(TranslationCopy.SHOW_ORIGINAL, 5), unmerged = true))
+    }
+
+    /** Failure policy B (docs/ux/translation-failure-policy.html, frames 4B and 6): a held message says why it was not sent; while the
+     *  server skips a failing translator the composer tag says messages will wait, until the instant passes (no read, no event) or the
+     *  account event `translation.status_changed` brings a new answer. */
+    @Test fun aHeldMessageSaysWhyAndTheTagWarnsWhileTranslationIsUnavailable() {
+        translatedConversation()
+        fun me(until: String?) = ApiResponse(200, """{"id":"u1","email":"owner@a07c.test","name":"Owner",
+            "preferences":{"translationEnabled":true,"translationLanguage":"zh-Hans"},"translationAvailable":true,
+            "translationUnavailableUntil":${until?.let { "\"$it\"" } ?: "null"}}""".encodeToByteArray())
+        val soon = java.time.Instant.now().plusSeconds(4).toString()
+        ComposerShell.answers["GET users/me"] = { me(soon) }
+        val tag = hasTestTag("composer-translation-tag")
+        signIn(); openSession()
+        await { has(tag and hasText("Chinese → English · unavailable, messages will wait"), unmerged = true) }
+
+        // 4B: the reason's sentence, then Retry and Send as written.
+        ComposerShell.answers["GET sessions/$s/turns"] = { ApiResponse(200, """[
+            {"turnId":"t-j","kind":"message","placement":"queued","content":"再跑一遍全部测试","attachments":[],"createdAt":"2026-11-12T01:06:00Z",
+             "translation":{"state":"FAILED","from":"zh-Hans","original":"再跑一遍全部测试","failureReason":"UNAVAILABLE"}}]""".encodeToByteArray()) }
+        ComposerShell.push("""{"type":"queued_turns_changed","seq":0,"payload":{}}""")
+        val held = hasAnyAncestor(hasTestTag("queued:t-j"))
+        await { has(text("Translation is unavailable right now, so it wasn't sent", substring = false) and held, unmerged = true) }
+        assertFalse(has(text(TranslationCopy.SEND_FAILED) and held, unmerged = true))
+        assertTrue(has(hasTestTag("translation-action:${TranslationCopy.RETRY}") and held, unmerged = true))
+        assertTrue(has(hasTestTag("translation-action:${TranslationCopy.SEND_AS_WRITTEN}") and held, unmerged = true))
+        compose.onNodeWithTag("transcript-list").performScrollToNode(hasTestTag("queued:t-j"))
+        shot("10-held-unavailable-and-composer-tag")
+
+        // The instant passes with no event: the ordinary tag again, drawn here without reading the account.
+        val reads = ComposerShell.calls.count { it == "GET users/me" }
+        await { has(tag and hasText("Chinese → English", substring = false), unmerged = true) }
+        assertEquals("the expiry is local", reads, ComposerShell.calls.count { it == "GET users/me" })
+
+        // The breaker opens again: the account event reads `users/me`, and the tag warns.
+        ComposerShell.answers["GET users/me"] = { me(java.time.Instant.now().plusSeconds(60).toString()) }
+        ComposerShell.pushControl("""{"type":"translation.status_changed","data":{}}""")
+        await { has(tag and hasText("Chinese → English · unavailable, messages will wait"), unmerged = true) }
+        // And closes: the next event clears it.
+        ComposerShell.answers["GET users/me"] = { me(null) }
+        ComposerShell.pushControl("""{"type":"translation.status_changed","data":{}}""")
+        await { has(tag and hasText("Chinese → English", substring = false), unmerged = true) }
+    }
+
+    /** On a narrow phone the reason's sentence (4B) wraps, under what the owner wrote, and Retry and Send as written keep their width. */
+    @Test @org.robolectric.annotation.Config(qualifiers = "w320dp-h700dp")
+    fun aWrappedReasonLaysOutUnderTheMessageOnANarrowPhone() {
+        translatedConversation()
+        val wrote = "再跑一遍全部测试"
+        ComposerShell.answers["GET sessions/$s/turns"] = { ApiResponse(200, """[
+            {"turnId":"t-j","kind":"message","placement":"queued","content":"$wrote","attachments":[],"createdAt":"2026-11-12T01:06:00Z",
+             "translation":{"state":"FAILED","from":"zh-Hans","original":"$wrote","failureReason":"TIMEOUT"}}]""".encodeToByteArray()) }
+        signIn(); openSession()
+        val held = hasAnyAncestor(hasTestTag("queued:t-j"))
+        val sentence = "The translator didn't answer in time, so it wasn't sent"
+        await { has(text(sentence, substring = false) and held, unmerged = true) }
+        compose.onNodeWithTag("transcript-list").performScrollToNode(hasTestTag("queued:t-j"))
+        compose.waitForIdle()
+        fun bounds(m: SemanticsMatcher) = compose.onNode(m and held, useUnmergedTree = true).getUnclippedBoundsInRoot()
+        val message = bounds(text(wrote))
+        val line = bounds(text(sentence, substring = false))
+        val retry = bounds(hasTestTag("translation-action:${TranslationCopy.RETRY}"))
+        val asWritten = bounds(hasTestTag("translation-action:${TranslationCopy.SEND_AS_WRITTEN}"))
+        val foot = bounds(hasTestTag("translation-foot"))
+        assertTrue("the foot is under the message: $message / $foot", foot.top >= message.bottom)
+        assertTrue("the sentence wraps at 320dp: ${line.bottom - line.top}", (line.bottom - line.top) > (retry.bottom - retry.top))
+        assertTrue("the sentence stays in the foot: $line / $foot", line.bottom <= foot.bottom && line.top >= foot.top)
+        assertTrue("Retry keeps its width: $retry", retry.right - retry.left > 20.dp)
+        assertTrue("Send as written keeps its width: $asWritten", asWritten.right - asWritten.left > 60.dp)
+        assertTrue("Send as written is on screen: $asWritten", asWritten.right <= 320.dp)
+        shot("11-held-timeout-wrapped-320dp")
+    }
+
+    /** docs/mocks/prompt-suggestion-room (option B): the engine's guess takes the box's line, so the tag gives way while one is on
+     *  offer, and only its "unavailable" warning stays beside the guess. */
+    @Test fun aSuggestionTakesTheTagsPlaceUnlessTheTagWarns() {
+        translatedConversation()
+        fun me(until: String?) = ApiResponse(200, """{"id":"u1","email":"owner@a07c.test","name":"Owner",
+            "preferences":{"translationEnabled":true,"translationLanguage":"zh-Hans","promptSuggestions":true},"translationAvailable":true,
+            "translationUnavailableUntil":${until?.let { "\"$it\"" } ?: "null"}}""".encodeToByteArray())
+        ComposerShell.answers["GET users/me"] = { me(null) }
+        ComposerShell.events = ComposerShell.events +
+            ComposerShell.obj("""{"type":"prompt_suggestion","seq":4,"turnId":"t-1","payload":{"text":"再跑一遍全部测试","source":"engine"}}""")
+        signIn(); openSession()
+        val tag = hasTestTag("composer-translation-tag")
+        await { has(hasTestTag("composer-suggestion-hint"), unmerged = true) }
+        assertFalse("the guess has the line", has(tag, unmerged = true))
+        shot("12-suggestion-without-tag")
+
+        val later = java.time.Instant.now().plusSeconds(600).toString()
+        ComposerShell.answers["GET users/me"] = { me(later) }
+        ComposerShell.pushControl("""{"type":"translation.status_changed","data":{}}""")
+        await { has(tag and hasText("Chinese → English · unavailable, messages will wait"), unmerged = true) }
+        assertTrue("the guess stays beside the warning", has(hasTestTag("composer-suggestion-hint"), unmerged = true))
+    }
+
+    @Test fun theComposerTagNamesANonEnglishAgentLanguage() {
+        translatedConversation()
+        ComposerShell.answers["GET users/me"] = { ApiResponse(200, """{"id":"u1","email":"owner@a07c.test","name":"Owner",
+            "preferences":{"translationEnabled":true,"translationLanguage":"zh-Hans","translationAgentLanguage":"ja"},
+            "translationAvailable":true}""".encodeToByteArray()) }
+        signIn(); openSession()
+        await { has(hasTestTag("composer-translation-tag"), unmerged = true) }
+        assertTrue(has(hasTestTag("composer-translation-tag") and hasText("Chinese → Japanese"), unmerged = true))
+        assertFalse(has(hasText("Chinese → English"), unmerged = true))
+        shot("9-composer-tag-japanese")
     }
 
     @Test fun withTranslationOffNothingIsTaggedOrGreyed() {

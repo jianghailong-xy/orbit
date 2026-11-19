@@ -170,9 +170,15 @@ export async function spaceScope(prisma: PrismaService, ownerId: string, spaceId
        WHERE s."owner_id" = ${ownerId}::uuid AND s."workspace_id" = ANY(${workspaceIds}::uuid[]) AND s."deleted_at" IS NULL
          AND t."project_id" IS NOT NULL
       UNION
-      SELECT t."project_id"::text
-        FROM "task" t
-       WHERE t."owner_id" = ${ownerId}::uuid AND t."assignee_id" = ANY(${workspaceIds}::uuid[]) AND t."project_id" IS NOT NULL`;
+      -- Asked per project rather than read off every task: a project's tasks can number 100k (production,
+      -- 2026-11-19: one pipeline's 109k OPEN tasks, all assigned here), and the answer is which projects,
+      -- so the first assigned task of each settles it (task_project_assignee_idx). 114 ms → 31 ms there.
+      SELECT p."id"::text
+        FROM "project" p
+       WHERE EXISTS (
+         SELECT 1 FROM "task" t
+          WHERE t."project_id" = p."id" AND t."owner_id" = ${ownerId}::uuid
+            AND t."assignee_id" = ANY(${workspaceIds}::uuid[]))`;
     for (const row of working) projectIds.add(row.projectId);
     const worksHere = new Set(projectIds);
     // Every session of the space's workspaces that speaks for a project, with the projects it speaks for.
@@ -193,16 +199,17 @@ export async function spaceScope(prisma: PrismaService, ownerId: string, spaceId
     const spoken = [...new Set(speaking.map((row) => row.projectId))];
     // Of those projects, the ones that say where they work at all: a task assigned somewhere, a task that
     // ran somewhere, or a codebase. A task with neither says nothing, and neither does a project of them
-    // alone. One pass each, joined rather than probed per task: `session` has no index on its task.
+    // alone. Probed per project, each test stopping at its first row: reading every task of these projects
+    // to learn three yes/no answers walked one pipeline's 109k tasks on every pass (production, 2026-11-19:
+    // 38,701 buffers, 258 ms → 834 buffers, about 1 ms, the same 192 projects).
     const placed = new Set(
       spoken.length === 0 ? [] : (await prisma.$queryRaw<Array<{ projectId: string }>>`
-        SELECT t."project_id"::text AS "projectId" FROM "task" t
-         WHERE t."project_id" = ANY(${spoken}::uuid[]) AND t."assignee_id" IS NOT NULL
-        UNION
-        SELECT t."project_id"::text FROM "task" t JOIN "session" s ON s."task_id" = t."id"
-         WHERE t."project_id" = ANY(${spoken}::uuid[]) AND s."deleted_at" IS NULL
-        UNION
-        SELECT pc."project_id"::text FROM "project_codebase" pc WHERE pc."project_id" = ANY(${spoken}::uuid[])`)
+        SELECT sp::text AS "projectId" FROM unnest(${spoken}::uuid[]) sp
+         WHERE EXISTS (SELECT 1 FROM "task" t WHERE t."project_id" = sp AND t."assignee_id" IS NOT NULL)
+            OR EXISTS (
+              SELECT 1 FROM "task" t JOIN "session" s ON s."task_id" = t."id"
+               WHERE t."project_id" = sp AND s."deleted_at" IS NULL)
+            OR EXISTS (SELECT 1 FROM "project_codebase" pc WHERE pc."project_id" = sp)`)
         .map((row) => row.projectId),
     );
     // A session is foreign when every project it speaks for works somewhere, and nowhere here.
@@ -244,6 +251,8 @@ export function factsSql(scope: SpaceScope, from: FactPosition | null): Prisma.S
       FROM "session" s
       LEFT JOIN "task" t ON t."id" = s."task_id"
      WHERE s."owner_id" = ${owner}::uuid AND s."workspace_id" = ANY(${scope.workspaceIds}::uuid[]) AND s."deleted_at" IS NULL
+       -- v1 feeds no scheduled task's run to the wiki (docs/scheduled-tasks-design.md §12.1).
+       AND s."run_source" <> 'SCHEDULE'
        AND s."last_turn_at" IS NOT NULL
        AND s."status"::text IN ('AWAITING_INPUT', 'SUCCEEDED', 'FAILED', 'CANCELLED', 'INTERRUPTED')
        AND ${ours(Prisma.sql`s."id"`)}
@@ -269,6 +278,7 @@ export function factsSql(scope: SpaceScope, from: FactPosition | null): Prisma.S
       JOIN "session" s ON s."id" = a."session_id"
       LEFT JOIN "task" t ON t."id" = s."task_id"
      WHERE s."owner_id" = ${owner}::uuid AND s."workspace_id" = ANY(${scope.workspaceIds}::uuid[]) AND s."deleted_at" IS NULL
+       AND s."run_source" <> 'SCHEDULE'
        AND a."decided_at" IS NOT NULL AND ${ours(Prisma.sql`s."id"`)}
        AND ((a."tool_name" = 'AskUserQuestion' AND a."status" = 'ALLOWED')
          OR (a."tool_name" = 'ExitPlanMode' AND a."status" IN ('ALLOWED', 'DENIED'))
@@ -280,6 +290,7 @@ export function factsSql(scope: SpaceScope, from: FactPosition | null): Prisma.S
       JOIN "session" s ON s."id" = r."session_id"
       LEFT JOIN "task" t ON t."id" = s."task_id"
      WHERE r."owner_id" = ${owner}::uuid AND s."workspace_id" = ANY(${scope.workspaceIds}::uuid[]) AND s."deleted_at" IS NULL
+       AND s."run_source" <> 'SCHEDULE'
        AND ${ours(Prisma.sql`s."id"`)}
        AND ${notMaintenance(Prisma.sql`t."list_id"`)} ${onOrAfter(Prisma.sql`r."created_at"`)}
     UNION ALL
@@ -320,6 +331,7 @@ export async function wikiSessionsOfSpace(reader: DossierReader, scope: SpaceSco
       LEFT JOIN "task" t ON t."id" = s."task_id"
      WHERE s."owner_id" = ${scope.ownerId}::uuid AND s."id" = ANY(${[...sessionIds]}::uuid[])
        AND s."workspace_id" = ANY(${scope.workspaceIds}::uuid[]) AND s."deleted_at" IS NULL
+       AND s."run_source" <> 'SCHEDULE'
        AND s."status"::text IN ('AWAITING_INPUT', 'SUCCEEDED', 'FAILED', 'CANCELLED', 'INTERRUPTED')
        AND s."id" <> ALL(${scope.foreignSessionIds}::uuid[])
        AND (${scope.maintenanceListId}::uuid IS NULL OR t."list_id" IS NULL OR t."list_id" <> ${scope.maintenanceListId}::uuid)`;

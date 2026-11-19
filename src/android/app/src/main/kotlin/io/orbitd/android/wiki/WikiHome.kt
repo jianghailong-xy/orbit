@@ -542,8 +542,8 @@ private fun HomeHeader(space: WikiSpace, spaces: List<WikiSpace>, pickSpace: (St
     }
 }
 
-/** The space beside the title, by the name a reader knows it by (design §12.3.4, mock 31 ④; iOS `WikiSpacePicker`): with
- * one space a grey label and no control; with several a menu of every space, the current one ticked — its name, the
+/** The space beside the title, by the name a reader knows it by (design §12.3.4, mock 31 ④; iOS `WikiSpacePicker`): always
+ * a menu, one space or several, since it is the way to New wiki… (the drawer has no such row; board 47) — every space, the current one ticked — its name, the
  * repository and its documents under it, what waits in it as the amber number — then, under the divider, Manage spaces, into Wiki
  * settings, and New wiki… last, which opens the Create wiki form (docs/wiki-explicit-creation-design.md §3.4, board 46 part 4 ③).
  * Trash is not in it: it opens from Wiki settings (docs/mocks/wiki-trash/02-trash-entry). */
@@ -553,14 +553,9 @@ internal fun WikiSpacePicker(space: WikiSpace, spaces: List<WikiSpace>, pick: (S
     val names = WikiSpaceLogic.names(spaces)
     val name = names[space.id] ?: space.title ?: space.slug
     // Given a [title] style, the name is the head's title (board docs/mocks/wiki-rail-name B, iOS `WikiSpacePicker`'s
-    // `title`): no capsule, the name in that type, and with several spaces a small chevron after it.
+    // `title`): no capsule, the name in that type, and a small chevron after it.
     if (title != null) {
         var expanded by remember { mutableStateOf(false) }
-        if (spaces.size < 2) {
-            Text(name, Modifier.testTag("wiki-space-picker").semantics { heading(); contentDescription = WikiCopy.spacePickerHint },
-                style = title, maxLines = 1, overflow = TextOverflow.Ellipsis)
-            return
-        }
         Box {
             Row(Modifier.clip(RoundedCornerShape(8.dp)).clickable(role = Role.Button) { expanded = true }.padding(horizontal = 4.dp, vertical = 2.dp)
                 .testTag("wiki-space-picker").semantics(mergeDescendants = true) { heading(); contentDescription = WikiCopy.spacePickerHint },
@@ -573,14 +568,6 @@ internal fun WikiSpacePicker(space: WikiSpace, spaces: List<WikiSpace>, pick: (S
         return
     }
     val capsule = Modifier.background(MaterialTheme.colorScheme.onSurface.copy(alpha = 0.07f), CircleShape)
-    if (spaces.size < 2) {
-        // The name is its own text: as a state as well, TalkBack read it twice.
-        Box(capsule.padding(horizontal = 12.dp, vertical = 6.dp).testTag("wiki-space-picker")
-            .semantics(mergeDescendants = true) { contentDescription = WikiCopy.spacePickerHint }) {
-            Text(name, style = WikiType.label, color = WikiPalette.secondary, maxLines = 1, overflow = TextOverflow.Ellipsis)
-        }
-        return
-    }
     var expanded by remember { mutableStateOf(false) }
     Box {
         Row(capsule.clickable(role = Role.Button) { expanded = true }.heightIn(min = 36.dp).padding(horizontal = 12.dp, vertical = 6.dp)

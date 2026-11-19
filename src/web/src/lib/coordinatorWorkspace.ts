@@ -1,4 +1,5 @@
 import type { SessionMoveTargets } from '@orbit/shared';
+import { machineName } from './machineSetup';
 
 /**
  * Change: where a project is coordinated from (docs/mocks/coordinator-move-workspace/04-change).
@@ -25,6 +26,15 @@ export const CHANGE_COPY = {
   cancel: 'Cancel',
   move: 'Move conversation',
   startThere: 'Start a new one there',
+} as const;
+
+/** The one fix a broken coordinator workspace has, by what is wrong with it: the project page's
+ *  coordinator card (`ProjectCoordinatorCard`) and the owner exception card's coordinator row
+ *  (`ProjectProgressStatus`, board owner-exception-who-fixes part 6) wear the same words. */
+export const COORDINATOR_FIX_LABEL = {
+  WORKSPACE_DISABLED: (workspace: string) => `Enable ${workspace}`,
+  WORKSPACE_TRASHED: (workspace: string) => `Restore ${workspace}`,
+  WORKSPACE_UNBOUND: (workspace: string) => `Bind ${workspace} to a runner`,
 } as const;
 
 /** A workspace as `GET /workspaces` lists it — only what the list reads. */
@@ -90,10 +100,14 @@ export function changeRowsFromWorkspaces(
   currentWorkspaceId: string | null,
   onlineRunnerIds: ReadonlySet<string> | null,
   providerName: (slug: string) => string,
+  managedRunnerId: string | null = null,
 ): ChangeRow[] {
   const rows = workspaces.map((w): ChangeRow => {
     const provider = w.lastProvider || 'claude';
-    const runnerName = w.runner?.displayName || w.runner?.name || null;
+    // Orbit Cloud for the account's managed runner (machineName).
+    const runnerName = w.runner
+      ? machineName({ ...w.runner, id: w.runnerId ?? undefined, name: w.runner.name ?? undefined }, managedRunnerId) || null
+      : null;
     const usual = [providerName(provider), runnerName].filter(Boolean).join(' · ');
     if (w.id === currentWorkspaceId) return currentRow(w.id, w.name, provider, usual);
     const reason = w.enabled === false ? CHANGE_COPY.disabled : !w.runnerId ? CHANGE_COPY.noRunner : null;

@@ -505,61 +505,59 @@ final class NeedsYouLogicTests: XCTestCase {
         XCTAssertEqual(NeedsYouLogic.banner(waiting: [garbled])?.text, "Approve merge to main")
     }
 
-    // MARK: arriving (the owner, 2026-11-15, docs/mocks/needs-you-capsule/05-one-surface)
+    // MARK: noticed once (the owner, 2026-11-15, docs/mocks/needs-you-capsule/12-once)
 
-    /// An approval that has just arrived is what the bar says, in the push's words, for six seconds:
-    /// the press opens the conversation it stops, and the count still covers everything waiting.
-    func testAnArrivalIsSaidForSixSecondsThenTheCountComesBack() throws {
-        let at = Date(timeIntervalSince1970: 1_800_000_000)
-        let old = session("old", approvals: 1, agentName: "orbit", title: "Owner answer replayed",
-                          lastTurnAt: "2026-11-12T10:00:00Z")
-        let new = session("new", approvals: 1, agentName: "orbit-develop", title: "Android 自动更新报错",
-                          lastTurnAt: "2026-11-15T10:00:00Z")
-        let arrival = NeedsYouArrival(sessionID: "new", line: "Needs your reply · task_create", at: at)
+    /// A conversation that starts waiting is noticed once, by name and by what it waits on; the same
+    /// wait is not noticed again, a new wait in the same conversation is, and the one on screen never.
+    func testAWaitIsNoticedOnceByNameAndWhat() throws {
+        let a = session("a", approvals: 1, agentName: "orbit-develop", title: "Android 自动更新报错",
+                        lastTurnAt: "2026-11-15T01:00:00Z")
+        let b = session("b", approvals: 1, agentName: "orbit-op", title: "Orbit 接入 Ollama",
+                        lastTurnAt: "2026-11-15T02:00:00Z")
+        let seen = Set([a].map(NeedsYouLogic.waitKey))
+        let fresh = NeedsYouLogic.newlyWaiting([a, b], seen: seen)
+        XCTAssertEqual(fresh.map(\.target.id), ["b"], "only what was not waiting before")
+        let notice = try XCTUnwrap(fresh.first)
+        XCTAssertEqual(notice.title, "Orbit 接入 Ollama")
+        XCTAssertEqual(notice.line, "Needs your reply · orbit-op")
+        XCTAssertEqual(notice.glyph, .hand)
 
-        let said = try XCTUnwrap(NeedsYouLogic.arriving(arrival, waiting: [old, new], now: at.addingTimeInterval(5.9)))
-        XCTAssertTrue(said.arriving)
-        XCTAssertEqual(said.text, "Needs your reply · task_create")
-        XCTAssertEqual(said.detail, "Android 自动更新报错")
-        XCTAssertEqual(said.target.id, "new", "the press goes to the newcomer, not the oldest")
-        XCTAssertEqual(said.count, 2)
-        XCTAssertEqual(said.more, 0)
-        XCTAssertEqual(said.since.flatMap { RelativeTime.elapsed($0, now: at) }, "0s")
-
-        XCTAssertNil(NeedsYouLogic.arriving(arrival, waiting: [old, new], now: at.addingTimeInterval(6)))
-        XCTAssertFalse(try XCTUnwrap(NeedsYouLogic.banner(waiting: [old, new])).arriving)
+        let bothSeen = Set([a, b].map(NeedsYouLogic.waitKey))
+        XCTAssertTrue(NeedsYouLogic.newlyWaiting([a, b], seen: bothSeen).isEmpty, "the same wait, not again")
+        let bAgain = session("b", approvals: 1, agentName: "orbit-op", title: "Orbit 接入 Ollama",
+                             lastTurnAt: "2026-11-15T03:00:00Z")
+        XCTAssertEqual(NeedsYouLogic.newlyWaiting([a, bAgain], seen: bothSeen).map(\.target.id), ["b"],
+                       "stopping again is a new wait")
+        XCTAssertTrue(NeedsYouLogic.newlyWaiting([a, b], seen: seen, excluding: "b").isEmpty,
+                      "the conversation on screen has its own card in front of the reader")
     }
 
-    /// Nothing to say for a conversation that is not waiting elsewhere: the push came before the
-    /// list did, it was answered already, or it is the one on screen.
-    func testAnArrivalNeedsItsConversationAmongThoseWaitingElsewhere() {
-        let at = Date(timeIntervalSince1970: 1_800_000_000)
-        let other = session("other", approvals: 1)
-        let arrival = NeedsYouArrival(sessionID: "new", line: "Needs your reply · Bash", at: at)
-        XCTAssertNil(NeedsYouLogic.arriving(arrival, waiting: [other], now: at))
-        let new = session("new", approvals: 1)
-        XCTAssertNil(NeedsYouLogic.arriving(arrival, waiting: [other, new], excluding: "new", now: at))
-        XCTAssertNil(NeedsYouLogic.arriving(nil, waiting: [other, new], now: at))
+    /// An owner request stops no turn, so the conversation keeps taking turns while it waits: each
+    /// one is the same wait, not a new notice, and the notice says the request's own words.
+    func testAnOwnerRequestIsNoticedOnceWhateverTurnsFollow() throws {
+        func filed(_ lastTurnAt: String) -> Session {
+            Session(id: "t", title: "Task: Walkthrough", status: .awaitingInput, agentId: "w",
+                    assignedRunnerId: nil, pendingApprovals: 1, waitingKind: .ownerRequest,
+                    branch: nil, updatedAt: nil,
+                    agent: SessionAgentRef(id: "w", name: "orbit-develop", provider: nil, model: nil, effort: nil),
+                    lastTurnAt: lastTurnAt)
+        }
+        let notice = try XCTUnwrap(NeedsYouLogic.newlyWaiting([filed("2026-11-17T22:36:15Z")], seen: []).first)
+        XCTAssertEqual(notice.line, "Waiting on you · orbit-develop")
+        let seen = Set([filed("2026-11-17T22:36:15Z")].map(NeedsYouLogic.waitKey))
+        XCTAssertTrue(NeedsYouLogic.newlyWaiting([filed("2026-11-17T22:52:34Z")], seen: seen).isEmpty,
+                      "a later turn of the same conversation is the same wait")
     }
 
-    // MARK: swiped away (the owner, 2026-11-15, docs/mocks/needs-you-capsule/06-list-floats)
-
-    /// A swipe puts away what is waiting now; only something new brings the bar back — another
-    /// conversation, or one that stopped to ask again.
-    func testASwipedBarComesBackOnlyForSomethingNew() {
-        let a = session("a", approvals: 1, lastTurnAt: "2026-11-15T01:00:00Z")
-        let b = session("b", approvals: 1, lastTurnAt: "2026-11-15T02:00:00Z")
-        let dismissed = NeedsYouLogic.dismissalKeys(waiting: [a, b])
-        XCTAssertTrue(NeedsYouLogic.isDismissed(waiting: [a, b], dismissed: dismissed))
-        XCTAssertTrue(NeedsYouLogic.isDismissed(waiting: [a], dismissed: dismissed), "one answered: still away")
-        XCTAssertTrue(NeedsYouLogic.isDismissed(waiting: [a, b], excluding: "a", dismissed: dismissed),
-                      "on a conversation's page too")
-
-        let c = session("c", approvals: 1, lastTurnAt: "2026-11-15T03:00:00Z")
-        XCTAssertFalse(NeedsYouLogic.isDismissed(waiting: [a, b, c], dismissed: dismissed), "a new one")
-        let bAgain = session("b", approvals: 1, lastTurnAt: "2026-11-15T04:00:00Z")
-        XCTAssertFalse(NeedsYouLogic.isDismissed(waiting: [a, bAgain], dismissed: dismissed), "stopped again")
-        XCTAssertFalse(NeedsYouLogic.isDismissed(waiting: [], dismissed: dismissed), "nothing to put away")
+    /// Any wait the server names says the row's own words, never the tool call's "Needs your reply".
+    func testANamedWaitIsNoticedInTheRowsWords() throws {
+        let confirming = Session(id: "c", title: "Task: Ship it", status: .awaitingInput, agentId: "w",
+                                 assignedRunnerId: nil, pendingApprovals: 1, waitingKind: .ownerConfirmation,
+                                 branch: nil, updatedAt: nil,
+                                 agent: SessionAgentRef(id: "w", name: "orbit-develop", provider: nil, model: nil, effort: nil),
+                                 lastTurnAt: "2026-11-18T01:00:00Z")
+        let notice = try XCTUnwrap(NeedsYouLogic.newlyWaiting([confirming], seen: []).first)
+        XCTAssertEqual(notice.line, "Waiting for your confirmation · orbit-develop")
     }
 
     // MARK: here (the owner, 2026-11-15, docs/mocks/needs-you-capsule/07-console-one-capsule)

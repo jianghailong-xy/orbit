@@ -1,5 +1,5 @@
 import { createHash, createHmac, randomUUID } from 'node:crypto';
-import { ConflictException, Injectable, Logger, NotFoundException } from '@nestjs/common';
+import { BadRequestException, ConflictException, Injectable, Logger, NotFoundException } from '@nestjs/common';
 import type { FeishuChatRoute as FeishuChatRouteRow } from '@prisma/client';
 import {
   FEISHU_CHAT_BOT_REMOVED,
@@ -8,11 +8,13 @@ import {
   FEISHU_CHAT_TICKET_INVALID,
   FEISHU_CHAT_TICKET_INVALID_MESSAGE,
   FEISHU_CHAT_TICKET_TTL_MINUTES,
+  FEISHU_CHAT_USES_APP_SETTINGS_MESSAGE,
   FEISHU_CONNECT_GROUP_PATH,
   type FeishuChatChange,
   type FeishuChatConfirm,
   type FeishuChatDisabledReason,
   type FeishuChatRoute,
+  type FeishuChatRouteSource,
   type FeishuChatRoutes,
 } from '@orbit/shared';
 import { PrismaService } from '../prisma/prisma.service';
@@ -21,21 +23,25 @@ import { FeishuOutbound, feishuDedupeUuid } from './feishu-outbound';
 import type { FeishuGroupRoute } from './feishu-group.service';
 import { credentialsOf, type FeishuOwnerApp } from './feishu-owner.service';
 
-/** What the bot answers in a group (§8.1). English, as every word the bot sends (CLAUDE.md §5). */
+/**
+ * What the bot answers in a group (§8.1). English, as every word the bot sends (CLAUDE.md §5); and, since everyone in
+ * the group reads it, never naming Orbit (§15.1) — the bot's own name, which the owner gives it in Feishu, aside.
+ */
 export const FEISHU_GROUP_REPLIES = {
+  /** `connect` from the owner: the card went to the owner's direct chat with the bot (§15.1). */
+  connectSent: "I've sent you a link in our direct chat to finish connecting this group.",
   /** `connect` from anyone but the owner. */
-  strangerConnect: 'Only the owner of this bot can connect this group to Orbit.',
+  strangerConnect: 'Only the owner of this bot can connect this group.',
   /** `connect` in a group with people from another organization. */
-  external: 'Orbit connects only groups inside your organization. This group has members from other organizations.',
+  external: 'This bot works only in groups inside your organization. This group has members from other organizations.',
   /** `connect` when Feishu would not say what the group is. */
   unreadable:
-    "Orbit couldn't read this group's information from Feishu. Check that the app has the im:chat:readonly permission, then try again.",
+    "The bot couldn't read this group's information from Feishu. Ask its owner to check the app's im:chat:readonly permission.",
   /** A mention in a group that was never connected, or whose connection was never confirmed (§8.1). */
   notConnected: (bot: string) =>
-    `This group isn't connected to Orbit, so nothing was started. The bot's owner can connect it by sending "@${bot} connect" here.`,
+    `This group isn't connected, so nothing was started. The bot's owner can connect it by sending "@${bot} connect" here.`,
   /** A mention in a connected group that is switched off. */
-  switchedOff: (bot: string) =>
-    `This group's connection to Orbit is switched off, so nothing was started. The bot's owner can switch it back on in Orbit, or send "@${bot} connect" here.`,
+  switchedOff: "The bot is switched off in this group, so nothing was started. Ask the bot's owner to switch it back on.",
 } as const;
 
 /** The app as the router read it, with the bot's name for the replies. */
@@ -68,11 +74,19 @@ function confirmUrl(ticket: string): string {
   return `${origin}${FEISHU_CONNECT_GROUP_PATH}?ticket=${encodeURIComponent(ticket)}`;
 }
 
-function present(row: FeishuChatRouteRow): FeishuChatRoute {
+/** Rows the Groups card lists: the connected groups, and those using the app's settings (§14.2). */
+const LISTED = (ownerId: string) => ({ ownerId, OR: [{ confirmedAt: { not: null } }, { source: 'OPEN_ACCESS' }] });
+
+function present(row: FeishuChatRouteRow, sessionsToday: number): FeishuChatRoute {
   return {
     id: row.id,
     chatId: row.chatId,
     chatName: row.chatName,
+    source: row.source as FeishuChatRouteSource,
+    firstUsedByOpenId: row.firstUsedByOpenId,
+    firstUsedByName: row.firstUsedByName,
+    firstUsedAt: row.firstUsedAt?.toISOString() ?? null,
+    sessionsToday,
     workspaceId: row.workspaceId ?? '',
     permissionMode: row.permissionMode ?? '',
     allowedOpenIds: row.allowedOpenIds,
@@ -90,10 +104,11 @@ function present(row: FeishuChatRouteRow): FeishuChatRoute {
  *
  * The owner sends `@<bot> connect` in a group (`handleGroupMessage`). From anyone else it is refused with one sentence and
  * writes nothing; a group with members from another organization, or one Feishu will not describe, likewise. Otherwise the
- * group's row is made, or found, holding a one-time ticket bound to the owner's open_id and the group, and the bot answers
- * with a card whose button opens Orbit's confirm page. The ticket is derived from the event (`chatTicketFor`), and the row
+ * group's row is made, or found, holding a one-time ticket bound to the owner's open_id and the group; the bot sends the
+ * owner, in their direct chat with it, a card whose button opens Orbit's confirm page, and answers the group with one
+ * sentence saying so (§15.1). The ticket is derived from the event (`chatTicketFor`), and the row
  * is not touched again by the event that already issued its ticket, so the same event processed twice issues one ticket,
- * one card (Feishu's uuid), and never reopens a ticket that was used.
+ * one card and one sentence (Feishu's uuid), and never reopens a ticket that was used.
  *
  * Confirming (`confirm`, an owner-channel route: a personal access token is refused) writes the workspace, the permission
  * mode, the allowed senders and the limits, switches the route on and clears the ticket, in one conditional UPDATE: a
@@ -131,7 +146,7 @@ export class FeishuChatRouteService {
     }
     if (!route.enabled) {
       this.logger.log(`feishu app ${app.appId}: a mention in a group whose connection is off; nothing started`);
-      await this.replyText(app, message.messageId, FEISHU_GROUP_REPLIES.switchedOff(bot));
+      await this.replyText(app, message.messageId, FEISHU_GROUP_REPLIES.switchedOff);
       return null;
     }
     // A confirmed route always holds both (the confirm writes them together).
@@ -175,12 +190,18 @@ export class FeishuChatRouteService {
         "ticket_expires_at" = EXCLUDED."ticket_expires_at",
         "updated_at" = now()
       WHERE "feishu_chat_route"."ticket_event_id" IS DISTINCT FROM EXCLUDED."ticket_event_id"`;
-    this.logger.log(`feishu app ${app.appId} of account ${app.ownerId}: the owner asked to connect a group; card sent`);
+    // The card goes to the owner's direct chat with the bot, never into the group (§15.1): only the owner can use its
+    // link, and the group reads one sentence saying so.
     const card = renderConnectGroupCard(chat.name, confirmUrl(ticket), FEISHU_CHAT_TICKET_TTL_MINUTES);
-    const sent = await this.outbound.reply(credentials, message.messageId, { msgType: 'interactive', content: card }, {
+    const sent = await this.outbound.send(credentials, { receiveIdType: 'open_id', receiveId: message.openId }, { msgType: 'interactive', content: card }, {
       uuid: feishuDedupeUuid('connect-card', app.appId, message.messageId),
     });
-    if (!sent.ok) this.logger.warn(`feishu app ${app.appId}: the connect card was not delivered (code ${sent.feishuCode ?? sent.status})`);
+    if (!sent.ok) {
+      this.logger.warn(`feishu app ${app.appId}: the connect card was not delivered to the owner (code ${sent.feishuCode ?? sent.status})`);
+      return;
+    }
+    this.logger.log(`feishu app ${app.appId} of account ${app.ownerId}: the owner asked to connect a group; card sent to the owner`);
+    await this.replyText(app, message.messageId, FEISHU_GROUP_REPLIES.connectSent);
   }
 
   /** `im.chat.member.bot.deleted_v1` (§8.1): the group's route is switched off, and any live ticket stops working. */
@@ -189,20 +210,25 @@ export class FeishuChatRouteService {
     const changed = await this.prisma.$executeRaw`
       UPDATE "feishu_chat_route"
       SET "enabled" = false,
-          "disabled_reason" = CASE WHEN "confirmed_at" IS NULL THEN NULL ELSE 'BOT_REMOVED' END,
+          "disabled_reason" = CASE WHEN "confirmed_at" IS NULL AND "source" <> 'OPEN_ACCESS' THEN NULL ELSE 'BOT_REMOVED' END,
           "ticket_hash" = NULL, "ticket_open_id" = NULL, "ticket_expires_at" = NULL,
           "updated_at" = now()
       WHERE "app_id" = ${appId} AND "chat_id" = ${chatId}
-        AND ("enabled" OR "ticket_hash" IS NOT NULL OR ("confirmed_at" IS NOT NULL AND "disabled_reason" IS DISTINCT FROM 'BOT_REMOVED'))`;
+        AND ("enabled" OR "ticket_hash" IS NOT NULL
+             OR (("confirmed_at" IS NOT NULL OR "source" = 'OPEN_ACCESS') AND "disabled_reason" IS DISTINCT FROM 'BOT_REMOVED'))`;
     if (changed > 0) this.logger.log(`feishu app ${appId}: the bot was removed from a group; its route is off`);
   }
 
-  /** `GET /integrations/feishu/chats`: the confirmed groups, and the group a live ticket names, when given one. */
+  /**
+   * `GET /integrations/feishu/chats`: the confirmed groups, then those using the app's settings (§14.2), each with the
+   * sessions started from it since midnight UTC; and the group a live ticket names, when given one.
+   */
   async list(ownerId: string, ticket?: string): Promise<FeishuChatRoutes> {
     const rows = await this.prisma.feishuChatRoute.findMany({
-      where: { ownerId, confirmedAt: { not: null } },
-      orderBy: [{ confirmedAt: 'desc' }, { id: 'asc' }],
+      where: LISTED(ownerId),
+      orderBy: [{ confirmedAt: { sort: 'desc', nulls: 'last' } }, { firstUsedAt: { sort: 'desc', nulls: 'last' } }, { id: 'asc' }],
     });
+    const today = await this.sessionsToday(ownerId);
     let pending: FeishuChatRoutes['pending'] = null;
     if (ticket) {
       const row = await this.prisma.feishuChatRoute.findFirst({
@@ -222,7 +248,20 @@ export class FeishuChatRouteService {
         };
       }
     }
-    return { routes: rows.map(present), pending };
+    return { routes: rows.map((row) => present(row, today.get(`${row.appId}\n${row.chatId}`) ?? 0)), pending };
+  }
+
+  /** Sessions started from each of the account's groups since midnight UTC: their topics whose session exists. */
+  private async sessionsToday(ownerId: string): Promise<Map<string, number>> {
+    const rows = await this.prisma.$queryRaw<Array<{ appId: string; chatId: string; sessions: number }>>`
+      SELECT t."app_id" AS "appId", t."chat_id" AS "chatId", count(*)::int AS "sessions"
+      FROM "feishu_thread" t
+      JOIN "feishu_chat_route" r ON r."app_id" = t."app_id" AND r."chat_id" = t."chat_id" AND r."owner_id" = t."owner_id"
+      WHERE t."owner_id" = ${ownerId}::uuid
+        AND t."created_at" >= date_trunc('day', now() AT TIME ZONE 'UTC') AT TIME ZONE 'UTC'
+        AND EXISTS (SELECT 1 FROM "session" s WHERE s."id" = t."session_id" AND s."owner_id" = t."owner_id")
+      GROUP BY t."app_id", t."chat_id"`;
+    return new Map(rows.map((row) => [`${row.appId}\n${row.chatId}`, row.sessions]));
   }
 
   /**
@@ -252,6 +291,8 @@ export class FeishuChatRouteService {
           enabled: true,
           disabledReason: null,
           confirmedAt: new Date(),
+          // A group that used the app's settings has its own from now on (§14.2).
+          source: 'CONNECT',
           ticketHash: null,
           ticketOpenId: null,
           ticketExpiresAt: null,
@@ -263,13 +304,21 @@ export class FeishuChatRouteService {
     }
     const row = await this.prisma.feishuChatRoute.findUniqueOrThrow({ where: { id: target.id } });
     this.logger.log(`account ${ownerId} connected a Feishu group to workspace ${workspace.id} (${dto.permissionMode})`);
-    return present(row);
+    return this.presentOne(row);
   }
 
-  /** `PATCH /integrations/feishu/chats/:id` (owner channel). Switching on a route whose bot left the group is a 409. */
+  /**
+   * `PATCH /integrations/feishu/chats/:id` (owner channel). Switching on a route whose bot left the group is a 409. A group
+   * using the app's settings (§14.2) is only switched off or on: anything else is a 400, and connecting it gives it its own.
+   */
   async change(ownerId: string, id: string, dto: FeishuChatChange): Promise<FeishuChatRoute> {
-    const row = await this.prisma.feishuChatRoute.findFirst({ where: { id, ownerId, confirmedAt: { not: null } } });
+    const row = await this.prisma.feishuChatRoute.findFirst({ where: { id, ...LISTED(ownerId) } });
     if (!row) throw new NotFoundException(FEISHU_CHAT_NOT_FOUND_MESSAGE);
+    if (row.source === 'OPEN_ACCESS'
+      && (dto.permissionMode !== undefined || dto.allowedOpenIds !== undefined
+        || dto.maxConcurrentSessions !== undefined || dto.sessionsPerDay !== undefined)) {
+      throw new BadRequestException(FEISHU_CHAT_USES_APP_SETTINGS_MESSAGE);
+    }
     if (dto.enabled === true && !row.enabled && row.disabledReason === 'BOT_REMOVED') {
       throw new ConflictException({ code: FEISHU_CHAT_BOT_REMOVED, message: FEISHU_CHAT_BOT_REMOVED_MESSAGE });
     }
@@ -277,7 +326,7 @@ export class FeishuChatRouteService {
       ? { enabled: true, disabledReason: null }
       : { enabled: false, disabledReason: 'OWNER' };
     const { count } = await this.prisma.feishuChatRoute.updateMany({
-      where: { id, ownerId, confirmedAt: { not: null } },
+      where: { id, ...LISTED(ownerId) },
       data: {
         ...switching,
         ...(dto.permissionMode !== undefined ? { permissionMode: dto.permissionMode } : {}),
@@ -288,7 +337,11 @@ export class FeishuChatRouteService {
     });
     if (count === 0) throw new NotFoundException(FEISHU_CHAT_NOT_FOUND_MESSAGE);
     this.logger.log(`account ${ownerId} changed Feishu group route ${id}`);
-    return present(await this.prisma.feishuChatRoute.findUniqueOrThrow({ where: { id } }));
+    return this.presentOne(await this.prisma.feishuChatRoute.findUniqueOrThrow({ where: { id } }));
+  }
+
+  private async presentOne(row: FeishuChatRouteRow): Promise<FeishuChatRoute> {
+    return present(row, (await this.sessionsToday(row.ownerId)).get(`${row.appId}\n${row.chatId}`) ?? 0);
   }
 
   /** `DELETE /integrations/feishu/chats/:id` (owner channel): the group is no longer connected. */

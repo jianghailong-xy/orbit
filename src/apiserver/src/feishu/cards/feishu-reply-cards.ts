@@ -11,6 +11,8 @@ import { FEISHU_CARD_MAX_BYTES } from './feishu-cards';
 export const FEISHU_TEXT_MAX_BYTES = 150 * 1024;
 
 export const REPLY_CUT_NOTE = '(Cut to fit a Feishu message. The rest is in Orbit.)';
+/** The same note in a group, which everyone in it reads: it names no Orbit (§15.1). */
+export const REPLY_CUT_NOTE_GROUP = '(Cut to fit a Feishu message.)';
 
 const OPEN_IN_ORBIT = 'Open in Orbit';
 
@@ -52,12 +54,13 @@ export function renderSessionReply(text: string, openUrl: string | null): Feishu
   if (contentBytes(plain) <= FEISHU_TEXT_MAX_BYTES) return { msgType: 'text', content: plain };
   // The longest head of the text that fits with the note, found by halving over its code points (never splitting one).
   const points = [...text];
-  const fits = (n: number) => contentBytes(plainOf(`${points.slice(0, n).join('').trimEnd()}\n\n${REPLY_CUT_NOTE}`, openUrl)) <= FEISHU_TEXT_MAX_BYTES;
+  const note = openUrl ? REPLY_CUT_NOTE : REPLY_CUT_NOTE_GROUP;
+  const fits = (n: number) => contentBytes(plainOf(`${points.slice(0, n).join('').trimEnd()}\n\n${note}`, openUrl)) <= FEISHU_TEXT_MAX_BYTES;
   let [low, high] = [0, points.length];
   while (low < high) {
     const mid = Math.ceil((low + high) / 2);
     if (fits(mid)) low = mid;
     else high = mid - 1;
   }
-  return { msgType: 'text', content: plainOf(`${points.slice(0, low).join('').trimEnd()}\n\n${REPLY_CUT_NOTE}`, openUrl) };
+  return { msgType: 'text', content: plainOf(`${points.slice(0, low).join('').trimEnd()}\n\n${note}`, openUrl) };
 }

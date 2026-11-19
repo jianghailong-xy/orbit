@@ -3,7 +3,7 @@ import { readFileSync } from 'node:fs';
 import { createServer, type ServerResponse } from 'node:http';
 import { connect, type AddressInfo } from 'node:net';
 import path from 'node:path';
-import { test } from 'node:test';
+import { afterEach, test } from 'node:test';
 import { Worker } from 'node:worker_threads';
 import { setTimeout as sleep } from 'node:timers/promises';
 
@@ -18,9 +18,23 @@ import { holdIdleConnections } from './idle-connections';
  * (keepAliveTimeout 120 s): without a database, the same order main.ts runs it in.
  */
 
+/**
+ * What a test leaves open if it fails before its stop ends it: its listener and the client threads. Without this, a test
+ * that fails before `drain` keeps the listener (and a client thread parked in Atomics.wait) alive, and the file never
+ * exits: the whole suite then waits for it without a word.
+ */
+const leftovers: Array<() => void> = [];
+afterEach(() => {
+  for (const end of leftovers.splice(0)) end();
+});
+
 async function listen(handler: (route: string, res: ServerResponse) => void) {
   const server = holdIdleConnections(createServer((req, res) => handler(req.url ?? '/', res)));
   const drain = drainable(server);
+  leftovers.push(() => {
+    server.closeAllConnections();
+    server.close(() => undefined);
+  });
   await new Promise<void>((resolve) => server.listen(0, '127.0.0.1', resolve));
   return { server, drain, port: (server.address() as AddressInfo).port };
 }
@@ -165,6 +179,7 @@ sock.on('connect', () => {
 async function lateClient(port: number, mode: 'fresh' | 'kept') {
   const flags = new Int32Array(new SharedArrayBuffer(12));
   const worker = new Worker(LATE_CLIENT, { eval: true, workerData: { port, mode, flags: flags.buffer } });
+  leftovers.push(() => void worker.terminate());
   const ended = new Promise<{ read: string; error: string | null }>((resolve, reject) => {
     worker.once('message', resolve);
     worker.once('error', reject);
@@ -179,7 +194,9 @@ async function lateClient(port: number, mode: 'fresh' | 'kept') {
     sendWhileStill() {
       Atomics.store(flags, 1, 1);
       Atomics.notify(flags, 1);
-      assert.equal(Atomics.wait(flags, 0, 0, 5_000), 'ok', 'the client sent its POST');
+      // 'not-equal': the client had already sent it by the time this thread came to wait, which a loaded host arranges
+      // whenever it takes this thread off the CPU between the notify and the wait. Only a timeout means it did not send.
+      assert.notEqual(Atomics.wait(flags, 0, 0, 5_000), 'timed-out', 'the client sent its POST');
     },
     ended: ended.finally(() => worker.terminate()),
   };

@@ -13,8 +13,8 @@ import (
 )
 
 // A folder Orbit names for a machine's first workspace (docs/first-workspace-contract.md §4) is made before the
-// engine starts, and only inside this machine's repos root, symlinks resolved. The repos root is
-// <home>/orbit-repos (clone.go), and HOME is what userHome reads first.
+// engine starts, and only inside this machine's home directory, symlinks resolved: <home>/<name> (create-workdir/v2)
+// or <home>/orbit-repos/<name> (v1, clone.go). HOME is what userHome reads first.
 
 func createWorkDirHome(t *testing.T) (home, root string) {
 	t.Helper()
@@ -71,6 +71,20 @@ func TestCreateWorkDirMakesTheNewFolderInsideTheReposRoot(t *testing.T) {
 	}
 }
 
+// create-workdir/v2: the folder of a new workspace is <home>/<name>, made directly in the home directory.
+func TestCreateWorkDirMakesTheNewFolderInHome(t *testing.T) {
+	home, _ := createWorkDirHome(t)
+	dir := filepath.Join(home, "app")
+
+	job := &ClaimedSession{SessionID: "s-new-folder-home", CreateWorkDir: true}
+	if got := setupWorktree(job, dir); got != dir {
+		t.Fatalf("execDir = %q, want the new folder %q", got, dir)
+	}
+	if info, err := os.Stat(dir); err != nil || !info.IsDir() || info.Mode().Perm() != mkdirPerm(t) {
+		t.Fatalf("%s was not made as a directory with %v: %v", dir, mkdirPerm(t), err)
+	}
+}
+
 // A repos root that is itself a link is judged where it leads: a folder below it is inside.
 func TestCreateWorkDirFollowsAReposRootThatIsALink(t *testing.T) {
 	_, root := createWorkDirHome(t)
@@ -87,7 +101,7 @@ func TestCreateWorkDirFollowsAReposRootThatIsALink(t *testing.T) {
 	}
 }
 
-// Anything that resolves outside the repos root is not made, and the session fails to start with the error a
+// Anything that resolves outside the home directory is not made, and the session fails to start with the error a
 // missing working directory has always had.
 func TestCreateWorkDirMakesNothingOutsideTheReposRoot(t *testing.T) {
 	home, root := createWorkDirHome(t)
@@ -118,8 +132,8 @@ func TestCreateWorkDirMakesNothingOutsideTheReposRoot(t *testing.T) {
 		{"through a link in the root", filepath.Join(root, "escape", "app"), []string{filepath.Join(outside, "app")}},
 		{"through a link that leads nowhere", filepath.Join(root, "dangling"), []string{filepath.Join(outside, "dangling-target")}},
 		{"below a link that leads nowhere", filepath.Join(root, "dangling", "app"), []string{filepath.Join(outside, "dangling-target")}},
-		{"beside the root", filepath.Join(home, "elsewhere", "app"), []string{filepath.Join(home, "elsewhere")}},
 		{"up and out by ..", root + "/../escaped", []string{filepath.Join(home, "escaped")}},
+		{"out of home by ..", home + "/../escaped", []string{filepath.Join(filepath.Dir(home), "escaped")}},
 		{"up through a link by ..", filepath.Join(root, "deep-link") + "/../app", []string{filepath.Join(root, "app"), filepath.Join(deep, "a", "app")}},
 		{"anywhere else on disk", filepath.Join(outside, "deep", "app"), []string{filepath.Join(outside, "deep")}},
 	} {
@@ -135,7 +149,7 @@ func TestCreateWorkDirMakesNothingOutsideTheReposRoot(t *testing.T) {
 		})
 	}
 	if entries, err := os.ReadDir(outside); err != nil || len(entries) != 0 {
-		t.Errorf("something was made outside the root: %v (%v)", entries, err)
+		t.Errorf("something was made outside home: %v (%v)", entries, err)
 	}
 
 	// What follows a refusal is the start that names the missing directory (spawn_workdir.go).
@@ -152,13 +166,12 @@ func TestCreateWorkDirMakesNothingOutsideTheReposRoot(t *testing.T) {
 	}
 }
 
-// Nothing above the repos root is made either: with no home directory, mkdir -p of <home>/orbit-repos/<name> would
-// make the home directory first.
-func TestCreateWorkDirMakesNothingAboveTheReposRoot(t *testing.T) {
+// Home itself is never made: with no home directory, mkdir -p of <home>/<name> would make it first.
+func TestCreateWorkDirMakesNothingAboveHome(t *testing.T) {
 	t.Setenv("ORBIT_HOME", t.TempDir())
 	home := filepath.Join(t.TempDir(), "never-made-home")
 	t.Setenv("HOME", home)
-	dir := filepath.Join(home, reposDirName, "app")
+	dir := filepath.Join(home, "app")
 	logs := captureLogs(t, func() { setupWorktree(&ClaimedSession{SessionID: "s-no-home", CreateWorkDir: true}, dir) })
 	assertMissing(t, home)
 	if !strings.Contains(logs, "not creating workDir") {
@@ -230,8 +243,8 @@ func TestOrbitWorkDirTargetRefusals(t *testing.T) {
 	if target, err := orbitWorkDirTarget(filepath.Join(root, "app")); err != nil || target != want {
 		t.Fatalf("a folder in a root that does not exist yet = %q, %v; want %q, made with the root", target, err, want)
 	}
-	// A relative path, the root itself, and the directory above it.
-	for _, dir := range []string{reposDirName + "/app", root, root + "/..", home} {
+	// A relative path, a `..`, home itself, and the directory above it.
+	for _, dir := range []string{reposDirName + "/app", root + "/..", home, filepath.Dir(home)} {
 		if target, err := orbitWorkDirTarget(dir); err == nil {
 			t.Errorf("orbitWorkDirTarget(%q) = %q, want a refusal", dir, target)
 		}

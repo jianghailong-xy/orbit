@@ -93,7 +93,10 @@ type codexAppServer struct {
 	// consentScope tells this process's JSON-RPC ids from another's (mcpConsentToolUseID).
 	consentScope string
 
-	orbitExecutable     string
+	orbitExecutable string
+	// resetNotePending says the conversation was compacted or resumed since the last turn/start: the next one leads
+	// with orbitContextResetNote (context_reset_note.go).
+	resetNotePending    atomic.Bool
 	instructionMode     codexInstructionMode
 	instructionMu       sync.Mutex
 	contextGeneration   uint64
@@ -103,6 +106,16 @@ type codexAppServer struct {
 	// Set from the stderr reader when Codex died bringing up its SQLite state, which is the
 	// one start failure worth another attempt. Read only after close() has joined that reader.
 	stateInitFailed atomic.Bool
+
+	// engineVersion is the Codex version its initialize answer names (codexVersionFromUserAgent), for the
+	// session's Agent Tools report.
+	engineVersion string
+	// The latest startup state Codex reported for Orbit's own MCP server (mcpServer/startupStatus/updated),
+	// read off the wire before the notification channel so that none is dropped, and who is told of the
+	// next one (onOrbitMCP, which the session's Agent Tools report sets). Guarded by mu.
+	orbitMCPState string
+	orbitMCPError string
+	onOrbitMCP    func(state, errText string)
 
 	// Set the first time this build answers a turn/steer with "unknown variant", which is the
 	// authoritative signal that it predates the method. It is a property of the process, not of
@@ -311,6 +324,18 @@ func runCodexAppServerSessionProcess(ctx context.Context, shutdownCtx context.Co
 		asyncWg.Wait()
 	}()
 
+	// The session's Agent Tools report (agent_tools_report.go): Codex's own word on Orbit's MCP server, and
+	// the playbooks skill handed to it as a skill root of this session's own. A root it does not take is
+	// reported and changes nothing else: no step depends on the skill.
+	agentTools := newCodexAgentTools(job, app, emit)
+	if root := writeCodexManagedSkillRoot(scratchDir); root != "" {
+		_, rootErr := app.request(ctx, "skills/extraRoots/set", map[string]interface{}{"extraRoots": []string{root}})
+		agentTools.skillRoot(rootErr, root)
+	} else {
+		agentTools.skillRoot(nil, "")
+	}
+	app.listenOrbitMCP(agentTools.mcpStatus)
+
 	// A resumed thread already carries the developer message an earlier generation
 	// injected, and inject_items appends rather than replaces. Injecting again on every
 	// warm restart / LRU reload would accumulate a copy of the agent context per
@@ -337,6 +362,7 @@ func runCodexAppServerSessionProcess(ctx context.Context, shutdownCtx context.Co
 	job.RuntimeSessionID = threadID
 	writeSessionMetaWithCodexState(scratchDir, job, execDir, state.Layout, state.Partition, state.CodexHome)
 	emit(evSystem, map[string]interface{}{"subtype": "init", "sessionId": threadID, "provider": providerCodex, "runtime": "app-server"})
+	agentTools.carrier(app.currentInstructionMode())
 
 	var activeMu sync.Mutex
 	var active *codexAppActiveTurn
@@ -1004,15 +1030,26 @@ func codexStderrDiagnostic(line string) (map[string]interface{}, bool) {
 // codexReadonlySubagentMode is the mode a read-only SubAgent's Codex child runs in, in place of plan. Plan on
 // Codex refuses every command, and Codex reads a repository only through its shell, so a read-only child
 // could read nothing. This mode runs every command in Codex's own read-only sandbox (no writes, no network)
-// without asking. A session's plan mode keeps its meaning: only a child claim carries readonlySubagent.
+// without asking. A session's plan mode keeps its meaning: only a child claim carries readonlySubagent, and
+// only a scheduled CHECK_ONLY run's claim carries scheduledCheckOnly (codexScheduledCheckOnly).
 const codexReadonlySubagentMode = "orbitReadonlySubagent"
 
 // codexPermissionMode is the permission mode Codex is configured from for this claim.
 func codexPermissionMode(job *ClaimedSession) string {
-	if job.readonlySubagent {
+	if job.readonlySubagent || codexScheduledCheckOnly(job) {
 		return codexReadonlySubagentMode
 	}
 	return job.Agent.PermissionMode
+}
+
+// codexScheduledCheckOnly is a scheduled CHECK_ONLY run's Plan session, as the control plane says on the
+// claim (agent.scheduledCheckOnly). Under the `untrusted` policy every other Plan session runs on, Codex asks
+// about every command, `ls` included, and Plan declines them all, so a check could fetch but not read its
+// checkout. This one session runs in the read-only sandbox instead: commands run without asking, the OS
+// refuses every write, the shell has no network, and the built-in web search still fetches
+// (docs/scheduled-tasks-engine-modes.md §8).
+func codexScheduledCheckOnly(job *ClaimedSession) bool {
+	return job.Agent.ScheduledCheckOnly && job.Agent.PermissionMode == "plan"
 }
 
 // codexApprovalPolicy is the `approvalPolicy` Codex is started with, derived from the session's
@@ -1314,6 +1351,7 @@ func codexAppServerCommandArgs(job *ClaimedSession, stateDir, exe string) []stri
 	args := []string{"app-server", "--stdio", "-c", fmt.Sprintf("sqlite_home=%q", stateDir)}
 	args = appendCodexSessionToolConfig(args)
 	args = appendCodexOrbitMCPConfig(args, exe)
+	args = appendCodexBrowserMCPConfig(args, exe)
 	return append(args, codexProviderArgs(job.Agent.Env)...)
 }
 
@@ -1330,6 +1368,7 @@ func (a *codexAppServer) initialize(ctx context.Context) error {
 		return err
 	}
 	a.setInstructionMode(codexInstructionModeForUserAgent(firstString(result, "userAgent")))
+	a.engineVersion = codexVersionFromUserAgent(firstString(result, "userAgent"))
 	return a.notify("initialized", map[string]interface{}{})
 }
 
@@ -1344,6 +1383,9 @@ func (a *codexAppServer) startOrResumeThread(ctx context.Context, job *ClaimedSe
 	if err != nil {
 		return "", err
 	}
+	if method == "thread/resume" {
+		a.resetNotePending.Store(true)
+	}
 	if id := threadIDFromResult(result); id != "" {
 		return id, nil
 	}
@@ -1357,6 +1399,7 @@ func (a *codexAppServer) startTurn(ctx context.Context, threadID string, job *Cl
 	mode, generation := a.prepareInstructionContext(func() error {
 		return a.injectAgentContext(ctx, threadID, job.instructionAgent(), job.insideRecordedWork(), job.watchesOn())
 	})
+	prompt = a.turnPrompt(prompt, job.insideRecordedWork())
 	result, err := a.request(ctx, "turn/start", codexTurnParams(
 		threadID, job, execDir, upDir, orbitTurnID, prompt, imagePaths,
 		codexTurnContextOptions{
@@ -1369,6 +1412,12 @@ func (a *codexAppServer) startTurn(ctx context.Context, threadID string, job *Cl
 		return "", err
 	}
 	return turnIDFromResult(result), nil
+}
+
+// turnPrompt is the person's words as the next turn/start sends them: led by orbitContextResetNote, once, after a
+// compaction or a resume (context_reset_note.go).
+func (a *codexAppServer) turnPrompt(prompt string, taskSession bool) string {
+	return withContextResetNote(prompt, a.resetNotePending.Swap(false), taskSession)
 }
 
 func (a *codexAppServer) injectAgentContext(
@@ -1430,6 +1479,7 @@ func (a *codexAppServer) currentInstructionMode() codexInstructionMode {
 }
 
 func (a *codexAppServer) markInstructionContextForRefresh() bool {
+	a.resetNotePending.Store(true)
 	a.instructionMu.Lock()
 	newlyInvalidated := !a.contextNeedsRefresh
 	a.contextNeedsRefresh = true
@@ -1805,6 +1855,14 @@ func (a *codexAppServer) readLoop(r io.Reader) {
 						a.emit(evSystem, map[string]interface{}{"subtype": "context_compacted"})
 					}
 				}
+				if msg.Method == "mcpServer/startupStatus/updated" {
+					params := rawObject(msg.Params)
+					if name, _ := params["name"].(string); name == codexOrbitMCPServer {
+						state, _ := params["status"].(string)
+						errText, _ := params["error"].(string)
+						a.noteOrbitMCP(state, errText)
+					}
+				}
 				select {
 				case a.notifications <- msg:
 				default:
@@ -1816,6 +1874,29 @@ func (a *codexAppServer) readLoop(r io.Reader) {
 			readErr = err
 			return
 		}
+	}
+}
+
+// noteOrbitMCP keeps the startup state Codex reported for Orbit's MCP server and tells the listener.
+func (a *codexAppServer) noteOrbitMCP(state, errText string) {
+	a.mu.Lock()
+	a.orbitMCPState, a.orbitMCPError = state, errText
+	listener := a.onOrbitMCP
+	a.mu.Unlock()
+	if listener != nil {
+		listener(state, errText)
+	}
+}
+
+// listenOrbitMCP has listener told every startup state Codex reports for Orbit's MCP server from now on,
+// starting with the latest one if Codex has reported any.
+func (a *codexAppServer) listenOrbitMCP(listener func(state, errText string)) {
+	a.mu.Lock()
+	a.onOrbitMCP = listener
+	state, errText := a.orbitMCPState, a.orbitMCPError
+	a.mu.Unlock()
+	if state != "" && listener != nil {
+		listener(state, errText)
 	}
 }
 

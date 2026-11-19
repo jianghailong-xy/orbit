@@ -84,7 +84,7 @@ EMAIL = 't06-{}@lab.invalid'
 NAME_RE = re.compile(r't06-([a-z0-9]+)@lab\.invalid')
 RECORDER_UNIT = 'orbit-mr-lab-t06-recorder'
 QUOTA = 't06-no-pods'
-PROBE_ROOT = '/var/lib/orbit/home/t06-probe'
+PROBE_ROOT = '/home/orbit/t06-probe'
 now = sw.now
 out = sw.out
 http = ml.http
@@ -615,19 +615,19 @@ check = c.execute('pragma integrity_check').fetchone()[0]
 c.close()
 head = subprocess.run(['git', '-C', repo, 'rev-parse', 'HEAD'], capture_output=True, text=True).stdout.strip()
 fsck = subprocess.run(['git', '-C', repo, 'fsck', '--full'], capture_output=True, text=True).returncode
-mount = [l.split()[:3] for l in open('/proc/mounts') if ' /var/lib/orbit ' in l]
+mount = [l.split()[:3] for l in open('/proc/mounts') if ' /home/orbit ' in l]
 print(json.dumps({'randomSha256': hashlib.sha256(open(blob, 'rb').read()).hexdigest(), 'rows': rows[0], 'maxRow': rows[1],
                   'rowsSha256': digest, 'integrityCheck': check, 'gitHead': head, 'gitFsckExit': fsck, 'mount': mount}))
 '''
 
 IDENTITY = r'''
 import json, pathlib
-orbit = pathlib.Path('/var/lib/orbit/home/.orbit')
+orbit = pathlib.Path('/home/orbit/.orbit')
 def read(name):
     p = orbit / name
     return json.loads(p.read_text()) if p.exists() else None
 config = read('config.json') or {}
-repos = pathlib.Path('/var/lib/orbit/home/orbit-repos')
+repos = pathlib.Path('/home/orbit/orbit-repos')
 print(json.dumps({'runnerId': config.get('runnerId'), 'managedInstance': read('managed-instance.json'),
                   'worktrees': sorted(p.name for p in (orbit / 'worktrees').iterdir()) if (orbit / 'worktrees').exists() else [],
                   'repos': sorted(p.name for p in repos.iterdir()) if repos.exists() else []}))

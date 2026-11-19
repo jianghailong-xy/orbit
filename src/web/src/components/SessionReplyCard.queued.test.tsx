@@ -32,7 +32,7 @@ describe('a reply turn waiting on the queue', () => {
         <SessionReplyCards
           cards={queued!.sessionReplies!}
           ts={queued!.createdAt}
-          attached={<QueuedTurnMeta placement={queued!.placement} onCancel={() => {}} />}
+          queued={<QueuedTurnMeta placement={queued!.placement} onCancel={() => {}} />}
         />
       </MemoryRouter>,
     );

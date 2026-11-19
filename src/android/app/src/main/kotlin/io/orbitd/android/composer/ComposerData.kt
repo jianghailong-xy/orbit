@@ -1,5 +1,6 @@
 package io.orbitd.android.composer
 
+import io.orbitd.android.core.promptoptimizer.PromptOptimizerState
 import io.orbitd.android.core.cards.ClaudeRegion
 import io.orbitd.android.core.cards.ClaudeRegionCopy
 import io.orbitd.android.core.realtime.SessionState
@@ -48,7 +49,7 @@ data class DraftTarget(val workspaceId: String, val folderId: String? = null, va
 data class ComposerState(val draft: ComposerDraft = ComposerDraft(), val loaded: Boolean = false,
     val busy: Boolean = false, val waiting: Boolean = false, val error: String? = null,
     val notice: String? = null, val uploads: Map<String, Float> = emptyMap(),
-    val failures: Map<String, String> = emptyMap(), val catalog: ComposerCatalog? = null,
+    val catalog: ComposerCatalog? = null,
     val catalogLoading: Boolean = false, val catalogError: String? = null,
     val acknowledgementPending: Boolean = false,
     /** What the provider picked for the session will do, and when, until the next message goes ([EngineCopy.switchNote]). */
@@ -58,7 +59,10 @@ data class ComposerState(val draft: ComposerDraft = ComposerDraft(), val loaded:
     val withdrawing: Set<String> = emptySet(), val steering: Set<String> = emptySet(),
     /** What the server confirmed before the queue's listing or the runner says so: a message sent into the running turn, drawn on its
      * way there, and one taken back, gone from the tray — or, put back, from the tail. */
-    val steered: Set<String> = emptySet(), val withdrawn: Set<String> = emptySet())
+    val steered: Set<String> = emptySet(), val withdrawn: Set<String> = emptySet(),
+    /** The prompt optimizer (docs/prompt-optimizer-design.md): the press out, the suggestion, the failure line, and what Use put in the
+     * box, for Undo and `optimizedTranslation`. Not saved with the draft: after a restart the text is sent, and translated, as typed. */
+    val optimizer: PromptOptimizerState = PromptOptimizerState())
 
 /** Where a credential comes from, as the Provider menu groups it (docs/provider-engine-contract.md §1.3): the engine's own
  * sign-in on the runner, OpenCode's own configuration there, an account pool, or one of the user's keys. */

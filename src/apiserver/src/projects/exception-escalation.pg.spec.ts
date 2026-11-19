@@ -837,7 +837,7 @@ async function deadline(stack: Stack, itemId: string): Promise<Date | null> {
   return row!.at;
 }
 
-for (const state of ['FAILED', 'retryAt', 'PENDING', 'RUNNING'] as const) {
+for (const state of ['retryAt', 'PENDING', 'RUNNING'] as const) {
   test(`undelivered ITEM waits without a deadline or owner card: ${state}`, { skip, timeout: 180_000 }, async () => {
     const stack = await connect();
     try {
@@ -870,6 +870,33 @@ for (const state of ['FAILED', 'retryAt', 'PENDING', 'RUNNING'] as const) {
     }
   });
 }
+
+// Production, 2026-11-13 to 11-18: the coordinator sat FAILED with no retry from before the item
+// opened, so the ITEM turn was never delivered. With no receipt the item had no deadline and no
+// owner card, and the INTEGRATION_CONFLICT it was held every later landing of its lane (M2) for
+// 98 hours with nobody told. A coordinator that cannot take the turn does not hold the clock.
+test('an undelivered ITEM whose coordinator is down with no retry reaches the owner one window after it opened',
+  { skip, timeout: 180_000 }, async () => {
+    const stack = await connect();
+    try {
+      const w = await world(stack, 'down-no-retry');
+      await stack.db.session.update({ where: { id: w.coordinatorSessionId }, data: { status: RunStatus.FAILED } });
+      const item = await failedTask(stack, w, 'down-no-retry');
+      assert.equal((await deadline(stack, item.id))?.getTime(), item.escalateAt!.getTime(),
+        'the window runs from when the item opened');
+      const list = await stack.openItems.list(w.ownerId, w.projectId);
+      assert.deepEqual(list.withCoordinator.map((row) => row.itemId), [item.id],
+        'the owner sees it waiting on a coordinator that is down');
+      assert.deepEqual(await tick(stack.prisma), [], 'not before its window');
+      await age(stack.db, item, frozenWindowMs(item) + MINUTE);
+      assert.deepEqual((await tick(stack.prisma)).map((row) => row.itemId), [item.id]);
+      const after = await reread(stack.db, item);
+      assert.deepEqual([after.assignee, after.assigneeReason], ['OWNER', 'ESCALATED']);
+      assert.deepEqual((await stack.openItems.list(w.ownerId, w.projectId)).needsYou.map((row) => row.itemId), [item.id]);
+    } finally {
+      await stack.db.$disconnect();
+    }
+  });
 
 test('receipt starts a full frozen window and invalidates the Open-list version', { skip, timeout: 180_000 }, async () => {
   const stack = await connect();

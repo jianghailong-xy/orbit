@@ -388,7 +388,7 @@ func codexProviderArgs(agentEnv map[string]string) []string {
 // Codex session started by another session waits as long as a root one, and can outlast the wait above it.
 // ORBIT_RUNNER_CHILD is the runner's mark on the processes it starts (runnerChildEnv): it is how Orbit's Plan gate
 // tells a session process with no socket, whose writes it refuses, from a terminal the runner did not start.
-const codexOrbitMCPEnvVarsConfig = `mcp_servers.orbit.env_vars=["ORBIT_HOME","ORBIT_SESSION_ID","ORBIT_AGENT_ID","ORBIT_TASK_ID","ORBIT_ALLOW_ORCHESTRATION","ORBIT_WATCHES","ORBIT_WIKI","ORBIT_MCP_PERMISSION_PROMPT","ORBIT_SPAWN_DEPTH","ORBIT_RUNNER_CHILD","ORBIT_BG_SOCKET","ORBIT_BG_TOKEN","ORBIT_MANAGED_RUNNER_GENERATION","ORBIT_MANAGED_RUNNER_POD_UID","ORBIT_SUBAGENT_RUN_ID"]`
+const codexOrbitMCPEnvVarsConfig = `mcp_servers.orbit.env_vars=["ORBIT_HOME","ORBIT_SESSION_ID","ORBIT_AGENT_ID","ORBIT_TASK_ID","ORBIT_ALLOW_ORCHESTRATION","ORBIT_WATCHES","ORBIT_WIKI","ORBIT_SCHEDULE_RUN","ORBIT_MCP_PERMISSION_PROMPT","ORBIT_SPAWN_DEPTH","ORBIT_RUNNER_CHILD","ORBIT_BG_SOCKET","ORBIT_BG_TOKEN","ORBIT_MANAGED_RUNNER_GENERATION","ORBIT_MANAGED_RUNNER_POD_UID","ORBIT_SUBAGENT_RUN_ID"]`
 
 // codexOrbitSessionEnv is the session context both Codex spawn paths export, for `orbit mcp` to read: which
 // session, agent and task it acts for, what it may orchestrate, which optional tools it serves, that Claude's
@@ -403,6 +403,7 @@ func codexOrbitSessionEnv(job *ClaimedSession) []string {
 		"ORBIT_ALLOW_ORCHESTRATION=" + orchestrationEnv(job.AllowOrchestration),
 		envWatches + "=" + watchesEnv(job.WatchesDisabled),
 		envWiki + "=" + wikiEnv(job.WikiDisabled),
+		envScheduleRun + "=" + scheduleRunEnv(job.ScheduleRun),
 		envMCPPermissionPrompt + "=0",
 		envSpawnDepth + "=" + strconv.Itoa(job.SpawnDepth),
 	}
@@ -502,6 +503,7 @@ func codexExecCommandArgs(job *ClaimedSession, execDir, upDir string, imagePaths
 	}
 	args = appendCodexSessionToolConfig(args)
 	args = appendCodexOrbitMCPConfig(args, exe)
+	args = appendCodexBrowserMCPConfig(args, exe)
 	args = append(args, codexProviderArgs(job.Agent.Env)...)
 	args = append(args, "--skip-git-repo-check")
 	for _, p := range imagePaths {

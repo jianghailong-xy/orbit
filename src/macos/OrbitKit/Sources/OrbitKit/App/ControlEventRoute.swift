@@ -48,6 +48,9 @@ public enum ControlEventRoute: Equatable, Sendable {
     case wiki
     /// `terminals.changed`: the approve card's requests and Settings → Terminals.
     case terminals
+    /// `translation.status_changed`: the account (`GET /users/me`), whose `translationUnavailableUntil`
+    /// the composer's language tag reads.
+    case account
     /// Nothing to read: the reserved `notification` channel, and any type this client does not know.
     case nothing
 
@@ -72,6 +75,7 @@ public enum ControlEventRoute: Equatable, Sendable {
         case .folderChanged: return .folders
         case .wikiChanged: return .wiki
         case .terminalsChanged: return .terminals
+        case .translationStatusChanged: return .account
         case .notification, .unknown: return .nothing
         }
     }

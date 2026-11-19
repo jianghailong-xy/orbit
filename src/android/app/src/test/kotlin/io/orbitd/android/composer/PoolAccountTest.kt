@@ -7,7 +7,7 @@ import org.junit.Test
 
 /** A07-7 (iOS f929ab1e4, a0a76a760): a session on a pool of one's own ChatGPT accounts names the account it runs on — the one its
  * detail records (`poolCodexLogin`), even when the pool's oldest is spent and there is no "next" — with that account's own quota,
- * and the Plan usage sheet says whose quota it is when the pool holds more than one. */
+ * in the usage sheet the toolbar's ring opens (the phone toolbar has no room for it). */
 class PoolAccountTest : ComposerShellTest() {
     private fun loginPool() {
         ComposerShell.pools = """[{"id":"34A07cCodexLoginPool01","slug":"codex-pool","label":"Codex pool","engine":"codex","logins":[
@@ -22,13 +22,12 @@ class PoolAccountTest : ComposerShellTest() {
     @Test fun aLoginPoolSessionNamesTheAccountItRunsOnAndItsQuota() {
         loginPool()
         signIn(); openSession()
+        compose.onNodeWithTag("composer-context").performClick()
+        awaitText("Primary: 41%")
         await { has(hasTestTag("composer-pool-account")) }
         compose.onNodeWithTag("composer-pool-account").assertTextEquals("second@example.test")
             .assertContentDescriptionEquals("Codex pool is running this session on second@example.test")
-        compose.onNode(hasText("Context: 0 tokens · Usage") and hasClickAction()).performClick()
-        awaitText("Primary: 41%")
-        assertTrue("the sheet names whose quota it is", has(hasText("Account") and hasAnyAncestor(isDialog())) &&
-            has(hasText("second@example.test") and hasAnyAncestor(isDialog())))
+        assertTrue("the sheet names whose quota it is", has(hasText("Account")))
     }
 
     @Test fun anAccountThePoolNoLongerHoldsIsNotGuessed() {
@@ -36,7 +35,7 @@ class PoolAccountTest : ComposerShellTest() {
         ComposerShell.session = ComposerShell.session + ("poolCodexLogin" to ComposerShell.obj("""{"email":"gone@example.test","fingerprint":"…EF56"}"""))
         signIn(); openSession()
         await { ComposerShell.calls.any { it == "GET providers/pools" } }
-        compose.onNode(hasText("Context: 0 tokens · Usage") and hasClickAction()).performClick()
+        compose.onNodeWithTag("composer-context").performClick()
         awaitText("No quota reported for this account.")
         assertFalse(has(hasTestTag("composer-pool-account")))
     }

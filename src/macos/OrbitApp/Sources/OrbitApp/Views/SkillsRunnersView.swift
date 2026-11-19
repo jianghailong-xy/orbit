@@ -84,11 +84,19 @@ struct SkillRow: View {
 /// a person, the machines (each opening its record; reordered and removed here), then the account pools
 /// and the API keys. Every way out stays in the app: an engine is signed in on its page, a machine on its
 /// record, a pool on its page — iOS's own; the Mac has none.
+///
+/// iOS Settings opens it twice, as the web's Settings nav has two groups: Machines (what needs a person
+/// about a machine, the machines, Add) and Providers (what needs a person about a pool, the pools, the
+/// keys, the model tiers). Everywhere else it is the whole page.
 struct RunnersListView: View {
+    enum Part { case all, machines, providers }
+
     @Environment(AppModel.self) private var model
     /// How this list's rows navigate. Defaults to the three-column shape; the compact shell and Settings,
     /// whose stacks know their own pushes, pass `.push`.
     var rowNavigation: SessionRowNavigation = .selection
+    /// Which of the page's halves it shows.
+    var part: Part = .all
     @State private var addingRunner = false
     @State private var pendingRemoval: Runner?
 
@@ -96,9 +104,9 @@ struct RunnersListView: View {
         @Bindable var model = model
         if let runners = model.runners {
             let lists = MachinesAndModelsLists(model)
-            // An account with no runner at all, while the server offers managed runners: its managed
-            // runner — Set up, or why there is none — above the machines, as the web's default landing
-            // shows it (`ManagedRunnerLogic.onboarding`). Add Runner stays where it is.
+            // The managed runner's entry above the machines: for an account with no runner at all,
+            // and for an existing account while the server offers it one (`ManagedRunnerLogic.onboarding`,
+            // D1). Once mapped it is one machine row instead (D4).
             let managed = runners.loadState.hasLoaded
                 ? ManagedRunnerLogic.onboarding(model.managedRunner?.display, runnerCount: runners.runners.count)
                 : nil
@@ -106,49 +114,69 @@ struct RunnersListView: View {
             // column to select into.
             List(selection: rowNavigation == .selection ? $model.selectedRunnerID : nil) {
                 #if os(iOS)
-                if let managed {
+                if part != .providers, let managed {
                     Section {
-                        ManagedRunnerBanner(display: managed, runnerID: model.managedRunner?.status?.runnerId)
+                        ManagedRunnerBanner(display: managed, runnerID: model.managedRunner?.status?.runnerId,
+                                            confirmsSetup: confirmsSetup, onEnsured: openManagedRunner)
                     }
                 }
                 #endif
                 if lists.settled {
-                    let attention = lists.attention
+                    // The managed runner's heartbeat "offline" is not said of it: its shared state is.
+                    let attention = lists.attention.filter { !isManagedOffline($0) && shows($0) }
                     if !attention.isEmpty {
                         MachinesAndModelsNeedsYouSection(items: attention, opensPools: opensPools,
                                                       open: openAttention)
                     }
                 }
-                Section {
-                    ForEach(runners.runners) { r in
-                        row(r)
+                if part != .providers {
+                    let managedID = model.managedRunner?.display == nil ? nil : model.managedRunner?.status?.runnerId
+                    let order = RunnerPageFormat.managedFirst(runners.runners, managedRunnerID: managedID)
+                    let pinned = order.first.flatMap { RunnerPageFormat.isManaged($0, managedRunnerID: managedID) ? $0 : nil }
+                    let movable = pinned == nil ? order : Array(order.dropFirst())
+                    Section {
+                        if let pinned {
+                            row(pinned, isManaged: true, separates: !movable.isEmpty)
+                                .listRowSeparator(.hidden, edges: .bottom)
+                        }
+                        ForEach(movable) { r in
+                            row(r)
+                                .listRowSeparator(pinned != nil && r.id == movable.first?.id ? .hidden : .automatic,
+                                                  edges: .top)
+                        }
+                        .onMove { moveRunners(runners, movable: movable, from: $0, to: $1) }
+                        .onDelete { offsets in
+                            guard let index = offsets.first, movable.indices.contains(index) else { return }
+                            pendingRemoval = movable[index]
+                        }
+                    } header: {
+                        RunnerSectionHeader(MachinesAndModels.machines,
+                                            trailing: MachinesAndModels.machinesCount(runners.runners))
+                    } footer: {
+                        Text(MachinesAndModels.machinesDetail)
                     }
-                    .onMove { moveRunners(runners, from: $0, to: $1) }
-                    .onDelete { pendingRemoval = runnerToRemove(runners, at: $0) }
-                } header: {
-                    RunnerSectionHeader(MachinesAndModels.machines,
-                                        trailing: MachinesAndModels.machinesCount(runners.runners))
-                } footer: {
-                    Text(MachinesAndModels.machinesDetail)
+                    RunnerAddSection { addingRunner = true }
                 }
-                RunnerAddSection { addingRunner = true }
-                MachinesAndModelsPoolsSection(memberPools: lists.memberPools, ownPools: lists.ownPools,
-                                           open: opensPools ? push : nil)
-                MachinesAndModelsKeysSection(keys: lists.keys, balances: model.agents?.deepSeekBalances ?? [:],
-                                          cursorModel: MachinesAndModels.cursorModel(lists.runners.filter { $0.online == true }),
-                                          open: opensPools ? push : nil)
-                if let agents = model.agents {
-                    InfrastructureModelTiersSection(agents: agents)
+                if part != .machines {
+                    MachinesAndModelsPoolsSection(memberPools: lists.memberPools, ownPools: lists.ownPools,
+                                               open: opensPools ? push : nil)
+                    MachinesAndModelsKeysSection(keys: lists.keys, balances: model.agents?.deepSeekBalances ?? [:],
+                                              cursorModel: MachinesAndModels.cursorModel(lists.runners.filter { $0.online == true }),
+                                              open: opensPools ? push : nil)
+                    if let agents = model.agents {
+                        InfrastructureModelTiersSection(agents: agents)
+                    }
                 }
             }
             .orbitRevealSurface()   // macOS: reveal the unified `orbitSurface`
-            .modifier(ManagedRunnerAboveList(display: managed, runnerID: model.managedRunner?.status?.runnerId))
-            .modifier(RunnersLoadOverlay(runners: runners, isEmpty: runners.runners.isEmpty,
+            .modifier(ManagedRunnerAboveList(display: managed, runnerID: model.managedRunner?.status?.runnerId,
+                                             confirmsSetup: confirmsSetup, onEnsured: openManagedRunner))
+            .modifier(RunnersLoadOverlay(runners: runners, isEmpty: part != .providers && runners.runners.isEmpty,
                                          failedTitle: "Machines couldn't be loaded",
                                          emptyTitle: nil, systemImage: "desktopcomputer"))
             .modifier(RunnerListEditing(runners: runners, addingRunner: $addingRunner,
                                         pendingRemoval: $pendingRemoval))
-            .navigationTitle(AppSection.runners.title)
+            .navigationTitle(title)
             // Each list is its own read, so they are asked for side by side. A machine checks in every
             // 30s: the machines are read again while the page is up, so where each one stands — its row,
             // and what needs you — moves with it, as a machine's own page does. No event reports a
@@ -172,11 +200,16 @@ struct RunnersListView: View {
     }
 
     /// One row, wrapped for the container it is in — the three-column `List`'s selection, or the
-    /// compact row's own destination on Runners' stack. The row view is the same either way.
-    @ViewBuilder private func row(_ r: Runner) -> some View {
-        let row = RunnerRow(runner: r, workspaces: model.runners?.agents(forRunner: r.id) ?? [],
-                            latestVersion: model.runners?.latestVersion,
-                            disclosure: rowNavigation == .push)
+    /// compact row's own destination on Runners' stack. The row view is the same either way, and the
+    /// managed runner's row carries its shared state label instead of the heartbeat's (D4).
+    @ViewBuilder private func row(_ r: Runner, isManaged: Bool = false, separates: Bool = false) -> some View {
+        let row = VStack(spacing: 6) {
+            RunnerRow(runner: r, workspaces: model.runners?.agents(forRunner: r.id) ?? [],
+                      latestVersion: model.runners?.latestVersion,
+                      managed: ManagedRunnerLogic.row(runnerID: r.id, status: model.managedRunner?.status),
+                      isManaged: isManaged, disclosure: rowNavigation == .push)
+            if separates { Divider() }
+        }
         switch rowNavigation {
         case .selection:
             row.tag(r.id)
@@ -191,11 +224,53 @@ struct RunnersListView: View {
         }
     }
 
+    private var title: String {
+        switch part {
+        case .all:       return AppSection.runners.title
+        case .machines:  return SettingsPage.machines.title
+        case .providers: return SettingsPage.providers.title
+        }
+    }
+
+    /// Whether a Needs you line belongs to the half shown.
+    private func shows(_ item: MachinesAndModels.Attention) -> Bool {
+        switch part {
+        case .all:       return true
+        case .machines:  return item.isMachine
+        case .providers: return !item.isMachine
+        }
+    }
+
     /// A pool's page — and a DeepSeek key's — is pushed where the page is a stack's (iOS); the three-column
     /// pane shows records only.
     private var opensPools: Bool { rowNavigation == .push }
 
+    /// Set up on an account that already has a machine or a workspace asks first (D3); a new account's
+    /// one-click landing is unchanged.
+    private var confirmsSetup: Bool {
+        ManagedRunnerLogic.confirmsSetup(runnerCount: model.runners?.runners.count ?? 0,
+                                         workspaceCount: model.agents?.items.count ?? 0)
+    }
+
+    /// Where the server's Set up answer lands: the managed runner's own machine page (D1) — pushed on
+    /// a stack, selected in the three-column pane — with the machines read again so its row is there.
+    private func openManagedRunner(_ id: String) {
+        Task { await model.runners?.load() }
+        if rowNavigation == .push {
+            model.push(.runnerDetail(runnerID: id))
+        } else {
+            model.selectedRunnerID = id
+        }
+    }
+
     private func push(_ page: NavNode) { model.push(page) }
+
+    /// Whether a Needs you line is the heartbeat saying a managed runner is offline: its shared state
+    /// (Preparing, Asleep…) is shown instead, on its row.
+    private func isManagedOffline(_ item: MachinesAndModels.Attention) -> Bool {
+        guard case .offline(let runnerID) = item.kind else { return false }
+        return ManagedRunnerLogic.row(runnerID: runnerID, status: model.managedRunner?.status) != nil
+    }
 
     /// A line of Needs you, opened: the machine's record, the pool's page.
     private func openAttention(_ item: MachinesAndModels.Attention) {
@@ -267,19 +342,22 @@ private struct RunnersLoadOverlay: ViewModifier {
 }
 
 /// The list's last card: Add Runner, and what it will ask of the new machine.
-/// The managed runner above Machines & models' list on the Mac, for an account with no runner
-/// (`ManagedRunnerLogic.onboarding`). A Mac list is a table that keeps its rows where they were when
-/// a row or a top inset that arrives after it has drawn changes its height, so there the banner takes
-/// room of its own above the list; on iOS it is the list's first section.
+/// The managed runner above Machines & models' list on the Mac (`ManagedRunnerLogic.onboarding`). A Mac
+/// list is a table that keeps its rows where they were when a row or a top inset that arrives after it
+/// has drawn changes its height, so there the banner takes room of its own above the list; on iOS it is
+/// the list's first section.
 private struct ManagedRunnerAboveList: ViewModifier {
     let display: ManagedRunnerDisplay?
     let runnerID: String?
+    let confirmsSetup: Bool
+    let onEnsured: ((String) -> Void)?
 
     func body(content: Content) -> some View {
         #if os(macOS)
         VStack(spacing: 0) {
             if let display {
-                ManagedRunnerBanner(display: display, runnerID: runnerID)
+                ManagedRunnerBanner(display: display, runnerID: runnerID,
+                                    confirmsSetup: confirmsSetup, onEnsured: onEnsured)
                     .padding(.horizontal, 12)
                     .padding(.vertical, 8)
             }
@@ -343,17 +421,11 @@ private struct RunnerListEditing: ViewModifier {
 }
 
 /// A drag in Edit: the rows move at once, and the server's order settles it.
-@MainActor private func moveRunners(_ runners: RunnersModel, from source: IndexSet, to destination: Int) {
-    var order = runners.runners
+@MainActor private func moveRunners(_ runners: RunnersModel, movable: [Runner], from source: IndexSet, to destination: Int) {
+    var order = movable
     order.move(fromOffsets: source, toOffset: destination)
     let ids = order.map(\.id)
     Task { await runners.reorder(ids) }
-}
-
-/// The row a delete in Edit (or a swipe) names — asked about before anything is removed.
-@MainActor private func runnerToRemove(_ runners: RunnersModel, at offsets: IndexSet) -> Runner? {
-    guard let index = offsets.first, runners.runners.indices.contains(index) else { return nil }
-    return runners.runners[index]
 }
 
 /// One machine in the list (03-ios.png): its status dot and name, the bar of its slots in use at the end
@@ -366,6 +438,11 @@ struct RunnerRow: View {
     /// The runner's workspaces: what its attention line is weighed against.
     var workspaces: [Agent] = []
     var latestVersion: String? = nil
+    /// The account's managed runner, as its machine row shows it (D4): the shared short label in
+    /// place of the heartbeat's Online/Offline, and the asleep line whole. Nil for every other runner,
+    /// and with the feature off.
+    var managed: ManagedRunnerRow? = nil
+    var isManaged = false
     /// Whether the row draws the disclosure a pushing row needs; a selection row has none.
     var disclosure = false
     var now = Date()
@@ -381,14 +458,28 @@ struct RunnerRow: View {
                                                     latestVersion: latestVersion)
         HStack(spacing: 10) {
             HStack(alignment: .firstTextBaseline, spacing: 10) {
-                RunnerStatusDot(presence: RunnerPageFormat.presence(runner, now: now), ringed: true)
+                mark
                     .alignmentGuide(.firstTextBaseline) { d in d[VerticalAlignment.center] + 5 }
+                if isManaged {
+                    Image(systemName: "cloud")
+                        .foregroundStyle(Color.accentColor)
+                        .accessibilityHidden(true)
+                } else {
+                    // Every other machine by the OS it reported (docs/mocks/machine-menu-icons, A).
+                    MachineOSMark(runner: runner)
+                }
                 VStack(alignment: .leading, spacing: 2) {
                     HStack(alignment: .firstTextBaseline, spacing: 8) {
                         Text(RunnerPageFormat.displayName(runner))
+                            .fontWeight(isManaged ? .semibold : nil)
                             .lineLimit(1)
                         Spacer(minLength: 8)
-                        if let slots = RunnerPageFormat.slots(runner, now: now) {
+                        if let managed {
+                            Text(managed.label)
+                                .font(.orbitListSubtitle)
+                                .foregroundStyle(managed.ink)
+                                .lineLimit(1)
+                        } else if let slots = RunnerPageFormat.slots(runner, now: now) {
                             RunnerSlotBar(slots: slots)
                                 .alignmentGuide(.firstTextBaseline) { d in d[VerticalAlignment.center] + 4 }
                         } else if RunnerPageFormat.isOffline(runner, now: now) {
@@ -397,10 +488,18 @@ struct RunnerRow: View {
                                 .foregroundStyle(Color.secondary)
                         }
                     }
-                    Text(MachinesAndModels.machineLine(runner, now: now))
-                        .font(.orbitListSubtitle)
-                        .foregroundStyle(Color.secondary)
-                        .lineLimit(1)
+                    // An asleep managed runner says when it wakes, whole — never cut to one line.
+                    if let detail = managed?.detail {
+                        Text(detail)
+                            .font(.orbitListSubtitle)
+                            .foregroundStyle(Color.secondary)
+                            .fixedSize(horizontal: false, vertical: true)
+                    } else {
+                        Text(MachinesAndModels.machineLine(runner, now: now))
+                            .font(.orbitListSubtitle)
+                            .foregroundStyle(Color.secondary)
+                            .lineLimit(1)
+                    }
                     if let line = RunnerAttention.listAttentionLine(items) {
                         // Not a `Label`: a list gives a label's icon a column of its own, and the
                         // mock's triangle sits right against its words.
@@ -422,12 +521,42 @@ struct RunnerRow: View {
         .padding(.vertical, 2)
     }
 
+    /// The state mark: the managed runner's shared tone — a spinner while it moves by itself, grey
+    /// asleep, green ready, orange when it needs a person — else the heartbeat's dot.
+    @ViewBuilder private var mark: some View {
+        if let managed {
+            if managed.tone == .progress {
+                ProgressView().controlSize(.small)
+            } else {
+                Circle()
+                    .fill(managed.ink)
+                    .frame(width: 9, height: 9)
+                    .padding(2.5)
+                    .background(Circle().fill(managed.ink.opacity(0.2)))
+            }
+        } else {
+            RunnerStatusDot(presence: RunnerPageFormat.presence(runner, now: now), ringed: true)
+        }
+    }
+
     private var showsDisclosure: Bool {
         #if os(iOS)
         disclosure && editMode?.wrappedValue.isEditing != true
         #else
         disclosure
         #endif
+    }
+}
+
+extension ManagedRunnerRow {
+    /// The row's ink for its tone: green ready, orange needing a person, grey everything that is
+    /// merely asleep or on its way (asleep is never the colour of a fault).
+    var ink: Color {
+        switch tone {
+        case .ready: return RunnerInk.green
+        case .attention: return RunnerInk.amber
+        case .idle, .progress: return Color.secondary
+        }
     }
 }
 
@@ -516,20 +645,43 @@ struct RunnerDetailContent: View {
         let now = Date()
         let workspaces = runners.agents(forRunner: runner.id)
         let offline = RunnerPageFormat.isOffline(runner, now: now)
+        // When this machine is the account's managed runner: its state in the shared words, its
+        // banner on top (D4), and — before it first reports — no readings or engines to show.
+        let managed = managedRow
+        let managedDisplay = self.managedDisplay
+        let managedWaiting = managed.map {
+            $0.kind != .available && (runner.version?.trimmingCharacters(in: .whitespacesAndNewlines) ?? "").isEmpty
+        } ?? false
         let items = RunnerAttention.runnerAttention(runner: runner, workspaces: workspaces,
                                                     nowMs: RunnerPageFormat.nowMs(now),
-                                                    latestVersion: runners.latestVersion)
+                                                    latestVersion: runners.latestVersion,
+                                                    managed: managed != nil)
+            // The managed runner's heartbeat "offline" card is not repeated beside its shared state.
+            .filter { !(managed != nil && $0.kind == .offline) }
         Form {
             head(now: now)
-            if let card = RunnerPageFormat.updateCard(runner, now: now) {
+            if let managedDisplay, managedDisplay.kind != .available {
+                Section {
+                    ManagedRunnerBanner(display: managedDisplay, runnerID: runner.id)
+                }
+            }
+            // A managed runner that has not reported yet has no release, readings or engines to show:
+            // no Update card, and one quiet line where Resources and Engines would be.
+            if !managedWaiting, let card = RunnerPageFormat.updateCard(runner, now: now) {
                 updateSection(card)
             }
             if !items.isEmpty {
                 attentionSection(items, now: now)
             }
-            resourcesSection(workspaces, now: now)
-            capacitySection(now: now)
-            enginesSection(offline: offline, now: now)
+            if managedWaiting {
+                managedWaitingSection(RunnerPageCopy.RUNNER_RESOURCES)
+                capacitySection(now: now)
+                managedWaitingSection(RunnerPageCopy.RUNNER_ENGINES)
+            } else {
+                resourcesSection(workspaces, now: now)
+                capacitySection(now: now)
+                enginesSection(offline: offline, now: now)
+            }
             workspacesSection(workspaces)
             aboutSection(now: now)
             rotateSection
@@ -537,7 +689,7 @@ struct RunnerDetailContent: View {
         }
         .formStyle(.grouped)
         .orbitRevealSurface()   // macOS: reveal the unified `orbitSurface` behind the grouped form
-        .navigationTitle(RunnerPageFormat.displayName(runner))
+        .navigationTitle(RunnerPageFormat.displayName(runner, managedRunnerID: managedRow?.runnerID))
         #if os(iOS)
         .navigationBarTitleDisplayMode(.inline)
         #endif
@@ -582,19 +734,26 @@ struct RunnerDetailContent: View {
     // MARK: sections, in the page's order
 
     /// The machine, where it stands and what it is — the Codex pool page's head, with a machine for
-    /// its mark.
+    /// its mark. The managed runner's state is the shared short label (Asleep, never Offline), in its
+    /// tone's colour.
     @ViewBuilder private func head(now: Date) -> some View {
-        let host = RunnerPageFormat.hostLine(runner)
+        let host = RunnerPageFormat.hostLine(runner, managed: managedRow != nil)
         Section {
             HStack(spacing: 14) {
                 RunnerMachineTile(presence: RunnerPageFormat.presence(runner, now: now))
                 VStack(alignment: .leading, spacing: 2) {
-                    Text(RunnerPageFormat.displayName(runner))
+                    Text(RunnerPageFormat.displayName(runner, managedRunnerID: managedRow?.runnerID))
                         .font(.title3.weight(.bold))
                         .lineLimit(2)
-                    Text(statusLine(now: now))
-                        .font(.orbitListSubtitle)
-                        .foregroundStyle(Color.secondary)
+                    if let managed = managedRow {
+                        Text(managed.label)
+                            .font(.orbitListSubtitle)
+                            .foregroundStyle(managed.ink)
+                    } else {
+                        Text(statusLine(now: now))
+                            .font(.orbitListSubtitle)
+                            .foregroundStyle(Color.secondary)
+                    }
                     if !host.isEmpty {
                         Text(host)
                             .font(.orbitListSubtitle)
@@ -606,6 +765,31 @@ struct RunnerDetailContent: View {
             .padding(.horizontal, 4)
             .listRowBackground(Color.clear)
             .listRowInsets(EdgeInsets(top: 0, leading: 0, bottom: 0, trailing: 0))
+        }
+    }
+
+    /// This machine as the managed runner's row, when it is the account's managed runner (D4): nil for
+    /// any other runner, and with the feature off.
+    private var managedRow: ManagedRunnerRow? {
+        ManagedRunnerLogic.row(runnerID: runner.id, status: model.managedRunner?.status)
+    }
+
+    /// The managed runner's shared display for this machine's page: nil for any other runner, and
+    /// with the feature off.
+    private var managedDisplay: ManagedRunnerDisplay? {
+        guard let status = model.managedRunner?.status, let id = status.runnerId,
+              PublicID.storageKey(id) == PublicID.storageKey(runner.id) else { return nil }
+        return ManagedRunnerLogic.display(status)
+    }
+
+    /// A managed runner that has not reported yet: one quiet sentence where a section would be, not
+    /// controls for a machine still being started.
+    private func managedWaitingSection(_ title: String) -> some View {
+        Section {
+            Text(ManagedRunnerCopy.notReported)
+                .foregroundStyle(Color.secondary)
+        } header: {
+            RunnerSectionHeader(title)
         }
     }
 
@@ -805,7 +989,7 @@ struct RunnerDetailContent: View {
                         HStack {
                             Text(RunnerPageCopy.RUNNER_MAX_CONCURRENT)
                             Spacer(minLength: 8)
-                            Text(verbatim: "\(maxDraft)")
+                            Text(verbatim: "\(maxDraft) \(RunnerPageCopy.RUNNER_MAX_CONCURRENT_UNIT)")
                                 .foregroundStyle(Color.secondary)
                                 .monospacedDigit()
                         }
@@ -858,6 +1042,16 @@ struct RunnerDetailContent: View {
                                 .font(.orbitLabel)
                                 .foregroundStyle(line.failed ? RunnerInk.red : Color.secondary)
                         }
+                    }
+                }
+                // A failed line: an agent can be sent to fix it, under the report
+                // (docs/mocks/engine-update-fix-with-agent/03-mobile.png).
+                if let fix = RunnerAgentFixLogic.engineUpdateState(runner) {
+                    VStack(alignment: .leading, spacing: 6) {
+                        RunnerAgentFixButton(state: fix, pressing: fixPressing) {
+                            fixWithAnAgent(RunnerAgentFixTarget(kind: .engineUpdateFailed, engine: nil))
+                        }
+                        RunnerAgentFixLine(state: fix) { openSession($0) }
                     }
                 }
                 Button(RunnerPageCopy.RUNNER_REFRESH_MODEL_LISTS) { refreshModels() }
@@ -924,8 +1118,9 @@ struct RunnerDetailContent: View {
             .runnerRowButtonStyle()
             aboutRow(RunnerPageCopy.RUNNER_ABOUT_HOSTNAME, runner.hostname)
             aboutRow(RunnerPageCopy.RUNNER_ABOUT_VERSION,
-                     RunnerPageFormat.versionValue(runner, latest: runners.latestVersion))
-            aboutRow(RunnerPageCopy.RUNNER_ABOUT_LAST_UPDATE, RunnerPageFormat.lastUpdate(runner))
+                     RunnerPageFormat.versionValue(runner, latest: runners.latestVersion, managed: managedRow != nil))
+            // A managed runner never installs a release into itself: Orbit replaces its image.
+            aboutRow(RunnerPageCopy.RUNNER_ABOUT_LAST_UPDATE, managedRow == nil ? RunnerPageFormat.lastUpdate(runner) : nil)
             // Only while a release is waiting: a check with nothing newer to install is not offered.
             if RunnerPageFormat.isBehindLatest(runner, latest: runners.latestVersion),
                RunnerAttention.runnerCanUpdateNow(runner, nowMs: RunnerPageFormat.nowMs(now)) {

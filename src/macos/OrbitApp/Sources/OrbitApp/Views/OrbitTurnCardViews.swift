@@ -170,7 +170,6 @@ struct EvidenceSentBackCardView: View {
     let text: String
     var ts: String?
     var undelivered: Bool = false
-    var attached: (kind: String, text: String)?
     var onCancelQueued: (() -> Void)?
 
     @Environment(\.openURL) private var openURL
@@ -196,7 +195,6 @@ struct EvidenceSentBackCardView: View {
                 .frame(maxWidth: .infinity, alignment: .leading)
             if undelivered { UndeliveredLine() }
             OrbitTurnCardTold(label: OrbitTurnCardCopy.runWasTold, text: text)
-            if let attached { AttachedNoteEntry(attached: attached) }
             if let onCancelQueued { ReviewTurnQueuedFoot(cancel: onCancelQueued) }
         }
         .modifier(OrbitTurnCardFrame(tone: .orange, queued: onCancelQueued != nil))

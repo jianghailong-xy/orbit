@@ -150,7 +150,7 @@ class TranscriptDeviceTest {
 
     /**
      * A06c over fixture mode A06C, through the real login, directory and reader: the sticky question — since A06-18 a
-     * capsule in the bar, off the live tail only — and its jump, the Orbit attached line, engine stderr/notice/transient
+     * capsule in the bar, off the live tail only — and its jump, hidden appended context, engine stderr/notice/transient
      * rows, a workflow's agents, an image file link, the worktree bar's merge and changed files (a binary file's
      * preview), and the tail kept in view when the keyboard rises.
      */
@@ -179,15 +179,9 @@ class TranscriptDeviceTest {
         compose.onNodeWithText("Second question: ship the reader").assertIsDisplayed()
         capture("a06c-sticky-jumped")
         measureCapsule("first-question")
-        // A06-9: what delivery appended is one line under the person's words, not part of them — ⊕ shut, ⊖ open
-        // (owner, 2026-10-27).
-        list.performScrollToNode(hasText("⊕ Orbit attached: list conditions"))
-        compose.onNodeWithText("⊕ Orbit attached: list conditions").assertIsDisplayed()
-        capture("a06c-context-card")
-        tap(hasText("⊕ Orbit attached: list conditions"))
-        awaitText("<list-conditions", substring = true)
-        compose.onNodeWithText("⊖ Orbit attached: list conditions").assertIsDisplayed()
-        capture("a06c-context-opened")
+        // Appended context stays out of the transcript (owner, 2026-11-18).
+        compose.onAllNodesWithText("Orbit attached", substring = true, useUnmergedTree = true).assertCountEquals(0)
+        compose.onAllNodesWithText("<list-conditions", substring = true, useUnmergedTree = true).assertCountEquals(0)
         // Engine stderr, a recoverable diagnostic and a notice, and Codex's exhausted 429 as a transient row (A06-1, A06-2).
         list.performScrollToNode(hasText("--dangerously-skip-permissions cannot be used with root/sudo privileges"))
         // The diagnostic is brought into view too: at 360×640 dp over API 29's three-button bar, the stderr row ends just

@@ -37,11 +37,12 @@ final class TranslationTests: XCTestCase {
     func testMeCarriesTheSwitchTheLanguageAndWhetherTheServerCanTranslate() throws {
         let me = try decode(User.self, """
         {"id":"u1","email":"a@b.c","translationAvailable":true,
-         "preferences":{"translationEnabled":true,"translationLanguage":"ja"}}
+         "preferences":{"translationEnabled":true,"translationLanguage":"ja","translationAgentLanguage":"pt"}}
         """)
         XCTAssertEqual(me.translationAvailable, true)
         XCTAssertEqual(me.preferences?.translationEnabled, true)
         XCTAssertEqual(SessionTranslation.language(me.preferences), .ja)
+        XCTAssertEqual(SessionTranslation.agentLanguage(me.preferences), .pt)
         XCTAssertTrue(SessionTranslation.isOn(me))
         XCTAssertFalse(SessionTranslation.unavailable(me))
     }
@@ -51,6 +52,7 @@ final class TranslationTests: XCTestCase {
         XCTAssertNil(me.preferences?.translationEnabled)
         XCTAssertFalse(SessionTranslation.isOn(me), "absent = off")
         XCTAssertEqual(SessionTranslation.language(me.preferences), .zhHans)
+        XCTAssertEqual(SessionTranslation.agentLanguage(me.preferences), .en, "absent agent language = English")
     }
 
     func testAServerWithoutAKeyTranslatesNothingWhateverThePreferenceSays() throws {
@@ -64,10 +66,28 @@ final class TranslationTests: XCTestCase {
         XCTAssertFalse(SessionTranslation.unavailable(login))
     }
 
+    func testTranslationUnavailableUntilIsReadWhileItLiesAhead() throws {
+        let me = try decode(User.self, """
+        {"id":"u1","email":"a@b.c","translationAvailable":true,"translationUnavailableUntil":"2026-11-18T06:01:00.000Z"}
+        """)
+        XCTAssertEqual(me.translationUnavailableUntil, "2026-11-18T06:01:00.000Z")
+        let until = Date(timeIntervalSince1970: 1_794_981_660)
+        XCTAssertEqual(SessionTranslation.temporarilyUnavailableUntil(me, now: until.addingTimeInterval(-1)), until)
+        XCTAssertNil(SessionTranslation.temporarilyUnavailableUntil(me, now: until), "past it, the ordinary tag again")
+        let closed = try decode(User.self, #"{"id":"u1","email":"a@b.c","translationAvailable":true,"translationUnavailableUntil":null}"#)
+        XCTAssertNil(closed.translationUnavailableUntil)
+        XCTAssertNil(SessionTranslation.temporarilyUnavailableUntil(closed))
+        XCTAssertNil(SessionTranslation.temporarilyUnavailableUntil(try decode(User.self, #"{"id":"u1","email":"a@b.c"}"#)))
+    }
+
     func testAStrayValueReadsAsAbsentAndAnUnknownLanguageAsTheDefault() throws {
-        let prefs = try decode(UserPreferences.self, #"{"translationEnabled":"yes","translationLanguage":"xx"}"#)
+        let prefs = try decode(UserPreferences.self,
+                               #"{"translationEnabled":"yes","translationLanguage":"xx","translationAgentLanguage":"xx"}"#)
         XCTAssertNil(prefs.translationEnabled)
         XCTAssertEqual(SessionTranslation.language(prefs), .zhHans)
+        XCTAssertEqual(SessionTranslation.agentLanguage(prefs), .en)
+        let stray = try decode(UserPreferences.self, #"{"translationAgentLanguage":7}"#)
+        XCTAssertNil(stray.translationAgentLanguage)
     }
 
     func testTheToggleWritesOnlyItsOwnKey() throws {
@@ -82,28 +102,146 @@ final class TranslationTests: XCTestCase {
         let lang = try keys(UpdatePreferencesRequest(translationLanguage: TranslationLanguage.ko.rawValue))
         XCTAssertEqual(lang.count, 1)
         XCTAssertEqual(lang["translationLanguage"] as? String, "ko")
+        let agent = try keys(UpdatePreferencesRequest(translationAgentLanguage: TranslationLanguage.de.rawValue))
+        XCTAssertEqual(agent.count, 1)
+        XCTAssertEqual(agent["translationAgentLanguage"] as? String, "de")
+    }
+
+    // MARK: - Show both languages (docs/mocks/session-translation/02-bilingual.png)
+
+    func testShowBothLanguagesIsOffUntilTheAccountSaysSoAndOnlyWhileTranslating() throws {
+        let absent = try decode(UserPreferences.self, #"{"translationEnabled":true}"#)
+        XCTAssertNil(absent.translationBilingual)
+        XCTAssertFalse(SessionTranslation.bilingual(absent), "absent = off")
+        let on = try decode(UserPreferences.self, #"{"translationEnabled":true,"translationBilingual":true}"#)
+        XCTAssertTrue(SessionTranslation.bilingual(on))
+        let translationOff = try decode(UserPreferences.self, #"{"translationEnabled":false,"translationBilingual":true}"#)
+        XCTAssertFalse(SessionTranslation.bilingual(translationOff), "shown only while Translate conversations is on")
+        let stray = try decode(UserPreferences.self, #"{"translationEnabled":true,"translationBilingual":"yes"}"#)
+        XCTAssertNil(stray.translationBilingual)
+        let write = try XCTUnwrap(JSONSerialization.jsonObject(
+            with: JSONEncoder().encode(UpdatePreferencesRequest(translationBilingual: true))) as? [String: Any])
+        XCTAssertEqual(write.count, 1)
+        XCTAssertEqual(write["translationBilingual"] as? Bool, true)
+    }
+
+    func testBothLanguagesOnTheFeetLoseTheFlip() {
+        let done = TurnTranslation(state: .done, from: .zhHans, original: "改吧")
+        XCTAssertEqual(SessionTranslation.userFoot(done, flipped: false, bilingual: true),
+                       [.text("Sent to the agent in English"), .action("Hide original", .hideOriginal)])
+        // Agents working in another language: the foot names it.
+        XCTAssertEqual(SessionTranslation.userFoot(done, flipped: false, bilingual: true, agentLanguage: .ja),
+                       [.text("Sent to the agent in Japanese"), .action("Hide original", .hideOriginal)])
+        XCTAssertEqual(SessionTranslation.replyFoot(ReplyTranslation(lang: .zhHans, text: "好"), pending: false,
+                                                    flipped: false, bilingual: true),
+                       [.text("Translated"), .action("Hide original", .hideOriginal)])
+        // Hidden (docs/mocks/translation-hide-original): "Show both" brings the original back.
+        XCTAssertEqual(SessionTranslation.userFoot(done, flipped: false, bilingual: true, originalHidden: true),
+                       [.text("Sent to the agent in English"), .action("Show both", .hideOriginal)])
+        XCTAssertEqual(SessionTranslation.replyFoot(ReplyTranslation(lang: .zhHans, text: "好"), pending: false,
+                                                    flipped: false, bilingual: true, originalHidden: true),
+                       [.text("Translated"), .action("Show both", .hideOriginal)])
+        // Off: exactly today's feet.
+        XCTAssertEqual(SessionTranslation.userFoot(done, flipped: false, bilingual: false),
+                       [.action("Show original", .flip)])
+        XCTAssertEqual(SessionTranslation.replyFoot(ReplyTranslation(lang: .zhHans, text: "好"), pending: false, flipped: false),
+                       [.text("Translated"), .action("Show original", .flip)])
+        // States unchanged with it on.
+        XCTAssertEqual(SessionTranslation.userFoot(TurnTranslation(state: .translating, from: .zhHans, original: "x"),
+                                                   flipped: false, bilingual: true), [.chip("Translating…")])
+        XCTAssertEqual(SessionTranslation.replyFoot(ReplyTranslation(lang: .zhHans, failed: true), pending: false,
+                                                    flipped: false, bilingual: true),
+                       [.text("Couldn't translate this reply"), .action("Retry", .retryReply)])
+        XCTAssertEqual(SessionTranslation.replyFoot(nil, pending: true, flipped: false, bilingual: true),
+                       [.chip("Translates when the reply is done")])
+    }
+
+    func testTheEnglishBlockIsDrawnOnlyWhenBothTextsExist() {
+        let done = TurnTranslation(state: .done, from: .zhHans, original: "改吧")
+        XCTAssertEqual(SessionTranslation.userEnglish("Go ahead.", done, bilingual: true), "Go ahead.")
+        XCTAssertNil(SessionTranslation.userEnglish("Go ahead.", done, bilingual: false), "off: none")
+        XCTAssertNil(SessionTranslation.userEnglish("x", TurnTranslation(state: .translating, from: .zhHans, original: "x"),
+                                                    bilingual: true))
+        XCTAssertNil(SessionTranslation.userEnglish("x", TurnTranslation(state: .sentAsWritten, from: .zhHans, original: "x"),
+                                                    bilingual: true))
+        // A reply drawn whole: one whose blocks do not pair (two paragraphs translated as one).
+        XCTAssertEqual(SessionTranslation.replyEnglish("Done.\n\nAll tests pass.",
+                                                       ReplyTranslation(lang: .zhHans, text: "好了，测试全部通过。"), bilingual: true),
+                       "Done.\n\nAll tests pass.")
+        // One that pairs is drawn block by block instead, with no English under it.
+        XCTAssertNil(SessionTranslation.replyEnglish("Done.", ReplyTranslation(lang: .zhHans, text: "好了"), bilingual: true))
+        XCTAssertNil(SessionTranslation.replyEnglish("Done.", ReplyTranslation(lang: .zhHans, failed: true), bilingual: true))
+        XCTAssertNil(SessionTranslation.replyEnglish("Done.", nil, bilingual: true))
+        // With it on the bubble shows what they wrote whatever the old flip said; copy follows.
+        XCTAssertEqual(SessionTranslation.shownUserText("Go ahead.", done, flipped: false), "改吧")
+    }
+
+    func testALongRepliesEnglishCollapsesAndCodeIsNotRepeated() {
+        let long = [
+            "Done. The popup now opens synchronously on click:",
+            "1. The script preloads on page load in a useEffect;",
+            "2. The click handler no longer awaits before signInWithPopup;",
+            "```ts",
+            "useEffect(() => { void loadGoogleScript(); }, []);",
+            "```",
+            "3. A new LoginPage.safari.test.tsx covers this case.",
+            "All tests pass.",
+            "The fix is on the branch.",
+            "Safari keeps blocking popups that are opened after an await.",
+            "Chrome and Firefox were never affected.",
+            "Want me to open a pull request?",
+        ].joined(separator: "\n")
+        let english = BilingualEnglish.prose(long)
+        XCTAssertFalse(english.contains("loadGoogleScript(); }"), "a code block is drawn once, above")
+        // The same N the web counts for the same reply (Transcript.translation.test.tsx).
+        XCTAssertEqual(BilingualEnglish.lineCount(english), 10)
+        XCTAssertTrue(BilingualEnglish.collapses(english))
+        XCTAssertEqual(TranslationCopy.showEnglishLabel(lines: BilingualEnglish.lineCount(english)), "Show English · 10 lines")
+        let short = "Found it: Safari blocks popups that aren't opened directly by a click."
+        XCTAssertEqual(BilingualEnglish.lineCount(short), 2)
+        XCTAssertFalse(BilingualEnglish.collapses(short))
+        // A long line wraps every 60 characters; blank lines do not count; an unclosed fence stays.
+        XCTAssertEqual(BilingualEnglish.lineCount(String(repeating: "a", count: 121) + "\n\n\nb"), 4)
+        XCTAssertEqual(BilingualEnglish.prose("a\n```\nb"), "a\n```\nb")
     }
 
     // MARK: - The languages and the composer tag
 
-    func testTheSevenLanguagesInTheWebsOrderWithTheirNames() {
-        XCTAssertEqual(TranslationLanguage.allCases.map(\.rawValue), ["zh-Hans", "zh-Hant", "ja", "ko", "es", "fr", "de"])
-        XCTAssertEqual(TranslationLanguage.allCases.map(\.name), [
-            "Chinese (Simplified)", "Chinese (Traditional)", "Japanese", "Korean", "Spanish", "French", "German",
+    func testTheSharedListInItsOrderWithTheirNames() {
+        XCTAssertEqual(TranslationLanguage.allCases.map(\.rawValue), [
+            "en", "zh-Hans", "zh-Hant", "ja", "ko", "es", "fr", "de", "ru", "pt", "it", "nl", "ar", "hi", "tr",
+            "vi", "th", "id", "pl", "uk", "he", "sv", "cs", "da", "fi", "el", "hu", "ro", "ms", "bn",
         ])
+        XCTAssertEqual(TranslationLanguage.allCases.map(\.name), [
+            "English", "Chinese (Simplified)", "Chinese (Traditional)", "Japanese", "Korean", "Spanish", "French",
+            "German", "Russian", "Portuguese", "Italian", "Dutch", "Arabic", "Hindi", "Turkish", "Vietnamese",
+            "Thai", "Indonesian", "Polish", "Ukrainian", "Hebrew", "Swedish", "Czech", "Danish", "Finnish",
+            "Greek", "Hungarian", "Romanian", "Malay", "Bengali",
+        ])
+        XCTAssertEqual(TranslationLanguage.default, .zhHans)
+        XCTAssertEqual(TranslationLanguage.agentDefault, .en)
     }
 
-    func testTheComposerTagDropsTheParenthesis() {
-        XCTAssertEqual(TranslationLanguage.zhHans.tag, "Chinese → English")
-        XCTAssertEqual(TranslationLanguage.zhHant.tag, "Chinese → English")
-        XCTAssertEqual(TranslationLanguage.ja.tag, "Japanese → English")
+    func testTheComposerTagNamesTheAgentLanguageWithoutParentheses() {
+        XCTAssertEqual(TranslationLanguage.zhHans.tag(to: .en), "Chinese → English")
+        XCTAssertEqual(TranslationLanguage.zhHant.tag(to: .en), "Chinese → English")
+        XCTAssertEqual(TranslationLanguage.ja.tag(to: .en), "Japanese → English")
+        XCTAssertEqual(TranslationLanguage.en.tag(to: .zhHans), "English → Chinese")
+        XCTAssertEqual(TranslationLanguage.ko.tag(to: .de), "Korean → German")
+    }
+
+    func testTheSwitchsLineNamesTheAgentLanguage() {
+        XCTAssertTrue(TranslationCopy.translateConversationsHint(.en).hasPrefix("Agents read and write in English; "))
+        XCTAssertTrue(TranslationCopy.translateConversationsHint(.zhHans)
+            .hasPrefix("Agents read and write in Chinese (Simplified); you write and read in your language."))
+        XCTAssertFalse(TranslationCopy.translateConversationsHint(.ja).contains("English"))
     }
 
     func testTheComposerTagOpensSettingsOnSessions() {
         var nav = NavState()
-        nav.openSettings(at: .sessions)
+        nav.openSettings(at: .general)
         XCTAssertTrue(nav.settingsPresented)
-        XCTAssertEqual(nav.settingsPath, [.settingsPage(.sessions)])
+        XCTAssertEqual(nav.settingsPath, [.settingsPage(.general)])
     }
 
     // MARK: - Decoding a message's, a reply's and a card's translation
@@ -118,6 +256,45 @@ final class TranslationTests: XCTestCase {
         XCTAssertNil(TurnTranslation.parse(.object(["state": .string("DONE"), "from": .string("xx"),
                                                     "original": .string("x")])))
         XCTAssertNil(TurnTranslation.parse(nil))
+    }
+
+    func testAFailedTurnAndARefusalSayWhyInSharedsReasons() throws {
+        XCTAssertEqual(TranslationFailureReason.allCases.map(\.rawValue),
+                       ["TIMEOUT", "NETWORK", "HTTP", "EMPTY", "TRUNCATED", "MANGLED", "NO_KEY", "UNAVAILABLE"])
+        let http = TurnTranslation.parse(.object(["state": .string("FAILED"), "from": .string("ja"), "original": .string("x"),
+                                                  "failureReason": .string("HTTP"), "httpStatus": .int(503)]))
+        XCTAssertEqual(http, TurnTranslation(state: .failed, from: .ja, original: "x", failureReason: .http, httpStatus: 503))
+        for reason in TranslationFailureReason.allCases {
+            let t = TurnTranslation.parse(.object(["state": .string("FAILED"), "from": .string("ja"), "original": .string("x"),
+                                                   "failureReason": .string(reason.rawValue)]))
+            XCTAssertEqual(t?.failureReason, reason)
+            XCTAssertNil(t?.httpStatus)
+        }
+        // An unknown reason is no reason (the generic line), not a turn that cannot be read.
+        let unknown = TurnTranslation.parse(.object(["state": .string("FAILED"), "from": .string("ja"), "original": .string("x"),
+                                                     "failureReason": .string("COSMIC_RAY")]))
+        XCTAssertNotNil(unknown)
+        XCTAssertNil(unknown?.failureReason)
+        // The Decodable path (turn list, send answer) reads it the same way.
+        let rows = try decode([QueuedTurnInfo].self, """
+        [{"turnId":"t1","content":"x","translation":{"state":"FAILED","from":"zh-Hans","original":"x","failureReason":"TIMEOUT"}},
+         {"turnId":"t2","content":"x","translation":{"state":"FAILED","from":"zh-Hans","original":"x","failureReason":"HTTP","httpStatus":401}},
+         {"turnId":"t3","content":"x","translation":{"state":"FAILED","from":"zh-Hans","original":"x","failureReason":"NEW_ONE"}}]
+        """)
+        XCTAssertEqual(rows[0].turnTranslation?.failureReason, .timeout)
+        XCTAssertEqual(rows[1].turnTranslation?.failureReason, .http)
+        XCTAssertEqual(rows[1].turnTranslation?.httpStatus, 401)
+        XCTAssertNotNil(rows[2].turnTranslation)
+        XCTAssertNil(rows[2].turnTranslation?.failureReason)
+        // The 422 says why.
+        let refusal = APIError.http(status: 422, body: #"{"code":"TRANSLATION_FAILED","message":"x","failureReason":"HTTP","httpStatus":429}"#)
+        XCTAssertEqual(SessionTranslation.refusalReason(refusal)?.reason, .http)
+        XCTAssertEqual(SessionTranslation.refusalReason(refusal)?.httpStatus, 429)
+        let timeout = APIError.http(status: 422, body: #"{"code":"TRANSLATION_FAILED","failureReason":"TIMEOUT"}"#)
+        XCTAssertEqual(SessionTranslation.refusalReason(timeout)?.reason, .timeout)
+        XCTAssertNil(SessionTranslation.refusalReason(timeout)?.httpStatus)
+        XCTAssertNil(SessionTranslation.refusalReason(APIError.http(status: 422, body: #"{"code":"TRANSLATION_FAILED"}"#)))
+        XCTAssertNil(SessionTranslation.refusalReason(APIError.http(status: 500, body: #"{"failureReason":"TIMEOUT"}"#)))
     }
 
     func testTheTurnListAndTheSendAnswerCarryTheHeldMessage() throws {
@@ -167,6 +344,35 @@ final class TranslationTests: XCTestCase {
         XCTAssertEqual(failed.shownInput, info.input)
     }
 
+    /// After the answer (3A): the transcript's record finds the card's translation by its call and
+    /// shows the questions as the card did, the answer still read off the English result.
+    func testAnAnsweredQuestionKeepsItsCardsLanguage() throws {
+        let info = try decode([ApprovalInfo].self, """
+        [{"id":"a1","toolName":"AskUserQuestion","status":"ALLOWED","toolUseId":"toolu_q",
+          "input":{"questions":[{"question":"Which one?","header":"Pick",
+            "options":[{"label":"Yes","description":"Do it"},{"label":"No"}]}]},
+          "translation":{"lang":"zh-Hans","questions":[{"question":"哪一个？","header":"选择",
+            "options":[{"label":"是","description":"做"},{"label":"否","description":"不该出现"}]}]}},
+         {"id":"a2","toolName":"Bash","status":"ALLOWED","toolUseId":"toolu_b","input":{},
+          "translation":{"lang":"zh-Hans","description":"列出"}}]
+        """)
+        let byCall = ApprovalTranslation.byToolUse(info)
+        XCTAssertEqual(Array(byCall.keys), ["toolu_q"], "only question cards, by their call")
+        let asked = Approvals.parseQuestions(from: try XCTUnwrap(info[0].input))
+        let outcome = QuestionRecords.outcome(questions: asked, result: #"The user answered: "Which one?"="No". Read the answers carefully."#, isError: false)
+        XCTAssertEqual(outcome, .answered([QuestionAnswer(picked: [1], typed: nil)]))
+        let shown = ApprovalTranslation.shownQuestions(asked, byCall["toolu_q"])
+        XCTAssertEqual(shown.first?.question, "哪一个？")
+        XCTAssertEqual(shown.first?.header, "选择")
+        XCTAssertEqual(shown.first?.options.map(\.label), ["是", "否"])
+        XCTAssertEqual(shown.first?.options.map(\.description), ["做", nil], "no description where the original had none")
+        if case .answered(let answers)? = outcome {
+            XCTAssertEqual(QuestionRecords.answerLine(shown[0], answers[0]), "否")
+        }
+        XCTAssertEqual(ApprovalTranslation.shownQuestions(asked, ApprovalTranslation(lang: .zhHans, failed: true)), asked)
+        XCTAssertEqual(ApprovalTranslation.shownQuestions(asked, nil), asked)
+    }
+
     func testAPlanIsShownTranslated() {
         let input: JSONValue = .object(["plan": .string("Do the thing")])
         let shown = ApprovalTranslation.shownInput(input, ApprovalTranslation(lang: .de, plan: "Mach es"))
@@ -198,9 +404,9 @@ final class TranslationTests: XCTestCase {
     func testTheOwnersMessageFoot() {
         let done = TurnTranslation(state: .done, from: .zhHans, original: "修一下")
         XCTAssertEqual(SessionTranslation.userFoot(done, flipped: false),
-                       [.text("Translated"), .action("Show original", .flip)])
+                       [.action("Show original", .flip)])
         XCTAssertEqual(SessionTranslation.userFoot(done, flipped: true),
-                       [.text("Sent to the agent in English"), .action("Show translation", .flip)])
+                       [.action("Show translation", .flip)])
         XCTAssertEqual(SessionTranslation.userFoot(TurnTranslation(state: .translating, from: .zhHans, original: "x"), flipped: false),
                        [.chip("Translating…")])
         XCTAssertEqual(SessionTranslation.userFoot(TurnTranslation(state: .failed, from: .zhHans, original: "x"), flipped: false),
@@ -273,6 +479,22 @@ final class TranslationTests: XCTestCase {
         XCTAssertEqual(replies(reducer.state).first?.awaitsTranslation, true)
     }
 
+    func testAReplyAlreadyInTheOwnersLanguageIsDrawnAsItIs() {
+        var reducer = TranscriptReducer()
+        reducer.apply(user(1, english: "Fix it", original: "修一下"))
+        // On replay: the translator handed back the reply itself, spaces aside.
+        reducer.apply(event(2, .assistant, ["text": .string("找到了。"),
+                                            "translation": .object(["lang": .string("zh-Hans"), "text": .string("找到了。\n")])]))
+        XCTAssertNil(replies(reducer.state).first?.translation)
+        XCTAssertNil(replies(reducer.state).first?.awaitsTranslation, "nor waits for one")
+        // Live: the same, once the translation event arrives.
+        reducer.apply(event(3, .assistant, ["text": .string("改好了。")]))
+        XCTAssertEqual(replies(reducer.state).last?.awaitsTranslation, true)
+        reducer.apply(event(0, .translation, ["of": .int(3), "lang": .string("zh-Hans"), "text": .string("改好了。")], turn: nil))
+        XCTAssertNil(replies(reducer.state).last?.translation)
+        XCTAssertNil(replies(reducer.state).last?.awaitsTranslation)
+    }
+
     func testAReplyInAnUntranslatedTurnIsLeftAlone() {
         var reducer = TranscriptReducer()
         reducer.apply(event(1, .user, ["text": .string("Fix it")]))
@@ -337,9 +559,10 @@ final class TranslationTests: XCTestCase {
         XCTAssertEqual(reducer.state.queued.first?.translation?.state, .translating)
     }
 
-    /// Queued messages are drawn in the tray over the composer: a held one says where its translation
-    /// is, and cannot be steered.
-    func testTheTraySaysWhereAHeldMessageIs() {
+    /// Queued messages are drawn in the tray over the composer, but one held for its translation is not:
+    /// it stays in the conversation with its chip or its failure, since the tray only waits for the
+    /// engine (web parity: `inPendingTray`, board frame 6).
+    func testAHeldMessageStaysOutOfTheTray() {
         var reducer = TranscriptReducer()
         func held(_ id: String, _ state: String) -> QueuedTurnInfo {
             QueuedTurnInfo(turnId: id, kind: "message", content: id, placement: "queued",
@@ -350,8 +573,38 @@ final class TranslationTests: XCTestCase {
                                       QueuedTurnInfo(turnId: "t3", kind: "message", content: "plain", placement: "queued")],
                                      knownBefore: [])
         let rows = PendingTray.rows(state: reducer.state, withdrawing: [], steering: [], steerOffered: true)
-        XCTAssertEqual(rows.map(\.state), ["Couldn't translate, so it wasn't sent", "Translating…", "Queued for next turn"])
-        XCTAssertEqual(rows.map(\.offersSteer), [false, false, true])
+        XCTAssertEqual(rows.map(\.bubble.turnId), ["t3"])
+        XCTAssertEqual(rows.map(\.state), ["Queued for next turn"])
+        XCTAssertEqual(reducer.state.queued.filter { !PendingTray.holds($0) }.map(\.turnId), ["t1", "t2"])
+    }
+
+    /// Sent while held, the message stays in the conversation; translated with a turn ahead of it, the
+    /// next listing has it queued, and it moves to the tray (web parity: the snapshot re-places it).
+    func testATranslatedMessageWaitingBehindATurnMovesToTheTray() {
+        var reducer = TranscriptReducer()
+        reducer.addOptimisticUser(clientTurnId: "c1", text: "再跑一遍")
+        reducer.setOptimisticTurnId(clientTurnId: "c1", turnId: "t1",
+                                    translation: TurnTranslation(state: .translating, from: .zhHans, original: "再跑一遍"),
+                                    placement: "queued")
+        func listed(_ state: String, _ placement: String) -> QueuedTurnInfo {
+            QueuedTurnInfo(turnId: "t1", kind: "message", content: "再跑一遍", placement: placement,
+                           translation: .object(["state": .string(state), "from": .string("zh-Hans"),
+                                                 "original": .string("再跑一遍")]))
+        }
+        reducer.reconcileQueuedTurns([listed("TRANSLATING", "queued")], knownBefore: ["t1"])
+        XCTAssertEqual(users(reducer.state).map(\.turnId), ["t1"], "still being translated: in the conversation")
+        XCTAssertTrue(reducer.state.queued.isEmpty)
+        // Translated, and accepted as the next turn: it stays where it is.
+        reducer.reconcileQueuedTurns([listed("DONE", "accepted")], knownBefore: ["t1"])
+        XCTAssertEqual(users(reducer.state).map(\.turnId), ["t1"])
+        XCTAssertTrue(reducer.state.accepted.isEmpty, "drawn once, in the conversation")
+        // Translated with a turn ahead of it: the tray's.
+        reducer.reconcileQueuedTurns([listed("DONE", "queued")], knownBefore: ["t1"])
+        XCTAssertTrue(users(reducer.state).isEmpty)
+        XCTAssertEqual(reducer.state.queued.map(\.turnId), ["t1"])
+        XCTAssertEqual(reducer.state.queued.first?.queued, true)
+        XCTAssertEqual(PendingTray.rows(state: reducer.state, withdrawing: [], steering: [], steerOffered: false).map(\.state),
+                       ["Queued for next turn"])
     }
 
     func testTheSendAnswerPutsTheChipOnTheOptimisticBubble() {

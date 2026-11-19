@@ -7,6 +7,7 @@ import {
   SessionRunState,
   SessionState,
 } from './enums';
+import type { SessionCoordinatorHandoff, SessionCoordinatorHandoffReceived } from './coordinator-handoff';
 import type { SessionCapabilities } from './dto';
 import type { ConfirmationUnderReview } from './owner-confirmation-review';
 import type { SessionOwnerItem, SessionWaitingKind } from './project-progress';
@@ -91,6 +92,11 @@ export enum ControlEventType {
    *  `ControlResourceChanged` naming the request or credential and NOTHING else: a nudge to re-read
    *  `GET /terminals/requests` (the approve card) and `GET /terminals` (Settings → Terminals). */
   TERMINALS_CHANGED = 'terminals.changed',
+  /** Owner → agent translation became temporarily unavailable or available again (the translator circuit
+   *  breaker opened, opened again or closed; MeTranslation.translationUnavailableUntil). USER-SCOPED (see
+   *  above), sent to every user. `data` is a `ControlResourceChanged` whose id is `translation` and nothing
+   *  else: a nudge to read `GET /users/me` again. Shipped clients treat it as an unknown type. */
+  TRANSLATION_STATUS_CHANGED = 'translation.status_changed',
   /** The owner's Open list may read differently than it did. USER-SCOPED (see above). `data` is a
    *  `ControlListChanged`. Sent ONLY to a stream that declared it with
    *  `GET /api/events?hints=list_changed` (`CONTROL_HINT_LIST_CHANGED`): shipped clients treat a type
@@ -113,7 +119,7 @@ export interface ControlEvent {
   type: ControlEventType;
   /** The session this event is about — EMPTY for the user-scoped events (`task.list.changed` /
    *  `tag.changed` / `folder.changed` / `provider.changed` / `project.criteria_decisions.changed` /
-   *  `project.changed` / `watch.changed` / `wiki.changed` / `terminals.changed` / `sessions.list_changed`), which belong to the owner, not to any
+   *  `project.changed` / `watch.changed` / `wiki.changed` / `terminals.changed` / `translation.status_changed` / `sessions.list_changed`), which belong to the owner, not to any
    *  one session. Clients must dispatch on `type`, not on the presence of a
    *  session id. */
   sessionId: string;
@@ -311,6 +317,14 @@ export interface ControlSessionSummary {
    *  row then says "From Feishu · <name>". Null for anybody else and cleared with `lastUserText` — a value, as
    *  `lastUserFrom` is; only an absent key, from an older control plane, means "unchanged". */
   lastUserFromExternal?: ExternalMessageFrom | null;
+  /** On a project's outgoing coordinator: its handoff (coordinator-handoff.ts) — WRITING, HANDING_OVER,
+   *  FAILED with a reason, or COMPLETED naming its successor. Null when there is none (a cancelled one
+   *  included) — a value, so a row learns a handoff cleared; only an absent key, from an older control
+   *  plane, means "unchanged". */
+  coordinatorHandoff?: SessionCoordinatorHandoff | null;
+  /** On the successor: the previous coordinator, its note and the waits that moved here. Null on any
+   *  other session; same convention. */
+  coordinatorHandoffReceived?: SessionCoordinatorHandoffReceived | null;
 }
 
 /** `data` for `session.ended`. */

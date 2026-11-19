@@ -152,6 +152,8 @@ let merges: Array<Record<string, unknown>> = [];
 let startRequest: Record<string, unknown> | null = null;
 /** The exceptions the open-items door serves as the coordinator's — a blocked candidate's holder. */
 let withCoordinatorItems: Array<Record<string, unknown>> = [];
+/** The items the open-items door serves as the owner's — a coordinator's question. */
+let needsYouItems: Array<Record<string, unknown>> = [];
 let openItemsCalls = 0;
 /** The project's integration line, with whatever is landing on it. */
 let integrationView: Record<string, unknown> | null = null;
@@ -263,6 +265,7 @@ beforeEach(() => {
   merges = [];
   startRequest = null;
   withCoordinatorItems = [];
+  needsYouItems = [];
   openItemsCalls = 0;
   integrationView = null;
   ownerRequests = [];
@@ -308,7 +311,7 @@ beforeEach(() => {
     if (path === `/projects/${PROJECT_ID}/handoffs`) return reply([]);
     if (path === `/projects/${PROJECT_ID}/open-items`) {
       openItemsCalls += 1;
-      return reply({ needsYou: [], withCoordinator: withCoordinatorItems, startRequest });
+      return reply({ needsYou: needsYouItems, withCoordinator: withCoordinatorItems, startRequest });
     }
     if (path === `/projects/${PROJECT_ID}/integration`) return reply(integrationView ?? []);
     if (path === `/projects/${PROJECT_ID}/acceptance/confirmation`) return reply(null);
@@ -930,6 +933,38 @@ describe('the title bar’s Project sessions button', { timeout: 60_000 }, () =>
     expect(button().getAttribute('aria-pressed')).toBe('true');
   });
 
+  it('spins while anything its page shows is active, and stands still once nothing is', async () => {
+    const spinning = (): boolean => button().querySelector('.anticon-loading') !== null;
+    const idleTask = { ...TASK, status: 'AWAITING_INPUT', runState: 'AWAITING_INPUT', lastToolUse: null };
+    // A member at work (the fixture's task runs).
+    await mount(() => expect(mounted().querySelector('.workspace-header .workspace-name')?.textContent).toBe(COORDINATOR.title),
+      `/sessions/${COORDINATOR.id}`);
+    await until(() => expect(button().textContent).toBe('2'));
+    await until(() => expect(spinning()).toBe(true));
+    await unmount();
+    // Nothing at work: the glyph.
+    rows = [LOOSE, COORDINATOR, idleTask];
+    await mount(() => expect(mounted().querySelector('.workspace-header .workspace-name')?.textContent).toBe(COORDINATOR.title),
+      `/sessions/${COORDINATOR.id}`);
+    await until(() => expect(button().textContent).toBe('2'));
+    await settle();
+    expect(spinning()).toBe(false);
+    expect(button().querySelector('.orbit-button-icon svg')).not.toBeNull();
+    await unmount();
+    // A landing job queued on the line, every session idle.
+    integrationView = { line: null, upstreamRef: 'main', integratingCount: 0, queuedCount: 1, inFlight: null };
+    await mount(() => expect(mounted().querySelector('.workspace-header .workspace-name')?.textContent).toBe(COORDINATOR.title),
+      `/sessions/${COORDINATOR.id}`);
+    await until(() => expect(spinning()).toBe(true));
+    await unmount();
+    // A merge into main being checked.
+    integrationView = null;
+    currentPromotion = { id: 'promo-1', state: 'CHECKING' };
+    await mount(() => expect(mounted().querySelector('.workspace-header .workspace-name')?.textContent).toBe(COORDINATOR.title),
+      `/sessions/${COORDINATOR.id}`);
+    await until(() => expect(spinning()).toBe(true));
+  });
+
   it('remembers a hand fold in this browser until the button is pressed again', async () => {
     const stored = new Map<string, string>();
     vi.stubGlobal('localStorage', {
@@ -1201,7 +1236,9 @@ describe('a project row whose member is waiting on you', { timeout: 60_000 }, ()
     Object.defineProperty(HTMLElement.prototype, 'getBoundingClientRect', {
       configurable: true,
       value(this: HTMLElement) {
-        const top = this.classList.contains('owner-request-card') ? 900 - (scrollTops.get(conversation()!) ?? 0)
+        const waitingCard = this.classList.contains('owner-request-card') || this.classList.contains('coordinator-question')
+          || (this.classList.contains('review-card') && this.id.startsWith('question-'));
+        const top = waitingCard ? 900 - (scrollTops.get(conversation()!) ?? 0)
           : this.classList.contains('workspace-sessions') ? 100 : 0;
         return { top, bottom: top + 400, left: 0, right: 400, width: 400, height: 400, x: 0, y: top, toJSON: () => ({}) };
       },
@@ -1243,13 +1280,24 @@ describe('a project row whose member is waiting on you', { timeout: 60_000 }, ()
       }
     });
 
-    it('opens the coordinator when the coordinator itself is waiting, and moves nothing', async () => {
+    // Owner 2026-11-16 (docs/mocks/coordinator-question-jump): the coordinator waiting on you with a
+    // question opens at that question's card, as a waiting member opens at its own.
+    it('opens the coordinator when the coordinator itself is waiting, at its question', async () => {
       rows = [LOOSE, waitingCoordinator, waitingMember];
+      ownerRequests = [];
+      needsYouItems = [{
+        itemId: 'item-question', kind: 'COORDINATOR_QUESTION', title: 'Coordinator asks: Can you restore Nacos?',
+        detailLine: null, assignee: 'OWNER', assigneeReason: 'DEFAULT', escalateAt: null, escalatedAt: null,
+        taskId: null, sessionId: null, promotionId: null, fuseEpisodeId: null,
+        delivery: { state: 'NOT_REQUIRED', sessionId: null, at: null }, actions: [], facts: null,
+        waitingSince: '2026-10-03T09:00:00Z',
+        question: { question: 'Can you restore Nacos?', options: [{ label: 'I’ll restore it now' }], recommendedOption: 0, blocksTaskIds: [], ifUnanswered: null },
+      }];
       await mount();
       await click(projectRow(), 'the project row');
       await until(() => expect(location).toBe(coordinatorAddress));
-      await settle();
-      expect(conversation()!.scrollTop).toBe(0);
+      await until(() => expect(conversation()?.querySelector('#question-item-question')).not.toBeNull());
+      await until(() => expect(conversation()!.scrollTop).toBe(900 - 100 - 12));
     });
 
     it('opens the coordinator when nobody is waiting', async () => {

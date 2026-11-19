@@ -36,16 +36,12 @@ public struct SidebarSectionRow: Equatable, Sendable, Identifiable {
     public let section: AppSection
     /// What waits on the reader there — the drawer's amber count.
     public let waiting: Int
-    /// New wiki… under the Wiki row (docs/wiki-explicit-creation-design.md §3.4): it raises the Create wiki form and
-    /// selects nothing. `section` is then `.wiki`, the section it belongs to.
-    public let newWiki: Bool
 
-    public var id: String { newWiki ? "new-wiki" : "section:\(section.rawValue)" }
+    public var id: String { "section:\(section.rawValue)" }
 
-    public init(_ section: AppSection, waiting: Int = 0, newWiki: Bool = false) {
+    public init(_ section: AppSection, waiting: Int = 0) {
         self.section = section
         self.waiting = waiting
-        self.newWiki = newWiki
     }
 }
 
@@ -132,10 +128,12 @@ public enum AgentListLogic {
     /// The work rows the Mac source list opens with, in `sections`' order. `wiki` is the server's
     /// answer (`WikiLogic.shown`): a false one drops the Wiki row here, as data, so the List body
     /// holds no branch. The waiting counts are the drawer's amber numbers, 0 when nothing waits.
-    /// `newWiki` (there is a wiki already) adds the New wiki… row right under the Wiki row.
+    /// `scheduled` (the server serves scheduled tasks) adds Scheduled right under Tasks, as the drawer does
+    /// (`DrawerWorkLogic.rows(scheduled:)`, board docs/mocks/scheduled-tasks/web/01-board.png ①), its count the
+    /// schedules failing or held (`scheduledNeedsYou`). Account-wide: it is never a row of a workspace's list.
     public static func sidebarSections(_ sections: [AppSection], wiki: Bool,
                                        projectsWaiting: Int, wikiWaiting: Int,
-                                       newWiki: Bool = false) -> [SidebarSectionRow] {
+                                       scheduled: Bool = false, scheduledNeedsYou: Int = 0) -> [SidebarSectionRow] {
         sections.filter { $0 != .wiki || wiki }.flatMap { section -> [SidebarSectionRow] in
             let waiting: Int
             switch section {
@@ -144,7 +142,8 @@ public enum AgentListLogic {
             default:        waiting = 0
             }
             let row = SidebarSectionRow(section, waiting: waiting)
-            return section == .wiki && newWiki ? [row, SidebarSectionRow(.wiki, newWiki: true)] : [row]
+            if section == .tasks && scheduled { return [row, SidebarSectionRow(.scheduled, waiting: scheduledNeedsYou)] }
+            return [row]
         }
     }
 
@@ -162,13 +161,16 @@ public enum AgentListLogic {
         }.filter { seen.insert($0.id).inserted }
     }
 
-    /// Rule 9: the machines that get a Set up row, in the runner list's order. Online, with no
-    /// workspace of this account on them: an offline one is already what Machines & models says needs
-    /// you. A runner the server hasn't said is online is not one.
-    public static func machinesToSetUp(runners: [Runner], agents: [Agent]) -> [MachineToSetUp] {
+    /// Machines with no workspace, Orbit Cloud first: online machines and managed runners
+    /// whose setup card accepts a folder while preparing or asleep.
+    public static func machinesToSetUp(runners: [Runner], agents: [Agent], managedStatus: ManagedRunnerStatus? = nil) -> [MachineToSetUp] {
         let taken = Set(agents.compactMap(\.runnerId))
-        return runners.filter { !taken.contains($0.id) && isOnline($0) }
-            .map { MachineToSetUp(id: $0.id, name: RunnerPageFormat.displayName($0)) }
+        let managedID = ManagedRunnerLogic.display(managedStatus) == nil ? nil : managedStatus?.runnerId
+        let available = runners.filter { !taken.contains($0.id) && (isOnline($0) || ManagedRunnerLogic.managedSetupState(runnerID: $0.id, status: managedStatus) != nil) }
+        return RunnerPageFormat.managedFirst(available, managedRunnerID: managedID).map {
+            MachineToSetUp(id: $0.id, name: RunnerPageFormat.displayName($0, managedRunnerID: managedID),
+                           isManaged: RunnerPageFormat.isManaged($0, managedRunnerID: managedID))
+        }
     }
 
     /// `GET /runners`' answer for this machine, read the way the rest of the rail reads it.

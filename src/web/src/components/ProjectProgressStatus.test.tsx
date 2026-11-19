@@ -706,14 +706,44 @@ describe('ExceptionCards — the same items in the coordinator’s conversation'
       () => <ExceptionCards projectId={PROJECT_ID} now={NOW} />,
     );
 
-    expect(html).toContain('Now yours — no one acted on this for 2h');
+    // The owner exception card (board owner-exception-who-fixes, D3 = A): the heading carries no
+    // number, the one clock is the total wait, and there is no footer.
+    expect(html).toContain('Now yours — the coordinator didn’t get to it');
     expect(html).toContain('有存活 Monitor 的 warm engine 不回收（带硬上限）');
-    expect(html).toContain('Owner: you · waiting 2h 6m · came to the owner at 2h');
+    expect(html).toContain('<span class="project-open-item-clock">waiting 2h 6m</span>');
+    expect(html).toContain('Reachable. It had this for 2h and didn’t get to it.');
+    expect(html).not.toContain('Owner: you');
     expect(html).not.toContain('goes to the owner');
   });
 
+  it('says an escalated item\u2019s coordinator can\u2019t take messages when the server read it unreachable, and keeps the heading otherwise', () => {
+    // 2026-11-15: "no one acted on this" over doors and a chat that could not reach the coordinator.
+    const unreachable = paint(
+      {
+        needsYou: [{ ...ESCALATED, coordinatorUnreachable: true, actions: ['OPEN_TASK_SESSION', 'CANCEL_TASK'] }],
+        withCoordinator: [],
+      },
+      () => <ExceptionCards projectId={PROJECT_ID} now={NOW} />,
+    );
+    expect(unreachable).toContain('Now yours — the coordinator can’t take messages');
+    expect(unreachable).not.toContain('no one acted on this');
+
+    const reachable = paint(
+      { needsYou: [{ ...ESCALATED, coordinatorUnreachable: false }], withCoordinator: [] },
+      () => <ExceptionCards projectId={PROJECT_ID} now={NOW} />,
+    );
+    expect(reachable).toContain('Now yours — the coordinator didn’t get to it');
+    expect(reachable).not.toContain('can’t take messages');
+  });
+
   it('gives each other way an item became yours its own heading', () => {
-    const ended = { ...ESCALATED, assigneeReason: 'COORDINATOR_ENDED' as const };
+    // The heading is the live reading (board owner-exception-who-fixes part 6): an ended
+    // conversation is one Ask again is no longer drawn for.
+    const ended = {
+      ...ESCALATED,
+      assigneeReason: 'COORDINATOR_ENDED' as const,
+      actions: ['OPEN_TASK_SESSION', 'CANCEL_TASK'] as ProjectOpenItemRow['actions'],
+    };
     const chain = { ...ESCALATED, assigneeReason: 'CHAIN_LIMIT' as const };
     const handed = { ...ESCALATED, assigneeReason: 'HANDED_OVER' as const };
     const draw = (row: ProjectOpenItemRow) =>
@@ -770,6 +800,31 @@ describe('the exception card’s fact block', () => {
       () => <ExceptionCards projectId={PROJECT_ID} now={NOW} />,
     );
   }
+
+  it('draws the shared baseline card and links every held task', () => {
+    const html = card(item({ kind: 'INTEGRATION_CHECK_FAILED', detailLine: '', requiredAction: '', actions: [], facts: facts({ targetRef: 'refs/heads/project/payments' }),
+      baseline: { upstreamSha: 'upstream-sha', targetSha: 'target-sha', mergeTreeSha: 'baseline-sha',
+        check: { name: 'LANDING_CHECK', command: 'make fast', exitCode: 1, expectedExitCode: 0, timedOut: false, durationMs: 1 } },
+      heldTaskIds: ['34OEE9DwfWYjo3aRFuBgo', '34WvwUS8YMXfOfWbMqVuu'] }));
+    for (const text of ['Baseline checks failing on project/payments', 'The project branch with the latest main fails its checks without this task.',
+      'Landings on hold', 'Upstream', 'Project tip', 'Combined baseline', 'Landing check', 'View held tasks',
+      'upstream-sha', 'target-sha', 'baseline-sha', 'make fast', 'Landings resume automatically when this open item is resolved.']) expect(html).toContain(text);
+    expect(html).not.toContain('class="project-open-item-next"');
+    expect(html.match(/href="\/tasks\//g)).toHaveLength(2);
+  });
+
+  it('draws the same baseline card once the item escalated to the owner, not the who-fixes card', () => {
+    const html = card(item({ kind: 'INTEGRATION_CHECK_FAILED', assignee: 'OWNER', assigneeReason: 'ESCALATED',
+      escalatedAt: at(6 * MINUTE), detailLine: '', requiredAction: '', actions: [], facts: facts({ targetRef: 'refs/heads/project/payments' }),
+      baseline: { upstreamSha: 'upstream-sha', targetSha: 'target-sha', mergeTreeSha: 'baseline-sha',
+        check: { name: 'LANDING_CHECK', command: 'make fast', exitCode: 1, expectedExitCode: 0, timedOut: false, durationMs: 1 } },
+      heldTaskIds: ['34OEE9DwfWYjo3aRFuBgo', '34WvwUS8YMXfOfWbMqVuu'] }));
+    for (const text of ['Baseline checks failing on project/payments', 'The project branch with the latest main fails its checks without this task.',
+      'Landings on hold', 'Upstream', 'Project tip', 'Combined baseline', 'Landing check', 'View held tasks',
+      'upstream-sha', 'target-sha', 'baseline-sha', 'make fast', 'Landings resume automatically when this open item is resolved.']) expect(html).toContain(text);
+    expect(html).not.toContain('is-who-fixes');
+    expect(html.match(/href="\/tasks\//g)).toHaveLength(2);
+  });
 
   it('draws the check that failed: its command, its exit code and its output’s tail', () => {
     const html = card(CHECK_FAILED);
@@ -858,9 +913,10 @@ describe('the exception card’s fact block', () => {
       escalateAt: at(6 * MINUTE),
       escalatedAt: at(6 * MINUTE),
     });
-    expect(escalated).toContain('Now yours — no one acted on this for 2h');
+    // The owner exception card names it on its subline instead (board owner-exception-who-fixes ②).
+    expect(escalated).toContain('Now yours — the coordinator can’t take messages');
     expect(escalated).not.toContain(`Checks failed on the combined tree: ${TASK}`);
-    expect(escalated).toContain(`<span class="criteria-decision-k">Task</span><span class="criteria-decision-v">${TASK}</span>`);
+    expect(escalated).toContain(`<p class="project-open-item-subline">Checks failed · ${TASK}</p>`);
     expect(card(CONFLICT)).not.toContain('Merge conflict: runner 托管作业支持「事件发生时叫醒会话」');
   });
 
@@ -870,7 +926,10 @@ describe('the exception card’s fact block', () => {
     // And once the clock has made it the owner's, the same sentence in the past tense: how long the
     // coordinator had it before the wait ran out. That is what the escalation heading above it is
     // about, and the footer was the one line that did not say it.
-    expect(card(ESCALATED)).toContain('Owner: you · waiting 2h 6m · came to the owner at 2h');
+    // The owner exception card has no footer (D3 = A): one clock at the top right, and how long the
+    // coordinator had it moves into Details.
+    expect(card(ESCALATED)).toContain('<span class="project-open-item-clock">waiting 2h 6m</span>');
+    expect(card(ESCALATED)).not.toContain('project-open-item-foot');
   });
 
   it('draws what it can when the payload carries none of it, rather than throwing', () => {
@@ -914,7 +973,8 @@ describe('the exception cards’ presses', () => {
     const html = card(ESCALATED);
 
     expect(html).toContain('Ask the coordinator again');
-    expect(html).toContain('Open task session');
+    // The task session is "Fix it myself" on the owner exception card (board ② 2).
+    expect(html).toContain('Fix it myself');
     expect(html).toContain('Cancel task');
     // The work is the coordinator's to run again (§4.7) — the owner's press is to ask, which is
     // why the server lists no RETRY on an item it escalated.
@@ -924,7 +984,7 @@ describe('the exception cards’ presses', () => {
   it('sends an escalated merge-into-main failure back to its coordinator, beside the merge card', () => {
     const html = card(ESCALATED_MERGE_CHECK);
 
-    expect(html).toContain('Now yours — no one acted on this for 2h');
+    expect(html).toContain('Now yours — the coordinator didn’t get to it');
     expect(html).toContain('Ask the coordinator again');
     expect(html).toContain('href="#promotion-3fFMHLbE7JTsr3vHFOzIDM"');
     // About the candidate and no task: nothing here runs, opens or stops one.
@@ -988,6 +1048,25 @@ function actionRow(html: string): { label: string; weight: Weight }[] {
   });
 }
 
+/** The owner exception card's presses, by the group it draws them in (board
+ *  owner-exception-who-fixes ②): the coordinator row, the You row, and "Already settled?". */
+function whoFixesPresses(html: string): Record<'coordinator' | 'you' | 'settled', { label: string; weight: Weight }[]> {
+  const doc = new DOMParser().parseFromString(html, 'text/html');
+  const read = (el: Element | null) =>
+    Array.from(el?.querySelectorAll<HTMLElement>('button, a') ?? []).map((press) => {
+      const variant = press.className.match(/orbit-button-(primary|default|link)\b/)?.[1];
+      const weight: Weight = press.tagName === 'A' || variant === 'link'
+        ? 'link'
+        : variant === 'primary' ? 'primary' : 'secondary';
+      return { label: press.textContent?.trim() ?? '', weight };
+    });
+  return {
+    coordinator: read(doc.querySelector('[data-who="coordinator"]')),
+    you: read(doc.querySelector('[data-who="you"]')),
+    settled: read(doc.querySelector('.project-open-item-settled')),
+  };
+}
+
 /**
  * The action row's three weights (mock 7, 方案 B): four equal buttons became the press this kind of
  * exception is asking for, the other way to take the same step, and — behind both — the two doors
@@ -1008,26 +1087,28 @@ describe('the exception card’s action row', () => {
     );
   }
 
-  it('draws an escalated card as one press, one alternative, and two text links', () => {
-    // 方案 B, and not 方案 C: the way back to the coordinator leads, the way onto the run is the one
-    // press beside it, and both endings — stopping the task, and the owner's own "handled" — are
-    // links at the end of the row rather than a third button beside them.
-    expect(actionRow(card(ESCALATED))).toEqual([
-      { label: 'Ask the coordinator again', weight: 'primary' },
-      { label: 'Open task session', weight: 'secondary' },
-      { label: 'Cancel task', weight: 'link' },
-      { label: 'Mark as handled', weight: 'link' },
-    ]);
+  it('draws an escalated card as who fixes it — the coordinator, you — and the two endings apart', () => {
+    // Board owner-exception-who-fixes ②: the way back to the coordinator leads its row, the way onto
+    // the run is "Fix it myself" in the owner's row, and both endings are links under "Already
+    // settled?".
+    expect(whoFixesPresses(card(ESCALATED))).toEqual({
+      coordinator: [{ label: 'Ask the coordinator again', weight: 'primary' }],
+      you: [{ label: 'Fix it myself', weight: 'secondary' }],
+      settled: [
+        { label: 'Mark as handled', weight: 'link' },
+        { label: 'Cancel task', weight: 'link' },
+      ],
+    });
   });
 
   it('leads an escalated merge-into-main failure with the way back to the coordinator', () => {
-    // No task to open or stop: the press is the hand-back, and the merge card and the owner's own
-    // "handled" are the links behind it.
-    expect(actionRow(card(ESCALATED_MERGE_CHECK))).toEqual([
-      { label: 'Ask the coordinator again', weight: 'primary' },
-      { label: 'Review', weight: 'link' },
-      { label: 'Mark as handled', weight: 'link' },
-    ]);
+    // No task to open or stop: the press is the hand-back, the merge card is the owner's way in, and
+    // the owner's own "handled" is the ending.
+    expect(whoFixesPresses(card(ESCALATED_MERGE_CHECK))).toEqual({
+      coordinator: [{ label: 'Ask the coordinator again', weight: 'primary' }],
+      you: [{ label: 'Review', weight: 'link' }],
+      settled: [{ label: 'Mark as handled', weight: 'link' }],
+    });
   });
 
   it('leads a conflict with the way onto the branch, and draws no Retry under it', () => {
@@ -1164,9 +1245,11 @@ describe('T10 required actions and current-candidate doors', () => {
     );
     const parsed = new DOMParser().parseFromString(html, 'text/html');
     const body = parsed.querySelector('.project-open-item-body')!;
-    expect(body.querySelector('.project-open-item-required-action')?.textContent).toContain('Nothing on the project branch');
+    // The owner exception card (board owner-exception-who-fixes ②) says what to do as "Who fixes
+    // it?" rather than as the server's sentence, and still says the coordinator is fixing it.
+    expect(body.querySelector('.project-open-item-required-action')).toBeNull();
     expect(body.querySelector('.project-open-item-handled-by')?.textContent).toContain('repair the combined tree');
-    expect(body.querySelector('.project-open-item-actions .orbit-button-primary')?.textContent).toContain('Ask the coordinator again');
+    expect(body.querySelector('[data-who="coordinator"] .orbit-button-primary')?.textContent).toContain('Ask the coordinator again');
     expect(body.querySelectorAll('.project-open-item-consequence').length).toBeGreaterThanOrEqual(2);
     expect(ACTION_CONSEQUENCES.MARK_HANDLED).toContain('reason');
   });
@@ -1220,12 +1303,17 @@ describe('T10 required actions and current-candidate doors', () => {
       { needsYou: [row], withCoordinator: [] },
       () => <ExceptionCards projectId={PROJECT_ID} now={NOW} />,
     );
-    expect(actionRow(html)).toEqual([
-      { label: 'Ask the coordinator again', weight: 'primary' },
-      { label: RERUN_CHECK_ACTION_LABEL, weight: 'secondary' },
-      { label: 'Review', weight: 'link' },
-      { label: 'Mark as handled', weight: 'link' },
-    ]);
+    expect(whoFixesPresses(html)).toEqual({
+      coordinator: [
+        { label: 'Ask the coordinator again', weight: 'primary' },
+        { label: 'or Chat about this first', weight: 'link' },
+      ],
+      you: [
+        { label: RERUN_CHECK_ACTION_LABEL, weight: 'secondary' },
+        { label: 'Review', weight: 'link' },
+      ],
+      settled: [{ label: 'Mark as handled', weight: 'link' }],
+    });
     // The re-check states its own consequence, not the landing rerun's.
     expect(html).toContain(PROMOTION_RETRY_CONSEQUENCE);
   });

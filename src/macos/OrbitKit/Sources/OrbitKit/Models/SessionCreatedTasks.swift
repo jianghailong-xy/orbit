@@ -26,8 +26,8 @@ public struct SessionCreatedTasks: Codable, Equatable, Sendable {
     public let failed: Int
     /// Rows whose status is DONE.
     public let done: Int
-    /// The first `limit` rows: Failed, Running, Queued, the rest of the unfinished, Done, Cancelled,
-    /// newest first within each.
+    /// The first `limit` rows, as the Agents list orders its runs: the running ones first, then
+    /// every other row newest first, whatever its status.
     public let items: [SessionCreatedTaskRow]
     /// The projects `items` belong to, each once, in the order `items` first names them.
     public let projects: [Named]

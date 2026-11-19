@@ -67,7 +67,7 @@ func nullableEngineEnum() []interface{} {
 const providerHelp = `orbit provider — list and configure the providers sessions and tasks get their credentials from
 
 Usage:
-  orbit provider list [--json]
+  orbit provider list [--workspace NAME_OR_ID] [--json]
   orbit provider create --label LABEL --base-url URL (--api-key KEY | --api-key-file -) --models JSON [options]
   orbit provider create --label LABEL --runtime cursor (--api-key KEY | --api-key-file -) [--json]
   orbit provider update SLUG [options]
@@ -80,7 +80,7 @@ var providerActionHelp = map[string]string{
 	"list": `orbit provider list — list the provider slugs this owner may dispatch with
 
 Usage:
-  orbit provider list [--json]
+  orbit provider list [--workspace NAME_OR_ID] [--json]
 
 A provider is where a session's credential comes from; the engine is the CLI that runs it
 (--engine: claude for Claude Code, codex for Codex, kimi for Kimi Code, antigravity for
@@ -95,6 +95,13 @@ DeepSeek key. The rest are the account's API keys, each with the protocol its en
 ("runtime") and the models it offers, and its account pools. One key can run on several
 engines: a DeepSeek key on Claude Code, OpenCode and DeepSeek Harness. A slug that is not on
 this list is refused with "provider not available".
+
+--workspace NAME_OR_ID answers instead for one workspace of the account: every provider ×
+engine with "usable" true or false, as SubAgent routing judges it on that workspace's runner
+(installed, signed in, quota, the SubAgent block list), a one-line "reason" when false, and the
+models usable there. The pair the workspace's sessions start on is marked "default", and
+"default" at the top says whether that one can run. Check a workspace this way before
+delegating to it or opening a session on it. A workspace that is not the account's is refused.
 `,
 	"create": `orbit provider create — configure a provider on this account, e.g. a self-hosted endpoint
 
@@ -214,17 +221,21 @@ func cmdProviderCLI(args []string, in io.Reader, out io.Writer) error {
 func cliProviderList(args []string, out io.Writer) error {
 	fs := newCLIFlagSet("orbit provider list")
 	jsonOut := fs.Bool("json", false, "emit compact JSON")
+	workspace := fs.String("workspace", "", "judge every provider × engine against this workspace's runner (name or id)")
 	if err := fs.Parse(args); err != nil {
 		return err
 	}
 	if err := rejectTrailing(fs); err != nil {
 		return err
 	}
+	if flagWasSet(fs, "workspace") && strings.TrimSpace(*workspace) == "" {
+		return fmt.Errorf("--workspace cannot be empty")
+	}
 	t, err := cliTransport()
 	if err != nil {
 		return err
 	}
-	raw, err := t.listProviders()
+	raw, err := t.listProviders(strings.TrimSpace(*workspace))
 	if err != nil {
 		return fmt.Errorf("list providers: %w", err)
 	}

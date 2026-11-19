@@ -9,6 +9,7 @@ import androidx.compose.ui.test.junit4.createAndroidComposeRule
 import io.orbitd.android.core.auth.AuthState
 import io.orbitd.android.core.realtime.ConnectionState
 import io.orbitd.android.directory.SessionListCopy
+import io.orbitd.android.navigation.ObjectId
 import java.time.Instant
 import java.time.temporal.ChronoUnit
 import kotlinx.coroutines.CompletableDeferred
@@ -231,18 +232,23 @@ class SessionListPageShellTest {
         assertFalse(exists(hasTestTag("directory-list")))
     }
 
-    /** The list's first thing, from a list that shows no single session: everything waiting is elsewhere. It floats over the list's
-     * top (the owner, 2026-11-15, `docs/mocks/needs-you-capsule/04-floating`) — the list runs on under it — and at rest the first
-     * row starts below it. */
-    @Test fun theNeedsYouCapsuleIsAtTheTopOfTheList() {
+    /** What waits is said once, as it starts (the owner, 2026-11-15, `docs/mocks/needs-you-capsule/12-once`): no bar over the list
+     * for what already waited at sign-in, one notice at the top for a session that then starts waiting, and the count on ≡ always. */
+    @Test fun aSessionThatStartsWaitingIsNoticedOnceAtTheTop() {
         NavShell.extra = mapOf("open" to listOf(NavShell.row("34A05cSessionWaiting1", "Waiting row", pending = 1)))
         signIn()
-        await { exists(hasTestTag("needs-you-bar")) && exists(hasRowMenu("Options for Waiting row")) }
-        val bar = compose.onNodeWithTag("needs-you-bar").fetchSemanticsNode().boundsInRoot
+        await { exists(hasRowMenu("Options for Waiting row")) && exists(hasTestTag("needs-you-menu-badge"), unmerged = true) }
+        assertFalse("what waited at sign-in is not news", exists(hasTestTag("needs-you-toast")))
+        NavShell.extra = mapOf("open" to listOf(NavShell.row("34A05cSessionWaiting1", "Waiting row", pending = 1),
+            NavShell.row("34A05cSessionWaiting2", "Second row", pending = 1)))
+        app().realtime.refreshDirectory()
+        await { exists(hasTestTag("needs-you-toast-title") and hasText("Second row"), unmerged = true) }
+        compose.onAllNodesWithTag("needs-you-toast").assertCountEquals(1)
+        val notice = compose.onNodeWithTag("needs-you-toast").fetchSemanticsNode().boundsInRoot
         val list = compose.onNodeWithTag("directory-list").fetchSemanticsNode().boundsInRoot
-        assertTrue("over the list, at its top", bar.top <= list.top + 1 && bar.bottom > list.top + 1)
-        assertTrue("the first row clear of it", compose.onNode(hasRowMenu("Options for Waiting row")).fetchSemanticsNode().boundsInRoot.top >=
-            bar.bottom - 1)
+        assertTrue("at the top, over the list: $notice in $list", notice.top < list.top + notice.height)
+        compose.onNodeWithTag("needs-you-toast").performClick()
+        await { !exists(hasTestTag("needs-you-toast")) && exists(hasContentDescription("Back")) }
     }
 
     /** iOS: a list that opens on today would be saying what its rows say. Later sections, and a Pinned that leads, keep their titles. */
@@ -283,7 +289,7 @@ class SessionListPageShellTest {
         val row = hasTestTag("folder-row:34A05cFolderResearch1")
         await { exists(row) }
         assertFalse("filed rows are behind their folder", exists(hasRowMenu("Options for Filed row")))
-        assertEquals("1 waiting for you", compose.onNode(row).fetchSemanticsNode().config.getOrNull(SemanticsProperties.StateDescription))
+        assertEquals("1 waiting for you. 1 sessions", compose.onNode(row).fetchSemanticsNode().config.getOrNull(SemanticsProperties.StateDescription))
         compose.onNode(row).assert(hasText("Research", substring = true)).assert(hasRowMenu("Options for Research"))
         compose.onNode(row).performClick()
         await { exists(hasRowMenu("Options for Filed row")) }
@@ -293,13 +299,65 @@ class SessionListPageShellTest {
         compose.onNodeWithContentDescription("Start a new session in Research").assertExists()
         compose.onAllNodesWithTag("session-search").assertCountEquals(0)
         compose.onAllNodes(hasContentDescription("Session scope", substring = true)).assertCountEquals(0)
-        compose.onAllNodesWithTag("needs-you-bar").assertCountEquals(0)
+        compose.onAllNodesWithTag("needs-you-toast").assertCountEquals(0)
         // Its ⋯ opens the folder's dialog, which holds a text field and never settles in Robolectric: DirectoryDeviceTest presses it.
         compose.onNodeWithContentDescription("Folder actions").assertExists()
         compose.onNodeWithContentDescription("Back").performClick()
         await { exists(hasTestTag("folder-row:34A05cFolderEmpty0001")) }
         compose.onNodeWithTag("folder-row:34A05cFolderEmpty0001").performClick()
         await { exists(hasText("Nothing in this folder")) }
+    }
+
+    @Test fun scheduledRunsKeepTheirFolderAndViewWhenReturningFromTheSession() {
+        val run = NavShell.row(NavShell.RUN, "Completed run", fields = ""","runSource":"SCHEDULE"""")
+        NavShell.lifecycle = NavShell.lifecycle + (NavShell.RUN to "COMPLETED")
+        NavShell.scheduled = mapOf("completed" to listOf(run))
+        NavShell.extra = mapOf("completed" to listOf(run))
+        signIn()
+        val folder = hasTestTag("folder-row:scheduled")
+        val session = hasRowMenu("Options for Completed run")
+        await { exists(review) }
+        compose.onNode(folder).assertDoesNotExist()
+        compose.pickFromSessionOptions("Completed")
+        await { exists(folder) }
+        compose.onNode(session).assertDoesNotExist()
+        compose.onNode(folder).assert(SemanticsMatcher.keyNotDefined(SemanticsActions.OnLongClick)).performClick()
+        await { exists(session) }
+        compose.onNode(hasText("Scheduled runs") and hasAnyAncestor(hasTestTag("app-bar")), useUnmergedTree = true).assertExists()
+        compose.onNode(hasText("Alpha") and hasAnyAncestor(hasTestTag("app-bar")), useUnmergedTree = true).assertExists()
+        compose.onNodeWithContentDescription("Folder actions").assertDoesNotExist()
+        compose.onNode(session).performClick()
+        await { exists(hasContentDescription("Session actions")) }
+        compose.onNodeWithContentDescription("Back").performClick()
+        await { exists(session) }
+
+        NavShell.scheduled = emptyMap()
+        app().realtime.refreshDirectory()
+        await { exists(hasText("No scheduled runs here.")) }
+    }
+
+    @Test fun scheduleHistoryOpensTheSessionInItsOwnWorkspacesScheduledRunsFolder() {
+        NavShell.scheduleHistory = true
+        NavShell.lifecycle = NavShell.lifecycle + (NavShell.RUN to "COMPLETED")
+        NavShell.scheduled = mapOf("completed" to listOf(NavShell.row(
+            NavShell.RUN, "Completed run", fields = ""","runSource":"SCHEDULE"""")))
+        signIn()
+        await { exists(review) }
+        openDrawer()
+        compose.onNodeWithTag("drawer:scheduled").performClick()
+        val schedule = hasTestTag("schedule-row") and hasText("Daily check")
+        await { exists(schedule) }
+        compose.onNode(schedule).performClick()
+        await { exists(hasTestTag("schedule-history-run")) }
+        compose.onNodeWithTag("schedule-history-run").performClick()
+        await { exists(hasContentDescription("Session actions")) && ObjectId.same(app().realtime.state.value.session?.id, NavShell.RUN) }
+        openDrawer()
+        await { exists(drawerRow("Alpha") and isSelected()) }
+        compose.onNodeWithTag("drawer:scheduled").assertIsNotSelected()
+        compose.onNode(drawerRow("Alpha")).assertIsSelected().performClick()
+        compose.onNodeWithContentDescription("Back").performClick()
+        await { exists(hasRowMenu("Options for Completed run")) }
+        compose.onNode(hasText("Scheduled runs") and hasAnyAncestor(hasTestTag("app-bar")), useUnmergedTree = true).assertExists()
     }
 
     /** No connection: the rows stay and the list says nothing. The drawer heads its workspaces with why, in iOS's words. */

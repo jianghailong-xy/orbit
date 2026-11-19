@@ -1,0 +1,185 @@
+<!doctype html>
+<html lang="zh">
+<head>
+<meta charset="utf-8">
+<style>
+:root{--bg:#f6f6f4;--card:#fff;--line:#e6e4df;--text:#1d1d1b;--t2:#55534e;--t3:#8b8882;--acc:#d97757;--accbg:#fbeee8;--blue:#2f6fde;--ok:#2e8b57;--warn:#c4581b;--bub:#efede8}
+*{box-sizing:border-box}
+body{margin:0;background:#e9e7e2;font-family:-apple-system,BlinkMacSystemFont,'PingFang SC',sans-serif;color:var(--text)}
+.board{width:2160px;padding:40px;background:#e9e7e2}
+h1{font-size:30px;margin:0 0 6px}
+.sub{color:var(--t2);font-size:16px;margin-bottom:28px;line-height:1.6}
+.row{display:flex;gap:28px;align-items:flex-start;margin-bottom:32px}
+.frame{background:#fff;border-radius:14px;box-shadow:0 2px 10px rgba(0,0,0,.08);overflow:hidden}
+.cap{font-size:15px;font-weight:600;margin:0 0 10px;color:#333}
+.cap small{font-weight:400;color:var(--t2);margin-left:6px}
+.num{display:inline-flex;width:24px;height:24px;border-radius:12px;background:var(--acc);color:#fff;font-size:13px;align-items:center;justify-content:center;margin-right:6px;font-weight:700}
+.mk{display:inline-flex;width:20px;height:20px;border-radius:10px;background:var(--acc);color:#fff;font-size:11px;align-items:center;justify-content:center;font-weight:700;vertical-align:middle;margin-left:6px;box-shadow:0 0 0 2px #fff}
+/* web console */
+.w{background:var(--bg);font-size:14px}
+.w-top{height:44px;border-bottom:1px solid var(--line);display:flex;align-items:center;padding:0 16px;gap:10px;background:#fbfbfa;color:var(--t2);font-size:13px}
+.w-page{padding:22px 0 26px}
+.w-col{max-width:560px;margin:0 auto}
+.w h2.pt{font-size:22px;margin:0 0 16px}
+.card{background:#fff;border:1px solid var(--line);border-radius:10px;padding:12px 16px;margin-bottom:16px}
+.card.new{outline:2.5px solid var(--acc);outline-offset:3px}
+.card .ct{font-weight:600;font-size:14px;padding:2px 0 6px;border-bottom:1px solid var(--line);margin-bottom:2px}
+.field{display:flex;justify-content:space-between;align-items:center;gap:16px;padding:10px 0}
+.field .h{color:var(--t3);font-size:12px;line-height:1.45;margin-top:2px}
+.sw{width:34px;height:20px;border-radius:10px;background:#cfccc6;position:relative;flex:none}
+.sw::after{content:'';position:absolute;top:2px;left:2px;width:16px;height:16px;border-radius:8px;background:#fff}
+.sw.on{background:var(--acc)}.sw.on::after{left:16px}
+.sw.dis{opacity:.45}
+.sel{border:1px solid var(--line);border-radius:7px;padding:5px 10px;width:200px;display:flex;justify-content:space-between;font-size:13px;background:#fff;flex:none}
+.sel.dis{color:var(--t3);background:#f4f3f0}
+.dim{opacity:.38}
+.notice{background:#fff7e8;border:1px solid #f1d9a8;border-radius:8px;padding:8px 10px;font-size:12px;color:#7a5512;margin:8px 0 4px}
+/* web transcript */
+.tr{padding:18px 26px;font-size:14px;line-height:1.6}
+.u{display:flex;flex-direction:column;align-items:flex-end;margin:6px 0 14px}
+.ub{background:var(--bub);border-radius:14px;padding:9px 13px;max-width:78%}
+.foot{font-size:12px;color:var(--t3);margin-top:4px;display:flex;gap:8px;align-items:center}
+.foot a{color:var(--t2);text-decoration:underline;text-underline-offset:2px}
+.foot .tg{display:inline-flex;align-items:center;gap:4px}
+.a{margin:4px 0 12px}
+.a p{margin:0 0 6px}
+.tool{font-family:'SF Mono',monospace;font-size:12.5px;color:var(--t2);background:#f4f3f0;border-radius:7px;padding:6px 10px;margin:8px 0}
+.orig{border-left:3px solid var(--line);padding-left:10px;color:var(--t2)}
+.stream::after{content:'▍';color:var(--acc)}
+.chip{font-size:11.5px;background:#f0eee9;color:var(--t2);border-radius:10px;padding:1px 8px}
+.err{color:var(--warn)}
+.composer{margin:10px 26px 18px;border:1px solid var(--line);border-radius:12px;background:#fff;padding:10px 12px;font-size:14px;color:var(--t3);display:flex;justify-content:space-between;align-items:center}
+.composer .lang{font-size:12px;color:var(--t2);background:#f4f3f0;border-radius:8px;padding:2px 8px}
+.cardq{border:1px solid var(--line);border-radius:10px;padding:10px 12px;background:#fff;margin:8px 0}
+.opt{border:1px solid var(--line);border-radius:8px;padding:6px 10px;margin-top:6px;font-size:13px}
+/* phones */
+.ph{width:393px;height:852px;border-radius:44px;background:#000;padding:10px;flex:none}
+.ps{width:373px;height:832px;border-radius:36px;overflow:hidden;background:#f2f2f7;position:relative;font-size:15px}
+.ps.and{background:#fbf8f6;border-radius:28px}
+.stat{height:48px;display:flex;justify-content:space-between;align-items:flex-end;padding:0 28px 6px;font-size:14px;font-weight:600}
+.nav{padding:6px 16px 8px;display:flex;align-items:center;gap:10px}
+.nav .t{font-size:17px;font-weight:600;flex:1;text-align:center}
+.nav .bk{color:var(--blue);font-size:16px}
+.big{font-size:32px;font-weight:700;padding:4px 18px 10px}
+.grp{margin:0 16px 6px;background:#fff;border-radius:12px;overflow:hidden}
+.gh{font-size:12.5px;color:#6d6d72;text-transform:uppercase;padding:14px 32px 6px}
+.gf{font-size:12.5px;color:#6d6d72;padding:6px 32px 10px;line-height:1.4}
+.cell{display:flex;justify-content:space-between;align-items:center;padding:11px 16px;border-bottom:1px solid #e5e5ea}
+.cell:last-child{border-bottom:0}
+.cell .v{color:#8e8e93}
+.isw{width:51px;height:31px;border-radius:16px;background:#e9e9eb;position:relative}
+.isw::after{content:'';position:absolute;top:2px;left:2px;width:27px;height:27px;border-radius:14px;background:#fff;box-shadow:0 1px 3px rgba(0,0,0,.2)}
+.isw.on{background:#34c759}.isw.on::after{left:22px}
+.hl{outline:2.5px solid var(--acc);outline-offset:-2px}
+.pt2{padding:8px 14px;font-size:15px;line-height:1.5}
+.pt2 .ub{background:#e9e9eb;max-width:85%}
+.pcomp{position:absolute;left:12px;right:12px;bottom:26px;background:#fff;border-radius:20px;padding:10px 14px;color:#8e8e93;font-size:15px;box-shadow:0 1px 4px rgba(0,0,0,.08)}
+.and .cell{border-bottom:0;padding:14px 18px}
+.and .grp{background:transparent;margin:0}
+.and .gh{text-transform:none;color:#8a4b32;font-weight:600;font-size:13.5px;padding:16px 18px 2px}
+.asw{flex:none;width:52px;height:32px;border-radius:16px;background:#e7e0dc;border:2px solid #85736b;position:relative}
+.asw::after{content:'';position:absolute;top:6px;left:6px;width:16px;height:16px;border-radius:8px;background:#85736b}
+.asw.on{background:#8a4b32;border-color:#8a4b32}.asw.on::after{left:24px;top:2px;width:24px;height:24px;border-radius:12px;background:#fff}
+.atop{padding:10px 8px 10px 14px;display:flex;gap:16px;align-items:center;font-size:20px}
+/* notes */
+.notes{background:#fff;border-radius:14px;padding:22px 26px;font-size:14.5px;line-height:1.65;box-shadow:0 2px 10px rgba(0,0,0,.06)}
+.notes h3{margin:0 0 10px;font-size:18px}
+table{border-collapse:collapse;width:100%;font-size:13.5px}
+td,th{border-bottom:1px solid #eee;padding:7px 8px;text-align:left;vertical-align:top}
+th{color:#666;font-weight:600;background:#faf9f7}
+code{font-family:'SF Mono',monospace;font-size:12.5px;background:#f3f1ec;padding:1px 5px;border-radius:4px}
+.dec{border:2px dashed var(--acc);background:#fffaf7}
+.dec li{margin-bottom:10px}
+.rec{color:var(--ok);font-weight:600}
+.pair{margin:0 0 12px}
+.pair .zh{margin:0}
+.pair .en{margin:2px 0 0;color:#8b8882;font-size:.9em;line-height:1.5}
+.pair.li{display:grid;grid-template-columns:18px 1fr;column-gap:4px}
+.pair.li .dot{color:var(--t2)}
+.bi{margin-top:6px;padding-top:6px;border-top:1px dashed #d9d6d0;color:#8b8882;font-size:.92em;line-height:1.5}
+.bi p{margin:0 0 6px}
+.h4{font-weight:700;margin:14px 0 6px}
+.h4 .en{font-weight:600}
+.cmk{display:inline-flex;width:18px;height:18px;border-radius:9px;background:var(--acc);color:#fff;font-size:10.5px;align-items:center;justify-content:center;font-weight:700;margin-left:6px;vertical-align:middle}
+</style></head><body><div class="board">
+<h1>Show both languages · 逐段对照（一行原文一行译文）</h1>
+<div class="sub">今天：整条回复先全是中文，虚线下再全是英文——长回复要上下来回找对应句子。提议：按<b>段落 / 列表项 / 标题</b>配对，每个块先显示你的语言，紧跟着一行灰色小一号的原文。代码块、工具行只出现一次。界面文字一律英文，标注用中文。</div>
+
+<div class="row">
+  <div>
+    <div class="cap"><span class="num">1</span>今天（已上线）<small>整块中文 + 整块英文</small></div>
+    <div class="frame w" style="width:640px;background:#fff">
+      <div class="tr">
+        <p style="margin:0 0 8px">“显示两种语言”现在已在 main 上，生产环境升级正在进行中。</p>
+        <div class="h4">将其合并到 main：</div>
+        <ul style="margin:0 0 8px;padding-left:20px"><li>在你发消息之前，main 尚未更新。那里唯一相关的提交是设计板图片（<code>54452c4f7</code>）。</li><li>追赶任务已完成 19 个冲突的解决……我已批准。</li></ul>
+        <div class="h4">升级：</div>
+        <ul style="margin:0;padding-left:20px"><li>生产环境原为 <code>c6dfc627e</code>，落后 main 11 个提交……</li></ul>
+        <div class="bi"><p>Show both languages is on main now, and the production upgrade is running.</p><p><b>Getting it onto main:</b></p><p>• Main wasn't updated before your message. The only related commit there was the design board image (<code>54452c4f7</code>).</p><p>• The catch-up task finished resolving the 19 conflicts… I approved it.</p><p><b>Upgrade:</b></p><p style="margin:0">• Production was on <code>c6dfc627e</code>, 11 commits behind main…</p></div>
+        <div class="foot">Translated</div>
+      </div>
+    </div>
+  </div>
+  <div>
+    <div class="cap"><span class="num">2</span>Web · 逐段对照 <small>推荐</small></div>
+    <div class="frame w" style="width:720px;background:#fff">
+      <div class="tr">
+        <div class="pair"><p class="zh">“显示两种语言”现在已在 main 上，生产环境升级正在进行中。</p><p class="en">Show both languages is on main now, and the production upgrade is running.</p></div>
+        <div class="h4">将其合并到 main：<span class="cmk">A</span><div class="en" style="color:#8b8882;font-size:.9em">Getting it onto main:</div></div>
+        <div class="pair li"><span class="dot">•</span><div><p class="zh">在你发消息之前，main 尚未更新。那里唯一相关的提交是设计板图片（<code>54452c4f7</code>）。</p><p class="en">Main wasn't updated before your message. The only related commit there was the design board image (<code>54452c4f7</code>).</p></div></div>
+        <div class="pair li"><span class="dot">•</span><div><p class="zh">追赶任务已完成 19 个冲突的解决。它的分支包含这两个功能，能无冲突地合并到当前 main。我已批准。</p><p class="en">The catch-up task finished resolving the 19 conflicts. Its branch contains both features and merges into current main with no conflicts. I approved it.</p></div></div>
+        <div class="pair li"><span class="dot">•</span><div><p class="zh">Orbit 自身的合并步骤因重放旧冲突而失败。我用普通推送将 main 快进到 <code>ca1a6516b</code>。</p><p class="en">Orbit's own merge step failed by replaying the old conflicts. I fast-forwarded main to <code>ca1a6516b</code> with a plain push.</p></div></div>
+        <div class="h4">升级：<div class="en" style="color:#8b8882;font-size:.9em;font-weight:600">Upgrade:</div></div>
+        <div class="pair li"><span class="dot">•</span><div><p class="zh">生产环境原为 <code>c6dfc627e</code>，落后 main 11 个提交。没有数据库迁移，因此不停机替换。</p><p class="en">Production was on <code>c6dfc627e</code>, 11 commits behind main. No database migrations, so it's replaced without downtime.</p></div></div>
+        <div class="foot">Translated <span class="cmk">B</span></div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<div class="row">
+  <div>
+    <div class="cap"><span class="num">3</span>iPhone · 逐段对照</div>
+    <div class="ph"><div class="ps" style="background:#fff">
+      <div class="stat"><span>9:41</span><span>●●● ▮</span></div>
+      <div class="nav"><span class="bk">‹</span><span class="t">支持默认显示双语</span><span class="bk">⋯</span></div>
+      <div class="pt2" style="font-size:14.5px">
+        <div class="pair"><p class="zh">“显示两种语言”现在已在 main 上，生产环境升级正在进行中。</p><p class="en">Show both languages is on main now, and the production upgrade is running.</p></div>
+        <div class="h4">将其合并到 main：<div class="en" style="color:#8b8882;font-size:.9em;font-weight:600">Getting it onto main:</div></div>
+        <div class="pair li"><span class="dot">•</span><div><p class="zh">在你发消息之前，main 尚未更新。唯一相关的提交是设计板图片（<code>54452c4f7</code>）。</p><p class="en">Main wasn't updated before your message. The only related commit was the design board image (<code>54452c4f7</code>).</p></div></div>
+        <div class="pair li"><span class="dot">•</span><div><p class="zh">追赶任务已完成 19 个冲突的解决。我已批准。</p><p class="en">The catch-up task finished resolving the 19 conflicts. I approved it.</p></div></div>
+        <div class="tool" style="font-size:12px">git push origin ca1a6516b:main</div>
+        <div class="pair"><p class="zh">该设置位于 Web 上的 Settings › Translation 下。</p><p class="en">The setting is under Settings › Translation on the web.</p></div>
+        <div class="foot">Translated</div>
+      </div>
+      <div class="pcomp">Message <span style="float:right;font-size:12px;background:#f2f2f7;border-radius:8px;padding:1px 7px;color:#555">Chinese → English</span></div>
+    </div></div>
+  </div>
+  <div>
+    <div class="cap"><span class="num">4</span>对不上时退回整块 <small>块数不一致</small></div>
+    <div class="frame w" style="width:520px;background:#fff">
+      <div class="tr">
+        <p style="margin:0 0 6px">我合并了两段：原文三段，译文写成了两段。</p>
+        <p style="margin:0">所以这一条按今天的方式显示。</p>
+        <div class="bi"><p>The original has three paragraphs.</p><p>The translation merged two of them.</p><p style="margin:0">So this message falls back to today's layout.</p></div>
+        <div class="foot">Translated <span class="cmk">C</span></div>
+      </div>
+    </div>
+    <div class="notes" style="width:520px;margin-top:18px;font-size:13.5px">
+      <b>A</b> 配对单位是 markdown 块：段落、列表项、标题、引用。每块：你的语言（正常）＋原文（灰、小一号、紧贴其下，无分隔线）。块与块之间正常段距。<br>
+      <b>B</b> 不再需要 “Show English · N lines” 折叠：每段原文就在它的译文旁边，长回复也不用来回找。<br>
+      <b>C</b> 译文与原文块数不一致（模型合并/拆了段）时，这条消息退回今天的整块显示，不硬配。<br>
+      代码块、工具行、表格只出现一次（在译文里）。你自己的短消息保持现状（气泡内上中下英）。
+    </div>
+  </div>
+  <div class="notes dec" style="width:640px">
+    <h3>⑤ 待你定（每项推荐 A）</h3>
+    <ol>
+      <li><b>顺序</b><br><span class="rec">A</span> 你的语言在上，原文在下　/　B 原文在上，译文在下</li>
+      <li><b>配对粒度</b><br><span class="rec">A</span> 按段落/列表项（稳，服务器已有的块结构即可）　/　B 按句子（更细，但要让翻译模型逐句对齐，成本和出错更多）</li>
+      <li><b>长回复折叠</b><br><span class="rec">A</span> 去掉，逐段对照后不需要　/　B 保留，原文行默认收起，点 “Show English” 才展开每段</li>
+      <li><b>对不上时</b>（C）<br><span class="rec">A</span> 整条退回今天的整块显示　/　B 能配的配，剩下的堆在最后</li>
+    </ol>
+  </div>
+</div>
+</div></body></html>
