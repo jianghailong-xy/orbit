@@ -9,6 +9,9 @@ export type FeishuSendResult =
   | { ok: true; messageId: string | null }
   | { ok: false; status: number | null; feishuCode: number | null; feishuMsg: string };
 
+/** Whether a person is in the app's availability scope in Feishu (§14.3); UNKNOWN when Feishu could not say. */
+export type FeishuAvailability = 'IN_SCOPE' | 'NOT_IN_SCOPE' | 'UNKNOWN';
+
 /** A message's body as Feishu takes it: its type (`text`, `interactive`, …) and its content, a JSON value. */
 export interface FeishuMessageBody {
   msgType: string;
@@ -151,6 +154,40 @@ export class FeishuOutbound {
     } catch {
       this.logger.log(`feishu app ${app.appId}: a user's name could not be read`);
       return null;
+    }
+  }
+
+  /**
+   * `POST /open-apis/application/v6/applications/:app_id/visibility/check_white_black_list` (`user_id_type=open_id`,
+   * body `{ user_ids: [openId] }`): whether a person is in the app's availability scope (§14.3), asked of Feishu on every
+   * message, never cached. Needs `application:application:self_manage`. Feishu counts a person in when they are on the
+   * white list or the paid list and not on the black list. UNKNOWN when Feishu does not say: an HTTP error or a non-zero
+   * code (the permission not granted among them), a timeout, Feishu unreachable, or no entry for the person. The caller
+   * treats UNKNOWN as NOT_IN_SCOPE.
+   */
+  async availability(app: FeishuAppCredentials, openId: string): Promise<FeishuAvailability> {
+    if (openId === '') return 'UNKNOWN';
+    try {
+      const answer = (await feishuClient(app).request({
+        method: 'POST',
+        url: `open-apis/application/v6/applications/${encodeURIComponent(app.appId)}/visibility/check_white_black_list`,
+        params: { user_id_type: 'open_id' },
+        data: { user_ids: [openId] },
+      })) as { code?: unknown; data?: { user_visibility_list?: unknown } } | null;
+      if (answer?.code !== 0) {
+        this.logger.log(`feishu app ${app.appId}: availability could not be checked (code ${String(answer?.code)})`);
+        return 'UNKNOWN';
+      }
+      const list = Array.isArray(answer.data?.user_visibility_list) ? answer.data.user_visibility_list : [];
+      const entry = list.find((item) => (item as { user_id?: unknown } | null)?.user_id === openId) as
+        | { in_white_list?: unknown; in_black_list?: unknown; in_paid_list?: unknown }
+        | undefined;
+      if (!entry) return 'UNKNOWN';
+      return (entry.in_white_list === true || entry.in_paid_list === true) && entry.in_black_list !== true ? 'IN_SCOPE' : 'NOT_IN_SCOPE';
+    } catch (error) {
+      const code = (error as { response?: { data?: { code?: unknown } } } | null)?.response?.data?.code;
+      this.logger.log(`feishu app ${app.appId}: availability could not be checked (${code === undefined ? 'no answer' : `code ${String(code)}`})`);
+      return 'UNKNOWN';
     }
   }
 

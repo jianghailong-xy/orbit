@@ -1374,6 +1374,15 @@ button.toast--pill:focus-visible {
 .tp-account-machine-cloud > .anticon {
   color: var(--brand);
 }
+/* Every other machine, by the OS it reported (docs/mocks/machine-menu-icons, A): its mark in grey, the name as is. */
+.tp-account-machine-os {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+}
+.tp-account-machine-os > .anticon {
+  color: var(--text-3);
+}
 /* Log out: the label in the menu's own danger colour, its icon in --error, as the replaced menu drew them (the
    page rule reached only the icon there). */
 .tp-account-menu .orbit-menu-item[data-danger] .orbit-menu-icon {
@@ -3697,9 +3706,9 @@ button.toast--pill:focus-visible {
   white-space: nowrap;
 }
 /* The Tasks card (SessionCreatedTasksStrip.tsx) sits in the tray's shell above; these are
-   only what a task list adds to it. Collapsed, the title never wraps and the sentence never gives
-   way: beside the sentence the title is what truncates, beside a lone task's name the name does;
-   the failed count is red. Opened, one row per task: a fixed status column, the title (with what it
+   only what a task list adds to it. Collapsed, the title never wraps and stays whole: beside a lone
+   task's name the name truncates, beside the band (`N running · <task>`, `<total> · <task>`) the
+   band does, and the pill after either keeps its size; the failed count is red. Opened, one row per task: a fixed status column, the title (with what it
    replaces, in grey), its age; then the links to the rest. */
 .ct-head {
   min-width: 0;
@@ -3707,10 +3716,15 @@ button.toast--pill:focus-visible {
   text-overflow: ellipsis;
   white-space: nowrap;
 }
-.ct-head:has(+ .ct-one) {
+.ct-head:has(+ .ct-one),
+.ct-head:has(~ .ct-count) {
   flex: none;
 }
 .ct-count {
+  flex: 0 1 auto;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
   white-space: nowrap;
 }
 .ct-failed {
@@ -3725,6 +3739,7 @@ button.toast--pill:focus-visible {
   color: var(--brand);
 }
 .ct-one + .status-pill,
+.ct-count + .status-pill,
 .ct-row .status-pill {
   height: 20px;
   font-size: 11.5px;
@@ -19875,6 +19890,20 @@ button.chat-jump-start:hover {
 .np-summary a:hover {
   color: var(--brand-strong);
 }
+/* The draft moved off what its workspace last ran on (board new-session-usable-default ② ③). */
+.np-summary.np-fallback {
+  color: var(--warning);
+}
+/* Nothing on the machine runs the draft (board ④): the way out, under the reason. */
+.np-cant-run {
+  margin-top: 10px;
+  font-size: 12px;
+  color: var(--text-2);
+}
+.np-cant-run a {
+  color: var(--brand);
+  text-decoration: none;
+}
 .np-note {
   margin-top: 9px;
   padding: 4px 10px;
@@ -29309,7 +29338,7 @@ button.agent-progress-agent:hover {
 }
 
 /* The Agents line (SessionAgentsStrip.tsx), in the Background processes tray's shell and rows: the band's
-   words truncate before the title does; opened, Running and Done over the tray's own rows, each a run's name
+   words truncate before the title does; opened, the tray's own rows in one list (running first, no headings), each a run's name
    then its facts. */
 .ag-head {
   flex: none;
@@ -29327,14 +29356,6 @@ button.agent-progress-agent:hover {
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
-}
-.ag-section {
-  flex: none;
-  padding: 4px 2px 0;
-  font-size: 11px;
-  font-weight: 600;
-  text-transform: uppercase;
-  color: var(--text-3);
 }
 .ag-row .ag-title {
   font-family: inherit;

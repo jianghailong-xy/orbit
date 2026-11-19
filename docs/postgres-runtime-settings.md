@@ -24,6 +24,7 @@
 | `shared_buffers` | `128MB` | `4GB`（09-17 建议的是 `1GB`，见 §5） | `4GB`（2026-11-06 14:27:52Z 起，`ALTER SYSTEM` 写在 `postgresql.auto.conf`） | 2026-11-06 账号所有者要求提交进 compose，已写进，见 §11 |
 | `jit` | `on`（默认） | `off` | `off`（角色和数据库级设置，不在 compose 里；本次未登生产核对） | 2026-11-01 账号所有者批准，已写进 compose，见 §10 |
 | `effective_cache_size` | `4GB`（默认） | `12GB` | `12GB`（同 `shared_buffers`） | 同 `shared_buffers`，见 §11 |
+| `maintenance_work_mem` | `64MB`（默认） | `64MB`（不改） | `64MB`（`autovacuum_work_mem = -1`，跟随它） | 2026-11-16 复核，结论是不改，见 §12 |
 
 三个 `0` 是这次复核的主因：**任何一条失控语句、或任何一个忘关事务的客户端，都能无限期持有锁。**
 这已经发生过两次：
@@ -413,3 +414,29 @@ autoanalyze 的触发线是 50 + 0.1×行数 ≈ 56.5 万次变更，所以 2026
 `sourcefile` 为空。`setting` 以 8kB 为单位：`shared_buffers` 的 4GB 显示为 `524288`，`effective_cache_size` 的
 12GB 显示为 `1572864`。任务 34t8cNbilotGUeasR269n 在本地的 `postgres:16-alpine`（16.15）上照这个顺序试过：
 先 `ALTER SYSTEM` 再重启，再用同一个数据目录带上与之不同的 `-c` 重建，读到的正是这几种结果，命令行的值胜出。
+
+## 12. `maintenance_work_mem`：`64MB` → **保持 `64MB`**（2026-11-16 复核）
+
+**线上读数**（PostgreSQL 16.14，2026-11-13 18:20Z 重启后约 2.7 天；宿主 32GB 内存、8 核、无 swap，负载约 1.4）：
+`maintenance_work_mem`、`autovacuum_work_mem`（`-1`）、`autovacuum_max_workers`（3）、`max_parallel_maintenance_workers`（2）
+都是默认值，没有 `ALTER SYSTEM`。容器内 `/dev/shm` 256MB，用了 12.9MB。
+
+**为什么不改：**
+
+1. **VACUUM 用不上。** 64MB 一轮能记约 1100 万个死元组。最大的两张表死元组是 `run_event` 145,086（1,746 万行，几乎只追加）
+   和 `tool_call` 136,556，其余不过万：离上限两个数量级。72 小时日志里没有超过 10 分钟的 autovacuum，没有 shm 报错。
+2. **会被乘。** `autovacuum_work_mem = -1`，三个 autovacuum worker 每个都可以用到这么多。
+3. **和 `shm_size` 绑在一起。** 并行 VACUUM 的动态共享内存段约等于它（§9）。256MB 的 `shm_size` 是按 64MB 定的；
+   提到 256MB 左右要一起提 `shm_size`，否则 2026-10-09 的 ENOSPC 会回来。
+4. **建索引够快。** 唯一吃它的是迁移里的 `CREATE INDEX`：0420 在约 570 万行的 `run_event` 上建索引用了 33.1s，
+   现在约三倍行数，估计 100–120s，仍在 300s 的 `statement_timeout` 以内（历史最长迁移见 §1；0414 的 420s 是它自设的超时，见 §8）。
+   哪条迁移真的逼近了，就在那条迁移里 `SET LOCAL maintenance_work_mem`，不改全局。
+
+**什么时候重看：** autovacuum 日志出现 `index scans: 2` 以上（死元组装不下，要的是 `autovacuum_work_mem`），
+或者迁移、手动 `REINDEX` 逼近 300s。
+
+**顺带记下的两件事：**
+
+- `run_event` 和 `tool_call` 的 `relfrozenxid` 年龄约 1.15 亿，`autovacuum_freeze_max_age` 是 2 亿；按测得的每分钟约 600 个事务号，
+  约 99 天后（2027 年 2 月下旬）会各来一次防回卷的全表 VACUUM。读满 15GB 的 `run_event`，但几乎不占这块内存；可以提前挑空闲时段手动 `VACUUM (FREEZE)`。
+- 11-13 重启清空了表统计，`task` 一直没有 autoanalyze；2026-11-19 手动 `ANALYZE task` 过一次（只刷新规划器的采样统计）。

@@ -3,7 +3,7 @@ import { MemoryRouter } from 'react-router-dom';
 import { describe, expect, it } from 'vitest';
 import { encodeId } from '../lib/idCodec';
 import { NewSessionProviderHero } from './NewSessionProviderHero';
-import { currentEngineChoice, engineChoices, type ChoiceSources } from '../lib/sessionProviderChoices';
+import { currentEngineChoice, draftFallback, engineChoices, type ChoiceSources } from '../lib/sessionProviderChoices';
 import { defaultEngineOf, type ConfiguredProvider } from '../lib/workspaceDefaults';
 import { AgentProvider, type RunnerAntigravityState, type RunnerEngineHealth } from '@orbit/shared';
 
@@ -203,5 +203,92 @@ describe('NewSessionProviderHero', () => {
     expect(markup('claude', { region: null })).toBe(markup('claude'));
     expect(markup('claude', { region: { verdict: 'allowed' } })).toBe(markup('claude'));
     expect(markup('claude')).not.toContain('Region not supported');
+  });
+});
+
+/**
+ * The draft moved off what the workspace last ran on, because it can't run on this machine (board
+ * docs/mocks/new-session-usable-default): as WorkspaceView wires it, the hero is on the fallback and
+ * names what it moved from.
+ */
+describe('NewSessionProviderHero on a fallback', () => {
+  const blocked = { verdict: 'blocked' as const };
+  const claudeIn: RunnerEngineHealth = { engine: 'claude', installed: true, auth: 'yes' };
+  const codexIn: RunnerEngineHealth = { engine: 'codex', installed: true, auth: 'yes' };
+  const anthropic: ConfiguredProvider = {
+    slug: 'anthropic',
+    label: 'Personal Max',
+    runtime: 'claude',
+    models: [{ value: 'claude-opus-5', label: 'Claude Opus 5' }],
+    defaultModel: 'claude-opus-5',
+    presetSlug: 'anthropic',
+    engines: ['claude'],
+  };
+  function fallbackMarkup(provider: string, keys: ConfiguredProvider[], engines: RunnerEngineHealth[]) {
+    const sources: ChoiceSources = { configured: keys, modelCatalog: catalog, engineHealth: engines, region: blocked };
+    const engine = AgentProvider.CLAUDE;
+    const choices = engineChoices(sources, [{ engine, provider }]);
+    const remembered = currentEngineChoice(engine, provider, choices, sources);
+    const to = draftFallback(remembered, choices, engines);
+    return renderToStaticMarkup(
+      <MemoryRouter>
+        <NewSessionProviderHero
+          current={to ? currentEngineChoice(to.engine, to.provider, choices, sources) : remembered}
+          engines={choices}
+          onPick={() => {}}
+          runnerId={RUNNER_ID}
+          fellBackFrom={to ? remembered : null}
+          machine="jdcloud"
+          cantRun={!to}
+        />
+      </MemoryRouter>,
+    );
+  }
+
+  it('says which credential it uses now and why, under the same engine (board ②)', () => {
+    const html = fallbackMarkup('claude', [configured[0], anthropic], [claudeIn]);
+    expect(html).toContain('aria-label="Engine: Claude Code"');
+    expect(html).toContain('Using <b>DeepSeek</b>');
+    expect(html).toContain('Anthropic unavailable on jdcloud');
+    expect(html).toMatch(new RegExp(`<a href="/settings/machines/${encodeId(RUNNER_ID)}\\?engine=claude"[^>]*>Details</a>`));
+    expect(html).not.toContain('Region not supported on this runner');
+    expect(html).not.toContain('can run a session yet');
+  });
+
+  it('names a reason other than the region by the credential, with Fix it', () => {
+    const sources: ChoiceSources = { configured: [configured[0]], modelCatalog: catalog, engineHealth: [{ engine: 'claude', installed: true, auth: 'no' }] };
+    const choices = engineChoices(sources, [{ engine: AgentProvider.CLAUDE, provider: 'claude' }]);
+    const remembered = currentEngineChoice(AgentProvider.CLAUDE, 'claude', choices, sources);
+    const to = draftFallback(remembered, choices, sources.engineHealth);
+    expect(to).toEqual({ engine: AgentProvider.CLAUDE, provider: 'deepseek' });
+    const html = renderToStaticMarkup(
+      <MemoryRouter>
+        <NewSessionProviderHero
+          current={currentEngineChoice(to!.engine, to!.provider, choices, sources)}
+          engines={choices}
+          onPick={() => {}}
+          runnerId={RUNNER_ID}
+          fellBackFrom={remembered}
+          machine="jdcloud"
+        />
+      </MemoryRouter>,
+    );
+    // OrbitKit's fallbackLine says the same words (DraftFallbackTests).
+    expect(html).toContain('Claude Code: Not signed in on jdcloud');
+    expect(html).toContain('Fix it');
+  });
+
+  it('names the engine that could not run when it moved to another one (board ③)', () => {
+    const html = fallbackMarkup('anthropic', [anthropic], [claudeIn, codexIn]);
+    expect(html).toContain('aria-label="Engine: Codex"');
+    expect(html).toContain('Claude Code can’t run on jdcloud: Region not supported');
+  });
+
+  it('keeps the reason and offers another provider when nothing here runs (board ④)', () => {
+    const html = fallbackMarkup('claude', [anthropic], [claudeIn]);
+    expect(html).toContain('Region not supported on this runner');
+    expect(html).toContain('Nothing on jdcloud can run a session yet.');
+    expect(html).toContain('<a href="/settings/providers"');
+    expect(html).toContain('Use another provider');
   });
 });

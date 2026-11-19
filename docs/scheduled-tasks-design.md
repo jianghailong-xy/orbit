@@ -504,7 +504,9 @@ run (`LANDING_FAILED`) with its reason, through the same push and **Waiting on y
   URL, a rate limit, where it left off.
 - The report ends the run. The session's turn may go on, but nothing after it changes the run.
 - A session that ends or settles idle without a report fails the run with `NO_REPORT`. Silence never reads as "no
-  change".
+  change". A session is not idle while one of its `bg_run` jobs (job or watch, not a service) is still running or a
+  turn, such as that job's wake, is still to be answered: a run may end its turn to wait for a job, and its run limit
+  still counts that wait.
 
 ### 7.2 Failure reasons and retries
 
@@ -678,10 +680,14 @@ Agents have the same five as tools, so "pause the Codex check until Monday" work
 
 As decided in revision 3, modelled on Reminders' *Scheduled* list:
 
-- **Left drawer:** a **Scheduled** item with a count of schedules that need the person (failing or held).
-- **Timeline:** occurrences grouped as **Needs you**, **Today**, **Tomorrow**, the rest of the week, **Later**,
-  **Paused**. A row is a circle that carries the state, the title, a line with the rule, the workspace and the
-  access, and the time. **Show past runs** puts earlier runs back, ticked off. A workspace filter sits in the header.
+- **Left drawer:** a **Scheduled** item with a count of schedules that need the person (held, or failing with no
+  run under way).
+- **Timeline:** occurrences grouped as **Today**, **Tomorrow**, the rest of the week, **Later**, **Paused**. A row is
+  a circle that carries the state, the title, a line with the rule, the workspace and the access, and the time.
+  There is no group of errors (owner 2026-11-19, replacing revision 3's **Needs you**): the page lists the schedules,
+  and a failing one is tagged on its own row, on the day of its next run. While a run of it is under way (Run now,
+  or its next slot) the tag is off: a failure puts it back, a run that did not fail clears it. A held schedule has no
+  next run and is listed under **Paused**, before the paused ones, with its Held tag. **Show past runs** puts earlier runs back, ticked off. A workspace filter sits in the header.
 - **Inspector** (beside the list on web and macOS, a sheet on iOS): the read-back sentence, next run, last result,
   *What was asked* (the intent), *Notes for the next run*, this month's use, history (runs and revisions with
   **Undo**, each naming who made it: you, a session, or a run), the controls of §8.4 and **Change…**.

@@ -149,13 +149,12 @@
 // pin here, which left this file red there. The owner approved these two lines on 2026-11-14 (22:40Z, Orbit item
 // 34xf9Nns4Dnab9eXTNyCa, project 34w2hTuJ3qOR1aQWnyGbS), and the block below pins them.
 //
-// Between 2026-11-16 and 2026-11-18 three commits added six lines to the apiserver's environment, each empty unless the
-// host's .env sets it: ORBIT_RELEASE_REPOSITORY, the repository Help's Report on GitHub opens an issue in (6447f0334,
-// 2026-11-16); VIEWER_STREAMS_MAX, how many live viewer streams an apiserver keeps open (92190ad89, 2026-11-17); and
-// APNS_SANDBOX_KEY, APNS_SANDBOX_KEY_ID, APNS_PRODUCTION_KEY and APNS_PRODUCTION_KEY_ID, an APNs signing key per
-// environment (27cab2729, 2026-11-18). No service, mount or port is added. They reached main without a pin here, which
-// left this file red there. The owner approved these six lines on 2026-11-18 (17:38Z, Orbit item 34zqNo5irwfdfmdXygkkP,
-// project 34tJs8k23brO8Ie2WtMSk), and the blocks below pin them.
+// Three more reached main without a pin, which left this file red there: VIEWER_STREAMS_MAX (92190ad890, the anonymous
+// viewer stream caps; unset, 2000), APNS_SANDBOX_KEY/_KEY_ID and APNS_PRODUCTION_KEY/_KEY_ID (27cab27299, one APNs key
+// per environment, falling back to APNS_KEY/APNS_KEY_ID) and ORBIT_RELEASE_REPOSITORY (6447f03346, where Help → Still
+// stuck → Report on GitHub opens an issue). Each is one optional apiserver environment line, empty unless the host's .env
+// sets it. No service, mount or port is added. The account owner approved all six lines on 2026-11-19 (in session
+// 34zBKhFsZ22eRi985pbrK: "Approve them and add them to the baseline"), and the blocks below pin them.
 import assert from 'node:assert/strict';
 import { execFileSync, spawnSync } from 'node:child_process';
 import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
@@ -446,13 +445,13 @@ const APPROVED_APISERVER_BLOCKS = [
   [
     '      TRUSTED_PROXIES: "${TRUSTED_PROXIES:-}"',
   ],
-  // The live viewer streams' cap (2026-11-18, item 34zqNo5irwfdfmdXygkkP, the top of this file), empty unless the host's
-  // .env sets it. The line comes right after the proxies', before DeepSeek's.
+  // The live viewer streams' cap (2026-11-19, the top of this file), empty unless the host's .env sets it. The line comes
+  // right after the proxies', before the push channels.
   [
     '      VIEWER_STREAMS_MAX: "${VIEWER_STREAMS_MAX:-}"',
   ],
-  // APNs signing keys per environment (2026-11-18, item 34zqNo5irwfdfmdXygkkP, the top of this file), each empty unless
-  // the host's .env sets it. The lines come right after APNS_KEY_ID's, before APNS_TEAM_ID's.
+  // One APNs key per environment (2026-11-19, the top of this file), each empty unless the host's .env sets it. The lines
+  // come right after APNS_KEY_ID, before the runner link's.
   [
     '      APNS_SANDBOX_KEY: "${APNS_SANDBOX_KEY:-}"',
     '      APNS_SANDBOX_KEY_ID: "${APNS_SANDBOX_KEY_ID:-}"',
@@ -487,8 +486,8 @@ const APPROVED_APISERVER_BLOCKS = [
   [
     '      RUNNER_RELEASE_DL_URL: "${RUNNER_RELEASE_DL_URL:-http://web/dl/}"',
   ],
-  // The repository Report on GitHub opens an issue in (2026-11-18, item 34zqNo5irwfdfmdXygkkP, the top of this file),
-  // empty unless the host's .env sets it. The line comes right after the releases', before Orbit Files' store.
+  // The repository a report opens its issue in (2026-11-19, the top of this file), empty unless the host's .env sets it.
+  // The line comes right after the releases', before Orbit Files' store.
   [
     '      ORBIT_RELEASE_REPOSITORY: "${ORBIT_RELEASE_REPOSITORY:-}"',
   ],
@@ -894,7 +893,8 @@ test('(p) NATS is named to the apiserver and the link gateway alone, and stores 
 // two users, each by the public key the environment names, with exactly what it may do. The apiserver publishes runners'
 // hints and turn prefix requests and reads live streams and the answers to its requests, and its processes ask and
 // answer each other on api.> (2026-10-28, the top of this file); the gateway reads runners' hints and requests, publishes
-// live streams and answers a request once. No trace or debug logging, here or in the service's command (p). Changing
+// live streams, answers a request once, and relays the browser's byte streams on vnc.> (docs/runner-browser-design.md §4,
+// 2026-11-17), which the apiserver sends on vnc.*.down and reads on vnc.*.up (the viewer route, 2026-11-18). No trace or debug logging, here or in the service's command (p). Changing
 // any of it is a new decision, made here.
 test('(q) the runner link\'s NATS configuration is exactly the one task B4 added: two nkey users, each allowed only what it does', () => {
   const conf = readFileSync(path.join(repo, NATS_CONF), 'utf8');
@@ -907,16 +907,16 @@ test('(q) the runner link\'s NATS configuration is exactly the one task B4 added
     '{',
     'nkey: $RUNNER_LINK_NATS_APISERVER_KEY',
     'permissions: {',
-    'publish: { allow: ["rnr.>", "api.>"] }',
-    'subscribe: { allow: ["ses.*.live", "_INBOX.>", "api.>"] }',
+    'publish: { allow: ["rnr.>", "api.>", "vnc.*.down"] }',
+    'subscribe: { allow: ["ses.*.live", "_INBOX.>", "api.>", "vnc.*.up"] }',
     'allow_responses: true',
     '}',
     '}',
     '{',
     'nkey: $RUNNER_LINK_NATS_GATEWAY_KEY',
     'permissions: {',
-    'publish: { allow: ["ses.*.live"] }',
-    'subscribe: { allow: ["rnr.>"] }',
+    'publish: { allow: ["ses.*.live", "vnc.>"] }',
+    'subscribe: { allow: ["rnr.>", "vnc.>"] }',
     'allow_responses: true',
     '}',
     '}',

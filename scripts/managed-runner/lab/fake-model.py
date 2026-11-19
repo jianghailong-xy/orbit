@@ -7,7 +7,8 @@ drain can be checked deterministically before (and besides) a real session. List
 only; Pods reach it at http://10.0.2.2:PORT through the QEMU user network.
 
 Every request is appended to the log as one JSON line: the message count and the last user text,
-so a resumed engine visibly sends the history it reloaded from the persistent volume.
+so a resumed engine visibly sends the history it reloaded from the persistent volume, and the MCP
+servers whose tools the engine offered (mcpServers).
   - "FAKE-SLOW <seconds>" in the last user message holds the streamed answer open that long
     (pings meanwhile), for a turn that is in flight when the runner is asked to stop.
   - The answer quotes every "T03-SECRET <word>" found anywhere in the conversation it was sent.
@@ -269,6 +270,9 @@ class Handler(BaseHTTPRequestHandler):
             call = loop_call(*steps[loop[4]], loop[3], loop[1]) if loop[4] < len(steps) else None
         plan = None if loop else plan_state(messages)
         offered_all = {t.get('name') for t in body.get('tools') or [] if isinstance(t, dict)}
+        # Every MCP server the engine names to the model, by its tools' mcp__<server>__ prefix: in the tools array or,
+        # where the engine defers them, in the listing of deferred tool names.
+        mcp_servers = sorted(set(re.findall(r'mcp__([A-Za-z0-9-]+)__', json.dumps(body))))
         if plan:
             following = plan[0][plan[1]] if plan[1] < len(plan[0]) else None
             call = None
@@ -299,7 +303,7 @@ class Handler(BaseHTTPRequestHandler):
                                       'path': self.path, 'model': body.get('model'), 'stream': body.get('stream'),
                                       'messages': len(messages), 'lastUser': last[-300:], 'secrets': secrets,
                                       'slow': int(slow[1]) if slow else 0, 'hold': int(hold[1]) if hold else 0, 'kind': kind, 'tool': call[0] if call else None,
-                                      'offered': offered, 'toolResult': results[0][:300] if results else None, 'shape': shape,
+                                      'offered': offered, 'mcpServers': mcp_servers, 'toolResult': results[0][:300] if results else None, 'shape': shape,
                                       'apiErrors': {apierr[2]: failures.get(apierr[2], 0)} if apierr else None,
                                       'loop': {'word': loop[3], 'made': loop[4], 'of': len(steps)} if loop else None,
                                       'plan': {'steps': [name for name, _ in plan[0]], 'made': plan[1],

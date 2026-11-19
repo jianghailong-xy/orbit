@@ -155,7 +155,7 @@ class CoordinatorHandoffDeviceTest {
         compose.waitForIdle()
     }
     private fun openContext() {
-        click(hasText("· Usage", substring = true) and hasClickAction())
+        click(hasTestTag("composer-context") and hasClickAction())
         await("Context and plan usage")
     }
     private fun await(text: String) {

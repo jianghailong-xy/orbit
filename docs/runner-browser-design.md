@@ -97,8 +97,9 @@ owner's browser ──WSS──▶ nginx ──▶ apiserver /api/runners/:id/br
   `StreamCredit{stream_id, bytes}` (both). Data rides the lowest write tier, below live deltas, and never blocks
   control frames; a window of 256 KiB per stream, refilled by `StreamCredit`. A runner that did not announce the
   capability in `Hello` is never sent `StreamOpen`.
-- **Gateway.** Answers the apiserver's `StreamOpen` request on `rnr.<runnerId>` only if it holds that runner's
-  connection, then relays `vnc.<streamId>.*` to and from link frames. At most 2 open streams per runner (two
+- **Gateway.** Answers the apiserver's `StreamOpen` request on `rnr.<runnerId>` only if it holds a connection of that
+  runner whose `Hello` named a `ManagedInstance` and whose `Welcome` offered the browser (the welcome route's verdict
+  on that instance against the manager's record, §2), then relays `vnc.<streamId>.*` to and from link frames. At most 2 open streams per runner (two
   tabs or devices watching). The gateway's NATS user gets `vnc.>`; nothing else changes in its permissions.
 - **Apiserver.** A WebSocket route behind the new gate. It authenticates the owner's web session, checks the
   runner is the caller's managed runner, opens the stream, and pipes bytes. A viewer that

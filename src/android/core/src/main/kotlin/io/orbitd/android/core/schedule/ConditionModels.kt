@@ -66,7 +66,8 @@ data class ScheduleConditionReading(
     val lastValue: Double? = null,
     val lastSampleAt: String? = null,
 ) {
-    /** The probe cannot be read: the row goes under Needs you (§5.3). */
+    /** The probe cannot be read: the row is tagged Can't read at the head of Waiting for a condition (§5.3; owner 2026-11-19,
+     * it no longer goes under Needs you). */
     val cantRead: Boolean get() = state == "UNKNOWN"
 
     companion object {

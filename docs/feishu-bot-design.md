@@ -180,7 +180,8 @@ model FeishuApp {                     // feishu_app，每个账号至多一行
    企业租户里发布应用通常要管理员审核。
 2. 开通权限（名称以控制台为准，F0 第一步逐条核对）：以应用身份发消息（`im:message:send_as_bot`）；读取用户发给
    机器人的单聊消息（`im:message.p2p_msg:readonly`）；接收群里 @机器人 的消息（`im:message.group_at_msg:readonly`）；
-   获取群信息（`im:chat:readonly`）；获取用户基本信息（`contact:user.base:readonly`，显示名字用）。
+   获取群信息（`im:chat:readonly`）；获取用户基本信息（`contact:user.base:readonly`，显示名字用）；管理应用自身资源
+   （`application:application:self_manage`，开放模式下核实发送者在可用范围内用，见 14.3）。
    **不申请**「读取群内所有消息」：群里只有 @机器人 的消息才会到 Orbit。
 3. 把 App ID / App Secret 填进 Orbit，等状态变成已连接。
 4. 回控制台，事件与回调的订阅方式都选「使用长连接接收」。事件订阅 `im.message.receive_v1`、`im.chat.member.bot.deleted_v1`；
@@ -657,7 +658,36 @@ Groups 列表（`GET /api/integrations/feishu/chats`）列出接入过的群和�
 
 - 每条消息都向飞书查一次：发送者在不在应用的可用范围里。不加缓存。
 - 不在范围、查询失败或超时，都按不在范围处理：不写任何数据，只回一句说明。
-- 接口、参数和所需权限由 O2 查定。
+
+**接口**（O2 查定）：`POST /open-apis/application/v6/applications/:app_id/visibility/check_white_black_list`
+（「查询用户或部门是否在应用的可用或禁用名单」，文档 https://open.feishu.cn/document/server-docs/application-v6/admin/check_white_black_list ，
+官方 Node SDK 里是 `client.application.applicationVisibility.checkWhiteBlackList`）。
+
+- 身份：`tenant_access_token`，自建应用与商店应用都可用。路径里的 `app_id` 是应用自己的 App ID；查别的应用才要 `admin:app.info:readonly`。
+- 参数：query `user_id_type=open_id`；请求体 `{ "user_ids": ["<发送者 open_id>"] }`（最多 100 个）；`department_ids`、`group_ids` 不传。
+- 权限：`application:application:self_manage`（管理应用自身资源）或 `admin:app.info:readonly` 二选一；Orbit 申请前者（§4.2），
+  它只涉及应用自己。
+- 返回：`{ code, msg, data: { user_visibility_list: [{ user_id, in_white_list, in_black_list, in_paid_list }], department_visibility_list, group_visibility_list } }`。
+  文档的说法是「在白名单或付费白名单，且不在黑名单中」的用户可见应用，所以 Orbit 判在范围的条件是
+  `(in_white_list || in_paid_list) && !in_black_list`。
+- 限流：每分钟 1000 次、每秒 50 次。参数错误是 HTTP 400、code 210001。
+- 查不了，都按不在范围处理：
+  - HTTP 4xx/5xx 或 `code` 非 0，包括没开通权限（99991672 / 99991679）；
+  - 超时（每个请求 10 秒，`FEISHU_REQUEST_TIMEOUT_MS`）或连不上；
+  - 返回里没有这个发送者的条目。
+- 文档没写明：用户经部门、用户组或「全员可见」进入范围时，`in_white_list` 是否为 true。O7 在真租户里核对。
+
+**落地**：
+
+- 查询是 `FeishuOutbound.availability(app, openId)`，答 `IN_SCOPE`、`NOT_IN_SCOPE` 或 `UNKNOWN`。
+- 门在 `FeishuRouter.route` 里。`access_mode = AVAILABILITY_SCOPE` 时，非主人（open_id 不是 `owner_open_id`，或还没有主人）的私聊消息和群 @消息，
+  先过这道门，再做别的事，包括绑定码和群里的 connect。
+  - 不是 `IN_SCOPE`：以对该消息的回复发 `FEISHU_OPEN_REPLIES.notAvailable`，到此为止。除了收件箱对这个事件本身的记录，不写任何数据。
+  - 是 `IN_SCOPE`：接着走后面的分支。O3、O4 落地前，按今天的行为处理（私聊回 stranger 句子，群走接入过的群的路径）。
+- 主人自己的消息不查。`OWNER_ONLY` 下不查。点卡片不经这道门（§7.4 的主人检查照旧）。
+- 绑定码也在门后：开放模式下，还没有主人时用码绑定的人必须在可用范围里。查询失败时绑定要等下一次。
+- 所有者要在飞书开发者后台开通 `application:application:self_manage`，并发布新版本，开放模式才能用。没开通时每次查询都失败，
+  所有非主人都会收到上面那句拒绝。
 
 ### 14.4 上限
 

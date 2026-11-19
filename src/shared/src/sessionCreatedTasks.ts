@@ -197,3 +197,35 @@ export function sessionTaskCard(
   const marked = rows.filter((row) => row.watched);
   return { rows, counts, watching: marked.length, stale: marked.some((row) => row.stale) };
 }
+
+/**
+ * What the collapsed card says past one row, as the Agents line says it of its runs: the newest
+ * running task by name — after `N running · ` when more than one runs — or, with none running,
+ * `total · ` and the newest task's name. `row` is the task whose pill closes the line; `failed`,
+ * when above zero, is written in red as `N failed · ` before `text`, so an older failure is not
+ * hidden behind the newest task's Done. Newest is the latest `createdAt`; a watched task created
+ * elsewhere has none and counts as the oldest; a tie goes to the earlier row.
+ *
+ * Null with one row (the line names that task) or none. `session-created-tasks.fixture.json`'s
+ * `band` cases hold every client to the same words.
+ */
+export interface SessionTaskBand {
+  failed: number;
+  text: string;
+  row: SessionTaskCardRow;
+}
+
+export function sessionTaskBand(card: SessionTaskCard | null | undefined): SessionTaskBand | null {
+  if (!card || card.rows.length === 0 || (card.counts.total === 1 && card.rows.length === 1)) return null;
+  const newest = (rows: SessionTaskCardRow[]) =>
+    rows.reduce((best, row) => ((row.createdAt ?? '') > (best.createdAt ?? '') ? row : best));
+  const running = card.rows.filter((row) => row.standing?.running);
+  const failed = card.counts.failed;
+  if (running.length > 0) {
+    const row = newest(running);
+    const text = card.counts.running > 1 ? `${card.counts.running} running · ${row.title}` : row.title;
+    return { failed, text, row };
+  }
+  const row = newest(card.rows);
+  return { failed, text: `${card.counts.total} · ${row.title}`, row };
+}
