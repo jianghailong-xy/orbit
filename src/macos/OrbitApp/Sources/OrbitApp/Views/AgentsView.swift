@@ -1501,10 +1501,27 @@ struct NewSessionView: View {
                         .accessibilityLabel("Engine: \(currentEngine.label). Switch")
                     }
                     VStack(spacing: 5) {
+                        // The draft moved off what the workspace last ran on, which can't run here
+                        // (board docs/mocks/new-session-usable-default ② ③): say what it uses now
+                        // and why, with the same route to the reason (web parity).
+                        if draft.draftFallback != nil, let from = draft.rememberedDraftEngine,
+                           let line = SessionProviderChoices.fallbackLine(from: from, to: currentEngine, machine: machineName) {
+                            Button {
+                                if let rid = agent.runnerId, let engine = from.provider?.fixEngine {
+                                    if let url = draft.webFixURL(engine: engine) { openURL(url) }
+                                    else { app.openRunnerEngine(rid, engine: engine) }
+                                }
+                            } label: {
+                                Text("\(line) · \(from.provider?.regionBlocked == true ? ClaudeRegionCopy.CLAUDE_REGION_DETAILS : "Fix it")")
+                                    .font(.callout).foregroundStyle(Color.accentColor).lineLimit(2)
+                                    .multilineTextAlignment(.center)
+                            }
+                            .buttonStyle(.plain)
+                            .disabled(agent.runnerId == nil || from.provider?.fixEngine == nil)
                         // The pick is sticky, so it can point at an engine this machine can no
                         // longer run — and the session would only fail minutes later, at the runner.
                         // Say so here, and make the line the route to the fix (web parity).
-                        if let blocker = currentProviderChoice.unavailable,
+                        } else if let blocker = currentProviderChoice.unavailable,
                            currentProviderChoice.fixEngine != nil {
                             Button {
                                 if let rid = agent.runnerId {
@@ -1531,6 +1548,15 @@ struct NewSessionView: View {
                             Text("Send a task to get started.")
                                 .font(.callout).foregroundStyle(.secondary)
                             Text(heroSubtitle).font(.footnote).foregroundStyle(.tertiary).lineLimit(1)
+                        }
+                        // Nothing on this machine runs the draft (board ④): the send waits, and
+                        // another provider's key is the way out here.
+                        if draft.draftCantRun {
+                            Text(SessionProviderChoices.cantRunLine(machine: machineName))
+                                .font(.callout).foregroundStyle(.secondary).multilineTextAlignment(.center)
+                                .padding(.top, 6)
+                            Button(ClaudeRegionCopy.CLAUDE_REGION_USE_ANOTHER_PROVIDER) { openURL(draft.webProvidersURL()) }
+                                .font(.callout).buttonStyle(.plain).foregroundStyle(Color.accentColor)
                         }
                     }
                     #if os(macOS)
@@ -1643,6 +1669,11 @@ struct NewSessionView: View {
         // Re-resolve the effort pill when the account preference lands after the draft was built
         // (async `user` prime on a restored-token launch). The model owns the edit revision, so this
         // account-last-picked refill cannot overwrite a picker action made while it was loading.
+        // Lands the draft on what can run here when what the workspace last ran on can't, and back
+        // once it can again (board docs/mocks/new-session-usable-default).
+        .task(id: draft.draftFallbackTarget) {
+            draft.settleDraftDefault()
+        }
         .task(id: defaultEffort) {
             draft.adoptDraftDefaultEffort(defaultEffort, legacyWorkspaceDefault: agent.effort)
         }
@@ -1698,6 +1729,11 @@ struct NewSessionView: View {
     private var currentEngine: EngineChoice {
         SessionProviderChoices.currentEngine(engine: draft.engine, provider: draft.provider, engines: engines,
                                              sources: sources)
+    }
+
+    /// The machine this draft would run on, by the name its page gives it.
+    private var machineName: String? {
+        agent.runnerId.flatMap { app.agents?.runnerLabel($0) }
     }
 
     private var currentProviderChoice: ProviderChoice {

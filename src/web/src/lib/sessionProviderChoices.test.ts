@@ -6,6 +6,7 @@ import {
   currentEngineChoice,
   currentProviderChoice,
   defaultModelLabel,
+  draftFallback,
   engineChoices,
   engineProviders,
   engineTitleFor,
@@ -1105,5 +1106,61 @@ describe('a runner blocked for the Claude region', () => {
     expect(current.provider?.regionBlocked).toBe(true);
     expect(current.unavailable).toBe('Region not supported');
     expect(current.regionBlocked).toBe(true);
+  });
+});
+
+/**
+ * A new session's default when what the workspace last ran on can't run on this machine (board
+ * docs/mocks/new-session-usable-default): the same engine on a credential that runs, else another
+ * engine that has one, else nothing — the hero says why and the send waits.
+ */
+describe('draftFallback: a new session’s default that can run here', () => {
+  const blocked = { region: { verdict: 'blocked' as const } };
+  const anthropicKey: ConfiguredProvider = { ...claudeMax, slug: 'anthropic', label: 'Personal Max', engines: ['claude'] };
+  const claudeSignedIn = { engine: 'claude' as const, installed: true, auth: 'yes' as const };
+  const codexSignedIn = { engine: 'codex' as const, installed: true, auth: 'yes' as const };
+  const fallbackOf = (from: { engine: AgentProvider; provider: string }, over: Partial<ChoiceSources>) => {
+    const src = sources(over);
+    const engines = engineChoices(src, [from]);
+    return draftFallback(currentEngineChoice(from.engine, from.provider, engines, src), engines, src.engineHealth);
+  };
+
+  it('stays on what the workspace last ran on while it can run', () => {
+    expect(fallbackOf({ engine: CLAUDE, provider: CLAUDE }, { configured: [deepseek], engineHealth: [claudeSignedIn] })).toBeNull();
+  });
+
+  it('moves to a credential of the same engine that runs: the region-blocked sign-in lands on DeepSeek', () => {
+    expect(
+      fallbackOf({ engine: CLAUDE, provider: CLAUDE }, { configured: [deepseek, anthropicKey], engineHealth: [claudeSignedIn, codexSignedIn], ...blocked }),
+    ).toEqual({ engine: CLAUDE, provider: 'deepseek' });
+  });
+
+  it('moves to another engine only when the remembered one has nothing that runs here', () => {
+    expect(
+      fallbackOf({ engine: CLAUDE, provider: 'anthropic' }, { configured: [anthropicKey], engineHealth: [claudeSignedIn, codexSignedIn], ...blocked }),
+    ).toEqual({ engine: CODEX, provider: CODEX });
+  });
+
+  it('moves to another engine only onto one the runner says it has installed', () => {
+    const codexMissing = { engine: 'codex' as const, installed: false, auth: 'unknown' as const };
+    expect(
+      fallbackOf({ engine: CLAUDE, provider: 'anthropic' }, { configured: [anthropicKey], engineHealth: [claudeSignedIn, codexMissing], ...blocked }),
+    ).toBeNull();
+  });
+
+  it('has nowhere to go when nothing on the machine runs', () => {
+    expect(fallbackOf({ engine: CLAUDE, provider: CLAUDE }, { configured: [anthropicKey], engineHealth: [claudeSignedIn], ...blocked })).toBeNull();
+  });
+
+  it('moves for a reason other than the region too: a signed-out sign-in lands on a key', () => {
+    const signedOut = { engine: 'claude' as const, installed: true, auth: 'no' as const };
+    expect(fallbackOf({ engine: CLAUDE, provider: CLAUDE }, { configured: [deepseek], engineHealth: [signedOut] })).toEqual({
+      engine: CLAUDE,
+      provider: 'deepseek',
+    });
+  });
+
+  it('does not move on what nobody has checked: a runner that reported nothing', () => {
+    expect(fallbackOf({ engine: CLAUDE, provider: CLAUDE }, { configured: [deepseek] })).toBeNull();
   });
 });
