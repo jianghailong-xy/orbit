@@ -1999,7 +1999,8 @@ export function EscalatedItemCard({
       />
     );
   }
-  const heading = escalationHeading(row, now) ?? itemHeading(row);
+  // A baseline item is named by what it is about, whoever has it: the branch whose checks fail.
+  const heading = row.baseline ? itemHeading(row) : escalationHeading(row, now) ?? itemHeading(row);
   return (
     <ItemCard row={row} heading={heading} tone="owner" now={now} onChat={onChat} main={main}>
       {cardActions(row, currentPromotionId).length > 0 || (row.assignee === 'OWNER' && HAND_CLOSABLE_KINDS.has(row.kind))
@@ -2244,7 +2245,8 @@ export interface CoordinatorWorkspaceFacts {
 
 /** The kinds the "Who fixes it?" card draws, once they are the owner's by escalation, a hand-over, an
  *  ended or missing coordinator. A failed chain's 3rd failure and a silent landing claim keep cards
- *  of their own. */
+ *  of their own, and so does a baseline item (`row.baseline`): it is about the project branch with
+ *  main, not one task's branch, so its heading, facts, held tasks and resume line are the card. */
 const WHO_FIXES_KINDS: ReadonlySet<OpenItemKind> = new Set<OpenItemKind>([
   'INTEGRATION_CONFLICT',
   'INTEGRATION_CHECK_FAILED',
@@ -2255,6 +2257,7 @@ const WHO_FIXES_KINDS: ReadonlySet<OpenItemKind> = new Set<OpenItemKind>([
 
 export function whoFixesIt(row: ProjectOpenItemRow): boolean {
   return row.assignee === 'OWNER'
+    && !row.baseline
     && WHO_FIXES_KINDS.has(row.kind)
     && row.assigneeReason !== 'CHAIN_LIMIT'
     && row.assigneeReason !== 'DEFAULT';

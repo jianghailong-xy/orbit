@@ -2150,7 +2150,8 @@ extension ExceptionCards {
 
     /// The kinds the card draws once they are the owner's by escalation, a hand-over, an ended or
     /// missing coordinator. A failed chain's 3rd failure and a silent landing claim keep cards of
-    /// their own.
+    /// their own, and so does a baseline item (`row.baseline`): it is about the project branch with
+    /// main, not one task's branch, so its heading, facts, held tasks and resume line are the card.
     static let whoFixesKinds: Set<ProjectOpenItemKind> = [
         .integrationConflict, .integrationCheckFailed, .integrationError, .taskFailed, .deliveryReview,
     ]
@@ -2158,6 +2159,7 @@ extension ExceptionCards {
     /// Whether this item is drawn as the "Who fixes it?" card — the browser's `whoFixesIt`.
     public static func whoFixesIt(_ row: ProjectOpenItemRow) -> Bool {
         row.assignee == .owner
+            && row.baseline == nil
             && whoFixesKinds.contains(row.kind)
             && row.assigneeReason != .chainLimit
             && row.assigneeReason != .defaultReason
