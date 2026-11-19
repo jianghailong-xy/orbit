@@ -43,12 +43,12 @@ controllers and their decorators, so it lists what the server mounts, not what a
 | Caller | Routes |
 | --- | --- |
 | `public` | 37 |
-| `user` | 482 |
+| `user` | 483 |
 | `admin` | 31 |
 | `runner` | 205 |
 | `channel` | 1 |
 | `link gateway` | 3 |
-| **Total** | **759** |
+| **Total** | **760** |
 
 ## Public routes
 
@@ -425,6 +425,7 @@ controllers and their decorators, so it lists what the server mounts, not what a
 | `POST` | `/api/sessions/:id/turns/:turnId/translation/retry` | path `id`, `turnId` | `SessionsController.retryTurnTranslation` |
 | `POST` | `/api/sessions/:id/turns/:turnId/translation/send-as-written` | path `id`, `turnId` | `SessionsController.sendTurnAsWritten` |
 | `POST` | `/api/sessions/:id/turns/current-work-routing` | body `Object`; path `id` | `SessionsController.routedTurn` |
+| `GET` | `/api/sessions/:id/workflows` | path `id` | `SessionsController.workflowRuns` |
 | `GET` | `/api/sessions/:id/worktree-file` | path `id`; query `path` | `SessionsController.worktreeFile` |
 | `GET` | `/api/sessions/compact` | query `parentSessionId`, `status` | `SessionsController.listCompact` |
 | `GET` | `/api/sessions/counts` | — | `SessionsController.counts` |

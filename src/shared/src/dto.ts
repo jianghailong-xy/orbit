@@ -2856,6 +2856,43 @@ export interface SubagentRunView {
   readonly: boolean;
   /** Paths the child's edit tools wrote, as the runner collected them; empty while it runs and for a read-only run. */
   changedFiles: string[];
+  /** The Orbit workflow this run is a call of (docs/subagent-workflow-design.md §5.2): the `id` of its
+   *  `WorkflowRunView`. Such a run's `toolUseId` is `<the workflow call's tool_use id>#<callIndex>`. Null, as are
+   *  the three below, on a `delegate` call's run. */
+  workflowRunId: string | null;
+  /** The call's place in the script, numbered from 0 in the order the script made its `agent()` calls. */
+  callIndex: number | null;
+  /** The `agent()` call's `label` and `phase`, as the script gave them; null when it gave none. */
+  label: string | null;
+  phase: string | null;
+  createdAt: string;
+  endedAt: string | null;
+}
+
+/**
+ * One Orbit workflow as a client reads it (`GET /sessions/:id/workflows`, docs/subagent-workflow-design.md §5.1),
+ * keyed by the `mcp__orbit__workflow` call it belongs to. Its calls are SubAgent runs (`GET /sessions/:id/subagents`)
+ * whose `workflowRunId` is this `id`.
+ */
+export interface WorkflowRunView {
+  id: string;
+  /** The `mcp__orbit__workflow` call's tool_use id. */
+  toolUseId: string;
+  /** The script's `meta`: its name, description and phase titles, in the script's order. */
+  name: string;
+  description: string | null;
+  phases: string[];
+  status: SubagentRunStatus;
+  /** Calls that finished, and calls that ended any other way. While the workflow runs they and `costUsd` are
+   *  counted from its calls' runs; once it has ended they are what the runner reported for the whole script. */
+  callsDone: number;
+  callsFailed: number;
+  costUsd: number;
+  /** The cost limit the call set; null when it set none, the default: the workflow has no limit. */
+  maxCostUsd: number | null;
+  /** Why it did not finish, truncated: the script's error, or what interrupted or stopped it. Null while it runs
+   *  and when it finished. */
+  error: string | null;
   createdAt: string;
   endedAt: string | null;
 }

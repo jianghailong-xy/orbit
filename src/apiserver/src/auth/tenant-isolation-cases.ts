@@ -614,6 +614,8 @@ export const TENANT_ISOLATION_CASES: Readonly<Record<string, TenantCase>> = {
   'GET /sessions/:id/turns': { request: (of) => ({ params: { id: of.sessionId } }) },
   // A session's SubAgent runs (docs/subagent-design.md §6.4): B on A's session is 404 (SessionsService.listSubagentRuns).
   'GET /sessions/:id/subagents': { request: (of) => ({ params: { id: of.sessionId } }) },
+  // And the Orbit workflows they are calls of (docs/subagent-workflow-design.md §5.1): the same 404 (listWorkflowRuns).
+  'GET /sessions/:id/workflows': { request: (of) => ({ params: { id: of.sessionId } }) },
   'DELETE /sessions/:id/turns/:turnId': {
     request: (of) => ({ params: { id: of.sessionId, turnId: of.turnId } }),
     nested: ['turnId'],
