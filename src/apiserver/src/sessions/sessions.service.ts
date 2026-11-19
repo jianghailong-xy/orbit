@@ -35,7 +35,12 @@ import { appendScheduledWakeupContext, endWakeupLoop, readSessionWakeups } from 
 import { checkOnlyCommandRules, checkOnlyRuleRefusal, runAccessLevel, SCHEDULE_CHECK_ONLY_RULE_REFUSED } from '../schedules/schedule-access';
 import { settleUnrunWakeTurns } from '../runner-api/wake-turn-withdraw';
 import { linkNotFound } from '../share-links/share-link';
-import { freshRunningBgJobs } from './background-job-activity';
+import {
+  bgJobsStalled,
+  movingBgJobs,
+  SESSION_EXECUTING_EXCEPT_BG_JOB_WHERE,
+  SESSION_RUNNING_BG_JOB_WHERE,
+} from '../common/session-working';
 import { readSessionActivities, sessionActivitySql } from './task-work-carrier';
 import { CLEARED_RUNNING_WORK, KEEP_BACKGROUND_WORK_END_CONTENT } from './running-work';
 import { resolveLegacyArtifactPath, runEventPayloadMentions } from './legacy-artifact-path';
@@ -3821,12 +3826,15 @@ export class SessionsService {
    * (queued + dispatched); `running` is deliberately narrower and matches the Session list's blue
    * spinner: a dispatched turn, a self-driven engine turn, or a parked parent with a sub-agent
    * still working. Keeping both prevents queued-only workspaces from falsely looking as though the
-   * model is already running. `jobs` is neither: sessions with a background job in flight AND still
-   * producing output (`runningBgJobs` narrowed by `runningBgJobActivity`) — a `bg_run` that has gone
-   * quiet is a process, not work in progress, and the rail should not draw it as the latter. The
-   * rail draws this as its own quieter mark: real work the workspace can be doing with nobody
-   * generating in it, and the one thing `running` deliberately does not cover.
-   * `needsYou` is returned separately, and a session it counts is in neither `running` nor `jobs`:
+   * model is already running. `jobs` and `stalledJobs` are neither: sessions with a background job
+   * in flight, which is executing however quiet the job is (common/session-working.ts), split by the
+   * one flag beside it — `stalledJobs` when every job has produced nothing for a while
+   * (`bgJobsStalled`), `jobs` otherwise. The rail draws `jobs` as its own quieter mark: real work the
+   * workspace can be doing with nobody generating in it, and the one thing `running` deliberately
+   * does not cover; a stalled job is still counted, as `stalledJobs`, so a surface can say "no output
+   * for a while" rather than either hiding the work or vouching for a job that may be hung.
+   * `needsYou` is returned separately, and a session it counts is in none of `running`, `jobs` or
+   * `stalledJobs`:
    * the Session list draws that row with the waiting glyph, not the spinner or the breathing
    * terminal, and the expanded sidebar shows its activity dot beside the count — where a turn
    * blocked on you would otherwise light the dot for work that is not moving.
@@ -3854,16 +3862,8 @@ export class SessionsService {
       // Rows rather than a `groupBy`, so a session that needs you can be taken back out by id.
       // These are the sessions in flight right now — a handful even for a busy account.
       this.prisma.session.findMany({
-        where: {
-          ...open,
-          OR: [
-            { status: RunStatus.RUNNING },
-            {
-              status: RunStatus.AWAITING_INPUT,
-              OR: [{ engineTurnActive: true }, { runningSubagents: { isEmpty: false } }],
-            },
-          ],
-        },
+        // Executing, background jobs aside (they are the third tally): common/session-working.ts.
+        where: { ...open, ...SESSION_EXECUTING_EXCEPT_BG_JOB_WHERE },
         select: { id: true, workspaceId: true },
       }),
       // The third tally, and the only one that is neither "the model is generating" nor "somebody
@@ -3872,14 +3872,14 @@ export class SessionsService {
       // quieter mark than the working dot, because it answers the question the rail was silent
       // about: a workspace can be doing real work with nobody generating in it.
       //
-      // A job only counts while it is still MOVING (freshRunningBgJobs): a `bg_run` whose process is
-      // up but has produced nothing for BG_JOB_ACTIVITY_STALE_AFTER_MS is a hang, and a marker that
-      // breathes for a hang is a marker that means nothing. That verdict is a fact about `now`, so
-      // it can't be a WHERE clause and it isn't a stored answer — hence rows, not a groupBy. The
-      // candidate set is the sessions with any job in flight at all, which is a handful even for a
-      // busy account, and the rule applied here is the same one the session payload counts with.
+      // Every job counts as executing; whether its session's jobs have all gone quiet
+      // (bgJobsStalled) only decides which of `jobs` and `stalledJobs` it lands in. That verdict is a
+      // fact about `now`, so it can't be a WHERE clause and it isn't a stored answer — hence rows,
+      // not a groupBy. The candidate set is the sessions with any job in flight at all, which is a
+      // handful even for a busy account, and the rule applied here is the same one the session
+      // payload and the task carrier read.
       this.prisma.session.findMany({
-        where: { ...open, runningBgJobs: { isEmpty: false } },
+        where: { ...open, ...SESSION_RUNNING_BG_JOB_WHERE },
         select: { id: true, workspaceId: true, runningBgJobs: true, runningBgJobActivity: true },
       }),
       // Only the blocked rows come back (a handful at most), so this stays a lookup, not a scan
@@ -3931,12 +3931,12 @@ export class SessionsService {
           });
     const counts = new Map<
       string,
-      { workspaceId: string; active: number; running: number; jobs: number; needsYou: number }
+      { workspaceId: string; active: number; running: number; jobs: number; stalledJobs: number; needsYou: number }
     >();
     const row = (workspaceId: string) => {
       const existing = counts.get(workspaceId);
       if (existing) return existing;
-      const fresh = { workspaceId, active: 0, running: 0, jobs: 0, needsYou: 0 };
+      const fresh = { workspaceId, active: 0, running: 0, jobs: 0, stalledJobs: 0, needsYou: 0 };
       counts.set(workspaceId, fresh);
       return fresh;
     };
@@ -3996,14 +3996,16 @@ export class SessionsService {
       if (!session.workspaceId || needsYou.has(session.id)) continue;
       row(session.workspaceId).running += 1;
     }
-    // One session is one row of this tally however many jobs it has in flight, as it has always
-    // been. What changed with the freshness rule is that a session whose jobs have ALL gone quiet
-    // is not one of them: the rail should stop showing work where nothing is moving. `undefined`
-    // for a job nobody has reported progress on is not quiet — see BgJobActivity.
+    // One session is one row of these tallies however many jobs it has in flight, as it has always
+    // been. A session whose jobs have ALL gone quiet is still executing and is counted, as
+    // `stalledJobs`, so the rail's breathing mark stops where nothing is moving without the work
+    // disappearing. `undefined` for a job nobody has reported progress on is not quiet — see
+    // BgJobActivity.
+    const nowMs = Date.now();
     for (const session of jobs) {
       if (!session.workspaceId || needsYou.has(session.id)) continue;
-      if (freshRunningBgJobs(session.runningBgJobs, session.runningBgJobActivity).length === 0) continue;
-      row(session.workspaceId).jobs += 1;
+      if (bgJobsStalled(session, nowMs)) row(session.workspaceId).stalledJobs += 1;
+      else row(session.workspaceId).jobs += 1;
     }
     return [...counts.values()];
   }
@@ -4462,11 +4464,11 @@ export class SessionsService {
         -- sessions/abandoned-approvals.ts), which a cardinality cannot answer. A client that wants
         -- the processes asks the count.
         s.running_bg_shells AS "runningBgShells",
-        -- The subset of the above that is work in flight (a job/watch, never a service), minus the
-        -- ones that have gone quiet: what the clients draw as the pulsing terminal glyph, and what
-        -- the workspace rail reads as background activity. See Session.runningBgJobs and
-        -- freshRunningBgJobs (background-job-activity.ts) — the count is derived in the mapper,
-        -- from these two columns, because the threshold applies to the read.
+        -- The subset of the above that is work in flight (a job/watch, never a service): executing
+        -- however quiet. The mapper derives from these two columns the ones still moving (what the
+        -- clients draw as the pulsing terminal glyph) and the stalled flag beside them —
+        -- movingBgJobs and bgJobsStalled (common/session-working.ts) — because the threshold
+        -- applies to the read.
         s.running_bg_jobs AS "runningBgJobs",
         s.running_bg_job_activity AS "runningBgJobActivity",
         cardinality(s.running_subagents)::int AS "runningSubagentCount",
@@ -4719,7 +4721,10 @@ export class SessionsService {
         hasGuests: r.hasGuests === true,
         tags: r.tags,
         runningBgCount: r.runningBgCount,
-        runningBgJobCount: freshRunningBgJobs(r.runningBgJobs, r.runningBgJobActivity).length,
+        // The moving jobs, which the glyph breathes for; a session whose jobs have all gone quiet is
+        // still executing (`activity` says BACKGROUND_JOB) and says so with the flag beside it.
+        runningBgJobCount: movingBgJobs(r).length,
+        runningBgJobsStalled: bgJobsStalled(r),
         runningSubagentCount: r.runningSubagentCount,
         runningSubagentTitle: r.runningSubagentTitle,
         engineTurnActive: r.engineTurnActive,
@@ -5113,10 +5118,13 @@ export class SessionsService {
       // client that only needs to draw the glyph should not have to count them itself. The list
       // endpoint answers with the count and never the ids, so this is the one spelling both read.
       //
-      // Counted, not `runningBgJobs.length`: a job that has produced nothing for longer than the
-      // threshold is still a process (it stays in `runningBgShells`, and in the tray) but is no
-      // longer work in flight, which is the question this number answers.
-      runningBgJobCount: freshRunningBgJobs(session.runningBgJobs, runningBgJobActivity).length,
+      // Counted, not `runningBgJobs.length`: the jobs still moving, which is what the glyph breathes
+      // for. A job that has produced nothing for longer than the threshold is still executing — the
+      // session's `activity` and its task's run say so — and `runningBgJobsStalled` is the flag beside
+      // it when every job has gone quiet (common/session-working.ts, the same rule the task's
+      // `runStalled` and the rail's `stalledJobs` read).
+      runningBgJobCount: movingBgJobs({ runningBgJobs: session.runningBgJobs, runningBgJobActivity }).length,
+      runningBgJobsStalled: bgJobsStalled({ runningBgJobs: session.runningBgJobs, runningBgJobActivity }),
       projectId: coordinatorForProject?.id ?? null,
       projectTitle: coordinatorForProject?.title ?? null,
       projectIntegrationRef: integrationRef ? branchName(integrationRef) : null,

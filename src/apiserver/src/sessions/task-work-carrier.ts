@@ -3,6 +3,7 @@ import type { SessionActivity, TaskRunReason } from '@orbit/shared';
 
 import {
   ARMED_RETRY,
+  bgJobsStalled,
   ENGINE_TURN,
   PENDING_WAKEUP,
   RESUME_WATCH,
@@ -10,7 +11,6 @@ import {
   RUNNING_SUBAGENT,
 } from '../common/session-working';
 import type { PrismaService } from '../prisma/prisma.service';
-import { freshRunningBgJobs } from './background-job-activity';
 
 /**
  * Whether a work session is still CARRYING its task: the one definition behind every surface that
@@ -146,20 +146,15 @@ export interface RunStallFacts {
 }
 
 /**
- * A run held only by background jobs that have all stopped producing output.
- *
- * Deliberately NOT part of whether the task is running: a job that has written nothing for ten
- * minutes is still a process that will wake its session when it ends, and its known false positive —
- * a compile's silent phase, a `sleep` — is a job that is working (`BG_JOB_ACTIVITY_STALE_AFTER_MS`).
- * So the task stays RUNNING and this rides beside the reason, letting a surface say "no output for a
- * while" instead of either hiding the run or vouching for a job that may be hung. Only a
- * BACKGROUND_JOB reason can be stalled: a turn, or a wait for something else, is not held by the job.
+ * A run held only by background jobs that have all stopped producing output: the shared stall flag
+ * (`bgJobsStalled`, common/session-working.ts), which is deliberately not part of whether the task is
+ * running. The task stays RUNNING and this rides beside the reason, letting a surface say "no output
+ * for a while" instead of either hiding the run or vouching for a job that may be hung. The carrier's
+ * own addition is the reason: only a BACKGROUND_JOB reason can be stalled — a turn, or a wait for
+ * something else, is not held by the job.
  */
 export function runStalled(facts: RunStallFacts, nowMs: number): boolean {
-  const jobs = facts.runningBgJobs ?? [];
-  return facts.runReason === 'BACKGROUND_JOB'
-    && jobs.length > 0
-    && freshRunningBgJobs(jobs, facts.runningBgJobActivity, nowMs).length === 0;
+  return facts.runReason === 'BACKGROUND_JOB' && bgJobsStalled(facts, nowMs);
 }
 
 /** The work session carrying one task, as the surfaces that show the task read it. */

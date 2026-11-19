@@ -14,7 +14,6 @@ export const SESSION_TERMINAL_STATUS_READERS: Readonly<Record<string, number>> =
   'src/apiserver/src/common/session-tree-sql.ts': 1,
   'src/apiserver/src/help/help-ask-marker.ts': 1,
   'src/apiserver/src/help/help-ask-reads.ts': 1,
-  'src/apiserver/src/managed-runners/managed-runner-work.ts': 1,
   'src/apiserver/src/projects/attempt-ended-unsettled.producer.ts': 5,
   'src/apiserver/src/projects/coordinator-evidence-queue.service.ts': 2,
   'src/apiserver/src/projects/coordinator-handoff.service.ts': 3,

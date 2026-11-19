@@ -2,10 +2,13 @@ import assert from 'node:assert/strict';
 import { test } from 'node:test';
 import { RunStatus } from '@prisma/client';
 
+import { BG_JOB_ACTIVITY_STALE_AFTER_MS } from '../sessions/background-job-activity';
 import { ACTIVE_TURN_STATUSES } from './session-scheduling';
 import {
   SESSION_HOLDS_SLOT_WHERE,
+  bgJobsStalled,
   isSessionExecuting,
+  movingBgJobs,
   sessionHoldsSlot,
   sessionHoldsSlotSql,
   sessionWillWake,
@@ -104,4 +107,27 @@ test('holdsSlot is exactly ACTIVE_TURN_STATUSES and does not widen', () => {
   assert.deepEqual(ACTIVE_TURN_STATUSES, [RunStatus.RUNNING]);
   assert.deepEqual(SESSION_HOLDS_SLOT_WHERE, { status: RunStatus.RUNNING });
   assert.equal(sessionHoldsSlotSql('s'), `(s."status" = 'RUNNING'::"run_status")`);
+});
+
+test('a quiet background job is still executing; "stalled" is a flag beside it, not a verdict', () => {
+  const now = 1_000_000_000_000;
+  const quiet = now - BG_JOB_ACTIVITY_STALE_AFTER_MS - 60_000;
+  const moving = now - 5_000;
+  const row = (activity: Record<string, number>, jobs = Object.keys(activity)) => ({
+    status: RunStatus.AWAITING_INPUT,
+    runningBgJobs: jobs,
+    runningBgJobActivity: activity,
+  });
+  // One job silent for eleven minutes: executing, and stalled.
+  assert.equal(isSessionExecuting(row({ bgj_a: quiet })), true);
+  assert.equal(bgJobsStalled(row({ bgj_a: quiet }), now), true);
+  assert.deepEqual(movingBgJobs(row({ bgj_a: quiet }), now), []);
+  // One quiet and one moving: not stalled, one moving.
+  assert.equal(bgJobsStalled(row({ bgj_a: quiet, bgj_b: moving }), now), false);
+  assert.deepEqual(movingBgJobs(row({ bgj_a: quiet, bgj_b: moving }), now), ['bgj_b']);
+  // A job nobody reported progress on is not quiet (an older runner).
+  assert.equal(bgJobsStalled(row({}, ['bgj_unreported']), now), false);
+  // No job at all is not stalled.
+  assert.equal(bgJobsStalled(row({}), now), false);
+  assert.equal(bgJobsStalled({ runningBgJobs: null, runningBgJobActivity: null }, now), false);
 });

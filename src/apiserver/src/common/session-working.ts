@@ -1,5 +1,6 @@
 import { Prisma, RunStatus } from '@prisma/client';
 
+import { freshRunningBgJobs } from '../sessions/background-job-activity';
 import { OPEN_SESSION_STATUSES } from './session-scheduling';
 
 /**
@@ -144,17 +145,44 @@ export const isSessionExecuting = (row: SessionExecutionRow): boolean =>
   DISPATCHED_TURN.holds(row)
   || (OPEN_SESSION_STATUSES.includes(row.status) && OUTSIDE_TURN_FACTS.some((fact) => fact.holds(row)));
 
-export const SESSION_EXECUTING_WHERE: Prisma.SessionWhereInput = {
+const executingWhere = (outsideTurn: ReadonlyArray<SessionFact<never>>): Prisma.SessionWhereInput => ({
   OR: [
     DISPATCHED_TURN.where,
-    { status: { in: OPEN_SESSION_STATUSES }, OR: OUTSIDE_TURN_FACTS.map((fact) => fact.where) },
+    { status: { in: OPEN_SESSION_STATUSES }, OR: outsideTurn.map((fact) => fact.where) },
   ],
+});
+
+export const SESSION_EXECUTING_WHERE: Prisma.SessionWhereInput = executingWhere(OUTSIDE_TURN_FACTS);
+
+/**
+ * Executing for any reason but a background job: a dispatched turn, the engine's own turn or a
+ * subagent. What the workspace rail's "working" tally counts; it marks a background job beside it,
+ * with `SESSION_RUNNING_BG_JOB_WHERE`, so together the two are `SESSION_EXECUTING_WHERE`.
+ */
+export const SESSION_EXECUTING_EXCEPT_BG_JOB_WHERE: Prisma.SessionWhereInput =
+  executingWhere([ENGINE_TURN, RUNNING_SUBAGENT]);
+
+/** A session that has not ended with a background job in flight, quiet or not: executing. */
+export const SESSION_RUNNING_BG_JOB_WHERE: Prisma.SessionWhereInput = {
+  status: { in: OPEN_SESSION_STATUSES },
+  ...RUNNING_BG_JOB.where,
 };
 
 export function sessionExecutingSql(session: string): string {
   return `(${DISPATCHED_TURN.sql(session)}
-    OR (${openStatusSql(session)}
-      AND (${OUTSIDE_TURN_FACTS.map((fact) => fact.sql(session)).join(' OR ')})))`;
+    OR ${sessionExecutingOutsideTurnSql(session)})`;
+}
+
+/**
+ * The part of `sessionExecutingSql` that is not a dispatched turn: on a session that has not ended,
+ * the engine's own turn, a subagent or a background job. `alsoCounting` lets a reader add work of its
+ * own on top of those facts, on the same open sessions — managed runner sleep adds background shells,
+ * which are no fact here (see the top of this file).
+ */
+export function sessionExecutingOutsideTurnSql(session: string, alsoCounting: readonly string[] = []): string {
+  const facts = [...OUTSIDE_TURN_FACTS.map((fact) => fact.sql(session)), ...alsoCounting];
+  return `(${openStatusSql(session)}
+      AND (${facts.join(' OR ')}))`;
 }
 
 /**
@@ -183,3 +211,24 @@ export const SESSION_HOLDS_SLOT_WHERE: Prisma.SessionWhereInput = DISPATCHED_TUR
 export function sessionHoldsSlotSql(session: string): string {
   return `(${DISPATCHED_TURN.sql(session)})`;
 }
+
+/**
+ * "No output for a while", the one flag beside a background job (docs/session-three-state-design.md
+ * §11.3 item 5). It is NOT part of executing: a job that has written nothing for
+ * `BG_JOB_ACTIVITY_STALE_AFTER_MS` is still a process that will wake its session when it ends, and its
+ * known false positive — a compile's silent phase, a `sleep` — is a job that is working. So every
+ * surface counts a quiet job as executing and may show this flag beside it: the task carrier's
+ * `runStalled`, the session row's `runningBgJobsStalled`, the workspace rail's `stalledJobs`.
+ */
+export interface SessionBgJobProgressRow {
+  runningBgJobs?: readonly string[] | null;
+  runningBgJobActivity?: unknown;
+}
+
+/** The session's background jobs whose output moved within the threshold (or was never reported). */
+export const movingBgJobs = (row: SessionBgJobProgressRow, nowMs: number = Date.now()): string[] =>
+  freshRunningBgJobs(row.runningBgJobs ?? [], row.runningBgJobActivity, nowMs);
+
+/** The session has background jobs in flight and every one of them has gone quiet. */
+export const bgJobsStalled = (row: SessionBgJobProgressRow, nowMs: number = Date.now()): boolean =>
+  RUNNING_BG_JOB.holds(row) && movingBgJobs(row, nowMs).length === 0;
