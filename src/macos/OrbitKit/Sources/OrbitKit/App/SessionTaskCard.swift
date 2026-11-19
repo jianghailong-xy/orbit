@@ -112,6 +112,37 @@ public struct SessionTaskCard: Equatable, Sendable {
         SessionCreatedTasksCopy.singleNamesTheTask && total == 1 && rows.count == 1 ? rows[0] : nil
     }
 
+    /// What the collapsed row says past one task, as the Agents line says it of its runs
+    /// (`SubagentSessionSummary.band`; the browser's `sessionTaskBand`, both held to the fixture's
+    /// `band` cases): the newest running task by name, after `N running · ` when more than one runs,
+    /// or with none running `total · ` and the newest task's name. `row` is the task whose pill
+    /// closes the line; `failed`, above zero, is written red as `N failed · ` before `text`, so an
+    /// older failure is not hidden behind the newest task's Done.
+    public struct Band: Equatable, Sendable {
+        public let failed: Int
+        public let text: String
+        public let row: Row
+
+        /// The red part that leads the line, `N failed`; nil while nothing failed.
+        public var failedPart: String? { failed > 0 ? "\(failed) failed" : nil }
+    }
+
+    /// Newest is the latest `createdAt`; a watched task created elsewhere has none and is the
+    /// oldest; a tie goes to the earlier row. Nil with one row, which `single` names.
+    public var band: Band? {
+        guard single == nil, !rows.isEmpty else { return nil }
+        func newest(_ rows: [Row]) -> Row {
+            rows.dropFirst().reduce(rows[0]) { ($1.createdAt ?? "") > ($0.createdAt ?? "") ? $1 : $0 }
+        }
+        let going = rows.filter { $0.standing?.running == true }
+        if !going.isEmpty {
+            let row = newest(going)
+            return Band(failed: failed, text: running > 1 ? "\(running) running · \(row.title)" : row.title, row: row)
+        }
+        let row = newest(rows)
+        return Band(failed: failed, text: "\(total) · \(row.title)", row: row)
+    }
+
     public var countParts: [SessionCreatedTasksCopy.CountPart] {
         SessionCreatedTasksCopy.countParts(running: running, failed: failed, done: done, total: total)
     }
