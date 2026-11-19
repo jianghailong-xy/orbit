@@ -34,9 +34,10 @@ class CoordinatorHandoffShellTest : ComposerShellTest() {
     }
     private val running = arrayOf<Pair<String, JsonElement>>("status" to JsonPrimitive("RUNNING"), "runState" to JsonPrimitive("RUNNING"))
 
-    private fun inDialog(text: String) = hasText(text) and hasAnyAncestor(isDialog())
+    /** In the usage sheet the toolbar's ring opens (a bottom sheet since board android-composer-parity), or in a dialog. */
+    private fun inDialog(text: String) = hasText(text) and (hasAnyAncestor(isDialog()) or hasAnyAncestor(hasTestTag("composer-context-sheet")))
     private fun openContext() {
-        val usage = hasText("· Usage", substring = true) and hasClickAction()
+        val usage = hasTestTag("composer-context") and hasClickAction()
         await { has(usage) }
         compose.onNode(usage).performClick()
         await { has(inDialog("Context and plan usage")) }

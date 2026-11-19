@@ -504,7 +504,9 @@ run (`LANDING_FAILED`) with its reason, through the same push and **Waiting on y
   URL, a rate limit, where it left off.
 - The report ends the run. The session's turn may go on, but nothing after it changes the run.
 - A session that ends or settles idle without a report fails the run with `NO_REPORT`. Silence never reads as "no
-  change".
+  change". A session is not idle while one of its `bg_run` jobs (job or watch, not a service) is still running or a
+  turn, such as that job's wake, is still to be answered: a run may end its turn to wait for a job, and its run limit
+  still counts that wait.
 
 ### 7.2 Failure reasons and retries
 

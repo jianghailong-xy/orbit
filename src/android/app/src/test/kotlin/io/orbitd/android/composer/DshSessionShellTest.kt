@@ -146,7 +146,7 @@ class DshSessionShellTest : ComposerShellTest() {
         // The + menu's Shell command says the same, and puts no ! in the box.
         compose.onNodeWithTag("composer-input").performTextReplacement("")
         compose.onNodeWithText("Dismiss error").performClick()
-        compose.onNode(hasText("+") and hasClickAction()).performClick()
+        compose.onNodeWithTag("composer-plus").performClick()
         compose.onNode(hasText("Shell command") and hasClickAction()).performClick()
         awaitText("DeepSeek Harness sessions don't run ! shell commands — ask the agent to run it instead.")
         assertFalse(has(hasTestTag("composer-input") and hasText("!")))

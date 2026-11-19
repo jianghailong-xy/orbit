@@ -821,7 +821,9 @@ func openCodeError(v interface{}) (message string, providerAuth bool) {
 			message = string(raw)
 		}
 	}
-	return message, name == "ProviderAuthError"
+	// OpenCode can report a rejected API key as an APIError with the 401 only in data.
+	statusCode, _ := data["statusCode"].(float64)
+	return message, name == "ProviderAuthError" || (name == "APIError" && statusCode == 401)
 }
 
 func newOpenCodeAgentName() (string, error) {
