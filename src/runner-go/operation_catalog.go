@@ -5350,6 +5350,12 @@ var catalogMetadata = map[string]operationMeta{
 		SuccessEvidence: "Whether the browser is running, the session holding it, the viewers and whether saved logins exist.",
 		Returns:         "The browser's status (JSON): enabled, runnerId, state, running, holderSessionId, holderTitle, viewers, savedLogins, reportedAt.",
 	},
+	"browser_open": {
+		Object:          objectBrowser,
+		Intent:          "Start the account's Orbit Cloud browser and get its tab's address, optionally opening a page in it.",
+		SuccessEvidence: "The browser tab's address, and the runner reporting the browser running.",
+		Returns:         "The open (JSON): enabled, runnerId, tabUrl, url, requestedAt, running, message.",
+	},
 
 	// ── the guide ──
 	"guide": {

@@ -218,6 +218,7 @@ export const HEARTBEAT_DELIVERIES = {
   postponeSelfUpdateUntil: { how: 'MARKED', writers: ['runners/runners.service.ts#postponeSelfUpdate'], pending: 'until a beat claims it' },
   selfUpdateNow: { how: 'MARKED', writers: ['runners/runners.service.ts#updateSelfNow'], pending: 'until a beat claims it' },
   clearBrowserProfile: { how: 'MARKED', writers: ['managed-runners/browser-state.ts#clear'], pending: 'until a beat claims it' },
+  openBrowser: { how: 'MARKED', writers: ['managed-runners/browser-state.ts#open'], pending: 'until a beat claims it' },
   codexRateLimitResetRequest: {
     how: 'MARKED',
     writers: ['runners/codex-rate-limit-reset.service.ts#create'],
@@ -962,6 +963,7 @@ export function heartbeatAnswerHandsOut(answer: RunnerHeartbeatResponse): boolea
     || answer.postponeSelfUpdateUntil !== undefined
     || answer.selfUpdateNow === true
     || answer.clearBrowserProfile === true
+    || answer.openBrowser !== undefined
   );
 }
 

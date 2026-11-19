@@ -948,6 +948,23 @@ export interface RunnerBrowserStatus {
   reportedAt: string | null;
 }
 
+/** The body of POST /runner/browser/open (browser_open, `orbit browser open [--url]`). */
+export interface RunnerBrowserOpenRequest {
+  /** A page for the remote Chrome to open (http or https). Absent: the browser is started and left on its page. */
+  url?: string;
+}
+
+/** Its answer: the open is handed to the Orbit Cloud runner's next heartbeat, which the runner is woken for at once. */
+export interface RunnerBrowserOpenResponse {
+  /** The account's Orbit Cloud runner. */
+  runnerId: string;
+  /** The browser's tab on this server (`/runners/:id/browser`, absolute), for a person to watch or take control in. */
+  tabUrl: string;
+  /** The page asked for, or null when none was. */
+  url: string | null;
+  requestedAt: string;
+}
+
 /** POST /runners/:id/browser/clear: Clear saved logins, accepted and waiting for the runner's next heartbeat. */
 export interface RunnerBrowserClearResponse {
   requestedAt: string;
@@ -1593,6 +1610,11 @@ export interface RunnerHeartbeatResponse {
    *  Set once per request and cleared as it is handed over, like `checkSelfUpdate`; only a runner that declares
    *  BROWSER_CLEAR_V1 is asked, and its `browser.profileClearedAt` is the answer. */
   clearBrowserProfile?: boolean;
+  /** A session's browser_open (POST /runner/browser/open): start the browser if it is not running, and when `url` is
+   *  set open that page in it, unless another session than `sessionId` holds the browser's lease. Set once per request
+   *  and cleared as it is handed over, like `clearBrowserProfile`; only a runner that declares BROWSER_OPEN_V1 is
+   *  asked. */
+  openBrowser?: { sessionId: string; url?: string };
   /** This machine's free-space floor in MB (Runner.minFreeDiskMb), the same number the auto-run
    *  disk gate reads. Sent so the runner can apply it to work only it can see — reclaiming the
    *  session checkouts on its own disk — without keeping a second copy of the setting.
@@ -1701,6 +1723,11 @@ export const SELF_UPDATE_NOW_V1 = 'self-update-now/v1';
  *  on each heartbeat (`browser`) and honours Clear saved logins (`clearBrowserProfile`). A runner without it is
  *  refused a clear. runner-go asserts the same string. */
 export const BROWSER_CLEAR_V1 = 'browser-clear/v1';
+
+/** Declared by a managed runner that honours a session's browser_open (`openBrowser`): it starts the browser and opens
+ *  the page asked for through Chrome's DevTools. A runner without it is refused an open as too old. runner-go asserts
+ *  the same string. */
+export const BROWSER_OPEN_V1 = 'browser-open/v1';
 
 /** Declared by a runner that keeps a remote SubAgent's conversation when the run ends and continues it on a claim's
  *  `resumeOf` (docs/subagent-design.md §10.2). A resume is refused for a target runner without it, which would start

@@ -524,6 +524,10 @@ type HeartbeatResponse struct {
 	// over once and cleared, like CheckSelfUpdate; sent only to a runner that declares browser-clear/v1. The answer is
 	// the browser report's profileClearedAt on the beats that follow.
 	ClearBrowserProfile bool `json:"clearBrowserProfile,omitempty"`
+	// A session's browser_open: start the browser if it is not running and open URL in it, unless another session
+	// than SessionID holds the lease (browser_open.go, handleBrowserOpen). Handed over once and cleared, like
+	// ClearBrowserProfile; sent only to a runner that declares browser-open/v1.
+	OpenBrowser *BrowserOpenCommand `json:"openBrowser,omitempty"`
 	// The control plane takes a claim scoped to named sessions (GET /runner/sessions/claim?drainScope=):
 	// a pool draining for an update claims only for sessions whose engine is running a turn here
 	// (drainClaimScope). False/absent on older control planes, which would ignore the scope, so the

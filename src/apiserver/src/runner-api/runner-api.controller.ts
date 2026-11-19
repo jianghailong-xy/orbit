@@ -3,7 +3,7 @@ import { appendRunQuestionContext, questionRecipient, RUN_QUESTION_PREFIX } from
 import { DRAIN_SKIPS_HELD, translationLanguages, turnTranslationOf } from '../sessions/turn-translation';
 import { isRunNotifyTurn, runNotifyContent } from '../sessions/run-notify';
 import { acceptedFinalizeBranch, codelessClaimFields } from '../sessions/codeless-checkout';
-import { BROWSER_CLEAR_V1, CONDITION_PROBE_CAPABILITY, readMergeRecovery, mergeRecoveryReady, RUNNER_RESTART_INTERRUPT_REASON, RUNNER_UPDATE_INTERRUPT_REASON, type MergeRecovery } from '@orbit/shared';
+import { BROWSER_CLEAR_V1, BROWSER_OPEN_V1, CONDITION_PROBE_CAPABILITY, readMergeRecovery, mergeRecoveryReady, RUNNER_RESTART_INTERRUPT_REASON, RUNNER_UPDATE_INTERRUPT_REASON, type MergeRecovery } from '@orbit/shared';
 import { OWNER_SECRET_CAPABILITY, OwnerSecretsService } from '../owner-requests/owner-secrets.service';
 import { ConditionsService } from '../conditions/conditions.service';
 import { GithubWorkspaceService } from '../github/github-workspace.service';
@@ -2708,6 +2708,7 @@ export class RunnerApiController {
     let postponeSelfUpdateUntil: RunnerHeartbeatResponse['postponeSelfUpdateUntil'];
     let selfUpdateNow: RunnerHeartbeatResponse['selfUpdateNow'];
     let clearBrowserProfile: RunnerHeartbeatResponse['clearBrowserProfile'];
+    let openBrowser: RunnerHeartbeatResponse['openBrowser'];
     let regionCheckRequest: RunnerHeartbeatResponse['regionCheckRequest'];
     let forkSnapshotsOpen: RunnerHeartbeatResponse['forkSnapshotsOpen'];
     try {
@@ -2788,6 +2789,11 @@ export class RunnerApiController {
       if (runnerSupportsCapability(capabilities, BROWSER_CLEAR_V1)) {
         clearBrowserProfile = await this.drainBrowserClearRequest(runner.id);
       }
+      // A session's browser_open (managed-runners/browser-state.ts#open), claimed the same way, by a runner that
+      // declares browser-open/v1 only.
+      if (runnerSupportsCapability(capabilities, BROWSER_OPEN_V1)) {
+        openBrowser = await this.drainBrowserOpenRequest(runner.id);
+      }
       // The owner's Check again, redelivered rather than claimed: a beat that skips it costs nothing, so it is last.
       regionCheckRequest = await this.drainRegionCheckRequest(runner.id, capabilities);
       // A listing, read on every full beat like agentDirs; a beat that fails before it states nothing, which the
@@ -2861,6 +2867,7 @@ export class RunnerApiController {
       postponeSelfUpdateUntil,
       selfUpdateNow,
       ...(clearBrowserProfile ? { clearBrowserProfile } : {}),
+      ...(openBrowser ? { openBrowser } : {}),
       // Only when a claim holds a command for this process: an older runner's response stays the shape
       // it always was, and a direct caller comparing responses sees no new key.
       ...(codexRateLimitResetRequest ? { codexRateLimitResetRequest } : {}),
@@ -3236,6 +3243,24 @@ export class RunnerApiController {
    * the claim, predicated on the time read, so a second press written between the read and the clear stays for the
    * next beat. The runner's `browser.profileClearedAt` is the answer.
    */
+  /** A session's browser_open, claimed by the beat that hands it over: what it asks for, or undefined. */
+  private async drainBrowserOpenRequest(runnerId: string): Promise<RunnerHeartbeatResponse['openBrowser']> {
+    const row = await this.prisma.runner.findUnique({
+      where: { id: runnerId },
+      select: { browserOpenRequestedAt: true, browserOpenRequest: true },
+    });
+    const at = row?.browserOpenRequestedAt;
+    if (!at) return undefined;
+    const claimed = await this.prisma.runner.updateMany({
+      where: { id: runnerId, browserOpenRequestedAt: at },
+      data: { browserOpenRequestedAt: null, browserOpenRequest: Prisma.DbNull },
+    });
+    if (claimed.count === 0) return undefined;
+    const asked = (row.browserOpenRequest ?? {}) as { sessionId?: unknown; url?: unknown };
+    const sessionId = typeof asked.sessionId === 'string' ? asked.sessionId : '';
+    return typeof asked.url === 'string' && asked.url !== '' ? { sessionId, url: asked.url } : { sessionId };
+  }
+
   private async drainBrowserClearRequest(runnerId: string): Promise<true | undefined> {
     const row = await this.prisma.runner.findUnique({ where: { id: runnerId }, select: { browserClearRequestedAt: true } });
     const at = row?.browserClearRequestedAt;

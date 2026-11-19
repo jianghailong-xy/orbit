@@ -934,6 +934,10 @@ model Runner {
   // The owner's Clear saved logins (1090): handed to the next heartbeat as clearBrowserProfile and cleared there,
   // like selfUpdateRequestedAt. The report's profileClearedAt is the answer.
   browserClearRequestedAt DateTime? @map("browser_clear_requested_at")
+  // A session's browser_open (1237): handed to the next heartbeat as openBrowser and cleared there, like
+  // browserClearRequestedAt. browserOpenRequest is what it asks for: {sessionId, url?}, cleared with it.
+  browserOpenRequestedAt DateTime? @map("browser_open_requested_at")
+  browserOpenRequest Json? @map("browser_open_request")
   // The push that something of the owner's waits on this runner's drain (0595): set by the one
   // heartbeat that sends it, cleared by a beat that is not draining, so each drain pushes once.
   drainWaitingPushedAt DateTime? @map("drain_waiting_pushed_at")
