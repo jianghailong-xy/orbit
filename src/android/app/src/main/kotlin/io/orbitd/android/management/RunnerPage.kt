@@ -1120,6 +1120,10 @@ internal object RunnerPage {
     fun isManaged(id: String?, managedRunnerId: String? = ManagedRunnerIdentity.runnerId, managed: Boolean? = null): Boolean =
         managed == true || (!id.isNullOrEmpty() && !managedRunnerId.isNullOrEmpty() && ObjectId.same(id, managedRunnerId))
 
+    /** The OS a runner reported, from its `os:<goos>` capability (`darwin`, `linux`, `windows`, …), as the web's machineOs reads it;
+     *  null when it has not said. A machine row draws its mark by it (docs/mocks/machine-menu-icons, A). */
+    fun os(runner: JsonObject): String? = runner.strings("capabilities").firstOrNull { it.startsWith("os:") }?.removePrefix("os:")
+
     /** Pin the account's managed runner, keeping the order the server sent for the other machines. */
     fun managedRunnerFirst(runners: List<JsonObject>, managedRunnerId: String? = ManagedRunnerIdentity.runnerId): List<JsonObject> =
         runners.sortedByDescending { isManaged(it, managedRunnerId) }

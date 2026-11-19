@@ -67,6 +67,13 @@ public enum RunnerPageFormat {
         return PublicID.storageKey(runnerID) == PublicID.storageKey(managedRunnerID)
     }
 
+    /// The OS a runner reported, from its `os:<goos>` capability (`darwin`, `linux`, `windows`, …), as the web's
+    /// `machineOs` reads it; nil when it has not said. A machine list draws its mark by it (docs/mocks/machine-menu-icons, A).
+    public static func os(_ runner: Runner) -> String? {
+        guard let capability = runner.capabilities?.first(where: { $0.hasPrefix("os:") }) else { return nil }
+        return String(capability.dropFirst(3))
+    }
+
     /// Orbit Cloud leads the list. The other machines keep the order the server gave them.
     public static func managedFirst(_ runners: [Runner], managedRunnerID: String?) -> [Runner] {
         guard let index = runners.firstIndex(where: { isManaged($0, managedRunnerID: managedRunnerID) }),

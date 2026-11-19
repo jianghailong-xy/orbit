@@ -349,8 +349,12 @@ struct ComposerView: View {
     }
 
     /// The "Chinese → English" tag shows while the account translates and the box is empty.
+    /// A suggestion on offer takes the line instead (docs/mocks/prompt-suggestion-room): the tag is about
+    /// words typed, and the guess needs the width. Its "unavailable" warning still shows over a guess.
     private var showsTranslationTag: Bool {
-        SessionTranslation.isOn(app.user) && console.composerText.isEmpty
+        guard SessionTranslation.isOn(app.user), console.composerText.isEmpty else { return false }
+        if offeredSuggestion == nil { return true }
+        return (SessionTranslation.temporarilyUnavailableUntil(app.user) ?? .distantPast) > Date()
     }
 
     /// The engine's guess at the next message, when the empty box offers it (`ComposerLogic`,
@@ -542,6 +546,7 @@ struct ComposerView: View {
                         if showsTranslationTag {
                             ComposerTranslationTag(language: SessionTranslation.language(app.user?.preferences),
                                                    agentLanguage: SessionTranslation.agentLanguage(app.user?.preferences),
+                                                   unavailableUntil: SessionTranslation.temporarilyUnavailableUntil(app.user),
                                                    open: openTranslationSettings)
                             .onGeometryChange(for: CGFloat.self) { $0.size.width } action: { translationTagWidth = $0 }
                         }
@@ -796,7 +801,9 @@ struct ComposerView: View {
                     #if os(macOS)
                     .keyboardShortcut("o", modifiers: [.command, .shift])
                     #endif
-                    .layoutPriority(1)
+                    // Below the model control's 1: the model is offered its room first, so on a full
+                    // phone footer Optimize folds to ✦ before the model gives up its effort or name.
+                    .layoutPriority(0.5)
             }
             sendControls
         }
@@ -1294,23 +1301,11 @@ struct ComposerView: View {
     private var modelChipLabel: some View {
         let smart = smartRoute != nil
         #if os(iOS)
-        HStack(alignment: .firstTextBaseline, spacing: 5) {
-            if smart {
-                Text("✦")
-                    .foregroundStyle(Color.accentColor)
-                    .accessibilityHidden(true)
-            }
-            Text(modelDisplayName)
-                .fontWeight(.semibold)
-                .foregroundStyle(Color.primary)
-                .lineLimit(1)
-                .truncationMode(.tail)
-            if !chipEffortLabel.isEmpty {
-                Text(chipEffortLabel)
-                    .foregroundStyle(Color.secondary)
-                    .lineLimit(1)
-                    .fixedSize()
-            }
+        // Where the name and the effort don't both fit, the effort leaves the footer (it stays in
+        // the menu) before the name truncates (board composer-usage-tap 04).
+        ViewThatFits(in: .horizontal) {
+            chipRow(smart: smart, effort: !chipEffortLabel.isEmpty)
+            if !chipEffortLabel.isEmpty { chipRow(smart: smart, effort: false) }
         }
         .padding(.horizontal, smart ? 7 : 0)
         .padding(.vertical, smart ? 2 : 0)
@@ -1324,6 +1319,30 @@ struct ComposerView: View {
             .lineLimit(1)
         #endif
     }
+
+    #if os(iOS)
+    /// One of the phone chip's two widths: the name with the effort after it, or the name alone.
+    private func chipRow(smart: Bool, effort: Bool) -> some View {
+        HStack(alignment: .firstTextBaseline, spacing: 5) {
+            if smart {
+                Text("✦")
+                    .foregroundStyle(Color.accentColor)
+                    .accessibilityHidden(true)
+            }
+            Text(modelDisplayName)
+                .fontWeight(.semibold)
+                .foregroundStyle(Color.primary)
+                .lineLimit(1)
+                .truncationMode(.tail)
+            if effort {
+                Text(chipEffortLabel)
+                    .foregroundStyle(Color.secondary)
+                    .lineLimit(1)
+                    .fixedSize()
+            }
+        }
+    }
+    #endif
 
     /// The effort half of the chip, with the fast lane appended while the session is in one —
     /// "Max · Fast". Web parity (`.composer-model-effort`); the lane is named there too rather than
@@ -1846,7 +1865,7 @@ struct ComposerView: View {
 /// placeholder would be (docs/prompt-suggestions-design.md §4.1). On a Mac, Use at its end (or Tab)
 /// takes it, and only Use takes the click. A touch screen has no button: a double-tap on the line
 /// takes it (`GrowingTextEditor`), and the words are followed by
-/// "Double-tap to use". Either way a tap anywhere else lands in the field, to type something else.
+/// "Double-tap". Either way a tap anywhere else lands in the field, to type something else.
 private struct PromptSuggestionLine: View {
     let text: String
     #if !os(iOS)
@@ -1859,7 +1878,7 @@ private struct PromptSuggestionLine: View {
         // field's own line height and the words sit exactly where typed ones would.
         HStack(alignment: .firstTextBaseline, spacing: 8) {
             words
-            Text("Double-tap to use")
+            Text("Double-tap")
                 .font(.orbitLabel)
                 .foregroundStyle(Self.placeholderColor)
                 .fixedSize()
@@ -2375,6 +2394,10 @@ private struct ContextWindowIndicator: View {
             // A phone's gauge is a 32pt-tall target like + and Send beside it, never narrower than
             // it is tall.
             .frame(minWidth: gaugeShowsNumber ? nil : 32, minHeight: gaugeShowsNumber ? nil : 32)
+            // A min-only frame lets a full toolbar squeeze it down to 32pt, narrower than the bar,
+            // ring and capsule inside it, which then draw over the model name and ✦ Optimize. Pinned
+            // to its ideal width, the gauge holds its room and the model name truncates instead.
+            .fixedSize()
             // The ring is only a stroke — dashed when there is no reading — and a plain button takes
             // a tap only where it draws: the whole gauge opens the detail, its hollow centre too.
             .contentShape(Rectangle())

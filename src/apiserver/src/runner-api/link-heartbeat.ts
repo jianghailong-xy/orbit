@@ -107,6 +107,7 @@ export const HEARTBEAT_FACTS = {
   reposRoot: 'REPORT',
   selfUpdate: 'REPORT',
   managedWorkload: 'DELIVERY',
+  browser: 'REPORT',
   resources: 'PRESENCE',
   backgroundJobSessionIds: 'PRESENCE',
 } as const satisfies { [K in keyof Required<RunnerHeartbeatRequest>]: HeartbeatFactRole };
@@ -119,7 +120,7 @@ export const HEADERS_FACT = '@headers';
 /** The kinds the runner row is written from; unchanged, a full reconcile leaves the row as it is (item 4 of O1). */
 export const RUNNER_ROW_FACTS: readonly string[] = [
   'status', 'version', 'leaseOwner', 'draining', 'commands', 'skills', 'modelCatalog', 'engines', 'runtimeDefaultModels',
-  'repos', 'runsAsRoot', 'reposRoot', 'selfUpdate', 'managedWorkload', HEADERS_FACT,
+  'repos', 'runsAsRoot', 'reposRoot', 'selfUpdate', 'managedWorkload', 'browser', HEADERS_FACT,
 ];
 
 /**
@@ -217,6 +218,7 @@ export const HEARTBEAT_DELIVERIES = {
   },
   postponeSelfUpdateUntil: { how: 'MARKED', writers: ['runners/runners.service.ts#postponeSelfUpdate'], pending: 'until a beat claims it' },
   selfUpdateNow: { how: 'MARKED', writers: ['runners/runners.service.ts#updateSelfNow'], pending: 'until a beat claims it' },
+  clearBrowserProfile: { how: 'MARKED', writers: ['managed-runners/browser-state.ts#clear'], pending: 'until a beat claims it' },
   codexRateLimitResetRequest: {
     how: 'MARKED',
     writers: ['runners/codex-rate-limit-reset.service.ts#create'],
@@ -962,6 +964,7 @@ export function heartbeatAnswerHandsOut(answer: RunnerHeartbeatResponse): boolea
     || answer.checkSelfUpdate === true
     || answer.postponeSelfUpdateUntil !== undefined
     || answer.selfUpdateNow === true
+    || answer.clearBrowserProfile === true
   );
 }
 

@@ -159,6 +159,18 @@ struct ToolFailureCardView: View {
 /// abbreviated path/summary · line-range badge · status) that expands to a semantic body (a `$`
 /// command, a red/green edit diff, a plan/prompt as prose, otherwise monospace output). The
 /// name→display mapping lives in `OrbitKit.ToolDisplay` so it stays in step with web and testable.
+private struct QuestionTranslationsKey: EnvironmentKey {
+    static let defaultValue: [String: ApprovalTranslation] = [:]
+}
+
+extension EnvironmentValues {
+    /// The owner-language text of the session's question cards, by tool_use id (ConsoleModel).
+    var questionTranslations: [String: ApprovalTranslation] {
+        get { self[QuestionTranslationsKey.self] }
+        set { self[QuestionTranslationsKey.self] = newValue }
+    }
+}
+
 struct ToolCardView: View {
     let card: ToolCard
     /// Workflow rows provide their own labeled disclosure and reuse this card's full detail.
@@ -194,6 +206,9 @@ struct ToolCardView: View {
     /// The console's background agents and workflows — read only by an Agent or Workflow card, so a
     /// progress frame re-renders those and no other row.
     @Environment(\.taskActivity) private var taskActivity
+    /// Settings › Translation: the question cards' owner-language text, by call (ConsoleModel).
+    @Environment(\.questionTranslations) private var questionTranslations
+    @Environment(\.translationActions) private var translationActions
 
     init(card: ToolCard, fullPayload: (@MainActor (Int) async -> JSONValue?)? = nil, showsHeader: Bool = true) {
         self.card = card
@@ -303,6 +318,11 @@ struct ToolCardView: View {
     }
     /// A workflow is named by its receipt once that lands (a resumed run carries no script).
     private var summaryText: String? {
+        if !questions.isEmpty {
+            // A question's row names its headers, as its card showed them.
+            let headers = shownQuestions.compactMap(\.header).filter { !$0.isEmpty }
+            return headers.isEmpty ? d.summary : headers.joined(separator: "  ·  ")
+        }
         guard card.name == "Workflow" else { return d.summary }
         return TaskProgressCopy.workflowTitle(input: card.input, result: result, progress: taskProgress) ?? d.summary
     }
@@ -315,6 +335,12 @@ struct ToolCardView: View {
     private var questions: [AskQuestion] {
         if case .question(let asked) = d.body { return asked }
         return []
+    }
+    /// The questions as their card showed them — in the owner's language where the server translated
+    /// them, while translation is on. The answer is still read off `questions`, the engine's English.
+    private var shownQuestions: [AskQuestion] {
+        guard translationActions?.on == true else { return questions }
+        return ApprovalTranslation.shownQuestions(questions, questionTranslations[card.id])
     }
     /// How they ended, read off the result: the folded card's record, the replay's ticks.
     private var questionOutcome: QuestionOutcome? {
@@ -441,7 +467,7 @@ struct ToolCardView: View {
             } else if !questions.isEmpty {
                 // Folded, a question is still its record: what was asked and how it was answered.
                 // The lines open the card like its row does.
-                QuestionFoldedLines(questions: questions, outcome: questionOutcome)
+                QuestionFoldedLines(questions: shownQuestions, outcome: questionOutcome)
                     .contentShape(Rectangle())
                     .onTapGesture { manualOpen = !expanded }
             }
@@ -582,7 +608,7 @@ struct ToolCardView: View {
                 // The SubAgent opens to its steps and result; the delegate call's own input is the
                 // prompt, which web does not draw in this block either.
             } else if !questions.isEmpty {
-                QuestionReplayView(questions: questions, outcome: questionOutcome)
+                QuestionReplayView(questions: shownQuestions, outcome: questionOutcome)
             } else {
                 ToolBodyView(kind: d.body)
             }
@@ -810,17 +836,19 @@ private extension ToolTone {
 /// or a red/green edit diff.
 struct ToolBodyView: View {
     let kind: ToolBody
+    /// Lines a command or code shows before its fold: the transcript's, or an approval card's 12.
+    var foldLines = MonospaceOutputLayout.previewLineLimit
     var body: some View {
         switch kind {
         case .none:
             EmptyView()
         case .command(let cmd):
-            CollapsibleMono(text: cmd, showsShellPrompt: true, viewerTitle: "Command")
+            CollapsibleMono(text: cmd, showsShellPrompt: true, viewerTitle: "Command", foldLines: foldLines)
                 .padding(8)
                 .background(Color.secondary.opacity(0.08), in: RoundedRectangle(cornerRadius: 6))
                 .overlay { RoundedRectangle(cornerRadius: 6).stroke(Color.secondary.opacity(0.18), lineWidth: 1) }
         case .code(let code):
-            CollapsibleMono(text: code)
+            CollapsibleMono(text: code, foldLines: foldLines)
         case .markdown(let md):
             MarkdownView(source: md)
                 .font(.orbitProseAside).textSelection(.enabled)
@@ -904,11 +932,12 @@ struct CollapsibleMono: View {
     let text: String
     var showsShellPrompt = false
     var viewerTitle = "Tool output"
+    var foldLines = MonospaceOutputLayout.previewLineLimit
     @State private var open = false
     @State private var showingFullOutput = false
 
     var body: some View {
-        let layout = MonospaceOutputLayout(text: text)
+        let layout = MonospaceOutputLayout(text: text, foldLines: foldLines)
         return VStack(alignment: .leading, spacing: 4) {
             transcriptText(layout.transcriptText(expanded: open))
                 .font(.orbitMono)

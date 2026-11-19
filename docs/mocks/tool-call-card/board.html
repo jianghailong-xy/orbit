@@ -1,0 +1,291 @@
+<!doctype html>
+<html lang="en"><head><meta charset="utf-8">
+<style>
+:root{
+  --brand:#3f6ff2; --brand-strong:#2a56d6; --brand-tint:#f1f5ff; --brand-border:#d6e1fd;
+  --text-1:#1d2330; --text-2:#4b5466; --text-3:#7d8596; --border:#e3e6ec; --bg:#ffffff; --bg-subtle:#f6f7f9;
+  --mono:'JetBrains Mono',ui-monospace,SFMono-Regular,Menlo,monospace;
+  --add:#e7f6ec; --add-ink:#1c7a3c; --del:#fdecec; --del-ink:#b42318;
+}
+*{box-sizing:border-box}
+body{margin:0;background:#e9ebef;font-family:-apple-system,BlinkMacSystemFont,Inter,'PingFang SC','Noto Sans SC',sans-serif;color:var(--text-1)}
+.board{width:1840px;padding:40px;background:#e9ebef}
+h1{font-size:26px;margin:0 0 6px}
+.sub{color:var(--text-2);font-size:15px;margin-bottom:28px}
+.row{display:grid;grid-template-columns:1fr 1fr;gap:28px;margin-bottom:28px}
+.frame{background:var(--bg);border-radius:14px;padding:22px 24px 26px;box-shadow:0 1px 3px rgba(0,0,0,.08)}
+.frame>.tag{font-size:15px;font-weight:700;margin-bottom:4px}
+.frame>.why{font-size:13px;color:var(--text-2);margin-bottom:14px;line-height:1.55}
+.tag .n{display:inline-block;width:24px;height:24px;border-radius:12px;background:#111;color:#fff;text-align:center;line-height:24px;font-size:13px;margin-right:8px}
+.tag.bad .n{background:#c2410c}
+.tag.good .n{background:#15803d}
+
+/* ---- card, copied from .approval-* ---- */
+.card{border:1px solid var(--brand);border-radius:10px;background:var(--brand-tint);overflow:hidden;position:relative}
+.c-sub{padding:8px 14px 0;font-size:12px;color:var(--text-3);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.c-head{padding:4px 14px 10px;font-size:13.5px;font-weight:600;border-bottom:1px solid var(--brand-border);display:flex;align-items:center;gap:8px}
+.c-head.first{padding-top:10px}
+.chip-tool{font-family:var(--mono);font-size:11.5px;font-weight:500;padding:1px 7px;border-radius:5px;background:var(--brand-border);color:var(--brand-strong)}
+.c-body{padding:8px 14px 4px;font-size:13.5px}
+.desc{font-size:13px;line-height:1.5;margin:2px 0 8px}
+.desc .orig{color:var(--text-3);font-size:12px;margin-left:6px}
+pre.json{white-space:pre-wrap;word-break:break-word;font-family:var(--mono);font-size:12px;margin:8px 0;line-height:1.5}
+.cmd{background:#fff;border:1px solid var(--brand-border);border-radius:7px;padding:9px 11px;font-family:var(--mono);font-size:12px;line-height:1.55;white-space:pre-wrap;word-break:break-word;position:relative}
+.cmd .p{color:var(--text-3);user-select:none}
+.cmd .copy{position:absolute;top:6px;right:8px;font-family:Inter,sans-serif;font-size:11px;color:var(--text-3);border:1px solid var(--border);background:#fff;border-radius:5px;padding:1px 7px}
+.cmd.folded{max-height:none}
+.cmd .fade{display:block;margin:6px -11px -9px;padding:6px 11px;border-top:1px dashed var(--brand-border);font-family:Inter,sans-serif;font-size:12px;color:var(--brand-strong);background:var(--brand-tint);border-radius:0 0 7px 7px}
+.meta{display:flex;flex-wrap:wrap;gap:6px;margin:8px 0 4px}
+.meta span{font-size:11.5px;color:var(--text-2);background:#fff;border:1px solid var(--border);border-radius:999px;padding:1px 9px}
+.meta span.warn{color:#9a3412;border-color:#fed7aa;background:#fff7ed}
+.path{font-family:var(--mono);font-size:12px;color:var(--text-1);background:#fff;border:1px solid var(--brand-border);border-radius:7px;padding:7px 11px;word-break:break-all}
+.path .dir{color:var(--text-3)}
+.diff{margin-top:8px;border:1px solid var(--brand-border);border-radius:7px;overflow:hidden;font-family:var(--mono);font-size:12px;line-height:1.55;background:#fff}
+.diff div{padding:0 11px;white-space:pre-wrap}
+.diff .d{background:var(--del);color:var(--del-ink)} .diff .a{background:var(--add);color:var(--add-ink)} .diff .c{color:var(--text-2)}
+.diff .hd{background:var(--bg-subtle);color:var(--text-3);font-family:Inter,sans-serif;font-size:11.5px;padding:3px 11px}
+.raw-toggle{font-size:12px;color:var(--brand-strong);margin:8px 0 2px}
+.kv{display:grid;grid-template-columns:max-content 1fr;gap:4px 12px;font-size:12.5px;margin:4px 0 6px}
+.kv .k{color:var(--text-3);font-family:var(--mono);font-size:12px}
+.kv .v{font-family:var(--mono);font-size:12px;word-break:break-all}
+.actions{display:flex;gap:8px;padding:10px 14px 12px;flex-wrap:wrap}
+.btn{font-size:13px;padding:6px 14px;border-radius:7px;border:1px solid var(--border);background:#fff;color:var(--text-1)}
+.btn.primary{background:var(--brand);border-color:var(--brand);color:#fff}
+.btn.accent{background:#fff;border-color:var(--brand-border);color:var(--brand-strong)}
+.kbd{margin-left:8px;font-size:11px;opacity:.75}
+.rule{font-family:var(--mono);font-size:12px;padding:1px 5px;border-radius:4px;background:var(--brand-border);color:var(--brand-strong)}
+
+/* marks */
+.mk{position:absolute;width:22px;height:22px;border-radius:11px;background:#e11d48;color:#fff;font:700 12px/22px Inter,sans-serif;text-align:center;box-shadow:0 0 0 2px #fff}
+.mk.g{background:#15803d}
+.notes{margin-top:14px;font-size:13px;line-height:1.65;color:var(--text-2)}
+.notes b{color:var(--text-1)}
+.notes li{margin-bottom:3px}
+
+.panel{background:var(--bg);border-radius:14px;padding:22px 26px;box-shadow:0 1px 3px rgba(0,0,0,.08)}
+.panel h2{font-size:17px;margin:0 0 12px}
+table{border-collapse:collapse;width:100%;font-size:13px}
+th,td{text-align:left;padding:7px 10px;border-bottom:1px solid var(--border);vertical-align:top}
+th{color:var(--text-3);font-weight:600;font-size:12px}
+td code,li code{font-family:var(--mono);font-size:12px;background:var(--bg-subtle);padding:0 4px;border-radius:3px}
+.decide{background:#fffbeb;border:1px solid #fde68a;border-radius:10px;padding:14px 18px;margin-top:16px;font-size:13.5px;line-height:1.7}
+.decide b{color:#92400e}
+</style></head><body><div class="board">
+
+<h1>Tool call card — web redesign (Bash / Edit / Fetch / fallback)</h1>
+<div class="sub">文件 <code>src/web/src/components/ApprovalPanel.tsx</code> 的通用“Approve tool call”分支。英文为产品文案，中文为标注。目标：先看到“要运行什么”，而不是一段 JSON；与 macOS <code>ApprovalCards.swift</code> 已有的做法对齐。</div>
+
+<!-- ROW 1 : today vs proposal for the owner's exact call -->
+<div class="row">
+  <div class="frame">
+    <div class="tag bad"><span class="n">①</span>今天 · 你截图里的那张卡</div>
+    <div class="why">整段 input 被 <code>JSON.stringify</code>：命令里的换行变成 <code>\n</code>，引号变成 <code>\"</code>；description 出现两次（译文一次、JSON 里原文一次）；标题只说出工具名。</div>
+    <div class="card">
+      <div class="c-sub">Agent · Read aivps session transcript and DB</div>
+      <div class="c-head">🔓 Approve tool call: Bash</div>
+      <div class="c-body">
+        <div class="desc">每个协调器会话的交付状态</div>
+<pre class="json">{
+  "command": "cd /root/orbit &amp;&amp; docker compose exec -T postgres psql -U orbit -d orbit -P pager=off -c \"\nSELECT d.session_id, d.purpose, count(*) AS n,\n       count(*) FILTER (WHERE d.returned_at IS NULL) AS unreturned,\n       count(*) FILTER (WHERE t.id IS NULL) AS turn_missing,\n       count(*) FILTER (WHERE t.status='PENDING') AS turn_pending,\n       min(d.created_at) AS first_delivery, max(d.created_at) AS last_delivery\nFROM project_open_item_delivery d\nLEFT JOIN conversation_turn t ON t.id = d.turn_id\nWHERE d.project_id = '01a1a72f-b499-769b-b2b8-99a7c4cdf161'\nGROUP BY d.session_id, d.purpose\nORDER BY first_delivery;\n\"",
+  "description": "Delivery state per coordinator session"
+}</pre>
+      </div>
+      <div class="actions">
+        <span class="btn primary">Approve<span class="kbd">Enter</span></span>
+        <span class="btn accent">Always allow <span class="rule">cd, docker compose</span><span class="kbd">⌘ + Enter</span></span>
+        <span class="btn">Reject</span>
+      </div>
+      <span class="mk" style="left:200px;top:28px">1</span>
+      <span class="mk" style="left:205px;top:66px">2</span>
+      <span class="mk" style="left:390px;top:92px">3</span>
+      <span class="mk" style="left:330px;top:246px">2</span>
+    </div>
+    <ul class="notes">
+      <li><b>1</b> 标题只有工具名，没说“这是要跑一条命令”。</li>
+      <li><b>2</b> 同一句 description 出现两次（译文 + JSON 原文）。</li>
+      <li><b>3</b> 12 行 SQL 被压成一行转义字符串，读不出 WHERE / GROUP BY。</li>
+    </ul>
+  </div>
+
+  <div class="frame">
+    <div class="tag good"><span class="n">②</span>提议 · 同一个调用</div>
+    <div class="why">标题说动作，工具名做成小 chip；description 只出现一次（有译文显示译文，原文灰字跟在后面）；命令按原样换行，等宽、可选中，带 <code>$</code> 前缀和 Copy。按钮不变。</div>
+    <div class="card">
+      <div class="c-sub">Agent · Read aivps session transcript and DB</div>
+      <div class="c-head">Run a command? <span class="chip-tool">Bash</span></div>
+      <div class="c-body">
+        <div class="desc">每个协调器会话的交付状态<span class="orig">Delivery state per coordinator session</span></div>
+<div class="cmd"><span class="copy">Copy</span><span class="p">$ </span>cd /root/orbit &amp;&amp; docker compose exec -T postgres psql -U orbit -d orbit -P pager=off -c "
+SELECT d.session_id, d.purpose, count(*) AS n,
+       count(*) FILTER (WHERE d.returned_at IS NULL) AS unreturned,
+       count(*) FILTER (WHERE t.id IS NULL) AS turn_missing,
+       count(*) FILTER (WHERE t.status='PENDING') AS turn_pending,
+       min(d.created_at) AS first_delivery, max(d.created_at) AS last_delivery
+FROM project_open_item_delivery d
+LEFT JOIN conversation_turn t ON t.id = d.turn_id
+WHERE d.project_id = '01a1a72f-b499-769b-b2b8-99a7c4cdf161'
+GROUP BY d.session_id, d.purpose
+ORDER BY first_delivery;
+"</div>
+      </div>
+      <div class="actions">
+        <span class="btn primary">Approve<span class="kbd">Enter</span></span>
+        <span class="btn accent">Always allow <span class="rule">cd, docker compose</span><span class="kbd">⌘ + Enter</span></span>
+        <span class="btn">Reject</span>
+      </div>
+      <span class="mk g" style="left:200px;top:28px">1</span>
+      <span class="mk g" style="left:430px;top:62px">2</span>
+      <span class="mk g" style="left:560px;top:150px">3</span>
+    </div>
+    <ul class="notes">
+      <li><b>1</b> 标题 <code>Run a command?</code>，工具名降为 chip（与 Mac 的 badge 一致）。</li>
+      <li><b>2</b> description 一次：译文在前，原文灰字；未开翻译时只有原文。</li>
+      <li><b>3</b> 命令原样渲染：真换行、真引号、可选中、Copy。不再显示 <code>description</code> 键。</li>
+    </ul>
+  </div>
+</div>
+
+<!-- ROW 2 : long command + flags ; edit / fetch / fallback -->
+<div class="row">
+  <div class="frame">
+    <div class="tag good"><span class="n">③</span>提议 · 长命令折叠 + 其它参数做成 chip</div>
+    <div class="why">超过 12 行的命令先显示前 12 行，底部一行 “Show all N lines”。<code>timeout</code>、<code>run_in_background</code>、<code>dangerouslyDisableSandbox</code> 这类参数不再藏在 JSON 里，做成命令下方的小 chip；关沙箱用警示色。</div>
+    <div class="card">
+      <div class="c-head first">Run a command? <span class="chip-tool">Bash</span></div>
+      <div class="c-body">
+        <div class="desc">Rebuild apiserver and run its unit tests under the heavy lock</div>
+<div class="cmd"><span class="copy">Copy</span><span class="p">$ </span>set -euo pipefail
+exec 9&gt;/mnt/tmp/34bc-hpc-heavy.lock
+flock 9
+cd /root/orbit
+export NODE_OPTIONS=--max-old-space-size=6144
+npm run prisma:generate -w @orbit/apiserver
+npm run build -w @orbit/shared
+npm run build -w @orbit/apiserver
+VITEST_MAX_WORKERS=4 \
+  npm run test -w @orbit/apiserver -- \
+  --reporter=dot \
+  --exclude 'test/pg/**' \<span class="fade">Show all 31 lines</span></div>
+        <div class="meta"><span>timeout 60 min</span><span>runs in background</span><span class="warn">sandbox off</span></div>
+      </div>
+      <div class="actions">
+        <span class="btn primary">Approve<span class="kbd">Enter</span></span>
+        <span class="btn accent">Always allow <span class="rule">set, exec, flock, cd, npm</span><span class="kbd">⌘ + Enter</span></span>
+        <span class="btn">Reject</span>
+      </div>
+    </div>
+    <ul class="notes">
+      <li>折叠只影响显示；Copy 永远复制完整命令。展开后不再有 360px 的内滚动框，卡片随内容变高（与 plan 卡同规则）。</li>
+      <li>chip 只列“改变风险”的参数；未知的额外键归到 ⑥ 的 <code>Show raw input</code>。</li>
+    </ul>
+  </div>
+
+  <div class="frame">
+    <div class="tag good"><span class="n">④</span>提议 · Edit / Write：路径 + diff</div>
+    <div class="why">今天 Edit 会把 old_string / new_string 两大段塞进 JSON。提议：路径一行（目录灰、文件名黑），下面是红绿 diff。Write 显示路径 + 前 12 行内容（同样可展开），标题 <code>Create a file?</code> / <code>Overwrite a file?</code>。</div>
+    <div class="card">
+      <div class="c-head first">Edit a file? <span class="chip-tool">Edit</span></div>
+      <div class="c-body">
+        <div class="path"><span class="dir">src/web/src/components/</span>ApprovalPanel.tsx</div>
+        <div class="diff">
+          <div class="hd">1 change</div>
+          <div class="c">            {translatedDescription &amp;&amp; &lt;div className="approval-translated-desc"&gt;…</div>
+          <div class="d">-           &lt;pre className="approval-input"&gt;{JSON.stringify(approval.input ?? {}, null, 2)}&lt;/pre&gt;</div>
+          <div class="a">+           &lt;ToolCallBody approval={approval} /&gt;</div>
+          <div class="c">          &lt;/&gt;</div>
+        </div>
+      </div>
+      <div class="actions">
+        <span class="btn primary">Approve<span class="kbd">Enter</span></span>
+        <span class="btn accent">Always allow <span class="rule">Edit</span><span class="kbd">⌘ + Enter</span></span>
+        <span class="btn">Reject</span>
+      </div>
+    </div>
+    <ul class="notes">
+      <li><code>replace_all: true</code> 时 diff 头写 “Every occurrence”。</li>
+      <li>diff 复用转录里 Edit 工具行已有的渲染（同一调用，两处长得一样）。</li>
+    </ul>
+  </div>
+</div>
+
+<div class="row">
+  <div class="frame">
+    <div class="tag good"><span class="n">⑤</span>提议 · 只有一个对象的工具</div>
+    <div class="why">Read / WebFetch / Grep / Glob：标题说动作，正文就是对象本身（路径、URL、pattern）。WebFetch 的 prompt 做 description 那一行。</div>
+    <div class="card" style="margin-bottom:14px">
+      <div class="c-head first">Fetch a web page? <span class="chip-tool">WebFetch</span></div>
+      <div class="c-body">
+        <div class="desc">Summarize the release notes for 1.63</div>
+        <div class="path">https://github.com/microsoft/playwright/releases/tag/v1.63.0</div>
+      </div>
+      <div class="actions">
+        <span class="btn primary">Approve<span class="kbd">Enter</span></span>
+        <span class="btn accent">Always allow <span class="rule">github.com</span><span class="kbd">⌘ + Enter</span></span>
+        <span class="btn">Reject</span>
+      </div>
+    </div>
+    <div class="card">
+      <div class="c-head first">Search files? <span class="chip-tool">Grep</span></div>
+      <div class="c-body">
+        <div class="path">approval-input</div>
+        <div class="meta"><span>in src/web/src</span><span>*.css</span></div>
+      </div>
+      <div class="actions">
+        <span class="btn primary">Approve<span class="kbd">Enter</span></span>
+        <span class="btn">Reject</span>
+      </div>
+    </div>
+  </div>
+
+  <div class="frame">
+    <div class="tag good"><span class="n">⑥</span>提议 · 不认识的工具（MCP 等）兜底</div>
+    <div class="why">不再整段 JSON：顶层字符串/数字字段排成键值表（值等宽，长值折 3 行），对象和数组折成 <code>{…} 4 keys</code>。底部 <code>Show raw input</code> 打开原始 JSON，给需要逐字核对的人。</div>
+    <div class="card">
+      <div class="c-head first">Approve tool call? <span class="chip-tool">mcp__linear__create_issue</span></div>
+      <div class="c-body">
+        <div class="kv">
+          <span class="k">title</span><span class="v">Tool call card shows escaped JSON</span>
+          <span class="k">team</span><span class="v">WEB</span>
+          <span class="k">priority</span><span class="v">2</span>
+          <span class="k">labels</span><span class="v" style="color:var(--text-3)">[…] 2 items</span>
+          <span class="k">body</span><span class="v">The generic approval card prints JSON.stringify(input), so a multi-line Bash command shows \n escapes and the description twice…</span>
+        </div>
+        <div class="raw-toggle">▸ Show raw input</div>
+      </div>
+      <div class="actions">
+        <span class="btn primary">Approve<span class="kbd">Enter</span></span>
+        <span class="btn">Reject</span>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- rules + files -->
+<div class="panel">
+  <h2>规则表</h2>
+  <table>
+    <tr><th>工具</th><th>标题</th><th>description 行</th><th>正文</th><th>chip</th></tr>
+    <tr><td>Bash</td><td>Run a command?</td><td><code>description</code>（译文优先，原文灰字）</td><td><code>$</code> 命令块，&gt;12 行折叠，Copy</td><td>timeout · background · sandbox off</td></tr>
+    <tr><td>Edit / MultiEdit</td><td>Edit a file?</td><td>—</td><td>路径 + diff</td><td>Every occurrence</td></tr>
+    <tr><td>Write</td><td>Create a file? / Overwrite a file?</td><td>—</td><td>路径 + 内容前 12 行</td><td>N lines</td></tr>
+    <tr><td>Read / NotebookEdit</td><td>Read a file? / Edit a notebook?</td><td>—</td><td>路径</td><td>lines a–b</td></tr>
+    <tr><td>WebFetch / WebSearch</td><td>Fetch a web page? / Search the web?</td><td><code>prompt</code></td><td>URL / query</td><td>—</td></tr>
+    <tr><td>Grep / Glob</td><td>Search files?</td><td>—</td><td>pattern</td><td>path · glob</td></tr>
+    <tr><td>其它</td><td>Approve tool call?</td><td><code>description</code> 若有</td><td>键值表 + Show raw input</td><td>—</td></tr>
+  </table>
+  <h2 style="margin-top:20px">会改的文件</h2>
+  <ul class="notes" style="margin-top:0">
+    <li><code>src/web/src/components/ApprovalPanel.tsx</code> — 通用分支换成新的 <code>ToolCallBody</code>，标题按工具取。</li>
+    <li><code>src/web/src/components/ToolCallBody.tsx</code>（新）+ 测试 — 按上表分派；Bash 折叠、Copy、chips、键值表兜底。</li>
+    <li><code>src/web/src/index.css</code> — <code>.approval-cmd</code> / <code>.approval-meta</code> / <code>.approval-kv</code>；<code>.approval-input</code> 只留给 Show raw input。</li>
+    <li>折叠后的审阅卡 summary（<code>ReviewCard</code>）用命令首行，不用 JSON。</li>
+  </ul>
+  <div class="decide">
+    <b>待你定</b><br>
+    A. 原生端（Mac / iOS / Android）要不要跟到同一套：标题说动作、description 行、长命令折叠、chips？Mac 已显示命令块，但没有 description 行和 chips。<br>
+    B. description 那一行：开了翻译时，原文灰字要不要保留（②里保留了）？<br>
+    C. 折叠阈值：12 行合适吗？
+  </div>
+</div>
+
+</div></body></html>

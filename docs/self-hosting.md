@@ -1300,6 +1300,11 @@ COMPOSE_PROFILES=managed-runners-docker,managed-runner-firewall
 
 - **The switch.** `ORBIT_MANAGED_RUNNERS_ENABLED=true` turns managed runners on in the apiserver. Absent, empty or
   `false` is off, and so is any other value, with a warning in the apiserver's log.
+- **The browser switch.** `ORBIT_MANAGED_RUNNER_BROWSER_ENABLED`, off by default and written by neither the install
+  nor an upgrade, offers managed runners a browser the owner can watch and take over. It is on only when it says
+  `true` and managed runners are on; absent, empty or `false` is off, and any other value is off with a warning in
+  the apiserver's log. Self-registered runners are never offered it. Apply a change with
+  `docker compose up -d apiserver`.
 - **The Docker backend.** The `managed-runners-docker` Compose profile starts `docker-channel`, the
   [restricted Docker channel](../deploy/managed-runner/docker-channel/README.md): the only process given the Docker
   socket. It makes each runner's container and volume from its own template and touches nothing it did not make.

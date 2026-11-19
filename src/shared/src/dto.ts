@@ -883,6 +883,45 @@ export interface RunnerHeartbeatRequest {
    *  Sent only by a managed instance that declares that capability; the control plane stores it only
    *  from the instance the manager authorized. Absent: nothing about this runner may be put to sleep. */
   managedWorkload?: ManagedRunnerWorkload;
+  /** The managed runner browser now (docs/runner-browser-design.md §3, §5): sent on every beat by a runner that
+   *  declares BROWSER_CLEAR_V1, which only a managed runner does. Absent: this runner has no browser. */
+  browser?: RunnerBrowserReport;
+}
+
+/** What a managed runner says of its browser on each heartbeat (RunnerHeartbeatRequest.browser). */
+export interface RunnerBrowserReport {
+  /** Xvfb, x11vnc and Chrome are started. */
+  running: boolean;
+  /** The session holding the browser lease, by its public id; absent while nobody holds it. */
+  holderSessionId?: string;
+  /** That session's title, as the runner knows it. */
+  holderTitle?: string;
+  /** How many viewer streams are open. */
+  viewers: number;
+  /** When this runner last cleared the saved logins (RFC 3339); absent if it never has since it started. */
+  profileClearedAt?: string;
+}
+
+/** GET /runners/:id/browser: the owner's managed runner browser, as its last heartbeat reported it. */
+export interface RunnerBrowserState {
+  runnerId: string;
+  /** RUNNING: Chrome is started. IDLE: it is not. UNKNOWN: no heartbeat has reported the browser yet. */
+  state: 'RUNNING' | 'IDLE' | 'UNKNOWN';
+  /** The session holding the browser lease, or null. */
+  holderSessionId: string | null;
+  holderTitle: string | null;
+  viewers: number;
+  /** When the heartbeat this was read from arrived, or null with UNKNOWN. */
+  reportedAt: string | null;
+  /** A Clear saved logins the runner has not been handed yet: when it was asked for. */
+  clearRequestedAt: string | null;
+  /** When the runner last reported clearing the saved logins. */
+  profileClearedAt: string | null;
+}
+
+/** POST /runners/:id/browser/clear: Clear saved logins, accepted and waiting for the runner's next heartbeat. */
+export interface RunnerBrowserClearResponse {
+  requestedAt: string;
 }
 
 /** What a runner's self-updater last found:
@@ -1525,6 +1564,10 @@ export interface RunnerHeartbeatResponse {
    *  restart. Set once per request and cleared as it is handed over, like `checkSelfUpdate`; only a
    *  runner that declares SELF_UPDATE_NOW_V1 is asked. */
   selfUpdateNow?: boolean;
+  /** The owner's Clear saved logins (POST /runners/:id/browser/clear): stop the browser and delete its profile.
+   *  Set once per request and cleared as it is handed over, like `checkSelfUpdate`; only a runner that declares
+   *  BROWSER_CLEAR_V1 is asked, and its `browser.profileClearedAt` is the answer. */
+  clearBrowserProfile?: boolean;
   /** This machine's free-space floor in MB (Runner.minFreeDiskMb), the same number the auto-run
    *  disk gate reads. Sent so the runner can apply it to work only it can see — reclaiming the
    *  session checkouts on its own disk — without keeping a second copy of the setting.
@@ -1628,6 +1671,11 @@ export const SELF_UPDATE_POSTPONE_V1 = 'self-update-postpone/v1';
  *  docs/runner-update-drain-design.md §4): it interrupts the turns in flight, installs and restarts.
  *  A runner without it is refused Update Now as too old. runner-go asserts the same string. */
 export const SELF_UPDATE_NOW_V1 = 'self-update-now/v1';
+
+/** Declared by a managed runner that has the runner browser (docs/runner-browser-design.md §3): it reports the browser
+ *  on each heartbeat (`browser`) and honours Clear saved logins (`clearBrowserProfile`). A runner without it is
+ *  refused a clear. runner-go asserts the same string. */
+export const BROWSER_CLEAR_V1 = 'browser-clear/v1';
 
 /** Declared by a runner that keeps a remote SubAgent's conversation when the run ends and continues it on a claim's
  *  `resumeOf` (docs/subagent-design.md §10.2). A resume is refused for a target runner without it, which would start
@@ -2904,11 +2952,11 @@ export interface RemoteSubagentEventsPage {
 /**
  * One model of the Providers page's Tier column (GET /providers/subagent-tiers, docs/subagent-design.md §7):
  * the tiers routeSubagent reads for it. Clients show `levels` joined with " · ", all four as "S–XL by effort",
- * and none as "Not set": a model with no tier stays out of automatic routing.
+ * and none as "Not set": a model with no tier ranks after every tiered one (its engine's default model runs then).
  */
 export interface ProviderModelTier {
   model: string;
-  /** The tiers this model fills, lowest first, at whatever effort each takes. Empty: not routed. */
+  /** The tiers this model fills, lowest first, at whatever effort each takes. Empty: ranked after tiered models. */
   levels: SubagentSize[];
   /** `catalogue`: the preset or the built-in tier table. `owner`: set on this page. Null: nobody has. */
   source: 'catalogue' | 'owner' | null;
@@ -4058,6 +4106,8 @@ export interface IntegrationCheckSpec {
 /** What one check came to. `exitCode` is null when the command never produced one. */
 export interface IntegrationCheckResult extends Omit<IntegrationCheckSpec, 'timeoutSeconds'> {
   scope?: 'COMBINED' | 'BASELINE';
+  /** The exact tree measured by the baseline check, before it ran (K4). */
+  treeSha?: string;
   skipped?: 'PATHS_EXEMPT';
   files?: string[];
   exitCode: number | null;

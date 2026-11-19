@@ -41,7 +41,8 @@ data class OwnerAnswer(val key: String, val option: Int? = null, val text: Strin
 @Serializable
 data class ProjectStartSettings(val line: String, val automatic: Boolean, val maxConcurrentTasks: Int,
     val mergeCheckCommand: String?, val projectBranchName: String? = null, val upstreamRef: String? = null,
-    val deliveryMode: String? = null)
+    val deliveryMode: String? = null, val landingCheckCommand: String? = null,
+    val landingCheckTimeoutSeconds: Int? = null, val mergeCheckTimeoutSeconds: Int? = null)
 
 enum class CardFamily {
     TOOL, QUESTION, PLAN, CREATE, BATCH, DAG, BLOCKER, PROVIDER, DELETE, WORKSPACE_WRITE,
@@ -163,7 +164,9 @@ object CardCatalog {
                 CardFamily.DELETE -> DeleteCards.title(approval.toolName)
                 CardFamily.WORKSPACE_WRITE -> WorkspaceWriteCards.title(approval.toolName)
                 CardFamily.PROVIDER -> ProviderWriteCards.title(approval.toolName)
-                else -> if (approval.toolName == SkipMergeCheckCards.tool) SkipMergeCheckCards.heading else approval.toolName
+                else -> if (approval.toolName == ApprovalRules.mergeCheckChange) LandingCheckCopy.confirmTitle
+                    else if (approval.toolName == SkipMergeCheckCards.tool) SkipMergeCheckCards.heading
+                    else if (ToolCalls.plain(approval.toolName)) ToolCalls.heading(approval.toolName, approval.input) else approval.toolName
             }
             // Settings › Translation (3A): the card shows its questions, description and plan in the owner's language once the server
             // translated them; the binding stays the input the engine asked with, so a translation arriving changes no press.
@@ -171,7 +174,10 @@ object CardCatalog {
             val shown = Translation.shownApproval(raw)
             add(InteractionCard("approval:${approval.id}", family, title, shown, id, projectId, approval.id,
                 approval.input.toString(), actions, if (unexpired) approval.status else "Expired",
-                OrbitCardTranslation.context(approval.toolName, raw, shown)))
+                // A plain call's description line puts the agent's own words beside a translation that replaced them.
+                approval.input.text("description")?.takeIf { family == CardFamily.TOOL }
+                    ?.let { buildJsonObject { put(ToolCalls.originalDescription, it) } }
+                    ?: OrbitCardTranslation.context(approval.toolName, raw, shown)))
         }
         val standing = snapshot.standing
         (standing["evidenceDecisions"] as? JsonObject)?.let { queue ->

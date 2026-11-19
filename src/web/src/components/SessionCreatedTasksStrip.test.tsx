@@ -26,12 +26,17 @@ vi.mock('../api', async (importOriginal) => ({
   api: vi.fn(),
 }));
 
-interface CountLineCase {
-  running: number;
-  failed: number;
-  done: number;
-  total: number;
-  text: string;
+interface BandCase {
+  name: string;
+  created: {
+    running: number;
+    failed: number;
+    done: number;
+    total: number;
+    items: { id: string; status: string; running: boolean; queued: boolean; createdAt: string }[];
+  } | null;
+  watched: unknown[];
+  band: { failed: number; text: string; row: string } | null;
 }
 
 /** A file of this repository, by both spellings: the web suite runs from `src/web`, a runner may
@@ -47,7 +52,7 @@ const fixture = JSON.parse(
     '../shared/src/session-created-tasks.fixture.json',
     'src/shared/src/session-created-tasks.fixture.json',
   ),
-) as { copy: Record<string, string>; countLine: CountLineCase[] };
+) as { copy: Record<string, string>; band: BandCase[] };
 
 const css = fromRepo('src/index.css', 'src/web/src/index.css');
 
@@ -175,47 +180,54 @@ describe('the collapsed row', () => {
     expect(one('.bg-tray-count'), 'one task is named, not counted').toBeNull();
   });
 
-  it('writes the sentence the fixture gives for every count, its failed part in red', async () => {
+  it('says what the fixture’s band says for every case, its failed part in red and the task’s pill after', async () => {
     expect(css).toMatch(/\.ct-failed\s*\{[^}]*color:\s*var\(--error-solid\)/);
-    for (const { text, ...counts } of fixture.countLine) {
-      await mount(created({ ...counts, items: [row(1), row(2)] }));
-      const label = JSON.stringify(counts);
-      expect(one('.bg-tray-count')?.textContent, label).toBe(text);
-      if (counts.failed > 0) {
-        expect(one('.bg-tray-count .ct-failed')?.textContent, label).toBe(`${counts.failed} failed`);
-      } else {
-        expect(one('.ct-failed'), label).toBeNull();
+    // The cases a watch adds rows to are the shared spec's; the line drawn from a band is the same.
+    const cases = fixture.band.filter((c) => c.created && c.watched.length === 0);
+    expect(cases.length).toBeGreaterThan(3);
+    for (const c of cases) {
+      const items = c.created!.items.map((item, n) =>
+        row(n + 1, { ...item, id: item.id, title: `Task ${item.id}`, status: item.status as 'OPEN' }),
+      );
+      await mount(created({ ...c.created!, items }));
+      if (!c.band) {
+        expect(one('.bg-tray-count'), c.name).toBeNull();
+        expect(one('.ct-one')?.textContent, c.name).toBe(items[0].title);
+        continue;
       }
-      expect(one('.ct-one'), label).toBeNull();
+      const failed = c.band.failed > 0 ? `${c.band.failed} failed · ` : '';
+      expect(one('.bg-tray-count')?.textContent, c.name).toBe(failed + c.band.text);
+      expect(one('.bg-tray-count .ct-failed')?.textContent ?? null, c.name).toBe(
+        c.band.failed > 0 ? `${c.band.failed} failed` : null,
+      );
+      const named = c.created!.items.find((item) => item.id === c.band!.row)!;
+      const pill = named.running ? 'Running' : named.queued ? 'Queued' : null;
+      if (pill) expect(one('.ct-count + .status-pill')?.textContent, c.name).toBe(pill);
+      else expect(one('.ct-count + .status-pill'), c.name).not.toBeNull();
+      expect(one('.ct-one'), c.name).toBeNull();
     }
   });
 
-  it('keeps the row once everything is done, saying only how much is', async () => {
-    const allDone = fixture.countLine.find((c) => c.done === c.total && c.running === 0 && c.failed === 0);
-    expect(allDone, 'the fixture keeps an all-done case').toBeDefined();
-    const { text, ...counts } = allDone!;
+  it('keeps the row once everything is done, naming the newest task with its Done pill', async () => {
     await mount(
-      created({ ...counts, items: [row(1, { status: 'DONE' }), row(2, { status: 'DONE' })] }),
+      created({ total: 2, done: 2, items: [row(2, { status: 'DONE' }), row(1, { status: 'DONE' })] }),
     );
-    expect(one('.bg-tray-count')?.textContent).toBe(text);
+    expect(one('.bg-tray-count')?.textContent).toBe('2 · Task 1');
+    expect(one('.ct-count + .status-pill')?.textContent).toBe('Done');
     expect(one('.ct-failed')).toBeNull();
   });
 
-  it('never wraps the title: it truncates beside the sentence, stays whole beside one task', async () => {
+  it('never wraps the title and keeps it whole: the band truncates, as one task’s name does', async () => {
     const title = () => all('span').find((el) => el.textContent === fixture.copy.title);
     await withStylesheet(async () => {
-      // The longest sentence seen: a pipeline session's 109,874 tasks, on a phone.
-      await mount(created({ total: 109_874, running: 1, failed: 2, done: 281, items: [row(1), row(2)] }));
-      expect(style(title(), 'whiteSpace', 'minWidth', 'overflow', 'textOverflow')).toEqual({
+      // The longest count seen: a pipeline session's 109,874 tasks, on a phone.
+      await mount(created({ total: 109_874, failed: 2, done: 281, items: [row(1), row(2)] }));
+      expect(style(title(), 'whiteSpace', 'flexShrink')).toEqual({ whiteSpace: 'nowrap', flexShrink: '0' });
+      expect(style(one('.ct-count'), 'whiteSpace', 'minWidth', 'overflow', 'textOverflow')).toEqual({
         whiteSpace: 'nowrap',
         minWidth: '0px',
         overflow: 'hidden',
         textOverflow: 'ellipsis',
-      });
-      // The sentence never shrinks below its words.
-      expect(style(one('.ct-count'), 'whiteSpace', 'minWidth')).toEqual({
-        whiteSpace: 'nowrap',
-        minWidth: 'auto',
       });
 
       await mount(created({ total: 1, items: [row(1, { title: 'A task named at length '.repeat(8) })] }));
@@ -227,7 +239,7 @@ describe('the collapsed row', () => {
     });
   });
 
-  it('writes the sentence in the body face, as iOS does', async () => {
+  it('writes the band in the body face, as iOS does', async () => {
     await withStylesheet(async () => {
       await mount(created({ total: 109_874, running: 1, failed: 2, done: 281, items: [row(1), row(2)] }));
       // In monospace this sentence left a phone's title a few letters wide.
@@ -363,7 +375,8 @@ describe('what the session waits on', () => {
     ]);
     expect(one('.bg-tray-title')?.textContent).toBe('Tasks');
     expect(one('.ct-watching')?.textContent?.trim()).toBe('2');
-    expect(one('.ct-count')?.textContent).toBe('2 running · 1/3 done');
+    // The newest running task, row 1, after how many run.
+    expect(one('.ct-count')?.textContent).toBe('2 running · Task 1');
 
     await click(one('.bg-tray-row'));
     // Watched first, in the server's order; then the rest.
@@ -383,7 +396,8 @@ describe('what the session waits on', () => {
         }),
       ]),
     ]);
-    expect(one('.ct-count')?.textContent).toBe('1 running · 1/2 done');
+    // The one running is named, though it has no age here.
+    expect(one('.ct-count')?.textContent).toBe('Somebody else’s task');
     await click(one('.bg-tray-row'));
     const rows = all('.ct-row');
     expect(rows.map((r) => r.querySelector('.ct-title')?.textContent)).toEqual(['Somebody else’s task', 'Task 1']);
@@ -436,7 +450,7 @@ describe('what the session waits on', () => {
       waits('SESSION_AWAIT', [runOf(items[0])], { predicate: AWAIT_SESSION }),
     ]);
     expect(one('.ct-watching')?.textContent?.trim()).toBe('1');
-    expect(one('.ct-count')?.textContent).toBe('1 running · 1/2 done');
+    expect(one('.ct-count')?.textContent).toBe('Task 1');
     await click(one('.bg-tray-row'));
     expect(all('.ct-row .ct-title').map((t) => t.textContent)).toEqual(['Task 1', 'Task 2']);
     expect(all('.ct-row').map((r) => r.querySelectorAll('.ct-eye .anticon-eye').length)).toEqual([1, 0]);
@@ -448,7 +462,7 @@ describe('what the session waits on', () => {
     await mount(created({ total: 1, done: 1, items: [row(1, { status: 'DONE' })] }), [
       waits('W', [runOf(elsewhere)], { predicate: AWAIT_SESSION }),
     ]);
-    expect(one('.ct-count')?.textContent).toBe('1 running · 1/2 done');
+    expect(one('.ct-count')?.textContent).toBe('iOS: share sheet saves the image to Photos');
     await click(one('.bg-tray-row'));
     const rows = all('.ct-row');
     expect(rows.map((r) => r.querySelector('.ct-title')?.textContent)).toEqual([
@@ -480,7 +494,7 @@ describe('what the session waits on', () => {
       waits('W', [runOf(items[0], { targetTask: undefined })], { predicate: AWAIT_SESSION }),
     ]);
     expect(one('.ct-watching')).toBeNull();
-    expect(one('.ct-count')?.textContent).toBe('1 running · 1/2 done');
+    expect(one('.ct-count')?.textContent).toBe('Task 1');
   });
 
   it('leaves out a watch that only notifies the person', async () => {

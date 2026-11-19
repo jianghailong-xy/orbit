@@ -100,7 +100,7 @@ class MainBranchTest {
         val request = StartProjectCopy.Request(StartProjectCopy.Settings("MAIN", null, true, 1, null, "refs/heads/master"), "", seal)
         val draft = StartProjectCopy.Draft.of(request.settings, view(upstreamRef = null))
         assertEquals(j("""{"criteriaDigest":"$seal","line":"MAIN","upstreamRef":"refs/heads/master","automatic":true,"maxConcurrentTasks":1,
-            "mergeCheckCommand":null,"requestId":"item-1"}"""), StartProjectCopy.body(request, draft, "item-1"))
+            "mergeCheckCommand":null,"mergeCheckTimeoutSeconds":null,"requestId":"item-1"}"""), StartProjectCopy.body(request, draft, "item-1"))
         assertEquals("refs/heads/release/3.0", StartProjectCopy.body(request, draft.copy(upstream = "release/3.0"), null).text("upstreamRef"))
         // No repository, no row, and nothing sent: the project keeps the main branch it stands on.
         assertFalse(StartProjectCopy.body(request, draft.copy(upstream = null), null).containsKey("upstreamRef"))
@@ -169,7 +169,7 @@ class MainBranchTest {
         }
         assertEquals("Directly into master", RunSettings.lineMain("master"))
         assertEquals("For a single task or an urgent fix. Every merge into master asks you.", RunSettings.lineMainHint("master"))
-        assertEquals("Runs on the combined tree before anything lands — on the project branch and again before master.", RunSettings.mergeCheckHint("master"))
+        assertEquals("Runs before merging into master.", RunSettings.mergeCheckHint("master"))
         assertEquals("No merge check: with Automatic on, the branch merges into master with nothing run on the combined tree.", RunSettings.noMergeCheckWarning("master"))
         assertEquals("Paused 2h ago. Stops new tasks, wake-ups and merges into master. Running tasks finish.",
             RunSettings.pauseFootnote("2026-10-10T10:00:00Z", now, "master"))

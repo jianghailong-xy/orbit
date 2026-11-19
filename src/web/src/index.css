@@ -1374,6 +1374,15 @@ button.toast--pill:focus-visible {
 .tp-account-machine-cloud > .anticon {
   color: var(--brand);
 }
+/* Every other machine, by the OS it reported (docs/mocks/machine-menu-icons, A): its mark in grey, the name as is. */
+.tp-account-machine-os {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+}
+.tp-account-machine-os > .anticon {
+  color: var(--text-3);
+}
 /* Log out: the label in the menu's own danger colour, its icon in --error, as the replaced menu drew them (the
    page rule reached only the icon there). */
 .tp-account-menu .orbit-menu-item[data-danger] .orbit-menu-icon {
@@ -3697,9 +3706,9 @@ button.toast--pill:focus-visible {
   white-space: nowrap;
 }
 /* The Tasks card (SessionCreatedTasksStrip.tsx) sits in the tray's shell above; these are
-   only what a task list adds to it. Collapsed, the title never wraps and the sentence never gives
-   way: beside the sentence the title is what truncates, beside a lone task's name the name does;
-   the failed count is red. Opened, one row per task: a fixed status column, the title (with what it
+   only what a task list adds to it. Collapsed, the title never wraps and stays whole: beside a lone
+   task's name the name truncates, beside the band (`N running · <task>`, `<total> · <task>`) the
+   band does, and the pill after either keeps its size; the failed count is red. Opened, one row per task: a fixed status column, the title (with what it
    replaces, in grey), its age; then the links to the rest. */
 .ct-head {
   min-width: 0;
@@ -3707,10 +3716,15 @@ button.toast--pill:focus-visible {
   text-overflow: ellipsis;
   white-space: nowrap;
 }
-.ct-head:has(+ .ct-one) {
+.ct-head:has(+ .ct-one),
+.ct-head:has(~ .ct-count) {
   flex: none;
 }
 .ct-count {
+  flex: 0 1 auto;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
   white-space: nowrap;
 }
 .ct-failed {
@@ -3725,6 +3739,7 @@ button.toast--pill:focus-visible {
   color: var(--brand);
 }
 .ct-one + .status-pill,
+.ct-count + .status-pill,
 .ct-row .status-pill {
   height: 20px;
   font-size: 11.5px;
@@ -8189,6 +8204,20 @@ button.chat-jump-start:hover {
   height: 18px;
   white-space: nowrap;
 }
+/* Held because its translation failed (docs/ux/translation-failure-policy.html, frames 4B and 7): the reason's
+   sentence can outrun the column and wrap, so the row grows downward from under the bubble instead of being held
+   to one 18px line, which drew a wrapped first line up over the bubble's border. Right-aligned like the bubble. */
+.chat-user-meta.has-failure-foot {
+  height: auto;
+  min-height: 18px;
+  align-items: flex-start;
+  white-space: normal;
+}
+.chat-user-meta.has-failure-foot > .chat-translate-foot.is-error {
+  min-width: 0;
+  justify-content: flex-end;
+  text-align: right;
+}
 .chat-user-meta > .chat-copy,
 .chat-user-meta > .chat-time,
 .chat-user-meta > .chat-meta-sep {
@@ -8302,6 +8331,10 @@ button.chat-jump-start:hover {
   display: flex;
   margin: 6px 0 0;
 }
+/* On an approval card (frame 5) the line sits inside the card's own 14px inset, as .approval-stale does. */
+.approval-untranslated-row {
+  padding: 8px 14px 0;
+}
 /* A send-back the composer finished and the server could not translate: above the composer. */
 .composer-translate-refused {
   margin-bottom: 8px;
@@ -8342,7 +8375,11 @@ button.chat-jump-start:hover {
     opacity: 1;
   }
 }
+/* A failure line says why (docs/ux/translation-failure-policy.html, frame 7), which can outrun a narrow column:
+   it wraps rather than running out of its card, and Retry and Send as written each stay whole. */
 .chat-translate-foot.is-error {
+  flex-wrap: wrap;
+  white-space: normal;
   color: var(--error-solid);
 }
 .chat-translate-sep {
@@ -8358,6 +8395,7 @@ button.chat-jump-start:hover {
   cursor: pointer;
 }
 .chat-translate-foot.is-error .chat-translate-action {
+  white-space: nowrap;
   color: var(--error-solid);
 }
 .chat-translate-action:disabled {
@@ -8449,6 +8487,21 @@ button.chat-jump-start:hover {
 }
 .composer-translation-tag:hover {
   color: var(--text-1);
+}
+/* Translation unavailable (docs/ux/translation-failure-policy.html, frame 6): the warning style, before a send.
+   Longer than the plain tag, so in a narrow toolbar it gives way before the model picker does (the whole of it
+   stays in the title). */
+.composer-translation-tag.is-unavailable {
+  flex: 0 100 auto;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  color: var(--warning);
+  background: var(--warning-bg);
+  border-color: var(--warning-border);
+}
+.composer-translation-tag.is-unavailable:hover {
+  color: var(--warning);
 }
 /* Prompt optimizer (docs/mocks/prompt-optimizer, frames 2–6): ✦ Optimize beside Send, and the
    suggestion card (or the failure line) above the composer, as the slash menu sits. */
@@ -13423,6 +13476,94 @@ button.chat-jump-start:hover {
   word-break: break-word;
   font-size: 12.5px;
   margin: 8px 0;
+}
+/* A plain tool call (ToolCallBody): the command, path or URL itself, not the input as JSON. */
+.approval-tool {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding: 6px 0 4px;
+}
+.approval-tool .approval-translated-desc {
+  margin-bottom: 0;
+}
+.approval-desc-original {
+  margin-left: 8px;
+  font-size: 12px;
+  color: var(--text-3);
+}
+.approval-tool-chip {
+  margin-left: 8px;
+  padding: 1px 7px;
+  border-radius: 5px;
+  background: var(--brand-border);
+  color: var(--brand-strong);
+  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  font-size: 11.5px;
+  font-weight: 500;
+  vertical-align: 1px;
+}
+.approval-cmd {
+  position: relative;
+}
+.approval-cmd .chat-pre-wrap.cmd .chat-pre {
+  background: var(--bg-raised);
+  padding-right: 56px;
+}
+.approval-copy {
+  position: absolute;
+  top: 6px;
+  right: 8px;
+  z-index: 1;
+  padding: 1px 7px;
+  border: 1px solid var(--border);
+  border-radius: 5px;
+  background: var(--bg-raised);
+  color: var(--text-3);
+  font-size: 11px;
+  cursor: pointer;
+}
+.approval-copy:hover {
+  color: var(--text-1);
+}
+.approval-path {
+  padding: 6px 10px;
+  border: 1px solid var(--border-subtle);
+  border-radius: 6px;
+  background: var(--bg-raised);
+  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  font-size: 12.5px;
+  word-break: break-all;
+}
+.approval-path-dir {
+  color: var(--text-3);
+}
+.approval-meta {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+.approval-meta span {
+  padding: 1px 9px;
+  border: 1px solid var(--border);
+  border-radius: 999px;
+  background: var(--bg-raised);
+  color: var(--text-2);
+  font-size: 11.5px;
+}
+.approval-meta span.is-warn {
+  border-color: var(--warning-border);
+  background: var(--warning-bg);
+  color: var(--warning-solid);
+}
+.approval-raw-toggle {
+  align-self: flex-start;
+  padding: 0;
+  border: none;
+  background: none;
+  color: var(--brand);
+  font-size: 12px;
+  cursor: pointer;
 }
 /* ---- Card actions: one size, wherever a card asks the reader for something ----
    The approval card settled these numbers over three rounds of beta — default control size, not a
@@ -19762,6 +19903,20 @@ button.chat-jump-start:hover {
 }
 .np-summary a:hover {
   color: var(--brand-strong);
+}
+/* The draft moved off what its workspace last ran on (board new-session-usable-default ② ③). */
+.np-summary.np-fallback {
+  color: var(--warning);
+}
+/* Nothing on the machine runs the draft (board ④): the way out, under the reason. */
+.np-cant-run {
+  margin-top: 10px;
+  font-size: 12px;
+  color: var(--text-2);
+}
+.np-cant-run a {
+  color: var(--brand);
+  text-decoration: none;
 }
 .np-note {
   margin-top: 9px;
@@ -28585,6 +28740,10 @@ button.agent-progress-agent:hover {
   font-size: 12.5px;
 }
 
+.landing-check-confirmation { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 16px; }
+@media (max-width: 600px) { .landing-check-confirmation { grid-template-columns: 1fr; } }
+
+.orbit-number-input.project-check-timeout { width: min(100%, 24rem); max-width: 100%; }
 /* The Providers page's Tier column (docs/subagent-design.md §7, board docs/mocks/subagent/05.png). */
 .model-tiers {
   width: 100%;
@@ -29157,7 +29316,7 @@ button.agent-progress-agent:hover {
 }
 
 /* The Agents line (SessionAgentsStrip.tsx), in the Background processes tray's shell and rows: the band's
-   words truncate before the title does; opened, Running and Done over the tray's own rows, each a run's name
+   words truncate before the title does; opened, the tray's own rows in one list (running first, no headings), each a run's name
    then its facts. */
 .ag-head {
   flex: none;
@@ -29176,14 +29335,101 @@ button.agent-progress-agent:hover {
   text-overflow: ellipsis;
   white-space: nowrap;
 }
-.ag-section {
-  flex: none;
-  padding: 4px 2px 0;
-  font-size: 11px;
-  font-weight: 600;
-  text-transform: uppercase;
-  color: var(--text-3);
-}
 .ag-row .ag-title {
   font-family: inherit;
+}
+/* Where the work went (docs/mocks/agents-band-models): a machine fact and model chips, as Apple's
+   AgentFact and AgentEngineChip draw them. Always one line: under 720px the models after the first fold
+   into "+n", under 520px the words go and the marks keep their counts. */
+.ag-tray {
+  container-type: inline-size;
+}
+.ag-line .ag-band {
+  flex: 0 1 auto;
+}
+.ag-chip,
+.ag-fact,
+.ag-more {
+  flex: none;
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  border-radius: 5px;
+  padding: 0 5px;
+  line-height: 18px;
+  white-space: nowrap;
+  font-size: 12px;
+}
+.ag-fact,
+.ag-more {
+  background: var(--bg-hover);
+  color: var(--text-2);
+}
+.ag-fact .anticon {
+  font-size: 11px;
+}
+.ag-chip {
+  --ag-tint: var(--text-3);
+  background: color-mix(in srgb, var(--ag-tint) 13%, transparent);
+  color: var(--text-1);
+  padding-left: 2px;
+  min-width: 0;
+}
+.ag-chip[data-engine='claude'] { --ag-tint: #d97857; }
+.ag-chip[data-engine='dsh'] { --ag-tint: #4d6bff; }
+.ag-chip[data-engine='kimi'] { --ag-tint: #1a73f2; }
+.ag-chip[data-engine='antigravity'] { --ag-tint: #4285f5; }
+.ag-chip[data-engine='codex'],
+.ag-chip[data-engine='cursor'],
+.ag-chip[data-engine='opencode'] { --ag-tint: var(--text-1); }
+.ag-chip-mark {
+  font-style: normal;
+  width: 14px;
+  height: 14px;
+  border-radius: 4px;
+  background: var(--ag-tint);
+  color: var(--bg-base, #fff);
+  font-size: 9px;
+  font-weight: 800;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+}
+.ag-chip-name {
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.ag-chip-n {
+  color: var(--text-3);
+}
+.ag-more {
+  display: none;
+}
+.ag-failed {
+  flex: none;
+  color: var(--error);
+  font-weight: 600;
+  white-space: nowrap;
+}
+.ag-facts {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+@container (max-width: 720px) {
+  .ag-line .ag-chip-extra {
+    display: none;
+  }
+  .ag-line .ag-more {
+    display: inline-flex;
+  }
+}
+@container (max-width: 520px) {
+  .ag-line .ag-word,
+  .ag-line .ag-chip-name {
+    display: none;
+  }
+  .ag-line .ag-chip {
+    padding-right: 3px;
+  }
 }

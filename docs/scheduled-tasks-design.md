@@ -6,7 +6,8 @@ Owner decisions of 2026-11-14, all kept:
 
 - no deploy level in v1;
 - repeated failures notify and never pause the schedule by themselves;
-- run sessions stay out of the session list, and a run that finds nothing new completes its session;
+- run sessions stay out of the session list, and a run that finds nothing new completes its session (amended
+  2026-11-18: they are listed in their workspace's built-in **Scheduled runs** folder, and nowhere else; §7.4);
 - scheduled tasks live in the left drawer, next to Projects, Tasks, Waiting on you and Wiki, across every workspace;
   nothing about them appears in a workspace's session list;
 - there is no form: a person says what they want and an agent fills in the schedule;
@@ -503,7 +504,9 @@ run (`LANDING_FAILED`) with its reason, through the same push and **Waiting on y
   URL, a rate limit, where it left off.
 - The report ends the run. The session's turn may go on, but nothing after it changes the run.
 - A session that ends or settles idle without a report fails the run with `NO_REPORT`. Silence never reads as "no
-  change".
+  change". A session is not idle while one of its `bg_run` jobs (job or watch, not a service) is still running or a
+  turn, such as that job's wake, is still to be answered: a run may end its turn to wait for a job, and its run limit
+  still counts that wait.
 
 ### 7.2 Failure reasons and retries
 
@@ -555,8 +558,14 @@ run (`LANDING_FAILED`) with its reason, through the same push and **Waiting on y
 
 ### 7.4 The run's session afterwards
 
-- Run sessions do not appear in the session list. They are reached from the schedule's history and from the
-  notification.
+- Run sessions do not appear among a workspace's own sessions. They are reached from the schedule's history, from
+  the notification, and (owner 2026-11-18, board `docs/mocks/scheduled-run-sessions-group/`) from the workspace's
+  built-in **Scheduled runs** folder: a folder row at the top of the workspace's list, shown while the view has a run,
+  whose page lists that workspace's run sessions in the view it was opened from (`GET /sessions?scheduled=1`, the
+  only read that includes them). Search, counts, `session_list` and `session.created` still leave them out.
+- Every run on Claude Code runs in Auto, whatever its access level (owner 2026-11-18), and so do the SubAgents it
+  starts: a run waits on no card nobody is there to answer. The level's deny lists still apply in Auto. Other
+  engines keep the level's mode: their Auto has no classifier.
 - A NO_CHANGE run completes its session. CHANGED and FAILED runs leave it open for follow-up questions.
 - Archiving or deleting a run's session keeps the run row; the run shows its session as gone.
 
@@ -671,10 +680,14 @@ Agents have the same five as tools, so "pause the Codex check until Monday" work
 
 As decided in revision 3, modelled on Reminders' *Scheduled* list:
 
-- **Left drawer:** a **Scheduled** item with a count of schedules that need the person (failing or held).
-- **Timeline:** occurrences grouped as **Needs you**, **Today**, **Tomorrow**, the rest of the week, **Later**,
-  **Paused**. A row is a circle that carries the state, the title, a line with the rule, the workspace and the
-  access, and the time. **Show past runs** puts earlier runs back, ticked off. A workspace filter sits in the header.
+- **Left drawer:** a **Scheduled** item with a count of what needs the person, the same on every client: schedules
+  that are held, or failing with no run under way, and schedules and waiting tasks whose condition cannot be read.
+- **Timeline:** occurrences grouped as **Today**, **Tomorrow**, the rest of the week, **Later**, **Paused**. A row is
+  a circle that carries the state, the title, a line with the rule, the workspace and the access, and the time.
+  There is no group of errors (owner 2026-11-19, replacing revision 3's **Needs you**): the page lists the schedules,
+  and a failing one is tagged on its own row, on the day of its next run. While a run of it is under way (Run now,
+  or its next slot) the tag is off: a failure puts it back, a run that did not fail clears it. A held schedule has no
+  next run and is listed under **Paused**, before the paused ones, with its Held tag. **Show past runs** puts earlier runs back, ticked off. A workspace filter sits in the header.
 - **Inspector** (beside the list on web and macOS, a sheet on iOS): the read-back sentence, next run, last result,
   *What was asked* (the intent), *Notes for the next run*, this month's use, history (runs and revisions with
   **Undo**, each naming who made it: you, a session, or a run), the controls of §8.4 and **Change…**.

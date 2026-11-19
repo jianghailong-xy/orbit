@@ -55,10 +55,16 @@ targets:
     dependencies:
       - package: OrbitKit
         product: OrbitKit
+      # Share to Orbit (docs/share-to-orbit-design.md §3.1), embedded in Orbit.app/PlugIns.
+      - target: OrbitShare
+        embed: true
+        codeSign: true
     settings:
       base:
         PRODUCT_BUNDLE_IDENTIFIER: io.orbitd.app
         PRODUCT_NAME: Orbit
+        # The release workflow names each target's App Store profile; empty locally (automatic).
+        PROVISIONING_PROFILE_SPECIFIER: $(ORBIT_APP_PROFILE)
         INFOPLIST_FILE: Support/Info.plist
         # Release/TestFlight/App Store → aps-environment=production (Orbit.entitlements).
         CODE_SIGN_ENTITLEMENTS: Support/Orbit.entitlements
@@ -72,6 +78,34 @@ targets:
         # sandbox APNs token (the client reports "sandbox"; the server pushes to the sandbox host).
         Debug:
           CODE_SIGN_ENTITLEMENTS: Support/Orbit.Debug.entitlements
+
+  # The Share Extension: lists Orbit in the share sheet, picks a session from the snapshot the app
+  # writes to the App Group, and leaves an inbox entry for the app to stage in that composer. It
+  # holds no token and makes no network call. The same SwiftUI picker is meant for the macOS
+  # Share-menu extension later.
+  OrbitShare:
+    type: app-extension
+    platform: iOS
+    deploymentTarget: "17.0"
+    sources:
+      - path: OrbitShare
+        excludes:
+          - "Info.plist"
+          - "*.entitlements"
+    dependencies:
+      - package: OrbitKit
+        product: OrbitKit
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: io.orbitd.app.OrbitShare
+        PRODUCT_NAME: OrbitShare
+        INFOPLIST_FILE: OrbitShare/Info.plist
+        CODE_SIGN_ENTITLEMENTS: OrbitShare/OrbitShare.entitlements
+        GENERATE_INFOPLIST_FILE: NO
+        TARGETED_DEVICE_FAMILY: "1,2"
+        APPLICATION_EXTENSION_API_ONLY: YES
+        SKIP_INSTALL: YES
+        PROVISIONING_PROFILE_SPECIFIER: $(ORBIT_SHARE_PROFILE)
 
 # Explicit shared scheme so `xcodebuild -scheme Orbit` resolves the SwiftPM dependencies
 # (OrbitKit + swift-markdown) reliably — `-target` can miss package resolution.

@@ -17,7 +17,7 @@ const UPGRADES = ['.claude/skills/upgrade/upgrade.sh', '.agents/skills/upgrade/s
 const INSTALL = 'scripts/install-server.sh';
 const COPIED = [
   ...UPGRADES, INSTALL, 'deploy/managed-runner/host.sh', '.env.example', '.gitignore', 'docker-compose.yml', 'gateway/nginx.conf', 'scripts/pg-backup.sh',
-  'scripts/runner-link/door-check.js', 'deploy/runner-link/behind-web-gateway.env',
+  'scripts/runner-link/door-check.js', 'deploy/runner-link/behind-web-gateway.env', 'src/link-gateway/nats.conf',
 ];
 const SECRET_NAMES = [
   'SIGNING_KEY', 'PUBLIC_KEY', 'GATEWAY_TOKEN', 'NATS_APISERVER_SEED', 'NATS_APISERVER_KEY', 'NATS_GATEWAY_SEED', 'NATS_GATEWAY_KEY',
@@ -43,6 +43,8 @@ case "$*" in
   "exec pgbackup-0 cat /usr/local/bin/pg-backup.sh") cat scripts/pg-backup.sh ;;
   "compose ps -q gateway") echo gateway-0 ;;
   "exec gateway-0 cat /etc/nginx/conf.d/default.conf") cat "${'$'}{FAKE_RUNNING_NGINX:-gateway/nginx.conf}" ;;
+  "compose ps -q nats") [ -n "${'$'}{FAKE_RUNNING_NATS_CONF:-}" ] && echo nats-0 ;;
+  "exec nats-0 cat /etc/orbit-nats/nats.conf") cat "$FAKE_RUNNING_NATS_CONF" ;;
   "compose ps -q link-gateway") [ -z "${'$'}{FAKE_LINK_GATEWAY_DOWN:-}" ] && echo link-gateway-0 ;;
   "inspect -f {{with index .State \"Health\"}}{{.Status}}{{end}} link-gateway-0") echo "${'$'}{FAKE_LINK_GATEWAY_HEALTH:-healthy}" ;;
   "build --help") echo '      --provenance string' ;;
@@ -144,6 +146,7 @@ const APISERVER_UP = /^compose up -d --wait (--no-deps )?apiserver wiki-worker w
 const IMAGES_BUILD = /^compose build .*apiserver wiki-worker web/;
 const DOOR_GATEWAY = 'node - http://gateway/runner-link';
 const WEB_GATEWAY_RECREATE = 'compose up -d --wait --no-deps --force-recreate gateway';
+const NATS_RECREATE = 'compose up -d --wait --wait-timeout 180 --no-deps --force-recreate nats';
 
 function assertNoSecretShown(fixture, run) {
   for (const name of SECRET_NAMES) {
@@ -409,6 +412,25 @@ for (const upgrade of UPGRADES) {
       assert.equal(again.status, 0, again.output);
       assert.ok(!fixture.calls().includes(WEB_GATEWAY_RECREATE));
     }
+  });
+
+  test(`${upgrade}: nats is recreated once, after the link is up and ahead of the apiserver, where the nats.conf it runs is not this checkout's`, (t) => {
+    const fixture = makeFixture(t);
+    writeFileSync(fixture.envFile, BEFORE_LINK);
+    // The file a running orbit-nats kept after a checkout replaced it: the grants of an earlier release.
+    const running = path.join(fixture.root, 'running-nats.conf');
+    writeFileSync(running, '# the nats.conf of an earlier release\n');
+    const run = fixture.run(upgrade, ['--no-pull'], { FAKE_RUNNING_NATS_CONF: running });
+    assert.equal(run.status, 0, run.output);
+    assert.match(run.stdout, /Recreating nats to run this checkout's src\/link-gateway\/nats\.conf/);
+    const calls = fixture.calls();
+    assert.equal(calls.filter((call) => call === NATS_RECREATE).length, 1);
+    assert.ok(indexOfCall(calls, LINK_UP) < calls.indexOf(NATS_RECREATE));
+    assert.ok(calls.indexOf(NATS_RECREATE) < indexOfCall(calls, APISERVER_UP));
+    // Running this checkout's already: it is left alone.
+    const again = fixture.run(upgrade, ['--no-pull'], { FAKE_RUNNING_NATS_CONF: path.join(fixture.checkout, 'src/link-gateway/nats.conf') });
+    assert.equal(again.status, 0, again.output);
+    assert.ok(!fixture.calls().includes(NATS_RECREATE));
   });
 
   test(`${upgrade}: a pull that changes the script runs the new one, from the start, once`, (t) => {

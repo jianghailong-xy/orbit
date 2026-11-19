@@ -69,6 +69,29 @@ class SessionTaskCardTest {
         }
     }
 
+    /** The collapsed line past one task, as the Agents line says it: held to the fixture's `band` cases. */
+    @Test fun everyBandCaseIsTheLineThisClientWrites() {
+        val cases = corpus.objects("band")
+        assertTrue(cases.isNotEmpty())
+        cases.forEach { case ->
+            val name = case.text("name")!!
+            val created = (case["created"] as? JsonObject)?.let { created ->
+                JsonObject(created + ("items" to JsonArray(created.objects("items").map { item ->
+                    JsonObject(item.filterKeys { it != "replaces" } + ("title" to JsonPrimitive("Task ${item.text("id")}")))
+                })))
+            }
+            val watched = case.objects("watched").map {
+                SessionWatchedTask(it.text("id")!!, "Task ${it.text("id")}",
+                    it.text("status")?.let { status -> WatchTargetStatus(status, it.flag("running"), it.flag("queued")) }, it.flag("stale"))
+            }
+            val band = SessionTaskCard.of(created, watched)?.band
+            val expected = case["band"] as? JsonObject
+            if (expected == null) { assertNull(name, band); return@forEach }
+            assertEquals(name, listOf(expected.number("failed"), expected.text("text"), expected.text("row")),
+                listOf(band?.failed, band?.text, band?.row?.id))
+        }
+    }
+
     // The split between the two cards (OrbitKit SessionTaskCardTests).
 
     private val f = WatchFixture

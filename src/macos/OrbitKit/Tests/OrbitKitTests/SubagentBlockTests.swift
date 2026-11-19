@@ -258,32 +258,55 @@ final class SubagentBlockTests: XCTestCase {
         XCTAssertEqual(SubagentSessionSummary.make([done, older, one])?.band, "2 running · \(deploy)", "the newest running one")
         XCTAssertEqual(SubagentSessionSummary.make([done, run(status: "RUNNING", endedAt: nil)])?.band, "2 · 1 running",
                        "no description keeps the counts")
-        XCTAssertNil(SubagentSessionSummary.make([done, one])?.last, "the spinner has the right edge while one runs")
+        XCTAssertEqual(SubagentSessionSummary.make([done, one])?.failed, 0)
+        let broke = run(status: "FAILED", createdAt: "2026-11-11T07:00:00.000Z", description: "Audit")
+        let both = try XCTUnwrap(SubagentSessionSummary.make([broke, one]))
+        XCTAssertEqual(both.failed, 1, "a failure still counts while another run is going")
+        XCTAssertEqual(both.spoken, "Agents: \(deploy), 1 failed")
+        XCTAssertEqual(SubagentSessionSummary.make([done, one])?.current?.description, " \(deploy) ")
     }
 
-    func testTheIdleBandSaysHowTheLastRunEnded() throws {
-        let deploy = "Deploy dacad7403 to production"
+    func testTheIdleBandSaysTheCountAndHowManyFailed() throws {
         let older = run(status: "DONE", createdAt: "2026-11-11T07:00:00.000Z", endedAt: "2026-11-11T07:01:00.000Z",
                         description: "Audit")
         let newest = run(status: "DONE", createdAt: "2026-11-11T08:00:00.000Z", endedAt: "2026-11-11T08:00:50.000Z",
-                         description: deploy)
+                         description: "Deploy dacad7403 to production")
         let idle = try XCTUnwrap(SubagentSessionSummary.make([older, newest]))
-        XCTAssertEqual(idle.band, "2 · \(deploy)", "the newest run names the band")
-        XCTAssertEqual(idle.last, SubagentSessionSummary.LastRun(failed: false, duration: "50s"))
-        XCTAssertEqual(idle.last?.spoken, "done, 50s")
+        XCTAssertEqual(idle.band, "2", "the newest run's title is on its row, not the band")
+        XCTAssertEqual(idle.failed, 0, "no check when all succeeded")
+        XCTAssertNil(idle.current)
 
         let failed = run(status: "FAILED", createdAt: "2026-11-11T09:00:00.000Z", endedAt: "2026-11-11T09:04:12.000Z",
                          description: "Run the OrbitKit test suite")
         let red = try XCTUnwrap(SubagentSessionSummary.make([older, newest, failed]))
-        XCTAssertEqual(red.band, "3 · Run the OrbitKit test suite")
-        XCTAssertEqual(red.last?.failed, true)
-        XCTAssertEqual(red.last?.spoken, "failed, 4m 12s")
+        XCTAssertEqual(red.band, "3")
+        XCTAssertEqual(red.failed, 1)
+        XCTAssertTrue(red.spoken.hasSuffix("1 failed"))
+    }
 
-        // No description on the newest: the count as before, still with its outcome and time.
-        let bare = try XCTUnwrap(SubagentSessionSummary.make([older, run(status: "DONE", createdAt: "2026-11-11T08:00:00.000Z",
-                                                                          endedAt: "2026-11-11T08:00:50.000Z")]))
-        XCTAssertEqual(bare.band, "2")
-        XCTAssertEqual(bare.last, SubagentSessionSummary.LastRun(failed: false, duration: "50s"))
+    func testTheBandCountsModelsAndMachines() throws {
+        func at(_ place: String?, _ model: String, _ label: String, _ minute: Int) -> SubagentRunView {
+            run(model: model, modelLabel: label, createdAt: "2026-11-11T08:0\(minute):00.000Z",
+                endedAt: "2026-11-11T08:0\(minute):30.000Z", workspaceName: place, engine: "claude")
+        }
+        let runs = [at("orbit-op", "deepseek", "DeepSeek V4.1 Flash", 1), at(nil, "opus", "Opus 5.5", 2),
+                    at("orbit-prod", "opus", "Opus 5.5", 3), at("orbit-prod", "opus", "Opus 5.5", 4)]
+        let s = try XCTUnwrap(SubagentSessionSummary.make(runs, parentEngine: "claude", parentModel: "opus"))
+        XCTAssertEqual(s.models, [.init(label: "Opus 5.5", engine: "claude", count: 3),
+                                  .init(label: "DeepSeek V4.1 Flash", engine: "claude", count: 1)])
+        XCTAssertEqual(s.machines, [.init(name: "orbit-prod", count: 2), .init(name: "orbit-op", count: 1),
+                                    .init(name: nil, count: 1)])
+        XCTAssertTrue(s.elsewhere)
+        XCTAssertTrue(s.spread)
+        XCTAssertEqual(s.spoken, "Agents: 4, 3 machines, Opus 5.5 3 runs, DeepSeek V4.1 Flash 1 run")
+
+        let own = try XCTUnwrap(SubagentSessionSummary.make([at(nil, "opus", "Opus 5.5", 1)],
+                                                            parentEngine: "claude", parentModel: "opus"))
+        XCTAssertFalse(own.spread, "the session's own model on its own machine: nothing to show")
+        let haiku = try XCTUnwrap(SubagentSessionSummary.make([at(nil, "haiku", "Haiku 5.5", 1)],
+                                                              parentEngine: "claude", parentModel: "opus"))
+        XCTAssertTrue(haiku.spread)
+        XCTAssertFalse(haiku.elsewhere)
     }
 
     func testAnOlderServerWithoutTheNewFieldsStillDecodes() throws {

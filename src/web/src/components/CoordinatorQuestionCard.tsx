@@ -319,6 +319,7 @@ export function CoordinatorQuestionCard({
       </div>
       {answer.isError && answerRefusedUntranslated(answer.error) && answer.variables ? (
         <RefusedAnswerFoot
+          error={answer.error}
           resend={(sendAsWritten) =>
             answer.mutateAsync({ ...answer.variables!, ...(sendAsWritten ? { sendAsWritten: true } : {}) })
           }

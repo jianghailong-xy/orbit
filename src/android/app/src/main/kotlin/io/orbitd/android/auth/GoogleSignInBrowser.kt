@@ -46,7 +46,9 @@ fun openInSignInBrowser(activity: Activity, url: String): Boolean {
 class GoogleSignInRedirectActivity : Activity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
-        startActivity(Intent(this, MainActivity::class.java).setData(intent.data).addFlags(
+        // A share page that started this sign-in takes the answer, and shows its picker after it (docs/share-to-orbit-design.md §4).
+        val target = if (io.orbitd.android.share.ShareSignIn.waiting) io.orbitd.android.share.ShareActivity::class.java else MainActivity::class.java
+        startActivity(Intent(this, target).setData(intent.data).addFlags(
             Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TOP or Intent.FLAG_ACTIVITY_SINGLE_TOP))
         finish()
     }

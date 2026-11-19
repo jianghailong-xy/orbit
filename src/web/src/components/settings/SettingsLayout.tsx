@@ -27,7 +27,6 @@ import {
   CodeOutlined,
   DatabaseOutlined,
   FolderOutlined,
-  HddOutlined,
   HolderOutlined,
   KeyOutlined,
   LeftOutlined,
@@ -42,6 +41,7 @@ import { MANAGED_RUNNER_COPY, type ManagedRunnerRow } from '@orbit/shared';
 import { api } from '../../api';
 import { routeId } from '../../lib/idCodec';
 import { machineName } from '../../lib/machineSetup';
+import { MachineOsIcon } from '../../lib/machineOs';
 import { managedRowOf, useManagedRunner, useManagedRunnerId } from '../../lib/managedRunner';
 import { Spinner } from '../ui/Spinner';
 import { publishedRunnerVersionQuery, runnersQuery, workspacesQuery } from '../../lib/queries';
@@ -605,7 +605,7 @@ function MachineRow({
     >
       <NavRow
         to={`/settings/machines/${runner.id}`}
-        icon={<HddOutlined />}
+        icon={<MachineOsIcon runner={runner} />}
         label={name}
         trailing={<MachineRowState state={state} managedRow={managedRow} />}
       />

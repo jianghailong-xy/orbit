@@ -683,7 +683,7 @@ struct SectionDetail: View {
             // The detail is the page's own bottom panel.
             ContentUnavailableView(section.title, systemImage: section.systemImage)
             #else
-            // The right-hand panel: a row's detail, a draft, or a run's session (web boards 01 ②④, 02 ⑤).
+            // The right-hand panel shows a row's detail or a draft.
             ScheduledMacDetail()
             #endif
         case .following:

@@ -29,6 +29,7 @@ import {
   EyeOutlined,
   ExclamationCircleOutlined,
   ExportOutlined,
+  FieldTimeOutlined,
   FolderOutlined,
   GlobalOutlined,
   InfoCircleOutlined,
@@ -169,6 +170,8 @@ import {
   folderNameDraft,
   folderNameFailure,
   listShowsFolders,
+  SCHEDULED_RUNS_COPY,
+  SCHEDULED_RUNS_FOLDER,
   type SessionFolderRow,
 } from '../lib/sessionFolders';
 import { rememberListFolder } from '../lib/workspaceListFolder';
@@ -177,6 +180,7 @@ import {
   SESSION_PROJECT_COPY,
   landingsRowSummary,
   listShowsProjects,
+  projectSessionsButtonActive,
   sessionProjectListing,
   sourceLandingLabel,
   type SessionProjectRow,
@@ -254,6 +258,7 @@ import {
   type ContextSeedState,
 } from '../lib/contextSeed';
 import { InitializeGitSteps, SessionOutputs } from './SessionOutputs';
+import { SessionBrowserChip } from './SessionBrowserChip';
 import { mergeRepairLoopLive } from './MergeRecoveryPanel';
 import { BrandMark, NewSessionProviderHero } from './NewSessionProviderHero';
 import { CreatedWorkspaceLine } from './CreatedWorkspaceLine';
@@ -265,6 +270,7 @@ import { managedRowOf, managedRunnerStatusQuery, useManagedRunnerId, type Manage
 import { MANAGED_RUNNER_COPY } from '@orbit/shared';
 import {
   currentEngineChoice,
+  draftFallback,
   currentProviderChoice,
   engineChoices,
   engineTitleFor,
@@ -340,8 +346,19 @@ import {
 import { DshRepairCard } from './Transcript';
 import type { TranslationActionResponse } from '@orbit/shared';
 import { useApprovalDecisions } from '../lib/approvalDecisions';
-import { agentLanguageOf, answerRefusedUntranslated, bilingualOn, heldForTranslation, translationLanguageOf, translationOn, translationTag } from '../lib/translation';
-import { RefusedSendBack, TranslationCtx, type TranslationActions } from './TranslationParts';
+import {
+  agentLanguageOf,
+  answerRefusedUntranslated,
+  bilingualOn,
+  heldForTranslation,
+  translationLanguageOf,
+  translationOn,
+  translationTag,
+  unavailableTranslationTag,
+  useTranslationUnavailable,
+} from '../lib/translation';
+import { QuestionTranslationsCtx, RefusedSendBack, TranslationCtx, type TranslationActions } from './TranslationParts';
+import { useQuestionTranslations } from '../lib/questionTranslations';
 import {
   RunNeverStartedCard,
   runNeverStarted,
@@ -373,7 +390,7 @@ import {
 } from './CriteriaDecisionCard';
 import { AnsweredQuestionCard, CoordinatorQuestions, closedQuestionRows, coordinatorQuestions } from './CoordinatorQuestionCard';
 import { useSessionOwnerRequestInserts } from './OwnerRequestCard';
-import { ScheduleRunCrumb, scheduleRunAgentName, useScheduleRunOfSession, useSessionScheduleInserts } from './ScheduleCards';
+import { useScheduleRunOfSession, useSessionScheduleInserts } from './ScheduleCards';
 import {
   OWNER_REQUEST_CHAT_PLACEHOLDER,
   OWNER_REQUEST_CHAT_PREFIX,
@@ -508,7 +525,6 @@ import {
   CONTINUE_MESSAGE,
   ENGINE_CLI_NAMES,
   derivePermissionSemantics,
-  scheduleRunHeadText,
   encodeCursorModel,
   fastModeAvailable,
   isAccountEngine,
@@ -2706,6 +2722,8 @@ export function WorkspaceView({
     placeholder: string;
     /** Carried ahead of the typed message by a send that starts an ordinary turn. */
     context?: string;
+    /** What ✦ Optimize is told the draft answers (`replyingTo`); absent, the banner and `context`. */
+    about?: string;
   } | null>(null);
   const [localStatusCards, setLocalStatusCards] = useState<LocalStatusCard[]>([]);
   const [images, setImages] = useState<ComposerImage[]>([]); // images staged in the composer
@@ -2941,14 +2959,17 @@ export function WorkspaceView({
   // session filed in it. That is the request every native client makes for every list; a workspace
   // without folders keeps paging as before.
   const listByTag = !!tagFilter || groupByTag;
-  const foldersShown = listShowsFolders(effectiveView, listByTag) && workspaceFolders.length > 0;
+  // The workspace's Scheduled runs folder is open (`?folder=scheduled`): the list is its runs' sessions alone, which
+  // every other list leaves out, with no folder or project rows of its own.
+  const onScheduledRuns = !listProjectId && searchParams.get('folder') === SCHEDULED_RUNS_FOLDER;
+  const foldersShown = !onScheduledRuns && listShowsFolders(effectiveView, listByTag) && workspaceFolders.length > 0;
   const projectScope = `${runner.id}:${scopeWorkspaceId}:${effectiveView}:${tagFilter ?? ''}`;
   const [membershipScope, setMembershipScope] = useState<string | null>(null);
   const projectsQ = useQuery({
     ...openProjectsQuery(),
     enabled: !!openProjectId || membershipScope === projectScope,
   });
-  const projectsShown = listShowsProjects(effectiveView, listByTag) &&
+  const projectsShown = !onScheduledRuns && listShowsProjects(effectiveView, listByTag) &&
     ((projectsQ.data?.length ?? 0) > 0 || membershipScope === projectScope);
   // One factory call drives both the list query and the optimistic-update key below, so
   // they can never drift apart; it's also the exact key the BootGate splash pre-warms.
@@ -2957,7 +2978,8 @@ export function WorkspaceView({
     workspaceId: scopeWorkspaceId,
     view: effectiveView,
     tagId: tagFilter,
-    limit: scopeWorkspaceId && (foldersShown || projectsShown) ? null : sessionLimit,
+    limit: scopeWorkspaceId && (foldersShown || projectsShown || onScheduledRuns) ? null : sessionLimit,
+    scheduled: onScheduledRuns,
   });
   const sessionsKey = sessionsOpts.queryKey;
   // While the control-plane stream is connected it re-reads the list on every event that touches
@@ -3012,9 +3034,9 @@ export function WorkspaceView({
   const sessionTags = useQuery(sessionTagsQuery()).data ?? [];
 
   const sessions = useMemo(() => {
-    // A scheduled task's run is in no session list (owner ruling, docs/scheduled-tasks-design.md §7.4): the server
-    // leaves them out, and a row that says it is one is not drawn here either. It is reached from the schedule.
-    const rows = (sessionsQ.data ?? []).filter((row) => row.runSource !== 'SCHEDULE');
+    // A scheduled task's run is listed only in its workspace's Scheduled runs folder (owner 2026-11-18): the server
+    // reads the folder apart, and a row on the wrong side is not drawn here either.
+    const rows = (sessionsQ.data ?? []).filter((row) => (row.runSource === 'SCHEDULE') === onScheduledRuns);
     // The Completed view is ordered by the server on completed_at (newest first) and
     // intentionally ignores pinning. The optimistic cache edits
     // (drop/rename/pin) only remove or patch rows in place — never reorder — and a real
@@ -3027,7 +3049,7 @@ export function WorkspaceView({
       const tb = b.lastTurnAt ?? b.createdAt;
       return ta < tb ? 1 : -1;
     });
-  }, [sessionsQ.data, effectiveView]);
+  }, [sessionsQ.data, effectiveView, onScheduledRuns]);
   const selectedFromList = useMemo(
     () => sessions.find((s) => s.id === selectedId) ?? null,
     [sessions, selectedId],
@@ -3430,13 +3452,16 @@ export function WorkspaceView({
   // The button's count is the column header's "Project · N sessions". Where the column shows another
   // project or none, the same two reads (one cache entry with the column's) count it.
   const titleBarOwnRead = !!titleBarProjectId && titleBarProjectId !== openProjectId;
+  // Polled as the page polls its own two, so the button's spinner follows them while the page is shut.
   const titleBarOpenQ = useQuery({
     ...projectSessionsQuery({ projectId: titleBarProjectId ?? '', view: 'open', includeLanding: true }),
     enabled: titleBarOwnRead,
+    refetchInterval: (query) => listPollMs(controlLive, query),
   });
   const titleBarCompletedQ = useQuery({
     ...projectSessionsQuery({ projectId: titleBarProjectId ?? '', view: 'completed', includeLanding: true }),
     enabled: titleBarOwnRead,
+    refetchInterval: (query) => listPollMs(controlLive, query),
   });
   const titleBarSessionCount = !titleBarProjectId ? null
     : !titleBarOwnRead ? (projectSessionsQ.isSuccess || completedProjectSessionsQ.isSuccess ? projectMembers.length : null)
@@ -3506,7 +3531,7 @@ export function WorkspaceView({
   // known: before that a missing folder is one not loaded yet. Arriving from another workspace, the
   // list is that one's until the scope catches up with the route, and its folders are not these.
   useEffect(() => {
-    if (listProjectId || !folderParam || openFolder || !foldersQ.isSuccess || !scopeWorkspaceId) return;
+    if (listProjectId || !folderParam || openFolder || onScheduledRuns || !foldersQ.isSuccess || !scopeWorkspaceId) return;
     if (scopeWorkspaceId !== resolvedWorkspaceId) return;
     if (!listShowsFolders(effectiveView, listByTag)) return;
     setSearchParams(
@@ -3518,7 +3543,7 @@ export function WorkspaceView({
       { replace: true },
     );
   }, [folderParam, openFolder, foldersQ.isSuccess, scopeWorkspaceId, resolvedWorkspaceId, effectiveView, listByTag,
-    setSearchParams, listProjectId]);
+    setSearchParams, listProjectId, onScheduledRuns]);
   // The folder page is kept for the workspace whose list it is, so the sidebar opens the workspace on
   // it again after a trip to another one (lib/workspaceListFolder). A project's sessions page over
   // the list leaves it as it was.
@@ -3554,7 +3579,18 @@ export function WorkspaceView({
   );
   // Where a session opened from this list lives. On a folder's page the page goes along, so the
   // list stays on it while the conversations it lists are opened one after another.
-  const folderSearch = openFolder ? `?folder=${encodeId(openFolder.id)}` : '';
+  const folderSearch = openFolder
+    ? `?folder=${encodeId(openFolder.id)}`
+    : onScheduledRuns ? `?folder=${SCHEDULED_RUNS_FOLDER}` : '';
+  // The Scheduled runs folder's row on the workspace's list: shown while the view has any run of this workspace,
+  // with how many wait on you. Run starts reach no list's stream (session.created leaves them out), so it polls.
+  const scheduledRunsQ = useQuery({
+    ...sessionsQuery({ runnerId: runner.id, workspaceId: scopeWorkspaceId, view: effectiveView, scheduled: true }),
+    enabled: !listProjectId && !onScheduledRuns && !!scopeWorkspaceId && listShowsFolders(effectiveView, listByTag),
+    refetchInterval: 30_000,
+  });
+  const scheduledRuns = (scheduledRunsQ.data ?? []).filter((row) =>
+    row.runSource === 'SCHEDULE' && row.workspace?.id === scopeWorkspaceId);
   // Where a session opened from the project's page lives: the page goes along, in the list on a
   // phone and in the column beside the conversation wider.
   const projectSearch = openProjectId
@@ -3690,6 +3726,28 @@ export function WorkspaceView({
   useEffect(() => {
     if (!projectColumnCrowds || !showProjectColumn) setProjectColumnOnDemand(false);
   }, [projectColumnCrowds, showProjectColumn]);
+  // The title bar's Project sessions button spins while anything its page shows is active (owner
+  // 2026-11-17, docs/mocks/project-sessions-button-running, option C). Its landing line and merge are
+  // read here only while that page is shut: open, the page reads them itself (the same cache entries),
+  // and these stop.
+  const titleBarPageShown = !!titleBarProjectId && (isMobile ? sheetProjectId === titleBarProjectId
+    : titleBarProjectId === columnProjectId && projectColumnOpen);
+  const titleBarReadsLine = !!titleBarProjectId && !selectedTrashed && !titleBarPageShown;
+  const titleBarIntegrationQ = useQuery({
+    ...projectIntegrationQuery(titleBarProjectId ?? ''),
+    enabled: titleBarReadsLine,
+  });
+  const titleBarPromotionQ = useQuery({
+    ...projectPromotionQuery(titleBarProjectId ?? ''),
+    enabled: titleBarReadsLine,
+    refetchInterval: pollWhileInFlight(20_000, (query) => promotionInFlight(query.state.data)),
+  });
+  const titleBarActive = !!titleBarProjectId && projectSessionsButtonActive(
+    titleBarOwnRead ? [...(titleBarOpenQ.data ?? []), ...(titleBarCompletedQ.data ?? [])] : allProjectMembers,
+    (s) => statusGlyphMotion(s, sessionWatching(watchingBySession, s.id)?.word),
+    titleBarIntegrationQ.data,
+    titleBarPromotionQ.data,
+  );
   // Esc folds the column too, unless focus is in a field, a dialog or a menu, which own the key.
   useEffect(() => {
     if (!projectColumnOpen) return;
@@ -3942,8 +4000,59 @@ export function WorkspaceView({
   const lastWorkspaceProvider =
     pickedWorkspace?.lastProvider ?? pickedWorkspace?.provider ?? (bareMachine ? (managedSetup && managed && firstSessionProvider(managed.status)) || firstEngineOn(runner.engines) : 'claude');
   const lastWorkspaceEngine = sessionEngineOf(pickedWorkspace?.lastEngine, lastWorkspaceProvider, configuredProviders);
-  const pickedEngine: AgentProvider = draftHere?.engine ?? lastWorkspaceEngine;
-  const pickedProvider: string = draftHere?.provider ?? lastWorkspaceProvider;
+  const rememberedEngine: AgentProvider = draftHere?.engine ?? lastWorkspaceEngine;
+  const rememberedProvider: string = draftHere?.provider ?? lastWorkspaceProvider;
+  // Everything that could run a session on this machine, by engine — with the health this runner
+  // reported, since the session runs there — and under each engine the credentials it runs on. The
+  // New Session hero offers the engines; the composer's Provider menu offers the credentials of the
+  // session's engine.
+  const providerWorkspace = selected
+    ? (workspacesQ.data ?? []).find((workspace) => workspace.id === selected.workspace?.id)
+    : pickedWorkspace;
+  const antigravityKeyAvailable = providerWorkspace
+    ? providerWorkspace.antigravityKeyAvailableByRunner?.[runner.id] === true
+    : runner.antigravity?.envKeyAvailable === true;
+  const choiceSources = useMemo<ChoiceSources>(
+    () => ({
+      configured: configuredProviders,
+      modelCatalog: runner.modelCatalog,
+      runtimeDefaultModels: runner.runtimeDefaultModels,
+      engineHealth: runner.engines,
+      pools: accountPools,
+      planUsage: runner.planUsage,
+      antigravity: runner.antigravity,
+      antigravityKeyAvailable,
+      dshRunner: runner,
+      fleet,
+      region: runner.region,
+    }),
+    [configuredProviders, runner, accountPools, antigravityKeyAvailable, fleet],
+  );
+  // The New Session hero's engines, each landing on the draft's pick when it is that engine's, else on
+  // what this workspace last ran there. The current one is the pick's own engine on the pick's own
+  // provider — drawn as it is even when that provider is no longer on offer (a key since removed).
+  const draftEngines = useMemo(
+    () =>
+      engineChoices(choiceSources, [
+        { engine: rememberedEngine, provider: rememberedProvider },
+        { engine: lastWorkspaceEngine, provider: lastWorkspaceProvider },
+      ]),
+    [choiceSources, rememberedEngine, rememberedProvider, lastWorkspaceEngine, lastWorkspaceProvider],
+  );
+  const rememberedDraftEngine = useMemo(
+    () => currentEngineChoice(rememberedEngine, rememberedProvider, draftEngines, choiceSources),
+    [rememberedEngine, rememberedProvider, draftEngines, choiceSources],
+  );
+  // Nobody picked in this draft and what the workspace last ran on can't run on this machine (the
+  // runner's Claude region, a sign-in gone, a CLI missing): the draft lands on what can, and the hero
+  // says why (draftFallback; board docs/mocks/new-session-usable-default). An explicit pick is never
+  // moved.
+  const fallback = useMemo(
+    () => (draftHere ? null : draftFallback(rememberedDraftEngine, draftEngines, runner.engines)),
+    [draftHere, rememberedDraftEngine, draftEngines, runner.engines],
+  );
+  const pickedEngine: AgentProvider = fallback?.engine ?? rememberedEngine;
+  const pickedProvider: string = fallback?.provider ?? rememberedProvider;
   // The Codex, Claude, Antigravity or Kimi account picked for the draft on the New Session hero, scoped to
   // its workspace like the provider pick. Without one a new session starts where Automatic or its
   // workspace says.
@@ -4119,47 +4228,14 @@ export function WorkspaceView({
     configuredProvidersLoaded,
   );
 
-  // Everything that could run a session on this machine, by engine — with the health this runner
-  // reported, since the session runs there — and under each engine the credentials it runs on. The
-  // New Session hero offers the engines; the composer's Provider menu offers the credentials of the
-  // session's engine.
-  const providerWorkspace = selected
-    ? (workspacesQ.data ?? []).find((workspace) => workspace.id === selected.workspace?.id)
-    : pickedWorkspace;
-  const antigravityKeyAvailable = providerWorkspace
-    ? providerWorkspace.antigravityKeyAvailableByRunner?.[runner.id] === true
-    : runner.antigravity?.envKeyAvailable === true;
-  const choiceSources = useMemo<ChoiceSources>(
-    () => ({
-      configured: configuredProviders,
-      modelCatalog: runner.modelCatalog,
-      runtimeDefaultModels: runner.runtimeDefaultModels,
-      engineHealth: runner.engines,
-      pools: accountPools,
-      planUsage: runner.planUsage,
-      antigravity: runner.antigravity,
-      antigravityKeyAvailable,
-      dshRunner: runner,
-      fleet,
-      region: runner.region,
-    }),
-    [configuredProviders, runner, accountPools, antigravityKeyAvailable, fleet],
-  );
-  // The New Session hero's engines, each landing on the draft's pick when it is that engine's, else on
-  // what this workspace last ran there. The current one is the pick's own engine on the pick's own
-  // provider — drawn as it is even when that provider is no longer on offer (a key since removed).
-  const draftEngines = useMemo(
-    () =>
-      engineChoices(choiceSources, [
-        { engine: pickedEngine, provider: pickedProvider },
-        { engine: lastWorkspaceEngine, provider: lastWorkspaceProvider },
-      ]),
-    [choiceSources, pickedEngine, pickedProvider, lastWorkspaceEngine, lastWorkspaceProvider],
-  );
   const currentDraftEngine = useMemo(
-    () => currentEngineChoice(pickedEngine, pickedProvider, draftEngines, choiceSources),
-    [pickedEngine, pickedProvider, draftEngines, choiceSources],
+    () =>
+      fallback ? currentEngineChoice(pickedEngine, pickedProvider, draftEngines, choiceSources) : rememberedDraftEngine,
+    [fallback, pickedEngine, pickedProvider, draftEngines, choiceSources, rememberedDraftEngine],
   );
+  // Nothing on this machine can run the draft and nobody picked anything else: sending would only be
+  // refused, so the send waits while the hero says why (board frame ④).
+  const draftCantRun = !selected && !machineDraft && !draftHere && !fallback && !!rememberedDraftEngine.unavailable;
   const newAccount = useNewAccount(composing && bareMachine);
   const machineWelcome = newAccount && bareMachine;
   // The credentials the composer's engine runs on here — the Provider menu's rows — and how any one
@@ -4552,6 +4628,7 @@ export function WorkspaceView({
   const translationIsOn = translationOn(me.data);
   const translationBilingual = bilingualOn(me.data);
   const translationAgentLanguage = agentLanguageOf(me.data);
+  const questionTranslations = useQuestionTranslations(selectedId ?? null, approvals, translationIsOn);
   const translationActions = useMemo<TranslationActions>(() => {
     const settle = (res: TranslationActionResponse) =>
       setQueued((current) =>
@@ -6013,7 +6090,8 @@ export function WorkspaceView({
         // Only an explicit pick travels, and it is the pair — the engine the hero picked and the
         // credential of it (docs/provider-engine-contract.md §3.2). Leaving both off keeps the
         // server's inherit-from-workspace path, which re-checks that pair as it starts the session.
-        ...(draftHere ? { engine: pickedEngine, provider: pickedProvider } : {}),
+        // A fallback travels too: the workspace's pair is the one that can't run here.
+        ...(draftHere || fallback ? { engine: pickedEngine, provider: pickedProvider } : {}),
         model: createModel,
         permissionMode: createPermissionMode,
         // Send even '' (Default) explicitly: the composer already seeds the pill from the workspace's
@@ -7376,6 +7454,7 @@ export function WorkspaceView({
       !send.isPending &&
       !uploading &&
       runnerTakesWork &&
+      !draftCantRun &&
       !selectedTrashed &&
       !sameSessionSendBlocked &&
       !selectedMissing &&
@@ -7572,11 +7651,12 @@ export function WorkspaceView({
       : undefined;
   // "Chat about this" on a question card hands the reply off to the main composer: show the
   // reply-context chip and focus the box. The send itself is rerouted to a deny in onSend.
-  const startChatReply = (id: string, question: string): void => {
+  const startChatReply = (id: string, question: string, about?: string): void => {
     setReplyTo({
       target: { kind: 'approval', id },
       banner: `Replying to Claude’s question${question ? `: ${question}` : ''}`,
       placeholder: 'Reply to Claude’s question…',
+      ...(about ? { about } : {}),
     });
     setTimeout(() => taRef.current?.focus(), 0);
   };
@@ -8323,12 +8403,15 @@ export function WorkspaceView({
   const shownWorkspaceId: string | undefined = selected ? (selected.workspace?.id ?? undefined) : workspaceId;
   // ✦ Optimize's context (docs/prompt-optimizer-design.md, D1): a session supplies its own; a new
   // draft has none yet, so it names the workspace the composer picked.
+  // A draft armed as a card's reply also says what it answers, so the rewrite stays a reply to it.
+  const replyingTo = replyTo ? replyTo.about ?? [replyTo.banner, replyTo.context].filter(Boolean).join('\n\n') : '';
   const promptOptimizerTarget = useMemo<PromptOptimizerTarget>(
     () => ({
       ...(selectedId ? { sessionId: selectedId } : shownWorkspaceId ? { workspaceId: shownWorkspaceId } : {}),
+      ...(replyingTo ? { replyingTo } : {}),
       onInserted: setOptimizedInsert,
     }),
-    [selectedId, shownWorkspaceId],
+    [selectedId, shownWorkspaceId, replyingTo],
   );
   useEffect(() => setOptimizedInsert(null), [selectedId]);
   // The workspace can't be switched once the session exists (live or terminal), nor when the
@@ -8375,6 +8458,19 @@ export function WorkspaceView({
     setSwipeOpen(null);
     setFolderEdit(null);
     setFolderParam(folder.id);
+  };
+  const enterScheduledRuns = (): void => {
+    setSwipeOpen(null);
+    setFolderEdit(null);
+    navigateWithPaneSlide(
+      'push',
+      () => setSearchParams((current) => {
+        const next = new URLSearchParams(current);
+        next.set('folder', SCHEDULED_RUNS_FOLDER);
+        return next;
+      }),
+      { swapsPane: false },
+    );
   };
   const leaveFolder = (replace = false): void => {
     setFolderEdit(null);
@@ -8539,7 +8635,8 @@ export function WorkspaceView({
   // breathing one while only a background job does. Its ⋯ takes the chevron's place on hover.
   const folderRowView = (row: SessionFolderRow): ReactNode => {
     const enter = (): void => enterFolder(row.folder);
-    const waiting = `${row.needsYou} ${row.needsYou === 1 ? 'session needs' : 'sessions need'} your reply`;
+    // One number on the row: who waits on you takes the total's place, which moves into its label.
+    const waiting = `${row.needsYou} ${row.needsYou === 1 ? 'session needs' : 'sessions need'} your reply · ${row.sessionCount} ${row.sessionCount === 1 ? 'session' : 'sessions'}`;
     return (
       <div
         key={row.folder.id}
@@ -8562,12 +8659,13 @@ export function WorkspaceView({
           ) : null}
         </span>
         <span className="session-folder-name">{row.folder.name}</span>
-        {row.needsYou > 0 && (
+        {row.needsYou > 0 ? (
           <span className="session-folder-needs" title={waiting} aria-label={waiting}>
             {row.needsYou}
           </span>
+        ) : (
+          <span className="session-folder-count">{row.sessionCount}</span>
         )}
-        <span className="session-folder-count">{row.sessionCount}</span>
         <span className="session-folder-end">
           <RightOutlined className="session-folder-chev" />
           <Menu
@@ -8589,6 +8687,42 @@ export function WorkspaceView({
               </span>
             }
           />
+        </span>
+      </div>
+    );
+  };
+  // The Scheduled runs folder's row: a folder row with no menu, since nobody files into it or renames it.
+  const scheduledRunsRowView = (): ReactNode => {
+    const needsYou = scheduledRuns.filter(sessionNeedsYou).length;
+    const running = scheduledRuns.some((s) => s.status === 'RUNNING');
+    const waiting = `${needsYou} ${needsYou === 1 ? 'run needs' : 'runs need'} your reply · ${scheduledRuns.length} ${scheduledRuns.length === 1 ? 'run' : 'runs'}`;
+    return (
+      <div
+        key="scheduled-runs"
+        className="session-folder-row session-scheduled-runs-row"
+        role="button"
+        tabIndex={0}
+        onClick={enterScheduledRuns}
+        onKeyDown={(e) => {
+          if (e.target !== e.currentTarget || (e.key !== 'Enter' && e.key !== ' ')) return;
+          e.preventDefault();
+          enterScheduledRuns();
+        }}
+      >
+        <span className="session-icon session-folder-icon">
+          <FieldTimeOutlined />
+          {running && <span className="session-folder-activity" title="Running" />}
+        </span>
+        <span className="session-folder-name">{SCHEDULED_RUNS_COPY.title}</span>
+        {needsYou > 0 ? (
+          <span className="session-folder-needs" title={waiting} aria-label={waiting}>
+            {needsYou}
+          </span>
+        ) : (
+          <span className="session-folder-count">{scheduledRuns.length}</span>
+        )}
+        <span className="session-folder-end">
+          <RightOutlined className="session-folder-chev" />
         </span>
       </div>
     );
@@ -9388,14 +9522,6 @@ export function WorkspaceView({
     : null;
   const headSub = composing
     ? [headWorkspaceName, openFolder?.name, 'New session'].filter(Boolean).join(' · ')
-    // A scheduled run's header is its run's: state · agent · how long it took (board web/run.png).
-    : selected && isScheduleRun && scheduleRun
-      ? scheduleRunHeadText({
-          state: headLifecycleWord,
-          engine: scheduleRunAgentName(scheduleRun, ENGINE_CLI_NAMES[selectedEngine] ?? null),
-          run: scheduleRun.run,
-          now: new Date(),
-        })
     : selected
       ? [
           headRunWord,
@@ -9915,7 +10041,7 @@ export function WorkspaceView({
   );
 
   return (
-    <div ref={setSplitEl} className={`workspace-split${selectedId || composingRoute || landingsProjectId ? ' show-conversation' : ''}${isScheduleRun && !composing ? ' is-schedule-run' : ''}`}>
+    <div ref={setSplitEl} className={`workspace-split${selectedId || composingRoute || landingsProjectId ? ' show-conversation' : ''}`}>
       {/* A machine with no workspace has no sessions to list: its setup page is the card alone. */}
       {!bareMachine && <>
       <aside className={`session-col${listProjectId ? ' session-project-page' : ''}`} style={{ width: colWidth }}>
@@ -9962,6 +10088,24 @@ export function WorkspaceView({
                 </span>
               }
             />
+          </div>
+        ) : onScheduledRuns ? (
+          // The Scheduled runs folder's page: back to the workspace's list, and the folder's name. It lists the view
+          // it was opened from, as a folder's page does.
+          <div className="session-col-head session-folder-head">
+            <button
+              type="button"
+              className="session-folder-back"
+              aria-label={FOLDER_COPY.back(headWorkspaceName)}
+              title={FOLDER_COPY.back(headWorkspaceName)}
+              onClick={() => leaveFolder()}
+            >
+              <LeftOutlined />
+            </button>
+            <span className="session-folder-titles">
+              <span className="session-folder-title">{SCHEDULED_RUNS_COPY.title}</span>
+              <span className="session-folder-workspace">{headWorkspaceName}</span>
+            </span>
           </div>
         ) : (
           <div className="session-col-head">
@@ -10039,6 +10183,9 @@ export function WorkspaceView({
             : openFolder
             ? listedSessions.length === 0 &&
               !loadingSessions && <div className="chat-note">No sessions in this folder.</div>
+            : onScheduledRuns
+            ? listedSessions.length === 0 &&
+              !loadingSessions && <div className="chat-note">{SCHEDULED_RUNS_COPY.empty}</div>
             : visibleSessions.length === 0 &&
               !loadingSessions && (
                 <div className="chat-note">
@@ -10054,8 +10201,9 @@ export function WorkspaceView({
           {/* The workspace's folders on top (§3.3), New Folder…'s field above them while it is
               open. A folder row reports for the sessions filed in it, which the time sections
               below leave out. */}
+          {!listProjectId && !openFolder && !onScheduledRuns && scheduledRuns.length > 0 && scheduledRunsRowView()}
           {!listProjectId && !openFolder && folderEdit?.id === null && folderEditRow(null)}
-          {!listProjectId && folderListing?.folders.map((row) =>
+          {!listProjectId && !onScheduledRuns && folderListing?.folders.map((row) =>
             folderEdit?.id === row.folder.id ? folderEditRow(row.folder.id) : folderRowView(row),
           )}
           {sections.map((sec) => renderSection(sec, listProjectId))}
@@ -10140,7 +10288,6 @@ export function WorkspaceView({
             </button>
           )}
           <div className="workspace-header-main">
-            {scheduleRun && isScheduleRun && !composing && <ScheduleRunCrumb of={scheduleRun} />}
             {selected?.taskId && !composing && (
               <button
                 type="button"
@@ -10240,8 +10387,7 @@ export function WorkspaceView({
                   <GlobalOutlined /> Shared · Live
                 </button>
               )}
-              {/* A scheduled run is followed through its schedule, not by a chip of its own. */}
-              {!composing && selectedId && !selectedTrashed && !selectedMissing && !isScheduleRun && (
+              {!composing && selectedId && !selectedTrashed && !selectedMissing && (
                 <SessionWatchBadges sessionId={selectedId} />
               )}
             </div>
@@ -10258,10 +10404,11 @@ export function WorkspaceView({
             <>
               {titleBarProjectId && !selectedTrashed && (
                 <Button variant="text" className="workspace-header-project"
-                  icon={<SidebarNavIcon name="projects" />}
+                  icon={titleBarActive
+                    ? <LoadingOutlined spin style={{ color: 'var(--brand)' }} />
+                    : <SidebarNavIcon name="projects" />}
                   title={PROJECT_COLUMN_COPY.label} aria-label={PROJECT_COLUMN_COPY.label}
-                  aria-pressed={isMobile ? sheetProjectId === titleBarProjectId
-                    : titleBarProjectId === columnProjectId && projectColumnOpen}
+                  aria-pressed={titleBarPageShown}
                   onClick={isMobile ? () => setSheetProjectId(titleBarProjectId) : toggleProjectColumn}>
                   {titleBarSessionCount ?? undefined}
                 </Button>
@@ -10645,6 +10792,7 @@ export function WorkspaceView({
           ) : selectedId ? (
             <div className="workspace-sessions" ref={scrollRef}>
               <TranslationCtx.Provider value={translationActions}>
+              <QuestionTranslationsCtx.Provider value={questionTranslations}>
               <WatchWakeNamesCtx.Provider value={wakeTargetName}>
               <ExchangeTreeCtx.Provider value={exchangeTree}>
               {/* A tail-first transcript always has more above it: while a page is in flight this
@@ -11067,6 +11215,7 @@ export function WorkspaceView({
               )}
               </ExchangeTreeCtx.Provider>
               </WatchWakeNamesCtx.Provider>
+              </QuestionTranslationsCtx.Provider>
               </TranslationCtx.Provider>
             </div>
           ) : bareMachine ? (
@@ -11101,6 +11250,9 @@ export function WorkspaceView({
                 <NewSessionProviderHero
                   current={currentDraftEngine}
                   engines={draftEngines}
+                  fellBackFrom={fallback ? rememberedDraftEngine : null}
+                  machine={machineName(runner)}
+                  cantRun={draftCantRun}
                   onPick={pickDraft}
                   runnerId={runner.id}
                   currentModelLabel={shownModelLabel}
@@ -11182,9 +11334,13 @@ export function WorkspaceView({
         {selectedId && !selectedTrashed && (
           <SessionCreatedTasksStrip sessionId={selectedId} openRequest={createdTasksOpenRequest} />
         )}
+        {/* The Orbit Cloud runner's browser, while it runs: opens the live view (docs/runner-browser-design.md §5). */}
+        {selectedId && !selectedTrashed && (
+          <SessionBrowserChip managedRunnerId={managedHeadRow ? runner.id : null} sessionId={selectedId} />
+        )}
         {/* Every Agent this session started, beside the branch below as iOS draws it: one line that opens
             their list. Hidden until it has started one. */}
-        {selectedId && !selectedTrashed && <SessionAgentsStrip key={selectedId} runs={subagentRuns} />}
+        {selectedId && !selectedTrashed && <SessionAgentsStrip key={selectedId} runs={subagentRuns} parent={{ engine: selectedEngine, model: selected?.model ?? null }} />}
         {mainCheckout.drawer}
         <MainCheckoutCtx.Provider value={mainCheckout.host}>
         <SessionOutputs
@@ -11694,6 +11850,8 @@ export function SessionComposer({
   const navigate = useNavigate();
   const me = useQuery(meQuery());
   const translationIsOn = translationOn(me.data);
+  // A failing translator being skipped (policy board frame 6): warned here, before the send.
+  const translationUnavailable = useTranslationUnavailable(me.data);
   // The textarea's scroll offset, mirrored so the chip layer stays in step once the draft passes
   // its auto-grow cap.
   const [composerScroll, setComposerScroll] = useState(0);
@@ -11916,7 +12074,9 @@ export function SessionComposer({
     setText,
     taRef,
     shellMode,
-    disabled: !!composerDisabled || !!replyTo,
+    // A reply armed by a card's "Chat about this" is still a draft the owner writes, so ✦ stays (as on
+    // macOS/iOS and Android): what Use puts in the box goes to the card's door like any typed reply.
+    disabled: !!composerDisabled,
     resetKey: selectedId,
   });
   // The `+` menu "Shell" entry: prefix the draft with `!` so onSend routes it as a raw
@@ -12344,7 +12504,7 @@ export function SessionComposer({
             Tab
           </kbd>
           <span className="composer-suggestion-tap" aria-hidden="true">
-            Double-tap to use
+            Double-tap
           </span>
           {/* For a screen reader on a touch screen, whose own double-tap is "activate": hidden
               from the eye there, and gone with a keyboard, which has Tab. */}
@@ -12614,11 +12774,17 @@ export function SessionComposer({
         {translationIsOn && (
           <button
             type="button"
-            className="composer-translation-tag"
-            title="Messages are translated before the agent gets them. Open Settings › Translation"
+            className={`composer-translation-tag${translationUnavailable ? ' is-unavailable' : ''}`}
+            title={
+              translationUnavailable
+                ? `${unavailableTranslationTag(translationLanguageOf(me.data), agentLanguageOf(me.data))}. The translator is failing, so a message sent now is held until you Retry or Send as written. Open Settings › Translation`
+                : 'Messages are translated before the agent gets them. Open Settings › Translation'
+            }
             onClick={() => navigate('/settings/general', { state: { settingsAnchor: 'translationEnabled' } })}
           >
-            {translationTag(translationLanguageOf(me.data), agentLanguageOf(me.data))}
+            {translationUnavailable
+              ? unavailableTranslationTag(translationLanguageOf(me.data), agentLanguageOf(me.data))
+              : translationTag(translationLanguageOf(me.data), agentLanguageOf(me.data))}
           </button>
         )}
         {/* A 32px icon like `+` and Send, there whenever the optimizer is on and only disabled with

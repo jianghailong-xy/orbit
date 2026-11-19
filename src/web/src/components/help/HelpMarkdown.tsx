@@ -1,4 +1,4 @@
-import { useState, type ReactNode } from 'react';
+import { useEffect, useRef, useState, type ReactNode } from 'react';
 import { Link } from 'react-router-dom';
 import { defaultUrlTransform, type Components } from 'react-markdown';
 import remarkGfm from 'remark-gfm';
@@ -75,6 +75,9 @@ export function HelpMarkdown({ body, account }: { body: string; account: HelpLin
 
 function CodeBlock({ text, children }: { text: string; children: ReactNode }) {
   const [copied, setCopied] = useState(false);
+  // The "Copied" reset is cancelled when this goes, so it never updates a component that is gone.
+  const copiedReset = useRef<ReturnType<typeof setTimeout>>(undefined);
+  useEffect(() => () => clearTimeout(copiedReset.current), []);
   return (
     <div className="help-md-code">
       <pre>{children}</pre>
@@ -84,7 +87,8 @@ function CodeBlock({ text, children }: { text: string; children: ReactNode }) {
         onClick={() => {
           void navigator.clipboard?.writeText(text.replace(/\n$/, '')).then(() => {
             setCopied(true);
-            setTimeout(() => setCopied(false), 1500);
+            clearTimeout(copiedReset.current);
+            copiedReset.current = setTimeout(() => setCopied(false), 1500);
           });
         }}
       >

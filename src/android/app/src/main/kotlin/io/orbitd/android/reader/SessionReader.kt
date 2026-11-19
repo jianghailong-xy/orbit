@@ -267,10 +267,11 @@ fun SessionReader(app: OrbitApplication, handle: SessionHandle, route: OrbitRout
         data.sessions.values.firstNotNullOfOrNull { rows -> rows.firstOrNull { ObjectId.same(it.id, route.id) }?.projectMembership?.projectId }
     }
     // The button's number is the sheet's head's: the project's Open and Completed sessions as the page reads them, read as the
-    // conversation opens, then what the sheet itself last counted. No number until the first read answers.
-    val readCount by rememberProjectSessionCount(app, api, projectId)
-    var sheetCount by remember(projectId) { mutableStateOf<Int?>(null) }
+    // conversation opens and kept current while it shows, or what the sheet itself last counted while its reads pause. No number until
+    // the first read answers. It spins while anything the sheet shows is active (owner 2026-11-17, option C).
     var projectSheet by remember(handle, route.id) { mutableStateOf(false) }
+    val projectButton by rememberProjectSessionsButton(app, handle, api, projectId, paused = projectSheet)
+    var sheetCount by remember(projectId) { mutableStateOf<Int?>(null) }
     val link = remember(handle, route.id) { "${handle.account.server.trimEnd('/')}/sessions/${ObjectId.toPublic(route.id!!)}" }
     val currentRows by rememberUpdatedState(shownRows)
     val nested = remember { object : NestedScrollConnection {
@@ -347,17 +348,16 @@ fun SessionReader(app: OrbitApplication, handle: SessionHandle, route: OrbitRout
     DisposableEffect(crossingStore) { onDispose { crossingStore.close() } }
     val crossingBatches = remember(crossingState.rows, coordinated) { coordinated?.let { crossingState.batches(it) }.orEmpty() }
     // The scheduled tasks' cards this conversation asked and the changes it made, each where it happened; a run's own session gets
-    // its strip at its head and its report after its end (docs/scheduled-tasks-design.md §8.1, §4, §7.4). Read behind each of the
+    // its strip at its planned time and its report after its end (docs/scheduled-tasks-design.md §8.1, §4, §7.4). Read behind each of the
     // session's snapshot reads, as the owner requests are.
     val scheduled = remember(handle) { ScheduledStore.of(app.session, handle, app.processScope) }
     val scheduledState by scheduled.state.collectAsState()
     val scheduleRunId = snapshotDetail?.text("scheduleRunId")
     LaunchedEffect(scheduled, route.id, scheduleRunId, state.session?.snapshotReads) { scheduled.loadSession(route.id!!, scheduleRunId) }
     val scheduleInserts = remember(scheduledState.sessions, scheduledState.runs, route.id) { ScheduleInsert.of(scheduledState, route.id!!) }
-    val scheduleSessionState = when (snapshotDetail?.text("lifecycleState")) { "COMPLETED" -> "Completed"; "TRASH" -> "Trash"; else -> "Open" }
     val drawSchedule: @Composable (ScheduleInsert) -> Unit = { insert ->
         key(insert.key) {
-            ScheduleConversationInsert(insert, scheduled, route.id!!, scheduleSessionState, snapshotDetail?.text("engine")) { id ->
+            ScheduleConversationInsert(insert, scheduled, route.id!!) { id ->
                 open(OrbitRoute(Destination.SCHEDULED, ObjectId.canonical(id) ?: id, origin = Origin.LINK))
             }
         }
@@ -610,7 +610,7 @@ fun SessionReader(app: OrbitApplication, handle: SessionHandle, route: OrbitRout
                 else if (offTail) question.value?.let { QuestionCapsule(it) { row -> model.show(row.event.seq) } }
             }
         }, actions = {
-            if (projectId != null) ProjectSessionsButton(sheetCount ?: readCount) { projectSheet = true }
+            if (projectId != null) ProjectSessionsButton(projectButton.count ?: sheetCount, projectButton.active) { projectSheet = true }
             SessionMenu(listed.takeUnless { state.denied }, state.session?.snapshot?.detail, link, state.session?.fresh == true && data.fresh,
                 actions, open, { action = it }, { settings = true }, leave)
         })
@@ -894,7 +894,7 @@ fun SessionReader(app: OrbitApplication, handle: SessionHandle, route: OrbitRout
                     ManagedRunnerAsleepLine(data.workspaces.firstOrNull { ObjectId.same(it.id, workspaceOfSession) }?.runnerId,
                         composerLocked = handoff?.locksComposer == true)
                     Box(Modifier.heightIn(max = composerHeight).clipToBounds()) { SessionComposer(app, handle, route.id!!, state.session,
-                    focusRequest = composeFocus, inputFocusChanged = { composerFocused = it }, foldsChrome = foldsChrome,
+                    focusRequest = composeFocus, inputFocusChanged = { composerFocused = it },
                     openTask = { open(OrbitRoute(Destination.TASK, it)) },
                     openRunner = { runner, engine -> open(OrbitRoute(Destination.RUNNER, runner, recordId = "engine:$engine")) },
                     openTranslationSettings = { open(OrbitRoute(Destination.SETTINGS, "sessions")) }) }

@@ -1,3 +1,4 @@
+import { LANDING_CHECK_COPY, inheritedLandingCommand, inheritedLandingTimeout } from '../lib/landingCheck';
 import { useRef, useState, type JSX } from 'react';
 import Markdown from './Markdown';
 import remarkGfm from 'remark-gfm';
@@ -24,6 +25,7 @@ import { shownQuestions } from '../lib/translation';
 import type { HeldDecision } from '../lib/approvalDecisions';
 import { CardTranslationFoot, UntranslatedDecisionFoot } from './TranslationParts';
 import { CONDITION_COPY } from '../lib/conditions';
+import { ToolCallBody, toolCallHeading, toolCallSummary } from './ToolCallBody';
 
 /**
  * What the card says once nothing is listening for its answer.
@@ -319,28 +321,14 @@ const isMergeCheckChange = (a: ApprovalInfo): boolean =>
   a.toolName === 'orbit_project_update_integration';
 
 interface MergeCheckChangeInput {
+  snapshot: Record<string, unknown>;
   projectTitle: string;
-  /** The check as the project stands, or null when it has none. */
-  current: string | null;
-  /** What it would become; null clears it. */
-  next: string | null;
-  /** The budget for the new check, in seconds, when the proposal named one. */
-  timeout: number | null;
 }
 
 function mergeCheckChangeInput(a: ApprovalInfo): MergeCheckChangeInput | null {
   if (!isMergeCheckChange(a)) return null;
-  const obj = (a.input ?? {}) as Record<string, unknown>;
-  const text = (v: unknown): string | null => (typeof v === 'string' && v.trim() !== '' ? v : null);
-  const timeout = obj.mergeCheckTimeoutSeconds;
-  return {
-    projectTitle: text(obj.projectTitle) ?? '',
-    current: text(obj.currentMergeCheckCommand),
-    next: text(obj.mergeCheckCommand),
-    // Absent means the budget is left as it is, which is not the same as "no budget" — so a
-    // proposal that named none shows no second line rather than a zero.
-    timeout: typeof timeout === 'number' ? timeout : null,
-  };
+  const snapshot = (a.input ?? {}) as Record<string, unknown>;
+  return { snapshot, projectTitle: typeof snapshot.projectTitle === 'string' ? snapshot.projectTitle : '' };
 }
 
 /**
@@ -720,11 +708,21 @@ type OnDecide = (
 ) => unknown;
 
 /** "Couldn't translate, so it wasn't sent · Retry · Send as written" under a card whose decision the
- *  server refused 422 TRANSLATION_FAILED: each press posts the held decision again. */
+ *  server refused 422 TRANSLATION_FAILED, its first sentence saying why when the refusal did (frame 5):
+ *  each press posts the held decision again. */
 function UntranslatedFoot({ id, held, onDecide }: { id: string; held: HeldDecision; onDecide: OnDecide }) {
   const post = (sendAsWritten: boolean) => async () =>
     onDecide(id, held.behavior, held.answers, held.message, held.rememberRules, held.startAfterCreate, sendAsWritten || undefined);
-  return <UntranslatedDecisionFoot onRetry={post(false)} onSendAsWritten={post(true)} />;
+  return (
+    <div className="approval-untranslated-row">
+      <UntranslatedDecisionFoot
+        onRetry={post(false)}
+        onSendAsWritten={post(true)}
+        failureReason={held.failureReason}
+        httpStatus={held.httpStatus}
+      />
+    </div>
+  );
 }
 
 /** A question form's picks and typed answers seeded from a held decision's answers, so the card
@@ -771,7 +769,7 @@ export function ApprovalPanel({
   active?: boolean;
   /** Whether an answer to this card can still reach anybody — see UNANSWERABLE_NOTE. */
   answerable?: boolean;
-  onChatAbout?: (id: string, question: string) => void;
+  onChatAbout?: (id: string, question: string, about: string) => void;
   /** Arm the composer to decline one of Orbit's own asks with the reason beside it; absent, the
    *  press falls back to denying where it stands. See `decliningPrefix`. */
   onDecline?: (id: string, toolName: string, subject: string) => void;
@@ -858,6 +856,9 @@ export function ApprovalPanel({
           : writing
             ? (writing.name || 'this workspace')
             : null;
+  // A plain tool call: none of the shapes above, so the card reads the call itself (ToolCallBody).
+  const plainCall = !isPlan(approval) && !dag && !batch && !create && !blocker && !skipCheck && !mergeCheck
+    && !deleting && !writing && !provider;
   const heading = isPlan(approval)
           ? '📋 Confirm: exit plan mode and proceed with this plan?'
           : dag
@@ -877,14 +878,14 @@ export function ApprovalPanel({
                   : skipCheck
                     ? `⏭ Confirm: land ${skipCheck.taskTitle || 'this task'} without the merge check?`
                     : mergeCheck
-                      ? `🔧 Confirm: change the merge check of ${mergeCheck.projectTitle || 'this project'}?`
+                      ? LANDING_CHECK_COPY.CONFIRM_TITLE
                       : deleting
                         ? `🗑 Confirm: delete ${deleting.noun} “${deleting.name || `this ${deleting.noun}`}”?`
                         : writing
                           ? `⚙️ Confirm: ${writing.creating ? 'create' : 'change'} workspace “${writing.name || 'this workspace'}”?`
                           : provider
                             ? `🔌 Confirm: ${provider.verb} provider${provider.name ? ` “${provider.name}”` : ''}?`
-                            : `🔓 Approve tool call: ${approval.toolName}`;
+                            : toolCallHeading(approval.toolName, approval.input);
   const createAndStartButton = (tone: 'primary' | 'accent') => (
     <CardActionButton
       tone={tone}
@@ -898,7 +899,7 @@ export function ApprovalPanel({
   );
   return (
     <ReviewCard enabled={compact} title={heading}
-      summary={markdownToPlainLines(plan || create?.prose || '')}
+      summary={plainCall ? toolCallSummary(approval.toolName, approval.input) : markdownToPlainLines(plan || create?.prose || '')}
       meta={!answerable ? 'No longer waiting for an answer' : undefined}
       open={reviewOpen} onOpenChange={setReviewOpen}>
     <div ref={anchor} className="approval-card">
@@ -907,9 +908,10 @@ export function ApprovalPanel({
       )}
       <div className="approval-head">
         {heading}
+        {plainCall && approval.toolName && <span className="approval-tool-chip">{approval.toolName}</span>}
       </div>
       {/* A create is read top to bottom like a plan, so it grows instead of scrolling. */}
-      <div className={`approval-body${plan || create || blocker || skipCheck || mergeCheck || deleting || writing || provider ? ' is-plan' : ''}`}>
+      <div className={`approval-body${plan || create || blocker || skipCheck || mergeCheck || deleting || writing || provider || plainCall ? ' is-plan' : ''}`}>
         {plan ? (
           <Markdown
             remarkPlugins={[remarkGfm]}
@@ -938,10 +940,7 @@ export function ApprovalPanel({
         ) : provider ? (
           <ProviderWriteBody input={provider} />
         ) : (
-          <>
-            {translatedDescription && <div className="approval-translated-desc">{translatedDescription}</div>}
-            <pre className="approval-input">{JSON.stringify(approval.input ?? {}, null, 2)}</pre>
-          </>
+          <ToolCallBody toolName={approval.toolName} input={approval.input} translatedDescription={translatedDescription} />
         )}
         {cardTranslation && (
           <CardTranslationFoot flipped={cardOriginal} onFlip={() => setCardOriginal((v) => !v)} />
@@ -971,7 +970,7 @@ export function ApprovalPanel({
                     : skipCheck
                       ? 'Land it without the check'
                       : mergeCheck
-                        ? 'Change the check'
+                        ? LANDING_CHECK_COPY.CONFIRM_ACTION
                         : deleting
                           ? 'Delete it'
                           : writing
@@ -1175,19 +1174,34 @@ function WorkspaceWriteBody({ input }: { input: WorkspaceWriteInput }): JSX.Elem
  * state, not as "no check at all".
  */
 function MergeCheckChangeBody({ input }: { input: MergeCheckChangeInput }): JSX.Element {
-  const current = input.current ?? 'no check configured';
-  const next = input.next ?? 'no check — nothing runs on the combined tree';
+  const raw = input.snapshot;
+  const command = (value: unknown): string | null => typeof value === 'string' ? value : null;
+  const seconds = (value: unknown): number | null => typeof value === 'number' ? value : null;
+  const value = (key: string, after: boolean): unknown =>
+    after && Object.prototype.hasOwnProperty.call(raw, key) ? raw[key] : raw[`current${key[0].toUpperCase()}${key.slice(1)}`];
   return (
     <div className="dag-approval">
-      <p className="dag-approval-note">
-        Run on the combined tree before this project's work lands. Nothing else about the
-        project's integration line changes.
-      </p>
-      <Command label="now" command={current} />
-      <Command label="after" command={next} />
-      {input.timeout !== null && (
-        <p className="dag-approval-caption">killed after {input.timeout}s</p>
-      )}
+      {input.projectTitle && <p className="dag-approval-note">{input.projectTitle}</p>}
+      <div className="landing-check-confirmation">
+        {(['landing', 'merge'] as const).map((layer) => (
+          <section key={layer}>
+            <h4>{layer === 'landing' ? LANDING_CHECK_COPY.LABEL : 'Merge check'}</h4>
+            <p className="dag-approval-caption">{layer === 'landing' ? LANDING_CHECK_COPY.HINT : 'Runs before merging into main.'}</p>
+            {[false, true].map((after) => {
+              const check = command(value(`${layer}CheckCommand`, after));
+              const timeout = seconds(value(`${layer}CheckTimeoutSeconds`, after));
+              return <div key={String(after)}>
+                <Command label={after ? 'after' : 'now'} command={check ?? (layer === 'landing'
+                  ? inheritedLandingCommand(command(value('mergeCheckCommand', after))) : 'no check configured')} />
+                <p className="dag-approval-caption">{LANDING_CHECK_COPY.TIMEOUT}: {timeout === null
+                  ? layer === 'landing' ? inheritedLandingTimeout(seconds(value('mergeCheckTimeoutSeconds', after))) : '3600 seconds'
+                  : `${timeout} seconds`}</p>
+              </div>;
+            })}
+          </section>
+        ))}
+      </div>
+      <p className="dag-approval-caption">{LANDING_CHECK_COPY.APPLIES}</p>
     </div>
   );
 }
@@ -1534,6 +1548,20 @@ function questionsOf(input: unknown): QItem[] {
   return [];
 }
 
+/** What a chat reply to a question card answers, for ✦ Optimize (`replyingTo`): each question as the
+ *  card shows it, with its options. */
+export function questionReplyContext(questions: QItem[]): string {
+  return questions
+    .map((q) => {
+      const title = [q.header, q.question].filter(Boolean).join(': ');
+      const options = (q.options ?? [])
+        .filter((o) => o.label)
+        .map((o) => `- ${o.label}${o.description ? `: ${o.description}` : ''}`);
+      return [title + (q.multiSelect ? ' (pick any)' : ''), ...options].join('\n');
+    })
+    .join('\n\n');
+}
+
 /** AskUserQuestion: pick option(s) per question and submit, like Claude's TUI. The picks
  *  ride back to claude as `answers` (question text → labels) on an `allow`. */
 function QuestionForm({
@@ -1546,7 +1574,7 @@ function QuestionForm({
   approval: ApprovalInfo;
   onDecide: OnDecide;
   answerable: boolean;
-  onChatAbout?: (id: string, question: string) => void;
+  onChatAbout?: (id: string, question: string, about: string) => void;
   untranslated?: HeldDecision;
 }): JSX.Element {
   const [reviewOpen, setReviewOpen] = useState(false);
@@ -1664,7 +1692,7 @@ function QuestionForm({
         <CardActionButton
           tone="outline"
           disabled={!answerable}
-          onClick={() => { setReviewOpen(false); onChatAbout?.(approval.id, chatLabel); }}
+          onClick={() => { setReviewOpen(false); onChatAbout?.(approval.id, chatLabel, questionReplyContext(questions)); }}
         >
           💬 Chat about this
         </CardActionButton>

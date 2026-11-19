@@ -23,6 +23,12 @@ zip="$out/$APP_NAME-v$VERSION-$archtag.zip"   # zipped .app = Sparkle update-cha
 # Sparkle auto-update config; injected into Info.plist only when SU_PUBLIC_ED_KEY is set (release).
 SU_FEED_URL="${SU_FEED_URL:-https://jianghailong-xy.github.io/orbit/appcast.xml}"
 SU_PUBLIC_ED_KEY="${SU_PUBLIC_ED_KEY:-8huUODCPnWSupH+g30/RWaCGOCeRzRY/oAlShNuIzm4=}"   # EdDSA public key (not secret)
+# Share to Orbit (docs/share-to-orbit-design.md §3.3): the App Group the app and OrbitShare.appex share.
+# A Developer ID build has no provisioning profile, so the group is the team-prefixed <TEAMID>.io.orbitd.app;
+# the team comes from SIGN_ID's "(TEAMID)". An ad-hoc build has no team and uses local.io.orbitd.app.
+TEAM_ID="${TEAM_ID:-$(printf '%s' "$SIGN_ID" | sed -n 's/.*(\([A-Z0-9]\{10\}\))[[:space:]]*$/\1/p')}"
+APP_GROUP="${APP_GROUP:-${TEAM_ID:-local}.io.orbitd.app}"
+SHARE_ID="$BUNDLE_ID.OrbitShare"
 echo "▶ swift build -c release ($ARCHS)"
 ( cd "$pkg" && swift build -c release $archflags )
 bin="$(cd "$pkg" && swift build -c release $archflags --show-bin-path)/OrbitApp"
@@ -64,8 +70,10 @@ cat > "$app/Contents/Info.plist" <<PLIST
   <key>NSPrincipalClass</key><string>NSApplication</string>
   <key>CFBundleURLTypes</key><array><dict>
     <key>CFBundleURLName</key><string>${BUNDLE_ID}</string>
-    <key>CFBundleURLSchemes</key><array><string>orbit</string></array>
+    <key>CFBundleURLSchemes</key><array><string>orbit</string><string>orbit-session</string></array>
   </dict></array>
+  <!-- The App Group (signed into the entitlements below) that holds the share inbox and snapshot. -->
+  <key>OrbitAppGroup</key><string>${APP_GROUP}</string>
 ${sparkle_keys}
 </dict></plist>
 PLIST
@@ -77,23 +85,85 @@ if [ -n "$fwk" ]; then
   # SPM links Sparkle via @rpath; point that rpath at the embedded copy.
   install_name_tool -add_rpath @executable_path/../Frameworks "$app/Contents/MacOS/$APP_NAME" 2>/dev/null || true
 fi
+echo "▶ assemble OrbitShare.appex (App Group $APP_GROUP)"
+# SPM has no app-extension product: the OrbitShare executable (Package.swift) was built with the app
+# above (its main hands over to NSExtensionMain) and is wrapped here into a bundle with its own Info.plist.
+appex="$app/Contents/PlugIns/OrbitShare.appex"
+mkdir -p "$appex/Contents/MacOS"
+cp "$(dirname "$bin")/OrbitShare" "$appex/Contents/MacOS/OrbitShare"
+# Same activation rule as the iOS extension: files, images, movies, text and links, at most 10 items.
+cat > "$appex/Contents/Info.plist" <<PLIST
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0"><dict>
+  <key>CFBundleName</key><string>OrbitShare</string>
+  <key>CFBundleDisplayName</key><string>${APP_NAME}</string>
+  <key>CFBundleIdentifier</key><string>${SHARE_ID}</string>
+  <key>CFBundleExecutable</key><string>OrbitShare</string>
+  <key>CFBundleInfoDictionaryVersion</key><string>6.0</string>
+  <key>CFBundlePackageType</key><string>XPC!</string>
+  <key>CFBundleShortVersionString</key><string>${VERSION}</string>
+  <key>CFBundleVersion</key><string>${BUILD_NUMBER}</string>
+  <key>LSMinimumSystemVersion</key><string>14.0</string>
+  <key>OrbitAppGroup</key><string>${APP_GROUP}</string>
+  <key>NSExtension</key><dict>
+    <key>NSExtensionAttributes</key><dict>
+      <key>NSExtensionActivationRule</key><dict>
+        <key>NSExtensionActivationSupportsAttachmentsWithMaxCount</key><integer>10</integer>
+        <key>NSExtensionActivationSupportsFileWithMaxCount</key><integer>10</integer>
+        <key>NSExtensionActivationSupportsImageWithMaxCount</key><integer>10</integer>
+        <key>NSExtensionActivationSupportsMovieWithMaxCount</key><integer>10</integer>
+        <key>NSExtensionActivationSupportsText</key><true/>
+        <key>NSExtensionActivationSupportsWebURLWithMaxCount</key><integer>10</integer>
+      </dict>
+    </dict>
+    <key>NSExtensionPointIdentifier</key><string>com.apple.share-services</string>
+    <key>NSExtensionPrincipalClass</key><string>OrbitShare.ShareViewController</string>
+  </dict>
+</dict></plist>
+PLIST
+# The extension is sandboxed (an extension must be) and reaches the app only through the group.
+# The app is not sandboxed; it carries the group so its container is the extension's.
+ents="$out/entitlements"; mkdir -p "$ents"
+cat > "$ents/OrbitShare.entitlements" <<PLIST
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0"><dict>
+  <key>com.apple.security.app-sandbox</key><true/>
+  <key>com.apple.security.application-groups</key><array><string>${APP_GROUP}</string></array>
+</dict></plist>
+PLIST
+cat > "$ents/Orbit.entitlements" <<PLIST
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0"><dict>
+  <key>com.apple.security.application-groups</key><array><string>${APP_GROUP}</string></array>
+</dict></plist>
+PLIST
 echo "▶ codesign ($SIGN_ID)"
 appfwk="$app/Contents/Frameworks/Sparkle.framework"
+# Nested code inside-out (Sparkle, then OrbitShare.appex with its own entitlements), then the app.
+# No --deep: it would re-sign the appex without its entitlements. Developer ID adds the hardened
+# runtime and a secure timestamp, which notarisation requires; ad-hoc (local dev) has neither.
 if [ "$SIGN_ID" = "-" ]; then
-  codesign --force --deep --sign - "$app"        # ad-hoc for local dev
+  sign() { codesign --force --sign - "$@"; }
 else
-  # Developer ID + hardened runtime: sign nested code (Sparkle) inside-out, then the app.
   sign() { codesign --force --options runtime --timestamp --sign "$SIGN_ID" "$@"; }
-  if [ -d "$appfwk" ]; then
-    vdir="$(ls -d "$appfwk"/Versions/[A-Z] 2>/dev/null | head -1)"
-    for x in "$vdir"/XPCServices/*.xpc; do [ -e "$x" ] && sign "$x"; done
-    [ -e "$vdir/Autoupdate" ] && sign "$vdir/Autoupdate"
-    [ -e "$vdir/Updater.app" ] && sign "$vdir/Updater.app"
-    sign "$appfwk"
-  fi
-  sign "$app"
 fi
+if [ -d "$appfwk" ]; then
+  vdir="$(ls -d "$appfwk"/Versions/[A-Z] 2>/dev/null | head -1)"
+  for x in "$vdir"/XPCServices/*.xpc; do [ -e "$x" ] && sign "$x"; done
+  [ -e "$vdir/Autoupdate" ] && sign "$vdir/Autoupdate"
+  [ -e "$vdir/Updater.app" ] && sign "$vdir/Updater.app"
+  sign "$appfwk"
+fi
+echo "▶ codesign OrbitShare.appex"
+sign --entitlements "$ents/OrbitShare.entitlements" "$appex"
+echo "▶ codesign $APP_NAME.app"
+sign --entitlements "$ents/Orbit.entitlements" "$app"
 codesign --verify --deep --strict --verbose=2 "$app" || true
+codesign -d --entitlements - "$appex" 2>/dev/null | grep -q "$APP_GROUP" \
+  || { echo "✗ OrbitShare.appex is not signed with the App Group $APP_GROUP" >&2; exit 1; }
 # Stapling fetches the ticket of an already accepted notarization from Apple (api.apple-cloudkit.com),
 # which sometimes drops the connection: Error 68, "The network connection was lost" (beta.207 failed
 # three times on it, on the app and on the DMG). Fetch it again rather than fail the release.

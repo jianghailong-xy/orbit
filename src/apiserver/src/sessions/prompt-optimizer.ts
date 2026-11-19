@@ -17,6 +17,7 @@ import {
   PROMPT_OPTIMIZATION_FAILED_CODE,
   PROMPT_OPTIMIZER_MAX_DRAFT_CHARS,
   PROMPT_OPTIMIZER_OFF_CODE,
+  PROMPT_OPTIMIZER_MAX_REPLYING_TO_CHARS,
   PROMPT_OPTIMIZER_TIMEOUT_MS,
   RunEventType,
   TRANSLATION_LANGUAGE_NAMES,
@@ -83,6 +84,8 @@ export interface PromptOptimizerContext {
   workspaceName?: string;
   project?: { title: string; goal: string | null; criteria: string[] };
   wiki?: Array<{ title: string; summary: string }>;
+  /** What the draft answers, from the client (`replyingTo`), when it answers a card. */
+  replyingTo?: string;
 }
 
 /** The sources the card draws as "Used: …" chips: exactly the parts of `context` that are present. */
@@ -138,6 +141,12 @@ export function optimizerTask(maskedDraft: string, context: PromptOptimizerConte
   if (context.turns) parts.push(`Recent conversation:\n${context.turns.text}`);
   if (context.wiki?.length) {
     parts.push(`Wiki entries:\n${context.wiki.map((entry) => `- ${entry.title}: ${entry.summary}`).join('\n')}`);
+  }
+  if (context.replyingTo) {
+    parts.push(
+      `The draft is the owner's reply to this, which the agent is waiting on:\n${context.replyingTo}\n\n` +
+        'Keep it a reply to that: make clear which question or option it answers, and do not turn it into a new request.',
+    );
   }
   parts.push(`Draft:\n${maskedDraft}`);
   return parts.join('\n\n');
@@ -273,6 +282,7 @@ export class PromptOptimizationDto implements PromptOptimizationRequest {
   @IsOptional() @IsPublicId() sessionId?: string;
   @IsOptional() @IsPublicId() workspaceId?: string;
   @IsOptional() @IsPublicId() projectId?: string;
+  @IsOptional() @IsString() replyingTo?: string;
 }
 
 @Injectable()
@@ -341,6 +351,8 @@ export class PromptOptimizerService {
       : dto.projectId ?? null;
 
     const context: PromptOptimizerContext = {};
+    const replyingTo = typeof dto.replyingTo === 'string' ? dto.replyingTo.trim().slice(0, PROMPT_OPTIMIZER_MAX_REPLYING_TO_CHARS).trim() : '';
+    if (replyingTo) context.replyingTo = replyingTo;
     if (session?.recapText?.trim()) context.recap = session.recapText.trim();
     const workspace = workspaceId
       ? await this.prisma.workspace.findFirst({

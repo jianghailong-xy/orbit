@@ -7,8 +7,9 @@ import { subagentSessionSummary } from "../lib/subagentRuns";
 import { SessionAgentsStrip } from "./SessionAgentsStrip";
 
 /**
- * The composer band's Agents line, as Apple's `AgentsBandRow` draws it: the band's words, the newest run's end
- * at its right edge, and the list it opens to, whose rows scroll to the run's block.
+ * The composer band's Agents line, as Apple's `AgentsBandRow` draws it (docs/mocks/agents-band-models): the
+ * band's words, where the work went, a failure at its right edge, and the list it opens to, whose rows scroll
+ * to the run's block.
  */
 
 (
@@ -57,7 +58,8 @@ describe("subagentSessionSummary (OrbitKit SubagentSessionSummary)", () => {
       run({ toolUseId: "b" }),
     ])!;
     expect(s.band).toBe("Build the Mac app");
-    expect(s.last).toBeNull();
+    expect(s.current?.toolUseId).toBe("a");
+    expect(s.failed).toBe(0);
     expect(s.rows.map((r) => r.toolUseId)).toEqual(["a", "b"]);
   });
 
@@ -93,7 +95,7 @@ describe("subagentSessionSummary (OrbitKit SubagentSessionSummary)", () => {
     expect(s.band).toBe("2 · 1 running");
   });
 
-  it("at rest, says the count and the newest run, and how that one ended", () => {
+  it("at rest, says the count alone and how many failed", () => {
     const s = subagentSessionSummary([
       run({ toolUseId: "a" }),
       run({
@@ -104,8 +106,46 @@ describe("subagentSessionSummary (OrbitKit SubagentSessionSummary)", () => {
         endedAt: "2026-11-18T11:04:12.000Z",
       }),
     ])!;
-    expect(s.band).toBe("2 · Ship it");
-    expect(s.last).toEqual({ failed: true, duration: "4m 12s" });
+    expect(s.band).toBe("2");
+    expect(s.failed).toBe(1);
+    expect(s.current).toBeNull();
+  });
+
+  it("counts the models most runs first and the machines, the session's own as null", () => {
+    const s = subagentSessionSummary(
+      [
+        run({ toolUseId: "a", workspaceName: "orbit-op", engine: "claude", model: "deepseek-v4.1-flash", modelLabel: "DeepSeek V4.1 Flash" }),
+        run({ toolUseId: "b" }),
+        run({ toolUseId: "c", workspaceName: "orbit-prod" }),
+        run({ toolUseId: "d", workspaceName: "orbit-prod" }),
+      ],
+      { engine: "claude", model: "claude-opus-5-5" },
+    )!;
+    expect(s.models).toEqual([
+      { label: "Opus 5.5", engine: "claude", count: 3 },
+      { label: "DeepSeek V4.1 Flash", engine: "claude", count: 1 },
+    ]);
+    expect(s.machines).toEqual([
+      { name: "orbit-prod", count: 2 },
+      { name: null, count: 1 },
+      { name: "orbit-op", count: 1 },
+    ]);
+    expect(s.elsewhere).toBe(true);
+    expect(s.spread).toBe(true);
+  });
+
+  it("is quiet when every run took the session's own model on its own machine", () => {
+    const parent = { engine: "claude", model: "claude-opus-5-5" };
+    const own = subagentSessionSummary([run({ toolUseId: "a" }), run({ toolUseId: "b", engine: null, model: null, modelLabel: null })], parent)!;
+    expect(own.spread).toBe(false);
+    expect(own.elsewhere).toBe(false);
+    // Another model, still here, is spread.
+    const other = subagentSessionSummary([run({ toolUseId: "a", model: "claude-haiku-5-5", modelLabel: "Haiku 5.5" })], parent)!;
+    expect(other.spread).toBe(true);
+    expect(other.elsewhere).toBe(false);
+    // A run with no model counts under its engine's name.
+    const kimi = subagentSessionSummary([run({ toolUseId: "a", engine: "kimi", model: null, modelLabel: null })], parent)!;
+    expect(kimi.models).toEqual([{ label: "Kimi", engine: "kimi", count: 1 }]);
   });
 });
 
@@ -128,6 +168,7 @@ describe("SessionAgentsStrip", () => {
       root.render(
         <SessionAgentsStrip
           runs={new Map(runs.map((r) => [r.toolUseId, r]))}
+          parent={{ engine: "claude", model: "claude-opus-5-5" }}
         />,
       ),
     );
@@ -167,27 +208,99 @@ describe("SessionAgentsStrip", () => {
     const line = host.querySelector(".bg-tray-row")!;
     expect(line.textContent).toContain("Agents");
     expect(line.textContent).toContain("Build the Mac app");
+    // The running run is on this machine on the session's model: no fact, no chip.
+    expect(line.querySelector(".ag-fact")).toBeNull();
+    expect(line.querySelector(".ag-chip")).toBeNull();
     await openList();
     // Opened in place, as Background processes is: no dialog, no figures, no cost.
     const dialog = host.querySelector(".bg-tray-list")!;
     expect(document.querySelector('[role="dialog"]')).toBeNull();
     expect(dialog.textContent).not.toContain("$");
     expect(dialog.textContent).not.toContain("engine");
-    expect(
-      [...dialog.querySelectorAll(".ag-section")].map((s) => s.textContent),
-    ).toEqual(["Running", "Done"]);
+    // One list, the running ones first: no Running / Done headings.
+    expect(dialog.querySelector(".ag-section")).toBeNull();
+    expect(dialog.textContent).not.toContain("Running");
     const rows = [...dialog.querySelectorAll(".ag-row")];
     expect(rows.map((r) => r.querySelector(".ag-title")!.textContent)).toEqual([
       "Build the Mac app",
       "Deploy to production",
       "Audit open landings",
     ]);
-    expect(rows[1].querySelector(".ag-facts")!.textContent).toBe(
-      "Opus 5.5 · on orbit-macos · 2 files · 50s",
+    const facts = (i: number) =>
+      [...rows[i].querySelector(".ag-facts")!.children].map((c) => c.textContent);
+    expect(facts(1)).toEqual(["orbit-macos", "COpus 5.5", "2 files", "50s"]);
+    expect(facts(2)).toEqual(["COpus 5.5", "Read-only", "50s"]);
+  });
+
+  const deepseek = { model: "deepseek-v4.1-flash", modelLabel: "DeepSeek V4.1 Flash 1017" };
+
+  it("at rest, says how many machines and each model with its runs, and no check when all succeeded", () => {
+    draw([
+      run({ toolUseId: "a", workspaceName: "orbit-prod-fcm" }),
+      run({ toolUseId: "b", workspaceName: "orbit-prod-fcm" }),
+      run({ toolUseId: "c", workspaceName: "orbit-op", ...deepseek }),
+      run({ toolUseId: "d", workspaceName: "orbit-macos", ...deepseek, createdAt: "2026-11-18T11:00:00.000Z" }),
+      run({ toolUseId: "e", workspaceName: "orbit-macos", ...deepseek }),
+    ]);
+    const line = host.querySelector(".bg-tray-row")!;
+    expect(line.querySelector(".ag-band")!.textContent).toBe("5");
+    expect(line.textContent).not.toContain("Deploy to production");
+    expect(line.querySelector(".ag-fact")!.textContent).toBe("3 machines");
+    expect(line.querySelector(".ag-fact")!.getAttribute("title")).toBe(
+      "Ran on\norbit-macos · 2\norbit-prod-fcm · 2\norbit-op · 1",
     );
-    expect(rows[2].querySelector(".ag-facts")!.textContent).toBe(
-      "Opus 5.5 · Read-only · 50s",
+    expect([...line.querySelectorAll(".ag-chip")].map((c) => c.textContent)).toEqual([
+      "CDeepSeek V4.1 Flash 1017×3",
+      "COpus 5.5×2",
+    ]);
+    expect(line.querySelector(".ag-chip-extra")!.textContent).toBe("COpus 5.5×2");
+    expect(line.querySelector(".ag-more")!.textContent).toBe("+1");
+    expect(line.querySelector(".chat-tool-status")).toBeNull();
+    expect(line.querySelector(".ag-failed")).toBeNull();
+    expect(line.getAttribute("aria-label")).toBe(
+      "Agents: 5, 3 machines, DeepSeek V4.1 Flash 1017 3 runs, Opus 5.5 2 runs",
     );
+  });
+
+  it("at rest, a failure is the only thing at the right edge", () => {
+    draw([run({ toolUseId: "a" }), run({ toolUseId: "b", status: "FAILED" })]);
+    const line = host.querySelector(".bg-tray-row")!;
+    expect(line.querySelector(".ag-failed")!.textContent).toBe(" 1 failed");
+    // Both on the session's own model and machine: nothing about where the work went.
+    expect(line.querySelector(".ag-chip")).toBeNull();
+    expect(line.querySelector(".ag-fact")).toBeNull();
+  });
+
+  it("while one runs, an earlier failure still shows, before the spinner", () => {
+    draw([
+      run({ toolUseId: "a", status: "FAILED" }),
+      run({ toolUseId: "b", status: "RUNNING", endedAt: null, description: "Deploy df0fe42fb", createdAt: "2026-11-18T11:00:00.000Z" }),
+    ]);
+    const line = host.querySelector(".bg-tray-row")!;
+    const failed = line.querySelector(".ag-failed")!;
+    expect(failed.textContent).toBe(" 1 failed");
+    const spinner = line.querySelector(".chat-tool-status.running")!;
+    expect(failed.compareDocumentPosition(spinner) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+    expect(line.getAttribute("aria-label")).toBe("Agents: Deploy df0fe42fb, 1 failed");
+  });
+
+  it("running elsewhere, names its machine and its model", () => {
+    draw([
+      run({ toolUseId: "a" }),
+      run({ toolUseId: "b", status: "RUNNING", endedAt: null, workspaceName: "orbit-op", ...deepseek, description: "Deploy df0fe42fb" }),
+    ]);
+    const line = host.querySelector(".bg-tray-row")!;
+    expect(line.querySelector(".ag-band")!.textContent).toBe("Deploy df0fe42fb");
+    expect(line.querySelector(".ag-fact")!.textContent).toBe("orbit-op");
+    expect(line.querySelector(".ag-chip")!.textContent).toBe("CDeepSeek V4.1 Flash 1017");
+    expect(line.querySelector(".chat-tool-status.running")).not.toBeNull();
+  });
+
+  it("an agent with another engine shows its own mark", () => {
+    draw([run({ toolUseId: "a", engine: "kimi", model: "kimi-k3", modelLabel: "Kimi K3" })]);
+    const chip = host.querySelector(".ag-chip")!;
+    expect(chip.getAttribute("data-engine")).toBe("kimi");
+    expect(chip.querySelector(".ag-chip-mark")!.textContent).toBe("K");
   });
 
   it("a row folds the list, then scrolls to its run's block and opens it", async () => {

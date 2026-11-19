@@ -120,11 +120,15 @@ describe('both cards get their actions from one component', () => {
       const rendered = buttons(html);
       expect(rendered.length, `${name} card rendered no button`).toBeGreaterThan(0);
       for (const button of rendered) {
-        // Every button is either an action on the shared token or a disclosure that folds a
-        // section open — a census, so a card growing a third kind of control is caught here.
+        // Every button is either an action on the shared token, a disclosure that folds a
+        // section open, or a tool call's Copy — a census, so a card growing a fourth kind of
+        // control is caught here.
         expect(
           button.includes(`class="${CARD_ACTION_CLASS}`)
-            || button.includes('decision-ask-toggle'),
+            || button.includes('decision-ask-toggle')
+            || button.includes('chat-more')
+            || button.includes('approval-raw-toggle')
+            || button.includes('approval-copy'),
           `${name} card's control is neither the shared action nor a disclosure`,
         ).toBe(true);
       }

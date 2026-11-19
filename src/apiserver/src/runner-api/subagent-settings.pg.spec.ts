@@ -169,7 +169,7 @@ test('SubAgents settings: defaults, the human doors, the runner refusals and the
     assert.equal(await prisma.workspace.count({ where: { ownerId, name: 'child' } }), 0, 'and no Agent was created');
   });
 
-  await t.test('a custom model with no tier is Not set and skipped by routeSubagent, until the owner sets one', async () => {
+  await t.test('a custom model with no tier is Not set and still routed, after any tiered model, until the owner sets one', async () => {
     const tag = runnerId.slice(-8);
     const slug = `my-endpoint-${tag}`;
     const created = await prisma.modelProvider.create({
@@ -177,7 +177,7 @@ test('SubAgents settings: defaults, the human doors, the runner refusals and the
         models: [{ value: 'qwen-coder', label: 'Qwen Coder' }], ownerId, position: 1 },
     });
     t.after(async () => { await prisma.modelProvider.deleteMany({ where: { id: created.id } }); });
-    // Only the custom endpoint is left to route onto, so whether it is picked is the tier alone.
+    // Only the custom endpoint is left to route onto: without a tier it still runs, as its provider's default model.
     await prisma.user.update({
       where: { id: ownerId },
       data: { preferences: { subagentBlockedProviders: ['claude', 'codex', 'kimi', 'opencode', 'antigravity', 'dsh', 'cursor'] } },
@@ -199,11 +199,10 @@ test('SubAgents settings: defaults, the human doors, the runner refusals and the
 
     const untiered = await plan();
     t.diagnostic(`before: ${JSON.stringify(untiered)}`);
-    assert.equal(untiered.model, null, 'nothing left to route onto');
-    assert.deepEqual(
-      untiered.candidates.filter((c) => c.provider === slug && c.model !== null),
-      [{ provider: slug, engine: 'claude', model: 'qwen-coder', effort: null, reason: 'The model has no tier' }],
-    );
+    const untieredWhy = `Nothing in tier M or above can run: qwen-coder is the default model of ${slug} (claude), which has no tiers`;
+    assert.deepEqual([untiered.provider, untiered.model, untiered.effort], [slug, 'qwen-coder', null], 'routed, untiered');
+    assert.ok(untiered.reasons.includes(untieredWhy), untiered.reasons.join('\n'));
+    assert.deepEqual(untiered.candidates.filter((c) => c.provider === slug && c.model !== null), [], 'not removed');
     assert.deepEqual((await row())?.models, [
       { model: 'qwen-coder', levels: [], source: null, editable: true, outputPricePerMTok: null },
     ], 'the Tier column says Not set, and offers to set it');
@@ -214,7 +213,7 @@ test('SubAgents settings: defaults, the human doors, the runner refusals and the
       label: 'My endpoint', modelTiers: { 'qwen-coder': 'M' }, models: [{ value: 'qwen-coder', label: 'Qwen Coder', tier: 'M' }],
     }));
     assert.deepEqual((await prisma.modelProvider.findUniqueOrThrow({ where: { id: created.id } })).modelTiers, {});
-    assert.equal((await plan()).model, null, 'still skipped after the runner write');
+    assert.ok((await plan()).reasons.includes(untieredWhy), 'still untiered after the runner write');
 
     // A model the key does not list, and a bad tier, are refused.
     await assert.rejects(providersDoor.setModelTier(user, created.id, await asSent(UpdateProviderModelTierDto, {
@@ -226,8 +225,9 @@ test('SubAgents settings: defaults, the human doors, the runner refusals and the
     const tiered = await plan();
     t.diagnostic(`after: ${JSON.stringify(tiered)}`);
     assert.equal(tiered.provider, slug);
-    assert.equal(tiered.model, 'qwen-coder', 'picked once it has a tier');
+    assert.equal(tiered.model, 'qwen-coder', 'picked in its tier once it has one');
     assert.equal(tiered.level, 'M');
+    assert.equal(tiered.reasons.some((r) => r.startsWith('Nothing in tier')), false, 'in the asked tier');
     assert.deepEqual((await row())?.models, [
       { model: 'qwen-coder', levels: ['M'], source: 'owner', editable: true, outputPricePerMTok: null },
     ]);
@@ -238,7 +238,9 @@ test('SubAgents settings: defaults, the human doors, the runner refusals and the
     }));
     assert.equal((await plan()).model, 'qwen-coder', 'a list edit leaves the tier alone');
     await providersDoor.setModelTier(user, created.id, await asSent(UpdateProviderModelTierDto, { model: 'qwen-coder', tier: null }));
-    assert.equal((await plan()).model, null, 'cleared: skipped again');
+    const cleared = await plan();
+    assert.equal(cleared.model, 'qwen-coder', 'cleared: untiered again, its first model the default');
+    assert.ok(cleared.reasons.includes(untieredWhy), cleared.reasons.join('\n'));
   });
 
   await t.test('the Tier column: preset tiers from the catalogue, not editable', async () => {

@@ -49,9 +49,10 @@ struct ProjectDoneCard: View {
     /// Settings › Translation: "Translated · Show original" under the coordinator's call, and its press.
     var translationFoot: [SessionTranslation.FootPart] = []
     var onFlipTranslation: () -> Void = {}
-    /// The last Not yet… note could not be translated and was not sent: "Couldn't translate, so it
-    /// wasn't sent · Retry · Send as written", Send as written going through `onNotYetAsWritten`.
-    var notYetRefused = false
+    /// The last Not yet… note could not be translated and was not sent: the line to draw — why ("…, so
+    /// your answer wasn't sent", or "Couldn't translate, so it wasn't sent") · Retry · Send as written,
+    /// Send as written going through `onNotYetAsWritten`. Nil while nothing was refused.
+    var notYetRefused: [SessionTranslation.FootPart]? = nil
     var onNotYetAsWritten: ((String) async -> Bool)? = nil
 
     @Environment(\.inApprovalReview) private var inReview
@@ -178,8 +179,8 @@ struct ProjectDoneCard: View {
                 Text(ProjectDone.notYetHint)
                     .font(.orbitLabel).foregroundStyle(.secondary)
                     .fixedSize(horizontal: false, vertical: true)
-                if notYetRefused, let onNotYet {
-                    TranslationFootView(parts: OwnerCardTranslations.refusedFoot) { action in
+                if let refusedFoot = notYetRefused, let onNotYet {
+                    TranslationFootView(parts: refusedFoot) { action in
                         decline(action == .sendAsWritten ? (onNotYetAsWritten ?? onNotYet) : onNotYet)
                     }
                 }

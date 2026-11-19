@@ -58,8 +58,8 @@ class ScheduledStore internal constructor(private val auth: AuthSession, val han
         val listRuns: List<ScheduleRunView>? = null,
         /** The account's PENDING create cards: the timeline's dashed rows and the draft panel. */
         val drafts: List<ScheduleCard> = emptyList(),
-        /** The OPEN tasks waiting for their startWhen condition: the "Waiting for a condition" group's task rows, or Needs you when
-         * one cannot be read (docs/condition-triggers-design.md §9). */
+        /** The OPEN tasks waiting for their startWhen condition: the "Waiting for a condition" group's task rows, tagged Can't read
+         * at its head when one cannot be read (docs/condition-triggers-design.md §9). */
         val waitingTasks: List<ScheduleWaitingTask> = emptyList(),
         /** Conditions read on their own (the inspector's Condition block, a run's firing, a Waiting on you card), by canonical id. */
         val conditions: Map<String, ConditionView> = emptyMap(),
@@ -86,8 +86,13 @@ class ScheduledStore internal constructor(private val auth: AuthSession, val han
         /** The last refusal a press came back with, said once under what was pressed. */
         val errorText: String? = null,
     ) {
-        /** The drawer's number: failing or held, or a condition that cannot be read; nothing at zero. */
-        val needsYouCount get() = ScheduleDisplay.needsYouCount(schedules, waitingTasks)
+        /** The drawer's number: held, failing with no run under way, or a condition that cannot be read; nothing at zero. */
+        val needsYouCount get() = ScheduleDisplay.needsYouCount(schedules, waitingTasks, pageRuns)
+
+        /** The runs the page knows of: the list's, or, from a server that sends none, each schedule's last and its detail's recent. */
+        val pageRuns: List<ScheduleRunView> get() = listRuns ?: schedules.flatMap { s ->
+            listOfNotNull(s.lastRun) + detail(s.id)?.recentRuns.orEmpty()
+        }.distinctBy { it.id }
 
         val shownSchedules get() = schedules.filter { it.state != "ENDED" && (workspaceFilter == null || ObjectId.same(it.workspaceId, workspaceFilter)) }
 
@@ -115,9 +120,7 @@ class ScheduledStore internal constructor(private val auth: AuthSession, val han
         fun timeline(now: Instant, timezone: String): List<ScheduleDisplay.TimelineGroup> {
             val shown = shownSchedules
             val ids = shown.map { key(it.id) }.toSet()
-            val runs = listRuns?.filter { key(it.scheduleId) in ids } ?: shown.flatMap { s ->
-                listOfNotNull(s.lastRun) + detail(s.id)?.recentRuns.orEmpty()
-            }.distinctBy { it.id }
+            val runs = pageRuns.filter { key(it.scheduleId) in ids }
             val drafts = if (workspaceFilter == null) drafts else drafts.filter { ObjectId.same(it.runsIn?.workspaceId, workspaceFilter) }
             return ScheduleDisplay.timeline(shown, runs, drafts, showPastRuns, now, timezone, shownWaitingTasks)
         }
@@ -219,7 +222,7 @@ class ScheduledStore internal constructor(private val auth: AuthSession, val han
         }
     }
 
-    /** The run a session's read names, for a server whose schedule-cards read names none: a run's session is in no list. */
+    /** The run a session's read names, for a server whose schedule-cards read names none. */
     private suspend fun findRun(runId: String): ScheduleRunView? {
         val schedules = try { api.list(state = "all").schedules } catch (cancel: CancellationException) { throw cancel } catch (_: Exception) { return null }
         for (s in schedules) {

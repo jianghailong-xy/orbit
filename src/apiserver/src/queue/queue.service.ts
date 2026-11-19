@@ -1270,7 +1270,6 @@ export class QueueService {
           (workspace?.disallowedTools as string[] | null) ?? [],
           runAccessLevel(session.scheduleRun),
           provider,
-          session.assignedRunner?.capabilities,
         ),
         // A CHECK_ONLY run's Plan runs Codex in its read-only sandbox (design §6.2); absent for every other session.
         ...scheduleRunAgentFields(runAccessLevel(session.scheduleRun)),
@@ -1282,10 +1281,8 @@ export class QueueService {
         permissionMode: normalizeBuiltinPermissionMode(
           provider,
           runnerModel,
-          // A CHECK_ONLY run on Claude Code asks only on a runner that closes the rest (schedule-access.ts).
-          scheduleRunPermissionMode(
-            permissionMode, runAccessLevel(session.scheduleRun), provider, session.assignedRunner?.capabilities,
-          ),
+          // A scheduled run on Claude Code runs in Auto, whatever its level (schedule-access.ts).
+          scheduleRunPermissionMode(permissionMode, runAccessLevel(session.scheduleRun), provider),
           customRow?.enabled === true,
           session.assignedRunner?.runsAsRoot,
           session.assignedRunner?.modelCatalog,

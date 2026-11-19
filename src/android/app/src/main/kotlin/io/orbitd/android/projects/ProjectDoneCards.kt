@@ -57,20 +57,22 @@ import java.time.Instant
 internal fun ProjectDoneCard(doc: JsonObject, request: JsonObject?, confirmedAt: String?, openItems: Int, running: Int, record: JsonObject?,
     sealRead: Boolean, now: Instant, enabled: Boolean, error: String?, tag: String, onRecord: suspend () -> Unit,
     onNotYet: (suspend (String, Boolean) -> Boolean)?, onReopen: (suspend () -> Unit)?, doneCheck: JsonObject? = null, actions: CriteriaActions? = null,
-    trailing: @Composable () -> Unit = {}, notTranslated: Boolean = false, review: Boolean = false) {
+    trailing: @Composable () -> Unit = {}, notTranslated: Boolean = false,
+    notTranslatedWhy: Pair<io.orbitd.android.core.translation.Translation.FailureReason, Int?>? = null, review: Boolean = false) {
     if (ProjectDone.recorded(doc, record)) {
         // Recorded while its review was open: the receipt takes the review's place (iOS `ProjectDoneCard`).
         if (review) Column(Modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(16.dp)) {
             ProjectDoneReceipt(doc, record, enabled, error, tag, onReopen, trailing) }
         else ProjectDoneReceipt(doc, record, enabled, error, tag, onReopen, trailing)
     } else ProjectDoneQuestion(doc, request, confirmedAt, openItems, running, sealRead, now, enabled, error, tag, onRecord, onNotYet, doneCheck, actions, trailing,
-        notTranslated, review)
+        notTranslated, notTranslatedWhy, review)
 }
 
 @Composable
 private fun ProjectDoneQuestion(doc: JsonObject, request: JsonObject?, confirmedAt: String?, openItems: Int, running: Int, sealRead: Boolean,
     now: Instant, enabled: Boolean, error: String?, tag: String, onRecord: suspend () -> Unit, onNotYet: (suspend (String, Boolean) -> Boolean)?,
-    doneCheck: JsonObject?, actions: CriteriaActions?, trailing: @Composable () -> Unit, notTranslated: Boolean, review: Boolean) {
+    doneCheck: JsonObject?, actions: CriteriaActions?, trailing: @Composable () -> Unit, notTranslated: Boolean,
+    notTranslatedWhy: Pair<io.orbitd.android.core.translation.Translation.FailureReason, Int?>?, review: Boolean) {
     val counts = ProjectDone.counts(doc)
     val nonCode = DoneFollowUps.nonCode(doc)
     val main = ProjectDone.mainBranch(doc)
@@ -147,7 +149,7 @@ private fun ProjectDoneQuestion(doc: JsonObject, request: JsonObject?, confirmed
             }
             // Settings › Translation (2A): the note could not be translated, so nothing was sent.
             if (notTranslated) AnswerNotTranslated({ send(false) }, { send(true) }, enabled && !sending && ProjectDone.declineNote(note) != null,
-                Modifier.testTag("$tag-translation-failed"))
+                Modifier.testTag("$tag-translation-failed"), notTranslatedWhy?.first, notTranslatedWhy?.second)
             Button(onClick = { send(false) }, Modifier.fillMaxWidth().heightIn(min = 48.dp).testTag("$tag-send"), enabled = enabled && !sending && ProjectDone.declineNote(note) != null) {
                 Text(ProjectDone.sendToCoordinator) }
             OutlinedButton(onClick = { notYetOpen = false }, Modifier.fillMaxWidth().heightIn(min = 48.dp).testTag("$tag-back"), enabled = !sending) {
@@ -306,6 +308,7 @@ fun CoordinatorDoneCard(app: OrbitApplication, handle: SessionHandle, sessionId:
     var error by remember(handle, sessionId) { mutableStateOf<String?>(null) }
     // The last "Not yet…" note was refused untranslated (422 TRANSLATION_FAILED): the card offers Retry and Send as written.
     var notTranslated by remember(handle, sessionId) { mutableStateOf(false) }
+    var notTranslatedWhy by remember(handle, sessionId) { mutableStateOf<Pair<io.orbitd.android.core.translation.Translation.FailureReason, Int?>?>(null) }
     LaunchedEffect(reads) {
         if (record != null && reads !== readsAtRecord && doc != null && ProjectDoc.status(doc) != "DONE") { record = null; readsAtRecord = null }
     }
@@ -331,7 +334,7 @@ fun CoordinatorDoneCard(app: OrbitApplication, handle: SessionHandle, sessionId:
     val notYet: (suspend (String, Boolean) -> Boolean)? = if (itemId == null) null else { note, asWritten ->
         write(ProjectDone.notDeclined) {
             try { api.declineDone(projectId, itemId, note, asWritten); notTranslated = false }
-            catch (failure: Exception) { notTranslated = Translation.refused(failure); throw failure }
+            catch (failure: Exception) { notTranslated = Translation.refused(failure); notTranslatedWhy = Translation.refusalReason(failure); throw failure }
         }.also { if (!it && notTranslated) error = null }
     }
     // Open, Change, Move to a follow-up… and Confirm… from the conversation: links into the app, and the owner's doors, after which the
@@ -352,7 +355,7 @@ fun CoordinatorDoneCard(app: OrbitApplication, handle: SessionHandle, sessionId:
             val body = ProjectDone.body(doc, live?.text("itemId"), live?.obj("doneRequest"), confirmation?.obj("currentVersion")?.text("digest"))
             if (body != null) write(ProjectDone.notRecorded) { api.done(projectId, body)?.let { record = it; readsAtRecord = reads } }
         },
-        onNotYet = notYet, actions = actions, notTranslated = notTranslated,
+        onNotYet = notYet, actions = actions, notTranslated = notTranslated, notTranslatedWhy = notTranslatedWhy,
         onReopen = { if (write(ProjectDone.notReopened) { api.setStatus(projectId, "OPEN", "reopen:${doc.text("updatedAt")}") }) { record = null; readsAtRecord = null } },
         review = inReview)
     val asking = slot is ProjectDone.Slot.Done && !ProjectDone.recorded(doc, record)

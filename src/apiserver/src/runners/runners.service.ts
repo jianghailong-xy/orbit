@@ -80,6 +80,7 @@ import {
   claudeAccountSwapStateOf,
   claudeAccountSwapWaitingOf,
 } from './claude-account-swap';
+import { openCodeKeyRows, runsOnOpenCode } from '../providers/custom-provider';
 
 /** The statuses an abandoned checkout can belong to: a session that has stopped running for good.
  *  A parked one can be dirty between turns and is not abandoned, so it is not listed. */
@@ -242,6 +243,11 @@ export class RunnersService {
     // Each account says how many sessions are at work on it, so that a client's "starts on" is the server's.
     const atWork = await activeSessionsOn(this.prisma, runners, new Date(now));
     const used = runners.map((runner) => engineHealthWithActiveSessions(usedRunnerEngines(runner), atWork.get(runner.id)));
+    // The runner's local auth probe cannot see keys Orbit injects at session dispatch.
+    const openCodeNoKeyEntries = used.flatMap((engines) => engines?.filter((entry) => entry.openCodeNoKey) ?? []);
+    if (openCodeNoKeyEntries.length && (await openCodeKeyRows(this.prisma, where.ownerId)).some(runsOnOpenCode)) {
+      for (const entry of openCodeNoKeyEntries) delete entry.openCodeNoKey;
+    }
     const updateTurns = await this.updateTurnsOf(where.ownerId, runners);
     const drainWaiting = await drainWaitingOf(this.prisma, where.ownerId, runners);
     // Fix with an agent: where a press would start its session on each runner, or why it can't, and the

@@ -5,6 +5,7 @@ import { Link } from 'react-router-dom';
 import {
   createdTasksCountLine,
   SESSION_CREATED_TASKS_COPY as COPY,
+  sessionTaskBand,
   sessionTaskCard,
   toUuid,
   type SessionCreatedTaskCounts,
@@ -22,7 +23,9 @@ import { useNow } from './WatchParts';
  * tasks this session's agent created (`GET /sessions/:id/created-tasks`) and the tasks its live
  * watches wait on, directly or through their run sessions (`watchedTasks`), one row each, folded to
  * one line and opened to a list — so a task a confirmation card filed does not scroll out of reach
- * with the conversation. A watched row carries an eye
+ * with the conversation. Folded past one task it reads as the Agents line does (`sessionTaskBand`):
+ * the newest running task, or the count and the newest task, with that task's pill; a red
+ * `N failed` leads while any failed. A watched row carries an eye
  * (orange while its watch goes unchecked) and comes first; one created elsewhere says so where its
  * age would be. Drawn in the Background processes tray's own shell (`.bg-tray`) with the task list's
  * status pill; the mock is docs/mocks/session-tasks-watch-merge-ios.png.
@@ -56,6 +59,8 @@ export function SessionCreatedTasksStrip({
   const staleLines = taskStaleLines(waitingOn, now);
   // One task is named rather than counted, as the Watching row names its one target.
   const single = card.counts.total === 1 && card.rows.length === 1 ? card.rows[0] : undefined;
+  // More than one: what is running, or the newest task and how it stands, as the Agents line says it.
+  const band = sessionTaskBand(card);
   const toggle = () => setOpen((o) => !o);
 
   return (
@@ -78,9 +83,20 @@ export function SessionCreatedTasksStrip({
                 <EyeOutlined /> {card.watching}
               </span>
             )}
-            <span className="bg-tray-count ct-count">
-              <CountLine counts={card.counts} />
-            </span>
+            {band && (
+              <>
+                <span className="bg-tray-count ct-count" title={band.row.title}>
+                  {band.failed > 0 && (
+                    <>
+                      <span className="ct-failed">{`${band.failed} failed`}</span>
+                      {' · '}
+                    </>
+                  )}
+                  {band.text}
+                </span>
+                {band.row.standing && <TaskStatusPill {...band.row.standing} />}
+              </>
+            )}
           </>
         )}
         <span className="wt-spacer" />

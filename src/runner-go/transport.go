@@ -137,6 +137,10 @@ func init() {
 	if secretFilesSupported {
 		runnerCapabilitiesV1 += "," + ownerSecretCapabilityV1
 	}
+	// Only a runner the managed image's entrypoint started has the browser (browser_supervisor.go).
+	if declaresBrowserClear(os.LookupEnv) {
+		runnerCapabilitiesV1 += "," + browserClearCapabilityV1
+	}
 }
 
 type transportHTTPError struct {

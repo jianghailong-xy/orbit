@@ -928,6 +928,12 @@ model Runner {
   // The owner's Update Now (0590): install the waiting release now, interrupting the turns in
   // flight. Handed to the next heartbeat as selfUpdateNow and cleared there, like the two above.
   selfUpdateNowRequestedAt DateTime? @map("self_update_now_requested_at")
+  // The managed runner browser as the last heartbeat reported it (1090; @orbit/shared RunnerBrowserReport, with the
+  // beat's time as reportedAt). Rewritten by every beat, to NULL when one omits it: a runner with no browser.
+  browserState      Json?        @map("browser_state")
+  // The owner's Clear saved logins (1090): handed to the next heartbeat as clearBrowserProfile and cleared there,
+  // like selfUpdateRequestedAt. The report's profileClearedAt is the answer.
+  browserClearRequestedAt DateTime? @map("browser_clear_requested_at")
   // The push that something of the owner's waits on this runner's drain (0595): set by the one
   // heartbeat that sends it, cleared by a beat that is not draining, so each drain pushes once.
   drainWaitingPushedAt DateTime? @map("drain_waiting_pushed_at")
@@ -3048,6 +3054,11 @@ model ConversationTurn {
   translationState String?  @map("translation_state")
   /// The language the owner wrote in (TRANSLATION_LANGUAGES).
   translationLang  String?  @map("translation_lang")
+  /// Why the translation failed (migration 1100, TranslationFailureReason): set only while translationState is FAILED,
+  /// cleared when it leaves FAILED. Null on a FAILED turn written before 1100.
+  translationFailureReason String? @map("translation_failure_reason")
+  /// The translator's HTTP status beside translationFailureReason HTTP; null otherwise.
+  translationHttpStatus    Int?    @map("translation_http_status")
   deliveredAt     DateTime? @map("delivered_at")
   leaseDeadlineAt DateTime? @map("lease_deadline_at")
   // Random runner-engine generation that owns the current delivery lease. A

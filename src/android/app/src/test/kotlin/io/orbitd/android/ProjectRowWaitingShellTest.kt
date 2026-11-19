@@ -129,7 +129,7 @@ class ProjectRowWaitingShellTest {
         shot(name)
         val list = bounds(compose.onNodeWithTag("transcript-list"))
         val head = commandHead().single()
-        val title = bounds(compose.onNodeWithText("Bash", useUnmergedTree = true))
+        val title = bounds(compose.onNodeWithText("Run a command?", useUnmergedTree = true))
         val header = bounds(compose.onNodeWithText("From Orbit", useUnmergedTree = true))
         assertTrue("the card's title is inside the transcript: $title in $list", title.top >= list.top && title.bottom <= list.bottom)
         assertTrue("its header too: $header in $list", header.top >= list.top && header.bottom <= list.bottom)
@@ -140,7 +140,7 @@ class ProjectRowWaitingShellTest {
         // At the top of the list, not wherever it happened to come in: the card's title in the list's upper quarter.
         val clear = list.top
         assertTrue("the card is at the top: $title in $list, clear from $clear", title.top < clear + list.height / 4)
-        assertFalse("the card's foot is below, unseen", visibleIn(list, footLine))
+        assertFalse("the card's foot is below, unseen", commandFootShown(list))
         assertFalse("the transcript is not at its end", atTheEnd())
         compose.onNodeWithContentDescription("Back").performClick()
         await { exists(hasTestTag(row)) }
@@ -163,8 +163,13 @@ class ProjectRowWaitingShellTest {
 
     /** Where the command's own text is — not a button's label that quotes it. */
     private fun commandHead(): List<Rect> = compose.onAllNodes(SemanticsMatcher("starts with the card's first line") { node ->
-        node.config.getOrNull(SemanticsProperties.Text)?.firstOrNull()?.text?.startsWith(headLine) == true
+        node.config.getOrNull(SemanticsProperties.Text)?.firstOrNull()?.text?.removePrefix("$ ")?.startsWith(headLine) == true
     }, useUnmergedTree = true).fetchSemanticsNodes().map { it.boundsInRoot }
+    /** Whether the command's own last line is on screen: its text runs down to the foot, which sits at the bottom of that text.
+     * Not the Allow & remember label, which quotes the whole command; and a folded command shows no foot at all. */
+    private fun commandFootShown(list: Rect): Boolean = compose.onAllNodes(SemanticsMatcher("the command's own text, down to its foot") { node ->
+        node.config.getOrNull(SemanticsProperties.Text)?.firstOrNull()?.text?.let { it.removePrefix("$ ").startsWith(headLine) && it.contains(footLine) } == true
+    }, useUnmergedTree = true).fetchSemanticsNodes().any { it.boundsInRoot.bottom > list.top && it.boundsInRoot.bottom <= list.bottom }
     /** Whether the transcript is scrolled to its end: its scroll range has nowhere further to go. */
     private fun atTheEnd(): Boolean {
         val range = compose.onNodeWithTag("transcript-list").fetchSemanticsNode().config[SemanticsProperties.VerticalScrollAxisRange]
@@ -172,10 +177,6 @@ class ProjectRowWaitingShellTest {
     }
     private fun settle() { repeat(5) { compose.mainClock.advanceTimeBy(500); compose.waitForIdle() } }
     private fun bounds(node: SemanticsNodeInteraction): Rect = node.fetchSemanticsNode().boundsInRoot
-    private fun visibleIn(list: Rect, text: String, tag: Boolean = false): Boolean {
-        val nodes = compose.onAllNodes(if (tag) hasTestTag(text) else hasText(text, substring = true), useUnmergedTree = true).fetchSemanticsNodes()
-        return nodes.any { it.boundsInRoot.top < list.bottom && it.boundsInRoot.bottom > list.top }
-    }
     private fun shows(text: String) = compose.onAllNodesWithText(text, substring = true, useUnmergedTree = true).fetchSemanticsNodes().isNotEmpty()
     private fun exists(matcher: SemanticsMatcher) = compose.onAllNodes(matcher).fetchSemanticsNodes().isNotEmpty()
     private fun openList() = await { exists(hasTestTag(row)) }

@@ -49,7 +49,7 @@ data class DraftTarget(val workspaceId: String, val folderId: String? = null, va
 data class ComposerState(val draft: ComposerDraft = ComposerDraft(), val loaded: Boolean = false,
     val busy: Boolean = false, val waiting: Boolean = false, val error: String? = null,
     val notice: String? = null, val uploads: Map<String, Float> = emptyMap(),
-    val failures: Map<String, String> = emptyMap(), val catalog: ComposerCatalog? = null,
+    val catalog: ComposerCatalog? = null,
     val catalogLoading: Boolean = false, val catalogError: String? = null,
     val acknowledgementPending: Boolean = false,
     /** What the provider picked for the session will do, and when, until the next message goes ([EngineCopy.switchNote]). */

@@ -1,0 +1,301 @@
+<!doctype html>
+<html lang="zh" data-theme="light">
+<head>
+<meta charset="utf-8">
+<title>在对话里改设置 · settings_propose</title>
+<link rel="stylesheet" href="../../../src/web/src/index.css">
+<link rel="stylesheet" href="../../../src/web/src/components/settings/Settings.css">
+<style>
+  body { margin: 0; background: #eef0f3; }
+  .b-part { font: 15px/1.6 Inter, "Noto Sans SC", sans-serif; color: #1f2329; background: #fff;
+    width: 1380px; box-sizing: border-box; padding: 36px 44px 40px; margin: 0 0 24px; }
+  .b-part h1 { font-size: 26px; margin: 0 0 6px; }
+  .b-part h2 { font-size: 21px; margin: 0 0 4px; }
+  .b-lead { color: #5b6270; margin: 0 0 22px; max-width: 1180px; }
+  .b-row { display: flex; gap: 28px; align-items: flex-start; }
+  .b-col { flex: 1 1 0; min-width: 0; }
+  .b-tag { display: inline-block; font-size: 13px; font-weight: 600; padding: 2px 10px; border-radius: 999px;
+    background: #eef1f6; color: #4a5160; margin-bottom: 10px; }
+  .b-tag.is-new { background: #e7f0ff; color: #1f5fd1; }
+  .b-tag.is-no { background: #fdecec; color: #b42318; }
+  /* A web conversation pane, drawn with the shipped transcript and card classes. */
+  .b-pane { position: relative; border: 1px solid #d9dde3; border-radius: 12px; background: var(--bg-base);
+    padding: 22px 22px 18px; font-size: 14px; min-height: 0; }
+  .b-pane .chat-user-wrap { margin: 0 0 16px auto; }
+  .b-agent { color: var(--text-1); line-height: 1.6; margin: 0 0 12px; }
+  .b-agent code { font-family: "JetBrains Mono", monospace; font-size: 12.5px; background: var(--bg-sunken);
+    padding: 1px 5px; border-radius: 4px; }
+  .b-pane .approval-card { margin-top: 6px; }
+  .b-change { display: grid; grid-template-columns: 1fr auto auto auto; gap: 6px 10px; align-items: baseline;
+    margin: 6px 0 4px; font-size: 13px; }
+  .b-change .b-k { color: var(--text-1); }
+  .b-change .b-from { color: var(--text-3); text-decoration: line-through; }
+  .b-change .b-arrow { color: var(--text-3); }
+  .b-change .b-to { color: var(--text-1); font-weight: 600; }
+  .b-path { font-size: 12px; color: var(--text-3); margin: 0 0 2px; }
+  .b-why { font-size: 12.5px; color: var(--text-2); margin: 8px 0 0; }
+  .b-link-card { border: 1px solid var(--border-subtle); border-radius: 10px; padding: 12px 14px; background: var(--bg-sunken);
+    display: flex; align-items: center; gap: 12px; font-size: 13px; }
+  .b-link-card .b-lt { flex: 1; }
+  .b-link-card .b-lt b { display: block; font-weight: 600; color: var(--text-1); }
+  .b-link-card .b-lt span { color: var(--text-3); font-size: 12px; }
+  .b-btn { border: 1px solid var(--border-subtle); border-radius: 7px; padding: 5px 12px; background: var(--bg-base);
+    color: var(--text-1); font: inherit; font-size: 13px; white-space: nowrap; }
+  /* Numbered marks + notes. */
+  .b-mark { position: absolute; width: 24px; height: 24px; border-radius: 50%; background: #e5484d; color: #fff;
+    font: 600 13px/24px Inter, sans-serif; text-align: center; box-shadow: 0 0 0 3px #fff; z-index: 5; }
+  .b-ring { position: absolute; border: 2px dashed #e5484d; border-radius: 10px; pointer-events: none; z-index: 4; }
+  .b-notes { margin: 18px 0 0; padding: 0; list-style: none; font-size: 14.5px; }
+  .b-notes li { display: flex; gap: 10px; margin: 0 0 8px; }
+  .b-notes li i { flex: 0 0 22px; height: 22px; border-radius: 50%; background: #e5484d; color: #fff; font: 600 12px/22px Inter;
+    text-align: center; font-style: normal; margin-top: 2px; }
+  .b-err { font-family: "JetBrains Mono", monospace; font-size: 12px; color: #b42318; background: #fff4f4;
+    border: 1px solid #f4c7c7; border-radius: 6px; padding: 6px 10px; margin: 0 0 12px; }
+  .b-toolline { font-size: 12.5px; color: var(--text-3); margin: 0 0 10px; }
+  .b-toolline code { font-family: "JetBrains Mono", monospace; font-size: 12px; }
+  /* Tier table. */
+  table.b-tiers { border-collapse: collapse; width: 100%; font-size: 14px; }
+  .b-tiers th, .b-tiers td { border: 1px solid #e1e4e8; padding: 9px 12px; text-align: left; vertical-align: top; }
+  .b-tiers th { background: #f6f7f9; font-weight: 600; }
+  .b-tiers td code { font-family: "JetBrains Mono", monospace; font-size: 12.5px; }
+  .b-tiers .b-c { font-size: 13px; color: #5b6270; }
+  /* Settings page frame: shipped settings-* classes, a drawn switch. */
+  .b-settings { border: 1px solid #d9dde3; border-radius: 12px; overflow: hidden; display: flex; height: 400px; }
+  .b-settings .settings-nav { flex-basis: 220px; }
+  .b-settings .b-page { flex: 1; padding: 26px 34px; background: var(--bg-base); overflow: hidden; }
+  .b-nav-item { padding: 6px 10px; border-radius: 6px; font-size: 13.5px; color: var(--text-2); }
+  .b-nav-item.is-on { background: var(--bg-hover); color: var(--text-1); font-weight: 600; }
+  .b-sw { flex: 0 0 auto; width: 36px; height: 20px; border-radius: 999px; background: #c9cdd3; position: relative; }
+  .b-sw::after { content: ''; position: absolute; top: 2px; left: 2px; width: 16px; height: 16px; border-radius: 50%; background: #fff; }
+  .b-sw.is-on { background: #3b82f6; }
+  .b-sw.is-on::after { left: 18px; }
+  .b-sel { flex: 0 0 auto; font-size: 13px; border: 1px solid var(--border-subtle); border-radius: 7px; padding: 4px 10px; color: var(--text-1); }
+  .b-changed { font-size: 12px; color: var(--text-3); margin-top: 3px; }
+  .b-changed a { color: var(--text-3); text-decoration: underline; text-underline-offset: 2px; }
+  /* Decisions. */
+  .b-q { border: 1px solid #e1e4e8; border-radius: 12px; padding: 16px 20px; margin: 0 0 16px; }
+  .b-q h3 { margin: 0 0 10px; font-size: 16.5px; }
+  .b-opts { display: flex; gap: 16px; }
+  .b-opt { flex: 1; border-radius: 10px; padding: 12px 14px; background: #f7f8fa; font-size: 14px; }
+  .b-opt.is-rec { background: #eef5ff; outline: 2px solid #7aa7f0; }
+  .b-opt > b { display: block; margin-bottom: 4px; }
+  .b-rec { font-size: 12px; font-weight: 600; color: #1f5fd1; margin-left: 6px; }
+  ol.b-steps { margin: 0; padding-left: 22px; font-size: 14.5px; }
+  ol.b-steps li { margin: 0 0 9px; }
+  ol.b-steps code, .b-q code, .b-lead code, .b-notes code { font-family: "JetBrains Mono", monospace; font-size: 12.5px;
+    background: #f1f3f5; padding: 1px 5px; border-radius: 4px; }
+  .b-cost { display: inline-block; font-size: 12px; color: #5b6270; background: #f1f3f5; border-radius: 4px; padding: 0 6px; margin-left: 6px; }
+</style>
+</head>
+<body>
+
+<!-- ───────────────────────── Part 1: today vs proposal ───────────────────────── -->
+<section class="b-part" id="part-1">
+  <h1>在对话里改设置：settings_propose</h1>
+  <p class="b-lead">人在对话里撞到问题，就在对话里修。Agent 不直接写设置，只<b>提议</b>；沿用现有的确认卡（和 provider / merge check 同一张卡），owner 点一下才生效。下面以“回复是英文，我要中文”为例。</p>
+  <div class="b-row">
+    <div class="b-col">
+      <span class="b-tag">① 今天</span>
+      <div class="b-pane" id="p1a">
+        <div class="chat-user-wrap"><div class="chat-msg chat-user">The replies are all in English. Can you show them in Chinese?</div></div>
+        <p class="b-agent" id="p1a-say">I can't change your settings from here. Open <b>Settings → General → Translation</b>, turn on <b>Translate conversations</b>, then set <b>Your language</b> to Chinese (Simplified).</p>
+        <p class="b-agent" style="color:var(--text-3)">（人得离开对话、找到页面、认出两个开关，再回来）</p>
+      </div>
+    </div>
+    <div class="b-col">
+      <span class="b-tag is-new">② 建议：Agent 提议，卡片确认</span>
+      <div class="b-pane" id="p1b">
+        <div class="chat-user-wrap"><div class="chat-msg chat-user">The replies are all in English. Can you show them in Chinese?</div></div>
+        <p class="b-toolline">orbit · <code>settings_propose</code></p>
+        <div class="approval-card" id="p1b-card">
+          <div class="approval-head">⚙️ Confirm: change 2 settings?</div>
+          <div class="approval-body is-plan">
+            <div class="dag-approval">
+              <p class="b-path">Settings › General › Translation</p>
+              <div class="b-change" id="p1b-diff">
+                <span class="b-k">Translate conversations</span><span class="b-from">Off</span><span class="b-arrow">→</span><span class="b-to">On</span>
+                <span class="b-k">Your language</span><span class="b-from">English</span><span class="b-arrow">→</span><span class="b-to">Chinese (Simplified)</span>
+              </div>
+              <p class="b-why" id="p1b-why">The agent says: you asked to read replies in Chinese.</p>
+              <p class="dag-approval-foot">Only these change. You can change them back in Settings.</p>
+            </div>
+          </div>
+          <div class="card-actions approval-actions" id="p1b-btns">
+            <button class="card-action card-action--primary">Save changes <span class="approval-kbd">⏎</span></button>
+            <button class="card-action card-action--secondary">💬 Chat about this</button>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+  <ol class="b-notes">
+    <li><i>1</i><span>今天 Agent 只能指路。改法是对的，但人要离开对话、自己在 Settings 里找。</span></li>
+    <li><i>2</i><span><b>一张卡，写明“当前 → 改后”</b>，标明在 Settings 的哪一页。相关的多项合进一张卡（这里两项），不逐项弹卡。复用现有确认卡：标题、正文、按钮的外观都不新造。</span></li>
+    <li><i>3</i><span>“The agent says…”一行是 Agent 的理由，灰字、在差异下面：要判断的是差异本身，理由只作参考。</span></li>
+    <li><i>4</i><span>按钮与 provider 修改卡一致：<b>Save changes</b>（⏎）/ <b>💬 Chat about this</b>。拒绝会回到对话说明原因；<b>没有 Always allow</b>：设置改动每次都问。</span></li>
+  </ol>
+</section>
+
+<!-- ───────────────────────── Part 2: tiers + tier 3 ───────────────────────── -->
+<section class="b-part" id="part-2">
+  <h2>能提议什么：按“会不会扩大 Agent 的权力”分三档</h2>
+  <p class="b-lead">分档表放在服务器上（<code>src/shared</code> 一份），不靠 Agent 自觉。第三档的 key 服务器直接拒绝提议，卡片根本不会出现。</p>
+  <table class="b-tiers">
+    <tr><th style="width:150px">档</th><th>设置（现有 preferences key）</th><th style="width:300px">在对话里</th></tr>
+    <tr><td><b>1 · 个人、无害</b></td>
+      <td>Theme <code>theme</code> · Translation 三项 <code>translation*</code> · Notifications 两项 <code>notify*</code> · Session recaps <code>recaps</code> · Suggested replies <code>promptSuggestions</code> · Prompt optimizer <code>promptOptimizer</code></td>
+      <td>提议 → 卡片 → 一点即改</td></tr>
+    <tr><td><b>2 · 新工作的默认值</b></td>
+      <td>Default model <code>defaultModels</code> · Default effort <code>defaultEffort</code> · Smart model selection <code>modelRouting</code></td>
+      <td>同上；卡片必须显示“当前 → 改后”，并注明“只影响新会话”</td></tr>
+    <tr><td><b>3 · 扩大 Agent 权力</b></td>
+      <td>Let sessions orchestrate <code>enableOrchestration</code>（打开）· Default permission mode <code>defaultPermissionMode</code>（放宽）· 子代理屏蔽 provider <code>subagentBlockedProviders</code>（解除）· Access tokens · 登录方式 · Profile</td>
+      <td><b>不能提议</b>。Agent 说明为什么需要，给出直达 Settings 那一行的链接，由人自己去点</td></tr>
+  </table>
+  <p class="b-c" style="margin:8px 0 26px">第三档中“收窄”的方向（关闭编排、屏蔽某个 provider、权限更严）是否也允许走卡片，见第 4 部分 Q2。</p>
+
+  <div class="b-row">
+    <div class="b-col">
+      <span class="b-tag is-no">③ 第三档：只给链接，不出卡片</span>
+      <div class="b-pane" id="p2a" style="min-height:330px">
+        <div class="chat-user-wrap"><div class="chat-msg chat-user">Why can't you split this up and hand pieces to other sessions?</div></div>
+        <p class="b-err" id="p2a-err">settings_propose → 403 SETTING_OWNER_ONLY: "Let sessions orchestrate" widens what agents may do; only you can turn it on, in Settings.</p>
+        <p class="b-agent">Handing work to other sessions needs <b>Let sessions orchestrate</b>, which is off for your account. I can't propose that one: it gives agents more reach, so it is yours to turn on.</p>
+        <div class="b-link-card" id="p2a-link">
+          <div class="b-lt"><b>Let sessions orchestrate</b><span>Settings › General › Orchestration</span></div>
+          <button class="b-btn">Open in Settings</button>
+        </div>
+      </div>
+    </div>
+    <div class="b-col">
+      <ol class="b-notes" style="margin-top:44px">
+        <li><i>5</i><span>拒绝在服务器上，不在提示词里：<code>SETTING_OWNER_ONLY</code>，并说明理由。Agent 看到的错误 = 它要对人说的话。</span></li>
+        <li><i>6</i><span>链接卡打开 Settings 并滚到那一行闪一下（现成的 Settings 搜索锚点 <code>data-setting-anchor</code>），由人自己拨开关。手机上同样直达那一行。</span></li>
+        <li><i>7</i><span>这正是今天 <code>orchestrationOffMsg</code> 用文字指路的场景：从“一段文字”变成“一个可点的入口”。</span></li>
+      </ol>
+    </div>
+  </div>
+</section>
+
+<!-- ───────────────────────── Part 3: Settings after ───────────────────────── -->
+<section class="b-part" id="part-3">
+  <h2>④ 改完之后：Settings 里看得到是哪个会话改的</h2>
+  <p class="b-lead">在对话里改的设置不能“悄悄变了”。被会话改过的那一行，下面多一行灰字（和 Settings 现有描述同级，不加色、不加框），点得回那段对话，也能一键撤销。</p>
+  <div class="b-settings" id="p3">
+    <nav class="settings-nav">
+      <div class="settings-title">Settings</div>
+      <div class="b-nav-item is-on">General</div>
+      <div class="b-nav-item">Notifications</div>
+      <div class="b-nav-item">Appearance</div>
+      <div class="b-nav-item">Profile</div>
+      <div class="b-nav-item">Storage</div>
+      <div class="b-nav-item">Access tokens</div>
+    </nav>
+    <div class="b-page">
+      <section class="settings-section">
+        <div class="settings-section-head"><h2 class="settings-section-title">Translation</h2></div>
+        <div class="settings-card">
+          <div class="settings-row" id="p3-row1">
+            <div class="settings-row-text">
+              <div class="settings-row-title">Translate conversations</div>
+              <div class="settings-row-description">Agents read and write in English; you write and read in your language.</div>
+              <div class="b-changed" id="p3-changed">Turned on from <a>Show replies in Chinese</a> · 2 min ago · <a>Undo</a></div>
+            </div>
+            <span class="b-sw is-on"></span>
+          </div>
+          <div class="settings-row" id="p3-row2">
+            <div class="settings-row-text">
+              <div class="settings-row-title">Your language</div>
+              <div class="settings-row-description">What you write in, and what replies are shown in.</div>
+              <div class="b-changed">Set from <a>Show replies in Chinese</a> · 2 min ago · <a>Undo</a></div>
+            </div>
+            <span class="b-sel">Chinese (Simplified) ⌄</span>
+          </div>
+          <div class="settings-row">
+            <div class="settings-row-text">
+              <div class="settings-row-title">Agents work in</div>
+              <div class="settings-row-description">What the agent receives and answers in.</div>
+            </div>
+            <span class="b-sel">English ⌄</span>
+          </div>
+        </div>
+      </section>
+    </div>
+  </div>
+  <ol class="b-notes">
+    <li><i>8</i><span>灰字只写三件事：哪个会话（链接回对话）、多久前、Undo。Undo 恢复卡片上的“当前”值，不用再弹卡（人自己点的）。</span></li>
+    <li><i>9</i><span>人之后在 Settings 里自己改过这一行，灰字就消失：它只说明“现在这个值是会话设的”。</span></li>
+    <li><i>10</i><span>对话里那张卡答完后折成一行：<code>✓ Changed 2 settings · Undo</code>，和其他已答的卡一样。</span></li>
+  </ol>
+</section>
+
+<!-- ───────────────────────── Part 4: decisions ───────────────────────── -->
+<section class="b-part" id="part-4">
+  <h2>待定 · 要你拍板</h2>
+  <p class="b-lead">每题都给了推荐；你只需要否掉不同意的那几项。</p>
+
+  <div class="b-q">
+    <h3>Q1 · 卡片由谁把关？</h3>
+    <div class="b-opts">
+      <div class="b-opt is-rec"><b>A · 服务器保管提议<span class="b-rec">推荐</span></b>Agent 把提议交给服务器，服务器存一张待答的卡；只有 owner 在客户端答“是”，服务器才写入。Agent 手里的凭据<strong>始终写不了</strong> preferences，<code>@PatForbidden('ACCOUNT')</code> 不动。</div>
+      <div class="b-opt"><b>B · 像 provider 写入那样由 runner 先问</b>runner 弹卡，用户点“是”后 runner 调写接口。改动少，但写接口得对 Agent 的凭据开放：一个绕过 MCP、直接 curl 的 Agent 就能跳过卡片。</div>
+    </div>
+  </div>
+
+  <div class="b-q">
+    <h3>Q2 · 第三档里“收窄”的改动能不能走卡片？（关闭编排、屏蔽 provider、权限更严）</h3>
+    <div class="b-opts">
+      <div class="b-opt is-rec"><b>A · 可以，走卡片<span class="b-rec">推荐</span></b>Agent 收紧自己的权限没有风险；比如“别再用 X 家模型了”可以当场确认。判断方向由服务器按 key 和新旧值决定。</div>
+      <div class="b-opt"><b>B · 一律只给链接</b>规则更简单（第三档 = 不可提议），代价是“关掉某项”也得跳去 Settings。</div>
+    </div>
+  </div>
+
+  <div class="b-q">
+    <h3>Q3 · 第一档要不要免卡，直接改、事后告知？</h3>
+    <div class="b-opts">
+      <div class="b-opt is-rec"><b>A · 也走卡片<span class="b-rec">推荐</span></b>设置是你的；一次点击的成本很低，且“任何设置改动都经过你”这条规则一句话就能讲清。</div>
+      <div class="b-opt"><b>B · 第一档直接改</b>少一次点击，但会出现“设置自己变了”的时刻，只能靠第 3 部分的灰字事后发现。</div>
+    </div>
+  </div>
+</section>
+
+<!-- ───────────────────────── Part 5: landing ───────────────────────── -->
+<section class="b-part" id="part-5">
+  <h2>落地（按代价排）</h2>
+  <ol class="b-steps">
+    <li><b>分档表</b>：<code>src/shared</code> 里一张 key → 档（含“收窄方向”判断）的表，服务器、runner、客户端读同一份。<span class="b-cost">小</span></li>
+    <li><b>服务器</b>：新的“设置提议”记录（会话、key、当前值、改后值、理由），只收第一、二档；第三档回 <code>403 SETTING_OWNER_ONLY</code>。owner 答“是”才写 preferences，并记下 <code>changedBy {sessionId, at}</code>，供 Settings 灰字和 Undo 使用。<span class="b-cost">中</span></li>
+    <li><b>runner-go</b>：MCP <code>settings_propose</code> + CLI <code>orbit settings propose</code>，加入 operation catalog；可选的 <code>settings_get</code> 让 Agent 先读到当前值再提议。primer 加一句：碰到设置问题，提议，而不是指路。<span class="b-cost">中</span></li>
+    <li><b>Web</b>：确认卡正文（当前 → 改后、所在页、理由）、第三档链接卡、Settings 行下灰字 + Undo。<span class="b-cost">中</span></li>
+    <li><b>iOS / macOS / Android</b>：同一张卡、同一行灰字；Android 照 iOS。<span class="b-cost">中</span></li>
+  </ol>
+  <p class="b-lead" style="margin-top:18px">你确认方向（尤其 Q1）后，我再写 <code>docs/settings-from-conversation-design.md</code>，然后建项目和任务。</p>
+</section>
+
+<script>
+// Numbered marks placed after layout, relative to each part.
+window.drawMarks = () => {
+  const mark = (n, sel, dx = -12, dy = -12, ring = false) => {
+    const el = document.querySelector(sel); if (!el) return;
+    const part = el.closest('.b-part'); part.style.position = 'relative';
+    const r = el.getBoundingClientRect(), p = part.getBoundingClientRect();
+    if (ring) {
+      const g = document.createElement('div'); g.className = 'b-ring';
+      Object.assign(g.style, { left: r.left - p.left - 5 + 'px', top: r.top - p.top - 5 + 'px', width: r.width + 10 + 'px', height: r.height + 10 + 'px' });
+      part.appendChild(g);
+    }
+    const m = document.createElement('div'); m.className = 'b-mark'; m.textContent = n;
+    Object.assign(m.style, { left: r.left - p.left + dx + 'px', top: r.top - p.top + dy + 'px' });
+    part.appendChild(m);
+  };
+  mark(1, '#p1a-say', -30, -6);
+  mark(2, '#p1b-diff', -34, -8, true);
+  mark(3, '#p1b-why', -34, -4);
+  mark(4, '#p1b-btns', -34, 0, true);
+  mark(5, '#p2a-err', -30, -8, true);
+  mark(6, '#p2a-link', -30, -10, true);
+  mark(8, '#p3-changed', -30, -6, true);
+};
+</script>
+</body>
+</html>

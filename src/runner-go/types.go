@@ -119,6 +119,9 @@ type HeartbeatRequest struct {
 	// sends it; the control plane stores it only from the instance its manager authorized, and puts
 	// nothing to sleep without a fresh one.
 	ManagedWorkload *ManagedWorkload `json:"managedWorkload,omitempty"`
+	// Browser is the managed runner browser now (browser_supervisor.go, Report): sent on every beat by a runner that
+	// has one, which only a managed runner does.
+	Browser *BrowserReport `json:"browser,omitempty"`
 	// CloneReports is where each clone the control plane asked for stands (clone_workdir.go). Omitted when there
 	// is none.
 	CloneReports []CloneReport `json:"cloneReports,omitempty"`
@@ -520,6 +523,10 @@ type HeartbeatResponse struct {
 	// RefreshModelCatalog: the outcome is what later heartbeats report. False/absent on older
 	// control planes.
 	CheckSelfUpdate bool `json:"checkSelfUpdate,omitempty"`
+	// The owner's Clear saved logins: stop the browser and delete its profile (browserSupervisor.ClearProfile). Handed
+	// over once and cleared, like CheckSelfUpdate; sent only to a runner that declares browser-clear/v1. The answer is
+	// the browser report's profileClearedAt on the beats that follow.
+	ClearBrowserProfile bool `json:"clearBrowserProfile,omitempty"`
 	// The control plane takes a claim scoped to named sessions (GET /runner/sessions/claim?drainScope=):
 	// a pool draining for an update claims only for sessions whose engine is running a turn here
 	// (drainClaimScope). False/absent on older control planes, which would ignore the scope, so the
@@ -814,6 +821,7 @@ type IntegrationCheckSpec struct {
 // IntegrationCheckResult is what one check came to. ExitCode is nil when the command never
 // produced one — it could not start, or its budget killed it.
 type IntegrationCheckResult struct {
+	TreeSha          string   `json:"treeSha,omitempty"`
 	Scope            string   `json:"scope,omitempty"`
 	Skipped          string   `json:"skipped,omitempty"`
 	Files            []string `json:"files,omitempty"`
