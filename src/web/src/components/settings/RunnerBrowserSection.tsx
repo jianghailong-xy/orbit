@@ -1,20 +1,18 @@
-import { useState } from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import { RUNNER_BROWSER_COPY as COPY, clearRunnerBrowser, runnerBrowserQuery } from '../../lib/runnerBrowser';
+import { RUNNER_BROWSER_COPY as COPY, clearRunnerBrowser, openRunnerBrowserTab, runnerBrowserQuery } from '../../lib/runnerBrowser';
 import { useToast } from '../../lib/toast';
-import { RunnerBrowserDrawer } from '../RunnerBrowserDrawer';
 import { Button } from '../ui/Button';
 import { useConfirm } from '../ui/ConfirmDialog';
 import { SettingsCard, SettingsRow, SettingsSection } from './SettingsBlocks';
 
 /**
- * Settings → Orbit Cloud runner → Browser (docs/runner-browser-design.md §5, board frames 8–9): Open browser, which
- * opens the drawer already in control (opening the viewer's stream is what starts Chrome on the runner), the
+ * Settings → Orbit Cloud runner → Browser (docs/runner-browser-design.md §5, board frames 8–9 and 02-control-view ②):
+ * Open browser, which opens the browser in a tab of its own (/runners/:id/browser) already in control (opening the
+ * viewer's stream is what starts Chrome on the runner), the
  * saved-logins line beside where the owner signs in, and Clear saved logins after a confirmation. Nothing at all
  * while the server reports the browser off (GET /runners/:id/browser answers 404).
  */
 export function RunnerBrowserSection({ runnerId }: { runnerId: string }) {
-  const [open, setOpen] = useState(false);
   const [confirm, confirmation] = useConfirm();
   const message = useToast();
   const qc = useQueryClient();
@@ -29,9 +27,8 @@ export function RunnerBrowserSection({ runnerId }: { runnerId: string }) {
   });
   if (!state) return null;
 
-  const status = open
-    ? COPY.runningInControl
-    : state.state === 'RUNNING'
+  const status =
+    state.state === 'RUNNING'
       ? state.holderTitle
         ? COPY.runningHeldBy(state.holderTitle)
         : COPY.running
@@ -46,11 +43,9 @@ export function RunnerBrowserSection({ runnerId }: { runnerId: string }) {
           title={COPY.rowTitle}
           description={status}
           control={
-            !open && (
-              <Button variant="primary" onClick={() => setOpen(true)}>
-                {COPY.openBrowser}
-              </Button>
-            )
+            <Button variant="primary" onClick={() => openRunnerBrowserTab(runnerId, true)}>
+              {COPY.openBrowser}
+            </Button>
           }
         />
         <SettingsRow title={COPY.savedLogins} description={COPY.savedLoginsLine} />
@@ -79,16 +74,6 @@ export function RunnerBrowserSection({ runnerId }: { runnerId: string }) {
         />
       </SettingsCard>
       {confirmation}
-      <RunnerBrowserDrawer
-        runnerId={runnerId}
-        open={open}
-        onClose={() => {
-          setOpen(false);
-          void qc.invalidateQueries({ queryKey: runnerBrowserQuery(runnerId).queryKey });
-        }}
-        from="settings"
-        state={state}
-      />
     </SettingsSection>
   );
 }

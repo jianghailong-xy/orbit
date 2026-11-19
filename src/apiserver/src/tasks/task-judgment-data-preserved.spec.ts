@@ -3168,7 +3168,10 @@ test('the ledger stays append-only, and every later migration is accounted for',
       // Show Orbit in Feishu (docs/feishu-bot-design.md §15.2). feishu_app is no preserved relation; no `task`,
       // `session`, `project` or `project_acceptance_*` object, trigger, function or type is named, created or replaced,
       // so it is not another writer of the DONE fence. No INSERT, UPDATE or DELETE.
-      '1150_feishu_show_orbit'],
+      '1150_feishu_show_orbit',
+      // 1170 adds one partial index on `session`; no row is written, and no preserved relation, trigger, function or
+      // DONE fence changes.
+      '1170_session_open_list_owner_idx'],
     'a later migration exists; re-read it before trusting the assertions above');
   // Stated rather than described: 0230's fence differs from 0228's by exactly one added lane.
   const later = readFileSync(

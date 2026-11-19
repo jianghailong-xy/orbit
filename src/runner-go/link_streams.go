@@ -1,6 +1,7 @@
 package main
 
 import (
+	"context"
 	"fmt"
 	"net"
 	"path/filepath"
@@ -24,10 +25,12 @@ import (
 
 const (
 	linkStreamCapability = "link-stream-v1"
-	linkStreamWindow     = 256 << 10
-	linkStreamMaxData    = 32 << 10
-	linkStreamMax        = 2
-	linkStreamDialWait   = 5 * time.Second
+	// linkStreamPasteCapability: this runner inserts a StreamPaste's text into its browser (browser_paste.go).
+	linkStreamPasteCapability = "link-stream-paste-v1"
+	linkStreamWindow          = 256 << 10
+	linkStreamMaxData         = 32 << 10
+	linkStreamMax             = 2
+	linkStreamDialWait        = 5 * time.Second
 	// linkStreamDialRetry is how long the runner waits before it dials the VNC socket again.
 	linkStreamDialRetry = 100 * time.Millisecond
 	// linkStreamRetry is how long the sender waits before it tries again a connection busy with another frame.
@@ -68,6 +71,8 @@ type linkStreams struct {
 	offered  func() bool
 	socket   func() string
 	viewer   func() (closed func(), err error)
+	// paste inserts the owner's pasted text into the browser (insertBrowserText on its DevTools).
+	paste func(ctx context.Context, text string) error
 	// dialWait is how long a stream tries to reach the VNC socket.
 	dialWait time.Duration
 
@@ -77,7 +82,16 @@ type linkStreams struct {
 
 func newLinkStreams(w *linkWork) *linkStreams {
 	return &linkStreams{w: w, declared: linkStreamsDeclared, offered: w.browserOffered, socket: linkVNCSocket,
-		viewer: linkStreamViewer, dialWait: linkStreamDialWait, open: map[string]*linkStream{}}
+		viewer: linkStreamViewer, paste: linkStreamPaste, dialWait: linkStreamDialWait, open: map[string]*linkStream{}}
+}
+
+// linkStreamPaste inserts text into the runner's browser, through Chrome's DevTools. It takes no lease (P3 = B).
+func linkStreamPaste(ctx context.Context, text string) error {
+	b := runnerBrowser()
+	if b == nil || !b.Running() {
+		return errBrowserUnavailable
+	}
+	return insertBrowserText(ctx, b.DevToolsEndpoint(), text)
 }
 
 // linkStream is one open stream: its connection, its socket, and the room each direction has.
@@ -94,6 +108,8 @@ type linkStream struct {
 	queued [][]byte
 	qBytes int
 	ended  bool
+	// pasting serializes the stream's pastes, so they are inserted in the order they were made.
+	pasting sync.Mutex
 	// roomed is signalled when the gateway credits room, queuedMore when bytes for the socket arrive.
 	roomed, queuedMore chan struct{}
 	done               chan struct{} // closed when the stream ends
@@ -116,7 +132,28 @@ func (s *linkStreams) onFrame(conn *linkWorkConn, f *linkpb.Frame) {
 		if st := s.get(conn, body.StreamClose.GetStreamId()); st != nil {
 			st.end(0, "", false)
 		}
+	case *linkpb.Frame_StreamPaste:
+		if st := s.get(conn, body.StreamPaste.GetStreamId()); st != nil {
+			go st.paste(body.StreamPaste.GetPasteId(), body.StreamPaste.GetText())
+		}
 	}
+}
+
+// paste inserts one StreamPaste's text and answers it with StreamPasted. Neither the text nor anything quoting it
+// is logged: a paste is often a password.
+func (st *linkStream) paste(id uint32, text string) {
+	st.pasting.Lock()
+	defer st.pasting.Unlock()
+	answer := &linkpb.StreamPasted{StreamId: st.id, PasteId: id}
+	select {
+	case <-st.done:
+		return
+	default:
+	}
+	if err := st.s.paste(context.Background(), text); err != nil {
+		answer.Error = err.Error()
+	}
+	_, _ = st.conn.send(&linkpb.Frame{Body: &linkpb.Frame_StreamPasted{StreamPasted: answer}})
 }
 
 func (s *linkStreams) get(conn *linkWorkConn, id string) *linkStream {
