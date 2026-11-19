@@ -668,10 +668,12 @@ final class ExceptionCardsTests: XCTestCase {
     /// is the browser's, taken from mock 5 through `ItemFactRows`.
     private func requireTheBrowsersWords() throws {
         let web = try webSource()
-        for label in ["Task", "Into", "Files", "After a fix", "Check", "Branch", "How", "Retries",
+        for label in ["Task", "Into", "After a fix", "Check", "Branch", "How", "Retries",
                       "Error"] {
             try require(web, "label=\"\(label)\"")
         }
+        // The Files row's label counts its paths once there are more than it shows: `'Files'` otherwise.
+        try require(web, "'Files'")
         try require(web, "' · nothing landed'")
         try require(web, ExceptionCards.afterAFix)
         try require(web, ExceptionCards.branchUnchanged)
