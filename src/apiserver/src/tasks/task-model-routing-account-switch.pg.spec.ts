@@ -164,7 +164,7 @@ async function fixture(
     data: {
       id: ownerId, email: `${label}-${RUN}-${ownerId}@routing.invalid`, name: label, passwordHash: 'x',
       // Optimize For is the account's (owner, 2026-11-19); Cost, the mode these runs were written against.
-      preferences: { ...(account === undefined ? {} : { modelRouting: account }), optimizeFor: 'cost' },
+      ...(account === undefined ? {} : { preferences: { modelRouting: account, optimizeFor: 'cost' } }),
     },
   });
   await db.runner.create({

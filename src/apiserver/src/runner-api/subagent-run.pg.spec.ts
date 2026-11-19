@@ -367,7 +367,7 @@ test('SubAgent runs: the row, the cost roll-up, the refusals and runningSubagent
       usageStanding: () => null,
     };
     const routed = new RunnerSubagentsController(prisma as never, silent(), planUsage as never);
-    await prisma.user.update({ where: { id: ownerId }, data: { preferences: { subagentBlockedProviders: [glm] } } });
+    await prisma.user.update({ where: { id: ownerId }, data: { preferences: { subagentBlockedProviders: [glm], optimizeFor: 'cost' } } });
 
     const sessionId = await parentSession({ runnerId: machineId, model: 'claude-sonnet-5-5', effort: 'medium' });
     const poolFields = { poolMemberProviderId: true, poolKeyId: true, poolCodexAccountId: true, poolSwitchNotice: true, provider: true } as const;
@@ -527,7 +527,7 @@ test('SubAgent runs: the row, the cost roll-up, the refusals and runningSubagent
       await prisma.providerPool.deleteMany({ where: { id: { in: [own.id, theirs.id, theirsShared.id] } } });
     });
     const routed = new RunnerSubagentsController(prisma as never, silent(), silent());
-    await prisma.user.update({ where: { id: ownerId }, data: { preferences: {} } });
+    await prisma.user.update({ where: { id: ownerId }, data: { preferences: { optimizeFor: 'cost' } } });
 
     const sessionId = await parentSession({ runnerId: machineId, model: 'claude-opus-5-5', effort: 'high' });
     const poolFields = { poolMemberProviderId: true, poolKeyId: true, poolCodexAccountId: true, poolSwitchNotice: true, provider: true } as const;
