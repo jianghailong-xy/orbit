@@ -150,6 +150,8 @@
 
 选命令与预算见 `project-integration-job.ts#checksFor`、`project-integration-job.ts#checkTimeoutSeconds`。
 
+Orbit 仓库的项目可将 `merge_check_command` 配为 `bash scripts/merge-check.sh`。脚本比较组合树的 `HEAD` 与上游共同祖先之间的改动，按路径选检查，并在首个失败时停止；仅改文档等非代码文件时不跑检查，未映射的代码改动至少跑 apiserver 检查。上游缺省为 `origin/main`，使用其他分支或本地引用时在命令前加 `MERGE_CHECK_BASE=<ref>`。可用 `--plan` 预览，或用 `MERGE_CHECK_SUITES=android,web` 指定检查以便排查。
+
 迁移 0422 再加一列和一个索引（L6）：
 
 | 列 / 索引 | 类型 | 约束与语义 |

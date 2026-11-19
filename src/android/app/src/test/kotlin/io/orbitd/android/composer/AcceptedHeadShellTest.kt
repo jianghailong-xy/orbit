@@ -87,7 +87,7 @@ class AcceptedHeadShellTest : ComposerShellTest() {
             {"turnId":"t-next","kind":"message","placement":"queued","content":"Then tag v2","attachments":[],"createdAt":"2026-10-15T02:00:02.000Z"}]""")
         signIn(); openSession()
         await { has(drawn) }
-        compose.onNode(hasText("+") and hasClickAction()).performClick()
+        compose.onNodeWithTag("composer-plus").performClick()
         await { shows("Queued messages (1)") }
         compose.onNodeWithText("Queued messages (1)").performClick()
         await { has(hasText("Then tag v2") and hasAnyAncestor(isDialog())) }

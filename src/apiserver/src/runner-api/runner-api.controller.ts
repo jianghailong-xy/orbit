@@ -3,7 +3,7 @@ import { appendRunQuestionContext, questionRecipient, RUN_QUESTION_PREFIX } from
 import { DRAIN_SKIPS_HELD, translationLanguages, turnTranslationOf } from '../sessions/turn-translation';
 import { isRunNotifyTurn, runNotifyContent } from '../sessions/run-notify';
 import { acceptedFinalizeBranch, codelessClaimFields } from '../sessions/codeless-checkout';
-import { CONDITION_PROBE_CAPABILITY, readMergeRecovery, mergeRecoveryReady, RUNNER_RESTART_INTERRUPT_REASON, RUNNER_UPDATE_INTERRUPT_REASON, type MergeRecovery } from '@orbit/shared';
+import { BROWSER_CLEAR_V1, CONDITION_PROBE_CAPABILITY, readMergeRecovery, mergeRecoveryReady, RUNNER_RESTART_INTERRUPT_REASON, RUNNER_UPDATE_INTERRUPT_REASON, type MergeRecovery } from '@orbit/shared';
 import { OWNER_SECRET_CAPABILITY, OwnerSecretsService } from '../owner-requests/owner-secrets.service';
 import { ConditionsService } from '../conditions/conditions.service';
 import { GithubWorkspaceService } from '../github/github-workspace.service';
@@ -240,6 +240,7 @@ import {
 import { normalizeStoredRememberRules, reachesPastOneMcpTool } from '../sessions/remember-rules';
 import {
   APPROVAL_ABANDONED_STATUS,
+  reapApprovalsOfEndedJobs,
   reapApprovalsOfEndedTurns,
   reapApprovalsOfReplacedSupervisor,
   reapApprovalsOfReplacedSupervisors,
@@ -544,6 +545,7 @@ import {
   sessionEngine,
   type SessionEngineFacts,
 } from '../providers/session-engine';
+import { storedBrowserState } from '../managed-runners/browser-state';
 import { refuseManagedRunnerDeletion } from '../managed-runners/managed-runner-delete';
 import { DELETE_APPROVAL_TOOL_NAMES, deleteCardInput } from './runner-delete-approval';
 import { sanitizeWorkspaceWrite } from './runner-agents.controller';
@@ -2279,6 +2281,9 @@ export class RunnerApiController {
         // newer binary reported must not outlive it. A report this server can't read is NULL too.
         selfUpdate:
           (sanitizeRunnerSelfUpdate(dto?.selfUpdate) as unknown as Prisma.InputJsonValue | null) ?? Prisma.DbNull,
+        // The managed runner browser (managed-runners/browser-state.ts), with this beat's time. Written by every beat,
+        // to NULL when it omits it, like selfUpdate: absence is a runner with no browser, not "no news".
+        browserState: (storedBrowserState(dto?.browser, beatAt) as unknown as Prisma.InputJsonValue | null) ?? Prisma.DbNull,
         // The directory this machine clones into, under which a workspace created from a git URL
         // gets its checkout. An empty string is treated as no report, exactly like the omission an
         // older runner sends: NULL here means "this machine never told us where it clones", and
@@ -2697,6 +2702,7 @@ export class RunnerApiController {
     let checkSelfUpdate: RunnerHeartbeatResponse['checkSelfUpdate'];
     let postponeSelfUpdateUntil: RunnerHeartbeatResponse['postponeSelfUpdateUntil'];
     let selfUpdateNow: RunnerHeartbeatResponse['selfUpdateNow'];
+    let clearBrowserProfile: RunnerHeartbeatResponse['clearBrowserProfile'];
     let regionCheckRequest: RunnerHeartbeatResponse['regionCheckRequest'];
     let forkSnapshotsOpen: RunnerHeartbeatResponse['forkSnapshotsOpen'];
     try {
@@ -2772,6 +2778,11 @@ export class RunnerApiController {
       checkSelfUpdate = await this.drainSelfUpdateRequest(runner.id);
       postponeSelfUpdateUntil = await this.drainSelfUpdatePostpone(runner.id);
       selfUpdateNow = await this.drainSelfUpdateNow(runner.id);
+      // The owner's Clear saved logins (managed-runners/browser-state.ts), claimed the same way; only a runner that
+      // declares browser-clear/v1 is handed it, and one that does not keeps it on the row.
+      if (runnerSupportsCapability(capabilities, BROWSER_CLEAR_V1)) {
+        clearBrowserProfile = await this.drainBrowserClearRequest(runner.id);
+      }
       // The owner's Check again, redelivered rather than claimed: a beat that skips it costs nothing, so it is last.
       regionCheckRequest = await this.drainRegionCheckRequest(runner.id, capabilities);
       // A listing, read on every full beat like agentDirs; a beat that fails before it states nothing, which the
@@ -2844,6 +2855,7 @@ export class RunnerApiController {
       ...(dto?.draining === true ? { drainScopedClaims: true } : {}),
       postponeSelfUpdateUntil,
       selfUpdateNow,
+      ...(clearBrowserProfile ? { clearBrowserProfile } : {}),
       // Only when a claim holds a command for this process: an older runner's response stays the shape
       // it always was, and a direct caller comparing responses sees no new key.
       ...(codexRateLimitResetRequest ? { codexRateLimitResetRequest } : {}),
@@ -3214,6 +3226,22 @@ export class RunnerApiController {
    * `selfUpdate` state later heartbeats carry — the new version, or `waitingForIdle` while a turn
    * runs — so a redelivered request would re-run the check on every beat. The clear is the claim.
    */
+  /**
+   * The owner's Clear saved logins (managed-runners/browser-state.ts), handed to one beat: the clear of the column is
+   * the claim, predicated on the time read, so a second press written between the read and the clear stays for the
+   * next beat. The runner's `browser.profileClearedAt` is the answer.
+   */
+  private async drainBrowserClearRequest(runnerId: string): Promise<true | undefined> {
+    const row = await this.prisma.runner.findUnique({ where: { id: runnerId }, select: { browserClearRequestedAt: true } });
+    const at = row?.browserClearRequestedAt;
+    if (!at) return undefined;
+    const claimed = await this.prisma.runner.updateMany({
+      where: { id: runnerId, browserClearRequestedAt: at },
+      data: { browserClearRequestedAt: null },
+    });
+    return claimed.count > 0 ? true : undefined;
+  }
+
   private async drainSelfUpdateRequest(runnerId: string): Promise<true | undefined> {
     const claimed = await this.prisma.runner.updateMany({
       where: { id: runnerId, selfUpdateRequestedAt: { not: null } },
@@ -9541,8 +9569,12 @@ export class RunnerApiController {
           },
         });
       }
+      // The cards a job that has just ended was reading: nothing is left to take their answer, and the
+      // turn ending — where they were collected before — may be hours off (reapApprovalsOfEndedJobs).
+      const jobCardsCollected = await reapApprovalsOfEndedJobs(tx, sessionId, bgEnded);
       return {
-        session, currentWorkAcknowledged, abandonedApprovals, accountReload, events, durable, alreadyStored: stored.size,
+        session, currentWorkAcknowledged, abandonedApprovals: [...abandonedApprovals, ...jobCardsCollected],
+        accountReload, events, durable, alreadyStored: stored.size,
         restated, seqConflicts, door: link ? 'link' : 'https', engineStarted,
       };
     };

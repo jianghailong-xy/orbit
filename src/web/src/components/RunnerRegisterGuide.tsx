@@ -71,6 +71,9 @@ export function RunnerRegisterGuide({ inSettings = false }: { inSettings?: boole
   const navigate = useNavigate();
   const [os, setOs] = useState<OS>('macOS');
   const [copied, setCopied] = useState(false);
+  // The "Copied" reset is cancelled when this goes, so it never updates a component that is gone.
+  const copiedReset = useRef<ReturnType<typeof setTimeout>>(undefined);
+  useEffect(() => () => clearTimeout(copiedReset.current), []);
   const installCmd = buildInstallCommands(__PUBLIC_ORIGIN__);
 
   const copy = (text: string) => {
@@ -78,7 +81,8 @@ export function RunnerRegisterGuide({ inSettings = false }: { inSettings?: boole
       if (!ok) return;
       setCopied(true);
       // Revert the “✓ Copied” affordance after a beat.
-      setTimeout(() => setCopied(false), 1600);
+      clearTimeout(copiedReset.current);
+      copiedReset.current = setTimeout(() => setCopied(false), 1600);
     });
   };
 
