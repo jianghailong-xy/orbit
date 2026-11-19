@@ -111,7 +111,7 @@ class ComposerDeviceTest {
         login()
         compose.onNodeWithTag("composer-context").performClick()
         awaitText("Primary: 23%"); closeSheet()
-        appClick("fixture-model")
+        modelChip()
         awaitText("Fixture Two"); appClick("Fixture Two")
         compose.waitUntil(5000) { stats()["config"]!!.jsonObject["model"]?.jsonPrimitive?.content == "fixture-model-2" }
         ready()
@@ -127,7 +127,9 @@ class ComposerDeviceTest {
         compose.onNode(second).performScrollTo().assertIsEnabled()
         assertTrue(compose.onAllNodes(hasText("Expired account")).fetchSemanticsNodes().isEmpty())
         compose.onNodeWithText("Close").performClick()
-        control("""{"status":"RUNNING"}"""); compose.runOnIdle { app.realtime.refreshSession() }; awaitText("Stop")
+        control("""{"status":"RUNNING"}"""); compose.runOnIdle { app.realtime.refreshSession() }
+        // Send turns into Stop: an icon, said aloud as "Stop" (the composer toolbar as iOS draws it).
+        compose.waitUntil(15000) { compose.onAllNodesWithContentDescription("Stop").fetchSemanticsNodes().isNotEmpty() }
         // Queued for the next turn while this one runs — Send held offers it — the message waits in the tray above the composer
         // (A07-22/23, b0f32ebbd), no longer in the + menu's "Queued messages"; withdrawn there, its words come back to the composer.
         compose.onNodeWithTag("composer-input").performTextInput("queued message")
@@ -415,14 +417,20 @@ class ComposerDeviceTest {
         compose.startNewSession()
         // The page as it opens: the engine hero over an empty composer (compared against iOS's draft page).
         compose.waitUntil(15000) { compose.onAllNodes(hasTestTag("new-session-engine") and isEnabled()).fetchSemanticsNodes().isNotEmpty() }
+        // The page opens with the box focused, as iOS's draft does. The keyboard with it is the device's call (see the card
+        // discussion journey): recorded, not asserted.
+        compose.waitUntil(10000) { compose.onAllNodes(hasTestTag("composer-input") and isFocused()).fetchSemanticsNodes().isNotEmpty() }
+        val keyboard = runCatching { compose.waitUntil(10000) {
+            ViewCompat.getRootWindowInsets(compose.activity.window.decorView)?.isVisible(WindowInsetsCompat.Type.ime()) == true }; true }.getOrDefault(false)
+        File(evidence, "new-session-keyboard.txt").writeText("composer focused: yes; soft keyboard shown within 10 s: $keyboard\n")
         capture("new-session-draft")
         compose.onNodeWithTag("composer-input").performTextInput("新会话的首条消息")
         compose.activityRule.scenario.recreate()
         compose.onNodeWithTag("composer-input").assertTextContains("新会话的首条消息")
         // The recreated page names the workspace's model, and lets the chip be pressed, once it is connected again: until then the
         // chip says "Model" and the box "Reconnect to send" (A15 F-20: pressed at once, 3 of 5 API 36 runs found nothing to press).
-        compose.waitUntil(15000) { compose.onAllNodes(hasText("fixture-model") and hasClickAction() and isEnabled()).fetchSemanticsNodes().isNotEmpty() }
-        appClick("fixture-model"); awaitText("Automatic")
+        compose.waitUntil(15000) { compose.onAllNodes(hasTestTag("composer-model") and hasClickAction() and isEnabled()).fetchSemanticsNodes().isNotEmpty() }
+        modelChip(); awaitText("Automatic")
         compose.onAllNodesWithText("Automatic").onLast().performScrollTo().performClick()
         compose.onNodeWithText("Close").performClick()
         compose.waitUntil(10000) { compose.onNodeWithTag("composer-send").fetchSemanticsNode().config.getOrNull(SemanticsProperties.Disabled)==null }
@@ -499,8 +507,8 @@ class ComposerDeviceTest {
             val below=all.drop(heading+1).filter { it.config.contains(SemanticsActions.OnClick) }.map { it.id }.toSet()
             return compose.onAllNodesWithText(label).fetchSemanticsNodes().withIndex().filter { it.value.id in below }.map { it.index }
         }
-        fun choose(label:String, current:String="fixture-model") {
-            appClick(current); compose.waitUntil(15000) { inSection(label).isNotEmpty() }
+        fun choose(label:String) {
+            modelChip(); compose.waitUntil(15000) { inSection(label).isNotEmpty() }
             compose.onAllNodesWithText(label)[inSection(label).single()].performScrollTo().performClick()
             compose.onNodeWithText("Close").performClick()
         }
@@ -517,8 +525,8 @@ class ComposerDeviceTest {
         compose.waitUntil(15000) { compose.onAllNodesWithTag("engine:claude").fetchSemanticsNodes().isNotEmpty() }
         compose.onNodeWithTag("engine:claude").performClick(); awaitEngine("Claude Code")
         quota("Primary: 11%")
-        choose("Claude account","claude-model"); quota("No quota reported for this account.")
-        choose("Automatic","claude-model"); clickSendWhenEnabled()
+        choose("Claude account"); quota("No quota reported for this account.")
+        choose("Automatic"); clickSendWhenEnabled()
         awaitCreatedSession()
         val request=stats()["creations"]!!.jsonArray.single().jsonObject
         assertEquals("claude",request["engine"]!!.jsonPrimitive.content)
@@ -590,7 +598,7 @@ class ComposerDeviceTest {
               {"engine":"claude","installed":true,"auth":"yes","accounts":[{"id":"default","name":"Default","auth":"yes"},{"id":"abcd1234","name":"Claude account","auth":"yes"}]}]},
             "providers":[{"slug":"custom-codex","label":"Custom account","runtime":"codex","models":[{"value":"custom-model","label":"Custom model"}]},
               {"slug":"deepseek","label":"DeepSeek","runtime":"claude","presetSlug":"deepseek","runsOnOpenCode":true,"models":[{"value":"deepseek-chat","label":"DeepSeek Chat"}]}]}""")
-        appClick("fixture-model"); compose.waitUntil(15000) { compose.onAllNodesWithTag("composer-engine-title").fetchSemanticsNodes().isNotEmpty() }
+        modelChip(); compose.waitUntil(15000) { compose.onAllNodesWithTag("composer-engine-title").fetchSemanticsNodes().isNotEmpty() }
         compose.onNodeWithTag("composer-engine-title").assertTextEquals("Codex")
         awaitText("Switches to soonest reset")
         compose.onNodeWithContentDescription("Automatic: starts on the Codex account whose quota resets soonest, and switches when it hits its limit").assertExists()
@@ -790,7 +798,7 @@ class ComposerDeviceTest {
     /** A07-8: a Retry pressed after picking a provider in the composer re-sends on it. */
     @Test fun a07cRetryCarriesTheProviderPick() = journey("a07c-retry-provider") {
         login("""{"status":"FAILED"}""")
-        appClick("fixture-model"); awaitText("Custom account"); appClick("Custom account")
+        modelChip(); awaitText("Custom account"); appClick("Custom account")
         // What the pick will do, and when (A07-19 (a)): the session has ended, so its next message.
         awaitText("Your next message uses Custom account.")
         compose.onNodeWithText("Close").performClick()
@@ -834,6 +842,10 @@ class ComposerDeviceTest {
     }
     /** The usage sheet the toolbar's ring opens goes with the system back, as a bottom sheet does. */
     private fun closeSheet() { InstrumentationRegistry.getInstrumentation().sendKeyDownUpSync(android.view.KeyEvent.KEYCODE_BACK); compose.waitForIdle() }
+    /** The composer's model chip, by its tag: it reads the model's id until the catalogue is in, then the catalogue's name. */
+    private fun modelChip() {
+        compose.onNode(hasTestTag("composer-model") and hasClickAction()).performSemanticsAction(SemanticsActions.OnClick) { assertTrue(it()) }
+    }
     private fun appClick(label:String) {
         compose.onNode((hasText(label) or hasContentDescription(label)) and hasClickAction()).performSemanticsAction(SemanticsActions.OnClick) { assertTrue(it()) }
     }

@@ -464,9 +464,11 @@ private fun OrbitShell(auth: AuthViewModel, app: OrbitApplication, incoming: Pai
                         }
                     }, actions = {
                         PageBar.Actions(route, this)
-                        if (navigation.canGoBack) IconButton(onClick = { scope.launch { focus.clearFocus(); drawer.open() } }) { NeedsYouMenuIcon(app, "Open navigation") }
+                        // A workspace's new session page has back alone in its bar, as iOS's draft does.
+                        val draftPage = route.destination == Destination.DRAFT && route.workspaceId != null
+                        if (navigation.canGoBack && !draftPage) IconButton(onClick = { scope.launch { focus.clearFocus(); drawer.open() } }) { NeedsYouMenuIcon(app, "Open navigation") }
                         // iOS: a session list is refreshed by pulling it.
-                        if (route.destination != Destination.WORKSPACES && route.destination != Destination.WORKSPACE && route.destination != Destination.FOLDER)
+                        if (route.destination != Destination.WORKSPACES && route.destination != Destination.WORKSPACE && route.destination != Destination.FOLDER && !draftPage)
                             IconButton(onClick = { app.realtime.refreshDirectory() }) { Icon(painterResource(R.drawable.ic_refresh), "Refresh directory") }
                     })
             }) { padding ->
