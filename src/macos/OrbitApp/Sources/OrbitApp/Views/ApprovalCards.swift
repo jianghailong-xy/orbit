@@ -216,18 +216,12 @@ struct ToolApprovalCard: View {
         guard Approvals.rememberOffered(runtime: console.engine) else { return [] }
         return approval.input.map { Approvals.rememberRules(toolName: approval.toolName ?? "", input: $0) } ?? []
     }
-    /// A shell line is shown as the command itself — never the model's prose `description`, since
-    /// what runs is what you are agreeing to — in the transcript's own `$` block, so the tool row
-    /// above and this card render one call the same way.
-    private var command: String? { nonEmpty(approval.input?["command"]?.stringValue) }
-    /// Otherwise: the thing the call acts on. Only `file_path` was ever shown, so approving a fetch
-    /// or a search on the phone showed the tool's name and nothing else — you were agreeing to a
-    /// call you couldn't see (web prints the whole input as JSON).
-    private var subject: String? {
-        for key in ["file_path", "notebook_path", "url", "pattern", "path"] {
-            if let value = nonEmpty(approval.input?[key]?.stringValue) { return value }
-        }
-        return nil
+    /// A plain tool call, read as the call it is: the question by tool, the description once, then
+    /// the command, the file and its change, the URL — or the fields, with the raw input one press
+    /// away (docs/mocks/tool-call-card; web's `ToolCallBody`).
+    private var toolCall: ToolCallPreview {
+        ToolCallPreview.make(toolName: approval.toolName, input: approval.input,
+                             translation: approval.translation)
     }
 
     /// Orbit's own asks carry a server-computed preview of what would happen. Without rendering it
@@ -624,19 +618,12 @@ struct ToolApprovalCard: View {
             }
             .frame(maxWidth: .infinity, alignment: .leading)
         } else {
-            ApprovalHeader(symbol: "hand.raised.fill", title: "Approve tool call",
+            ApprovalHeader(symbol: "hand.raised.fill", title: toolCall.heading,
                            tone: .orange, badge: approval.toolName ?? "Tool")
             if let raw = approval.input.flatMap({ Approvals.workspaceWriteRawInput(toolName: approval.toolName ?? "", from: $0) }) {
                 workspaceWriteBlock(raw)
-            } else if let command {
-                ToolBodyView(kind: .command(command))
-            } else if let subject {
-                Text(subject)
-                    .font(.orbitMono).foregroundStyle(.secondary)
-                    .lineLimit(3).truncationMode(.middle)   // a path keeps its root AND its filename
-                    .frame(maxWidth: .infinity, alignment: .leading)
-            } else if let raw = approval.input.flatMap(Approvals.rawInput) {
-                workspaceWriteBlock(raw)
+            } else {
+                ToolCallBodyView(preview: toolCall)
             }
         }
     }
@@ -934,7 +921,8 @@ struct QuestionCard: View {
         Button {
             dismissReview()
             console.startChatReply(approvalID: approval.id,
-                                   question: Approvals.chatReplyLabel(questions))
+                                   question: Approvals.chatReplyLabel(questions),
+                                   about: Approvals.chatReplyContext(questions))
         } label: {
             Label("Chat about this", systemImage: "bubble.left.and.bubble.right")
                 .approvalActionLabel()
@@ -1452,6 +1440,103 @@ private struct EvidenceDecisionFacts: View {
                     .frame(maxWidth: .infinity, alignment: .leading)
                 }
             }
+        }
+    }
+}
+
+/// The plain tool-call card's body (`ToolCallPreview`): one description line, the call in the
+/// transcript's own blocks — the `$` command, the diff — folded at 12 lines, and the settings that
+/// change the risk as chips under it. Web parity: `ToolCallBody`.
+private struct ToolCallBodyView: View {
+    let preview: ToolCallPreview
+    @State private var rawOpen = false
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 6) {
+            if let description = preview.description {
+                // The owner's language first, the agent's own words after it in grey — once each.
+                (Text(description).foregroundColor(.primary)
+                    + Text(preview.originalDescription.map { "  \($0)" } ?? "").foregroundColor(.secondary))
+                    .font(.orbitProse)
+                    .textSelection(.enabled)
+                    .fixedSize(horizontal: false, vertical: true)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+            }
+            content
+            if !preview.chips.isEmpty {
+                FlowLayout(spacing: 6) {
+                    ForEach(preview.chips) { chip in
+                        Text(chip.label)
+                            .font(.orbitMeta).foregroundStyle(chip.warn ? Color.orange : Color.secondary)
+                            .padding(.horizontal, 6).padding(.vertical, 2)
+                            .background((chip.warn ? Color.orange : Color.primary).opacity(chip.warn ? 0.16 : 0.07),
+                                        in: Capsule())
+                    }
+                }
+                .frame(maxWidth: .infinity, alignment: .leading)
+            }
+        }
+        .frame(maxWidth: .infinity, alignment: .leading)
+    }
+
+    @ViewBuilder private var content: some View {
+        switch preview.body {
+        case .command(let command):
+            ToolBodyView(kind: .command(command), foldLines: ToolCallPreview.foldLines)
+        case .edit(let path, let hunks):
+            pathLine(path)
+            if !hunks.isEmpty { ToolBodyView(kind: .diff(hunks)) }
+        case .write(let path, let content):
+            pathLine(path)
+            if !content.isEmpty { ToolBodyView(kind: .code(content), foldLines: ToolCallPreview.foldLines) }
+        case .path(let path):
+            pathLine(path)
+        case .line(let line):
+            Text(line).font(.orbitMono)
+                .textSelection(.enabled)
+                .fixedSize(horizontal: false, vertical: true)
+                .frame(maxWidth: .infinity, alignment: .leading)
+        case .fields(let fields, let raw):
+            ForEach(fields) { field in
+                if field.block {
+                    VStack(alignment: .leading, spacing: 2) {
+                        Text(field.key).font(.orbitLabel).foregroundStyle(.secondary)
+                        CollapsibleMono(text: field.value, foldLines: ToolCallPreview.foldLines)
+                    }
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                } else {
+                    HStack(alignment: .firstTextBaseline, spacing: 12) {
+                        Text(field.key).font(.orbitLabel).foregroundStyle(.secondary)
+                        Text(field.value).font(.orbitMono)
+                            .textSelection(.enabled)
+                            .fixedSize(horizontal: false, vertical: true)
+                            .frame(maxWidth: .infinity, alignment: .leading)
+                    }
+                }
+            }
+            DisclosureToggle(open: rawOpen,
+                             label: rawOpen ? ToolCallPreview.hideRawInput : ToolCallPreview.showRawInput) {
+                rawOpen.toggle()
+            }
+            if rawOpen {
+                Text(raw).font(.orbitMono).foregroundStyle(.secondary)
+                    .textSelection(.enabled)
+                    .fixedSize(horizontal: false, vertical: true)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+            }
+        }
+    }
+
+    /// The path whole — a yes to a file is a yes to that file — its folder in grey, its name in ink.
+    @ViewBuilder private func pathLine(_ path: String) -> some View {
+        let shown = ToolCallPreview.relPath(path)
+        if !shown.isEmpty {
+            let cut = shown.lastIndex(of: "/").map { shown.index(after: $0) } ?? shown.startIndex
+            (Text(shown[..<cut]).foregroundColor(.secondary) + Text(shown[cut...]).foregroundColor(.primary))
+                .font(.orbitMono)
+                .textSelection(.enabled)
+                .fixedSize(horizontal: false, vertical: true)
+                .frame(maxWidth: .infinity, alignment: .leading)
         }
     }
 }
@@ -4353,8 +4438,8 @@ private struct CoordinatorQuestionCardView: View {
                 .background(Color.blue.opacity(0.08),
                             in: RoundedRectangle(cornerRadius: ApprovalMetrics.rowRadius))
             // Frame 4, mark B: the owner's words could not be translated, so nothing was sent.
-            if console.answersRefusedUntranslated.contains(row.itemId) {
-                TranslationFootView(parts: OwnerCardTranslations.refusedFoot) { action in
+            if let refusedFoot = console.answersRefusedUntranslated[row.itemId] {
+                TranslationFootView(parts: refusedFoot) { action in
                     if let original = row.question {
                         send(row, original, sendAsWritten: action == .sendAsWritten)
                     }

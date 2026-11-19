@@ -905,7 +905,7 @@ describe('DAG change approval', () => {
     expect(html).toContain('No task changes state');
   });
 
-  it('still renders an ordinary tool approval as the raw input', () => {
+  it('renders an ordinary tool approval as the call itself', () => {
     const html = renderToStaticMarkup(
       <ApprovalPanel
         approval={{ id: 'b1', toolName: 'Bash', input: { command: 'ls -la' } } as ApprovalInfo}
@@ -913,7 +913,8 @@ describe('DAG change approval', () => {
       />,
     );
 
-    expect(html).toContain('Approve tool call: Bash');
+    expect(html).toContain('Run a command?');
+    expect(html).toContain('approval-tool-chip');
     expect(html).toContain('ls -la');
   });
 });

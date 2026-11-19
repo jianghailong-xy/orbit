@@ -15,11 +15,16 @@ public struct PromptOptimizationRequest: Codable, Equatable, Sendable {
     public let sessionId: String?
     public let workspaceId: String?
     public let projectId: String?
-    public init(draft: String, sessionId: String? = nil, workspaceId: String? = nil, projectId: String? = nil) {
+    /// Set while the draft answers a card through its "Chat about this": what it answers, as the card
+    /// shows it. The optimizer keeps the draft a reply to it.
+    public let replyingTo: String?
+    public init(draft: String, sessionId: String? = nil, workspaceId: String? = nil, projectId: String? = nil,
+                replyingTo: String? = nil) {
         self.draft = draft
         self.sessionId = sessionId
         self.workspaceId = workspaceId
         self.projectId = projectId
+        self.replyingTo = replyingTo
     }
 }
 

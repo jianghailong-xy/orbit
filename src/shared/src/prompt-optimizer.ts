@@ -37,7 +37,9 @@ import type { TranslationLanguage } from './translation';
  *  The server reads only what it already holds: the session's recap, its last turns (fitted to the
  *  recap's input budget), the workspace name, the Orbit project's goal and acceptance criteria, and
  *  up to three wiki entries the wiki search finds for the draft. `contextUsed` lists exactly the
- *  sources that contributed, which the card draws as "Used: …" chips.
+ *  sources that contributed, which the card draws as "Used: …" chips. A draft answering a card also
+ *  carries what it answers (`replyingTo`), which the client holds and the server does not; it is
+ *  not one of the chips, since the card it came from is on screen.
  *
  * LANGUAGE (D2 A)
  * ===============
@@ -74,7 +76,15 @@ export interface PromptOptimizationRequest {
   sessionId?: string;
   workspaceId?: string;
   projectId?: string;
+  /** Set while the draft answers a card through its "Chat about this": what it answers, as the card
+   *  shows it — the agent's question with its options, or the card's subject and the facts it carries.
+   *  The optimizer keeps the draft a reply to it. The server reads at most
+   *  PROMPT_OPTIMIZER_MAX_REPLYING_TO_CHARS of it. */
+  replyingTo?: string;
 }
+
+/** How much of `replyingTo` the server reads; the rest is dropped, not refused. */
+export const PROMPT_OPTIMIZER_MAX_REPLYING_TO_CHARS = 4_000;
 
 /** One run of the optimized prompt. `added` marks text drawn from context, which the card tints. */
 export interface PromptOptimizationSegment {

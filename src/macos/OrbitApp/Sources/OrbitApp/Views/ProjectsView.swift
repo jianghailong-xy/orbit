@@ -2950,7 +2950,7 @@ private struct ProjectDoneSheet: View {
                 error = refused
                 return false
             }
-            if store.doneDeclineRefusedUntranslated { return false }
+            if store.doneDeclineRefusedUntranslated != nil { return false }
             dismiss()
             return true
         }

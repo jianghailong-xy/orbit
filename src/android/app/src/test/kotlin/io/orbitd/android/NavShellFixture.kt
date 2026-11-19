@@ -50,6 +50,7 @@ internal object NavShell {
     /** More rows than the two sessions, by view, as [row] spells them; the account's folders and tags; a read of the workspaces that fails. */
     @Volatile var extra: Map<String, List<String>> = emptyMap()
     @Volatile var scheduled: Map<String, List<String>> = emptyMap()
+    @Volatile var scheduleHistory = false
     @Volatile var folders = "[]"
     @Volatile var tags = "[]"
     @Volatile var failWorkspaces: Int? = null
@@ -60,7 +61,7 @@ internal object NavShell {
         // An earlier test's held request is dropped, never answered: answered now, it would write into this test's server state
         // and post its toast here.
         holdDelete = null; holdOpen = null; holdDeletes.clear()
-        holdScope = null; scopeStatus = null; extra = emptyMap(); scheduled = emptyMap()
+        holdScope = null; scopeStatus = null; extra = emptyMap(); scheduled = emptyMap(); scheduleHistory = false
         folders = "[]"; tags = "[]"; failWorkspaces = null
     }
 
@@ -128,6 +129,11 @@ internal object NavShell {
             path == "session-folders" -> ok(folders)
             path == "session-tags" -> ok(tags)
             path == "runners" -> ok("""[{"id":"r1","name":"Fixture runner","online":true}]""")
+            path == "schedules" && scheduleHistory -> ok("""{"schedules":[$schedule],"runs":[]}""")
+            path == "schedules/fixture-schedule" && scheduleHistory -> ok("""{"schedule":$schedule,"recentRuns":[{
+                "id":"fixture-run","scheduleId":"fixture-schedule","plannedAt":"2026-10-09T01:00:00Z",
+                "state":"CHANGED","sessionId":"$RUN","summary":"Found a change."}]}""")
+            path == "schedules/drafts" && scheduleHistory -> ok("""{"drafts":[]}""")
             path == "sessions/search" -> ok("""{"q":"Review","contentSearched":true,"total":1,"hits":[{"id":"$SESSION","title":"Found by search","status":"RUNNING"}]}""")
             path == "sessions" && ("scheduled" to "1") in api.query -> {
                 val query = api.query.toMap()
@@ -168,6 +174,10 @@ internal object NavShell {
             else -> ok("{}")
         }
     }
+
+    private val schedule get() = """{"id":"fixture-schedule","title":"Daily check","rule":{"kind":"DAILY","time":"10:00"},
+        "timezone":"UTC","workspaceId":"$BETA","workspaceName":"Beta","state":"ACTIVE",
+        "nextDueAt":"${java.time.Instant.now().plusSeconds(600)}"}"""
 
     /** The streams open and stay quiet: the account is connected, so writes are offered. */
     val events = object : EventTransport {

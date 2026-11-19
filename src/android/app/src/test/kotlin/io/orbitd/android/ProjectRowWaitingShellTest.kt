@@ -129,7 +129,7 @@ class ProjectRowWaitingShellTest {
         shot(name)
         val list = bounds(compose.onNodeWithTag("transcript-list"))
         val head = commandHead().single()
-        val title = bounds(compose.onNodeWithText("Bash", useUnmergedTree = true))
+        val title = bounds(compose.onNodeWithText("Run a command?", useUnmergedTree = true))
         val header = bounds(compose.onNodeWithText("From Orbit", useUnmergedTree = true))
         assertTrue("the card's title is inside the transcript: $title in $list", title.top >= list.top && title.bottom <= list.bottom)
         assertTrue("its header too: $header in $list", header.top >= list.top && header.bottom <= list.bottom)
@@ -163,7 +163,7 @@ class ProjectRowWaitingShellTest {
 
     /** Where the command's own text is — not a button's label that quotes it. */
     private fun commandHead(): List<Rect> = compose.onAllNodes(SemanticsMatcher("starts with the card's first line") { node ->
-        node.config.getOrNull(SemanticsProperties.Text)?.firstOrNull()?.text?.startsWith(headLine) == true
+        node.config.getOrNull(SemanticsProperties.Text)?.firstOrNull()?.text?.removePrefix("$ ")?.startsWith(headLine) == true
     }, useUnmergedTree = true).fetchSemanticsNodes().map { it.boundsInRoot }
     /** Whether the transcript is scrolled to its end: its scroll range has nowhere further to go. */
     private fun atTheEnd(): Boolean {

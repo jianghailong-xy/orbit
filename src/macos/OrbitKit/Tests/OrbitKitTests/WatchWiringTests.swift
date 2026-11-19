@@ -137,7 +137,7 @@ final class WatchWiringTests: XCTestCase {
 
     func testAWatchRouteOpensTheWatchAndEventsNudgeTheList() throws {
         let app = try source("AppModel.swift")
-        let route = try slice(app, from: "func route(to route: Route) {", to: "private func openSession(")
+        let route = try slice(app, from: "func route(to route: Route,", to: "private func openSession(")
         XCTAssertTrue(route.contains("case .watch(let id):"))
         XCTAssertTrue(route.contains("selectedWatchID"))
         let apply = try slice(app, from: "private func apply(_ ev: ControlEvent) {", to: "private func mergeSessionSummary(")

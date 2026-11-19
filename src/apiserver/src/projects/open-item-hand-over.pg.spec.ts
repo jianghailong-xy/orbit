@@ -15,6 +15,7 @@ import { prismaClientFor } from '../prisma/prisma-client';
 import { PrismaService } from '../prisma/prisma.service';
 import { replyTranslationsSettled } from '../sessions/reply-translation';
 import { SessionsService } from '../sessions/sessions.service';
+import { resetTranslationBreaker } from '../sessions/translation';
 import {
   OPEN_ITEM_HAND_OVER_NOTE_REQUIRED,
   OPEN_ITEM_HAND_OVER_NOTE_TOO_LONG,
@@ -354,10 +355,12 @@ test('a handed-over item\'s note is translated after hand-over, stored failed on
     await t.test('a failed translation is stored as failed and the note served as written', async () => {
       asked.length = 0;
       failing = true;
+      resetTranslationBreaker();
       const id = await item(h.db, w);
       await handOver(id, note);
       await settle();
       failing = false;
+      resetTranslationBreaker();
       assert.deepEqual(await stored(id), { lang: 'zh-Hans', failed: true });
       const row = await listed(id);
       assert.deepEqual(row.translation, { lang: 'zh-Hans', failed: true });

@@ -100,6 +100,8 @@ final class AgentsModel {
     /// The app's Open-list refresh (`AppModel.loadSessions`), answering the list it adopted — nil
     /// when that fetch failed. An Open list loads through it, so the app fetches that list once.
     @ObservationIgnored var refreshOpen: (@MainActor () async -> [Session]?)?
+    /// Told when the server has answered the workspace list: the share picker's snapshot names them.
+    @ObservationIgnored var onWorkspacesLoaded: (@MainActor () -> Void)?
 
     private let api: APIClient
 
@@ -323,6 +325,7 @@ final class AgentsModel {
         do {
             assignIfChanged(\.items, try await api.agents())
             workspacesAnswered = true
+            onWorkspacesLoaded?()
             await refreshRunnerSnapshot()
             // Also when a refresh already on the wire took that call: the workspaces just changed.
             updateMachinesToSetUp()

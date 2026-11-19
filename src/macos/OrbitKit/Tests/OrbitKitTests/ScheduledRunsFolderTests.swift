@@ -46,6 +46,13 @@ final class ScheduledRunsFolderTests: XCTestCase {
         XCTAssertEqual(idle?.running, false)
     }
 
+    func testRunLinkUsesItsWorkspaceAndLifecycleScope() throws {
+        let json = #"{"id":"run","status":"SUCCEEDED","runSource":"SCHEDULE","agentId":"w1","agent":{"id":"w2","name":"Workspace"},"lifecycleState":"COMPLETED"}"#
+        let run = try JSONDecoder().decode(Session.self, from: Data(json.utf8))
+        XCTAssertEqual(SessionFolderAddress.scheduledRuns(for: run), .scheduledRuns(agentID: "w2", view: .completed))
+        XCTAssertEqual(SessionFolderAddress.scheduledRuns(for: session("open")), .scheduledRuns(agentID: "w1", view: .open))
+    }
+
     func testBackFromARunReturnsToItsFolderAndScope() {
         let folder = SessionFolderAddress.scheduledRuns(agentID: "w1", view: .completed)
         var nav = NavState(section: .agents)

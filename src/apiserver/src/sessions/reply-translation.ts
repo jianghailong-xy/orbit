@@ -11,11 +11,12 @@ import {
   type TranslatedQuestion,
   type TranslatedTaskBody,
   type TranslationEventPayload,
+  type TranslationFailedBody,
 } from '@orbit/shared';
 import { AsyncWorkQueue } from '../common/async-work-queue';
 import { cardTranslationSettled } from './card-translation-wait';
 import { translate, TranslationFailed } from './translation';
-import type { TranslationLanguages } from './turn-translation';
+import { logOwnerTranslationFailure, type TranslationLanguages } from './turn-translation';
 
 /**
  * Settings › Translation, what the agent says (task A2, decisions 2A and 3A; wire shapes in @orbit/shared
@@ -363,12 +364,22 @@ export async function translateCardNow(
 
 // ── answers ────────────────────────────────────────────────────────────────────────────────────────
 
-/** The refusal of a decision whose words could not be translated: nothing was recorded (1A). */
-export function decisionNotTranslated(): UnprocessableEntityException {
-  return new UnprocessableEntityException({
+/** The refusal of a decision whose words could not be translated: nothing was recorded (1A). Says why
+ *  (TranslationFailedBody): the same `failureReason` and `httpStatus` a held message's FAILED translation carries. */
+export function decisionNotTranslated(error: TranslationFailed): UnprocessableEntityException {
+  const body: TranslationFailedBody = {
     code: TRANSLATION_FAILED_CODE,
     message: "Couldn't translate, so it wasn't sent.",
-  });
+    failureReason: error.reason,
+    ...(error.reason === 'HTTP' && error.httpStatus != null ? { httpStatus: error.httpStatus } : {}),
+  };
+  return new UnprocessableEntityException(body);
+}
+
+/** Where the owner's words came in, for the failure's log line (logOwnerTranslationFailure). */
+export interface OwnerWordsDoor {
+  door: string;
+  sessionId?: string | null;
 }
 
 /**
@@ -382,12 +393,16 @@ export async function ownerWordsForAgent(
   text: string | null | undefined,
   langs: TranslationLanguages | null,
   sendAsWritten?: boolean,
+  where: OwnerWordsDoor = { door: 'owner-words' },
 ): Promise<OwnerWordsTranslation | null> {
   if (!langs || sendAsWritten === true || !text?.trim()) return null;
   try {
     return { lang: langs.agent, text: await translate(text, langs.owner, langs.agent) };
   } catch (error) {
-    if (error instanceof TranslationFailed) throw decisionNotTranslated();
+    if (error instanceof TranslationFailed) {
+      logOwnerTranslationFailure(error, where);
+      throw decisionNotTranslated(error);
+    }
     throw error;
   }
 }
@@ -404,8 +419,10 @@ export async function agentDecision(
   translation: ApprovalTranslation | null | undefined,
   dto: { message?: string; answers?: QuestionAnswers; sendAsWritten?: boolean },
   langs: TranslationLanguages | null,
+  where: OwnerWordsDoor = { door: 'approval-decision' },
 ): Promise<{ message?: string; answers?: QuestionAnswers }> {
-  const toAgent = async (text: string): Promise<string> => (await ownerWordsForAgent(text, langs, dto.sendAsWritten))?.text ?? text;
+  const toAgent = async (text: string): Promise<string> =>
+    (await ownerWordsForAgent(text, langs, dto.sendAsWritten, where))?.text ?? text;
   const message = dto.message === undefined ? undefined : await toAgent(dto.message);
   if (!dto.answers || typeof dto.answers !== 'object') return { message, answers: dto.answers };
   const questions = (input as { questions?: CardQuestion[] } | null)?.questions;
