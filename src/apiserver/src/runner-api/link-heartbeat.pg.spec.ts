@@ -19,6 +19,9 @@
  *  13. a draining beat asks for the drain's one push even when quiet, so work queuing behind a drain is told once.
  *  14. the sessions a background job holds slots for (backgroundJobSessionIds) are written by the beat's one statement
  *      and counted by the runners list as running, a session named both ways once; an older runner's beat clears them.
+ *  15. a beat that states what is executing (executing, plan step 1.6) replaces the inferred sets of the sessions it
+ *      names: a job whose end report never arrived is gone; a beat without sets changes nothing; a session of another
+ *      runner, of another process or closed is not written.
  *
  *   bash scripts/run-pg-spec.sh src/apiserver/src/runner-api/link-heartbeat.pg.spec.ts
  *
@@ -893,6 +896,75 @@ test('a link heartbeat answered from runner_presence', { skip: !URL_, concurrenc
     await beat();
     assert.deepEqual(await holders(), []);
     assert.equal(await running(), inTurn, 'a runner that omits the member counts as before');
+    await settle();
+  });
+
+  // ── 15 ─────────────────────────────────────────────────────────────────────────────────────────────────
+  await t.test('15. a beat that states what is executing replaces the inferred sets of its own sessions, and no other', async () => {
+    await settle();
+    type Sets = { jobs: string[]; shells: string[]; subagents: string[]; activity: Record<string, number>; turn: boolean; tuple: string };
+    const sets = async (id: string): Promise<Sets> => (await sql.query(
+      `SELECT "running_bg_jobs" AS jobs, "running_bg_shells" AS shells, "running_subagents" AS subagents,
+              "running_bg_job_activity" AS activity, "engine_turn_active" AS turn, ctid::text || ':' || xmin::text AS tuple
+         FROM "session" WHERE "id" = $1`, [id])).rows[0];
+    const seed = (id: string) => sql.query(
+      `UPDATE "session" SET "running_bg_jobs" = '{bgj_lost,bgj_live}', "running_bg_shells" = '{toolu_shell,bgj_lost,bgj_live}',
+              "running_bg_job_activity" = '{"bgj_lost": 1000, "bgj_live": 2000}', "running_subagents" = '{toolu_agent}',
+              "engine_turn_active" = true
+        WHERE "id" = $1`, [id]);
+    const seeded = { jobs: ['bgj_lost', 'bgj_live'], shells: ['toolu_shell', 'bgj_lost', 'bgj_live'], subagents: ['toolu_agent'],
+      activity: { bgj_lost: 1000, bgj_live: 2000 }, turn: true };
+    const without = ({ tuple: _tuple, ...rest }: Sets) => rest;
+    const lost = await session(RunStatus.AWAITING_INPUT);
+    await seed(lost);
+
+    // An older runner's beat carries no sets: today's inference stands, and the beat costs what it cost.
+    const older = await beat();
+    assert.equal(older.statements.length, 1, older.statements.join('\n---\n'));
+    assert.deepEqual(without(await sets(lost)), seeded, 'a beat without sets changes nothing');
+
+    // bgj_lost ended and its end report never arrived; the runner states what it still runs.
+    const stating = await beat({
+      executing: [{ sessionId: lost.toUpperCase(), engineTurnActive: false, jobs: ['bgj_live'], shells: ['bgj_live', 'toolu_shell'], subagents: [] }],
+    });
+    assert.equal(isFull(stating.answer), false, 'nothing a beat delivers depends on the sets');
+    const after = await sets(lost);
+    assert.deepEqual(without(after), {
+      jobs: ['bgj_live'], shells: ['toolu_shell', 'bgj_live'], subagents: [], activity: { bgj_live: 2000 }, turn: false,
+    }, 'the lost job is gone from every set; the job that stays keeps its freshness and its place');
+
+    // The same statement again moves no row.
+    await beat({ executing: [{ sessionId: lost, engineTurnActive: false, jobs: ['bgj_live'], shells: ['toolu_shell', 'bgj_live'], subagents: [] }] });
+    assert.equal((await sets(lost)).tuple, after.tuple, 'a beat that states the stored sets writes nothing');
+
+    // A set an entry leaves out is not stated; a new id goes in after the ones that stay.
+    await seed(lost);
+    await beat({ executing: [{ sessionId: lost, jobs: ['bgj_live', 'bgj_new'] }] });
+    assert.deepEqual(without(await sets(lost)), { ...seeded, jobs: ['bgj_live', 'bgj_new'], activity: { bgj_live: 2000 } });
+
+    // A session assigned to another runner of the same account, one leased to another process, and a closed one are
+    // not written, whatever the beat says of them.
+    const otherRunner = randomUUID();
+    await prisma.runner.create({ data: { id: otherRunner, ownerId, name: 'laptop', tokenHash: sha256(randomUUID()), status: 'ONLINE' } });
+    const elsewhere = await session(RunStatus.AWAITING_INPUT, { assignedRunnerId: otherRunner });
+    const otherProcess = await session(RunStatus.AWAITING_INPUT, { inboxLeaseOwner: randomUUID() });
+    const closed = await session(RunStatus.SUCCEEDED);
+    for (const id of [elsewhere, otherProcess, closed]) await seed(id);
+    await beat({ executing: [elsewhere, otherProcess, closed].map((sessionId) => ({ sessionId, engineTurnActive: false, jobs: [], shells: [], subagents: [] })) });
+    for (const id of [elsewhere, otherProcess, closed]) {
+      assert.deepEqual(without(await sets(id)), seeded, `a beat cannot write session ${id}: another runner's, another process's, or closed`);
+    }
+
+    // Over HTTPS the same body does the same.
+    await seed(lost);
+    await door.heartbeat(
+      (await prisma.runner.findUniqueOrThrow({ where: { id: runnerId } })) as never,
+      { ...body, executing: [{ sessionId: lost, engineTurnActive: false, jobs: [], shells: [], subagents: [] }] },
+      CAPABILITIES, 'claude,codex', 'linux',
+    );
+    assert.deepEqual(without(await sets(lost)), { jobs: [], shells: [], subagents: [], activity: {}, turn: false });
+    for (const id of [lost, elsewhere, otherProcess]) await prisma.session.update({ where: { id }, data: { status: RunStatus.CANCELLED } });
+    for (let i = 0; i < 4 && isFull((await beat()).answer); i += 1);
     await settle();
   });
 
