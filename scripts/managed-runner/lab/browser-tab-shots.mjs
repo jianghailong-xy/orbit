@@ -35,7 +35,12 @@ const step = (what, detail = {}) => {
 // One DevTools command on the runner Chrome's shown page, run by node inside the Pod (Chrome listens on its loopback).
 const DEVTOOLS = `
 const [method, params] = JSON.parse(process.argv[1]);
-const pages = (await (await fetch('http://127.0.0.1:9222/json/list')).json()).filter((t) => t.type === 'page');
+// Chrome may still be starting: the viewer goes live on x11vnc before its DevTools listen.
+let pages = [];
+for (let i = 0; i < 120 && !pages.length; i++) {
+  try { pages = (await (await fetch('http://127.0.0.1:9222/json/list')).json()).filter((t) => t.type === 'page'); }
+  catch { await new Promise((r) => setTimeout(r, 500)); }
+}
 if (!pages.length) throw new Error('no page');
 const ws = new WebSocket(pages[0].webSocketDebuggerUrl);
 await new Promise((r, j) => { ws.onopen = r; ws.onerror = j; });
@@ -46,7 +51,7 @@ console.log(JSON.stringify(answer));`;
 function devtools(method, params) {
   const raw = execFileSync(inPod[0], [...inPod.slice(1), 'node', '--input-type=module', '-e', DEVTOOLS, JSON.stringify([method, params])], {
     encoding: 'utf8',
-    timeout: 30_000,
+    timeout: 90_000,
   });
   const answer = JSON.parse(raw.trim().split('\n').pop());
   if (answer.error) throw new Error(`${method}: ${answer.error.message}`);
