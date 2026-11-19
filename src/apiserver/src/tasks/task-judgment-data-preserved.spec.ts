@@ -3157,7 +3157,12 @@ test('the ledger stays append-only, and every later migration is accounted for',
       // or `project_acceptance_*` object nor any of the six preserved triggers/functions is named, and no function,
       // trigger or type is created, replaced or dropped, so it is not another writer of the DONE fence. No INSERT,
       // UPDATE or DELETE: a constant default is a catalog change.
-      '1140_feishu_open_access'],
+      '1140_feishu_open_access',
+      // 1150 adds feishu_app.show_orbit, BOOLEAN NOT NULL with a constant default (catalog-only, no rewrite), for
+      // Show Orbit in Feishu (docs/feishu-bot-design.md §15.2). feishu_app is no preserved relation; no `task`,
+      // `session`, `project` or `project_acceptance_*` object, trigger, function or type is named, created or replaced,
+      // so it is not another writer of the DONE fence. No INSERT, UPDATE or DELETE.
+      '1150_feishu_show_orbit'],
     'a later migration exists; re-read it before trusting the assertions above');
   // Stated rather than described: 0230's fence differs from 0228's by exactly one added lane.
   const later = readFileSync(
