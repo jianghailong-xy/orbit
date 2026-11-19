@@ -2701,6 +2701,9 @@ export interface SubagentCandidateTarget {
   effort: string | null;
   /** Its billing and headroom in a few words, as the Why line says it. */
   note?: string;
+  /** A fallback's own tier, null for an untiered default model; absent on the pick and on decisions before
+   *  p4-every-provider-2. Never on an attempt. */
+  level?: SubagentSize | null;
 }
 
 /** How one attempt of a SubAgent run ended: still running, a usage-limit, capacity or login failure it moved on from,

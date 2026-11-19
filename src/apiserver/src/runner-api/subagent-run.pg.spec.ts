@@ -409,7 +409,7 @@ test('SubAgent runs: the row, the cost roll-up, the refusals and runningSubagent
     assert.equal(decision.model, 'claude-opus-5-5');
     assert.equal(decision.effort, 'high');
     assert.equal(decision.applied, true);
-    assert.equal(decision.policyVersion, 'p4-every-provider-1');
+    assert.equal(decision.policyVersion, 'p4-every-provider-2');
     assert.equal(decision.tierNote, 'Tier L, set by the caller');
     assert.equal(decision.note, 'subscription pool, Bob with 80% quota left');
     assert.deepEqual(decision.reasons, [

@@ -28,7 +28,7 @@ import {
   MinLength,
 } from 'class-validator';
 import { IsPublicId } from '../common/public-id';
-import { MODEL_AT_CAPACITY_ERROR_MARKER, type SubagentRoutingDecision } from '../tasks/model-routing';
+import { MODEL_AT_CAPACITY_ERROR_MARKER, subagentFitLine, type SubagentRoutingDecision } from '../tasks/model-routing';
 import { stripNul } from './strip-nul';
 
 /**
@@ -260,6 +260,11 @@ export function appliedDecision(
   const ranked = fallbackCandidates(route);
   const at = ranked.findIndex((c) => c.engine === runsOn.engine && c.provider === runsOn.provider && c.model === runsOn.model);
   const fallbacks = at >= 0 ? ranked.slice(at + 1) : route.fallbacks;
+  // A candidate further down that runs because the ones before it could not start: say when it is not of the asked tier.
+  const ran = at > 0 ? ranked[at] : null;
+  const fit = ran && route.level && ran.level !== undefined
+    ? subagentFitLine(route.level, { level: ran.level, model: ran.model, provider: ran.provider, engine: ran.engine })
+    : null;
   return {
     ...route,
     engine: runsOn.engine,
@@ -270,6 +275,7 @@ export function appliedDecision(
     reasons: [
       ...route.reasons,
       ...passedOver.map((p) => `Passed over ${p.target.model} on ${p.target.provider}: ${p.reason}`),
+      ...(fit ? [fit] : []),
     ],
     candidates: [
       ...route.candidates,

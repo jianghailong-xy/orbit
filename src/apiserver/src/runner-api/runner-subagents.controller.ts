@@ -310,7 +310,7 @@ export class RunnerSubagentsController {
       if (dto.readonly) decision.readonly = true;
       // A call that asked for a workspace or capabilities and was placed here says why first (§10.1).
       if (workspaceReason) decision.reasons = [workspaceReason, ...decision.reasons];
-      const { note: _note, ...target } = chosen.target;
+      const { note: _note, level: _level, ...target } = chosen.target;
       const row = await tx.subagentRun.create({
         data: {
           ownerId: session.ownerId,
@@ -464,7 +464,7 @@ export class RunnerSubagentsController {
         throw widerModeRefusal(parentMode, dto.permissionMode, childEngine,
           "Remove permissionMode from the SubAgent's definition to run it in this session's mode.");
       }
-      const { note: _note, ...target } = chosen;
+      const { note: _note, level: _level, ...target } = chosen;
       const row = await tx.subagentRun.create({
         data: {
           ownerId: session.ownerId,
@@ -820,7 +820,7 @@ export class RunnerSubagentsController {
             ? `Moved to ${next.model} on ${next.provider} after ${from}'s login failed`
             : `Moved to ${next.model} on ${next.provider} after ${from}'s account hit its limit`;
         const attempt = attempts.length + 1;
-        const { note: _note, ...target } = next;
+        const { note: _note, level: _level, ...target } = next;
         attempts.push({
           ...target, attempt, outcome: 'RUNNING', startedAt: now,
           ...(built.poolMember ? { poolMember: built.poolMember } : {}),
