@@ -19875,6 +19875,20 @@ button.chat-jump-start:hover {
 .np-summary a:hover {
   color: var(--brand-strong);
 }
+/* The draft moved off what its workspace last ran on (board new-session-usable-default ② ③). */
+.np-summary.np-fallback {
+  color: var(--warning);
+}
+/* Nothing on the machine runs the draft (board ④): the way out, under the reason. */
+.np-cant-run {
+  margin-top: 10px;
+  font-size: 12px;
+  color: var(--text-2);
+}
+.np-cant-run a {
+  color: var(--brand);
+  text-decoration: none;
+}
 .np-note {
   margin-top: 9px;
   padding: 4px 10px;
@@ -29273,7 +29287,7 @@ button.agent-progress-agent:hover {
 }
 
 /* The Agents line (SessionAgentsStrip.tsx), in the Background processes tray's shell and rows: the band's
-   words truncate before the title does; opened, Running and Done over the tray's own rows, each a run's name
+   words truncate before the title does; opened, the tray's own rows in one list (running first, no headings), each a run's name
    then its facts. */
 .ag-head {
   flex: none;
@@ -29291,14 +29305,6 @@ button.agent-progress-agent:hover {
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
-}
-.ag-section {
-  flex: none;
-  padding: 4px 2px 0;
-  font-size: 11px;
-  font-weight: 600;
-  text-transform: uppercase;
-  color: var(--text-3);
 }
 .ag-row .ag-title {
   font-family: inherit;

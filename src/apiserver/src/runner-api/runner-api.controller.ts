@@ -240,6 +240,7 @@ import {
 import { normalizeStoredRememberRules, reachesPastOneMcpTool } from '../sessions/remember-rules';
 import {
   APPROVAL_ABANDONED_STATUS,
+  reapApprovalsOfEndedJobs,
   reapApprovalsOfEndedTurns,
   reapApprovalsOfReplacedSupervisor,
   reapApprovalsOfReplacedSupervisors,
@@ -3260,7 +3261,8 @@ export class RunnerApiController {
    * The snapshots this runner's open forked tasks start from (docs/task-fork-from-session-design.md §2.6, SR55): the
    * distinct `fork_sha` of every OPEN or IN_PROGRESS task forked on this runner. The runner deletes each keep-alive ref
    * whose snapshot is not listed, so a task that closed lets its snapshot go. Only to a process that declares
-   * task-fork/v1; undefined otherwise, which deletes nothing. Reads only, through the owner's status index.
+   * task-fork/v1; undefined otherwise, which deletes nothing. Reads only, through `task_fork_snapshot_idx` (1130),
+   * which holds only forked tasks: the owner's status index is no entry when one owner holds nearly every task.
    */
   private async forkSnapshotsOpen(
     ownerId: string,
@@ -9540,8 +9542,12 @@ export class RunnerApiController {
           },
         });
       }
+      // The cards a job that has just ended was reading: nothing is left to take their answer, and the
+      // turn ending — where they were collected before — may be hours off (reapApprovalsOfEndedJobs).
+      const jobCardsCollected = await reapApprovalsOfEndedJobs(tx, sessionId, bgEnded);
       return {
-        session, currentWorkAcknowledged, abandonedApprovals, accountReload, events, durable, alreadyStored: stored.size,
+        session, currentWorkAcknowledged, abandonedApprovals: [...abandonedApprovals, ...jobCardsCollected],
+        accountReload, events, durable, alreadyStored: stored.size,
         restated, seqConflicts, door: link ? 'link' : 'https', engineStarted,
       };
     };

@@ -713,6 +713,30 @@ export function currentEngineChoice(
   return engineLanding(engine, providers, currentProviderChoice(engine, provider, providers, sources));
 }
 
+/** Where a new session goes when nobody picked in this draft and what the workspace last ran on
+ *  (`remembered`, from currentEngineChoice) can't run on this machine (board
+ *  docs/mocks/new-session-usable-default): that engine's own landing, when one of its credentials
+ *  can run (landingOf's order), else the first of the hero's engines that has one. Null while the
+ *  remembered pick can run, and when nothing here can: the hero then says why and the send is held.
+ *  Only a known reason moves it: a credential nobody has checked yet counts as one that runs. Moving
+ *  to another engine, the bigger move, also takes the runner's word that it has that engine's CLI. */
+export function draftFallback(
+  remembered: EngineChoice,
+  engines: readonly EngineChoice[],
+  engineHealth?: readonly RunnerEngineHealth[] | null,
+): { engine: AgentProvider; provider: string } | null {
+  if (!remembered.unavailable) return null;
+  const runs = (choice: EngineChoice | undefined): choice is EngineChoice & { provider: ProviderChoice } =>
+    !!choice?.provider && !choice.unavailable;
+  const installed = (choice: EngineChoice) =>
+    !!engineHealth?.some((health) => health.engine === choice.slug && health.installed);
+  const same = engines.find((choice) => choice.slug === remembered.slug);
+  const to = runs(same)
+    ? same
+    : engines.find((choice) => choice.slug !== remembered.slug && runs(choice) && installed(choice));
+  return to?.provider ? { engine: to.slug, provider: to.provider.slug } : null;
+}
+
 /** The engine a session runs on, as the composer's model menu titles itself: the CLI's own product
  *  name (`Claude Code`, not `Claude`, because a session on a DeepSeek key writes DeepSeek's models
  *  while Claude Code executes them) over that engine's brand mark. Read off the session's own engine,

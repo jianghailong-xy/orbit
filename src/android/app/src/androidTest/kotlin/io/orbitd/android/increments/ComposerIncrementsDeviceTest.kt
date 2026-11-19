@@ -108,7 +108,7 @@ class ComposerIncrementsDeviceTest : IncrementDeviceTest() {
         capture("02-echo-took-over")
     }
 
-    /** A07-16 and A07-21: the empty composer offers the engine's guess with "Double-tap to use" beside it; a double-tap takes it. */
+    /** A07-16 and A07-21: the empty composer offers the engine's guess with "Double-tap" beside it; a double-tap takes it. */
     @Test fun theEmptyComposerOffersTheEnginesGuess() = journey {
         val longGuess = "run the whole instrumentation suite on every API level from 29 to 36 and attach the reports to the release notes"
         events = turnEvents() + event(4, "prompt_suggestion", """{"text":"  ${longGuess} ","source":"engine"}""", turnId = "t-0")
@@ -120,9 +120,9 @@ class ComposerIncrementsDeviceTest : IncrementDeviceTest() {
         compose.onNodeWithTag("composer-suggestion-hint", useUnmergedTree = true).assertIsDisplayed()
         val hint = compose.onNodeWithTag("composer-suggestion-hint", useUnmergedTree = true).fetchSemanticsNode().boundsInRoot
         val field = compose.onNodeWithTag("composer-input").fetchSemanticsNode().boundsInRoot
-        verify("“Double-tap to use” stays inside the field beside a guess too long for it ($hint in $field)",
+        verify("“Double-tap” stays inside the field beside a guess too long for it ($hint in $field)",
             hint.left >= field.left && hint.right <= field.right + 1 && hint.top >= field.top && hint.bottom <= field.bottom + 1 && hint.width > 0)
-        verify("TalkBack does not read the hint's words", !exists(hasText("Double-tap to use"), unmerged = true))
+        verify("TalkBack does not read the hint's words", !exists(hasText("Double-tap"), unmerged = true))
         verify("the draft is empty", draft().isEmpty())
         capture("01-guess-offered")
         compose.onNodeWithTag("composer-input").performTouchInput { doubleClick() }

@@ -12,6 +12,7 @@ import {
   scheduleHeldWaiting,
   scheduleNeedsYou,
   scheduleReportedText,
+  scheduleRowCircle,
   scheduleRowLine,
   scheduleRunCircle,
   scheduleRunLine,
@@ -88,7 +89,7 @@ const names = (groups: ReturnType<typeof scheduleTimeline>) =>
   groups.map((g) => [g.title, g.subtitle, g.items.map((i) => (i.kind === 'DRAFT' ? i.card.title : i.schedule.title))]);
 
 describe('scheduleTimeline', () => {
-  it('lays out board 1/2 ①: Needs you, Today, Tomorrow, Monday, Paused', () => {
+  it('lays out board 1/2 ①: Today, Tomorrow, Monday, Paused — no group of errors (owner 2026-11-19)', () => {
     const sweep = schedule({ title: 'Nightly pg spec sweep', consecutiveFailures: 3, nextDueAt: sh('2025-11-15T02:00') });
     const audit = schedule({ title: 'Weekly dependency audit', state: 'HELD', heldReason: 'AGENT_DISABLED' });
     const docs = schedule({ title: 'Docs link check', nextDueAt: sh('2025-11-15T12:00') });
@@ -105,14 +106,14 @@ describe('scheduleTimeline', () => {
       timezone: TZ,
     });
     expect(names(groups)).toEqual([
-      ['Needs you', '2', ['Nightly pg spec sweep', 'Weekly dependency audit']],
       ['Today', 'Fri, Nov 14', ['Docs link check', 'Release notes draft', 'Deploy health check']],
       ['Tomorrow', 'Sat, Nov 15', ['Nightly pg spec sweep', 'Codex stable check', 'Docs link check']],
       ['Monday', 'Nov 17', ['Weekly cost report']],
-      ['Paused', '1', ['Gateway CSP report digest']],
+      // A held schedule has no next run: it is listed with the paused ones, before them.
+      ['Paused', '2', ['Weekly dependency audit', 'Gateway CSP report digest']],
     ]);
-    expect(groups.map((g) => g.key)).toEqual(['NEEDS_YOU', 'TODAY', 'TOMORROW', 'DAY', 'PAUSED']);
-    expect(groups[1]!.items[0]!.kind).toBe('RUN');
+    expect(groups.map((g) => g.key)).toEqual(['TODAY', 'TOMORROW', 'DAY', 'PAUSED']);
+    expect(groups[0]!.items[0]!.kind).toBe('RUN');
   });
 
   it('splits at local midnight, not at UTC midnight', () => {
@@ -213,7 +214,7 @@ describe('scheduleTimeline', () => {
 
 describe('circles', () => {
   const EXPECTED: Record<ScheduleRunState, [string, string | null, string | null]> = {
-    QUEUED: ['open', null, null],
+    QUEUED: ['open', 'clock', null],
     RUNNING: ['running', null, null],
     AWAITING_APPROVAL: ['held', 'alert', 'Waiting for you'],
     NO_CHANGE: ['done', 'check', 'No change'],
@@ -249,7 +250,26 @@ describe('circles', () => {
     expect(scheduleCircle({ state: 'PAUSED', consecutiveFailures: 0 }).circle).toBe('paused');
     expect(scheduleCircle({ state: 'ENDED', consecutiveFailures: 0 }).circle).toBe('muted');
     expect(scheduleCircle({ state: 'ACTIVE', consecutiveFailures: 0 }, { draft: true }).circle).toBe('draft');
-    expect(scheduleNeedsYou({ state: 'PAUSED', consecutiveFailures: 2 })).toBe(false);
+    expect(scheduleNeedsYou({ id: 's', state: 'PAUSED', consecutiveFailures: 2 })).toBe(false);
+  });
+
+  it('a failing schedule with a run under way waits for that run: no tag, not counted (owner 2026-11-19)', () => {
+    const failing = schedule({ consecutiveFailures: 2, nextDueAt: sh('2025-11-15T18:00') });
+    const held = schedule({ state: 'HELD', heldReason: 'AGENT_DISABLED' });
+    const other = schedule();
+    expect(scheduleNeedsYou(failing)).toBe(true);
+    expect(scheduleRowCircle(failing, []).tag?.text).toBe('Failed 2 in a row');
+    for (const state of ['QUEUED', 'RUNNING', 'AWAITING_APPROVAL'] as const) {
+      const retry = [run(failing, state, sh('2025-11-14T12:27'), { trigger: 'MANUAL' })];
+      expect(scheduleNeedsYou(failing, retry)).toBe(false);
+      expect(scheduleRowCircle(failing, retry)).toEqual({ circle: 'open', mark: null, tag: null });
+    }
+    // An ended run, or another schedule's run under way, leaves the failure standing.
+    expect(scheduleNeedsYou(failing, [run(failing, 'FAILED', sh('2025-11-14T12:27'))])).toBe(true);
+    expect(scheduleNeedsYou(failing, [run(other, 'RUNNING', sh('2025-11-14T12:27'))])).toBe(true);
+    // A hold is not waited out by a run.
+    expect(scheduleNeedsYou(held, [run(held, 'QUEUED', sh('2025-11-14T12:27'))])).toBe(true);
+    expect(scheduleRowCircle(held, []).tag?.text).toBe('Held');
   });
 });
 

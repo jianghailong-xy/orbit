@@ -3148,6 +3148,9 @@ test('the ledger stays append-only, and every later migration is accounted for',
       // DECIDED and REVISED; catalog-only, no row is written, and no preserved relation, trigger, function or DONE
       // fence changes.
       '1110_evidence_undecided_item',
+      // 1130 adds three partial indexes, one on `task` and two on `session`; no row is written, and no preserved
+      // relation, trigger, function or DONE fence changes.
+      '1130_rare_predicate_indexes',
       // 1140 opens the Feishu bot to the app's availability (docs/feishu-bot-design.md §14): `feishu_app` gains
       // access_mode, open_workspace_id (foreign key to `workspace`, ON DELETE SET NULL, with its index),
       // open_permission_mode and four limits, all NOT NULL with constant defaults but the workspace; `feishu_chat_route`

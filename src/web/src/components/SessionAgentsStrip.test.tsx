@@ -173,9 +173,9 @@ describe("SessionAgentsStrip", () => {
     expect(document.querySelector('[role="dialog"]')).toBeNull();
     expect(dialog.textContent).not.toContain("$");
     expect(dialog.textContent).not.toContain("engine");
-    expect(
-      [...dialog.querySelectorAll(".ag-section")].map((s) => s.textContent),
-    ).toEqual(["Running", "Done"]);
+    // One list, the running ones first: no Running / Done headings.
+    expect(dialog.querySelector(".ag-section")).toBeNull();
+    expect(dialog.textContent).not.toContain("Running");
     const rows = [...dialog.querySelectorAll(".ag-row")];
     expect(rows.map((r) => r.querySelector(".ag-title")!.textContent)).toEqual([
       "Build the Mac app",

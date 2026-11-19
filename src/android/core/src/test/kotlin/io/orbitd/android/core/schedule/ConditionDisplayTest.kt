@@ -76,7 +76,7 @@ class ConditionDisplayTest {
 
     // The Scheduled page (board ④)
 
-    @Test fun theConditionGroupSitsAboveTodayAndCantReadIsUnderNeedsYou() {
+    @Test fun theConditionGroupSitsAboveTodayAndCantReadLeadsIt() {
         val daily = ScheduleView.parse(json("""
             {"id":"s-codex","title":"Codex stable check","rule":{"kind":"DAILY","time":"10:00"},"workspaceId":"w-api",
              "workspaceName":"apiserver","nextDueAt":"2026-11-17T06:00:00.000Z"}
@@ -88,11 +88,11 @@ class ConditionDisplayTest {
               "unit":"%","state":"UNKNOWN","lastValue":5}}
         """))!!
         val groups = ScheduleDisplay.timeline(listOf(daily, guardSchedule(), mon), now = now, timezone = zone, waitingTasks = listOf(osdTask()))
-        assertEquals(listOf("Needs you", "Waiting for a condition", "Today"), groups.map { it.title })
-        assertEquals("1", groups[0].subtitle)
-        assertEquals("2", groups[1].subtitle)
-        assertEquals("schedules, then tasks", listOf("schedule-s-guard", "task-t-osd"), groups[1].items.map { it.id })
-        assertEquals(listOf("schedule-s-mon"), groups[0].items.map { it.id })
+        // No Needs you group (owner 2026-11-19): a condition that cannot be read leads Waiting for a condition.
+        assertEquals(listOf("Waiting for a condition", "Today"), groups.map { it.title })
+        assertEquals("3", groups[0].subtitle)
+        assertEquals("can't read first, then schedules, then tasks", listOf("schedule-s-mon", "schedule-s-guard", "task-t-osd"),
+            groups[0].items.map { it.id })
         assertEquals(1, ScheduleDisplay.needsYouCount(listOf(daily, guardSchedule(), mon), listOf(osdTask())))
 
         val cantRead = ScheduleDisplay.scheduleCircle(mon)
@@ -102,7 +102,27 @@ class ConditionDisplayTest {
         assertTrue("a gauge in place of the circle", ConditionDisplay.circle(cantRead = false).gauge)
 
         val taskCantRead = ScheduleDisplay.timeline(emptyList(), now = now, timezone = zone, waitingTasks = listOf(osdTask("UNKNOWN")))
-        assertEquals(listOf("Needs you"), taskCantRead.map { it.title })
+        assertEquals(listOf("Waiting for a condition"), taskCantRead.map { it.title })
+        val both = ScheduleDisplay.timeline(listOf(guardSchedule()), now = now, timezone = zone,
+            waitingTasks = listOf(osdTask(), osdTask("UNKNOWN").copy(id = "t-unknown", title = "Zz unreadable task")))
+        assertEquals("a task that cannot be read leads the readable schedule", listOf("task-t-unknown", "schedule-s-guard", "task-t-osd"),
+            both[0].items.map { it.id })
+    }
+
+    @Test fun aFailingWhenScheduleStaysInTheConditionGroup() {
+        val failing = guardSchedule().copy(consecutiveFailures = 2)
+        val groups = ScheduleDisplay.timeline(listOf(failing), now = now, timezone = zone)
+        assertEquals(listOf("Waiting for a condition"), groups.map { it.title })
+        assertEquals(listOf("schedule-s-guard"), groups[0].items.map { it.id })
+        assertEquals(ScheduleDisplay.Circle.failed, ScheduleDisplay.rowCircle(failing, emptyList()).circle)
+        assertEquals(1, ScheduleDisplay.needsYouCount(listOf(failing)))
+        // A run under way: the plain gauge, and not counted.
+        val runs = listOf(ScheduleRunView(id = "r-1", scheduleId = "s-guard", plannedAt = "2026-11-17T03:40:00.000Z", state = "RUNNING"))
+        val circle = ScheduleDisplay.rowCircle(failing, runs)
+        assertEquals(ScheduleDisplay.Circle.open, circle.circle)
+        assertNull(circle.tag)
+        assertTrue(circle.gauge)
+        assertEquals(0, ScheduleDisplay.needsYouCount(listOf(failing), runs = runs))
     }
 
     @Test fun aRowShowsTheNewestReadingAndItsAge() {

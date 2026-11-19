@@ -24,7 +24,7 @@ const delegateBlockOf = (toolUseId: string): HTMLElement | null =>
  * The composer band's line for the session's Agents (`mcp__orbit__delegate`), between the Tasks card and the
  * branch bar: Apple's `AgentsBandRow` and `AgentsSheet` (docs/mocks/subagent-ios-highlight ③; no cost, as the
  * Apple clients dropped it). Folded, it says what the running one is doing, or names the newest one with how it
- * ended and its time. It opens in place, as Background processes does, to every run, the running ones first. A
+ * ended and its time. It opens in place, as Background processes does, to every run, the running ones first, in one list with no headings. A
  * row folds the list, scrolls the conversation to the run's block and opens it. Absent until the session has
  * started one. Drawn in the Background processes tray's shell (`.bg-tray`) and rows (`.bg-shell`).
  */
@@ -37,8 +37,6 @@ export function SessionAgentsStrip({
   const summary = subagentSessionSummary(runs.values());
   if (!summary) return null;
   const toggle = () => setOpen((o) => !o);
-  const runningRows = summary.rows.filter((run) => run.status === "RUNNING");
-  const endedRows = summary.rows.filter((run) => run.status !== "RUNNING");
   const reveal = (toolUseId: string) => {
     setOpen(false);
     const block = delegateBlockOf(toolUseId);
@@ -120,10 +118,7 @@ export function SessionAgentsStrip({
       </div>
       {open && (
         <div className="bg-tray-list">
-          {runningRows.length > 0 && <div className="ag-section">Running</div>}
-          {runningRows.map(row)}
-          {endedRows.length > 0 && <div className="ag-section">Done</div>}
-          {endedRows.map(row)}
+          {summary.rows.map(row)}
         </div>
       )}
     </div>

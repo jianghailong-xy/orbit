@@ -182,10 +182,11 @@ class ScheduledDeviceTest : IncrementDeviceTest() {
         await("the timeline") { exists(hasTestTag("scheduled-page")) && exists(hasText("Nightly pg spec sweep"), unmerged = true) }
     }
 
-    /** Board 01 ② (+ ① in the drawer): Needs you, Today, Tomorrow, the days, Paused; the phone's one-line grammar; the line at the end. */
+    /** Board 01 ② (+ ① in the drawer): Today, Tomorrow, the days, Paused (no Needs you group, owner 2026-11-19: a failing row is
+     * tagged on its day, a held one leads Paused); the phone's one-line grammar; the line at the end. */
     @Test fun theTimeline() = journey {
         openScheduled()
-        verify("Needs you heads the page", exists(hasText(ScheduleCopy.groups.getValue("NEEDS_YOU")), unmerged = true))
+        verify("there is no Needs you group", !exists(hasText("Needs you"), unmerged = true))
         verify("the failing row says Failed 3 in a row", exists(hasText("Failed 3 in a row"), unmerged = true))
         verify("the held row says why in a few words", exists(hasText("↻ Mondays 09:00 · agent disabled"), unmerged = true))
         verify("the running row says how long", exists(hasText("running 21 min", substring = true), unmerged = true) ||
