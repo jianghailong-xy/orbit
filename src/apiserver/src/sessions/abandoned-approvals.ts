@@ -317,6 +317,30 @@ export async function reapApprovalsOfReturnedCalls(
   return collected.map((row) => row.id);
 }
 
+/**
+ * Collect the cards whose job has just ended. Returns the ids collected.
+ *
+ * The job's own fact, acted on where it is written: a job card's reader is its job, so the turn
+ * ending says nothing about it, and waiting for /turn-complete left a card whose job was killed
+ * PENDING for the rest of the turn — the conversation reading "Waiting for approval" with no card
+ * on any surface (2026-11-19: `bg_kill` at 00:19, the card collected at 00:31). So
+ * `RunnerApiController.events` calls this with the jobs a batch reported terminal.
+ */
+export async function reapApprovalsOfEndedJobs(
+  tx: Prisma.TransactionClient,
+  sessionId: string,
+  jobIds: readonly string[],
+): Promise<string[]> {
+  if (jobIds.length === 0) return [];
+  const collected = await tx.approval.updateManyAndReturn({
+    where: { sessionId, status: 'PENDING', backgroundJobId: { in: [...jobIds] } },
+    data: { status: APPROVAL_ABANDONED_STATUS, message: APPROVAL_ABANDONED_JOB_MESSAGE },
+    select: { id: true },
+  });
+  if (collected.length > 0) await eraseEnvValuesOfCollectedCards(tx, sessionId);
+  return collected.map((row) => row.id);
+}
+
 /** reapApprovalsOfReplacedSupervisor for many sessions taken over at once (the batch takeover), in one statement. */
 export async function reapApprovalsOfReplacedSupervisors(
   tx: Prisma.TransactionClient,
@@ -395,9 +419,9 @@ export function readByRunningSubagent(
  * How many of a session's cards are still being asked, over the two readers above.
  *
  * The count half of that read, as one function so the surfaces that report a number cannot answer it
- * differently: a generating session holds its turn's cards and counts every pending row it has —
- * what this number has always been, and deliberately a superset, because the door re-reads the facts
- * and this is the signal — while a conversation that is NOT generating counts only the cards a
+ * differently: a generating session holds its turn's cards and counts every pending row it has but
+ * the cards of jobs that are gone — deliberately a superset otherwise, because the door re-reads the
+ * facts and this is the signal — while a conversation that is NOT generating counts only the cards a
  * runner-hosted job is still reading, which it can be holding while parked. The session list
  * decides the same total per row (it has the page in hand); this is the shape for a caller that has
  * one session and asks for its number.
@@ -425,8 +449,12 @@ export async function countLiveApprovals(
   if (!generating && session.runningBgShells.length === 0) {
     return session.taskId ? (await visibleQuestions(db, subagentCards)).length : subagentCards.length;
   }
-  const where = { sessionId: session.id, status: 'PENDING',
-    ...(!generating ? { backgroundJobId: { in: [...session.runningBgShells] } } : {}),
+  // A job's card counts only while its job is up, generating or not: its reader is the job, and the
+  // card listing (`SessionsService.stillBeingAsked`) shows it on that fact alone.
+  const where: Prisma.ApprovalWhereInput = { sessionId: session.id, status: 'PENDING',
+    ...(!generating
+      ? { backgroundJobId: { in: [...session.runningBgShells] } }
+      : { OR: [{ backgroundJobId: null }, { backgroundJobId: { in: [...session.runningBgShells] } }] }),
   };
   const count = (await db.approval.count({ where })) + subagentCards.length;
   if (!session.taskId || count === 0) return count;
