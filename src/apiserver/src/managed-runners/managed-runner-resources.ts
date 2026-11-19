@@ -37,7 +37,7 @@ export const GENERATION_ANNOTATION = 'orbit.dev/generation';
 export const PVC_UID_ANNOTATION = 'orbit.dev/pvc-uid';
 
 /** The runner name every managed runner reports, and ORBIT_RUNNER_NAME in its Pod. */
-export const MANAGED_RUNNER_NAME = 'orbit-managed';
+export const MANAGED_RUNNER_NAME = 'Orbit Cloud';
 /**
  * The manager's finalizer on every Pod it creates: taken off by the manager alone, once it has
  * recorded the Pod's stop (kubernetes-backend.ts, `removeInstance`).
