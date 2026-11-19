@@ -318,7 +318,10 @@ test('every release writes the release column and its cause, and the revive clea
         status: RunStatus.FAILED, importSourceCwd: '/home/someone', deletedAt: now, finishedAt: null,
       } },
       { name: 'source refused', cause: 'setup_failed', data: {
+        // A chat source, the shape session_source_snapshot_chk admits with the fewest columns.
         status: RunStatus.FAILED, sourceState: 'REFUSED', sourceRefusalCode: 'BASE_REF_NOT_FOUND', finishedAt: now,
+        sourceKind: 'CHAT_UPSTREAM', sourceRepoUrl: 'https://git.invalid/acme/widgets', sourceRefAuthority: 'REMOTE',
+        sourceRef: 'refs/heads/main',
       } },
       { name: 'runner offline', cause: 'runner_lost', data: {
         status: RunStatus.FAILED, error: 'runner offline', cancelRequestedAt: now, finishedAt: now,
