@@ -103,6 +103,9 @@ const END_REASON = Prisma.sql`
     ELSE 'SESSION_ENDED'
   END`;
 
+/** A grant whose copy may still be on its runner: the Saved list counts these as a saved secret's live copies. */
+const LIVE_COPY_STATES = ['PENDING_DELIVERY', 'ACTIVE', 'REMOVING'] as const;
+
 const RUNNER_DELETED_NOTE = 'Removal unconfirmed: the runner was deleted before it could confirm.';
 
 /** What the owner's card reads of a grant: never the value, its length, or anything derived from it. */
@@ -279,6 +282,14 @@ export class OwnerSecretsService implements OnModuleInit, OnModuleDestroy {
       if (existing) await tx.ownerRequestSecret.delete({ where: { requestId } });
       const [{ id }] = await tx.$queryRaw<Array<{ id: string }>>`SELECT gen_random_uuid()::text AS id`;
       const now = new Date();
+      if (usesSaved) {
+        // Under the saved secret's row lock, as its delete takes it: a saved secret deleted since it was read makes no
+        // grant, and one deleted after this commits sees this grant among its live copies.
+        const used = await tx.accountSecret.updateMany({ where: { id: given.savedSecretId, ownerId }, data: { lastUsedAt: now } });
+        if (used.count === 0) throw new NotFoundException('saved secret not found');
+      }
+      // The runner's name now, so a copy left on a runner deleted later is still named.
+      const runner = await tx.runner.findFirst({ where: { id: spec.runnerId, ownerId }, select: { name: true } });
       // The task's epoch now: reopening the task later starts a new one, which the grant does not live into (§6.1).
       const taskEpoch = session.taskId
         ? (await tx.taskProgress.findUnique({ where: { taskId: session.taskId }, select: { lifecycleEpoch: true } }))?.lifecycleEpoch ?? 0
@@ -298,6 +309,8 @@ export class OwnerSecretsService implements OnModuleInit, OnModuleDestroy {
           valueEnc: sealOwnerSecret(value, grantAad(id, ownerId, spec.runnerId)),
           state: 'PENDING_DELIVERY',
           expiresAt: new Date(now.getTime() + OWNER_SECRET_MAX_DAYS * 24 * 60 * 60 * 1000),
+          savedSecretId: usesSaved ? given.savedSecretId : null,
+          runnerName: runner?.name ?? null,
         },
         select: { id: true },
       });
@@ -385,13 +398,49 @@ export class OwnerSecretsService implements OnModuleInit, OnModuleDestroy {
 
   // ─── Saved account secrets (§3.4): write-only ───────────────────────────────────────────────
 
+  /**
+   * Each saved secret's label, dates, and its live copies: grants made from it by "Use saved" that may still be on a
+   * machine (PENDING_DELIVERY, ACTIVE or REMOVING), with the names of the runners they are on.
+   */
   async listSaved(ownerId: string) {
-    const secrets = await this.prisma.accountSecret.findMany({
+    const saved = await this.prisma.accountSecret.findMany({
       where: { ownerId },
       orderBy: { label: 'asc' },
-      select: { id: true, label: true, createdAt: true, updatedAt: true },
+      select: { id: true, label: true, createdAt: true, updatedAt: true, lastUsedAt: true },
+    });
+    const copies = saved.length === 0 ? [] : await this.prisma.ownerRequestSecret.findMany({
+      where: { ownerId, savedSecretId: { in: saved.map((s) => s.id) }, state: { in: [...LIVE_COPY_STATES] } },
+      select: { savedSecretId: true, runnerName: true },
+    });
+    const secrets = saved.map((s) => {
+      const mine = copies.filter((c) => c.savedSecretId === s.id);
+      const runnerNames = [...new Set(mine.map((c) => c.runnerName).filter((n): n is string => Boolean(n)))].sort();
+      return { ...s, liveCopies: { count: mine.length, runnerNames } };
     });
     return { secrets };
+  }
+
+  /** The owner's Add on the Secrets page: a saved secret made without a card. A label already taken is 409. */
+  async createSaved(ownerId: string, label: unknown, value: unknown) {
+    const invalid = ownerSecretValueError(value);
+    if (invalid) throw new BadRequestException(invalid);
+    const trimmed = typeof label === 'string' ? label.trim() : '';
+    if (!trimmed || trimmed.length > 100) throw new BadRequestException('label is 1 to 100 characters');
+    if (!ownerSecretStoreAvailable()) {
+      throw new ConflictException({ code: SECRET_STORE_UNAVAILABLE, message: 'this Orbit server cannot keep a secret' });
+    }
+    const [{ id }] = await this.prisma.$queryRaw<Array<{ id: string }>>`SELECT gen_random_uuid()::text AS id`;
+    try {
+      return await this.prisma.accountSecret.create({
+        data: { id, ownerId, label: trimmed, valueEnc: sealOwnerSecret(value as string, savedSecretAad(id, ownerId)) },
+        select: { id: true, label: true, createdAt: true, updatedAt: true, lastUsedAt: true },
+      });
+    } catch (e) {
+      if (e instanceof Prisma.PrismaClientKnownRequestError && e.code === 'P2002') {
+        throw new ConflictException({ code: 'SAVED_SECRET_LABEL_TAKEN', message: 'a saved secret with this label already exists' });
+      }
+      throw e;
+    }
   }
 
   async replaceSaved(ownerId: string, id: string, value: unknown): Promise<void> {
@@ -407,10 +456,34 @@ export class OwnerSecretsService implements OnModuleInit, OnModuleDestroy {
     if (written.count === 0) throw new NotFoundException('saved secret not found');
   }
 
-  /** Deleting a saved secret leaves grants already made from it alone; the owner revokes those on their cards. */
-  async deleteSaved(ownerId: string, id: string): Promise<void> {
-    const deleted = await this.prisma.accountSecret.deleteMany({ where: { id, ownerId } });
-    if (deleted.count === 0) throw new NotFoundException('saved secret not found');
+  /**
+   * Deleting a saved secret leaves the grants already made from it alone, unless `revokeCopies`: then each of them still
+   * PENDING_DELIVERY or ACTIVE is ended REVOKED through `revoke`, as its card's Revoke would (one already REMOVING is
+   * on its way out). The grants are read under the saved secret's row lock, which "Use saved" also takes, so none made
+   * from it is missed and none is made from it after.
+   */
+  async deleteSaved(ownerId: string, id: string, revokeCopies = false): Promise<void> {
+    const live = await this.prisma.$transaction(async (tx) => {
+      const locked = await tx.$queryRaw<Array<{ id: string }>>`
+        SELECT "id"::text AS id FROM "account_secret" WHERE "id" = ${id}::uuid AND "owner_id" = ${ownerId}::uuid FOR UPDATE`;
+      if (locked.length === 0) throw new NotFoundException('saved secret not found');
+      const grants = revokeCopies
+        ? await tx.ownerRequestSecret.findMany({
+          where: { ownerId, savedSecretId: id, state: { in: ['PENDING_DELIVERY', 'ACTIVE'] } },
+          select: { requestId: true },
+        })
+        : [];
+      await tx.accountSecret.delete({ where: { id } });
+      return grants;
+    });
+    for (const grant of live) {
+      try {
+        await this.revoke(ownerId, grant.requestId);
+      } catch (e) {
+        // Ended by something else since it was read: nothing left to revoke.
+        if (!(e instanceof ConflictException)) throw e;
+      }
+    }
   }
 
   private async saveInTx(tx: Prisma.TransactionClient, ownerId: string, label: string, value: string): Promise<void> {

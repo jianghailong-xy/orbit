@@ -24,7 +24,11 @@
  *   (h) tenant isolation of the owner doors: another account's request, grant or saved secret is the 404 of one that
  *       does not exist, and writes nothing;
  *   (i) the write door: a body carrying the value, raw or encoded, is refused SECRET_IN_TEXT; the runner protocol's
- *       own routes and a runner holding nothing pass.
+ *       own routes and a runner holding nothing pass;
+ *   (j) the Secrets page's Saved section: Use saved links the grant (saved_secret_id) and stamps last_used_at; every
+ *       grant names its runner, also once that runner is deleted; Add (409 on a taken label, 400 on a bad value or
+ *       label); Replace; the list's lastUsedAt and liveCopies; Delete without revokeCopies leaves the copies, with it
+ *       ends each live one REVOKED through the card's own revoke.
  *
  * Not destructive: every id is freshly generated and every assertion is scoped to its own accounts.
  */
@@ -443,7 +447,7 @@ test('owner request secrets: one runner, removed when the scope ends', { skip, c
     const listed = await secrets.listSaved(a.ownerId);
     assert.deepEqual(listed.secrets.map((s) => s.label), ['DeepSeek']);
     assert.equal(JSON.stringify(listed).includes(value), false);
-    assert.deepEqual(Object.keys(listed.secrets[0]).sort(), ['createdAt', 'id', 'label', 'updatedAt']);
+    assert.deepEqual(Object.keys(listed.secrets[0]).sort(), ['createdAt', 'id', 'label', 'lastUsedAt', 'liveCopies', 'updatedAt']);
     const saved = await db.accountSecret.findFirstOrThrow({ where: { ownerId: a.ownerId } });
     assert.equal(saved.valueEnc.includes(value), false);
     const second = await fileSecret(await a.session());
@@ -504,5 +508,128 @@ test('owner request secrets: one runner, removed when the scope ends', { skip, c
     assert.equal(completion.result, 'final answer: [redacted]');
     assert.equal(await send('/api/runner/tasks/x/comments', { body: value }, { id: b.runnerId, ownerId: b.ownerId }), 'stored',
       'a runner holding no grant is not searched');
+  });
+
+  await t.test('(j) the Saved section: last used, live copies, Add, Replace, Delete with or without its copies', async () => {
+    const saveVia = async (label: string, value = canary()) => {
+      const created = await secrets.createSaved(a.ownerId, label, value);
+      assert.equal(JSON.stringify(created).includes(value), false, 'Add never echoes the value');
+      assert.deepEqual(Object.keys(created).sort(), ['createdAt', 'id', 'label', 'lastUsedAt', 'updatedAt']);
+      assert.equal(created.lastUsedAt, null);
+      return { id: created.id, value };
+    };
+    const useSaved = async (savedSecretId: string, sessionId?: string) => {
+      const request = await fileSecret(sessionId ?? await a.session());
+      await secrets.submit(a.ownerId, request.id, { savedSecretId });
+      return { request, grant: await grantOf(request.id) };
+    };
+
+    // Add: the label is trimmed and unique per owner; the value follows the card's rules.
+    const one = await saveVia('  page one  ');
+    assert.equal((await db.accountSecret.findUniqueOrThrow({ where: { id: one.id } })).label, 'page one');
+    await assert.rejects(secrets.createSaved(a.ownerId, 'page one', canary()),
+      (e: unknown) => e instanceof ConflictException && /SAVED_SECRET_LABEL_TAKEN/.test(JSON.stringify(e.getResponse())));
+    await assert.rejects(secrets.createSaved(a.ownerId, 'too short', 'short'), BadRequestException);
+    await assert.rejects(secrets.createSaved(a.ownerId, 'has nul', `nul\0inside-key`), BadRequestException);
+    await assert.rejects(secrets.createSaved(a.ownerId, '   ', canary()), BadRequestException);
+    await assert.rejects(secrets.createSaved(a.ownerId, 'x'.repeat(101), canary()), BadRequestException);
+    assert.equal(await db.accountSecret.count({ where: { ownerId: a.ownerId, label: { in: ['too short', 'has nul'] } } }), 0);
+    // Another account may use the same label.
+    await secrets.createSaved(b.ownerId, 'page one', canary());
+
+    // Use saved: the grant names the saved secret and the runner, and last_used_at moves, in the submit's transaction.
+    const before = new Date();
+    const used = await useSaved(one.id);
+    assert.equal(used.grant.savedSecretId, one.id);
+    assert.equal(used.grant.runnerName, 'a-main');
+    const stamped = (await db.accountSecret.findUniqueOrThrow({ where: { id: one.id } })).lastUsedAt;
+    assert.ok(stamped && stamped.getTime() >= before.getTime() - 1000, 'last_used_at is stamped');
+    assert.equal((await secrets.fetch(runnerA, used.grant.id)).value, one.value);
+    // A typed value names its runner too, and no saved secret; it does not touch any saved secret's last use.
+    const typed = await fileSecret(await a.session());
+    await secrets.submit(a.ownerId, typed.id, { value: canary() });
+    assert.equal((await grantOf(typed.id)).runnerName, 'a-main');
+    assert.equal((await grantOf(typed.id)).savedSecretId, null);
+    assert.equal((await db.accountSecret.findUniqueOrThrow({ where: { id: one.id } })).lastUsedAt?.getTime(), stamped.getTime());
+
+    // Replace: the next Use saved delivers the new value.
+    const replacement = canary();
+    await secrets.replaceSaved(a.ownerId, one.id, replacement);
+    const afterReplace = await useSaved(one.id);
+    assert.equal((await secrets.fetch(runnerA, afterReplace.grant.id)).value, replacement);
+    await secrets.ack(runnerA, afterReplace.grant.id, 'DELIVERED', undefined, undefined);
+
+    // A grant on a runner deleted since keeps the runner's name.
+    const doomed = await db.runner.create({
+      data: {
+        id: randomUUID(), ownerId: a.ownerId, name: 'a-doomed-named', tokenHash: `hash-${randomUUID()}`, status: RunnerStatus.ONLINE,
+        capabilities: ['owner-secret/v1'], capabilitiesReportedAt: new Date(), lastHeartbeatAt: new Date(),
+      },
+    });
+    const onDoomed = await useSaved(one.id, await a.session({ on: doomed.id }));
+    assert.equal(onDoomed.grant.runnerName, 'a-doomed-named');
+    await sql.query(`UPDATE "session" SET "assigned_runner_id" = NULL WHERE "assigned_runner_id" = $1`, [doomed.id]);
+    await sql.query(`DELETE FROM "runner" WHERE "id" = $1`, [doomed.id]);
+    await secrets.sweep();
+    const orphan = await db.ownerRequestSecret.findUniqueOrThrow({ where: { id: onDoomed.grant.id } });
+    assert.equal(orphan.runnerId, null);
+    assert.equal(orphan.runnerName, 'a-doomed-named', 'the name survives the runner');
+    assert.equal(orphan.state, 'REMOVED');
+
+    // The list: last used, and live copies (PENDING_DELIVERY, ACTIVE, REMOVING) with their runners' names.
+    const two = await saveVia('page two');
+    const twoOnSecond = await useSaved(two.id, await a.session({ on: a.secondRunnerId }));
+    const twoOnMain = await useSaved(two.id);
+    await secrets.fetch(runnerA, twoOnMain.grant.id);
+    await secrets.ack(runnerA, twoOnMain.grant.id, 'DELIVERED', undefined, undefined);
+    const twoRemoving = await useSaved(two.id);
+    await secrets.fetch(runnerA, twoRemoving.grant.id);
+    await secrets.ack(runnerA, twoRemoving.grant.id, 'DELIVERED', undefined, undefined);
+    await secrets.revoke(a.ownerId, twoRemoving.request.id);
+    const twoRemoved = await useSaved(two.id);
+    await secrets.cancel(a.ownerId, twoRemoved.request.id);
+    assert.equal((await grantOf(twoRemoved.request.id)).state, 'REMOVED');
+    const listed = await secrets.listSaved(a.ownerId);
+    for (const value of [one.value, replacement, two.value]) assert.equal(JSON.stringify(listed).includes(value), false);
+    const rowOf = (id: string) => listed.secrets.find((s) => s.id === id)!;
+    assert.deepEqual(rowOf(two.id).liveCopies, { count: 3, runnerNames: ['a-main', 'a-second'] });
+    assert.ok(rowOf(two.id).lastUsedAt instanceof Date);
+    // one: its first copy (fetched, PENDING_DELIVERY), the delivered replacement (ACTIVE); the removed one is not live.
+    assert.deepEqual(rowOf(one.id).liveCopies, { count: 2, runnerNames: ['a-main'] });
+    assert.ok(rowOf(one.id).lastUsedAt instanceof Date);
+    assert.equal((await secrets.listSaved(b.ownerId)).secrets.every((s) => s.liveCopies.count === 0), true);
+
+    // Delete without revokeCopies: the copies are untouched, only their link to the saved secret goes.
+    const statesOf = async (requestIds: string[]) =>
+      (await db.ownerRequestSecret.findMany({ where: { requestId: { in: requestIds } }, orderBy: { requestId: 'asc' } }))
+        .map((g) => ({ id: g.id, state: g.state, endReason: g.endReason }));
+    const oneCopies = [used.request.id, afterReplace.request.id];
+    const oneBefore = await statesOf(oneCopies);
+    await secrets.deleteSaved(a.ownerId, one.id);
+    assert.deepEqual(await statesOf(oneCopies), oneBefore);
+    assert.deepEqual(oneBefore.map((g) => g.state).sort(), ['ACTIVE', 'PENDING_DELIVERY']);
+    assert.equal(await db.ownerRequestSecret.count({ where: { requestId: { in: oneCopies }, savedSecretId: { not: null } } }), 0);
+    await assert.rejects(secrets.deleteSaved(a.ownerId, one.id), NotFoundException);
+    // A Use saved of a deleted saved secret makes no grant.
+    const late = await fileSecret(await a.session());
+    await assert.rejects(secrets.submit(a.ownerId, late.id, { savedSecretId: one.id }), NotFoundException);
+
+    // Delete with revokeCopies: each live copy ends REVOKED as its card's Revoke would; another saved secret's are left.
+    const three = await saveVia('page three');
+    const threeCopy = await useSaved(three.id);
+    const unrelated = await statesOf([threeCopy.request.id]);
+    await assert.rejects(secrets.deleteSaved(b.ownerId, two.id, true), NotFoundException);
+    assert.equal((await grantOf(twoOnMain.request.id)).state, 'ACTIVE', 'another account\'s delete revokes nothing');
+    await secrets.deleteSaved(a.ownerId, two.id, true);
+    const ended = (id: string) => grantOf(id).then((g) => ({ state: g.state, endReason: g.endReason, valueEnc: g.valueEnc }));
+    assert.deepEqual(await ended(twoOnSecond.request.id), { state: 'REMOVED', endReason: 'REVOKED', valueEnc: null },
+      'not fetched yet: REMOVED at once');
+    assert.deepEqual(await ended(twoOnMain.request.id), { state: 'REMOVING', endReason: 'REVOKED', valueEnc: null },
+      'delivered: REMOVING until its runner confirms');
+    assert.deepEqual(await ended(twoRemoving.request.id), { state: 'REMOVING', endReason: 'REVOKED', valueEnc: null });
+    assert.deepEqual(await ended(twoRemoved.request.id), { state: 'REMOVED', endReason: 'REVOKED', valueEnc: null });
+    assert.ok((await secrets.reconcileFor(a.runnerId)).secretGrantsRemoving.includes(twoOnMain.grant.id));
+    assert.deepEqual(await statesOf([threeCopy.request.id]), unrelated);
+    assert.equal(await db.accountSecret.count({ where: { id: two.id } }), 0);
   });
 });

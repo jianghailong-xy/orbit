@@ -16,6 +16,7 @@ export const OWNER_INTERACTIVE_ROUTES: readonly string[] = [
   // owner's own act, as POST /wiki/spaces is; it also refuses an acting session, WIKI_OWNER_CHANNEL_ONLY.
   'POST /owner-requests/:id/create-wiki',
   'GET /account-secrets',
+  'POST /account-secrets',
   'PUT /account-secrets/:id',
   'DELETE /account-secrets/:id',
   'POST /tasks/:taskId/owner-confirmation',

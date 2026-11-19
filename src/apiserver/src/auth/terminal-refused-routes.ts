@@ -274,6 +274,7 @@ export const TERMINAL_REFUSED_ROUTES: readonly string[] = [
   'POST /access-tokens',
   'POST /access-tokens/device/:userCode/approve',
   'POST /access-tokens/device/:userCode/deny',
+  'POST /account-secrets',
   'POST /admin/email/test',
   'POST /admin/managed-runners/:id/volume-switch',
   'POST /admin/providers',

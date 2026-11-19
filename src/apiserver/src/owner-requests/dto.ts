@@ -106,6 +106,15 @@ export class SubmitOwnerSecretDto {
 }
 
 /** Replacing a saved secret's value (`PUT /account-secrets/:id`). */
+/** The owner's Add on the Secrets page (`POST /account-secrets`): a label and a value, never echoed back. */
+export class CreateAccountSecretDto {
+  @IsString({ message: 'label must be a string' }) @MaxLength(100, { message: 'label is 1 to 100 characters' })
+  label!: string;
+
+  @IsString({ message: 'value must be a string' }) @MaxLength(16_384, { message: 'the key may be at most 16384 characters' })
+  value!: string;
+}
+
 export class ReplaceAccountSecretDto {
   @IsString({ message: 'value must be a string' }) @MaxLength(16_384, { message: 'the key may be at most 16384 characters' })
   value!: string;

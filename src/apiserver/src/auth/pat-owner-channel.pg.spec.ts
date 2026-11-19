@@ -269,6 +269,11 @@ test('the owner channel refuses a personal access token door by door and field b
     },
     { route: 'GET /account-secrets', path: '/account-secrets', login: 200 },
     {
+      route: 'POST /account-secrets', path: '/account-secrets',
+      body: { label: 'added key', value: 'added-key-value' }, login: 201,
+      observe: () => db.accountSecret.findUnique({ where: { ownerId_label: { ownerId: userId, label: 'added key' } } }),
+    },
+    {
       route: 'PUT /account-secrets/:id', path: `/account-secrets/${savedSecret.id}`,
       body: { value: 'replacement-key' }, login: 204, observe: savedRow,
     },
