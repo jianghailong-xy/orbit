@@ -1,5 +1,6 @@
 import { createHash } from 'node:crypto';
 import {
+  type ConfirmedCriterionReading,
   type CriteriaChangesSinceConfirmed,
   type CriteriaChangesSinceConfirmedAbsentReason,
   type ProjectStartRecord,
@@ -201,6 +202,67 @@ export interface RecordedStandardSetConfirmation {
    * or "confirmed" at all.
    */
   startedWith?: ProjectStartRecord | null;
+  /** The words stored with it (`criteria_wording`, 1200), or null on an older row. Only the
+   *  confirmation read carries it, and the view turns it into `criteria` rather than publishing it. */
+  criteriaWording?: ConfirmedCriterionWording[] | null;
+  /** What it changed since the confirmation before it (`criteria_changes`, 1200): null when there
+   *  was none before it, or on an older row. */
+  changes?: CriteriaChangesSinceConfirmed | null;
+  /** What each confirmed criterion said and whether it has moved since — the receipt's list,
+   *  resolved by the view (`confirmedCriteriaReadings`). */
+  criteria?: ConfirmedCriterionReading[];
+  /** Whether the words were stored with it. False on a row older than 1200, whose `criteria` show
+   *  today's words where the hash still matches and none where it does not. */
+  wordingRecorded?: boolean;
+}
+
+/** One criterion's words as a confirmation stored them (`criteria_wording`). */
+export interface ConfirmedCriterionWording {
+  definitionId: string;
+  ordinal: number;
+  text: string;
+  verificationMethod: string | null;
+}
+
+/** The words a confirmation of `stated` stores. */
+export function criteriaWordingOf(stated: StatedAcceptanceCriterion[]): ConfirmedCriterionWording[] {
+  return stated.map((criterion) => ({
+    definitionId: criterion.definitionId,
+    ordinal: criterion.ordinal,
+    text: criterion.text,
+    verificationMethod: criterion.verificationMethod,
+  }));
+}
+
+/**
+ * What each criterion of a recorded confirmation said, and whether it has moved since.
+ *
+ * The words are the stored ones. A row older than 1200 has none stored, so a criterion whose content
+ * hash still matches the one confirmed shows its words today — the hash is the database's own over
+ * the words and the method, so a match means the same words — and one that moved shows none, because
+ * nothing kept them. Ordered as the confirmed set was; a criterion with no place left goes last.
+ */
+export function confirmedCriteriaReadings(
+  confirmed: ConfirmedCriterionVersion[],
+  wording: ConfirmedCriterionWording[] | null,
+  stated: StatedAcceptanceCriterion[],
+): ConfirmedCriterionReading[] {
+  const now = new Map(stated.map((criterion) => [criterion.definitionId, criterion]));
+  const words = new Map((wording ?? []).map((item) => [item.definitionId, item]));
+  const readings = confirmed.map((item): ConfirmedCriterionReading => {
+    const current = now.get(item.definitionId);
+    const since = !current ? 'REMOVED' : current.contentHash === item.contentHash ? 'UNCHANGED' : 'EDITED';
+    const stored = words.get(item.definitionId);
+    const key = criterionKeyOf(item.definitionId);
+    if (stored) {
+      return { key, ordinal: stored.ordinal, text: stored.text, verificationMethod: stored.verificationMethod, since };
+    }
+    if (current && since === 'UNCHANGED') {
+      return { key, ordinal: current.ordinal, text: current.text, verificationMethod: current.verificationMethod, since };
+    }
+    return { key, ordinal: current?.ordinal ?? null, text: null, verificationMethod: null, since };
+  });
+  return readings.sort((a, b) => (a.ordinal ?? Number.MAX_SAFE_INTEGER) - (b.ordinal ?? Number.MAX_SAFE_INTEGER));
 }
 
 export interface StandardSetConfirmationStanding {

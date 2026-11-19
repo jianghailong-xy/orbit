@@ -177,7 +177,7 @@ class WikiShellTest {
         compose.waitUntil(60_000) { compose.onAllNodesWithTag("watch-error").fetchSemanticsNodes().isNotEmpty() }
         // Settings, from the drawer, goes on the same stack, over the watch.
         compose.onNodeWithContentDescription("Open navigation").performClick()
-        compose.onNodeWithText("Settings").performScrollTo().performClick()
+        compose.onNodeWithTag("drawer:settings").performClick()
         awaitThat("Settings over the watch") { compose.onAllNodesWithTag("watch-detail:${WikiShell.WATCH}").fetchSemanticsNodes().isEmpty() }
         back()
         awaitTag("watch-detail:${WikiShell.WATCH}")

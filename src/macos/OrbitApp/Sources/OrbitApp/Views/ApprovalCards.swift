@@ -2485,8 +2485,7 @@ struct DeliveredDecisionCardView: View {
             case .criteriaChange:
                 CriteriaChangeCardView(console: console)
             case .acceptanceConfirmationReceipt(let confirmed):
-                AcceptanceConfirmationReceiptCard(confirmed: confirmed,
-                                                  changed: console.confirmedChanges(confirmed))
+                AcceptanceConfirmationReceiptCard(confirmed: confirmed)
             case .evidenceDecision(let taskID, let evidenceRevision):
                 EvidenceDecisionCard(console: console, taskID: taskID,
                                      evidenceRevision: evidenceRevision)
@@ -3147,17 +3146,21 @@ private struct AcceptanceConfirmationCard: View {
 /// it and `OwnerDecisionReceiptView` below, and for their reason: a question leaves the conversation
 /// when it is answered, so a record kept by the window that pressed it is a record the next open
 /// takes away. Drawn from the door's own read (`AcceptanceConfirmations.receipt`), it names what was
-/// signed — the count, and the seal of the version standing when it was signed, which is not always
-/// the version standing now — by whom, and when.
+/// signed — the count, and what it changed — by whom, and when.
+///
+/// WHAT THE CONFIRMATION WAS ABOUT rides in a fold under the record, closed by default
+/// (docs/mocks/acceptance-receipt-fold): pressing the button used to be the moment the criteria
+/// became unreadable — the card had them, and the receipt that replaced it had a count and a seal
+/// (the account owner, 2026-11-19). Opened, it shows what changed in the change card's own rows,
+/// the confirmed set in the words that were confirmed, a note when some of it has moved or its
+/// words were never kept, and the seal the press locked.
 ///
 /// Blue, like the card it replaces — the same question, answered — with a green tick and no actions,
 /// and the provenance mark the other receipts carry: a record of a decision the owner made is no
-/// more the agent's writing than the question was.
+/// more the agent's writing than the question was. The fold's toggle is a reading control, not an
+/// action: it writes nothing and is never disabled, as on the web receipt.
 private struct AcceptanceConfirmationReceiptCard: View {
     let confirmed: RecordedStandardSetConfirmation
-    /// What a re-confirmation pressed in this console changed — "1 new, 1 stricter" — when it knows
-    /// (`ConsoleModel.confirmedChanges`); the read says only the seal.
-    var changed: String? = nil
 
     var body: some View {
         VStack(alignment: .leading, spacing: ApprovalMetrics.spacing) {
@@ -3166,7 +3169,7 @@ private struct AcceptanceConfirmationReceiptCard: View {
                            tone: .blue)
             // A start says it started the project; any other confirmation says it confirmed the
             // criteria (`AcceptanceConfirmations.receiptLine`, off the record's own `startedWith`).
-            Text(AcceptanceConfirmations.receiptLine(confirmed, changed: changed))
+            Text(AcceptanceConfirmations.receiptLine(confirmed))
                 .font(.orbitProse)
                 .frame(maxWidth: .infinity, alignment: .leading)
             // …and a start's record says what the project was started WITH: the settings the owner
@@ -3181,11 +3184,122 @@ private struct AcceptanceConfirmationReceiptCard: View {
                     OwnerConfirmations.receiptTime(confirmed.confirmedAt)))
                 .font(.orbitMonoFine).foregroundStyle(.secondary)
                 .frame(maxWidth: .infinity, alignment: .leading)
+            AcceptanceReceiptFold(confirmed: confirmed)
             Text(CriteriaDecisions.provenanceLabel)
                 .font(.orbitMonoFine).foregroundStyle(.secondary)
                 .frame(maxWidth: .infinity, alignment: .leading)
         }
         .approvalChrome(.blue)
+    }
+}
+
+/// WHAT THE CONFIRMATION WAS ABOUT, folded under its record (docs/mocks/acceptance-receipt-fold).
+/// Closed by default — the record's job is to say the answer was recorded, and what it was about
+/// is the question a reader asks second. Nothing is drawn for a record that keeps no criteria: a
+/// server older than the wording has nothing to fold out.
+///
+/// In order, as on the web receipt (`AcceptanceReceiptFold`): what this confirmation changed, in
+/// the change card's own rows; the set, numbered, in the words that were confirmed, with a tag on
+/// what has moved since; a note when some of it has moved or its words were never kept; and the
+/// seal.
+private struct AcceptanceReceiptFold: View {
+    let confirmed: RecordedStandardSetConfirmation
+    @State private var open = false
+
+    private var criteria: [ConfirmedCriterionReading] { confirmed.criteria }
+    /// The keys this confirmation added, for the `new` tag after a criterion's words.
+    private var added: Set<String> { Set((confirmed.changes?.added ?? []).map(\.key)) }
+
+    var body: some View {
+        if !criteria.isEmpty {
+            // The same kind of reading control as the question card's "Read all N in full":
+            // brand-coloured text, not an action button, and never disabled.
+            Button {
+                PlatformHaptics.tap()
+                open.toggle()
+            } label: {
+                Text(open ? AcceptanceConfirmations.receiptCloseLabel
+                          : AcceptanceConfirmations.receiptOpenLabel(
+                                count: confirmed.criteriaMaterial.count))
+                    .font(.orbitLabel)
+                    .foregroundStyle(Color.blue)
+            }
+            .buttonStyle(.plain)
+            .frame(maxWidth: .infinity, alignment: .leading)
+
+            if open {
+                changesPanel
+                ForEach(criteria) { item in
+                    criterionRow(item)
+                }
+                if let note = AcceptanceConfirmations.receiptNote(confirmed) {
+                    Text(note)
+                        .font(.orbitLabel).foregroundStyle(.secondary)
+                        .frame(maxWidth: .infinity, alignment: .leading)
+                }
+                Text(AcceptanceConfirmations.receiptSeal(confirmed))
+                    .font(.orbitMonoFine).foregroundStyle(.secondary)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+            }
+        }
+    }
+
+    /// What this confirmation changed since the one before it — the SAME rows the "Confirm the new
+    /// criteria?" card draws, so the question and its record read the same. Only when the record
+    /// kept the changes and any criterion was added, made stricter or changed.
+    @ViewBuilder private var changesPanel: some View {
+        if let changes = confirmed.changes {
+            let rows = CriteriaChanges.rows(changes)
+            if !rows.isEmpty {
+                StartPanel {
+                    ForEach(Array(rows.enumerated()), id: \.element.id) { index, row in
+                        if index > 0 { Divider() }
+                        CriteriaChangeRowView(row: row)
+                    }
+                }
+                .accessibilityElement(children: .contain)
+                .accessibilityLabel(CriteriaChanges.whatChanged)
+            }
+        }
+    }
+
+    /// One confirmed criterion: its number in the set that was confirmed (left off once it has
+    /// none), its words — or, for a record older than keeping them about a criterion that changed
+    /// since, that they are not on record — and a tag when it was new here or has moved since.
+    private func criterionRow(_ item: ConfirmedCriterionReading) -> some View {
+        HStack(alignment: .top, spacing: 8) {
+            if let ordinal = item.ordinal {
+                Text("\(ordinal)")
+                    .font(.orbitMonoFine).foregroundStyle(.secondary)
+                    .frame(minWidth: 14, alignment: .trailing)
+            }
+            if let text = item.text {
+                Text(text).font(.orbitProse)
+            } else {
+                Text(AcceptanceConfirmations.receiptWordsGone)
+                    .font(.orbitProse).italic().foregroundStyle(.secondary)
+            }
+            if added.contains(item.key) {
+                tag(AcceptanceConfirmations.receiptTagNew, tone: .green)
+            }
+            if item.since == .edited {
+                tag(AcceptanceConfirmations.receiptTagEdited, tone: .orange)
+            }
+            if item.since == .removed {
+                tag(AcceptanceConfirmations.receiptTagRemoved, tone: .orange)
+            }
+            Spacer(minLength: 0)
+        }
+        .frame(maxWidth: .infinity, alignment: .leading)
+    }
+
+    /// A small tag after a criterion's words: success for `new`, warning for what moved since.
+    private func tag(_ text: String, tone: Color) -> some View {
+        Text(text)
+            .font(.orbitMonoFine)
+            .foregroundStyle(tone)
+            .padding(.horizontal, 5).padding(.vertical, 2)
+            .background(tone.opacity(0.14), in: Capsule())
     }
 }
 
@@ -4141,7 +4255,7 @@ private struct CriteriaChangeCardView: View {
             StartPanel {
                 ForEach(Array(rows.enumerated()), id: \.element.id) { index, row in
                     if index > 0 { Divider() }
-                    changeRow(row)
+                    CriteriaChangeRowView(row: row)
                 }
             }
             .accessibilityElement(children: .contain)
@@ -4181,30 +4295,6 @@ private struct CriteriaChangeCardView: View {
         }
     }
 
-    /// One change: its mark, which criterion and what happened to it, the words it has now, and —
-    /// for a stricter check — the check it replaced.
-    private func changeRow(_ row: CriteriaChanges.Row) -> some View {
-        let tone: Color = row.mark == .new ? .green : (row.mark == .stricter ? .blue : .orange)
-        return HStack(alignment: .top, spacing: 10) {
-            Text(row.mark.rawValue)
-                .font(.orbitProse.weight(.bold))
-                .foregroundStyle(tone)
-                .frame(width: 24, height: 24)
-                .background(tone.opacity(0.14), in: RoundedRectangle(cornerRadius: 7))
-                .accessibilityHidden(true)
-            VStack(alignment: .leading, spacing: 2) {
-                Text(row.kind).font(.orbitLabel.weight(.semibold)).foregroundStyle(tone)
-                Text(row.text).font(.orbitProse)
-                    .frame(maxWidth: .infinity, alignment: .leading)
-                if let was = row.was {
-                    Text(was).font(.orbitLabel).foregroundStyle(.secondary)
-                        .frame(maxWidth: .infinity, alignment: .leading)
-                }
-            }
-        }
-        .startRow()
-    }
-
     /// Confirm the version standing now. The project was running the whole time; this press lets it
     /// be marked done against these criteria, and leaves a receipt that says it confirmed them.
     private func confirmButton(_ standing: StandardSetConfirmationStanding?) -> some View {
@@ -4235,6 +4325,36 @@ private struct CriteriaChangeCardView: View {
         }
         .buttonStyle(.bordered)
         .disabled(standing == nil)
+    }
+}
+
+/// One change row of the "Confirm the new criteria?" card: its mark, which criterion and what
+/// happened to it, the words it has now, and — for a stricter check — the check it replaced. The
+/// confirmation receipt's fold draws the same rows (`AcceptanceReceiptFold`), so the question and
+/// its record read the same (web's `CriteriaChangeList`).
+private struct CriteriaChangeRowView: View {
+    let row: CriteriaChanges.Row
+
+    var body: some View {
+        let tone: Color = row.mark == .new ? .green : (row.mark == .stricter ? .blue : .orange)
+        HStack(alignment: .top, spacing: 10) {
+            Text(row.mark.rawValue)
+                .font(.orbitProse.weight(.bold))
+                .foregroundStyle(tone)
+                .frame(width: 24, height: 24)
+                .background(tone.opacity(0.14), in: RoundedRectangle(cornerRadius: 7))
+                .accessibilityHidden(true)
+            VStack(alignment: .leading, spacing: 2) {
+                Text(row.kind).font(.orbitLabel.weight(.semibold)).foregroundStyle(tone)
+                Text(row.text).font(.orbitProse)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                if let was = row.was {
+                    Text(was).font(.orbitLabel).foregroundStyle(.secondary)
+                        .frame(maxWidth: .infinity, alignment: .leading)
+                }
+            }
+        }
+        .startRow()
     }
 }
 

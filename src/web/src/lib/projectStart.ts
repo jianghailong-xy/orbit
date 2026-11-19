@@ -819,20 +819,6 @@ export function criteriaChangeSummary(changes: {
   ].filter(Boolean).join(', ');
 }
 
-/**
- * Where a press on the change card leaves what it confirmed — "1 new, 1 stricter" — for the receipt
- * of that confirmation, under the seal it signed. Kept by this window only: once a set is confirmed
- * nothing is left changed, so the confirmation read cannot say it afterwards, and a receipt drawn
- * on another device or after a reload says the seal and the count without it.
- */
-export const confirmedChangesKey = (projectId: string, digest: string) =>
-  ['project', projectId, 'confirmed-changes', digest] as const;
-
-/** The current window's receipt summary, kept on the project so the transcript reader can observe
- * it while the confirmation digest changes from the old seal to the one just confirmed. */
-export const confirmedChangesProjectKey = (projectId: string) =>
-  ['project', projectId, 'confirmed-changes'] as const;
-
 // ── The write ────────────────────────────────────────────────────────────────────────────────
 
 /**
