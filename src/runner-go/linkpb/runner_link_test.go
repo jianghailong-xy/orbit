@@ -119,6 +119,9 @@ func samples(t *testing.T) []proto.Message {
 	streamCredit := &linkpb.StreamCredit{StreamId: "0190a0b0-0000-7000-8000-0000000000e1", Bytes: 12}
 	streamClose := &linkpb.StreamClose{StreamId: "0190a0b0-0000-7000-8000-0000000000e1",
 		Code: linkpb.StreamCloseCode_STREAM_CLOSE_CODE_NORMAL, Message: "the viewer left"}
+	streamPaste := &linkpb.StreamPaste{StreamId: "0190a0b0-0000-7000-8000-0000000000e1", PasteId: 3, Text: "密码 Pässwörd 🔑"}
+	streamPasted := &linkpb.StreamPasted{StreamId: "0190a0b0-0000-7000-8000-0000000000e1", PasteId: 3,
+		Error: "No page in the browser is open to paste into"}
 
 	messages := []proto.Message{
 		chunk, hello, writeContract, managedInstance, resume, welcome, limits, sessionState, release,
@@ -134,7 +137,7 @@ func samples(t *testing.T) []proto.Message {
 		&linkpb.RpcResult{RequestId: "req-1", Outcome: &linkpb.RpcResult_Failure{Failure: failure}},
 		tunnelResponse, failure, heartbeat, fact, heartbeatAck, eventBatch, event, eventAck, rejected,
 		credit, liveBatch, liveEvent, turnPrefixRequest, turnPrefixResponse,
-		streamOpen, streamOpened, streamData, streamCredit, streamClose,
+		streamOpen, streamOpened, streamData, streamCredit, streamClose, streamPaste, streamPasted,
 	}
 
 	// One Frame per member of its body, each wrapping the first sample of that member's type.
