@@ -189,3 +189,49 @@ func TestTheHeartbeatBoundsTheSessionsItStates(t *testing.T) {
 		t.Fatalf("%d entries from %s, want %d from s0000", len(entries), entries[0].SessionID, executingSessionsMax)
 	}
 }
+
+// The beat says when its sets were composed, read before any probe is: a change a probe misses happens after that
+// instant, so the TS of the event that reports it is no earlier, which is what lets the control plane keep a batch over
+// an older beat. With nothing probed, the instant is left out with the sets.
+func TestTheHeartbeatStampsItsExecutingBeforeReadingProbes(t *testing.T) {
+	pool := newSessionPool(2)
+	s := registerPoolSession(t, pool, "s", false)
+	var probedAt int64
+	clear := pool.setExecutingProbe(s, func(bool) executingSnapshot {
+		time.Sleep(2 * time.Millisecond)
+		probedAt = time.Now().UnixMilli()
+		return executingSnapshot{}
+	})
+	beat := func() (HeartbeatRequest, map[string]json.RawMessage) {
+		t.Helper()
+		var sent HeartbeatRequest
+		if _, _, err := sendHeartbeatCycle(pool, newHeartbeatTelemetryProbe(time.Hour, nil), HeartbeatRequest{},
+			func(r HeartbeatRequest) (*HeartbeatResponse, error) { sent = r; return &HeartbeatResponse{}, nil }); err != nil {
+			t.Fatal(err)
+		}
+		raw, _ := json.Marshal(sent)
+		var body map[string]json.RawMessage
+		if err := json.Unmarshal(raw, &body); err != nil {
+			t.Fatal(err)
+		}
+		return sent, body
+	}
+	before := time.Now().UnixMilli()
+	sent, body := beat()
+	if sent.ExecutingAt < before || sent.ExecutingAt >= probedAt {
+		t.Fatalf("executingAt = %d, want in [%d, %d): taken before the probe was read", sent.ExecutingAt, before, probedAt)
+	}
+	if _, ok := body["executingAt"]; !ok {
+		t.Fatalf("the body carries no executingAt: %v", body)
+	}
+	// An event emitted after the probe read is stamped no earlier than the beat's instant.
+	if ts, err := time.Parse(time.RFC3339Nano, nowISO()); err != nil || ts.UnixMilli() < sent.ExecutingAt {
+		t.Fatalf("an event after the beat is stamped %v (%v), before executingAt %d", ts, err, sent.ExecutingAt)
+	}
+
+	clear()
+	sent, body = beat()
+	if _, ok := body["executingAt"]; ok || sent.ExecutingAt != 0 {
+		t.Fatalf("with no probe, the body carries executingAt %d", sent.ExecutingAt)
+	}
+}

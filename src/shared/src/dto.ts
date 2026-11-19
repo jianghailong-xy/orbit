@@ -839,6 +839,11 @@ export interface RunnerHeartbeatRequest {
    *  runner, open and leased to this process (runners/runner-executing-sets.ts). A set an entry leaves out, a session
    *  no entry names, and a beat without the member (an older runner) leave the stored values as they are. */
   executing?: RunnerSessionExecuting[];
+  /** When `executing` was composed, in Unix milliseconds on the runner's own clock: the clock its events' `ts` is
+   *  read on. A session whose sets an event batch moved at or after this instant keeps them as the batch left them,
+   *  since the beat was composed before that news (Session.executingEventAt). Absent on runners that predate it, whose
+   *  beats replace the sets as before. */
+  executingAt?: number;
   /** Commits this runner reported as failed that no longer fail for the reason they gave: the
    *  index lock they met is gone, or the branch has moved since. The control plane drops each
    *  settled error it still holds for that exact operation, so the worktree bar offers Commit

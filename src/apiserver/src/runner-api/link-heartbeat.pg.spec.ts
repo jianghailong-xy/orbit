@@ -22,6 +22,9 @@
  *  15. a beat that states what is executing (executing, plan step 1.6) replaces the inferred sets of the sessions it
  *      names: a job whose end report never arrived is gone; a beat without sets changes nothing; a session of another
  *      runner, of another process or closed is not written.
+ *  16. a beat says when it was composed (executingAt, plan step 1.7): one composed before an event batch that moved a
+ *      session's sets, and written after it, leaves them as the batch left them — a job just launched is not taken out,
+ *      an ended one is not put back; a later beat still replaces, and so does one that does not say.
  *
  *   bash scripts/run-pg-spec.sh src/apiserver/src/runner-api/link-heartbeat.pg.spec.ts
  *
@@ -34,7 +37,7 @@ import { setTimeout as delay } from 'node:timers/promises';
 
 import { CreatorType, PrismaClient, RunStatus, SessionDispatchOrigin, TaskStatus } from '@prisma/client';
 import type { HttpException } from '@nestjs/common';
-import type { PlanUsageRateLimitReset, RunnerHeartbeatRequest, RunnerHeartbeatResponse } from '@orbit/shared';
+import { type PlanUsageRateLimitReset, type RunnerHeartbeatRequest, type RunnerHeartbeatResponse, RunEventType } from '@orbit/shared';
 import { PrismaPg } from '@prisma/adapter-pg';
 import { Client, Pool } from 'pg';
 
@@ -965,6 +968,50 @@ test('a link heartbeat answered from runner_presence', { skip: !URL_, concurrenc
     assert.deepEqual(without(await sets(lost)), { jobs: [], shells: [], subagents: [], activity: {}, turn: false });
     for (const id of [lost, elsewhere, otherProcess]) await prisma.session.update({ where: { id }, data: { status: RunStatus.CANCELLED } });
     for (let i = 0; i < 4 && isFull((await beat()).answer); i += 1);
+    await settle();
+  });
+
+  // ── 16 ─────────────────────────────────────────────────────────────────────────────────────────────────
+  await t.test('16. a beat composed before an event batch that moved the sets, and written after it, does not undo it', async () => {
+    await settle();
+    const sets = async (id: string) => (await sql.query(
+      `SELECT "running_bg_jobs" AS jobs, "running_bg_shells" AS shells FROM "session" WHERE "id" = $1`, [id])).rows[0] as { jobs: string[]; shells: string[] };
+    const s = await session(RunStatus.AWAITING_INPUT);
+    let seq = 0;
+    const job = (status: string) => ({ toolUseId: 'bgj_new', shellId: 'bgj_new', status, kind: 'job', command: 'npm test', outputPath: '/runs/bgj_new.output', idleMs: 0 });
+    const report = (payload: Record<string, unknown>, ts: number) => door.events({ id: runnerId, ownerId } as never, s, {
+      leaseOwner: process_, events: [{ type: RunEventType.BACKGROUND_TASK, payload, seq: ++seq, ts: new Date(ts).toISOString() }],
+    } as never);
+    const nothing = { sessionId: s, engineTurnActive: false, jobs: [] as string[], shells: [] as string[], subagents: [] as string[] };
+
+    // The beat was composed (runner clock) a moment before bgj_new started; the launch's batch is written first.
+    const composed = Date.now() - 5_000;
+    await report(job('running'), composed + 1_000);
+    assert.deepEqual(await sets(s), { jobs: ['bgj_new'], shells: ['bgj_new'] }, 'the launch is recorded');
+    await beat({ executing: [nothing], executingAt: composed });
+    assert.deepEqual(await sets(s), { jobs: ['bgj_new'], shells: ['bgj_new'] },
+      'the beat composed before the launch does not take the running job out: the session does not read idle');
+
+    // The same at the same millisecond: the runner stamps the event no earlier than the beat that missed it.
+    await beat({ executing: [nothing], executingAt: composed + 1_000 });
+    assert.deepEqual(await sets(s), { jobs: ['bgj_new'], shells: ['bgj_new'] }, 'a beat of the launch\'s own instant is not newer');
+
+    // A beat composed after the batch is newer news, and replaces: here the job's end report was lost.
+    await beat({ executing: [nothing], executingAt: composed + 2_000 });
+    assert.deepEqual(await sets(s), { jobs: [], shells: [] }, 'a later beat still clears a job whose end never arrived');
+
+    // The other order: a beat composed before an end, and written after it, does not put the ended job back.
+    await report(job('running'), composed + 3_000);
+    await report({ ...job('completed'), exitCode: 0 }, composed + 4_000);
+    assert.deepEqual(await sets(s), { jobs: [], shells: [] });
+    await beat({ executing: [{ ...nothing, jobs: ['bgj_new'], shells: ['bgj_new'] }], executingAt: composed + 3_500 });
+    assert.deepEqual(await sets(s), { jobs: [], shells: [] }, 'the ended job is not restated by an older beat');
+
+    // A beat that does not say when it was composed (a runner of step 1.6 alone) replaces as it did.
+    await report(job('running'), composed + 5_000);
+    await beat({ executing: [nothing] });
+    assert.deepEqual(await sets(s), { jobs: [], shells: [] }, 'without executingAt the beat replaces');
+    await prisma.session.update({ where: { id: s }, data: { status: RunStatus.CANCELLED } });
     await settle();
   });
 

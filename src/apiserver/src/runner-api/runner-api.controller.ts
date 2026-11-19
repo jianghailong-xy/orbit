@@ -571,7 +571,7 @@ import {
 } from '../runners/runner-presence';
 import { recordRunnerResources, sanitizeRunnerResources } from '../runners/runner-resources';
 import { ownBackgroundJobSessionIds, sanitizeBackgroundJobSessionIds } from '../runners/runner-background-holders';
-import { replaceExecutingSets, sanitizeExecuting } from '../runners/runner-executing-sets';
+import { executingStatedAt, replaceExecutingSets, sanitizeExecuting } from '../runners/runner-executing-sets';
 import {
   CHECK_ONLY_REFUSED_MESSAGE,
   checkOnlyRefusesApproval,
@@ -669,6 +669,10 @@ const INGEST_SESSION_SELECT = {
   runningBgJobs: true,
   runningBgJobActivity: true,
   runningSubagents: true,
+  // Beside the sets: whether this batch moved the engine's turn, and the batch stamp a moved set leaves
+  // (`executingEventAt`, runners/runner-executing-sets.ts).
+  engineTurnActive: true,
+  executingEventAt: true,
   coordinatorContextEpoch: true,
   // Same one-shot-per-run reason as runtimeSessionId: the stamp ingestEvents takes is only taken
   // while this is still null, and the row is held FOR UPDATE across that decision.
@@ -908,6 +912,7 @@ const INGESTED_SESSION_COLUMNS: Record<string, { column: string; type: 'text' | 
   contextTokens: { column: 'context_tokens', type: 'integer' },
   contextWindow: { column: 'context_window', type: 'integer' },
   engineTurnActive: { column: 'engine_turn_active', type: 'boolean' },
+  executingEventAt: { column: 'executing_event_at', type: 'timestamp' },
   enginePhase: { column: 'engine_phase', type: 'text' },
   enginePhaseSince: { column: 'engine_phase_since', type: 'timestamp' },
   lastUserText: { column: 'last_user_text', type: 'text' },
@@ -926,6 +931,16 @@ const INGESTED_SESSION_COLUMNS: Record<string, { column: string; type: 'text' | 
   runningBgJobActivity: { column: 'running_bg_job_activity', type: 'jsonb' },
   agentTools: { column: 'agent_tools', type: 'jsonb' },
 };
+
+/** The newest runner-clock `ts` of a batch's events, or null when none parses. */
+function newestEventTime(events: ReadonlyArray<{ ts?: unknown }>): Date | null {
+  let newest: number | null = null;
+  for (const e of events) {
+    const at = typeof e.ts === 'string' ? Date.parse(e.ts) : Number.NaN;
+    if (!Number.isNaN(at) && (newest === null || at > newest)) newest = at;
+  }
+  return newest === null ? null : new Date(newest);
+}
 
 /** A value of an ingested Session column as text, or undefined when it is not one writeCallSessions carries. */
 function ingestedSessionValue(type: (typeof INGESTED_SESSION_COLUMNS)[string]['type'], value: unknown): string | null | undefined {
@@ -2148,7 +2163,7 @@ export class RunnerApiController {
     const entries = sanitizeExecuting(dto?.executing);
     if (!entries) return;
     try {
-      const moved = await replaceExecutingSets(this.prisma, { runnerId, leaseOwner, entries });
+      const moved = await replaceExecutingSets(this.prisma, { runnerId, leaseOwner, entries, statedAt: executingStatedAt(dto?.executingAt) });
       for (const sessionId of moved) this.realtime.publishSessionUpdated(sessionId);
     } catch (error) {
       this.logger.warn(`runner ${runnerId}: executing sets not recorded this heartbeat (${(error as { code?: string })?.code ?? (error as Error)?.name})`);
@@ -4972,6 +4987,8 @@ export class RunnerApiController {
       }
 
       const orphanedApprovals: Array<{ sessionId: string; id: string }> = [];
+      const interruptedSubagents: string[] = [];
+      const interruptedWorkflows: string[] = [];
       if (writes.length > 0) {
         // The single route's writes, once for the batch. The lease write goes first here so a row a
         // guard refuses (it skips the row rather than raising) retires nothing and reaps nothing —
@@ -5018,11 +5035,34 @@ export class RunnerApiController {
           const replaced = landed.filter((w) => w.predecessor).map((w) => w.id);
           if (replaced.length > 0) {
             orphanedApprovals.push(...await reapApprovalsOfReplacedSupervisors(tx, replaced));
+            // The single route's SubAgent and workflow interrupts, once for the batch: the predecessor that hosted them is
+            // gone, and none of them will report an end. Without this a restart's idle sessions kept their runs RUNNING with
+            // no wake for the parent (design §11.3 item 4), and no sweep ends a local run.
+            interruptedSubagents.push(...await interruptOrphanedSubagentRuns(tx, replaced));
+            interruptedWorkflows.push(...await interruptOrphanedWorkflowRuns(tx, replaced));
           }
         }
       }
-      return { results: ids.map((id) => answers.get(id)!), orphanedApprovals };
+      return { results: ids.map((id) => answers.get(id)!), orphanedApprovals, interruptedSubagents, interruptedWorkflows };
     }, loggedRetry(this.logger, 'runnerApi.takeoverLeasesBatch'));
+
+    // As the single route files them; the wake sweep files any not filed here (ScheduledWakeupWorker).
+    if (this.sessions) {
+      for (const runId of taken.interruptedSubagents) {
+        try {
+          await fileSubagentWake(this.prisma, this.sessions, runId);
+        } catch (error) {
+          this.logger.warn(`the wake for interrupted SubAgent run ${runId} was not filed yet: ${(error as Error).message}`);
+        }
+      }
+      for (const runId of taken.interruptedWorkflows) {
+        try {
+          await fileWorkflowWake(this.prisma, this.sessions, runId);
+        } catch (error) {
+          this.logger.warn(`the wake for interrupted workflow run ${runId} was not filed yet: ${(error as Error).message}`);
+        }
+      }
+    }
 
     for (const { sessionId, id } of taken.orphanedApprovals) {
       this.realtime.publish(sessionId, {
@@ -9586,6 +9626,16 @@ export class RunnerApiController {
       if (!sameIds(shells, session.runningBgShells)) sessionData.runningBgShells = shells;
       if (!sameIds(jobs, session.runningBgJobs)) sessionData.runningBgJobs = jobs;
       if (!sameIds(subagents, session.runningSubagents)) sessionData.runningSubagents = subagents;
+      // A batch that moved what is executing stamps the row with its newest event's time, on the runner's clock: a beat
+      // composed before that instant, and written after this batch, is older news and does not replace these sets
+      // (runners/runner-executing-sets.ts). Never moved back: a late retry of an older batch keeps the newer stamp.
+      const executingMoved = sessionData.runningBgShells !== undefined || sessionData.runningBgJobs !== undefined
+        || sessionData.runningSubagents !== undefined
+        || (engineTurnActive !== undefined && engineTurnActive !== session.engineTurnActive);
+      const batchAt = executingMoved ? newestEventTime(events) : null;
+      if (batchAt && (!session.executingEventAt || batchAt > session.executingEventAt)) {
+        sessionData.executingEventAt = batchAt;
+      }
       // When each of those jobs last produced output, folded from the same reports and pruned to the
       // same set. This is what makes the marker mean "work in flight AND still moving": a job whose
       // entry here is older than the threshold stops counting as in flight while staying in

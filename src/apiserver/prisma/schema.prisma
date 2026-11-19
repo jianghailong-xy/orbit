@@ -2206,6 +2206,10 @@ model Session {
   // `status` remains the sole source of truth for runner-slot accounting, so a self-driven
   // turn never consumes a permit it did not acquire.
   engineTurnActive     Boolean   @default(false) @map("engine_turn_active")
+  /// The runner-clock time (an event's `ts`) of the newest event batch that moved engineTurnActive, runningSubagents,
+  /// runningBgJobs or runningBgShells. A heartbeat's `executing` composed before it does not replace those sets: the
+  /// batch is newer news than the beat (runners/runner-executing-sets.ts, migration 1267). Internal: never sent.
+  executingEventAt     DateTime? @map("executing_event_at")
   // When the engine first spoke for the CURRENT run: cleared by every claim, stamped by the
   // first event the engine itself produced (a spawn handshake, or any generation event when a
   // warm process is reused and there is no handshake). RUNNING with this still null is the

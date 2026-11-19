@@ -82,9 +82,9 @@ export type HeartbeatFactRole =
  *   resources                                    kept on the presence row by the beat's own write (runners/runner-resources.ts).
  *   backgroundJobSessionIds                      kept on the presence row by the beat's own write, replaced on every beat
  *                                                (runners/runner-background-holders.ts).
- *   executing                                    what runs in each supervised session, replacing the sessions' inferred sets
- *                                                on every beat that carries it, by its own statement beside the beat's
- *                                                (runners/runner-executing-sets.ts).
+ *   executing, executingAt                       what runs in each supervised session, and when the runner composed it,
+ *                                                replacing the sessions' inferred sets on every beat that carries it, by its
+ *                                                own statement beside the beat's (runners/runner-executing-sets.ts).
  *   the rest but idleCapacity                    reports: the runner row's catalogues and state, its plan usage, its
  *                                                sessions' worktrees, its workspaces' directories.
  */
@@ -115,6 +115,7 @@ export const HEARTBEAT_FACTS = {
   resources: 'PRESENCE',
   backgroundJobSessionIds: 'PRESENCE',
   executing: 'PRESENCE',
+  executingAt: 'PRESENCE',
 } as const satisfies { [K in keyof Required<RunnerHeartbeatRequest>]: HeartbeatFactRole };
 
 export type HeartbeatFactKind = keyof typeof HEARTBEAT_FACTS;

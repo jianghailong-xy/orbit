@@ -25,8 +25,16 @@ import { BACKGROUND_JOB_SESSIONS_MAX } from './runner-background-holders';
  *   - an id already stored keeps its place, new ids follow in the beat's order, and a set equal to the stored one as a
  *     set writes nothing: a quiet beat touches no row.
  *
- * A beat composed just before a launch, or just after an end, and delivered after the batch that reported it, says the
- * opposite of that batch until the next beat: the sets are as exact as the beat cadence, never stuck.
+ * A beat and the event batches travel by separate requests and are written by separate transactions, so a beat composed
+ * just before a launch can be written after the batch that reported the launch (on the link a beat may wait up to 75 s
+ * for its answer, and the next beat comes 30 s after that). Replacing from it would take the new id out again until
+ * the next beat, and a session with a job just started would read as executing nothing: a waiting parent released
+ * early, a scheduled run landed early. So the beat says when it was composed (`executingAt`, the runner's clock), each
+ * batch that moves a set stamps the session with its newest event's `ts` on the same clock (`executing_event_at`), and
+ * a session stamped at or after the beat's instant is left as the batch left it — in either direction, so a beat
+ * composed before an end does not put the ended id back either. The runner observes an event into the state a beat
+ * reads before it stamps the event's `ts` (runner-go session_executing.go), so news the beat missed always carries a
+ * later stamp. A beat without `executingAt` (a runner of step 1.6 alone) replaces as before.
  */
 
 /** At most this many ids in one set of one session: a set longer than this is not stated, and its stored value stands. */
@@ -36,6 +44,16 @@ export const EXECUTING_IDS_MAX = 256;
 const EXECUTING_ID_MAX_LENGTH = 200;
 
 const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+
+/**
+ * The instant a beat says its `executing` was composed, on the runner's clock; undefined for a beat that does not say,
+ * or says something that is not a time.
+ */
+export function executingStatedAt(value: unknown): Date | undefined {
+  if (typeof value !== 'number' || !Number.isSafeInteger(value) || value <= 0) return undefined;
+  const at = new Date(value);
+  return Number.isNaN(at.getTime()) ? undefined : at;
+}
 
 /** One session's sets as stored from a beat; a member left out is not stated. */
 export interface ExecutingEntry {
@@ -108,6 +126,12 @@ function replaced(column: string, member: string): Prisma.Sql {
     ELSE ${col} END`;
 }
 
+/** The session's last event-path move of its sets is older than the beat, or the beat does not say when it was composed. */
+function olderThanTheBeat(statedAt: Date | undefined): Prisma.Sql {
+  if (!statedAt) return Prisma.sql`true`;
+  return Prisma.sql`(s."executing_event_at" IS NULL OR s."executing_event_at" < ${statedAt.toISOString()}::timestamp)`;
+}
+
 /**
  * Replaces the stored sets of the sessions a beat names with what it states, as the module comment says; answers the
  * ids of the sessions whose row moved, for the caller to publish. One UPDATE of session rows by key (rank 30); the
@@ -115,7 +139,7 @@ function replaced(column: string, member: string): Prisma.Sql {
  */
 export async function replaceExecutingSets(
   prisma: Pick<PrismaService, '$queryRaw'>,
-  input: { runnerId: string; leaseOwner: string | null; entries: readonly ExecutingEntry[] },
+  input: { runnerId: string; leaseOwner: string | null; entries: readonly ExecutingEntry[]; statedAt?: Date },
 ): Promise<string[]> {
   if (!input.leaseOwner || input.entries.length === 0) return [];
   const values = input.entries.map((e) => ({
@@ -149,6 +173,7 @@ export async function replaceExecutingSets(
        AND s."status" IN (${OPEN_STATUSES_SQL})
        AND s."kind" = 'CONVERSATION'
        AND s."inbox_lease_owner" = ${input.leaseOwner}::uuid
+       AND ${olderThanTheBeat(input.statedAt)}
        AND (${turnDiffers} OR ${setDiffers('running_subagents', 'subagents')} OR ${setDiffers('running_bg_shells', 'shells')}
             OR ${setDiffers('running_bg_jobs', 'jobs')})
     RETURNING s."id"::text AS "id"`;
