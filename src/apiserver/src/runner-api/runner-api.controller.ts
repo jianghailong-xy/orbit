@@ -7560,8 +7560,8 @@ export class RunnerApiController {
       // Beside the status the ack just wrote, in its transaction and only when it won, so a retried completion
       // records nothing twice. The session's copy rides on the park below, the one Session write (I3).
       if (turnOutcome) {
-        await tx.conversationTurn.update({
-          where: { id: dto.turnId },
+        await tx.conversationTurn.updateMany({
+          where: { id: dto.turnId, sessionId },
           data: { outcome: turnOutcome, error: turnError },
         });
       }
