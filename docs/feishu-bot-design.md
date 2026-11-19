@@ -637,6 +637,30 @@ F0 → F1 → F2 → F3 串行，F3n 在 F3 之后两端并行。以后再做：
   - 在 `open_workspace_id`、以 `open_permission_mode` 开会话，turn 记外部发送者（F3-5 的字段）；
   - 回执 `Started · <title>` 和每轮的最终回复发回他的消息链，只有正文，没有 Orbit 链接；
   - 在消息链里回复，进入同一个会话；另发一条顶层消息，开新会话。
+  - 落地（O3）：
+    - 路由器在 O2 的门之后，把非主人的私聊交给 `FeishuDirectService.handleOpenMessage`。
+    - 应用还没有主人时不开会话，照旧回 `noOwner`：审批要发给主人，没有主人就没人能答。
+    - 开放模式无效时（14.1，或 `reserveOpenSlot` 答 `NOT_OPEN`），照旧回 stranger 句子，不写数据。
+    - 顶层消息：
+      - 会话 id 是 `feishuDerivedUuid('feishu-open-session', appId, messageId)`；
+      - 先 `reserveOpenSlot`，再 `SessionsService.create`（`openedBy = FEISHU`，`externalSender` 是发送者），
+        建成后 `openSlotStarted`；
+      - 回执 `Started · <title>` 是对这条消息的普通回复，不写 workspace 名。
+    - 链内回复：只认这个发送者自己开的链（`feishu_thread.open_access_open_id` 等于他的 open_id，同一私聊）。
+      - 认到了，就作为那个会话的 turn，记外部发送者，只给那一行盖 `last_spoken_at`；
+      - 主人的链、提醒卡和别人的链都认不到，回
+        `This message isn't linked to a session. To start a new session, send a new message rather than a reply.`。
+    - `help`、`status`、`disconnect` 是主人的命令，对别人只是普通消息；非文本照旧回 `Only text messages are supported for now.`。
+    - 服务端拒绝时回 `Nothing was started: <reason>.` 或 `This wasn't sent to the session: <reason>.`。
+      reason 按 §15.1 的 `groupReason` 处理。
+    - activity（credential_kind = FEISHU，payload 带 appId、openId、messageId、chatId）：
+      - `feishu.open.session.created`：建会话；
+      - `feishu.open.session.turn`：链内 turn；
+      - `feishu.open.refused`：超限，带 `limit`、`max`。这一行的 id 由应用和消息派生，同一事件再处理只写一次。
+    - 回传（outbox）：链的 `feishu_thread` 行 `open_access_open_id` 不为空时，只发正文，不带 Open in Orbit 和 URL。
+      截断说明用群里那句，以普通回复发，不开话题。
+    - 回传照旧发到会话最近有人说话的链。主人在 Orbit 里回复不写链；主人在飞书里回复这个会话的审批卡时，链变成主人的，
+      之后的回传发给主人（带 Open in Orbit），直到发起人再在自己的链里说话。
 - **群**（O4）
   - 接入过的群用它自己的路由和上限。
   - 未接入的内部群第一次被 @ 时，建一条隐式路由，按默认设置开会话，用话题回执。隐式路由是 `feishu_chat_route` 的一行：
