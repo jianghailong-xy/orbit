@@ -2,7 +2,7 @@ import assert from 'node:assert/strict';
 import { test } from 'node:test';
 
 import { coordinatorDeliveryTurnId } from './coordinator-delivery.service';
-import { turnTypedByOwner } from './task-run-stopped.producer';
+import { runStoppedWakeOn, TaskRunStoppedProducer, turnTypedByOwner } from './task-run-stopped.producer';
 
 test('a turn counts as the owner\'s only when a client minted its key and no session sent it', () => {
   const session = '01a19ef3-88ce-7789-a094-0f2cca249425';
@@ -20,4 +20,26 @@ test('a turn counts as the owner\'s only when a client minted its key and no ses
   ]) {
     assert.equal(turnTypedByOwner({ clientTurnId, senderSessionId: null }), false, clientTurnId);
   }
+});
+
+test('ORBIT_RUN_STOPPED_WAKE=off switches the producer off; anything else leaves it on', async () => {
+  assert.equal(runStoppedWakeOn({}), true);
+  assert.equal(runStoppedWakeOn({ ORBIT_RUN_STOPPED_WAKE: 'on' }), true);
+  assert.equal(runStoppedWakeOn({ ORBIT_RUN_STOPPED_WAKE: '' }), true);
+  assert.equal(runStoppedWakeOn({ ORBIT_RUN_STOPPED_WAKE: 'off' }), false);
+  assert.equal(runStoppedWakeOn({ ORBIT_RUN_STOPPED_WAKE: ' OFF ' }), false);
+
+  // Off, a stop reads nothing and delivers nothing.
+  const touched: string[] = [];
+  const trap = new Proxy({}, { get: (_target, key) => { touched.push(String(key)); return trap; } });
+  const producer = new TaskRunStoppedProducer(trap as never, trap as never, trap as never);
+  const before = process.env.ORBIT_RUN_STOPPED_WAKE;
+  process.env.ORBIT_RUN_STOPPED_WAKE = 'off';
+  try {
+    assert.equal(await producer.afterStop('01a19ef3-88ce-7789-a094-0f2cca249425', { turnId: 't' }), null);
+  } finally {
+    if (before === undefined) delete process.env.ORBIT_RUN_STOPPED_WAKE;
+    else process.env.ORBIT_RUN_STOPPED_WAKE = before;
+  }
+  assert.deepEqual(touched, []);
 });
