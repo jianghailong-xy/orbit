@@ -58,7 +58,6 @@ import { Drawer } from '../ui/Drawer';
 import { Input } from '../ui/Input';
 import { Menu } from '../ui/Menu';
 import { PasswordInput } from '../ui/PasswordInput';
-import { Select } from '../ui/Select';
 import { Spinner } from '../ui/Spinner';
 import { Switch } from '../ui/Switch';
 import { Textarea } from '../ui/Textarea';
@@ -100,7 +99,6 @@ export interface SettingsWorkspace {
   enableWorktree?: boolean;
   /** Smart model selection (docs/model-routing-design.md §7.2). */
   modelRouting?: boolean;
-  modelRoutingOptimizeFor?: 'cost' | 'balance' | 'intelligence';
   /** The other engines smart selection may move this Agent's task runs to (§6). */
   modelRoutingProviders?: string[];
   /** SubAgents (docs/subagent-design.md §7): on by default, 4 of one session's at once. */
@@ -131,7 +129,6 @@ type WorkspacePatch = Partial<
     | 'repoUrl'
     | 'enableWorktree'
     | 'modelRouting'
-    | 'modelRoutingOptimizeFor'
     | 'modelRoutingProviders'
     | 'subagentsEnabled'
     | 'subagentsMaxRunning'
@@ -619,25 +616,6 @@ function WorkspaceSettingsPage({ id }: { id: string }) {
                   />
                 }
               />
-              <SettingsRow
-                title="Optimize for"
-                description="For tasks without a suggested tier."
-                tooltip="For tasks without a suggested tier: Cost uses the inferred tier, Balance starts at M, and Intelligence starts at L. Applies to future runs; pinned models always win."
-                control={
-                  <Select
-                    aria-label="Optimize for"
-                    value={workspace.modelRoutingOptimizeFor ?? 'cost'}
-                    options={[
-                      { value: 'cost', label: 'Cost' },
-                      { value: 'balance', label: 'Balance' },
-                      { value: 'intelligence', label: 'Intelligence' },
-                    ]}
-                    onValueChange={(value) => {
-                      if (value !== null) save({ modelRoutingOptimizeFor: value });
-                    }}
-                  />
-                }
-              />
               <div className="settings-row settings-row--block">
                 <RoutingEngines
                   own={engine}
@@ -732,8 +710,6 @@ function WorkspaceSettingsPage({ id }: { id: string }) {
       <SubagentSettings
         enabled={workspace.subagentsEnabled ?? true}
         onEnabledChange={(subagentsEnabled) => save({ subagentsEnabled })}
-        optimizeFor={workspace.modelRoutingOptimizeFor ?? 'cost'}
-        onOptimizeForChange={(modelRoutingOptimizeFor) => save({ modelRoutingOptimizeFor })}
         maxRunning={workspace.subagentsMaxRunning ?? 4}
         onMaxRunningChange={(subagentsMaxRunning) => save({ subagentsMaxRunning })}
       />

@@ -344,6 +344,57 @@ test('a subscription whose quota was not read ranks after those whose headroom i
   assert.equal(balance.provider, 'deepseek');
 });
 
+test('quota that goes to waste first is spent first: nearly spent last, then the soonest expiry, then headroom', () => {
+  const HOUR = 3_600_000;
+  const T0 = Date.UTC(2026, 10, 19, 12, 0);
+  const kimi = (utilization: number, expiresAt: number | null, nearLimit = false): SubagentProvider => ({
+    slug: 'kimi', billing: 'subscription', inScope: true, credential: { kind: 'login', engine: 'kimi' }, engines: [{ engine: 'kimi' }],
+    account: { quota: { utilization, window: 'monthly' }, expiresAt, nearLimit },
+  });
+  const soon = codex({ account: { quota: { utilization: 60, window: 'weekly' }, expiresAt: T0 + 3 * HOUR } });
+  const engines = { claude: { installed: true }, codex: { installed: true }, kimi: { installed: true } };
+  const modelCatalog: RunnerModelCatalog = { ...CATALOG, kimi: [{ value: 'kimi-code/k3', label: 'K3' }] };
+  const at = (optimizeFor: 'cost' | 'balance' | 'intelligence', providers: SubagentProvider[]) =>
+    route(input({ optimizeFor, providers, engines, modelCatalog }));
+
+  // Codex has less left, but it resets in 3 hours; Kimi's lasts 20 days.
+  const cost = at('cost', [kimi(10, T0 + 480 * HOUR), soon, DEEPSEEK]);
+  assert.equal(cost.provider, 'codex');
+  assert.match(cost.reasons.find((r) => r.startsWith('Picked'))!,
+    /a subscription with 40% of its quota left until 2026-11-19T15:00Z, used before any metered key/);
+  assert.equal(cost.fallbacks[0].provider, 'kimi');
+  // A nearly spent window goes last, however soon it resets.
+  assert.equal(at('cost', [kimi(10, T0 + 480 * HOUR), codex({ account: { ...soon.account, nearLimit: true } })]).provider, 'kimi');
+  // No reset known counts as never: after one that has one, then by headroom as before.
+  assert.equal(at('cost', [kimi(10, null), soon]).provider, 'codex');
+  assert.equal(at('cost', [kimi(10, null), codex({ account: { quota: { utilization: 60, window: 'weekly' } } })]).provider, 'kimi');
+
+  // Balance: expiring quota before a key, whose headroom never runs out; with no reset known, headroom as before.
+  const balance = at('balance', [DEEPSEEK, soon]);
+  assert.equal(balance.provider, 'codex');
+  assert.match(balance.reasons.find((r) => r.startsWith('Picked'))!, /\(Balance\): the quota that expires soonest in tier M/);
+  assert.equal(at('balance', [codex({ account: { quota: { utilization: 60, window: 'weekly' } } }), DEEPSEEK]).provider, 'deepseek');
+
+  // Intelligence: the stronger model first; expiry only between equals.
+  const lOnly: SubagentProvider = {
+    slug: 'team-token', billing: 'subscription', inScope: true, credential: { kind: 'key', presetSlug: null },
+    engines: [{ engine: 'claude', models: [{ model: 'mid-model', effort: null, level: 'L' }] }],
+    account: { quota: null, expiresAt: T0 + HOUR },
+  };
+  const strong = at('intelligence', [lOnly, claude({ account: { quota: null, expiresAt: T0 + 400 * HOUR } })]);
+  assert.equal(strong.model, OPUS, 'Opus reaches XL; it leads tier L over a model that reaches L, whatever expires first');
+  const twins = route(input({ optimizeFor: 'balance', caller: { size: 'M' }, engines, modelCatalog,
+    providers: [codex({ slug: 'codex-late', account: { quota: null, expiresAt: T0 + 100 * HOUR } }), codex({ slug: 'codex-soon', account: { quota: null, expiresAt: T0 + HOUR } })] }));
+  assert.equal(twins.provider, 'codex-soon');
+
+  // An account pool runs on its member whose quota goes first.
+  const crew = pool('crew', [
+    { label: 'late@team', quota: { utilization: 10, window: 'weekly' }, expiresAt: T0 + 150 * HOUR },
+    { label: 'soon@team', quota: { utilization: 50, window: 'weekly' }, expiresAt: T0 + 2 * HOUR },
+  ], 'codex');
+  assert.equal(at('cost', [crew]).note, 'subscription pool, soon@team with 50% quota left');
+});
+
 test('Cost: a subscription with headroom before a cheaper metered key; subscriptions by headroom; keys by price', () => {
   const tierM = (models: SubagentModelRow[]) => models;
   const cheap = key('cheap-key', tierM([{ model: 'cheap', effort: null, level: 'M', outputPricePerMTok: 0.1 }]));

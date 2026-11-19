@@ -113,7 +113,7 @@ async function fixture(
   await db.user.create({
     data: {
       id: ownerId, email: `${label}-${RUN}-${ownerId}@routing.invalid`, name: label, passwordHash: 'x',
-      preferences: { modelRouting: true },
+      preferences: { modelRouting: true, optimizeFor: 'cost' },
     },
   });
   await db.runner.create({

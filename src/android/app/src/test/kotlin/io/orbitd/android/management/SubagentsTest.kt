@@ -72,9 +72,9 @@ class SubagentsTest {
         // Not an object (a server before the route answers 404 or a list): no providers, not a crash.
         assertEquals(emptyList<SubagentProvider>(), Subagents.decode(JsonArray(emptyList())))
 
-        assertEquals(SubagentSettings(true, "cost", 4), SubagentSettings.of(buildJsonObject { put("name", "a") }))
-        assertEquals(SubagentSettings(false, "intelligence", 9), SubagentSettings.of(buildJsonObject {
-            put("subagentsEnabled", false); put("modelRoutingOptimizeFor", "intelligence"); put("subagentsMaxRunning", 9) }))
+        assertEquals(SubagentSettings(true, 4), SubagentSettings.of(buildJsonObject { put("name", "a") }))
+        assertEquals(SubagentSettings(false, 9), SubagentSettings.of(buildJsonObject {
+            put("subagentsEnabled", false); put("subagentsMaxRunning", 9) }))
         assertEquals(listOf("kimi"), Subagents.blocked(Json.parseToJsonElement("""{"preferences":{"subagentBlockedProviders":["kimi"]}}""")))
         assertEquals(emptyList<String>(), Subagents.blocked(Json.parseToJsonElement("""{"preferences":{"theme":"system"}}""")))
     }
@@ -97,10 +97,10 @@ class SubagentsTest {
     @Test fun workspacePatchSendsSubagentFieldsOnlyWhenTheyMoved() {
         val saved = buildJsonObject { put("name", "app") }
         assertEquals(buildJsonObject { put("name", "app"); put("effort", ""); put("enabled", true) },
-            workspacePatch(saved, "app", "", "", "", true, false, SubagentSettings(true, "cost", 4)))
+            workspacePatch(saved, "app", "", "", "", true, false, SubagentSettings(true, 4)))
         assertEquals(buildJsonObject { put("name", "app"); put("effort", ""); put("enabled", true); put("subagentsEnabled", false)
-            put("modelRoutingOptimizeFor", "balance"); put("subagentsMaxRunning", 16) },
-            workspacePatch(saved, "app", "", "", "", true, false, SubagentSettings(false, "balance", 16)))
+            put("subagentsMaxRunning", 16) },
+            workspacePatch(saved, "app", "", "", "", true, false, SubagentSettings(false, 16)))
     }
 
     @Test fun theGroupsRowsSayTheMocksWordsAndDoneSendsWhatMoved() {
@@ -108,17 +108,17 @@ class SubagentsTest {
         var done = 0
         compose.setContent { WorkspaceSettings(api, ManagementFixture.WORKSPACE, 0, { done++ }, {}, {}) }
         await("5 of 6 · Edit")
-        listOf(Subagents.GROUP, Subagents.SWITCH_DETAIL, Subagents.OPTIMIZE, "Cost", "Balance", "Intelligence", Subagents.PROVIDERS,
+        listOf(Subagents.GROUP, Subagents.SWITCH_DETAIL, Subagents.PROVIDERS,
             Subagents.PROVIDERS_DETAIL, Subagents.RUNNING, Subagents.RUNNING_DETAIL).forEach {
             assertTrue("$it is drawn", compose.onAllNodesWithText(it, useUnmergedTree = true).fetchSemanticsNodes().isNotEmpty())
         }
+        // Optimize For is the account's, on Settings › General: the Agent's form draws and writes none of it.
+        assertEquals(0, compose.onAllNodesWithText("Optimize For", useUnmergedTree = true).fetchSemanticsNodes().size)
         compose.onNodeWithTag("subagents-running", useUnmergedTree = true).assertTextEquals("4")
         val switch = hasText(Subagents.SWITCH_DETAIL) and isToggleable()
         compose.onNode(switch).assertIsOn()
-        compose.onNode(hasText("Cost") and isSelectable()).assertIsSelected()
 
         compose.onNode(switch).performScrollTo().performClick()
-        compose.onNode(hasText("Intelligence") and isSelectable()).performScrollTo().performClick()
         compose.onNodeWithContentDescription("More").performScrollTo().performClick().performClick()
         compose.onNodeWithContentDescription("Fewer").performClick()
         compose.onNodeWithTag("subagents-running", useUnmergedTree = true).assertTextEquals("5")
@@ -126,19 +126,17 @@ class SubagentsTest {
         compose.waitUntil(60_000) { done == 1 }
         val patch = written("PATCH workspaces/${ManagementFixture.WORKSPACE}").single()
         assertEquals(JsonPrimitive(false), patch["subagentsEnabled"])
-        assertEquals(JsonPrimitive("intelligence"), patch["modelRoutingOptimizeFor"])
         assertEquals(JsonPrimitive(5), patch["subagentsMaxRunning"])
         assertTrue("no runner route", fixture.calls.none { it.contains("runner/") })
     }
 
     @Test fun storedSubagentFieldsPrefillAndAnUnchangedFormWritesNothing() {
-        fixture.workspaceExtra = ""","subagentsEnabled":false,"modelRoutingOptimizeFor":"balance","subagentsMaxRunning":16"""
+        fixture.workspaceExtra = ""","subagentsEnabled":false,"subagentsMaxRunning":16"""
         val api = api()
         var done = 0
         compose.setContent { WorkspaceSettings(api, ManagementFixture.WORKSPACE, 0, { done++ }, {}, {}) }
         await("5 of 6 · Edit")
         compose.onNode(hasText(Subagents.SWITCH_DETAIL) and isToggleable()).assertIsOff()
-        compose.onNode(hasText("Balance") and isSelectable()).assertIsSelected()
         compose.onNodeWithTag("subagents-running", useUnmergedTree = true).assertTextEquals("16")
         compose.onNodeWithContentDescription("More").assertIsNotEnabled()
         compose.onNodeWithText("Done").performClick()
