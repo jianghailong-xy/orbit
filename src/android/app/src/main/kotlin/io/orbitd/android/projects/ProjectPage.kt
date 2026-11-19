@@ -438,7 +438,11 @@ object ProjectPage {
     fun criterionWork(c: JsonObject, integrationRef: String?, main: String = RunSettings.defaultMainBranch): CriterionWork? {
         val satisfied = ProjectDoc.satisfied(c) ?: return null
         var landing: String? = null; var warning: String? = null
-        if (satisfied) c.text("landing")?.let { raw -> when (raw) {
+        // D2 A: a landing reason read for it decides the half-sentence, in the Done card's words; an unmet criterion says none. Absent
+        // (a public page, an older server, a non-code project) the row keeps the words its `landing` lane gives it.
+        val reasoned = "landingReason" in c
+        if (reasoned) landing = criterionLandingHalfSentence(satisfied, c.text("landingReason"), main)
+        else if (satisfied) c.text("landing")?.let { raw -> when (raw) {
             "ON_INTEGRATION_LINE" -> { landing = "on ${integrationRef ?: "the project branch"}"; warning = "not on $main yet" }
             "LANDED" -> landing = "on $main"
             "UNKNOWN" -> landing = "no merge receipt either way"
@@ -449,7 +453,23 @@ object ProjectPage {
                 CriterionWork.HeldUp(it.text("taskId").orEmpty(), it.text("title").orEmpty(), requiredActionSentence[it.text("requiredAction")] ?: it.text("requiredAction").orEmpty())
             })
         }
-        return CriterionWork(if (satisfied) metByItsWork else notMetByItsWork, landing, warning, satisfied && c.text("landing") == "UNKNOWN", reasons)
+        val flagged = if (reasoned) c.text("landingReason") in setOf("NO_RECEIPT", "NO_BRANCH") else c.text("landing") == "UNKNOWN"
+        return CriterionWork(if (satisfied) metByItsWork else notMetByItsWork, landing, warning, satisfied && flagged, reasons)
+    }
+    /** A criterion's landing half-sentence on the project page (D2 A): the Done card's words for its `landingReason`, and none for a
+     * criterion its work has not met — that work has not landed anywhere yet, whatever the landing lane says. Web's and OrbitKit's
+     * `criterionLandingHalfSentence`, held to src/shared/src/project-page-labels.fixture.json. */
+    fun criterionLandingHalfSentence(satisfied: Boolean?, landingReason: String?, main: String = RunSettings.defaultMainBranch): String? =
+        if (satisfied == true) ProjectDone.landingReasonLabel(landingReason, main) else null
+    /** Each criterion with its `landingReason` from the done read, matched by id — the items do not carry it. A non-code project's
+     * reasons are all null by design (it reads no landing), so it keeps the rows it always drew. Web's and OrbitKit's
+     * `withLandingReasons`. */
+    fun withLandingReasons(criteria: List<JsonObject>, derivedDone: JsonObject?): List<JsonObject> {
+        if (derivedDone == null || derivedDone.flag("nonCode")) return criteria
+        val byId = derivedDone.objects("criteria").filter { it.text("definitionId") != null }
+            .associate { it.text("definitionId")!! to (it["landingReason"] ?: JsonNull) }
+        if (byId.isEmpty()) return criteria
+        return criteria.map { c -> byId[c.text("id")]?.let { JsonObject(c + ("landingReason" to it)) } ?: c }
     }
     const val criteriaPreviewCompact = 4
     fun criteriaStanding(count: Int) = "$count ${if (count == 1) "criterion" else "criteria"} stated. Whether one is met is read off the work filed under it; nothing in Orbit judges the criteria themselves."
@@ -628,9 +648,31 @@ object ProjectPage {
         val state = t.obj("integration")?.text("state") ?: return null
         return if (state in integratingStates) "integrating" else if (state in landedStates) "landed" else null
     }
-    fun workTag(t: JsonObject): Tag? = when (workState(t)) {
+    /** A running task whose background jobs have said nothing for ten minutes (`runStalled`; web `RUN_STALLED`). */
+    const val runStalled = "no output 10+ min"
+    /** A task set to start by hand (`autoRunWhenReady: false`), as its row says it: the Project started card's words for the same
+     * tasks. Web's `PROJECT_TASK_STARTS_BY_HAND`, OrbitKit's `ProjectPage.startsByHand`. */
+    const val startsByHand = "set to start by hand"
+    private val runReasonLabel = mapOf("TURN" to "Turn in progress", "BACKGROUND_JOB" to "Background job", "WAITING" to "Waiting to be woken")
+    /** What a running task says it is doing: "Running · Background job", and "· no output 10+ min" when it stalled; null when the
+     * server gave no reason. Web's and OrbitKit's `runningLabel`. */
+    fun runningLabel(runReason: String?, runStalled: Boolean): String? {
+        if (runReason.isNullOrEmpty()) return null
+        val label = "Running · ${runReasonLabel[runReason] ?: runReason}"
+        return if (runStalled) "$label · ${ProjectPage.runStalled}" else label
+    }
+    fun workTag(t: JsonObject): Tag? {
+        val state = workState(t)
+        // Held for a person to start (G5): said on the row in the Project started card's words. `false`, not absent — an older server
+        // sends no flag, and that is no claim.
+        if (t["autoRunWhenReady"] == JsonPrimitive(false) && (state == "READY" || (state == "BLOCKED" && !waitsForLanding(t))))
+            return if (state == "READY") Tag("Ready · $startsByHand", TagTone.WARNING) else Tag("Blocked · $startsByHand", TagTone.NEUTRAL)
+        return workTagByState(t, state)
+    }
+    private fun workTagByState(t: JsonObject, state: String): Tag? = when (state) {
         "READY" -> Tag(if (t.flag("autoRunWhenReady")) "Ready · automatic dispatch" else "Ready · can start now", TagTone.WARNING)
-        "RUNNING" -> Tag("Running", TagTone.BRAND)
+        // A stalled run (G4) says so on its row as well as in the run queue.
+        "RUNNING" -> if (t.flag("runStalled")) Tag("Running · $runStalled", TagTone.WARNING) else Tag("Running", TagTone.BRAND)
         "BLOCKED" -> if (waitsForLanding(t)) null else Tag("Blocked", TagTone.NEUTRAL)
         "AWAITING_VERIFICATION" -> Tag(when (t.text("verificationState")) {
             "FAILED" -> "Verification failed"; "MISSING" -> "Missing verifier"; "RUNNING" -> "Awaiting verification · verifier running"
@@ -828,7 +870,7 @@ object ProjectPage {
     fun queueImpactTruncated(maxTasks: Int) = "Impact ranking not computed" to
         "This project has more than $maxTasks unfinished tasks, so tasks are shown without downstream impact ranking."
     fun queueRowState(item: JsonObject) = when (item.text("runState")) {
-        "RUNNING" -> "Work in progress"
+        "RUNNING" -> runningLabel(item.text("runReason"), item.flag("runStalled")) ?: "Work in progress"
         "QUEUED" -> "Waiting for runner"
         "PAUSED" -> item.obj("pausedList")?.text("title")?.takeIf { it.isNotEmpty() }?.let { "List paused · $it" } ?: "List paused"
         else -> "Prerequisites complete"
@@ -859,12 +901,7 @@ object ProjectPage {
     }
     fun confirmButton(status: String) = when (status) { "DONE" -> "Record as done"; "CANCELLED" -> "Record as cancelled"; else -> "Reopen" }
     fun confirmMessage(status: String, doc: JsonObject, buckets: JsonObject?): String = when (status) {
-        "DONE" -> {
-            val criteria = doc.objects("acceptanceCriteriaItems")
-            val settled = criteria.count { ProjectDoc.satisfied(it) == true }
-            val noReceipt = criteria.count { it.text("landing") == "UNKNOWN" }
-            "${criteria.size} stated ${if (criteria.size == 1) "criterion" else "criteria"} · $settled settled by the work filed under them · $noReceipt with no merge receipt"
-        }
+        "DONE" -> ProjectDone.recordAsDoneTally(doc)
         "CANCELLED" -> {
             val unfinished = buckets?.let { it.n("running") + it.n("ready") + it.n("blocked") + it.n("awaitingVerification") + it.n("failed") } ?: 0
             "$unfinished unfinished ${if (unfinished == 1) "task stays" else "tasks stay"} filed under it and won’t start. A run already going is not stopped."
