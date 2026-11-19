@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"os"
 	"os/exec"
+	"path/filepath"
 	"sort"
 	"strings"
 	"time"
@@ -28,6 +29,10 @@ func openCodeCLIAvailable() bool {
 }
 
 func fetchOpenCodeModelCatalog(ctx context.Context, dir string) ([]ModelInfo, error) {
+	dir, err := filepath.Abs(expandTilde(dir))
+	if err != nil {
+		return nil, fmt.Errorf("resolve OpenCode model probe directory: %w", err)
+	}
 	// Reachable only from a background refresh, so the ceiling costs nobody a wait — and it has to
 	// cover a cold start of a 214 MB binary: `opencode models --verbose` measured 17 s on a loaded
 	// runner (2026-11-13), and the old 30 s ceiling was killing it mid-startup every hour, leaving
@@ -37,13 +42,14 @@ func fetchOpenCodeModelCatalog(ctx context.Context, dir string) ([]ModelInfo, er
 	// Model discovery is metadata-only; never execute project/global plugins while
 	// probing a runner heartbeat catalog.
 	cmd := exec.CommandContext(cctx, providerOpenCode, "--pure", "models", "--verbose")
+	cmd.Dir = dir
+	// Match session isolation so providers defined only in global config stay out of
+	// the catalog. Keep the inherited data directory so auth-store sign-ins still work.
 	cmd.Env = replaceEnv(os.Environ(), map[string]string{
 		"OPENCODE_DISABLE_AUTOUPDATE":     "1",
 		"OPENCODE_DISABLE_PROJECT_CONFIG": "1",
+		"XDG_CONFIG_HOME":                 dir,
 	})
-	if strings.TrimSpace(dir) != "" {
-		cmd.Dir = expandTilde(dir)
-	}
 	out, err := cmd.CombinedOutput()
 	if err != nil {
 		return nil, fmt.Errorf("opencode models --verbose: %w", err)
@@ -52,9 +58,9 @@ func fetchOpenCodeModelCatalog(ctx context.Context, dir string) ([]ModelInfo, er
 }
 
 // OpenCode merges project config by walking up from the current directory. A runner heartbeat has
-// no agent scope, so discover only globally configured models from a stable directory beneath the
-// runner's private machine home. Never use the shared OS temp directory: another local account
-// could plant an ancestor opencode.json there.
+// no agent scope, so use a stable, empty directory beneath the runner's private machine home for
+// both the working directory and config home. Never use the shared OS temp directory: another
+// local account could plant an ancestor opencode.json there.
 func fetchGlobalOpenCodeModelCatalog(ctx context.Context) ([]ModelInfo, error) {
 	dir, err := privateProbeDir("opencode-model-catalog")
 	if err != nil {
