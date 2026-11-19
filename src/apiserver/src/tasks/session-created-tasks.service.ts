@@ -16,36 +16,17 @@ const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/
 export const SESSION_CREATED_TASKS_MAX_HOPS = 10;
 
 /**
- * Where a row sorts, by the pill it shows: live state first, as `TaskStatusPill` draws it, and the
- * stored status otherwise. Failed → Running → Queued → the rest of the unfinished → Done →
- * Cancelled.
+ * Where a row sorts, as the Agents list sorts its runs: the running ones first, then every other
+ * row newest first, whatever its status — a Done row is not sent to the bottom, and its pill says
+ * how it ended.
  */
-const RUNNING_GROUP = 1;
-const QUEUED_GROUP = 2;
-const STATUS_GROUP: Readonly<Record<TaskStatus, number>> = {
-  [TaskStatus.FAILED]: 0,
-  [TaskStatus.OPEN]: 3,
-  [TaskStatus.IN_PROGRESS]: 3,
-  [TaskStatus.DONE]: 4,
-  [TaskStatus.CANCELLED]: 5,
-};
-
-function groupOf(row: { status: TaskStatus; running: boolean; queued: boolean }): number {
-  if (row.running) return RUNNING_GROUP;
-  if (row.queued) return QUEUED_GROUP;
-  return STATUS_GROUP[row.status];
+function groupOf(row: { running: boolean }): number {
+  return row.running ? 0 : 1;
 }
 
-/** `STATUS_GROUP` in SQL, for the rows nothing is running or queued on. Constants, not input. */
-const STATUS_GROUP_SQL = Prisma.raw(
-  `CASE l."status" ${Object.entries(STATUS_GROUP)
-    .map(([status, group]) => `WHEN '${status}' THEN ${group}`)
-    .join(' ')} END`,
-);
-
-/** Every status `STATUS_GROUP` places, as a SQL array: the page's first rows are read per status. */
+/** Every status, as a SQL array: the page's first rows are read per status. Constants, not input. */
 const STATUSES_SQL = Prisma.raw(
-  `ARRAY[${Object.keys(STATUS_GROUP).map((status) => `'${status}'`).join(', ')}]::task_status[]`,
+  `ARRAY[${Object.values(TaskStatus).map((status) => `'${status}'`).join(', ')}]::task_status[]`,
 );
 
 /** A task another one took over, and names: the only kind whose chain is walked. */
@@ -74,9 +55,9 @@ interface PickedRow {
  *  - `running`/`queued` are `TasksService.withRunning`'s, the task list's and the link card's. The
  *    statement only has to know which rows COULD be live — the ones a work session carries, as many
  *    as the owner has runs live, queued or waiting to be woken, not as many as the session has tasks —
- *    and returns all of those plus the first `limit` of the rest in status order. Every other row
- *    has no live session, so its group is its status, and the page is exact once the live ones are
- *    placed by the flags.
+ *    and returns all of those plus the newest `limit` of the rest. Every other row has no live
+ *    session, so it sorts by its age alone, and the page is exact once the live ones are placed by
+ *    the flags.
  */
 @Injectable()
 export class SessionCreatedTasksService {
@@ -160,9 +141,9 @@ export class SessionCreatedTasksService {
                (count(*) FILTER (WHERE l."status" = ${TaskStatus.DONE}::task_status))::int AS "done"
           FROM (SELECT o."status" FROM own o UNION ALL SELECT e."status" FROM beyond e) l
       ),
-      -- Every row that could be live, looked up by id, and the first "limit" of the rest in status
-      -- order. Each of those is among the first "limit" of its own status, so each status gives its
-      -- newest "limit" straight off the index: a handful of entries however many rows the session has.
+      -- Every row that could be live, looked up by id, and the newest "limit" of the rest. Each of
+      -- those is among the newest "limit" of its own status, so each status gives its newest "limit"
+      -- straight off the index: a handful of entries however many rows the session has.
       picked AS (
         SELECT o."id" FROM own o WHERE o."id" IN (SELECT b."task_id" FROM busy b)
         UNION ALL
@@ -182,7 +163,7 @@ export class SessionCreatedTasksService {
                  SELECT e."id", e."status", e."created_at"
                    FROM beyond e
                   WHERE e."id" NOT IN (SELECT b."task_id" FROM busy b)) l
-          ORDER BY ${STATUS_GROUP_SQL}, l."created_at" DESC, l."id" DESC
+          ORDER BY l."created_at" DESC, l."id" DESC
           LIMIT ${limit}::int)
       )
       SELECT y."total", y."failed", y."done", p."id", r."replaces_id"
