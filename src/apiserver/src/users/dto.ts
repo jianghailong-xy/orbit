@@ -125,6 +125,15 @@ export class UpdatePreferencesDto {
   modelRouting?: boolean;
 
   /**
+   * Optimize For, account-wide (owner, 2026-11-19; board docs/mocks/routing-mode-account): how SubAgents and
+   * smart-selected task runs on every Agent rank providers (common/model-routing-switch.ts optimizeForOf).
+   * Absent means Balance.
+   */
+  @IsOptional()
+  @IsIn(['cost', 'balance', 'intelligence'])
+  optimizeFor?: 'cost' | 'balance' | 'intelligence';
+
+  /**
    * Whether this account's Claude sessions offer the engine's guess at the next message once a
    * turn ends (common/prompt-suggestions-switch.ts). Each guess is one more request on the
    * session's account, so it can be turned off. Default on (absent = on), so the switch is only

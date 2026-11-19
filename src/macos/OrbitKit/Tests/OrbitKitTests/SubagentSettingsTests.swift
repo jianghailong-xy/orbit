@@ -90,29 +90,27 @@ final class SubagentSettingsTests: XCTestCase {
 
     func testWorkspaceFieldsDecodeAndDefault() throws {
         let set = try JSONDecoder().decode(Agent.self, from: Data("""
-        {"id":"a1","name":"orbit","modelRoutingOptimizeFor":"intelligence","subagentsEnabled":false,"subagentsMaxRunning":7}
+        {"id":"a1","name":"orbit","subagentsEnabled":false,"subagentsMaxRunning":7}
         """.utf8))
-        XCTAssertEqual(SubagentSettings.OptimizeFor(stored: set.modelRoutingOptimizeFor), .intelligence)
         XCTAssertEqual(set.subagentsEnabled, false)
         XCTAssertEqual(SubagentSettings.maxRunning(set.subagentsMaxRunning), 7)
 
         let absent = try JSONDecoder().decode(Agent.self, from: Data(#"{"id":"a1","name":"orbit"}"#.utf8))
         XCTAssertNil(absent.subagentsEnabled)
         XCTAssertEqual(absent.subagentsEnabled ?? true, true)
-        XCTAssertEqual(SubagentSettings.OptimizeFor(stored: absent.modelRoutingOptimizeFor), .cost)
         XCTAssertEqual(SubagentSettings.maxRunning(absent.subagentsMaxRunning), 4)
-        XCTAssertEqual(SubagentSettings.OptimizeFor(stored: "fastest"), .cost)
         XCTAssertEqual(SubagentSettings.maxRunning(99), 16)
         XCTAssertEqual(SubagentSettings.maxRunning(0), 1)
     }
 
     func testWorkspaceUpdateSendsOnlyWhatMoved() throws {
         let body = try JSONSerialization.jsonObject(with: JSONEncoder().encode(
-            UpdateAgentRequest(modelRoutingOptimizeFor: "balance", subagentsEnabled: false, subagentsMaxRunning: 6)))
+            UpdateAgentRequest(subagentsEnabled: false, subagentsMaxRunning: 6)))
             as? [String: Any]
-        XCTAssertEqual(body?["modelRoutingOptimizeFor"] as? String, "balance")
         XCTAssertEqual(body?["subagentsEnabled"] as? Bool, false)
         XCTAssertEqual(body?["subagentsMaxRunning"] as? Int, 6)
+        // Optimize For is the account's now (Settings → General): no Agent write can name it.
+        XCTAssertFalse(body?.keys.contains("modelRoutingOptimizeFor") ?? false)
         let none = try JSONSerialization.jsonObject(with: JSONEncoder().encode(UpdateAgentRequest())) as? [String: Any]
         XCTAssertEqual(none?.isEmpty, true)
     }

@@ -55,6 +55,12 @@ export const PERSONAL_SETTINGS = {
     'Smart model selection',
     'Coordinators suggest a tier for each task; Agents you turn this on for run on that tier.',
   ),
+  optimizeFor: setting(
+    'optimizeFor',
+    '/settings/general',
+    'Optimize For',
+    'How SubAgents and smart-selected tasks pick a provider, on every Agent.',
+  ),
   promptSuggestions: setting(
     'promptSuggestions',
     '/settings/general',
