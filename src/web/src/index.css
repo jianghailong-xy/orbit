@@ -18103,6 +18103,20 @@ button.chat-jump-start:hover {
 .re-account-menu.orbit-menu .orbit-menu-item[data-danger] .orbit-menu-icon {
   color: inherit;
 }
+/* An item that says what it does under its name (Set as default), or why it can't be chosen now. */
+.re-account-menu.orbit-menu .re-menu-label {
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+  padding: 2px 0;
+}
+.re-account-menu.orbit-menu .re-menu-hint {
+  max-width: 230px;
+  font-size: 11px;
+  line-height: 1.35;
+  color: var(--text-3);
+  white-space: normal;
+}
 /* Codex with more than one account: the engine's row heads a group, and each account is a row
    under it. The head keeps what the engine owns — binary, version, updates — and says how many. */
 .re-grp .re-meta b {

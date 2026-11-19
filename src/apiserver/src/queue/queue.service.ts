@@ -1,4 +1,5 @@
 import { randomUUID } from 'crypto';
+import { claudeSwapHoldsSession } from '../runners/claude-account-swap';
 import { setTimeout as delay } from 'node:timers/promises';
 import { BadRequestException, ConflictException, Inject, Injectable, Logger, Optional } from '@nestjs/common';
 import { Prisma, type ManagedRunnerManagementState } from '@prisma/client';
@@ -253,6 +254,8 @@ export class QueueService {
           // blocked, or waiting with a region sentence already (claudeRegionHold). Keys and pools are read above.
           { provider: AgentProvider.CLAUDE, providerBuiltin: true, assignedRunner: { region: { path: ['verdict'], equals: 'blocked' } } },
           { provider: AgentProvider.CLAUDE, providerBuiltin: true, error: { startsWith: CLAUDE_REGION_ERROR_PREFIX } },
+          // Claude Code on its own sign-in, on a runner where a Set as default swap is pending (claude-account-swap.ts).
+          { provider: AgentProvider.CLAUDE, providerBuiltin: true, assignedRunner: { claudeAccountSwapStatus: 'pending' } },
         ],
       },
       select: {
@@ -270,6 +273,8 @@ export class QueueService {
             engines: true, accountPauses: true, defaultRemoved: true, planUsage: true, capabilities: true,
             // What the region check holds a session on, and the name its sentence gives the machine.
             name: true, displayName: true, region: true,
+            // The Set as default swap pending there, if one is, and the account it makes the Default.
+            claudeAccountSwapStatus: true, claudeAccountSwapAccount: true,
           },
         },
       },
@@ -278,6 +283,13 @@ export class QueueService {
     const poolPauses = new Map<string, Date | null>();
     for (const session of pending) {
       const runner = session.assignedRunner;
+      // A pending Set as default for Claude Code holds back the sessions on either of its accounts: a claim now would
+      // start one in the folder that is about to change. It writes no notice; the swap ends within minutes, and a
+      // session it held is woken then.
+      if (runner && claudeSwapHoldsSession(session, runner)) {
+        blocked.push(session.id);
+        continue;
+      }
       let until = runner ? sessionAccountPausedUntil(session, session.workspace, runner, now) : null;
       const slug = session.provider;
       // The engine it runs on: its own, else — for a row an older replica wrote — the old rules'.

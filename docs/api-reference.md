@@ -43,12 +43,12 @@ controllers and their decorators, so it lists what the server mounts, not what a
 | Caller | Routes |
 | --- | --- |
 | `public` | 37 |
-| `user` | 480 |
+| `user` | 481 |
 | `admin` | 31 |
-| `runner` | 204 |
+| `runner` | 205 |
 | `channel` | 1 |
 | `link gateway` | 3 |
-| **Total** | **756** |
+| **Total** | **758** |
 
 ## Public routes
 
@@ -301,6 +301,7 @@ controllers and their decorators, so it lists what the server mounts, not what a
 | `DELETE` | `/api/runners/:id/accounts/:engine/:account` | path `account`, `engine`, `id` | `RunnersController.removeAccount` |
 | `PATCH` | `/api/runners/:id/accounts/:engine/:account` | body `RenameAccountDto`; path `account`, `engine`, `id` | `RunnersController.renameAccount` |
 | `POST` | `/api/runners/:id/accounts/:engine/:account/pause` | body `PauseAccountDto`; path `account`, `engine`, `id` | `RunnersController.pauseAccount` |
+| `POST` | `/api/runners/:id/accounts/:engine/:account/set-default` | path `account`, `engine`, `id` | `RunnersController.setDefaultAccount` |
 | `POST` | `/api/runners/:id/accounts/:engine/default/restore` | path `engine`, `id` | `RunnersController.restoreDefault` |
 | `POST` | `/api/runners/:id/attention/:kind/fix` | body `Object`; path `id`, `kind` | `RunnerAttentionFixController.fix` |
 | `GET` | `/api/runners/:id/browser` | path `id` | `ManagedRunnerBrowserController.state` |
@@ -622,6 +623,7 @@ controllers and their decorators, so it lists what the server mounts, not what a
 | `GET` | `/api/runner/agents` | — | `RunnerAgentsController.listWorkspaces` |
 | `POST` | `/api/runner/agents` | body `Object` | `RunnerAgentsController.createWorkspace` |
 | `PATCH` | `/api/runner/agents/:id` | body `Object`; path `id` | `RunnerAgentsController.updateWorkspace` |
+| `POST` | `/api/runner/claude-account-swap-result` | body `Object` | `RunnerApiController.claudeAccountSwapResult` |
 | `POST` | `/api/runner/claude-history-result` | body `Object` | `RunnerApiController.claudeHistoryResult` |
 | `POST` | `/api/runner/codex-account-remove-result` | body `Object` | `RunnerApiController.codexAccountRemoveResult` |
 | `POST` | `/api/runner/codex-rate-limit-reset-result` | body `Object` | `RunnerApiController.codexRateLimitResetResult` |
