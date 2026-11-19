@@ -400,6 +400,7 @@ import {
 } from '../providers/account';
 import { sanitizeRunnerEngines, usedRunnerEngines } from '../common/runner-engines';
 import { runnerAccountPausedUntil } from '../common/account-pause';
+import { swapClaudeAccountRecords, type ClaudeAccountSwapApplied } from '../runners/claude-account-swap';
 import { ACCOUNT_MOVE_CAPABILITY, cursorMoveRefusal } from '../providers/account-move-capability';
 import { sessionPoolCodexLogin } from '../providers/codex-login';
 import {
@@ -11938,6 +11939,28 @@ export class SessionsService {
       if (outcome === 'reloaded') this.realtime.notifyInbox(id);
     }
     return stuck;
+  }
+
+  /**
+   * Apply a finished Set as default swap of Claude accounts on a runner (docs/claude-default-swap-contract.md §5): in one
+   * transaction, every record Orbit keys by the two account ids follows its account (swapClaudeAccountRecords), and
+   * each live session on either account is given a reload, so its next turn starts in its account's new folder. The
+   * former Default is named by `formerDefaultEmail`, the runner's `now.accountEmail`, until the owner renames it. After
+   * the commit, each is hinted, which delivers what the swap held. Null when the swap is not the pending one.
+   */
+  async applyClaudeAccountSwap(
+    runnerId: string, added: string, attempt: Date, formerDefaultEmail: string | null = null,
+  ): Promise<ClaudeAccountSwapApplied | null> {
+    const applied = await withTransactionRetry(this.prisma, (tx) => swapClaudeAccountRecords(tx, runnerId, added, attempt, async (lockTx, id) => {
+      await lockTx.$queryRaw`SELECT id FROM "session" WHERE id = ${id}::uuid FOR UPDATE`;
+      await this.insertTurnLocked(lockTx, id, {
+        kind: 'reload',
+        content: JSON.stringify({ provider: AgentProvider.CLAUDE }),
+        clientTurnId: randomUUID(),
+      });
+    }, formerDefaultEmail), loggedRetry(this.logger, 'sessions.applyClaudeAccountSwap'));
+    for (const id of applied?.release ?? []) this.realtime.notifyInbox(id);
+    return applied;
   }
 
   /**

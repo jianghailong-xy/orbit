@@ -1007,7 +1007,7 @@ func finalizeWorktree(wt *Worktree, checkpoint bool) ([]ChangedFile, []FilePatch
 		} else {
 			// Permanent commit that stays on the branch and may merge to main — summarize the
 			// diff into a real message, never the raw session title/prompt.
-			msg = generateCommitMessage(wt.Path, diffstatFallbackMessage(wt.Path, wt.Branch))
+			msg = withOrbitSaved(generateCommitMessage(wt.Path, diffstatFallbackMessage(wt.Path, wt.Branch)), orbitSavedSessionEnd)
 		}
 		// Use the user's git identity; --no-verify keeps hooks from blocking finalization.
 		if _, err := git(wt.Path, "commit", "--no-verify", "-m", msg); err != nil {
@@ -2513,7 +2513,7 @@ func commitWorktree(req CommitCommand) commitOutcome {
 	// Summarize the staged diff into a real Conventional-Commits message (one-shot headless
 	// Claude); fall back to a diffstat subject, then the bare branch slug, so the history
 	// reads like hand-written commits instead of "orbit: commit <branch>".
-	msg := generateCommitMessage(wtPath, diffstatFallbackMessage(wtPath, req.Branch))
+	msg := withOrbitSaved(generateCommitMessage(wtPath, diffstatFallbackMessage(wtPath, req.Branch)), orbitSavedCommitButton)
 	// Use the user's git identity; --no-verify skips hooks, as in finalizeWorktree.
 	if err := gitIndex("commit", "--no-verify", "-m", msg); err != nil {
 		return fail(err)

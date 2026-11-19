@@ -318,6 +318,9 @@ public struct Runner: Codable, Equatable, Sendable, Identifiable {
     /// so a newer control plane cannot make the runner list undecodable.
     public let install: RunnerInstallState?
     public let accountRemove: RunnerAccountRemoveState?
+    /// Set as default for Claude Code: which added account is becoming the Default, and where that
+    /// stands (shared `RunnerClaudeAccountSwapState`). Nil from an older server, and when nothing was asked.
+    public var claudeAccountSwap: RunnerClaudeAccountSwapState? = nil
     /// Where this runner's Claude connection to Anthropic last came out, with the effective verdict
     /// (docs/claude-region-check-contract.md §6). Nil for a runner that does not check, one no check
     /// has decided yet, or an older server: never gated, drawn as before.

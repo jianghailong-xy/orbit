@@ -5,7 +5,7 @@ import org.junit.Test
 import java.io.File
 
 /**
- * Removing Default from Orbit and bringing it back say what the web says, word for word: each RunnerAccountCopy sentence is the one
+ * Removing Default from Orbit, bringing it back and Set as default say what the web says, word for word: each RunnerAccountCopy sentence is the one
  * src/web/src/lib/runnerAccountCopy.ts declares — an `export function`'s single template with its `${parameter}`s, or an `export const`
  * — read as text. Held to the web rather than to Swift, so whichever native client lands first changes nothing here. A missing file
  * fails, never skips.
@@ -43,7 +43,22 @@ class RunnerAccountCopyParityTest {
             "RUNNER_ACCOUNT_IN_USE_OPEN" to RunnerAccountCopy.IN_USE_OPEN,
             "RUNNER_ACCOUNT_IN_USE_RUNNING" to RunnerAccountCopy.IN_USE_RUNNING,
             "RUNNER_ACCOUNT_IN_USE_WAITING" to RunnerAccountCopy.IN_USE_WAITING,
-            "RUNNER_ACCOUNT_IN_USE_UNTITLED" to RunnerAccountCopy.IN_USE_UNTITLED)
+            "RUNNER_ACCOUNT_IN_USE_UNTITLED" to RunnerAccountCopy.IN_USE_UNTITLED,
+            "RUNNER_ACCOUNT_SET_DEFAULT" to RunnerAccountCopy.SET_DEFAULT,
+            "RUNNER_ACCOUNT_SET_DEFAULT_HINT" to RunnerAccountCopy.SET_DEFAULT_HINT,
+            "RUNNER_ACCOUNT_SET_DEFAULT_OFFLINE" to RunnerAccountCopy.SET_DEFAULT_OFFLINE,
+            "RUNNER_ACCOUNT_SET_DEFAULT_UPDATE" to RunnerAccountCopy.SET_DEFAULT_UPDATE,
+            "RUNNER_ACCOUNT_SET_DEFAULT_BUSY" to RunnerAccountCopy.SET_DEFAULT_BUSY,
+            "runnerAccountSetDefaultTitle" to RunnerAccountCopy.setDefaultTitle("{name}"),
+            "runnerAccountSetDefaultDetail" to RunnerAccountCopy.setDefaultDetail("{name}", "{defaultDir}", "{defaultName}", "{dir}", "{runner}"),
+            "RUNNER_ACCOUNT_SET_DEFAULT_CONFIRM" to RunnerAccountCopy.SET_DEFAULT_CONFIRM,
+            "runnerAccountSettingDefault" to RunnerAccountCopy.settingDefault("{name}"),
+            "runnerAccountSettingDefaultOne" to RunnerAccountCopy.settingDefaultOne("{name}"),
+            "runnerAccountSettingDefaultMany" to RunnerAccountCopy.settingDefaultMany("{name}", 7).replace("7", "{count}"),
+            "RUNNER_ACCOUNT_SETTING_DEFAULT_TERMINAL" to RunnerAccountCopy.SETTING_DEFAULT_TERMINAL,
+            "runnerAccountSetDefaultFailed" to RunnerAccountCopy.setDefaultFailed("{name}"),
+            "RUNNER_ACCOUNT_SET_DEFAULT_UNCHANGED" to RunnerAccountCopy.SET_DEFAULT_UNCHANGED,
+            "RUNNER_ACCOUNT_FORMER_DEFAULT" to RunnerAccountCopy.FORMER_DEFAULT)
         val web = templates + constants
         for ((name, said) in android) assertEquals(name, web[name], said)
         // Every sentence of the web's is said here but the two of the workspace form's account field, which no Android page has.
