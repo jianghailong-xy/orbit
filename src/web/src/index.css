@@ -3656,6 +3656,11 @@ button.toast--pill:focus-visible {
   height: 26px;
   overflow: hidden;
 }
+/* The rotating names take the row's free space themselves; the spacer after them gives way, so
+   the count and the mark still sit at the right edge. */
+.bg-rot + .wt-spacer {
+  flex: none;
+}
 .bg-rot-name {
   position: absolute;
   left: 0;
