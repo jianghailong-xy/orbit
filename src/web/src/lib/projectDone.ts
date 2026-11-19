@@ -736,6 +736,16 @@ export function landingReasonLabel(reason: CriterionLandingReason | null, main: 
   }
 }
 
+/** A criterion's landing half-sentence on the project page (decision D2 A): the Done card's words for
+ *  its `landingReason`, and none for a criterion its work has not met — that work has not landed
+ *  anywhere yet, whatever the landing lane says (src/shared/src/project-page-labels.fixture.json). */
+export function criterionLandingHalfSentence(
+  criterion: { satisfied?: boolean; landingReason: CriterionLandingReason | null },
+  main: string = DEFAULT_MAIN_BRANCH,
+): string | null {
+  return criterion.satisfied ? landingReasonLabel(criterion.landingReason, main) : null;
+}
+
 export function isWaitingOnWork(reason: CriterionLandingReason | null): boolean {
   return reason === 'IN_FLIGHT' || reason === 'ON_PROJECT_BRANCH';
 }

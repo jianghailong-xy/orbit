@@ -6,6 +6,7 @@ import {
   type ProjectListCoordinatorActivity,
   type TaskIntegrationView,
   type TaskSignInHold,
+  type TaskRunReason,
   type TaskStatus,
 } from '@orbit/shared';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
@@ -118,6 +119,8 @@ import {
   type CriterionMovedOut,
   type ProjectDoneDocument,
 } from '../lib/projectDone';
+import { RUN_STALLED } from '../lib/projectDependencyGraph';
+import { PROJECT_TASK_STARTS_BY_HAND } from '../lib/projectStart';
 
 // The panel a task opens in over this page — TaskDetailPanel, and the transcript and editors it
 // draws — is needed only once a task is open, so it is not on the page's own import path: the
@@ -1860,6 +1863,9 @@ export interface ProjectTask {
     | 'CANCELLED';
   verificationState?: 'PENDING' | 'BLOCKED' | 'RUNNING' | 'PASSED' | 'FAILED' | 'MISSING' | null;
   autoRunWhenReady?: boolean;
+  /** Why a RUNNING row runs, and whether its background jobs went quiet (`runningLabel`). */
+  runReason?: TaskRunReason | null;
+  runStalled?: boolean;
   /** Where this task sits between "done" and "on main" (contract §2.7, §7.3 V10). Optional because
    *  a server from before the integration line answers without it, and a row that read an absent
    *  field as NOT_APPLICABLE would be claiming to know something it was never told. */
@@ -1904,14 +1910,26 @@ const UNKNOWN_TASK_STATUS_MARK = { glyph: 'ring', color: 'var(--text-3)' } as co
 
 /** The server's canonical work lane, translated once for every desktop/phone task row. */
 export function projectTaskWorkLabel(task: ProjectTask): { text: string; color: string } | null {
-  switch (projectTaskWorkStateOf(task)) {
+  const workState = projectTaskWorkStateOf(task);
+  // Held for a person to start (G5): said on the row in the Project started card's words, not only
+  // on that card. `false`, not falsy — an older server sends no flag, and that is no claim.
+  if (task.autoRunWhenReady === false && (workState === 'READY' || (workState === 'BLOCKED' && !taskWaitsForLanding(task)))) {
+    return {
+      text: `${workState === 'READY' ? 'Ready' : 'Blocked'} · ${PROJECT_TASK_STARTS_BY_HAND}`,
+      color: workState === 'READY' ? 'gold' : 'default',
+    };
+  }
+  switch (workState) {
     case 'READY':
       return {
         text: task.autoRunWhenReady ? 'Ready · automatic dispatch' : 'Ready · can start now',
         color: 'gold',
       };
     case 'RUNNING':
-      return { text: 'Running', color: 'processing' };
+      // A stalled run (G4) says so here as well as in the task graph and the run queue.
+      return task.runStalled
+        ? { text: `Running · ${RUN_STALLED}`, color: 'gold' }
+        : { text: 'Running', color: 'processing' };
     case 'BLOCKED':
       // A row held by nothing but a landing says WHAT it is waiting for instead (§7.3 V10). One
       // tag, not two: "Blocked" beside "Waits for 1 task to land" reads as two different holds,

@@ -834,3 +834,8 @@ export const startProject = (
     method: 'POST',
     body,
   });
+
+/** A task set to start by hand (`autoRunWhenReady: false`), as its project-page row says it: the
+ *  Project started card's words for the same tasks ("1 task is set to start by hand, …",
+ *  ProjectStartedCard `projectStartedHeldLead`). */
+export const PROJECT_TASK_STARTS_BY_HAND = 'set to start by hand';
