@@ -791,9 +791,9 @@ public enum TranscriptRows {
         // Agent→Workspace rename had rewritten "Agent" here). Their cards carry work of their own —
         // a nested transcript, progress — and must never fold into a run. So does Orbit's own
         // SubAgent (`mcp__orbit__delegate`), which draws the child's steps under the same block
-        // (docs/subagent-design.md §6.4).
+        // (docs/subagent-design.md §6.4), and an Orbit workflow, whose block counts its calls.
         case "AskUserQuestion", "ExitPlanMode", "mcp__orbit__session_create", "Task", "Agent", "Workflow",
-             SubagentBlock.toolName:
+             SubagentBlock.toolName, WorkflowBlock.toolName:
             return false
         default:
             return true
