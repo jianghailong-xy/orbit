@@ -39,6 +39,76 @@ export const DEFAULT_MODEL_TIER_TABLE = {
   },
 } as const;
 
+/**
+ * Tiers by model family, for every catalogue the table above does not describe (Cursor, Antigravity, and any
+ * engine after them) and for a key's model that neither its preset nor the owner tiers. A family, not a model
+ * list, so a release the catalogue adds later (`claude-opus-5-6`, `gemini-4-xenon`) is tiered with no edit
+ * here: each tier takes the family's newest model the catalogue reports (familyNewest). In order of preference
+ * within a tier. The efforts are what each tier asks for; a model runs at the highest of its own reported levels
+ * at or below it (clampEffort), at its own default when it reports none.
+ */
+export const MODEL_FAMILY_TIERS: ReadonlyArray<{
+  family: string;
+  match: RegExp;
+  tiers: Partial<Record<ModelRoutingLevel, string>>;
+}> = [
+  { family: 'Claude Sonnet', match: /^claude-sonnet-\d/, tiers: { S: 'low', M: 'medium' } },
+  { family: 'Claude Opus', match: /^claude-opus-\d/, tiers: { L: 'high', XL: 'max' } },
+  { family: 'Gemini Flash', match: /^gemini-\d[\d.]*-flash$/, tiers: { S: 'low', M: 'medium' } },
+  { family: 'Gemini', match: /^gemini-\d[\d.]*-(?!flash$)[a-z]+$/, tiers: { L: 'high', XL: 'max' } },
+  { family: 'Composer', match: /^composer-\d/, tiers: { S: 'low' } },
+];
+
+const EFFORT_ORDER = ['minimal', 'low', 'medium', 'high', 'xhigh', 'max'];
+
+/** The version numbers in a model id, for ordering a family newest first: `claude-opus-5-5` is [5, 5]. */
+function versionOf(model: string): number[] {
+  return (model.match(/\d+/g) ?? []).map(Number);
+}
+
+function newerFirst(a: string, b: string): number {
+  const x = versionOf(a);
+  const y = versionOf(b);
+  for (let i = 0; i < Math.max(x.length, y.length); i += 1) {
+    if (x[i] === undefined || y[i] === undefined) return x[i] === undefined ? 1 : -1;
+    if (x[i] !== y[i]) return y[i] - x[i];
+  }
+  return 0;
+}
+
+/** The highest of a model's own levels at or below `wanted`, else its lowest; null when it reports none. */
+function clampEffort(wanted: string, levels: readonly string[] | undefined): string | null {
+  if (!levels?.length) return null;
+  const rank = (level: string) => EFFORT_ORDER.indexOf(level.toLowerCase());
+  const ranked = levels.filter((level) => rank(level) >= 0).sort((a, b) => rank(a) - rank(b));
+  if (ranked.length === 0) return null;
+  return [...ranked].reverse().find((level) => rank(level) <= rank(wanted)) ?? ranked[0];
+}
+
+/** A catalogue's tier rows by family: each family's newest model at each of its tiers, then every other model
+ *  untiered (reachable by name). Ties in version go by catalogue order. */
+function familyTierRows(catalog: readonly RunnerModelInfo[]): SubagentModelRow[] {
+  const rows: SubagentModelRow[] = [];
+  const tiered = new Set<string>();
+  for (const level of MODEL_ROUTING_LEVELS) {
+    for (const { match, tiers } of MODEL_FAMILY_TIERS) {
+      const wanted = tiers[level];
+      if (!wanted) continue;
+      const newest = catalog.filter((row) => match.test(row.value)).sort((a, b) => newerFirst(a.value, b.value))[0];
+      if (!newest) continue;
+      rows.push({ model: newest.value, effort: clampEffort(wanted, newest.reasoningLevels), level });
+      tiered.add(newest.value);
+    }
+  }
+  return [...rows, ...catalog.filter((row) => !tiered.has(row.value)).map((row) => ({ model: row.value, effort: null, level: null }))];
+}
+
+/** The lowest tier a model's family takes, for a key's model with one tier and no effort; null for no family. */
+export function familyTier(model: string): ModelRoutingLevel | null {
+  const rule = MODEL_FAMILY_TIERS.find(({ match }) => match.test(model));
+  return rule ? MODEL_ROUTING_LEVELS.find((level) => rule.tiers[level]) ?? null : null;
+}
+
 /** The built-in engines with a tier table: the only ones a run can be routed onto from another (§4.3, §6). */
 export const MODEL_ROUTING_ENGINES: readonly string[] = [AgentProvider.CLAUDE, AgentProvider.CODEX];
 
@@ -396,7 +466,7 @@ export interface SubagentModelRow {
 export interface SubagentProviderEngine {
   engine: string;
   /** The rows of a model space of the provider's own. Absent: the engine's runner-reported catalogue,
-   *  which only the built-in tier table (DEFAULT_MODEL_TIER_TABLE) describes. */
+   *  which the built-in tier table (DEFAULT_MODEL_TIER_TABLE) or the family tiers (MODEL_FAMILY_TIERS) describe. */
   models?: readonly SubagentModelRow[];
   /** For a key on that catalogue: USD per million output tokens by model id (models.dev). */
   prices?: Readonly<Record<string, number>>;
@@ -526,7 +596,7 @@ const OPTIMIZE_LABEL = { cost: 'Cost', balance: 'Balance', intelligence: 'Intell
  * The built-in tier table's rows for an engine's runner-reported catalogue: Claude's families at the
  * table's efforts, the family's first model by catalogue priority (as routeTaskRun picks it), and Codex's
  * runner default at each effort, and Kimi's first reported model of each tier. Every other engine's
- * catalogue has no tier, model by model.
+ * catalogue is tiered by family (MODEL_FAMILY_TIERS); a model of no family has no tier.
  */
 type SubagentCatalogInput = Pick<SubagentRoutingInput, 'modelCatalog' | 'runtimeDefaultModels'>;
 
@@ -565,7 +635,7 @@ function builtinRows(engine: string, input: SubagentCatalogInput): SubagentModel
       return model ? [{ model, effort: tier.effort, level }] : [];
     });
   }
-  return catalog.map((row) => ({ model: row.value, effort: null, level: null }));
+  return familyTierRows(catalog);
 }
 
 /**
