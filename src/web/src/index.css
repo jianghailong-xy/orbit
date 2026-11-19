@@ -3627,6 +3627,104 @@ button.toast--pill:focus-visible {
   color: var(--text-1);
   font-weight: 500;
 }
+/* The folded Background row (the shared rule, src/shared backgroundRow.ts): "Background", the one
+   name in the brand tint as the Tasks card's .ct-one, its mark; or the running names in turn. */
+.bg-tray-label {
+  flex: none;
+}
+.bg-tray-row .bg-tray-count {
+  flex: none;
+}
+/* A command keeps its end and gives way in the middle: the head ellipsizes, the tail stays. */
+.bg-name-mid {
+  display: inline-flex;
+}
+.bg-name-head {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.bg-name-tail {
+  flex: none;
+  white-space: pre;
+}
+.bg-rot {
+  position: relative;
+  flex: 1 1 auto;
+  min-width: 0;
+  height: 26px;
+  overflow: hidden;
+}
+.bg-rot-name {
+  position: absolute;
+  left: 0;
+  right: 0;
+  top: 0;
+  line-height: 26px;
+  color: var(--brand);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+/* A change, --bg-rot-change long (BACKGROUND_ROW_ROTATE_CHANGE_MS): the new name pushes up from
+   below and the old one leaves upward, fading. Under prefers-reduced-motion they crossfade in place. */
+.bg-rot.is-push .bg-rot-in {
+  animation: bg-rot-push-in var(--bg-rot-change) ease-out both;
+}
+.bg-rot.is-push .bg-rot-out {
+  animation: bg-rot-push-out var(--bg-rot-change) ease-out both;
+}
+.bg-rot.is-fade .bg-rot-in {
+  animation: bg-rot-fade-in var(--bg-rot-change) ease-out both;
+}
+.bg-rot.is-fade .bg-rot-out {
+  animation: bg-rot-fade-out var(--bg-rot-change) ease-out both;
+}
+@media (prefers-reduced-motion: reduce) {
+  .bg-rot.is-push .bg-rot-in {
+    animation-name: bg-rot-fade-in;
+  }
+  .bg-rot.is-push .bg-rot-out {
+    animation-name: bg-rot-fade-out;
+  }
+}
+@keyframes bg-rot-push-in {
+  from {
+    transform: translateY(100%);
+    opacity: 0;
+  }
+  to {
+    transform: translateY(0);
+    opacity: 1;
+  }
+}
+@keyframes bg-rot-push-out {
+  from {
+    transform: translateY(0);
+    opacity: 1;
+  }
+  to {
+    transform: translateY(-100%);
+    opacity: 0;
+  }
+}
+@keyframes bg-rot-fade-in {
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
+}
+@keyframes bg-rot-fade-out {
+  from {
+    opacity: 1;
+  }
+  to {
+    opacity: 0;
+  }
+}
 /* In the body face, as iOS writes both counts: in monospace the Tasks row's sentence ran wide enough
    to leave a phone a few letters of its title. */
 .bg-tray-count {
@@ -3730,7 +3828,8 @@ button.toast--pill:focus-visible {
 .ct-failed {
   color: var(--error-solid);
 }
-.ct-one {
+.ct-one,
+.bg-tray-name {
   flex: 0 1 auto;
   min-width: 0;
   overflow: hidden;

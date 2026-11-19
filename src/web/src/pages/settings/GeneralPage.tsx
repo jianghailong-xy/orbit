@@ -1,5 +1,6 @@
 import { TRANSLATION_LANGUAGE_NAMES, TRANSLATION_LANGUAGES, type TranslationLanguage } from '@orbit/shared';
 import { SettingsCard, SettingsHeader, SettingsRow, SettingsSection } from '../../components/settings';
+import { NumberInput } from '../../components/ui/NumberInput';
 import { Segmented } from '../../components/ui/Segmented';
 import { Select } from '../../components/ui/Select';
 import { Switch } from '../../components/ui/Switch';
@@ -36,6 +37,10 @@ export const GENERAL_HINTS = {
   enableOrchestration: {
     short: S.enableOrchestration.description,
     full: 'Sessions in every workspace can start and manage other sessions, and manage your agents and runners, through the orbit MCP tools and CLI: create, change and delete agents, install engines on runners and delete them. Off → those tools are hidden and refused.',
+  },
+  cardFreeTaskCreates: {
+    short: S.cardFreeTaskCreates.description,
+    full: "A session's first tasks are created without a confirmation card; the one after, and every one after that, waits for you. Every task the session created counts, including ones you approved. A session in a narrower mode than your default always asks. 8 unless you set another number, up to 50.",
   },
 } as const;
 
@@ -266,6 +271,25 @@ export function GeneralSettingsPage() {
                 checked={prefs.enableOrchestration ?? true}
                 onCheckedChange={(v) => save.mutate({ enableOrchestration: v })}
                 loading={save.isPending}
+              />
+            }
+          />
+          {/* docs/mocks/card-free-task-creates: absent reads as the server's default, 8; 0 cards every create. */}
+          <SettingsRow
+            anchor={S.cardFreeTaskCreates.anchor}
+            title={S.cardFreeTaskCreates.title}
+            description={h.cardFreeTaskCreates.short}
+            tooltip={h.cardFreeTaskCreates.full}
+            control={
+              <NumberInput
+                aria-label="Tasks a session files without asking"
+                style={{ width: 96 }}
+                value={prefs.cardFreeTaskCreates ?? 8}
+                min={0}
+                max={50}
+                step={1}
+                precision={0}
+                onValueChange={(v) => v !== null && v !== (prefs.cardFreeTaskCreates ?? 8) && save.mutate({ cardFreeTaskCreates: v })}
               />
             }
           />

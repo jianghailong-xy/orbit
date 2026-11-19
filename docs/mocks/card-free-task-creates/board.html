@@ -1,0 +1,97 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<title>Settings · Tasks a session files without asking</title>
+<style>
+  body { margin: 0; background: #eef0f3; font-family: -apple-system, "SF Pro Text", "PingFang SC", Inter, "Noto Sans SC", sans-serif; color: #1f2329; }
+  .board { width: 1760px; padding: 40px; box-sizing: border-box; background: #eef0f3; }
+  h1 { font-size: 30px; margin: 0 0 6px; }
+  .sub { color: #5c6470; font-size: 16px; margin-bottom: 28px; line-height: 1.6; }
+  .frames { display: grid; grid-template-columns: 1fr 1fr; gap: 24px; }
+  .frame { background: #fff; border-radius: 14px; padding: 20px 22px; box-shadow: 0 1px 3px rgba(0,0,0,.08); }
+  .frame h2 { font-size: 18px; margin: 0 0 4px; }
+  .frame p { font-size: 14px; color: #5c6470; margin: 0 0 14px; line-height: 1.55; }
+  .frame img { width: 100%; display: block; border: 1px solid #e3e6ea; border-radius: 8px; }
+  .tag { display: inline-block; font-size: 12px; padding: 2px 8px; border-radius: 999px; margin-right: 6px; vertical-align: 2px; }
+  .today { background: #e8eaee; color: #4a5260; } .new { background: #e3eeff; color: #1f5fd1; }
+  .panels { display: grid; grid-template-columns: 1.2fr 1fr; gap: 24px; margin-top: 24px; }
+  .panel { background: #fff; border-radius: 14px; padding: 20px 24px; box-shadow: 0 1px 3px rgba(0,0,0,.08); font-size: 14px; line-height: 1.6; }
+  .panel h3 { margin: 0 0 10px; font-size: 17px; }
+  table { border-collapse: collapse; width: 100%; }
+  td, th { border-bottom: 1px solid #eceff2; padding: 7px 8px; text-align: left; vertical-align: top; }
+  th { color: #5c6470; font-weight: 600; font-size: 13px; }
+  code { font-family: "JetBrains Mono", ui-monospace, monospace; font-size: 12.5px; background: #f3f4f6; padding: 1px 5px; border-radius: 4px; }
+  .quote { background: #f7f8fa; border-left: 3px solid #1f5fd1; padding: 10px 12px; margin: 8px 0 0; font-size: 13.5px; }
+  .decide { background: #fff7e6; border: 1px solid #f3d38a; }
+  .decide li { margin-bottom: 6px; }
+</style>
+</head>
+<body>
+<div class="board">
+  <h1>Settings › General › Orchestration：会话免确认建任务的数量</h1>
+  <div class="sub">
+    服务端已支持账号级设置 <code>cardFreeTaskCreates</code>（默认 8，0–50）。这块板只画 Web 设置页上的一行：在哪里、怎么写、怎么改。
+    截图均为真实控制台（today 与 proto 两次构建，同一套 fixtures）。
+  </div>
+
+  <div class="frames">
+    <div class="frame">
+      <h2><span class="tag today">① 今天</span>Orchestration 只有一行</h2>
+      <p>数量写死在服务端（目前生效的是 7，分支上已改为默认 8），设置页看不到，也改不了。</p>
+      <img src="f1-today.png">
+    </div>
+    <div class="frame">
+      <h2><span class="tag new">② 提案 · 未设置</span>新增一行，显示默认值 8</h2>
+      <p>放在 “Let sessions orchestrate” 下面：两行都在回答“智能体不问你能做什么”。右侧是数字框（0–50，整数），改完即存，和本页其它行一样没有保存按钮。</p>
+      <img src="f2-default.png">
+    </div>
+    <div class="frame">
+      <h2><span class="tag new">③ 提案 · 改成 12</span>每个会话前 12 个任务免确认</h2>
+      <p>第 13 个起，每次建任务都弹确认卡。改动只影响之后的建任务请求，已经弹出的卡不变。</p>
+      <img src="f3-twelve.png">
+    </div>
+    <div class="frame">
+      <h2><span class="tag new">④ 提案 · 改成 0</span>回到“每次都问”</h2>
+      <p>0 = 每个 task_create / task_create_batch 都要你确认（即这次改动之前的行为）。</p>
+      <img src="f4-zero.png">
+    </div>
+  </div>
+
+  <div class="panels">
+    <div class="panel">
+      <h3>规则（服务端已实现，见 <code>session-create-allowance.ts</code>）</h3>
+      <table>
+        <tr><th>情况</th><th>结果</th></tr>
+        <tr><td>该会话已建任务数 + 本次条数 ≤ 设置值</td><td>卡片自动通过，不打扰你</td></tr>
+        <tr><td>会超过设置值的那一次，及之后每一次</td><td>照常弹卡等你确认</td></tr>
+        <tr><td>一次批量就超过设置值（如设置 8，批量 9 条）</td><td>整批弹卡</td></tr>
+        <tr><td>会话的权限模式比账号默认更窄（如 Plan）</td><td>总是弹卡</td></tr>
+        <tr><td>计数</td><td>该会话建过的所有任务，包括你手动批准的</td></tr>
+        <tr><td>未设置 / 存储值非法</td><td>按 8 处理</td></tr>
+      </table>
+      <h3 style="margin-top:16px">悬停说明（title 文案，截图拍不到，原文如下）</h3>
+      <div class="quote">A session's first tasks are created without a confirmation card; the one after, and every one after that, waits for you. Every task the session created counts, including ones you approved. A session in a narrower mode than your default always asks. 8 unless you set another number, up to 50.</div>
+    </div>
+    <div class="panel">
+      <h3>要改的文件（Web）</h3>
+      <table>
+        <tr><td><code>src/web/src/pages/settings/GeneralPage.tsx</code></td><td>Orchestration 里加一行 + 说明文案</td></tr>
+        <tr><td><code>src/web/src/pages/settings/settingsIndex.ts</code></td><td>标题与一行描述（设置搜索也读这里）</td></tr>
+        <tr><td><code>src/web/src/lib/queries.ts</code></td><td>UserPreferences 加 <code>cardFreeTaskCreates</code></td></tr>
+        <tr><td><code>GeneralPage.test.tsx</code></td><td>默认显示 8、改值发 PATCH、0 可存</td></tr>
+      </table>
+      <div class="panel decide" style="margin-top:16px; box-shadow:none">
+        <h3>待你定</h3>
+        <ol>
+          <li><b>位置：</b>放在 Orchestration（本板）还是 New sessions？</li>
+          <li><b>标题：</b>“Tasks a session files without asking” 是否合适？备选：“Card-free task creates per session”。</li>
+          <li><b>保存时机：</b>改一次存一次（本板）还是失焦/回车再存？</li>
+          <li><b>其它客户端：</b>先只做 Web，还是 iOS / macOS / Android 设置页同时加？</li>
+        </ol>
+      </div>
+    </div>
+  </div>
+</div>
+</body>
+</html>
