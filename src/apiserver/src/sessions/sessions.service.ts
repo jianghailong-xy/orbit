@@ -159,7 +159,7 @@ import { GithubConnectionService } from '../github/github-connection.service';
 import { githubRepoUrl } from '../github/github-workspace.service';
 import { PrismaService } from '../prisma/prisma.service';
 import { PREPARED_STATEMENT } from '../prisma/prisma-client';
-import { RUNNER_DISK_BELOW_FLOOR, sessionDiskHoldSql } from '../common/runner-disk-gate';
+import { RUNNER_DISK_BELOW_FLOOR, diskBelowFloor, sessionDiskHoldSql } from '../common/runner-disk-gate';
 import { workspaceCloneHoldSql, workspaceCloneReasonSql } from '../common/workspace-clone-gate';
 import {
   reprojectAfterSettledChecks,
@@ -363,7 +363,7 @@ import {
 } from './engine-signin-preflight';
 import {
   managedRunnerFailedRefusal, managedRunnerStartingNote, mergePendingNext, nextTurnStartingRefusal,
-  resumeBlockedRefusal, sessionRecoveryBody, sessionRefusal,
+  resumeBlockedRefusal, sessionRecoveryBody, sessionRefusal, spawnDiskBelowFloorRefusal, spawnRunnerOfflineRefusal,
 } from './session-recovery';
 import { claudeRegionCreateRefusal, isClaudeRegionError, regionCredentialOf } from '../runners/runner-region';
 import { assertManagedFirstSessionRuntime, managedFirstSessionKey } from '../managed-runners/managed-runner-supply';
@@ -2917,6 +2917,25 @@ export class SessionsService {
     const targetManaged = targetRunnerId ? await this.wakeManagedRunner(targetRunnerId, 'session') : NOT_MANAGED;
     if (targetRunnerId && targetManaged.managed && !targetManaged.comingBack) {
       throw managedRunnerFailedRefusal(targetRunnerId, { type: 'WORKSPACE', id: workspaceId! }, targetManaged);
+    }
+    // The same for a runner that is offline (a managed one coming up is waited for, above) or below its Keep Free
+    // (runner-disk-gate.ts): the claim would hold the child, and the agent that asked would wait on it with nothing to
+    // say why. Refused, with the reason. A workspace not named is the parent's own.
+    const spawnWorkspaceId = workspaceId ?? parent.workspaceId;
+    const spawnTarget = await this.prisma.workspace.findFirst({
+      where: { id: spawnWorkspaceId, ownerId },
+      select: {
+        workDirFreeBytes: true,
+        runner: { select: { id: true, name: true, displayName: true, status: true, minFreeDiskMb: true, ...RUNNER_BEATS } },
+      },
+    });
+    if (spawnTarget?.runner) {
+      if (!targetManaged.managed && !runnerIsOnline(spawnTarget.runner)) {
+        throw spawnRunnerOfflineRefusal(spawnTarget.runner, spawnWorkspaceId);
+      }
+      if (diskBelowFloor(spawnTarget.workDirFreeBytes, spawnTarget.runner.minFreeDiskMb)) {
+        throw spawnDiskBelowFloorRefusal(spawnTarget.runner, spawnWorkspaceId);
+      }
     }
     const narrowedTo = await this.assertChildModeOrNarrow(ownerId, parent, dto, workspaceId, parentAnchor);
     // A root joins its own tree the first time it spawns; before that it belongs to no tree

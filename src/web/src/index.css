@@ -4910,6 +4910,22 @@ button.toast--pill:focus-visible {
   position: relative;
   display: flex;
   flex-direction: column;
+  /* One width for every card in the conversation (docs/mocks/chat-card-width, D1 = D2 = A): each
+     card reads this, so on a wide column they all end on one line, and on a narrow one they all fill
+     it. Outside the conversation a card keeps the width its own rule falls back to. Reply content —
+     prose, tool output, code — is not a card and keeps the column. */
+  --chat-card-max: 720px;
+}
+.workspace-scroll-wrap :is(
+  .approval-card,
+  .review-card,
+  .chat-error-card,
+  .chat-session-card,
+  .owner-request-card,
+  .cu-rc-card,
+  .session-project-landing
+) {
+  max-width: var(--chat-card-max);
 }
 .workspace-sessions {
   flex: 1;
@@ -8562,6 +8578,26 @@ button.chat-jump-start:hover {
   text-decoration: underline dotted;
   text-underline-offset: 3px;
 }
+/* The held tag with Cancel beside it, on a message no runner has taken yet. */
+.chat-held-foot {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 12px;
+  line-height: 1;
+  color: var(--text-3);
+}
+.chat-held-cancel {
+  padding: 0;
+  border: 0;
+  background: none;
+  font: inherit;
+  color: var(--brand);
+  cursor: pointer;
+}
+.chat-held-cancel:hover {
+  text-decoration: underline;
+}
 .runner-updating-pop {
   max-width: 420px;
   font-size: 13px;
@@ -9041,7 +9077,7 @@ button.chat-jump-start:hover {
   background: var(--bg-hover);
 }
 .chat-status-card {
-  width: min(560px, 100%);
+  width: min(var(--chat-card-max, 560px), 100%);
   margin: 10px 0;
   border: 1px solid var(--border);
   border-left: 3px solid var(--brand);
@@ -11928,7 +11964,7 @@ button.chat-jump-start:hover {
    Two classes, because `.approval-card` is written further down and would win at one. It is kept
    to the width of the conversation's other cards (`.crc`), not stretched across the stream. */
 .approval-card.evidence-decision-receipt {
-  max-width: 720px;
+  max-width: var(--chat-card-max, 720px);
   border-color: var(--border);
   background: var(--bg-raised);
 }
@@ -21784,7 +21820,7 @@ div.landing-jobs-open {
 /* What a landing in hand still carries, on the chat's own status card under its sentence. */
 .landings-window-card.chat-status-card {
   margin: 8px 12px 0;
-  width: min(640px, calc(100% - 24px));
+  width: min(var(--chat-card-max, 640px), calc(100% - 24px));
 }
 .landings-window-card.is-failed {
   border-left-color: var(--error);
@@ -24531,7 +24567,7 @@ div.landing-jobs-open {
 }
 .oic {
   width: 100%;
-  max-width: 720px;
+  max-width: var(--chat-card-max, 720px);
   padding: 10px 12px;
   border: 1px solid var(--warning-border);
   border-radius: 12px;
@@ -24704,7 +24740,7 @@ div.landing-jobs-open {
 }
 .tsc {
   width: 100%;
-  max-width: 720px;
+  max-width: var(--chat-card-max, 720px);
   padding: 10px 12px;
   border: 1px solid var(--brand-border);
   border-radius: 12px;
@@ -24899,7 +24935,7 @@ div.landing-jobs-open {
   flex-direction: column;
   align-items: flex-start;
   width: fit-content;
-  max-width: min(720px, 100%);
+  max-width: min(var(--chat-card-max, 720px), 100%);
   min-width: 0;
 }
 .smc-head {
@@ -25052,7 +25088,7 @@ a.smc-from:hover {
   margin: 8px 0;
 }
 .src {
-  width: min(560px, 88%);
+  width: min(var(--chat-card-max, 560px), 100%);
   padding: 10px 12px;
   border: 1px solid var(--brand-border);
   border-radius: 12px;
@@ -25133,7 +25169,7 @@ a.smc-from:hover {
 }
 .psc {
   width: 100%;
-  max-width: 720px;
+  max-width: var(--chat-card-max, 720px);
   padding: 10px 12px;
   border: 1px solid var(--brand-border);
   border-radius: 12px;
@@ -25268,7 +25304,7 @@ a.smc-from:hover {
 }
 .crc {
   width: 100%;
-  max-width: 720px;
+  max-width: var(--chat-card-max, 720px);
   padding: 10px 12px;
   border: 1px solid var(--brand-border);
   border-radius: 12px;

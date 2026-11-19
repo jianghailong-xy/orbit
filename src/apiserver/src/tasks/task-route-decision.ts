@@ -1,6 +1,8 @@
 import { Prisma, RunStatus, TaskEvidenceDecisionValue, TaskVerdict } from '@prisma/client';
 import {
   AgentProvider,
+  accountCapWindows,
+  cursorUsageRead,
   isEngine,
   USAGE_LIMIT_ERROR_MARKERS,
   runnerCatalogRow,
@@ -72,7 +74,7 @@ export function taskRouteReads(prisma: PrismaService, ownerId: string, now: Date
       where: { id, ownerId },
       select: {
         runnerId: true, effort: true, modelRouting: true, modelRoutingProviders: true,
-        env: true, codexAccount: true, claudeAccount: true, kimiAccount: true,
+        env: true, codexAccount: true, claudeAccount: true, kimiAccount: true, antigravityAccount: true, cursorAccount: true,
       },
     })),
     /** What an unpinned run of this task starts on: its project's coordinator, else its workspace's
@@ -249,9 +251,21 @@ function windowName(window: PlanUsageWindow | undefined, slot: string): string {
  * When an account's quota goes to waste and whether it is nearly spent, as account selection weighs them
  * (quotaExpiresAt, quotaNearLimit in planUsage.ts): what the SubAgent router spends first (§4.2).
  */
-export function quotaTiming(snapshot: PlanUsageSnapshot | null | undefined, now: Date): { expiresAt: number | null; nearLimit: boolean } {
-  const at = quotaExpiresAt(snapshot, now);
-  return { expiresAt: Number.isFinite(at) ? at : null, nearLimit: quotaNearLimit(snapshot, now) };
+export function quotaTiming(
+  snapshot: PlanUsageSnapshot | null | undefined,
+  now: Date,
+): { expiresAt: number | null; nearLimit: boolean; opusUtilization: number | null } {
+  // A model family's own window (Opus or Sonnet weekly) caps that family, not the account: it moves the family's
+  // rows (opusUtilization), never the account's place.
+  const account = snapshot ? { ...snapshot, sevenDayOpus: undefined, sevenDaySonnet: undefined } : snapshot;
+  const at = quotaExpiresAt(account, now);
+  const opus = snapshot?.sevenDayOpus;
+  const live = opus && !(Date.parse(opus.resetsAt ?? '') <= now.getTime());
+  return {
+    expiresAt: Number.isFinite(at) ? at : null,
+    nearLimit: quotaNearLimit(account, now),
+    opusUtilization: live ? opus.utilization : null,
+  };
 }
 
 /**
@@ -268,6 +282,8 @@ export function fullestWindow(snapshot: PlanUsageSnapshot | null | undefined, no
       [snapshot.monthCode, 'monthly'],
       [snapshot.primary, windowName(snapshot.primary, 'primary')],
       [snapshot.secondary, windowName(snapshot.secondary, 'secondary')],
+      // Antigravity's shared buckets and a Cursor account's usage limit (accountCapWindows).
+      ...accountCapWindows(snapshot),
     ]
     : [];
   let quota: ModelRoutingEngineState['quota'] = null;
@@ -299,6 +315,8 @@ export function engineState(
     codexAccount: agent.codexAccount,
     claudeAccount: agent.claudeAccount,
     kimiAccount: agent.kimiAccount,
+    antigravityAccount: agent.antigravityAccount,
+    cursorAccount: agent.cursorAccount,
     ...(automatic ? { [ACCOUNT_CHOICE[engine]]: automatic } : {}),
   };
   const signedOut = signedOutEngineRefusal({
@@ -313,8 +331,11 @@ export function engineState(
   const snapshot = account === null ? undefined : spentPlanUsage(runner.planUsage as PlanUsage | null, engine, account);
   const quota = fullestWindow(snapshot, now);
   // No reading at all, or one without a window fullestWindow reads (a runner that fetched nothing for it).
+  // Antigravity reads as read once it reports any bucket (one of a model's own is a reading too); Cursor once it
+  // reports its included usage.
   const quotaUnread = !snapshot
-    || ![snapshot.fiveHour, snapshot.sevenDay, snapshot.month, snapshot.monthCode, snapshot.primary, snapshot.secondary].some(Boolean);
+    || (![snapshot.fiveHour, snapshot.sevenDay, snapshot.month, snapshot.monthCode, snapshot.primary, snapshot.secondary].some(Boolean)
+      && !(snapshot.buckets?.length) && !cursorUsageRead(snapshot));
   const regionBlocked = engine === AgentProvider.CLAUDE && blockedRunnerRegion(runner, now) !== null;
   // Only the SubAgent router reads it (routeSubagent); chooseEngine does not.
   const paused = runnerAccountPausedUntil(runner.accountPauses, engine, account, now) !== null;
