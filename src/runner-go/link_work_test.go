@@ -1080,3 +1080,20 @@ func TestLinkHeartbeatCarriesTheBackgroundJobSlotHolders(t *testing.T) {
 		}
 	}
 }
+
+// Welcome.browser (docs/runner-browser-design.md §2) is what the server says of the managed runner browser: the client
+// keeps what the current connection's Welcome said, and a gateway that says nothing offers nothing.
+func TestLinkClientKeepsWhatTheWelcomeSaysOfTheBrowser(t *testing.T) {
+	offered := newLinkWorkRig(t)
+	offered.g.welcome = func(c *fakeWorkConn, w *linkpb.Welcome) { w.Browser = true }
+	offered.useLink(t)
+	if !offered.m.work.browserOffered() {
+		t.Fatal("a Welcome saying browser left the client without it")
+	}
+
+	silent := newLinkWorkRig(t)
+	silent.useLink(t)
+	if silent.m.work.browserOffered() {
+		t.Fatal("a Welcome saying nothing of the browser left the client with it")
+	}
+}

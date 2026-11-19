@@ -3393,6 +3393,9 @@ function UserBubble({ node, queued }: { node: TextNode; queued?: ReactNode }) {
   const foot = useContext(QueuedFootCtx);
   const held = foot && !queued && foot.seq === node.seq ? foot.tag : null;
   const [copied, setCopied] = useState(false);
+  // The "Copied" reset is cancelled when this goes, so it never updates a component that is gone.
+  const copiedReset = useRef<ReturnType<typeof setTimeout>>(undefined);
+  useEffect(() => () => clearTimeout(copiedReset.current), []);
   const [expanded, setExpanded] = useState(false);
   // What the runner echoed back is what it was *given*, which includes anything delivery appended
   // — a reference expansion, a list's condition board, the background work a returning engine is
@@ -3431,7 +3434,8 @@ function UserBubble({ node, queued }: { node: TextNode; queued?: ReactNode }) {
     void copyText(typed).then((ok) => {
       if (!ok) return;
       setCopied(true);
-      setTimeout(() => setCopied(false), 1600);
+      clearTimeout(copiedReset.current);
+      copiedReset.current = setTimeout(() => setCopied(false), 1600);
     });
   };
   // The bubble's own state, at the end of its meta row: it waits for no hover, where the copy
@@ -3552,6 +3556,9 @@ function TurnAttachments({ node }: { node: TextNode }) {
 // hover. A turn with nothing to copy keeps its time; one with neither is the old blank divider.
 function TurnFoot({ node }: { node: DividerNode }) {
   const [copied, setCopied] = useState(false);
+  // The "Copied" reset is cancelled when this goes, so it never updates a component that is gone.
+  const copiedReset = useRef<ReturnType<typeof setTimeout>>(undefined);
+  useEffect(() => () => clearTimeout(copiedReset.current), []);
   const { seq, ts, reply } = node;
   // Settings › Translation: copy the version of the reply on screen, translated unless flipped.
   const shownOriginal = useReplyShownOriginal(node.replySeq);
@@ -3563,7 +3570,8 @@ function TurnFoot({ node }: { node: DividerNode }) {
     void copyText(shownReply).then((ok) => {
       if (!ok) return;
       setCopied(true);
-      setTimeout(() => setCopied(false), 1600);
+      clearTimeout(copiedReset.current);
+      copiedReset.current = setTimeout(() => setCopied(false), 1600);
     });
   };
   return (
@@ -3903,13 +3911,17 @@ function GroupedChatImage({
 function CodeBlock({ children }: any) {
   const preRef = useRef<HTMLPreElement>(null);
   const [copied, setCopied] = useState(false);
+  // The "Copied" reset is cancelled when this goes, so it never updates a component that is gone.
+  const copiedReset = useRef<ReturnType<typeof setTimeout>>(undefined);
+  useEffect(() => () => clearTimeout(copiedReset.current), []);
   const copy = () => {
     const text = preRef.current?.textContent ?? '';
     if (!text) return;
     void copyText(text).then((ok) => {
       if (!ok) return;
       setCopied(true);
-      setTimeout(() => setCopied(false), 1600);
+      clearTimeout(copiedReset.current);
+      copiedReset.current = setTimeout(() => setCopied(false), 1600);
     });
   };
   return (
