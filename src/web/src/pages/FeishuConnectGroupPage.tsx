@@ -49,7 +49,7 @@ export const modeLabel = (mode: string) => FEISHU_GROUP_MODES.find((m) => m.valu
 export const groupConsequence = (runner: string, mode: string) =>
   `People in this group can make agents act on ${runner} in ${modeLabel(mode)} mode.`;
 
-interface WorkspaceRow {
+export interface WorkspaceRow {
   id: string;
   name: string;
   enabled?: boolean;
@@ -58,7 +58,7 @@ interface WorkspaceRow {
   runner?: { id?: string; name?: string | null; displayName?: string | null } | null;
 }
 /** Its machine as the app names it (Orbit Cloud for the managed runner, machineName). */
-const runnerName = (w: WorkspaceRow | undefined, managedRunnerId: string | null) =>
+export const runnerName =(w: WorkspaceRow | undefined, managedRunnerId: string | null) =>
   (w?.runner
     ? machineName({ ...w.runner, id: w.runner.id ?? w.runnerId ?? undefined, name: w.runner.name ?? undefined }, managedRunnerId)
     : '') || 'its runner';
