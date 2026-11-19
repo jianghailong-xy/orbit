@@ -1904,9 +1904,9 @@ func runKimiSessionProcess(ctx context.Context, shutdownCtx context.Context, t *
 			ChangedDiff:      livePatches,
 			BaseSha:          liveBaseSha,
 			WorktreeDirty:    worktreeIsDirty(job.WT),
-			BranchSha:        effectiveBranchSha(job.WT),
-			BranchMerged:     branchMergedInto(job.WT),
-			WorktreeBranch:   currentBranch(job.WT),
+			BranchSha:        effectiveBranchSha(job.WT), BranchCommits: branchCommits(job.WT),
+			BranchMerged:   branchMergedInto(job.WT),
+			WorktreeBranch: currentBranch(job.WT),
 		}); completeErr != nil {
 			logln("turn-complete failed for", job.SessionID+":", completeErr)
 		}
@@ -2124,7 +2124,7 @@ func runKimiSessionProcess(ctx context.Context, shutdownCtx context.Context, t *
 					runShellTurnBackground(bg, execDir, scratchDir, shellCommand, resp.TurnID, emit, job.Agent.Env)
 					if err := completeTurn(TurnCompleteRequest{
 						TurnID: resp.TurnID, Status: stSucceeded, Result: "started in background", Subtype: "shell",
-						RuntimeSessionID: sessionID, BranchSha: effectiveBranchSha(job.WT),
+						RuntimeSessionID: sessionID, BranchSha: effectiveBranchSha(job.WT), BranchCommits: branchCommits(job.WT),
 					}); err != nil {
 						logln("shell turn-complete failed for", job.SessionID+":", err)
 					}
@@ -2206,7 +2206,7 @@ func runKimiSessionProcess(ctx context.Context, shutdownCtx context.Context, t *
 					ChangedFiles: liveFiles, ChangedDiff: livePatches,
 					BaseSha:       liveBaseSha,
 					WorktreeDirty: worktreeIsDirty(job.WT), BranchMerged: branchMergedInto(job.WT),
-					BranchSha: effectiveBranchSha(job.WT), WorktreeBranch: currentBranch(job.WT),
+					BranchSha: effectiveBranchSha(job.WT), BranchCommits: branchCommits(job.WT), WorktreeBranch: currentBranch(job.WT),
 				}); err != nil {
 					logln("diff-result failed for", job.SessionID+":", err)
 				}

@@ -527,7 +527,7 @@ struct ProjectDetailView: View {
                                 .onDisappear { headerOnScreen = false }
                         }
                         .listRowBackground(Color.clear)
-                    case .openItems:      openItemsAttention(store, document, now: now)
+                    case .openItems:      openItemsPageSection(store, document, now: now)
                     case .overview:       overviewSection(store, document)
                     case .coordinator:    coordinatorSection(store, document, now: now)
                     case .runSettings:    runSettingsSection(store, document, now: now)
@@ -780,31 +780,37 @@ struct ProjectDetailView: View {
         .accessibilityValue(summary?.subtitle ?? (store.openItemsUnread ? "Couldn't load open items" : "Loading"))
     }
 
+    /// Open items on the page itself, at all times (D3 A), where web's mobile page draws them: after
+    /// the title area, before Work overview — the header's "N need you · N with the coordinator ·
+    /// oldest first", then the Needs you rows (the owner's own Record as done… · not asked yet among
+    /// them) and the coordinator's. The toolbar's Open items stays, a way here from anywhere.
     @ViewBuilder
-    private func openItemsAttention(_ store: ProjectDetailModel, _ document: ProjectDocument,
-                                    now: Date) -> some View {
-        let summary = ProjectPage.openItemsSummary(status: document.status, started: document.started,
-                                                  items: store.openItems)
-        if let attention = summary?.attention {
+    private func openItemsPageSection(_ store: ProjectDetailModel, _ document: ProjectDocument,
+                                      now: Date) -> some View {
+        if let section = ProjectPage.openItemsSection(status: document.status, started: document.started,
+                                                      derivedDone: document.derivedDone, items: store.openItems) {
             Section {
-                Button { pageSheet = .openItems } label: {
-                    HStack(spacing: 8) {
-                        Label(attention, systemImage: "exclamationmark.circle")
-                        Spacer(minLength: 8)
-                        Image(systemName: "chevron.forward").font(.orbitMeta.weight(.semibold))
-                    }
-                    .font(.orbitLabel.weight(.semibold))
-                    .foregroundStyle(Color.orange)
-                    .padding(.vertical, 4)
-                    .contentShape(Rectangle())
+                if section.drawsNeedsYou {
+                    groupLabel(ProjectPage.needsYouGroup)
+                    if let start = section.start { startItem(start, store: store, now: now) }
+                    if let done = section.done { doneItem(done, store: store, now: now) }
+                    ForEach(section.needsYou) { row in openItem(row, store: store, now: now) }
                 }
-                .buttonStyle(.plain)
+                if !section.withCoordinator.isEmpty {
+                    groupLabel(ProjectPage.withCoordinatorGroup)
+                    ForEach(section.withCoordinator) { row in openItem(row, store: store, now: now) }
+                }
+            } header: {
+                HStack(alignment: .firstTextBaseline, spacing: 8) {
+                    Text(ProjectPage.openItemsHeading)
+                    Text(section.hint)
+                        .font(.orbitLabel)
+                        .foregroundStyle(.secondary)
+                        .fixedSize(horizontal: false, vertical: true)
+                }
+                .textCase(nil)
             }
-            .listRowBackground(Color.orange.opacity(0.1))
-        } else if let start = StartProject.pageRow(status: document.status, started: document.started,
-                                                   openItems: store.openItems), start.request == nil {
-            // Starting an unstarted project remains discoverable even with no pending request.
-            Section { startItem(start, store: store, now: now) }
+            .id(ProjectPage.openItemsHeading)
         }
     }
 
@@ -886,7 +892,6 @@ struct ProjectDetailView: View {
         let done = ProjectDone.pageRow(status: document.status, derivedDone: document.derivedDone,
                                        openItems: store.openItems)
         let needsYou = store.openItems.map(ProjectPage.needsYouRows) ?? []
-        let withCoordinator = store.openItems?.withCoordinator ?? []
         if !needsYou.isEmpty || start != nil || done != nil {
             Section {
                 if let start { startItem(start, store: store, now: now) }
@@ -894,13 +899,6 @@ struct ProjectDetailView: View {
                 ForEach(needsYou) { row in openItem(row, store: store, now: now) }
             } header: {
                 groupLabel(ProjectPage.needsYouGroup)
-            }
-        }
-        if !withCoordinator.isEmpty {
-            Section {
-                ForEach(withCoordinator) { row in openItem(row, store: store, now: now) }
-            } header: {
-                groupLabel(ProjectPage.withCoordinatorGroup)
             }
         }
     }
@@ -1438,6 +1436,7 @@ struct ProjectDetailView: View {
         if RunSettings.shown(started: document.started) {
             Section {
                 if let view = store.integration {
+                    runSettingsSummary(store, view, document: document)
                     // First, because it decides whether the landing settings under it mean anything.
                     deliversSetting(store, view, document: document)
                     if document.nonCode {
@@ -1483,6 +1482,31 @@ struct ProjectDetailView: View {
                 sectionHeader(StartProject.howItRuns, detail: RunSettings.appliesFromNextTask)
             }
         }
+    }
+
+    /// How it runs opens with web's one-line summary (`project-run-settings-summary`): "Automatic On"
+    /// over the line, its branch and how many tasks run at once.
+    private func runSettingsSummary(_ store: ProjectDetailModel, _ view: ProjectIntegrationView,
+                                    document: ProjectDocument) -> some View {
+        let summary = RunSettings.summary(view, projectID: document.id,
+                                          automatic: document.coordinatorEnabled ?? false,
+                                          maxConcurrentTasks: store.pendingConcurrency ?? document.maxConcurrentTasks,
+                                          nonCode: document.nonCode)
+        return HStack(alignment: .firstTextBaseline, spacing: 10) {
+            Circle().fill(Color.accentColor).frame(width: 8, height: 8)
+            VStack(alignment: .leading, spacing: 2) {
+                Text(summary.title).font(.orbitSubtext.weight(.semibold))
+                if !summary.line.isEmpty {
+                    Text(summary.line)
+                        .font(.orbitLabel)
+                        .foregroundStyle(.secondary)
+                        .fixedSize(horizontal: false, vertical: true)
+                }
+            }
+        }
+        .padding(.vertical, 2)
+        .accessibilityElement(children: .combine)
+        .accessibilityIdentifier("project-run-settings-summary")
     }
 
     /// Delivers (board 01 A–C): Code or Not code, each with what choosing it means, and — on a marked
@@ -2663,11 +2687,7 @@ struct ProjectDetailView: View {
     private func confirmMessage(_ store: ProjectDetailModel) -> String {
         switch confirmingStatus {
         case .done?:
-            let criteria = store.document?.acceptanceCriteriaItems ?? []
-            let settled = criteria.filter { $0.satisfied == true }.count
-            let noReceipt = criteria.filter { $0.landing == "UNKNOWN" }.count
-            let noun = criteria.count == 1 ? "criterion" : "criteria"
-            return "\(criteria.count) stated \(noun) · \(settled) settled by the work filed under them · \(noReceipt) with no merge receipt"
+            return ProjectDone.recordAsDoneTally(store.document)
         case .cancelled?:
             var unfinished = 0
             if let b = store.panorama?.buckets {

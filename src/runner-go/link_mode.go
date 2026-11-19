@@ -514,6 +514,7 @@ var linkDaemonRoutes = []string{
 	"POST /runner/install-result",
 	"POST /runner/codex-account-remove-result",
 	"POST /runner/account-remove-result",
+	"POST /runner/claude-account-swap-result",
 	"POST /runner/login-result",
 	"POST /runner/cursor-key-check-result",
 	"GET /runner/sessions/claim",

@@ -75,7 +75,6 @@ import {
   QuestionNotAskable,
   SESSION_ENDING_SELECT,
   TASK_FAILURE_CHAIN_LIMIT,
-  conversationIsDown,
   conversationIsOver,
   coordinatorQuestion,
   deliveryReviewDetailLine,
@@ -103,6 +102,7 @@ import {
   sessionHasEnded,
 } from './project-open-item';
 import { escalatesAt } from './open-item-escalation.service';
+import { COORDINATOR_PAUSE_SELECT, conversationIsPaused } from './coordinator-evidence-queue';
 import { canonicalJson } from './canonical-json';
 import { mainBranchOf, taskLandingSql } from './project-criterion-landing';
 import {
@@ -418,7 +418,7 @@ export interface OpenItemReturned {
   assignee: 'COORDINATOR';
   /** The wait starts over, which is the whole of what "ask again" gives the coordinator. */
   waitingSince: Date;
-  escalateAt: Date;
+  escalateAt: Date | null;
 }
 
 /** The durable result of a coordinator deliberately handing an open item to the owner. */
@@ -874,18 +874,15 @@ export class ProjectOpenItemService {
       await this.handToOwner(item.id, item.assignedAt, 'NO_COORDINATOR');
       return;
     }
+    // A platform delivery must not disarm an existing retry or revive a failed run.
+    const coordinator = await this.prisma.session.findUnique({
+      where: { id: sessionId }, select: COORDINATOR_PAUSE_SELECT,
+    });
+    if (coordinator && conversationIsPaused(coordinator)) return;
     const clientTurnId = openItemTurnId(item.id, item.assignedAt);
     const fixed = await this.landedFixesOf(item.id, item.integrationJobId);
-    // The owner's press onto a conversation that is only down (`conversationIsDown`) revives it, as
-    // a message in "Chat about this" would: the press was drawn because a message can reach it
-    // (`readCoordinatorReach`), and the owner is not the platform G6 keeps from reviving one. Every
-    // other delivery writes a turn on a live conversation and nothing else.
-    const revives = askedBy === 'OWNER' && await this.isDown(sessionId);
     try {
-      const send = revives
-        ? this.sessions.resume.bind(this.sessions)
-        : this.sessions.createTurn.bind(this.sessions);
-      const turn = await send(item.ownerId, sessionId, {
+      const turn = await this.sessions.createTurn(item.ownerId, sessionId, {
         clientTurnId,
         content: openItemMessage({
           id: item.id,
@@ -906,7 +903,7 @@ export class ProjectOpenItemService {
           assignedAt: item.assignedAt,
           sessionId,
           clientTurnId,
-        }, revives),
+        }),
       });
       // The turn the delivery row names. Written after the commit because the row is written inside
       // it, before the turn exists; a process that dies here leaves a delivery whose turn is found
@@ -941,12 +938,6 @@ export class ProjectOpenItemService {
       }
       throw error;
     }
-  }
-
-  /** Whether this conversation is only down (`conversationIsDown`): FAILED, and nobody closed it. */
-  private async isDown(sessionId: string): Promise<boolean> {
-    const session = await this.prisma.session.findUnique({ where: { id: sessionId }, select: SESSION_ENDING_SELECT });
-    return session != null && conversationIsDown(session);
   }
 
   /**
@@ -1727,8 +1718,7 @@ export class ProjectOpenItemService {
         project: {
           select: {
             coordinatorSessionId: true,
-            coordinatorSession: { select: SESSION_ENDING_SELECT },
-            exceptionEscalationSeconds: true,
+            coordinatorSession: { select: COORDINATOR_PAUSE_SELECT },
           },
         },
       },
@@ -1792,10 +1782,7 @@ export class ProjectOpenItemService {
     // put it in front of (`deliver`, which this ends by calling with `OWNER`). What the switch does
     // keep is every automatic hand-over: an item opened for a switched-off coordinator is the
     // owner's from the start, and this refusal is what it was always about — a project with NO
-    // conversation at all, one that is over, or one no message can reach — the reading the card drew
-    // the press from (`readCoordinatorReach`), so a drawn press is never refused here and a hidden
-    // one would never have worked. A run that FAILED while its runner was away is only down: once
-    // the runner is back the delivery below revives it, as a message in "Chat about this" would.
+    // conversation at all, one that is over, or one that is permanently unreachable.
     const reach = await readCoordinatorReach(this.sessions, ownerId, item.project);
     if (!reach.askable) {
       throw new ConflictException({
@@ -1806,7 +1793,8 @@ export class ProjectOpenItemService {
       });
     }
     const now = new Date();
-    const escalateAt = new Date(now.getTime() + item.project.exceptionEscalationSeconds * 1_000);
+    // The new assignment has no deadline until its ITEM turn is taken.
+    const escalateAt = null;
     const returned = await this.prisma.projectOpenItem.updateMany({
       where: { id: itemId, state: 'OPEN', assignee: 'OWNER' },
       data: {
@@ -3542,7 +3530,7 @@ export class ProjectOpenItemService {
       select: {
         id: true,
         coordinatorSessionId: true,
-        coordinatorSession: { select: SESSION_ENDING_SELECT },
+        coordinatorSession: { select: COORDINATOR_PAUSE_SELECT },
       },
     });
     if (!project) throw new NotFoundException('project not found');
@@ -3556,17 +3544,8 @@ export class ProjectOpenItemService {
     await this.guarded('supersedeStaleDoneRequest', async () => {
       await supersedeStaleDoneRequest(this.prisma, ownerId, projectId, this.sessions);
     });
-    // Where "Chat about this" goes for every row (`openItemChat`) and whether it can be handed a
-    // message now (`receiveBlockedReasonFor`, asked once for the whole list), and whether there is a
-    // conversation to ask again — that same reading, of a conversation that is not over, which is
-    // exactly what `returnToCoordinator` refuses on. Minus the switch, which is not part of it: the
-    // press is the owner's own, so a switched-off coordinator still has somewhere to put the item
-    // (`deliver`). Drawn the other way round, the card would hide a press that works, which is the
-    // same failure as drawing one that cannot (§4.7). A pointer to a row that is not there any more
-    // is no conversation at all. Both in `readCoordinatorReach`, which the owner's push reads too.
     const reach = await readCoordinatorReach(this.sessions, ownerId, project);
     const { askable, coordinator } = reach;
-    // What an escalated item's heading says about its coordinator (`coordinatorUnreachable`).
     const unreachable = coordinatorUnreachable(reach);
     const open = await this.prisma.projectOpenItem.findMany({
       where: { projectId, state: 'OPEN' },
@@ -4024,15 +4003,12 @@ export class ProjectOpenItemService {
       sessionId: string;
       clientTurnId: string;
     },
-    revives = false,
   ): Promise<void> {
     const session = await tx.session.findUniqueOrThrow({
       where: { id: delivery.sessionId },
-      select: SESSION_ENDING_SELECT,
+      select: COORDINATOR_PAUSE_SELECT,
     });
-    // Read before the revive writes the row, so a conversation the owner's press revives is still
-    // FAILED here; what it may not be is over.
-    if (revives ? conversationIsOver(session) : sessionHasEnded(session)) {
+    if (sessionHasEnded(session) || conversationIsPaused(session)) {
       throw new SessionNotSendable('the coordinator conversation has ended');
     }
     const [owed] = await tx.$queryRaw<Array<{ count: number }>>(Prisma.sql`

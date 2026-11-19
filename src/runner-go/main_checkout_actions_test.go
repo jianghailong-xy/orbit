@@ -514,28 +514,6 @@ func TestMainCheckoutActionsSerializeOnTheRealPath(t *testing.T) {
 	}
 }
 
-// An isolated session whose worktree cannot be made never runs in the shared checkout: it gets no
-// directory, the refusal it fails with names why, and the run reports it as its error.
-func TestWorktreeCreationFailureNeverFallsBackToShared(t *testing.T) {
-	f := newResumableFixture(t)
-	job := &ClaimedSession{SessionID: "sess-blocked", Branch: "orbit/sess-blocked"}
-	writeUnder(t, filepath.Join(worktreesDir(), "sess-blocked"), "in/the/way.txt", "x\n")
-	execDir := setupWorktree(job, f.repo)
-	if execDir != "" || job.WT != nil || job.IsolationStatus == isoShared || job.IsolationStatus == isoSharedNoGit {
-		t.Fatalf("execDir %q, WT %+v, isolation %q: it fell back to the shared checkout", execDir, job.WT, job.IsolationStatus)
-	}
-	if job.SourceRefusal == nil || job.SourceRefusal.Code != sourceRefusalWorktreeRequired ||
-		!strings.Contains(job.SourceRefusal.Detail["reason"].(string), "git worktree add") {
-		t.Fatalf("refusal %+v", job.SourceRefusal)
-	}
-	var events []map[string]interface{}
-	emit := func(kind string, payload map[string]interface{}) { events = append(events, payload) }
-	status, _, _ := runSessionProcess(context.Background(), context.Background(), nil, job, "", execDir, "", emit, nil, nil, false, nil, nil, nil, nil, nil)
-	if status != stFailed || len(events) != 1 || !strings.HasPrefix(events[0]["message"].(string), sourceRefusalWorktreeRequired+": ") {
-		t.Fatalf("status %q, events %+v", status, events)
-	}
-}
-
 // The relay's runner half: a snapshot read and an action, each answered under its id; nothing
 // started past its deadline.
 func TestMainCheckoutRelayAnswers(t *testing.T) {

@@ -118,10 +118,17 @@ public enum CodexAccounts {
     }
 
     /// What an account is called where one is named: what the user called it — Default too, once
-    /// renamed in Orbit — else "Default", or the slot's own id (web `accountNameOf`).
+    /// renamed in Orbit — else "Default"; a former Default (the account a Set as default moved out of
+    /// ~/.claude) by its email, else "Former default"; or the slot's own id (web `accountNameOf`).
     public static func label(_ id: String, accounts: [RunnerEngineAccount]?) -> String {
-        if let name = accounts?.first(where: { $0.id == id })?.name, !name.isEmpty { return name }
-        return id == defaultID ? "Default" : "Account \(id)"
+        let account = accounts?.first(where: { $0.id == id })
+        if let name = account?.name, !name.isEmpty { return name }
+        if id == defaultID { return "Default" }
+        if account?.formerDefault == true {
+            if let email = account?.email, !email.isEmpty { return email }
+            return RunnerAccountCopy.RUNNER_ACCOUNT_FORMER_DEFAULT
+        }
+        return "Account \(id)"
     }
 
     /// `wanted` when the runner reports it, else Default — the account dispatch runs a session on

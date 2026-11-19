@@ -76,4 +76,60 @@ public enum RunnerAccountCopy {
     public static let RUNNER_ACCOUNT_IN_USE_WAITING = "Waiting for input"
     /// A listed session with no title yet.
     public static let RUNNER_ACCOUNT_IN_USE_UNTITLED = "Untitled session"
+
+    /// An added Claude Code account's way to become the Default: the item in its ⋯ menu, and what it does.
+    public static let RUNNER_ACCOUNT_SET_DEFAULT = "Set as default"
+    public static let RUNNER_ACCOUNT_SET_DEFAULT_HINT =
+        "Moves this login into ~/.claude, so the terminal uses it too"
+    /// Why that item can't be chosen: the runner is offline, too old to swap logins, or swapping already.
+    public static let RUNNER_ACCOUNT_SET_DEFAULT_OFFLINE = "The runner is offline"
+    public static let RUNNER_ACCOUNT_SET_DEFAULT_UPDATE =
+        "Update the runner to set a default Claude Code account on it"
+    public static let RUNNER_ACCOUNT_SET_DEFAULT_BUSY = "A default is already being set on this runner"
+
+    /// The question in front of Set as default.
+    public static func runnerAccountSetDefaultTitle(name: String) -> String { "Make \(name) the default?" }
+
+    /// What Set as default comes to: `name` is the added account and `dir` its folder, `defaultName` and
+    /// `defaultDir` the Default's, each the way a terminal spells it.
+    public static func runnerAccountSetDefaultDetail(name: String, defaultDir: String, defaultName: String,
+                                                    dir: String, runner: String) -> String {
+        "\(name)’s login moves to \(defaultDir), and \(defaultName)’s to \(dir). Claude Code in a terminal "
+            + "on \(runner) uses \(name) from then on — restart any that are open. Sessions stay on their "
+            + "accounts, and a turn in progress finishes first. Workspaces keep their account."
+    }
+
+    /// The confirmation's own button.
+    public static let RUNNER_ACCOUNT_SET_DEFAULT_CONFIRM = "Make default"
+
+    /// Under the account while it is being made the Default, with no turn left to wait for.
+    public static func runnerAccountSettingDefault(name: String) -> String {
+        "Making \(name) the default"
+    }
+
+    /// The same, while one session on either account finishes its turn.
+    public static func runnerAccountSettingDefaultOne(name: String) -> String {
+        "Making \(name) the default — waiting for 1 session to finish its turn"
+    }
+
+    /// The same, while several do.
+    public static func runnerAccountSettingDefaultMany(name: String, count: Int) -> String {
+        "Making \(name) the default — waiting for \(count) sessions to finish their turns"
+    }
+
+    /// Beside it, while Claude Code runs in a terminal on either folder: the swap waits for it to exit.
+    public static let RUNNER_ACCOUNT_SETTING_DEFAULT_TERMINAL =
+        "It also waits for Claude Code running in a terminal there to exit."
+
+    /// A swap that failed, or that the control plane refused: over the reason.
+    public static func runnerAccountSetDefaultFailed(name: String) -> String {
+        "Couldn’t make \(name) the default"
+    }
+
+    /// Under that reason: a failed swap puts both logins back.
+    public static let RUNNER_ACCOUNT_SET_DEFAULT_UNCHANGED = "Both logins are as they were."
+
+    /// What a former Default is called — the account a Set as default moved out of ~/.claude into an
+    /// added folder — while the owner has not named it and no email is known for it.
+    public static let RUNNER_ACCOUNT_FORMER_DEFAULT = "Former default"
 }

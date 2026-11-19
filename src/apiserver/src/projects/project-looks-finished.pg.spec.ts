@@ -72,6 +72,9 @@ import { MergeReceiptService } from '../sessions/merge-receipt.service';
 import { SessionsService } from '../sessions/sessions.service';
 import { TasksService } from '../tasks/tasks.service';
 import { CompletionInputRouter } from './completion-input-router.service';
+import { DependentReadyProducer } from './dependent-ready.producer';
+import { TaskRunStoppedProducer } from './task-run-stopped.producer';
+import { CoordinatorFactQueueService } from './coordinator-fact-queue.service';
 import { CoordinatorConvergenceService } from './coordinator-convergence.service';
 import { CoordinatorDeliveryService, coordinatorDeliveryTurnId } from './coordinator-delivery.service';
 import { CoordinatorJudgmentService } from './coordinator-judgment.service';
@@ -87,6 +90,7 @@ import { criterionKeyOf } from './project-acceptance';
 import { ProjectAcceptanceService } from './project-acceptance.service';
 import { readDerivedProjectDone } from './project-done-derived';
 import { doneReadiness, readDoneState } from './project-done-request';
+import { projectsToRecordAsDone } from './project-looks-finished';
 import { branchName } from './project-criterion-landing';
 import { INTEGRATION_JOB_CLAIM } from './project-integration-job';
 import { configureProjectIntegration } from './project-integration-line';
@@ -161,7 +165,16 @@ async function connect(): Promise<Stack> {
     new CriterionUnlandedProducer(prisma, convergence),
   );
   const openItems = new ProjectOpenItemService(prisma, sessions);
+  const recoveryDelivery = new CoordinatorDeliveryService(prisma, new CoordinatorWakeService(prisma), sessions);
+  const recovery = new CoordinatorFactQueueService(
+    prisma, recoveryDelivery,
+    new TaskRunStoppedProducer(prisma, convergence, recoveryDelivery),
+    new DependentReadyProducer(prisma, convergence, recoveryDelivery),
+    new ProjectTasksSettledProducer(prisma,
+      new CoordinatorJudgmentService(prisma, new CoordinatorWakeService(prisma), sessions), convergence, recoveryDelivery),
+  );
   const tasks = new TasksService(prisma, sessions, realtime, undefined, router, undefined, openItems);
+  Object.assign(tasks, { coordinatorFacts: recovery });
   const acceptance = new ProjectAcceptanceService(prisma);
   const projects = new ProjectsService(prisma, acceptance, sessions);
   const receipts = new MergeReceiptService(prisma, router);
@@ -185,6 +198,7 @@ async function connect(): Promise<Stack> {
     undefined,
     new ProjectPromotionService(prisma),
   );
+  Object.assign(api, { coordinatorFacts: recovery });
   return { db, sessions, tasks, projects, acceptance, receipts, api, jobs };
 }
 
@@ -423,7 +437,7 @@ async function queuedJob(
 function settledWakes(stack: Stack, w: World) {
   return stack.db.projectCoordinatorWake.findMany({
     where: { projectId: w.projectId, event: 'PROJECT_TASKS_SETTLED' },
-    select: { id: true, status: true, sessionId: true, idempotencyKey: true, updatedAt: true },
+    select: { id: true, status: true, sessionId: true, idempotencyKey: true, updatedAt: true, refusalCode: true, delivery: true },
     orderBy: { createdAt: 'asc' },
   });
 }
@@ -787,12 +801,60 @@ test('(2)(3) a project that looks finished is handed to its coordinator with eve
   });
 
   // ── (3) and then the owner ─────────────────────────────────────────────────────────────────────
-  const backdate = (table: 'project_coordinator_wake' | 'project_open_item', id: string, seconds: number) =>
-    stack.db.$executeRawUnsafe(
-      `UPDATE "${table}" SET "updated_at" = "updated_at" - make_interval(secs => $1) WHERE "id" = $2::uuid`,
-      seconds,
-      id,
-    );
+  await t.test('unread notifications wait through outages, retries, account queues and busy turns; recovery replaces a drained turn once', async () => {
+    const [wake] = await settledWakes(stack, w);
+    const originalKey = coordinatorDeliveryTurnId(wake!.idempotencyKey);
+    const farFuture = new Date(Date.now() + 86_400_000);
+    const due = (at = farFuture) => projectsToRecordAsDone(stack.db as unknown as PrismaService, w.ownerId, [w.projectId], at);
+    for (const data of [
+      { status: RunStatus.FAILED, retryAt: null },
+      { status: RunStatus.AWAITING_INPUT, retryAt: new Date(Date.now() + 60_000) },
+      { status: RunStatus.PENDING, retryAt: null },
+      { status: RunStatus.RUNNING, retryAt: null },
+    ]) {
+      await stack.db.session.update({ where: { id: w.coordinatorSessionId }, data });
+      assert.equal((await due()).has(w.projectId), false, `${data.status} escalated an unread turn`);
+      assert.deepEqual(await signalsFor(stack, w), []);
+    }
+    await stack.db.conversationTurn.update({
+      where: { sessionId_clientTurnId: { sessionId: w.coordinatorSessionId, clientTurnId: originalKey } },
+      data: { status: 'ANSWERED', deliveredAt: null },
+    });
+    await stack.db.session.update({ where: { id: w.coordinatorSessionId }, data: { status: RunStatus.AWAITING_INPUT } });
+    await Promise.all([stack.tasks.deliverLooksFinishedOwedTo(w.coordinatorSessionId), stack.tasks.deliverLooksFinishedOwedTo()]);
+    const rebound = await stack.db.projectCoordinatorWake.findUniqueOrThrow({ where: { id: wake!.id } });
+    const key = (rebound.delivery as { clientTurnId: string }).clientTurnId;
+    assert.notEqual(key, originalKey);
+    assert.equal(await stack.db.conversationTurn.count({ where: { sessionId: w.coordinatorSessionId, clientTurnId: key } }), 1);
+    assert.equal((await due()).has(w.projectId), false, 'requeue did not start the window');
+    const takenAt = new Date();
+    await stack.db.conversationTurn.update({
+      where: { sessionId_clientTurnId: { sessionId: w.coordinatorSessionId, clientTurnId: key } },
+      data: { deliveredAt: takenAt, status: 'IN_FLIGHT' },
+    });
+    assert.equal((await due(new Date(takenAt.getTime() + 7_199_999))).has(w.projectId), false);
+    assert.equal((await due(new Date(takenAt.getTime() + 7_200_000))).get(w.projectId)?.getTime(), takenAt.getTime() + 7_200_000);
+    // A true end, Trash and disabling Automatic bypass even an unread turn's missing deadline.
+    await stack.db.conversationTurn.update({
+      where: { sessionId_clientTurnId: { sessionId: w.coordinatorSessionId, clientTurnId: key } },
+      data: { deliveredAt: null, status: 'ANSWERED' },
+    });
+    for (const data of [
+      { status: RunStatus.FAILED, endReason: 'USER_ENDED', deletedAt: null },
+      { status: RunStatus.AWAITING_INPUT, endReason: null, deletedAt: new Date() },
+    ]) {
+      await stack.db.session.update({ where: { id: w.coordinatorSessionId }, data });
+      assert.equal((await due()).has(w.projectId), true, 'a truly unavailable coordinator hands off immediately');
+    }
+    await stack.db.session.update({ where: { id: w.coordinatorSessionId }, data: { status: RunStatus.AWAITING_INPUT, endReason: null, deletedAt: null } });
+    await stack.db.project.update({ where: { id: w.projectId }, data: { coordinatorEnabled: false } });
+    assert.equal((await due()).has(w.projectId), true, 'Automatic off hands off immediately');
+    await stack.db.project.update({ where: { id: w.projectId }, data: { coordinatorEnabled: true } });
+    await stack.db.conversationTurn.update({
+      where: { sessionId_clientTurnId: { sessionId: w.coordinatorSessionId, clientTurnId: key } },
+      data: { deliveredAt: takenAt, status: 'ANSWERED' },
+    });
+  });
 
   await t.test('(3a) inside the escalation window the owner is not asked', async () => {
     assert.deepEqual(await signalsFor(stack, w), [], 'the owner was asked before the window ran out');
@@ -802,7 +864,11 @@ test('(2)(3) a project that looks finished is handed to its coordinator with eve
 
   await t.test('(3b) once exceptionEscalationSeconds have passed with no request, the owner’s Needs you shows Record as done…', async () => {
     const [wake] = await settledWakes(stack, w);
-    await backdate('project_coordinator_wake', wake!.id, 7_200 + 1);
+    const delivery = await stack.db.projectCoordinatorWake.findUniqueOrThrow({ where: { id: wake!.id } });
+    await stack.db.conversationTurn.update({
+      where: { sessionId_clientTurnId: { sessionId: w.coordinatorSessionId, clientTurnId: (delivery.delivery as { clientTurnId: string }).clientTurnId } },
+      data: { deliveredAt: new Date(Date.now() - 7_201_000) },
+    });
 
     assert.deepEqual(await signalsFor(stack, w), [{
       sessionId: w.coordinatorSessionId,
@@ -858,7 +924,7 @@ test('(2)(3) a project that looks finished is handed to its coordinator with eve
       'Record as done… stood beside an open request to record the project done');
   });
 
-  await t.test('(3d) after the owner answers "Not yet…", the clock runs from the answer', async () => {
+  await t.test('(3d) a declined request does not reset the delivery turn’s deadline', async () => {
     // Answered a window ago, and nothing asked since: the owner's again. One statement, because a
     // finished item is final (`project_open_item` refuses any later write to it).
     await stack.db.$executeRaw`
@@ -871,8 +937,8 @@ test('(2)(3) a project that looks finished is handed to its coordinator with eve
     assert.deepEqual((await signalsFor(stack, w)).map((signal) => signal.kind), ['RECORD_AS_DONE'],
       'a window after the answer, with nothing asked since, it is the owner’s again');
 
-    // Asked again, and answered "Not yet…" just now: the coordinator was just handed the question
-    // back, so the owner is not asked the moment they said not yet.
+    // An open request suppresses the notification; answering it does not change when the
+    // LOOKS_FINISHED turn was taken up.
     const again = await requestDone();
     assert.equal(await recordAsDone(), false);
     await stack.db.projectOpenItem.update({
@@ -885,7 +951,7 @@ test('(2)(3) a project that looks finished is handed to its coordinator with eve
         resolvedByUserId: w.ownerId,
       },
     });
-    assert.equal(await recordAsDone(), false, 'the owner was asked again the moment they said not yet');
+    assert.equal(await recordAsDone(), true, 'a request answer must not restart the delivery turn’s elapsed window');
   });
 
   await t.test('(3e) recording it done ends it', async () => {
@@ -897,6 +963,35 @@ test('(2)(3) a project that looks finished is handed to its coordinator with eve
     });
     assert.deepEqual(await signalsFor(stack, w), [], 'a project recorded done still asked its owner');
   });
+});
+
+test('a looks-finished fact first raised during FAILED waits and is delivered on recovery without another project event', {
+  skip, concurrency: 1, timeout: 300_000,
+}, async (t) => {
+  const stack = await connect();
+  t.after(() => stack.db.$disconnect().catch(() => undefined));
+  const w = await world(stack, 'failed-first', ['the walkthrough is complete']);
+  const task = await servingTask(stack, w, w.keys[0]!, 'walkthrough');
+  const sessionId = await workSession(stack, w, task.id, 'orbit/walkthrough');
+  await settleExecutable(stack, task.id);
+  await queuedJob(stack, w, 'LAND_TASK', task.id, 'NOTHING_TO_LAND');
+  await stack.db.session.update({ where: { id: w.coordinatorSessionId }, data: { status: RunStatus.FAILED } });
+  await stack.receipts.record(w.ownerId, sessionId, {
+    result: 'ALREADY_MERGED', sourceSha: sha('7'), targetBranch: await projectBranch(stack, w), targetShaBefore: sha('7'),
+  }, 'RUNNER');
+  const wakes = await settledWakes(stack, w);
+  assert.equal(wakes.length, 1);
+  assert.equal(wakes[0]!.refusalCode, 'DELIVERY_COORDINATOR_PAUSED');
+  assert.deepEqual(await signalsFor(stack, w), []);
+  await stack.tasks.deliverLooksFinishedOwedTo();
+  assert.equal((await settledWakes(stack, w)).length, 1, 'paused scans do not write another refusal');
+  await stack.db.session.update({ where: { id: w.coordinatorSessionId }, data: { status: RunStatus.AWAITING_INPUT } });
+  await Promise.all([stack.tasks.deliverLooksFinishedOwedTo(w.coordinatorSessionId), stack.tasks.deliverLooksFinishedOwedTo()]);
+  const delivered = (await settledWakes(stack, w)).filter((wake) => wake.status === 'DELIVERED');
+  assert.equal(delivered.length, 1);
+  const key = (delivered[0]!.delivery as { clientTurnId: string }).clientTurnId;
+  assert.equal(await stack.db.conversationTurn.count({ where: { sessionId: w.coordinatorSessionId, clientTurnId: key } }), 1);
+  assert.equal((await projectsToRecordAsDone(stack.db as unknown as PrismaService, w.ownerId, [w.projectId], new Date(Date.now() + 86_400_000))).size, 0);
 });
 
 // ═══ (4) the gap between a landing and main ═══════════════════════════════════════════════════════
@@ -1103,3 +1198,42 @@ test('(6) a project shaped like Coordinator handoff v2 counts only its met crite
 test('the looks-finished PostgreSQL target is explicitly disposable', { skip }, () => {
   assertCoordinatorPgUrlIsIsolated(URL);
 });
+
+test('a settled-project fact refused during FAILED recovers on the reconcile tick without another event',
+  { skip, timeout: 120_000 }, async (t) => {
+    const stack = await connect();
+    t.after(() => stack.db.$disconnect());
+    const w = await world(stack, 'settled-recovery', ['the walkthrough is complete']);
+    const task = await servingTask(stack, w, w.keys[0]!, 'completed walkthrough');
+    await stack.db.session.update({ where: { id: w.coordinatorSessionId }, data: { status: RunStatus.FAILED } });
+    await settleExecutable(stack, task.id);
+    const prisma = stack.db as unknown as PrismaService;
+    const convergence = new CoordinatorConvergenceService(prisma);
+    const delivery = new CoordinatorDeliveryService(prisma, new CoordinatorWakeService(prisma), stack.sessions);
+    const producer = new ProjectTasksSettledProducer(prisma,
+      new CoordinatorJudgmentService(prisma, new CoordinatorWakeService(prisma), stack.sessions), convergence, delivery);
+    assert.equal((await producer.afterCommit([w.projectId]))[0]?.outcome, 'REFUSED');
+    const wakes = () => stack.db.projectCoordinatorWake.findMany({
+      where: { projectId: w.projectId, event: 'PROJECT_TASKS_SETTLED' },
+    });
+    assert.equal((await wakes()).length, 1);
+    await stack.tasks.reconcileTick();
+    assert.equal((await wakes()).length, 1, 'a paused coordinator causes no repeated refusal');
+    await stack.db.session.update({ where: { id: w.coordinatorSessionId }, data: { status: RunStatus.AWAITING_INPUT } });
+    await Promise.all([stack.tasks.reconcileTick(), stack.tasks.reconcileTick()]);
+    assert.equal((await wakes()).filter((wake) => wake.status === 'DELIVERED').length, 1);
+    const turns = () => stack.db.conversationTurn.findMany({
+      where: { sessionId: w.coordinatorSessionId, content: { contains: 'looks finished, but Orbit' } },
+    });
+    assert.equal((await turns()).length, 1);
+    await stack.db.conversationTurn.updateMany({
+      where: { id: (await turns())[0]!.id }, data: { status: 'ANSWERED', deliveredAt: null },
+    });
+    await stack.db.session.update({ where: { id: w.coordinatorSessionId }, data: { status: RunStatus.AWAITING_INPUT } });
+    await Promise.all([stack.tasks.reconcileTick(), stack.tasks.reconcileTick()]);
+    const resent = await turns();
+    assert.equal(resent.length, 2);
+    assert.notEqual(resent[0]!.clientTurnId, resent[1]!.clientTurnId);
+    await stack.tasks.reconcileTick();
+    assert.equal((await turns()).length, 2);
+  });
