@@ -5,9 +5,10 @@
  *   - the open: a NATS request on rnr.<runnerId> carrying a Frame with only stream_open set, in protobuf's canonical
  *     JSON, answered by a Frame with stream_opened or stream_close set, in the same JSON;
  *   - the bytes: on vnc.<streamId>.down (to the runner) and vnc.<streamId>.up (from it), each NATS message one
- *     binary-encoded Frame with only stream_data, stream_credit or stream_close set.
+ *     binary-encoded Frame with only stream_data, stream_credit or stream_close set;
+ *   - a paste (docs/runner-browser-design.md §5): stream_paste down, answered by stream_pasted up, on the same subjects.
  *
- * The apiserver does not carry the generated protobuf code, so the five messages it needs are written and read here by
+ * The apiserver does not carry the generated protobuf code, so the seven messages it needs are written and read here by
  * hand, field by field as the proto numbers them. browser-stream-frames.spec.ts holds both directions to the code
  * generated from the proto (@orbit/shared's runner_link_pb.ts).
  */
@@ -16,6 +17,8 @@
 const FRAME_STREAM_DATA = 22;
 const FRAME_STREAM_CREDIT = 23;
 const FRAME_STREAM_CLOSE = 24;
+const FRAME_STREAM_PASTE = 25;
+const FRAME_STREAM_PASTED = 26;
 
 /** Why a stream closed (runner_link.proto, StreamCloseCode). */
 export const STREAM_CLOSE = {
@@ -37,7 +40,8 @@ const CLOSE_CODE_NAMES: Record<string, number> = Object.fromEntries(
 export type StreamFrame =
   | { kind: 'data'; streamId: string; data: Uint8Array }
   | { kind: 'credit'; streamId: string; bytes: number }
-  | { kind: 'close'; streamId: string; code: number; message: string };
+  | { kind: 'close'; streamId: string; code: number; message: string }
+  | { kind: 'pasted'; streamId: string; pasteId: number; error: string };
 
 /** The open request: a Frame with only stream_open set (kind VNC), in protobuf's canonical JSON. */
 export function streamOpenMessage(streamId: string): string {
@@ -79,6 +83,11 @@ export function encodeStreamClose(streamId: string, code: number, message = ''):
   );
 }
 
+/** A paste the owner made in control (StreamPaste): the text goes to the runner's browser, and nowhere else. */
+export function encodeStreamPaste(streamId: string, pasteId: number, text: string): Uint8Array {
+  return frame(FRAME_STREAM_PASTE, concat([stringField(1, streamId), varintField(2, pasteId), stringField(3, text)]));
+}
+
 /** Reads one binary Frame from vnc.<streamId>.up; null when it is not a stream frame this side reads. */
 export function decodeStreamFrame(buf: Uint8Array): StreamFrame | null {
   try {
@@ -112,6 +121,16 @@ export function decodeStreamFrame(buf: Uint8Array): StreamFrame | null {
           if (f.number === 3 && f.wire === 2) message = utf8(f.value as Uint8Array);
         }
         found = { kind: 'close', streamId, code, message };
+      } else if (field.number === FRAME_STREAM_PASTED) {
+        let streamId = '';
+        let pasteId = 0;
+        let error = '';
+        for (const f of fields(body)) {
+          if (f.number === 1 && f.wire === 2) streamId = utf8(f.value as Uint8Array);
+          if (f.number === 2 && f.wire === 0) pasteId = Number(f.value);
+          if (f.number === 3 && f.wire === 2) error = utf8(f.value as Uint8Array);
+        }
+        found = { kind: 'pasted', streamId, pasteId, error };
       }
     }
     return found;

@@ -184,11 +184,16 @@ const orbitNotifyInstructions = "When the person asked to hear once something is
 // Measured 2026-11-15 in three fresh sessions asked to read production data: each one thought of "the orbit-prod
 // agent", found it with agent_list and used session_create, never delegate. So the paragraph says that workspace
 // is another agent's name, and when delegate beats session_create.
-const orbitDelegateInstructions = "Use delegate to hand a self-contained piece of work to a cheaper or stronger model " +
-	"than yours, to run it on another machine (needs: [\"os:darwin\"], or workspace: another agent's name from " +
-	"agent_list), or to run an independent piece in the background while you go on. Prefer it to session_create " +
-	"when you only need that piece's result back, and to your engine's built-in subagent or Agent tool when Orbit " +
-	"should pick the model, record the cost or run the work elsewhere." + orbitDelegateClaudeCodeLoad + "\n\n"
+//
+// Measured 2026-11-19 with headless Claude Code on Opus, Sonnet and Haiku 5.5: when the paragraph only said to
+// prefer delegate "when Orbit should pick the model, record the cost or run the work elsewhere", a request to work
+// in the background or to "use a subagent" went to the engine's own Agent tool. So it now claims both outright.
+const orbitDelegateInstructions = "Use delegate whenever you would start a subagent or run an independent piece in " +
+	"the background, in place of your engine's built-in subagent or Agent tool: Orbit picks the model, records the " +
+	"cost and brings the result back even if this engine is recycled. Use it too to hand work to a cheaper or " +
+	"stronger model than yours, or to run it on another machine (needs: [\"os:darwin\"], or workspace: another " +
+	"agent's name from agent_list). Prefer it to session_create when you only need that piece's result back." +
+	orbitDelegateClaudeCodeLoad + "\n\n"
 
 // orbitDelegateClaudeCodeLoad is the paragraph's Claude Code sentence. Cursor, which never shows mcp__orbit__*
 // names, is given the paragraph without it (cursorAgentInstructions). Delegate is marked to load up front

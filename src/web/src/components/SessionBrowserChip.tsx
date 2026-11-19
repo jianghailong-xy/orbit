@@ -6,7 +6,8 @@ import { RunnerBrowserDrawer } from './RunnerBrowserDrawer';
 /**
  * The session's Browser chip, in the outputs above the composer (docs/runner-browser-design.md §5, board frame 4):
  * shown only when the server has the browser switch on, the session runs on the account's managed runner, and the
- * runner reports its browser running. The red dot says the picture is live. It opens the drawer view only.
+ * runner reports its browser running. The red dot says the picture is live. It opens the drawer view only, a quick
+ * look whose Open in new tab and Take control open the browser's own tab.
  */
 export function SessionBrowserChip({
   managedRunnerId,
@@ -30,7 +31,6 @@ export function SessionBrowserChip({
         runnerId={managedRunnerId}
         open={open}
         onClose={() => setOpen(false)}
-        from="session"
         sessionId={sessionId}
         state={state}
       />

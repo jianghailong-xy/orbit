@@ -14,6 +14,8 @@
 // Minor revisions of v1 (each only adds, §5.11; a peer learns of one from a Hello capability):
 //   - Byte streams (StreamOpen, StreamOpened, StreamData, StreamCredit, StreamClose), capability
 //     `link-stream-v1` (docs/runner-browser-design.md §4).
+//   - Paste into the browser of a stream (StreamPaste, StreamPasted), capability
+//     `link-stream-paste-v1` (docs/runner-browser-design.md §5).
 //
 // Units: times are Unix milliseconds (`*_unix_ms`), durations are milliseconds (`*_ms`).
 
@@ -341,6 +343,8 @@ type Frame struct {
 	//	*Frame_StreamData
 	//	*Frame_StreamCredit
 	//	*Frame_StreamClose
+	//	*Frame_StreamPaste
+	//	*Frame_StreamPasted
 	Body          isFrame_Body `protobuf_oneof:"body"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
@@ -597,6 +601,24 @@ func (x *Frame) GetStreamClose() *StreamClose {
 	return nil
 }
 
+func (x *Frame) GetStreamPaste() *StreamPaste {
+	if x != nil {
+		if x, ok := x.Body.(*Frame_StreamPaste); ok {
+			return x.StreamPaste
+		}
+	}
+	return nil
+}
+
+func (x *Frame) GetStreamPasted() *StreamPasted {
+	if x != nil {
+		if x, ok := x.Body.(*Frame_StreamPasted); ok {
+			return x.StreamPasted
+		}
+	}
+	return nil
+}
+
 type isFrame_Body interface {
 	isFrame_Body()
 }
@@ -716,6 +738,16 @@ type Frame_StreamClose struct {
 	StreamClose *StreamClose `protobuf:"bytes,24,opt,name=stream_close,json=streamClose,proto3,oneof"`
 }
 
+type Frame_StreamPaste struct {
+	// Gateway to runner: text the owner pasted in a viewer of an open VNC stream, for the browser.
+	StreamPaste *StreamPaste `protobuf:"bytes,25,opt,name=stream_paste,json=streamPaste,proto3,oneof"`
+}
+
+type Frame_StreamPasted struct {
+	// Runner to gateway: how a StreamPaste ended.
+	StreamPasted *StreamPasted `protobuf:"bytes,26,opt,name=stream_pasted,json=streamPasted,proto3,oneof"`
+}
+
 func (*Frame_Hello) isFrame_Body() {}
 
 func (*Frame_Welcome) isFrame_Body() {}
@@ -761,6 +793,10 @@ func (*Frame_StreamData) isFrame_Body() {}
 func (*Frame_StreamCredit) isFrame_Body() {}
 
 func (*Frame_StreamClose) isFrame_Body() {}
+
+func (*Frame_StreamPaste) isFrame_Body() {}
+
+func (*Frame_StreamPasted) isFrame_Body() {}
 
 // A piece of a frame too large for one WebSocket message (§5.1: a message carries at most
 // Limits.max_frame_bytes). The sender encodes the whole Frame, cuts the bytes into pieces and sends
@@ -3768,11 +3804,142 @@ func (x *StreamClose) GetMessage() string {
 	return ""
 }
 
+// Gateway to runner: text the owner pasted while in control of a viewer, which the runner inserts into
+// the page that has focus in its browser (Chrome DevTools Input.insertText), as typed text. It is
+// not one of the stream's bytes and takes no room in its window; it is sent only to a runner whose
+// Hello declared `link-stream-paste-v1`. The text is often a password: no side logs or stores it.
+type StreamPaste struct {
+	state protoimpl.MessageState `protogen:"open.v1"`
+	// The open stream the paste came from.
+	StreamId string `protobuf:"bytes,1,opt,name=stream_id,json=streamId,proto3" json:"stream_id,omitempty"`
+	// Names the paste in its StreamPasted: chosen by the apiserver, unique within the stream.
+	PasteId uint32 `protobuf:"varint,2,opt,name=paste_id,json=pasteId,proto3" json:"paste_id,omitempty"`
+	// The text, at most 64 KiB of UTF-8.
+	Text          string `protobuf:"bytes,3,opt,name=text,proto3" json:"text,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *StreamPaste) Reset() {
+	*x = StreamPaste{}
+	mi := &file_v1_runner_link_proto_msgTypes[43]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *StreamPaste) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*StreamPaste) ProtoMessage() {}
+
+func (x *StreamPaste) ProtoReflect() protoreflect.Message {
+	mi := &file_v1_runner_link_proto_msgTypes[43]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use StreamPaste.ProtoReflect.Descriptor instead.
+func (*StreamPaste) Descriptor() ([]byte, []int) {
+	return file_v1_runner_link_proto_rawDescGZIP(), []int{43}
+}
+
+func (x *StreamPaste) GetStreamId() string {
+	if x != nil {
+		return x.StreamId
+	}
+	return ""
+}
+
+func (x *StreamPaste) GetPasteId() uint32 {
+	if x != nil {
+		return x.PasteId
+	}
+	return 0
+}
+
+func (x *StreamPaste) GetText() string {
+	if x != nil {
+		return x.Text
+	}
+	return ""
+}
+
+// Runner to gateway: the answer to one StreamPaste.
+type StreamPasted struct {
+	state protoimpl.MessageState `protogen:"open.v1"`
+	// The stream_id of the StreamPaste this answers.
+	StreamId string `protobuf:"bytes,1,opt,name=stream_id,json=streamId,proto3" json:"stream_id,omitempty"`
+	// The paste_id of the StreamPaste this answers.
+	PasteId uint32 `protobuf:"varint,2,opt,name=paste_id,json=pasteId,proto3" json:"paste_id,omitempty"`
+	// Empty when the text was inserted; otherwise why not, in English, shown to the owner.
+	Error         string `protobuf:"bytes,3,opt,name=error,proto3" json:"error,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *StreamPasted) Reset() {
+	*x = StreamPasted{}
+	mi := &file_v1_runner_link_proto_msgTypes[44]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *StreamPasted) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*StreamPasted) ProtoMessage() {}
+
+func (x *StreamPasted) ProtoReflect() protoreflect.Message {
+	mi := &file_v1_runner_link_proto_msgTypes[44]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use StreamPasted.ProtoReflect.Descriptor instead.
+func (*StreamPasted) Descriptor() ([]byte, []int) {
+	return file_v1_runner_link_proto_rawDescGZIP(), []int{44}
+}
+
+func (x *StreamPasted) GetStreamId() string {
+	if x != nil {
+		return x.StreamId
+	}
+	return ""
+}
+
+func (x *StreamPasted) GetPasteId() uint32 {
+	if x != nil {
+		return x.PasteId
+	}
+	return 0
+}
+
+func (x *StreamPasted) GetError() string {
+	if x != nil {
+		return x.Error
+	}
+	return ""
+}
+
 var File_v1_runner_link_proto protoreflect.FileDescriptor
 
 const file_v1_runner_link_proto_rawDesc = "" +
 	"\n" +
-	"\x14v1/runner_link.proto\x12\x13orbit.runnerlink.v1\"\xee\v\n" +
+	"\x14v1/runner_link.proto\x12\x13orbit.runnerlink.v1\"\xff\f\n" +
 	"\x05Frame\x12\x0e\n" +
 	"\x02id\x18\x01 \x01(\x04R\x02id\x122\n" +
 	"\x05hello\x18\x02 \x01(\v2\x1a.orbit.runnerlink.v1.HelloH\x00R\x05hello\x128\n" +
@@ -3803,7 +3970,9 @@ const file_v1_runner_link_proto_rawDesc = "" +
 	"\vstream_data\x18\x16 \x01(\v2\x1f.orbit.runnerlink.v1.StreamDataH\x00R\n" +
 	"streamData\x12H\n" +
 	"\rstream_credit\x18\x17 \x01(\v2!.orbit.runnerlink.v1.StreamCreditH\x00R\fstreamCredit\x12E\n" +
-	"\fstream_close\x18\x18 \x01(\v2 .orbit.runnerlink.v1.StreamCloseH\x00R\vstreamCloseB\x06\n" +
+	"\fstream_close\x18\x18 \x01(\v2 .orbit.runnerlink.v1.StreamCloseH\x00R\vstreamClose\x12E\n" +
+	"\fstream_paste\x18\x19 \x01(\v2 .orbit.runnerlink.v1.StreamPasteH\x00R\vstreamPaste\x12H\n" +
+	"\rstream_pasted\x18\x1a \x01(\v2!.orbit.runnerlink.v1.StreamPastedH\x00R\fstreamPastedB\x06\n" +
 	"\x04body\"`\n" +
 	"\x05Chunk\x12\x19\n" +
 	"\bframe_id\x18\x01 \x01(\x04R\aframeId\x12\x14\n" +
@@ -4015,7 +4184,15 @@ const file_v1_runner_link_proto_rawDesc = "" +
 	"\vStreamClose\x12\x1b\n" +
 	"\tstream_id\x18\x01 \x01(\tR\bstreamId\x128\n" +
 	"\x04code\x18\x02 \x01(\x0e2$.orbit.runnerlink.v1.StreamCloseCodeR\x04code\x12\x18\n" +
-	"\amessage\x18\x03 \x01(\tR\amessage*:\n" +
+	"\amessage\x18\x03 \x01(\tR\amessage\"Y\n" +
+	"\vStreamPaste\x12\x1b\n" +
+	"\tstream_id\x18\x01 \x01(\tR\bstreamId\x12\x19\n" +
+	"\bpaste_id\x18\x02 \x01(\rR\apasteId\x12\x12\n" +
+	"\x04text\x18\x03 \x01(\tR\x04text\"\\\n" +
+	"\fStreamPasted\x12\x1b\n" +
+	"\tstream_id\x18\x01 \x01(\tR\bstreamId\x12\x19\n" +
+	"\bpaste_id\x18\x02 \x01(\rR\apasteId\x12\x14\n" +
+	"\x05error\x18\x03 \x01(\tR\x05error*:\n" +
 	"\x04Mode\x12\x14\n" +
 	"\x10MODE_UNSPECIFIED\x10\x00\x12\r\n" +
 	"\tMODE_HTTP\x10\x01\x12\r\n" +
@@ -4057,7 +4234,7 @@ func file_v1_runner_link_proto_rawDescGZIP() []byte {
 }
 
 var file_v1_runner_link_proto_enumTypes = make([]protoimpl.EnumInfo, 4)
-var file_v1_runner_link_proto_msgTypes = make([]protoimpl.MessageInfo, 43)
+var file_v1_runner_link_proto_msgTypes = make([]protoimpl.MessageInfo, 45)
 var file_v1_runner_link_proto_goTypes = []any{
 	(Mode)(0),                  // 0: orbit.runnerlink.v1.Mode
 	(CloseCode)(0),             // 1: orbit.runnerlink.v1.CloseCode
@@ -4106,6 +4283,8 @@ var file_v1_runner_link_proto_goTypes = []any{
 	(*StreamData)(nil),         // 44: orbit.runnerlink.v1.StreamData
 	(*StreamCredit)(nil),       // 45: orbit.runnerlink.v1.StreamCredit
 	(*StreamClose)(nil),        // 46: orbit.runnerlink.v1.StreamClose
+	(*StreamPaste)(nil),        // 47: orbit.runnerlink.v1.StreamPaste
+	(*StreamPasted)(nil),       // 48: orbit.runnerlink.v1.StreamPasted
 }
 var file_v1_runner_link_proto_depIdxs = []int32{
 	6,  // 0: orbit.runnerlink.v1.Frame.hello:type_name -> orbit.runnerlink.v1.Hello
@@ -4131,41 +4310,43 @@ var file_v1_runner_link_proto_depIdxs = []int32{
 	44, // 20: orbit.runnerlink.v1.Frame.stream_data:type_name -> orbit.runnerlink.v1.StreamData
 	45, // 21: orbit.runnerlink.v1.Frame.stream_credit:type_name -> orbit.runnerlink.v1.StreamCredit
 	46, // 22: orbit.runnerlink.v1.Frame.stream_close:type_name -> orbit.runnerlink.v1.StreamClose
-	7,  // 23: orbit.runnerlink.v1.Hello.write_contract:type_name -> orbit.runnerlink.v1.WriteContract
-	8,  // 24: orbit.runnerlink.v1.Hello.managed_instance:type_name -> orbit.runnerlink.v1.ManagedInstance
-	9,  // 25: orbit.runnerlink.v1.Hello.sessions:type_name -> orbit.runnerlink.v1.SessionResume
-	0,  // 26: orbit.runnerlink.v1.Welcome.mode:type_name -> orbit.runnerlink.v1.Mode
-	11, // 27: orbit.runnerlink.v1.Welcome.limits:type_name -> orbit.runnerlink.v1.Limits
-	37, // 28: orbit.runnerlink.v1.Welcome.credit:type_name -> orbit.runnerlink.v1.Credit
-	12, // 29: orbit.runnerlink.v1.Welcome.sessions:type_name -> orbit.runnerlink.v1.SessionState
-	24, // 30: orbit.runnerlink.v1.Welcome.hints:type_name -> orbit.runnerlink.v1.HintState
-	13, // 31: orbit.runnerlink.v1.Welcome.release:type_name -> orbit.runnerlink.v1.AssignedRelease
-	1,  // 32: orbit.runnerlink.v1.Close.code:type_name -> orbit.runnerlink.v1.CloseCode
-	19, // 33: orbit.runnerlink.v1.Hint.inbox:type_name -> orbit.runnerlink.v1.InboxHint
-	20, // 34: orbit.runnerlink.v1.Hint.claim:type_name -> orbit.runnerlink.v1.ClaimHint
-	21, // 35: orbit.runnerlink.v1.Hint.commands:type_name -> orbit.runnerlink.v1.CommandsHint
-	22, // 36: orbit.runnerlink.v1.Hint.approval:type_name -> orbit.runnerlink.v1.ApprovalHint
-	23, // 37: orbit.runnerlink.v1.Hint.watchers:type_name -> orbit.runnerlink.v1.WatchersHint
-	22, // 38: orbit.runnerlink.v1.HintState.approvals:type_name -> orbit.runnerlink.v1.ApprovalHint
-	23, // 39: orbit.runnerlink.v1.HintState.watchers:type_name -> orbit.runnerlink.v1.WatchersHint
-	26, // 40: orbit.runnerlink.v1.Rpc.tunnel:type_name -> orbit.runnerlink.v1.TunnelRequest
-	28, // 41: orbit.runnerlink.v1.RpcResult.tunnel:type_name -> orbit.runnerlink.v1.TunnelResponse
-	29, // 42: orbit.runnerlink.v1.RpcResult.failure:type_name -> orbit.runnerlink.v1.Failure
-	31, // 43: orbit.runnerlink.v1.Heartbeat.facts:type_name -> orbit.runnerlink.v1.Fact
-	0,  // 44: orbit.runnerlink.v1.HeartbeatAck.mode:type_name -> orbit.runnerlink.v1.Mode
-	24, // 45: orbit.runnerlink.v1.HeartbeatAck.hints:type_name -> orbit.runnerlink.v1.HintState
-	13, // 46: orbit.runnerlink.v1.HeartbeatAck.release:type_name -> orbit.runnerlink.v1.AssignedRelease
-	34, // 47: orbit.runnerlink.v1.EventBatch.events:type_name -> orbit.runnerlink.v1.Event
-	36, // 48: orbit.runnerlink.v1.EventAck.rejected:type_name -> orbit.runnerlink.v1.RejectedEvent
-	29, // 49: orbit.runnerlink.v1.EventAck.failure:type_name -> orbit.runnerlink.v1.Failure
-	39, // 50: orbit.runnerlink.v1.LiveBatch.events:type_name -> orbit.runnerlink.v1.LiveEvent
-	2,  // 51: orbit.runnerlink.v1.StreamOpen.kind:type_name -> orbit.runnerlink.v1.StreamKind
-	3,  // 52: orbit.runnerlink.v1.StreamClose.code:type_name -> orbit.runnerlink.v1.StreamCloseCode
-	53, // [53:53] is the sub-list for method output_type
-	53, // [53:53] is the sub-list for method input_type
-	53, // [53:53] is the sub-list for extension type_name
-	53, // [53:53] is the sub-list for extension extendee
-	0,  // [0:53] is the sub-list for field type_name
+	47, // 23: orbit.runnerlink.v1.Frame.stream_paste:type_name -> orbit.runnerlink.v1.StreamPaste
+	48, // 24: orbit.runnerlink.v1.Frame.stream_pasted:type_name -> orbit.runnerlink.v1.StreamPasted
+	7,  // 25: orbit.runnerlink.v1.Hello.write_contract:type_name -> orbit.runnerlink.v1.WriteContract
+	8,  // 26: orbit.runnerlink.v1.Hello.managed_instance:type_name -> orbit.runnerlink.v1.ManagedInstance
+	9,  // 27: orbit.runnerlink.v1.Hello.sessions:type_name -> orbit.runnerlink.v1.SessionResume
+	0,  // 28: orbit.runnerlink.v1.Welcome.mode:type_name -> orbit.runnerlink.v1.Mode
+	11, // 29: orbit.runnerlink.v1.Welcome.limits:type_name -> orbit.runnerlink.v1.Limits
+	37, // 30: orbit.runnerlink.v1.Welcome.credit:type_name -> orbit.runnerlink.v1.Credit
+	12, // 31: orbit.runnerlink.v1.Welcome.sessions:type_name -> orbit.runnerlink.v1.SessionState
+	24, // 32: orbit.runnerlink.v1.Welcome.hints:type_name -> orbit.runnerlink.v1.HintState
+	13, // 33: orbit.runnerlink.v1.Welcome.release:type_name -> orbit.runnerlink.v1.AssignedRelease
+	1,  // 34: orbit.runnerlink.v1.Close.code:type_name -> orbit.runnerlink.v1.CloseCode
+	19, // 35: orbit.runnerlink.v1.Hint.inbox:type_name -> orbit.runnerlink.v1.InboxHint
+	20, // 36: orbit.runnerlink.v1.Hint.claim:type_name -> orbit.runnerlink.v1.ClaimHint
+	21, // 37: orbit.runnerlink.v1.Hint.commands:type_name -> orbit.runnerlink.v1.CommandsHint
+	22, // 38: orbit.runnerlink.v1.Hint.approval:type_name -> orbit.runnerlink.v1.ApprovalHint
+	23, // 39: orbit.runnerlink.v1.Hint.watchers:type_name -> orbit.runnerlink.v1.WatchersHint
+	22, // 40: orbit.runnerlink.v1.HintState.approvals:type_name -> orbit.runnerlink.v1.ApprovalHint
+	23, // 41: orbit.runnerlink.v1.HintState.watchers:type_name -> orbit.runnerlink.v1.WatchersHint
+	26, // 42: orbit.runnerlink.v1.Rpc.tunnel:type_name -> orbit.runnerlink.v1.TunnelRequest
+	28, // 43: orbit.runnerlink.v1.RpcResult.tunnel:type_name -> orbit.runnerlink.v1.TunnelResponse
+	29, // 44: orbit.runnerlink.v1.RpcResult.failure:type_name -> orbit.runnerlink.v1.Failure
+	31, // 45: orbit.runnerlink.v1.Heartbeat.facts:type_name -> orbit.runnerlink.v1.Fact
+	0,  // 46: orbit.runnerlink.v1.HeartbeatAck.mode:type_name -> orbit.runnerlink.v1.Mode
+	24, // 47: orbit.runnerlink.v1.HeartbeatAck.hints:type_name -> orbit.runnerlink.v1.HintState
+	13, // 48: orbit.runnerlink.v1.HeartbeatAck.release:type_name -> orbit.runnerlink.v1.AssignedRelease
+	34, // 49: orbit.runnerlink.v1.EventBatch.events:type_name -> orbit.runnerlink.v1.Event
+	36, // 50: orbit.runnerlink.v1.EventAck.rejected:type_name -> orbit.runnerlink.v1.RejectedEvent
+	29, // 51: orbit.runnerlink.v1.EventAck.failure:type_name -> orbit.runnerlink.v1.Failure
+	39, // 52: orbit.runnerlink.v1.LiveBatch.events:type_name -> orbit.runnerlink.v1.LiveEvent
+	2,  // 53: orbit.runnerlink.v1.StreamOpen.kind:type_name -> orbit.runnerlink.v1.StreamKind
+	3,  // 54: orbit.runnerlink.v1.StreamClose.code:type_name -> orbit.runnerlink.v1.StreamCloseCode
+	55, // [55:55] is the sub-list for method output_type
+	55, // [55:55] is the sub-list for method input_type
+	55, // [55:55] is the sub-list for extension type_name
+	55, // [55:55] is the sub-list for extension extendee
+	0,  // [0:55] is the sub-list for field type_name
 }
 
 func init() { file_v1_runner_link_proto_init() }
@@ -4197,6 +4378,8 @@ func file_v1_runner_link_proto_init() {
 		(*Frame_StreamData)(nil),
 		(*Frame_StreamCredit)(nil),
 		(*Frame_StreamClose)(nil),
+		(*Frame_StreamPaste)(nil),
+		(*Frame_StreamPasted)(nil),
 	}
 	file_v1_runner_link_proto_msgTypes[14].OneofWrappers = []any{
 		(*Hint_Inbox)(nil),
@@ -4218,7 +4401,7 @@ func file_v1_runner_link_proto_init() {
 			GoPackagePath: reflect.TypeOf(x{}).PkgPath(),
 			RawDescriptor: unsafe.Slice(unsafe.StringData(file_v1_runner_link_proto_rawDesc), len(file_v1_runner_link_proto_rawDesc)),
 			NumEnums:      4,
-			NumMessages:   43,
+			NumMessages:   45,
 			NumExtensions: 0,
 			NumServices:   0,
 		},
