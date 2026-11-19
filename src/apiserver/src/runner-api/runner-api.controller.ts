@@ -240,6 +240,7 @@ import {
 import { normalizeStoredRememberRules, reachesPastOneMcpTool } from '../sessions/remember-rules';
 import {
   APPROVAL_ABANDONED_STATUS,
+  reapApprovalsOfEndedJobs,
   reapApprovalsOfEndedTurns,
   reapApprovalsOfReplacedSupervisor,
   reapApprovalsOfReplacedSupervisors,
@@ -9540,8 +9541,12 @@ export class RunnerApiController {
           },
         });
       }
+      // The cards a job that has just ended was reading: nothing is left to take their answer, and the
+      // turn ending — where they were collected before — may be hours off (reapApprovalsOfEndedJobs).
+      const jobCardsCollected = await reapApprovalsOfEndedJobs(tx, sessionId, bgEnded);
       return {
-        session, currentWorkAcknowledged, abandonedApprovals, accountReload, events, durable, alreadyStored: stored.size,
+        session, currentWorkAcknowledged, abandonedApprovals: [...abandonedApprovals, ...jobCardsCollected],
+        accountReload, events, durable, alreadyStored: stored.size,
         restated, seqConflicts, door: link ? 'link' : 'https', engineStarted,
       };
     };
