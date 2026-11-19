@@ -418,7 +418,7 @@ export function routeTaskRun(input: ModelRoutingInput): ModelRoutingDecision {
 // ─────────────────────────── SubAgent routing (docs/subagent-design.md §4.1, §4.2) ───────────────────────────
 
 /** What a recorded SubAgent decision was made under: bump when a rule below changes what it picks. */
-export const SUBAGENT_ROUTING_POLICY_VERSION = 'p4-every-provider-1';
+export const SUBAGENT_ROUTING_POLICY_VERSION = 'p4-every-provider-2';
 
 /** Which row of §4.1 set the tier — or, for the first two, the model. */
 export type SubagentTierSource = 'named-model' | 'definition-model' | 'size' | 'definition-size' | 'type-default';
@@ -427,7 +427,7 @@ export type SubagentTierSource = 'named-model' | 'definition-model' | 'size' | '
 export interface SubagentModelRow {
   model: string;
   effort: string | null;
-  /** Null: the model has no tier, so routing never picks it. */
+  /** Null: the model has no tier; an engine with no tiers at all routes its default model, after every tiered one. */
   level: ModelRoutingLevel | null;
   /** USD per million output tokens, for a metered key; null when nobody knows it. */
   outputPricePerMTok?: number | null;
@@ -525,7 +525,7 @@ export interface SubagentRoutingDecision {
   effort: string | null;
   reasons: string[];
   candidates: SubagentRemovedCandidate[];
-  /** The rest of the tier's pool after the pick, in the order it was ranked: where a SubAgent whose account
+  /** The rest of the pool after the pick, every tier, in the order it was ranked: where a SubAgent whose account
    *  hit its limit moves next (§4.3). Empty when the model was named rather than routed. */
   fallbacks: SubagentFallback[];
   /** SUBAGENT_ROUTING_POLICY_VERSION. */
@@ -544,6 +544,8 @@ export interface SubagentFallback {
   effort: string | null;
   /** Its billing and headroom in a few words, as the Why line says it once it runs there. */
   note?: string;
+  /** Its own tier, null for an untiered default model: what says so when it runs instead of the asked tier. */
+  level?: ModelRoutingLevel | null;
 }
 
 const levelIndex = (level: ModelRoutingLevel): number => MODEL_ROUTING_LEVELS.indexOf(level);
@@ -675,13 +677,20 @@ function pickLine(mode: ModelRoutingOptimizeFor, c: SubagentCandidate): string {
   return `Picked ${what} (${OPTIMIZE_LABEL[mode]}): ${lead}`;
 }
 
-/** Why the pick is not in the asked tier, when it is not. */
-function fitLine(c: SubagentCandidate, level: ModelRoutingLevel): string | null {
-  if (c.fit === 'higher') return `Nothing in tier ${level} can run: the nearest tier above that can is ${c.level}`;
-  if (c.fit === 'untiered') {
-    return `Nothing in tier ${level} or above can run: ${c.model} is the default model of ${c.provider.slug} (${c.engine}), which has no tiers`;
+/**
+ * Why what runs is not in the asked tier, when it is not: for the router's pick, and for a candidate further down
+ * that runs because the ones before it could not start (appliedDecision).
+ */
+export function subagentFitLine(
+  asked: ModelRoutingLevel,
+  c: { level: ModelRoutingLevel | null; model: string; provider: string; engine: string },
+): string | null {
+  if (c.level === null) {
+    return `Nothing in tier ${asked} or above can run: ${c.model} is the default model of ${c.provider} (${c.engine}), which has no tiers`;
   }
-  if (c.fit === 'lower') return `Nothing in tier ${level} or above, and no untiered model, can run: the nearest tier below is ${c.level}`;
+  const away = levelIndex(c.level) - levelIndex(asked);
+  if (away > 0) return `Nothing in tier ${asked} can run: the nearest tier above that can is ${c.level}`;
+  if (away < 0) return `Nothing in tier ${asked} or above, and no untiered model, can run: the nearest tier below is ${c.level}`;
   return null;
 }
 
@@ -983,7 +992,7 @@ export function routeSubagent(input: SubagentRoutingInput): SubagentRoutingDecis
       reasons: [...reasons, 'No provider can run a SubAgent: the SubAgent is refused with NO_SUBAGENT_PROVIDER'] };
   }
   const [best, ...rest] = [...pool].sort((a, b) => compareCandidates(mode, a, b));
-  const away = fitLine(best, level);
+  const away = subagentFitLine(level, { level: best.level, model: best.model, provider: best.provider.slug, engine: best.engine });
   if (away) reasons.push(away);
   reasons.push(pickLine(mode, best));
   const priceless = new Set(pool
@@ -996,7 +1005,9 @@ export function routeSubagent(input: SubagentRoutingInput): SubagentRoutingDecis
     reasons.push(`${exact} candidate${exact === 1 ? '' : 's'} in tier ${level}${others ? `, ${others} more in other tiers or untiered` : ''}; ties go by the owner's provider order`);
   }
   if (removed.length > 0) reasons.push(`${removed.length} candidate${removed.length === 1 ? '' : 's'} removed, each with its reason`);
-  const fallbacks = rest.map((c) => ({ engine: c.engine, provider: c.provider.slug, model: c.model, effort: c.effort, note: candidateNote(c) }));
+  const fallbacks = rest.map((c) => ({
+    engine: c.engine, provider: c.provider.slug, model: c.model, effort: c.effort, note: candidateNote(c), level: c.level,
+  }));
   return {
     ...decision, engine: best.engine, provider: best.provider.slug, model: best.model, effort: best.effort,
     note: candidateNote(best), reasons, fallbacks,

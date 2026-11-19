@@ -249,6 +249,7 @@ export const PUBLIC_ID_FIELDS: ReadonlySet<string> = new Set([
   'runId',
   // The SubAgent run a card asked from (`approval.subagent_run_id`, 0528): the run the subagents door hands out.
   'subagentRunId',
+  'workflowRunId',
   // The SubAgent run a remote claim continues (RemoteSubagentClaim.resumeOf): spelled as `runId` is, so the target
   // runner finds the directory it keeps under that run's id.
   'resumeOf',
