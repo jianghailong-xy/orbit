@@ -15,7 +15,7 @@ FROM node:26.10.0-trixie-slim@sha256:ec7758ee051e457b468b32bde57b0879010b325bb98
 # Preserve the whole native layout, including codex-path/rg and package resources.
 # Invoke its native binary directly so there is no npm wrapper in the signal path.
 RUN test "$(node --version)" = v26.10.0 \
- && npm install --global --ignore-scripts --no-audit --no-fund @openai/codex@0.169.1 \
+ && npm install --global --ignore-scripts --no-audit --no-fund @openai/codex@0.170.0 \
  && mv /usr/local/lib/node_modules/@openai/codex/node_modules/@openai/codex-linux-*/vendor/*-unknown-linux-musl /opt/codex \
  && test -x /opt/codex/bin/codex \
  && test -x /opt/codex/codex-path/rg
@@ -25,7 +25,7 @@ FROM node:26.10.0-trixie-slim@sha256:ec7758ee051e457b468b32bde57b0879010b325bb98
 # postinstall only copies its platform package's native binary over a stub: take that binary
 # directly, so no Node wrapper sits in the signal path either.
 RUN test "$(node --version)" = v26.10.0 \
- && npm install --global --ignore-scripts --no-audit --no-fund @anthropic-ai/claude-code@2.1.327 \
+ && npm install --global --ignore-scripts --no-audit --no-fund @anthropic-ai/claude-code@2.1.328 \
  && install -D -m 0755 \
       "/usr/local/lib/node_modules/@anthropic-ai/claude-code/node_modules/@anthropic-ai/claude-code-linux-$(node -p process.arch)/claude" \
       /opt/claude/bin/claude
@@ -53,23 +53,36 @@ RUN install -d /opt/orbit-engines/engines/dsh \
     fi \
  && chown -R root:root /opt/orbit-engines && chmod -R go-w /opt/orbit-engines
 
+FROM node:26.10.0-trixie-slim@sha256:ec7758ee051e457b468b32bde57b0879010b325bb9862718e9615225ce4aaae1 AS playwright-mcp
+# The browser tool server, with its exact playwright and playwright-core pins nested under it. No browser download
+# (--ignore-scripts): it drives the image's Debian Chromium. Its cli.js is run by node directly, with no npm wrapper.
+RUN test "$(node --version)" = v26.10.0 \
+ && npm install --global --ignore-scripts --no-audit --no-fund @playwright/mcp@0.0.85 \
+ && mv /usr/local/lib/node_modules/@playwright/mcp /opt/playwright-mcp \
+ && test -x /opt/playwright-mcp/cli.js
+
 FROM golang:1.27.1-trixie@sha256:3b77fc618ec235a1ab412de7737f120dd507c57e8d87de4cbb7994fb94275ed5 AS downloads
 # Native builds fetched by URL, each checked against the digest its publisher's manifest gives for the pinned
 # version (pins.json names the manifests). One RUN per engine, so a new pin refetches only its own engine.
 ARG TARGETARCH
+# How each of them is fetched. A download that stops moving is ended and started again: below 4 KB/s for a minute
+# is a stall, and a stall is retried, five times. There is no total time limit, so a slow download that is still
+# moving finishes. Without these, curl waits on a dead connection forever: on 2026-11-19 the release build sat 18
+# minutes at 81.7 MB of the Kimi binary until it was killed by hand.
+ARG FETCH="curl -fsSL --connect-timeout 30 --speed-limit 4096 --speed-time 60 --retry 5 --retry-delay 10 --retry-all-errors"
 RUN case "$TARGETARCH" in \
       amd64) target=linux-x64 sum=5999b710b1a34c19e93989973c54a8f1c167df8f8bec2fbf3171bfc304f6bdb9 ;; \
       arm64) target=linux-arm64 sum=4e97ef1e7c32abad5fd581a4884111e11348677aa51207490c0568e9af028eae ;; \
       *) exit 1 ;; esac \
- && curl -fsSL -o /tmp/kimi "https://code.kimi.com/kimi-code/binaries/2.6.3/kimi-code-$target" \
+ && $FETCH -o /tmp/kimi "https://code.kimi.com/kimi-code/binaries/2.6.3/kimi-code-$target" \
  && echo "$sum  /tmp/kimi" | sha256sum -c - \
  && install -D -m 0755 /tmp/kimi /opt/kimi-code/bin/kimi \
  && rm /tmp/kimi
 RUN case "$TARGETARCH" in \
-      amd64) path=linux-x64/cli_linux_x64.tar.gz sum=713ae840845d74736e2d4a96f5d84e3353d614e73a875793ddf500997ccee09595448cebfd8e94fdd90ce2a0fa97707bd1cc29763dcfe01c945d80c92234378f ;; \
-      arm64) path=linux-arm/cli_linux_arm64.tar.gz sum=f9f5c7ebc47a8b8de536acca8116b1f5a43dca614cde94008fe5a510517b23535fb281d85416930d76e76478858bf3dc66ea6d1b0c9b6eeadcfabe4d8ef2a807 ;; \
+      amd64) path=linux-x64/cli_linux_x64.tar.gz sum=26de25fccb3fbf0b093e090ce14a14ac1df1ec3e90ef4ea6106887d3a81b0cc9edb0dadea7b9101d07f9606eba159062a6fb7b78e91b73f7520684a24db73428 ;; \
+      arm64) path=linux-arm/cli_linux_arm64.tar.gz sum=1030d89ce9e5cb39509e272cb89b71fde0e0d5d6527b7392525d5ef2683da54fb49230449107486d91c02ded39a678faaa649b2041304a6cf82a3a332d5819d9 ;; \
       *) exit 1 ;; esac \
- && curl -fsSL -o /tmp/agy.tar.gz "https://storage.googleapis.com/antigravity-public/antigravity-cli/1.5.10-5253791805734912/$path" \
+ && $FETCH -o /tmp/agy.tar.gz "https://storage.googleapis.com/antigravity-public/antigravity-cli/1.5.12-5281398513336320/$path" \
  && echo "$sum  /tmp/agy.tar.gz" | sha512sum -c - \
  && mkdir /tmp/agy && tar -xzf /tmp/agy.tar.gz -C /tmp/agy --no-same-owner \
  && install -D -m 0755 /tmp/agy/antigravity /opt/agy/bin/agy \
@@ -79,7 +92,7 @@ RUN case "$TARGETARCH" in \
 # Measured on Linux x64 only, so an arm64 image ships an empty store, as the runner would install nothing there.
 RUN install -d /opt/orbit-engines/cursor/versions \
  && if [ "$TARGETARCH" = amd64 ]; then \
-      curl -fsSL -o /tmp/cursor.tar.gz https://downloads.cursor.com/lab/2026.10.14-941492e/linux/x64/agent-cli-package.tar.gz \
+      $FETCH -o /tmp/cursor.tar.gz https://downloads.cursor.com/lab/2026.10.14-941492e/linux/x64/agent-cli-package.tar.gz \
       && echo "6f6bf39dd2df29dcd38643cdfab0155ce71699953889f732deec123f6562bb2d  /tmp/cursor.tar.gz" | sha256sum -c - \
       && test "$(stat -c %s /tmp/cursor.tar.gz)" = 183861376 \
       && mkdir /tmp/cursor && tar -xzf /tmp/cursor.tar.gz -C /tmp/cursor --no-same-owner \
@@ -103,6 +116,10 @@ RUN mkdir -p /etc/ssl/certs \
  && apt-get -o Acquire::https::CAInfo=/etc/ssl/certs/ca-certificates.crt update \
  && apt-get -o Acquire::https::CAInfo=/etc/ssl/certs/ca-certificates.crt install --no-install-recommends -y \
       bash ca-certificates curl git openssh-client ripgrep sqlite3 python3 procps tini \
+ && apt-get install --no-install-recommends -y \
+      chromium=154.0.8037.57-1~deb13u1 chromium-common=154.0.8037.57-1~deb13u1 \
+      xvfb=2:21.1.16-1.3+deb13u4 x11vnc=0.9.17-1 \
+      fonts-noto-cjk=1:20240730+repack1-1 fonts-noto-color-emoji=2.051-0+deb13u1 \
  && rm -rf /var/lib/apt/lists/* \
  && groupadd --gid 10001 orbit \
  && useradd --uid 10001 --gid 10001 --home-dir /home/orbit --no-create-home --shell /bin/bash orbit \
@@ -112,6 +129,7 @@ COPY --from=orbit-build /usr/local/go/ /usr/local/go/
 COPY --from=codex /opt/codex/ /opt/codex/
 COPY --from=claude /opt/claude/ /opt/claude/
 COPY --from=opencode /opt/opencode/ /opt/opencode/
+COPY --from=playwright-mcp /opt/playwright-mcp/ /opt/playwright-mcp/
 COPY --from=downloads /opt/kimi-code/ /opt/kimi-code/
 COPY --from=downloads /opt/agy/ /opt/agy/
 COPY --from=downloads /opt/orbit-engines/ /opt/orbit-engines/
@@ -139,8 +157,9 @@ RUN ln -s /opt/codex/bin/codex /usr/local/bin/codex \
  && ln -s /opt/opencode/bin/opencode /usr/local/bin/opencode \
  && ln -s /opt/kimi-code/bin/kimi /usr/local/bin/kimi \
  && ln -s /opt/agy/bin/agy /usr/local/bin/agy \
- && chown -R root:root /opt/codex /opt/claude /opt/opencode /opt/kimi-code /opt/agy /usr/local/go /usr/local/share/orbit \
- && chmod -R go-w /opt/codex /opt/claude /opt/opencode /opt/kimi-code /opt/agy /usr/local/go /usr/local/share/orbit \
+ && ln -s /opt/playwright-mcp/cli.js /usr/local/bin/playwright-mcp \
+ && chown -R root:root /opt/codex /opt/claude /opt/opencode /opt/kimi-code /opt/agy /opt/playwright-mcp /usr/local/go /usr/local/share/orbit \
+ && chmod -R go-w /opt/codex /opt/claude /opt/opencode /opt/kimi-code /opt/agy /opt/playwright-mcp /usr/local/go /usr/local/share/orbit \
  && chmod 0755 /usr/local/share/orbit \
  && git config --system user.name 'Orbit Runner' \
  && git config --system user.email runner@orbit.invalid
@@ -169,6 +188,14 @@ env = dict(os.environ, HOME='/tmp/orbit-version-check',
            CLAUDE_CONFIG_DIR='/tmp/orbit-version-check/.claude')
 def version(*argv):
     return subprocess.check_output(argv, env=env, text=True).strip()
+def first_line(*argv):  # x11vnc prints its version on stderr
+    out = subprocess.run(argv, env=env, text=True, stdout=subprocess.PIPE,
+                          stderr=subprocess.STDOUT).stdout.split('\n')
+    return next(line.strip() for line in out if line.strip())
+def package(name, binary=None):  # Xvfb has no version option: its package's version, once its binary is there
+    if binary and not os.access(binary, os.X_OK):
+        raise SystemExit(f'{name}: {binary} is missing')
+    return version('dpkg-query', '-W', '-f=${Version}', name)
 
 actual = {
     'go': version('go', 'env', 'GOVERSION'),
@@ -184,14 +211,25 @@ actual = {
     'opencode': version('opencode', '--version'),
     'kimi': version('kimi', '--version'),
     'agy': version('agy', '--version'),
+    # The browser stack (docs/runner-browser-design.md §3). Nothing here starts at boot.
+    'chromium': version('chromium', '--version'),
+    'xvfb': package('xvfb', '/usr/bin/Xvfb'),
+    'x11vnc': first_line('x11vnc', '-version'),
+    'fontsNotoCjk': package('fonts-noto-cjk'),
+    'fontsNotoColorEmoji': package('fonts-noto-color-emoji'),
+    'playwrightMcp': version('playwright-mcp', '--version'),
 }
 # Cursor CLI and DeepSeek Harness are where the runner looks for them (ORBIT_ENGINE_STORE), on Linux x64 only.
 store = Path(os.environ['ORBIT_ENGINE_STORE'])
 if platform.machine() == 'x86_64':
     actual['cursor'] = version(str(store / 'cursor/versions/2026.10.14-941492e/cursor-agent'), '--version')
     actual['dsh'] = version(str(store / 'engines/dsh/0.2.0-rc.2/node_modules/.bin/dsh'), '--version')
-expected_versions = {'go': 'go1.27.1', 'node': 'v26.10.0', 'codex': 'codex-cli 0.169.1',
-                     'claude': '2.1.327 (Claude Code)', 'opencode': '1.19.6', 'kimi': '2.6.3', 'agy': '1.5.10'}
+expected_versions = {'go': 'go1.27.1', 'node': 'v26.10.0', 'codex': 'codex-cli 0.170.0',
+                     'claude': '2.1.328 (Claude Code)', 'opencode': '1.19.6', 'kimi': '2.6.3', 'agy': '1.5.12'}
+expected_versions.update(chromium='Chromium 154.0.8037.57 built on Debian GNU/Linux 13 (trixie)',
+                         xvfb='2:21.1.16-1.3+deb13u4', x11vnc='x11vnc: 0.9.17 lastmod: 2025-04-11',
+                         fontsNotoCjk='1:20240730+repack1-1', fontsNotoColorEmoji='2.051-0+deb13u1',
+                         playwrightMcp='Version 0.0.85')
 if platform.machine() == 'x86_64':
     expected_versions.update(cursor='2026.10.14-941492e', dsh='0.2.0-rc.2')
 for tool, expected in expected_versions.items():

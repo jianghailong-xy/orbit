@@ -238,6 +238,8 @@ var userModeRoutes = []struct {
 	{command: "session merge-receipts", args: []string{"S1", "--limit", "2", "--json"},
 		method: "GET", path: "/api/sessions/S1/merge-receipts", query: map[string]string{"limit": "2"}},
 	{command: "session end", args: []string{"S1", "--json"}, method: "POST", path: "/api/sessions/S1/end"},
+	{command: "session move", args: []string{"S1", "--workspace-id", "W1", "--folder-id", "F1", "--json"},
+		method: "POST", path: "/api/sessions/S1/move", body: `{"folderId":"F1","workspaceId":"W1"}`},
 	{command: "session complete", args: []string{"S1", "--json"}, method: "POST", path: "/api/sessions/S1/complete"},
 	{command: "session delete", args: []string{"S1", "--json"}, method: "DELETE", path: "/api/sessions/S1", noBody: true},
 }

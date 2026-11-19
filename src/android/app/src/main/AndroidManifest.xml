@@ -75,6 +75,28 @@
                 <data android:scheme="orbit-wiki" />
             </intent-filter>
         </activity>
+        <!-- Share to Orbit (docs/share-to-orbit-design.md §3.2): its own task, so Close returns to the app that shared, and singleTask so
+             a Google sign-in started from it comes back to it. -->
+        <activity
+            android:name=".share.ShareActivity"
+            android:exported="true"
+            android:label="@string/app_name"
+            android:launchMode="singleTask"
+            android:taskAffinity="${applicationId}.share"
+            android:excludeFromRecents="true"
+            android:windowSoftInputMode="adjustResize">
+            <intent-filter>
+                <action android:name="android.intent.action.SEND" />
+                <action android:name="android.intent.action.SEND_MULTIPLE" />
+                <category android:name="android.intent.category.DEFAULT" />
+                <data android:mimeType="*/*" />
+            </intent-filter>
+            <intent-filter>
+                <action android:name="android.intent.action.SEND" />
+                <category android:name="android.intent.category.DEFAULT" />
+                <data android:mimeType="text/plain" />
+            </intent-filter>
+        </activity>
         <activity
             android:name=".auth.GoogleSignInRedirectActivity"
             android:exported="true"

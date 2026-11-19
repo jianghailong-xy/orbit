@@ -65,8 +65,12 @@ final class ScheduledModel {
 
     // MARK: reads
 
-    /// The drawer's number: failing or held, nothing at zero.
-    var needsYouCount: Int { ScheduleDisplay.needsYouCount(schedules, waitingTasks: waitingTasks) }
+    /// The drawer's number: held, failing with no run under way, or a condition that cannot be read; nothing at zero.
+    /// The list's runs say which failing ones are already running again (owner 2026-11-19).
+    var needsYouCount: Int {
+        ScheduleDisplay.needsYouCount(schedules, waitingTasks: waitingTasks,
+                                      runs: listRuns ?? schedules.compactMap(\.lastRun))
+    }
 
     /// The count beside the page title (board ②): what the timeline lists.
     var listedCount: Int { shownSchedules.count + drafts.count + shownWaitingTasks.count }
@@ -87,18 +91,25 @@ final class ScheduledModel {
         return seen.map { (id: $0.key, name: $0.value) }.sorted { $0.name < $1.name }
     }
 
-    func timeline(now: Date = Date()) -> [ScheduleDisplay.TimelineGroup] {
+    /// The runs the timeline places: the list's, or else each schedule's last run and the recent runs its detail read
+    /// brought (Show past runs lists today's). A row reads them too, to keep a Failed tag off while a run is under way.
+    var timelineRuns: [ScheduleRunView] {
         let shown = shownSchedules
-        // Each schedule's last run, and the recent runs its detail read brought (Show past runs lists today's).
+        let ids = Set(shown.map(\.id))
+        if let listRuns { return listRuns.filter { ids.contains($0.scheduleId) } }
         var runs: [ScheduleRunView] = []
         var seen = Set<String>()
-        let ids = Set(shown.map(\.id))
-        if let listRuns { runs = listRuns.filter { ids.contains($0.scheduleId) } }
-        for s in shown where listRuns == nil {
+        for s in shown {
             for run in [s.lastRun].compactMap({ $0 }) + (detail(s.id)?.recentRuns ?? []) where seen.insert(run.id).inserted {
                 runs.append(run)
             }
         }
+        return runs
+    }
+
+    func timeline(now: Date = Date()) -> [ScheduleDisplay.TimelineGroup] {
+        let shown = shownSchedules
+        let runs = timelineRuns
         let drafts = workspaceFilter == nil ? self.drafts : self.drafts.filter { $0.runsIn?.workspaceId == workspaceFilter }
         return ScheduleDisplay.timeline(schedules: shown, runs: runs, drafts: drafts, waitingTasks: shownWaitingTasks,
                                         showPastRuns: showPastRuns, now: now, timezone: timezone)

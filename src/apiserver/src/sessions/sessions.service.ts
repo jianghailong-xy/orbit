@@ -157,6 +157,7 @@ import {
 import { GithubConnectionService } from '../github/github-connection.service';
 import { githubRepoUrl } from '../github/github-workspace.service';
 import { PrismaService } from '../prisma/prisma.service';
+import { PREPARED_STATEMENT } from '../prisma/prisma-client';
 import { RUNNER_DISK_BELOW_FLOOR, sessionDiskHoldSql } from '../common/runner-disk-gate';
 import { workspaceCloneHoldSql, workspaceCloneReasonSql } from '../common/workspace-clone-gate';
 import {
@@ -271,14 +272,17 @@ import {
   titleFromPrompt,
 } from './naming';
 import { enqueueRecap, type RecapOutcome } from './recap';
-import { translate, TranslationFailed } from './translation';
+import { translate } from './translation';
 import { agentDecision, retranslateEvent, translatableText, type TranslationDeps } from './reply-translation';
 import {
   DRAIN_SKIPS_HELD,
   HELD_TURN_STATUS,
   accountAgentLanguage,
+  CLEARED_FAILURE_COLUMNS,
+  failedTurnColumns,
   heldTurnColumns,
   isSlashCommand,
+  logOwnerTranslationFailure,
   readOptimizedTranslation,
   translationLanguages,
   turnTranslationOf,
@@ -4053,6 +4057,8 @@ export class SessionsService {
       confinedTo?: readonly string[];
       view?: 'open' | 'completed' | 'trash' | 'active' | 'archived' | 'deleted' | 'system';
       limit?: number;
+      /** A workspace's Scheduled runs folder: its scheduled runs' sessions alone, which every other read leaves out. */
+      scheduled?: boolean;
     },
     /** The Open list's data version the caller read for this list (`openListVersion`). Given, a flat
      *  Open read is shared with every other read of the same version and filters (`sharedOpenList`). */
@@ -4134,14 +4140,18 @@ export class SessionsService {
     // An Ask (migration 0850) is in no session list: it is listed under /help → Your questions (help/help-ask.ts).
     const build = () => this.listRows(ownerId, {
       scope: Prisma.sql`AND s.help_ask IS NULL ${runnerFilter} ${workspaceFilter} ${confinedFilter} ${tagFilter} ${projectFilter}`,
-      // A scheduled task's run is reached from its schedule's history and its notification, never from a list
-      // (docs/scheduled-tasks-design.md §7.4): every view, folder and project read, and the delta that reads this.
-      // `listRowsByIds` names its sessions and is left as it is: a link card to a run is by id.
-      visibility: view === 'system' ? visibility : Prisma.sql`(${visibility}) AND s.run_source <> 'SCHEDULE'`,
+      // A scheduled task's run is listed only in its workspace's Scheduled runs folder (`scheduled`), never among
+      // a workspace's own sessions (docs/scheduled-tasks-design.md §7.4): every other view, folder and project read,
+      // and the delta that reads this, leave it out. `listRowsByIds` names its sessions: a link card to a run is by id.
+      visibility: view === 'system'
+        ? visibility
+        : filters.scheduled
+          ? Prisma.sql`(${visibility}) AND s.run_source = 'SCHEDULE'`
+          : Prisma.sql`(${visibility}) AND s.run_source <> 'SCHEDULE'`,
       orderBy,
       pageLimit,
     });
-    if (version === undefined || view !== 'open' || filters.projectId !== undefined) return build();
+    if (version === undefined || view !== 'open' || filters.projectId !== undefined || filters.scheduled) return build();
     return this.sharedOpenList(JSON.stringify([
       ownerId, version, filters.runnerId ?? null, filters.workspaceId ?? null, filters.tagId ?? null,
       filters.confinedTo ?? null,
@@ -4281,6 +4291,8 @@ export class SessionsService {
       permissionMode: string | null;
       effort: string | null;
       fastMode: boolean;
+      /** SCHEDULE marks a scheduled run's session, which only a workspace's Scheduled runs folder lists. */
+      runSource: string;
       lastAssistantText: string | null;
       lastToolUse: string | null;
       lastUserText: string | null;
@@ -4343,7 +4355,12 @@ export class SessionsService {
       queuedRunnerTurns: Array<{ id: string; title: string | null }> | null;
       queuedSince: Date | null;
     };
-    const rows = await this.prisma.$queryRaw<Row[]>(Prisma.sql`
+    // A named prepared statement (PREPARED_STATEMENT): planning this text took ~20 ms on every call on a warm
+    // connection (production, 2026-11-19), as much as the read itself for a 50-row page and ~90% of a project's.
+    // Its text is fixed per filter combination, every value being a parameter, and PostgreSQL's generic plan was
+    // measured there on the open list, a workspace page and a project page: the same rows, no slower, planned in
+    // 0.1 ms. Each variant a connection has run holds ~3.4 MB of cached plan for the connection's life.
+    const rows = await this.prisma.$queryRaw<Row[]>(Prisma.sql`${Prisma.raw(PREPARED_STATEMENT)}
       SELECT
         s.id, s.status, s.title,
         -- What drives the session (LS6): a LANDING row is never in the flat list, but a reader that
@@ -4386,6 +4403,7 @@ export class SessionsService {
         s.permission_mode AS "permissionMode",
         s.effort,
         s.fast_mode       AS "fastMode",
+        s.run_source      AS "runSource",
         left(s.last_assistant_text, ${SessionsService.PREVIEW_LEN}::int) AS "lastAssistantText",
         s.last_tool_use   AS "lastToolUse",
         left(s.last_user_text, ${SessionsService.PREVIEW_LEN}::int) AS "lastUserText",
@@ -4633,7 +4651,13 @@ export class SessionsService {
             -- full runner its list of running turns does not show.
             CASE g.reason WHEN 'runner_at_capacity' THEN g.runner_held END AS held
         ) n
-      ) q ON s.status = 'PENDING' AND s.cancel_requested_at IS NULL
+        -- Asked inside, behind OFFSET 0, rather than on the join: as a join condition the planner flattened
+        -- this subquery and computed every gate's counts for every row of the list, then dropped all but the
+        -- PENDING ones (production, 2026-11-19: 1,297 rows for 15, 130k of the statement's 154k buffers and
+        -- 175 ms of its 289). Here it is a one-time filter, so the counts run only for a PENDING row.
+        WHERE s.status = 'PENDING' AND s.cancel_requested_at IS NULL
+        OFFSET 0
+      ) q ON true
       WHERE s.owner_id = ${ownerId}::uuid
         ${scope}
         AND (${visibility})
@@ -4671,6 +4695,7 @@ export class SessionsService {
         permissionMode: r.permissionMode,
         effort: r.effort,
         fastMode: r.fastMode,
+        runSource: r.runSource,
         lastAssistantText: r.lastAssistantText,
         lastToolUse: r.lastToolUse,
         lastUserText: r.lastUserText,
@@ -4748,9 +4773,9 @@ export class SessionsService {
     // Rows rather than a `groupBy`, because the second class is not a predicate the query can
     // carry: the question is whether a card's `background_job_id` is IN its session's
     // `running_bg_shells`. The candidate set is the sessions that are generating plus the ones with
-    // a shell up — a handful even on a busy account — so this stays a lookup. What the turn half
-    // counts is unchanged from when it was the only half: every PENDING card of a generating
-    // session, which is the signal this number has always been, and the door re-reads the facts.
+    // a shell up — a handful even on a busy account — so this stays a lookup. The turn half counts
+    // every PENDING card of a generating session except a job's, which only its live job holds open,
+    // and the door re-reads the facts.
     const generating = new Set(sessions.filter(isSessionGenerating).map((s) => s.id));
     // Off the raw rows, not the mapped ones: the shell ids are read here and deliberately not
     // shipped to the client, so they do not survive into the payload above.
@@ -4781,11 +4806,10 @@ export class SessionsService {
     const heldQuestions = await questionsWithCoordinator(this.prisma, sessions.filter(s => s.taskId).map(s => s.id));
     const byId = new Map<string, number>();
     for (const card of await visibleQuestions(this.prisma, cards)) {
-      if (
-        !generating.has(card.sessionId) &&
-        !readByLiveBackgroundJob(card, shells.get(card.sessionId) ?? []) &&
-        !readBySubagent.has(card.id)
-      ) {
+      // A job's card is read by its job, not the turn: it counts while the job is up, as the card
+      // listing (`stillBeingAsked`) shows it, whether or not the session is generating.
+      const readByJob = readByLiveBackgroundJob(card, shells.get(card.sessionId) ?? []);
+      if (card.backgroundJobId !== null ? !readByJob : !generating.has(card.sessionId) && !readBySubagent.has(card.id)) {
         continue;
       }
       byId.set(card.sessionId, (byId.get(card.sessionId) ?? 0) + 1);
@@ -7494,7 +7518,7 @@ export class SessionsService {
     if (!turn) return;
     const original = turnTranslationOf({ ...turn, translationState: 'TRANSLATING' });
     let translated: string | null = null;
-    let why = 'the message could not be read';
+    let failure: unknown = new Error('the held message could not be read');
     if (original && prepared !== null) {
       translated = prepared;
     } else if (original) {
@@ -7503,7 +7527,7 @@ export class SessionsService {
         const agent = await accountAgentLanguage(this.prisma, ownerId);
         translated = await translate(original.original, original.from, agent);
       } catch (error) {
-        why = error instanceof TranslationFailed ? `${error.reason}: ${error.message}` : String(error);
+        failure = error;
       }
     }
     if (translated !== null) {
@@ -7511,12 +7535,41 @@ export class SessionsService {
       await this.releaseHeldTurn(sessionId, turnId, translated, 'DONE', ['TRANSLATING', 'FAILED']);
       return;
     }
+    // FAILED with why (TranslationFailureReason, and the HTTP status beside HTTP): what the turn list and Retry answer.
     const failed = await this.prisma.conversationTurn.updateMany({
       where: { id: turnId, sessionId, status: HELD_TURN_STATUS, translationState: 'TRANSLATING' },
-      data: { translationState: 'FAILED' },
+      data: failedTurnColumns(failure),
     });
-    this.logger.warn(`turn ${turnId} of session ${sessionId} was not translated, so it was not sent (${why})`);
-    if (failed.count > 0) this.realtime.publishQueuedTurnsChanged(sessionId);
+    logOwnerTranslationFailure(failure, { door: 'held-turn', sessionId, turnId });
+    if (failed.count > 0) {
+      this.realtime.publishQueuedTurnsChanged(sessionId);
+      this.scheduleHeldMessagePush(sessionId, turnId);
+    }
+  }
+
+  /** How long a held message stays FAILED before its owner is pushed (frame 4B of translation-failure-policy.html). */
+  static readonly HELD_MESSAGE_PUSH_DELAY_MS = 60_000;
+
+  /** turnId → its pending held-message check, one per turn: a Retry that fails again replaces the earlier one. */
+  private readonly heldMessagePushes = new Map<string, ReturnType<typeof setTimeout>>();
+
+  /**
+   * One check, HELD_MESSAGE_PUSH_DELAY_MS after a held message's translation failed: RealtimeService.heldMessageUnseen
+   * pushes the owner unless they are viewing the session, and PushService.notifyHeldMessage only while the turn is
+   * still HELD and FAILED — so a Retry, Send as written, withdrawal or translation before then sends nothing.
+   * The check lives in this process's memory: a restart (or a deploy) inside the 60 s loses it, and that message
+   * is not pushed; the message itself stays held with Retry and Send as written, so only the reminder is lost.
+   */
+  private scheduleHeldMessagePush(sessionId: string, turnId: string): void {
+    clearTimeout(this.heldMessagePushes.get(turnId));
+    const timer = setTimeout(() => {
+      this.heldMessagePushes.delete(turnId);
+      void Promise.resolve().then(() => this.realtime.heldMessageUnseen(sessionId, turnId)).catch((error: unknown) => {
+        this.logger.warn(`held message push for turn ${turnId} failed: ${(error as Error)?.message ?? error}`);
+      });
+    }, SessionsService.HELD_MESSAGE_PUSH_DELAY_MS);
+    timer.unref?.();
+    this.heldMessagePushes.set(turnId, timer);
   }
 
   /**
@@ -7556,6 +7609,7 @@ export class SessionsService {
           content,
           status: 'PENDING',
           translationState: state,
+          ...CLEARED_FAILURE_COLUMNS,
           ...(steerTarget ? { kind: 'steer', sendIntent: 'CURRENT_WORK', targetTurnId: steerTarget.id } : {}),
         },
       });
@@ -7584,7 +7638,10 @@ export class SessionsService {
     assertEngineSessionRow(session);
     const turn = await this.prisma.conversationTurn.findFirst({
       where: { id: turnId, sessionId },
-      select: { id: true, status: true, displayPrompt: true, translationState: true, translationLang: true },
+      select: {
+        id: true, status: true, displayPrompt: true, translationState: true, translationLang: true,
+        translationFailureReason: true, translationHttpStatus: true,
+      },
     });
     if (!turn) throw new NotFoundException('message not found');
     return turn;
@@ -7603,7 +7660,7 @@ export class SessionsService {
     await this.ownHeldTurn(ownerId, sessionId, turnId);
     const retried = await this.prisma.conversationTurn.updateMany({
       where: { id: turnId, sessionId, status: HELD_TURN_STATUS, translationState: { in: ['FAILED', 'TRANSLATING'] } },
-      data: { translationState: 'TRANSLATING' },
+      data: { translationState: 'TRANSLATING', ...CLEARED_FAILURE_COLUMNS },
     });
     if (retried.count === 0) throw SessionsService.notHeld();
     this.realtime.publishQueuedTurnsChanged(sessionId);
@@ -8009,6 +8066,8 @@ export class SessionsService {
         displayPrompt: true,
         translationState: true,
         translationLang: true,
+        translationFailureReason: true,
+        translationHttpStatus: true,
         attachments: { select: { id: true, mimeType: true } },
       },
     });
@@ -8214,6 +8273,8 @@ export class SessionsService {
       displayPrompt: null,
       translationState: null,
       translationLang: null,
+      translationFailureReason: null,
+      translationHttpStatus: null,
       attachments,
     }];
   }
@@ -9790,7 +9851,7 @@ export class SessionsService {
    * asks for any other status is untouched, and the question an unanswered evidence card was about
    * is still on the decision rail's derived read (`pending-evidence-judgments.ts`).
    */
-  async listApprovals(ownerId: string, id: string, status?: string): Promise<ApprovalInfo[]> {
+  async listApprovals(ownerId: string, id: string, status?: string, toolName?: string): Promise<ApprovalInfo[]> {
     const session = await this.prisma.session.findFirst({
       where: { id, ownerId },
       select: { id: true, status: true, engineTurnActive: true, runningBgShells: true,
@@ -9798,7 +9859,7 @@ export class SessionsService {
     });
     if (!session) throw new NotFoundException('session not found');
     const approvals = await this.prisma.approval.findMany({
-      where: { sessionId: id, ...(status ? { status } : {}) },
+      where: { sessionId: id, ...(status ? { status } : {}), ...(toolName ? { toolName } : {}) },
       orderBy: { createdAt: 'asc' },
     });
     const answerable = status === 'PENDING' ? await this.stillBeingAsked(session, approvals) : approvals;
@@ -9975,6 +10036,7 @@ export class SessionsService {
         answering.translation as unknown as ApprovalTranslation | null,
         dto,
         langs,
+        { door: 'approval-decision', sessionId: id },
       );
     }
     // Only the first decision on a still-PENDING approval applies (idempotent). A Feishu card's

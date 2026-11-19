@@ -19,6 +19,11 @@ import {
   openItemCoordinatorCanTake,
 } from './project-open-item';
 import { PROJECT_LIVE_SESSION_STATUS_SQL } from './live-session-status';
+import {
+  EVIDENCE_UNDECIDED_KIND,
+  evidenceUndecidedEnding,
+  openUndecidedEvidenceStatement,
+} from './evidence-undecided';
 
 /**
  * How often the clock looks. Not how long anything waits: each item carries its own
@@ -43,6 +48,13 @@ export interface EscalatedOpenItem {
 
 /** One `LANDING_LEASE_EXPIRED` item the tick opened (§4.6 X-E5), for the same reason. */
 export interface OpenedLeaseItem {
+  itemId: string;
+  projectId: string;
+  ownerId: string;
+}
+
+/** One `EVIDENCE_UNDECIDED` item the tick opened (1110), for the same reason. */
+export interface OpenedEvidenceItem {
   itemId: string;
   projectId: string;
   ownerId: string;
@@ -364,7 +376,13 @@ export class ProjectOpenItemEscalationService implements OnModuleInit, OnModuleD
         .then((opened) => {
           for (const item of opened) void this.push?.notifyOwnerItem(item.itemId);
         })
-        .catch((e) => this.logger.error(`lease-expired items failed: ${(e as Error).message}`));
+        .catch((e) => this.logger.error(`lease-expired items failed: ${(e as Error).message}`))
+        // 1110: evidence its coordinator has not decided within the project's window.
+        .then(() => this.openUndecidedEvidenceItems())
+        .then((opened) => {
+          for (const item of opened) void this.push?.notifyOwnerItem(item.itemId);
+        })
+        .catch((e) => this.logger.error(`undecided-evidence items failed: ${(e as Error).message}`));
     }, TICK_MS);
     this.timer.unref();
   }
@@ -607,6 +625,34 @@ export class ProjectOpenItemEscalationService implements OnModuleInit, OnModuleD
   }
 
   /**
+   * 1110: open one owner item per task whose latest evidence revision has waited longer than its
+   * project's window for a decision its coordinator has not made (`evidence-undecided.ts` says the
+   * rule), and say which ones were opened. The coordinator was asked first, through the evidence
+   * delivery, and nothing about that changes. One statement, its own compare-and-set, in a transaction
+   * of its own under X-E5's lock timeout: a wait that outlives it opens nothing and is the next tick's.
+   */
+  async openUndecidedEvidenceItems(): Promise<OpenedEvidenceItem[]> {
+    const lockTimeout = `${this.leaseAlarmLockTimeoutMs}ms`;
+    let opened: OpenedEvidenceItem[];
+    try {
+      opened = await this.prisma.$transaction(async (tx) => {
+        await tx.$executeRaw`SELECT set_config('lock_timeout', ${lockTimeout}, true)`;
+        return tx.$queryRaw<OpenedEvidenceItem[]>(openUndecidedEvidenceStatement());
+      });
+    } catch (error) {
+      if (!isLockNotAvailable(error)) throw error;
+      this.logger.warn(`${EVIDENCE_UNDECIDED_KIND} items left to the next tick: a lock it waited for `
+        + `was not granted within ${this.leaseAlarmLockTimeoutMs} ms, so it opened nothing`);
+      return [];
+    }
+    for (const item of opened) {
+      this.logger.warn(`opened ${EVIDENCE_UNDECIDED_KIND} ${item.itemId} of project `
+        + `${item.projectId}: evidence waited out the window with no decision`);
+    }
+    return opened;
+  }
+
+  /**
    * The backstop (§4.2): close every OPEN item nobody owes any more, and say which ones those were.
    *
    * An item is closed by the transaction that moves what it is about, one edge per fact, and this
@@ -640,6 +686,8 @@ export class ProjectOpenItemEscalationService implements OnModuleInit, OnModuleD
     const closed = await this.prisma.$queryRaw<ReconciledOpenItem[]>(Prisma.sql`
       UPDATE "project_open_item" item
          SET "state" = CASE WHEN stale."kind" = ${LANDING_LEASE_EXPIRED_KIND} THEN 'RESOLVED'
+                            WHEN stale."kind" = ${EVIDENCE_UNDECIDED_KIND}
+                              THEN CASE WHEN stale."resolution" = 'REVISED' THEN 'SUPERSEDED' ELSE 'RESOLVED' END
                             WHEN stale."promotionState" = 'SUPERSEDED' THEN 'SUPERSEDED'
                             ELSE 'RESOLVED' END,
              "resolution" = stale."resolution",
@@ -651,6 +699,9 @@ export class ProjectOpenItemEscalationService implements OnModuleInit, OnModuleD
                  promotion."state" AS "promotionState",
                  CASE WHEN stale_item."kind" = ${LANDING_LEASE_EXPIRED_KIND}
                         THEN 'job ' || job."id"::text || '@' || job."state"
+                      WHEN stale_item."kind" = ${EVIDENCE_UNDECIDED_KIND}
+                        THEN 'evidence ' || (stale_item."payload"->>'evidenceId') || ' of task '
+                             || COALESCE(task."id"::text || '@' || task."status"::text, 'gone')
                       WHEN stale_item."promotion_id" IS NOT NULL
                       THEN 'promotion ' || promotion."id"::text || '@' || promotion."state"
                       ELSE 'task ' || task."id"::text || '@' || task."status"::text END AS "about",
@@ -659,6 +710,7 @@ export class ProjectOpenItemEscalationService implements OnModuleInit, OnModuleD
                  -- item is about one claim, and every edge that moves that claim writes
                  -- JOB_MOVED_ON — the same ending here, whatever state the job is in now.
                  CASE WHEN stale_item."kind" = ${LANDING_LEASE_EXPIRED_KIND} THEN 'JOB_MOVED_ON'
+                      WHEN stale_item."kind" = ${EVIDENCE_UNDECIDED_KIND} THEN ${evidenceUndecidedEnding('stale_item')}
                       WHEN stale_item."kind" = ${LANDING_UNOBSERVED_KIND} THEN
                         CASE WHEN task."superseded_by_task_id" IS NOT NULL THEN 'SUCCESSOR_FILED'
                              WHEN task."status" = 'CANCELLED' THEN 'TASK_CLOSED'
@@ -687,6 +739,8 @@ export class ProjectOpenItemEscalationService implements OnModuleInit, OnModuleD
                  -- cancellation it is not; one whose task really was cancelled is.
                  CASE WHEN stale_item."kind" = ${LANDING_LEASE_EXPIRED_KIND}
                         THEN ' is no longer the claim that stopped reporting'
+                      WHEN stale_item."kind" = ${EVIDENCE_UNDECIDED_KIND}
+                        THEN ' is no longer the undecided latest revision of a waiting task'
                       WHEN stale_item."kind" = ${LANDING_UNOBSERVED_KIND} THEN
                         CASE WHEN task."superseded_by_task_id" IS NOT NULL
                                THEN ' was superseded by task ' || task."superseded_by_task_id"::text

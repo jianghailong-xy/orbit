@@ -138,7 +138,7 @@ class ScheduledDeviceTest : IncrementDeviceTest() {
           "before":{"rule":${rule("DAILY", "10:00")}},"after":{"rule":${rule("DAILY", "09:00")}},"createdAt":"${ago(3)}",
           "undo":{"path":"/schedules/$codex/undo","body":{"revision":4}}}]}"""
 
-    /** Board 01 ⑦: a run's own session — its crumb, title, head line, strip, what it said, and its report. */
+    /** A run's session shows its strip, what it said, and its report. */
     private val runPlanned get() = ago(12)
     private fun runDetail() = conversationDetail().replace(conversation, runSession).replace("Codex release watch", "Codex stable check")
         .replace("\"tags\":[]", "\"tags\":[],\"scheduleRunId\":\"r-run\",\"runSource\":\"SCHEDULE\"")
@@ -182,10 +182,11 @@ class ScheduledDeviceTest : IncrementDeviceTest() {
         await("the timeline") { exists(hasTestTag("scheduled-page")) && exists(hasText("Nightly pg spec sweep"), unmerged = true) }
     }
 
-    /** Board 01 ② (+ ① in the drawer): Needs you, Today, Tomorrow, the days, Paused; the phone's one-line grammar; the line at the end. */
+    /** Board 01 ② (+ ① in the drawer): Today, Tomorrow, the days, Paused (no Needs you group, owner 2026-11-19: a failing row is
+     * tagged on its day, a held one leads Paused); the phone's one-line grammar; the line at the end. */
     @Test fun theTimeline() = journey {
         openScheduled()
-        verify("Needs you heads the page", exists(hasText(ScheduleCopy.groups.getValue("NEEDS_YOU")), unmerged = true))
+        verify("there is no Needs you group", !exists(hasText("Needs you"), unmerged = true))
         verify("the failing row says Failed 3 in a row", exists(hasText("Failed 3 in a row"), unmerged = true))
         verify("the held row says why in a few words", exists(hasText("↻ Mondays 09:00 · agent disabled"), unmerged = true))
         verify("the running row says how long", exists(hasText("running 21 min", substring = true), unmerged = true) ||
@@ -256,8 +257,8 @@ class ScheduledDeviceTest : IncrementDeviceTest() {
         signIn()
         open("orbit-session:$runSession")
         await("the run's strip") { exists(hasTestTag("schedule-run-strip"), unmerged = true) }
-        verify("the crumb names its schedule", exists(hasTestTag("schedule-run-crumb"), unmerged = true))
-        verify("the head line says state, agent and duration", exists(hasText("Open · Codex agent · 4 min"), unmerged = true))
+        verify("the strip has no schedule breadcrumb", !exists(hasTestTag("schedule-run-crumb"), unmerged = true))
+        verify("the session has no run-specific header line", !exists(hasText("Open · Codex agent · 4 min"), unmerged = true))
         await("the report") { exists(hasTestTag("schedule-run-report"), unmerged = true) }
         verify("the report says what it found", exists(hasText("Reported: Changed · codex@0.49.0 · you were notified"), unmerged = true))
         compose.onNodeWithTag("transcript-list").performScrollToNode(hasTestTag("schedule-run-strip"))

@@ -123,7 +123,7 @@ function lowerFirst(text: string): string {
   return text.charAt(0).toLowerCase() + text.slice(1);
 }
 
-/** A condition that cannot be read goes under Needs you. */
+/** A condition that cannot be read: tagged Can't read, at the head of Waiting for a condition. */
 export function conditionCantRead(reading: Pick<ScheduleConditionReading, 'state'> | null | undefined): boolean {
   return reading?.state === 'UNKNOWN';
 }

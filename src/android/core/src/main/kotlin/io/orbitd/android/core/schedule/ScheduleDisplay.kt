@@ -211,7 +211,7 @@ object ScheduleDisplay {
     enum class Circle { open, running, done, new, failed, held, draft, paused, muted;
         val rawValue: String get() = name
     }
-    enum class Mark { check, alert }
+    enum class Mark { check, alert, clock }
     enum class TagTone { new, fail, held, mute }
 
     data class Tag(val tone: TagTone, val text: String)
@@ -222,7 +222,7 @@ object ScheduleDisplay {
     fun runCircle(state: String, newFinding: Boolean = false): CircleView {
         val label = C.runStates[state] ?: state
         return when (state) {
-            "QUEUED" -> CircleView(Circle.open)
+            "QUEUED" -> CircleView(Circle.open, Mark.clock)
             "RUNNING" -> CircleView(Circle.running)
             "AWAITING_APPROVAL" -> CircleView(Circle.held, Mark.alert, Tag(TagTone.held, label))
             "NO_CHANGE" -> CircleView(Circle.done, Mark.check, Tag(TagTone.mute, label))
@@ -234,7 +234,7 @@ object ScheduleDisplay {
         }
     }
 
-    /** A schedule's circle on its next occurrence, or in Needs you / Paused. */
+    /** A schedule's circle on its next occurrence, or in Paused. A failing one whose next run is under way: [rowCircle]. */
     fun scheduleCircle(state: String, consecutiveFailures: Int, draft: Boolean = false): CircleView {
         if (draft) return CircleView(Circle.draft)
         return when (state) {
@@ -258,16 +258,35 @@ object ScheduleDisplay {
         return if (schedule.rule is ScheduleRule.When) view.copy(gauge = true) else view
     }
 
-    /** Needs you: failing or held (§9.2), or a WHEN rule whose condition cannot be read (condition-triggers §9) — also the count
-     * beside Scheduled in the drawer. */
+    /** Whether one of [runs] (the list's timeline runs) is a run of [schedule] under way: queued, running or waiting for an approval. */
+    fun runUnderWay(schedule: ScheduleView, runs: List<ScheduleRunView>): Boolean =
+        runs.any { it.scheduleId == schedule.id && it.state in inProgress }
+
+    /** Failing or held, by state alone (§9.2). Whether a run is under way needs the schedule: [needsYou] with its runs. */
     fun needsYou(state: String, consecutiveFailures: Int): Boolean = state == "HELD" || (state == "ACTIVE" && consecutiveFailures > 0)
 
-    fun needsYou(schedule: ScheduleView): Boolean = needsYou(schedule.state, schedule.consecutiveFailures) ||
-        (schedule.state == "ACTIVE" && schedule.condition?.cantRead == true)
+    /**
+     * Needs you: held, failing with no run of it under way (§9.2), or a WHEN rule whose condition cannot be read
+     * (condition-triggers §9) — the count beside Scheduled in the drawer. A failing schedule whose next run is already under way
+     * (Run now, owner 2026-11-19) waits for that run: a failure keeps consecutiveFailures above zero and puts it back, a run that
+     * did not fail has the server reset it.
+     */
+    fun needsYou(schedule: ScheduleView, runs: List<ScheduleRunView> = emptyList()): Boolean {
+        if (schedule.state == "HELD") return true
+        if (schedule.state != "ACTIVE") return false
+        return schedule.condition?.cantRead == true || (schedule.consecutiveFailures > 0 && !runUnderWay(schedule, runs))
+    }
 
     /** The drawer's number: how many schedules, and tasks waiting on a condition, need you; nothing at zero. */
-    fun needsYouCount(schedules: List<ScheduleView>, waitingTasks: List<ScheduleWaitingTask> = emptyList()): Int =
-        schedules.count(::needsYou) + waitingTasks.count { it.condition.cantRead }
+    fun needsYouCount(schedules: List<ScheduleView>, waitingTasks: List<ScheduleWaitingTask> = emptyList(),
+                      runs: List<ScheduleRunView> = emptyList()): Int =
+        schedules.count { needsYou(it, runs) } + waitingTasks.count { it.condition.cantRead }
+
+    /** A schedule's row circle on the page: its Failed tag stays off while a run of it is under way (owner 2026-11-19). */
+    fun rowCircle(schedule: ScheduleView, runs: List<ScheduleRunView>): CircleView =
+        if (schedule.state == "ACTIVE" && schedule.consecutiveFailures > 0 && runUnderWay(schedule, runs)) {
+            scheduleCircle(schedule.copy(consecutiveFailures = 0))
+        } else scheduleCircle(schedule)
 
     // A row's second line
 
@@ -335,7 +354,7 @@ object ScheduleDisplay {
 
     // The timeline
 
-    enum class GroupKey(val rawValue: String) { needsYou("NEEDS_YOU"), condition("CONDITION"), today("TODAY"), tomorrow("TOMORROW"),
+    enum class GroupKey(val rawValue: String) { condition("CONDITION"), today("TODAY"), tomorrow("TOMORROW"),
         day("DAY"), later("LATER"), paused("PAUSED") }
 
     sealed class TimelineItem {
@@ -360,9 +379,9 @@ object ScheduleDisplay {
 
     data class TimelineGroup(
         val key: GroupKey,
-        /** "Needs you", "Today", "Monday", "Later", "Paused". */
+        /** "Waiting for a condition", "Today", "Monday", "Later", "Paused". */
         val title: String,
-        /** "Fri, Nov 14" under Today and Tomorrow, "Nov 17" under a day, the count under Needs you and Paused. */
+        /** "Fri, Nov 14" under Today and Tomorrow, "Nov 17" under a day, the count under Waiting for a condition and Paused. */
         val subtitle: String?,
         val items: List<TimelineItem>,
     ) {
@@ -372,11 +391,15 @@ object ScheduleDisplay {
     internal val inProgress = setOf("QUEUED", "RUNNING", "AWAITING_APPROVAL")
 
     /**
-     * The Scheduled page's groups (§9.2), in the viewer's zone: Needs you (failing, then held, then a condition that cannot be
-     * read), Waiting for a condition (WHEN schedules, then tasks waiting on their startWhen: a condition has no day, so it is a group
-     * of its own above Today, condition-triggers §9), Today, Tomorrow, each day of the coming week by its name, Later, Paused. A
-     * schedule appears on the day of its next run, a draft on the day of its first; a run under way on its planned day, an ended one
-     * on today's only with [showPastRuns]. Ended schedules appear nowhere; empty groups are left out; a day is in time order.
+     * The Scheduled page's groups (§9.2), in the viewer's zone: Waiting for a condition (the WHEN schedules and the tasks waiting on
+     * their startWhen, the ones that cannot be read first: a condition has no day, so it is a group of its own above Today,
+     * condition-triggers §9), Today, Tomorrow, each day of the coming week by its name, Later, Paused (held before paused: a held
+     * schedule has no next run to be placed on). A schedule appears on the day of its next run, a draft on the day of its first; a
+     * run under way on its planned day, an ended one on today's only with [showPastRuns]. Ended schedules appear nowhere; empty
+     * groups are left out; a day is in time order.
+     *
+     * There is no Needs you group (owner 2026-11-19): the page lists the schedules, and a failing one is tagged on its own row on
+     * the day of its next run ([rowCircle]); a failing WHEN schedule stays in Waiting for a condition.
      */
     fun timeline(schedules: List<ScheduleView>, runs: List<ScheduleRunView> = emptyList(), drafts: List<ScheduleCard> = emptyList(),
                  showPastRuns: Boolean = false, now: Instant, timezone: String,
@@ -393,13 +416,15 @@ object ScheduleDisplay {
             if (day - today >= 7) later += order to item else days.getOrPut(day) { mutableListOf() } += order to item
         }
         val byTitle = Comparator<ScheduleView> { a, b -> String.CASE_INSENSITIVE_ORDER.compare(a.title, b.title) }
-        val needs = schedules.filter(::needsYou)
-            .sortedWith(compareBy<ScheduleView> { if (it.state == "HELD") 1 else if (it.consecutiveFailures > 0) 0 else 2 }.then(byTitle))
         val byTaskTitle = Comparator<ScheduleWaitingTask> { a, b -> String.CASE_INSENSITIVE_ORDER.compare(a.title, b.title) }
-        val tasksNeeding = waitingTasks.filter { it.condition.cantRead }.sortedWith(byTaskTitle)
-        val waiting = schedules.filter { it.rule is ScheduleRule.When && it.state == "ACTIVE" && !needsYou(it) }.sortedWith(byTitle)
-        val tasksWaiting = waitingTasks.filter { !it.condition.cantRead }.sortedWith(byTaskTitle)
-        val paused = schedules.filter { it.state == "PAUSED" }.sortedWith(byTitle)
+        val (whenCantRead, whenReadable) = schedules.filter { it.rule is ScheduleRule.When && it.state == "ACTIVE" }.sortedWith(byTitle)
+            .partition { it.condition?.cantRead == true }
+        val (tasksCantRead, tasksReadable) = waitingTasks.sortedWith(byTaskTitle).partition { it.condition.cantRead }
+        // Can't read first: the rows that need the owner lead the group.
+        val waiting = whenCantRead.map { TimelineItem.Schedule(it, null) } + tasksCantRead.map { TimelineItem.Task(it) } +
+            whenReadable.map { TimelineItem.Schedule(it, null) } + tasksReadable.map { TimelineItem.Task(it) }
+        val paused = schedules.filter { it.state == "PAUSED" || it.state == "HELD" }
+            .sortedWith(compareBy<ScheduleView> { if (it.state == "HELD") 0 else 1 }.then(byTitle))
 
         for (s in schedules) if (s.state == "ACTIVE") s.nextDueAt?.let { place(TimelineItem.Schedule(s, it), it) }
         for (card in drafts) card.`when`?.firstRunAt?.let { place(TimelineItem.Draft(card, it), it) }
@@ -415,14 +440,7 @@ object ScheduleDisplay {
 
         val byTime = compareBy<Pair<Int, TimelineItem>> { it.second.at?.let(::parse)?.toEpochMilli() ?: 0L }.thenBy { it.first }
         val groups = mutableListOf<TimelineGroup>()
-        if (needs.isNotEmpty() || tasksNeeding.isNotEmpty()) {
-            groups += TimelineGroup(GroupKey.needsYou, C.groups.getValue("NEEDS_YOU"), (needs.size + tasksNeeding.size).toString(),
-                needs.map { TimelineItem.Schedule(it, it.nextDueAt) } + tasksNeeding.map { TimelineItem.Task(it) })
-        }
-        if (waiting.isNotEmpty() || tasksWaiting.isNotEmpty()) {
-            groups += TimelineGroup(GroupKey.condition, ConditionCopy.group, (waiting.size + tasksWaiting.size).toString(),
-                waiting.map { TimelineItem.Schedule(it, null) } + tasksWaiting.map { TimelineItem.Task(it) })
-        }
+        if (waiting.isNotEmpty()) groups += TimelineGroup(GroupKey.condition, ConditionCopy.group, waiting.size.toString(), waiting)
         for (day in days.keys.sorted()) {
             val items = days.getValue(day).sortedWith(byTime).map { it.second }
             val at = items.firstOrNull()?.at?.let(::parse) ?: continue
@@ -755,7 +773,7 @@ object ScheduleDisplay {
 
     // A run's session
 
-    /** "Scheduled run · planned 10:00, started 10:01 · access Check only · this session is not in your session list". */
+    /** "Scheduled run · planned 10:00, started 10:01 · access Check only". */
     fun runStripText(plannedAt: String, startedAt: String?, accessLevel: String, timezone: String): String =
         fill(C.RunSession.strip, mapOf(
             "planned" to (parse(plannedAt)?.let { localParts(it, timezone).time } ?: ""),
@@ -763,29 +781,8 @@ object ScheduleDisplay {
             "access" to accessCopy(accessLevel).label,
         ))
 
-    /** "Run of Nov 13": the run's own page's title (board 01 ⑦). */
+    /** "Run of Nov 13": the condition history's run label. */
     fun capitalizedRunOf(plannedAt: String, timezone: String): String = capitalize(runOfText(plannedAt, timezone))
-
-    /** A run's session's header line (board web/run.png): "Open · Codex agent · 4 min" — the session's state word, the
-     * engine it ran on, and how long the run took (until now while it runs). A part not known is left out. */
-    fun runHeadText(state: String?, engine: String?, startedAt: String?, endedAt: String?, now: Instant): String {
-        val parts = mutableListOf<String>()
-        if (!state.isNullOrEmpty()) parts += state
-        if (!engine.isNullOrEmpty()) parts += fill(C.RunSession.agent, mapOf("engine" to engine))
-        startedAt?.let(::parse)?.let { started ->
-            val end = endedAt?.let(::parse) ?: now
-            val minutes = maxOf(1L, Math.round(Duration.between(started, end).toMillis() / 60_000.0))
-            parts += fill(C.RunSession.duration, mapOf("minutes" to minutes.toString()))
-        }
-        return parts.joinToString(C.separator)
-    }
-
-    /** The agent a run's header names (the web's `scheduleRunAgentName`): the engine its schedule's view carries
-     * ("Codex"), else the session's own engine, capitalized. */
-    fun runAgentName(scheduleEngine: String?, sessionEngine: String?): String? {
-        if (!scheduleEngine.isNullOrEmpty()) return engineName(scheduleEngine)
-        return sessionEngine?.let(::engineName)
-    }
 
     /** The delete question's title: "Delete “Codex stable check”?". */
     fun deleteTitle(title: String): String = fill(C.DeleteConfirm.title, mapOf("title" to title))

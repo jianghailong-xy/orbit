@@ -110,20 +110,28 @@ Optimize For 只在第 5 条（没人给档位）时抬档：Balance 至少 M，
    区域不可用只去掉 `claude` 引擎上对 Anthropic 的凭据（`credentialIsAnthropicBound`：Claude 自己的登录、Claude 号池、
    `anthropic` preset 或 anthropic.com 的 key），理由 `claude can’t use Anthropic on <runner>`；DeepSeek 等 key 和别的引擎照常
    （docs/claude-region-check-contract.md §8）。远程 delegate 和 `provider_list --workspace` 走同一个判断；
-4. 额度 ≥ 90%（`ENGINE_QUOTA_LIMIT`）或账号暂停中的；
-5. **没有档位的模型**。自定义 endpoint 的模型要先在 Providers 页标档位才进池；点名（§4.1 第 1 条）不受影响。
+4. 额度 ≥ 90%（`ENGINE_QUOTA_LIMIT`）、账号暂停中、或 endpoint 拒了它的 key 的。
+
+只有「跑不起来」才去掉。**凡是在 Orbit 注册了的都参与路由，只是先后不同**（owner，2026-11-19）：
+
+- **所有档位都进池**，不只是要的那一档。没有档位的不再去掉：一个 Provider × 引擎**一个档位都没有**时（Antigravity、Cursor、
+  OpenCode、DSH 的内置登录，没标档位的自定义 endpoint），它的**默认模型**以「无档位」进池——runner 报的该引擎默认模型，
+  否则 Provider 自己的默认模型，否则列表第一个；列表里其余的模型记为去掉（`The model has no tier; <provider> runs <model>`），
+  点名照样能用。已有档位的 Provider 里个别没档位的模型仍记为去掉。
+- **额度读不到**的订阅（runner 没报这个账号、或报了但没有窗口）不去掉，也不当作 100% 余量：排在额度已知的之后。
 
 **档位表**从「每个引擎一张」扩成「每个模型一行」：`(provider, model, effort) → 档位`。preset 的模型由目录提供档位和价格
 （价格取自 models.dev，preset 列表本来就从那里刷新，`providerPresets.ts`）；Claude / Codex 内置登录沿用今天
-`DEFAULT_MODEL_TIER_TABLE` 的映射。
+`DEFAULT_MODEL_TIER_TABLE` 的映射，Kimi 内置登录也在这张表里（S/M 用 K3，L/XL 用 K3.1 Pro，没有就 K3；只给 SubAgent 用）。
 
-**排序**（同档内）：
+**先按贴合度**：要的那一档 → 更高的档（近的先）→ 无档位的默认模型 → 更低的档（近的先）。选中的不在要的档时，理由里写明
+（`Nothing in tier M can run: …`）。**同一贴合度内**再按下表：
 
 | Optimize For | 规则 |
 |---|---|
-| Cost（默认） | 边际花费最低的先（见 §9 待定 A），并列时额度余量多的先 |
-| Balance | 同档里额度余量多的先，并列时便宜的先 |
-| Intelligence | 同档里档位上限高的模型先（例如 L 档里 Opus 先于 Sonnet-high），并列时便宜的先 |
+| Cost（默认） | 订阅先于计费 key；订阅里额度已知的先、余量多的先；key 里便宜的先 |
+| Balance | 额度已知的先（key 算已知），余量多的先，并列时便宜的先 |
+| Intelligence | 档位上限高的模型先（例如 L 档里 Opus 先于 Sonnet-high），再额度已知的先，并列时便宜的先 |
 
 最后按 owner 在 Providers 页排的顺序打破平局。结果和理由冻结在 `subagent_run` 里，续跑不重算。
 
@@ -299,8 +307,19 @@ P1 不路由，所以可以先把最难的部分（同 cwd 子进程、事件内
 ### 10.2 在哪里跑、改动去哪
 
 - 服务端把 SubAgent 派给目标 runner；目标 runner 在该 workspace 的 workDir 上建一个**临时的、detached 的 worktree**
-  （目标 workspace 自己的 HEAD），子引擎在里面跑；结束后整个删掉。workDir 不是 git 仓库时直接拒绝
-  （`SUBAGENT_WORKSPACE_NOT_GIT`），不在别人的工作目录里乱写。
+  （目标 workspace 自己的 HEAD），子引擎在里面跑；结束后整个删掉。
+- **workDir 不是 git 仓库**（owner 决策 2026-11-19）：
+  - **只读的 SubAgent**（`type: explore`，或定义文件 `readonly: true`）**就地跑**：子引擎直接在 workDir 里跑，不建也不删
+    worktree。claim 带 `inPlace: true`；目标 runner 不管自己读到的定义怎么写，一律按只读起子引擎（Claude 去掉
+    Edit/MultiEdit/Write/NotebookEdit，Bash 仍按父会话的模式；Codex 用只读沙箱，**不能联网**，连数据库这类检查要用 Claude）。
+    run.json 记 `inPlace`、`tree` 为空，恢复和 GC 都不会删 workDir。续跑时 workDir 是不是 git 仓库变了就失败，提示重开。
+    目标 runner 要声明 `subagent-remote-in-place/v1`（`SUBAGENT_REMOTE_IN_PLACE_V1`），否则不派（`SUBAGENT_WORKSPACE_LACKS_NEEDS`，
+    按 `needs` 选时列为不满足）。
+  - **可能改文件的 SubAgent** 仍拒绝（`SUBAGENT_WORKSPACE_NOT_GIT`），不在别人的工作目录里乱写。拒绝文案指出两条不改目录的路：
+    改成只读委派，或在那个 workspace 上开会话；并明确劝阻 `git init`：它会改动那个目录，第一次提交还会把里面的东西（含密钥）
+    一起提交。
+  - 已知边界：就地只读挡住的是编辑工具，不是 shell；Claude 子引擎的 Bash 写下的东西不会被丢弃。worktree 本来也只隔离文件，
+    挡不住数据库写入和网络请求。
 - **只交回文字结果**：不把任何文件带回父会话，也不留在目标 workspace。结果末尾由 runner 附一行
   `Discarded changes: <n> files (<paths…>)`，让父 Agent 知道它改过什么但没有带回。
 - 看不到父会话未提交的改动：工具描述里写明「remote SubAgents run on that workspace's own HEAD and return text only」，

@@ -749,7 +749,7 @@ class ProjectPageTest {
         assertEquals("", request.why)
         val branch = StartProjectCopy.body(request, StartProjectCopy.Draft("PROJECT_BRANCH", false, 5, "  npm test  "), requestId = null)
         assertEquals(j("""{"criteriaDigest":"seal","line":"PROJECT_BRANCH","projectBranchName":"refs/heads/project/34Wzv","automatic":false,"maxConcurrentTasks":5,
-            "mergeCheckCommand":"npm test","requestId":null}"""), branch)
+            "mergeCheckCommand":"npm test","landingCheckCommand":null,"landingCheckTimeoutSeconds":null,"mergeCheckTimeoutSeconds":null,"requestId":null}"""), branch)
         val main = StartProjectCopy.body(request, StartProjectCopy.Draft("MAIN", true, 3, "   "), requestId = null)
         assertFalse("directly into main names no branch", main.containsKey("projectBranchName"))
         assertEquals(JsonNull, main["mergeCheckCommand"]); assertEquals(JsonNull, main["requestId"])

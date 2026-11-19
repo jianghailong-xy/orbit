@@ -36,6 +36,7 @@ import io.orbitd.android.core.cards.transcriptCards
 import io.orbitd.android.core.cards.SessionMessageNote
 import io.orbitd.android.core.cards.BackgroundWakeCard
 import io.orbitd.android.core.cards.OrbitEvent
+import io.orbitd.android.core.cards.OwnerRequests
 import io.orbitd.android.cards.OrbitEventLine
 import io.orbitd.android.cards.LocalSteerDeliveries
 import io.orbitd.android.cards.TranscriptCardView
@@ -137,7 +138,7 @@ internal fun TranscriptRowView(row: TranscriptRow, model: FullEvents, live: Tran
     // with its own flip to the English, held by the reader so a recycled row keeps its side.
     val shownOriginals = LocalShownOriginals.current
     val turnTranslation = if (event.type == "user") Translation.turn(shown.fields["translation"]) else null
-    val replyTranslation = if (event.type == "assistant" && event.parent().isNullOrEmpty()) Translation.reply(shown.fields["translation"]) else null
+    val replyTranslation = if (event.type == "assistant" && event.parent().isNullOrEmpty()) Translation.shownReply(shown.fields["translation"], shown.body()) else null
     val translationKey = if (event.type == "user") ShownOriginals.user(event.seq, event.turnId) else ShownOriginals.reply(event.seq)
     // "Show both languages" (02-bilingual.png): your language on top, the English under it, no flip.
     val bilingual = LocalTranslation.current.bilingual
@@ -148,7 +149,7 @@ internal fun TranscriptRowView(row: TranscriptRow, model: FullEvents, live: Tran
     val showsBoth = bilingual && !originalHidden
     fun shownWords(source: RunEvent): String = when {
         source.type == "user" -> TranslationShown.userWords(source.personWords(), Translation.turn(source.fields["translation"]), flipped)
-        source.type == "assistant" && source.parent().isNullOrEmpty() -> TranslationShown.replyWords(source.body(), Translation.reply(source.fields["translation"]), flipped)
+        source.type == "assistant" && source.parent().isNullOrEmpty() -> TranslationShown.replyWords(source.body(), Translation.shownReply(source.fields["translation"], source.body()), flipped)
         else -> source.body()
     }
     // The owner's answer handed to the coordinator: the row is its one line (`OwnerAnswerLineView`), not a message under a heading. So is
@@ -218,8 +219,10 @@ internal fun TranscriptRowView(row: TranscriptRow, model: FullEvents, live: Tran
     // The turn Orbit sent to continue a turn the owner's Update Now cut: Orbit's words, written for the agent, so one grey Orbit line
     // rather than a message in the reader's name (web `runner-update-resume`).
     val updateResume = event.type == "user" && RunnerUpdateNow.isResume(shown.fields.string("text"))
+    // The turn Orbit queued when an owner request ended: prose and JSON for the agent, so one divider (web `owner-request-turn-divider`).
+    val requestEnding = if (event.type == "user") OwnerRequests.resolutionTurnLabel(shown.fields.string("text")) else null
     val bg = when { highlighted -> MaterialTheme.colorScheme.secondaryContainer
-        event.type == "user" && answerLine == null && bubble == null && !updateResume -> MaterialTheme.colorScheme.surfaceVariant
+        event.type == "user" && answerLine == null && bubble == null && !updateResume && requestEnding == null -> MaterialTheme.colorScheme.surfaceVariant
         else -> MaterialTheme.colorScheme.surface }
     // The runtime's calls whose work outlives them: a sub-agent (Agent; Task before 2.x) and a Workflow.
     val taskKind = (shown.fields.string("name") ?: shown.fields.string("toolName")).takeIf { event.type == "tool_use" && it in setOf("Agent", "Task", "Workflow") }
@@ -235,6 +238,15 @@ internal fun TranscriptRowView(row: TranscriptRow, model: FullEvents, live: Tran
         if (updateResume) {
             Text(RunnerUpdateNow.RESUME_NOTE, Modifier.testTag("runner-update-resume"), style = MaterialTheme.typography.labelMedium,
                 color = MaterialTheme.colorScheme.onSurfaceVariant)
+            return@Column
+        }
+        if (requestEnding != null) {
+            Row(Modifier.fillMaxWidth().testTag("owner-request-turn-divider"), verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+                HorizontalDivider(Modifier.weight(1f))
+                Text(requestEnding, style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                HorizontalDivider(Modifier.weight(1f))
+            }
             return@Column
         }
         if (dshRepair != null && console != null) { DshRepairCard(dshRepair, console); return@Column }

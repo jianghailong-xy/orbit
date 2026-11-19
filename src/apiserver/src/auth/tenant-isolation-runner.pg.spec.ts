@@ -273,6 +273,11 @@ test('tenant isolation: past the runner gate and through the share links, anothe
       ownerId, sessionId: machineSessionId, toolUseId: 'toolu_census_resumable', type: 'general',
       definitionSource: 'builtin', decision: {}, status: 'DONE', workspaceId: of.workspaceId, targetRunnerId: of.runnerId,
     }, select: { id: true } });
+    const script = 'return 1';
+    const { id: workflowRunId } = await db.subagentWorkflowRun.create({ data: {
+      ownerId, sessionId: machineSessionId, toolUseId: 'toolu_census_workflow_fixture',
+      name: 'review', script, scriptSha256: createHash('sha256').update(script).digest('hex'),
+    }, select: { id: true } });
     // The owner's yes, in the calling session, to deleting the spare runner and the spare workspace:
     // the cards the delete doors go through on (runner-api/runner-delete-approval.ts).
     for (const [toolName, input] of [
@@ -465,7 +470,7 @@ test('tenant isolation: past the runner gate and through the share links, anothe
       landingSessionId,
       takeoverSessionId, activateSessionId, leaseOwner, leaseGeneration, inboxSessionId, inboxLeaseGeneration, turnSessionId, shellTurnId,
       finalizeSessionId, sessionAttachmentId, uploadedFileId, evidenceRevisionId, runningTaskId, runningTaskSessionId, allowedApprovalId,
-      subagentRunId, artifactRequestId, integrationJobId, landingTaskId, secretGrantId, removingSecretGrantId,
+      subagentRunId, workflowRunId, artifactRequestId, integrationJobId, landingTaskId, secretGrantId, removingSecretGrantId,
       codexOperationId, wikiRepoOpId, spareServiceTokenId, replyRequestId, interruptSessionId, endSessionId, completedSessionId,
       deletedSessionId, archivedSessionId, coordinatorItemId, handOverItemId, failedTaskId, watchId, verifierTaskId, verifiedTaskId,
       providerSlug: await slugOf(of.providerId), spareProviderSlug: await slugOf(of.spare.providerId), listTaskId,

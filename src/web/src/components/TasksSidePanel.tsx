@@ -14,10 +14,12 @@ import {
   LogoutOutlined,
   MenuFoldOutlined,
   MenuUnfoldOutlined,
+  MoonOutlined,
   MoreOutlined,
   PlusOutlined,
   QuestionCircleOutlined,
   SettingOutlined,
+  SunOutlined,
   TeamOutlined,
   UserOutlined,
 } from '@ant-design/icons';
@@ -78,6 +80,7 @@ import { listPollMs, streamDown, streamPoll } from '../lib/listBudget';
 import { workspaceListPath } from '../lib/workspaceListFolder';
 import { orderWorkspaces, reorderedWorkspaceIds, workspaceRunnerId } from '../lib/workspaceOrder';
 import { machineDraftPath, machineName, machinesToSetUp } from '../lib/machineSetup';
+import { MachineOsIcon } from '../lib/machineOs';
 import { setupTitle } from '../lib/machineSetupCopy';
 import { useThemeMode, type ThemeMode } from '../lib/theme';
 import { useToast } from '../lib/toast';
@@ -427,12 +430,11 @@ export function TasksSidePanel({ open = false, onNavigate }: { open?: boolean; o
   // would jump back there until the new detail arrived (and Cmd/Ctrl + Up/Down step from there).
   // While the placeholder stands, the row already active holds.
   const [heldWorkspaceId, setHeldWorkspaceId] = useState<string | null>(null);
-  // A scheduled task's run belongs to its schedule, not to a workspace's list (docs/scheduled-tasks-design.md §7.4):
-  // its session lights Scheduled, and no workspace row.
-  const onScheduleRun = !!sessionId && !sessionQ.isPlaceholderData && sessionQ.data?.runSource === 'SCHEDULE';
+  // A scheduled task's run is a session of its workspace like any other (owner 2026-11-19): it lights that workspace's
+  // row, whose list holds it in the Scheduled runs folder.
   const activeWorkspaceId =
     openWorkspaceId ??
-    (sessionId && !onScheduleRun
+    (sessionId
       ? sessionQ.isPlaceholderData
         ? heldWorkspaceId
         : (sessionQ.data?.workspace?.id ?? null)
@@ -492,8 +494,6 @@ export function TasksSidePanel({ open = false, onNavigate }: { open?: boolean; o
   // the pages under it (a machine's, a key's, a pool's) light nothing, as Settings lights nothing.
   const routeKey = projectPageKey
     ? projectPageKey
-    : onScheduleRun
-    ? 'scheduled'
     : activeWorkspaceId
     ? '' // scoped to one workspace — its row highlights below, no top item
     : loc.pathname.startsWith('/workspaces/') ||
@@ -1265,14 +1265,21 @@ export function TasksSidePanel({ open = false, onNavigate }: { open?: boolean; o
                 </span>
               ),
               children: (
+                // Each with its mark before it, as the Machines level draws its rows (docs/mocks/machine-menu-icons/03-appearance-icons, A).
                 [
-                  { key: 'system', label: 'System' },
-                  { key: 'light', label: 'Light' },
-                  { key: 'dark', label: 'Dark' },
-                ] as { key: ThemeMode; label: string }[]
+                  { key: 'system', label: 'System', mark: <DesktopOutlined aria-hidden /> },
+                  { key: 'light', label: 'Light', mark: <SunOutlined aria-hidden /> },
+                  { key: 'dark', label: 'Dark', mark: <MoonOutlined aria-hidden /> },
+                ] as { key: ThemeMode; label: string; mark: ReactNode }[]
               ).map((it) => ({
                 key: `theme-${it.key}`,
-                label: it.label,
+                textValue: it.label,
+                label: (
+                  <span className="tp-account-machine-os">
+                    {it.mark}
+                    {it.label}
+                  </span>
+                ),
                 icon:
                   mode === it.key ? (
                     <CheckOutlined />
@@ -1326,7 +1333,11 @@ export function TasksSidePanel({ open = false, onNavigate }: { open?: boolean; o
                                 {machineName(runner, managedRunnerId)}
                               </span>
                             ) : (
-                              <span>{machineName(runner, managedRunnerId)}</span>
+                              // Every other machine by the OS it reported (docs/mocks/machine-menu-icons, A).
+                              <span className="tp-account-machine-os">
+                                <MachineOsIcon runner={runner} />
+                                {machineName(runner, managedRunnerId)}
+                              </span>
                             )}
                             {!ready && (
                               <span className="tp-account-current-theme">{managedRow?.label ?? 'Offline'}</span>
@@ -1342,8 +1353,15 @@ export function TasksSidePanel({ open = false, onNavigate }: { open?: boolean; o
                     { type: 'separator' as const, key: 'machines-add-separator' },
                     {
                       key: 'machines-add',
-                      icon: <PlusOutlined />,
-                      label: 'Add a machine',
+                      // Its + leads, in the machines' icon column, so the words start where their names do; the end column
+                      // is the machines' state alone (docs/mocks/machine-menu-icons/02-add-machine-align, A).
+                      textValue: 'Add a machine',
+                      label: (
+                        <span className="tp-account-machine-os">
+                          <PlusOutlined aria-hidden />
+                          Add a machine
+                        </span>
+                      ),
                       onSelect: () => navigate('/settings/machines/new'),
                     },
                   ],

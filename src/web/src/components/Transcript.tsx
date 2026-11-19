@@ -78,6 +78,9 @@ import {
 } from '../lib/evidenceFiles';
 import { saveUserFile } from '../lib/userFile';
 import { stripAnsi } from '../lib/ansi';
+import { Diff, ExportCtx, KeyVals, Pre, relPath, safeJson, type ExportMode } from './ToolBlocks';
+// Re-exported for the modules that have always read them from the transcript.
+export { ExportCtx, Pre, relPath, type ExportMode };
 import { copyText } from '../lib/clipboard';
 import { splitRecordedNote } from '../lib/deliveredMessage';
 import { offersSteerWithdraw, steerDeliveryState, WITHDRAWN_DELIVERY } from '../lib/steerDelivery';
@@ -190,8 +193,9 @@ import {
   DEFAULT_AGENT_LANGUAGE,
   type BilingualPair,
 } from '@orbit/shared';
-import { replyTranslationOf, showEnglishLabel, turnTranslationOf } from '../lib/translation';
+import { replyTranslationOf, shownQuestions, showEnglishLabel, translationUnchanged, turnTranslationOf } from '../lib/translation';
 import {
+  QuestionTranslationsCtx,
   ReplyTranslationFoot,
   ShownOriginalProvider,
   TranslationCtx,
@@ -239,15 +243,6 @@ export interface TurnImage {
   mime: string;
 }
 
-// When present, the transcript is being serialized to a standalone HTML file (see
-// lib/sessionExport). A static file has no JS, so collapsibles must render expanded —
-// otherwise their content sits behind a dead, un-clickable fold and is simply lost — and
-// images must resolve from a pre-fetched data-URL map instead of the live bearer fetch.
-// The context is null in the running app, so every reader below is a no-op there.
-export interface ExportMode {
-  images: Map<string, string>; // attachment id → base64 data URL
-}
-export const ExportCtx = createContext<ExportMode | null>(null);
 
 // Jump-to-session for the "session created" card (mcp__orbit__session_create result). WorkspaceView
 // provides a navigator; the shared/public page and static export leave it null so the card
@@ -1500,13 +1495,15 @@ function buildTranscript(
             const siblings = into(parent);
             agentWorked();
             // A sub-agent's report to its caller is never translated (parentToolUseId).
-            const replyTranslation = parent ? undefined : replyTranslationOf(p.translation);
+            const translation = parent ? undefined : replyTranslationOf(p.translation);
+            // Already in the owner's language: the translation is the reply, so draw the reply alone.
+            const replyTranslation = translationUnchanged(translation, text) ? undefined : translation;
             siblings.push({
               kind: 'assistant',
               seq: ev.seq,
               text,
               ...(replyTranslation ? { replyTranslation } : {}),
-              ...(!parent && !replyTranslation && turnTranslated ? { awaitsTranslation: true } : {}),
+              ...(!parent && !translation && turnTranslated ? { awaitsTranslation: true } : {}),
             });
             if (siblings === roots) {
               turnReply = text;
@@ -3396,6 +3393,9 @@ function UserBubble({ node, queued }: { node: TextNode; queued?: ReactNode }) {
   const foot = useContext(QueuedFootCtx);
   const held = foot && !queued && foot.seq === node.seq ? foot.tag : null;
   const [copied, setCopied] = useState(false);
+  // The "Copied" reset is cancelled when this goes, so it never updates a component that is gone.
+  const copiedReset = useRef<ReturnType<typeof setTimeout>>(undefined);
+  useEffect(() => () => clearTimeout(copiedReset.current), []);
   const [expanded, setExpanded] = useState(false);
   // What the runner echoed back is what it was *given*, which includes anything delivery appended
   // — a reference expansion, a list's condition board, the background work a returning engine is
@@ -3434,7 +3434,8 @@ function UserBubble({ node, queued }: { node: TextNode; queued?: ReactNode }) {
     void copyText(typed).then((ok) => {
       if (!ok) return;
       setCopied(true);
-      setTimeout(() => setCopied(false), 1600);
+      clearTimeout(copiedReset.current);
+      copiedReset.current = setTimeout(() => setCopied(false), 1600);
     });
   };
   // The bubble's own state, at the end of its meta row: it waits for no hover, where the copy
@@ -3483,7 +3484,8 @@ function UserBubble({ node, queued }: { node: TextNode; queued?: ReactNode }) {
         </button>
       )}
       {(typed || status || held || translationFoot) && (
-        <div className="chat-user-meta">
+        // A failed translation's line says why and can wrap (frame 7): the row then grows below the bubble.
+        <div className={translation?.state === 'FAILED' ? 'chat-user-meta has-failure-foot' : 'chat-user-meta'}>
           {/* A delivered translation's flip opens the row; copy and the time stay together at its
               end (docs/mocks/translation-user-hover). */}
           {flipFoot && translationFoot}
@@ -3554,6 +3556,9 @@ function TurnAttachments({ node }: { node: TextNode }) {
 // hover. A turn with nothing to copy keeps its time; one with neither is the old blank divider.
 function TurnFoot({ node }: { node: DividerNode }) {
   const [copied, setCopied] = useState(false);
+  // The "Copied" reset is cancelled when this goes, so it never updates a component that is gone.
+  const copiedReset = useRef<ReturnType<typeof setTimeout>>(undefined);
+  useEffect(() => () => clearTimeout(copiedReset.current), []);
   const { seq, ts, reply } = node;
   // Settings › Translation: copy the version of the reply on screen, translated unless flipped.
   const shownOriginal = useReplyShownOriginal(node.replySeq);
@@ -3565,7 +3570,8 @@ function TurnFoot({ node }: { node: DividerNode }) {
     void copyText(shownReply).then((ok) => {
       if (!ok) return;
       setCopied(true);
-      setTimeout(() => setCopied(false), 1600);
+      clearTimeout(copiedReset.current);
+      copiedReset.current = setTimeout(() => setCopied(false), 1600);
     });
   };
   return (
@@ -3905,13 +3911,17 @@ function GroupedChatImage({
 function CodeBlock({ children }: any) {
   const preRef = useRef<HTMLPreElement>(null);
   const [copied, setCopied] = useState(false);
+  // The "Copied" reset is cancelled when this goes, so it never updates a component that is gone.
+  const copiedReset = useRef<ReturnType<typeof setTimeout>>(undefined);
+  useEffect(() => () => clearTimeout(copiedReset.current), []);
   const copy = () => {
     const text = preRef.current?.textContent ?? '';
     if (!text) return;
     void copyText(text).then((ok) => {
       if (!ok) return;
       setCopied(true);
-      setTimeout(() => setCopied(false), 1600);
+      clearTimeout(copiedReset.current);
+      copiedReset.current = setTimeout(() => setCopied(false), 1600);
     });
   };
   return (
@@ -4651,6 +4661,10 @@ function ToolView({ node, live }: { node: ToolNode; live?: boolean }) {
     () => (questions.length ? questionOutcome(questions, answer, !!node.result?.isError) : null),
     [questions, answer, node.result?.isError],
   );
+  // The answer is read off the engine's words; the record then shows the questions as the card did,
+  // in the owner's language where the server translated them (options keep their index).
+  const questionTranslation = useContext(QuestionTranslationsCtx).get(node.id);
+  const shown = useMemo(() => shownQuestions(questions, questionTranslation), [questions, questionTranslation]);
   // A result this client cannot read, once it is whole: its own words are then the only answer
   // there is, so the card opens on them, as it always did.
   const questionUnread =
@@ -4667,8 +4681,8 @@ function ToolView({ node, live }: { node: ToolNode; live?: boolean }) {
   // body/icon — and the <Diff>/<MD>/<KeyVals> elements inside it — stable instead of rebuilding
   // on each append.
   const { label, summary, summaryMono, body, icon, tone, path, meta: toolMeta, tag } = useMemo(
-    () => describeTool(node.name, input, isShell, outcome),
-    [node.name, input, isShell, outcome],
+    () => describeTool(node.name, input, isShell, outcome, shown),
+    [node.name, input, isShell, outcome, shown],
   );
   // A SubAgent's tier, model, time and cost, and its Why, come from its run rather than its call.
   const isDelegate = node.name === DELEGATE_TOOL;
@@ -4753,7 +4767,7 @@ function ToolView({ node, live }: { node: ToolNode; live?: boolean }) {
         {isBackgroundTask && !(hasDetail && open) && (waitingLine ?? <SubagentLiveLine node={node} live={live} />)}
         {questions.length > 0 && !(hasDetail && open) && (
           <QuestionFolded
-            questions={questions}
+            questions={shown}
             outcome={outcome}
             onOpen={() => setManualOpen((prev) => !(prev ?? defaultOpen))}
           />
@@ -5146,7 +5160,13 @@ function shellCommandSummary(command: string): string {
 
 // describeTool maps a tool name + input to a folded-row label/summary/icon and an
 // optional expanded body, roughly matching how Claude Code Web renders each tool.
-function describeTool(name: string, input: any, isShell?: boolean, outcome?: QuestionOutcome | null): ToolDesc {
+function describeTool(
+  name: string,
+  input: any,
+  isShell?: boolean,
+  outcome?: QuestionOutcome | null,
+  questions?: AskedQuestion[],
+): ToolDesc {
   const i = input ?? {};
   // A user-run `!`-shell command (not Claude's Bash tool): show the command inline in the
   // folded row and render as a terminal-flavoured "Shell" card (ToolView auto-opens it).
@@ -5302,7 +5322,7 @@ function describeTool(name: string, input: any, isShell?: boolean, outcome?: Que
       // A multiple-choice prompt to the user, drawn with how it ended: open, each question as a
       // card (header · question · options, the pick ticked) instead of the nested questions array
       // as a raw JSON blob; folded, ToolView draws the record under the row (`QuestionFolded`).
-      const qs = askedQuestions(i);
+      const qs = questions ?? askedQuestions(i);
       return {
         label: 'Question',
         icon: <QuestionCircleOutlined />,
@@ -5453,150 +5473,7 @@ function LiveShellOutput({ toolUseId, seq }: { toolUseId: string; seq: number })
   return <ToolResult seq={seq} content={output.content} compact />;
 }
 
-// ── primitives ──────────────────────────────────────────────────────────────
-// Pre renders monospace text and collapses past `threshold` lines (Read output,
-// long commands, JSON blobs) so one tool call can't flood the transcript.
-// `prompt` prefixes a shell `$` for Bash commands.
-// Exported so the background-process tray can reuse the same collapsing output block.
-export function Pre({
-  text,
-  threshold = 16,
-  muted,
-  prompt,
-}: {
-  text: string;
-  threshold?: number;
-  muted?: boolean;
-  prompt?: boolean;
-}) {
-  const exp = useContext(ExportCtx);
-  const [open, setOpen] = useState(!!exp);
-  const clean = useMemo(() => stripAnsi(text), [text]);
-  const lines = clean.split('\n');
-  const hidden = Math.max(0, lines.length - threshold);
-  const long = hidden > 0;
-  const shown = open || !long ? clean : lines.slice(0, threshold).join('\n');
-  return (
-    <div className={`chat-pre-wrap${muted ? ' muted' : ''}${prompt ? ' cmd' : ''}`}>
-      <pre className="chat-pre">
-        {prompt && <span className="chat-cmd-prompt">$ </span>}
-        {shown}
-      </pre>
-      {long && (
-        <button className="chat-more" onClick={() => setOpen((o) => !o)}>
-          {open ? 'Show less' : `Show ${hidden} more lines`}
-        </button>
-      )}
-    </div>
-  );
-}
 
-// ── edit diff ─────────────────────────────────────────────────────────────--
-type DiffRow = { type: 'ctx' | 'del' | 'add'; text: string };
-type RenderRow = DiffRow | { type: 'gap'; n: number };
-
-// Line-level LCS diff: unchanged lines become context, so a one-line change in a
-// 30-line block shows ~3 context lines around it instead of 30 red + 30 green.
-function lineDiff(oldStr: string, newStr: string): DiffRow[] {
-  const a = oldStr.split('\n');
-  const b = newStr.split('\n');
-  const n = a.length;
-  const m = b.length;
-  // Bail out to a plain del/add dump on pathologically large inputs — the LCS
-  // table is O(n·m) and not worth it for a giant generated edit.
-  if (n * m > 250_000) {
-    return [...a.map((t): DiffRow => ({ type: 'del', text: t })), ...b.map((t): DiffRow => ({ type: 'add', text: t }))];
-  }
-  const dp: number[][] = Array.from({ length: n + 1 }, () => new Array(m + 1).fill(0));
-  for (let x = n - 1; x >= 0; x--) {
-    for (let y = m - 1; y >= 0; y--) {
-      dp[x][y] = a[x] === b[y] ? dp[x + 1][y + 1] + 1 : Math.max(dp[x + 1][y], dp[x][y + 1]);
-    }
-  }
-  const rows: DiffRow[] = [];
-  let i = 0;
-  let j = 0;
-  while (i < n && j < m) {
-    if (a[i] === b[j]) {
-      rows.push({ type: 'ctx', text: a[i] });
-      i++;
-      j++;
-    } else if (dp[i + 1][j] >= dp[i][j + 1]) {
-      rows.push({ type: 'del', text: a[i++] });
-    } else {
-      rows.push({ type: 'add', text: b[j++] });
-    }
-  }
-  while (i < n) rows.push({ type: 'del', text: a[i++] });
-  while (j < m) rows.push({ type: 'add', text: b[j++] });
-  return rows;
-}
-
-// Collapse long runs of unchanged context, keeping `ctx` lines next to each
-// change so the diff reads like a unified hunk rather than the whole file.
-function collapseCtx(rows: DiffRow[], ctx: number): RenderRow[] {
-  const out: RenderRow[] = [];
-  let i = 0;
-  while (i < rows.length) {
-    if (rows[i].type !== 'ctx') {
-      out.push(rows[i]);
-      i++;
-      continue;
-    }
-    let j = i;
-    while (j < rows.length && rows[j].type === 'ctx') j++;
-    const run = rows.slice(i, j);
-    const head = i === 0 ? 0 : ctx; // no leading context before the first change
-    const tail = j === rows.length ? 0 : ctx; // none after the last change
-    if (run.length > head + tail + 1) {
-      for (let k = 0; k < head; k++) out.push(run[k]);
-      out.push({ type: 'gap', n: run.length - head - tail });
-      for (let k = run.length - tail; k < run.length; k++) out.push(run[k]);
-    } else {
-      for (const r of run) out.push(r);
-    }
-    i = j;
-  }
-  return out;
-}
-
-function Diff({ oldStr, newStr }: { oldStr?: string; newStr?: string }) {
-  const rows = useMemo(
-    () => collapseCtx(lineDiff(String(oldStr ?? ''), String(newStr ?? '')), 3),
-    [oldStr, newStr],
-  );
-  // Hunk-relative line numbers (Edit payloads carry no file offset, so these can't
-  // be real file lines) — a light gutter just to keep the two sides aligned.
-  let oldNo = 0;
-  let newNo = 0;
-  return (
-    <div className="chat-diff">
-      {rows.map((r, k) => {
-        if (r.type === 'gap') {
-          oldNo += r.n;
-          newNo += r.n;
-          return (
-            <div key={k} className="diff-line diff-gap">
-              <span className="diff-gutter" />
-              <span className="diff-text">⋯ {r.n} unchanged {r.n === 1 ? 'line' : 'lines'} ⋯</span>
-            </div>
-          );
-        }
-        const o = r.type !== 'add' ? ++oldNo : undefined;
-        const nw = r.type !== 'del' ? ++newNo : undefined;
-        const sign = r.type === 'del' ? '-' : r.type === 'add' ? '+' : ' ';
-        return (
-          <div key={k} className={`diff-line diff-${r.type}`}>
-            <span className="diff-ln">{o ?? ''}</span>
-            <span className="diff-ln">{nw ?? ''}</span>
-            <span className="diff-sign">{sign}</span>
-            <span className="diff-text">{r.text}</span>
-          </div>
-        );
-      })}
-    </div>
-  );
-}
 
 function Todos({ todos }: { todos: any[] }) {
   const mark = (s: string): string => (s === 'completed' ? '✔' : s === 'in_progress' ? '◐' : '○');
@@ -5735,25 +5612,6 @@ function SessionCreateCard({ result }: { result: any }) {
   );
 }
 
-// KeyVals renders an unknown tool's input as a compact key/value table instead of
-// a raw JSON blob — scalars inline, nested objects/arrays as collapsible JSON.
-function KeyVals({ obj }: { obj: any }) {
-  const entries = obj && typeof obj === 'object' ? Object.entries(obj) : [];
-  return (
-    <div className="chat-kv">
-      {entries.map(([k, v]) => (
-        <div className="kv-row" key={k}>
-          <span className="kv-key">{k}</span>
-          {v !== null && typeof v === 'object' ? (
-            <Pre text={safeJson(v)} threshold={12} muted />
-          ) : (
-            <span className="kv-val">{String(v)}</span>
-          )}
-        </div>
-      ))}
-    </div>
-  );
-}
 
 // ── helpers ─────────────────────────────────────────────────────────────────
 const hasKeys = (o: any): boolean => !!o && typeof o === 'object' && Object.keys(o).length > 0;
@@ -5783,15 +5641,6 @@ function splitPath(path: string): { base: string; dir: string } {
   return { base: clean.slice(cut + 1), dir: segs.length ? `…/${segs[segs.length - 1]}/` : '/' };
 }
 
-// A worktree-isolated session runs its tools under <home>/.orbit/worktrees/<id>/;
-// that absolute prefix is ephemeral machine scratch, so strip it and show the path
-// relative to the repo root. Paths outside a worktree are returned unchanged.
-const WORKTREE_RE = /\.orbit\/worktrees\/[^/]+\//;
-function relPath(path: string): string {
-  const m = WORKTREE_RE.exec(path);
-  if (!m) return path;
-  return path.slice(m.index + m[0].length) || path;
-}
 
 // Read's offset/limit → a compact line-range badge (e.g. L240–400) instead of an
 // inline "(from 240, 160 lines)" tail on the path.
@@ -5801,13 +5650,6 @@ function lineMeta(offset?: number, limit?: number): string | undefined {
   return limit ? `L${start}–${start + limit}` : `L${start}+`;
 }
 
-const safeJson = (v: any): string => {
-  try {
-    return JSON.stringify(v, null, 2);
-  } catch {
-    return String(v);
-  }
-};
 
 // A tool_result's content is either a string, an array of content blocks
 // (text/image/...), or an MCP CallToolResult wrapper whose `content` holds that array. Flatten it

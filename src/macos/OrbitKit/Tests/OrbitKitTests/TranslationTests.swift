@@ -66,6 +66,20 @@ final class TranslationTests: XCTestCase {
         XCTAssertFalse(SessionTranslation.unavailable(login))
     }
 
+    func testTranslationUnavailableUntilIsReadWhileItLiesAhead() throws {
+        let me = try decode(User.self, """
+        {"id":"u1","email":"a@b.c","translationAvailable":true,"translationUnavailableUntil":"2026-11-18T06:01:00.000Z"}
+        """)
+        XCTAssertEqual(me.translationUnavailableUntil, "2026-11-18T06:01:00.000Z")
+        let until = Date(timeIntervalSince1970: 1_794_981_660)
+        XCTAssertEqual(SessionTranslation.temporarilyUnavailableUntil(me, now: until.addingTimeInterval(-1)), until)
+        XCTAssertNil(SessionTranslation.temporarilyUnavailableUntil(me, now: until), "past it, the ordinary tag again")
+        let closed = try decode(User.self, #"{"id":"u1","email":"a@b.c","translationAvailable":true,"translationUnavailableUntil":null}"#)
+        XCTAssertNil(closed.translationUnavailableUntil)
+        XCTAssertNil(SessionTranslation.temporarilyUnavailableUntil(closed))
+        XCTAssertNil(SessionTranslation.temporarilyUnavailableUntil(try decode(User.self, #"{"id":"u1","email":"a@b.c"}"#)))
+    }
+
     func testAStrayValueReadsAsAbsentAndAnUnknownLanguageAsTheDefault() throws {
         let prefs = try decode(UserPreferences.self,
                                #"{"translationEnabled":"yes","translationLanguage":"xx","translationAgentLanguage":"xx"}"#)
@@ -244,6 +258,45 @@ final class TranslationTests: XCTestCase {
         XCTAssertNil(TurnTranslation.parse(nil))
     }
 
+    func testAFailedTurnAndARefusalSayWhyInSharedsReasons() throws {
+        XCTAssertEqual(TranslationFailureReason.allCases.map(\.rawValue),
+                       ["TIMEOUT", "NETWORK", "HTTP", "EMPTY", "TRUNCATED", "MANGLED", "NO_KEY", "UNAVAILABLE"])
+        let http = TurnTranslation.parse(.object(["state": .string("FAILED"), "from": .string("ja"), "original": .string("x"),
+                                                  "failureReason": .string("HTTP"), "httpStatus": .int(503)]))
+        XCTAssertEqual(http, TurnTranslation(state: .failed, from: .ja, original: "x", failureReason: .http, httpStatus: 503))
+        for reason in TranslationFailureReason.allCases {
+            let t = TurnTranslation.parse(.object(["state": .string("FAILED"), "from": .string("ja"), "original": .string("x"),
+                                                   "failureReason": .string(reason.rawValue)]))
+            XCTAssertEqual(t?.failureReason, reason)
+            XCTAssertNil(t?.httpStatus)
+        }
+        // An unknown reason is no reason (the generic line), not a turn that cannot be read.
+        let unknown = TurnTranslation.parse(.object(["state": .string("FAILED"), "from": .string("ja"), "original": .string("x"),
+                                                     "failureReason": .string("COSMIC_RAY")]))
+        XCTAssertNotNil(unknown)
+        XCTAssertNil(unknown?.failureReason)
+        // The Decodable path (turn list, send answer) reads it the same way.
+        let rows = try decode([QueuedTurnInfo].self, """
+        [{"turnId":"t1","content":"x","translation":{"state":"FAILED","from":"zh-Hans","original":"x","failureReason":"TIMEOUT"}},
+         {"turnId":"t2","content":"x","translation":{"state":"FAILED","from":"zh-Hans","original":"x","failureReason":"HTTP","httpStatus":401}},
+         {"turnId":"t3","content":"x","translation":{"state":"FAILED","from":"zh-Hans","original":"x","failureReason":"NEW_ONE"}}]
+        """)
+        XCTAssertEqual(rows[0].turnTranslation?.failureReason, .timeout)
+        XCTAssertEqual(rows[1].turnTranslation?.failureReason, .http)
+        XCTAssertEqual(rows[1].turnTranslation?.httpStatus, 401)
+        XCTAssertNotNil(rows[2].turnTranslation)
+        XCTAssertNil(rows[2].turnTranslation?.failureReason)
+        // The 422 says why.
+        let refusal = APIError.http(status: 422, body: #"{"code":"TRANSLATION_FAILED","message":"x","failureReason":"HTTP","httpStatus":429}"#)
+        XCTAssertEqual(SessionTranslation.refusalReason(refusal)?.reason, .http)
+        XCTAssertEqual(SessionTranslation.refusalReason(refusal)?.httpStatus, 429)
+        let timeout = APIError.http(status: 422, body: #"{"code":"TRANSLATION_FAILED","failureReason":"TIMEOUT"}"#)
+        XCTAssertEqual(SessionTranslation.refusalReason(timeout)?.reason, .timeout)
+        XCTAssertNil(SessionTranslation.refusalReason(timeout)?.httpStatus)
+        XCTAssertNil(SessionTranslation.refusalReason(APIError.http(status: 422, body: #"{"code":"TRANSLATION_FAILED"}"#)))
+        XCTAssertNil(SessionTranslation.refusalReason(APIError.http(status: 500, body: #"{"failureReason":"TIMEOUT"}"#)))
+    }
+
     func testTheTurnListAndTheSendAnswerCarryTheHeldMessage() throws {
         let rows = try decode([QueuedTurnInfo].self, """
         [{"turnId":"t1","kind":"message","placement":"queued","content":"再跑一遍",
@@ -289,6 +342,35 @@ final class TranslationTests: XCTestCase {
         let failed = PendingApproval(id: "a2", kind: .question, toolName: "AskUserQuestion", input: info.input,
                                      translation: ApprovalTranslation(lang: .zhHans, failed: true))
         XCTAssertEqual(failed.shownInput, info.input)
+    }
+
+    /// After the answer (3A): the transcript's record finds the card's translation by its call and
+    /// shows the questions as the card did, the answer still read off the English result.
+    func testAnAnsweredQuestionKeepsItsCardsLanguage() throws {
+        let info = try decode([ApprovalInfo].self, """
+        [{"id":"a1","toolName":"AskUserQuestion","status":"ALLOWED","toolUseId":"toolu_q",
+          "input":{"questions":[{"question":"Which one?","header":"Pick",
+            "options":[{"label":"Yes","description":"Do it"},{"label":"No"}]}]},
+          "translation":{"lang":"zh-Hans","questions":[{"question":"哪一个？","header":"选择",
+            "options":[{"label":"是","description":"做"},{"label":"否","description":"不该出现"}]}]}},
+         {"id":"a2","toolName":"Bash","status":"ALLOWED","toolUseId":"toolu_b","input":{},
+          "translation":{"lang":"zh-Hans","description":"列出"}}]
+        """)
+        let byCall = ApprovalTranslation.byToolUse(info)
+        XCTAssertEqual(Array(byCall.keys), ["toolu_q"], "only question cards, by their call")
+        let asked = Approvals.parseQuestions(from: try XCTUnwrap(info[0].input))
+        let outcome = QuestionRecords.outcome(questions: asked, result: #"The user answered: "Which one?"="No". Read the answers carefully."#, isError: false)
+        XCTAssertEqual(outcome, .answered([QuestionAnswer(picked: [1], typed: nil)]))
+        let shown = ApprovalTranslation.shownQuestions(asked, byCall["toolu_q"])
+        XCTAssertEqual(shown.first?.question, "哪一个？")
+        XCTAssertEqual(shown.first?.header, "选择")
+        XCTAssertEqual(shown.first?.options.map(\.label), ["是", "否"])
+        XCTAssertEqual(shown.first?.options.map(\.description), ["做", nil], "no description where the original had none")
+        if case .answered(let answers)? = outcome {
+            XCTAssertEqual(QuestionRecords.answerLine(shown[0], answers[0]), "否")
+        }
+        XCTAssertEqual(ApprovalTranslation.shownQuestions(asked, ApprovalTranslation(lang: .zhHans, failed: true)), asked)
+        XCTAssertEqual(ApprovalTranslation.shownQuestions(asked, nil), asked)
     }
 
     func testAPlanIsShownTranslated() {
@@ -395,6 +477,22 @@ final class TranslationTests: XCTestCase {
         reducer.markReplyRetrying(seq: 2)
         XCTAssertNil(replies(reducer.state).first?.translation)
         XCTAssertEqual(replies(reducer.state).first?.awaitsTranslation, true)
+    }
+
+    func testAReplyAlreadyInTheOwnersLanguageIsDrawnAsItIs() {
+        var reducer = TranscriptReducer()
+        reducer.apply(user(1, english: "Fix it", original: "修一下"))
+        // On replay: the translator handed back the reply itself, spaces aside.
+        reducer.apply(event(2, .assistant, ["text": .string("找到了。"),
+                                            "translation": .object(["lang": .string("zh-Hans"), "text": .string("找到了。\n")])]))
+        XCTAssertNil(replies(reducer.state).first?.translation)
+        XCTAssertNil(replies(reducer.state).first?.awaitsTranslation, "nor waits for one")
+        // Live: the same, once the translation event arrives.
+        reducer.apply(event(3, .assistant, ["text": .string("改好了。")]))
+        XCTAssertEqual(replies(reducer.state).last?.awaitsTranslation, true)
+        reducer.apply(event(0, .translation, ["of": .int(3), "lang": .string("zh-Hans"), "text": .string("改好了。")], turn: nil))
+        XCTAssertNil(replies(reducer.state).last?.translation)
+        XCTAssertNil(replies(reducer.state).last?.awaitsTranslation)
     }
 
     func testAReplyInAnUntranslatedTurnIsLeftAlone() {

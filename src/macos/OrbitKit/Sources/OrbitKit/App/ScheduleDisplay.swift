@@ -280,7 +280,7 @@ public enum ScheduleDisplay {
     /// A row's circle (board 1/2 ①): `open` is to come, `running` turns, `done` a grey tick, `new` a green tick,
     /// `failed` red, `held` amber, `draft` dashed, `paused` faint, `muted` a run that never did the work.
     public enum Circle: String, CaseIterable, Sendable { case open, running, done, new, failed, held, draft, paused, muted }
-    public enum Mark: String, Sendable { case check, alert }
+    public enum Mark: String, Sendable { case check, alert, clock }
     public enum TagTone: String, Sendable { case new, fail, held, mute }
 
     public struct Tag: Equatable, Sendable {
@@ -306,7 +306,7 @@ public enum ScheduleDisplay {
     public static func runCircle(state: String, newFinding: Bool = false) -> CircleView {
         let label = C.runStates[state] ?? state
         switch state {
-        case "QUEUED": return CircleView(.open)
+        case "QUEUED": return CircleView(.open, .clock)
         case "RUNNING": return CircleView(.running)
         case "AWAITING_APPROVAL": return CircleView(.held, .alert, Tag(tone: .held, text: label))
         case "NO_CHANGE": return CircleView(.done, .check, Tag(tone: .mute, text: label))
@@ -320,7 +320,7 @@ public enum ScheduleDisplay {
         }
     }
 
-    /// A schedule's circle on its next occurrence, or in Needs you / Paused.
+    /// A schedule's circle on its next occurrence, or in Paused.
     public static func scheduleCircle(state: String, consecutiveFailures: Int, draft: Bool = false) -> CircleView {
         if draft { return CircleView(.draft) }
         switch state {
@@ -337,30 +337,46 @@ public enum ScheduleDisplay {
         }
     }
 
-    public static func scheduleCircle(_ schedule: ScheduleView, draft: Bool = false) -> CircleView {
-        if schedule.state == "ACTIVE", schedule.consecutiveFailures == 0, schedule.condition?.cantRead == true {
+    /// A schedule's row circle. `runs` are the list's timeline runs: while a run of a failing schedule is under way
+    /// its Failed tag stays off (owner 2026-11-19, the shared `scheduleRowCircle`), and the run's end decides —
+    /// a failure keeps consecutiveFailures above zero and the tag returns, a success has the server reset it.
+    public static func scheduleCircle(_ schedule: ScheduleView, draft: Bool = false,
+                                      runs: [ScheduleRunView] = []) -> CircleView {
+        let failures = runUnderWay(schedule, runs: runs) ? 0 : schedule.consecutiveFailures
+        if schedule.state == "ACTIVE", failures == 0, schedule.condition?.cantRead == true {
             return ConditionDisplay.circle(cantRead: true)
         }
-        let view = scheduleCircle(state: schedule.state, consecutiveFailures: schedule.consecutiveFailures, draft: draft)
+        let view = scheduleCircle(state: schedule.state, consecutiveFailures: failures, draft: draft)
         // A WHEN schedule keeps its gauge in every group (condition-triggers board ④ ③).
         guard case .when = schedule.rule else { return view }
         return CircleView(view.circle, view.mark, view.tag, gauge: true)
     }
 
+    /// Whether one of `runs` (the list's timeline runs) is a run of this schedule under way: queued, running or
+    /// waiting for an approval.
+    public static func runUnderWay(_ schedule: ScheduleView, runs: [ScheduleRunView]) -> Bool {
+        runs.contains { $0.scheduleId == schedule.id && inProgress.contains($0.state) }
+    }
+
     /// Needs you: failing or held (§9.2), or a WHEN rule whose condition cannot be read (condition-triggers §9) —
-    /// also the count beside Scheduled in the drawer.
+    /// the count beside Scheduled in the drawer. There is no Needs you group on the page any more (owner
+    /// 2026-11-19): each is tagged on its own row.
     public static func needsYou(state: String, consecutiveFailures: Int) -> Bool {
         state == "HELD" || (state == "ACTIVE" && consecutiveFailures > 0)
     }
 
-    public static func needsYou(_ schedule: ScheduleView) -> Bool {
-        needsYou(state: schedule.state, consecutiveFailures: schedule.consecutiveFailures)
+    /// A failing schedule whose next run is already under way in `runs` (Run now, owner 2026-11-19) waits for that
+    /// run instead: a failure puts it back, an ended run that did not fail clears it.
+    public static func needsYou(_ schedule: ScheduleView, runs: [ScheduleRunView] = []) -> Bool {
+        let failures = runUnderWay(schedule, runs: runs) ? 0 : schedule.consecutiveFailures
+        return needsYou(state: schedule.state, consecutiveFailures: failures)
             || (schedule.state == "ACTIVE" && schedule.condition?.cantRead == true)
     }
 
     /// The drawer's number: how many schedules, and tasks waiting on a condition, need you; nothing at zero.
-    public static func needsYouCount(_ schedules: [ScheduleView], waitingTasks: [ScheduleWaitingTask] = []) -> Int {
-        schedules.filter(needsYou).count + waitingTasks.filter(\.condition.cantRead).count
+    public static func needsYouCount(_ schedules: [ScheduleView], waitingTasks: [ScheduleWaitingTask] = [],
+                                     runs: [ScheduleRunView] = []) -> Int {
+        schedules.filter { needsYou($0, runs: runs) }.count + waitingTasks.filter(\.condition.cantRead).count
     }
 
     // MARK: - A row's second line
@@ -443,7 +459,7 @@ public enum ScheduleDisplay {
 
     // MARK: - The timeline
 
-    public enum GroupKey: String, Sendable { case needsYou = "NEEDS_YOU", condition = "CONDITION", today = "TODAY",
+    public enum GroupKey: String, Sendable { case condition = "CONDITION", today = "TODAY",
                                                   tomorrow = "TOMORROW", day = "DAY", later = "LATER", paused = "PAUSED" }
 
     public enum TimelineItem: Equatable, Sendable, Identifiable {
@@ -473,9 +489,9 @@ public enum ScheduleDisplay {
 
     public struct TimelineGroup: Equatable, Sendable, Identifiable {
         public let key: GroupKey
-        /// "Needs you", "Today", "Monday", "Later", "Paused".
+        /// "Waiting for a condition", "Today", "Monday", "Later", "Paused".
         public let title: String
-        /// "Fri, Nov 14" under Today and Tomorrow, "Nov 17" under a day, the count under Needs you and Paused.
+        /// "Fri, Nov 14" under Today and Tomorrow, "Nov 17" under a day, the count under a condition and Paused.
         public let subtitle: String?
         public let items: [TimelineItem]
         public var id: String { key == .day ? "day-\(title)" : key.rawValue }
@@ -483,12 +499,14 @@ public enum ScheduleDisplay {
 
     static let inProgress: Set<String> = ["QUEUED", "RUNNING", "AWAITING_APPROVAL"]
 
-    /// The Scheduled page's groups (§9.2), in the viewer's zone: Needs you (failing, then held, then a condition that
-    /// cannot be read), Waiting for a condition (WHEN schedules, then tasks waiting on their startWhen: a condition has
-    /// no day, so it is a group of its own above Today, condition-triggers §9), Today, Tomorrow, each day of the
-    /// coming week by its name, Later, Paused. A schedule appears on the day of its next run, a draft on the day of its
-    /// first; a run under way on its planned day, an ended one on today's only with `showPastRuns`. Ended schedules
-    /// appear nowhere; empty groups are left out; a day is in time order.
+    /// The Scheduled page's groups (§9.2), in the viewer's zone: Waiting for a condition (the ACTIVE WHEN schedules and
+    /// the tasks waiting on their startWhen, the ones whose condition cannot be read first: a condition has no day, so
+    /// it is a group of its own above Today, condition-triggers §9), Today, Tomorrow, each day of the coming week by
+    /// its name, Later, Paused (held before paused: a held one has no next run to be placed on). A schedule appears on
+    /// the day of its next run, a draft on the day of its first; a run under way on its planned day, an ended one on
+    /// today's only with `showPastRuns`. There is no group of errors (owner 2026-11-19, replacing Needs you): a failing
+    /// schedule is tagged on its own row (`scheduleCircle(_:runs:)`). Ended schedules appear nowhere; empty groups are
+    /// left out; a day is in time order.
     public static func timeline(schedules: [ScheduleView], runs: [ScheduleRunView] = [], drafts: [ScheduleCard] = [],
                                 waitingTasks: [ScheduleWaitingTask] = [],
                                 showPastRuns: Bool = false, now: Date, timezone: String) -> [TimelineGroup] {
@@ -507,21 +525,24 @@ public enum ScheduleDisplay {
         let byTitle: (ScheduleView, ScheduleView) -> Bool = {
             $0.title.compare($1.title, options: [.caseInsensitive]) == .orderedAscending
         }
-        let needs = schedules.filter(needsYou).sorted {
-            func rank(_ s: ScheduleView) -> Int { s.state == "HELD" ? 1 : s.consecutiveFailures > 0 ? 0 : 2 }
-            let a = rank($0), b = rank($1)
-            return a != b ? a < b : byTitle($0, $1)
-        }
         let byTaskTitle: (ScheduleWaitingTask, ScheduleWaitingTask) -> Bool = {
             $0.title.compare($1.title, options: [.caseInsensitive]) == .orderedAscending
         }
-        let tasksNeeding = waitingTasks.filter(\.condition.cantRead).sorted(by: byTaskTitle)
-        let waiting = schedules.filter { s in
-            if case .when = s.rule { return s.state == "ACTIVE" && !needsYou(s) }
+        let when = schedules.filter { s in
+            if case .when = s.rule { return s.state == "ACTIVE" }
             return false
         }.sorted(by: byTitle)
-        let tasksWaiting = waitingTasks.filter { !$0.condition.cantRead }.sorted(by: byTaskTitle)
-        let paused = schedules.filter { $0.state == "PAUSED" }.sorted(by: byTitle)
+        let tasks = waitingTasks.sorted(by: byTaskTitle)
+        // Can't read first: the rows that need the owner lead the group.
+        let cantRead: (ScheduleView) -> Bool = { $0.condition?.cantRead == true }
+        let conditionItems: [TimelineItem] = when.filter(cantRead).map { .schedule($0, at: nil) }
+            + tasks.filter(\.condition.cantRead).map { .task($0) }
+            + when.filter { !cantRead($0) }.map { .schedule($0, at: nil) }
+            + tasks.filter { !$0.condition.cantRead }.map { .task($0) }
+        let paused = schedules.filter { $0.state == "PAUSED" || $0.state == "HELD" }.sorted {
+            let a = $0.state == "HELD" ? 0 : 1, b = $1.state == "HELD" ? 0 : 1
+            return a != b ? a < b : byTitle($0, $1)
+        }
 
         for s in schedules where s.state == "ACTIVE" {
             if let next = s.nextDueAt { place(.schedule(s, at: next), next) }
@@ -545,15 +566,9 @@ public enum ScheduleDisplay {
             return ta != tb ? ta < tb : a.0 < b.0
         }
         var groups: [TimelineGroup] = []
-        if !needs.isEmpty || !tasksNeeding.isEmpty {
-            groups.append(TimelineGroup(key: .needsYou, title: C.groups["NEEDS_YOU"]!,
-                                        subtitle: String(needs.count + tasksNeeding.count),
-                                        items: needs.map { .schedule($0, at: $0.nextDueAt) } + tasksNeeding.map { .task($0) }))
-        }
-        if !waiting.isEmpty || !tasksWaiting.isEmpty {
+        if !conditionItems.isEmpty {
             groups.append(TimelineGroup(key: .condition, title: ConditionCopy.group,
-                                        subtitle: String(waiting.count + tasksWaiting.count),
-                                        items: waiting.map { .schedule($0, at: nil) } + tasksWaiting.map { .task($0) }))
+                                        subtitle: String(conditionItems.count), items: conditionItems))
         }
         for day in days.keys.sorted() {
             let items = days[day]!.sorted(by: byTime).map(\.1)
@@ -938,7 +953,7 @@ public enum ScheduleDisplay {
 
     // MARK: - A run's session
 
-    /// "Scheduled run · planned 10:00, started 10:01 · access Check only · this session is not in your session list".
+    /// "Scheduled run · planned 10:00, started 10:01 · access Check only".
     public static func runStripText(plannedAt: String, startedAt: String?, accessLevel: String,
                                     timezone: String) -> String {
         fill(C.RunSession.strip, [
@@ -948,41 +963,9 @@ public enum ScheduleDisplay {
         ])
     }
 
-    /// "Run of Nov 13": the run's own page's title (board 01 ⑦).
+    /// "Run of Nov 13": the label for a run in a schedule's history.
     public static func capitalizedRunOf(plannedAt: String, timezone: String) -> String {
         capitalize(runOfText(plannedAt: plannedAt, timezone: timezone))
-    }
-
-    /// A run's session's header line (board web/run.png): "Open · Codex agent · 4 min" — the session's state word,
-    /// the engine it ran on, and how long the run took (until now while it runs). A part not known is left out.
-    public static func runHeadText(state: String?, engine: String?, startedAt: String?, endedAt: String?,
-                                   now: Date) -> String {
-        var parts: [String] = []
-        if let state, !state.isEmpty { parts.append(state) }
-        if let engine, !engine.isEmpty { parts.append(fill(C.RunSession.agent, ["engine": engine])) }
-        if let started = startedAt.flatMap(parse) {
-            let end = endedAt.flatMap(parse) ?? now
-            let minutes = max(1, Int((end.timeIntervalSince(started) / 60).rounded()))
-            parts.append(fill(C.RunSession.duration, ["minutes": String(minutes)]))
-        }
-        return parts.joined(separator: C.separator)
-    }
-
-    /// A run's session's head line from the session's own read (its detail, which every run session has, in the
-    /// app's lists or not): its lifecycle word, its engine's name as the web's ENGINE_CLI_NAMES gives it, and how long
-    /// the run took. "Open · Codex agent · 5 min".
-    public static func runHeadText(session: Session?, run: ScheduleRunView, scheduleEngine: String? = nil,
-                                   now: Date) -> String {
-        runHeadText(state: session.map(SessionHeader.lifecycleWord(for:)),
-                    engine: runAgentName(scheduleEngine: scheduleEngine, sessionEngine: session?.engine),
-                    startedAt: run.startedAt, endedAt: run.endedAt, now: now)
-    }
-
-    /// The agent a run's header names (the web's `scheduleRunAgentName`): the engine its schedule's view carries
-    /// ("Codex"), else the session's own, as the engine lists name it.
-    public static func runAgentName(scheduleEngine: String?, sessionEngine: String?) -> String? {
-        if let scheduleEngine, !scheduleEngine.isEmpty { return engineName(scheduleEngine) }
-        return sessionEngine.map(ProviderEngines.cliName)
     }
 
     /// The delete question's title: "Delete “Codex stable check”?".

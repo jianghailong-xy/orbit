@@ -68,6 +68,12 @@ public enum TranslationLanguage: String, CaseIterable, Codable, Equatable, Senda
     public func tag(to agent: TranslationLanguage) -> String {
         "\(shortName) → \(agent.shortName)"
     }
+
+    /// The composer tag while the server is skipping a failing translator (policy board
+    /// docs/ux/translation-failure-policy.html, frame 6): "Chinese → English · unavailable, messages will wait".
+    public func tag(to agent: TranslationLanguage, unavailable: Bool) -> String {
+        unavailable ? "\(tag(to: agent)) · \(TranslationCopy.unavailableTag)" : tag(to: agent)
+    }
 }
 
 /// The words every client shows about translation, byte for byte the web's (`TRANSLATION_COPY` in
@@ -109,10 +115,38 @@ public enum TranslationCopy {
     public static let original = "Original"
     public static let translating = "Translating…"
     public static let sendFailed = "Couldn't translate, so it wasn't sent"
+    /// Frame 6 of docs/ux/translation-failure-policy.html: after the composer tag while translation is unavailable.
+    public static let unavailableTag = "unavailable, messages will wait"
     public static let retry = "Retry"
     public static let sendAsWritten = "Send as written"
     public static let replyPending = "Translates when the reply is done"
     public static let replyFailed = "Couldn't translate this reply"
+    /// Why a held message (or a card answer, `answer: true`) was not sent: the B column of frame 7 of
+    /// docs/ux/translation-failure-policy.html, drawn before "· Retry · Send as written". With no
+    /// reason, or one the board gives no sentence for (NO_KEY, HTTP without a status), it is the
+    /// generic `sendFailed`.
+    public static func sendFailed(_ reason: TranslationFailureReason?, httpStatus: Int? = nil,
+                                  answer: Bool = false) -> String {
+        guard let cause = failureCause(reason, httpStatus: httpStatus) else { return sendFailed }
+        return "\(cause), so \(answer ? "your answer" : "it") wasn't sent"
+    }
+
+    private static func failureCause(_ reason: TranslationFailureReason?, httpStatus: Int?) -> String? {
+        switch reason {
+        case .timeout: return "The translator didn't answer in time"
+        case .network: return "The translator was unreachable"
+        case .http:
+            guard let status = httpStatus else { return nil }
+            if status == 429 || status >= 500 { return "The translator was unreachable" }
+            if (400..<500).contains(status) { return "The translator refused the message" }
+            return nil
+        case .truncated: return "Too long to translate"
+        case .mangled, .empty: return "The translation came back damaged"
+        case .unavailable: return "Translation is unavailable right now"
+        case .noKey, nil: return nil
+        }
+    }
+
     // "Show both languages" in a conversation (02-bilingual.png, frames 2–4).
     public static let sentToAgent = "Sent to the agent in"
     public static let show = "Show"
@@ -406,6 +440,20 @@ public enum TurnTranslationState: String, Codable, Equatable, Sendable {
     case sentAsWritten = "SENT_AS_WRITTEN"
 }
 
+/// Why translating the owner's words failed (`TranslationFailureReason`, @orbit/shared translation.ts):
+/// on a FAILED turn's `failureReason` and on the 422 TRANSLATION_FAILED answer. A value this client
+/// does not know reads as no reason (the generic failure line).
+public enum TranslationFailureReason: String, Codable, CaseIterable, Equatable, Sendable {
+    case timeout = "TIMEOUT"
+    case network = "NETWORK"
+    case http = "HTTP"
+    case empty = "EMPTY"
+    case truncated = "TRUNCATED"
+    case mangled = "MANGLED"
+    case noKey = "NO_KEY"
+    case unavailable = "UNAVAILABLE"
+}
+
 /// The `translation` of a translated turn — on the queued/active turn list, a send's answer, and
 /// the runner's `user` event. Absent on every message translation was not involved in.
 public struct TurnTranslation: Codable, Equatable, Sendable {
@@ -414,21 +462,44 @@ public struct TurnTranslation: Codable, Equatable, Sendable {
     public var from: TranslationLanguage
     /// What the owner typed, as typed.
     public var original: String
+    /// Why it failed, on a FAILED turn the server stored a reason for.
+    public var failureReason: TranslationFailureReason?
+    /// The translator's HTTP status, beside `failureReason == .http`.
+    public var httpStatus: Int?
 
-    public init(state: TurnTranslationState, from: TranslationLanguage, original: String) {
+    public init(state: TurnTranslationState, from: TranslationLanguage, original: String,
+                failureReason: TranslationFailureReason? = nil, httpStatus: Int? = nil) {
         self.state = state
         self.from = from
         self.original = original
+        self.failureReason = failureReason
+        self.httpStatus = httpStatus
+    }
+
+    private enum CodingKeys: String, CodingKey { case state, from, original, failureReason, httpStatus }
+
+    public init(from decoder: Decoder) throws {
+        let c = try decoder.container(keyedBy: CodingKeys.self)
+        state = try c.decode(TurnTranslationState.self, forKey: .state)
+        from = try c.decode(TranslationLanguage.self, forKey: .from)
+        original = try c.decode(String.self, forKey: .original)
+        // An unknown reason, or a stray value, is no reason rather than a failed decode.
+        failureReason = (try? c.decodeIfPresent(String.self, forKey: .failureReason))
+            .flatMap { $0 }.flatMap(TranslationFailureReason.init(rawValue:))
+        httpStatus = (try? c.decodeIfPresent(Int.self, forKey: .httpStatus)) ?? nil
     }
 
     /// Read off a payload's raw `translation`; nil unless every field is one this client knows,
-    /// so a stray value never draws a foot that lies (web: `turnTranslationOf`).
+    /// so a stray value never draws a foot that lies (web: `turnTranslationOf`). An unknown
+    /// `failureReason` is dropped, not refused.
     public static func parse(_ value: JSONValue?) -> TurnTranslation? {
         guard let value,
               let state = value["state"]?.stringValue.flatMap(TurnTranslationState.init(rawValue:)),
               let from = value["from"]?.stringValue.flatMap(TranslationLanguage.init(rawValue:)),
               let original = value["original"]?.stringValue else { return nil }
-        return TurnTranslation(state: state, from: from, original: original)
+        let reason = value["failureReason"]?.stringValue.flatMap(TranslationFailureReason.init(rawValue:))
+        let status = value["httpStatus"]?.intValue
+        return TurnTranslation(state: state, from: from, original: original, failureReason: reason, httpStatus: status)
     }
 
     /// Still waiting on its translation, so not delivered to the engine.
@@ -462,6 +533,14 @@ public struct ReplyTranslation: Codable, Equatable, Sendable {
         if let text = value["text"]?.stringValue { return ReplyTranslation(lang: lang, text: text) }
         if value["failed"]?.boolValue == true { return ReplyTranslation(lang: lang, failed: true) }
         return nil
+    }
+
+    /// Whether the translation came back as the reply itself: the agent already wrote in the
+    /// owner's language. Such a reply is drawn as it is, with no foot (web `translationUnchanged`).
+    public func unchanged(from original: String) -> Bool {
+        guard let text else { return false }
+        return text.trimmingCharacters(in: .whitespacesAndNewlines)
+            == original.trimmingCharacters(in: .whitespacesAndNewlines)
     }
 }
 
@@ -630,6 +709,35 @@ public struct ApprovalTranslation: Codable, Equatable, Sendable {
         return .object(obj)
     }
 
+    /// An AskUserQuestion's questions as its card showed them: translated, index for index, where the
+    /// server translated them, so an answered question's record keeps the owner's language. The
+    /// answer is read off the English beforehand; options keep their index (web: `shownQuestions`).
+    public static func shownQuestions(_ questions: [AskQuestion], _ translation: ApprovalTranslation?) -> [AskQuestion] {
+        guard let translation, !translation.failed, let translated = translation.questions else { return questions }
+        return questions.enumerated().map { i, q in
+            guard i < translated.count else { return q }
+            let t = translated[i]
+            let options = q.options.enumerated().map { j, o in
+                guard j < t.options.count else { return o }
+                return AskOption(label: nonEmpty(t.options[j].label) ?? o.label,
+                                 description: o.description == nil ? nil : nonEmpty(t.options[j].description) ?? o.description)
+            }
+            return AskQuestion(header: q.header == nil ? nil : nonEmpty(t.header) ?? q.header,
+                               question: nonEmpty(t.question) ?? q.question,
+                               options: options,
+                               multiSelect: q.multiSelect)
+        }
+    }
+
+    /// The translated question cards of a session, by their call's tool_use id.
+    public static func byToolUse(_ approvals: [ApprovalInfo]) -> [String: ApprovalTranslation] {
+        var out: [String: ApprovalTranslation] = [:]
+        for a in approvals where Approvals.isQuestion(toolName: a.toolName ?? "") {
+            if let id = a.toolUseId, let t = parse(a.translation) { out[id] = t }
+        }
+        return out
+    }
+
     private static func nonEmpty(_ s: String?) -> String? {
         guard let s, !s.isEmpty else { return nil }
         return s
@@ -720,12 +828,52 @@ public enum SessionTranslation {
         user?.translationAvailable == false
     }
 
+    /// Until when the server is skipping a failing translator (`translationUnavailableUntil`, board frame 6), or nil
+    /// when it is not, the instant has passed, or the value does not parse. Non-nil: the composer tag reads
+    /// "unavailable, messages will wait". The server does not say when it passes: draw the ordinary tag again then.
+    public static func temporarilyUnavailableUntil(_ user: User?, now: Date = Date()) -> Date? {
+        guard let raw = user?.translationUnavailableUntil else { return nil }
+        let fractional = ISO8601DateFormatter()
+        fractional.formatOptions = [.withInternetDateTime, .withFractionalSeconds]
+        guard let until = fractional.date(from: raw) ?? ISO8601DateFormatter().date(from: raw), until > now else { return nil }
+        return until
+    }
+
     /// Whether a refusal is the 422 TRANSLATION_FAILED a decision whose owner's words could not be
     /// translated is answered with (1A): nothing was recorded, and the card offers Retry and Send as
     /// written instead of reporting a failure.
     public static func refusedUntranslated(_ error: Error) -> Bool {
         guard case APIError.http(let status, let body)? = error as? APIError, status == 422 else { return false }
         return body?.contains("TRANSLATION_FAILED") == true
+    }
+
+    /// Why the server could not translate the owner's words, read off that 422's body
+    /// (`TranslationFailedBody`): the reason and, beside HTTP, the translator's status. Nil for any
+    /// other error, or a refusal from a server that does not say why.
+    public static func refusalReason(_ error: Error) -> (reason: TranslationFailureReason, httpStatus: Int?)? {
+        guard refusedUntranslated(error),
+              case APIError.http(_, let body)? = error as? APIError,
+              let data = body?.data(using: .utf8),
+              let object = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
+              let reason = (object["failureReason"] as? String).flatMap(TranslationFailureReason.init(rawValue:))
+        else { return nil }
+        return (reason, (object["httpStatus"] as? NSNumber)?.intValue)
+    }
+
+    /// The line under a card answer the server refused with 422 TRANSLATION_FAILED (frame 5): why,
+    /// naming "your answer", then Retry and Send as written. `.retryTurn` sends the answer again and
+    /// `.sendAsWritten` sends it with `sendAsWritten: true`.
+    public static func refusedAnswerFoot(_ reason: TranslationFailureReason?, httpStatus: Int? = nil) -> [FootPart] {
+        [.text(TranslationCopy.sendFailed(reason, httpStatus: httpStatus, answer: true)),
+         .action(TranslationCopy.retry, .retryTurn),
+         .action(TranslationCopy.sendAsWritten, .sendAsWritten)]
+    }
+
+    /// The same line read straight off the refusal (`refusalReason`); the generic line when the
+    /// server did not say why.
+    public static func refusedAnswerFoot(after error: Error) -> [FootPart] {
+        let why = refusalReason(error)
+        return refusedAnswerFoot(why?.reason, httpStatus: why?.httpStatus)
     }
 
     /// One piece of the line under a translated message.
@@ -763,7 +911,7 @@ public enum SessionTranslation {
         case .translating:
             return [.chip(TranslationCopy.translating)]
         case .failed:
-            return [.text(TranslationCopy.sendFailed),
+            return [.text(TranslationCopy.sendFailed(translation.failureReason, httpStatus: translation.httpStatus)),
                     .action(TranslationCopy.retry, .retryTurn),
                     .action(TranslationCopy.sendAsWritten, .sendAsWritten)]
         case .done:

@@ -155,7 +155,6 @@
       "showPastRuns": "Show past runs"
     },
     "groups": {
-      "NEEDS_YOU": "Needs you",
       "TODAY": "Today",
       "TOMORROW": "Tomorrow",
       "LATER": "Later",
@@ -533,7 +532,7 @@
     "runSession": {
       "crumb": "Scheduled",
       "runOf": "run of {date}",
-      "strip": "Scheduled run · planned {planned}, started {started} · access {access} · this session is not in your session list",
+      "strip": "Scheduled run · planned {planned}, started {started} · access {access}",
       "reported": "Reported: {state}",
       "agent": "{engine} agent",
       "duration": "{minutes} min"

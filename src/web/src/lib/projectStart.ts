@@ -283,9 +283,9 @@ export const RUN_SWITCH_OFF = 'Off';
 export const RUN_AT_MOST = 'At most';
 export const RUN_MERGE_CHECK = 'Merge check';
 export const RUN_MERGE_CHECK_HINT =
-  'Runs on the combined tree before anything lands — on the project branch and again before main.';
+  'Runs before merging into main.';
 export function runMergeCheckHint(main: string = DEFAULT_MAIN_BRANCH): string {
-  return `Runs on the combined tree before anything lands — on the project branch and again before ${main}.`;
+  return `Runs before merging into ${main}.`;
 }
 /** The merge check while the agent pushes its own work: Orbit runs nothing, the agent runs it. */
 export function runMergeCheckHintAgentPush(main: string = DEFAULT_MAIN_BRANCH): string {
@@ -818,20 +818,6 @@ export function criteriaChangeSummary(changes: {
     changes.removed > 0 ? `${changes.removed} removed` : '',
   ].filter(Boolean).join(', ');
 }
-
-/**
- * Where a press on the change card leaves what it confirmed — "1 new, 1 stricter" — for the receipt
- * of that confirmation, under the seal it signed. Kept by this window only: once a set is confirmed
- * nothing is left changed, so the confirmation read cannot say it afterwards, and a receipt drawn
- * on another device or after a reload says the seal and the count without it.
- */
-export const confirmedChangesKey = (projectId: string, digest: string) =>
-  ['project', projectId, 'confirmed-changes', digest] as const;
-
-/** The current window's receipt summary, kept on the project so the transcript reader can observe
- * it while the confirmation digest changes from the old seal to the one just confirmed. */
-export const confirmedChangesProjectKey = (projectId: string) =>
-  ['project', projectId, 'confirmed-changes'] as const;
 
 // ── The write ────────────────────────────────────────────────────────────────────────────────
 

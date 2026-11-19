@@ -107,7 +107,8 @@ final class SessionProjectPageWiringTests: XCTestCase {
         }
         XCTAssertTrue(page.contains("return projectListing.entries.map(\\.timeGroupingSession)"))
         XCTAssertTrue(page.contains("let projectRows = Dictionary(uniqueKeysWithValues: projectListing.projects.map { ($0.id, $0) })"))
-        XCTAssertTrue(page.contains("let projectMarks = grouping.projectListing.marks"))
+        // The Scheduled runs folder groups nothing (no folders or projects in it), so its page has no grouping.
+        XCTAssertTrue(page.contains("let projectMarks = grouping?.projectListing.marks ?? [:]"))
         XCTAssertTrue(page.contains("folderSection(index: index, section: section, projects: projectRows, marks: projectMarks)"),
                       "the list's one ForEach hands the section its rows and marks")
         XCTAssertTrue(page.contains("listRow(session, projects: projects, marks: marks)"),
@@ -125,8 +126,13 @@ final class SessionProjectPageWiringTests: XCTestCase {
         for relative in ["Views/AgentsView.swift", "Views/SessionFolderPage.swift"] {
             let source = code(try appSource(relative))
             XCTAssertTrue(source.contains("@State private var listingMemo = SessionListingMemo<SessionListGrouping>()"), relative)
-            XCTAssertTrue(source.contains("let grouping = listingMemo.value(for: listInputs, compute: Self.grouping)"), relative)
-            XCTAssertTrue(source.contains("let projectRows = grouping.projectRows"), relative)
+            let folderPage = relative == "Views/SessionFolderPage.swift"
+            XCTAssertTrue(source.contains(folderPage
+                ? "let grouping = address.isScheduledRuns ? nil : listingMemo.value(for: listInputs, compute: Self.grouping)"
+                : "let grouping = listingMemo.value(for: listInputs, compute: Self.grouping)"), relative)
+            XCTAssertTrue(source.contains(folderPage
+                ? "let projectRows = grouping?.projectRows ?? [:]"
+                : "let projectRows = grouping.projectRows"), relative)
             let grouping = try slice(source, from: "private static func grouping(_ inputs: SessionListInputs, _ lines: SessionLineCache) -> SessionListGrouping {",
                                      to: "\n    }")
             XCTAssertTrue(grouping.contains("Self.projectListing(inputs, lines)"), relative)
@@ -281,8 +287,9 @@ final class SessionProjectPageWiringTests: XCTestCase {
         }
         let agents = code(try appSource("Views/AgentsView.swift"))
         XCTAssertTrue(agents.contains(".sessionListSearch(text: $searchQuery,"))
-        XCTAssertTrue(agents.contains("isEnabled: app.projectSessionsColumn == nil || rowNavigation != .selection"),
-                      "only the project column removes the root search field")
+        XCTAssertTrue(agents.contains("isEnabled: rowNavigation != .selection ||")
+                      && agents.contains("(app.projectSessionsColumn == nil && app.folderColumn?.isScheduledRuns != true))"),
+                      "only the project column and the Scheduled runs folder remove the root search field")
         XCTAssertTrue(agents.contains("SessionFolderPage(address: address, rowNavigation: rowNavigation, searchQuery: $searchQuery)"))
         XCTAssertTrue(agents.contains("searchQuery: $searchQuery, rowNavigation: rowNavigation)"))
         let search = code(try appSource("Views/SessionListSearch.swift"))

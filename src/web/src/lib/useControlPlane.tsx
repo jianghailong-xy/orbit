@@ -633,6 +633,9 @@ export function ControlPlaneProvider({ children }: { children: ReactNode }) {
           refetchProjectPages(projectId, ['session']);
         }
         if (ev.type === 'task.changed') refetchProjectPages('', ['task']);
+        // The translator was skipped or is in use again (MeTranslation.translationUnavailableUntil): the composer's
+        // tag reads /users/me.
+        if (ev.type === 'translation.status_changed') void qc.invalidateQueries({ queryKey: ['user', 'me'], exact: true });
         // The session an event is about: the envelope's, or a session event's own id from a peer
         // that leaves the envelope's empty. An approval's id is the approval's.
         const subject = ev.sessionId || (ev.type.startsWith('session.') && typeof id === 'string' ? id : '');

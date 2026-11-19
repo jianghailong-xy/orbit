@@ -96,7 +96,6 @@ export const SCHEDULE_COPY = {
     showPastRuns: 'Show past runs',
   },
   groups: {
-    NEEDS_YOU: 'Needs you',
     TODAY: 'Today',
     TOMORROW: 'Tomorrow',
     LATER: 'Later',
@@ -418,9 +417,7 @@ export const SCHEDULE_COPY = {
   runSession: {
     crumb: 'Scheduled',
     runOf: 'run of {date}',
-    strip:
-      'Scheduled run · planned {planned}, started {started} · access {access} · this session is not in your session '
-      + 'list',
+    strip: 'Scheduled run · planned {planned}, started {started} · access {access}',
     reported: 'Reported: {state}',
     agent: '{engine} agent',
     duration: '{minutes} min',
@@ -617,7 +614,7 @@ export interface ScheduleListResponse {
   runs?: ScheduleTimelineRun[];
   /**
    * On the REST list only: the OPEN tasks that wait for their startWhen condition (docs/condition-triggers-design.md
-   * §9), which the page lists beside the WHEN schedules in "Waiting for a condition", or under Needs you when it
+   * §9), which the page lists beside the WHEN schedules in "Waiting for a condition", tagged Can't read when it
    * cannot be read. A task whose condition has fired or ended is not waiting and is not here.
    */
   waitingTasks?: ScheduleWaitingTask[];
@@ -902,7 +899,7 @@ export function scheduleDayText(at: Date, now: Date, timezone: string): string {
   return scheduleFill(C.dates.day, { month: C.months[p.month - 1]!, day: p.day });
 }
 
-/** "Today 02:00", "Tomorrow 09:00", "Monday 09:00", "Nov 24 09:00": the inspector's next run, a Needs you row. */
+/** "Today 02:00", "Tomorrow 09:00", "Monday 09:00", "Nov 24 09:00": the inspector's next run. */
 export function scheduleWhenText(at: Date, now: Date, timezone: string): string {
   return scheduleFill(C.dates.at, { day: scheduleDayText(at, now, timezone), time: localParts(at, timezone).time });
 }
@@ -1113,7 +1110,7 @@ export function scheduleCreateWhen(card: Pick<ScheduleCreateCard, 'when'>, now: 
 // ---------------------------------------------------------------------------------------------------------------
 
 /**
- * A row's circle (board 1/2 ①): `open` is to come, `running` turns, `done` a grey tick (no change, or already
+ * A row's circle (board 1/2 ①): `open` is to come (a queued run wears clock hands in it), `running` turns, `done` a grey tick (no change, or already
  * reported), `new` a green tick (a new finding), `failed` red, `held` amber, `draft` dashed, `paused` faint, `muted`
  * a run that never did the work (skipped, missed, cancelled).
  */
@@ -1125,7 +1122,7 @@ export type ScheduleTagTone = 'new' | 'fail' | 'held' | 'mute';
 export interface ScheduleCircleView {
   circle: ScheduleCircle;
   /** What sits inside the circle. */
-  mark: 'check' | 'alert' | null;
+  mark: 'check' | 'alert' | 'clock' | null;
   /** The label at the right of a row, if any. */
   tag: { tone: ScheduleTagTone; text: string } | null;
 }
@@ -1141,7 +1138,7 @@ export function scheduleRunCircle(
   const label = C.runStates[run.state];
   switch (run.state) {
     case 'QUEUED':
-      return { circle: 'open', mark: null, tag: null };
+      return { circle: 'open', mark: 'clock', tag: null };
     case 'RUNNING':
       return { circle: 'running', mark: null, tag: null };
     case 'AWAITING_APPROVAL':
@@ -1163,7 +1160,7 @@ export function scheduleRunCircle(
   }
 }
 
-/** A schedule's circle on its next occurrence, or in Needs you / Paused. */
+/** A schedule's circle on its next occurrence, or in Paused. A failing one whose next run is under way: scheduleRowCircle. */
 export function scheduleCircle(
   schedule: Pick<ScheduleView, 'state' | 'consecutiveFailures'>,
   opts: { draft?: boolean } = {},
@@ -1193,9 +1190,50 @@ export function scheduleCircle(
   }
 }
 
-/** Needs you: failing or held (§9.2) — also the count beside Scheduled in the drawer. */
-export function scheduleNeedsYou(schedule: Pick<ScheduleView, 'state' | 'consecutiveFailures'>): boolean {
-  return schedule.state === 'HELD' || (schedule.state === 'ACTIVE' && schedule.consecutiveFailures > 0);
+/** Whether one of `runs` (the list's timeline runs) is a run of this schedule under way: queued, running or waiting. */
+export function scheduleRunUnderWay(
+  schedule: Pick<ScheduleView, 'id'>,
+  runs: readonly Pick<ScheduleRunView, 'scheduleId' | 'state'>[],
+): boolean {
+  return runs.some((run) => run.scheduleId === schedule.id && IN_PROGRESS.includes(run.state));
+}
+
+/**
+ * Needs you: held, or failing with no run under way (§9.2) — the count beside Scheduled in the drawer. A failing
+ * schedule whose next run is already under way (Run now, owner 2026-11-19) waits for that run: a failure puts it back,
+ * an ended run that did not fail clears it.
+ */
+export function scheduleNeedsYou(
+  schedule: Pick<ScheduleView, 'id' | 'state' | 'consecutiveFailures'>,
+  runs: readonly Pick<ScheduleRunView, 'scheduleId' | 'state'>[] = [],
+): boolean {
+  if (schedule.state === 'HELD') return true;
+  return schedule.state === 'ACTIVE' && schedule.consecutiveFailures > 0 && !scheduleRunUnderWay(schedule, runs);
+}
+
+/**
+ * The count beside Scheduled in the drawer, the same on every client (owner 2026-11-19): the schedules that need you
+ * (scheduleNeedsYou), the ACTIVE ones whose condition cannot be read, and the tasks waiting on a condition that cannot
+ * be read.
+ */
+export function scheduleNeedsCount(
+  list: Pick<ScheduleListResponse, 'schedules' | 'runs' | 'waitingTasks'> | null | undefined,
+): number {
+  if (!list) return 0;
+  const runs = list.runs ?? [];
+  const cantRead = (reading: Pick<ScheduleConditionReading, 'state'> | null | undefined) => reading?.state === 'UNKNOWN';
+  const schedules = (list.schedules ?? []).filter((s) =>
+    scheduleNeedsYou(s, runs) || (s.state === 'ACTIVE' && cantRead(s.condition))).length;
+  return schedules + (list.waitingTasks ?? []).filter((t) => cantRead(t.condition)).length;
+}
+
+/** A schedule's row circle on the page: its Failed tag stays off while a run of it is under way. */
+export function scheduleRowCircle(
+  schedule: Pick<ScheduleView, 'id' | 'state' | 'consecutiveFailures'>,
+  runs: readonly Pick<ScheduleRunView, 'scheduleId' | 'state'>[],
+): ScheduleCircleView {
+  if (schedule.state === 'ACTIVE' && !scheduleNeedsYou(schedule, runs)) return { circle: 'open', mark: null, tag: null };
+  return scheduleCircle(schedule);
 }
 
 // ---------------------------------------------------------------------------------------------------------------
@@ -1304,7 +1342,7 @@ export function scheduleRunLine(
 // The timeline
 // ---------------------------------------------------------------------------------------------------------------
 
-export type ScheduleTimelineGroupKey = 'NEEDS_YOU' | 'TODAY' | 'TOMORROW' | 'DAY' | 'LATER' | 'PAUSED';
+export type ScheduleTimelineGroupKey = 'TODAY' | 'TOMORROW' | 'DAY' | 'LATER' | 'PAUSED';
 
 export type ScheduleTimelineItem =
   | { kind: 'SCHEDULE'; schedule: ScheduleListRow; at: string | null }
@@ -1313,9 +1351,9 @@ export type ScheduleTimelineItem =
 
 export interface ScheduleTimelineGroup {
   key: ScheduleTimelineGroupKey;
-  /** "Needs you", "Today", "Monday", "Later", "Paused". */
+  /** "Today", "Monday", "Later", "Paused". */
   title: string;
-  /** "Fri, Nov 14" under Today and Tomorrow, "Nov 17" under a day, the count under Needs you and Paused. */
+  /** "Fri, Nov 14" under Today and Tomorrow, "Nov 17" under a day, the count under Paused. */
   subtitle: string | null;
   items: ScheduleTimelineItem[];
 }
@@ -1325,14 +1363,14 @@ const IN_PROGRESS: readonly ScheduleRunState[] = ['QUEUED', 'RUNNING', 'AWAITING
 /**
  * The Scheduled page's groups (§9.2), in the viewer's zone:
  *
- *   * Needs you: the failing and held schedules. A failing one still appears on its next day too.
  *   * Today, Tomorrow, then each day of the coming week by its name ("Monday"), then Later. A schedule appears on
  *     the day of its next run, a draft on the day of its first. A run under way (queued, running or waiting for an
  *     approval) appears on its planned day; a run that has ended appears on today's list only with `showPastRuns`.
- *   * Paused: the paused schedules.
+ *   * Paused: the schedules that do not run, held before paused; a held one has no next run to be placed on.
  *
- * Ended schedules appear nowhere; empty groups are left out. Within a day, items are in time order; Needs you lists
- * the failing before the held.
+ * There is no group of errors (owner 2026-11-19): the page lists the schedules, and a failing one is tagged on its own
+ * row on the day of its next run (scheduleRowCircle). Ended schedules appear nowhere; empty groups are left out.
+ * Within a day, items are in time order.
  */
 export function scheduleTimeline(input: {
   schedules: ScheduleListRow[];
@@ -1354,9 +1392,8 @@ export function scheduleTimeline(input: {
     else days.set(day, [...(days.get(day) ?? []), item]);
   };
 
-  const needs = input.schedules.filter(scheduleNeedsYou).sort((a, b) =>
-    (a.state === 'HELD' ? 1 : 0) - (b.state === 'HELD' ? 1 : 0) || a.title.localeCompare(b.title));
-  const paused = input.schedules.filter((s) => s.state === 'PAUSED').sort((a, b) => a.title.localeCompare(b.title));
+  const paused = input.schedules.filter((s) => s.state === 'PAUSED' || s.state === 'HELD').sort((a, b) =>
+    (a.state === 'HELD' ? 0 : 1) - (b.state === 'HELD' ? 0 : 1) || a.title.localeCompare(b.title));
 
   for (const s of input.schedules) {
     if (s.state === 'ACTIVE' && s.nextDueAt) place({ kind: 'SCHEDULE', schedule: s, at: s.nextDueAt });
@@ -1377,14 +1414,6 @@ export function scheduleTimeline(input: {
   const byTime = (a: ScheduleTimelineItem, b: ScheduleTimelineItem) =>
     new Date(a.at ?? 0).getTime() - new Date(b.at ?? 0).getTime();
   const groups: ScheduleTimelineGroup[] = [];
-  if (needs.length) {
-    groups.push({
-      key: 'NEEDS_YOU',
-      title: C.groups.NEEDS_YOU,
-      subtitle: String(needs.length),
-      items: needs.map((s) => ({ kind: 'SCHEDULE' as const, schedule: s, at: s.nextDueAt })),
-    });
-  }
   for (const day of [...days.keys()].sort((a, b) => a - b)) {
     const items = days.get(day)!.sort(byTime);
     const at = new Date(items[0]!.at!);
@@ -1789,7 +1818,7 @@ export function scheduleApprovalWaiting(input: {
 // A run's session
 // ---------------------------------------------------------------------------------------------------------------
 
-/** "Scheduled run · planned 10:00, started 10:01 · access Check only · this session is not in your session list". */
+/** "Scheduled run · planned 10:00, started 10:01 · access Check only". */
 export function scheduleRunStripText(
   run: Pick<ScheduleRunView, 'plannedAt' | 'startedAt'>,
   accessLevel: ScheduleAccessLevel,
@@ -1800,25 +1829,6 @@ export function scheduleRunStripText(
     started: run.startedAt ? localParts(new Date(run.startedAt), timezone).time : '—',
     access: C.access[accessLevel].label,
   });
-}
-
-/**
- * A run's session's header line (board web/run.png): "Open · Codex agent · 4 min" — the session's state word, the
- * engine it ran on, and how long the run took (until now while it runs). A part that is not known is left out.
- */
-export function scheduleRunHeadText(input: {
-  state: string | null;
-  engine: string | null;
-  run: Pick<ScheduleRunView, 'startedAt' | 'endedAt'>;
-  now: Date;
-}): string {
-  const { run } = input;
-  const parts = [input.state, input.engine ? scheduleFill(C.runSession.agent, { engine: input.engine }) : null];
-  if (run.startedAt) {
-    const ms = (run.endedAt ? Date.parse(run.endedAt) : input.now.getTime()) - Date.parse(run.startedAt);
-    parts.push(scheduleFill(C.runSession.duration, { minutes: Math.max(1, Math.round(ms / 60_000)) }));
-  }
-  return parts.filter(Boolean).join(C.separator);
 }
 
 /** "run of Nov 13". */

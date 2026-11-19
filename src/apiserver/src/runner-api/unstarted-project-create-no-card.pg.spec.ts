@@ -55,6 +55,8 @@ import { PublicIdInterceptor } from '../common/public-id.interceptor';
 import { TransientDbConflictFilter } from '../common/transient-db-conflict.filter';
 import { prismaClientFor } from '../prisma/prisma-client';
 import { PrismaService } from '../prisma/prisma.service';
+import { pastCreateAllowance } from '../test-support/past-create-allowance';
+import { SESSION_CREATE_ALLOWANCE_MESSAGE } from './session-create-allowance';
 import { AttemptBudgetMeterService } from '../projects/attempt-budget-meter.service';
 import {
   assertCoordinatorPgUrlIsIsolated,
@@ -227,7 +229,7 @@ test('a coordinator’s creates in a project nobody has started, or one that is 
   });
 
   /** A conversation on this runner, in the middle of a turn — where an agent's create is asked. */
-  async function conversation(title: string): Promise<string> {
+  async function conversation(title: string, { fresh = false } = {}): Promise<string> {
     const id = randomUUID();
     await prisma.session.create({
       data: {
@@ -245,6 +247,8 @@ test('a coordinator’s creates in a project nobody has started, or one that is 
         startedAt: new Date(),
       },
     });
+    // Past its card-free creates unless asked: these cases are about the card a person answers.
+    if (!fresh) await pastCreateAllowance(prisma, ownerId, id);
     return id;
   }
 
@@ -620,5 +624,32 @@ test('a coordinator’s creates in a project nobody has started, or one that is 
     // Stored as sent: the card renders the body the runner spelled, public id and all.
     assert.equal(stored.assigneeId, assigneeId);
     assert.equal(stored.title, 'an ordinary create');
+  });
+
+  // ── 11 ───────────────────────────────────────────────────────────────────────────────────────
+  await t.test('a session under 8 created tasks files without a card, and the create that reaches 8 is asked', async () => {
+    const someone = await conversation('an ordinary session, first creates', { fresh: true });
+
+    const batch = Array.from({ length: 6 }, (_, i) => taskBody(`step ${i + 1}`, null));
+    const batchCard = await askBatch(someone, batch);
+    assert.equal(batchCard.status, 'ALLOWED');
+    assert.deepEqual(await approvalRow(batchCard.id), {
+      status: 'ALLOWED',
+      message: SESSION_CREATE_ALLOWANCE_MESSAGE,
+      decided_by_id: null,
+      decided: true,
+    });
+    await write(someone, '/runner/tasks/batch-create', { tasks: batch });
+
+    // The seventh is still under 8.
+    const seventh = taskBody('step 7', null);
+    const seventhCard = await ask(someone, 'orbit_task_create', seventh);
+    assert.equal(seventhCard.status, 'ALLOWED');
+    await write(someone, '/runner/tasks', seventh);
+    assert.deepEqual(await raised(someone), { cards: 0, pushes: 0, pending: 0 });
+
+    // The eighth would make 8: a person is asked.
+    const eighth = await ask(someone, 'orbit_task_create', taskBody('step 8', null));
+    await assertAsked(someone, eighth);
   });
 });

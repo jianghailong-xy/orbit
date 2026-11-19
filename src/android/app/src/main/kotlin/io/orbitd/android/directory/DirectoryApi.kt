@@ -6,6 +6,7 @@ import io.orbitd.android.core.net.ApiError
 import io.orbitd.android.core.net.ApiRequest
 import io.orbitd.android.core.net.HttpMethod
 import io.orbitd.android.core.net.NetworkException
+import io.orbitd.android.core.net.scheduledSessions
 import io.orbitd.android.core.protocol.Wire
 import kotlinx.serialization.DeserializationStrategy
 import kotlinx.serialization.json.*
@@ -17,6 +18,8 @@ class DirectoryApi(private val api: OrbitApi, private val handle: SessionHandle)
 
     suspend fun search(query: String): SearchResults = read(listOf("sessions", "search"), SearchResults.serializer(),
         listOf("q" to query, "limit" to "100"))
+    suspend fun scheduledSessions(workspaceId: String, view: SessionView): List<DirectorySession> =
+        api.scheduledSessions(handle, workspaceId, view.query, DirectorySession.serializer())
     suspend fun moveTargets(id: String): MoveTargets = read(listOf("sessions", id, "move-targets"), MoveTargets.serializer())
     suspend fun objectRead(path: List<String>): JsonObject = read(path, JsonObject.serializer())
     /** A file's bytes, bounded by the server's 25 MiB upload limit. */

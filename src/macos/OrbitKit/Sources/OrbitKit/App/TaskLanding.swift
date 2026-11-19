@@ -204,7 +204,9 @@ public enum TaskLandingLogic {
             receiptLine = nil
         }
         // A task on a line whose landing has not been queued yet says so, as the web does.
-        let reason = job?.blockingReason?.summary
+        let baselineWait = job?.blockingReason?.code == "WAITING_BASELINE"
+        let summary = job?.blockingReason?.summary
+        let reason = baselineWait ? [LandingCheckCopy.waiting, summary ?? "", LandingCheckCopy.resumes].joined(separator: "\n") : summary
             ?? (job == nil && integration.state == "QUEUED" ? TaskLandingCopy.waitingNotQueued : nil)
         return TaskLandingStatus(
             badge: badge,

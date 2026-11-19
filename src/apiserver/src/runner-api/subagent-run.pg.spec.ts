@@ -4,7 +4,7 @@
  *   1. POST /runner/sessions/:id/subagents opens a run on the model routing picked (routing applies, §8 P3),
  *      PATCH …/:runId ends it DONE, and the one `subagent_run` row holds what was posted, the status, the
  *      changed files — while the parent's `cost_usd` rises by exactly the run's cost, once.
- *   2. The fifth POST on a session with four RUNNING is refused, and a POST for an agent with SubAgents
+ *   2. The ninth POST on a session with eight RUNNING is refused, and a POST for an agent with SubAgents
  *      turned off is refused.
  *   3. A top-level `mcp__orbit__delegate` tool_use joins `runningSubagents`, its `{ runId, status: "running" }`
  *      receipt leaves it there, and its terminal background_task removes it.
@@ -214,20 +214,20 @@ test('SubAgent runs: the row, the cost roll-up, the refusals and runningSubagent
     assert.deepEqual(writeView.changedFiles, ['src/quota/poller.ts']);
   });
 
-  await t.test('the fifth concurrent POST is refused once four are RUNNING, and a disabled agent is refused', async () => {
+  await t.test('the ninth concurrent POST is refused once eight are RUNNING, and a disabled agent is refused', async () => {
     const sessionId = await parentSession();
-    for (let i = 1; i <= 4; i++) {
+    for (let i = 1; i <= 8; i++) {
       const run = await subagents.createSubagentRun(runner, sessionId, create({ toolUseId: `toolu_01Parallel${i}`, background: true }));
       assert.equal(run.status, 'RUNNING');
     }
     await assert.rejects(
-      subagents.createSubagentRun(runner, sessionId, create({ toolUseId: 'toolu_01Parallel5', background: true })),
+      subagents.createSubagentRun(runner, sessionId, create({ toolUseId: 'toolu_01Parallel9', background: true })),
       (e: unknown) =>
         e instanceof ConflictException &&
         (e.getResponse() as { code?: string }).code === 'SUBAGENT_LIMIT_REACHED',
-      'the fifth is refused while four run',
+      'the ninth is refused while eight run',
     );
-    assert.equal(await prisma.subagentRun.count({ where: { sessionId } }), 4, 'and wrote no row');
+    assert.equal(await prisma.subagentRun.count({ where: { sessionId } }), 8, 'and wrote no row');
 
     const disabled = await parentSession({ subagentsEnabled: false });
     await assert.rejects(
@@ -409,13 +409,13 @@ test('SubAgent runs: the row, the cost roll-up, the refusals and runningSubagent
     assert.equal(decision.model, 'claude-opus-5-5');
     assert.equal(decision.effort, 'high');
     assert.equal(decision.applied, true);
-    assert.equal(decision.policyVersion, 'p3-applied-1');
+    assert.equal(decision.policyVersion, 'p4-every-provider-2');
     assert.equal(decision.tierNote, 'Tier L, set by the caller');
     assert.equal(decision.note, 'subscription pool, Bob with 80% quota left');
     assert.deepEqual(decision.reasons, [
       'Tier L, set by the caller: one service plus its spec',
       `Picked claude-opus-5-5 · high on ${team.slug} (claude) (Cost): a subscription pool whose account Bob has 80% of its quota left, used before any metered key`,
-      '3 candidates in tier L; ties go by the owner\'s provider order',
+      '3 candidates in tier L, 8 more in other tiers or untiered; ties go by the owner\'s provider order',
       `${decision.candidates.length} candidates removed, each with its reason`,
     ]);
     const why = (provider: string) => decision.candidates
@@ -424,14 +424,12 @@ test('SubAgent runs: the row, the cost roll-up, the refusals and runningSubagent
     assert.deepEqual(why('kimi'), [['kimi', null, "kimi is not installed on the parent's runner"]]);
     assert.deepEqual(why(glm), [[null, null, 'Blocked in the SubAgents settings']]);
     assert.deepEqual(why(shared), [[null, null, 'A shared provider, which only admins may use']]);
-    assert.deepEqual(why(custom), [
-      ['claude', 'house-coder', 'The model has no tier'],
-      ['opencode', null, "opencode is not installed on the parent's runner"],
-    ]);
+    // Its only model has no tier, so it joins as its default model, after every tiered candidate.
+    assert.deepEqual(why(custom), [['opencode', null, "opencode is not installed on the parent's runner"]]);
     assert.deepEqual(why(spent.slug), [['codex', null,
       'Every account in the pool is at or above 90% of its quota or paused: carol@team.invalid at 96% of its weekly quota']]);
-    // The members are listed on their own too; with no model list of their own they have no tier.
-    assert.deepEqual(why(alice), [['claude', null, 'No models with a tier on claude']]);
+    // The members are listed on their own too, with an empty model list of their own.
+    assert.deepEqual(why(alice), [['claude', null, 'No models listed for claude']]);
     assert.deepEqual(why(deepseek), [
       ['opencode', null, "opencode is not installed on the parent's runner"],
       ['dsh', null, "dsh is not installed on the parent's runner"],
@@ -472,7 +470,7 @@ test('SubAgent runs: the row, the cost roll-up, the refusals and runningSubagent
     t.diagnostic(`empty pool: ${JSON.stringify(refusal)}`);
     assert.equal(refusal?.code, 'NO_SUBAGENT_PROVIDER');
     assert.match(refusal!.message!, /^No provider is left to run this SubAgent in tier M\. Each provider's reason:/);
-    assert.ok(refusal!.message!.includes('- claude (claude): No models with a tier on claude'), 'the parent\'s own engine, with its reason');
+    assert.ok(refusal!.message!.includes('- claude (claude): No models listed for claude'), 'the parent\'s own engine, with its reason');
     assert.ok(refusal!.message!.includes("- codex (codex): codex is not installed on the parent's runner"), 'and every other provider');
     assert.equal(await prisma.subagentRun.count({ where: { sessionId } }), 0, 'no run was opened on the parent\'s model');
   });

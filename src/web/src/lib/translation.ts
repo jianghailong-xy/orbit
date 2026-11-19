@@ -3,15 +3,19 @@
 import {
   DEFAULT_AGENT_LANGUAGE,
   DEFAULT_TRANSLATION_LANGUAGE,
+  isTranslationFailureReason,
   isTranslationLanguage,
   TRANSLATION_FAILED_CODE,
   TRANSLATION_LANGUAGE_NAMES,
   type ApprovalTranslation,
   type ReplyTranslation,
   type TranslationEventPayload,
+  type TranslationFailureReason,
   type TranslationLanguage,
   type TurnTranslation,
+  TRANSLATION_UNAVAILABLE_TAG,
 } from '@orbit/shared';
+import { useEffect, useState } from 'react';
 import type { Me } from './queries';
 
 /** The copy every client shows, kept identical across Web, iOS/macOS and Android. */
@@ -75,6 +79,42 @@ export function answerRefusedUntranslated(err: unknown): boolean {
   return !!e && typeof e === 'object' && e.status === 422 && e.code === TRANSLATION_FAILED_CODE;
 }
 
+/** Why a 422 TRANSLATION_FAILED refused the owner's words (TranslationFailedBody), read off the error's body; empty
+ *  when it says none (an older server), which draws the generic line. */
+export function refusalReasonOf(err: unknown): { failureReason?: TranslationFailureReason; httpStatus?: number } {
+  const body = (err as { body?: { failureReason?: unknown; httpStatus?: unknown } } | null)?.body;
+  if (!body || !isTranslationFailureReason(body.failureReason)) return {};
+  return {
+    failureReason: body.failureReason,
+    ...(typeof body.httpStatus === 'number' ? { httpStatus: body.httpStatus } : {}),
+  };
+}
+
+/** Whether translation is unavailable now (frame 6): /users/me's `translationUnavailableUntil` is in the future. */
+export function translationUnavailableAt(me: Me | undefined, now: number): boolean {
+  const until = me?.translationUnavailableUntil ? Date.parse(me.translationUnavailableUntil) : NaN;
+  return Number.isFinite(until) && until > now;
+}
+
+/** `translationUnavailableAt` now, turning false by itself when `translationUnavailableUntil` passes: the server
+ *  announces nothing then (the breaker closes on the next call), so a timer, not a refetch, ends it. */
+export function useTranslationUnavailable(me: Me | undefined): boolean {
+  const until = me?.translationUnavailableUntil ?? null;
+  const [, expire] = useState(0);
+  const unavailable = translationUnavailableAt(me, Date.now());
+  useEffect(() => {
+    if (!unavailable || !until) return;
+    const timer = setTimeout(() => expire((n) => n + 1), Math.max(0, Date.parse(until) - Date.now()) + 1);
+    return () => clearTimeout(timer);
+  }, [unavailable, until]);
+  return unavailable;
+}
+
+/** The composer tag while translation is unavailable (frame 6): "Chinese → English · unavailable, messages will wait". */
+export function unavailableTranslationTag(lang: TranslationLanguage, agentLang: TranslationLanguage = DEFAULT_AGENT_LANGUAGE): string {
+  return `${translationTag(lang, agentLang)} · ${TRANSLATION_UNAVAILABLE_TAG}`;
+}
+
 /** Whether the owner's messages are being translated now: switched on, and the server able to. */
 export function translationOn(me: Me | undefined): boolean {
   return me?.preferences?.translationEnabled === true && me.translationAvailable === true;
@@ -104,7 +144,13 @@ export function turnTranslationOf(value: unknown): TurnTranslation | undefined {
   if (t.state !== 'TRANSLATING' && t.state !== 'FAILED' && t.state !== 'DONE' && t.state !== 'SENT_AS_WRITTEN') {
     return undefined;
   }
-  return { state: t.state, from: t.from, original: t.original };
+  return {
+    state: t.state,
+    from: t.from,
+    original: t.original,
+    ...(t.state === 'FAILED' && isTranslationFailureReason(t.failureReason) ? { failureReason: t.failureReason } : {}),
+    ...(t.state === 'FAILED' && typeof t.httpStatus === 'number' ? { httpStatus: t.httpStatus } : {}),
+  };
 }
 
 /** A translated `assistant` / `prompt_suggestion` payload's `translation`, when it is one. */
@@ -115,6 +161,12 @@ export function replyTranslationOf(value: unknown): ReplyTranslation | undefined
   if (typeof t.text === 'string') return { lang: t.lang, text: t.text };
   if (t.failed === true) return { lang: t.lang, failed: true };
   return undefined;
+}
+
+/** Whether a reply's translation came back as the reply itself: the agent already wrote in the
+ *  owner's language. Such a reply is drawn as it is, with no foot and no "Translated". */
+export function translationUnchanged(translation: ReplyTranslation | undefined, original: string): boolean {
+  return translation?.text !== undefined && translation.text.trim() === original.trim();
 }
 
 /** Whether a held message is still waiting on its translation (not delivered to the engine). */
@@ -146,8 +198,8 @@ export function foldTranslationEvent<T extends EventLike>(events: readonly T[], 
 
 interface QuestionLike {
   question?: string;
-  header?: string;
-  options?: Array<{ label?: string; description?: string }>;
+  header?: string | null;
+  options?: Array<{ label?: string; description?: string | null }>;
 }
 
 /**
@@ -164,7 +216,7 @@ export function shownQuestions<Q extends QuestionLike>(questions: readonly Q[], 
     return {
       ...q,
       question: t.question || q.question,
-      ...(q.header !== undefined ? { header: t.header || q.header } : {}),
+      ...(q.header != null ? { header: t.header || q.header } : {}),
       ...(q.options
         ? {
             options: q.options.map((o, j) => {
@@ -173,7 +225,7 @@ export function shownQuestions<Q extends QuestionLike>(questions: readonly Q[], 
               return {
                 ...o,
                 label: to.label || o.label,
-                ...(o.description !== undefined ? { description: to.description || o.description } : {}),
+                ...(o.description != null ? { description: to.description || o.description } : {}),
               };
             }),
           }

@@ -741,6 +741,14 @@ test('0453 §10.4 §10.9 on the schema before it, over rows of every table it al
         await sql.query(readFileSync(path.join(MIGRATIONS, '0615_task_session_fork', 'migration.sql'), 'utf8'));
         await sql.query(readFileSync(path.join(MIGRATIONS, '0616_task_session_fork_checks', 'migration.sql'), 'utf8'));
         await sql.query(readFileSync(path.join(MIGRATIONS, '0617_task_fork_changed_files', 'migration.sql'), 'utf8'));
+        // 1110 restates `project_open_item`'s kind, resolution and owner-only CHECKs. It is catalog-only and
+        // self-contained, so it is replayed here, without its own BEGIN/COMMIT: those would end this
+        // transaction, and the ROLLBACK below has to restore the schema 0453 left.
+        await sql.query(readFileSync(path.join(MIGRATIONS, '1110_evidence_undecided_item', 'migration.sql'), 'utf8')
+          .replace(/^(BEGIN|COMMIT);$/gm, ''));
+        // 1130 adds `task_fork_snapshot_idx` (over 0615's fork columns) and two `session` indexes over columns from
+        // 0046 and 0288. Self-contained and without BEGIN/COMMIT, so it is replayed as it ships.
+        await sql.query(readFileSync(path.join(MIGRATIONS, '1130_rare_predicate_indexes', 'migration.sql'), 'utf8'));
         // 1060 adds `task.start_when_condition_id` with its unique index, its foreign key to `condition` and
         // `task_run_at_or_start_when_chk`. The key needs 1030's `condition` table, which needs `schedule` and more,
         // so 1060 cannot be replayed here alone: its four objects, by name, are left out of the empty side instead.

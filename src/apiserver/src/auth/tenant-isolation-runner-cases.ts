@@ -99,6 +99,7 @@ export interface RunnerObjects {
   allowedApprovalId: string;
   /** Of `machineSessionId`: an ended SubAgent run, which a delegate call's `resumeOf` names. */
   subagentRunId: string;
+  workflowRunId: string;
   artifactRequestId: string;
   /** An integration job, and a Codex reset operation, the machine holds the claim of (`leaseOwner`, generation 1). */
   integrationJobId: string;
@@ -408,6 +409,21 @@ export const RUNNER_ISOLATION_CASES: Readonly<Record<string, RunnerCase>> = {
       body: { toolUseId: 'toolu_census_delegate', type: 'general', definitionSource: 'builtin' },
     }),
   },
+  'POST /runner/sessions/:id/workflows': {
+    as: RUNNER,
+    request: (of) => ({
+      params: { id: of.runner.machineSessionId },
+      body: { toolUseId: 'toolu_census_workflow', name: 'review', script: 'return 1' },
+    }),
+  },
+  'PATCH /runner/sessions/:id/workflows/:workflowRunId': {
+    as: RUNNER,
+    request: (of) => ({
+      params: { id: of.runner.machineSessionId, workflowRunId: of.runner.workflowRunId },
+      body: { status: 'DONE' },
+    }),
+    nested: ['workflowRunId'],
+  },
   // The machine's own alert about a job of the session's (its agents' is POST /runner/notify, below): another account's
   // runner is refused it as for an id that names nothing, while the owner's is answered by the push channel.
   'POST /runner/sessions/:id/notify': {
@@ -474,6 +490,8 @@ export const RUNNER_ISOLATION_CASES: Readonly<Record<string, RunnerCase>> = {
   'GET /runner/sessions/:id/merge-receipts': { as: ['runner', 'session'], request: (of) => ({ params: { id: of.sessionId } }) },
   'POST /runner/sessions/:id/end': { as: SESSION, request: (of) => ({ params: { id: of.runner.endSessionId } }) },
   'POST /runner/sessions/:id/complete-session': { as: SESSION, request: (of) => ({ params: { id: of.runner.completedSessionId } }) },
+  // Moved to its own workspace, out of no folder: nothing changes, so no case loses what it asks for.
+  'POST /runner/sessions/:id/move': { as: SESSION, request: (of) => ({ params: { id: of.sessionId }, body: { workspaceId: of.workspaceId } }) },
   'DELETE /runner/sessions/:id': { as: SESSION, request: (of) => ({ params: { id: of.runner.deletedSessionId } }) },
   'POST /runner/sessions/:id/archive': { as: SESSION, request: (of) => ({ params: { id: of.runner.archivedSessionId } }) },
 
@@ -872,6 +890,7 @@ const ownSessionRequests: Readonly<Record<string, (mine: RunnerTenant) => Tenant
   'POST /runner/sessions/:id/merge': (mine) => ({ params: { id: mine.sessionId }, body: {} }),
   'POST /runner/sessions/:id/end': (mine) => ({ params: { id: mine.runner.endSessionId } }),
   'POST /runner/sessions/:id/complete-session': (mine) => ({ params: { id: mine.runner.completedSessionId } }),
+  'POST /runner/sessions/:id/move': (mine) => ({ params: { id: mine.sessionId }, body: { workspaceId: mine.workspaceId } }),
   'DELETE /runner/sessions/:id': (mine) => ({ params: { id: mine.runner.deletedSessionId } }),
   'POST /runner/sessions/:id/archive': (mine) => ({ params: { id: mine.runner.archivedSessionId } }),
   'GET /runner/workspaces': () => ({ params: {} }),
@@ -996,6 +1015,16 @@ export const RUNNER_ISOLATION_FIELD_CASES: Readonly<Record<string, RunnerFieldCa
     request: (of, mine) => ({
       params: { id: mine.runner.machineSessionId },
       body: { toolUseId: 'toolu_census_resume', type: 'general', definitionSource: 'builtin', resumeOf: of.runner.subagentRunId },
+    }),
+  },
+  'POST /runner/sessions/:id/subagents body workflowRunId': {
+    as: RUNNER,
+    request: (of, mine) => ({
+      params: { id: mine.runner.machineSessionId },
+      body: {
+        toolUseId: 'toolu_census_workflow_call', type: 'general', definitionSource: 'builtin',
+        workflowRunId: of.runner.workflowRunId, callIndex: 0,
+      },
     }),
   },
   // What the link gateway's Welcome says of a process's sessions: B's own process, asking after A's leased session.
@@ -1150,6 +1179,14 @@ export const RUNNER_ISOLATION_FIELD_CASES: Readonly<Record<string, RunnerFieldCa
   'POST /runner/sessions/:id/turns body clientTurnId': {
     as: ['runner', 'service', 'session'],
     request: (of, mine) => ({ params: { id: mine.sessionId }, body: { message: 'from the census', clientTurnId: openItemTurnKey(of) } }),
+  },
+  'POST /runner/sessions/:id/move body workspaceId': {
+    as: SESSION,
+    request: (of, mine) => ({ params: { id: mine.sessionId }, body: { workspaceId: of.workspaceId } }),
+  },
+  'POST /runner/sessions/:id/move body folderId': {
+    as: SESSION,
+    request: (of, mine) => ({ params: { id: mine.sessionId }, body: { folderId: of.folderId } }),
   },
   'POST /runner/sessions/:id/interrupt body clientTurnId': {
     as: SESSION,
@@ -1486,6 +1523,11 @@ const planUsageReadings = Object.fromEntries(
 
 /** Ids a runner-gate request carries that name nothing of an account's to reach, with why and where. */
 export const RUNNER_ISOLATION_FIELDS_BY_HAND: Readonly<Record<string, string>> = {
+  // ── the managed runner browser (docs/runner-browser-design.md §5) ─────────────────────────────────────
+  'POST /runner/heartbeat body browser.holderSessionId':
+    "the runner's own word about which of its sessions holds its browser, stored as text in the calling runner's own "
+    + 'runner.browser_state (runner-api/runner-api.controller.ts:2285) and shown only to that runner\'s owner (managed-runners/browser-state.ts:122); no session is '
+    + 'read, written or authorized by it, so another account\'s session id there names nothing of anybody\'s',
   // ── conditions (docs/condition-triggers-design.md §4.2) ──────────────────────────────────────────
   'POST /runner/heartbeat body conditionSamples[].conditionId':
     "taken only for a condition of the runner's owner whose workspace the calling runner serves, read in one statement "
@@ -1609,6 +1651,8 @@ export const RUNNER_ISOLATION_FIELDS_BY_HAND: Readonly<Record<string, string>> =
   'POST /runner/sessions/:id/subagents body toolUseId':
     'the engine\'s id for the delegate call, a key only within the session the path names '
     + '(runner-api/runner-subagents.controller.ts:110)',
+  'POST /runner/sessions/:id/workflows body toolUseId':
+    'the engine id for a workflow call, keyed only by the session in the path (runner-api/runner-subagents.controller.ts:225)',
   'POST /runner/sessions/:id/background-wake body wakeId':
     'the machine\'s key for one wake of one of its jobs, made into a turn key of the session the path names '
     + '(runner-api.controller.ts:4094)',

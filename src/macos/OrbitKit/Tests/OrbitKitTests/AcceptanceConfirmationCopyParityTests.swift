@@ -239,43 +239,60 @@ final class AcceptanceConfirmationCopyParityTests: XCTestCase {
                        "why a card confirmed at another end offers nothing")
     }
 
-    /// The line a confirmation records: the count and the seal of the version that was SIGNED —
-    /// which is the point of reading it off the record and not off the standing, so it is asserted
-    /// on a confirmation whose set has since moved.
+    /// The line a confirmation records: the count of the set that was SIGNED — which is the point
+    /// of reading it off the record and not off the standing. The seal of the version signed moved
+    /// into the fold, where it is proof rather than the headline (`acceptanceReceiptSeal`), so it
+    /// is asserted on a confirmation whose set has since moved.
     func testTheLineAConfirmationLeavesMatchesTheWebCard() throws {
         let web = try flatWebCard()
 
         assertTemplate(web, AcceptanceConfirmations.confirmedLine(recorded(.confirmed)),
-                       [(currentSeal, "${seal}"), (count, "${count}")],
-                       "the line a confirmation leaves where it was pressed")
-        let superseded = AcceptanceConfirmations.confirmedLine(recorded(.stale))
-        XCTAssertTrue(superseded.contains(priorSeal), superseded)
-        XCTAssertFalse(superseded.contains(currentSeal),
+                       [(count, "${count}")],
+                       "the line a start leaves where it was pressed")
+        let sealLine = AcceptanceConfirmations.receiptSeal(recorded(.stale))
+        XCTAssertTrue(sealLine.contains(priorSeal), sealLine)
+        XCTAssertFalse(sealLine.contains(currentSeal),
                        "the record must name the version somebody signed, not the one standing now")
-        assertTemplate(web, superseded, [(priorSeal, "${seal}"), (count, "${count}")],
-                       "the same line for a confirmation the criteria have since moved under")
+        assertTemplate(web, sealLine, [(priorSeal, "${shortSeal(confirmation.criteriaDigest)}")],
+                       "the fold's seal line, for a confirmation the criteria have since moved under")
     }
 
     /// …and what every OTHER confirmation leaves: the project was running already, so the record
-    /// says it was confirmed rather than started — with what the version changed after the seal,
-    /// when the pressing console knows it. Which of the two a record says is the record's own
-    /// `startedWith`, at both ends.
+    /// says it was confirmed rather than started — with what that version changed since the
+    /// confirmation before it, which the record now keeps (`changes`), so every device and every
+    /// reload says the same. Which of the two a record says is the record's own `startedWith`, at
+    /// both ends.
     func testTheLineAReConfirmationLeavesMatchesTheWebCard() throws {
         let web = try flatWebCard()
         let line = AcceptanceConfirmations.reconfirmedLine(recorded(.confirmed))
-        assertTemplate(web, line, [(currentSeal, "${seal}"), (count, "${count}")],
-                       "the line a re-confirmation leaves")
-        assertTemplate(web, AcceptanceConfirmations.reconfirmedLine(recorded(.confirmed),
-                                                                    changed: "CHANGED"),
-                       [(line, "${line}"), ("CHANGED", "${changed}")],
-                       "the same line with what the version changed after it")
-        XCTAssertEqual(AcceptanceConfirmations.reconfirmedLine(recorded(.confirmed), changed: ""),
-                       line, "nothing known to have changed adds nothing")
+        assertTemplate(web, line, [(count, "${count}")], "the line a re-confirmation leaves")
+
+        // What the press changed is the record's own fact now, not the pressing window's memory —
+        // the words are the change card's own (`CriteriaChanges.summary`, parity-checked next door).
+        let moved = RecordedStandardSetConfirmation(
+            criteriaDigest: Self.current, criteriaMaterial: recorded(.confirmed).criteriaMaterial,
+            confirmedAt: "2026-09-11T03:00:00.000Z", confirmedById: "u1",
+            changes: CriteriaChangesSinceConfirmed(
+                added: [CriterionAddedSinceConfirmed(key: "k23", ordinal: 23, text: "…")],
+                unchanged: [1, 2, 3, 4, 5, 6]))
+        XCTAssertEqual(AcceptanceConfirmations.reconfirmedLine(moved),
+                       "You confirmed \(Self.count) criteria · 1 new, 6 unchanged")
+        XCTAssertTrue(web.contains("`${line} · ${summary}`"),
+                      "the web no longer appends the change summary to the re-confirmation line")
+        XCTAssertTrue(web.contains("criteriaChangeSummary({"),
+                      "whose words are the change card's own summary")
+        XCTAssertEqual(AcceptanceConfirmations.reconfirmedLine(
+                           RecordedStandardSetConfirmation(
+                               criteriaDigest: Self.current,
+                               criteriaMaterial: recorded(.confirmed).criteriaMaterial,
+                               confirmedAt: "2026-09-11T03:00:00.000Z", confirmedById: "u1",
+                               changes: CriteriaChangesSinceConfirmed())),
+                       line, "a confirmation that changed nothing says the count alone")
 
         XCTAssertTrue(web.contains("return confirmation.startedWith"),
                       "the web no longer picks the receipt's line off the record's own start")
         XCTAssertTrue(web.contains("? acceptanceConfirmedLine(confirmation)"))
-        XCTAssertTrue(web.contains(": acceptanceReconfirmedLine(confirmation, changed);"))
+        XCTAssertTrue(web.contains(": acceptanceReconfirmedLine(confirmation)"))
         XCTAssertEqual(AcceptanceConfirmations.receiptLine(recorded(.confirmed)), line,
                        "a record that started nothing says confirmed")
         let start = RecordedStandardSetConfirmation(
@@ -283,15 +300,62 @@ final class AcceptanceConfirmationCopyParityTests: XCTestCase {
             confirmedAt: "2026-09-11T03:00:00.000Z", confirmedById: "u1",
             startedWith: ProjectStartRecord(settings: ProjectStartSettings(
                 line: .main, automatic: true, maxConcurrentTasks: 3)))
-        XCTAssertEqual(AcceptanceConfirmations.receiptLine(start, changed: "CHANGED"),
+        XCTAssertEqual(AcceptanceConfirmations.receiptLine(start),
                        AcceptanceConfirmations.confirmedLine(start),
-                       "and one that started the project says started, whatever else is known")
+                       "and one that started the project says started")
 
         // A start's record carries the settings it left, the owner's changes marked, at both ends.
         XCTAssertTrue(web.contains("settings={started.settings}"),
                       "the web receipt no longer draws the settings a start recorded")
         XCTAssertTrue(web.contains("differs={started.differsFromRequest}"),
                       "or no longer marks which of them the owner changed")
+    }
+
+    // MARK: the fold — what the confirmation was about
+
+    /// The fold's words: its two toggle labels, the missing-words line, the tags, both notes and
+    /// the seal line, each compared against the web receipt's own declaration of it
+    /// (`AcceptanceReceiptFold`, docs/mocks/acceptance-receipt-fold).
+    func testTheFoldWordsMatchTheWebCard() throws {
+        let web = try flatWebCard()
+
+        // The toggle, closed and open: the count is the thing confirmed, in both.
+        assertTemplate(web, AcceptanceConfirmations.receiptOpenLabel(count: Self.count),
+                       [(count, "${count}"), ("criteria", "${count === 1 ? 'criterion' : 'criteria'}")],
+                       "the fold's toggle, closed")
+        XCTAssertEqual(AcceptanceConfirmations.receiptOpenLabel(count: 1),
+                       "What this confirmed · 1 criterion")
+        assertDeclares(web, "ACCEPTANCE_RECEIPT_CLOSE_LABEL",
+                       AcceptanceConfirmations.receiptCloseLabel, "the fold's toggle, open")
+
+        assertDeclares(web, "ACCEPTANCE_RECEIPT_WORDS_GONE", AcceptanceConfirmations.receiptWordsGone,
+                       "a criterion whose confirmed words nothing kept")
+        assertDeclares(web, "ACCEPTANCE_RECEIPT_TAG_NEW", AcceptanceConfirmations.receiptTagNew,
+                       "the tag on a criterion this confirmation added")
+        assertDeclares(web, "ACCEPTANCE_RECEIPT_TAG_EDITED", AcceptanceConfirmations.receiptTagEdited,
+                       "the tag on one that moved since")
+        assertDeclares(web, "ACCEPTANCE_RECEIPT_TAG_REMOVED", AcceptanceConfirmations.receiptTagRemoved,
+                       "and on one that is gone")
+
+        // The note under a record older than keeping the words, and how many words are gone.
+        assertDeclares(web, "ACCEPTANCE_RECEIPT_WORDING_NOT_KEPT",
+                       AcceptanceConfirmations.receiptWordingNotKept,
+                       "the note under a record older than keeping the words")
+        XCTAssertTrue(web.contains("' One criterion has changed since and its old words are gone.'"),
+                      "the web no longer has the words-gone sentence for one")
+        XCTAssertEqual(AcceptanceConfirmations.receiptWordsGoneSentence(1),
+                       " One criterion has changed since and its old words are gone.")
+        assertTemplate(web, AcceptanceConfirmations.receiptWordsGoneSentence(2),
+                       [(" 2", " ${n}")], "…and for more than one")
+
+        // The note under a record whose words were kept, once some of them have moved: which, by
+        // number, ascending.
+        assertTemplate(web, AcceptanceConfirmations.receiptMovedNote([3]),
+                       [("Criterion 3 has", "${who}")],
+                       "the note under a kept record whose criteria moved since")
+        assertTemplate(web, AcceptanceConfirmations.receiptMovedNote([5, 2, 3]),
+                       [("Criteria 2, 3 and 5 have", "${who}")],
+                       "…which names the numbers ascending, however they arrive")
     }
 
     /// The record itself: what it is headed, and the stamp under it saying who signed it and when.

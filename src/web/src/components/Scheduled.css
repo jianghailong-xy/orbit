@@ -21,7 +21,6 @@
   color: var(--text-1); display: flex; gap: 8px; align-items: baseline;
 }
 .sched-group > h2 small { color: var(--text-3); font-weight: 400; font-size: 13px; }
-.sched-group[data-group='NEEDS_YOU'] > h2 { color: var(--error); }
 .sched-group[data-group='PAUSED'] > h2 { color: var(--text-3); }
 
 .sched-row {
@@ -53,6 +52,7 @@
 .sched-circle[data-circle='running'] { border-color: var(--brand); border-right-color: transparent; animation: sched-spin 1.2s linear infinite; }
 .sched-circle[data-circle='draft'] { border-style: dashed; border-color: var(--brand); }
 .sched-circle[data-circle='paused'] { border-color: var(--border); }
+.sched-circle[data-circle='open'] { color: var(--text-3); }
 @keyframes sched-spin { to { transform: rotate(360deg); } }
 @media (prefers-reduced-motion: reduce) { .sched-circle[data-circle='running'] { animation: none; } }
 
@@ -179,7 +179,6 @@
 .sched-record.is-undone { opacity: 0.7; }
 
 /* ---- A run's session ---- */
-.sched-crumb { color: var(--text-3); font-size: 13px; margin-bottom: 4px; }
 .sched-crumb a { color: var(--brand); text-decoration: none; }
 .sched-strip {
   display: flex; gap: 8px; align-items: center; font-size: 13px; color: var(--text-2); background: var(--bg-subtle);
@@ -194,7 +193,6 @@
 .sched-report-head { font-weight: 600; display: flex; gap: 6px; align-items: center; }
 .sched-report-head .sched-icon { color: var(--success-solid); }
 .sched-report.is-failed .sched-report-head .sched-icon { color: var(--error); }
-.workspace-split.is-schedule-run > .session-col { display: none; }
 
 /* ---- Waiting on you ---- */
 .sched-command {

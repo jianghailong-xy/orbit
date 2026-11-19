@@ -70,14 +70,48 @@ class ScheduleDisplayTest {
         val groups = ScheduleDisplay.timeline(listOf(sweep, audit, docs, notes, deploy, codex, cost, csp, gone),
             runs = listOf(run(docs, "RUNNING", sh("2025-11-14T12:00"))), now = now, timezone = tz)
         assertEquals(listOf(
-            "Needs you|2|Nightly pg spec sweep,Weekly dependency audit",
             "Today|Fri, Nov 14|Docs link check,Release notes draft,Deploy health check",
             "Tomorrow|Sat, Nov 15|Nightly pg spec sweep,Codex stable check,Docs link check",
             "Monday|Nov 17|Weekly cost report",
-            "Paused|1|Gateway CSP report digest",
+            "Paused|2|Weekly dependency audit,Gateway CSP report digest",
         ), names(groups))
-        assertEquals(listOf(GroupKey.needsYou, GroupKey.today, GroupKey.tomorrow, GroupKey.day, GroupKey.paused), groups.map { it.key })
-        assertTrue("the running run leads Today", groups[1].items[0] is TimelineItem.Run)
+        assertEquals(listOf(GroupKey.today, GroupKey.tomorrow, GroupKey.day, GroupKey.paused), groups.map { it.key })
+        assertTrue("the running run leads Today", groups[0].items[0] is TimelineItem.Run)
+    }
+
+    // No Needs you group (owner 2026-11-19): a failing schedule is tagged on its own row, on the day of its next run.
+    @Test fun aFailingScheduleIsTaggedOnItsDayRow() {
+        val sweep = schedule("Nightly pg spec sweep", nextDueAt = sh("2025-11-15T02:00"), consecutiveFailures = 3)
+        val groups = ScheduleDisplay.timeline(listOf(sweep), now = now, timezone = tz)
+        assertEquals(listOf("Tomorrow|Sat, Nov 15|Nightly pg spec sweep"), names(groups))
+        assertEquals(CircleView(Circle.failed, Mark.alert, Tag(TagTone.fail, "Failed 3 in a row")), ScheduleDisplay.rowCircle(sweep, emptyList()))
+        assertEquals(1, ScheduleDisplay.needsYouCount(listOf(sweep)))
+    }
+
+    @Test fun aRunUnderWayClearsTheFailure() {
+        val sweep = schedule("Nightly pg spec sweep", nextDueAt = sh("2025-11-15T02:00"), consecutiveFailures = 3)
+        for (state in listOf("QUEUED", "RUNNING", "AWAITING_APPROVAL")) {
+            val runs = listOf(run(sweep, state, sh("2025-11-14T12:00")))
+            assertEquals(state, CircleView(Circle.open), ScheduleDisplay.rowCircle(sweep, runs))
+            assertEquals(state, 0, ScheduleDisplay.needsYouCount(listOf(sweep), runs = runs))
+        }
+        // An ended run does not: the failure stays until the server resets the count.
+        val ended = listOf(run(sweep, "FAILED", sh("2025-11-14T12:00")))
+        assertEquals(Circle.failed, ScheduleDisplay.rowCircle(sweep, ended).circle)
+        assertEquals(1, ScheduleDisplay.needsYouCount(listOf(sweep), runs = ended))
+        // Another schedule's run under way is not this one's.
+        val other = schedule("Other")
+        assertEquals(1, ScheduleDisplay.needsYouCount(listOf(sweep), runs = listOf(run(other, "RUNNING", sh("2025-11-14T12:00")))))
+    }
+
+    @Test fun heldSchedulesLeadPaused() {
+        val zeta = schedule("Zeta held", state = "HELD", heldReason = "AGENT_DISABLED")
+        val alpha = schedule("Alpha paused", state = "PAUSED")
+        val beta = schedule("Beta held", state = "HELD", heldReason = "AGENT_DISABLED")
+        val groups = ScheduleDisplay.timeline(listOf(zeta, alpha, beta), now = now, timezone = tz)
+        assertEquals(listOf("Paused|3|Beta held,Zeta held,Alpha paused"), names(groups))
+        assertEquals(Tag(TagTone.held, "Held"), ScheduleDisplay.rowCircle(beta, emptyList()).tag)
+        assertEquals(2, ScheduleDisplay.needsYouCount(listOf(zeta, alpha, beta)))
     }
 
     @Test fun splitsAtLocalMidnight() {
@@ -148,7 +182,7 @@ class ScheduleDisplayTest {
 
     @Test fun everyRunStateHasACircle() {
         val expected = mapOf(
-            "QUEUED" to Triple(Circle.open, null, null), "RUNNING" to Triple(Circle.running, null, null),
+            "QUEUED" to Triple(Circle.open, Mark.clock, null), "RUNNING" to Triple(Circle.running, null, null),
             "AWAITING_APPROVAL" to Triple(Circle.held, Mark.alert, "Waiting for you"), "NO_CHANGE" to Triple(Circle.done, Mark.check, "No change"),
             "CHANGED" to Triple(Circle.done, Mark.check, "Known"), "FAILED" to Triple(Circle.failed, Mark.alert, "Failed"),
             "SKIPPED" to Triple(Circle.muted, Mark.check, "Skipped"), "MISSED" to Triple(Circle.muted, Mark.check, "Missed"),
@@ -172,7 +206,7 @@ class ScheduleDisplayTest {
         assertEquals(Circle.muted, ScheduleDisplay.scheduleCircle("ENDED", 0).circle)
         assertEquals(Circle.draft, ScheduleDisplay.scheduleCircle("ACTIVE", 0, draft = true).circle)
         assertEquals(false, ScheduleDisplay.needsYou("PAUSED", 2))
-        // The drawer's number: failing or held, nothing else.
+        // The drawer's number: failing (with no run under way) or held, nothing else.
         assertEquals(2, ScheduleDisplay.needsYouCount(listOf(schedule(consecutiveFailures = 2), schedule(state = "HELD"),
             schedule(state = "PAUSED"), schedule())))
     }
@@ -281,7 +315,7 @@ class ScheduleDisplayTest {
         assertNull(ScheduleDisplay.reportedFailureClause("REPORTED_FAILED", "server words", "x"))
     }
 
-    /** S5's schedule names its agent and engine: a hold says which agent, and a run's head line has its engine first. */
+    /** S5's schedule names its agent and engine. A hold says which agent. */
     @Test fun theScheduleNamesItsAgentAndEngine() {
         val s = ScheduleView.parse(json("""{"id":"a","title":"Weekly dependency audit","rule":{"kind":"WEEKLY","time":"09:00","weekdays":["MON"]},
             "timezone":"UTC","workspaceId":"w","workspaceName":"web","state":"HELD","heldReason":"AGENT_DISABLED",
@@ -290,25 +324,13 @@ class ScheduleDisplayTest {
         assertEquals("It could not start on Monday 09:00: the agent \"auditor\" in workspace web is disabled. Nothing runs until it is " +
             "enabled and you resume.", ScheduleDisplay.heldWaiting(s.title, s.heldReason, sh("2025-11-10T09:00"), s.agentName, s.workspaceName,
                 at("2025-11-10T09:01"), tz).body)
-        val run = ScheduleRunView(id = "r", scheduleId = "a", plannedAt = sh("2025-11-13T10:00"), state = "RUNNING", startedAt = sh("2025-11-14T12:15"))
-        assertEquals("Codex agent · 4 min", ScheduleDisplay.runHeadText(null, ScheduleDisplay.runAgentName(s.engine, null), run.startedAt, run.endedAt, now))
+        assertEquals("codex", s.engine)
         val card = ScheduleCard.parse(json("""{"id":"c","kind":"CREATE","notice":"You'll hear about new versions and failures only."}"""))!!
         assertEquals("You'll hear about new versions and failures only.", card.notice)
     }
 
-    /** The web's `scheduleRunAgentName`: the schedule view's engine first, else the session's own. */
-    @Test fun theRunHeadNamesTheSchedulesEngineFirst() {
-        assertEquals("Codex", ScheduleDisplay.runAgentName("codex", "claude"))
-        // OrbitKit names a session's engine by ProviderEngines.cliName ("Claude Code"); core has no engine list, so the id, capitalized.
-        assertEquals("Claude", ScheduleDisplay.runAgentName(null, "claude"))
-        assertNull(ScheduleDisplay.runAgentName(null, null))
-        assertEquals("Open · Codex agent · 5 min", ScheduleDisplay.runHeadText("Open", ScheduleDisplay.runAgentName("codex", "claude"),
-            sh("2025-11-13T10:01"), sh("2025-11-13T10:06"), now))
-        assertEquals("5 min", ScheduleDisplay.runHeadText(null, null, sh("2025-11-13T10:01"), sh("2025-11-13T10:06"), now))
-    }
-
     @Test fun theRunsSession() {
-        assertEquals("Scheduled run · planned 10:00, started 10:01 · access Check only · this session is not in your session list",
+        assertEquals("Scheduled run · planned 10:00, started 10:01 · access Check only",
             ScheduleDisplay.runStripText(sh("2025-11-13T10:00"), sh("2025-11-13T10:01"), "CHECK_ONLY", tz))
         assertEquals("run of Nov 13", ScheduleDisplay.runOfText(sh("2025-11-13T10:00"), tz))
         assertEquals("Run of Nov 13", ScheduleDisplay.capitalizedRunOf(sh("2025-11-13T10:00"), tz))
@@ -316,11 +338,7 @@ class ScheduleDisplayTest {
         assertEquals("Reported: No change", ScheduleDisplay.reportedText("NO_CHANGE", null))
     }
 
-    /** `scheduleRunHeadText`: state · agent · how long, the unknown parts left out; at least a minute. */
-    @Test fun theRunHeadLine() {
-        assertEquals("Open · Codex agent · 4 min", ScheduleDisplay.runHeadText("Open", "Codex", sh("2025-11-13T10:01"), sh("2025-11-13T10:05"), now))
-        assertEquals("1 min", ScheduleDisplay.runHeadText(null, null, sh("2025-11-14T12:19"), null, now))
-        assertEquals("Completed", ScheduleDisplay.runHeadText("Completed", null, null, null, now))
+    @Test fun theDeleteConfirmationNamesTheSchedule() {
         assertEquals("Delete “Codex stable check”?", ScheduleDisplay.deleteTitle("Codex stable check"))
     }
 

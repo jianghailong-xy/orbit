@@ -1,6 +1,6 @@
 import {
   LandingFailureClass,
-  RetryableLandingFailureClass,
+  LandingRetryFailureClass,
   isRetryableLandingFailure,
   landingFailureClass,
 } from './project-integration-job';
@@ -60,6 +60,26 @@ export interface IntegrationRetryFacts {
   openItems: ReadonlyArray<{ id: string; kind: string; assignee: string; assigneeReason: string }>;
   /** The task's open `project_blocker` episodes that wait on the account owner. */
   ownerBlockers: ReadonlyArray<{ id: string; kind: string }>;
+  /**
+   * Read only for a CONFLICT that stopped at MAIN_SYNC (§3.1 M3): the commit that landing was handed
+   * (`project_integration_job.source_sha`) and the tip of the branch a rerun would hand the line now,
+   * as its runner last reported it (`session.branch_sha`). Both are facts the server already holds;
+   * the apiserver runs no git.
+   *
+   * WHY "MOVED" IS ENOUGH. The same commit run again meets the same conflict, so an unmoved branch
+   * keeps the refusal. A branch that moved may carry the absorb (both tips merged into it): then J-S2
+   * ① skips the main sync and J-S4 lands it by MERGE. Whether it does is a question for git, and the
+   * landing job asks it on a runner that has the repository — if the branch still lacks a tip, the
+   * landing stops at MAIN_SYNC again and its conflict item comes back exactly as it does today.
+   */
+  sourceTips?: { conflicted: string | null; current: string | null };
+}
+
+/** What the rerun of a MAIN_SYNC conflict whose branch moved says it is doing. */
+export function mainSyncMovedMessage(from: string, to: string): string {
+  return `Landing again: the branch has moved since it conflicted at MAIN_SYNC (${from.slice(0, 7)} → `
+    + `${to.slice(0, 7)}). If it now contains the project line and main, it lands by a merge; if it `
+    + 'does not, the landing stops at MAIN_SYNC again and its conflict item comes back.';
 }
 
 /** A refusal, in the shape the service throws it: the status, and the body the caller reads. */
@@ -73,7 +93,9 @@ export type IntegrationRetryDecision =
   | {
       ok: true;
       retryOfJobId: string;
-      failureClass: RetryableLandingFailureClass;
+      failureClass: LandingRetryFailureClass;
+      /** Set when the rerun is not the plain one: what it will do differently. */
+      message?: string;
       /**
        * The open items the rerun will be HANDLING: the coordinator's own, about this failure. They stay
        * OPEN while the rerun is in flight and are ended by its result (§4.7 H1–H4) — HANDLED when it
@@ -137,13 +159,20 @@ export function decideIntegrationRetry(facts: IntegrationRetryFacts): Integratio
       + 'stops reporting past its limit, it can be retried then.',
       { newestLanding: landing });
   }
-  const failureClass: LandingFailureClass | null = timedOut ? 'ERROR' : landingFailureClass(newest);
-  if (!isRetryableLandingFailure(failureClass)) {
+  const classified: LandingFailureClass | null = timedOut ? 'ERROR' : landingFailureClass(newest);
+  // §3.1 M3: a MAIN_SYNC conflict is rerun once the branch has moved off the commit that conflicted
+  // — the runner's J-S2 decides whether the move was the absorb (see `sourceTips`).
+  const tips = facts.sourceTips;
+  const moved = classified === 'CONFLICT' && newest.phase === 'MAIN_SYNC'
+    && !!tips?.conflicted && !!tips.current && tips.current !== tips.conflicted;
+  if (!moved && !isRetryableLandingFailure(classified)) {
     return refuse(409, INTEGRATION_RETRY_NOT_APPLICABLE,
-      notRetryable(newest.state, failureClass, newest.phase ?? null), {
-        newestLanding: { ...landing, failureClass },
+      notRetryable(newest.state, classified, newest.phase ?? null), {
+        newestLanding: { ...landing, failureClass: classified },
       });
   }
+  const failureClass = classified as LandingRetryFailureClass;
+  const message = moved ? { message: mainSyncMovedMessage(tips!.conflicted!, tips!.current!) } : {};
 
   const requester = facts.requester ?? 'COORDINATOR';
   if (requester === 'OWNER') {
@@ -162,6 +191,7 @@ export function decideIntegrationRetry(facts: IntegrationRetryFacts): Integratio
       retryOfJobId: newest.id,
       failureClass,
       handle: mine.map((item) => item.id),
+      ...message,
       ...(timedOut ? { endsTimedOutJob: true } : {}),
     };
   }
@@ -181,6 +211,7 @@ export function decideIntegrationRetry(facts: IntegrationRetryFacts): Integratio
     retryOfJobId: newest.id,
     failureClass,
     handle: mine.map((item) => item.id),
+    ...message,
     ...(timedOut ? { endsTimedOutJob: true } : {}),
   };
 }

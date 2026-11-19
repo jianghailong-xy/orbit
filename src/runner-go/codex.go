@@ -503,6 +503,7 @@ func codexExecCommandArgs(job *ClaimedSession, execDir, upDir string, imagePaths
 	}
 	args = appendCodexSessionToolConfig(args)
 	args = appendCodexOrbitMCPConfig(args, exe)
+	args = appendCodexBrowserMCPConfig(args, exe)
 	args = append(args, codexProviderArgs(job.Agent.Env)...)
 	args = append(args, "--skip-git-repo-check")
 	for _, p := range imagePaths {
@@ -856,6 +857,9 @@ func codexToolItemName(item map[string]interface{}) string {
 			// The name the control plane counts a running SubAgent by and the clients draw its block for
 			// (delegateEngineToolName), as every other engine spells it.
 			return delegateEngineToolName
+		}
+		if server == codexOrbitMCPServer && tool == workflowToolName {
+			return workflowEngineToolName
 		}
 		return server + "__" + tool
 	}

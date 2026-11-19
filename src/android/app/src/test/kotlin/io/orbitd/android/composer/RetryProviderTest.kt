@@ -16,7 +16,7 @@ class RetryProviderTest : ComposerShellTest() {
             "capabilities" to ComposerShell.obj("""{"canSend":false,"canResume":true,"canComplete":true}"""))
     }
     private fun retryFromTheMenu() {
-        compose.onNode(hasText("+") and hasClickAction()).performClick()
+        compose.onNodeWithTag("composer-plus").performClick()
         val retry = hasText("Retry last failed message") and hasClickAction() and isEnabled()
         await { has(retry) }
         compose.onNode(retry).performClick()

@@ -48,6 +48,8 @@ type gateway struct {
 	merger *eventMerger
 	// watchers is who watches which session live, by runner (live.go).
 	watchers *watcherBook
+	// streams is every byte stream of the gateway's connections (streams.go).
+	streams *streamBook
 
 	// forward hands an Rpc to a backend (forwardRPC); nil without backends.
 	forward func(c *conn, rpc *linkpb.Rpc)
@@ -56,6 +58,9 @@ type gateway struct {
 	drill *drillFaults
 	// pace holds forwarded events to LINK_DRILL_INGEST_RATE (drill.go); nil, as it is unless a load test sets it.
 	pace *pacer
+	// wrapWrite, set by tests only, wraps each new connection's message writes, for example to slow them to a link's
+	// bandwidth.
+	wrapWrite func(write func(ctx context.Context, b []byte) error) func(ctx context.Context, b []byte) error
 }
 
 func newGateway(cfg config, logger *slog.Logger) *gateway {
@@ -73,6 +78,8 @@ func newGateway(cfg config, logger *slog.Logger) *gateway {
 	g.metrics = newGatewayMetrics(version, deny)
 	g.credit = newCreditBook(g, cfg.link)
 	g.watchers = newWatcherBook(cfg.link.WatchersTTL)
+	g.streams = newStreamBook()
+	g.metrics.openStreams.fn = func() float64 { return float64(g.streams.open()) }
 	g.metrics.ingestEvents.fn = func() float64 { return float64(g.credit.depth().Events) }
 	g.metrics.ingestBytes.fn = func() float64 { return float64(g.credit.depth().Bytes) }
 	g.metrics.watchedSessions.fn = func() float64 { return float64(g.watchers.watched()) }

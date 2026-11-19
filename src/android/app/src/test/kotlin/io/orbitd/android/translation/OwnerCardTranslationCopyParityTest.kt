@@ -84,7 +84,11 @@ class OwnerCardTranslationCopyParityTest {
     @Test fun theRefusedAnswerSaysTheSameLineOnEveryClient() {
         val expected = "Couldn't translate, so it wasn't sent · Retry · Send as written"
         assertEquals("Android", expected to expected, lines(part(ANDROID_VIEWS, "fun AnswerNotTranslated(", "\n}\n"), androidWord, "Sep(", androidWords, ANDROID_VIEWS))
-        assertEquals("Web", expected to expected, lines(part(WEB_PARTS, "export function UntranslatedDecisionFoot(", "\n}\n"), webWord, "<Sep />", webWords(), WEB_PARTS))
+        // The web says why through translationFailureSentence('answer', …) (frame 7 B); with no reason it is the GENERIC answer line.
+        val genericAnswer = Regex("""GENERIC: \{\s*message: "[^"]*",\s*answer: "([^"]*)",""").find(read(SHARED_TRANSLATION))
+            ?.groupValues?.get(1) ?: error("$SHARED_TRANSLATION no longer has TRANSLATION_FAILURE_LINES.GENERIC")
+        assertEquals("Web", expected to expected, lines(part(WEB_PARTS, "export function UntranslatedDecisionFoot(", "\n}\n"),
+            Regex("""COPY\.(\w+)|translationFailureSentence\('answer'"""), "<Sep />", webWords() + ("" to genericAnswer), WEB_PARTS))
         assertEquals("iOS/macOS", listOf(expected), swiftLines(part(SWIFT_OWNER, "public static let refusedFoot", "\n    ]\n")))
     }
 
@@ -108,7 +112,9 @@ class OwnerCardTranslationCopyParityTest {
         }
         SWIFT_CARDS.forEach { path ->
             val text = read(path)
-            assertTrue("$path draws its foot and refusal from OwnerCardTranslations", text.contains("OwnerCardTranslations."))
+            // The done card's Not yet refusal arrives as parts its model built (SessionTranslation.refusedAnswerFoot), drawn by TranslationFootView.
+            assertTrue("$path draws its foot and refusal from OwnerCardTranslations or TranslationFootView",
+                text.contains("OwnerCardTranslations.") || text.contains("TranslationFootView(parts:"))
             assertTrue("$path says no translation words of its own", !Regex("""TranslationCopy\.(sendFailed|showOriginal|showTranslation)""").containsMatchIn(text))
         }
     }
@@ -117,6 +123,7 @@ class OwnerCardTranslationCopyParityTest {
         const val ANDROID_VIEWS = "src/android/app/src/main/kotlin/io/orbitd/android/translation/TranslationViews.kt"
         const val WEB_LIB = "src/web/src/lib/translation.ts"
         const val WEB_PARTS = "src/web/src/components/TranslationParts.tsx"
+        const val SHARED_TRANSLATION = "src/shared/src/translation.ts"
         const val SWIFT_COPY = "src/macos/OrbitKit/Sources/OrbitKit/Models/Translation.swift"
         const val SWIFT_OWNER = "src/macos/OrbitKit/Sources/OrbitKit/App/OwnerCardTranslations.swift"
         const val SWIFT_FOOT = "src/macos/OrbitApp/Sources/OrbitApp/Views/Console/TranslationViews.swift"

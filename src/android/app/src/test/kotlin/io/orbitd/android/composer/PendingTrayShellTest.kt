@@ -144,7 +144,7 @@ class PendingTrayShellTest : ComposerShellTest() {
     @Test fun sendHeldWhileATurnRunsQueuesTheMessageForTheNextTurn() {
         running(); signIn(); openSession()
         compose.onNodeWithTag("composer-input").performTextInput("and tag the release")
-        await { has(hasTestTag("composer-send") and isEnabled() and hasText("Send")) }
+        await { has(hasTestTag("composer-send") and isEnabled() and hasContentDescription("Send")) }
         compose.onNodeWithTag("composer-send").performTouchInput { longClick() }
         await { has(hasTestTag("composer-queue-next-turn")) }
         assertTrue(shows("Queue for next turn"))
@@ -157,7 +157,7 @@ class PendingTrayShellTest : ComposerShellTest() {
         // A tap sends as it always has, and the server places it.
         await { input() == "" }
         compose.onNodeWithTag("composer-input").performTextInput("and write the notes")
-        await { has(hasTestTag("composer-send") and isEnabled() and hasText("Send")) }
+        await { has(hasTestTag("composer-send") and isEnabled() and hasContentDescription("Send")) }
         compose.onNodeWithTag("composer-send").performClick()
         await { ComposerShell.bodies.count { it.first == turns } == 2 }
         assertNull(ComposerShell.body(turns)!!["intent"])
@@ -170,7 +170,7 @@ class PendingTrayShellTest : ComposerShellTest() {
         await { has(hasText("and update the changelog") and tray) }
         assertFalse(has(hasTestTag("pending-tray-steer")))
         compose.onNodeWithTag("composer-input").performTextInput("and tag the release")
-        await { has(hasTestTag("composer-send") and isEnabled() and hasText("Send")) }
+        await { has(hasTestTag("composer-send") and isEnabled() and hasContentDescription("Send")) }
         compose.onNodeWithTag("composer-send").performTouchInput { longClick() }
         compose.waitForIdle()
         assertFalse(has(hasTestTag("composer-queue-next-turn")))
@@ -195,7 +195,7 @@ class PendingTrayShellTest : ComposerShellTest() {
         await { ComposerShell.calls.any { it.startsWith("GET attachments/") } }
         shot("tray")
         compose.onNodeWithTag("composer-input").performTextInput("and tag the release")
-        await { has(hasTestTag("composer-send") and isEnabled() and hasText("Send")) }
+        await { has(hasTestTag("composer-send") and isEnabled() and hasContentDescription("Send")) }
         compose.onNodeWithTag("composer-send").performTouchInput { longClick() }
         await { has(hasTestTag("composer-queue-next-turn")) }
         shot("queue-for-next-turn")

@@ -54,6 +54,9 @@ object Translation {
     const val DEFAULT_AGENT_LANGUAGE = "en"
     /** The 422 code of a question answer whose words could not be translated: nothing was recorded (TRANSLATION_FAILED_CODE). */
     const val FAILED_CODE = "TRANSLATION_FAILED"
+    /** The account event announcing that `translationUnavailableUntil` changed (ControlEventType.TRANSLATION_STATUS_CHANGED): read
+     *  `users/me` again. Its passing by itself is never announced. */
+    const val STATUS_CHANGED_EVENT = "translation.status_changed"
 
     /** Whether a door refused the owner's words because they could not be translated: nothing was recorded, and the card offers
      * Retry and Send as written. */
@@ -244,10 +247,30 @@ object Translation {
     /** `GET /users/me`'s `translationAvailable`: the server holds a DeepSeek key. Absent (an older server) reads as unable. */
     fun available(user: JsonObject?): Boolean = (user?.get("translationAvailable") as? JsonPrimitive)?.takeIf { !it.isString }?.booleanOrNull == true
 
+    /** `GET /users/me`'s `translationUnavailableUntil` (MeTranslation, board frame 6): until when the server skips a failing translator,
+     * so a message sent now is held with reason UNAVAILABLE. Null when absent, null, unparsable or already past [now]; non-null, the
+     * composer tag reads "unavailable, messages will wait". The server does not say when it passes: draw the ordinary tag again then. */
+    fun unavailableUntil(user: JsonObject?, now: java.time.Instant = java.time.Instant.now()): java.time.Instant? {
+        val raw = (user?.get("translationUnavailableUntil") as? JsonPrimitive)?.takeIf { it.isString }?.content ?: return null
+        val until = runCatching { java.time.Instant.parse(raw) }.getOrNull() ?: return null
+        return until.takeIf { it.isAfter(now) }
+    }
+
     enum class TurnState { TRANSLATING, FAILED, DONE, SENT_AS_WRITTEN }
 
-    /** A turn's `translation` (TurnTranslation): where the owner's message is, the language it was written in, and what they typed. */
-    data class Turn(val state: TurnState, val from: String, val original: String) {
+    /** Why translating the owner's words failed (TranslationFailureReason, TRANSLATION_FAILURE_REASONS in shared's order): on a FAILED
+     * turn's `failureReason` and on the 422 TRANSLATION_FAILED answer. A value this client does not know reads as no reason. */
+    enum class FailureReason { TIMEOUT, NETWORK, HTTP, EMPTY, TRUNCATED, MANGLED, NO_KEY, UNAVAILABLE }
+
+    /** A turn's `translation` (TurnTranslation): where the owner's message is, the language it was written in, and what they typed;
+     * on a FAILED one, why ([failureReason]) and, beside HTTP, the translator's status ([httpStatus]). */
+    data class Turn(
+        val state: TurnState,
+        val from: String,
+        val original: String,
+        val failureReason: FailureReason? = null,
+        val httpStatus: Int? = null,
+    ) {
         /** Not delivered to the engine yet: still translating, or failed (1A). */
         val held: Boolean get() = state == TurnState.TRANSLATING || state == TurnState.FAILED
     }
@@ -260,7 +283,24 @@ object Translation {
         val original = (t["original"] as? JsonPrimitive)?.takeIf { it.isString }?.content ?: return null
         val from = t.string("from")?.takeIf(::isLanguage) ?: return null
         val state = TurnState.entries.firstOrNull { it.name == t.string("state") } ?: return null
-        return Turn(state, from, original)
+        return Turn(state, from, original, failureReason(t), httpStatus(t))
+    }
+
+    private fun failureReason(t: JsonObject): FailureReason? = FailureReason.entries.firstOrNull { it.name == t.string("failureReason") }
+    private fun httpStatus(t: JsonObject): Int? = (t["httpStatus"] as? JsonPrimitive)?.takeIf { !it.isString }?.longOrNull?.toInt()
+
+    /** Why a door refused the owner's words untranslated, read off that 422's body (TranslationFailedBody): the reason and, beside HTTP,
+     * the translator's status. Null for any other error, or a refusal from a server that does not say why. */
+    fun refusalReason(error: Throwable?): Pair<FailureReason, Int?>? {
+        if (!refused(error)) return null
+        return refusalReason((error as io.orbitd.android.core.net.ApiError).body as? JsonObject)
+    }
+
+    /** The same, read off a 422 TRANSLATION_FAILED body a door answered with (a card's `response`). Null for any other body. */
+    fun refusalReason(body: JsonObject?): Pair<FailureReason, Int?>? {
+        if (body?.string("code") != FAILED_CODE) return null
+        val reason = failureReason(body) ?: return null
+        return reason to httpStatus(body)
     }
 
     fun reply(value: JsonElement?): Reply? {
@@ -270,6 +310,13 @@ object Translation {
         if ((t["failed"] as? JsonPrimitive)?.takeIf { !it.isString }?.booleanOrNull == true) return Reply(lang, null, true)
         return null
     }
+
+    /**
+     * A reply's translation as it is drawn: none when the translator handed back the reply itself, spaces aside — the agent already
+     * wrote in the owner's language, so the reply is drawn as it is, with no foot (web `translationUnchanged`).
+     */
+    fun shownReply(value: JsonElement?, original: String): Reply? =
+        reply(value)?.takeUnless { it.text != null && it.text.trim() == original.trim() }
 
     /**
      * A live `translation` event (seq 0, TranslationEventPayload) folded into the event it translates, under that event's payload as

@@ -18,6 +18,10 @@ public struct User: Codable, Equatable, Sendable, Identifiable {
     /// Settings › Translation: the server holds a DeepSeek key and so can translate. False: the
     /// switch is drawn disabled with the board frame 2 notice. Nil in login's user payload.
     public let translationAvailable: Bool?
+    /// Translation is temporarily unavailable until this ISO-8601 instant (MeTranslation, policy board frame 6): the
+    /// server's translator circuit breaker is skipping a failing translator, so a message sent now is held with reason
+    /// UNAVAILABLE. Nil while the translator is in use, from an older server, and in login's user payload.
+    public let translationUnavailableUntil: String?
     /// Settings › Prompt optimizer: the server holds a DeepSeek key and so can optimize a draft.
     /// False: the switch is drawn disabled with the board frame 1b notice. Nil in login's user payload.
     public let promptOptimizerAvailable: Bool?
@@ -643,6 +647,8 @@ public struct Session: Codable, Equatable, Sendable, Identifiable {
     /// Legacy internal provenance. Current clients keep every unfiled session in Open and no longer
     /// expose a separate System list; the optional field remains for older-server compatibility.
     public let source: String?
+    /// What opened the session; SCHEDULE marks a scheduled run's, which only the workspace's Scheduled runs folder lists.
+    public let runSource: String?
     /// The scheduled task's run this session is (docs/scheduled-tasks-design.md §6.3), from the session's own
     /// read; nil for every other session. What puts the run's header over its conversation.
     public var scheduleRunId: String? = nil
@@ -885,6 +891,7 @@ public struct Session: Codable, Equatable, Sendable, Identifiable {
         effort = try values.decodeIfPresent(String.self, forKey: .effort)
         fastMode = try values.decodeIfPresent(Bool.self, forKey: .fastMode)
         source = try values.decodeIfPresent(String.self, forKey: .source)
+        runSource = try values.decodeIfPresent(String.self, forKey: .runSource)
         scheduleRunId = try? values.decodeIfPresent(String.self, forKey: .scheduleRunId)
         projectId = try values.decodeIfPresent(String.self, forKey: .projectId)
         projectTitle = try values.decodeIfPresent(String.self, forKey: .projectTitle)
@@ -935,7 +942,7 @@ public struct Session: Codable, Equatable, Sendable, Identifiable {
                 ownerItems: [SessionOwnerItem]? = nil, taskId: String? = nil,
                 branch: String?,
                 updatedAt: String?, model: String? = nil, permissionMode: String? = nil,
-                effort: String? = nil, fastMode: Bool? = nil, source: String? = nil,
+                effort: String? = nil, fastMode: Bool? = nil, source: String? = nil, runSource: String? = nil,
                 projectId: String? = nil, projectTitle: String? = nil,
                 lastAssistantText: String? = nil,
                 lastToolUse: String? = nil, lastUserText: String? = nil,
@@ -1012,6 +1019,7 @@ public struct Session: Codable, Equatable, Sendable, Identifiable {
         self.effort = effort
         self.fastMode = fastMode
         self.source = source
+        self.runSource = runSource
         self.projectId = projectId
         self.projectTitle = projectTitle
         self.projectMembership = projectMembership
@@ -1609,6 +1617,8 @@ public struct ApprovalInfo: Codable, Equatable, Sendable, Identifiable {
     public let toolName: String?
     public let status: String?
     public let input: JSONValue?
+    /// The engine's call this card asks about: an answered question's record finds its card by it.
+    public let toolUseId: String?
     /// Settings › Translation (3A): what the card shows in the owner's language. Raw, read by
     /// `ApprovalTranslation.parse`.
     public let translation: JSONValue?

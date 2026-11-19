@@ -1,7 +1,7 @@
 import { useMemo } from 'react';
 import { queryOptions, useQuery } from '@tanstack/react-query';
 import {
-  scheduleNeedsYou,
+  scheduleNeedsCount,
   type ScheduleCard,
   type ScheduleChangeRecord,
   type ScheduleDetailResponse,
@@ -12,6 +12,7 @@ import {
 } from '@orbit/shared';
 import { api } from '../api';
 import { streamPoll } from './listBudget';
+import { SCHEDULED_RUNS_FOLDER } from './sessionFolders';
 
 /**
  * Scheduled tasks on the web (docs/scheduled-tasks-design.md §9.2): the REST reads the Scheduled page, the inspector,
@@ -78,16 +79,19 @@ export const sessionScheduleCardsQuery = (sessionId: string) =>
     refetchInterval: streamPoll(20_000),
   });
 
-/** The count beside Scheduled in the drawer: the failing and the held (§9.2). */
+/** The count beside Scheduled in the drawer, as on Apple and Android: scheduleNeedsCount. */
 export function useScheduledNeedsCount(): number {
   const list = useQuery(schedulesQuery());
-  return useMemo(() => (list.data?.schedules ?? []).filter(scheduleNeedsYou).length, [list.data]);
+  return useMemo(() => scheduleNeedsCount(list.data), [list.data]);
 }
 
-/** A run's session, reached from the schedule's history: run sessions are in no list, only here (§7.4). */
-export function scheduleRunSessionPath(run: Pick<ScheduleRunView, 'sessionId' | 'scheduleId' | 'id'>): string | null {
+/**
+ * A run's session, reached from the schedule's history: the ordinary session page, with its workspace's list on the
+ * Scheduled runs folder, the one list that holds it (owner 2026-11-19).
+ */
+export function scheduleRunSessionPath(run: Pick<ScheduleRunView, 'sessionId'>): string | null {
   if (!run.sessionId) return null;
-  return `/sessions/${encodeURIComponent(run.sessionId)}?schedule=${encodeURIComponent(run.scheduleId)}&run=${encodeURIComponent(run.id)}`;
+  return `/sessions/${encodeURIComponent(run.sessionId)}?folder=${SCHEDULED_RUNS_FOLDER}`;
 }
 
 /** The Scheduled page with one schedule open in the inspector. */

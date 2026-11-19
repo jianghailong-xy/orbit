@@ -801,6 +801,31 @@ describe('the exception card’s fact block', () => {
     );
   }
 
+  it('draws the shared baseline card and links every held task', () => {
+    const html = card(item({ kind: 'INTEGRATION_CHECK_FAILED', detailLine: '', requiredAction: '', actions: [], facts: facts({ targetRef: 'refs/heads/project/payments' }),
+      baseline: { upstreamSha: 'upstream-sha', targetSha: 'target-sha', mergeTreeSha: 'baseline-sha',
+        check: { name: 'LANDING_CHECK', command: 'make fast', exitCode: 1, expectedExitCode: 0, timedOut: false, durationMs: 1 } },
+      heldTaskIds: ['34OEE9DwfWYjo3aRFuBgo', '34WvwUS8YMXfOfWbMqVuu'] }));
+    for (const text of ['Baseline checks failing on project/payments', 'The project branch with the latest main fails its checks without this task.',
+      'Landings on hold', 'Upstream', 'Project tip', 'Combined baseline', 'Landing check', 'View held tasks',
+      'upstream-sha', 'target-sha', 'baseline-sha', 'make fast', 'Landings resume automatically when this open item is resolved.']) expect(html).toContain(text);
+    expect(html).not.toContain('class="project-open-item-next"');
+    expect(html.match(/href="\/tasks\//g)).toHaveLength(2);
+  });
+
+  it('draws the same baseline card once the item escalated to the owner, not the who-fixes card', () => {
+    const html = card(item({ kind: 'INTEGRATION_CHECK_FAILED', assignee: 'OWNER', assigneeReason: 'ESCALATED',
+      escalatedAt: at(6 * MINUTE), detailLine: '', requiredAction: '', actions: [], facts: facts({ targetRef: 'refs/heads/project/payments' }),
+      baseline: { upstreamSha: 'upstream-sha', targetSha: 'target-sha', mergeTreeSha: 'baseline-sha',
+        check: { name: 'LANDING_CHECK', command: 'make fast', exitCode: 1, expectedExitCode: 0, timedOut: false, durationMs: 1 } },
+      heldTaskIds: ['34OEE9DwfWYjo3aRFuBgo', '34WvwUS8YMXfOfWbMqVuu'] }));
+    for (const text of ['Baseline checks failing on project/payments', 'The project branch with the latest main fails its checks without this task.',
+      'Landings on hold', 'Upstream', 'Project tip', 'Combined baseline', 'Landing check', 'View held tasks',
+      'upstream-sha', 'target-sha', 'baseline-sha', 'make fast', 'Landings resume automatically when this open item is resolved.']) expect(html).toContain(text);
+    expect(html).not.toContain('is-who-fixes');
+    expect(html.match(/href="\/tasks\//g)).toHaveLength(2);
+  });
+
   it('draws the check that failed: its command, its exit code and its output’s tail', () => {
     const html = card(CHECK_FAILED);
 

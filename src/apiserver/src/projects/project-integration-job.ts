@@ -206,6 +206,10 @@ export type LandingFailureClass = (typeof LANDING_FAILURE_CLASSES)[number];
 /** Explicit retry treats BASELINE_RED like CHECK_FAILED; migrations 0344/0513 admit both. */
 export const RETRYABLE_LANDING_FAILURE_CLASSES = ['CHECK_FAILED', 'CHECK_TIMED_OUT', 'BASELINE_RED', 'ERROR'] as const;
 export type RetryableLandingFailureClass = (typeof RETRYABLE_LANDING_FAILURE_CLASSES)[number];
+/** What `integration_retry` reruns: a retryable failure, or a MAIN_SYNC conflict whose branch has
+ *  moved since (§3.1 M3). The CONFLICT one is queued without the retry columns, whose class check
+ *  (0344/0513) admits only the retryable classes. */
+export type LandingRetryFailureClass = RetryableLandingFailureClass | 'CONFLICT';
 
 /**
  * The class of a finished job, or null for a state that is not a failure.
@@ -1043,9 +1047,25 @@ export async function endTimedOutLanding(
   return errorCode;
 }
 
+/** K5: the result transaction queues the same delivery behind the baseline hold, without a retry decision. */
+export async function queueBaselineHeld(
+  tx: Prisma.TransactionClient,
+  input: { ownerId: string; projectId: string; taskId: string; sessionId: string; sourceRef: string; runnerId: string | null },
+): Promise<void> {
+  const codebase = await tx.projectCodebase.findFirstOrThrow({
+    where: { projectId: input.projectId, slot: 'primary' },
+    select: { id: true, canonicalRepoUrl: true, integrationRef: true, upstreamRef: true },
+  });
+  await queueLandTask(tx, {
+    ...input, codebase,
+    session: { id: input.sessionId, branch: shortBranchName(input.sourceRef), runnerId: input.runnerId },
+    cause: 'BASELINE_HELD',
+  });
+}
+
 /**
  * Queue the next generation of a task's landing because its coordinator asked for it (§2.3 J-T1b) —
- * the one way a landing that stopped is attempted again without the task being completed again (J5).
+ * the explicit retry door for a stopped landing (J5); K5 queues baseline-held work in its result transaction.
  *
  * The branch is the one a DONE written now would hand the line (`landingWorkSession`), not the one
  * the failed generation was handed: a task that was run again after its landing failed has its work
@@ -1073,6 +1093,9 @@ export async function queueLandingRetry(
      * 0393). Omitted by `integration_retry`, which queues the same generation WITH the check.
      */
     skipMergeCheck?: LandingSkipMergeCheck;
+    /** Which door queued it, when it is neither a recorded rerun nor a skip: the rerun of a MAIN_SYNC
+     *  conflict whose branch moved carries no retry columns (§3.1 M3) and is still the RETRY door's. */
+    cause?: EnqueueCause;
   },
 ): Promise<{ jobId: string; generation: number; sourceRef: string; landingSessionId: string } | null> {
   const task = await tx.task.findFirst({
@@ -1094,7 +1117,7 @@ export async function queueLandingRetry(
     session: { id: work.id, branch: work.branch, runnerId: work.assignedRunnerId },
     retry: input.retry,
     skipMergeCheck: input.skipMergeCheck,
-    cause: input.retry ? 'RETRY' : 'SKIP_CHECK',
+    cause: input.cause ?? (input.retry ? 'RETRY' : 'SKIP_CHECK'),
   });
   if (queued === null) return null;
   const job = await tx.projectIntegrationJob.findUniqueOrThrow({
@@ -1107,6 +1130,25 @@ export async function queueLandingRetry(
     sourceRef: job.sourceRef,
     landingSessionId: queued.landingSessionId,
   };
+}
+
+/**
+ * The tip of the branch a rerun of this task's landing would hand the line — the same
+ * `landingWorkSession` choice `queueLandingRetry` makes — as its runner last reported it
+ * (`session.branch_sha`, 0370). Null when there is no such branch or no tip was reported.
+ */
+export async function readLandingSourceTip(
+  db: Prisma.TransactionClient,
+  input: { ownerId: string; projectId: string; taskId: string },
+): Promise<string | null> {
+  const task = await db.task.findFirst({
+    where: { id: input.taskId, ownerId: input.ownerId, projectId: input.projectId },
+    select: { codeless: true, sessions: workSessionsOfTaskSelect() },
+  });
+  const work = landingWorkSession(task?.sessions ?? []);
+  if (!task || task.codeless || !work?.branch) return null;
+  const tip = await db.session.findUnique({ where: { id: work.id }, select: { branchSha: true } });
+  return tip?.branchSha ?? null;
 }
 
 /** The stop a skip of an in-flight landing asks for: the cause its `STOP_REQUESTED` line carries,

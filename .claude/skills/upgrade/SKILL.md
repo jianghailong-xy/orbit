@@ -150,9 +150,10 @@ says decides what it may do, and no line of `.env` ever changes:
   warning, by name, never by value.
 
 After the images are built and before the apiserver is recreated, it starts `nats` and
-`link-gateway`, recreates the web gateway if the `gateway/nginx.conf` it runs is not this
-checkout's (a single-file bind mount Compose does not see change: a moment's break for web
-traffic and streams, once per change), and checks that `/runner-link` reaches the link
+`link-gateway`, recreates `nats` if the `src/link-gateway/nats.conf` it runs is not this
+checkout's, and the web gateway if the `gateway/nginx.conf` it runs is not this checkout's
+(single-file bind mounts Compose does not see change: a moment's break, once per change, for the
+runner link's NATS connections or for web traffic and streams), and checks that `/runner-link` reaches the link
 gateway. This build's `docker-compose.yml` requires `RUNNER_LINK_SIGNING_KEY`, since it has no
 HTTPS work path, so a failure there stops the upgrade before the apiserver is recreated, and
 the deployment goes on running the build it has.
@@ -279,9 +280,9 @@ the two Compose files a target lists beside `docker-compose.yml`, `deploy/postgr
    release's images are all there: a deploy that stops before then puts them back, and takes away the files
    and directories it added, having changed nothing;
 4. prints the plan: each service's `docker compose config --hash` for this release against the hash its
-   container was made with, as `create`, `unchanged`, `start` or `recreate`. `db-proxy`, `gateway` and
-   `pgbackup` each bind-mount one file on its own (`deploy/db-proxy/haproxy.cfg`, `gateway/nginx.conf`,
-   `scripts/pg-backup.sh`), which a running container keeps from its start whatever Compose sees, so one that
+   container was made with, as `create`, `unchanged`, `start` or `recreate`. `db-proxy`, `nats`, `gateway`
+   and `pgbackup` each bind-mount one file on its own (`deploy/db-proxy/haproxy.cfg`,
+   `src/link-gateway/nats.conf`, `gateway/nginx.conf`, `scripts/pg-backup.sh`), which a running container keeps from its start whatever Compose sees, so one that
    runs another than the release's is `recreate` too, and says which file. Under the table it says how the
    apiserver and web are replaced: `Replacing the apiserver and web: without a gap`, or `stop, then start` with
    the reason ([Without a gap](#without-a-gap), below). Where the target runs managed runners on Kubernetes (its

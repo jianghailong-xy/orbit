@@ -152,6 +152,12 @@ const ALLOWED_READERS: Readonly<Record<string, string>> = {
     'types completion-evidence source provenance; does not read task project provenance',
   'src/apiserver/src/tasks/task-completion-evidence.service.ts':
     'validates and records completion-evidence source provenance; grants no project authority',
+  // The undecided-evidence clock files an owner item for evidence left undecided past the project's
+  // window, and copies that evidence's source session into the item's `session_id` for the card to
+  // link. Whether an item is filed is decided by the window, the decision and the newer revision
+  // alone; the value is never compared.
+  'src/apiserver/src/projects/evidence-undecided.ts':
+    "copies completion-evidence's source session onto the owner item it files; decides nothing",
   // §2.9 LS6's landing view reuses the same `sourceSessionId` spelling for a different fact: the
   // work session a landing attempt is about (`project_integration_job.session_id`, a history
   // reference). The view copies it into the attempt for a reader to display and answers NULL when

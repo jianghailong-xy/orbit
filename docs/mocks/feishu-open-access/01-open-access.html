@@ -1,0 +1,371 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<title>飞书机器人：开放给可用范围内的人（设计稿）</title>
+<link rel="stylesheet" href="../../../src/web/src/components/ui/foundation.css">
+<link rel="stylesheet" href="../../../src/web/src/index.css">
+<link rel="stylesheet" href="../../../src/web/src/components/ui/Card.css">
+<link rel="stylesheet" href="../../../src/web/src/components/ui/Badge.css">
+<style>
+  /* Board chrome is prefixed b- (index.css has bare short classes). The cards use the shipped
+     .orbit-card / .admin-signin-* / .feishu-hint / .orbit-badge classes; switches, radios, selects,
+     number boxes and the alert are drawn with index.css tokens. */
+  body { margin: 0; background: #e9ecef; font-family: Inter, "Noto Sans SC", sans-serif; color: var(--text-1); }
+  .b-part { width: 1520px; box-sizing: border-box; padding: 34px 40px 40px; background: #f4f5f7; border-bottom: 6px solid #e9ecef; }
+  .b-h1 { font-size: 26px; font-weight: 700; margin: 0 0 4px; }
+  .b-sub { color: var(--text-2); font-size: 15px; margin: 0 0 22px; line-height: 1.6; }
+  .b-cols { display: grid; gap: 28px; align-items: start; }
+  .b-col-title { font-size: 15px; font-weight: 600; margin: 0 0 10px; color: var(--text-2); }
+  .b-frame { position: relative; background: var(--bg-base); border: 1px solid #dfe2e6; border-radius: 12px; padding: 22px 22px 22px 46px; box-shadow: 0 1px 2px rgba(0,0,0,.04); }
+  .b-mark { position: absolute; left: -34px; top: 1px; display: inline-flex; align-items: center; justify-content: center; width: 22px; height: 22px; border-radius: 50%; background: #e8590c; color: #fff; font: 700 12px/1 Inter, sans-serif; }
+  .b-rel { position: relative; }
+  .b-notes { display: grid; gap: 10px; font-size: 14px; line-height: 1.65; }
+  .b-note { display: grid; grid-template-columns: 22px 1fr; gap: 10px; align-items: start; }
+  .b-note .b-dot { display: inline-flex; align-items: center; justify-content: center; width: 22px; height: 22px; border-radius: 50%; background: #e8590c; color: #fff; font: 700 12px/1 Inter, sans-serif; margin-top: 1px; }
+  .b-note b { font-weight: 600; }
+  .b-q { font-family: Inter, sans-serif; background: #fff; border: 1px solid var(--border-subtle); border-radius: 6px; padding: 1px 6px; color: var(--text-2); font-size: 13px; }
+  .b-tag { display: inline-block; font-size: 12px; font-weight: 600; padding: 2px 8px; border-radius: 10px; margin-right: 6px; }
+  .b-tag-today { background: #e9ecef; color: #495057; }
+  .b-tag-new { background: #fff0e6; color: #d9480f; }
+  .b-drawn { color: var(--text-3); font-size: 12px; margin-top: 10px; }
+
+  /* Settings controls, drawn with the page's tokens. */
+  .b-card-stack { display: grid; gap: 16px; }
+  .b-radio-row { display: grid; grid-template-columns: 18px 1fr; gap: 10px; align-items: start; padding: 10px 0; }
+  .b-radio { width: 16px; height: 16px; border-radius: 50%; border: 1px solid #c9cdd4; background: #fff; box-sizing: border-box; margin-top: 3px; }
+  .b-radio.on { border: 5px solid var(--brand); }
+  .b-indent { margin-left: 28px; padding: 14px 16px 16px; border-left: 2px solid var(--brand-border); background: var(--bg-subtle); border-radius: 0 8px 8px 0; display: grid; gap: 18px; }
+  .b-sec-label { font-size: 13px; font-weight: 600; color: var(--text-2); letter-spacing: .02em; }
+  .b-select { display: inline-flex; align-items: center; justify-content: space-between; gap: 12px; min-width: 220px; height: 32px; box-sizing: border-box; padding: 0 10px 0 12px; border: 1px solid #d0d3d9; border-radius: 6px; background: #fff; font-size: 14px; }
+  .b-select::after { content: ""; width: 7px; height: 7px; border-right: 1.5px solid #8f959e; border-bottom: 1.5px solid #8f959e; transform: rotate(45deg) translateY(-2px); }
+  .b-num { display: inline-flex; align-items: center; justify-content: center; width: 52px; height: 30px; border: 1px solid #d0d3d9; border-radius: 6px; background: #fff; font-size: 14px; margin: 0 6px; }
+  .b-limits { display: grid; gap: 8px; font-size: 14px; }
+  .b-limits .b-lrow { display: grid; grid-template-columns: 150px auto; align-items: center; }
+  .b-nowrap { display: inline-flex; align-items: center; white-space: nowrap; }
+  .b-indent .admin-signin-row > div:first-child { flex: 1; min-width: 0; }
+  .b-switch { width: 40px; height: 22px; border-radius: 11px; background: #c9cdd4; position: relative; flex: none; }
+  .b-switch::after { content: ""; position: absolute; top: 2px; left: 2px; width: 18px; height: 18px; border-radius: 50%; background: #fff; box-shadow: 0 1px 2px rgba(0,0,0,.2); }
+  .b-switch.on { background: var(--brand); }
+  .b-switch.on::after { left: 20px; }
+  .b-alert { display: grid; grid-template-columns: 22px 1fr; gap: 10px; padding: 12px 14px; border: 1px solid var(--warning-border); background: var(--warning-bg); border-radius: 8px; font-size: 13px; line-height: 1.6; }
+  .b-alert .b-bang { width: 20px; height: 20px; border-radius: 50%; background: var(--warning-solid); color: #fff; font: 700 13px/20px Inter, sans-serif; text-align: center; margin-top: 1px; }
+  .b-alert-title { font-size: 14px; font-weight: 600; color: var(--text-1); margin-bottom: 4px; }
+  .b-link { color: var(--brand); }
+  .b-btns { display: flex; justify-content: flex-end; gap: 10px; align-items: center; }
+  .b-btn { height: 32px; padding: 0 15px; border-radius: 6px; border: 1px solid #d0d3d9; background: #fff; font-size: 14px; display: inline-flex; align-items: center; }
+  .b-btn.primary { background: var(--brand); border-color: var(--brand); color: #fff; }
+  .b-btn.danger { color: var(--error); border-color: var(--error-border); }
+  .b-group { display: grid; grid-template-columns: 1fr auto; gap: 16px; align-items: center; padding: 14px 0; border-top: 1px solid var(--border-subtle); }
+  .b-group:first-of-type { border-top: 0; }
+  .b-group-name { font-weight: 600; font-size: 15px; display: flex; align-items: center; gap: 8px; }
+  .b-group-actions { display: flex; align-items: center; gap: 10px; }
+
+  /* Feishu chat panes (drawn). */
+  .b-chat { background: #fff; border: 1px solid #dfe2e6; border-radius: 12px; overflow: hidden; }
+  .b-chat-head { padding: 10px 16px; border-bottom: 1px solid #eceef1; font-weight: 600; font-size: 14px; display: flex; gap: 8px; align-items: center; }
+  .b-chat-head .b-pill { font-size: 11px; font-weight: 500; color: #646a73; background: #f1f1f4; padding: 1px 7px; border-radius: 9px; }
+  .b-chat-body { padding: 14px 16px 16px; display: grid; gap: 12px; background: #fafbfc; }
+  .b-msg { display: grid; grid-template-columns: 32px 1fr; gap: 10px; align-items: start; }
+  .b-av { width: 32px; height: 32px; border-radius: 50%; display: flex; align-items: center; justify-content: center; color: #fff; font: 600 12px/1 Inter, sans-serif; }
+  .b-av.bot { background: #3370ff; }
+  .b-av.p1 { background: #7c5cff; } .b-av.p2 { background: #10a37f; } .b-av.p3 { background: #d97706; } .b-av.me { background: #495057; }
+  .b-who { font-size: 12px; color: #8f959e; margin-bottom: 3px; }
+  .b-who .b-botbadge { font-size: 10px; font-weight: 600; color: #b7791f; background: #fdf3d8; padding: 0 5px; border-radius: 4px; margin-left: 4px; }
+  .b-bubble { display: inline-block; max-width: 520px; background: #fff; border: 1px solid #e4e6ea; border-radius: 10px; padding: 8px 12px; font-size: 14px; line-height: 1.55; }
+  .b-bubble.mine { background: #e1ebff; border-color: #c9dbff; }
+  .b-at { color: #3370ff; }
+  .b-thread { margin-left: 42px; padding-left: 12px; border-left: 2px solid #dfe2e6; display: grid; gap: 10px; }
+  .b-thread-label { font-size: 12px; color: #8f959e; }
+  .b-fcard { max-width: 520px; border: 1px solid #e4e6ea; border-radius: 10px; overflow: hidden; background: #fff; }
+  .b-fcard-head { padding: 10px 14px; background: linear-gradient(90deg, #fdebd8, #fff6ee); }
+  .b-fcard-head .t { color: #c05621; font-weight: 600; font-size: 15px; }
+  .b-fcard-head .s { color: #c05621; font-size: 13px; margin-top: 2px; }
+  .b-fcard-body { padding: 10px 14px 12px; font-size: 13px; display: grid; gap: 8px; }
+  .b-fbtns { display: flex; gap: 8px; }
+  .b-fbtn { border: 1px solid #c9cdd4; border-radius: 6px; padding: 3px 12px; font-size: 13px; background: #fff; }
+  .b-fbtn.allow { color: #3370ff; border-color: #3370ff; }
+  .b-fbtn.deny { color: #d4380d; border-color: #f5a08a; }
+  .b-new { outline: 2px dashed #e8590c; outline-offset: 3px; border-radius: 6px; }
+  .b-bubble.b-new { margin-top: 6px; }
+
+  /* Decisions and phases. */
+  .b-table { width: 100%; border-collapse: separate; border-spacing: 0; background: #fff; border: 1px solid #dfe2e6; border-radius: 12px; overflow: hidden; font-size: 14px; line-height: 1.6; }
+  .b-table th { text-align: left; background: #f1f3f5; color: #495057; font-weight: 600; padding: 10px 14px; border-bottom: 1px solid #dfe2e6; }
+  .b-table td { padding: 12px 14px; border-bottom: 1px solid #eceef1; vertical-align: top; }
+  .b-table tr:last-child td { border-bottom: 0; }
+  .b-rec { color: #2b8a3e; font-weight: 600; }
+  .b-box { background: #fff; border: 1px solid #dfe2e6; border-radius: 12px; padding: 16px 20px; font-size: 14px; line-height: 1.7; }
+  .b-box h3 { margin: 0 0 8px; font-size: 16px; }
+  .b-box ol, .b-box ul { margin: 0; padding-left: 20px; }
+</style>
+</head>
+<body>
+
+<!-- ============================== Part 1 ============================== -->
+<section class="b-part">
+  <h1 class="b-h1">飞书机器人：开放给「能用这个应用的人」· ① 设置页</h1>
+  <p class="b-sub">Settings → Integrations → Feishu 加一张「Who can use the bot」卡片，位置在「Your Feishu account」下面、「Groups」上面。
+    选「Everyone the app is available to in Feishu」后，可用范围里的人可以私聊机器人，也可以在它所在的任何内部群里 @ 它，不用一个群一个群地 connect。</p>
+  <div class="b-cols" style="grid-template-columns: 430px 1fr 380px;">
+    <div>
+      <div class="b-col-title"><span class="b-tag b-tag-today">今天</span>只有你能用；群要一个个接入</div>
+      <div class="b-frame" style="padding-left:22px">
+        <div style="display:grid; gap:14px; font-size:14px; line-height:1.65">
+          <div><b>别人私聊机器人</b>：不开会话，只回一句<br><span class="b-q">This bot only takes direct messages from its owner.</span></div>
+          <div><b>没接入的群里 @ 机器人</b>：不开会话，只回一句<br><span class="b-q">This group isn't connected to Orbit, so nothing was started. The bot's owner can connect it by sending "@Orbitd connect" here.</span></div>
+          <div><b>接入一个群</b>：你在群里发 <span class="b-q">@Orbitd connect</span>，再在确认页选 workspace、权限模式、谁能派活、上限。</div>
+          <div style="color:var(--text-2)">设置页上没有「谁能用」这一项。</div>
+        </div>
+      </div>
+    </div>
+
+    <div>
+      <div class="b-col-title"><span class="b-tag b-tag-new">建议</span>新卡片「Who can use the bot」，选中开放时</div>
+      <div class="b-frame">
+        <section class="orbit-card feishu-card b-rel" aria-label="Who can use the bot" style="margin:0">
+          <span class="b-mark" style="top:16px">1</span>
+          <div class="orbit-card-head">
+            <h2 class="orbit-card-title">Who can use the bot</h2>
+            <span class="orbit-badge orbit-badge-warning">Open to others</span>
+          </div>
+          <div class="orbit-card-body" style="display:grid; gap:6px">
+            <div class="b-radio-row b-rel">
+              <span class="b-mark" style="left:-58px">2</span>
+              <span class="b-radio"></span>
+              <div>
+                <div class="admin-signin-label">Only you</div>
+                <div class="admin-signin-hint">Direct messages from anyone else are refused, and a group works only once you connect it.</div>
+              </div>
+            </div>
+            <div class="b-radio-row b-rel">
+              <span class="b-mark" style="left:-58px">3</span>
+              <span class="b-radio on"></span>
+              <div>
+                <div class="admin-signin-label">Everyone the app is available to in Feishu</div>
+                <div class="admin-signin-hint">Feishu's availability decides who. They can message the bot directly, or @mention it in any group inside your organization that it is in. No group needs connecting.</div>
+              </div>
+            </div>
+            <div class="b-indent b-rel">
+              <span class="b-mark" style="left:-86px">4</span>
+              <div class="b-sec-label">Sessions other people start</div>
+              <div class="admin-signin-row">
+                <div><div class="admin-signin-label">Workspace</div><div class="admin-signin-hint">A workspace of its own, with nothing sensitive in its folder, is safest.</div></div>
+                <span class="b-select">feishu-sandbox · HPC</span>
+              </div>
+              <div class="admin-signin-row">
+                <div><div class="admin-signin-label">Permission mode</div><div class="admin-signin-hint">Agents decide for themselves what is safe to run.</div></div>
+                <span class="b-select">Auto</span>
+              </div>
+              <div>
+                <div class="admin-signin-label">Limits</div>
+                <div class="admin-signin-hint">A message past a limit starts nothing; the bot says why.</div>
+                <div class="b-limits" style="margin-top:10px">
+                  <div class="b-lrow"><span>Each person</span><span class="b-nowrap"><span class="b-num">1</span>at a time<span class="b-num">10</span>a day</span></div>
+                  <div class="b-lrow"><span>Everyone together</span><span class="b-nowrap"><span class="b-num">3</span>at a time<span class="b-num">50</span>a day</span></div>
+                </div>
+              </div>
+              <div class="b-alert b-rel">
+                <span class="b-mark" style="left:-50px">5</span>
+                <span class="b-bang">!</span>
+                <div>
+                  <div class="b-alert-title">Anyone the app is available to in Feishu can make agents act on HPC in Auto mode.</div>
+                  Approvals and agents' questions come to you in Feishu, never to the person who asked. They get each turn's final reply only: no tool output, files or Orbit links.
+                  Who can use the app is set in Feishu's developer console, under the app's availability. <span class="b-link">Open the developer console ↗</span>
+                </div>
+              </div>
+            </div>
+            <div class="b-btns b-rel" style="margin-top:10px">
+              <span class="b-mark" style="left:-58px">6</span>
+              <span class="feishu-hint" style="margin-right:auto">Only you, signed in to Orbit, can change this. An access token cannot.</span>
+              <span class="b-btn">Cancel</span><span class="b-btn primary">Save</span>
+            </div>
+          </div>
+        </section>
+      </div>
+      <div class="b-drawn">画的部分：开关、单选、下拉、数字框和警告框，用的是 index.css 的颜色变量。卡片和行用的是页面上真实的 class（orbit-card、admin-signin-row、feishu-hint、orbit-badge）。</div>
+    </div>
+
+    <div class="b-notes" style="padding-top:30px">
+      <div class="b-note"><span class="b-dot">1</span><div><b>一张新卡片</b>，放在「Your Feishu account」下面、「Groups」上面。右上角徽标在开放时显示 <span class="b-q">Open to others</span>，一眼能看出现在不只你能用。</div></div>
+      <div class="b-note"><span class="b-dot">2</span><div><b>默认还是「Only you」。</b>升级后什么都不变，你主动选了才放开。随时可以一键切回。</div></div>
+      <div class="b-note"><span class="b-dot">3</span><div><b>「谁能用」交给飞书的可用范围</b>，Orbit 不再另存一份名单。在飞书后台把人加进可用范围，这个人就能用；移出去就不能用了。核实方式见④页的 D2。</div></div>
+      <div class="b-note"><span class="b-dot">4</span><div><b>别人开的会话只用一组设置</b>：一个 workspace、一个权限模式（默认 Auto，和你 11-18 对群确认页的要求一致），外加两层上限：每人一层、所有人合计一层。你自己私聊开的会话照旧用「Default workspace」。</div></div>
+      <div class="b-note"><span class="b-dot">5</span><div><b>后果直接写在页面上</b>：审批和提问只发给你，对方只收到每轮的最终回复。可用范围要去飞书后台改，这里给一个跳转链接。</div></div>
+      <div class="b-note"><span class="b-dot">6</span><div><b>保存走所有者通道</b>：和群确认页一样，用 PAT 调接口会被拒（403），因为这一步决定了别人能不能在你的机器上启动 agent。</div></div>
+    </div>
+  </div>
+</section>
+
+<!-- ============================== Part 2 ============================== -->
+<section class="b-part">
+  <h1 class="b-h1">② Groups 卡片：开放以后</h1>
+  <p class="b-sub">没接入的群会自动用上面那组设置。connect 仍然保留，作用变成「给某个群单独设置」。有人第一次在某个群里用机器人，这个群就出现在列表里，你可以单独把它关掉。</p>
+  <div class="b-cols" style="grid-template-columns: 1fr 430px;">
+    <div class="b-frame">
+      <section class="orbit-card feishu-card" aria-label="Groups" style="margin:0">
+        <div class="orbit-card-head"><h2 class="orbit-card-title">Groups</h2></div>
+        <div class="orbit-card-body">
+          <p class="feishu-hint b-rel" style="margin:0 0 6px; font-size:13px; line-height:1.6">
+            <span class="b-mark" style="left:-58px">1</span>
+            Everyone the app is available to can use the bot in any group inside your organization that it is in, with the settings above.
+            To give a group its own workspace, mode or people, send "@bot connect" there. Groups with people from other organizations are never served.
+          </p>
+          <div class="b-group b-rel">
+            <span class="b-mark" style="left:-58px">2</span>
+            <div>
+              <div class="b-group-name">Platform team <span class="orbit-badge orbit-badge-success">Own settings</span></div>
+              <div class="feishu-hint" style="font-size:13px">orbit-develop · Default mode · 3 people · up to 2 at a time, 20 a day</div>
+            </div>
+            <div class="b-group-actions"><span class="b-switch on"></span><span class="b-btn danger">Remove</span></div>
+          </div>
+          <div class="b-group b-rel">
+            <span class="b-mark" style="left:-58px">3</span>
+            <div>
+              <div class="b-group-name">Orbit test <span class="orbit-badge orbit-badge-info">Uses the settings above</span></div>
+              <div class="feishu-hint" style="font-size:13px">First used by Li Wei today at 15:42 · 2 sessions today</div>
+            </div>
+            <div class="b-group-actions"><span class="b-switch on"></span></div>
+          </div>
+          <div class="b-group b-rel">
+            <span class="b-mark" style="left:-58px">4</span>
+            <div>
+              <div class="b-group-name">Design review <span class="orbit-badge orbit-badge-info">Uses the settings above</span></div>
+              <div class="feishu-hint" style="font-size:13px">Switched off: a mention here starts nothing, and the bot says so.</div>
+            </div>
+            <div class="b-group-actions"><span class="b-switch"></span></div>
+          </div>
+        </div>
+      </section>
+    </div>
+    <div class="b-notes" style="padding-top:8px">
+      <div class="b-note"><span class="b-dot">1</span><div><b>说明文字跟着开关变。</b>选「Only you」时还是今天那段（"To connect a group, add the bot to it and send "@bot connect" there…"）。外部群一律不服务，这一点不变。</div></div>
+      <div class="b-note"><span class="b-dot">2</span><div><b>接入过的群</b>保留自己的 workspace、模式、名单和上限，优先于上面的默认设置。今天已经接入的群都在这一类。</div></div>
+      <div class="b-note"><span class="b-dot">3</span><div><b>没接入、但有人用过的群</b>，第一次有人 @ 机器人时自动出现，标「Uses the settings above」，显示谁第一个用的、今天开了几个会话。想单独设置，就在群里发 connect，它会变成第 2 类。</div></div>
+      <div class="b-note"><span class="b-dot">4</span><div><b>单独关掉一个群</b>：群里再 @ 机器人就不开会话，只回一句说明。切回「Only you」后，第 3、4 类的群全部停用；第 2 类不受影响，照常工作。</div></div>
+      <div class="b-note" style="margin-top:6px"><span class="b-dot" style="background:#868e96">·</span><div>今天已经验证过：把机器人移出群，这个群的连接会自动关掉，并写明原因（你刚发的截图）。开放模式下这条照旧适用。</div></div>
+    </div>
+  </div>
+</section>
+
+<!-- ============================== Part 3 ============================== -->
+<section class="b-part">
+  <h1 class="b-h1">③ 飞书里的样子（用的都是示例名字）</h1>
+  <p class="b-sub">机器人说的每个字都是英文。虚线框是开放模式新增的话；会话开始时的回执、话题回复和审批卡，用的都是今天已有的写法。</p>
+  <div class="b-cols" style="grid-template-columns: 1fr 1fr;">
+
+    <div class="b-chat">
+      <div class="b-chat-head">A. 同事私聊机器人 <span class="b-pill">Li Wei ↔ Orbitd</span></div>
+      <div class="b-chat-body">
+        <div class="b-msg"><span class="b-av p1">LW</span><div><div class="b-who">Li Wei</div><span class="b-bubble mine">Summarize yesterday's failed CI runs on main</span></div></div>
+        <div class="b-thread">
+          <div class="b-thread-label">Thread</div>
+          <div class="b-msg"><span class="b-av bot">O</span><div><div class="b-who">Orbitd<span class="b-botbadge">BOT</span></div><span class="b-bubble">Started · Summarize yesterday's failed CI runs</span></div></div>
+          <div class="b-msg"><span class="b-av bot">O</span><div><div class="b-who">Orbitd<span class="b-botbadge">BOT</span></div><span class="b-bubble">Three runs failed. Two were the flaky upload test; one was a real break in the billing module, fixed in the next commit.</span></div></div>
+        </div>
+        <div class="feishu-hint" style="font-size:12.5px; margin-left:42px">在这个话题里回复，继续同一个会话；另发一条新消息，开一个新会话。对方只看到正文，没有 Open in Orbit。</div>
+      </div>
+    </div>
+
+    <div class="b-chat">
+      <div class="b-chat-head">B. 没接入的群里 @ <span class="b-pill">Orbit test · 4 members</span></div>
+      <div class="b-chat-body">
+        <div class="b-msg"><span class="b-av p2">ZM</span><div><div class="b-who">Zhao Min</div><span class="b-bubble"><span class="b-at">@Orbitd</span> check why staging returns 502</span></div></div>
+        <div class="b-thread">
+          <div class="b-thread-label">Topic</div>
+          <div class="b-msg"><span class="b-av bot">O</span><div><div class="b-who">Orbitd<span class="b-botbadge">BOT</span></div><span class="b-bubble">Started · Check why staging returns 502</span></div></div>
+          <div class="b-msg"><span class="b-av bot">O</span><div><div class="b-who">Orbitd<span class="b-botbadge">BOT</span></div><span class="b-bubble">The gateway's upstream was restarting from 14:02 to 14:05 after a deploy. It has served 200s since.</span></div></div>
+        </div>
+        <div class="feishu-hint" style="font-size:12.5px; margin-left:42px">和今天已接入的群一样：每个请求一个话题，结果回到话题里。Orbit 里这一轮标着 <span class="b-q">From Feishu · Zhao Min</span>。</div>
+      </div>
+    </div>
+
+    <div class="b-chat">
+      <div class="b-chat-head">C. 不开会话时，机器人怎么说</div>
+      <div class="b-chat-body">
+        <div class="b-msg"><span class="b-av bot">O</span><div><div class="b-who">Orbitd<span class="b-botbadge">BOT</span> · to Chen Yu, not in the app's availability</div><span class="b-bubble b-new">You can't use this bot. Ask its owner to make the app available to you in Feishu.</span></div></div>
+        <div class="b-msg"><span class="b-av bot">O</span><div><div class="b-who">Orbitd<span class="b-botbadge">BOT</span> · past the daily limit</div><span class="b-bubble b-new">You've started 10 sessions today, the most this bot allows one person. Try again tomorrow.</span></div></div>
+        <div class="b-msg"><span class="b-av bot">O</span><div><div class="b-who">Orbitd<span class="b-botbadge">BOT</span> · one already running</div><span class="b-bubble b-new">You already have a session running. Wait for it to finish, then send this again.</span></div></div>
+        <div class="b-msg"><span class="b-av bot">O</span><div><div class="b-who">Orbitd<span class="b-botbadge">BOT</span> · in a group you switched off</div><span class="b-bubble b-new">The owner has switched this bot off in this group, so nothing was started.</span></div></div>
+      </div>
+    </div>
+
+    <div class="b-chat">
+      <div class="b-chat-head">D. 你的私聊：别人会话里的审批 <span class="b-pill">you ↔ Orbitd</span></div>
+      <div class="b-chat-body">
+        <div class="b-msg"><span class="b-av bot">O</span><div><div class="b-who">Orbitd<span class="b-botbadge">BOT</span></div>
+          <div class="b-fcard">
+            <div class="b-fcard-head"><div class="t">Check why staging returns 502</div><div class="s">Needs your reply · Bash</div></div>
+            <div class="b-fcard-body">
+              <div class="b-new" style="padding:2px 4px">Started by Zhao Min in Orbit test</div>
+              <div style="color:#8f959e">Details hidden by your settings</div>
+              <div class="b-fbtns"><span class="b-fbtn allow">Allow once</span><span class="b-fbtn deny">Deny</span><span class="b-fbtn">Open in Orbit</span></div>
+            </div>
+          </div>
+        </div></div>
+        <div class="feishu-hint" style="font-size:12.5px; margin-left:42px">只有你能批。发起的人看不到这张卡，也批不了。卡上新加一行，写明是谁、在哪个群发起的，你好判断要不要放行。</div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ============================== Part 4 ============================== -->
+<section class="b-part">
+  <h1 class="b-h1">④ 待定 · 要你拍板</h1>
+  <p class="b-sub">每一项都给了推荐。你回「按推荐」，我就按推荐写进设计文档、建任务；哪项想改，直接说编号。</p>
+  <table class="b-table">
+    <tr><th style="width:52px">#</th><th style="width:230px">问题</th><th>方案 A</th><th>方案 B</th><th style="width:120px">推荐</th></tr>
+    <tr><td>D1</td><td>放开到哪里</td><td>私聊和群都放开。同事第一次找机器人，多半是私聊。</td><td>只放开群，同事私聊照旧被拒。</td><td class="b-rec">A</td></tr>
+    <tr><td>D2</td><td>怎么确认对方「有权限」</td><td>每条消息由 Orbit 自己再向飞书核实一次：发送者在不在应用的可用范围里。要多申请一个只读权限，接口名和权限名在真实租户上核实。查不到就当作不在范围里处理（见③C 第一句）。</td><td>只要飞书把消息发来了就受理。但如果飞书把可用范围以外的人在群里的 @ 也发过来，就等于群里任何人都能用。</td><td class="b-rec">A</td></tr>
+    <tr><td>D3</td><td>别人开的会话用什么设置</td><td>一组默认设置：workspace、模式、上限。connect 过的群用它自己的设置。</td><td>每个人单独一套设置。太重，也违背「不用逐一授权」的初衷。</td><td class="b-rec">A</td></tr>
+    <tr><td>D4</td><td>默认权限模式</td><td>Auto，和你 11-18 对群确认页的要求一致。</td><td>Default：每条命令都要你批。人一多，你的私聊会被审批卡刷屏。</td><td class="b-rec">A</td></tr>
+    <tr><td>D5</td><td>默认上限</td><td>每人同时 1 个、每天 10 个；所有人合计同时 3 个、每天 50 个。数字都能改。</td><td>只设合计上限。一个人就能把一天的额度用完。</td><td class="b-rec">A</td></tr>
+  </table>
+  <div class="b-cols" style="grid-template-columns: 1fr 1fr; margin-top:22px">
+    <div class="b-box">
+      <h3>风险与对策</h3>
+      <ul>
+        <li><b>可用范围在飞书后台改，不经过 Orbit。</b>有人把它设成「所有员工」，全公司都能让你机器上的 agent 干活。对策：
+          <ul>
+            <li>放开后，卡片和 Groups 卡上都写明后果；</li>
+            <li>别人开的会话只在一个独立 workspace 里跑；</li>
+            <li>有两层上限；</li>
+            <li>群可以单独关掉；</li>
+            <li>一键切回「Only you」。</li>
+          </ul>
+        </li>
+        <li><b>审批只给你。</b>别人的会话里，危险动作还是要你点头（Auto 模式下由 agent 判断哪些要问）。</li>
+        <li><b>回传只有正文。</b>对方拿不到工具输出、文件和 Orbit 链接。这和今天的群一样。</li>
+        <li><b>跨账号隔离不变。</b>一个账号的应用只作用于这个账号。外部群照旧不服务。</li>
+      </ul>
+    </div>
+    <div class="b-box">
+      <h3>落地（按代价排）</h3>
+      <ol>
+        <li><b>飞书卡片（S）</b>：你私聊里的审批卡加一行「Started by &lt;name&gt; in &lt;group&gt;」。这一项单独做也有用：今天群里发起的会话也受益。</li>
+        <li><b>Web（M）</b>：「Who can use the bot」卡片，以及 Groups 卡里「Uses the settings above」的那些行。</li>
+        <li><b>服务端（L）</b>，包括：
+          <ul>
+            <li>feishu_app 加访问策略的字段，迁移号取 0800 以上，默认 Only you；</li>
+            <li>别人私聊、没接入的群，改成按策略开会话；</li>
+            <li>核实发送者（D2）；</li>
+            <li>每人和合计的上限计数；</li>
+            <li>单独关掉群；</li>
+            <li>英文回复；</li>
+            <li>所有者通道（PAT 403）；</li>
+            <li>普查，以及覆盖幂等、跨账号、超限零写入的 pg spec。</li>
+          </ul>
+        </li>
+        <li><b>真实租户核实（要你来做）</b>：
+          <ul>
+            <li>可用范围以外的人在群里 @，飞书会不会把消息发过来；</li>
+            <li>D2 的接口在你的租户上能不能用。</li>
+          </ul>
+        </li>
+      </ol>
+    </div>
+  </div>
+</section>
+
+</body>
+</html>

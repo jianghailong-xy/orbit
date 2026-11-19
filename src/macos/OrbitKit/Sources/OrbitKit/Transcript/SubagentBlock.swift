@@ -309,7 +309,8 @@ public struct SubagentGroup: Equatable, Sendable {
     }
 }
 
-/// Every Agent a session started, as the console's capsule counts them and its sheet lists them (board 03).
+/// Every Agent a session started, as the console's capsule counts them and its sheet lists them (board 03),
+/// and where their work went (docs/mocks/agents-band-models): the web's `subagentSessionSummary`.
 /// It carries no cost: the owner does not want what the Agents spent shown on the band or in the sheet.
 public struct SubagentSessionSummary: Equatable, Sendable {
     public let count: Int
@@ -318,54 +319,135 @@ public struct SubagentSessionSummary: Equatable, Sendable {
     public let capsule: String
     /// The runs, the running ones first, then the rest newest first.
     public let rows: [SubagentRunView]
+    /// How many ended without finishing, in every state: red at the band's right edge, before the
+    /// spinner while one runs.
+    public let failed: Int
+    /// The models the runs took, most runs first.
+    public let models: [ModelCount]
+    /// Every place the runs ran, most runs first; the session's own machine is `name: nil`.
+    public let machines: [MachineCount]
+    /// Whether any run went to another workspace.
+    public let elsewhere: Bool
+    /// Whether any run went to another workspace or another model than the session's: the band shows
+    /// where the work went only then, so a session whose Agents all ran on its own model and machine
+    /// stays quiet.
+    public let spread: Bool
+    /// Whether the newest running run took the session's own engine and model (true while none runs):
+    /// otherwise the band names its model when it ran on this machine.
+    public let currentIsOwnModel: Bool
+
+    public struct ModelCount: Equatable, Sendable {
+        public let label: String
+        /// Gives the chip its mark; nil when neither the run nor the session says.
+        public let engine: String?
+        public let count: Int
+    }
+
+    public struct MachineCount: Equatable, Sendable {
+        public let name: String?
+        public let count: Int
+    }
+
+    /// The newest running run, which the band names while one runs; nil while none does.
+    public var current: SubagentRunView? { rows.first(where: \.isRunning) }
 
     /// The composer band's words after "Agents". While one runs it says what that one is doing, by
     /// its `delegate` description ("Deploy dacad7403 to production"); several running lead with how
     /// many ("2 running · Deploy …"), naming the newest. A running run with no description keeps the
-    /// counts ("2 · 1 running"). With none running it is the count and the newest run's description
-    /// ("2 · Deploy …"), whose outcome and time `last` puts at the band's right edge; the count alone
-    /// when that run has none. The session list's row says the same thing in its own words
-    /// (`SessionLine.subagentRunningLine`).
+    /// counts ("2 · 1 running"). With none running it is the count alone: the models and machines say
+    /// what was done, and each run's title is on its row in the sheet. The session list's row says the
+    /// same thing in its own words (`SessionLine.subagentRunningLine`).
     public var band: String {
-        guard running > 0 else {
-            let newest = Self.described(rows.first)
-            return newest.isEmpty ? "\(count)" : "\(count) · \(newest)"
-        }
-        let newest = Self.described(rows.first(where: \.isRunning))
+        guard running > 0 else { return "\(count)" }
+        let newest = Self.described(current)
         if newest.isEmpty { return "\(count) · \(running) running" }
         return running > 1 ? "\(running) running · \(newest)" : newest
     }
 
-    /// How the newest run ended, for the band's right edge while nothing runs (where the spinner is
-    /// while something does): failed or not, as its row in the sheet marks it, and how long it took.
-    /// Nil while a run is still going.
-    public var last: LastRun? {
-        guard running == 0, let run = rows.first else { return nil }
-        let failed = SubagentBlock.describe(input: .object([:]), run: run, status: .ok).outcomeIsFailure
-        return LastRun(failed: failed, duration: SubagentBlock.duration(run))
+    /// What VoiceOver says for the band: "Agents: 12, 4 machines, Opus 5.5 9 runs, 1 failed".
+    public var spoken: String {
+        var parts = ["Agents: \(band)"]
+        if running > 0 {
+            if let place = current?.workspaceName, !place.isEmpty { parts.append("on \(place)") }
+        } else {
+            if spread {
+                if elsewhere { parts.append("\(machines.count) machines") }
+                parts += models.map { "\($0.label) \($0.count == 1 ? "1 run" : "\($0.count) runs")" }
+            }
+        }
+        if failed > 0 { parts.append("\(failed) failed") }
+        return parts.joined(separator: ", ")
     }
 
-    public struct LastRun: Equatable, Sendable {
-        public let failed: Bool
-        /// `50s`, `4m 12s`; nil when the run has no end time.
-        public let duration: String?
-        /// What VoiceOver says after the band's words: "done, 50s" / "failed, 4m 12s".
-        public var spoken: String {
-            [failed ? "failed" : "done", duration].compactMap { $0 }.joined(separator: ", ")
-        }
+    /// The model a run took, as its chip names it: the catalogue's label, the id, else its engine's name.
+    public static func modelLabel(_ run: SubagentRunView) -> String? {
+        nonEmpty(run.modelLabel) ?? nonEmpty(run.model) ?? nonEmpty(run.engine).map(SubagentBlock.shortName)
+    }
+
+    /// Whether a run took the session's own model: a shadow row (no engine of its own) runs on the
+    /// parent's, and a run on the parent's engine with the parent's model is no different from it.
+    static func ownModel(_ run: SubagentRunView, parentEngine: String?, parentModel: String?) -> Bool {
+        guard let engine = nonEmpty(run.engine) else { return true }
+        return engine == parentEngine && nonEmpty(run.model) == nonEmpty(parentModel)
     }
 
     private static func described(_ run: SubagentRunView?) -> String {
         run?.description?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
     }
 
-    /// Nil when the session started no Agent: the capsule then has no place for one.
-    public static func make(_ runs: [SubagentRunView]) -> SubagentSessionSummary? {
+    private static func nonEmpty(_ value: String?) -> String? {
+        guard let value, !value.isEmpty else { return nil }
+        return value
+    }
+
+    /// Nil when the session started no Agent: the capsule then has no place for one. `parentEngine` and
+    /// `parentModel` are the session's own: a run on both, on this machine, adds nothing to the band.
+    public static func make(_ runs: [SubagentRunView], parentEngine: String? = nil,
+                            parentModel: String? = nil) -> SubagentSessionSummary? {
         guard !runs.isEmpty else { return nil }
         let running = runs.filter(\.isRunning).count
         let rows = runs.filter(\.isRunning).sorted { $0.createdAt > $1.createdAt }
             + runs.filter { !$0.isRunning }.sorted { $0.createdAt > $1.createdAt }
-        return SubagentSessionSummary(count: runs.count, running: running, capsule: "\(runs.count)",
-                                      rows: rows)
+        var models: [ModelCount] = []
+        var machines: [MachineCount] = []
+        // Oldest first, so a tie keeps the order the runs were started in.
+        for run in rows.reversed() {
+            if let label = modelLabel(run) {
+                let engine = nonEmpty(run.engine) ?? parentEngine
+                if let i = models.firstIndex(where: { $0.label == label && $0.engine == engine }) {
+                    models[i] = ModelCount(label: label, engine: engine, count: models[i].count + 1)
+                } else {
+                    models.append(ModelCount(label: label, engine: engine, count: 1))
+                }
+            }
+            let name = nonEmpty(run.workspaceName)
+            if let i = machines.firstIndex(where: { $0.name == name }) {
+                machines[i] = MachineCount(name: name, count: machines[i].count + 1)
+            } else {
+                machines.append(MachineCount(name: name, count: 1))
+            }
+        }
+        let own = { (run: SubagentRunView) in ownModel(run, parentEngine: parentEngine, parentModel: parentModel) }
+        let failed = rows.filter {
+            SubagentBlock.describe(input: .object([:]), run: $0, status: .ok).outcomeIsFailure
+        }.count
+        let current = rows.first(where: \.isRunning)
+        return SubagentSessionSummary(
+            count: runs.count, running: running, capsule: "\(runs.count)", rows: rows, failed: failed,
+            models: stableByCount(models), machines: stableByCount(machines),
+            elsewhere: runs.contains { nonEmpty($0.workspaceName) != nil },
+            spread: runs.contains { nonEmpty($0.workspaceName) != nil || !own($0) },
+            currentIsOwnModel: current.map(own) ?? true)
+    }
+
+    /// Most first; a tie keeps its order (Swift's `sorted` is not guaranteed stable).
+    private static func stableByCount<T>(_ list: [T]) -> [T] where T: HasCount {
+        list.enumerated().sorted { a, b in
+            a.element.count != b.element.count ? a.element.count > b.element.count : a.offset < b.offset
+        }.map(\.element)
     }
 }
+
+protocol HasCount { var count: Int { get } }
+extension SubagentSessionSummary.ModelCount: HasCount {}
+extension SubagentSessionSummary.MachineCount: HasCount {}

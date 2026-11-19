@@ -99,6 +99,8 @@ type bgJobService struct {
 	// hosts. A nil job hosts none.
 	job       *ClaimedSession
 	subagents subagentRegistry
+	// The workflows it hosts (subagent_workflow.go), whose calls are among subagents.
+	workflows workflowRegistry
 	// keptPastEnd: the session ended because its coordinator handed over, leaving its SubAgents running
 	// (keepSubagentsPastEnd). The end of each then owes a wake, which the server forwards to the successor.
 	keptPastEnd atomic.Bool
@@ -262,6 +264,8 @@ func (s *bgJobService) handle(req bgSocketRequest) bgSocketResponse {
 
 	case "subagent_start", "subagent_wait", "subagent_detach":
 		return s.handleSubagent(req.Op, args)
+	case "workflow_start":
+		return s.handleWorkflow(req.Op, args)
 
 	case "output":
 		tail, err := bgOptionalInt(args, "tail")
@@ -287,6 +291,10 @@ func (s *bgJobService) handle(req bgSocketRequest) bgSocketResponse {
 			return bgSocketResponse{Error: err.Error()}
 		}
 		return bgSocketResponse{OK: true, Result: status}
+
+	case browserMCPAcquireOp:
+		// One browser tool call by this session (browser_mcp.go).
+		return s.serveBrowserAcquire()
 
 	case "secret_scan":
 		return s.secretScan(getString(args, "path"))

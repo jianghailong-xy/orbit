@@ -271,6 +271,10 @@ func (s *mcpServer) handle(req *rpcRequest) (rpcResponse, bool) {
 			// Claude Code names the call this is; its SubAgent's events nest under that id.
 			return s.ok(req.ID, s.callDelegate(p.Arguments, asString(p.Meta["claudecode/toolUseId"]))), true
 		}
+		if p.Name == workflowToolName {
+			// Its calls' events nest under this id, as a delegate call's do.
+			return s.ok(req.ID, s.callWorkflow(p.Arguments, asString(p.Meta["claudecode/toolUseId"]))), true
+		}
 		return s.ok(req.ID, s.invokeTool(p.Name, p.Arguments)), true
 	default:
 		if isNotification {
@@ -1905,6 +1909,29 @@ func (s *mcpServer) runTool(name string, args map[string]interface{}) map[string
 		raw, err := s.t.endSession(s.sessionID, s.orchestrationToken, id)
 		if err != nil {
 			return toolResult("end session failed: "+err.Error(), true)
+		}
+		return toolResult(prettyJSON(raw), false)
+
+	case "session_move":
+		if !s.orchestrationEnabled() {
+			return toolResult(orchestrationOffMsg, true)
+		}
+		id := getString(args, "sessionId")
+		if id == "" {
+			return toolResult("sessionId is required", true)
+		}
+		body := map[string]interface{}{}
+		copyIfPresent(body, args, "workspaceId")
+		// folderId null is an answer of its own: out of any folder.
+		if folder, ok := args["folderId"]; ok {
+			body["folderId"] = folder
+		}
+		if len(body) == 0 {
+			return toolResult("pass workspaceId, folderId, or folderId null to take the session out of its folder", true)
+		}
+		raw, err := s.t.moveSession(s.sessionID, s.orchestrationToken, id, body)
+		if err != nil {
+			return toolResult("move session failed: "+err.Error(), true)
 		}
 		return toolResult(prettyJSON(raw), false)
 

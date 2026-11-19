@@ -84,6 +84,10 @@ internal object RunnerCopy {
     const val SEP = " · "
     const val NO_PROVIDER_KEY = "no provider key found"
     fun offlineLastSeen(whenText: String) = "Offline · last seen $whenText"
+    /** The country a machine's IP is in, first in the line under a machine page's title (OrbitKit `runnerLocation`). */
+    fun location(place: String) = "📍 $place"
+    /** The same, when the check went through a proxy: the country is the proxy's, not the machine's. */
+    fun locationViaProxy(place: String) = "📍 $place (via proxy)"
     fun versionTag(version: String) = "v$version"
     fun runningOf(active: Int, max: Int) = "$active of $max running"
     const val ADD = "Add Runner"
@@ -1088,6 +1092,10 @@ internal object RunnerPage {
     fun isManaged(id: String?, managedRunnerId: String? = ManagedRunnerIdentity.runnerId, managed: Boolean? = null): Boolean =
         managed == true || (!id.isNullOrEmpty() && !managedRunnerId.isNullOrEmpty() && ObjectId.same(id, managedRunnerId))
 
+    /** The OS a runner reported, from its `os:<goos>` capability (`darwin`, `linux`, `windows`, …), as the web's machineOs reads it;
+     *  null when it has not said. A machine row draws its mark by it (docs/mocks/machine-menu-icons, A). */
+    fun os(runner: JsonObject): String? = runner.strings("capabilities").firstOrNull { it.startsWith("os:") }?.removePrefix("os:")
+
     /** Pin the account's managed runner, keeping the order the server sent for the other machines. */
     fun managedRunnerFirst(runners: List<JsonObject>, managedRunnerId: String? = ManagedRunnerIdentity.runnerId): List<JsonObject> =
         runners.sortedByDescending { isManaged(it, managedRunnerId) }
@@ -1118,6 +1126,18 @@ internal object RunnerPage {
         val host = runner.str("hostname")?.trim()?.takeIf { it.isNotEmpty() && it != shown }
         return listOfNotNull(host, versionLine(runner.str("version"), managed)).joinToString(RunnerCopy.SEP)
     }
+
+    /** Where a machine's IP is, from the Claude region check's last answer (`runner.region`): `📍 Japan`, `📍 Japan (via proxy)`.
+     *  Null for a runner no check has decided, or one too old to check. The web's `runnerLocationLine`. */
+    fun location(runner: JsonObject): String? {
+        val region = runner.obj("region") ?: return null
+        val place = region.str("name")?.trim()?.takeIf { it.isNotEmpty() } ?: region.str("country")?.trim()?.takeIf { it.isNotEmpty() } ?: return null
+        return if (region.bool("viaProxy") == true) RunnerCopy.locationViaProxy(place) else RunnerCopy.location(place)
+    }
+
+    /** The head's line under the title: the country its IP is in, then [hostLine]. */
+    fun headLine(runner: JsonObject, managed: Boolean = false): String =
+        listOfNotNull(location(runner), hostLine(runner, managed).takeIf { it.isNotEmpty() }).joinToString(RunnerCopy.SEP)
 
     /** green online, amber while it drains, grey offline. */
     /** The status dot, by the web's rule: "online" or "offline" — a machine that drains is online. */

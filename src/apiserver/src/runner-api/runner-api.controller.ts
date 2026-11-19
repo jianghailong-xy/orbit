@@ -3,7 +3,7 @@ import { appendRunQuestionContext, questionRecipient, RUN_QUESTION_PREFIX } from
 import { DRAIN_SKIPS_HELD, translationLanguages, turnTranslationOf } from '../sessions/turn-translation';
 import { isRunNotifyTurn, runNotifyContent } from '../sessions/run-notify';
 import { acceptedFinalizeBranch, codelessClaimFields } from '../sessions/codeless-checkout';
-import { CONDITION_PROBE_CAPABILITY, readMergeRecovery, mergeRecoveryReady, RUNNER_RESTART_INTERRUPT_REASON, RUNNER_UPDATE_INTERRUPT_REASON, type MergeRecovery } from '@orbit/shared';
+import { BROWSER_CLEAR_V1, CONDITION_PROBE_CAPABILITY, readMergeRecovery, mergeRecoveryReady, RUNNER_RESTART_INTERRUPT_REASON, RUNNER_UPDATE_INTERRUPT_REASON, type MergeRecovery } from '@orbit/shared';
 import { OWNER_SECRET_CAPABILITY, OwnerSecretsService } from '../owner-requests/owner-secrets.service';
 import { ConditionsService } from '../conditions/conditions.service';
 import { GithubWorkspaceService } from '../github/github-workspace.service';
@@ -240,6 +240,7 @@ import {
 import { normalizeStoredRememberRules, reachesPastOneMcpTool } from '../sessions/remember-rules';
 import {
   APPROVAL_ABANDONED_STATUS,
+  reapApprovalsOfEndedJobs,
   reapApprovalsOfEndedTurns,
   reapApprovalsOfReplacedSupervisor,
   reapApprovalsOfReplacedSupervisors,
@@ -258,7 +259,8 @@ import {
   stopOvertookTarget,
   terminalizePendingCurrentWorkSteers,
 } from '../sessions/current-work-delivery';
-import { fileSubagentWake, interruptOrphanedSubagentRuns } from './subagent-wake';
+import { fileSubagentWake, fileWorkflowWake, interruptOrphanedSubagentRuns, interruptOrphanedWorkflowRuns } from './subagent-wake';
+import { orbitWorkflowLaunchReceipt } from './workflow-run';
 import { remoteSubagentHeartbeat } from './subagent-remote';
 import { CLEARED_RUNNING_WORK } from '../sessions/running-work';
 import { deadLetterQueuedWatchWakes } from '../watches/watch-wake-drain';
@@ -526,6 +528,7 @@ import {
   withProviderDeclarations,
 } from './runner-provider-support';
 import { coordinatorCreateAllowedBy } from './unstarted-project-create';
+import { sessionCreateAllowedBy } from './session-create-allowance';
 import {
   freezeSessionSourcePin,
   forkAuthorityBindings, sessionSourceSnapshot,
@@ -544,6 +547,7 @@ import {
   sessionEngine,
   type SessionEngineFacts,
 } from '../providers/session-engine';
+import { storedBrowserState } from '../managed-runners/browser-state';
 import { refuseManagedRunnerDeletion } from '../managed-runners/managed-runner-delete';
 import { DELETE_APPROVAL_TOOL_NAMES, deleteCardInput } from './runner-delete-approval';
 import { sanitizeWorkspaceWrite } from './runner-agents.controller';
@@ -1060,7 +1064,7 @@ const QUOTA_RETRY_JITTER_MS = 60_000;
 // The runtime tools whose call starts work that outlives it — see subStarted in the events ingest.
 // Claude Code's own names: Agent (Task before 2.x) runs one sub-agent, Workflow a team of them; and
 // Orbit's own SubAgent (docs/subagent-design.md §6.2), whatever engine the parent runs.
-const RUNTIME_SUBAGENT_TOOLS = new Set(['Task', 'Agent', 'Workflow', 'mcp__orbit__delegate']);
+const RUNTIME_SUBAGENT_TOOLS = new Set(['Task', 'Agent', 'Workflow', 'mcp__orbit__delegate', 'mcp__orbit__workflow']);
 const LEASE_GENERATION_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
 // Session primary keys are UUIDv7, while older rows may still be UUIDv4. Keep
 // entity-ID validation separate from the stricter runner-generated lease UUID
@@ -2279,6 +2283,9 @@ export class RunnerApiController {
         // newer binary reported must not outlive it. A report this server can't read is NULL too.
         selfUpdate:
           (sanitizeRunnerSelfUpdate(dto?.selfUpdate) as unknown as Prisma.InputJsonValue | null) ?? Prisma.DbNull,
+        // The managed runner browser (managed-runners/browser-state.ts), with this beat's time. Written by every beat,
+        // to NULL when it omits it, like selfUpdate: absence is a runner with no browser, not "no news".
+        browserState: (storedBrowserState(dto?.browser, beatAt) as unknown as Prisma.InputJsonValue | null) ?? Prisma.DbNull,
         // The directory this machine clones into, under which a workspace created from a git URL
         // gets its checkout. An empty string is treated as no report, exactly like the omission an
         // older runner sends: NULL here means "this machine never told us where it clones", and
@@ -2697,6 +2704,7 @@ export class RunnerApiController {
     let checkSelfUpdate: RunnerHeartbeatResponse['checkSelfUpdate'];
     let postponeSelfUpdateUntil: RunnerHeartbeatResponse['postponeSelfUpdateUntil'];
     let selfUpdateNow: RunnerHeartbeatResponse['selfUpdateNow'];
+    let clearBrowserProfile: RunnerHeartbeatResponse['clearBrowserProfile'];
     let regionCheckRequest: RunnerHeartbeatResponse['regionCheckRequest'];
     let forkSnapshotsOpen: RunnerHeartbeatResponse['forkSnapshotsOpen'];
     try {
@@ -2772,6 +2780,11 @@ export class RunnerApiController {
       checkSelfUpdate = await this.drainSelfUpdateRequest(runner.id);
       postponeSelfUpdateUntil = await this.drainSelfUpdatePostpone(runner.id);
       selfUpdateNow = await this.drainSelfUpdateNow(runner.id);
+      // The owner's Clear saved logins (managed-runners/browser-state.ts), claimed the same way; only a runner that
+      // declares browser-clear/v1 is handed it, and one that does not keeps it on the row.
+      if (runnerSupportsCapability(capabilities, BROWSER_CLEAR_V1)) {
+        clearBrowserProfile = await this.drainBrowserClearRequest(runner.id);
+      }
       // The owner's Check again, redelivered rather than claimed: a beat that skips it costs nothing, so it is last.
       regionCheckRequest = await this.drainRegionCheckRequest(runner.id, capabilities);
       // A listing, read on every full beat like agentDirs; a beat that fails before it states nothing, which the
@@ -2844,6 +2857,7 @@ export class RunnerApiController {
       ...(dto?.draining === true ? { drainScopedClaims: true } : {}),
       postponeSelfUpdateUntil,
       selfUpdateNow,
+      ...(clearBrowserProfile ? { clearBrowserProfile } : {}),
       // Only when a claim holds a command for this process: an older runner's response stays the shape
       // it always was, and a direct caller comparing responses sees no new key.
       ...(codexRateLimitResetRequest ? { codexRateLimitResetRequest } : {}),
@@ -3214,6 +3228,22 @@ export class RunnerApiController {
    * `selfUpdate` state later heartbeats carry — the new version, or `waitingForIdle` while a turn
    * runs — so a redelivered request would re-run the check on every beat. The clear is the claim.
    */
+  /**
+   * The owner's Clear saved logins (managed-runners/browser-state.ts), handed to one beat: the clear of the column is
+   * the claim, predicated on the time read, so a second press written between the read and the clear stays for the
+   * next beat. The runner's `browser.profileClearedAt` is the answer.
+   */
+  private async drainBrowserClearRequest(runnerId: string): Promise<true | undefined> {
+    const row = await this.prisma.runner.findUnique({ where: { id: runnerId }, select: { browserClearRequestedAt: true } });
+    const at = row?.browserClearRequestedAt;
+    if (!at) return undefined;
+    const claimed = await this.prisma.runner.updateMany({
+      where: { id: runnerId, browserClearRequestedAt: at },
+      data: { browserClearRequestedAt: null },
+    });
+    return claimed.count > 0 ? true : undefined;
+  }
+
   private async drainSelfUpdateRequest(runnerId: string): Promise<true | undefined> {
     const claimed = await this.prisma.runner.updateMany({
       where: { id: runnerId, selfUpdateRequestedAt: { not: null } },
@@ -3260,7 +3290,8 @@ export class RunnerApiController {
    * The snapshots this runner's open forked tasks start from (docs/task-fork-from-session-design.md §2.6, SR55): the
    * distinct `fork_sha` of every OPEN or IN_PROGRESS task forked on this runner. The runner deletes each keep-alive ref
    * whose snapshot is not listed, so a task that closed lets its snapshot go. Only to a process that declares
-   * task-fork/v1; undefined otherwise, which deletes nothing. Reads only, through the owner's status index.
+   * task-fork/v1; undefined otherwise, which deletes nothing. Reads only, through `task_fork_snapshot_idx` (1130),
+   * which holds only forked tasks: the owner's status index is no entry when one owner holds nearly every task.
    */
   private async forkSnapshotsOpen(
     ownerId: string,
@@ -4403,17 +4434,14 @@ export class RunnerApiController {
           (workspace?.disallowedTools as string[] | null) ?? [],
           runAccessLevel(s.scheduleRun),
           provider,
-          runner.capabilities,
         ),
         // A CHECK_ONLY run's Plan runs Codex in its read-only sandbox (design §6.2); absent for every other session.
         ...scheduleRunAgentFields(runAccessLevel(s.scheduleRun)),
         permissionMode: normalizeBuiltinPermissionMode(
           provider,
           runnerModel,
-          // A CHECK_ONLY run on Claude Code asks only on a runner that closes the rest (schedule-access.ts).
-          scheduleRunPermissionMode(
-            permissionMode, runAccessLevel(s.scheduleRun), provider, runner.capabilities,
-          ),
+          // A scheduled run on Claude Code runs in Auto, whatever its level (schedule-access.ts).
+          scheduleRunPermissionMode(permissionMode, runAccessLevel(s.scheduleRun), provider),
           customRow?.enabled === true,
           runner.runsAsRoot,
           s.assignedRunner?.modelCatalog,
@@ -4659,7 +4687,7 @@ export class RunnerApiController {
       }
       const currentOwner = owned[0].inboxLeaseOwner;
       if (currentOwner === leaseOwner) {
-        return { status: owned[0].status, orphanedApprovals: [], interruptedSubagents: [] as string[] };
+        return { status: owned[0].status, orphanedApprovals: [], interruptedSubagents: [] as string[], interruptedWorkflows: [] as string[] };
       }
       if (
         (pendingWorktreeOperationMayBeExecuting(
@@ -4748,7 +4776,8 @@ export class RunnerApiController {
       // (subagent-wake.ts), filed once this commits. A predecessor that stopped in good order reported them
       // itself, and none is left RUNNING.
       const interruptedSubagents = currentOwner ? await interruptOrphanedSubagentRuns(tx, sessionId) : [];
-      return { status: owned[0].status, orphanedApprovals, interruptedSubagents };
+      const interruptedWorkflows = currentOwner ? await interruptOrphanedWorkflowRuns(tx, sessionId) : [];
+      return { status: owned[0].status, orphanedApprovals, interruptedSubagents, interruptedWorkflows };
     }, loggedRetry(this.logger, 'runnerApi.takeoverLeases'));
     if (taken.interruptedSubagents.length > 0 && this.sessions) {
       for (const runId of taken.interruptedSubagents) {
@@ -4757,6 +4786,15 @@ export class RunnerApiController {
         } catch (error) {
           // The wake sweep files it on its next pass.
           this.logger.warn(`the wake for interrupted SubAgent run ${runId} was not filed yet: ${(error as Error).message}`);
+        }
+      }
+    }
+    if (this.sessions) {
+      for (const runId of taken.interruptedWorkflows) {
+        try {
+          await fileWorkflowWake(this.prisma, this.sessions, runId);
+        } catch (error) {
+          this.logger.warn(`the wake for interrupted workflow run ${runId} was not filed yet: ${(error as Error).message}`);
         }
       }
     }
@@ -6296,7 +6334,9 @@ export class RunnerApiController {
       ? AUTO_ALLOWED_MESSAGE
       : existing || refused
         ? null
-        : await coordinatorCreateAllowedBy(this.prisma, session, dto.toolName, dto.input);
+        : (await coordinatorCreateAllowedBy(this.prisma, session, dto.toolName, dto.input)) ??
+          // And any session's first few creates (`session-create-allowance.ts`).
+          (await sessionCreateAllowedBy(this.prisma, session, dto.toolName, dto.input));
     // Which turn is asking. Derived here rather than sent by the runner: the MCP server knows only
     // its session, and the server already knows which turn it leased to that session — the runner
     // has been polling inside it since the dequeue. It is what makes an abandoned call provable
@@ -9377,6 +9417,7 @@ export class RunnerApiController {
             !(e.payload as { parentToolUseId?: string }).parentToolUseId &&
             !isAsyncAgentLaunchAck((e.payload as { content?: unknown }).content) &&
             !workflowLaunchReceipt((e.payload as { content?: unknown }).content) &&
+            !orbitWorkflowLaunchReceipt((e.payload as { content?: unknown }).content) &&
             // A background SubAgent's `{ runId, status: "running" }`: it runs on, and its terminal
             // background_task clears it.
             !delegateLaunchReceipt((e.payload as { content?: unknown }).content),
@@ -9412,16 +9453,21 @@ export class RunnerApiController {
       const subRunning = events
         .filter((e) => {
           if (e.type !== RunEventType.BACKGROUND_TASK) return false;
-          const { status, subagentRunId } = e.payload as { status?: unknown; subagentRunId?: unknown };
-          return status === 'running' && typeof subagentRunId === 'string' && subagentRunId !== '';
+          // A workflow (runner-go subagent_workflow.go) is re-announced by its own id, and runs SubAgents as one.
+          const { status, subagentRunId, workflowRunId } = e.payload as { status?: unknown; subagentRunId?: unknown; workflowRunId?: unknown };
+          const runId = subagentRunId || workflowRunId;
+          return status === 'running' && typeof runId === 'string' && runId !== '';
         })
         .map((e) => String((e.payload as { toolUseId?: unknown }).toolUseId ?? ''))
         .filter(Boolean);
       const bgRunningReports = events
         .filter((e) => {
           if (e.type !== RunEventType.BACKGROUND_TASK) return false;
-          const { status, kind, subagentRunId } = e.payload as { status?: unknown; kind?: unknown; subagentRunId?: unknown };
+          const { status, kind, subagentRunId, workflowRunId } = e.payload as {
+            status?: unknown; kind?: unknown; subagentRunId?: unknown; workflowRunId?: unknown;
+          };
           if (typeof subagentRunId === 'string' && subagentRunId !== '') return false;
+          if (typeof workflowRunId === 'string' && workflowRunId !== '') return false;
           return status === 'running' && typeof kind === 'string' && kind !== '';
         })
         .map((e) => {
@@ -9543,8 +9589,12 @@ export class RunnerApiController {
           },
         });
       }
+      // The cards a job that has just ended was reading: nothing is left to take their answer, and the
+      // turn ending — where they were collected before — may be hours off (reapApprovalsOfEndedJobs).
+      const jobCardsCollected = await reapApprovalsOfEndedJobs(tx, sessionId, bgEnded);
       return {
-        session, currentWorkAcknowledged, abandonedApprovals, accountReload, events, durable, alreadyStored: stored.size,
+        session, currentWorkAcknowledged, abandonedApprovals: [...abandonedApprovals, ...jobCardsCollected],
+        accountReload, events, durable, alreadyStored: stored.size,
         restated, seqConflicts, door: link ? 'link' : 'https', engineStarted,
       };
     };

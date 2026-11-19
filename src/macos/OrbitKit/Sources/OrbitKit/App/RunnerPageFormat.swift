@@ -67,6 +67,13 @@ public enum RunnerPageFormat {
         return PublicID.storageKey(runnerID) == PublicID.storageKey(managedRunnerID)
     }
 
+    /// The OS a runner reported, from its `os:<goos>` capability (`darwin`, `linux`, `windows`, …), as the web's
+    /// `machineOs` reads it; nil when it has not said. A machine list draws its mark by it (docs/mocks/machine-menu-icons, A).
+    public static func os(_ runner: Runner) -> String? {
+        guard let capability = runner.capabilities?.first(where: { $0.hasPrefix("os:") }) else { return nil }
+        return String(capability.dropFirst(3))
+    }
+
     /// Orbit Cloud leads the list. The other machines keep the order the server gave them.
     public static func managedFirst(_ runners: [Runner], managedRunnerID: String?) -> [Runner] {
         guard let index = runners.firstIndex(where: { isManaged($0, managedRunnerID: managedRunnerID) }),
@@ -133,6 +140,19 @@ public enum RunnerPageFormat {
             .flatMap { $0.isEmpty || $0 == shown ? nil : $0 }
         let version = RunnerAttention.runnerVersionLine(runner.version, managed: orbitCloud)
         return [host, version].compactMap { $0 }.joined(separator: RunnerPageCopy.RUNNER_LINE_SEPARATOR)
+    }
+
+    /// Where a machine's IP is, from the Claude region check's last answer (`runner.region`):
+    /// `📍 Japan`, `📍 Japan (via proxy)`. Nil for a runner no check has decided, or one too old to
+    /// check. The web's `runnerLocationLine`.
+    public static func location(_ runner: Runner) -> String? {
+        guard let region = runner.region else { return nil }
+        let name = region.name?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+        let place = name.isEmpty ? (region.country?.trimmingCharacters(in: .whitespacesAndNewlines) ?? "") : name
+        guard !place.isEmpty else { return nil }
+        return region.viaProxy == true
+            ? RunnerPageCopy.runnerLocationViaProxy(place: place)
+            : RunnerPageCopy.runnerLocation(place: place)
     }
 
     // MARK: Needs Attention

@@ -39,7 +39,7 @@ func TestWithOrbitCLIInstructions(t *testing.T) {
 		// card the create raises, never the model deciding the shape qualifies. Saying first what is
 		// about to be created is what keeps that card from arriving unannounced.
 		"writes nothing until they confirm it",
-		"first say in a sentence or two what you are about to create",
+		"first say in a sentence or two what you will create",
 		"do not create it another way",
 		"Its confirmation card is the user's answer",
 		"from this same session",
@@ -491,7 +491,7 @@ func TestOnlyATopLevelSessionIsToldWhenToDelegate(t *testing.T) {
 		}
 	}
 	for _, want := range []string{"cheaper or stronger model", "another machine", `needs: ["os:darwin"]`, "workspace",
-		"in the background", "built-in subagent or Agent tool", "record the cost", "ToolSearch select:mcp__orbit__delegate"} {
+		"in the background", "built-in subagent or Agent tool", "records the cost", "ToolSearch select:mcp__orbit__delegate"} {
 		if !strings.Contains(orbitDelegateInstructions, want) {
 			t.Errorf("the delegate paragraph lacks %q", want)
 		}

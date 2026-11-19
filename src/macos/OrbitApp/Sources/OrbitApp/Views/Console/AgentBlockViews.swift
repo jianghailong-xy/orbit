@@ -264,31 +264,42 @@ struct AgentGroupView: View {
     }
 }
 
-/// The composer band's line for the session's Agents: what the running one is doing, or the last
-/// one's description with how it ended and its time (`SubagentSessionSummary.band`, `.last`). No cost.
-/// It opens their list (`AgentsSheet`). Absent until the session has started one.
+/// The composer band's line for the session's Agents (docs/mocks/agents-band-models): what the running one
+/// is doing and where, or with none running where the work went — the machines first, then each model with
+/// how many runs took it — and, in every state, how many failed at its right edge. No cost, and no check
+/// when all succeeded. Always one line: what does not fit gives way in order (the title, the models after
+/// the first, then the words, then the models), the machines and the failures last. It opens their list
+/// (`AgentsSheet`). Absent until the session has started one.
 struct AgentsBandRow: View {
     @Environment(AppModel.self) private var app
     let console: ConsoleModel
     @State private var showing = false
 
     var body: some View {
-        if let summary = SubagentSessionSummary.make(Array(console.subagentRuns.values)) {
+        let session = app.session(id: console.sessionID)
+        if let summary = SubagentSessionSummary.make(Array(console.subagentRuns.values),
+                                                     parentEngine: session?.engine, parentModel: session?.model) {
             Button { showing = true } label: {
                 HStack(spacing: 8) {
                     Image(systemName: "sparkle").font(.orbitMeta).foregroundStyle(.purple)
                     Text("Agents").font(.orbitLabel.weight(.semibold))
-                    Text(summary.band).font(.orbitMeta).foregroundStyle(.secondary).lineLimit(1)
-                    Spacer(minLength: 4)
                     if summary.running > 0 {
-                        ProgressView().controlSize(.mini)
-                    } else if let last = summary.last {
-                        // How the newest run ended, as its row in the sheet marks it.
-                        ToolStatusGlyph(status: last.failed ? .error : .ok)
-                        if let duration = last.duration {
-                            Text(duration).font(.orbitMeta).monospacedDigit().foregroundStyle(.secondary)
-                        }
+                        Text(summary.band).font(.orbitMeta).foregroundStyle(.secondary).lineLimit(1)
+                        AgentsBandCurrent(summary: summary).layoutPriority(1)
+                        Spacer(minLength: 4)
+                    } else {
+                        Text(summary.band).font(.orbitMeta).monospacedDigit().foregroundStyle(.secondary)
+                            .fixedSize()
+                        if summary.spread { AgentsBandSpread(summary: summary) }
+                        Spacer(minLength: 4)
                     }
+                    // Failures in every state, the title giving way first: before the spinner while one runs.
+                    if summary.failed > 0 {
+                        Label("\(summary.failed) failed", systemImage: "xmark.circle.fill")
+                            .font(.orbitMeta.weight(.semibold)).foregroundStyle(.red)
+                            .labelStyle(.titleAndIcon).fixedSize().layoutPriority(2)
+                    }
+                    if summary.running > 0 { ProgressView().controlSize(.mini) }
                     Image(systemName: "chevron.right")
                         .font(.orbitMeta.weight(.semibold)).foregroundStyle(.secondary)
                 }
@@ -298,14 +309,101 @@ struct AgentsBandRow: View {
             .buttonStyle(.plain)
             .composerBandCard()
             .padding(.bottom, .composerBandGap)
-            .accessibilityLabel(["Agents: \(summary.band)", summary.last?.spoken].compactMap { $0 }.joined(separator: ", "))
+            .accessibilityLabel(summary.spoken)
             .sheet(isPresented: $showing) {
-                AgentsSheet(summary: summary, parentEngine: app.session(id: console.sessionID)?.engine) { id in
+                AgentsSheet(summary: summary, parentEngine: session?.engine) { id in
                     showing = false
                     console.revealAgent(id)
                 }
             }
         }
+    }
+}
+
+/// Where the running Agent runs: its machine when it went to another one, else its model when that is
+/// not the session's own — the chip with its name, or its mark alone when the name does not fit.
+private struct AgentsBandCurrent: View {
+    let summary: SubagentSessionSummary
+
+    var body: some View {
+        if let run = summary.current {
+            if let place = run.workspaceName, !place.isEmpty {
+                AgentFact(symbol: "desktopcomputer", text: place).lineLimit(1).fixedSize()
+            } else if !summary.currentIsOwnModel, let label = SubagentSessionSummary.modelLabel(run) {
+                ViewThatFits(in: .horizontal) {
+                    AgentBandChip(engine: run.engine, label: label)
+                    AgentBandChip(engine: run.engine, label: nil)
+                }
+            }
+        }
+    }
+}
+
+/// Where the work went, with none running: the machines first, then the models most runs first, each
+/// with its count. What does not fit gives way: the models after the first fold into "+n", then the
+/// words go and the marks keep their counts; the machines stay.
+private struct AgentsBandSpread: View {
+    let summary: SubagentSessionSummary
+
+    var body: some View {
+        ViewThatFits(in: .horizontal) {
+            line(words: true, allModels: true)
+            line(words: true, allModels: false)
+            line(words: false, allModels: true)
+            line(words: false, allModels: false)
+            line(words: false, allModels: false, models: false)
+        }
+    }
+
+    private func line(words: Bool, allModels: Bool, models: Bool = true) -> some View {
+        let shown = allModels ? summary.models : Array(summary.models.prefix(1))
+        let folded = summary.models.count - shown.count
+        return HStack(spacing: 5) {
+            if summary.elsewhere {
+                AgentFact(symbol: "desktopcomputer",
+                          text: words ? "\(summary.machines.count) machines" : "\(summary.machines.count)")
+            }
+            if models {
+                ForEach(Array(shown.enumerated()), id: \.offset) { _, m in
+                    AgentBandChip(engine: m.engine, label: words ? m.label : nil, count: m.count)
+                }
+                if folded > 0 {
+                    Text("+\(folded)").font(.orbitLabel).foregroundStyle(.secondary)
+                        .padding(.horizontal, 5).padding(.vertical, 2)
+                        .background(Color.gray.opacity(0.14), in: RoundedRectangle(cornerRadius: 6))
+                }
+            }
+        }
+        .lineLimit(1)
+        .fixedSize()
+    }
+}
+
+/// `[C] Opus 5.5 ×9` on the band: the coding agent's mark, the model unless there is no room for it, and
+/// how many runs took it. `AgentEngineChip`'s look.
+struct AgentBandChip: View {
+    let engine: String?
+    let label: String?
+    var count: Int? = nil
+
+    var body: some View {
+        let tint = engineTint(engine)
+        HStack(spacing: 4) {
+            if let engine {
+                Text(String(SubagentBlock.shortName(engine).prefix(1)))
+                    .font(.orbitSectionLabel.weight(.heavy))
+                    .foregroundStyle(Color(white: 1))
+                    .frame(width: 14, height: 14)
+                    .background(tint, in: RoundedRectangle(cornerRadius: 4))
+            }
+            if let label { Text(label).lineLimit(1) }
+            if let count { Text("×\(count)").foregroundStyle(.secondary).monospacedDigit() }
+        }
+        .font(.orbitLabel)
+        .padding(.leading, engine == nil ? 6 : 3).padding(.trailing, label == nil && count == nil ? 3 : 6)
+        .padding(.vertical, 2)
+        .background(tint.opacity(0.12), in: RoundedRectangle(cornerRadius: 6))
+        .fixedSize()
     }
 }
 
@@ -319,11 +417,10 @@ struct AgentsSheet: View {
 
     var body: some View {
         NavigationStack {
+            // One list, the running ones first (`summary.rows`' order), with no Running / Done headings:
+            // each row's status mark already tells them apart.
             List {
-                let running = summary.rows.filter(\.isRunning)
-                let ended = summary.rows.filter { !$0.isRunning }
-                if !running.isEmpty { Section("Running") { ForEach(running) { row($0) } } }
-                if !ended.isEmpty { Section("Done") { ForEach(ended) { row($0) } } }
+                ForEach(summary.rows) { row($0) }
             }
             .navigationTitle("Agents")
             #if os(iOS)

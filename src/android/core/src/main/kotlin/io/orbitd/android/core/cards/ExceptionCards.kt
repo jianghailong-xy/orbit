@@ -307,6 +307,7 @@ object ExceptionCards {
 
     /** How the item became the owner's, one sentence per way; null for an item that was the owner's from the start. */
     fun heading(row: JsonObject, now: Instant = Instant.now()): String? {
+        if (row.obj("baseline") != null) return LandingCheckCopy.title(row.obj("facts")?.text("targetRef")?.removePrefix("refs/heads/") ?: "the project branch")
         // §4.6 X-E5 (revision 23): the item is escalated at birth, so `waitedBeforeEscalation` would only ever say "1s". Its heading
         // is the fact it is about — how long the claim has been silent, counted from the last report the runner made (board v4 06).
         if (row.text("kind") == "LANDING_LEASE_EXPIRED") {
@@ -442,6 +443,15 @@ object ExceptionCards {
     /** The rows of the item's payload, in the browser's order (`ItemFactRows`), field for field. X-E5 draws the claim it is about in
      * three rows instead of the item's sentence; an item an older build opened carries no lease and keeps that sentence. */
     fun facts(row: JsonObject): Facts {
+        row.obj("baseline")?.let { baseline -> return Facts.Rows(listOf(
+            FactRow("", LandingCheckCopy.baselineBody),
+            FactRow(LandingCheckCopy.held, row.strings("heldTaskIds").size.toString()),
+            FactRow(LandingCheckCopy.upstream, baseline.text("upstreamSha").orEmpty(), mono = true),
+            FactRow(LandingCheckCopy.tip, baseline.text("targetSha").orEmpty(), mono = true),
+            FactRow(LandingCheckCopy.baseline, baseline.text("mergeTreeSha").orEmpty(), mono = true),
+            FactRow(LandingCheckCopy.label, baseline.obj("check")?.text("command").orEmpty(), mono = true),
+            FactRow("", LandingCheckCopy.resumes))) }
+
         if (row.text("kind") == "LANDING_LEASE_EXPIRED") row.obj("lease")?.let { return Facts.Rows(leaseFacts(row, it)) }
         val facts = row.obj("facts") ?: return Facts.DetailLine(row.text("detailLine").orEmpty())
         val rows = mutableListOf<FactRow>()
@@ -625,10 +635,11 @@ object ExceptionCards {
     private fun bool(row: JsonObject, key: String): Boolean? = (row[key] as? JsonPrimitive)?.booleanOrNull
 
     /** The kinds the card draws once they are the owner's by escalation, a hand-over, an ended or missing coordinator. A failed
-     * chain's 3rd failure and a silent landing claim keep cards of their own. */
+     * chain's 3rd failure, a silent landing claim, and a failing landing baseline keep cards of their own. */
     private val whoFixesKinds = setOf("INTEGRATION_CONFLICT", "INTEGRATION_CHECK_FAILED", "INTEGRATION_ERROR", "TASK_FAILED", "DELIVERY_REVIEW")
 
-    fun whoFixesIt(row: JsonObject): Boolean = row.text("assignee") == "OWNER" && row.text("kind") in whoFixesKinds &&
+    fun whoFixesIt(row: JsonObject): Boolean = row.obj("baseline") == null &&
+        row.text("assignee") == "OWNER" && row.text("kind") in whoFixesKinds &&
         row.text("assigneeReason") != "CHAIN_LIMIT" && row.text("assigneeReason") != "DEFAULT"
 
     /** Whether the server drew Ask again: the coordinator can take it, and the status is not read. */

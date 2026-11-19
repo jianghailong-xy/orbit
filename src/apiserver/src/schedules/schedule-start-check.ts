@@ -17,7 +17,7 @@ import type { Prisma, Schedule } from '@prisma/client';
 
 import { isWiderThanStarter, resolvePermissionMode } from '../common/permission-mode';
 import { agentProviderSeed } from '../workspaces/workspace-provider';
-import { scheduleRunMode } from './schedule-access';
+import { scheduleRunMode, scheduleRunPermissionMode } from './schedule-access';
 import { widenedParts, type AccessLevel, type Envelope } from './schedule-envelope';
 import { instantOfLocal, offsetAt, parseRule, ruleCommandHash, runsPerWeek } from './schedule-time';
 
@@ -33,7 +33,11 @@ export type ScheduleHeldReason =
   | 'NO_REPOSITORY'
   | 'WORKTREE_DISABLED';
 
-/** What a run that passed starts with: its mode, and the engine and credential it runs on (null: the workspace's). */
+/**
+ * What a run that passed starts with: its session's mode, and the engine and credential it runs on (null: the
+ * workspace's). The mode is the one the claim runs it in (Auto on Claude Code, schedule-access.ts), so the session
+ * shows the mode it really runs in.
+ */
 export interface StartPlan {
   mode: PermissionMode;
   engine: string | null;
@@ -114,7 +118,8 @@ export async function scheduleStartCheck(db: Db, schedule: Schedule): Promise<St
   if (schedule.accessLevel === 'LAND' && !workspace.enableWorktree) {
     return { ok: false, reason: 'WORKTREE_DISABLED' };
   }
-  return { ok: true, plan: { mode, engine, provider } };
+  const runMode = scheduleRunPermissionMode(mode, schedule.accessLevel as AccessLevel, judged);
+  return { ok: true, plan: { mode: runMode, engine, provider } };
 }
 
 /** The weekly budget's window: the 7 days before a slot, as the schedule's clock reads them. */

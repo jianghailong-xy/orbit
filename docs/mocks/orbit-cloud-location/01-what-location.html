@@ -1,0 +1,112 @@
+<!doctype html>
+<html><head><meta charset="utf-8">
+<style>
+*{box-sizing:border-box}
+body{margin:0;background:#eef0f3;font-family:-apple-system,Inter,'Noto Sans SC',sans-serif;color:#1d2330}
+.board{width:1500px;padding:40px 48px 48px;background:#f7f8fa}
+h1{font-size:28px;margin:0 0 6px}
+.sub{color:#5b6475;font-size:16px;margin:0 0 30px}
+.chain{display:flex;align-items:stretch;gap:0;margin-bottom:34px}
+.node{flex:1;background:#fff;border:1.5px solid #d6dae2;border-radius:14px;padding:18px 20px;position:relative}
+.node h3{margin:0 0 6px;font-size:17px}
+.node p{margin:0;font-size:14px;color:#5b6475;line-height:1.45}
+.arrow{width:56px;display:flex;align-items:center;justify-content:center;font-size:28px;color:#9aa3b2}
+.tag{display:inline-block;font-weight:700;font-size:13px;border-radius:6px;padding:2px 8px;margin-bottom:8px;color:#fff}
+.A{background:#7a5af5}.B{background:#e0782b}.C{background:#1f9d6b}
+.val{font-family:'JetBrains Mono',monospace;font-size:14px;margin-top:10px;background:#f2f4f7;border-radius:6px;padding:6px 8px;display:inline-block}
+.claude{flex:.8;background:#fbf6ee;border-color:#e8d9bf}
+.opts{display:grid;grid-template-columns:repeat(3,1fr);gap:22px}
+.opt{background:#fff;border:1.5px solid #d6dae2;border-radius:14px;padding:20px}
+.opt.rec{border:2.5px solid #1f9d6b}
+.opt h2{font-size:18px;margin:0 0 4px}
+.opt .q{font-size:14px;color:#5b6475;margin:0 0 14px;line-height:1.45}
+.mock{border:1px solid #e1e4ea;border-radius:10px;padding:14px 16px;background:#fcfcfd}
+.mock .t{font-weight:600;font-size:15px;display:flex;align-items:center;gap:8px}
+.dot{width:8px;height:8px;border-radius:50%;background:#22a565}
+.mock .row{display:flex;justify-content:space-between;font-size:13.5px;padding:7px 0;border-top:1px solid #eef0f3;margin-top:8px}
+.mock .row span:first-child{color:#6b7385}
+.hl{background:#fff5c2;border-radius:4px;padding:0 4px}
+ul{margin:14px 0 0;padding-left:18px;font-size:13.5px;line-height:1.55;color:#3a4252}
+.cost{margin-top:12px;font-size:13px;font-weight:600}
+.good{color:#1f9d6b}.warn{color:#c2581b}.bad{color:#c23b3b}
+.today{margin-top:30px;background:#fff;border:1.5px dashed #c3c8d2;border-radius:14px;padding:16px 20px;font-size:14.5px;line-height:1.55}
+.today b{color:#1d2330}
+</style></head><body>
+<div class="board">
+<h1>“Address / location” of Orbit Cloud — three different things</h1>
+<p class="sub">Orbit Cloud is a machine Orbit runs for you. Between it and Claude there are three places you could call its “location”. Values below are examples.</p>
+
+<div class="chain">
+  <div class="node">
+    <span class="tag A">A · Host / data center</span>
+    <h3>Where the machine physically runs</h3>
+    <p>The server rack / cloud zone the Orbit Cloud container lives on.</p>
+    <div class="val">e.g. “Tokyo · ap-northeast-1”</div>
+    <p style="margin-top:10px" class="warn">Orbit does <b>not</b> record this today.</p>
+  </div>
+  <div class="arrow">→</div>
+  <div class="node">
+    <span class="tag B">B · Public IP address</span>
+    <h3>The internet address it goes out from</h3>
+    <p>The IP that websites (and Claude) see the traffic coming from.</p>
+    <div class="val">e.g. 203.0.113.42</div>
+    <p style="margin-top:10px" class="bad">Deliberately <b>never stored</b> (privacy rule in the region contract).</p>
+  </div>
+  <div class="arrow">→</div>
+  <div class="node">
+    <span class="tag C">C · Exit region</span>
+    <h3>Country Claude thinks it's in</h3>
+    <p>Looked up from that IP; decides whether Anthropic serves Claude there.</p>
+    <div class="val">e.g. “Japan · checked 3 min ago”</div>
+    <p style="margin-top:10px" class="good">Already recorded for every machine.</p>
+  </div>
+  <div class="arrow">→</div>
+  <div class="node claude">
+    <h3>Claude (Anthropic)</h3>
+    <p>Allows or blocks by country. If blocked, Orbit already shows a red note naming C.</p>
+  </div>
+</div>
+
+<div class="opts">
+  <div class="opt">
+    <span class="tag A">A</span>
+    <h2>Show the host / data center</h2>
+    <p class="q">“Which data center is my Orbit Cloud machine in?”</p>
+    <div class="mock">
+      <div class="t"><span class="dot"></span>Orbit Cloud</div>
+      <div class="row"><span>Status</span><span>Online</span></div>
+      <div class="row"><span>Location</span><span class="hl">Tokyo · ap-northeast-1</span></div>
+    </div>
+    <ul><li>Server must start reporting where the container runs (new field).</li><li>Then every client shows it.</li></ul>
+    <div class="cost warn">Bigger: server + clients</div>
+  </div>
+  <div class="opt">
+    <span class="tag B">B</span>
+    <h2>Show the public IP</h2>
+    <p class="q">“What IP does my Orbit Cloud machine use?” (e.g. to allow-list it)</p>
+    <div class="mock">
+      <div class="t"><span class="dot"></span>Orbit Cloud</div>
+      <div class="row"><span>Status</span><span>Online</span></div>
+      <div class="row"><span>Public IP</span><span class="hl">203.0.113.42</span></div>
+    </div>
+    <ul><li>Goes against the current rule that Orbit never stores an address.</li><li>Needs your decision to change that rule.</li></ul>
+    <div class="cost bad">Policy change + server + clients</div>
+  </div>
+  <div class="opt rec">
+    <span class="tag C">C · recommended</span>
+    <h2>Always show the exit region</h2>
+    <p class="q">“Which country does Claude see my Orbit Cloud machine in?”</p>
+    <div class="mock">
+      <div class="t"><span class="dot"></span>Orbit Cloud</div>
+      <div class="row"><span>Status</span><span>Online</span></div>
+      <div class="row"><span>Claude region</span><span class="hl">Japan · checked 3 min ago</span></div>
+    </div>
+    <ul><li>Data is already there; today it's only shown when Claude is <b>blocked</b>.</li><li>Change: show it all the time.</li></ul>
+    <div class="cost good">Smallest: clients only</div>
+  </div>
+</div>
+
+<div class="today"><b>Today:</b> the machine page shows nothing about location while things work. Only when Claude refuses the region does a red note appear: “Anthropic doesn't offer Claude in <i>Country</i> … checked 3 min ago”.<br>
+<b>Question for you:</b> which of A, B or C did you mean? (Or more than one.)</div>
+</div>
+</body></html>

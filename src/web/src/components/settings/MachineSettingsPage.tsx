@@ -28,6 +28,7 @@ import { api, cleanUpWorkspaceRepo } from '../../api';
 import { encodeId, routeId } from '../../lib/idCodec';
 import { machineDraftPath, machineName } from '../../lib/machineSetup';
 import { managedRowOf, useManagedRunner, useWakeForSignIn } from '../../lib/managedRunner';
+import { RunnerBrowserSection } from './RunnerBrowserSection';
 import { ManagedRunnerNotice } from '../ManagedRunnerNotice';
 import { machineEmpty, START_A_SESSION } from '../../lib/machineSetupCopy';
 import { publishedRunnerVersionQuery, workspaceSessionCountsQuery } from '../../lib/queries';
@@ -62,6 +63,7 @@ import {
   runnerAttention,
   runnerCanUpdateNow,
   runnerDisk,
+  runnerLocationLine,
   runnerVersionLine,
   type AttentionItem,
   type AttentionKind,
@@ -130,7 +132,7 @@ import { RunnerUpdateLaterMenu } from '../RunnerUpdateLater';
 import { RunnerUpdateNowButton } from '../RunnerUpdateNow';
 import { runnerTakesUpdateNow } from '../../lib/runnerUpdateNow';
 import { useClaudeRegionCheckAgain } from '../../lib/claudeRegion';
-import { CLAUDE_REGION_CHECK_AGAIN } from '../../lib/claudeRegionCopy';
+import { CLAUDE_REGION_CHECK_AGAIN, claudeRegionChecked } from '../../lib/claudeRegionCopy';
 import { ago, ENGINE_CLI_NAME } from '../../lib/runnerEngines';
 import { useToast } from '../../lib/toast';
 import { MachineResources } from './MachineResources';
@@ -732,6 +734,8 @@ export function MachineSettingsPage() {
     runnerVersionLine(version, isManaged),
     runner.online && runner.lastHeartbeatAt ? `${RUNNER_ABOUT_LAST_CHECK_IN} ${ago(runner.lastHeartbeatAt, nowMs)}` : null,
   ].filter(Boolean) as string[];
+  // The country its IP is in, ahead of the rest; hovering it says when it was checked.
+  const location = runnerLocationLine(runner.region);
 
   const runsAs =
     runner.runsAsRoot === true ? RUNNER_RUNS_AS_ROOT : runner.runsAsRoot === false ? RUNNER_RUNS_AS_REGULAR_USER : '—';
@@ -761,7 +765,20 @@ export function MachineSettingsPage() {
             }
           />
         </div>
-        {metaline.length > 0 && <div className="machine-metaline">{metaline.join(RUNNER_LINE_SEPARATOR)}</div>}
+        {(location || metaline.length > 0) && (
+          <div className="machine-metaline">
+            {location && runner.region && (
+              <span
+                data-testid="machine-location"
+                title={claudeRegionChecked(ago(runner.region.checkedAt, nowMs), runner.region.name, runner.region.viaProxy)}
+              >
+                {location}
+              </span>
+            )}
+            {location && metaline.length > 0 && RUNNER_LINE_SEPARATOR}
+            {metaline.join(RUNNER_LINE_SEPARATOR)}
+          </div>
+        )}
       </header>
 
       {/* The managed runner's own state, Retry and the way to a model included; none while it is ready. */}
@@ -958,6 +975,9 @@ export function MachineSettingsPage() {
       </SettingsSection>
       </>
       )}
+
+      {/* Orbit Cloud's browser: Open browser, saved logins, Clear saved logins. Nothing while the server has it off. */}
+      {isManaged && <RunnerBrowserSection runnerId={runner.id} />}
 
       <div ref={capacityRef} className="machine-capacity">
         <SettingsSection title={RUNNER_CAPACITY} className="machine-section-capacity">

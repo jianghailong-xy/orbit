@@ -464,6 +464,9 @@ struct RunnerRow: View {
                     Image(systemName: "cloud")
                         .foregroundStyle(Color.accentColor)
                         .accessibilityHidden(true)
+                } else {
+                    // Every other machine by the OS it reported (docs/mocks/machine-menu-icons, A).
+                    MachineOSMark(runner: runner)
                 }
                 VStack(alignment: .leading, spacing: 2) {
                     HStack(alignment: .firstTextBaseline, spacing: 8) {
@@ -734,7 +737,10 @@ struct RunnerDetailContent: View {
     /// its mark. The managed runner's state is the shared short label (Asleep, never Offline), in its
     /// tone's colour.
     @ViewBuilder private func head(now: Date) -> some View {
-        let host = RunnerPageFormat.hostLine(runner, managed: managedRow != nil)
+        // The country its IP is in, ahead of the host and version.
+        let host = [RunnerPageFormat.location(runner), RunnerPageFormat.hostLine(runner, managed: managedRow != nil)]
+            .compactMap { $0?.isEmpty == false ? $0 : nil }
+            .joined(separator: RunnerPageCopy.RUNNER_LINE_SEPARATOR)
         Section {
             HStack(spacing: 14) {
                 RunnerMachineTile(presence: RunnerPageFormat.presence(runner, now: now))

@@ -573,7 +573,7 @@ test('§6.3 the run is a new session: runSource SCHEDULE, scheduleRunId, the mod
   assert.equal(session.runSource, SessionRunSource.SCHEDULE);
   assert.equal(session.scheduleRunId, run.id);
   assert.equal(session.workspaceId, w.workspaceId);
-  assert.equal(session.permissionMode, PermissionMode.DEFAULT, 'CHECK_ONLY on Claude Code runs in Default (schedule-access.ts)');
+  assert.equal(session.permissionMode, PermissionMode.AUTO, 'every scheduled run on Claude Code is opened in Auto (schedule-access.ts)');
   assert.equal(session.branch, null, 'with no worktree');
   assert.equal(session.promptByOrbit, true, 'the control plane wrote its first turn');
   assert.equal(session.openedBy, 'SCHEDULE', 'not a person\'s conversation, so never the workspace default');
@@ -597,7 +597,7 @@ test('§6.3 the run is a new session: runSource SCHEDULE, scheduleRunId, the mod
   );
 });
 
-test('§6.2 an OPEN_PR run runs in Accept Edits, in a worktree when its workspace has them, with the merge and release tools taken away', { skip }, async () => {
+test('§6.2 an OPEN_PR run on Claude Code runs in Auto, in a worktree when its workspace has them, with the merge and release tools taken away', { skip }, async () => {
   reset();
   at('2026-11-14T00:00:00Z');
   const w = await world('open-pr');
@@ -610,7 +610,7 @@ test('§6.2 an OPEN_PR run runs in Accept Edits, in a worktree when its workspac
     where: { id: run.sessionId! },
     include: { scheduleRun: { select: { schedule: { select: { accessLevel: true } } } } },
   });
-  assert.equal(session.permissionMode, PermissionMode.ACCEPT_EDITS);
+  assert.equal(session.permissionMode, PermissionMode.AUTO, 'the mode it runs in, which the session shows');
   assert.notEqual(session.branch, null, 'its own worktree');
   assert.deepEqual(
     scheduleRunDisallowedTools([], session.scheduleRun?.schedule.accessLevel, session.provider),
@@ -735,6 +735,40 @@ test('§7.1 NO_REPORT: a session that settles idle, or ends, without a report fa
   await db.session.update({ where: { id: s2 }, data: { completedAt: clockNow } });
   assert.equal(await runs.reconcileRun(r2.id), 'FAILED');
   assert.equal((await runOf(r2.id)).failureReason, 'NO_REPORT');
+});
+
+test('§7.1 an idle session waiting on a bg_run job, or on the wake its end files, is still working', { skip }, async () => {
+  reset();
+  at('2026-11-14T00:00:00Z');
+  const w = await world('no-report-bg-job');
+  const { run, sessionId } = await runningRun(w, { runLimitMinutes: 120 });
+  // The turn ends to wait for a job set to wake it: silent for 40 minutes, as one waiting on a lock is.
+  await db.conversationTurn.updateMany({ where: { sessionId }, data: { status: 'ANSWERED' } });
+  await db.session.update({
+    where: { id: sessionId }, data: { status: 'AWAITING_INPUT', runningBgShells: ['bgj_1'], runningBgJobs: ['bgj_1'] },
+  });
+  advance(40 * MINUTE);
+  assert.equal(await runs.reconcileRun(run.id), 'UNCHANGED', 'a live job holds the run');
+  // The job's end is reported before its wake is filed, and the wake waits to be delivered.
+  await db.session.update({ where: { id: sessionId }, data: { runningBgShells: [], runningBgJobs: [] } });
+  await db.conversationTurn.create({ data: { sessionId, seq: 2, clientTurnId: 'bg-wake:w1', content: '', status: 'PENDING' } });
+  assert.equal(await runs.reconcileRun(run.id), 'UNCHANGED', 'a wake still to deliver holds the run');
+  // The wake's turn ends without a report: now it is NO_REPORT.
+  await db.conversationTurn.updateMany({ where: { sessionId }, data: { status: 'ANSWERED' } });
+  assert.equal(await runs.reconcileRun(run.id), 'FAILED');
+  assert.equal((await runOf(run.id)).failureReason, 'NO_REPORT');
+
+  // A job that never ends is still capped by the run limit.
+  at('2026-11-14T00:00:00Z');
+  const w2 = await world('no-report-bg-job-limit');
+  const { run: r2, sessionId: s2 } = await runningRun(w2, { runLimitMinutes: 20 });
+  await db.conversationTurn.updateMany({ where: { sessionId: s2 }, data: { status: 'ANSWERED' } });
+  await db.session.update({
+    where: { id: s2 }, data: { status: 'AWAITING_INPUT', runningBgShells: ['bgj_2'], runningBgJobs: ['bgj_2'] },
+  });
+  advance(20 * MINUTE);
+  assert.equal(await runs.reconcileRun(r2.id), 'FAILED');
+  assert.equal((await runOf(r2.id)).failureReason, 'RUN_LIMIT');
 });
 
 test('§7.2 RUN_LIMIT: a run past runLimitMinutes from its delivery is interrupted and fails', { skip }, async () => {

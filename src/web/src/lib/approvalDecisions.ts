@@ -1,6 +1,7 @@
 // Posting the owner's answer to an approval card, for every view that draws the cards.
-import { TRANSLATION_FAILED_CODE } from '@orbit/shared';
+import { TRANSLATION_FAILED_CODE, type TranslationFailureReason } from '@orbit/shared';
 import { useState, type Dispatch, type SetStateAction } from 'react';
+import { refusalReasonOf } from './translation';
 import { ApiError, decideApproval, listApprovals, type ApprovalInfo, type PermissionRule } from '../api';
 
 /** A decision as it was pressed: what Retry and Send as written post again. */
@@ -10,6 +11,9 @@ export interface HeldDecision {
   message?: string;
   rememberRules?: PermissionRule[];
   startAfterCreate?: boolean;
+  /** Why the refusal said the words could not be translated (TranslationFailedBody); the card's line says it. */
+  failureReason?: TranslationFailureReason;
+  httpStatus?: number;
 }
 
 /** The refusal of a decision whose owner's words could not be translated: nothing was recorded (1A). */
@@ -52,7 +56,7 @@ export function useApprovalDecisions(
       });
     } catch (err) {
       if (refusedUntranslated(err)) {
-        setUntranslated((prev) => ({ ...prev, [approvalId]: { behavior, answers, message, rememberRules, startAfterCreate } }));
+        setUntranslated((prev) => ({ ...prev, [approvalId]: { behavior, answers, message, rememberRules, startAfterCreate, ...refusalReasonOf(err) } }));
       }
       listApprovals(sessionId)
         .then(setApprovals)

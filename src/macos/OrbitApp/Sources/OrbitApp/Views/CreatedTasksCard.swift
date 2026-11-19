@@ -7,8 +7,10 @@ import OrbitKit
 /// (`docs/mocks/session-tasks-watch-merge-ios.png`; the web draws the same card).
 ///
 /// Collapsed it is one line in the tray's language — `Tasks`, an eye with how many rows the session
-/// waits on, and the sentence `2 running · 1 failed · 4/8 done`, its failed part red — or, with one
-/// task, that task's name and pill. Opened, it lists the rows: the watched ones first, each with an
+/// waits on, and what the Agents line would say of them (`SessionTaskCard.band`): the newest running
+/// task, after `3 running · ` when more run, or `14 · ` and the newest task, then that task's pill,
+/// led by a red `1 failed · ` while any failed (`docs/mocks/session-tasks-band-like-agents`) — or,
+/// with one task, that task's name and pill. Opened, it lists the rows: the watched ones first, each with an
 /// eye (orange while its watch goes unchecked), then the rest exactly as the server sent them
 /// (already in order, a replaced task already drawn as the one that took it over), each opening its
 /// task. A watched task created elsewhere says so where its age would be. There is no card while the
@@ -85,6 +87,7 @@ struct CreatedTasksCard: View {
                 Text(SessionCreatedTasksCopy.title)
                     .font(.orbitLabel.weight(.semibold))
                     .lineLimit(1)
+                    .fixedSize()
                 if card.watching > 0 {
                     // How many rows the session waits on; the eye and the number keep their size.
                     HStack(spacing: 3) {
@@ -95,12 +98,18 @@ struct CreatedTasksCard: View {
                     .foregroundStyle(card.stale ? AnyShapeStyle(Color.orange) : AnyShapeStyle(.tint))
                     .fixedSize()
                 }
-                // The count is what the line is for: when it grows, the title yields and it doesn't.
-                countText(card.countParts)
-                    .font(.orbitMeta)
-                    .lineLimit(1)
-                    .layoutPriority(1)
-                Spacer(minLength: 4)
+                // What runs, or the newest task, as the Agents line says it; the name yields, the
+                // title and the pill keep their size.
+                if let band = card.band {
+                    bandText(band)
+                        .font(.orbitMeta)
+                        .lineLimit(1)
+                        .truncationMode(.tail)
+                        .frame(maxWidth: .infinity, alignment: .leading)
+                    if let pill = band.row.pill { TaskStatusPill(pill: pill).fixedSize() }
+                } else {
+                    Spacer(minLength: 4)
+                }
             }
             Image(systemName: open ? "chevron.down" : "chevron.right")
                 .font(.orbitMeta.weight(.semibold))
@@ -122,17 +131,14 @@ struct CreatedTasksCard: View {
             .accessibilityLabel("Watching")
     }
 
-    /// The sentence, secondary, with its failed part red.
-    private func countText(_ parts: [SessionCreatedTasksCopy.CountPart]) -> Text {
+    /// The band, secondary, led by a red `N failed · ` while any task failed.
+    private func bandText(_ band: SessionTaskCard.Band) -> Text {
         var text = Text(verbatim: "")
-        for (index, part) in parts.enumerated() {
-            if index > 0 {
-                text = text + Text(SessionCreatedTasksCopy.separator).foregroundStyle(.secondary)
-            }
-            let tone: Color = part.failed ? .red : .secondary
-            text = text + Text(part.text).foregroundStyle(tone)
+        if let failed = band.failedPart {
+            text = Text(verbatim: failed).foregroundStyle(.red)
+                + Text(SessionCreatedTasksCopy.separator).foregroundStyle(.secondary)
         }
-        return text
+        return text + Text(verbatim: band.text).foregroundStyle(.secondary)
     }
 
     // MARK: - the rows

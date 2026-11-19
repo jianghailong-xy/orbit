@@ -107,18 +107,18 @@ func TestDelegateCallLogTakesTheAnnouncedCall(t *testing.T) {
 	log.note(sess, evToolUse, map[string]interface{}{"id": "run:x", "name": "mcp__orbit__delegate", "subagentRunId": "run",
 		"input": map[string]interface{}{"prompt": "do B"}})
 
-	if got := log.take(sess, "do B", "B", 0); got != "call_b" {
+	if got := log.take(sess, delegateToolName, "do B", "B", 0); got != "call_b" {
 		t.Fatalf("take(do B) = %q, want call_b", got)
 	}
-	if got := log.take(sess, "do B", "B", 0); got != "" {
+	if got := log.take(sess, delegateToolName, "do B", "B", 0); got != "" {
 		t.Fatalf("a call taken once was taken again: %q", got)
 	}
-	if got := log.take("other", "do A", "A", 0); got != "" {
+	if got := log.take("other", delegateToolName, "do A", "A", 0); got != "" {
 		t.Fatalf("another session's call was taken: %q", got)
 	}
 	// One whose id the engine sent is claimed, so a call without one does not take it.
 	log.claim(sess, "call_a")
-	if got := log.take(sess, "do A", "A", 0); got != "" {
+	if got := log.take(sess, delegateToolName, "do A", "A", 0); got != "" {
 		t.Fatalf("a claimed call was taken: %q", got)
 	}
 
@@ -128,13 +128,13 @@ func TestDelegateCallLogTakesTheAnnouncedCall(t *testing.T) {
 		log.note(sess, evToolUse, map[string]interface{}{"id": "call_late", "name": "orbit__delegate",
 			"input": map[string]interface{}{"prompt": "late"}})
 	}()
-	if got := log.take(sess, "late", "", 2*time.Second); got != "call_late" {
+	if got := log.take(sess, delegateToolName, "late", "", 2*time.Second); got != "call_late" {
 		t.Fatalf("take(late) = %q, want call_late", got)
 	}
 
 	// A call announced with no input (an engine that sends the arguments later) is the oldest open one.
 	log.note(sess, evToolUse, map[string]interface{}{"id": "call_bare", "name": "delegate"})
-	if got := log.take(sess, "anything", "", 0); got != "call_bare" {
+	if got := log.take(sess, delegateToolName, "anything", "", 0); got != "call_bare" {
 		t.Fatalf("take(bare) = %q, want call_bare", got)
 	}
 	log.forget(sess)

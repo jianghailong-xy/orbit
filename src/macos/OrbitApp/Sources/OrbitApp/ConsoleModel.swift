@@ -81,6 +81,17 @@ struct QuestionReply: Equatable, Sendable {
     let banner: String
     /// What the empty composer asks for while this is armed.
     let placeholder: String
+    /// What ✦ Optimize is told the draft answers; absent, the banner and the context carried.
+    var about: String? = nil
+
+    /// `replyingTo` of a press of ✦ Optimize while this is armed (web: the same rule).
+    var optimizerContext: String {
+        if let about, !about.isEmpty { return about }
+        switch target {
+        case .planChange(let context), .ownerItem(let context): return banner + "\n\n" + context
+        case .approval, .ownerConfirmation, .evidenceDecision: return banner
+        }
+    }
 }
 
 // `LocalStatusCard` lives in OrbitKit (Transcript/TranscriptRows.swift) — the transcript's row
@@ -314,6 +325,12 @@ final class ConsoleModel {
         var keysSection = URLComponents(url: page, resolvingAgainstBaseURL: false)
         keysSection?.fragment = "keys"
         return keysSection?.url ?? page
+    }
+
+    /// The web app's keys, where another provider's key is connected (the new-session hero's way out
+    /// when nothing on the machine runs the draft).
+    func webProvidersURL() -> URL {
+        api.baseURL.appendingPathComponent("providers")
     }
 
     /// A key's own page in the web app, where it is changed or turned back on.
@@ -1106,6 +1123,11 @@ final class ConsoleModel {
     /// starts or ends (`SubagentRuns.signature`); empty for a session that never delegated.
     private(set) var subagentRuns: [String: SubagentRunView] = [:]
     private var subagentRunsSignature = ""
+    /// Settings › Translation (3A) after the answer: the owner-language text of the session's question
+    /// cards, by the call's tool_use id, so an answered question's record shows what its card showed.
+    /// A card leaves `pendingApprovals` once decided, so its translation is kept as it passes; the
+    /// ones decided before this console opened are read once on open (web: `useQuestionTranslations`).
+    private(set) var questionTranslations: [String: ApprovalTranslation] = [:]
     private var subagentRunsFetch: Task<Void, Never>?
 
     /// The sticky error line above the composer. Errors only — it's about the message you just tried
@@ -1148,6 +1170,8 @@ final class ConsoleModel {
         let behavior: ApprovalBehavior
         let answers: [String: [String]]?
         let remember: Bool
+        /// The line the card draws: why (the 422's `failureReason`), then Retry and Send as written.
+        let foot: [SessionTranslation.FootPart]
     }
 
     /// An approval as it was answered here: the card as it was asked, and the press that answered
@@ -1433,6 +1457,8 @@ final class ConsoleModel {
         // AskUserQuestion awaiting an answer) surfaces. Decoupled from the stream; cancels with run().
         let approvalsSeed = Task { [weak self] in await self?.refreshApprovals() }
         defer { approvalsSeed.cancel() }
+        let questionTranslationsSeed = Task { [weak self] in await self?.loadQuestionTranslations() }
+        defer { questionTranslationsSeed.cancel() }
         // Still-PENDING turns likewise have no replayable `user` event until the runner leases them.
         // Fetch the durable queue so a follow-up sent from web is visible when this console opens.
         let queuedTurnsSeed = Task { [weak self] in await self?.refreshQueuedTurns() }
@@ -1734,10 +1760,26 @@ final class ConsoleModel {
         trimWindow()
         stateRevision &+= 1
         state = reducer.state
+        keepQuestionTranslations()
         refreshSubagentRunsIfNeeded()
         clearAwaitingReplyIfSatisfied()
         reconcileReplyContext()
         followPendingWaitingCard()
+    }
+
+    /// Keep each live question card's translation under its call, before the card is decided and goes.
+    private func keepQuestionTranslations() {
+        for a in state.pendingApprovals where a.kind == .question {
+            guard let id = a.toolUseId, let t = a.translation, questionTranslations[id] != t else { continue }
+            questionTranslations[id] = t
+        }
+    }
+
+    private func loadQuestionTranslations() async {
+        guard let cards = try? await api.questionApprovals(sessionID: sessionID) else { return }
+        for (id, t) in ApprovalTranslation.byToolUse(cards) where questionTranslations[id] != t {
+            questionTranslations[id] = t
+        }
     }
 
     /// Read the session's SubAgent runs whenever a `delegate` call starts or ends (web parity:
@@ -2087,7 +2129,8 @@ final class ConsoleModel {
         promptOptimizer.start(draft: draft)
         let request = PromptOptimizationRequest(draft: String(trimmed.prefix(ComposerLogic.maxPromptChars)),
                                                 sessionId: isDraft ? nil : sessionID,
-                                                workspaceId: isDraft ? draftAgent?.id : nil)
+                                                workspaceId: isDraft ? draftAgent?.id : nil,
+                                                replyingTo: replyContext?.optimizerContext)
         let api = self.api
         optimizeTask?.cancel()
         optimizeTask = Task { [weak self] in
@@ -2142,7 +2185,9 @@ final class ConsoleModel {
     }
 
     var availability: SendAvailability {
-        isDraft ? .sendNow
+        // Nothing on the machine runs the draft (board new-session-usable-default ④): it would only be refused.
+        if draftCantRun { return .blocked }
+        return isDraft ? .sendNow
                 : ComposerLogic.availability(status: sessionStatus, capabilities: sendCapabilities)
     }
 
@@ -2327,9 +2372,6 @@ final class ConsoleModel {
         agentName = s.agent?.name
         // A scheduled task's run: its strip, its report and the cards it asked, drawn from the schedule reads.
         scheduleRunID = s.scheduleRunId
-        // The run's head line reads this session's own state and engine: a run's session is in none of the app's
-        // lists, so this read is the only one that has them.
-        if s.scheduleRunId != nil { scheduleRunSession = s }
         Task { [weak self] in await self?.refreshScheduleCards(force: true) }
         // Adopt the owning agent's id too (a console opened by session id may have been created
         // without one), so project commands/skills remain correctly scoped.
@@ -2750,6 +2792,12 @@ final class ConsoleModel {
     func pickDraft(engine: String, provider slug: String) {
         guard isDraft, engine != self.engine || slug != provider else { return }
         draftPick = EnginePick(engine: engine, provider: slug)
+        landDraft(engine: engine, provider: slug)
+    }
+
+    /// Put the draft on `engine` and `slug`, re-seeding the model and re-clamping the pills to the pair
+    /// (`pickDraft`, and the fallback `settleDraftDefault` lands on).
+    private func landDraft(engine: String, provider slug: String) {
         recordedEngine = engine
         provider = slug
         modelID = draftModelSeed(AgentDefaults.defaultModel(
@@ -2764,6 +2812,52 @@ final class ConsoleModel {
         effort = AgentDefaults.normalizedEffort(effort, for: engine, provider: slug, model: modelID,
                                                 catalog: modelCatalog,
                                                 configured: configuredProviders)
+    }
+
+    /// Draft only: what the workspace last ran on, as the hero judges it on this machine (web's
+    /// `rememberedDraftEngine`): carrying its reason when it can't run here.
+    var rememberedDraftEngine: EngineChoice? {
+        guard isDraft, let agent = draftAgent else { return nil }
+        let pick = EnginePick(engine: agent.defaultEngine(configured: configuredProviders), provider: agent.defaultProvider)
+        let sources = choiceSources
+        let engines = SessionProviderChoices.engines(sources: sources, preferred: [pick])
+        return SessionProviderChoices.currentEngine(engine: pick.engine, provider: pick.provider, engines: engines,
+                                                    sources: sources)
+    }
+
+    /// Draft only: where the draft goes when nobody picked and what the workspace last ran on can't run
+    /// on this machine (`SessionProviderChoices.draftFallback`; board
+    /// docs/mocks/new-session-usable-default). Nil while it can, and after an explicit pick.
+    var draftFallbackTarget: EnginePick? {
+        guard isDraft, draftPick == nil, let remembered = rememberedDraftEngine else { return nil }
+        let engines = SessionProviderChoices.engines(
+            sources: choiceSources, preferred: [EnginePick(engine: remembered.slug, provider: remembered.provider?.slug ?? remembered.slug)])
+        return SessionProviderChoices.draftFallback(remembered: remembered, engines: engines, engineHealth: runnerEngines)
+    }
+
+    /// Draft only: the fallback the draft is on now. Unlike `draftPick` it is no one's choice, so it
+    /// moves with what the machine reports; the create request carries it all the same, since the
+    /// workspace's own pair is the one that can't run.
+    private(set) var draftFallback: EnginePick?
+
+    /// Land the draft on `draftFallbackTarget`, or back on what the workspace last ran on once that runs
+    /// again. Called whenever the target changes (AgentsView's hero).
+    func settleDraftDefault() {
+        guard isDraft, draftPick == nil else { return }
+        let target = draftFallbackTarget
+        guard target != draftFallback else { return }
+        if let target {
+            landDraft(engine: target.engine, provider: target.provider)
+        } else if let agent = draftAgent {
+            landDraft(engine: agent.defaultEngine(configured: configuredProviders), provider: agent.defaultProvider)
+        }
+        draftFallback = target
+    }
+
+    /// Draft only: nothing on this machine can run what the workspace last ran on and nobody picked
+    /// anything else, so the send waits while the hero says why (board frame ④).
+    var draftCantRun: Bool {
+        isDraft && draftPick == nil && draftFallback == nil && rememberedDraftEngine?.unavailable != nil
     }
 
     /// Pick one of the runner's accounts of `slug` — an engine's own sign-in — for this draft, or
@@ -2836,7 +2930,7 @@ final class ConsoleModel {
             // `defaultModel` is the parent's, computed for the WORKSPACE's engine and provider. Once
             // this draft has been pointed somewhere else, that value belongs to a different model space
             // — resolve the picked pair's own default instead of dragging the workspace's back in.
-            let fallback = draftPick == nil
+            let fallback = draftPick == nil && draftFallback == nil
                 ? defaultModel
                 : AgentDefaults.defaultModel(engine: engine, provider: provider, catalog: modelCatalog,
                                              configured: configuredProviders, runtimeDefaults: runtimeDefaultModels)
@@ -3657,8 +3751,9 @@ final class ConsoleModel {
             // Only an explicit pick travels, and it is the pair — the engine the hero picked and the
             // credential of it (contract §3.2). Leaving both off keeps the server's
             // inherit-from-workspace path, which re-checks that pair as it starts the session.
-            engine: draftPick?.engine,
-            provider: draftPick?.provider,
+            // A fallback travels too: the workspace's pair is the one that can't run here.
+            engine: (draftPick ?? draftFallback)?.engine,
+            provider: (draftPick ?? draftFallback)?.provider,
             model: providerCapabilitiesResolved ? modelID : nil,
             permissionMode: permissionMode.rawValue, effort: effort.rawValue,
             // Sent only when on, like every other override that has an "off" default: a
@@ -3687,6 +3782,7 @@ final class ConsoleModel {
         // The pick was this session's binding; nothing to write back. The next draft here
         // opens on it anyway, because the default is read from what the project last ran.
         draftPick = nil
+        draftFallback = nil
         draftCodexAccount = nil
         draftClaudeAccount = nil
         draftAntigravityAccount = nil
@@ -4172,18 +4268,22 @@ final class ConsoleModel {
 
     /// `+` menu → Image / File: read a picked file, enforce the size cap (web
     /// parity), and upload it via the existing attachment path.
-    func attachFile(url: URL) async {
+    /// `name` is the chip's file name when the file on disk is named otherwise — a shared item's
+    /// inbox copy (Share to Orbit).
+    func attachFile(url: URL, name: String? = nil) async {
+        let filename = name ?? url.lastPathComponent
         guard let data = try? Data(contentsOf: url) else {
-            statusMessage = "Couldn't read \(url.lastPathComponent)"
+            statusMessage = "Couldn't read \(filename)"
             return
         }
-        let mime = UTType(filenameExtension: url.pathExtension)?.preferredMIMEType
+        let ext = (filename as NSString).pathExtension.isEmpty ? url.pathExtension : (filename as NSString).pathExtension
+        let mime = UTType(filenameExtension: ext)?.preferredMIMEType
             ?? "application/octet-stream"
         if let reason = Attachments.rejectReason(mimeType: mime, byteCount: data.count) {
             statusMessage = reason
             return
         }
-        attach(filename: url.lastPathComponent, mimeType: mime, data: data)
+        attach(filename: filename, mimeType: mime, data: data)
     }
 
     /// Clipboard ⌘V of an image (e.g. a screenshot): the view normalizes it to PNG, then this
@@ -4253,12 +4353,13 @@ final class ConsoleModel {
 
     /// Begin a "Chat about this" reply to a pending question: the next composer send resolves it
     /// as a deny+message instead of a fresh turn (see send()). The card stays until then.
-    func startChatReply(approvalID: String, question: String) {
+    func startChatReply(approvalID: String, question: String, about: String? = nil) {
         replyContext = QuestionReply(
             target: .approval(id: approvalID),
             banner: question.isEmpty ? "Replying to Claude’s question"
                                      : "Replying to Claude’s question: \(question)",
-            placeholder: "Type your reply to Claude…")
+            placeholder: "Type your reply to Claude…",
+            about: about)
     }
 
     /// Decline one of Orbit's own asks — a batch, a create, a restructure — with the reason beside
@@ -4391,7 +4492,8 @@ final class ConsoleModel {
             // back with Retry / Send as written rather than a failure line.
             approvalAnswers[approval.id] = nil
             untranslatedDecisions[approval.id] = UntranslatedDecision(behavior: behavior, answers: answers,
-                                                                      remember: remember)
+                                                                      remember: remember,
+                                                                      foot: SessionTranslation.refusedAnswerFoot(after: error))
             await refreshApprovals()
         }
         catch {
@@ -4494,10 +4596,6 @@ final class ConsoleModel {
     /// request arrives with its own suggestions (web's `edited`). Kept here rather than in the
     /// card: a row the List recycles is a new view, and edits it held would be gone.
     private var startDrafts: [String: StartSettingsDraft] = [:]
-    /// What a press on the change card confirmed — "1 new, 1 stricter" — by the seal it signed, for
-    /// the receipt of that confirmation. Kept by this console only: once a set is confirmed nothing
-    /// is left changed, so the read cannot say it afterwards (web's `confirmedChangesKey`).
-    private var confirmedChangeSummaries: [String: String] = [:]
     /// Bumped to open this conversation's "Tasks created here" list from elsewhere on screen — the
     /// start card's "View tasks ›" (web's `openRequest`).
     private(set) var createdTasksOpenTick = 0
@@ -5061,11 +5159,12 @@ final class ConsoleModel {
         do {
             _ = try await api.declineDoneRequest(projectID: projectID, itemID: row.itemId, note: note,
                                                  sendAsWritten: sendAsWritten)
-            doneDeclineRefusedUntranslated = false
+            doneDeclineRefusedUntranslated = nil
         } catch {
-            // A note that could not be translated was not sent: the card offers Retry and Send as written.
+            // A note that could not be translated was not sent: the card says why, with Retry and Send as written.
             doneDeclineRefusedUntranslated = OwnerCardTranslations.refused(error)
-            if !doneDeclineRefusedUntranslated {
+                ? SessionTranslation.refusedAnswerFoot(after: error) : nil
+            if doneDeclineRefusedUntranslated == nil {
                 statusMessage = "\(ProjectDone.notDeclined) — \(APIClient.failureReason(error))."
             }
             return false
@@ -5074,8 +5173,9 @@ final class ConsoleModel {
         return true
     }
 
-    /// The last "Not yet…" note was refused with 422 TRANSLATION_FAILED and not sent.
-    var doneDeclineRefusedUntranslated = false
+    /// The last "Not yet…" note was refused with 422 TRANSLATION_FAILED and not sent: the line the
+    /// card draws (why, then Retry and Send as written), nil otherwise.
+    var doneDeclineRefusedUntranslated: [SessionTranslation.FootPart]? = nil
 
     /// Move to a follow-up…, from the done card in this conversation. Nil when it moved; otherwise
     /// the door's own words.
@@ -5150,12 +5250,6 @@ final class ConsoleModel {
         else { return false }
         createdTasksOpenTick &+= 1
         return true
-    }
-
-    /// What a press on the change card confirmed, for the receipt of the confirmation it made — nil
-    /// for any other record, whose read says only the seal.
-    func confirmedChanges(_ confirmation: RecordedStandardSetConfirmation) -> String? {
-        confirmedChangeSummaries[confirmation.criteriaDigest]
     }
 
     /// Whether a STARTED project is running on a plan nobody has confirmed — the older confirmation
@@ -5246,8 +5340,6 @@ final class ConsoleModel {
     /// That run and its schedule, once found; the detail for whether its finding was new and told.
     private(set) var scheduleRun: (schedule: ScheduleView, run: ScheduleRunView)?
     private(set) var scheduleRunDetail: ScheduleDetailResponse?
-    /// This run's session as its own read answered, for the head line's state and engine.
-    private(set) var scheduleRunSession: Session?
     private var loadingScheduleCards = false
     private var lastScheduleRead = Date.distantPast
 
@@ -6007,9 +6099,8 @@ final class ConsoleModel {
     }
 
     /// Confirm the criteria a started project moved to — the change card's press. The same door as
-    /// the confirmation above, which for a started project only confirms; what this press adds is
-    /// what the version changed, kept for the receipt under the seal it signed, because the read
-    /// can no longer say it once the set is confirmed.
+    /// the confirmation above, which for a started project only confirms; what the press changed is
+    /// on the answer the door returns (`confirmation.changes`), which the receipt reads.
     func confirmCriteriaChange() async {
         guard let projectID, let standing = acceptanceConfirmation,
               CriteriaChanges.answerable(standing),
@@ -6018,7 +6109,6 @@ final class ConsoleModel {
         do {
             let next = try await api.confirmAcceptanceCriteria(projectID: projectID,
                                                                criteriaDigest: digest)
-            confirmedChangeSummaries[digest] = CriteriaChanges.counts(changes)
             answeredDecisions[DeliveredDecisionCard(kind: .criteriaChange).id] =
                 .criteriaChange(standing, criteria: projectCriteria.sorted { $0.ordinal < $1.ordinal },
                                 changes: CriteriaChanges.counts(changes), at: Date())
@@ -6213,7 +6303,7 @@ final class ConsoleModel {
         do {
             let receipt = try await api.answerOpenItem(projectID: projectID, itemID: row.itemId,
                                                        request)
-            answersRefusedUntranslated.remove(row.itemId)
+            answersRefusedUntranslated[row.itemId] = nil
             questionsAnsweredHere.insert(row.itemId)
             adoptQuestionRecord(CoordinatorQuestions.answeredHere(row: row, question: question,
                                                                   request: request, receipt: receipt))
@@ -6223,18 +6313,19 @@ final class ConsoleModel {
             // Words that could not be translated were not sent (decision 2A): the card offers Retry and
             // Send as written in place of a failure line.
             if OwnerCardTranslations.refused(error) {
-                answersRefusedUntranslated.insert(row.itemId)
+                answersRefusedUntranslated[row.itemId] = SessionTranslation.refusedAnswerFoot(after: error)
                 return nil
             }
-            answersRefusedUntranslated.remove(row.itemId)
+            answersRefusedUntranslated[row.itemId] = nil
             statusMessage = "That answer was not recorded — \(APIClient.failureReason(error))."
             return nil
         }
     }
 
-    /// The coordinator questions whose last answer was refused with 422 TRANSLATION_FAILED: their
-    /// card shows "Couldn't translate, so it wasn't sent · Retry · Send as written".
-    var answersRefusedUntranslated: Set<String> = []
+    /// The coordinator questions whose last answer was refused with 422 TRANSLATION_FAILED, with the
+    /// line their card shows: why ("…, so your answer wasn't sent", or the generic "Couldn't translate,
+    /// so it wasn't sent"), then Retry and Send as written.
+    var answersRefusedUntranslated: [String: [SessionTranslation.FootPart]] = [:]
 
     /// Ask the coordinator again (§4.7, mock 5): the item goes back to the conversation that
     /// should have had it, with the project's clock for it restarted. Nothing is retried and
@@ -6577,7 +6668,8 @@ final class ConsoleModel {
         reducer.reconcileApprovals(infos.map {
             PendingApproval(id: $0.id, kind: Approvals.kind(toolName: $0.toolName),
                             toolName: $0.toolName, input: $0.input,
-                            translation: ApprovalTranslation.parse($0.translation))
+                            translation: ApprovalTranslation.parse($0.translation),
+                            toolUseId: $0.toolUseId)
         }, knownBefore: knownBefore)
         publishStateNow()
     }

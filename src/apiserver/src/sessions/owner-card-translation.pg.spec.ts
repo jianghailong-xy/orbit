@@ -25,7 +25,8 @@
  */
 import assert from 'node:assert/strict';
 import { randomUUID } from 'node:crypto';
-import { test } from 'node:test';
+import { beforeEach, test } from 'node:test';
+import { resetTranslationBreaker } from './translation';
 
 import { CreatorType, RunStatus, RunnerStatus, SessionDispatchOrigin, TaskStatus } from '@prisma/client';
 import { Client } from 'pg';
@@ -40,6 +41,9 @@ import { OwnerRequestsService } from '../owner-requests/owner-requests.service';
 import { OwnerSecretsService } from '../owner-requests/owner-secrets.service';
 import { replyTranslationsSettled } from './reply-translation';
 import { SessionsService } from './sessions.service';
+
+// The translator's circuit breaker is the process's: each test starts with it closed and nothing counted.
+beforeEach(() => resetTranslationBreaker());
 
 const URL = process.env.COORDINATOR_PG_URL;
 const skip = !URL;
@@ -136,6 +140,7 @@ test('owner cards outside a session are translated, once, whole or failed', { sk
     asked.length = 0;
     published.length = 0;
     failing = false;
+    resetTranslationBreaker();
     gate = null;
   };
   const ask = async (key: string) =>
@@ -213,10 +218,12 @@ test('owner cards outside a session are translated, once, whole or failed', { sk
     await reset();
     await prefer(ON);
     failing = true;
+    resetTranslationBreaker();
     const itemId = await ask('b');
     const decision = await requests.file(p.ownerId, p.workerSessionId, { ...DECISION, clientRequestId: 'b-decision' });
     await settle();
     failing = false;
+    resetTranslationBreaker();
 
     assert.deepEqual(await stored('project_open_item', itemId), { lang: 'zh-Hans', failed: true });
     const row = await openRow(itemId);

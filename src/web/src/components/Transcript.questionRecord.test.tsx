@@ -3,8 +3,9 @@ import { act } from 'react';
 import { createRoot, type Root } from 'react-dom/client';
 import { MemoryRouter } from 'react-router-dom';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { QUESTION_RECORD_COPY } from '@orbit/shared';
+import { QUESTION_RECORD_COPY, type ApprovalTranslation } from '@orbit/shared';
 import { type RunEvent, EventFullCtx, Transcript } from './Transcript';
+import { QuestionTranslationsCtx } from './TranslationParts';
 
 /**
  * An agent's question once it has ended (`docs/mocks/ask-question-card-ios/`). Folded, the card is
@@ -52,12 +53,18 @@ afterEach(() => {
   container.remove();
 });
 
-async function show(events: RunEvent[], fetchFull: ((seq: number) => Promise<unknown>) | null = null) {
+async function show(
+  events: RunEvent[],
+  fetchFull: ((seq: number) => Promise<unknown>) | null = null,
+  translations: ReadonlyMap<string, ApprovalTranslation> = new Map(),
+) {
   await act(async () => {
     root.render(
       <MemoryRouter>
         <EventFullCtx.Provider value={fetchFull}>
-          <Transcript events={events} />
+          <QuestionTranslationsCtx.Provider value={translations}>
+            <Transcript events={events} />
+          </QuestionTranslationsCtx.Provider>
         </EventFullCtx.Provider>
       </MemoryRouter>,
     );
@@ -184,5 +191,50 @@ describe('a clipped answer', () => {
     expect(fetchFull).toHaveBeenCalledWith(2);
     expect(card().classList.contains('is-open')).toBe(false);
     expect(text('.chat-q-answer-words')).toEqual(['Swipe back only']);
+  });
+});
+
+/**
+ * Settings › Translation (3A): a question the owner was shown in their language keeps that language
+ * once it is answered, folded and open. The answer is still read off the engine's English result.
+ */
+describe('an answered question that was translated', () => {
+  const zh: ApprovalTranslation = {
+    lang: 'zh-Hans',
+    questions: [
+      {
+        question: '在 iPad 上，从左边缘向右滑应该做什么？',
+        header: '右滑',
+        options: [
+          { label: '两者都要，和 iPhone 一样（推荐）', description: '列表页右滑打开侧边栏，推入的页面右滑返回。' },
+          { label: '只打开侧边栏', description: '返回仍只用返回按钮。' },
+          { label: '只右滑返回', description: '侧边栏仍只从工具栏按钮打开。' },
+        ],
+      },
+    ],
+  };
+  const translations = new Map([['toolu_q', zh]]);
+
+  it('shows the question and the pick as the card showed them, folded', async () => {
+    await show([call(), result(answered('Open the sidebar only'))], null, translations);
+    expect(text('.chat-q-lead')).toEqual([zh.questions![0].question]);
+    expect(text('.chat-q-answer-words')).toEqual(['只打开侧边栏']);
+  });
+
+  it('opens to the translated header, question and options, the pick highlighted', async () => {
+    await show([call(), result(answered('Open the sidebar only'))], null, translations);
+    await open();
+    expect(text('.chat-q-header')).toEqual(['右滑']);
+    expect(text('.chat-q-text')).toEqual([zh.questions![0].question]);
+    expect(text('.chat-q-opt-label')).toEqual(zh.questions![0].options!.map((o) => o.label));
+    expect(text('.chat-q-opt-desc')).toEqual(zh.questions![0].options!.map((o) => o.description));
+    expect(text('.chat-q-opt.is-picked .chat-q-opt-label')).toEqual(['只打开侧边栏']);
+    expect(container.textContent).not.toContain(QUESTION);
+  });
+
+  it('keeps the English when the translation failed', async () => {
+    await show([call(), result(answered('Open the sidebar only'))], null, new Map([['toolu_q', { lang: 'zh-Hans', failed: true } as ApprovalTranslation]]));
+    await open();
+    expect(text('.chat-q-text')).toEqual([QUESTION]);
   });
 });

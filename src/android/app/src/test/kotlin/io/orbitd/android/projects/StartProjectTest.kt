@@ -240,7 +240,7 @@ class StartProjectTest {
         val draft = StartProjectCopy.Draft.of(request().settings).copy(automatic = false, maxConcurrentTasks = 5, mergeCheckCommand = "  npm test  ")
         val branch = StartProjectCopy.body(request(), draft, "item-1")
         assertEquals(j("""{"criteriaDigest":"$seal","line":"PROJECT_BRANCH","projectBranchName":"refs/heads/project/$project","automatic":false,
-            "maxConcurrentTasks":5,"mergeCheckCommand":"npm test","requestId":"item-1"}"""), branch)
+            "maxConcurrentTasks":5,"mergeCheckCommand":"npm test","landingCheckCommand":null,"landingCheckTimeoutSeconds":null,"mergeCheckTimeoutSeconds":null,"requestId":"item-1"}"""), branch)
         val main = StartProjectCopy.body(request(), StartProjectCopy.Draft("MAIN", true, 3, "   "), null)
         assertEquals("MAIN", main.text("line"))
         assertFalse("directly into main names no branch", main.containsKey("projectBranchName"))
@@ -258,9 +258,12 @@ class StartProjectTest {
         val card = CardCatalog.project("s1", project, reads).single { it.family == CardFamily.START }
         val request = StartProjectCopy.request(row)!!
         for (draft in listOf(StartProjectCopy.Draft.of(request.settings), StartProjectCopy.Draft("MAIN", false, 7, " make check "),
-            StartProjectCopy.Draft("PROJECT_BRANCH", true, 2, ""))) {
+            StartProjectCopy.Draft("PROJECT_BRANCH", true, 2, ""),
+            StartProjectCopy.Draft("PROJECT_BRANCH", true, 2, "make all", landingCheckCommand = "  make fast  ", landingCheckTimeoutSeconds = 600, mergeCheckTimeoutSeconds = 900))) {
             val sent = CardRequests.build(card, CardVerb.START, CardInput(settings = ProjectStartSettings(draft.line, draft.automatic, draft.maxConcurrentTasks,
-                draft.mergeCheckCommand, request.settings.projectBranchName)))
+                draft.mergeCheckCommand, request.settings.projectBranchName,
+                landingCheckCommand = draft.landingCheckCommand.takeIf { it.isNotBlank() },
+                landingCheckTimeoutSeconds = draft.landingCheckTimeoutSeconds, mergeCheckTimeoutSeconds = draft.mergeCheckTimeoutSeconds)))
             assertEquals(listOf("projects", project, "start"), sent.path)
             assertEquals(StartProjectCopy.body(request, draft, "item-1"), Json.parseToJsonElement(sent.body!!.decodeToString()).jsonObject)
         }
