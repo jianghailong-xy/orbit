@@ -16,6 +16,7 @@ import {
   CoordinatorProgressRows,
   ItemAsCard,
   ACTION_CONSEQUENCES,
+  FIXING_TAG,
   PROMOTION_RETRY_CONSEQUENCE,
   RERUN_CHECK_ACTION_LABEL,
   TASK_RUN_AGAIN_CONSEQUENCE,
@@ -1263,6 +1264,44 @@ describe('T10 required actions and current-candidate doors', () => {
     expect(body.querySelector('[data-who="coordinator"] .orbit-button-primary')?.textContent).toContain('Ask the coordinator again');
     expect(body.querySelectorAll('.project-open-item-consequence').length).toBeGreaterThanOrEqual(2);
     expect(ACTION_CONSEQUENCES.MARK_HANDLED).toContain('reason');
+  });
+
+  it('a coordinator item with a live repair says so once, links the task, and asks nothing', () => {
+    const fixing = (state: string) => item({
+      kind: 'INTEGRATION_CONFLICT',
+      assignee: 'COORDINATOR',
+      requiredAction: 'A repair task is already handling this item — let it finish or open the task to see what it needs.',
+      primaryAction: 'REVIEW',
+      actions: ['REVIEW', 'OPEN_LANDING'],
+      landingSessionId: '34Y7Utvsd47A14DjMzIzE',
+      facts: facts({ targetRef: 'refs/heads/main', targetSha: '928ed7e0000', nothingLanded: true, files: ['docs/api-reference.md'] }),
+      handledBy: [{ taskId: '34Y7Utvsd47A14DjMzIzD', title: 'regenerate api-reference.md', state }],
+    });
+    const draw = (row: ProjectOpenItemRow) => new DOMParser().parseFromString(paint(
+      { needsYou: [], withCoordinator: [row] },
+      () => <ExceptionCards projectId={PROJECT_ID} now={NOW} />,
+    ), 'text/html');
+
+    const live = draw(fixing('IN_PROGRESS'));
+    expect(live.querySelector('.project-open-item-state')?.textContent).toBe(FIXING_TAG);
+    // The server's sentence and the old handled-by line are one line now, with the task a link.
+    expect(live.querySelector('.project-open-item-required-action')).toBeNull();
+    expect(live.querySelector('.project-open-item-handled-by')).toBeNull();
+    const link = live.querySelector('.project-open-item-fixing a');
+    expect(link?.textContent).toContain('regenerate api-reference.md');
+    expect(link?.getAttribute('href')).toContain('/tasks/');
+    // No press is the reader's next step while it is being fixed: every door is a quiet link.
+    expect(live.querySelector('.orbit-button-primary, .project-open-item-action.is-primary')).toBeNull();
+    expect(live.querySelector('.project-open-item-quiet-row')).not.toBeNull();
+    expect(live.querySelectorAll('.project-open-item-consequence')).toHaveLength(0);
+    expect(live.body.textContent).toContain('main at 928ed7e');
+    expect(live.body.textContent).not.toContain('refs/heads/main');
+
+    // Once the repair ended, the card is the plain one again: the sentence and a leading press.
+    const ended = draw(fixing('DONE'));
+    expect(ended.querySelector('.project-open-item-fixing')).toBeNull();
+    expect(ended.querySelector('.project-open-item-required-action')).not.toBeNull();
+    expect(ended.querySelectorAll('.project-open-item-consequence').length).toBeGreaterThan(0);
   });
 
   it('only draws Review for the candidate mounted beside the row', () => {
