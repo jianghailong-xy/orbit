@@ -471,8 +471,8 @@ class WikiWatchDeviceTest {
             .joinToString("\n") { "${it.string("method")} ${it.string("path")} ${it["body"] ?: ""}" } + "\n")
         // Settings → Shared links: the list names the kinds, and the wiki's row is its title and "Wiki".
         compose.onAllNodesWithContentDescription("Open navigation").onFirst().performClick()
-        compose.waitUntil(15_000) { compose.onAllNodes(hasText("Settings") and hasClickAction()).fetchSemanticsNodes().isNotEmpty() }
-        compose.onNode(hasText("Settings") and hasClickAction()).performClick()
+        compose.waitUntil(15_000) { compose.onAllNodesWithTag("drawer:settings").fetchSemanticsNodes().isNotEmpty() }
+        compose.onNodeWithTag("drawer:settings").performClick()
         compose.waitUntil(15_000) { compose.onAllNodes(hasText("Shared links") and hasClickAction()).fetchSemanticsNodes().isNotEmpty() }
         compose.onNode(hasText("Shared links") and hasClickAction()).performScrollTo().performClick()
         await("A12 controlled Wiki")
