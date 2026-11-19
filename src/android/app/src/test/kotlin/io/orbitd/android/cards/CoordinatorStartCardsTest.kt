@@ -3,6 +3,8 @@ package io.orbitd.android.cards
 import android.content.ComponentName
 import androidx.activity.ComponentActivity
 import androidx.compose.foundation.layout.Column
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.test.*
 import androidx.compose.ui.test.junit4.createComposeRule
 import io.orbitd.android.TestOrbitApplication
@@ -147,7 +149,7 @@ class CoordinatorStartCardsTest {
         assertTrue(shows("${card.key}:receipt-fold", expected.text("seal")!!))
     }
 
-    private fun startedEvent(payload: JsonObject) = RunEvent("user", 41, JsonObject(payload + ("text" to JsonPrimitive("From Orbit · project started\n\nTold words."))),
+    private fun startedEvent(payload: JsonObject, seq: Long = 41) = RunEvent("user", seq, JsonObject(payload + ("text" to JsonPrimitive("From Orbit · project started\n\nTold words."))),
         ts = Instant.now().minusSeconds(3_600).toString())
 
     @Test fun projectStartedSaysWhatWebSaysForEachSharedCase() {
@@ -170,13 +172,17 @@ class CoordinatorStartCardsTest {
     }
 
     @Test fun projectStartedIsItsOwnCardInTheConversationWithItsTasksAndWhatTheCoordinatorWasTold() {
-        start.objects("projectStarted").forEach { case ->
-            val event = startedEvent(case.obj("payload")!!)
+        // One composition, each case drawn in turn: a rule sets its content once.
+        val opened = mutableListOf<String>()
+        var drawn by androidx.compose.runtime.mutableStateOf<Pair<InteractionCard, RunEvent>?>(null)
+        show { drawn?.let { (card, event) -> androidx.compose.runtime.key(card.key) { TranscriptCardView(card, { opened += it }, event) } } }
+        start.objects("projectStarted").forEachIndexed { index, case ->
+            val event = startedEvent(case.obj("payload")!!, 41L + index)
             val card = transcriptCards(event).single { it.key.endsWith(":projectStarted") }
             assertTrue("drawn as Orbit's turn, the row is the card alone", isOrbitTurnCard(card))
             val expected = case.obj("expected")!!
-            val opened = mutableListOf<String>()
-            show { TranscriptCardView(card, { opened += it }, event) }
+            drawn = card to event
+            compose.waitForIdle()
             val tag = "turn-project-started"
             (listOf("label", "kind", "title", "lead", "told").map { expected.text(it)!! } + expected.texts("tasks")).forEach {
                 assertTrue("${case.text("name")}: $it", shows(tag, it))
@@ -200,7 +206,7 @@ class CoordinatorStartCardsTest {
             assertFalse("folded until asked", shows(tag, "Told words."))
             compose.onNodeWithTag("$tag:told", useUnmergedTree = true).performClick()
             compose.waitForIdle()
-            assertTrue(shows("$tag:words", "Told words.", substring = true))
+            compose.onNodeWithTag("$tag:words", useUnmergedTree = true).assertTextContains("Told words.", substring = true)
         }
     }
 
