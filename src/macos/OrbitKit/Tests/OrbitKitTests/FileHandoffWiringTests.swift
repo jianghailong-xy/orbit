@@ -167,5 +167,8 @@ final class FileHandoffWiringTests: XCTestCase {
         // The third is the Share extension's (OrbitShare, its own target): it opens Orbit's own handoff
         // link, ShareHandoffLink, to tell the app a share arrived. It hands no file to the system.
         XCTAssertEqual(doors, ["FileHandoff.swift": 1, "OrbitLinkCards.swift": 1, "ShareModel.swift": 1])
+        // And that one call opens the handoff link alone, so the extension's door cannot become a file's.
+        let share = try source("src/macos/OrbitApp/Sources/OrbitShare/ShareModel.swift")
+        XCTAssertTrue(share.contains("NSWorkspace.shared.open(ShareHandoffLink.url(target:"))
     }
 }

@@ -236,7 +236,7 @@ describe('board phrases', () => {
   it('the board copy the capture scripts show is in SCHEDULE_COPY', () => {
     const all = new Set(strings(SCHEDULE_COPY));
     for (const s of [
-      'Scheduled', 'All workspaces', 'Show past runs', 'Needs you', 'Today', 'Tomorrow', 'Monday', 'Paused',
+      'Scheduled', 'All workspaces', 'Show past runs', 'Today', 'Tomorrow', 'Monday', 'Paused',
       'Failed 3 in a row'.replace('3', '{count}'), 'Held', 'Failed', 'Known', 'New', 'Next run', 'Last', 'Run now',
       'Pause', 'Change…', 'What it does', 'What was asked', 'Notes for the next run', 'This month', 'History',
       'Create scheduled task?', 'When', 'Runs in', 'May', 'Costs', 'Not now', 'Create', 'Open conversation', 'Allow',

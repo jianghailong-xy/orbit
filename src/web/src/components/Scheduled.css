@@ -21,7 +21,6 @@
   color: var(--text-1); display: flex; gap: 8px; align-items: baseline;
 }
 .sched-group > h2 small { color: var(--text-3); font-weight: 400; font-size: 13px; }
-.sched-group[data-group='NEEDS_YOU'] > h2 { color: var(--error); }
 .sched-group[data-group='PAUSED'] > h2 { color: var(--text-3); }
 
 .sched-row {

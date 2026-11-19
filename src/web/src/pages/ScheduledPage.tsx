@@ -8,9 +8,9 @@ import {
   scheduleCircle,
   scheduleDateText,
   scheduleFill,
-  scheduleNeedsYou,
   scheduleHistoryWho,
   scheduleRecordText,
+  scheduleRowCircle,
   scheduleRowLine,
   scheduleRuleRepeats,
   scheduleRuleText,
@@ -167,7 +167,7 @@ function Row({ row }: { row: RowView }): JSX.Element {
 
 const OPEN_CIRCLE: ScheduleCircleView = { circle: 'open', mark: null, tag: null };
 
-/** A group as the page draws it: the timeline's, the conditions' own, or Needs you with can't-read rows added. */
+/** A group as the page draws it: the timeline's, or the conditions' own. */
 interface Section {
   key: string;
   title: string;
@@ -271,13 +271,10 @@ export function ScheduledPage(): JSX.Element {
         onSelect,
       };
     }
-    const inNeeds = group.key === 'NEEDS_YOU';
     const inPaused = group.key === 'PAUSED';
-    const circle = inNeeds || inPaused ? scheduleCircle(schedule) : OPEN_CIRCLE;
-    const failing = inNeeds && schedule.state === 'ACTIVE' && schedule.lastRun;
     return {
       key: `${group.key}:${schedule.id}`,
-      circle,
+      circle: scheduleRowCircle(schedule, runs),
       title: schedule.title,
       line: scheduleRowLine(schedule, {
         agentName: schedule.agentName,
@@ -285,9 +282,7 @@ export function ScheduledPage(): JSX.Element {
         timezone,
       }),
       repeats: scheduleRuleRepeats(schedule.rule),
-      time: failing && schedule.lastRun
-        ? scheduleWhenText(new Date(schedule.lastRun.plannedAt), now, timezone)
-        : item.at && !inNeeds && !inPaused ? scheduleClock(item.at, timezone) : '',
+      time: item.at && !inPaused ? scheduleClock(item.at, timezone) : '',
       cls: inPaused ? ' is-paused' : '',
       selected,
       onSelect,
@@ -295,11 +290,11 @@ export function ScheduledPage(): JSX.Element {
   };
 
   // A WHEN schedule that is on and fine waits for its condition: it has no time, so the timeline places it nowhere,
-  // and it gets a group of its own above Today. One that cannot be read goes under Needs you.
+  // and it gets a group of its own above Today. One that cannot be read is there too, tagged Can't read.
   const nowMs = now.getTime();
   const conditionScheduleRow = (schedule: ScheduleListRow, cantRead: boolean): RowView => ({
-    key: `${cantRead ? 'NEEDS_YOU' : 'CONDITION'}:${schedule.id}`,
-    circle: cantRead ? { circle: 'open', mark: null, tag: { tone: 'held', text: K.cantRead } } : OPEN_CIRCLE,
+    key: `CONDITION:${schedule.id}`,
+    circle: cantRead ? { circle: 'open', mark: null, tag: { tone: 'held', text: K.cantRead } } : scheduleRowCircle(schedule, runs),
     title: schedule.title,
     line: conditionScheduleLine(schedule),
     repeats: true,
@@ -311,7 +306,7 @@ export function ScheduledPage(): JSX.Element {
     reading: !cantRead && schedule.condition ? conditionRowReading(schedule.condition, nowMs) : undefined,
   });
   const conditionTaskRow = (task: ScheduleWaitingTask, cantRead: boolean): RowView => ({
-    key: `${cantRead ? 'NEEDS_YOU' : 'CONDITION'}:task:${task.id}`,
+    key: `CONDITION:task:${task.id}`,
     circle: cantRead ? { circle: 'open', mark: null, tag: { tone: 'held', text: K.cantRead } } : OPEN_CIRCLE,
     title: task.title,
     line: conditionTaskLine(task),
@@ -323,12 +318,11 @@ export function ScheduledPage(): JSX.Element {
     gauge: cantRead ? 'cant-read' : 'waiting',
     reading: cantRead ? undefined : conditionRowReading(task.condition, nowMs),
   });
-  const waitingWhen = schedules.filter((s) => s.rule.kind === 'WHEN' && s.state === 'ACTIVE' && !scheduleNeedsYou(s));
-  const needsRows = [
+  const waitingWhen = schedules.filter((s) => s.rule.kind === 'WHEN' && s.state === 'ACTIVE');
+  // Can't read first: the rows that need the owner lead the group.
+  const waitingRows = [
     ...waitingWhen.filter((s) => conditionCantRead(s.condition)).map((s) => conditionScheduleRow(s, true)),
     ...waitingTasks.filter((t) => conditionCantRead(t.condition)).map((t) => conditionTaskRow(t, true)),
-  ];
-  const waitingRows = [
     ...waitingWhen.filter((s) => !conditionCantRead(s.condition)).map((s) => conditionScheduleRow(s, false)),
     ...waitingTasks.filter((t) => !conditionCantRead(t.condition)).map((t) => conditionTaskRow(t, false)),
   ];
@@ -338,18 +332,8 @@ export function ScheduledPage(): JSX.Element {
     subtitle: group.subtitle,
     rows: group.items.map((item) => rowOf(group, item)),
   }));
-  if (needsRows.length) {
-    let needs = sections.find((section) => section.key === 'NEEDS_YOU');
-    if (!needs) {
-      needs = { key: 'NEEDS_YOU', title: C.groups.NEEDS_YOU, subtitle: null, rows: [] };
-      sections.unshift(needs);
-    }
-    needs.rows.push(...needsRows);
-    needs.subtitle = String(needs.rows.length);
-  }
   if (waitingRows.length) {
-    const at = sections.findIndex((section) => section.key !== 'NEEDS_YOU');
-    sections.splice(at < 0 ? sections.length : at, 0, {
+    sections.unshift({
       key: 'CONDITION', title: K.group, subtitle: String(waitingRows.length), rows: waitingRows,
     });
   }
