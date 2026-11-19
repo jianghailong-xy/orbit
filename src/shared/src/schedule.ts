@@ -512,6 +512,12 @@ export type ScheduleRule =
   | { kind: 'ONCE'; at: string }
   | { kind: 'DAILY'; time: string }
   | { kind: 'WEEKLY'; time: string; weekdays: ScheduleWeekday[] }
+  /**
+   * Sub-daily: slots every `minutes` (30, 60, 120, 180, 240, 360, 480 or 720) from `time` through `until`
+   * (inclusive) or the end of the day, on `weekdays`, on the local wall clock. The server always writes `time` and
+   * `weekdays`, so a client that predates EVERY reads it as a weekly rule.
+   */
+  | { kind: 'EVERY'; minutes: number; time: string; weekdays: ScheduleWeekday[]; until?: string }
   /** Starts when its condition fires; `conditionId` is null on a create card, before Create writes the condition. */
   | { kind: 'WHEN'; conditionId: string | null; runsPerWeek: number; condition: ScheduleWhenCondition };
 
@@ -946,6 +952,7 @@ export function scheduleRuleText(rule: ScheduleRule, form: 'short' | 'long' = 's
     return scheduleFill(CC.rules[form], { condition: form === 'long' ? lowerFirst(rule.condition.text) : rule.condition.text });
   }
   if (rule.kind === 'DAILY') return scheduleFill(t.daily, { time: rule.time });
+  if (rule.kind === 'EVERY') return everyRuleText(rule);
   const days = SCHEDULE_WEEKDAYS.filter((d) => rule.weekdays.includes(d));
   if (days.length === 7) return scheduleFill(t.daily, { time: rule.time });
   if (days.length === 5 && WORKWEEK.every((d) => days.includes(d))) return scheduleFill(t.weekdays, { time: rule.time });
@@ -956,6 +963,40 @@ export function scheduleRuleText(rule: ScheduleRule, form: 'short' | 'long' = 's
       : scheduleFill(C.rules.long.weekday, { weekday: C.weekdays[d], time: rule.time });
   }
   return scheduleFill(t.days, { days: days.map((d) => C.weekdaysShort[d]).join(C.rules.daysSeparator), time: rule.time });
+}
+
+/**
+ * An EVERY rule's sentence, the same in both forms (design §9.2): "Every 30 min, 09:00–18:00, Mon–Fri", "Every hour",
+ * "Every 2 hours from 08:00, weekends". Kept beside SCHEDULE_COPY rather than in it until the clients that hold
+ * SCHEDULE_COPY to contracts/schedule.contract.json word for word carry it too.
+ */
+export const SCHEDULE_EVERY_COPY = {
+  minutes: 'Every {count} min',
+  hour: 'Every hour',
+  hours: 'Every {count} hours',
+  window: '{interval}, {time}–{until}',
+  from: '{interval} from {time}',
+  days: '{rule}, {days}',
+  workweek: 'Mon–Fri',
+  weekend: 'weekends',
+} as const;
+
+function everyRuleText(rule: Extract<ScheduleRule, { kind: 'EVERY' }>): string {
+  const e = SCHEDULE_EVERY_COPY;
+  const interval = rule.minutes < 60
+    ? scheduleFill(e.minutes, { count: rule.minutes })
+    : rule.minutes === 60 ? e.hour : scheduleFill(e.hours, { count: rule.minutes / 60 });
+  const text = rule.until
+    ? scheduleFill(e.window, { interval, time: rule.time, until: rule.until })
+    : rule.time === '00:00' ? interval : scheduleFill(e.from, { interval, time: rule.time });
+  const days = SCHEDULE_WEEKDAYS.filter((d) => rule.weekdays.includes(d));
+  if (days.length === 7) return text;
+  const named = days.length === 5 && WORKWEEK.every((d) => days.includes(d))
+    ? e.workweek
+    : days.length === 2 && days.includes('SAT') && days.includes('SUN')
+      ? e.weekend
+      : days.map((d) => C.weekdaysShort[d]).join(C.rules.daysSeparator);
+  return scheduleFill(e.days, { rule: text, days: named });
 }
 
 /** Whether a row shows the repeat mark (↻) before its rule: a one-off does not. */
@@ -1609,7 +1650,10 @@ function fieldValueText(field: string, value: unknown, names: Record<string, str
 }
 
 function ruleChangeText(before: ScheduleRule | undefined, after: ScheduleRule): { field: string | null; text: string } {
-  if (before && before.kind !== 'ONCE' && after.kind !== 'ONCE' && before.kind !== 'WHEN' && after.kind !== 'WHEN') {
+  if (
+    before && before.kind !== 'ONCE' && after.kind !== 'ONCE' && before.kind !== 'WHEN' && after.kind !== 'WHEN'
+    && before.kind !== 'EVERY' && after.kind !== 'EVERY'
+  ) {
     const sameShape = before.kind === after.kind
       && (before.kind !== 'WEEKLY' || after.kind !== 'WEEKLY' || before.weekdays.join() === after.weekdays.join());
     if (sameShape && before.time !== after.time) {
