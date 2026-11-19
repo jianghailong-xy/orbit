@@ -138,7 +138,7 @@ test('managed runners at sign-in: off changes nothing; on, sign-in records inten
   await sql.connect();
   await verifyCoordinatorPgIdentity(sql);
   const db: PrismaClient = prismaClientFor(url);
-  const scratch = mkdtempSync(path.join(tmpdir(), 'orbit-managed-sign-in-'));
+  const scratch = mkdtempSync(path.join(tmpdir(), 'orbit-cloud-sign-in-'));
   t.after(async () => {
     await db.$disconnect().catch(() => undefined);
     await sql.end().catch(() => undefined);

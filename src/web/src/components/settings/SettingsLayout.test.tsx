@@ -667,7 +667,7 @@ describe('reordering machines in the nav', () => {
 
   describe('with Orbit Cloud among them', () => {
     // The account's managed runner, saved second: the nav pins it first all the same.
-    const WITH_CLOUD = [RUNNERS[0], { id: 'cloud', name: 'orbit-managed', online: true, engines: [signedIn], managed: true }, ...RUNNERS.slice(1)];
+    const WITH_CLOUD = [RUNNERS[0], { id: 'cloud', name: 'orbit-cloud', online: true, engines: [signedIn], managed: true }, ...RUNNERS.slice(1)];
     beforeEach(() => {
       runners = WITH_CLOUD as typeof RUNNERS;
       reorder = async (ids) => {

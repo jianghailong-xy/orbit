@@ -286,11 +286,11 @@ describe('a workspace’s Settings page', () => {
   });
 
   it('shows smart selection and its engines only while the account has it on; Optimize For is not here', async () => {
-    await mount(`/settings/workspaces/${ORBIT}`);
+    await mount(`/settings/workspaces/${ORBIT}`, undefined, { preferences: { modelRouting: false } });
     expect($$('.settings-row-title', section('Sessions')).map(text)).toEqual(['Worktree isolation', 'Model']);
     act(() => root?.unmount());
     host?.remove();
-    await mount(`/settings/workspaces/${ORBIT}`, undefined, { preferences: { modelRouting: true } });
+    await mount(`/settings/workspaces/${ORBIT}`, undefined, { preferences: {} });
     expect($$('.settings-row-title', section('Sessions')).map(text)).toEqual([
       'Worktree isolation',
       'Smart model selection for tasks',

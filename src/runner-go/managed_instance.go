@@ -27,8 +27,8 @@ const (
 	envManagedRunnerGeneration        = "ORBIT_MANAGED_RUNNER_GENERATION"
 	envManagedRunnerPodUID            = "ORBIT_MANAGED_RUNNER_POD_UID"
 	managedRunnerInstanceCapabilityV1 = "managed-runner-instance-v1"
-	managedRunnerGenerationHeader     = "X-Orbit-Managed-Runner-Generation"
-	managedRunnerPodUIDHeader         = "X-Orbit-Managed-Runner-Pod-Uid"
+	managedRunnerGenerationHeader     = "X-Orbit-Cloud-Runner-Generation"
+	managedRunnerPodUIDHeader         = "X-Orbit-Cloud-Runner-Pod-Uid"
 
 	// The refusals after which the control plane will never accept this instance again.
 	managedInstanceRequired      = "MANAGED_RUNNER_INSTANCE_REQUIRED"

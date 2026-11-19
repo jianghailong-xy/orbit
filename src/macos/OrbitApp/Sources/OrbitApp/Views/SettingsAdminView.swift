@@ -215,12 +215,15 @@ struct SettingsView: View {
         Toggle(SettingsCopy.smartModelSelection, isOn: $modelRouting)
         Text(SettingsCopy.smartModelSelectionHint)
             .font(.orbitLabel).foregroundStyle(.secondary)
-        Picker(SettingsCopy.optimizeFor, selection: $optimizeFor) {
-            ForEach(OptimizeFor.allCases) { Text($0.label).tag($0) }
+        // Only smart model selection reads it, so it shows only while that is on (owner, 2026-11-20).
+        if SessionSettings.shows(.optimizeFor, smartModelSelection: modelRouting) {
+            Picker(SettingsCopy.optimizeFor, selection: $optimizeFor) {
+                ForEach(OptimizeFor.allCases) { Text($0.label).tag($0) }
+            }
+            .pickerStyle(.segmented)
+            Text(SettingsCopy.optimizeForHint)
+                .font(.orbitLabel).foregroundStyle(.secondary)
         }
-        .pickerStyle(.segmented)
-        Text(SettingsCopy.optimizeForHint)
-            .font(.orbitLabel).foregroundStyle(.secondary)
         Toggle(SettingsCopy.suggestedReplies, isOn: $promptSuggestions)
         Text(SettingsCopy.suggestedRepliesHint)
             .font(.orbitLabel).foregroundStyle(.secondary)

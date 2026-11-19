@@ -710,7 +710,7 @@ private fun RunsWithSheet(app: OrbitApplication, handle: SessionHandle, task: Js
                 listOf<Pair<String?, String>>(null to TaskListCopy.unassigned) + orderedWorkspaceRows(workspaces).map { it.text("id") to (it.text("name") ?: "Workspace") } +
                     listOfNotNull(currentAssignee?.takeIf { a -> workspaces.none { ObjectId.same(it.text("id"), a.text("id")) } }?.let { it.text("id") to (it.text("name") ?: it.text("id").orEmpty()) }),
                 tag = "task-assignee") { patch(buildJsonObject { put("assigneeId", it?.let(::JsonPrimitive) ?: JsonNull) }) }
-            // The account's switch for smart model selection, off by default: then none of it is drawn here — no Suggested, no ✦
+            // The account's switch for smart model selection, on by default: then none of it is drawn here — no Suggested, no ✦
             // placeholder, no coordinator's reason — as on the web and iOS (9fb3ae6ee).
             val picks = TaskDetailLogic.modelHintPicks(task.objects("modelHintOptions"))
             if (smartSelection) PickerRow(TaskDetailCopy.suggestedLabel, picks.firstOrNull { it.value == task.text("modelHint") }?.label ?: task.text("modelHint") ?: TaskDetailCopy.noSuggestion,

@@ -113,8 +113,8 @@ test('the browser state and Clear saved logins: owner only, 404 when off, the cl
   const beat = async (server: Apiserver, body: object, declares = true) => {
     const reply = await call(server, 'POST', '/api/runner/heartbeat', managed.token, { version: '0.1.0', ...body }, {
       'x-orbit-runner-capabilities': declares ? `${INSTANCE_CAPABILITY},${BROWSER_CLEAR}` : INSTANCE_CAPABILITY,
-      'x-orbit-managed-runner-generation': '1',
-      'x-orbit-managed-runner-pod-uid': podUid,
+      'x-orbit-cloud-runner-generation': '1',
+      'x-orbit-cloud-runner-pod-uid': podUid,
     });
     assert.equal(reply.status, 201, `R's heartbeat: ${reply.text}`);
     return reply.json as Record<string, unknown>;

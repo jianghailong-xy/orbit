@@ -9145,7 +9145,7 @@ export function WorkspaceView({
   // without smart selection has one that was not applied, so both look as they always have — and
   // with the account's switch off (the default), so does every run.
   const smartRoute = (() => {
-    if (me.data?.preferences?.modelRouting !== true) return null;
+    if (me.data?.preferences?.modelRouting === false) return null;
     const route = detailForSelected?.route;
     return selected?.taskId && route?.applied && route.level && route.model === shownModel ? route : null;
   })();

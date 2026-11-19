@@ -280,7 +280,7 @@ final class TaskDetailWiringTests: XCTestCase {
         XCTAssertTrue(mac.contains("Color.accentColor.opacity(0.12)"))
     }
 
-    /// The account's switch (preferences.modelRouting) hides all of it while off, the default — web
+    /// The account's switch (preferences.modelRouting, on by default) hides all of it while off — web
     /// parity with TaskDetailPanel.tsx, WorkspaceView.tsx and RunnerDetailPage.tsx.
     func testTheAccountSwitchGatesEverySmartSelectionEntry() throws {
         let view = try source(Self.tasksView)

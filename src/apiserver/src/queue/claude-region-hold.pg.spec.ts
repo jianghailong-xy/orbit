@@ -26,8 +26,8 @@
  *       pending is failed with that sentence by the heartbeat instead of handed out.
  *   (9) The push: over real checks, only the blocked check that takes blockedChecks to 2 is the confirmed flip — once per
  *       run of blocked checks, and never for a single one.
- *  (10) A task's run under model routing: Claude's own sign-in on the blocked runner is ruled out as a signed-out one
- *       is, and the run goes to an engine the owner allowed; on an allowed runner it stays on Claude.
+ *  (10) A task's run under model routing: Claude's own sign-in on the blocked runner is ruled out of the pool the run is
+ *       picked from, and the run goes to the next provider there (Codex); on an allowed runner it stays on Claude.
  *
  *     bash scripts/run-pg-spec.sh src/apiserver/src/queue/claude-region-hold.pg.spec.ts
  *
@@ -64,6 +64,8 @@ import { RunnersService } from '../runners/runners.service';
 import { SESSION_MOVE_V1 } from '../sessions/session-move';
 import { SessionsService } from '../sessions/sessions.service';
 import { planTaskRunRoute, taskRouteReads } from '../tasks/task-route-decision';
+import { subagentRouteInput } from '../runner-api/subagent-route';
+import { subagentCandidateRefusal } from '../tasks/model-routing';
 import { QueueService } from './queue.service';
 import '../test-support/dequeue-under-lease';
 
@@ -535,7 +537,9 @@ test('the region check holds Anthropic-bound Claude sessions, refuses them at cr
         engines: [{ engine: 'claude', installed: true, auth: 'yes' }, { engine: 'codex', installed: true, auth: 'yes' }] as unknown as Prisma.InputJsonValue,
       },
     });
-    await db.workspace.update({ where: { id: m.workspaceId }, data: { modelRouting: true, modelRoutingProviders: ['codex'] } });
+    // The run is picked from the owner's whole pool on this runner (every provider × engine × model), not from a
+    // per-Agent engine list: Claude and Codex are both signed-in subscriptions here, and Claude is first by order.
+    await db.workspace.update({ where: { id: m.workspaceId }, data: { modelRouting: true } });
     const taskId = randomUUID();
     await db.task.create({
       data: {
@@ -544,11 +548,24 @@ test('the region check holds Anthropic-bound Claude sessions, refuses them at cr
       } as never,
     });
     const route = () => planTaskRunRoute(taskRouteReads(prisma, ownerId), { id: taskId, modelHint: 'M' }, { id: m.workspaceId, runnerId: m.runnerId }, 'the work');
+    // Why Claude's own sign-in leaves the pool, as the route reads that pool for the Agent's runner.
+    const claudeRefusal = async () => subagentCandidateRefusal(await subagentRouteInput(db as unknown as Prisma.TransactionClient, {
+      ownerId, workspaceId: m.workspaceId, runnerId: m.runnerId,
+      dto: { toolUseId: '', type: 'task', definitionSource: 'builtin' },
+      parent: { engine: AgentProvider.CLAUDE, provider: AgentProvider.CLAUDE, model: '', effort: null },
+    }), AgentProvider.CLAUDE, AgentProvider.CLAUDE);
     const allowed = await route();
-    assert.equal(allowed?.engine, AgentProvider.CLAUDE, `stays on its own engine where the region is fine: ${JSON.stringify(allowed?.reasons)}`);
+    assert.equal(allowed?.engine, AgentProvider.CLAUDE, `stays on Claude where the region is fine: ${JSON.stringify(allowed?.reasons)}`);
+    assert.equal(allowed?.model, 'claude-sonnet-5-5');
+    assert.equal(allowed?.effort, 'medium');
+    assert.equal(await claudeRefusal(), null);
     await check(m, BLOCKED);
     const blocked = await route();
     assert.equal(blocked?.engine, AgentProvider.CODEX, JSON.stringify(blocked?.reasons));
-    assert.ok(blocked?.reasons.includes('Engine codex: claude can’t use Anthropic on this runner'), JSON.stringify(blocked?.reasons));
+    assert.equal(blocked?.provider, AgentProvider.CODEX);
+    assert.equal(blocked?.model, 'gpt-5.5-codex');
+    assert.equal(blocked?.effort, 'medium');
+    assert.ok(blocked?.reasons.some((r) => r.startsWith('Picked gpt-5.5-codex · medium on codex (Cost)')), JSON.stringify(blocked?.reasons));
+    assert.equal(await claudeRefusal(), 'claude can’t use Anthropic on the parent\'s runner');
   });
 });

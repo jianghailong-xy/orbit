@@ -12,7 +12,7 @@ import {
   type PodContainerStatus,
   type Secret,
 } from './kube-client';
-import { MANAGED_ADMISSION_DENIAL_MARKER, podImages } from './managed-runner-admission';
+import { LEGACY_MANAGED_ADMISSION_DENIAL_MARKER, MANAGED_ADMISSION_DENIAL_MARKER, podImages } from './managed-runner-admission';
 import {
   ManagedRunnerConflict,
   type ManagedCredential,
@@ -320,7 +320,8 @@ export class KubernetesBackend implements ManagedRunnerBackend {
     try {
       await this.kube.pods.create(probe, { dryRun: true });
     } catch (error) {
-      if (error instanceof KubeApiError && error.message.includes(MANAGED_ADMISSION_DENIAL_MARKER)) return;
+      if (error instanceof KubeApiError
+        && (error.message.includes(MANAGED_ADMISSION_DENIAL_MARKER) || error.message.includes(LEGACY_MANAGED_ADMISSION_DENIAL_MARKER))) return;
       if (isRetryableKubeError(error)) throw error;
       throw new ManagedRunnerConflict('ADMISSION_GUARD_UNVERIFIED', `the admission probe was refused, but not by the guard: ${(error as Error).message}`);
     }

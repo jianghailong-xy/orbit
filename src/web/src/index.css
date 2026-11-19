@@ -4910,6 +4910,22 @@ button.toast--pill:focus-visible {
   position: relative;
   display: flex;
   flex-direction: column;
+  /* One width for every card in the conversation (docs/mocks/chat-card-width, D1 = D2 = A): each
+     card reads this, so on a wide column they all end on one line, and on a narrow one they all fill
+     it. Outside the conversation a card keeps the width its own rule falls back to. Reply content —
+     prose, tool output, code — is not a card and keeps the column. */
+  --chat-card-max: 720px;
+}
+.workspace-scroll-wrap :is(
+  .approval-card,
+  .review-card,
+  .chat-error-card,
+  .chat-session-card,
+  .owner-request-card,
+  .cu-rc-card,
+  .session-project-landing
+) {
+  max-width: var(--chat-card-max);
 }
 .workspace-sessions {
   flex: 1;
@@ -9041,7 +9057,7 @@ button.chat-jump-start:hover {
   background: var(--bg-hover);
 }
 .chat-status-card {
-  width: min(560px, 100%);
+  width: min(var(--chat-card-max, 560px), 100%);
   margin: 10px 0;
   border: 1px solid var(--border);
   border-left: 3px solid var(--brand);
@@ -11928,7 +11944,7 @@ button.chat-jump-start:hover {
    Two classes, because `.approval-card` is written further down and would win at one. It is kept
    to the width of the conversation's other cards (`.crc`), not stretched across the stream. */
 .approval-card.evidence-decision-receipt {
-  max-width: 720px;
+  max-width: var(--chat-card-max, 720px);
   border-color: var(--border);
   background: var(--bg-raised);
 }
@@ -14258,6 +14274,40 @@ button.chat-jump-start:hover {
 }
 .review-card-preview.answered-question-card.is-queued {
   border-style: dashed;
+}
+/* Opened in place (board docs/mocks/card-ui-polish ③): the preview and the record it opens read as
+   one card — the preview's lower corners and the record's upper ones meet on one hairline. */
+.answered-question-inline.is-open .review-card-preview.answered-question-card {
+  margin-bottom: 0;
+  border-bottom-left-radius: 0;
+  border-bottom-right-radius: 0;
+}
+.answered-question-inline.is-open > .approval-card.answered-question {
+  /* The record is the preview's lower half, in its neutral frame — not the open question's amber
+     border nor the approval card's blue, which the sheet used to strip (ReviewCard.css). */
+  margin-top: 0;
+  border: 1px solid var(--border);
+  border-top-color: var(--border-subtle);
+  border-top-left-radius: 0;
+  border-top-right-radius: 0;
+  background: var(--bg-raised);
+}
+.answered-question-inline > .approval-card.answered-question[hidden] {
+  display: none;
+}
+.answered-question-hide {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin: 0;
+  padding: 4px 14px 12px;
+  border: 0;
+  background: var(--bg-raised);
+  color: var(--brand);
+  font: inherit;
+  font-size: 13px;
+  font-weight: 600;
+  cursor: pointer;
 }
 .answered-question-head {
   display: flex;
@@ -21750,7 +21800,7 @@ div.landing-jobs-open {
 /* What a landing in hand still carries, on the chat's own status card under its sentence. */
 .landings-window-card.chat-status-card {
   margin: 8px 12px 0;
-  width: min(640px, calc(100% - 24px));
+  width: min(var(--chat-card-max, 640px), calc(100% - 24px));
 }
 .landings-window-card.is-failed {
   border-left-color: var(--error);
@@ -24497,7 +24547,7 @@ div.landing-jobs-open {
 }
 .oic {
   width: 100%;
-  max-width: 720px;
+  max-width: var(--chat-card-max, 720px);
   padding: 10px 12px;
   border: 1px solid var(--warning-border);
   border-radius: 12px;
@@ -24583,25 +24633,6 @@ div.landing-jobs-open {
 .oic-facts-mark {
   flex: none;
 }
-.oic-actions {
-  display: flex;
-  flex-wrap: wrap;
-  align-items: center;
-  gap: 6px;
-  margin-top: 8px;
-  font-size: 12px;
-}
-.oic-actions-label {
-  color: var(--text-2);
-}
-.oic-chip {
-  padding: 1px 8px;
-  border: 1px solid var(--border);
-  border-radius: 9px;
-  background: var(--bg-raised);
-  color: var(--text-1);
-  font-size: 12px;
-}
 .oic-links {
   display: flex;
   gap: 12px;
@@ -24611,6 +24642,22 @@ div.landing-jobs-open {
 .oic-links a {
   color: var(--brand);
   text-decoration: none;
+}
+.oic-goto {
+  padding: 0;
+  border: 0;
+  background: none;
+  color: var(--brand);
+  font: inherit;
+  cursor: pointer;
+}
+.oic-missing {
+  color: var(--text-3);
+}
+.oic-raw-id {
+  margin-top: 6px;
+  color: var(--text-3);
+  font-size: 11px;
 }
 .oic-meta {
   margin-top: 8px;
@@ -24673,7 +24720,7 @@ div.landing-jobs-open {
 }
 .tsc {
   width: 100%;
-  max-width: 720px;
+  max-width: var(--chat-card-max, 720px);
   padding: 10px 12px;
   border: 1px solid var(--brand-border);
   border-radius: 12px;
@@ -24868,7 +24915,7 @@ div.landing-jobs-open {
   flex-direction: column;
   align-items: flex-start;
   width: fit-content;
-  max-width: min(720px, 100%);
+  max-width: min(var(--chat-card-max, 720px), 100%);
   min-width: 0;
 }
 .smc-head {
@@ -25021,7 +25068,7 @@ a.smc-from:hover {
   margin: 8px 0;
 }
 .src {
-  width: min(560px, 88%);
+  width: min(var(--chat-card-max, 560px), 100%);
   padding: 10px 12px;
   border: 1px solid var(--brand-border);
   border-radius: 12px;
@@ -25102,7 +25149,7 @@ a.smc-from:hover {
 }
 .psc {
   width: 100%;
-  max-width: 720px;
+  max-width: var(--chat-card-max, 720px);
   padding: 10px 12px;
   border: 1px solid var(--brand-border);
   border-radius: 12px;
@@ -25237,7 +25284,7 @@ a.smc-from:hover {
 }
 .crc {
   width: 100%;
-  max-width: 720px;
+  max-width: var(--chat-card-max, 720px);
   padding: 10px 12px;
   border: 1px solid var(--brand-border);
   border-radius: 12px;
@@ -25849,6 +25896,56 @@ button.project-open-item-action:disabled {
   color: var(--brand);
   font-size: 12.5px;
   line-height: 1.5;
+}
+/* A repair task is live on the item (board docs/mocks/card-ui-polish ①): one line naming it as a
+   link, the doors demoted to one quiet row under the facts. */
+.project-open-item-fixing {
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+  padding: 8px 12px;
+  border: 1px solid var(--brand-border);
+  border-radius: 8px;
+  background: var(--brand-tint);
+  font-size: 13px;
+  line-height: 1.55;
+}
+.project-open-item-fixing a {
+  color: var(--brand);
+  font-weight: 600;
+}
+.project-open-item-fixing-sub {
+  color: var(--text-2);
+  font-size: 12px;
+}
+.project-open-item-fixing-spin {
+  flex: none;
+  width: 12px;
+  height: 12px;
+  margin-top: 4px;
+  border: 2px solid var(--brand-border);
+  border-top-color: var(--brand);
+  border-radius: 50%;
+  animation: project-open-item-spin 1s linear infinite;
+}
+@keyframes project-open-item-spin {
+  to { transform: rotate(360deg); }
+}
+@media (prefers-reduced-motion: reduce) {
+  .project-open-item-fixing-spin { animation: none; }
+}
+.project-open-item-actions.project-open-item-quiet-row {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 4px 16px;
+  margin-top: 8px;
+}
+.project-open-item-quiet-row .project-open-item-door {
+  display: block;
+}
+.project-open-item-quiet-row .project-open-item-chat {
+  margin-top: 0;
 }
 /* The card's fact block (mock 5): the rows under the heading, and the tail of what a failed check
    printed under the Check row. The label and value cells are the merge confirmation card's own two

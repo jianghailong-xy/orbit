@@ -259,10 +259,10 @@ account's first real session on the same image (last rows).
 bash scripts/worktree-overlay.sh && npm run build -w @orbit/shared && npm run build -w @orbit/apiserver
 sudo scripts/managed-runner/lab/start.sh && sudo scripts/managed-runner/lab/test-server.sh start
 docker buildx build --file deploy/managed-runner/image/Dockerfile --build-arg ORBIT_SOURCE_SHA="$(git rev-parse HEAD)" \
-  --output type=docker,dest=/mnt/data/image.tar,name=orbit-managed-runner:TAG .   # clean checkout; nothing is pushed
+  --output type=docker,dest=/mnt/data/image.tar,name=orbit-cloud-runner:TAG .   # clean checkout; nothing is pushed
 R=scripts/managed-runner/lab/runner-image.py
 python3 $R import /mnt/data/image.tar          # into the guest's k3s containerd; the Pod uses imagePullPolicy Never
-python3 $R owner && python3 $R enroll t03 && python3 $R start t03 --image docker.io/library/orbit-managed-runner:TAG
+python3 $R owner && python3 $R enroll t03 && python3 $R start t03 --image docker.io/library/orbit-cloud-runner:TAG
 python3 $R workspace t03 && python3 $R provider t03 --key-file /mnt/data/managed-runner-lab/secrets/deepseek-api-key
 python3 $R session t03 --provider SLUG --attach FILE --prompt TEXT     # --fake / fake-model.py for model-free checks
 python3 $R snapshot t03 && python3 $R stop t03 && python3 $R start t03 --image ... && python3 $R snapshot t03
@@ -343,7 +343,7 @@ Claude login on the runner's volume (no access token, so no request leaves the r
 ```sh
 export LAB_TEST_SERVER_DIR=/mnt/data/managed-runner-lab/test-server-t04
 M=scripts/managed-runner/lab/manager-lab.py
-python3 $M prepare --image docker.io/library/orbit-managed-runner-lab@sha256:...   # T02a's CA and token; identity; profile -> the gate
+python3 $M prepare --image docker.io/library/orbit-cloud-runner-lab@sha256:...   # T02a's CA and token; identity; profile -> the gate
 python3 $M gate start && sudo scripts/managed-runner/lab/test-server.sh start --managed && python3 $M replica start
 python3 scripts/managed-runner/lab/single-writer.py admission install
 python3 $M owner alice --no-signin && python3 $M signin alice --parallel 8 && python3 $M ensure alice --parallel 8 --replica
@@ -377,7 +377,7 @@ session ran on a DeepSeek-preset model key whose endpoint is fake-model.py. That
 ```sh
 export LAB_TEST_SERVER_DIR=/mnt/data/managed-runner-lab/test-server-t05
 L=scripts/managed-runner/lab/login-lab.py
-python3 $L prepare --image docker.io/library/orbit-managed-runner-lab@sha256:...   # T02a's CA and token, T04's identity
+python3 $L prepare --image docker.io/library/orbit-cloud-runner-lab@sha256:...   # T02a's CA and token, T04's identity
 python3 $L gate start && sudo scripts/managed-runner/lab/test-server.sh start      # switch unset; --managed-false; --managed
 python3 $L off-check admin --label unset          # the first user, then new and existing accounts: nothing managed
 python3 $L account vera && python3 $L veteran vera && python3 $L landing vera --save
@@ -409,7 +409,7 @@ a DeepSeek-preset key whose endpoint is fake-model.py (T05's way), which is not 
 ```sh
 export LAB_TEST_SERVER_DIR=/mnt/data/managed-runner-lab/test-server-t06
 W=scripts/managed-runner/lab/wake-lab.py
-python3 $W prepare --image docker.io/library/orbit-managed-runner-lab@sha256:...   # T02a's CA and token, T04's identity; budget: one runner
+python3 $W prepare --image docker.io/library/orbit-cloud-runner-lab@sha256:...   # T02a's CA and token, T04's identity; budget: one runner
 python3 $W gate start && sudo scripts/managed-runner/lab/test-server.sh start    # unset: the bootstrap, then accounts without sign-in
 python3 $W account root && python3 $W account amy --no-signin && python3 $W selfhost root && python3 $W selfhost-dispatch root --label unset0
 sudo scripts/managed-runner/lab/test-server.sh start --managed                    # after stopping the apiserver unit

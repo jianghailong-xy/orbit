@@ -4756,7 +4756,7 @@ function ToolView({ node, live }: { node: ToolNode; live?: boolean }) {
           )}
           {tag && <span className="chat-tool-tag">{tag}</span>}
           {isBackgroundTask ? (
-            <TaskBadgeAndStatus node={node} live={live} meta={meta} />
+            <TaskBadgeAndStatus node={node} live={live} meta={meta} run={isDelegate ? run : undefined} />
           ) : outcome?.kind === 'replied' ? (
             // The engine files "Chat about this" as the call's error; it is the person's reply.
             <MessageFilled className="chat-tool-status replied" />
@@ -4984,7 +4984,19 @@ function leadToolSummary(desc: ToolDesc): { text: string; mono: boolean } | unde
  * workflow) or tool calls made (an agent), and a spinner for as long as the work runs — the call
  * itself returned the moment it launched, so its own result would put a check on work just begun.
  */
-function TaskBadgeAndStatus({ node, live, meta }: { node: ToolNode; live?: boolean; meta?: string }) {
+function TaskBadgeAndStatus({
+  node,
+  live,
+  meta,
+  run,
+}: {
+  node: ToolNode;
+  live?: boolean;
+  meta?: string;
+  /** A SubAgent's run: once it has ended, its end is the card's status, not the call's (a background call only
+   *  answered with its receipt, so it always reads as a success). */
+  run?: SubagentRunView;
+}) {
   const lookup = useContext(TaskLookupCtx);
   const progress = lookup.progress(node.id);
   const badge = (progress && progressBadge(progress)) ?? meta;
@@ -4993,6 +5005,13 @@ function TaskBadgeAndStatus({ node, live, meta }: { node: ToolNode; live?: boole
       {badge && <span className="chat-tool-meta">{badge}</span>}
       {lookup.running(node.id) ? (
         <LoadingOutlined className="chat-tool-status running" spin />
+      ) : run && run.status !== 'RUNNING' ? (
+        // Red for every end but DONE, as the SubAgent's finished line is (subagentFinishedOk).
+        run.status === 'DONE' ? (
+          <CheckCircleFilled className="chat-tool-status ok" aria-label="done" />
+        ) : (
+          <CloseCircleFilled className="chat-tool-status err" aria-label={run.status.toLowerCase()} />
+        )
       ) : (
         <ToolStatus node={node} live={live} />
       )}

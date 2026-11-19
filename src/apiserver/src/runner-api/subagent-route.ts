@@ -14,7 +14,7 @@ import {
   type SubagentRunCreateRequest,
 } from '@orbit/shared';
 import { Prisma } from '@prisma/client';
-import { optimizeForOf } from '../common/model-routing-switch';
+import { modelRoutingEnabled, optimizeForOf } from '../common/model-routing-switch';
 import { isLoginEngine, sanitizeRunnerEngines } from '../common/runner-engines';
 import { sanitizeRuntimeDefaultModels } from '../common/runtime-model';
 import type { PrismaService } from '../prisma/prisma.service';
@@ -183,6 +183,7 @@ export async function subagentRouteInput(
     parent: args.parent,
     providers: [...builtins, ...configured.map((entry) => entry.provider)],
     blockedProviders: subagentBlockedProviders(owner?.preferences),
+    smartSelection: modelRoutingEnabled(owner),
     engines,
     modelCatalog: catalog,
     runtimeDefaultModels: sanitizeRuntimeDefaultModels(runner?.runtimeDefaultModels),

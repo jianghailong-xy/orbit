@@ -240,7 +240,7 @@ class FakeHost:
 
 
 def config_value(**change):
-    value = {"schemaVersion": 1, "network": "orbit-managed-runners", "bridge": BRIDGE, "gateway": "172.19.0.1", "apiPort": 2086,
+    value = {"schemaVersion": 1, "network": "orbit-cloud-runners", "bridge": BRIDGE, "gateway": "172.19.0.1", "apiPort": 2086,
              "dnsServers": ["192.168.1.254"], "allow": [{"to": "10.77.0.2", "protocol": "tcp", "port": 18080}],
              "intervalSeconds": 10}
     value.update(change)
@@ -356,8 +356,8 @@ class RulesTest(FirewallFixture):
 
     def test_the_jumps_match_the_bridge_only(self):
         self.assertEqual(self.fw.jump_rules(self.config, {"input": "INPUT", "forward": "DOCKER-USER"}), {
-            "INPUT": f"-A INPUT -i {BRIDGE} -m comment --comment orbit-managed-runners -j ORBIT-MR-INPUT",
-            "DOCKER-USER": f"-A DOCKER-USER -i {BRIDGE} -m comment --comment orbit-managed-runners -j ORBIT-MR-FORWARD",
+            "INPUT": f"-A INPUT -i {BRIDGE} -m comment --comment orbit-cloud-runners -j ORBIT-MR-INPUT",
+            "DOCKER-USER": f"-A DOCKER-USER -i {BRIDGE} -m comment --comment orbit-cloud-runners -j ORBIT-MR-FORWARD",
         })
 
 
@@ -367,9 +367,9 @@ class SaveParsingTest(FirewallFixture):
             "# Warning: iptables-legacy tables present, use iptables-legacy-save to see them\n"
             "*nat\n:PREROUTING ACCEPT [0:0]\n-A PREROUTING -m addrtype --dst-type LOCAL -j DOCKER\nCOMMIT\n"
             "*filter\n:INPUT ACCEPT [12:345]\n:DOCKER-USER - [0:0]\n"
-            "-A INPUT -i br-x -m comment --comment orbit-managed-runners -j ORBIT-MR-INPUT\nCOMMIT\n")
+            "-A INPUT -i br-x -m comment --comment orbit-cloud-runners -j ORBIT-MR-INPUT\nCOMMIT\n")
         self.assertEqual(saved["chains"], {"INPUT", "DOCKER-USER"})
-        self.assertEqual(saved["rules"], {"INPUT": ["-A INPUT -i br-x -m comment --comment orbit-managed-runners -j ORBIT-MR-INPUT"]})
+        self.assertEqual(saved["rules"], {"INPUT": ["-A INPUT -i br-x -m comment --comment orbit-cloud-runners -j ORBIT-MR-INPUT"]})
         self.assertEqual(self.fw.jumps_into_ours(saved), [("INPUT", saved["rules"]["INPUT"][0])])
 
 
@@ -383,8 +383,8 @@ class ApplyTest(FirewallFixture):
         self.assertEqual([argv[0] for argv in restores], ["iptables-nft-restore", "ip6tables-nft-restore"])
         self.assertEqual(self.check(host), [])
         chains = host.table("nft", 4)["chains"]
-        self.assertEqual(chains["INPUT"][0], f"-A INPUT -i {BRIDGE} -m comment --comment orbit-managed-runners -j ORBIT-MR-INPUT")
-        self.assertEqual(chains["DOCKER-USER"], [f"-A DOCKER-USER -i {BRIDGE} -m comment --comment orbit-managed-runners -j ORBIT-MR-FORWARD"])
+        self.assertEqual(chains["INPUT"][0], f"-A INPUT -i {BRIDGE} -m comment --comment orbit-cloud-runners -j ORBIT-MR-INPUT")
+        self.assertEqual(chains["DOCKER-USER"], [f"-A DOCKER-USER -i {BRIDGE} -m comment --comment orbit-cloud-runners -j ORBIT-MR-FORWARD"])
         self.assertEqual(chains["FORWARD"][0], "-A FORWARD -j DOCKER-USER", "Docker's own rules are untouched")
 
     def test_applying_again_writes_nothing(self):
@@ -403,7 +403,7 @@ class ApplyTest(FirewallFixture):
             "the jump gone": lambda t: t["chains"]["DOCKER-USER"].clear(),
             "the jump twice": lambda t: t["chains"]["INPUT"].append(t["chains"]["INPUT"][0]),
             "a jump left for an old bridge": lambda t: t["chains"]["INPUT"].append(
-                "-A INPUT -i br-feedfacecafe -m comment --comment orbit-managed-runners -j ORBIT-MR-INPUT"),
+                "-A INPUT -i br-feedfacecafe -m comment --comment orbit-cloud-runners -j ORBIT-MR-INPUT"),
             "every chain flushed and deleted": lambda t: t.__setitem__("chains", docker_table()["chains"]),
         }
         for name, change in cases.items():
@@ -449,7 +449,7 @@ class ApplyTest(FirewallFixture):
         host = FakeHost(ipv6_docker=False)
         self.assertEqual(self.apply(host), ([4, 6], []))
         self.assertEqual(host.table("nft", 6)["chains"]["FORWARD"][0],
-                         f"-A FORWARD -i {BRIDGE} -m comment --comment orbit-managed-runners -j ORBIT-MR-FORWARD")
+                         f"-A FORWARD -i {BRIDGE} -m comment --comment orbit-cloud-runners -j ORBIT-MR-FORWARD")
 
     def test_a_host_without_ipv6_gets_ipv4_rules_only(self):
         host = FakeHost()
@@ -515,7 +515,7 @@ class PreflightAndRemoveTest(FirewallFixture):
         payloads = [stdin for argv, stdin in host.calls if argv[0].endswith("-restore")]
         self.assertEqual(len(payloads), 2)
         self.assertIn("--ctstate DNAT --ctorigdst 192.0.2.1 --ctorigdstport 2086", payloads[0])
-        self.assertIn("-m comment --comment orbit-managed-runners", payloads[0])
+        self.assertIn("-m comment --comment orbit-cloud-runners", payloads[0])
         self.assertNotIn("-A INPUT", payloads[0] + payloads[1], "no rule a packet reaches")
         for family in (4, 6):
             self.assertNotIn("ORBIT-MR-PREFLIGHT", host.table("nft", family)["chains"])
@@ -532,7 +532,7 @@ class PreflightAndRemoveTest(FirewallFixture):
         host = FakeHost()
         self.apply(host)
         host.table("nft", 4)["chains"]["INPUT"].append(
-            "-A INPUT -i br-feedfacecafe -m comment --comment orbit-managed-runners -j ORBIT-MR-INPUT")
+            "-A INPUT -i br-feedfacecafe -m comment --comment orbit-cloud-runners -j ORBIT-MR-INPUT")
         done = self.fw.remove(host.run, legacy_present=False, ipv6=True)
         self.assertEqual(len(done), 9)
         self.assertEqual(host.tables[("nft", 4)], docker_table())
@@ -604,10 +604,10 @@ class KubernetesTest(FirewallFixture):
     """k3s beside Docker: its jumps sit above DOCKER-USER in FORWARD, and kube-proxy's KUBE-SERVICES DNATs in nat
     PREROUTING on every interface. The rules must still come first for the runners' bridge, and stay first."""
 
-    FORWARD_JUMP = f"-A FORWARD -i {BRIDGE} -m comment --comment orbit-managed-runners -j ORBIT-MR-FORWARD"
-    INPUT_JUMP = f"-A INPUT -i {BRIDGE} -m comment --comment orbit-managed-runners -j ORBIT-MR-INPUT"
-    NAT_JUMP = f"-A PREROUTING -i {BRIDGE} -m comment --comment orbit-managed-runners -j ORBIT-MR-PREROUTING"
-    RAW_JUMP = f"-A PREROUTING -i {BRIDGE} -m comment --comment orbit-managed-runners -j ORBIT-MR-RAW"
+    FORWARD_JUMP = f"-A FORWARD -i {BRIDGE} -m comment --comment orbit-cloud-runners -j ORBIT-MR-FORWARD"
+    INPUT_JUMP = f"-A INPUT -i {BRIDGE} -m comment --comment orbit-cloud-runners -j ORBIT-MR-INPUT"
+    NAT_JUMP = f"-A PREROUTING -i {BRIDGE} -m comment --comment orbit-cloud-runners -j ORBIT-MR-PREROUTING"
+    RAW_JUMP = f"-A PREROUTING -i {BRIDGE} -m comment --comment orbit-cloud-runners -j ORBIT-MR-RAW"
     ROUTING_RULE = {"priority": 1, "src": "all", "fwmark": "0x100000", "fwmask": "0x100000", "iif": BRIDGE, "action": "prohibit"}
 
     def k3s_host(self, ipv6_k3s=True):
@@ -673,7 +673,7 @@ class KubernetesTest(FirewallFixture):
                 self.assert_first(host, family)
         chains = host.table("nft", 4)["chains"]
         # Docker's DOCKER-USER keeps its jump too, and every rule of Kubernetes and Docker is still there, in order.
-        self.assertEqual(chains["DOCKER-USER"], [f"-A DOCKER-USER -i {BRIDGE} -m comment --comment orbit-managed-runners -j ORBIT-MR-FORWARD"])
+        self.assertEqual(chains["DOCKER-USER"], [f"-A DOCKER-USER -i {BRIDGE} -m comment --comment orbit-cloud-runners -j ORBIT-MR-FORWARD"])
         self.assertEqual(chains["FORWARD"][1:], [*KUBE_FORWARD, "-A FORWARD -j DOCKER-USER", "-A FORWARD -j DOCKER-FORWARD",
                                                   '-A FORWARD -m comment --comment "flanneld forward" -j FLANNEL-FWD'])
         self.assertEqual(chains["INPUT"][1:], KUBE_INPUT)
@@ -885,8 +885,8 @@ class WithoutKubernetesTest(FirewallFixture):
         self.assertEqual(payloads[0], "\n".join([
             "*filter", ":ORBIT-MR-INPUT - [0:0]", ":ORBIT-MR-FORWARD - [0:0]",
             *self.fw.chain_rules(self.config, 4)["ORBIT-MR-INPUT"], *self.fw.chain_rules(self.config, 4)["ORBIT-MR-FORWARD"],
-            f"-I INPUT 1 -i {BRIDGE} -m comment --comment orbit-managed-runners -j ORBIT-MR-INPUT",
-            f"-I DOCKER-USER 1 -i {BRIDGE} -m comment --comment orbit-managed-runners -j ORBIT-MR-FORWARD",
+            f"-I INPUT 1 -i {BRIDGE} -m comment --comment orbit-cloud-runners -j ORBIT-MR-INPUT",
+            f"-I DOCKER-USER 1 -i {BRIDGE} -m comment --comment orbit-cloud-runners -j ORBIT-MR-FORWARD",
             "COMMIT"]) + "\n")
         self.assertNotIn("*nat", "".join(payloads))
         self.assertNotIn("*raw", "".join(payloads))

@@ -1,0 +1,176 @@
+<!doctype html><html><head><meta charset="utf-8"><style>
+@font-face{font-family:Inter;src:url(/var/tmp/landing-mock-render/fonts/Inter.ttf)}
+@font-face{font-family:NotoSC;src:url(/var/tmp/landing-mock-render/fonts/NotoSansSC.ttf)}
+@font-face{font-family:Mono;src:url(/var/tmp/landing-mock-render/fonts/JetBrainsMono.ttf)}
+:root{--bg-subtle:#fafbfc;--bg-sunken:#f7f8fa;--border:#dee0e3;--border-subtle:#eceef1;--text-1:#1f2329;--text-2:#646a73;--text-3:#8f959e;
+--brand:#3370ff;--brand-tint:#eaf1ff;--brand-border:#bcd3ff;--success:#1a7f37;--warning:#c2710c;--warning-bg:#fff4e6;--warning-border:#ffd591;--error:#cf3b35}
+*{box-sizing:border-box}body{margin:0;padding:32px;width:1500px;font:14px/1.5 Inter,NotoSC,sans-serif;color:var(--text-1);background:#eef0f3}
+h1{font-size:24px;margin:0 0 4px}h2{font-size:18px;margin:36px 0 6px}.cap{color:var(--text-2);margin:0 0 14px;font-size:14px}
+.cols{display:grid;grid-template-columns:1fr 1fr;gap:28px}.col h3{font-size:13px;letter-spacing:.06em;color:var(--text-3);margin:0 0 8px;text-transform:uppercase}
+.pane{background:#fff;border-radius:10px;padding:18px;box-shadow:0 1px 3px rgba(0,0,0,.08)}
+.mono{font-family:Mono,monospace;font-size:13px}
+.bad{position:relative}.n{display:inline-flex;width:20px;height:20px;border-radius:50%;background:var(--error);color:#fff;font-size:12px;font-weight:700;align-items:center;justify-content:center;margin-left:6px;vertical-align:middle}
+.notes{margin:12px 0 0;padding:0 0 0 0;list-style:none;font-size:13.5px;color:var(--text-2)}.notes li{margin:5px 0}.notes b{color:var(--text-1)}
+.ok{display:inline-flex;width:20px;height:20px;border-radius:50%;background:var(--success);color:#fff;font-size:12px;font-weight:700;align-items:center;justify-content:center;margin-right:6px}
+.dec{background:#fff;border-left:4px solid var(--brand);padding:10px 14px;margin:14px 0 0;border-radius:6px;font-size:14px}.dec b{color:var(--brand)}
+/* open item card */
+.card{border:1px solid var(--border);border-radius:12px;background:#fff;overflow:hidden}
+.card-head{display:flex;align-items:center;gap:8px;padding:12px 16px;background:var(--bg-subtle);border-bottom:1px solid var(--border-subtle);font-weight:600}
+.card-head .sp{flex:1}.prov{font-size:11px;letter-spacing:.08em;color:var(--text-3);border:1px solid var(--border);border-radius:4px;padding:1px 6px;font-weight:600}
+.tag{font-size:12px;font-weight:600;border-radius:10px;padding:1px 8px}.tag.blue{background:var(--brand-tint);color:var(--brand);border:1px solid var(--brand-border)}
+.card-body{padding:12px 16px}.next{background:var(--warning-bg);border:1px solid var(--warning-border);border-radius:8px;padding:10px 14px}
+.next p{margin:0 0 6px}.next .req{font-weight:600}.next .hb{color:var(--brand)}
+.door{display:flex;align-items:center;gap:12px;margin-top:6px}.btn{display:inline-block;padding:4px 14px;border-radius:6px;font-size:14px}
+.btn.pri{background:var(--brand);color:#fff;min-width:200px}.btn.link{text-decoration:underline;color:var(--text-1)}.cons{color:var(--text-2)}
+.kv{display:grid;grid-template-columns:110px 1fr;gap:4px 0;margin:12px 0 8px;font-size:14px}.kv .k{color:var(--text-3)}
+.chat{display:inline-block;border:1px solid var(--border);border-radius:6px;padding:2px 10px;margin-top:4px}
+.foot{padding:9px 16px;border-top:1px solid var(--border-subtle);color:var(--text-2);font-size:13px}
+.fixing{display:flex;align-items:flex-start;gap:10px;background:var(--brand-tint);border:1px solid var(--brand-border);border-radius:8px;padding:10px 14px}
+.spin{width:14px;height:14px;border-radius:50%;border:2px solid var(--brand-border);border-top-color:var(--brand);margin-top:4px;flex:none}
+.fixing a{color:var(--brand);font-weight:600;text-decoration:none}.fixing .sub{color:var(--text-2);font-size:13px}
+.quiet{display:flex;gap:18px;margin-top:10px;font-size:13.5px}.quiet a{color:var(--text-2);text-decoration:none;border-bottom:1px dotted var(--text-3)}
+/* delivery card */
+.oic{max-width:720px;padding:10px 12px;border:1px solid var(--warning-border);border-radius:12px;background:var(--warning-bg)}
+.oic-head{display:flex;align-items:center;gap:6px;color:var(--warning);font-weight:600}.oic-head .sp{flex:1}
+.oic-kind{font-size:12px;border:1px solid var(--warning-border);background:#fff;border-radius:10px;padding:0 8px;color:var(--text-2);font-weight:500}
+.oic-title{font-weight:600;margin:4px 0}.oic-why{margin:2px 0 6px}.oic-files{background:#fff;border-radius:6px;padding:6px 10px;margin:6px 0}
+.oic-facts{background:#fff;border-radius:6px;padding:6px 10px;color:var(--text-2);font-size:13px}
+.oic-chip{border:1px solid var(--border);background:#fff;border-radius:6px;padding:1px 8px}
+.oic-links{margin:6px 0;font-size:13.5px}.oic-links a{color:var(--brand);text-decoration:none;margin-right:14px}
+.oic-meta{border-top:1px solid var(--warning-border);margin-top:6px;padding-top:6px;color:var(--text-3);font-size:12.5px}
+.oic-raw{color:var(--text-2);font-size:13px;margin-top:2px}
+/* answered question */
+.aq{border:1px solid var(--border);border-radius:12px;background:#fff;padding:10px 14px;max-width:640px}
+.aq-head{display:flex;gap:6px;align-items:center;font-weight:600}.aq-head .q{color:var(--brand)}.aq-head .t{margin-left:auto;color:var(--text-3);font-weight:400;font-size:13px}
+.aq-lead{margin:4px 0}.aq-ans{color:var(--success)}.aq-open{color:var(--brand);font-size:13px;margin-top:4px}
+.aq-full{border-top:1px solid var(--border-subtle);margin-top:10px;padding-top:10px}
+.opt{display:flex;gap:8px;border:1px solid var(--border-subtle);border-radius:8px;padding:7px 10px;margin:6px 0}.opt.ch{border-color:#b6e7c4;background:#e8f6ec}
+.opt .m{width:16px;flex:none;color:var(--text-3)}.opt.ch .m{color:var(--success)}.opt .d{color:var(--text-2);font-size:13px}
+.rec{font-size:11px;color:var(--brand);border:1px solid var(--brand-border);border-radius:8px;padding:0 6px;margin-left:6px}
+.aq-foot{color:var(--text-2);font-size:13px;margin-top:8px}
+.dialog{border:1px solid var(--border);border-radius:12px;background:#fff;box-shadow:0 12px 32px rgba(0,0,0,.18);padding:14px;margin-top:10px;max-width:520px}
+.dim{background:rgba(0,0,0,.35);border-radius:10px;padding:18px}
+.arrow{color:var(--text-3);font-size:13px;margin:8px 0}
+</style></head><body>
+<h1>卡片 UI 优化 · 设计图（待确认）</h1>
+<p class="cap">orbit-develop · web 控制台。卡片用的是真实类名与 index.css 亮色 token 手绘（外壳是画的）。UI 文案为英文；说明为中文。任务标题是用户数据，原样显示。</p>
+
+<h2>① 待办卡（Open item card）—— 修复任务正在处理时</h2>
+<p class="cap">截图里上方那张卡：<span class="mono">ProjectProgressStatus.tsx · ItemCard</span>。</p>
+<div class="cols">
+<div class="col"><h3>现在</h3><div class="pane">
+ <div class="card">
+  <div class="card-head">Merge conflict — needs a fix on the task branch<span class="sp"></span><span class="prov">FROM ORBIT</span></div>
+  <div class="card-body">
+   <div class="next">
+    <p class="req">A repair task is already handling this item — let it finish or open the task to see what it needs.<span class="n">1</span></p>
+    <p class="hb">The coordinator is fixing this in 项目线并入 main：重新生成 api-reference.md，让提升到 main 的候选能合入.<span class="n">2</span></p>
+    <div class="door"><span class="btn pri">Review</span><span class="n">3</span><span class="cons">Open the current merge card.</span></div>
+    <div class="door"><span class="btn link">Open landing</span><span class="cons">Open the landing: every attempt, step by step.</span></div>
+   </div>
+   <div class="kv"><span class="k">Into</span><span class="mono">refs/heads/main at 928ed7e · nothing landed</span><span class="k">Files</span><span class="mono">docs/api-reference.md</span></div>
+   <span class="chat">Chat about this</span>
+  </div>
+  <div class="foot">Owner: coordinator · waiting 18m</div>
+ </div>
+ <ul class="notes">
+  <li><span class="n">1</span><span class="n">2</span> <b>两句话说同一件事</b>，而且“open the task”却没有任务链接——任务标题是纯文本，点不进去。</li>
+  <li><span class="n">3</span> <b>修复已在进行，却给了一个蓝色主按钮</b>：读起来像“轮到你了”，其实不需要你做任何事。</li>
+  <li>标题旁看不出状态：这张卡是“有人在修”还是“等你处理”，要读完正文才知道。</li>
+ </ul>
+</div></div>
+<div class="col"><h3>建议</h3><div class="pane">
+ <div class="card">
+  <div class="card-head">Merge conflict — needs a fix on the task branch<span class="tag blue">Fixing</span><span class="sp"></span><span class="prov">FROM ORBIT</span></div>
+  <div class="card-body">
+   <div class="fixing"><span class="spin"></span><div>
+     <div>Being fixed in <a>项目线并入 main：重新生成 api-reference.md，让提升到 main 的候选能合入 ↗</a></div>
+     <div class="sub">In progress · nothing for you to do unless it fails.</div></div></div>
+   <div class="kv"><span class="k">Into</span><span class="mono">main at 928ed7e · nothing landed</span><span class="k">Files</span><span class="mono">docs/api-reference.md</span></div>
+   <div class="quiet"><a>Review the merge</a><a>Open the landing</a><a>Chat about this</a></div>
+  </div>
+  <div class="foot">Owner: coordinator · waiting 18m</div>
+ </div>
+ <ul class="notes">
+  <li><span class="ok">✓</span><b>合成一行</b>：“Being fixed in &lt;任务&gt; ↗”，任务标题可点，打开修复任务；下面一行说状态。</li>
+  <li><span class="ok">✓</span>标题旁加蓝色 <b>Fixing</b> 标签（与已有 Handling 同色系）。</li>
+  <li><span class="ok">✓</span>修复进行中时，所有门<b>降为一排安静链接</b>；修复失败/结束后，卡回到现在的样子（主按钮回来）。</li>
+  <li><span class="ok">✓</span><span class="mono">refs/heads/main</span> 显示为 <span class="mono">main</span>。</li>
+ </ul>
+</div></div>
+</div>
+<div class="dec"><b>D1</b> 修复进行中时按钮怎么放？ <b>A（建议）</b> 全部降为安静链接，如右图　·　B 保留 Review 主按钮，只合并那两句话。</div>
+
+<h2>② 对话里的异常卡（Exception item）</h2>
+<p class="cap">截图里下方那张卡：<span class="mono">OpenItemDeliveryCard.tsx</span>，它和上面的待办卡讲的是同一条待办。</p>
+<div class="cols">
+<div class="col"><h3>现在</h3><div class="pane">
+ <div class="oic">
+  <div class="oic-head">⚠ Exception item<span class="sp"></span><span class="oic-kind">Merge conflict</span></div>
+  <div class="oic-title">Merge conflict: merging the project branch into main</div>
+  <div class="oic-why">git refused the merge into refs/heads/main; the target branch did not move. The platform will not retry it by itself.</div>
+  <div class="oic-files mono">docs/api-reference.md</div>
+  <div class="oic-facts">◌ No merge receipt for this work — Orbit cannot tell whether it has landed.</div>
+  <div style="margin:8px 0">The coordinator can: <span class="oic-chip">Review the merge</span><span class="n">4</span></div>
+  <div class="oic-links"><a>Open the landing ↗</a></div>
+  <div class="oic-meta">Item 350QQl7dfSWzuAT56lM1P · a notification, not an interruption · 14m ago<span class="n">5</span></div>
+  <div class="oic-raw">▸ What the coordinator was told</div>
+ </div>
+ <ul class="notes">
+  <li><span class="n">4</span> “Review the merge” <b>长得像按钮，但点不了</b>（只是标签）。</li>
+  <li><span class="n">5</span> 内部 id 和 “a notification, not an interruption” 是给代理看的话，对人没用。</li>
+  <li>“The platform will not retry it by itself” 也是写给代理的；人看到会以为卡住了，而其实修复任务已经在跑。</li>
+ </ul>
+</div></div>
+<div class="col"><h3>建议</h3><div class="pane">
+ <div class="oic">
+  <div class="oic-head">⚠ Exception item<span class="sp"></span><span class="oic-kind">Merge conflict</span></div>
+  <div class="oic-title">Merge conflict: merging the project branch into main</div>
+  <div class="oic-why">git refused the merge into main; main did not move.</div>
+  <div class="oic-files mono">docs/api-reference.md</div>
+  <div class="oic-facts">◌ No merge receipt for this work — Orbit cannot tell whether it has landed.</div>
+  <div class="oic-links"><a>Go to the item card ↑</a><a>Open the landing ↗</a></div>
+  <div class="oic-meta">Sent to the coordinator · 14m ago</div>
+  <div class="oic-raw">▸ What the coordinator was told <span style="color:var(--text-3)">(item id inside)</span></div>
+ </div>
+ <ul class="notes">
+  <li><span class="ok">✓</span>去掉假按钮 “The coordinator can: …”；改成真链接 <b>Go to the item card ↑</b>，滚动到上面那张能操作的卡（用现有的 revealOpenItemCard）。</li>
+  <li><span class="ok">✓</span>脚注改成人话 “Sent to the coordinator · 14m ago”；item id 收进底部披露里。</li>
+  <li><span class="ok">✓</span>原因句只留事实，删掉写给代理的 “will not retry” 半句（原话仍在披露里）。</li>
+ </ul>
+</div></div>
+</div>
+
+<h2>③ 已回答的问题卡 —— 原地展开，不再弹 Sheet</h2>
+<p class="cap"><span class="mono">CoordinatorQuestionCard.tsx · ClosedQuestionCard</span>：现在点卡片会经 <span class="mono">ReviewCard</span> 打开对话框/Sheet。改为在卡片自身位置展开完整问题与选项，再点收起。</p>
+<div class="cols">
+<div class="col"><h3>现在：点击 → 弹出 Sheet</h3><div class="pane">
+ <div class="aq"><div class="aq-head"><span class="q">?</span>Answered<span class="t">14:02</span></div>
+  <div class="aq-lead">Which branch should the API reference be regenerated on?</div>
+  <div class="aq-ans">✓ Regenerate on the task branch</div><div class="aq-open">View details ›</div></div>
+ <div class="arrow">↓ click</div>
+ <div class="dim"><div class="dialog"><b>Answered</b><div style="color:var(--text-2);font-size:13px;margin:6px 0">（Sheet 盖住对话，关掉才能继续读）</div>
+  <div class="opt ch"><span class="m">✓</span><div>Regenerate on the task branch</div></div><div class="opt"><span class="m">○</span><div>Regenerate on main</div></div></div></div>
+</div></div>
+<div class="col"><h3>建议：点击 → 原地展开</h3><div class="pane">
+ <div class="aq"><div class="aq-head"><span class="q">?</span>Answered<span class="t">14:02</span></div>
+  <div class="aq-lead">Which branch should the API reference be regenerated on?</div>
+  <div class="aq-ans">✓ Regenerate on the task branch</div>
+  <div class="aq-full">
+   <div style="font-size:12px;color:var(--text-3);margin-bottom:4px">FROM THE COORDINATOR · asked 13:51</div>
+   <div>The project line conflicts on <span class="mono">docs/api-reference.md</span>. Which branch should the API reference be regenerated on?</div>
+   <div class="opt ch"><span class="m">✓</span><div>Regenerate on the task branch<span class="rec">Recommended</span><div class="d">Keeps main untouched until the candidate passes.</div></div></div>
+   <div class="opt"><span class="m">○</span><div>Regenerate on main<div class="d">Faster, but lands outside the project line.</div></div></div>
+   <div class="aq-foot">✓ Answered by you · 14:02 · sent to the coordinator</div>
+  </div>
+  <div class="aq-open">Hide details ⌃</div></div>
+ <ul class="notes">
+  <li><span class="ok">✓</span>点卡片任意处或 “View details ›” 展开；展开后变 “Hide details ⌃”。内容与现在 Sheet 里的一致（问题、全部选项、所选勾选、你的备注、脚注）。</li>
+  <li><span class="ok">✓</span>手机端也原地展开，不再弹底部 Sheet。键盘：Enter/Space 切换，aria-expanded 保留。</li>
+ </ul>
+</div></div>
+</div>
+
+<h2>④ 不变</h2>
+<p class="cap">Start project 卡的 <b>Automatic</b> 继续默认打开（<span class="mono">StartProjectCard.tsx</span> 里 <span class="mono">automatic: true</span>，本次不动）。iOS / Android 端本次不改，确认后按需另开任务对齐。</p>
+</body></html>

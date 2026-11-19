@@ -53,7 +53,7 @@ test('managed runners off: the production server starts without Kubernetes or Ce
   const sql = new Client({ connectionString: url, connectionTimeoutMillis: 5_000 });
   await sql.connect();
   await verifyCoordinatorPgIdentity(sql);
-  const scratch = mkdtempSync(path.join(tmpdir(), 'orbit-managed-boot-'));
+  const scratch = mkdtempSync(path.join(tmpdir(), 'orbit-cloud-boot-'));
   t.after(async () => {
     await sql.end().catch(() => undefined);
     rmSync(scratch, { recursive: true, force: true });
