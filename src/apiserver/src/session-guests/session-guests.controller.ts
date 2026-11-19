@@ -4,6 +4,7 @@ import {
 import { FileInterceptor } from '@nestjs/platform-express';
 import type { Observable } from 'rxjs';
 import type { Response } from 'express';
+import type { GuestPromptOptimizationRequest } from '@orbit/shared';
 import { MAX_UPLOAD_BYTES } from '../attachments/attachments.media';
 import { AllowQueryToken } from '../auth/allow-query-token.decorator';
 import { JwtAuthGuard } from '../auth/jwt-auth.guard';
@@ -198,7 +199,7 @@ export class GuestSessionsController {
   /** ✦ Optimize a draft (SessionGuestsService.optimize). Nothing is sent: the composer shows the answer as a card. */
   @Post(':id/prompt-optimizations')
   @HttpCode(200)
-  optimize(@CurrentUser() user: AuthUser, @Param('id', PublicIdPipe) id: string, @Body() body: { draft?: unknown }) {
+  optimize(@CurrentUser() user: AuthUser, @Param('id', PublicIdPipe) id: string, @Body() body: GuestPromptOptimizationRequest) {
     return this.guests.optimize(user.userId, id, body);
   }
 

@@ -43,12 +43,12 @@ controllers and their decorators, so it lists what the server mounts, not what a
 | Caller | Routes |
 | --- | --- |
 | `public` | 37 |
-| `user` | 480 |
+| `user` | 481 |
 | `admin` | 31 |
 | `runner` | 202 |
 | `channel` | 1 |
 | `link gateway` | 3 |
-| **Total** | **754** |
+| **Total** | **755** |
 
 ## Public routes
 
@@ -141,6 +141,7 @@ controllers and their decorators, so it lists what the server mounts, not what a
 | `GET` | `/api/guest-sessions/:id/events` | path `id`; query `after`, `before`, `limit`, `maxPayload` | `GuestSessionsController.events` |
 | `GET` | `/api/guest-sessions/:id/events/:seq` | path `id`, `seq` | `GuestSessionsController.event` |
 | `POST` | `/api/guest-sessions/:id/leave` | path `id` | `GuestSessionsController.leave` |
+| `POST` | `/api/guest-sessions/:id/prompt-optimizations` | body `Object`; path `id` | `GuestSessionsController.optimize` |
 | `GET` | `/api/guest-sessions/:id/stream` | path `id`; query `maxPayload`, `sinceSeq` | `GuestSessionsController.stream` |
 | `POST` | `/api/guest-sessions/:id/turns` | body `Object`; path `id` | `GuestSessionsController.turn` |
 | `DELETE` | `/api/guest-sessions/:id/turns/:turnId` | path `id`, `turnId` | `GuestSessionsController.cancelTurn` |
