@@ -122,10 +122,6 @@ test('browser_open: starts the account\'s Orbit Cloud browser for any session of
       ...(runnerToken === r.token ? instance() : {}),
       ...(sessionId ? { 'x-orbit-session-id': sessionId } : {}),
     });
-  const beat = async (server: Apiserver, body: object) => {
-    const reply = await call(server, 'POST', '/api/runner/heartbeat', r.token, { version: '0.1.0', ...body }, instance());
-    assert.equal(reply.status, 201, `R's heartbeat: ${reply.text}`);
-  };
   const beat = async (server: Apiserver, body: object, declares = true) => {
     const reply = await call(server, 'POST', '/api/runner/heartbeat', r.token, { version: '0.1.0', ...body }, instance(declares));
     assert.equal(reply.status, 201, `R's heartbeat: ${reply.text}`);
