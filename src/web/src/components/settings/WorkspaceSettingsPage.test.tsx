@@ -305,6 +305,23 @@ describe('a workspace’s Settings page', () => {
   });
 });
 
+describe('worktree isolation on a directory that is not a git repository', () => {
+  const notGit = { enableWorktree: false, repoUrl: null, workDirExists: true, workDirIsGit: false, workDirProbedAt: '2026-11-20T08:00:00.000Z' };
+
+  it('cannot be switched on, and says why', async () => {
+    const { sent } = await mount(`/settings/workspaces/${ORBIT}`, [workspace(ORBIT, 'orbit', notGit)]);
+    expect(toggle('Worktree isolation').hasAttribute('disabled') || toggle('Worktree isolation').getAttribute('aria-disabled') === 'true').toBe(true);
+    expect(document.body.textContent).toContain('Unavailable: the working directory is not a git repository.');
+    await click(toggle('Worktree isolation'));
+    expect(sent).toEqual([]);
+  });
+
+  it('can be switched on once git will be set up there', async () => {
+    await mount(`/settings/workspaces/${ORBIT}`, [workspace(ORBIT, 'orbit', { ...notGit, autoInitGit: true })]);
+    expect(toggle('Worktree isolation').hasAttribute('disabled')).toBe(false);
+  });
+});
+
 describe('every edit is one PATCH carrying only that field', () => {
   const only = (sent: Sent[]) => sent.map(({ method, path, body }) => ({ method, path, body }));
 
