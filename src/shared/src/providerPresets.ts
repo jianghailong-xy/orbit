@@ -18,7 +18,7 @@ export interface ProviderPresetModel {
   contextWindow?: number;
   /**
    * The SubAgent router's tier for this model (docs/subagent-design.md §4.2). Orbit's own judgement,
-   * kept with the list: models.dev has no such field. A model without one is not routed onto.
+   * kept with the list: models.dev has no such field. A model without one ranks after every tiered one.
    */
   tier?: 'S' | 'M' | 'L' | 'XL';
   /** USD per million output tokens, from models.dev (`cost.output`): what Cost and the tie-breaks order keys by. */

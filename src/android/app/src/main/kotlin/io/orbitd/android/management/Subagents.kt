@@ -51,7 +51,7 @@ internal object Subagents {
     const val RUNNING = "Running at once"
     const val RUNNING_DETAIL = "Per session, foreground and background together"
     const val TIERS = "Model tiers"
-    const val TIERS_FOOTER = "Preset tiers and prices follow the catalogue. A custom endpoint's model stays out of automatic routing until it has a tier."
+    const val TIERS_FOOTER = "Preset tiers and prices follow the catalogue. A model with no tier still runs SubAgents, after every model whose tier fits."
     const val NOT_SET = "Not set"
     const val SUBSCRIPTION = "Subscription"
     const val CLEAR = "Clear"
