@@ -27,6 +27,8 @@ struct SettingsView: View {
     @State private var orchestration = true
     /// The account's switch for smart model selection. Absent on the server means off.
     @State private var modelRouting = false
+    /// The account's "Optimize For" pick. Absent on the server means Balance.
+    @State private var optimizeFor: OptimizeFor = .balance
     /// The account's switch for suggested replies. Absent on the server means on.
     @State private var promptSuggestions = true
     /// The account's switch for session recaps. Absent on the server means on.
@@ -87,6 +89,7 @@ struct SettingsView: View {
             ?? AgentDefaults.defaultPermissionMode
         orchestration = p?.enableOrchestration ?? true
         modelRouting = p?.smartModelSelection ?? false
+        optimizeFor = OptimizeFor(stored: p?.optimizeFor)
         promptSuggestions = p?.suggestedReplies ?? true
         recaps = p?.showRecaps ?? true
         translation = !SessionTranslation.unavailable(model.user) && p?.translationEnabled == true
@@ -121,6 +124,7 @@ struct SettingsView: View {
         // afford.
         .onChange(of: orchestration) { saveOrchestration() }
         .onChange(of: modelRouting) { saveModelRouting() }
+        .onChange(of: optimizeFor) { saveOptimizeFor() }
         .onChange(of: promptSuggestions) { savePromptSuggestions() }
         .onChange(of: recaps) { saveRecaps() }
         .onChange(of: translation) { saveTranslation() }
@@ -210,6 +214,12 @@ struct SettingsView: View {
         // pickers' alone.
         Toggle(SettingsCopy.smartModelSelection, isOn: $modelRouting)
         Text(SettingsCopy.smartModelSelectionHint)
+            .font(.orbitLabel).foregroundStyle(.secondary)
+        Picker(SettingsCopy.optimizeFor, selection: $optimizeFor) {
+            ForEach(OptimizeFor.allCases) { Text($0.label).tag($0) }
+        }
+        .pickerStyle(.segmented)
+        Text(SettingsCopy.optimizeForHint)
             .font(.orbitLabel).foregroundStyle(.secondary)
         Toggle(SettingsCopy.suggestedReplies, isOn: $promptSuggestions)
         Text(SettingsCopy.suggestedRepliesHint)
@@ -349,6 +359,12 @@ struct SettingsView: View {
     private func saveModelRouting() {
         guard (model.user?.preferences?.smartModelSelection ?? false) != modelRouting else { return }
         Task { await model.savePreferences(UpdatePreferencesRequest(modelRouting: modelRouting)) }
+    }
+
+    /// And for Optimize For.
+    private func saveOptimizeFor() {
+        guard OptimizeFor(stored: model.user?.preferences?.optimizeFor) != optimizeFor else { return }
+        Task { await model.savePreferences(UpdatePreferencesRequest(optimizeFor: optimizeFor.rawValue)) }
     }
 
     /// And for suggested replies.

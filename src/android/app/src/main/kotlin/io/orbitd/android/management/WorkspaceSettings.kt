@@ -98,9 +98,8 @@ fun WorkspaceSettings(api: ManagementApi, workspaceId: String?, revision: Long, 
     var modelRouting by rememberSaveable(id) { mutableStateOf(saved.bool("modelRouting") ?: false) }
     val savedSubagents = SubagentSettings.of(saved)
     var subagentsEnabled by rememberSaveable(id) { mutableStateOf(savedSubagents.enabled) }
-    var optimizeFor by rememberSaveable(id) { mutableStateOf(savedSubagents.optimizeFor) }
     var subagentsMaxRunning by rememberSaveable(id) { mutableStateOf(savedSubagents.maxRunning) }
-    val subagents = SubagentSettings(subagentsEnabled, optimizeFor, subagentsMaxRunning)
+    val subagents = SubagentSettings(subagentsEnabled, subagentsMaxRunning)
     val dirty = name != saved.text("name") || effort != prefilledEffort || instructions != saved.text("appendSystemPrompt") ||
         workDir != saved.text("workDir") || enabled != (saved.bool("enabled") ?: true) || modelRouting != (saved.bool("modelRouting") ?: false) ||
         subagents != savedSubagents
@@ -166,8 +165,7 @@ fun WorkspaceSettings(api: ManagementApi, workspaceId: String?, revision: Long, 
                 Switch(checked = modelRouting, onCheckedChange = null)
             }
         }
-        SubagentsSection(api, subagentsEnabled, { subagentsEnabled = it }, optimizeFor, { optimizeFor = it },
-            subagentsMaxRunning, { subagentsMaxRunning = it })
+        SubagentsSection(api, subagentsEnabled, { subagentsEnabled = it }, subagentsMaxRunning, { subagentsMaxRunning = it })
         val env = (saved["env"] as? JsonObject)?.entries?.sortedBy { it.key }.orEmpty()
         if (env.isNotEmpty()) FormSection("Environment") {
             env.forEach { (key, value) ->
@@ -205,6 +203,5 @@ internal fun workspacePatch(saved: JsonObject, name: String, effort: String, ins
     if (modelRouting != (saved.bool("modelRouting") ?: false)) put("modelRouting", modelRouting)
     val savedSubagents = SubagentSettings.of(saved)
     if (subagents.enabled != savedSubagents.enabled) put("subagentsEnabled", subagents.enabled)
-    if (subagents.optimizeFor != savedSubagents.optimizeFor) put("modelRoutingOptimizeFor", subagents.optimizeFor)
     if (subagents.maxRunning != savedSubagents.maxRunning) put("subagentsMaxRunning", subagents.maxRunning)
 }

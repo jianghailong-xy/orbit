@@ -21,7 +21,7 @@ const item = (version, build) => `        <item>
             <sparkle:shortVersionString>${version}</sparkle:shortVersionString>
             <sparkle:minimumSystemVersion>14.0</sparkle:minimumSystemVersion>
             <sparkle:hardwareRequirements>arm64</sparkle:hardwareRequirements>
-            <enclosure url="https://github.com/jianghailong-xy/orbit/releases/download/v${version}/Orbit-v${version}-arm64.zip" length="27921501" type="application/octet-stream" sparkle:edSignature="sig-${build}=="/>
+            <enclosure url="https://github.com/jianghailong-xy/orbit/releases/download/v${version}/Orbitd-v${version}-arm64.zip" length="27921501" type="application/octet-stream" sparkle:edSignature="sig-${build}=="/>
         </item>
 `;
 

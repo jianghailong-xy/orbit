@@ -719,6 +719,9 @@ export const NEVER_PUBLIC_ID_FIELDS: ReadonlySet<string> = new Set([
   // id of a session assigned to that runner. The column appears in no response (runners.service.ts drops it; the page
   // lists the matched sessions' own ids), and a decode on the way in could only refuse the report over one id.
   'codexAccountRemoveSessions',
+  // The sessions a pending Set as default swap waits on (runner.claude_account_swap_waiting, migration 1000): the same
+  // kind of raw UUIDs, kept only where they equal a session assigned to the reporting runner, and in no response.
+  'claudeAccountSwapWaiting',
   'generation',
   'leaseGeneration',
   'leaseOwner',

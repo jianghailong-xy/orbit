@@ -365,6 +365,7 @@ export const TERMINAL_REFUSED_ROUTES: readonly string[] = [
   'POST /push/register',
   'POST /push/unregister',
   'POST /runners/:id/accounts/:engine/:account/pause',
+  'POST /runners/:id/accounts/:engine/:account/set-default',
   'POST /runners/:id/accounts/:engine/default/restore',
   'POST /runners/:id/attention/:kind/fix',
   'POST /runners/:id/browser/clear',

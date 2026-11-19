@@ -25,6 +25,14 @@ const LAST_WORDS_LIMIT = 1_200;
  */
 export type RunStop = { turnId: string } | { engineTurnEndSeq: number };
 
+/**
+ * ORBIT_RUN_STOPPED_WAKE=off stops this producer on the replica: no TASK_RUN_STOPPED fact is written or delivered.
+ * Anything else, unset included, is on. Read per stop, so a restart is all it takes either way.
+ */
+export function runStoppedWakeOn(env: NodeJS.ProcessEnv = process.env): boolean {
+  return env.ORBIT_RUN_STOPPED_WAKE?.trim().toLowerCase() !== 'off';
+}
+
 const UUID_SHAPE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
 /**
@@ -88,8 +96,9 @@ export class TaskRunStoppedProducer {
     private readonly deliveries: CoordinatorDeliveryService,
   ) {}
 
-  /** Null when this stop justifies no fact, which is the ordinary answer. */
+  /** Null when this stop justifies no fact, which is the ordinary answer, or when the deployment switched it off. */
   async afterStop(sessionId: string, stop: RunStop): Promise<CoordinatorDeliveryOutcome | null> {
+    if (!runStoppedWakeOn()) return null;
     const fact = await this.factFor(sessionId, stop);
     return fact ? this.deliveries.queue(fact, this.authorize) : null;
   }

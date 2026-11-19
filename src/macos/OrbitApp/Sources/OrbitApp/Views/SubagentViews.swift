@@ -10,7 +10,6 @@ import OrbitKit
 struct SubagentSettingsSection: View {
     let agents: AgentsModel
     @Binding var enabled: Bool
-    @Binding var optimizeFor: SubagentSettings.OptimizeFor
     @Binding var maxRunning: Int
     @Environment(AppModel.self) private var app
     @State private var editingProviders = false
@@ -21,18 +20,6 @@ struct SubagentSettingsSection: View {
         Section(SubagentSettings.groupTitle) {
             Toggle(isOn: $enabled) {
                 SubagentRowLabel(title: SubagentSettings.enabledTitle, detail: SubagentSettings.enabledDetail)
-            }
-
-            ViewThatFits(in: .horizontal) {
-                HStack {
-                    Text(SubagentSettings.optimizeFor)
-                    Spacer(minLength: 12)
-                    optimizePicker.fixedSize()
-                }
-                VStack(alignment: .leading, spacing: 8) {
-                    Text(SubagentSettings.optimizeFor)
-                    optimizePicker
-                }
             }
 
             HStack(spacing: 12) {
@@ -65,14 +52,6 @@ struct SubagentSettingsSection: View {
                 }
             }
         }
-    }
-
-    private var optimizePicker: some View {
-        Picker(SubagentSettings.optimizeFor, selection: $optimizeFor) {
-            ForEach(SubagentSettings.OptimizeFor.allCases) { Text($0.label).tag($0) }
-        }
-        .pickerStyle(.segmented)
-        .labelsHidden()
     }
 }
 

@@ -11,6 +11,7 @@ import io.orbitd.android.core.auth.AuthState
 import io.orbitd.android.navigation.Destination
 import io.orbitd.android.navigation.OrbitRoute
 import kotlinx.coroutines.runBlocking
+import kotlinx.serialization.json.*
 import org.junit.Assert.*
 import org.junit.Before
 import org.junit.Rule
@@ -24,8 +25,9 @@ import org.robolectric.annotation.Config
 
 /** Settings → General (once Sessions), as iOS has it since docs/mocks/ios-settings-order (2A, scope 3A) and ios-settings-web-groups:
  * Personal's first row opens the page, the
- * list itself holds none of the account's five session settings, and the page draws them in iOS's order (SessionSettings), each
- * with the web's hint as its footer. */
+ * list itself holds none of the account's session settings, and the page draws them in iOS's order (SessionSettings), each
+ * with the web's hint as its footer — with the account-wide Optimize For (docs/mocks/routing-mode-account/01-account-wide-optimize-for.png)
+ * below Smart model selection. */
 @RunWith(RobolectricTestRunner::class)
 @Config(sdk = [29], application = ManagementShellApplication::class, qualifiers = "w411dp-h4000dp")
 class SessionSettingsPageTest {
@@ -71,7 +73,7 @@ class SessionSettingsPageTest {
         assertEquals(GENERAL, settingsTitle("sessions"))
     }
 
-    @Test fun theSessionsPageDrawsTheFiveInIosOrderEachWithItsHintUnderIt() {
+    @Test fun theSessionsPageDrawsThemInIosOrderEachWithItsHintUnderIt() {
         val api = api()
         compose.setContent {
             SettingsScreen(api, OrbitRoute(Destination.SETTINGS, "sessions"), revision, {}, {}, logout = {}, changed = {}, workspaceDeleted = {},
@@ -89,5 +91,44 @@ class SessionSettingsPageTest {
         compose.onNode(hasText(SMART_MODEL_SELECTION) and isToggleable()).assertIsOff()
         compose.onNode(hasText(SUGGESTED_REPLIES) and isToggleable()).assertIsOn()
         compose.onNode(hasText(SESSION_RECAPS) and isToggleable()).assertIsOn()
+    }
+
+    /** The account-wide Optimize For (docs/mocks/routing-mode-account/01-account-wide-optimize-for.png): directly below Smart model
+     * selection, absent reads as Balance, and a segment writes `{"optimizeFor":…}` alone the moment it moves. */
+    @Test fun optimizeForSitsUnderSmartModelSelectionAndASegmentWritesThePreference() {
+        val api = api()
+        compose.setContent {
+            SettingsScreen(api, OrbitRoute(Destination.SETTINGS, "sessions"), revision, {}, {}, logout = {}, changed = {}, workspaceDeleted = {},
+                deviceAlerts = { true }, notifications = {}, about = {})
+        }
+        await(SESSION_RECAPS)
+        // The title and its words are one list item, merged into one node: read each text on its own.
+        fun textTop(text: String) = compose.onNodeWithText(text, useUnmergedTree = true).fetchSemanticsNode().positionInRoot.y
+        assertTrue("title, then its words, under Smart model selection's hint and above Suggested replies",
+            textTop(SMART_MODEL_SELECTION_HINT) < textTop(OPTIMIZE_FOR) && textTop(OPTIMIZE_FOR) < textTop(OPTIMIZE_FOR_DETAIL) &&
+                textTop(OPTIMIZE_FOR_DETAIL) < textTop(SUGGESTED_REPLIES))
+        // The fixture's account names no optimizeFor: Balance is selected.
+        compose.onNode(hasText("Balance") and isSelectable()).assertIsSelected()
+        compose.onNode(hasText("Intelligence") and isSelectable()).performScrollTo().performClick()
+        compose.waitUntil(60_000) { fixture.optimizeFor == "intelligence" }
+        val patch = fixture.bodies.filter { it.startsWith("PATCH users/me/preferences") }
+            .map { Json.parseToJsonElement(it.removePrefix("PATCH users/me/preferences").trim()).jsonObject }.single()
+        assertEquals(buildJsonObject { put("optimizeFor", "intelligence") }, patch)
+        // The server's answer carries it, so the segment stays selected.
+        compose.onNode(hasText("Intelligence") and isSelectable()).assertIsSelected()
+    }
+
+    /** An account that stored a mode opens on its own segment, and opening writes nothing. */
+    @Test fun aStoredOptimizeForPrefillsItsSegment() {
+        val api = api()
+        fixture.optimizeFor = "cost"
+        compose.setContent {
+            SettingsScreen(api, OrbitRoute(Destination.SETTINGS, "sessions"), revision, {}, {}, logout = {}, changed = {}, workspaceDeleted = {},
+                deviceAlerts = { true }, notifications = {}, about = {})
+        }
+        await(SESSION_RECAPS)
+        compose.waitUntil(60_000) { runCatching { compose.onNode(hasText("Cost") and isSelectable()).assertIsSelected() }.isSuccess }
+        compose.onNode(hasText("Balance") and isSelectable()).assertIsNotSelected()
+        assertTrue(fixture.bodies.none { it.startsWith("PATCH users/me/preferences") })
     }
 }

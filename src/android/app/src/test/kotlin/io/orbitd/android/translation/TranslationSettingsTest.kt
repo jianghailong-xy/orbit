@@ -107,6 +107,9 @@ class TranslationSettingsTest {
     private fun top(text: String) = compose.onNodeWithText(text).fetchSemanticsNode().positionInRoot.y
     private val toggle get() = compose.onNode(hasText(TranslationCopy.TRANSLATE_CONVERSATIONS) and isToggleable())
 
+    /** A language the sheet offers: selectable, and not one of Optimize For's segments, which the page under the sheet also has. */
+    private val languageChoice = isSelectable() and !(hasText("Cost") or hasText("Balance") or hasText("Intelligence"))
+
     @Test fun theGroupIsOffByDefaultAndEachRowIsWrittenAloneAsItMoves() {
         open()
         // The group, after the default permission and before the rest, as the board places it under Session defaults.
@@ -130,7 +133,7 @@ class TranslationSettingsTest {
         // Your language: a bottom sheet over the whole list, one of them picked; a pick is written alone.
         compose.onNode(hasText(TranslationCopy.YOUR_LANGUAGE) and hasClickAction()).performClick()
         compose.waitUntil(60_000) { compose.onAllNodesWithText("German").fetchSemanticsNodes().isNotEmpty() }
-        compose.onAllNodes(isSelectable()).assertCountEquals(Translation.LANGUAGES.size)
+        compose.onAllNodes(languageChoice).assertCountEquals(Translation.LANGUAGES.size)
         Translation.LANGUAGES.forEach { (_, name) -> compose.onNode(hasText(name) and isSelectable()).assertExists() }
         compose.onNode(hasText(Translation_name_default) and isSelectable()).assertIsSelected()
         compose.onNode(hasText("Japanese") and isSelectable()).performClick()
@@ -142,14 +145,14 @@ class TranslationSettingsTest {
         // Agents work in: the same sheet over the same list, English picked while the account names none; a pick is written alone
         // under its own key, and the switch's line then names it.
         compose.onNode(hasText(TranslationCopy.AGENTS_WORK_IN) and hasClickAction()).performClick()
-        compose.waitUntil(60_000) { compose.onAllNodes(isSelectable()).fetchSemanticsNodes().size == Translation.LANGUAGES.size }
+        compose.waitUntil(60_000) { compose.onAllNodes(languageChoice).fetchSemanticsNodes().size == Translation.LANGUAGES.size }
         compose.onNode(isHeading() and hasText(TranslationCopy.AGENTS_WORK_IN)).assertExists()
         Translation.LANGUAGES.forEach { (_, name) -> compose.onNode(hasText(name) and isSelectable()).assertExists() }
         compose.onNode(hasText("English") and isSelectable()).assertIsSelected()
         compose.onNode(hasText("Swedish") and isSelectable()).performScrollTo().performClick()
         compose.waitUntil(60_000) { writes.size == 3 }
         assertEquals(buildJsonObject { put("translationAgentLanguage", "sv") }, writes[2])
-        compose.waitUntil(60_000) { compose.onAllNodes(isSelectable()).fetchSemanticsNodes().isEmpty() }
+        compose.waitUntil(60_000) { compose.onAllNodes(languageChoice).fetchSemanticsNodes().isEmpty() }
         compose.waitUntil(60_000) { compose.onAllNodesWithText(TranslationCopy.translateConversationsHint("sv")).fetchSemanticsNodes().isNotEmpty() }
         assertTrue(TranslationCopy.translateConversationsHint("sv").startsWith("Agents read and write in Swedish;"))
         compose.onNodeWithText("Swedish").assertIsDisplayed()
@@ -169,7 +172,7 @@ class TranslationSettingsTest {
         assertTrue(top(TranslationCopy.YOUR_LANGUAGE) < top(TranslationCopy.AGENTS_WORK_IN))
         shot("7-settings-agent-language-japanese")
         compose.onNode(hasText(TranslationCopy.AGENTS_WORK_IN) and hasClickAction()).performClick()
-        compose.waitUntil(60_000) { compose.onAllNodes(isSelectable()).fetchSemanticsNodes().size == Translation.LANGUAGES.size }
+        compose.waitUntil(60_000) { compose.onAllNodes(languageChoice).fetchSemanticsNodes().size == Translation.LANGUAGES.size }
         compose.onNode(hasText("Japanese") and isSelectable()).assertIsSelected()
         assertTrue(writes.isEmpty())
     }

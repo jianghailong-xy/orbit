@@ -3,6 +3,7 @@ import { ACCOUNT_ENGINES as SHARED_ACCOUNT_ENGINES, codexAccountSnapshot, isAcco
 import type { Runner } from '../components/TasksSidePanel';
 import { CURSOR_ACCOUNT_LOGIN_CAPABILITY } from './cursorRuntime';
 import { planUsageSnapshotForProvider } from './planUsage';
+import { RUNNER_ACCOUNT_FORMER_DEFAULT } from './runnerAccountCopy';
 
 /**
  * The engines whose CLI keeps one login per config directory, so one machine can sign in several
@@ -71,10 +72,14 @@ export function runsOnEnvKey(
 }
 
 /** What an account is called wherever one is named: what the user called it — Default too, once
- *  renamed in Orbit — else "Default", or the slot's own id when the name it was added under is gone.
- *  The apiserver's accountLabel names it the same way in a session's transcript. */
-export function accountNameOf(account: Pick<RunnerEngineAccount, 'id' | 'name'>): string {
-  return account.name || (account.id === 'default' ? 'Default' : `Account ${account.id}`);
+ *  renamed in Orbit — else "Default"; a former Default (the account a Set as default moved out of
+ *  ~/.claude) by its email, else "Former default"; or the slot's own id when the name it was added
+ *  under is gone. The apiserver's accountLabel names it the same way in a session's transcript. */
+export function accountNameOf(account: Pick<RunnerEngineAccount, 'id' | 'name' | 'formerDefault' | 'email'>): string {
+  if (account.name) return account.name;
+  if (account.id === 'default') return 'Default';
+  if (account.formerDefault) return account.email || RUNNER_ACCOUNT_FORMER_DEFAULT;
+  return `Account ${account.id}`;
 }
 
 /** What "+ Account" calls a new account until the user names it: its number on the machine, Default
