@@ -552,6 +552,7 @@ import { refuseManagedRunnerDeletion } from '../managed-runners/managed-runner-d
 import { DELETE_APPROVAL_TOOL_NAMES, deleteCardInput } from './runner-delete-approval';
 import { sanitizeWorkspaceWrite } from './runner-agents.controller';
 import { workspaceWriteCardInput } from './runner-workspace-approval';
+import { turnOutcomeOf } from './turn-outcome';
 import { authorizeManagedRunnerInstance, type ManagedRunnerInstance } from '../managed-runners/managed-runner-instance';
 import { MANAGED_RUNNER_GATE, type ManagedRunnerGate } from '../managed-runners/managed-runner-gate';
 import {
@@ -1018,8 +1019,6 @@ interface HandedTurn {
 // is swallowing the message, and a fourth hand-over asks the same question the last three asked.
 // See the delivery count in `turnComplete` for what it bounds and how it is spent.
 const UNANSWERED_DELIVERY_BUDGET = 3;
-// `conversation_turn.outcome` and `session.last_turn_outcome` (migration 1150 and its CHECKs).
-type TurnOutcome = 'ANSWERED' | 'FAILED' | 'INTERRUPTED' | 'CANCELLED';
 // What a run whose message was swallowed is reported failed with, kept in the session's `error` — the
 // list shows it under the title and the failure card reads it. Two halves: what the control plane
 // watched happen (deliveries with no answer under any of them) and what it did about it (the ladder),
@@ -7498,35 +7497,18 @@ export class RunnerApiController {
               ? nextAutoRetryAt(current.retryAttempts, new Date())
               : null;
       // How the turn ended, for the turn row and the session's copy of it (docs/session-three-state-design.md
-      // §4.2): what the runner reported, except where this handler has already read the turn otherwise. Only a
-      // turn of work has an outcome, a `message` or a `!`-shell turn: a steer and a withdraw settled above, and
-      // a control turn or a kind this build does not know gets none. A region stop ends the turn as an
-      // interrupt does (§10 above), and a swallowed delivery is a failure. A success nothing answered is put
-      // back in the queue and has not ended: the completion that answers it says how it did.
-      const turnOutcome: TurnOutcome | null =
-        completedTurn?.kind !== 'message' && completedTurn?.kind !== 'shell'
-          ? null
-          : regionStopped
-            ? 'INTERRUPTED'
-            : swallowed || dto.status === RunStatus.FAILED
-              ? 'FAILED'
-              : dto.status === RunStatus.INTERRUPTED
-                ? 'INTERRUPTED'
-                : dto.status === RunStatus.CANCELLED
-                  ? 'CANCELLED'
-                  : dto.status === RunStatus.SUCCEEDED && !unanswered
-                    ? 'ANSWERED'
-                    : null;
-      // The words it ended with: the runner's failure (in the session error's own form, without the acceptance
-      // comparison, which is about the task rather than the turn), the region's stopped sentence, or the error a
-      // stop was reported with. An answered turn has none.
-      const turnError = turnOutcome === 'FAILED'
-        ? (swallowed ? swallowedMessageError(failureText) : failureText) || 'run failed'
-        : turnOutcome === 'ANSWERED'
-          ? null
-          : regionStopped
-            ? dto.error || dto.result || null
-            : dto.error || null;
+      // §4.2), and the words it ended with: see turn-outcome.ts. A steer and a withdraw settled above.
+      const turnEnd = turnOutcomeOf({
+        kind: completedTurn?.kind,
+        status: dto.status,
+        regionStopped,
+        swallowed,
+        unanswered,
+        failureError: (swallowed ? swallowedMessageError(failureText) : failureText) || 'run failed',
+        error: dto.error,
+        result: dto.result,
+      });
+      const turnOutcome = turnEnd?.outcome ?? null;
       // Idempotent ack: only the first turn-complete for this turn applies. `deliveredAt` is the
       // other half of that compare-and-set now that a completion can leave the row un-ANSWERED: a
       // turn put back in the queue is no longer out on a delivery, so a retried completion for it
@@ -7559,10 +7541,10 @@ export class RunnerApiController {
       }
       // Beside the status the ack just wrote, in its transaction and only when it won, so a retried completion
       // records nothing twice. The session's copy rides on the park below, the one Session write (I3).
-      if (turnOutcome) {
+      if (turnEnd) {
         await tx.conversationTurn.updateMany({
           where: { id: dto.turnId, sessionId },
-          data: { outcome: turnOutcome, error: turnError },
+          data: { outcome: turnEnd.outcome, error: turnEnd.error },
         });
       }
       let acceptanceTaskChanged = false;

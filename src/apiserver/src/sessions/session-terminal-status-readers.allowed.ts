@@ -39,6 +39,8 @@ export const SESSION_TERMINAL_STATUS_READERS: Readonly<Record<string, number>> =
   'src/apiserver/src/runner-api/scheduled-wakeup.ts': 3,
   'src/apiserver/src/runner-api/scheduled-wakeup.worker.ts': 2,
   'src/apiserver/src/runner-api/subagent-remote.ts': 4,
+  // The old runner protocol's turn status words translated into the turn outcome; goes when plan phase 6 lets the runner report the outcome itself.
+  'src/apiserver/src/runner-api/turn-outcome.ts': 4,
   'src/apiserver/src/runners/attention-fix.ts': 1,
   'src/apiserver/src/runners/runners.service.ts': 4,
   'src/apiserver/src/schedules/schedule-runs.service.ts': 14,

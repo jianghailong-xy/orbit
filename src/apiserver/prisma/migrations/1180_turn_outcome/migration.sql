@@ -1,5 +1,5 @@
 -- ══════════════════════════════════════════════════════════════════════════════════════════════
--- 1150: every turn's outcome on the turn (docs/session-three-state-plan.md §5 step 2.1, design §4.2;
+-- 1180: every turn's outcome on the turn (docs/session-three-state-plan.md §5 step 2.1, design §4.2;
 -- project 3508bDBDE5xPH43TYuiqP). Today a failed or interrupted turn is recorded only as the session's
 -- status; `conversation_turn.status` says only where the turn is in the queue.
 --
@@ -13,20 +13,20 @@
 -- conversation_turn_outcome_chk and session_last_turn_outcome_chk hold each to the four values.
 --
 -- Written by runner turn-complete (runner-api.controller.ts) in the statements that already write the turn's
--- and the session's status. Nothing reads them yet. Turns written before this stay null; 1151 backfills
+-- and the session's status. Nothing reads them yet. Turns written before this stay null; 1181 backfills
 -- session.last_turn_outcome.
 --
 -- LOCKS
 -- -----
 -- As 1100: ADD COLUMN without a default is a catalogue change, no rewrite. Both tables' locks are asked for in
 -- one DO statement, 2 s at a time, 1 s apart, up to 45 tries (a try can wait 2 s for each table). The CHECKs
--- are added NOT VALID here, and validated by 1151, a file with no DO, so the validating scan does not run
+-- are added NOT VALID here, and validated by 1181, a file with no DO, so the validating scan does not run
 -- inside the transaction holding these ACCESS EXCLUSIVE locks. No function, trigger or type is created,
 -- replaced or dropped. No INSERT, UPDATE or DELETE.
 --
 -- NUMBERING, RE-RUNNABILITY
 -- -------------------------
--- 1150: main stands at 1130; origin/orbit/* and origin/project/* use up to 1140 (scanned 2026-11-19).
+-- 1180: main stands at 1170; origin/orbit/* and origin/project/* use up to 1150 (rescanned 2026-11-19).
 -- Can run twice: ADD COLUMN IF NOT EXISTS, DROP CONSTRAINT IF EXISTS.
 -- ══════════════════════════════════════════════════════════════════════════════════════════════
 

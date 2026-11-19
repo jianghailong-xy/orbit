@@ -1,5 +1,5 @@
 -- ══════════════════════════════════════════════════════════════════════════════════════════════
--- 1151: validate 1150's two CHECKs, and backfill session.last_turn_outcome from status and end_reason
+-- 1181: validate 1180's two CHECKs, and backfill session.last_turn_outcome from status and end_reason
 -- (docs/session-three-state-plan.md §5 step 2.3, the table in design §4.3).
 --
 -- THE BACKFILL
@@ -14,7 +14,7 @@
 --   everything else                 null         (PENDING and RUNNING have no settled turn yet; CANCELLED,
 --                                                 INTERRUPTED with an end_reason and SUCCEEDED without task_done
 --                                                 are "as it was", which these two columns do not record)
--- Only rows still null are written, so a value turn-complete wrote after 1150 is never overwritten.
+-- Only rows still null are written, so a value turn-complete wrote after 1180 is never overwritten.
 -- conversation_turn rows are not backfilled: old turns stay null.
 --
 -- BATCHES, LOCKS
@@ -29,7 +29,7 @@
 -- --------------
 -- Can run twice: VALIDATE on a valid constraint is a no-op, CREATE OR REPLACE, the backfill writes null rows
 -- only, DROP PROCEDURE IF EXISTS. If a statement_timeout or a crash stops it halfway, the batches already
--- committed stay: `prisma migrate resolve --rolled-back 1151_turn_outcome_backfill`, then deploy again.
+-- committed stay: `prisma migrate resolve --rolled-back 1181_turn_outcome_backfill`, then deploy again.
 -- ══════════════════════════════════════════════════════════════════════════════════════════════
 
 SET lock_timeout = 0;
