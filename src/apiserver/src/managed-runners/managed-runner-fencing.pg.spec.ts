@@ -95,7 +95,7 @@ const URL = process.env.COORDINATOR_PG_URL;
 const RUN = randomUUID().slice(0, 8);
 const quiet = { warn: () => undefined, error: () => undefined, log: () => undefined };
 const ON = { enabled: true, problem: null } as const;
-const TENANT = 'system:serviceaccount:orbit-managed-test:default';
+const TENANT = 'system:serviceaccount:orbit-cloud-test:default';
 
 test('managed runner single-writer gate: no new generation without a stop proof or a fencing receipt', {
   skip: !URL, concurrency: 1, timeout: 600_000,
@@ -498,7 +498,7 @@ test('managed runner single-writer gate: no new generation without a stop proof 
         ['unlabelled', () => w.cluster.submitPod(intruder('bare'), { username: TENANT })],
         ['same node', () => w.cluster.submitPod(intruder('same-node', 'node-a'), { username: TENANT })],
         ['another node', () => w.cluster.submitPod(intruder('other-node', 'node-b'), { username: TENANT })],
-        ['labelled like a runner', () => w.cluster.submitPod(intruder('impostor', undefined, { 'app.kubernetes.io/name': 'orbit-managed-runner' }), { username: TENANT })],
+        ['labelled like a runner', () => w.cluster.submitPod(intruder('impostor', undefined, { 'app.kubernetes.io/name': 'orbit-cloud-runner' }), { username: TENANT })],
         ['the fixed name, by someone else', () => w.cluster.submitPod(intruder(managedPodName(mapping.runnerId)), { username: TENANT })],
         ['a Job’s Pod', () => w.cluster.submitPod(intruder('restore-job-abc12'), { username: 'system:serviceaccount:kube-system:job-controller' })],
         ['a stale generation, as the manager', () => w.cluster.submitPod(buildManagedPod({ ownerId, runnerId: mapping.runnerId, generation: 2, namespace: mapping.namespace }, 'pvc-uid-not-yet-known', w.profile), { username: TEST_MANAGER_USERNAME })],
@@ -543,7 +543,7 @@ test('managed runner instance binding over HTTP: the authorized instance only, a
   await verifyCoordinatorPgIdentity(sql);
   const db: PrismaClient = prismaClientFor(url);
   const prisma = db as unknown as PrismaService;
-  const scratch = mkdtempSync(path.join(tmpdir(), 'orbit-managed-fencing-'));
+  const scratch = mkdtempSync(path.join(tmpdir(), 'orbit-cloud-fencing-'));
   const JWT_SECRET = randomBytes(32).toString('hex');
   const PASSWORD = 'correct horse battery staple';
   // Passes run when this test says, never on a timer: the worker is stopped right after boot.
@@ -787,7 +787,7 @@ test('managed runner instance binding over HTTP: the authorized instance only, a
     const decided = await call(server, 'POST', '/api/managed-runner/admission', 'test-admission-webhook-token', review(intruder, TENANT));
     assert.equal(decided.status, 200, decided.text);
     assert.equal(decided.json.response.allowed, false);
-    assert.match(decided.json.response.status.message, /^orbit-managed-runner-admission: NOT_THE_MANAGER: /);
+    assert.match(decided.json.response.status.message, /^orbit-cloud-runner-admission: NOT_THE_MANAGER: /);
   });
 
   await t.test('(H6) shutdown: the real Kubernetes client was never built', async () => {

@@ -2,9 +2,9 @@
   "apiVersion": "admissionregistration.k8s.io/v1",
   "kind": "ValidatingWebhookConfiguration",
   "metadata": {
-    "name": "orbit-managed-runner-pods",
+    "name": "orbit-cloud-runner-pods",
     "labels": {
-      "app.kubernetes.io/name": "orbit-managed-runner",
+      "app.kubernetes.io/name": "orbit-cloud-runner",
       "orbit-test-environment": "__TEST_ENVIRONMENT_ID__"
     }
   },

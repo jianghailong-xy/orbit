@@ -3,7 +3,7 @@
 
 docs/managed-runner-design.md, "Implementation record: the managed runners' host firewall", and this
 directory's README. Every account's managed runner is a container on one bridge network of this host
-(orbit-managed-runners). Without rules, code in it reaches every service this host listens to on an
+(orbit-cloud-runners). Without rules, code in it reaches every service this host listens to on an
 address other than loopback, and through the host the private networks behind it. These rules, which
 match only traffic that comes in from that network's bridge, leave it:
 
@@ -68,8 +68,8 @@ import subprocess
 import sys
 import time
 
-CONFIG = "/var/lib/orbit-managed-runner-firewall/config.json"
-STATUS = "/var/lib/orbit-managed-runner-firewall/status.json"
+CONFIG = "/var/lib/orbit-cloud-runner-firewall/config.json"
+STATUS = "/var/lib/orbit-cloud-runner-firewall/status.json"
 CHAIN_INPUT = "ORBIT-MR-INPUT"
 CHAIN_FORWARD = "ORBIT-MR-FORWARD"
 CHAINS = (CHAIN_INPUT, CHAIN_FORWARD)
@@ -87,7 +87,7 @@ KUBERNETES_SEEN = "kubernetes-seen"
 # The chains Kubernetes' networking makes (kube-proxy, kube-router, flannel): where one is, it shares the host.
 KUBERNETES_CHAINS = ("KUBE-", "FLANNEL-")
 PREFLIGHT_CHAIN = "ORBIT-MR-PREFLIGHT"
-COMMENT = "orbit-managed-runners"
+COMMENT = "orbit-cloud-runners"
 REJECT_V4 = "-j REJECT --reject-with icmp-admin-prohibited"
 REJECT_V6 = "-j REJECT --reject-with icmp6-adm-prohibited"
 # What a runner never reaches through this host unless an operator allows it by name: IANA's IPv4 special-purpose
@@ -114,7 +114,7 @@ REFUSED_BY_A_FIREWALL = ("EHOSTUNREACH", "ENETUNREACH", "EACCES", "EPERM")
 
 def log(message):
     stamp = time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime())
-    print(f"{stamp} orbit-managed-runner-firewall: {message}", file=sys.stderr, flush=True)
+    print(f"{stamp} orbit-cloud-runner-firewall: {message}", file=sys.stderr, flush=True)
 
 
 # ── configuration ───────────────────────────────────────────────────────────────────────────────

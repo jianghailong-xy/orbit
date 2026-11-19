@@ -770,8 +770,8 @@ test('a link heartbeat answered from runner_presence', { skip: !URL_, concurrenc
     assert.equal((await sql.query(`SELECT 1 FROM runner_presence WHERE runner_id = $1`, [managed])).rowCount, 0);
     const instance = {
       'x-orbit-runner-capabilities': `${CAPABILITIES},managed-runner-instance-v1`,
-      'x-orbit-managed-runner-generation': '1',
-      'x-orbit-managed-runner-pod-uid': podUid,
+      'x-orbit-cloud-runner-generation': '1',
+      'x-orbit-cloud-runner-pod-uid': podUid,
     };
     for (let i = 0; i < 3; i += 1) assert.ok(isFull(await managedBeat(instance)), 'every beat of a managed runner reconciles in full');
   });

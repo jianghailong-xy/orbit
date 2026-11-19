@@ -53,7 +53,9 @@ import {
  */
 
 /** Every refusal message starts with this, so the manager's dry-run probe can recognise the guard. */
-export const MANAGED_ADMISSION_DENIAL_MARKER = 'orbit-managed-runner-admission';
+export const MANAGED_ADMISSION_DENIAL_MARKER = 'orbit-cloud-runner-admission';
+/** The marker an apiserver from before the rename starts its refusals with, while one may still answer the webhook. */
+export const LEGACY_MANAGED_ADMISSION_DENIAL_MARKER = 'orbit-managed-runner-admission';
 
 /** The parts of an AdmissionReview v1 request the decision reads. */
 export interface PodAdmissionRequest {

@@ -203,7 +203,7 @@ def cmd_import(args):
         raise SystemExit(f'import failed: {result.stdout} {result.stderr}')
     images = ssh('sudo', 'k3s', 'crictl', 'images', '--digests', '-o', 'json')
     listed = [image for image in json.loads(images.stdout)['images']
-              if any('orbit-managed-runner' in tag for tag in image.get('repoTags') or [])]
+              if any('orbit-cloud-runner' in tag for tag in image.get('repoTags') or [])]
     out({'archiveSha256': digest, 'importSeconds': round(time.monotonic() - started, 1),
          'ctr': result.stdout.strip().splitlines(), 'criImages': listed})
 
@@ -232,7 +232,7 @@ def pod_spec(name, image, first_start, expected_id):
     return {
         'apiVersion': 'v1', 'kind': 'Pod',
         'metadata': {'name': f'{name}-runner', 'namespace': NAMESPACE,
-                     'labels': {'app.kubernetes.io/name': 'orbit-managed-runner', 'orbit-test-environment': 'lab',
+                     'labels': {'app.kubernetes.io/name': 'orbit-cloud-runner', 'orbit-test-environment': 'lab',
                                 'orbit-lab-runner': name}},
         'spec': {
             'restartPolicy': 'Never', 'automountServiceAccountToken': False, 'enableServiceLinks': False,

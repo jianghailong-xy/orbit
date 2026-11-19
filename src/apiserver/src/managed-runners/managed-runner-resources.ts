@@ -113,7 +113,7 @@ export function buildManagedSecret(identity: ManagedRunnerIdentity, credential: 
     metadata: {
       name: managedSecretName(identity.runnerId),
       namespace: identity.namespace,
-      labels: { 'app.kubernetes.io/name': 'orbit-managed-runner' },
+      labels: { 'app.kubernetes.io/name': 'orbit-cloud-runner' },
       annotations: {
         [OWNER_ANNOTATION]: identity.ownerId,
         [RUNNER_ANNOTATION]: identity.runnerId,
@@ -156,7 +156,7 @@ export function buildManagedPod(identity: ManagedRunnerIdentity, pvcUid: string,
       namespace: identity.namespace,
       finalizers: [MANAGED_STOP_REPORT_FINALIZER],
       labels: {
-        'app.kubernetes.io/name': 'orbit-managed-runner',
+        'app.kubernetes.io/name': 'orbit-cloud-runner',
         'orbit-test-environment': profile.environmentId,
       },
       annotations: {

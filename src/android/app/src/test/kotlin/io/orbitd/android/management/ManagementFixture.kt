@@ -205,7 +205,7 @@ object ManagementFixture {
     private fun runners() = runnerOrder.filter { (it == RUNNER || secondRunner) && it !in removedRunners }.joinToString(",", "[", "]") {
         when (it) {
             RUNNER -> runner()
-            CLOUD_RUNNER -> """{"id":"$CLOUD_RUNNER","name":"orbit-managed","managed":true,"online":true,"lastHeartbeatAt":"$now"}"""
+            CLOUD_RUNNER -> """{"id":"$CLOUD_RUNNER","name":"orbit-cloud","managed":true,"online":true,"lastHeartbeatAt":"$now"}"""
             else -> runnerTwo()
         }
     }
