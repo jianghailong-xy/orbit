@@ -64,6 +64,7 @@ import {
   reapApprovalsOfEndedTurns,
 } from './abandoned-approvals';
 import { SessionsService } from './sessions.service';
+import { pastCreateAllowance } from '../test-support/past-create-allowance';
 
 const URL = process.env.COORDINATOR_PG_URL;
 const skip = !URL;
@@ -170,6 +171,7 @@ async function fixture(db: PrismaClient, label: string): Promise<Fixture> {
       runtimeSessionId: randomUUID(),
     },
   });
+  await pastCreateAllowance(db, ownerId, sessionId);
   const turn = await db.conversationTurn.create({
     data: {
       sessionId,
