@@ -28,6 +28,7 @@ import { endUndeliveredGrants, enqueueResolutions } from './owner-request-ending
 import { OwnerSecretsService, type OwnerSecretGrantView } from './owner-secrets.service';
 import { settingOwnerOnlyBody, settingsChangeTitle } from '@orbit/shared';
 import { normalizeDefaultModels } from '../providers/engine-provider';
+import { applySettingsChanges } from './settings-apply';
 import {
   SettingsProposalInvalid,
   sameSettingsChanges,
@@ -45,6 +46,7 @@ import {
   SETTINGS_ALREADY_SET,
   SETTINGS_CHANGE,
   SETTINGS_CHANGE_DECLINED,
+  SETTINGS_OWNER_CHANNEL_ONLY,
   WIKI_CREATE_DAILY_RUN_LIMIT,
   WIKI_CREATE_DECLINED,
   WIKI_CREATE_LOOKBACK_DAYS,
@@ -666,6 +668,42 @@ export class OwnerRequestsService implements OnModuleInit, OnModuleDestroy {
       if (now.state === 'DONE') return now;
       throw error;
     }
+  }
+
+  /**
+   * The owner's Save changes on a SETTINGS_CHANGE card (docs/settings-from-conversation-design.md §5.2), in the
+   * transaction that settles the card DONE: the account's preferences re-read under the user row's lock; any key whose
+   * value in force is no longer the card's `from` answers 409 SETTINGS_STALE and the whole transaction rolls back, so
+   * nothing is written and the card stays PENDING; otherwise each `to` is merged as the owner's PATCH merges it, and each
+   * key written is marked `changedBy[key] = { sessionId, requestId, at, from }` (§5.3). The ending reaches the asking
+   * session as every owner request's does (`settle`). The owner's own login only: a request carrying an acting session
+   * is refused SETTINGS_OWNER_CHANNEL_ONLY before anything is read, and a personal access token never reaches this door
+   * (@PatForbidden('OWNER_INTERACTIVE')).
+   */
+  async applySettings(
+    ownerId: string,
+    id: string,
+    actingSessionId: string | null,
+    client: OwnerRequestClient | null = null,
+  ): Promise<OwnerRequestView> {
+    if (actingSessionId !== null) {
+      throw new ForbiddenException({
+        code: SETTINGS_OWNER_CHANNEL_ONLY,
+        message: 'a settings change is saved by the account owner, signed in, with no acting session: the owner presses Save changes on the card.',
+      });
+    }
+    const request = await this.get(ownerId, id);
+    if (request.kind !== SETTINGS_CHANGE) throw new BadRequestException('only a SETTINGS_CHANGE request applies settings');
+    if (request.state !== 'PENDING') {
+      throw new ConflictException({
+        code: OWNER_REQUEST_NOT_PENDING,
+        state: request.state,
+        message: `this request is already ${request.state}; an ended request is final and nothing was written`,
+      });
+    }
+    const { changes } = request.payload as unknown as SettingsChangePayload;
+    return this.settle(ownerId, id, 'DONE', { resolvedByUserId: ownerId, resolvedClient: client }, (tx, now) =>
+      applySettingsChanges(tx, { ownerId, requestId: id, askedBySessionId: request.askedBySessionId, changes }, now));
   }
 
   /**

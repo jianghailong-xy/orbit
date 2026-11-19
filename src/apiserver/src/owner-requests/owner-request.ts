@@ -58,6 +58,10 @@ export const WIKI_CREATE_NO_REPOSITORY = 'WIKI_CREATE_NO_REPOSITORY';
 export const SETTINGS_ALREADY_SET = 'SETTINGS_ALREADY_SET';
 /** A settings proposal re-filing a change this session's card was declined for (design §5.1 step 4). */
 export const SETTINGS_CHANGE_DECLINED = 'SETTINGS_CHANGE_DECLINED';
+/** Saving a SETTINGS_CHANGE card on a request that carries an acting session (design §5.2): only the owner saves it. */
+export const SETTINGS_OWNER_CHANNEL_ONLY = 'SETTINGS_OWNER_CHANNEL_ONLY';
+/** Saving a SETTINGS_CHANGE card after one of its settings changed since it was proposed (design §5.2). */
+export const SETTINGS_STALE = 'SETTINGS_STALE';
 
 /** The maintenance a wiki made from a WIKI_CREATE card starts with (design §3.6): the Create wiki form's defaults. */
 export const WIKI_CREATE_DAILY_RUN_LIMIT = 8;

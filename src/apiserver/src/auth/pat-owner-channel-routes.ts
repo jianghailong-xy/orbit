@@ -15,6 +15,9 @@ export const OWNER_INTERACTIVE_ROUTES: readonly string[] = [
   // The owner's Create wiki on a WIKI_CREATE card (docs/wiki-explicit-creation-design.md §3.6): making a wiki is the
   // owner's own act, as POST /wiki/spaces is; it also refuses an acting session, WIKI_OWNER_CHANNEL_ONLY.
   'POST /owner-requests/:id/create-wiki',
+  // The owner's Save changes on a SETTINGS_CHANGE card (docs/settings-from-conversation-design.md §5.2): it writes the
+  // account's preferences; it also refuses an acting session, SETTINGS_OWNER_CHANNEL_ONLY.
+  'POST /owner-requests/:id/apply-settings',
   'GET /account-secrets',
   'PUT /account-secrets/:id',
   'DELETE /account-secrets/:id',
