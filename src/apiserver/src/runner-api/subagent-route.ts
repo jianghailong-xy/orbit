@@ -14,6 +14,7 @@ import {
   type SubagentRunCreateRequest,
 } from '@orbit/shared';
 import { Prisma } from '@prisma/client';
+import { optimizeForOf } from '../common/model-routing-switch';
 import { isLoginEngine, sanitizeRunnerEngines } from '../common/runner-engines';
 import { sanitizeRuntimeDefaultModels } from '../common/runtime-model';
 import type { PrismaService } from '../prisma/prisma.service';
@@ -37,7 +38,7 @@ import {
   type SubagentRoutingDecision,
   type SubagentRoutingInput,
 } from '../tasks/model-routing';
-import { engineState, fullestWindow, taskRouteReads } from '../tasks/task-route-decision';
+import { engineState, fullestWindow, quotaTiming, taskRouteReads } from '../tasks/task-route-decision';
 
 /** The account-level preference listing the providers SubAgents may not run on (docs/subagent-design.md §6.2). */
 export function subagentBlockedProviders(preferences: unknown): string[] {
@@ -161,15 +162,17 @@ export async function subagentRouteInput(
     credential: builtinCredential(slug),
     engines: [{ engine: slug }],
     ...(states[slug] ? {
-      account: { quota: states[slug].quota ?? null, paused: states[slug].paused === true, unreadable: states[slug].quotaUnread === true },
+      account: {
+        quota: states[slug].quota ?? null, paused: states[slug].paused === true, unreadable: states[slug].quotaUnread === true,
+        expiresAt: states[slug].expiresAt ?? null, nearLimit: states[slug].nearLimit === true,
+      },
     } : {}),
   }));
 
   const catalog = (runner?.modelCatalog ?? null) as RunnerModelCatalog | null;
   const configured = await readConfiguredProviders(db, ownerId, { catalog, planUsage: args.planUsage ?? null, now: reads.now });
 
-  const mode = agent?.modelRoutingOptimizeFor;
-  const optimizeFor: ModelRoutingOptimizeFor = mode === 'balance' || mode === 'intelligence' ? mode : 'cost';
+  const optimizeFor: ModelRoutingOptimizeFor = optimizeForOf(owner);
   const level = (value: unknown) => (['S', 'M', 'L', 'XL'] as const).find((entry) => entry === value) ?? null;
   return {
     type: dto.type,
@@ -232,6 +235,7 @@ async function readConfiguredProviders(
       ...(subscription ? {
         account: {
           quota: fullestWindow(usage, now),
+          ...quotaTiming(usage, now),
           refused: standing === 'KEY_REFUSED',
           unreadable: usage === null || standing === 'USAGE_UNKNOWN',
         },
@@ -283,6 +287,7 @@ async function readConfiguredProviders(
         return {
           label: login.email ?? login.accountId,
           quota: spent ? { utilization: 100, window: 'usage limit' } : fullestWindow(usage, now),
+          ...quotaTiming(usage, now),
           paused: later(login.pausedUntil) || later(login.throttledUntil),
           unreadable: !spent && !usage,
         };
@@ -296,6 +301,7 @@ async function readConfiguredProviders(
           return {
             label: row.label,
             quota: fullestWindow(usage, now),
+            ...quotaTiming(usage, now),
             paused: later(row.pausedUntil),
             refused: standing === 'KEY_REFUSED',
             unreadable: standing === 'USAGE_UNKNOWN' || usage === null,

@@ -941,7 +941,7 @@ func runDshSessionProcess(p sessionProcessArgs) (string, bool, bool) {
 				if err := p.t.diffResult(p.job.SessionID, DiffResultRequest{
 					ChangedFiles: files, ChangedDiff: patches, BaseSha: p.job.WT.baseSha(),
 					WorktreeDirty: worktreeIsDirty(p.job.WT), BranchMerged: branchMergedInto(p.job.WT),
-					BranchSha: effectiveBranchSha(p.job.WT), WorktreeBranch: currentBranch(p.job.WT),
+					BranchSha: effectiveBranchSha(p.job.WT), BranchCommits: branchCommits(p.job.WT), WorktreeBranch: currentBranch(p.job.WT),
 				}); err != nil {
 					logln("diff-result failed for", p.job.SessionID+":", err)
 				}

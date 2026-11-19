@@ -12,9 +12,10 @@
  *       beyond the inbox's own record of the event;
  *   (2) `connect` from anyone but the owner is not taken: one sentence, no feishu_chat_route row, nothing written;
  *   (3) `connect` from the owner in a group with members from another organization is refused alike;
- *   (4) the owner's `connect` makes the group's row, holding only a ticket bound to the owner's open_id and the group,
- *       and the bot answers with the `Connect this group to Orbit` card whose button carries that ticket; the same event
- *       processed again issues the same ticket and card (same Feishu uuid) and writes nothing;
+ *   (4) the owner's `connect` makes the group's row, holding only a ticket bound to the owner's open_id and the group;
+ *       the group gets one sentence, and the `Connect <group>` card whose button carries that ticket goes to the owner's
+ *       open_id, never into the group (§15.1); the same event processed again issues the same ticket, card and sentence
+ *       (same Feishu uuids) and writes nothing;
  *   (5) until it is confirmed, a mention in the group still starts no session and gets the sentence;
  *   (6) the confirm page reads the ticket's group with a login — its members by name, from Feishu, every page, the owner
  *       left out since they are always allowed — and a token is refused that read (ACCOUNT);
@@ -62,12 +63,12 @@ const TEAM = `oc_team_${RUN}`;
 const EXTERNAL = `oc_external_${RUN}`;
 const OTHER = `oc_other_${RUN}`;
 
-/** The sentences the bot answers with, spelled out here so the spec pins the words themselves. */
-const NOT_CONNECTED = `This group isn't connected to Orbit, so nothing was started. The bot's owner can connect it by sending "@${X.botName} connect" here.`;
-const SWITCHED_OFF =
-  `This group's connection to Orbit is switched off, so nothing was started. The bot's owner can switch it back on in Orbit, or send "@${X.botName} connect" here.`;
-const STRANGER_CONNECT = 'Only the owner of this bot can connect this group to Orbit.';
-const EXTERNAL_GROUP = 'Orbit connects only groups inside your organization. This group has members from other organizations.';
+/** The sentences the bot answers with, spelled out here so the spec pins the words themselves (§15.1). */
+const NOT_CONNECTED = `This group isn't connected, so nothing was started. The bot's owner can connect it by sending "@${X.botName} connect" here.`;
+const SWITCHED_OFF = "The bot is switched off in this group, so nothing was started. Ask the bot's owner to switch it back on.";
+const STRANGER_CONNECT = 'Only the owner of this bot can connect this group.';
+const EXTERNAL_GROUP = 'This bot works only in groups inside your organization. This group has members from other organizations.';
+const CONNECT_SENT = "I've sent you a link in our direct chat to finish connecting this group.";
 
 async function until<T>(what: string, probe: () => Promise<T> | T, ms = 30_000): Promise<NonNullable<T>> {
   const deadline = Date.now() + ms;
@@ -211,6 +212,12 @@ test('Feishu: a group is connected only by the owner\'s connect and the confirm 
     await processedTimes(eventId, attempts + 1);
     await sleep(300);
   }
+  /** Messages the bot sent to someone directly (not replies), to `openId`: the connect card goes there (§15.1). */
+  const sentToUser = (openId: string): FakeRequest[] => fake.messages.filter((m) =>
+    m.method === 'POST' && m.path === '/open-apis/im/v1/messages' && (m.body as { receive_id?: string }).receive_id === openId);
+  /** Every message request into a group: a reply to one of its messages, or a send with its chat_id. */
+  const groupRequests = (messageId: string, chatId: string): FakeRequest[] => fake.requests.filter((r) =>
+    r.path.startsWith(`/open-apis/im/v1/messages/${messageId}`) || (r.body as { receive_id?: string } | null)?.receive_id === chatId);
   /** The ticket the card's button carries. */
   const ticketOf = (reply: FakeRequest): string => {
     const body = reply.body as { msg_type: string; content: string };
@@ -249,10 +256,26 @@ test('Feishu: a group is connected only by the owner\'s connect and the confirm 
   let connectEvent = '';
   let ticket = '';
   await t.test('(4) the owner\'s connect makes a ticket bound to the owner and the group, and answers with the card', async () => {
+    const cardsBefore = sentToUser(ALICE).length;
     const m = await mention(TEAM, ALICE, 'connect');
     connectEvent = m.eventId;
-    const [card] = repliesTo(m.messageId);
-    assert.match((card.body as { content: string }).content, /Connect this group to Orbit/);
+    // The group reads one sentence, and nothing else is sent into it: no card, no link.
+    assert.deepEqual(m.replies, [CONNECT_SENT]);
+    assert.deepEqual(groupRequests(m.messageId, TEAM).map((r) => `${r.method} ${r.path}`), [`POST /open-apis/im/v1/messages/${m.messageId}/reply`]);
+    assert.doesNotMatch(JSON.stringify(groupRequests(m.messageId, TEAM).map((r) => r.body)), /ticket=|https?:\/\//, 'no link in the group');
+    // The card went to the owner's open_id.
+    const cards = sentToUser(ALICE).slice(cardsBefore);
+    assert.equal(cards.length, 1, 'one card to the owner');
+    const card = cards[0];
+    assert.equal(card.query.get('receive_id_type'), 'open_id');
+    const content = JSON.parse((card.body as { content: string }).content) as {
+      header: { title: { content: string } }; body: { elements: Array<Record<string, unknown>> };
+    };
+    assert.equal(content.header.title.content, 'Connect Release team');
+    const words = JSON.stringify(content.body.elements);
+    assert.match(words, /Choose the workspace, the permission mode, who in this group can start sessions, and the limits\. Nothing runs from this group until you confirm\./);
+    assert.match(words, /Only you can use this link, once, within 30 minutes\./);
+    assert.match(words, /"content":"Choose settings"/);
     ticket = ticketOf(card);
     const row = await routeOf(TEAM);
     assert.ok(row);
@@ -267,15 +290,19 @@ test('Feishu: a group is connected only by the owner\'s connect and the confirm 
     const [app, links] = [await appRow(), await linkRows()];
     const before = await mark();
     await reprocess(connectEvent);
-    // Sent again with the same ticket under the same uuid, so Feishu (and the fake, as Feishu does) delivers it once.
-    const sentTo = () => fake.requests.filter((r) => r.method === 'POST' && r.path === `/open-apis/im/v1/messages/${m.messageId}/reply`);
-    await until('the card sent again', () => sentTo().length === 2);
-    const [first, second] = sentTo();
+    // Sent again with the same ticket under the same uuid, so Feishu (and the fake, as Feishu does) delivers it once;
+    // the group's sentence likewise.
+    const cardSends = () => fake.requests.filter((r) => r.method === 'POST' && r.path === '/open-apis/im/v1/messages'
+      && (r.body as { receive_id?: string }).receive_id === ALICE && (r.body as { uuid?: string }).uuid === (card.body as { uuid?: string }).uuid);
+    const groupSends = () => fake.requests.filter((r) => r.method === 'POST' && r.path === `/open-apis/im/v1/messages/${m.messageId}/reply`);
+    await until('the card and the sentence sent again', () => cardSends().length === 2 && groupSends().length === 2);
+    const [first, second] = cardSends();
     assert.equal(ticketOf(second), ticket);
-    assert.equal((second.body as { uuid?: string }).uuid, (first.body as { uuid?: string }).uuid);
     assert.ok((first.body as { uuid?: string }).uuid, 'the card carries a Feishu uuid');
     assert.equal(second.answeredWith, first.answeredWith, 'Feishu answered the repeat with the card it delivered');
-    assert.equal(repliesTo(m.messageId).length, 1, 'one card delivered');
+    assert.equal((groupSends()[1].body as { uuid?: string }).uuid, (groupSends()[0].body as { uuid?: string }).uuid);
+    assert.equal(sentToUser(ALICE).slice(cardsBefore).length, 1, 'one card delivered');
+    assert.deepEqual(textsTo(m.messageId), [CONNECT_SENT], 'one sentence delivered');
     assert.deepEqual(await strayWrites(before, connectEvent, app, links), []);
   });
 
@@ -357,8 +384,10 @@ test('Feishu: a group is connected only by the owner\'s connect and the confirm 
   });
 
   await t.test('(9) an expired ticket, or one issued to someone no longer the owner, connects nothing', async () => {
+    const cardsBefore = sentToUser(ALICE).length;
     const m = await mention(OTHER, ALICE, 'connect');
-    const other = ticketOf(repliesTo(m.messageId)[0]);
+    assert.deepEqual(m.replies, [CONNECT_SENT]);
+    const other = ticketOf(sentToUser(ALICE).slice(cardsBefore)[0]);
     await db.feishuChatRoute.update({ where: { appId_chatId: { appId: X.appId, chatId: OTHER } }, data: { ticketExpiresAt: new Date(Date.now() - 1_000) } });
     const expired = await api('POST', '/integrations/feishu/chats/confirm', login, { ticket: other, ...submission });
     assert.equal(expired.status, 409);

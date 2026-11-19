@@ -161,14 +161,14 @@ public enum SettingsHome {
     }
 }
 
-/// The page Settings' General row opens on iOS, top to bottom: the account's five session settings —
+/// The page Settings' General row opens on iOS, top to bottom: the account's session settings —
 /// the web's Session defaults card and its Session orchestration card — each in a section of its own
 /// with the web's hint as its footer, as the Notifications page's switches have theirs
 /// (docs/mocks/ios-settings-order, 2A). Every one is the whole account's, so it is answered on its
 /// row and opens nothing.
 public enum SessionSettings {
     public enum Row: String, CaseIterable, Sendable {
-        case defaultPermission, orchestration, modelRouting, promptSuggestions, recaps
+        case defaultPermission, orchestration, modelRouting, optimizeFor, promptSuggestions, recaps
     }
 
     /// One group on the page: a row's section, Settings › Translation's, or the Prompt optimizer's.
@@ -192,6 +192,7 @@ public enum SessionSettings {
         case .defaultPermission: return "Default permission"
         case .orchestration:     return "Session orchestration"
         case .modelRouting:      return SettingsCopy.smartModelSelection
+        case .optimizeFor:       return SettingsCopy.optimizeFor
         case .promptSuggestions: return SettingsCopy.suggestedReplies
         case .recaps:            return SettingsCopy.sessionRecaps
         }
@@ -203,6 +204,7 @@ public enum SessionSettings {
         case .defaultPermission: return SettingsCopy.defaultPermissionHint
         case .orchestration:     return SettingsCopy.letSessionsOrchestrateHint
         case .modelRouting:      return SettingsCopy.smartModelSelectionHint
+        case .optimizeFor:       return SettingsCopy.optimizeForHint
         case .promptSuggestions: return SettingsCopy.suggestedRepliesHint
         case .recaps:            return SettingsCopy.sessionRecapsHint
         }
@@ -339,6 +341,12 @@ public enum SettingsCopy {
     /// page the row is the switch and the hint its footer.
     public static let smartModelSelection = "Smart model selection"
     public static let smartModelSelectionHint = "Coordinators suggest a tier for each task, and Agents you turn this on for run their tasks on that tier's model and effort. Off: tasks run exactly as before."
+
+    // MARK: Optimize For (board docs/mocks/routing-mode-account, approved 2026-11-19)
+
+    /// The account's one routing pick, directly under Smart model selection on Settings → General.
+    public static let optimizeFor = "Optimize For"
+    public static let optimizeForHint = "How SubAgents and smart-selected tasks pick a provider, on every Agent."
 
     // MARK: Suggested replies (the web page's Session defaults card)
 

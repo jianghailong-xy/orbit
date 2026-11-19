@@ -210,7 +210,7 @@ final class SettingsStackWiringTests: XCTestCase {
                      ".task { await model.sharedPools?.load() }", "await model.sharedPools?.loadAccess(id)"] {
             XCTAssertTrue(list.contains(read), "the list reads \(read)")
         }
-        // The five session settings are the General page's (`testTheSessionsPageDrawsSessionSettings`):
+        // The session settings are the General page's (`testTheSessionsPageDrawsSessionSettings`):
         // the list has none of their controls, and its General row is a link like Notifications'.
         for control in ["$permMode", "$orchestration", "$modelRouting", "$promptSuggestions", "$recaps"] {
             XCTAssertFalse(list.contains(control), "the list still draws \(control)")
@@ -277,10 +277,17 @@ final class SettingsStackWiringTests: XCTestCase {
             XCTAssertTrue(page.contains(write), "the page no longer writes \(write)")
             XCTAssertTrue(page.contains(seed), "the page no longer seeds \(seed)")
         }
+        // Optimize For (board docs/mocks/routing-mode-account): a segmented picker directly under
+        // Smart model selection, absent reading as Balance, written the moment it moves.
+        XCTAssertTrue(controls.contains("Picker(title, selection: $optimizeFor)"))
+        XCTAssertTrue(page.contains("UpdatePreferencesRequest(optimizeFor: value.rawValue)"))
+        XCTAssertTrue(page.contains("optimizeFor = OptimizeFor(stored: p?.optimizeFor)"))
         XCTAssertEqual(page.components(separatedBy: "guard (model.user?.preferences?.").count - 1, 6,
                        "every switch's write is guarded against the account's own value")
         XCTAssertTrue(page.contains("PromptOptimizer.switchedOn(model.user?.preferences) != value else { return }"),
                       "the prompt optimizer's write is guarded against the account's own value (absent = on)")
+        XCTAssertTrue(page.contains("guard OptimizeFor(stored: model.user?.preferences?.optimizeFor) != value else { return }"),
+                      "Optimize For's write is guarded against the account's own value (absent = Balance)")
     }
 
     /// The avatar and name are one button, pencilled as ChatGPT's are, that opens the edit-profile

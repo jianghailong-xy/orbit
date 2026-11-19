@@ -353,10 +353,11 @@ export type NamedRunner = { engines: unknown; accountNames: unknown };
 /** What an account is called where one is named: what the user called it — Default too, once renamed
  *  — else "Default", or the slot's id when the name it was added under is gone. */
 export function accountLabel(engine: AccountEngine, id: string, runner: NamedRunner): string {
-  const name = namedRunnerEngines(runner)
+  const account = namedRunnerEngines(runner)
     ?.find((entry) => entry.engine === engine)
-    ?.accounts?.find((account) => account.id === id)?.name;
-  if (name) return name;
+    ?.accounts?.find((entry) => entry.id === id);
+  if (account?.name) return account.name;
+  if (account?.formerDefault) return account.email || 'Former default';
   return id === DEFAULT_ACCOUNT ? 'Default' : `Account ${id}`;
 }
 

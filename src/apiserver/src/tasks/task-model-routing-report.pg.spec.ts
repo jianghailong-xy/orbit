@@ -42,7 +42,7 @@ test('model-routing report aggregates actual runs, first-run task cohorts and on
   // Both accounts have smart model selection on, as an account whose runs were routed has.
   for (const id of [owner, otherOwner]) {
     await db.user.create({
-      data: { id, email: `${id}@routing-report.invalid`, name: 'report', passwordHash: 'h', preferences: { modelRouting: true } },
+      data: { id, email: `${id}@routing-report.invalid`, name: 'report', passwordHash: 'h', preferences: { modelRouting: true, optimizeFor: 'cost' } },
     });
   }
   const agent = await db.workspace.create({ data: { ownerId: owner, name: 'first agent' } });

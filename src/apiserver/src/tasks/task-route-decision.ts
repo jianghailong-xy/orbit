@@ -4,6 +4,8 @@ import {
   isEngine,
   USAGE_LIMIT_ERROR_MARKERS,
   runnerCatalogRow,
+  quotaExpiresAt,
+  quotaNearLimit,
   spentPlanUsage,
   type AccountEngine,
   type PlanUsage,
@@ -12,7 +14,7 @@ import {
   type RunnerModelCatalog,
 } from '@orbit/shared';
 import { runnerAccountPausedUntil } from '../common/account-pause';
-import { modelRoutingEnabled } from '../common/model-routing-switch';
+import { modelRoutingEnabled, optimizeForOf } from '../common/model-routing-switch';
 import { resolvePermissionMode } from '../common/permission-mode';
 import { firstRuntimeCatalogModel, sanitizeRuntimeDefaultModels } from '../common/runtime-model';
 import { normalizeEffortForProvider } from '../common/runtime-provider';
@@ -69,7 +71,7 @@ export function taskRouteReads(prisma: PrismaService, ownerId: string, now: Date
     workspace: (id: string) => once(`workspace:${id}`, () => prisma.workspace.findFirst({
       where: { id, ownerId },
       select: {
-        runnerId: true, effort: true, modelRouting: true, modelRoutingProviders: true, modelRoutingOptimizeFor: true,
+        runnerId: true, effort: true, modelRouting: true, modelRoutingProviders: true,
         env: true, codexAccount: true, claudeAccount: true, kimiAccount: true,
       },
     })),
@@ -244,6 +246,15 @@ function windowName(window: PlanUsageWindow | undefined, slot: string): string {
 }
 
 /**
+ * When an account's quota goes to waste and whether it is nearly spent, as account selection weighs them
+ * (quotaExpiresAt, quotaNearLimit in planUsage.ts): what the SubAgent router spends first (§4.2).
+ */
+export function quotaTiming(snapshot: PlanUsageSnapshot | null | undefined, now: Date): { expiresAt: number | null; nearLimit: boolean } {
+  const at = quotaExpiresAt(snapshot, now);
+  return { expiresAt: Number.isFinite(at) ? at : null, nearLimit: quotaNearLimit(snapshot, now) };
+}
+
+/**
  * The fullest live window of one account's snapshot, the one that caps the whole engine — a model family's
  * own window (Opus weekly) is not one. Null when none is live: one past its reset has given its quota back.
  */
@@ -252,6 +263,9 @@ export function fullestWindow(snapshot: PlanUsageSnapshot | null | undefined, no
     ? [
       [snapshot.fiveHour, '5-hour'],
       [snapshot.sevenDay, 'weekly'],
+      // Kimi Code's monthly pair.
+      [snapshot.month, 'monthly'],
+      [snapshot.monthCode, 'monthly'],
       [snapshot.primary, windowName(snapshot.primary, 'primary')],
       [snapshot.secondary, windowName(snapshot.secondary, 'secondary')],
     ]
@@ -299,12 +313,13 @@ export function engineState(
   const snapshot = account === null ? undefined : spentPlanUsage(runner.planUsage as PlanUsage | null, engine, account);
   const quota = fullestWindow(snapshot, now);
   // No reading at all, or one without a window fullestWindow reads (a runner that fetched nothing for it).
-  const quotaUnread = !snapshot || ![snapshot.fiveHour, snapshot.sevenDay, snapshot.primary, snapshot.secondary].some(Boolean);
+  const quotaUnread = !snapshot
+    || ![snapshot.fiveHour, snapshot.sevenDay, snapshot.month, snapshot.monthCode, snapshot.primary, snapshot.secondary].some(Boolean);
   const regionBlocked = engine === AgentProvider.CLAUDE && blockedRunnerRegion(runner, now) !== null;
   // Only the SubAgent router reads it (routeSubagent); chooseEngine does not.
   const paused = runnerAccountPausedUntil(runner.accountPauses, engine, account, now) !== null;
   return {
-    signedOut, quota, ...(quotaUnread ? { quotaUnread } : {}), ...(regionBlocked ? { regionBlocked } : {}), ...(paused ? { paused } : {}),
+    signedOut, quota, ...quotaTiming(snapshot, now), ...(quotaUnread ? { quotaUnread } : {}), ...(regionBlocked ? { regionBlocked } : {}), ...(paused ? { paused } : {}),
   };
 }
 
@@ -335,7 +350,9 @@ async function routeEngines(
   const states: Record<string, ModelRoutingEngineState> = {};
   for (const engine of new Set([env.engine, ...allowed])) {
     if (env.runner && (engine === AgentProvider.CLAUDE || engine === AgentProvider.CODEX)) {
-      states[engine] = engineState(engine, agent, env.runner, reads.now);
+      // What only the SubAgent router reads stays out of the task run's recorded features.
+      const { quotaUnread: _unread, expiresAt: _expires, nearLimit: _near, ...state } = engineState(engine, agent, env.runner, reads.now);
+      states[engine] = state;
     }
   }
   const verifiedRunEngine = task.verifiesTaskId ? await lastRunEngine(reads, task.verifiesTaskId) : null;
@@ -471,8 +488,8 @@ export async function planTaskRunRoute(
     dependents,
     promptChars: prompt.length,
   };
-  const optimizeFor = agent?.modelRoutingOptimizeFor === 'balance' ? 'balance'
-    : agent?.modelRoutingOptimizeFor === 'intelligence' ? 'intelligence' : 'cost';
+  // The account's, for every Agent (owner, 2026-11-19).
+  const optimizeFor = optimizeForOf(await reads.owner());
   const decision = routeTaskRun({
     optimizeFor,
     features: structuralFeatures,

@@ -55,6 +55,12 @@ export const PERSONAL_SETTINGS = {
     'Smart model selection',
     'Coordinators suggest a tier for each task; Agents you turn this on for run on that tier.',
   ),
+  optimizeFor: setting(
+    'optimizeFor',
+    '/settings/general',
+    'Optimize For',
+    'How SubAgents and smart-selected tasks pick a provider, on every Agent.',
+  ),
   promptSuggestions: setting(
     'promptSuggestions',
     '/settings/general',
@@ -79,6 +85,12 @@ export const PERSONAL_SETTINGS = {
     '/settings/general',
     'Let sessions orchestrate',
     'Sessions can start and manage other sessions, and manage agents and runners, via the orbit MCP tools.',
+  ),
+  cardFreeTaskCreates: setting(
+    'cardFreeTaskCreates',
+    '/settings/general',
+    'Tasks a session files without asking',
+    'After this many, each task a session creates waits for your OK on a card. 0 asks for every one.',
   ),
   // Settings › Translation (docs/mocks/session-translation, frames 1 and 2): between New sessions and Orchestration.
   translationEnabled: setting(

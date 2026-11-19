@@ -112,7 +112,6 @@ export const FROM_ORBIT_TITLE =
 
 export const OPEN_ITEMS_HEADING = 'Open items';
 export const NEEDS_YOU_GROUP = 'Needs you';
-export const WITH_COORDINATOR_GROUP = 'With the coordinator';
 
 /**
  * The word an exception card wears for where the coordinator's handling of it stands (§4.7 H1–H5).
@@ -1413,6 +1412,27 @@ function FactRow({ label, children }: { label: string; children: ReactNode }): J
   );
 }
 
+/** A row's paths: the first few, and the rest one press away — a delivery can name hundreds, and
+ *  unfolded they push everything after the card out of sight. */
+function PathList({ paths }: { paths: readonly string[] }): JSX.Element {
+  const [open, setOpen] = useState(false);
+  const hidden = Math.max(0, paths.length - DETAIL_FILES_SHOWN);
+  const shown = open || hidden === 0 ? paths : paths.slice(0, DETAIL_FILES_SHOWN);
+  return (
+    <>
+      <span className="project-open-item-mono">{shown.join(' · ')}</span>
+      {hidden > 0 ? (
+        <>
+          {' '}
+          <button className="chat-more" onClick={() => setOpen((o) => !o)}>
+            {open ? 'Show less' : `Show ${hidden} more`}
+          </button>
+        </>
+      ) : null}
+    </>
+  );
+}
+
 /** How many lines of a failed check's output stay out of the fold. The rest are one press away. */
 const CHECK_TAIL_LINES = 6;
 
@@ -1558,8 +1578,8 @@ function ItemFactRows({
               : null}
           </FactRow>
         ) : (
-          <FactRow label="Files">
-            <span className="project-open-item-mono">{facts.files.join(' · ')}</span>
+          <FactRow label={facts.files.length > DETAIL_FILES_SHOWN ? `Files (${facts.files.length})` : 'Files'}>
+            <PathList paths={facts.files} />
           </FactRow>
         )
       ) : null}
@@ -1569,11 +1589,9 @@ function ItemFactRows({
         <FactRow label="Its reason">{facts.review.argument ?? ''}</FactRow>
       ) : facts.review ? (
         <FactRow label="Declared">
-          <span className="project-open-item-mono">
-            {facts.review.declaredPaths.length > 0
-              ? facts.review.declaredPaths.join(' · ')
-              : 'no paths'}
-          </span>
+          {facts.review.declaredPaths.length > 0
+            ? <PathList paths={facts.review.declaredPaths} />
+            : <span className="project-open-item-mono">no paths</span>}
         </FactRow>
       ) : null}
       {facts.task && facts.files.length > 0 && !facts.review && !folded ? (
@@ -2905,7 +2923,7 @@ export function isOwnerExceptionCard(row: ProjectOpenItemRow): boolean {
 }
 
 /**
- * Every open exception of this project, as cards, wherever a transcript wants them: the project's
+ * The owner’s exceptions for this project, as cards, wherever a transcript wants them: the project's
  * coordinator conversation draws these INTO its own turns, at the moment each one happened, and the
  * project page expands the same components (§7.5).
  *
@@ -2943,14 +2961,9 @@ export function exceptionCardRows(
  * the thing that stopped the project.
  */
 function ordered(items: ProjectOpenItemsView | undefined): ProjectOpenItemRow[] {
-  // The settled ones too (§4.7 H5): a card the conversation drew while the coordinator handled it
-  // stays at the moment it happened and says how it ended, rather than vanishing from under the
-  // reader the moment its rerun lands.
-  const all = [
-    ...(items?.needsYou ?? []),
-    ...(items?.withCoordinator ?? []),
-    ...(items?.settled ?? []),
-  ];
+  // Keep settled cards for items the owner could see before they ended.
+  const all = [...(items?.needsYou ?? []), ...(items?.settled ?? [])]
+    .filter((row) => row.assignee === 'OWNER');
   const paused = all.filter((row) => row.kind === 'FUSE_PAUSED');
   const rest = all
     .filter((row) => row.kind !== 'FUSE_PAUSED')
@@ -3260,13 +3273,12 @@ export function ProjectOpenItems({
     ...(doneRequest ? [doneRequest] : []),
     ...(items.data?.needsYou ?? []).filter((row) => row.kind !== 'FUSE_PAUSED' && row.kind !== 'DONE_REQUEST'),
   ];
-  const withCoordinator = items.data?.withCoordinator ?? [];
   const signIns = items.data?.signIns ?? [];
   const ownStart = start?.kind === 'own' && onStartProject ? onStartProject : null;
   const ownDone = items.data !== undefined && !doneRequest && onRecordDone ? onRecordDone : null;
   if (
     !projectId
-    || (paused.length + needsYou.length + signIns.length + withCoordinator.length === 0 && !ownStart && !ownDone)
+    || (paused.length + needsYou.length + signIns.length === 0 && !ownStart && !ownDone)
   ) return null;
 
   return (
@@ -3274,7 +3286,7 @@ export function ProjectOpenItems({
       <header className="project-open-items-head">
         <span className="project-open-items-title">{OPEN_ITEMS_HEADING}</span>
         <span className="project-open-items-hint">
-          {`${needsYou.length + signIns.length} need you · ${withCoordinator.length} with the coordinator · oldest first`}
+          {`${needsYou.length + signIns.length} need you · oldest first`}
         </span>
       </header>
       {paused.map((row) => (
@@ -3317,22 +3329,6 @@ export function ProjectOpenItems({
                 />
               ),
             )}
-          </ul>
-        </>
-      ) : null}
-      {withCoordinator.length > 0 ? (
-        <>
-          <div className="project-open-items-group">{WITH_COORDINATOR_GROUP}</div>
-          <ul className="project-open-items-list">
-            {withCoordinator.map((row) => (
-              <OpenItemRowView
-                key={row.itemId}
-                row={row}
-                now={now}
-                currentPromotionId={currentPromotionId}
-                main={main}
-              />
-            ))}
           </ul>
         </>
       ) : null}

@@ -52,6 +52,8 @@ import {
   parseQuotaResetAt,
   isAsyncAgentLaunchAck,
   delegateLaunchReceipt,
+  ORBIT_WORKFLOW_TOOL,
+  orbitWorkflowLaunchReceipt,
   progressBadge,
   COORDINATOR_HANDOFF_PROMPT_HEAD,
   QUESTION_RECORD_COPY,
@@ -4581,9 +4583,9 @@ function resultRepeatsBody(node: ToolNode): boolean {
 }
 
 /** The runtime's calls whose work outlives them: a sub-agent (Agent; Task before 2.x), a Workflow — and
- *  Orbit's own SubAgent (`delegate`). */
+ *  Orbit's own SubAgent (`delegate`) and workflow. */
 function isBackgroundTaskCall(name: string): boolean {
-  return name === 'Agent' || name === 'Task' || name === 'Workflow' || name === DELEGATE_TOOL;
+  return name === 'Agent' || name === 'Task' || name === 'Workflow' || name === DELEGATE_TOOL || name === ORBIT_WORKFLOW_TOOL;
 }
 
 /**
@@ -4597,6 +4599,7 @@ function isLaunchReceipt(node: ToolNode): boolean {
   if (!content || node.result?.isError) return false;
   if (node.name === 'Workflow') return !!workflowLaunchReceipt(content);
   if (node.name === DELEGATE_TOOL) return !!delegateLaunchReceipt(content);
+  if (node.name === ORBIT_WORKFLOW_TOOL) return !!orbitWorkflowLaunchReceipt(content);
   return (node.name === 'Agent' || node.name === 'Task') && isAsyncAgentLaunchAck(content);
 }
 
@@ -4795,7 +4798,7 @@ function ToolView({ node, live }: { node: ToolNode; live?: boolean }) {
                 }
               />
             )}
-            {body && (node.name === 'Workflow' ? (
+            {body && (node.name === 'Workflow' || node.name === ORBIT_WORKFLOW_TOOL ? (
               <details className="chat-workflow-source" open={exp ? true : undefined}>
                 <summary>Workflow source</summary>
                 <div className="chat-tool-body">{body}</div>
@@ -5305,6 +5308,18 @@ function describeTool(
         summary: workflowTitle(i, null),
         body: typeof i.script === 'string' ? <Pre text={i.script} threshold={6} muted /> : undefined,
       };
+    case ORBIT_WORKFLOW_TOOL:
+      // Orbit's own workflow (docs/subagent-workflow-design.md): drawn as the runtime's Workflow card is, named by
+      // its script's meta and the call's description. Its agent() calls nest under it as SubAgent cards.
+      return {
+        label: 'Workflow',
+        icon: <ApartmentOutlined />,
+        tone: 'agent',
+        summary: [orbitWorkflowName(i.script), typeof i.description === 'string' ? i.description.trim() : '']
+          .filter(Boolean)
+          .join(' · ') || undefined,
+        body: typeof i.script === 'string' ? <Pre text={i.script} threshold={6} muted /> : undefined,
+      };
     case 'ExitPlanMode':
       // The plan is Markdown meant to be read — render it like Task's prompt,
       // not as a raw key/value blob via the default branch.
@@ -5407,6 +5422,12 @@ function describeTool(
       }
       return { label: name, icon: <ToolOutlined />, summary: kvSummary(i), summaryMono: true, body: hasKeys(i) ? <KeyVals obj={i} /> : undefined };
   }
+}
+
+/** The `name` of an Orbit workflow script's leading `export const meta = { name: … }`, when it is a plain string. */
+function orbitWorkflowName(script: unknown): string {
+  if (typeof script !== 'string') return '';
+  return /export\s+const\s+meta\s*=\s*\{[^]*?\bname\s*:\s*(['"`])([^'"`\n]+)\1/.exec(script)?.[2]?.trim() ?? '';
 }
 
 function ToolResult({

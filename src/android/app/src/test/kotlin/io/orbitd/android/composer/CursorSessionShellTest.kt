@@ -195,7 +195,7 @@ class CursorSessionShellTest : ComposerShellTest() {
         assertTrue(shows("This conversation can’t move to Team yet — "))
         compose.onNodeWithTag("auto-retry-cursor-elsewhere").assertTextEquals("start a new session on Team.").performScrollTo().performClick()
         // A new session in the workspace, on Cursor CLI and Team.
-        await { has(hasTestTag("new-session-engine") and hasText("Cursor CLI ⌄")) }
+        await { has(hasTestTag("new-session-engine") and hasText("Cursor CLI")) }
         compose.onNodeWithTag("composer-input").performTextInput("Pick it up on Team")
         compose.onNodeWithTag("composer-send").performClick()
         await { ComposerShell.body("POST sessions") != null }

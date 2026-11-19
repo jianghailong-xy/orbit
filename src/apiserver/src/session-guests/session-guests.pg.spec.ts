@@ -149,6 +149,16 @@ test('session guests: invite by email, a guest turn as ORBIT_GUEST, Shared with 
     assert.equal(strangerImage.json.message, GUEST_SESSION_NOT_SHARED);
     assert.equal((await api('GET', `/guest-sessions/${sessionId}/attachments/${elsewhere.id}`, guestLogin)).status, 404);
 
+    const link = ok(await api('POST', `/sessions/${sessionId}/share`, ownerLogin), 'sharing publicly');
+    const publicWaiting = async (expected: boolean) => {
+      for (const suffix of ['', '/events?after=0']) {
+        const reply = ok(await api('GET', `/shared/${link.json.shareToken}${suffix}`, ''), 'the public waiting state');
+        assert.equal(reply.json.waitingOnOwner, expected);
+        assert.ok(!reply.text.includes(`secret-${RUN}`), 'the public link never carries what the card asks');
+      }
+    };
+    await publicWaiting(false);
+
     // A card pending for the owner: the guest page is told the agent waits on them, and nothing of what it asks.
     const card = await db.approval.create({
       data: { sessionId, toolName: 'Bash', input: { command: `secret-${RUN}` }, status: 'PENDING' },
@@ -156,9 +166,11 @@ test('session guests: invite by email, a guest turn as ORBIT_GUEST, Shared with 
     });
     const waiting = ok(await api('GET', `/guest-sessions/${sessionId}/events?after=0`, guestLogin), 'following while it waits');
     assert.equal(waiting.json.waitingOnOwner, true);
+    await publicWaiting(true);
     assert.ok(!waiting.text.includes(`secret-${RUN}`), 'what the card asks stays the owner’s');
     assert.equal(ok(await api('GET', `/guest-sessions/${sessionId}`, guestLogin), 'the guest page while it waits').json.waitingOnOwner, true);
     await db.approval.update({ where: { id: card.id }, data: { status: 'ALLOWED' } });
+    await publicWaiting(false);
     assert.equal(ok(await api('GET', `/guest-sessions/${sessionId}/events?after=0`, guestLogin), 'following after the answer').json.waitingOnOwner, false);
 
     // The owner's list marks the session as having guests (the two-person icon).

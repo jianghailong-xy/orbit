@@ -413,6 +413,9 @@ class ComposerDeviceTest {
         login()
         compose.onNodeWithContentDescription("Back").performClick()
         compose.startNewSession()
+        // The page as it opens: the engine hero over an empty composer (compared against iOS's draft page).
+        compose.waitUntil(15000) { compose.onAllNodes(hasTestTag("new-session-engine") and isEnabled()).fetchSemanticsNodes().isNotEmpty() }
+        capture("new-session-draft")
         compose.onNodeWithTag("composer-input").performTextInput("新会话的首条消息")
         compose.activityRule.scenario.recreate()
         compose.onNodeWithTag("composer-input").assertTextContains("新会话的首条消息")
@@ -512,7 +515,7 @@ class ComposerDeviceTest {
         // Claude Code's accounts are under Claude Code: the engine first, then the account — the draft lands on its Default.
         compose.onNodeWithTag("new-session-engine").performClick()
         compose.waitUntil(15000) { compose.onAllNodesWithTag("engine:claude").fetchSemanticsNodes().isNotEmpty() }
-        compose.onNodeWithTag("engine:claude").performClick(); awaitText("Claude Code ⌄")
+        compose.onNodeWithTag("engine:claude").performClick(); awaitEngine("Claude Code")
         quota("Primary: 11%")
         choose("Claude account","claude-model"); quota("No quota reported for this account.")
         choose("Automatic","claude-model"); clickSendWhenEnabled()
@@ -607,11 +610,11 @@ class ComposerDeviceTest {
         assertEquals("the engines in the boards' order, whatever the runner's", order,
             engines.map { it.substringBefore(" | ").removeSuffix(" | ✓") }.filter { it in order })
         capture("a07c-draft-engine-list")
-        compose.onNodeWithTag("engine:antigravity").performClick(); awaitText("Antigravity CLI ⌄")
+        compose.onNodeWithTag("engine:antigravity").performClick(); awaitEngine("Antigravity CLI")
         compose.onNodeWithTag("composer-model").performClick(); awaitText("Google account")
         capture("a07c-draft-antigravity-sign-in")
         compose.onNodeWithText("Close").performClick()
-        engineList(); compose.onNodeWithTag("engine:opencode").performClick(); awaitText("OpenCode ⌄")
+        engineList(); compose.onNodeWithTag("engine:opencode").performClick(); awaitEngine("OpenCode")
         // The Provider row says "Own sign-in" for OpenCode's own configuration since A07-19 (d) (A07e, d66ddbc8e); the row under
         // "On Fixture runner" keeps the full name.
         compose.onNodeWithTag("composer-model").performClick(); awaitText("Own sign-in")
@@ -674,7 +677,7 @@ class ComposerDeviceTest {
         engineList()
         val landing = read("landing")
         capture("a07e-engine-list")
-        compose.onNodeWithTag("engine:dsh").performClick(); awaitText("DeepSeek Harness ⌄")
+        compose.onNodeWithTag("engine:dsh").performClick(); awaitEngine("DeepSeek Harness")
         engineList()
         val ticked = read("ticked")
         capture("a07e-engine-list-dsh-ticked")
@@ -836,6 +839,8 @@ class ComposerDeviceTest {
     }
     private fun ready() { compose.waitUntil(10000) { app.realtime.state.value.session?.fresh==true && !model.state.value.busy };compose.waitForIdle() }
     private fun awaitText(text:String) { compose.waitUntil(15000) { compose.onAllNodesWithText(text).fetchSemanticsNodes().isNotEmpty() } }
+    /** The new session hero names [engine] (the chevron beside it is an icon). */
+    private fun awaitEngine(engine: String) { compose.waitUntil(15000) { compose.onAllNodes(hasTestTag("new-session-engine") and hasText(engine)).fetchSemanticsNodes().isNotEmpty() } }
     /** The created session's page is up: its ⋯ in the bar has the session to act on — the page draws no title since A06-18. */
     private fun awaitCreatedSession() {
         compose.waitUntil(15000) { compose.onAllNodes(hasContentDescription("Session actions") and isEnabled()).fetchSemanticsNodes().isNotEmpty() }

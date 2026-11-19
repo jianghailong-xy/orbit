@@ -513,7 +513,7 @@ describe('where the tray stands', { timeout: 60_000 }, () => {
     ];
     await mountSession(() => {
       expect(rowState(trayRow('push into main'))).toBe('Waiting to be read');
-      expect(mounted().querySelector('.bg-tray')?.textContent).toContain('Background processes');
+      expect(mounted().querySelector('.bg-tray')?.textContent).toBe('BackgroundBackfill the events▸');
     });
     const band = mounted().querySelector('.workspace-composer')!;
     const tray = band.querySelector('.pending-tray')!;
