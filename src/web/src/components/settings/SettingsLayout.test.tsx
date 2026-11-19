@@ -293,6 +293,7 @@ describe('the Settings window', () => {
       ['Storage', '/settings/storage'],
       ['Shared links', '/settings/shared-links'],
       ['Access tokens', '/settings/access-tokens'],
+      ['Secrets', '/settings/secrets'],
       ['Terminals', '/settings/terminals'],
     ]);
     expect(rows('Integrations').map((r) => [r.label, r.href])).toEqual([

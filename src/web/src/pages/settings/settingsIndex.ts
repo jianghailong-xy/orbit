@@ -21,6 +21,7 @@ export const PERSONAL_PAGES = [
   { path: '/settings/storage', label: 'Storage' },
   { path: '/settings/shared-links', label: 'Shared links' },
   { path: '/settings/access-tokens', label: 'Access tokens' },
+  { path: '/settings/secrets', label: 'Secrets' },
   { path: '/settings/terminals', label: 'Terminals' },
 ] as const;
 
