@@ -115,7 +115,8 @@ async function fixture(
   await db.user.create({
     data: {
       id: ownerId, email: `${label}-${RUN}-${ownerId}@routing.invalid`, name: label, passwordHash: 'x',
-      preferences: { modelRouting: true },
+      // Optimize For is the account's (owner, 2026-11-19); Cost, the mode these runs were written against.
+      preferences: { modelRouting: true, optimizeFor: 'cost' },
     },
   });
   await db.runner.create({
@@ -222,6 +223,12 @@ async function pause(db: PrismaClient, sessionId: string) {
   await db.session.update({
     where: { id: sessionId }, data: { status: RunStatus.AWAITING_INPUT, numTurns: 1 },
   });
+}
+
+/** The account's Optimize For (UserPreferences.optimizeFor), merged into what its preferences hold. */
+async function setOptimizeFor(db: PrismaClient, ownerId: string, mode: 'cost' | 'balance' | 'intelligence'): Promise<void> {
+  const { preferences } = await db.user.findUniqueOrThrow({ where: { id: ownerId }, select: { preferences: true } });
+  await db.user.update({ where: { id: ownerId }, data: { preferences: { ...(preferences as object), optimizeFor: mode } } });
 }
 
 test('smart selection on: a fresh run is created on the routed model and effort, and the task keeps its pins',
@@ -369,7 +376,7 @@ test('a model pinned on the task wins: the run is created on the pin, and the de
     try {
       // XL would route to Opus at max; the pin says Sonnet.
       const target = await fixture(services, 'pin', [{ model: SONNET, modelHint: 'XL' }]);
-      await services.workspaces.update(target.ownerId, target.agentId, { modelRoutingOptimizeFor: 'intelligence' });
+      await setOptimizeFor(services.db, target.ownerId, 'intelligence');
       const [taskId] = target.taskIds;
       const press = randomUUID();
 
@@ -399,7 +406,7 @@ test('continuing a paused run is not routed again, with smart selection on',
       assert.deepEqual(await sessionOf(services.db, run), { provider: 'claude', model: SONNET, effort: 'low' });
       await pause(services.db, run);
       // Changing the mode and suggestion affects only later CREATE plans.
-      await services.workspaces.update(target.ownerId, target.agentId, { modelRoutingOptimizeFor: 'intelligence' });
+      await setOptimizeFor(services.db, target.ownerId, 'intelligence');
       await services.db.task.update({ where: { id: taskId }, data: { modelHint: 'XL' } });
       const press = randomUUID();
 
@@ -621,7 +628,7 @@ test('Optimize For is frozen with CREATE; changed modes affect only later fresh 
       const target = await fixture(services, 'optimize', [{ modelHint: null }]);
       const [taskId] = target.taskIds;
       for (const [mode, level] of [['cost', null], ['balance', 'M'], ['intelligence', 'L']] as const) {
-        await services.workspaces.update(target.ownerId, target.agentId, { modelRoutingOptimizeFor: mode });
+        await setOptimizeFor(services.db, target.ownerId, mode);
         const press = randomUUID();
         const run = await runNow(services, target, taskId, press);
         const row = (await decisionsOf(services.db, taskId)).find((r) => r.sessionId === run)!;
@@ -629,7 +636,7 @@ test('Optimize For is frozen with CREATE; changed modes affect only later fresh 
         assert.equal((row.features as Record<string, unknown>).optimizeFor, mode);
         const bound = await receipt(services.db, target.ownerId, TASK_RUN_ACTION.execute, press);
         assert.equal(bound.target.route.features.optimizeFor, mode);
-        await services.workspaces.update(target.ownerId, target.agentId, { modelRoutingOptimizeFor: 'intelligence' });
+        await setOptimizeFor(services.db, target.ownerId, 'intelligence');
         assert.equal(await runNow(services, target, taskId, press), run);
         assert.equal((await receipt(services.db, target.ownerId, TASK_RUN_ACTION.execute, press)).target.route.features.optimizeFor, mode);
         await services.db.session.update({ where: { id: run }, data: { status: RunStatus.SUCCEEDED, finishedAt: new Date() } });

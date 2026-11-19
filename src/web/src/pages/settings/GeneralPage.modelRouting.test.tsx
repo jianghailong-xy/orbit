@@ -9,7 +9,8 @@ import { meQuery, type Me, type UserPreferences } from '../../lib/queries';
 /**
  * Smart model selection, one switch for the whole account (`preferences.modelRouting`) under General's
  * New sessions. Unlike the other switches on the page it is OFF until turned on: an account that never
- * wrote it reads off.
+ * wrote it reads off. Under it, Optimize For: one for every Agent (`preferences.optimizeFor`, board
+ * docs/mocks/routing-mode-account), Balance until the owner picks another.
  */
 
 // The theme control reaches for localStorage and matchMedia, and it is not what these tests are about.
@@ -95,6 +96,25 @@ async function toggle(): Promise<void> {
   await settle();
 }
 
+/** Optimize For's segment that reads `text`, and the one that is on. */
+const segment = (text: string) =>
+  [...container!.querySelectorAll<HTMLElement>('[aria-label="Optimize For"] [role="radio"]')].find((el) => el.textContent === text)!;
+const selectedMode = () =>
+  container!.querySelector('[aria-label="Optimize For"] [aria-checked="true"]')?.textContent;
+
+// A segment needs the browser's full pointer sequence to commit a choice.
+async function press(el: HTMLElement): Promise<void> {
+  await act(async () => {
+    const init = { bubbles: true, cancelable: true, button: 0, buttons: 1, detail: 1 };
+    el.dispatchEvent(new PointerEvent('pointerdown', { ...init, pointerType: 'mouse' }));
+    el.dispatchEvent(new MouseEvent('mousedown', init));
+    el.dispatchEvent(new PointerEvent('pointerup', { ...init, buttons: 0, pointerType: 'mouse' }));
+    el.dispatchEvent(new MouseEvent('mouseup', { ...init, buttons: 0 }));
+    el.dispatchEvent(new MouseEvent('click', { ...init, buttons: 0 }));
+  });
+  await settle();
+}
+
 async function answer(value: Me): Promise<void> {
   expect(reply, 'a PATCH is in flight').toBeTruthy();
   await act(async () => reply!(value));
@@ -140,11 +160,24 @@ afterEach(async () => {
 });
 
 describe('smart model selection, one switch for the whole account', () => {
-  it('keeps optimize mode on the Agent rather than introducing account inheritance', async () => {
+  it('Optimize For sits right under it, for every Agent, Balance until another is picked', async () => {
     await mount({ modelRouting: true });
-    expect(document.body.querySelector('[aria-label="Optimize For"]')).toBeNull();
+    const titles = [...container!.querySelectorAll('.settings-row-title')].map((el) => el.textContent);
+    expect(titles.indexOf('Optimize For')).toBe(titles.indexOf(LABEL) + 1);
+    expect([...container!.querySelectorAll('[aria-label="Optimize For"] [role="radio"]')].map((el) => el.textContent))
+      .toEqual(['Cost', 'Balance', 'Intelligence']);
+    expect(selectedMode()).toBe('Balance');
     expect(checked()).toBe('true');
     expect(patches()).toEqual([]);
+  });
+
+  it('shows the stored mode, and saves a new one to the account at once', async () => {
+    await mount({ optimizeFor: 'cost' });
+    expect(selectedMode()).toBe('Cost');
+    await press(segment('Intelligence'));
+    expect(patches()).toEqual([{ optimizeFor: 'intelligence' }]);
+    await answer(me({ optimizeFor: 'intelligence' }));
+    expect(selectedMode()).toBe('Intelligence');
   });
 
   it('sits in New sessions under Default permission mode, saying what it does in one line and in full on hover', async () => {

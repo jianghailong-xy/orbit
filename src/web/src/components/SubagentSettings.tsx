@@ -7,31 +7,24 @@ import { useToast } from '../lib/toast';
 import { Button } from './ui/Button';
 import { Dialog } from './ui/Dialog';
 import { NumberInput } from './ui/NumberInput';
-import { Segmented } from './ui/Segmented';
 import { Switch } from './ui/Switch';
-
-export type OptimizeFor = 'cost' | 'balance' | 'intelligence';
 
 /** The most SubAgents of one session the owner can let run at once (workspaces/dto.ts SUBAGENTS_MAX_RUNNING_LIMIT). */
 export const SUBAGENTS_MAX_RUNNING_LIMIT = 16;
 
 /**
- * The Agent settings' SubAgents group (docs/subagent-design.md §7, board docs/mocks/subagent/05.png). The switch,
- * Optimize For and Running at once are the Agent's, saved with the form; Providers is the account's block list,
- * saved as it is changed.
+ * The Agent settings' SubAgents group (docs/subagent-design.md §7, board docs/mocks/subagent/05.png). The switch
+ * and Running at once are the Agent's, saved with the form; Providers is the account's block list, saved as it is
+ * changed. Optimize For is the account's, on Settings → General (board docs/mocks/routing-mode-account).
  */
 export function SubagentSettings({
   enabled,
   onEnabledChange,
-  optimizeFor,
-  onOptimizeForChange,
   maxRunning,
   onMaxRunningChange,
 }: {
   enabled: boolean;
   onEnabledChange: (value: boolean) => void;
-  optimizeFor: OptimizeFor;
-  onOptimizeForChange: (value: OptimizeFor) => void;
   maxRunning: number;
   onMaxRunningChange: (value: number) => void;
 }) {
@@ -49,21 +42,6 @@ export function SubagentSettings({
           <div className="rd-set-desc">Let this agent hand work to other providers in the same folder</div>
         </div>
         <Switch checked={enabled} onCheckedChange={onEnabledChange} aria-label="SubAgents" />
-      </div>
-      <div className="subagents-row">
-        <div className="rd-set-main">
-          <div className="rd-set-label">Optimize For</div>
-        </div>
-        <Segmented<OptimizeFor>
-          aria-label="Optimize For"
-          value={optimizeFor}
-          onValueChange={onOptimizeForChange}
-          options={[
-            { value: 'cost', label: 'Cost' },
-            { value: 'balance', label: 'Balance' },
-            { value: 'intelligence', label: 'Intelligence' },
-          ]}
-        />
       </div>
       <div className="subagents-row">
         <div className="rd-set-main">

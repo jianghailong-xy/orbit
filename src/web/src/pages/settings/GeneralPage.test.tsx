@@ -40,6 +40,7 @@ describe('Settings → General (docs/mocks/settings-redesign, board-2)', () => {
     expect(rows).toEqual([
       'Default permission mode',
       'Smart model selection',
+      'Optimize For',
       'Suggested replies',
       'Prompt optimizer',
       'Session recaps',
