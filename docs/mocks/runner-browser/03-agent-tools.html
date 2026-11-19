@@ -1,0 +1,216 @@
+<!-- DESIGN MOCK (2026-11-19). Orbit Cloud browser for agents: a sign-in request card, browser status/open/clear
+     tools in orbit mcp and the CLI. Annotations in Chinese, UI copy in English, demo data. Render: see README.md -->
+<!doctype html><html lang="zh"><meta charset="utf-8">
+<title>Orbit Cloud 浏览器：给 agent 的工具（请你登录、状态、打开、清除）</title>
+<style>
+  :root { --brand:#3E69F6; --brand-bg:#EAF0FF; --t1:#111114; --t2:#8a8a90; --sep:#e4e4e8; --amber:#b86e00; --amber-bg:#FDF2E6; --green:#23a15a; }
+  * { box-sizing:border-box; }
+  body { margin:0; padding:36px 40px 48px; width:1540px; background:#ececef; color:var(--t1);
+         font:14px/1.5 -apple-system,"Inter","Noto Sans SC",sans-serif; -webkit-font-smoothing:antialiased; }
+  h1 { font-size:25px; margin:0 0 6px; } .lede { color:#55555e; margin:0 0 24px; max-width:1440px; }
+  .part { margin-bottom:34px; }
+  .fh { font-weight:700; font-size:15px; margin:0 0 8px; display:flex; gap:8px; align-items:center; }
+  .fh small { font-weight:400; color:#6b6b75; font-size:12.5px; }
+  .tag { font:600 11.5px/1 sans-serif; padding:4px 7px; border-radius:5px; background:#dcf3e5; color:#17683b; }
+  .tag.grey { background:#e6e6ea; color:#55555e; } .tag.red { background:#fde8e6; color:#b3261e; }
+  .note { font-size:12.5px; color:#55555e; margin:8px 2px 0; line-height:1.7; max-width:1460px; } .note b { color:var(--t1); }
+  code { font:12px "JetBrains Mono","DejaVu Sans Mono",monospace; }
+  .sheet { background:#fff; border-radius:12px; padding:18px 22px; }
+  .sheet h2 { font-size:16px; margin:0 0 10px; }
+  table { border-collapse:collapse; width:100%; font-size:12.5px; } td, th { border-top:1px solid #eee; padding:6px 8px; text-align:left; vertical-align:top; }
+  th { color:#6b6b75; font-weight:600; background:#fafafb; }
+  .two { display:grid; grid-template-columns:1fr 1fr; gap:28px; }
+  .q { background:#fff7e6; border:1px solid #f1d9a8; border-radius:10px; padding:12px 16px; margin-top:20px; font-size:13px; line-height:1.7; }
+  .q b { color:#7a4a00; }
+  .cv-x { position:relative; } .cv-x::after { content:attr(data-n); position:absolute; top:-9px; right:-9px; width:19px; height:19px; border-radius:50%;
+       background:#d93838; color:#fff; font:700 11.5px/19px sans-serif; text-align:center; z-index:5; }
+
+  /* app window */
+  .cv-win { width:1460px; height:820px; background:#fff; border-radius:12px; box-shadow:0 1px 0 #d5d5da, 0 6px 24px rgba(0,0,0,.06); overflow:hidden; position:relative; font-size:13px; }
+  .cv-win.small { width:715px; height:470px; }
+  .cv-top { height:30px; background:#f3f3f5; border-bottom:1px solid var(--sep); display:flex; align-items:center; gap:6px; padding:0 12px; }
+  .cv-top i { width:10px; height:10px; border-radius:50%; background:#d9d9de; display:inline-block; }
+  .cv-app { position:absolute; inset:30px 0 0 0; display:flex; }
+  .cv-nav { width:220px; background:#f7f7f9; border-right:1px solid var(--sep); padding:14px 12px; color:#333; font-size:13px; flex:none; }
+  .cv-nav div { padding:5px 8px; border-radius:6px; } .cv-nav .on { background:#e7ecfb; color:#2546b8; font-weight:600; }
+  .cv-nav .h { color:#8a8a90; font-size:11.5px; margin-top:10px; }
+  .cv-page { flex:1; padding:20px 26px; color:#333; overflow:hidden; }
+  .cv-page h3 { margin:0 0 10px; font-size:15px; }
+  .cv-card { border:1px solid var(--sep); border-radius:10px; padding:10px 14px; margin-bottom:12px; }
+  .cv-card .r { padding:6px 0; border-top:1px solid #f0f0f2; } .cv-card .r:first-child { border-top:0; }
+  .cv-sub { color:#8a8a90; font-size:12px; }
+  .cv-redl { color:#d93025; }
+  .cv-scrim { position:absolute; inset:30px 0 0 0; background:rgba(20,20,28,.35); }
+
+  /* drawer + viewer */
+  .cv-drawer { position:absolute; top:30px; right:0; bottom:0; background:#fff; border-left:1px solid var(--sep); display:flex; flex-direction:column; }
+  .cv-hd { display:flex; align-items:center; gap:10px; padding:10px 14px; border-bottom:1px solid var(--sep); }
+  .cv-hd.ctl { background:var(--amber-bg); border-bottom-color:#f1d9a8; }
+  .cv-hd .tt { flex:1; font-weight:600; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+  .cv-hd.ctl .tt { color:#c0661a; }
+  .cv-hd .tt small { font-weight:400; color:#9a6a30; margin-left:6px; }
+  .cv-cl { color:#8a8a90; font-size:17px; line-height:1; }
+  .cv-btn { border-radius:8px; padding:5px 12px; font-weight:600; font-size:12.5px; background:#fff; color:var(--t1); border:1px solid #d6d6dc; white-space:nowrap; }
+  .cv-btn.pri { background:var(--brand); color:#fff; border-color:var(--brand); }
+  .cv-ico { width:28px; height:28px; border-radius:7px; border:1px solid #d6d6dc; display:grid; place-items:center; font-size:14px; color:#444; background:#fff; }
+  .cv-seg { display:inline-flex; border:1px solid #d6d6dc; border-radius:8px; overflow:hidden; font-size:12px; font-weight:600; }
+  .cv-seg span { padding:4px 10px; color:#55555e; background:#fff; } .cv-seg span.on { background:#eef0f4; color:var(--t1); }
+  .cv-stage { flex:1; padding:12px; background:#f6f7f9; display:flex; align-items:center; justify-content:center; min-height:0; }
+  .cv-stage.top { align-items:flex-start; }
+  .cv-ft { display:flex; align-items:center; gap:12px; padding:7px 14px; border-top:1px solid var(--sep); color:#6b6b75; font-size:12px; }
+  .cv-ft .r { margin-left:auto; display:flex; gap:12px; align-items:center; }
+  .cv-live { color:var(--green); font-weight:600; }
+
+  /* the remote Chrome (1280x800 drawn at a given width via --w) */
+  .cv-chrome { width:1280px; height:800px; zoom:var(--s); background:#fff; border:2px solid #cfd3da; position:relative; overflow:hidden; flex:none; font-size:15px; }
+  .cv-chrome.ctl { border:calc(3px / var(--s)) solid #f0a020; }
+  .cv-info.cv-x::after { zoom:calc(1 / var(--s)); top:4px; right:auto; left:8px; }
+  .cv-chrome.cv-x::after { zoom:calc(1 / var(--s)); top:6px; right:6px; }
+  .cv-tabs { height:3.2em; background:#dfe3ea; display:flex; align-items:flex-end; padding:0 .8em; gap:.4em; }
+  .cv-tab { background:#fff; border-radius:.6em .6em 0 0; padding:.5em 1em; font-size:.85em; width:16em; }
+  .cv-omni { height:3em; display:flex; align-items:center; gap:.8em; padding:0 1em; border-bottom:1px solid #e3e6eb; color:#5f6368; }
+  .cv-omni .u { flex:1; background:#f1f3f4; border-radius:1.5em; padding:.35em 1em; color:#202124; font-size:.9em; }
+  .cv-info { height:2.6em; display:flex; align-items:center; justify-content:center; background:#fff; border-bottom:1px solid #e3e6eb; color:#3c4043; font-size:.82em; }
+  .cv-g { text-align:center; padding-top:4.2em; position:relative; }
+  .cv-g .logo { font:700 4.6em/1 "Inter",sans-serif; letter-spacing:-.02em; }
+  .cv-g .logo b:nth-child(1){color:#4285f4} .cv-g .logo b:nth-child(2){color:#ea4335} .cv-g .logo b:nth-child(3){color:#fbbc05}
+  .cv-g .logo b:nth-child(4){color:#4285f4} .cv-g .logo b:nth-child(5){color:#34a853} .cv-g .logo b:nth-child(6){color:#ea4335}
+  .cv-g .box { width:36em; height:3em; border:1px solid #dfe1e5; border-radius:1.5em; margin:1.6em auto 1.2em; box-shadow:0 1px 4px rgba(0,0,0,.08); }
+  .cv-g .bt span { display:inline-block; background:#f8f9fa; border-radius:.3em; padding:.6em 1.1em; margin:0 .3em; font-size:.85em; color:#3c4043; }
+  .cv-g .sg { position:absolute; right:1.2em; top:1em; background:#1a73e8; color:#fff; border-radius:1.2em; padding:.4em 1.1em; font-size:.85em; }
+  .cv-cur { position:absolute; width:0; height:0; border-left:.5em solid transparent; border-right:.5em solid transparent; border-bottom:1em solid #111; transform:rotate(-30deg); }
+
+  .cv-cap { font-size:12.5px; color:#55555e; margin:8px 2px 0; }
+  /* the owner's own browser window around the Orbit tab */
+  .lb-tabs { height:38px; background:#e3e6ec; display:flex; align-items:flex-end; gap:4px; padding:0 10px 0 84px; position:relative; }
+  .lb-tabs::before { content:'● ● ●'; position:absolute; left:14px; top:11px; color:#c9ccd3; font-size:11px; letter-spacing:2px; }
+  .lb-tab { height:30px; border-radius:9px 9px 0 0; padding:7px 14px; font-size:12px; color:#55555e; width:230px; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+  .lb-tab.on { background:#fff; color:var(--t1); font-weight:500; }
+  .lb-url { height:38px; display:flex; align-items:center; gap:10px; padding:0 12px; border-bottom:1px solid var(--sep); color:#6b6b75; font-size:12px; }
+  .lb-url .u { flex:1; background:#f1f3f4; border-radius:16px; padding:5px 14px; color:#202124; }
+  .lb-page { position:absolute; left:0; right:0; bottom:0; display:flex; flex-direction:column; }
+  .cv-pair { display:grid; grid-template-columns:715px 715px; gap:30px; }
+  .cv-grey { color:#8a8a90; }
+
+  .at-flow { display:grid; grid-template-columns:1fr 1fr 1fr; gap:22px; }
+  .at-pane { background:#fff; border-radius:12px; box-shadow:0 1px 0 #d5d5da, 0 6px 24px rgba(0,0,0,.06); overflow:hidden; position:relative; }
+  .at-ph { padding:9px 14px; border-bottom:1px solid var(--sep); font-weight:600; font-size:13px; background:#f7f7f9; }
+  .at-body { padding:14px 16px; font-size:13px; line-height:1.55; }
+  .at-tool { border:1px solid var(--sep); border-radius:8px; padding:7px 10px; margin:8px 0; font-size:12px; background:#fafafb; }
+  .at-tool b { font-family:"JetBrains Mono",monospace; font-weight:600; }
+  .at-tool pre { margin:4px 0 0; font:11.5px/1.5 "JetBrains Mono",monospace; white-space:pre-wrap; color:#444; }
+  .at-say { margin:8px 0; }
+  .at-wait { color:var(--amber); font-weight:600; font-size:12px; }
+  .at-card { border:1px solid #e6d3b3; background:#fffaf2; border-radius:12px; padding:12px 14px; }
+  .at-card .k { font-size:11.5px; color:#9a6a30; font-weight:600; text-transform:uppercase; letter-spacing:.03em; }
+  .at-card h4 { margin:4px 0 6px; font-size:15px; }
+  .at-card .q { background:#fff; border:1px solid var(--sep); border-radius:8px; padding:8px 10px; margin:8px 0; font-size:12.5px; }
+  .at-card .warn { font-size:12px; color:#6b6b75; margin:6px 0 10px; }
+  .at-btns { display:flex; gap:8px; }
+  .at-ban { background:#EAF0FF; border-bottom:1px solid #c9d6fb; color:#1f3d9c; padding:8px 14px; display:flex; gap:10px; align-items:center; font-size:12.5px; }
+  .at-ban b { flex:1; font-weight:600; }
+  .at-mini { width:100%; aspect-ratio:1280/800; background:#fff; border:1px solid #cfd3da; position:relative; overflow:hidden; font-size:11px; }
+  .at-mini .bar { background:#dfe3ea; height:16px; } .at-mini .url { margin:4px 8px; background:#f1f3f4; border-radius:8px; padding:1px 8px; font-size:9.5px; }
+  .at-login { width:58%; margin:14px auto; border:1px solid #d0d7de; border-radius:6px; padding:10px; font-size:10px; }
+  .at-login .f { border:1px solid #d0d7de; border-radius:4px; height:16px; margin:4px 0 8px; }
+  .at-login .g { background:#1f883d; color:#fff; border-radius:4px; text-align:center; padding:3px; font-weight:600; }
+  .at-tbl td:first-child { white-space:nowrap; font-family:"JetBrains Mono",monospace; font-size:12px; }
+  .at-no { color:#b3261e; font-weight:600; } .at-yes { color:#17683b; font-weight:600; }
+</style>
+<h1>Orbit Cloud 浏览器：给 agent 的工具</h1>
+<p class="lede">agent 卡在登录页时，今天只能停下或乱猜。提案：agent 可以<b>请你登录</b>（一张卡，点开就是浏览器标签页、已在接管），也能查浏览器状态、帮你打开、在你确认后清除登录。都走 Orbit 现有的 <code>orbit mcp</code> 工具和 CLI；<b>不</b>开放从别的 runner 远程操作这个浏览器。界面文案英文，注释中文，演示数据。</p>
+
+<!-- =================================================================== PART 1 -->
+<section class="part" id="part-1">
+  <div class="fh">① 请你登录：agent → 卡 → 标签页 → agent 继续 <small>agent 在 Orbit Cloud runner 上，用的是共享浏览器</small></div>
+  <div class="at-flow">
+    <div class="at-pane">
+      <div class="at-ph">Session · Export the monthly report from GitHub</div>
+      <div class="at-body">
+        <div class="at-tool"><b>browser_navigate</b> github.com/acme/billing/settings<pre>Page Title: Sign in to GitHub</pre></div>
+        <div class="at-say">The repository's settings need a signed-in account, and the browser is not signed in to GitHub.</div>
+        <div class="at-tool cv-x" data-n="1"><b>browser_request_sign_in</b><pre>site: github.com
+reason: "Sign in to the account that owns acme/billing, so I can export the report."</pre></div>
+        <div class="at-wait cv-x" data-n="2">Waiting for you to sign in · github.com</div>
+      </div>
+    </div>
+    <div class="at-pane">
+      <div class="at-ph">Waiting on you</div>
+      <div class="at-body">
+        <div class="at-card">
+          <div class="k">Sign in needed · Orbit Cloud browser</div>
+          <h4>Sign in to github.com</h4>
+          <div class="q">“Sign in to the account that owns acme/billing, so I can export the report.”<div class="cv-sub" style="margin-top:4px">From session Export the monthly report from GitHub</div></div>
+          <div class="warn cv-x" data-n="3">You sign in yourself; Orbit never sees your password. The login stays on this runner, and every agent on it can use it.</div>
+          <div class="at-btns"><span class="cv-btn pri cv-x" data-n="4">Open browser</span><span class="cv-btn">Not now</span></div>
+        </div>
+      </div>
+    </div>
+    <div class="at-pane">
+      <div class="at-ban"><b>Sign in to github.com, asked by “Export the monthly report…”</b><span class="cv-btn pri cv-x" data-n="5">I’m signed in</span></div>
+      <div class="cv-hd ctl" style="padding:7px 12px"><span class="tt" style="font-size:12.5px">You are controlling the browser<small>· the agent keeps running</small></span><span class="cv-btn">Done</span></div>
+      <div style="padding:10px; background:#f6f7f9">
+        <div class="at-mini"><div class="bar"></div><div class="url">github.com/login</div>
+          <div class="at-login"><b>Sign in to GitHub</b><div style="margin-top:6px">Username or email</div><div class="f"></div><div>Password</div><div class="f"></div><div class="g">Sign in</div></div></div>
+      </div>
+      <div class="cv-ft"><span>Used by “Export the monthly report…”</span><span class="r"><span>Paste with ⌘V</span><span class="cv-live">Live</span></span></div>
+    </div>
+  </div>
+  <p class="note"><b>①</b> 新工具 <code>browser_request_sign_in</code>（Orbit 的 MCP，CLI 同名 <code>orbit browser request-sign-in</code>）：说清哪个站、为什么。只有 Orbit Cloud runner 上、开关打开时才有。<b>②</b> agent 的这一轮停在“等你”；浏览器租约暂时放开，免得你登录时它还在点（已定 Q1、Q2 = A）。
+    <b>③</b> 卡上直说：密码你自己输、Orbit 看不到；登录留在这台 runner，所有 agent 都能用（P2 = B）。<b>④</b> Open browser = 打开浏览器标签页（方案 C），已在接管，页面就停在 agent 遇到的登录页。Not now = 告诉 agent 你现在不登，它自己决定下一步。
+    <b>⑤</b> 标签页顶上一条请求横幅；<b>I’m signed in</b> 把结果交回 agent，它接着做。只按 Done 不算回答，卡还在。</p>
+</section>
+
+<!-- =================================================================== PART 2 -->
+<section class="part" id="part-2">
+  <div class="two">
+    <div class="sheet">
+      <h2>② 工具面（orbit mcp 与 CLI 同一套）</h2>
+      <table class="at-tbl">
+        <tr><th>工具 / 命令</th><th>做什么</th><th>谁能用</th><th>要不要你确认</th></tr>
+        <tr><td>browser_status<br>orbit browser status</td><td>开关、是否在跑、哪个会话占着、几个人在看、有没有保存的登录（只说有没有，不列站点）</td><td>本账户的任何会话</td><td>不用（只读）</td></tr>
+        <tr><td>browser_open<br>orbit browser open [--url]</td><td>启动浏览器（没在跑就启动），返回标签页地址；给 url 时先打开那一页。CLI 在本机直接打开</td><td>本账户的任何会话</td><td>不用</td></tr>
+        <tr><td>browser_request_sign_in<br>orbit browser request-sign-in</td><td>①：发卡请你登录，等结果（I’m signed in / Not now）</td><td>Orbit Cloud runner 上的会话</td><td>就是那张卡</td></tr>
+        <tr><td>browser_clear_logins<br>orbit browser clear-logins</td><td>停浏览器、删掉保存的登录</td><td>本账户的任何会话</td><td><b>要</b>：确认卡，和 Settings 的 Clear saved logins 一样</td></tr>
+      </table>
+      <p class="note">开关关着：四个工具都不出现（不是报错），和“关 = 不存在”一致。只有 runner 主人的会话能用（P4 = A）。</p>
+    </div>
+    <div class="sheet">
+      <h2>不做的</h2>
+      <table>
+        <tr><td class="at-no">✕</td><td><b>从别的 runner 操作这个浏览器</b>（DevTools 或点击走链路）。保存的登录会变成全账户任何 runner、任何 agent 都能用，超出 P2 定的“这台 runner 上的 agent”。要用登录态的活，放到 Orbit Cloud runner 上跑。</td></tr>
+        <tr><td class="at-no">✕</td><td><b>CLI 里看画面</b>（终端 VNC）：标签页够了。</td></tr>
+        <tr><td class="at-no">✕</td><td><b>列出保存了哪些站点</b>：cookie 名单本身就是隐私，status 只说有没有。</td></tr>
+        <tr><td class="at-no">✕</td><td><b>租约排队</b>：status 够 agent 自己等、重试；排队以后再说。</td></tr>
+      </table>
+    </div>
+  </div>
+</section>
+
+<!-- =================================================================== PART 3 -->
+<section class="part" id="part-3">
+  <div class="two">
+    <div class="sheet">
+      <h2>已定（owner 2026-11-19）：Q1–Q4 全部 A</h2>
+      <table>
+        <tr><th>#</th><th>问题</th><th>A（已定）</th><th>B</th></tr>
+        <tr><td>Q1</td><td>agent 等你登录时</td><td><b>这一轮停住等</b>（像现在的问题卡），你回答后它接着做</td><td>立刻返回，agent 自己轮询 status</td></tr>
+        <tr><td>Q2</td><td>等的时候浏览器租约</td><td><b>放开</b>，你登录时它不会同时点；回答后它重新拿</td><td>留着，别的会话也用不了</td></tr>
+        <tr><td>Q3</td><td>browser_status / open 给谁</td><td><b>本账户任何会话</b>（只读、只开给你看，不碰登录）</td><td>只给 Orbit Cloud runner 上的会话</td></tr>
+        <tr><td>Q4</td><td>卡出现在哪</td><td><b>和其他“等你”的卡一样</b>：网页、手机通知、Mac</td><td>只在网页</td></tr>
+      </table>
+      <div class="q"><b>已定：都选 A。</b>Q1：卡住等最不容易出错，和现有的问题卡一个模式。Q2：你在里面登录时 agent 还在点会互相打架。Q3：状态和打开不碰登录态，限制没意义。Q4：要你登录就是要你知道。</div>
+    </div>
+    <div class="sheet">
+      <h2>落地（按代价排）</h2>
+      <table>
+        <tr><td>1</td><td><code>browser_status</code> / <code>browser_open</code>：apiserver 已有 <code>GET /api/runners/:id/browser</code>，加 MCP 工具和 CLI 子命令；open 返回方案 C 的标签页地址</td></tr>
+        <tr><td>2</td><td><code>browser_clear_logins</code>：走现有 <code>POST …/browser/clear</code>，前面加确认卡</td></tr>
+        <tr><td>3</td><td><code>browser_request_sign_in</code>：复用“等你”卡（request_owner_action 那一套）+ 新卡型；标签页的请求横幅和 I’m signed in；等待时放开租约</td></tr>
+        <tr><td>4</td><td>测试：开关关着工具不出现；别的账户、非 Orbit Cloud runner 拒绝；清除必须过卡；实验室里走一遍 ①</td></tr>
+      </table>
+      <p class="note">依赖方案 C 的标签页（任务 3509U1cM 在做）：Open browser 要打开它。</p>
+    </div>
+  </div>
+</section>
+</html>
