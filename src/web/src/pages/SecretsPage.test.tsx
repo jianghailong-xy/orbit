@@ -188,7 +188,7 @@ describe('Settings → Secrets: On machines now', () => {
 
   it('reads a copy being removed, with no action', async () => {
     await render(<SecretsPage />);
-    expect(cells(row('g5'))[4]).toBe('RemovingRevoked · waiting for HPC to delete it');
+    expect(cells(row('g5'))[4]).toBe('RemovingRevokedWaiting for HPC to delete it');
     expect(cells(row('g5'))[5]).toBe('');
   });
 
@@ -225,7 +225,7 @@ describe('Settings → Secrets: On machines now', () => {
     await render(<SecretsPage />);
     await click(button(row('g1')!, 'Revoke'));
     expect(apiMock).toHaveBeenCalledWith('/account-secrets/grants/g1/revoke', { method: 'POST' });
-    await vi.waitFor(() => expect(cells(row('g1'))[4]).toBe('RemovingRevoked · waiting for HPC to delete it'));
+    await vi.waitFor(() => expect(cells(row('g1'))[4]).toBe('RemovingRevokedWaiting for HPC to delete it'));
     expect(toast.success).toHaveBeenCalledWith('Copy revoked', '“QA GHP2 password” on HPC.');
   });
 

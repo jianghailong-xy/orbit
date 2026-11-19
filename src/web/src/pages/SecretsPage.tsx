@@ -9,7 +9,7 @@ import { Dialog } from '../components/ui/Dialog';
 import { Input } from '../components/ui/Input';
 import { PasswordInput } from '../components/ui/PasswordInput';
 import { Spinner } from '../components/ui/Spinner';
-import { TableScroll } from '../components/ui/Table';
+import { TableFrame } from '../components/ui/Table';
 import {
   END_REASON,
   GRANT_CHIP,
@@ -193,7 +193,7 @@ export function SecretsPage(): JSX.Element {
 
 function Table({ head, empty, children }: { head: string[]; empty: string | null; children: ReactNode }) {
   return (
-    <TableScroll>
+    <TableFrame>
       <table className="orbit-table secrets-table">
         <thead>
           <tr>
@@ -216,7 +216,7 @@ function Table({ head, empty, children }: { head: string[]; empty: string | null
           )}
         </tbody>
       </table>
-    </TableScroll>
+    </TableFrame>
   );
 }
 
@@ -251,7 +251,7 @@ function GrantRow({ grant, now, ending, onEnd }: { grant: SecretGrant; now: numb
       : view === 'WAITING'
         ? deliveryLines(grant, now).map((text) => ({ text, tone: 'warn' as const }))
         : view === 'REMOVING'
-          ? [{ text: grant.endReason ? `${END_REASON[grant.endReason]} · waiting for ${machineName(grant)} to delete it` : `Waiting for ${machineName(grant)} to delete it` }]
+          ? [...(grant.endReason ? [{ text: END_REASON[grant.endReason] }] : []), { text: `Waiting for ${machineName(grant)} to delete it` }]
           : view === 'UNCONFIRMED'
             ? [{ text: `Runner deleted ${shortWhen(grant.removedAt ?? grant.createdAt, now)}`, tone: 'bad' }]
             : [{ text: `${grant.endReason ? END_REASON[grant.endReason] : 'Removed'} · ${shortWhen(grant.removedAt ?? grant.createdAt, now)}` }];
