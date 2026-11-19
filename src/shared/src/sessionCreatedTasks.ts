@@ -44,9 +44,9 @@ export interface SessionCreatedTasks<Instant = string> {
   /** Rows whose status is DONE. */
   done: number;
   /**
-   * The first `limit` rows: Failed, Running, Queued, the rest of the unfinished (Open, In
-   * progress), Done, Cancelled, and newest first within each. A row sorts under the pill it shows,
-   * so a running or queued task is under Running or Queued whatever its status says.
+   * The first `limit` rows, as the Agents list orders its runs: the running ones first (a row
+   * whose pill says Running, whatever its status says), then every other row newest first,
+   * whatever its status.
    */
   items: SessionCreatedTaskRow<Instant>[];
   /** The projects `items` belong to, each once, in the order `items` first names them. */
