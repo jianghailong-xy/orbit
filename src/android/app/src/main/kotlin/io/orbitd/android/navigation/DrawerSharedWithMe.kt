@@ -5,7 +5,6 @@ import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.NavigationDrawerItem
 import androidx.compose.material3.Text
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
@@ -56,19 +55,17 @@ internal fun DrawerSharedWithMe(sessions: List<GuestSessionSummary>, openId: Str
     if (!SharedWithMe.showsGroup(sessions)) return
     DrawerGroupLabel(GuestCopy.SHARED_WITH_ME, sessions.size)
     sessions.forEach { session ->
-        NavigationDrawerItem(
-            label = {
-                Column {
-                    Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp), verticalAlignment = Alignment.CenterVertically) {
-                        Text(SharedWithMe.title(session), Modifier.weight(1f), maxLines = 1, overflow = TextOverflow.Ellipsis)
-                        Text(SharedWithMe.ago(session), style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
-                    }
-                    Text(SharedWithMe.subtitle(session), style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant,
-                        maxLines = 1, overflow = TextOverflow.Ellipsis)
+        DrawerRow(ObjectId.same(session.id, openId),
+            { select(guestDestination(session.id), OrbitRoute(Destination.GUEST_SESSION, session.id, origin = Origin.DRAWER)) },
+            Modifier.testTag("shared-with-me:${session.id}")) {
+            Column {
+                Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp), verticalAlignment = Alignment.CenterVertically) {
+                    Text(SharedWithMe.title(session), Modifier.weight(1f), maxLines = 1, overflow = TextOverflow.Ellipsis)
+                    Text(SharedWithMe.ago(session), style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
                 }
-            },
-            selected = ObjectId.same(session.id, openId),
-            onClick = { select(guestDestination(session.id), OrbitRoute(Destination.GUEST_SESSION, session.id, origin = Origin.DRAWER)) },
-            modifier = Modifier.testTag("shared-with-me:${session.id}"))
+                Text(SharedWithMe.subtitle(session), style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    maxLines = 1, overflow = TextOverflow.Ellipsis)
+            }
+        }
     }
 }

@@ -28,6 +28,16 @@ export function runnerOfflineLastSeen(when: string): string {
   return `Offline · last seen ${when}`;
 }
 
+/** The country a machine's IP is in, first in the line under a machine page's title: `📍 Japan`. */
+export function runnerLocation(place: string): string {
+  return `📍 ${place}`;
+}
+
+/** The same, when the check went through a proxy: the country is the proxy's, not the machine's. */
+export function runnerLocationViaProxy(place: string): string {
+  return `📍 ${place} (via proxy)`;
+}
+
 export function runnerVersionTag(version: string): string {
   return `v${version}`;
 }

@@ -4772,6 +4772,14 @@ model ProjectStandardSetConfirmation {
   /// that only confirmed. The "Project started" card is drawn from it, so the card shows the start
   /// as it happened rather than whatever the settings say by the time somebody reads it.
   startedWith Json? @map("started_with")
+  /// The words each criterion had when this was written (migration 1200): `definitionId`,
+  /// `ordinal`, `text`, `verificationMethod`, one object per criterion. Null on an older row; the
+  /// receipt then shows today's words only where the content hash still matches.
+  criteriaWording Json? @map("criteria_wording")
+  /// What the confirmed set changed since the confirmation before it (`@orbit/shared`
+  /// `CriteriaChangesSinceConfirmed`), as the card that asked showed it. Null when there was none
+  /// before it, and on a row older than 1200.
+  criteriaChanges Json? @map("criteria_changes")
 
   @@index([projectId, confirmedAt(sort: Desc)], map: "project_standard_set_confirmation_recent_idx")
   @@map("project_standard_set_confirmation")

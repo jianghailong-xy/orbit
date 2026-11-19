@@ -682,7 +682,7 @@ private fun RunnerHead(runner: JsonObject, now: Long, managed: ManagedRunner.Row
                     if (line.startsWith(word)) addStyle(SpanStyle(color = wordColor, fontWeight = FontWeight.Medium), 0, word.length)
                 }, style = MaterialTheme.typography.bodySmall, color = Ink.muted)
             }
-            RunnerPage.hostLine(runner, managed = managed != null || RunnerPage.isManaged(runner)).takeIf { it.isNotEmpty() }?.let { Text(it, style = MaterialTheme.typography.bodySmall, color = Ink.muted) }
+            RunnerPage.headLine(runner, managed = managed != null || RunnerPage.isManaged(runner)).takeIf { it.isNotEmpty() }?.let { Text(it, style = MaterialTheme.typography.bodySmall, color = Ink.muted) }
         }
     }
 }

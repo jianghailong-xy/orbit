@@ -7,7 +7,9 @@ import {
 } from '@orbit/shared';
 import {
   ACCEPTANCE_FINDING_ROUTING,
+  confirmedCriteriaReadings,
   criteriaFromDefinitions,
+  criteriaWordingOf,
   criteriaSemanticRevision,
   criterionKeyOf,
 } from './project-acceptance';
@@ -140,4 +142,34 @@ test('the judging half of the criteria module is gone', () => {
   ]) {
     assert.equal(source.includes(gone), false, `${gone} survives in project-acceptance.ts`);
   }
+});
+
+// The receipt of a confirmation reads what each confirmed criterion SAID (1200). Kept words win;
+// a record older than keeping them shows today's words only where the content hash still matches,
+// because a matching hash is the same words, and nothing where it does not.
+test('a recorded confirmation reads as the words it confirmed, and says what moved since', () => {
+  const id = (n: number) => `0190a1b2-c3d4-7e5f-8a9b-00000000000${n}`;
+  const stated = (rows: Array<[number, number, string, string]>) => rows.map(([n, ordinal, text, hash]) => ({
+    ordinal, key: criterionKeyOf(id(n)), text, definitionId: id(n), definitionRevision: 1,
+    verificationMethod: 'HUMAN', completionCriterionOverrideReason: null, contentHash: hash,
+  }));
+  const then = stated([[1, 1, 'one', 'h1'], [2, 2, 'two', 'h2'], [3, 3, 'three', 'h3']]);
+  const material = then.map((c) => ({ definitionId: c.definitionId, revision: 1, contentHash: c.contentHash }));
+  // Since then: two reworded, three gone, and one moved to the end of a reordered list.
+  const now = stated([[2, 1, 'two, reworded', 'h2b'], [1, 2, 'one', 'h1']]);
+
+  const kept = confirmedCriteriaReadings(material, criteriaWordingOf(then), now);
+  assert.deepEqual(kept.map((r) => [r.ordinal, r.text, r.since]), [
+    [1, 'one', 'UNCHANGED'],
+    [2, 'two', 'EDITED'],
+    [3, 'three', 'REMOVED'],
+  ], 'the kept words and their order, whatever happened since');
+  assert.equal(kept[0]!.key, criterionKeyOf(id(1)));
+
+  const older = confirmedCriteriaReadings(material, null, now);
+  assert.deepEqual(older.map((r) => [r.ordinal, r.text, r.since]), [
+    [1, null, 'EDITED'],
+    [2, 'one', 'UNCHANGED'],
+    [null, null, 'REMOVED'],
+  ], 'without kept words: today\'s words where the hash matches, none where it moved');
 });

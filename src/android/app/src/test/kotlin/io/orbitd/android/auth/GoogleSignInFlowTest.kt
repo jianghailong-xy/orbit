@@ -16,6 +16,7 @@ import androidx.compose.ui.test.hasText
 import androidx.compose.ui.test.junit4.createAndroidComposeRule
 import androidx.compose.ui.test.onAllNodesWithText
 import androidx.compose.ui.test.onNodeWithContentDescription
+import androidx.compose.ui.test.onNodeWithTag
 import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.performClick
 import androidx.compose.ui.test.performCustomAccessibilityActionWithLabel
@@ -178,7 +179,7 @@ class GoogleSignInFlowTest {
         compose.waitUntil(60_000) { session().state.value is AuthState.SignedIn }
         // Signed in, the app opens on its directory; the account's email is shown on Settings › Profile.
         compose.onNodeWithContentDescription("Open navigation").performClick()
-        compose.onNodeWithText("Settings").performScrollTo().performClick()
+        compose.onNodeWithTag("drawer:settings").performClick()
         compose.waitUntil(60_000) { compose.onAllNodes(hasText("Profile") and hasClickAction()).fetchSemanticsNodes().isNotEmpty() }
         compose.onNode(hasText("Profile") and hasClickAction()).performScrollTo().performClick()
         compose.waitUntil(60_000) { compose.onAllNodesWithText("fixture@example.test").fetchSemanticsNodes().isNotEmpty() }
