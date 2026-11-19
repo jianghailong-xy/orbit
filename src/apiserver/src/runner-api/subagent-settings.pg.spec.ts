@@ -2,10 +2,10 @@
  * The SubAgents settings and the Providers page's Tier column (docs/subagent-design.md §4.2, §7), on a real
  * PostgreSQL:
  *
- *   1. Defaults: a new Agent has SubAgents on, Optimize For Cost and 4 running at once; a new account blocks
- *      no provider.
- *   2. The human doors write them: PATCH /workspaces/:id (subagentsEnabled, subagentsMaxRunning,
- *      modelRoutingOptimizeFor) and PATCH /users/me/preferences (subagentBlockedProviders).
+ *   1. Defaults: a new Agent has SubAgents on and 8 running at once; a new account blocks no provider, and its
+ *      Optimize For (account-wide since 2026-11-19) is Balance.
+ *   2. The human doors write them: PATCH /workspaces/:id (subagentsEnabled, subagentsMaxRunning) and
+ *      PATCH /users/me/preferences (subagentBlockedProviders, optimizeFor), which routing reads.
  *   3. The runner doors refuse the same fields: PATCH and POST /runner/workspaces answer 400
  *      HUMAN_ONLY_WORKSPACE_FIELD and nothing is written, and a runner's provider write carries no tier.
  *   4. A custom endpoint's model with no tier is listed `Not set` and skipped by routeSubagent with its reason;
@@ -24,6 +24,7 @@ import { type PrismaClient } from '@prisma/client';
 import { Client } from 'pg';
 
 import { sha256 } from '../common/crypto.util';
+import { optimizeForOf } from '../common/model-routing-switch';
 import { prismaClientFor } from '../prisma/prisma-client';
 import {
   assertCoordinatorPgUrlIsIsolated,
@@ -103,26 +104,35 @@ test('SubAgents settings: defaults, the human doors, the runner refusals and the
     name: `orbit-worker-${runnerId.slice(-8)}`, runnerId, workDir: '/work/repo',
   }));
 
-  await t.test('defaults: SubAgents on, Optimize For Cost, 4 at once, nothing blocked', async () => {
+  await t.test('defaults: SubAgents on, 8 at once, nothing blocked, Optimize For Balance', async () => {
     assert.equal(agent.subagentsEnabled, true);
-    assert.equal(agent.modelRoutingOptimizeFor, 'cost');
-    assert.equal(agent.subagentsMaxRunning, 4);
+    assert.equal(agent.subagentsMaxRunning, 8);
     const me = await users.me(user);
     assert.deepEqual(subagentBlockedProviders(me?.preferences), [], 'a new account blocks no provider');
+    assert.equal((me?.preferences as { optimizeFor?: string } | undefined)?.optimizeFor, undefined, 'nothing stored');
+    assert.equal(optimizeForOf(me ?? null), 'balance', 'absent is Balance');
   });
 
   await t.test('the human doors write every field', async () => {
     const saved = await workspaces.update(ownerId, agent.id, await asSent(UpdateWorkspaceDto, {
-      subagentsEnabled: false, subagentsMaxRunning: 2, modelRoutingOptimizeFor: 'intelligence',
+      subagentsEnabled: false, subagentsMaxRunning: 2,
     }));
     assert.equal(saved.subagentsEnabled, false);
     assert.equal(saved.subagentsMaxRunning, 2);
-    assert.equal(saved.modelRoutingOptimizeFor, 'intelligence');
     const stored = await prisma.workspace.findUniqueOrThrow({ where: { id: agent.id } });
-    assert.deepEqual(
-      [stored.subagentsEnabled, stored.subagentsMaxRunning, stored.modelRoutingOptimizeFor],
-      [false, 2, 'intelligence'],
-    );
+    assert.deepEqual([stored.subagentsEnabled, stored.subagentsMaxRunning], [false, 2]);
+
+    // Optimize For: the account's, one value for every Agent.
+    for (const optimizeFor of ['cost', 'intelligence', 'balance'] as const) {
+      const me = await users.updatePreferences(user, await asSent(UpdatePreferencesDto, { optimizeFor }));
+      assert.equal((me.preferences as { optimizeFor?: string }).optimizeFor, optimizeFor);
+      const route = await planSubagentRoute(prisma as never, {
+        ownerId, workspaceId: agent.id, runnerId, parent: { engine: 'claude', provider: 'claude', model: 'claude-opus-5-5', effort: 'high' },
+        dto: { toolUseId: `toolu_${randomUUID()}`, type: 'general', definitionSource: 'builtin', size: 'M' },
+      });
+      assert.equal(route.optimizeFor, optimizeFor, 'routing reads the account preference');
+    }
+    await assert.rejects(asSent(UpdatePreferencesDto, { optimizeFor: 'fast' }), BadRequestException, 'an unknown mode is refused');
     // Out of range is the global pipe's 400, before any write.
     for (const subagentsMaxRunning of [0, 17, 2.5]) {
       await assert.rejects(asSent(UpdateWorkspaceDto, { subagentsMaxRunning }), BadRequestException,
@@ -137,7 +147,7 @@ test('SubAgents settings: defaults, the human doors, the runner refusals and the
     assert.deepEqual(subagentBlockedProviders(cleared.preferences), [], '[] unblocks every provider');
 
     await workspaces.update(ownerId, agent.id, await asSent(UpdateWorkspaceDto, {
-      subagentsEnabled: true, subagentsMaxRunning: 4, modelRoutingOptimizeFor: 'cost',
+      subagentsEnabled: true, subagentsMaxRunning: 4,
     }));
   });
 

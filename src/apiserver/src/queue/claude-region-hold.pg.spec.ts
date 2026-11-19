@@ -521,7 +521,7 @@ test('the region check holds Anthropic-bound Claude sessions, refuses them at cr
   await t.test('(10) model routing rules Claude’s sign-in out on the blocked runner, as a signed-out one, and nowhere else', async () => {
     const ownerId = randomUUID();
     await db.user.create({
-      data: { id: ownerId, email: `routing-${ownerId}@region-hold.invalid`, name: 'The owner', passwordHash: 'x', preferences: { modelRouting: true } },
+      data: { id: ownerId, email: `routing-${ownerId}@region-hold.invalid`, name: 'The owner', passwordHash: 'x', preferences: { modelRouting: true, optimizeFor: 'cost' } },
     });
     const m = await machine('routing', { ownerId });
     await db.runner.update({

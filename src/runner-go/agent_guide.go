@@ -108,7 +108,7 @@ var guideTopics = []guideTopic{
 		Steps: []guideStep{
 			{Op: "task_list", Optional: true, Why: "When the work may already be recorded, or you are not sure which project it belongs to, read before you write (R4).",
 				Example: map[string]interface{}{"projectId": "<projectId>", "status": "OPEN"}},
-			{Op: "task_create", Why: "Write it. The call puts a confirmation card in front of the user and waits for their answer; nothing is written if they decline."},
+			{Op: "task_create", Why: "Write it. The call puts a confirmation card in front of the user and waits for their answer; nothing is written if they decline. A session's first 7 tasks are answered at once, with no one asked."},
 			{Op: "task_get", Optional: true, Why: "Read it back when the claim matters.", Example: map[string]interface{}{"taskId": "<taskId>"}},
 		},
 		Rules: []string{

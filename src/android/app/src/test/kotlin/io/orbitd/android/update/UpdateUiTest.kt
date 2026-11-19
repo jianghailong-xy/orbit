@@ -7,6 +7,7 @@ import androidx.compose.ui.test.assertIsDisplayed
 import androidx.compose.ui.test.junit4.createAndroidComposeRule
 import androidx.compose.ui.test.onAllNodesWithText
 import androidx.compose.ui.test.onNodeWithContentDescription
+import androidx.compose.ui.test.onNodeWithTag
 import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.performClick
 import androidx.compose.ui.test.performScrollTo
@@ -83,7 +84,7 @@ class UpdateUiTest {
         val app = compose.activity.application as OrbitApplication
         compose.waitUntil(60_000) { app.session.state.value is AuthState.SignedIn }
         compose.onNodeWithContentDescription("Open navigation").performClick()
-        compose.onNodeWithText("Settings").performScrollTo().performClick()
+        compose.onNodeWithTag("drawer:settings").performClick()
 
         // Settings → About: the installed version, the found update and a manual check.
         compose.onNodeWithText("About").performScrollTo().performClick()

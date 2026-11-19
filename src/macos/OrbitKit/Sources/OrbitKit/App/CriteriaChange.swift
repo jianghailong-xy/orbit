@@ -21,8 +21,8 @@ import Foundation
    -------------
    The project keeps running while this waits: the confirmation gates DONE and nothing else, and the
    card says so. The press confirms the version standing now at the confirmation door, which for a
-   started project only confirms; the receipt it leaves says "You confirmed", with what this press
-   confirmed — how many new, how many stricter — after the seal.
+   started project only confirms; the receipt it leaves says "You confirmed", with what the version
+   changed read off the record the door returned (`confirmation.changes`).
 
    The words are `lib/projectStart.ts`'s; `CriteriaChangeCardCopyParityTests` reads them back.
    ───────────────────────────────────────────────────────────────────────────────────────────── */
@@ -180,7 +180,8 @@ public enum CriteriaChanges {
         "Confirm \(count) \(count == 1 ? "criterion" : "criteria")"
     }
 
-    /// What a re-confirmation's receipt adds after the seal: what the new version changed, counted.
+    /// What a re-confirmation's receipt says after the count: what the new version changed,
+    /// counted ("1 new, 1 stricter").
     public static func summary(added: Int, stricter: Int, revised: Int, removed: Int) -> String {
         [
             added > 0 ? "\(added) new" : "",
@@ -190,7 +191,8 @@ public enum CriteriaChanges {
         ].filter { !$0.isEmpty }.joined(separator: ", ")
     }
 
-    /// How many of each change a press confirms: what its receipt says after the seal.
+    /// How many of each change a press confirms: the summary the review sheet's record of that
+    /// press carries.
     public static func counts(_ changes: CriteriaChangesSinceConfirmed) -> String {
         summary(added: changes.added.count, stricter: changes.stricter.count,
                 revised: changes.revised.count, removed: changes.removed.count)

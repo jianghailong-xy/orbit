@@ -666,7 +666,8 @@ func (w *linkWork) onFrame(conn *linkWorkConn, f *linkpb.Frame) {
 		w.m.events.onAck(conn, body.EventAck)
 	case *linkpb.Frame_Credit:
 		w.m.events.onCredit(conn, body.Credit)
-	case *linkpb.Frame_StreamOpen, *linkpb.Frame_StreamData, *linkpb.Frame_StreamCredit, *linkpb.Frame_StreamClose:
+	case *linkpb.Frame_StreamOpen, *linkpb.Frame_StreamData, *linkpb.Frame_StreamCredit, *linkpb.Frame_StreamClose,
+		*linkpb.Frame_StreamPaste:
 		w.streams.onFrame(conn, f)
 	}
 	// A body this binary does not know is ignored, as the protocol asks.

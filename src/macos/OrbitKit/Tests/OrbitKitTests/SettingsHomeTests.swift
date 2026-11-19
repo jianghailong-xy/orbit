@@ -65,16 +65,18 @@ final class SettingsHomeTests: XCTestCase {
 
     /// Sessions, the page Preferences' first row opens: the web's Session defaults and Session
     /// orchestration cards, a setting a row in the order the list had them, each with the web's hint
-    /// as its footer (docs/mocks/ios-settings-order, 2A).
-    func testTheSessionsPageHoldsTheFiveSettingsWithTheWebsHints() {
+    /// as its footer (docs/mocks/ios-settings-order, 2A). Optimize For sits directly under Smart
+    /// model selection (board docs/mocks/routing-mode-account, approved 2026-11-19).
+    func testTheSessionsPageHoldsTheSixSettingsWithTheWebsHints() {
         XCTAssertEqual(SessionSettings.Row.allCases,
-                       [.defaultPermission, .orchestration, .modelRouting, .promptSuggestions, .recaps])
+                       [.defaultPermission, .orchestration, .modelRouting, .optimizeFor, .promptSuggestions, .recaps])
         XCTAssertEqual(SessionSettings.Row.allCases.map(SessionSettings.title),
-                       ["Default permission", "Session orchestration", "Smart model selection", "Suggested replies",
-                        "Session recaps"])
+                       ["Default permission", "Session orchestration", "Smart model selection", "Optimize For",
+                        "Suggested replies", "Session recaps"])
         XCTAssertEqual(SessionSettings.footer(.defaultPermission), SettingsCopy.defaultPermissionHint)
         XCTAssertEqual(SessionSettings.footer(.orchestration), SettingsCopy.letSessionsOrchestrateHint)
         XCTAssertEqual(SessionSettings.footer(.modelRouting), SettingsCopy.smartModelSelectionHint)
+        XCTAssertEqual(SessionSettings.footer(.optimizeFor), SettingsCopy.optimizeForHint)
         XCTAssertEqual(SessionSettings.footer(.promptSuggestions), SettingsCopy.suggestedRepliesHint)
         XCTAssertEqual(SessionSettings.footer(.recaps), SettingsCopy.sessionRecapsHint)
         let footers = SessionSettings.Row.allCases.map(SessionSettings.footer)
@@ -87,7 +89,7 @@ final class SettingsHomeTests: XCTestCase {
     func testTheSessionsPagePutsTranslationAfterDefaultPermission() {
         XCTAssertEqual(SessionSettings.groups,
                        [.row(.defaultPermission), .translation, .row(.orchestration), .row(.modelRouting),
-                        .row(.promptSuggestions), .promptOptimizer, .row(.recaps)])
+                        .row(.optimizeFor), .row(.promptSuggestions), .promptOptimizer, .row(.recaps)])
     }
 
     // MARK: - What a row says

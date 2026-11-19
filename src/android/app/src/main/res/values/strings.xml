@@ -1,6 +1,6 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
-    <string name="app_name">Orbit Android</string>
+    <string name="app_name">Orbitd</string>
     <string name="signed_in">Signed in</string>
     <string name="sign_out">Sign out</string>
     <string name="switch_account_instance">Switch account or instance</string>

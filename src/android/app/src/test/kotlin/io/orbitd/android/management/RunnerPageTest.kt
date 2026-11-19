@@ -142,6 +142,19 @@ class RunnerPageTest {
         assertEquals("0.1.190 · Orbit updates this machine for you.", RunnerPage.versionValue(runner("orbit-managed", version = "0.1.190"), "0.1.197", managed = true))
         assertFalse(RunnerPage.hostLine(runner("orbit-managed"), managed = true).contains("managed-"))
 
+        // The head's line leads with the country its IP is in, once a check has decided one; the words are OrbitKit's.
+        fun located(viaProxy: Boolean) = buildJsonObject {
+            put("id", id); put("name", "orbit-managed"); put("version", "0.1.190")
+            put("region", buildJsonObject { put("verdict", "allowed"); put("country", "JP"); put("name", "Japan"); put("viaProxy", viaProxy); put("checkedAt", "2026-09-28T11:57:00Z") })
+        }
+        assertEquals("📍 Japan · v0.1.190", RunnerPage.headLine(located(false), managed = true))
+        assertEquals("📍 Japan (via proxy) · v0.1.190", RunnerPage.headLine(located(true), managed = true))
+        assertEquals("v0.1.190", RunnerPage.headLine(runner("orbit-managed", version = "0.1.190"), managed = true))
+        val root = generateSequence(File(System.getProperty("user.dir"))) { it.parentFile }.first { File(it, "src/macos/OrbitKit/Sources/OrbitKit").isDirectory }
+        val swift = File(root, "src/macos/OrbitKit/Sources/OrbitKit/App/RunnerPageCopy.swift").readText()
+        assertTrue(swift.contains("static func runnerLocation(place: String) -> String { \"${RunnerCopy.location("\\(place)")}\" }"))
+        assertTrue(swift.contains("static func runnerLocationViaProxy(place: String) -> String { \"${RunnerCopy.locationViaProxy("\\(place)")}\" }"))
+
         // ORBIT_NO_SELFUPDATE and behind: no card on the managed runner, the card unchanged on a self-hosted one.
         val behind = case("selfUpdate disabledByEnv and behind")
         assertEquals(listOf("Updates are turned off"), items(behind).map { it.title })

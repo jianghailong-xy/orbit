@@ -153,6 +153,8 @@ export const CHECK_ONLY_CLAUDE_DENIED_ORBIT_TOOLS: readonly string[] = [
   'mcp__orbit__wiki_propose', 'mcp__orbit__withdraw_owner_request',
   // Served by `orbit mcp` beside the catalogue (runner-go subagent.go): it starts a SubAgent, work outside this check.
   'mcp__orbit__delegate',
+  // Served beside it (runner-go subagent_workflow.go): it starts SubAgents from a script, work outside this check.
+  'mcp__orbit__workflow',
 ];
 
 /**

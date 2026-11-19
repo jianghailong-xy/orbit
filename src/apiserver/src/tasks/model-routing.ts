@@ -58,6 +58,10 @@ export interface ModelRoutingEngineState {
   /** No quota reading for that account: `quota` null then says nothing about its headroom. Only the SubAgent
    *  router reads it (routeSubagent ranks such an account after those whose headroom is known). */
   quotaUnread?: boolean;
+  /** When what that account has left goes to waste (quotaExpiresAt, ms); null when no reset is known. And whether a
+   *  window is nearly spent (quotaNearLimit). Only the SubAgent router reads them: soonest expiry first. */
+  expiresAt?: number | null;
+  nearLimit?: boolean;
 }
 
 export interface ModelRoutingSelection {
@@ -418,7 +422,7 @@ export function routeTaskRun(input: ModelRoutingInput): ModelRoutingDecision {
 // ─────────────────────────── SubAgent routing (docs/subagent-design.md §4.1, §4.2) ───────────────────────────
 
 /** What a recorded SubAgent decision was made under: bump when a rule below changes what it picks. */
-export const SUBAGENT_ROUTING_POLICY_VERSION = 'p4-every-provider-1';
+export const SUBAGENT_ROUTING_POLICY_VERSION = 'p5-expiry-first-1';
 
 /** Which row of §4.1 set the tier — or, for the first two, the model. */
 export type SubagentTierSource = 'named-model' | 'definition-model' | 'size' | 'definition-size' | 'type-default';
@@ -427,7 +431,7 @@ export type SubagentTierSource = 'named-model' | 'definition-model' | 'size' | '
 export interface SubagentModelRow {
   model: string;
   effort: string | null;
-  /** Null: the model has no tier, so routing never picks it. */
+  /** Null: the model has no tier; an engine with no tiers at all routes its default model, after every tiered one. */
   level: ModelRoutingLevel | null;
   /** USD per million output tokens, for a metered key; null when nobody knows it. */
   outputPricePerMTok?: number | null;
@@ -455,6 +459,9 @@ export interface SubagentPoolMember {
   refused?: boolean;
   /** Its quota could not be read: nothing was reported, or the endpoint will not report on it. */
   unreadable?: boolean;
+  /** When its quota goes to waste (ms), null when unknown; and whether a window is nearly spent. */
+  expiresAt?: number | null;
+  nearLimit?: boolean;
 }
 
 /** One provider the owner has, in the owner's order (provider_list). */
@@ -468,7 +475,10 @@ export interface SubagentProvider {
   /** The credential it spends, as far as the Claude region check asks (credentialIsAnthropicBound, contract §8). */
   credential: AnthropicBoundCredential;
   /** A subscription's account on the parent's runner: its fullest window, and whether it is paused. */
-  account?: { quota?: ModelRoutingEngineState['quota']; paused?: boolean; refused?: boolean; unreadable?: boolean } | null;
+  account?: {
+    quota?: ModelRoutingEngineState['quota']; paused?: boolean; refused?: boolean; unreadable?: boolean;
+    expiresAt?: number | null; nearLimit?: boolean;
+  } | null;
   /** An account pool: a subscription on its members' own credentials, whose headroom is its best member's. */
   pool?: { members: readonly SubagentPoolMember[] };
 }
@@ -525,7 +535,7 @@ export interface SubagentRoutingDecision {
   effort: string | null;
   reasons: string[];
   candidates: SubagentRemovedCandidate[];
-  /** The rest of the tier's pool after the pick, in the order it was ranked: where a SubAgent whose account
+  /** The rest of the pool after the pick, every tier, in the order it was ranked: where a SubAgent whose account
    *  hit its limit moves next (§4.3). Empty when the model was named rather than routed. */
   fallbacks: SubagentFallback[];
   /** SUBAGENT_ROUTING_POLICY_VERSION. */
@@ -544,6 +554,8 @@ export interface SubagentFallback {
   effort: string | null;
   /** Its billing and headroom in a few words, as the Why line says it once it runs there. */
   note?: string;
+  /** Its own tier, null for an untiered default model: what says so when it runs instead of the asked tier. */
+  level?: ModelRoutingLevel | null;
 }
 
 const levelIndex = (level: ModelRoutingLevel): number => MODEL_ROUTING_LEVELS.indexOf(level);
@@ -615,6 +627,9 @@ interface SubagentCandidate extends SubagentModelRow {
   quota?: ModelRoutingEngineState['quota'];
   /** A subscription whose quota was not read: ranked after those whose headroom is known. */
   quotaUnknown: boolean;
+  /** A subscription's: when what it has left goes to waste (null: no reset known), and whether it is nearly spent. */
+  expiresAt: number | null;
+  nearLimit: boolean;
   poolMember?: string;
   /** How it fits the asked tier (§4.2): the tier itself, a higher one, an untiered default model, a lower one. */
   fit: SubagentFit;
@@ -633,6 +648,19 @@ const headroom = (c: SubagentCandidate): number =>
 const marginalPrice = (c: SubagentCandidate): number =>
   c.provider.billing === 'subscription' ? 0 : c.outputPricePerMTok ?? Infinity;
 
+/**
+ * Quota that goes to waste first is spent first (owner, 2026-11-19), as account selection does (rankAccounts in
+ * planUsage.ts): one nearly spent last, then the soonest expiry. A key, and a subscription with no reset known,
+ * expire never.
+ */
+function expiryOrder(a: SubagentCandidate, b: SubagentCandidate): number {
+  const near = Number(a.nearLimit) - Number(b.nearLimit);
+  if (near) return near;
+  const x = a.expiresAt ?? Infinity;
+  const y = b.expiresAt ?? Infinity;
+  return x === y ? 0 : x < y ? -1 : 1;
+}
+
 function compareCandidates(mode: ModelRoutingOptimizeFor, a: SubagentCandidate, b: SubagentCandidate): number {
   const fit = SUBAGENT_FITS.indexOf(a.fit) - SUBAGENT_FITS.indexOf(b.fit) || a.distance - b.distance;
   if (fit) return fit;
@@ -641,11 +669,14 @@ function compareCandidates(mode: ModelRoutingOptimizeFor, a: SubagentCandidate, 
   if (mode === 'cost') {
     const subscription = (c: SubagentCandidate) => (c.provider.billing === 'subscription' ? 0 : 1);
     order = subscription(a) - subscription(b)
-      || (subscription(a) === 0 ? unknown(a) - unknown(b) || headroom(b) - headroom(a) : marginalPrice(a) - marginalPrice(b));
+      || (subscription(a) === 0
+        ? unknown(a) - unknown(b) || expiryOrder(a, b) || headroom(b) - headroom(a)
+        : marginalPrice(a) - marginalPrice(b));
   } else if (mode === 'balance') {
-    order = unknown(a) - unknown(b) || headroom(b) - headroom(a) || marginalPrice(a) - marginalPrice(b);
+    order = unknown(a) - unknown(b) || expiryOrder(a, b) || headroom(b) - headroom(a) || marginalPrice(a) - marginalPrice(b);
   } else {
-    order = levelIndex(b.ceiling) - levelIndex(a.ceiling) || unknown(a) - unknown(b) || marginalPrice(a) - marginalPrice(b);
+    order = levelIndex(b.ceiling) - levelIndex(a.ceiling) || unknown(a) - unknown(b) || expiryOrder(a, b)
+      || marginalPrice(a) - marginalPrice(b);
   }
   // NaN only from Infinity - Infinity: two keys nobody knows the price of, which tie.
   return (Number.isNaN(order) ? 0 : order) || a.providerIndex - b.providerIndex || a.engineIndex - b.engineIndex;
@@ -662,26 +693,34 @@ function pickLine(mode: ModelRoutingOptimizeFor, c: SubagentCandidate): string {
   // The provider once, and the engine only when it is another name.
   const what = `${c.model}${c.effort ? ` · ${c.effort}` : ''} on ${c.provider.slug}${c.engine === c.provider.slug ? '' : ` (${c.engine})`}`;
   const price = c.outputPricePerMTok != null ? `$${c.outputPricePerMTok} per million output tokens` : 'an unknown price';
+  const resets = c.expiresAt !== null ? ` until ${new Date(c.expiresAt).toISOString().slice(0, 16)}Z` : '';
   const why = c.poolMember
-    ? `a subscription pool whose account ${c.poolMember} ${c.quotaUnknown ? 'has no quota reading' : `has ${headroom(c)}% of its quota left`}`
+    ? `a subscription pool whose account ${c.poolMember} ${c.quotaUnknown ? 'has no quota reading' : `has ${headroom(c)}% of its quota left${resets}`}`
     : c.provider.billing === 'subscription'
-      ? (c.quotaUnknown ? 'a subscription whose quota was not read' : `a subscription with ${headroom(c)}% of its quota left`)
+      ? (c.quotaUnknown ? 'a subscription whose quota was not read' : `a subscription with ${headroom(c)}% of its quota left${resets}`)
       : `a metered key at ${price}`;
   const among = c.level ? `tier ${c.level}` : 'the untiered models';
   const lead = mode === 'intelligence' ? `the strongest model in ${among}${c.level ? ` (reaches ${c.ceiling})` : ''}, ${why}`
-    : mode === 'balance' ? `the most quota headroom in ${among}, ${why}`
+    : mode === 'balance' ? `${c.expiresAt !== null ? 'the quota that expires soonest' : 'the most quota headroom'} in ${among}, ${why}`
       : c.provider.billing === 'subscription' ? `${why}, used before any metered key`
         : `the cheapest in ${among}: ${why}`;
   return `Picked ${what} (${OPTIMIZE_LABEL[mode]}): ${lead}`;
 }
 
-/** Why the pick is not in the asked tier, when it is not. */
-function fitLine(c: SubagentCandidate, level: ModelRoutingLevel): string | null {
-  if (c.fit === 'higher') return `Nothing in tier ${level} can run: the nearest tier above that can is ${c.level}`;
-  if (c.fit === 'untiered') {
-    return `Nothing in tier ${level} or above can run: ${c.model} is the default model of ${c.provider.slug} (${c.engine}), which has no tiers`;
+/**
+ * Why what runs is not in the asked tier, when it is not: for the router's pick, and for a candidate further down
+ * that runs because the ones before it could not start (appliedDecision).
+ */
+export function subagentFitLine(
+  asked: ModelRoutingLevel,
+  c: { level: ModelRoutingLevel | null; model: string; provider: string; engine: string },
+): string | null {
+  if (c.level === null) {
+    return `Nothing in tier ${asked} or above can run: ${c.model} is the default model of ${c.provider} (${c.engine}), which has no tiers`;
   }
-  if (c.fit === 'lower') return `Nothing in tier ${level} or above, and no untiered model, can run: the nearest tier below is ${c.level}`;
+  const away = levelIndex(c.level) - levelIndex(asked);
+  if (away > 0) return `Nothing in tier ${asked} can run: the nearest tier above that can is ${c.level}`;
+  if (away < 0) return `Nothing in tier ${asked} or above, and no untiered model, can run: the nearest tier below is ${c.level}`;
   return null;
 }
 
@@ -693,9 +732,12 @@ function fitLine(c: SubagentCandidate, level: ModelRoutingLevel): string | null 
 function bestPoolMember(members: readonly SubagentPoolMember[]): { member: SubagentPoolMember } | { reason: string } {
   if (members.length === 0) return { reason: 'The pool has no account that can run' };
   const live = members.filter((m) => !m.refused && !m.paused);
+  const expires = (m: SubagentPoolMember) => m.expiresAt ?? Infinity;
   const eligible = live
     .filter((m) => !m.unreadable && (m.quota?.utilization ?? 0) < ENGINE_QUOTA_LIMIT)
-    .sort((a, b) => (a.quota?.utilization ?? 0) - (b.quota?.utilization ?? 0));
+    .sort((a, b) => Number(a.nearLimit === true) - Number(b.nearLimit === true)
+      || (expires(a) === expires(b) ? 0 : expires(a) < expires(b) ? -1 : 1)
+      || (a.quota?.utilization ?? 0) - (b.quota?.utilization ?? 0));
   if (eligible.length > 0) return { member: eligible[0] };
   const unreadable = live.find((m) => m.unreadable);
   if (unreadable) return { member: unreadable };
@@ -719,7 +761,9 @@ function engineVerdict(
   input: SubagentRoutingInput,
   provider: SubagentProvider,
   engine: string,
-): { reason: string } | { quota: ModelRoutingEngineState['quota']; quotaUnknown: boolean; poolMember?: string } {
+): { reason: string } | {
+  quota: ModelRoutingEngineState['quota']; quotaUnknown: boolean; expiresAt: number | null; nearLimit: boolean; poolMember?: string;
+} {
   const where = input.runnerLabel ?? "the parent's runner";
   const report = input.engines?.[engine];
   // A runner that reported nothing is not judged on it; one that reported others lacks this one.
@@ -732,7 +776,10 @@ function engineVerdict(
     // A pool runs on its members' own credentials, not the runner's sign-in: its best member decides.
     const best = bestPoolMember(provider.pool.members);
     if ('reason' in best) return best;
-    return { quota: best.member.quota, quotaUnknown: best.member.unreadable === true, poolMember: best.member.label };
+    return {
+      quota: best.member.quota, quotaUnknown: best.member.unreadable === true,
+      expiresAt: best.member.expiresAt ?? null, nearLimit: best.member.nearLimit === true, poolMember: best.member.label,
+    };
   }
   const quota = provider.account?.quota;
   if (provider.billing === 'subscription') {
@@ -743,9 +790,12 @@ function engineVerdict(
     if (provider.account?.paused) return { reason: 'The account is paused' };
     if (provider.account?.refused) return { reason: "The endpoint refused the account's key" };
     // No reading of its quota (nothing reported for it, or none read at all): it runs, after those whose headroom is known.
-    return { quota, quotaUnknown: !provider.account || provider.account.unreadable === true };
+    return {
+      quota, quotaUnknown: !provider.account || provider.account.unreadable === true,
+      expiresAt: provider.account?.expiresAt ?? null, nearLimit: provider.account?.nearLimit === true,
+    };
   }
-  return { quota, quotaUnknown: false };
+  return { quota, quotaUnknown: false, expiresAt: null, nearLimit: false };
 }
 
 /**
@@ -942,9 +992,9 @@ export function routeSubagent(input: SubagentRoutingInput): SubagentRoutingDecis
       const { engine } = spec;
       const verdict = engineVerdict(input, provider, engine);
       if ('reason' in verdict) return drop(slug, engine, null, null, verdict.reason);
-      const { quota, quotaUnknown, poolMember } = verdict;
+      const { quota, quotaUnknown, expiresAt, nearLimit, poolMember } = verdict;
       const join = (row: SubagentModelRow, ceiling: ModelRoutingLevel, fit: SubagentFit, distance: number) => pool.push({
-        ...row, provider, providerIndex, engine, engineIndex, ceiling, quota, quotaUnknown,
+        ...row, provider, providerIndex, engine, engineIndex, ceiling, quota, quotaUnknown, expiresAt, nearLimit,
         ...(poolMember ? { poolMember } : {}), fit, distance,
       });
       const rows = subagentEngineRows(spec, input);
@@ -983,7 +1033,7 @@ export function routeSubagent(input: SubagentRoutingInput): SubagentRoutingDecis
       reasons: [...reasons, 'No provider can run a SubAgent: the SubAgent is refused with NO_SUBAGENT_PROVIDER'] };
   }
   const [best, ...rest] = [...pool].sort((a, b) => compareCandidates(mode, a, b));
-  const away = fitLine(best, level);
+  const away = subagentFitLine(level, { level: best.level, model: best.model, provider: best.provider.slug, engine: best.engine });
   if (away) reasons.push(away);
   reasons.push(pickLine(mode, best));
   const priceless = new Set(pool
@@ -996,7 +1046,9 @@ export function routeSubagent(input: SubagentRoutingInput): SubagentRoutingDecis
     reasons.push(`${exact} candidate${exact === 1 ? '' : 's'} in tier ${level}${others ? `, ${others} more in other tiers or untiered` : ''}; ties go by the owner's provider order`);
   }
   if (removed.length > 0) reasons.push(`${removed.length} candidate${removed.length === 1 ? '' : 's'} removed, each with its reason`);
-  const fallbacks = rest.map((c) => ({ engine: c.engine, provider: c.provider.slug, model: c.model, effort: c.effort, note: candidateNote(c) }));
+  const fallbacks = rest.map((c) => ({
+    engine: c.engine, provider: c.provider.slug, model: c.model, effort: c.effort, note: candidateNote(c), level: c.level,
+  }));
   return {
     ...decision, engine: best.engine, provider: best.provider.slug, model: best.model, effort: best.effort,
     note: candidateNote(best), reasons, fallbacks,

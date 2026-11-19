@@ -157,6 +157,12 @@ function samples(): Sample[] {
       code: pb.StreamCloseCode.NORMAL,
       message: 'the viewer left',
     }),
+    sample(pb.StreamPasteSchema, { streamId: '0190a0b0-0000-7000-8000-0000000000e1', pasteId: 3, text: '密码 Pässwörd 🔑' }),
+    sample(pb.StreamPastedSchema, {
+      streamId: '0190a0b0-0000-7000-8000-0000000000e1',
+      pasteId: 4,
+      error: 'No page in the browser has focus',
+    }),
   ];
 
   // One Frame per member of its body, each wrapping the first sample of that member's type.

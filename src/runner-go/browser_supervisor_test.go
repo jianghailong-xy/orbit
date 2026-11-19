@@ -95,8 +95,17 @@ func TestBrowserAcquireStartsTheBrowserAndTakesTheLease(t *testing.T) {
 		args[p.name] = strings.Join(p.args, " ")
 	}
 	profile := filepath.Join(r.home, ".orbit", "browser", "profile")
-	for _, want := range []string{"--no-sandbox", "--disable-dev-shm-usage", "--user-data-dir=" + profile, "--remote-debugging-address=127.0.0.1"} {
-		if !strings.Contains(args["chromium"], want) {
+	chromeArgs := map[string]bool{}
+	for _, p := range r.starter.started {
+		if p.name == "chromium" {
+			for _, a := range p.args {
+				chromeArgs[a] = true
+			}
+		}
+	}
+	// --test-type with --no-sandbox: without it Chrome draws the "unsupported command-line flag" bar on every page.
+	for _, want := range []string{"--no-sandbox", "--test-type", "--disable-dev-shm-usage", "--user-data-dir=" + profile, "--remote-debugging-address=127.0.0.1"} {
+		if !chromeArgs[want] {
 			t.Fatalf("chromium args %q lack %q", args["chromium"], want)
 		}
 	}
@@ -104,7 +113,7 @@ func TestBrowserAcquireStartsTheBrowserAndTakesTheLease(t *testing.T) {
 		t.Fatalf("Xvfb args %q", args["Xvfb"])
 	}
 	sock := filepath.Join(r.home, ".orbit", "browser", "vnc.sock")
-	for _, want := range []string{"-unixsock " + sock, "-shared", "-forever", "-nopw"} {
+	for _, want := range []string{"-unixsock " + sock, "-shared", "-forever", "-nopw", "-noprimary"} {
 		if !strings.Contains(args["x11vnc"], want) {
 			t.Fatalf("x11vnc args %q lack %q", args["x11vnc"], want)
 		}

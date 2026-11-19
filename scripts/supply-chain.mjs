@@ -72,7 +72,7 @@ export function bundleFileNames(version) {
 
 /** The release surface an artifact belongs to, from the name the build gives it. */
 export function surfaceOf(name) {
-  if (/^Orbit-v.+\.(?:dmg|zip)$/.test(name)) return 'macos';
+  if (/^Orbitd-v.+\.(?:dmg|zip)$/.test(name)) return 'macos';
   if (name === 'appcast.xml') return 'sparkle-appcast';
   if (/^orbit-(?:linux|darwin)-(?:x64|arm64)\.gz$/.test(name) || name === 'version.json') return 'runner';
   if (/^orbit-android-.+\.apk$/.test(name) || /^orbit-android-.+\.apk\.sha256$/.test(name)) return 'android';
@@ -172,10 +172,10 @@ export function artifactVersionProblems({ name, version, sourceSha, buildNumber,
   if (macos && macos[1] !== `v${version}`) {
     problems.push(`${name} names ${macos[1]}, but the release is v${version}`);
   }
-  if (/^Orbit-v.+\.zip$/.test(name)) {
-    const plist = readZipEntry(path.join(directory, name), 'Orbit.app/Contents/Info.plist');
+  if (/^Orbitd-v.+\.zip$/.test(name)) {
+    const plist = readZipEntry(path.join(directory, name), 'Orbitd.app/Contents/Info.plist');
     if (!plist) {
-      problems.push(`${name} is not a readable Sparkle payload with Orbit.app/Contents/Info.plist`);
+      problems.push(`${name} is not a readable Sparkle payload with Orbitd.app/Contents/Info.plist`);
     } else {
       const text = plist.toString('utf8');
       const shortVersion = plistValue(text, 'CFBundleShortVersionString');

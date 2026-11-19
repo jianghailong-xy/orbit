@@ -17,6 +17,9 @@ struct ScheduledMacPage: View {
     @State private var typed = ""
     @State private var asking = false
     @AppStorage("scheduled.quickAddWorkspace") private var chosenWorkspace = ""
+    /// The schedule a row's right-click asked to delete, and the run it asked to stop, while the question is up.
+    @State private var deleting: ScheduleView?
+    @State private var stopping: ScheduleRunView?
 
     var body: some View {
         Group {
@@ -57,7 +60,7 @@ struct ScheduledMacPage: View {
                         groupHeader(group)
                         ForEach(ScheduleTimelineRows.rows(group, scheduled: scheduled, now: now, wide: true,
                                                           openTask: { id in model.route(to: .task(id)) })) { row in
-                            rowView(row, selected: row.scheduleID.map {
+                            rowView(row, scheduled, selected: row.scheduleID.map {
                                 PublicID.storageKey($0) == scheduled.inspectedID.map(PublicID.storageKey)
                             } ?? false)
                         }
@@ -78,6 +81,27 @@ struct ScheduledMacPage: View {
             if scheduled.listRuns == nil {
                 for s in scheduled.schedules { await scheduled.loadDetail(s.id) }
             }
+        }
+        // A row's Delete and Stop ask first, as the detail panel's ⋯ → Delete does.
+        .orbitConfirmation({ ScheduleDisplay.deleteTitle($0.title) },
+                           isPresented: Binding(get: { deleting != nil }, set: { if !$0 { deleting = nil } }),
+                           presenting: deleting) { schedule in
+            Button(SC.DeleteConfirm.confirm, role: .destructive) {
+                Task { @MainActor in await scheduled.delete(schedule.id) }
+            }
+            Button(SC.DeleteConfirm.cancel, role: .cancel) {}
+        } message: { _ in
+            Text(SC.DeleteConfirm.body)
+        }
+        .orbitConfirmation({ _ in SC.StopConfirm.title },
+                           isPresented: Binding(get: { stopping != nil }, set: { if !$0 { stopping = nil } }),
+                           presenting: stopping) { run in
+            Button(SC.StopConfirm.confirm, role: .destructive) {
+                Task { @MainActor in await scheduled.stop(runID: run.id, scheduleID: run.scheduleId) }
+            }
+            Button(SC.StopConfirm.cancel, role: .cancel) {}
+        } message: { _ in
+            Text(SC.StopConfirm.body)
         }
         .accessibilityIdentifier("scheduled-mac-page")
     }
@@ -143,8 +167,12 @@ struct ScheduledMacPage: View {
 
     /// One row: the state circle, the title with its tag and time at the end, and the long line under it. The row a
     /// panel is open for is tinted, as the web's selected row.
-    private func rowView(_ row: ScheduleRowModel, selected: Bool) -> some View {
-        Button(action: row.open) {
+    private func rowView(_ row: ScheduleRowModel, _ scheduled: ScheduledModel, selected: Bool) -> some View {
+        // The phone's long-press menu on a right-click (ScheduleRowActions); the Mac has no row swipes.
+        let actions = ScheduleRowActions(row.kind, model: model, scheduled: scheduled,
+                                         askDelete: { deleting = $0 }, askStop: { stopping = $0 },
+                                         openTask: { id in model.route(to: .task(id)) })
+        return Button(action: row.open) {
             HStack(alignment: .top, spacing: 10) {
                 ScheduleCircleGlyph(view: row.circle, size: 18).padding(.top, 1)
                 VStack(alignment: .leading, spacing: 2) {
@@ -195,6 +223,7 @@ struct ScheduledMacPage: View {
         .padding(.horizontal, -8)
         .accessibilityElement(children: .combine)
         .accessibilityIdentifier("schedule-row")
+        .contextMenu { actions.menuContent }
     }
 
     /// The line at the end (web board ③): one sentence and the workspace it goes to, ↵ asks. Not a form: an agent sets

@@ -164,14 +164,14 @@ class DirectoryDeviceTest {
                 }
                 compose.waitForIdle()
                 instrumentation.uiAutomation.waitForIdle(500, 5_000)
-                compose.onNodeWithText("Settings").performScrollTo().assertIsDisplayed()
+                compose.onNodeWithTag("drawer:settings").assertIsDisplayed()
                 capture("drawer-swipe")
                 key(KeyEvent.KEYCODE_BACK)
-                compose.onNodeWithText("Settings").assertIsNotDisplayed()
+                compose.onNodeWithTag("drawer:settings").assertIsNotDisplayed()
                 compose.onNodeWithText("Research").assertIsDisplayed()
                 compose.onNodeWithContentDescription("Back").assertDoesNotExist()
                 compose.onNodeWithContentDescription("Open navigation").performClick()
-                compose.onNodeWithText("Settings").performScrollTo().performClick()
+                compose.onNodeWithTag("drawer:settings").performClick()
                 // Settings opens on the account it is signed in as, once its read answers (A13's page has no "Signed in" line).
                 compose.waitUntil(15_000) { compose.onAllNodesWithText("Directory fixture").fetchSemanticsNodes().isNotEmpty() }
                 compose.onNodeWithText("Directory fixture").assertIsDisplayed()

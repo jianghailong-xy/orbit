@@ -291,6 +291,8 @@ export const SCHEDULE_COPY = {
     alwaysAllow: 'Always allow',
     allowOnce: 'Allow once',
     deny: 'Deny',
+    stop: 'Stop',
+    openLastRun: 'Open last run',
   },
   deleteConfirm: {
     title: 'Delete “{title}”?',
@@ -298,6 +300,13 @@ export const SCHEDULE_COPY = {
       'It stops running: a run waiting to start is cancelled, and one under way finishes. Its runs and their '
       + 'sessions are kept, but the Scheduled page no longer shows it or its history, and you cannot undo this here.',
     confirm: 'Delete',
+    cancel: 'Cancel',
+  },
+  /** The phone's Stop on a run under way: asks first, as Delete does. */
+  stopConfirm: {
+    title: 'Stop this run?',
+    body: 'It ends where it is and counts as stopped by you. Its session is kept, and the schedule runs again at its next time.',
+    confirm: 'Stop',
     cancel: 'Cancel',
   },
   /** The decline button of an envelope card, by what it widens. */
