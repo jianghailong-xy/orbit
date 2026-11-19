@@ -836,17 +836,19 @@ private extension ToolTone {
 /// or a red/green edit diff.
 struct ToolBodyView: View {
     let kind: ToolBody
+    /// Lines a command or code shows before its fold: the transcript's, or an approval card's 12.
+    var foldLines = MonospaceOutputLayout.previewLineLimit
     var body: some View {
         switch kind {
         case .none:
             EmptyView()
         case .command(let cmd):
-            CollapsibleMono(text: cmd, showsShellPrompt: true, viewerTitle: "Command")
+            CollapsibleMono(text: cmd, showsShellPrompt: true, viewerTitle: "Command", foldLines: foldLines)
                 .padding(8)
                 .background(Color.secondary.opacity(0.08), in: RoundedRectangle(cornerRadius: 6))
                 .overlay { RoundedRectangle(cornerRadius: 6).stroke(Color.secondary.opacity(0.18), lineWidth: 1) }
         case .code(let code):
-            CollapsibleMono(text: code)
+            CollapsibleMono(text: code, foldLines: foldLines)
         case .markdown(let md):
             MarkdownView(source: md)
                 .font(.orbitProseAside).textSelection(.enabled)
@@ -930,11 +932,12 @@ struct CollapsibleMono: View {
     let text: String
     var showsShellPrompt = false
     var viewerTitle = "Tool output"
+    var foldLines = MonospaceOutputLayout.previewLineLimit
     @State private var open = false
     @State private var showingFullOutput = false
 
     var body: some View {
-        let layout = MonospaceOutputLayout(text: text)
+        let layout = MonospaceOutputLayout(text: text, foldLines: foldLines)
         return VStack(alignment: .leading, spacing: 4) {
             transcriptText(layout.transcriptText(expanded: open))
                 .font(.orbitMono)

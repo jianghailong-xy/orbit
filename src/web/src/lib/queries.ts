@@ -247,6 +247,9 @@ export interface Me {
   /** The server holds a DeepSeek key and can translate (Settings › Translation). Absent from a
    *  server that predates translation, which reads as unable. */
   translationAvailable?: boolean;
+  /** While a failing translator is skipped, the ISO-8601 instant it is tried again (MeTranslation,
+   *  docs/ux/translation-failure-policy.html frame 6). Null or absent: translation is in use. */
+  translationUnavailableUntil?: string | null;
   /** The server holds a DeepSeek key and can optimize a draft (Settings › General › Prompt optimizer).
    *  Absent from a server that predates it, which reads as unable. */
   promptOptimizerAvailable?: boolean;

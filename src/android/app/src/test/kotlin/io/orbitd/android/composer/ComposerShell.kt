@@ -51,6 +51,7 @@ internal object ComposerShell {
 
     fun reset() {
         while (frames.tryReceive().isSuccess) Unit
+        while (controlFrames.tryReceive().isSuccess) Unit
         calls.clear(); bodies.clear(); answers.clear(); gates.clear(); disk.clear()
         session = emptyMap(); workspace = emptyMap(); providers = "[]"; pools = "[]"; sharedPools = "[]"
         events = emptyList(); around = null; pageGate = null; retryMessage = """{"text":""}"""; attachments = emptyMap()
@@ -115,6 +116,9 @@ internal object ComposerShell {
     private val frames = Channel<SseFrame>(Channel.UNLIMITED)
     private const val END = "__end_of_stream__"
     fun push(event: String) { frames.trySend(SseFrame(event, null, null)) }
+    /** What a test sends down the account's control stream: an account event as the server would (`{"type":…,"data":{…}}`). */
+    private val controlFrames = Channel<SseFrame>(Channel.UNLIMITED)
+    fun pushControl(event: String) { controlFrames.trySend(SseFrame(event, null, null)) }
     /** The session's stream ends as a server closing it would, and the app connects again. */
     fun endStream() { frames.trySend(SseFrame(END, null, null)) }
 
@@ -123,6 +127,7 @@ internal object ComposerShell {
         override suspend fun stream(request: HttpRequest, onOpen: suspend () -> Unit, onFrame: suspend (SseFrame) -> Unit) {
             onOpen()
             if (request.api.path.size > 1) for (frame in frames) { if (frame.data == END) return; onFrame(frame) }
+            else for (frame in controlFrames) onFrame(frame)
             awaitCancellation()
         }
     }

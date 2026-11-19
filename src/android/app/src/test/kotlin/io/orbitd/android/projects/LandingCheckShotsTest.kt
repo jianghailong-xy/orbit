@@ -110,7 +110,7 @@ class LandingCheckShotsTest {
     }
     @Test fun baseline() {
         val row = json("""{"itemId":"b1","kind":"INTEGRATION_CHECK_FAILED","title":"Baseline red",
-          "assignee":"OWNER","assigneeReason":"ESCALATED","waitingSince":"2026-11-11T09:00:00Z","actions":[],
+          "assignee":"OWNER","assigneeReason":"DEFAULT","waitingSince":"2026-11-11T09:00:00Z","actions":[],
           "baseline":{"upstreamSha":"c81d795","targetSha":"3c25e06","mergeTreeSha":"b1719dc","check":{"command":"make test-fast"}},
           "heldTaskIds":["t1","t2"],"facts":{"targetRef":"refs/heads/project/payments"}}""")
         val card = CardCatalog.project("s1", "p1", mapOf("project" to json("""{"id":"p1"}"""),

@@ -202,9 +202,9 @@ final class AgentsStackWiringTests: XCTestCase {
             let fn = code(try slice(app, from: start, to: end))
             XCTAssertTrue(fn.contains(transition), "\(start) navigates by \(transition)")
         }
-        let route = code(try slice(app, from: "private func openSession(_ id: String) {",
+        let route = code(try slice(app, from: "private func openSession(_ id: String, inScheduledRuns: Bool) {",
                                    to: "guard !sessions.contains(where:"))
-        XCTAssertTrue(route.contains("show(.console(sessionID: id, origin: .deepLink), agent: agentID(for: id))"),
+        XCTAssertTrue(route.contains("show(.console(sessionID: id, origin: .deepLink), agent: agentID(for: id), folder: folder)"),
                       "a deep link / search hit is the same 'select this session' act")
         let drop = code(try slice(app, from: "private func dropIfOpen(_ id: String) {",
                                   to: "/// Remove every local fallback"))
