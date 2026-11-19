@@ -266,99 +266,117 @@ struct UserBubbleView: View {
     @ViewBuilder
     private var meta: some View {
         if !bubble.text.isEmpty || unconfirmed || heldFoot != nil {
-            HStack(spacing: 6) {
-                if !bubble.text.isEmpty {
-                    Button { copy() } label: {
-                        Image(systemName: copied ? "checkmark" : "doc.on.doc").font(.orbitMeta)
-                            .frame(width: copyHitWidth, alignment: .trailing)
-                            .contentShape(Rectangle())
+            if delivered {
+                // A phone's column is too narrow for copy, time and "Sent to the agent in English ·
+                // Hide original" together: rather than wrap the foot into two lines beside the time,
+                // it drops to a line of its own under them, still one row.
+                ViewThatFits(in: .horizontal) {
+                    metaRow(footInline: true)
+                    VStack(alignment: .trailing, spacing: 3) {
+                        metaRow(footInline: false)
+                        translationFoot
                     }
-                    .buttonStyle(.plain).foregroundStyle(.secondary).help("Copy message")
-                    .opacity(copyShown ? 1 : 0)
-                    .allowsHitTesting(copyShown)
                 }
-                if bubble.undelivered {
-                    // Amber, not red: nothing broke on this message — the run ended before its turn
-                    // came — and the auth/error card above already says why. Re-sending is the fix,
-                    // and the composer (or that card's Retry) is where it happens.
-                    Label(SteerDelivery.state("failed").label, systemImage: "exclamationmark.circle")
+            } else {
+                metaRow(footInline: false)
+            }
+        }
+    }
+
+    /// The meta row itself; `footInline` ends it with a delivered translation's foot.
+    private func metaRow(footInline: Bool) -> some View {
+        HStack(spacing: 6) {
+            if !bubble.text.isEmpty {
+                Button { copy() } label: {
+                    Image(systemName: copied ? "checkmark" : "doc.on.doc").font(.orbitMeta)
+                        .frame(width: copyHitWidth, alignment: .trailing)
+                        .contentShape(Rectangle())
+                }
+                .buttonStyle(.plain).foregroundStyle(.secondary).help("Copy message")
+                .opacity(copyShown ? 1 : 0)
+                .allowsHitTesting(copyShown)
+            }
+            if bubble.undelivered {
+                // Amber, not red: nothing broke on this message — the run ended before its turn
+                // came — and the auth/error card above already says why. Re-sending is the fix,
+                // and the composer (or that card's Retry) is where it happens.
+                Label(SteerDelivery.state("failed").label, systemImage: "exclamationmark.circle")
+                    .font(.orbitMeta).foregroundStyle(.orange)
+                putBackButton
+            } else if bubble.steer {
+                // A steer is not waiting its turn — it is on its way into the one already
+                // running — and the turn it joined answers something else, so this line is the
+                // only report it gets. Shown whether or not it is still pending: "Read in this
+                // turn" is what says the engine took it, and it arrives after the durable
+                // `user` event has already settled the bubble. While nothing has read it, the
+                // way to take it back sits beside the state it would undo, styled as the queued
+                // Cancel is (web parity: `SteerState`); once asked, the line says so in place of
+                // both, so it cannot be pressed twice.
+                if steer?.withdrawing == true {
+                    Text("Withdrawing…").font(.orbitMeta).foregroundStyle(.secondary)
+                } else if SteerDelivery.state(bubble.delivery).tone == .failed {
+                    // Nobody can say the engine read it ("Couldn't confirm it was read"): said in
+                    // the warning tone, as web's and Android's are. Put back only where all there
+                    // is of it is the receipt (`offersPutBack`).
+                    Label(SteerDelivery.state(bubble.delivery).label, systemImage: "exclamationmark.circle")
                         .font(.orbitMeta).foregroundStyle(.orange)
                     putBackButton
-                } else if bubble.steer {
-                    // A steer is not waiting its turn — it is on its way into the one already
-                    // running — and the turn it joined answers something else, so this line is the
-                    // only report it gets. Shown whether or not it is still pending: "Read in this
-                    // turn" is what says the engine took it, and it arrives after the durable
-                    // `user` event has already settled the bubble. While nothing has read it, the
-                    // way to take it back sits beside the state it would undo, styled as the queued
-                    // Cancel is (web parity: `SteerState`); once asked, the line says so in place of
-                    // both, so it cannot be pressed twice.
-                    if steer?.withdrawing == true {
-                        Text("Withdrawing…").font(.orbitMeta).foregroundStyle(.secondary)
-                    } else if SteerDelivery.state(bubble.delivery).tone == .failed {
-                        // Nobody can say the engine read it ("Couldn't confirm it was read"): said in
-                        // the warning tone, as web's and Android's are. Put back only where all there
-                        // is of it is the receipt (`offersPutBack`).
-                        Label(SteerDelivery.state(bubble.delivery).label, systemImage: "exclamationmark.circle")
-                            .font(.orbitMeta).foregroundStyle(.orange)
-                        putBackButton
-                    } else {
-                        Text(SteerDelivery.state(bubble.delivery).label)
-                            .font(.orbitMeta).foregroundStyle(.secondary)
-                        if let onWithdraw = steer?.onWithdraw {
-                            Button { onWithdraw() } label: {
-                                Text("Withdraw").font(.orbitMeta)
-                            }
-                            .buttonStyle(.plain).foregroundStyle(.tint)
-                            .padding(.leading, 2).contentShape(Rectangle())
-                        }
-                    }
-                } else if bubble.pending, bubble.translation?.held == true {
-                    // Held for its translation: the line under the meta says where it is (1A / 4A).
-                    EmptyView()
-                } else if bubble.pending, heldFoot != nil {
-                    // Accepted, and held by a full runner or its update: the tag below says so.
-                    EmptyView()
-                } else if awaitingServer {
-                    if bubble.queued { QueuedWord(label: "Queued for next turn") } else { Text("Sending…").font(.orbitMeta).foregroundStyle(.secondary) }
-                    // A queued message can be withdrawn until the runner leases it (web parity). Offered
-                    // only once the server `turnId` is known — the DELETE keys on it — which lands a tick
-                    // after send. `contentShape` widens the small hit target for touch.
-                    if bubble.queued, bubble.turnId != nil, let onCancel = onCancelQueued {
-                        Button { onCancel() } label: {
-                            Text("Cancel").font(.orbitMeta)
+                } else {
+                    Text(SteerDelivery.state(bubble.delivery).label)
+                        .font(.orbitMeta).foregroundStyle(.secondary)
+                    if let onWithdraw = steer?.onWithdraw {
+                        Button { onWithdraw() } label: {
+                            Text("Withdraw").font(.orbitMeta)
                         }
                         .buttonStyle(.plain).foregroundStyle(.tint)
                         .padding(.leading, 2).contentShape(Rectangle())
                     }
-                } else if let ts = bubble.ts, let rel = RelativeTime.format(ts) {
-                    // Reached on a settled turn, and on one the server accepted that no runner has
-                    // echoed yet (stamped with when it was accepted) — every other branch above is a
-                    // state that stays on screen. Gated here rather than on the row so the copy button beside it
-                    // can be shown on its own (see `copyShown` / `timeShown`).
-                    Text(rel).font(.orbitMeta).foregroundStyle(.secondary)
-                        .opacity(timeShown ? 1 : 0)
                 }
-                // A delivered translation's Show original / Show translation ends the copy/time line
-                // rather than taking one of its own (docs/mocks/translation-foot-one-line, B). The dot
-                // goes with the time, so on macOS at rest the press keeps its place at the edge. With
-                // nothing in that slot (no time, or a hold drawing its tag instead) there is no dot to
-                // hang off the copy button (web parity: its separator needs `node.ts`).
-                if delivered {
-                    if stateOrTimeDrawn {
-                        Text("·").font(.orbitMeta).foregroundStyle(.tertiary).opacity(timeShown ? 1 : 0)
+            } else if bubble.pending, bubble.translation?.held == true {
+                // Held for its translation: the line under the meta says where it is (1A / 4A).
+                EmptyView()
+            } else if bubble.pending, heldFoot != nil {
+                // Accepted, and held by a full runner or its update: the tag below says so.
+                EmptyView()
+            } else if awaitingServer {
+                if bubble.queued { QueuedWord(label: "Queued for next turn") } else { Text("Sending…").font(.orbitMeta).foregroundStyle(.secondary) }
+                // A queued message can be withdrawn until the runner leases it (web parity). Offered
+                // only once the server `turnId` is known — the DELETE keys on it — which lands a tick
+                // after send. `contentShape` widens the small hit target for touch.
+                if bubble.queued, bubble.turnId != nil, let onCancel = onCancelQueued {
+                    Button { onCancel() } label: {
+                        Text("Cancel").font(.orbitMeta)
                     }
-                    translationFoot
+                    .buttonStyle(.plain).foregroundStyle(.tint)
+                    .padding(.leading, 2).contentShape(Rectangle())
                 }
-                // What holds this message (web `QueuedFootCtx`): always shown, unlike the time.
-                if let heldFoot {
-                    RunnerUpdatingTagView(foot: heldFoot)
-                }
+            } else if let ts = bubble.ts, let rel = RelativeTime.format(ts) {
+                // Reached on a settled turn, and on one the server accepted that no runner has
+                // echoed yet (stamped with when it was accepted) — every other branch above is a
+                // state that stays on screen. Gated here rather than on the row so the copy button beside it
+                // can be shown on its own (see `copyShown` / `timeShown`).
+                Text(rel).font(.orbitMeta).foregroundStyle(.secondary)
+                    .opacity(timeShown ? 1 : 0)
             }
-            // Reserve at least one line for the meta row.
-            .frame(minHeight: metaHeight)
-            .animation(.easeOut(duration: 0.12), value: hovering)
+            // A delivered translation's Show original / Show translation ends the copy/time line
+            // rather than taking one of its own (docs/mocks/translation-foot-one-line, B). The dot
+            // goes with the time, so on macOS at rest the press keeps its place at the edge. With
+            // nothing in that slot (no time, or a hold drawing its tag instead) there is no dot to
+            // hang off the copy button (web parity: its separator needs `node.ts`).
+            if delivered, footInline {
+                if stateOrTimeDrawn {
+                    Text("·").font(.orbitMeta).foregroundStyle(.tertiary).opacity(timeShown ? 1 : 0)
+                }
+                translationFoot
+            }
+            // What holds this message (web `QueuedFootCtx`): always shown, unlike the time.
+            if let heldFoot {
+                RunnerUpdatingTagView(foot: heldFoot)
+            }
         }
+        // Reserve at least one line for the meta row.
+        .frame(minHeight: metaHeight)
+        .animation(.easeOut(duration: 0.12), value: hovering)
     }
 
     /// The words of a message that never reached the engine, back in the composer — beside the state
