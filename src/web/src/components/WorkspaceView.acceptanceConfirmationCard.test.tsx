@@ -357,6 +357,8 @@ beforeEach(() => {
           confirmedAt: '2026-09-11T03:10:40.000Z',
           confirmedById: 'user-1',
           startedWith: null,
+          // What the press changed, kept on the record as the server keeps it (1200).
+          changes: confirmationStanding.changesSinceConfirmed,
         },
         changesSinceConfirmed: { added: [], stricter: [], revised: [], removed: [], unchanged: [1, 2] },
         changesSinceConfirmedAbsentReason: null,
@@ -683,7 +685,7 @@ describe('the start card in WorkspaceView', { timeout: 60_000 }, () => {
     });
     const receipt = mounted().querySelector<HTMLElement>('.settlement-receipt')!;
     expect(receipt.querySelector('.settlement-receipt-line')?.textContent)
-      .toBe('You started the project on 2 criteria at seal 4fc57753a6ec');
+      .toBe('You started the project on 2 criteria');
     expect(receipt.querySelector('.settlement-receipt-settings')?.textContent)
       .toContain('Automatic on');
     expect(receipt.querySelector('.run-settings-changed')?.textContent).toContain('5 tasks at a time');
@@ -738,7 +740,7 @@ describe('the change card in WorkspaceView', { timeout: 60_000 }, () => {
     await waitForUi(() => {
       expect(count('#settlement-preview')).toBe(0);
       expect(mounted().querySelector('.settlement-receipt .settlement-receipt-line')?.textContent)
-        .toBe('You confirmed 2 criteria at seal 4fc57753a6ec — 1 new');
+        .toBe('You confirmed 2 criteria · 1 new, 1 unchanged');
     });
     // A confirmation that started nothing carries no settings.
     expect(count('.settlement-receipt-settings')).toBe(0);

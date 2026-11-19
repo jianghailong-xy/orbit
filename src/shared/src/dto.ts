@@ -1678,6 +1678,12 @@ export const BROWSER_CLEAR_V1 = 'browser-clear/v1';
  *  a new conversation instead. runner-go declares the same string (subagentRemoteResumeCapabilityV1). */
 export const SUBAGENT_REMOTE_RESUME_V1 = 'subagent-remote-resume/v1';
 
+/** Declared by a runner that runs a read-only remote SubAgent in a work directory that is not a git repository, in that
+ *  directory itself, on a claim's `inPlace` (docs/subagent-design.md §10.2). The server places no such run on a target
+ *  runner without it, which would refuse the claim with SUBAGENT_WORKSPACE_NOT_GIT. runner-go declares the same string
+ *  (subagentRemoteInPlaceCapabilityV1). */
+export const SUBAGENT_REMOTE_IN_PLACE_V1 = 'subagent-remote-in-place/v1';
+
 /** The body of POST /runners/:id/self-update/now: the owner's explicit "interrupt these turns". */
 export interface RunnerSelfUpdateNowRequest {
   interruptTurns: true;
@@ -2850,8 +2856,11 @@ export interface RemoteSubagentClaim {
   /** The delegate call: the parent's events nest under it. */
   toolUseId: string;
   workspaceId: string;
-  /** The target workspace's work dir, which the runner makes a temporary detached worktree of. */
+  /** The target workspace's work dir, which the runner makes a temporary detached worktree of, or runs in with `inPlace`. */
   workDir: string | null;
+  /** A read-only run in a work dir that is not a git repository: the child runs in the work dir itself, read-only, with
+   *  no worktree made or removed (§10.2). */
+  inPlace: boolean;
   type: string;
   definitionSource: string;
   description: string | null;

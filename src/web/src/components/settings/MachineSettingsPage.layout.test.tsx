@@ -306,6 +306,20 @@ describe('a runner’s page, laid out as web.png', () => {
     expect(document.body.textContent).not.toContain('Details');
   });
 
+  it('puts the country its IP is in first on the header line, with when it was checked on hover', async () => {
+    const checkedAt = new Date(NOW - 3 * 60_000).toISOString();
+    const region = { verdict: 'allowed' as const, country: 'JP', regionCode: null, name: 'Japan', viaProxy: false, checkedAt };
+    await mount(machine('real wikova', { region }));
+    expect(text($('.machine-metaline'))).toBe('📍 Japan · vmi3129740 · v0.1.197 · Last Check-in just now');
+    expect($('[data-testid="machine-location"]').title).toBe('Checked 3m ago · Claude’s connection: Japan (no proxy)');
+  });
+
+  it('says the country is the proxy’s when the check went through one', async () => {
+    const region = { verdict: 'allowed' as const, country: 'JP', regionCode: null, name: 'Japan', viaProxy: true, checkedAt: new Date(NOW).toISOString() };
+    await mount(machine('real wikova', { region }));
+    expect(text($('[data-testid="machine-location"]'))).toBe('📍 Japan (via proxy)');
+  });
+
   it('gives each item a card of its own, with the reset time in front of a quota', async () => {
     await mount(machine('real wikova'));
     const [quota, disk] = cards();

@@ -369,6 +369,9 @@ type subagentRun struct {
 	// workspace names the workspace a remote run runs on (§10): its child is another runner's, and this one only
 	// follows its events. Empty for a run on this machine.
 	workspace string
+	// workflowID is the workflow run whose agent() call this run is (subagent_workflow.go), empty for a delegate
+	// call's. Its end is answered to the workflow's script, never as a wake or a background_task of its own.
+	workflowID string
 }
 
 func (r *subagentRun) reportLocked() subagentReport {
@@ -755,9 +758,13 @@ func (s *bgJobService) startSubagent(args map[string]interface{}) (subagentRepor
 			return subagentReport{}, errors.New("resume continues a SubAgent where it ran; leave out workspace and needs, or start a new SubAgent with the full brief")
 		}
 	}
-	if strings.TrimSpace(toolUseID) == "" {
+	workflowID := strings.TrimSpace(getString(args, "workflowRunId"))
+	if workflowID != "" {
+		// A workflow's agent() call: the workflow names it, and nothing waits for it inline or owes a wake for it.
+		background = false
+	} else if strings.TrimSpace(toolUseID) == "" {
 		// An engine that does not say which call this is: the call its engine announced in the session's stream.
-		toolUseID = delegateCalls.take(s.sessionID, getString(args, "prompt"), getString(args, "description"), delegateCallWait)
+		toolUseID = delegateCalls.take(s.sessionID, delegateToolName, getString(args, "prompt"), getString(args, "description"), delegateCallWait)
 	} else {
 		delegateCalls.claim(s.sessionID, toolUseID)
 	}
@@ -777,6 +784,15 @@ func (s *bgJobService) startSubagent(args map[string]interface{}) (subagentRepor
 	}
 	if description := strings.TrimSpace(getString(args, "description")); description != "" {
 		body["description"] = description
+	}
+	if workflowID != "" {
+		body["workflowRunId"] = workflowID
+		body["callIndex"] = args["callIndex"]
+		for _, key := range []string{"label", "phase"} {
+			if v := strings.TrimSpace(getString(args, key)); v != "" {
+				body[key] = v
+			}
+		}
 	}
 	var created subagentCreateResponse
 	if err := s.t.do(nil, "POST", "/runner/sessions/"+s.sessionID+"/subagents", body, &created, 30*time.Second); err != nil {
@@ -803,8 +819,9 @@ func (s *bgJobService) startSubagent(args map[string]interface{}) (subagentRepor
 		run := &subagentRun{
 			id: created.RunID, toolUseID: toolUseID, description: getString(args, "description"), background: background,
 			kind: def.Name, done: make(chan struct{}), startedAt: time.Now(), status: subagentStatusRunning, cancel: cancel,
-			workspace: firstNonEmpty(created.Remote.WorkspaceName, created.Remote.WorkspaceID),
-			model:     remoteSubagentModel(created.Decision),
+			workspace:  firstNonEmpty(created.Remote.WorkspaceName, created.Remote.WorkspaceID),
+			model:      remoteSubagentModel(created.Decision),
+			workflowID: workflowID,
 		}
 		s.subagents.add(run)
 		s.bg.subagentsLive.Add(1)
@@ -839,7 +856,7 @@ func (s *bgJobService) startSubagent(args map[string]interface{}) (subagentRepor
 	run := &subagentRun{
 		id: created.RunID, toolUseID: toolUseID, description: getString(args, "description"),
 		background: background, model: created.Exec.Model, engine: engine, engineSession: engineSession, stateDir: stateDir, kind: def.Name,
-		done: make(chan struct{}), startedAt: time.Now(), status: subagentStatusRunning, cancel: cancel,
+		done: make(chan struct{}), startedAt: time.Now(), status: subagentStatusRunning, cancel: cancel, workflowID: workflowID,
 	}
 	s.subagents.add(run)
 	s.bg.subagentsLive.Add(1)
@@ -1058,11 +1075,15 @@ func (s *bgJobService) runSubagent(ctx context.Context, run *subagentRun, target
 	// server forwards the wake to the successor (session_keep_work.go).
 	wake := (answeredElsewhere && status != subagentStatusStopped) || stopReason == subagentStopHandedOver ||
 		(s.keptPastEnd.Load() && stopReason == "")
+	if run.workflowID != "" {
+		// Its end is the workflow script's to read; the workflow's own end is what wakes the parent.
+		answeredElsewhere, wake = false, false
+	}
 	s.subagents.mu.Unlock()
 
 	_ = os.WriteFile(filepath.Join(dir, "result.txt"), []byte(result), 0o600)
 	s.patchSubagent(run.id, report, res.Usage, wake)
-	if answeredElsewhere || status == subagentStatusStopped {
+	if run.workflowID == "" && (answeredElsewhere || status == subagentStatusStopped) {
 		// The terminal background_task clears the delegate call from the session's running SubAgents, as a
 		// background Agent's does.
 		bgStatus := map[string]string{subagentStatusDone: bgStatusCompleted, subagentStatusFailed: bgStatusFailed}[status]
@@ -1085,6 +1106,23 @@ func (s *bgJobService) runSubagent(ctx context.Context, run *subagentRun, target
 // subagentStopReportWait after the kill. Run before the session's finalize commit (§5.2), so nothing a
 // SubAgent is still writing is captured by it.
 func (s *bgJobService) stopSubagents(reason string) {
+	// A workflow's script first, so it starts no call while its running ones are stopped; it reports its own end
+	// once they have (subagent_workflow.go).
+	workflows := s.stopWorkflows(reason)
+	defer func() {
+		if len(workflows) == 0 {
+			return
+		}
+		deadline := time.After(subagentStopGrace + subagentStopReportWait)
+		for _, w := range workflows {
+			select {
+			case <-w.done:
+			case <-deadline:
+				logln("workflows of session", s.sessionID, "were stopped but not all reported in time")
+				return
+			}
+		}
+	}()
 	s.subagents.mu.Lock()
 	var running []*subagentRun
 	for _, r := range s.subagents.runs {
@@ -1139,7 +1177,8 @@ func (s *bgJobService) announceSubagents() {
 	var toolUseIDs []string
 	var orphaned []string
 	for _, r := range s.subagents.runs {
-		if r.status != subagentStatusRunning {
+		if r.status != subagentStatusRunning || r.workflowID != "" {
+			// A workflow's call is announced as its workflow (announceWorkflows), whose end answers for it.
 			continue
 		}
 		if !r.background && !r.detached {
@@ -1158,6 +1197,7 @@ func (s *bgJobService) announceSubagents() {
 	for _, id := range orphaned {
 		go s.recordSubagentDetach(id)
 	}
+	s.announceWorkflows()
 }
 
 // recordSubagentDetach tells the server that the call waiting for a run has stopped waiting, so the run's end
@@ -1635,6 +1675,8 @@ var delegateCallWait = 3 * time.Second
 
 // delegateCall is a delegate tool call one session's engine announced.
 type delegateCall struct {
+	// tool is the Orbit tool the call is: delegate, or workflow (subagent_workflow.go).
+	tool                    string
 	id, prompt, description string
 	taken                   bool
 }
@@ -1664,7 +1706,17 @@ func isDelegateToolName(name string) bool {
 
 // note reads one event the session emitted.
 func (l *delegateCallLog) note(sessionID, eventType string, payload map[string]interface{}) {
-	if eventType != evToolUse || !isDelegateToolName(asString(payload["name"])) || asString(payload["subagentRunId"]) != "" {
+	// A workflow's own agent() calls are drawn as delegate calls, and are no engine's: skipped by their workflowRunId.
+	if eventType != evToolUse || asString(payload["subagentRunId"]) != "" || asString(payload["workflowRunId"]) != "" {
+		return
+	}
+	tool := ""
+	switch name := asString(payload["name"]); {
+	case isDelegateToolName(name):
+		tool = delegateToolName
+	case isWorkflowToolName(name):
+		tool = workflowToolName
+	default:
 		return
 	}
 	id := asString(payload["id"])
@@ -1686,7 +1738,7 @@ func (l *delegateCallLog) note(sessionID, eventType string, payload map[string]i
 			return
 		}
 	}
-	calls := append(l.sessions[key], &delegateCall{id: id, prompt: asString(input["prompt"]), description: asString(input["description"])})
+	calls := append(l.sessions[key], &delegateCall{tool: tool, id: id, prompt: asString(input["prompt"]), description: asString(input["description"])})
 	if len(calls) > delegateCallLogCap {
 		calls = calls[len(calls)-delegateCallLogCap:]
 	}
@@ -1706,16 +1758,16 @@ func (l *delegateCallLog) claim(sessionID, id string) {
 	}
 }
 
-// take is the id of the call a delegate with this prompt is, waiting up to wait for it to be announced; "" when
-// none was.
-func (l *delegateCallLog) take(sessionID, prompt, description string, wait time.Duration) string {
+// take is the id of the call of tool (delegate or workflow) with this prompt, waiting up to wait for it to be
+// announced; "" when none was. A workflow call has no prompt: its description picks it.
+func (l *delegateCallLog) take(sessionID, tool, prompt, description string, wait time.Duration) string {
 	key := decodeSessionID(sessionID)
 	deadline := time.Now().Add(wait)
 	for {
 		l.mu.Lock()
 		var match, oldest *delegateCall
 		for _, c := range l.sessions[key] {
-			if c.taken {
+			if c.taken || c.tool != tool {
 				continue
 			}
 			if oldest == nil {

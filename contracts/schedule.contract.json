@@ -404,12 +404,20 @@
       "openAgentSettings": "Open agent settings",
       "alwaysAllow": "Always allow",
       "allowOnce": "Allow once",
-      "deny": "Deny"
+      "deny": "Deny",
+      "stop": "Stop",
+      "openLastRun": "Open last run"
     },
     "deleteConfirm": {
       "title": "Delete “{title}”?",
       "body": "It stops running: a run waiting to start is cancelled, and one under way finishes. Its runs and their sessions are kept, but the Scheduled page no longer shows it or its history, and you cannot undo this here.",
       "confirm": "Delete",
+      "cancel": "Cancel"
+    },
+    "stopConfirm": {
+      "title": "Stop this run?",
+      "body": "It ends where it is and counts as stopped by you. Its session is kept, and the schedule runs again at its next time.",
+      "confirm": "Stop",
       "cancel": "Cancel"
     },
     "keep": {

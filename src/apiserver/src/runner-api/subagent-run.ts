@@ -19,6 +19,8 @@ import {
   ArrayMaxSize,
   IsBoolean,
   IsIn,
+  IsInt,
+  Max,
   IsNumber,
   IsObject,
   IsOptional,
@@ -117,6 +119,24 @@ export class SubagentRunCreateDto implements SubagentRunCreateRequest {
   @IsOptional()
   @IsPublicId()
   resumeOf?: string;
+
+  @IsOptional()
+  @IsPublicId()
+  workflowRunId?: string;
+
+  @IsOptional()
+  @IsInt()
+  @Min(0)
+  @Max(2_147_483_647)
+  callIndex?: number;
+
+  @IsOptional()
+  @IsString()
+  label?: string;
+
+  @IsOptional()
+  @IsString()
+  phase?: string;
 }
 
 export class SubagentRunUpdateDto implements SubagentRunUpdateRequest {

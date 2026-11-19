@@ -294,6 +294,8 @@ final class RunnerPageCopyParityTests: XCTestCase {
     /// afterwards — so the whole sentence is compared, and not only the words around a value.
     private static let templates: [(name: String, rendered: String)] = [
         ("runnerOfflineLastSeen", RunnerPageCopy.runnerOfflineLastSeen(when: "${when}")),
+        ("runnerLocation", RunnerPageCopy.runnerLocation(place: "${place}")),
+        ("runnerLocationViaProxy", RunnerPageCopy.runnerLocationViaProxy(place: "${place}")),
         ("runnerVersionTag", RunnerPageCopy.runnerVersionTag(version: "${version}")),
         ("runnerVersionInstallsWhenQuiet", put(RunnerPageCopy.runnerVersionInstallsWhenQuiet(minutes: 90_001),
                                                [90_001: "minutes"])),

@@ -99,6 +99,7 @@ export interface RunnerObjects {
   allowedApprovalId: string;
   /** Of `machineSessionId`: an ended SubAgent run, which a delegate call's `resumeOf` names. */
   subagentRunId: string;
+  workflowRunId: string;
   artifactRequestId: string;
   /** An integration job, and a Codex reset operation, the machine holds the claim of (`leaseOwner`, generation 1). */
   integrationJobId: string;
@@ -407,6 +408,21 @@ export const RUNNER_ISOLATION_CASES: Readonly<Record<string, RunnerCase>> = {
       params: { id: of.runner.machineSessionId },
       body: { toolUseId: 'toolu_census_delegate', type: 'general', definitionSource: 'builtin' },
     }),
+  },
+  'POST /runner/sessions/:id/workflows': {
+    as: RUNNER,
+    request: (of) => ({
+      params: { id: of.runner.machineSessionId },
+      body: { toolUseId: 'toolu_census_workflow', name: 'review', script: 'return 1' },
+    }),
+  },
+  'PATCH /runner/sessions/:id/workflows/:workflowRunId': {
+    as: RUNNER,
+    request: (of) => ({
+      params: { id: of.runner.machineSessionId, workflowRunId: of.runner.workflowRunId },
+      body: { status: 'DONE' },
+    }),
+    nested: ['workflowRunId'],
   },
   // The machine's own alert about a job of the session's (its agents' is POST /runner/notify, below): another account's
   // runner is refused it as for an id that names nothing, while the owner's is answered by the push channel.
@@ -999,6 +1015,16 @@ export const RUNNER_ISOLATION_FIELD_CASES: Readonly<Record<string, RunnerFieldCa
     request: (of, mine) => ({
       params: { id: mine.runner.machineSessionId },
       body: { toolUseId: 'toolu_census_resume', type: 'general', definitionSource: 'builtin', resumeOf: of.runner.subagentRunId },
+    }),
+  },
+  'POST /runner/sessions/:id/subagents body workflowRunId': {
+    as: RUNNER,
+    request: (of, mine) => ({
+      params: { id: mine.runner.machineSessionId },
+      body: {
+        toolUseId: 'toolu_census_workflow_call', type: 'general', definitionSource: 'builtin',
+        workflowRunId: of.runner.workflowRunId, callIndex: 0,
+      },
     }),
   },
   // What the link gateway's Welcome says of a process's sessions: B's own process, asking after A's leased session.
@@ -1625,6 +1651,8 @@ export const RUNNER_ISOLATION_FIELDS_BY_HAND: Readonly<Record<string, string>> =
   'POST /runner/sessions/:id/subagents body toolUseId':
     'the engine\'s id for the delegate call, a key only within the session the path names '
     + '(runner-api/runner-subagents.controller.ts:110)',
+  'POST /runner/sessions/:id/workflows body toolUseId':
+    'the engine id for a workflow call, keyed only by the session in the path (runner-api/runner-subagents.controller.ts:225)',
   'POST /runner/sessions/:id/background-wake body wakeId':
     'the machine\'s key for one wake of one of its jobs, made into a turn key of the session the path names '
     + '(runner-api.controller.ts:4094)',
