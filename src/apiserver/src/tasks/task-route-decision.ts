@@ -249,9 +249,21 @@ function windowName(window: PlanUsageWindow | undefined, slot: string): string {
  * When an account's quota goes to waste and whether it is nearly spent, as account selection weighs them
  * (quotaExpiresAt, quotaNearLimit in planUsage.ts): what the SubAgent router spends first (§4.2).
  */
-export function quotaTiming(snapshot: PlanUsageSnapshot | null | undefined, now: Date): { expiresAt: number | null; nearLimit: boolean } {
-  const at = quotaExpiresAt(snapshot, now);
-  return { expiresAt: Number.isFinite(at) ? at : null, nearLimit: quotaNearLimit(snapshot, now) };
+export function quotaTiming(
+  snapshot: PlanUsageSnapshot | null | undefined,
+  now: Date,
+): { expiresAt: number | null; nearLimit: boolean; opusUtilization: number | null } {
+  // A model family's own window (Opus or Sonnet weekly) caps that family, not the account: it moves the family's
+  // rows (opusUtilization), never the account's place.
+  const account = snapshot ? { ...snapshot, sevenDayOpus: undefined, sevenDaySonnet: undefined } : snapshot;
+  const at = quotaExpiresAt(account, now);
+  const opus = snapshot?.sevenDayOpus;
+  const live = opus && !(Date.parse(opus.resetsAt ?? '') <= now.getTime());
+  return {
+    expiresAt: Number.isFinite(at) ? at : null,
+    nearLimit: quotaNearLimit(account, now),
+    opusUtilization: live ? opus.utilization : null,
+  };
 }
 
 /**
