@@ -258,7 +258,11 @@ final class SubagentBlockTests: XCTestCase {
         XCTAssertEqual(SubagentSessionSummary.make([done, older, one])?.band, "2 running · \(deploy)", "the newest running one")
         XCTAssertEqual(SubagentSessionSummary.make([done, run(status: "RUNNING", endedAt: nil)])?.band, "2 · 1 running",
                        "no description keeps the counts")
-        XCTAssertEqual(SubagentSessionSummary.make([done, one])?.failed, 0, "the spinner has the right edge while one runs")
+        XCTAssertEqual(SubagentSessionSummary.make([done, one])?.failed, 0)
+        let broke = run(status: "FAILED", createdAt: "2026-11-11T07:00:00.000Z", description: "Audit")
+        let both = try XCTUnwrap(SubagentSessionSummary.make([broke, one]))
+        XCTAssertEqual(both.failed, 1, "a failure still counts while another run is going")
+        XCTAssertEqual(both.spoken, "Agents: \(deploy), 1 failed")
         XCTAssertEqual(SubagentSessionSummary.make([done, one])?.current?.description, " \(deploy) ")
     }
 

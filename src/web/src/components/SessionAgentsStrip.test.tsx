@@ -271,6 +271,19 @@ describe("SessionAgentsStrip", () => {
     expect(line.querySelector(".ag-fact")).toBeNull();
   });
 
+  it("while one runs, an earlier failure still shows, before the spinner", () => {
+    draw([
+      run({ toolUseId: "a", status: "FAILED" }),
+      run({ toolUseId: "b", status: "RUNNING", endedAt: null, description: "Deploy df0fe42fb", createdAt: "2026-11-18T11:00:00.000Z" }),
+    ]);
+    const line = host.querySelector(".bg-tray-row")!;
+    const failed = line.querySelector(".ag-failed")!;
+    expect(failed.textContent).toBe(" 1 failed");
+    const spinner = line.querySelector(".chat-tool-status.running")!;
+    expect(failed.compareDocumentPosition(spinner) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+    expect(line.getAttribute("aria-label")).toBe("Agents: Deploy df0fe42fb, 1 failed");
+  });
+
   it("running elsewhere, names its machine and its model", () => {
     draw([
       run({ toolUseId: "a" }),
