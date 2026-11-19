@@ -801,6 +801,21 @@ export interface CursorKeyCheckResult {
   keyFingerprint: string;
 }
 
+/** What a runner states is executing in one session it supervises (RunnerHeartbeatRequest.executing). Each member is
+ *  the complete current value; one left out is not stated. */
+export interface RunnerSessionExecuting {
+  sessionId: string;
+  /** The engine is running a turn, one Orbit delivered or one it started itself (Session.engineTurnActive). */
+  engineTurnActive?: boolean;
+  /** The launch tool_use ids of the subagents and workflows still running (Session.runningSubagents). */
+  subagents?: string[];
+  /** The runner-hosted jobs still running, but services (Session.runningBgJobs). */
+  jobs?: string[];
+  /** Every background process still running: engine shells, Monitors, `!` shells and runner-hosted jobs
+   *  (Session.runningBgShells). */
+  shells?: string[];
+}
+
 export interface RunnerHeartbeatRequest {
   status: RunnerStatus;
   /** How many more active turns the runner can accept right now. Warm idle
@@ -819,6 +834,11 @@ export interface RunnerHeartbeatRequest {
    *  runners list counts them as running beside the sessions in a turn. Absent when there are
    *  none, and on older runners, which are counted by turns alone. */
   backgroundJobSessionIds?: string[];
+  /** For each session this process supervises, what is executing in it right now, stated whole (plan step 1.6): the
+   *  control plane replaces the session's inferred sets with the ones an entry gives, for sessions assigned to this
+   *  runner, open and leased to this process (runners/runner-executing-sets.ts). A set an entry leaves out, a session
+   *  no entry names, and a beat without the member (an older runner) leave the stored values as they are. */
+  executing?: RunnerSessionExecuting[];
   /** Commits this runner reported as failed that no longer fail for the reason they gave: the
    *  index lock they met is gone, or the branch has moved since. The control plane drops each
    *  settled error it still holds for that exact operation, so the worktree bar offers Commit

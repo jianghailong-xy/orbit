@@ -571,6 +571,7 @@ import {
 } from '../runners/runner-presence';
 import { recordRunnerResources, sanitizeRunnerResources } from '../runners/runner-resources';
 import { ownBackgroundJobSessionIds, sanitizeBackgroundJobSessionIds } from '../runners/runner-background-holders';
+import { replaceExecutingSets, sanitizeExecuting } from '../runners/runner-executing-sets';
 import {
   CHECK_ONLY_REFUSED_MESSAGE,
   checkOnlyRefusesApproval,
@@ -2091,6 +2092,7 @@ export class RunnerApiController {
       return this.reconcileHeartbeat(admitted, dto, headers.capabilities, headers.providerHeader, headers.osHeader, instance, link);
     }
     if (row.landingNamed) assertEngineSessionRow({ sessionKind: 'LANDING' });
+    await this.recordExecuting(runnerId, leaseOwner, dto);
     let verdict = linkBeatVerdict(runnerId, row, digests, supervised.length);
     if (verdict.answer === 'REPORT') {
       // A beat whose checkout report changed is written here, not by the full reconcile: read what it overwrites, so
@@ -2135,6 +2137,22 @@ export class RunnerApiController {
       row,
       digests,
     });
+  }
+
+  /**
+   * What the beat states is executing in each session the process supervises, replacing those sessions' inferred sets
+   * (runners/runner-executing-sets.ts); nothing for a beat that carries none. Advisory, as the background-job holders
+   * are: a write that fails leaves the sets as they were, and the next beat states them again.
+   */
+  private async recordExecuting(runnerId: string, leaseOwner: string | null, dto: RunnerHeartbeatRequest): Promise<void> {
+    const entries = sanitizeExecuting(dto?.executing);
+    if (!entries) return;
+    try {
+      const moved = await replaceExecutingSets(this.prisma, { runnerId, leaseOwner, entries });
+      for (const sessionId of moved) this.realtime.publishSessionUpdated(sessionId);
+    } catch (error) {
+      this.logger.warn(`runner ${runnerId}: executing sets not recorded this heartbeat (${(error as { code?: string })?.code ?? (error as Error)?.name})`);
+    }
   }
 
   /** What a link heartbeat's answer says waits for the runner: the beat statement's HintState, and this process's own. */
@@ -2338,6 +2356,7 @@ export class RunnerApiController {
         backgroundJobSessionIds,
         at: beatAt,
       }).catch(beatLost);
+      await this.recordExecuting(runner.id, heartbeatLeaseOwner, dto);
       // The machine's reading, on the row the beat just wrote. Advisory: a reading lost is the page's dash until the next.
       const resources = sanitizeRunnerResources(dto?.resources);
       if (resources) {

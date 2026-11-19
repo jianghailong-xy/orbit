@@ -57,7 +57,8 @@ export type HeartbeatFactRole =
   | 'REPORT'
   /** Written on every beat by the statement that writes the beat itself (readLinkBeat, recordRunnerResources,
    *  recordRunnerBeat), so it needs no digest: the machine's resources, which change on nearly every beat, and the
-   *  sessions its background jobs hold slots for. */
+   *  sessions its background jobs hold slots for; and what is executing in each session, which replaceExecutingSets
+   *  writes on every beat that carries it. */
   | 'PRESENCE'
   /** The heartbeat route does not read it. */
   | 'UNREAD';
@@ -81,6 +82,9 @@ export type HeartbeatFactRole =
  *   resources                                    kept on the presence row by the beat's own write (runners/runner-resources.ts).
  *   backgroundJobSessionIds                      kept on the presence row by the beat's own write, replaced on every beat
  *                                                (runners/runner-background-holders.ts).
+ *   executing                                    what runs in each supervised session, replacing the sessions' inferred sets
+ *                                                on every beat that carries it, by its own statement beside the beat's
+ *                                                (runners/runner-executing-sets.ts).
  *   the rest but idleCapacity                    reports: the runner row's catalogues and state, its plan usage, its
  *                                                sessions' worktrees, its workspaces' directories.
  */
@@ -110,6 +114,7 @@ export const HEARTBEAT_FACTS = {
   browser: 'REPORT',
   resources: 'PRESENCE',
   backgroundJobSessionIds: 'PRESENCE',
+  executing: 'PRESENCE',
 } as const satisfies { [K in keyof Required<RunnerHeartbeatRequest>]: HeartbeatFactRole };
 
 export type HeartbeatFactKind = keyof typeof HEARTBEAT_FACTS;
