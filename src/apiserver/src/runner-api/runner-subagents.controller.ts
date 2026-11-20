@@ -140,6 +140,16 @@ function assertSubagentsEnabled(workspace: { subagentsEnabled: boolean } | null)
   }
 }
 
+/** A workflow needs its own switch on as well (workflowsOn); `delegate` reads only SubAgents. */
+function assertWorkflowsEnabled(workspace: { workflowsEnabled: boolean } | null): void {
+  if (workspace?.workflowsEnabled === false) {
+    throw new ForbiddenException({
+      code: 'WORKFLOWS_DISABLED',
+      message: 'Workflows are turned off for this agent. Hand each piece of work to delegate, or do it in this session.',
+    });
+  }
+}
+
 /** Called under the session lock shared by workflow completion and SubAgent admission. */
 async function assertWorkflowRunning(tx: Prisma.TransactionClient, sessionId: string, workflowRunId?: string): Promise<void> {
   if (!workflowRunId) return;
@@ -230,11 +240,12 @@ export class RunnerSubagentsController {
         where: { id: sessionId },
         select: {
           ownerId: true, status: true, endReason: true, completedAt: true, archivedAt: true, deletedAt: true,
-          workspace: { select: { subagentsEnabled: true } },
+          workspace: { select: { subagentsEnabled: true, workflowsEnabled: true } },
         },
       });
       if (sessionHasEnded(session)) throw new ConflictException('the session has ended');
       assertSubagentsEnabled(session.workspace);
+      assertWorkflowsEnabled(session.workspace);
       const row = await tx.subagentWorkflowRun.create({
         data: {
           ownerId: session.ownerId,

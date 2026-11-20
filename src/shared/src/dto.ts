@@ -3150,6 +3150,10 @@ export interface ClaimedSession {
    *  ORBIT_WIKI, wiki/wiki-rollout.ts). Injected as ORBIT_WIKI=off so `orbit mcp` and the CLI leave out the wiki
    *  tools. Absent means on. */
   wikiDisabled?: boolean;
+  /** Present, and true, only when this session's Agent may not start a workflow: its Workflows switch is off, or its
+   *  SubAgents are (docs/subagent-workflow-design.md §9 D2). Injected as ORBIT_WORKFLOWS=off so `orbit mcp` leaves out
+   *  the `workflow` tool; `delegate` is not affected. Absent means on. */
+  workflowsDisabled?: boolean;
   /** Present, and true, only for the session of a scheduled task's run (`Session.scheduleRunId`, docs/scheduled-
    *  tasks-design.md §7.1). Injected as ORBIT_SCHEDULE_RUN=1 so `orbit mcp` lists schedule_run_report. */
   scheduleRun?: boolean;
@@ -3626,6 +3630,8 @@ export interface ReclaimSession {
   watchesDisabled?: boolean;
   /** The wiki not switched on for the owner, cf. ClaimedSession.wikiDisabled. */
   wikiDisabled?: boolean;
+  /** Workflows not on for the session's Agent, cf. ClaimedSession.workflowsDisabled. */
+  workflowsDisabled?: boolean;
   /** A scheduled task's run, cf. ClaimedSession.scheduleRun. */
   scheduleRun?: boolean;
   /** Fresh runner/session-bound proof for the runner's private credential store. */
