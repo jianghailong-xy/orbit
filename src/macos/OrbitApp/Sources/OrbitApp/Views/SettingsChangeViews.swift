@@ -229,7 +229,7 @@ struct SettingChangedLineView: View {
 
     var body: some View {
         if let mark = appModel.user?.changedBy?[key] {
-            HStack(alignment: .firstTextBaseline, spacing: 0) {
+            HStack(alignment: .lastTextBaseline, spacing: 0) {
                 Text(SettingsFromConversation.changedLine(mark))
                 Button(SettingsChangeCopy.undo) {
                     busy = true
