@@ -8,6 +8,7 @@ import {
   OrderedListOutlined,
   QuestionOutlined,
   SafetyCertificateOutlined,
+  SettingOutlined,
 } from '@ant-design/icons';
 import { CoordinatorQuestionCard, coordinatorQuestions, type ProjectOpenItemRow } from '../components/CoordinatorQuestionCard';
 import { OwnerRequestCard, OwnerRequestResolved } from '../components/OwnerRequestCard';
@@ -51,6 +52,7 @@ const ACTION: Readonly<Record<AgentRequestKind, string>> = {
   MANUAL_STEP: 'Open steps',
   CONFIRM: 'Review',
   WIKI_CREATE: 'Review',
+  SETTINGS_CHANGE: 'Review',
   BROWSER_SIGN_IN: BROWSER_SIGN_IN_COPY.action,
 };
 
@@ -60,6 +62,7 @@ const ICON: Readonly<Record<AgentRequestKind, ReactNode>> = {
   MANUAL_STEP: <OrderedListOutlined />,
   CONFIRM: <SafetyCertificateOutlined />,
   WIKI_CREATE: <BookOutlined />,
+  SETTINGS_CHANGE: <SettingOutlined />,
   BROWSER_SIGN_IN: <LoginOutlined />,
 };
 

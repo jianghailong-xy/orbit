@@ -11,7 +11,8 @@ public struct ProviderModelTier: Codable, Equatable, Sendable, Identifiable {
     public let levels: [String]
     /// `catalogue`, `owner`, or nil when nobody has set one.
     public let source: String?
-    /// The owner may set or clear it (PATCH /providers/mine/:providerId/model-tier).
+    /// The owner may set or clear it: a key's model (PATCH /providers/mine/:providerId/model-tier), or any model
+    /// of a built-in engine's catalogue (PATCH /providers/builtin/:slug/model-tier).
     public let editable: Bool
     /// USD per million output tokens, when known.
     public let outputPricePerMTok: Double?
@@ -83,7 +84,8 @@ public struct SubagentTiersResponse: Codable, Equatable, Sendable {
     public init(providers: [ProviderTierRow]) { self.providers = providers }
 }
 
-/// PATCH /providers/mine/:id/model-tier: set or clear (nil, sent as JSON null) the owner's tier for one model.
+/// PATCH /providers/mine/:id/model-tier or /providers/builtin/:slug/model-tier: set or clear (nil, sent as JSON
+/// null) the owner's tier for one model.
 public struct ProviderModelTierUpdate: Encodable, Sendable {
     public let model: String
     public let tier: String?
@@ -128,6 +130,8 @@ public enum SubagentSettings {
     public static let subscription = "Subscription"
     public static let noPrice = "—"
     public static let clear = "Clear"
+    /// The tag after a tier the owner set (board 2026-11-20).
+    public static let yours = "Yours"
     public static let tierSaveFailed = "Couldn't save the tier"
 
     /// The tiers a model can be given, lowest first.
@@ -185,6 +189,20 @@ public enum SubagentSettings {
         return billing == "subscription" ? subscription : noPrice
     }
 
-    /// Whether the tier menu offers Clear: only where a tier is set.
-    public static func menuOffersClear(_ levels: [String]) -> Bool { !levels.isEmpty }
+    /// Whether the tier menu offers Clear: a key's model with a tier, or a built-in engine's model the owner tiered
+    /// (a catalogue tier there has nothing to clear).
+    public static func menuOffersClear(_ provider: ProviderTierRow, _ model: ProviderModelTier) -> Bool {
+        provider.kind == "builtin" ? model.source == "owner" : !model.levels.isEmpty
+    }
+
+    /// Where a model's tier is written: a built-in engine's catalogue, or a key of the owner's own; nil when the
+    /// model's tier is not the owner's to set.
+    public static func tierPath(_ provider: ProviderTierRow, _ model: ProviderModelTier) -> String? {
+        guard model.editable else { return nil }
+        if provider.kind == "builtin" { return "providers/builtin/\(provider.slug)/model-tier" }
+        return provider.providerId.map { "providers/mine/\($0)/model-tier" }
+    }
+
+    /// Whether the Tier cell carries the Yours tag: a tier the owner set.
+    public static func showsYours(_ model: ProviderModelTier) -> Bool { model.source == "owner" }
 }

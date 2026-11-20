@@ -111,9 +111,20 @@ abstract class SubagentsShots {
         page { Column(Modifier.padding(horizontal = 16.dp)) { ModelTiersSection(api, 0) } }
         await("qwen-coder")
         shot("c-model-tiers")
-        compose.onNodeWithTag("tier:qwen-coder", useUnmergedTree = true).performClick()
+        compose.onNodeWithTag("tier:my-endpoint:qwen-coder", useUnmergedTree = true).performClick()
         compose.waitUntil(60_000) { compose.onAllNodesWithText("XL").fetchSemanticsNodes().isNotEmpty() }
         shot("d-model-tier-menu")
+    }
+
+    @Test fun builtinModelTiers() {
+        fixture.subagentTiers = SubagentFixtures.BUILTIN
+        val api = api()
+        page { Column(Modifier.padding(horizontal = 16.dp)) { ModelTiersSection(api, 0) } }
+        await("kimi-k3")
+        shot("e-builtin-tiers")
+        compose.onNodeWithTag("tier:cursor:grok-4.7", useUnmergedTree = true).performClick()
+        compose.waitUntil(60_000) { compose.onAllNodesWithText("Clear").fetchSemanticsNodes().isNotEmpty() }
+        shot("f-builtin-tier-menu")
     }
 }
 

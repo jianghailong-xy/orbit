@@ -275,7 +275,14 @@ Options:
                               key from project_get. Required of a project's judgment session,
                               optional for everybody else
   --codeless[=BOOL]           This work produces no code (a rollout, a walkthrough, research):
-                              it takes no part in its criterion's landing (see below)
+                              it resolves no source and its run gets a checkout with
+                              no branch until it has something to commit (see below)
+  --landing-check-exempt[=BOOL]
+                              Skip the project's landing check when this task lands on its
+                              project branch; its own acceptance still runs. Needs
+                              --landing-check-exempt-reason; project branch, coordinator or owner only
+  --landing-check-exempt-reason TEXT
+                              Why the landing check has nothing to say about it (max 280 characters)
   --completion-criterion EXECUTABLE|VERIFICATION|EVIDENCE_JUDGMENT|OWNER_CONFIRMED
 				              Required for every runner-created task; EVIDENCE_JUDGMENT must be explicit.
 				              OWNER_CONFIRMED is confirmed only by the account owner in the app, never by an agent
@@ -343,10 +350,9 @@ belongs to another project or another owner, or has already been replaced (only 
 take over from another, so two racing replacements produce one winner and one error).
 
 --codeless declares that this task produces no code — a rollout, a walkthrough, a verification,
-research — even though its project is bound to a codebase. It resolves no source and takes no part
-in its acceptance criterion's landing: the criterion does not wait for its work to reach main,
-where a task with no commit to land would hold it off LANDED, and the project off done. Declaring
-it here needs no reason; turning an existing task codeless later is 'orbit task update --codeless
+research — even though its project is bound to a codebase. It resolves no source and its run gets
+a checkout with no branch until it has something to commit. It does not decide landing: Orbit
+measures whether work lands from its commits. Declaring it here needs no reason; turning an existing task codeless later is 'orbit task update --codeless
 --codeless-reason TEXT', which is refused for a task that already has commits of its own.
 
 --project-id files the new task under a project you own — what a coordinator wants when the
@@ -722,10 +728,18 @@ Options:
                               brought back up to date
   --clear-criterion-key       Take the declaration back; the task stays, the relation goes
   --codeless[=BOOL]           Declare (or, =false, take back) that this task produces no code,
-                              which takes it out of its criterion's landing. Declaring it needs
-                              --codeless-reason, and is refused for a task with commits of its own
+                              so it resolves no source and its run gets a checkout with no branch
+                              until it has something to commit; it does not decide landing.
+                              Declaring it needs --codeless-reason, and is refused for a task with commits of its own
   --codeless-reason TEXT      Why this task produces no code; required with --codeless, and
                               stored on the task beside the declaration
+  --landing-check-exempt[=BOOL]
+                              Exempt this task from its project's landing check (=false takes it
+                              back); its own acceptance still runs. Needs
+                              --landing-check-exempt-reason; project branch, coordinator or owner only
+  --landing-check-exempt-reason TEXT
+                              Why the landing check has nothing to say about it (max 280
+                              characters); alone, replaces the reason of an exempt task
   --completion-criterion EXECUTABLE|VERIFICATION|EVIDENCE_JUDGMENT
                               Replace the task's one normal completion criterion
   --completion-criterion-override-reason TEXT
@@ -805,12 +819,12 @@ Undeclared, the same move is refused PROJECT_SCOPE_MISMATCH. The account owner n
 
 --model-hint: ` + taskModelHintDescription + `
 
---codeless turns an existing task into one that produces no code: it stops taking part in its
-acceptance criterion's landing, so the criterion no longer waits for its work to reach main. That
-changes what the project's done stands on, so it needs --codeless-reason in the same call (stored
+--codeless turns an existing task into one that produces no code: it resolves no source and its
+run gets a checkout with no branch until it has something to commit. It does not decide landing:
+Orbit measures that from commits. It needs --codeless-reason in the same call (stored
 on the task, and returned by task get as codelessReason), and it is refused outright for a task
 that already has commits of its own — a merge that moved a target, or a work session that
-reported changes on its branch: that work has to land. --codeless=false takes the declaration back
+reported changes on its branch: that work lands. --codeless=false takes the declaration back
 and needs no reason.
 
 --run-at sets or moves the task's one-time scheduled start and --clear-run-at cancels it; passing
@@ -1799,7 +1813,9 @@ func cliTaskCreate(args []string, in io.Reader, out io.Writer) error {
 	acceptanceCriteria := fs.String("acceptance-criteria", "", "what would settle that this task is done")
 	acceptanceCriteriaFile := fs.String("acceptance-criteria-file", "", "read the acceptance criteria from stdin (-)")
 	criterionKey := fs.String("criterion-key", "", "which of the project's acceptance criteria this work serves")
-	codeless := fs.Bool("codeless", false, "this work produces no code, so it takes no part in its criterion's landing")
+	codeless := fs.Bool("codeless", false, "this work produces no code, so it resolves no source and its run gets a checkout with no branch until it has something to commit")
+	landingCheckExempt := fs.Bool("landing-check-exempt", false, "skip the project's landing check when this task lands on its project branch (needs --landing-check-exempt-reason)")
+	landingCheckExemptReason := fs.String("landing-check-exempt-reason", "", "why the project's landing check has nothing to say about this task (at most 280 characters)")
 	completionCriterion := fs.String("completion-criterion", "", "completion criterion (EXECUTABLE|VERIFICATION|EVIDENCE_JUDGMENT)")
 	completionCriterionOverrideReason := fs.String("completion-criterion-override-reason", "", "why this task keeps a criterion after TASK_CRITERION_SHAPE_ADVICE")
 	ownerConfirmationReason := fs.String("owner-confirmation-reason", "", "why only the account owner can settle this OWNER_CONFIRMED task (DEPLOY|IRREVERSIBLE|OWNER_DEVICE_OR_ACCOUNT|OWNER_TRADE_OFF)")
@@ -1952,6 +1968,17 @@ func cliTaskCreate(args []string, in io.Reader, out io.Writer) error {
 	// was before the flag existed, and `--codeless=false` says the default out loud.
 	if flagWasSet(fs, "codeless") {
 		body["codeless"] = *codeless
+	}
+	// §12.15 P-C2, present-only like --codeless. Who may write it, the reason it needs and the line it
+	// needs are the server's to judge; a blank reason is caught before the round trip.
+	if flagWasSet(fs, "landing-check-exempt") {
+		body["landingCheckExempt"] = *landingCheckExempt
+	}
+	if flagWasSet(fs, "landing-check-exempt-reason") {
+		if strings.TrimSpace(*landingCheckExemptReason) == "" {
+			return fmt.Errorf("--landing-check-exempt-reason cannot be blank")
+		}
+		body["landingCheckExemptReason"] = strings.TrimSpace(*landingCheckExemptReason)
 	}
 	// The server checks the parent against the projectId sent on THIS request and never infers one
 	// from the parent, so a subtask of a project's task has to name both. Same present-only rule as
@@ -2585,6 +2612,8 @@ func cliTaskUpdate(args []string, in io.Reader, out io.Writer) error {
 	clearCriterionKey := fs.Bool("clear-criterion-key", false, "take back this task's criterion declaration")
 	codeless := fs.Bool("codeless", false, "declare (or, =false, take back) that this task produces no code")
 	codelessReason := fs.String("codeless-reason", "", "why this task produces no code (required with --codeless)")
+	landingCheckExempt := fs.Bool("landing-check-exempt", false, "exempt (or, =false, take back) this task from its project's landing check")
+	landingCheckExemptReason := fs.String("landing-check-exempt-reason", "", "why the project's landing check has nothing to say about this task (at most 280 characters)")
 	completionCriterion := fs.String("completion-criterion", "", "replace the completion criterion (EXECUTABLE|VERIFICATION|EVIDENCE_JUDGMENT)")
 	completionCriterionOverrideReason := fs.String("completion-criterion-override-reason", "", "why this edit changes the completion criterion")
 	ownerConfirmationReason := fs.String("owner-confirmation-reason", "", "replace why only the account owner can settle this OWNER_CONFIRMED task (DEPLOY|IRREVERSIBLE|OWNER_DEVICE_OR_ACCOUNT|OWNER_TRADE_OFF)")
@@ -2908,6 +2937,16 @@ func cliTaskUpdate(args []string, in io.Reader, out io.Writer) error {
 			return fmt.Errorf("--codeless-reason cannot be blank")
 		}
 		body["codelessReason"] = strings.TrimSpace(*codelessReason)
+	}
+	// §12.15 P-C2 on the edit door; the server judges the writer, the reason and the line.
+	if flagWasSet(fs, "landing-check-exempt") {
+		body["landingCheckExempt"] = *landingCheckExempt
+	}
+	if flagWasSet(fs, "landing-check-exempt-reason") {
+		if strings.TrimSpace(*landingCheckExemptReason) == "" {
+			return fmt.Errorf("--landing-check-exempt-reason cannot be blank")
+		}
+		body["landingCheckExemptReason"] = strings.TrimSpace(*landingCheckExemptReason)
 	}
 	if flagWasSet(fs, "completion-criterion") {
 		body["completionCriterion"] = *completionCriterion
@@ -3622,6 +3661,8 @@ func buildCLICapabilities(executable string) cliCapabilitiesDocument {
 	// Ungated too: keeping and reading back your own files is no power over anybody else's session. Upload and fetch
 	// are SessionOnly, because a file stays with the session that uploads it.
 	specs = append(specs, fileCLICapabilities...)
+	// Ungated too, and SessionOnly: a proposal is a card in the session's conversation (settings_tools.go).
+	specs = append(specs, settingsCLICapabilities...)
 	// The browser commands only while the server's browser switch is on, as the engine was spawned with it: off, the
 	// `orbit browser` family is absent (browser_tools.go).
 	if browserToolsEnabledFromEnv() {

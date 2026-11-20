@@ -1124,7 +1124,7 @@ struct BackgroundTrayView: View {
     /// folded away; it starts again from where it was.
     private var rotationPaused: Bool { open || paused || scenePhase != .active }
 
-    /// "Background", the name and its mark, the count: only the name moves, by a push from below,
+    /// "Background", the name, the count and its mark: only the name moves, by a push from below,
     /// or — with Reduce Motion — a crossfade in place.
     private func folded(_ row: BackgroundRowRule.Row) -> some View {
         let item = current(row)
@@ -1143,7 +1143,7 @@ struct BackgroundTrayView: View {
             .clipped()
             // The screen reader reads the row's own label, never a name that changes every 3 s.
             .accessibilityHidden(true)
-            BackgroundRowMarkView(mark: item.mark)
+            // The count, then the mark, at the right edge before the chevron, as AgentsBandRow ends.
             if !row.countParts.isEmpty {
                 row.countParts.enumerated().reduce(Text("")) { line, part in
                     line + Text(part.offset == 0 ? "" : " · ")
@@ -1151,6 +1151,7 @@ struct BackgroundTrayView: View {
                 }
                 .font(.orbitMeta).foregroundStyle(.secondary).lineLimit(1).fixedSize()
             }
+            BackgroundRowMarkView(mark: item.mark)
             Image(systemName: "chevron.right")
                 .font(.orbitMeta.weight(.semibold)).foregroundStyle(.secondary)
         }

@@ -1063,6 +1063,17 @@ public final class APIClient: @unchecked Sendable {
         try await postEmpty("owner-requests/\(id)/create-wiki")
     }
 
+    /// A SETTINGS_CHANGE card's Save changes (design §5.2): writes the proposed values and settles the card DONE. A value
+    /// that moved since is refused 409 SETTINGS_STALE and nothing is written.
+    public func applyOwnerRequestSettings(_ id: String) async throws -> OwnerRequest {
+        try await postEmpty("owner-requests/\(id)/apply-settings")
+    }
+
+    /// Undo of a settings change (design §5.3): the owner's own preferences PATCH with each key's `from`.
+    public func undoSettingsChange(_ values: [String: JSONValue]) async throws -> User {
+        try await patch("users/me/preferences", body: values)
+    }
+
     /// A SECRET request's key, in the body and nowhere else; the answer never carries it back.
     public func submitOwnerSecret(_ id: String, _ body: OwnerRequestSecretBody) async throws -> OwnerRequest {
         try await post("owner-requests/\(id)/secret", body: body)
@@ -1827,10 +1838,10 @@ public final class APIClient: @unchecked Sendable {
     /// Every provider with its models' SubAgent tiers and prices (GET /providers/subagent-tiers): the
     /// Providers page's Model tiers table and the SubAgents settings' provider list.
     public func subagentTiers() async throws -> SubagentTiersResponse { try await get("providers/subagent-tiers") }
-    /// Set or clear (nil) the owner's tier for one model of their own key.
-    public func setModelTier(providerID: String, model: String, tier: String?) async throws {
-        _ = try await send(makeRequest("providers/mine/\(providerID)/model-tier", method: "PATCH",
-                                       body: ProviderModelTierUpdate(model: model, tier: tier)))
+    /// Set or clear (nil) the owner's tier for one model, at the path SubagentSettings.tierPath names: a key of
+    /// their own, or a built-in engine's catalogue.
+    public func setModelTier(path: String, model: String, tier: String?) async throws {
+        _ = try await send(makeRequest(path, method: "PATCH", body: ProviderModelTierUpdate(model: model, tier: tier)))
     }
 
     /// The whole DeepSeek account's balance behind one of the account's own DeepSeek keys (GET

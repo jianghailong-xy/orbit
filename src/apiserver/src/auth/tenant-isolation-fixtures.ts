@@ -348,6 +348,13 @@ export function censusFixtures({ run: RUN, db, sql, server, jwt }: CensusWorld) 
         crossingFact: { kind: 'SELF_STARTED_TURN' },
       },
     })).id;
+    const settingChangeId = (await db.projectSettingChange.create({
+      data: {
+        ownerId, projectId, field: 'LANDING_CHECK', origin: 'COORDINATOR', reason: 'CENSUS', writtenBySessionId: randomUUID(),
+        oldValue: { command: null, timeoutSeconds: null, none: false },
+        newValue: { command: 'true', timeoutSeconds: null, none: false },
+      },
+    })).id;
     const handoffTargetId = await project(`${name} handoff target`);
     const handoffId = randomUUID();
     const payloadDigest = 'a'.repeat(64);
@@ -727,6 +734,7 @@ export function censusFixtures({ run: RUN, db, sql, server, jwt }: CensusWorld) 
       doneRequestItemId,
       blockerId,
       fuseEpisodeId,
+      settingChangeId,
       handoffId,
       promotionId,
       integrationJobId,

@@ -57,6 +57,8 @@ data class OwnerRequest(
     /** WIKI_CREATE: the repository the wiki is asked for, and the asking session's workspace it would read it from. */
     val repoUrlNorm: String? = null,
     val workspaceId: String? = null,
+    /** SETTINGS_CHANGE: `{changes: [{key, from, to, tier}]}`; read with [SettingsFromConversation.entries]. */
+    val payload: JsonElement? = null,
     /** BROWSER_SIGN_IN: the site to sign in to, the Orbit Cloud runner whose browser it is, and the asking session's title. */
     val browserSite: String? = null,
     val browserRunnerId: String? = null,
@@ -95,9 +97,11 @@ object OwnerRequests {
     const val CONFIRM = "CONFIRM"
     /** An agent asking the owner to create a wiki for its workspace's repository (docs/wiki-explicit-creation-design.md §3.6). */
     const val WIKI_CREATE = "WIKI_CREATE"
+    /** An agent proposing changes to the owner's own Settings (docs/settings-from-conversation-design.md §5.1). */
+    const val SETTINGS_CHANGE = "SETTINGS_CHANGE"
+    val kinds = setOf(DECISION, SECRET, MANUAL_STEP, CONFIRM, WIKI_CREATE, SETTINGS_CHANGE, BROWSER_SIGN_IN)
     /** An agent asking the owner to sign in to a site in the Orbit Cloud runner's browser. Signed in is answered from the browser tab. */
     const val BROWSER_SIGN_IN = "BROWSER_SIGN_IN"
-    val kinds = setOf(DECISION, SECRET, MANUAL_STEP, CONFIRM, WIKI_CREATE, BROWSER_SIGN_IN)
 
     /** The BROWSER_SIGN_IN card's words (web `BROWSER_SIGN_IN_COPY`). */
     const val browserSignInEyebrow = "Sign in needed · Orbit Cloud browser"
@@ -138,14 +142,14 @@ object OwnerRequests {
     const val later = "Later"
 
     /** The tag beside a card's title. */
-    fun kindTag(kind: String) = when (kind) { MANUAL_STEP -> "STEPS"; WIKI_CREATE -> "WIKI"; BROWSER_SIGN_IN -> "SIGN IN"; else -> kind }
+    fun kindTag(kind: String) = when (kind) { MANUAL_STEP -> "STEPS"; WIKI_CREATE -> "WIKI"; SETTINGS_CHANGE -> "SETTINGS"; BROWSER_SIGN_IN -> "SIGN IN"; else -> kind }
     /** The card's primary button. */
-    fun primary(kind: String) = when (kind) { DECISION -> "Send answer"; SECRET -> "Provide key"; MANUAL_STEP -> "Mark done"; WIKI_CREATE -> "Create wiki"; BROWSER_SIGN_IN -> "Open browser"; else -> "Confirm" }
+    fun primary(kind: String) = when (kind) { DECISION -> "Send answer"; SECRET -> "Provide key"; MANUAL_STEP -> "Mark done"; WIKI_CREATE -> "Create wiki"; SETTINGS_CHANGE -> SettingsChangeCopy.save; BROWSER_SIGN_IN -> "Open browser"; else -> "Confirm" }
     /** An inbox row's button. */
     fun inboxAction(kind: String) = when (kind) { DECISION -> "Answer"; SECRET -> "Provide"; MANUAL_STEP -> "Open steps"; BROWSER_SIGN_IN -> "Sign in"; else -> "Review" }
     /** A push's primary action, which opens the card on its input. */
     fun pushAction(kind: String): String? = when (kind) {
-        SECRET -> "Provide key"; DECISION -> "Answer"; MANUAL_STEP -> "Mark done"; CONFIRM, WIKI_CREATE -> "Review"; BROWSER_SIGN_IN -> "Sign in"; else -> null
+        SECRET -> "Provide key"; DECISION -> "Answer"; MANUAL_STEP -> "Mark done"; CONFIRM, WIKI_CREATE, SETTINGS_CHANGE -> "Review"; BROWSER_SIGN_IN -> "Sign in"; else -> null
     }
     fun declineLabel(kind: String) = if (kind == MANUAL_STEP) "Can’t do this…" else "Decline…"
 
@@ -245,6 +249,7 @@ object OwnerRequests {
                     }
                 }
                 request.kind == CONFIRM -> "Confirmed"
+                request.kind == SETTINGS_CHANGE -> SettingsChangeCopy.changed(SettingsFromConversation.entries(request.payload).size)
                 request.kind == WIKI_CREATE -> request.answer?.name?.takeIf { it.isNotEmpty() }?.let { "Created the wiki $it" } ?: "Wiki created"
                 request.kind == BROWSER_SIGN_IN -> signedIn(request.browserSite.orEmpty())
                 else -> "Marked done"
@@ -482,6 +487,10 @@ class OwnerRequestsApi(private val api: OrbitApi, private val handle: SessionHan
 
     /** WIKI_CREATE's Create wiki: the owner's door that makes the wiki with the card's settings and settles the card (design §3.6). */
     suspend fun createWiki(id: String): OwnerRequest = post(id, listOf("create-wiki"), buildJsonObject { })
+
+    /** SETTINGS_CHANGE's Save changes (design §5.2): writes the proposed values and settles the card DONE. A value that moved since is
+     * refused 409 SETTINGS_STALE and nothing is written. */
+    suspend fun applySettings(id: String): OwnerRequest = post(id, listOf("apply-settings"), buildJsonObject { })
 
     /** The key itself, optionally saved under [saveAs]. */
     suspend fun provide(id: String, value: String, saveAs: String? = null): OwnerRequest =

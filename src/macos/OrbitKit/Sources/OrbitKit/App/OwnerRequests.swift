@@ -17,6 +17,7 @@ public enum OwnerRequests {
         case .manualStep: return "STEPS"
         case .confirm:    return "CONFIRM"
         case .wikiCreate: return "WIKI"
+        case .settingsChange: return "SETTINGS"
         case .browserSignIn: return "SIGN IN"
         }
     }
@@ -29,6 +30,7 @@ public enum OwnerRequests {
         case .manualStep: return "Mark done"
         case .confirm:    return "Confirm"
         case .wikiCreate: return "Create wiki"
+        case .settingsChange: return SettingsChangeCopy.save
         case .browserSignIn: return BrowserSignInCopy.openBrowser
         }
     }
@@ -46,6 +48,7 @@ public enum OwnerRequests {
         case .manualStep: return "Open steps"
         case .confirm:    return "Review"
         case .wikiCreate: return "Review"
+        case .settingsChange: return "Review"
         case .browserSignIn: return BrowserSignInCopy.action
         }
     }
@@ -58,6 +61,7 @@ public enum OwnerRequests {
         case .manualStep: return "list.number"
         case .confirm:    return "checkmark.shield"
         case .wikiCreate: return "books.vertical"
+        case .settingsChange: return "gearshape"
         case .browserSignIn: return "person.badge.key"
         }
     }
@@ -198,7 +202,7 @@ public enum OwnerRequests {
         switch request.kind {
         case .secret:   return draft.body != nil
         case .decision: return option != nil || !text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
-        case .manualStep, .confirm, .wikiCreate, .browserSignIn: return true
+        case .manualStep, .confirm, .wikiCreate, .settingsChange, .browserSignIn: return true
         }
     }
 
@@ -241,6 +245,9 @@ public enum OwnerRequests {
             return words.map { "“\($0)”" } ?? "Answered"
         }
         if request.kind == .wikiCreate { return WikiStartCopy.created(request.answer?.name) }
+        if request.kind == .settingsChange {
+            return SettingsChangeCopy.changed(SettingsFromConversation.entries(request.payload).count)
+        }
         if request.kind == .browserSignIn { return request.browserSite.map(BrowserSignInCopy.signedIn) ?? "Signed in" }
         return request.kind == .confirm ? "Confirmed" : "Marked done"
     }
@@ -347,7 +354,7 @@ public enum OwnerRequests {
             return label.map { "decision · recommended: \($0)" } ?? "decision"
         case .confirm:
             return "confirmation"
-        case .secret, .wikiCreate, .browserSignIn:
+        case .secret, .wikiCreate, .settingsChange, .browserSignIn:
             return nil
         }
     }
@@ -486,7 +493,7 @@ public enum OwnerRequestLink {
         switch kind {
         case .secret: return .secret
         case .decision: return .answer
-        case .manualStep, .confirm, .wikiCreate, .browserSignIn: return .primary
+        case .manualStep, .confirm, .wikiCreate, .settingsChange, .browserSignIn: return .primary
         }
     }
 }

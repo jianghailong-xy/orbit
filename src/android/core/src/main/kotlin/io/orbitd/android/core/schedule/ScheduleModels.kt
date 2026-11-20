@@ -29,6 +29,9 @@ sealed class ScheduleRule {
     data class Once(val at: String) : ScheduleRule()
     data class Daily(override val time: String) : ScheduleRule()
     data class Weekly(override val time: String, val weekdays: List<String>) : ScheduleRule()
+    /** Sub-daily: a slot every [minutes] from [time] through [until] (inclusive; the end of the day when null), on [weekdays]. The
+     * server always writes `time` and `weekdays`, so a build that predates EVERY reads it as a [Weekly] rule. */
+    data class Every(val minutes: Int, override val time: String, val weekdays: List<String>, val until: String? = null) : ScheduleRule()
     /** A WHEN rule: starts a run each time its condition fires. [conditionId] is null on a create card, before Create writes the
      * condition. */
     data class When(val conditionId: String?, val runsPerWeek: Int, override val condition: ScheduleWhenCondition) : ScheduleRule()
@@ -44,12 +47,17 @@ sealed class ScheduleRule {
             is Once -> { put("kind", "ONCE"); put("at", at) }
             is Daily -> { put("kind", "DAILY"); put("time", time) }
             is Weekly -> { put("kind", "WEEKLY"); put("time", time); put("weekdays", JsonArray(weekdays.map(::JsonPrimitive))) }
+            is Every -> {
+                put("kind", "EVERY"); put("minutes", minutes); put("time", time)
+                put("weekdays", JsonArray(weekdays.map(::JsonPrimitive))); until?.let { put("until", it) }
+            }
             is When -> { put("kind", "WHEN"); put("conditionId", conditionId); put("runsPerWeek", runsPerWeek); put("condition", condition.toJson()) }
         }
     }
 
     companion object {
-        /** ONCE and DAILY by name; any other kind is weekly, as the Swift decoder reads it. */
+        /** ONCE, DAILY, EVERY and WHEN by name; any other kind is weekly, as the Swift decoder reads it. An EVERY rule without a
+         * readable `minutes` falls to that same weekly reading, so it is never dropped. */
         fun parse(json: JsonElement?): ScheduleRule? {
             val o = json as? JsonObject ?: return null
             return when (o.scheduleText("kind") ?: return null) {
@@ -57,6 +65,9 @@ sealed class ScheduleRule {
                 "DAILY" -> Daily(o.scheduleText("time") ?: return null)
                 "WHEN" -> When(o.scheduleText("conditionId"), o.scheduleInt("runsPerWeek") ?: 0,
                     ScheduleWhenCondition.parse(o["condition"]) ?: return null)
+                "EVERY" -> o.scheduleInt("minutes")?.takeIf { it > 0 }?.let { minutes ->
+                    Every(minutes, o.scheduleText("time") ?: return null, o.scheduleStrings("weekdays") ?: emptyList(), o.scheduleText("until"))
+                } ?: Weekly(o.scheduleText("time") ?: return null, o.scheduleStrings("weekdays") ?: emptyList())
                 else -> Weekly(o.scheduleText("time") ?: return null, o.scheduleStrings("weekdays") ?: emptyList())
             }
         }
@@ -163,6 +174,11 @@ data class ScheduleView(
     val revision: Int = 1,
     val startAt: String? = null,
     val endAt: String? = null,
+    /** The planned end by count (§8.5); null without one. */
+    val maxRuns: Int? = null,
+    val runsStarted: Int? = null,
+    /** maxRuns minus runsStarted, at least 0; null without maxRuns or from a server before it. */
+    val runsLeft: Int? = null,
     val nextDueAt: String? = null,
     val consecutiveFailures: Int = 0,
     val createdFromSessionId: String? = null,
@@ -205,6 +221,9 @@ data class ScheduleView(
                 revision = o.scheduleInt("revision") ?: 1,
                 startAt = o.scheduleText("startAt"),
                 endAt = o.scheduleText("endAt"),
+                maxRuns = o.scheduleInt("maxRuns"),
+                runsStarted = o.scheduleInt("runsStarted"),
+                runsLeft = o.scheduleInt("runsLeft"),
                 nextDueAt = o.scheduleText("nextDueAt"),
                 consecutiveFailures = o.scheduleInt("consecutiveFailures") ?: 0,
                 createdFromSessionId = o.scheduleText("createdFromSessionId"),

@@ -10,6 +10,8 @@ public enum OwnerRequestKind: String, Codable, Sendable, CaseIterable {
     case confirm = "CONFIRM"
     /// An agent asking the owner to create a wiki for its workspace's repository (docs/wiki-explicit-creation-design.md §3.6).
     case wikiCreate = "WIKI_CREATE"
+    /// An agent proposing changes to the owner's own Settings (docs/settings-from-conversation-design.md §5.1).
+    case settingsChange = "SETTINGS_CHANGE"
     /// An agent on an Orbit Cloud runner asking the owner to sign in to a site in that runner's browser.
     case browserSignIn = "BROWSER_SIGN_IN"
 }
@@ -139,6 +141,8 @@ public struct OwnerRequest: Codable, Equatable, Sendable, Identifiable {
     /// The request's agent-written words in the owner's language (Settings › Translation): title,
     /// why, ifUnanswered, options, the steps' text and verifyHint. Nil until translated.
     public let translation: OwnerCardTranslation?
+    /// SETTINGS_CHANGE: `{changes: [{key, from, to, tier}]}`; read with `SettingsFromConversation.entries`.
+    public let payload: JSONValue?
 
     public init(id: String, kind: OwnerRequestKind, state: OwnerRequestState = .pending, title: String,
                 why: String, blocksTaskIds: [String] = [], ifUnanswered: String? = nil,
@@ -151,7 +155,7 @@ public struct OwnerRequest: Codable, Equatable, Sendable, Identifiable {
                 projectId: String? = nil, resolvedAt: String? = nil, resolvedByUserId: String? = nil,
                 resolutionNote: String? = nil, answer: OwnerRequestAnswer? = nil,
                 resolvedClient: String? = nil, createdAt: String,
-                translation: OwnerCardTranslation? = nil) {
+                translation: OwnerCardTranslation? = nil, payload: JSONValue? = nil) {
         self.id = id
         self.kind = kind
         self.state = state
@@ -181,13 +185,14 @@ public struct OwnerRequest: Codable, Equatable, Sendable, Identifiable {
         self.resolvedClient = resolvedClient
         self.createdAt = createdAt
         self.translation = translation
+        self.payload = payload
     }
 
     private enum CodingKeys: String, CodingKey {
         case id, kind, state, title, why, blocksTaskIds, ifUnanswered, options, recommendedOption, steps
         case secretSpec, secretScope, secretGrant, verifyHint, repoUrlNorm, workspaceId, expiresAt, askedBySessionId, projectId
         case browserSite, browserRunnerId, askedBySessionTitle
-        case resolvedAt, resolvedByUserId, resolutionNote, answer, resolvedClient, createdAt, translation
+        case resolvedAt, resolvedByUserId, resolutionNote, answer, resolvedClient, createdAt, translation, payload
     }
 
     public init(from decoder: Decoder) throws {
@@ -221,6 +226,7 @@ public struct OwnerRequest: Codable, Equatable, Sendable, Identifiable {
         resolvedClient = try? c.decodeIfPresent(String.self, forKey: .resolvedClient)
         createdAt = try c.decode(String.self, forKey: .createdAt)
         translation = (try? c.decodeIfPresent(OwnerCardTranslation.self, forKey: .translation)) ?? nil
+        payload = (try? c.decodeIfPresent(JSONValue.self, forKey: .payload)) ?? nil
     }
 }
 

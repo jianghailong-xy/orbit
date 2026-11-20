@@ -24,6 +24,8 @@
 | 结果确定的步骤 | 集成进集成线、在组合树上跑检查、写回执、派发下游、吸收 main、合入 main 前重检、DONE 投影、升级计时 | 平台：apiserver 记账，runner 执行 git 与检查 | §1–§3、§4.6 |
 | 需要判断的例外 | 冲突怎么解、检查为什么红、失败任务重试还是拆分 | 协调会话（例外待办的负责人） | §4 |
 | 需要授权的决定 | 合入 main、协调会话的提问、保险丝恢复、blocker 解除、判据提案 | owner 本人，直接看卡片，不经 LLM 转述 | §3、§5、§6 |
+| 落地前跑什么、落地失败谁先修（修订 42） | 项目分支上的落地检查、单个任务免落地检查、落地失败交回前的轮数 | 协调者定（不出卡；进 upstream 的门仍归 owner） | §12（P-C1、P-C2、P-R1） |
+| 落不落地（修订 42） | 一条任务有没有东西要落 | 平台从交付的提交读出，没有人声明、没有标签 | §12 P-M1 |
 
 **G1**：不存在「平台通知协调会话去执行一个结果确定的步骤」的设计；这类步骤由平台执行（apiserver 记账，runner 跑 git 与检查）。平台的每一次集成尝试都属于一个**落地会话**（§2.9；修订 12 对实现的要求，分期落地）：它是这件事的地址、记录与实时状态，由平台驱动，不启动 engine、不接收轮次、不做决定。一件待办的负责人是会话，当且仅当处理它需要判断；落地会话永远不是负责人。
 
@@ -171,7 +173,9 @@ Orbit 仓库的项目可将 `merge_check_command` 配为 `bash scripts/merge-che
 - `IntegrationLine` = `integration_ref = upstream_ref` ? `MAIN` : `PROJECT_BRANCH`。
 - 分支短名 = 全名去掉 `refs/heads/`，与 `session_merge_receipt.target_branch` 的写法一致（runner 回报短名）。
 
-**`isCodeTask(task)`**：`task.project_id` 非空 ∧ `task.codeless = false` ∧ 该任务最近一条工作会话（`starts_task_work = true`、`deleted_at IS NULL`、按 `created_at` 取最新）的 `isolation_status = 'worktree'` 且 `branch` 非空，且（修订 29，§10.5 O-L7）这条会话所在 workspace 的 `repo_url` 经 PSC SR36 规范化后等于项目代码库的 `canonical_repo_url`，或者无从比较（还没有代码库行、会话没有 workspace、workspace 没有 `repo_url` 时条件成立：仓库不明不等于仓库不同）。已知且不等的不是本线的代码任务：J9 豁免，不入队，不冻结交付身份，不观测，也退出 §1.4 判据落地的合取。
+**`isCodeTask(task)`**：`task.project_id` 非空 ∧ 该任务最近一条工作会话（`starts_task_work = true`、`deleted_at IS NULL`、按 `created_at` 取最新）的 `isolation_status = 'worktree'` 且 `branch` 非空，且（修订 29，§10.5 O-L7）这条会话所在 workspace 的 `repo_url` 经 PSC SR36 规范化后等于项目代码库的 `canonical_repo_url`，或者无从比较（还没有代码库行、会话没有 workspace、workspace 没有 `repo_url` 时条件成立：仓库不明不等于仓库不同）。已知且不等的不是本线的代码任务：J9 豁免，不入队，不冻结交付身份，不观测，也退出 §1.4 判据落地的合取。（修订 42，§12 P-M3：合取项里去掉 `task.codeless = false`，`codeless` 不再决定落地。）是代码任务不等于入队，入队看 §12 P-M1（修订 42）。
+
+> **现状（修订 42 之前，main 上的做法，不是规则）**：`isCodeTask` 仍带 `task.codeless = false`，贴了 `codeless` 的任务不入队；上一段是对实现的要求，由修订 42 第二部分的实现任务落地。
 
 **`lineStarted(project)`**：该项目 `slot = 'primary'` 的代码库行存在且 `integration_started_at` 非空。
 
@@ -181,7 +185,7 @@ Orbit 仓库的项目可将 `merge_check_command` 配为 `bash scripts/merge-che
 
 **L2（默认规则，纯函数）** `defaultIntegrationLine(codeTasks, edges): IntegrationLine`：
 
-- 输入：项目内 `codeless = false`、`status <> 'CANCELLED'` 的任务集合 T，以及 `task_dependency` 中两端都在 T 内的边集合 E。
+- 输入：项目内 `status <> 'CANCELLED'` 的任务集合 T（修订 42，§12 P-M3：不再读 `codeless`；现状是 main 上仍只取 `codeless = false` 的任务，实现任务落地前以现状为准），以及 `task_dependency` 中两端都在 T 内的边集合 E。
 - E 非空 → `PROJECT_BRANCH`；否则 → `MAIN`。
 - 不读标题、描述或别的列。「紧急修复」是 owner 的显式选择（L1），不是推断。
 
@@ -202,6 +206,10 @@ Orbit 仓库的项目可将 `merge_check_command` 配为 `bash scripts/merge-che
 **L5（显式设置的写入门）**：`GET / PATCH /projects/:id/integration`。PATCH 只接受 owner 凭据；带 acting session 的请求（任何 agent 会话，包括协调会话）一律拒绝 403 `INTEGRATION_SETTINGS_OWNER_ONLY`。
 
 **L5-b（合并检查的确认卡，2026-10-07）**：`PATCH /projects/:id`（以及 runner 门 `PATCH /runner/projects/:id`）上的 `integration` 按字段拆分。线字段（`line` / `projectBranchName` / `upstreamRef`）与 L5 一样，带 acting session 即 403，卡也不能改变这一点；`mergeCheckCommand`、`mergeCheckTimeoutSeconds`、`landingCheckCommand`、`landingCheckTimeoutSeconds` 则可以由会话写入，前提是服务端找到一张**本会话、对本项目、且 input 里的提议与本次逐字相同**的 ALLOWED 卡（`decided_by_id` 非空——由工作区常设规则自动放行的卡不算，那不是人点的），并把该卡记入本次写入的 provenance（`activity`，type `project.merge_check.changed`）。找不到卡 / 被拒 / 内容不符 → 仍是那条 403，且守卫在事务之前，什么都不写。写入门仍是 `PATCH /projects/:id/integration`：它不带会话，不涉及卡。四个字段按请求中实际出现的项一起比对，显式 null 与省略有别；见 `project-integration-approval.ts#mergeCheckProposalKey`、`project-integration-approval.ts#findMergeCheckApproval`。
+
+**L5-b 的放开（修订 42，§12 P-C1、P-R1）**：线是 `PROJECT_BRANCH` 且该线配了合并检查（`merge_check_command` 非空）时，`landingCheckCommand` 与 `landingCheckTimeoutSeconds` 由项目当前的协调会话直接写，不要卡；写入记 `landing_check_set_by_session_id` 与 `landing_check_set_at`，并按 P-R1 留一行只追加的记录。没有合并检查时落地检查是唯一的检查，改它仍要卡；`MAIN` 线不放开；`mergeCheckCommand` 与 `mergeCheckTimeoutSeconds` 不放开（它们是进 upstream 的门）。owner 写过的值，协调者此后不能再无卡覆盖，同一字段回到本条的卡。写 `null` 仍是回落到合并检查（K1）；要明说不跑，写显式值 `landingCheck: 'NONE'`（见 K1）。
+
+> **现状（修订 42 之前，不是规则）**：main 上四个字段一律要本会话、内容逐字相同的 ALLOWED 卡；上一段是对实现的要求。
 
 ```ts
 interface UpdateProjectIntegrationDto {
@@ -501,6 +509,10 @@ interface UpstreamMovedCommits {
 
 `enqueueForDoneTask` 在 `isCodeTask` 为假时什么也不做；为真时按 §10.5 O-L4 冻结交付身份（修订 29），并按线入队：`MAIN` 线（或尚未决定、按 L2 算出 `MAIN`）的项目改为插入晋升（§3.4 M-F2），但交付方式为 `AGENT_PUSH` 的项目不插入，改为入队观测（修订 29，§10.5 O-L2、§10.6 O-T1）；`PROJECT_BRANCH` 线插入 `LAND_TASK`。父任务聚合（`applyTaskAggregations`）写的 DONE 不入队：父任务没有自己的工作分支。新增普查 `src/apiserver/src/projects/integration-enqueue-done-sites.spec.ts`：扫描 apiserver 里所有把 task 写成 DONE 的方法，要求每一处在同一方法内调用 `enqueueForDoneTask`，聚合写入方列入白名单；修订 29 起它还要求每个 DONE 写入点同时冻结交付身份（§10.9）。
 
+**（修订 42，§12 P-M1）`enqueueForDoneTask` 在冻结交付身份（§10.5 O-L4）之后、入队之前读它**：`delivered_sha = delivered_base_sha`（分支上没有自己的提交）→ **不入队**：不写 `LAND_TASK`、不建晋升候选、不入队观测，不经 runner，也不为此开始一条线；同一事务按 §10.5 O-L7 收口，该任务没有任何会话报告过工作就是「没有东西要落」，J9 对它的下游读作满足，下游在这个 DONE 的边沿上派发（J10 的第二条边沿），有会话报告过工作则照旧开 `LANDING_UNOBSERVED`（`WORK_ELSEWHERE`）。`delivered_sha ≠ delivered_base_sha` → 照上面入队。身份还没冻结（O-L4 第 3 条）→ 等补冻结，补冻结的事务里做同一个判断；身份不明照 O-T1。普查 `integration-enqueue-done-sites.spec.ts` 加这一支。
+
+> **现状（修订 42 之前，不是规则）**：main 上 `isCodeTask` 为真就入队，空分支要等 runner 领到作业才在 J-S2 答 `NOTHING_TO_LAND`；上一段是对实现的要求。
+
 **J-T1b（显式重试）**：协调会话调用 MCP `integration_retry { projectId, taskId, reason }`（runner 门 `POST /runner/projects/:id/tasks/:taskId/integration/retry`，带 `X-Orbit-Session-Id`）。规则在 `project-integration-retry.ts#decideIntegrationRetry`，读的事实都在任务行 `FOR NO KEY UPDATE`（与 DONE 事务同一把锁）下读：
 
 - `reason` 必填，去空白后非空且 ≤2000 字符，否则 400 `INTEGRATION_RETRY_REASON_REQUIRED`。
@@ -572,10 +584,10 @@ interface IntegrationJobCommand {
 | 步 | 命令与判定 | 失败出口 |
 |---|---|---|
 | **J-S1 FETCH** | `git fetch <remote> <target_ref> <upstream_ref>`；T0 = 远端目标 tip（`PROJECT_BRANCH` 线目标不存在时 T0 = U）；U = 远端 upstream tip；S = `git rev-parse refs/heads/<源分支>` → `source_sha` | fetch 失败 → `ERROR / FETCH_FAILED`；源分支不存在 → `ERROR / SOURCE_BRANCH_MISSING`；upstream 不存在 → `ERROR / BASE_REF_NOT_FOUND` |
-| **J-S2 MAIN_SYNC**（仅 `PROJECT_BRANCH`） | （修订 33）S **等于会话记录的 base**（分支停在 fork 点，自己没有提交）、且是 T0 或 U 的祖先时不做这一步，直接答 `NOTHING_TO_LAND`（0300），并实测 S 是否 U 的祖先，报为 `sourceOnUpstream`（0346），`sourceFullyApplied = false`（0410），不跑检查、不推送：没有东西要落的任务不替别人的同步冲突报红，这个冲突由下一个有提交的任务报。其余情形：U 是 T0 的祖先时什么都不合，base = T0。U 不是 T0 的祖先时，按源分支手里有什么分三支：**①** S 同时包含 U 与 T0、且 S ≠ U——源分支自己已经做过这次吸收（§3.1 M3）——不再合，base = T0，J-S4 走 MERGE 模式；**②** S 包含 T0，也包含某个 upstream 提交 U′（U′ 是 U 的祖先、且不在 T0 里，S 的 tip 也不恰好是 U′），但不含 U：在**源分支**上 `git merge --no-ff -m "Merge <upstream> into <source>" U`，合干净时这次合并就是 base（写 `main_sync_sha`，这一次吸收是作业自己做的），J-S4 走 MERGE 模式，进项目分支的树 = S + `U′..U` 的改动、旧 T0 仍是祖先；**③** 其余（S 不含 T0，或从没吸收过 upstream——`merge-base(S, U)` 落在 T0 里，或 S 的 tip 就是 U′）：照旧在 T0 上 `git merge --no-ff -m "Merge <upstream> into <target>" U` → M = `main_sync_sha`，base = M。S = U 不算吸收：它没有自己的东西。声明的 base 就是它时上面已经答了；声明的不是它时走 ③，由 J-S3 答 `ALREADY_LANDED` | 冲突 → `CONFLICT`（`phase = MAIN_SYNC`，冲突路径来自 `git diff --name-only --diff-filter=U`）：① 不合并，没有这一出口；② 的冲突说明 `U′..U` 真的改到了解法所在处；③ 的冲突照旧。② 还有一个 `ERROR` 出口：`git checkout --detach S` 失败 → `ERROR / SOURCE_BRANCH_MISSING`（源分支在 fetch 与这里之间消失）。**J-S3 的「已包含」仍对目标判**（`containedIn`：T0，或在 ③ 真的合出了 MAIN_SYNC 合并提交时的那个结果），不对 base 判：② 把吸收合进了源分支，那时 base 已经包含 S，照 base 判会错答 `ALREADY_LANDED`。② 的判定用到的 U′ 就是 `merge-base(S, U)` |
+| **J-S2 MAIN_SYNC**（仅 `PROJECT_BRANCH`） | （修订 42，§12 P-M1：下面空分支的这一支标为**旧 runner 的回落**——零提交的任务在 DONE 时就不入队，这一支只接住旧 runner 没报 `branch_sha` 的会话；现状是 main 上它是零提交任务唯一的出口。）（修订 33）S **等于会话记录的 base**（分支停在 fork 点，自己没有提交）、且是 T0 或 U 的祖先时不做这一步，直接答 `NOTHING_TO_LAND`（0300），并实测 S 是否 U 的祖先，报为 `sourceOnUpstream`（0346），`sourceFullyApplied = false`（0410），不跑检查、不推送：没有东西要落的任务不替别人的同步冲突报红，这个冲突由下一个有提交的任务报。其余情形：U 是 T0 的祖先时什么都不合，base = T0。U 不是 T0 的祖先时，按源分支手里有什么分三支：**①** S 同时包含 U 与 T0、且 S ≠ U——源分支自己已经做过这次吸收（§3.1 M3）——不再合，base = T0，J-S4 走 MERGE 模式；**②** S 包含 T0，也包含某个 upstream 提交 U′（U′ 是 U 的祖先、且不在 T0 里，S 的 tip 也不恰好是 U′），但不含 U：在**源分支**上 `git merge --no-ff -m "Merge <upstream> into <source>" U`，合干净时这次合并就是 base（写 `main_sync_sha`，这一次吸收是作业自己做的），J-S4 走 MERGE 模式，进项目分支的树 = S + `U′..U` 的改动、旧 T0 仍是祖先；**③** 其余（S 不含 T0，或从没吸收过 upstream——`merge-base(S, U)` 落在 T0 里，或 S 的 tip 就是 U′）：照旧在 T0 上 `git merge --no-ff -m "Merge <upstream> into <target>" U` → M = `main_sync_sha`，base = M。S = U 不算吸收：它没有自己的东西。声明的 base 就是它时上面已经答了；声明的不是它时走 ③，由 J-S3 答 `ALREADY_LANDED` | 冲突 → `CONFLICT`（`phase = MAIN_SYNC`，冲突路径来自 `git diff --name-only --diff-filter=U`）：① 不合并，没有这一出口；② 的冲突说明 `U′..U` 真的改到了解法所在处；③ 的冲突照旧。② 还有一个 `ERROR` 出口：`git checkout --detach S` 失败 → `ERROR / SOURCE_BRANCH_MISSING`（源分支在 fetch 与这里之间消失）。**J-S3 的「已包含」仍对目标判**（`containedIn`：T0，或在 ③ 真的合出了 MAIN_SYNC 合并提交时的那个结果），不对 base 判：② 把吸收合进了源分支，那时 base 已经包含 S，照 base 判会错答 `ALREADY_LANDED`。② 的判定用到的 U′ 就是 `merge-base(S, U)` |
 | **J-S3 已包含** | S 是**目标**（`containedIn`，见 J-S2 末）的祖先 → `ALREADY_LANDED`。不推送，丢弃 M（② 合出的 base 也一样丢）。空分支到不了这里（修订 33）：它在 J-S2 之前已经答了 | |
 | **J-S4 REBASE / MERGE** | fork = `git merge-base S base`；`git rev-list --merges fork..S` 非空，或 J-S2 判定源分支已吸收 upstream → **MERGE 模式** `git merge --no-ff S`（保住合并提交里的冲突解法；后一种 T0 是 S 的祖先，合出来的树就是 S 的树）；否则 `git rebase --onto base anchor S`：anchor 默认取 fork，仅 `sessionBaseSha` 非空、是 S 的祖先且不是 fork 的祖先时取 `sessionBaseSha`（会话 base 早于或等于 fork 时用 fork，避免重放 base 已有的提交）。结果 C = `tested_sha`。REBASE 的 C 就是 base 时什么都不推：要重放的提交全被当作「补丁已在上游」跳过，或本来就没有要重放的。这时答 `NOTHING_TO_LAND`（`phase = REBASE`），不 PUSH、不 VERIFY，实测 `sourceOnUpstream`，并报 `sourceFullyApplied` = 重放前 `anchor..S` 非空（0410；2026-10-09 一批这样的落地被记成 LANDED 并写了回执）。MERGE 模式不适用：合出的结果等于 base，只发生在 J-S2 把 upstream 吸收进源分支那条路上，那时推 base 就是落地 | 冲突 → `CONFLICT`（`phase = REBASE` 或 `MERGE`） |
-| **J-S5 CHECK** | 有检查时先在 C 铺环境，再依次跑已配置的任务验收与落地检查（K1，`project-integration-job.ts#checksFor`）；晋升的合并检查见 M-S3 | 铺环境失败或超时 → `ERROR / CHECK_TREE_UNPREPARED`；任一检查不通过 → `CHECK_FAILED`，不推送；落地检查按下述 K2、K3 判免检与归属 |
+| **J-S5 CHECK** | 有检查时先在 C 铺环境，再依次跑已配置的任务验收与落地检查（K1，`project-integration-job.ts#checksFor`）；晋升的合并检查见 M-S3 | 铺环境失败或超时 → `ERROR / CHECK_TREE_UNPREPARED`；任一检查不通过 → `CHECK_FAILED`，不推送；落地检查按下述 K2、K3 判免检与归属。（修订 42，§12 P-C2、P-C1）任务带 `landing_check_exempt` 时不跑项目的落地检查，检查条目记 `skipped: 'TASK_EXEMPT'` 与理由，**`TASK_ACCEPTANCE` 照跑**；项目的 `landingCheck` 为 `'NONE'` 时只跑任务验收（现状：main 上没有这两条） |
 | **J-S6a 落地前核对** | `tested_tree_sha = git rev-parse C^{tree}`；要求 `HEAD = C` 且 `git status --porcelain --untracked-files=no` 为空（检查不得改动或提交已跟踪文件） | → `ERROR / CHECK_MUTATED_TREE` |
 | **J-S6 PUSH** | REMOTE：`git push <remote> C:<target_ref>`（不带 force，只能 fast-forward）；RUNNER_LOCAL：`git update-ref <target_ref> C T0`。随后在 workDir 前移本地目标 ref（同 `rebaseFastForward`：目标在根 checkout 上时 `merge --ff-only`，否则 `branch -f`） | 非 fast-forward 被拒 → 回 J-S1，至多 2 轮 → `ERROR / TARGET_MOVED`；其他 → `ERROR / PUSH_REJECTED` |
 | **J-S7 VERIFY** | `git fetch <remote> <target_ref>`；要求远端 tip = C 且 `C^{tree} = tested_tree_sha`；`landed_sha = C`，`landed_tree_sha` = 其树；`ahead_of_upstream = git rev-list --count U..C` | 不一致 → `ERROR / LANDED_TREE_MISMATCH`（不写回执） |
@@ -2148,7 +2160,7 @@ O-L2、O-L5、O-L6 的读法（R29-8）：
 
 **O-L7（空分支与别的仓库）**：
 
-- `delivered_sha = delivered_base_sha` 表示这条分支在 base 之外没有提交（不等于这个任务没写过代码，修订 33，见 O-L8），照 J8 的 `NOTHING_TO_LAND` 规则：该任务没有任何会话报告过工作时写回执，否则开 `LANDING_UNOBSERVED`（原因 `WORK_ELSEWHERE`）。
+- `delivered_sha = delivered_base_sha` 表示这条分支在 base 之外没有提交（不等于这个任务没写过代码，修订 33，见 O-L8），照 J8 的 `NOTHING_TO_LAND` 规则：该任务没有任何会话报告过工作时写回执，否则开 `LANDING_UNOBSERVED`（原因 `WORK_ELSEWHERE`）。（修订 42，§12 P-M1：这条规则在 DONE 的事务里就执行，不再等 runner 领到作业；现状是 main 上由 J-S2 在 runner 上答 `NOTHING_TO_LAND` 之后才写。）
 - `isCodeTask` 的后半加一个条件：工作会话所在 workspace 的 `repo_url`，经 SR36 规范化后等于项目代码库的 `canonical_repo_url`。已知且不等的不是本线的代码任务：J9 豁免，不入队，不冻结，不观测，并像 codeless 一样退出 §1.4 判据落地的合取（「有提交可落」）。无从比较的，条件成立：还没有代码库行的项目，第一次集成按 L3 把它绑到这份工作的仓库；会话没有 workspace、或 workspace 没有 `repo_url` 的，仓库不明不等于仓库不同，照旧入队、被等、留在合取里，缺的仓库由原有的路径交给人（还没绑定时是 L3 的 `INTEGRATION_ERROR / INTEGRATION_REPOSITORY_UNKNOWN`，已经绑定时是落地本身的结局），不悄悄读成没有东西可落。代码库这一侧同样过一遍 SR36：`bind()` 写下的行本来就是规范形，这一步对它不改变任何东西。SQL 里的规范化是 `canonicalRepoUrlSql`，与 TypeScript 的 `canonicalRepoUrl` 逐步对应；SQL 的比较用 `<>`，任一侧为 NULL 时条件成立，TypeScript 同样以 null 为成立。
 
 **O-L8（没有东西可落地的任务，修订 33）**：缘由是一个回补任务（纯数据修复，分支零提交，没声明 codeless；orbitd.io 生产库查不到这条分支）答了 `SOURCE_BRANCH_MISSING`，查证时被读成「这个码就是没有代码可落地的表现」。本条不加状态、不加错误码、不改入队，只写一条规则、四条读法和两处要说实话的地方。
@@ -2335,7 +2347,7 @@ O-L2、O-L5、O-L6 的读法（R29-8）：
 - **答 `SOURCE_BRANCH_MISSING` 时转给观测、不开待办**（修订 33）：按提交指名上线后答这个码的全是领不了观测的旧 runner，观测会一直 `QUEUED`（生产上有 2 条已排队 5 天）。看得见的错变成无声的等，违反 `docs/product-intro.md` 的「Nothing blocks in silence」。
 - **把 `SOURCE_BRANCH_MISSING` 读成没有东西可落**（修订 33）：丢了分支的真实提交也会变绿（O-L8）。
 - **建任务时必须声明 codeless，或 DONE 时补问**（修订 33）：声明是对意图的陈述，回补这类任务建的时候说不准；线的测量是更好的事实（§1.4）。
-- **项目级的「不改代码」开关，以及声明了 codeless 却有改动时的新待办**（修订 33，owner 2026-11-03）：没有改动的任务在落地这一层本来就不打扰人，多一个开关、多一种待办只换来省掉一次几秒钟的检查。声明了 codeless 却提交了代码时不落地、也不提醒，这个缺口仍在，范围没有变大，本修订不处理。
+- **项目级的「不改代码」开关，以及声明了 codeless 却有改动时的新待办**（修订 33，owner 2026-11-03）：没有改动的任务在落地这一层本来就不打扰人，多一个开关、多一种待办只换来省掉一次几秒钟的检查。声明了 codeless 却提交了代码时不落地、也不提醒，这个缺口仍在，范围没有变大，本修订不处理。（修订 42，§12 P-M3、P-M4：走得更远——连逐任务的 `codeless` 也不再决定落地，项目级的 `nonCode` 同样不再被读；有提交就按提交落，这个缺口由 §12 收口，不再适用上一句。）
 
 ## 11. 落地检查分两层与基线红（修订 36）
 
@@ -2384,7 +2396,7 @@ O-L2、O-L5、O-L6 的读法（R29-8）：
 
 **K1（检查分两层）**：`checksFor` 按作业种类选命令：
 
-- `LAND_TASK`：`TASK_ACCEPTANCE`（不变）+ `LANDING_CHECK`（`landing_check_command ?? merge_check_command`，超时同理）。修订 11 的跳过门对 `LANDING_CHECK` 生效；修订 39 另加 owner 在途跳过门。
+- `LAND_TASK`：`TASK_ACCEPTANCE`（不变）+ `LANDING_CHECK`（`landing_check_command ?? merge_check_command`，超时同理）。修订 11 的跳过门对 `LANDING_CHECK` 生效；修订 39 另加 owner 在途跳过门。（修订 42，§12 P-C1、P-C2：`landingCheck: 'NONE'` 是显式的「不跑」，这时只跑 `TASK_ACCEPTANCE`；带 `landing_check_exempt` 的任务不跑 `LANDING_CHECK`，见 K2。现状是 main 上没有 `'NONE'` 这个值，只有写 `null` 回落到合并检查。）
 - `CHECK_PROMOTION` / `LAND_PROMOTION`：M-S3 不变，`PROJECT_BRANCH` 源跑 `MERGE_CHECK`；`TASK_BRANCH` 源跑 `TASK_ACCEPTANCE` + `MERGE_CHECK`。
 
 `MAIN` 线项目没有 `LAND_TASK`，不受本条影响。两列与 `merge_check_command` 一样，在领取时从代码库行读（`integration-job-relay.ts` 的领取查询），入队之后改命令对下一次领取生效。
@@ -2396,6 +2408,8 @@ O-L2、O-L5、O-L6 的读法（R29-8）：
 3. 改动文件里不含 `.orbit/landing-check-exempt` 本身。
 
 **免检模式从 U（J-S1 取到的 upstream tip）读**，不从 C 或源分支读：生效的名单是已经进了 main 的那份，任务不能通过修改名单来豁免自己。跳过时，检查条目写 `{ name: 'LANDING_CHECK', skipped: 'PATHS_EXEMPT', files: [...] }`，不算失败。`TASK_ACCEPTANCE` 照跑：它是任务自己的验收，不归项目免检。M-S3 从不跳过。
+
+**K2 的第二种免检（修订 42，§12 P-C2）**：任务行 `landing_check_exempt = true`（写入者限项目当前的协调会话与 owner，带理由，只在 `PROJECT_BRANCH` 线上生效，`MAIN` 线上写入 → 409 `LANDING_CHECK_EXEMPT_NEEDS_PROJECT_BRANCH`）时，J-S5 不跑项目的落地检查，检查条目写 `{ name: 'LANDING_CHECK', skipped: 'TASK_EXEMPT', reason }`，与 `PATHS_EXEMPT` 并列，不算失败。`TASK_ACCEPTANCE` 与进 upstream 的合并检查照跑。上面的仓库名单不变：它是仓库的规则，这一条是协调者对一条任务的判断。现状：main 上没有这一支，是对实现的要求。
 
 **K3（基线归属）**：`LANDING_CHECK` 的退出码不符（不含 runner 在预算处杀掉的 `timedOut`），**且**这一代在 J-S2 合入了 upstream（base = M ≠ T0）时，runner 在 M 上（不含本任务的提交）再跑一次同一条 `LANDING_CHECK`，检查条目记 `scope: 'BASELINE'`：
 

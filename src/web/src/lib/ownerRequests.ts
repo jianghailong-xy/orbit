@@ -14,7 +14,11 @@ import { formatSpan, sameResourceId } from './watches';
  */
 
 export type OwnerRequestKind =
-  | 'DECISION' | 'SECRET' | 'MANUAL_STEP' | 'CONFIRM' | 'WIKI_CREATE' | 'BROWSER_SIGN_IN'
+  | 'DECISION' | 'SECRET' | 'MANUAL_STEP' | 'CONFIRM' | 'WIKI_CREATE'
+  // A change to the owner's own Settings, proposed by a session (docs/settings-from-conversation-design.md §5.1).
+  | 'SETTINGS_CHANGE'
+  // An agent on the Orbit Cloud runner asking the owner to sign in to a site in its browser (browser_request_sign_in).
+  | 'BROWSER_SIGN_IN'
   // A scheduled task's items, which no session can file (apiserver schedules/schedule-attention.ts).
   | 'SCHEDULE_FAILED' | 'SCHEDULE_HELD' | 'SCHEDULE_APPROVAL' | 'SCHEDULE_WIDEN'
   // A condition's items (apiserver conditions/condition-attention.ts): it cannot be read, or a task's condition has
@@ -96,6 +100,8 @@ export interface OwnerRequest {
   scheduleChangeRequestId?: string | null;
   /** CONDITION_*: the condition the item is about, which names its schedule or task. */
   conditionId?: string | null;
+  /** SETTINGS_CHANGE: `{ changes: [{ key, from, to, tier }] }`, which the card draws (lib/settingsChange). */
+  payload?: unknown;
   expiresAt: string | null;
   askedBySessionId: string;
   projectId: string | null;
@@ -120,6 +126,7 @@ export const KIND_TAGS: Readonly<Record<OwnerRequestKind, string>> = {
   MANUAL_STEP: 'STEPS',
   CONFIRM: 'CONFIRM',
   WIKI_CREATE: 'WIKI',
+  SETTINGS_CHANGE: 'SETTINGS',
   BROWSER_SIGN_IN: 'SIGN IN',
   SCHEDULE_FAILED: SCHEDULE_COPY.waiting.kinds.schedule,
   SCHEDULE_HELD: SCHEDULE_COPY.waiting.kinds.schedule,

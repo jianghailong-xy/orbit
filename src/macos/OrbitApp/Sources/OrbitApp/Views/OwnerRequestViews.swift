@@ -34,7 +34,9 @@ struct OwnerRequestContent: View {
     var onChat: ((OwnerRequest) -> Void)? = nil
 
     var body: some View {
-        if request.state != .pending {
+        if request.kind == .settingsChange, [.pending, .done, .declined].contains(request.state) {
+            SettingsChangeCardView(model: model, request: request)
+        } else if request.state != .pending {
             OwnerRequestResolvedLine(model: model, request: request)
         } else if focus == nil, let until = model.snoozedUntil(request.id) {
             OwnerRequestSnoozedLine(model: model, request: request, until: until)
@@ -222,6 +224,8 @@ struct OwnerRequestCard: View {
             EmptyView()
         case .wikiCreate:
             OwnerRequestWikiCreateFacts(request: request)
+        case .settingsChange:
+            EmptyView()
         case .browserSignIn:
             VStack(alignment: .leading, spacing: 6) {
                 if let from = BrowserSignInCopy.fromSessionLine(request) {

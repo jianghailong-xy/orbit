@@ -183,6 +183,7 @@ public enum Notifications {
         case .manualStep: return "Mark done"
         case .confirm:    return "Review"
         case .wikiCreate: return "Review"
+        case .settingsChange: return "Review"
         case .browserSignIn: return BrowserSignInCopy.action
         }
     }
