@@ -65,23 +65,29 @@ for (const theme of ['dark', 'light']) {
   await context.close();
 }
 
-// ── (c) one Revert, light ────────────────────────────────────────────────────────────────────────
-{
-  const { context, page, writes } = await open('light');
+// ── (c) the settings block with the non-code mark set, then one Revert, light and dark ──────────────
+sql(`UPDATE project SET non_code = true, non_code_set_by = 'OWNER', non_code_set_at = now() WHERE id='${B.projectId}'::uuid`);
+const rowsQuery = `SELECT field, origin, reverts_change_id IS NOT NULL AS is_revert, old_value::text, new_value::text FROM project_setting_change WHERE project_id='${B.projectId}'::uuid ORDER BY created_at`;
+// One theme per run (THEME=light|dark): the Revert is written once, so the dark pass re-seeds a fresh database.
+for (const theme of [process.env.THEME ?? 'light']) {
+  const { context, page, writes } = await open(theme);
   await page.goto(`${BASE}/projects/${B.projectId}`);
+  await page.locator('.project-changes-row').waitFor();
+  await shot(page, '.project-run-settings', `settings-non-code-${theme}`);
+  say({ theme, landingOffDrawn: (await page.locator('.project-run-landing-off').count()) > 0 });
   await page.locator('.project-changes-row').click();
   await page.locator('.project-changes-list').waitFor();
-  say({ before: sql(`SELECT field, origin, reverts_change_id IS NOT NULL AS is_revert, old_value::text, new_value::text FROM project_setting_change WHERE project_id='${B.projectId}'::uuid ORDER BY created_at`) });
+  say({ theme, before: sql(rowsQuery) });
+  await shot(page, '.project-changes', `changes-before-revert-${theme}`);
   await page.locator('.project-change-row button').first().click();
   const dialog = page.locator('[role="dialog"], [role="alertdialog"]').first();
   await dialog.waitFor();
-  await shot(page, '[role="dialog"], [role="alertdialog"]', 'changes-confirm-light');
+  await shot(page, '[role="dialog"], [role="alertdialog"]', `changes-confirm-${theme}`);
   await dialog.getByRole('button', { name: 'Revert' }).click();
   await page.locator('.project-change-reverted').first().waitFor();
-  await shot(page, '.project-changes', 'changes-reverted-light');
-  say({ writes });
-  say({ after: sql(`SELECT field, origin, reverts_change_id IS NOT NULL AS is_revert, old_value::text, new_value::text FROM project_setting_change WHERE project_id='${B.projectId}'::uuid ORDER BY created_at`) });
-  say({ landingCheckNow: sql(`SELECT landing_check_command, landing_check_none, landing_check_set_by FROM project_codebase WHERE project_id='${B.projectId}'::uuid`) });
+  await shot(page, '.project-changes', `changes-after-revert-${theme}`);
+  say({ theme, writes });
+  say({ theme, after: sql(rowsQuery) });
   await context.close();
 }
 

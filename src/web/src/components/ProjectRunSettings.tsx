@@ -73,8 +73,6 @@ import {
   RUN_DELIVERS_CODE_HINT,
   RUN_DELIVERS_NOT_CODE,
   RUN_DELIVERS_NOT_CODE_HINT,
-  RUN_LANDING,
-  RUN_LANDING_OFF_HINT,
   RUN_TO_CODE,
   RUN_TO_NOT_CODE,
   formatDoneDateTime,
@@ -512,7 +510,6 @@ export function ProjectRunSettings({
             </div>
           </div>
 
-          {draft.nonCode ? null : (<>
           <div className="project-integration-setting">
             <div className="project-integration-setting-label">{RUN_TASKS_LAND_ON}</div>
             <div>
@@ -602,8 +599,6 @@ export function ProjectRunSettings({
             </div>
           ) : null}
 
-          </>)}
-
           <div className="project-integration-setting">
             <div className="project-integration-setting-label">{RUN_AUTOMATIC}</div>
             <div>
@@ -649,13 +644,7 @@ export function ProjectRunSettings({
         <div className="project-run-settings-group">
           <div className="project-run-settings-group-head">{RUN_INTEGRATION}</div>
 
-          {draft.nonCode ? (
-            <div className="project-integration-setting project-run-landing-off">
-              <div className="project-integration-setting-label">{RUN_LANDING}</div>
-              <div className="project-integration-setting-hint">{RUN_LANDING_OFF_HINT}</div>
-            </div>
-          ) : (
-            <>
+          <>
               <div className="project-integration-setting">
                 <div className="project-integration-setting-label">{LANDING_CHECK_COPY.LABEL}</div>
                 <div>
@@ -733,8 +722,7 @@ export function ProjectRunSettings({
                   {missingCheck ? <div className="start-card-warn">{runNoMergeCheckWarning(main)}</div> : null}
                 </div>
               </div>
-            </>
-          )}
+          </>
 
           <div className="project-integration-setting">
             <div className="project-integration-setting-label">{RUN_ESCALATE_AFTER}</div>

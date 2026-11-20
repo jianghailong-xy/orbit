@@ -30,8 +30,6 @@ import {
   NON_CODE_MARKED_BY_COORDINATOR,
   NON_CODE_MARKED_BY_YOU,
   RUN_DELIVERS,
-  RUN_LANDING,
-  RUN_LANDING_OFF_HINT,
   RUN_TO_CODE,
   RUN_TO_NOT_CODE,
 } from '../lib/projectDone';
@@ -841,6 +839,33 @@ describe("Coordinator's changes (board 05)", () => {
     expect(rows[2]!.querySelector('button')).toBeNull();
     expect(rows[2]!.textContent).toContain('Your change · nothing to revert');
   });
+  it('shows Your change · nothing to revert on an owner row, including the row a revert writes', async () => {
+    const revertRow = { id: 'c4', projectId: PROJECT, taskId: null, field: 'LANDING_CHECK', origin: 'OWNER',
+      oldValue: { command: null, timeoutSeconds: null, none: true },
+      newValue: { command: 'npm run check:landing', timeoutSeconds: null, none: false },
+      reason: null, writtenBySessionId: null, revertsChangeId: 'c1', revertedAt: null, revertible: false,
+      createdAt: new Date(Date.now() - 30_000).toISOString() };
+    const node = await mount(projectOf({ settingChanges: [revertRow, ...CHANGES] as unknown as RunSettingsProject['settingChanges'] }));
+    await press(node.querySelector<HTMLElement>('.project-changes-row')!);
+    const rows = [...node.querySelectorAll<HTMLElement>('.project-change-row')];
+    expect(rows[0]!.querySelector('button')).toBeNull();
+    expect(rows[0]!.querySelector('.project-change-action')?.textContent).toBe('Your change · nothing to revert');
+    expect(rows[0]!.querySelector('.project-landing-badge')?.textContent).toBe('You');
+  });
+  it.each([
+    ['SETTING_CHANGE_NOT_CURRENT', 'This field has changed since, so putting back the old value would undo a later change. Nothing was written.'],
+    ['SETTING_CHANGE_NOT_REVERTIBLE', 'Only a change the coordinator made without a card can be reverted. This one is yours or was approved on a card. Nothing was written.'],
+    ['SETTING_CHANGE_ALREADY_REVERTED', 'This change was already reverted. Nothing was written.'],
+  ])('reads a 409 %s as a plain sentence in place', async (code, sentence) => {
+    server.door = async () => { throw new ApiError('conflict', 409, code); };
+    const node = await mount(projectOf({ settingChanges: CHANGES }));
+    await press(node.querySelector<HTMLElement>('.project-changes-row')!);
+    await press(node.querySelector<HTMLElement>('.project-change-row button')!);
+    await until(() => dialog() !== null, 'the question');
+    await press(dialogButton('Revert'));
+    await until(() => node.querySelector('.project-changes .start-card-warn') !== null, 'the sentence');
+    expect(node.querySelector('.project-changes .start-card-warn')!.textContent).toBe(sentence);
+  });
   it('asks first, says what it will do, and posts the revert only on confirm', async () => {
     const node = await mount(projectOf({ settingChanges: CHANGES }));
     await press(node.querySelector<HTMLElement>('.project-changes-row')!);
@@ -906,13 +931,18 @@ describe('How it runs — Delivers (board 01)', () => {
     expect(text).not.toContain('checks the work reached');
   });
 
-  it('draws a coordinator-marked project as Not code with who and when, and folds the landing rows into Landing · Off', async () => {
+  it('draws a coordinator-marked project as Not code with who and when, and draws the integration rows as it does for code (P-M3)', async () => {
     const node = await mount(projectOf({ nonCode: true, nonCodeSetBy: 'COORDINATOR', nonCodeSetAt: '2026-11-11T10:20:00.000Z' }));
-    expect(labels(node)).toEqual([RUN_DELIVERS, 'Automatic', 'At most', RUN_LANDING, 'Escalate after']);
+    const drawn = labels(node);
+    expect(drawn).toContain('Landing check');
+    expect(drawn).toContain('Merge check');
+    expect(drawn).toContain('Tasks land on');
+    expect(drawn).not.toContain('Landing');
+    expect(node.textContent).not.toContain('Landing · Off');
+    expect(node.textContent).not.toContain('Off for a non-code project');
     expect(deliversInput(node, 'NOT_CODE').checked).toBe(true);
     expect(settingRow(node, RUN_DELIVERS).id).toBe(NON_CODE_ANCHOR);
     expect(settingRow(node, RUN_DELIVERS).textContent).toContain(`${NON_CODE_MARKED_BY_COORDINATOR} · Nov 11`);
-    expect(settingRow(node, RUN_LANDING).textContent).toBe(`${RUN_LANDING}${RUN_LANDING_OFF_HINT}`);
     expect(node.querySelector('.project-run-settings-summary')?.textContent).toContain('Non-code · 3 tasks at a time');
   });
 
