@@ -4701,11 +4701,14 @@ struct CoordinatorQuestionRecordView: View {
     /// The record as drawn: the question in the owner's language where it was translated.
     private var record: ProjectClosedQuestion { source.shown(owner: owner, showOriginal: showOriginal) }
 
-    init(record: ProjectClosedQuestion, queued: Bool = false, notice: String? = nil, told: OwnerAnswerTold? = nil) {
+    init(record: ProjectClosedQuestion, queued: Bool = false, notice: String? = nil,
+         told: OwnerAnswerTold? = nil, initiallyOpen: Bool = false) {
         self.source = record
         self.queued = queued
         self.notice = notice
         self.told = told
+        // The evidence probe draws the record already unfolded; the conversation opens it folded.
+        _open = State(initialValue: initiallyOpen)
     }
 
     var body: some View {
