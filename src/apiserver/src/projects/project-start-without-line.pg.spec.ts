@@ -29,6 +29,8 @@ import {
 } from '@prisma/client';
 import type { PrismaClient } from '@prisma/client';
 import { type ProjectStartRequestFiled } from '@orbit/shared';
+import { plainToInstance } from 'class-transformer';
+import { validate } from 'class-validator';
 import { Client } from 'pg';
 
 import { prismaClientFor } from '../prisma/prisma-client';
@@ -45,6 +47,7 @@ import {
   assertCoordinatorPgUrlIsIsolated,
   verifyCoordinatorPgIdentity,
 } from './coordinator-pg-test-safety';
+import { RequestProjectStartDto, StartProjectDto } from './dto';
 import { ProjectAcceptanceService } from './project-acceptance.service';
 import { ProjectOpenItemService } from './project-open-item.service';
 import { ProjectsService } from './projects.service';
@@ -55,7 +58,7 @@ const sha = (nibble: string) => nibble.repeat(40);
 const CRITERION = 'the work lands once a task commits';
 const TOUCHED = [{ path: 'src/thing.ts', status: 'M', additions: 1, deletions: 0 }];
 
-test('a project starts with no line and no repository, and its line starts at the first commit', {
+for (const withRepo of [false, true]) test(`a project starts with no line${withRepo ? ' (its coordination workspace names a repository)' : ' and no repository'}, and its line starts at the first commit`, {
   skip, concurrency: 1, timeout: 300_000,
 }, async (t) => {
   const url = URL!;
@@ -112,7 +115,7 @@ test('a project starts with no line and no repository, and its line starts at th
   });
   // The coordination workspace names no repository; the workspace the work runs in does.
   await prisma.workspace.create({
-    data: { id: coordinationWorkspaceId, ownerId, runnerId, name: 'coordination', enabled: true, repoUrl: null },
+    data: { id: coordinationWorkspaceId, ownerId, runnerId, name: 'coordination', enabled: true, repoUrl: withRepo ? repoUrl : null },
   });
   await prisma.workspace.create({
     data: {
@@ -177,12 +180,22 @@ test('a project starts with no line and no repository, and its line starts at th
   const ask = (body: Record<string, unknown>) =>
     door.requestStart(runner, coordinatorSessionId, projectId, body as never) as Promise<ProjectStartRequestFiled>;
 
+  // The two doors' bodies are validated before the services see them: a body with no line passes.
+  assert.deepEqual(await validate(plainToInstance(RequestProjectStartDto, {
+    maxConcurrentTasks: 2, why: 'ready',
+  }), { whitelist: true }), [], 'the request body validates with no line');
+  assert.deepEqual(await validate(plainToInstance(StartProjectDto, {
+    criteriaDigest: 'a'.repeat(64), automatic: true, maxConcurrentTasks: 2, mergeCheckCommand: null,
+  }), { whitelist: true }), [], 'the start body validates with no line');
+
   // (4, first half) a request that carries a line is unchanged: no repository, no project branch.
-  const withLine = await refused(() => ask({
-    line: 'PROJECT_BRANCH', maxConcurrentTasks: 2, why: 'a branch, with no repository to hold it',
-  }));
-  assert.equal(withLine.code, 'START_REQUEST_NOT_READY');
-  assert.ok(withLine.findings?.some((finding) => finding.code === 'START_REPOSITORY_UNKNOWN'));
+  if (!withRepo) {
+    const withLine = await refused(() => ask({
+      line: 'PROJECT_BRANCH', maxConcurrentTasks: 2, why: 'a branch, with no repository to hold it',
+    }));
+    assert.equal(withLine.code, 'START_REQUEST_NOT_READY');
+    assert.ok(withLine.findings?.some((finding) => finding.code === 'START_REPOSITORY_UNKNOWN'));
+  }
 
   // (1) no line: accepted, and no codeless warning.
   const filed = await ask({ maxConcurrentTasks: 2, why: 'the plan is ready; the line starts at the first commit' });
@@ -200,10 +213,12 @@ test('a project starts with no line and no repository, and its line starts at th
   // (4, second half) the start door with a line is unchanged.
   const digest = (await acceptance.standardSetConfirmation(ownerId, projectId)).currentVersion.digest;
   const body = { criteriaDigest: digest, automatic: true, maxConcurrentTasks: 2, mergeCheckCommand: null };
-  const startWithLine = await refused(() => acceptance.startProject(ownerId, projectId, {
-    ...body, line: 'PROJECT_BRANCH',
-  } as never));
-  assert.equal(startWithLine.code, 'INTEGRATION_REPOSITORY_UNKNOWN');
+  if (!withRepo) {
+    const startWithLine = await refused(() => acceptance.startProject(ownerId, projectId, {
+      ...body, line: 'PROJECT_BRANCH',
+    } as never));
+    assert.equal(startWithLine.code, 'INTEGRATION_REPOSITORY_UNKNOWN');
+  }
 
   // (2) no line: the door starts it.
   const started = await acceptance.startProject(ownerId, projectId, { ...body, requestId: stored.id } as never);
