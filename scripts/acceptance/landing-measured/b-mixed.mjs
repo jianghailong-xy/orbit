@@ -172,39 +172,47 @@ check('M2: LANDING_CHECK skipped TASK_EXEMPT with the coordinator\'s reason', m2
 check('M2: its own acceptance ran (TASK_ACCEPTANCE exit 0)', m2Checks.some((x) => x.name === 'TASK_ACCEPTANCE' && x.exitCode === 0 && !x.skipped), m2Checks.map((x) => `${x.name}:${x.skipped ?? x.exitCode}`).join(','));
 check('M2: the landing check never ran (no LANDM42 landing-check output in its job)', !JSON.stringify(m2Checks).includes('LM42 landing check on'));
 
-// Main: reached only through a promotion whose check ran the merge check.
-let promo = await until('a promotion to main to merge', () => {
-  const r = rows(`select state, merged_sha from project_promotion where project_id = ${P} and state = 'MERGED'`);
-  return r.length ? r[0] : null;
-}, { timeoutMs: 120_000, everyMs: 3_000 }).catch(() => null);
-let promotionPath = 'Automatic: the candidate was made after the last landing, checked and merged without a press';
-if (!promo) {
+// Main: reached only through promotions, each checked by the merge check before it moved main. Automatic may promote
+// more than once (a candidate is made after a landing whenever the criteria read satisfied), so every one is checked.
+const mergedPromos = () => rows(`select id, merged_sha, source_sha from project_promotion where project_id = ${P} and state = 'MERGED' order by decided_at`);
+// The three LAND_TASKs have finished (above): the project branch's tip is the last one's landing.
+const tip = row(`select landed_sha from project_integration_job where project_id = ${P} and kind = 'LAND_TASK' and state = 'LANDED' order by finished_at desc limit 1`);
+const tipMerged = () => { const r = mergedPromos(); return r.some((x) => x[2] === tip) ? r : null; };
+let promos = await until('a promotion of the project branch\'s tip to merge', tipMerged, { timeoutMs: 120_000, everyMs: 3_000 }).catch(() => null);
+let promotionPath = 'Automatic: candidates were made after landings, checked and merged without a press';
+if (!promos) {
   const rp = await coordinatorCall('request-promotion', 'integration_request_promotion', { projectId: p.id, reason: 'Every task is DONE and landed on the project branch.' });
   check('integration_request_promotion is accepted', !rp.isError, rp.text.slice(0, 300));
   promotionPath = 'the coordinator requested the promotion; Automatic checked and merged it';
-  promo = await until('the requested promotion to merge', () => {
-    const r = rows(`select state, merged_sha from project_promotion where project_id = ${P} and state = 'MERGED'`);
-    return r.length ? r[0] : null;
-  }, { timeoutMs: 600_000, everyMs: 3_000 });
+  promos = await until('the requested promotion to merge', tipMerged, { timeoutMs: 600_000, everyMs: 3_000 });
 }
-ev.say(`promotion: ${promotionPath}; merged ${promo[1]}`);
+ev.say(`promotions: ${promotionPath}; ${promos.length} merged: ${promos.map((x) => `${x[1]} (from ${x[2]})`).join(', ')}; the project branch's last landing ${tip}`);
 const mainAfter = gitIn(origin(REPO), 'rev-parse', 'refs/heads/main');
-check('origin main moved to the promotion\'s merge', mainAfter === promo[1] && mainAfter !== mainBefore, `${mainBefore} -> ${mainAfter}`);
-const promoJobs = rows(`select j.kind, j.state, j.checks::text, j.finished_at, j.landed_sha, j.skip_merge_check from project_integration_job j
-  where j.project_id = ${P} and j.kind in ('CHECK_PROMOTION', 'LAND_PROMOTION') order by j.created_at`);
-const mergeChecked = promoJobs.filter((j) => j[0] === 'CHECK_PROMOTION' && j[1] === 'READY');
-const lastReady = mergeChecked.at(-1);
-const mc = lastReady ? JSON.parse(lastReady[2]).find((x) => x.name === 'MERGE_CHECK') : null;
-check('the promotion\'s check ran the merge check, exit 0, before main moved', !!mc && mc.exitCode === 0 && mc.command === MERGE_CHECK
-  && /LM42 merge check on/.test(mc.outputTail ?? ''), JSON.stringify(mc)?.slice(0, 300));
-const landPromo = promoJobs.filter((j) => j[0] === 'LAND_PROMOTION' && j[4] === mainAfter);
-check('main was moved by a LAND_PROMOTION finished after that check, merge check not skipped',
-  landPromo.length === 1 && landPromo[0][5] === 'f' && lastReady && landPromo[0][3] > lastReady[3], JSON.stringify(landPromo.map((j) => [j[0], j[1], j[3], j[4]])));
+check('origin main is the last promotion\'s merge', mainAfter === promos.at(-1)[1] && mainAfter !== mainBefore, `${mainBefore} -> ${mainAfter}`);
+const firstParents = gitIn(origin(REPO), 'rev-list', '--first-parent', '--reverse', `${mainBefore}..${mainAfter}`).split('\n').filter(Boolean);
+check('every first-parent commit main gained is a promotion\'s merge, in order', JSON.stringify(firstParents) === JSON.stringify(promos.map((x) => x[1])),
+  `main gained ${firstParents.join(' ')}; promotions merged ${promos.map((x) => x[1]).join(' ')}`);
+for (const [id, merged] of promos) {
+  const pj = rows(`select kind, state, checks::text, finished_at, landed_sha, skip_merge_check from project_integration_job
+    where promotion_id = '${id}' and kind in ('CHECK_PROMOTION', 'LAND_PROMOTION') order by created_at`);
+  const ready = pj.filter((j) => j[0] === 'CHECK_PROMOTION' && j[1] === 'READY').at(-1);
+  const mc = ready ? JSON.parse(ready[2]).find((x) => x.name === 'MERGE_CHECK') : null;
+  const landJob = pj.find((j) => j[0] === 'LAND_PROMOTION' && j[4] === merged);
+  check(`promotion ${merged.slice(0, 10)}: its check ran the merge check (exit 0) and finished before the LAND_PROMOTION that moved main`,
+    !!mc && mc.exitCode === 0 && mc.command === MERGE_CHECK && /LM42 merge check on/.test(mc.outputTail ?? '')
+    && !!landJob && landJob[5] === 'f' && landJob[3] > ready[3], `${JSON.stringify(mc)?.slice(0, 200)}; land ${landJob?.[3]} after check ${ready?.[3]}`);
+}
 const skipped = row(`select count(*) from project_integration_job where project_id = ${P} and skip_merge_check`);
 check('no job of the project skipped the merge check', skipped === '0', skipped);
+check('the last promotion carries the project branch\'s last landing', promos.at(-1)[2] === tip, tip);
 const mainLog = gitIn(origin(REPO), 'log', '--format=%H %P %s', 'refs/heads/main');
-const firstParents = gitIn(origin(REPO), 'rev-list', '--first-parent', `${mainBefore}..${mainAfter}`).split('\n').filter(Boolean);
-check('main gained exactly one first-parent commit, the promotion\'s', firstParents.length === 1 && firstParents[0] === mainAfter, firstParents.join(' '));
+// Recorded, not checked: for each promotion, the committing tasks whose landing was queued only after the candidate was
+// made (their DONE came while their run was still open, so P-M1 queued the landing at the run's finish).
+ev.query('B — promotions against landings queued after them', `select pp.merged_sha, pp.created_at as candidate_made, t.title as task,
+  j.created_at as landing_queued, s.finished_at as task_run_finished
+from project_promotion pp join project_integration_job j on j.project_id = pp.project_id and j.kind = 'LAND_TASK' and j.created_at > pp.created_at
+join task t on t.id = j.task_id join session s on s.task_id = t.id and s.starts_task_work
+where pp.project_id = ${P} and pp.state = 'MERGED' order by pp.created_at, j.created_at`, true);
 for (const k of committing) {
   const sha = row(`select delivered_sha from task where id = (select id from task where project_id = ${P} and title like '${k} %')`);
   const onMain = (() => { try { gitIn(origin(REPO), 'merge-base', '--is-ancestor', sha, mainAfter); return true; } catch { return false; } })();

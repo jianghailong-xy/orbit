@@ -112,37 +112,52 @@ await until('all six tasks to be DONE', async () => {
 ev.file('seen.json', seen);
 check('all six tasks are DONE', true, all.map((k) => `${k} ${seen[k].done}`).join(', '));
 
-// Each dependent's first run against its prerequisites' DONE, from the rows: the DONE is the moment the prerequisite's
-// run settled (the EXECUTABLE acceptance writes DONE as the run finishes); the dependent's run is its session row.
+// Each dependent's first run against its prerequisites. Two edges are measured:
+//  - the prerequisite's DONE, as this script saw it (polled once a second, so the real DONE is at most ~1 s earlier);
+//  - the prerequisite's work session finishing (session.finished_at), the edge §12.15 P-M1 decides on when the DONE
+//    came while that session was still open ("work still moving", §10.5 O-L4 3).
+const firstRun = Object.fromEntries(psql(`select distinct on (s.task_id) t.title, s.created_at, s.finished_at
+  from session s join task t on t.id = s.task_id where t.project_id = ${P} and s.starts_task_work
+  order by s.task_id, s.created_at`).split('\n').slice(2).filter((l) => l.includes('|'))
+  .map((l) => l.split('|').map((c) => c.trim())).map(([title, created, finished]) => [title.split(' ')[0],
+    { created: new Date(created.replace(' ', 'T') + 'Z'), finished: new Date(finished.replace(' ', 'T') + 'Z') }]));
 const timing = psql(`with first_run as (
   select distinct on (s.task_id) s.task_id, s.created_at, s.dispatch_origin, s.run_source
   from session s join task t on t.id = s.task_id where t.project_id = ${P} and s.starts_task_work
   order by s.task_id, s.created_at),
-done_at as (
-  select s.task_id, max(s.finished_at) as done_at
+finished as (
+  select s.task_id, max(s.finished_at) as finished_at
   from session s join task t on t.id = s.task_id where t.project_id = ${P} and s.starts_task_work group by s.task_id)
-select dt.title as dependent, pt.title as prerequisite, d_at.done_at as prerequisite_done, fr.created_at as dependent_started,
-  round(extract(epoch from fr.created_at - d_at.done_at)::numeric, 3) as gap_seconds, fr.dispatch_origin, fr.run_source
+select dt.title as dependent, pt.title as prerequisite, f.finished_at as prerequisite_run_finished, fr.created_at as dependent_started,
+  round(extract(epoch from fr.created_at - f.finished_at)::numeric, 3) as after_finish_seconds, fr.dispatch_origin, fr.run_source
 from task_dependency td join task dt on dt.id = td.task_id join task pt on pt.id = td.depends_on_task_id
-join first_run fr on fr.task_id = td.task_id join done_at d_at on d_at.task_id = td.depends_on_task_id
+join first_run fr on fr.task_id = td.task_id join finished f on f.task_id = td.depends_on_task_id
 where dt.project_id = ${P} order by dt.title, pt.title`);
-ev.appendFile('queries.txt', `\n### dependents against their prerequisites' DONE  (${new Date().toISOString()})\n${timing}`);
-const gaps = timing.split('\n').slice(2).filter((l) => l.includes('|')).map((l) => Number(l.split('|')[4]));
-check('every one of the 6 edges: the dependent started after its prerequisite finished', gaps.length === 6 && gaps.every((g) => g >= 0), gaps.join(', '));
-// The latest prerequisite of each dependent is what releases it (J10): its run comes within seconds of that DONE.
-const releaseGap = psql(`with first_run as (
-  select distinct on (s.task_id) s.task_id, s.created_at from session s join task t on t.id = s.task_id
-  where t.project_id = ${P} and s.starts_task_work order by s.task_id, s.created_at),
-done_at as (select s.task_id, max(s.finished_at) as done_at from session s join task t on t.id = s.task_id
-  where t.project_id = ${P} and s.starts_task_work group by s.task_id)
-select dt.title, round(extract(epoch from fr.created_at - max(d_at.done_at))::numeric, 3) as after_last_prerequisite_seconds
-from task_dependency td join task dt on dt.id = td.task_id join first_run fr on fr.task_id = td.task_id
-join done_at d_at on d_at.task_id = td.depends_on_task_id where dt.project_id = ${P}
-group by dt.title, fr.created_at order by dt.title`);
-ev.appendFile('queries.txt', `\n### each dependent against its LAST prerequisite's DONE  (${new Date().toISOString()})\n${releaseGap}`);
-const release = releaseGap.split('\n').slice(2).filter((l) => l.includes('|')).map((l) => Number(l.split('|')[1]));
-check('each of the 4 dependents started within 30 s of its last prerequisite\'s DONE (no landing to wait for)',
-  release.length === 4 && release.every((g) => g >= 0 && g < 30), release.join(', '));
+ev.appendFile('queries.txt', `\n### dependents against their prerequisites' work session finishing  (${new Date().toISOString()})\n${timing}`);
+const edges = Object.entries(spec).flatMap(([k, s]) => s.deps.map((d) => [k, d]));
+const edgeRows = edges.map(([k, d]) => ({
+  dependent: k, prerequisite: d,
+  prerequisiteDoneSeen: seen[d].done, prerequisiteRunFinished: firstRun[d].finished.toISOString(),
+  dependentStarted: firstRun[k].created.toISOString(),
+  afterDoneSeenSeconds: (firstRun[k].created - new Date(seen[d].done)) / 1000,
+  afterRunFinishedSeconds: (firstRun[k].created - firstRun[d].finished) / 1000,
+}));
+ev.file('edges.json', edgeRows);
+ev.appendFile('queries.txt', `\n### the six edges: DONE as polled vs the work session finishing  (${new Date().toISOString()})\n${edgeRows.map((e) =>
+  `${e.dependent} <- ${e.prerequisite}: prerequisite DONE seen ${e.prerequisiteDoneSeen}, its run finished ${e.prerequisiteRunFinished}, dependent started ${e.dependentStarted} (${e.afterDoneSeenSeconds.toFixed(3)} s after the DONE was seen, ${e.afterRunFinishedSeconds.toFixed(3)} s after the run finished)`).join('\n')}\n`);
+check('every one of the 6 edges: the dependent started after its prerequisite was DONE and its run finished',
+  edgeRows.length === 6 && edgeRows.every((e) => e.afterDoneSeenSeconds >= -1.5 && e.afterRunFinishedSeconds >= 0),
+  edgeRows.map((e) => `${e.dependent}<-${e.prerequisite} ${e.afterDoneSeenSeconds.toFixed(1)}/${e.afterRunFinishedSeconds.toFixed(3)}`).join(', '));
+// The last prerequisite to settle is what releases a dependent (J10); with nothing to land there is nothing else to
+// wait for, so the dependent's run follows that edge at once.
+const release = Object.entries(spec).filter(([, s]) => s.deps.length).map(([k, s]) => {
+  const last = Math.max(...s.deps.map((d) => firstRun[d].finished.getTime()));
+  const lastDone = Math.max(...s.deps.map((d) => new Date(seen[d].done).getTime()));
+  return { k, afterFinish: (firstRun[k].created - last) / 1000, afterDone: (firstRun[k].created - lastDone) / 1000 };
+});
+check('each of the 4 dependents started within 2 s of its last prerequisite\'s run finishing (no landing in between)',
+  release.length === 4 && release.every((r) => r.afterFinish >= 0 && r.afterFinish < 2), release.map((r) => `${r.k} ${r.afterFinish.toFixed(3)} s`).join(', '));
+ev.say(`measured, not checked: each dependent started ${release.map((r) => `${r.k} ${r.afterDone.toFixed(1)} s`).join(', ')} after its last prerequisite's DONE was seen — the DONE came while that prerequisite's session was still open, so P-M1 decided at the session's finish`);
 
 // The project to done: Orbit records it by itself when it can prove every criterion; else the coordinator asks.
 let done = await until('the project to be DONE by itself', async () => {
