@@ -1017,7 +1017,7 @@ struct ScheduleDraftPanel: View {
             // The agent drafts the card in its conversation; read until it is there.
             while !Task.isCancelled, scheduled?.draft(forSession: panel.sessionID) == nil {
                 await scheduled?.load()
-                try? await Task.sleep(nanoseconds: 3_000_000_000)
+                await VisibilityGate.app.pause(3)   // not while the app cannot be seen (§4 R3)
             }
         }
         .accessibilityIdentifier("schedule-draft-panel")
