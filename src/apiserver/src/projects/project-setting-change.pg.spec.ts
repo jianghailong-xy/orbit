@@ -134,6 +134,13 @@ interface ChangeRow {
   created_at: Date;
 }
 
+/** The owner's revert, reached through a cast so this file compiles on a tree without it. */
+function revert(stack: Stack, ownerId: string, projectId: string, changeId: string, sessionId?: string): Promise<unknown> {
+  return (stack.projects as unknown as {
+    revertSettingChange(o: string, p: string, c: string, s?: string): Promise<unknown>;
+  }).revertSettingChange(ownerId, projectId, changeId, sessionId);
+}
+
 async function changes(stack: Stack, w: World): Promise<ChangeRow[]> {
   const { rows } = await stack.sql.query<ChangeRow>(
     `SELECT * FROM "project_setting_change" WHERE "project_id" = $1 ORDER BY "created_at", "id"`, [w.projectId]);
@@ -200,12 +207,12 @@ test('P-R1 needs postgres; every case below is a skip without it', { skip, timeo
 
     // A revert request that carries an acting session is refused whole.
     await assert.rejects(
-      stack.projects.revertSettingChange(w.ownerId, w.projectId, first.id, w.coordinatorSessionId),
+      revert(stack, w.ownerId, w.projectId, first.id, w.coordinatorSessionId),
       (error: { getStatus?: () => number; getResponse?: () => { code?: string } }) =>
         error.getStatus?.() === 403 && error.getResponse?.().code === 'INTEGRATION_SETTINGS_OWNER_ONLY');
     assert.equal((await landing(stack, w)).command, 'npm run build');
 
-    await stack.projects.revertSettingChange(w.ownerId, w.projectId, first.id);
+    await revert(stack, w.ownerId, w.projectId, first.id);
     assert.deepEqual(await landing(stack, w), { command: null, timeout: null, none: false, setBy: 'OWNER' });
     assert.equal((await changes(stack, w)).length, 1, 'the revert is an owner write: no record, and the record stays');
 
@@ -261,7 +268,7 @@ test('P-R1 needs postgres; every case below is a skip without it', { skip, timeo
     await update({ landingCheckExempt: true, landingCheckExemptReason: 'Owner says so.' });
     assert.equal((await changes(stack, w)).length, 2);
     // Revert the coordinator's second record (exempt back to true with its old reason), as the owner.
-    await stack.projects.revertSettingChange(w.ownerId, w.projectId, rows[1].id);
+    await revert(stack, w.ownerId, w.projectId, rows[1].id);
     assert.deepEqual(await exemption(stack, taskId), { exempt: true, reason: 'Docs only.', by: null });
     assert.equal((await changes(stack, w)).length, 2);
     // The coordinator can no longer write that field without a card.
