@@ -81,9 +81,8 @@ internal fun TranscriptCardView(card: InteractionCard, open: (String) -> Unit, e
     if (card.key.endsWith(":sessionMessage")) {
         SessionMessageBubble(card.source, event, open); return
     }
-    // Orbit's cards on the left stop at 720 dp, as the message bubble beside them does (owner 2026-11-12).
-    val capped = listOf(":taskStart", ":projectStarted").any { card.key.endsWith(it) }
-    Surface(if (capped) Modifier.widthIn(max = 720.dp) else Modifier, shape = MaterialTheme.shapes.medium, color = MaterialTheme.colorScheme.secondaryContainer) {
+    // Every card of the conversation ends at its one width (ConversationCardWidth), as the message bubble beside them does.
+    Surface(Modifier.conversationCard(), shape = MaterialTheme.shapes.medium, color = MaterialTheme.colorScheme.secondaryContainer) {
         Column(Modifier.fillMaxWidth().padding(12.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
             Text(card.title, style = MaterialTheme.typography.titleSmall)
             Text("Recorded by Orbit", style = MaterialTheme.typography.labelSmall)
@@ -144,7 +143,7 @@ internal fun OwnerAnswerLineView(card: InteractionCard, event: RunEvent?, queued
     val answered = LocalAnsweredQuestions.current
     val record = answered?.record(card.source)
     if (answered != null && record != null) {
-        Box(Modifier.fillMaxWidth().testTag(card.key)) {
+        Box(Modifier.conversationCard().testTag(card.key)) {
             QuestionRecordCard(record, queued = queued && !undelivered, notice = OwnerAnswerLine.undelivered.takeIf { undelivered },
                 told = event, open = openLink)
         }
