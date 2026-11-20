@@ -26,6 +26,8 @@ var cliParityParamAlias = map[string]string{
 	// Singular at a terminal, like --depends-on above: one flag carries one label and repeats,
 	// which is also what makes a label containing a comma expressible.
 	"labels": "--label",
+	// settings_propose's changes map is one --set KEY=VALUE per setting.
+	"changes": "--set",
 	// session_create's worktree only ever turns isolation off, so at a terminal it is the switch
 	// that says so.
 	"worktree": "--no-worktree",

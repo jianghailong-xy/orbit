@@ -210,6 +210,9 @@ func TestMCPSettingsProposeReturnsTheRequestsReceipt(t *testing.T) {
 		if !r.OK || r.Outcome != outcomeWritten || r.ID == nil || *r.ID != "req-1" || r.Status == nil || *r.Status != "PENDING" {
 			t.Errorf("settings_propose receipt = ok %v outcome %q id %v status %v", r.OK, r.Outcome, r.ID, r.Status)
 		}
+		if r.Action != "propose" || r.EntityType != string(objectAccount) {
+			t.Errorf("settings_propose receipt action %q entityType %q, want propose on the account", r.Action, r.EntityType)
+		}
 		if !r.Approval.Required || r.Approval.Outcome != approvalOutcomePending {
 			t.Errorf("settings_propose approval = %+v, want the owner's answer pending", r.Approval)
 		}

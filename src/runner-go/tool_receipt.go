@@ -212,7 +212,7 @@ func (op *operation) action() string {
 	}
 	tool := op.Tool
 	for _, prefix := range []string{"tasklist_", "task_", "project_", "session_", "agent_", "provider_", "runner_",
-		"watch_", "wiki_", "file_", "bg_", "integration_", "criterion_", "open_item_"} {
+		"watch_", "wiki_", "file_", "bg_", "integration_", "criterion_", "open_item_", "settings_"} {
 		if strings.HasPrefix(tool, prefix) && len(tool) > len(prefix) {
 			tool = strings.TrimPrefix(tool, prefix)
 			break
