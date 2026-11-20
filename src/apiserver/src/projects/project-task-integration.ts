@@ -10,7 +10,7 @@ import type {
 } from '@orbit/shared';
 import { PrismaService } from '../prisma/prisma.service';
 import { runnerOfflineSql } from '../runners/runner-presence';
-import { branchNameSql, isCodeTaskSql, lineStartedSql, taskLandingSql } from './project-criterion-landing';
+import { branchNameSql, hasWorkToLandSql, lineStartedSql, taskLandingSql } from './project-criterion-landing';
 import { INTEGRATION_JOB_CLAIM } from './project-integration-job';
 import { baselineHoldSql } from './baseline-hold';
 
@@ -59,6 +59,8 @@ export interface QueueBlockingFacts {
   syncHandlingGeneration: number | null;
   baselineItemId?: string | null;
   baselineHeldCount?: number | null;
+  /** The project of the job a claimed job waits behind on its runner's local lock. */
+  blockingProjectTitle?: string | null;
 }
 
 /** The reason codes a QUEUED job can read, and the one a claimed job waiting on this runner's own
@@ -186,9 +188,26 @@ export function queueBlockingSummary(code: QueueBlockingCode, facts: QueueBlocki
       return `Waiting for ${runner}: it cannot land a merge the Automatic setting approved, which needs promotion-automatic-land/v1`;
     case 'WAITING_DISPATCH':
       return `Waiting to land: next for ${runner}, which claims it on its next heartbeat`;
-    case 'WAITING_LOCAL_LOCK':
-      return 'Waiting for another job on this runner: it is using this repository and target branch';
+    case 'WAITING_LOCAL_LOCK': {
+      if (!facts.blockingJobKind) {
+        return 'Waiting for another job on this runner: it is using this repository and target branch';
+      }
+      return `Waiting for ${runner}’s repository lock: ${lockHolderPhrase(facts)} holds it`;
+    }
   }
+}
+
+/** The job holding a runner's local lock, by its kind, its task and its project: "the merge check of
+ *  project “Wiki”", "the landing of “Fix login” in project “Web”". */
+function lockHolderPhrase(facts: QueueBlockingFacts): string {
+  const job = facts.blockingJobKind === 'LAND_TASK'
+    ? (facts.blockingTaskTitle ? `the landing of “${facts.blockingTaskTitle}”` : 'a landing')
+    : facts.blockingJobKind === 'CHECK_PROMOTION' ? 'the merge check'
+      : facts.blockingJobKind === 'LAND_PROMOTION' ? `the merge into ${facts.mainBranch ?? 'main'}`
+        : facts.blockingJobKind === 'OBSERVE_LANDING' ? 'an observation'
+          : 'another integration job';
+  if (!facts.blockingProjectTitle) return job;
+  return `${job} ${facts.blockingJobKind === 'LAND_TASK' ? 'in' : 'of'} project “${facts.blockingProjectTitle}”`;
 }
 
 /** The sentence a page prints for a reason, built from the facts the row read. */
@@ -374,7 +393,8 @@ export async function readTaskIntegrationViews(
 ): Promise<Map<string, TaskIntegrationView<Date>>> {
   if (taskIds.length === 0) return new Map();
   const landing = Prisma.raw(taskLandingSql('t'));
-  const isCode = Prisma.raw(isCodeTaskSql('t'));
+  // §12.15 P-M1: a DONE that delivered nothing of its own is not work this line integrates.
+  const isCode = Prisma.raw(hasWorkToLandSql('t'));
   const lineStarted = Prisma.raw(lineStartedSql('t'));
   const mainBranch = Prisma.raw(branchNameSql('pc."upstream_ref"'));
   const ids = Prisma.join(taskIds.map((id) => Prisma.sql`${id}::uuid`));

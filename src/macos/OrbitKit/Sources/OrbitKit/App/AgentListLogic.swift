@@ -188,3 +188,31 @@ public enum AgentListLogic {
         return firstOnlineMachine.map(NewSessionTarget.machine) ?? .machines
     }
 }
+
+/// A machine the Workspaces group's + offers a new workspace on (docs/mocks/new-workspace-form/02-apple-entry, owner A
+/// 2026-11-20): every machine of the account, whatever it already holds, with how many workspaces it has.
+public struct NewWorkspaceMachine: Equatable, Sendable, Identifiable {
+    public let id: String
+    public let name: String
+    public let online: Bool
+    public let workspaces: Int
+
+    public init(id: String, name: String, online: Bool, workspaces: Int) {
+        self.id = id
+        self.name = name
+        self.online = online
+        self.workspaces = workspaces
+    }
+}
+
+extension AgentListLogic {
+    /// The + menu's machines, in the rail's runner order with the account's managed runner first.
+    public static func newWorkspaceMachines(runners: [Runner], agents: [Agent],
+                                            managedStatus: ManagedRunnerStatus? = nil) -> [NewWorkspaceMachine] {
+        let managedID = ManagedRunnerLogic.display(managedStatus) == nil ? nil : managedStatus?.runnerId
+        return RunnerPageFormat.managedFirst(runners, managedRunnerID: managedID).map { runner in
+            NewWorkspaceMachine(id: runner.id, name: RunnerPageFormat.displayName(runner, managedRunnerID: managedID),
+                                online: isOnline(runner), workspaces: agents.filter { $0.runnerId == runner.id }.count)
+        }
+    }
+}

@@ -1169,9 +1169,10 @@ struct TranscriptView: View {
         .environment(\.answeredQuestions, console.answeredQuestions)
         // The item a record link or a search hit asked for: a long message from another session opens to it.
         .environment(\.revealedItemID, console.revealedItemID)
-        // Where a SubAgent's finished line finds the card it was started from, and the scroll to it.
-        .environment(\.subagentCardLinks, SubagentCardLinks(find: { console.delegateCard(forRun: $0) },
-                                                            reveal: { console.revealAgent($0) }))
+        // A SubAgent's end turns, joined to their cards by run id: what the agent read, and a queued one's
+        // Don't send (`SubagentCardEnd`).
+        .environment(\.subagentWakes, console.subagentWakes)
+        .environment(\.subagentQueuedWakes, console.subagentQueuedWakes)
         .scrollContentBackground(.hidden)   // show the window background, not the List's own
         #if os(iOS)
         // Turn OFF the scroll view's touch delay so an in-list control (the jump-to-latest disc, the
@@ -1671,16 +1672,16 @@ struct TranscriptView: View {
             // BELOW it — which is why the bar at the top of this console points down at it.
             #if os(iOS)
             if let run = folds[card.id] {
-                settledFoldRow(run, card: card)
+                settledFoldRow(run, card: card).orbitCardWidth()
             } else {
-                DeliveredDecisionCardView(console: console, card: card)
+                DeliveredDecisionCardView(console: console, card: card).orbitCardWidth()
             }
             #else
-            DeliveredDecisionCardView(console: console, card: card)
+            DeliveredDecisionCardView(console: console, card: card).orbitCardWidth()
             #endif
         case .approval(let approval):
             // No `AnchorRow`: an approval isn't a "Your question" the sticky header names.
-            ApprovalCard(console: console, approval: approval)
+            ApprovalCard(console: console, approval: approval).orbitCardWidth()
         case .recap(let card):
             // No `AnchorRow`: the recap sums the conversation up; it asks nothing.
             RecapCardView(card: card, onHide: hideRecap)
@@ -2175,7 +2176,7 @@ struct SessionStatusCardView: View {
             .padding(.horizontal, 12)
             .padding(.vertical, 10)
         }
-        .frame(maxWidth: 560, alignment: .leading)
+        .frame(maxWidth: ConversationCardWidth.max, alignment: .leading)
         .background(Color.primary.opacity(0.035), in: RoundedRectangle(cornerRadius: 8))
         .overlay {
             RoundedRectangle(cornerRadius: 8)
@@ -2581,18 +2582,18 @@ struct TranscriptItemView: View {
             }
         case .error(_, let message):
             if let console, console.executesDsh, let repair = DshRuntime.repair(message) {
-                DshRepairCardView(console: console, repair: repair)
+                DshRepairCardView(console: console, repair: repair).orbitCardWidth()
             } else if let repair = EngineAuth.antigravityRepair(message), let console, console.executesAntigravity {
-                AntigravityRepairCardView(console: console, repair: repair)
+                AntigravityRepairCardView(console: console, repair: repair).orbitCardWidth()
             } else if let summary = ToolFailureSummary.parse(message) {
-                ToolFailureCardView(message: message, summary: summary)
+                ToolFailureCardView(message: message, summary: summary).orbitCardWidth()
             } else {
                 Label(message, systemImage: "exclamationmark.triangle.fill")
                     .foregroundStyle(.red).textSelection(.enabled)
             }
         case .authError(let id, let message):
             if let console {
-                AuthErrorCardView(console: console, message: message, settled: console.settlement.auth[id])
+                AuthErrorCardView(console: console, message: message, settled: console.settlement.auth[id]).orbitCardWidth()
             } else {
                 // No console to act through (a preview / detached render): the diagnosis alone,
                 // which is what the runtime said in the first place.
@@ -2601,7 +2602,7 @@ struct TranscriptItemView: View {
             }
         case .autoRetry(let notice):
             if let console {
-                AutoRetryCardView(console: console, notice: notice)
+                AutoRetryCardView(console: console, notice: notice).orbitCardWidth()
             } else {
                 // Same as above: with no session to read the armed retry off, or to retry through,
                 // what's left is the runtime's own sentence.
@@ -2622,7 +2623,7 @@ struct TranscriptItemView: View {
             // The main checkout's card (board 01) or one action's line (board 03). Without a console to
             // act through, the event's own sentence, as the notice it used to be.
             if let console, let changed = item.changed {
-                MainCheckoutCardView(console: console, item: item, notice: changed)
+                MainCheckoutCardView(console: console, item: item, notice: changed).orbitCardWidth()
             } else if let console, let result = item.result {
                 MainCheckoutResultRow(console: console, result: result)
             } else {

@@ -466,7 +466,8 @@ var agentToolsFamilyDefs = []struct {
 	{"waits", "Waits", []string{"watch"}},
 	{"files", "Files", []string{"file"}},
 	{"background", "Background jobs", []string{"background_job", "session"}},
-	{"owner", "Questions for you", []string{"owner"}},
+	// The account's tools are the owner's own Settings (settings_tools.go): settings_propose is a card for them too.
+	{"owner", "Questions for you", []string{"owner", "account"}},
 	{"wiki", "Wiki", []string{"wiki"}},
 	{"providers", "Providers", []string{"provider"}},
 	{"merge-receipts", "Merge receipts", []string{"merge_receipt"}},

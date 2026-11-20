@@ -40,7 +40,8 @@ public struct SubagentBlock: Equatable, Sendable {
     public let outcome: String?
     /// The outcome is the files it changed, drawn in the primary weight.
     public let outcomeIsFiles: Bool
-    /// The run did not finish: the outcome is how it ended, drawn in red.
+    /// The run did not finish (failed or interrupted; a stop is no failure): the outcome is how it
+    /// ended, drawn in red.
     public let outcomeIsFailure: Bool
     /// `41s`, once the run has ended. The run's cost is left out.
     public let numbers: String?
@@ -93,7 +94,8 @@ public struct SubagentBlock: Equatable, Sendable {
                 }
             case "FAILED": outcome = "Failed"; isFailure = true
             case "INTERRUPTED": outcome = "Interrupted"; isFailure = true
-            case "STOPPED": outcome = "Stopped"; isFailure = true
+            // Stopped on purpose: grey, and no failure (board docs/mocks/subagent-card-and-end-line D1).
+            case "STOPPED": outcome = "Stopped"
             default: outcome = firstLine(result)
             }
         }
@@ -319,8 +321,8 @@ public struct SubagentSessionSummary: Equatable, Sendable {
     public let capsule: String
     /// The runs, the running ones first, then the rest newest first.
     public let rows: [SubagentRunView]
-    /// How many ended without finishing, in every state: red at the band's right edge, before the
-    /// spinner while one runs.
+    /// How many ended without finishing — failed or interrupted, never stopped — in every state: red at
+    /// the band's right edge, before the spinner while one runs.
     public let failed: Int
     /// The models the runs took, most runs first.
     public let models: [ModelCount]
