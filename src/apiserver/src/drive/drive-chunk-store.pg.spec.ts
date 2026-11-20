@@ -423,7 +423,15 @@ test('Orbit Files drive: the chunked streamed store, on the local files director
   const s3Dir = mkdtempSync(path.join(tmpdir(), 'orbit-drive-s3-'));
   const s3Data = mkdtempSync(path.join(tmpdir(), 'orbit-drive-s3-data-'));
   t.after(() => {
-    for (const dir of [localDir, s3Dir, s3Data]) rmSync(dir, { recursive: true, force: true });
+    for (const dir of [localDir, s3Dir, s3Data]) {
+      try {
+        rmSync(dir, { recursive: true, force: true });
+      } catch (error) {
+        // The S3 server's container writes s3Data as its own root user, which a CI runner's unprivileged user
+        // cannot remove (EACCES). The runner is thrown away after the job, so the leftover is not kept.
+        if ((error as NodeJS.ErrnoException).code !== 'EACCES') throw error;
+      }
+    }
   });
 
   await t.test('local', storeCases({ storage: 'local', config: { dir: localDir, storage: 'local' } }));
