@@ -66,6 +66,8 @@ func (j *bgJob) recordLocked(sessionID string) bgJobRecord {
 		WakeOnStallSeconds: int(j.wakeOnStall / time.Second),
 		StallWakes:         j.stallWakes,
 		StallWokenFor:      j.stallWokenFor,
+		Limits:             j.limits,
+		LimitsNote:         j.limitsNote,
 	}
 }
 
