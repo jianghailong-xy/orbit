@@ -11,6 +11,9 @@ REPO=$(cd "$L/../../.." && pwd)
 CA=${LAB_TEST_SERVER_DIR:?}/tls/ca.crt
 BUILDER=${LAB_BUILDX_BUILDER:-orbit-mr-lab}
 SHA=$(git -C "$REPO" rev-parse HEAD)
+# The name single-writer.py imports the image under and pins.
+IMAGE_NAME=$(sed -n "s/^IMAGE_NAME = '\(.*\)'$/\1/p" "$L/single-writer.py")
+[ -n "$IMAGE_NAME" ] || { echo "no IMAGE_NAME in single-writer.py" >&2; exit 1; }
 [ -z "$(git -C "$REPO" status --porcelain -- deploy/managed-runner/image src/runner-go)" ] || { echo "uncommitted image sources" >&2; exit 1; }
 docker buildx inspect "$BUILDER" >/dev/null 2>&1 || docker buildx create --name "$BUILDER" --driver docker-container >/dev/null
 rm -rf "$W" && mkdir -p "$W/ctx" "$W/lab-ctx"
@@ -30,7 +33,7 @@ cp "$CA" "$W/lab-ctx/ca.crt"
 started=$(date +%s)
 docker buildx build --builder "$BUILDER" --build-context "base=oci-layout://$W/product-oci@$DIGEST" \
   --file "$L/lab-ca-image.Dockerfile" --provenance=false \
-  --output "type=oci,dest=$W/lab.oci.tar,name=docker.io/library/orbit-managed-runner-lab:browser-${SHA:0:9}" \
+  --output "type=oci,dest=$W/lab.oci.tar,name=$IMAGE_NAME:lab-${SHA:0:9}" \
   "$W/lab-ctx"
 echo "lab CA build: $(( $(date +%s) - started )) s"
 rm -rf "$W/product-oci" "$W/ctx"
