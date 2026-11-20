@@ -61,8 +61,17 @@ printf 'scope=revision 42 part two screens, light and dark; controlled HTTP fixt
 sha256sum "$apk" "$tests" > "$output/apks.sha256"
 "$ANDROID_HOME/build-tools/36.0.0/aapt" dump badging "$apk" > "$output/apk-badging.txt"
 grep -F "package: name='$package'" "$output/apk-badging.txt" >/dev/null
-adb install -r "$apk" > "$output/install-app.txt"
-adb install -r "$tests" > "$output/install-tests.txt"
+# Another session's debug key may have signed the installed app: replace it then (drawer-projects-device-test.sh's `install`).
+install() {
+  if ! adb install -r "$2" > "$3" 2>&1; then
+    grep -F INSTALL_FAILED_UPDATE_INCOMPATIBLE "$3" >/dev/null || { cat "$3" >&2; return 1; }
+    adb shell dumpsys package "$1" | grep -E -A2 'signatures|Signing' >> "$3" || true
+    adb uninstall "$1" >> "$3"
+    adb install "$2" >> "$3"
+  fi
+}
+install "$package" "$apk" "$output/install-app.txt"
+install "$package.test" "$tests" "$output/install-tests.txt"
 # API 34+ opens "Try out your stylus" over a focused field, which would cover the screenshots.
 old_handwriting="$(adb shell settings get secure stylus_handwriting_enabled | tr -d '\r')"
 adb shell settings put secure stylus_handwriting_enabled 0

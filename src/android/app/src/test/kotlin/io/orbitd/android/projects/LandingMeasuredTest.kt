@@ -132,6 +132,12 @@ class LandingMeasuredTest {
         assertEquals(3, body.number("maxConcurrentTasks"))
         assertEquals("Lands on the project’s branch when a task commits", LandingMeasuredCopy.landsWhenATaskCommits)
         assertTrue(StartProjectCopy.settingsLine(draft, "project/p1").contains(LandingMeasuredCopy.landsWhenATaskCommits))
+        // Nothing about the line is decided, so no sentence on the card names main or a merge (web 4e487f20ec).
+        assertEquals("The coordinator decides when each task is done.", RunSettings.automaticSays(true, null, false))
+        assertEquals("You decide when each task is done.", RunSettings.automaticSays(false, null, true))
+        for (automatic in listOf(true, false)) assertFalse(StartProjectCopy.comesToYou(automatic, null, emptyList(), 0, 7_200)
+            .joinToString(" ") { it.text }.contains(Regex("\\bmain\\b|merg", RegexOption.IGNORE_CASE)))
+        assertTrue(RunSettings.automaticSays(true, "PROJECT_BRANCH", false).contains("merges into main by itself"))
         // A line this build does not know is still a request it cannot read.
         assertNull(StartProjectCopy.request(requestRow("""{"line":"SIDEWAYS","automatic":true,"maxConcurrentTasks":3,"mergeCheckCommand":null}""")))
     }

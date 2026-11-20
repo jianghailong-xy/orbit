@@ -1002,7 +1002,8 @@ object StartProjectCopy {
         main: String = RunSettings.defaultMainBranch, deliveryMode: String? = null): List<ComesToYouItem> {
         val confirms = if (ownerConfirmed.size > 3) listOf(ComesToYouItem(tasksYouConfirm(ownerConfirmed.size)))
             else ownerConfirmed.map { ComesToYouItem("${it.label} · ${it.title}", youConfirm) }
-        val merges = if (line == "MAIN") { if (deliveryMode == "AGENT_PUSH") emptyList() else listOf(ComesToYouItem(eachMergeInto(main))) }
+        // A request with no line decides nothing about merging, so no merge comes to the owner on it.
+        val merges = if (line == null) emptyList() else if (line == "MAIN") { if (deliveryMode == "AGENT_PUSH") emptyList() else listOf(ComesToYouItem(eachMergeInto(main))) }
             else if (automatic) emptyList() else listOf(ComesToYouItem(mergingInto(main)))
         val criteria = ComesToYouItem(criteriaChanges)
         if (automatic) return confirms + merges + criteria + ComesToYouItem(problemsUnresolved(within(escalationSeconds)))
@@ -1328,6 +1329,8 @@ object RunSettings {
     const val automaticOffMain = "You decide when each task is done, and each merge into main asks you."
     /** …said of the project's main branch: the five constants above, for a project on main. */
     fun automaticSays(automatic: Boolean, line: String?, hasMergeCheck: Boolean, main: String = defaultMainBranch) = when {
+        // A request with no line (§12.15 P-M2) decides nothing about where work lands: no sentence names a branch (web's runAutomaticSays).
+        line == null -> if (automatic) "The coordinator decides when each task is done." else "You decide when each task is done."
         !automatic -> if (line == "MAIN") "You decide when each task is done, and each merge into $main asks you."
             else "You decide when each task is done and when the branch goes into $main."
         line == "MAIN" -> "The coordinator decides when each task is done. Each merge into $main still asks you."
