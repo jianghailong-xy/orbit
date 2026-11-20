@@ -1,4 +1,4 @@
-import CoreGraphics
+import Foundation
 
 /// The one width every card in a conversation draws at, in points (docs/mocks/chat-card-width, owner
 /// approved; the web's `--chat-card-max: 720px`). A column wider than this ends every card on one
