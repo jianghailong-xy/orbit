@@ -9,6 +9,7 @@ import io.orbitd.android.core.net.ApiError
 import io.orbitd.android.core.protocol.Wire
 import kotlin.coroutines.CoroutineContext
 import kotlin.coroutines.EmptyCoroutineContext
+import kotlinx.serialization.json.JsonObject
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Job
