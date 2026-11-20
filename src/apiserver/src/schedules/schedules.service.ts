@@ -662,7 +662,8 @@ export class SchedulesService {
             }
             checkTimezone(timezone);
             // §8.5: the card's suggested end is the same local time 7 days after this press, unless No end was pressed.
-            if ((request.proposed as FieldValues).suggestedEnd === true && input.dropSuggestedEnd !== true) {
+            const suggested = (request.proposed as FieldValues).suggestedEnd === true;
+            if (suggested && input.dropSuggestedEnd !== true) {
               proposal.endAt = suggestedEndAt(now, timezone);
             }
             // Re-judged as the world is now: a workspace deleted since the ask is not one to start runs in.
@@ -683,7 +684,24 @@ export class SchedulesService {
             );
             const allowed = await tx.scheduleChangeRequest.update({
               where: { id: requestId },
-              data: { state: 'ALLOWED', decidedAt: now, decidedByUserId: actor.ownerId, scheduleId: schedule.id, resultRevision: 1 },
+              data: {
+                state: 'ALLOWED',
+                decidedAt: now,
+                decidedByUserId: actor.ownerId,
+                scheduleId: schedule.id,
+                resultRevision: 1,
+                // §8.5: the decided card keeps what Create made of the suggestion: the end it fixed, still marked
+                // suggested, or none when No end was pressed.
+                ...(suggested
+                  ? {
+                      proposed: {
+                        ...(request.proposed as FieldValues),
+                        endAt: proposal.endAt?.toISOString() ?? null,
+                        suggestedEnd: proposal.endAt !== null,
+                      } as Prisma.InputJsonValue,
+                    }
+                  : {}),
+              },
             });
             return { outcome: 'ALLOWED' as const, request: allowed, schedule };
           }

@@ -8,8 +8,8 @@
  *      it on an EVERY rule), and gets exactly one push once that slot's run is over, landing included; a ONCE rule's
  *      end sends none;
  *   3. an EVERY create card that names no end carries a suggested end 7 days out (the same local time, across a
- *      daylight-saving change); Create writes it, and Create with No end writes none; a named end is not suggested
- *      and DAILY gets no suggestion;
+ *      daylight-saving change); Create writes it, and Create with No end writes none, and the decided card reads
+ *      which; a named end is not suggested and DAILY gets no suggestion;
  *   4. the list row carries endAt, maxRuns, runsStarted and runsLeft; maxRuns at or below the runs started is refused,
  *      before any card.
  *
@@ -389,12 +389,18 @@ test('§8.5 an EVERY create card without an end suggests one 7 days out; Create 
   assert.equal(dropped.outcome, 'ALLOWED');
   assert.equal(dropped.schedule!.endAt, null, 'created without an end');
   assert.equal(dropped.schedule!.maxRuns, null);
+  assert.equal(((await reads.request(w.ownerId, id)) as unknown as { ends: unknown }).ends, null, 'the decided card shows no end');
 
   // Create as suggested: the same local time 7 days after the press, across New York's fall-back (Nov 1, 2026).
   const kept = await card(w, { rule: every(60), timezone: 'America/New_York' });
   at('2026-10-28T14:00:00Z'); // 10:00 EDT
   const allowed = await schedules.decide(w.owner, kept, 'ALLOW');
   assert.equal(allowed.schedule!.endAt?.toISOString(), '2026-11-04T15:00:00.000Z', '10:00 EST seven days later');
+  assert.deepEqual(
+    ((await reads.request(w.ownerId, kept)) as unknown as { ends: unknown }).ends,
+    { endAt: '2026-11-04T15:00:00.000Z', maxRuns: null, suggested: true },
+    'the decided card reads the end Create wrote',
+  );
 
   // A card whose zone comes from the pressing device: the press's zone places the end.
   const zoneless = await card(w, { rule: every(120), timezone: null });

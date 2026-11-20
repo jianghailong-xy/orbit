@@ -195,12 +195,14 @@ export function scheduleCardView(request: ScheduleChangeRequest, ctx: ScheduleCa
         : null,
       notice: scheduleCreateNotice(p.findings),
       // §8.5 Ends: the end the agent named, or the server's suggested one, the same local time 7 days after now (in
-      // UTC until a pressing device names the zone); Create fixes it 7 days after the press. `suggested` is what
-      // offers No end (allow with dropSuggestedEnd).
+      // UTC until a pressing device names the zone); Create fixes it 7 days after the press. `suggested` marks the
+      // server's; a pending card offers No end for it (allow with dropSuggestedEnd). Once allowed, the card reads what
+      // Create wrote (decide records it on the proposal): the fixed end, or none after No end. A card declined or
+      // withdrawn created nothing, so it shows no suggestion.
       ends: p.suggestedEnd === true && request.state === 'PENDING'
         ? { endAt: suggestedEndAt(ctx.now, p.timezone ?? 'UTC').toISOString(), maxRuns: null, suggested: true }
         : p.endAt || p.maxRuns != null
-          ? { endAt: p.endAt ?? null, maxRuns: p.maxRuns ?? null, suggested: false }
+          ? { endAt: p.endAt ?? null, maxRuns: p.maxRuns ?? null, suggested: p.suggestedEnd === true }
           : null,
       envelope: null,
     };

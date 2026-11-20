@@ -744,7 +744,20 @@ export interface ScheduleCreateCard extends ScheduleCardBase, ScheduleEnvelopeLi
   };
   today: { key: string; summary: string | null; text: string } | null;
   notice: string;
+  /** The Ends line (§8.5); null when the card names no end. Absent from servers before it. */
+  ends?: ScheduleCardEnds | null;
   envelope: null;
+}
+
+/**
+ * A create card's planned end (§8.5): the end the agent named, or on an EVERY rule that named none the server's
+ * suggestion 7 days out. A PENDING card's suggestion offers No end (`ScheduleAllowBody.dropSuggestedEnd`); once
+ * allowed, the card reads the end Create wrote, still `suggested`, or null after No end.
+ */
+export interface ScheduleCardEnds {
+  endAt: string | null;
+  maxRuns: number | null;
+  suggested: boolean;
 }
 
 /** The envelope card (§4): *Now* and *Asked*. */
@@ -836,9 +849,13 @@ export interface SessionScheduleCardsResponse {
   records: ScheduleChangeRecord[];
 }
 
-/** `POST /api/schedule-requests/:id/allow`: a zone only for a CREATE card that names none. */
+/**
+ * `POST /api/schedule-requests/:id/allow`: a zone only for a CREATE card that names none; `dropSuggestedEnd` is the
+ * create card's No end (§8.5), so Create writes no end instead of the suggested one.
+ */
 export interface ScheduleAllowBody {
   timezone?: string;
+  dropSuggestedEnd?: boolean;
 }
 
 /** `POST /api/schedule-requests/:id/{allow,decline}`. */
