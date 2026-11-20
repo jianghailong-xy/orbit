@@ -370,7 +370,7 @@ model User {
   /// account through its space.
   wikiSpaces       WikiSpace[]
 
-  /// The drive's chunk manifest and its writes not committed yet (migration 1280).
+  /// The drive's chunk manifest and its writes not committed yet (migration 1283).
   driveStagings      DriveStaging[]
   driveVersionChunks DriveVersionChunk[]
 
@@ -3504,7 +3504,7 @@ model FileBlob {
   /// From when the backup sidecar may remove them from the off-host copy (scripts/pg-backup.sh).
   offHostPruneAt   DateTime?    @map("off_host_prune_at")
   attachments      Attachment[]
-  /// The drive's holders (1280, docs/orbit-files-drive-technical-design.md §2.4): a chunk of a drive version, and a
+  /// The drive's holders (1283, docs/orbit-files-drive-technical-design.md §2.4): a chunk of a drive version, and a
   /// chunk of a write not committed yet. Either holds the bytes while its row exists.
   driveVersionChunks DriveVersionChunk[]
   driveStagingChunks DriveStagingChunk[]
@@ -3512,7 +3512,7 @@ model FileBlob {
   @@map("file_blob")
 }
 
-/// A drive write not committed yet (1280, docs/orbit-files-drive-technical-design.md §1.1): an owner's resumable upload,
+/// A drive write not committed yet (1283, docs/orbit-files-drive-technical-design.md §1.1): an owner's resumable upload,
 /// a write through the mount, or a drive tool's put. Its chunks hold their bytes until a commit names them; one untouched
 /// for 7 days is removed by the retention sweep (files/file-retention-sweep.ts, step 0). `entry_id` and `parent_id` name
 /// drive_entry rows, whose foreign keys the name layer's migration adds.
@@ -3545,7 +3545,7 @@ model DriveStaging {
   @@map("drive_staging")
 }
 
-/// One chunk a staging has received (1280): at most 8 MiB, a file_blob by its sha256. A chunk re-sent for the same `idx`
+/// One chunk a staging has received (1283): at most 8 MiB, a file_blob by its sha256. A chunk re-sent for the same `idx`
 /// replaces the row.
 model DriveStagingChunk {
   stagingId String       @map("staging_id") @db.Uuid
@@ -3561,7 +3561,7 @@ model DriveStagingChunk {
   @@map("drive_staging_chunk")
 }
 
-/// The ordered chunks of one drive version (1280, docs/orbit-files-drive-technical-design.md §1.2): a file's bytes are
+/// The ordered chunks of one drive version (1283, docs/orbit-files-drive-technical-design.md §1.2): a file's bytes are
 /// their concatenation in `idx` order, and `offset` finds the chunk for any byte. The name layer's migration adds the
 /// foreign key (version_id, owner_id) -> drive_version ON DELETE CASCADE.
 model DriveVersionChunk {

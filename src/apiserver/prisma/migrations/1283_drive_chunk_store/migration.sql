@@ -1,4 +1,4 @@
--- 1280 — Orbit Files drive: the chunk manifest and the staging tables
+-- 1283 — Orbit Files drive: the chunk manifest and the staging tables
 -- (docs/orbit-files-drive-technical-design.md §1.1, §2.2, §2.4).
 --
 -- A drive file is an ordered list of chunks of at most 8 MiB, each an ordinary file_blob kept through the existing
