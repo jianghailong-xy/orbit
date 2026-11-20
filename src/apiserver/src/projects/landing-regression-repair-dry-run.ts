@@ -1,7 +1,7 @@
 import { Prisma } from '@prisma/client';
 
 import { databaseUrl, prismaClientFor } from '../prisma/prisma-client';
-import { predictLandingRegressionRepair, repairLine } from './landing-regression-repair';
+import { predictLandingRegressionRepair, repairLine, type RegressionRepairPrediction } from './landing-regression-repair';
 
 /**
  * What the next start of the API server will do to rows §12.15 P-M1's first reading misread, read from the
@@ -29,10 +29,23 @@ async function main(): Promise<void> {
       const line = repairLine(project, true);
       if (line) process.stdout.write(`${line}\n`);
     }
+    // The OPEN dependents of misread tasks, by project: which J9 holds today on them (and so the fix
+    // releases), and what happens to them — at the start, or at the project's Resume when it is paused.
+    const byProject = new Map<string, RegressionRepairPrediction['dependents']>();
     for (const dependent of prediction.dependents) {
-      process.stdout.write(`dependent (predicted): task ${dependent.taskId} "${dependent.title}" waits on ${dependent.waitsOn}; `
-        + `${dependent.autoRunWhenReady && dependent.projectStarted && !dependent.projectPaused
-          ? 'starts by itself once its other prerequisites are met' : 'released, but does not start by itself'}\n`);
+      const key = dependent.projectId ?? 'no project';
+      byProject.set(key, [...(byProject.get(key) ?? []), dependent]);
+    }
+    for (const [projectId, dependents] of byProject) {
+      const released = dependents.filter((dependent) => dependent.heldTodayByJ9);
+      const starting = released.filter((dependent) => dependent.autoRunWhenReady && !dependent.dispatchHold);
+      const paused = dependents.some((dependent) => dependent.projectPaused);
+      const since = released.map((dependent) => dependent.heldSince).filter((at): at is Date => at !== null)
+        .sort((a, b) => new Date(a).getTime() - new Date(b).getTime())[0];
+      process.stdout.write(`dependents (predicted): project ${projectId}: ${dependents.length} OPEN dependent(s) of misread tasks; `
+        + `${released.length} held today by J9 on them${since ? ` (since ${new Date(since).toISOString()} at the earliest)` : ''} `
+        + `and released by the fix; ${starting.length} of those start by themselves once their other prerequisites are met `
+        + `${paused ? 'when the project is resumed (it is paused, so nothing starts at the deploy)' : 'at the next ready sweep after the start'}\n`);
     }
     const toDone = prediction.projects.filter((project) => project.statusBefore === 'OPEN' && project.statusAfter === 'DONE');
     const items = prediction.projects.reduce((sum, project) => sum + project.supersededItemIds.length, 0);

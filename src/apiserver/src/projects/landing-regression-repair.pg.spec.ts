@@ -69,7 +69,7 @@ interface PredictedProject {
 interface RepairModule {
   predictLandingRegressionRepair(db: unknown): Promise<{
     passWouldFreeze: string[];
-    dependents: Array<{ taskId: string; waitsOn: string }>;
+    dependents: Array<{ taskId: string; waitsOn: string; heldTodayByJ9: boolean; dispatchHold: boolean }>;
     projects: PredictedProject[];
   }>;
 }
@@ -369,8 +369,12 @@ test('(d) from production\'s state, a start predicts and then does it: DONE agai
         return repair.predictLandingRegressionRepair(tx);
       }, { timeout: 60_000 });
       const predicted = prediction.projects.find((row) => row.projectId === project.projectId);
-      assert.deepEqual(prediction.dependents.filter((row) => row.taskId === waiting).map((row) => row.waitsOn),
-        [first!.taskId], 'the prediction names the dependent the fix releases, and what it waits on');
+      assert.deepEqual(
+        prediction.dependents.filter((row) => row.taskId === waiting)
+          .map((row) => [row.waitsOn, row.heldTodayByJ9, row.dispatchHold]),
+        [[first!.taskId, true, false]],
+        'the prediction names the dependent, what it waits on, and that only the fix releases it: its line has '
+          + 'started, the prerequisite is code work, and no receipt says it landed');
       const byId = (a: { taskId: string }, b: { taskId: string }) => a.taskId.localeCompare(b.taskId);
       assert.deepEqual(
         {

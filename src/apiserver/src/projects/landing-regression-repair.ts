@@ -12,6 +12,7 @@ import {
 import { readDerivedProjectStatusWrite } from './project-done-derived';
 import { refreshProjectDone } from './project-done-request';
 import { readDeliveredIdentity } from './project-integration-job';
+import { prerequisiteLandedOtherwiseSql } from '../tasks/task-dependencies';
 import { DELIVERY_REVIEW_KIND, deliveryReviewKey } from './project-open-item';
 
 /**
@@ -129,7 +130,12 @@ export interface RegressionRepairPrediction {
    */
   dependents: Array<{
     taskId: string; title: string; waitsOn: string; projectId: string | null;
-    autoRunWhenReady: boolean; projectStarted: boolean; projectPaused: boolean;
+    autoRunWhenReady: boolean; dispatchHold: boolean; projectStarted: boolean; projectPaused: boolean;
+    /** Whether J9 holds it on this prerequisite today — true when nothing but the P-M1 fact releases it, so
+     *  the fix changes what a start (or a Resume of its project) does with it. */
+    heldTodayByJ9: boolean;
+    /** Since when, as far as the rows say: the later of the line's start and the prerequisite's last finish. */
+    heldSince: Date | null;
   }>;
   projects: Array<RegressionRepairProject & {
     title: string | null;
@@ -246,9 +252,18 @@ export async function predictLandingRegressionRepair(
   const dependents = footprint.length === 0 ? [] : await db.$queryRaw<RegressionRepairPrediction['dependents']>(Prisma.sql`
     SELECT dependent."id" AS "taskId", dependent."title", edge."depends_on_task_id" AS "waitsOn",
            dependent."project_id" AS "projectId", dependent."auto_run_when_ready" AS "autoRunWhenReady",
-           (project."started_at" IS NOT NULL) AS "projectStarted", (project."paused_at" IS NOT NULL) AS "projectPaused"
+           dependent."dispatch_hold" AS "dispatchHold",
+           (project."started_at" IS NOT NULL) AS "projectStarted", (project."paused_at" IS NOT NULL) AS "projectPaused",
+           NOT ${Prisma.raw(prerequisiteLandedOtherwiseSql('prerequisite'))} AS "heldTodayByJ9",
+           GREATEST(
+             (SELECT line."integration_started_at" FROM "project_codebase" line
+               WHERE line."project_id" = prerequisite."project_id" AND line."slot" = 'primary'),
+             (SELECT max(work."finished_at") FROM "session" work
+               WHERE work."task_id" = prerequisite."id" AND work."starts_task_work" = true AND work."deleted_at" IS NULL)
+           ) AS "heldSince"
       FROM "task_dependency" edge
       JOIN "task" dependent ON dependent."id" = edge."task_id"
+      JOIN "task" prerequisite ON prerequisite."id" = edge."depends_on_task_id"
       LEFT JOIN "project" project ON project."id" = dependent."project_id"
      WHERE edge."depends_on_task_id" = ANY(${footprint.map((row) => row.taskId)}::uuid[])
        AND dependent."status" = 'OPEN'
