@@ -148,15 +148,15 @@ final class ProjectPageTests: XCTestCase {
                            sessionId: sessionId, fuseEpisodeId: fuse, actions: actions)
     }
 
-    func testOpenItemsSummaryKeepsCoordinatorItemsQuietUntilTheServerReassignsThem() throws {
+    func testOpenItemsShowsOnlyOwnerRows() throws {
         let coordinator = item(.integrationCheckFailed, assignee: .coordinator, waited: 3_600,
                                escalateIn: -60)
         let quiet = try XCTUnwrap(ProjectPage.openItemsSummary(
             status: .open, started: true, items: .init(withCoordinator: [coordinator])))
-        XCTAssertEqual(quiet.count, 1)
+        XCTAssertEqual(quiet.count, 0)
         XCTAssertEqual(quiet.needsYou, 0)
         XCTAssertNil(quiet.attention, "a local countdown reaching zero does not reassign an item")
-        XCTAssertEqual(quiet.subtitle, "No action needed from you · 1 with the coordinator")
+        XCTAssertEqual(quiet.subtitle, "No open items")
 
         let owner = item(.integrationCheckFailed, assignee: .owner, waited: 3_600)
         let escalated = try XCTUnwrap(ProjectPage.openItemsSummary(
@@ -166,12 +166,12 @@ final class ProjectPageTests: XCTestCase {
         XCTAssertEqual(escalated.subtitle, "1 item needs you")
 
         let pause = item(.fusePaused, assignee: .owner, waited: 60, actions: [.resume], fuse: "f1")
-        let mixed = try XCTUnwrap(ProjectPage.openItemsSummary(
-            status: .open, started: true,
-            items: .init(needsYou: [owner, pause], withCoordinator: [coordinator])))
-        XCTAssertEqual(mixed.count, 3)
+        let items = ProjectOpenItemsView(needsYou: [owner, pause], withCoordinator: [coordinator])
+        XCTAssertEqual(ProjectPage.needsYouRows(items), [owner, pause])
+        let mixed = try XCTUnwrap(ProjectPage.openItemsSummary(status: .open, started: true, items: items))
+        XCTAssertEqual(mixed.count, 2)
         XCTAssertEqual(mixed.attention, "2 items need you", "the existing Resume action remains discoverable")
-        XCTAssertEqual(mixed.subtitle, "2 items need you · 1 with the coordinator")
+        XCTAssertEqual(mixed.subtitle, "2 items need you")
     }
 
     /// The coordinator's request to record the project done is one of the owner's items while the

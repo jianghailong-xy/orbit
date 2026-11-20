@@ -127,7 +127,7 @@ export class GuestSessionsController {
   ): Observable<MessageEvent> {
     return this.viewerStreams.stream(
       id,
-      { kind: 'GUEST', waitingOnOwner: (sessionId) => this.guests.waitingOnOwner(sessionId) },
+      { kind: 'GUEST' },
       {
         // The session gone, or this guest's invitation ended; a link's signals are not the guest's.
         named: (r) => !('linkId' in r) && r.sessionId === id && (r.guestId === undefined || r.guestId === user.userId),

@@ -81,7 +81,9 @@ test('SubAgent runs: the row, the cost roll-up, the refusals and runningSubagent
   const ownerId = randomUUID();
   const runnerId = randomUUID();
   await prisma.user.create({
-    data: { id: ownerId, email: `subagent-${ownerId}@runner-door.invalid`, name: 'The account owner', passwordHash: 'x' },
+    // Optimize For is the account's (owner, 2026-11-19); Cost, the mode these decisions were written against.
+    data: { id: ownerId, email: `subagent-${ownerId}@runner-door.invalid`, name: 'The account owner', passwordHash: 'x',
+      preferences: { optimizeFor: 'cost' } },
   });
   // Claude's catalogue is what routing picks from; with none, every SubAgent is refused NO_SUBAGENT_PROVIDER.
   const claudeCatalog = {
@@ -101,7 +103,7 @@ test('SubAgent runs: the row, the cost roll-up, the refusals and runningSubagent
 
   /** A live parent session of that runner, under an agent with SubAgents on or off. */
   async function parentSession(opts: {
-    subagentsEnabled?: boolean; costUsd?: number; runnerId?: string; model?: string; effort?: string; optimizeFor?: string;
+    subagentsEnabled?: boolean; costUsd?: number; runnerId?: string; model?: string; effort?: string;
     permissionMode?: string;
   } = {}) {
     const workspaceId = randomUUID();
@@ -110,7 +112,6 @@ test('SubAgent runs: the row, the cost roll-up, the refusals and runningSubagent
       data: {
         id: workspaceId, ownerId, runnerId: onRunner, name: `orbit-worker-${workspaceId.slice(-8)}`, enabled: true,
         ...(opts.subagentsEnabled === undefined ? {} : { subagentsEnabled: opts.subagentsEnabled }),
-        ...(opts.optimizeFor ? { modelRoutingOptimizeFor: opts.optimizeFor } : {}),
       },
     });
     const sessionId = randomUUID();
@@ -366,9 +367,9 @@ test('SubAgent runs: the row, the cost roll-up, the refusals and runningSubagent
       usageStanding: () => null,
     };
     const routed = new RunnerSubagentsController(prisma as never, silent(), planUsage as never);
-    await prisma.user.update({ where: { id: ownerId }, data: { preferences: { subagentBlockedProviders: [glm] } } });
+    await prisma.user.update({ where: { id: ownerId }, data: { preferences: { subagentBlockedProviders: [glm], optimizeFor: 'cost' } } });
 
-    const sessionId = await parentSession({ runnerId: machineId, model: 'claude-sonnet-5-5', effort: 'medium', optimizeFor: 'cost' });
+    const sessionId = await parentSession({ runnerId: machineId, model: 'claude-sonnet-5-5', effort: 'medium' });
     const poolFields = { poolMemberProviderId: true, poolKeyId: true, poolCodexAccountId: true, poolSwitchNotice: true, provider: true } as const;
     const parentBefore = await prisma.session.findUniqueOrThrow({ where: { id: sessionId }, select: poolFields });
     const opened = await routed.createSubagentRun(machine, sessionId, create({
@@ -409,12 +410,16 @@ test('SubAgent runs: the row, the cost roll-up, the refusals and runningSubagent
     assert.equal(decision.model, 'claude-opus-5-5');
     assert.equal(decision.effort, 'high');
     assert.equal(decision.applied, true);
-    assert.equal(decision.policyVersion, 'p4-every-provider-2');
+    assert.equal(decision.policyVersion, 'p6-subscriptions-first-1');
     assert.equal(decision.tierNote, 'Tier L, set by the caller');
     assert.equal(decision.note, 'subscription pool, Bob with 80% quota left');
-    assert.deepEqual(decision.reasons, [
-      'Tier L, set by the caller: one service plus its spec',
-      `Picked claude-opus-5-5 · high on ${team.slug} (claude) (Cost): a subscription pool whose account Bob has 80% of its quota left, used before any metered key`,
+    // The pick names when Bob's quota resets: the fixture's window, relative to now (p5-expiry-first-1).
+    const [tierLine, pickLine, ...rest] = decision.reasons;
+    assert.equal(tierLine, 'Tier L, set by the caller: one service plus its spec');
+    assert.match(pickLine, new RegExp(
+      `^Picked claude-opus-5-5 · high on ${team.slug} \\(claude\\) \\(Cost\\): a subscription pool whose account Bob has 80% `
+      + 'of its quota left until \\d{4}-\\d\\d-\\d\\dT\\d\\d:\\d\\dZ, used before any metered key$'));
+    assert.deepEqual(rest, [
       '3 candidates in tier L, 8 more in other tiers or untiered; ties go by the owner\'s provider order',
       `${decision.candidates.length} candidates removed, each with its reason`,
     ]);
@@ -427,13 +432,47 @@ test('SubAgent runs: the row, the cost roll-up, the refusals and runningSubagent
     // Its only model has no tier, so it joins as its default model, after every tiered candidate.
     assert.deepEqual(why(custom), [['opencode', null, "opencode is not installed on the parent's runner"]]);
     assert.deepEqual(why(spent.slug), [['codex', null,
-      'Every account in the pool is at or above 90% of its quota or paused: carol@team.invalid at 96% of its weekly quota']]);
+      'No account in the pool can run: carol@team.invalid at 96% of its weekly quota']]);
     // The members are listed on their own too, with an empty model list of their own.
     assert.deepEqual(why(alice), [['claude', null, 'No models listed for claude']]);
     assert.deepEqual(why(deepseek), [
       ['opencode', null, "opencode is not installed on the parent's runner"],
       ['dsh', null, "dsh is not installed on the parent's runner"],
     ]);
+  });
+
+  await t.test('a resume on this machine opens where the run ran, never routed again; refused while it runs or unknown', async () => {
+    const sessionId = await parentSession();
+    const first = await subagents.createSubagentRun(runner, sessionId, create({ toolUseId: 'toolu_resume_first', size: 'M' }));
+    // Its last attempt ran on Opus at high: not what tier S, which the resume asks for, routes to.
+    await prisma.subagentRun.update({
+      where: { id: first.runId },
+      data: { attempts: [{ attempt: 1, engine: 'claude', provider: 'claude', model: 'claude-opus-5-5', effort: 'high',
+        outcome: 'RUNNING', startedAt: new Date().toISOString() }] },
+    });
+    const code = (expected: string) => (error: unknown) =>
+      (error as { getResponse?: () => { code?: string } }).getResponse?.()?.code === expected;
+    await assert.rejects(subagents.createSubagentRun(runner, sessionId, create({
+      toolUseId: 'toolu_resume_early', resumeOf: first.runId, size: 'S',
+    })), (error: unknown) => error instanceof ConflictException && code('SUBAGENT_RESUME_RUNNING')(error));
+
+    await subagents.updateSubagentRun(runner, sessionId, first.runId, update({ status: 'DONE', resultSummary: 'half done' }));
+    const resumed = await subagents.createSubagentRun(runner, sessionId, create({
+      toolUseId: 'toolu_resume_again', resumeOf: first.runId, size: 'S',
+    }));
+    t.diagnostic(`resumed decision ${JSON.stringify(resumed.decision)}`);
+    assert.equal(resumed.decision.tierSource, 'not-routed');
+    assert.deepEqual([resumed.decision.engine, resumed.decision.provider, resumed.decision.model, resumed.decision.effort],
+      ['claude', 'claude', 'claude-opus-5-5', 'high'], 'the last attempt\'s target, not tier S\'s');
+    assert.deepEqual(resumed.decision.reasons, [`Resumes ${first.runId} where it ran: claude-opus-5-5 on claude`]);
+    assert.deepEqual(resumed.decision.fallbacks, [], 'a conversation does not move to another engine');
+    assert.equal(resumed.exec.model, 'claude-opus-5-5');
+    const row = await prisma.subagentRun.findUniqueOrThrow({ where: { id: resumed.runId } });
+    assert.deepEqual((row.attempts as Array<{ model: string }>).map((a) => a.model), ['claude-opus-5-5']);
+
+    await assert.rejects(subagents.createSubagentRun(runner, sessionId, create({
+      toolUseId: 'toolu_resume_unknown', resumeOf: randomUUID(),
+    })), (error: unknown) => error instanceof NotFoundException && code('SUBAGENT_RESUME_NOT_FOUND')(error));
   });
 
   await t.test('an empty pool is refused NO_SUBAGENT_PROVIDER with each provider\'s reason, and opens no run', async () => {
@@ -522,9 +561,9 @@ test('SubAgent runs: the row, the cost roll-up, the refusals and runningSubagent
       await prisma.providerPool.deleteMany({ where: { id: { in: [own.id, theirs.id, theirsShared.id] } } });
     });
     const routed = new RunnerSubagentsController(prisma as never, silent(), silent());
-    await prisma.user.update({ where: { id: ownerId }, data: { preferences: {} } });
+    await prisma.user.update({ where: { id: ownerId }, data: { preferences: { optimizeFor: 'cost' } } });
 
-    const sessionId = await parentSession({ runnerId: machineId, model: 'claude-opus-5-5', effort: 'high', optimizeFor: 'cost' });
+    const sessionId = await parentSession({ runnerId: machineId, model: 'claude-opus-5-5', effort: 'high' });
     const poolFields = { poolMemberProviderId: true, poolKeyId: true, poolCodexAccountId: true, poolSwitchNotice: true, provider: true } as const;
     const parentBefore = await prisma.session.findUniqueOrThrow({ where: { id: sessionId }, select: poolFields });
     const opened = await routed.createSubagentRun(machine, sessionId, create({

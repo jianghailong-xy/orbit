@@ -201,9 +201,14 @@ export interface UserPreferences {
    *  workspace, enforced by the server on each claim, spawn and call. Absent means on; only
    *  opting out is ever written. */
   enableOrchestration?: boolean;
+  /** How many tasks a session creates before each create is carded; absent = 8, 0 = every one. */
+  cardFreeTaskCreates?: number | null;
   /** Smart model selection for the whole account — the Suggested tiers and the Agent switch that
    *  routes task runs onto them. Absent means OFF; only turning it on has to be written. */
   modelRouting?: boolean;
+  /** Optimize For, one for every Agent: how SubAgents and smart-selected task runs rank providers (board
+   *  docs/mocks/routing-mode-account). Absent means Balance. */
+  optimizeFor?: 'cost' | 'balance' | 'intelligence';
   /** Whether Claude sessions offer the next message you would probably type once a turn ends
    *  (lib/promptSuggestion). Each one is a request on the session's account, read when its engine
    *  starts. Absent means on; only opting out is ever written. */

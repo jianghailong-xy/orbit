@@ -49,7 +49,7 @@ export const modeLabel = (mode: string) => FEISHU_GROUP_MODES.find((m) => m.valu
 export const groupConsequence = (runner: string, mode: string) =>
   `People in this group can make agents act on ${runner} in ${modeLabel(mode)} mode.`;
 
-interface WorkspaceRow {
+export interface WorkspaceRow {
   id: string;
   name: string;
   enabled?: boolean;
@@ -58,7 +58,7 @@ interface WorkspaceRow {
   runner?: { id?: string; name?: string | null; displayName?: string | null } | null;
 }
 /** Its machine as the app names it (Orbit Cloud for the managed runner, machineName). */
-const runnerName = (w: WorkspaceRow | undefined, managedRunnerId: string | null) =>
+export const runnerName =(w: WorkspaceRow | undefined, managedRunnerId: string | null) =>
   (w?.runner
     ? machineName({ ...w.runner, id: w.runner.id ?? w.runnerId ?? undefined, name: w.runner.name ?? undefined }, managedRunnerId)
     : '') || 'its runner';
@@ -109,7 +109,9 @@ function ConnectForm({
   const message = useToast();
   const managedRunnerId = useManagedRunnerId();
   const [workspaceId, setWorkspaceId] = useState<string | null>(workspaces.length === 1 ? workspaces[0].id : null);
-  const [mode, setMode] = useState<PermissionMode>(PermissionMode.DEFAULT);
+  // Auto by default (the owner, 2026-11-18). A model that cannot run Auto still opens the session:
+  // dispatch narrows it to Default (normalizeBuiltinPermissionMode), as for any Auto session.
+  const [mode, setMode] = useState<PermissionMode>(PermissionMode.AUTO);
   const [who, setWho] = useState<'everyone' | 'listed'>('everyone');
   const [chosen, setChosen] = useState<ReadonlySet<string>>(new Set());
   const [maxConcurrent, setMaxConcurrent] = useState<number | null>(FEISHU_CHAT_DEFAULT_MAX_CONCURRENT);

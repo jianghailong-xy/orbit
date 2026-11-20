@@ -1,6 +1,6 @@
 {
   "schemaVersion": 1,
-  "network": "orbit-managed-runners",
+  "network": "orbit-cloud-runners",
   "bridge": "br-0123456789ab",
   "gateway": "172.19.0.1",
   "apiPort": 2086,

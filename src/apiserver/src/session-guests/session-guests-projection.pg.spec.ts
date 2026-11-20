@@ -322,12 +322,11 @@ test('session guests: the guest door shows only what the public link may, and th
     assert.deepEqual(echo?.payload?.externalSender, ORBIT_GUEST, 'the guest page names the guest on the echo');
     const [, shared] = guestAnswers[0]!;
     assert.deepEqual(shared.json.sessions.map((x: Json) => x.ownerName), [OWNER_NAME]);
-    // The guest door's page is the public link's page, field for field, plus who shared it and whether the agent
-    // waits on them — a bare boolean, since what the waiting card asks is the owner's alone.
+    // The guest door's page is the public link's page, field for field, plus who shared it.
     const [, publicRoot] = publicAnswers[0]!;
     const fieldsOf = (json: Json) => Object.keys(json).sort();
-    const { ownerName: _ownerName, waitingOnOwner, ...guestPage } = page.json;
-    assert.equal(typeof waitingOnOwner, 'boolean', 'the guest page says only whether the agent waits on the owner');
+    const { ownerName: _ownerName, ...guestPage } = page.json;
+    assert.equal(typeof page.json.waitingOnOwner, 'boolean', 'the guest page says only whether the agent waits on the owner');
     assert.deepEqual(
       fieldsOf(guestPage).filter((f) => !fieldsOf(publicRoot.json).includes(f)),
       [],
@@ -388,10 +387,10 @@ test('session guests: the guest door shows only what the public link may, and th
     await stored('task_progress', { toolUseId: 'toolu_stored', description: OWNER_ONLY.legacyLive });
 
     // ── the doors ─────────────────────────────────────────────────────────────────────────────
-    const doors: Array<{ name: string; toolOutput: boolean; guest: boolean; streamPath: string; readPath: string; bearer?: string }> = [
-      { name: 'guest', toolOutput: true, guest: true, streamPath: `/guest-sessions/${s}/stream?access_token=${guestLogin}`, readPath: `/guest-sessions/${s}/events`, bearer: guestLogin },
-      { name: 'session link (Tool output on)', toolOutput: true, guest: false, streamPath: `/shared/${shareToken}/stream`, readPath: `/shared/${shareToken}/events` },
-      { name: 'task link conversation (Tool output off)', toolOutput: false, guest: false, streamPath: `/shared/${taskToken}/sessions/${s}/stream`, readPath: `/shared/${taskToken}/sessions/${s}/events` },
+    const doors: Array<{ name: string; toolOutput: boolean; streamPath: string; readPath: string; bearer?: string }> = [
+      { name: 'guest', toolOutput: true, streamPath: `/guest-sessions/${s}/stream?access_token=${guestLogin}`, readPath: `/guest-sessions/${s}/events`, bearer: guestLogin },
+      { name: 'session link (Tool output on)', toolOutput: true, streamPath: `/shared/${shareToken}/stream`, readPath: `/shared/${shareToken}/events` },
+      { name: 'task link conversation (Tool output off)', toolOutput: false, streamPath: `/shared/${taskToken}/sessions/${s}/stream`, readPath: `/shared/${taskToken}/sessions/${s}/events` },
     ];
     const streams: HeldStream[] = [];
     st.after(() => streams.forEach((held) => held.close()));
@@ -461,7 +460,7 @@ test('session guests: the guest door shows only what the public link may, and th
       await held.until((f) => f.seq === lastSeq, `${door.name}: the last reply`);
       await held.until(
         (f) => f.type === 'head' && f.payload.title === NEW_TITLE && f.payload.runState === 'AWAITING_INPUT'
-          && (!door.guest || f.payload.waitingOnOwner === true),
+          && f.payload.waitingOnOwner === true,
         `${door.name}: the head after the rename, the status and the card`,
       );
     }
@@ -505,8 +504,7 @@ test('session guests: the guest door shows only what the public link may, and th
       }
       // The triggers (a rename, two statuses, a card) came within one 250 ms window: one read, not four.
       assert.ok(heads.length <= 3, `${door.name}: ${heads.length} heads for one burst of triggers`);
-      if (door.guest) assert.equal(readHeader.waitingOnOwner, true, 'the guest read says the agent waits on the owner');
-      else assert.equal('waitingOnOwner' in readHeader, false, `${door.name}: a public header says whom the agent waits on`);
+      assert.equal(readHeader.waitingOnOwner, true, `${door.name}: the read says the agent waits on the owner`);
     }
     // The resumed guest stream replayed only what came after its cursor, then went live.
     const resumedSeqs = resumed.frames.filter((f) => f.seq > 0 && f.type !== 'head').map((f) => f.seq);

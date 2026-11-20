@@ -934,6 +934,7 @@ export class TaskCompletionEvidenceService {
           evidenceDigest: latest.evidenceDigest,
           decision: input.decision,
           note,
+          ...(noteForAgent && langs ? { translatedNote: noteForAgent.text, translationLang: langs.owner } : {}),
           decidedByType: actor.type,
           decidedById: actor.id,
           decidingSessionId: decidingSession.id,
@@ -994,8 +995,7 @@ export class TaskCompletionEvidenceService {
     // goes on submit; a fault is logged and never reported as a failed decision, the note staying
     // readable on the revision in `list`.
     if (committed.decision.decision === 'SEND_BACK') {
-      await this.evidenceReviews?.deliverSendBack(ownerId, taskId, committed.decision.id, ownerInTheApp ? null : input.decidingSessionId,
-        noteForAgent && langs ? { note: noteForAgent.text, from: langs.owner } : undefined)
+      await this.evidenceReviews?.deliverSendBack(ownerId, taskId, committed.decision.id, ownerInTheApp ? null : input.decidingSessionId)
         .catch((error) => this.logger.warn(`send-back of task ${taskId} was not handed to its run: `
           + `${error instanceof Error ? error.message : error}`));
     }

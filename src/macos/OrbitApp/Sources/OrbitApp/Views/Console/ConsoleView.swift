@@ -342,7 +342,11 @@ struct ConsoleView: View {
             VStack(spacing: 0) {
                 // What this session waits on — a watch, not a process — above the real shells.
                 WatchingCardStack(sessionID: console.sessionID)
-                BackgroundTrayView(procs: console.state.background, progress: console.state.taskProgress)
+                // The folded row by the shared rule; its names stop rotating while the band is folded.
+                BackgroundTrayView(procs: console.state.background, progress: console.state.taskProgress,
+                                   row: BackgroundRowRule.row(console.state.background, items: console.state.items,
+                                                              sessionLive: console.isLive),
+                                   paused: foldsChrome(console) || foldsBand(console))
                 // The tasks this session's agent created, beside the code the bar below
                 // carries — the session's two kinds of output, together.
                 CreatedTasksCard(console: console)
@@ -1082,6 +1086,8 @@ struct TranscriptView: View {
         // Held by its runner's update (board 5 of docs/mocks/runner-update-drain): the foot row of
         // the reader's last message says so, or, before there is one, the queued page does.
         .environment(\.runnerUpdatingFoot, runnerUpdatingFoot)
+        // …and where that message is one no runner has taken, Cancel beside the tag (`HeldCancel`).
+        .environment(\.heldCancel, { [console] bubble in Task { await console.cancelHeld(bubble) } })
         .overlay { runnerUpdatingPage }
         // macOS shows the session state in this band. iOS gave the state up with the nav-bar title,
         // for reading space (see `ConsoleView`'s toolbar), so the band is retired there.
@@ -1693,7 +1699,8 @@ struct TranscriptView: View {
                 Task { await console.cancelQueued(bubble) }
             }, steer: SteerControls(bubble: bubble, withdrawing: console.withdrawingSteers) {
                 Task { await console.withdrawSteer(bubble) }
-            }, putBack: putBack(bubble))
+            }, putBack: putBack(bubble),
+               revealItemCard: { console.revealOpenItemCard($0) })
             .environment(\.runnerUpdatingQueued, runnerUpdatingQueued(bubble))
         case .bottom:
             // Both shapes end in the room the list's fade lies over (`fadesIntoComposerBand`), so a list
@@ -2548,7 +2555,7 @@ struct TranscriptItemView: View {
         case .user(let b):
             // Which card a user turn is — or the owner's bubble — is decided in one place, for the
             // transcript and the queued tail alike (`UserTurnRow`).
-            UserTurnRow(bubble: b, steer: steerControls(b), putBack: putBack(b))
+            UserTurnRow(bubble: b, steer: steerControls(b), putBack: putBack(b), revealItemCard: { console?.revealOpenItemCard($0) ?? false })
         case .assistant(let b): AssistantBubbleView(bubble: b)
         case .thinking(let b):  ThinkingView(block: b)
         case .toolCall(let c):

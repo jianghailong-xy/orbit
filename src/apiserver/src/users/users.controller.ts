@@ -168,6 +168,7 @@ export class UsersController {
     if (dto.notifyAgentMessage !== undefined) merged.notifyAgentMessage = dto.notifyAgentMessage;
     if (dto.enableOrchestration !== undefined) merged.enableOrchestration = dto.enableOrchestration;
     if (dto.modelRouting !== undefined) merged.modelRouting = dto.modelRouting;
+    if (dto.optimizeFor !== undefined) merged.optimizeFor = dto.optimizeFor;
     if (dto.promptSuggestions !== undefined) merged.promptSuggestions = dto.promptSuggestions;
     if (dto.recaps !== undefined) merged.recaps = dto.recaps;
     if (dto.translationEnabled !== undefined) merged.translationEnabled = dto.translationEnabled;
@@ -176,6 +177,9 @@ export class UsersController {
     if (dto.promptOptimizer !== undefined) merged.promptOptimizer = dto.promptOptimizer;
     if (dto.translationBilingual !== undefined) merged.translationBilingual = dto.translationBilingual;
     if (dto.subagentBlockedProviders !== undefined) merged.subagentBlockedProviders = [...new Set(dto.subagentBlockedProviders)];
+    // null goes back to the default (session-create-allowance.ts), which is an absent key.
+    if (dto.cardFreeTaskCreates === null) delete merged.cardFreeTaskCreates;
+    else if (dto.cardFreeTaskCreates !== undefined) merged.cardFreeTaskCreates = dto.cardFreeTaskCreates;
     return asMe(await this.prisma.user.update({
       where: { id: user.userId },
       data: { preferences: merged as Prisma.InputJsonValue },

@@ -4,4 +4,4 @@
 FROM python:3.13-alpine
 COPY deploy/managed-runner/docker-channel/channel.py /opt/orbit-docker-channel/channel.py
 ENTRYPOINT ["python3", "-I", "/opt/orbit-docker-channel/channel.py"]
-CMD ["serve", "--config", "/var/lib/orbit-managed-runners/channel.json"]
+CMD ["serve", "--config", "/var/lib/orbit-cloud-runners/channel.json"]

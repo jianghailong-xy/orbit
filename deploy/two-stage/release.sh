@@ -130,7 +130,7 @@ release_of() {
   MR_IMAGE=""
   if git cat-file -e "$1:deploy/managed-runner/image/Dockerfile" 2>/dev/null; then
     MR_TAG="$(git log -1 --format=%H "$1" -- "${MANAGED_RUNNER_INPUTS[@]}")"
-    MR_IMAGE="$REGISTRY/orbit-managed-runner:$MR_TAG"
+    MR_IMAGE="$REGISTRY/orbit-cloud-runner:$MR_TAG"
   fi
   base="$(git show "$1:deploy/two-stage/base-images.env")"
   for name in ORBIT_NGINX_IMAGE ORBIT_NATS_IMAGE; do

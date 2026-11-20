@@ -713,7 +713,7 @@ private struct AvatarCropView: View {
 
 // MARK: - Sessions
 
-/// The account's five session settings, which the list's Sessions row opens (`SessionSettings`): each
+/// The account's session settings, which the list's Sessions row opens (`SessionSettings`): each
 /// in a section of its own with the web's hint as its footer, as the Notifications page below draws
 /// its switches. Each is written the moment it changes, guarded against the value the account
 /// already has, so seeding them never writes.
@@ -725,6 +725,8 @@ private struct SessionSettingsPage: View {
     @State private var orchestration = true
     /// The account's switch for smart model selection. Absent on the server means off.
     @State private var modelRouting = false
+    /// The account's "Optimize For" pick. Absent on the server means Balance.
+    @State private var optimizeFor: OptimizeFor = .balance
     /// The account's switch for suggested replies. Absent on the server means on.
     @State private var promptSuggestions = true
     /// The account's switch for session recaps. Absent on the server means on.
@@ -742,10 +744,12 @@ private struct SessionSettingsPage: View {
             ForEach(SessionSettings.groups, id: \.self) { group in
                 switch group {
                 case .row(let row):
-                    Section {
-                        control(row)
-                    } footer: {
-                        Text(SessionSettings.footer(row))
+                    if SessionSettings.shows(row, smartModelSelection: modelRouting) {
+                        Section {
+                            control(row)
+                        } footer: {
+                            Text(SessionSettings.footer(row))
+                        }
                     }
                 case .translation:
                     translationSection
@@ -769,6 +773,10 @@ private struct SessionSettingsPage: View {
         .onChange(of: modelRouting) { _, value in
             guard (model.user?.preferences?.smartModelSelection ?? false) != value else { return }
             Task { await model.savePreferences(UpdatePreferencesRequest(modelRouting: value)) }
+        }
+        .onChange(of: optimizeFor) { _, value in
+            guard OptimizeFor(stored: model.user?.preferences?.optimizeFor) != value else { return }
+            Task { await model.savePreferences(UpdatePreferencesRequest(optimizeFor: value.rawValue)) }
         }
         .onChange(of: promptSuggestions) { _, value in
             guard (model.user?.preferences?.suggestedReplies ?? true) != value else { return }
@@ -796,8 +804,8 @@ private struct SessionSettingsPage: View {
         .onChange(of: model.user?.preferences?.translationBilingual) { _, value in bilingual = value == true }
     }
 
-    /// A row's own control: the mode is a menu on the row, as the list's Appearance is; the other four
-    /// are the account's switches.
+    /// A row's own control: the mode is a menu on the row, as the list's Appearance is; Optimize For is
+    /// a segmented picker; the other four are the account's switches.
     @ViewBuilder private func control(_ row: SessionSettings.Row) -> some View {
         let title = SessionSettings.title(row)
         switch row {
@@ -809,6 +817,11 @@ private struct SessionSettingsPage: View {
             }
         case .orchestration:     Toggle(title, isOn: $orchestration)
         case .modelRouting:      Toggle(title, isOn: $modelRouting)
+        case .optimizeFor:
+            Picker(title, selection: $optimizeFor) {
+                ForEach(OptimizeFor.allCases) { Text($0.label).tag($0) }
+            }
+            .pickerStyle(.segmented)
         case .promptSuggestions: Toggle(title, isOn: $promptSuggestions)
         case .recaps:            Toggle(title, isOn: $recaps)
         }
@@ -879,6 +892,7 @@ private struct SessionSettingsPage: View {
         permMode = PermissionMode(rawValue: p?.defaultPermissionMode ?? "") ?? AgentDefaults.defaultPermissionMode
         orchestration = p?.enableOrchestration ?? true
         modelRouting = p?.smartModelSelection ?? false
+        optimizeFor = OptimizeFor(stored: p?.optimizeFor)
         promptSuggestions = p?.suggestedReplies ?? true
         recaps = p?.showRecaps ?? true
         translation = !SessionTranslation.unavailable(model.user) && p?.translationEnabled == true

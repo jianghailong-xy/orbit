@@ -249,8 +249,8 @@ fun SessionCards(cards: SessionCardsModel, open: (String) -> Unit, discuss: ((St
                 val result = results[card.key]?.takeIf { it.binding == card.binding } ?: CardActionState()
                 val submit = { verb: CardVerb, input: CardInput -> cards.submit(card, verb, input) }
                 when {
-                    // A08-13: a question that has ended is the record it became, replayed in its review.
-                    card.family == CardFamily.QUESTION_RECORD -> QuestionRecordCard(card) { cards.open(card.key) }
+                    // A08-13: a question that has ended is the record it became, unfolded in place (board card-ui-polish ③).
+                    card.family == CardFamily.QUESTION_RECORD -> QuestionRecordCard(card, open = open)
                     // A11-9: the merge into main is one line where it happened; its card is on the project's sessions page, and the line
                     // opens the same review (iOS `PromotionEventLine`, 6b4bef713) — the conversation's way into a review, as a preview is.
                     card.family == CardFamily.PROMOTION -> PromotionEventLine(card.source.takeUnless { card.status == CardPreviews.stale },

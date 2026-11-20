@@ -2118,9 +2118,7 @@ struct AgentFormContent: View {
     @State private var instructions = ""
     @State private var workDir = ""
     @State private var enabled = true
-    @State private var modelRouting = false
     @State private var subagentsEnabled = true
-    @State private var optimizeFor = SubagentSettings.OptimizeFor.cost
     @State private var subagentsMaxRunning = SubagentSettings.defaultMaxRunning
     @State private var confirmingDelete = false
     #if os(macOS)
@@ -2201,25 +2199,7 @@ struct AgentFormContent: View {
                           prompt: Text("/path/to/project on the runner (optional)"))
             }
 
-            // Off by default, and only the owner's to turn on: it decides what task runs cost, so the
-            // agent tools cannot set it (docs/model-routing-design.md §7.2). With the account's switch
-            // off (the default) the Agent has no switch of its own; its stored value is left alone,
-            // since Done sends it only when it moved.
-            if app.user?.preferences?.smartModelSelection ?? false {
-                Section("Task runs") {
-                    Toggle(isOn: $modelRouting) {
-                        VStack(alignment: .leading, spacing: 3) {
-                            Text(TaskDetailCopy.smartSelectionSwitch)
-                            Text(TaskDetailCopy.smartSelectionSwitchDetail)
-                                .font(.orbitLabel)
-                                .foregroundStyle(.secondary)
-                                .fixedSize(horizontal: false, vertical: true)
-                        }
-                    }
-                }
-            }
-
-            SubagentSettingsSection(agents: agents, enabled: $subagentsEnabled, optimizeFor: $optimizeFor,
+            SubagentSettingsSection(agents: agents, enabled: $subagentsEnabled,
                                     maxRunning: $subagentsMaxRunning)
 
             if let env = agent.env, !env.isEmpty {
@@ -2292,9 +2272,7 @@ struct AgentFormContent: View {
         instructions = agent.appendSystemPrompt ?? ""
         workDir = agent.workDir ?? ""
         enabled = agent.enabled ?? true
-        modelRouting = agent.modelRouting ?? false
         subagentsEnabled = agent.subagentsEnabled ?? true
-        optimizeFor = SubagentSettings.OptimizeFor(stored: agent.modelRoutingOptimizeFor)
         subagentsMaxRunning = SubagentSettings.maxRunning(agent.subagentsMaxRunning)
     }
 
@@ -2311,9 +2289,7 @@ struct AgentFormContent: View {
         || instructions != (agent.appendSystemPrompt ?? "")
         || workDir != (agent.workDir ?? "")
         || enabled != (agent.enabled ?? true)
-        || modelRouting != (agent.modelRouting ?? false)
         || subagentsEnabled != (agent.subagentsEnabled ?? true)
-        || optimizeFor != SubagentSettings.OptimizeFor(stored: agent.modelRoutingOptimizeFor)
         || subagentsMaxRunning != SubagentSettings.maxRunning(agent.subagentsMaxRunning)
     }
 
@@ -2335,11 +2311,7 @@ struct AgentFormContent: View {
             effort: effort.rawValue,
             workDir: workDir.isEmpty ? nil : workDir,
             enabled: enabled,
-            // Only when moved: the switch is written by the user API alone, and only by a press.
-            modelRouting: modelRouting != (agent.modelRouting ?? false) ? modelRouting : nil,
-            // SubAgents: each only when moved, like the switch above.
-            modelRoutingOptimizeFor: optimizeFor != SubagentSettings.OptimizeFor(stored: agent.modelRoutingOptimizeFor)
-                ? optimizeFor.rawValue : nil,
+            // SubAgents: each only when moved.
             subagentsEnabled: subagentsEnabled != (agent.subagentsEnabled ?? true) ? subagentsEnabled : nil,
             subagentsMaxRunning: subagentsMaxRunning != SubagentSettings.maxRunning(agent.subagentsMaxRunning)
                 ? subagentsMaxRunning : nil

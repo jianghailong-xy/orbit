@@ -55,7 +55,7 @@ internal object WorkspaceEffort {
 
 /**
  * The workspace edit form (iOS AgentSettingsSheet / AgentFormContent): name, effort, enabled, instructions,
- * working directory, smart model selection for task runs, a read-only environment, and Delete. Cancel writes
+ * working directory, a read-only environment, and Delete. Cancel writes
  * nothing; Done saves only when something changed and the name is not blank. Blank instructions or path
  * mean "unchanged", as on iOS and the web.
  */
@@ -95,14 +95,12 @@ fun WorkspaceSettings(api: ManagementApi, workspaceId: String?, revision: Long, 
     var instructions by rememberSaveable(id) { mutableStateOf(saved.text("appendSystemPrompt")) }
     var workDir by rememberSaveable(id) { mutableStateOf(saved.text("workDir")) }
     var enabled by rememberSaveable(id) { mutableStateOf(saved.bool("enabled") ?: true) }
-    var modelRouting by rememberSaveable(id) { mutableStateOf(saved.bool("modelRouting") ?: false) }
     val savedSubagents = SubagentSettings.of(saved)
     var subagentsEnabled by rememberSaveable(id) { mutableStateOf(savedSubagents.enabled) }
-    var optimizeFor by rememberSaveable(id) { mutableStateOf(savedSubagents.optimizeFor) }
     var subagentsMaxRunning by rememberSaveable(id) { mutableStateOf(savedSubagents.maxRunning) }
-    val subagents = SubagentSettings(subagentsEnabled, optimizeFor, subagentsMaxRunning)
+    val subagents = SubagentSettings(subagentsEnabled, subagentsMaxRunning)
     val dirty = name != saved.text("name") || effort != prefilledEffort || instructions != saved.text("appendSystemPrompt") ||
-        workDir != saved.text("workDir") || enabled != (saved.bool("enabled") ?: true) || modelRouting != (saved.bool("modelRouting") ?: false) ||
+        workDir != saved.text("workDir") || enabled != (saved.bool("enabled") ?: true) ||
         subagents != savedSubagents
     val options = WorkspaceEffort.options(engine, runner).let { if (effort in it) it else listOf(effort) + it }
     fun commit() {
@@ -110,7 +108,7 @@ fun WorkspaceSettings(api: ManagementApi, workspaceId: String?, revision: Long, 
         saving = true; failure = null
         scope.launch {
             try {
-                api.patch("workspaces/$id", workspacePatch(saved, name, effort, instructions, workDir, enabled, modelRouting, subagents))
+                api.patch("workspaces/$id", workspacePatch(saved, name, effort, instructions, workDir, enabled, subagents))
                 changed(); done()
             } catch (e: CancellationException) { throw e }
             catch (e: Exception) { failure = personalFailure(e) }
@@ -152,22 +150,7 @@ fun WorkspaceSettings(api: ManagementApi, workspaceId: String?, revision: Long, 
             OutlinedTextField(workDir, { workDir = it }, Modifier.fillMaxWidth().padding(vertical = 6.dp), label = { Text("Path") },
                 placeholder = { Text("/path/to/project on the runner (optional)") }, singleLine = true)
         }
-        // Off by default, and only the owner's to turn on (docs/model-routing-design.md §7.2). With the account's switch off the
-        // Agent has no switch of its own; its stored value is left alone, since Done sends it only when it moved (iOS 9fb3ae6ee).
-        if (LocalSmartSelection.current) FormSection("Task runs") {
-            Row(Modifier.fillMaxWidth().toggleable(modelRouting, role = Role.Switch) { modelRouting = it }.padding(vertical = 8.dp),
-                verticalAlignment = Alignment.CenterVertically) {
-                Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(3.dp)) {
-                    Text("Smart model selection for tasks")
-                    Text("Task runs use the model and effort of the tier suggested for the task, and go one tier up after a " +
-                        "failed run. Tasks with no suggestion start on this Agent's model. A model pinned on a task always " +
-                        "wins. Sessions you open yourself are not affected.", style = MaterialTheme.typography.labelMedium, color = Ink.muted)
-                }
-                Switch(checked = modelRouting, onCheckedChange = null)
-            }
-        }
-        SubagentsSection(api, subagentsEnabled, { subagentsEnabled = it }, optimizeFor, { optimizeFor = it },
-            subagentsMaxRunning, { subagentsMaxRunning = it })
+        SubagentsSection(api, subagentsEnabled, { subagentsEnabled = it }, subagentsMaxRunning, { subagentsMaxRunning = it })
         val env = (saved["env"] as? JsonObject)?.entries?.sortedBy { it.key }.orEmpty()
         if (env.isNotEmpty()) FormSection("Environment") {
             env.forEach { (key, value) ->
@@ -196,15 +179,13 @@ fun WorkspaceSettings(api: ManagementApi, workspaceId: String?, revision: Long, 
 
 /** UpdateAgentRequest as iOS sends it: name trimmed, effort and enabled always, the rest only when they mean a change. */
 internal fun workspacePatch(saved: JsonObject, name: String, effort: String, instructions: String, workDir: String,
-                            enabled: Boolean, modelRouting: Boolean, subagents: SubagentSettings = SubagentSettings.of(saved)) = buildJsonObject {
+                            enabled: Boolean, subagents: SubagentSettings = SubagentSettings.of(saved)) = buildJsonObject {
     put("name", name.trim())
     if (instructions.isNotEmpty()) put("appendSystemPrompt", instructions)
     put("effort", effort)
     if (workDir.isNotEmpty()) put("workDir", workDir)
     put("enabled", enabled)
-    if (modelRouting != (saved.bool("modelRouting") ?: false)) put("modelRouting", modelRouting)
     val savedSubagents = SubagentSettings.of(saved)
     if (subagents.enabled != savedSubagents.enabled) put("subagentsEnabled", subagents.enabled)
-    if (subagents.optimizeFor != savedSubagents.optimizeFor) put("modelRoutingOptimizeFor", subagents.optimizeFor)
     if (subagents.maxRunning != savedSubagents.maxRunning) put("subagentsMaxRunning", subagents.maxRunning)
 }

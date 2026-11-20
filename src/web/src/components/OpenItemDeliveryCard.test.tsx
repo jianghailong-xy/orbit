@@ -5,6 +5,7 @@ import { MemoryRouter } from 'react-router-dom';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import type { OpenItemDeliveryCard as Delivery } from '@orbit/shared';
 import { Transcript, type RunEvent } from './Transcript';
+import { GO_TO_ITEM_CARD, ITEM_CARD_NOT_HERE } from './OpenItemDeliveryCard';
 
 /**
  * An exception item's delivery is drawn from the payload the control plane recorded beside the
@@ -120,10 +121,17 @@ describe('an exception item delivered to the coordinator', () => {
     // The change that made this worth a card: the platform's own reading of the landing, which
     // otherwise costs the coordinator a re-check of the merge receipts every time.
     expect(el!.querySelector('.oic-facts')?.textContent).toContain('No merge receipt');
-    // The doors are the server's list, and the ones a reader can walk are links. A conflict offers
-    // no rerun (the server refuses one for it), so the only chip left is the quiet one that stops.
-    const chips = [...el!.querySelectorAll('.oic-chip')].map((c) => c.textContent);
-    expect(chips).toEqual(['Cancel the task']);
+    // No door names drawn as chips nobody can press (board card-ui-polish ②): the doors are on the
+    // item's own card, and this one points at it.
+    expect(el!.querySelector('.oic-chip')).toBeNull();
+    expect(el!.querySelector('.oic-goto')?.textContent).toBe(GO_TO_ITEM_CARD);
+    // The agent's half of the headline stays in the disclosure, and the branch is named by its name.
+    expect(el!.querySelector('.oic-why')?.textContent).not.toContain('will not retry');
+    expect(el!.querySelector('.oic-why')?.textContent).not.toContain('refs/heads/');
+    // The footer is the person's line; the item's id is inside the disclosure with the agent's words.
+    expect(el!.querySelector('.oic-meta')?.textContent).toMatch(/^Sent to the coordinator · /u);
+    expect(el!.querySelector('.oic-meta')?.textContent).not.toContain('notification');
+    expect(el!.querySelector('details.oic-raw .oic-raw-id')?.textContent).toContain('Item ');
     const links = [...el!.querySelectorAll('.oic-links a')].map((a) => a.textContent);
     expect(links).toEqual(['Open the task ↗', 'Open the failed session ↗']);
     // The paragraph the agent read is still one disclosure away, verbatim.
@@ -147,6 +155,13 @@ describe('an exception item delivered to the coordinator', () => {
     expect(el!.querySelector('.oic-why')?.textContent).toContain('asked only if');
     expect([...el!.querySelectorAll('.oic-files li')].map((li) => li.textContent))
       .toEqual(['src/web/src/index.css']);
+  });
+
+  it('says so when the item card it points at is not in this conversation', async () => {
+    await mount([delivered(CARD)]);
+    await act(async () => card()!.querySelector<HTMLButtonElement>('.oic-goto')!.click());
+    expect(card()!.querySelector('.oic-goto')).toBeNull();
+    expect(card()!.querySelector('.oic-missing')?.textContent).toBe(ITEM_CARD_NOT_HERE);
   });
 
   it('marks a round Orbit opened, which the sticky bar hides over', async () => {

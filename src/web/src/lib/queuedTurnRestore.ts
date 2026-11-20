@@ -41,3 +41,15 @@ export function returnsToComposer(turn: QueuedTurnOrigin): boolean {
 export function isQueuedWatchWake(turn: QueuedTurnOrigin): boolean {
   return !turn.sessionMessage && parseWatchWake(turn.content) !== null;
 }
+
+/**
+ * The SubAgent runs a queued turn tells the agent ended (`<orbit-subagent-finished>`), or none for any other
+ * turn. Each run's card says the turn is waiting and offers `Don't send` (SubagentCardEnd); the queued tail
+ * draws it only when it also carries a background job's news, which is that tail's to show.
+ */
+export function queuedSubagentWake(turn: QueuedTurnOrigin): { runIds: string[]; alone: boolean } | null {
+  if (turn.sessionMessage) return null;
+  const wake = parseSubagentFinished(turn.content);
+  if (!wake) return null;
+  return { runIds: wake.runs.map((run) => run.runId), alone: parseBackgroundWake(wake.rest) === null };
+}

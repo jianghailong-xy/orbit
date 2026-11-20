@@ -239,8 +239,11 @@ internal fun SessionComposer(app: OrbitApplication, handle: SessionHandle, sessi
     val planRow = state.catalog?.usage(effective)?.let { io.orbitd.android.management.bindingRow(it, System.currentTimeMillis()) }
     var modeMenu by remember { mutableStateOf(false) }
     val focused = inputFocused && imeUp
-    Surface(tonalElevation = 2.dp) {
-        Column(Modifier.fillMaxWidth().padding(horizontal = 10.dp, vertical = 6.dp).testTag("session-composer")) {
+    // The band under the card is the page's own colour (iOS `ComposerBand`): a tonal elevation tinted it grey-blue apart from the page.
+    // Not a Surface: a Surface clips to itself, and the card's light-mode shadow spreads over the page above the band, as on iOS.
+    CompositionLocalProvider(LocalContentColor provides MaterialTheme.colorScheme.onSurface) {
+        Column(Modifier.fillMaxWidth().background(MaterialTheme.colorScheme.surface).padding(horizontal = 16.dp, vertical = 6.dp)
+            .testTag("session-composer")) {
             Column(Modifier.weight(1f, fill = false).verticalScroll(rememberScrollState())) {
                 state.error?.let { Text(it, color = MaterialTheme.colorScheme.error); TextButton(onClick = model::clearError) { Text("Dismiss error") } }
                 if (!state.loaded && !state.busy) TextButton(onClick = model::restore) { Text("Retry draft restore") }
@@ -267,7 +270,7 @@ internal fun SessionComposer(app: OrbitApplication, handle: SessionHandle, sessi
             }
             // The card: staged attachments, the text across its whole width, and the toolbar pinned to its foot. The text grows
             // upward and the toolbar never moves, so `+` and Send stay where the thumb left them however long the message gets.
-            Column(Modifier.weight(1f, fill = false).fillMaxWidth().clip(ComposerCardShape).background(composerCardColor())
+            Column(Modifier.weight(1f, fill = false).fillMaxWidth().composerCardLift().clip(ComposerCardShape).background(composerCardColor())
                 .border(1.dp, composerCardBorder(focused), ComposerCardShape).testTag("composer-card")) {
                 Column(Modifier.weight(1f, fill = false).verticalScroll(rememberScrollState())) {
                     // Decided 2026-11-19: inside the card, above the text, as iOS draws them.

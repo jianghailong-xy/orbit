@@ -262,7 +262,8 @@ import { SessionBrowserChip } from './SessionBrowserChip';
 import { mergeRepairLoopLive } from './MergeRecoveryPanel';
 import { BrandMark, NewSessionProviderHero } from './NewSessionProviderHero';
 import { CreatedWorkspaceLine } from './CreatedWorkspaceLine';
-import { MachineSetupCard, RevealedOnArrival, setupCredentialOf } from './MachineSetupCard';
+import { MachineSetupCard, RevealedOnArrival, setupCredentialOf, type HistoryChoice } from './MachineSetupCard';
+import { startHistoryImport } from '../lib/claudeHistoryImport';
 import { ManagedRunnerNotice } from './ManagedRunnerNotice';
 import { useNewAccount } from './WelcomeCard';
 import type { LoginEngine } from '@orbit/shared';
@@ -295,7 +296,7 @@ import {
   watchingWord,
   type SessionWatching,
 } from '../lib/watches';
-import { isQueuedWatchWake, returnsToComposer } from '../lib/queuedTurnRestore';
+import { isQueuedWatchWake, queuedSubagentWake, returnsToComposer } from '../lib/queuedTurnRestore';
 import {
   api,
   ApiError,
@@ -582,7 +583,7 @@ import { coordinatorDeliverySentence, parseCoordinatorDelivery } from '../lib/co
 import { trashNoteWhen } from '../lib/trashNote';
 import { transcriptPlaceholder } from '../lib/transcriptPaint';
 import { useDelayedFlag } from '../lib/useDelayedFlag';
-import { queuedTurnEvent } from '../lib/acceptedUserTurn';
+import { type AcceptedUserTurn, queuedTurnEvent } from '../lib/acceptedUserTurn';
 import { turnPlacementOf } from '../lib/turnPlacement';
 import { commitFailureCopy, resolveCommitPrompt } from '../lib/commitFailure';
 import { defaultSessionTurnIntent } from '../lib/sessionTurnIntent';
@@ -2383,6 +2384,35 @@ export function QueuedTurnMeta({
  *  says so (QueuedTurnMeta `held`). A steer and a settled delivery are not. */
 export function queuedTurnWaitsItsTurn(turn: { placement: string; delivery?: string }): boolean {
   return turn.placement === 'queued' && turn.delivery == null;
+}
+
+/**
+ * The message under the held tag (`lastUserEventSeq`) when it is still only accepted — drawn from the
+ * active snapshot or this tab's send, with no runner's echo yet — and so still the reader's to cancel.
+ * Never the session's opening prompt, which the server keeps (`cancelQueuedTurn`), nor one with no id yet.
+ */
+export function cancellableHeldTurn(
+  events: ReadonlyArray<{ type: string; seq: number; turnId?: string | null }>,
+  seq: number,
+  accepted: readonly AcceptedUserTurn[],
+): (AcceptedUserTurn & { turnId: string }) | null {
+  const event = events.find((e) => e.seq === seq && e.type === 'user');
+  if (!event?.turnId) return null;
+  const turn = accepted.find((t) => t.turnId === event.turnId);
+  return turn?.turnId && !turn.opening ? (turn as AcceptedUserTurn & { turnId: string }) : null;
+}
+
+/** The held tag under a message no runner has taken yet, with Cancel beside it. */
+export function HeldFoot({ tag, onCancel }: { tag: ReactNode; onCancel: () => void }) {
+  return (
+    <span className="chat-held-foot">
+      {tag}
+      <span className="chat-meta-sep">·</span>
+      <button type="button" className="chat-held-cancel" onClick={onCancel}>
+        Cancel
+      </button>
+    </span>
+  );
 }
 
 /** The seq of the reader's last message in the transcript, or null where there is none. */
@@ -4609,6 +4639,7 @@ export function WorkspaceView({
     setIdle,
     queued,
     setQueued,
+    acceptedUserTurns,
     setAcceptedUserTurns,
     serverBgShells,
     loadOlder,
@@ -4796,7 +4827,8 @@ export function WorkspaceView({
   const queuedTailEvents = useMemo(
     () =>
       visibleQueuedTurns
-        .filter((turn) => !inPendingTray(turn))
+        // A SubAgent's end turn waits on its card instead (`subagentQueuedWakes`): the tail draws nothing for it.
+        .filter((turn) => !inPendingTray(turn) && !queuedSubagentWake(turn)?.alone)
         .map((turn) => ({ turn, event: queuedTurnEvent(turn) })),
     [visibleQueuedTurns],
   );
@@ -4818,8 +4850,30 @@ export function WorkspaceView({
   // anywhere is waiting does it fall back to the last message they sent.
   const tailHeld = !!queuedHeldTag && visibleQueuedTurns.some((turn) => queuedTurnWaitsItsTurn(turn));
   const footSeq = queuedHeldTag && !tailHeld ? lastUserEventSeq(transcriptEvents) : null;
+  // That message, while no runner has taken it yet, can still be taken back: Cancel beside the tag,
+  // as a queued row has, and its words return to the composer.
+  const heldTurn = footSeq !== null ? cancellableHeldTurn(transcriptEvents, footSeq, acceptedUserTurns) : null;
+  const cancelHeldTurn = async (turn: AcceptedUserTurn & { turnId: string }): Promise<void> => {
+    if (!selectedId) return;
+    try {
+      await cancelQueuedTurn(selectedId, turn.turnId);
+    } catch {
+      message.info('This message is already being processed and cannot be withdrawn');
+      return;
+    }
+    setAcceptedUserTurns((current) => current.filter((t) => t.key !== turn.key));
+    restoreUndelivered?.(turn.translation?.original ?? turn.text, turn.attachments);
+    refreshSessionLists();
+  };
   const queuedFoot: { seq: number; tag: ReactNode } | null =
-    footSeq !== null ? { seq: footSeq, tag: queuedHeldTag } : null;
+    footSeq !== null
+      ? {
+          seq: footSeq,
+          tag: heldTurn
+            ? <HeldFoot tag={queuedHeldTag} onCancel={() => void cancelHeldTurn(heldTurn)} />
+            : queuedHeldTag,
+        }
+      : null;
   // What stands in for an empty transcript — exactly one of these, so the loading skeleton can't
   // stack on top of the centered "waiting for a slot" pane. See lib/transcriptPaint.
   const placeholder = transcriptPlaceholder({
@@ -5414,7 +5468,7 @@ export function WorkspaceView({
     currentPromotion.data?.upstreamRef ?? mergedPromotions.data?.[0]?.upstreamRef,
   );
 
-  // The exceptions this project still owes somebody, drawn into the transcript at the moment each
+  // The owner’s exceptions, drawn into the transcript at the moment each
   // became the owner's (`exceptionCardRows`) instead of as a block under it — where a card that
   // happened thirty-four minutes ago sat under the newest message saying `waiting 34m`, which is
   // two different stories about when it happened. The moment is the item's own (`escalatedAt`, else
@@ -7201,12 +7255,13 @@ export function WorkspaceView({
   // name the card was given. The list then says the machine has one, and the console moves on to its new
   // session page (WorkspaceConsole), with the engine and credential picked here as its draft's.
   const createWorkspace = useMutation({
-    mutationFn: ({ folder, name }: { folder: PickedFolder; name: string }) =>
+    mutationFn: ({ folder, name }: { folder: PickedFolder; name: string; history: HistoryChoice | null }) =>
       api<{ id: string }>('/workspaces', {
         method: 'POST',
         body: { name, runnerId: runner.id, ...newWorkspaceOf(folder) },
       }),
-    onSuccess: async (made) => {
+    onSuccess: async (made, { history }) => {
+      if (history) void startHistoryImport(made.id, history.history, history.mode, message, refreshSessionLists);
       if (draftHere) setDraftPick({ ...draftHere, workspaceId: made.id });
       await qc.invalidateQueries({ queryKey: ['workspaces'] });
     },
@@ -8159,6 +8214,18 @@ export function WorkspaceView({
     steerOffered,
     queuedHeldTag,
   });
+  // A SubAgent's end turn still on the queue, by run id: its card says the agent has not read it yet, and its
+  // `Don't send` does what the tail's Cancel did (SubagentCardEnd).
+  const subagentQueuedWakes = useMemo(() => {
+    const out = new Map<string, () => void>();
+    if (selectedTrashed) return out;
+    for (const turn of visibleQueuedTurns) {
+      const wake = queuedSubagentWake(turn);
+      for (const runId of wake?.runIds ?? []) out.set(runId, () => void cancelQueued(turn.turnId));
+    }
+    return out;
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- cancelQueued is rebuilt each render; it reads the latest queue itself
+  }, [visibleQueuedTurns, selectedTrashed]);
   // Take back a message whose delivery settled undelivered. Nothing read it, so this bubble is
   // the only copy of what was typed: hand it back the way the transcript's own undelivered card
   // does (appended, never overwriting a draft), then discard the row so the pane stops carrying a
@@ -9145,7 +9212,7 @@ export function WorkspaceView({
   // without smart selection has one that was not applied, so both look as they always have — and
   // with the account's switch off (the default), so does every run.
   const smartRoute = (() => {
-    if (me.data?.preferences?.modelRouting !== true) return null;
+    if (me.data?.preferences?.modelRouting === false) return null;
     const route = detailForSelected?.route;
     return selected?.taskId && route?.applied && route.level && route.model === shownModel ? route : null;
   })();
@@ -10884,6 +10951,7 @@ export function WorkspaceView({
                 wikiChat={wikiChatCards}
                 subagentWaiting={subagentWaiting}
                 subagentRuns={subagentRuns}
+                subagentQueuedWakes={subagentQueuedWakes}
               />
               </QueuedFootCtx.Provider>
               </MainCheckoutCtx.Provider>
@@ -11209,7 +11277,7 @@ export function WorkspaceView({
                 <MachineSetupCard
                   runner={runner}
                   managed={managed}
-                  onCreate={(folder, name) => createWorkspace.mutate({ folder, name })}
+                  onCreate={(folder, name, history) => createWorkspace.mutate({ folder, name, history })}
                   creating={createWorkspace.isPending}
                   createError={createWorkspace.error?.message ?? null}
                   welcome={machineWelcome}

@@ -6,7 +6,7 @@
  *
  * Every client labels the account's managed runner Orbit Cloud. They used to know which runner that is
  * only from GET /managed-runner, which arrives after the runner list, so a row showed its stored name
- * `orbit-managed` first. The row says it now (RunnerRowIdentity.managed):
+ * (`orbit-managed` before migration 1250) first. The row says it now (RunnerRowIdentity.managed):
  *
  *   (1) GET /runners marks the runner with the owner's ManagedRunner mapping `managed: true` and every
  *       other runner of theirs `managed: false`; another owner's managed runner changes nothing here;
@@ -67,11 +67,11 @@ test('GET /runners marks the account managed runner, and only it', { skip: !URL,
   // whose own managed runner must not leak into the first one's answers.
   const alice = await owner('alice');
   const laptop = await runner(alice.id, 'laptop', 3);
-  const cloud = await runner(alice.id, 'orbit-managed', 2);
+  const cloud = await runner(alice.id, 'Orbit Cloud', 2);
   const buildBox = await runner(alice.id, 'build-box', 1);
   await managedMapping(alice.id, cloud);
   const bob = await owner('bob');
-  const bobCloud = await runner(bob.id, 'orbit-managed', 1);
+  const bobCloud = await runner(bob.id, 'Orbit Cloud', 1);
   await managedMapping(bob.id, bobCloud);
 
   const jwtSecret = `managed-flag-${randomUUID()}`;
