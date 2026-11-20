@@ -203,9 +203,27 @@ export function ControlPlaneProvider({ children }: { children: ReactNode }) {
       }
       pump();
     };
+    // The owner requests in the open list, as its last read had them. A request that arrived in it or left it (filed,
+    // answered, expired) is one the other states' reads (done, declined, all) now show differently, and those are
+    // read for nothing else on the stream's word: they are the whole history, and a session event says nothing of
+    // requests (queries.ts ownerRequestsQuery). The first read only sets what is known.
+    let openRequests: string | null = null;
+    const followOpenRequests = (data: unknown): void => {
+      const ids = ((data as { requests?: { id?: unknown }[] } | undefined)?.requests ?? [])
+        .map((request) => String(request?.id))
+        .sort()
+        .join(' ');
+      const before = openRequests;
+      openRequests = ids;
+      if (before === null || before === ids) return;
+      refresh({ predicate: ({ queryKey }) => queryKey[0] === 'owner-requests' && queryKey[1] !== 'open' });
+    };
     const unsubscribeCache = qc.getQueryCache().subscribe((event) => {
       if (event.type !== 'updated') return;
       const { query, action } = event;
+      if (action.type === 'success' && query.queryKey[0] === 'owner-requests' && query.queryKey[1] === 'open') {
+        followOpenRequests(query.state.data);
+      }
       if (action.type === 'fetch' || action.type === 'continue') readStartedAt.set(query.queryHash, Date.now());
       if (action.type === 'fetch') queued.delete(query.queryHash);
       else if (query.state.fetchStatus === 'idle' && refetchWhenLanded.delete(query.queryHash)) {

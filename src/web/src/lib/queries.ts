@@ -817,14 +817,21 @@ export const openProjectsQuery = () =>
   });
 
 /**
- * The owner requests in one state, newest first, at most 200. No realtime event announces one, so
- * this polls like the coordinator's questions do; a press re-reads it at once.
+ * The owner requests in one state, newest first, at most 200. No event of its own announces one: the asking
+ * session's `session.updated` does (see the meta below), and the poll is the safety read; a press re-reads it at once.
  */
 export const ownerRequestsQuery = (filter: OwnerRequestListFilter) =>
   queryOptions({
     queryKey: ['owner-requests', filter] as const,
-    // Owner-wide: no one session's event moves it (lib/sessionReach). Its own poll is its safety read.
-    meta: { entities: ['session'], sessionReach: 'none' satisfies SessionReach },
+    // Filing, answering or expiring a request publishes a `session.updated` of the session that asked
+    // (OwnerRequestsService, the schedule and condition notifiers), and a summary says nothing of requests, so any
+    // session event may be one: the open list, small, is read on every one (lib/sessionReach says nothing). The
+    // other states are the whole history (`all` was 52 kB on 2026-11-20): no session event reads them; a request
+    // arriving in or leaving the open list does (useControlPlane, followOpenRequests).
+    meta: {
+      entities: ['session'],
+      ...(filter === 'open' ? {} : { sessionReach: 'none' satisfies SessionReach }),
+    },
     queryFn: () => api<{ requests: OwnerRequest[] }>(`/owner-requests?state=${filter}`),
     refetchInterval: streamPoll(20_000),
   });

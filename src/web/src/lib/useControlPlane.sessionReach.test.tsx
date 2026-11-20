@@ -31,6 +31,8 @@ const h = vi.hoisted(() => {
   const h = {
     asked: [] as string[],
     answer: (_path: string): unknown => null,
+    // The owner requests the open list answers with.
+    openRequests: [{ id: 'q1', state: 'PENDING', askedBySessionId: 'S3' }] as { id: string; state: string; askedBySessionId: string }[],
     record: async (path: string): Promise<unknown> => {
       h.asked.push(path);
       return h.answer(path);
@@ -65,6 +67,7 @@ function answer(path: string): unknown {
   }
   if (path.startsWith('/tasks/active')) return { queuedCount: 0, runningCount: 1, items: [] };
   if (path.startsWith('/tasks/counts')) return { total: 1, running: 1, queued: 0, done: 0, failed: 0 };
+  if (path === '/owner-requests?state=open') return { requests: h.openRequests };
   if (path.startsWith('/owner-requests')) return { requests: [] };
   if (path.startsWith('/schedules')) return { schedules: [] };
   if (path.startsWith('/guest-sessions')) return { sessions: [] };
@@ -129,7 +132,10 @@ const views = {
   taskCountsP2: taskCountsQuery(undefined, [], undefined, 'P2'),
   welcomeOpen: anySessionQuery('open'),
   welcomeCompleted: anySessionQuery('completed'),
+  // Waiting on you, and the badge: the open owner requests. Mounted only where a case says so.
+  ownerRequestsOpen: ownerRequestsQuery('open'),
 };
+type View = keyof typeof views;
 
 /** The request each view makes, so a recorded path names the view that made it. */
 function viewOf(path: string): string {
@@ -142,6 +148,7 @@ function viewOf(path: string): string {
   }
   if (path.startsWith('/tasks/active')) return path.includes('projectId=P1') ? 'activeTasksP1' : 'activeTasks';
   if (path.startsWith('/tasks/counts')) return path.includes('projectId=P2') ? 'taskCountsP2' : 'taskCounts';
+  if (path === '/owner-requests?state=open') return 'ownerRequestsOpen';
   if (path.startsWith('/owner-requests')) return 'ownerRequests';
   if (path.startsWith('/schedules')) return 'schedules';
   if (path.startsWith('/guest-sessions')) return 'guestSessions';
@@ -168,7 +175,7 @@ async function mount(): Promise<QueryClient> {
 }
 
 /** The views on screen, each as its factory defines it (its own poll included). */
-async function onScreen(client: QueryClient, which: (keyof typeof views)[] = Object.keys(views) as (keyof typeof views)[]): Promise<void> {
+async function onScreen(client: QueryClient, which: View[] = (Object.keys(views) as View[]).filter((view) => view !== 'ownerRequestsOpen')): Promise<void> {
   for (const name of which) {
     const observer = new QueryObserver(client, views[name] as unknown as QueryObserverOptions);
     observers.push(observer.subscribe(() => {}));
@@ -191,6 +198,7 @@ beforeEach(() => {
   FakeEventSource.open = [];
   h.asked = [];
   h.answer = answer;
+  h.openRequests = [{ id: 'q1', state: 'PENDING', askedBySessionId: 'S3' }];
   forgetOpenListCursors();
 });
 
@@ -295,6 +303,41 @@ describe('a session event reads only the views that can show that session', () =
       expect(times).toBeLessThanOrEqual(3);
     }
     expect(new Set(made)).toEqual(new Set(['activeTasks', 'activeTasksP1', 'completedA', 'taskCounts']));
+  });
+
+  it('the open owner requests follow every session event; the whole history only a request coming or going', async () => {
+    const client = await mount();
+    await onScreen(client, ['ownerRequestsOpen', 'ownerRequests']);
+    await openStream(true);
+    h.asked = [];
+
+    // 3 s of other sessions' turns: the open list (small) once a window, the history (52 kB) never.
+    for (let i = 0; i < 30; i += 1) {
+      await sessionEvent('session.updated', i % 2 ? 'S1' : 'S9', i % 2 ? 'A' : 'B');
+      await advance(100);
+    }
+    await advance(1_000);
+    const made = reads();
+    expect(new Set(made)).toEqual(new Set(['ownerRequestsOpen']));
+    const open = made.filter((view) => view === 'ownerRequestsOpen').length;
+    expect(open).toBeGreaterThanOrEqual(1);
+    expect(open).toBeLessThanOrEqual(3);
+
+    // S5 files a request: the server publishes S5's session.updated. The open list is read in that window, shows the
+    // new request, and the history is read once after it.
+    h.asked = [];
+    h.openRequests = [...h.openRequests, { id: 'q2', state: 'PENDING', askedBySessionId: 'S5' }];
+    await sessionEvent('session.updated', 'S5', 'A');
+    await sessionEvent('session.updated', 'S5', 'A');
+    await advance(1_000);
+    expect(reads().filter((view) => view.startsWith('ownerRequests'))).toEqual(['ownerRequests', 'ownerRequestsOpen']);
+
+    // The owner answers it elsewhere: S5's session.updated again, and the request leaves the open list.
+    h.asked = [];
+    h.openRequests = h.openRequests.filter((request) => request.id !== 'q2');
+    await sessionEvent('session.updated', 'S5', 'A');
+    await advance(1_000);
+    expect(reads().filter((view) => view.startsWith('ownerRequests'))).toEqual(['ownerRequests', 'ownerRequestsOpen']);
   });
 
   it('only a session entering or leaving the lists reads the welcome card', async () => {
