@@ -29160,6 +29160,14 @@ button.agent-progress-agent:hover {
 .model-tiers-set.model-tiers-unset {
   color: var(--warning);
 }
+.model-tiers-yours {
+  margin-left: 8px;
+  padding: 0 5px;
+  border: 1px solid var(--border-subtle);
+  border-radius: 4px;
+  font-size: 11px;
+  color: var(--text-3);
+}
 .model-tiers-foot {
   margin-top: 8px;
   font-size: 12px;

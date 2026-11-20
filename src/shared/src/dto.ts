@@ -2970,10 +2970,11 @@ export interface ProviderModelTier {
   model: string;
   /** The tiers this model fills, lowest first, at whatever effort each takes. Empty: ranked after tiered models. */
   levels: SubagentSize[];
-  /** `catalogue`: the preset or the built-in tier table. `owner`: set on this page. Null: nobody has. */
+  /** `catalogue`: the preset, the built-in tier table or the model's family. `owner`: set on this page. Null: nobody has. */
   source: 'catalogue' | 'owner' | null;
-  /** The owner may set or clear it (PATCH /providers/mine/:providerId/model-tier): a model of a key's own
-   *  list that the catalogue gives no tier. */
+  /** The owner may set or clear it: a model of a key's own list that the catalogue gives no tier
+   *  (PATCH /providers/mine/:providerId/model-tier), or any model of a built-in engine's catalogue
+   *  (PATCH /providers/builtin/:slug/model-tier, which overrides the catalogue's tier). */
   editable: boolean;
   /** USD per million output tokens, when known (models.dev); null for a subscription or an unpriced key. */
   outputPricePerMTok: number | null;
@@ -2995,7 +2996,8 @@ export interface SubagentTiersResponse {
   providers: ProviderTierRow[];
 }
 
-/** PATCH /providers/mine/:id/model-tier: set or clear (null) the owner's tier for one model of that key. */
+/** PATCH /providers/mine/:id/model-tier, or PATCH /providers/builtin/:engine/model-tier: set or clear (null) the
+ *  owner's tier for one model of that key, or of that built-in engine's catalogue. */
 export interface ProviderModelTierUpdate {
   model: string;
   tier: SubagentSize | null;

@@ -27,6 +27,8 @@ import { COMPATIBILITY_GUARD_SLUGS } from '../providers/providers.service';
 import {
   familyTier,
   MODEL_ROUTING_LEVELS,
+  type BuiltinModelTiers,
+  type ModelRoutingLevel,
   routeSubagent,
   subagentEngineRows,
   type ModelRoutingEngineState,
@@ -44,6 +46,23 @@ import { engineState, fullestWindow, quotaTiming, taskRouteReads } from '../task
 export function subagentBlockedProviders(preferences: unknown): string[] {
   const list = (preferences as { subagentBlockedProviders?: unknown } | null)?.subagentBlockedProviders;
   return Array.isArray(list) ? list.filter((slug): slug is string => typeof slug === 'string') : [];
+}
+
+/** The account-level preference holding the owner's tiers for built-in engines' models, engine → model → tier
+ *  (docs/subagent-design.md §7), with anything that is not a tier dropped. Written only by
+ *  PATCH /providers/builtin/:engine/model-tier. */
+export function builtinModelTiers(preferences: unknown): BuiltinModelTiers {
+  const map = (preferences as { builtinModelTiers?: unknown } | null)?.builtinModelTiers;
+  const tiers: Record<string, Record<string, ModelRoutingLevel>> = {};
+  if (!map || typeof map !== 'object' || Array.isArray(map)) return tiers;
+  for (const [engine, models] of Object.entries(map)) {
+    if (!models || typeof models !== 'object' || Array.isArray(models)) continue;
+    for (const [model, tier] of Object.entries(models)) {
+      const level = MODEL_TIERS.find((entry) => entry === tier);
+      if (level) (tiers[engine] ??= {})[model] = level;
+    }
+  }
+  return tiers;
 }
 
 /** A tier row of a key's own list, with where its tier came from (the Tier column reads it; the router ignores it). */
@@ -177,6 +196,7 @@ export async function subagentRouteInput(
   const configured = await readConfiguredProviders(db, ownerId, { catalog, planUsage: args.planUsage ?? null, now: reads.now });
 
   const optimizeFor: ModelRoutingOptimizeFor = optimizeForOf(owner);
+  const ownerTiers = builtinModelTiers(owner?.preferences);
   const level = (value: unknown) => (['S', 'M', 'L', 'XL'] as const).find((entry) => entry === value) ?? null;
   return {
     type: dto.type,
@@ -191,6 +211,7 @@ export async function subagentRouteInput(
     engines,
     modelCatalog: catalog,
     runtimeDefaultModels: sanitizeRuntimeDefaultModels(runner?.runtimeDefaultModels),
+    ...(Object.keys(ownerTiers).length > 0 ? { builtinModelTiers: ownerTiers } : {}),
     ...(args.runnerLabel ? { runnerLabel: args.runnerLabel } : {}),
     ...(args.strictNamedModel ? { strictNamedModel: true } : {}),
   };
@@ -323,8 +344,8 @@ async function readConfiguredProviders(
  * The Providers page's Tier column and the SubAgents settings' provider list (docs/subagent-design.md §7): every
  * provider routeSubagent considers, in its order, each with the tiers the router reads for its models. The
  * runner catalogue is the owner's most recently heard-from runner's that reported one, so the built-in table's
- * rows name the models a SubAgent would get there. Built-in engines without a tier table list no models:
- * nothing of theirs is routed onto. Reads only.
+ * rows name the models a SubAgent would get there. A built-in engine lists every model of that catalogue, each
+ * the owner's to tier (PATCH /providers/builtin/:engine/model-tier); a key lists its own models. Reads only.
  */
 export async function subagentTierView(db: Prisma.TransactionClient, ownerId: string, now = new Date()): Promise<SubagentTiersResponse> {
   const runner = await db.runner.findFirst({
@@ -332,9 +353,12 @@ export async function subagentTierView(db: Prisma.TransactionClient, ownerId: st
     orderBy: [{ lastHeartbeatAt: { sort: 'desc', nulls: 'last' } }, { id: 'desc' }],
     select: { modelCatalog: true, runtimeDefaultModels: true },
   });
+  const owner = await db.user.findUnique({ where: { id: ownerId }, select: { preferences: true } });
+  const ownerTiers = builtinModelTiers(owner?.preferences);
   const catalogInput = {
     modelCatalog: (runner?.modelCatalog ?? null) as RunnerModelCatalog | null,
     runtimeDefaultModels: sanitizeRuntimeDefaultModels(runner?.runtimeDefaultModels),
+    builtinModelTiers: ownerTiers,
   };
   const configured = await readConfiguredProviders(db, ownerId, { catalog: catalogInput.modelCatalog, planUsage: null, now });
   const builtins: ConfiguredProvider[] = Object.values(AgentProvider).map((slug) => ({
@@ -352,10 +376,16 @@ export async function subagentTierView(db: Prisma.TransactionClient, ownerId: st
         const builtin = index < builtins.length;
         const models = new Map<string, ProviderModelTier>();
         for (const engine of entry.provider.engines) {
-          // A built-in engine lists only its tiered rows: its untiered ones would read Not set, a tier the owner
-          // cannot give it.
           const rows = subagentEngineRows(engine, catalogInput) as Array<SubagentModelRow & Partial<KeyModelRow>>;
-          for (const row of engine.models ? rows : rows.filter((entry) => entry.level)) {
+          // A built-in engine lists its whole catalogue, the models no row tiers as Not set; a key on that catalogue
+          // lists only its tiered rows, since the tier is the engine's to set, not the key's.
+          const listed: Array<SubagentModelRow & Partial<KeyModelRow>> = builtin
+            ? [...rows, ...(catalogInput.modelCatalog?.[engine.engine as AgentProvider] ?? [])
+              .filter((model) => !rows.some((row) => row.model === model.value))
+              .map((model): SubagentModelRow => ({ model: model.value, effort: null, level: null }))]
+            : engine.models ? rows : rows.filter((row) => row.level);
+          const owned = engine.models ? undefined : ownerTiers[engine.engine];
+          for (const row of listed) {
             const seen = models.get(row.model) ?? {
               model: row.model,
               levels: [],
@@ -364,8 +394,8 @@ export async function subagentTierView(db: Prisma.TransactionClient, ownerId: st
               outputPricePerMTok: null,
             };
             if (row.level && !seen.levels.includes(row.level)) seen.levels.push(row.level);
-            seen.source = seen.source ?? row.source ?? (row.level ? 'catalogue' : null);
-            seen.editable = seen.editable || (row.editable === true && entry.providerId !== null);
+            seen.source = seen.source ?? row.source ?? (owned?.[row.model] ? 'owner' : row.level ? 'catalogue' : null);
+            seen.editable = seen.editable || builtin || (row.editable === true && entry.providerId !== null);
             seen.outputPricePerMTok = seen.outputPricePerMTok ?? row.outputPricePerMTok ?? null;
             models.set(row.model, seen);
           }
