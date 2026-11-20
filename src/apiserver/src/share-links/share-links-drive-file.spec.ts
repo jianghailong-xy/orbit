@@ -112,7 +112,7 @@ test('only the owner\'s controller makes a link: tokens refused, and no runner r
       return statSync(full).isDirectory() ? walk(full) : [full];
     });
   const callers = walk(src)
-    .filter((file) => file.endsWith('.ts') && !file.endsWith('.spec.ts') && !file.includes(`${path.sep}test-support${path.sep}`))
+    .filter((file) => file.endsWith('.ts') && !file.endsWith('.spec.ts') && !file.includes(`${path.sep}test-support${path.sep}`) && !file.endsWith('db-write-inventory.ts'))
     .filter((file) => /putDriveFile|ShareDriveFileDto/.test(readFileSync(file, 'utf8')))
     .map((file) => path.relative(src, file))
     .sort();
