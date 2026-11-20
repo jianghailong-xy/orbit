@@ -3199,7 +3199,11 @@ test('the ledger stays append-only, and every later migration is accounted for',
       '1250_managed_runner_name_orbit_cloud',
       // 1260 adds two nullable columns on runner, bg_job_cpus and bg_job_memory_mb (no default); no row is written,
       // and no preserved relation, trigger, function or DONE fence changes.
-      '1260_runner_bg_job_limits'],
+      '1260_runner_bg_job_limits',
+      // 1317 adds two nullable columns on session, actual_permission_mode and actual_permission_mode_at, and a new
+      // append-only table session_permission_mode_change (cascades with its session); no row is written, and no
+      // preserved relation, trigger, function or DONE fence changes.
+      '1317_session_actual_permission_mode'],
     'a later migration exists; re-read it before trusting the assertions above');
   // Stated rather than described: 0230's fence differs from 0228's by exactly one added lane.
   const later = readFileSync(

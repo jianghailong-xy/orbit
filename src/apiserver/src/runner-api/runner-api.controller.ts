@@ -6338,8 +6338,13 @@ export class RunnerApiController {
         // that names no mode (an account move) leaves the engine in the one it had.
         const payload = configTurnPayload(t.content);
         if (payload.permissionMode !== undefined) {
-          const sender = await tx.conversationTurn.findUnique({ where: { id: t.id }, select: { senderClient: true } });
-          await recordActualPermissionMode(tx, sessionId, payload.permissionMode, causeOfConfigTurn(payload), sender?.senderClient);
+          const sender = await tx.conversationTurn.findUnique({
+            where: { id: t.id },
+            select: { senderClient: true, clientTurnId: true },
+          });
+          await recordActualPermissionMode(
+            tx, sessionId, payload.permissionMode, causeOfConfigTurn(sender?.clientTurnId), sender?.senderClient,
+          );
         }
       }
       // What a resend of this fetch is answered with (above), on the row this transaction holds: a
@@ -7044,7 +7049,7 @@ export class RunnerApiController {
     if (typeof result === 'string' && result.startsWith('unreadable payload')) return;
     const turn = await tx.conversationTurn.findFirst({
       where: { id: turnId, sessionId, kind: 'setconfig' },
-      select: { seq: true, content: true, senderClient: true },
+      select: { seq: true, content: true, senderClient: true, clientTurnId: true },
     });
     if (!turn) return;
     const later = await tx.conversationTurn.count({
@@ -7052,7 +7057,9 @@ export class RunnerApiController {
     });
     if (later > 0) return;
     const payload = configTurnPayload(turn.content);
-    await recordActualPermissionMode(tx, sessionId, payload.permissionMode, causeOfConfigTurn(payload), turn.senderClient);
+    await recordActualPermissionMode(
+      tx, sessionId, payload.permissionMode, causeOfConfigTurn(turn.clientTurnId), turn.senderClient,
+    );
   }
 
   /** A single interactive turn finished; retain or release its active-turn slot. */

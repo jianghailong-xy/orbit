@@ -19,7 +19,7 @@ import {
  *  - Claude Code's init frame, carried in the runner's Agent Tools report (`agentTools.permissionMode`), records what
  *    the engine itself says (ENGINE_REPORT, or RESPAWN when a reload re-spawned it since the last record);
  *  - a `setconfig` turn's acknowledgement, and a `reload` handed to the runner, record the mode they carried
- *    (OWNER_PICK, or ORBIT_CHANGE when Orbit made the change);
+ *    (OWNER_PICK, or ORBIT_CHANGE when Orbit made the change, which the turn's key says: configTurnKey);
  *  - a runner's `permission_mode_corrected` event records a correction it made by itself (RUNNER_CORRECTION).
  *
  * Every change is one row of session_permission_mode_change naming its cause; recording the mode already recorded
@@ -97,16 +97,26 @@ export async function recordEngineReportedModes(
 /** The engine name a Claude Code Agent Tools report carries (runner-go providerClaude). */
 const CLAUDE_REPORT_ENGINE = 'claude';
 
-/** The control turns' word on who asked: `origin` in a setconfig/reload payload (SessionsService.updateConfig). */
+/** Who asked for a config change (SessionsService.updateConfig): the owner, or Orbit itself. */
 export type ConfigChangeOrigin = 'OWNER' | 'ORBIT';
 
-/** The cause a delivered or acknowledged config turn is recorded with. */
-export function causeOfConfigTurn(content: { origin?: unknown }): PermissionModeChangeCause {
-  return content.origin === 'ORBIT' ? 'ORBIT_CHANGE' : 'OWNER_PICK';
+/**
+ * The key a setconfig/reload turn of updateConfig is filed under. Orbit's own changes carry ORBIT_CONFIG_TURN_PREFIX,
+ * so the mode change they cause is not put down to the owner; the payload the runner reads stays as it was. Only the
+ * server writes control turns: no door takes a client's key for one.
+ */
+export function configTurnKey(origin: ConfigChangeOrigin): string {
+  return origin === 'ORBIT' ? `${ORBIT_CONFIG_TURN_PREFIX}${randomUUID()}` : randomUUID();
+}
+const ORBIT_CONFIG_TURN_PREFIX = 'orbit-config:';
+
+/** The cause a delivered or acknowledged config turn is recorded with, read off its key. */
+export function causeOfConfigTurn(clientTurnId: string | null | undefined): PermissionModeChangeCause {
+  return clientTurnId?.startsWith(ORBIT_CONFIG_TURN_PREFIX) ? 'ORBIT_CHANGE' : 'OWNER_PICK';
 }
 
 /** A control turn's payload, or {} when it is not a JSON object. */
-export function configTurnPayload(content: string | null | undefined): { permissionMode?: unknown; origin?: unknown } {
+export function configTurnPayload(content: string | null | undefined): { permissionMode?: unknown } {
   try {
     const parsed: unknown = JSON.parse(content ?? '');
     return parsed && typeof parsed === 'object' && !Array.isArray(parsed) ? parsed : {};

@@ -62,7 +62,7 @@ import {
   type ExternalTurnSender,
 } from './session-message';
 import { senderClientColumns, type TurnSenderClient } from './turn-sender-client';
-import { type ConfigChangeOrigin, readPermissionModeChanges } from './actual-permission-mode';
+import { type ConfigChangeOrigin, configTurnKey, readPermissionModeChanges } from './actual-permission-mode';
 import { readOrbitMessageFrom } from './orbit-message';
 import {
   closeRequestsTheRetryWillNotResend,
@@ -11885,8 +11885,8 @@ export class SessionsService {
    * normalized one. A model with no Auto runs the engine in Default (normalizeBuiltinPermissionMode), which the
    * control turn tells the engine and its acknowledgement records as the actual mode (actual-permission-mode.ts);
    * moving back to a model with Auto then finds the intent still Auto. `origin` says who asked, which the control
-   * turns carry so the actual-mode change they cause names it: the owner (with `senderClient`, the app the request
-   * came from), or Orbit itself.
+   * turns' keys carry (configTurnKey) so the actual-mode change they cause names it: the owner (with `senderClient`,
+   * the app the request came from, on the turn's own columns), or Orbit itself.
    */
   async updateConfig(
     ownerId: string,
@@ -12140,10 +12140,9 @@ export class SessionsService {
             // reads an absent effort as "say nothing about effort". (A model with declared levels
             // is the exception engineEffort makes: there a model change is an effort change too.)
             effort: engineEffort,
-            // Who asked, for the actual-mode change its acknowledgement records; the runner reads no such key.
-            origin: by.origin,
           }),
-          clientTurnId: randomUUID(),
+          // Who asked, for the actual-mode change its acknowledgement records (configTurnKey).
+          clientTurnId: configTurnKey(by.origin),
           ...senderClientColumns(by.senderClient),
         });
       }
@@ -12165,10 +12164,9 @@ export class SessionsService {
             // An OpenCode session moving between keys (or onto its machine's own config) needs a new
             // OPENCODE_CONFIG_CONTENT just as a provider switch does, so it names its provider too.
             provider: next.changed || openCodeKeyMoved ? next.provider : undefined,
-            // Who asked, as on setconfig: its delivery records the mode it re-spawns the engine in.
-            origin: by.origin,
           }),
-          clientTurnId: randomUUID(),
+          // Who asked, as on setconfig: its delivery records the mode it re-spawns the engine in.
+          clientTurnId: configTurnKey(by.origin),
           ...senderClientColumns(by.senderClient),
         });
       }

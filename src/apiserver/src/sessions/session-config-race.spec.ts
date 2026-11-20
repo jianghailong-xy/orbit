@@ -67,7 +67,7 @@ test('config update seeds the prompt before the control turn when claim just cha
   assert.equal(inboxWakes, 1);
 });
 
-test('a live model change persists and hands the runner the normalized permission pair', async () => {
+test('a live model change keeps the intent and hands the runner the normalized permission pair', async () => {
   const id = '11111111-1111-4111-8111-111111111111';
   const ownerId = '22222222-2222-4222-8222-222222222222';
   let updatedData: Record<string, unknown> = {};
@@ -115,7 +115,9 @@ test('a live model change persists and hands the runner the normalized permissio
   await service.updateConfig(ownerId, id, { model: 'claude-haiku-4-5' });
 
   assert.equal(updatedData.model, 'claude-haiku-4-5');
-  assert.equal(updatedData.permissionMode, 'default');
+  // The stored mode is the owner's intent: a model with no Auto never writes Default over it. The engine is told
+  // Default, below, and records it as the mode it runs in when it takes it (actual-permission-mode.ts).
+  assert.equal(updatedData.permissionMode, 'auto');
   assert.deepEqual(JSON.parse(controlTurns[0].content ?? '{}'), {
     model: 'claude-haiku-4-5',
     permissionMode: 'default',
@@ -192,10 +194,14 @@ test('concurrent partial config patches serialize without restoring a stale mode
     service.updateConfig(ownerId, id, { permissionMode: 'auto' }),
   ]);
 
+  // The model is not restored, the intent stays Auto, and the engine is told the pair it can run.
   assert.deepEqual(state, {
+    model: 'claude-haiku-4-5',
+    permissionMode: 'auto',
+  });
+  assert.equal(controlTurns.length, 2);
+  assert.deepEqual(JSON.parse(controlTurns[1].content ?? '{}'), {
     model: 'claude-haiku-4-5',
     permissionMode: 'default',
   });
-  assert.equal(controlTurns.length, 2);
-  assert.deepEqual(JSON.parse(controlTurns[1].content ?? '{}'), state);
 });
