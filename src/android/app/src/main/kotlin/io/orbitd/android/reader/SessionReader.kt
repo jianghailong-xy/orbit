@@ -65,6 +65,7 @@ import io.orbitd.android.composer.SessionComposer
 import io.orbitd.android.composer.ManagedRunnerAsleepLine
 import io.orbitd.android.composer.SessionPendingTray
 import io.orbitd.android.cards.AnsweredQuestions
+import io.orbitd.android.cards.conversationCard
 import io.orbitd.android.cards.CardFocus
 import io.orbitd.android.cards.LocalCardViewport
 import io.orbitd.android.cards.CardReceiptSheet
@@ -358,10 +359,10 @@ fun SessionReader(app: OrbitApplication, handle: SessionHandle, route: OrbitRout
     LaunchedEffect(scheduled, route.id, scheduleRunId, state.session?.snapshotReads) { scheduled.loadSession(route.id!!, scheduleRunId) }
     val scheduleInserts = remember(scheduledState.sessions, scheduledState.runs, route.id) { ScheduleInsert.of(scheduledState, route.id!!) }
     val drawSchedule: @Composable (ScheduleInsert) -> Unit = { insert ->
-        key(insert.key) {
+        key(insert.key) { Box(Modifier.conversationCard()) {
             ScheduleConversationInsert(insert, scheduled, route.id!!) { id ->
                 open(OrbitRoute(Destination.SCHEDULED, ObjectId.canonical(id) ?: id, origin = Origin.LINK))
-            }
+            } }
         }
     }
     // What the needs-you bar counts in this conversation (iOS `ConsoleModel.openBelowRows`), and which way it lies from
@@ -686,18 +687,18 @@ fun SessionReader(app: OrbitApplication, handle: SessionHandle, route: OrbitRout
                         if (displayedWindow.hasOlder) TextButton(enabled = !displayedLoading, onClick = { follow = false; model.older() }) { Text(if (displayedLoading) "Loading messages…" else "Load earlier messages") }
                         else if (ownerPlaced[-1] != null || crossingPlaced[-1] != null || schedulePlaced[-1] != null) Column(verticalArrangement = Arrangement.spacedBy(16.dp)) {
                             schedulePlaced[-1]?.forEach { drawSchedule(it) }
-                            ownerPlaced[-1]?.forEach { key(it.id) { OwnerRequestInConversation(it, ownerStore, ownerRunner, openLink, discussCard) } }
-                            crossingPlaced[-1]?.forEach { key(it.id) { CrossingCardView(it, crossingState) { crossingStore.open(it.id) } } }
+                            ownerPlaced[-1]?.forEach { key(it.id) { Box(Modifier.conversationCard()) { OwnerRequestInConversation(it, ownerStore, ownerRunner, openLink, discussCard) } } }
+                            crossingPlaced[-1]?.forEach { key(it.id) { Box(Modifier.conversationCard()) { CrossingCardView(it, crossingState) { crossingStore.open(it.id) } } } }
                         }
                     }
                     // Board 02 ③: a successor opens with the note its predecessor wrote, and the waits that moved here.
                     val receivedHandoff = CoordinatorHandoff.received(detail)
-                    if (receivedHandoff != null && displayedWindow.seeded && !displayedWindow.hasOlder) item(key = "handoff-note") {
+                    if (receivedHandoff != null && displayedWindow.seeded && !displayedWindow.hasOlder) item(key = "handoff-note") { Box(Modifier.conversationCard()) {
                         HandoffNoteCard(receivedHandoff, io.orbitd.android.core.cards.CoordinatorCleanStart.history(
                             detail?.text("createdAt"), session?.snapshot?.standing.orEmpty(), cards.merged)) { open(OrbitRoute(Destination.SESSION, it)) }
-                    }
+                    } }
                     if (createdWorkspaceLine != null && !displayedWindow.hasOlder) {
-                        item(key = "created-workspace") {
+                        item(key = "created-workspace") { Box(Modifier.conversationCard()) {
                             // A workspace cloned from GitHub: where its clone stands, from the detail (read at `madeReadAt`) and the stream.
                             val heardClones by app.clones.all.collectAsState()
                             val clone = createdWorkspaceLine.cloneState?.let { stored ->
@@ -737,7 +738,7 @@ fun SessionReader(app: OrbitApplication, handle: SessionHandle, route: OrbitRout
                                     open(OrbitRoute(Destination.SETTINGS, id = "workspace", workspaceId = createdWorkspaceLine.workspaceId))
                                 },
                             )
-                        }
+                        } }
                     }
                     itemsIndexed(displayedRows, key = { _, it -> it.key }, contentType = { _, it -> if (it.steps.isNotEmpty()) "steps" else it.event.type }) { index, row ->
                         val asked = ownerPlaced[index]
@@ -758,8 +759,8 @@ fun SessionReader(app: OrbitApplication, handle: SessionHandle, route: OrbitRout
                         else Column(verticalArrangement = Arrangement.spacedBy(16.dp)) {
                             drawRow()
                             scheduleThings?.forEach { drawSchedule(it) }
-                            asked?.forEach { key(it.id) { OwnerRequestInConversation(it, ownerStore, ownerRunner, openLink, discussCard) } }
-                            crossings?.forEach { key(it.id) { CrossingCardView(it, crossingState) { crossingStore.open(it.id) } } }
+                            asked?.forEach { key(it.id) { Box(Modifier.conversationCard()) { OwnerRequestInConversation(it, ownerStore, ownerRunner, openLink, discussCard) } } }
+                            crossings?.forEach { key(it.id) { Box(Modifier.conversationCard()) { CrossingCardView(it, crossingState) { crossingStore.open(it.id) } } } }
                         }
                     }
                     // Held by its runner's update with no message of the reader's to put the foot row under: the queued page's
@@ -841,7 +842,7 @@ fun SessionReader(app: OrbitApplication, handle: SessionHandle, route: OrbitRout
                         held = runnerUpdatingGate?.let { gate -> { RunnerUpdatingFoot(gate, runnerUpdatingMachine, later = runnerUpdatingLater) } })
                 }
                 // A08-5: a run that never started says why, first of the band's cards under the tray — and stays while a phone types.
-                SessionRunStartCard(app, handle, state.session?.snapshot?.detail, state.session?.fresh == true, console,
+                Box(Modifier.conversationCard()) { SessionRunStartCard(app, handle, state.session?.snapshot?.detail, state.session?.fresh == true, console,
                     chat = {
                         // The composer is handed a reply about this run, in place of whatever was in it (iOS `chatAboutRefusedRun`).
                         composer.edit(SessionRunStart.chatPrefix, SessionRunStart.chatPrefix.length, SessionRunStart.chatPrefix.length)
@@ -850,17 +851,17 @@ fun SessionReader(app: OrbitApplication, handle: SessionHandle, route: OrbitRout
                     sendAgain = { composer.retryFailed() },
                     openRunner = { runner -> open(OrbitRoute(Destination.RUNNER, runner)) },
                     // The region card's Move to another machine: the session's own Move…, as its menu opens it.
-                    move = listed?.takeIf { it.workspace != null }?.let { session -> { action = DirectoryDialog.Move(session) } })
+                    move = listed?.takeIf { it.workspace != null }?.let { session -> { action = DirectoryDialog.Move(session) } }) }
                 // A07-4: a session queued behind the runner's Antigravity gate says what to fix, above the composer (iOS
                 // `queuedAntigravityRepair`).
                 val queuedDetail = console.detail
                 val queued = (queuedDetail?.string("runStatus") ?: queuedDetail?.string("status")) == "PENDING"
                 // A07-5: and behind its DeepSeek Harness gate, first (iOS `queuedDshRepair`).
                 val queuedDsh = DshRuntime.repair(queuedDetail?.string("error"))?.takeIf { console.executesDsh && queued }
-                if (queuedDsh != null) Box(Modifier.padding(horizontal = 16.dp, vertical = 4.dp)) { DshRepairCard(queuedDsh, console) }
+                if (queuedDsh != null) Box(Modifier.padding(horizontal = 16.dp, vertical = 4.dp).conversationCard()) { DshRepairCard(queuedDsh, console) }
                 else AntigravityRepair.of(queuedDetail?.string("error"))?.takeIf {
                     console.executesAntigravity && queued
-                }?.let { Box(Modifier.padding(horizontal = 16.dp, vertical = 4.dp)) { AntigravityRepairCard(it, console) } }
+                }?.let { Box(Modifier.padding(horizontal = 16.dp, vertical = 4.dp).conversationCard()) { AntigravityRepairCard(it, console) } }
                 // What this session waits on, the tasks it created and its code output: folded to no height while a
                 // phone's composer holds the keyboard (iOS `TypingFold`), so an open list or a sheet comes back as it was.
                 Box(Modifier.fillMaxWidth().typingFold(foldsChrome)) { SessionWatches(app, handle, route.id!!, open = open) }
@@ -870,7 +871,7 @@ fun SessionReader(app: OrbitApplication, handle: SessionHandle, route: OrbitRout
                 Box(Modifier.fillMaxWidth().typingFold(foldsChrome)) {
                     BackgroundTray(background.orEmpty(), lastUserMessageAt, BackgroundTrayLogic.sessionLive(detail), folded = foldsChrome)
                 }
-                Box(Modifier.fillMaxWidth().typingFold(foldsChrome)) { SessionTasksCard(app, handle, route.id!!, cards, openLink) }
+                Box(Modifier.conversationCard().typingFold(foldsChrome)) { SessionTasksCard(app, handle, route.id!!, cards, openLink) }
                 // The composer's send in flight holds Merge as a queued turn does (A06-14, iOS `console.sending`).
                 Box(Modifier.fillMaxWidth().typingFold(foldsChrome)) { Column(Modifier.padding(horizontal = 16.dp)) {
                     // The main checkout's standing state, in Worktree and Shared sessions alike (board 01⑤, 02④).
