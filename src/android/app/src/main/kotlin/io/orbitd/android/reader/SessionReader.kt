@@ -375,12 +375,14 @@ fun SessionReader(app: OrbitApplication, handle: SessionHandle, route: OrbitRout
     // A08-4: the queue's turns drawn at the transcript's end, the ones the window has not seen delivered yet — but the reader's own
     // messages still on their way, which the tray above the composer holds; what Orbit queued keeps its card here. After them, the
     // reader's steers only the server's receipt says were not delivered, until Put back takes one away.
-    val queued = remember(state.session?.snapshot?.queuedTurns, state.window.events, composerState.withdrawing, composerState.withdrawn) {
+    val queuedTurns = remember(state.session?.snapshot?.queuedTurns, state.window.events, composerState.withdrawing, composerState.withdrawn) {
         val listed = state.session?.snapshot?.queuedTurns.orEmpty()
         queuedTail(listed, state.window.events).filterNot { it.inTray } + undeliveredTail(listed, state.window.events).filterNot {
             (ObjectId.canonical(it.turnId!!) ?: it.turnId) in composerState.withdrawing + composerState.withdrawn
         }
     }
+    // A SubAgent's end turn still on the queue waits on its run's card, with Don't send ([subagentQueuedWakes]), not in the tail.
+    val queued = remember(queuedTurns) { queuedTurns.filter { it.inTail() } }
     // Whether the tray holds a message of the reader's still waiting for its own turn: then its row says what holds it.
     val trayHeld = remember(state.session?.snapshot?.queuedTurns, state.window.events) {
         queuedTail(state.session?.snapshot?.queuedTurns.orEmpty(), state.window.events).any { it.inTray && it.heldByUpdate }
@@ -558,14 +560,16 @@ fun SessionReader(app: OrbitApplication, handle: SessionHandle, route: OrbitRout
     val mainCheckoutResults = remember(state.window.events) {
         state.window.events.filter { it.type == "system" }.mapNotNull { e -> MainCheckout.resultNotice(e.fields)?.let { e.seq to it } }
     }
-    // A SubAgent's finished line points back at the delegate card its run was started from, when that card is drawn.
-    val delegateCalls = remember(state.window.events) { delegateCallsByRun(state.window.events) }
-    val subagentJump: (String) -> (() -> Unit)? = { runId ->
-        delegateCalls[runId]?.takeIf { seq -> currentRows.any { it.contains(seq) } }?.let { seq -> { model.show(seq) } }
+    // Each SubAgent end turn loaded, by run id: its card draws the end, so the turn itself draws nothing (SubagentCardEnd).
+    val subagentWakes = remember(state.window.events, steerDeliveries) { subagentWakesOf(state.window.events, steerDeliveries) }
+    val queuedCancelEnabled = state.session?.fresh == true && !composerState.busy
+    val subagentQueued = remember(queuedTurns, queuedCancelEnabled, liveTail) {
+        if (!liveTail) emptyMap() else subagentQueuedWakes(queuedTurns, queuedCancelEnabled) { turnId -> composer.control("turns/$turnId", HttpMethod.DELETE) }
     }
     CompositionLocalProvider(LocalMainCheckoutResults provides mainCheckoutResults, LocalReaderResources provides resources, LocalShownOriginals provides shownOriginals, LocalTaskActivity provides taskActivity, LocalSteerDeliveries provides steerDeliveries,
         LocalSessionConsole provides console, LocalMainCheckout provides mainCheckout, LocalWatchTargetNames provides targetNames, LocalAnsweredQuestions provides answeredQuestions,
-        LocalExchangeTree provides exchangeTree, LocalSubagentRuns provides subagentRuns, LocalSubagentCardJump provides subagentJump) {
+        LocalExchangeTree provides exchangeTree, LocalSubagentRuns provides subagentRuns, LocalSubagentWakes provides subagentWakes,
+        LocalSubagentQueuedWakes provides subagentQueued) {
         SessionCardsReads(cards)
         BoxWithConstraints(Modifier.fillMaxSize()) {
         val view = LocalView.current

@@ -120,15 +120,29 @@ class OrbitEventLineTest {
     }
 
     @Test fun knownBlocksKeepTheirLinesHeadinglessBetweenTheAssistantRows() {
-        listOf(turn("", job) to "background-wake", turn("", wakeup) to "background-wake", turn("", subagent) to "subagent-finished",
+        listOf(turn("", job) to "background-wake", turn("", wakeup) to "background-wake",
             RunEvent("user", 9, buildJsonObject { put("text", watch) }, "turn-9", ago) to "watch-wake").forEachIndexed { i, (event, tag) ->
             show(event)
             assertTrue("$tag is drawn", compose.onAllNodes(hasTestTag(tag) and hasAnyAncestor(hasTestTag("event:9")), useUnmergedTree = true)
                 .fetchSemanticsNodes().isNotEmpty())
             compose.onAllNodesWithTag("orbit-event", useUnmergedTree = true).assertCountEquals(0)
             assertHeadingless("event:9")
-            shot("0${i + 3}-${listOf("job", "wakeup", "subagent", "watch")[i]}")
+            shot("0${i + 3}-${listOf("job", "wakeup", "watch")[i]}")
         }
+    }
+
+    // A SubAgent's end is drawn on its card (SubagentCardEnd), so its turn draws nothing at all: not a line of its own, not the From Orbit
+    // line, not the reader's row (docs/mocks/subagent-card-and-end-line; web `Transcript.orbitEvent.test.tsx`).
+    @Test fun aSubagentsEndDrawsNothingWhichItsCardDraws() {
+        val event = turn("", subagent)
+        show(event)
+        compose.onAllNodesWithTag("event:9", useUnmergedTree = true).assertCountEquals(0)
+        compose.onAllNodesWithTag("orbit-event", useUnmergedTree = true).assertCountEquals(0)
+        compose.onAllNodesWithText("From Orbit", useUnmergedTree = true).assertCountEquals(0)
+        compose.onAllNodesWithText("You", useUnmergedTree = true).assertCountEquals(1)
+        compose.onAllNodesWithText("Find every caller of pollQuota", substring = true, useUnmergedTree = true).assertCountEquals(0)
+        assertFalse(SteerDelivery.readersOwn(event))
+        assertFalse(SteerDelivery.orbitOnly(event))
     }
 
     @Test fun typedWordsKeepTheirRowWithoutTheAppendedNote() {

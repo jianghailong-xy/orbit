@@ -23,9 +23,10 @@ fun transcriptCards(event: RunEvent): List<InteractionCard> = buildList {
             val title = when (wake.text("state")) { "MATCHED" -> "Watch triggered"; "EXPIRED" -> "Watch expired"; "REVOKED" -> "Watch stopped: access lost"; else -> "Watch stopped: every target is gone" }
             add(InteractionCard("record:${event.seq}:watch", CardFamily.BACKGROUND, title, wake, "", objectId = wake.text("watchId")!!, binding = "", status = "Recorded"))
         }
-        // A SubAgent's end is a line of its own (docs/mocks/subagent-finished-line), drawn before a job's news the same note carries.
+        // A SubAgent's end: Orbit's turn, never the reader's bubble or the From Orbit line, and drawn as nothing — its card is the end
+        // (docs/mocks/subagent-card-and-end-line). A job's news the same note carries keeps its own line.
         payload.text("controlPlaneNote")?.takeIf { SubagentFinished.parse(it) != null }?.let { note ->
-            add(InteractionCard("record:${event.seq}:subagent", CardFamily.BACKGROUND, SubagentFinishedCard.finished,
+            add(InteractionCard("record:${event.seq}:subagent", CardFamily.BACKGROUND, "SubAgent ended",
                 buildJsonObject { put("note", note) }, "", objectId = "${event.seq}", binding = "", status = "Recorded"))
         }
         backgroundWake(payload.text("controlPlaneNote").orEmpty())?.let { wake ->
