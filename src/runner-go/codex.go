@@ -533,6 +533,8 @@ func runCodexTurn(ctx context.Context, job *ClaimedSession, execDir, prompt stri
 	cmd.Env = envWithAgent(job.Agent.Env)
 	cmd.Env = append(cmd.Env, codexOrbitSessionEnv(job)...)
 	cmd.Env = append(cmd.Env, bgJobEnvPairs(job.SessionID)...)
+	// On the Orbit Cloud runner with the browser on, a tool the agent runs opens its pages there (browser_opener.go).
+	cmd.Env = browserOpenerEnv(cmd.Env, job.BrowserEnabled)
 	cmd.Stdin = strings.NewReader(prompt)
 	stdout, err := cmd.StdoutPipe()
 	if err != nil {

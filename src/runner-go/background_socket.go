@@ -240,6 +240,8 @@ func (s *bgJobService) handle(req bgSocketRequest) bgSocketResponse {
 			WakeOnExit:   wakeOnExit,
 			WakeOnOutput: wakeOnOutput,
 			WakeOnStall:  wakeOnStall,
+			// A tool the job runs opens its pages as one the engine's shell runs does (browser_opener.go).
+			BrowserOpener: s.job != nil && s.job.BrowserEnabled,
 		}
 		if err := validateBgJobSpec(spec); err != nil {
 			return bgSocketResponse{Error: err.Error()}
