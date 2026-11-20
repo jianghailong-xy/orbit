@@ -2910,9 +2910,10 @@ export class ProjectOpenItemService {
     // Rank 55 before the job row's rank-60 write, as the stop door takes it: this orders the stop
     // against a result or a DONE that would queue the next generation.
     const [codebase] = await tx.$queryRaw<Array<{
-      landingCheckCommand: string | null; mergeCheckCommand: string | null;
+      landingCheckCommand: string | null; landingCheckNone: boolean; mergeCheckCommand: string | null;
     }>>(Prisma.sql`
       SELECT "landing_check_command" AS "landingCheckCommand",
+             "landing_check_none" AS "landingCheckNone",
              "merge_check_command" AS "mergeCheckCommand"
         FROM "project_codebase"
        WHERE "project_id" = ${projectId}::uuid AND "slot" = 'primary'
@@ -2928,6 +2929,7 @@ export class ProjectOpenItemService {
     const refusal = inFlightSkipRefusal({
       ...job,
       landingCheckCommand: codebase?.landingCheckCommand ?? null,
+      landingCheckNone: codebase?.landingCheckNone ?? false,
       mergeCheckCommand: codebase?.mergeCheckCommand ?? null,
     });
     if (refusal) throw new ConflictException(refusal);

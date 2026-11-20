@@ -67,7 +67,11 @@ export interface ProjectIntegrationSettings<Instant = string> {
   startedAt: Instant | null;
   landingCheckCommand: string | null;
   landingCheckTimeoutSeconds: number | null;
-  landingCheckCommandAbsentReason: 'FALLS_BACK_TO_MERGE_CHECK' | null;
+  /** Why there is no landing-check command: it falls back to the merge check (§11 K1), or the
+   *  project was told to run none (`NONE`, §12.15 P-C1). */
+  landingCheckCommandAbsentReason: 'FALLS_BACK_TO_MERGE_CHECK' | 'NONE' | null;
+  /** The landing check and who set it last (§12.16). Absent on servers that predate it. */
+  landingCheck?: ProjectLandingCheck<Instant>;
   mergeCheckCommand: string | null;
   mergeCheckCommandAbsentReason: 'NOT_CONFIGURED' | null;
   mergeCheckTimeoutSeconds: number | null;
@@ -82,6 +86,23 @@ export interface ProjectIntegrationSettings<Instant = string> {
   /** When the account owner last wrote `deliveryMode` — null while nobody ever chose it. Absent on
    *  servers that predate it. */
   deliveryModeChosenAt?: Instant | null;
+}
+
+/** Who last wrote a project's landing check (§12.14): the account owner at their own door, a
+ *  merge-check card the owner answered, or the project's coordinator with no card (§12.15 P-C1). */
+export type LandingCheckSetBy = 'OWNER' | 'CARD' | 'COORDINATOR';
+
+/** A project's landing check as `project_get.integration.landingCheck` gives it (§12.16). */
+export interface ProjectLandingCheck<Instant = string> {
+  /** The command; `NONE` when the project runs no landing check, so a landing runs only the task's
+   *  own acceptance; null when it falls back to the merge check (§11 K1). */
+  command: string | 'NONE' | null;
+  /** Null when nobody has written it since the record existed, or the start wrote it. */
+  setBy: LandingCheckSetBy | null;
+  /** The coordinator session behind a `COORDINATOR` write; null otherwise. */
+  setBySessionId: string | null;
+  /** When the `COORDINATOR` write happened; null otherwise. */
+  setAt: Instant | null;
 }
 
 /** An account's last choice of main branch for one repository (§1.2 L6). */

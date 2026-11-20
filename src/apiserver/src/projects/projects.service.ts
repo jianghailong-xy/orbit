@@ -195,6 +195,9 @@ import {
 } from './criterion-landing-reason';
 import {
   configureProjectIntegration,
+  coordinatorLandingCheckRefusal,
+  coordinatorLandingCheckRefusalReason,
+  coordinatorLandingCheckRefused,
   type IntegrationReadSelectors,
   type IntegrationSettings,
   lastMainBranchView,
@@ -208,6 +211,7 @@ import {
 } from './project-integration-line';
 import {
   findMergeCheckApproval,
+  isLandingCheckField,
   isMergeCheckField,
   MERGE_CHECK_AUDIT_TYPE,
   type MergeCheckApproval,
@@ -295,6 +299,25 @@ export const COORDINATOR_MESSAGE_UNDELIVERED_CODE = 'COORDINATOR_MESSAGE_UNDELIV
 export const START_COORDINATOR_UNAVAILABLE = 'START_COORDINATOR_UNAVAILABLE';
 /** The non-code mark written from a session that does not coordinate the project (`nonCodeWriter`). */
 export const NON_CODE_COORDINATOR_ONLY = 'NON_CODE_COORDINATOR_ONLY';
+
+/**
+ * Who a session's integration write rests on (`assertIntegrationIsWrittenByItsOwner`): a card the
+ * account owner answered, or the project's coordinator writing its landing check with no card
+ * (§12.15 P-C1).
+ */
+type IntegrationSessionWrite =
+  | { by: 'CARD'; approval: MergeCheckApproval }
+  | { by: 'COORDINATOR'; sessionId: string };
+
+/** A cardless landing-check write whose session stopped coordinating the project before it landed. */
+function coordinatorNoLongerCoordinates(): ForbiddenException {
+  return new ForbiddenException({
+    statusCode: 403,
+    code: 'INTEGRATION_SETTINGS_OWNER_ONLY',
+    message: 'this session no longer coordinates the project, so it cannot change the landing check '
+      + 'without the owner’s card. Nothing was written',
+  });
+}
 
 /**
  * Which press `coordinator` is answering.
@@ -1227,9 +1250,17 @@ export class ProjectsService {
    *     field added to `IntegrationSettings` later is owner-only until somebody deliberately gives
    *     it a card.
    *
-   * Returns the card that authorised the write, or null when the request carried no merge check —
-   * the caller records it beside the write it is about. Async and query-free in the common cases:
-   * a session sending only a line field, or only an unwritable field, is refused without a lookup.
+   *   - One exception needs no card (§12.15 P-C1): the project's current coordinator writing only
+   *     the landing check (`landingCheckCommand`, `landingCheckTimeoutSeconds`, `landingCheck`
+   *     NONE) on a `PROJECT_BRANCH` line that has a merge check, when the owner has not written the
+   *     landing check themselves or through a card. The landing check then guards the project branch,
+   *     and the merge check still guards main. Any other case looks for the card as before. The
+   *     binding's conditions are read again under its lock, and the coordinator under the project's.
+   *
+   * Returns who the session write rests on — the card that authorised it, or the coordinator with
+   * no card — or null when the request carried no integration fields or no session. The caller
+   * records it beside the write it is about. Async and query-free in the common cases: a session
+   * sending only a line field, or only an unwritable field, is refused without a lookup.
    *
    * Checked BEFORE the update's transaction, like `status` above, so a refusal writes nothing at
    * all — not the merge check, and not the title the same request happened to carry.
@@ -1239,7 +1270,8 @@ export class ProjectsService {
     projectId: string,
     dto: UpdateProjectDto,
     actingSessionId: string | undefined,
-  ): Promise<MergeCheckApproval | null> {
+    coordinatorSessionId: string | null,
+  ): Promise<IntegrationSessionWrite | null> {
     const settings = dto.integration as Record<string, unknown> | undefined;
     if (settings === undefined) return null;
     const sessionId = actingSessionId?.trim();
@@ -1267,6 +1299,15 @@ export class ProjectsService {
       });
     }
 
+    // P-C1: the coordinator's own landing check, with no card, where the binding allows it.
+    let cardless: string | null = null;
+    if (named.every(isLandingCheckField) && coordinatorSessionId !== null
+      && ProjectsService.sameSession(sessionId, coordinatorSessionId)) {
+      const refusal = coordinatorLandingCheckRefusal(await readProjectCodebase(this.prisma, projectId));
+      if (!refusal) return { by: 'COORDINATOR', sessionId: coordinatorSessionId };
+      cardless = coordinatorLandingCheckRefusalReason(refusal);
+    }
+
     const approval = await findMergeCheckApproval(this.prisma, { projectId, sessionId, settings });
     if (!approval) {
       throw new ForbiddenException({
@@ -1276,11 +1317,24 @@ export class ProjectsService {
           + 'confirmation card they have answered for this project, from this session, for exactly '
           + `this change (${mergeCheck.join(', ')}). No such card was found — none was filed, the `
           + 'one filed was declined or is still unanswered, or it authorised a different change — '
-          + 'so nothing was written. Call project_update with the change you want: it puts the '
+          + 'so nothing was written. '
+          + (cardless !== null
+            ? `The coordinator could set the landing check without a card, but not here: ${cardless}. `
+            : '')
+          + 'Call project_update with the change you want: it puts the '
           + 'question in front of them and performs the write once they answer',
       });
     }
-    return approval;
+    return { by: 'CARD', approval };
+  }
+
+  /** Whether an acting session id names this session, in either spelling. */
+  private static sameSession(acting: string, sessionId: string): boolean {
+    try {
+      return toUuid(acting) === sessionId;
+    } catch {
+      return false;
+    }
   }
 
   /**
@@ -3888,9 +3942,10 @@ export class ProjectsService {
     const nonCodeWriter = ProjectsService.nonCodeWriter(dto, actingSessionId, current.coordinatorSessionId);
     // The card this write rests on, when it carries a merge check. Read BEFORE the transaction
     // with the rest of the guards, so a request no card covers is refused having written nothing.
-    const mergeCheckApproval = await this.assertIntegrationIsWrittenByItsOwner(
-      ownerId, id, dto, actingSessionId,
+    const integrationWrite = await this.assertIntegrationIsWrittenByItsOwner(
+      ownerId, id, dto, actingSessionId, current.coordinatorSessionId,
     );
+    const mergeCheckApproval = integrationWrite?.by === 'CARD' ? integrationWrite.approval : null;
     refuseOwnerFieldsToToken(credential, {
       status: dto.status,
       integration: dto.integration,
@@ -3998,7 +4053,20 @@ export class ProjectsService {
         // The integration line, under its binding's own lock: rank 55, after the project row above
         // and before any criterion row below.
         if (dto.integration !== undefined) {
-          await configureProjectIntegration(tx, { ownerId, projectId: id, settings: dto.integration });
+          // A cardless write is the CURRENT coordinator's: a rotation that committed since the
+          // guard read the project leaves this session nothing to write with.
+          if (integrationWrite?.by === 'COORDINATOR'
+            && locked.coordinator_session_id !== integrationWrite.sessionId) {
+            throw coordinatorNoLongerCoordinates();
+          }
+          await configureProjectIntegration(tx, {
+            ownerId,
+            projectId: id,
+            settings: dto.integration,
+            landingCheckWriter: integrationWrite?.by === 'COORDINATOR'
+              ? { by: 'COORDINATOR', sessionId: integrationWrite.sessionId }
+              : integrationWrite?.by === 'CARD' ? { by: 'CARD' } : { by: 'OWNER' },
+          });
         }
         // Who let this merge check through, when a card did — and in the same transaction as the
         // write it is about, so a rolled-back attempt leaves no row claiming the change happened.

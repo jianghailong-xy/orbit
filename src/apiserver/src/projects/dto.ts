@@ -233,6 +233,9 @@ export class UpdateProjectIntegrationDto implements IntegrationSettings {
   /** Landing check overrides; null falls back to the merge check setting. */
   @IsOptional() @IsString() landingCheckCommand?: string | null;
   @IsOptional() @IsInt() @Min(1) landingCheckTimeoutSeconds?: number | null;
+  /** `NONE`: run no project landing check, only each task's own acceptance (§12.15 P-C1). Writing
+   *  `landingCheckCommand` lifts it. */
+  @IsOptional() @IsIn(['NONE']) landingCheck?: 'NONE';
   /**
    * How long one of this project's exception items may wait on its coordinator before it becomes
    * yours (§4.6). Five minutes to a week, the same range the column's CHECK holds; two hours unless

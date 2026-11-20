@@ -284,6 +284,8 @@ export interface IntegrationCheckSource {
   acceptanceTimeoutSeconds: number | null;
   landingCheckCommand?: string | null;
   landingCheckTimeoutSeconds?: number | null;
+  /** The project runs no landing check (`landingCheck` NONE, §12.15 P-C1); absent reads false. */
+  landingCheckNone?: boolean;
   mergeCheckCommand: string | null;
   mergeCheckTimeoutSeconds: number | null;
   skipMergeCheck: boolean;
@@ -330,6 +332,9 @@ export function checksFor(row: IntegrationCheckSource): IntegrationCheckSpec[] {
   // that arrived saying otherwise — a hand-written fixture, a build ahead of the migration — keeps
   // the check it was queued for rather than landing unchecked.
   const landing = row.kind === 'LAND_TASK';
+  // NONE (§12.15 P-C1) is the project saying "no landing check": a landing then runs only the task's
+  // own acceptance above. A null command is not that: it falls back to the merge check (§11 K1).
+  if (landing && row.landingCheckNone) return checks;
   const command = landing ? row.landingCheckCommand ?? row.mergeCheckCommand : row.mergeCheckCommand;
   if (command && !(landing && row.skipMergeCheck)) {
     checks.push({

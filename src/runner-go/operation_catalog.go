@@ -1174,6 +1174,10 @@ func buildOperationCatalog() []*operation {
 				"in flight carries `landingSessionId`, and a criterion waiting on a landing says so " +
 				"through its landing reason; that id is the LANDING session recording the attempt — " +
 				"open it with session_get rather than reading the integration tables yourself. " +
+				"`integration.landingCheck` says what runs before a task lands on the project branch — " +
+				"command (a command, NONE for no landing check, or null to fall back to the merge check) " +
+				"— and who set it last: setBy OWNER, CARD or COORDINATOR, with setBySessionId and setAt " +
+				"for a coordinator's cardless write. " +
 				"Returns the " +
 				"shape of the project, not its tasks: use task_list for those. Reads the projects " +
 				"of the account this runner belongs to; write these same fields with " +
@@ -1491,8 +1495,10 @@ func buildOperationCatalog() []*operation {
 					"description": "Where this project's finished tasks land, and what is " +
 						"checked before they do, as {line: MAIN | PROJECT_BRANCH, " +
 						"projectBranchName, upstreamRef, mergeCheckCommand, " +
-						"mergeCheckTimeoutSeconds, landingCheckCommand, landingCheckTimeoutSeconds}. " +
-						"Landing settings fall back to the merge settings when null. The two halves are not the same decision. " +
+						"mergeCheckTimeoutSeconds, landingCheckCommand, landingCheckTimeoutSeconds, landingCheck}. " +
+						"Landing settings fall back to the merge settings when null; landingCheck: NONE runs no landing " +
+						"check at all, so a task landing on the project branch runs only its own acceptance, and sending " +
+						"landingCheckCommand later (a command, or null) lifts it. The two halves are not the same decision. " +
 						"THE LINE — line, projectBranchName, upstreamRef — is the account owner's " +
 						"to choose, and a request carrying one is refused whenever this tool is " +
 						"called from inside a session, which is every call you make: read it back " +
@@ -1505,7 +1511,15 @@ func buildOperationCatalog() []*operation {
 						"if they approve it. Nothing is written if they decline, and a second " +
 						"change is a second question — an approval covers the exact command and " +
 						"timeout it named and nothing else. Send mergeCheckCommand: null to remove " +
-						"the check. Once a project has started integrating the line is locked, and " +
+						"the check. One exception needs no card: when this session is the project's " +
+						"coordinator, the line is PROJECT_BRANCH and a merge check is configured, a " +
+						"request whose integration names only landingCheckCommand, " +
+						"landingCheckTimeoutSeconds or landingCheck is written at once, because the " +
+						"merge check still guards main. It still needs the card on a MAIN line, with no " +
+						"merge check, from any other session, and once the owner has set the landing " +
+						"check themselves or through a card; project_get shows who set it last as " +
+						"integration.landingCheck {command, setBy: OWNER | CARD | COORDINATOR, " +
+						"setBySessionId, setAt}. The merge check itself always needs the card. Once a project has started integrating the line is locked, and " +
 						"a request to move it is refused even from the owner: to change it, its " +
 						"project branch reaches main first.",
 				},
