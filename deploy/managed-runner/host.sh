@@ -29,13 +29,13 @@ managed_runner_network() {
 
 # ── the managed runner image ────────────────────────────────────────────────────────────────────────
 
-# Builds orbit-managed-runner:local from deploy/managed-runner/image at this checkout, stamped with commit $1.
+# Builds orbit-cloud-runner:local from deploy/managed-runner/image at this checkout, stamped with commit $1.
 managed_runner_image_build_from() {
   echo "==> Building the managed runner image from deploy/managed-runner/image (local, never pushed)"
   # No provenance attestation, which BuildKit makes anew for every build: in Docker's containerd image store it
   # would give the same image a new ID each time. /upgrade builds it the same way and compares the IDs.
   docker build --provenance=false -f deploy/managed-runner/image/Dockerfile --build-arg "ORBIT_SOURCE_SHA=$1" \
-    -t orbit-managed-runner:local .
+    -t orbit-cloud-runner:local .
 }
 
 # ── the managed runners' host firewall ──────────────────────────────────────────────────────────────
@@ -47,7 +47,7 @@ firewall_run() {
   local mounts=() directory
   case "$MR_DIR" in /*) directory="$MR_DIR/firewall" ;; *) directory="$REPO_ROOT/$MR_DIR/firewall" ;; esac
   if [ -f /run/xtables.lock ]; then mounts+=(-v /run/xtables.lock:/run/xtables.lock); fi
-  if [ -d "$directory" ]; then mounts+=(-v "$directory:/var/lib/orbit-managed-runner-firewall"); fi
+  if [ -d "$directory" ]; then mounts+=(-v "$directory:/var/lib/orbit-cloud-runner-firewall"); fi
   docker run --rm --network host --cap-drop ALL --cap-add NET_ADMIN --cap-add NET_RAW \
     --security-opt no-new-privileges --read-only ${mounts[@]+"${mounts[@]}"} "$FW_IMAGE" "$@"
 }
@@ -117,7 +117,7 @@ firewall_configure() {
 EOF
   )
   echo "==> Applying the managed runners' firewall rules"
-  firewall_run apply --config /var/lib/orbit-managed-runner-firewall/config.json.new \
+  firewall_run apply --config /var/lib/orbit-cloud-runner-firewall/config.json.new \
     || die "the managed runners' firewall rules could not be applied (the reason is above). $FIREWALL_HELP"
   echo "==> Checking from the managed runners' network that this host and private addresses are refused"
   on_runner_network probe --blocked "$gateway:1" --blocked 169.254.169.254:80 --blocked 10.255.255.1:9 \

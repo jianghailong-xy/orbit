@@ -98,7 +98,7 @@ describe('the confirm page', () => {
   it('names the group, says what the mode lets the group do on which runner, and confirms the choices in one POST', async () => {
     await open();
     expect(container!.textContent).toContain('Release team');
-    expect(container!.textContent).toContain('People in this group can make agents act on Build box in Default mode.');
+    expect(container!.textContent).toContain('People in this group can make agents act on Build box in Auto mode.');
     await click(radio('Accept Edits'), 'Accept Edits');
     expect(container!.textContent).toContain('People in this group can make agents act on Build box in Accept Edits mode.');
     await click(radio('Only these people'), 'Only these people');
@@ -115,6 +115,21 @@ describe('the confirm page', () => {
     }]);
     expect(container!.textContent).toContain('the Feishu settings');
     expect(toast.success).toHaveBeenCalledWith('Group connected', 'Release team can now start sessions in groups workspace.');
+  });
+
+  it('opens on Auto with its warning, and confirms Auto when the mode is left alone', async () => {
+    await open();
+    expect(radio('Auto')?.getAttribute('aria-checked')).toBe('true');
+    expect(radio('Default')?.getAttribute('aria-checked')).toBe('false');
+    const consequence = container!.querySelector('.feishu-consequence');
+    expect(consequence?.classList.contains('orbit-alert-warning')).toBe(true);
+    expect(consequence?.textContent).toContain('People in this group can make agents act on Build box in Auto mode.');
+    expect(consequence?.textContent).toContain("Approvals and agents' questions come to you in Feishu, never to the group.");
+    await click(button('Connect group'), 'Connect group');
+    expect(posted).toEqual([{
+      ticket: 't-123', workspaceId: 'ws-1', permissionMode: 'auto', allowedOpenIds: [],
+      maxConcurrentSessions: 2, sessionsPerDay: 20,
+    }]);
   });
 
   it('sends an empty list for everyone in the group, and drops what was ticked once everyone is chosen', async () => {

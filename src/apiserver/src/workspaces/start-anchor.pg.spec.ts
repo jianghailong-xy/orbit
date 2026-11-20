@@ -172,7 +172,7 @@ test('project work follows its coordinator, not a person’s one-off Codex conve
 
   /** The routing baseline of a fresh task of this project, with smart model selection on. */
   async function routingBaseline(project: string): Promise<{ engine: unknown; provider: unknown }> {
-    await prisma.user.update({ where: { id: ownerId }, data: { preferences: { modelRouting: true } } });
+    await prisma.user.update({ where: { id: ownerId }, data: { preferences: { modelRouting: true, optimizeFor: 'cost' } } });
     try {
       const routed = await task('a routed task', project);
       const subject = await prisma.task.findUniqueOrThrow({ where: { id: routed } });

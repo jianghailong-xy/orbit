@@ -103,6 +103,7 @@ func init() {
 		claudeAccountLoginCapabilityV1,
 		claudeAccountRemoveCapabilityV1,
 		claudeAccountMoveCapabilityV1,
+		claudeAccountSwapCapabilityV1,
 		claudeScheduledCheckOnlyAsksCapabilityV1,
 		antigravityAccountLoginCapabilityV1,
 		antigravityAccountRemoveCapabilityV1,
@@ -139,7 +140,7 @@ func init() {
 	}
 	// Only a runner the managed image's entrypoint started has the browser (browser_supervisor.go).
 	if declaresBrowserClear(os.LookupEnv) {
-		runnerCapabilitiesV1 += "," + browserClearCapabilityV1
+		runnerCapabilitiesV1 += "," + browserClearCapabilityV1 + "," + browserOpenCapabilityV1
 	}
 }
 
@@ -1091,6 +1092,12 @@ func (t *Transport) dirProbeResult(b RunnerDirProbeResult) error {
 // whether this machine ended up signed in.
 func (t *Transport) loginResult(b LoginResultRequest) error {
 	return t.do(nil, "POST", "/runner/login-result", b, nil, 15*time.Second)
+}
+
+// claudeAccountSwapResult reports where a heartbeat-delivered Claude account swap stands
+// (claude-account-swap/v1).
+func (t *Transport) claudeAccountSwapResult(b ClaudeAccountSwapResult) error {
+	return t.do(nil, "POST", "/runner/claude-account-swap-result", b, nil, 15*time.Second)
 }
 
 // codexAccountRemoveResult reports what a heartbeat-delivered account removal came to, on the route

@@ -1320,9 +1320,9 @@ COMPOSE_PROFILES=managed-runners-docker,managed-runner-firewall
   ([where each setting lives](managed-runner-docker-operations.md#where-each-setting-lives)).
 - **The image.** The script builds the managed runner image from
   [deploy/managed-runner/image](../deploy/managed-runner/image/Dockerfile) on this host, as
-  `orbit-managed-runner:local`, and pushes it nowhere. Both files name it by its local image ID. To use an image
+  `orbit-cloud-runner:local`, and pushes it nowhere. Both files name it by its local image ID. To use an image
   built elsewhere from a commit you reviewed, load it with `docker load` and pass `--managed-runner-image <image>`.
-- **Their network.** `orbit-managed-runners`, an IPv4-only bridge network on which containers cannot reach one
+- **Their network.** `orbit-cloud-runners`, an IPv4-only bridge network on which containers cannot reach one
   another. A runner reaches the internet (its model's endpoint, Git hosts) and reaches this deployment the way a
   runner on another machine does: through the gateway's published port 2086, at the host's address on that network.
   It reaches neither another runner nor the stack's own containers.
@@ -1332,7 +1332,7 @@ COMPOSE_PROFILES=managed-runners-docker,managed-runner-firewall
   writing anything the install checks that this host can carry the rules; then it applies them once and checks from
   the network that this host and a private address are refused and that DNS still resolves, and once the stack is up
   that the gateway's port is reached. Where any of that fails it stops and says why.
-- **Their server address.** `profile.json` gives each runner `http://<gateway of orbit-managed-runners>:2086`. A
+- **Their server address.** `profile.json` gives each runner `http://<gateway of orbit-cloud-runners>:2086`. A
   runner sends its credential with every request, and a managed runner accepts plain HTTP to any private address,
   so keep `runner.serverUrl` on this host's own address on that network, or make it `https://`. Never point it at
   another machine over plain HTTP, a LAN address included.
@@ -1466,7 +1466,7 @@ runner in their image never updates itself, so each upgrade:
 1. stops before building anything unless `channel.json` and `profile.json` are in the managed runners' directory,
    as Compose binds it into `docker-channel`;
 2. rebuilds `docker-channel` with the other images, then the managed runner image from this checkout, as
-   `orbit-managed-runner:local`, on this host and pushed nowhere;
+   `orbit-cloud-runner:local`, on this host and pushed nowhere;
 3. when the image ID is new, writes it into both files (the channel's `image`, the profile's `runner.image`), each
    file replaced whole by a rename;
 4. recreates the other services, then the apiserver if that did not recreate it, and with it any
@@ -1562,7 +1562,7 @@ the way any runner on the internet does, at its public `https://` address. The d
 server (10.66.0.1)                                   channel host (10.66.0.3)
 apiserver ── HTTP + bearer token, private link ──▶  docker-channel   listens on 10.66.0.3:7300 only, for 10.66.0.1 only
   profile.json: docker.hosts[].channel.url            managed-runner-firewall   rules on this host
-                                                      orbit-managed-runner image   built here, from the server's commit
+                                                      orbit-cloud-runner image   built here, from the server's commit
                                                       mr-<runner> containers ── https://<server> ──▶ the server
 ```
 
@@ -1572,7 +1572,7 @@ What a channel host needs:
   others share. The channel speaks plain HTTP with a bearer token, and answers only the source addresses you name.
 - Docker with the Compose plugin, rootful, on its iptables firewall backend, as for the
   [managed runners' firewall](#isolation-and-its-limits) on a single host. No deployment with managed runners on the
-  same host: the kit's containers have the same names (`orbit-docker-channel`, `orbit-managed-runner-firewall`).
+  same host: the kit's containers have the same names (`orbit-docker-channel`, `orbit-cloud-runner-firewall`).
 - A checkout of this repository, for the kit to build from, and root.
 - The server at a public `https://` address its runners can reach. The firewall refuses every private address, so a
   runner never reaches the server over the private link, and the profile refuses a plain `http://` `runner.serverUrl`
@@ -1596,8 +1596,8 @@ the channel makes) are optional; without `--commit` it builds the checkout as it
 changes. It then does what a single host's install does for its managed runners, with the same code
 (`deploy/managed-runner/host.sh`):
 
-1. checks that the host can carry the firewall's rules, makes the `orbit-managed-runners` network, and builds the
-   managed runner image as `orbit-managed-runner:local`, pushed nowhere;
+1. checks that the host can carry the firewall's rules, makes the `orbit-cloud-runners` network, and builds the
+   managed runner image as `orbit-cloud-runner:local`, pushed nowhere;
 2. writes `data/channel-host` (mode 0700): the channel's `token`, `channel.json` (listening on `--listen` for the
    `--allow-peer` addresses alone, naming the image by its ID) after the channel's own check of it, `firewall/config.json`,
    and `compose.env`, which names the directory for
@@ -1608,7 +1608,7 @@ changes. It then does what a single host's install does for its managed runners,
 5. prints the entry for the server's profile and where the token is:
 
    ```text
-   { "instanceId": "orbit-1a2b3c4d", "channel": { "url": "http://10.66.0.3:7300" }, "tokenFile": "/var/lib/orbit-managed-runners/orbit-1a2b3c4d.token" }
+   { "instanceId": "orbit-1a2b3c4d", "channel": { "url": "http://10.66.0.3:7300" }, "tokenFile": "/var/lib/orbit-cloud-runners/orbit-1a2b3c4d.token" }
    ```
 
 `remote-host.sh status` says what runs there: the instance and its listener, the image `channel.json` names and the
@@ -1637,7 +1637,7 @@ Copy the channel host's `data/channel-host/token` into the server's `data/manage
   "resourceProfileId": "docker-default",
   "docker": {
     "hosts": [
-      { "instanceId": "orbit-1a2b3c4d", "channel": { "url": "http://10.66.0.3:7300" }, "tokenFile": "/var/lib/orbit-managed-runners/orbit-1a2b3c4d.token" }
+      { "instanceId": "orbit-1a2b3c4d", "channel": { "url": "http://10.66.0.3:7300" }, "tokenFile": "/var/lib/orbit-cloud-runners/orbit-1a2b3c4d.token" }
     ]
   },
   "storage": { "capacity": "20Gi" },
@@ -2168,8 +2168,8 @@ its steps after the ones above:
 
 ```bash
 docker build -f deploy/managed-runner/image/Dockerfile --build-arg "ORBIT_SOURCE_SHA=$(git rev-parse HEAD)" \
-  -t orbit-managed-runner:local .
-docker image inspect -f '{{.Id}}' orbit-managed-runner:local
+  -t orbit-cloud-runner:local .
+docker image inspect -f '{{.Id}}' orbit-cloud-runner:local
 # Write that ID as "image" in data/managed-runners/channel.json and as runner.image in profile.json, then:
 docker compose up -d --wait --no-deps --force-recreate apiserver
 docker compose up -d --wait --no-deps --force-recreate docker-channel

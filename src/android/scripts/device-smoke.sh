@@ -132,7 +132,7 @@ PY
 "$adb" -s "$serial" shell am start -W -n "$package/$activity" > "$output/launch.txt"
 grep -q '^Status: ok' "$output/launch.txt"
 capture home
-assert_text "$output/home.xml" 'Orbit Android'
+assert_text "$output/home.xml" 'Orbitd'
 coordinates="$(python3 - "$output/home.xml" <<'PY'
 import re
 import sys
@@ -156,15 +156,15 @@ for node in ET.parse(sys.argv[1]).iter("node"):
 PY
 "$adb" -s "$serial" shell input keyevent KEYCODE_BACK
 capture back
-assert_text "$output/back.xml" 'Orbit Android'
+assert_text "$output/back.xml" 'Orbitd'
 "$adb" -s "$serial" shell input keyevent KEYCODE_HOME
 "$adb" -s "$serial" shell am start -W -n "$package/$activity" > "$output/resume.txt"
 capture resume
-assert_text "$output/resume.xml" 'Orbit Android'
+assert_text "$output/resume.xml" 'Orbitd'
 "$adb" -s "$serial" shell am force-stop "$package"
 "$adb" -s "$serial" shell am start -W -n "$package/$activity" > "$output/relaunch.txt"
 capture relaunch
-assert_text "$output/relaunch.xml" 'Orbit Android'
+assert_text "$output/relaunch.xml" 'Orbitd'
 "$adb" -s "$serial" logcat -d -v threadtime -T "$device_start" > "$output/logcat.txt"
 "$adb" -s "$serial" logcat -b crash -d -v threadtime -T "$device_start" > "$output/crash.txt"
 if grep -F "Process: $package," "$output/crash.txt"; then

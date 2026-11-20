@@ -108,7 +108,7 @@
 
 ### 0.6 条款编号
 
-每节一个前缀：G 总则、L 集成线、J 集成作业、M 合入 main、X 例外待办、R 回复、F 保险丝、B blocker、V 读模型、C 兼容；修订 29 加 O 落地观测（§10）。修订 36 加 K 落地检查与基线红（§11）。
+每节一个前缀：G 总则、L 集成线、J 集成作业、M 合入 main、X 例外待办、R 回复、F 保险丝、B blocker、V 读模型、C 兼容；修订 29 加 O 落地观测（§10）。修订 36 加 K 落地检查与基线红（§11）。修订 42 加 W 任务会话接手落地失败与 P 项目运行方式（§12）。
 
 ### 0.7 各节要素索引
 
@@ -125,6 +125,7 @@
 | 9 任务对照 | §9.1、§9.4 | §9.4 | §9.4 | — | §9.1「测试」列、§9.2 |
 | 10 落地观测与交付方式（修订 29） | §10.4 | §10.6 O-J1–O-J4 | §10.6 O-T1–O-T5 | §10.9 | §10.9 |
 | 11 落地检查分两层与基线红（修订 36） | §11.3 | §11.4 K3–K5 | §11.4 K1–K5、K7 | §11.6 | §11.7 |
+| 12 落地：agent 动手，平台守门（修订 42） | §12.4、§12.14 | §12.6 W-T1–W-T6 | §12.5 W5–W7、§12.15 P-M1、P-M2 | §12.7、§12.16 | §12.8、§12.16 |
 
 ---
 
@@ -1237,7 +1238,7 @@ CHECK：`(state = 'OPEN') = (resolved_at IS NULL)`；`kind ∈ {PROMOTION_APPROV
 
 其余从当前分配的 `purpose = ITEM` 投递 turn 的 `conversation_turn.delivered_at` 给满一个窗口（修订 35）：基准截止时间 = `delivered_at + 窗口`，窗口沿用冻结的 `escalate_at − waiting_since`（项目 `exceptionEscalationSeconds`）。此时项目页列表才返回它。有效截止时间按 `GREATEST(基准截止时间, 最后推进 + 窗口)` 计。「最后推进」取这条待办**自己的事实**里最新的一个：它那次投递轮次的 `answered_at`（`purpose = ITEM`、`kind = 'message'`）、挂在它上面的修复任务的 `updated_at`（新建或 `task_update` 挂上都算）、那些修复任务的工作会话的 `COALESCE(last_turn_at, created_at)` 与结束时刻取大的一个、H1 重跑的开始（`handling_started_at`）与结束（作业的 `finished_at`）。与这条待办无关的聊天轮次不算：那是对话在动，不是这件事在动。于是接手之后还在推进的会话一直持有它；卡住、停下或结束的会话在停下满一个窗口后交出；从没取走的待办没有截止时间，不能按旧 `escalate_at` 交出。**时钟只读这些行，一行也不写**；升级之后的归属不变——待办归 owner，协调会话的「标记已处理」照旧被拒（`OPEN_ITEM_NOT_COORDINATOR_ITEM`），X-E3 的终态事实照常解决它。
 
-**接手之后不升级（修订 13，owner 2026-10-08 决定）**：协调会话接手了的待办没有升级时刻（`escalatesAt` 为 NULL），不论它处理了多久。「接手」= 项目此刻的协调会话回答过这条待办的投递轮次：该会话上 `client_turn_id` 以 `open-item:v1:<itemId>:` 开头、`kind = 'message'`、`answered_at` 不早于 `waiting_since` 的轮次存在（「Ask the coordinator again」重置 `waiting_since`，所以要在按下之后回答才算，按下之前的答复不算），并且这条会话此刻仍能接着处理：项目 `coordinator_enabled`，会话没进 Trash、没被 Completed、没被请求结束，status 为 `PENDING`、`RUNNING`、`AWAITING_INPUT`，或没有 `end_reason` 的 `INTERRUPTED`（挂了的 `FAILED` 不算）。处理中要 owner 拍板的事，由协调会话用 `ask_owner` 问，待办仍留在它那里；必须由 owner 亲手处理的事，它用 `open_item_hand_over` 带说明交出（§4.7）。平台不替它判断「处理得太久」。时钟只兜已取走但没人接手、以及接手资格失效后仍应按进展计时的情形；未取走不计时、不设上限。挂了但未结束仍按暂时不可用处理；会话真的结束、进回收站或项目关掉 Automatic 立即转 owner。取走后的 taken up 判定与修复在途豁免不变。缘由：项目 `34a0e97BOc6shsNLJbIuM` 的合并检查红了（待办 `34c46hi0h8KK9096z0ZyR`），协调会话 8 分钟内查明原因、建了修复任务，待办开出 27 分钟后修复就落了地、随后由 Automatic 合进 main；待办却没人关，修复会话结束两小时后被时钟交给了 owner——一张「Escalated to you」的卡，说的是一件已经办完的事。owner：「应该是 coordinator 修复的过程中有问题来问我，而不是发这个卡片。」
+**接手之后不升级（修订 13，owner 2026-10-08 决定）**：协调会话接手了的待办没有升级时刻（`escalatesAt` 为 NULL），不论它处理了多久。「接手」= 项目此刻的协调会话取走了这条待办当前分配的 ITEM 投递轮次（不要求回答）：该会话上 `client_turn_id` 以 `open-item:v1:<itemId>:` 开头、`kind = 'message'`、`delivered_at` 非空且不早于 `waiting_since` 的轮次存在（「Ask the coordinator again」重置 `waiting_since`，所以只有新投递的取走才算，按下之前的取走不算；被排空但没读、`ANSWERED` 而 `delivered_at` 为空的轮次不算取走），并且这条会话此刻仍能接着处理：项目 `coordinator_enabled`，会话没进 Trash、没被 Completed、没被请求结束，status 为 `PENDING`、`RUNNING`、`AWAITING_INPUT`，或没有 `end_reason` 的 `INTERRUPTED`（挂了的 `FAILED` 不算）。处理中要 owner 拍板的事，由协调会话用 `ask_owner` 问，待办仍留在它那里；必须由 owner 亲手处理的事，它用 `open_item_hand_over` 带说明交出（§4.7）。平台不替它判断「处理得太久」。时钟只兜接手资格失效后仍应按进展计时的情形；未取走不计时、不设上限。挂了但未结束仍按暂时不可用处理；会话真的结束、进回收站或项目关掉 Automatic 立即转 owner。取走即接手、没有截止时间；同一 turn 内等 owner 确认卡超过窗口也不升级，之后的 `integration_retry` 不会因此被拒；修复在途豁免不变。缘由：项目 `34a0e97BOc6shsNLJbIuM` 的合并检查红了（待办 `34c46hi0h8KK9096z0ZyR`），协调会话 8 分钟内查明原因、建了修复任务，待办开出 27 分钟后修复就落了地、随后由 Automatic 合进 main；待办却没人关，修复会话结束两小时后被时钟交给了 owner——一张「Escalated to you」的卡，说的是一件已经办完的事。owner：「应该是 coordinator 修复的过程中有问题来问我，而不是发这个卡片。」
 
 **X-E2**：`escalate_at` 在创建或「Ask the coordinator again」时冻结；改项目的升级时长只影响之后创建的待办（附录 A-Q8）。
 
@@ -2488,6 +2489,285 @@ M-F4、M7、M-T11 不变：(a) 或 (b) 成立时，Automatic 的项目分支照�
 | §4.2 | `INTEGRATION_CHECK_FAILED` 的基线形状：`ICB:` 去重键、payload、结案表 |
 | 附录 A | Q26–Q29 |
 
+## 12. 落地：agent 动手，平台守门（修订 42）
+
+**状态**：已裁决，未实现。owner 2026-11-20 裁决：附录 A 的 Q30–Q37 一律按默认做法；分两个项目实现，第二部分先做。实现落地之前本节不改变任何现行条款：正文照旧，§12.9 与 §12.17 列出要改写的条款，由各自的实现项目在第一条文档任务里改。本节全部是对实现的要求；写「现状」的句子描述 `acb7448a49` 上的代码与条文。
+
+一条修订，两部分，同一个意思：**门归平台，门以外的归 agent**。第一部分（§12.1–§12.10，条款 W）：落地失败先交给写这份工作的会话去修。第二部分（§12.11–§12.18，条款 P）：落不落地由平台从交付的提交量出来，不给项目或任务贴「不改代码」的标签；进项目分支之前跑什么由协调者定。两部分可以分开裁决、分开实现。效果图：`docs/mocks/landing-fix-own-session/`（`00-overview.png` 是合起来的一张）。
+
+### 12.1 第一部分的缘由：落地失败谁来修
+
+owner 2026-11-20 问：Orbit 是 agent-first 的平台，落地、合并检查这些流程为什么是写死的，而不是 agent 在做。
+
+查到的现状：
+
+- **判断已经是 agent 在做，但离失败很远**。一次 `LAND_TASK` 以 `CONFLICT` 或 `CHECK_FAILED` 结束后，路径是：作业终态 → 例外待办（§4.2）→ 投给协调会话（§4.4）→ 协调会话 `task_comment` + `task_reopen`（§4.7「两类冲突的解法」）→ 一条**新的**工作会话，在新分支上从项目 tip 起步，把上一条会话的提交拣过来、解冲突 → 新证据、新裁决、再次 DONE → 再排一代落地。写这份工作的会话就在那里，带着全部上下文，却不在这条路径上。
+- **协调会话只能经门表动手**（§4.7 的门能力表，`open-item-doors.ts`）：它碰不到失败的那棵树，也不该碰；它做的是转述。
+- **J-T1c 写了没做**。§2.3 J-T1c「任务分支来了新提交 → 平台自己再集成、再检查」是 v1 草案就有的条款（效果图 5），`docs/landing-session-design.md` §9 第 4 条记下它没有实现；J5 依赖它。于是「在任务分支上修好就行」这条最短的路从来不存在。
+- **修订 12 留了口**：§2.9 末「判断点本期不接 engine（owner 2026-10-04）……以后要接，另开修订」。本节就是那条修订。
+
+### 12.2 原则
+
+- **W0（门不动）**：J1（串行）、J2（落地的树 = 测过的树）、M7（谁对合入 main 说是）、O2（落地 = 观测到提交在线上）一个字不改。检查仍由平台在组合树上跑，推送仍由平台做。任务会话在 `PLATFORM` 交付方式下照旧不推目标分支（§10.5 O-L3）。
+- **W1（谁写的谁先修）**：一次任务落地的失败，第一个收到它的是写这份工作的会话；协调会话第二，owner 第三。协调会话收到时，事情已经是「写它的会话修不了」，这才是需要协调的判断。
+- **W2（修在任务分支上，不在组合树上）**：会话在自己的 checkout、自己的分支上修，提交，结束这一轮。它拿不到平台的临时组合树，也不需要：把目标分支合进自己的分支，就是 J-S2 ①、J-S4 MERGE 模式本来就认的形状。没有 `landing_exec` 一类的工具（`docs/landing-session-design.md` §7 否决 S2 的那条理由仍然成立）。
+- **W3（不加时钟）**：每一步由已提交事实触发（G2、G3）。交给会话、会话修完、会话修不了，都是一行已提交的事实。
+
+### 12.3 范围
+
+| 作业 | 结果 | 先交给谁 |
+|---|---|---|
+| `LAND_TASK` | `CONFLICT`，`phase` 为 `REBASE` / `MERGE` | 任务会话 |
+| `LAND_TASK` | `CONFLICT`，`phase = MAIN_SYNC` | 任务会话（§3.1 M3 的解法本来就放在这个任务的源分支上） |
+| `LAND_TASK` | `CHECK_FAILED`，失败分类为 `CHECK_FAILED`（`project-integration-job.ts#landingFailureClass`） | 任务会话 |
+| `TASK_BRANCH` 候选的 `CHECK_PROMOTION` / `LAND_PROMOTION`（`MAIN` 线） | `CONFLICT`、`CHECK_FAILED` | 任务会话 |
+| 以上任一 | 失败分类 `BASELINE_RED`、`CHECK_TIMED_OUT`、`ERROR`（任何 `error_code`） | 协调会话，照旧：这些不是这份工作的错 |
+| `PROJECT_BRANCH` 候选的晋升作业 | 任何失败 | 协调会话，照旧：没有任务，也就没有「任务自己的会话」 |
+| `OBSERVE_LANDING` | — | 不适用 |
+
+**W4（任务会话是哪一条）**：失败作业的 `session_id`，即入队时 `landingWorkSession` 取的那条：这次交付的分支所属的工作会话。只在下面条件全部成立时交给它，任一不成立就照今天的路径直接归协调会话：
+
+1. 会话 `kind = 'CONVERSATION'`、`starts_task_work = true`、`deleted_at IS NULL`、不在 Trash、没有 `cancel_requested_at`。
+2. 会话还开着，或者是随任务 DONE 结束的（`end_reason = 'task_done'`）。被人结束的（`ended`、`cancelled`、`completed`、`deleted`）不复活。
+3. 任务仍是 DONE，这条会话仍是它最近的工作会话。
+4. 本任务段（§2.9 的 TASK 主体，同一个 episode）里，由任务会话发起的落地代数还没到上限（W8）。
+
+### 12.4 数据结构
+
+不加表。迁移（落地时取下一个空号）：
+
+| 表 | 列 | 约束与语义 |
+|---|---|---|
+| `project_open_item` | `work_session_id` uuid NULL | 这条待办先交给了哪条任务会话；不带外键（同 §2.1 的历史引用） |
+| `project_open_item` | `work_session_offered_at` timestamptz(3) NULL | 交出的时刻；与上一列同有同无 |
+| `project_open_item` | `work_session_returned_at` timestamptz(3) NULL | 交回协调会话的时刻（W7）；NULL = 还在任务会话手里，或已由落地解决 |
+| `project_open_item` | `work_session_return_reason` text NULL | CHECK ∈ {`NO_NEW_COMMIT`, `TURN_FAILED`, `SESSION_ENDED`, `ROUNDS_EXHAUSTED`, `TASK_MOVED_ON`}；与上一列同有同无 |
+
+`project_integration_job` 不加列：任务会话修出来的下一代沿用 0344 的四列，`retry_requested_by_session_id` 写任务会话，`retry_reason` 写固定文案 `Fixed by the task's own session`，`retry_failure_class` 照抄失败那一代。
+
+待办的 `kind`、`assignee`、去重键、payload 都不变：`assignee` 仍是 `COORDINATOR`（闭集不加值），「此刻在谁手里」由上面四列读出。
+
+### 12.5 规则
+
+**W5（交出）**：J-T7 写作业终态的事务里，待办照 §4.2 开出；W4 成立时同一事务写 `work_session_id` 与 `work_session_offered_at`，并且**不**按 §4.4 X-D4 投给协调会话、**不**写 `escalate_at`（没有人欠着它，时钟不为它走；与修订 13「协调会话接手了的待办没有升级时刻」同一个道理）。提交后的边沿把失败送进任务会话（W6）；事实驱动的补偿点是这条待办的读（`openItemOwed` 的兜底）与该会话的下一次 `turnComplete`。
+
+**W6（送达；G6 的一处例外）**：载体仍是 `SessionsService.createTurn(… intent: 'NEXT_TURN', participateSendTransaction)`，新前缀进 §0.3 的表：
+
+| `clientTurnId` 前缀 | 发给谁 | 定义在 |
+|---|---|---|
+| `landing-fix:v1:<jobId>` | 失败作业的任务会话 | 本条 |
+
+G6 写「不复活已结束的会话」。**本前缀是例外，且只此一种**：会话因任务 DONE 而结束（`end_reason = 'task_done'`）时，这一轮把它续上，方式与协调会话 `session_send` 续做一条失败会话相同（修订 34 记的那条路径）；checkout 已被回收的，由 runner 在领取时从分支重建（`docs/session-checkout-storage-design.md` 的 `restoreAbsentCheckout`）。别的已结束状态仍在钩子里抛错，这时按 W7 以 `SESSION_ENDED` 交回。
+
+这一轮期间：
+
+- 任务**保持 DONE**。这一轮不开新的生命周期代，不重新冻结判据，轮次结束不重跑验收、不重提证据。裁决过的是这份工作；这一轮做的是让它能落上线，判它的是 J-S5（任务验收与落地检查在组合树上重跑）。
+- 它占任务的认领与项目的并发名额，和任何工作会话一样；名额满时这一轮排队。J-T2 的领取条件「该任务没有 `finished_at IS NULL` 的工作会话」（J-T1e）让本任务的落地在这一轮结束之前不会被领取，不需要新的守卫。
+- 它不计入协调会话的自主花费（§6.1）：是平台投递的轮次（G7「外部」），发生在工作会话里。花费由 W8 的轮数封顶。
+
+内容只由不可变的行派生（重放逐字节一致）：作业的结构化结果、`project_integration_job_log` 里该检查的失败段（`integrate.go#addFailureLines` 写下的那几行）、落地会话 id。文案（产品文案，英文）：
+
+```text
+Orbit could not land your work for "<task title>" on <target branch>.
+
+<CONFLICT>   Conflict while <rebasing onto | merging into | syncing main into> <target branch> at <target sha>:
+             <file>, <file>, …
+<CHECK_FAILED> The check "<check name>" failed on the combined tree (<tested sha>), exit <code>:
+             <failure lines>
+
+Nothing was pushed. <target branch> is unchanged.
+
+Fix it on your own branch, in this checkout:
+1. Merge <target branch>[ and <upstream branch>] into your branch and resolve what conflicts.
+2. Run what failed until it passes.
+3. Commit, then end your turn.
+
+Orbit lands the new commit and runs the checks again by itself. Do not push <target branch>.
+If this is not yours to fix, end your turn without committing and say why; the project's coordinator takes it from there.
+The full record: landing <landingSessionId>.
+```
+
+任务会话对自己任务的落地有读口：`session_get(landingSessionId)` 与 `project_integration_get` 对「本会话的任务」放行（今天只放行协调会话）。
+
+**W7（三种结局）**：都在已提交事实的边沿上。
+
+| 事实 | 结局 | 同一事务写下 |
+|---|---|---|
+| 这一轮 `turnComplete`，`dto.branchSha` ≠ 失败作业的 `source_sha`，任务仍 DONE | **再落一代**（这就是 J-T1c，本条是它的实现） | 按 §10.5 O-L4 把交付身份重新冻结到新提交；经 `queueLandingRetry` 入队下一代（§12.4 的 `retry_*` 写法）；待办按 H1 记 `handling_job_id`、`handling_session_id` = 任务会话。`MAIN` 线：旧候选按 M-T6 被取代，新候选 `source_sha` = 新的 `delivered_sha` |
+| 这一轮 `turnComplete`，`branchSha` 没变 | **交回** `NO_NEW_COMMIT` | 写 `work_session_returned_at` 与原因；待办从此刻起按 §4.4 X-D4 投给协调会话，`waiting_since` 与 `escalate_at` 从此刻算；payload 增 `workSession: { sessionId, rounds, lastMessage }`（`lastMessage` 是会话这一轮最后说的话，同修订 32 `TASK_RUN_STOPPED` 的取法） |
+| 这一轮失败或被打断；会话在送达前后被结束、删除；W6 的钩子抛错 | **交回** `TURN_FAILED` / `SESSION_ENDED` | 同上 |
+| 任务被重开、取消、移走（J-T8 的叫停事实） | **交回** `TASK_MOVED_ON`，随即按 §4.2 的既有事实关闭 | 同上；不投递 |
+
+再落的那一代成功：J-T5 与 H2 照旧把待办写成 `RESOLVED / HANDLED`，`resolved_by_session_id` = 任务会话。协调会话从头到尾没有被叫醒，待办出现在它的 `settled` 读里（H5）。
+
+再落的那一代又失败：H3 照旧，先开新待办、旧的写 `SUPERSEDED / RETRIED`。新待办按 W4 重新判：轮数未到上限就再交给任务会话，到了就归协调会话，`work_session_return_reason = ROUNDS_EXHAUSTED`，开出即投递。
+
+**W8（轮数上限）**：同一任务段里，`retry_requested_by_session_id` 等于该任务工作会话的作业至多 **2** 条（附录 A-Q32）。按已提交行计数，不计时。
+
+**W9（协调会话与 owner 的门不变）**：待办交回之后，§4.7 的门表原样适用，包括 `task_comment` + `task_reopen`、修复任务（`fixes_open_item_id`）、`open_item_hand_over`。待办还在任务会话手里时，协调会话与 owner 看得到它（读模型，§12.7），门只有两扇：owner 的叫停门（§4.7，J-T8）与「Chat about this」。`open_item_resolve`、`integration_retry` 在此期间拒绝 409 `OPEN_ITEM_WITH_WORK_SESSION`：两个会话同时修同一个冲突没有赢家。
+
+**W10（Automatic 无关）**：交给任务会话不看 `coordinator_enabled`。解自己的冲突不是授权；进 main 的那一步仍按 M7（附录 A-Q33）。
+
+### 12.6 状态转移
+
+| # | from | 已提交事实 | to |
+|---|---|---|---|
+| W-T1 | 待办不存在 | J-T7 的结果事务，W4 成立 | OPEN，在任务会话手里（`work_session_offered_at` 非空、`returned_at` 为空） |
+| W-T2 | 在任务会话手里 | `turnComplete` 带新 `branchSha` | OPEN，处理中（H1），下一代 `QUEUED` |
+| W-T3 | 处理中 | 下一代 `LANDED` / `ALREADY_LANDED` / `READY` | `RESOLVED / HANDLED`（H2） |
+| W-T4 | 处理中 | 下一代 `CONFLICT` / `CHECK_FAILED` / `ERROR` | `SUPERSEDED / RETRIED`（H3）；新待办按 W4 再判 |
+| W-T5 | 在任务会话手里 | W7 的交回事实 | OPEN，归协调会话，开始投递与升级计时 |
+| W-T6 | 待办不存在 | J-T7 的结果事务，W4 不成立 | OPEN，归协调会话（今天的路径，不变） |
+
+### 12.7 读模型
+
+- `GET /projects/:id/open-items` 每行增可选 `workSession: { sessionId, offeredAt, returnedAt?, returnReason?, rounds }`。在任务会话手里的待办不进 owner 的 Needs you、不计 attention（没有人在等 owner），项目页 Open items 把它列在「Being fixed by its session」下。
+- 落地时间线（§2.9 LS2，`landing-timeline.ts`）增三种行：`Handed to the task's session`、`Fixed in <sha7> · landing again`、`Returned to the coordinator: <reason>`。
+- 任务行的集成三段（§7.3）在这期间显示 `Landing · fixing`，按压进任务会话。
+- 效果图：`docs/mocks/landing-fix-own-session/`（`01-path.png` 一次冲突走的路，`02-iphone.png` 任务会话里的卡、落地窗口的 Fixing 状态与交回，`03-decisions.png` Q30–Q33）。只画了 iPhone；web 与 Android 用同一组部件，方向定了再画。
+
+### 12.8 测试
+
+- `landing-fix-work-session.pg.spec.ts`（新）：W4 的四个条件逐一取反都走 W-T6；`CONFLICT` 三种 phase 与 `CHECK_FAILED` 走 W-T1，`BASELINE_RED` / `CHECK_TIMED_OUT` / `ERROR` 不走；W-T2 入队恰好一代且交付身份已重新冻结；W-T3 关待办、协调会话零轮次；W-T5 的每种原因各一例，交回后 `escalate_at` 从交回时刻算；W8 第三次失败直接归协调会话；重放 `landing-fix:v1:<jobId>` 逐字节一致。
+- `open-item-doors.spec.ts`：在任务会话手里的格子只有叫停与 chat；每格消息里的工具名仍属于这一格的门。
+- `coordinator-wake` / 保险丝：W6 的轮次不计 §6.1 的三项。
+- 会话路由普查：`landing-fix:v1:` 是唯一能续上 `task_done` 会话的平台前缀。
+
+### 12.9 裁决后改写的正文条款
+
+- §0.1 G1：表的第二行改为「需要判断的例外：先是任务自己的会话（§12），它修不了才是协调会话」；G1 末句「一件待办的负责人是会话，当且仅当处理它需要判断」之后加「任务落地的失败先在写这份工作的会话手里」。
+- §0.3 G6：前缀表加 `landing-fix:v1:`；「不复活已结束的会话」加本节 W6 的例外。
+- §2.2 J5、§2.3 J-T1c：J-T1c 改写为指向 W7，去掉「有 OPEN 的集成类待办」之外的独立触发；`docs/landing-session-design.md` §9 第 4 条标为已由本修订收口。
+- §2.9 末「判断点本期不接 engine」一段：改为「任务落地的 `CONFLICT` 与 `CHECK_FAILED` 先交任务自己的会话（修订 42，§12）；落地会话本身仍不启动 engine、不接收轮次」。LS6、LS8 不变。
+- §4.2 kind 表 `INTEGRATION_CONFLICT`、`INTEGRATION_CHECK_FAILED` 两行与 §4.4 X-D4：加「在任务会话手里时不投递」。§4.6：`escalate_at` 的冻结时刻加交回这一支。
+- §4.7：「两类冲突的解法 ①」标为交回之后的做法；门表加 W9 的格子。
+- §3.1 M3：「协调者的做法」前加一句，默认由平台直接交给任务会话。
+
+### 12.10 不采纳
+
+- **由 agent 执行落地本身**（`docs/landing-session-design.md` §7 的 S2）：让 engine 跑结果确定的步骤，每次落地付 engine 的钱并占着 J1；用 runner 的凭据执行 agent 选的命令可以绕过 J2 与 M7。本节不动门，只换修的人。
+- **在平台的组合树上修**：那棵树属于一次尝试，作业终态时就删（§2.4）；留着它就要给它租约、回收与第二个写入者。任务分支已经是会话的，够用。
+- **新开一条「落地修复」会话**：冷启动，要把任务、分支、冲突再讲一遍；这正是今天 `task_reopen` 开新会话的毛病。
+- **任务先回到 IN_PROGRESS 再修**：把「验收通过」和「落上了线」重新绑在一起（§10.11 第二条否决过），还要重新裁决一份没有变的工作。要不要对修复本身再裁决一次，见附录 A-Q31。
+- **给修复轮次加超时**：违反 G3。轮次卡住由既有的会话机制收口（reaper 结束它 → `TURN_FAILED` → 交回）。
+
+### 12.11 第二部分的缘由：项目怎么运行
+
+owner 2026-11-20：落地前要不要跑检查、项目运行期间怎么执行，应当在创建项目时更多地交给 agent 决定；例如运维类项目，任务图可以很复杂，却不改代码，也不涉及落地。随后（同日，看过本节初稿）：agent-first 的平台不该用「no-code」给项目贴标签。
+
+现状是这些事分散在几处，各有各的写入者：
+
+| 事 | 今天谁定 | 在哪 |
+|---|---|---|
+| 一条任务有没有东西要落 | 平台推断它「是代码任务」（工作会话是 worktree 隔离、有分支），于是先入队；真有没有提交，要等 runner 领到作业才量 | §1.1 `isCodeTask`、§2.4 J-S2 |
+| 单个任务不产出代码 | 协调者逐条贴 `codeless` | `task_create` / `task_update` |
+| 整个项目不改代码 | 协调者贴 `nonCode`；它只管 DONE 的读法，**不**管落地机器 | 迁移 `0535_project_non_code_mark`，`ProjectsService.nonCodeWriter`、`project-done-request.ts`；本契约没有写到它 |
+| 落在哪条线 | 没人选时平台按依赖边推断（L2）；协调者在开始请求里建议，owner 在开始卡上定 | §1.2 L2、L5、L6 |
+| 落地检查、合并检查的命令 | 协调者提议，每次改动一张 owner 卡 | §1.2 L5-b |
+| 某次落地不跑落地检查 | 仓库里的免检名单（K2），或 owner 自己的门 | §11.4 K2、修订 39 |
+
+落到一个运维项目上：任务在带仓库的工作区里跑，于是每条都是「代码任务」；任务之间有依赖边，于是 L2 给它一条项目分支；每次 DONE 都入队一条 `LAND_TASK`，下游按 J9 等它，而它要等 runner 心跳领取、等同一条线的串行位（J1），最后答一句 `NOTHING_TO_LAND`。开始请求还必须在 `PROJECT_BRANCH` 与 `MAIN` 之间选一个（`project_request_start` 的 `line` 必填），并对每条没贴 `codeless` 的任务给出警告。
+
+**两个标签为什么是错的形状**（本节初稿曾把 `nonCode` 扩成「不进落地机器」，已撤回）：
+
+- 它们在工作开始之前给工作分类，而要不要落地是工作做完才有的事实：分支上有没有自己的提交。
+- 这个事实平台已经有了。写 DONE 的事务按 §10.5 O-L4 冻结 `delivered_sha` 与 `delivered_base_sha`；两者相等就是没有提交（O-L7）。标签只是在猜一个稍后就能读到的数。
+- 标签会贴错。贴了「不改代码」却提交了，工作留在分支上没人知道（修订 33 记下的缺口）；没贴而确实没改，就是上面那条等待。两种错都要再加规则去兜。
+- 它按「有没有代码」把项目分成两类，以代码为默认。一个项目可以三条任务改代码、三十条不改；agent 不需要先回答「这是什么类的项目」才能开工。
+
+### 12.12 原则
+
+- **P0（界线在 upstream）**：进 upstream 之前的事是工作方式，归协调者；进 upstream 的门与授权归 owner。项目分支是协调者的暂存区；main 是 owner 的。
+- **P1（量，不贴标签）**：一份工作落不落地，由它交付了什么决定：分支上有自己的提交就落，没有就不落。平台从已提交的行读出这个事实，不向 agent 要分类，也不从隔离方式、依赖边或标题推断。
+- **P2（一次确认）**：协调者在请求开始时提出运行方式，owner 在开始卡上按一次 Start 就是对整份运行方式的确认。开始之后，协调者改自己这一侧的设置不再出卡，每次写入留下谁、何时、为什么，owner 在项目页看得到、改得回。
+
+### 12.13 谁定什么
+
+| 事 | 性质 | 谁 |
+|---|---|---|
+| 一条任务有没有东西要落 | 事实 | 平台量出来（P-M1），没有人声明 |
+| 落在哪条线（`MAIN` / `PROJECT_BRANCH`） | 工作方式，开始后锁定 | 协调者在开始请求里提出，owner 按 Start 确认（现状）；可以不提，到第一份提交出现时按 L2 定（P-M2） |
+| 落地检查（进**项目分支**之前跑什么，§11 K1） | 工作方式 | 协调者，不出卡（P-C1） |
+| 单个任务免落地检查 | 工作方式 | 协调者，带理由（P-C2） |
+| 落地失败先交任务会话、修几轮（本节第一部分） | 工作方式 | 协调者 |
+| 合并检查（进 **upstream** 之前跑什么，M-S3） | 门 | 协调者提议，owner 卡（L5-b，不变） |
+| `MAIN` 线上的落地检查 | 门（这条线上它就是进 upstream 的检查） | owner 卡（L5-b，不变） |
+| upstream 是哪条分支 | owner 的选择 | owner（L6，不变） |
+| 交付方式 `AGENT_PUSH` | 授权 | owner（O-L1，不变） |
+| Automatic、并发数 | 授权 / 资源 | 协调者建议，owner 在开始卡上定（不变） |
+| 跳过一次合并检查、在途跳过 | 授权 | owner（修订 11、39，不变） |
+
+### 12.14 数据结构
+
+迁移（落地时取下一个空号）：
+
+| 表 | 列 | 约束与语义 |
+|---|---|---|
+| `task` | `landing_check_exempt` boolean NOT NULL DEFAULT false | 这条任务落上项目分支时不跑项目的落地检查（P-C2） |
+| `task` | `landing_check_exempt_reason` text NULL | ≤280 字符；`landing_check_exempt = true` 时非空 |
+| `task` | `landing_check_exempt_by_session_id` uuid NULL | 谁写的；owner 写时为 NULL |
+| `project_codebase` | `landing_check_set_by_session_id` uuid NULL、`landing_check_set_at` timestamptz(3) NULL | 落地检查最近一次由哪条会话无卡写入（P-C1）；经卡或 owner 写入时清空 |
+
+P-M1 不加列：它读的 `delivered_sha` 与 `delivered_base_sha` 是修订 29 已有的。`project.non_code`（0535）与 `task.codeless` 的列都不删，见 P-M3。
+
+### 12.15 规则
+
+**P-M1（没有提交就没有落地，在 DONE 时就知道）**：J-T1a 的 `enqueueForDoneTask` 在冻结交付身份（§10.5 O-L4）之后、入队之前读它：
+
+- `delivered_sha = delivered_base_sha`（分支上没有自己的提交）：**不入队**。不写 `LAND_TASK`、不建晋升候选、不入队观测，不经 runner，也不为此开始一条线。同一事务按 §10.5 O-L7 今天对空分支的那条规则收口：该任务没有任何会话报告过工作，就是「没有东西要落」，J9 对它的下游读作满足，下游在这个 DONE 的边沿上派发（J10 的第二条边沿）；有会话报告过工作，照旧开 `LANDING_UNOBSERVED`（原因 `WORK_ELSEWHERE`），那是「工作不在分支上」，要有人看。
+- `delivered_sha ≠ delivered_base_sha`：照今天入队。
+- 身份还没冻结（工作仍在移动，O-L4 第 3 条）：照今天等补冻结，补冻结的那个事务里做同一个判断。身份不明：照 O-T1。
+
+这与 J-S2（修订 33）在 runner 上答的 `NOTHING_TO_LAND` 是同一个判定，提前到 DONE，由 apiserver 从已提交的行算。读口不变：任务行的集成三段（§7.3）显示 `Nothing to land`，§1.4 的判据落地折叠照 `NOTHING_TO_LAND` 读。J-S2 的那一支保留，接住旧 runner 没报 `branch_sha` 的会话。
+
+**P-M2（线在第一份提交出现时才开始）**：L3 本来就写「默认规则只求值一次，在插入本项目第一条集成作业的事务里」；P-M1 之后，没有任务交付过提交的项目永远到不了那一步：没有代码库行、没有线、没有 Landings 行、attention 里没有落地类。由此：
+
+- `project_request_start` 的 `line` 改为可选。不带时开始卡不画线与检查两段，画一行 `Lands on the project's branch when a task commits`；第一份提交出现时按 L2 求值（现状的默认规则）。带了就照今天。
+- 不带 `line` 的开始请求与开始门不要求仓库：不再以 `START_REPOSITORY_UNKNOWN` / `INTEGRATION_REPOSITORY_UNKNOWN` 拒绝。第一份提交出现而项目没有仓库时，照 L3 第 2 步今天的写法开 `INTEGRATION_ERROR / INTEGRATION_REPOSITORY_UNKNOWN` 待办。
+- 开始请求不再出「看起来不产出代码却没声明 codeless」的警告。
+
+**P-M3（两个标签不再决定落地）**：
+
+- `task.codeless`：`isCodeTask` 的合取项里去掉 `task.codeless = false`，落地只按 P-M1。这个标记余下的含义是「这条任务不解析源、不需要 checkout」，那是派发的事，照旧。贴了 `codeless` 的任务若有提交，照 P-M1 落地（今天 `task_update` 对已有提交的任务拒绝改成 codeless，方向一致）。
+- `project.non_code`：不再被读。它今天管的两处读法（`project-done-request.ts`：判据不读落地、完成检查不报未落地）由事实给出：没有任务交付过提交，就没有落地可读。`project_update` 的 `nonCode` / `nonCodeReason` 保留一个版本，写入照收、不起作用，工具说明写明已由平台自己量；`project_get` 照旧返回已有的值。列不删。
+
+**现状（已知缺口，本修订一并收口）**：今天 `non_code` 只被 `project-done-request.ts` 与 `ProjectsService` 读，`enqueueForDoneTask` 不读它，所以贴了 `nonCode` 的项目照样入队落地。
+
+**P-M4（提交就是交付）**：分支上的提交都是要落的；没有「提交了但别落」的声明。不想落地的东西不提交到任务分支上（放 Orbit Files，或别的仓库：O-L7 对别的仓库已有规则）。
+
+**P-C1（项目分支上的落地检查归协调者）**：线是 `PROJECT_BRANCH` 时，`landingCheckCommand` 与 `landingCheckTimeoutSeconds` 由项目当前的协调会话直接写，不出卡（L5-b 对这两个字段在这条线上放开），写入记 `landing_check_set_by_session_id` 与时刻。前提是这条线配了合并检查（`merge_check_command` 非空）：没有 M-S3 这道门时，落地检查是唯一的检查，改它仍要卡。`MAIN` 线不放开。写 `null` 的含义不变：回落到合并检查（K1）。要明说「不跑」，增一个显式值 `landingCheck: 'NONE'`：J-S5 这时只跑任务验收。
+
+**P-C2（单个任务免落地检查）**：`task_create` / `task_update` 增 `landingCheckExempt` 与 `landingCheckExemptReason`，写入者限项目当前的协调会话与 owner；只在 `PROJECT_BRANCH` 线上生效（`MAIN` 线上写入 → 409 `LANDING_CHECK_EXEMPT_NEEDS_PROJECT_BRANCH`）。J-S5 对这条任务不跑项目的落地检查，检查结果记 `Skipped: 'TASK_EXEMPT'` 与理由（与 K2 的 `PATHS_EXEMPT` 并列）；**任务验收照跑**，进 upstream 的合并检查照跑。K2 的仓库名单不变：它是仓库的规则，这一条是协调者对一条任务的判断。
+
+**P-R1（运行中改，留痕）**：P-C1、P-C2 与第一部分的轮数，协调者在运行中都可以改。每次写入留一行只追加的记录（放进既有的项目裁决账本还是另起一张表，交给实现任务按账本的闭集定），项目页 Settings 段按时间列出「谁、何时、从什么改成什么、为什么」；owner 可以改回，owner 写过的值协调者不能再无卡覆盖（同一字段此后回到 L5-b 的卡）。
+
+**P-X（本修订不放开的）**：线与 upstream（L4–L6）、合并检查（L5-b）、交付方式（O-L1）、合入 main 的确认（M7）、跳过合并检查（修订 11、39）、Automatic 与并发数、保险丝（§6）、项目 status。派发谓词（J9、J10）不是设置：它由 P-M1 的事实推出。
+
+### 12.16 第二部分的读模型与测试
+
+- `project_get.integration` 增 `landingCheck: { command, setBy: 'OWNER' | 'COORDINATOR' | 'CARD', setAt }`；任务读口增 `landingCheckExempt` 与理由。没有线的项目，`integration` 照今天「没有代码库行」的读法，不加新字段。
+- 项目页与列表行：线没开始的项目不画集成三段（§7.3）、不画 Landings 行（§2.9）。
+- 测试：`no-commit-no-landing.pg.spec.ts`（新）：`delivered_sha = delivered_base_sha` 的 DONE 不写 `project_integration_job`、不插代码库行、不开始线；三层依赖、全部零提交的任务图只靠 DONE 边沿跑完，全程没有 runner 领取；其中一条有提交时只有它入队，线在那一刻开始；报告过工作而分支为空的照旧开 `LANDING_UNOBSERVED`；贴了 `nonCode` 的项目里有提交的任务照常落地；旧 runner（没有 `branch_sha`）走 J-S2。`integration-enqueue-done-sites.spec.ts` 的普查加这一支。`project-landing-check-coordinator-write.pg.spec.ts`（新）：P-C1 的三个前提逐一取反都回到卡；P-C2 在 `MAIN` 线被拒、`TASK_EXEMPT` 下任务验收仍跑。
+
+### 12.17 第二部分：裁决后改写的正文条款
+
+- §0.1 的表加一行「落地前跑什么、落地失败谁先修：协调者定，§12」；「落不落地：平台从交付的提交读出，§12 P-M1」。
+- §1.1 `isCodeTask`：去掉 `task.codeless = false`；加一句「是代码任务不等于入队，入队看 P-M1」。§1.2 L2 的输入集合同样去掉 `codeless`；L5-b 加 P-C1 的放开。
+- §2.3 J-T1a：`enqueueForDoneTask` 一段加 P-M1；§2.4 J-S2 的空分支一支标为旧 runner 的回落。§10.5 O-L7 第一条：加「这条规则在 DONE 的事务里就执行（P-M1）」。
+- §2.4 J-S5、§11.4 K1/K2：加 `TASK_EXEMPT` 与 `landingCheck: 'NONE'`。
+- §10.11「项目级的『不改代码』开关」一条：补一句，修订 42 走得更远——连逐任务的 `codeless` 也不再决定落地。
+- `project_create`、`project_update`、`project_request_start`、`task_create` 的工具说明（英文）照 P-M2、P-M3、P-C2 改。
+
+### 12.18 第二部分：不采纳
+
+- **把 `nonCode` 扩成「不进落地机器」**（本节初稿）：标签，见 §12.11 末。owner 2026-11-20 否决。
+- **由 agent 在完成时声明「这次交付了什么」**：比项目标签好，仍然是让 agent 复述一个平台读得到的数。只在平台读不到的地方才要声明；这里读得到。
+- **协调者可以自己选线、自己选 upstream**：线在开始时锁定，选错的代价是一条要人工收拾的项目分支；upstream 是 owner 说过的话（L6）。保留为开始卡上的一次确认。
+- **协调者可以改合并检查而不出卡**：那是进 main 的门。Automatic 的项目分支项目里，合并检查通过就自动合入（M7），放开它等于让 agent 自己决定什么能进 main。
+- **把运行方式做成一份自由文本的「项目流程」交给协调者解释执行**：结果确定的步骤仍由平台执行（G1 保留的那一半）；交给 agent 的是选择，不是执行。
+
+---
+
 ## 附录 A　待 owner 裁决的问题
 
 每条：默认做法 / 一句话推翻方式。未裁决前按默认做法实现。
@@ -2523,6 +2803,14 @@ M-F4、M7、M-T11 不变：(a) 或 (b) 成立时，Automatic 的项目分支照�
 | Q27 | 何时建晋升候选（§11 K7） | 判据全部满足、只差进 main 时，或协调会话写明理由显式请求时；Automatic 照旧自动合入。owner 2026-11-10 裁决：按默认做法 | 保持今天：每次落地后都建候选（M-F1） |
 | Q28 | 落地检查跑什么（§11 K1） | 项目自己配 `landing_check_command`（例如 tsc + 单测 + 仓库脚本挑出的受影响 pg spec）；不配时沿用全检。owner 2026-11-10 裁决：按默认做法 | 平台规定一组固定的快检 |
 | Q29 | 修 upstream 的任务直接进 upstream（§11 K6） | 第 2 期做；只对 `fixes_open_item_id` 指向基线待办、协调者标了 `UPSTREAM` 的任务。owner 2026-11-10 裁决：按默认做法 | 不做：修复照常落项目分支，随项目合入 main |
+| Q30 | 哪些落地失败先交给任务自己的会话（§12.3，修订 42） | 任务落地的 `CONFLICT`（三种 phase）与分类为 `CHECK_FAILED` 的检查失败；基线红、超时、`ERROR` 与项目分支的晋升照旧归协调会话 | 只交 `CONFLICT`，检查失败照旧归协调会话 |
+| Q31 | 任务会话修过之后，要不要重新裁决（§12.5 W6） | 不要：任务保持 DONE，判它的是组合树上重跑的任务验收与落地检查；修复的提交范围记在落地时间线上 | 每次修复都把任务重开一代，新证据、新裁决之后再落（等于今天的 `task_reopen`，只省掉协调会话那一跳） |
+| Q32 | 任务会话最多修几轮（§12.5 W8） | 每个任务段 2 轮，第三次失败归协调会话 | 1 轮；或做成项目设置，由协调者按 §12.15 P-R1 定 |
+| Q33 | 非 Automatic 的项目也先交任务会话吗（§12.5 W10） | 是：解自己的冲突不是授权，进 main 仍按 M7 | 只在 Automatic 的项目里交；其余照旧先到 owner 或协调会话 |
+| Q34 | 落不落地由平台从交付的提交量出来，`nonCode` 与 `codeless` 不再决定落地（§12.15 P-M1–P-M4）。owner 2026-11-20：不用 no-code 给项目贴标签 | 量：DONE 时分支上没有自己的提交就不入队、下游只等 DONE，线到第一份提交出现才开始；两个标记的列保留、不再为落地而读 | 只做 P-M1（零提交不入队），两个标记照旧保留现有含义 |
+| Q35 | 项目分支上的落地检查由协调者直接写、不出卡（§12.15 P-C1） | 是，前提是这条线配了合并检查；`MAIN` 线与合并检查仍要卡 | 维持 L5-b：每次改动一张 owner 卡 |
+| Q36 | 协调者可以声明单个任务免落地检查（§12.15 P-C2）。**涉及 owner 2026-11-18 的决定**（修订 39：在途跳过只开给 owner） | 可以，只在 `PROJECT_BRANCH` 线、带理由、任务验收与合并检查照跑；在途的跳过门仍只归 owner | 不开：免检只靠仓库名单（K2）与 owner 的门 |
+| Q37 | 开始之后协调者改自己这一侧的设置要不要再问 owner（§12.12 P2、§12.15 P-R1） | 不问：留痕、项目页可见、owner 可改回，owner 改过的字段此后回到卡 | 每次改动一张卡（等于今天的 L5-b 推到所有字段） |
 
 ## 附录 B　修订记录
 
@@ -2575,3 +2863,5 @@ M-F4、M7、M-T11 不变：(a) 或 (b) 成立时，Automatic 的项目分支照�
 - **v1 修订 40**（2026-11-18，owner 当日决定）：§5.2 R11 改为只补投**还没有任何一代协调会话读过**的答复（读过 = 某一代的 ANSWER 投递行对应的轮次 `delivered_at` 已写），去掉「仍阻塞未结任务就补投」一支，也不再区分被替换的那一代。缘由：2026-11-18 owner 把项目协调换到另一个工作区，新协调会话开场 8 秒内被补投 29 条旧答复，逐条回「已处理、无需动作」；其中 11-15 那条已被前四代各读过一遍——阻塞的任务一直开着，每次轮换都再补投。改由状态摘要承载：每个接任的协调会话（交接、owner 的 replace、换工作区、恢复）开场都带 `readStateDigest`，不再只有交接才带；摘要新增 `Owner answers in force` 一节（近 14 天内答复的，或所阻塞的任务仍未结的；一行一条：日期 · 问题（截 160 字）→ 答复（截 200 字，有译文用译文）· item id；本节上限 3,000 字，超出计数并指向 `project_get`）。项目的第一个协调会话开场不变。补投给非提问会话的那条（R10）在仍阻塞时列出被阻塞任务的标题与状态，不再只说「仍阻塞未结任务」；提问会话收到的文本逐字节不变。`deliverOwed` 去掉第二个参数。测试：`blocking-request-replies.pg.spec.ts` 第 (h) 例改为三问（已读且仍阻塞的不补投；排进队未取走的、无人协调时答复的补投；第三代什么也不收），`coordinator-handoff.pg.spec.ts` 新增无交接接任带摘要一例，`coordinator-digest.spec.ts` 覆盖新一节。无迁移。
 
 - **v1 修订 41**（2026-11-18，owner 当日决定）：协调会话开场状态摘要里，同一条答复不再出现两次。owner 答复一问时会自动写一条裁决（`writeAutoRuling`，`sourceKind = ASK_OWNER`、`sourceId` 为该问），它已列在 `Owner rulings in force`；`Owner answers in force` 因此只列没有裁决记录的答复（裁决功能之前答复的）。裁决已被取代（`superseded_by_id` 非空）的答复也不列：owner 已换了决定，原答复不再有效。自动裁决的文字是「问题 — 所选项」，owner 打字答复时其文字只在 `quote` 里，所以这类裁决行在后面加 ` → <quote>`（截 200 字），所选项已在裁决文字里的不加；从 turn 记下的裁决（`TURN`）不变。读一次该项目这些问题的全部 ASK_OWNER 裁决（含已取代的）。缘由：生产测试（2026-11-18，测试项目已删）开场里两条答复在两节各出现一次。测试：`coordinator-digest.spec.ts` 新增一例。无迁移。
+
+- **v1 修订 42**（2026-11-20，owner 当日裁决 Q30–Q37 按默认做法，分两个项目实现、第二部分先做；缘由：owner 当日问落地与合并检查为什么不是 agent 在做，指定由任务自己的会话接手；又提出落地前要不要检查、项目怎么运行应更多交给 agent，例如任务图复杂却不改代码的运维项目；看过初稿后指出 agent-first 的平台不该用 no-code 给项目贴标签，并要求把两份草稿合成一条）：新增 §12「落地：agent 动手，平台守门」，两部分。**第一部分（W）**：门不动（J1、J2、M7、O2），检查与推送仍由平台做。任务落地的 `CONFLICT` 与 `CHECK_FAILED` 在结果事务里开出待办后，先经新前缀 `landing-fix:v1:<jobId>` 送进写这份工作的会话（G6 的一处例外：可以续上因任务 DONE 而结束的会话）；它在自己的分支上修、提交、结束这一轮，平台按新提交重新冻结交付身份并再排一代（这就是一直没有实现的 J-T1c）；没有新提交、轮次失败、会话已被人结束或修满 2 轮时，待办交回协调会话，此后照 §4.7 不变。任务保持 DONE。待办表加四列记「在不在任务会话手里」，不加表、不加 kind、不加唤醒事件、不加时钟。取代 §2.9 末「判断点本期不接 engine」（owner 2026-10-04）对任务落地的那一半；落地会话本身仍不启动 engine。**第二部分（P）**：界线画在 upstream，之前的是工作方式、归协调者，进 upstream 的门与授权归 owner。其一，落不落地由平台量：DONE 的事务读已冻结的交付身份，`delivered_sha = delivered_base_sha` 就不入队、不经 runner、下游只等 DONE，线到第一份提交出现才开始，开始请求的 `line` 改为可选、没有仓库也能开始；`task.codeless` 与 `project.non_code`（0535）不再决定落地，列保留。初稿曾把 `nonCode` 扩成「不进落地机器」，已撤回，理由写在 §12.11 末。其二，`PROJECT_BRANCH` 线上的落地检查由协调者直接写（前提是配了合并检查），并可对单个任务声明免落地检查，任务验收与合并检查照跑。其三，开始卡上的一次 Start 确认整份运行方式，之后协调者改自己这一侧不再出卡，留痕、owner 可改回。线、upstream、合并检查、交付方式、合入 main、Automatic 与并发都不放开。涉及一处先前的决定并在 Q36 标明：2026-11-18 的在途跳过只开给 owner（修订 39）。只改文档；正文条款由两个实现项目各自的文档任务按 §12.9 与 §12.17 改写。原先分作修订 42、43 的两份草稿（`096be91ec2`）由本条取代，43 这个号没有用掉。

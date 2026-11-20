@@ -404,7 +404,7 @@ test('managed runner volume switch: an administrator puts a restored volume back
     await st.test('(2) the single writer after the switch: the guard, the stop proof and fencing are the new claim\'s', async () => {
       const intruder = buildManagedPod({ ownerId, runnerId: woken.runnerId, generation: woken.generation, namespace: woken.namespace }, woken.pvcUid!, w.profile);
       intruder.metadata.name = 'a-second-pod';
-      await assert.rejects(w.cluster.submitPod(intruder, { username: 'operator' }), /orbit-managed-runner-admission: NOT_THE_MANAGER/);
+      await assert.rejects(w.cluster.submitPod(intruder, { username: 'operator' }), /orbit-cloud-runner-admission: NOT_THE_MANAGER/);
       const slept = await w.putToSleep(ownerId);
       const proof = slept.fencingReceipt as { kind: string; predecessor: { pvcUid: string; volumeHandle: string; generation: number }; retiredAt?: string };
       assert.deepEqual([proof.kind, proof.predecessor.pvcUid, proof.predecessor.volumeHandle, proof.predecessor.generation, typeof proof.retiredAt],

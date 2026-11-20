@@ -24,6 +24,7 @@ import {
 } from '../common/runner-repo-health';
 import { MODEL_ROUTING_ENGINES } from '../tasks/model-routing';
 import { CreateWorkspaceDto, UpdateWorkspaceDto } from './dto';
+import { worktreeNeedsGit } from './worktree-needs-git';
 import { isNewFolderName, newFolderWorkDirOn, readGithub, type NewWorkspaceTarget } from '../sessions/new-workspace';
 
 /** The engines a list names, each once and in the order the router weighs them. Absent stays absent:
@@ -371,6 +372,8 @@ export class WorkspacesService {
 
   async update(ownerId: string, id: string, dto: UpdateWorkspaceDto) {
     const current = await this.get(ownerId, id);
+    const needsGit = worktreeNeedsGit(current, dto);
+    if (needsGit) throw needsGit;
     await this.assertOwnedRunner(ownerId, dto.targetRunnerId);
     await this.assertOwnedRunner(ownerId, dto.runnerId);
     const data: Prisma.WorkspaceUpdateInput = {

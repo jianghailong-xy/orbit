@@ -116,7 +116,7 @@ test('task runsWith and orbit status say what dispatch starts the task on', {
   }
   /** Smart model selection's baseline for the same task. */
   async function routingBaseline(taskId: string) {
-    await prisma.user.update({ where: { id: ownerId }, data: { preferences: { modelRouting: true } } });
+    await prisma.user.update({ where: { id: ownerId }, data: { preferences: { modelRouting: true, optimizeFor: 'cost' } } });
     try {
       const subject = await prisma.task.findUniqueOrThrow({ where: { id: taskId } });
       const route = await planTaskRunRoute(taskRouteReads(db, ownerId), subject, { id: workspaceId, runnerId }, 'go');

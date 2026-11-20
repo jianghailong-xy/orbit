@@ -59,6 +59,8 @@ export interface QueueBlockingFacts {
   syncHandlingGeneration: number | null;
   baselineItemId?: string | null;
   baselineHeldCount?: number | null;
+  /** The project of the job a claimed job waits behind on its runner's local lock. */
+  blockingProjectTitle?: string | null;
 }
 
 /** The reason codes a QUEUED job can read, and the one a claimed job waiting on this runner's own
@@ -186,9 +188,26 @@ export function queueBlockingSummary(code: QueueBlockingCode, facts: QueueBlocki
       return `Waiting for ${runner}: it cannot land a merge the Automatic setting approved, which needs promotion-automatic-land/v1`;
     case 'WAITING_DISPATCH':
       return `Waiting to land: next for ${runner}, which claims it on its next heartbeat`;
-    case 'WAITING_LOCAL_LOCK':
-      return 'Waiting for another job on this runner: it is using this repository and target branch';
+    case 'WAITING_LOCAL_LOCK': {
+      if (!facts.blockingJobKind) {
+        return 'Waiting for another job on this runner: it is using this repository and target branch';
+      }
+      return `Waiting for ${runner}’s repository lock: ${lockHolderPhrase(facts)} holds it`;
+    }
   }
+}
+
+/** The job holding a runner's local lock, by its kind, its task and its project: "the merge check of
+ *  project “Wiki”", "the landing of “Fix login” in project “Web”". */
+function lockHolderPhrase(facts: QueueBlockingFacts): string {
+  const job = facts.blockingJobKind === 'LAND_TASK'
+    ? (facts.blockingTaskTitle ? `the landing of “${facts.blockingTaskTitle}”` : 'a landing')
+    : facts.blockingJobKind === 'CHECK_PROMOTION' ? 'the merge check'
+      : facts.blockingJobKind === 'LAND_PROMOTION' ? `the merge into ${facts.mainBranch ?? 'main'}`
+        : facts.blockingJobKind === 'OBSERVE_LANDING' ? 'an observation'
+          : 'another integration job';
+  if (!facts.blockingProjectTitle) return job;
+  return `${job} ${facts.blockingJobKind === 'LAND_TASK' ? 'in' : 'of'} project “${facts.blockingProjectTitle}”`;
 }
 
 /** The sentence a page prints for a reason, built from the facts the row read. */

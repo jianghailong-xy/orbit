@@ -1,6 +1,5 @@
 package io.orbitd.android.composer
 
-import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.shape.RoundedCornerShape
@@ -69,8 +68,8 @@ internal fun ComposerUsage(model: ComposerModel, state: ComposerState, detail: J
         .clickable(role = Role.Button) { expanded = true; model.loadCatalog() }
         .semantics { contentDescription = spoken }.testTag("composer-context"), contentAlignment = Alignment.Center) {
         if (planRow == null) UsageRingIcon(percent, noContext)
-        else Row(Modifier.height(28.dp).border(0.5.dp, MaterialTheme.colorScheme.outline.copy(alpha = 0.5f), RoundedCornerShape(50))
-            .padding(horizontal = 7.dp), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(4.dp)) {
+        // No outline round the pair: iOS 26's hairline capsule (board composer-usage-tap 03 C) does not show on its glass card.
+        else Row(Modifier.height(28.dp).padding(horizontal = 7.dp), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(4.dp)) {
             UsageBarIcon(planRow); UsageRingIcon(percent, noContext)
         }
     }

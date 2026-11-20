@@ -171,7 +171,7 @@ Keep `reasons` a string array for existing clients. Prefix source reasons with s
 
 #### 3.5.3 Optimize For: Cost / Balance / Intelligence
 
-Use an owner-editable Agent setting `modelRoutingOptimizeFor` with values `cost`, `balance`, `intelligence`; absent means `cost`. Agent scope is sufficient for this project; no account inheritance is introduced. Settings copy is **Optimize For**, **Cost**, **Balance**, **Intelligence**. Only subsequent CREATE plans read a changed setting; the resolved value is frozen in decision features and the run target. This preference neither enables Smart model selection nor authorizes extra engines.
+**Superseded 2026-11-19 (owner):** Optimize For is one account-wide preference, `preferences.optimizeFor` (`cost`, `balance`, `intelligence`; absent means `balance`), set in Settings → General and read for every Agent (`common/model-routing-switch.ts` `optimizeForOf`); the Agent column `modelRoutingOptimizeFor` is no longer read. The original text: use an owner-editable Agent setting `modelRoutingOptimizeFor` with values `cost`, `balance`, `intelligence`; absent means `cost`. Agent scope is sufficient for this project; no account inheritance is introduced. Settings copy is **Optimize For**, **Cost**, **Balance**, **Intelligence**. Only subsequent CREATE plans read a changed setting; the resolved value is frozen in decision features and the run target. This preference neither enables Smart model selection nor authorizes extra engines.
 
 | Mode | Missing-hint candidate | Failure escalation |
 |---|---|---|
@@ -254,6 +254,25 @@ Changing an owner's mode selection or enabled flag selects existing policy behav
 
 ## 6. 跨引擎（P5）
 
+> **Superseded 2026-11-20 (owner).** The pick no longer uses `chooseEngine` and the per-Agent
+> `modelRoutingProviders` list. Once §3 has set a tier, `routeTaskRun` hands it to the SubAgent router
+> (`routeSubagent`, docs/subagent-design.md §4.2). The pool is the one a SubAgent on the Agent's runner would
+> get: every provider × engine × model the owner has, less the providers blocked in the SubAgents settings.
+> It also drops what the runner cannot sign in to or lacks, and accounts at 90% of a window or paused, all
+> ranked by Optimize For. The Agent's own engine and credential keep the run whenever they can take it at the
+> tier (owner, 2026-11-20); the ranking only decides where it goes when they cannot. On top of that pool: a task's
+> provider or engine pin limits it to that pin; in Auto
+> permission mode, Claude models without Auto are left out; a verification run moves off the engine the
+> verified task last ran on when another candidate can take it. No candidate keeps the Agent's model
+> (`level: null`). The Opus-weekly step-down (§5) and the Codex `reasoningLevels` effort clamp went with the
+> old pick. `modelRoutingProviders` is still stored but no longer read. The account switch is now on unless
+> turned off. With it off, SubAgents are not routed either: a named model is used, anything else runs on
+> the parent's model. The per-Agent switch (`workspace.modelRouting`) and the per-Agent engine list are gone
+> too: the Agent settings page no longer shows them, and the server still accepts and returns both columns
+> but never reads them. While the account switch is on, every task run on every Agent is routed and the
+> decision is applied whenever it set a tier; there is no shadow mode any more. The text below describes the
+> P5 design as it was.
+
 契约 §7.4 R1–R4 定边界，这里定做法：
 
 - **候选引擎** = 本 Agent 的引擎 ∪ `workspace.modelRoutingProviders`（只算有档位表的）。默认空数组 = 只有本 Agent 的引擎，
@@ -310,8 +329,8 @@ P5 实现的口径（`model-routing.ts` 的 `chooseEngine`，读取在 `task-rou
 
 | 列 | 类型 | 说明 |
 |---|---|---|
-| `model_routing`（`modelRouting`） | boolean，默认 false | Smart model selection 开关：true = 生效，false = 影子模式 |
-| `model_routing_providers`（`modelRoutingProviders`） | text[]，默认空数组 | owner 显式授权的其他引擎（P5）；空 = 只在本 Agent 的引擎内选档 |
+| `model_routing`（`modelRouting`） | boolean，默认 false | Former per-Agent switch (true = applied, false = shadow). No longer read since 2026-11-20: the account switch alone decides, and every routed run is applied |
+| `model_routing_providers`（`modelRoutingProviders`） | text[]，默认空数组 | Former per-Agent list of other engines (P5). No longer read since 2026-11-20 (§6) |
 
 两列都**只能通过用户 API 改**（`workspaces/dto.ts` + `workspaces.service.ts`），不进
 `runner-api/runner-agents.controller.ts` 的 `ORCHESTRATOR_WORKSPACE_CREATE_FIELDS` / sanitize：这是影响花费和引擎的开关，
@@ -328,7 +347,7 @@ agent 不能给自己打开（契约 §8.2）。
 | `task_id` | uuid，task 删除时级联 | |
 | `request_token` | text | 这次 run request 的 token：单次派发是租约上的 request token，批量是该项的 `TASK_RUN_TRIGGER.batch(press, task)` |
 | `session_id` | uuid，可空，**无外键** | plan 给出的会话 id。写决策时会话还不存在（与 `desired_session_id` 不带外键同理）；派发随后被拒的，它永远不会存在 |
-| `applied` | boolean | 是否用于派发：`modelRouting` 打开且定出了档位 |
+| `applied` | boolean | 是否用于派发：since 2026-11-20, whenever a tier was decided (the account switch is on, or there is no decision at all) |
 | `policy_version` | int | 档位表与规则的版本，第一版 1 |
 | `level` | text，**可空**，CHECK 只允许 S / M / L / XL | 定出的档位；不路由时为空 |
 | `provider` | text | 选出的引擎；不路由时 = 基线 |
@@ -470,9 +489,9 @@ Run Now、`task_start` / `orbit task start`、依赖解锁、自动重跑、定�
 
 | 位置 | 改动 | 效果图 |
 |---|---|---|
-| Agent 设置页 | Worktree isolation 下面加 Smart model selection for tasks 开关（默认关，只有用户 API 能改）；P5 再加 Engines it may use，默认只勾本 Agent 的引擎 | Web §1 · iOS ③ |
-| 任务详情 · Details | 多一行 Suggested（No suggestion / S / M / L / XL，每档显示对应模型、effort 和一句说明），理由用灰字显示在下面；Assignee 开了智能选择时，Model 的占位文字是 ✦ Smart selection；在这里选定一个模型就是 pin，优先于建议 | Web §2 · iOS ① |
-| 任务详情 · Runs | 每行副标题加"模型 · effort · 档位"，档位标签 ✦ M，升档时 ✦ L ↑；点开看 Why（决策里的 `reasons` 加页脚）；Agent 没开启时多一行紫色影子提示 Smart selection would have picked … | Web §3 · iOS ①② |
+| Agent 设置页 | Removed 2026-11-20: no Smart model selection for tasks switch and no Engines it may use list; the Model line follows the account switch (Settings → General) alone | Web §1 · iOS ③ |
+| 任务详情 · Details | 多一行 Suggested（No suggestion / S / M / L / XL，每档显示对应模型、effort 和一句说明），理由用灰字显示在下面；账号开了智能选择时（since 2026-11-20 the account switch alone），Model 的占位文字是 ✦ Smart selection；在这里选定一个模型就是 pin，优先于建议 | Web §2 · iOS ① |
+| 任务详情 · Runs | 每行副标题加"模型 · effort · 档位"，档位标签 ✦ M，升档时 ✦ L ↑；点开看 Why（决策里的 `reasons` 加页脚）；Agent 没开启时多一行紫色影子提示 Smart selection would have picked …（no longer drawn for new runs since 2026-11-20: every routed run is applied） | Web §3 · iOS ①② |
 | 任务会话输入框 | 路由选出的任务会话，模型标签加 ✦ 和浅蓝底；下拉顶部说明为什么是它；在这里换模型只影响这一次运行，想固定去任务上 pin | Web §4 · iOS ④ |
 
 - 自己开的会话、没开启智能选择的任务会话，标签与今天完全一样。

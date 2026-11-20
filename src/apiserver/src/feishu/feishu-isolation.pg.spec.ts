@@ -450,7 +450,7 @@ test('Feishu: an app acts only on its own account — naming another account\'s 
     const bBefore = await bState();
     const nothing = await message(APP_A, A_OWNER, { id: NOWHERE, type: 'group' }, 'fix the build');
     assert.deepEqual(textOf(nothing.sent), [
-      `This group isn't connected to Orbit, so nothing was started. The bot's owner can connect it by sending "@${APP_A.botName} connect" here.`,
+      `This group isn't connected, so nothing was started. The bot's owner can connect it by sending "@${APP_A.botName} connect" here.`,
     ]);
     for (const sender of [A_OWNER, STRANGER]) {
       const named = await message(APP_A, sender, { id: B_ONLY, type: 'group' }, 'fix the build');
@@ -463,7 +463,7 @@ test('Feishu: an app acts only on its own account — naming another account\'s 
     const bBefore = await bState();
     const nothing = await message(APP_A, A_OWNER, { id: SHARED, type: 'group' }, 'and the tests', { root: `om_nothing_topic_${RUN}` });
     assert.deepEqual(textOf(nothing.sent), [
-      `This topic isn't linked to an Orbit session. To start one, send "@${APP_A.botName} <request>" in the group, not in a topic.`,
+      `This topic isn't linked to a session. To start one, send "@${APP_A.botName} <request>" in the group, not in a topic.`,
     ]);
     const named = await message(APP_A, A_OWNER, { id: SHARED, type: 'group' }, 'and the tests', { root: B_TOPIC });
     await sameAsNothing(named, nothing, bBefore);

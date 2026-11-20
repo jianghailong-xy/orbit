@@ -14,7 +14,8 @@ import {
   type SubagentRunCreateRequest,
 } from '@orbit/shared';
 import { Prisma } from '@prisma/client';
-import { isLoginEngine, sanitizeRunnerEngines } from '../common/runner-engines';
+import { modelRoutingEnabled, optimizeForOf } from '../common/model-routing-switch';
+import { ACCOUNT_ENGINES, isLoginEngine, sanitizeRunnerEngines } from '../common/runner-engines';
 import { sanitizeRuntimeDefaultModels } from '../common/runtime-model';
 import type { PrismaService } from '../prisma/prisma.service';
 import { keyCredential, usableProviderScope } from '../providers/custom-provider';
@@ -24,7 +25,7 @@ import { isPoolCandidate } from '../providers/pool-admission';
 import { followsRuntimeCatalog, withPreset } from '../providers/preset-overlay';
 import { COMPATIBILITY_GUARD_SLUGS } from '../providers/providers.service';
 import {
-  DEFAULT_MODEL_TIER_TABLE,
+  familyTier,
   MODEL_ROUTING_LEVELS,
   routeSubagent,
   subagentEngineRows,
@@ -37,7 +38,7 @@ import {
   type SubagentRoutingDecision,
   type SubagentRoutingInput,
 } from '../tasks/model-routing';
-import { engineState, fullestWindow, taskRouteReads } from '../tasks/task-route-decision';
+import { engineState, fullestWindow, quotaTiming, taskRouteReads } from '../tasks/task-route-decision';
 
 /** The account-level preference listing the providers SubAgents may not run on (docs/subagent-design.md §6.2). */
 export function subagentBlockedProviders(preferences: unknown): string[] {
@@ -52,17 +53,19 @@ interface KeyModelRow extends SubagentModelRow {
 }
 
 /** One model of a key's own list as a tier row: the tier its preset ships for it, else the one the owner set
- *  (model_provider.model_tiers), and its price. */
+ *  (model_provider.model_tiers), else its family's (familyTier), and its price. */
 function keyModelRow(model: ProviderPresetModel, shipped: readonly ProviderPresetModel[], ownerTiers: unknown): KeyModelRow {
   const preset = shipped.find((entry) => entry.value === model.value);
   const set = ownerTiers && typeof ownerTiers === 'object' ? (ownerTiers as Record<string, unknown>)[model.value] : undefined;
   const owner = MODEL_TIERS.find((tier) => tier === set) ?? null;
+  const family = preset?.tier || owner ? null : familyTier(model.value);
   return {
     model: model.value,
     effort: null,
-    level: preset?.tier ?? owner,
+    level: preset?.tier ?? owner ?? family,
     outputPricePerMTok: model.outputPricePerMTok ?? preset?.outputPricePerMTok ?? null,
-    source: preset?.tier ? 'catalogue' : owner ? 'owner' : null,
+    // A family's tier reads as the catalogue's, and stays the owner's to change.
+    source: preset?.tier || family ? 'catalogue' : owner ? 'owner' : null,
     // The catalogue's word stands; a model it does not tier is the owner's to tier (docs/subagent-design.md §7).
     editable: !preset?.tier,
   };
@@ -133,11 +136,12 @@ export async function subagentRouteInput(
   const agent = args.workspaceId ? await reads.workspace(args.workspaceId) : null;
   const runner = args.runnerId ? await reads.runner(args.runnerId) : null;
 
-  // The runner's word on each engine; for Claude, Codex and Kimi the account a run there would use, as a task run reads it.
+  // The runner's word on each engine; for every engine that keeps accounts, the account a run there would use, as a
+  // task run reads it: its sign-in and its quota.
   const health = sanitizeRunnerEngines(runner?.engines);
   const states: Record<string, ModelRoutingEngineState> = {};
   if (agent && runner) {
-    for (const engine of [AgentProvider.CLAUDE, AgentProvider.CODEX, AgentProvider.KIMI] as const) {
+    for (const engine of ACCOUNT_ENGINES) {
       states[engine] = engineState(engine, agent, runner, reads.now);
     }
   }
@@ -161,15 +165,18 @@ export async function subagentRouteInput(
     credential: builtinCredential(slug),
     engines: [{ engine: slug }],
     ...(states[slug] ? {
-      account: { quota: states[slug].quota ?? null, paused: states[slug].paused === true, unreadable: states[slug].quotaUnread === true },
+      account: {
+        quota: states[slug].quota ?? null, paused: states[slug].paused === true, unreadable: states[slug].quotaUnread === true,
+        expiresAt: states[slug].expiresAt ?? null, nearLimit: states[slug].nearLimit === true,
+        opusUtilization: states[slug].opusUtilization ?? null,
+      },
     } : {}),
   }));
 
   const catalog = (runner?.modelCatalog ?? null) as RunnerModelCatalog | null;
   const configured = await readConfiguredProviders(db, ownerId, { catalog, planUsage: args.planUsage ?? null, now: reads.now });
 
-  const mode = agent?.modelRoutingOptimizeFor;
-  const optimizeFor: ModelRoutingOptimizeFor = mode === 'balance' || mode === 'intelligence' ? mode : 'cost';
+  const optimizeFor: ModelRoutingOptimizeFor = optimizeForOf(owner);
   const level = (value: unknown) => (['S', 'M', 'L', 'XL'] as const).find((entry) => entry === value) ?? null;
   return {
     type: dto.type,
@@ -180,6 +187,7 @@ export async function subagentRouteInput(
     parent: args.parent,
     providers: [...builtins, ...configured.map((entry) => entry.provider)],
     blockedProviders: subagentBlockedProviders(owner?.preferences),
+    smartSelection: modelRoutingEnabled(owner),
     engines,
     modelCatalog: catalog,
     runtimeDefaultModels: sanitizeRuntimeDefaultModels(runner?.runtimeDefaultModels),
@@ -232,6 +240,7 @@ async function readConfiguredProviders(
       ...(subscription ? {
         account: {
           quota: fullestWindow(usage, now),
+          ...quotaTiming(usage, now),
           refused: standing === 'KEY_REFUSED',
           unreadable: usage === null || standing === 'USAGE_UNKNOWN',
         },
@@ -283,6 +292,7 @@ async function readConfiguredProviders(
         return {
           label: login.email ?? login.accountId,
           quota: spent ? { utilization: 100, window: 'usage limit' } : fullestWindow(usage, now),
+          ...quotaTiming(usage, now),
           paused: later(login.pausedUntil) || later(login.throttledUntil),
           unreadable: !spent && !usage,
         };
@@ -296,6 +306,7 @@ async function readConfiguredProviders(
           return {
             label: row.label,
             quota: fullestWindow(usage, now),
+            ...quotaTiming(usage, now),
             paused: later(row.pausedUntil),
             refused: standing === 'KEY_REFUSED',
             unreadable: standing === 'USAGE_UNKNOWN' || usage === null,
@@ -341,10 +352,10 @@ export async function subagentTierView(db: Prisma.TransactionClient, ownerId: st
         const builtin = index < builtins.length;
         const models = new Map<string, ProviderModelTier>();
         for (const engine of entry.provider.engines) {
-          // A built-in engine outside the tier table has no tiered rows: listing its whole catalogue as Not set would
-          // offer tiers the owner cannot give it.
-          if (!engine.models && !Object.hasOwn(DEFAULT_MODEL_TIER_TABLE, engine.engine)) continue;
-          for (const row of subagentEngineRows(engine, catalogInput) as Array<SubagentModelRow & Partial<KeyModelRow>>) {
+          // A built-in engine lists only its tiered rows: its untiered ones would read Not set, a tier the owner
+          // cannot give it.
+          const rows = subagentEngineRows(engine, catalogInput) as Array<SubagentModelRow & Partial<KeyModelRow>>;
+          for (const row of engine.models ? rows : rows.filter((entry) => entry.level)) {
             const seen = models.get(row.model) ?? {
               model: row.model,
               levels: [],

@@ -88,11 +88,11 @@ class ManagementHttpTest {
     }
 
     @Test fun workspaceDoneSendsWhatUpdateAgentRequestSends() {
-        val saved = buildJsonObject { put("name", "app"); put("appendSystemPrompt", "be brief"); put("workDir", "/srv/app"); put("modelRouting", false) }
+        val saved = buildJsonObject { put("name", "app"); put("appendSystemPrompt", "be brief"); put("workDir", "/srv/app"); put("modelRouting", true) }
         assertEquals(buildJsonObject { put("name", "App"); put("effort", "high"); put("enabled", true) },
-            workspacePatch(saved, "  App ", "high", "", "", true, false))
-        assertEquals(buildJsonObject { put("name", "app"); put("appendSystemPrompt", "x"); put("effort", ""); put("workDir", "/w"); put("enabled", false); put("modelRouting", true) },
-            workspacePatch(saved, "app", "", "x", "/w", false, true))
+            workspacePatch(saved, "  App ", "high", "", "", true))
+        assertEquals(buildJsonObject { put("name", "app"); put("appendSystemPrompt", "x"); put("effort", ""); put("workDir", "/w"); put("enabled", false) },
+            workspacePatch(saved, "app", "", "x", "/w", false))
     }
 
     @Test fun shareAndPoolWritesKeepTheirIosShapes() = runBlocking {

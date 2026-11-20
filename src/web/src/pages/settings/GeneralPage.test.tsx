@@ -40,6 +40,7 @@ describe('Settings → General (docs/mocks/settings-redesign, board-2)', () => {
     expect(rows).toEqual([
       'Default permission mode',
       'Smart model selection',
+      'Optimize For',
       'Suggested replies',
       'Prompt optimizer',
       'Session recaps',
@@ -47,6 +48,7 @@ describe('Settings → General (docs/mocks/settings-redesign, board-2)', () => {
       'Your language',
       'Agents work in',
       'Let sessions orchestrate',
+      'Tasks a session files without asking',
     ]);
     // No way into Machines & models any more: the nav's Machines, Providers and Workspaces groups replace it.
     expect(html).not.toContain('Machines &amp; models');
@@ -72,6 +74,7 @@ describe('Settings → General (docs/mocks/settings-redesign, board-2)', () => {
       ['Suggested replies', GENERAL_HINTS.promptSuggestions],
       ['Session recaps', GENERAL_HINTS.recaps],
       ['Let sessions orchestrate', GENERAL_HINTS.enableOrchestration],
+      ['Tasks a session files without asking', GENERAL_HINTS.cardFreeTaskCreates],
     ];
     for (const [label, hint] of rows) {
       const row = unescape(rowOf(html, label));
@@ -98,6 +101,26 @@ describe('session orchestration, one switch for the whole account', () => {
     const html = render({});
     expect(html).not.toContain('can orchestrate now');
     expect(html).not.toContain('Turn on for all');
+  });
+});
+
+// docs/mocks/card-free-task-creates, frames 2-4: the row under Let sessions orchestrate.
+describe('tasks a session files without asking, one number for the whole account', () => {
+  const inputOf = (row: string): string => row.match(/<input[^>]*>/)?.[0] ?? '';
+
+  it("reads 8 for an account that never set it, the server's default", () => {
+    expect(inputOf(rowOf(render({}), 'Tasks a session files without asking'))).toContain('value="8"');
+  });
+
+  it('reads the number the account saved, 0 included', () => {
+    expect(inputOf(rowOf(render({ cardFreeTaskCreates: 12 }), 'Tasks a session files without asking'))).toContain('value="12"');
+    expect(inputOf(rowOf(render({ cardFreeTaskCreates: 0 }), 'Tasks a session files without asking'))).toContain('value="0"');
+  });
+
+  it('says what the number does in the row, and the rest in the tooltip', () => {
+    const row = unescape(rowOf(render({}), 'Tasks a session files without asking'));
+    expect(row).toContain('After this many, each task a session creates waits for your OK on a card. 0 asks for every one.');
+    expect(row).toContain('8 unless you set another number, up to 50.');
   });
 });
 

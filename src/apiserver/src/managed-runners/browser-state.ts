@@ -1,4 +1,5 @@
 import {
+  BadRequestException,
   type CanActivate,
   ConflictException,
   Controller,
@@ -16,8 +17,11 @@ import {
 } from '@nestjs/common';
 import {
   BROWSER_CLEAR_V1,
+  BROWSER_OPEN_V1,
   toUuid,
+  uuidToBase62,
   type RunnerBrowserClearResponse,
+  type RunnerBrowserOpenResponse,
   type RunnerBrowserReport,
   type RunnerBrowserState,
   type RunnerBrowserStatus,
@@ -39,6 +43,9 @@ import { MANAGED_RUNNER_BROWSER_GATE, type ManagedRunnerBrowserGate } from './ma
  *                                         as the runner's last heartbeat reported them (RunnerBrowserState)
  *   GET  /api/runner/browser              the same for a session of the account, by its runner's credential: browser_status
  *                                         and `orbit browser status` (runner-api/runner-browser.controller.ts)
+ *   POST /api/runner/browser/open         browser_open and `orbit browser open [--url]`, by the same credential: the
+ *                                         runner's next heartbeat is handed `openBrowser`, and the runner starts the
+ *                                         browser (as for Open browser) and opens the page asked for, if any
  *   POST /api/runners/:id/browser/clear   Clear saved logins: the runner's next heartbeat is handed
  *                                         `clearBrowserProfile`, and the runner stops Chrome and deletes its profile
  *                                         (~/.orbit/browser/profile); its next report's profileClearedAt is the answer
@@ -116,6 +123,33 @@ export function browserStateOf(
 
 const NOT_YOURS = 'No managed runner of yours has this id';
 
+/** The longest page a browser_open may ask for. */
+export const BROWSER_OPEN_URL_MAX = 2048;
+
+/** The page a browser_open asks for: absent, or an http(s) URL of at most BROWSER_OPEN_URL_MAX characters, else 400. */
+export function browserOpenUrl(raw: unknown): string | undefined {
+  if (raw === undefined || raw === null || raw === '') return undefined;
+  if (typeof raw !== 'string') throw new BadRequestException('url must be a string');
+  const trimmed = raw.trim();
+  if (trimmed.length > BROWSER_OPEN_URL_MAX) throw new BadRequestException(`url is longer than ${BROWSER_OPEN_URL_MAX} characters`);
+  let parsed: URL;
+  try {
+    parsed = new URL(trimmed);
+  } catch {
+    throw new BadRequestException('url is not an absolute URL');
+  }
+  if (parsed.protocol !== 'http:' && parsed.protocol !== 'https:') {
+    throw new BadRequestException('url must be an http or https address');
+  }
+  return parsed.toString();
+}
+
+/** The browser's tab of its own on this server (web lib/runnerBrowser.ts runnerBrowserTabPath), absolute. */
+export function browserTabUrl(runnerId: string, env: NodeJS.ProcessEnv = process.env): string {
+  const origin = (env.PUBLIC_ORIGIN?.trim() || 'http://localhost:2086').replace(/\/+$/u, '');
+  return `${origin}/runners/${uuidToBase62(runnerId)}/browser`;
+}
+
 @Injectable()
 export class ManagedRunnerBrowserService {
   constructor(
@@ -170,6 +204,38 @@ export class ManagedRunnerBrowserService {
       savedLogins: state?.savedLogins ?? null,
       reportedAt: state?.reportedAt ?? null,
     };
+  }
+
+  /**
+   * browser_open (`POST /runner/browser/open`): start the account's Orbit Cloud browser if it is not running and, with a
+   * url, open that page in it; answer the browser's tab on this server. sessionId is the asking session (a uuid), whose
+   * own lease a page may be opened under, and no other's: while another session holds the browser, a url is refused
+   * rather than taken from it. Carried by the runner's next heartbeat, which it is woken for at once, like the clear.
+   */
+  async open(ownerId: string, sessionId: string, rawUrl: unknown): Promise<RunnerBrowserOpenResponse> {
+    const url = browserOpenUrl(rawUrl);
+    const managed = await this.prisma.managedRunner.findUnique({ where: { ownerId }, select: { runnerId: true } });
+    const runner = managed
+      ? await this.prisma.runner.findFirst({
+        where: { id: managed.runnerId, ownerId },
+        select: { id: true, capabilities: true, browserState: true },
+      })
+      : null;
+    if (!runner) throw new ConflictException('This account has no Orbit Cloud runner, so there is no browser to open');
+    if (!runner.capabilities.includes(BROWSER_OPEN_V1)) {
+      throw new ConflictException('The Orbit Cloud runner is too old to open its browser for a session: it does not declare browser-open/v1');
+    }
+    const holder = storedBrowserState(runner.browserState, new Date(0))?.holderSessionId;
+    if (url && holder && holder !== uuidToBase62(sessionId) && holder !== sessionId) {
+      throw new ConflictException(`The browser is in use by session ${holder}; try again after it finishes, or open it without a url to watch`);
+    }
+    const requestedAt = new Date();
+    await this.prisma.runner.update({
+      where: { id: runner.id },
+      data: { browserOpenRequestedAt: requestedAt, browserOpenRequest: url ? { sessionId, url } : { sessionId } },
+    });
+    this.realtime?.notifyRunnerWake(runner.id);
+    return { runnerId: runner.id, tabUrl: browserTabUrl(runner.id), url: url ?? null, requestedAt: requestedAt.toISOString() };
   }
 
   async clear(ownerId: string, rawId: string): Promise<RunnerBrowserClearResponse> {
