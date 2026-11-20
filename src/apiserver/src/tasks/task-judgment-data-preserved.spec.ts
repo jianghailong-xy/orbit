@@ -3167,10 +3167,10 @@ test('the ledger stays append-only, and every later migration is accounted for',
       // 1220 sets fastupdate = off on run_event's trigram index and merges its pending list; no row is written, and
       // no preserved relation, trigger, function or DONE fence changes.
       '1220_run_event_text_trgm_fastupdate_off',
-      // 1233 restates owner_request's kind CHECK to admit BROWSER_SIGN_IN and adds two nullable columns with a CHECK
+      // 1263 restates owner_request's kind CHECK to admit BROWSER_SIGN_IN and adds two nullable columns with a CHECK
       // that every existing row passes; no row is written, and no preserved relation, trigger, function or DONE fence
       // changes.
-      '1233_owner_request_browser_sign_in'],
+      '1263_owner_request_browser_sign_in'],
     'a later migration exists; re-read it before trusting the assertions above');
   // Stated rather than described: 0230's fence differs from 0228's by exactly one added lane.
   const later = readFileSync(
