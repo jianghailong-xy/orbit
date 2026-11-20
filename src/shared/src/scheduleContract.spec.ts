@@ -269,6 +269,9 @@ describe('board phrases', () => {
     expect(scheduleMissedText(
       [{ plannedAt: '2025-11-13T17:00:00.000Z' }, { plannedAt: '2025-11-14T00:30:00.000Z' }], 'Asia/Shanghai',
     )).toBe('2 slots missed, 01:00–08:30');
+    expect(scheduleMissedText(
+      [{ plannedAt: '2025-11-19T22:00:00.000Z' }, { plannedAt: '2025-11-20T06:30:00.000Z' }], 'UTC',
+    )).toBe('2 slots missed, Nov 19, 22:00–Nov 20, 06:30');
     const record = (before: unknown, after: unknown) => ({
       before: { maxRuns: before }, after: { maxRuns: after }, revision: 3,
     } as unknown as ScheduleChangeRecord);

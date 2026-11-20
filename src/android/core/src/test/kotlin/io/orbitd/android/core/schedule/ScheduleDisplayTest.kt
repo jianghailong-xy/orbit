@@ -437,6 +437,8 @@ class ScheduleDisplayTest {
         fun missed(id: String, at: String) = ScheduleRunView(id, "s", plannedAt = at, state = "MISSED")
         val runs = listOf(missed("r1", "2026-11-20T01:00:00Z"), missed("r2", "2026-11-20T01:30:00Z"), missed("r3", "2026-11-20T08:30:00Z"))
         assertEquals("3 slots missed, 01:00–08:30", ScheduleDisplay.missedText(runs, "UTC"))
+        assertEquals("2 slots missed, Nov 19, 22:00–Nov 20, 06:30",
+            ScheduleDisplay.missedText(listOf(missed("x1", "2026-11-19T22:00:00Z"), missed("x2", "2026-11-20T06:30:00Z")), "UTC"))
         val groups = ScheduleDisplay.timeline(listOf(view()), runs + missed("r4", "2026-11-20T09:00:00Z").copy(state = "CHANGED"),
             showPastRuns = true, now = now, timezone = "UTC")
         val items = groups.flatMap { it.items }

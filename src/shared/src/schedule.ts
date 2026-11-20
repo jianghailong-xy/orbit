@@ -335,6 +335,7 @@ export const SCHEDULE_COPY = {
     runLeft: '1 run left',
     runsLeft: '{count} runs left',
     missed: '{count} slots missed, {from}–{to}',
+    missedDated: '{count} slots missed, {fromDate}, {from}–{toDate}, {to}',
     endLabel: 'Ends',
     extend: 'Extend the end',
     remove: 'Remove the end',
@@ -1062,14 +1063,17 @@ export function scheduleEndText(
   return parts.length ? parts.join(C.separator) : null;
 }
 
-/** "16 slots missed, 01:00–08:30": consecutive MISSED runs of one schedule as one line. */
+/** "16 slots missed, 01:00–08:30", or with dates when the range spans days: "…, Nov 19, 22:00–Nov 20, 06:30". */
 export function scheduleMissedText(runs: readonly Pick<ScheduleRunView, 'plannedAt'>[], timezone: string): string {
   const times = runs.map((r) => Date.parse(r.plannedAt));
-  const at = (ms: number) => localParts(new Date(ms), timezone).time;
-  return scheduleFill(C.end.missed, {
-    count: runs.length,
-    from: at(Math.min(...times)),
-    to: at(Math.max(...times)),
+  const first = localParts(new Date(Math.min(...times)), timezone);
+  const last = localParts(new Date(Math.max(...times)), timezone);
+  if (first.month === last.month && first.day === last.day) {
+    return scheduleFill(C.end.missed, { count: runs.length, from: first.time, to: last.time });
+  }
+  const date = (p: typeof first) => scheduleFill(C.dates.day, { month: C.months[p.month - 1]!, day: p.day });
+  return scheduleFill(C.end.missedDated, {
+    count: runs.length, fromDate: date(first), from: first.time, toDate: date(last), to: last.time,
   });
 }
 

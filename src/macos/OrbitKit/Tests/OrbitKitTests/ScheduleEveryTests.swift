@@ -84,6 +84,14 @@ final class ScheduleEveryTests: XCTestCase {
         XCTAssertNil(end(nil))
     }
 
+    func testMissedRangeSpanningDaysCarriesDates() {
+        func run(_ id: String, _ at: String) -> ScheduleRunView { ScheduleRunView(id: id, scheduleId: "s", plannedAt: at, state: "MISSED") }
+        XCTAssertEqual(ScheduleDisplay.missedText([run("a", "2025-11-19T22:00:00Z"), run("b", "2025-11-20T06:30:00Z")], timezone: "UTC"),
+                       "2 slots missed, Nov 19, 22:00–Nov 20, 06:30")
+        XCTAssertEqual(ScheduleDisplay.missedText([run("a", "2025-11-20T01:00:00Z"), run("b", "2025-11-20T08:30:00Z")], timezone: "UTC"),
+                       "2 slots missed, 01:00–08:30")
+    }
+
     func testMissedSlotsCollapseIntoOneRow() {
         func run(_ id: String, _ local: String, _ state: String) -> ScheduleRunView {
             ScheduleRunView(id: id, scheduleId: "s1", plannedAt: ScheduleDisplayTests.sh(local), state: state)

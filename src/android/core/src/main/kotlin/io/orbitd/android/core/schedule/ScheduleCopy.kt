@@ -245,6 +245,7 @@ object ScheduleCopy {
         const val runLeft = "1 run left"
         const val runsLeft = "{count} runs left"
         const val missed = "{count} slots missed, {from}–{to}"
+        const val missedDated = "{count} slots missed, {fromDate}, {from}–{toDate}, {to}"
         const val endLabel = "Ends"
         const val extend = "Extend the end"
         const val remove = "Remove the end"
@@ -574,6 +575,7 @@ object ScheduleCopy {
         "end.runLeft" to End.runLeft,
         "end.runsLeft" to End.runsLeft,
         "end.missed" to End.missed,
+        "end.missedDated" to End.missedDated,
         "end.endLabel" to End.endLabel,
         "end.extend" to End.extend,
         "end.remove" to End.remove,

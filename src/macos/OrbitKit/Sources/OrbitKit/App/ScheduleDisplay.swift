@@ -227,8 +227,13 @@ public enum ScheduleDisplay {
     /// "16 slots missed, 01:00–08:30": consecutive MISSED runs as one line.
     public static func missedText(_ runs: [ScheduleRunView], timezone: String) -> String {
         let times = runs.compactMap { parse($0.plannedAt) }.sorted()
-        func at(_ d: Date?) -> String { d.map { localParts($0, timezone: timezone).time } ?? "" }
-        return fill(C.End.missed, ["count": String(runs.count), "from": at(times.first), "to": at(times.last)])
+        guard let first = times.first, let last = times.last else { return fill(C.End.missed, ["count": String(runs.count), "from": "", "to": ""]) }
+        let a = localParts(first, timezone: timezone), b = localParts(last, timezone: timezone)
+        if a.month == b.month && a.day == b.day {
+            return fill(C.End.missed, ["count": String(runs.count), "from": a.time, "to": b.time])
+        }
+        return fill(C.End.missedDated, ["count": String(runs.count), "fromDate": dateText(first, timezone: timezone), "from": a.time,
+                                        "toDate": dateText(last, timezone: timezone), "to": b.time])
     }
 
     /// A run list, newest first, with each streak of two or more MISSED runs in a row (nothing else between them)

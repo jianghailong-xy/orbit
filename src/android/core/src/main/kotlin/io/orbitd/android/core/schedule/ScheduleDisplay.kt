@@ -186,9 +186,15 @@ object ScheduleDisplay {
     /** "16 slots missed, 01:00–08:30": consecutive MISSED runs of one schedule as one line. */
     fun missedText(runs: List<ScheduleRunView>, timezone: String): String {
         val times = runs.mapNotNull { parse(it.plannedAt) }.sorted()
-        return fill(C.End.missed, mapOf("count" to runs.size.toString(),
-            "from" to times.firstOrNull()?.let { localParts(it, timezone).time }.orEmpty(),
-            "to" to times.lastOrNull()?.let { localParts(it, timezone).time }.orEmpty()))
+        val first = times.firstOrNull() ?: return fill(C.End.missed, mapOf("count" to runs.size.toString(), "from" to "", "to" to ""))
+        val last = times.last()
+        val a = localParts(first, timezone)
+        val b = localParts(last, timezone)
+        if (a.month == b.month && a.day == b.day) {
+            return fill(C.End.missed, mapOf("count" to runs.size.toString(), "from" to a.time, "to" to b.time))
+        }
+        return fill(C.End.missedDated, mapOf("count" to runs.size.toString(), "fromDate" to dateText(first, timezone), "from" to a.time,
+            "toDate" to dateText(last, timezone), "to" to b.time))
     }
 
     /** Whether a row shows the repeat mark before its rule: a one-off does not. */

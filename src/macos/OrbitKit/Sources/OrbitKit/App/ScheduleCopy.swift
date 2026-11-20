@@ -102,6 +102,7 @@ public enum ScheduleCopy {
         public static let runLeft = "1 run left"
         public static let runsLeft = "{count} runs left"
         public static let missed = "{count} slots missed, {from}–{to}"
+        public static let missedDated = "{count} slots missed, {fromDate}, {from}–{toDate}, {to}"
         public static let endLabel = "Ends"
         public static let extend = "Extend the end"
         public static let remove = "Remove the end"
@@ -584,6 +585,7 @@ public enum ScheduleCopy {
         "end.runLeft": ScheduleCopy.End.runLeft,
         "end.runsLeft": ScheduleCopy.End.runsLeft,
         "end.missed": ScheduleCopy.End.missed,
+        "end.missedDated": ScheduleCopy.End.missedDated,
         "end.endLabel": ScheduleCopy.End.endLabel,
         "end.extend": ScheduleCopy.End.extend,
         "end.remove": ScheduleCopy.End.remove,

@@ -444,6 +444,7 @@
       "runLeft": "1 run left",
       "runsLeft": "{count} runs left",
       "missed": "{count} slots missed, {from}–{to}",
+      "missedDated": "{count} slots missed, {fromDate}, {from}–{toDate}, {to}",
       "endLabel": "Ends",
       "extend": "Extend the end",
       "remove": "Remove the end",
