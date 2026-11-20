@@ -197,7 +197,6 @@ import {
   configureProjectIntegration,
   coordinatorLandingCheckRefusal,
   coordinatorLandingCheckRefusalReason,
-  coordinatorLandingCheckRefused,
   type IntegrationReadSelectors,
   type IntegrationSettings,
   lastMainBranchView,
