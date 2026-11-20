@@ -111,7 +111,7 @@ internal fun OpenItemDeliveryCardView(card: InteractionCard, event: RunEvent?, o
         }
         // Where the reader can go: the item's own card, scrolled to in place, then the task, the run that failed and the landing.
         FlowRow(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(12.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
-            if (cardMissing) Text(OpenItemDeliveryCopy.itemCardNotHere, Modifier.testTag("$key:item-card-missing"),
+            if (cardMissing) Text(OpenItemDeliveryCopy.itemCardNotHere, Modifier.padding(vertical = 4.dp).testTag("$key:item-card-missing"),
                 style = MaterialTheme.typography.bodySmall, color = secondary)
             else DeliveryLink(OpenItemDeliveryCopy.goToItemCard, "$key:item-card") {
                 cardMissing = reveal?.invoke(delivery.text("itemId").orEmpty()) != true

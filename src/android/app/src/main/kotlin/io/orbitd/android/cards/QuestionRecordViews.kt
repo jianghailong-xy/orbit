@@ -88,7 +88,7 @@ internal fun QuestionRecordCard(card: InteractionCard, queued: Boolean = false, 
             Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
                 RecordDetails(card.key, record, translated != null, showOriginal, { showOriginal = !showOriginal }, told, open)
             }
-            HorizontalDivider(color = line)
+            // As on iOS, the footer follows the options with no rule between them.
             RecordFootLines(card.key, record)
             Row(Modifier.clickable(role = Role.Button) { expanded = false }.padding(vertical = 4.dp).testTag("${card.key}:hide"),
                 verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(6.dp)) {

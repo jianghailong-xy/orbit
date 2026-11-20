@@ -189,8 +189,7 @@ internal fun ExceptionCard(card: InteractionCard, fresh: Boolean, result: CardAc
         // Every door a quiet link in one row with Chat about this, under the facts, while the repair runs (board card-ui-polish ①,
         // D1 = A; iOS `quietRow`). What a press came back with is said under the row, as the doors' block says it otherwise.
         if (fixing) {
-            FlowRow(Modifier.fillMaxWidth().testTag("${card.key}:quiet"), horizontalArrangement = Arrangement.spacedBy(14.dp),
-                verticalArrangement = Arrangement.spacedBy(2.dp)) {
+            FlowRow(Modifier.fillMaxWidth().testTag("${card.key}:quiet"), horizontalArrangement = Arrangement.spacedBy(14.dp)) {
                 // A pause keeps its one Resume, drawn quiet like the rest.
                 (if (row.text("kind") == "FUSE_PAUSED") ExceptionCards.cardPresses(row, mergeCard) else ExceptionCards.presses(row, mergeCard, quiet = true))
                     .forEach { press ->
@@ -272,12 +271,13 @@ private fun FixingBlock(key: String, row: JsonObject, open: (String) -> Unit) {
     }
 }
 
-/** A door while a repair runs: a quiet link in the tint, with no line under it. */
+/** A door while a repair runs: a quiet link in the tint, with no line under it — link text, as iOS draws it (`quietRow`'s plain
+ * buttons), not a Material button, so the row wraps as words do. */
 @Composable
 private fun QuietLink(label: String, enabled: Boolean, tag: String, onClick: () -> Unit) {
-    TextButton(onClick, Modifier.testTag(tag), enabled = enabled, contentPadding = PaddingValues(horizontal = 0.dp, vertical = 8.dp)) {
-        Text(label, style = MaterialTheme.typography.bodyMedium)
-    }
+    Text(label, Modifier.clickable(enabled = enabled, role = Role.Button, onClick = onClick).padding(vertical = 6.dp).testTag(tag),
+        style = MaterialTheme.typography.bodyMedium,
+        color = if (enabled) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurface.copy(alpha = 0.38f))
 }
 
 /** One door and, under it, the line that says what pressing it does. */
