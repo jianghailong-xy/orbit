@@ -1573,6 +1573,10 @@ type ClaimedSession struct {
 	// ORBIT_WIKI=off, which leaves the wiki tools out of the MCP server and the wiki commands out of
 	// `orbit capabilities` (wiki_tools.go). Absent means on.
 	WikiDisabled bool `json:"wikiDisabled,omitempty"`
+	// WorkflowsDisabled is set when the session's Agent may not start a workflow: its Workflows switch is off, or its
+	// SubAgents are. Injected as ORBIT_WORKFLOWS=off, which leaves the workflow tool out of `orbit mcp`
+	// (subagent_workflow.go); delegate is not affected. Absent means on.
+	WorkflowsDisabled bool `json:"workflowsDisabled,omitempty"`
 	// ScheduleRun is set for the session of a scheduled task's run (Session.scheduleRunId); injected as
 	// ORBIT_SCHEDULE_RUN=1, which lists schedule_run_report in its `orbit mcp` (schedule_tools.go).
 	ScheduleRun bool `json:"scheduleRun,omitempty"`
@@ -1830,6 +1834,8 @@ type ReclaimSession struct {
 	// may have moved since the session was first claimed.
 	WatchesDisabled bool `json:"watchesDisabled,omitempty"`
 	WikiDisabled    bool `json:"wikiDisabled,omitempty"`
+	// WorkflowsDisabled, cf. ClaimedSession: the Agent's switch may have moved since the session was first claimed.
+	WorkflowsDisabled bool `json:"workflowsDisabled,omitempty"`
 	// ScheduleRun, cf. ClaimedSession.ScheduleRun.
 	ScheduleRun bool `json:"scheduleRun,omitempty"`
 	// OrchestrationToken is freshly persisted for the reclaimed runtime, cf. ClaimedSession.

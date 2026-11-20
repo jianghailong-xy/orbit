@@ -40,6 +40,7 @@ func cmdMcp() {
 		allowOrchestration:    mcpOrchestrationEnabled(),
 		watchesOff:            !watchesEnabledFromEnv(),
 		wikiOff:               !wikiEnabledFromEnv(),
+		workflowsOff:          !workflowsEnabledFromEnv(),
 		scheduleRun:           scheduleRunFromEnv(),
 		onlyTools:             mcpToolsFromEnv(),
 		callTimeout:           mcpCallTimeoutFromEnv(),
@@ -58,6 +59,7 @@ type mcpServer struct {
 	allowOrchestration    bool   // L3: expose session_* tools (the account's orchestration switch)
 	watchesOff            bool   // spawned with ORBIT_WATCHES=off: no watch tools (watch_rollout.go)
 	wikiOff               bool   // spawned with ORBIT_WIKI=off: no wiki tools (wiki_tools.go)
+	workflowsOff          bool   // spawned with ORBIT_WORKFLOWS=off: no workflow tool (subagent_workflow.go)
 	scheduleRun           bool   // spawned with ORBIT_SCHEDULE_RUN=1: a scheduled run's session (schedule_tools.go)
 	// Spawned with ORBIT_MCP_TOOLS: these tools and no others, listed or called (the runner-hosted job an
 	// owner's wait is handed to, handOffOwnerWait). Nil serves every tool.

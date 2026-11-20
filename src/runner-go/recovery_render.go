@@ -453,10 +453,14 @@ func (s *mcpServer) listedToolDescriptors() []map[string]interface{} {
 	if !s.scheduleRun {
 		tools = withoutScheduleRunReport(tools)
 	}
-	// A SubAgent cannot hand work on again (subagent.go).
+	// A SubAgent cannot hand work on again (subagent.go), and a session whose Agent has Workflows off is not offered a
+	// workflow (subagent_workflow.go); delegate does not depend on that switch.
 	if os.Getenv(envSubagentRunID) == "" {
 		cwd, _ := os.Getwd()
-		tools = append(tools, delegateToolDescriptor(schemaObject, sessionSubagentDefinitions(cwd)), workflowToolDescriptor(schemaObject))
+		tools = append(tools, delegateToolDescriptor(schemaObject, sessionSubagentDefinitions(cwd)))
+		if !s.workflowsOff {
+			tools = append(tools, workflowToolDescriptor(schemaObject))
+		}
 	}
 	if s.onlyTools != nil {
 		tools = onlyMCPTools(tools, s.onlyTools)
