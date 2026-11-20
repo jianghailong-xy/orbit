@@ -2935,6 +2935,63 @@ export interface WorkflowRunView {
   endedAt: string | null;
 }
 
+/** A SubAgents report row's tier: the pick's, `named` when the call or its definition named the model, `not-routed`
+ *  when smart model selection was off. */
+export type SubagentReportTier = SubagentSize | 'named' | 'not-routed';
+
+/**
+ * One row of the routing report's SubAgents view (`GET /tasks/model-routing/report/subagents`, docs/subagent-design.md
+ * §7, board docs/mocks/subagent-workflow/08-report.html): the SubAgent runs routed at one tier onto one provider and
+ * model, workflow calls included. A run counts under the pick its decision recorded, wherever a usage limit moved it.
+ */
+export interface SubagentReportGroup {
+  tier: SubagentReportTier;
+  /** The pick's provider slug, and its name on the account (the slug when it has none). Null when no candidate was left. */
+  provider: string | null;
+  providerLabel: string | null;
+  /** The pick's model, and how the owner's tables name it (the id when they do not). Null when no candidate was left. */
+  model: string | null;
+  modelLabel: string | null;
+  runs: number;
+  /** Of `runs`, calls of an Orbit workflow: the Workflows view's calls are these. */
+  workflowCalls: number;
+  /** Runs that have ended, and of them those that finished (DONE). */
+  ended: number;
+  done: number;
+  /** What the runs reported; a subscription that reports no price adds 0. */
+  costUsd: number;
+  /** Runs that moved on to the next candidate after a usage limit, capacity or a failed login. */
+  movedOn: number;
+  /** Runs whose tier was their type's default: the call gave no size, and its definition none. */
+  noSize: number;
+}
+
+/**
+ * One row of the routing report's Workflows view: the runs of the Orbit workflows of one name (`meta.name`). Their
+ * calls are SubAgent runs, so the SubAgents view counts them too.
+ */
+export interface WorkflowReportGroup {
+  name: string;
+  /** The newest description its runs gave; null when none gave one. */
+  description: string | null;
+  runs: number;
+  /** Of `runs`, those still running. */
+  running: number;
+  calls: number;
+  /** Calls that ended without finishing: failed, interrupted or stopped. */
+  failedCalls: number;
+  /** What its calls reported. */
+  costUsd: number;
+  /** The median time its ended runs took, in milliseconds; null while none has ended. */
+  durationP50Ms: number | null;
+}
+
+/** `GET /tasks/model-routing/report/subagents?since=&agentId=`: the routing report's SubAgents and Workflows views. */
+export interface SubagentRoutingReport {
+  subagents: SubagentReportGroup[];
+  workflows: WorkflowReportGroup[];
+}
+
 /** What the runner sends when the parent model calls `delegate` (§5.1 step 2). */
 export interface SubagentRunCreateRequest {
   /** The `delegate` call's tool_use id. A retry with the same id answers with the run it opened. */

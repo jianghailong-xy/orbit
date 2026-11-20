@@ -22,6 +22,8 @@ export const PERSONAL_PAGES = [
   { path: '/settings/shared-links', label: 'Shared links' },
   { path: '/settings/access-tokens', label: 'Access tokens' },
   { path: '/settings/terminals', label: 'Terminals' },
+  // Board docs/mocks/subagent-workflow/08-report.html: the routing report, last of Personal.
+  { path: '/settings/routing-report', label: 'Routing report' },
 ] as const;
 
 /** The Integrations group of Settings: each connected service's page, its nav label and address. */

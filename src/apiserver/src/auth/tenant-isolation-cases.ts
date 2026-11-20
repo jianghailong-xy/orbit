@@ -1418,6 +1418,9 @@ export const TENANT_ISOLATION_FIELD_CASES: Readonly<Record<string, TenantFieldCa
     request: (of) => ({ params: {}, query: { decidingSessionId: of.sessionId } }),
   },
   'GET /tasks/model-routing/report query agentId': { request: (of) => ({ params: {}, query: { agentId: of.workspaceId } }) },
+  'GET /tasks/model-routing/report/subagents query agentId': {
+    request: (of) => ({ params: {}, query: { agentId: of.workspaceId } }),
+  },
   'POST /tasks/batch-assign body taskIds[]': {
     request: (of, mine) => ({ params: {}, body: { taskIds: [mine.taskId, of.taskId], assigneeId: mine.workspaceId } }),
   },

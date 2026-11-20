@@ -14,6 +14,7 @@ import type {
   SessionGuestSuggestion,
   TranslationActionResponse,
   TurnTranslation,
+  SubagentRoutingReport,
   SubagentRunView,
   WorkflowRunView,
 } from '@orbit/shared';
@@ -493,6 +494,16 @@ export const getSessionSubagents = (id: string): Promise<SubagentRunView[]> =>
 /** The session's Orbit workflows, oldest first: what each `mcp__orbit__workflow` block shows beside its call. */
 export const getSessionWorkflows = (id: string): Promise<WorkflowRunView[]> =>
   api<WorkflowRunView[]>(`/sessions/${id}/workflows`);
+
+/** The routing report's SubAgents and Workflows views (docs/subagent-design.md §7): runs since `since`, of one Agent's
+ *  sessions or of all of them. */
+export const getSubagentRoutingReport = (opts: { since?: string; agentId?: string }): Promise<SubagentRoutingReport> => {
+  const qs = new URLSearchParams();
+  if (opts.since) qs.set('since', opts.since);
+  if (opts.agentId) qs.set('agentId', opts.agentId);
+  const query = qs.toString();
+  return api<SubagentRoutingReport>(`/tasks/model-routing/report/subagents${query ? `?${query}` : ''}`);
+};
 
 // ── Interactive sessions (Route B) ──
 
