@@ -344,8 +344,11 @@ test('(d) from production\'s state, a start predicts and then does it: DONE agai
       const stillOpen = [reviews[3]!, unobserved.itemId].sort();
       const before = new Date();
 
-      const predicted = (await repair.predictLandingRegressionRepair(db)).projects
-        .find((row) => row.projectId === project.projectId);
+      // As the dry run reads it: one REPEATABLE READ, READ ONLY transaction, in which any write would fail.
+      const predicted = (await db.$transaction(async (tx) => {
+        await tx.$executeRaw`SET TRANSACTION ISOLATION LEVEL REPEATABLE READ, READ ONLY`;
+        return repair.predictLandingRegressionRepair(tx);
+      }, { timeout: 60_000 })).projects.find((row) => row.projectId === project.projectId);
       const byId = (a: { taskId: string }, b: { taskId: string }) => a.taskId.localeCompare(b.taskId);
       assert.deepEqual(
         {
