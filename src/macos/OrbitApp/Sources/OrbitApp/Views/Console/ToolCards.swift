@@ -399,7 +399,7 @@ struct ToolCardView: View {
     var body: some View {
         Group {
             if let payload = sessionCreate {
-                SessionCreateCardView(payload: payload)
+                SessionCreateCardView(payload: payload).orbitCardWidth()
             } else if let draft = wikiDraftID {
                 WikiDraftCardSlot(draftID: draft)
             } else if card.resultTruncated, needsWholeResult, fullResult == nil {
