@@ -301,8 +301,43 @@ describe('bashCommandRules', () => {
       '<<- lets tabs indent the terminator',
       'more than one heredoc on a line',
       'a here-string is not a heredoc',
+      'recorded card 1 of session 4FwPbT4Fa0wz8VbxYjHfVz',
+      'recorded card 6 of session 4FwPbT4Fa0wz8VbxYjHfVz',
+      'nothing inside $(…) is remembered',
+      'nothing inside backticks is remembered',
+      'an argument is never part of the name',
+      'file-changing programs are never remembered',
+      'environment-changing programs are never remembered',
     ]) {
       expect(names.some((n) => n.startsWith(required)), required).toBe(true);
+    }
+  });
+  it('remembers exactly these rules from the six cards recorded on 2026-11-18', () => {
+    // Production saved `then cd`, `fi`, `worktree list` (from inside `$(…)`), `ls OrbitKitTests`,
+    // `echo APPLIED_OK`, `cp` and `export` from these; the commands are verbatim from the approval rows.
+    const recorded = fixture.cases.filter((c) => c.name.startsWith('recorded card '));
+    expect(recorded.map((c) => prefixesOf(c.command))).toEqual([
+      ['git worktree', 'rg', 'echo', 'cd', 'git status', 'git diff', 'ls', 'head', 'find'],
+      ['git apply', 'echo', 'git status', 'wc'],
+      ['ls', 'xcode-select', 'echo', 'which', 'head', 'rg'],
+      ['ls', 'rg', 'head', 'mdfind', 'echo'],
+      ['ls', 'head', 'file', 'defaults read'],
+      ['ls', 'rg', 'head'],
+    ]);
+  });
+
+  it('never remembers a keyword-led, argument-named, file- or environment-changing prefix', () => {
+    const keywords = ['if', 'then', 'elif', 'else', 'fi', 'do', 'done', 'while', 'until', 'for', 'case', 'esac'];
+    const neverRemembered = ['cp', 'mv', 'rm', 'ln', 'chmod', 'chown', 'export', 'env', 'tee', 'dd'];
+    const subcommandPrograms = ['git', 'npm', 'docker', 'go', 'swift', 'defaults'];
+    for (const c of fixture.cases) {
+      for (const prefix of prefixesOf(c.command)) {
+        const [program, second] = (prefix ?? '').split(' ');
+        const name = program.slice(program.lastIndexOf('/') + 1);
+        expect(keywords, `${c.name}: ${prefix}`).not.toContain(program);
+        expect(neverRemembered, `${c.name}: ${prefix}`).not.toContain(name);
+        if (second !== undefined) expect(subcommandPrograms, `${c.name}: ${prefix}`).toContain(name);
+      }
     }
   });
 });
