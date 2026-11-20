@@ -35,6 +35,7 @@ import { appendScheduledWakeupContext, endWakeupLoop, readSessionWakeups } from 
 import { checkOnlyCommandRules, checkOnlyRuleRefusal, runAccessLevel, SCHEDULE_CHECK_ONLY_RULE_REFUSED } from '../schedules/schedule-access';
 import { settleUnrunWakeTurns } from '../runner-api/wake-turn-withdraw';
 import { linkNotFound } from '../share-links/share-link';
+import { freshRunningBgJobs } from './background-job-activity';
 import {
   bgJobsStalled,
   movingBgJobs,
