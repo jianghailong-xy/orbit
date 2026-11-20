@@ -3216,10 +3216,10 @@ test('the ledger stays append-only, and every later migration is accounted for',
       // 1270 adds two plain indexes, session_merge_receipt (source_sha) and task (owner_id, updated_at); no row is
       // written, and no preserved relation, trigger, function or DONE fence changes.
       '1270_receipt_source_sha_task_updated_idx',
-      // 1341 adds session_release_fact_chk NOT VALID and 1342 validates it; no row is written, and no preserved
+      // 1401 adds session_release_fact_chk NOT VALID and 1402 validates it; no row is written, and no preserved
       // relation, trigger, function or DONE fence changes.
-      '1341_session_release_fact_chk',
-      '1342_session_release_fact_validate'],
+      '1401_session_release_fact_chk',
+      '1402_session_release_fact_validate'],
     'a later migration exists; re-read it before trusting the assertions above');
   // Stated rather than described: 0230's fence differs from 0228's by exactly one added lane.
   const later = readFileSync(

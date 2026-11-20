@@ -14,7 +14,7 @@
  *   (7) ending a session still queued                → CANCELLED, ended
  *   (8) the revive                                   → PENDING, finished_at and release_cause both null
  *   (9) migration 1262's backfill, one session per rule, then the two counts of plan step 3.3 over the database
- *  (10) migrations 1341 and 1342 (plan step 3.4): the CHECK is listed validated, and each violating write is refused
+ *  (10) migrations 1401 and 1402 (plan step 3.4): the CHECK is listed validated, and each violating write is refused
  *
  * The other three writers are asserted where they are already driven: turn-complete's failed turn in
  * runner-api/turn-complete-outcome.pg.spec.ts (2), the landing container in projects/landing-session.pg.spec.ts
@@ -304,7 +304,7 @@ test('every release writes the release column and its cause, and the revive clea
   await t.test('(9) migration 1262 backfills every terminal row, and the two counts are zero', async () => {
     const w = await world(s.db, 'backfill');
     const now = new Date();
-    // Rows from before 1261 break session_release_fact_chk (1341) by design; the check comes back, by its own two
+    // Rows from before 1261 break session_release_fact_chk (1401) by design; the check comes back, by its own two
     // migrations, once the backfill has made the rows whole.
     await sql.query(`ALTER TABLE "session" DROP CONSTRAINT IF EXISTS "session_release_fact_chk"`);
     // One row per rule of 1262's table, written as a row from before 1261: no cause, and no release column where
@@ -391,9 +391,9 @@ test('every release writes the release column and its cause, and the revive clea
     assert.equal(b.n, 0, 'open rows with either');
   });
 
-  await t.test('(10) 1341 and 1342: the check is validated, and each violating write is refused', async () => {
+  await t.test('(10) 1401 and 1402: the check is validated, and each violating write is refused', async () => {
     const migrations = join(__dirname, '..', '..', 'prisma', 'migrations');
-    for (const dir of ['1341_session_release_fact_chk', '1342_session_release_fact_validate']) {
+    for (const dir of ['1401_session_release_fact_chk', '1402_session_release_fact_validate']) {
       for (const statement of statementsOf(join(migrations, dir, 'migration.sql'))) await sql.query(statement);
     }
     const listed = (await sql.query(

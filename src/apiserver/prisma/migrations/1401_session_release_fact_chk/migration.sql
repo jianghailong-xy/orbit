@@ -1,5 +1,5 @@
 -- ══════════════════════════════════════════════════════════════════════════════════════════════
--- 1341: the release fact is one fact (docs/session-three-state-plan.md §6 step 3.4; project 3508bDBDE5xPH43TYuiqP).
+-- 1401: the release fact is one fact (docs/session-three-state-plan.md §6 step 3.4; project 3508bDBDE5xPH43TYuiqP).
 --
 -- WHAT IT ADDS
 -- ------------
@@ -7,7 +7,7 @@
 -- `finished_at` is set, and `release_cause` is set exactly when `finished_at` is set. Written as two implications
 -- each way so a violation names itself in a spec: terminal without finished_at, open with finished_at, released
 -- without a cause, a cause on a held session.
--- 1342 validates it, in a file with no DO, so the validating scan does not run under this ACCESS EXCLUSIVE lock.
+-- 1402 validates it, in a file with no DO, so the validating scan does not run under this ACCESS EXCLUSIVE lock.
 --
 -- WHICH RELEASE IT MAY SHIP IN
 -- ----------------------------
@@ -24,7 +24,7 @@
 --
 -- NUMBERING, RE-RUNNABILITY
 -- -------------------------
--- 1341: main, origin/orbit/* and origin/project/* use up to 1340 (rescanned 2026-11-20). Not a multiple of 10.
+-- 1401: main, origin/orbit/* and origin/project/* use up to 1400 (rescanned 2026-11-20). Not a multiple of 10.
 -- Can run twice: DROP CONSTRAINT IF EXISTS first.
 -- ══════════════════════════════════════════════════════════════════════════════════════════════
 
