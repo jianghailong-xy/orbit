@@ -10048,7 +10048,7 @@ export class SessionsService {
     await reprojectAfterSettledChecks(this.prisma, ended.checksSettled, this.logger);
     if (ended.settledProjectId && this.moduleRef) {
       try {
-        const { CompletionInputRouter } = await import('../projects/completion-input-router.service');
+        const { CompletionInputRouter } = await import('../projects/completion-input-router.service.js');
         await this.moduleRef.get(CompletionInputRouter, { strict: false }).routeSettledWork([ended.settledProjectId]);
       } catch (e) {
         // Hand-built contexts have no router; the next delivery derives the same facts.
