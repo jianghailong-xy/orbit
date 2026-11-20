@@ -1112,7 +1112,7 @@ export const TRANSACTION_UNITS: readonly TransactionUnit[] = [
     isolation: '',
     attempts: 4,
     replay: 'Every read is inside the attempt; a re-run finds the claim made or the session busy and writes nothing.',
-    effects: 'None inside; announceParkedSessionEnd after the commit (the lifecycle event, the runner hint, the inbox).',
+    effects: 'None inside; after the commit, requestCancel (the runner change mark a link heartbeat reads, link-heartbeat.ts) and announceParkedSessionEnd (the lifecycle event, the inbox).',
     answer: 'Logged; the reaper\'s next sweep ends the session (endParked), as before this existed.',
   },
   {

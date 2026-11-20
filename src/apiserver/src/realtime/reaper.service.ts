@@ -1054,7 +1054,8 @@ export class ReaperService implements OnModuleInit, OnModuleDestroy {
       loggedRetry(this.log, 'reaper.endParked'),
     );
     if (!done) return;
-    announceParkedSessionEnd(this.realtime, { sessionId, runnerId, reason });
+    if (runnerId) this.realtime.requestCancel(runnerId, sessionId);
+    announceParkedSessionEnd(this.realtime, { sessionId, reason });
     this.log.log(`recycling parked session ${sessionId}`);
   }
 }

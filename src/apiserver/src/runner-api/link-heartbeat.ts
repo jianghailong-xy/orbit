@@ -143,6 +143,7 @@ export const HEARTBEAT_DELIVERIES = {
     writers: [
       'sessions/sessions.service.ts#publishEndIntent', 'realtime/reaper.service.ts#forceFinalize',
       'realtime/reaper.service.ts#endParked', 'runner-api/runner-api.controller.ts#turnComplete',
+      'realtime/parked-session-end.ts#endIdleWorkOfDoneTask',
     ],
     pending: 'drained for an hour, or until five minutes after its session finished: every full answer carries it',
   },

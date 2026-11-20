@@ -67,10 +67,14 @@ export async function claimParkedSessionEnd(
   return true;
 }
 
-/** After the claim has committed: the clients see it filed, and its runner is told to drain the end. */
+/**
+ * After the claim has committed: the clients see it filed, and the session's inbox is poked. The caller that
+ * committed the claim marks its runner changed itself (`requestCancel`), which is what delivers the end to a link
+ * heartbeat; link-heartbeat.ts names each such caller as a writer of `cancelSessionIds`.
+ */
 export function announceParkedSessionEnd(
   realtime: RealtimeService,
-  ended: { sessionId: string; runnerId: string | null; reason: SessionEndReason },
+  ended: { sessionId: string; reason: SessionEndReason },
 ): void {
   if (ended.reason === SessionEndReason.TASK_DONE) {
     realtime.publishSessionLifecycleChanged(
@@ -80,7 +84,6 @@ export function announceParkedSessionEnd(
       SessionLifecycleState.COMPLETED,
     );
   }
-  if (ended.runnerId) realtime.requestCancel(ended.runnerId, ended.sessionId);
   realtime.notifyInbox(ended.sessionId);
 }
 
@@ -137,11 +140,8 @@ export async function endIdleWorkOfDoneTask(
         return claimParkedSessionEnd(tx, candidate.id, SessionEndReason.TASK_DONE);
       }, loggedRetry(logger, 'parkedSessionEnd.endIdleWorkOfDoneTask'));
       if (!claimed) continue;
-      announceParkedSessionEnd(realtime, {
-        sessionId: candidate.id,
-        runnerId: candidate.assignedRunnerId,
-        reason: SessionEndReason.TASK_DONE,
-      });
+      if (candidate.assignedRunnerId) realtime.requestCancel(candidate.assignedRunnerId, candidate.id);
+      announceParkedSessionEnd(realtime, { sessionId: candidate.id, reason: SessionEndReason.TASK_DONE });
       ended.push(candidate.id);
     } catch (error) {
       logger.warn(`the end of session ${candidate.id} was not requested on its task's DONE; the reaper ends it: ${
