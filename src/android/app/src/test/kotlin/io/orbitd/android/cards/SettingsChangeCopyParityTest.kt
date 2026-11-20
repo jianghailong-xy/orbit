@@ -29,7 +29,7 @@ class SettingsChangeCopyParityTest {
     @Test fun theCardAndItsFoldedLinesSayWhatTheWebAndOrbitKitSay() {
         assertSays(web, copyFile, "heading: (count: number) => `⚙️ Confirm: change \${count} setting\${count === 1 ? '' : 's'}?`")
         assertSays(web, copyFile, "changed: (count: number) => `✓ Changed \${count} setting\${count === 1 ? '' : 's'}`")
-        assertSays(web, copyFile, "agentSays: (why: String) => `The agent says: \${why}`".replace("String", "string"))
+        assertSays(web, copyFile, "agentSays: (why: string) => `The agent says: \${why}`")
         for ((key, native) in mapOf(
             "newSessionsOnly" to SettingsChangeCopy.newSessionsOnly, "foot" to SettingsChangeCopy.foot, "save" to SettingsChangeCopy.save,
             "chat" to SettingsChangeCopy.chat, "declinePlaceholder" to SettingsChangeCopy.declinePlaceholder,
