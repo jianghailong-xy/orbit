@@ -58,7 +58,6 @@ import { Drawer } from '../ui/Drawer';
 import { Input } from '../ui/Input';
 import { Menu } from '../ui/Menu';
 import { PasswordInput } from '../ui/PasswordInput';
-import { Select } from '../ui/Select';
 import { Spinner } from '../ui/Spinner';
 import { Switch } from '../ui/Switch';
 import { Textarea } from '../ui/Textarea';
@@ -100,7 +99,6 @@ export interface SettingsWorkspace {
   enableWorktree?: boolean;
   /** Smart model selection (docs/model-routing-design.md §7.2). */
   modelRouting?: boolean;
-  modelRoutingOptimizeFor?: 'cost' | 'balance' | 'intelligence';
   /** The other engines smart selection may move this Agent's task runs to (§6). */
   modelRoutingProviders?: string[];
   /** SubAgents (docs/subagent-design.md §7): on by default, 4 of one session's at once. */
@@ -131,7 +129,6 @@ type WorkspacePatch = Partial<
     | 'repoUrl'
     | 'enableWorktree'
     | 'modelRouting'
-    | 'modelRoutingOptimizeFor'
     | 'modelRoutingProviders'
     | 'subagentsEnabled'
     | 'subagentsMaxRunning'
@@ -273,7 +270,7 @@ function WorkspaceSettingsPage({ id }: { id: string }) {
   const runner = runners.find((r) => r.id === workspace?.runnerId) ?? null;
   const configuredProviders = useQuery(providersQuery()).data ?? [];
   // The account's switch for smart model selection: off (the default), the workspace has none of it.
-  const smartSelection = useQuery(meQuery()).data?.preferences?.modelRouting === true;
+  const smartSelection = useQuery(meQuery()).data?.preferences?.modelRouting !== false;
   const rules = useQuery({ ...workspacePermissionRulesQuery(id), enabled: !!workspace });
   const imported = useQuery({
     queryKey: ['imported-sessions', id],
@@ -441,6 +438,17 @@ function WorkspaceSettingsPage({ id }: { id: string }) {
     return null;
   })();
 
+  // The server refuses isolation on a directory the runner found not to be a repository (WORKTREE_NEEDS_GIT)
+  // unless git will be set up there; say so here instead of letting the switch fail.
+  const worktreeNeedsGit =
+    !workspace.enableWorktree &&
+    !!workspace.workDirProbedAt &&
+    workspace.workDirExists === true &&
+    workspace.workDirIsGit === false &&
+    dir === (workspace.workDir ?? '').trim() &&
+    !workspace.repoUrl?.trim() &&
+    !workspace.autoInitGit;
+
   const env = workspace.env ?? {};
   const envKeys = Object.keys(env);
   const instructions = workspace.appendSystemPrompt?.trim() ?? '';
@@ -556,12 +564,17 @@ function WorkspaceSettingsPage({ id }: { id: string }) {
         <SettingsCard>
           <SettingsRow
             title="Worktree isolation"
-            description="Each session runs in its own git worktree."
+            description={
+              worktreeNeedsGit
+                ? 'Unavailable: the working directory is not a git repository. Initialize git there from the shared-folder notice on the agent page, or keep isolation off.'
+                : 'Each session runs in its own git worktree.'
+            }
             tooltip="Each session runs in its own git worktree. Off → sessions run directly in the working directory, sharing it."
             control={
               <Switch
                 aria-label="Worktree isolation"
                 checked={workspace.enableWorktree ?? false}
+                disabled={worktreeNeedsGit}
                 onCheckedChange={(enableWorktree) => {
                   // Board 04: the switch says what it means for the main checkout first; it never blocks.
                   const ask = worktreeIsolationDialogFor(
@@ -616,25 +629,6 @@ function WorkspaceSettingsPage({ id }: { id: string }) {
                     aria-label="Smart model selection for tasks"
                     checked={workspace.modelRouting ?? false}
                     onCheckedChange={(modelRouting) => save({ modelRouting })}
-                  />
-                }
-              />
-              <SettingsRow
-                title="Optimize for"
-                description="For tasks without a suggested tier."
-                tooltip="For tasks without a suggested tier: Cost uses the inferred tier, Balance starts at M, and Intelligence starts at L. Applies to future runs; pinned models always win."
-                control={
-                  <Select
-                    aria-label="Optimize for"
-                    value={workspace.modelRoutingOptimizeFor ?? 'cost'}
-                    options={[
-                      { value: 'cost', label: 'Cost' },
-                      { value: 'balance', label: 'Balance' },
-                      { value: 'intelligence', label: 'Intelligence' },
-                    ]}
-                    onValueChange={(value) => {
-                      if (value !== null) save({ modelRoutingOptimizeFor: value });
-                    }}
                   />
                 }
               />
@@ -732,8 +726,6 @@ function WorkspaceSettingsPage({ id }: { id: string }) {
       <SubagentSettings
         enabled={workspace.subagentsEnabled ?? true}
         onEnabledChange={(subagentsEnabled) => save({ subagentsEnabled })}
-        optimizeFor={workspace.modelRoutingOptimizeFor ?? 'cost'}
-        onOptimizeForChange={(modelRoutingOptimizeFor) => save({ modelRoutingOptimizeFor })}
         maxRunning={workspace.subagentsMaxRunning ?? 4}
         onMaxRunningChange={(subagentsMaxRunning) => save({ subagentsMaxRunning })}
       />

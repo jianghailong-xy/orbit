@@ -2120,7 +2120,6 @@ struct AgentFormContent: View {
     @State private var enabled = true
     @State private var modelRouting = false
     @State private var subagentsEnabled = true
-    @State private var optimizeFor = SubagentSettings.OptimizeFor.cost
     @State private var subagentsMaxRunning = SubagentSettings.defaultMaxRunning
     @State private var confirmingDelete = false
     #if os(macOS)
@@ -2219,7 +2218,7 @@ struct AgentFormContent: View {
                 }
             }
 
-            SubagentSettingsSection(agents: agents, enabled: $subagentsEnabled, optimizeFor: $optimizeFor,
+            SubagentSettingsSection(agents: agents, enabled: $subagentsEnabled,
                                     maxRunning: $subagentsMaxRunning)
 
             if let env = agent.env, !env.isEmpty {
@@ -2294,7 +2293,6 @@ struct AgentFormContent: View {
         enabled = agent.enabled ?? true
         modelRouting = agent.modelRouting ?? false
         subagentsEnabled = agent.subagentsEnabled ?? true
-        optimizeFor = SubagentSettings.OptimizeFor(stored: agent.modelRoutingOptimizeFor)
         subagentsMaxRunning = SubagentSettings.maxRunning(agent.subagentsMaxRunning)
     }
 
@@ -2313,7 +2311,6 @@ struct AgentFormContent: View {
         || enabled != (agent.enabled ?? true)
         || modelRouting != (agent.modelRouting ?? false)
         || subagentsEnabled != (agent.subagentsEnabled ?? true)
-        || optimizeFor != SubagentSettings.OptimizeFor(stored: agent.modelRoutingOptimizeFor)
         || subagentsMaxRunning != SubagentSettings.maxRunning(agent.subagentsMaxRunning)
     }
 
@@ -2338,8 +2335,6 @@ struct AgentFormContent: View {
             // Only when moved: the switch is written by the user API alone, and only by a press.
             modelRouting: modelRouting != (agent.modelRouting ?? false) ? modelRouting : nil,
             // SubAgents: each only when moved, like the switch above.
-            modelRoutingOptimizeFor: optimizeFor != SubagentSettings.OptimizeFor(stored: agent.modelRoutingOptimizeFor)
-                ? optimizeFor.rawValue : nil,
             subagentsEnabled: subagentsEnabled != (agent.subagentsEnabled ?? true) ? subagentsEnabled : nil,
             subagentsMaxRunning: subagentsMaxRunning != SubagentSettings.maxRunning(agent.subagentsMaxRunning)
                 ? subagentsMaxRunning : nil

@@ -12,7 +12,13 @@
  *   (3) the reply that comes back into the group's topic is the turn's last words and nothing else, its request body
  *       pinned field by field: no tool input or output, no sub-agent's words, no earlier text, no file, no Orbit link
  *       (no Open in Orbit, no session URL);
- *   (4) after the group's route is removed, a later turn's reply into the topic still carries no Orbit link.
+ *   (4) after the group's route is removed, a later turn's reply into the topic still carries no Orbit link;
+ *   (5) who started it (§6.1, task O5): the approval and question cards of a session a group member started say
+ *       `Started by <name> in <group>`, and of a session someone else started in a direct message (made here as O3's
+ *       door would make it: a first turn with the outside sender, its chain in a chat no route connects) say
+ *       `Started by <name> in a direct message` — in TITLES_ONLY too, and kept in the alert the closed card is drawn
+ *       from; each card goes to the owner's open_id alone, none to whoever started the session; the owner's own
+ *       session's card has no such line.
  *
  *   bash scripts/run-pg-spec.sh src/apiserver/src/feishu/feishu-group-boundary.pg.spec.ts
  */
@@ -21,7 +27,7 @@ import { randomBytes, randomUUID } from 'node:crypto';
 import { test } from 'node:test';
 import { setTimeout as sleep } from 'node:timers/promises';
 
-import { RunnerStatus, type PrismaClient } from '@prisma/client';
+import { RunnerStatus, RunStatus, SessionDispatchOrigin, type PrismaClient } from '@prisma/client';
 import { uuidToBase62 } from '@orbit/shared';
 import { Client } from 'pg';
 
@@ -49,6 +55,9 @@ const X = { platform: 'FEISHU' as const, appId: `cli_${randomBytes(8).toString('
 const ALICE = 'ou_alice_boundary';
 const BOB = 'ou_bob_boundary';
 const TEAM = `oc_team_${RUN}`;
+/** Someone who started a session in a direct message (O3's door, made here by hand), and that chat. */
+const CAROL = 'ou_carol_boundary';
+const CAROL_CHAT = `oc_p2p_carol_${RUN}`;
 
 const QUESTION = {
   questions: [{
@@ -113,6 +122,7 @@ test('Feishu: a group session asks the owner in private and answers the group wi
     },
   });
 
+  fake.userNames.set(BOB, 'Bob Chen');
   server = await startApiserver(url, `feishu-group-boundary-${randomUUID()}`, { [FEISHU_TEST_OPEN_PLATFORM_ENV]: fakeUrl, [FEISHU_TEST_TIME_SCALE_ENV]: SCALE });
   const said = () => server!.output().slice(-4000);
   const connection: FakeConnection = await until('X connected', () => fake.openConnections(X.appId)[0]).catch((error) => {
@@ -208,6 +218,9 @@ test('Feishu: a group session asks the owner in private and answers the group wi
     return { approvalId, row, requests: messageRequests(from) };
   }
 
+  /** The card a request sent, as text. */
+  const cardText = (r: FakeRequest): string => String((r.body as { content?: unknown }).content ?? '');
+
   /** Where every request went: (1) and (2) hold each request to the owner's direct messages. */
   function assertOnlyToOwner(requests: FakeRequest[], what: string) {
     assert.ok(requests.length > 0, `${what}: a card was sent`);
@@ -218,6 +231,7 @@ test('Feishu: a group session asks the owner in private and answers the group wi
       assert.equal(r.query.get('receive_id_type'), 'open_id', `${what}: addressed to a person`);
       assert.equal(body.receive_id, ALICE, `${what}: the owner's open_id`);
       assert.notEqual(body.receive_id, TEAM, `${what}: not the group's chat_id`);
+      assert.ok(![BOB, CAROL].includes(body.receive_id as string), `${what}: not whoever started the session`);
       assert.ok(!JSON.stringify({ query: r.query.toString(), body }).includes(TEAM), `${what}: the group is not named anywhere in the request`);
     }
   }
@@ -232,6 +246,7 @@ test('Feishu: a group session asks the owner in private and answers the group wi
     assert.equal(row.receiveId, ALICE, 'the card\'s row is addressed to the owner');
     assert.equal(row.sessionId, opened.sessionId, 'it is the group session\'s card');
     assert.equal(repliesTo(opened.messageId).length, groupRepliesBefore, 'nothing more in the group\'s topic');
+    assert.ok(cardText(requests[0]!).includes('Started by Bob Chen in Team'), 'the card says who started it, and in which group');
   });
 
   await t.test('(2) the agent\'s question of a group session goes to the owner\'s open_id, never into the group', async () => {
@@ -243,6 +258,61 @@ test('Feishu: a group session asks the owner in private and answers the group wi
     assert.equal(row.receiveId, ALICE);
     assert.ok(JSON.parse((requests[0]!.body as { content: string }).content), 'a card');
     assert.equal(repliesTo(opened.messageId).length, groupRepliesBefore, 'nothing more in the group\'s topic');
+    assert.ok(cardText(requests[0]!).includes('Started by Bob Chen in Team'), 'the question card says who started it, and in which group');
+  });
+
+  await t.test('(5) who started it: in a group, in a direct message, in TITLES_ONLY too; the owner\'s own session says nothing', async () => {
+    await db.feishuApp.update({ where: { appId: X.appId }, data: { messageDetail: 'TITLES_ONLY' } });
+    try {
+      // A session someone else started in a direct message, as O3's door will open it: the first turn carries the outside
+      // sender, and its chain is in a chat no route connects.
+      const made = async (title: string, sender: { name: string | null } | null) => {
+        const session = await db.session.create({
+          data: {
+            ownerId, creatorId: ownerId, workspaceId: personal.id, assignedRunnerId: runnerId, title, prompt: title, provider: 'claude',
+            status: RunStatus.AWAITING_INPUT, numTurns: 1, dispatchOrigin: SessionDispatchOrigin.USER,
+          },
+        });
+        await db.conversationTurn.create({
+          data: {
+            sessionId: session.id, seq: 1, clientTurnId: `initial-${session.id}`, kind: 'message', status: 'ANSWERED', content: title,
+            ...(sender ? { externalSenderSource: 'FEISHU', externalSenderId: CAROL, externalSenderName: sender.name } : {}),
+          },
+        });
+        if (sender) {
+          await db.feishuThread.create({ data: { ownerId, appId: X.appId, chatId: CAROL_CHAT, rootMessageId: `om_root_${session.id}`, sessionId: session.id } });
+        }
+        return session.id;
+      };
+      const cases: Array<{ what: string; sessionId: string; line: string | null }> = [
+        { what: 'a group member\'s session', sessionId: (await openGroupSession('Rotate the logs')).sessionId, line: 'Started by Bob Chen in Team' },
+        { what: 'a direct message\'s session', sessionId: await made('Check the disk', { name: 'Carol Wu' }), line: 'Started by Carol Wu in a direct message' },
+        { what: 'the owner\'s own session', sessionId: await made('My own work', null), line: null },
+      ];
+      for (const c of cases) {
+        for (const [toolName, input] of [['Bash', { command: 'df -h' }], ['AskUserQuestion', QUESTION]] as const) {
+          const what = `${c.what}, ${toolName}`;
+          const { requests, row } = await fileApproval(c.sessionId, toolName, input);
+          assertOnlyToOwner(requests, what);
+          assert.equal(requests.length, 1, `${what}: one card`);
+          assert.equal(row.receiveId, ALICE, `${what}: the card's row is addressed to the owner`);
+          const card = JSON.parse((requests[0]!.body as { content: string }).content) as { body: { elements: unknown[] } };
+          const stored = row.alert as { startedBy?: string } | null;
+          if (c.line === null) {
+            assert.ok(!cardText(requests[0]!).includes('Started by'), `${what}: no line`);
+            assert.equal(stored?.startedBy, undefined, `${what}: nothing stored`);
+          } else {
+            assert.deepEqual(card.body.elements[0], { tag: 'div', text: { tag: 'plain_text', content: c.line, text_size: 'notation', text_color: 'grey' } },
+              `${what}: the card's first line says who started it, in TITLES_ONLY`);
+            assert.equal(stored?.startedBy, c.line, `${what}: the alert the closed card is drawn from keeps the line`);
+          }
+          // Settle it, so the next approval of the session opens a card of its own.
+          await db.approval.update({ where: { id: row.approvalId! }, data: { status: 'DENIED', decidedAt: new Date() } });
+        }
+      }
+    } finally {
+      await db.feishuApp.update({ where: { appId: X.appId }, data: { messageDetail: 'FULL' } });
+    }
   });
 
   // ── the runner's half of a turn, with tool calls, a sub-agent and words before the last ──────────────────────────

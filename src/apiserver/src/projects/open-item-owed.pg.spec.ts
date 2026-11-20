@@ -644,6 +644,8 @@ test('(2) the sweep neither escalates nor announces an item nobody owes, and the
       const done = await task(stack, w, TaskStatus.DONE, 'done');
       const failureZombie = await openItem(stack, w, { kind: 'TASK_FAILED', taskId: done, ...due });
 
+      // The owed control must be eligible for the clock despite having taken its ITEM.
+      await stack.db.project.update({ where: { id: w.projectId }, data: { coordinatorEnabled: false } });
       const clock = new ProjectOpenItemEscalationService(stack.prisma);
       const escalated = (await clock.sweep()).filter((row) => row.projectId === w.projectId);
       assert.deepEqual(escalated.map((row) => row.itemId), [owed],

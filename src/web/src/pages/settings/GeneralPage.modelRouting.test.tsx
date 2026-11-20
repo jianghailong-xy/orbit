@@ -8,8 +8,9 @@ import { meQuery, type Me, type UserPreferences } from '../../lib/queries';
 
 /**
  * Smart model selection, one switch for the whole account (`preferences.modelRouting`) under General's
- * New sessions. Unlike the other switches on the page it is OFF until turned on: an account that never
- * wrote it reads off.
+ * New sessions. Like the other switches on the page it is ON until turned off: an account that never
+ * wrote it reads on. Under it, Optimize For: one for every Agent (`preferences.optimizeFor`, board
+ * docs/mocks/routing-mode-account), Balance until the owner picks another.
  */
 
 // The theme control reaches for localStorage and matchMedia, and it is not what these tests are about.
@@ -24,9 +25,9 @@ const { GeneralSettingsPage } = await import('./GeneralPage');
 
 const LABEL = 'Smart model selection';
 /** The one line the board shortens it to, and the full text kept as the control's tooltip. */
-const HINT = 'Coordinators suggest a tier for each task; Agents you turn this on for run on that tier.';
+const HINT = 'Task runs and SubAgents get a model matched to how hard the work is.';
 const FULL_HINT =
-  "Coordinators suggest a tier for each task, and Agents you turn this on for run their tasks on that tier's model and effort. Off: tasks run exactly as before.";
+  "Coordinators suggest a tier for each task, and a SubAgent's size sets its own. Every SubAgent, and the task runs of Agents you turn this on for, run on a model of that tier from your providers. Off: tasks keep their Agent's model and SubAgents their parent session's.";
 
 const me = (preferences: UserPreferences): Me => ({
   id: 'u1',
@@ -95,6 +96,25 @@ async function toggle(): Promise<void> {
   await settle();
 }
 
+/** Optimize For's segment that reads `text`, and the one that is on. */
+const segment = (text: string) =>
+  [...container!.querySelectorAll<HTMLElement>('[aria-label="Optimize For"] [role="radio"]')].find((el) => el.textContent === text)!;
+const selectedMode = () =>
+  container!.querySelector('[aria-label="Optimize For"] [aria-checked="true"]')?.textContent;
+
+// A segment needs the browser's full pointer sequence to commit a choice.
+async function press(el: HTMLElement): Promise<void> {
+  await act(async () => {
+    const init = { bubbles: true, cancelable: true, button: 0, buttons: 1, detail: 1 };
+    el.dispatchEvent(new PointerEvent('pointerdown', { ...init, pointerType: 'mouse' }));
+    el.dispatchEvent(new MouseEvent('mousedown', init));
+    el.dispatchEvent(new PointerEvent('pointerup', { ...init, buttons: 0, pointerType: 'mouse' }));
+    el.dispatchEvent(new MouseEvent('mouseup', { ...init, buttons: 0 }));
+    el.dispatchEvent(new MouseEvent('click', { ...init, buttons: 0 }));
+  });
+  await settle();
+}
+
 async function answer(value: Me): Promise<void> {
   expect(reply, 'a PATCH is in flight').toBeTruthy();
   await act(async () => reply!(value));
@@ -140,11 +160,38 @@ afterEach(async () => {
 });
 
 describe('smart model selection, one switch for the whole account', () => {
-  it('keeps optimize mode on the Agent rather than introducing account inheritance', async () => {
+  it('Optimize For sits right under it, for every Agent, Balance until another is picked', async () => {
     await mount({ modelRouting: true });
-    expect(document.body.querySelector('[aria-label="Optimize For"]')).toBeNull();
+    const titles = [...container!.querySelectorAll('.settings-row-title')].map((el) => el.textContent);
+    expect(titles.indexOf('Optimize For')).toBe(titles.indexOf(LABEL) + 1);
+    expect([...container!.querySelectorAll('[aria-label="Optimize For"] [role="radio"]')].map((el) => el.textContent))
+      .toEqual(['Cost', 'Balance', 'Intelligence']);
+    expect(selectedMode()).toBe('Balance');
     expect(checked()).toBe('true');
     expect(patches()).toEqual([]);
+  });
+
+  it('Optimize For shows only while the switch is on, and comes back with the mode the account kept', async () => {
+    await mount({ modelRouting: false, optimizeFor: 'intelligence' });
+    expect(container!.querySelector('[aria-label="Optimize For"]')).toBeNull();
+    expect(container!.textContent).not.toContain('Optimize For');
+    await toggle();
+    await answer(me({ modelRouting: true, optimizeFor: 'intelligence' }));
+    expect(selectedMode()).toBe('Intelligence');
+    // Turning it off hides the row and writes only the switch: the mode is kept.
+    await toggle();
+    expect(patches()).toEqual([{ modelRouting: true }, { modelRouting: false }]);
+    await answer(me({ modelRouting: false, optimizeFor: 'intelligence' }));
+    expect(container!.querySelector('[aria-label="Optimize For"]')).toBeNull();
+  });
+
+  it('shows the stored mode, and saves a new one to the account at once', async () => {
+    await mount({ optimizeFor: 'cost' });
+    expect(selectedMode()).toBe('Cost');
+    await press(segment('Intelligence'));
+    expect(patches()).toEqual([{ optimizeFor: 'intelligence' }]);
+    await answer(me({ optimizeFor: 'intelligence' }));
+    expect(selectedMode()).toBe('Intelligence');
   });
 
   it('sits in New sessions under Default permission mode, saying what it does in one line and in full on hover', async () => {
@@ -159,10 +206,10 @@ describe('smart model selection, one switch for the whole account', () => {
     expect(text.indexOf(LABEL)).toBeGreaterThan(text.indexOf('Default permission mode'));
   });
 
-  it('is off for an account that never said otherwise', async () => {
-    // Absent means OFF: only turning it on has to be written.
+  it('is on for an account that never said otherwise', async () => {
+    // Absent means ON: only turning it off has to be written.
     await mount({});
-    expect(checked()).toBe('false');
+    expect(checked()).toBe('true');
   });
 
   it('reads off when the account turned it off, and on when it turned it on', async () => {
@@ -177,7 +224,7 @@ describe('smart model selection, one switch for the whole account', () => {
   });
 
   it('turning it on sends modelRouting: true, and then reads as the saved account says', async () => {
-    await mount({});
+    await mount({ modelRouting: false });
     await toggle();
     expect(patches()).toEqual([{ modelRouting: true }]);
 
@@ -198,10 +245,10 @@ describe('smart model selection, one switch for the whole account', () => {
   it('shows what the server saved, not what was asked for', async () => {
     await mount({});
     await toggle();
-    expect(patches()).toEqual([{ modelRouting: true }]);
+    expect(patches()).toEqual([{ modelRouting: false }]);
 
-    // The account as returned is the account: an answer without the switch on leaves it off.
+    // The account as returned is the account: an answer without the switch written reads on.
     await answer(me({}));
-    expect(checked()).toBe('false');
+    expect(checked()).toBe('true');
   });
 });

@@ -146,7 +146,7 @@
 .sched-link:disabled { color: var(--text-4); cursor: default; text-decoration: none; }
 
 /* ---- Cards (create, envelope) ---- */
-.sched-card { border: 1px solid var(--border); border-radius: 10px; max-width: 560px; margin: 10px 0 0; overflow: hidden; background: var(--bg-raised); }
+.sched-card { border: 1px solid var(--border); border-radius: 10px; max-width: var(--chat-card-max, 560px); margin: 10px 0 0; overflow: hidden; background: var(--bg-raised); }
 .sched-inspector .sched-card { border-color: var(--brand-border); max-width: none; }
 .sched-card.is-widen { border-color: var(--warning-border); }
 .sched-card-head { display: flex; gap: 8px; align-items: center; padding: 11px 14px 4px; font-weight: 600; color: var(--text-1); }
@@ -171,7 +171,7 @@
 /* ---- The change line ---- */
 .sched-record {
   display: flex; gap: 8px; align-items: center; margin: 10px 0 0; padding: 8px 12px; border-radius: 8px; background: var(--bg-subtle);
-  border: 1px solid var(--border-subtle); font-size: 13.5px; color: var(--text-2); max-width: 640px;
+  border: 1px solid var(--border-subtle); font-size: 13.5px; color: var(--text-2); max-width: var(--chat-card-max, 640px);
 }
 .sched-record .sched-icon { color: var(--brand); }
 .sched-record b { color: var(--text-1); font-weight: 600; }
@@ -187,7 +187,7 @@
 .sched-strip .sched-icon { color: var(--brand); }
 .sched-report {
   border: 1px solid var(--border-subtle); border-left: 3px solid var(--success-solid); border-radius: 8px; padding: 10px 14px;
-  font-size: 14px; line-height: 22px; margin: 12px 0 0; max-width: 640px; color: var(--text-1);
+  font-size: 14px; line-height: 22px; margin: 12px 0 0; max-width: var(--chat-card-max, 640px); color: var(--text-1);
 }
 .sched-report.is-failed { border-left-color: var(--error); }
 .sched-report-head { font-weight: 600; display: flex; gap: 6px; align-items: center; }

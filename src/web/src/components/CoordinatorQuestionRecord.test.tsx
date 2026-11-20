@@ -11,6 +11,7 @@ import {
   COORDINATOR_WITHDREW,
   DELIVERED_TO_COORDINATOR,
   FROM_COORDINATOR,
+  HIDE_DETAILS,
   OTHER_OPTION,
   RECOMMENDED,
   VIEW_DETAILS,
@@ -288,7 +289,7 @@ describe('the card and its review', () => {
   }
 
   const card = (): string => host.querySelector('.answered-question-card')?.textContent ?? '';
-  /** The review is mounted behind the card (`ReviewCard` keeps it) — wherever its dialog is. */
+  /** The review is mounted under the card while folded, so it reads the same open or not. */
   const reviewEl = (): Element | null => document.querySelector(`[data-question-record="${ITEM_ID}"]`);
   const review = (): string => reviewEl()?.textContent ?? '';
   const chosen = (): string[] =>
@@ -321,6 +322,27 @@ describe('the card and its review', () => {
     expect(review()).not.toContain('the rollout stays paused');
     expect(review()).toContain(`${ANSWERED_BY_YOU} · ${decisionReceiptTime(ANSWERED_AT, NOW)}`);
     expect(review()).toContain(DELIVERED_TO_COORDINATOR);
+  });
+
+  it('opens in place, not in a sheet: the record unfolds under the card and folds back', async () => {
+    await draw(record());
+    const preview = host.querySelector<HTMLButtonElement>('.answered-question-card')!;
+    expect(preview.getAttribute('aria-expanded')).toBe('false');
+    expect(reviewEl()?.hasAttribute('hidden')).toBe(true);
+    // The record is in the card's own subtree — no dialog, no portal.
+    expect(host.contains(reviewEl())).toBe(true);
+
+    await act(async () => preview.click());
+    expect(document.querySelector('[role="dialog"]')).toBeNull();
+    expect(preview.getAttribute('aria-expanded')).toBe('true');
+    expect(reviewEl()?.hasAttribute('hidden')).toBe(false);
+    expect(card()).not.toContain(VIEW_DETAILS);
+    expect(review()).toContain(HIDE_DETAILS);
+
+    await act(async () => reviewEl()!.querySelector<HTMLButtonElement>('.answered-question-hide')!.click());
+    expect(preview.getAttribute('aria-expanded')).toBe('false');
+    expect(reviewEl()?.hasAttribute('hidden')).toBe(true);
+    expect(card()).toContain(VIEW_DETAILS);
   });
 
   it('an option and a note: the note under the answer, and inside the chosen option', async () => {

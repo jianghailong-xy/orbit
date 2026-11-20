@@ -662,8 +662,7 @@ describe('what each run was routed to, and why', { timeout: 60_000 }, () => {
 
 describe('with the account switch off', { timeout: 60_000 }, () => {
   const cases: Array<[string, UserPreferences]> = [
-    ['preferences without modelRouting', {}],
-    ['modelRouting: false', { modelRouting: false }],
+    ['preferences with modelRouting explicitly off', { modelRouting: false }],
   ];
   for (const [what, preferences] of cases) {
     it(`(${what}) nothing of smart selection shows`, async () => {

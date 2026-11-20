@@ -662,7 +662,8 @@ test('Cross-workspace SubAgents: choice of workspace, refusals, hand-over, relay
     const local = await subagents.openSubagentRun(e.hpc, e.sessionId, create({ toolUseId: 'toolu_01Local' }));
     await assert.rejects(
       subagents.openSubagentRun(e.hpc, e.sessionId, create({ toolUseId: 'toolu_01NotRemote', resumeOf: local.runId })),
-      refusedWith('SUBAGENT_RESUME_NOT_FOUND'), "a run on the parent's own machine is resumed there, not through the server");
+      refusedWith('SUBAGENT_RESUME_RUNNING'),
+      "a run on the parent's own machine is resumed on this machine where it ran (resumeInPlace), and not while it runs");
 
     const resumed = await again('toolu_01Again') as SubagentRemoteRunCreateResponse;
     assert.deepEqual(resumed.remote, { workspaceId: e.macos, workspaceName: 'orbit-macos' });

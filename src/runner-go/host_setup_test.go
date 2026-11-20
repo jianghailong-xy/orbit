@@ -152,6 +152,7 @@ func TestHostSetupInstallsTheUnitsSystemdWillRead(t *testing.T) {
 		"TimeoutStopSec=180",
 		// An OOM kill inside the unit leaves the runner up (TestARunnerUnitSurvivesAnOOMKillInsideIt).
 		"OOMPolicy=continue",
+		"Delegate=yes",
 		"[Install]",
 		"WantedBy=multi-user.target",
 	})
@@ -716,7 +717,8 @@ func TestHostSetupSaysWhatItSetUp(t *testing.T) {
 		"  Runners: orbit-runner@<user>.service, one instance per Linux user,\n" +
 		"           each running that user's own ~/.orbit/bin/orbit\n" +
 		"  Server:  https://orbit.example.com\n\n" +
-		"  Every user on this host can now run `orbit register` without root.\n"
+		"  Every user on this host can now run `orbit register` without root.\n" +
+		"  Runners already running get background job limits (Delegate=yes) when they next restart.\n"
 	if out.String() != want {
 		t.Errorf("setup said:\n%s\nwant:\n%s", out.String(), want)
 	}

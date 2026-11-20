@@ -18,23 +18,32 @@ import {
   RunnerAgentsController,
 } from '../runner-api/runner-agents.controller';
 import { RunnerOrchestrationAuthorizer } from '../runner-api/runner-orchestration-authorizer';
+import { subagentRouteInput } from '../runner-api/subagent-route';
 import { SessionsService } from '../sessions/sessions.service';
 import { CreateWorkspaceDto, UpdateWorkspaceDto } from '../workspaces/dto';
 import { WorkspacesService } from '../workspaces/workspaces.service';
+import { subagentCandidateRefusal } from './model-routing';
 import { TasksService } from './tasks.service';
 
 /**
  * P5 of model routing (docs/model-routing-design.md §6; contract §7.4 R1–R4): routing may move a
- * fresh run to another engine, but only to one the owner listed on the Agent
- * (`workspace.modelRoutingProviders`), and only for a reason it writes down.
+ * fresh run to another engine, for a reason it writes down.
+ *
+ * Since 2026-11-20 the pick at a run's tier is the SubAgent router's (routeSubagent), over the pool
+ * subagentRouteInput reads for the Agent's runner: every provider × engine × model of the owner, less
+ * engines not installed or signed out there and accounts at 90% of a window, ranked by Optimize For
+ * (Cost here: subscriptions first, then the quota expiring soonest, then headroom, then the owner's
+ * provider order). The Agent's own engine and credential keep the run while they can take it at the
+ * tier; the router's ranking decides where it goes when they cannot. The Agent's
+ * `modelRoutingProviders` list is no longer read: any provider in the pool may take it.
  *
  * The router's rules are unit-tested (model-routing.spec.ts). What is proven here, on a real
  * PostgreSQL and through the doors that start a run — Run Now (`execute`) and the sweep
  * (`reconcileReadyTasks`, whose re-arm the task read reports as `autoRunSkipped`):
- *  - the list is the owner's: the user API writes it, the agent tools cannot, and with nothing on it
- *    a run never leaves the Agent's own engine;
+ *  - the list is still stored and still the owner's: the user API writes it, the agent tools cannot;
  *  - an engine signed out on the runner, or with a window at 90% or more for the account the run
- *    would use, is not picked — the Agent's own engine included, when a listed one can take the run;
+ *    would use, leaves the pool — the Agent's own engine included — and with nothing left the run
+ *    keeps the Agent's model;
  *  - a verification run prefers an engine the task it verifies did not last run on;
  *  - a run that moved is a new Session on the other engine, the task's pins untouched, and a paused
  *    run is never moved;
@@ -56,11 +65,24 @@ const CODEX = 'gpt-5.5-codex';
 const AGENT_EFFORT = 'max';
 const HINT_REASON = 'one service plus its spec';
 const TIER_M = `[coordinator] Tier M: suggested by the coordinator — ${HINT_REASON}`;
-const OWN = "Engine claude: this agent's own engine";
 const WEEKLY_LIMIT = "You've hit your weekly limit · resets 1pm (Europe/Berlin)";
 /** Three days out: a window that stays in force for the whole spec. */
 const RESETS = new Date(Date.now() + 3 * 24 * 3600_000).toISOString();
 const WEEK_MINS = 7 * 24 * 60;
+const OWN = "Engine claude: this agent's own engine, which can take the run at tier M";
+
+/**
+ * The router's lines for a pick at tier M on a subscription with `left`% of its weekly quota left: the pick, how many
+ * candidates there were (both engines in the pool: 2 at M; one: 1), and the count of those removed — the five other
+ * built-in engines, which this runner does not have installed, and the engine out of the pool, if any.
+ */
+const picked = (engine: 'claude' | 'codex', left: number, both: boolean) => [
+  `Picked ${engine === 'claude' ? SONNET : CODEX} · medium on ${engine} (Cost): a subscription with ${left}% of its quota left until ${RESETS.slice(0, 16)}Z, used before any metered key`,
+  both
+    ? "2 candidates in tier M, 6 more in other tiers or untiered; ties go by the owner's provider order"
+    : "1 candidate in tier M, 3 more in other tiers or untiered; ties go by the owner's provider order",
+  `${both ? 5 : 6} candidates removed, each with its reason`,
+];
 
 interface Services {
   db: PrismaClient;
@@ -139,7 +161,7 @@ async function fixture(
   await db.user.create({
     data: {
       id: ownerId, email: `${label}-${RUN}-${ownerId}@routing.invalid`, name: label, passwordHash: 'x',
-      preferences: { modelRouting: true },
+      preferences: { modelRouting: true, optimizeFor: 'cost' },
     },
   });
   await db.runner.create({
@@ -234,6 +256,19 @@ async function routed(db: PrismaClient, sessionId: string) {
   return { applied: row.applied, provider: row.provider, model: row.model, effort: row.effort, reasons: row.reasons };
 }
 
+/**
+ * Why an engine's built-in provider is out of the pool routing reads for the fixture's Agent and runner, or null when
+ * it is in: the removal the decision's 'N candidates removed' line counts.
+ */
+async function refusal(db: PrismaClient, target: Fixture, engine: 'claude' | 'codex') {
+  const input = await subagentRouteInput(db as unknown as Prisma.TransactionClient, {
+    ownerId: target.ownerId, workspaceId: target.agentId, runnerId: target.runnerId,
+    dto: { toolUseId: '', type: 'task', definitionSource: 'builtin' },
+    parent: { engine: 'claude', provider: 'claude', model: '', effort: null },
+  });
+  return subagentCandidateRefusal(input, engine, engine);
+}
+
 /** The sweep, once: what the minute timer runs. */
 const sweep = (services: Services) =>
   (services.tasks as unknown as { reconcileReadyTasks(): Promise<void> }).reconcileReadyTasks();
@@ -252,7 +287,10 @@ async function readyTask(db: PrismaClient, target: Fixture, seed: Partial<Prisma
   return taskId;
 }
 
-test('the engines a run may move to are the owner\'s to list: the user API writes them, the agent tools cannot',
+// Routing no longer reads `modelRoutingProviders` (2026-11-20: the pool is every provider of the owner's), so what this
+// case once proved — that only the owner decides which engines a run may move to — has no premise left. What still
+// holds is kept: the API still stores the list, and the agent tools still cannot write it.
+test('the engines list on an Agent is still the owner\'s to write: the user API stores it, the agent tools cannot',
   { skip, timeout: 120_000 }, async () => {
     assertCoordinatorPgUrlIsIsolated(URL!);
     const services = connect();
@@ -324,7 +362,7 @@ test('the engines a run may move to are the owner\'s to list: the user API write
     }
   });
 
-test('a run leaves the agent\'s engine only for one the owner listed, and only when its own is at 90% or signed out',
+test('a run leaves the agent\'s engine when its account is at 90% or signed out, whatever the agent\'s list says',
   { skip, timeout: 180_000 }, async () => {
     assertCoordinatorPgUrlIsIsolated(URL!);
     const services = connect();
@@ -333,21 +371,14 @@ test('a run leaves the agent\'s engine only for one the owner listed, and only w
       // Claude's weekly window is at 95%: the Agent's own engine is not one to start a run on.
       const target = await fixture(services, 'quota', { allowed: [], planUsage: quota(95) });
 
-      // Nothing listed: the run stays on claude, at the suggested tier.
-      const unlisted = await runNow(services, target, await taskIn(db, target));
-      assert.deepEqual(await routed(db, unlisted), {
-        applied: true, provider: 'claude', model: SONNET, effort: 'medium', reasons: [TIER_M, OWN],
-      });
-      assert.deepEqual(await sessionOf(db, unlisted), { provider: 'claude', model: SONNET, effort: 'medium' });
-
-      // The owner lists codex: the same tier, on Codex's tier table.
-      await services.workspaces.update(target.ownerId, target.agentId, { modelRoutingProviders: ['codex'] });
+      // Nothing listed on the Agent, and the run still goes to codex: the list is not read, the pool is.
       const movedTask = await taskIn(db, target);
       const moved = await runNow(services, target, movedTask);
       assert.deepEqual(await routed(db, moved), {
         applied: true, provider: 'codex', model: CODEX, effort: 'medium',
-        reasons: [TIER_M, 'Engine codex: claude is at 95% of its weekly quota'],
+        reasons: [TIER_M, ...picked('codex', 90, false)],
       });
+      assert.equal(await refusal(db, target, 'claude'), 'The account is at 95% of its weekly quota');
       assert.deepEqual(await sessionOf(db, moved), { provider: 'codex', model: CODEX, effort: 'medium' });
       const row = await decisionOf(db, moved);
       assert.equal((row.baseline as Record<string, unknown>).provider, 'claude', 'the baseline is still the agent\'s engine');
@@ -358,14 +389,8 @@ test('a run leaves the agent\'s engine only for one the owner listed, and only w
           engineStates: features.engineStates,
           verifiedRunEngine: features.verifiedRunEngine,
         },
-        {
-          modelRoutingProviders: ['codex'],
-          engineStates: {
-            claude: { signedOut: false, quota: { utilization: 95, window: 'weekly' } },
-            codex: { signedOut: false, quota: { utilization: 10, window: 'weekly' } },
-          },
-          verifiedRunEngine: null,
-        },
+        // The per-Agent list and the per-engine states are no longer what the pick reads, so neither is recorded.
+        { modelRoutingProviders: undefined, engineStates: undefined, verifiedRunEngine: null },
       );
       assert.deepEqual(
         await db.task.findUniqueOrThrow({ where: { id: movedTask }, select: { provider: true, model: true } }),
@@ -373,12 +398,23 @@ test('a run leaves the agent\'s engine only for one the owner listed, and only w
         'the route is never written back onto the task',
       );
 
-      // Claude has room again: a listed engine is no reason to leave the agent's own.
+      // Claude has room again, though less than codex, which the router ranks first (with both resetting at once,
+      // Cost takes the most headroom): the agent's own engine can take the run, so it keeps it.
       await runnerReports(db, target, { planUsage: quota(40) });
-      const roomy = await runNow(services, target, await taskIn(db, target));
-      assert.deepEqual(await routed(db, roomy), {
+      const roomier = await routed(db, await runNow(services, target, await taskIn(db, target)));
+      assert.deepEqual({ ...roomier, reasons: roomier.reasons.slice(0, 2) }, {
         applied: true, provider: 'claude', model: SONNET, effort: 'medium', reasons: [TIER_M, OWN],
       });
+      assert.equal(roomier.reasons.at(-1), 'Runs on claude-sonnet-5-5 · medium on claude, subscription with 60% quota left',
+        JSON.stringify(roomier.reasons));
+
+      // Level with codex: the router's own pick is claude too, by the owner's provider order.
+      await runnerReports(db, target, { planUsage: quota(10) });
+      const level = await runNow(services, target, await taskIn(db, target));
+      assert.deepEqual(await routed(db, level), {
+        applied: true, provider: 'claude', model: SONNET, effort: 'medium', reasons: [TIER_M, OWN, ...picked('claude', 90, true)],
+      });
+      assert.equal(await refusal(db, target, 'claude'), null);
 
       // The moved run was paused, and is asked to go on: it continues on codex, and is not routed again —
       // a run never changes engine, only a fresh one starts on another (R4).
@@ -391,34 +427,32 @@ test('a run leaves the agent\'s engine only for one the owner listed, and only w
       await runnerReports(db, target, { engines: enginesReport({ claude: 'no' }) });
       const signedOut = await runNow(services, target, await taskIn(db, target));
       assert.deepEqual(await routed(db, signedOut), {
-        applied: true, provider: 'codex', model: CODEX, effort: 'medium',
-        reasons: [TIER_M, 'Engine codex: claude is signed out on this runner'],
+        applied: true, provider: 'codex', model: CODEX, effort: 'medium', reasons: [TIER_M, ...picked('codex', 90, false)],
       });
+      assert.equal(await refusal(db, target, 'claude'), 'claude is signed out on the parent\'s runner');
       assert.deepEqual(await sessionOf(db, signedOut), { provider: 'codex', model: CODEX, effort: 'medium' });
 
-      // Claude at 95% again, and codex is the one signed out: codex is not picked, so the run stays put.
+      // Claude at 95% again, and codex is the one signed out: nothing is left in the pool, so the run keeps the
+      // Agent's model.
       await runnerReports(db, target, { planUsage: quota(95), engines: enginesReport({ codex: 'no' }) });
       const codexSignedOut = await runNow(services, target, await taskIn(db, target));
-      assert.deepEqual(await routed(db, codexSignedOut), {
-        applied: true, provider: 'claude', model: SONNET, effort: 'medium',
-        reasons: [
-          TIER_M,
-          `${OWN} — no other engine it may use is available`,
-          'claude is at 95% of its weekly quota',
-          'codex is signed out on this runner',
-        ],
-      });
-      assert.deepEqual(await sessionOf(db, codexSignedOut), { provider: 'claude', model: SONNET, effort: 'medium' });
+      const none = "[not-routed] No provider can run it at this tier — keeps the agent's model";
+      const unrouted = await routed(db, codexSignedOut);
+      assert.deepEqual(
+        { ...unrouted, reasons: [unrouted.reasons[0], unrouted.reasons.at(-1)] },
+        { applied: false, provider: 'claude', model: null, effort: AGENT_EFFORT, reasons: [TIER_M, none] },
+      );
+      assert.equal((await decisionOf(db, codexSignedOut)).level, null);
+      assert.equal(await refusal(db, target, 'codex'), 'codex is signed out on the parent\'s runner');
+      assert.deepEqual(await sessionOf(db, codexSignedOut), { provider: 'claude', model: null, effort: AGENT_EFFORT });
 
       // Signed in, but at 92% of its own week: not picked either.
       await runnerReports(db, target, { planUsage: quota(95, 92), engines: enginesReport() });
       const codexFull = await runNow(services, target, await taskIn(db, target));
-      assert.deepEqual((await routed(db, codexFull)).reasons, [
-        TIER_M,
-        `${OWN} — no other engine it may use is available`,
-        'claude is at 95% of its weekly quota',
-        'codex is at 92% of its weekly quota',
-      ]);
+      const full = (await routed(db, codexFull)).reasons;
+      assert.deepEqual([full[0], full.at(-1)], [TIER_M, none]);
+      assert.equal((await decisionOf(db, codexFull)).level, null);
+      assert.equal(await refusal(db, target, 'codex'), 'The account is at 92% of its weekly quota');
       assert.equal((await sessionOf(db, codexFull)).provider, 'claude');
 
       // Smart selection off: the decision says where it would have gone, and the run is the baseline.
@@ -426,8 +460,7 @@ test('a run leaves the agent\'s engine only for one the owner listed, and only w
       await services.workspaces.update(target.ownerId, target.agentId, { modelRouting: false });
       const shadow = await runNow(services, target, await taskIn(db, target));
       assert.deepEqual(await routed(db, shadow), {
-        applied: false, provider: 'codex', model: CODEX, effort: 'medium',
-        reasons: [TIER_M, 'Engine codex: claude is at 95% of its weekly quota'],
+        applied: false, provider: 'codex', model: CODEX, effort: 'medium', reasons: [TIER_M, ...picked('codex', 90, false)],
       });
       assert.deepEqual(await sessionOf(db, shadow), { provider: 'claude', model: null, effort: AGENT_EFFORT });
     } finally {
@@ -466,16 +499,17 @@ test('the quota judged is the account the run would use: a full account the agen
       await services.workspaces.update(target.ownerId, target.agentId, { claudeAccount: 'a1b2c3d4' });
       const pinned = await runNow(services, target, await taskIn(db, target));
       assert.deepEqual(await routed(db, pinned), {
-        applied: true, provider: 'codex', model: CODEX, effort: 'medium',
-        reasons: [TIER_M, 'Engine codex: claude is at 96% of its weekly quota'],
+        applied: true, provider: 'codex', model: CODEX, effort: 'medium', reasons: [TIER_M, ...picked('codex', 90, false)],
       });
+      assert.equal(await refusal(db, target, 'claude'), 'The account is at 96% of its weekly quota');
 
-      // Automatic: a new Claude session would start on Default, which has room.
+      // Automatic: a new Claude session would start on Default, which has room: the agent's own engine keeps it.
       await services.workspaces.update(target.ownerId, target.agentId, { claudeAccount: null });
       const automatic = await runNow(services, target, await taskIn(db, target));
       assert.deepEqual(await routed(db, automatic), {
-        applied: true, provider: 'claude', model: SONNET, effort: 'medium', reasons: [TIER_M, OWN],
+        applied: true, provider: 'claude', model: SONNET, effort: 'medium', reasons: [TIER_M, OWN, ...picked('claude', 90, true)],
       });
+      assert.equal(await refusal(db, target, 'claude'), null);
     } finally {
       await services.db.$disconnect();
     }
@@ -488,20 +522,23 @@ test('a verification run looks at the work with an engine the task it verifies d
     try {
       const { db } = services;
       const target = await fixture(services, 'verifier');
-      // The work ran on claude: with room on it, a listed codex is no reason to leave.
+      // The work ran on claude: with room on it, the agent's own engine keeps the run.
       const subject = await taskIn(db, target);
       const work = await runNow(services, target, subject);
       assert.deepEqual(await routed(db, work), {
-        applied: true, provider: 'claude', model: SONNET, effort: 'medium', reasons: [TIER_M, OWN],
+        applied: true, provider: 'claude', model: SONNET, effort: 'medium', reasons: [TIER_M, OWN, ...picked('claude', 90, true)],
       });
       await end(db, work, RunStatus.SUCCEEDED);
 
       const verifier = await taskIn(db, target, { verifiesTaskId: subject, title: 'verify the work' });
       const check = await runNow(services, target, verifier);
-      assert.deepEqual(await routed(db, check), {
+      const checked = await routed(db, check);
+      assert.deepEqual({ ...checked, reasons: checked.reasons.slice(0, 2) }, {
         applied: true, provider: 'codex', model: CODEX, effort: 'medium',
         reasons: [TIER_M, 'Engine codex: the task it verifies last ran on claude'],
       });
+      assert.ok(checked.reasons.includes('Runs on gpt-5.5-codex · medium on codex, subscription with 90% quota left'),
+        JSON.stringify(checked.reasons));
       assert.deepEqual(await sessionOf(db, check), { provider: 'codex', model: CODEX, effort: 'medium' });
       const features = (await decisionOf(db, check)).features as Record<string, unknown>;
       assert.deepEqual(
@@ -509,15 +546,23 @@ test('a verification run looks at the work with an engine the task it verifies d
         { verifiesTask: true, verifiedRunEngine: 'claude' },
       );
 
-      // The owner takes codex off the list: the next check stays on claude — a preference, never a
-      // licence to use an engine nobody listed.
+      // The Agent's list no longer narrows the pool: with codex taken off it, the next check still moves to codex.
       await end(db, check, RunStatus.SUCCEEDED);
       await services.workspaces.update(target.ownerId, target.agentId, { modelRoutingProviders: [] });
       const recheck = await runNow(services, target, verifier);
-      assert.deepEqual(await routed(db, recheck), {
-        applied: true, provider: 'claude', model: SONNET, effort: 'medium', reasons: [TIER_M, OWN],
+      assert.equal((await routed(db, recheck)).provider, 'codex');
+      assert.ok((await routed(db, recheck)).reasons.includes('Engine codex: the task it verifies last ran on claude'));
+
+      // Codex signed out: no other engine is left, so the check stays on claude, and says why.
+      await end(db, recheck, RunStatus.SUCCEEDED);
+      await runnerReports(db, target, { engines: enginesReport({ codex: 'no' }) });
+      const stayed = await runNow(services, target, verifier);
+      const kept = await routed(db, stayed);
+      assert.deepEqual({ ...kept, reasons: kept.reasons.slice(0, 3) }, {
+        applied: true, provider: 'claude', model: SONNET, effort: 'medium',
+        reasons: [TIER_M, OWN, 'Engine claude: no other engine it may use is available; the task it verifies last ran on claude'],
       });
-      assert.deepEqual(await sessionOf(db, recheck), { provider: 'claude', model: SONNET, effort: 'medium' });
+      assert.deepEqual(await sessionOf(db, stayed), { provider: 'claude', model: SONNET, effort: 'medium' });
     } finally {
       await services.db.$disconnect();
     }
@@ -529,28 +574,28 @@ test('the sweep\'s quota gate judges the engine routing picks: a spent agent eng
     const services = connect();
     try {
       const { db } = services;
-      // Claude's weekly window is spent until RESETS; Codex has room.
-      const target = await fixture(services, 'gate', { allowed: [], started: true, planUsage: quota(100) });
+      // Claude's weekly window is spent until RESETS; Codex has room. The Agent's own switch is off.
+      const target = await fixture(services, 'gate', { allowed: [], routing: false, started: true, planUsage: quota(100) });
       const taskId = await readyTask(db, target);
 
-      // Nothing listed: the run would be on claude, whose quota is spent — held, nothing started.
-      await sweep(services);
-      assert.deepEqual(await workRuns(db, taskId), [], 'held: the run would spend a spent quota');
-
-      // Codex listed, smart selection off: the run would still be the baseline on claude — held.
-      await services.workspaces.update(target.ownerId, target.agentId, {
-        modelRouting: false, modelRoutingProviders: ['codex'],
-      });
+      // Smart selection off on the Agent: the run would be the baseline on claude, whose quota is spent — held.
       await sweep(services);
       assert.deepEqual(await workRuns(db, taskId), [], 'held: in shadow the run is claude\'s');
 
-      // Smart selection on: routing moves the run to codex, which the gate finds with room, so it starts.
+      // Smart selection on: routing moves the run to codex, which the gate finds with room, so it starts — with
+      // nothing on the Agent's list.
       await services.workspaces.update(target.ownerId, target.agentId, { modelRouting: true });
       await sweep(services);
       const [run] = await workRuns(db, taskId);
       assert.ok(run, 'the sweep did not start the task on the engine it would run on');
       assert.deepEqual(await sessionOf(db, run.id), { provider: 'codex', model: CODEX, effort: 'medium' });
-      assert.deepEqual((await routed(db, run.id)).reasons, [TIER_M, 'Engine codex: claude is at 100% of its weekly quota']);
+      assert.deepEqual((await routed(db, run.id)).reasons, [TIER_M, ...picked('codex', 90, false)]);
+      assert.equal(await refusal(db, target, 'claude'), 'The account is at 100% of its weekly quota');
+
+      // A task pinned to claude cannot leave it: the pin is the whole pool, which is spent — held.
+      const pinned = await readyTask(db, target, { provider: 'claude' });
+      await sweep(services);
+      assert.deepEqual(await workRuns(db, pinned), [], 'held: its pin keeps it on claude');
     } finally {
       await services.db.$disconnect();
     }
@@ -602,22 +647,24 @@ test('an automatic re-run after a usage limit is held, or not, by the engine it 
           autoRunSkipped: { code: string; retryAt: Date | null } | null;
         }).autoRunSkipped;
 
-      // The re-run would be on claude: held until the reset, as the task read says.
+      // The Agent's own switch off: the re-run would be the baseline on claude — held until the reset, as the task
+      // read says.
+      await services.workspaces.update(target.ownerId, target.agentId, { modelRouting: false });
       const held = await skipped();
       assert.equal(held?.code, 'QUOTA_EXHAUSTED');
       assert.equal(held?.retryAt?.toISOString(), RESETS);
       await sweep(services);
       assert.equal((await workRuns(db, taskId)).length, 1, 'held: nothing re-run');
 
-      // The owner lists codex: the re-run would be on codex, which has room — due now.
-      await services.workspaces.update(target.ownerId, target.agentId, { modelRoutingProviders: ['codex'] });
+      // Back on: the re-run would be routed to codex, which has room — due now, with nothing on the Agent's list.
+      await services.workspaces.update(target.ownerId, target.agentId, { modelRouting: true });
       assert.equal(await skipped(), null, 'nothing holds it');
       await sweep(services);
       const runs = await workRuns(db, taskId);
       assert.equal(runs.length, 2, 'the sweep did not re-run the task');
       assert.deepEqual(await sessionOf(db, runs[1].id), { provider: 'codex', model: CODEX, effort: 'medium' });
       assert.deepEqual((await routed(db, runs[1].id)).reasons, [
-        TIER_M, 'Run 1 hit a usage limit — not counted', 'Engine codex: claude is at 100% of its weekly quota',
+        TIER_M, 'Run 1 hit a usage limit — not counted', ...picked('codex', 90, false),
       ]);
     } finally {
       await services.db.$disconnect();

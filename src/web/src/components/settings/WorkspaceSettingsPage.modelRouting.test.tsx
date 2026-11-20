@@ -144,13 +144,6 @@ function mount(
 }
 
 const settle = () => act(async () => new Promise((resolve) => setTimeout(resolve, 0)));
-const byText = (selector: string, text: string) => {
-  const found = [...document.body.querySelectorAll<HTMLElement>(selector)].find(
-    (el) => el.textContent?.trim() === text,
-  );
-  if (!found) throw new Error(`no ${selector} reading "${text}"`);
-  return found;
-};
 const click = async (el: HTMLElement) => {
   await act(async () => {
     el.dispatchEvent(new MouseEvent('click', { bubbles: true }));
@@ -158,19 +151,6 @@ const click = async (el: HTMLElement) => {
   await settle();
 };
 const squash = (text: string | null | undefined) => (text ?? '').replace(/\s+/g, ' ').trim();
-
-// Select options need the browser's full pointer sequence to commit a choice.
-const press = async (el: HTMLElement) => {
-  await act(async () => {
-    const init = { bubbles: true, cancelable: true, button: 0, buttons: 1, detail: 1 };
-    el.dispatchEvent(new PointerEvent('pointerdown', { ...init, pointerType: 'mouse' }));
-    el.dispatchEvent(new MouseEvent('mousedown', init));
-    el.dispatchEvent(new PointerEvent('pointerup', { ...init, buttons: 0, pointerType: 'mouse' }));
-    el.dispatchEvent(new MouseEvent('mouseup', { ...init, buttons: 0 }));
-    el.dispatchEvent(new MouseEvent('click', { ...init, buttons: 0 }));
-  });
-  await settle();
-};
 
 /** The workspace's page, drawn: every row shows without anything to open. */
 async function openEditor() {
@@ -201,43 +181,14 @@ const rowOf = (title: string) => {
 const smartRow = () => rowOf(SWITCH_LABEL);
 const smartSwitch = () => smartRow().querySelector<HTMLElement>('[role="switch"]')!;
 const worktreeSwitch = () => rowOf('Worktree isolation').querySelector<HTMLElement>('[role="switch"]')!;
-const optimize = () => page().querySelector<HTMLElement>('[aria-label="Optimize for"]');
 const modelLine = () => squash(rowOf('Model').querySelector('.rd-form-derived')?.textContent);
 
 describe('smart model selection on the Agent', () => {
-  it.each([
-    [undefined, 'Cost'],
-    ['cost', 'Cost'],
-    ['balance', 'Balance'],
-    ['intelligence', 'Intelligence'],
-  ])('reads optimize mode %s as %s', async (mode, label) => {
-    mount(workspace({ modelRoutingOptimizeFor: mode }));
+  it('has no Optimize For of its own: it is the account\'s, on Settings → General', async () => {
+    const { writes } = mount(workspace({ modelRouting: true }));
     await openEditor();
-    expect(optimize()?.textContent).toContain(label);
-  });
-
-  it.each(['Cost', 'Balance', 'Intelligence'])('saves %s on its own, in a PATCH of that field alone', async (label) => {
-    const { writes } = mount(workspace({ modelRoutingOptimizeFor: label === 'Balance' ? 'cost' : 'balance' }));
-    await openEditor();
-    await click(optimize()!);
-    expect([...document.querySelectorAll('[role="option"]')].map((el) => el.textContent)).toEqual([
-      'Cost', 'Balance', 'Intelligence',
-    ]);
-    await press(byText('[role="option"]', label));
-    expect(writes).toEqual([
-      { method: 'PATCH', path: `/workspaces/${WORKSPACE_ID}`, body: { modelRoutingOptimizeFor: label.toLowerCase() } },
-    ]);
-    expect(optimize()?.textContent).toContain(label);
-  });
-
-  it('leaves the saved optimize mode alone when another setting is saved with the account switch off', async () => {
-    const { writes } = mount(workspace({ modelRoutingOptimizeFor: 'intelligence' }), { modelRouting: false });
-    await openEditor();
-    expect(optimize()).toBeNull();
-    // Only the SubAgents group's control, which writes the same field (docs/subagent-design.md §7).
-    const controls = page().querySelectorAll('[aria-label="Optimize For"]');
-    expect(controls).toHaveLength(1);
-    expect(controls[0].closest('.subagents-group')).not.toBeNull();
+    expect(page().querySelector('[aria-label="Optimize for"]')).toBeNull();
+    expect(page().querySelector('[aria-label="Optimize For"]')).toBeNull();
     await click(worktreeSwitch());
     expect(writes.map((w) => w.body)).toEqual([{ enableWorktree: false }]);
   });
@@ -246,7 +197,7 @@ describe('smart model selection on the Agent', () => {
     mount(workspace());
     await openEditor();
 
-    expect(settingLabels()).toEqual(['Worktree isolation', SWITCH_LABEL, 'Optimize for']);
+    expect(settingLabels()).toEqual(['Worktree isolation', SWITCH_LABEL]);
     expect(smartRow().querySelector('.settings-row-description')?.textContent).toBe(SWITCH_DESC);
     // The whole explanation, where the row shortens it.
     expect(smartRow().querySelector('.settings-row-control')?.getAttribute('title')).toBe(SWITCH_TOOLTIP);
@@ -306,7 +257,7 @@ const engineInput = (engine: string) =>
   )!;
 
 describe('the engines smart selection may use', () => {
-  it('sit under Optimize for, with only the agent\'s own engine ticked, and that one fixed', async () => {
+  it('sit under smart model selection, with only the agent\'s own engine ticked, and that one fixed', async () => {
     mount(workspace());
     await openEditor();
 
@@ -399,8 +350,7 @@ describe('the engines, never the keys (board 7)', () => {
 
 describe('with the account switch off', () => {
   const cases: Array<[string, UserPreferences]> = [
-    ['preferences without modelRouting', {}],
-    ['modelRouting: false', { modelRouting: false }],
+    ['preferences with modelRouting explicitly off', { modelRouting: false }],
   ];
   for (const [what, preferences] of cases) {
     it(`(${what}) nothing of smart selection shows, and saving another row leaves the Agent's own setting as it was`, async () => {

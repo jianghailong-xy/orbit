@@ -13,7 +13,6 @@ import {
   OBSERVE_FAILED,
   OBSERVE_MODAL_TITLE,
   ProjectOpenItems,
-  exceptionCardRows,
   isOwnerExceptionCard,
   itemStandingLine,
   observingLine,
@@ -173,7 +172,7 @@ function ExceptionCards({ projectId, now }: { projectId: string; now: number }):
   const items = useQuery({ ...projectOpenItemsQuery(projectId), enabled: true });
   return (
     <>
-      {exceptionCardRows(items.data, []).map(({ row }) => (
+      {[...(items.data?.needsYou ?? []), ...(items.data?.withCoordinator ?? [])].map((row) => (
         <ItemAsCard key={row.itemId} projectId={projectId} row={row} now={now} />
       ))}
     </>

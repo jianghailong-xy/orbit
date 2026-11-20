@@ -16,6 +16,7 @@ import {
   CoordinatorProgressRows,
   ItemAsCard,
   ACTION_CONSEQUENCES,
+  FIXING_TAG,
   PROMOTION_RETRY_CONSEQUENCE,
   RERUN_CHECK_ACTION_LABEL,
   TASK_RUN_AGAIN_CONSEQUENCE,
@@ -329,18 +330,12 @@ const STANDING = {
   withCoordinator: [CONFLICT, CHECK_FAILED],
 };
 
-/**
- * The conversation's host, as `WorkspaceView` now draws these cards: the rows of the open-items
- * read, one card each, in the order the host would insert them. Production places each of those
- * rows at the moment it happened (`exceptionCardRows` → the transcript's `inserts`); what these
- * assertions are about is the CARD, so this stands in for the placing and does none of it — the
- * rows are the same selection and order, drawn from the same read.
- */
+/** Mount the card renderer directly for card content and action tests. */
 function ExceptionCards({ projectId, now }: { projectId: string; now: number }): JSX.Element {
   const items = useQuery({ ...projectOpenItemsQuery(projectId), enabled: true });
   return (
     <>
-      {exceptionCardRows(items.data, []).map(({ row }) => (
+      {[...(items.data?.needsYou ?? []), ...(items.data?.withCoordinator ?? [])].map((row) => (
         <ItemAsCard key={row.itemId} projectId={projectId} row={row} now={now} />
       ))}
     </>
@@ -348,15 +343,14 @@ function ExceptionCards({ projectId, now }: { projectId: string; now: number }):
 }
 
 describe('ProjectOpenItems — the project page’s Open items card', () => {
-  it('renders open items in two groups with owner, waiting time and escalation', () => {
+  it('renders only the owner’s open items with waiting time and escalation', () => {
     const html = paint(STANDING, () => <ProjectOpenItems projectId={PROJECT_ID} now={NOW} />);
 
     expect(html).toContain('Open items');
-    expect(html).toContain('3 need you · 2 with the coordinator · oldest first');
+    expect(html).toContain('3 need you · oldest first');
 
-    // The two groups, in the order the card puts them in.
     expect(html.indexOf('Needs you')).toBeGreaterThan(-1);
-    expect(html.indexOf('With the coordinator')).toBeGreaterThan(html.indexOf('Needs you'));
+    expect(html).not.toContain('With the coordinator');
 
     // The owner's group: each row says it is theirs and how long it has been.
     expect(html).toContain('Approve merge to main');
@@ -367,21 +361,15 @@ describe('ProjectOpenItems — the project page’s Open items card', () => {
     // An escalated item says WHEN it became the owner's, not merely that it is waiting.
     expect(html).toContain('escalated 6m ago');
 
-    // The coordinator's group: how long it has had it, and when it stops being its problem.
-    expect(html).toContain('Merge conflict: runner 托管作业支持「事件发生时叫醒会话」');
-    expect(html).toContain('3 files conflict with project/bg-jobs · nothing landed');
-    expect(html).toContain('18m · goes to you in 1h 42m');
-    expect(html).toContain('5m · goes to you in 1h 55m');
-
-    // Who has it, in the words the mock uses for each group.
+    expect(html).not.toContain(CONFLICT.title);
+    expect(html).not.toContain(CHECK_FAILED.title);
     expect(html.match(/>You</g) ?? []).toHaveLength(3);
-    expect(html.match(/>Coordinator</g) ?? []).toHaveLength(2);
 
     // The one press each row offers, from the server's own `actions` — never one with no door.
     // A row is a way in (§7.2 V5): the presses that WRITE are the card's, and a row leaves them
     // out, which is why these two appear on the cards below and nowhere here.
     expect(html).toContain('Answer');
-    expect(html).toContain('Open coordinator');
+    expect(html).not.toContain('Open coordinator');
     expect(html).not.toContain('Retry');
     expect(html).not.toContain('Cancel task');
   });
@@ -421,7 +409,7 @@ describe('ProjectOpenItems — the project page’s Open items card', () => {
       html.indexOf('Approve merge to main'),
     );
     // And it is a card, not one of the rows: the pause is not counted into either group's tally.
-    expect(html).toContain('1 need you · 1 with the coordinator · oldest first');
+    expect(html).toContain('1 need you · oldest first');
   });
 
   it('draws nothing while nothing is open', () => {
@@ -499,7 +487,7 @@ describe('ProjectOpenItems — the start of a project nobody has started', () =>
     // First in the group, ahead of an older question: nothing else here runs until it is answered.
     expect(html.indexOf(START_PROJECT_TITLE)).toBeLessThan(html.indexOf('Coordinator asks: start t4 first'));
     // Somebody is waiting on the owner for it, so it counts with what needs them.
-    expect(html).toContain('2 need you · 0 with the coordinator · oldest first');
+    expect(html).toContain('2 need you · oldest first');
     expect(html).not.toContain(START_ROW_NOT_ASKED);
   });
 
@@ -536,7 +524,7 @@ describe('ProjectOpenItems — the start of a project nobody has started', () =>
       const html = openItems(asked, { started });
       expect(html, String(started)).not.toContain(START_PROJECT_TITLE);
       expect(html, String(started)).not.toContain(START_ROW_OWN);
-      expect(html, String(started)).toContain('1 need you · 0 with the coordinator · oldest first');
+      expect(html, String(started)).toContain('1 need you · oldest first');
     }
   });
 
@@ -549,7 +537,7 @@ describe('ProjectOpenItems — the start of a project nobody has started', () =>
     expect(html).toContain(START_ROW_NOT_ASKED);
     expect(START_ROW_NOT_ASKED).toBe('not asked yet');
     // Quiet: nobody is waiting on it, so it is not counted, and it carries no wait.
-    expect(html).toContain('0 need you · 0 with the coordinator · oldest first');
+    expect(html).toContain('0 need you · oldest first');
     expect(html).not.toContain('waiting');
     expect(html).not.toContain(START_PROJECT_TITLE);
   });
@@ -644,10 +632,10 @@ describe('exceptionCardRows — where each exception lands in a conversation', (
   it('keeps the pause first and the rest oldest first, as the one block drew them', () => {
     const older = { ...ESCALATED, itemId: 'OLDER', escalatedAt: null, waitingSince: at(3 * HOUR) };
     const rows = exceptionCardRows(
-      { needsYou: [older], withCoordinator: [CONFLICT, PAUSED] },
+      { needsYou: [older, PAUSED], withCoordinator: [CONFLICT] },
       EVENTS,
     );
-    expect(rows.map(({ row }) => row.itemId)).toEqual([PAUSED.itemId, 'OLDER', CONFLICT.itemId]);
+    expect(rows.map(({ row }) => row.itemId)).toEqual([PAUSED.itemId, 'OLDER']);
   });
 });
 
@@ -853,6 +841,30 @@ describe('the exception card’s fact block', () => {
     expect(html).toContain('project/bg-jobs');
     expect(html).toContain('b70a446');
     expect(html).toContain('nothing landed');
+  });
+
+  it('folds a long file list to five paths, with the rest one press away', async () => {
+    const files = Array.from({ length: 8 }, (_, i) => `src/file-${i}.ts`);
+    const row = { ...REVIEW, facts: { ...REVIEW.facts!, files } };
+    const html = card(row);
+    expect(html).toContain('<span class="criteria-decision-k">Files (8)</span>');
+    expect(html).toContain('src/file-4.ts');
+    expect(html).not.toContain('src/file-5.ts');
+    expect(html).toContain('Show 3 more');
+    // A short list is drawn whole, under its plain label and with nothing to press.
+    expect(card(REVIEW)).not.toContain('more</button>');
+
+    await mount(
+      <MemoryRouter>
+        <QueryClientProvider client={client({ needsYou: [], withCoordinator: [row] })}>
+          <ExceptionCards projectId={PROJECT_ID} now={NOW} />
+        </QueryClientProvider>
+      </MemoryRouter>,
+    );
+    await act(async () => button('Show 3 more')!.click());
+    expect(document.body.textContent).toContain('src/file-7.ts');
+    await act(async () => button('Show less')!.click());
+    expect(document.body.textContent).not.toContain('src/file-7.ts');
   });
 
   it('draws a delivery review as the coordinator’s: what changed beside what was declared', () => {
@@ -1252,6 +1264,44 @@ describe('T10 required actions and current-candidate doors', () => {
     expect(body.querySelector('[data-who="coordinator"] .orbit-button-primary')?.textContent).toContain('Ask the coordinator again');
     expect(body.querySelectorAll('.project-open-item-consequence').length).toBeGreaterThanOrEqual(2);
     expect(ACTION_CONSEQUENCES.MARK_HANDLED).toContain('reason');
+  });
+
+  it('a coordinator item with a live repair says so once, links the task, and asks nothing', () => {
+    const fixing = (state: string) => item({
+      kind: 'INTEGRATION_CONFLICT',
+      assignee: 'COORDINATOR',
+      requiredAction: 'A repair task is already handling this item — let it finish or open the task to see what it needs.',
+      primaryAction: 'REVIEW',
+      actions: ['REVIEW', 'OPEN_LANDING'],
+      landingSessionId: '34Y7Utvsd47A14DjMzIzE',
+      facts: facts({ targetRef: 'refs/heads/main', targetSha: '928ed7e0000', nothingLanded: true, files: ['docs/api-reference.md'] }),
+      handledBy: [{ taskId: '34Y7Utvsd47A14DjMzIzD', title: 'regenerate api-reference.md', state }],
+    });
+    const draw = (row: ProjectOpenItemRow) => new DOMParser().parseFromString(paint(
+      { needsYou: [], withCoordinator: [row] },
+      () => <ExceptionCards projectId={PROJECT_ID} now={NOW} />,
+    ), 'text/html');
+
+    const live = draw(fixing('IN_PROGRESS'));
+    expect(live.querySelector('.project-open-item-state')?.textContent).toBe(FIXING_TAG);
+    // The server's sentence and the old handled-by line are one line now, with the task a link.
+    expect(live.querySelector('.project-open-item-required-action')).toBeNull();
+    expect(live.querySelector('.project-open-item-handled-by')).toBeNull();
+    const link = live.querySelector('.project-open-item-fixing a');
+    expect(link?.textContent).toContain('regenerate api-reference.md');
+    expect(link?.getAttribute('href')).toContain('/tasks/');
+    // No press is the reader's next step while it is being fixed: every door is a quiet link.
+    expect(live.querySelector('.orbit-button-primary, .project-open-item-action.is-primary')).toBeNull();
+    expect(live.querySelector('.project-open-item-quiet-row')).not.toBeNull();
+    expect(live.querySelectorAll('.project-open-item-consequence')).toHaveLength(0);
+    expect(live.body.textContent).toContain('main at 928ed7e');
+    expect(live.body.textContent).not.toContain('refs/heads/main');
+
+    // Once the repair ended, the card is the plain one again: the sentence and a leading press.
+    const ended = draw(fixing('DONE'));
+    expect(ended.querySelector('.project-open-item-fixing')).toBeNull();
+    expect(ended.querySelector('.project-open-item-required-action')).not.toBeNull();
+    expect(ended.querySelectorAll('.project-open-item-consequence').length).toBeGreaterThan(0);
   });
 
   it('only draws Review for the candidate mounted beside the row', () => {

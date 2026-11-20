@@ -394,6 +394,27 @@ export function delegateLaunchReceipt(content: unknown): { runId: string } | nul
   return typeof runId === 'string' && runId && status === 'running' ? { runId } : null;
 }
 
+/** The tool name of Orbit's own workflow (docs/subagent-workflow-design.md), as engines report it. */
+export const ORBIT_WORKFLOW_TOOL = 'mcp__orbit__workflow';
+
+/**
+ * The receipt `mcp__orbit__workflow` returns the instant a workflow starts: `{ "workflowRunId": "…", "status":
+ * "running" }`. A workflow always runs in the background: this is its only top-level tool_result, and its end is
+ * reported later by a terminal background_task carrying the workflow call's tool_use id, as a background delegate's
+ * is. The server reads the same receipt (runner-api workflow-run.ts). Null for anything else.
+ */
+export function orbitWorkflowLaunchReceipt(content: unknown): { workflowRunId: string } | null {
+  let parsed: unknown;
+  try {
+    parsed = JSON.parse(toolResultText(content).trim());
+  } catch {
+    return null;
+  }
+  if (!parsed || typeof parsed !== 'object') return null;
+  const { workflowRunId, status } = parsed as { workflowRunId?: unknown; status?: unknown };
+  return typeof workflowRunId === 'string' && workflowRunId && status === 'running' ? { workflowRunId } : null;
+}
+
 /**
  * What a failed run's error text says was actually wrong.
  *
