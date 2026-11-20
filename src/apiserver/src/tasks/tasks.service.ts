@@ -10,6 +10,7 @@ import {
   Optional,
 } from '@nestjs/common';
 import { workspaceCloneReason } from '../common/workspace-clone-gate';
+import { diskBelowFloor } from '../common/runner-disk-gate';
 import { taskRunAnchor, taskRunAnchors } from '../workspaces/start-anchor';
 import { PushService } from '../push/push.service';
 import { ProjectOrphanSweepService } from '../projects/project-orphan-sweep.service';
@@ -102,6 +103,7 @@ import {
   projectStandsStill,
 } from './project-pause-dispatch';
 import { ProjectFuseService } from '../projects/project-fuse.service';
+import { CoordinatorFactQueueService } from '../projects/coordinator-fact-queue.service';
 import { CoordinatorEvidenceQueueService } from '../projects/coordinator-evidence-queue.service';
 import { EvidenceReviewService } from './evidence-review.service';
 import { OwnerConfirmationReviewService } from './owner-confirmation-review.service';
@@ -1482,8 +1484,8 @@ interface EndedAutoRunMoment {
   deletedAt: Date | null;
   /** The run's own automatic retry (AutoRetryService), when one is armed. */
   retryAt: Date | null;
-  /** The task's engine and provider pins and whether smart selection is on for it (its Agent's switch
-   *  and its account's): what a re-run would start on, and so which quota holds it (dispatchEngines). */
+  /** The task's engine and provider pins and whether smart selection is on for it (its account's
+   *  switch; there is no per-Agent one): what a re-run would start on, and so which quota holds it (dispatchEngines). */
   taskEngine: string | null;
   taskProvider: string | null;
   modelRouting: boolean;
@@ -1966,27 +1968,6 @@ function foremanLock(listId: string): string {
   return `task-list-foreman:${listId}`;
 }
 
-/**
- * Is this workspace's filesystem below its runner's free-space floor, so no new work should be
- * dispatched onto it?
- *
- * Fail-open on every kind of missing information — no floor configured, or no reading from the
- * runner (too old to measure, work dir gone, a platform with no answer). A disk gate that fired
- * on absent telemetry would stop a fleet precisely because it knew nothing about it, and the
- * failure it is guarding against (a volume filling up) is one that its own silence cannot
- * evidence. The gate is only as good as the reading, and no reading means no gate.
- *
- * bigint throughout: a multi-terabyte volume's byte count is past Number.MAX_SAFE_INTEGER.
- */
-export function diskBelowFloor(
-  freeBytes: bigint | null | undefined,
-  minFreeDiskMb: number | null | undefined,
-): boolean {
-  if (freeBytes == null) return false;
-  if (minFreeDiskMb == null || !Number.isFinite(minFreeDiskMb) || minFreeDiskMb <= 0) return false;
-  return freeBytes < BigInt(Math.floor(minFreeDiskMb)) * 1024n * 1024n;
-}
-
 // PostgreSQL accepts at most 32,767 bind parameters. Dependency lookups are also used
 // by the legacy unpaged endpoint, so keep every generated IN (...) comfortably below
 // that ceiling even when an owner has tens of thousands of tasks.
@@ -2340,6 +2321,7 @@ export class TasksService implements OnModuleInit, OnModuleDestroy {
      * one over THIS prisma, so a startWhen is written exactly as the injected one writes it.
      */
     @Optional() conditions?: ConditionsService,
+    @Optional() private readonly coordinatorFacts?: CoordinatorFactQueueService,
   ) {
     this.conditions = conditions ?? new ConditionsService(prisma);
     // A task's startWhen fired (docs/condition-triggers-design.md §5.2): in the firing's own transaction, the task
@@ -2741,6 +2723,10 @@ export class TasksService implements OnModuleInit, OnModuleDestroy {
     this.reconcileTimer.unref(); // don't keep the process alive just for this timer
   }
 
+  async deliverLooksFinishedOwedTo(sessionId?: string): Promise<void> {
+    await this.completionInputs?.deliverLooksFinishedOwedTo?.(sessionId);
+  }
+
   /**
    * One tick of the reconcile timer, on the apiserver process that runs the singleton sweeps
    * (realtime/control-plane-leader.ts) and on no other. Two ticks at once are two dispatch decisions
@@ -2800,8 +2786,12 @@ export class TasksService implements OnModuleInit, OnModuleDestroy {
       // one of its own, for the reason at the top of this block. A coordinator's own turn ending
       // hands it over too; that is the latency, and this is the guarantee that one which is back and
       // has no turn ending is not left with revisions waiting (coordinator-evidence-queue.service.ts).
+      .then(() => this.deliverLooksFinishedOwedTo())
+      .then(() => this.coordinatorFacts?.deliverOwedTo())
       .then(() => this.evidenceQueue?.deliverToIdleCoordinators())
       .then(() => this.evidenceReviews?.deliverOwedTo())
+      .then(() => this.evidenceReviews?.deliverSendBacksOwedTo())
+      .then(() => this.confirmationReviews?.deliverOwedTo())
       .then(() => this.confirmationReviews?.deliverPendingFor())
       .catch((e) =>
         this.logger.error(`waiting evidence sweep failed: ${e instanceof Error ? e.message : e}`),
@@ -11818,8 +11808,8 @@ export class TasksService implements OnModuleInit, OnModuleDestroy {
     // only to discard them dwarfs the dispatch it exists to do.
     // freeBytes/minFreeDiskMb ride along on the joins this scan already needs, so the disk gate
     // below costs no extra round trip. They arrive as bigint (BIGINT column) and number. So do the
-    // task's provider pin and whether smart selection is on for its run — its Agent's switch, and
-    // its account's above it — which say which engine the quota gate judges (dispatchEngines).
+    // task's provider pin and whether smart selection is on for its run — its account's switch
+    // (there is no per-Agent one) — which say which engine the quota gate judges (dispatchEngines).
     const ready = await this.autoRunCandidates();
     if (ready.length === 0) return;
     // Two independent brakes. The quota gate comes first because it is the one that knows
@@ -12493,12 +12483,12 @@ export class TasksService implements OnModuleInit, OnModuleDestroy {
    * The engine and the credential each task's next fresh run would be created on, as dispatch plans it
    * — what the sweep's quota gate judges, so that it holds back the quota a run will spend and not
    * another (docs/model-routing-design.md §6, docs/provider-engine-contract.md §4.5). The routed pair
-   * when the task's Agent has smart selection on and routing applies; otherwise the task's pins, else
+   * when the task's account has smart selection on and routing applies; otherwise the task's pins, else
    * the Agent's seed (the project's last interactive session, migration 0088), which `sessions.create`
    * falls back to — resolved as `sessions.create` resolves them (routeEnvironment).
    *
-   * The pins and the switch ride on the scan that found the candidates — on only where both the
-   * Agent's switch and its account's are (common/model-routing-switch.ts). Routing is planned only
+   * The pins and the switch ride on the scan that found the candidates — on wherever the
+   * account's switch is (common/model-routing-switch.ts; there is no per-Agent switch). Routing is planned only
    * there: anywhere else a route is never applied, so it could not move the engine. A route that cannot
    * be worked out leaves the run on the pins, exactly as dispatch does (routeFreshRun).
    */
@@ -12726,7 +12716,7 @@ export class TasksService implements OnModuleInit, OnModuleDestroy {
              a.work_dir_free_bytes AS "freeBytes", r.min_free_disk_mb AS "minFreeDiskMb", a.clone_state AS "cloneState",
              t.list_id AS "listId", e.epoch AS "dispatchEpoch", t.priority AS "priority",
              t.project_id AS "projectId", t.engine AS "taskEngine", t.provider AS "taskProvider",
-             a.model_routing AND ${modelRoutingEnabledSql('t.owner_id')} AS "modelRouting"
+             ${modelRoutingEnabledSql('t.owner_id')} AS "modelRouting"
       FROM task t
       LEFT JOIN workspace a ON a.id = t.assignee_id
       LEFT JOIN runner r ON r.id = a.runner_id
@@ -12795,7 +12785,7 @@ export class TasksService implements OnModuleInit, OnModuleDestroy {
              a.work_dir_free_bytes AS "freeBytes", r.min_free_disk_mb AS "minFreeDiskMb", a.clone_state AS "cloneState",
              c.list_id AS "listId", e.epoch AS "dispatchEpoch", c.priority AS "priority",
              c.project_id AS "projectId", c.engine AS "taskEngine", c.provider AS "taskProvider",
-             a.model_routing AND ${modelRoutingEnabledSql('c.owner_id')} AS "modelRouting"
+             ${modelRoutingEnabledSql('c.owner_id')} AS "modelRouting"
       FROM (
         SELECT t.id, t.owner_id, t.assignee_id, t.list_id, t.created_at, t.priority, t.project_id,
                t.engine, t.provider,
@@ -13129,7 +13119,7 @@ export class TasksService implements OnModuleInit, OnModuleDestroy {
              run.end_reason AS "endReason", run.completed_at AS "completedAt",
              run.archived_at AS "archivedAt", run.deleted_at AS "deletedAt",
              run.retry_at AS "retryAt", t.engine AS "taskEngine", t.provider AS "taskProvider",
-             a.model_routing AND ${modelRoutingEnabledSql('t.owner_id')} AS "modelRouting"
+             ${modelRoutingEnabledSql('t.owner_id')} AS "modelRouting"
         FROM task t
         JOIN workspace a ON a.id = t.assignee_id
         JOIN task_dispatch_epoch current_moment ON current_moment.task_id = t.id
@@ -15960,9 +15950,9 @@ export class TasksService implements OnModuleInit, OnModuleDestroy {
       && (await this.sessions.assertMayReach(ownerId, actingSessionId, plannedRun.sessionId, 'resumeRun')).narrower
       ? { ...plannedRun, narrowerSessionId: actingSessionId }
       : plannedRun;
-    // Routed for a fresh run only (docs/model-routing-design.md §8.1). The decision is frozen and
-    // recorded either way; only an Agent with smart selection on is dispatched with it — any other
-    // run keeps the task's pins and names no effort, as before routing. A RESUME or ADOPT is never
+    // Routed for a fresh run only (docs/model-routing-design.md §8.1). The decision is frozen,
+    // recorded and dispatched with whenever a tier was decided; a run with no tier keeps the task's
+    // pins and names no effort, as before routing. A RESUME or ADOPT is never
     // routed: that run has already started. With the account's switch off there is no decision at
     // all (planTaskRunRoute), and the run is planned as before routing existed.
     const route = planned.kind === 'CREATE'
@@ -16384,7 +16374,7 @@ export class TasksService implements OnModuleInit, OnModuleDestroy {
       ownerId, t, workspace, TASK_RUN_TRIGGER.batch(pressToken, t.id),
     );
     // Routed per item, exactly as the single Run does it: a fresh run only, and dispatched with
-    // the route only when the item's Agent has smart selection on.
+    // the route whenever it decided a tier.
     const route = itemPlan.kind === 'CREATE'
       ? await this.routeFreshRun(routeReads, t, workspace, prompt)
       : null;

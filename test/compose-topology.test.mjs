@@ -160,6 +160,10 @@
 // gained its apiserver environment line, ORBIT_MANAGED_RUNNER_BROWSER_ENABLED, off unless the host's .env says true,
 // right after the managed runners' switch (Orbit task 3507XXbnib94qfwmCPaOA, filed by that project's coordinator).
 // No service, mount or port is added; the managed runners' block below pins the line.
+//
+// ce80000db8 then added one apiserver environment line, ORBIT_RUN_STOPPED_WAKE (on unless the host's .env sets
+// ORBIT_RUN_STOPPED_WAKE_MODE to off), and the three comment lines that explain it; the account owner approved it as a
+// deployment setting on 2026-11-20. No service, mount or port is added; the block below pins the line.
 import assert from 'node:assert/strict';
 import { execFileSync, spawnSync } from 'node:child_process';
 import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
@@ -385,7 +389,7 @@ test('(s) the two-stage release names each image through variables, and changes 
   // two-stage release deploys, still built where they run and named as before.
   assert.deepEqual(lines.filter((line) => /^\s+image:/.test(line) && !TWO_STAGE_IMAGES.has(line) && !TWO_STAGE_WEB_IMAGE.endsWith(line)),
     ['    image: postgres:16-alpine', '    image: postgres:16-alpine', '    image: orbit-docker-channel:local',
-      '    image: orbit-managed-runner-firewall:local']);
+      '    image: orbit-cloud-runner-firewall:local']);
 });
 
 /** What Compose acts on: comments and blank lines document a block, they cannot run a process. */
@@ -436,6 +440,11 @@ const APPROVED_APISERVER_BLOCKS = [
   // because the line comes right after `logging`, before the environment.
   [
     '    stop_grace_period: 30s',
+  ],
+  // The Run stopped wake's switch (2026-11-20, ce80000db8, the top of this file): on unless the host's .env sets
+  // ORBIT_RUN_STOPPED_WAKE_MODE to off. It comes right after the Wiki's canary owners in the file, before PORT.
+  [
+    '      ORBIT_RUN_STOPPED_WAKE: "${ORBIT_RUN_STOPPED_WAKE_MODE:-on}"',
   ],
   // Claude Code on an OpenAI key (2026-11-11, the top of this file): its flag, the flag of the owner's own Codex login
   // pool, and the upstream hosts an admin lists besides api.openai.com, each empty unless the host's .env sets it. They
@@ -521,8 +530,11 @@ const APPROVED_APISERVER_BLOCKS = [
   [
     '      ORBIT_MANAGED_RUNNERS_ENABLED: "${ORBIT_MANAGED_RUNNERS_ENABLED:-false}"',
     '      ORBIT_MANAGED_RUNNER_BROWSER_ENABLED: "${ORBIT_MANAGED_RUNNER_BROWSER_ENABLED:-false}"',
-    '      ORBIT_MANAGED_RUNNERS_PROFILE: /var/lib/orbit-managed-runners/profile.json',
+    '      ORBIT_MANAGED_RUNNERS_PROFILE: /var/lib/orbit-cloud-runners/profile.json',
     '    volumes:',
+    '      - "${ORBIT_MANAGED_RUNNERS_DIR:-/dev/null}:/var/lib/orbit-cloud-runners:ro"',
+    // Amended on 2026-11-20, when the owner renamed orbit-managed to orbit-cloud with a migration: the same directory,
+    // read-only, at its path from before, which profile.json and channel.json written by an earlier install name.
     '      - "${ORBIT_MANAGED_RUNNERS_DIR:-/dev/null}:/var/lib/orbit-managed-runners:ro"',
   ],
   // Orbit Files' directory (2026-11-02, the top of this file): the local store and the uploads' temporary files, a bind
@@ -705,15 +717,18 @@ test('(m) the Docker channel is exactly the service the owner allowed on 2026-10
     '    container_name: orbit-docker-channel',
     '    restart: unless-stopped',
     '    network_mode: none',
-    '    command: ["serve", "--config", "/var/lib/orbit-managed-runners/channel.json", "--disk-probe-path", "/var/lib/orbit-docker-volumes"]',
+    '    command: ["serve", "--config", "/var/lib/orbit-cloud-runners/channel.json", "--disk-probe-path", "/var/lib/orbit-docker-volumes"]',
     '    volumes:',
     '      - /var/run/docker.sock:/var/run/docker.sock',
+    '      - "${ORBIT_MANAGED_RUNNERS_DIR:-/dev/null}:/var/lib/orbit-cloud-runners"',
+    // Amended on 2026-11-20 (orbit-managed renamed orbit-cloud, with a migration): the same directory at its path from
+    // before, which an earlier install's channel.json names.
     '      - "${ORBIT_MANAGED_RUNNERS_DIR:-/dev/null}:/var/lib/orbit-managed-runners"',
     '      - type: volume',
     '        target: /var/lib/orbit-docker-volumes',
     '        read_only: true',
     '    healthcheck:',
-    '      test: ["CMD", "python3", "-c", "import socket; socket.socket(socket.AF_UNIX).connect(\'/var/lib/orbit-managed-runners/channel.sock\')"]',
+    '      test: ["CMD", "python3", "-c", "import socket; socket.socket(socket.AF_UNIX).connect(\'/var/lib/orbit-cloud-runners/channel.sock\')"]',
     '      interval: 5s',
     '      timeout: 5s',
     '      retries: 6',
@@ -748,8 +763,8 @@ test('(n) the managed runners\' firewall is exactly the service the owner allowe
     '    build:',
     '      context: .',
     '      dockerfile: deploy/managed-runner/firewall/Dockerfile',
-    '    image: orbit-managed-runner-firewall:local',
-    '    container_name: orbit-managed-runner-firewall',
+    '    image: orbit-cloud-runner-firewall:local',
+    '    container_name: orbit-cloud-runner-firewall',
     '    restart: unless-stopped',
     '    network_mode: host',
     '    cap_drop: [ALL]',
@@ -757,14 +772,14 @@ test('(n) the managed runners\' firewall is exactly the service the owner allowe
     '    security_opt: ["no-new-privileges:true"]',
     '    read_only: true',
     '    volumes:',
-    '      - "${ORBIT_MANAGED_RUNNERS_DIR:-/dev/null}/firewall:/var/lib/orbit-managed-runner-firewall"',
+    '      - "${ORBIT_MANAGED_RUNNERS_DIR:-/dev/null}/firewall:/var/lib/orbit-cloud-runner-firewall"',
     '      - type: bind',
     '        source: "${ORBIT_MANAGED_RUNNER_FIREWALL_XTABLES_LOCK:-/dev/null}"',
     '        target: /run/xtables.lock',
     '        bind:',
     '          create_host_path: false',
     '    healthcheck:',
-    '      test: ["CMD", "python3", "-I", "/opt/orbit-managed-runner-firewall/firewall.py", "status"]',
+    '      test: ["CMD", "python3", "-I", "/opt/orbit-cloud-runner-firewall/firewall.py", "status"]',
     '      interval: 10s',
     '      timeout: 5s',
     '      retries: 3',

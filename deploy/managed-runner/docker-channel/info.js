@@ -11,7 +11,7 @@
 const { readFileSync } = require('node:fs');
 const http = require('node:http');
 
-const file = process.argv[2] || process.env.ORBIT_MANAGED_RUNNERS_PROFILE || '/var/lib/orbit-managed-runners/profile.json';
+const file = process.argv[2] || process.env.ORBIT_MANAGED_RUNNERS_PROFILE || '/var/lib/orbit-cloud-runners/profile.json';
 const profile = JSON.parse(readFileSync(file, 'utf8'));
 const hosts = profile.docker?.hosts ?? [profile.docker];
 const pinned = /^sha256:[0-9a-f]{64}$/.test(profile.runner?.image ?? '') ? profile.runner.image : null;

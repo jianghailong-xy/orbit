@@ -75,7 +75,7 @@ test('every Docker field is required and checked, and Kubernetes sections are re
     ['a channel over https', (p) => (p.docker.channel = { url: 'https://127.0.0.1:7781' }), /docker\.channel\.url must be http:\/\/127/],
     ['a relative token file', (p) => (p.docker.tokenFile = 'token'), /docker\.tokenFile must be an absolute path/],
     ['an instance that is no DNS label', (p) => (p.docker.instanceId = 'Orbit_A'), /docker\.instanceId must be a DNS label/],
-    ['an image by tag', (p) => (p.runner.image = 'orbit-managed-runner:local'), /runner\.image must be the local image ID/],
+    ['an image by tag', (p) => (p.runner.image = 'orbit-cloud-runner:local'), /runner\.image must be the local image ID/],
     ['an image by registry digest', (p) => (p.runner.image = `registry.invalid/x@sha256:${'a'.repeat(64)}`), /local image ID/],
     ['plain http to a public name', (p) => (p.runner.serverUrl = 'http://orbit.example.com'), /runner\.serverUrl must be an https URL, or http to a loopback or private address/],
     ['plain http to a public address', (p) => (p.runner.serverUrl = 'http://8.8.8.8:3000'), /runner\.serverUrl must be an https URL/],

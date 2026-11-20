@@ -604,7 +604,7 @@ def attempt(label, pod, manager=False, expect=None):
     if created:  # admitted: it must not stay, but the record says it got in
         sw.kubectl('delete', 'pod', pod['metadata']['name'], '--grace-period=0', '--force', '--wait=false', check=False)
     answer = (result.stdout if created else result.stderr).strip()
-    code = re.search(r'orbit-managed-runner-admission: ([A-Z_]+):', answer)
+    code = re.search(r'orbit-cloud-runner-admission: ([A-Z_]+):', answer)
     return {'case': label, 'at': started, 'identity': f'system:serviceaccount:{NAMESPACE}:{sw.MANAGER}' if manager else 'lab cluster-admin',
             'name': pod['metadata']['name'], 'node': pod['spec'].get('nodeName'), 'admitted': created, 'code': code and code.group(1),
             'expected': expect, 'answer': answer}
@@ -652,7 +652,7 @@ def duplicate_guard(ctx, step):
     for a in attempts:
         if 'events' in a:
             step.check(a['case'] + ': no Pod; the Job controller\'s create refused by the guard',
-                       not a['admitted'] and any('orbit-managed-runner-admission' in e and 'NOT_THE_MANAGER' in e for e in a['events']), a['events'])
+                       not a['admitted'] and any('orbit-cloud-runner-admission' in e and 'NOT_THE_MANAGER' in e for e in a['events']), a['events'])
         else:
             step.check(f"{a['case']}: refused by the admission guard, {a['expected']}", not a['admitted'] and a['code'] == a['expected'], a['answer'][-220:])
     step.check('the authorized Pod is the same one, still running on the second node',

@@ -133,7 +133,7 @@ final class SettingsCopyParityTests: XCTestCase {
         assertSays(page, "title={S.modelRouting.title}", in: Self.general)
         assertSays(try web(Self.settingsIndex), "'modelRouting', '/settings/general', '\(SettingsCopy.smartModelSelection)',", in: Self.settingsIndex)
         assertSays(page, "full: \"\(SettingsCopy.smartModelSelectionHint)\",", in: Self.general)
-        assertSays(page, "checked={prefs.modelRouting === true}", in: Self.general)
+        assertSays(page, "checked={prefs.modelRouting !== false}", in: Self.general)
         assertSays(page, "save.mutate({ modelRouting: v })", in: Self.general)
         XCTAssertEqual(SessionSettings.title(.modelRouting), SettingsCopy.smartModelSelection)
     }

@@ -342,7 +342,11 @@ struct ConsoleView: View {
             VStack(spacing: 0) {
                 // What this session waits on — a watch, not a process — above the real shells.
                 WatchingCardStack(sessionID: console.sessionID)
-                BackgroundTrayView(procs: console.state.background, progress: console.state.taskProgress)
+                // The folded row by the shared rule; its names stop rotating while the band is folded.
+                BackgroundTrayView(procs: console.state.background, progress: console.state.taskProgress,
+                                   row: BackgroundRowRule.row(console.state.background, items: console.state.items,
+                                                              sessionLive: console.isLive),
+                                   paused: foldsChrome(console) || foldsBand(console))
                 // The tasks this session's agent created, beside the code the bar below
                 // carries — the session's two kinds of output, together.
                 CreatedTasksCard(console: console)

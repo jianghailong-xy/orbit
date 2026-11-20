@@ -47,7 +47,7 @@ Build only on an explicitly authorized isolated builder, with a reviewed clean s
 docker --host "$AUTHORIZED_TEST_DOCKER_HOST" build \
   --file deploy/managed-runner/image/Dockerfile \
   --build-arg ORBIT_SOURCE_SHA="$(git rev-parse HEAD)" \
-  --tag orbit-managed-runner:test .
+  --tag orbit-cloud-runner:test .
 ```
 
 Use a final image digest in Kubernetes. Do not point this command at the production daemon or mount
@@ -252,8 +252,8 @@ clients cooperatively; neither is the protection here. Three pieces are, togethe
    cannot run managed Pods: every create is refused.
 
 2. **Generation-bound runner authentication.** Every request a managed runner makes with its
-   credential names its generation and Pod UID (`X-Orbit-Managed-Runner-Generation`,
-   `X-Orbit-Managed-Runner-Pod-Uid`) and declares `managed-runner-instance-v1`; the runner guards
+   credential names its generation and Pod UID (`X-Orbit-Cloud-Runner-Generation`,
+   `X-Orbit-Cloud-Runner-Pod-Uid`) and declares `managed-runner-instance-v1`; the runner guards
    accept it only from the recorded instance and refuse a predecessor (403
    `MANAGED_RUNNER_INSTANCE_SUPERSEDED`), another Pod, a fenced mapping, or no instance at all;
    claims and inbox polls re-check it where work is handed out. Self-managed runners are unaffected.
@@ -313,7 +313,7 @@ on nodes, Ceph or the webhook configuration.
 Run the local preparation checks from the checkout, preferably through a runner-hosted background job:
 
 ```bash
-bash scripts/managed-runner/local-smoke.sh /tmp/orbit-managed-local-evidence
+bash scripts/managed-runner/local-smoke.sh /tmp/orbit-cloud-local-evidence
 ```
 
 These clear all inherited `ORBIT_*` variables and provider keys, use scratch homes and recording

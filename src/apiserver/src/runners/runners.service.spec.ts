@@ -175,6 +175,8 @@ test('reorderRunners handles workspaceless runners, filters invalid ids, and app
       // Why this machine is or isn't updating itself (runner-self-update.ts).
       selfUpdate: true,
       minFreeDiskMb: true,
+      bgJobCpus: true,
+      bgJobMemoryMb: true,
       reposRoot: true,
       // Where `orbit register` ran (docs/first-workspace-contract.md §1).
       registerDir: true,
@@ -206,6 +208,11 @@ test('reorderRunners handles workspaceless runners, filters invalid ids, and app
       codexAccountRemoveStatus: true,
       codexAccountRemoveMessage: true,
       codexAccountRemoveSessions: true,
+      claudeAccountSwapAccount: true,
+      claudeAccountSwapStatus: true,
+      claudeAccountSwapMessage: true,
+      claudeAccountSwapWaiting: true,
+      claudeAccountSwapForeign: true,
       // Where its Claude connection to Anthropic comes out (docs/claude-region-check-contract.md §6).
       region: true,
       // Whether it is the account's managed runner: `managed` on the row (Orbit Cloud on every client).

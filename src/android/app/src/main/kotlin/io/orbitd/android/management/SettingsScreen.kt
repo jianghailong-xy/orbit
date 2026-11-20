@@ -126,11 +126,21 @@ internal const val SUGGESTED_REPLIES_HINT = "When a Claude turn ends, the empty 
 /** SettingsCopy's smart model selection switch: its name doesn't say what it does, so the web's hint is its footer on the Sessions
  * page. */
 internal const val SMART_MODEL_SELECTION = "Smart model selection"
-internal const val SMART_MODEL_SELECTION_HINT = "Coordinators suggest a tier for each task, and Agents you turn this on for run their tasks on that tier's model and effort. Off: tasks run exactly as before."
+internal const val SMART_MODEL_SELECTION_HINT = "Coordinators suggest a tier for each task, and a SubAgent's size sets its own. Task runs and SubAgents run on a model of that tier from your providers. Off: tasks keep their Agent's model and SubAgents their parent session's."
 
-/** UserPreferences.smartModelSelection: on only for an explicit boolean true; absent, or anything else, reads as off. */
+/** UserPreferences.smartModelSelection: off only for an explicit boolean false; absent, or anything else, reads as on. */
 internal fun smartModelSelection(preferences: JsonObject?): Boolean =
-    (preferences?.get("modelRouting") as? JsonPrimitive)?.takeIf { !it.isString }?.booleanOrNull == true
+    (preferences?.get("modelRouting") as? JsonPrimitive)?.takeIf { !it.isString }?.booleanOrNull != false
+
+/** SettingsCopy's Optimize For row, directly below Smart model selection (board docs/mocks/routing-mode-account/01-account-wide-optimize-for.png):
+ * the account-wide preference `preferences.optimizeFor`, one segmented control for every Agent at once. */
+internal const val OPTIMIZE_FOR = "Optimize For"
+internal const val OPTIMIZE_FOR_DETAIL = "What to favour when a model is picked at a tier."
+internal val OPTIMIZE_FOR_VALUES = listOf("cost", "balance", "intelligence")
+
+/** UserPreferences.optimizeFor: one of cost, balance, intelligence; absent — or a value this build cannot read — means balance. */
+internal fun optimizeFor(preferences: JsonObject?): String =
+    preferences?.str("optimizeFor")?.takeIf { it in OPTIMIZE_FOR_VALUES } ?: "balance"
 
 /** SettingsCopy's session recaps switch (SettingsHome.sessionRecaps): what a session list shows instead of the raw last reply. */
 internal const val SESSION_RECAPS = "Session recaps"
@@ -253,7 +263,7 @@ private fun SettingsHome(api: ManagementApi, revision: Long, open: (OrbitRoute) 
             }
         }
         SettingsGroup(SETTINGS_PERSONAL) {
-            // The account's five session settings are a page of their own, as on iOS (SessionSettings).
+            // The account's session settings are a page of their own, as on iOS (SessionSettings).
             SettingsLink(GENERAL, R.drawable.ic_settings) { page("sessions") }
             SettingsLink("Notifications", R.drawable.ic_bell, when (alerts) { true -> "On"; false -> "Off"; null -> "Unavailable" }) { page("notifications") }
             SettingsPicker("Appearance", R.drawable.ic_appearance, preferences.text("theme").ifBlank { "system" },
@@ -309,9 +319,10 @@ private fun ProfileSettingsPage(api: ManagementApi, revision: Long, open: (Orbit
     }
 }
 
-/** iOS's General page (SessionSettings): the account's five session settings, in iOS's order, each in a group of its own with the
- * web's hint as its footer (docs/mocks/ios-settings-order, 2A). Each is written alone the moment it moves; absent on the server means
- * on, except smart model selection, which is off unless turned on. */
+/** iOS's General page (SessionSettings): the account's session settings, in iOS's order, each in a group of its own with the
+ * web's hint as its footer (docs/mocks/ios-settings-order, 2A), and the account-wide Optimize For below Smart model selection
+ * (docs/mocks/routing-mode-account/01-account-wide-optimize-for.png). Each is written alone the moment it moves; absent on the
+ * server means on. */
 @Composable
 private fun SessionSettingsPage(api: ManagementApi, revision: Long) {
     val record = remember(api) { PersonalRecord { api.get("users/me") } }
@@ -331,9 +342,26 @@ private fun SessionSettingsPage(api: ManagementApi, revision: Long) {
         SettingsGroup(null, footer = SESSION_ORCHESTRATION_HINT) {
             SettingsSwitch("Session orchestration", on("enableOrchestration"), record.ready) { preference("enableOrchestration", JsonPrimitive(it)) }
         }
-        // Off unless the account turned it on; written alone (iOS 9fb3ae6ee).
+        // On unless the account turned it off; written alone (iOS 9fb3ae6ee).
         SettingsGroup(null, footer = SMART_MODEL_SELECTION_HINT) {
             SettingsSwitch(SMART_MODEL_SELECTION, smartModelSelection(preferences), record.ready) { preference("modelRouting", JsonPrimitive(it)) }
+        }
+        // Account-wide, one answer for every Agent (docs/mocks/routing-mode-account/01-account-wide-optimize-for.png): absent reads
+        // as Balance, and a segment writes the preference alone the moment it moves, as the switch above does. Only smart model
+        // selection reads it, so it shows only while that is on (owner, 2026-11-20); the saved value is kept while it is off.
+        if (smartModelSelection(preferences)) SettingsGroup(null) {
+            ListItem(headlineContent = { Text(OPTIMIZE_FOR) }, colors = settingsRowColors(),
+                supportingContent = { Text(OPTIMIZE_FOR_DETAIL) })
+            SingleChoiceSegmentedButtonRow(Modifier.fillMaxWidth().padding(start = 16.dp, end = 16.dp, bottom = 12.dp)) {
+                OPTIMIZE_FOR_VALUES.forEachIndexed { index, value ->
+                    SegmentedButton(selected = optimizeFor(preferences) == value, onClick = { preference("optimizeFor", JsonPrimitive(value)) },
+                        enabled = record.ready, shape = SegmentedButtonDefaults.itemShape(index, OPTIMIZE_FOR_VALUES.size), icon = {},
+                        // M3's 12dp a side clips "Intelligence" on a 393dp phone.
+                        contentPadding = PaddingValues(horizontal = 4.dp)) {
+                        Text(value.replaceFirstChar { it.uppercase() }, maxLines = 1)
+                    }
+                }
+            }
         }
         // The engine's guess at the next message after a Claude turn (docs/prompt-suggestions-design.md).
         SettingsGroup(null, footer = SUGGESTED_REPLIES_HINT) {

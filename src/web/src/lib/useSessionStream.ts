@@ -1367,6 +1367,8 @@ export function useSessionStream({
     setIdle,
     queued,
     setQueued,
+    /** The selected session's accepted turns still drawn as placeholders (no `user` echo yet). */
+    acceptedUserTurns: visibleAcceptedUserTurns,
     setAcceptedUserTurns,
     serverBgShells,
     loadOlder,

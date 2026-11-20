@@ -66,8 +66,10 @@ export async function readOpenListVersion(
       SELECT r.id, r.ctid::text || ':' || r.xmin::text AS v, r.status::text AS status, ${runnerLastBeatSql('r')} AS beat
         FROM runner r
        WHERE r.owner_id = ${o}
-          OR r.id IN (SELECT assigned_runner_id FROM session
-                       WHERE owner_id = ${o} AND assigned_runner_id IS NOT NULL)
+          -- Asked per runner (session_open_list_runner_idx is (owner_id, assigned_runner_id)): as an IN over the
+          -- owner's sessions it read every one of them to find a handful of runners (production, 2026-11-19:
+          -- 9,316 index entries, 2,054 buffers, for 8 runners; the statement 26 ms -> 14 ms).
+          OR EXISTS (SELECT 1 FROM session ra WHERE ra.owner_id = ${o} AND ra.assigned_runner_id = r.id)
     )
     SELECT
       -- Every source table's counter in one read (migration 0484). It may move when the list did

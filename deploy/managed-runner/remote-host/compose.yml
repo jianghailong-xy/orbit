@@ -33,9 +33,11 @@ services:
     network_mode: host
     # The disk the storage budget is measured on, as in root Compose: an empty volume of the channel's own, read-only,
     # which Docker keeps beside every runner's data volume.
-    command: ["serve", "--config", "/var/lib/orbit-managed-runners/channel.json", "--disk-probe-path", "/var/lib/orbit-docker-volumes"]
+    command: ["serve", "--config", "/var/lib/orbit-cloud-runners/channel.json", "--disk-probe-path", "/var/lib/orbit-docker-volumes"]
     volumes:
       - /var/run/docker.sock:/var/run/docker.sock
+      - "${ORBIT_CHANNEL_HOST_DIR:?run this through deploy/managed-runner/remote-host/remote-host.sh}:/var/lib/orbit-cloud-runners"
+      # Its path from before the rename, which channel.json from an earlier install still names.
       - "${ORBIT_CHANNEL_HOST_DIR:?run this through deploy/managed-runner/remote-host/remote-host.sh}:/var/lib/orbit-managed-runners"
       - type: volume
         target: /var/lib/orbit-docker-volumes
@@ -43,7 +45,7 @@ services:
     healthcheck:
       # Serving: its address is in LISTEN in this host's /proc/net/tcp. A connection would do too, but from this host it
       # comes from an address allowPeers does not list, and the channel would log every one of them as refused.
-      test: ["CMD", "python3", "-I", "-c", "import json, socket, struct; t = json.load(open('/var/lib/orbit-managed-runners/channel.json'))['listen']['tcp']; want = '%08X:%04X' % (struct.unpack('<I', socket.inet_aton(t['host']))[0], t['port']); rows = [l.split() for l in open('/proc/net/tcp').readlines()[1:]]; raise SystemExit(0 if any(r[1] == want and r[3] == '0A' for r in rows) else 1)"]
+      test: ["CMD", "python3", "-I", "-c", "import json, socket, struct; t = json.load(open('/var/lib/orbit-cloud-runners/channel.json'))['listen']['tcp']; want = '%08X:%04X' % (struct.unpack('<I', socket.inet_aton(t['host']))[0], t['port']); rows = [l.split() for l in open('/proc/net/tcp').readlines()[1:]]; raise SystemExit(0 if any(r[1] == want and r[3] == '0A' for r in rows) else 1)"]
       interval: 5s
       timeout: 5s
       retries: 6
@@ -56,8 +58,8 @@ services:
     build:
       context: ../../..
       dockerfile: deploy/managed-runner/firewall/Dockerfile
-    image: orbit-managed-runner-firewall:local
-    container_name: orbit-managed-runner-firewall
+    image: orbit-cloud-runner-firewall:local
+    container_name: orbit-cloud-runner-firewall
     restart: unless-stopped
     logging: *logging
     network_mode: host
@@ -66,7 +68,7 @@ services:
     security_opt: ["no-new-privileges:true"]
     read_only: true
     volumes:
-      - "${ORBIT_CHANNEL_HOST_DIR:?run this through deploy/managed-runner/remote-host/remote-host.sh}/firewall:/var/lib/orbit-managed-runner-firewall"
+      - "${ORBIT_CHANNEL_HOST_DIR:?run this through deploy/managed-runner/remote-host/remote-host.sh}/firewall:/var/lib/orbit-cloud-runner-firewall"
       # The legacy iptables backend's lock, which install names only where this host's iptables is legacy.
       - type: bind
         source: "${ORBIT_MANAGED_RUNNER_FIREWALL_XTABLES_LOCK:-/dev/null}"
@@ -74,7 +76,7 @@ services:
         bind:
           create_host_path: false
     healthcheck:
-      test: ["CMD", "python3", "-I", "/opt/orbit-managed-runner-firewall/firewall.py", "status"]
+      test: ["CMD", "python3", "-I", "/opt/orbit-cloud-runner-firewall/firewall.py", "status"]
       interval: 10s
       timeout: 5s
       retries: 3

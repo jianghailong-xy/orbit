@@ -4,7 +4,7 @@ import SwiftUI
 /// The macOS host of the share picker (docs/share-to-orbit-design.md §3.3): the Share menu's
 /// "Orbit" item shows `ShareView` over the shared item providers. Its model and view are the iOS
 /// extension's own sources (src/ios/OrbitShare, symlinked into this target); build-dmg.sh wraps
-/// the `OrbitShare` product into Orbit.app/Contents/PlugIns/OrbitShare.appex. Cancel cancels the request; Add opens Orbit on the
+/// the `OrbitShare` product into Orbitd.app/Contents/PlugIns/OrbitShare.appex. Cancel cancels the request; Add opens Orbit on the
 /// inbox entry and completes it.
 final class ShareViewController: NSViewController {
     private let model = ShareModel()

@@ -30,11 +30,10 @@ internal data class SubagentProvider(val slug: String, val label: String, val ki
                                      val models: List<SubagentTierModel>)
 
 /** An Agent's SubAgents fields as GET workspaces/:id carries them, each with its default when absent (docs/subagent-design.md §7). */
-internal data class SubagentSettings(val enabled: Boolean, val optimizeFor: String, val maxRunning: Int) {
+internal data class SubagentSettings(val enabled: Boolean, val maxRunning: Int) {
     companion object {
         fun of(workspace: JsonObject) = SubagentSettings(
             workspace.bool("subagentsEnabled") ?: true,
-            workspace.str("modelRoutingOptimizeFor")?.takeIf { it in Subagents.OPTIMIZE_FOR } ?: "cost",
             (workspace.int("subagentsMaxRunning") ?: 4).coerceIn(1, Subagents.MAX_RUNNING),
         )
     }
@@ -45,7 +44,6 @@ internal object Subagents {
     const val GROUP = "SubAgents"
     const val SWITCH = "SubAgents"
     const val SWITCH_DETAIL = "Let this agent hand work to other providers in the same folder"
-    const val OPTIMIZE = "Optimize For"
     const val PROVIDERS = "Providers"
     const val PROVIDERS_DETAIL = "All enabled providers. Block one to keep SubAgents off it."
     const val RUNNING = "Running at once"
@@ -60,10 +58,7 @@ internal object Subagents {
     const val SAVE_BLOCKED_FAILED = "Couldn't save blocked providers"
     const val TIER_SAVE_FAILED = "Couldn't save the tier"
     const val MAX_RUNNING = 16
-    val OPTIMIZE_FOR = listOf("cost", "balance", "intelligence")
     val LEVELS = listOf("S", "M", "L", "XL")
-
-    fun optimizeLabel(value: String) = value.replaceFirstChar { it.uppercase() }
 
     fun decode(body: JsonElement): List<SubagentProvider> = ((body as? JsonObject)?.list("providers")).orEmpty().mapNotNull { row ->
         val slug = row.str("slug")?.takeIf { it.isNotEmpty() } ?: return@mapNotNull null
@@ -102,13 +97,13 @@ internal object Subagents {
 }
 
 /**
- * The Agent form's SubAgents group (docs/mocks/subagent/05.png): the switch, Optimize For, the Providers SubAgents may use, and how many
- * run at once. The switch, Optimize For and Running at once are the Agent's and saved with the form's Done; the providers blocked are the
+ * The Agent form's SubAgents group (docs/mocks/subagent/05.png): the switch, the Providers SubAgents may use, and how many
+ * run at once. The switch and Running at once are the Agent's and saved with the form's Done; the providers blocked are the
  * account's (users/me/preferences) and saved from their own list.
  */
 @Composable
-internal fun SubagentsSection(api: ManagementApi, enabled: Boolean, setEnabled: (Boolean) -> Unit, optimizeFor: String,
-                              setOptimizeFor: (String) -> Unit, maxRunning: Int, setMaxRunning: (Int) -> Unit) {
+internal fun SubagentsSection(api: ManagementApi, enabled: Boolean, setEnabled: (Boolean) -> Unit,
+                              maxRunning: Int, setMaxRunning: (Int) -> Unit) {
     var providers by remember(api) { mutableStateOf<List<SubagentProvider>?>(null) }
     var blocked by remember(api) { mutableStateOf<List<String>>(emptyList()) }
     var failure by remember(api) { mutableStateOf<String?>(null) }
@@ -128,27 +123,6 @@ internal fun SubagentsSection(api: ManagementApi, enabled: Boolean, setEnabled: 
                 Text(Subagents.SWITCH_DETAIL, style = MaterialTheme.typography.labelMedium, color = Ink.muted)
             }
             Switch(checked = enabled, onCheckedChange = null)
-        }
-        HorizontalDivider()
-        // Beside its label where there is room (the mock); on a phone the three segments take the row's width under it (iOS ViewThatFits).
-        BoxWithConstraints(Modifier.fillMaxWidth()) {
-            val segments = @Composable { modifier: Modifier ->
-                SingleChoiceSegmentedButtonRow(modifier) {
-                    Subagents.OPTIMIZE_FOR.forEachIndexed { index, value ->
-                        SegmentedButton(selected = optimizeFor == value, onClick = { setOptimizeFor(value) },
-                            shape = SegmentedButtonDefaults.itemShape(index, Subagents.OPTIMIZE_FOR.size), icon = {},
-                            // M3's 12dp a side clips "Intelligence" on a 393dp phone.
-                            contentPadding = PaddingValues(horizontal = 4.dp)) {
-                            Text(Subagents.optimizeLabel(value), maxLines = 1)
-                        }
-                    }
-                }
-            }
-            if (maxWidth >= 520.dp) Row(Modifier.fillMaxWidth().padding(vertical = 8.dp), verticalAlignment = Alignment.CenterVertically) {
-                Text(Subagents.OPTIMIZE, Modifier.weight(1f)); segments(Modifier.width(360.dp))
-            } else Column(Modifier.fillMaxWidth().padding(vertical = 8.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
-                Text(Subagents.OPTIMIZE); segments(Modifier.fillMaxWidth())
-            }
         }
         HorizontalDivider()
         Row(Modifier.fillMaxWidth().padding(vertical = 8.dp), verticalAlignment = Alignment.CenterVertically,

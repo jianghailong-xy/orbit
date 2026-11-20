@@ -280,6 +280,9 @@ func (s *ClaimedSession) appendSystemPrompt() string {
 		wt = s.Detached
 	}
 	note := checkoutInstructions(wt)
+	if commits := branchCommitInstructions(s.WT); commits != "" {
+		note = strings.TrimSpace(commits + "\n\n" + note)
+	}
 	repo := s.WorkDir
 	if wt != nil && wt.RepoDir != "" {
 		repo = wt.RepoDir
@@ -294,6 +297,21 @@ func (s *ClaimedSession) appendSystemPrompt() string {
 		return note
 	}
 	return strings.TrimRight(s.Agent.AppendSystemPrompt, "\r\n") + "\n\n" + note
+}
+
+// branchCommitInstructions asks the agent of a session on its own branch to commit each step itself. The person reads
+// that branch as a list of commits (docs/mocks/session-commits-first), and only the agent knows why a change was made,
+// so a commit it writes says what the runner's end-of-session commit cannot. It is said outright that no one has to
+// ask first, because an engine's own rules otherwise hold commits back until the user asks for one. "" for a session
+// with no branch of its own. ASCII, like the rest of the instructions it goes out with.
+func branchCommitInstructions(wt *Worktree) string {
+	if wt == nil || wt.Branch == "" {
+		return ""
+	}
+	return "This session works on its own branch, `" + wt.Branch + "`, and the person reads its work as a list of " +
+		"commits. Commit each logical step when it is done, without being asked: a subject that says what changed and " +
+		"a body that says why in a sentence or two. Whatever is left uncommitted is " +
+		"saved when the session ends, under a generic message."
 }
 
 // instructionAgent is the session's agent as an engine's instructions are built from it: its appended prompt is

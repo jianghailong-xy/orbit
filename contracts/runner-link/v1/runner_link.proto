@@ -157,9 +157,9 @@ message WriteContract {
 // The managed instance a managed runner's credential was issued to: the server accepts that
 // credential only from this instance, as it does over HTTPS today.
 message ManagedInstance {
-  // The instance's generation, today's X-Orbit-Managed-Runner-Generation header.
+  // The instance's generation, today's X-Orbit-Cloud-Runner-Generation header.
   string generation = 1;
-  // The instance's pod UID, today's X-Orbit-Managed-Runner-Pod-Uid header.
+  // The instance's pod UID, today's X-Orbit-Cloud-Runner-Pod-Uid header.
   string pod_uid = 2;
 }
 

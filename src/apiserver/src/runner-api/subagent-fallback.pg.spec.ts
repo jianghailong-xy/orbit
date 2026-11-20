@@ -89,7 +89,9 @@ test('SubAgent quota fallback: moves, attempts, the reason, the bound and the re
 
   const ownerId = randomUUID();
   await prisma.user.create({
-    data: { id: ownerId, email: `fallback-${ownerId}@runner-door.invalid`, name: 'The account owner', passwordHash: 'x' },
+    // Optimize For is the account's (owner, 2026-11-19); Cost, the mode these moves were written against.
+    data: { id: ownerId, email: `fallback-${ownerId}@runner-door.invalid`, name: 'The account owner', passwordHash: 'x',
+      preferences: { optimizeFor: 'cost' } },
   });
   // The parent's machine: Claude signed in with room left, Opus and Sonnet in its catalogue; nothing else installed.
   const runnerId = randomUUID();
@@ -127,7 +129,7 @@ test('SubAgent quota fallback: moves, attempts, the reason, the bound and the re
   async function parentSession() {
     const workspaceId = randomUUID();
     await prisma.workspace.create({
-      data: { id: workspaceId, ownerId, runnerId, name: `orbit-worker-${workspaceId.slice(-8)}`, enabled: true, modelRoutingOptimizeFor: 'cost' },
+      data: { id: workspaceId, ownerId, runnerId, name: `orbit-worker-${workspaceId.slice(-8)}`, enabled: true },
     });
     const sessionId = randomUUID();
     await prisma.session.create({
@@ -355,7 +357,7 @@ test('SubAgent quota fallback: moves, attempts, the reason, the bound and the re
     });
     const workspaceId = randomUUID();
     await prisma.workspace.create({
-      data: { id: workspaceId, ownerId, runnerId: machineId, name: `orbit-worker-${workspaceId.slice(-8)}`, enabled: true, modelRoutingOptimizeFor: 'cost' },
+      data: { id: workspaceId, ownerId, runnerId: machineId, name: `orbit-worker-${workspaceId.slice(-8)}`, enabled: true },
     });
     const sessionId = randomUUID();
     await prisma.session.create({

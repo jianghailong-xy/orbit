@@ -373,7 +373,7 @@ test('with ORBIT_REGISTRY unset, Compose renders exactly what the file rendered 
   });
   assert.equal(set.status, 0, set.stderr);
   assert.deepEqual(set.stdout.trim().split('\n').sort(), [
-    'orbit-docker-channel:local', 'orbit-managed-runner-firewall:local',
+    'orbit-docker-channel:local', 'orbit-cloud-runner-firewall:local',
     `${REGISTRY}/library/haproxy:3.4.7-alpine@sha256:b9fe316f718d5015c5cfebd8ca019591f3e44656f61d93cb8b59a1028961e530`,
     `${REGISTRY}/library/nats@sha256:7ae34c25dfd6fe2e01c6483eabef20d796690fdcac6c4d94ca780a6cf9877fde`,
     `${REGISTRY}/library/nginx@sha256:8b1e78743a03dbb2c95171cc58639fef29abc8816598e27fb910ed2e621e589a`,
@@ -705,7 +705,7 @@ test('a build short of room removes earlier release images, then prunes, and sto
     writeFileSync(files.FAKE_IN_USE, `${inUse.join('\n')}\n`);
     return files;
   };
-  const earlier = [`${REGISTRY}/orbit-apiserver:${old}`, `${REGISTRY}/orbit-web:${old}`, `${REGISTRY}/orbit-managed-runner:${old}`];
+  const earlier = [`${REGISTRY}/orbit-apiserver:${old}`, `${REGISTRY}/orbit-web:${old}`, `${REGISTRY}/orbit-cloud-runner:${old}`];
   const running = `${REGISTRY}/orbit-apiserver:${'1'.repeat(40)}`;
   const linkImage = `${REGISTRY}/orbit-link-gateway:${fixture.linkTag()}`;
   const others = ['orbit-web:previous-release', 'postgres:16-alpine', 'unrelated:latest'];
@@ -775,7 +775,7 @@ test('a deploy keeps the last 3 releases\' images on the target and removes the 
     image('apiserver', c), image('web', c), image('link-gateway', link), image('link-gateway', linkB)];
   const removable = [image('apiserver', a), image('web', a), image('apiserver', older), image('web', older), image('link-gateway', linkA)];
   const inUse = image('web', older);
-  const others = [`${REGISTRY}/library/postgres:16.14`, `${REGISTRY}/orbit-managed-runner:${a}`, 'unrelated:latest'];
+  const others = [`${REGISTRY}/library/postgres:16.14`, `${REGISTRY}/orbit-cloud-runner:${a}`, 'unrelated:latest'];
   const images = path.join(fixture.root, 'target-images');
   const inUseFile = path.join(fixture.root, 'target-in-use');
   writeFileSync(images, `${[...kept, ...removable, ...others].join('\n')}\n`);
@@ -880,7 +880,7 @@ test('the hosted runners\' image is built when the runner changed, and their pro
   const fixture = makeFixture(t);
   const upgrade = UPGRADES[0];
   const digestOf = (image) => `${image.slice(0, image.lastIndexOf(':'))}@sha256:${execFileSync('sha256sum', { input: image, encoding: 'utf8' }).slice(0, 64)}`;
-  const OLD = `docker.io/library/orbit-managed-runner@sha256:${'a'.repeat(64)}`;
+  const OLD = `docker.io/library/orbit-cloud-runner@sha256:${'a'.repeat(64)}`;
   // The runner's sources and the image's directory, as the build reads them; a test of the runner is not one of them.
   const write = (relative, text) => {
     mkdirSync(path.dirname(path.join(fixture.checkout, relative)), { recursive: true });
@@ -902,7 +902,7 @@ test('the hosted runners\' image is built when the runner changed, and their pro
   // The first release: the image is built from this checkout, tagged by the last commit of the runner's sources, and
   // pushed; the profile names it by its digest, before the apiserver is replaced, with the one before kept beside it.
   const first = fixture.commit('the first release');
-  const firstImage = `${REGISTRY}/orbit-managed-runner:${first}`;
+  const firstImage = `${REGISTRY}/orbit-cloud-runner:${first}`;
   let run = fixture.run(upgrade);
   assert.equal(run.status, 0, run.output);
   assert.deepEqual(imageBuilds(run).map((call) => call.args),
@@ -922,7 +922,7 @@ test('the hosted runners\' image is built when the runner changed, and their pro
   run = fixture.run(upgrade);
   assert.equal(run.status, 0, run.output);
   assert.deepEqual(imageBuilds(run), [], 'a runner test and a document are not what the image is built from');
-  assert.match(run.stdout, new RegExp(`orbit-managed-runner:${first} is in the registry already`));
+  assert.match(run.stdout, new RegExp(`orbit-cloud-runner:${first} is in the registry already`));
   assert.match(run.stdout, / {4}managed-runner +unchanged\n/);
   assert.equal(profile(), profileText(digestOf(firstImage)));
   assert.equal(backups().length, 1);
@@ -930,7 +930,7 @@ test('the hosted runners\' image is built when the runner changed, and their pro
   // A release that changes the runner: a plan says so and changes nothing; the deploy moves the profile on.
   write('src/runner-go/main.go', 'package main\n\n// a change of the third release\n');
   const third = fixture.commit('the third release');
-  const thirdImage = `${REGISTRY}/orbit-managed-runner:${third}`;
+  const thirdImage = `${REGISTRY}/orbit-cloud-runner:${third}`;
   run = fixture.run(upgrade, ['--build-only']);
   assert.equal(run.status, 0, run.output);
   assert.equal(imageBuilds(run).length, 1);

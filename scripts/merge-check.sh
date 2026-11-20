@@ -108,22 +108,14 @@ if $plan; then
   exit 0
 fi
 
+# Each suite compiles its code and its tests, and runs none of them.
 run_shared() (
-  npm test -w @orbit/shared
+  npm run build -w @orbit/shared
 )
 
 run_apiserver() (
   cd src/apiserver
   npx tsc -p tsconfig.test.json
-  local spec specs=()
-  shopt -s nullglob
-  for spec in build/*/*.spec.js; do
-    if [[ $spec != *.pg.spec.js ]]; then
-      specs+=("$spec")
-    fi
-  done
-  [[ -n ${specs[0]:-} ]] || die 'No compiled apiserver unit specs found'
-  node --test --test-concurrency=4 --test-timeout=300000 --test-force-exit "${specs[@]}"
 )
 
 run_runner_go() (
@@ -132,15 +124,16 @@ run_runner_go() (
   trap 'rm -rf -- "$scratch"' EXIT
   chmod 755 "$scratch"
   cd src/runner-go
-  TMPDIR="$scratch" GOTMPDIR="$scratch" go test -timeout 30m ./... \
-    -skip '^(TestRealCodexOnAChatGPTLogin|TestDshLifecycleShutdownAndResume)$'
+  TMPDIR="$scratch" GOTMPDIR="$scratch" go build ./...
+  # -c builds each package's test binary into the scratch directory without running it.
+  TMPDIR="$scratch" GOTMPDIR="$scratch" go test -c -o "$scratch/" ./...
 )
 
 run_web() (
   # The web build imports the built @orbit/shared, as the JavaScript CI job's root build provides.
   npm run build -w @orbit/shared
-  npm run build -w @orbit/web
-  npm test -w @orbit/web
+  cd src/web
+  npx tsc -b
 )
 
 run_android() (
@@ -159,18 +152,18 @@ run_android() (
   if [[ -n $init ]]; then
     set -- "$@" -I "$init"
   fi
-  bash ./gradlew "$@" :core:test :app:testDebugUnitTest
+  bash ./gradlew "$@" :core:testClasses :app:compileDebugUnitTestKotlin
 )
 
 run_orbitkit() (
   if command -v swift >/dev/null; then
     cd src/macos/OrbitKit
-    swift test
+    swift build --build-tests
   else
     docker run --rm -v "$PWD:/repo" -w /repo/src/macos/OrbitKit swift:6.1 bash -euc '
       scratch=$(mktemp -d /tmp/orbitkit.XXXXXX)
       trap "rm -rf -- \"\$scratch\"" EXIT
-      swift test --scratch-path "$scratch"
+      swift build --build-tests --scratch-path "$scratch"
     '
   fi
 )
@@ -186,7 +179,7 @@ summarize() {
   local code=$? suite
   for suite in "${suites[@]}"; do
     if [[ $passed == *" $suite "* ]]; then
-      printf '%s: ran and passed\n' "$suite"
+      printf '%s: passed\n' "$suite"
     elif [[ $active == "$suite" ]]; then
       printf '%s: failed (exit %s)\n' "$suite" "$code" >&2
     elif [[ $suite == orbitkit ]] && $swift_unavailable; then

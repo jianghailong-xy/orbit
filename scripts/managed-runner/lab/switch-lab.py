@@ -168,7 +168,7 @@ def backup_export(ctx, step):
     host_gz = al.sha256_file(destination / 'volume.img.gz')
     al.guest(f'sudo rm -f {al.GUEST_BACKUP}/volume.img.gz {al.GUEST_BACKUP}/raw.sha256 && sudo rmdir {al.GUEST_BACKUP}')
     os.chmod(destination / 'volume.img.gz', 0o600)
-    manifest = {'schemaVersion': 1, 'kind': 'orbit-managed-runner-rbd-export', 'createdAt': now(), 'source': {
+    manifest = {'schemaVersion': 1, 'kind': 'orbit-cloud-runner-rbd-export', 'createdAt': now(), 'source': {
         'owner': ml.owner_state(OWNER)['user']['id'], 'runnerId': ident['runnerId'], 'namespace': NAMESPACE, 'pvc': {'name': ident['pvcName'], 'uid': ident['pvcUid']},
         'pv': {'name': ident['pvName'], 'uid': ident['pvUid']}, 'volumeHandle': ident['volumeHandle'], 'clusterID': ident['clusterID'],
         'pool': ident['pool'], 'image': ident['rbdImage'], 'imageId': info_before.get('id'), 'sizeBytes': info_before.get('size'),
@@ -279,7 +279,7 @@ def restore_under_name(ctx, step):
                                           'volumeMounts': [{'name': 'data', 'mountPath': '/home/orbit'}]}],
                           'volumes': [{'name': 'data', 'persistentVolumeClaim': {'claimName': m['pvc_name']}}]}}
     refused = k('create', '-f', '-', input=json.dumps(check_pod), check=False)
-    step.check('the admission guard refuses a check Pod on the restored claim', refused.returncode != 0 and 'orbit-managed-runner-admission' in refused.stderr,
+    step.check('the admission guard refuses a check Pod on the restored claim', refused.returncode != 0 and 'orbit-cloud-runner-admission' in refused.stderr,
                refused.stderr.strip()[-240:])
     step.check('no such Pod exists', kget('pod', 't08b-restore-check') is None)
     # The manager looks at the failed runner on every pass: the claim under its name is not the recorded one, so nothing

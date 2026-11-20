@@ -113,7 +113,7 @@ test('the authorized Pod is admitted: the manager, the fixed name, the reserved 
 });
 
 test('any other Pod using the volume is refused: another name, no labels, a Job, a read-only mount, on the same node or another', () => {
-  const tenant = 'system:serviceaccount:orbit-managed-test:default';
+  const tenant = 'system:serviceaccount:orbit-cloud-test:default';
   const cases: Array<[string, PodAdmissionRequest, string]> = [
     ['another name, by the manager', create({ ...authorizedPod(), metadata: { ...authorizedPod().metadata, name: `${managedPodName(RUNNER)}-debug` } }), 'NOT_THE_FIXED_NAME'],
     ['another name, unlabelled, by someone else', create(podUsingTheVolume('backup'), tenant), 'NOT_THE_MANAGER'],
@@ -122,7 +122,7 @@ test('any other Pod using the volume is refused: another name, no labels, a Job,
     ['the fixed name, unlabelled and unannotated, by the manager', create(podUsingTheVolume(managedPodName(RUNNER))), 'NOT_THE_OWNER'],
     ['on the same node as the runner', create(podUsingTheVolume('same-node', { nodeName: 'node-a' }), tenant), 'NOT_THE_MANAGER'],
     ['on another node', create(podUsingTheVolume('cross-node', { nodeName: 'node-b' }), tenant), 'NOT_THE_MANAGER'],
-    ['labelled as a runner', create(podUsingTheVolume('impostor', { labels: { 'app.kubernetes.io/name': 'orbit-managed-runner' } }), tenant), 'NOT_THE_MANAGER'],
+    ['labelled as a runner', create(podUsingTheVolume('impostor', { labels: { 'app.kubernetes.io/name': 'orbit-cloud-runner' } }), tenant), 'NOT_THE_MANAGER'],
     ['read-only', create(podUsingTheVolume('reader', { readOnly: true }), tenant), 'NOT_THE_MANAGER'],
     ['a Job’s Pod', create(podUsingTheVolume('restore-job-x7k2p'), 'system:serviceaccount:kube-system:job-controller'), 'NOT_THE_MANAGER'],
   ];
@@ -158,7 +158,7 @@ test('the manager itself is refused for anything but the reserved generation’s
 });
 
 test('volumes are resolved from the database, never from the Pod: unknown, aliased and doubled claims are refused', () => {
-  const tenant = 'system:serviceaccount:orbit-managed-test:default';
+  const tenant = 'system:serviceaccount:orbit-cloud-test:default';
   refusedWith(decide(create(podUsingTheVolume('x'), tenant), null), 'UNMAPPED_MANAGED_CLAIM', 'a managed name no mapping owns');
   const both = podUsingTheVolume('both');
   both.spec.volumes!.push({ name: 'other', persistentVolumeClaim: { claimName: managedPvcName(OTHER_RUNNER) } });
@@ -293,7 +293,7 @@ test('the webhook fails closed: a malformed review is 400, a database that fails
     namespace: NS,
     pvcName: { in: [managedPvcName(RUNNER)] },
   }, 'ownership is looked up by the claim, in this cluster and namespace');
-  const refused = await controller.review(review(create(podUsingTheVolume('other'), 'system:serviceaccount:orbit-managed-test:default')) as never);
+  const refused = await controller.review(review(create(podUsingTheVolume('other'), 'system:serviceaccount:orbit-cloud-test:default')) as never);
   assert.equal(refused.response.allowed, false);
 
   const failing = new ManagedRunnerAdmissionController({ managedRunner: { findMany: async () => { throw new Error('database down'); } } } as never, available);

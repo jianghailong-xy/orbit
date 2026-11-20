@@ -44,8 +44,8 @@ test('a prerelease identity derives every surface from the package version', () 
   assert.equal(id.githubRelease.tag, 'v0.1.257-beta.1');
   assert.equal(id.githubRelease.prerelease, true);
   assert.equal(id.notes, 'release-notes/0.1.257-beta.1.md');
-  assert.equal(id.macos.dmg, 'Orbit-v0.1.257-beta.1-arm64.dmg');
-  assert.equal(id.macos.zip, 'Orbit-v0.1.257-beta.1-arm64.zip');
+  assert.equal(id.macos.dmg, 'Orbitd-v0.1.257-beta.1-arm64.dmg');
+  assert.equal(id.macos.zip, 'Orbitd-v0.1.257-beta.1-arm64.zip');
   assert.equal(id.macos.shortVersionString, '0.1.257-beta.1');
   assert.equal(id.macos.channel, 'beta');
   assert.equal(id.ios.marketingVersion, '0.1.257', 'Apple marketing versions are numeric');
