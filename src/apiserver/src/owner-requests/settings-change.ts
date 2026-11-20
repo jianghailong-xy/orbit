@@ -2,7 +2,10 @@ import { plainToInstance } from 'class-transformer';
 import { validate } from 'class-validator';
 import {
   isTieredSettingKey,
+  SETTING_ROWS,
+  SETTING_TIER_KEYS,
   SETTING_TIERS,
+  settingLink,
   settingValueInForce,
   widensAgentReach,
   type SettingTier,
@@ -116,4 +119,26 @@ export function settingsChangeDeclinedMessage(declinedAt: Date, reason: string |
   const date = declinedAt.toISOString().slice(0, 10);
   const line = `The owner declined this change on ${date}; ask the person instead of filing it again.`;
   return reason ? `${line} Their reason: ${reason}` : line;
+}
+
+/** One setting as `GET /runner/settings` reads it (design §7): its value in force, tier and Settings row. */
+export interface SettingView {
+  key: TieredSettingKey;
+  tier: SettingTier;
+  value: unknown;
+  title: string;
+  path: string | null;
+  link: string;
+}
+
+/** Every key a conversation can propose, tier by tier, as `settings_get` answers it. */
+export function settingsView(preferences: Readonly<Record<string, unknown>>): SettingView[] {
+  return ([1, 2, 3] as const).flatMap((tier) => SETTING_TIER_KEYS[tier].map((key) => ({
+    key,
+    tier,
+    value: settingValueInForce(key, preferences),
+    title: SETTING_ROWS[key].title,
+    path: SETTING_ROWS[key].path,
+    link: settingLink(key),
+  })));
 }
