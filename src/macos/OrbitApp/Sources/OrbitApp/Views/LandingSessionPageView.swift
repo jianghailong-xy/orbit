@@ -311,10 +311,25 @@ struct LandingTimelineView: View {
             }
             ForEach(Array(steps.enumerated()), id: \.element.key) { index, step in
                 let last = index == steps.count - 1
-                let status: StepStatus = LandingSteps.failed(step, kind: section.kind) ? .failed
+                // A task exempt from the landing check (P-C2, board 04 b): Skipped, with its reason.
+                let status: StepStatus = LandingCheckSkip.taskExempt(step) != nil ? .skipped
+                    : LandingSteps.failed(step, kind: section.kind) ? .failed
                     : last && live ? .running
                     : last && current && landing.currentAttempt?.state == "QUEUED" ? .pending : .ok
                 stepRow(step, status: status, section: section)
+            }
+            // A task exempt from the landing check (board 04 b, D5): the merge check still runs on the
+            // way into main, said under the list.
+            if steps.contains(where: { LandingCheckSkip.taskExempt($0) != nil }) {
+                HStack(spacing: 7) {
+                    Image(systemName: "figure.walk").font(.orbitMeta).foregroundStyle(.secondary)
+                        .frame(width: 20, height: 20)
+                    Text(LandingProvenanceCopy.mergeCheckStillRuns).font(.orbitMono.weight(.semibold))
+                    Text(LandingProvenanceCopy.stillRuns).font(.orbitLabel).foregroundStyle(.secondary)
+                    Spacer(minLength: 0)
+                }
+                .padding(.leading, 28).padding(.vertical, 6)
+                .accessibilityElement(children: .combine)
             }
             // A check streaming before its attempt wrote any line has no step to sit in.
             if steps.isEmpty, live, let attempt = landing.currentAttempt, attempt.check != nil {
@@ -332,7 +347,19 @@ struct LandingTimelineView: View {
         .frame(maxWidth: .infinity, alignment: .leading)
     }
 
-    enum StepStatus { case ok, failed, running, pending }
+    enum StepStatus { case ok, failed, running, pending, skipped }
+
+    /// A task exempt from the landing check (board 04 b): "Landing check · Skipped", and "Exempt: why".
+    private static func stepName(_ step: LandingStep, _ status: StepStatus) -> String {
+        status == .skipped ? LandingProvenanceCopy.checkSkipped : step.name
+    }
+
+    private static func stepSummary(_ step: LandingStep, _ status: StepStatus) -> String {
+        if status == .skipped, let line = LandingCheckSkip.taskExempt(step).flatMap(LandingCheckSkip.exemptLine) {
+            return line
+        }
+        return LandingCheckCopy.timelineText(step.summary)
+    }
 
     private static func icon(_ key: String) -> String {
         switch key {
@@ -370,10 +397,10 @@ struct LandingTimelineView: View {
                     .font(.orbitMeta).foregroundStyle(tone)
                     .frame(width: 20, height: 20)
                     .background(tone.opacity(0.14), in: RoundedRectangle(cornerRadius: 5))
-                Text(step.name)
-                    .font(.orbitMono.weight(.semibold)).foregroundStyle(.primary)
+                Text(Self.stepName(step, status))
+                    .font(.orbitMono.weight(.semibold)).foregroundStyle(status == .skipped ? .orange : .primary)
                     .lineLimit(1).fixedSize()
-                Text(LandingCheckCopy.timelineText(step.summary))
+                Text(Self.stepSummary(step, status))
                     .font(.orbitLabel).foregroundStyle(.secondary)
                     .lineLimit(1).truncationMode(.tail)
                 Spacer(minLength: 4)
@@ -382,6 +409,7 @@ struct LandingTimelineView: View {
                 case .running: ProgressView().controlSize(.mini)
                 case .pending: Image(systemName: "clock").foregroundStyle(.secondary)
                 case .ok: Image(systemName: "checkmark.circle.fill").foregroundStyle(.green)
+                case .skipped: Image(systemName: "arrow.right.circle.fill").foregroundStyle(.orange)
                 }
             }
             .contentShape(Rectangle())
@@ -470,7 +498,8 @@ struct LandingTimelineView: View {
     /// What a timeline mark says, and the ink it says it in (mockups 05 a/e/i).
     private func glyph(_ entry: IntegrationTimelineEntry, jobKind: String,
                        entries: [IntegrationTimelineEntry], index: Int) -> Mark {
-        if entry.data?["skipped"]?.stringValue == "PATHS_EXEMPT" { return Mark(glyph: "≡", color: .secondary) }
+        if entry.data?["skipped"]?.stringValue == "TASK_EXEMPT" { return Mark(glyph: "→", color: .orange) }
+        if LandingCheckSkip.isSkip(entry) { return Mark(glyph: "≡", color: .secondary) }
         switch entry.kind {
         case "TAKEN_OVER":
             return Mark(glyph: "↗", color: .accentColor)

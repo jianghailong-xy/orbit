@@ -45,7 +45,9 @@ import Foundation
 
 /// How a project runs, as a start sets it — `@orbit/shared`'s `ProjectStartSettings`.
 ///
-/// - `line` — where its finished tasks land: its own branch first, or straight on its upstream.
+/// - `line` — where its finished tasks land: its own branch first, or straight on its upstream. Nil
+///   when the request named none (contract §12.15 P-M2): the line is decided when the first task
+///   with commits is done, and the card draws one sentence for it (`StartProject.landsWhenCommits`).
 /// - `projectBranchName` — the project branch as a full `refs/heads/…` ref, only with a project
 ///   branch. Absent on a request means `refs/heads/project/<project id>`, or the branch the project
 ///   already names.
@@ -57,7 +59,7 @@ import Foundation
 /// - `maxConcurrentTasks` — how many of its tasks may be in flight at once.
 /// - `mergeCheckCommand` — the check run on the combined tree before anything lands; nil for none.
 public struct ProjectStartSettings: Codable, Equatable, Sendable {
-    public let line: IntegrationLine
+    public let line: IntegrationLine?
     public let projectBranchName: String?
     public let upstreamRef: String?
     public let automatic: Bool
@@ -67,7 +69,7 @@ public struct ProjectStartSettings: Codable, Equatable, Sendable {
     public let mergeCheckTimeoutSeconds: Int?
     public let mergeCheckCommand: String?
 
-    public init(line: IntegrationLine, projectBranchName: String? = nil, upstreamRef: String? = nil,
+    public init(line: IntegrationLine?, projectBranchName: String? = nil, upstreamRef: String? = nil,
                 automatic: Bool, maxConcurrentTasks: Int, mergeCheckCommand: String? = nil,
                 landingCheckCommand: String? = nil, landingCheckTimeoutSeconds: Int? = nil,
                 mergeCheckTimeoutSeconds: Int? = nil) {
@@ -84,10 +86,11 @@ public struct ProjectStartSettings: Codable, Equatable, Sendable {
 
     /// Decoded by hand so that settings naming a line this build does not know are NOT settings:
     /// the caller reads them with `try?` and draws nothing for them, the way web's `settingsOf`
-    /// leaves them off whole rather than drawing half of them.
+    /// leaves them off whole rather than drawing half of them. Settings naming NO line are settings
+    /// (P-M2): a request that leaves the line to the first commit.
     public init(from decoder: Decoder) throws {
         let c = try decoder.container(keyedBy: CodingKeys.self)
-        line = try c.decode(IntegrationLine.self, forKey: .line)
+        line = try c.decodeIfPresent(IntegrationLine.self, forKey: .line)
         guard line != .unknown else {
             throw DecodingError.dataCorruptedError(forKey: .line, in: c,
                                                    debugDescription: "a line this build does not know")
@@ -110,10 +113,18 @@ public struct ProjectStartSettings: Codable, Equatable, Sendable {
     /// card's `settings` (`ProjectStarted.parseCard`). Nil for anything that is not whole settings.
     public static func parse(_ value: JSONValue?) -> ProjectStartSettings? {
         guard case .object(let settings)? = value,
-              let raw = settings["line"]?.stringValue,
-              let line = IntegrationLine(rawValue: raw), line != .unknown,
               case .bool(let automatic)? = settings["automatic"],
               let count = settings["maxConcurrentTasks"]?.intValue, count >= 0 else { return nil }
+        // No line is a start that left it to the first commit (P-M2); one this build does not know
+        // is not settings at all.
+        let line: IntegrationLine?
+        switch settings["line"] {
+        case .string(let raw)?:
+            guard let known = IntegrationLine(rawValue: raw), known != .unknown else { return nil }
+            line = known
+        case .null?, nil: line = nil
+        default: return nil
+        }
         let check: String?
         switch settings["mergeCheckCommand"] {
         case .string(let command)?: check = command
@@ -250,7 +261,8 @@ public struct ProjectStartRequest: Codable, Equatable, Sendable {
 /// when there is none.
 public struct StartProjectRequestBody: Encodable, Equatable, Sendable {
     public let criteriaDigest: String
-    public let line: IntegrationLine
+    /// Nil sends no `line` at all (P-M2): the start leaves it to the first task with commits.
+    public let line: IntegrationLine?
     public let projectBranchName: String?
     /// The main branch as a full `refs/heads/…` ref: the owner's choice once pressed.
     public let upstreamRef: String?
@@ -265,7 +277,7 @@ public struct StartProjectRequestBody: Encodable, Equatable, Sendable {
     /// keeps the one it has.
     public let deliveryMode: DeliveryMode?
 
-    public init(criteriaDigest: String, line: IntegrationLine, projectBranchName: String? = nil,
+    public init(criteriaDigest: String, line: IntegrationLine?, projectBranchName: String? = nil,
                 upstreamRef: String? = nil, automatic: Bool, maxConcurrentTasks: Int,
                 mergeCheckCommand: String? = nil, requestId: String? = nil,
                 deliveryMode: DeliveryMode? = nil, landingCheckCommand: String? = nil,
@@ -293,7 +305,7 @@ public struct StartProjectRequestBody: Encodable, Equatable, Sendable {
     public func encode(to encoder: Encoder) throws {
         var c = encoder.container(keyedBy: CodingKeys.self)
         try c.encode(criteriaDigest, forKey: .criteriaDigest)
-        try c.encode(line, forKey: .line)
+        try c.encodeIfPresent(line, forKey: .line)
         if line == .projectBranch {
             if let landingCheckCommand { try c.encode(landingCheckCommand, forKey: .landingCheckCommand) }
             else { try c.encodeNil(forKey: .landingCheckCommand) }
@@ -331,6 +343,9 @@ public enum StartProject {
     public static let doneWhen = "Done when"
     public static let plan = "Plan"
     public static let howItRuns = "How it runs"
+    /// How it runs for a request that named no line (P-M2, board D1): this one sentence in place of
+    /// the line and its checks; the line is decided when the first task with commits is done.
+    public static let landsWhenCommits = "Lands on the project’s branch when a task commits"
     /// The link under the plan, to the tasks it names.
     public static let viewTasks = "View tasks ›"
     /// Beside it, while the plan is drawn as levels: the project page's task graph, full screen.
@@ -489,15 +504,18 @@ public enum StartProject {
     /// problem reaches the owner only after the project's escalation window. The merges name the
     /// project's main branch, `main`. An agent that pushes its own work to main asks nobody to merge
     /// it (§10.5 O-L2), so no merge comes to the owner on that line.
+    /// A request that named no line (`linePending`, P-M2) has nothing decided about where work lands,
+    /// so no merge is listed — web's `line === null`.
     public static func comesToYou(automatic: Bool, line: IntegrationLine,
                                   ownerConfirmed: [StartPlanNamedTask], evidenceJudged: Int,
                                   escalationSeconds: Int,
                                   main: String = RunSettings.defaultMainBranch,
-                                  deliveryMode: DeliveryMode = .platform) -> [ComesToYouItem] {
+                                  deliveryMode: DeliveryMode = .platform,
+                                  linePending: Bool = false) -> [ComesToYouItem] {
         let confirms: [ComesToYouItem] = ownerConfirmed.count > 3
             ? [ComesToYouItem(text: tasksYouConfirm(ownerConfirmed.count))]
             : ownerConfirmed.map { ComesToYouItem(text: "\($0.label) · \($0.title)", detail: youConfirm) }
-        let merges: [ComesToYouItem] = line == .main
+        let merges: [ComesToYouItem] = linePending ? [] : line == .main
             ? deliveryMode == .agentPush ? [] : [ComesToYouItem(text: eachMergeInto(main))]
             : automatic ? [] : [ComesToYouItem(text: mergingInto(main))]
         let criteria = ComesToYouItem(text: criteriaChanges)
@@ -709,6 +727,16 @@ public enum StartProject {
         let branch = request.settings.projectBranchName ?? ""
         let check = draft.mergeCheckCommand.trimmingCharacters(in: .whitespacesAndNewlines)
         let upstream = draft.upstream ?? ""
+        // A request that named no line is answered with none (P-M2): nothing about the line, its
+        // main branch, its delivery or its landing check is sent, and the merge check rides as the
+        // card shows it (board D8).
+        if draft.linePending {
+            return StartProjectRequestBody(
+                criteriaDigest: request.criteriaDigest, line: nil,
+                automatic: draft.automatic, maxConcurrentTasks: draft.maxConcurrentTasks,
+                mergeCheckCommand: check.isEmpty ? nil : check, requestId: requestId,
+                mergeCheckTimeoutSeconds: draft.mergeCheckTimeoutSeconds)
+        }
         return StartProjectRequestBody(
             criteriaDigest: request.criteriaDigest,
             line: draft.line,
@@ -870,6 +898,10 @@ public struct StartPlanView: Equatable, Sendable {
 /// state — but it is still bounded by the door's own limits (`complete`).
 public struct StartSettingsDraft: Equatable, Sendable {
     public var line: IntegrationLine
+    /// The request named no line (P-M2): the card draws `StartProject.landsWhenCommits` in place of
+    /// the line, its main branch, its delivery and its landing check, and the press sends none of
+    /// them. `line` then stands for the project branch that sentence names.
+    public var linePending: Bool = false
     /// The main branch by name, `refs/heads/` left off: what the Main branch row shows and the reader
     /// picks or types — nil for a project with no repository, which has no main branch to choose
     /// and no row.
@@ -907,8 +939,8 @@ public struct StartSettingsDraft: Equatable, Sendable {
     /// the agent's way on a line that stays main, and otherwise Orbit's — the default (A-Q21).
     public init(_ settings: ProjectStartSettings, standing: ProjectIntegrationView? = nil) {
         let repository = standing?.repository ?? ""
-        self.init(line: settings.line,
-                  upstream: repository.isEmpty ? nil
+        self.init(line: settings.line ?? .projectBranch,
+                  upstream: repository.isEmpty || settings.line == nil ? nil
                       : StartProject.mainBranch(suggested: settings.upstreamRef, standing: standing),
                   automatic: true,
                   maxConcurrentTasks: settings.maxConcurrentTasks,
@@ -918,6 +950,8 @@ public struct StartSettingsDraft: Equatable, Sendable {
                   landingCheckCommand: settings.landingCheckCommand ?? "",
                   landingCheckTimeoutSeconds: settings.landingCheckTimeoutSeconds,
                   mergeCheckTimeoutSeconds: settings.mergeCheckTimeoutSeconds)
+        linePending = settings.line == nil
+        if linePending { deliveryMode = nil }
     }
 
     /// Whether the agent pushes its own work here: only on a main line (§10.5 O-L2), where no merge
@@ -935,7 +969,8 @@ public struct StartSettingsDraft: Equatable, Sendable {
 
     /// The sentence under Automatic: who decides what, for the line, merge check and delivery chosen.
     public var automaticSays: String {
-        agentPushes ? RunSettings.automaticSaysAgentPush(automatic: automatic, main: main)
+        if linePending { return RunSettings.automaticSaysNoLine(automatic: automatic) }
+        return agentPushes ? RunSettings.automaticSaysAgentPush(automatic: automatic, main: main)
                     : RunSettings.automaticSays(automatic: automatic, line: line,
                                                 hasMergeCheck: hasMergeCheck, main: main)
     }
@@ -1195,6 +1230,12 @@ public enum RunSettings {
         "You decide when each task is done, and each merge into main asks you."
 
     /// The five above, said of the project's main branch.
+    /// The same sentence for a request that named no line (P-M2): nothing is decided about where
+    /// work lands, so it names no branch — web's `runAutomaticSays` with `line === null`.
+    public static func automaticSaysNoLine(automatic: Bool) -> String {
+        automatic ? "The coordinator decides when each task is done." : "You decide when each task is done."
+    }
+
     public static func automaticSays(automatic: Bool, line: IntegrationLine, hasMergeCheck: Bool,
                                      main: String = defaultMainBranch) -> String {
         guard automatic else {
@@ -1279,7 +1320,9 @@ public enum RunSettings {
                              differs: [ProjectStartSettingKey] = []) -> [Part] {
         let tasks = settings.maxConcurrentTasks
         let line: String
-        if settings.line == .main {
+        if settings.line == nil {
+            line = StartProject.landsWhenCommits
+        } else if settings.line == .main {
             line = lineMain(mainBranchName(settings.upstreamRef))
         } else if let branch = settings.projectBranchName, !branch.isEmpty {
             line = shortBranch(branch)

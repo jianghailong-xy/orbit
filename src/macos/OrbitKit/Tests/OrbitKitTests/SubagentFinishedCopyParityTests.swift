@@ -2,14 +2,19 @@ import Foundation
 import XCTest
 @testable import OrbitKit
 
-/// The two clients read the same SubAgent wake block, including its status, result, and remaining note.
+/// The two clients read a SubAgent's end the same way and say the same words about it.
 ///
-/// The browser uses that block on the run's existing card. Its copy, preview, and fold rules are
-/// pinned here independently of the native finish line. A missing source is a failure.
+/// `SubagentFinished.swift` is a hand-copy of the browser's reading (`lib/subagentFinished.ts`), and
+/// `SubagentCardEnd.swift` of how the card ends (`SubagentCardEnd.tsx`, landed first, board
+/// docs/mocks/subagent-card-and-end-line). Neither end compiles the other, so a pattern or a word changed
+/// at one end would simply never reach the other — and a wording only one end reads turns the end turn
+/// into a From Orbit line. A missing counterpart is a FAILURE, never an `XCTSkip`.
 final class SubagentFinishedCopyParityTests: XCTestCase {
 
     private static let webReader = "src/web/src/lib/subagentFinished.ts"
     private static let webCard = "src/web/src/components/SubagentCardEnd.tsx"
+    private static let webRuns = "src/web/src/lib/subagentRuns.ts"
+    private static let webQueue = "src/web/src/lib/queuedTurnRestore.ts"
     private static let webTranscript = "src/web/src/components/Transcript.tsx"
     private static let webCss = "src/web/src/index.css"
 
@@ -61,51 +66,80 @@ final class SubagentFinishedCopyParityTests: XCTestCase {
         }
     }
 
-    func testTheWebShowsTheWakeOnTheRunsCard() throws {
+    func testTheCardEndsInTheWebsWords() throws {
         let card = try source(Self.webCard)
-        for word in [SubagentFinishedCard.rawSummary, "Show files", "Stopped by the agent.",
-                     "It did not finish its work.",
-                     "The runner hosting it stopped (a restart, an update or a crash) before it finished."] {
+        // The reason, one fixed sentence per end, said once.
+        for status in ["INTERRUPTED", "FAILED", "STOPPED"] {
+            let reason = try XCTUnwrap(SubagentCardEnd.because(status))
+            XCTAssertTrue(card.contains("\(status): '\(reason)',"), "\(Self.webCard) no longer says \(reason)")
+        }
+        XCTAssertNil(SubagentCardEnd.because("DONE"))
+        for word in [SubagentCardEnd.showFiles, SubagentCardEnd.rawSummary] {
             assertWritten(card, word, Self.webCard)
         }
-        XCTAssertTrue(card.contains("\(SubagentFinishedCard.run) {runId}"))
+        XCTAssertTrue(card.contains("\(SubagentCardEnd.waiting) ·{' '}"))
+        XCTAssertTrue(card.contains(SubagentCardEnd.dontSend.replacingOccurrences(of: "'", with: "&apos;")))
+        // The templates, filled the way this end fills them.
+        XCTAssertTrue(card.contains("`${n} ${n === 1 ? 'file' : 'files'} left uncommitted`"))
+        XCTAssertEqual(SubagentCardEnd.fileCount(1), "1 file left uncommitted")
+        XCTAssertEqual(SubagentCardEnd.fileCount(9), "9 files left uncommitted")
+        XCTAssertTrue(card.contains("const first = files.slice(0, 2).map(basename);"))
+        XCTAssertTrue(card.contains("`+${files.length - first.length}`"))
+        XCTAssertTrue(card.contains(".join(' · ')"))
+        XCTAssertEqual(SubagentCardEnd.fileNames(["a/model-routing.ts", "b/task-route-decision.ts", "c", "d"]),
+                       "model-routing.ts · task-route-decision.ts · +2")
+        XCTAssertEqual(SubagentCardEnd.fileNames(["only.ts"]), "only.ts")
+        XCTAssertTrue(card.contains("{fileCount(files.length)} in the working tree:"))
+        XCTAssertEqual(SubagentCardEnd.filesHead(9), "9 files left uncommitted in the working tree:")
+        XCTAssertTrue(card.contains("… {files.length - shown.length} more"))
+        XCTAssertEqual(SubagentCardEnd.moreFiles(6), "… 6 more")
+        XCTAssertTrue(card.contains("const FILES_SHOWN = \(SubagentCardEnd.filesShown);"))
+        XCTAssertTrue(card.contains("`Stopped${when} by the agent.`"))
+        XCTAssertTrue(card.contains(
+            "`${run.status === 'FAILED' ? 'Failed' : 'Interrupted'}${when}: ${lowerFirst(BECAUSE[run.status as keyof typeof BECAUSE])}`"))
+        XCTAssertEqual(SubagentCardEnd.endHead("INTERRUPTED", when: "10m ago"),
+                       "Interrupted 10m ago: the runner hosting it stopped (a restart, an update or a crash) before it finished.")
+        XCTAssertEqual(SubagentCardEnd.endHead("FAILED", when: nil), "Failed: it did not finish its work.")
+        XCTAssertEqual(SubagentCardEnd.endHead("STOPPED", when: "2m ago"), "Stopped 2m ago by the agent.")
+        XCTAssertNil(SubagentCardEnd.endHead("DONE", when: "2m ago"))
+        XCTAssertTrue(card.contains("Run {runId}"))
+        XCTAssertTrue(card.contains("{readAt && ` · read by the agent at ${readAt}`}"))
+        XCTAssertEqual(SubagentCardEnd.runLine("R1", readAt: "14:02"), "Run R1 · read by the agent at 14:02")
+        XCTAssertEqual(SubagentCardEnd.runLine("R1", readAt: nil), "Run R1")
+        XCTAssertTrue(card.contains("toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit', hour12: false })"))
+        // The chip is the status in lower case, every end but DONE; grey for a stop, red otherwise.
         XCTAssertTrue(card.contains("const word = run.status.toLowerCase();"))
-        XCTAssertTrue(card.contains("aria-label=\"done\""))
-        XCTAssertTrue(card.contains("if (!run.resultSummary) return null;"))
-        XCTAssertTrue(card.contains("<pre>{wake.text}</pre>"))
-
-        let transcript = try source(Self.webTranscript)
-        XCTAssertTrue(transcript.contains(
-            "for (const run of wake.runs) out.set(run.runId, { text: wake.text, readAt: read ? node.ts : undefined });"))
+        XCTAssertTrue(card.contains("status === 'DONE' ? 'ok' : status === 'STOPPED' ? 'stopped' : 'failed'"))
+        XCTAssertEqual(SubagentCardEnd.chip("INTERRUPTED"), "interrupted")
+        XCTAssertNil(SubagentCardEnd.chip("DONE"))
+        XCTAssertEqual(SubagentCardEnd.tone("STOPPED"), .stopped)
+        XCTAssertEqual(SubagentCardEnd.tone("FAILED"), .failed)
+        XCTAssertEqual(SubagentCardEnd.tone("INTERRUPTED"), .failed)
+        // Only a background run that has ended draws its end on the card.
+        XCTAssertTrue(card.contains("run && run.background && run.status !== 'RUNNING'"))
     }
 
-    func testTheWebFoldedCardPreviewsTwoLinesOfResult() throws {
+    func testTheResultShowsTwoLinesAsTheWebsDoes() throws {
         let css = try source(Self.webCss)
         guard let start = css.range(of: ".chat-subagent-ending-md > .md {"),
               let end = css.range(of: "}", range: start.upperBound..<css.endIndex) else {
-            return XCTFail("\(Self.webCss) no longer styles the folded card's result")
+            return XCTFail("\(Self.webCss) no longer clamps the ending")
         }
-        XCTAssertTrue(css[start.upperBound..<end.lowerBound].contains("-webkit-line-clamp: 2;"))
+        XCTAssertTrue(css[start.upperBound..<end.lowerBound]
+            .contains("-webkit-line-clamp: \(SubagentCardEnd.resultLines);"))
     }
 
-    func testTheWebOnlyFoldsJobNewsFromASubagentWake() throws {
+    /// The end turn draws nothing on the web either, folds as nothing, and leaves the queued tail when it
+    /// carries no job's news; a stop is no failure.
+    func testTheEndTurnDrawsNothingAsTheWebsDoes() throws {
         let transcript = try source(Self.webTranscript)
-        guard let turn = transcript.range(of: "function orbitTurnOf("),
-              let end = transcript.range(of: "\n}", range: turn.upperBound..<transcript.endIndex),
-              let start = transcript.range(of: "const subagent = parseSubagentFinished(node.note);",
-                                           range: turn.upperBound..<end.lowerBound) else {
-            return XCTFail("\(Self.webTranscript) no longer handles SubAgent wakes in the fold classifier")
-        }
-        XCTAssertEqual(String(transcript[start.lowerBound..<end.lowerBound]), """
-        const subagent = parseSubagentFinished(node.note);
-          const background = parseBackgroundWake(subagent ? subagent.rest : node.note);
-          if (background) {
-            if (background.jobs.some((job) => job.status === 'failed' || job.status === 'killed')) return null;
-            const title = backgroundWakeTitle(background);
-            const name = backgroundWakeName(background);
-            return { ts, what: name ? `${title}: ${name}` : title, category: 'job', target: null };
-          }
-          return null;
-        """)
+        XCTAssertFalse(transcript.contains("SubagentFinishedCard"), "the web draws the end turn again")
+        XCTAssertTrue(transcript.contains("const background = parseBackgroundWake(subagent ? subagent.rest : node.note);"))
+        let queue = try source(Self.webQueue)
+        XCTAssertTrue(queue.contains("alone: parseBackgroundWake(wake.rest) === null"))
+        XCTAssertTrue(queue.contains("if (turn.sessionMessage) return null;"))
+        let runs = try source(Self.webRuns)
+        XCTAssertTrue(runs.contains("run.status === 'FAILED' || run.status === 'INTERRUPTED';"))
+        XCTAssertFalse(runs.contains("run.status === 'INTERRUPTED' || run.status === 'STOPPED'"))
     }
 }

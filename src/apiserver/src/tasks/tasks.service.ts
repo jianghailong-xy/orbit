@@ -3442,6 +3442,7 @@ export class TasksService implements OnModuleInit, OnModuleDestroy {
         where: { id: { in: uniqueIds.slice(offset, offset + TASK_ID_QUERY_CHUNK) }, ownerId },
         select: {
           id: true,
+          status: true,
           projectId: true,
           project: {
             select: {
@@ -3462,7 +3463,8 @@ export class TasksService implements OnModuleInit, OnModuleDestroy {
             where: { startsTaskWork: true, deletedAt: null },
             orderBy: { createdAt: 'desc' },
             select: {
-              isolationStatus: true, branch: true, finishedAt: true, changedFiles: true,
+              id: true, isolationStatus: true, branch: true, worktreeBranch: true, finishedAt: true,
+              changedFiles: true, branchSha: true, baseSha: true, worktreeDirty: true,
               workspace: { select: { repoUrl: true } },
             },
           },
@@ -3484,6 +3486,8 @@ export class TasksService implements OnModuleInit, OnModuleDestroy {
             ? { isolationStatus: work.isolationStatus, branch: work.branch, repoUrl: work.workspace?.repoUrl }
             : null,
           receipts: row.mergeReceipts ?? [],
+          status: row.status,
+          mergeReceipts: row.mergeReceipts,
           deliveredSha: row.deliveredSha,
           deliveredBaseSha: row.deliveredBaseSha,
           sessions: row.sessions,
