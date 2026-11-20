@@ -627,7 +627,7 @@ async function landingFixture(stack: Stack, label: string): Promise<LandingFixtu
       taskId,
       title: `${label} work`,
       prompt: 'do the work',
-      status: RunStatus.SUCCEEDED, finishedAt: new Date(), releaseCause: 'engine_exited',
+      status: RunStatus.SUCCEEDED, releaseCause: 'engine_exited',
       provider: 'claude',
       providerBuiltin: true,
       engine: 'claude',

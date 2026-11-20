@@ -409,7 +409,7 @@ test('the census notices a DONE that states no identity, and a finish that settl
       'export async function end(tx: Prisma.TransactionClient, sessionId: string) {',
       '  await tx.session.updateMany({',
       '    where: { id: sessionId, finishedAt: null },',
-      '    data: { status: RunStatus.CANCELLED, releaseCause: 'cancelled', finishedAt: new Date() },',
+      '    data: { status: RunStatus.CANCELLED, finishedAt: new Date() },',
       '  });',
       '}',
       'export async function read(tx: Prisma.TransactionClient, sessionId: string) {',

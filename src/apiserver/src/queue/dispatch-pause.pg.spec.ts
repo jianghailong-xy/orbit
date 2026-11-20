@@ -216,7 +216,7 @@ test('the runner dispatch pause holds new work, lets running work finish, and ha
       data: {
         ownerId: owner.id, creatorId: owner.id, taskId: task.id, workspaceId: projectWorkspaceId,
         assignedRunnerId: runnerId, title: `${name} work`, prompt: `${name} work`, branch,
-        isolationStatus: 'worktree', baseSha: 'b'.repeat(40), status: RunStatus.SUCCEEDED, finishedAt: new Date(), releaseCause: 'engine_exited', startsTaskWork: true,
+        isolationStatus: 'worktree', baseSha: 'b'.repeat(40), status: RunStatus.SUCCEEDED, releaseCause: 'engine_exited', startsTaskWork: true,
         finishedAt: new Date(Date.now() - 2 * 86_400_000), worktreeBranch: branch, worktreeDirty: false,
         changedFiles: [{ path: 'src/work.ts' }] as never,
       },

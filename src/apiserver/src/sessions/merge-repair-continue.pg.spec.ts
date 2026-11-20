@@ -140,7 +140,7 @@ async function parentSession(db: PrismaClient, w: World, label: string, rec: Mer
     data: {
       id, ownerId: w.ownerId, creatorId: w.ownerId, workspaceId: w.workspaceId, assignedRunnerId: w.runnerId,
       title: `${label} parent`, prompt: 'ship the feature', provider: 'claude', providerBuiltin: true,
-      dispatchOrigin: SessionDispatchOrigin.USER, status: RunStatus.SUCCEEDED, finishedAt: new Date(), releaseCause: 'engine_exited', startedAt: new Date(Date.now() - 2 * HOUR),
+      dispatchOrigin: SessionDispatchOrigin.USER, status: RunStatus.SUCCEEDED, releaseCause: 'engine_exited', startedAt: new Date(Date.now() - 2 * HOUR),
       finishedAt: new Date(Date.now() - HOUR), runtimeSessionId: randomUUID(), numTurns: 1,
       branch: `orbit/${label}-${id.slice(0, 8)}`, isolationStatus: 'worktree',
       mergeRecovery: rec as never, mergeStatus: 'conflict', mergeRecoveryAction: 'preview',

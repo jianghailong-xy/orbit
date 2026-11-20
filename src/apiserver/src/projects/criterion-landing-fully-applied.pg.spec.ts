@@ -236,7 +236,7 @@ test('a landing whose commits the target already had is read as the work being t
         prompt: 'do the work',
         branch,
         isolationStatus: 'worktree',
-        status: RunStatus.SUCCEEDED, finishedAt: new Date(), releaseCause: 'engine_exited',
+        status: RunStatus.SUCCEEDED, releaseCause: 'engine_exited',
         finishedAt: finish.finishedAt ?? new Date(Date.now() - 60_000),
         worktreeBranch: finish.worktreeBranch ?? branch,
         worktreeDirty: false,

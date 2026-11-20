@@ -384,7 +384,7 @@ test('a coordinator asks its owner to record the project done, and the project i
         prompt: 'do the work',
         branch,
         isolationStatus: 'worktree',
-        status: RunStatus.SUCCEEDED, finishedAt: new Date(), releaseCause: 'engine_exited',
+        status: RunStatus.SUCCEEDED, releaseCause: 'engine_exited',
         baseSha: sha('1'),
         changedFiles: [] as never,
         createdAt: new Date(Date.now() - 10 * 60_000),

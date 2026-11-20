@@ -229,7 +229,7 @@ async function anotherFailedAttempt(
       title: `attempt ${round}`,
       prompt: 'do the work',
       provider: 'claude',
-      status: RunStatus.FAILED, finishedAt: new Date(), releaseCause: 'engine_exited',
+      status: RunStatus.FAILED, releaseCause: 'engine_exited',
       dispatchOrigin: SessionDispatchOrigin.USER,
       startsTaskWork: true,
       finishedAt: new Date(),
