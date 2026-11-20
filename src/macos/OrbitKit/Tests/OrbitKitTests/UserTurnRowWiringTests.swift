@@ -86,7 +86,7 @@ final class UserTurnRowWiringTests: XCTestCase {
     /// or never.
     func testTheTranscriptAndTheQueueDrawAUserTurnThroughTheOneRow() throws {
         let console = statements(try source(Self.consolePath))
-        XCTAssertTrue(console.contains("UserTurnRow(bubble: b, steer: steerControls(b), putBack: putBack(b))"),
+        XCTAssertTrue(console.contains("UserTurnRow(bubble: b, steer: steerControls(b), putBack: putBack(b), revealItemCard: { console?.revealOpenItemCard($0) ?? false })"),
                       "the transcript no longer draws a user turn with the row")
         XCTAssertTrue(console.contains("UserTurnRow(bubble: bubble, queued: QueuedControls(bubble: bubble) {"),
                       "the queued tail no longer draws its turn with the row the transcript draws it with")

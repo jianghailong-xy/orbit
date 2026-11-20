@@ -351,13 +351,14 @@ class SessionListPageShellTest {
         await { exists(hasTestTag("schedule-history-run")) }
         compose.onNodeWithTag("schedule-history-run").performClick()
         await { exists(hasContentDescription("Session actions")) && ObjectId.same(app().realtime.state.value.session?.id, NavShell.RUN) }
-        openDrawer()
-        await { exists(drawerRow("Alpha") and isSelected()) }
-        compose.onNodeWithTag("drawer:scheduled").assertIsNotSelected()
-        compose.onNode(drawerRow("Alpha")).assertIsSelected().performClick()
+        // A session page's bar carries back and its own menu, not the drawer (1da59c34c2, as iOS): Back lands in the
+        // workspace's Scheduled runs folder, whose bar opens the drawer on that workspace.
         compose.onNodeWithContentDescription("Back").performClick()
         await { exists(hasRowMenu("Options for Completed run")) }
         compose.onNode(hasText("Scheduled runs") and hasAnyAncestor(hasTestTag("app-bar")), useUnmergedTree = true).assertExists()
+        openDrawer()
+        await { exists(drawerRow("Alpha") and isSelected()) }
+        compose.onNodeWithTag("drawer:scheduled").assertIsNotSelected()
     }
 
     /** No connection: the rows stay and the list says nothing. The drawer heads its workspaces with why, in iOS's words. */

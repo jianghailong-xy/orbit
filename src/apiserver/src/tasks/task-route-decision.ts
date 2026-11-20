@@ -9,6 +9,7 @@ import {
   quotaExpiresAt,
   quotaNearLimit,
   spentPlanUsage,
+  withEnginePlanUsage,
   type AccountEngine,
   type PlanUsage,
   type PlanUsageSnapshot,
@@ -16,6 +17,7 @@ import {
   type RunnerModelCatalog,
 } from '@orbit/shared';
 import { runnerAccountPausedUntil } from '../common/account-pause';
+import { sanitizeRunnerEngines } from '../common/runner-engines';
 import { modelRoutingEnabled, optimizeForOf } from '../common/model-routing-switch';
 import { resolvePermissionMode } from '../common/permission-mode';
 import { firstRuntimeCatalogModel, sanitizeRuntimeDefaultModels } from '../common/runtime-model';
@@ -73,7 +75,7 @@ export function taskRouteReads(prisma: PrismaService, ownerId: string, now: Date
     workspace: (id: string) => once(`workspace:${id}`, () => prisma.workspace.findFirst({
       where: { id, ownerId },
       select: {
-        runnerId: true, effort: true, modelRouting: true, modelRoutingProviders: true,
+        runnerId: true, effort: true,
         env: true, codexAccount: true, claudeAccount: true, kimiAccount: true, antigravityAccount: true, cursorAccount: true,
       },
     })),
@@ -328,7 +330,9 @@ export function engineState(
     nowMs: now.getTime(),
   }) !== null;
   const account = runAccount(engine, agent.env, accounts, runner, now);
-  const snapshot = account === null ? undefined : spentPlanUsage(runner.planUsage as PlanUsage | null, engine, account);
+  // Antigravity's reading travels with its engine health, not in planUsage: folded in as every quota reader does.
+  const usage = withEnginePlanUsage(runner.planUsage as PlanUsage | null, sanitizeRunnerEngines(runner.engines));
+  const snapshot = account === null ? undefined : spentPlanUsage(usage, engine, account);
   const quota = fullestWindow(snapshot, now);
   // No reading at all, or one without a window fullestWindow reads (a runner that fetched nothing for it).
   // Antigravity reads as read once it reports any bucket (one of a model's own is a reading too); Cursor once it
@@ -455,14 +459,12 @@ export interface TaskRouteSubject {
  * Route one fresh run: read the router's inputs, call it, and return the decision with the
  * baseline and features it is recorded with (§7.3).
  *
- * `applied` when the Agent has smart selection on (`workspace.modelRouting`) and a tier was decided:
- * the run is then created on the routed provider, model and effort (§7.4). Otherwise it is the
- * shadow — the run is dispatched exactly as it was before routing existed, and the decision records
- * what routing would have picked.
+ * `applied` whenever a tier was decided: the run is then created on the routed provider, model and
+ * effort (§7.4). There is no per-Agent switch any more (owner, 2026-11-20; `workspace.modelRouting`
+ * is no longer read): the account's switch alone decides.
  *
  * Null when the account has smart model selection off (common/model-routing-switch.ts): routing
- * does not exist then, so there is no decision to record, shadow or not, and the run is dispatched
- * as before routing whatever the Agent's own switch says.
+ * does not exist then, so there is no decision to record, and the run is dispatched as before routing.
  */
 export async function planTaskRunRoute(
   reads: TaskRouteReads,
@@ -537,9 +539,9 @@ export async function planTaskRunRoute(
     : null;
   return {
     policyVersion: decision.policyVersion,
-    // Only a decided tier is applied: one that kept the baseline (a model pin, no tier table, no
-    // suggestion, no catalogue) changes nothing whether the switch is on or not.
-    applied: agent?.modelRouting === true && decision.level !== null,
+    // Only a decided tier is applied: one that kept the baseline (a model pin, no suggestion, no
+    // provider that can take it) changes nothing.
+    applied: decision.level !== null,
     level: decision.level,
     engine: decision.engine,
     provider: decision.provider,
@@ -575,7 +577,6 @@ export async function planTaskRunRoute(
         : null,
       escalatedFrom,
       opusWeeklyUtilization: env.planUsage?.claude?.sevenDayOpus?.utilization ?? null,
-      modelRouting: agent?.modelRouting === true,
       verifiedRunEngine: engines.verifiedRunEngine ?? null,
     },
     reasons: decision.reasons,

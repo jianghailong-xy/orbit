@@ -63,6 +63,7 @@ import { ImpersonationBanner } from '../ImpersonationBanner';
 import { HelpDrawer } from '../HelpDrawer';
 
 import type { Runner } from '../TasksSidePanel';
+import { SettingChangedLine, SettingChangedLineSlot } from './SettingChangedLine';
 import { around, searchSettings, type SettingsHit, type SettingsHitGroup } from './settingsSearch';
 import './Settings.css';
 
@@ -166,7 +167,9 @@ export function SettingsLayout() {
                   <span>Settings</span>
                 </button>
               )}
-              <Outlet />
+              <SettingChangedLineSlot.Provider value={SettingChangedLine}>
+                <Outlet />
+              </SettingChangedLineSlot.Provider>
             </div>
           </main>
         )}

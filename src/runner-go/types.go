@@ -564,9 +564,6 @@ type HeartbeatResponse struct {
 	// states the floor states the budget too, the link's quiet answer included. Nil from older
 	// control planes and for every runner the control plane has no measurement for.
 	StorageBudget *StorageBudget `json:"storageBudget,omitempty"`
-	// BackgroundJobLimits is the owner's ceiling for this runner's background jobs (bg_limits.go), set on its
-	// Settings → Machine page. Absence replaces, as MinFreeDiskMb's does: no field is limits off.
-	BackgroundJobLimits *bgJobLimits `json:"backgroundJobLimits,omitempty"`
 	// The one Codex rate-limit reset step claimed for this process
 	// (docs/codex-rate-limit-reset-contract.md §6). Nil from older control planes and whenever no
 	// operation is claimed for it; nothing acts on it until this binary declares
@@ -734,9 +731,14 @@ type IntegrationJobCommand struct {
 	// (§3.3 M-T11). It is authorized onto UpstreamShaChecked and nowhere else: if the upstream has
 	// moved, the job merges nothing, checks nothing and reports READY, and the owner is asked
 	// (M-T12). Only sent to a process that declared promotionAutomaticLandCapabilityV1.
-	Automatic       bool                   `json:"automatic,omitempty"`
-	Checks          []IntegrationCheckSpec `json:"checks"`
-	CancelRequested bool                   `json:"cancelRequested"`
+	Automatic bool                   `json:"automatic,omitempty"`
+	Checks    []IntegrationCheckSpec `json:"checks"`
+	// LandingCheckExemptReason is set on a LAND_TASK whose task the coordinator or the owner exempted
+	// from the project's landing check (contract §12.15 P-C2). The control plane has already left the
+	// landing check out of Checks, so a runner that ignores this field still runs exactly the task's
+	// acceptance; this one also records the skip and its reason in the result.
+	LandingCheckExemptReason string `json:"landingCheckExemptReason,omitempty"`
+	CancelRequested          bool   `json:"cancelRequested"`
 	// Earlier landings on this job's serial key whose push outcome the control plane could not know
 	// (ERROR / PUSH_OUTCOME_UNKNOWN) and that have no receipt yet (J12). After its fetch the runner
 	// asks git whether each one's tested commit is already an ancestor of the target, and reports
@@ -824,17 +826,19 @@ type IntegrationCheckSpec struct {
 // IntegrationCheckResult is what one check came to. ExitCode is nil when the command never
 // produced one — it could not start, or its budget killed it.
 type IntegrationCheckResult struct {
-	TreeSha          string   `json:"treeSha,omitempty"`
-	Scope            string   `json:"scope,omitempty"`
-	Skipped          string   `json:"skipped,omitempty"`
-	Files            []string `json:"files,omitempty"`
-	Name             string   `json:"name"`
-	Command          string   `json:"command"`
-	ExpectedExitCode int      `json:"expectedExitCode"`
-	ExitCode         *int     `json:"exitCode"`
-	TimedOut         bool     `json:"timedOut"`
-	DurationMs       int64    `json:"durationMs"`
-	OutputTail       string   `json:"outputTail"`
+	TreeSha string   `json:"treeSha,omitempty"`
+	Scope   string   `json:"scope,omitempty"`
+	Skipped string   `json:"skipped,omitempty"`
+	Files   []string `json:"files,omitempty"`
+	// Reason is why a TASK_EXEMPT landing check was not run (§12.15 P-C2).
+	Reason           string `json:"reason,omitempty"`
+	Name             string `json:"name"`
+	Command          string `json:"command"`
+	ExpectedExitCode int    `json:"expectedExitCode"`
+	ExitCode         *int   `json:"exitCode"`
+	TimedOut         bool   `json:"timedOut"`
+	DurationMs       int64  `json:"durationMs"`
+	OutputTail       string `json:"outputTail"`
 }
 
 // IntegrationJobProgressRequest renews the lease and says which step the job reached.

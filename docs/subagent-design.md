@@ -114,8 +114,8 @@ Optimize For 只在第 5 条（没人给档位）时抬档：Balance 至少 M，
 
 只有「跑不起来」才去掉。**凡是在 Orbit 注册了的都参与路由，只是先后不同**（owner，2026-11-19）：
 
-- **所有档位都进池**，不只是要的那一档。没有档位的不再去掉：一个 Provider × 引擎**一个档位都没有**时（Antigravity、Cursor、
-  OpenCode、DSH 的内置登录，没标档位的自定义 endpoint），它的**默认模型**以「无档位」进池——runner 报的该引擎默认模型，
+- **所有档位都进池**，不只是要的那一档。没有档位的不再去掉：一个 Provider × 引擎**一个档位都没有**时（目录里没有一个已知
+  家族模型、owner 也没标档位的内置引擎，例如只报 `grok-4.7` 之类的 Cursor；没标档位的自定义 endpoint），它的**默认模型**以「无档位」进池——runner 报的该引擎默认模型，
   否则 Provider 自己的默认模型，否则列表第一个；列表里其余的模型记为去掉（`The model has no tier; <provider> runs <model>`），
   点名照样能用。已有档位的 Provider 里个别没档位的模型仍记为去掉。
 - **额度读不到**的订阅（runner 没报这个账号、或报了但没有窗口）不去掉，也不当作 100% 余量：排在额度已知的之后。
@@ -123,6 +123,16 @@ Optimize For 只在第 5 条（没人给档位）时抬档：Balance 至少 M，
 **档位表**从「每个引擎一张」扩成「每个模型一行」：`(provider, model, effort) → 档位`。preset 的模型由目录提供档位和价格
 （价格取自 models.dev，preset 列表本来就从那里刷新，`providerPresets.ts`）；Claude / Codex 内置登录沿用今天
 `DEFAULT_MODEL_TIER_TABLE` 的映射，Kimi 内置登录也在这张表里（S/M 用 K3，L/XL 用 K3.1 Pro，没有就 K3；只给 SubAgent 用）。
+其余内置引擎（Cursor、Antigravity、OpenCode、DSH）的目录按**模型家族**定档（`MODEL_FAMILY_TIERS`：Claude Sonnet S/M、
+Claude Opus L/XL、Gemini Flash S/M、Gemini L/XL、Composer S），每档取该家族版本最新的模型，effort 夹到模型自己报的等级
+（`clampEffort`）；不属于任何已知家族的模型（Cursor 的 `grok-4.7`、`kimi-k3`，Antigravity 的 `gpt-oss-120b` 等）没有档位。
+
+**owner 给内置引擎的模型定档**（owner，2026-11-20：表总会漏，漏了应该点一下就能补，而不是等发版）：任何内置引擎目录里的
+任何模型，owner 都可以在 Providers 页的 Tier 列设一个档位或清除，存在账号偏好 `builtinModelTiers`（引擎 → 模型 → 档位），
+只经 `PATCH /providers/builtin/:engine/model-tier` 写（`tier: null` 清除）。设了档位的模型在该引擎上**只**占 owner 定的那一档，
+取代内置表和家族给它的档位；effort 是该档要的（S low、M medium、L high、XL max）夹到模型报的等级。清除后回到内置表 / 家族的档位，
+没有就回到无档位。只对 runner 报了的模型生效；用同一引擎目录的 key（例如 Claude Code 上的 Anthropic key）也读这份档位。
+owner 什么都没设时 Claude / Codex / Kimi 的行与以前逐字节相同；任务 run 的路由（`routeTaskRun`）不读它。
 
 **先按贴合度**：要的那一档 → 更高的档（近的先）→ 无档位的默认模型 → 更低的档（近的先）。选中的不在要的档时，理由里写明
 （`Nothing in tier M can run: …`）。**同一贴合度内**再按下表：
@@ -282,6 +292,8 @@ Optimize For 只在第 5 条（没人给档位）时抬档：Balance 至少 M，
 - **Agent 设置 → SubAgents**：开关、Providers（默认全部，点进去屏蔽）、
   Running at once。
 - **Providers 页**：每个模型多一列 Tier；preset 的档位和价格跟目录走，自定义 endpoint 显示 `Not set`，点开可以标。
+  内置引擎（Claude Code、Codex、Cursor、Antigravity……）列出 runner 目录里的**每个**模型：内置表或家族给了档位的显示该档位，
+  其余显示 `Not set`；每一行都可以点开设档位（覆盖目录的档位）或清除（`builtinModelTiers`，§4.2）。
 - **报告**：沿用 model routing 报告页，加一个 SubAgents 视图：按档位、模型统计次数、成功率、花费、额度换候选次数、
   没给 `size` 的比例。
   已做（2026-11-20，owner 批准的效果图 [`mocks/subagent-workflow/08-report.html`](./mocks/subagent-workflow/08-report.html)）：

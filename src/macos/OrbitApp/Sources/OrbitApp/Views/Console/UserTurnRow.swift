@@ -53,6 +53,9 @@ struct UserTurnRow: View {
     /// The words of a message that never reached the engine, back in the composer: nil unless
     /// `SteerDelivery.offersPutBack` says so and there is a console to act through.
     var putBack: (() -> Void)? = nil
+    /// Scrolls a delivery card to the item's own card in this conversation; nil where there is no
+    /// console to scroll (board card-ui-polish ②).
+    var revealItemCard: ((String) -> Bool)? = nil
     /// The item a record link or a search hit asked for: this turn's long message opens if it is that one.
     @Environment(\.revealedItemID) private var revealedItemID
 
@@ -90,7 +93,8 @@ struct UserTurnRow: View {
             // Nobody typed this turn: draw the delivery card rather than the reader's own bubble.
             OpenItemDeliveryCardView(card: card, text: b.text, ts: b.ts,
                                      undelivered: undelivered,
-                                     onCancelQueued: cancel)
+                                     onCancelQueued: cancel,
+                                     revealItemCard: revealItemCard)
         } else if let card = b.ownerAnswer, b.sessionReplies?.isEmpty ?? true {
             // The owner's answer handed to the coordinator is the platform's message too: the question
             // replayed in full and the answer, written for the AGENT — as a bubble, the reader's own
@@ -155,16 +159,20 @@ struct UserTurnRow: View {
             // note once delivered and the turn's own words while it waits, folded at the card's foot.
             EvidenceToReviewCardView(card: card, told: told(b), ts: b.ts,
                                      undelivered: undelivered, onCancelQueued: cancel)
+                .orbitCardWidth()
         } else if let card = b.evidenceSendBack {
             EvidenceSentBackCardView(card: card, text: b.text, ts: b.ts,
                                      undelivered: undelivered,
                                      onCancelQueued: cancel)
+                .orbitCardWidth()
         } else if let card = b.runQuestion {
             RunQuestionCardView(card: card, told: told(b), ts: b.ts,
                                 undelivered: undelivered, onCancelQueued: cancel)
+                .orbitCardWidth()
         } else if let card = b.runNotice {
             RunNoticeCardView(card: card, told: told(b), ts: b.ts,
                               undelivered: undelivered, onCancelQueued: cancel)
+                .orbitCardWidth()
         } else if let card = b.sessionOpening {
             // The opening of a session Orbit opened with a brief of its own: one row saying why.
             SessionOpeningRowView(card: card, text: b.text,
@@ -189,6 +197,7 @@ struct UserTurnRow: View {
                 }
                 SessionReplyCardsView(replies: replies, ts: b.ts,
                                       undelivered: undelivered, onCancelQueued: cancel)
+                .orbitCardWidth()
             }
         } else if let line = RunnerUpdateNow.resumeLine(b.text) {
             // The turn Orbit sent to continue a turn the owner's Update Now cut (D4): nobody typed it,

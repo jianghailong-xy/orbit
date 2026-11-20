@@ -671,7 +671,7 @@ private class RunPins(val task: JsonObject, val data: TaskDetailData, assignee: 
     val runProvider = pinnedProvider ?: pinnedEngine?.let { engine -> if (engine == ProviderEngines.DSH) firstDeepSeekKey?.id ?: engine else engine }
         ?: assigneeProvider
     val models = catalog?.models(runEngine, runProvider).orEmpty()
-    val unpinned = if (smartSelection && assignee?.flag("modelRouting") == true) TaskDetailCopy.smartSelectionPlaceholder else TaskDetailCopy.providerDefault
+    val unpinned = if (smartSelection) TaskDetailCopy.smartSelectionPlaceholder else TaskDetailCopy.providerDefault
     val modelValue = task.text("model")?.let { m -> models.firstOrNull { it.text("value") == m }?.text("label") ?: m } ?: unpinned
 }
 

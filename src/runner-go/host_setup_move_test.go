@@ -493,7 +493,7 @@ func TestHostSetupKeepsTheUidInstanceDownWhenTheNameInstanceCannotBeConfirmedDow
 			// The output ends with alice's lines: no footer saying her uid instance keeps its
 			// process, which it does not.
 			tail := "\n  Left on their orbit-runner@<uid> instance (1):\n" + why + "      alice runs:  /usr/local/bin/orbit register\n"
-			if !strings.HasSuffix(out, "when they next restart.\n"+tail) {
+			if !strings.HasSuffix(out, "without root.\n"+tail) {
 				t.Errorf("setup output does not end with %q:\n%s", tail, out)
 			}
 			if strings.Contains(out, "put back as it was") {
@@ -517,7 +517,7 @@ func TestHostSetupPrintsNoKeptProcessFooterForAUidInstanceItCouldNotPutBack(t *t
 	tail := "\n  Left on their orbit-runner@<uid> instance (1):\n" +
 		"    alice (" + from + "): the move failed: systemctl start " + to + " failed: exit status 1; and it could not be put back: systemctl start " + from + " failed: exit status 1.\n" +
 		"      alice runs:  /usr/local/bin/orbit register\n"
-	if !strings.HasSuffix(out, "when they next restart.\n"+tail) {
+	if !strings.HasSuffix(out, "without root.\n"+tail) {
 		t.Errorf("setup output does not end with %q:\n%s", tail, out)
 	}
 }

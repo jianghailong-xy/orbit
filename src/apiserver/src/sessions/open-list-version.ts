@@ -50,6 +50,35 @@ export async function readOpenListVersion(
   ownerId: string,
   nowMs: number = Date.now(),
 ): Promise<string> {
+  return (await readOpenListVersionParts(prisma, ownerId, nowMs)).version;
+}
+
+/**
+ * The version, and the two parts of it a `since=` read decides from whether it may build only the
+ * rows that moved (`SessionsService.listOpenSince`):
+ *
+ * - `epochs`: each source's counter total, so the read can tell WHICH sources were written since its
+ *   cursor's snapshot — every source a row reads has a rule there for finding the rows it moved, or
+ *   sends the read to a whole build.
+ * - `steady`: what of the rest a row can show that no per-row check of that read covers — each
+ *   runner's name and status and whether it reads online. Not the runners' beats: the delta does not
+ *   count a raw heartbeat as a change, and their presence rows are rewritten every 30 s.
+ * - `deadlinesPassed`: the decision deadlines passed, after which a row's waiting cards and decisions
+ *   are read again for every row.
+ */
+export interface OpenListVersionParts {
+  version: string;
+  epochs: Record<string, string>;
+  steady: string;
+  /** How many of the account's decision deadlines have passed (the version's own count of them). */
+  deadlinesPassed: number;
+}
+
+export async function readOpenListVersionParts(
+  prisma: PrismaService,
+  ownerId: string,
+  nowMs: number = Date.now(),
+): Promise<OpenListVersionParts> {
   const o = Prisma.sql`${ownerId}::uuid`;
   // How many row versions, and an order-free fingerprint of which (only the few live sources use it).
   const rowsOf = (alias: string, from: Prisma.Sql) => {
@@ -63,7 +92,7 @@ export async function readOpenListVersion(
   // One statement, so one round trip and one plan.
   const [row] = await prisma.$queryRaw<Array<Record<string, unknown>>>(Prisma.sql`
     WITH runners AS MATERIALIZED (
-      SELECT r.id, r.ctid::text || ':' || r.xmin::text AS v, r.status::text AS status, ${runnerLastBeatSql('r')} AS beat
+      SELECT r.id, r.name, r.ctid::text || ':' || r.xmin::text AS v, r.status::text AS status, ${runnerLastBeatSql('r')} AS beat
         FROM runner r
        WHERE r.owner_id = ${o}
           -- Asked per runner (session_open_list_runner_idx is (owner_id, assigned_runner_id)): as an IN over the
@@ -106,7 +135,7 @@ export async function readOpenListVersion(
       -- What the thresholds decided on the JS clock are read from; not hashed (the counters are).
       (SELECT json_agg(json_build_array(s.running_bg_jobs, s.running_bg_job_activity))
          FROM session s WHERE s.owner_id = ${o} AND cardinality(s.running_bg_jobs) > 0) AS bg_jobs,
-      (SELECT json_agg(json_build_array(status, ${ms(Prisma.sql`beat`)})) FROM runners) AS runner_clock,
+      (SELECT json_agg(json_build_array(status, ${ms(Prisma.sql`beat`)}, id, name) ORDER BY id) FROM runners) AS runner_clock,
       -- The instants at which a JS-clock threshold flips: an evidence-review window closing (the
       -- delivery moment is stamped on the evidence row by migration 0484, so no task or turn is
       -- joined here), a coordinator's escalation running out (from a delivered wake or a done
@@ -134,14 +163,26 @@ export async function readOpenListVersion(
     .filter((at) => at != null && at <= nowMs).length;
   const freshJobs = ((bg_jobs ?? []) as Array<[string[], unknown]>)
     .reduce((n, [jobs, activity]) => n + freshRunningBgJobs(jobs, activity, nowMs).length, 0);
-  const runnersOnline = ((runner_clock ?? []) as Array<[string, number | null]>)
-    .filter(([status, beat]) => runnerIsOnline({ status, lastHeartbeatAt: beat == null ? null : new Date(beat) }, nowMs))
-    .length;
+  const runners = ((runner_clock ?? []) as Array<[string, number | null, string, string]>)
+    .map(([status, beat, id, name]) => ({
+      id, name, status, online: runnerIsOnline({ status, lastHeartbeatAt: beat == null ? null : new Date(beat) }, nowMs),
+    }));
+  const runnersOnline = runners.filter((runner) => runner.online).length;
 
-  return createHash('sha256')
+  const version = createHash('sha256')
     .update(JSON.stringify([rows, deadlinesPassed, freshJobs, runnersOnline]))
     .digest('base64url')
     .slice(0, 27);
+  const epochs: Record<string, string> = {};
+  for (const entry of String(rows.epochs ?? '').split(',')) {
+    const at = entry.lastIndexOf('=');
+    if (at > 0) epochs[entry.slice(0, at)] = entry.slice(at + 1);
+  }
+  const steady = createHash('sha256')
+    .update(JSON.stringify(runners.map(({ id, name, status, online }) => [id, name, status, online])))
+    .digest('base64url')
+    .slice(0, 27);
+  return { version, epochs, steady, deadlinesPassed };
 }
 
 /** The views the version answers for: Open, and its legacy alias. */
