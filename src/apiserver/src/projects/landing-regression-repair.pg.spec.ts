@@ -53,10 +53,10 @@ import { WakeDispositionService } from './wake-disposition.service';
  *      derivation, and a projection would only store what an unrelated lag left;
  *  (h) the repair never takes a project out of DONE: a project DONE by derivation whose projection reads
  *      not done for reasons of its own (production's 01a0726d: a task filed under a criterion since the
- *      project was settled, still OPEN) stays DONE through a start, its row untouched. The dry run says so
- *      in both forms: its printed line for every project — this DONE one among them — shows the status
- *      read from the row and the status the start leaves, exactly as its JSON holds them, and its summary
- *      counts the projects it leaves unchanged.
+ *      project was settled, still OPEN) stays DONE through a start, its row untouched;
+ *  (i) the dry run says so in both forms: its printed line for every project — such a DONE one among
+ *      them — shows the status read from the row and the status the start leaves, exactly as its JSON
+ *      holds them, and its summary counts the projects it leaves unchanged.
  *
  * What this reads that the tree before the fix does not have is loaded by name, so the file compiles there
  * and every case is red for want of the behaviour rather than of a type.
@@ -605,34 +605,57 @@ test('(g) a project whose only misread task serves no criterion is not projected
     }
   });
 
-// ═══ (h) the repair never takes a project out of DONE ═════════════════════════════════════════════
+// ═══ (h) and (i) the repair never takes a project out of DONE, and its dry run says so ═════════════
 
-test('(h) a project DONE by derivation whose projection reads not done for a reason of its own stays DONE through a start, its row untouched; the dry run prints DONE -> DONE for it, every line as its JSON says, and counts the unchanged',
+/**
+ * Production's 01a0726d: DONE by derivation since September, its misread task (the V2 row, frozen empty)
+ * serving a criterion, and a task filed under its other criterion since then, still OPEN. Filed by hand,
+ * as rows from before the projection's edges were: the stored DONE is stale against the facts.
+ */
+async function staleDoneProject(db: PrismaClient, label: string) {
+  const project = await settledProject(db, label, [V2_ROW, V2_ROW]);
+  await freezeAsTheFirstPassDid(db, project);
+  const second = await db.task.findUniqueOrThrow({
+    where: { id: project.tasks[1]!.taskId }, select: { criterionDefinitionId: true, criterionRevision: true },
+  });
+  await db.task.create({
+    data: {
+      id: randomUUID(), ownerId: project.ownerId, creatorType: 'USER', creatorId: project.ownerId,
+      title: 'a follow-up filed under criterion 2 after the project was settled', projectId: project.projectId,
+      status: 'OPEN', autoRunWhenReady: false, completionCriterion: 'EXECUTABLE', acceptanceCommand: 'true',
+      acceptanceExpectedExitCode: 0,
+      criterionDefinitionId: second.criterionDefinitionId, criterionRevision: second.criterionRevision,
+    },
+  });
+  const stale = await projectRow(db, project.projectId);
+  assert.deepEqual([stale.status, stale.doneBy], [ProjectStatus.DONE, 'DERIVED'], 'CONTROL: stored DONE by derivation');
+  const derived = await readDerivedProjectDone(db as unknown as PrismaService, project.ownerId, project.projectId);
+  assert.deepEqual(derived.withheld, ['CRITERION_UNSATISFIED', 'CRITERION_UNLANDED'],
+    'CONTROL: the projection reads not done, for the OPEN follow-up and not for the misread task');
+  return { project, stale };
+}
+
+test('(h) a project DONE by derivation whose projection reads not done for a reason of its own stays DONE through a start, its row untouched: the repair stores nothing but DONE, and only over OPEN',
+  { skip, timeout: 240_000 }, async () => {
+    const db = await connect();
+    try {
+      const { project, stale } = await staleDoneProject(db, 'stale-done');
+
+      await start(db);
+
+      assert.deepEqual(await projectRow(db, project.projectId), stale,
+        'a start leaves it DONE, recorded DERIVED at its original time: the repair wrote nothing to the row');
+      assert.deepEqual(await noise(db, project.projectId), QUIET, 'nothing queued, nothing open, nobody woken');
+    } finally {
+      await db.$disconnect();
+    }
+  });
+
+test('(i) the dry run prints every project with its status as read from the row and the status the start leaves it in, exactly as its JSON holds them — a stale DONE one among them — and its summary counts the unchanged',
   { skip, timeout: 300_000 }, async () => {
     const db = await connect();
     try {
-      // 01a0726d's shape: DONE by derivation since September, its misread task (the V2 row, frozen empty)
-      // serving a criterion, and a task filed under its other criterion since then, still OPEN. Filed by
-      // hand, as rows from before the projection's edges were: the stored DONE is stale against the facts.
-      const project = await settledProject(db, 'stale-done', [V2_ROW, V2_ROW]);
-      await freezeAsTheFirstPassDid(db, project);
-      const second = await db.task.findUniqueOrThrow({
-        where: { id: project.tasks[1]!.taskId }, select: { criterionDefinitionId: true, criterionRevision: true },
-      });
-      await db.task.create({
-        data: {
-          id: randomUUID(), ownerId: project.ownerId, creatorType: 'USER', creatorId: project.ownerId,
-          title: 'a follow-up filed under criterion 2 after the project was settled', projectId: project.projectId,
-          status: 'OPEN', autoRunWhenReady: false, completionCriterion: 'EXECUTABLE', acceptanceCommand: 'true',
-          acceptanceExpectedExitCode: 0,
-          criterionDefinitionId: second.criterionDefinitionId, criterionRevision: second.criterionRevision,
-        },
-      });
-      const stale = await projectRow(db, project.projectId);
-      assert.deepEqual([stale.status, stale.doneBy], [ProjectStatus.DONE, 'DERIVED'], 'CONTROL: stored DONE by derivation');
-      const derived = await readDerivedProjectDone(db as unknown as PrismaService, project.ownerId, project.projectId);
-      assert.deepEqual(derived.withheld, ['CRITERION_UNSATISFIED', 'CRITERION_UNLANDED'],
-        'CONTROL: the projection reads not done, for the OPEN follow-up and not for the misread task');
+      const { project, stale } = await staleDoneProject(db, 'stale-printed');
 
       const predicted = (await repair.predictLandingRegressionRepair(db)).projects
         .find((row) => row.projectId === project.projectId);
@@ -641,7 +664,7 @@ test('(h) a project DONE by derivation whose projection reads not done for a rea
         [ProjectStatus.DONE, ProjectStatus.DONE, ['CRITERION_UNSATISFIED', 'CRITERION_UNLANDED']],
         'the prediction leaves it DONE, and says what the projection withholds DONE for');
 
-      // The command a deploy runs, both ways, against this database: every project the fixtures above left
+      // The command a deploy runs, both ways, against this database: every project the cases above left
       // in it, OPEN, DONE and stale DONE alike, printed as its JSON holds it.
       const dryRun = join(__dirname, 'landing-regression-repair-dry-run.js');
       const env = { ...process.env, DATABASE_URL: URL };
@@ -674,11 +697,9 @@ test('(h) a project DONE by derivation whose projection reads not done for a rea
       assert.match(summary, new RegExp(`unchanged: [^;]*\\b${count('DONE')} DONE\\b`), 'the DONE ones it leaves are counted');
       assert.ok(count('DONE') >= 1, 'CONTROL: DONE projects are among the ones compared');
 
+      // And the start does what was printed.
       await start(db);
-
-      assert.deepEqual(await projectRow(db, project.projectId), stale,
-        'a start leaves it DONE, recorded DERIVED at its original time: the repair wrote nothing to the row');
-      assert.deepEqual(await noise(db, project.projectId), QUIET, 'nothing queued, nothing open, nobody woken');
+      assert.deepEqual(await projectRow(db, project.projectId), stale, 'a start leaves the row as the prediction said');
     } finally {
       await db.$disconnect();
     }
