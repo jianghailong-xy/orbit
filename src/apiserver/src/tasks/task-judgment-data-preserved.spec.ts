@@ -3199,7 +3199,11 @@ test('the ledger stays append-only, and every later migration is accounted for',
       '1250_managed_runner_name_orbit_cloud',
       // 1260 adds two nullable columns on runner, bg_job_cpus and bg_job_memory_mb (no default); no row is written,
       // and no preserved relation, trigger, function or DONE fence changes.
-      '1260_runner_bg_job_limits'],
+      '1260_runner_bg_job_limits',
+      // 1304 adds two nullable columns on schedule, max_runs (with a CHECK that NULL passes) and planned_end_told_at,
+      // marks every ENDED schedule told (an UPDATE of schedule rows only), and adds two partial indexes; schedule and
+      // schedule_run are not preserved relations, and no trigger, function or DONE fence changes.
+      '1304_schedule_max_runs'],
     'a later migration exists; re-read it before trusting the assertions above');
   // Stated rather than described: 0230's fence differs from 0228's by exactly one added lane.
   const later = readFileSync(
