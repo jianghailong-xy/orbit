@@ -160,6 +160,22 @@ internal fun acceptedHeads(rows: List<JsonObject>, events: List<RunEvent>): List
     }
 }
 
+/** The accepted head a full runner, run or batch (or a runner's update) holds, still the reader's to take back: its turn and the words
+ * Cancel returns to the composer — the translation's original when there is one, as the reader typed them. */
+internal data class HeldCancel(val turnId: String, val words: String)
+
+/**
+ * The message under the held tag when it is the accepted head — the last one, no runner's echo yet (web `cancellableHeldTurn`): Cancel
+ * beside `Queued · runner full` withdraws it. Never the session's opening prompt (the listing's `opening`), which the server keeps.
+ */
+internal fun cancellableHeldTurn(rows: List<JsonObject>, events: List<RunEvent>): HeldCancel? {
+    val turnId = acceptedHeads(rows, events).lastOrNull()?.turnId ?: return null
+    val row = rows.firstOrNull { it.text("placement") == "accepted" && it.text("turnId")?.let { id -> ObjectId.same(id, turnId) } == true }
+        ?: return null
+    if (row["opening"] == JsonPrimitive(true)) return null
+    return HeldCancel(turnId, Translation.turn(row["translation"])?.original ?: row.text("content").orEmpty())
+}
+
 /** The platform's turn asking a coordinator for its handoff note (board 02 ②): Orbit's, drawn only as the handoff's own row — never
  * as a queued card or an accepted head (web `queuedTurnsOutsideTranscript`, OrbitKit `PendingTray`). The listing carries no turn key,
  * so it is told by its first line, as the transcript tells its echo. */
