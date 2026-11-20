@@ -592,7 +592,7 @@ private fun SettledAuthLine(message: String, resolved: Boolean) {
 private fun ToolFailureCard(message: String, summary: ToolFailureSummary) {
     var expanded by rememberSaveable(message) { mutableStateOf(false) }
     val error = MaterialTheme.colorScheme.error
-    Column(Modifier.conversationCard().drawBehind { drawRect(error, size = size.copy(width = 3.dp.toPx())) }.padding(start = 11.dp),
+    Column(Modifier.conversationCard().testTag("tool-failure-card").drawBehind { drawRect(error, size = size.copy(width = 3.dp.toPx())) }.padding(start = 11.dp),
         verticalArrangement = Arrangement.spacedBy(6.dp)) {
         Row(horizontalArrangement = Arrangement.spacedBy(7.dp), verticalAlignment = Alignment.CenterVertically) {
             Text(summary.tool ?: "Tool call", Modifier.weight(1f, fill = false), fontFamily = FontFamily.Monospace,
