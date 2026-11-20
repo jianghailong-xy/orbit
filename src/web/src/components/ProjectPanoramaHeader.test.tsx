@@ -1104,6 +1104,38 @@ describe('§7.2 V6: the head once the server derives the claim’s liveness', ()
       .toBe('checking · output 6s ago · claim 1 · round 1');
   });
 
+  it('says a job waiting for its runner’s local lock is waiting, and names the job holding it', () => {
+    // 2026-11-19: a merge claimed by workstation-gpu sat behind another project's merge check for
+    // 78 minutes and read "fetching · no output for 78m · claim 1". It had not started its work.
+    const waitStart = '2026-09-25T12:41:20Z';
+    const holder = 'Waiting for runner workstation-gpu’s repository lock: the merge check of project “Wiki” holds it';
+    const lock = {
+      kind: 'LAND_PROMOTION' as const, taskTitle: null, taskId: null, phase: 'FETCH' as const, check: null,
+      runner: 'workstation-gpu', stepStartedAt: waitStart, startedAt: waitStart,
+      outputMovedAt: waitStart, liveness: 'QUIET' as const,
+      blockingReason: { code: 'WAITING_LOCAL_LOCK' as const, summary: holder, jobId: 'job-holder' },
+    };
+    const view = view6(claimed(lock), [listed({ ...lock, runnerName: 'workstation-gpu' })]);
+    const line = landingLine(view, V6_NOW, { updatedAt: V6_NOW })!;
+    const head = landingHead(line);
+    expect(line.state).toBe('waiting');
+    // The wait's own clock: from the step that began it, 78 minutes ago.
+    expect(head).toEqual({ right: '78m 0s', isClock: true, detail: `waiting · ${holder} · claim 1 · round 1` });
+    expect(head.detail).not.toContain('fetching');
+    expect(head.detail).not.toContain('no output');
+    // The job list and the card say the same.
+    const [job] = landingJobLines(view, V6_NOW, { updatedAt: V6_NOW });
+    expect(job.line.state).toBe('waiting');
+    expect(landingHead(job.line).detail).toBe(`waiting · ${holder} · claim 1 · round 1`);
+    expect(landingCard(view, V6_NOW, { updatedAt: V6_NOW })!.state).toBe('waiting');
+
+    // A runner gone silent while it waited is the runner's fact, not the lock's.
+    const silent = landingHead(landingLine(view6(
+      claimed({ ...lock, liveness: 'SILENT', heartbeatAt: '2026-09-25T13:50:20Z' }),
+      [listed({ ...lock, liveness: 'SILENT', heartbeatAt: '2026-09-25T13:50:20Z' })]), V6_NOW)!);
+    expect(silent.detail).toBe('fetching · no word from runner workstation-gpu for 9m · claim 1 · round 1');
+  });
+
   it('writes "round N of 3" only for a task’s landing', () => {
     expect(landingRoundClause(2, 'LAND_TASK')).toBe('round 2 of 3');
     expect(landingRoundClause(1, 'CHECK_PROMOTION')).toBe('round 1');

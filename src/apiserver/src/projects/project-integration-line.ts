@@ -609,6 +609,13 @@ interface InFlightJobRow extends IntegrationCheckSource {
   serialBlockOwnerId: string | null;
   serialBlockKind: string | null;
   serialBlockTaskTitle: string | null;
+  /** The job a claimed job waits behind on its runner's local lock: the earliest other RUNNING job on
+   *  the same runner, repository and target ref that is not itself waiting for the lock. */
+  lockHolderJobId: string | null;
+  lockHolderOwnerId: string | null;
+  lockHolderKind: string | null;
+  lockHolderTaskTitle: string | null;
+  lockHolderProjectTitle: string | null;
   /** The landing session of this attempt's subject (`project_landing.session_id`, §2.9); null for
    *  a job written before 0436. Pre-generated when the subject opens, so it needs no session row. */
   landingSessionId: string | null;
@@ -659,9 +666,20 @@ function blockingReasonOf(row: InFlightJobRow): IntegrationJobBlockingReason | n
     const localLock = row.progressProtocol === INTEGRATION_PROGRESS_V2_PROTOCOL
       ? row.step === 'WAITING_LOCAL_LOCK'
       : !!row.behindAnotherOnRunner;
-    return localLock
-      ? { code: 'WAITING_LOCAL_LOCK', summary: queueBlockingSummary('WAITING_LOCAL_LOCK', queueFacts(row)) }
-      : null;
+    if (!localLock) return null;
+    // The holder is named only to its own owner, as every other blocker is.
+    const mineHolder = row.lockHolderJobId !== null && mine(row.lockHolderOwnerId);
+    const reason: IntegrationJobBlockingReason = {
+      code: 'WAITING_LOCAL_LOCK',
+      summary: queueBlockingSummary('WAITING_LOCAL_LOCK', queueFacts(row, {
+        runnerName: row.runnerName,
+        blockingJobKind: mineHolder ? row.lockHolderKind : null,
+        blockingTaskTitle: mineHolder ? row.lockHolderTaskTitle : null,
+        blockingProjectTitle: mineHolder ? row.lockHolderProjectTitle : null,
+      })),
+    };
+    if (mineHolder) reason.jobId = row.lockHolderJobId!;
+    return reason;
   }
   if (row.cancelRequestedAt) {
     return { code: 'CANCELLING', summary: queueBlockingSummary('CANCELLING', queueFacts(row)) };
@@ -971,7 +989,10 @@ async function readInFlightJobsForProjects(
            sync_block."handlingGeneration" AS "syncHandlingGeneration",
            running_block."jobId" AS "serialBlockJobId", running_block."ownerId" AS "serialBlockOwnerId",
            running_block."kind" AS "serialBlockKind", running_block."taskTitle" AS "serialBlockTaskTitle",
-           landing."session_id" AS "landingSessionId"
+           landing."session_id" AS "landingSessionId",
+           lock_holder."jobId" AS "lockHolderJobId", lock_holder."ownerId" AS "lockHolderOwnerId",
+           lock_holder."kind" AS "lockHolderKind", lock_holder."taskTitle" AS "lockHolderTaskTitle",
+           lock_holder."projectTitle" AS "lockHolderProjectTitle"
       FROM "project_integration_job" j
       JOIN "project_codebase" cb ON cb."id" = j."codebase_id"
       LEFT JOIN "project_landing" landing ON landing."id" = j."landing_id"
@@ -1041,6 +1062,28 @@ async function readInFlightJobsForProjects(
            AND r."serial_key" = j."serial_key" AND r."state" = 'RUNNING'
          ORDER BY COALESCE(r."claimed_at", r."created_at"), r."id" LIMIT 1
       ) running_block ON true
+      -- The runner's local lock is keyed by its checkout and the target ref (runner-go
+      -- integrationLock), so a claimed job waiting for it waits behind another RUNNING job of the
+      -- same runner, repository and target ref — of whichever project. The one not itself waiting
+      -- for the lock holds it; the earliest claimed of those is named.
+      LEFT JOIN LATERAL (
+        SELECT o."id" AS "jobId", o."owner_id" AS "ownerId", o."kind" AS "kind",
+               ot."title" AS "taskTitle", op."title" AS "projectTitle"
+          FROM "project_integration_job" o
+          JOIN "project_codebase" ocb ON ocb."id" = o."codebase_id"
+          LEFT JOIN "task" ot ON ot."id" = o."task_id"
+          LEFT JOIN "project" op ON op."id" = o."project_id"
+         WHERE j."state" = 'RUNNING'
+           AND (j."step" = 'WAITING_LOCAL_LOCK'
+                OR (j."progress_protocol" IS DISTINCT FROM ${INTEGRATION_PROGRESS_V2_PROTOCOL}
+                    AND j."heartbeat_at" <= j."claimed_at"))
+           AND o."state" = 'RUNNING' AND o."id" <> j."id"
+           AND o."runner_id" = j."runner_id"
+           AND o."target_ref" = j."target_ref"
+           AND (o."kind" = 'OBSERVE_LANDING') = (j."kind" = 'OBSERVE_LANDING')
+           AND ocb."canonical_repo_url" = cb."canonical_repo_url"
+         ORDER BY (o."step" IS NOT DISTINCT FROM 'WAITING_LOCAL_LOCK'), o."claimed_at", o."id" LIMIT 1
+      ) lock_holder ON true
      WHERE j."project_id" IN (${ids})
        AND j."state" IN ('RUNNING', 'QUEUED')
        ${observations === 'EXCLUDE' ? Prisma.sql`AND j."kind" <> 'OBSERVE_LANDING'` : Prisma.empty}
