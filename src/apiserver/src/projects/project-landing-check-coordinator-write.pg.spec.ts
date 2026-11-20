@@ -3,7 +3,7 @@ import { randomUUID } from 'node:crypto';
 import { test } from 'node:test';
 
 import { uuidToBase62 } from '@orbit/shared';
-import { RunnerStatus, RunStatus, SessionDispatchOrigin, type PrismaClient } from '@prisma/client';
+import { Prisma, RunnerStatus, RunStatus, SessionDispatchOrigin, type PrismaClient } from '@prisma/client';
 import { Client } from 'pg';
 
 import { prismaClientFor } from '../prisma/prisma-client';
@@ -213,7 +213,9 @@ async function startRequest(stack: Stack, f: Fixture, settings: Record<string, u
       projectId: f.projectId, ownerId: f.ownerId, kind: START_REQUEST_KIND, state: 'OPEN',
       assignee: 'OWNER', assigneeReason: 'DEFAULT', askedBySessionId: f.coordinatorSessionId,
       dedupeKey: START_REQUEST_DEDUPE_KEY, title: START_REQUEST_TITLE,
-      payload: { settings, why: 'the plan is ready', criteriaDigest: '', planDigest: '', repository: null, warnings: [] },
+      payload: {
+        settings, why: 'the plan is ready', criteriaDigest: '', planDigest: '', repository: null, warnings: [],
+      } as unknown as Prisma.InputJsonValue,
       waitingSince: now, assignedAt: now, escalateAt: null,
     },
     select: { id: true },
