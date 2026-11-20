@@ -363,6 +363,8 @@ import {
   retryReplyTranslation,
 } from '../api';
 import { DshRepairCard } from './Transcript';
+import { useAgentFix } from './AgentFix';
+import { sandboxFixTarget } from '../lib/agentFix';
 import type { TranslationActionResponse } from '@orbit/shared';
 import { useApprovalDecisions } from '../lib/approvalDecisions';
 import {
@@ -386,7 +388,7 @@ import {
 } from './RunNeverStartedCard';
 import { claudeRegionHeld, claudeRegionHeldWords, useClaudeRegionCheckAgain } from '../lib/claudeRegion';
 import { approvalRememberOffered, DSH_RUNNER_CAPABILITY, dshRepair } from '../lib/dshRuntime';
-import { AntigravityRepairCard, antigravityRepair, AttachmentImage, QueuedFootCtx, type AuthErrorHelp, type AutoRetryHelp, type CursorQuotaHelp, QueuedUserTurn, type SteerWithdrawHandle, type TurnAttachmentRef, type TurnImage, type UnreadSteer, unreadSteersOf } from './Transcript';
+import { AntigravityRepairCard, antigravityRepair, AttachmentImage, QueuedFootCtx, type AuthErrorHelp, type AutoRetryHelp, type CursorQuotaHelp, QueuedUserTurn, type SandboxFixHelp, type SteerWithdrawHandle, type TurnAttachmentRef, type TurnImage, type UnreadSteer, unreadSteersOf } from './Transcript';
 import { PendingTray, type PendingTrayRow } from './PendingTray';
 import { PROVIDERS_BASE, PROVIDERS_LIST_KEY, type ProviderRow } from '../lib/providerAdmin';
 import { ApprovalPanel, DECLINE_PLACEHOLDER, decliningPrefix } from './ApprovalPanel';
@@ -9300,6 +9302,18 @@ export function WorkspaceView({
       navigate,
     ],
   );
+  // The transcript's missing-bubblewrap warning (docs/mocks/codex-sandbox-fix-with-agent): the same
+  // one-press door as the machine page's Fix with an agent, drawn under the row that caught it.
+  const sandboxFix = useAgentFix(runner.id);
+  const sandboxFixHelp: SandboxFixHelp = useMemo(
+    () => ({
+      fix: runner.agentFix,
+      start: () => sandboxFix.mutate(sandboxFixTarget()),
+      starting: sandboxFix.isPending,
+    }),
+    // `mutate` is referentially stable; `sandboxFix` itself is not, so depend on what moves.
+    [runner.agentFix, sandboxFix.mutate, sandboxFix.isPending],
+  );
   // A failed clone's Retry, from the never-started card (the conversation's first line has its own).
   const retryCloneNow = useMutation({
     mutationFn: (workspaceId: string) => retryClone(workspaceId),
@@ -11223,6 +11237,7 @@ export function WorkspaceView({
                 inserts={transcriptInserts}
                 authErrorHelp={authErrorHelp}
                 autoRetryHelp={autoRetryHelp}
+                sandboxFixHelp={sandboxFixHelp}
                 restoreUndelivered={restoreUndelivered}
                 steerWithdrawal={steerWithdrawal}
                 linkStateWord={orbitLinkStateWord}

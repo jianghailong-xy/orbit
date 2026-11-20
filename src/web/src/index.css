@@ -10278,6 +10278,32 @@ button.chat-jump-start:hover {
   text-decoration: underline;
 }
 
+/* Fix with an agent under the transcript's sandbox warning
+   (docs/mocks/codex-sandbox-fix-with-agent): the button and the line saying where its session runs,
+   or the agent's session while it is open, or the one that already finished with the warning. */
+.chat-sandbox-fix {
+  margin: 10px 0 14px;
+  padding: 10px 12px;
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  background: var(--bg-subtle);
+}
+.chat-sandbox-fix-line {
+  margin-top: 6px;
+  font-size: 12px;
+  line-height: 1.5;
+  color: var(--text-3);
+}
+.chat-sandbox-fix.fixing .chat-sandbox-fix-line,
+.chat-sandbox-fix.handled .chat-sandbox-fix-line {
+  margin-top: 0;
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 0 4px;
+  color: var(--text-2);
+}
+
 /* Sign-in failure: a remedy card, not an error line. Sits at message width so it reads as
    part of the conversation rather than as chrome. */
 .chat-authfix {
