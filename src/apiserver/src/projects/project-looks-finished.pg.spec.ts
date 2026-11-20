@@ -350,6 +350,10 @@ async function workSession(
       dispatchOrigin: SessionDispatchOrigin.USER,
       startsTaskWork: true,
       startedAt: new Date(),
+      // A run that ended has finished: its finish is what settles the work (§10.5 O-L4 3), and a DONE
+      // over work that has not finished decides its landing at that finish (§12.15 P-M1).
+      ...(([RunStatus.SUCCEEDED, RunStatus.FAILED, RunStatus.CANCELLED] as RunStatus[]).includes(status)
+        ? { finishedAt: new Date() } : {}),
       ...(branch ? { branch, isolationStatus: 'worktree', baseSha: sha('b') } : {}),
     },
   });
