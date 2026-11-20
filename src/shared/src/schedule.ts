@@ -317,6 +317,30 @@ export const SCHEDULE_COPY = {
     WORKSPACE: 'Keep in {workspace}',
     other: 'Keep as it is',
   },
+  every: {
+    minutes: 'Every {count} min',
+    hour: 'Every hour',
+    hours: 'Every {count} hours',
+    window: '{interval}, {time}–{until}',
+    from: '{interval} from {time}',
+    days: '{rule}, {days}',
+    workweek: 'Mon–Fri',
+    weekend: 'weekends',
+  },
+  /** The planned end (§8.5) and the line a run of missed slots collapses into. */
+  end: {
+    until: 'until {when}',
+    today: '{time} today',
+    tomorrow: '{time} tomorrow',
+    runLeft: '1 run left',
+    runsLeft: '{count} runs left',
+    missed: '{count} slots missed, {from}–{to}',
+    endLabel: 'Ends',
+    extend: 'Extend the end',
+    remove: 'Remove the end',
+    extendAsk: '{title}: extend the end',
+    removeAsk: '{title}: remove the end',
+  },
   history: {
     who: { USER: 'You', SESSION: 'Session', RUN: 'Run', ALLOWED: 'You allowed' },
     fields: {
@@ -327,6 +351,7 @@ export const SCHEDULE_COPY = {
       rule: 'Time',
       timezone: 'Time zone',
       endAt: 'Ends',
+      maxRuns: 'Runs',
       accessLevel: 'Access',
       runLimitMinutes: 'Run limit',
       workspaceId: 'Workspace',
@@ -991,24 +1016,9 @@ export function scheduleRuleText(rule: ScheduleRule, form: 'short' | 'long' = 's
   return scheduleFill(t.days, { days: days.map((d) => C.weekdaysShort[d]).join(C.rules.daysSeparator), time: rule.time });
 }
 
-/**
- * An EVERY rule's sentence, the same in both forms (design §9.2): "Every 30 min, 09:00–18:00, Mon–Fri", "Every hour",
- * "Every 2 hours from 08:00, weekends". Kept beside SCHEDULE_COPY rather than in it until the clients that hold
- * SCHEDULE_COPY to contracts/schedule.contract.json word for word carry it too.
- */
-export const SCHEDULE_EVERY_COPY = {
-  minutes: 'Every {count} min',
-  hour: 'Every hour',
-  hours: 'Every {count} hours',
-  window: '{interval}, {time}–{until}',
-  from: '{interval} from {time}',
-  days: '{rule}, {days}',
-  workweek: 'Mon–Fri',
-  weekend: 'weekends',
-} as const;
-
+/** An EVERY rule's sentence, the same in both forms (design §9.2): "Every 30 min, 09:00–18:00, Mon–Fri", "Every hour". */
 function everyRuleText(rule: Extract<ScheduleRule, { kind: 'EVERY' }>): string {
-  const e = SCHEDULE_EVERY_COPY;
+  const e = C.every;
   const interval = rule.minutes < 60
     ? scheduleFill(e.minutes, { count: rule.minutes })
     : rule.minutes === 60 ? e.hour : scheduleFill(e.hours, { count: rule.minutes / 60 });
@@ -1026,23 +1036,6 @@ function everyRuleText(rule: Extract<ScheduleRule, { kind: 'EVERY' }>): string {
 }
 
 /**
- * The planned end and the missed-slot line (design §8.5, §9.2). Kept beside SCHEDULE_EVERY_COPY, outside
- * SCHEDULE_COPY, until the clients that hold SCHEDULE_COPY to the contract word for word carry it too.
- */
-export const SCHEDULE_END_COPY = {
-  until: 'until {when}',
-  today: '{time} today',
-  runLeft: '1 run left',
-  runsLeft: '{count} runs left',
-  missed: '{count} slots missed, {from}–{to}',
-  endLabel: 'Ends',
-  extend: 'Extend the end',
-  remove: 'Remove the end',
-  extendAsk: '{title}: extend the end',
-  removeAsk: '{title}: remove the end',
-} as const;
-
-/**
  * A schedule's planned end as one line: "until 18:00 today", "until Nov 25", "3 runs left", or both joined by the
  * separator when it has an end by time and one by count. Null when it has no end.
  */
@@ -1051,12 +1044,15 @@ export function scheduleEndText(
   now: Date,
   timezone: string,
 ): string | null {
-  const e = SCHEDULE_END_COPY;
+  const e = C.end;
   const parts: string[] = [];
   if (schedule.endAt) {
     const at = new Date(schedule.endAt);
-    const today = scheduleDayText(at, now, timezone) === C.dates.today;
-    const when = today ? scheduleFill(e.today, { time: localParts(at, timezone).time }) : scheduleDateText(at, timezone);
+    const day = scheduleDayText(at, now, timezone);
+    const time = localParts(at, timezone).time;
+    const when = day === C.dates.today ? scheduleFill(e.today, { time })
+      : day === C.dates.tomorrow ? scheduleFill(e.tomorrow, { time })
+        : scheduleDateText(at, timezone);
     parts.push(scheduleFill(e.until, { when }));
   }
   if (schedule.maxRuns != null) {
@@ -1070,7 +1066,7 @@ export function scheduleEndText(
 export function scheduleMissedText(runs: readonly Pick<ScheduleRunView, 'plannedAt'>[], timezone: string): string {
   const times = runs.map((r) => Date.parse(r.plannedAt));
   const at = (ms: number) => localParts(new Date(ms), timezone).time;
-  return scheduleFill(SCHEDULE_END_COPY.missed, {
+  return scheduleFill(C.end.missed, {
     count: runs.length,
     from: at(Math.min(...times)),
     to: at(Math.max(...times)),
@@ -1768,7 +1764,7 @@ export function scheduleHistoryWho(record: Pick<ScheduleChangeRecord, 'changedBy
 }
 
 function fieldValueText(field: string, value: unknown, names: Record<string, string>): string {
-  if (value === null || value === undefined) return field === 'endAt' ? C.history.noEnd : '';
+  if (value === null || value === undefined) return field === 'endAt' || field === 'maxRuns' ? C.history.noEnd : '';
   if (field === 'accessLevel') return C.access[value as ScheduleAccessLevel]?.label ?? String(value);
   if (field === 'runLimitMinutes') return scheduleFill(C.history.minutes, { minutes: Number(value) });
   if (field === 'workspaceId') return names[String(value)] ?? String(value);

@@ -17,7 +17,6 @@ import {
   scheduleCollapseMissed,
   scheduleEndText,
   scheduleMissedText,
-  SCHEDULE_END_COPY,
   scheduleRunCircle,
   scheduleRunLine,
   scheduleRunOfText,
@@ -747,16 +746,16 @@ function ScheduleInspector({ schedule }: { schedule: ScheduleListRow }): JSX.Ele
       </div>
       {endLine ? (
         <div className="sched-block" data-inspector-block="end">
-          <span className="sched-label">{SCHEDULE_END_COPY.endLabel}</span>
+          <span className="sched-label">{C.end.endLabel}</span>
           {C.separator}
           {endLine}
           {' '}
-          <button type="button" className="sched-link" onClick={() => askChange(SCHEDULE_END_COPY.extendAsk)}>
-            {SCHEDULE_END_COPY.extend}
+          <button type="button" className="sched-link" onClick={() => askChange(C.end.extendAsk)}>
+            {C.end.extend}
           </button>
           {' '}
-          <button type="button" className="sched-link" onClick={() => askChange(SCHEDULE_END_COPY.removeAsk)}>
-            {SCHEDULE_END_COPY.remove}
+          <button type="button" className="sched-link" onClick={() => askChange(C.end.removeAsk)}>
+            {C.end.remove}
           </button>
         </div>
       ) : null}
