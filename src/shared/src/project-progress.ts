@@ -88,20 +88,24 @@ export interface ProjectIntegrationSettings<Instant = string> {
   deliveryModeChosenAt?: Instant | null;
 }
 
-/** Who last wrote a project's landing check (§12.14): the account owner at their own door, a
- *  merge-check card the owner answered, or the project's coordinator with no card (§12.15 P-C1). */
-export type LandingCheckSetBy = 'OWNER' | 'CARD' | 'COORDINATOR';
+/** Who last wrote a project's landing check (§12.14): the account owner (at their own door, or a
+ *  value of their own on the start card), a merge-check card the owner answered, the owner's Start
+ *  press confirming the coordinator's proposal (`START`, §12.12 P2), or the project's coordinator
+ *  with no card (§12.15 P-C1). `OWNER` and `CARD` keep it the owner's; the coordinator may change a
+ *  `START` or `COORDINATOR` value without a card. */
+export type LandingCheckSetBy = 'OWNER' | 'CARD' | 'START' | 'COORDINATOR';
 
 /** A project's landing check as `project_get.integration.landingCheck` gives it (§12.16). */
 export interface ProjectLandingCheck<Instant = string> {
   /** The command; `NONE` when the project runs no landing check, so a landing runs only the task's
    *  own acceptance; null when it falls back to the merge check (§11 K1). */
   command: string | 'NONE' | null;
-  /** Null when nobody has written it since the record existed, or the start wrote it. */
+  /** Null when nobody has written it. */
   setBy: LandingCheckSetBy | null;
   /** The coordinator session behind a `COORDINATOR` write; null otherwise. */
   setBySessionId: string | null;
-  /** When the `COORDINATOR` write happened; null otherwise. */
+  /** When it was last written, whoever wrote it; null when nobody has, or for a value set before
+   *  the record existed. */
   setAt: Instant | null;
 }
 

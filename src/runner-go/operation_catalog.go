@@ -1176,8 +1176,9 @@ func buildOperationCatalog() []*operation {
 				"open it with session_get rather than reading the integration tables yourself. " +
 				"`integration.landingCheck` says what runs before a task lands on the project branch — " +
 				"command (a command, NONE for no landing check, or null to fall back to the merge check) " +
-				"— and who set it last: setBy OWNER, CARD or COORDINATOR, with setBySessionId and setAt " +
-				"for a coordinator's cardless write. " +
+				"— and who set it last and when: setBy OWNER, CARD, START (the owner started the project " +
+				"with the value its coordinator proposed) or COORDINATOR, setAt, and setBySessionId for a " +
+				"coordinator's cardless write. " +
 				"Returns the " +
 				"shape of the project, not its tasks: use task_list for those. Reads the projects " +
 				"of the account this runner belongs to; write these same fields with " +
@@ -1518,8 +1519,10 @@ func buildOperationCatalog() []*operation {
 						"merge check still guards main. It still needs the card on a MAIN line, with no " +
 						"merge check, from any other session, and once the owner has set the landing " +
 						"check themselves or through a card; project_get shows who set it last as " +
-						"integration.landingCheck {command, setBy: OWNER | CARD | COORDINATOR, " +
-						"setBySessionId, setAt}. The merge check itself always needs the card. Once a project has started integrating the line is locked, and " +
+						"integration.landingCheck {command, setBy: OWNER | CARD | START | COORDINATOR, " +
+						"setBySessionId, setAt}: a value the owner confirmed on the start card as you " +
+						"proposed it (START) stays yours to change, one they wrote themselves (OWNER) or " +
+						"approved on a card (CARD) does not. The merge check itself always needs the card. Once a project has started integrating the line is locked, and " +
 						"a request to move it is refused even from the owner: to change it, its " +
 						"project branch reaches main first.",
 				},

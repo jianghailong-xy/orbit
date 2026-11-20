@@ -1603,13 +1603,34 @@ export interface IntegrationSettings {
 /**
  * Who writes a landing check (§12.14): the account owner at their own door, a session through a
  * merge-check card the owner answered, the project's coordinator with no card (§12.15 P-C1), or the
- * start the owner pressed.
+ * owner's Start press confirming the value the coordinator proposed (`START`, §12.12 P2). A Start
+ * press that writes a value of the owner's own is `OWNER` (`startLandingCheckWriter`).
  */
 export type LandingCheckWriter =
   | { by: 'OWNER' }
   | { by: 'CARD' }
   | { by: 'COORDINATOR'; sessionId: string }
   | { by: 'START' };
+
+/**
+ * Who a Start press writes the landing check as: `START` when every landing-check field it names is
+ * the value the start request it answers proposed — the owner confirmed the coordinator's running
+ * mode, which stays the coordinator's to change (§12.12 P2) — and `OWNER` when one differs or no
+ * request was named, because then the value is the owner's own words. A command is compared as it
+ * is written (trimmed, blank as none) and a missing field as null.
+ */
+export function startLandingCheckWriter(
+  started: Pick<StartLineSettings, 'landingCheckCommand' | 'landingCheckTimeoutSeconds'>,
+  proposed: Pick<StartLineSettings, 'landingCheckCommand' | 'landingCheckTimeoutSeconds'> | undefined,
+): LandingCheckWriter {
+  if (!proposed) return { by: 'OWNER' };
+  const command = (value: string | null | undefined) => value?.trim() || null;
+  const sameCommand = started.landingCheckCommand === undefined
+    || command(started.landingCheckCommand) === command(proposed.landingCheckCommand);
+  const sameTimeout = started.landingCheckTimeoutSeconds === undefined
+    || (started.landingCheckTimeoutSeconds ?? null) === (proposed.landingCheckTimeoutSeconds ?? null);
+  return sameCommand && sameTimeout ? { by: 'START' } : { by: 'OWNER' };
+}
 
 /** Why the project's coordinator may not write its landing check without a card (§12.15 P-C1). */
 export type CoordinatorLandingCheckRefusal = 'NOT_PROJECT_BRANCH' | 'NO_MERGE_CHECK' | 'SET_BY_OWNER';
@@ -1656,17 +1677,15 @@ export function coordinatorLandingCheckRefused(refusal: CoordinatorLandingCheckR
   });
 }
 
-/** The provenance columns a landing-check write leaves on the binding. */
+/** The provenance columns a landing-check write leaves on the binding: who, and always when; the
+ *  session only for the coordinator's cardless write. */
 function landingCheckProvenance(
   writer: LandingCheckWriter = { by: 'OWNER' },
 ): Prisma.ProjectCodebaseUpdateInput {
-  if (writer.by === 'COORDINATOR') {
-    return { landingCheckSetBy: 'COORDINATOR', landingCheckSetBySessionId: writer.sessionId, landingCheckSetAt: new Date() };
-  }
   return {
-    landingCheckSetBy: writer.by === 'START' ? null : writer.by,
-    landingCheckSetBySessionId: null,
-    landingCheckSetAt: null,
+    landingCheckSetBy: writer.by,
+    landingCheckSetBySessionId: writer.by === 'COORDINATOR' ? writer.sessionId : null,
+    landingCheckSetAt: new Date(),
   };
 }
 
@@ -1805,9 +1824,7 @@ export async function configureProjectIntegration(
     settings: IntegrationSettings;
     /**
      * Who is writing the landing check, recorded on the binding when the settings name it
-     * (§12.14). Left out is the account owner at their own door. `START` is the start card the
-     * owner pressed, which confirms the running mode as a whole (§12.12 P2) and so leaves the
-     * landing check the coordinator's to change: it clears the record rather than marking it.
+     * (§12.14). Left out is the account owner at their own door.
      */
     landingCheckWriter?: LandingCheckWriter;
   },
@@ -2113,7 +2130,14 @@ export async function defaultStartLine(
  */
 export async function startProjectLine(
   tx: Prisma.TransactionClient,
-  input: { ownerId: string; projectId: string; settings: StartLineSettings },
+  input: {
+    ownerId: string;
+    projectId: string;
+    settings: StartLineSettings;
+    /** Who the landing check the start names is written as (`startLandingCheckWriter`); left out,
+     *  the owner's own. */
+    landingCheckWriter?: LandingCheckWriter;
+  },
 ): Promise<StartLineSettings & { locked: boolean }> {
   const { ownerId, projectId, settings } = input;
   const mergeCheckCommand = settings.mergeCheckCommand?.trim() || null;
@@ -2147,7 +2171,7 @@ export async function startProjectLine(
   await configureProjectIntegration(tx, {
     ownerId,
     projectId,
-    landingCheckWriter: { by: 'START' },
+    landingCheckWriter: input.landingCheckWriter ?? { by: 'OWNER' },
     settings: locked
       ? { mergeCheckCommand, ...namedLanding, ...namedTimeout, ...namedDelivery }
       : {

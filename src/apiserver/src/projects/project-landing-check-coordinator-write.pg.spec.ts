@@ -16,6 +16,7 @@ import { SessionsService } from '../sessions/sessions.service';
 import { ProjectAcceptanceService } from './project-acceptance.service';
 import { ProjectHandoffService } from './project-handoff.service';
 import { PROJECT_INTEGRATION_APPROVAL_TOOL_NAME } from './project-integration-approval';
+import { START_REQUEST_DEDUPE_KEY, START_REQUEST_KIND, START_REQUEST_TITLE } from './project-start-request';
 import { checksFor, type IntegrationCheckSource } from './project-integration-job';
 import { ProjectsService } from './projects.service';
 import {
@@ -52,6 +53,7 @@ interface Stack {
   sql: Client;
   sessions: SessionsService;
   projects: ProjectsService;
+  acceptance: ProjectAcceptanceService;
 }
 
 async function connect(): Promise<Stack> {
@@ -63,10 +65,12 @@ async function connect(): Promise<Stack> {
   const prisma = db as unknown as PrismaService;
   const realtime = new Proxy({}, { get: () => () => undefined }) as unknown as RealtimeService;
   const queue = { notifySessionQueued: () => undefined } as unknown as QueueService;
+  const acceptance = new ProjectAcceptanceService(prisma);
   return {
     db, sql,
     sessions: new SessionsService(prisma, queue, realtime),
-    projects: new ProjectsService(prisma, new ProjectAcceptanceService(prisma)),
+    projects: new ProjectsService(prisma, acceptance),
+    acceptance,
   };
 }
 
@@ -200,6 +204,42 @@ async function landingOf(stack: Stack, f: Fixture): Promise<LandingRow> {
   return rows[0];
 }
 
+/** The coordinator's open start request, as `project_request_start` files it: the settings it
+ *  proposes are what the owner's Start press is measured against. */
+async function startRequest(stack: Stack, f: Fixture, settings: Record<string, unknown>): Promise<string> {
+  const now = new Date();
+  const row = await stack.db.projectOpenItem.create({
+    data: {
+      projectId: f.projectId, ownerId: f.ownerId, kind: START_REQUEST_KIND, state: 'OPEN',
+      assignee: 'OWNER', assigneeReason: 'DEFAULT', askedBySessionId: f.coordinatorSessionId,
+      dedupeKey: START_REQUEST_DEDUPE_KEY, title: START_REQUEST_TITLE,
+      payload: { settings, why: 'the plan is ready', criteriaDigest: '', planDigest: '', repository: null, warnings: [] },
+      waitingSince: now, assignedAt: now, escalateAt: null,
+    },
+    select: { id: true },
+  });
+  return row.id;
+}
+
+/** The owner's Start press on the card, with what the card holds, answering `requestId` if named. */
+async function pressStart(
+  stack: Stack,
+  f: Fixture,
+  landing: { landingCheckCommand?: string | null; landingCheckTimeoutSeconds?: number | null },
+  requestId: string | null,
+): Promise<void> {
+  const seal = (await stack.acceptance.standardSetConfirmation(f.ownerId, f.projectId)).currentVersion.digest;
+  await stack.acceptance.startProject(f.ownerId, f.projectId, {
+    criteriaDigest: seal,
+    line: 'PROJECT_BRANCH',
+    automatic: false,
+    maxConcurrentTasks: 3,
+    mergeCheckCommand: MERGE_CHECK,
+    ...landing,
+    ...(requestId !== null ? { requestId } : {}),
+  } as never);
+}
+
 test('P-C1 needs postgres; every case below is a skip without it', { skip }, async (t) => {
   const stack = await connect();
   t.after(() => stack.db.$disconnect().catch(() => undefined));
@@ -300,12 +340,14 @@ test('P-C1 needs postgres; every case below is a skip without it', { skip }, asy
 
     assert.deepEqual(await writeAsSession(stack, f, { landingCheckCommand: LANDING_CHECK }), { refused: false });
 
-    // The owner writes it at their own door: the coordinator's record is cleared, the value is theirs.
+    // The owner writes it at their own door: the coordinator's session is cleared, the value is
+    // theirs, and it is dated like any other write.
+    const before = (await landingOf(stack, f)).setAt!;
     await writeAsOwner(stack, f, { landingCheckCommand: 'npm run owner-check' });
     let row = await landingOf(stack, f);
     assert.equal(row.setBy, 'OWNER');
     assert.equal(row.setBySessionId, null);
-    assert.equal(row.setAt, null);
+    assert.ok(row.setAt instanceof Date && row.setAt.getTime() >= before.getTime(), 'the owner write is dated');
 
     for (const write of [{ landingCheckCommand: LANDING_CHECK }, { landingCheckTimeoutSeconds: 60 }, { landingCheck: 'NONE' }]) {
       assert.deepEqual(await writeAsSession(stack, f, write), { refused: true }, JSON.stringify(write));
@@ -324,8 +366,72 @@ test('P-C1 needs postgres; every case below is a skip without it', { skip }, asy
     row = await landingOf(stack, g);
     assert.equal(row.command, 'npm run carded');
     assert.equal(row.setBy, 'CARD');
+    assert.equal(row.setBySessionId, null);
+    assert.ok(row.setAt instanceof Date, 'the card write is dated');
     assert.deepEqual(await writeAsSession(stack, g, { landingCheckCommand: LANDING_CHECK }), { refused: true });
     assert.equal((await landingOf(stack, g)).command, 'npm run carded');
+  });
+
+  await t.test('a landing check the owner started with as the coordinator proposed it stays the coordinator’s', async () => {
+    const f = await project(stack, 'start-as-proposed', { line: 'PROJECT_BRANCH', mergeCheckCommand: MERGE_CHECK });
+    const proposal = { landingCheckCommand: 'npm run build', landingCheckTimeoutSeconds: 600 };
+    const requestId = await startRequest(stack, f, {
+      line: 'PROJECT_BRANCH', automatic: false, maxConcurrentTasks: 3, mergeCheckCommand: MERGE_CHECK, ...proposal,
+    });
+
+    await pressStart(stack, f, proposal, requestId);
+    let row = await landingOf(stack, f);
+    assert.equal(row.command, 'npm run build');
+    assert.equal(row.timeout, 600);
+    assert.equal(row.setBy, 'START');
+    assert.equal(row.setBySessionId, null);
+    assert.ok(row.setAt instanceof Date, 'the start is dated');
+    const view = await stack.projects.integration(f.ownerId, f.projectId) as unknown as {
+      landingCheck?: { command: string | null; setBy: string | null; setAt: Date | null };
+    };
+    assert.equal(view.landingCheck?.setBy, 'START');
+    assert.ok(view.landingCheck?.setAt instanceof Date);
+
+    // The coordinator changes it afterwards with no card.
+    assert.deepEqual(await writeAsSession(stack, f, { landingCheck: 'NONE' }), { refused: false });
+    row = await landingOf(stack, f);
+    assert.equal(row.none, true);
+    assert.equal(row.setBy, 'COORDINATOR');
+  });
+
+  await t.test('a landing check the owner wrote on the start card, or started with no request, needs the card', async () => {
+    // The owner edits the proposed command on the card.
+    const f = await project(stack, 'start-edited', { line: 'PROJECT_BRANCH', mergeCheckCommand: MERGE_CHECK });
+    const requestId = await startRequest(stack, f, {
+      line: 'PROJECT_BRANCH', automatic: false, maxConcurrentTasks: 3, mergeCheckCommand: MERGE_CHECK,
+      landingCheckCommand: 'npm run build', landingCheckTimeoutSeconds: 600,
+    });
+    await pressStart(stack, f, { landingCheckCommand: 'npm run owner-build', landingCheckTimeoutSeconds: 600 }, requestId);
+    let row = await landingOf(stack, f);
+    assert.equal(row.command, 'npm run owner-build');
+    assert.equal(row.setBy, 'OWNER');
+    assert.ok(row.setAt instanceof Date);
+    assert.deepEqual(await writeAsSession(stack, f, { landingCheckCommand: LANDING_CHECK }), { refused: true });
+    assert.deepEqual(await writeAsSession(stack, f, { landingCheck: 'NONE' }), { refused: true });
+    assert.equal((await landingOf(stack, f)).command, 'npm run owner-build');
+
+    // Only the budget differs from the proposal: still the owner's.
+    const b = await project(stack, 'start-budget-edited', { line: 'PROJECT_BRANCH', mergeCheckCommand: MERGE_CHECK });
+    const budgetRequest = await startRequest(stack, b, {
+      line: 'PROJECT_BRANCH', automatic: false, maxConcurrentTasks: 3, mergeCheckCommand: MERGE_CHECK,
+      landingCheckCommand: 'npm run build', landingCheckTimeoutSeconds: 600,
+    });
+    await pressStart(stack, b, { landingCheckCommand: 'npm run build', landingCheckTimeoutSeconds: 1200 }, budgetRequest);
+    assert.equal((await landingOf(stack, b)).setBy, 'OWNER');
+    assert.deepEqual(await writeAsSession(stack, b, { landingCheckTimeoutSeconds: 60 }), { refused: true });
+
+    // No start request at all: the value is the owner's own words.
+    const g = await project(stack, 'start-no-request', { line: 'PROJECT_BRANCH', mergeCheckCommand: MERGE_CHECK });
+    await pressStart(stack, g, { landingCheckCommand: 'npm run build' }, null);
+    row = await landingOf(stack, g);
+    assert.equal(row.setBy, 'OWNER');
+    assert.deepEqual(await writeAsSession(stack, g, { landingCheckCommand: LANDING_CHECK }), { refused: true });
+    assert.equal((await landingOf(stack, g)).command, 'npm run build');
   });
 
   await t.test('the merge check itself still needs the card, from the coordinator too', async () => {
