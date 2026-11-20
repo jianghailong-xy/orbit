@@ -6,9 +6,20 @@ import { messageOf, type FileStorage } from './file-store';
 import { fileGraceMs } from './file-retention';
 import { FilesService } from './files.service';
 
-/** How often the scrub runs (docs/orbit-files-drive-technical-design.md §10.3 item 5: weekly). */
-export const SCRUB_INTERVAL_MS = 7 * 24 * 60 * 60 * 1000;
-const FIRST_SCRUB_DELAY_MS = 10 * 60 * 1000;
+/** How often the timer looks at the clock. The scrub itself runs once a week, in a fixed slot. */
+const CHECK_INTERVAL_MS = 60 * 60 * 1000;
+const DAY_MS = 24 * 60 * 60 * 1000;
+
+/**
+ * The most recent weekly scrub slot at or before `now`: Sunday 03:00 UTC (docs/orbit-files-drive-technical-design.md §10.3
+ * item 5). Computed from the clock alone, so a restart neither causes a scrub nor delays one.
+ */
+export function scrubSlotAtOrBefore(now: Date): Date {
+  const midnight = Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate());
+  let slot = midnight - now.getUTCDay() * DAY_MS + 3 * 60 * 60 * 1000;
+  if (slot > now.getTime()) slot -= 7 * DAY_MS;
+  return new Date(slot);
+}
 const STORAGES: readonly FileStorage[] = ['local', 's3'];
 
 /** What `files orphans` found in one store. */
@@ -54,7 +65,6 @@ export interface VerifyReport {
 @Injectable()
 export class FileIntegrity implements OnApplicationBootstrap, OnModuleDestroy {
   private readonly logger = new Logger('FileIntegrity');
-  private first?: ReturnType<typeof setTimeout>;
   private timer?: ReturnType<typeof setInterval>;
   private running?: Promise<unknown>;
 
@@ -64,27 +74,38 @@ export class FileIntegrity implements OnApplicationBootstrap, OnModuleDestroy {
     @Optional() private readonly leader?: ControlPlaneLeader,
   ) {}
 
+  /** The slot the last scrub answered, or the one in force at boot: a boot after a slot has passed does not owe it. */
+  private doneSlot = 0;
+
   onApplicationBootstrap(): void {
-    this.first = setTimeout(() => this.tick(), FIRST_SCRUB_DELAY_MS);
-    this.timer = setInterval(() => this.tick(), SCRUB_INTERVAL_MS);
-    this.first.unref();
+    this.doneSlot = scrubSlotAtOrBefore(new Date()).getTime();
+    this.timer = setInterval(() => this.tick(), CHECK_INTERVAL_MS);
     this.timer.unref();
   }
 
   async onModuleDestroy(): Promise<void> {
-    clearTimeout(this.first);
     clearInterval(this.timer);
     await this.running;
   }
 
-  private tick(): void {
-    if (this.leader && !this.leader.leads()) return;
-    if (this.running) return;
-    this.running = this.scrub()
+  /** The timer's check, as of `now`: scrubs once when a slot has come that no scrub has answered. Returns whether it started one. */
+  tick(now: Date = new Date()): boolean {
+    if (this.leader && !this.leader.leads()) return false;
+    if (this.running) return false;
+    const slot = scrubSlotAtOrBefore(now).getTime();
+    if (slot <= this.doneSlot) return false;
+    this.doneSlot = slot;
+    this.running = this.scrub(now)
       .catch((error) => this.logger.error(`the scrub stopped and runs again next week: ${messageOf(error)}`))
       .finally(() => {
         this.running = undefined;
       });
+    return true;
+  }
+
+  /** The running scrub, for a spec to wait on. */
+  settled(): Promise<unknown> {
+    return this.running ?? Promise.resolve();
   }
 
   /** The weekly scrub: orphans of every store this deployment has, reported and never removed. */

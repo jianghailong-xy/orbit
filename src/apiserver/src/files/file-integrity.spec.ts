@@ -6,7 +6,8 @@ import type { AddressInfo } from 'node:net';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
 import test from 'node:test';
-import { FileIntegrity } from './file-integrity';
+import { FileIntegrity, scrubSlotAtOrBefore } from './file-integrity';
+import { sigV4Authorization } from './s3-file-store';
 import { FilesService } from './files.service';
 
 const sha = (bytes: Buffer) => createHash('sha256').update(bytes).digest('hex');
@@ -16,15 +17,37 @@ const NOW = new Date('2026-11-20T00:00:00Z');
 interface Blob { sha256: string; storage: string; bytesDeletedAt: Date | null }
 
 /** A bucket in memory that answers ListObjectsV2 (paged by 2), GET and DELETE of an object. */
+let listedWithToken = 0;
+
 async function fakeBucket(t: test.TestContext, objects: Map<string, { bytes: Buffer; modified: Date }>) {
   const server = http.createServer((req, res) => {
     const url = new URL(req.url!, 'http://x');
+    // Every request must carry the signature AWS would compute for it, query string included.
+    const auth = req.headers.authorization ?? '';
+    const signedNames = /SignedHeaders=([^,]*)/.exec(auth)?.[1]?.split(';') ?? [];
+    const expected = sigV4Authorization(
+      {
+        method: req.method!,
+        path: url.pathname,
+        query: url.search.slice(1),
+        headers: Object.fromEntries(signedNames.map((n) => [n, String(req.headers[n])])),
+        payloadSha256: String(req.headers['x-amz-content-sha256']),
+      },
+      { accessKeyId: 'a', secretAccessKey: 's', region: 'r', service: 's3' },
+      String(req.headers['x-amz-date']),
+    );
+    if (expected !== auth) {
+      res.statusCode = 403;
+      res.end('<Error><Code>SignatureDoesNotMatch</Code></Error>');
+      return;
+    }
     if (url.searchParams.get('list-type') === '2') {
       assert.equal(url.searchParams.get('prefix'), 'files/');
       const keys = [...objects.keys()].sort();
       const from = Number(url.searchParams.get('continuation-token') ?? 0);
       const page = keys.slice(from, from + 2);
       const more = from + 2 < keys.length;
+      if (from > 0) listedWithToken += 1;
       res.end(
         `<ListBucketResult>${page.map((k) => `<Contents><Key>files/${k.slice(0, 2)}/${k}</Key><LastModified>${objects.get(k)!.modified.toISOString()}</LastModified><Size>${objects.get(k)!.bytes.length}</Size></Contents>`).join('')}`
           + `<Contents><Key>files/notes.txt</Key><Size>1</Size></Contents>`
@@ -113,6 +136,7 @@ test('files orphans lists an object no row names only after the grace period, on
   assert.deepEqual([local.scanned, local.orphans, local.withinGrace, local.removed], [3, 1, 1, 0]);
   assert.deepEqual(local.sample, [oldOrphan.id]);
   assert.equal(local.orphanBytes, oldOrphan.bytes.length);
+  assert.ok(listedWithToken >= 1, 'a second page was asked for with a continuation token, and its signature held');
   assert.deepEqual([remote.scanned, remote.orphans, remote.withinGrace, remote.removed], [4, 2, 1, 0], 'paged listing, and the foreign key skipped');
   assert.deepEqual(new Set(remote.sample), new Set([s3Old, s3Old2]));
   assert.ok(existsSync(oldOrphan.file) && existsSync(youngOrphan.file) && bucket.has(s3Old) && bucket.has(s3Young), 'report mode deletes nothing');
@@ -186,4 +210,44 @@ test('files verify flags a missing blob and a chunk whose bytes do not match its
   );
   const quick = await integrity.verify({ deep: false });
   assert.deepEqual(quick.problems.map((p) => p.problem), ['missing'], 'without reading back, only absence shows');
+});
+
+test('the weekly slot is Sunday 03:00 UTC, and a restart neither scrubs nor delays it', async (t) => {
+  assert.equal(scrubSlotAtOrBefore(new Date('2026-11-22T03:00:00Z')).toISOString(), '2026-11-22T03:00:00.000Z');
+  assert.equal(scrubSlotAtOrBefore(new Date('2026-11-22T02:59:59Z')).toISOString(), '2026-11-15T03:00:00.000Z');
+  assert.equal(scrubSlotAtOrBefore(new Date('2026-11-25T12:00:00Z')).toISOString(), '2026-11-22T03:00:00.000Z');
+
+  const dir = mkdtempSync(path.join(tmpdir(), 'orbit-slot-'));
+  t.after(() => rmSync(dir, { recursive: true, force: true }));
+  const integrity = setup([], await fakeBucket(t, new Map()), dir);
+  let scrubs = 0;
+  integrity.scrub = async () => {
+    scrubs += 1;
+    return [];
+  };
+  // Boot on Saturday: the timer is armed, but nothing is owed.
+  t.mock.timers.enable({ apis: ['Date', 'setInterval'], now: new Date('2026-11-21T10:00:00Z').getTime() });
+  integrity.onApplicationBootstrap();
+  t.after(() => integrity.onModuleDestroy());
+  assert.equal(scrubs, 0, 'a boot does not scrub');
+  assert.equal(integrity.tick(new Date('2026-11-21T11:00:00Z')), false);
+  assert.equal(integrity.tick(new Date('2026-11-22T02:59:00Z')), false, 'a tick before the slot does not scrub');
+  assert.equal(integrity.tick(new Date('2026-11-22T03:00:00Z')), true, 'a tick at the slot does');
+  await integrity.settled();
+  assert.equal(integrity.tick(new Date('2026-11-22T04:00:00Z')), false, 'and only once');
+  assert.equal(integrity.tick(new Date('2026-11-23T04:00:00Z')), false);
+  assert.equal(scrubs, 1);
+  // A process restarted on Sunday after the slot owes nothing either.
+  const rebooted = setup([], await fakeBucket(t, new Map()), dir);
+  rebooted.scrub = async () => {
+    scrubs += 1;
+    return [];
+  };
+  t.mock.timers.setTime(new Date('2026-11-22T09:00:00Z').getTime());
+  rebooted.onApplicationBootstrap();
+  t.after(() => rebooted.onModuleDestroy());
+  assert.equal(rebooted.tick(new Date('2026-11-22T10:00:00Z')), false);
+  assert.equal(rebooted.tick(new Date('2026-11-29T03:00:00Z')), true, 'the next Sunday it does');
+  await rebooted.settled();
+  assert.equal(scrubs, 2);
 });
