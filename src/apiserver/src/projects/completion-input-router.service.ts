@@ -276,7 +276,7 @@ export class CompletionInputRouter {
   }
 
   /**
-   * §12.15 P-M1, for a finish that cannot reach `TasksService` (the reaper, `SessionsService`): the
+   * §12.15 P-M1, for a finish that cannot reach `TasksService` (the reaper, the session end): the
    * project facts a DONE task's settled work re-derives once its landing is decided — the settled
    * fact the deferred landing held (`landingDeferred`), then the two criterion facts. Each step
    * reads committed rows and is idempotent on the wake ledger; failures are logged, since the
