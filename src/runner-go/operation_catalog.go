@@ -895,6 +895,34 @@ func buildOperationCatalog() []*operation {
 			"turns the task codeless; stored on the task beside the declaration (task_get returns it as " +
 			"codelessReason) and cleared when the declaration is taken back. Ignored on any other call.",
 	}
+	// §12.15 P-C2: one task exempt from its project's landing check, on the three task doors. One
+	// description per door, so who may write it and what it skips cannot drift between them.
+	landingCheckExemptRule := "Only on a project whose line lands on a project branch (refused 409 " +
+		"LANDING_CHECK_EXEMPT_NEEDS_PROJECT_BRANCH on a MAIN line, or for a task in no project), and only from the " +
+		"project's current coordinator session or the owner (refused 403 LANDING_CHECK_EXEMPT_COORDINATOR_ONLY from " +
+		"any other session). It skips the project's landing check alone: the task's own acceptance still runs on the " +
+		"combined tree, and the merge check before main is untouched. The landing records the skip as TASK_EXEMPT " +
+		"with the reason."
+	createLandingCheckExemptProp := map[string]interface{}{
+		"type": "boolean",
+		"description": "true: when this task lands on its project's branch, do not run the project's landing check. " +
+			"Needs landingCheckExemptReason in the same call (refused LANDING_CHECK_EXEMPT_REASON_REQUIRED without " +
+			"it). " + landingCheckExemptRule + " Omit it for ordinary work.",
+	}
+	updateLandingCheckExemptProp := map[string]interface{}{
+		"type": "boolean",
+		"description": "true exempts this task from its project's landing check when it lands, and needs " +
+			"landingCheckExemptReason in the same call (refused LANDING_CHECK_EXEMPT_REASON_REQUIRED without it); " +
+			"false takes the exemption back and clears the reason. " + landingCheckExemptRule +
+			" Omit to leave it.",
+	}
+	landingCheckExemptReasonProp := map[string]interface{}{
+		"type":      "string",
+		"maxLength": 280,
+		"description": "Why the project's landing check has nothing to say about this task, in a sentence of at " +
+			"most 280 characters. Required with landingCheckExempt true; on task_update it alone replaces the " +
+			"reason of a task that is already exempt. Refused beside landingCheckExempt false.",
+	}
 	// The verifier to write BESIDE this subject, in the same call. Deliberately not part of
 	// taskCreateProps: the batch door pairs its own items with verifiesRef, the server refuses this
 	// field on a batch item, and a schema that advertised it there would invite a call that cannot
@@ -945,11 +973,13 @@ func buildOperationCatalog() []*operation {
 					"The item must be in the same project and assigned to the owner or coordinating session; " +
 					"an item may have multiple fixing tasks.",
 			},
-			"handoff":            handoffProp,
-			"parentTaskId":       parentTaskIDProp,
-			"acceptanceCriteria": acceptanceCriteriaProp,
-			"criterionKey":       criterionKeyProp,
-			"codeless":           createCodelessProp,
+			"handoff":                  handoffProp,
+			"parentTaskId":             parentTaskIDProp,
+			"acceptanceCriteria":       acceptanceCriteriaProp,
+			"criterionKey":             criterionKeyProp,
+			"codeless":                 createCodelessProp,
+			"landingCheckExempt":       createLandingCheckExemptProp,
+			"landingCheckExemptReason": landingCheckExemptReasonProp,
 			"completionCriterion": map[string]interface{}{
 				"type":        "string",
 				"enum":        []string{"EXECUTABLE", "VERIFICATION", "EVIDENCE_JUDGMENT", "OWNER_CONFIRMED"},
@@ -2441,20 +2471,22 @@ func buildOperationCatalog() []*operation {
 					"type":        []string{"string", "null"},
 					"description": "Attach this task to an OPEN integration or TASK_FAILED item as its concrete fix. Omit to preserve the current link; pass null to detach it. The item must be in the same project and assigned to the owner or coordinating session.",
 				},
-				"handoff":            updateHandoffProp,
-				"assigneeId":         map[string]interface{}{"type": []string{"string", "null"}},
-				"parentTaskId":       updateParentTaskIDProp,
-				"dueDate":            map[string]interface{}{"type": []string{"string", "null"}},
-				"runAt":              updateRunAtProp,
-				"engine":             engineProp,
-				"provider":           providerProp,
-				"model":              modelProp,
-				"modelHint":          modelHintProp,
-				"modelHintReason":    modelHintReasonProp,
-				"acceptanceCriteria": updateAcceptanceCriteriaProp,
-				"criterionKey":       updateCriterionKeyProp,
-				"codeless":           updateCodelessProp,
-				"codelessReason":     codelessReasonProp,
+				"handoff":                  updateHandoffProp,
+				"assigneeId":               map[string]interface{}{"type": []string{"string", "null"}},
+				"parentTaskId":             updateParentTaskIDProp,
+				"dueDate":                  map[string]interface{}{"type": []string{"string", "null"}},
+				"runAt":                    updateRunAtProp,
+				"engine":                   engineProp,
+				"provider":                 providerProp,
+				"model":                    modelProp,
+				"modelHint":                modelHintProp,
+				"modelHintReason":          modelHintReasonProp,
+				"acceptanceCriteria":       updateAcceptanceCriteriaProp,
+				"criterionKey":             updateCriterionKeyProp,
+				"codeless":                 updateCodelessProp,
+				"codelessReason":           codelessReasonProp,
+				"landingCheckExempt":       updateLandingCheckExemptProp,
+				"landingCheckExemptReason": landingCheckExemptReasonProp,
 				"completionCriterion": map[string]interface{}{
 					"type":        "string",
 					"enum":        []string{"EXECUTABLE", "VERIFICATION", "EVIDENCE_JUDGMENT", "OWNER_CONFIRMED"},
