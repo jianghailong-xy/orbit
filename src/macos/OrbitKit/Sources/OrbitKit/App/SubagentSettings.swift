@@ -108,11 +108,14 @@ public enum SubagentSettings {
     public static let groupTitle = "SubAgents"
     public static let enabledTitle = "SubAgents"
     public static let enabledDetail = "Let this agent hand work to other providers in the same folder"
+    /// Board docs/mocks/subagent-workflow part 5 (docs/subagent-workflow-design.md §6).
+    public static let workflowsTitle = "Workflows"
+    public static let workflowsDetail = "Let this agent run a script that starts many SubAgents and wakes it once"
     public static let providers = "Providers"
     public static let providersDetail = "All enabled providers. Block one to keep SubAgents off it."
     public static let edit = "Edit"
     public static let runningAtOnce = "Running at once"
-    public static let runningAtOnceDetail = "Per session, foreground and background together"
+    public static let runningAtOnceDetail = "Per session: delegated SubAgents and workflow calls together"
     public static let providersLoadFailed = "Couldn't load providers"
     public static let saveBlockedFailed = "Couldn't save blocked providers"
 
@@ -141,6 +144,12 @@ public enum SubagentSettings {
     /// A stored count, held to the range the server accepts; absent is the default.
     public static func maxRunning(_ stored: Int?) -> Int {
         min(max(stored ?? defaultMaxRunning, maxRunningRange.lowerBound), maxRunningRange.upperBound)
+    }
+
+    /// What the Workflows switch shows: it follows SubAgents, since every call of a workflow is a SubAgent, so it reads
+    /// off (and cannot be turned on) while SubAgents is off, and its own stored value otherwise.
+    public static func workflowsOn(subagentsEnabled: Bool, workflowsEnabled: Bool) -> Bool {
+        subagentsEnabled && workflowsEnabled
     }
 
     // MARK: providers

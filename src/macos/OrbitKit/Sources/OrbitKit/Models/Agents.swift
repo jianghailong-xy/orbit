@@ -98,6 +98,8 @@ public struct UpdateAgentRequest: Encodable, Sendable {
     public var subagentsEnabled: Bool?
     /// How many of one session's SubAgents run at once, 1…16.
     public var subagentsMaxRunning: Int?
+    /// Workflows for this Agent's sessions (docs/subagent-workflow-design.md §6).
+    public var workflowsEnabled: Bool?
 
     public init(name: String? = nil, description: String? = nil,
                 model: String? = nil,
@@ -109,7 +111,7 @@ public struct UpdateAgentRequest: Encodable, Sendable {
                 runnerId: String? = nil, workDir: String? = nil, env: [String: String]? = nil,
                 enabled: Bool? = nil, autoInitGit: Bool? = nil, enableWorktree: Bool? = nil,
                 modelRouting: Bool? = nil,
-                subagentsEnabled: Bool? = nil, subagentsMaxRunning: Int? = nil) {
+                subagentsEnabled: Bool? = nil, subagentsMaxRunning: Int? = nil, workflowsEnabled: Bool? = nil) {
         self.name = name
         self.description = description
         self.model = model
@@ -132,6 +134,7 @@ public struct UpdateAgentRequest: Encodable, Sendable {
         self.modelRouting = modelRouting
         self.subagentsEnabled = subagentsEnabled
         self.subagentsMaxRunning = subagentsMaxRunning
+        self.workflowsEnabled = workflowsEnabled
     }
 }
 
