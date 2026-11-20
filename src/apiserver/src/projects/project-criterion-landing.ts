@@ -909,10 +909,11 @@ export function lineSawNothingToLand(task: LandingServingTask): boolean {
 }
 
 /**
- * Whether this work has nothing to land at all — and there are three ways for that to be true: the
+ * Whether this work has nothing to land at all — and there are four ways for that to be true: the
  * task DECLARES it needs no code, its work was done in another repository than the one its line is
- * bound to (`workInAnotherRepository`), or the line's own record says it never had a commit of its
- * own.
+ * bound to (`workInAnotherRepository`), the line's own record says it never had a commit of its
+ * own, or its DONE measured that (§12.15 P-M1, `deliveredNothingOfItsOwn`) and so queued nothing for
+ * the line to answer.
  *
  * §1.1 `isCodeTask` has two halves and the first is the declaration: a task that declares itself
  * `codeless` "needs no code, even though its project is bound to a codebase", which is SR5's escape
