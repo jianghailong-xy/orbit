@@ -17,12 +17,12 @@ import {
   HttpStatus,
   Inject,
   Injectable,
-  forwardRef,
   Logger,
   NotFoundException,
   Optional,
   ServiceUnavailableException,
 } from '@nestjs/common';
+import { ModuleRef } from '@nestjs/core';
 import {
   type ConversationTurn,
   Prisma,
@@ -227,7 +227,6 @@ import { isCodelessTaskRun } from './codeless-checkout';
 import { readWikiChatContext, sameWikiChatContext, wikiContextOutsideChat } from '../wiki/wiki-chat-context';
 import { branchName } from '../projects/project-criterion-landing';
 import { settleDeliveredIdentityAfterFinish } from '../projects/project-integration-job';
-import { CompletionInputRouter } from '../projects/completion-input-router.service';
 import { INTEGRATION_ITEM_KINDS, openItemOwed, openItemVisible } from '../projects/project-open-item';
 import { readSourceLanding } from '../projects/landing-session';
 import { readLandingIntegrationLog, type IntegrationLogSelectors } from '../projects/project-integration-log';
@@ -1116,13 +1115,12 @@ export class SessionsService {
      */
     @Optional() private readonly githubConnections?: GithubConnectionService,
     /**
-     * The completion doors (projects/completion-input-router.service.ts), for the project facts a finish
-     * re-derives once it has decided a DONE task's landing (§12.15 P-M1). The router, not `TasksService`,
-     * which this service must not reach (Nest DI). CoordinatorJudgmentModule closes the ring with a
-     * `forwardRef`, as MergeReceiptService does; absent in the specs that build this service by hand.
+     * Finds the completion doors (projects/completion-input-router.service.ts) when a finish has to
+     * re-derive project facts (§12.15 P-M1). Resolved lazily, and the router imported at the call: a
+     * value import here closes a file cycle through the judgment service that leaves `SessionsService`
+     * undefined at its decoration. Absent in the specs that build this service by hand.
      */
-    @Optional() @Inject(forwardRef(() => CompletionInputRouter))
-    private readonly completionInputs?: CompletionInputRouter,
+    @Optional() private readonly moduleRef?: ModuleRef,
   ) {
     this.files = files ?? new FilesService(prisma);
   }
@@ -10048,7 +10046,15 @@ export class SessionsService {
       loggedRetry(this.logger, 'sessions.transitionEnd'),
     );
     await reprojectAfterSettledChecks(this.prisma, ended.checksSettled, this.logger);
-    if (ended.settledProjectId) await this.completionInputs?.routeSettledWork([ended.settledProjectId]);
+    if (ended.settledProjectId && this.moduleRef) {
+      try {
+        const { CompletionInputRouter } = await import('../projects/completion-input-router.service');
+        await this.moduleRef.get(CompletionInputRouter, { strict: false }).routeSettledWork([ended.settledProjectId]);
+      } catch (e) {
+        // Hand-built contexts have no router; the next delivery derives the same facts.
+        this.logger.warn(`project facts after a settled finish not re-derived: ${e instanceof Error ? e.message : e}`);
+      }
+    }
     return ended;
   }
 
