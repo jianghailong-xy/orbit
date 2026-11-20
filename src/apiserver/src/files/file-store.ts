@@ -42,7 +42,21 @@ export interface FileStore {
   open(sha256: string, range?: ByteRange): Promise<Readable | null>;
   /** Let the bytes named `sha256` go (file-retention.ts is the one caller). Bytes already gone are no error. */
   remove(sha256: string): Promise<void>;
+  /**
+   * Every object in the store named like a content (`files orphans`, file-integrity.ts): the sha256, the bytes it holds and
+   * when it was last written. Anything else in the directory or bucket is not listed.
+   */
+  list(): AsyncIterable<StoredObject>;
 }
+
+/** One object a store lists. */
+export interface StoredObject {
+  sha256: string;
+  sizeBytes: number;
+  modifiedAt: Date;
+}
+
+export const SHA256_NAME = /^[0-9a-f]{64}$/;
 
 /** The S3-compatible bucket a deployment keeps files in (`ORBIT_FILES_BACKEND=s3`). */
 export interface S3FilesConfig {
@@ -349,5 +363,33 @@ export class LocalFileStore implements FileStore {
 
   async remove(sha256: string): Promise<void> {
     await removeTempFile(this.pathOf(sha256));
+  }
+
+  async *list(): AsyncIterable<StoredObject> {
+    let prefixes: string[];
+    try {
+      prefixes = await readdir(this.dir);
+    } catch (error) {
+      if ((error as NodeJS.ErrnoException).code === 'ENOENT') return;
+      throw error;
+    }
+    for (const prefix of prefixes.filter((name) => /^[0-9a-f]{2}$/.test(name)).sort()) {
+      let names: string[];
+      try {
+        names = await readdir(path.join(this.dir, prefix));
+      } catch (error) {
+        if ((error as NodeJS.ErrnoException).code === 'ENOENT' || (error as NodeJS.ErrnoException).code === 'ENOTDIR') continue;
+        throw error;
+      }
+      for (const name of names.sort()) {
+        if (!SHA256_NAME.test(name) || !name.startsWith(prefix)) continue;
+        try {
+          const entry = await lstat(path.join(this.dir, prefix, name));
+          if (entry.isFile()) yield { sha256: name, sizeBytes: entry.size, modifiedAt: new Date(entry.mtimeMs) };
+        } catch (error) {
+          if ((error as NodeJS.ErrnoException).code !== 'ENOENT') throw error;
+        }
+      }
+    }
   }
 }
