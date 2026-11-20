@@ -88,7 +88,7 @@ import {
 import { mergeWatches } from './watches';
 import { integrationInFlight, pollWhileInFlight, streamPoll, streamStaleTime } from './listBudget';
 import { readOpenList, type OpenListAnswer } from './openListDelta';
-import type { SessionReach } from './sessionReach';
+import type { SessionReach, SessionReachDeclaration } from './sessionReach';
 
 export type { ConfiguredProvider };
 
@@ -631,7 +631,14 @@ export const sessionQuery = (id: string | null | undefined) =>
 export const sessionRequestQuery = (requestId: string) =>
   queryOptions({
     queryKey: ['sessions', 'request', requestId] as const,
-    meta: { entities: ['session'] },
+    // The two sessions it is between are the ones whose events can move it (lib/sessionReach).
+    meta: {
+      entities: ['session'],
+      sessionReach: ((data: unknown) => {
+        const view = data as { fromSessionId?: string; toSessionId?: string } | undefined;
+        return { sessions: [view?.fromSessionId ?? '', view?.toSessionId ?? ''].filter(Boolean) };
+      }) satisfies SessionReachDeclaration,
+    },
     queryFn: () => getSessionRequest(requestId),
     // A run's question can still move after its request closes: passed to the owner, it waits for
     // their answer (OrbitTurnCards `RunQuestionTurnCard`).
@@ -702,8 +709,8 @@ export const activeTasksQuery = (listId?: string, projectId?: string) =>
     queryKey: ['tasks', 'active', listId ?? null, ...(projectId ? [{ projectId }] : [])] as const,
     // Every row here is on the strip BECAUSE a session is running or queued on it, and a run
     // starting or ending writes no task row — only `session.*`. `task` alone would leave the strip
-    // showing work that has already finished.
-    meta: { entities: ['task', 'session'] },
+    // showing work that has already finished. A task run's events read it, no other session's (lib/sessionReach).
+    meta: { entities: ['task', 'session'], sessionReach: { taskRuns: projectId ?? null } satisfies SessionReach },
     queryFn: () => api<ActiveTasks>(activeTasksPath(listId, projectId)),
     // `task.*` events refresh it; this is the safety read (listBudget).
     refetchInterval: streamPoll(5_000),
@@ -735,8 +742,9 @@ export const taskCountsQuery = (
     ] as const,
     // `running` and `queued` are counted from open sessions, not from task columns: a run that
     // starts or ends moves these two numbers without writing a task row, so `task` alone would
-    // leave the Running tab and the progress bar counting a run that is over.
-    meta: { entities: ['task', 'session'] },
+    // leave the Running tab and the progress bar counting a run that is over. A task run's events read it, no other
+    // session's (lib/sessionReach).
+    meta: { entities: ['task', 'session'], sessionReach: { taskRuns: projectId ?? null } satisfies SessionReach },
     queryFn: () => api<TaskCounts>(taskCountsPath(listId, labels, creatorSessionId, projectId)),
     staleTime: 10_000,
   });

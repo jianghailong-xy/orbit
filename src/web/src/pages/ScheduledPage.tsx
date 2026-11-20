@@ -38,6 +38,7 @@ import { api } from '../api';
 import {
   scheduleClock,
   scheduleDetailQuery,
+  awaitDraftFrom,
   scheduleDraftsQuery,
   scheduleRecordUndoable,
   scheduleRunSessionPath,
@@ -401,6 +402,7 @@ export function ScheduledPage(): JSX.Element {
       initialWorkspaceId={workspaceFilter}
       onSent={(draft) => {
         setPending((rows) => [...rows, draft]);
+        awaitDraftFrom(draft.sessionId);
         void qc.invalidateQueries({ queryKey: ['schedules', 'drafts'] });
         select({ kind: 'pending', sessionId: draft.sessionId });
       }}

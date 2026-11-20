@@ -5,9 +5,17 @@ import { QueryClient, QueryClientProvider, QueryObserver, type QueryObserverOpti
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { ControlPlaneProvider } from './useControlPlane';
 import { forgetOpenListCursors } from './openListDelta';
-import { ownerRequestsQuery, sessionCreatedTasksQuery, sessionQuery, sessionsQuery } from './queries';
-import { schedulesQuery, sessionScheduleCardsQuery } from './schedules';
+import {
+  activeTasksQuery,
+  ownerRequestsQuery,
+  sessionCreatedTasksQuery,
+  sessionQuery,
+  sessionsQuery,
+  taskCountsQuery,
+} from './queries';
 import { guestSessionsQuery } from '../components/SharedWithMe';
+import { anySessionQuery } from '../components/WelcomeCard';
+import { schedulesQuery, sessionScheduleCardsQuery } from './schedules';
 
 /**
  * A session's event reads again only the views that can show that session (task 350wwd0BfOJPegSAOYpPY).
@@ -40,20 +48,23 @@ vi.mock('../api', async (importOriginal) => ({
 
 const row = (id: string, lifecycleState = 'OPEN') => ({ id, title: id, status: 'IDLE', lifecycleState, createdAt: '2026-11-01T00:00:00Z' });
 
-// What each workspace holds: S1 is open in A, S9 (the other session, whose page is open) and S7 in B, R1 is a
+// What each workspace holds: S1 and the task run T1 are open in A, S9 (the other session, whose page is open) and S7 in B, R1 is a
 // scheduled run in A's Scheduled runs folder.
 function answer(path: string): unknown {
   if (path.startsWith('/sessions?')) {
     const q = new URLSearchParams(path.slice('/sessions?'.length));
     const ws = q.get('workspaceId');
+    if (q.get('limit') === '1') return [row('S1')];
     if (q.get('scheduled') === '1') return [row('R1')];
     if (q.get('view') === 'completed') return [row(ws === 'A' ? 'C1' : 'C9', 'COMPLETED')];
     if (q.has('since')) {
       if (q.get('since')) return { full: false, upserts: [], removedIds: [], cursor: 'c1' };
-      return { full: true, sessions: ws === 'A' ? [row('S1')] : [row('S9'), row('S7')], cursor: 'c1' };
+      return { full: true, sessions: ws === 'A' ? [row('S1'), row('T1')] : [row('S9'), row('S7')], cursor: 'c1' };
     }
     return [];
   }
+  if (path.startsWith('/tasks/active')) return { queuedCount: 0, runningCount: 1, items: [] };
+  if (path.startsWith('/tasks/counts')) return { total: 1, running: 1, queued: 0, done: 0, failed: 0 };
   if (path.startsWith('/owner-requests')) return { requests: [] };
   if (path.startsWith('/schedules')) return { schedules: [] };
   if (path.startsWith('/guest-sessions')) return { sessions: [] };
@@ -111,6 +122,13 @@ const views = {
   otherDetail: sessionQuery('S9'),
   otherCreatedTasks: sessionCreatedTasksQuery('S9'),
   otherScheduleCards: sessionScheduleCardsQuery('S9'),
+  // The task page's reads, every project's and project P1's, and the welcome card's.
+  activeTasks: activeTasksQuery(),
+  taskCounts: taskCountsQuery(),
+  activeTasksP1: activeTasksQuery(undefined, 'P1'),
+  taskCountsP2: taskCountsQuery(undefined, [], undefined, 'P2'),
+  welcomeOpen: anySessionQuery('open'),
+  welcomeCompleted: anySessionQuery('completed'),
 };
 
 /** The request each view makes, so a recorded path names the view that made it. */
@@ -118,9 +136,12 @@ function viewOf(path: string): string {
   if (path.startsWith('/sessions?')) {
     const q = new URLSearchParams(path.slice('/sessions?'.length));
     const ws = q.get('workspaceId');
+    if (q.get('limit') === '1') return `welcome-${q.get('view')}`;
     if (q.get('scheduled') === '1') return `scheduled${ws}`;
     return `${q.get('view')}${ws}`;
   }
+  if (path.startsWith('/tasks/active')) return path.includes('projectId=P1') ? 'activeTasksP1' : 'activeTasks';
+  if (path.startsWith('/tasks/counts')) return path.includes('projectId=P2') ? 'taskCountsP2' : 'taskCounts';
   if (path.startsWith('/owner-requests')) return 'ownerRequests';
   if (path.startsWith('/schedules')) return 'schedules';
   if (path.startsWith('/guest-sessions')) return 'guestSessions';
@@ -234,6 +255,67 @@ describe('a session event reads only the views that can show that session', () =
     await advance(1_000);
 
     expect(reads()).toEqual(['completedB', 'otherCreatedTasks', 'otherDetail', 'otherScheduleCards']);
+  });
+
+  it('a task run\'s events read the task page once a window, its own project\'s and not another\'s', async () => {
+    const client = await mount();
+    await onScreen(client);
+    await openStream(true);
+    h.asked = [];
+
+    // T1 runs task K1 of project P1, in workspace A: its summary names both. A turn's events, then an approval,
+    // which names neither (the stream remembers what the summary said).
+    const summary = { id: 'T1', agentId: 'A', taskId: 'K1', projectMembership: { projectId: 'P1', role: 'TASK' } };
+    await publish('session.updated', 'T1', 'A', summary);
+    await advance(200);
+    await publish('session.updated', 'T1', 'A', summary);
+    await advance(200);
+    await publish('approval.requested', 'T1', 'A', { approvalId: 'ap1' });
+    await advance(1_000);
+
+    expect(reads()).toEqual(['activeTasks', 'activeTasksP1', 'completedA', 'taskCounts']);
+
+    // The approval alone, in a window of its own: the run it is about is still known.
+    h.asked = [];
+    await publish('approval.resolved', 'T1', 'A', { approvalId: 'ap1' });
+    await advance(1_000);
+    expect(reads()).toEqual(['activeTasks', 'activeTasksP1', 'completedA', 'taskCounts']);
+
+    // A run busy for 3 s: each task read at most once a window.
+    h.asked = [];
+    for (let i = 0; i < 30; i += 1) {
+      await publish('session.updated', 'T1', 'A', summary);
+      await advance(100);
+    }
+    await advance(1_000);
+    const made = reads();
+    for (const view of ['activeTasks', 'activeTasksP1', 'taskCounts']) {
+      const times = made.filter((read) => read === view).length;
+      expect(times).toBeGreaterThanOrEqual(1);
+      expect(times).toBeLessThanOrEqual(3);
+    }
+    expect(new Set(made)).toEqual(new Set(['activeTasks', 'activeTasksP1', 'completedA', 'taskCounts']));
+  });
+
+  it('only a session entering or leaving the lists reads the welcome card', async () => {
+    const client = await mount();
+    await onScreen(client, ['welcomeOpen', 'welcomeCompleted']);
+    await openStream(true);
+    h.asked = [];
+
+    await sessionEvent('session.updated', 'S1', 'A');
+    await sessionEvent('approval.requested', 'S1', 'A');
+    await advance(1_000);
+    expect(reads()).toEqual([]);
+
+    await sessionEvent('session.created', 'S2', 'A');
+    await advance(1_000);
+    expect(reads()).toEqual(['welcome-completed', 'welcome-open']);
+
+    h.asked = [];
+    await publish('session.ended', 'S2', 'A', { status: 'SUCCEEDED', lifecycleState: 'COMPLETED' });
+    await advance(1_000);
+    expect(reads()).toEqual(['welcome-completed', 'welcome-open']);
   });
 
   it('before the hint, the Open list of the session\'s workspace is read, not another workspace\'s', async () => {

@@ -4,7 +4,7 @@ import type { WatchView } from '@orbit/shared';
 import { getToken } from '../api';
 import { streamReport } from './listBudget';
 import { cloneEventOf, hearClone, sameWorkspace } from './workspaceClone';
-import { heldIds, sessionReaches, type SessionReach, type SessionSubject } from './sessionReach';
+import { heldIds, sessionReaches, type SessionReachDeclaration, type SessionSubject } from './sessionReach';
 
 // Coalesce a burst of control events (a turn end fires status + approval back-to-back) into a
 // single refetch per list. A second, as the list budget asks (docs/list-freshness-design.md R1): a
@@ -90,6 +90,17 @@ const derivedFrom = (query: Query, entities: readonly string[]): boolean => {
   const declared = (query.meta?.entities as string[] | undefined) ?? [];
   return declared.some((entity) => entities.includes(entity));
 };
+
+/** The part of an event's `data` the stream reads. */
+type EventData = {
+  id?: unknown;
+  taskId?: unknown;
+  taskIds?: unknown;
+  resync?: unknown;
+  repoHealth?: unknown;
+  projectId?: unknown;
+  projectMembership?: { projectId?: unknown } | null;
+} | null | undefined;
 
 /** The ids a `task.changed` names: `taskIds`, and `taskId` from an older server. */
 const taskIdsOf = (data: { taskId?: unknown; taskIds?: unknown } | null | undefined): string[] => [
@@ -320,7 +331,8 @@ export function ControlPlaneProvider({ children }: { children: ReactNode }) {
           ((queryKey[0] === 'sessions' && queryKey.length === 6) || queryKey[0] === 'project-sessions') &&
           heldIds(state.data).includes(id));
       const reached = (query: Query): boolean => {
-        const reach = query.meta?.sessionReach as SessionReach | undefined;
+        const declared = query.meta?.sessionReach as SessionReachDeclaration | undefined;
+        const reach = typeof declared === 'function' ? declared(query.state.data) : declared;
         const held = heldIds(query.state.data);
         return subjects.some((subject) => sessionReaches(reach, subject, held, listed));
       };
@@ -497,10 +509,40 @@ export function ControlPlaneProvider({ children }: { children: ReactNode }) {
         pendingProjects.clear();
       }, REFRESH_DEBOUNCE_MS);
     };
+    // The task each session runs and its project, as the summaries this connection carried said (a summary always
+    // names both; an approval or a background job's event names neither).
+    const runs = new Map<string, { taskId: string; projectId: string }>();
+    const runOf = (sessionId: string, data: EventData): { taskId: string; projectId: string } => {
+      if (data && 'taskId' in data) {
+        const projectId = data.projectMembership?.projectId ?? data.projectId;
+        const run = {
+          taskId: typeof data.taskId === 'string' ? data.taskId : '',
+          projectId: typeof projectId === 'string' ? projectId : '',
+        };
+        runs.set(sessionId, run);
+        return run;
+      }
+      const heard = runs.get(sessionId);
+      if (heard) return heard;
+      // Never heard of here: what this tab has read of it, in a list or its detail.
+      for (const [key, cached] of qc.getQueriesData<unknown>({ predicate: ({ queryKey }) => queryKey[0] === 'sessions' || queryKey[0] === 'project-sessions' || (queryKey[0] === 'session' && queryKey.length === 2) })) {
+        const rows = (Array.isArray(cached) ? cached : key[0] === 'session' && cached ? [cached] : []) as {
+          id?: unknown; taskId?: unknown; projectId?: unknown; projectMembership?: { projectId?: unknown } | null;
+        }[];
+        const row = rows.find((candidate) => candidate?.id === sessionId);
+        if (!row) continue;
+        const projectId = row.projectMembership?.projectId ?? row.projectId;
+        return {
+          taskId: typeof row.taskId === 'string' ? row.taskId : '',
+          projectId: typeof projectId === 'string' ? projectId : '',
+        };
+      }
+      return { taskId: '', projectId: '' };
+    };
     const scheduleRefresh = (
       type: string,
       sessionId: string,
-      data: { id?: unknown; taskId?: unknown; taskIds?: unknown; resync?: unknown; repoHealth?: unknown } | null | undefined,
+      data: EventData,
       workspaceId = '',
     ): void => {
       // The Open list's hint is the one event whose path is not an entity: it says the list may read
@@ -510,13 +552,20 @@ export function ControlPlaneProvider({ children }: { children: ReactNode }) {
       for (const entity of entitiesFor(type, data)) {
         pending.add(entity);
         if (entity !== 'session') continue;
-        // A session's own event names the session, and the envelope its workspace (`agentId`).
+        // A session's own event names the session, and the envelope its workspace (`agentId`); the task it runs and
+        // its project are the summary's, or what this tab last heard or read of it.
         if (sessionId && (type.startsWith('session.') || type.startsWith('approval.') || type === 'background.task')) {
           const known = pendingSubjects.get(sessionId);
+          const run = runOf(sessionId, data);
+          const lifecycle = type === 'session.created' || type === 'session.ended';
           pendingSubjects.set(sessionId, {
             id: sessionId,
             workspaceId: workspaceId || known?.workspaceId || '',
+            taskId: run.taskId,
+            projectId: run.projectId,
             createdOnly: (known?.createdOnly ?? true) && type === 'session.created',
+            created: (known?.created ?? false) || type === 'session.created',
+            lifecycle: (known?.lifecycle ?? false) || lifecycle,
           });
         } else {
           pendingAnySession = true;
