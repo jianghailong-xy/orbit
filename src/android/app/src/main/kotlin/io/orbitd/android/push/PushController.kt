@@ -6,6 +6,7 @@ import android.os.Build
 import android.os.Bundle
 import io.orbitd.android.core.auth.AuthSession
 import io.orbitd.android.core.auth.AuthState
+import io.orbitd.android.core.auth.SessionHandle
 import io.orbitd.android.core.realtime.RealtimeStore
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CoroutineScope
@@ -17,8 +18,6 @@ import kotlinx.coroutines.launch
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
 import kotlinx.coroutines.withContext
-import kotlinx.coroutines.withTimeoutOrNull
-import io.orbitd.android.core.realtime.ConnectionState
 import kotlinx.serialization.json.JsonObject
 import kotlinx.coroutines.currentCoroutineContext
 import kotlinx.coroutines.ensureActive
@@ -193,7 +192,7 @@ class PushController(
         val active = notifications.active().distinctBy { it.notificationKey }
         if (active.isEmpty()) return true
         val authority = PushAuthority(session, handle)
-        val needsYou = if (!readOpen) null else try { authority.needsYou(openRows()) } catch (cancel: CancellationException) { throw cancel }
+        val needsYou = if (!readOpen) null else try { authority.needsYou(openRows(handle)) } catch (cancel: CancellationException) { throw cancel }
             catch (_: Exception) { null }
         var complete = true
         for (message in active) {
@@ -209,13 +208,9 @@ class PushController(
         return complete
     }
 
-    /** The Open rows after the store's own read that left after this call landed (a `since=` delta): a reconcile asks no list of its own. */
-    private suspend fun openRows(): List<JsonObject> {
-        // Offline or in the background the store reads nothing: no reminder is let go on a snapshot that cannot be brought up to date.
-        check(realtime.state.value.controlConnection == ConnectionState.CONNECTED) { "no live Open snapshot" }
-        checkNotNull(withTimeoutOrNull(OPEN_READ_TIMEOUT_MS) { realtime.rereadDirectory() }) { "the Open read did not land" }
-        return realtime.state.value.directory?.sessions?.get("open") ?: throw IllegalStateException("no Open snapshot")
-    }
+    /** The Open rows by one `since=` read on the store's cursor, whether or not the stream is up: a SYNC push arrives while the Activity is
+     * stopped and the stream closed, and still has to clear the reminders the owner answered elsewhere. */
+    private suspend fun openRows(handle: SessionHandle): List<JsonObject> = realtime.readOpen(handle)
 
     private fun remove(message: PushMessage) = notifications.cancel(message)
 
@@ -235,5 +230,4 @@ class PushController(
     override fun onActivitySaveInstanceState(activity: Activity, outState: Bundle) = Unit
     override fun onActivityDestroyed(activity: Activity) = Unit
 
-    private companion object { const val OPEN_READ_TIMEOUT_MS = 20_000L }
 }
