@@ -1699,7 +1699,8 @@ struct TranscriptView: View {
                 Task { await console.cancelQueued(bubble) }
             }, steer: SteerControls(bubble: bubble, withdrawing: console.withdrawingSteers) {
                 Task { await console.withdrawSteer(bubble) }
-            }, putBack: putBack(bubble))
+            }, putBack: putBack(bubble),
+               revealItemCard: { console.revealOpenItemCard($0) })
             .environment(\.runnerUpdatingQueued, runnerUpdatingQueued(bubble))
         case .bottom:
             // Both shapes end in the room the list's fade lies over (`fadesIntoComposerBand`), so a list
@@ -2554,7 +2555,7 @@ struct TranscriptItemView: View {
         case .user(let b):
             // Which card a user turn is — or the owner's bubble — is decided in one place, for the
             // transcript and the queued tail alike (`UserTurnRow`).
-            UserTurnRow(bubble: b, steer: steerControls(b), putBack: putBack(b))
+            UserTurnRow(bubble: b, steer: steerControls(b), putBack: putBack(b), revealItemCard: { console?.revealOpenItemCard($0) ?? false })
         case .assistant(let b): AssistantBubbleView(bubble: b)
         case .thinking(let b):  ThinkingView(block: b)
         case .toolCall(let c):
