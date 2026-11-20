@@ -29874,3 +29874,120 @@ button.agent-progress-agent:hover {
   font-size: 12px;
   color: var(--text-3);
 }
+
+/* Revision 42 part two (docs/mocks/landing-measured): the landing check's origin, its No check state and
+   the coordinator's change list. */
+.project-landing-mode {
+  margin-bottom: 8px;
+}
+.project-landing-origin {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-top: 6px;
+  font-size: 12px;
+  color: var(--text-3);
+}
+.project-landing-badge {
+  display: inline-block;
+  padding: 0 8px;
+  border-radius: 999px;
+  font-size: 11.5px;
+  font-weight: 600;
+  line-height: 18px;
+  white-space: nowrap;
+  color: var(--text-1);
+  background: var(--fill-2, rgba(127, 127, 127, 0.16));
+}
+.project-landing-badge.is-owner { color: #fff; background: #1f2329; }
+.project-landing-badge.is-coordinator { color: #8a5a00; background: #ffedc2; }
+.project-landing-badge.is-card { color: var(--brand-strong); background: var(--brand-tint); }
+.project-landing-badge.is-start { color: #5b3fd1; background: #ece8ff; }
+[data-theme='dark'] .project-landing-badge.is-owner { color: #1f2329; background: #e8eaed; }
+[data-theme='dark'] .project-landing-badge.is-coordinator { color: #ffd479; background: rgba(255, 190, 60, 0.18); }
+[data-theme='dark'] .project-landing-badge.is-start { color: #b9a8ff; background: rgba(140, 110, 255, 0.2); }
+.project-landing-none {
+  font-size: 13.5px;
+  line-height: 1.5;
+  color: var(--text-3);
+}
+.project-landing-none b {
+  color: var(--text-1);
+}
+.project-landing-who {
+  margin-top: 12px;
+}
+.project-landing-who-row {
+  display: flex;
+  gap: 10px;
+  align-items: baseline;
+  margin-top: 6px;
+  font-size: 12.5px;
+  color: var(--text-3);
+}
+.project-changes-row {
+  display: flex;
+  width: 100%;
+  align-items: center;
+  justify-content: space-between;
+  padding: 0;
+  border: none;
+  background: none;
+  font: inherit;
+  cursor: pointer;
+}
+.project-changes-count {
+  color: var(--text-3);
+}
+.project-changes {
+  margin-top: 10px;
+}
+.project-changes-title {
+  font-size: 15px;
+  font-weight: 600;
+}
+.project-changes-list {
+  margin: 10px 0 0;
+  padding: 0;
+  list-style: none;
+  border: 1px solid var(--border-subtle);
+  border-radius: 8px;
+}
+.project-change-row {
+  display: grid;
+  grid-template-columns: 150px minmax(0, 1fr) 190px 90px;
+  gap: 12px;
+  align-items: start;
+  padding: 10px 12px;
+  font-size: 13px;
+}
+.project-change-row + .project-change-row {
+  border-top: 1px solid var(--border-subtle);
+}
+.project-change-what {
+  font-weight: 600;
+}
+.project-change-values s,
+.project-change-reason,
+.project-change-when,
+.project-change-note,
+.project-change-reverted {
+  color: var(--text-3);
+}
+.project-change-code {
+  font-size: 12px;
+}
+.project-change-reverted {
+  margin-top: 4px;
+  font-size: 12px;
+}
+.project-change-consequence {
+  margin-top: 6px;
+  color: var(--text-3);
+}
+@media (max-width: 720px) {
+  .project-change-row {
+    grid-template-columns: 1fr;
+    gap: 6px;
+  }
+}

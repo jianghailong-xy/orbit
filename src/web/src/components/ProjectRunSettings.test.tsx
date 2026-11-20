@@ -1,4 +1,5 @@
 // @vitest-environment jsdom
+import { MemoryRouter } from 'react-router-dom';
 import { QueryClient, QueryClientProvider, notifyManager } from '@tanstack/react-query';
 import { act } from 'react';
 import { createRoot, type Root } from 'react-dom/client';
@@ -172,9 +173,11 @@ async function mount(project: RunSettingsProject = projectOf()): Promise<HTMLEle
   root = tree;
   await act(async () => {
     tree.render(
-      <QueryClientProvider client={qc}>
-        <ProjectRunSettings projectId={PROJECT} project={project} />
-      </QueryClientProvider>,
+      <MemoryRouter>
+        <QueryClientProvider client={qc}>
+          <ProjectRunSettings projectId={PROJECT} project={project} />
+        </QueryClientProvider>
+      </MemoryRouter>,
     );
   });
   await until(() => node.querySelector('.project-integration-setting') !== null, 'the settings rows');
@@ -745,6 +748,114 @@ describe('How it runs — switching to the agent while a merge is waiting', () =
   }
 });
 
+const dialog = (): HTMLElement | null =>
+  document.body.querySelector<HTMLElement>('.orbit-overlay-footer')?.closest<HTMLElement>('[role="dialog"], [role="alertdialog"]') ?? null;
+const dialogButton = (label: string): HTMLButtonElement => button(dialog()!, label);
+async function unmountAll(): Promise<void> {
+  const mounted = root;
+  root = null;
+  if (mounted) await act(async () => mounted.unmount());
+  container?.remove();
+  container = null;
+}
+
+const pressMode = (row: ParentNode, label: string): Promise<void> => {
+  const item = [...row.querySelectorAll<HTMLElement>('[role="radio"]')].find((entry) => entry.textContent === label);
+  if (!item) throw new Error(`no ${label} in the landing check switch`);
+  return press(item);
+};
+
+describe('Landing check — who set it, and No check (revision 42 part two, board 03)', () => {
+  const setBy = (by: 'OWNER' | 'COORDINATOR' | 'CARD' | 'START', command: string | null) => ({
+    landingCheck: { command, setBy: by, setBySessionId: null, setAt: new Date(Date.now() - 12 * 60_000).toISOString() },
+  });
+  it('draws the three-way switch on the stored value, with a badge and the time under the command', async () => {
+    for (const [by, badge] of [['COORDINATOR', 'Coordinator'], ['OWNER', 'You'], ['CARD', 'Approved on a card'], ['START', 'Set at start']] as const) {
+      server.view = viewOf({ landingCheckCommand: 'npm run check:landing', ...setBy(by, 'npm run check:landing') });
+      const node = await mount();
+      const row = settingRow(node, 'Landing check');
+      expect([...row.querySelectorAll('[role="radio"]')].map((item) => item.textContent)).toEqual(['Merge check', 'Command', 'No check']);
+      expect(row.querySelector('[role="radio"][aria-checked="true"]')?.textContent).toBe('Command');
+      expect(row.querySelector('.project-landing-origin .project-landing-badge')?.textContent).toBe(badge);
+      expect(row.querySelector('.project-landing-origin-time')?.textContent).toBe('set 12m ago');
+      await unmountAll();
+    }
+  });
+  it('reads no-check as its own value, writes it by name, and says what it means', async () => {
+    server.view = viewOf({ landingCheckCommand: null, ...setBy('OWNER', 'NONE'), landingCheckCommandAbsentReason: 'NONE' });
+    const node = await mount();
+    const row = settingRow(node, 'Landing check');
+    expect(row.querySelector('[role="radio"][aria-checked="true"]')?.textContent).toBe('No check');
+    expect(row.textContent).toContain('Tasks land with only their own acceptance. The merge check still runs before main.');
+    expect(row.querySelector('.project-landing-who')?.textContent).toContain('Set at start');
+    expect(row.querySelector('input[aria-label="Landing check Timeout (seconds)"]')).toBeNull();
+    await pressMode(row, 'Merge check');
+    await save(node, 1);
+    expect(writes[0]?.body).toEqual({ landingCheckCommand: null });
+  });
+  it('sends landingCheck NONE when the owner picks No check', async () => {
+    server.view = viewOf({ landingCheckCommand: 'make quick', ...setBy('COORDINATOR', 'make quick') });
+    const node = await mount();
+    await pressMode(settingRow(node, 'Landing check'), 'No check');
+    await save(node, 1);
+    expect(writes[0]?.body).toEqual({ landingCheck: 'NONE' });
+  });
+});
+
+const CHANGES = [
+  { id: 'c1', projectId: PROJECT, taskId: null, field: 'LANDING_CHECK', origin: 'COORDINATOR',
+    oldValue: { command: 'npm run check:landing', timeoutSeconds: null, none: false },
+    newValue: { command: null, timeoutSeconds: null, none: true },
+    reason: 'This project only changes infrastructure; the command has nothing to build.', writtenBySessionId: 's',
+    revertsChangeId: null, revertedAt: null, revertible: true, createdAt: new Date(Date.now() - 12 * 60_000).toISOString() },
+  { id: 'c2', projectId: PROJECT, taskId: '350fMiNUjSVyj5VGo47lF', field: 'TASK_LANDING_CHECK_EXEMPT', origin: 'COORDINATOR',
+    oldValue: { exempt: false, reason: null }, newValue: { exempt: true, reason: 'x' },
+    reason: 'Only moves cron entries.', writtenBySessionId: 's',
+    revertsChangeId: null, revertedAt: new Date(Date.now() - 60_000).toISOString(), revertible: false,
+    createdAt: new Date(Date.now() - 20 * 60_000).toISOString() },
+  { id: 'c3', projectId: PROJECT, taskId: null, field: 'LANDING_CHECK', origin: 'OWNER',
+    oldValue: { command: null, timeoutSeconds: null, none: false },
+    newValue: { command: 'npm run check:landing', timeoutSeconds: null, none: false },
+    reason: null, writtenBySessionId: null, revertsChangeId: null, revertedAt: null, revertible: false,
+    createdAt: new Date(Date.now() - 2 * 86_400_000).toISOString() },
+] as unknown as RunSettingsProject['settingChanges'];
+
+describe("Coordinator's changes (board 05)", () => {
+  it('draws no row while the server lists none', async () => {
+    const node = await mount(projectOf());
+    expect(node.querySelector('.project-changes-row')).toBeNull();
+  });
+  it('lists each change with who and when, offers Revert only where the server says revertible, and shows a reverted one', async () => {
+    const node = await mount(projectOf({ settingChanges: CHANGES }));
+    const entry = node.querySelector<HTMLElement>('.project-changes-row')!;
+    expect(entry.textContent).toBe('Coordinator’s changes3 changes ›');
+    await press(entry);
+    const rows = [...node.querySelectorAll<HTMLElement>('.project-change-row')];
+    expect(rows).toHaveLength(3);
+    expect(rows[0]!.textContent).toContain('npm run check:landing → No check');
+    expect(rows[0]!.querySelector('.project-landing-badge')?.textContent).toBe('Coordinator');
+    expect(rows[0]!.querySelector('button')?.textContent).toBe('Revert');
+    expect(rows[1]!.querySelector('button')).toBeNull();
+    expect(rows[1]!.textContent).toContain('not exempt → exempt');
+    expect(rows[1]!.textContent).toContain('Reverted by you · 1m ago · coordinator needs a card for this field');
+    expect(rows[2]!.querySelector('button')).toBeNull();
+    expect(rows[2]!.textContent).toContain('Your change · nothing to revert');
+  });
+  it('asks first, says what it will do, and posts the revert only on confirm', async () => {
+    const node = await mount(projectOf({ settingChanges: CHANGES }));
+    await press(node.querySelector<HTMLElement>('.project-changes-row')!);
+    await press(node.querySelector<HTMLElement>('.project-change-row button')!);
+    await until(() => dialog() !== null, 'the question');
+    expect(dialog()!.textContent).toContain('Revert this change?');
+    expect(dialog()!.textContent).toContain('Landing check goes back from No check to npm run check:landing.');
+    expect(dialog()!.textContent).toContain('The coordinator can no longer change this field without a card.');
+    expect(writes).toEqual([]);
+    await press(dialogButton('Revert'));
+    await until(() => writes.length === 1, 'the revert');
+    expect(writes[0]).toEqual({ method: 'POST', path: `/projects/${PROJECT}/setting-changes/c1/revert`, body: undefined });
+  });
+});
+
 describe('Landing check settings', () => {
   it('reads independent inheritance, writes the exact command and timeout through integration PATCH', async () => {
     server.view = viewOf({ landingCheckCommand: null, landingCheckTimeoutSeconds: null, mergeCheckTimeoutSeconds: 900 });
@@ -753,10 +864,11 @@ describe('Landing check settings', () => {
     const timeout = row.querySelector<HTMLInputElement>('input[aria-label="Landing check Timeout (seconds)"]')!;
     expect(timeout.placeholder).toBe('Uses merge check timeout');
     expect(timeout.closest('.project-check-timeout')).not.toBeNull();
-    expect(row.textContent).toContain('Runs when a task lands on the project branch.');
     expect(row.textContent).toContain('Uses merge check:');
     expect(row.textContent).toContain('Uses merge check timeout: 900 seconds');
     expect(row.textContent).toContain('Leave blank to use the merge check timeout.');
+    await pressMode(row, 'Command');
+    expect(row.textContent).toContain('Runs when a task lands on the project branch.');
     await type(row.querySelector<HTMLInputElement>('input[aria-label="Landing check"]')!, '  make quick  ');
     await type(row.querySelector<HTMLInputElement>('input[aria-label="Landing check Timeout (seconds)"]')!, '600');
     await save(node, 1);
