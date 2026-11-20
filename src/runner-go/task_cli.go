@@ -3622,6 +3622,7 @@ func buildCLICapabilities(executable string) cliCapabilitiesDocument {
 	// Ungated too: keeping and reading back your own files is no power over anybody else's session. Upload and fetch
 	// are SessionOnly, because a file stays with the session that uploads it.
 	specs = append(specs, fileCLICapabilities...)
+	specs = append(specs, driveCLICapabilities...)
 	// The guide reads the catalogue and asks the server nothing, so every process is offered it.
 	specs = append(specs, guideCLICapabilities...)
 	if includeOrchestration {

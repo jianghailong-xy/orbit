@@ -8,8 +8,52 @@ import (
 	"io/fs"
 	"os"
 	"path/filepath"
+	"strconv"
 	"strings"
 )
+
+var (
+	mountinfoPath  = "/proc/self/mountinfo"
+	driveMountPath = "/run/orbit-files/drive"
+	driveHomePath  = "/home/orbit/Files"
+)
+
+func driveMounted() bool {
+	data, err := os.ReadFile(mountinfoPath)
+	if err != nil {
+		return false
+	}
+	mounted := false
+	for _, line := range strings.Split(string(data), "\n") {
+		mount, filesystem, ok := strings.Cut(line, " - ")
+		fields := strings.Fields(mount)
+		if ok && len(fields) >= 6 && unescapeMountinfo(fields[4]) == driveMountPath {
+			// A later mount at the same point hides the earlier one.
+			fstype, _, _ := strings.Cut(filesystem, " ")
+			mounted = fstype == "fuse.orbit-files"
+		}
+	}
+	return mounted
+}
+
+// unescapeMountinfo undoes the kernel's octal escapes of a mountinfo field (\040 for a space).
+func unescapeMountinfo(field string) string {
+	if !strings.Contains(field, `\`) {
+		return field
+	}
+	var b strings.Builder
+	for i := 0; i < len(field); i++ {
+		if field[i] == '\\' && i+3 < len(field) {
+			if n, err := strconv.ParseUint(field[i+1:i+4], 8, 8); err == nil {
+				b.WriteByte(byte(n))
+				i += 3
+				continue
+			}
+		}
+		b.WriteByte(field[i])
+	}
+	return b.String()
+}
 
 // localFileScope is the one rule for a file of this machine on its way to the control plane, whichever door it leaves
 // by: file_upload, a file a reply links, a legacy artifact request or Codex's generated image. It goes by where a path
@@ -174,6 +218,11 @@ func insideDirectory(path string, dir os.FileInfo) bool {
 // (openWorktreeArtifactFile). What is true of the file, its type and size and what sniffing it says, is read from the
 // handle: the path may mean something else by then.
 func (s localFileScope) open(path string) (*os.File, os.FileInfo, error) {
+	return s.openRegular(path, true)
+}
+
+// openRegular enforces the path rule for both attachments and drive_put.
+func (s localFileScope) openRegular(path string, scanSecrets bool) (*os.File, os.FileInfo, error) {
 	real, err := filepath.EvalSymlinks(path)
 	if err != nil {
 		return nil, nil, err
@@ -201,7 +250,7 @@ func (s localFileScope) open(path string) (*os.File, os.FileInfo, error) {
 		if err == nil && !info.Mode().IsRegular() {
 			err = errors.New("not a regular file")
 		}
-		if err == nil {
+		if err == nil && scanSecrets {
 			err = refuseFileHoldingSecret(file, real)
 		}
 		if err != nil {

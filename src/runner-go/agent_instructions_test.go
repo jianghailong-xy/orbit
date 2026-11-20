@@ -255,7 +255,7 @@ func TestOrbitInstructionsKeepEvidenceOutOfTheRepository(t *testing.T) {
 			"rather than saving a log",
 			"keep screenshots and reports with file_upload rather than in the repository",
 			"it reads those same two directories",
-			"returns a link that also works in a reply",
+			"returns a reply link and the id a FILE check cites",
 		} {
 			if !strings.Contains(got, phrase) {
 				t.Errorf("instructions (inside=%v, watches=%v) do not say %q", form.inside, form.watches, phrase)
@@ -301,6 +301,7 @@ var advertisedCapabilityFamilies = []struct {
 	{"wikiImportCLICapabilities", wikiImportCLICapabilities, false},
 	// Ungated, for the same reason: keeping and reading back your own files.
 	{"fileCLICapabilities", fileCLICapabilities, false},
+	{"driveCLICapabilities", driveCLICapabilities, false},
 	// Ungated and offered everywhere: the guide reads the catalogue and asks the server nothing.
 	{"guideCLICapabilities", guideCLICapabilities, false},
 	// The person's own commands: every one HeadlessOnly, so no running agent is offered any of them.
@@ -495,5 +496,55 @@ func TestOnlyATopLevelSessionIsToldWhenToDelegate(t *testing.T) {
 		if !strings.Contains(orbitDelegateInstructions, want) {
 			t.Errorf("the delegate paragraph lacks %q", want)
 		}
+	}
+}
+
+func TestOrbitDriveGuidanceMatchesRunnerKind(t *testing.T) {
+	for _, mounted := range []bool{false, true} {
+		name := "self-registered"
+		// What the instructions say in brief, and the guide's files topic in full (docs/orbit-files-drive-technical-design.md §4.6, §7.3).
+		brief := []string{"drive_put", "drive_get", "drive_list", "drive_move", "drive_delete", "orbit drive",
+			"a Trash agents cannot see", "ORBIT_GUEST turns only read it"}
+		full := []string{"drive_put", "drive_get", "drive_list", "drive_move", "drive_delete", "orbit drive put|get|ls|mv|rm",
+			"owner's Trash, which agents cannot see", "no tool shares a drive file", "ORBIT_GUEST", "do not write it"}
+		if mounted {
+			name = "cloud"
+			brief = []string{"~/Files", "permanent Orbit Files drive", "link its files by path", "~/Files/ (a symlink)", "cp -r",
+				"rsync -rt", "tar x", "locks", "in-place writes", "/run/orbit-files/errors.log", "ORBIT_GUEST turns only read it"}
+			full = []string{"/home/orbit/Files", "/run/orbit-files/drive", "shared across sessions", "trailing slash", "cp -a",
+				"cp -p", "rsync -a", "tar x", "file locks", "writing inside an existing file", "executing a file", "errors.log",
+				"status.json", "unsent/", "ORBIT_GUEST", "do not write it"}
+		}
+		t.Run(name, func(t *testing.T) {
+			fakeDriveMount(t, mounted)
+			long := "/home/a-long-account-name/.orbit/bin/versions/0.1.999/orbit"
+			instructions := orbitCLIInstructions(long, true, true, true)
+			if len(instructions) > orbitInstructionsMaxBytes {
+				t.Errorf("%d instruction bytes exceed budget %d", len(instructions), orbitInstructionsMaxBytes)
+			}
+			for _, p := range strings.Split(instructions, "\n\n") {
+				if len(p) > codexContextValueMaxBytes {
+					t.Errorf("%d paragraph bytes exceed budget %d", len(p), codexContextValueMaxBytes)
+				}
+			}
+			for _, phrase := range brief {
+				if !strings.Contains(instructions, phrase) {
+					t.Errorf("instructions omit %q", phrase)
+				}
+			}
+			doc, err := guideAnswer(guideFacts{context: guideContext{Surface: "mcp"}}, "files")
+			if err != nil {
+				t.Fatal(err)
+			}
+			guide := strings.Join(doc.(guideTopicDocument).Rules, "\n")
+			for _, phrase := range full {
+				if !strings.Contains(guide, phrase) {
+					t.Errorf("the files guide omits %q", phrase)
+				}
+			}
+			if got := strings.Contains(instructions, "~/Files is the owner's"); got != mounted {
+				t.Errorf("shell mount instructions present = %t, mounted = %t", got, mounted)
+			}
+		})
 	}
 }

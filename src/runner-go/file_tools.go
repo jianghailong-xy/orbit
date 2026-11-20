@@ -508,7 +508,17 @@ func uploadPath(t *Transport, tool fileToolContext, path, taskID, label, as stri
 	return out, nil
 }
 
-// newFileUploadScope is what file_upload may read: this session's own directories and, in a session with no worktree,
+// newFileUploadScope also accepts the mounted drive. The ~/Files symlink and the mount point
+// resolve to the same root, so access through either spelling is checked against the mount.
+func newFileUploadScope(sessionID string) localFileScope {
+	scope := newSessionFileScope(sessionID)
+	if driveMounted() {
+		scope.roots = append(scope.roots, realPath(driveMountPath))
+	}
+	return scope
+}
+
+// newSessionFileScope covers this session's own directories and, in a session with no worktree,
 // the working directory it was called from, which is that session's checkout. Nothing the session can write decides it,
 // so no repository's configuration does: git would read that from the checkout. A working directory that is / or holds
 // the home directory is no root, so the rule fails closed whatever directory an engine starts this process in, and a
@@ -521,7 +531,7 @@ func uploadPath(t *Transport, tool fileToolContext, path, taskID, label, as stri
 // broad it is, with Orbit's own directory still refused (session.go): the engine can read there anyway in such a session,
 // and refusing would take away ordinary reply images. So in a session running at / or in a home directory, a reply's link
 // reaches that directory and file_upload does not.
-func newFileUploadScope(sessionID string) localFileScope {
+func newSessionFileScope(sessionID string) localFileScope {
 	dirs := artifactRequestRoots(sessionID)
 	cwd, err := os.Getwd()
 	if err != nil || hasOwnWorktree(sessionID) || !usableAsARoot(cwd) {
@@ -579,6 +589,10 @@ func fileScopeError(path, reason, sessionID string) error {
 	next := "Copy the file there first."
 	if reason == localFileInOrbitsDirectory {
 		next = "That file is not one to upload."
+	}
+	if driveMounted() {
+		return fmt.Errorf("file_upload: %s is outside the allowed paths: %s. Use this session's checkout, "+
+			"its uploads directory (%s), or the mounted Orbit Files drive. %s", path, reason, uploads, next)
 	}
 	return fmt.Errorf("file_upload: %s is %s, so nothing was uploaded. file_upload reads only this session's checkout and "+
 		"its uploads directory, %s, the same rule a reply's links follow. %s", path, reason, uploads, next)

@@ -210,7 +210,12 @@ let agentToolsGuideJSON = #"""
       "operations": [
         "file_upload",
         "file_fetch",
-        "file_list"
+        "file_list",
+        "drive_put",
+        "drive_get",
+        "drive_list",
+        "drive_move",
+        "drive_delete"
       ],
       "topic": "files"
     },
@@ -736,6 +741,11 @@ let agentToolsGuideJSON = #"""
       "id": "files",
       "label": "Files",
       "tools": [
+        "drive_delete",
+        "drive_get",
+        "drive_list",
+        "drive_move",
+        "drive_put",
         "file_fetch",
         "file_list",
         "file_pin",

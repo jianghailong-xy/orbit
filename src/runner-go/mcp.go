@@ -385,6 +385,49 @@ func (s *mcpServer) callTool(name string, args map[string]interface{}) map[strin
 	return s.withRecovery(name, args, mark, s.runTool(name, args))
 }
 
+func driveToolDescriptors(obj func(map[string]interface{}, ...string) map[string]interface{}) []map[string]interface{} {
+	drivePath := map[string]interface{}{"type": "string", "description": "A drive path such as /Proj/r.md or ~/Files/Proj/r.md."}
+	return []map[string]interface{}{
+		{
+			"name": "drive_put",
+			"description": "Copy a local file into the owner's Orbit Files drive. Creates missing parent folders and " +
+				"keeps the previous version when overwriting a file. Returns an orbit-drive: link for replies.",
+			"inputSchema": obj(map[string]interface{}{
+				"localPath": map[string]interface{}{"type": "string", "description": "A file in this session's checkout or uploads directory."},
+				"path":      drivePath,
+			}, "localPath", "path"),
+			"annotations": map[string]interface{}{"readOnlyHint": false, "destructiveHint": false},
+		},
+		{
+			"name":        "drive_get",
+			"description": "Download a drive file into this session's uploads directory and return its local path and size.",
+			"inputSchema": obj(map[string]interface{}{"path": drivePath}, "path"),
+			"annotations": map[string]interface{}{"readOnlyHint": true},
+		},
+		{
+			"name":        "drive_list",
+			"description": "List one page of a drive folder with each entry's path, kind, size and modification time.",
+			"inputSchema": obj(map[string]interface{}{
+				"path":   map[string]interface{}{"type": "string", "description": "The folder's drive path. Omit it to list the root."},
+				"cursor": map[string]interface{}{"type": "string", "description": "The nextCursor from the previous page."},
+			}),
+			"annotations": map[string]interface{}{"readOnlyHint": true},
+		},
+		{
+			"name":        "drive_move",
+			"description": "Move or rename a drive entry. This overwrites an existing file at the destination.",
+			"inputSchema": obj(map[string]interface{}{"from": drivePath, "to": drivePath}, "from", "to"),
+			"annotations": map[string]interface{}{"readOnlyHint": false, "destructiveHint": false},
+		},
+		{
+			"name":        "drive_delete",
+			"description": "Move a drive entry to the owner's Trash. The owner can restore it from the Files page. Agents cannot see Trash.",
+			"inputSchema": obj(map[string]interface{}{"path": drivePath}, "path"),
+			"annotations": map[string]interface{}{"readOnlyHint": false, "destructiveHint": true},
+		},
+	}
+}
+
 func (s *mcpServer) runTool(name string, args map[string]interface{}) map[string]interface{} {
 	// Runner-hosted background jobs are not a control-plane call at all: they are
 	// forwarded to the local runner over this session's socket (mcp_bg.go).
@@ -403,6 +446,9 @@ func (s *mcpServer) runTool(name string, args map[string]interface{}) map[string
 	}
 	// So are the file tools: `orbit file` runs the same runFileTool (file_tools.go).
 	if result, handled := s.callFileTool(name, args); handled {
+		return result
+	}
+	if result, handled := s.callDriveTool(name, args); handled {
 		return result
 	}
 	// And the scheduled tasks' tools, which act as this session (schedule_tools.go).
