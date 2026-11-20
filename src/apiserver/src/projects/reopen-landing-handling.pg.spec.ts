@@ -35,7 +35,7 @@ import { openItemOwed } from './project-open-item';
 import { ProjectOpenItemService } from './project-open-item.service';
 import { readTaskIntegrationViews } from './project-task-integration';
 import '../test-support/dequeue-under-lease';
-import { settleDeliveredIdentityAfterFinish } from './project-integration-job';
+import { enqueueForDoneTask, settleDeliveredIdentityAfterFinish } from './project-integration-job';
 
 /**
  * The landing generation created by a real DONE after task_reopen is an H1 hand-off, not a fresh
@@ -479,6 +479,68 @@ test('reopen -> DONE hands the old integration card to the new generation, then 
       assert.equal(old.resolvedByUserId, null);
       assert.equal(old.resolvedByJobId, reopened.jobId);
       assert.equal(old.resolutionNote, REOPEN_LANDING_HANDLING_REASON);
+    } finally {
+      await stack.db.$disconnect();
+    }
+  });
+
+test('an owner\'s Confirm that writes the reopened DONE while the run is open: the finish hands the OWNER-held old card to the new generation',
+  { skip, timeout: 240_000 }, async () => {
+    const stack = await connect();
+    try {
+      const w = await world(stack, 'reopen-owner-confirm');
+      const failed = await failFirst(stack, w, 'reopen-owner-confirm');
+      await stack.db.projectOpenItem.update({ where: { id: failed.firstItemId }, data: { assignee: 'OWNER', escalatedAt: new Date(), escalateAt: null } });
+      await reopen(stack, w, failed.taskId);
+
+      // The reopened work is still running when the owner presses Confirm: DONE is written, the route
+      // is deferred (§12.15 P-M1), and the record of who wrote it is the owner's decision row.
+      const sessionId = randomUUID();
+      const branch = `orbit/owner-confirm-${randomUUID().slice(0, 6)}`;
+      await stack.db.session.create({
+        data: {
+          id: sessionId, ownerId: w.ownerId, creatorId: w.ownerId, taskId: failed.taskId,
+          workspaceId: w.workspaceId, assignedRunnerId: w.runnerId, title: 'reopened work', prompt: 'rework',
+          provider: 'claude', status: RunStatus.AWAITING_INPUT, dispatchOrigin: SessionDispatchOrigin.USER,
+          startsTaskWork: true, startedAt: new Date(), branch, isolationStatus: 'worktree',
+          baseSha: '9'.repeat(40), branchSha: '8'.repeat(40),
+          changedFiles: [{ path: 'src/reopened.ts', additions: 1, deletions: 0 }],
+        },
+      });
+      await stack.db.$transaction(async (tx) => {
+        await tx.task.update({ where: { id: failed.taskId }, data: { status: TaskStatus.DONE } });
+        await tx.taskOwnerDecision.create({
+          data: {
+            taskId: failed.taskId, ownerId: w.ownerId, decision: 'CONFIRM',
+            decidedByType: 'USER', decidedById: w.ownerId,
+          },
+        });
+        await enqueueForDoneTask(tx, w.ownerId, failed.taskId, { userId: w.ownerId });
+      });
+      assert.equal(
+        await stack.db.projectIntegrationJob.count({ where: { taskId: failed.taskId, generation: 2 } }), 0,
+        'CONTROL: the DONE written while the work moves queued no generation',
+      );
+      assert.equal((await openItem(stack, failed.firstItemId)).handlingJobId, null, 'CONTROL: not handled yet');
+
+      await stack.db.$transaction(async (tx) => {
+        const finished = await tx.session.update({
+          where: { id: sessionId },
+          data: { status: RunStatus.SUCCEEDED, finishedAt: new Date(), worktreeBranch: branch, worktreeDirty: false },
+          select: { id: true, ownerId: true, taskId: true, startsTaskWork: true },
+        });
+        await settleDeliveredIdentityAfterFinish(tx, finished);
+      });
+      const job = await stack.db.projectIntegrationJob.findFirstOrThrow({
+        where: { taskId: failed.taskId, kind: 'LAND_TASK', generation: 2 }, select: { id: true },
+      });
+      const old = await openItem(stack, failed.firstItemId);
+      assert.equal(old.state, 'OPEN');
+      assert.equal(old.handlingJobId, job.id, 'the new generation handles the owner-held card');
+      assert.equal(old.handlingUserId, w.ownerId, 'attributed to the owner who confirmed');
+      assert.equal(old.handlingSessionId, null);
+      assert.equal(old.handlingReason, REOPEN_LANDING_HANDLING_REASON);
+      assert.equal(await stack.db.taskReopenIntent.count({ where: { taskId: failed.taskId } }), 0);
     } finally {
       await stack.db.$disconnect();
     }

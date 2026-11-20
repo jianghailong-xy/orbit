@@ -17,6 +17,7 @@ import {
   HttpStatus,
   Inject,
   Injectable,
+  forwardRef,
   Logger,
   NotFoundException,
   Optional,
@@ -226,6 +227,7 @@ import { isCodelessTaskRun } from './codeless-checkout';
 import { readWikiChatContext, sameWikiChatContext, wikiContextOutsideChat } from '../wiki/wiki-chat-context';
 import { branchName } from '../projects/project-criterion-landing';
 import { settleDeliveredIdentityAfterFinish } from '../projects/project-integration-job';
+import { CompletionInputRouter } from '../projects/completion-input-router.service';
 import { INTEGRATION_ITEM_KINDS, openItemOwed, openItemVisible } from '../projects/project-open-item';
 import { readSourceLanding } from '../projects/landing-session';
 import { readLandingIntegrationLog, type IntegrationLogSelectors } from '../projects/project-integration-log';
@@ -1113,6 +1115,14 @@ export class SessionsService {
      * workspace is refused as GitHub not being connected.
      */
     @Optional() private readonly githubConnections?: GithubConnectionService,
+    /**
+     * The completion doors (projects/completion-input-router.service.ts), for the project facts a finish
+     * re-derives once it has decided a DONE task's landing (§12.15 P-M1). The router, not `TasksService`,
+     * which this service must not reach (Nest DI). CoordinatorJudgmentModule closes the ring with a
+     * `forwardRef`, as MergeReceiptService does; absent in the specs that build this service by hand.
+     */
+    @Optional() @Inject(forwardRef(() => CompletionInputRouter))
+    private readonly completionInputs?: CompletionInputRouter,
   ) {
     this.files = files ?? new FilesService(prisma);
   }
@@ -10038,6 +10048,7 @@ export class SessionsService {
       loggedRetry(this.logger, 'sessions.transitionEnd'),
     );
     await reprojectAfterSettledChecks(this.prisma, ended.checksSettled, this.logger);
+    if (ended.settledProjectId) await this.completionInputs?.routeSettledWork([ended.settledProjectId]);
     return ended;
   }
 
@@ -10065,6 +10076,8 @@ export class SessionsService {
     projectBound: boolean;
     /** The Agent checks this end settled, for their projects' DONE after the commit. */
     checksSettled?: SettledCriterionCheck[];
+    /** The project of a DONE task whose route this end decided (§12.15 P-M1); its facts are re-derived after the commit. */
+    settledProjectId?: string;
   }> {
     const locked = await tx.$queryRaw<Array<{ id: string }>>`
       SELECT id FROM "session"
@@ -10169,6 +10182,7 @@ export class SessionsService {
     // finalize after it) closes them RECIPIENT_ENDED, which wins over UNDELIVERED (session-request.ts).
     await settleUnrunSessionRequests(tx, sessionId, { code: 'SESSION_ENDED', closesRequests: false, retryArmed: false });
     // An Agent check this run was, ended before its verdict (projects/criterion-check-ended.ts).
+    let settledProjectId: string | undefined;
     const checksSettled = await settleChecksOfEndedRun(
       tx,
       { sessionId, taskId: session.taskId },
@@ -10193,7 +10207,11 @@ export class SessionsService {
       });
       // A session that ends before it ran is still a finish of the task's work, and may be the one
       // a DONE task's identity was waiting for (§10.5 O-L4 3).
-      await settleDeliveredIdentityAfterFinish(tx, session);
+      const settlement = await settleDeliveredIdentityAfterFinish(tx, session);
+      if (settlement === 'FROZEN' || settlement === 'IDENTITY_UNKNOWN') {
+        settledProjectId = (await tx.task.findUnique({ where: { id: session.taskId! }, select: { projectId: true } }))
+          ?.projectId ?? undefined;
+      }
       await retireSessionInboxGeneration(tx, sessionId);
       // A wakeup filed onto a `bg-wake:` turn still queued goes with the drain below, unrun: dropped with
       // the session it was to wake, and taken out of its loop's runs (runner-api/wake-turn-withdraw.ts).
@@ -10238,6 +10256,7 @@ export class SessionsService {
       endReason: reason,
       projectBound: false,
       checksSettled,
+      settledProjectId,
     };
   }
 

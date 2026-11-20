@@ -4720,9 +4720,11 @@ export class RunnerApiController {
     @Body() dto: SourcePinRequest,
   ): Promise<SourcePinResponse> {
     await this.assertEngineSessionById(sessionId, (runner as { ownerId?: string }).ownerId);
+    const settledBox: { work: { ownerId: string; taskId: string } | null } = { work: null };
     const outcome = await withTransactionRetry(
       this.prisma,
       async (tx) => {
+        settledBox.work = null;
         const frozen = await freezeSessionSourcePin(
           tx,
           { sessionId, runnerId: runner.id, ownerId: runner.ownerId },
@@ -4744,10 +4746,14 @@ export class RunnerApiController {
           );
           // The refusal ended the run, and that finish may be the one a DONE task's identity was
           // waiting for (§10.5 O-L4 3). Here rather than in the freeze, after the project is taken.
-          await settleDeliveredIdentityAfterFinish(tx, await tx.session.findUnique({
+          const finished = await tx.session.findUnique({
             where: { id: sessionId },
             select: { id: true, ownerId: true, taskId: true, startsTaskWork: true },
-          }));
+          });
+          const settled = await settleDeliveredIdentityAfterFinish(tx, finished);
+          if (finished?.taskId && (settled === 'FROZEN' || settled === 'IDENTITY_UNKNOWN')) {
+            settledBox.work = { ownerId: finished.ownerId, taskId: finished.taskId };
+          }
         }
         return frozen;
       },
@@ -4762,6 +4768,13 @@ export class RunnerApiController {
     // (publishTaskChanged) and the project's coordinator is told, because a start that never became
     // a run is the one thing a project's timeline would otherwise never mention.
     const { refused, ...response } = outcome;
+    // §12.15 P-M1: the refused run's finish decided the route a DONE task's work had left open.
+    const settledWork = settledBox.work;
+    if (settledWork) {
+      await this.tasks?.dispatchDependentsOfSettledWork(settledWork.ownerId, settledWork.taskId).catch((error) =>
+        this.logger.warn(`dependents of task ${settledWork.taskId} not dispatched after its work settled: ${
+          error instanceof Error ? error.message : error}`));
+    }
     if (refused) {
       this.realtime.publishTaskChanged(sessionId, refused.taskId);
       await this.tasks?.deliverDispatchRefusalAfterCommit(refused.taskId);
@@ -7454,6 +7467,7 @@ export class RunnerApiController {
       // message away. A task-bound session additionally reclaims its task as FAILED (it
       // would otherwise sit IN_PROGRESS with nothing watching).
       let failSession = dto.status === RunStatus.FAILED && !regionStopped;
+      let settledWork = false;
       // A reserved L0 turn that cannot produce a comparison is unsettled, not a guessed task
       // failure. An ordinary failed model/shell turn retains the existing FAILED behaviour.
       const failTask = failSession && !!current.taskId && !taskAcceptanceTurn;
@@ -8121,7 +8135,8 @@ export class RunnerApiController {
         // The park above wrote this session's finish, which may be the one a DONE task's identity was
         // waiting for (§10.5 O-L4 3). An item it opens is delivered after the commit with this
         // turn's own exception items.
-        await settleDeliveredIdentityAfterFinish(tx, current);
+        const settled = await settleDeliveredIdentityAfterFinish(tx, current);
+        settledWork = settled === 'FROZEN' || settled === 'IDENTITY_UNKNOWN';
       }
       // NO_REPLY (contract §4.1): the turn has settled, the session is idle and its run goes on. Each
       // request it has read and not answered is closed with its last words — unless something will
@@ -8293,6 +8308,7 @@ export class RunnerApiController {
         repairCheck: repairCheckAfter(current, true, dto.status === RunStatus.SUCCEEDED),
         droppedWakeups,
         checksSettled,
+        settledWork,
       };
     }, loggedRetry(this.logger, 'runnerApi.turnComplete', {
       transaction: {
@@ -8388,6 +8404,13 @@ export class RunnerApiController {
     // what an attempt ending with its task unsettled means. Nothing is decided here: the producer
     // behind this door re-reads what committed and owes the coordinator nothing for a task that
     // settled after all.
+    // §12.15 P-M1: the failed turn ended the last work session of a DONE task whose route was left to
+    // this finish; the DONE edge runs again on what is now decided (the 60 s sweep asks the same).
+    if ('settledWork' in finalized && finalized.settledWork && finalized.taskId && finalized.taskOwnerId) {
+      await this.tasks?.dispatchDependentsOfSettledWork(finalized.taskOwnerId, finalized.taskId).catch((error) =>
+        this.logger.warn(`dependents of task ${finalized.taskId} not dispatched after its work settled: ${
+          error instanceof Error ? error.message : error}`));
+    }
     if (
       finalized.applied
       && !finalized.steer
