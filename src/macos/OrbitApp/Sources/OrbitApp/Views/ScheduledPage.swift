@@ -179,7 +179,7 @@ enum ScheduleTimelineRows {
                     id: "\(group.id)-\(item.id)",
                     circle: ScheduleDisplay.scheduleCircle(state: "ACTIVE", consecutiveFailures: 0, draft: true),
                     title: card.title ?? "",
-                    line: wide
+                    line: Self.withEnd(wide
                         ? ScheduleDisplay.rowLine(rule: rule, workspaceName: card.runsIn?.workspaceName,
                                                   accessLevel: accessLevel, state: "ACTIVE", heldReason: nil, draft: true)
                         : ScheduleDisplay.phoneRowLine(rule: rule, workspaceName: card.runsIn?.workspaceName,
@@ -257,12 +257,18 @@ enum ScheduleTimelineRows {
                                                        accessLevel: s.accessLevel, state: s.state,
                                                        heldReason: s.heldReason, pausedAt: pausedAt,
                                                        timezone: scheduled.timezone),
+                        s, now: now, timezone: scheduled.timezone),
                     repeats: ScheduleDisplay.ruleRepeats(s.rule), time: time, draft: false, paused: inPaused,
                     scheduleID: s.id,
                     kind: .schedule(s),
                     open: { Self.select(s.id, scheduled) })
             }
         }
+    }
+
+    /// A row's second line with the schedule's planned end after it: "… · until Nov 25", "… · 3 runs left".
+    private static func withEnd(_ line: String, _ s: ScheduleView, now: Date, timezone: String) -> String {
+        ScheduleDisplay.endText(s, now: now, timezone: timezone).map { line + SC.separator + $0 } ?? line
     }
 
     @MainActor
@@ -717,6 +723,12 @@ extension ScheduleDetailPanel {
                     }
                     .font(.orbitLabel).foregroundStyle(.secondary)
                 }
+                if let end = ScheduleDisplay.endText(s, now: now, timezone: zone) {
+                    block {
+                        Text(SC.End.endLabel + SC.separator + end).font(.orbitLabel).foregroundStyle(.secondary)
+                            .accessibilityIdentifier("schedule-end-line")
+                    }
+                }
                 if conditionID != nil {
                     // A WHEN rule (condition-triggers board ⑥ ② ③): how far the reading is from firing, and how it
                     // is checked, in place of the next run.
@@ -843,8 +855,11 @@ extension ScheduleDetailPanel {
         case record(ScheduleChangeRecord)
         /// A condition's line (board ⑥ ③): Fired, Ready again; a FIRED's run is drawn by its line, not twice.
         case event(ConditionEventView, ConditionDisplay.HistoryLine, index: Int)
+        /// Consecutive MISSED slots, newest first, as one line (design §9.2).
+        case missed([ScheduleRunView])
         var id: String {
             switch self {
+            case .missed(let runs): return "missed-\(runs[0].id)"
             case .run(let r): return "run-\(r.id)"
             case .record(let r): return "rev-\(r.revision)"
             case .event(let e, _, let index): return "event-\(index)-\(e.at)"
@@ -852,6 +867,7 @@ extension ScheduleDetailPanel {
         }
         var at: String {
             switch self {
+            case .missed(let runs): return runs[0].plannedAt
             case .run(let r): return r.startedAt ?? r.plannedAt
             case .record(let r): return r.createdAt
             case .event(let e, _, _): return e.at
@@ -866,8 +882,17 @@ extension ScheduleDetailPanel {
         }
         let firedRuns = Set((condition?.events ?? []).compactMap { $0.runId.map(PublicID.storageKey) })
         let runs = (detail?.recentRuns ?? []).filter { !firedRuns.contains(PublicID.storageKey($0.id)) }
-        let entries = (runs.map(HistoryEntry.run) + events + (detail?.history ?? []).map(HistoryEntry.record))
+        let sorted = (runs.map(HistoryEntry.run) + events + (detail?.history ?? []).map(HistoryEntry.record))
             .sorted { (ScheduleDisplay.parse($0.at) ?? .distantPast) > (ScheduleDisplay.parse($1.at) ?? .distantPast) }
+        // Consecutive missed slots, with nothing else between them, read as one line.
+        let entries = sorted.reduce(into: [HistoryEntry]()) { out, entry in
+            guard case .run(let run) = entry, run.state == "MISSED" else { return out.append(entry) }
+            switch out.last {
+            case .missed(let streak)?: out[out.count - 1] = .missed(streak + [run])
+            case .run(let last)? where last.state == "MISSED": out[out.count - 1] = .missed([last, run])
+            default: out.append(entry)
+            }
+        }
         return section(SC.Inspector.history) {
             VStack(alignment: .leading, spacing: 0) {
                 ForEach(Array(entries.enumerated()), id: \.element.id) { index, entry in
@@ -885,6 +910,12 @@ extension ScheduleDetailPanel {
                             detail: ScheduleDetailResponse?, now: Date, zone: String) -> some View {
         let when = ScheduleDisplay.parse(entry.at).map { ScheduleDisplay.whenText($0, now: now, timezone: zone) } ?? ""
         switch entry {
+        case .missed(let runs):
+            VStack(alignment: .leading, spacing: 2) {
+                Text(when).font(.orbitSubtext)
+                Text(ScheduleDisplay.missedText(runs, timezone: zone)).font(.orbitLabel).foregroundStyle(.secondary)
+            }
+            .accessibilityIdentifier("schedule-history-missed")
         case .event(let event, let line, _):
             let run = line.runId.flatMap { id in
                 detail?.recentRuns.first { PublicID.storageKey($0.id) == PublicID.storageKey(id) }

@@ -164,6 +164,8 @@ public enum ScheduleDisplay {
                 : fill(ScheduleConditionCopy.rulesLong, ["condition": lowerFirst(condition.text)])
         case .once: return short ? C.Rules.shortOnce : C.Rules.longOnce
         case .daily(let time): return fill(daily, ["time": time])
+        case .every(let minutes, let time, let until, let weekdays):
+            return everyText(minutes: minutes, time: time, until: until, weekdays: weekdays)
         case .weekly(let time, let weekdays):
             let days = weekdayOrder.filter { weekdays.contains($0) }
             if days.count == 7 { return fill(daily, ["time": time]) }
@@ -178,6 +180,76 @@ public enum ScheduleDisplay {
             let list = days.map { C.weekdaysShort[$0] ?? $0 }.joined(separator: C.Rules.daysSeparator)
             return fill(short ? C.Rules.shortDays : C.Rules.longDays, ["days": list, "time": time])
         }
+    }
+
+    /// An EVERY rule's sentence, the same in both forms: "Every 30 min, 09:00–18:00, Mon–Fri", "Every hour",
+    /// "Every 2 hours from 08:00, weekends"; seven weekdays are left unsaid.
+    static func everyText(minutes: Int, time: String, until: String?, weekdays: [String]) -> String {
+        let e = C.Every.self
+        let interval = minutes < 60 ? fill(e.minutes, ["count": String(minutes)])
+            : minutes == 60 ? e.hour : fill(e.hours, ["count": String(minutes / 60)])
+        let text: String
+        if let until { text = fill(e.window, ["interval": interval, "time": time, "until": until]) }
+        else if time == "00:00" { text = interval }
+        else { text = fill(e.from, ["interval": interval, "time": time]) }
+        let days = weekdayOrder.filter { weekdays.contains($0) }
+        if days.count == 7 { return text }
+        let named: String
+        if days.count == 5, ["MON", "TUE", "WED", "THU", "FRI"].allSatisfy(days.contains) { named = e.workweek }
+        else if days.count == 2, days.contains("SAT"), days.contains("SUN") { named = e.weekend }
+        else { named = days.map { C.weekdaysShort[$0] ?? $0 }.joined(separator: C.Rules.daysSeparator) }
+        return fill(e.days, ["rule": text, "days": named])
+    }
+
+    /// A schedule's planned end as one line: "until 18:00 today", "until Nov 25", "3 runs left", or both joined by
+    /// the separator. Nil when it has no end.
+    public static func endText(endAt: String?, maxRuns: Int?, runsLeft: Int?, now: Date, timezone: String) -> String? {
+        var parts: [String] = []
+        if let at = endAt.flatMap(parse) {
+            let day = dayText(at, now: now, timezone: timezone)
+            let time = localParts(at, timezone: timezone).time
+            let when = day == C.Dates.today ? fill(C.End.today, ["time": time])
+                : day == C.Dates.tomorrow ? fill(C.End.tomorrow, ["time": time])
+                : dateText(at, timezone: timezone)
+            parts.append(fill(C.End.until, ["when": when]))
+        }
+        if let maxRuns {
+            let left = runsLeft ?? maxRuns
+            parts.append(left == 1 ? C.End.runLeft : fill(C.End.runsLeft, ["count": String(left)]))
+        }
+        return parts.isEmpty ? nil : parts.joined(separator: C.separator)
+    }
+
+    public static func endText(_ schedule: ScheduleView, now: Date, timezone: String) -> String? {
+        endText(endAt: schedule.endAt, maxRuns: schedule.maxRuns, runsLeft: schedule.runsLeft, now: now, timezone: timezone)
+    }
+
+    /// "16 slots missed, 01:00–08:30": consecutive MISSED runs as one line.
+    public static func missedText(_ runs: [ScheduleRunView], timezone: String) -> String {
+        let times = runs.compactMap { parse($0.plannedAt) }.sorted()
+        func at(_ d: Date?) -> String { d.map { localParts($0, timezone: timezone).time } ?? "" }
+        return fill(C.End.missed, ["count": String(runs.count), "from": at(times.first), "to": at(times.last)])
+    }
+
+    /// A run list, newest first, with each streak of two or more MISSED runs in a row (nothing else between them)
+    /// gathered into one entry; a single MISSED run stays a run.
+    public enum MissedCollapsed: Equatable, Sendable {
+        case run(ScheduleRunView)
+        case missed([ScheduleRunView])
+    }
+
+    public static func collapseMissed(_ runs: [ScheduleRunView]) -> [MissedCollapsed] {
+        var out: [MissedCollapsed] = []
+        var streak: [ScheduleRunView] = []
+        func close() {
+            if streak.count == 1 { out.append(.run(streak[0])) } else if !streak.isEmpty { out.append(.missed(streak)) }
+            streak = []
+        }
+        for run in runs {
+            if run.state == "MISSED" { streak.append(run) } else { close(); out.append(.run(run)) }
+        }
+        close()
+        return out
     }
 
     /// Whether a row shows the repeat mark (↻) before its rule: a one-off does not.
@@ -733,7 +805,7 @@ public enum ScheduleDisplay {
     }
 
     static func fieldValueText(_ field: String, _ value: JSONValue?, names: [String: String]) -> String {
-        guard let value, value != .null else { return field == "endAt" ? C.History.noEnd : "" }
+        guard let value, value != .null else { return field == "endAt" || field == "maxRuns" ? C.History.noEnd : "" }
         if field == "accessLevel" { return C.access[value.asString ?? ""]?.label ?? (value.asString ?? "") }
         if field == "runLimitMinutes" { return fill(C.History.minutes, ["minutes": value.asString ?? ""]) }
         if field == "workspaceId" { return names[value.asString ?? ""] ?? (value.asString ?? "") }
@@ -807,7 +879,7 @@ public enum ScheduleDisplay {
     /// The web takes the first key the change wrote; a Swift dictionary has no order, so the field list's
     /// order (`history.fields`) stands in for it.
     static func orderedFirst(after: [String: JSONValue], among fields: [String]) -> String? {
-        let order = ["title", "prompt", "intent", "rule", "timezone", "endAt", "accessLevel", "runLimitMinutes",
+        let order = ["title", "prompt", "intent", "rule", "timezone", "endAt", "maxRuns", "accessLevel", "runLimitMinutes",
                      "workspaceId"]
         return order.first(where: fields.contains) ?? fields.first
     }
