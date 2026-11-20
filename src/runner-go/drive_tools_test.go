@@ -251,6 +251,7 @@ func TestDriveGetVerifiesEachChunk(t *testing.T) {
 }
 
 func TestDriveCLIListsMovesDeletesAndOverwrites(t *testing.T) {
+	madeFolder := false
 	srv := newDriveTestServer(t, func(w http.ResponseWriter, r *http.Request) {
 		switch r.Method + " " + strings.TrimPrefix(r.URL.Path, "/api/runner/drive") {
 		case "GET /list":
@@ -258,13 +259,21 @@ func TestDriveCLIListsMovesDeletesAndOverwrites(t *testing.T) {
 				t.Errorf("list query = %v", query)
 			}
 			fmt.Fprint(w, `{"entries":[{"id":"e1","kind":"FILE","name":"r.md","path":"/r.md","sizeBytes":2,"mtime":"2026-11-20T00:00:00Z"}],"nextCursor":"next+2"}`)
+		case "POST /mkdir":
+			// A move makes its destination's folder first, as a put does.
+			body := driveTestBody(t, r)
+			if body["path"] != "/Archive" || body["parents"] != true {
+				t.Errorf("mkdir body = %v", body)
+			}
+			madeFolder = true
+			fmt.Fprint(w, `{"id":"f1","kind":"FOLDER","path":"/Archive"}`)
 		case "POST /rename":
 			body := driveTestBody(t, r)
 			checkDriveWriter(t, body, fileTestSession)
-			if body["from"] != "/Proj/r.md" || body["to"] != "/r.md" || body["noReplace"] != false {
-				t.Errorf("move body = %v", body)
+			if !madeFolder || body["from"] != "/Proj/r.md" || body["to"] != "/Archive/r.md" || body["noReplace"] != false {
+				t.Errorf("move body = %v (folder made first: %v)", body, madeFolder)
 			}
-			fmt.Fprint(w, `{"id":"e1","kind":"FILE","path":"/r.md"}`)
+			fmt.Fprint(w, `{"id":"e1","kind":"FILE","path":"/Archive/r.md"}`)
 		case "POST /delete":
 			body := driveTestBody(t, r)
 			checkDriveWriter(t, body, "")
@@ -301,7 +310,7 @@ func TestDriveCLIListsMovesDeletesAndOverwrites(t *testing.T) {
 		want string
 	}{
 		{[]string{"ls", "--cursor", "next+1", "--json"}, `"nextCursor":"next+2"`},
-		{[]string{"mv", "~/Files/Proj/r.md", "--json", "r.md"}, `"path":"/r.md"`},
+		{[]string{"mv", "~/Files/Proj/r.md", "--json", "Archive/r.md"}, `"path":"/Archive/r.md"`},
 		{[]string{"put", "empty", "/r.md", "--json"}, `"newVersion":true`},
 		{[]string{"rm", "/r.md", "--json"}, `"deleted":true`},
 	} {

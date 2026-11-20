@@ -127,6 +127,13 @@ func runDriveTool(t *Transport, tool fileToolContext, name string, args map[stri
 		if pathErr != nil {
 			return nil, pathErr
 		}
+		// As drive_put does, the destination's folder is made first: the door's rename, which the mount shares,
+		// refuses a missing folder as rename(2) does.
+		if parent := path.Dir(to); parent != "/" {
+			if err := driveWrite(ctx, t, "/mkdir", map[string]interface{}{"path": parent, "parents": true, "writer": writer}, nil); err != nil {
+				return nil, err
+			}
+		}
 		var entry json.RawMessage
 		err = driveWrite(ctx, t, "/rename", map[string]interface{}{"from": p, "to": to, "noReplace": false, "writer": writer}, &entry)
 		answer = entry

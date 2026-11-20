@@ -182,6 +182,8 @@ test('Orbit Files drive: the runner drive door — drive tools by path, no Trash
     const listing = ok(await as(aliceRunner.token, 'GET', `/list?path=${q('/Proj/sub')}`), 'list').json;
     assert.deepEqual(listing.entries.map((e: { name: string }) => e.name), ['r.md']);
     assert.equal(listing.entries[0].sha256, sha256(first), 'a one-chunk file carries its chunk');
+    assert.equal(listing.entries[0].path, '/Proj/sub/r.md', 'a listed entry carries its path');
+    assert.equal(listing.folder.path, '/Proj/sub');
     assert.deepEqual(
       ok(await as(aliceRunner.token, 'GET', '/list'), 'the root').json.entries.map((e: { name: string }) => e.name),
       ['Proj'],

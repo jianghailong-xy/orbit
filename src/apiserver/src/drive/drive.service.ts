@@ -483,9 +483,16 @@ export class DriveService {
       select: { id: true, chunks: { select: { sha256: true }, take: 1 } },
     });
     const sha = new Map(single.map((v) => [v.id, v.chunks[0]?.sha256 ?? null]));
+    const folderPath = await pathOf(this.prisma, ownerId, folder.id);
+    const pathIn = (name: string) => (folderPath === '/' ? `/${name}` : `${folderPath}/${name}`);
     return {
       ...page,
-      entries: page.entries.map((e) => ({ ...e, sha256: e.currentVersionId ? sha.get(e.currentVersionId) ?? null : null })),
+      folder: { ...page.folder, path: folderPath },
+      entries: page.entries.map((e) => ({
+        ...e,
+        path: pathIn(e.name),
+        sha256: e.currentVersionId ? sha.get(e.currentVersionId) ?? null : null,
+      })),
     };
   }
 
