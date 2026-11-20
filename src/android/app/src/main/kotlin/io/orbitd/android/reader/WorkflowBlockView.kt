@@ -124,13 +124,16 @@ internal fun WorkflowCallsPage(row: TranscriptRow, dismiss: () -> Unit, child: @
         Surface(Modifier.fillMaxSize().testTag("workflow-calls")) {
             Column(Modifier.fillMaxSize().safeDrawingPadding()) {
                 BackHandler(enabled = call != null) { detail = null }
-                CenterAlignedTopAppBar(
-                    title = { Text(call?.label ?: block.title.ifEmpty { WorkflowBlock.LABEL }, maxLines = 1, overflow = TextOverflow.Ellipsis,
-                        style = MaterialTheme.typography.titleMedium) },
-                    navigationIcon = { if (call != null) IconButton({ detail = null }, Modifier.testTag("workflow-call-back")) {
-                        Icon(painterResource(R.drawable.ic_back), "Back") } },
-                    actions = { TextButton(dismiss, Modifier.testTag("workflow-calls-done")) { Text("Done", fontWeight = FontWeight.SemiBold) } },
+                // As on iOS: the list's title leads, a call's detail centres its own under a back button.
+                val done = @Composable { TextButton(dismiss, Modifier.testTag("workflow-calls-done")) { Text("Done", fontWeight = FontWeight.SemiBold) } }
+                if (call != null) CenterAlignedTopAppBar(
+                    title = { Text(call.label, maxLines = 1, overflow = TextOverflow.Ellipsis, style = MaterialTheme.typography.titleMedium) },
+                    navigationIcon = { IconButton({ detail = null }, Modifier.testTag("workflow-call-back")) { Icon(painterResource(R.drawable.ic_back), "Back") } },
                     windowInsets = WindowInsets(0))
+                else TopAppBar(
+                    title = { Text(block.title.ifEmpty { WorkflowBlock.LABEL }, maxLines = 1, overflow = TextOverflow.Ellipsis,
+                        fontWeight = FontWeight.SemiBold, style = MaterialTheme.typography.titleMedium) },
+                    actions = { done() }, windowInsets = WindowInsets(0))
                 if (call != null) {
                     // One call's SubAgent: the block a `delegate` call draws, opened — Why, steps, what it handed back.
                     Column(Modifier.fillMaxSize().verticalScroll(rememberScrollState()).testTag("workflow-call-detail")) {

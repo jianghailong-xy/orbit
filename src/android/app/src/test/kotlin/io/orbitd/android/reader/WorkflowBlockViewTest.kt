@@ -91,7 +91,7 @@ class WorkflowBlockViewTest {
         compose.onNodeWithTag("workflow-call:$WF#1", useUnmergedTree = true).assertExists()
         compose.onAllNodes(hasTestTag("workflow-call:$WF#2"), useUnmergedTree = true).assertCountEquals(0)
         assertTrue(says("2 findings", "workflow-call:$WF#0"))
-        assertTrue(says("Real", "workflow-call:$WF#4"))
+        assertTrue(says("nextRun() skips a day at DST end", "workflow-call:$WF#4"))
         compose.onAllNodes(hasText("Queued"), useUnmergedTree = true).assertCountEquals(2)
         shotDialog("03-calls-page")
         press(hasTestTag("workflow-more"))
@@ -100,7 +100,8 @@ class WorkflowBlockViewTest {
         press(hasTestTag("workflow-call:$WF#4"))
         compose.onNodeWithTag("workflow-call-detail").assertExists()
         assertTrue(says("general · S · DeepSeek Chat · 1m", "workflow-call-detail"))
-        assertTrue(says("Real", "workflow-call-detail"))
+        assertTrue(says("Why · S: the workflow call asked for it", "workflow-call-detail"))
+        assertTrue(says("Reading the diff.", "workflow-call-detail"))
         shotDialog("04-call-detail")
         press(hasTestTag("workflow-call-back"))
         compose.onNodeWithTag("workflow-calls-list").assertExists()
@@ -118,7 +119,7 @@ class WorkflowBlockViewTest {
         // Never the raw block or the reader's bubble.
         compose.onAllNodes(hasText("<orbit-workflow-finished>", substring = true), useUnmergedTree = true).assertCountEquals(0)
         compose.onAllNodes(hasText("The control plane opened this turn", substring = true), useUnmergedTree = true).assertCountEquals(0)
-        compose.onAllNodes(hasText("The workflow confirmed 3 of the findings", substring = true), useUnmergedTree = true).assertCountEquals(1)
+        compose.onAllNodes(hasText("Three findings held up", substring = true), useUnmergedTree = true).assertCountEquals(1)
         shot("02-folded-finished-and-strip")
         press(hasTestTag("workflow-block"))
         assertEquals(listOf("REVIEW · 4 DONE", "VERIFY · 8 DONE"),

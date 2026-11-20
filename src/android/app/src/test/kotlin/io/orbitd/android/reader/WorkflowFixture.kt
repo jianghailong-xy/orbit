@@ -23,6 +23,9 @@ internal object WorkflowFixture {
   The control plane opened this turn for it.
 </orbit-workflow-finished>"""
 
+    /** What each verify handed back once it ended (the iOS probe's words). */
+    private val verifyResults = listOf("nextRun() skips a day at DST end", "Lock released before the row write", "", "Cron parse drops seconds",
+        "Not a bug: retries are bounded", "Not reproduced", "Not reproduced", "Not reproduced")
     private fun label(i: Int) = if (i < 4) reviews[i] else "verify"
     private fun phase(i: Int) = if (i < 4) "Review" else "Verify"
     /** The call's run status: [finished] ends every call, the third verify failed either way. */
@@ -33,14 +36,14 @@ internal object WorkflowFixture {
     }
     private fun result(i: Int, finished: Boolean): String? = when {
         i < 4 -> "2 findings"
-        status(i, finished) == "DONE" -> "Real"
+        status(i, finished) == "DONE" -> verifyResults[i - 4]
         else -> null
     }
 
     fun events(finished: Boolean = false, wake: Boolean = finished): List<RunEvent> = buildList {
         val ts = "2026-11-20T08:00:00.000Z"
-        add(RunEvent("user", 1, buildJsonObject { put("text", "Review the scheduler diff and verify each finding.") }, "turn-1", ts))
-        add(RunEvent("assistant", 2, buildJsonObject { put("text", "I'll run a workflow: four reviewers, then a verifier per finding.") }, "turn-1", ts))
+        add(RunEvent("user", 1, buildJsonObject { put("text", "Review the scheduler change for bugs.") }, "turn-1", ts))
+        add(RunEvent("assistant", 2, buildJsonObject { put("text", "I'll run a review workflow and check each finding.") }, "turn-1", ts))
         add(RunEvent("tool_use", 3, buildJsonObject {
             put("id", WF); put("name", WorkflowBlock.TOOL_NAME)
             putJsonObject("input") {
@@ -57,6 +60,8 @@ internal object WorkflowFixture {
                 put("id", "$WF#$i"); put("name", SubagentBlock.TOOL_NAME); put("parentToolUseId", WF)
                 putJsonObject("input") { put("description", label(i)); put("prompt", "…"); put("workflow_phase", phase(i)) }
             }, "turn-1", ts))
+            // The first verify's own step, which its SubAgent block draws.
+            if (i == 4) add(RunEvent("assistant", seq++, buildJsonObject { put("text", "Reading the diff."); put("parentToolUseId", "$WF#4") }, "turn-1", ts))
             val status = status(i, finished)
             if (status == "DONE" || status == "FAILED") add(RunEvent("tool_result", seq++, buildJsonObject {
                 put("toolUseId", "$WF#$i"); put("parentToolUseId", WF)
@@ -67,7 +72,7 @@ internal object WorkflowFixture {
         if (wake) {
             add(RunEvent("user", 100, buildJsonObject { put("text", WAKE); put("controlPlaneNote", WAKE) }, "turn-wake", ts))
             add(RunEvent("assistant", 101, buildJsonObject {
-                put("text", "The workflow confirmed 3 of the findings; one verifier failed on a flaky fixture. Fixing the three now.")
+                put("text", "Three findings held up. The worst: nextRun() skips a day at DST end.")
             }, "turn-wake", ts))
         }
     }
@@ -75,7 +80,7 @@ internal object WorkflowFixture {
     fun runs(finished: Boolean = false): Map<String, SubagentRun> = (0 until 12).mapNotNull { i ->
         val status = status(i, finished).ifEmpty { return@mapNotNull null }
         SubagentRun("$WF#$i", "general", false, status, "S", "deepseek-chat", "DeepSeek Chat", costUsd = 0.05,
-            resultSummary = result(i, finished), createdAt = "2026-11-20T08:00:00.000Z",
+            resultSummary = result(i, finished), why = "S: the workflow call asked for it", createdAt = "2026-11-20T08:00:00.000Z",
             endedAt = if (status == "RUNNING") null else "2026-11-20T08:01:00.000Z",
             workflowRunId = RUN_ID, callIndex = i, label = label(i), phase = phase(i))
     }.associateBy { it.toolUseId }
