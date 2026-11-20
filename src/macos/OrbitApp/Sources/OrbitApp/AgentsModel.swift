@@ -260,11 +260,11 @@ final class AgentsModel {
         }
     }
 
-    /// Set or clear (nil) the owner's tier for one model of their own key, then read the table again.
-    /// Answers why it failed, or nil.
-    func setModelTier(providerID: String, model: String, tier: String?) async -> String? {
+    /// Set or clear (nil) the owner's tier for one model (of their own key, or of a built-in engine's catalogue),
+    /// then read the table again. Answers why it failed, or nil.
+    func setModelTier(path: String, model: String, tier: String?) async -> String? {
         do {
-            try await api.setModelTier(providerID: providerID, model: model, tier: tier)
+            try await api.setModelTier(path: path, model: model, tier: tier)
         } catch {
             return SubagentSettings.tierSaveFailed + ": " + APIClient.failureReason(error)
         }
