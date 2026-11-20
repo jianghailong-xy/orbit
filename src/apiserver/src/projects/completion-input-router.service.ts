@@ -129,10 +129,11 @@ export class CompletionInputRouter {
     /**
      * Finds the service that offers a project branch's tip to its owner (M-F1), asked again after a
      * finish that decided a deferred landing (§12.15 P-M1). Found at the call and imported there, as
-     * `SessionsService.routeSettledFacts` finds this router: a value import of that service's file
+     * the session end's `routeSettledFacts` finds this router: a value import of that service's file
      * closes a ring back to this one (through `MergeReceiptService` and `ProjectFuseService`), and
      * ProjectsModule, which provides it, imports this module. `@Optional()` and last, for the reason
-     * the seventh gives: for a router built by hand without it, the next landing asks instead.
+     * the seventh gives: a router built by hand without it logs an error naming the projects it
+     * could not ask about (`considerPromotionAfterSettledWork`).
      */
     @Optional() private readonly moduleRef?: ModuleRef,
   ) {}
