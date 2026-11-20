@@ -13,7 +13,8 @@
  * - SESSION_TURN_SETTLED answers every row exactly as the base commit's leaf did, which is restated below,
  *   so a watch stored with it is decided as before.
  *
- * watch-session-quiescent.pg.spec.ts drives the same cases through the evaluator against PostgreSQL rows.
+ * watch-evaluator.pg.spec.ts (its SESSION_QUIESCENT section) drives the same cases through the evaluator
+ * against PostgreSQL rows.
  */
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
