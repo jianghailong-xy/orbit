@@ -98,7 +98,8 @@ fun WorkspaceSettings(api: ManagementApi, workspaceId: String?, revision: Long, 
     val savedSubagents = SubagentSettings.of(saved)
     var subagentsEnabled by rememberSaveable(id) { mutableStateOf(savedSubagents.enabled) }
     var subagentsMaxRunning by rememberSaveable(id) { mutableStateOf(savedSubagents.maxRunning) }
-    val subagents = SubagentSettings(subagentsEnabled, subagentsMaxRunning)
+    var workflowsEnabled by rememberSaveable(id) { mutableStateOf(savedSubagents.workflowsEnabled) }
+    val subagents = SubagentSettings(subagentsEnabled, subagentsMaxRunning, workflowsEnabled)
     val dirty = name != saved.text("name") || effort != prefilledEffort || instructions != saved.text("appendSystemPrompt") ||
         workDir != saved.text("workDir") || enabled != (saved.bool("enabled") ?: true) ||
         subagents != savedSubagents
@@ -150,7 +151,8 @@ fun WorkspaceSettings(api: ManagementApi, workspaceId: String?, revision: Long, 
             OutlinedTextField(workDir, { workDir = it }, Modifier.fillMaxWidth().padding(vertical = 6.dp), label = { Text("Path") },
                 placeholder = { Text("/path/to/project on the runner (optional)") }, singleLine = true)
         }
-        SubagentsSection(api, subagentsEnabled, { subagentsEnabled = it }, subagentsMaxRunning, { subagentsMaxRunning = it })
+        SubagentsSection(api, subagentsEnabled, { subagentsEnabled = it }, workflowsEnabled, { workflowsEnabled = it },
+            subagentsMaxRunning, { subagentsMaxRunning = it })
         val env = (saved["env"] as? JsonObject)?.entries?.sortedBy { it.key }.orEmpty()
         if (env.isNotEmpty()) FormSection("Environment") {
             env.forEach { (key, value) ->
@@ -188,4 +190,5 @@ internal fun workspacePatch(saved: JsonObject, name: String, effort: String, ins
     val savedSubagents = SubagentSettings.of(saved)
     if (subagents.enabled != savedSubagents.enabled) put("subagentsEnabled", subagents.enabled)
     if (subagents.maxRunning != savedSubagents.maxRunning) put("subagentsMaxRunning", subagents.maxRunning)
+    if (subagents.workflowsEnabled != savedSubagents.workflowsEnabled) put("workflowsEnabled", subagents.workflowsEnabled)
 }

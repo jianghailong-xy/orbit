@@ -7,6 +7,9 @@ import type { BgShell } from './background';
 //
 // Owner decisions (project 34yq7HVPsPDGBiMEm8sL2, 2026-11-17):
 //   D1  an ended process stays until the user's next message; a wake turn does not clear it.
+//       `lastUserMessageAt` is the newest message the person typed. A wake note, a watch's wake and a
+//       message another Orbit session sent (session_send / project_send, a `sessionMessage` card,
+//       a coordinator's included) are not the person's message and never count (ruling 2026-11-20).
 //   D2  the visible label is "Background"; the screen reader keeps "Background processes".
 //   E1  several running: rotate the names, newest started first, 3000 ms each, 300 ms change.
 //   E2  while a failed process is shown, the most recently failed one is pinned.

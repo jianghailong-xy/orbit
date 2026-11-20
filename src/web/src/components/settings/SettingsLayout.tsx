@@ -20,6 +20,7 @@ import {
 import { CSS } from '@dnd-kit/utilities';
 import {
   ApiOutlined,
+  BarChartOutlined,
   GithubOutlined,
   BellOutlined,
   BlockOutlined,
@@ -76,6 +77,7 @@ const PERSONAL_ICONS: Record<(typeof PERSONAL_PAGES)[number]['path'], ReactNode>
   '/settings/shared-links': <LinkOutlined />,
   '/settings/access-tokens': <KeyOutlined />,
   '/settings/terminals': <CodeOutlined />,
+  '/settings/routing-report': <BarChartOutlined />,
 };
 
 /** Integrations' rows' icons, one per connected service. */

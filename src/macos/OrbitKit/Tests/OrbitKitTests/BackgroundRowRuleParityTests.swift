@@ -15,6 +15,7 @@ final class BackgroundRowRuleParityTests: XCTestCase {
             let list: [BackgroundRowRule.Input]
             let lastUserMessageAt: String?
             let sessionLive: Bool
+            let events: [RunEvent]?
         }
         let rules: [String: String]
         let rotation: [String: Int]
@@ -60,6 +61,12 @@ final class BackgroundRowRuleParityTests: XCTestCase {
         let expects = try XCTUnwrap(raw["cases"] as? [[String: Any]]).map { $0["expect"] as! NSDictionary }
         XCTAssertGreaterThan(fixture.cases.count, 0)
         for (c, expect) in zip(fixture.cases, expects) {
+            // A case that carries its transcript is read through the reader, as every client must.
+            if let events = c.events {
+                var reducer = TranscriptReducer()
+                for ev in events { reducer.apply(ev) }
+                XCTAssertEqual(BackgroundRowRule.lastUserMessageAt(reducer.state.items), c.lastUserMessageAt, c.case)
+            }
             let row = BackgroundRowRule.row(c.list, lastUserMessageAt: c.lastUserMessageAt, sessionLive: c.sessionLive)
             XCTAssertEqual(json(row), expect, c.case)
         }

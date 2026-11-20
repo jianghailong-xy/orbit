@@ -1,15 +1,16 @@
 import SwiftUI
 import OrbitKit
 
-// SubAgents (docs/subagent-design.md §7, board docs/mocks/subagent/05.png): an Agent's SubAgents group,
-// the provider list it opens, and the Infrastructure page's Model tiers table. Words and rules are
-// OrbitKit's `SubagentSettings`.
+// SubAgents (docs/subagent-design.md §7, board docs/mocks/subagent/05.png, its Workflows row from board
+// docs/mocks/subagent-workflow part 5): an Agent's SubAgents group, the provider list it opens, and the
+// Infrastructure page's Model tiers table. Words and rules are OrbitKit's `SubagentSettings`.
 
 /// An Agent's SubAgents group. The workspace fields are the form's working copy, written by Done with the
 /// rest; the blocked providers are the account's, written as each switch moves (the sheet).
 struct SubagentSettingsSection: View {
     let agents: AgentsModel
     @Binding var enabled: Bool
+    @Binding var workflowsEnabled: Bool
     @Binding var maxRunning: Int
     @Environment(AppModel.self) private var app
     @State private var editingProviders = false
@@ -21,6 +22,16 @@ struct SubagentSettingsSection: View {
             Toggle(isOn: $enabled) {
                 SubagentRowLabel(title: SubagentSettings.enabledTitle, detail: SubagentSettings.enabledDetail)
             }
+
+            // It follows SubAgents: off and not to be turned on while SubAgents is off (SubagentSettings.workflowsOn).
+            Toggle(isOn: Binding(
+                get: { SubagentSettings.workflowsOn(subagentsEnabled: enabled, workflowsEnabled: workflowsEnabled) },
+                set: { workflowsEnabled = $0 }
+            )) {
+                SubagentRowLabel(title: SubagentSettings.workflowsTitle, detail: SubagentSettings.workflowsDetail)
+            }
+            .disabled(!enabled)
+            .accessibilityIdentifier("subagents.workflows")
 
             HStack(spacing: 12) {
                 SubagentRowLabel(title: SubagentSettings.providers, detail: SubagentSettings.providersDetail)

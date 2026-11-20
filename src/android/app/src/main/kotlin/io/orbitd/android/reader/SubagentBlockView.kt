@@ -36,10 +36,11 @@ internal val AgentTone = Color(0xFFAF52DE)
  * run still going, the italic line saying what it is on. A tap opens the grey Why line, the SubAgent's own steps and what it handed back.
  * A background run is this one card from start to end (board docs/mocks/subagent-card-and-end-line): once it ends, the row says how and
  * the line under it becomes the ending, the opened block closes on its end ([SubagentEndBlock]), and while its end turn waits on the queue
- * the card says so. [child] draws a nested record as the transcript does.
+ * the card says so. [child] draws a nested record as the transcript does. [startOpen]: the block as a workflow call's detail page draws
+ * it, already opened.
  */
 @Composable
-internal fun SubagentBlockView(row: TranscriptRow, highlighted: Boolean, child: @Composable (TranscriptRow) -> Unit) {
+internal fun SubagentBlockView(row: TranscriptRow, highlighted: Boolean, startOpen: Boolean = false, child: @Composable (TranscriptRow) -> Unit) {
     val event = row.event
     val id = event.toolId()
     val run = id?.let { LocalSubagentRuns.current[it] }
@@ -60,7 +61,7 @@ internal fun SubagentBlockView(row: TranscriptRow, highlighted: Boolean, child: 
         val last = nested.lastOrNull()?.event
         ended?.status != "INTERRUPTED" && !(last?.type == "assistant" && last.body().trim() == text.trim())
     }
-    var open by rememberSaveable(row.key) { mutableStateOf(false) }
+    var open by rememberSaveable(row.key) { mutableStateOf(startOpen) }
     val canOpen = block.why != null || nested.isNotEmpty() || handedBack != null || ended != null
     val grey = MaterialTheme.colorScheme.onSurfaceVariant
     val description = (event.fields["input"] as? kotlinx.serialization.json.JsonObject)?.string("description")

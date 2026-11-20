@@ -19,7 +19,7 @@ import (
 // was missing from both, which no test of either half alone could see.
 func TestCodexForwardsTheWholeSessionContextToOrbitMCP(t *testing.T) {
 	job := &ClaimedSession{SessionID: "11111111-1111-4111-8111-111111111111", AgentID: "agent", TaskID: "task",
-		SpawnDepth: 3, AllowOrchestration: true}
+		SpawnDepth: 3, AllowOrchestration: true, WorkflowsDisabled: true}
 	allowlist := codexMCPEnvAllowlist(t)
 	got := map[string]string{}
 	for _, pair := range codexOrbitSessionEnv(job) {
@@ -33,7 +33,7 @@ func TestCodexForwardsTheWholeSessionContextToOrbitMCP(t *testing.T) {
 	for name, want := range map[string]string{
 		"ORBIT_SESSION_ID": publicID(job.SessionID), "ORBIT_AGENT_ID": publicID("agent"), "ORBIT_TASK_ID": publicID("task"),
 		envMCPOrchestration: "1", envWatches: watchesEnv(false), envWiki: wikiEnv(false), envMCPPermissionPrompt: "0",
-		envSpawnDepth: "3",
+		envSpawnDepth: "3", envWorkflows: "off",
 	} {
 		if got[name] != want {
 			t.Errorf("the Codex spawn sets %s=%q, want %q", name, got[name], want)
