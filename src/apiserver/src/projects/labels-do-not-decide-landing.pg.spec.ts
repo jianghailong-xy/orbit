@@ -289,7 +289,6 @@ test('(1) a committing task in a project marked non-code lands as any other, and
       assert.equal((await predicates(stack, a)).landed, false, 'J9 in SQL: not landed yet');
 
       const before = await doneReading(stack, w);
-      assert.equal(before.state.nonCode, false, 'the done check no longer reports the mark');
       assert.notEqual(before.criterion.landing, 'LANDED', 'the criterion waits for the commit to land');
       assert.notEqual(before.criterion.reason, null, 'and says why');
       assert.deepEqual(before.criterion.heldOffLanded, [{ taskId: a, title: 'commits-in-marked' }],
@@ -297,9 +296,10 @@ test('(1) a committing task in a project marked non-code lands as any other, and
       // (4) of the acceptance: the marked project with an unlanded committing task is reported unlanded.
       assert.equal(before.unlanded.length, 1, 'the done check reports the criterion unlanded');
       assert.deepEqual(before.unlanded[0].tasks, [{ taskId: a, title: 'commits-in-marked' }]);
-      assert.equal(before.derived.nonCode, false);
       assert.ok(before.derived.withheld.includes('CRITERION_UNLANDED'), 'derivedDone withholds it for landing');
       assert.notEqual(before.derived.criteria[0].landingReason, null);
+      assert.equal(before.state.nonCode, false, 'the done check no longer reports the mark');
+      assert.equal(before.derived.nonCode, false, 'nor does derivedDone');
 
       await landOnMain(stack, w, a, 'c');
       const after = await doneReading(stack, w);
