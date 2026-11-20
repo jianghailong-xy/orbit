@@ -5,7 +5,9 @@ import OrbitKit
 /// What the "Tasks created here" card above one session's composer is drawn from: the session's
 /// `GET /sessions/:id/created-tasks`, read when the console is focused, again when a task event or a
 /// reconnect says a task may have moved, and every 15s while a row is running or queued. Owned by
-/// `ConsoleModel` (`console.createdTasks`) and rendered by `CreatedTasksCard`.
+/// `ConsoleModel` (`console.createdTasks`) and rendered by `CreatedTasksCard`. While the app cannot be
+/// seen nothing is read: the poll waits to be shown and a nudge's read is owed (`ListReads`, §4 R3),
+/// and on the way back the card is read once.
 ///
 /// The poll is started and stopped with the console's stream (`startStreaming` / `stopStreaming`),
 /// from the app's focus state, for the reason `WorktreeModel`'s is: a `.task` on the pushed iPhone
@@ -21,22 +23,25 @@ final class CreatedTasksModel {
     private(set) var snapshot: SessionCreatedTasks?
 
     @ObservationIgnored private var generation = 0
-    @ObservationIgnored private var nudgeTask: Task<Void, Never>?
+    /// The nudge's reads (`ListReads`), and when the last read started.
+    @ObservationIgnored private let reads: ListReads
     /// The last read failed on the way there (not the server saying there is nothing to read), so
     /// the next tick asks again even with no live row to watch.
     @ObservationIgnored private var retryDue = false
 
     private static let pollInterval: TimeInterval = 15
     /// One read for a burst of task events, the same window the watches and projects use.
-    private static let nudgeDelay: UInt64 = 2_000_000_000
+    private static let nudgeDelay: TimeInterval = 2
 
     init(sessionID: String, api: APIClient) {
         self.sessionID = sessionID
         self.api = api
+        reads = ListReads(key: "created-tasks:\(sessionID)", delay: Self.nudgeDelay)
     }
 
     func load() async {
         guard !sessionID.isEmpty else { return }
+        reads.noteRead()
         generation &+= 1
         let current = generation
         do {
@@ -60,19 +65,16 @@ final class CreatedTasksModel {
         while !Task.isCancelled {
             await VisibilityGate.app.pause(Self.pollInterval)   // not while the app cannot be seen
             if Task.isCancelled { break }
+            // A read made since — the one a nudge owed for the time it was hidden — is this one.
+            guard reads.isDue(at: Date(), interval: Self.pollInterval) else { continue }
             if retryDue || snapshot?.hasLiveRows == true { await load() }
         }
     }
 
-    /// A task may have moved: read again shortly, once for a burst.
+    /// A task may have moved: read again shortly, once for a burst. Hidden, owed.
     func nudge() {
-        guard !sessionID.isEmpty, nudgeTask == nil else { return }
-        nudgeTask = Task { @MainActor [weak self] in
-            try? await Task.sleep(nanoseconds: Self.nudgeDelay)
-            guard let self else { return }
-            self.nudgeTask = nil
-            await self.load()
-        }
+        guard !sessionID.isEmpty else { return }
+        reads.nudge { [weak self] in await self?.load() }
     }
 }
 

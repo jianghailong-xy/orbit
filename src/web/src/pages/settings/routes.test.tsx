@@ -20,6 +20,7 @@ describe('the Personal pages, each at /settings/<slug>', () => {
     ['storage/:kind/:id', '<StorageFilesPage />'],
     ['shared-links', '<SharedLinksPage />'],
     ['access-tokens', '<AccessTokensPage />'],
+    ['secrets', '<SecretsPage />'],
     ['routing-report', '<RoutingReportPage />'],
     ['integrations/feishu', '<FeishuIntegrationPage />'],
     ['integrations/feishu/connect-group', '<FeishuConnectGroupPage />'],
@@ -34,6 +35,11 @@ describe('the Personal pages, each at /settings/<slug>', () => {
 
   it('keeps Access tokens after Shared links', () => {
     expect(block.indexOf('path="access-tokens"')).toBeGreaterThan(block.indexOf('path="shared-links"'));
+  });
+
+  it('keeps Secrets right after Access tokens', () => {
+    expect(block.indexOf('path="secrets"')).toBeGreaterThan(block.indexOf('path="access-tokens"'));
+    expect(block.indexOf('path="secrets"')).toBeLessThan(block.indexOf('path="terminals"'));
   });
 
   it('has no one-page Settings left', () => {

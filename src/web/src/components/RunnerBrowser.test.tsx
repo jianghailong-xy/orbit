@@ -5,6 +5,7 @@ import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { MemoryRouter, Route, Routes, useLocation } from 'react-router-dom';
 import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
 import type { RunnerBrowserState } from '@orbit/shared';
+import type { OwnerRequest } from '../lib/ownerRequests';
 import { SessionBrowserChip } from './SessionBrowserChip';
 import { RunnerBrowserSection } from './settings/RunnerBrowserSection';
 import { RunnerBrowserPage } from '../pages/RunnerBrowserPage';
@@ -124,6 +125,39 @@ const running = (over: Partial<RunnerBrowserState> = {}): RunnerBrowserState => 
 let browser: RunnerBrowserState | 'off' = 'off';
 /** Every request the page made, as `METHOD path`. */
 let calls: string[] = [];
+/** The owner's open requests, as GET /owner-requests?state=open answers them. */
+let openRequests: OwnerRequest[] = [];
+/** The last mount's query client, to re-read a list as the realtime stream would. */
+let queryClient: QueryClient | null = null;
+
+const signIn = (over: Partial<OwnerRequest> = {}): OwnerRequest => ({
+  id: 'req-sign-in',
+  kind: 'BROWSER_SIGN_IN',
+  state: 'PENDING',
+  title: 'Sign in to github.com',
+  why: 'Sign in to the account that owns acme/billing, so I can export the report.',
+  blocksTaskIds: [],
+  ifUnanswered: null,
+  options: null,
+  recommendedOption: null,
+  steps: null,
+  secretSpec: null,
+  secretGrant: null,
+  verifyHint: null,
+  browserSite: 'github.com',
+  browserRunnerId: RUNNER,
+  askedBySessionTitle: 'Export the monthly report from GitHub',
+  expiresAt: null,
+  askedBySessionId: SESSION,
+  projectId: null,
+  resolvedAt: null,
+  resolvedByUserId: null,
+  resolvedBySessionId: null,
+  resolutionNote: null,
+  answer: null,
+  createdAt: '2026-11-18T05:00:00.000Z',
+  ...over,
+});
 
 let root: Root | null = null;
 let host: HTMLDivElement | null = null;
@@ -162,6 +196,7 @@ afterAll(() => {
 beforeEach(() => {
   browser = 'off';
   calls = [];
+  openRequests = [];
   opened = [];
   clipboard = [];
   vnc.made.length = 0;
@@ -175,6 +210,13 @@ beforeEach(() => {
       return browser;
     }
     if (path === `/runners/${RUNNER}/browser/clear` && init?.method === 'POST') return { requestedAt: '2026-11-18T05:01:00.000Z' };
+    if (path === '/owner-requests?state=open') return { requests: openRequests };
+    const done = /^\/owner-requests\/([^/]+)\/done$/.exec(path);
+    if (done && init?.method === 'POST') {
+      const answered = openRequests.find((r) => r.id === decodeURIComponent(done[1]));
+      openRequests = openRequests.filter((r) => r !== answered);
+      return { ...answered, state: 'DONE' };
+    }
     throw new Error(`no ${path} here`);
   });
 });
@@ -197,7 +239,8 @@ async function mount(node: React.ReactNode) {
   host = document.createElement('div');
   document.body.appendChild(host);
   root = createRoot(host);
-  const qc = new QueryClient({ defaultOptions: { queries: { retry: false } } });
+  const qc = new QueryClient({ defaultOptions: { queries: { retry: false }, mutations: { retry: false } } });
+  queryClient = qc;
   act(() => root!.render(<QueryClientProvider client={qc}>{node}</QueryClientProvider>));
   await settle();
 }
@@ -211,8 +254,8 @@ async function press(button: HTMLElement | null) {
   await act(async () => button!.click());
   await settle();
 }
-/** The requests other than reading the browser's state: what the viewer sent anywhere else. */
-const writes = () => calls.filter((call) => call !== `GET /runners/${RUNNER}/browser`);
+/** The requests other than reads: what the viewer sent anywhere. */
+const writes = () => calls.filter((call) => !call.startsWith('GET '));
 
 describe('the session Browser chip', () => {
   it('shows when the switch is on, the session runs on the managed runner, and the browser is running', async () => {
@@ -560,5 +603,105 @@ describe('the browser in a tab of its own, /runners/:id/browser', () => {
     await settle();
     expect(vnc.made).toHaveLength(2);
     expect(host!.querySelector('.rb-link')?.textContent).toBe('Live');
+  });
+});
+
+describe('a sign-in request in the browser tab (board 03-agent-tools frame ①, notes ④ ⑤)', () => {
+  const openTab = (path: string) =>
+    mount(
+      <MemoryRouter initialEntries={[path]}>
+        <Routes>
+          <Route path="/runners/:id/browser" element={<RunnerBrowserPage />} />
+        </Routes>
+      </MemoryRouter>,
+    );
+  const banners = () => [...host!.querySelectorAll<HTMLElement>('.rb-sign-in')];
+  const bannerText = () => banners().map((b) => b.querySelector('.rb-sign-in-text')?.textContent);
+
+  it('the card’s Open browser lands in control with the banner above the bar: the site, who asked, I’m signed in', async () => {
+    browser = running({ holderSessionId: null, holderTitle: null });
+    openRequests = [signIn()];
+    // The address the card's Open browser opens (OwnerRequestCard.browserSignIn.test.tsx).
+    await openTab(`/runners/${RUNNER}/browser?control=1`);
+    expect(vnc.made[0].viewOnly).toBe(false);
+    expect(controlSaid()).toEqual([true]);
+    expect(bannerText()).toEqual(['Sign in to github.com, asked by “Export the monthly report from GitHub”']);
+    // Above the bar.
+    expect(banners()[0].nextElementSibling?.classList.contains('rb-tab-bar')).toBe(true);
+    expect(banners()[0].querySelector('button')?.textContent).toBe('I’m signed in');
+    expect(writes()).toEqual([]);
+  });
+
+  it('I’m signed in answers the card as signed in (DONE), and the banner goes; control stays', async () => {
+    browser = running({ holderSessionId: null, holderTitle: null });
+    openRequests = [signIn()];
+    await openTab(`/runners/${RUNNER}/browser?control=1`);
+    await press(buttonNamed('I’m signed in'));
+    expect(writes()).toEqual(['POST /owner-requests/req-sign-in/done']);
+    expect(apiMock).toHaveBeenCalledWith('/owner-requests/req-sign-in/done', { method: 'POST', body: {} });
+    expect(banners()).toEqual([]);
+    expect(vnc.made[0].viewOnly).toBe(false);
+    expect(controlSaid()).toEqual([true]);
+  });
+
+  it('Done only stops control: it answers nothing and the banner stays', async () => {
+    browser = running({ holderSessionId: null, holderTitle: null });
+    openRequests = [signIn()];
+    await openTab(`/runners/${RUNNER}/browser?control=1`);
+    await press(buttonNamed('Done'));
+    expect(controlSaid()).toEqual([true, false]);
+    expect(writes()).toEqual([]);
+    expect(bannerText()).toEqual(['Sign in to github.com, asked by “Export the monthly report from GitHub”']);
+    expect(buttonNamed('I’m signed in')).not.toBeNull();
+  });
+
+  it('goes when the card is answered elsewhere (Not now on the card), once the list is read again', async () => {
+    browser = running();
+    openRequests = [signIn()];
+    await openTab(`/runners/${RUNNER}/browser?control=1`);
+    expect(banners()).toHaveLength(1);
+    openRequests = [];
+    await act(async () => void queryClient!.invalidateQueries({ queryKey: ['owner-requests'] }));
+    await settle();
+    expect(banners()).toEqual([]);
+  });
+
+  it('shows only for an open sign-in request for this runner', async () => {
+    browser = running();
+    openRequests = [
+      signIn({ id: 'other-runner', browserRunnerId: '34z8OKBXxDRYsIZwzJ35X' }),
+      signIn({ id: 'no-runner', browserRunnerId: null }),
+      signIn({ id: 'past-deadline', expiresAt: '2026-01-01T00:00:00.000Z' }),
+      signIn({ id: 'a-decision', kind: 'DECISION', browserSite: null, browserRunnerId: null }),
+    ];
+    await openTab(`/runners/${RUNNER}/browser`);
+    expect(banners()).toEqual([]);
+    expect(buttonNamed('I’m signed in')).toBeNull();
+  });
+
+  it('with no session title names only the site; two requests are two banners, oldest first', async () => {
+    browser = running();
+    openRequests = [
+      signIn({ id: 'later', browserSite: 'linear.app', createdAt: '2026-11-18T05:02:00.000Z' }),
+      signIn({ askedBySessionTitle: null }),
+    ];
+    await openTab(`/runners/${RUNNER}/browser`);
+    expect(bannerText()).toEqual(['Sign in to github.com', 'Sign in to linear.app, asked by “Export the monthly report from GitHub”']);
+  });
+
+  it('says so when the answer does not go through, and keeps the banner', async () => {
+    browser = running();
+    openRequests = [signIn()];
+    const answer = apiMock.getMockImplementation()!;
+    apiMock.mockImplementation(async (path: string, init?: { method?: string }) => {
+      if (path.endsWith('/done')) {
+        calls.push(`POST ${path}`);
+        throw new ApiError('this request is already DECLINED', 409);
+      }
+      return answer(path, init as never);
+    });
+    await openTab(`/runners/${RUNNER}/browser?control=1`);
+    await press(buttonNamed('I’m signed in'));
+    expect(banners()[0].querySelector('[role="alert"]')?.textContent).toBe("Couldn't send your answer");
   });
 });

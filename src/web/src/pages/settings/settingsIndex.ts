@@ -13,6 +13,7 @@ export const PERSONAL_PAGES = [
   { path: '/settings/storage', label: 'Storage' },
   { path: '/settings/shared-links', label: 'Shared links' },
   { path: '/settings/access-tokens', label: 'Access tokens' },
+  { path: '/settings/secrets', label: 'Secrets' },
   { path: '/settings/terminals', label: 'Terminals' },
   // Board docs/mocks/subagent-workflow/08-report.html: the routing report, last of Personal.
   { path: '/settings/routing-report', label: 'Routing report' },

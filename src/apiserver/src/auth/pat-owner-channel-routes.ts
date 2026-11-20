@@ -19,6 +19,9 @@ export const OWNER_INTERACTIVE_ROUTES: readonly string[] = [
   // account's preferences; it also refuses an acting session, SETTINGS_OWNER_CHANNEL_ONLY.
   'POST /owner-requests/:id/apply-settings',
   'GET /account-secrets',
+  'POST /account-secrets',
+  'GET /account-secrets/grants',
+  'POST /account-secrets/grants/:id/revoke',
   'PUT /account-secrets/:id',
   'DELETE /account-secrets/:id',
   'POST /tasks/:taskId/owner-confirmation',
