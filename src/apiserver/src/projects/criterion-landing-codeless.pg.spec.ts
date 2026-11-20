@@ -684,16 +684,12 @@ test('work with nothing to land stops holding its criterion — on a declaration
 
     const first = await ask('the plan is written and every criterion is served');
     assert.equal(first.state, 'OPEN', 'a warning does not refuse the request');
-    const codelessWarnings = first.warnings.filter((finding) =>
-      finding.code === 'START_CRITERION_CODELESS_UNDECLARED');
-    assert.equal(codelessWarnings.length, 1,
-      `exactly one criterion rests only on undeclared codeless-looking work: ${JSON.stringify(first.warnings)}`);
-    const [warning] = codelessWarnings;
-    assert.equal(warning.severity, 'WARN');
-    assert.deepEqual(warning.criterion, { key: rolloutAt.key, ordinal: 1, text: ROLLOUT });
-    assert.deepEqual(warning.tasks, [{ taskId: rolloutTask, title: 'roll it out' }]);
-    assert.match(warning.message, /codeless/);
-    assert.match(warning.requiredAction, /codelessReason/);
+    // P-M2: the codeless-look warning is gone; nothing is warned about the shape of the work.
+    assert.deepEqual(
+      first.warnings.filter((finding) => finding.code === 'START_CRITERION_CODELESS_UNDECLARED'), [],
+      `no codeless warning is produced: ${JSON.stringify(first.warnings)}`,
+    );
+    assert.ok(rolloutTask);
 
     // The coordinator declares it, and asks again: the warning is gone.
     await tasks.update(ownerId, rolloutTask, { codeless: true, codelessReason: REASON } as never);

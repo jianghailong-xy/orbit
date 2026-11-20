@@ -2047,7 +2047,8 @@ export async function projectDefaultLine(
 
 /** The line half of a start's settings — what `startProjectLine` is asked for and answers with. */
 export interface StartLineSettings {
-  line: IntegrationLine;
+  /** Left out, the start writes nothing about the line or the checks (P-M2). */
+  line?: IntegrationLine;
   /** A full `refs/heads/…` ref, only with `PROJECT_BRANCH`. */
   projectBranchName?: string;
   /**
@@ -2083,7 +2084,7 @@ export async function defaultStartLine(
   tx: Prisma.TransactionClient,
   ownerId: string,
   projectId: string,
-): Promise<StartLineSettings> {
+): Promise<StartLineSettings & { line: IntegrationLine }> {
   const row = await readProjectCodebase(tx, projectId);
   const mergeCheckCommand = row?.mergeCheckCommand ?? null;
   const mergeCheckTimeoutSeconds = row?.mergeCheckTimeoutSeconds ?? null;
@@ -2108,8 +2109,10 @@ export async function defaultStartLine(
  * A start's line and merge check, applied under the binding's lock (rank 55) as the owner's choice.
  *
  * A participant, like `configureProjectIntegration`, which does the writing: the caller owns the
- * transaction and holds the project row. Three ways it goes:
+ * transaction and holds the project row. Four ways it goes:
  *
+ *   * NO LINE NAMED (P-M2). Nothing is written and no repository is needed; the answer carries no
+ *     line, and the default rule decides it when the first task with commits is done.
  *   * THE LINE HAS STARTED. It is locked (L4), so the start leaves it where it is and writes only the
  *     merge check — its command and the budget that check runs on — and the delivery mode it names,
  *     which L4 does not lock (O-L1), and says so — `locked`, with the line the project is actually
@@ -2140,6 +2143,11 @@ export async function startProjectLine(
   },
 ): Promise<StartLineSettings & { locked: boolean }> {
   const { ownerId, projectId, settings } = input;
+  // P-M2: a start that names no line writes nothing about it or the checks, and needs no
+  // repository. The line is decided by the default rule when the first task with commits is done.
+  if (settings.line === undefined) {
+    return { mergeCheckCommand: null, mergeCheckTimeoutSeconds: null, locked: false };
+  }
   const mergeCheckCommand = settings.mergeCheckCommand?.trim() || null;
   // Only when the start NAMED a budget: absent is a client that does not know the field, and
   // reading that as "no budget" would clear one its owner never saw (`StartProjectDto`). `null` is
