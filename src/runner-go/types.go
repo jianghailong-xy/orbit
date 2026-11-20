@@ -423,6 +423,10 @@ type ModelInfo struct {
 	// silence as "no". Deliberately not narrowed by this machine's root-ness: that is a property
 	// of the runner, reported separately as runsAsRoot.
 	PermissionModes []string `json:"permissionModes,omitempty"`
+	// How many trusted probe readings in a row have found this model without Auto. Runner-side
+	// only (never sent): carryOverModelCapabilities withdraws Auto only once it reaches
+	// claudeAutoWithdrawReadings.
+	autoMissStreak int
 	// Whether this model has the runtime's fast lane. A pointer for the same reason: nil is "could
 	// not say" and false is "asked, and it does not", which the clients must tell apart.
 	FastMode *bool `json:"fastMode,omitempty"`
