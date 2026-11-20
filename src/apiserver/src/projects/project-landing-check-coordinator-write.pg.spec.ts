@@ -155,7 +155,11 @@ async function writeAsSession(
   sessionId: string = f.coordinatorSessionId,
 ): Promise<{ refused: boolean }> {
   try {
-    await door(stack).updateProject(f.runner, f.projectId, sessionId, { integration } as never);
+    await door(stack).updateProject(
+      f.runner, f.projectId, sessionId,
+      // P-R1: a cardless write names why; every other writer leaves the words unread.
+      { integration: { ...integration, landingCheckReason: 'The spec writes it.' } } as never,
+    );
     return { refused: false };
   } catch (error) {
     const status = (error as { getStatus?: () => number }).getStatus?.();
