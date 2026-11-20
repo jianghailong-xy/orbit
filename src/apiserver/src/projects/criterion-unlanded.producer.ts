@@ -137,7 +137,6 @@ export class CriterionUnlandedProducer {
           servingTasks: {
             select: {
               id: true,
-              status: true,
               // Which of the task's deliveries this is: one sent back and delivered again is a new
               // fact even when nothing else under the criterion moved (`deliveryVersion`).
               progress: { select: { lifecycleEpoch: true } },

@@ -478,7 +478,8 @@ test('(5) the landing is NONE outside a project, LINE_THEN_OWNER on a MAIN line 
       return { taskId, ...run };
     };
 
-    // NONE: in no project — and in a project, a codeless task or one whose run took no branch.
+    // NONE: in no project — and in a project, a task whose run took no branch. A task flagged codeless
+    // whose run made a branch is code work like any other (§12.15 P-M3) and lands.
     const outside = await codeTask(null, 'outside-any-project');
     assert.deepEqual(await landingOf(outside.taskId), { landing: 'NONE', startsAfterLanding: false });
     const mainLine = await lineProject(s.db, w, 'main-line', 'MAIN', true);
@@ -489,7 +490,7 @@ test('(5) the landing is NONE outside a project, LINE_THEN_OWNER on a MAIN line 
     await waitingRun(s.db, w, codeless, {
       declared: DECLARED_REPORT, stopped: DECLARED_REPORT, session: onBranch('orbit/codeless'),
     });
-    assert.deepEqual(await landingOf(codeless), { landing: 'NONE', startsAfterLanding: false });
+    assert.deepEqual(await landingOf(codeless), { landing: 'LINE_THEN_OWNER', startsAfterLanding: true });
     const noBranch = await confirmedTask(s.db, w, mainLine, 'no-worktree');
     await waitingRun(s.db, w, noBranch, { declared: DECLARED_REPORT, stopped: DECLARED_REPORT });
     assert.deepEqual(await landingOf(noBranch), { landing: 'NONE', startsAfterLanding: false });

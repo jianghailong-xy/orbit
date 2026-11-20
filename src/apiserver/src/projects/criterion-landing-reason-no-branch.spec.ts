@@ -26,6 +26,7 @@ function servingTask(
 ): LandingReasonServingTask {
   return {
     id,
+    status: 'DONE',
     mergeReceipts: [],
     integrationJobs: [],
     // A shared-isolation run: no worktree, no branch, and it reported changed files.
@@ -62,6 +63,8 @@ test('work that ran no branch and reported nothing has nothing to land (P-M3)', 
     read([servingTask('t1', { sessions: [quiet], mergeReceipts: [{ result: 'MERGED', targetBranch: 'x', sourceSha: null, createdAt: new Date(0), detail: null, targetShaAfter: null }] as never })]),
     { landing: 'UNKNOWN', reason: 'NO_RECEIPT' },
     'a receipt against it keeps it in');
+  assert.deepEqual(read([servingTask('t1', { sessions: [], status: 'IN_PROGRESS' })]), { landing: 'UNKNOWN', reason: 'NO_BRANCH' },
+    'a task that is not DONE has not delivered yet: it is not let out');
 });
 
 test('work that ran without a branch but reported changes stays delivery and reads NO_BRANCH', () => {

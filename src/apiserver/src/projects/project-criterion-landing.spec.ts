@@ -107,7 +107,9 @@ const serving = (
   mergeReceipts: receipts,
   integrationJobs: facts.jobs ?? [],
   // Work that ran in shared isolation — no branch — and reported nothing: no commit was delivered.
-  ...(facts.branchless ? { sessions: [{ isolationStatus: 'shared', branch: null, changedFiles: null }] } : {}),
+  ...(facts.branchless
+    ? { status: 'DONE', sessions: [{ isolationStatus: 'shared', branch: null, changedFiles: null }] }
+    : {}),
 });
 
 /** One criterion, stated as the rows the fold reads. */

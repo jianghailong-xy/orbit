@@ -1105,10 +1105,10 @@ export async function queueLandingRetry(
 ): Promise<{ jobId: string; generation: number; sourceRef: string; landingSessionId: string } | null> {
   const task = await tx.task.findFirst({
     where: { id: input.taskId, ownerId: input.ownerId, projectId: input.projectId },
-    select: { codeless: true, sessions: workSessionsOfTaskSelect() },
+    select: { sessions: workSessionsOfTaskSelect() },
   });
   const work = landingWorkSession(task?.sessions ?? []);
-  if (!task || task.codeless || !work?.branch) return null;
+  if (!task || !work?.branch) return null;
   const codebase = await tx.projectCodebase.findFirst({
     where: { projectId: input.projectId, slot: 'primary' },
     select: { id: true, canonicalRepoUrl: true, integrationRef: true, upstreamRef: true },
@@ -1148,10 +1148,10 @@ export async function readLandingSourceTip(
 ): Promise<string | null> {
   const task = await db.task.findFirst({
     where: { id: input.taskId, ownerId: input.ownerId, projectId: input.projectId },
-    select: { codeless: true, sessions: workSessionsOfTaskSelect() },
+    select: { sessions: workSessionsOfTaskSelect() },
   });
   const work = landingWorkSession(task?.sessions ?? []);
-  if (!task || task.codeless || !work?.branch) return null;
+  if (!task || !work?.branch) return null;
   const tip = await db.session.findUnique({ where: { id: work.id }, select: { branchSha: true } });
   return tip?.branchSha ?? null;
 }
@@ -1663,9 +1663,10 @@ function workSessionsOfTaskSelect() {
 
 /**
  * What a DONE of this task hands its project's integration line: the project, and the work session
- * whose branch is landed — or no work, which is NOT_A_CODE_TASK: a task in no project, a codeless
- * one, one none of whose work sessions took a worktree on a branch, or one whose branch is in another
- * repository than the project's line (O-L7).
+ * whose branch is landed — or no work, which is NOT_A_CODE_TASK: a task in no project, one none of
+ * whose work sessions took a worktree on a branch, or one whose branch is in another repository than
+ * the project's line (O-L7). The `codeless` flag is not read (§12.15 P-M3): a codeless task with
+ * commits lands like any other.
  *
  * Writes nothing. `enqueueForDoneTask` acts on it, and the owner's confirmation card reads it as the
  * landing confirming starts (`landing: NONE` when there is no work).
@@ -1679,13 +1680,12 @@ export async function doneTaskLandingWork(
     where: { id: taskId, ownerId },
     select: {
       projectId: true,
-      codeless: true,
       sessions: workSessionsOfTaskSelect(),
       project: { select: { codebases: { where: { slot: 'primary' }, select: { canonicalRepoUrl: true } } } },
     },
   });
   const work = landingWorkSession(task?.sessions ?? []);
-  if (!task?.projectId || task.codeless || !work?.branch) {
+  if (!task?.projectId || !work?.branch) {
     return { projectId: task?.projectId ?? null, work: null };
   }
   // A branch in another repository than the one the project's line is bound to is not this line's
@@ -1707,8 +1707,8 @@ export async function doneTaskLandingWork(
  * when it queues nothing and the observation sees the work. Neither is a message to anybody: both are
  * rows, and the platform carries them from there.
  *
- * Does nothing for work that has no branch: a codeless task, a task in no project, a task none of
- * whose work sessions took a worktree. Those are the majority of DONE writes, and the check is
+ * Does nothing for work that has no branch: a task in no project, a task none of whose work
+ * sessions took a worktree on a branch (a codeless run that changed nothing makes none). Those are the majority of DONE writes, and the check is
  * three columns rather than an inference from the title.
  *
  * WHICH of the task's branches is handed over is `landing-source-branch.ts`, and it is not simply
@@ -2227,7 +2227,6 @@ async function backfillFinishedCodeTasks(
     where: {
       ownerId: input.ownerId,
       projectId: input.projectId,
-      codeless: false,
       status: TaskStatus.DONE,
       id: { not: input.exceptTaskId },
       // §12.15 P-M1: a DONE whose work still moves has no route yet; the finish that freezes its

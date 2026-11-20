@@ -492,7 +492,6 @@ async function expectedTurnId(db: PrismaClient, projectId: string): Promise<stri
         select: {
           id: true,
           title: true,
-          status: true,
           // Everything the landing fold reads, spread from the module that folds it: this
           // expectation has to be folded from the same facts the product's own reader carries, or
           // the mirror can disagree with it.

@@ -330,13 +330,15 @@ async function servingTask(stack: Stack, w: World, criterionKey: string, title: 
   } as never);
 }
 
-/** A run of that task, as the runner left it: a worktree on `branch`, or none at all. */
+/** A run of that task, as the runner left it: a worktree on `branch`, or none at all; `reported` is
+ *  what it reported as changed. */
 async function workSession(
   stack: Stack,
   w: World,
   taskId: string,
   branch: string | null,
   status: RunStatus = RunStatus.SUCCEEDED,
+  reported?: string[],
 ): Promise<string> {
   const id = randomUUID();
   await stack.db.session.create({
@@ -359,6 +361,7 @@ async function workSession(
       ...(([RunStatus.SUCCEEDED, RunStatus.FAILED, RunStatus.CANCELLED] as RunStatus[]).includes(status)
         ? { finishedAt: new Date() } : {}),
       ...(branch ? { branch, isolationStatus: 'worktree', baseSha: sha('b') } : {}),
+      ...(reported ? { changedFiles: reported } : {}),
     },
   });
   return id;
@@ -640,13 +643,15 @@ test('(1) derivedDone gives every criterion that is not on main its reason, and 
   await workSession(stack, w, unreceipted.id, 'orbit/no-receipt');
   await settleExecutable(stack, unreceipted.id);
 
-  // Looks codeless: its run took no worktree at all, so no landing was ever queued — and it never
-  // declared what it is.
+  // Looks codeless: its run took no worktree at all, so no landing was ever queued — yet it reported
+  // changes, which Orbit knows of and cannot place. (One that reported nothing delivered no commit and
+  // has nothing to land, §12.15 P-M3.)
   const noBranch = await servingTask(stack, w, LOOKS_CODELESS!, 'looks-codeless');
-  await workSession(stack, w, noBranch.id, null);
+  await workSession(stack, w, noBranch.id, null, RunStatus.SUCCEEDED, ['notes.md']);
   await settleExecutable(stack, noBranch.id);
 
-  // Declared codeless: LANDED, with nothing of its own to land — the other kind of landed.
+  // Declared codeless and never ran: LANDED, with nothing of its own to land — because it delivered
+  // no commit, not because of the flag (§12.15 P-M3).
   const definition = await stack.db.projectAcceptanceCriterionDefinition.findFirstOrThrow({
     where: { projectId: w.projectId, ordinal: 7 }, select: { id: true, revision: true },
   });
@@ -684,8 +689,8 @@ test('(1) derivedDone gives every criterion that is not on main its reason, and 
     'a branch with nothing on it is "nothing to land", not "on the project branch"');
   assert.deepEqual(answer(NO_RECEIPT), [true, 'UNKNOWN', 'NO_RECEIPT']);
   assert.deepEqual(answer(LOOKS_CODELESS), [true, 'UNKNOWN', 'NO_BRANCH']);
-  assert.deepEqual(answer(DECLARED), [true, 'LANDED', 'CODELESS'],
-    'declared codeless is LANDED, and the reason says it had nothing to land');
+  assert.deepEqual(answer(DECLARED), [true, 'LANDED', 'NOTHING_TO_LAND'],
+    'work that delivered no commit is LANDED, and the reason says it had nothing to land');
 
   // Counted once, from those answers: on main and every reason partition the criteria, so two
   // numbers on one card can no longer disagree about one gap.
@@ -694,7 +699,7 @@ test('(1) derivedDone gives every criterion that is not on main its reason, and 
     met: 7,
     landed: 2,
     onMain: 1,
-    byReason: { IN_FLIGHT: 1, ON_PROJECT_BRANCH: 1, NOTHING_TO_LAND: 1, NO_RECEIPT: 1, NO_BRANCH: 1, CODELESS: 1 },
+    byReason: { IN_FLIGHT: 1, ON_PROJECT_BRANCH: 1, NOTHING_TO_LAND: 2, NO_RECEIPT: 1, NO_BRANCH: 1, CODELESS: 0 },
   });
   assert.equal(
     derived.counts.onMain + Object.values(derived.counts.byReason).reduce((sum, n) => sum + n, 0),
@@ -1153,6 +1158,9 @@ test('a settled-project fact refused during FAILED recovers on the reconcile tic
     t.after(() => stack.db.$disconnect());
     const w = await world(stack, 'settled-recovery', ['the walkthrough is complete']);
     const task = await servingTask(stack, w, w.keys[0]!, 'completed walkthrough');
+    // Ran without a branch and reported changes: the criterion is unlanded (NO_BRANCH), which is what
+    // makes the settled fact say "looks finished, but Orbit…".
+    await workSession(stack, w, task.id, null, RunStatus.SUCCEEDED, ['walkthrough.md']);
     await stack.db.session.update({ where: { id: w.coordinatorSessionId }, data: { status: RunStatus.FAILED } });
     await settleExecutable(stack, task.id);
     const prisma = stack.db as unknown as PrismaService;

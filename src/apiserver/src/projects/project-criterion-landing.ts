@@ -304,6 +304,9 @@ export interface LandingJobSessionFacts {
  * `taskHasNothingToLand` below reads it; no label the task carries takes part (§12.15 P-M3).
  */
 export interface LandingServingTask {
+  /** The task's status: only a DONE task has delivered, so only a DONE one can have delivered
+   *  nothing (`ranNoBranch`). A reader that did not select it reads as one that has not. */
+  status?: string;
   mergeReceipts: ReadonlyArray<LandingReceiptFacts>;
   integrationJobs: ReadonlyArray<LandingJobFacts>;
   /** §1.1's repository condition (revision 29, O-L7) as this lane reads it: the task's newest work
@@ -969,16 +972,18 @@ export function taskHasNothingToLand(task: LandingServingTask): boolean {
 }
 
 /**
- * Whether no work session of the task ever ran a branch or reported changed files, and nothing at the
+ * Whether a DONE task's work sessions never ran a branch or reported changed files, and nothing at the
  * line or in a receipt says otherwise: such work delivered no commit Orbit can see, and so has none
- * to land (§12.15 P-M3) — which is what a project with no repository, or one whose work is documents
+ * to land (§12.15 P-M3). A task that is not DONE has delivered nothing yet, which is not the same as
+ * delivering nothing, and stays in — which is what a project with no repository, or one whose work is documents
  * and accounts, is made of. A session with no branch that DID report changed files is work Orbit
  * knows of and cannot place, and keeps the task in (it reads NO_BRANCH). A reader that did not select
  * the sessions' `isolationStatus` and `branch` cannot tell, and gets `false` — the withholding answer.
  */
 export function ranNoBranch(task: LandingServingTask): boolean {
   const sessions = task.sessions;
-  if (!sessions || sessions.some((session) => !('isolationStatus' in session) || !('branch' in session))) {
+  if (task.status !== 'DONE' || !sessions
+    || sessions.some((session) => !('isolationStatus' in session) || !('branch' in session))) {
     return false;
   }
   return task.mergeReceipts.length === 0 && task.integrationJobs.length === 0
@@ -1130,6 +1135,8 @@ export const WORK_SESSIONS_NEWEST_FIRST = {
  * function that ran the select.
  */
 export const LANDING_SERVING_WORK_SELECT = {
+  // Only a DONE task has delivered (`ranNoBranch`).
+  status: true,
   mergeReceipts: { select: { result: true, targetBranch: true, sourceSha: true, createdAt: true, detail: true, targetShaAfter: true } },
   // §1.1's repository condition (O-L7): where the newest work session ran, and where the project's
   // line is bound. Two relation levels each, not a statement per task (`workInAnotherRepository`).
