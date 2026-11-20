@@ -45,10 +45,10 @@ controllers and their decorators, so it lists what the server mounts, not what a
 | `public` | 37 |
 | `user` | 480 |
 | `admin` | 31 |
-| `runner` | 205 |
+| `runner` | 206 |
 | `channel` | 1 |
 | `link gateway` | 3 |
-| **Total** | **757** |
+| **Total** | **758** |
 
 ## Public routes
 
