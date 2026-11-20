@@ -452,7 +452,7 @@ function recordLanding(holder: OpenItemDoorAssignee): OpenItemDoor {
   });
 }
 
-/** Declare the task codeless, with a reason (§1.1): it takes no part in its criterion's landing, and
+/** Declare the task codeless, with a reason (§1.1): it resolves no source and does not decide landing, and
  *  a `LANDING_UNOBSERVED` about it ends CODELESS. A task with commits of its own is refused
  *  `TASK_CODELESS_HAS_COMMITS`, as everywhere else. */
 function declareCodeless(holder: OpenItemDoorAssignee): OpenItemDoor {

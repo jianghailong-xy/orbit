@@ -10186,8 +10186,7 @@ export class TasksService implements OnModuleInit, OnModuleDestroy {
     // write below). A stored change record never stops describing it, so it is not that prose.
     const clearsStaleOverrideReason = attachesVerifier
       && readTaskCriterionChange(before.completionCriterionOverrideReason) == null;
-    // The codeless door (`task-codeless.ts`): turning an existing task codeless takes it out of its
-    // criterion's landing conjunction, so it is asked why, and refused for a task whose commits are
+    // The codeless door (`task-codeless.ts`): turning an existing task codeless is asked why (it does not decide landing), and refused for a task whose commits are
     // already somewhere — those are work that has to land. Only the change is questioned: re-sending
     // the value the task has, or taking the declaration back, writes no reason and needs none.
     // Before the transaction, like every refusal on this path.
