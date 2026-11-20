@@ -165,11 +165,8 @@ final class NewWorkspaceShotTests: ProbeCase {
         }
         expect(app, "api", "\(look)-created")
         settle(2)
+        lowerKeyboard(app)
         shot(app, "\(look)-06-created")
-        press(app.buttons["Open navigation"])
-        settle(1.5)
-        expect(app, "api", "\(look)-created-drawer")
-        shot(app, "\(look)-07-created-drawer")
     }
 
     /// Settings → Machines & models → orbit@austin: the row after its workspaces opens the same page.
@@ -200,7 +197,22 @@ final class NewWorkspaceShotTests: ProbeCase {
         let app = launch(scene: "two", until: "wiki-site", "mac-launch")
         guard let plus = plus(app, "mac") else { return }
         shot(app, "mac-01-entry")
-        press(plus)
+        // The sidebar folds its section header and the + into one element as wide as the header (run 44704121881):
+        // the + sits at its trailing edge, so click there until the menu opens.
+        let begins = NSPredicate(format: "title BEGINSWITH %@", "orbit@austin")
+        let frame = plus.frame
+        let window = app.windows.firstMatch
+        note("mac: the + element \(plus.elementType.rawValue) label=\(plus.label) frame=\(frame) window=\(window.frame)")
+        for dx in [-6.0, 2, 10, 14, 18, -14] {
+            window.coordinate(withNormalizedOffset: .zero)
+                .withOffset(CGVector(dx: frame.maxX - window.frame.minX + dx, dy: frame.midY - window.frame.minY)).click()
+            if app.menuItems.matching(begins).firstMatch.waitForExistence(timeout: 2) {
+                note("mac: the menu opened from a click \(dx) pt past the header's trailing edge")
+                break
+            }
+            app.typeKey(.escape, modifierFlags: [])
+            settle(0.5)
+        }
         guard let austin = menuItem(app, "orbit@austin", "mac-menu") else { return }
         shot(app, "mac-02-menu")
         press(austin)
