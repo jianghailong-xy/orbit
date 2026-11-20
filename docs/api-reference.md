@@ -43,12 +43,12 @@ controllers and their decorators, so it lists what the server mounts, not what a
 | Caller | Routes |
 | --- | --- |
 | `public` | 37 |
-| `user` | 482 |
+| `user` | 483 |
 | `admin` | 31 |
-| `runner` | 205 |
+| `runner` | 207 |
 | `channel` | 1 |
 | `link gateway` | 3 |
-| **Total** | **759** |
+| **Total** | **762** |
 
 ## Public routes
 
@@ -179,6 +179,7 @@ controllers and their decorators, so it lists what the server mounts, not what a
 | `GET` | `/api/outcomes/inbox` | query `limit` | `OutcomeSurfacesController.inbox` |
 | `GET` | `/api/owner-requests` | query `state` | `OwnerRequestsController.list` |
 | `GET` | `/api/owner-requests/:id` | path `id` | `OwnerRequestsController.get` |
+| `POST` | `/api/owner-requests/:id/apply-settings` | path `id` | `OwnerRequestsController.applySettings` |
 | `POST` | `/api/owner-requests/:id/create-wiki` | path `id` | `OwnerRequestsController.createWiki` |
 | `POST` | `/api/owner-requests/:id/decline` | body `DeclineOwnerRequestDto`; path `id` | `OwnerRequestsController.decline` |
 | `POST` | `/api/owner-requests/:id/done` | body `CompleteOwnerRequestDto`; path `id` | `OwnerRequestsController.complete` |
@@ -763,6 +764,8 @@ controllers and their decorators, so it lists what the server mounts, not what a
 | `GET` | `/api/runner/sessions/search` | query `limit`, `q` | `RunnerSessionsController.searchSessions` |
 | `POST` | `/api/runner/sessions/takeover-leases` | body `Object` | `RunnerApiController.takeoverLeasesBatch` |
 | `POST` | `/api/runner/sessions/worktrees-removable` | body `Object` | `RunnerApiController.worktreesRemovable` |
+| `GET` | `/api/runner/settings` | — | `RunnerOwnerRequestsController.settings` |
+| `POST` | `/api/runner/settings-proposals` | body `ProposeSettingsDto` | `RunnerOwnerRequestsController.proposeSettings` |
 | `PATCH` | `/api/runner/subagent-runs/:runId` | body `SubagentRunUpdateDto`; path `runId` | `RunnerSubagentsController.endRemoteSubagentRun` |
 | `POST` | `/api/runner/subagent-runs/:runId/claim` | path `runId` | `RunnerSubagentsController.claimRemoteSubagentRun` |
 | `POST` | `/api/runner/subagent-runs/:runId/events` | body `Object`; path `runId` | `RunnerSubagentsController.relaySubagentEvents` |

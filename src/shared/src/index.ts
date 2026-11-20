@@ -80,3 +80,5 @@ export * from './orbit-turn-cards';
 export * from './mainCheckoutGit';
 export * from './schedule';
 export * from './condition';
+export * from './settingsIndex';
+export * from './settingsTiers';

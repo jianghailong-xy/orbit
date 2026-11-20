@@ -3203,6 +3203,10 @@ test('the ledger stays append-only, and every later migration is accounted for',
       // 1270 adds two plain indexes, session_merge_receipt (source_sha) and task (owner_id, updated_at); no row is
       // written, and no preserved relation, trigger, function or DONE fence changes.
       '1270_receipt_source_sha_task_updated_idx',
+      // 1273 widens owner_request's kind check for SETTINGS_CHANGE, adds a nullable JSONB payload with a CHECK every
+      // stored row passes and a partial unique index; no row is written, and no preserved relation, trigger, function
+      // or DONE fence changes.
+      '1273_owner_request_settings_change',
       // 1304 adds two nullable columns on schedule, max_runs (with a CHECK that NULL passes) and planned_end_told_at,
       // marks every ENDED schedule told (an UPDATE of schedule rows only), and adds two partial indexes; schedule and
       // schedule_run are not preserved relations, and no trigger, function or DONE fence changes.
