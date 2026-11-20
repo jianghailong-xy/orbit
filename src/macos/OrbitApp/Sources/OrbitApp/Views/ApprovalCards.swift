@@ -3698,6 +3698,15 @@ struct StartProjectCard: View {
         StartPanel {
             automaticRow(editable: editable)
             Divider()
+            // A request with no line (ruling D1) draws one sentence in place of the line, delivery,
+            // main branch and landing check: the line is decided when the first task commits.
+            if draft.line == nil {
+                Text(StartProject.noLine)
+                    .font(.orbitLabel).foregroundStyle(.secondary)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                    .startRow()
+                Divider()
+            } else {
             lineRow(editable: editable)
             // How the work reaches main (§10.5 O-L1, A-Q21), directly under the line it depends on
             // (owner decision 2026-11-10). A read that does not say — a server that predates it —
@@ -3733,6 +3742,7 @@ struct StartProjectCard: View {
                     }
                 }
             }.startRow()
+            }
             mergeCheckRow(editable: editable)
             Divider()
             atMostRow(editable: editable)

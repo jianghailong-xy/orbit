@@ -1172,9 +1172,10 @@ struct TranscriptView: View {
         .environment(\.answeredQuestions, console.answeredQuestions)
         // The item a record link or a search hit asked for: a long message from another session opens to it.
         .environment(\.revealedItemID, console.revealedItemID)
-        // Where a SubAgent's finished line finds the card it was started from, and the scroll to it.
-        .environment(\.subagentCardLinks, SubagentCardLinks(find: { console.delegateCard(forRun: $0) },
-                                                            reveal: { console.revealAgent($0) }))
+        // A SubAgent's end turns, joined to their cards by run id: what the agent read, and a queued one's
+        // Don't send (`SubagentCardEnd`).
+        .environment(\.subagentWakes, console.subagentWakes)
+        .environment(\.subagentQueuedWakes, console.subagentQueuedWakes)
         .scrollContentBackground(.hidden)   // show the window background, not the List's own
         #if os(iOS)
         // Turn OFF the scroll view's touch delay so an in-list control (the jump-to-latest disc, the

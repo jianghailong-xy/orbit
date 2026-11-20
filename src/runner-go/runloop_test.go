@@ -362,9 +362,9 @@ func TestReclaimStatusOpenRejectsTerminalAndUnknownRows(t *testing.T) {
 // A reclaimed session's engine is spawned from its reclaim row, so the two rollout switches the
 // apiserver says there must reach the engine's environment exactly as a claim's do: a runner
 // restart must not hand the wiki or watch tools back to an account they are switched off for.
-func TestReclaimCarriesTheWatchAndWikiSwitchesToTheSpawn(t *testing.T) {
+func TestReclaimCarriesTheWatchWikiAndWorkflowSwitchesToTheSpawn(t *testing.T) {
 	var resp ReclaimResponse
-	wire := `{"sessions":[{"sessionId":"off","watchesDisabled":true,"wikiDisabled":true},{"sessionId":"on"}]}`
+	wire := `{"sessions":[{"sessionId":"off","watchesDisabled":true,"wikiDisabled":true,"workflowsDisabled":true},{"sessionId":"on"}]}`
 	if err := json.Unmarshal([]byte(wire), &resp); err != nil {
 		t.Fatal(err)
 	}
@@ -375,9 +375,13 @@ func TestReclaimCarriesTheWatchAndWikiSwitchesToTheSpawn(t *testing.T) {
 	if got := watchesEnv(off.WatchesDisabled); got != "off" {
 		t.Errorf("reclaimed with watchesDisabled: %s=%s, want off", envWatches, got)
 	}
+	if got := workflowsEnv(off.WorkflowsDisabled); got != "off" {
+		t.Errorf("reclaimed with workflowsDisabled: %s=%s, want off", envWorkflows, got)
+	}
 	on := claimedSessionFromReclaim(resp.Sessions[1])
-	if wikiEnv(on.WikiDisabled) != "on" || watchesEnv(on.WatchesDisabled) != "on" {
-		t.Errorf("reclaimed with neither field: wiki=%s watches=%s, want both on", wikiEnv(on.WikiDisabled), watchesEnv(on.WatchesDisabled))
+	if wikiEnv(on.WikiDisabled) != "on" || watchesEnv(on.WatchesDisabled) != "on" || workflowsEnv(on.WorkflowsDisabled) != "on" {
+		t.Errorf("reclaimed with no field: wiki=%s watches=%s workflows=%s, want all on",
+			wikiEnv(on.WikiDisabled), watchesEnv(on.WatchesDisabled), workflowsEnv(on.WorkflowsDisabled))
 	}
 }
 

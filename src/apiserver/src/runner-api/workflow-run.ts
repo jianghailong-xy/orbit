@@ -5,6 +5,26 @@ import {
 
 export const WORKFLOW_SCRIPT_MAX_BYTES = 512 * 1024;
 
+/** The Agent switches a workflow needs: its own, and SubAgents, since every call of a workflow is a SubAgent. */
+export interface WorkflowSwitches {
+  subagentsEnabled: boolean;
+  workflowsEnabled: boolean;
+}
+
+/** Whether an Agent's sessions may start a workflow (docs/subagent-workflow-design.md §9 D2). */
+export function workflowsOn(workspace: WorkflowSwitches): boolean {
+  return workspace.subagentsEnabled && workspace.workflowsEnabled;
+}
+
+/**
+ * What a claim and a reclaim say of it: nothing while the session's Agent may start workflows, the payload runners
+ * have always had, and `workflowsDisabled` otherwise, so the runner spawns the session without the `workflow` tool. A
+ * session with no Agent is told nothing, as the workflow door lets it open one.
+ */
+export function workflowClaimFields(workspace: WorkflowSwitches | null | undefined): { workflowsDisabled?: true } {
+  return workspace && !workflowsOn(workspace) ? { workflowsDisabled: true } : {};
+}
+
 export class WorkflowRunCreateDto {
   @IsString()
   @MinLength(1)

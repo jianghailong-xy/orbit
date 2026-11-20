@@ -2055,13 +2055,20 @@ final class ConsoleModel {
                                       tick: scrollTick)
     }
 
-    /// The `delegate` call a SubAgent run was started from, by the run its result names — what a
-    /// SubAgent's finished line links back to — or nil where the loaded transcript holds none.
-    func delegateCard(forRun runId: String) -> String? {
-        for case .toolCall(let card) in reducer.state.items where card.name == SubagentBlock.toolName {
-            if SubagentFinishedText.delegateRunId(card.result) == runId { return card.id }
+    /// Each SubAgent end turn loaded, by run id: its card draws the end and keeps the block the agent read
+    /// (`SubagentCardEnd.wakes`), so the turn itself draws nothing.
+    var subagentWakes: [String: SubagentCardEnd.WakeSeen] { SubagentCardEnd.wakes(state.items) }
+
+    /// Each SubAgent end turn still on the queue, by run id: its card says the agent has not read it yet,
+    /// and its `Don't send` takes the turn off the queue, as the queue's own Cancel did.
+    var subagentQueuedWakes: SubagentQueuedWakes {
+        var out: [String: @MainActor () -> Void] = [:]
+        for bubble in state.queued {
+            for runId in SubagentCardEnd.queuedWake(bubble)?.runIds ?? [] {
+                out[runId] = { [weak self] in Task { await self?.cancelQueued(bubble) } }
+            }
         }
-        return nil
+        return SubagentQueuedWakes(dontSend: out)
     }
 
     /// The transcript scrolled to the record's row: mark it for a moment, and consume the request so a
