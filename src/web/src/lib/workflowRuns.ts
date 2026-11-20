@@ -1,5 +1,5 @@
 import { ORBIT_WORKFLOW_TOOL, type SubagentRunView, type WorkflowRunView } from '@orbit/shared';
-import { useEffect, useState } from 'react';
+import { createContext, useEffect, useState } from 'react';
 import { getSessionSubagents, getSessionWorkflows } from '../api';
 import type { RunEvent } from '../components/Transcript';
 import { DELEGATE_TOOL } from './subagentRuns';
@@ -17,6 +17,10 @@ export interface WorkflowRuns {
 }
 
 const NO_RUNS: WorkflowRuns = { workflows: new Map(), calls: new Map() };
+
+/** The session's workflows and their calls' runs (`useWorkflowRuns`), for the transcript's workflow blocks. Empty
+ *  where nothing reads them: a share page, an export. */
+export const WorkflowRunsCtx = createContext<WorkflowRuns>(NO_RUNS);
 
 /**
  * What moves a session's workflows and their calls' runs, as the runner draws a workflow (runner-go

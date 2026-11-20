@@ -113,6 +113,9 @@ import { RUNNER_UPDATE_INTERRUPT_REASON, RUNNER_UPDATE_RESUME_NOTE } from '@orbi
 import { isRunnerUpdateResume, runnerUpdateInterruptedLine } from '../lib/runnerUpdateNow';
 import { parseBackgroundWake } from '../lib/backgroundWake';
 import { parseSubagentFinished, subagentFinishedOk } from '../lib/subagentFinished';
+import { parseWorkflowFinished, workflowFinishedTitle } from '../lib/orbitWorkflow';
+import { WorkflowRunsCtx } from '../lib/workflowRuns';
+import { OrbitWorkflowBlock, WorkflowFinishedStrip } from './OrbitWorkflowBlock';
 import { parseOpenItemDelivery } from '../lib/openItemDelivery';
 import type { OpenItemDeliveryCard as OpenItemDelivery, ProjectStartedCard as Started } from '@orbit/shared';
 import { OpenItemDeliveryCard } from './OpenItemDeliveryCard';
@@ -1002,6 +1005,7 @@ const readersOwnWords = (node: TextNode): boolean =>
   && !isRunnerUpdateResume(node.text)
   && !parseBackgroundWake(node.note)
   && !parseSubagentFinished(node.note)
+  && !parseWorkflowFinished(node.note)
   && !orbitOnlyTurn(node);
 
 // A turn whose typed text is empty and whose recorded note holds Orbit's blocks, with nothing the
@@ -2178,6 +2182,13 @@ function orbitTurnOf(
   }
   // A SubAgent's end folds like a job's news: a session running several should not read as a run of
   // rounds the reader opened. One that did not finish stays drawn, as a failed job does.
+  const workflow = parseWorkflowFinished(node.note);
+  if (workflow) {
+    if (workflow.runs.some((run) => run.status !== 'DONE')) return null;
+    const title = workflowFinishedTitle(workflow.runs[0]);
+    const name = workflow.runs.length === 1 ? workflow.runs[0].name : null;
+    return { ts, what: name ? `${title}: ${name}` : title, category: 'job', target: null };
+  }
   const subagent = parseSubagentFinished(node.note);
   if (subagent) {
     if (subagent.runs.some((run) => !subagentFinishedOk(run))) return null;
@@ -2625,6 +2636,20 @@ function NodeView({ node, live, queued }: { node: Node; live?: boolean; queued?:
       // A SubAgent's end is the same kind of turn, in a block of its own (SubagentFinishedCard). A note
       // that carries a background job's news beside it draws that line too, after the SubAgent's, as
       // the control plane wrote them; the job's line then says how the turn went, once.
+      // A workflow's end is one strip (board part 2), drawn before what else the note carried.
+      const workflow = parseWorkflowFinished(node.note);
+      if (workflow) {
+        const others = parseSubagentFinished(workflow.rest);
+        const jobs = parseBackgroundWake(others ? others.rest : workflow.rest);
+        return (
+          <>
+            <WorkflowFinishedStrip wake={workflow} seq={seq} queued={others || jobs ? undefined : queued} />
+            {others && <SubagentFinishedCard wake={others} seq={seq} ts={node.ts} queued={jobs ? undefined : queued} />}
+            {jobs && <BackgroundWakeCard wake={jobs} seq={seq} ts={node.ts} queued={queued} />}
+            {node.text.trim() !== '' && <UserBubble node={{ ...node, note: undefined }} />}
+          </>
+        );
+      }
       const subagent = parseSubagentFinished(node.note);
       if (subagent) {
         const undelivered = node.delivery === 'failed' || node.delivery === 'unconfirmed';
@@ -4607,7 +4632,7 @@ function isLaunchReceipt(node: ToolNode): boolean {
 // Each tool renders as a single folded row (icon · name · summary · status);
 // clicking expands to show the call body, any sub-workspace transcript, and the
 // result.
-function ToolView({ node, live }: { node: ToolNode; live?: boolean }) {
+function ToolView({ node, live, startOpen }: { node: ToolNode; live?: boolean; startOpen?: boolean }) {
   // A `!`-shell command the user ran (runner tags its tool_use id `shell-…`) renders as a
   // distinct "Shell" card, not Claude's Bash tool — see describeTool's isShell branch.
   const isShell = node.id.startsWith('shell-');
@@ -4631,6 +4656,7 @@ function ToolView({ node, live }: { node: ToolNode; live?: boolean }) {
   // asked and how it was answered (see `questionUnread` below for the one time it still does).
   const usuallyOpen =
     !!exp ||
+    !!startOpen ||
     node.name === 'ExitPlanMode' ||
     isShell ||
     isAutoOpenBatch(node);
@@ -4690,6 +4716,7 @@ function ToolView({ node, live }: { node: ToolNode; live?: boolean }) {
   // A SubAgent's tier, model, time and cost, and its Why, come from its run rather than its call.
   const isDelegate = node.name === DELEGATE_TOOL;
   const run = useContext(SubagentRunsCtx).get(node.id);
+  const taskLookup = useContext(TaskLookupCtx);
   const meta = isDelegate ? subagentMeta(run) ?? undefined : toolMeta;
   const why = isDelegate ? subagentWhy(run) : null;
   const waitingFor = useContext(SubagentWaitingCtx).get(node.id);
@@ -4718,6 +4745,21 @@ function ToolView({ node, live }: { node: ToolNode; live?: boolean }) {
   }
   // A drafting call that made a card is the card; one that made none (a dry run, a refusal) stays a call. A clipped
   // answer that does not name its card yet waits for the whole one (see needsWholeResult), as a session's does.
+  // An Orbit workflow is its own block (board parts 2 and 3): its calls by phase, read from the server.
+  if (node.name === ORBIT_WORKFLOW_TOOL) {
+    return (
+      <OrbitWorkflowBlock
+        node={node}
+        running={taskLookup.running(node.id)}
+        title={summary}
+        source={body}
+        card={(id) => {
+          const child = node.children.find((c): c is ToolNode => c.kind === 'tool' && c.id === id);
+          return child ? <WorkflowCallCard node={child} live={live} /> : null;
+        }}
+      />
+    );
+  }
   if (draftCall && node.result && !node.result.isError) {
     const draftId = wikiChatDraftIdOf(resultContent);
     if (draftId) return <WikiDraftCard draftId={draftId} />;
@@ -4826,6 +4868,18 @@ function ToolView({ node, live }: { node: ToolNode; live?: boolean }) {
       </div>
       {ownerWords && <OwnerChatBubble words={ownerWords} />}
     </>
+  );
+}
+
+/** A workflow call's SubAgent card, opened from its row: today's SubAgent block, reading the call's run. */
+function WorkflowCallCard({ node, live }: { node: ToolNode; live?: boolean }) {
+  const runs = useContext(SubagentRunsCtx);
+  const run = useContext(WorkflowRunsCtx).calls.get(node.id);
+  const merged = useMemo(() => (run ? new Map(runs).set(node.id, run) : runs), [runs, run, node.id]);
+  return (
+    <SubagentRunsCtx.Provider value={merged}>
+      <ToolView node={node} live={live} startOpen />
+    </SubagentRunsCtx.Provider>
   );
 }
 
