@@ -54,6 +54,7 @@ import { test } from 'node:test';
 
 import { HttpException } from '@nestjs/common';
 import {
+  Prisma,
   RunStatus,
   RunnerStatus,
   SessionDispatchOrigin,
@@ -121,7 +122,12 @@ interface StatedCriterion {
   landing?: string;
 }
 
-/** How a work session's finalize left it. Omitted fields are a clean finish on its own branch. */
+/**
+ * How a work session's finalize left it. Omitted fields are a clean finish on its own branch by a runner
+ * too old to report a tip or a diff (both NULL): nothing measured the branch, so only the line's answer
+ * can say whether it held anything. An EMPTY list beside a missing tip is a measurement since the owner's
+ * ruling of 2026-11-20 (`unnamedIdentityMeasuresNothing`), which is not what these cases are about.
+ */
 interface Finish {
   worktreeBranch?: string;
   changedFiles?: unknown[];
@@ -313,7 +319,7 @@ test('work with nothing to land stops holding its criterion — on a declaration
             finishedAt: new Date(Date.now() - 60_000),
             worktreeBranch: finish.worktreeBranch ?? branch,
             worktreeDirty: false,
-            changedFiles: (finish.changedFiles ?? []) as never,
+            changedFiles: finish.changedFiles === undefined ? Prisma.DbNull : finish.changedFiles as never,
           }),
       },
     });

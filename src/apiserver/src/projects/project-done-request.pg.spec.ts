@@ -369,7 +369,12 @@ test('a coordinator asks its owner to record the project done, and the project i
     return id;
   }
 
-  /** A work session that ran `branch` in a worktree and finished with it a while ago. */
+  /**
+   * A work session that ran `branch` in a worktree and finished with it a while ago, on a runner that
+   * reported neither its tip nor a diff: nothing measured the branch, so its DONE asks the line. (An
+   * EMPTY diff beside a missing tip is a measurement since the owner's ruling of 2026-11-20, and reads
+   * as nothing to land — `unnamedIdentityMeasuresNothing`.)
+   */
   async function workBranch(p: Project, taskId: string, branch: string): Promise<string> {
     const id = randomUUID();
     await prisma.session.create({
@@ -386,7 +391,6 @@ test('a coordinator asks its owner to record the project done, and the project i
         isolationStatus: 'worktree',
         status: RunStatus.SUCCEEDED,
         baseSha: sha('1'),
-        changedFiles: [] as never,
         createdAt: new Date(Date.now() - 10 * 60_000),
         finishedAt: new Date(Date.now() - 10 * 60_000),
         worktreeBranch: branch,
