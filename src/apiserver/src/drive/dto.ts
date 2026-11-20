@@ -31,3 +31,9 @@ export class OpenDriveUploadDto {
   /** The folder an earlier file of the same drop answered, so the whole drop shares one top folder. */
   @IsOptional() @IsPublicId() dropRootId?: string;
 }
+
+/** `POST /drive/entries/:id/download-link`: a URL the browser downloads from itself, for the current version or `versionId`. */
+export class DriveDownloadLinkDto {
+  /** A version of this file; its current one when absent. */
+  @IsOptional() @IsPublicId() versionId?: string;
+}

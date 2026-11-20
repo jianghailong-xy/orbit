@@ -176,6 +176,9 @@ export interface Tenant {
     driveVersionId: string;
     driveTrashGroupId: string;
     driveRestoreGroupId: string;
+    /** A Trash group whose one item the owner restores on its own, and that item. */
+    driveRestoreItemGroupId: string;
+    driveRestoreItemEntryId: string;
     /** An empty upload that completes, and one that is abandoned. */
     driveCompleteUploadId: string;
     driveAbandonUploadId: string;
@@ -322,6 +325,11 @@ export const TENANT_ISOLATION_CASES: Readonly<Record<string, TenantCase>> = {
   'GET /drive/trash/groups/:id': { request: (of) => ({ params: { id: of.driveTrashGroupId } }) },
   'POST /drive/trash/groups/:id/restore': { request: (of) => ({ params: { id: of.spare.driveRestoreGroupId } }) },
   'DELETE /drive/trash/groups/:id': { request: (of) => ({ params: { id: of.spare.driveTrashGroupId } }) },
+  'POST /drive/trash/groups/:id/items/:entryId/restore': {
+    request: (of) => ({ params: { id: of.spare.driveRestoreItemGroupId, entryId: of.spare.driveRestoreItemEntryId } }),
+    nested: ['entryId'],
+  },
+  'POST /drive/entries/:id/download-link': { request: (of) => ({ params: { id: of.driveFileId } }) },
 
   // ── projects ─────────────────────────────────────────────────────────────────────────────────
   'GET /projects/:id': { request: (of) => ({ params: { id: of.projectId } }) },
@@ -1266,6 +1274,9 @@ export const TENANT_ISOLATION_FIELD_CASES: Readonly<Record<string, TenantFieldCa
   'POST /drive/uploads body parentId': { request: (of) => ({ params: {}, body: { parentId: of.driveFolderId, name: 'census.bin', size: 1 } }) },
   'POST /drive/uploads body dropRootId': {
     request: (of, mine) => ({ params: {}, body: { parentId: mine.driveFolderId, name: 'census.bin', size: 1, relativePath: 'Dir/census.bin', dropRootId: of.driveFolderId } }),
+  },
+  'POST /drive/entries/:id/download-link body versionId': {
+    request: (of, mine) => ({ params: { id: mine.driveFileId }, body: { versionId: of.driveVersionId } }),
   },
   'PATCH /drive/entries/:id body parentId': {
     request: (of, mine) => ({ params: { id: mine.driveFileId }, body: { parentId: of.driveFolderId } }),

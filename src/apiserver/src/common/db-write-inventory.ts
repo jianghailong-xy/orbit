@@ -3087,6 +3087,15 @@ export const TRANSACTION_UNITS: readonly TransactionUnit[] = [
     answer: 'Typed 503 after retry exhaustion, with nothing written; the caller sends the request again.',
   },
   {
+    at: 'drive/drive.service.ts#restoreItem', shape: 'TX_RETRIED',
+    locks: 'SET LOCAL statement_timeout; the per-account drive folder lock (pg_advisory_xact_lock(4001327, hashtext(owner id)), as drive.restoreGroup takes it); the group FOR UPDATE; the item read; liveDestination (folders FOR SHARE, missing ones INSERTed) and one UPDATE of the item; one UPDATE of what hangs under it in the group and one per name clash; deleteEmptyGroups and recordChanges. No trigger.',
+    identity: 'The item: a re-run after a commit finds it out of the group and is answered 404 with nothing written.',
+    isolation: '', attempts: 4,
+    replay: 'Every attempt re-reads and re-locks what it decides on inside the closure; ids are made in the attempt, so a rolled-back attempt leaves nothing.',
+    effects: 'After commit only: RealtimeService.publishDriveChanged with the highest change seq written, to streams that declared drive_changed.',
+    answer: 'Typed 503 after retry exhaustion, with nothing written; the caller sends the request again.',
+  },
+  {
     at: 'drive/drive.service.ts#restoreVersion', shape: 'TX_RETRIED',
     locks: "SET LOCAL statement_timeout; the version read; as CURRENT restoreAsCurrent (the entry FOR UPDATE, the current version to a new VERSION group, the chosen one out of Trash, its old group deleted when empty, the entry UPDATE); as COPY the parent FOR SHARE, one drive_entry and one drive_version INSERT and an INSERT ... SELECT of the chosen version's chunk rows; then recordChanges. No trigger.",
     identity: 'As CURRENT, the version being replaced: a re-run finds it current and is answered 409. As COPY none: each call makes one copy.',
@@ -3547,7 +3556,7 @@ export const TRANSACTION_PARTICIPANTS: readonly TransactionParticipant[] = [
   { at: 'drive/drive.service.ts#finishCommit', under: "drive.commit: under the entry row FOR UPDATE it holds, the entry UPDATE, recordChanges, the staging's chunk rows DELETEd and its row UPDATEd, and one drive_commit INSERT" },
   { at: 'drive/drive.service.ts#renameOnto', under: 'drive.rename: under the source row FOR UPDATE, the target FOR UPDATE, deleteGroupFor (one drive_trash_group INSERT), the target UPDATE into Trash, the group UPDATE of its counts, the source UPDATE into the target\'s place, and recordChanges. Nothing is deleted: the target keeps every version in Trash' },
   { at: 'drive/drive.service.ts#bound', under: 'every drive.service.ts unit, first: SET LOCAL statement_timeout, which writes no row' },
-  { at: 'drive/drive.service.ts#lockAccount', under: 'drive.rename (a folder move), drive.moveToTrash (a folder), drive.restoreGroup, drive.deleteGroup, drive.deleteVersion and drive.emptyTrash: the per-account advisory key, before any row lock' },
+  { at: 'drive/drive.service.ts#lockAccount', under: 'drive.rename (a folder move), drive.moveToTrash (a folder), drive.restoreGroup, drive.restoreItem, drive.deleteGroup, drive.deleteVersion and drive.emptyTrash: the per-account advisory key, before any row lock' },
   { at: 'drive/drive.service.ts#rootIn', under: "drive.ensureRoot, and every unit writing into the root: the account's root read, or INSERTed ON CONFLICT DO NOTHING" },
   { at: 'drive/drive.service.ts#lockLiveFolder', under: 'drive.createFolder, drive.createFile, drive.rename, drive.restoreVersion and liveDestination: the folder written into, FOR SHARE' },
   { at: 'drive/drive.service.ts#recordChanges', under: "every drive.service.ts unit that changes an entry, last: drive_change INSERTs and an UPDATE of those entries' seq, rows its caller already holds or made" },
@@ -3555,8 +3564,8 @@ export const TRANSACTION_PARTICIPANTS: readonly TransactionParticipant[] = [
   { at: 'drive/drive.service.ts#replaceVersion', under: 'drive.commit and restoreAsCurrent: one drive_trash_group INSERT and an UPDATE of the replaced version, under the entry row FOR UPDATE its caller holds' },
   { at: 'drive/drive.service.ts#restoreAsCurrent', under: 'drive.restoreGroup and drive.restoreVersion: the entry FOR UPDATE, replaceVersion, the chosen version UPDATE, deleteEmptyGroups, the entry UPDATE and recordChanges' },
   { at: 'drive/drive.service.ts#deleteGroupFor', under: 'drive.moveToTrash, and renameOnto for the file a replacing rename puts in Trash (no burst key): with a burst key the advisory key of that key and the open group FOR UPDATE, or one drive_trash_group INSERT, and a group UPDATE when the folder deleted is the one its items came from' },
-  { at: 'drive/drive.service.ts#liveDestination', under: 'drive.restoreGroup, under the per-account lock: folders FOR SHARE and one drive_entry INSERT per missing folder' },
-  { at: 'drive/drive.service.ts#deleteEmptyGroups', under: 'drive.restoreVersion, drive.deleteGroup, drive.deleteVersion: a drive_trash_group DELETE of the named groups nothing is in, and an UPDATE of the counts of the rest' },
+  { at: 'drive/drive.service.ts#liveDestination', under: 'drive.restoreGroup and drive.restoreItem, under the per-account lock: folders FOR SHARE and one drive_entry INSERT per missing folder' },
+  { at: 'drive/drive.service.ts#deleteEmptyGroups', under: 'drive.restoreVersion, drive.restoreItem, drive.deleteGroup, drive.deleteVersion: a drive_trash_group DELETE of the named groups nothing is in, and an UPDATE of the counts of the rest' },
 ];
 
 /** The recurring shapes an autocommit write takes. */

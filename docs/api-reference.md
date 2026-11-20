@@ -42,13 +42,13 @@ controllers and their decorators, so it lists what the server mounts, not what a
 
 | Caller | Routes |
 | --- | --- |
-| `public` | 38 |
-| `user` | 506 |
+| `public` | 39 |
+| `user` | 508 |
 | `admin` | 31 |
 | `runner` | 205 |
 | `channel` | 1 |
 | `link gateway` | 3 |
-| **Total** | **784** |
+| **Total** | **787** |
 
 ## Public routes
 
@@ -65,6 +65,7 @@ controllers and their decorators, so it lists what the server mounts, not what a
 | `GET` | `/api/auth/methods` | — | `AuthController.methods` |
 | `POST` | `/api/auth/refresh` | body `RefreshDto` | `AuthController.refresh` |
 | `GET` | `/api/auth/setup-status` | — | `AuthController.setupStatus` |
+| `GET` | `/api/drive/dl/:token` | path `token` | `DriveDownloadController.open` |
 | `ALL` | `/api/gw/anthropic` | — | `AnthropicGatewayController.forward` |
 | `ALL` | `/api/gw/anthropic/{*path}` | — | `AnthropicGatewayController.forward` |
 | `ALL` | `/api/gw/codex` | — | `PoolGatewayController.forward` |
@@ -140,6 +141,7 @@ controllers and their decorators, so it lists what the server mounts, not what a
 | `GET` | `/api/drive/entries/:id` | path `id` | `DriveController.get` |
 | `PATCH` | `/api/drive/entries/:id` | body `UpdateDriveEntryDto`; path `id` | `DriveController.update` |
 | `GET` | `/api/drive/entries/:id/content` | path `id` | `DriveController.download` |
+| `POST` | `/api/drive/entries/:id/download-link` | body `DriveDownloadLinkDto`; path `id` | `DriveController.downloadLink` |
 | `POST` | `/api/drive/entries/:id/share-check` | path `id` | `DriveController.shareCheck` |
 | `GET` | `/api/drive/entries/:id/versions` | path `id` | `DriveController.versions` |
 | `POST` | `/api/drive/folders` | body `CreateDriveFolderDto` | `DriveController.createFolder` |
@@ -148,6 +150,7 @@ controllers and their decorators, so it lists what the server mounts, not what a
 | `GET` | `/api/drive/trash` | query `cursor`, `limit` | `DriveController.trash` |
 | `DELETE` | `/api/drive/trash/groups/:id` | path `id` | `DriveController.deleteGroup` |
 | `GET` | `/api/drive/trash/groups/:id` | path `id`; query `cursor`, `limit`, `parentId` | `DriveController.trashGroup` |
+| `POST` | `/api/drive/trash/groups/:id/items/:entryId/restore` | path `entryId`, `id` | `DriveController.restoreItem` |
 | `POST` | `/api/drive/trash/groups/:id/restore` | path `id` | `DriveController.restoreGroup` |
 | `POST` | `/api/drive/uploads` | body `OpenDriveUploadDto` | `DriveController.openUpload` |
 | `DELETE` | `/api/drive/uploads/:id` | path `id` | `DriveController.abandonUpload` |

@@ -1936,6 +1936,12 @@ export const SHARED_BY_HAND: Readonly<Record<string, string>> = {
  * answered alike whoever made the one that does.
  */
 export const PUBLIC_ROUTES: Readonly<Record<string, string>> = {
+  'GET /drive/dl/:token':
+    'a download URL the owner\'s Files page minted (POST /drive/entries/:id/download-link, behind the owner\'s login): the '
+    + 'token is the credential, signed with a key of its own and expiring in five minutes, and it names its owner, file '
+    + 'and version itself; the version is read WHERE id, owner and file are the token\'s, and a forged, expired or stale '
+    + 'one is the one 404 — drive-download-links.ts:78, :84; nothing in the request but the token names an object — '
+    + 'drive.controller.ts:279',
   'GET /health':
     'a constant `{status:"ok"}` that touches no table — health/health.controller.ts:27',
   'ALL /gw/codex':

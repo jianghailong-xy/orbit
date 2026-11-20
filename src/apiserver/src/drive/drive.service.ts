@@ -923,6 +923,80 @@ export class DriveService {
   }
 
   /**
+   * Restore ONE item out of a DELETE group (board frame 6, rule 3: one file back from an agent's `rm -rf` without the
+   * rest), under the account's lock like the whole group. The item is any entry of the group: a top item, or one under a
+   * folder of the group. It goes back to its folder if that folder is live; otherwise the missing folders of its path are
+   * made again, as a group restore makes them (liveDestination), and the group's own folders stay in Trash. A name a live
+   * entry took meanwhile gets the first free suffix. What hangs under the item comes back with it and keeps its names.
+   * The group keeps the rest; it is deleted once nothing is in it, its counts recounted otherwise.
+   */
+  async restoreItem(ownerId: string, groupId: string, entryId: string, writer: DriveWriter = OWNER_WRITER) {
+    const outcome = await withTransactionRetry(this.prisma, async (tx) => {
+      await bound(tx);
+      await lockAccount(tx, ownerId);
+      const found = await tx.$queryRaw<Array<{ id: string; kind: string }>>`
+        SELECT "id", "kind" FROM "drive_trash_group" WHERE "id" = ${groupId}::uuid AND "owner_id" = ${ownerId}::uuid FOR UPDATE`;
+      if (!found.length) throw refusal(HttpStatus.NOT_FOUND, DRIVE_TRASH_GROUP_NOT_FOUND, 'No such group in Trash.');
+      const item = await tx.driveEntry.findFirst({ where: { id: entryId, ownerId, trashGroupId: groupId } });
+      if (!item) throw notFound();
+      const checked = await checkedWriter(tx, ownerId, writer);
+      const now = new Date();
+      const changes: ChangeRow[] = [];
+      const dest = await liveDestination(tx, ownerId, item.parentId!, checked, now, changes);
+      const name = await freeName(tx, ownerId, dest, item.name, item.kind, 'SUFFIX');
+      await tx.driveEntry.update({
+        where: { id: item.id },
+        data: { parentId: dest, name, trashedAt: null, trashGroupId: null, trashTop: false, updatedAt: now, ...lastWriterFields(checked, now) },
+      });
+      changes.push({ entryId: item.id, parentId: dest, op: 'UPSERT' });
+      const restored = [item.id];
+      // What hangs under it in the group comes back with it, under the names it had.
+      const under = await tx.$queryRaw<Array<{ id: string; parent_id: string; name: string; kind: string }>>`
+        WITH RECURSIVE "sub" AS (
+          SELECT e."id", e."parent_id", e."name", e."kind", e."trashed_at" FROM "drive_entry" e
+           WHERE e."parent_id" = ${item.id}::uuid AND e."owner_id" = ${ownerId}::uuid AND e."trash_group_id" = ${groupId}::uuid
+          UNION ALL
+          SELECT e."id", e."parent_id", e."name", e."kind", e."trashed_at" FROM "drive_entry" e JOIN "sub" ON e."parent_id" = "sub"."id"
+           WHERE e."owner_id" = ${ownerId}::uuid AND e."trash_group_id" = ${groupId}::uuid
+        )
+        SELECT "id", "parent_id", "name", "kind" FROM "sub" ORDER BY "trashed_at" ASC, "id" ASC`;
+      // Two of them with one name in one folder (deleted, made again and deleted again in one burst) cannot both have it
+      // back: every one but the first gets a suffix, after the others are live — as a whole group's restore does.
+      const seenNames = new Set<string>();
+      const clashing = under.filter((r) => {
+        const key = `${r.parent_id}\u0000${r.name}`;
+        if (seenNames.has(key)) return true;
+        seenNames.add(key);
+        return false;
+      });
+      const clashIds = new Set(clashing.map((c) => c.id));
+      const plain = under.filter((r) => !clashIds.has(r.id)).map((r) => r.id);
+      if (plain.length) {
+        await tx.driveEntry.updateMany({
+          where: { ownerId, trashGroupId: groupId, id: { in: plain } },
+          data: { trashedAt: null, trashGroupId: null, trashTop: false, updatedAt: now, ...lastWriterFields(checked, now) },
+        });
+      }
+      for (const r of under) {
+        if (clashIds.has(r.id)) {
+          const freed = await freeName(tx, ownerId, r.parent_id, r.name, r.kind, 'SUFFIX');
+          await tx.driveEntry.update({
+            where: { id: r.id },
+            data: { name: freed, trashedAt: null, trashGroupId: null, trashTop: false, updatedAt: now, ...lastWriterFields(checked, now) },
+          });
+        }
+        changes.push({ entryId: r.id, parentId: r.parent_id, op: 'UPSERT' });
+        restored.push(r.id);
+      }
+      await deleteEmptyGroups(tx, ownerId, [groupId]);
+      const seq = await recordChanges(tx, ownerId, changes);
+      return { restored, seq };
+    }, loggedRetry(this.logger, 'drive.restoreItem', { transaction: TRANSACTION }));
+    this.announce(ownerId, outcome.seq);
+    return { entryIds: outcome.restored };
+  }
+
+  /**
    * Restore a replaced version (board choice c): as the current version (the current one goes to Trash in a VERSION group;
    * the file must be live), or as a copy beside the file named by the suffix rule, the chosen version staying in Trash.
    */

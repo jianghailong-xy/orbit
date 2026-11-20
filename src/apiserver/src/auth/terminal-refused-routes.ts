@@ -527,6 +527,8 @@ export const TERMINAL_REFUSED_ROUTES: readonly string[] = [
   'GET /drive/trash',
   'GET /drive/trash/groups/:id',
   'POST /drive/trash/groups/:id/restore',
+  'POST /drive/trash/groups/:id/items/:entryId/restore',
+  'POST /drive/entries/:id/download-link',
   'DELETE /drive/trash/groups/:id',
   'DELETE /drive/trash',
   'GET /drive/changes',

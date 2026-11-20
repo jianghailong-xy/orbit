@@ -11,7 +11,8 @@ import { DRIVE_CHUNK_MAX, DRIVE_CHUNK_TOO_LARGE, DriveChunksService } from './dr
 import { DriveContentService, type DriveContent } from './drive-content.service';
 import { DriveUploadsService } from './drive-uploads.service';
 import { DriveService } from './drive.service';
-import { CreateDriveFolderDto, OpenDriveUploadDto, RestoreDriveVersionDto, UpdateDriveEntryDto } from './dto';
+import { DriveDownloadLinks } from './drive-download-links';
+import { CreateDriveFolderDto, DriveDownloadLinkDto, OpenDriveUploadDto, RestoreDriveVersionDto, UpdateDriveEntryDto } from './dto';
 
 /** What every drive route declares for a token: the files scope; a drive holds no workspace, so a confined token is refused. */
 export const DRIVE_PAT = () => PatScope('files', { workspaceConfinable: false });
@@ -32,6 +33,7 @@ export class DriveController {
     private readonly uploads: DriveUploadsService,
     private readonly chunks: DriveChunksService,
     private readonly content: DriveContentService,
+    private readonly downloadLinks: DriveDownloadLinks,
   ) {}
 
   @DRIVE_PAT()
@@ -118,6 +120,18 @@ export class DriveController {
   @HttpCode(HttpStatus.OK)
   restoreGroup(@CurrentUser() user: AuthUser, @Param('id', PublicIdPipe) id: string) {
     return this.drive.restoreGroup(user.userId, id);
+  }
+
+  /** Restore one item of a group, and what hangs under it, leaving the rest in Trash (board frame 6, rule 3). */
+  @DRIVE_PAT()
+  @Post('trash/groups/:id/items/:entryId/restore')
+  @HttpCode(HttpStatus.OK)
+  restoreItem(
+    @CurrentUser() user: AuthUser,
+    @Param('id', PublicIdPipe) id: string,
+    @Param('entryId', PublicIdPipe) entryId: string,
+  ) {
+    return this.drive.restoreItem(user.userId, id, entryId);
   }
 
   /** Delete a group for good. */
@@ -208,6 +222,17 @@ export class DriveController {
     return send(await this.content.ofEntry(user.userId, id, { range, ifRange, ifNoneMatch }), res);
   }
 
+  /**
+   * A short-lived URL that downloads the current version (or `versionId`) without a login header, for the browser to
+   * navigate to and stream to disk itself (D12: no size limit). Answers `{ path, expiresAt }`; `path` is under /api.
+   */
+  @DRIVE_PAT()
+  @Post('entries/:id/download-link')
+  @HttpCode(HttpStatus.OK)
+  downloadLink(@CurrentUser() user: AuthUser, @Param('id', PublicIdPipe) id: string, @Body() dto: DriveDownloadLinkDto) {
+    return this.downloadLinks.mint(user.userId, id, dto.versionId);
+  }
+
   /** Download one version, current or replaced. */
   @DRIVE_PAT()
   @Get('versions/:id/content')
@@ -240,4 +265,25 @@ function send(content: DriveContent, res: Response): StreamableFile | undefined 
   const stream = content.stream;
   res.once('close', () => stream.destroy());
   return new StreamableFile(stream);
+}
+
+/**
+ * The download URL a Files page minted (`POST /drive/entries/:id/download-link`), opened by a navigation that carries no
+ * login: the signed token is the credential, bound to one owner, file and version, and expired, forged or stale it is the
+ * one 404. Range, If-Range and If-None-Match work as on the owner's content route.
+ */
+@Controller('drive')
+export class DriveDownloadController {
+  constructor(private readonly downloadLinks: DriveDownloadLinks) {}
+
+  @Get('dl/:token')
+  async open(
+    @Param('token') token: string,
+    @Headers('range') range: string | undefined,
+    @Headers('if-range') ifRange: string | undefined,
+    @Headers('if-none-match') ifNoneMatch: string | undefined,
+    @Res({ passthrough: true }) res: Response,
+  ) {
+    return send(await this.downloadLinks.open(token, { range, ifRange, ifNoneMatch }), res);
+  }
 }

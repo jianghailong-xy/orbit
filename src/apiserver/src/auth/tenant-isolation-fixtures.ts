@@ -666,6 +666,8 @@ export function censusFixtures({ run: RUN, db, sql, server, jwt }: CensusWorld) 
     const driveTrashGroupId = await driveTrashed('in-trash');
     const spareDriveTrashGroupId = await driveTrashed('deleted-for-good');
     const spareDriveRestoreGroupId = await driveTrashed('restored');
+    const spareDriveRestoreItemEntryId = (await drive.createFile(ownerId, { parentId: driveFolder.id, name: 'restored-alone.txt' })).id;
+    const spareDriveRestoreItemGroupId = (await drive.moveToTrash(ownerId, spareDriveRestoreItemEntryId)).trashGroupId;
     const driveUpload = async (declaredSize: number) =>
       (await new DriveChunksService(db as never, undefined as never).openStaging(ownerId, {
         source: 'OWNER_UPLOAD', parentId: driveFolder.id, name: 'upload.bin', declaredSize,
@@ -827,6 +829,8 @@ export function censusFixtures({ run: RUN, db, sql, server, jwt }: CensusWorld) 
         driveVersionId: spareDriveVersionId,
         driveTrashGroupId: spareDriveTrashGroupId,
         driveRestoreGroupId: spareDriveRestoreGroupId,
+        driveRestoreItemGroupId: spareDriveRestoreItemGroupId,
+        driveRestoreItemEntryId: spareDriveRestoreItemEntryId,
       },
     };
   }
