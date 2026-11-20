@@ -507,8 +507,8 @@ export class CreateTaskDto {
   // criteria said one thing is refused, not silently dropped, after a person rewrites them.
   @IsOptional() @IsString() @MaxLength(64) criterionKey?: string;
   // SR5's escape hatch (migration 0231): this work produces no code — a rollout, a verification, a
-  // piece of research — so it resolves no source and does not take part in its criterion's landing
-  // conjunction (§1.1 isCodeTask, §1.4). Omitted is false, which is every task there has been.
+  // piece of research — so it resolves no source and its run gets a checkout with no branch
+  // (§1.1 isCodeTask); it does not decide landing, which is measured from commits. Omitted is false, which is every task there has been.
   // Declaring it here is the first statement of what the task is and needs no reason; turning an
   // existing task codeless does (UpdateTaskDto.codelessReason, `task-codeless.ts`).
   @IsOptional() @IsBoolean() codeless?: boolean;
@@ -778,8 +778,8 @@ export class UpdateTaskDto {
   // declare again — was the one thing no caller could perform. The alternative on offer was
   // deleting the task and filing it afresh, which is the detachment 0232 refused to automate.
   @IsOptional() @IsString() @MaxLength(64) criterionKey?: string | null;
-  // SR5's declaration on the edit door (`task-codeless.ts`): true takes this task out of its
-  // criterion's landing conjunction, false puts it back. Omit to leave it. Turning a task codeless
+  // SR5's declaration on the edit door (`task-codeless.ts`): true declares that it produces no code
+  // (it does not decide landing), false takes that back. Omit to leave it. Turning a task codeless
   // needs `codelessReason` in the same request and is refused outright for a task that already has
   // commits of its own; re-sending the value it has, or taking the declaration back, needs nothing.
   @IsOptional() @IsBoolean() codeless?: boolean;
