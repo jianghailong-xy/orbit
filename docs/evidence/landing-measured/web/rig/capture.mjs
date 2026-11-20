@@ -292,6 +292,26 @@ const SCENES = {
     path: `/projects/${PROJECT_ID}/tasks/${TASK_ID}`, reads: { ...settingsScene(lc(CHECK, 'COORDINATOR', 12 * MIN), changes), [`/api/tasks/${TASK_ID}`]: exemptTask }, ready: '[data-task-exempt]',
     shot: '[aria-label="Task landing"]',
   },
+  'landing-skipped': {
+    path: `/projects/${PROJECT_ID}/landings`, reads: { ...settingsScene(lc(CHECK, 'COORDINATOR', 12 * MIN), changes),
+      [`/api/sessions/${LANDING_SESSION.id}`]: LANDING_SESSION,
+      '/api/sessions': [coordinatorRow, { ...landingRow(960, 'Land · Move cron jobs off the old VM', 'SETTLED'), id: LANDING_SESSION.id,
+        landing: { subject: 'TASK', state: 'SETTLED', settledAs: 'LANDED', settledAt: at(3 * MIN) } }],
+      '/api/auth/capabilities': {},
+      [`/api/projects/${PROJECT_ID}/coordinator/status`]: { coordination: { sessionId: COORDINATOR }, readAt: FIXED_NOW } },
+    ready: '.landings-window', viewport: { width: 1440, height: 1200 },
+    act: async (page) => {
+      await page.locator('.landings-window-reply').first().click();
+      for (let n = 0; n < 8; n += 1) {
+        const folded = page.locator('.landings-window-steps-line[aria-expanded="false"], .landing-step-row[aria-expanded="false"]').first();
+        if (await folded.count() === 0) break;
+        await folded.click();
+        await page.waitForTimeout(200);
+      }
+      await page.locator('[data-step="check:LANDING_CHECK"]').waitFor();
+    },
+    shot: '[data-step="check:LANDING_CHECK"]',
+  },
   // ⑤ the coordinator's change list, the owner's Revert, and the list afterwards.
   'changes-list': {
     path: `/projects/${PROJECT_ID}`, reads: settingsScene(lc(CHECK, 'COORDINATOR', 12 * MIN), changes), ready: '.project-changes-row',
@@ -339,6 +359,7 @@ async function shoot(browser, name, theme) {
   const errors = [];
   const writes = [];
   page.on('pageerror', (e) => errors.push(e.message));
+  if (process.env.DEBUG_DIR) page.on('request', (r) => { if (r.url().includes('/api/')) console.log('REQ', r.method(), new URL(r.url()).pathname); });
   page.on('console', (m) => { if (m.type() === 'error') errors.push(`console: ${m.text()}`); });
   await installFixedDate(page);
   const api = await installFixtures(page, { theme });
