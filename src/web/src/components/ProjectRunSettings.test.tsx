@@ -897,6 +897,15 @@ describe('How it runs — Delivers (board 01)', () => {
   const deliversInput = (node: ParentNode, value: 'CODE' | 'NOT_CODE'): HTMLInputElement =>
     settingRow(node, RUN_DELIVERS).querySelector<HTMLInputElement>(`input[value="${value}"]`)!;
 
+  it('says the mark is a label: both hints defer to the commits each task delivers (P-M3)', async () => {
+    const node = await mount();
+    const text = settingRow(node, RUN_DELIVERS).textContent ?? '';
+    expect(text).toContain('The default. Landing follows the commits each task delivers.');
+    expect(text).toContain('A label only: Orbit no longer reads it. Landing follows the commits each task delivers.');
+    expect(text).not.toContain('nothing lands');
+    expect(text).not.toContain('checks the work reached');
+  });
+
   it('draws a coordinator-marked project as Not code with who and when, and folds the landing rows into Landing · Off', async () => {
     const node = await mount(projectOf({ nonCode: true, nonCodeSetBy: 'COORDINATOR', nonCodeSetAt: '2026-11-11T10:20:00.000Z' }));
     expect(labels(node)).toEqual([RUN_DELIVERS, 'Automatic', 'At most', RUN_LANDING, 'Escalate after']);

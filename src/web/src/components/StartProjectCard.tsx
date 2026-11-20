@@ -410,7 +410,7 @@ export function StartProjectCard({
   const agentPushes = draft.line === 'MAIN' && draft.deliveryMode === 'AGENT_PUSH';
   const comesToYou = startComesToYou({
     automatic: draft.automatic,
-    line: draft.line ?? undefined,
+    line: draft.line,
     ownerConfirmed: plan.ownerConfirmed,
     evidenceJudged: plan.evidenceJudged,
     escalationSeconds: facts.escalationSeconds,
@@ -529,7 +529,7 @@ export function StartProjectCard({
             <div className="start-card-hint">
               {agentPushes
                 ? runAutomaticSaysAgentPush(draft.automatic, main)
-                : runAutomaticSays(draft.automatic, draft.line ?? undefined, hasMergeCheck, main)}
+                : runAutomaticSays(draft.automatic, draft.line, hasMergeCheck, main)}
             </div>
             {opensCoordinator ? <div className="start-card-opens">{START_OPENS_COORDINATOR}</div> : null}
             <div className="start-card-comes">

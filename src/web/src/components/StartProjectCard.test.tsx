@@ -682,6 +682,17 @@ describe('what a press sends', () => {
     expect(startDraftOf(requestOf().settings).mergeCheckTimeoutSeconds).toBeNull();
   });
 
+  it('words the Automatic sentence and the Comes-to-you list without a branch for a request with no line', () => {
+    expect(runAutomaticSays(true, null, false)).toBe('The coordinator decides when each task is done.');
+    expect(runAutomaticSays(false, null, true)).toBe('You decide when each task is done.');
+    for (const automatic of [true, false]) {
+      const list = startComesToYou({ automatic, line: null, ownerConfirmed: [], evidenceJudged: 0, escalationSeconds: 7_200 });
+      expect(list.map((item) => item.text).join(' ')).not.toMatch(/\bmain\b|merge/i);
+    }
+    // With a line the sentences are today's.
+    expect(runAutomaticSays(true, 'PROJECT_BRANCH', false)).toContain('merges into main by itself');
+  });
+
   it('opens a request with no line on no line, and the body carries no line key', () => {
     const request = requestOf({ settings: { automatic: true, maxConcurrentTasks: 3, mergeCheckCommand: null } });
     const draft = startDraftOf(request.settings, integrationOf());
@@ -1310,6 +1321,10 @@ describe('the main branch on the card', () => {
     }));
     const { card } = await delivered();
     expect(rowNames(card())).toEqual(['Automatic', 'Merge check', 'At most']);
+    // Nothing about the line is decided, so no sentence on the card names main.
+    expect(settingRow(card(), 'Automatic').textContent).toContain('The coordinator decides when each task is done.');
+    expect(settingRow(card(), 'Automatic').textContent).not.toMatch(/\bmain\b/);
+    expect(card().querySelector('.start-card-comes')?.textContent).not.toMatch(/\bmain\b/);
     expect(card().querySelector('[data-no-line="true"]')?.textContent).toBe('Lands on the project’s branch when a task commits');
     expect(card().querySelector('[data-landing-check="true"]')).toBeNull();
     await act(async () => {
