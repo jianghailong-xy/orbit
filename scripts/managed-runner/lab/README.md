@@ -14,6 +14,8 @@ A scenario is a file in [scenarios/](scenarios/), named after what it checks:
 | `browser_status` | `browser_status` and `orbit browser status` while another session holds the browser |
 | `browser_open` | `browser_open` and `orbit browser open --url`: the browser started from stopped, each page loaded in the remote Chrome and shot through the viewer, both absent with `ORBIT_BROWSER` unset |
 | `browser_clear_logins` | `browser_clear_logins` called in a session's turn (`FAKE-BCLEAR`): a declined card keeps the profile, a confirmed one deletes it |
+| `browser_cli_sign_in` | a command-line sign-in with a localhost callback ([cli-sign-in/](cli-sign-in/)) run in a session's Bash (`FAKE-SH`): its page opens in the runner's Chrome through `$BROWSER` and `xdg-open`, the owner signs in through the viewer after a `browser_request_sign_in` card, the callback reaches the tool, and the tool answers `SIGNED_IN` |
+| `browser_cli_sign_in_off` | the same command with the switch off: no `BROWSER`, no opener's `xdg-open`, nothing opened |
 | `browser_sign_in_banner` | the sign-in card's Open browser opens the tab in control on the agent's page with the request banner; Done leaves the card open; I'm signed in answers it and the agent's turn carries on; Not now answers NOT_NOW |
 
 [scenarios/run.sh](scenarios/run.sh) does the whole run on one machine, as root:
