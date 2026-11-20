@@ -553,8 +553,18 @@ private fun EngineLine(event: RunEvent) {
         "notice" -> GlyphLine("⚠", text, if (event.fields["settled"] == JsonPrimitive(true)) MaterialTheme.colorScheme.onSurfaceVariant
             else LocalOrbitColors.current.needsYou, MaterialTheme.typography.labelLarge)
         "auth_settled" -> SettledAuthLine(text, event.fields["resolved"] == JsonPrimitive(true))
-        "diagnostic" -> DiagnosticLine(event.fields.string("label").orEmpty(), EngineStderr.logText(text),
-            (event.fields["repeats"] as? JsonPrimitive)?.intOrNull ?: 1)
+        "diagnostic" -> {
+            val line: @Composable () -> Unit = {
+                DiagnosticLine(event.fields.string("label").orEmpty(), EngineStderr.logText(text),
+                    (event.fields["repeats"] as? JsonPrimitive)?.intOrNull ?: 1)
+            }
+            val console = LocalSessionConsole.current
+            // The sandbox warning offers the agent that installs what Codex wants (docs/mocks/codex-sandbox-fix-with-agent);
+            // every other diagnostic stays a plain row.
+            if (event.fields.string("component") == "sandbox" && event.fields.string("code") == "bubblewrap_missing" && console != null)
+                Column(verticalArrangement = Arrangement.spacedBy(6.dp)) { line(); SandboxFixCard(console) }
+            else line()
+        }
         // The self-healing failure's sentence; the card around it (countdown, Retry) is the auto-retry card's.
         else -> GlyphLine("◷", text, MaterialTheme.colorScheme.onSurfaceVariant, MaterialTheme.typography.bodyMedium)
     }
