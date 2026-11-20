@@ -279,19 +279,19 @@ public enum Approvals {
 
     /// One rule per distinct sub-command of a Bash line, so `cd x && git add …` remembers both `cd`
     /// and `git add`, not just the leading `cd`. Empty when the line is blank, when no sub-command
-    /// has a clean prefix, or when any of them is a shell wrapper. A port of `bashCommandRules` in
-    /// `@orbit/shared`.
+    /// has a prefix worth remembering, or when any of them is a shell wrapper. A port of
+    /// `bashCommandRules` in `@orbit/shared`.
     public static func bashCommandRules(_ command: String) -> [PermissionRule] {
         guard !command.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else { return [] }
-        let segments = bashSegments(command)
+        let (segments, heads) = scanBashLine(command)
         // Codex sends commands as `/bin/bash -lc '…'`. Remembering the wrapper would be a standing
         // grant for arbitrary shell code, and a line with a wrapper anywhere in it is equally unsafe
         // to summarize by prefixes.
         if segments.contains(where: isBashShellWrapperCommand) { return [] }
         var seen = Set<String>()
         var rules: [PermissionRule] = []
-        for segment in segments {
-            if let prefix = bashPrefix(segment), !isBashCommandKeyword(prefix), seen.insert(prefix).inserted {
+        for head in heads {
+            if let prefix = rememberedPrefix(head), !isBashCommandKeyword(prefix), seen.insert(prefix).inserted {
                 rules.append(PermissionRule(toolName: "Bash", ruleContent: "\(prefix):*"))
             }
         }
@@ -375,44 +375,123 @@ public enum Approvals {
     /// scalar like the web walks by code unit — a `\r\n` is one `Character`, and the newline in it
     /// must still split.
     public static func bashSegments(_ command: String) -> [String] {
+        scanBashLine(command).segments
+    }
+
+    /// Where the command substitution whose body starts at `start` ends: just past the `)` that closes
+    /// a `$(`, or the backtick that closes one, or at the end of the command when nothing closes it.
+    /// A port of `endOfSubstitution` in `@orbit/shared`.
+    private static func endOfSubstitution(_ chars: [Unicode.Scalar], from start: Int, backtick: Bool) -> Int {
+        var depth = 1
+        var i = start
+        while i < chars.count {
+            let c = chars[i]
+            if c == "\\" {
+                i += 2
+            } else if backtick {
+                if c == "`" { return i + 1 }
+                i += 1
+            } else if c == "'" {
+                i = (chars[(i + 1)...].firstIndex(of: "'") ?? chars.count - 1) + 1
+            } else if c == "\"" {
+                i += 1
+                while i < chars.count, chars[i] != "\"" {
+                    if chars[i] == "\\" {
+                        i += 2
+                    } else if let body = substitutionBody(chars, at: i) {
+                        i = endOfSubstitution(chars, from: body, backtick: chars[i] == "`")
+                    } else {
+                        i += 1
+                    }
+                }
+                i += 1
+            } else if c == "`" {
+                i = endOfSubstitution(chars, from: i + 1, backtick: true)
+            } else if c == "(" {
+                depth += 1
+                i += 1
+            } else if c == ")" {
+                depth -= 1
+                if depth == 0 { return i + 1 }
+                i += 1
+            } else {
+                i += 1
+            }
+        }
+        return chars.count
+    }
+
+    /// Where a command substitution opens at `i`, as the index its body starts at, or nil. `$((` is
+    /// arithmetic. A port of `substitutionBodyAt` in `@orbit/shared`.
+    private static func substitutionBody(_ chars: [Unicode.Scalar], at i: Int) -> Int? {
+        if chars[i] == "`" { return i + 1 }
+        guard chars[i] == "$", i + 1 < chars.count, chars[i + 1] == "(" else { return nil }
+        return i + 2 < chars.count && chars[i + 2] == "(" ? nil : i + 2
+    }
+
+    /// The sub-commands of a line (`segments`), and each with its command substitutions replaced by
+    /// `$_` (`heads`), which is what a rule is taken from. A port of `scanBashLine` in `@orbit/shared`.
+    private static func scanBashLine(_ command: String) -> (segments: [String], heads: [String]) {
         let chars = Array(command.unicodeScalars)
         var out: [String] = []
+        var heads: [String] = []
         var cur = String.UnicodeScalarView()
+        var head = String.UnicodeScalarView()
         // The quote that is open: `'` and `"` as themselves, `$` for ANSI-C `$'…'`, which closes on `'`.
         var quote: Unicode.Scalar?
         var atWordStart = true
         var heredocs: [Heredoc] = []
         var inArithmetic = false
         var i = 0
+        func add(_ c: Unicode.Scalar) {
+            cur.append(c)
+            head.append(c)
+        }
+        func add<S: Sequence>(_ cs: S) where S.Element == Unicode.Scalar {
+            cur.append(contentsOf: cs)
+            head.append(contentsOf: cs)
+        }
         func endSegment() {
             out.append(String(cur))
+            heads.append(String(head))
             cur = String.UnicodeScalarView()
+            head = String.UnicodeScalarView()
             atWordStart = true
             inArithmetic = false
         }
         while i < chars.count {
             let c = chars[i]
             if quote == "'" {
-                cur.append(c)
+                add(c)
                 if c == "'" { quote = nil }
                 i += 1
                 continue
             }
+            if quote != "$", let body = substitutionBody(chars, at: i) {
+                // A command substitution runs a second command to build this one: one piece of this
+                // sub-command, never split at what it holds, and no rule is taken from inside it.
+                let end = endOfSubstitution(chars, from: body, backtick: c == "`")
+                cur.append(contentsOf: chars[i..<end])
+                head.append(contentsOf: "$_".unicodeScalars)
+                atWordStart = false
+                i = end
+                continue
+            }
             if let open = quote {
                 if c == "\\", i + 1 < chars.count {
-                    cur.append(c)
-                    cur.append(chars[i + 1])
+                    add(c)
+                    add(chars[i + 1])
                     i += 2
                     continue
                 }
-                cur.append(c)
+                add(c)
                 if c == (open == "$" ? "'" : open) { quote = nil }
                 i += 1
                 continue
             }
             if c == "\\", i + 1 < chars.count {
-                cur.append(c)
-                cur.append(chars[i + 1])
+                add(c)
+                add(chars[i + 1])
                 // A line continuation is as if neither character were there, so the word state stays.
                 if chars[i + 1] != "\n" { atWordStart = false }
                 i += 2
@@ -420,15 +499,15 @@ public enum Approvals {
             }
             if c == "\"" || c == "'" {
                 quote = c
-                cur.append(c)
+                add(c)
                 atWordStart = false
                 i += 1
                 continue
             }
             if c == "$", i + 1 < chars.count, chars[i + 1] == "'" {
                 quote = "$"
-                cur.append(c)
-                cur.append(chars[i + 1])
+                add(c)
+                add(chars[i + 1])
                 atWordStart = false
                 i += 2
                 continue
@@ -440,14 +519,14 @@ public enum Approvals {
             if c == "<", i + 1 < chars.count, chars[i + 1] == "<", !inArithmetic {
                 if i + 2 < chars.count, chars[i + 2] == "<" {
                     // A here-string: its text is the word after it, on this line.
-                    cur.append(contentsOf: chars[i...(i + 2)])
+                    add(chars[i...(i + 2)])
                     atWordStart = true
                     i += 3
                     continue
                 }
                 if let (heredoc, end) = readHeredoc(chars, at: i) {
                     heredocs.append(heredoc)
-                    cur.append(contentsOf: chars[i..<min(end, chars.count)])
+                    add(chars[i..<min(end, chars.count)])
                     i = end
                     continue
                 }
@@ -475,12 +554,12 @@ public enum Approvals {
             // and a plain `sh` takes the `<<` in it for a heredoc.
             if c == "(", i > 1, chars[i - 1] == "(", chars[i - 2] == "$" { inArithmetic = true }
             if c == ")", i > 0, chars[i - 1] == ")" { inArithmetic = false }
-            cur.append(c)
+            add(c)
             atWordStart = c == " " || c == "\t" || c == "&" || c == "(" || c == ")" || c == "<" || c == ">"
             i += 1
         }
-        out.append(String(cur))
-        return out
+        endSegment()
+        return (out, heads)
     }
 
     /// Leading command word(s) to auto-allow: skip `FOO=bar` assignments, take the program
@@ -502,6 +581,44 @@ public enum Approvals {
     /// command after it. A port of `isBashCommandKeyword` in `@orbit/shared`.
     public static func isBashCommandKeyword(_ prefix: String) -> Bool {
         ["if", "then", "elif", "else", "while", "until", "do", "time", "coproc"].contains(prefix)
+    }
+
+    /// Words that lead a command without being its program: what follows them is judged instead.
+    private static let leadingKeywords: Set<String> = ["if", "then", "elif", "else", "while", "until", "do", "time",
+        "coproc", "fi", "done", "esac", "!", "{", "}"]
+    /// Words that open a construct whose next word is a name or a pattern, not a program to run.
+    private static let constructHeaders: Set<String> = ["for", "select", "case", "function"]
+    /// Programs whose second word picks what they do. A port of `SUBCOMMAND_PROGRAMS` in `@orbit/shared`.
+    private static let subcommandPrograms: Set<String> = [
+        "git", "gh", "npm", "pnpm", "yarn", "bun", "npx", "deno", "node-gyp",
+        "docker", "podman", "kubectl", "helm", "terraform", "gcloud", "aws", "az",
+        "go", "cargo", "rustup", "swift", "xcrun", "dotnet", "mvn", "gradle", "gradlew", "flutter", "adb",
+        "pip", "pip3", "uv", "poetry", "conda", "brew", "apt", "apt-get",
+        "systemctl", "launchctl", "defaults", "make", "orbit",
+    ]
+    /// Programs that change files or the environment, or run whatever they are given: allowed once,
+    /// never remembered. A port of `NEVER_REMEMBERED` in `@orbit/shared`.
+    private static let neverRemembered: Set<String> = [
+        "cp", "mv", "rm", "rmdir", "ln", "chmod", "chown", "chgrp", "tee", "dd", "touch", "truncate",
+        "mkdir", "install", "rsync", "unlink", "shred",
+        "export", "env", "set", "unset", "declare", "typeset", "readonly", "local", "alias", "source", ".",
+        "eval", "exec", "sudo", "doas", "xargs",
+    ]
+
+    /// The prefix "always allow" remembers for one sub-command (its `head`), or nil for none: leading
+    /// keywords skipped, nothing from inside a substitution, a second word only for a sub-command
+    /// program, and nothing for a program that changes files or the environment. A port of
+    /// `rememberedPrefix` in `@orbit/shared`.
+    static func rememberedPrefix(_ head: String) -> String? {
+        let toks = head.split(whereSeparator: { $0 == " " || $0 == "\t" || $0 == "\n" }).map(String.init)
+        var i = 0
+        while i < toks.count, leadingKeywords.contains(toks[i]) || isEnvAssignment(toks[i]) { i += 1 }
+        guard i < toks.count, !constructHeaders.contains(toks[i]), isCleanProgram(toks[i]) else { return nil }
+        let prog = toks[i]
+        let name = prog.split(separator: "/", omittingEmptySubsequences: false).last.map(String.init) ?? prog
+        if neverRemembered.contains(name) { return nil }
+        guard subcommandPrograms.contains(name) else { return prog }
+        return i + 1 < toks.count && isSubcommand(toks[i + 1]) ? "\(prog) \(toks[i + 1])" : nil
     }
 
     /// Whether one sub-command runs a shell with `-c`/`-lc`-style command execution. Codex wraps
