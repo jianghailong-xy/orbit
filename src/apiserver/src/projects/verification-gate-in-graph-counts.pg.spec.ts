@@ -272,6 +272,7 @@ async function checkRun(
       prompt: label,
       provider: 'claude',
       status: shape.settled ? RunStatus.SUCCEEDED : RunStatus.RUNNING,
+      ...(shape.settled ? { finishedAt: new Date(), releaseCause: 'engine_exited' } : {}),
       dispatchOrigin: SessionDispatchOrigin.USER,
       startsTaskWork: true,
       // §4.2: only a natural `task_done` run that reached COMPLETED is evidence a check concluded.

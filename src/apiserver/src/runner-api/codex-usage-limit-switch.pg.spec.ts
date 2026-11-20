@@ -263,7 +263,7 @@ test('a Codex session its account’s usage limit stopped goes on — on another
     // not what this file is about, so stood in for by the state they leave). The engine that claim
     // starts announces itself, and the line rides that, once.
     await sql.query(
-      `UPDATE "session" SET status = 'RUNNING', cancel_requested_at = NULL, finished_at = NULL, retry_at = NULL
+      `UPDATE "session" SET status = 'RUNNING', cancel_requested_at = NULL, finished_at = NULL, release_cause = NULL, retry_at = NULL
         WHERE id = $1::uuid`,
       [f.sessionId],
     );

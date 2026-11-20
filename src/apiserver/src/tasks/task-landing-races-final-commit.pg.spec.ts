@@ -880,7 +880,7 @@ test('a landing is not judged before the work it is about has stopped moving', {
     // (`sessions.service.ts`), so while it runs its branch can move again…
     await prisma.session.update({
       where: { id: guardSession },
-      data: { status: RunStatus.PENDING, finishedAt: null },
+      data: { status: RunStatus.PENDING, finishedAt: null, releaseCause: null },
     });
     // …and its finalize commits what it did onto the branch it ends on and records a NEW finish
     // (SR13): the same branch, with more work on it.

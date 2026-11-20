@@ -231,6 +231,9 @@ async function conversation(
       prompt: title,
       provider: 'claude',
       status: options.status ?? RunStatus.AWAITING_INPUT,
+      ...(options.status === RunStatus.SUCCEEDED || options.status === RunStatus.FAILED
+        ? { finishedAt: new Date(), releaseCause: 'engine_exited' }
+        : options.status === RunStatus.CANCELLED ? { finishedAt: new Date(), releaseCause: 'cancelled' } : {}),
       dispatchOrigin: SessionDispatchOrigin.USER,
       ...(options.taskId === undefined ? { titleManagedByProject: true } : {}),
       ...(options.ended ? { completedAt: new Date() } : {}),
@@ -890,7 +893,7 @@ test('(9) the hold ends the moment the coordinator cannot act on it, and not whi
       // Parked on a retry is the same pause.
       await stack.db.session.update({
         where: { id: w.coordinatorSessionId! },
-        data: { status: RunStatus.AWAITING_INPUT, retryAt: new Date(Date.now() + 3_600_000) },
+        data: { status: RunStatus.AWAITING_INPUT, finishedAt: null, releaseCause: null, retryAt: new Date(Date.now() + 3_600_000) },
       });
       assert.deepEqual(await ownerAsked(stack, w, later), []);
       assert.equal(await ownerCount(stack, w, later), 0);

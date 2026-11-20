@@ -353,7 +353,7 @@ async function doneTask(stack: Stack, w: World, label: string): Promise<Attempt>
   assert.equal(await taskStatus(stack.db, declared.id), TaskStatus.DONE, 'the acceptance command agreed');
   await stack.db.session.update({
     where: { id: sessionId },
-    data: { finishedAt: new Date(), worktreeBranch: branch, worktreeDirty: false },
+    data: { status: RunStatus.SUCCEEDED, releaseCause: 'engine_exited', finishedAt: new Date(), worktreeBranch: branch, worktreeDirty: false },
   });
   return { taskId: declared.id, title, sessionId, branch };
 }
@@ -1197,7 +1197,11 @@ test('the landing’s todos list its owed INTEGRATION_* item and not another kin
       for (const status of [RunStatus.FAILED, RunStatus.PENDING, RunStatus.RUNNING]) {
         // A FAILED coordinator still takes the turn only with an auto-retry pending.
         const retryAt = status === RunStatus.FAILED ? new Date(Date.now() + 60 * 60_000) : null;
-        await stack.db.session.update({ where: { id: w.coordinatorSessionId }, data: { status, retryAt } });
+        await stack.db.session.update({ where: { id: w.coordinatorSessionId }, data: {
+          status, retryAt,
+          finishedAt: status === RunStatus.FAILED ? new Date() : null,
+          releaseCause: status === RunStatus.FAILED ? 'engine_exited' : null,
+        } });
         assert.deepEqual(await todosOf(stack, w, landing.sessionId), [],
           `${status}: an unread coordinator item is not an owner-facing landing todo`);
         assert.equal(await rowStateOf(stack, w, landing.sessionId), 'IN_FLIGHT',
@@ -1207,7 +1211,7 @@ test('the landing’s todos list its owed INTEGRATION_* item and not another kin
       await stack.db.session.update({ where: { id: w.coordinatorSessionId }, data: { status: RunStatus.FAILED, finishedAt: new Date(), releaseCause: 'engine_exited', retryAt: null } });
       assert.deepEqual(await todosOf(stack, w, landing.sessionId), [[failedId, 'INTEGRATION_CHECK_FAILED', 'OPEN']],
         'an item its coordinator cannot take is an owner-facing landing todo');
-      await stack.db.session.update({ where: { id: w.coordinatorSessionId }, data: { status: RunStatus.AWAITING_INPUT } });
+      await stack.db.session.update({ where: { id: w.coordinatorSessionId }, data: { status: RunStatus.AWAITING_INPUT, finishedAt: null, releaseCause: null } });
       await receiveOpenItem(stack.db, failedId);
 
 

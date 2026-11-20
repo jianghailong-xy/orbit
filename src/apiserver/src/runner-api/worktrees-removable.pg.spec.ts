@@ -88,6 +88,9 @@ test('worktrees-removable: what is kept, and what of that is resumable', {
           runtimeSessionId: randomUUID(),
           branch: `orbit/${title.replace(/\W+/g, '-')}-${RUN}`,
           ...columns,
+          ...(columns.status === RunStatus.SUCCEEDED || columns.status === RunStatus.FAILED || columns.status === RunStatus.CANCELLED
+            ? { finishedAt: new Date(), releaseCause: columns.status === RunStatus.CANCELLED ? 'cancelled' : 'engine_exited' }
+            : {}),
         } as never,
       })
     ).id;

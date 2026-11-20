@@ -382,8 +382,6 @@ async function doneCodeTask(
       dispatchOrigin: SessionDispatchOrigin.USER,
       startsTaskWork: true,
       startedAt: new Date(),
-      // The work stopped moving a minute ago (§2.6 J-T1a), so every claim below is after it.
-      finishedAt: new Date(Date.now() - 60_000),
       branch: `orbit/${label}-${randomUUID().slice(0, 6)}`,
       isolationStatus: 'worktree',
       baseSha: 'b'.repeat(40),
@@ -425,6 +423,10 @@ async function doneCodeTask(
   });
   const task = await db.task.findUniqueOrThrow({ where: { id: declared.id }, select: { status: true } });
   assert.equal(task.status, TaskStatus.DONE, 'the acceptance command agreed');
+  await db.session.update({
+    where: { id: sessionId },
+    data: { status: RunStatus.SUCCEEDED, finishedAt: new Date(Date.now() - 60_000), releaseCause: 'engine_exited' },
+  });
   return { taskId: declared.id, sessionId };
 }
 

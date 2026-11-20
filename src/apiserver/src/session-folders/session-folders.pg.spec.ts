@@ -32,6 +32,7 @@ import { BadRequestException, type INestApplication, Module, ValidationPipe } fr
 import { HttpAdapterHost, NestFactory, Reflector } from '@nestjs/core';
 import { JwtService } from '@nestjs/jwt';
 import { PrismaClient, RunnerStatus, RunStatus, SessionDispatchOrigin } from '@prisma/client';
+import { isReleasedStatus } from '../common/session-release';
 import { toUuid, uuidToBase62 } from '@orbit/shared';
 import { Client } from 'pg';
 
@@ -163,10 +164,15 @@ test('session folders: owned, unique per workspace, deleted without deleting a s
     } = {},
   ): Promise<string> {
     const id = randomUUID();
+    const status = extra.status ?? RunStatus.AWAITING_INPUT;
     await db.session.create({
       data: {
         id, ownerId, creatorId: ownerId, workspaceId: extra.workspaceId ?? alpha, assignedRunnerId: runnerId,
-        title, prompt: title, status: extra.status ?? RunStatus.AWAITING_INPUT,
+        title, prompt: title, status,
+        ...(isReleasedStatus(status) ? {
+          finishedAt: new Date(),
+          releaseCause: status === RunStatus.CANCELLED ? 'cancelled' : 'engine_exited',
+        } : {}),
         dispatchOrigin: SessionDispatchOrigin.USER,
         folderId: extra.folderId ?? null,
         ...(extra.completedAt ? { completedAt: extra.completedAt } : {}),

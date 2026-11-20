@@ -149,6 +149,7 @@ async function seedSession(
       batchId: listId,
       batchMaxConcurrent: cap,
       status,
+      ...(status === 'SUCCEEDED' ? { finishedAt: new Date(), releaseCause: 'engine_exited' } : {}),
       ...(status === 'RUNNING' ? { startedAt: new Date() } : {}),
     },
   });

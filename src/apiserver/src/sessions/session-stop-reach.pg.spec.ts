@@ -31,6 +31,7 @@ import { test } from 'node:test';
 import { type INestApplication, Module, ValidationPipe } from '@nestjs/common';
 import { HttpAdapterHost, NestFactory } from '@nestjs/core';
 import { type Prisma, RunStatus, RunnerStatus, SessionDispatchOrigin, type PrismaClient } from '@prisma/client';
+import { isReleasedStatus } from '../common/session-release';
 import { uuidToBase62 } from '@orbit/shared';
 import { Client } from 'pg';
 
@@ -209,6 +210,7 @@ test('a session stops a wider run from its task’s side only as the table says'
   async function sessionIn(mode: string | null, extra: Shape = {}): Promise<string> {
     const id = randomUUID();
     const engine = extra.engine ?? 'claude';
+    const fixtureStatus = extra.status ?? RunStatus.AWAITING_INPUT;
     await prisma.session.create({
       data: {
         id, ownerId, creatorId: ownerId, workspaceId, assignedRunnerId: runnerId,
@@ -217,6 +219,10 @@ test('a session stops a wider run from its task’s side only as the table says'
         status: RunStatus.AWAITING_INPUT, numTurns: 1, startedAt: new Date(), runtimeSessionId: randomUUID(),
         dispatchOrigin: SessionDispatchOrigin.USER,
         ...extra,
+        ...(isReleasedStatus(fixtureStatus) ? {
+          finishedAt: extra.finishedAt ?? new Date(),
+          releaseCause: fixtureStatus === RunStatus.CANCELLED ? 'cancelled' : 'engine_exited',
+        } : {}),
       },
     });
     return id;

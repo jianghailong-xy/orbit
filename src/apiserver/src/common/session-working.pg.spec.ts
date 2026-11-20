@@ -3,6 +3,7 @@ import { randomUUID } from 'node:crypto';
 import test from 'node:test';
 
 import { Prisma, RunStatus, SessionDispatchOrigin } from '@prisma/client';
+import { isReleasedStatus } from '../common/session-release';
 
 import { assertCoordinatorPgUrlIsIsolated } from '../projects/coordinator-pg-test-safety';
 import { prismaClientFor } from '../prisma/prisma-client';
@@ -78,6 +79,10 @@ test('predicate, Prisma filter and SQL fragment agree on every status and fact c
       data: fixtures.map((f) => ({
         id: f.id, ownerId, creatorId: ownerId, title: 'session-working', prompt: 'p', provider: 'claude',
         status: f.status, dispatchOrigin: SessionDispatchOrigin.USER,
+        ...(isReleasedStatus(f.status) ? {
+          finishedAt: new Date(),
+          releaseCause: f.status === RunStatus.CANCELLED ? 'cancelled' : 'engine_exited',
+        } : {}),
         engineTurnActive: f.on.has('engine'),
         runningSubagents: f.on.has('subagent') ? ['toolu_sub'] : [],
         runningBgJobs: f.on.has('job') ? ['bgj_job'] : [],

@@ -6,6 +6,7 @@ import {
   SessionDispatchOrigin, TaskStatus,
 } from '@prisma/client';
 import { Client } from 'pg';
+import { isReleasedStatus } from '../common/session-release';
 import { PrismaService } from '../prisma/prisma.service';
 import {
   assertCoordinatorPgUrlIsIsolated,
@@ -112,6 +113,7 @@ async function makeSession(
   await db.session.create({
     data: {
       ownerId, creatorId: ownerId, taskId, title: `run of ${taskId}`, prompt: 'do it', status,
+      ...(isReleasedStatus(status) ? { finishedAt: new Date(), releaseCause: status === 'CANCELLED' ? 'cancelled' : 'engine_exited' } : {}),
       dispatchOrigin: SessionDispatchOrigin.USER, startsTaskWork: true,
     },
   });

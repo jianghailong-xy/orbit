@@ -14,6 +14,7 @@ import test from 'node:test';
 import { setTimeout as sleep } from 'node:timers/promises';
 
 import { Prisma, RunStatus, RunnerStatus, TaskStatus, type ModelProvider } from '@prisma/client';
+import { isReleasedStatus } from '../common/session-release';
 import { AgentProvider, openCodeKeyOf, providerPreset, type ClaimedSession } from '@orbit/shared';
 import { Client } from 'pg';
 
@@ -159,15 +160,20 @@ test('T4 provider-engine migration on PostgreSQL', { timeout: 900_000 }, async (
     label: string; engine: string | null; providerBuiltin?: boolean; model?: string | null; status?: RunStatus;
     completed?: boolean; workspaceId?: string; runtimeSessionId?: string | null; createdAt?: Date;
   }) {
+    const status = opts.status ?? RunStatus.PENDING;
     const id = (await db.session.create({ data: {
       title: opts.label, prompt: '', ownerId: at.ownerId, creatorId: at.ownerId, workspaceId: opts.workspaceId ?? at.workspaceId,
       assignedRunnerId: at.id, provider, providerBuiltin: opts.providerBuiltin ?? false,
       ...(opts.engine !== null ? { engine: opts.engine } : {}),
-      status: opts.status ?? RunStatus.PENDING, usesRuntimeDefaultModel: true,
+      status, usesRuntimeDefaultModel: true,
+      ...(isReleasedStatus(status) ? {
+        finishedAt: new Date(),
+        releaseCause: status === RunStatus.CANCELLED ? 'cancelled' : 'engine_exited',
+      } : {}),
       model: opts.model === undefined ? 'pinned-model' : opts.model,
       runtimeSessionId: opts.runtimeSessionId === undefined ? `runtime-${randomUUID()}` : opts.runtimeSessionId,
       numTurns: 1, startedAt: new Date(),
-      ...(opts.completed ? { completedAt: new Date(), finishedAt: new Date() } : {}),
+      ...(opts.completed ? { completedAt: new Date() } : {}),
       ...(opts.createdAt ? { createdAt: opts.createdAt } : {}),
     } })).id;
     fixtures.set(id, opts.label);

@@ -166,6 +166,7 @@ async function moveTo(db: PrismaClient, sessionId: string, status: RunStatus) {
       data: {
         status,
         finishedAt: (TERMINAL as RunStatus[]).includes(status) ? new Date() : null,
+        releaseCause: (TERMINAL as RunStatus[]).includes(status) ? (status === RunStatus.CANCELLED ? 'cancelled' : 'engine_exited') : null,
       },
     });
   });
@@ -769,6 +770,7 @@ test('the duplicate shapes the unit tests construct are the ones this server pro
         provider: 'claude', status, dispatchOrigin: SessionDispatchOrigin.USER,
         startsTaskWork: true,
         finishedAt: (TERMINAL as RunStatus[]).includes(status) ? new Date() : null,
+        releaseCause: (TERMINAL as RunStatus[]).includes(status) ? (status === RunStatus.CANCELLED ? 'cancelled' : 'engine_exited') : null,
       });
       const first = randomUUID();
       await services.db.session.create({ data: row(first, RunStatus.PENDING) });

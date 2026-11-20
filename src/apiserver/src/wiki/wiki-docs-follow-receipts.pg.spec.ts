@@ -246,7 +246,7 @@ async function doneCodeTask(stack: Stack, w: World, projectId: string, label: st
       id: sessionId, ownerId: w.ownerId, creatorId: w.ownerId, taskId: declared.id, workspaceId: w.workspaceId,
       assignedRunnerId: w.runnerId, title, prompt: title, provider: 'claude', status: RunStatus.RUNNING,
       dispatchOrigin: SessionDispatchOrigin.USER, startsTaskWork: true, startedAt: new Date(),
-      finishedAt: new Date(Date.now() - 60_000), branch: `orbit/${label}-${randomUUID().slice(0, 6)}`, isolationStatus: 'worktree',
+      branch: `orbit/${label}-${randomUUID().slice(0, 6)}`, isolationStatus: 'worktree',
       baseSha: 'b'.repeat(40),
     },
   });
@@ -269,6 +269,11 @@ async function doneCodeTask(stack: Stack, w: World, projectId: string, label: st
   });
   const task = await db.task.findUniqueOrThrow({ where: { id: declared.id }, select: { status: true } });
   assert.equal(task.status, TaskStatus.DONE, 'the acceptance command agreed');
+  // Release the work session before the integration job can claim the branch.
+  await db.session.update({
+    where: { id: sessionId },
+    data: { status: RunStatus.SUCCEEDED, finishedAt: new Date(Date.now() - 60_000), releaseCause: 'engine_exited' },
+  });
   return { taskId: declared.id, title, sessionId };
 }
 

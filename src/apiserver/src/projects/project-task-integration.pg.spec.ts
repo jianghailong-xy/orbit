@@ -275,7 +275,7 @@ async function finishWork(stack: Stack, sessionId: string, branch?: string) {
   const session = await stack.db.session.findUniqueOrThrow({ where: { id: sessionId }, select: { branch: true } });
   await stack.db.session.update({
     where: { id: sessionId },
-    data: { finishedAt: new Date(), worktreeBranch: branch ?? session.branch, worktreeDirty: false },
+    data: { status: RunStatus.SUCCEEDED, finishedAt: new Date(), releaseCause: 'engine_exited', worktreeBranch: branch ?? session.branch, worktreeDirty: false },
   });
 }
 

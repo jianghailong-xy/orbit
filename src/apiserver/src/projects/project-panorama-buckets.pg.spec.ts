@@ -6,6 +6,7 @@ import {
 } from '@prisma/client';
 import { NotFoundException } from '@nestjs/common';
 import { Client } from 'pg';
+import { isReleasedStatus } from '../common/session-release';
 import { PrismaService } from '../prisma/prisma.service';
 import { SessionsService } from '../sessions/sessions.service';
 import {
@@ -129,6 +130,7 @@ async function session(
       title: `run of ${taskId}`,
       prompt: 'do the thing',
       status,
+      ...(isReleasedStatus(status) ? { finishedAt: new Date(), releaseCause: status === 'CANCELLED' ? 'cancelled' : 'engine_exited' } : {}),
       dispatchOrigin: SessionDispatchOrigin.USER,
       startsTaskWork: true,
     },

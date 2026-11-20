@@ -231,11 +231,11 @@ test('P1 Cursor CLI runner gate on PostgreSQL', { timeout: 300_000 }, async (t) 
       assert.equal(await rawUpdate(id, `inbox_lease_generation = '${generation}'::uuid`, CURRENT_REPLICA), 1);
       // Letting go is never an acquisition: release, cancel and a server terminal revive stay open to all.
       assert.equal(await rawUpdate(id, 'inbox_lease_owner = NULL, inbox_lease_generation = NULL'), 1, 'release stays available');
-      assert.equal(await rawUpdate(id, "status = 'CANCELLED'"), 1);
+      assert.equal(await rawUpdate(id, "status = 'CANCELLED', finished_at = now(), release_cause = 'cancelled'"), 1);
       const handoff = newTerminalResumeHandoffOwner();
-      assert.equal(await rawUpdate(id, `status = 'PENDING', inbox_lease_owner = '${handoff}'::uuid`), 1, 'a terminal revive only reserves a handoff marker');
+      assert.equal(await rawUpdate(id, `status = 'PENDING', finished_at = NULL, release_cause = NULL, inbox_lease_owner = '${handoff}'::uuid`), 1, 'a terminal revive only reserves a handoff marker');
       assert.equal(await rawUpdate(id, "status = 'RUNNING'", BEFORE_0426), 0, 'the handoff marker cannot bypass the claim gate');
-      await rawUpdate(id, "status = 'CANCELLED', inbox_lease_owner = NULL");
+      await rawUpdate(id, "status = 'CANCELLED', finished_at = now(), release_cause = 'cancelled', inbox_lease_owner = NULL");
     }
     // The declaration is transaction-local: the last authorized transaction cannot authorize the next.
     assert.equal(await rawUpdate(await f.session(), "status = 'RUNNING'", BEFORE_0426), 0);

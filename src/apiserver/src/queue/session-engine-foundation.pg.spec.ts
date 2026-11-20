@@ -15,6 +15,7 @@ import path from 'node:path';
 import test from 'node:test';
 
 import { RunStatus, RunnerStatus } from '@prisma/client';
+import { isReleasedStatus } from '../common/session-release';
 import { AgentProvider, SESSION_CODEX_STEER_V1 } from '@orbit/shared';
 import { Client } from 'pg';
 
@@ -134,11 +135,16 @@ test('T2 provider-engine foundation on PostgreSQL', { timeout: 600_000 }, async 
       model?: string | null; taskId?: string; startsTaskWork?: boolean; effort?: string | null; numTurns?: number;
     } = {},
   ) {
+    const status = opts.status ?? RunStatus.PENDING;
     return (await db.session.create({ data: {
       title: 'engine', prompt: '', ownerId: on.ownerId, creatorId: on.ownerId, workspaceId: on.workspaceId,
       assignedRunnerId: on.id, provider, providerBuiltin: opts.providerBuiltin ?? false,
       ...(opts.engine !== undefined ? { engine: opts.engine } : {}),
-      status: opts.status ?? RunStatus.PENDING, usesRuntimeDefaultModel: true,
+      status, usesRuntimeDefaultModel: true,
+      ...(isReleasedStatus(status) ? {
+        finishedAt: new Date(),
+        releaseCause: status === RunStatus.CANCELLED ? 'cancelled' : 'engine_exited',
+      } : {}),
       model: opts.model === undefined ? 'pinned-model' : opts.model,
       runtimeSessionId: opts.runtimeSessionId ?? null,
       // A session that ran a turn was claimed once: resume refuses one that never was.
@@ -376,7 +382,7 @@ test('T2 provider-engine foundation on PostgreSQL', { timeout: 600_000 }, async 
     assert.equal(await raw('UPDATE "session" SET inbox_lease_owner = NULL, inbox_lease_generation = NULL WHERE id = $1', [recorded]), 1, 'release stays open');
     assert.equal(await raw(`UPDATE "session" SET status = 'CANCELLED', finished_at = now(), release_cause = 'cancelled' WHERE id = $1`, [recorded]), 1);
     assert.equal(
-      await raw(`UPDATE "session" SET status = 'PENDING', inbox_lease_owner = $2 WHERE id = $1`, [recorded, newTerminalResumeHandoffOwner()]),
+      await raw(`UPDATE "session" SET status = 'PENDING', finished_at = NULL, release_cause = NULL, inbox_lease_owner = $2 WHERE id = $1`, [recorded, newTerminalResumeHandoffOwner()]),
       1, 'a server terminal revive only reserves its handoff marker',
     );
     // Harness on a DeepSeek key, whose runtime an older replica reads as Claude: it never declares

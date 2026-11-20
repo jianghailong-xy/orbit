@@ -91,6 +91,7 @@ async function fixture(t: { after: (fn: () => Promise<void>) => void }): Promise
       data: {
         id, ownerId, creatorId: ownerId, workspaceId, assignedRunnerId: runnerId, title: `olv ${id}`,
         prompt: 'olv', provider: 'claude', providerBuiltin: true, status, startedAt: new Date(),
+        ...(status === RunStatus.SUCCEEDED ? { finishedAt: new Date(), releaseCause: 'engine_exited' } : {}),
         dispatchOrigin: SessionDispatchOrigin.USER,
       },
     });

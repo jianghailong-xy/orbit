@@ -61,6 +61,7 @@ import { pathToFileURL } from 'node:url';
 
 import { BadRequestException } from '@nestjs/common';
 import { Prisma, PrismaClient, RunStatus, RunnerStatus, SessionDispatchOrigin } from '@prisma/client';
+import { isReleasedStatus } from '../common/session-release';
 import { AgentProvider } from '@orbit/shared';
 import { plainToInstance } from 'class-transformer';
 import { validate } from 'class-validator';
@@ -221,6 +222,7 @@ test('a wakeup loop outlives failed turns and FAILED sessions, and ends only for
   /** A session that has run a turn and is parked between turns, unless `data` says otherwise. */
   async function session(m: Machine, data: Partial<Prisma.SessionUncheckedCreateInput> = {}): Promise<string> {
     const id = randomUUID();
+    const fixtureStatus = data.status ?? RunStatus.AWAITING_INPUT;
     await db.session.create({
       data: {
         id,
@@ -240,6 +242,10 @@ test('a wakeup loop outlives failed turns and FAILED sessions, and ends only for
         numTurns: 1,
         runtimeSessionId: randomUUID(),
         ...data,
+        ...(isReleasedStatus(fixtureStatus) ? {
+          finishedAt: data.finishedAt ?? new Date(),
+          releaseCause: fixtureStatus === RunStatus.CANCELLED ? 'cancelled' : 'engine_exited',
+        } : {}),
       },
     });
     await db.conversationTurn.create({
@@ -362,7 +368,7 @@ test('a wakeup loop outlives failed turns and FAILED sessions, and ends only for
         WHERE "session_id" = $1::uuid AND "kind" = 'message' AND "status" IN ('PENDING', 'IN_FLIGHT')`,
       [sessionId],
     );
-    await sql.query(`UPDATE "session" SET "status" = 'AWAITING_INPUT' WHERE "id" = $1::uuid`, [sessionId]);
+    await sql.query(`UPDATE "session" SET "status" = 'AWAITING_INPUT', "finished_at" = NULL, "release_cause" = NULL WHERE "id" = $1::uuid`, [sessionId]);
   }
   /** A turn failed the session, as turn-complete records it: FAILED, its runner slot reclaimed. */
   async function failSession(sessionId: string, retryAt: Date | null = null): Promise<void> {
@@ -570,7 +576,7 @@ test('a wakeup loop outlives failed turns and FAILED sessions, and ends only for
 
     // The session is healthy again — its owner brought it back — and the loop goes on by itself.
     await sql.query(
-      `UPDATE "session" SET "status" = 'AWAITING_INPUT', "cancel_requested_at" = NULL, "finished_at" = NULL, "error" = NULL WHERE "id" = $1::uuid`,
+      `UPDATE "session" SET "status" = 'AWAITING_INPUT', "cancel_requested_at" = NULL, "finished_at" = NULL, "release_cause" = NULL, "error" = NULL WHERE "id" = $1::uuid`,
       [id],
     );
     const tick = await makeDue(loop.id);
@@ -713,7 +719,7 @@ test('a wakeup loop outlives failed turns and FAILED sessions, and ends only for
 
     // The retry brought the session back: the wakeup is delivered.
     await sql.query(
-      `UPDATE "session" SET "status" = 'AWAITING_INPUT', "retry_at" = NULL, "cancel_requested_at" = NULL WHERE "id" = $1::uuid`,
+      `UPDATE "session" SET "status" = 'AWAITING_INPUT', "retry_at" = NULL, "cancel_requested_at" = NULL, "finished_at" = NULL, "release_cause" = NULL WHERE "id" = $1::uuid`,
       [armed],
     );
     assert.deepEqual(await drainOnly(armed), ['DELIVERED']);
@@ -763,10 +769,10 @@ test('a wakeup loop outlives failed turns and FAILED sessions, and ends only for
   await t.test('SESSION_ENDED: a tick that finds its session over ends the loop, for every way a session ends', async () => {
     const m = await machine('ended');
     const ways: Array<[string, Partial<Prisma.SessionUncheckedUpdateInput>]> = [
-      ['ended by its owner (CANCELLED)', { status: RunStatus.CANCELLED, endReason: 'ended', finishedAt: new Date() }],
+      ['ended by its owner (CANCELLED)', { status: RunStatus.CANCELLED, releaseCause: 'cancelled', endReason: 'ended', finishedAt: new Date() }],
       ['moved to Completed', { completedAt: new Date() }],
       ['moved to Trash', { deletedAt: new Date() }],
-      ['finished (SUCCEEDED)', { status: RunStatus.SUCCEEDED, finishedAt: new Date() }],
+      ['finished (SUCCEEDED)', { status: RunStatus.SUCCEEDED, releaseCause: 'engine_exited', finishedAt: new Date() }],
       ['being ended', { status: RunStatus.RUNNING, cancelRequestedAt: new Date() }],
     ];
     for (const [how, end] of ways) {
@@ -1034,8 +1040,8 @@ test('a wakeup loop outlives failed turns and FAILED sessions, and ends only for
     assert.equal(await signalling.deliver(held.id, armed, m.ownerId), 'HELD');
 
     const ways: Array<[string, Partial<Prisma.SessionUncheckedUpdateInput>]> = [
-      ['ended by its owner (CANCELLED)', { status: RunStatus.CANCELLED, endReason: 'ended', finishedAt: new Date() }],
-      ['FAILED and moved to Completed', { status: RunStatus.FAILED, finishedAt: new Date(), completedAt: new Date() }],
+      ['ended by its owner (CANCELLED)', { status: RunStatus.CANCELLED, releaseCause: 'cancelled', endReason: 'ended', finishedAt: new Date() }],
+      ['FAILED and moved to Completed', { status: RunStatus.FAILED, releaseCause: 'engine_exited', finishedAt: new Date(), completedAt: new Date() }],
     ];
     for (const [how, end] of ways) {
       const id = await session(m);

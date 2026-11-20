@@ -858,7 +858,7 @@ for (const state of ['retryAt', 'PENDING', 'RUNNING'] as const) {
       }
       await stack.db.session.update({ where: { id: w.coordinatorSessionId }, data: {
         status: state === 'retryAt' ? RunStatus.FAILED : RunStatus[state],
-        ...(state === 'retryAt' ? { retryAt: new Date(Date.now() + 60 * MINUTE) } : {}),
+        ...(state === 'retryAt' ? { finishedAt: new Date(), releaseCause: 'engine_exited', retryAt: new Date(Date.now() + 60 * MINUTE) } : {}),
       } });
       const item = await failedTask(stack, w, `queued-${state}`);
       await age(stack.db, item, 24 * 60 * MINUTE);
@@ -998,6 +998,7 @@ for (const state of ['FAILED', 'retryAt', 'completed', 'trash', 'missing'] as co
         });
         else await stack.db.session.update({ where: { id: w.coordinatorSessionId }, data: {
           status: state === 'FAILED' ? RunStatus.FAILED : RunStatus.PENDING,
+          ...(state === 'FAILED' ? { finishedAt: new Date(), releaseCause: 'engine_exited' } : {}),
           endReason: null,
           retryAt: state === 'retryAt' ? retryAt : null,
         } });
@@ -1027,7 +1028,7 @@ for (const state of ['FAILED', 'retryAt', 'completed', 'trash', 'missing'] as co
 
         // Recovery uses the existing turn-end drain, including concurrent triggers.
         await stack.db.session.update({ where: { id: w.coordinatorSessionId }, data: {
-          status: RunStatus.AWAITING_INPUT, endReason: null, retryAt: null,
+          status: RunStatus.AWAITING_INPUT, finishedAt: null, releaseCause: null, endReason: null, retryAt: null,
         } });
         await Promise.all([
           stack.openItems.deliverOwedTo(w.coordinatorSessionId),

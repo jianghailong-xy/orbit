@@ -268,6 +268,7 @@ async function fixture(
         prompt: `协调：${label}`,
         provider: 'claude',
         status: wanted === 'PARKED' ? RunStatus.AWAITING_INPUT : RunStatus.SUCCEEDED,
+        ...(wanted === 'PARKED' ? {} : { finishedAt: new Date(), releaseCause: 'engine_exited' }),
         dispatchOrigin: SessionDispatchOrigin.USER,
         titleManagedByProject: true,
         ...(wanted === 'ENDED' ? { completedAt: new Date() } : {}),
@@ -484,7 +485,7 @@ async function coordinatorReadsIt(db: PrismaClient, f: Fixture) {
   });
   await db.session.update({
     where: { id: f.coordinatorSessionId! },
-    data: { status: RunStatus.AWAITING_INPUT },
+    data: { status: RunStatus.AWAITING_INPUT, finishedAt: null, releaseCause: null },
   });
 }
 

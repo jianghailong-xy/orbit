@@ -150,6 +150,9 @@ test('link previews: five kinds of card, one answer for everything out of reach,
         dispatchOrigin: SessionDispatchOrigin.USER,
         startsTaskWork: true,
         ...extra,
+        ...(status === RunStatus.SUCCEEDED || status === RunStatus.FAILED
+          ? { finishedAt: extra.finishedAt ?? new Date(), releaseCause: 'engine_exited' }
+          : status === RunStatus.CANCELLED ? { finishedAt: extra.finishedAt ?? new Date(), releaseCause: 'cancelled' } : {}),
       },
     });
     return id;

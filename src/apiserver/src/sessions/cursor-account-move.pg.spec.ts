@@ -134,9 +134,9 @@ test('P6b Cursor CLI account and key moves on PostgreSQL', { skip, concurrency: 
     /** Idle after a turn, Cursor's conversation id known. */
     idle: () => ({ status: RunStatus.AWAITING_INPUT, numTurns: 1, runtimeSessionId: randomUUID() }),
     /** Ended after two turns. */
-    ended: () => ({ status: RunStatus.FAILED, numTurns: 2, runtimeSessionId: randomUUID(), finishedAt: new Date() }),
+    ended: () => ({ status: RunStatus.FAILED, releaseCause: 'engine_exited', numTurns: 2, runtimeSessionId: randomUUID(), finishedAt: new Date() }),
     /** Ended in the middle of its first turn: no turn settled, but Cursor opened its conversation. */
-    endedMidTurn: () => ({ status: RunStatus.CANCELLED, numTurns: 0, runtimeSessionId: randomUUID(), finishedAt: new Date() }),
+    endedMidTurn: () => ({ status: RunStatus.CANCELLED, releaseCause: 'cancelled', numTurns: 0, runtimeSessionId: randomUUID(), finishedAt: new Date() }),
     /** Its first turn running, before Cursor reported the conversation it opened. */
     firstTurnRunning: () => ({ status: RunStatus.RUNNING, numTurns: 0, runtimeSessionId: null }),
   } satisfies Record<string, Facts>;
@@ -146,7 +146,7 @@ test('P6b Cursor CLI account and key moves on PostgreSQL', { skip, concurrency: 
     /** Live, and nothing said to Cursor yet. */
     live: () => ({ status: RunStatus.AWAITING_INPUT, numTurns: 0, runtimeSessionId: null }),
     /** Ended before Cursor opened a conversation — its start refused, say, by a key Cursor rejects. */
-    ended: () => ({ status: RunStatus.FAILED, numTurns: 0, runtimeSessionId: null, finishedAt: new Date() }),
+    ended: () => ({ status: RunStatus.FAILED, releaseCause: 'engine_exited', numTurns: 0, runtimeSessionId: null, finishedAt: new Date() }),
   } satisfies Record<string, Facts>;
 
   /** A Cursor CLI session on the machine, in the state `facts` makes: on the runner's sign-in (Default)

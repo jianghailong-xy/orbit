@@ -211,8 +211,10 @@ async function session(h: Harness, ownerId: string, shape: SessionShape = {}): P
   // `archived_at` is the deprecated mirror of `completed_at`; a fixture keeps the two in step.
   await h.sql.query(
     `INSERT INTO "session"("id","title","prompt","owner_id","creator_id","status","end_reason",
-                           "completed_at","archived_at","deleted_at","updated_at")
-     VALUES ($1,'watched session','p',$2,$2,$3,$4,$5,$5,$6,now())`,
+                           "completed_at","archived_at","deleted_at","updated_at", "finished_at", "release_cause")
+     VALUES ($1,'watched session','p',$2,$2,$3,$4,$5,$5,$6,now(),
+             CASE WHEN $3::run_status IN ('SUCCEEDED', 'FAILED', 'CANCELLED') THEN now() END,
+             CASE WHEN $3::run_status = 'CANCELLED' THEN 'cancelled' WHEN $3::run_status IN ('SUCCEEDED', 'FAILED') THEN 'engine_exited' END)`,
     [id, ownerId, shape.status ?? 'RUNNING', shape.endReason ?? null, shape.completedAt ?? null, shape.deletedAt ?? null],
   );
   for (let n = 0; n < (shape.pendingApprovals ?? 0); n += 1) {

@@ -362,7 +362,7 @@ test('a Kimi session that has said something moves to another Kimi account only 
     // The re-send revives the session (auto-retry, resume — stood in for by the state they leave), and
     // its claim hands the runner Work's home, which the runner carries the conversation into.
     await sql.query(
-      `UPDATE "session" SET status = 'PENDING', cancel_requested_at = NULL, finished_at = NULL, retry_at = NULL
+      `UPDATE "session" SET status = 'PENDING', cancel_requested_at = NULL, finished_at = NULL, release_cause = NULL, retry_at = NULL
         WHERE id = $1::uuid`,
       [f.sessionId],
     );

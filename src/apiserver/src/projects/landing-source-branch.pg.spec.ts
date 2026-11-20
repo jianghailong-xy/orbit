@@ -76,7 +76,7 @@ const sha = (nibble: string) => nibble.repeat(40);
 interface Finish {
   changedFiles?: unknown[];
   baseSha?: string;
-  status?: RunStatus;
+  status?: typeof RunStatus.SUCCEEDED | typeof RunStatus.FAILED;
 }
 
 /** The diff summary a session that delivered something reports. */
@@ -224,6 +224,7 @@ async function harness(t: { after(fn: () => Promise<void> | void): void }) {
         changedFiles: (finish.changedFiles ?? []) as never,
         createdAt: new Date(Date.now() - minutesAgo * 60_000),
         finishedAt: new Date(Date.now() - minutesAgo * 60_000),
+        releaseCause: 'engine_exited',
       },
     });
     return id;

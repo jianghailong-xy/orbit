@@ -183,7 +183,9 @@ async function fixture(
       startsTaskWork: true,
       numTurns: 1,
       engineTurnActive: false,
-      ...(parked ? {} : { finishedAt: new Date() }),
+      ...(sessionStatus === RunStatus.SUCCEEDED || sessionStatus === RunStatus.FAILED
+        ? { finishedAt: new Date(), releaseCause: 'engine_exited' }
+        : sessionStatus === RunStatus.CANCELLED ? { finishedAt: new Date(), releaseCause: 'cancelled' } : {}),
     },
   });
   if (parked) {

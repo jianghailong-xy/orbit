@@ -188,6 +188,7 @@ async function repairSession(
 /** An ended repair session that can be resumed: its run finished, the runner that holds it online. */
 const ended = (extra: Partial<Prisma.SessionUncheckedCreateInput> = {}): Partial<Prisma.SessionUncheckedCreateInput> => ({
   status: RunStatus.SUCCEEDED, finishedAt: new Date(Date.now() - 20 * 60_000), ...extra,
+  releaseCause: extra.status === RunStatus.CANCELLED ? 'cancelled' : 'engine_exited',
 });
 
 /** Every repair session of `parentId`, oldest first. */

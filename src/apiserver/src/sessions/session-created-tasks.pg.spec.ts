@@ -29,6 +29,7 @@ import {
   SessionDispatchOrigin,
   TaskStatus,
 } from '@prisma/client';
+import { isReleasedStatus } from '../common/session-release';
 import { SESSION_CREATED_TASKS_MAX_LIMIT, toUuid, uuidToBase62 } from '@orbit/shared';
 import { Client } from 'pg';
 
@@ -197,6 +198,10 @@ test('the tasks a session created: its row, its counts, its order, and the task 
       data: {
         id: randomUUID(), ownerId: me.ownerId, creatorId: me.ownerId, taskId,
         title: `run of ${taskId}`, prompt: 'do the thing', status,
+        ...(isReleasedStatus(status) ? {
+          finishedAt: new Date(),
+          releaseCause: status === RunStatus.CANCELLED ? 'cancelled' : 'engine_exited',
+        } : {}),
         dispatchOrigin: SessionDispatchOrigin.USER, startsTaskWork: true,
       },
     });
@@ -618,6 +623,10 @@ test('the row writes no temp file, however many tasks the session created', {
       data: {
         id: randomUUID(), ownerId, creatorId: ownerId, taskId,
         title: `run of ${taskId}`, prompt: 'do the thing', status,
+        ...(isReleasedStatus(status) ? {
+          finishedAt: new Date(),
+          releaseCause: status === RunStatus.CANCELLED ? 'cancelled' : 'engine_exited',
+        } : {}),
         dispatchOrigin: SessionDispatchOrigin.USER, startsTaskWork: true,
       },
     });

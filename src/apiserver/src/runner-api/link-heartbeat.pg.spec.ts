@@ -157,6 +157,9 @@ test('a link heartbeat answered from runner_presence', { skip: !URL_, concurrenc
         id, ownerId, creatorId: ownerId, title: 'a session', prompt: 'work', provider: 'claude', status, workspaceId,
         dispatchOrigin: SessionDispatchOrigin.USER, startsTaskWork: false, assignedRunnerId: runnerId, numTurns: 1,
         inboxLeaseOwner: process_, branch: `orbit/${id.slice(0, 8)}`, ...extra,
+        ...(status === RunStatus.SUCCEEDED || status === RunStatus.FAILED
+          ? { finishedAt: new Date(), releaseCause: 'engine_exited' }
+          : status === RunStatus.CANCELLED ? { finishedAt: new Date(), releaseCause: 'cancelled' } : {}),
       },
     });
     return id;
@@ -621,8 +624,8 @@ test('a link heartbeat answered from runner_presence', { skip: !URL_, concurrenc
     // Another process takes a session over, and another writer ends one: no writer marks anything, and the next beat
     // reconciles anyway, because every beat reads the leases of what it supervises.
     await sql.query(`UPDATE "session" SET inbox_lease_owner = gen_random_uuid() WHERE id = $1`, [takenOver]);
-    await sql.query(`UPDATE "session" SET status = 'SUCCEEDED', finished_at = now(), release_cause = 'engine_exited' - interval '10 minutes' WHERE id = $1`, [ended]);
-    await sql.query(`UPDATE "session" SET status = 'CANCELLED', finished_at = now(), release_cause = 'cancelled' - interval '10 minutes' WHERE id = $1`, [cancelled]);
+    await sql.query(`UPDATE "session" SET status = 'SUCCEEDED', finished_at = now() - interval '10 minutes', release_cause = 'engine_exited' WHERE id = $1`, [ended]);
+    await sql.query(`UPDATE "session" SET status = 'CANCELLED', finished_at = now() - interval '10 minutes', release_cause = 'cancelled' WHERE id = $1`, [cancelled]);
     const next = await beat();
     assert.ok(isFull(next.answer));
     assert.deepEqual([...(next.answer.leaseLostSessionIds ?? [])].sort(), [cancelled, takenOver, ended].sort());

@@ -55,6 +55,7 @@ import type { ManagedRunner, PrismaClient } from '@prisma/client';
 import { json, urlencoded } from 'express';
 import { Client } from 'pg';
 
+import { isReleasedStatus } from '../common/session-release';
 import { DisabledAccounts } from '../auth/disabled-accounts';
 import { call, type Apiserver } from '../auth/pat-test-apiserver';
 import { generateToken, sha256 } from '../common/crypto.util';
@@ -271,7 +272,11 @@ test('managed runners wake on demand and sleep through the real application', {
     const columns: Record<string, unknown> = {
       id, owner_id: m.ownerId, creator_id: m.ownerId, workspace_id: workspace.id, assigned_runner_id: m.runnerId,
       title: 'earlier work', prompt: 'the opening prompt', provider: 'claude', provider_builtin: true, status, num_turns: 1,
-      runtime_session_id: randomUUID(), ...extra,
+      runtime_session_id: randomUUID(),
+      ...(isReleasedStatus(status) ? {
+        finished_at: new Date(), release_cause: status === 'CANCELLED' ? 'cancelled' : 'engine_exited',
+      } : {}),
+      ...extra,
     };
     const names = Object.keys(columns);
     await sql.query(
@@ -342,7 +347,7 @@ test('managed runners wake on demand and sleep through the real application', {
     let awake = await upAndReady(o.userId, 2);
     await assertSameIdentity(o.mapping, awake);
     assert.equal(toUuid((await claim(awake.runnerId)).sessionId), parked, 'the wakeup\'s turn is served');
-    await sql.query(`UPDATE "session" SET status = 'AWAITING_INPUT' WHERE id = $1`, [parked]); // its turn ran
+    await sql.query(`UPDATE "session" SET status = 'AWAITING_INPUT', finished_at = NULL, release_cause = NULL WHERE id = $1`, [parked]); // its turn ran
 
     asleep = await putToSleep(o);
     const created = await call(server, 'POST', '/api/tasks', o.token, { title: 'nightly', description: 'run at its time', assigneeId: o.workspaceId, completionCriterion: 'EXECUTABLE', acceptanceCommand: 'true', acceptanceExpectedExitCode: 0 });

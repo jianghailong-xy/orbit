@@ -165,6 +165,9 @@ suite('a shared model provider runs an admin\'s sessions only, on real PostgreSQ
         title: 'shared provider',
         prompt: 'hello',
         status,
+        ...(['SUCCEEDED', 'FAILED', 'CANCELLED'].includes(status)
+          ? { finishedAt: new Date(), releaseCause: status === 'CANCELLED' ? 'cancelled' : 'engine_exited' }
+          : {}),
         ownerId,
         creatorId: ownerId,
         workspaceId: at.workspaceId,

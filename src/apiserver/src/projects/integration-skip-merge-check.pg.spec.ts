@@ -350,7 +350,7 @@ async function doneTask(stack: Stack, w: World, label: string): Promise<Attempt>
   assert.equal(await taskStatus(stack.db, declared.id), TaskStatus.DONE, 'the acceptance command agreed');
   await stack.db.session.update({
     where: { id: sessionId },
-    data: { finishedAt: new Date(), worktreeBranch: branch, worktreeDirty: false },
+    data: { status: RunStatus.SUCCEEDED, releaseCause: 'engine_exited', finishedAt: new Date(), worktreeBranch: branch, worktreeDirty: false },
   });
   return { taskId: declared.id, title, sessionId, turnId, branch };
 }

@@ -180,6 +180,9 @@ test('Set as default for Claude Code accounts: the swap relay and the records th
         runtimeSessionId: randomUUID(),
         numTurns: 2,
         ...extra,
+        ...(status === RunStatus.SUCCEEDED || status === RunStatus.FAILED
+          ? { finishedAt: extra.finishedAt ?? new Date(), releaseCause: 'engine_exited' }
+          : status === RunStatus.CANCELLED ? { finishedAt: extra.finishedAt ?? new Date(), releaseCause: 'cancelled' } : {}),
       },
     });
     return id;

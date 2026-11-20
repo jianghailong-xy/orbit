@@ -45,6 +45,7 @@ import { PrismaClient, RunStatus, RunnerStatus, type ModelProvider } from '@pris
 import { RunEventType, uuidToBase62, type ClaimedSession } from '@orbit/shared';
 import { Client } from 'pg';
 
+import { isReleasedStatus } from '../common/session-release';
 import { JwtAuthGuard } from '../auth/jwt-auth.guard';
 import { PublicIdExceptionFilter } from '../common/public-id.filter';
 import { PublicIdInterceptor } from '../common/public-id.interceptor';
@@ -215,6 +216,7 @@ async function sessionOn(
       title: 'pool closure',
       prompt: 'hello',
       status,
+      ...(isReleasedStatus(status) ? { finishedAt: new Date(), releaseCause: status === 'CANCELLED' ? 'cancelled' : 'engine_exited' } : {}),
       ownerId,
       creatorId: ownerId,
       workspaceId: at.workspaceId,
@@ -395,7 +397,7 @@ suite("an account pool's admission, closed at every door, on real PostgreSQL", {
   }
   /** The session's next message queued, which is what has the runner claim it again. */
   const nextTurn = (sessionId: string) =>
-    db.session.update({ where: { id: sessionId }, data: { status: RunStatus.PENDING } });
+    db.session.update({ where: { id: sessionId }, data: { status: RunStatus.PENDING, finishedAt: null, releaseCause: null } });
   /** The runner reporting its engine up: the first event of the process the claim just spawned. */
   async function engineStarted(runnerId: string, sessionId: string, seq: number) {
     const { runtimeSessionId } = await db.session.findUniqueOrThrow({

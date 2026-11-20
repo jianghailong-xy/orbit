@@ -53,6 +53,7 @@ import { type INestApplication, Module, ValidationPipe } from '@nestjs/common';
 import { HttpAdapterHost, NestFactory } from '@nestjs/core';
 import { json } from 'express';
 import { type PrismaClient, RunStatus } from '@prisma/client';
+import { isReleasedStatus } from '../common/session-release';
 import {
   MANAGED_RUNNER_GENERATION_HEADER,
   MANAGED_RUNNER_INSTANCE_CAPABILITY,
@@ -354,6 +355,7 @@ test('the link Welcome: each session\'s durable seq and lease, and the release t
     const owner = opts.stranger ? strangerId : ownerId;
     const process = opts.process === undefined ? leaseOwner : opts.process;
     const generation = randomUUID();
+    const status = opts.status ?? RunStatus.RUNNING;
     await prisma.session.create({
       data: {
         id: sessionId,
@@ -365,7 +367,11 @@ test('the link Welcome: each session\'s durable seq and lease, and the release t
         prompt: title,
         provider: 'claude',
         providerBuiltin: true,
-        status: opts.status ?? RunStatus.RUNNING,
+        status,
+        ...(isReleasedStatus(status) ? {
+          finishedAt: new Date(),
+          releaseCause: status === RunStatus.CANCELLED ? 'cancelled' : 'engine_exited',
+        } : {}),
         dispatchOrigin: 'USER',
         startsTaskWork: false,
         startedAt: new Date(),

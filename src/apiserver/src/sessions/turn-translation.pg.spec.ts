@@ -136,6 +136,9 @@ async function liveSession(status: RunStatus): Promise<string> {
       id: sessionId, ownerId, creatorId: ownerId, workspaceId, assignedRunnerId: runnerId,
       title: 'translation', prompt: 'opening', provider: 'claude', providerBuiltin: true, engine: 'claude',
       status, numTurns: 1, dispatchOrigin: 'USER', startsTaskWork: false,
+      ...(['SUCCEEDED', 'FAILED', 'CANCELLED'].includes(status)
+        ? { finishedAt: new Date(), releaseCause: status === 'CANCELLED' ? 'cancelled' : 'engine_exited' }
+        : {}),
     },
   });
   await prisma.conversationTurn.create({

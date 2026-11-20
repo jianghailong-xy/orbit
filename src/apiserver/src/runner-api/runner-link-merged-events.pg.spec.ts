@@ -67,6 +67,7 @@ import { setTimeout as sleep } from 'node:timers/promises';
 import { type INestApplication, Logger, Module, ValidationPipe } from '@nestjs/common';
 import { HttpAdapterHost, NestFactory } from '@nestjs/core';
 import { type PrismaClient, RunStatus } from '@prisma/client';
+import { isReleasedStatus } from '../common/session-release';
 import { RunEventType, type NormalizedRunEvent } from '@orbit/shared';
 import { Client } from 'pg';
 
@@ -338,6 +339,7 @@ test('the link gateway\'s merged event call: many sessions in one transaction, e
     const turnId = randomUUID();
     const generation = randomUUID();
     const process = options.process ?? of.leaseOwner;
+    const status = options.status ?? RunStatus.RUNNING;
     await prisma.session.create({
       data: {
         id: sessionId,
@@ -349,7 +351,11 @@ test('the link gateway\'s merged event call: many sessions in one transaction, e
         prompt: title,
         provider: 'claude',
         providerBuiltin: true,
-        status: options.status ?? RunStatus.RUNNING,
+        status,
+        ...(isReleasedStatus(status) ? {
+          finishedAt: new Date(),
+          releaseCause: status === RunStatus.CANCELLED ? 'cancelled' : 'engine_exited',
+        } : {}),
         dispatchOrigin: 'USER',
         startsTaskWork: false,
         startedAt: new Date(),

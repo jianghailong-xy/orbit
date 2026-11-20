@@ -43,14 +43,12 @@ const URL = process.env.COORDINATOR_PG_URL;
 const SHA = (c: string) => c.repeat(40);
 
 /**
- * The deploy-time repair for the shells the old refusal path left, byte for byte the file
- * `prisma migrate deploy` applies. Read rather than re-typed: the assertions below are about what
- * that migration does, and a copy of its SQL in this file would be a second thing to keep in step.
+ * The historical repair runs here against the current schema, which also requires a release cause.
  */
 const REPAIR_SQL = readFileSync(
   path.resolve(__dirname, '../../prisma/migrations/0394_close_refused_running_shells/migration.sql'),
   'utf8',
-);
+).replace(`SET "status" = 'FAILED',`, `SET "status" = 'FAILED', "release_cause" = 'engine_exited',`);
 
 interface World {
   ownerId: string;

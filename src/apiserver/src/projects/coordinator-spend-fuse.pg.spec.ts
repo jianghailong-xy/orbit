@@ -287,6 +287,9 @@ async function openSession(
       prompt: `session ${id}`,
       provider: 'claude',
       status: options.status ?? RunStatus.AWAITING_INPUT,
+      ...(options.status === RunStatus.SUCCEEDED || options.status === RunStatus.FAILED
+        ? { finishedAt: new Date(), releaseCause: 'engine_exited' }
+        : options.status === RunStatus.CANCELLED ? { finishedAt: new Date(), releaseCause: 'cancelled' } : {}),
       dispatchOrigin: SessionDispatchOrigin.USER,
       startsTaskWork: options.startsTaskWork ?? false,
     },

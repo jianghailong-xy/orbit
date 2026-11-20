@@ -6,6 +6,7 @@ import {
   SessionDispatchOrigin, TaskStatus,
 } from '@prisma/client';
 import { Client } from 'pg';
+import { isReleasedStatus } from '../common/session-release';
 import { PrismaService } from '../prisma/prisma.service';
 import {
   assertCoordinatorPgUrlIsIsolated,
@@ -380,6 +381,7 @@ test('a dispatched task is running in the index rather than ready, and the page 
       await db.session.create({
         data: {
           ownerId, creatorId: ownerId, taskId, title: `run of ${taskId}`, prompt: 'do it', status,
+          ...(isReleasedStatus(status) ? { finishedAt: new Date(), releaseCause: status === 'CANCELLED' ? 'cancelled' : 'engine_exited' } : {}),
           dispatchOrigin: SessionDispatchOrigin.USER, startsTaskWork: true,
         },
       });
@@ -724,11 +726,16 @@ test('the rail reaches the index’s running count from the rows that can be run
       extra: Partial<Prisma.SessionUncheckedCreateInput> = {},
     ): Promise<string> => {
       const id = randomUUID();
+      const sessionStatus = extra.status ?? status;
       await db.session.create({
         data: {
           id, ownerId, creatorId: ownerId, taskId, title: `run of ${taskId}`, prompt: 'do it',
-          status, dispatchOrigin: SessionDispatchOrigin.USER, startsTaskWork: true,
+          status: sessionStatus, dispatchOrigin: SessionDispatchOrigin.USER, startsTaskWork: true,
           ...extra,
+          ...(isReleasedStatus(sessionStatus) ? {
+            finishedAt: extra.finishedAt ?? new Date(),
+            releaseCause: sessionStatus === RunStatus.CANCELLED ? 'cancelled' : 'engine_exited',
+          } : {}),
         },
       });
       return id;

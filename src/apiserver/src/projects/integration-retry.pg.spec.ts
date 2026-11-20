@@ -361,8 +361,8 @@ async function doneTask(
   await stack.db.session.update({
     where: { id: sessionId },
     data: worktree
-      ? { finishedAt: new Date(), worktreeBranch: branch, worktreeDirty: false }
-      : { finishedAt: new Date() },
+      ? { status: RunStatus.SUCCEEDED, releaseCause: 'engine_exited', finishedAt: new Date(), worktreeBranch: branch, worktreeDirty: false }
+      : { status: RunStatus.SUCCEEDED, finishedAt: new Date(), releaseCause: 'engine_exited' },
   });
   return { taskId: declared.id, title, sessionId, turnId, branch };
 }

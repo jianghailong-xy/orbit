@@ -279,7 +279,7 @@ async function workSession(stack: Stack, w: World, taskId: string, s: WorkSessio
       startedAt: minutesAgo(30), createdAt: minutesAgo(30), runtimeSessionId: randomUUID(),
       ...(s.worktreeBranch ? { worktreeBranch: s.worktreeBranch } : {}),
       ...(s.changedFiles ? { changedFiles: s.changedFiles as Prisma.InputJsonValue } : {}),
-      ...(finished ? { finishedAt: minutesAgo(s.finishedMinutesAgo!) } : {}),
+      ...(finished ? { finishedAt: minutesAgo(s.finishedMinutesAgo!), releaseCause: 'engine_exited' } : {}),
     },
   });
   return id;

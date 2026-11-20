@@ -1008,7 +1008,7 @@ test('(6) the backstop writes the ending the task’s own edge would have writte
       });
       await stack.db.session.update({
         where: { id: resumedFailure.id },
-        data: { status: RunStatus.PENDING, finishedAt: null },
+        data: { status: RunStatus.PENDING, finishedAt: null, releaseCause: null },
       });
       await stack.db.conversationTurn.create({
         data: {

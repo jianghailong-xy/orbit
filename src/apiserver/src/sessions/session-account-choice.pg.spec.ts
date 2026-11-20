@@ -59,6 +59,7 @@ import { randomUUID } from 'node:crypto';
 import { test } from 'node:test';
 
 import { Prisma, PrismaClient, RunStatus, RunnerStatus, SessionDispatchOrigin } from '@prisma/client';
+import { isReleasedStatus } from '../common/session-release';
 import {
   AgentProvider,
   RunEventType,
@@ -192,6 +193,7 @@ test('which of its runner’s accounts a session runs on — picked by hand, or 
     extra: Partial<Prisma.SessionUncheckedCreateInput> = {},
   ) {
     const id = randomUUID();
+    const fixtureStatus = extra.status ?? status;
     await db.session.create({
       data: {
         id,
@@ -210,6 +212,10 @@ test('which of its runner’s accounts a session runs on — picked by hand, or 
         runtimeSessionId: randomUUID(),
         numTurns: 2,
         ...extra,
+        ...(isReleasedStatus(fixtureStatus) ? {
+          finishedAt: extra.finishedAt ?? new Date(),
+          releaseCause: fixtureStatus === RunStatus.CANCELLED ? 'cancelled' : 'engine_exited',
+        } : {}),
       },
     });
     return id;
@@ -836,7 +842,7 @@ test('which of its runner’s accounts a session runs on — picked by hand, or 
     }
     // A message somebody sends to one of them is not held back: an account with room beats the limit it
     // would meet here. (The rest let go of the runner's slots first, or nothing is claimed at all.)
-    await db.session.updateMany({ where: { id: { in: herd.slice(0, 7) } }, data: { status: RunStatus.AWAITING_INPUT } });
+    await db.session.updateMany({ where: { id: { in: herd.slice(0, 7) } }, data: { status: RunStatus.AWAITING_INPUT, finishedAt: null, releaseCause: null } });
     await messageMovesIt(m, herd[7], turns[7]);
   });
 

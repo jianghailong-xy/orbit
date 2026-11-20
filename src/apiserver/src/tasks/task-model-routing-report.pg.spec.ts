@@ -59,11 +59,14 @@ test('model-routing report aggregates actual runs, first-run task cohorts and on
     } });
   }
   async function run(subject: Task, seconds: number, duration: number | null, data: Partial<Prisma.SessionUncheckedCreateInput> = {}) {
+    const status = data.status ?? 'SUCCEEDED';
+    const terminal = ['SUCCEEDED', 'FAILED', 'CANCELLED'].includes(status);
     return db.session.create({ data: {
       ownerId: subject.ownerId, creatorId: subject.ownerId, title: 'report run', prompt: 'report', taskId: subject.id,
       workspaceId: subject.ownerId === owner ? agent.id : otherAgent.id, startsTaskWork: true,
-      provider: 'claude', model: OPUS, effort: 'low', status: 'SUCCEEDED', releaseCause: 'engine_exited', createdAt: at(seconds),
-      finishedAt: duration === null ? null : at(seconds + duration), ...data,
+      provider: 'claude', model: OPUS, effort: 'low', status, createdAt: at(seconds), ...data,
+      finishedAt: terminal ? data.finishedAt ?? at(seconds + (duration ?? 0)) : null,
+      releaseCause: terminal ? (status === 'CANCELLED' ? 'cancelled' : 'engine_exited') : null,
     } });
   }
   async function route(subject: Task, sessionId: string | null, seconds: number, data: Partial<Prisma.TaskRouteDecisionUncheckedCreateInput> = {}) {

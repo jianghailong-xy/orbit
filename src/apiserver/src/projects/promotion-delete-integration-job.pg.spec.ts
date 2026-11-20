@@ -271,6 +271,7 @@ async function doneCodeTask(stack: Stack, w: World): Promise<{ taskId: string; s
   });
   const sessionId = randomUUID();
   const turnId = randomUUID();
+  const finishedAt = new Date(Date.now() - 60_000);
   await db.session.create({
     data: {
       id: sessionId,
@@ -286,7 +287,6 @@ async function doneCodeTask(stack: Stack, w: World): Promise<{ taskId: string; s
       dispatchOrigin: SessionDispatchOrigin.USER,
       startsTaskWork: true,
       startedAt: new Date(),
-      finishedAt: new Date(Date.now() - 60_000),
       branch: `orbit/${w.label}`,
       worktreeBranch: `orbit/${w.label}`,
       worktreeDirty: false,
@@ -330,6 +330,10 @@ async function doneCodeTask(stack: Stack, w: World): Promise<{ taskId: string; s
   });
   const task = await db.task.findUniqueOrThrow({ where: { id: declared.id }, select: { status: true } });
   assert.equal(task.status, TaskStatus.DONE, 'the acceptance command agreed');
+  await db.session.update({
+    where: { id: sessionId },
+    data: { status: RunStatus.SUCCEEDED, finishedAt, releaseCause: 'engine_exited' },
+  });
   return { taskId: declared.id, sessionId };
 }
 

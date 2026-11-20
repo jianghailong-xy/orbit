@@ -14,6 +14,7 @@ import { Client } from 'pg';
 
 import { uuidToBase62 } from '@orbit/shared';
 
+import { isReleasedStatus } from '../common/session-release';
 import { prismaClientFor } from '../prisma/prisma-client';
 import { PrismaService } from '../prisma/prisma.service';
 import type { PushService } from '../push/push.service';
@@ -137,6 +138,7 @@ async function conversation(
   options: { status?: RunStatus; ended?: boolean; taskId?: string; at?: Date } = {},
 ): Promise<string> {
   const id = randomUUID();
+  const status = options.status ?? RunStatus.AWAITING_INPUT;
   await db.session.create({
     data: {
       id,
@@ -149,7 +151,8 @@ async function conversation(
       title,
       prompt: title,
       provider: 'claude',
-      status: options.status ?? RunStatus.AWAITING_INPUT,
+      status,
+      ...(isReleasedStatus(status) ? { finishedAt: new Date(), releaseCause: status === 'CANCELLED' ? 'cancelled' : 'engine_exited' } : {}),
       dispatchOrigin: SessionDispatchOrigin.USER,
       ...(options.at ? { createdAt: options.at, lastTurnAt: options.at } : { lastTurnAt: new Date() }),
       ...(options.ended ? { completedAt: new Date() } : {}),

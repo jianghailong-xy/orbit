@@ -181,10 +181,10 @@ async function runNow(services: Services, target: Fixture, taskId: string): Prom
 async function end(
   db: PrismaClient,
   sessionId: string,
-  status: RunStatus,
+  status: typeof RunStatus.SUCCEEDED | typeof RunStatus.FAILED,
   data: { error?: string | null; model?: string } = {},
 ) {
-  await db.session.update({ where: { id: sessionId }, data: { status, finishedAt: new Date(), ...data } });
+  await db.session.update({ where: { id: sessionId }, data: { status, finishedAt: new Date(), releaseCause: 'engine_exited', ...data } });
 }
 
 const decisionOf = (db: PrismaClient, sessionId: string) =>

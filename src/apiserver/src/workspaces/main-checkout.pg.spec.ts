@@ -400,7 +400,7 @@ test('a runner\'s ACTION_FAILED is accepted and written as its line; a control-p
 
 test('a live session on a capable runner gets the line as a `notice` turn for the runner to number', { skip }, async (t) => {
   const w = await world(t);
-  await w.prisma.session.update({ where: { id: w.sessionId }, data: { status: RunStatus.AWAITING_INPUT, assignedRunnerId: w.runnerId } });
+  await w.prisma.session.update({ where: { id: w.sessionId }, data: { status: RunStatus.AWAITING_INPUT, finishedAt: null, releaseCause: null, assignedRunnerId: w.runnerId } });
   await w.prisma.runEvent.create({ data: { sessionId: w.sessionId, seq: 1, type: 'assistant', payload: { text: 'hi' } } });
   const { requestId } = await commit(w);
   const [handed] = await handOut(w);

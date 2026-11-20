@@ -229,6 +229,7 @@ async function doneCodeTask(stack: Stack, w: World, label: string): Promise<stri
   });
   const sessionId = randomUUID();
   const turnId = randomUUID();
+  const finishedAt = new Date(Date.now() - 60_000);
   await db.session.create({
     data: {
       id: sessionId,
@@ -244,7 +245,6 @@ async function doneCodeTask(stack: Stack, w: World, label: string): Promise<stri
       dispatchOrigin: SessionDispatchOrigin.USER,
       startsTaskWork: true,
       startedAt: new Date(),
-      finishedAt: new Date(Date.now() - 60_000),
       branch: `orbit/${label}-${randomUUID().slice(0, 6)}`,
       isolationStatus: 'worktree',
       baseSha: 'b'.repeat(40),
@@ -289,6 +289,10 @@ async function doneCodeTask(stack: Stack, w: World, label: string): Promise<stri
   });
   const task = await db.task.findUniqueOrThrow({ where: { id: declared.id }, select: { status: true } });
   assert.equal(task.status, TaskStatus.DONE);
+  await db.session.update({
+    where: { id: sessionId },
+    data: { status: RunStatus.SUCCEEDED, finishedAt, releaseCause: 'engine_exited' },
+  });
   return declared.id;
 }
 

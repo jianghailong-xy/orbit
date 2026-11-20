@@ -221,10 +221,12 @@ async function addCheck(
     await db.$executeRawUnsafe(
       `INSERT INTO "session" ("id","owner_id","workspace_id","task_id","title","prompt","creator_id","provider","status",
          "end_reason","completed_at","archived_at","deleted_at","starts_task_work",
-         "dispatch_origin","updated_at")
+         "dispatch_origin","updated_at", "finished_at", "release_cause")
        VALUES ($1,$2,$3,$4,'check run','run the check',$2,'claude',$5::"run_status",$6,
          CASE WHEN $7 THEN now() END, CASE WHEN $8 THEN now() END,
-         CASE WHEN $9 THEN now() END, true, 'USER'::"session_dispatch_origin", now())`,
+         CASE WHEN $9 THEN now() END, true, 'USER'::"session_dispatch_origin", now(),
+             CASE WHEN $5::run_status IN ('SUCCEEDED', 'FAILED', 'CANCELLED') THEN now() END,
+             CASE WHEN $5::run_status = 'CANCELLED' THEN 'cancelled' WHEN $5::run_status IN ('SUCCEEDED', 'FAILED') THEN 'engine_exited' END)`,
       randomUUID(), OWNER, agentId, checkId, run.status ?? 'SUCCEEDED',
       run.endReason === undefined ? 'task_done' : run.endReason,
       run.completedAt ?? true, run.archivedAt ?? false, run.deleted ?? false,
@@ -761,9 +763,9 @@ test('§13.3 DEP on real PostgreSQL', { skip, concurrency: 1 }, async (t) => {
       await db.$executeRawUnsafe(
         `INSERT INTO "session" ("id","owner_id","workspace_id","task_id","title","prompt",
            "creator_id","provider","status","end_reason","completed_at","starts_task_work",
-           "dispatch_origin","updated_at")
+           "dispatch_origin","updated_at","finished_at","release_cause")
          VALUES ($1,$2,$3,$4,'forged run','x',$2,'claude','SUCCEEDED'::"run_status",'task_done',
-           now(),true,'USER'::"session_dispatch_origin",now())`,
+           now(),true,'USER'::"session_dispatch_origin",now(),now(),'engine_exited')`,
         randomUUID(), scope.ownerId, scope.agentId, id,
       );
     }

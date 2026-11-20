@@ -322,7 +322,7 @@ async function attempt(
   w: World,
   label: string,
   options: {
-    session?: RunStatus;
+    session?: typeof RunStatus.RUNNING | typeof RunStatus.AWAITING_INPUT;
     taskStatus?: TaskStatus;
     acceptance?: { command: string; expectedExitCode: number };
     supersedesTaskId?: string;
@@ -654,12 +654,13 @@ async function queuedLanding(
   // The session that produced this branch has stopped moving: the runner commits a worktree when it
   // FINISHES the session (SR13), and a landing is not handed over before that (J-T1a,
   // `task-landing-races-final-commit.pg.spec.ts` — a landing judged earlier answers ALREADY_LANDED
-  // about a branch that is about to grow). The status is left as it was: what the queue reads is
-  // the finish and where HEAD ended, and this spec's cases are about the items a landing opens.
+  // about a branch that is about to grow). The queue reads the finish and where HEAD ended.
   await stack.db.session.update({
     where: { id: a.sessionId },
     data: {
+      status: RunStatus.SUCCEEDED,
       finishedAt: new Date(),
+      releaseCause: 'engine_exited',
       worktreeBranch: `orbit/${label}`,
       worktreeDirty: false,
     },
@@ -1392,7 +1393,9 @@ test('a claim with nowhere to run it opens an item the coordinator is told about
     await stack.db.session.update({
       where: { id: a.sessionId },
       data: {
+        status: RunStatus.SUCCEEDED,
         finishedAt: new Date(),
+        releaseCause: 'engine_exited',
         worktreeBranch: 'orbit/unworkable',
         worktreeDirty: false,
       },
