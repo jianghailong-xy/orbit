@@ -18,6 +18,7 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.test.*
 import androidx.compose.ui.test.junit4.createAndroidComposeRule
+import androidx.compose.ui.semantics.getOrNull
 import androidx.compose.ui.unit.dp
 import io.orbitd.android.TestOrbitApplication
 import io.orbitd.android.core.realtime.RunEvent
@@ -120,16 +121,23 @@ class SubagentCardEndTest {
 
     private var queuedWakes by mutableStateOf<Map<String, (() -> Unit)?>>(emptyMap())
 
+    private var shown by mutableStateOf<Pair<List<RunEvent>, List<SubagentRun>>>(emptyList<RunEvent>() to emptyList())
+    private var started = false
+
     private fun mount(events: List<RunEvent>, runs: List<SubagentRun>) {
-        val rows = transcriptRows(events)
-        val wakes = subagentWakesOf(events)
-        compose.setContent {
-            OrbitTheme(darkTheme = false) {
-                Surface(Modifier.fillMaxSize(), color = MaterialTheme.colorScheme.background) {
-                    CompositionLocalProvider(LocalSubagentRuns provides runs.associateBy { it.toolUseId }, LocalSubagentWakes provides wakes,
-                        LocalSubagentQueuedWakes provides queuedWakes) {
-                        Column(Modifier.fillMaxWidth().padding(16.dp), verticalArrangement = Arrangement.spacedBy(16.dp)) {
-                            rows.forEach { row -> TranscriptRowView(row, { error("no full read") }, null, {}) }
+        compose.runOnIdle { shown = events to runs }
+        if (!started) {
+            started = true
+            compose.setContent {
+                val (evs, rs) = shown
+                val rows = androidx.compose.runtime.remember(evs) { transcriptRows(evs) }
+                OrbitTheme(darkTheme = false) {
+                    Surface(Modifier.fillMaxSize(), color = MaterialTheme.colorScheme.background) {
+                        CompositionLocalProvider(LocalSubagentRuns provides rs.associateBy { it.toolUseId },
+                            LocalSubagentWakes provides subagentWakesOf(evs), LocalSubagentQueuedWakes provides queuedWakes) {
+                            Column(Modifier.fillMaxWidth().padding(16.dp), verticalArrangement = Arrangement.spacedBy(16.dp)) {
+                                rows.forEach { row -> androidx.compose.runtime.key(row.key) { TranscriptRowView(row, { error("no full read") }, null, {}) } }
+                            }
                         }
                     }
                 }
@@ -163,7 +171,7 @@ class SubagentCardEndTest {
         allText("From Orbit").assertCountEquals(0)
         allText("<orbit-subagent-finished>").assertCountEquals(0)
         // Only the words the reader typed are theirs.
-        compose.onAllNodesWithText("You", useUnmergedTree = true).assertCountEquals(1)
+        compose.onAllNodesWithText("Start them.", useUnmergedTree = true).assertCountEquals(1)
     }
 
     @Test fun runsAsOneCardWithItsLiveLine() {
@@ -306,7 +314,8 @@ class SubagentCardEndTest {
         val odd = DONE.replace("finished: DONE", "finished: LOST")
         mount(events.map { if (it.seq == 9L) wake(9, odd) else it }, listOf(view))
         all("orbit-event").assertCountEquals(1)
-        compose.onAllNodes(hasText("You") and hasAnyAncestor(hasTestTag("event:9")), useUnmergedTree = true).assertCountEquals(0)
+        compose.onAllNodes(hasText("finished: LOST", substring = true) and hasAnyAncestor(hasTestTag("event:9")) and
+            hasAnyAncestor(hasTestTag("orbit-event")).not(), useUnmergedTree = true).assertCountEquals(0)
     }
 
     @Test fun aQueuedEndSaysSoOnTheCardWithDontSendAndTheLineIsGoneOnceDelivered() {

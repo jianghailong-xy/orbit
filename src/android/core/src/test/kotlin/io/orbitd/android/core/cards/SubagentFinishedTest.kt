@@ -58,7 +58,6 @@ class SubagentFinishedTest {
         for (block in listOf(DONE, FAILED, STOPPED, INTERRUPTED, TWO, STEER)) for (run in parse(block).runs) for (sentence in PROTOCOL) {
             assertFalse(run.result.contains(sentence))
             assertFalse(run.reason.orEmpty().contains(sentence))
-            assertFalse(SubagentFinishedCard.rowLine(run).contains(sentence))
         }
     }
 

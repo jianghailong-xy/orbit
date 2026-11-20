@@ -139,7 +139,7 @@ class OrbitEventLineTest {
         compose.onAllNodesWithTag("event:9", useUnmergedTree = true).assertCountEquals(0)
         compose.onAllNodesWithTag("orbit-event", useUnmergedTree = true).assertCountEquals(0)
         compose.onAllNodesWithText("From Orbit", useUnmergedTree = true).assertCountEquals(0)
-        compose.onAllNodesWithText("You", useUnmergedTree = true).assertCountEquals(1)
+        compose.onAllNodesWithText("Fix the card and run the suite.", useUnmergedTree = true).assertCountEquals(1)
         compose.onAllNodesWithText("Find every caller of pollQuota", substring = true, useUnmergedTree = true).assertCountEquals(0)
         assertFalse(SteerDelivery.readersOwn(event))
         assertFalse(SteerDelivery.orbitOnly(event))
