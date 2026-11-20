@@ -1,5 +1,7 @@
 import assert from 'node:assert/strict';
+import { execFileSync } from 'node:child_process';
 import { randomUUID } from 'node:crypto';
+import { join } from 'node:path';
 import { test } from 'node:test';
 
 import type { ModuleRef } from '@nestjs/core';
@@ -364,6 +366,15 @@ test('(d) from production\'s state, a start predicts and then does it: DONE agai
           to: ProjectStatus.DONE,
         },
         'the prediction names the project, its four tasks, the two open questions and OPEN -> DONE');
+      // The command a deploy runs against production before the start, here against this database.
+      const cli = JSON.parse(execFileSync(process.execPath, [join(__dirname, 'landing-regression-repair-dry-run.js'), '--json'], {
+        env: { ...process.env, DATABASE_URL: URL }, encoding: 'utf8',
+      })) as { projects: PredictedProject[] };
+      const fromCli = cli.projects.find((row) => row.projectId === project.projectId);
+      assert.deepEqual(
+        [[...(fromCli?.tasks ?? [])].sort(byId), fromCli?.supersededItemIds, fromCli?.statusBefore, fromCli?.statusAfter],
+        [[...(predicted?.tasks ?? [])].sort(byId), predicted?.supersededItemIds, predicted?.statusBefore, predicted?.statusAfter],
+        'the dry-run command prints the same prediction');
 
       await start(db);
 
