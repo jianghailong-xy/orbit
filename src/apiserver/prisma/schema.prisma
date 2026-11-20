@@ -370,6 +370,10 @@ model User {
   /// account through its space.
   wikiSpaces       WikiSpace[]
 
+  /// The drive's chunk manifest and its writes not committed yet (migration 1280).
+  driveStagings      DriveStaging[]
+  driveVersionChunks DriveVersionChunk[]
+
   /// The account's one managed runner mapping, when it has one (migration 0399).
   managedRunner    ManagedRunner?
 
@@ -3500,8 +3504,79 @@ model FileBlob {
   /// From when the backup sidecar may remove them from the off-host copy (scripts/pg-backup.sh).
   offHostPruneAt   DateTime?    @map("off_host_prune_at")
   attachments      Attachment[]
+  /// The drive's holders (1280, docs/orbit-files-drive-technical-design.md §2.4): a chunk of a drive version, and a
+  /// chunk of a write not committed yet. Either holds the bytes while its row exists.
+  driveVersionChunks DriveVersionChunk[]
+  driveStagingChunks DriveStagingChunk[]
 
   @@map("file_blob")
+}
+
+/// A drive write not committed yet (1280, docs/orbit-files-drive-technical-design.md §1.1): an owner's resumable upload,
+/// a write through the mount, or a drive tool's put. Its chunks hold their bytes until a commit names them; one untouched
+/// for 7 days is removed by the retention sweep (files/file-retention-sweep.ts, step 0). `entry_id` and `parent_id` name
+/// drive_entry rows, whose foreign keys the name layer's migration adds.
+model DriveStaging {
+  id           String    @id @default(uuid(7)) @db.Uuid
+  ownerId      String    @map("owner_id") @db.Uuid
+  owner        User      @relation(fields: [ownerId], references: [id], onDelete: Cascade, map: "drive_staging_owner_id_fkey")
+  /// `OWNER_UPLOAD` | `MOUNT` | `TOOL` (drive_staging_source_chk).
+  source       String
+  /// For `MOUNT`: the entry the handle is bound to.
+  entryId      String?   @map("entry_id") @db.Uuid
+  /// For `MOUNT` and `TOOL`: the runner, and for a managed runner the generation, that opened it.
+  runnerId     String?   @map("runner_id") @db.Uuid
+  generation   Int?
+  /// For `OWNER_UPLOAD`: where it will land.
+  parentId     String?   @map("parent_id") @db.Uuid
+  name         String?
+  relativePath String?   @map("relative_path")
+  declaredSize BigInt?   @map("declared_size")
+  /// For `MOUNT`: the handle holds bytes no commit has taken yet.
+  dirty        Boolean   @default(false)
+  createdAt    DateTime  @default(now()) @map("created_at") @db.Timestamptz(3)
+  /// Moves with every chunk and keepalive.
+  touchedAt    DateTime  @default(now()) @map("touched_at") @db.Timestamptz(3)
+  committedAt  DateTime? @map("committed_at") @db.Timestamptz(3)
+  chunks       DriveStagingChunk[]
+
+  @@unique([id, ownerId], map: "drive_staging_id_owner_id_key")
+  @@index([touchedAt], map: "drive_staging_touched_at_idx")
+  @@map("drive_staging")
+}
+
+/// One chunk a staging has received (1280): at most 8 MiB, a file_blob by its sha256. A chunk re-sent for the same `idx`
+/// replaces the row.
+model DriveStagingChunk {
+  stagingId String       @map("staging_id") @db.Uuid
+  idx       Int
+  ownerId   String       @map("owner_id") @db.Uuid
+  staging   DriveStaging @relation(fields: [stagingId, ownerId], references: [id, ownerId], onDelete: Cascade, map: "drive_staging_chunk_staging_fkey")
+  sha256    String
+  blob      FileBlob     @relation(fields: [sha256], references: [sha256], onDelete: Restrict, map: "drive_staging_chunk_sha256_fkey")
+  sizeBytes Int          @map("size_bytes")
+
+  @@id([stagingId, idx], map: "drive_staging_chunk_pkey")
+  @@index([sha256], map: "drive_staging_chunk_sha256_idx")
+  @@map("drive_staging_chunk")
+}
+
+/// The ordered chunks of one drive version (1280, docs/orbit-files-drive-technical-design.md §1.2): a file's bytes are
+/// their concatenation in `idx` order, and `offset` finds the chunk for any byte. The name layer's migration adds the
+/// foreign key (version_id, owner_id) -> drive_version ON DELETE CASCADE.
+model DriveVersionChunk {
+  versionId String   @map("version_id") @db.Uuid
+  idx       Int
+  ownerId   String   @map("owner_id") @db.Uuid
+  owner     User     @relation(fields: [ownerId], references: [id], onDelete: Cascade, map: "drive_version_chunk_owner_id_fkey")
+  offset    BigInt
+  sizeBytes Int      @map("size_bytes")
+  sha256    String
+  blob      FileBlob @relation(fields: [sha256], references: [sha256], onDelete: Restrict, map: "drive_version_chunk_sha256_fkey")
+
+  @@id([versionId, idx], map: "drive_version_chunk_pkey")
+  @@index([sha256], map: "drive_version_chunk_sha256_idx")
+  @@map("drive_version_chunk")
 }
 
 // Lightweight activity feed (no FKs, append-only).

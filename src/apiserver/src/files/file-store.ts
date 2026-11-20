@@ -1,6 +1,6 @@
 import type { Logger } from '@nestjs/common';
 import { createHash, randomUUID } from 'node:crypto';
-import { close, createReadStream, createWriteStream, open as openWithCallback, type ReadStream, type WriteStream } from 'node:fs';
+import { close, createReadStream, createWriteStream, fstat as fstatWithCallback, open as openWithCallback, type ReadStream, type WriteStream } from 'node:fs';
 import { lstat, mkdir, open, readdir, rename, stat, unlink } from 'node:fs/promises';
 import path from 'node:path';
 import { Transform, type Readable } from 'node:stream';
@@ -12,6 +12,15 @@ import { promisify } from 'node:util';
  * each content's sha256. `file_blob.storage` names the store a content is in.
  */
 export type FileStorage = 'local' | 's3';
+
+/**
+ * Bytes `start` through `end` of a content, both counted from 0 and both included, as an HTTP `Range: bytes=start-end`
+ * spells them. `end` past the content's last byte reads to its end; `start` past it is an error.
+ */
+export interface ByteRange {
+  start: number;
+  end: number;
+}
 
 /**
  * One store. Content-addressed and write-once: a name always holds the same bytes, so storing a name
@@ -27,10 +36,10 @@ export interface FileStore {
    */
   put(sha256: string, tempPath: string, sizeBytes: number): Promise<void>;
   /**
-   * The bytes named `sha256`, read as a stream that whoever takes it reads to the end or destroys; null when they
-   * are not kept here.
+   * The bytes named `sha256`, or only `range` of them, read as a stream that whoever takes it reads to the end or
+   * destroys; null when they are not kept here.
    */
-  open(sha256: string): Promise<Readable | null>;
+  open(sha256: string, range?: ByteRange): Promise<Readable | null>;
   /** Let the bytes named `sha256` go (file-retention.ts is the one caller). Bytes already gone are no error. */
   remove(sha256: string): Promise<void>;
 }
@@ -141,6 +150,16 @@ export function filesConfigFrom(env: NodeJS.ProcessEnv = process.env): FilesConf
  * not be left to be collected: a descriptor can be given back when it is (closedWhenDropped).
  */
 const openDescriptor = promisify(openWithCallback);
+const fstat = promisify(fstatWithCallback);
+
+/** Refuse a range that is not one, or that starts past the last byte of a content of `size` bytes. */
+export function assertRange(range: ByteRange, size?: number): void {
+  const { start, end } = range;
+  if (!Number.isSafeInteger(start) || !Number.isSafeInteger(end) || start < 0 || end < start) {
+    throw new RangeError(`not a byte range: ${start}-${end}`);
+  }
+  if (size !== undefined && start >= size) throw new RangeError(`the range ${start}-${end} starts past the end of ${size} bytes`);
+}
 
 const droppedStreams = new FinalizationRegistry<number>((fd) => close(fd, () => undefined));
 
@@ -162,16 +181,25 @@ export interface HashedTempFile {
   sha256: string;
 }
 
+/** What writeHashedTempFile fails with when the source runs past its `maxBytes`. */
+export class TempFileTooLargeError extends Error {
+  constructor(readonly maxBytes: number) {
+    super(`more than ${maxBytes} bytes`);
+  }
+}
+
 /**
  * Write `source` to a new file in `dir`, hashing the bytes as they pass: the one read of an upload, so it
  * is never held in memory whole. `onPath` is told the file's path before the first byte is written, for a
  * caller that must be able to remove it while it is still being written. The data is flushed to disk
- * before this resolves; on failure the file is removed.
+ * before this resolves; on failure the file is removed. With `maxBytes`, a source that runs past it fails with
+ * TempFileTooLargeError as soon as it does, so no more than that is ever written.
  */
 export async function writeHashedTempFile(
   source: Readable,
   dir: string,
   onPath?: (tempPath: string) => void,
+  maxBytes?: number,
 ): Promise<HashedTempFile> {
   await mkdir(dir, { recursive: true });
   const tempPath = path.join(dir, `upload-${randomUUID()}`);
@@ -182,8 +210,12 @@ export async function writeHashedTempFile(
   let size = 0;
   const hashing = new Transform({
     transform(chunk: Buffer, _encoding, done) {
-      hash.update(chunk);
       size += chunk.length;
+      if (maxBytes !== undefined && size > maxBytes) {
+        done(new TempFileTooLargeError(maxBytes));
+        return;
+      }
+      hash.update(chunk);
       done(null, chunk);
     },
   });
@@ -289,7 +321,7 @@ export class LocalFileStore implements FileStore {
     }
   }
 
-  async open(sha256: string): Promise<Readable | null> {
+  async open(sha256: string, range?: ByteRange): Promise<Readable | null> {
     const file = this.pathOf(sha256);
     let fd: number;
     try {
@@ -298,7 +330,15 @@ export class LocalFileStore implements FileStore {
       if ((error as NodeJS.ErrnoException).code === 'ENOENT') return null;
       throw error;
     }
-    return closedWhenDropped(createReadStream(file, { fd }), fd);
+    if (range) {
+      try {
+        assertRange(range, (await fstat(fd)).size);
+      } catch (error) {
+        close(fd, () => undefined);
+        throw error;
+      }
+    }
+    return closedWhenDropped(createReadStream(file, { fd, ...(range ? { start: range.start, end: range.end } : {}) }), fd);
   }
 
   async remove(sha256: string): Promise<void> {

@@ -3,7 +3,7 @@ import { createReadStream } from 'node:fs';
 import http, { type IncomingMessage } from 'node:http';
 import https from 'node:https';
 import type { Readable } from 'node:stream';
-import { removeTempFile, type FileStore, type S3FilesConfig } from './file-store';
+import { assertRange, removeTempFile, type ByteRange, type FileStore, type S3FilesConfig } from './file-store';
 
 /**
  * An S3-compatible bucket as a file store (`ORBIT_FILES_BACKEND=s3`, docs/orbit-files-design.md §2.10):
@@ -57,12 +57,17 @@ export class S3FileStore implements FileStore {
     }
   }
 
-  async open(sha256: string): Promise<Readable | null> {
-    const response = await this.send('GET', this.keyOf(sha256));
-    if (response.statusCode === 200) return response;
+  async open(sha256: string, range?: ByteRange): Promise<Readable | null> {
+    if (range) assertRange(range);
+    const response = await this.send('GET', this.keyOf(sha256), undefined, range ? { range: `bytes=${range.start}-${range.end}` } : {});
+    if (response.statusCode === (range ? 206 : 200)) return response;
     if (response.statusCode === 404) {
       response.resume();
       return null;
+    }
+    if (range && response.statusCode === 416) {
+      response.resume();
+      throw new RangeError(`the range ${range.start}-${range.end} starts past the end of ${this.keyOf(sha256)}`);
     }
     throw await failure(response, 'GET', this.keyOf(sha256));
   }
@@ -81,6 +86,7 @@ export class S3FileStore implements FileStore {
     method: 'HEAD' | 'GET' | 'PUT' | 'DELETE',
     key: string,
     upload?: { body: Readable; sizeBytes: number; sha256: string },
+    extraHeaders: Record<string, string> = {},
   ): Promise<IncomingMessage> {
     const base = this.endpoint.pathname.replace(/\/+$/, '');
     const requestPath = `${base}/${[this.config.bucket, ...key.split('/')].map(sigV4Encode).join('/')}`;
@@ -90,6 +96,7 @@ export class S3FileStore implements FileStore {
       host: this.endpoint.host,
       'x-amz-content-sha256': payloadSha256,
       'x-amz-date': amzDate,
+      ...extraHeaders,
       ...(upload ? { 'content-length': String(upload.sizeBytes), 'content-type': 'application/octet-stream' } : {}),
     };
     const authorization = sigV4Authorization(

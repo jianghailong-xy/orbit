@@ -694,6 +694,9 @@ export const PUBLIC_ID_FIELDS: ReadonlySet<string> = new Set([
   // reference with no foreign key). Addresses a reader follows — never a fence: a press is decided on the card's row.
   'draftId',
   'replacesId',
+  // An Orbit Files drive write not committed yet (migration 1280, docs/orbit-files-drive-technical-design.md §1.1): the
+  // upload or handle a chunk row belongs to, which the upload and door routes address. Never a fence.
+  'stagingId',
 ]);
 
 /** `@db.Uuid` columns that are NOT public ids. They are opaque lease/fence tokens: the runner
