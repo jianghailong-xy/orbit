@@ -296,9 +296,10 @@ struct AgentsBandRow: View {
                     Text("Agents").font(.orbitLabel.weight(.semibold)).lineLimit(1).fixedSize()
                     if summary.running > 0 {
                         // The title keeps a readable stub; when the model's name would leave it less,
-                        // the chip gives way to the agent's mark alone (board ④).
+                        // the chip gives way to the agent's mark alone (board ④). After the chip the title
+                        // comes before the spacer, so it is never cut while a gap is left.
                         Text(summary.band).font(.orbitMeta).foregroundStyle(.secondary).lineLimit(1)
-                            .frame(minWidth: 80, alignment: .leading)
+                            .frame(minWidth: 80, alignment: .leading).layoutPriority(0.5)
                         AgentsBandCurrent(summary: summary).layoutPriority(1)
                         Spacer(minLength: 4)
                     } else {
