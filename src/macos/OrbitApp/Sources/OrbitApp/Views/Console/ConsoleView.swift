@@ -1671,7 +1671,7 @@ struct TranscriptView: View {
             // BELOW it — which is why the bar at the top of this console points down at it.
             #if os(iOS)
             if let run = folds[card.id] {
-                settledFoldRow(run, card: card)
+                settledFoldRow(run, card: card).orbitCardWidth()
             } else {
                 DeliveredDecisionCardView(console: console, card: card).orbitCardWidth()
             }
