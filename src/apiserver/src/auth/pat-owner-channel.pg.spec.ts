@@ -195,6 +195,19 @@ test('the owner channel refuses a personal access token door by door and field b
     spaces: await db.wikiSpace.count({ where: { ownerId: userId, repoUrlNorm: wikiRepoUrlNorm, deletedAt: null } }),
   });
 
+  // A real SETTINGS_CHANGE card (docs/settings-from-conversation-design.md §5.2): Save changes writes the account's theme
+  // and settles the card.
+  const settingsToApply = (await db.ownerRequest.create({
+    data: {
+      ownerId: userId, askedBySessionId: sessionId, kind: 'SETTINGS_CHANGE', title: 'Change 1 setting?',
+      why: 'the person asked for a dark theme', payload: { changes: [{ key: 'theme', from: 'system', to: 'dark', tier: 1 }] },
+    },
+  })).id;
+  const settingsApplied = async () => ({
+    state: (await db.ownerRequest.findUniqueOrThrow({ where: { id: settingsToApply } })).state,
+    preferences: (await db.user.findUniqueOrThrow({ where: { id: userId } })).preferences,
+  });
+
   // A Feishu app of the account's (switched off, so nothing connects it) with a group waiting on a live ticket, and two
   // groups connected: the three group doors (docs/feishu-bot-design.md §8.1) stood up for real.
   const feishuAppId = `cli_owner_channel_${RUN}`;
@@ -269,6 +282,10 @@ test('the owner channel refuses a personal access token door by door and field b
     {
       route: 'POST /owner-requests/:id/create-wiki', path: `/owner-requests/${wikiToCreate}/create-wiki`,
       login: 200, observe: wikiCreated,
+    },
+    {
+      route: 'POST /owner-requests/:id/apply-settings', path: `/owner-requests/${settingsToApply}/apply-settings`,
+      login: 200, observe: settingsApplied,
     },
     { route: 'GET /account-secrets', path: '/account-secrets', login: 200 },
     { route: 'GET /account-secrets/grants', path: '/account-secrets/grants?removed=30d', login: 200 },
@@ -412,6 +429,11 @@ test('the owner channel refuses a personal access token door by door and field b
       login: 404,
     },
     {
+      route: 'POST /projects/:id/setting-changes/:changeId/revert',
+      path: `/projects/${anyProject}/setting-changes/${nobody()}/revert`,
+      login: 404,
+    },
+    {
       route: 'POST /projects/:id/open-items/:itemId/accept',
       path: `/projects/${anyProject}/open-items/${nobody()}/accept`,
       login: 404,
@@ -519,6 +541,18 @@ test('the owner channel refuses a personal access token door by door and field b
       path: `/integrations/feishu/chats/${chatToRemove}`,
       login: 200,
       observe: async () => (await chatRow(chatToRemove)) !== null,
+    },
+    // Opening the Feishu bot to everyone the app is available to (§14.1): the token writes no column of the app.
+    {
+      route: 'PUT /integrations/feishu/access',
+      path: '/integrations/feishu/access',
+      body: { mode: 'AVAILABILITY_SCOPE', workspaceId, permissionMode: 'acceptEdits', maxRunningPerPerson: 2, sessionsPerDayTotal: 40 },
+      login: 200,
+      observe: async () => {
+        const app = await db.feishuApp.findUniqueOrThrow({ where: { appId: feishuAppId } });
+        return [app.accessMode, app.openWorkspaceId, app.openPermissionMode, app.openMaxRunningPerPerson, app.openSessionsPerDayPerPerson,
+          app.openMaxRunningTotal, app.openSessionsPerDayTotal, app.updatedAt.toISOString()];
+      },
     },
     // A terminal asking to be approved (docs/terminal-session-design.md): two real requests on the account's runner.
     { route: 'GET /terminals/requests', path: '/terminals/requests', login: 200 },

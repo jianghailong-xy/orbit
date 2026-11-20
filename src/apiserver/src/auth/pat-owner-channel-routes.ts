@@ -15,6 +15,9 @@ export const OWNER_INTERACTIVE_ROUTES: readonly string[] = [
   // The owner's Create wiki on a WIKI_CREATE card (docs/wiki-explicit-creation-design.md §3.6): making a wiki is the
   // owner's own act, as POST /wiki/spaces is; it also refuses an acting session, WIKI_OWNER_CHANNEL_ONLY.
   'POST /owner-requests/:id/create-wiki',
+  // The owner's Save changes on a SETTINGS_CHANGE card (docs/settings-from-conversation-design.md §5.2): it writes the
+  // account's preferences; it also refuses an acting session, SETTINGS_OWNER_CHANNEL_ONLY.
+  'POST /owner-requests/:id/apply-settings',
   'GET /account-secrets',
   'POST /account-secrets',
   'GET /account-secrets/grants',
@@ -76,6 +79,8 @@ export const OWNER_INTERACTIVE_ROUTES: readonly string[] = [
   // §10.8's "look again", the owner's door annotated and registered as the abandon door is: it refuses
   // an acting session, and a coordinator asks through `integration_observe`.
   'POST /projects/:id/integration/observe',
+  // §12.15 P-R1: the owner putting a coordinator's recorded landing-check change back. Refuses an acting session.
+  'POST /projects/:id/setting-changes/:changeId/revert',
   // The wiki's owner channel: each refuses an agent session WIKI_OWNER_CHANNEL_ONLY.
   'POST /wiki/entries/:id/reject',
   'POST /wiki/entries/:id/confirm',
@@ -117,6 +122,9 @@ export const OWNER_INTERACTIVE_ROUTES: readonly string[] = [
   'POST /integrations/feishu/chats/confirm',
   'PATCH /integrations/feishu/chats/:id',
   'DELETE /integrations/feishu/chats/:id',
+  // Who can use the Feishu bot (docs/feishu-bot-design.md §14.1): opening it lets everyone the app is available to in
+  // Feishu start agents on the owner's machines, in the workspace and mode chosen here.
+  'PUT /integrations/feishu/access',
   // A terminal asking to be approved (docs/terminal-session-design.md, "The terminal credential"): approving mints a
   // credential that answers this machine's approval cards for 30 days, so the card, its Approve and its Deny are the
   // owner's own, signed in to the app — never a token's, a runner's or another terminal's.

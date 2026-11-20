@@ -78,7 +78,7 @@ internal object StickySummary {
         if (event.card(cards, "ownerAnswer") != null) return false
         // A turn carrying only Orbit's blocks is a line in the answer too (OrbitEvent), whatever block.
         if (cards.isEmpty() && SteerDelivery.orbitOnly(event)) return false
-        // A SubAgent's end is a line inside the answer too, as a background job's news is (board subagent-finished-line ①).
+        // A SubAgent's end is inside the answer too (it draws nothing; its card is the end), as a background job's news is.
         if (event.card(cards, "wake") == null && event.card(cards, "subagent") == null) {
             // A turn that is only a note this reader cannot read draws no row of the reader's, so it heads no round (OrbitKit).
             return cards.isNotEmpty() || !io.orbitd.android.core.cards.BackgroundWakeCard.drawsNoteAlone(event.personWords(),

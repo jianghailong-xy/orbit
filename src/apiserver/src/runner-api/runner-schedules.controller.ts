@@ -68,6 +68,7 @@ export class RunnerSchedulesController {
       accessLevel: dto.accessLevel,
       runLimitMinutes: dto.runLimitMinutes,
       endAt: dto.endAt ? new Date(dto.endAt) : null,
+      maxRuns: dto.maxRuns ?? null,
       readBack: dto.readBack ?? null,
       findings: dto.findings ?? null,
       baseline: dto.baseline,
@@ -94,7 +95,7 @@ export class RunnerSchedulesController {
   ) {
     const actor = await this.actor(runner, sessionHeader);
     const patch: SchedulePatch = {};
-    for (const key of ['intent', 'title', 'prompt', 'rule', 'timezone', 'accessLevel', 'runLimitMinutes', 'workspaceId', 'readBack'] as const) {
+    for (const key of ['intent', 'title', 'prompt', 'rule', 'timezone', 'accessLevel', 'runLimitMinutes', 'workspaceId', 'readBack', 'maxRuns'] as const) {
       if (dto[key] !== undefined) (patch as Record<string, unknown>)[key] = dto[key];
     }
     if (dto.endAt !== undefined) patch.endAt = dto.endAt === null ? null : new Date(dto.endAt);

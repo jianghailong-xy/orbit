@@ -300,6 +300,7 @@ func antigravityEnv(job *ClaimedSession, execDir string) []string {
 		"ORBIT_ALLOW_ORCHESTRATION": orchestrationEnv(job.AllowOrchestration),
 		envWatches:                  watchesEnv(job.WatchesDisabled),
 		envWiki:                     wikiEnv(job.WikiDisabled),
+		envWorkflows:                workflowsEnv(job.WorkflowsDisabled),
 		envScheduleRun:              scheduleRunEnv(job.ScheduleRun),
 		envMCPPermissionPrompt:      "0",
 		envSpawnDepth:               strconv.Itoa(job.SpawnDepth),

@@ -119,7 +119,7 @@ timestamps.
 - A saved secret has no expiry and is the one long-lived copy in this design, which is why it should be opt-in.
 - Deleting a saved secret does not end grants already made from it, unless the owner asks it to
   (`DELETE /account-secrets/:id?revokeCopies=true`): then each live grant made from it is revoked as its card's Revoke
-  would. A grant records the saved secret it came from (`saved_secret_id`, migration 1250) and the saved secret its
+  would. A grant records the saved secret it came from (`saved_secret_id`, migration 1400) and the saved secret its
   last use (`last_used_at`), so the Secrets page can show a saved secret's live copies.
 
 ## 4. Delivery to exactly one runner

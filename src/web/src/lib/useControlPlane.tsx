@@ -4,6 +4,7 @@ import type { WatchView } from '@orbit/shared';
 import { getToken } from '../api';
 import { streamReport } from './listBudget';
 import { cloneEventOf, hearClone, sameWorkspace } from './workspaceClone';
+import { heldIds, sessionReaches, type SessionReachDeclaration, type SessionSubject } from './sessionReach';
 
 // Coalesce a burst of control events (a turn end fires status + approval back-to-back) into a
 // single refetch per list. A second, as the list budget asks (docs/list-freshness-design.md R1): a
@@ -89,6 +90,17 @@ const derivedFrom = (query: Query, entities: readonly string[]): boolean => {
   const declared = (query.meta?.entities as string[] | undefined) ?? [];
   return declared.some((entity) => entities.includes(entity));
 };
+
+/** The part of an event's `data` the stream reads. */
+type EventData = {
+  id?: unknown;
+  taskId?: unknown;
+  taskIds?: unknown;
+  resync?: unknown;
+  repoHealth?: unknown;
+  projectId?: unknown;
+  projectMembership?: { projectId?: unknown } | null;
+} | null | undefined;
 
 /** The ids a `task.changed` names: `taskIds`, and `taskId` from an older server. */
 const taskIdsOf = (data: { taskId?: unknown; taskIds?: unknown } | null | undefined): string[] => [
@@ -191,9 +203,27 @@ export function ControlPlaneProvider({ children }: { children: ReactNode }) {
       }
       pump();
     };
+    // The owner requests in the open list, as its last read had them. A request that arrived in it or left it (filed,
+    // answered, expired) is one the other states' reads (done, declined, all) now show differently, and those are
+    // read for nothing else on the stream's word: they are the whole history, and a session event says nothing of
+    // requests (queries.ts ownerRequestsQuery). The first read only sets what is known.
+    let openRequests: string | null = null;
+    const followOpenRequests = (data: unknown): void => {
+      const ids = ((data as { requests?: { id?: unknown }[] } | undefined)?.requests ?? [])
+        .map((request) => String(request?.id))
+        .sort()
+        .join(' ');
+      const before = openRequests;
+      openRequests = ids;
+      if (before === null || before === ids) return;
+      refresh({ predicate: ({ queryKey }) => queryKey[0] === 'owner-requests' && queryKey[1] !== 'open' });
+    };
     const unsubscribeCache = qc.getQueryCache().subscribe((event) => {
       if (event.type !== 'updated') return;
       const { query, action } = event;
+      if (action.type === 'success' && query.queryKey[0] === 'owner-requests' && query.queryKey[1] === 'open') {
+        followOpenRequests(query.state.data);
+      }
       if (action.type === 'fetch' || action.type === 'continue') readStartedAt.set(query.queryHash, Date.now());
       if (action.type === 'fetch') queued.delete(query.queryHash);
       else if (query.state.fetchStatus === 'idle' && refetchWhenLanded.delete(query.queryHash)) {
@@ -301,11 +331,34 @@ export function ControlPlaneProvider({ children }: { children: ReactNode }) {
      * reached by the first event naming an entity it declares, with no entry to keep here. A pair
      * is not repeated either — a workspace rename or a tag recolor moves the rows of every session
      * list, and those lists declare `workspace` / `tag` themselves.
+     *
+     * A session's own events (`session.*`, `approval.*`, `background.task`) are narrower: they say which
+     * session moved, so they reach a read that declares `session` only when that session can be in it
+     * (`meta.sessionReach`, lib/sessionReach). On 2026-11-20 every such event read every one of some twenty
+     * reads (owner requests, schedules, another session's cards, a Scheduled runs folder built whole), a burst
+     * almost every second under load. Whatever else names `session` (a write this tab made, a held criteria
+     * proposal) names no one session, and reaches every such read.
      */
-    const refetchEntities = (entities: ReadonlySet<string>): void => {
+    const refetchEntities = (entities: ReadonlySet<string>, subjects: readonly SessionSubject[], anySession: boolean): void => {
       if (entities.size === 0) return;
-      const named = [...entities];
-      refresh({ predicate: (query) => derivedFrom(query, named) && !hasOwnBudget(query) });
+      const named = [...entities].filter((entity) => entity !== 'session' || anySession);
+      const bySession = entities.has('session') && !anySession;
+      // Whether a list other than a Scheduled runs folder holds the session (sessionReach's `scheduledRuns`).
+      const listed = (id: string): boolean =>
+        qc.getQueryCache().findAll().some(({ queryKey, state }) =>
+          ((queryKey[0] === 'sessions' && queryKey.length === 6) || queryKey[0] === 'project-sessions') &&
+          heldIds(state.data).includes(id));
+      const reached = (query: Query): boolean => {
+        const declared = query.meta?.sessionReach as SessionReachDeclaration | undefined;
+        const reach = typeof declared === 'function' ? declared(query.state.data) : declared;
+        const held = heldIds(query.state.data);
+        return subjects.some((subject) => sessionReaches(reach, subject, held, listed));
+      };
+      refresh({
+        predicate: (query) =>
+          !hasOwnBudget(query) &&
+          (derivedFrom(query, named) || (bySession && derivedFrom(query, ['session']) && reached(query))),
+      });
     };
     // The rail's project summaries. The session lists draw each row's project membership and
     // declare `project`, so a project change reaches them through refetchEntities; the Projects
@@ -446,6 +499,10 @@ export function ControlPlaneProvider({ children }: { children: ReactNode }) {
     // What the stream has queued for this coalescing window: the entities the events named, and
     // the reads that are reached by a path of their own rather than through an entity.
     const pending = new Set<string>();
+    // The sessions the window's session events were about, and whether something named `session` with no one
+    // session behind it (refetchEntities).
+    const pendingSubjects = new Map<string, SessionSubject>();
+    let pendingAnySession = false;
     const pendingFlags = new Set<'openList' | 'watches'>();
     const pendingSessions = new Set<string>();
     const pendingProjects = new Set<string>();
@@ -455,7 +512,7 @@ export function ControlPlaneProvider({ children }: { children: ReactNode }) {
         refreshTimer = undefined;
         // One scan for the whole burst: a query several of the window's events reach (a session
         // list, on a rename and the event that announces it) is marked once, not once per path.
-        refetchEntities(pending);
+        refetchEntities(pending, [...pendingSubjects.values()], pendingAnySession);
         if (pending.has('task')) refetchTaskLists();
         if (pending.has('project')) refetchProjects();
         if (pending.has('watch') || pendingFlags.has('watches')) refetchWatches();
@@ -463,21 +520,75 @@ export function ControlPlaneProvider({ children }: { children: ReactNode }) {
         for (const id of pendingSessions) refetchSessionDetail(id);
         for (const id of pendingProjects) refetchCriteriaDecisions(id);
         pending.clear();
+        pendingSubjects.clear();
+        pendingAnySession = false;
         pendingFlags.clear();
         pendingSessions.clear();
         pendingProjects.clear();
       }, REFRESH_DEBOUNCE_MS);
     };
+    // The task each session runs and its project, as the summaries this connection carried said (a summary always
+    // names both; an approval or a background job's event names neither).
+    const runs = new Map<string, { taskId: string; projectId: string }>();
+    const runOf = (sessionId: string, data: EventData): { taskId: string; projectId: string } => {
+      if (data && 'taskId' in data) {
+        const projectId = data.projectMembership?.projectId ?? data.projectId;
+        const run = {
+          taskId: typeof data.taskId === 'string' ? data.taskId : '',
+          projectId: typeof projectId === 'string' ? projectId : '',
+        };
+        runs.set(sessionId, run);
+        return run;
+      }
+      const heard = runs.get(sessionId);
+      if (heard) return heard;
+      // Never heard of here: what this tab has read of it, in a list or its detail.
+      for (const [key, cached] of qc.getQueriesData<unknown>({ predicate: ({ queryKey }) => queryKey[0] === 'sessions' || queryKey[0] === 'project-sessions' || (queryKey[0] === 'session' && queryKey.length === 2) })) {
+        const rows = (Array.isArray(cached) ? cached : key[0] === 'session' && cached ? [cached] : []) as {
+          id?: unknown; taskId?: unknown; projectId?: unknown; projectMembership?: { projectId?: unknown } | null;
+        }[];
+        const row = rows.find((candidate) => candidate?.id === sessionId);
+        if (!row) continue;
+        const projectId = row.projectMembership?.projectId ?? row.projectId;
+        return {
+          taskId: typeof row.taskId === 'string' ? row.taskId : '',
+          projectId: typeof projectId === 'string' ? projectId : '',
+        };
+      }
+      return { taskId: '', projectId: '' };
+    };
     const scheduleRefresh = (
       type: string,
       sessionId: string,
-      data: { id?: unknown; taskId?: unknown; taskIds?: unknown; resync?: unknown; repoHealth?: unknown } | null | undefined,
+      data: EventData,
+      workspaceId = '',
     ): void => {
       // The Open list's hint is the one event whose path is not an entity: it says the list may read
       // differently, and is read through its own delta read rather than through the session events
       // that would read every session list for it (sessions.list_changed names no session).
       if (type === 'sessions.list_changed') pendingFlags.add('openList');
-      for (const entity of entitiesFor(type, data)) pending.add(entity);
+      for (const entity of entitiesFor(type, data)) {
+        pending.add(entity);
+        if (entity !== 'session') continue;
+        // A session's own event names the session, and the envelope its workspace (`agentId`); the task it runs and
+        // its project are the summary's, or what this tab last heard or read of it.
+        if (sessionId && (type.startsWith('session.') || type.startsWith('approval.') || type === 'background.task')) {
+          const known = pendingSubjects.get(sessionId);
+          const run = runOf(sessionId, data);
+          const lifecycle = type === 'session.created' || type === 'session.ended';
+          pendingSubjects.set(sessionId, {
+            id: sessionId,
+            workspaceId: workspaceId || known?.workspaceId || '',
+            taskId: run.taskId,
+            projectId: run.projectId,
+            createdOnly: (known?.createdOnly ?? true) && type === 'session.created',
+            created: (known?.created ?? false) || type === 'session.created',
+            lifecycle: (known?.lifecycle ?? false) || lifecycle,
+          });
+        } else {
+          pendingAnySession = true;
+        }
+      }
       if (watchFollows(type, sessionId, data)) pendingFlags.add('watches');
       // Only the `session.*` family: those are the events that can move a session's run state,
       // and so the ones a frozen detail has to be corrected by. An approval or a background task
@@ -494,6 +605,7 @@ export function ControlPlaneProvider({ children }: { children: ReactNode }) {
     };
     refreshSessionListsRef.current = () => {
       pending.add('session');
+      pendingAnySession = true;
       // The server's hint for the write joins this read in the window.
       pendingFlags.add('openList');
       openWindow();
@@ -572,6 +684,7 @@ export function ControlPlaneProvider({ children }: { children: ReactNode }) {
         let ev: {
           type?: string;
           sessionId?: string;
+          agentId?: string | null;
           data?: {
             id?: unknown;
             projectMembership?: { projectId?: unknown } | null;
@@ -652,7 +765,11 @@ export function ControlPlaneProvider({ children }: { children: ReactNode }) {
               sameWorkspace((state.data as { workspace?: { id?: string } | null } | undefined)?.workspace?.id, cloned.workspaceId),
           });
         }
-        scheduleRefresh(ev.type, subject, ev.data);
+        // The session's workspace: the envelope's `agentId`, or the summary's own from a peer that leaves it empty.
+        const workspaceOf = typeof ev.agentId === 'string' && ev.agentId
+          ? ev.agentId
+          : typeof ev.data?.agentId === 'string' ? ev.data.agentId : '';
+        scheduleRefresh(ev.type, subject, ev.data, workspaceOf);
       };
       es.onerror = () => drop();
     }

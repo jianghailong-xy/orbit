@@ -38,7 +38,7 @@ class AcceptedHeadShellTest : ComposerShellTest() {
         assertTrue("the active view, which lists the head", ComposerShell.calls.contains("GET sessions/${ComposerShell.SESSION}/turns?view=active"))
         // The person's turn, where its echo will land: after the history, as the transcript draws one.
         assertTrue(has(hasText("Write the release notes") and hasAnyAncestor(drawn)))
-        assertTrue(has(hasText("You") and hasAnyAncestor(drawn)))
+        assertTrue("the person's bubble", has(hasTestTag("user-bubble") and hasAnyAncestor(drawn), unmerged = true))
         assertFalse("the runner has it: nothing withdraws it", has(hasText("Cancel")))
         assertFalse(shows("Queued"))
         val order = compose.onNodeWithTag("transcript-list").fetchSemanticsNode().children.map { it.config.getOrNull(SemanticsProperties.TestTag) }

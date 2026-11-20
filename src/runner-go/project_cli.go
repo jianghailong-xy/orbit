@@ -40,7 +40,7 @@ Usage:
   orbit project ensure-coordinator PROJECT_ID [--json]
   orbit project send PROJECT_ID (--message TEXT | --message-file -) [--client-turn-id ID] [--expect-reply [--reply-options JSON] [--reply-within-seconds N]] [--json]
   orbit project resolve-blocker PROJECT_ID --blocker-id ID --reason TEXT [--json]
-  orbit project request-start PROJECT_ID --line LINE [--automatic[=BOOL]] --max-concurrent-tasks N --why TEXT [options]
+  orbit project request-start PROJECT_ID [--line LINE] [--automatic[=BOOL]] --max-concurrent-tasks N --why TEXT [options]
   orbit project request-promotion PROJECT_ID --reason TEXT [--json]
   orbit project request-done PROJECT_ID --judgment TEXT (--gaps JSON | --gaps-file -) [--json]
   orbit project merge-evidence PROJECT_ID --requirement-id ID --target-branch REF --content-hash SHA256 [options]
@@ -210,7 +210,7 @@ Options:
 	"request-start": `orbit project request-start — ask the account owner to start the project this session coordinates
 
 Usage:
-  orbit project request-start PROJECT_ID --line PROJECT_BRANCH|MAIN [--automatic[=BOOL]]
+  orbit project request-start PROJECT_ID [--line PROJECT_BRANCH|MAIN] [--automatic[=BOOL]]
       --max-concurrent-tasks N --why TEXT [--project-branch-name REF] [--upstream-ref REF]
       [--merge-check-command CMD] [--merge-check-timeout-seconds N]
       [--landing-check-command CMD] [--landing-check-timeout-seconds N] [--json]
@@ -241,7 +241,8 @@ if that fails, leave it out. It is only a suggestion: the card puts the owner's 
 this repository ahead of it, and nothing is written until they press Start.
 
 Options:
-  --line PROJECT_BRANCH|MAIN     where finished tasks land (required)
+  --line PROJECT_BRANCH|MAIN     where finished tasks land; leave it out to start with no line and no
+                                 repository: the project lands on its own branch once a task commits
   --project-branch-name REF      with PROJECT_BRANCH: the branch as a full ref (refs/heads/...)
   --upstream-ref REF             the project's main branch as a full ref (refs/heads/...), suggested
                                  only when integration.lastMainBranch is null (see above)

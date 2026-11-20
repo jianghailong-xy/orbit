@@ -2118,9 +2118,9 @@ struct AgentFormContent: View {
     @State private var instructions = ""
     @State private var workDir = ""
     @State private var enabled = true
-    @State private var modelRouting = false
     @State private var subagentsEnabled = true
     @State private var subagentsMaxRunning = SubagentSettings.defaultMaxRunning
+    @State private var workflowsEnabled = true
     @State private var confirmingDelete = false
     #if os(macOS)
     /// Agent Tools for this workspace (docs/mocks/agent-tools board ⑤), and whether its Edit asked for the
@@ -2200,26 +2200,8 @@ struct AgentFormContent: View {
                           prompt: Text("/path/to/project on the runner (optional)"))
             }
 
-            // Off by default, and only the owner's to turn on: it decides what task runs cost, so the
-            // agent tools cannot set it (docs/model-routing-design.md §7.2). With the account's switch
-            // off (the default) the Agent has no switch of its own; its stored value is left alone,
-            // since Done sends it only when it moved.
-            if app.user?.preferences?.smartModelSelection ?? false {
-                Section("Task runs") {
-                    Toggle(isOn: $modelRouting) {
-                        VStack(alignment: .leading, spacing: 3) {
-                            Text(TaskDetailCopy.smartSelectionSwitch)
-                            Text(TaskDetailCopy.smartSelectionSwitchDetail)
-                                .font(.orbitLabel)
-                                .foregroundStyle(.secondary)
-                                .fixedSize(horizontal: false, vertical: true)
-                        }
-                    }
-                }
-            }
-
             SubagentSettingsSection(agents: agents, enabled: $subagentsEnabled,
-                                    maxRunning: $subagentsMaxRunning)
+                                    workflowsEnabled: $workflowsEnabled, maxRunning: $subagentsMaxRunning)
 
             if let env = agent.env, !env.isEmpty {
                 Section("Environment") {
@@ -2291,9 +2273,9 @@ struct AgentFormContent: View {
         instructions = agent.appendSystemPrompt ?? ""
         workDir = agent.workDir ?? ""
         enabled = agent.enabled ?? true
-        modelRouting = agent.modelRouting ?? false
         subagentsEnabled = agent.subagentsEnabled ?? true
         subagentsMaxRunning = SubagentSettings.maxRunning(agent.subagentsMaxRunning)
+        workflowsEnabled = agent.workflowsEnabled ?? true
     }
 
     /// True when the working copy diverges from the agent as prefilled — mirrors `prefill()` field
@@ -2309,9 +2291,9 @@ struct AgentFormContent: View {
         || instructions != (agent.appendSystemPrompt ?? "")
         || workDir != (agent.workDir ?? "")
         || enabled != (agent.enabled ?? true)
-        || modelRouting != (agent.modelRouting ?? false)
         || subagentsEnabled != (agent.subagentsEnabled ?? true)
         || subagentsMaxRunning != SubagentSettings.maxRunning(agent.subagentsMaxRunning)
+        || workflowsEnabled != (agent.workflowsEnabled ?? true)
     }
 
     /// Save (only if changed and still valid) then close. An emptied name is invalid — the form was
@@ -2332,12 +2314,11 @@ struct AgentFormContent: View {
             effort: effort.rawValue,
             workDir: workDir.isEmpty ? nil : workDir,
             enabled: enabled,
-            // Only when moved: the switch is written by the user API alone, and only by a press.
-            modelRouting: modelRouting != (agent.modelRouting ?? false) ? modelRouting : nil,
-            // SubAgents: each only when moved, like the switch above.
+            // SubAgents: each only when moved.
             subagentsEnabled: subagentsEnabled != (agent.subagentsEnabled ?? true) ? subagentsEnabled : nil,
             subagentsMaxRunning: subagentsMaxRunning != SubagentSettings.maxRunning(agent.subagentsMaxRunning)
-                ? subagentsMaxRunning : nil
+                ? subagentsMaxRunning : nil,
+            workflowsEnabled: workflowsEnabled != (agent.workflowsEnabled ?? true) ? workflowsEnabled : nil
         )
         Task { await agents.save(agent.id, req) }
     }

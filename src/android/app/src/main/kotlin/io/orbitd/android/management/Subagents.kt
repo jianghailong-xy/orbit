@@ -1,8 +1,10 @@
 package io.orbitd.android.management
 
+import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.selection.toggleable
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.*
@@ -29,12 +31,14 @@ internal data class SubagentTierModel(val model: String, val levels: List<String
 internal data class SubagentProvider(val slug: String, val label: String, val kind: String, val providerId: String?, val billing: String,
                                      val models: List<SubagentTierModel>)
 
-/** An Agent's SubAgents fields as GET workspaces/:id carries them, each with its default when absent (docs/subagent-design.md §7). */
-internal data class SubagentSettings(val enabled: Boolean, val maxRunning: Int) {
+/** An Agent's SubAgents fields as GET workspaces/:id carries them, each with its default when absent (docs/subagent-design.md §7),
+ * and its Workflows switch (docs/subagent-workflow-design.md §6). */
+internal data class SubagentSettings(val enabled: Boolean, val maxRunning: Int, val workflowsEnabled: Boolean) {
     companion object {
         fun of(workspace: JsonObject) = SubagentSettings(
             workspace.bool("subagentsEnabled") ?: true,
             (workspace.int("subagentsMaxRunning") ?: 4).coerceIn(1, Subagents.MAX_RUNNING),
+            workspace.bool("workflowsEnabled") ?: true,
         )
     }
 }
@@ -44,15 +48,19 @@ internal object Subagents {
     const val GROUP = "SubAgents"
     const val SWITCH = "SubAgents"
     const val SWITCH_DETAIL = "Let this agent hand work to other providers in the same folder"
+    const val WORKFLOWS = "Workflows"
+    const val WORKFLOWS_DETAIL = "Let this agent run a script that starts many SubAgents and wakes it once"
     const val PROVIDERS = "Providers"
     const val PROVIDERS_DETAIL = "All enabled providers. Block one to keep SubAgents off it."
     const val RUNNING = "Running at once"
-    const val RUNNING_DETAIL = "Per session, foreground and background together"
+    const val RUNNING_DETAIL = "Per session: delegated SubAgents and workflow calls together"
     const val TIERS = "Model tiers"
     const val TIERS_FOOTER = "Preset tiers and prices follow the catalogue. A model with no tier still runs SubAgents, after every model whose tier fits."
     const val NOT_SET = "Not set"
     const val SUBSCRIPTION = "Subscription"
     const val CLEAR = "Clear"
+    /** The tag after a tier the owner set (board 2026-11-20). */
+    const val YOURS = "Yours"
     const val EDIT = "Edit"
     const val PROVIDERS_LOAD_FAILED = "Couldn't load providers"
     const val SAVE_BLOCKED_FAILED = "Couldn't save blocked providers"
@@ -78,6 +86,20 @@ internal object Subagents {
         else -> levels.joinToString(" · ")
     }
 
+    /** Where a model's tier is written: a built-in engine's catalogue, or a key of the owner's own; null when it is not the owner's to set. */
+    fun tierPath(provider: SubagentProvider, model: SubagentTierModel): String? = when {
+        !model.editable -> null
+        provider.kind == "builtin" -> "providers/builtin/${provider.slug}/model-tier"
+        else -> provider.providerId?.let { "providers/mine/$it/model-tier" }
+    }
+
+    /** Whether the menu offers Clear: a key's model with a tier, or a built-in engine's model the owner tiered. */
+    fun offersClear(provider: SubagentProvider, model: SubagentTierModel) =
+        if (provider.kind == "builtin") model.source == "owner" else model.levels.isNotEmpty()
+
+    /** Whether the Tier cell carries the Yours tag: a tier the owner set. */
+    fun showsYours(model: SubagentTierModel) = model.source == "owner"
+
     fun priceText(model: SubagentTierModel, billing: String) = when {
         model.outputPricePerMTok != null -> String.format(Locale.US, "$%.2f", model.outputPricePerMTok)
         billing == "subscription" -> SUBSCRIPTION
@@ -97,12 +119,14 @@ internal object Subagents {
 }
 
 /**
- * The Agent form's SubAgents group (docs/mocks/subagent/05.png): the switch, the Providers SubAgents may use, and how many
- * run at once. The switch and Running at once are the Agent's and saved with the form's Done; the providers blocked are the
- * account's (users/me/preferences) and saved from their own list.
+ * The Agent form's SubAgents group (docs/mocks/subagent/05.png, its Workflows row from docs/mocks/subagent-workflow part 5): the
+ * switch, Workflows, the Providers SubAgents may use, and how many run at once. The switches and Running at once are the Agent's
+ * and saved with the form's Done; the providers blocked are the account's (users/me/preferences) and saved from their own list.
+ * Workflows follows SubAgents: every call of a workflow is a SubAgent, so with SubAgents off it reads off and cannot be turned on.
  */
 @Composable
 internal fun SubagentsSection(api: ManagementApi, enabled: Boolean, setEnabled: (Boolean) -> Unit,
+                              workflowsEnabled: Boolean, setWorkflowsEnabled: (Boolean) -> Unit,
                               maxRunning: Int, setMaxRunning: (Int) -> Unit) {
     var providers by remember(api) { mutableStateOf<List<SubagentProvider>?>(null) }
     var blocked by remember(api) { mutableStateOf<List<String>>(emptyList()) }
@@ -123,6 +147,16 @@ internal fun SubagentsSection(api: ManagementApi, enabled: Boolean, setEnabled: 
                 Text(Subagents.SWITCH_DETAIL, style = MaterialTheme.typography.labelMedium, color = Ink.muted)
             }
             Switch(checked = enabled, onCheckedChange = null)
+        }
+        HorizontalDivider()
+        val workflows = enabled && workflowsEnabled
+        Row(Modifier.fillMaxWidth().toggleable(workflows, enabled = enabled, role = Role.Switch) { setWorkflowsEnabled(it) }
+            .padding(vertical = 8.dp), verticalAlignment = Alignment.CenterVertically) {
+            Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(3.dp)) {
+                Text(Subagents.WORKFLOWS)
+                Text(Subagents.WORKFLOWS_DETAIL, style = MaterialTheme.typography.labelMedium, color = Ink.muted)
+            }
+            Switch(checked = workflows, onCheckedChange = null, enabled = enabled)
         }
         HorizontalDivider()
         Row(Modifier.fillMaxWidth().padding(vertical = 8.dp), verticalAlignment = Alignment.CenterVertically,
@@ -207,8 +241,9 @@ internal fun SubagentProvidersDialog(providers: List<SubagentProvider>, blocked:
 
 /**
  * The Providers page's Model tiers (docs/subagent-design.md §7): each provider's models with the tiers routing reads for them and their
- * price per million output tokens. A model the owner may tier opens a menu of the four, and Clear once set. On a phone the provider sits
- * above its model in one cell.
+ * price per million output tokens. A model the owner may tier (a key's own, or any of a built-in engine's catalogue) opens a menu of the
+ * four, and Clear where the owner's tier can be cleared; a tier the owner set carries a Yours tag. On a phone the provider sits above its
+ * model in one cell.
  */
 @Composable
 internal fun ModelTiersSection(api: ManagementApi, revision: Long) {
@@ -238,10 +273,10 @@ internal fun ModelTiersSection(api: ManagementApi, revision: Long) {
                             provider = { Text(provider.label, style = it, maxLines = 1) },
                             model = { Text(model.model, style = it.copy(fontFamily = FontFamily.Monospace), maxLines = 1) },
                             tier = { style ->
-                                TierCell(model, provider.providerId, style) { tier ->
+                                TierCell(provider, model, style) { path, tier ->
                                     scope.launch {
                                         try {
-                                            api.patch("providers/mine/${provider.providerId}/model-tier", buildJsonObject {
+                                            api.patch(path, buildJsonObject {
                                                 put("model", model.model); put("tier", tier?.let(::JsonPrimitive) ?: JsonNull)
                                             })
                                             reads++; failure = null
@@ -284,20 +319,33 @@ private fun TierRow(wide: Boolean, header: Boolean, provider: @Composable (andro
 }
 
 @Composable
-private fun TierCell(model: SubagentTierModel, providerId: String?, style: androidx.compose.ui.text.TextStyle, set: (String?) -> Unit) {
+private fun TierCell(provider: SubagentProvider, model: SubagentTierModel, style: androidx.compose.ui.text.TextStyle,
+                     set: (String, String?) -> Unit) {
     val text = Subagents.tierText(model.levels)
     val color = if (model.levels.isEmpty()) Ink.amber else MaterialTheme.colorScheme.onSurface
-    if (!model.editable || providerId == null) { Text(text, style = style, color = color, maxLines = 1); return }
-    var open by remember { mutableStateOf(false) }
-    Box {
-        Text("$text ▾", Modifier.clickable(role = Role.DropdownList) { open = true }.testTag("tier:${model.model}"), style = style,
-            color = color, maxLines = 1)
-        DropdownMenu(open, { open = false }) {
-            Subagents.LEVELS.forEach { level ->
-                DropdownMenuItem(text = { Text(level) }, trailingIcon = if (model.levels == listOf(level)) { { Text("✓") } } else null,
-                    onClick = { open = false; set(level) })
+    val path = Subagents.tierPath(provider, model)
+    Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+        if (path == null) Text(text, style = style, color = color, maxLines = 1)
+        else {
+            var open by remember { mutableStateOf(false) }
+            Box {
+                Text("$text ▾", Modifier.clickable(role = Role.DropdownList) { open = true }.testTag("tier:${provider.slug}:${model.model}"),
+                    style = style, color = color, maxLines = 1)
+                DropdownMenu(open, { open = false }) {
+                    Subagents.LEVELS.forEach { level ->
+                        DropdownMenuItem(text = { Text(level) }, trailingIcon = if (model.levels == listOf(level)) { { Text("✓") } } else null,
+                            onClick = { open = false; set(path, level) })
+                    }
+                    if (Subagents.offersClear(provider, model)) {
+                        DropdownMenuItem(text = { Text(Subagents.CLEAR) }, onClick = { open = false; set(path, null) })
+                    }
+                }
             }
-            if (model.levels.isNotEmpty()) DropdownMenuItem(text = { Text(Subagents.CLEAR) }, onClick = { open = false; set(null) })
         }
+        // A tier the owner set (board 2026-11-20), as iOS draws it.
+        if (Subagents.showsYours(model)) Text(Subagents.YOURS,
+            Modifier.border(1.dp, Ink.muted.copy(alpha = 0.35f), RoundedCornerShape(4.dp)).padding(horizontal = 5.dp)
+                .testTag("tier-yours:${provider.slug}:${model.model}"),
+            style = MaterialTheme.typography.labelSmall, color = Ink.muted, maxLines = 1)
     }
 }

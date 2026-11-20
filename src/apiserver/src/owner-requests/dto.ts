@@ -7,6 +7,7 @@ import {
   IsIn,
   IsISO8601,
   IsInt,
+  IsObject,
   IsOptional,
   IsString,
   Max,
@@ -130,4 +131,15 @@ export class SecretGrantAckDto {
 /** The runner's word that its copy is gone (`POST /runner/secret-grants/:id/removed`). */
 export class SecretGrantRemovedDto {
   @IsOptional() @IsString() @MaxLength(500) note?: string;
+}
+
+/**
+ * A session proposing a change to the owner's Settings (`POST /runner/settings-proposals`,
+ * docs/settings-from-conversation-design.md §5.1). `changes` maps preference keys to their new values; its keys and
+ * values are checked against the tier table and `UpdatePreferencesDto` by `validateSettingsChanges`, not here, so a
+ * key that is not a setting is refused by name rather than stripped.
+ */
+export class ProposeSettingsDto {
+  @IsObject() changes!: Record<string, unknown>;
+  @IsString() @MinLength(1) @MaxLength(MAX_OWNER_REQUEST_WHY) why!: string;
 }

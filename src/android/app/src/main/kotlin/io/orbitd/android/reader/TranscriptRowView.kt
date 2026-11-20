@@ -3,6 +3,7 @@ package io.orbitd.android.reader
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.selection.SelectionContainer
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
@@ -11,12 +12,17 @@ import androidx.compose.runtime.*
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.drawBehind
 import androidx.compose.ui.draw.rotate
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalClipboardManager
 import androidx.compose.ui.platform.testTag
+import androidx.compose.ui.graphics.luminance
+import androidx.compose.ui.res.painterResource
+import androidx.compose.ui.semantics.CustomAccessibilityAction
 import androidx.compose.ui.semantics.Role
+import androidx.compose.ui.semantics.customActions
 import androidx.compose.ui.semantics.clearAndSetSemantics
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.semantics.stateDescription
@@ -41,6 +47,7 @@ import io.orbitd.android.cards.OrbitEventLine
 import io.orbitd.android.cards.LocalSteerDeliveries
 import io.orbitd.android.cards.TranscriptCardView
 import io.orbitd.android.cards.isOrbitTurnCard
+import io.orbitd.android.cards.conversationCard
 import io.orbitd.android.cards.DetailFold
 import io.orbitd.android.core.translation.Translation
 import io.orbitd.android.directory.ExternalSender
@@ -55,7 +62,9 @@ import io.orbitd.android.translation.TranslationShown
 import io.orbitd.android.translation.UserTranslationFoot
 import io.orbitd.android.management.RunnerUpdateNow
 import io.orbitd.android.text.*
+import io.orbitd.android.R
 import io.orbitd.android.ui.LocalOrbitColors
+import io.orbitd.android.wiki.RelativeTime
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.launch
 import kotlinx.serialization.json.*
@@ -69,7 +78,7 @@ internal fun interface FullEvents { suspend fun full(seq: Long): RunEvent }
 internal val LocalOwnerHeading = staticCompositionLocalOf { ExternalSender.you }
 
 /** The cards that are lines in the agent's stream, each the whole of a turn Orbit opened for its own news. */
-private val WAKE_LINE_KEYS = listOf(":subagent", ":wake", ":watch")
+private val WAKE_LINE_KEYS = listOf(":workflow", ":subagent", ":wake", ":watch")
 
 @Composable
 internal fun TranscriptRowView(row: TranscriptRow, model: FullEvents, live: Transcript?, open: (String) -> Unit, highlighted: Boolean = false,
@@ -91,6 +100,11 @@ internal fun TranscriptRowView(row: TranscriptRow, model: FullEvents, live: Tran
         SubagentBlockView(row, highlighted) { child -> TranscriptRowView(child, model, live, open) }
         return
     }
+    // So is an Orbit workflow, which opens to its calls by phase (board docs/mocks/subagent-workflow part 4).
+    if (!detailOnly && event.type == "tool_use" && (event.fields.string("name") ?: event.fields.string("toolName")) == WorkflowBlock.TOOL_NAME) {
+        WorkflowBlockView(row, highlighted) { child -> TranscriptRowView(child, model, live, open) }
+        return
+    }
     val clipboard = LocalClipboardManager.current
     var expanded by rememberSaveable(row.key) { mutableStateOf(false) }
     var childrenOpen by rememberSaveable(row.key) { mutableStateOf(false) }
@@ -104,7 +118,7 @@ internal fun TranscriptRowView(row: TranscriptRow, model: FullEvents, live: Tran
     val result = fullResult ?: row.result
     val tool = event.type in setOf("tool_use", "tool_result")
     val cards = remember(shown) { transcriptCards(shown) }
-    // The turns Orbit opens for its own news — a SubAgent's end, a background job's news or a wakeup coming due, a watch's wake — are lines
+    // The turns Orbit opens for its own news — a background job's news or a wakeup coming due, a watch's wake — are lines
     // in the agent's stream (owner 2026-11-16: they must not look like something the reader sent): no "Orbit" heading, no row tint, no Copy
     // message — the lines are the whole row, as on the web and iOS.
     // A turn carrying only Orbit's blocks that no line knows is the generic From Orbit line, never the reader's row (OrbitEvent).
@@ -114,6 +128,11 @@ internal fun TranscriptRowView(row: TranscriptRow, model: FullEvents, live: Tran
         val wakeLines = cards.isNotEmpty() && cards.all { card -> WAKE_LINE_KEYS.any { card.key.endsWith(it) } } &&
             (words.isBlank() || cards.any { it.key.endsWith(":watch") })
         val orbitOnly = cards.isEmpty() && OrbitEvent.draws(words, note, (shown.fields["attachments"] as? JsonArray).orEmpty().isNotEmpty())
+        // A SubAgent's end draws nothing: like Claude Code's built-in Agent, the SubAgent is one card from start to end, and that card
+        // draws how it ended (SubagentCardEnd, joined by run id). Its card still keeps the turn from being the reader's bubble or the From
+        // Orbit line; only a job's news written beside it draws, as it always has.
+        val drawn = if (wakeLines) cards.filterNot { it.key.endsWith(":subagent") } else cards
+        if (wakeLines && drawn.isEmpty()) return
         if (wakeLines || orbitOnly) {
             Column(Modifier.fillMaxWidth().padding(horizontal = 10.dp, vertical = 4.dp).testTag(row.key), verticalArrangement = Arrangement.spacedBy(6.dp)) {
                 if (orbitOnly) {
@@ -122,7 +141,7 @@ internal fun TranscriptRowView(row: TranscriptRow, model: FullEvents, live: Tran
                     OrbitEventLine(note!!.trim(), event.ts, BackgroundWakeCard.steerReceipt(
                         BackgroundWakeCard.steerState(shown.fields["steer"] == JsonPrimitive(true), delivery, undelivered)), undelivered)
                 } else {
-                    cards.forEach { TranscriptCardView(it, open, shown) }
+                    drawn.forEach { TranscriptCardView(it, open, shown) }
                 }
             }
             return
@@ -221,7 +240,12 @@ internal fun TranscriptRowView(row: TranscriptRow, model: FullEvents, live: Tran
     val updateResume = event.type == "user" && RunnerUpdateNow.isResume(shown.fields.string("text"))
     // The turn Orbit queued when an owner request ended: prose and JSON for the agent, so one divider (web `owner-request-turn-divider`).
     val requestEnding = if (event.type == "user") OwnerRequests.resolutionTurnLabel(shown.fields.string("text")) else null
+    // A person's turn as iOS draws it (`UserBubbleView`): a right-aligned tinted bubble with its copy and time under it, and over it
+    // only the name of somebody who is not the reader — a Feishu member, a guest, the owner on a guest's page. Orbit's own turns,
+    // another session's message and the dividers keep their rows.
+    val userBubble = event.type == "user" && !detailOnly && cards.isEmpty() && answerLine == null && !updateResume && requestEnding == null
     val bg = when { highlighted -> MaterialTheme.colorScheme.secondaryContainer
+        userBubble -> MaterialTheme.colorScheme.surface
         event.type == "user" && answerLine == null && bubble == null && !updateResume && requestEnding == null -> MaterialTheme.colorScheme.surfaceVariant
         else -> MaterialTheme.colorScheme.surface }
     // The runtime's calls whose work outlives them: a sub-agent (Agent; Task before 2.x) and a Workflow.
@@ -233,7 +257,12 @@ internal fun TranscriptRowView(row: TranscriptRow, model: FullEvents, live: Tran
     val repair = if (event.type == "error" || event.type == "assistant") AntigravityRepair.of(shown.body().trim())?.takeIf { console?.executesAntigravity == true } else null
     // A07-5: so is a DeepSeek Harness failure on a session Harness runs (iOS e789ce3dc).
     val dshRepair = if (event.type == "error") DshRuntime.repair(shown.body().trim())?.takeIf { console?.executesDsh == true } else null
-    Column(Modifier.fillMaxWidth().background(bg).padding(10.dp).testTag(row.key), verticalArrangement = Arrangement.spacedBy(6.dp)) {
+    // A reply is the page's own text (iOS `AssistantBubbleView`): no heading, copied by selecting it, or by TalkBack's Copy message.
+    val plainReply = event.type == "assistant" && !detailOnly && cards.isEmpty() && repair == null
+    // A person's bubble and a plain reply sit on the list's own 16dp margin, as iOS's 16pt; other rows keep their 10dp inset.
+    Column(Modifier.fillMaxWidth().background(bg).padding(horizontal = if (userBubble || plainReply) 0.dp else 10.dp, vertical = 10.dp).testTag(row.key)
+        .then(if (plainReply) Modifier.semantics { customActions = listOf(CustomAccessibilityAction("Copy message") { loadFull(copy = true); true }) }
+            else Modifier), verticalArrangement = Arrangement.spacedBy(6.dp)) {
         if (answerLine != null) { cards.forEach { TranscriptCardView(it, open, shown) }; return@Column }
         if (updateResume) {
             Text(RunnerUpdateNow.RESUME_NOTE, Modifier.testTag("runner-update-resume"), style = MaterialTheme.typography.labelMedium,
@@ -249,18 +278,18 @@ internal fun TranscriptRowView(row: TranscriptRow, model: FullEvents, live: Tran
             }
             return@Column
         }
-        if (dshRepair != null && console != null) { DshRepairCard(dshRepair, console); return@Column }
-        if (repair != null && console != null) { AntigravityRepairCard(repair, console); return@Column }
+        if (dshRepair != null && console != null) { Box(Modifier.conversationCard()) { DshRepairCard(dshRepair, console) }; return@Column }
+        if (repair != null && console != null) { Box(Modifier.conversationCard()) { AntigravityRepairCard(repair, console) }; return@Column }
         if (event.type == "auto_retry" && console != null) {
-            AutoRetryCard(AutoRetryNotice(shown.body(), shown.fields.string("variant") == "quota", shown.fields["stale"] == JsonPrimitive(true),
-                shown.fields["afterUserMsg"] == JsonPrimitive(true)), console)
+            Box(Modifier.conversationCard()) { AutoRetryCard(AutoRetryNotice(shown.body(), shown.fields.string("variant") == "quota", shown.fields["stale"] == JsonPrimitive(true),
+                shown.fields["afterUserMsg"] == JsonPrimitive(true)), console) }
             return@Column
         }
         // The main checkout's card (board 01) and an action's outcome line (board 03).
-        if (event.type == MainCheckout.ROW_CARD) { MainCheckout.changedNotice(shown.fields)?.let { MainCheckoutCard(it, row.key, event.seq, event.ts) }; return@Column }
+        if (event.type == MainCheckout.ROW_CARD) { MainCheckout.changedNotice(shown.fields)?.let { Box(Modifier.conversationCard()) { MainCheckoutCard(it, row.key, event.seq, event.ts) } }; return@Column }
         if (event.type == MainCheckout.ROW_RESULT) { MainCheckout.resultNotice(shown.fields)?.let { MainCheckoutResultRow(it) }; return@Column }
         // A thinking row is its own one line (A06-11); a question card's line folds and opens it, as its record does.
-        if (!detailOnly && event.type != "thinking" && bubble == null) Row(Modifier.fillMaxWidth().then(if (questions.isEmpty()) Modifier else Modifier
+        if (!detailOnly && event.type != "thinking" && bubble == null && !userBubble && !plainReply) Row(Modifier.fillMaxWidth().then(if (questions.isEmpty()) Modifier else Modifier
             .clickable(onClickLabel = if (questionShown) "Hide options" else "Show options", role = Role.Button) { questionOpen = !questionShown }
             .semantics { stateDescription = if (questionShown) "Expanded" else "Collapsed" }),
             horizontalArrangement = Arrangement.SpaceBetween, verticalAlignment = Alignment.CenterVertically) {
@@ -367,7 +396,8 @@ internal fun TranscriptRowView(row: TranscriptRow, model: FullEvents, live: Tran
         } else if (event.type == "interrupt") {
             // The title is the whole row, as on web and iOS: the payload is the runner's bookkeeping (the request a Stop answered, the
             // restart's reason), which the body below would print as raw JSON.
-        } else {
+        } else UserBubbleFrame(userBubble, sender = title.takeIf { it != ExternalSender.you }, time = RelativeTime.format(event.ts),
+            copy = if (shown.body().isNotBlank()) ({ loadFull(copy = true) }) else null) {
             val atts = (shown.fields["attachments"] as? JsonArray).orEmpty().filterIsInstance<JsonObject>()
             val attachmentOnly = shown.type == "user" && shown.body().isBlank() && atts.isNotEmpty()
             // Delivery's appended note stays out of the person's words and is never rendered separately.
@@ -382,7 +412,7 @@ internal fun TranscriptRowView(row: TranscriptRow, model: FullEvents, live: Tran
                 if (pairs != null) InterleavedReply(pairs, open)
                 else if (pendingReply) CompositionLocalProvider(LocalContentColor provides MaterialTheme.colorScheme.onSurfaceVariant) {
                     MarkdownText(words.ifBlank { shown.payload.toString() }, open = open)
-                } else MarkdownText(words.ifBlank { shown.payload.toString() }, open = open)
+                } else UserBubbleBox(userBubble) { MarkdownText(words.ifBlank { shown.payload.toString() }, open = open) }
                 // The English the agent read or wrote, below its dashed divider; a long reply's collapsed (frame 3).
                 (if (event.type == "user") BilingualShown.userEnglish(shown.personWords(), turnTranslation, showsBoth)
                     else if (event.type == "assistant") BilingualShown.replyEnglish(shown.body(), replyTranslation, showsBoth) else null)
@@ -429,6 +459,38 @@ internal fun TranscriptRowView(row: TranscriptRow, model: FullEvents, live: Tran
             LazyColumn { items(row.children.filter { !(it.event.type == "tool_use" && it.event.toolId() in shownAgents) }, key = { it.key }) {
                 TranscriptRowView(it, model, live, open) } }
         } }
+    }
+}
+
+/** The tint of a person's bubble, as iOS's `.tint.opacity(0.15)` reads on an iPhone (measured: light #E0E9FF, dark #071026). */
+@Composable
+private fun userBubbleColor(): Color = if (MaterialTheme.colorScheme.surface.luminance() > 0.5f) Color(0xFFE0E9FF) else Color(0xFF071026)
+
+/** A person's words in their bubble (iOS `UserBubbleView`): 12dp corners, 12 by 8 inside; anything else draws [content] as it is. */
+@Composable
+private fun UserBubbleBox(on: Boolean, content: @Composable () -> Unit) {
+    if (!on) { content(); return }
+    Box(Modifier.clip(RoundedCornerShape(12.dp)).background(userBubbleColor()).padding(horizontal = 12.dp, vertical = 8.dp)
+        .testTag("user-bubble")) { content() }
+}
+
+/**
+ * A person's turn laid out as iOS's: pushed right past a 60dp gutter, [sender] over it when it is somebody other than the reader,
+ * and under it a copy and its [time] (iOS `metaRow`). Off, [content] is drawn as every other row's body is.
+ */
+@Composable
+private fun UserBubbleFrame(on: Boolean, sender: String?, time: String?, copy: (() -> Unit)?, content: @Composable ColumnScope.() -> Unit) {
+    if (!on) { Column(verticalArrangement = Arrangement.spacedBy(6.dp), content = content); return }
+    Row(Modifier.fillMaxWidth().padding(start = 60.dp), horizontalArrangement = Arrangement.End) {
+        Column(horizontalAlignment = Alignment.End, verticalArrangement = Arrangement.spacedBy(3.dp)) {
+            sender?.let { Text(it, style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.onSurfaceVariant) }
+            content()
+            if (copy != null || time != null) Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                if (copy != null) Icon(painterResource(R.drawable.ic_copy), "Copy message", Modifier.size(16.dp)
+                    .clickable(role = Role.Button, onClickLabel = "Copy message", onClick = copy), tint = MaterialTheme.colorScheme.onSurfaceVariant)
+                time?.let { Text(it, style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant) }
+            }
+        }
     }
 }
 
@@ -535,7 +597,7 @@ private fun SettledAuthLine(message: String, resolved: Boolean) {
 private fun ToolFailureCard(message: String, summary: ToolFailureSummary) {
     var expanded by rememberSaveable(message) { mutableStateOf(false) }
     val error = MaterialTheme.colorScheme.error
-    Column(Modifier.fillMaxWidth().drawBehind { drawRect(error, size = size.copy(width = 3.dp.toPx())) }.padding(start = 11.dp),
+    Column(Modifier.conversationCard().testTag("tool-failure-card").drawBehind { drawRect(error, size = size.copy(width = 3.dp.toPx())) }.padding(start = 11.dp),
         verticalArrangement = Arrangement.spacedBy(6.dp)) {
         Row(horizontalArrangement = Arrangement.spacedBy(7.dp), verticalAlignment = Alignment.CenterVertically) {
             Text(summary.tool ?: "Tool call", Modifier.weight(1f, fill = false), fontFamily = FontFamily.Monospace,

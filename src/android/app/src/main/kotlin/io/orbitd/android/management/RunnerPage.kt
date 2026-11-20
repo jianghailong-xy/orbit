@@ -74,7 +74,7 @@ internal object RunnerCopy {
     /** A managed runner that has not reported yet (preparing, waiting for capacity, failed to start): its Resources and Engines say
      * only this (web runnerCopy MANAGED_RUNNER_NOT_REPORTED). */
     const val MANAGED_NOT_REPORTED = "Available once the runner is ready."
-    /** The account's managed runner wherever its name is shown, unless its owner renamed it: its stored name (`orbit-managed`) is
+    /** The account's managed runner wherever its name is shown, unless its owner renamed it: its stored name (`orbit-managed` on a server before migration 1250) is
      * the server's, not a word for anyone to read (web runnerCopy MANAGED_RUNNER_LABEL). */
     const val MANAGED_RUNNER_LABEL = "Orbit Cloud"
     /** A managed runner's version when it reports none that is a release (its image is `managed-<sha>`). */

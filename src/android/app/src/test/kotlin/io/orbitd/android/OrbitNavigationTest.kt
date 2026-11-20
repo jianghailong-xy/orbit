@@ -169,6 +169,16 @@ class OrbitNavigationTest {
         assertEquals(other, other.dropSession(publicId))
     }
 
+    /** iOS `openCreatedAgentSession`: the session a draft created takes the draft's place, so Back returns to the list it was opened from. */
+    @Test fun aCreatedSessionReplacesItsDraftSoBackSkipsIt() {
+        val root = OrbitRoute(Destination.WORKSPACE, "w1")
+        val draft = OrbitRoute(Destination.DRAFT, workspaceId = "w1")
+        val session = OrbitRoute(Destination.SESSION, uuid, workspaceId = "w1")
+        val nav = OrbitNavigation().bindAccount("server|user").select("w1", root).push(draft).replaceTop(session)
+        assertEquals(listOf(root, session), nav.frames)
+        assertEquals(listOf(root), nav.back().frames)
+    }
+
     /** Copy Link's address names the session by its public id, as the deployment's own routes do (OrbitKit `PublicID.toPublic`). */
     @Test fun aSessionsPublicIdIsItsUuidInBase62() {
         assertEquals(publicId, ObjectId.toPublic(uuid))

@@ -25,6 +25,7 @@ import { BackgroundShellsTray, lastUserMessageAt } from './BackgroundShellsTray'
 interface RowCase {
   case: string;
   list: BackgroundRowInput[];
+  events?: RunEvent[];
   lastUserMessageAt: string | null;
   sessionLive: boolean;
   expect: BackgroundRow;
@@ -100,7 +101,9 @@ describe('the folded row, by background-row.fixture.json', () => {
   });
 
   it.each(fixture.cases.map((c) => [c.case, c] as const))('%s', (_name, c) => {
-    render(c.list.map(shell), userAt(c.lastUserMessageAt), c.sessionLive);
+    // A case that carries its transcript is read through the reader, as every client must.
+    if (c.events) expect(lastUserMessageAt(c.events)).toBe(c.lastUserMessageAt);
+    render(c.list.map(shell), c.events ?? userAt(c.lastUserMessageAt), c.sessionLive);
     const want = c.expect;
     if (want.hidden) {
       expect(container.innerHTML).toBe('');
@@ -133,6 +136,24 @@ describe('the folded row, by background-row.fixture.json', () => {
       const failed = want.countParts.find((p) => p.kind === 'failed');
       expect(one('.bg-tray-count .ct-failed')?.textContent ?? null).toBe(failed?.text ?? null);
     }
+
+    // As the Agents row: the name, then past the spacer the count, the mark, the arrow at the edge.
+    const name = one(want.name.mode === 'rotate' ? '.bg-rot' : '.bg-tray-name')!;
+    const order = [name, one('.wt-spacer')!, one('.bg-tray-count'), marks[0], one('.wt-expand')!].filter(
+      (el): el is HTMLElement => el !== null,
+    );
+    const rowChildren = [...one('.bg-tray-row')!.children];
+    expect(order.map((el) => rowChildren.indexOf(el))).toEqual(
+      [...order.map((el) => rowChildren.indexOf(el))].sort((a, b) => a - b),
+    );
+    expect(order.every((el) => rowChildren.includes(el))).toBe(true);
+    expect(rowChildren.slice(-2)).toEqual([marks[0], one('.wt-expand')]);
+    if (want.countLine !== null) expect(rowChildren.slice(-3, -2)).toEqual([one('.bg-tray-count')]);
+  });
+
+  it('lets the rotating names, not the spacer, take the free space', () => {
+    expect(css).toMatch(/\.bg-rot\s*\{[^}]*flex:\s*1 1 auto/);
+    expect(css).toMatch(/\.bg-rot \+ \.wt-spacer\s*\{[^}]*flex:\s*none/);
   });
 
   it('draws the one name in the brand tint, as the Tasks card draws its .ct-one', () => {

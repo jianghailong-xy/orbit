@@ -104,6 +104,9 @@ interface ChildExec {
   poolMember?: SubagentPoolMemberChoice;
 }
 
+/** What a resumed run on this machine was opened under: its last attempt's target, never routed (resumeInPlace). */
+export const SUBAGENT_RESUME_POLICY_VERSION = 'subagent-resume-v1';
+
 /** A refusal's own words. */
 function refusalText(error: HttpException): string {
   const said = error.getResponse();
@@ -136,6 +139,16 @@ function assertSubagentsEnabled(workspace: { subagentsEnabled: boolean } | null)
     throw new ForbiddenException({
       code: 'SUBAGENTS_DISABLED',
       message: 'SubAgents are turned off for this agent. Do the work in this session instead.',
+    });
+  }
+}
+
+/** A workflow needs its own switch on as well (workflowsOn); `delegate` reads only SubAgents. */
+function assertWorkflowsEnabled(workspace: { workflowsEnabled: boolean } | null): void {
+  if (workspace?.workflowsEnabled === false) {
+    throw new ForbiddenException({
+      code: 'WORKFLOWS_DISABLED',
+      message: 'Workflows are turned off for this agent. Hand each piece of work to delegate, or do it in this session.',
     });
   }
 }
@@ -230,11 +243,12 @@ export class RunnerSubagentsController {
         where: { id: sessionId },
         select: {
           ownerId: true, status: true, endReason: true, completedAt: true, archivedAt: true, deletedAt: true,
-          workspace: { select: { subagentsEnabled: true } },
+          workspace: { select: { subagentsEnabled: true, workflowsEnabled: true } },
         },
       });
       if (sessionHasEnded(session)) throw new ConflictException('the session has ended');
       assertSubagentsEnabled(session.workspace);
+      assertWorkflowsEnabled(session.workspace);
       const row = await tx.subagentWorkflowRun.create({
         data: {
           ownerId: session.ownerId,
@@ -325,7 +339,11 @@ export class RunnerSubagentsController {
     });
     // A retry answers with the run it opened, wherever it was placed.
     if (opened?.targetRunnerId) return this.remoteAnswer(opened);
-    if (!opened && dto.resumeOf) return this.openRemoteResume(sessionId, dto, dto.resumeOf);
+    if (!opened && dto.resumeOf) {
+      // One that ran on another workspace continues there (§10.2); one that ran on this machine, here (createSubagentRun).
+      const original = await this.prisma.subagentRun.findFirst({ where: { id: dto.resumeOf, sessionId }, select: { targetRunnerId: true } });
+      if (!original || original.targetRunnerId) return this.openRemoteResume(sessionId, dto, dto.resumeOf);
+    }
     if (!opened && (dto.workspace?.trim() || neededCapabilities(dto.needs).length > 0)) {
       const parent = await this.prisma.session.findUniqueOrThrow({ where: { id: sessionId }, select: { ownerId: true, workspaceId: true } });
       const pick = await chooseSubagentWorkspace(this.prisma, {
@@ -389,33 +407,39 @@ export class RunnerSubagentsController {
           decision: opened.decision as unknown as SubagentDecision, exec: built.exec,
         };
       }
-      const route = await planSubagentRoute(tx, {
-        ownerId: session.ownerId,
-        workspaceId: session.workspaceId,
-        runnerId: session.assignedRunnerId,
-        dto,
-        planUsage: this.planUsage,
-        parent,
-      });
-      // The pick, else the first of the tier's next candidates this runner can start.
-      const passedOver: Array<{ target: SubagentCandidateTarget; reason: string }> = [];
-      let chosen: { target: SubagentCandidateTarget; built: ChildExec } | null = null;
-      for (const target of fallbackCandidates(route)) {
-        try {
-          chosen = { target, built: await build(target) };
-          break;
-        } catch (error) {
-          if (!(error instanceof HttpException)) throw error;
-          passedOver.push({ target, reason: refusalText(error) });
-        }
-      }
-      if (!chosen) {
-        throw new ConflictException({
-          code: 'NO_SUBAGENT_PROVIDER',
-          message: noProviderMessage(route, [], passedOver.map((p) => `${p.target.provider} (${p.target.engine}), ${p.target.model}: ${p.reason}`)),
-        });
-      }
-      const decision = appliedDecision(route, chosen.target, passedOver);
+      // A resume continues the conversation where it ran: on its last attempt's engine, provider and model, never routed
+      // again, since the conversation is that engine's and another would get the model without it.
+      const { chosen, decision } = dto.resumeOf
+        ? await this.resumeInPlace(tx, sessionId, dto.resumeOf, build)
+        : await (async () => {
+          const route = await planSubagentRoute(tx, {
+            ownerId: session.ownerId,
+            workspaceId: session.workspaceId,
+            runnerId: session.assignedRunnerId,
+            dto,
+            planUsage: this.planUsage,
+            parent,
+          });
+          // The pick, else the first of the tier's next candidates this runner can start.
+          const passedOver: Array<{ target: SubagentCandidateTarget; reason: string }> = [];
+          let chosen: { target: SubagentCandidateTarget; built: ChildExec } | null = null;
+          for (const target of fallbackCandidates(route)) {
+            try {
+              chosen = { target, built: await build(target) };
+              break;
+            } catch (error) {
+              if (!(error instanceof HttpException)) throw error;
+              passedOver.push({ target, reason: refusalText(error) });
+            }
+          }
+          if (!chosen) {
+            throw new ConflictException({
+              code: 'NO_SUBAGENT_PROVIDER',
+              message: noProviderMessage(route, [], passedOver.map((p) => `${p.target.provider} (${p.target.engine}), ${p.target.model}: ${p.reason}`)),
+            });
+          }
+          return { chosen, decision: appliedDecision(route, chosen.target, passedOver) };
+        })();
       if (dto.readonly) decision.readonly = true;
       // A call that asked for a workspace or capabilities and was placed here says why first (§10.1).
       if (workspaceReason) decision.reasons = [workspaceReason, ...decision.reasons];
@@ -451,6 +475,57 @@ export class RunnerSubagentsController {
         exec: chosen.built.exec,
       };
     }, loggedRetry(this.logger, 'runnerSubagents.createSubagentRun'));
+  }
+
+  /**
+   * Continue a finished run of this session on this machine: a new run on the engine, provider, model and effort its
+   * last attempt ran on, which hold its conversation. Refused while it runs, and when that target cannot start here
+   * now: moving it to another engine would start a conversation without the one it continues.
+   */
+  private async resumeInPlace(
+    tx: Prisma.TransactionClient,
+    sessionId: string,
+    resumeOf: string,
+    build: (target: SubagentCandidateTarget) => Promise<ChildExec>,
+  ): Promise<{ chosen: { target: SubagentCandidateTarget; built: ChildExec }; decision: SubagentDecision }> {
+    const original = await tx.subagentRun.findFirst({
+      where: { id: resumeOf, sessionId, targetRunnerId: null },
+      select: { status: true, attempts: true, decision: true },
+    });
+    const last = original ? attemptsOf(original.attempts).at(-1) : undefined;
+    if (!original || !last) {
+      throw new NotFoundException({ code: 'SUBAGENT_RESUME_NOT_FOUND', message: 'This session has no SubAgent run by that id to resume.' });
+    }
+    if (original.status === 'RUNNING') {
+      throw new ConflictException({ code: 'SUBAGENT_RESUME_RUNNING', message: 'That SubAgent is still running; resume it once it has ended.' });
+    }
+    const target: SubagentCandidateTarget = { engine: last.engine, provider: last.provider, model: last.model, effort: last.effort ?? null };
+    const where = `${target.model} on ${target.provider}${target.engine === target.provider ? '' : ` (${target.engine})`}`;
+    let built: ChildExec;
+    try {
+      built = await build(target);
+    } catch (error) {
+      if (!(error instanceof HttpException)) throw error;
+      throw new ConflictException({
+        code: 'SUBAGENT_RESUME_CANNOT_START',
+        message: `That SubAgent ran on ${where}, which cannot start here now: ${refusalText(error)}. Its conversation is that `
+          + "engine's, so it is not moved to another. Start a new SubAgent with the full brief instead.",
+      });
+    }
+    const before = original.decision as unknown as SubagentDecision | null;
+    const decision: SubagentDecision = {
+      level: before?.level ?? null,
+      tierSource: 'not-routed',
+      optimizeFor: null,
+      ...target,
+      reasons: [`Resumes ${resumeOf} where it ran: ${where}`],
+      candidates: [],
+      fallbacks: [],
+      policyVersion: SUBAGENT_RESUME_POLICY_VERSION,
+      applied: true,
+      tierNote: 'Resumed where it ran',
+    };
+    return { chosen: { target, built }, decision };
   }
 
   /**

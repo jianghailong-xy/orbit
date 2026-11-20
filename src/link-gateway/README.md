@@ -263,7 +263,7 @@ It carries, besides the request itself:
 | `X-Orbit-Link-Request-Id` | `Rpc.request_id`: a claim sent again under it answers the session the first one claimed. |
 | `X-Orbit-Link-Session-Id`, `X-Orbit-Link-After-Seq` | `Rpc.session_id` and `Rpc.after_seq`, when set: the call waits for the session's events to be stored through that seq. |
 | `X-Orbit-Link-Gateway-Id` | This gateway node, which the heartbeat route records in the runner's presence. |
-| `X-Orbit-Runner-Capabilities`, `X-Orbit-Runner-Os`, `X-Orbit-CLI-Version`, the three `X-Orbit-Runner-*-Revision`/`-Digest` write-contract headers, `X-Orbit-Managed-Runner-Generation` and `-Pod-Uid` | What Hello declared, under the names a runner sends on every HTTPS request today. |
+| `X-Orbit-Runner-Capabilities`, `X-Orbit-Runner-Os`, `X-Orbit-CLI-Version`, the three `X-Orbit-Runner-*-Revision`/`-Digest` write-contract headers, `X-Orbit-Cloud-Runner-Generation` and `-Pod-Uid` | What Hello declared, under the names a runner sends on every HTTPS request today. |
 | `X-Orbit-Supported-Providers` | The engines the newest Heartbeat names (Hello's until one does; an empty list leaves the last one). |
 
 Each call runs under its connection's context: a runner that disconnects aborts its calls, so a route that watches its

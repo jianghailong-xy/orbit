@@ -331,7 +331,7 @@ const QUESTION_TRANSLATION = {
 };
 
 const cardText = (alert: FeishuAlert): string => JSON.stringify(renderFeishuCard(alert, {
-  detail: 'FULL', approvalsInFeishu: true, openUrl: 'https://orbit.test/s',
+  detail: 'FULL', approvalsInFeishu: true, showOrbit: true, openUrl: 'https://orbit.test/s',
 }));
 
 test('a Feishu approval card draws approval.translation when present, and the original when absent or failed', () => {

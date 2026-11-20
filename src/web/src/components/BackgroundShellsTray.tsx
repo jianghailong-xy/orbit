@@ -23,6 +23,7 @@ import {
 } from '@orbit/shared';
 import { splitRecordedNote } from '../lib/deliveredMessage';
 import { parseWatchWake } from '../lib/watches';
+import { parseSessionMessage } from '../lib/sessionMessage';
 import { EMPTY_LIVE_TASK_PROGRESS, type LiveTaskProgress } from '../lib/liveTaskProgress';
 import { TaskProgressBlock } from './TaskProgressBlock';
 
@@ -85,10 +86,13 @@ export function BackgroundShellsTray({
           <>
             <span className="bg-tray-title bg-tray-label">{row.label}</span>
             <FoldedName name={row.name} rotation={rotation} />
-            {row.countParts.length > 0 && <CountLine parts={row.countParts} />}
           </>
         )}
         <span className="wt-spacer" />
+        {/* Folded, the count and then the mark sit at the right edge, before the arrow, as the
+            Agents row draws its status. */}
+        {!open && row.countParts.length > 0 && <CountLine parts={row.countParts} />}
+        {!open && <BgStatusIcon status={row.name.mode === 'rotate' ? 'running' : row.name.item.mark} />}
         <button
           type="button"
           className="wt-expand"
@@ -122,13 +126,15 @@ export function BackgroundShellsTray({
 /**
  * When the person last wrote: the newest `user` event with words they typed. A turn Orbit opened
  * itself (a background job's or a SubAgent's wake: nothing typed, only the recorded note) or a
- * watch's wake is not their message, so it clears nothing (decision D1).
+ * watch's wake is not their message, so it clears nothing (decision D1); nor is a message another
+ * Orbit session sent (`sessionMessage` card).
  */
 export function lastUserMessageAt(events: RunEvent[]): string | null {
   for (let i = events.length - 1; i >= 0; i--) {
     const ev = events[i];
     if (ev.type !== 'user' || !ev.ts) continue;
     const p = (ev.payload ?? {}) as { text?: unknown };
+    if (parseSessionMessage(p)) continue;
     const recorded = splitRecordedNote(p);
     const text = recorded ? recorded.text : typeof p.text === 'string' ? p.text : '';
     if (text.trim() === '' || parseWatchWake(text)) continue;
@@ -201,31 +207,21 @@ function useRotation(name: BackgroundRowName | null, paused: boolean): Rotation 
 }
 
 /**
- * The folded row's name: one still name with its mark, or the running names in turn. A change
+ * The folded row's name: one still name, or the running names in turn. A change
  * pushes the old name up and the new one in from below (translateY); under prefers-reduced-motion
  * the two crossfade in place. The rotating text is aria-hidden: the toggle's label says the count.
  */
 function FoldedName({ name, rotation }: { name: BackgroundRowName; rotation: Rotation }) {
-  if (name.mode !== 'rotate') {
-    return (
-      <>
-        <RowName item={name.item} className="bg-tray-name" />
-        <BgStatusIcon status={name.item.mark} />
-      </>
-    );
-  }
+  if (name.mode !== 'rotate') return <RowName item={name.item} className="bg-tray-name" />;
   const { items, changeMs } = name;
   const { step, changing } = rotation;
   const at = (n: number) => items[((n % items.length) + items.length) % items.length];
   const style = { '--bg-rot-change': `${changeMs}ms` } as CSSProperties;
   return (
-    <>
-      <span className={`bg-rot ${reducedMotion() ? 'is-fade' : 'is-push'}`} style={style} aria-hidden="true">
-        {changing && <RowName key={`out-${step}`} item={at(step - 1)} className="bg-rot-name bg-rot-out" />}
-        <RowName key={`in-${step}`} item={at(step)} className={`bg-rot-name${changing ? ' bg-rot-in' : ''}`} />
-      </span>
-      <BgStatusIcon status="running" />
-    </>
+    <span className={`bg-rot ${reducedMotion() ? 'is-fade' : 'is-push'}`} style={style} aria-hidden="true">
+      {changing && <RowName key={`out-${step}`} item={at(step - 1)} className="bg-rot-name bg-rot-out" />}
+      <RowName key={`in-${step}`} item={at(step)} className={`bg-rot-name${changing ? ' bg-rot-in' : ''}`} />
+    </span>
   );
 }
 

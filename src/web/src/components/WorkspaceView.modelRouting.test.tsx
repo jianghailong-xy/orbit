@@ -320,8 +320,7 @@ describe('the model chip on a task run smart selection picked', { timeout: 60_00
   });
 
   const switchedOff: Array<[string, Record<string, unknown>]> = [
-    ['preferences without modelRouting', {}],
-    ['modelRouting: false', { modelRouting: false }],
+    ['preferences with modelRouting explicitly off', { modelRouting: false }],
   ];
   for (const [what, preferences] of switchedOff) {
     it(`with the account switch off (${what}) nothing of smart selection shows`, async () => {
