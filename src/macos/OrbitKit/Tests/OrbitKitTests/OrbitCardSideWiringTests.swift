@@ -100,6 +100,7 @@ final class OrbitCardSideWiringTests: XCTestCase {
         XCTAssertGreaterThanOrEqual(turns.components(separatedBy: ".orbitCardWidth()").count - 1, 5)
         let tools = try source(Self.views + "/Console/ToolCards.swift")
         XCTAssertTrue(tools.contains("SessionCreateCardView(payload: payload).orbitCardWidth()"))
+        XCTAssertTrue(tools.contains("defaultBody.orbitCardWidth()"), "an answered question is a card and takes the width")
         let setup = try source(Self.views + "/MachineSetupCard.swift")
         XCTAssertTrue(setup.contains("maxWidth: ConversationCardWidth.max"))
     }

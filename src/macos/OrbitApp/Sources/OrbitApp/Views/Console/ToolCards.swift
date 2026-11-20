@@ -405,7 +405,9 @@ struct ToolCardView: View {
             } else if card.resultTruncated, needsWholeResult, fullResult == nil {
                 EmptyView()   // nothing to show until the untrimmed JSON lands
             } else if showsHeader {
-                defaultBody
+                // An answered question is a card (its record), so it ends where the cards end;
+                // every other tool call is tool output and keeps the column.
+                if questions.isEmpty { defaultBody } else { defaultBody.orbitCardWidth() }
             } else {
                 detail
             }
