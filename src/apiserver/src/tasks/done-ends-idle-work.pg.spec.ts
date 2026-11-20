@@ -22,6 +22,7 @@ import { QueueService } from '../queue/queue.service';
 import { RealtimeService } from '../realtime/realtime.service';
 import { RunnerApiController } from '../runner-api/runner-api.controller';
 import { SessionsService } from '../sessions/sessions.service';
+import { completeHumanTaskForPgTest } from './task-completion-test-helper';
 import { TasksService } from './tasks.service';
 import '../test-support/dequeue-under-lease';
 
@@ -342,7 +343,8 @@ test('a DONE written while its work session was in a turn is answered by that tu
       const turnId = await messageInFlight(s.db, sessionId, 1);
       // Another door (an evidence CONFIRM, the owner's Confirm done) writes DONE while the turn runs;
       // its edge finds the session busy and leaves it.
-      await s.db.task.update({ where: { id: taskId }, data: { status: TaskStatus.DONE } });
+      await completeHumanTaskForPgTest(s.db, w.ownerId, taskId, 'confirmed mid-turn');
+      assert.equal((await s.db.task.findUniqueOrThrow({ where: { id: taskId } })).status, TaskStatus.DONE);
       await s.tasks.dispatchDependentsAfterCompletion(w.ownerId, taskId);
       assert.equal(
         (await s.db.session.findUniqueOrThrow({ where: { id: sessionId }, select: { cancelRequestedAt: true } })).cancelRequestedAt,

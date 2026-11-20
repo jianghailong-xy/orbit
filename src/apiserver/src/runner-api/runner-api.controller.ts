@@ -8395,6 +8395,17 @@ export class RunnerApiController {
       ));
       // A task that is done answers whatever exception was open about it (contract §4.2).
       await this.openItems?.resolveByFact([finalized.taskId]);
+    } else if (
+      'taskCompleted' in finalized
+      && finalized.applied
+      && finalized.status === RunStatus.AWAITING_INPUT
+      && finalized.taskOwnerId
+      && finalized.taskId
+    ) {
+      // §12.15 P-M1: a DONE written by another door while this work session was still in its turn
+      // (an evidence CONFIRM, the owner's Confirm done) could not end it then; its park asks now.
+      // Nothing for a task that is not DONE or a session with more to do (`endIdleWorkOfDoneTask`).
+      await this.tasks?.requestEndOfIdleWork(finalized.taskOwnerId, finalized.taskId);
     }
     // The exception half of that same edge. `taskCompleted` is true only for a DERIVED DONE, so
     // three real endings reach nothing above: an acceptance code that disagreed and derived FAILED,

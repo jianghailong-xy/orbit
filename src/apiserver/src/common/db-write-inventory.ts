@@ -1105,6 +1105,17 @@ export const TRANSACTION_UNITS: readonly TransactionUnit[] = [
     answer: 'Typed 503; the sweep runs again.',
   },
   {
+    at: 'realtime/parked-session-end.ts#endIdleWorkOfDoneTask',
+    shape: 'TX_RETRIED',
+    locks: 'One unit per idle work session of a DONE task (§12.15 P-M1), opened after the DONE committed by the completion edge every DONE door runs (TasksService.dispatchDependentsAfterCompletion) or by the park of that session\'s turn (runnerApi.turnComplete). Plain reads first — the session row, its PENDING/IN_FLIGHT turns, the OPEN session_request rows addressed to it, and hasPendingWakeSource — then claimParkedSessionEnd: the session row (rank 30) by its conditional UPDATE, the transaction\'s first lock and its one write of the row (lock-order.ts I3), and one conversation_turn INSERT (rank 60). Nothing of the task is locked: the claim reads the task\'s status through the UPDATE\'s join, as the reaper\'s does.',
+    identity: 'The claim is a compare-and-set on status AWAITING_INPUT, cancel_requested_at NULL, deleted_at NULL and the task DONE, so a second request, the reaper\'s claim or a turn queued in between (which moves the row out of AWAITING_INPUT under the same lock) makes it write nothing.',
+    isolation: '',
+    attempts: 4,
+    replay: 'Every read is inside the attempt; a re-run finds the claim made or the session busy and writes nothing.',
+    effects: 'None inside; announceParkedSessionEnd after the commit (the lifecycle event, the runner hint, the inbox).',
+    answer: 'Logged; the reaper\'s next sweep ends the session (endParked), as before this existed.',
+  },
+  {
     at: 'runner-api/runner-api.controller.ts#takeoverLeases',
     shape: 'TX_RETRIED',
     locks: 'session FOR UPDATE (rank 30), then inbox_lease_generation and conversation_turn (rank 60). No task or workspace lock — one write of the Session row (lock-order.ts, I3).',
@@ -3047,6 +3058,7 @@ export interface TransactionParticipant {
  * silently.
  */
 export const TRANSACTION_PARTICIPANTS: readonly TransactionParticipant[] = [
+  { at: 'realtime/parked-session-end.ts#claimParkedSessionEnd', under: 'reaper.endParked and parkedSessionEnd.endIdleWorkOfDoneTask, each its own unit: the conditional UPDATE of the session row (rank 30) that is the claim, then one conversation_turn INSERT (rank 60) for the end turn, so a seq conflict rolls both back' },
   { at: 'conditions/condition-still-waiting.ts#fileStillWaitingItem', under: 'conditions.askStillWaiting: under the condition row FOR UPDATE it holds, one owner_request INSERT ON CONFLICT (asked_by_session_id, client_request_id) DO NOTHING' },
   { at: 'conditions/condition-still-waiting.ts#answerStillWaiting', under: 'ownerRequests.settle, as its effect: after the item CAS to DONE, one conditional UPDATE of its condition (keep_waiting_since for Keep waiting, ENDED for Stop)' },
   { at: 'tasks/tasks.service.ts#onStartWhenFired', under: 'conditions.applySamples, as its fire hook (ConditionsService.write): under the condition row FOR UPDATE it holds, task_dispatch_epoch_advance on the task the condition starts — FOR NO KEY UPDATE and one UPDATE of its task_dispatch_epoch row' },

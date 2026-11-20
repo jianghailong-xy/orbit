@@ -1,0 +1,152 @@
+import { Prisma, RunStatus, TaskStatus } from '@prisma/client';
+import { SessionEndReason, SessionLifecycleState } from '@orbit/shared';
+import { randomUUID } from 'crypto';
+
+import { loggedRetry, withTransactionRetry, type RetryLogger } from '../common/transaction-retry';
+import type { PrismaService } from '../prisma/prisma.service';
+import { hasPendingWakeSource } from '../sessions/session-request';
+import type { RealtimeService } from './realtime.service';
+
+/**
+ * Ending a parked session because its task is over: the one write both of its callers make.
+ *
+ *   * The reaper (`ReaperService.endParked`) finds an idle session whose task is DONE or CANCELLED on
+ *     its sweep, every REAP_INTERVAL_MS. That is the backstop.
+ *   * The DONE (`endIdleWorkOfDoneTask`, §12.15 P-M1): the completion edge every DONE door runs once
+ *     its transaction has committed asks for the end of the task's idle work sessions at once. A DONE
+ *     over an open work session decides its landing, and releases its dependents, at that session's
+ *     finish (O-L4 3); so the finish is requested by the DONE, not left to a sweep.
+ *
+ * The end is a request: `cancel_requested_at` and the end reason on the row, and an `end` turn the
+ * runner drains. The runner's finalize writes `finished_at`, and that finish freezes the delivered
+ * identity and dispatches the dependents (`settleDeliveredIdentityAfterFinish`).
+ */
+
+/**
+ * The claim, in the caller's transaction: still parked, no end requested yet, and its task still in
+ * the state the end is named for. A stale reader must never turn a cancelled task into task_done, and
+ * Trash stays authoritative over Completed. Then the `end` turn, so a seq conflict rolls both back.
+ * False when the row no longer matches; nothing is written then.
+ */
+export async function claimParkedSessionEnd(
+  tx: Prisma.TransactionClient,
+  sessionId: string,
+  reason: SessionEndReason,
+): Promise<boolean> {
+  const taskStatus = reason === SessionEndReason.TASK_DONE ? TaskStatus.DONE : TaskStatus.CANCELLED;
+  const now = new Date();
+  const claimed = await tx.session.updateMany({
+    where: {
+      id: sessionId,
+      status: RunStatus.AWAITING_INPUT,
+      cancelRequestedAt: null,
+      task: { status: taskStatus },
+      ...(reason === SessionEndReason.TASK_DONE ? { deletedAt: null } : {}),
+    },
+    data: {
+      cancelRequestedAt: now,
+      endReason: reason,
+      ...(reason === SessionEndReason.TASK_DONE ? { completedAt: now, archivedAt: now } : {}),
+    },
+  });
+  if (claimed.count === 0) return false;
+  const last = await tx.conversationTurn.findFirst({
+    where: { sessionId },
+    orderBy: { seq: 'desc' },
+    select: { seq: true },
+  });
+  await tx.conversationTurn.create({
+    data: {
+      sessionId,
+      seq: (last?.seq ?? 0) + 1,
+      clientTurnId: randomUUID(),
+      kind: 'end',
+      status: 'PENDING',
+    },
+  });
+  return true;
+}
+
+/** After the claim has committed: the clients see it filed, and its runner is told to drain the end. */
+export function announceParkedSessionEnd(
+  realtime: RealtimeService,
+  ended: { sessionId: string; runnerId: string | null; reason: SessionEndReason },
+): void {
+  if (ended.reason === SessionEndReason.TASK_DONE) {
+    realtime.publishSessionLifecycleChanged(
+      ended.sessionId,
+      RunStatus.AWAITING_INPUT,
+      ended.reason,
+      SessionLifecycleState.COMPLETED,
+    );
+  }
+  if (ended.runnerId) realtime.requestCancel(ended.runnerId, ended.sessionId);
+  realtime.notifyInbox(ended.sessionId);
+}
+
+/**
+ * §12.15 P-M1: the DONE requests the end of its task's idle work sessions. A session that still has
+ * something to do — a queued or running turn, a request addressed to it that is still open, or a
+ * wake source (`hasPendingWakeSource`: a running background job, an armed retry, a scheduled wakeup,
+ * a watch, a request of its own) — is left to the reaper, as before. So is a session still in a turn
+ * when the DONE is written; its park asks again (runner-api `turnComplete`).
+ *
+ * One transaction per session. The checks are plain reads ahead of the claim, and the claim is its
+ * first lock (the session row, rank 30, as the reaper takes it): anything that gives a parked session
+ * something to do — a message, a request, a resumed wakeup — queues a turn and moves the row out of
+ * AWAITING_INPUT under that same lock, which the claim's own re-check reads. Best effort: a failure is
+ * logged, and the reaper ends the session on its next sweep. Returns the ids it ended.
+ */
+export async function endIdleWorkOfDoneTask(
+  prisma: PrismaService,
+  realtime: RealtimeService,
+  logger: RetryLogger,
+  input: { ownerId: string; taskId: string },
+): Promise<string[]> {
+  const candidates = await prisma.session.findMany({
+    where: {
+      ownerId: input.ownerId,
+      taskId: input.taskId,
+      startsTaskWork: true,
+      status: RunStatus.AWAITING_INPUT,
+      cancelRequestedAt: null,
+      deletedAt: null,
+      task: { status: TaskStatus.DONE },
+    },
+    select: { id: true, assignedRunnerId: true },
+  });
+  const ended: string[] = [];
+  for (const candidate of candidates) {
+    try {
+      const claimed = await withTransactionRetry(prisma, async (tx) => {
+        const row = await tx.session.findUnique({
+          where: { id: candidate.id },
+          select: { id: true, runningBgJobs: true, retryAt: true, engineTurnActive: true },
+        });
+        if (!row || row.engineTurnActive) return false;
+        const queued = await tx.conversationTurn.findFirst({
+          where: { sessionId: candidate.id, status: { in: ['PENDING', 'IN_FLIGHT'] } },
+          select: { id: true },
+        });
+        if (queued) return false;
+        const asked = await tx.sessionRequest.findFirst({
+          where: { toSessionId: candidate.id, state: 'OPEN' },
+          select: { id: true },
+        });
+        if (asked || (await hasPendingWakeSource(tx, row))) return false;
+        return claimParkedSessionEnd(tx, candidate.id, SessionEndReason.TASK_DONE);
+      }, loggedRetry(logger, 'parkedSessionEnd.endIdleWorkOfDoneTask'));
+      if (!claimed) continue;
+      announceParkedSessionEnd(realtime, {
+        sessionId: candidate.id,
+        runnerId: candidate.assignedRunnerId,
+        reason: SessionEndReason.TASK_DONE,
+      });
+      ended.push(candidate.id);
+    } catch (error) {
+      logger.warn(`the end of session ${candidate.id} was not requested on its task's DONE; the reaper ends it: ${
+        error instanceof Error ? error.message : error}`);
+    }
+  }
+  return ended;
+}
