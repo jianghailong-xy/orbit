@@ -12742,6 +12742,14 @@ button.chat-jump-start:hover {
   line-height: 1.5;
   color: var(--text-3);
 }
+.start-card-no-line .start-card-hint {
+  margin-top: 0;
+  padding: 8px 10px;
+  border-radius: 6px;
+  font-size: 13.5px;
+  color: var(--text-1);
+  background: color-mix(in srgb, var(--brand) 9%, transparent);
+}
 .start-card-line {
   min-width: 170px;
 }

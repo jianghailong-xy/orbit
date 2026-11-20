@@ -34,6 +34,9 @@ export const NOT_STARTED = 'Not started';
 export const START_DONE_WHEN = 'Done when';
 export const START_PLAN = 'Plan';
 export const START_HOW_IT_RUNS = 'How it runs';
+
+/** The one line a start request with no line draws in place of the line and the landing check (ruling D1). */
+export const START_NO_LINE = 'Lands on the project’s branch when a task commits';
 /** The link under the plan, to the tasks it names. */
 export const START_VIEW_TASKS = 'View tasks ›';
 /** Beside it, while the plan is drawn as levels: the project page's task graph, full screen. */

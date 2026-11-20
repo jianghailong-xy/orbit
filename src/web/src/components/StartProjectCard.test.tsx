@@ -682,6 +682,15 @@ describe('what a press sends', () => {
     expect(startDraftOf(requestOf().settings).mergeCheckTimeoutSeconds).toBeNull();
   });
 
+  it('opens a request with no line on no line, and the body carries no line key', () => {
+    const request = requestOf({ settings: { automatic: true, maxConcurrentTasks: 3, mergeCheckCommand: null } });
+    const draft = startDraftOf(request.settings, integrationOf());
+    expect(draft.line).toBeNull();
+    expect(draft.upstream).toBeNull();
+    const body = startBody(request, draft, 'item-1');
+    expect(Object.keys(body)).not.toContain('line');
+  });
+
   it('sends the seal it was asked about, every setting as the card shows it, and the request', () => {
     const request = requestOf();
     expect(startBody(request, {
@@ -1292,6 +1301,25 @@ describe('the main branch on the card', () => {
     });
     await until(() => bodies.length === 1, 'the press');
     expect(bodies[0]).not.toHaveProperty('upstreamRef');
+  });
+
+  it('draws one sentence for a request with no line, and the press sends no line key', async () => {
+    server.integration = integrationOf();
+    server.row = rowOf('item-1', requestOf({
+      settings: { automatic: true, maxConcurrentTasks: 3, mergeCheckCommand: null },
+    }));
+    const { card } = await delivered();
+    expect(rowNames(card())).toEqual(['Automatic', 'Merge check', 'At most']);
+    expect(card().querySelector('[data-no-line="true"]')?.textContent).toBe('Lands on the project’s branch when a task commits');
+    expect(card().querySelector('[data-landing-check="true"]')).toBeNull();
+    await act(async () => {
+      action(card(), START_PROJECT_ACTION).click();
+    });
+    await until(() => bodies.length === 1, 'the press');
+    expect(bodies[0]).not.toHaveProperty('line');
+    expect(bodies[0]).not.toHaveProperty('upstreamRef');
+    expect(bodies[0]).not.toHaveProperty('landingCheckCommand');
+    expect(bodies[0]).toMatchObject({ requestId: 'item-1', mergeCheckCommand: null });
   });
 
   it('is read-only once the request no longer stands', async () => {
