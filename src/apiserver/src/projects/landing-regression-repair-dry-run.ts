@@ -29,11 +29,17 @@ async function main(): Promise<void> {
       const line = repairLine(project, true);
       if (line) process.stdout.write(`${line}\n`);
     }
+    for (const dependent of prediction.dependents) {
+      process.stdout.write(`dependent (predicted): task ${dependent.taskId} "${dependent.title}" waits on ${dependent.waitsOn}; `
+        + `${dependent.autoRunWhenReady && dependent.projectStarted && !dependent.projectPaused
+          ? 'starts by itself once its other prerequisites are met' : 'released, but does not start by itself'}\n`);
+    }
     const toDone = prediction.projects.filter((project) => project.statusBefore === 'OPEN' && project.statusAfter === 'DONE');
     const items = prediction.projects.reduce((sum, project) => sum + project.supersededItemIds.length, 0);
     process.stdout.write(`prediction: ${prediction.projects.length} project(s) hold misread tasks; `
       + `${toDone.length} go OPEN -> DONE (${toDone.map((project) => project.projectId).join(', ') || 'none'}); `
-      + `${items} open item(s) will be superseded; the deploy-time pass would freeze `
+      + `${items} open item(s) will be superseded; ${prediction.dependents.length} OPEN dependent(s) are released `
+      + `as far as these tasks go; the deploy-time pass would freeze `
       + `${prediction.passWouldFreeze.length} identit${prediction.passWouldFreeze.length === 1 ? 'y' : 'ies'} first`
       + `${prediction.passWouldFreeze.length > 0 ? ` (${prediction.passWouldFreeze.join(', ')}), which this does not follow` : ''}\n`);
   } finally {

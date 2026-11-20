@@ -48,7 +48,9 @@ import { WakeDispositionService } from './wake-disposition.service';
  *  (e) the other cause of that deploy: an identity nobody can name whose every work session reported an
  *      empty diff (T3) — the project is DONE again by the same start;
  *  (f) the scope review is not asked about a task with nothing of its own, whose `changed_files` is the
- *      diff to a commit it only checked out.
+ *      diff to a commit it only checked out;
+ *  (g) a project whose only misread task serves no criterion is not projected again: that task moves no
+ *      derivation, and a projection would only store what an unrelated lag left.
  *
  * What this reads that the tree before the fix does not have is loaded by name, so the file compiles there
  * and every case is red for want of the behaviour rather than of a type.
@@ -59,13 +61,17 @@ const sha = (nibble: string) => nibble.repeat(40);
 
 interface PredictedProject {
   projectId: string;
-  tasks: Array<{ taskId: string; clause: string }>;
+  tasks: Array<{ taskId: string; clause: string; servesCriterion: boolean }>;
   supersededItemIds: string[];
   statusBefore: string | null;
   statusAfter: string | null;
 }
 interface RepairModule {
-  predictLandingRegressionRepair(db: unknown): Promise<{ passWouldFreeze: string[]; projects: PredictedProject[] }>;
+  predictLandingRegressionRepair(db: unknown): Promise<{
+    passWouldFreeze: string[];
+    dependents: Array<{ taskId: string; waitsOn: string }>;
+    projects: PredictedProject[];
+  }>;
 }
 const repair: RepairModule = (() => {
   const name = './landing-regression-repair';
@@ -344,13 +350,27 @@ test('(d) from production\'s state, a start predicts and then does it: DONE agai
         where: { id: { in: handled } }, orderBy: { id: 'asc' }, select: { id: true, state: true, resolution: true, updatedAt: true },
       });
       const stillOpen = [reviews[3]!, unobserved.itemId].sort();
+      // A task that has waited on the first verification since the flip: J9 releases it with the fix.
+      const waiting = randomUUID();
+      await db.task.create({
+        data: {
+          id: waiting, ownerId: project.ownerId, creatorType: 'USER', creatorId: project.ownerId,
+          title: 'publish the verified installer', projectId: project.projectId, status: 'OPEN',
+          autoRunWhenReady: false, completionCriterion: 'EXECUTABLE', acceptanceCommand: 'true',
+          acceptanceExpectedExitCode: 0,
+        },
+      });
+      await db.taskDependency.create({ data: { taskId: waiting, dependsOnTaskId: first!.taskId } });
       const before = new Date();
 
       // As the dry run reads it: one REPEATABLE READ, READ ONLY transaction, in which any write would fail.
-      const predicted = (await db.$transaction(async (tx) => {
+      const prediction = await db.$transaction(async (tx) => {
         await tx.$executeRaw`SET TRANSACTION ISOLATION LEVEL REPEATABLE READ, READ ONLY`;
         return repair.predictLandingRegressionRepair(tx);
-      }, { timeout: 60_000 })).projects.find((row) => row.projectId === project.projectId);
+      }, { timeout: 60_000 });
+      const predicted = prediction.projects.find((row) => row.projectId === project.projectId);
+      assert.deepEqual(prediction.dependents.filter((row) => row.taskId === waiting).map((row) => row.waitsOn),
+        [first!.taskId], 'the prediction names the dependent the fix releases, and what it waits on');
       const byId = (a: { taskId: string }, b: { taskId: string }) => a.taskId.localeCompare(b.taskId);
       assert.deepEqual(
         {
@@ -360,7 +380,8 @@ test('(d) from production\'s state, a start predicts and then does it: DONE agai
           to: predicted?.statusAfter,
         },
         {
-          tasks: project.tasks.map((task) => ({ taskId: task.taskId, clause: 'EMPTY_IDENTITY' })).sort(byId),
+          tasks: project.tasks.map((task) => ({ taskId: task.taskId, clause: 'EMPTY_IDENTITY', servesCriterion: true }))
+            .sort(byId),
           items: stillOpen,
           from: ProjectStatus.OPEN,
           to: ProjectStatus.DONE,
@@ -429,7 +450,8 @@ test('(e) a project flipped by an identity nobody can name, whose every work ses
         .find((row) => row.projectId === project.projectId);
       assert.deepEqual(
         [predicted?.tasks, predicted?.statusBefore, predicted?.statusAfter],
-        [[{ taskId: project.tasks[0]!.taskId, clause: 'UNNAMED_IDENTITY_EMPTY_LISTS' }], ProjectStatus.OPEN, ProjectStatus.DONE],
+        [[{ taskId: project.tasks[0]!.taskId, clause: 'UNNAMED_IDENTITY_EMPTY_LISTS', servesCriterion: true }],
+          ProjectStatus.OPEN, ProjectStatus.DONE],
         'the prediction names the task, its clause, and OPEN -> DONE');
 
       await start(db);
@@ -508,6 +530,63 @@ test('(f) the scope review is not asked about a task with nothing of its own who
       }), 0, 'and no review was filed about the verification run');
       assert.equal(criterionKeyOf(definition.criterionDefinitionId!), verification.criterionKey,
         'CONTROL: the fact named the criterion both tasks serve');
+    } finally {
+      await db.$disconnect();
+    }
+  });
+
+// ═══ (g) a misread task that serves no criterion ═══════════════════════════════════════════════════
+
+test('(g) a project whose only misread task serves no criterion is not projected again, even where the stored status lags',
+  { skip, timeout: 240_000 }, async () => {
+    const db = await connect();
+    try {
+      // Every criterion served by work landed on main by a MERGED receipt, the set confirmed: the facts
+      // prove DONE. The stored column says OPEN anyway — a lag this repair did not cause.
+      const project = await settledProject(db, 'lagging', [{ branchSha: sha('c'), baseSha: sha('9'), changedFiles: [] }]);
+      const served = project.tasks[0]!;
+      await db.sessionMergeReceipt.create({
+        data: {
+          ownerId: project.ownerId, sessionId: served.sessionId, taskId: served.taskId, projectId: project.projectId,
+          result: 'MERGED', sourceBranch: served.branch, sourceSha: sha('c'), targetBranch: 'main',
+          targetShaBefore: sha('a'), targetShaAfter: sha('b'), recordedBy: 'AGENT', idempotencyKey: `landed:${served.taskId}`,
+        },
+      });
+      await flipToOpen(db, project.projectId);
+      // And a task outside every criterion that the fix now reads as nothing of its own (T3's shape).
+      const loose = randomUUID();
+      await db.task.create({
+        data: {
+          id: loose, ownerId: project.ownerId, creatorType: 'USER', creatorId: project.ownerId,
+          title: 'an October measurement nobody filed under a criterion', projectId: project.projectId,
+          assigneeId: project.workspaceId, status: 'IN_PROGRESS', autoRunWhenReady: false,
+          completionCriterion: 'EXECUTABLE', acceptanceCommand: 'true', acceptanceExpectedExitCode: 0,
+        },
+      });
+      await db.session.create({
+        data: {
+          id: randomUUID(), ownerId: project.ownerId, creatorId: project.ownerId, taskId: loose,
+          workspaceId: project.workspaceId, assignedRunnerId: project.runnerId, title: 'measure', prompt: 'measure',
+          provider: 'claude', status: RunStatus.SUCCEEDED, dispatchOrigin: SessionDispatchOrigin.USER,
+          startsTaskWork: true, isolationStatus: 'worktree', branch: 'orbit/loose', baseSha: sha('3'),
+          changedFiles: [], worktreeDirty: false, finishedAt: new Date('2026-10-01T10:00:00.000Z'),
+        },
+      });
+      await db.$executeRaw`UPDATE "task" SET "status" = 'DONE' WHERE "id" = ${loose}::uuid AND "status" = 'IN_PROGRESS'`;
+      const derived = await readDerivedProjectDone(db as unknown as PrismaService, project.ownerId, project.projectId);
+      assert.deepEqual(derived.withheld, [], 'CONTROL: the facts prove DONE, and the stored column lags');
+
+      const predicted = (await repair.predictLandingRegressionRepair(db)).projects
+        .find((row) => row.projectId === project.projectId);
+      assert.deepEqual(
+        [predicted?.tasks, predicted?.statusBefore, predicted?.statusAfter],
+        [[{ taskId: loose, clause: 'UNNAMED_IDENTITY_EMPTY_LISTS', servesCriterion: false }], ProjectStatus.OPEN, ProjectStatus.OPEN],
+        'the prediction names the task and leaves the project as it is');
+
+      await start(db);
+
+      assert.equal((await projectRow(db, project.projectId)).status, ProjectStatus.OPEN,
+        'the repair does not project a project whose misread work serves no criterion');
     } finally {
       await db.$disconnect();
     }

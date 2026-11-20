@@ -48,10 +48,12 @@ import { DELIVERY_REVIEW_KIND, deliveryReviewKey } from './project-open-item';
  *      the scope review (`DR:OUTSIDE_DECLARED_SCOPE:<task>`) and the `LANDING_UNOBSERVED` it opened as
  *      WORK_ELSEWHERE or IDENTITY_UNKNOWN. An item somebody already answered stays as they answered it: a
  *      closed item is never rewritten (`project_open_item_terminal_guard`);
- *   2. each project they are in is projected again (`refreshProjectDone`, the same projection every
- *      post-commit edge runs), so a project the first reading took out of DONE is DONE again when the
- *      facts prove it — recorded DERIVED, at the moment of this repair. The original completion time is
- *      not restored: the projection that took DONE away cleared it, and nothing else recorded it.
+ *   2. each project in which one of them serves a criterion is projected again (`refreshProjectDone`, the
+ *      same projection every post-commit edge runs), so a project the first reading took out of DONE is
+ *      DONE again when the facts prove it — recorded DERIVED, at the moment of this repair. The original
+ *      completion time is not restored: the projection that took DONE away cleared it, and nothing else
+ *      recorded it. A task that serves no criterion moves no derivation, so its project is not projected
+ *      for it: that would only store whatever an unrelated lag left, which is not this repair's to do.
  *
  * It writes no merge receipt, no identity, no task status and no criterion, sends no push, and wakes no
  * coordinator. An owner's record or Reopen press stands, as the projection itself makes it stand.
@@ -92,6 +94,8 @@ export type RepairClause =
 export interface RepairTask {
   taskId: string;
   clause: RepairClause;
+  /** Whether it serves one of its project's criteria — only such a task can move the project's DONE. */
+  servesCriterion: boolean;
 }
 
 /** What the repair did — or, predicted, will do — for one project. */
@@ -117,6 +121,16 @@ export interface RegressionRepairResult {
 export interface RegressionRepairPrediction {
   /** Tasks the deploy-time pass would freeze before the repair runs, whose effect this does not follow. */
   passWouldFreeze: string[];
+  /**
+   * The OPEN tasks that wait on a footprint task (§2.5 J9 reads the same predicate, live): once the fixed
+   * server runs, each is released as far as that prerequisite goes, and the 60 s ready sweep starts the
+   * ones that start by themselves (`autoRunWhenReady`, in a started project that is not paused) once
+   * their other prerequisites are met too.
+   */
+  dependents: Array<{
+    taskId: string; title: string; waitsOn: string; projectId: string | null;
+    autoRunWhenReady: boolean; projectStarted: boolean; projectPaused: boolean;
+  }>;
   projects: Array<RegressionRepairProject & {
     title: string | null;
     items: Array<{ itemId: string; kind: string; dedupeKey: string; reason: string | null }>;
@@ -128,6 +142,7 @@ interface Footprint {
   projectId: string;
   ownerId: string;
   clause: RepairClause;
+  servesCriterion: boolean;
 }
 
 /**
@@ -142,7 +157,8 @@ export function readRegressionFootprint(
   return db.$queryRaw<Footprint[]>(Prisma.sql`
     SELECT t."id" AS "taskId", t."project_id" AS "projectId", t."owner_id" AS "ownerId",
            CASE WHEN ${Prisma.raw(unnamedIdentityMeasuresNothingSql('t'))}
-                THEN 'UNNAMED_IDENTITY_EMPTY_LISTS' ELSE 'EMPTY_IDENTITY' END AS "clause"
+                THEN 'UNNAMED_IDENTITY_EMPTY_LISTS' ELSE 'EMPTY_IDENTITY' END AS "clause",
+           t."criterion_definition_id" IS NOT NULL AS "servesCriterion"
       FROM "task" t
      WHERE t."status" = 'DONE'
        AND t."project_id" IS NOT NULL
@@ -206,7 +222,7 @@ function byProject(rows: readonly Footprint[]): Map<string, { ownerId: string; t
   const grouped = new Map<string, { ownerId: string; tasks: RepairTask[] }>();
   for (const row of rows) {
     const project = grouped.get(row.projectId) ?? { ownerId: row.ownerId, tasks: [] };
-    project.tasks.push({ taskId: row.taskId, clause: row.clause });
+    project.tasks.push({ taskId: row.taskId, clause: row.clause, servesCriterion: row.servesCriterion });
     grouped.set(row.projectId, project);
   }
   return grouped;
@@ -226,8 +242,19 @@ export async function predictLandingRegressionRepair(
     const reading = await readDeliveredIdentity(db, candidate.ownerId, candidate.taskId);
     if (reading.kind === 'KNOWN') passWouldFreeze.push(candidate.taskId);
   }
-  const prediction: RegressionRepairPrediction = { passWouldFreeze, projects: [] };
-  for (const [projectId, { ownerId, tasks }] of byProject(await readRegressionFootprint(db))) {
+  const footprint = await readRegressionFootprint(db);
+  const dependents = footprint.length === 0 ? [] : await db.$queryRaw<RegressionRepairPrediction['dependents']>(Prisma.sql`
+    SELECT dependent."id" AS "taskId", dependent."title", edge."depends_on_task_id" AS "waitsOn",
+           dependent."project_id" AS "projectId", dependent."auto_run_when_ready" AS "autoRunWhenReady",
+           (project."started_at" IS NOT NULL) AS "projectStarted", (project."paused_at" IS NOT NULL) AS "projectPaused"
+      FROM "task_dependency" edge
+      JOIN "task" dependent ON dependent."id" = edge."task_id"
+      LEFT JOIN "project" project ON project."id" = dependent."project_id"
+     WHERE edge."depends_on_task_id" = ANY(${footprint.map((row) => row.taskId)}::uuid[])
+       AND dependent."status" = 'OPEN'
+     ORDER BY dependent."project_id", dependent."id"`);
+  const prediction: RegressionRepairPrediction = { passWouldFreeze, dependents, projects: [] };
+  for (const [projectId, { ownerId, tasks }] of byProject(footprint)) {
     const items = await db.$queryRaw<Array<{ itemId: string; kind: string; dedupeKey: string; reason: string | null }>>(
       Prisma.sql`
         SELECT item."id" AS "itemId", item."kind", item."dedupe_key" AS "dedupeKey",
@@ -237,6 +264,7 @@ export async function predictLandingRegressionRepair(
          ORDER BY item."id"`);
     const decision = await readDerivedProjectStatusWrite(db as unknown as PrismaService, ownerId, projectId);
     const project = await db.project.findFirst({ where: { id: projectId, ownerId }, select: { title: true } });
+    const reprojected = tasks.some((task) => task.servesCriterion);
     prediction.projects.push({
       projectId,
       title: project?.title ?? null,
@@ -244,7 +272,7 @@ export async function predictLandingRegressionRepair(
       items,
       supersededItemIds: items.map((item) => item.itemId),
       statusBefore: decision.stored?.status ?? null,
-      statusAfter: decision.write ?? decision.stored?.status ?? null,
+      statusAfter: (reprojected ? decision.write : null) ?? decision.stored?.status ?? null,
       doneAgainAt: null,
       withheld: decision.derived.withheld,
     });
@@ -271,7 +299,10 @@ export async function runLandingRegressionRepair(
         (tx) => supersedeFirstReadingItems(tx, { projectId, taskIds: tasks.map((task) => task.taskId) }),
         loggedRetry(logger, 'landingRegressionRepair.items'),
       );
-      const derived = await refreshProjectDone(prisma, ownerId, projectId, {});
+      // Only a project in which a misread task serves a criterion: nothing else moves its derivation.
+      const derived = tasks.some((task) => task.servesCriterion)
+        ? await refreshProjectDone(prisma, ownerId, projectId, {})
+        : null;
       const after = await prisma.project.findFirst({
         where: { id: projectId, ownerId }, select: { status: true, doneAt: true },
       });
@@ -283,7 +314,7 @@ export async function runLandingRegressionRepair(
         statusBefore: before?.status ?? null,
         statusAfter: after?.status ?? null,
         doneAgainAt: doneAgain ? after?.doneAt ?? null : null,
-        withheld: derived.withheld,
+        withheld: derived?.withheld ?? [],
       };
       result.projects.push(repaired);
       const line = repairLine(repaired);
