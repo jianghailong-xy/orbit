@@ -25,6 +25,7 @@ import { BackgroundShellsTray, lastUserMessageAt } from './BackgroundShellsTray'
 interface RowCase {
   case: string;
   list: BackgroundRowInput[];
+  events?: RunEvent[];
   lastUserMessageAt: string | null;
   sessionLive: boolean;
   expect: BackgroundRow;
@@ -100,7 +101,9 @@ describe('the folded row, by background-row.fixture.json', () => {
   });
 
   it.each(fixture.cases.map((c) => [c.case, c] as const))('%s', (_name, c) => {
-    render(c.list.map(shell), userAt(c.lastUserMessageAt), c.sessionLive);
+    // A case that carries its transcript is read through the reader, as every client must.
+    if (c.events) expect(lastUserMessageAt(c.events)).toBe(c.lastUserMessageAt);
+    render(c.list.map(shell), c.events ?? userAt(c.lastUserMessageAt), c.sessionLive);
     const want = c.expect;
     if (want.hidden) {
       expect(container.innerHTML).toBe('');
