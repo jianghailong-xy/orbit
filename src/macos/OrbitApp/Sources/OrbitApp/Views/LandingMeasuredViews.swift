@@ -156,7 +156,6 @@ struct CoordinatorChangesPage: View {
                         .font(.orbitLabel).foregroundStyle(.secondary)
                         .fixedSize(horizontal: false, vertical: true)
                         .listRowBackground(Color.clear)
-                        .listRowInsets(EdgeInsets(top: 4, leading: 4, bottom: 4, trailing: 4))
                 }
                 if let refused {
                     Section { Text(refused).font(.orbitLabel).foregroundStyle(.red) }
@@ -196,6 +195,7 @@ struct CoordinatorChangesPage: View {
                     #endif
             }
         }
+        .accessibilityElement(children: .contain)
         .accessibilityIdentifier("coordinator-changes-page")
     }
 
@@ -240,6 +240,9 @@ struct CoordinatorChangesPage: View {
         }
         .opacity(row.reverted ? 0.6 : 1)
         .padding(.vertical, 4)
+        // `.contain`: an identifier on a plain container is handed down to every element in it,
+        // which would hide the badge's and Revert's own.
+        .accessibilityElement(children: .contain)
         .accessibilityIdentifier("change-\(row.id)")
     }
 
@@ -289,6 +292,7 @@ struct CoordinatorChangesPage: View {
             .controlSize(.large)
         }
         .padding(20)
+        .accessibilityElement(children: .contain)
         .accessibilityIdentifier("revert-confirmation")
     }
 
@@ -343,6 +347,7 @@ struct TaskExemptionRow: View {
                 .accessibilityIdentifier("remove-exemption")
         }
         .frame(maxWidth: .infinity, alignment: .leading)
+        .accessibilityElement(children: .contain)
         .accessibilityIdentifier("task-landing-exemption")
     }
 }

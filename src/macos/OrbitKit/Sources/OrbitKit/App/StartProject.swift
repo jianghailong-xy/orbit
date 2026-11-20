@@ -504,15 +504,18 @@ public enum StartProject {
     /// problem reaches the owner only after the project's escalation window. The merges name the
     /// project's main branch, `main`. An agent that pushes its own work to main asks nobody to merge
     /// it (§10.5 O-L2), so no merge comes to the owner on that line.
+    /// A request that named no line (`linePending`, P-M2) has nothing decided about where work lands,
+    /// so no merge is listed — web's `line === null`.
     public static func comesToYou(automatic: Bool, line: IntegrationLine,
                                   ownerConfirmed: [StartPlanNamedTask], evidenceJudged: Int,
                                   escalationSeconds: Int,
                                   main: String = RunSettings.defaultMainBranch,
-                                  deliveryMode: DeliveryMode = .platform) -> [ComesToYouItem] {
+                                  deliveryMode: DeliveryMode = .platform,
+                                  linePending: Bool = false) -> [ComesToYouItem] {
         let confirms: [ComesToYouItem] = ownerConfirmed.count > 3
             ? [ComesToYouItem(text: tasksYouConfirm(ownerConfirmed.count))]
             : ownerConfirmed.map { ComesToYouItem(text: "\($0.label) · \($0.title)", detail: youConfirm) }
-        let merges: [ComesToYouItem] = line == .main
+        let merges: [ComesToYouItem] = linePending ? [] : line == .main
             ? deliveryMode == .agentPush ? [] : [ComesToYouItem(text: eachMergeInto(main))]
             : automatic ? [] : [ComesToYouItem(text: mergingInto(main))]
         let criteria = ComesToYouItem(text: criteriaChanges)
@@ -966,7 +969,8 @@ public struct StartSettingsDraft: Equatable, Sendable {
 
     /// The sentence under Automatic: who decides what, for the line, merge check and delivery chosen.
     public var automaticSays: String {
-        agentPushes ? RunSettings.automaticSaysAgentPush(automatic: automatic, main: main)
+        if linePending { return RunSettings.automaticSaysNoLine(automatic: automatic) }
+        return agentPushes ? RunSettings.automaticSaysAgentPush(automatic: automatic, main: main)
                     : RunSettings.automaticSays(automatic: automatic, line: line,
                                                 hasMergeCheck: hasMergeCheck, main: main)
     }
@@ -1226,6 +1230,12 @@ public enum RunSettings {
         "You decide when each task is done, and each merge into main asks you."
 
     /// The five above, said of the project's main branch.
+    /// The same sentence for a request that named no line (P-M2): nothing is decided about where
+    /// work lands, so it names no branch — web's `runAutomaticSays` with `line === null`.
+    public static func automaticSaysNoLine(automatic: Bool) -> String {
+        automatic ? "The coordinator decides when each task is done." : "You decide when each task is done."
+    }
+
     public static func automaticSays(automatic: Bool, line: IntegrationLine, hasMergeCheck: Bool,
                                      main: String = defaultMainBranch) -> String {
         guard automatic else {

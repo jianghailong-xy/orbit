@@ -3804,7 +3804,8 @@ struct StartProjectCard: View {
                                             ownerConfirmed: plan.ownerConfirmed,
                                             evidenceJudged: plan.evidenceJudged,
                                             escalationSeconds: escalationSeconds, main: draft.main,
-                                            deliveryMode: draft.agentPushes ? .agentPush : .platform)
+                                            deliveryMode: draft.agentPushes ? .agentPush : .platform,
+                                            linePending: draft.linePending)
         return VStack(alignment: .leading, spacing: 5) {
             Text(StartProject.comesToYou)
                 .font(.orbitMeta.weight(.semibold)).foregroundStyle(Color.blue)

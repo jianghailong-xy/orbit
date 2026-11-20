@@ -77,6 +77,20 @@ final class LandingMeasuredTests: XCTestCase {
         XCTAssertEqual(sent["requestId"] as? String, "item-1")
     }
 
+    /// With no line nothing is decided about where work lands: the Automatic sentence names no
+    /// branch and no merge comes to the owner (web's `runAutomaticSays` / `startComesToYou` with
+    /// `line === null`).
+    func testANoLineRequestNamesNoBranch() throws {
+        var draft = StartSettingsDraft(try decode(ProjectStartSettings.self, noLineSettings))
+        XCTAssertEqual(draft.automaticSays, "The coordinator decides when each task is done.")
+        draft.automatic = false
+        XCTAssertEqual(draft.automaticSays, "You decide when each task is done.")
+        let items = StartProject.comesToYou(automatic: false, line: draft.line, ownerConfirmed: [],
+                                            evidenceJudged: 0, escalationSeconds: 7_200,
+                                            linePending: true)
+        XCTAssertFalse(items.contains { $0.text.contains("main") }, "a merge is listed: \(items.map(\.text))")
+    }
+
     func testARequestThatNamesALineStillSendsIt() throws {
         let settings = ProjectStartSettings(line: .projectBranch, automatic: true, maxConcurrentTasks: 2)
         let request = ProjectStartRequest(settings: settings, criteriaDigest: String(repeating: "a", count: 64))
