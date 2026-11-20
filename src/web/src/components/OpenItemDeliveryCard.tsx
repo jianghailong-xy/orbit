@@ -1,6 +1,6 @@
 import { useState, type ReactNode } from 'react';
 import { CheckCircleFilled, ExclamationCircleFilled } from '@ant-design/icons';
-import type { OpenItemAction, OpenItemDeliveryCard as Delivery, OpenItemKind } from '@orbit/shared';
+import type { OpenItemDeliveryCard as Delivery, OpenItemKind } from '@orbit/shared';
 import { routeId } from '../lib/idCodec';
 import { AppLink } from './AppLink';
 import { revealOpenItemCard } from './DecisionRail';
@@ -36,25 +36,6 @@ const KIND_LABEL: Partial<Record<OpenItemKind, string>> = {
   COORDINATOR_QUESTION: 'Question',
   FUSE_PAUSED: 'Project paused',
 };
-
-/**
- * The card's earlier words, which the native ends still draw (OrbitKit's `OpenItemDeliveryCard`,
- * held to this file by `OpenItemDeliveryCopyParityTests`) until they follow board card-ui-polish ②.
- * The browser no longer draws them: the doors are pressed on the item's own card, the footer says
- * when the item was sent, and the agent's "will not retry" half stays in the disclosure.
- */
-export const ACTION_LABEL: Partial<Record<OpenItemAction, string>> = {
-  RETRY: 'Retry the task',
-  CANCEL_TASK: 'Cancel the task',
-  ASK_COORDINATOR_AGAIN: 'Ask the coordinator again',
-  REVIEW: 'Review the merge',
-  ANSWER: 'Answer the question',
-  RESUME: 'Resume the project',
-};
-export const NATIVE_DOORS_LEAD = 'The coordinator can:';
-export const NATIVE_NOTIFICATION = 'a notification, not an interruption';
-export const NATIVE_CONFLICT_TAIL = '; the target branch did not move. '
-  + 'The platform will not retry it by itself.';
 
 /** The link to the item's own card, where its doors are pressed (board card-ui-polish ②): this
  *  card is the notice, that one is where the item is acted on. */

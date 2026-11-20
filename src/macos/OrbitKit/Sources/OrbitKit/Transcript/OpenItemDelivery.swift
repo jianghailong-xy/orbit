@@ -113,8 +113,8 @@ public struct OpenItemDelivery: Sendable, Equatable, Codable {
     public let errorCode: String?
     public let failure: OpenItemDeliveryFailure?
     /// The doors that exist for this item, as the server decides them (§4.8) — the raw
-    /// `OpenItemAction` values, read the way the web reads them: a value this build does not know is
-    /// kept and simply has no label to draw (`OpenItemDeliveryCard.actionLabels`).
+    /// `OpenItemAction` values, kept here so a payload round-trips; the card no longer names them,
+    /// because the doors are pressed on the item's own card.
     public let actions: [String]
     public let landing: OpenItemDeliveryLandingFacts?
     /// The landing session this failure came from (§2.9 LS1), if the network recorded one: the
@@ -291,8 +291,16 @@ public enum OpenItemDeliveryCard {
                 + "\(failure.limit) in this chain."
         }
         if card.kind == .integrationConflict {
-            return "git refused the merge\(target); the target branch did not move. "
-                + "The platform will not retry it by itself."
+            // The "will not retry" half the agent read stays in the disclosure: to a person it reads
+            // as stuck, while the coordinator is already the one handling it. The branch is named by
+            // its name, not by `refs/heads/…`. Web: `headline`.
+            let raw = card.targetRef ?? ""
+            let branch = raw.hasPrefix("refs/heads/")
+                ? String(raw.dropFirst("refs/heads/".count)) : raw
+            if !branch.isEmpty {
+                return "git refused the merge into \(branch); \(branch) did not move."
+            }
+            return "git refused the merge; the target branch did not move."
         }
         if card.kind == .integrationCheckFailed, let check = card.check {
             return "Check \(check.name) exited \(check.exitCode.map(String.init) ?? "?") where "
@@ -330,45 +338,30 @@ public enum OpenItemDeliveryCard {
         }
     }
 
-    /// What each door is called on the card. `OPEN_COORDINATOR` and `OPEN_TASK_SESSION` are absent on
-    /// purpose: the first is the conversation this card is drawn in — the reader is already there —
-    /// and the second is drawn below as the session link.
-    public static func actionLabels(_ actions: [String]) -> [String] {
-        actions.compactMap { action in
-            switch action {
-            case "RETRY":                 return "Retry the task"
-            case "CANCEL_TASK":           return "Cancel the task"
-            case "ASK_COORDINATOR_AGAIN": return "Ask the coordinator again"
-            case "REVIEW":                return "Review the merge"
-            case "ANSWER":                return "Answer the question"
-            case "RESUME":                return "Resume the project"
-            // The landing doors (§2.9 LS6, board v4 06 b): Open landing is a way in, and Abandon is
-            // the X-E5 card's lead — the delivery card only names both, as it names every door.
-            case "OPEN_LANDING":          return "Open landing"
-            case "ABANDON":               return "Abandon"
-            default:                      return nil
-            }
-        }
-    }
-
     /// The row's name on the card's head. A kind the payload did not put a state under still has a
     /// title, so the header alone names the turn.
-    public static let doorsLead = "The coordinator can:"
     public static let openTask = "Open the task ↗"
     public static let openSession = "Open the failed session ↗"
     /// The third link, after the two main's card already had (board v4 06 b): the landing this
     /// attempt belongs to. A delivery whose item recorded no landing draws nothing.
     public static let openLanding = "Open the landing ↗"
 
+    /// The link to the item's own card, where its doors are pressed (board card-ui-polish ②): this
+    /// card is the notice, that one is where the item is acted on. A conversation that does not hold
+    /// that card says so instead.
+    public static let goToItemCard = "Go to the item card ↑"
+    public static let itemCardNotHere = "The item card is not in this conversation."
+
     /// Where `Open the landing ↗` goes, or nil for a payload an older server recorded.
     public static func landingLink(_ card: OpenItemDelivery) -> URL? {
         guard let id = card.landingSessionId, !id.isEmpty else { return nil }
         return URL(string: "orbit-session:\(PublicID.toPublic(id))")
     }
-    /// The foot line: what this is, and that it asks nothing of the reader yet.
-    public static let notification = "a notification, not an interruption"
+    /// The foot line: when the item was sent to the coordinator, in the person's own words.
+    public static let sentToCoordinator = "Sent to the coordinator"
     public static let undelivered = "The session has not confirmed it received this."
-    /// The fold the paragraph the agent read stays behind.
+    /// The fold the paragraph the agent read stays behind — and, since the agent is the only reader
+    /// of the item's id, the id now lives inside it.
     public static let rawSummary = "What the coordinator was told"
 
     /// "Show 2 more files" / "Show fewer files". Nil when every file the item named is already on
@@ -378,14 +371,17 @@ public enum OpenItemDeliveryCard {
         return expanded ? "Show fewer files" : "Show \(total - filesShown) more files"
     }
 
-    /// "Item 34ShSQc0zVFxWSokxZive · a notification, not an interruption · 3m ago".
-    ///
-    /// The id is drawn in the public spelling the web draws it in, and is kept as it arrived when it
-    /// is in neither spelling — this line is the card's footnote, not a link.
-    public static func meta(_ card: OpenItemDelivery, ts: String? = nil, now: Date = Date()) -> String {
-        var line = "Item \(PublicID.toPublic(card.itemId)) · \(notification)"
-        if let ts, let relative = RelativeTime.format(ts, now: now) { line += " · \(relative)" }
-        return line
+    /// "Sent to the coordinator · 3m ago", or nil for a delivery with no clock — a line about when
+    /// it was sent says nothing when nobody recorded when.
+    public static func meta(_ card: OpenItemDelivery, ts: String? = nil, now: Date = Date()) -> String? {
+        guard let ts, let relative = RelativeTime.format(ts, now: now) else { return nil }
+        return "\(sentToCoordinator) · \(relative)"
+    }
+
+    /// "Item 34ShSQc0zVFxWSokxZive", the id line inside the disclosure. The id is drawn in the public
+    /// spelling the web draws it in, and is kept as it arrived when it is in neither spelling.
+    public static func rawItemId(_ card: OpenItemDelivery) -> String {
+        "Item \(PublicID.toPublic(card.itemId))"
     }
 
     /// The task this item is about, as the app's own `orbit-task:` door — nil when the item is about

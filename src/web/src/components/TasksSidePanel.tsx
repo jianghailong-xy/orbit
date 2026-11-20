@@ -293,9 +293,6 @@ export interface Runner {
   // Free-space floor in MB (PATCH minFreeDiskMb): below it this machine takes no new task runs.
   // null = no floor.
   minFreeDiskMb?: number | null;
-  // Limits on each background job it runs (PATCH bgJobCpus / bgJobMemoryMb); both null is off.
-  bgJobCpus?: number | null;
-  bgJobMemoryMb?: number | null;
   // Where this machine clones repositories, as it reported. null = a runner too old to say.
   reposRoot?: string | null;
   // The directory `orbit register` ran in: a suggestion for its first workspace, to be checked on the
