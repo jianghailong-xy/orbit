@@ -5245,26 +5245,13 @@ private struct OwnerItemCardView: View {
         HStack(alignment: .top, spacing: 10) {
             ProgressView().controlSize(.small).padding(.top, 2)
             VStack(alignment: .leading, spacing: 3) {
-                FlowLayout(spacing: 4) {
-                    Text(ExceptionCards.beingFixedIn)
-                    ForEach(Array(ExceptionCards.liveRepairs(row).enumerated()), id: \.offset) { index, task in
-                        if index > 0 { Text("·") }
-                        if let url = ExceptionCards.repairLink(task) {
-                            Button { PlatformHaptics.tap(); openURL(url) } label: {
-                                Text("\(task.title) ↗").fontWeight(.semibold)
-                            }
-                            .buttonStyle(.plain)
-                            .foregroundStyle(Color.accentColor)
-                        } else {
-                            // An id that names no task is drawn as the title it is, not as a link
-                            // that could only do nothing.
-                            Text("\(task.title) ↗").fontWeight(.semibold)
-                        }
-                    }
-                }
-                .font(.orbitLabel)
-                .fixedSize(horizontal: false, vertical: true)
-                .frame(maxWidth: .infinity, alignment: .leading)
+                // One attributed line rather than a row of buttons: the title wraps inside the card
+                // (a flow of independent views measured it at its full single-line width and stretched
+                // the whole card past the phone's edge), and the link is the text itself.
+                Text(fixingLine(row))
+                    .font(.orbitLabel)
+                    .fixedSize(horizontal: false, vertical: true)
+                    .frame(maxWidth: .infinity, alignment: .leading)
                 Text(ExceptionCards.fixingNothingForYou)
                     .font(.orbitMeta).foregroundStyle(.secondary)
                     .fixedSize(horizontal: false, vertical: true)
@@ -5277,6 +5264,24 @@ private struct OwnerItemCardView: View {
         .overlay {
             RoundedRectangle(cornerRadius: 8).strokeBorder(Color.accentColor.opacity(0.35))
         }
+    }
+
+    /// "Being fixed in <title ↗> · <title ↗>": the first task's title is the link, and the rest
+    /// follow after a middot. A task whose id names no task is drawn as plain words rather than as a
+    /// link that could only do nothing.
+    private func fixingLine(_ row: ProjectOpenItemRow) -> AttributedString {
+        var line = AttributedString("\(ExceptionCards.beingFixedIn) ")
+        for (index, task) in ExceptionCards.liveRepairs(row).enumerated() {
+            if index > 0 { line += AttributedString(" · ") }
+            var title = AttributedString("\(task.title) ↗")
+            if let url = ExceptionCards.repairLink(task) {
+                title.link = url
+                title.foregroundColor = .accentColor
+                title.font = .orbitLabel.weight(.semibold)
+            }
+            line += title
+        }
+        return line
     }
 
     /// Every door as a quiet link, in one row with Chat about this, while a repair task is live:
