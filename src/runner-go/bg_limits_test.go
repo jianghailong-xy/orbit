@@ -1,8 +1,8 @@
 package main
 
 import (
-	"bytes"
 	"context"
+	"encoding/json"
 	"os"
 	"path/filepath"
 	"slices"
@@ -45,64 +45,36 @@ func TestBgJobLimitsStayUnderTheRunnersCeiling(t *testing.T) {
 			t.Errorf("effectiveBgLimits(%+v) = %+v, %q; want %+v, lowered %v", c.asked, got, note, c.want, c.lowered)
 		}
 	}
-	// No ceiling: the ask stands.
-	if got, note := effectiveBgLimits(bgJobLimits{CPUs: 64}, bgJobLimits{}); got.CPUs != 64 || note != "" {
+	// No ceiling: limits are off, so an ask is not applied, and is told so.
+	if got, note := effectiveBgLimits(bgJobLimits{CPUs: 64}, bgJobLimits{}); !got.none() || note != bgLimitsOffNote {
 		t.Errorf("without a ceiling = %+v, %q", got, note)
 	}
-}
-
-func TestParseMemoryMB(t *testing.T) {
-	for in, want := range map[string]int64{"512": 512, "512M": 512, "8G": 8192, "1.5g": 1536, "2GiB": 2048, "0": 0} {
-		if got, err := parseMemoryMB(in); err != nil || got != want {
-			t.Errorf("parseMemoryMB(%q) = %d, %v; want %d", in, got, err, want)
-		}
+	if got, note := effectiveBgLimits(bgJobLimits{}, bgJobLimits{}); !got.none() || note != "" {
+		t.Errorf("no ask, no ceiling = %+v, %q", got, note)
 	}
-	for _, bad := range []string{"", "lots", "-1G", "100B", "1e12G"} {
-		if _, err := parseMemoryMB(bad); err == nil {
-			t.Errorf("parseMemoryMB(%q) took it", bad)
-		}
+	// A ceiling on one field turns limits on; the other field takes the agent's ask as it stands.
+	if got, _ := effectiveBgLimits(bgJobLimits{MemoryMB: 512}, bgJobLimits{CPUs: 2}); got != (bgJobLimits{CPUs: 2, MemoryMB: 512}) {
+		t.Errorf("ceiling on cpus only = %+v", got)
 	}
 }
 
-func TestBgLimitsCommandKeepsTheCeilingInConfig(t *testing.T) {
-	home := t.TempDir()
-	t.Setenv("ORBIT_HOME", home)
-	t.Setenv("ORBIT_SESSION_ID", "")
-	if err := saveConfig(&RunnerConfig{RunnerID: "r1", Name: "box"}); err != nil {
+// The ceiling is what the last heartbeat answer carried, and an answer without one turns limits off.
+func TestBgJobCeilingComesFromTheHeartbeat(t *testing.T) {
+	t.Cleanup(func() { runnerBgJobLimits.Store(nil) })
+	var on, off HeartbeatResponse
+	if err := json.Unmarshal([]byte(`{"backgroundJobLimits":{"cpus":1.5,"memoryMb":4096}}`), &on); err != nil {
 		t.Fatal(err)
 	}
-	run := func(args ...string) (string, error) {
-		var out bytes.Buffer
-		err := cmdBgLimits(args, &out)
-		return out.String(), err
+	runnerBgJobLimits.Store(on.BackgroundJobLimits)
+	if got := runnerBgJobCeiling(); got != (bgJobLimits{CPUs: 1.5, MemoryMB: 4096}) {
+		t.Fatalf("ceiling = %+v", got)
 	}
-	if out, err := run("--cpus", "2", "--memory", "8G"); err != nil || !strings.Contains(out, "cpus 2, memory 8192 MB") {
-		t.Fatalf("set = %q, %v", out, err)
+	if err := json.Unmarshal([]byte(`{}`), &off); err != nil {
+		t.Fatal(err)
 	}
-	if got := runnerBgJobCeiling(); got != (bgJobLimits{CPUs: 2, MemoryMB: 8192}) {
-		t.Fatalf("ceiling after set = %+v", got)
-	}
-	if loadConfig().RunnerID != "r1" {
-		t.Fatal("setting the limits lost the rest of the config")
-	}
-	if _, err := run("--memory", "0"); err != nil || runnerBgJobCeiling() != (bgJobLimits{CPUs: 2}) {
-		t.Fatalf("clearing memory alone = %+v, %v", runnerBgJobCeiling(), err)
-	}
-	if out, err := run(); err != nil || !strings.Contains(out, "cpus 2") {
-		t.Fatalf("show = %q, %v", out, err)
-	}
-	if _, err := run("--clear"); err != nil || !runnerBgJobCeiling().none() || loadConfig().BackgroundJobLimits != nil {
-		t.Fatalf("clear left %+v, %v", runnerBgJobCeiling(), err)
-	}
-	for _, bad := range [][]string{{"--cpus", "abc"}, {"--memory", "8"}, {"--cpus"}, {"extra"}} {
-		if _, err := run(bad...); err == nil {
-			t.Errorf("bg-limits %v took it", bad)
-		}
-	}
-	// An agent runs as the same user; it does not get to raise the ceiling that bounds it.
-	t.Setenv("ORBIT_SESSION_ID", "s1")
-	if _, err := run("--clear"); err == nil {
-		t.Fatal("bg-limits ran inside a session")
+	runnerBgJobLimits.Store(off.BackgroundJobLimits)
+	if got := runnerBgJobCeiling(); !got.none() {
+		t.Fatalf("ceiling after an answer without limits = %+v, want off", got)
 	}
 }
 
@@ -149,5 +121,43 @@ func TestBgJobRecordCarriesLimitsToTheAdoptingImage(t *testing.T) {
 	}
 	if st := adopted.statusLocked(); st.Limits == nil || st.LimitsNote == "" {
 		t.Fatalf("adopted status lost its limits: %+v", st)
+	}
+}
+
+// A job running under limits takes no session slot: it holds the checkout through the door a watch uses,
+// because the jobs' parent cgroup bounds them all together. One whose limits were not applied counts.
+func TestABoundedJobTakesNoSessionSlot(t *testing.T) {
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	holds := &recordingHolds{active: map[string]string{}}
+	bg := newBgTailer(ctx, func(string, map[string]interface{}) {}, holds)
+	t.Cleanup(bg.stopAll)
+	cases := map[string]struct {
+		limits *bgJobLimits
+		door   string
+	}{
+		"bgj_bounded":  {&bgJobLimits{CPUs: 2, MemoryMB: 1024}, "watch"},
+		"bgj_cpu_only": {&bgJobLimits{CPUs: 2}, "watch"},
+		"bgj_mem_only": {&bgJobLimits{MemoryMB: 1024}, "watch"},
+		"bgj_none":     {nil, "job"},
+	}
+	bg.mu.Lock()
+	for id, c := range cases {
+		bg.jobs[id] = &bgJob{id: id, kind: bgKindJob, limits: c.limits}
+		bg.holdFor(id, id, false)
+	}
+	bg.mu.Unlock()
+	for id, c := range cases {
+		if got := holds.door(id); got != c.door {
+			t.Errorf("%s held through %q, want %q", id, got, c.door)
+		}
+	}
+
+	// And the pool's capacity account agrees.
+	pool := newSessionPoolWithClock(1, newFakePoolClock())
+	pool.holdWorktreeForRunnerWatch("s1", "bgj_bounded", "bounded build")
+	pool.holdWorktreeForRunnerJob("s2", "bgj_none", "unbounded build")
+	if counts := pool.backgroundJobCounts(); counts["s1"] != 0 || counts["s2"] != 1 {
+		t.Fatalf("backgroundJobCounts = %v, want only s2's job counted", counts)
 	}
 }

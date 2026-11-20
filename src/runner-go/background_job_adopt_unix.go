@@ -44,7 +44,7 @@ func (p *sessionPool) adoptRecordedJobs() {
 			logln(fmt.Sprintf("background %s %s of session %s exited (%d) while the runner re-executed; adopted to report its end",
 				rec.Kind, rec.JobID, rec.SessionID, exit))
 		} else {
-			p.holdWorktreeWriter(rec.SessionID, rec.JobID, bgHold{name: rec.JobID, runnerHosted: true, watch: rec.Kind == bgKindWatch})
+			p.holdWorktreeWriter(rec.SessionID, rec.JobID, bgHold{name: rec.JobID, runnerHosted: true, watch: rec.Kind == bgKindWatch || job.boundedLocked()})
 			logln(fmt.Sprintf("background %s %s of session %s (pid %d) adopted across the runner's re-exec",
 				rec.Kind, rec.JobID, rec.SessionID, rec.PID))
 		}

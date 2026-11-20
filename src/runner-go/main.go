@@ -68,7 +68,6 @@ Usage:
   orbit unregister [--yes]          Remove this runner: delete it server-side, stop the service, drop local config
   orbit status                      Show this directory's runner and its control-plane status
   orbit doctor                      Check the coding-engine CLIs, sign-in, and service PATH
-  orbit bg-limits [--cpus N] [--memory SIZE]  Limit the CPU and memory of each background job here
   orbit engine-update               Update the coding-engine CLIs now (the periodic check, on demand)
   orbit resume [session-id]         Reopen a session in the Orbit terminal client (--engine-cli: its engine's CLI)
   orbit task <command>              Manage Orbit tasks
@@ -117,9 +116,8 @@ Env:
 
 // Per-command help, shown for `orbit <cmd> --help|-h` and `orbit help <cmd>`.
 var cmdHelp = map[string]string{
-	"secret":    secretHelp,
-	"bg-limits": bgLimitsHelp,
-	"terminal":  terminalHelp,
+	"secret":   secretHelp,
+	"terminal": terminalHelp,
 	"register": `orbit register — register this machine and install the background service
 
 Usage:
@@ -441,10 +439,6 @@ func runOrbitCLI(args []string, in io.Reader, out, errW io.Writer) error {
 		cmdStatus()
 	case "doctor":
 		cmdDoctor()
-	case "bg-limits":
-		if err := cmdBgLimits(args[1:], out); err != nil {
-			return fmt.Errorf("orbit bg-limits: %w", err)
-		}
 	case "resume":
 		cmdResume(args[1:])
 	case "task":
@@ -723,11 +717,6 @@ func finishRegister(runnerID, runnerToken, name string, server string, labels []
 		// turns that off. There is no prompt: the installer's plan says so.
 		AutoInstallEngines: autoInstallEnabled(bools),
 	}
-	// The owner's background job limits are this machine's, not the registration's: registering again —
-	// which is how a runner gets the Delegate=yes that enforces them — keeps them.
-	if prev := loadConfig(); prev != nil {
-		cfg.BackgroundJobLimits = prev.BackgroundJobLimits
-	}
 	if err := saveConfig(cfg); err != nil {
 		fmt.Fprintln(os.Stderr, "failed to save config:", err)
 		os.Exit(1)
@@ -953,8 +942,9 @@ func cmdRun() {
 	// anything runs Git there, it looks at what the last stop left.
 	recoverManagedRepositories()
 	logManagedVolumeSyncs()
-	// Before any session or job starts: it moves this process into a cgroup of its own (bg_cgroup_linux.go).
-	setupBgCgroups()
+	// Whether this machine can limit background jobs, for its Settings → Machine page: checked without
+	// changing anything, before the first call declares it (bg_cgroup_linux.go).
+	runnerCapabilitiesV1 += "," + bgJobLimitsCapability()
 	runWithSelfUpdates(cfg, selfUpdate, func() (bool, func()) { return runLoop(cfg) })
 	// Its Pod ends Failed, not Succeeded: the instance did not finish, it was retired or fenced.
 	if managedInstanceRevokedSeen.Load() {

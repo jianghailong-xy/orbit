@@ -294,6 +294,17 @@ test('the quiet answer hands out nothing and states the runner\'s settings, with
   assert.equal(quietHeartbeatAnswer({ maxConcurrent: 1, minFreeDiskMb: null }, {}).minFreeDiskMb, null);
 });
 
+test('the quiet answer states the background job limits that are set, and nothing when none is', () => {
+  const row = { maxConcurrent: 4, minFreeDiskMb: 2048 };
+  assert.equal('backgroundJobLimits' in quietHeartbeatAnswer({ ...row, bgJobCpus: null, bgJobMemoryMb: null }, {}), false);
+  assert.deepEqual(quietHeartbeatAnswer({ ...row, bgJobCpus: 2, bgJobMemoryMb: null }, {}).backgroundJobLimits, { cpus: 2 });
+  assert.deepEqual(quietHeartbeatAnswer({ ...row, bgJobCpus: null, bgJobMemoryMb: 512 }, {}).backgroundJobLimits, { memoryMb: 512 });
+  assert.deepEqual(
+    quietHeartbeatAnswer({ ...row, bgJobCpus: 0.5, bgJobMemoryMb: 512 }, {}).backgroundJobLimits,
+    { cpus: 0.5, memoryMb: 512 },
+  );
+});
+
 test('the quiet answer is, to the byte, what the runner\'s own test applies (src/runner-go/testdata/o1-quiet-answer.json)', () => {
   const fixture = readFileSync(path.resolve(__dirname, '../../../runner-go/testdata/o1-quiet-answer.json'), 'utf8').trim();
   assert.equal(JSON.stringify(quietHeartbeatAnswer({ maxConcurrent: 4, minFreeDiskMb: 2048 }, {})), fixture);

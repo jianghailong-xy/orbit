@@ -11,7 +11,8 @@ import (
 // Background job limits need Linux cgroup v2 (bg_cgroup_linux.go). Elsewhere a job runs without them, and
 // bg_run says so.
 
-func setupBgCgroups() {}
+// bgJobLimitsCapability says, as a Linux runner's does, why this one cannot limit jobs.
+func bgJobLimitsCapability() string { return bgJobLimitsUnavailableCapabilityPrefix + "os" }
 
 type bgJobCgroup struct{}
 
