@@ -104,6 +104,9 @@ export class CreateWorkspaceDto {
   // (ORCHESTRATOR_WORKSPACE_CREATE_FIELDS) leaves them out and refuses them by name (HUMAN_ONLY_WORKSPACE_FIELDS).
   @IsOptional() @IsBoolean() subagentsEnabled?: boolean;
   @IsOptional() @IsInt() @Min(1) @Max(SUBAGENTS_MAX_RUNNING_LIMIT) subagentsMaxRunning?: number;
+  // Workflows (docs/subagent-workflow-design.md §6): whether this Agent's sessions may start a workflow, which also
+  // takes SubAgents on. Human-only for the same reason as subagentsEnabled (HUMAN_ONLY_WORKSPACE_FIELDS).
+  @IsOptional() @IsBoolean() workflowsEnabled?: boolean;
 }
 
 export class UpdateWorkspaceDto {
@@ -155,6 +158,8 @@ export class UpdateWorkspaceDto {
   /** See CreateWorkspaceDto.subagentsEnabled. Absent leaves each as it is. */
   @IsOptional() @IsBoolean() subagentsEnabled?: boolean;
   @IsOptional() @IsInt() @Min(1) @Max(SUBAGENTS_MAX_RUNNING_LIMIT) subagentsMaxRunning?: number;
+  /** See CreateWorkspaceDto.workflowsEnabled. Absent leaves the switch as it is. */
+  @IsOptional() @IsBoolean() workflowsEnabled?: boolean;
 }
 
 // The full workspace list in the desired sidebar order; each id's index becomes its position.

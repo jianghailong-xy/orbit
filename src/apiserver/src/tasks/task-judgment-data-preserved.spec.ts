@@ -3199,7 +3199,12 @@ test('the ledger stays append-only, and every later migration is accounted for',
       '1250_managed_runner_name_orbit_cloud',
       // 1260 adds two nullable columns on runner, bg_job_cpus and bg_job_memory_mb (no default); no row is written,
       // and no preserved relation, trigger, function or DONE fence changes.
-      '1260_runner_bg_job_limits'],
+      '1260_runner_bg_job_limits',
+      // 1270 adds workspace.workflows_enabled, BOOLEAN NOT NULL with a constant default (catalog-only, no rewrite), for
+      // the Agent's Workflows switch. workspace is not a preserved relation; no `task`, `session`, `project` or
+      // `project_acceptance_*` object, trigger, function or type is named, created or replaced, so it is not another
+      // writer of the DONE fence. No INSERT, UPDATE or DELETE.
+      '1270_workspace_workflows_enabled'],
     'a later migration exists; re-read it before trusting the assertions above');
   // Stated rather than described: 0230's fence differs from 0228's by exactly one added lane.
   const later = readFileSync(

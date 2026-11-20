@@ -104,6 +104,8 @@ export interface SettingsWorkspace {
   /** SubAgents (docs/subagent-design.md §7): on by default, 4 of one session's at once. */
   subagentsEnabled?: boolean;
   subagentsMaxRunning?: number;
+  /** Workflows (docs/subagent-workflow-design.md §6): on by default; it takes SubAgents on as well. */
+  workflowsEnabled?: boolean;
   effort?: string | null;
   /** What the runner last saw at `workDir` on its own disk (refreshed each heartbeat). */
   workDirExists?: boolean | null;
@@ -132,6 +134,7 @@ type WorkspacePatch = Partial<
     | 'modelRoutingProviders'
     | 'subagentsEnabled'
     | 'subagentsMaxRunning'
+    | 'workflowsEnabled'
     | 'env'
     | 'appendSystemPrompt'
     | 'enabled'
@@ -726,6 +729,8 @@ function WorkspaceSettingsPage({ id }: { id: string }) {
       <SubagentSettings
         enabled={workspace.subagentsEnabled ?? true}
         onEnabledChange={(subagentsEnabled) => save({ subagentsEnabled })}
+        workflowsEnabled={workspace.workflowsEnabled ?? true}
+        onWorkflowsEnabledChange={(workflowsEnabled) => save({ workflowsEnabled })}
         maxRunning={workspace.subagentsMaxRunning ?? 4}
         onMaxRunningChange={(subagentsMaxRunning) => save({ subagentsMaxRunning })}
       />

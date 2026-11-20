@@ -1440,6 +1440,9 @@ model Workspace {
   // many of one session's SubAgents may run at once. On by default (§9 B).
   subagentsEnabled    Boolean   @default(true) @map("subagents_enabled")
   subagentsMaxRunning Int       @default(8) @map("subagents_max_running")
+  // Workflows (docs/subagent-workflow-design.md §6, §9 D2): whether this Agent's sessions may start a workflow, whose
+  // every call is a SubAgent, so it takes SubAgents on as well (workflowsOn). On by default, as SubAgents is.
+  workflowsEnabled    Boolean   @default(true) @map("workflows_enabled")
   // Default reasoning effort a new session inherits when its create request omits one
   // ('' / null = the model's default). Claude: low|medium|high|xhigh|max; codex adds minimal.
   effort              String?   @map("effort")

@@ -271,7 +271,7 @@ import {
   terminalizePendingCurrentWorkSteers,
 } from '../sessions/current-work-delivery';
 import { fileSubagentWake, fileWorkflowWake, interruptOrphanedSubagentRuns, interruptOrphanedWorkflowRuns } from './subagent-wake';
-import { orbitWorkflowLaunchReceipt } from './workflow-run';
+import { orbitWorkflowLaunchReceipt, workflowClaimFields } from './workflow-run';
 import { remoteSubagentHeartbeat } from './subagent-remote';
 import { CLEARED_RUNNING_WORK } from '../sessions/running-work';
 import { deadLetterQueuedWatchWakes } from '../watches/watch-wake-drain';
@@ -4682,6 +4682,8 @@ export class RunnerApiController {
         ...watchClaimFields(watchRollout, s.ownerId),
         // And the wiki, on the same rule (wiki/wiki-rollout.ts).
         ...wikiClaimFields(wikiRollout, s.ownerId),
+        // cf. the claim path: the Agent's Workflows switch, which may have moved since the session was first claimed.
+        ...workflowClaimFields(workspace),
         // cf. the claim path: a scheduled run's session lists schedule_run_report.
         ...(s.scheduleRunId ? { scheduleRun: true } : {}),
         // Read, never re-derived (SR29). A session already PINNED comes back on the SHA its first

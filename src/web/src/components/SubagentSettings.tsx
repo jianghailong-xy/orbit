@@ -13,18 +13,24 @@ import { Switch } from './ui/Switch';
 export const SUBAGENTS_MAX_RUNNING_LIMIT = 16;
 
 /**
- * The Agent settings' SubAgents group (docs/subagent-design.md §7, board docs/mocks/subagent/05.png). The switch
- * and Running at once are the Agent's, saved with the form; Providers is the account's block list, saved as it is
- * changed. Optimize For is the account's, on Settings → General (board docs/mocks/routing-mode-account).
+ * The Agent settings' SubAgents group (docs/subagent-design.md §7, board docs/mocks/subagent/05.png, and its
+ * Workflows row from board docs/mocks/subagent-workflow part 5). The switches and Running at once are the Agent's,
+ * saved with the form; Providers is the account's block list, saved as it is changed. Optimize For is the account's,
+ * on Settings → General (board docs/mocks/routing-mode-account). Workflows follows SubAgents: every call of a
+ * workflow is a SubAgent, so with SubAgents off it reads off and cannot be turned on.
  */
 export function SubagentSettings({
   enabled,
   onEnabledChange,
+  workflowsEnabled,
+  onWorkflowsEnabledChange,
   maxRunning,
   onMaxRunningChange,
 }: {
   enabled: boolean;
   onEnabledChange: (value: boolean) => void;
+  workflowsEnabled: boolean;
+  onWorkflowsEnabledChange: (value: boolean) => void;
   maxRunning: number;
   onMaxRunningChange: (value: number) => void;
 }) {
@@ -45,6 +51,18 @@ export function SubagentSettings({
       </div>
       <div className="subagents-row">
         <div className="rd-set-main">
+          <div className="rd-set-label">Workflows</div>
+          <div className="rd-set-desc">Let this agent run a script that starts many SubAgents and wakes it once</div>
+        </div>
+        <Switch
+          checked={enabled && workflowsEnabled}
+          disabled={!enabled}
+          onCheckedChange={onWorkflowsEnabledChange}
+          aria-label="Workflows"
+        />
+      </div>
+      <div className="subagents-row">
+        <div className="rd-set-main">
           <div className="rd-set-label">Providers</div>
           <div className="rd-set-desc">All enabled providers. Block one to keep SubAgents off it.</div>
         </div>
@@ -55,7 +73,7 @@ export function SubagentSettings({
       <div className="subagents-row">
         <div className="rd-set-main">
           <div className="rd-set-label">Running at once</div>
-          <div className="rd-set-desc">Per session, foreground and background together</div>
+          <div className="rd-set-desc">Per session: delegated SubAgents and workflow calls together</div>
         </div>
         <NumberInput
           aria-label="Running at once"
