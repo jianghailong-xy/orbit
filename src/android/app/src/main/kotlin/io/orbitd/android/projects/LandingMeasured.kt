@@ -137,9 +137,11 @@ internal fun LandingCheckSegments(mode: ProjectLandingCheck.Mode, enabled: Boole
     }
 }
 
-/** A command, monospaced, in the hairline box the board draws it in. */
+/** A command, monospaced, in the hairline box the board draws it in; a press opens its editor where there is one. The tag and the
+ * press are one node, so the box reads as itself. */
 @Composable
-internal fun CommandBox(command: String, tag: String) = Text(command, Modifier.fillMaxWidth()
+internal fun CommandBox(command: String, tag: String, enabled: Boolean = true, open: (() -> Unit)? = null) = Text(command, Modifier.fillMaxWidth()
+    .then(if (open != null) Modifier.clickable(enabled = enabled, role = Role.Button, onClick = open) else Modifier)
     .border(1.dp, MaterialTheme.colorScheme.outline.copy(alpha = 0.3f), RoundedCornerShape(8.dp)).padding(horizontal = 9.dp, vertical = 6.dp).testTag(tag),
     style = MaterialTheme.typography.bodySmall, fontFamily = FontFamily.Monospace)
 

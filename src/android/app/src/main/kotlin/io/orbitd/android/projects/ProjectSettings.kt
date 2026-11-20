@@ -620,8 +620,7 @@ private fun LandingCheckSetting(view: JsonObject, enabled: Boolean, now: Instant
                 }
             }
             when (read.mode) {
-                ProjectLandingCheck.Mode.COMMAND -> Box(Modifier.clickable(enabled = enabled, role = Role.Button) { editing = true }) {
-                    CommandBox(read.command.orEmpty(), "project-landing-check-command") }
+                ProjectLandingCheck.Mode.COMMAND -> CommandBox(read.command.orEmpty(), "project-landing-check-command", enabled) { editing = true }
                 ProjectLandingCheck.Mode.MERGE_CHECK -> Note(LandingCheckCopy.inheritedCommand(view.text("mergeCheckCommand")))
                 ProjectLandingCheck.Mode.NONE -> NoCheckSays("project-landing-check-none")
             }
