@@ -122,7 +122,7 @@ function fingerprint(dir) {
  * With `server` the target is reached through a stand-in ssh that runs the far side's real rsync, printing OpenSSH's warning first
  * if `server.warns`. `locked`, given the directories, names a directory of the target and the mode it has for the length of each poll.
  */
-function round({ prepare, system = CLUSTER, due = [], database = 'up', interval = 86_400, rsyncFailsOn = null, cut = null, server = null, locked = null, mirror = false }) {
+function round({ prepare, system = CLUSTER, due = [], database = 'up', interval = 86_400, rsyncFailsOn = null, cut = null, server = null, locked = null, mirror = false, database_container = null }) {
   // The far side has to reach this directory as the unprivileged account when this runs as root, so not through a private TMPDIR.
   const scratch = mkdtempSync(path.join(AS_ROOT ? '/tmp' : tmpdir(), 'pg-backup-offhost-'));
   try {
@@ -154,7 +154,9 @@ function round({ prepare, system = CLUSTER, due = [], database = 'up', interval 
       psql: `printf '%s\\n' "$*" >> '${queries}'
 case "$*" in
   *system_identifier*) [ '${database}' = up ] && echo ${system} || { echo 'could not connect to server' >&2; exit 2; } ;;
-  *file_blob*) [ '${database}' = up ] || { echo 'could not connect to server' >&2; exit 2; }; printf '%s\\n' ${due.map((name) => `'${name}'`).join(' ') || "''"} ;;
+  *file_blob*) ${database_container
+    ? `exec docker exec -i '${database_container}' psql -U postgres "$@" ;;`
+    : `[ '${database}' = up ] || { echo 'could not connect to server' >&2; exit 2; }; printf '%s\\n' ${due.map((name) => `'${name}'`).join(' ') || "''"} ;;`}
   *) echo 0 ;;
 esac`,
       // A base backup is taken at the start of the round only when none is recent, which `prepare` decides.
@@ -1226,4 +1228,32 @@ test('a database it cannot read prunes nothing from the bucket mirror either', (
   const gone = NAME('a');
   const result = round({ mirror: true, database: 'down', due: [gone], prepare: prepareBucket([gone]) });
   assert.deepEqual(onBucket(result), [inCopy(gone)], result.log);
+});
+
+test('against a real Postgres, the bucket mirror loses the object whose off_host_prune_at has passed and keeps the one not yet due', () => {
+  const name = `pgbackup-bucket-${process.pid}`;
+  const [due, notYet, local] = [NAME('d'), NAME('e'), NAME('f')];
+  const docker = (...args) => execFileSync('docker', args, { encoding: 'utf8' });
+  docker('run', '-d', '--rm', '--name', name, '-e', 'POSTGRES_PASSWORD=x', 'postgres:16-alpine');
+  try {
+    let ready = false;
+    for (let i = 0; i < 60 && !ready; i += 1) {
+      ready = spawnSync('docker', ['exec', name, 'pg_isready', '-h', '127.0.0.1', '-U', 'postgres']).status === 0;
+      if (!ready) spawnSync('sleep', ['1']);
+    }
+    assert.ok(ready, 'the throwaway Postgres came up');
+    const sql = (statement) => docker('exec', name, 'psql', '-h', '127.0.0.1', '-U', 'postgres', '-v', 'ON_ERROR_STOP=1', '-c', statement);
+    sql('create database orbit');
+    const inOrbit = (statement) => docker('exec', name, 'psql', '-h', '127.0.0.1', '-U', 'postgres', '-d', 'orbit', '-v', 'ON_ERROR_STOP=1', '-c', statement);
+    inOrbit('create table file_blob (sha256 text primary key, storage text not null, off_host_prune_at timestamp)');
+    inOrbit(`insert into file_blob values
+      ('${due}', 's3', now() at time zone 'utc' - interval '1 day'),
+      ('${notYet}', 's3', now() at time zone 'utc' + interval '3 days'),
+      ('${local}', 'local', null)`);
+    const result = round({ mirror: true, database_container: name, prepare: prepareBucket([due, notYet]) });
+    assert.deepEqual(onBucket(result), [inCopy(notYet)], result.log);
+    assert.match(result.log, /pruned 1 file\(s\) from .*-bucket/);
+  } finally {
+    spawnSync('docker', ['rm', '-f', name]);
+  }
 });
