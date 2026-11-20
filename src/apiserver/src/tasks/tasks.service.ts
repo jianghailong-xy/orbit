@@ -3454,13 +3454,19 @@ export class TasksService implements OnModuleInit, OnModuleDestroy {
           // §1.1 reads the NEWEST work session, so a task whose first attempt ran in a worktree and
           // whose latest one did not is judged by the latest — and by the repository its workspace
           // names (O-L7).
+          // Every one of them, newest first, for whether any is still moving (§12.15 P-M1): no
+          // `changed_files` here, which `_count` below answers for without reading the lists.
           sessions: {
             where: { startsTaskWork: true, deletedAt: null },
             orderBy: { createdAt: 'desc' },
-            take: 1,
-            select: { isolationStatus: true, branch: true, workspace: { select: { repoUrl: true } } },
+            select: {
+              isolationStatus: true, branch: true, finishedAt: true, workspace: { select: { repoUrl: true } },
+            },
           },
           mergeReceipts: LANDING_SERVING_WORK_SELECT.mergeReceipts,
+          deliveredSha: true,
+          deliveredBaseSha: true,
+          _count: LANDING_SERVING_WORK_SELECT._count,
         },
       });
       for (const row of rows) {
@@ -3477,6 +3483,10 @@ export class TasksService implements OnModuleInit, OnModuleDestroy {
             ? { isolationStatus: work.isolationStatus, branch: work.branch, repoUrl: work.workspace?.repoUrl }
             : null,
           receipts: row.mergeReceipts ?? [],
+          deliveredSha: row.deliveredSha,
+          deliveredBaseSha: row.deliveredBaseSha,
+          _count: row._count,
+          workStillMoving: (row.sessions ?? []).some((session) => session.finishedAt === null),
         }));
       }
     }
@@ -11275,6 +11285,16 @@ export class TasksService implements OnModuleInit, OnModuleDestroy {
       // an unrelated blocker from some earlier episode goes on releasing its work.
       if (!stopped) await this.dispatchIndependentSiblingsOf(ownerId, doneTaskId);
     }
+  }
+
+  /**
+   * §12.15 P-M1: the finish that froze a DONE task's identity decided the route its DONE had left to
+   * it, and a task that delivered nothing of its own releases its dependents on that finish (J10's
+   * second edge, moved from the DONE to where the fact became known). The dependency dispatch and its
+   * decisions only: the DONE's own edge already delivered the completion's facts.
+   */
+  async dispatchDependentsOfSettledWork(ownerId: string, doneTaskId: string): Promise<void> {
+    await this.deliverReadyDependents(await this.dispatchDependentsOf(ownerId, doneTaskId));
   }
 
   /**

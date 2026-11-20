@@ -10222,6 +10222,10 @@ export class RunnerApiController {
         taskReclaimed,
         dispatchRefused,
         identityUnknown: delivered === 'IDENTITY_UNKNOWN',
+        // This finish froze a DONE task's identity and decided the route its DONE left to it (§12.15
+        // P-M1): a task that delivered nothing releases its dependents on this edge.
+        identityFrozen: delivered === 'FROZEN',
+        ownerId: current.ownerId,
         taskId: current.taskId,
         currentWorkTerminalized,
         // A session the runner finalizes while it runs a turn ends that turn here — completed, failed or
@@ -10260,9 +10264,18 @@ export class RunnerApiController {
       // this door reclaimed the task and told nobody at all.
       await this.openItems?.deliverForTasks([outcome.taskId]);
     }
-    // The item a DONE task's unknown identity opened when this finish settled its work (O-T1).
-    if ('identityUnknown' in outcome && outcome.identityUnknown && outcome.taskId) {
+    // The item a DONE task's unknown identity opened when this finish settled its work (O-T1), or the
+    // WORK_ELSEWHERE one its frozen identity opened (§12.15 P-M1).
+    if ('identityUnknown' in outcome && (outcome.identityUnknown || outcome.identityFrozen) && outcome.taskId) {
       await this.openItems?.deliverForTasks([outcome.taskId]);
+    }
+    // §12.15 P-M1, J10's second edge for a DONE written while its work moved: the finish decided the
+    // route, and a task that delivered nothing releases its dependents now. A predicate the 60 s
+    // ready sweep asks too, so a process that dies here costs one sweep.
+    if ('identityFrozen' in outcome && outcome.identityFrozen && outcome.taskId && outcome.ownerId) {
+      await this.tasks?.dispatchDependentsOfSettledWork(outcome.ownerId, outcome.taskId).catch((error) =>
+        this.logger.warn(`dependents of task ${outcome.taskId} not dispatched after its work settled: ${
+          error instanceof Error ? error.message : error}`));
     }
     // The refusal this finalize recorded: the task row moved, and the project's coordinator is told,
     // because nothing else about a start that never became a run would tell anybody.

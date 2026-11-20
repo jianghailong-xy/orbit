@@ -1,4 +1,4 @@
-import type { Prisma } from '@prisma/client';
+import { Prisma } from '@prisma/client';
 import type { PrismaService } from '../prisma/prisma.service';
 
 /**
@@ -312,6 +312,11 @@ export interface LandingServingTask {
    *  about the repository, which reads as work in the project's own. */
   sessions?: ReadonlyArray<{ workspace?: { repoUrl: string | null } | null }>;
   project?: { codebases: ReadonlyArray<{ canonicalRepoUrl: string }> } | null;
+  /** §12.15 P-M1's facts (`deliveredNothingOfItsOwn`). A reader that did not select them reads as a
+   *  task that delivered something. */
+  deliveredSha?: string | null;
+  deliveredBaseSha?: string | null;
+  _count?: { sessions?: number } | null;
 }
 
 /** The rows the fold needs: one criterion's identity and its serving work's receipts. */
@@ -587,6 +592,93 @@ export function lineStartedSql(alias: string): string {
        WHERE started_line."project_id" = ${alias}."project_id"
          AND started_line."slot" = 'primary'
          AND started_line."integration_started_at" IS NOT NULL
+    )`;
+}
+
+/**
+ * The work sessions of a task that reported work of their own (`sessionReportedWork`, J8): the
+ * sessions `workSessionsReportingWork` in the relay reads, with a `changed_files` that is a list with
+ * something in it. As a Prisma filter, for the readers that count them in their own select.
+ *
+ * The runner writes `changed_files` as a JSON list or not at all, so "not null, not `null`, not `[]`"
+ * is the same set as the TypeScript and SQL spellings' "a list with at least one entry".
+ */
+export const WORK_REPORTED_WHERE = {
+  startsTaskWork: true,
+  deletedAt: null,
+  isolationStatus: 'worktree',
+  branch: { not: null },
+  NOT: [{ changedFiles: { equals: Prisma.AnyNull } }, { changedFiles: { equals: [] } }],
+} satisfies Prisma.SessionWhereInput;
+
+/** The facts §12.15 P-M1 reads about one DONE task, as the readers select them. */
+export interface DeliveredNothingFacts {
+  /** The frozen delivered identity (§10.5 O-L4): the commit, and the commit it forked from. */
+  deliveredSha?: string | null;
+  deliveredBaseSha?: string | null;
+  /** How many of its work sessions reported work (`WORK_REPORTED_WHERE`). */
+  _count?: { sessions?: number } | null;
+}
+
+/**
+ * §12.15 P-M1, the fact itself: this task delivered no commit of its own, and nothing of its work
+ * is anywhere else either — so it has nothing to land, and was given no route to a line.
+ *
+ * Both halves are committed rows. `delivered_sha = delivered_base_sha` is the branch with no commit
+ * past its base, frozen when the work settled (O-L4; NULL until then, and cleared when the task
+ * leaves DONE). And no work session of the task reported work (J8's condition, O-L7): a session
+ * that did means the work is on some other branch, which is `WORK_ELSEWHERE` and not nothing.
+ *
+ * The enqueue (`enqueueForDoneTask`), the dependency predicate (§2.5 J9), and the landing fold
+ * (`taskHasNothingToLand`) all read this, in this spelling or `deliveredNothingOfItsOwnSql`.
+ */
+export function deliveredNothingOfItsOwn(task: DeliveredNothingFacts): boolean {
+  return typeof task.deliveredSha === 'string'
+    && task.deliveredSha === task.deliveredBaseSha
+    && (task._count?.sessions ?? 0) === 0;
+}
+
+/** `deliveredNothingOfItsOwn` as SQL, correlated to a TASK alias. */
+export function deliveredNothingOfItsOwnSql(alias: string): string {
+  return `(
+      ${alias}."delivered_sha" IS NOT NULL
+      AND ${alias}."delivered_sha" = ${alias}."delivered_base_sha"
+      AND NOT EXISTS (
+        SELECT 1 FROM "session" reported_work
+         WHERE reported_work."task_id" = ${alias}."id"
+           AND reported_work."starts_task_work" = true
+           AND reported_work."deleted_at" IS NULL
+           AND reported_work."isolation_status" = 'worktree'
+           AND reported_work."branch" IS NOT NULL
+           AND jsonb_typeof(reported_work."changed_files") = 'array'
+           AND reported_work."changed_files" <> '[]'::jsonb
+      )
+    )`;
+}
+
+/**
+ * Code work of this line that delivered something to land: `isCodeTaskSql` without the tasks §12.15
+ * P-M1 gave no route (`deliveredNothingOfItsOwnSql`). What the task row and the project's buckets
+ * read as "this task integrates": a DONE that measured no commit of its own reads as nothing to land
+ * (`NOT_APPLICABLE`, `doneNotIntegrated`) rather than as a landing that never comes.
+ */
+export function hasWorkToLandSql(alias: string): string {
+  return `(${isCodeTaskSql(alias)} AND NOT ${deliveredNothingOfItsOwnSql(alias)})`;
+}
+
+/**
+ * Whether a task's work is still moving: a work session of it has not finished (the negation of
+ * `landingWorkHasSettled`, J-T1e). Its delivered identity is not frozen yet, and the finish that
+ * freezes it is where its landing is decided (§12.15 P-M1), so a DONE in this state has queued
+ * nothing and started no line yet.
+ */
+export function workStillMovingSql(alias: string): string {
+  return `EXISTS (
+      SELECT 1 FROM "session" moving_work
+       WHERE moving_work."task_id" = ${alias}."id"
+         AND moving_work."starts_task_work" = true
+         AND moving_work."deleted_at" IS NULL
+         AND moving_work."finished_at" IS NULL
     )`;
 }
 
@@ -877,7 +969,10 @@ export function lineSawNothingToLand(task: LandingServingTask): boolean {
  * receipt and all.
  */
 export function taskHasNothingToLand(task: LandingServingTask): boolean {
-  return task.codeless || workInAnotherRepository(task) || lineSawNothingToLand(task);
+  return task.codeless || workInAnotherRepository(task) || lineSawNothingToLand(task)
+    // §12.15 P-M1: the DONE measured no commit of its own and queued nothing, so there is no job for
+    // the line's answer to come from; the fact the DONE decided on is read instead.
+    || deliveredNothingOfItsOwn(task);
 }
 
 /**
@@ -1026,6 +1121,11 @@ export const LANDING_SERVING_WORK_SELECT = {
   // line is bound. Two relation levels each, not a statement per task (`workInAnotherRepository`).
   sessions: NEWEST_WORK_REPOSITORY,
   project: { select: { codebases: { where: { slot: 'primary' }, select: { canonicalRepoUrl: true } } } },
+  // §12.15 P-M1 (`deliveredNothingOfItsOwn`): the frozen identity, and a count rather than the lists
+  // themselves, since a `changed_files` can hold thousands of entries and only "any?" is asked.
+  deliveredSha: true,
+  deliveredBaseSha: true,
+  _count: { select: { sessions: { where: WORK_REPORTED_WHERE } } },
 } as const;
 
 /**

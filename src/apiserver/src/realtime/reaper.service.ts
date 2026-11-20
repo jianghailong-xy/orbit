@@ -972,7 +972,9 @@ export class ReaperService implements OnModuleInit, OnModuleDestroy {
         ok: true,
         taskReclaimed,
         currentWorkTerminalized,
-        identityUnknown: delivered === 'IDENTITY_UNKNOWN',
+        // Or the WORK_ELSEWHERE item an identity frozen here opened (§12.15 P-M1). The dependents of a
+        // task that delivered nothing are released by the 60 s ready sweep, which asks the same predicate.
+        identitySettled: delivered === 'IDENTITY_UNKNOWN' || delivered === 'FROZEN',
         droppedWakeups,
         checksSettled,
       };
@@ -995,8 +997,9 @@ export class ReaperService implements OnModuleInit, OnModuleDestroy {
       // And the exception item this sweep opened goes to whoever is responsible for it (§4.4 X-D4 1).
       await this.openItems?.deliverForTasks([taskId]);
     }
-    // The item a DONE task's unknown identity opened when this finish settled its work (O-T1).
-    if ('identityUnknown' in outcome && outcome.identityUnknown && taskId) {
+    // The item a DONE task's unknown identity opened when this finish settled its work (O-T1), or the
+    // WORK_ELSEWHERE item its frozen identity opened (§12.15 P-M1).
+    if ('identitySettled' in outcome && outcome.identitySettled && taskId) {
       await this.openItems?.deliverForTasks([taskId]);
     }
     if (outcome.currentWorkTerminalized > 0) {

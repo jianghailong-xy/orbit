@@ -5,11 +5,15 @@ import {
   // The landing module's, not a second copy — this file and the panorama both fold refs the same
   // way, and two spellings of that fold is two answers to "did it land".
   branchNameSql,
+  deliveredNothingOfItsOwn,
+  deliveredNothingOfItsOwnSql,
+  type DeliveredNothingFacts,
   LandingReceiptFacts,
   landingBranchesFor,
   taskLanding,
   workOnProjectRepository,
   workOnProjectRepositorySql,
+  workStillMovingSql,
 } from '../projects/project-criterion-landing';
 import { successorChain, TASK_SUPERSESSION_MAX_HOPS, taskNotRetiredSql } from './task-supersession';
 import {
@@ -535,12 +539,19 @@ export function everyPrerequisiteDoneOrRetiredSql(alias = 't'): string {
 /**
  * §2.5 J9 in SQL, correlated to a PREREQUISITE alias: is there nothing left for it to land?
  *
- * TRUE — nothing to wait for — in three cases, and they are disjuncts rather than a filter because
+ * TRUE — nothing to wait for — in four cases, and they are disjuncts rather than a filter because
  * each one means "this prerequisite has no landing to do", not "skip the check":
  *
+ *  0. **It delivered nothing of its own** (§12.15 P-M1, `deliveredNothingOfItsOwnSql`): its DONE
+ *     froze a branch with no commit past its base, no work session of it reported work, and so the
+ *     DONE queued nothing — its dependents are dispatched on that DONE (J10's second edge), or on the
+ *     finish that froze it.
  *  1. **Its project has not started integrating** (§8.4 C2), which includes a task filed under no
  *     project at all. Nothing lands work on a line that does not exist yet, so requiring a landing
- *     would hold every dependent of every project in this repository for ever.
+ *     would hold every dependent of every project in this repository for ever. Except while the
+ *     work of a task filed under a project is still moving (§12.15 P-M1): its DONE has not decided
+ *     yet whether it lands, and if it does, that decision starts the line — the dependents of the
+ *     first committing task wait for its landing, not for its DONE.
  *  2. **It is not code work** (§1.1 `isCodeTask`): declared codeless, or its newest work session did
  *     not run in a worktree on a branch, or ran in a repository other than the one the project's
  *     line is bound to (revision 29, §10.5 O-L7). A documentation prerequisite has no commit to land,
@@ -557,12 +568,13 @@ export function everyPrerequisiteDoneOrRetiredSql(alias = 't'): string {
 export function prerequisiteLandedSql(alias = 'chain_task'): string {
   const results = LANDED_RESULTS.map((result) => `'${result}'`).join(', ');
   return `(
-      NOT EXISTS (
+      ${deliveredNothingOfItsOwnSql(alias)}
+      OR (NOT EXISTS (
         SELECT 1 FROM "project_codebase" landing_line
          WHERE landing_line."project_id" = ${alias}."project_id"
            AND landing_line."slot" = 'primary'
            AND landing_line."integration_started_at" IS NOT NULL
-      )
+      ) AND (${alias}."project_id" IS NULL OR NOT ${workStillMovingSql(alias)}))
       OR ${alias}."codeless" = true
       OR NOT EXISTS (
         SELECT 1 FROM "session" landing_work
@@ -595,7 +607,9 @@ export function prerequisiteLandedSql(alias = 'chain_task'): string {
 }
 
 /** One prerequisite's rows, as the TypeScript spelling of J9 reads them. */
-export interface PrerequisiteLandingFacts {
+export interface PrerequisiteLandingFacts extends DeliveredNothingFacts {
+  /** Whether a work session of it has not finished (`workStillMovingSql`). Absent reads as settled. */
+  workStillMoving?: boolean;
   codeless: boolean;
   projectId: string | null;
   /** The project's primary binding, or null when it has none. */
@@ -616,13 +630,17 @@ export interface PrerequisiteLandingFacts {
 /**
  * §2.5 J9 as a pure function, so the dispatch paths that read rows and the sweeps that count in SQL
  * cannot answer differently — the same hazard `dependenciesSatisfiedSql` names about SU9, one
- * clause further along. The three disjuncts are `prerequisiteLandedSql`'s, in the same order.
+ * clause further along. The disjuncts are `prerequisiteLandedSql`'s, in the same order.
  */
 export function prerequisiteLanded(facts: PrerequisiteLandingFacts): boolean {
-  if (!facts.codebase?.integrationStartedAt) return true;
+  if (deliveredNothingOfItsOwn(facts)) return true;
+  if (!facts.codebase?.integrationStartedAt && (facts.projectId === null || !facts.workStillMoving)) return true;
   if (facts.codeless || facts.projectId === null) return true;
   if (facts.work?.isolationStatus !== 'worktree' || !facts.work.branch) return true;
   if (!workOnProjectRepository(facts.work.repoUrl, facts.codebase)) return true;
+  // Reached with no binding only for work still moving in a project with no line: no receipt can be
+  // on a line that does not exist, as the SQL's join on the binding says.
+  if (!facts.codebase) return false;
   return taskLanding(facts.receipts, landingBranchesFor(facts.codebase)) !== 'NOT_KNOWN';
 }
 
