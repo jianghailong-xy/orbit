@@ -397,7 +397,8 @@ import {
   taskCodelessHasCommitsBody,
   taskCodelessReasonRequiredBody,
 } from './task-codeless';
-import { type LandingCheckExemptColumns, landingCheckExemptWrite } from './task-landing-check-exempt';
+import { type LandingCheckExemptColumns, type LandingCheckExemptWrite, landingCheckExemptWrite } from './task-landing-check-exempt';
+import { recordSettingChange } from '../projects/project-setting-change';
 import {
   assertForkCallerOnRunner,
   assertForkPlacement,
@@ -4303,7 +4304,7 @@ export class TasksService implements OnModuleInit, OnModuleDestroy {
       await this.pausedListIds(ownerId, [dto.listId]),
       criterionDeclaration,
       forkColumns,
-      landingCheckExempt,
+      landingCheckExempt?.columns ?? null,
     );
     // Initial edges and their task must become visible atomically. Taking the same owner lock
     // used by add/replace prevents a concurrent reverse-edge write from observing the new task
@@ -4424,6 +4425,13 @@ export class TasksService implements OnModuleInit, OnModuleDestroy {
             tx, ownerId, dependencyCrossings.edges, now,
           );
           const created = await tx.task.create({ data });
+          // §12.15 P-R1: the coordinator's cardless exemption leaves its record in this transaction.
+          if (landingCheckExempt?.record && created.projectId) {
+            await recordSettingChange(tx, {
+              ownerId, projectId: created.projectId, taskId: created.id, field: 'TASK_LANDING_CHECK_EXEMPT',
+              ...landingCheckExempt.record,
+            });
+          }
           // Its startWhen, in this transaction: the condition, the approved command's hash and the baseline
           // (docs/condition-triggers-design.md §6.2). A refusal (the account's 20) takes the task with it.
           if (dto.startWhen) {
@@ -5412,7 +5420,7 @@ export class TasksService implements OnModuleInit, OnModuleDestroy {
       if (fork) forkColumns.set(index, fork);
     }
     // §12.15 P-C2, per item and over the project each was admitted into, like the fork above.
-    const exemptions = new Map<number, LandingCheckExemptColumns>();
+    const exemptions = new Map<number, LandingCheckExemptWrite>();
     for (const [index, item] of items.entries()) {
       if (frozen.has(index)) continue;
       const exemption = await landingCheckExemptWrite(this.prisma, {
@@ -5644,9 +5652,16 @@ export class TasksService implements OnModuleInit, OnModuleDestroy {
               heldListIds,
               criterionDeclarations.get(index) ?? null,
               forkColumns.get(index) ?? null,
-              exemptions.get(index) ?? null,
+              exemptions.get(index)?.columns ?? null,
             ),
           }));
+        const exemptionRecord = existing ? undefined : exemptions.get(index)?.record;
+        if (exemptionRecord && task.projectId) {
+          await recordSettingChange(tx, {
+            ownerId, projectId: task.projectId, taskId: task.id, field: 'TASK_LANDING_CHECK_EXEMPT',
+            ...exemptionRecord,
+          });
+        }
         if (!existing) {
           insertedIds.push(task.id);
           // Its startWhen, in this transaction, as the single door writes one (task-start-when.ts).
@@ -10196,6 +10211,8 @@ export class TasksService implements OnModuleInit, OnModuleDestroy {
       exempt: dto.landingCheckExempt,
       reason: dto.landingCheckExemptReason,
       currentlyExempt: before.landingCheckExempt,
+      currentReason: before.landingCheckExemptReason,
+      ownerHasWritten: before.landingCheckExemptOwnerSetAt != null,
     });
     if (dto.assigneeId) await this.assertOwnedWorkspace(ownerId, dto.assigneeId);
     if (dto.listId) await this.assertOwnedList(ownerId, dto.listId);
@@ -10385,7 +10402,7 @@ export class TasksService implements OnModuleInit, OnModuleDestroy {
       codeless: declaresCodeless || withdrawsCodeless ? dto.codeless : undefined,
       codelessReason: declaresCodeless ? codelessReason : withdrawsCodeless ? null : undefined,
       // The exemption and its reason and writer move together (§12.15 P-C2); absent when not named.
-      ...(landingCheckExempt ?? {}),
+      ...(landingCheckExempt?.columns ?? {}),
       // Three-state like the pins above: omitted keeps the conclusion, null revokes it. Revoking is
       // a real operation rather than an undo — a subject completed by VERIFICATION_PASSED goes back
       // to OPEN on the next reconcile, which is the point of storing the verdict rather than
@@ -10760,6 +10777,7 @@ export class TasksService implements OnModuleInit, OnModuleDestroy {
       // fence is a check the rotation it exists for can simply commit past. An agent edit inside a
       // project therefore takes the transaction; nothing else changes shape.
       !restructures && !(touchesAcceptanceFacts && before.projectId) && !scopeFence
+        && !landingCheckExempt?.record
         ? assertMaySettleWhatThisMoves(this.prisma).then(() => this.prisma.task.update({ where: { id }, data }))
         // Retried whole, on the transaction branch only. The one-statement branch is an
         // autocommit UPDATE with nothing to re-run: it has no transaction of its own, so a
@@ -11044,6 +11062,16 @@ export class TasksService implements OnModuleInit, OnModuleDestroy {
             // Every verifier has the same carrier lifecycle. `data.status` above derives DONE from
             // any verdict before this transaction decides an optional evidence-bound request.
             let task = await tx.task.update({ where: { id }, data });
+            // §12.15 P-R1: the coordinator's cardless exemption change leaves its record in this transaction.
+            if (landingCheckExempt?.record) {
+              const recordedProjectId = task.projectId;
+              if (recordedProjectId) {
+                await recordSettingChange(tx, {
+                  ownerId, projectId: recordedProjectId, taskId: id, field: 'TASK_LANDING_CHECK_EXEMPT',
+                  ...landingCheckExempt.record,
+                });
+              }
+            }
             if (retiresAfter) {
               await writeSupersession();
               task = await tx.task.findUniqueOrThrow({ where: { id } });

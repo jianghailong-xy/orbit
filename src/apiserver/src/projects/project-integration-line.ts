@@ -29,6 +29,7 @@ import {
 
 import type { PrismaService } from '../prisma/prisma.service';
 import { baselineHoldSql } from './baseline-hold';
+import { recordSettingChange, requiredChangeReason, type LandingCheckValue } from './project-setting-change';
 import { runnerOfflineSql } from '../runners/runner-presence';
 import { branchName, canonicalRepoUrl, workOnProjectRepository } from './project-criterion-landing';
 import {
@@ -1592,6 +1593,11 @@ export interface IntegrationSettings {
    * `landingCheckCommand` later (a command, or null to fall back to the merge check) lifts it.
    */
   landingCheck?: 'NONE';
+  /**
+   * Why the project's coordinator is changing the landing check without a card (§12.15 P-R1): required
+   * and at most 280 characters on that cardless write, ignored on every other. Not a setting.
+   */
+  landingCheckReason?: string;
   mergeCheckCommand?: string | null;
   mergeCheckTimeoutSeconds?: number | null;
   /** This project's escalation window in seconds (§4.6). The column's CHECK bounds it, 300 to a week. */
@@ -1687,6 +1693,40 @@ function landingCheckProvenance(
     landingCheckSetBySessionId: writer.by === 'COORDINATOR' ? writer.sessionId : null,
     landingCheckSetAt: new Date(),
   };
+}
+
+/** The landing check as one value, for the record of a change (§12.15 P-R1). */
+function landingCheckValueOf(
+  row: { landingCheckCommand?: string | null; landingCheckTimeoutSeconds?: number | null; landingCheckNone?: boolean },
+): LandingCheckValue {
+  return {
+    command: row.landingCheckCommand ?? null,
+    timeoutSeconds: row.landingCheckTimeoutSeconds ?? null,
+    none: row.landingCheckNone ?? false,
+  };
+}
+
+/**
+ * The owner putting a recorded landing check back (§12.15 P-R1): the three values under the binding's lock,
+ * written as the owner's own, so the coordinator's next cardless write is refused and goes to the card.
+ */
+export async function restoreLandingCheck(
+  tx: Prisma.TransactionClient,
+  projectId: string,
+  value: LandingCheckValue,
+): Promise<void> {
+  const row = await lockCodebase(tx, projectId);
+  if (!row) throw new ConflictException({ code: 'SETTING_CHANGE_NO_BINDING', message: 'this project has no code binding any more' });
+  await tx.projectCodebase.update({
+    where: { id: row.id },
+    data: {
+      landingCheckCommand: value.command,
+      landingCheckTimeoutSeconds: value.timeoutSeconds,
+      landingCheckNone: value.none,
+      ...landingCheckProvenance({ by: 'OWNER' }),
+    },
+    select: { id: true },
+  });
 }
 
 /** The binding, locked for the rest of this transaction. Rank 55: after `task`, before its children. */
@@ -1842,6 +1882,9 @@ export async function configureProjectIntegration(
   if (settings.line === 'MAIN' && settings.projectBranchName !== undefined) {
     throw new BadRequestException('a project that integrates straight into main has no project branch to name');
   }
+  const cardlessReason = input.landingCheckWriter?.by === 'COORDINATOR'
+    ? requiredChangeReason(settings.landingCheckReason, 'LANDING_CHECK_REASON_REQUIRED', 'landingCheckReason')
+    : null;
 
   // The escalation window is the PROJECT's column, not the binding's (§4.1): it says how long a
   // person waits, and a project with no code at all still has exceptions waiting on somebody. So it
@@ -1954,6 +1997,18 @@ export async function configureProjectIntegration(
   });
   if (settings.deliveryMode === 'AGENT_PUSH' && row.deliveryMode !== 'AGENT_PUSH') {
     await deliveryModeTurnedAgentPush(tx, { ownerId, projectId });
+  }
+  // §12.15 P-R1: the coordinator's cardless write leaves its record in this transaction, under the lock.
+  if (landingNamed && cardlessReason !== null && input.landingCheckWriter?.by === 'COORDINATOR') {
+    await recordSettingChange(tx, {
+      ownerId,
+      projectId,
+      field: 'LANDING_CHECK',
+      oldValue: landingCheckValueOf(row),
+      newValue: landingCheckValueOf(written),
+      reason: cardlessReason,
+      sessionId: input.landingCheckWriter.sessionId,
+    });
   }
   return projectIntegrationView(written, await escalationWindow(tx, projectId));
 }

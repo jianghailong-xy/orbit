@@ -2,6 +2,7 @@ import { BadRequestException, ConflictException, ForbiddenException } from '@nes
 
 import type { PrismaService } from '../prisma/prisma.service';
 import { decidedLine, readProjectCodebase } from '../projects/project-integration-line';
+import { requiredChangeReason, type LandingCheckExemptValue } from '../projects/project-setting-change';
 
 /**
  * One task exempt from its project's landing check (docs/project-integration-line-contract.md §12.15
@@ -15,6 +16,10 @@ import { decidedLine, readProjectCodebase } from '../projects/project-integratio
  *
  * Writers: the project's current coordinator session, or the owner at their own door (no session).
  * The task's acceptance still runs when it lands (`checksFor`).
+ *
+ * §12.15 P-R1: the coordinator's write leaves a record (`recordSettingChange`), so it names a reason whether it
+ * exempts or takes the exemption back; the owner's write leaves none and stamps the task, after which the
+ * coordinator's cardless write of this field is refused.
  */
 
 export const MAX_LANDING_CHECK_EXEMPT_REASON_CHARS = 280;
@@ -24,12 +29,22 @@ export const LANDING_CHECK_EXEMPT_REASON_REQUIRED = 'LANDING_CHECK_EXEMPT_REASON
 export const LANDING_CHECK_EXEMPT_REASON_TOO_LONG = 'LANDING_CHECK_EXEMPT_REASON_TOO_LONG';
 export const LANDING_CHECK_EXEMPT_REASON_WITHOUT_EXEMPTION = 'LANDING_CHECK_EXEMPT_REASON_WITHOUT_EXEMPTION';
 export const LANDING_CHECK_EXEMPT_COORDINATOR_ONLY = 'LANDING_CHECK_EXEMPT_COORDINATOR_ONLY';
+export const LANDING_CHECK_EXEMPT_SET_BY_OWNER = 'LANDING_CHECK_EXEMPT_SET_BY_OWNER';
 
 /** The three columns as a write leaves them. */
 export interface LandingCheckExemptColumns {
   landingCheckExempt: boolean;
   landingCheckExemptReason: string | null;
   landingCheckExemptBySessionId: string | null;
+  /** Stamped by the owner's own write; absent from the coordinator's. */
+  landingCheckExemptOwnerSetAt?: Date;
+}
+
+/** What `landingCheckExemptWrite` decided: the columns to write and, for the coordinator's write, its record. */
+export interface LandingCheckExemptWrite {
+  columns: LandingCheckExemptColumns;
+  /** Set when the coordinator wrote it: the one row P-R1 keeps, written in the same transaction. */
+  record: { sessionId: string; reason: string; oldValue: LandingCheckExemptValue; newValue: LandingCheckExemptValue } | null;
 }
 
 /**
@@ -49,13 +64,18 @@ export async function landingCheckExemptWrite(
     reason: string | null | undefined;
     /** Whether the task is exempt before this write; false for a create. */
     currentlyExempt: boolean;
+    /** The task's exemption reason before this write; null for a create. */
+    currentReason?: string | null;
+    /** Whether the owner has written or reverted this task's exemption; false for a create. */
+    ownerHasWritten?: boolean;
   },
-): Promise<LandingCheckExemptColumns | null> {
+): Promise<LandingCheckExemptWrite | null> {
   if (input.exempt === undefined && input.reason === undefined) return null;
   const exempt = input.exempt ?? input.currentlyExempt;
   const reason = input.reason?.trim() || null;
+  const bySession = !!input.actingSessionId;
   if (!exempt) {
-    if (reason !== null) {
+    if (reason !== null && !bySession) {
       throw new BadRequestException({
         code: LANDING_CHECK_EXEMPT_REASON_WITHOUT_EXEMPTION,
         message: 'landingCheckExemptReason explains landingCheckExempt true; this write leaves the task not exempt. '
@@ -85,10 +105,13 @@ export async function landingCheckExemptWrite(
       select: { coordinatorSessionId: true },
     })
     : null;
-  const cleared = { landingCheckExempt: false, landingCheckExemptReason: null, landingCheckExemptBySessionId: null };
+  const cleared: LandingCheckExemptColumns = {
+    landingCheckExempt: false, landingCheckExemptReason: null, landingCheckExemptBySessionId: null,
+    ...(bySession ? {} : { landingCheckExemptOwnerSetAt: new Date() }),
+  };
   if (!project) {
     // The owner may still take back an exemption left on a task that has since left its project.
-    if (!exempt && !input.actingSessionId) return cleared;
+    if (!exempt && !bySession) return { columns: cleared, record: null };
     throw needsProjectBranch('this task is in no project, so it lands on no project branch');
   }
   if (input.actingSessionId && input.actingSessionId !== project.coordinatorSessionId) {
@@ -98,7 +121,22 @@ export async function landingCheckExemptWrite(
         + 'exempt from the landing check. Nothing was written',
     });
   }
-  if (!exempt) return cleared;
+  if (bySession && input.ownerHasWritten) {
+    throw new ForbiddenException({
+      code: LANDING_CHECK_EXEMPT_SET_BY_OWNER,
+      message: 'the account owner has written or reverted this task\'s landing-check exemption, so it stays '
+        + 'theirs: this session cannot change it without their card. Nothing was written',
+    });
+  }
+  const before: LandingCheckExemptValue = { exempt: input.currentlyExempt, reason: input.currentReason ?? null };
+  const recordOf = (after: LandingCheckExemptValue): LandingCheckExemptWrite['record'] => bySession
+    ? { sessionId: input.actingSessionId!, reason: reason!, oldValue: before, newValue: after }
+    : null;
+  if (!exempt) {
+    // The coordinator's taking it back is a recorded write too, and says why.
+    if (bySession) requiredChangeReason(reason, LANDING_CHECK_EXEMPT_REASON_REQUIRED, 'landingCheckExemptReason');
+    return { columns: cleared, record: recordOf({ exempt: false, reason: null }) };
+  }
   const binding = await readProjectCodebase(prisma, input.projectId!);
   const line = binding ? decidedLine(binding) : null;
   if (line !== 'PROJECT_BRANCH') {
@@ -107,9 +145,13 @@ export async function landingCheckExemptWrite(
       : 'this project has not decided to land on a project branch yet');
   }
   return {
-    landingCheckExempt: true,
-    landingCheckExemptReason: reason,
-    landingCheckExemptBySessionId: input.actingSessionId ?? null,
+    columns: {
+      landingCheckExempt: true,
+      landingCheckExemptReason: reason,
+      landingCheckExemptBySessionId: input.actingSessionId ?? null,
+      ...(bySession ? {} : { landingCheckExemptOwnerSetAt: new Date() }),
+    },
+    record: recordOf({ exempt: true, reason }),
   };
 }
 

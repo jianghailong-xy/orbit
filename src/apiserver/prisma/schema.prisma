@@ -3795,6 +3795,7 @@ model Project {
   @@map("project")
   coordinatorHandoffs CoordinatorHandoff[]
   rulings             ProjectRuling[]
+  settingChanges      ProjectSettingChange[]
 }
 
 /// A Project's explicit binding to ONE line of code (`docs/project-source-contract.md` §3.1,
@@ -6246,6 +6247,9 @@ model Task {
   landingCheckExemptReason      String? @map("landing_check_exempt_reason")
   /// The coordinator conversation that wrote the exemption; NULL when the owner did.
   landingCheckExemptBySessionId String? @map("landing_check_exempt_by_session_id") @db.Uuid
+  /// When the owner last wrote or reverted this task's exemption (migration 1390); the coordinator's
+  /// next cardless write of it is refused while set. NULL when the owner never has.
+  landingCheckExemptOwnerSetAt  DateTime? @map("landing_check_exempt_owner_set_at")
   /// The session this task was forked from (migration 0615, SOURCE row PF, SR55): the session whose
   /// create call filed it, on that call's runner credential. The five fork columns are all NULL or
   /// all set, written by the create doors in the task's own INSERT and never afterwards (0615's
@@ -7881,6 +7885,27 @@ model ProjectRuling {
 
   @@index([projectId, createdAt])
   @@map("project_ruling")
+}
+
+/// One cardless landing-check change by the project's coordinator (migration 1390, §12.15 P-R1). Insert-only.
+/// LANDING_CHECK | TASK_LANDING_CHECK_EXEMPT (a CHECK); `taskId` is set exactly for the second.
+model ProjectSettingChange {
+  id                 String   @id @default(uuid(7)) @db.Uuid
+  ownerId            String   @map("owner_id") @db.Uuid
+  projectId          String   @map("project_id") @db.Uuid
+  project            Project  @relation(fields: [projectId, ownerId], references: [id, ownerId], onDelete: Cascade, map: "project_setting_change_project_fkey")
+  /// No foreign key: the record outlives the task it is about.
+  taskId             String?  @map("task_id") @db.Uuid
+  field              String
+  oldValue           Json     @map("old_value")
+  newValue           Json     @map("new_value")
+  reason             String
+  /// The coordinator conversation that wrote it. No foreign key.
+  writtenBySessionId String   @map("written_by_session_id") @db.Uuid
+  createdAt          DateTime @default(now()) @map("created_at")
+
+  @@index([projectId, createdAt])
+  @@map("project_setting_change")
 }
 
 model KeyGatewayToken {

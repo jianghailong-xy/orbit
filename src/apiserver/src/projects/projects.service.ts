@@ -93,6 +93,8 @@ import {
 import { type PendingAddresseeRead, readPendingAddressees } from './pending-addressees';
 import { planCriterionMove, readCriterionMoveFacts, writeCriterionMove } from './criterion-move';
 import { readCriterionMoveRecord } from './criterion-move-record';
+import { readSettingChanges, type ProjectSettingChangeView } from './project-setting-change';
+import { revertSettingChange } from './project-setting-revert';
 import { readLiveRulings } from './project-ruling';
 import { settleTaskSegmentAfterMove } from './landing-session';
 import { lockOwnerTaskGraph, orderedIds } from '../common/lock-order';
@@ -1278,7 +1280,9 @@ export class ProjectsService {
     // to ask and no card to bind, so the field is theirs exactly as it was before this existed.
     if (!sessionId) return null;
 
-    const named = namedIntegrationFields(settings);
+    // `landingCheckReason` is the words of a cardless write, not a setting: it is neither refused as an
+    // owner field nor part of any card's proposal.
+    const named = namedIntegrationFields(settings).filter((field) => field !== 'landingCheckReason');
     const refused = named.filter((field) => !isMergeCheckField(field));
     const mergeCheck = named.filter(isMergeCheckField);
     if (refused.length > 0 || mergeCheck.length === 0) {
@@ -2933,6 +2937,7 @@ export class ProjectsService {
       mainBranchMemory,
       moveRecord,
       rulings,
+      settingChanges,
     ] = await Promise.all([
       // One lookup by primary key, not a tally of this project's tasks.
       //
@@ -2997,6 +3002,8 @@ export class ProjectsService {
       readCriterionMoveRecord(this.prisma, ownerId, id, criterionKeyOf),
       // And the owner rulings still live (coordinator handoff v2 §2): one statement, oldest first.
       readLiveRulings(this.prisma, ownerId, id),
+      // And the coordinator's cardless landing-check changes, newest first (§12.15 P-R1): one statement.
+      readSettingChanges(this.prisma, ownerId, id),
     ]);
     const landingAnswers = criterionLandingWithReasons(
       landingFacts,
@@ -3051,6 +3058,8 @@ export class ProjectsService {
       criteriaMovedOut: moveRecord.movedOut,
       // The owner rulings still live, oldest first; a superseded one is kept but not listed.
       rulings,
+      // The coordinator's cardless landing-check changes, newest first, each one the owner can revert.
+      settingChanges,
       blockers,
       integration: {
         ...projectIntegrationView(codebase, project.exceptionEscalationSeconds),
@@ -3251,6 +3260,28 @@ export class ProjectsService {
     // queue is doing is not part of what was just decided, and reading it in the transaction would
     // put two more statements under the binding's lock for a row nobody is waiting on.
     return readProjectIntegrationView(this.prisma, id, written);
+  }
+
+  /**
+   * The account owner putting one recorded landing-check change back to its old value (§12.15 P-R1). Owner
+   * only, like every integration write: a request that carries an acting session is refused whole.
+   */
+  async revertSettingChange(
+    ownerId: string,
+    id: string,
+    changeId: string,
+    actingSessionId?: string,
+  ): Promise<ProjectSettingChangeView> {
+    if (actingSessionId?.trim()) {
+      throw new ForbiddenException({
+        statusCode: 403,
+        code: 'INTEGRATION_SETTINGS_OWNER_ONLY',
+        message: 'putting a recorded landing-check change back is the account owner\'s to do, not this '
+          + 'session\'s. Nothing was written',
+      });
+    }
+    await this.assertOwned(ownerId, id);
+    return revertSettingChange(this.prisma, ownerId, id, changeId);
   }
 
   /**
