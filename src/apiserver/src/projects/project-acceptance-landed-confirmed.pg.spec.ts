@@ -325,6 +325,24 @@ async function mergeSession(stack: Stack, f: Fixture, taskId: string, label: str
   return sessionId;
 }
 
+/**
+ * The task's work ran on a worktree branch, committed past its base and finished: it has commits to land,
+ * so until a receipt puts them on the branch its criterion is not landed. (Work that never ran a branch
+ * delivered no commit and has nothing to land, §12.15 P-M3.)
+ */
+async function ranOnABranch(stack: Stack, f: Fixture, taskId: string, label: string): Promise<void> {
+  await stack.db.session.create({
+    data: {
+      id: randomUUID(), ownerId: f.ownerId, creatorId: f.ownerId, taskId, workspaceId: f.workspaceId,
+      assignedRunnerId: f.runnerId, title: `${label}-work`, prompt: `${label}-work`, provider: 'claude',
+      status: RunStatus.SUCCEEDED, dispatchOrigin: SessionDispatchOrigin.USER, startsTaskWork: true,
+      isolationStatus: 'worktree', branch: `orbit/${label}`, worktreeBranch: `orbit/${label}`,
+      baseSha: '1'.repeat(40), branchSha: '2'.repeat(40), worktreeDirty: false, changedFiles: ['src/suite.ts'],
+      finishedAt: new Date(),
+    },
+  });
+}
+
 /** A landing that is already on file before the walk reaches the receipt under test. */
 async function recordLanding(stack: Stack, f: Fixture, taskId: string, label: string) {
   const sessionId = await mergeSession(stack, f, taskId, label);
@@ -393,6 +411,7 @@ async function walkToTheLastReceipt(
   const routingWork = await serve(stack, f, routing!.key, '把路由改对并合进 main');
   const suiteWork = await serve(stack, f, suite!.key, '把全量服务测试跑绿并合进 main');
   await afterFiling?.();
+  await ranOnABranch(stack, f, suiteWork, 'suite');
   await recordLanding(stack, f, routingWork, 'routing');
   await settle(stack.db, routingWork);
   await settle(stack.db, suiteWork);
