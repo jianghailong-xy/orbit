@@ -137,7 +137,9 @@ public struct ProjectSettingChange: Codable, Equatable, Sendable, Identifiable {
 
 // MARK: - the words
 
-/// The board's words (docs/mocks/landing-measured 03–05).
+/// The board's words (docs/mocks/landing-measured 03–05), held to web's `lib/landingCheck.ts`
+/// (`LANDING_MODE_COPY`, `LANDING_CHECK_ORIGIN_COPY`, `CHANGES_COPY`, `TASK_EXEMPT_COPY`) by
+/// `LandingCheckTests.testEveryWebCopyKeyHasAnExactNativeCounterpart`.
 public enum LandingProvenanceCopy {
     // Who set it (D3, D9).
     public static let you = "You"
@@ -155,25 +157,29 @@ public enum LandingProvenanceCopy {
     public static let modeNone = "No check"
     public static let noneLead = "No check."
     public static let noneBody = "Tasks land with only their own acceptance. The merge check still runs before main."
-    /// Under a command the coordinator set: where its changes are listed.
-    public static let coordinatorHint =
-        "Runs when a task lands on the project branch. Changes the coordinator makes are listed under Coordinator’s changes."
+    /// Where the coordinator's changes are listed.
+    public static let commandNote = "Changes the coordinator makes are listed under Coordinator’s changes."
+    /// Under a command the coordinator set.
+    public static let coordinatorHint = "\(LandingCheckCopy.hint) \(commandNote)"
+    /// The board's explanation of the four badges; web keeps the words, neither client draws it.
+    public static let whoCanSet = "Who can set it"
 
     // The change list (D6, D7).
     public static let changesTitle = "Coordinator’s changes"
     public static let changesIntro = "What the coordinator changed on its own since the project started. "
         + "Revert puts the old value back and takes the field away from the coordinator: it needs a card from then on."
     public static func changesCount(_ count: Int) -> String { count == 1 ? "1 change" : "\(count) changes" }
-    public static let noChanges = "No changes yet"
+    public static let noChanges = "The coordinator has not changed anything on its own."
     public static let landingCheck = "Landing check"
-    public static func checkExempt(_ task: String) -> String { "Check exempt · \(task)" }
+    public static let checkExemptHead = "Check exempt"
+    public static func checkExempt(_ task: String) -> String { "\(checkExemptHead) · \(task)" }
     public static let exemptValue = "exempt"
     public static let notExemptValue = "not exempt"
     public static let usesMergeCheck = "Uses merge check"
     public static let revert = "Revert"
     public static let cancel = "Cancel"
+    public static let yourChangeHead = "Your change"
     public static let yourChange = "Your change · nothing to revert"
-    public static let cardChange = "Approved on a card · nothing to revert"
     public static func revertedByYou(_ ago: String) -> String {
         "Reverted by you · \(ago) · coordinator needs a card for this field"
     }
@@ -187,6 +193,9 @@ public enum LandingProvenanceCopy {
     /// "Landing check · Skipped"
     public static let checkSkipped = "\(landingCheck) · \(skipped)"
     public static func exemptBecause(_ reason: String) -> String { "Exempt: \(reason)" }
+    /// Under a skipped landing check: the merge check still runs on the way into main (board 04 b).
+    public static let mergeCheckStillRuns = "Merge check before main"
+    public static let stillRuns = "Still runs"
     /// "Landing check skipped" — the Landing section's fact line.
     public static let landingCheckSkipped = "Landing check skipped"
 }
@@ -312,8 +321,6 @@ public enum CoordinatorChanges {
                 note = LandingProvenanceCopy.revertedByYou(RelativeTime.ago(at, now: now) ?? "just now")
             } else if kind == "you" {
                 note = LandingProvenanceCopy.yourChange
-            } else if kind == "card" {
-                note = LandingProvenanceCopy.cardChange
             } else {
                 note = nil
             }

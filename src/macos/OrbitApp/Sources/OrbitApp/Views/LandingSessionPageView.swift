@@ -318,6 +318,19 @@ struct LandingTimelineView: View {
                     : last && current && landing.currentAttempt?.state == "QUEUED" ? .pending : .ok
                 stepRow(step, status: status, section: section)
             }
+            // A task exempt from the landing check (board 04 b, D5): the merge check still runs on the
+            // way into main, said under the list.
+            if steps.contains(where: { LandingCheckSkip.taskExempt($0) != nil }) {
+                HStack(spacing: 7) {
+                    Image(systemName: "figure.walk").font(.orbitMeta).foregroundStyle(.secondary)
+                        .frame(width: 20, height: 20)
+                    Text(LandingProvenanceCopy.mergeCheckStillRuns).font(.orbitMono.weight(.semibold))
+                    Text(LandingProvenanceCopy.stillRuns).font(.orbitLabel).foregroundStyle(.secondary)
+                    Spacer(minLength: 0)
+                }
+                .padding(.leading, 28).padding(.vertical, 6)
+                .accessibilityElement(children: .combine)
+            }
             // A check streaming before its attempt wrote any line has no step to sit in.
             if steps.isEmpty, live, let attempt = landing.currentAttempt, attempt.check != nil {
                 liveCheck(attempt)

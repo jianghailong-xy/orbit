@@ -142,6 +142,8 @@ final class LandingMeasuredShotTests: ProbeCase {
         let app = launch("landing:L1", until: "Task acceptance", "04b")
         expect(app, "Landing check · Skipped", "04b")
         expect(app, "Exempt: Only moves cron entries", "04b")
+        expect(app, "Merge check before main", "04b")
+        expect(app, "Still runs", "04b")
         let skipped = element(app, containing: "Landing check · Skipped")
         bring(app, skipped, between: 160, and: 700, "04b-step")
         picture(app, "04b-landing-skipped")
