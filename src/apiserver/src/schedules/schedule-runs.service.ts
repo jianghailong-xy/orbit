@@ -8,7 +8,7 @@
  * One transaction per due schedule, under the per-account lock and the schedule row FOR UPDATE (the order
  * SchedulesService takes them in): the slots from `nextDueAt` up to now are read from the rule; the latest is the
  * one that runs — SCHEDULED when it is on time, CATCH_UP (with its own `plannedAt`) when it is late — and every
- * earlier one is written MISSED; a latest slot older than one period (24 hours for ONCE) is MISSED too. The new run
+ * earlier one is written MISSED; a latest slot older than one period (24 hours for ONCE, one interval for EVERY) is MISSED too. The new run
  * is QUEUED, and an older QUEUED run is SKIPPED, so at most one waits. `nextDueAt` moves to the first slot after now,
  * and a rule with none left ENDS the schedule (END_REACHED). The slot's unique index is the belt to the lock: two
  * workers, or one after a restart, write one run for a slot.
@@ -66,12 +66,14 @@ import {
   heldCopy,
   onceMissedCopy,
   overBudgetCopy,
+  plannedEndCopy,
   runReasonText,
   scheduleHomeSession,
   sendAlerts,
   type ScheduleAlert,
   type ScheduleNotifier,
 } from './schedule-attention';
+import { closeUnknownItems } from '../conditions/condition-attention';
 import type { ConditionFiring } from '../conditions/conditions.service';
 import { sampleHolds } from '../conditions/condition-evaluation';
 import { RUN_BLOCK_MAX_SAMPLES, scheduledRunTurn, type RunBlockFiring } from './schedule-run-block';
@@ -79,6 +81,7 @@ import {
   scheduleBudgetStarts,
   scheduleOverBudget,
   scheduleOverBudgetMessage,
+  scheduleRunsStarted,
   scheduleStartCheck,
   type StartPlan,
 } from './schedule-start-check';
@@ -213,6 +216,14 @@ type Tx = Prisma.TransactionClient;
 
 const IN_PROGRESS = ['RUNNING', 'AWAITING_APPROVAL'] as const;
 
+/**
+ * A run that is not over yet, as §8.5's planned-end push waits for it: waiting (QUEUED, a retry's wait included), under
+ * way, or reported on a LAND schedule and still landing, whose landing may yet fail it (LANDING_FAILED).
+ */
+const RUN_NOT_OVER = {
+  OR: [{ state: { in: ['QUEUED', ...IN_PROGRESS] } }, { landingStatus: { in: ['WAITING', 'MERGING'] } }],
+} satisfies Prisma.ScheduleRunWhereInput;
+
 function refusal(kind: 'BAD_REQUEST' | 'CONFLICT' | 'FORBIDDEN' | 'NOT_FOUND', code: string, message: string): Error {
   const body = { code, message };
   if (kind === 'BAD_REQUEST') return new BadRequestException(body);
@@ -242,6 +253,8 @@ export function waitedOnCards(cards: Array<{ createdAt: Date; decidedAt: Date | 
 export function catchUpWindowMs(rule: ScheduleRule, timezone: string, slot: Date): number {
   // A WHEN run's slot is its firing: like a ONCE slot, it may start for a day, and is MISSED after.
   if (rule.kind === 'ONCE' || rule.kind === 'WHEN') return SCHEDULE_ONCE_CATCH_UP_MS;
+  // An EVERY rule's period is its interval, also for a day's last slot, whose next one is the next morning.
+  if (rule.kind === 'EVERY') return rule.minutes * MINUTE;
   const next = nextDueAt(rule, timezone, slot);
   return next ? next.getTime() - slot.getTime() : 7 * 24 * HOUR;
 }
@@ -443,6 +456,11 @@ export class ScheduleRunsService {
           await this.holdRun(tx, run, schedule.heldReason ?? 'HELD', now);
           return { outcome: 'HELD' };
         }
+        if (schedule.maxRuns !== null && (await scheduleRunsStarted(tx, schedule.id)) >= schedule.maxRuns) {
+          // §8.5: the planned end by count is reached; nothing starts past it.
+          await tx.scheduleRun.update({ where: { id: runId }, data: { state: 'CANCELLED', endedAt: now, notBeforeAt: null } });
+          return { outcome: 'CANCELLED' };
+        }
         // Computed under the lock, so a session another replica opens for this run after this commits is never one.
         const strays = await tx.session.findMany({
           where: { scheduleRunId: runId, ...LIVE_SESSION },
@@ -497,6 +515,11 @@ export class ScheduleRunsService {
           // The level the run starts with is the one its session is held to (schedule-access.ts runAccessLevel).
           data: { state: 'RUNNING', startedAt: now, sessionId, notBeforeAt: null, accessLevel: schedule.accessLevel },
         });
+        // §8.5: the start that reaches maxRuns ends the schedule, in this transaction and under the lock the count was
+        // read under. The run itself goes on.
+        if (schedule.maxRuns !== null && schedule.state !== 'ENDED' && (await scheduleRunsStarted(tx, schedule.id)) >= schedule.maxRuns) {
+          await this.endAtMaxRuns(tx, schedule, now);
+        }
         return { outcome: 'STARTED', open: this.openInput(schedule, run, sessionId, prompt, check.plan) };
       },
       loggedRetry(this.logger, 'scheduleRuns.start'),
@@ -781,6 +804,55 @@ export class ScheduleRunsService {
       }
     }, loggedRetry(this.logger, 'scheduleRuns.settleLanding'));
     await this.alert(alerts);
+  }
+
+  /**
+   * §8.5's one push, "Stopped as planned after N runs", for each schedule ENDED (END_REACHED) by its endAt or maxRuns
+   * once no run of it is waiting, under way or still landing, so the last run's own push comes first. `plannedEndToldAt`,
+   * set under the schedule lock in the transaction that decides the push, keeps it to one. A ONCE rule, whose end is
+   * its only slot, is marked told and sends none.
+   */
+  async tellPlannedEnds(batch = 25): Promise<string[]> {
+    const ended = await this.prisma.schedule.findMany({
+      where: { state: 'ENDED', endedReason: 'END_REACHED', plannedEndToldAt: null, runs: { none: RUN_NOT_OVER } },
+      orderBy: [{ endedAt: 'asc' }, { id: 'asc' }],
+      take: batch,
+      select: { id: true },
+    });
+    const told: string[] = [];
+    for (const { id } of ended) {
+      const alerts: ScheduleAlert[] = [];
+      try {
+        await withTransactionRetry(
+          this.prisma,
+          async (tx) => {
+            alerts.length = 0;
+            const schedule = await this.lock(tx, id);
+            if (!schedule || schedule.state !== 'ENDED' || schedule.endedReason !== 'END_REACHED' || schedule.plannedEndToldAt) return;
+            if ((await tx.scheduleRun.count({ where: { scheduleId: id, ...RUN_NOT_OVER } })) > 0) return;
+            await tx.schedule.update({ where: { id }, data: { plannedEndToldAt: this.clock() } });
+            if ((schedule.rule as { kind?: string } | null)?.kind === 'ONCE') return;
+            alerts.push({
+              kind: 'PLANNED_END',
+              ownerId: schedule.ownerId,
+              scheduleId: id,
+              runId: null,
+              opens: { scheduleId: id },
+              ownerRequestId: null,
+              ...plannedEndCopy(schedule.title, await scheduleRunsStarted(tx, id)),
+              collapseId: `schedule-planned-end-${id}`,
+            });
+          },
+          loggedRetry(this.logger, 'scheduleRuns.tellPlannedEnds'),
+        );
+      } catch (error) {
+        this.logger.error(`the planned end of schedule ${id} was not told: ${messageOf(error)}`);
+        continue;
+      }
+      await this.alert(alerts);
+      if (alerts.length > 0) told.push(id);
+    }
+    return told;
   }
 
   /** §7.4: a NO_CHANGE run's session is completed once its turn has settled. */
@@ -1463,6 +1535,28 @@ export class ScheduleRunsService {
       where: { scheduleId, state: 'QUEUED' },
       data: { state: 'SKIPPED', endedAt: now, notBeforeAt: null },
     });
+  }
+
+  /**
+   * §8.5: a start reached the schedule's maxRuns. ENDED (END_REACHED) in that start's transaction, under the schedule
+   * lock the count was read under, so two replicas cannot both start a last run; no next slot, and a WHEN rule's
+   * condition ended as syncCondition ends it. No other run is QUEUED (schedule_run_one_queued_key: the one queued was
+   * the one starting), and start() cancels any run that would start past the count. The run that reached it goes on;
+   * tellPlannedEnds pushes once it is over.
+   */
+  private async endAtMaxRuns(tx: Tx, schedule: Schedule, now: Date): Promise<void> {
+    await tx.schedule.update({
+      where: { id: schedule.id },
+      data: { state: 'ENDED', endedReason: 'END_REACHED', endedAt: now, nextDueAt: null },
+    });
+    const rule = schedule.rule as unknown as ScheduleRule;
+    if (rule.kind === 'WHEN' && rule.conditionId) {
+      const ended = await tx.condition.updateMany({
+        where: { id: rule.conditionId, state: { not: 'ENDED' } },
+        data: { state: 'ENDED', endedAt: now, trueSince: null, repeatFrom: null },
+      });
+      if (ended.count > 0) await closeUnknownItems(tx, rule.conditionId, now);
+    }
   }
 
   private async holdRun(tx: Tx, run: ScheduleRun, reason: string, now: Date): Promise<void> {

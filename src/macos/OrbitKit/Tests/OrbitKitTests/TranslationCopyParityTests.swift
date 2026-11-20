@@ -7,14 +7,14 @@ import XCTest
 /// words to iOS and macOS, and nothing in either build notices a word changed at one end only — so
 /// each one is looked up in the web source it came from: the conversation's words in
 /// `TRANSLATION_COPY` (src/web/src/lib/translation.ts), the Settings section's on the General page
-/// (pages/settings/GeneralPage.tsx, its rows' titles and descriptions in settingsIndex.ts), and the
+/// (pages/settings/GeneralPage.tsx, its rows' titles and descriptions in src/shared/src/settingsIndex.ts), and the
 /// languages in @orbit/shared translation.ts. A missing counterpart is a FAILURE, never an
 /// `XCTSkip`.
 final class TranslationCopyParityTests: XCTestCase {
 
     private static let lib = "src/web/src/lib/translation.ts"
     private static let settings = "src/web/src/pages/settings/GeneralPage.tsx"
-    private static let settingsIndex = "src/web/src/pages/settings/settingsIndex.ts"
+    private static let settingsIndex = "src/shared/src/settingsIndex.ts"
     private static let shared = "src/shared/src/translation.ts"
 
     private enum ParityError: Error, CustomStringConvertible {

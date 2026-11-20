@@ -118,15 +118,10 @@ object OrbitExchangeFold {
             val target = if (one != null && kind in setOf("TASK", "SESSION")) one.text("id")?.let { Target(kind!!, it, name) } else null
             return Head(if (name != null) "$title: $name" else title, title, "watch", target)
         }
-        // A SubAgent's end folds like a job's news (web `orbitTurnOf`); one that did not finish stays drawn, as a failed job does.
-        SubagentFinished.parse(payload.text("controlPlaneNote"))?.let { wake ->
-            if (wake.runs.any { !it.ok }) return null
-            if (backgroundWake(wake.rest)?.let { jobs -> BackgroundWakeCard.jobs(jobs).any(BackgroundWakeCard::isFailed) } == true) return null
-            val title = SubagentFinishedCard.title(wake)
-            val name = SubagentFinishedCard.name(wake)
-            return Head(if (name != null) "$title: $name" else title, null, "job", null)
-        }
-        backgroundWake(payload.text("controlPlaneNote").orEmpty())?.let { wake ->
+        // A SubAgent's end draws nothing (its card is the end), so there is no line to fold the turn under: the reader reads on into what
+        // the agent said next. Only a job's news written beside it folds, as its own (web `orbitTurnOf`).
+        val note = payload.text("controlPlaneNote").orEmpty()
+        backgroundWake(SubagentFinished.parse(note)?.rest ?: note)?.let { wake ->
             if (BackgroundWakeCard.jobs(wake).any(BackgroundWakeCard::isFailed)) return null
             val title = BackgroundWakeCard.title(wake)
             val name = BackgroundWakeCard.lineName(wake)?.takeIf { it.isNotEmpty() }

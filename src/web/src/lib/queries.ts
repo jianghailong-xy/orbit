@@ -37,6 +37,7 @@ import type { ProviderModelRow } from './providerAdmin';
 import type { ProjectDependencyGraphResponse } from './projectDependencyGraph';
 import type { SidebarProject } from './projectAttention';
 import type { AccountSecret, OwnerRequest, OwnerRequestListFilter } from './ownerRequests';
+import type { SettingChangedBy } from './settingsChange';
 import type { ProjectFilter } from '../components/ProjectsToolbar';
 import type { CoordinatorStatus } from '../components/ProjectCoordinatorCard';
 import type { PendingDecisionQueue } from '../components/DecisionRail';
@@ -258,6 +259,9 @@ export interface Me {
   /** The server holds a DeepSeek key and can optimize a draft (Settings › General › Prompt optimizer).
    *  Absent from a server that predates it, which reads as unable. */
   promptOptimizerAvailable?: boolean;
+  /** Each setting last changed from a conversation's card, by preference key (docs/settings-from-conversation-design.md
+   *  §5.3). Absent from a server that predates it. */
+  changedBy?: Record<string, SettingChangedBy>;
 }
 
 /** The signed-in user — backs the account page and the nav footer's avatar + name. */

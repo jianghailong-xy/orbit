@@ -155,12 +155,9 @@ export async function readDoneState(
     (await readCriterionSatisfaction(tx, ownerId, projectId)).map((row) => [row.definitionId, row]),
   );
   const branches = await readLandingBranches(tx, projectId);
-  // The explicit non-code mark (0535): a marked project reads no landing — no reason, no work held
-  // off LANDED — while `landing` itself stays the fold's own answer.
-  const nonCode = (await tx.project.findFirst({
-    where: { id: projectId, ownerId },
-    select: { nonCode: true },
-  }))?.nonCode ?? false;
+  // The non-code mark (0535) is not read (§12.15 P-M3): a project none of whose tasks delivered a
+  // commit reads every criterion LANDED from that fact alone, and one whose tasks did is read like any
+  // other, marked or not.
   const landing = new Map(
     criterionLanding(served, branches).map((row) => [row.definitionId, row.landing]),
   );
@@ -193,14 +190,14 @@ export async function readDoneState(
       satisfied: met?.satisfied ?? false,
       heldUpBy: [...heldUpBy].map(([taskId, title]) => ({ taskId, title })),
       landing: landed,
-      reason: landed === 'LANDED' || nonCode
+      reason: landed === 'LANDED'
         ? null
         : criterionLandingReason(
           { landing: landed, servingTasks: definition.servingTasks },
           branches,
           jobs.map((job) => ({ kind: job.kind, taskId: job.taskId })),
         ) ?? 'NO_RECEIPT',
-      heldOffLanded: landed === 'LANDED' || nonCode
+      heldOffLanded: landed === 'LANDED'
         ? []
         : definition.servingTasks
           .filter((task) => !taskHasNothingToLand(task)
@@ -259,8 +256,9 @@ export async function readDoneState(
     ownerItems,
     jobs,
     criteriaDigest: standardSetVersion(stated).digest,
-    stateDigest: doneStateDigest(criteria, tasks, jobs, nonCode),
-    nonCode,
+    stateDigest: doneStateDigest(criteria, tasks, jobs),
+    // Kept for the clients that read it; the mark no longer changes what the check finds.
+    nonCode: false,
   };
 }
 
@@ -275,13 +273,9 @@ export function doneStateDigest(
   criteria: readonly DoneStateCriterion[],
   tasks: readonly DoneStateTask[],
   jobs: DoneState['jobs'],
-  /** Marking or unmarking the project changes what the check finds, so it is a different state.
-   *  Absent from an unmarked project's digest, which therefore reads as it always has. */
-  nonCode = false,
 ): string {
   const state = {
     version: 2,
-    ...(nonCode ? { nonCode: true } : {}),
     tasks: tasks
       .filter((task) => task.criterionDefinitionId !== null)
       .map((task) => `${task.id}:${task.status}:${task.criterionDefinitionId ?? ''}:${task.run ?? ''}`)
@@ -331,8 +325,7 @@ const UNLANDED: Record<CriterionLandingReason, (ordinal: number) => [string, str
       + 'land them first.',
   ],
   CODELESS: (n) => [
-    `criterion ${n}'s work was declared codeless or done in another repository, so nothing of it `
-      + 'lands here',
+    `criterion ${n}'s work was done in another repository, so nothing of it lands here`,
     'Name it as a gap: why Orbit cannot prove it, and what you checked instead.',
   ],
 };
@@ -416,8 +409,7 @@ export function doneReadiness(
   }
 
   const named = new Set(gaps.map((gap) => gap.criterionKey));
-  // A project marked non-code reads no landing: nothing of it is reported unlanded.
-  for (const criterion of state.nonCode ? [] : state.criteria) {
+  for (const criterion of state.criteria) {
     // An unmet criterion is already a refusal of its own (DONE_CRITERION_UNSATISFIED): reporting it
     // unlanded too would count one thing twice.
     if (criterion.landing === 'LANDED' || !criterion.satisfied) continue;

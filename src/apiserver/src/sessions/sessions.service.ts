@@ -22,6 +22,7 @@ import {
   Optional,
   ServiceUnavailableException,
 } from '@nestjs/common';
+import { ModuleRef } from '@nestjs/core';
 import {
   type ConversationTurn,
   Prisma,
@@ -1113,6 +1114,13 @@ export class SessionsService {
      * workspace is refused as GitHub not being connected.
      */
     @Optional() private readonly githubConnections?: GithubConnectionService,
+    /**
+     * Finds the completion doors (projects/completion-input-router.service.ts) when a finish has to
+     * re-derive project facts (§12.15 P-M1). Resolved lazily, and the router imported at the call: a
+     * value import here closes a file cycle through the judgment service that leaves `SessionsService`
+     * undefined at its decoration. Absent in the specs that build this service by hand.
+     */
+    @Optional() private readonly moduleRef?: ModuleRef,
   ) {
     this.files = files ?? new FilesService(prisma);
   }
@@ -10038,7 +10046,23 @@ export class SessionsService {
       loggedRetry(this.logger, 'sessions.transitionEnd'),
     );
     await reprojectAfterSettledChecks(this.prisma, ended.checksSettled, this.logger);
+    if (ended.settledProjectId) await this.routeSettledFacts(ended.settledProjectId);
     return ended;
+  }
+
+  /**
+   * §12.15 P-M1: re-derive a project's facts after a finish that decided a DONE task's landing. The router
+   * is found by `ModuleRef` and imported at the call (see the constructor); a context without one has
+   * nothing to deliver, and the next delivery derives the same facts.
+   */
+  async routeSettledFacts(projectId: string): Promise<void> {
+    if (!this.moduleRef) return;
+    try {
+      const { CompletionInputRouter } = await import('../projects/completion-input-router.service.js');
+      await this.moduleRef.get(CompletionInputRouter, { strict: false }).routeSettledWork([projectId]);
+    } catch (e) {
+      this.logger.warn(`project facts after a settled finish not re-derived: ${e instanceof Error ? e.message : e}`);
+    }
   }
 
   /**
@@ -10065,6 +10089,8 @@ export class SessionsService {
     projectBound: boolean;
     /** The Agent checks this end settled, for their projects' DONE after the commit. */
     checksSettled?: SettledCriterionCheck[];
+    /** The project of a DONE task whose route this end decided (§12.15 P-M1); its facts are re-derived after the commit. */
+    settledProjectId?: string;
   }> {
     const locked = await tx.$queryRaw<Array<{ id: string }>>`
       SELECT id FROM "session"
@@ -10169,6 +10195,7 @@ export class SessionsService {
     // finalize after it) closes them RECIPIENT_ENDED, which wins over UNDELIVERED (session-request.ts).
     await settleUnrunSessionRequests(tx, sessionId, { code: 'SESSION_ENDED', closesRequests: false, retryArmed: false });
     // An Agent check this run was, ended before its verdict (projects/criterion-check-ended.ts).
+    let settledProjectId: string | undefined;
     const checksSettled = await settleChecksOfEndedRun(
       tx,
       { sessionId, taskId: session.taskId },
@@ -10193,7 +10220,11 @@ export class SessionsService {
       });
       // A session that ends before it ran is still a finish of the task's work, and may be the one
       // a DONE task's identity was waiting for (§10.5 O-L4 3).
-      await settleDeliveredIdentityAfterFinish(tx, session);
+      const settlement = await settleDeliveredIdentityAfterFinish(tx, session);
+      if (settlement === 'FROZEN' || settlement === 'IDENTITY_UNKNOWN') {
+        settledProjectId = (await tx.task.findUnique({ where: { id: session.taskId! }, select: { projectId: true } }))
+          ?.projectId ?? undefined;
+      }
       await retireSessionInboxGeneration(tx, sessionId);
       // A wakeup filed onto a `bg-wake:` turn still queued goes with the drain below, unrun: dropped with
       // the session it was to wake, and taken out of its loop's runs (runner-api/wake-turn-withdraw.ts).
@@ -10238,6 +10269,7 @@ export class SessionsService {
       endReason: reason,
       projectBound: false,
       checksSettled,
+      settledProjectId,
     };
   }
 
@@ -13079,7 +13111,10 @@ export class SessionsService {
         throw new BadRequestException('session must be in Trash before it can be permanently deleted');
       }
       await tx.session.delete({ where: { id: session.id } });
-    }, loggedRetry(this.logger, 'sessions.purge'));
+      // That one delete cascades through the session's run_event and tool_call rows — thousands of
+      // wide, TOASTed rows in the two largest tables. It took 1.2s idle and 7–36s on a loaded
+      // production database (2026-11-20), so Prisma's 5s default expired it into a 500 every time.
+    }, loggedRetry(this.logger, 'sessions.purge', { transaction: { timeout: 60_000, maxWait: 10_000 } }));
     this.realtime.publishViewerRevoked({ sessionId: id });
     return { ok: true };
   }

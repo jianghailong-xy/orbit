@@ -121,6 +121,9 @@ final class AppModel {
     /// stack: the page under it keeps its section, its stack and its scroll, and closing the task
     /// is clearing this. Nil on a phone, which pushes the task over the console instead.
     var taskOverPageID: String?
+    /// The Settings row an `orbit-settings:` link asked to be shown: its page scrolls to it and flashes it, then
+    /// clears this (`SettingsAnchorScroll`).
+    var settingsAnchor: String?
     /// The task whose detail fills the pane — and, in the three-column shell, the row drawn as
     /// selected. Kept under its old name so its readers (the pane, the deep-link route, the
     /// delete/404 guards, the scope switch) needed no change, with the difference that it is read
@@ -657,6 +660,7 @@ final class AppModel {
                                           store: ConsoleRegistry.defaultStore(for: url))
         launchSnapshots = LaunchSnapshotStore.defaultStore(for: url)
         machineSetups = [:]
+        newWorkspaceRunners = []
         // A console's fleeting confirmations ("Merged into main", "Committed changes") ride the app's
         // one toast host, not the status line above the composer — see `showToast`.
         consoleRegistry?.onToast = { [weak self] request, sessionID in
@@ -965,6 +969,7 @@ final class AppModel {
         }
         signedIn = false
         machineSetups = [:]
+        newWorkspaceRunners = []
         sharedWithMe = []
         sessions = []
         needsYouSessions = []
@@ -2257,6 +2262,29 @@ final class AppModel {
         }
     }
 
+    /// Open Settings at one row (an `orbit-settings:` link's Open in Settings, design §6): the page that holds it
+    /// — on iOS the sheet, pushed to that page — with the row asked to scroll into view and flash. Theme, which
+    /// has no page of its own on the phone, opens Settings' own list.
+    func openSettings(at place: SettingPlace) {
+        settingsAnchor = place.key
+        #if os(iOS)
+        if let page = place.page { nav.openSettings(at: page) } else { nav.openSettings() }
+        #else
+        selectedSection = .settings
+        #endif
+    }
+
+    /// Undo of a change made from a conversation (design §5.3): the owner's own preferences PATCH.
+    func undoSettingsChange(_ values: [String: JSONValue]) async throws {
+        guard let api, !values.isEmpty else { return }
+        user = try await api.undoSettingsChange(values)
+    }
+
+    /// The account read again, for the marks a just-applied card wrote.
+    func reloadUser() async {
+        if let me = try? await api?.me() { assignIfChanged(\.user, me) }
+    }
+
     /// Settings → GitHub: the sheet's page on iOS, the Settings section on the Mac, where GitHub is a group of its form.
     func showGithubSettings() {
         #if os(iOS)
@@ -2303,6 +2331,28 @@ final class AppModel {
     func openMachineDraft(_ runnerID: String) {
         selectedSection = .agents
         nav.openMachineDraft(runnerID: runnerID)
+    }
+
+    /// The machines whose new session page was opened as New workspace while they had a workspace already
+    /// (docs/mocks/new-workspace-form/02-apple-entry, owner A 2026-11-20), by storage key: that page makes one more
+    /// rather than moving on to the first.
+    private(set) var newWorkspaceRunners: Set<String> = []
+
+    func addsWorkspace(on runnerID: String) -> Bool {
+        newWorkspaceRunners.contains(PublicID.storageKey(runnerID))
+    }
+
+    /// New workspace on a machine, from the Workspaces group's + or the machine page's row: its new session page,
+    /// with the setup card, whatever the machine holds. One with no workspace yet gets the page its Set up row opens.
+    func openNewWorkspace(_ runnerID: String) {
+        settingsPresented = false
+        let key = PublicID.storageKey(runnerID)
+        if agents?.firstWorkspace(onRunner: runnerID) != nil {
+            newWorkspaceRunners.insert(key)
+        } else {
+            newWorkspaceRunners.remove(key)
+        }
+        openMachineDraft(runnerID)
     }
 
     // MARK: Shared with me — the sessions other people invited this account to reply in
@@ -2373,6 +2423,7 @@ final class AppModel {
                                                                             runnerID: runnerID))
             await agents?.load()
             machineSetups[PublicID.storageKey(runnerID)] = nil
+            newWorkspaceRunners.remove(PublicID.storageKey(runnerID))
             if machineDraftRunnerID == runnerID { show(.compose(agentID: made.id, folderID: nil), agent: made.id) }
             return nil
         } catch {
@@ -2383,7 +2434,8 @@ final class AppModel {
     /// The machine got a workspace some other way (another device, the web's form): the page moves on
     /// to it, and what was being set up here no longer applies.
     func machineGotWorkspace(_ runnerID: String) {
-        guard machineDraftRunnerID == runnerID, let workspace = agents?.firstWorkspace(onRunner: runnerID)
+        guard machineDraftRunnerID == runnerID, !addsWorkspace(on: runnerID),
+              let workspace = agents?.firstWorkspace(onRunner: runnerID)
         else { return }
         machineSetups[PublicID.storageKey(runnerID)] = nil
         show(.compose(agentID: workspace.id, folderID: nil), agent: workspace.id)
@@ -2393,6 +2445,7 @@ final class AppModel {
     func leaveMachineDraft(_ runnerID: String) {
         guard machineDraftRunnerID == runnerID else { return }
         machineSetups[PublicID.storageKey(runnerID)] = nil
+        newWorkspaceRunners.remove(PublicID.storageKey(runnerID))
         nav.popToRoot()
     }
 
