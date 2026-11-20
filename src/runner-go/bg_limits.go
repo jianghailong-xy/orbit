@@ -1,24 +1,32 @@
 package main
 
 import (
-	"errors"
 	"fmt"
 	"io"
 	"math"
-	"os"
 	"strconv"
 	"strings"
+	"sync/atomic"
 )
 
-// CPU and memory limits on runner-hosted background jobs (bg_run). The machine's owner sets a ceiling for
-// this runner (`orbit bg-limits`, kept in config.json); it is every job's limit, and an agent may ask bg_run
-// for less, never for more. On Linux each limited job runs in a cgroup v2 of its own (bg_cgroup_linux.go):
-// cpu.max throttles it to its CPUs, and past memory.max the kernel kills the whole job, not the runner or the
-// session beside it. Where that cannot be done — macOS, a runner unit without Delegate=yes, a container — the
-// job still runs, and bg_run says the limit was not applied rather than leaving the agent to believe it was.
+// CPU and memory limits on runner-hosted background jobs (bg_run). They are off until the machine's owner
+// sets a ceiling for this runner on its Settings → Machine page (Runner.bgJobCpus and bgJobMemoryMb), which
+// every heartbeat answer carries (HeartbeatResponse.BackgroundJobLimits); from then it is every job's limit,
+// and an agent may ask bg_run for less, never for more. On Linux each limited job runs in a cgroup v2 of its
+// own (bg_cgroup_linux.go): cpu.max throttles it to its CPUs, and past memory.max the kernel kills the whole
+// job, not the runner or the session beside it. Where that cannot be done — macOS, a runner unit without
+// Delegate=yes, a container — the job still runs, and bg_run says the limit was not applied rather than
+// leaving the agent to believe it was. The runner declares which (bgJobLimitsCapability), for the page.
 //
 // A limit is resource management, not a security boundary: a job runs as the runner's own user, who owns
-// the delegated cgroup and the config alike.
+// the delegated cgroup.
+
+// The capabilities bgJobLimitsCapability declares: one where limits can be enforced, else the prefix and why
+// not — os, cgroup, delegate or controllers (@orbit/shared BG_JOB_LIMITS_CAPABILITY).
+const (
+	bgJobLimitsCapabilityV1                = "bg-job-limits/v1"
+	bgJobLimitsUnavailableCapabilityPrefix = "bg-job-limits-unavailable/v1:"
+)
 
 // bgCPUsMax and bgMemoryMBMin bound what a limit may say: more CPUs than any machine has is a typo, and
 // a job given less memory than a shell needs dies before it prints why.
@@ -80,9 +88,19 @@ func bgLimitArgs(args map[string]interface{}) (bgJobLimits, error) {
 	return l, l.validate()
 }
 
-// effectiveBgLimits is what a job runs under: in each field the agent's ask, unless the runner's ceiling
-// is lower or the agent asked for nothing. note says where an ask was lowered.
+// bgLimitsOffNote is what bg_run says to an ask on a runner whose owner has not turned limits on.
+const bgLimitsOffNote = "Limits not applied: background job limits are off on this runner. Its owner turns them on in Settings → Machine."
+
+// effectiveBgLimits is what a job runs under. Limits are off until the owner sets a ceiling: then no job
+// has any, and an ask is answered with bgLimitsOffNote. Once on, each field is the agent's ask, unless
+// the ceiling is lower or the agent asked for nothing. note says where an ask was lowered or dropped.
 func effectiveBgLimits(asked, ceiling bgJobLimits) (limits bgJobLimits, note string) {
+	if ceiling.none() {
+		if !asked.none() {
+			note = bgLimitsOffNote
+		}
+		return bgJobLimits{}, note
+	}
 	limits = asked
 	var lowered []string
 	if ceiling.CPUs > 0 && (asked.CPUs == 0 || asked.CPUs > ceiling.CPUs) {
@@ -103,106 +121,23 @@ func effectiveBgLimits(asked, ceiling bgJobLimits) (limits bgJobLimits, note str
 	return limits, note
 }
 
-// runnerBgJobCeiling is the owner's ceiling, read from config.json on every job so a change applies to the
-// next job without a restart.
-var runnerBgJobCeiling = func() bgJobLimits {
-	if cfg := loadConfig(); cfg != nil && cfg.BackgroundJobLimits != nil {
-		return *cfg.BackgroundJobLimits
+// runnerBgJobLimits is the owner's ceiling as the last heartbeat answer carried it; nil is off. A change
+// applies to the next job; running jobs keep theirs.
+var runnerBgJobLimits atomic.Pointer[bgJobLimits]
+
+func runnerBgJobCeiling() bgJobLimits {
+	if l := runnerBgJobLimits.Load(); l != nil {
+		return *l
 	}
 	return bgJobLimits{}
 }
 
-const bgLimitsHelp = `orbit bg-limits — limit the CPU and memory of this runner's background jobs
-
-Usage:
-  orbit bg-limits                              Show the limits
-  orbit bg-limits [--cpus N] [--memory SIZE]   Set them
-  orbit bg-limits --clear                      Remove them
-
-The limits apply to every background job an agent starts on this machine with bg_run, each job on
-its own: --cpus 2 lets a job use two CPUs' worth of time, --memory 8G lets it hold 8 GiB, and past
-that the kernel ends the whole job. An agent may ask bg_run for less, never for more. A change
-applies to the next job; running jobs keep theirs.
-
-They are enforced with Linux cgroup v2, which needs the runner's systemd unit to carry Delegate=yes
-('orbit register' and 'orbit host setup' write it; reinstall the service of a runner set up
-before). Where they cannot be enforced, jobs still run, and bg_run says the limits were not applied.
-
-Options:
-  --cpus N         CPUs per job, fractions allowed (0.5, 2, 6)
-  --memory SIZE    Memory per job: a number of megabytes, or with a unit, M or G (512M, 8G)
-  --clear          Remove both limits
-`
-
-// cmdBgLimits is `orbit bg-limits`. It is the owner's: a session's agent, which runs as the same user, is
-// refused, so that the ceiling is not raised by what it bounds.
-func cmdBgLimits(args []string, out io.Writer) error {
-	if os.Getenv("ORBIT_SESSION_ID") != "" {
-		return errors.New("the background job limits are the machine owner's to set; run this outside an Orbit session")
-	}
-	fs := newCLIFlagSet("orbit bg-limits")
-	cpus := fs.Float64("cpus", 0, "CPUs per job")
-	memory := fs.String("memory", "", "memory per job")
-	clear := fs.Bool("clear", false, "remove both limits")
-	if err := fs.Parse(args); err != nil {
-		return err
-	}
-	if err := rejectTrailing(fs); err != nil {
-		return err
-	}
-	cfg := loadConfig()
-	if cfg == nil {
-		return errors.New("no runner config found — run `orbit register` first")
-	}
-	limits := bgJobLimits{}
-	if cfg.BackgroundJobLimits != nil && !*clear {
-		limits = *cfg.BackgroundJobLimits
-	}
-	changed := *clear
-	if flagWasSet(fs, "cpus") {
-		limits.CPUs, changed = *cpus, true
-	}
-	if flagWasSet(fs, "memory") {
-		mb, err := parseMemoryMB(*memory)
-		if err != nil {
-			return err
-		}
-		limits.MemoryMB, changed = mb, true
-	}
-	if err := limits.validate(); err != nil {
-		return err
-	}
-	if changed {
-		cfg.BackgroundJobLimits = &limits
-		if limits.none() {
-			cfg.BackgroundJobLimits = nil
-		}
-		if err := saveConfig(cfg); err != nil {
-			return err
-		}
-	}
-	_, err := fmt.Fprintf(out, "background job limits: %s\n", limits)
-	return err
-}
-
-// parseMemoryMB reads --memory: megabytes, or a number with an M or G suffix. 0 is no limit.
-func parseMemoryMB(s string) (int64, error) {
-	t := strings.ToUpper(strings.TrimSpace(s))
-	mult := 1.0
-	for _, unit := range []struct {
-		suffix string
-		mult   float64
-	}{{"GIB", 1024}, {"GB", 1024}, {"G", 1024}, {"MIB", 1}, {"MB", 1}, {"M", 1}} {
-		if rest, ok := strings.CutSuffix(t, unit.suffix); ok {
-			t, mult = rest, unit.mult
-			break
-		}
-	}
-	v, err := strconv.ParseFloat(t, 64)
-	if err != nil || v < 0 || v*mult > math.MaxInt32 {
-		return 0, fmt.Errorf("--memory must be megabytes or a size like 512M or 8G, got %q", s)
-	}
-	return int64(math.Round(v * mult)), nil
+// boundedLocked reports whether the job runs under limits, in its cgroup inside the jobs' parent. Such a
+// job takes no session slot of this runner (backgroundJobCountsLocked): the parent bounds what all of them
+// take together — a tenth of the sessions' CPU weight, half of the memory — however many there are and
+// whatever each asked for. Caller holds bgTailer.mu, or is the only one to know the job.
+func (j *bgJob) boundedLocked() bool {
+	return j.limits != nil
 }
 
 // bgJobOOMNote is the line a job killed by its memory limit gets at the end of its output: the exit status
