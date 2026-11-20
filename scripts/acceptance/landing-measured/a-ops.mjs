@@ -227,7 +227,7 @@ const moved = row(`select count(*) from task where project_id = ${P} and (delive
 check('every task delivered no commit of its own (delivered_sha = delivered_base_sha)', moved === '0', `${moved} differ`);
 const reported = row(`select string_agg(split_part(t.title, ' ', 1), ',') from session s join task t on t.id = s.task_id where t.project_id = ${P} and jsonb_typeof(s.changed_files) = 'array' and jsonb_array_length(s.changed_files) > 0`);
 check('only D1\'s run reported changed files: the diff from its base to the line it checked out', reported === 'D1', reported);
-const d1Own = row(`select count(*) from session s where s.task_id = '${ids.D1}' and s.starts_task_work and s.branch_sha = s.base_sha and s.worktree_dirty is not true`);
+const d1Own = row(`select count(*) from session s join task t on t.id = s.task_id where t.project_id = ${P} and split_part(t.title, ' ', 1) = 'D1' and s.starts_task_work and s.branch_sha = s.base_sha and s.worktree_dirty is not true`);
 check('and D1\'s own branch never moved past its base, with a clean checkout (branch_sha = base_sha)', Number(d1Own) >= 1, d1Own);
 const landingItems = row(`select count(*) from project_open_item where project_id = ${P} and (kind like 'LANDING%' or kind like 'INTEGRATION%')`);
 check('no landing or integration open item', landingItems === '0', landingItems);
