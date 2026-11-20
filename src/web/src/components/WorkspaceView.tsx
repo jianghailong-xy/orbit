@@ -295,7 +295,7 @@ import {
   watchingWord,
   type SessionWatching,
 } from '../lib/watches';
-import { isQueuedWatchWake, returnsToComposer } from '../lib/queuedTurnRestore';
+import { isQueuedWatchWake, queuedSubagentWake, returnsToComposer } from '../lib/queuedTurnRestore';
 import {
   api,
   ApiError,
@@ -4826,7 +4826,8 @@ export function WorkspaceView({
   const queuedTailEvents = useMemo(
     () =>
       visibleQueuedTurns
-        .filter((turn) => !inPendingTray(turn))
+        // A SubAgent's end turn waits on its card instead (`subagentQueuedWakes`): the tail draws nothing for it.
+        .filter((turn) => !inPendingTray(turn) && !queuedSubagentWake(turn)?.alone)
         .map((turn) => ({ turn, event: queuedTurnEvent(turn) })),
     [visibleQueuedTurns],
   );
@@ -8211,6 +8212,18 @@ export function WorkspaceView({
     steerOffered,
     queuedHeldTag,
   });
+  // A SubAgent's end turn still on the queue, by run id: its card says the agent has not read it yet, and its
+  // `Don't send` does what the tail's Cancel did (SubagentCardEnd).
+  const subagentQueuedWakes = useMemo(() => {
+    const out = new Map<string, () => void>();
+    if (selectedTrashed) return out;
+    for (const turn of visibleQueuedTurns) {
+      const wake = queuedSubagentWake(turn);
+      for (const runId of wake?.runIds ?? []) out.set(runId, () => void cancelQueued(turn.turnId));
+    }
+    return out;
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- cancelQueued is rebuilt each render; it reads the latest queue itself
+  }, [visibleQueuedTurns, selectedTrashed]);
   // Take back a message whose delivery settled undelivered. Nothing read it, so this bubble is
   // the only copy of what was typed: hand it back the way the transcript's own undelivered card
   // does (appended, never overwriting a draft), then discard the row so the pane stops carrying a
@@ -10936,6 +10949,7 @@ export function WorkspaceView({
                 wikiChat={wikiChatCards}
                 subagentWaiting={subagentWaiting}
                 subagentRuns={subagentRuns}
+                subagentQueuedWakes={subagentQueuedWakes}
               />
               </QueuedFootCtx.Provider>
               </MainCheckoutCtx.Provider>

@@ -346,7 +346,7 @@ public enum SettingsCopy {
     /// The account's master switch for smart model selection, on unless turned off. On iOS' Sessions
     /// page the row is the switch and the hint its footer.
     public static let smartModelSelection = "Smart model selection"
-    public static let smartModelSelectionHint = "Coordinators suggest a tier for each task, and a SubAgent's size sets its own. Every SubAgent, and the task runs of Agents you turn this on for, run on a model of that tier from your providers. Off: tasks keep their Agent's model and SubAgents their parent session's."
+    public static let smartModelSelectionHint = "Coordinators suggest a tier for each task, and a SubAgent's size sets its own. Task runs and SubAgents run on a model of that tier from your providers. Off: tasks keep their Agent's model and SubAgents their parent session's."
 
     // MARK: Optimize For (board docs/mocks/routing-mode-account, approved 2026-11-19)
 

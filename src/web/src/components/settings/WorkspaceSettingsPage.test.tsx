@@ -285,18 +285,14 @@ describe('a workspace’s Settings page', () => {
     expect($$('button').some((b) => text(b) === 'Save')).toBe(false);
   });
 
-  it('shows smart selection and its engines only while the account has it on; Optimize For is not here', async () => {
+  it('has no smart selection row or engine list of its own, with the account switch on or off; Optimize For is not here', async () => {
     await mount(`/settings/workspaces/${ORBIT}`, undefined, { preferences: { modelRouting: false } });
     expect($$('.settings-row-title', section('Sessions')).map(text)).toEqual(['Worktree isolation', 'Model']);
     act(() => root?.unmount());
     host?.remove();
     await mount(`/settings/workspaces/${ORBIT}`, undefined, { preferences: {} });
-    expect($$('.settings-row-title', section('Sessions')).map(text)).toEqual([
-      'Worktree isolation',
-      'Smart model selection for tasks',
-      'Model',
-    ]);
-    expect(text(section('Sessions').querySelector('.rd-engines-label'))).toBe('Engines it may use');
+    expect($$('.settings-row-title', section('Sessions')).map(text)).toEqual(['Worktree isolation', 'Model']);
+    expect(section('Sessions').textContent).not.toContain('Engines it may use');
   });
 
   it('says so for a workspace that does not exist', async () => {
@@ -331,17 +327,6 @@ describe('every edit is one PATCH carrying only that field', () => {
     expect(only(sent)).toEqual([{ method: 'PATCH', path: `/workspaces/${ORBIT}`, body: { enableWorktree: false } }]);
     expect(toggle('Worktree isolation').getAttribute('aria-checked')).toBe('false');
     expect(toast.success).toHaveBeenCalledWith('Setting saved');
-  });
-
-  it('a switch when it changes, and each engine ticked', async () => {
-    const { sent } = await mount(`/settings/workspaces/${ORBIT}`, undefined, { preferences: { modelRouting: true } });
-    await click(toggle('Smart model selection for tasks'));
-    const codex = $$('.rd-engines-list [role="checkbox"]').find((c) => text(c.closest('label')) === 'Codex')!;
-    await click(codex);
-    expect(only(sent)).toEqual([
-      { method: 'PATCH', path: `/workspaces/${ORBIT}`, body: { modelRouting: true } },
-      { method: 'PATCH', path: `/workspaces/${ORBIT}`, body: { modelRoutingProviders: ['codex'] } },
-    ]);
   });
 
   it('a text field on blur, and on Enter — once, though the blur follows the Enter', async () => {

@@ -184,13 +184,16 @@ describe('the SubAgent block', () => {
     expect(bg.textContent).not.toContain('"status":"running"');
   });
 
-  it("draws a background run's end, not its call's receipt: a run that did not finish is red, never checked", () => {
-    for (const status of ['INTERRUPTED', 'FAILED', 'STOPPED'] as const) {
+  it("draws a background run's end, not its call's receipt: a run that did not finish is red, a stopped one grey, never checked", () => {
+    for (const status of ['INTERRUPTED', 'FAILED'] as const) {
       render([FG, { ...BG_RUNNING, status, endedAt: '2026-11-11T10:03:13.000Z' }], false);
       const bg = card(5);
       expect(bg.querySelector('.chat-tool-status.ok')).toBeNull();
       expect(bg.querySelector('.chat-tool-status.err')?.getAttribute('aria-label')).toBe(status.toLowerCase());
     }
+    render([FG, { ...BG_RUNNING, status: 'STOPPED', endedAt: '2026-11-11T10:03:13.000Z' }], false);
+    expect(card(5).querySelector('.chat-tool-status.ok, .chat-tool-status.err')).toBeNull();
+    expect(card(5).querySelector('.chat-tool-status.stopped')?.getAttribute('aria-label')).toBe('stopped');
     render([FG, { ...BG_RUNNING, status: 'DONE', endedAt: '2026-11-11T10:03:13.000Z' }], false);
     expect(card(5).querySelector('.chat-tool-status.ok')).not.toBeNull();
   });

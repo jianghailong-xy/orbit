@@ -872,6 +872,10 @@ model Runner {
   // One knob per machine, but evaluated against each workspace's own measured filesystem —
   // "keep this much headroom wherever you are writing" is the same policy on every mount.
   minFreeDiskMb     Int?         @default(10240) @map("min_free_disk_mb")
+  // Unused: the background job limits these held were withdrawn on 2026-11-20. They stay because
+  // migration 1260 already added them to production's database; nothing reads or writes them.
+  bgJobCpus         Float?       @map("bg_job_cpus")
+  bgJobMemoryMb     Int?         @map("bg_job_memory_mb")
   version           String?
   tokenHash         String       @map("token_hash") // hash of the long-lived runner credential
   // The runner's own low-frequency record of its heartbeats: written by a heartbeat at most every
