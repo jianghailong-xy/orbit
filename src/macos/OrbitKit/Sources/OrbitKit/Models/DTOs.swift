@@ -25,6 +25,9 @@ public struct User: Codable, Equatable, Sendable, Identifiable {
     /// Settings › Prompt optimizer: the server holds a DeepSeek key and so can optimize a draft.
     /// False: the switch is drawn disabled with the board frame 1b notice. Nil in login's user payload.
     public let promptOptimizerAvailable: Bool?
+    /// Settings last changed from a conversation, by preference key (`GET /users/me`, design §5.3). Nil from an older
+    /// server and in login's user payload.
+    public var changedBy: [String: SettingChangedBy]? = nil
 }
 
 public struct LoginRequest: Codable, Sendable {

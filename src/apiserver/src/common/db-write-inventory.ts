@@ -166,6 +166,17 @@ export const TRANSACTION_UNITS: readonly TransactionUnit[] = [
     answer: 'Typed 503 after retry exhaustion; the owner or the session ends the request again, and a request already ended is refused as such.',
   },
   {
+    at: 'owner-requests/owner-requests.service.ts#proposeSettings',
+    shape: 'TX_RETRIED',
+    locks: "Every PENDING SETTINGS_CHANGE owner_request row of the asking session, through one UPDATE to WITHDRAWN (at most one: owner_request_settings_change_pending_key); then one owner_request INSERT, whose user foreign key takes the user row FOR KEY SHARE. No trigger, and no other row. The account's preferences, the session and the session's declined cards are read before the transaction, never locked.",
+    identity: "None of its own: each call files one card. owner_request_settings_change_pending_key holds a session to one PENDING card, so two filings of one session at once cannot both stand: the second's INSERT waits for the first and is refused on the key once it commits, and the method files it again (at most three times), when its UPDATE withdraws the first.",
+    isolation: '',
+    attempts: 4,
+    replay: "Re-run against the committed rows: the withdrawal matches whatever card is PENDING then, and a rollback discards it with the INSERT. The changes, title and payload are computed before the closure and are the same in every attempt.",
+    effects: "After commit only: the owner's push and the session's list row, and the card's translation queued. The withdrawn card queues no delivery: the filing's answer names it (withdrawnRequestIds).",
+    answer: 'Typed 503 after retry exhaustion; the session files the proposal again, which withdraws whatever the lost attempt left.',
+  },
+  {
     at: 'owner-requests/owner-secrets.service.ts#submit',
     shape: 'TX_RETRIED',
     locks: "The owner_request row by id and owner, FOR UPDATE; then the asking session read; then the request's owner_request_secret row (unique on request_id), deleted when it still waits for delivery, and one INSERT of the new grant; then, with saveAs, the owner's account_secret row by (owner, label), updated or inserted. No trigger.",
@@ -3037,6 +3048,7 @@ export interface TransactionParticipant {
  */
 export const TRANSACTION_PARTICIPANTS: readonly TransactionParticipant[] = [
   { at: 'conditions/condition-still-waiting.ts#fileStillWaitingItem', under: 'conditions.askStillWaiting: under the condition row FOR UPDATE it holds, one owner_request INSERT ON CONFLICT (asked_by_session_id, client_request_id) DO NOTHING' },
+  { at: 'owner-requests/settings-apply.ts#applySettingsChanges', under: "ownerRequests.settle, as its effect for applySettings (docs/settings-from-conversation-design.md §5.2): after the card's CAS to DONE, the owner's user row read FOR NO KEY UPDATE, then one UPDATE of its preferences; a stale from throws 409 SETTINGS_STALE and the settle rolls back whole" },
   { at: 'conditions/condition-still-waiting.ts#answerStillWaiting', under: 'ownerRequests.settle, as its effect: after the item CAS to DONE, one conditional UPDATE of its condition (keep_waiting_since for Keep waiting, ENDED for Stop)' },
   { at: 'tasks/tasks.service.ts#onStartWhenFired', under: 'conditions.applySamples, as its fire hook (ConditionsService.write): under the condition row FOR UPDATE it holds, task_dispatch_epoch_advance on the task the condition starts — FOR NO KEY UPDATE and one UPDATE of its task_dispatch_epoch row' },
   { at: 'tasks/task-start-when.ts#writeStartWhen', under: 'tasks.create and tasks.createMany, after the task INSERT: createCondition, one condition_sample INSERT (the baseline), the UPDATE of that condition row, its condition_event INSERTs, and one UPDATE of the task row just inserted setting start_when_condition_id' },
