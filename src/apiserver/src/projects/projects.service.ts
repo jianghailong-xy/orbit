@@ -94,7 +94,7 @@ import { type PendingAddresseeRead, readPendingAddressees } from './pending-addr
 import { planCriterionMove, readCriterionMoveFacts, writeCriterionMove } from './criterion-move';
 import { readCriterionMoveRecord } from './criterion-move-record';
 import { readSettingChanges, type ProjectSettingChangeView } from './project-setting-change';
-import { revertSettingChange } from './project-setting-revert';
+import { putSettingChangeBack, readSettingChange } from './project-setting-revert';
 import { readLiveRulings } from './project-ruling';
 import { settleTaskSegmentAfterMove } from './landing-session';
 import { lockOwnerTaskGraph, orderedIds } from '../common/lock-order';
@@ -3281,7 +3281,12 @@ export class ProjectsService {
       });
     }
     await this.assertOwned(ownerId, id);
-    return revertSettingChange(this.prisma, ownerId, id, changeId);
+    const row = await readSettingChange(this.prisma, ownerId, id, changeId);
+    return withTransactionRetry(
+      this.prisma,
+      (tx) => putSettingChangeBack(tx, ownerId, id, row),
+      loggedRetry(this.logger, 'projects.revertSettingChange'),
+    );
   }
 
   /**
