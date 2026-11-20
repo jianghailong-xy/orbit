@@ -578,6 +578,7 @@ fun SessionReader(app: OrbitApplication, handle: SessionHandle, route: OrbitRout
         BoxWithConstraints(Modifier.fillMaxSize()) {
         val view = LocalView.current
         val composerHeight = ComposerFold.height(maxHeight, WindowInsets.ime.getBottom(LocalDensity.current), ComposerFold.windowIme(view), composerFocused)
+        // Clipped only while folded to nothing for a card's form: open, the composer card's light shadow spreads over the page above it (iOS).
         val compact = maxWidth < 600.dp
         // What D09 P02 waits for, as this frame composes it: the newest durable row of a window at the live tail (the list's
         // measure says whether it is on screen), and a composer that takes typing, with room, in a window no dialog covers.
@@ -831,7 +832,7 @@ fun SessionReader(app: OrbitApplication, handle: SessionHandle, route: OrbitRout
                 // conversation and above the parking strip (docs/mocks/pending-tray-above-parking, decided 2026-10-28). Not folded while
                 // a phone types, as it is about the messages being typed into; out of the way with the composer while a card's form
                 // holds the keyboard.
-                Box(Modifier.heightIn(max = composerHeight).clipToBounds()) {
+                Box(Modifier.heightIn(max = composerHeight).then(if (composerHeight == 0.dp) Modifier.clipToBounds() else Modifier)) {
                     SessionPendingTray(composer, state.session, unreadSteers,
                         held = runnerUpdatingGate?.let { gate -> { RunnerUpdatingFoot(gate, runnerUpdatingMachine, later = runnerUpdatingLater) } })
                 }
@@ -907,7 +908,7 @@ fun SessionReader(app: OrbitApplication, handle: SessionHandle, route: OrbitRout
                     // does not work then, and the line would say it does.
                     ManagedRunnerAsleepLine(data.workspaces.firstOrNull { ObjectId.same(it.id, workspaceOfSession) }?.runnerId,
                         composerLocked = handoff?.locksComposer == true)
-                    Box(Modifier.heightIn(max = composerHeight).clipToBounds()) { SessionComposer(app, handle, route.id!!, state.session,
+                    Box(Modifier.heightIn(max = composerHeight).then(if (composerHeight == 0.dp) Modifier.clipToBounds() else Modifier)) { SessionComposer(app, handle, route.id!!, state.session,
                     focusRequest = composeFocus, inputFocusChanged = { composerFocused = it },
                     openTask = { open(OrbitRoute(Destination.TASK, it)) },
                     openRunner = { runner, engine -> open(OrbitRoute(Destination.RUNNER, runner, recordId = "engine:$engine")) },
