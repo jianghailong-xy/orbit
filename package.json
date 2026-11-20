@@ -13,6 +13,9 @@
     "@nestjs/cli": {
       "minimatch": "^11.0.1"
     },
+    "@prisma/config": {
+      "effect": "3.22.1"
+    },
     "basic-ftp": "^6.2.4",
     "deepmerge-ts": "^8.0.2",
     "katex": "^0.18.2",
