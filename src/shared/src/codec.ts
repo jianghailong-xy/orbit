@@ -175,6 +175,8 @@ export const PUBLIC_ID_FIELDS: ReadonlySet<string> = new Set([
   'landingCheckExemptBySessionId',
   // The coordinator conversation that wrote a recorded landing-check change (migration 1390): an address.
   'writtenBySessionId',
+  // The change an owner's revert put back (migration 1390): the id the history lists it under.
+  'revertsChangeId',
   'workspaceId',
   // The workspaces a personal access token is confined to (migration 0383): addresses its owner
   // picks when issuing it and reads back in the token list — never a fence.
