@@ -709,7 +709,6 @@ describe('the Workspaces section of a machine with none', () => {
 // saved one is edited on its own page, row by row.
 describe('the Add workspace form', () => {
   const field = (label: string) => $<HTMLInputElement>(`input[aria-label="${label}"]`);
-  const submit = (label: string) => button(label) as HTMLButtonElement;
   const type = async (input: HTMLInputElement, value: string) => {
     await act(async () => {
       input.focus();
@@ -718,36 +717,17 @@ describe('the Add workspace form', () => {
     });
     await settle();
   };
-  const pressEnter = async (input: HTMLInputElement) => {
-    await act(async () => {
-      input.dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter', bubbles: true }));
-    });
-    await settle();
-  };
 
-  it('creates a workspace only once it has a name and a working directory', async () => {
+  // What the card does once it's open is WorkspaceSettingsPage.test.tsx's and MachineSetupCard.test.tsx's.
+  it('opens New workspace on this machine: the setup card, under the page’s own header', async () => {
     const { sent } = await mount(machine('no CLI signed in and no workspace'));
     await click(button('Add workspace'));
-    expect(field('Working directory').placeholder).toBe('/path/to/project on the runner');
-    expect(submit('Create').disabled).toBe(true);
-
-    await type(field('Name'), 'app');
-    expect(submit('Create').disabled).toBe(true);
-    // Enter in the name creates nothing while the folder is missing.
-    await pressEnter(field('Name'));
-    await type(field('Working directory'), '   ');
-    expect(submit('Create').disabled).toBe(true);
+    expect($('.settings-header-description')?.textContent).toContain('Change machine');
+    expect($('.workspace-new .msc')).not.toBeNull();
+    expect(document.querySelector('.msc-head')).toBeNull();
+    expect(field('Folder')).not.toBeNull();
+    expect(document.querySelector('input[aria-label="Working directory"]')).toBeNull();
     expect(sent).toEqual([]);
-
-    await type(field('Working directory'), '~/code/app');
-    expect(submit('Create').disabled).toBe(false);
-    await click(submit('Create'));
-    expect(sent).toHaveLength(1);
-    expect(sent[0]).toMatchObject({
-      method: 'POST',
-      path: '/workspaces',
-      body: { name: 'app', workDir: '~/code/app', runnerId: RUNNER_ID },
-    });
   });
 
   it('a saved workspace’s working directory, emptied on its page, goes back to what is saved and sends nothing', async () => {
