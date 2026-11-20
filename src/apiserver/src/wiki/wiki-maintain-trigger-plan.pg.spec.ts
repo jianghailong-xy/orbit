@@ -287,7 +287,10 @@ test('the trigger reads the settled tasks after the cursor by index, answering w
         const taskAfter = indexed.by.get('task') ?? 0;
         assert.ok(taskAfter * 10 <= taskBefore,
           `${hint.name}: the read took ${taskAfter} buffers of task against the control's ${taskBefore}`);
-        assert.ok(indexed.buffers < control.buffers,
+        // Not above: a settled session's read touches no task page in either path, and the two session reads differ
+        // by a page or two depending on where the heap puts the row (1490 against 1488 before session_release_fact_chk
+        // widened nothing but moved the rows, 1488 against 1488 after). The task arm's tenfold cut is asserted above.
+        assert.ok(indexed.buffers <= control.buffers,
           `${hint.name}: the read took ${indexed.buffers} buffers against the control's ${control.buffers}`);
       }
     } finally {
