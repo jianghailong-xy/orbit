@@ -17,7 +17,8 @@ import kotlinx.coroutines.launch
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
 import kotlinx.coroutines.withContext
-import kotlinx.coroutines.withTimeout
+import kotlinx.coroutines.withTimeoutOrNull
+import io.orbitd.android.core.realtime.ConnectionState
 import kotlinx.serialization.json.JsonObject
 import kotlinx.coroutines.currentCoroutineContext
 import kotlinx.coroutines.ensureActive
@@ -210,7 +211,9 @@ class PushController(
 
     /** The Open rows after the store's own read that left after this call landed (a `since=` delta): a reconcile asks no list of its own. */
     private suspend fun openRows(): List<JsonObject> {
-        withTimeout(OPEN_READ_TIMEOUT_MS) { realtime.rereadDirectory() }
+        // Offline or in the background the store reads nothing: no reminder is let go on a snapshot that cannot be brought up to date.
+        check(realtime.state.value.controlConnection == ConnectionState.CONNECTED) { "no live Open snapshot" }
+        checkNotNull(withTimeoutOrNull(OPEN_READ_TIMEOUT_MS) { realtime.rereadDirectory() }) { "the Open read did not land" }
         return realtime.state.value.directory?.sessions?.get("open") ?: throw IllegalStateException("no Open snapshot")
     }
 
