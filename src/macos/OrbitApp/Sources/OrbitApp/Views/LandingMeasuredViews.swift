@@ -22,10 +22,14 @@ struct ProvenanceBadge: View {
             .accessibilityIdentifier("provenance-\(kind)")
     }
 
+    /// The board's amber ink, lifted in dark mode where the light one would not read on its fill.
+    static let amberInk = Color(light: Color(red: 0.6, green: 0.38, blue: 0.0),
+                                dark: Color(red: 1.0, green: 0.76, blue: 0.4))
+
     private var ink: Color {
         switch kind {
         case "you": return Color(light: .white, dark: .black)
-        case "coordinator": return Color(red: 0.6, green: 0.38, blue: 0.0)
+        case "coordinator": return ProvenanceBadge.amberInk
         case "card": return .blue
         default: return .purple
         }
@@ -323,7 +327,7 @@ struct TaskExemptionRow: View {
                 Spacer(minLength: 8)
                 Text(LandingProvenanceCopy.exempt)
                     .font(.orbitMeta.weight(.semibold))
-                    .foregroundStyle(Color(red: 0.6, green: 0.38, blue: 0.0))
+                    .foregroundStyle(ProvenanceBadge.amberInk)
                     .padding(.horizontal, 7).padding(.vertical, 2)
                     .background(Color.yellow.opacity(0.25), in: Capsule())
             }
