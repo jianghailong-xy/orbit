@@ -15,7 +15,7 @@ import { Prisma, RunStatus } from '@prisma/client';
 import {
   ALWAYS_ALLOWED_TOOLS,
   isWiderThanParent,
-  resolvePermissionMode,
+  runningPermissionMode,
 } from '../common/permission-mode';
 import { dispatchAllowedTools } from '../common/permission-rules';
 import { normalizeBuiltinPermissionMode, normalizeEffortForRuntimeModel } from '../common/runtime-provider';
@@ -339,7 +339,7 @@ export async function remoteSubagentExec(
   const parent = await tx.session.findUnique({
     where: { id: args.parentSessionId },
     select: {
-      engine: true, provider: true, permissionMode: true, owner: { select: { preferences: true } },
+      engine: true, provider: true, permissionMode: true, actualPermissionMode: true, owner: { select: { preferences: true } },
       scheduleRun: { select: { accessLevel: true, schedule: { select: { accessLevel: true } } } },
     },
   });
@@ -387,7 +387,8 @@ export async function remoteSubagentExec(
   const provider = resolved.provider;
   const runnerModel = resolved.runnerModel ?? resolved.model;
   const catalog = workspace.runner.modelCatalog;
-  const parentMode = resolvePermissionMode(parent.permissionMode, parent.owner);
+  // R3: the mode the parent is actually running in.
+  const parentMode = runningPermissionMode(parent, parent.owner);
   const parentEngine = parent.engine ?? parent.provider ?? provider;
   // Never wider than the parent's mode (§5.3), judged on the engine the child runs on.
   const asked = !args.facts.readonly && args.facts.permissionMode

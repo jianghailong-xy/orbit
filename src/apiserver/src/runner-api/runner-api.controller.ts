@@ -42,6 +42,12 @@ import { deriveSessionCapabilities, type SessionCapabilityFields } from '../sess
 import { readWorktreeArtifactRequest, worktreeFileAnswerKey } from '../sessions/worktree-artifact';
 import { importForkSessionId } from '../sessions/import-fork';
 import { reloadCarriesEnv } from '../sessions/session-settings';
+import {
+  causeOfConfigTurn,
+  configTurnPayload,
+  recordActualPermissionMode,
+  recordEngineReportedModes,
+} from '../sessions/actual-permission-mode';
 import { branchName } from '../projects/project-criterion-landing';
 import { TasksService } from '../tasks/tasks.service';
 import { MergeReceiptService } from '../sessions/merge-receipt.service';
@@ -1031,6 +1037,9 @@ interface HandedTurn {
 // deserves it promptly, and everything that legitimately needs one — an engine still starting, a
 // conversation being resumed — answers or fails within its first two. What is left is an engine that
 // is swallowing the message, and a fourth hand-over asks the same question the last three asked.
+/** The subtype a runner completes a `setconfig` turn with (runner-go claude_setconfig.go subtypeSetConfig). */
+const TURN_COMPLETE_SETCONFIG = 'setconfig';
+
 // See the delivery count in `turnComplete` for what it bounds and how it is spent.
 const UNANSWERED_DELIVERY_BUDGET = 3;
 // What a run whose message was swallowed is reported failed with, kept in the session's `error` — the
@@ -4564,6 +4573,18 @@ export class RunnerApiController {
       const [maxSeqRow] = await this.prisma.$queryRaw<Array<{ max: number }>>`
         SELECT coalesce(max("seq"), 0) AS "max" FROM "run_event" WHERE "session_id" = ${s.id}::uuid
       `;
+      const handedPermissionMode = normalizeBuiltinPermissionMode(
+        provider,
+        runnerModel,
+        // A scheduled run on Claude Code runs in Auto, whatever its level (schedule-access.ts).
+        scheduleRunPermissionMode(permissionMode, runAccessLevel(s.scheduleRun), provider),
+        customRow?.enabled === true,
+        runner.runsAsRoot,
+        s.assignedRunner?.modelCatalog,
+      );
+      // The reclaim re-spawns the engine in this mode: until it says otherwise, the session's actual mode, as a
+      // claim's is (actual-permission-mode.ts).
+      await recordActualPermissionMode(this.prisma, s.id, handedPermissionMode, 'CLAIM');
       // The stored session model wins over Runtime/ModelProvider defaults, so a resumed process
       // keeps the model it was created with; cross-provider ids are still coerced safely.
       const workspaceCfg: AgentExecConfig = {
@@ -4586,15 +4607,7 @@ export class RunnerApiController {
         ),
         // A CHECK_ONLY run's Plan runs Codex in its read-only sandbox (design §6.2); absent for every other session.
         ...scheduleRunAgentFields(runAccessLevel(s.scheduleRun)),
-        permissionMode: normalizeBuiltinPermissionMode(
-          provider,
-          runnerModel,
-          // A scheduled run on Claude Code runs in Auto, whatever its level (schedule-access.ts).
-          scheduleRunPermissionMode(permissionMode, runAccessLevel(s.scheduleRun), provider),
-          customRow?.enabled === true,
-          runner.runsAsRoot,
-          s.assignedRunner?.modelCatalog,
-        ),
+        permissionMode: handedPermissionMode,
         // Whether the fast lane is actually on. Policed HERE rather than where it was picked,
         // for the same reason an OpenCode variant is: the constraint is about the model this
         // session dispatches with, which a create request that named none does not know. A
@@ -6319,6 +6332,16 @@ export class RunnerApiController {
         reloadRefused = true;
         return null;
       }
+      if (t.kind === 'reload') {
+        // A reload re-spawns the engine in the mode it carries: the actual mode from here, for an engine that
+        // reports none, and until Claude Code's next init frame says otherwise (actual-permission-mode.ts). A reload
+        // that names no mode (an account move) leaves the engine in the one it had.
+        const payload = configTurnPayload(t.content);
+        if (payload.permissionMode !== undefined) {
+          const sender = await tx.conversationTurn.findUnique({ where: { id: t.id }, select: { senderClient: true } });
+          await recordActualPermissionMode(tx, sessionId, payload.permissionMode, causeOfConfigTurn(payload), sender?.senderClient);
+        }
+      }
       // What a resend of this fetch is answered with (above), on the row this transaction holds: a
       // write of two columns no session trigger names.
       if (ownFetch && resent.length === 0) {
@@ -7006,6 +7029,32 @@ export class RunnerApiController {
     return suggestion ? { suggestion } : {};
   }
 
+  /**
+   * Record the mode a `setconfig` turn carried as the session's actual mode, now that the runner says the engine took
+   * it (runner-go claude_setconfig.go): applied in place, or by the re-spawn it fell back to. Not when the runner
+   * could not read the payload, which applied nothing, and not for an acknowledgement older than a config turn
+   * handed out after it, whose mode is no longer the one running.
+   */
+  private async recordSetConfigAck(
+    tx: Prisma.TransactionClient,
+    sessionId: string,
+    turnId: string,
+    result: string | undefined,
+  ): Promise<void> {
+    if (typeof result === 'string' && result.startsWith('unreadable payload')) return;
+    const turn = await tx.conversationTurn.findFirst({
+      where: { id: turnId, sessionId, kind: 'setconfig' },
+      select: { seq: true, content: true, senderClient: true },
+    });
+    if (!turn) return;
+    const later = await tx.conversationTurn.count({
+      where: { sessionId, kind: { in: ['setconfig', 'reload'] }, seq: { gt: turn.seq }, status: 'ANSWERED' },
+    });
+    if (later > 0) return;
+    const payload = configTurnPayload(turn.content);
+    await recordActualPermissionMode(tx, sessionId, payload.permissionMode, causeOfConfigTurn(payload), turn.senderClient);
+  }
+
   /** A single interactive turn finished; retain or release its active-turn slot. */
   @UseGuards(RunnerAuthGuard)
   @Post('sessions/:id/turn-complete')
@@ -7052,6 +7101,11 @@ export class RunnerApiController {
       // lost-wakeup state AWAITING_INPUT + PENDING conversation turn. The same lock also
       // fences every write below to the runner process that currently owns the Session.
       await this.lockSessionLeaseOwner(tx, sessionId, runner.id, leaseOwner);
+      // A setconfig's acknowledgement: the engine took the mode it carried (actual-permission-mode.ts). Before the
+      // ack below, which a control turn answered on delivery never reaches.
+      if (dto.subtype === TURN_COMPLETE_SETCONFIG && dto.status === RunStatus.SUCCEEDED) {
+        await this.recordSetConfigAck(tx, sessionId, dto.turnId, dto.result);
+      }
       const current = await tx.session.findUniqueOrThrow({
         where: { id: sessionId },
         select: {
@@ -9404,6 +9458,8 @@ export class RunnerApiController {
       const engineTurnActive = engineTurnActiveAfter(durable);
       // The session's Agent Tools report (Session.agentTools): the newest one in the batch, kept whole.
       const agentTools = latestAgentToolsReport(durable);
+      // And the mode the engine says it runs in, or that the runner corrected it to (actual-permission-mode.ts).
+      await recordEngineReportedModes(tx, sessionId, durable);
       // What the engine is doing in a stretch where it produces nothing else — see
       // Session.enginePhase. Reduced separately from engineTurnActive above because the two
       // answer different questions off overlapping events: a compaction is not a turn, and the

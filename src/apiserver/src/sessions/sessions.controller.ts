@@ -571,8 +571,14 @@ export class SessionsController {
     @CurrentUser() user: AuthUser,
     @Param('id', PublicIdPipe) id: string,
     @Body() dto: SessionConfigDto,
+    @Headers('x-orbit-client') client?: string,
+    @Headers('x-orbit-device') device?: string,
   ) {
-    return this.sessions.updateConfig(user.userId, id, dto, user.credential);
+    // The owner's pick, and the app it came from (turn-sender-client.ts), which the mode change it causes names.
+    return this.sessions.updateConfig(user.userId, id, dto, user.credential, {
+      origin: 'OWNER',
+      senderClient: senderClientOfRequest(user.credential, client, device),
+    });
   }
 
   /** The session's Settings panel: its own env vars and notification overrides — see

@@ -84,6 +84,7 @@ import { worktreeOperationFenceSql } from '../common/session-inbox-fence';
 import { sessionDiskHoldSql } from '../common/runner-disk-gate';
 import { workspaceCloneHoldSql } from '../common/workspace-clone-gate';
 import { engineNamingJob } from '../sessions/naming';
+import { recordActualPermissionMode } from '../sessions/actual-permission-mode';
 import {
   batchActiveTurns,
   runnerActiveTurns,
@@ -1182,6 +1183,23 @@ export class QueueService {
     // A session nothing else will name is named by the engine about to run it (engineNamingJob). An Ask is not:
     // its title is its first question, and no model is asked for another (help-ask.ts; board 03).
     const naming = session.helpAsk == null ? engineNamingJob(session, provider, configuredRow) : undefined;
+    // Configured providers still borrow one of these runtimes, so the same runtime-level
+    // guard applies to API/MCP/old-client input as it does to built-in identities; their
+    // vendor-defined model space is exempt from the Claude allow-list though.
+    // The root check rides along here for the same reason: a Bypass default reaching a root
+    // runner is a session that exits during startup, and this is the last place before it does.
+    const handedPermissionMode = normalizeBuiltinPermissionMode(
+      provider,
+      runnerModel,
+      // A scheduled run on Claude Code runs in Auto, whatever its level (schedule-access.ts).
+      scheduleRunPermissionMode(permissionMode, runAccessLevel(session.scheduleRun), provider),
+      customRow?.enabled === true,
+      session.assignedRunner?.runsAsRoot,
+      session.assignedRunner?.modelCatalog,
+    );
+    // The mode this claim hands the runner is the session's actual mode until its engine says otherwise
+    // (actual-permission-mode.ts): for an engine that reports none, it is the whole answer.
+    await recordActualPermissionMode(this.prisma, session.id, handedPermissionMode, 'CLAIM');
     return {
       sessionId: session.id,
       provider,
@@ -1273,20 +1291,8 @@ export class QueueService {
         ),
         // A CHECK_ONLY run's Plan runs Codex in its read-only sandbox (design §6.2); absent for every other session.
         ...scheduleRunAgentFields(runAccessLevel(session.scheduleRun)),
-        // Configured providers still borrow one of these runtimes, so the same runtime-level
-        // guard applies to API/MCP/old-client input as it does to built-in identities; their
-        // vendor-defined model space is exempt from the Claude allow-list though.
-        // The root check rides along here for the same reason: a Bypass default reaching a root
-        // runner is a session that exits during startup, and this is the last place before it does.
-        permissionMode: normalizeBuiltinPermissionMode(
-          provider,
-          runnerModel,
-          // A scheduled run on Claude Code runs in Auto, whatever its level (schedule-access.ts).
-          scheduleRunPermissionMode(permissionMode, runAccessLevel(session.scheduleRun), provider),
-          customRow?.enabled === true,
-          session.assignedRunner?.runsAsRoot,
-          session.assignedRunner?.modelCatalog,
-        ),
+        // Normalized above, where it is recorded as the session's actual mode.
+        permissionMode: handedPermissionMode,
         // Whether the fast lane is actually on. Policed HERE rather than where it was picked,
         // for the same reason an OpenCode variant is: the constraint is about the model this
         // session dispatches with, which a create request that named none does not know. A

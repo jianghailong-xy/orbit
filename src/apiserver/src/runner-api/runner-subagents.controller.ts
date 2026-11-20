@@ -39,7 +39,7 @@ import {
   ALWAYS_ALLOWED_TOOLS,
   isWiderThanParent,
   modesASubagentMayRunIn,
-  resolvePermissionMode,
+  runningPermissionMode,
   widerModeRefusal,
 } from '../common/permission-mode';
 import { dispatchAllowedTools } from '../common/permission-rules';
@@ -122,6 +122,7 @@ const SUBAGENT_PARENT_SELECT = {
   provider: true,
   effort: true,
   permissionMode: true,
+  actualPermissionMode: true,
   scheduleRun: { select: { accessLevel: true, schedule: { select: { accessLevel: true } } } },
   workspace: {
     select: {
@@ -634,7 +635,8 @@ export class RunnerSubagentsController {
       const { decision, target: chosen, built } = await planRemoteSubagent(tx, {
         ownerId: session.ownerId, sessionId, dto, facts, pick, planUsage: this.planUsage,
       });
-      const parentMode = resolvePermissionMode(session.permissionMode, session.owner);
+      // R3: the mode the parent is actually running in.
+      const parentMode = runningPermissionMode(session, session.owner);
       const childEngine = String(built.exec!.provider);
       const parentEngine = session.provider ?? childEngine;
       if (!dto.readonly && dto.permissionMode
@@ -887,7 +889,8 @@ export class RunnerSubagentsController {
     );
     // By the rule a session starting another is held to (SessionsService.assertChildModeOrNarrow), but with no
     // exemption: an Auto parent's SubAgent may not run Bypass either (isWiderThanParent).
-    const parentMode = resolvePermissionMode(session.permissionMode, session.owner);
+    // R3: the mode the parent is actually running in.
+    const parentMode = runningPermissionMode(session, session.owner);
     if (!dto.readonly && dto.permissionMode && isWiderThanParent({ mode: parentMode, engine: provider }, dto.permissionMode, provider)) {
       throw widerModeRefusal(
         parentMode,

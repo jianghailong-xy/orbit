@@ -236,6 +236,56 @@ export interface AgentExecConfig {
   env?: Record<string, string>;
 }
 
+/**
+ * What changed the mode a session's engine is actually running in (`session_permission_mode_change.cause`,
+ * migration 1317):
+ *  - CLAIM: a claim handed the runner this mode (for an engine that reports none, that is the mode it runs in);
+ *  - OWNER_PICK: the owner's config change reached the engine (`client` names the app when the request said);
+ *  - ENGINE_REPORT: the engine said it runs in another mode than the one recorded (Claude Code's init frame);
+ *  - RUNNER_CORRECTION: the runner switched the engine itself (a `permission_mode_corrected` system event);
+ *  - RESPAWN: the engine came back from a re-spawn in this mode;
+ *  - ORBIT_CHANGE: a config change Orbit made, not the owner (a paused pinned task run moved to another model).
+ */
+export const PERMISSION_MODE_CHANGE_CAUSES = [
+  'CLAIM',
+  'OWNER_PICK',
+  'ENGINE_REPORT',
+  'RUNNER_CORRECTION',
+  'RESPAWN',
+  'ORBIT_CHANGE',
+] as const;
+export type PermissionModeChangeCause = (typeof PERMISSION_MODE_CHANGE_CAUSES)[number];
+
+/** The system event subtype a runner reports a mode correction it made by itself with, carrying `mode`. */
+export const PERMISSION_MODE_CORRECTED_EVENT_SUBTYPE = 'permission_mode_corrected';
+
+/** One change of the mode a session's engine actually runs in, oldest first on the session detail. */
+export interface SessionPermissionModeChange {
+  /** Null for the session's first recorded mode. */
+  fromMode: string | null;
+  toMode: string;
+  cause: PermissionModeChangeCause;
+  /** For OWNER_PICK, the app it came from (`web`, `ios`, `macos`, `android`, `terminal`) when known. */
+  client: string | null;
+  at: string;
+}
+
+/**
+ * The session detail's and list row's word on its mode. `permissionMode` is the owner's intent and is never
+ * rewritten by normalization; `actualPermissionMode` is what the engine runs in (null until a claim since 1317,
+ * and absent from an older server). Clients that read neither keep working: both are additions.
+ */
+export interface SessionPermissionModeFacts {
+  permissionMode?: string | null;
+  actualPermissionMode?: string | null;
+  actualPermissionModeAt?: string | null;
+  /** Detail only: the newest changes, oldest first (at most SESSION_PERMISSION_MODE_CHANGES_LIMIT). */
+  permissionModeChanges?: SessionPermissionModeChange[];
+}
+
+/** How many mode changes the session detail carries. */
+export const SESSION_PERMISSION_MODE_CHANGES_LIMIT = 50;
+
 // ─────────────────────────────── Runner ⇆ control plane ───────────────────────────────
 
 export interface RunnerRegisterRequest {
