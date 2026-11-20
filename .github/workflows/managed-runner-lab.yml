@@ -32,7 +32,9 @@ jobs:
     timeout-minutes: 180
     env:
       SCENARIO: ${{ inputs.scenario }}
-      LAB_DIR: /mnt/managed-runner-lab
+      # On the root disk: /mnt is not mounted on these runners, and a systemd unit naming a path under it
+      # fails on its mnt.mount dependency.
+      LAB_DIR: /opt/managed-runner-lab
       LAB_OUT: ${{ github.workspace }}/lab-out
       PLAYWRIGHT_BROWSERS_PATH: ${{ github.workspace }}/.ms-playwright
     steps:
@@ -49,13 +51,13 @@ jobs:
           sudo udevadm control --reload-rules
           sudo udevadm trigger --name-match=kvm
           ls -l /dev/kvm
-      # Room for the VM's disks, Ceph's images and the runner image: /mnt is the runner's large
-      # temporary disk; preinstalled SDKs the lab never uses leave the root disk.
+      # Room for the VM's disks, Ceph's images and the runner image: preinstalled SDKs the lab
+      # never uses leave the root disk.
       - name: Free disk space
         run: |
           sudo rm -rf /usr/local/lib/android /usr/share/dotnet /opt/ghc /usr/local/.ghcup /usr/share/swift
           sudo install -d -m 0755 "$LAB_DIR"
-          df -h / /mnt
+          df -h /
           free -m
           nproc
       - name: Install the lab's host tools
@@ -79,7 +81,7 @@ jobs:
           npm run build -w @orbit/web
           (cd src/web && npx playwright install --with-deps chromium)
       # The lab's scripts run as root (systemd-run, /dev/kvm) and name /usr/local/bin/node; lab.env
-      # names the lab's directory, which here is on /mnt.
+      # names the lab's directory.
       - name: Point the lab at this runner
         run: |
           sudo ln -sf "$(command -v node)" /usr/local/bin/node

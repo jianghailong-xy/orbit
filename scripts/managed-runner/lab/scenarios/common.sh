@@ -86,7 +86,7 @@ PY
   step "test server: managed runners on, browser switch $browser; gate, link gateway, NATS"
   python3 "$L/login-lab.py" gate start > /dev/null
   local flags=(--managed); [ "$browser" = on ] && flags+=(--browser)
-  bash -x "$L/test-server.sh" start "${flags[@]}" > "$LOGS/test-server.log" 2>&1 \
+  "$L/test-server.sh" start "${flags[@]}" > "$LOGS/test-server.log" 2>&1 \
     || tail_die "$LOGS/test-server.log" 60 "the test server did not start"
   grep -E '^(apiserver|state):' "$LOGS/test-server.log" || true
   LAB_NATS=1 "$SC/link.sh" start > "$LOGS/link-start.log" 2>&1 || tail_die "$LOGS/link-start.log" 30 "the runner link did not start"
