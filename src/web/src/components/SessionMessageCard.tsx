@@ -142,7 +142,7 @@ export const SESSION_MESSAGE_SHOW_LESS = 'Show less';
  * line height, re-measured as the width changes. With no layout to read (an export, a test DOM), it is
  * never tall, so the message shows whole.
  */
-function useTallBody(ref: RefObject<HTMLDivElement | null>, enabled: boolean): boolean {
+export function useTallBody(ref: RefObject<HTMLDivElement | null>, enabled: boolean): boolean {
   const [tall, setTall] = useState(false);
   useEffect(() => {
     const el = ref.current;

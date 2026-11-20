@@ -3160,6 +3160,21 @@ test('the ledger stays append-only, and every later migration is accounted for',
       // 1130 adds three partial indexes, one on `task` and two on `session`; no row is written, and no preserved
       // relation, trigger, function or DONE fence changes.
       '1130_rare_predicate_indexes',
+      // 1140 opens the Feishu bot to the app's availability (docs/feishu-bot-design.md §14): `feishu_app` gains
+      // access_mode, open_workspace_id (foreign key to `workspace`, ON DELETE SET NULL, with its index),
+      // open_permission_mode and four limits, all NOT NULL with constant defaults but the workspace; `feishu_chat_route`
+      // gains source (NOT NULL, constant default) and three nullable first-use columns, and its enabled CHECK is widened
+      // for OPEN_ACCESS rows; `feishu_thread` gains a nullable open_access_open_id with a partial index. Every CHECK and
+      // the foreign key are added NOT VALID and validated. None is a preserved relation, no `task`, `session`, `project`
+      // or `project_acceptance_*` object nor any of the six preserved triggers/functions is named, and no function,
+      // trigger or type is created, replaced or dropped, so it is not another writer of the DONE fence. No INSERT,
+      // UPDATE or DELETE: a constant default is a catalog change.
+      '1140_feishu_open_access',
+      // 1150 adds feishu_app.show_orbit, BOOLEAN NOT NULL with a constant default (catalog-only, no rewrite), for
+      // Show Orbit in Feishu (docs/feishu-bot-design.md §15.2). feishu_app is no preserved relation; no `task`,
+      // `session`, `project` or `project_acceptance_*` object, trigger, function or type is named, created or replaced,
+      // so it is not another writer of the DONE fence. No INSERT, UPDATE or DELETE.
+      '1150_feishu_show_orbit',
       // 1170 adds one partial index on `session`; no row is written, and no preserved relation, trigger, function or
       // DONE fence changes.
       '1170_session_open_list_owner_idx',
@@ -3170,12 +3185,18 @@ test('the ledger stays append-only, and every later migration is accounted for',
       // each that NULL passes to project_standard_set_confirmation, which is not a preserved relation; no row is
       // written, and no trigger, function or DONE fence changes.
       '1200_standard_set_confirmation_wording',
+      // 1213 adds a nullable session.branch_commits (JSONB, no default); no row is written, and no preserved
+      // relation, trigger, function or DONE fence changes.
+      '1213_session_branch_commits',
       // 1220 sets fastupdate = off on run_event's trigram index and merges its pending list; no row is written, and
       // no preserved relation, trigger, function or DONE fence changes.
       '1220_run_event_text_trgm_fastupdate_off',
       // 1240 adds a plain index on project_coordinator_wake (idempotency_key); no row is written, and no preserved
       // relation, trigger, function or DONE fence changes.
-      '1240_project_coordinator_wake_key_idx'],
+      '1240_project_coordinator_wake_key_idx',
+      // 1250 renames each account's managed runner from orbit-managed to Orbit Cloud: an UPDATE of runner.name joined to
+      // managed_runner; runner is not a preserved relation, and no trigger, function or DONE fence changes.
+      '1250_managed_runner_name_orbit_cloud'],
     'a later migration exists; re-read it before trusting the assertions above');
   // Stated rather than described: 0230's fence differs from 0228's by exactly one added lane.
   const later = readFileSync(

@@ -187,6 +187,12 @@ public enum SessionSettings {
             row == .promptSuggestions ? [.row(row), .promptOptimizer] : [.row(row)]
         }
 
+    /// Whether a row is drawn: Optimize For only while smart model selection is on, the one thing that
+    /// reads it (owner, 2026-11-20); its saved value is kept while it is hidden. Every other row always.
+    public static func shows(_ row: Row, smartModelSelection: Bool) -> Bool {
+        row != .optimizeFor || smartModelSelection
+    }
+
     public static func title(_ row: Row) -> String {
         switch row {
         case .defaultPermission: return "Default permission"
@@ -337,16 +343,16 @@ public enum SettingsCopy {
 
     // MARK: Smart model selection (the web page's Session defaults card)
 
-    /// The account's master switch for smart model selection, off unless turned on. On iOS' Sessions
+    /// The account's master switch for smart model selection, on unless turned off. On iOS' Sessions
     /// page the row is the switch and the hint its footer.
     public static let smartModelSelection = "Smart model selection"
-    public static let smartModelSelectionHint = "Coordinators suggest a tier for each task, and Agents you turn this on for run their tasks on that tier's model and effort. Off: tasks run exactly as before."
+    public static let smartModelSelectionHint = "Coordinators suggest a tier for each task, and a SubAgent's size sets its own. Every SubAgent, and the task runs of Agents you turn this on for, run on a model of that tier from your providers. Off: tasks keep their Agent's model and SubAgents their parent session's."
 
     // MARK: Optimize For (board docs/mocks/routing-mode-account, approved 2026-11-19)
 
     /// The account's one routing pick, directly under Smart model selection on Settings → General.
     public static let optimizeFor = "Optimize For"
-    public static let optimizeForHint = "How SubAgents and smart-selected tasks pick a provider, on every Agent."
+    public static let optimizeForHint = "What to favour when a model is picked at a tier."
 
     // MARK: Suggested replies (the web page's Session defaults card)
 

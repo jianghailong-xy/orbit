@@ -21,15 +21,15 @@ class SettingsLogicTest {
         assertEquals("Share task", settingsTitle("share", "TASK:abc"))
     }
 
-    /** UserPreferences.smartModelSelection: on only for an explicit true; absent, or anything but a boolean, is off. */
-    @Test fun smartModelSelectionIsOnOnlyForAnExplicitTrue() {
+    /** UserPreferences.smartModelSelection: off only for an explicit false; absent, or anything but a boolean, is on. */
+    @Test fun smartModelSelectionIsOffOnlyForAnExplicitFalse() {
         fun prefs(json: String) = Json.parseToJsonElement(json).jsonObject
         assertTrue(smartModelSelection(prefs("""{"modelRouting":true}""")))
         assertFalse(smartModelSelection(prefs("""{"modelRouting":false}""")))
-        assertFalse(smartModelSelection(prefs("""{"theme":"dark"}""")))
-        assertFalse(smartModelSelection(prefs("""{"modelRouting":"true"}""")))
-        assertFalse(smartModelSelection(prefs("""{"modelRouting":1}""")))
-        assertFalse(smartModelSelection(null))
+        assertTrue(smartModelSelection(prefs("""{"theme":"dark"}""")))
+        assertTrue(smartModelSelection(prefs("""{"modelRouting":"false"}""")))
+        assertTrue(smartModelSelection(prefs("""{"modelRouting":0}""")))
+        assertTrue(smartModelSelection(null))
     }
 
     /** UserPreferences.optimizeFor: each of the three values parses; absent, or anything else, reads as balance. */

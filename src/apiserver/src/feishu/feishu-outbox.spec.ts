@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
 import { FEISHU_CARD_MAX_BYTES } from './cards/feishu-cards';
-import { FEISHU_TEXT_MAX_BYTES, REPLY_CUT_NOTE, renderSessionReply } from './cards/feishu-reply-cards';
+import { FEISHU_TEXT_MAX_BYTES, REPLY_CUT_NOTE, REPLY_CUT_NOTE_GROUP, renderSessionReply } from './cards/feishu-reply-cards';
 import { FEISHU_OUTBOX_MAX_ATTEMPTS, outboxRetryMs } from './feishu-outbox';
 import { registerFeishuReply } from './feishu-outbox-register';
 import { feishuTiming } from './feishu-timing';
@@ -44,11 +44,30 @@ test('past 30 KB the reply is plain text; past 150 KB it is cut, and says so', (
   const text = (cut.content as { text: string }).text;
   assert.ok(bytes(cut.content) <= FEISHU_TEXT_MAX_BYTES, 'within 150 KB');
   assert.ok(bytes(cut.content) > FEISHU_TEXT_MAX_BYTES - 64, 'and as much of the words as fits');
-  assert.ok(text.endsWith(`\n\n${REPLY_CUT_NOTE}`));
-  assert.ok(huge.startsWith(text.slice(0, -REPLY_CUT_NOTE.length - 2)), 'the head of the words, never a split character');
+  assert.ok(text.endsWith(`\n\n${REPLY_CUT_NOTE_GROUP}`), 'the group\'s note names no Orbit (§15.1)');
+  assert.doesNotMatch(text.slice(-200), /Orbit/);
+  assert.ok(huge.startsWith(text.slice(0, -REPLY_CUT_NOTE_GROUP.length - 2)), 'the head of the words, never a split character');
   const cutDirect = renderSessionReply(huge, URL);
   assert.ok((cutDirect.content as { text: string }).text.endsWith(`${REPLY_CUT_NOTE}\n\nOpen in Orbit: ${URL}`));
   assert.ok(bytes(cutDirect.content) <= FEISHU_TEXT_MAX_BYTES);
+});
+
+test('Show Orbit in Feishu off: the owner\'s reply is plain text, with no Open in Orbit line (§15.2)', () => {
+  const words = '**Done.** The export bug is fixed.';
+  const on = renderSessionReply(words, URL);
+  assert.equal(on.msgType, 'interactive', 'on: the card with its button, as before');
+  const off = renderSessionReply(words, null, true);
+  assert.deepEqual(off, { msgType: 'text', content: { text: words } }, 'off: the words alone, as any chat message');
+  const long = renderSessionReply('a'.repeat(FEISHU_CARD_MAX_BYTES), null, true);
+  assert.deepEqual(long.content, { text: 'a'.repeat(FEISHU_CARD_MAX_BYTES) });
+  const huge = renderSessionReply('修复\n'.repeat(FEISHU_TEXT_MAX_BYTES / 4), null, true);
+  const text = (huge.content as { text: string }).text;
+  assert.ok(bytes(huge.content) <= FEISHU_TEXT_MAX_BYTES);
+  assert.ok(text.endsWith(`\n\n${REPLY_CUT_NOTE}`), 'the owner\'s own chat still says where the rest is');
+  for (const body of [off, long, huge]) {
+    const json = JSON.stringify(body);
+    assert.ok(!json.includes('Open in Orbit') && !json.includes('orbit.example') && !json.includes('http'), json.slice(0, 80));
+  }
 });
 
 test('a failed reply waits 5 s, doubling, at most 10 minutes, a bounded number of times', () => {

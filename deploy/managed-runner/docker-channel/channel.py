@@ -101,7 +101,7 @@ RUNNER_USER = "10001:10001"
 DATA_MOUNT = "/home/orbit"
 BOOT_MOUNT = "/run/orbit-bootstrap"
 TMP_MOUNT = "/tmp"
-RUNNER_NAME = "orbit-managed"
+RUNNER_NAME = "Orbit Cloud"
 MAX_BODY = 64 * 1024
 GiB = 2 ** 30
 # What the runner needs in its environment, and nothing else: never a credential or a generation.

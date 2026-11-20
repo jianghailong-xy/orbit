@@ -286,11 +286,11 @@ describe('a workspace’s Settings page', () => {
   });
 
   it('shows smart selection and its engines only while the account has it on; Optimize For is not here', async () => {
-    await mount(`/settings/workspaces/${ORBIT}`);
+    await mount(`/settings/workspaces/${ORBIT}`, undefined, { preferences: { modelRouting: false } });
     expect($$('.settings-row-title', section('Sessions')).map(text)).toEqual(['Worktree isolation', 'Model']);
     act(() => root?.unmount());
     host?.remove();
-    await mount(`/settings/workspaces/${ORBIT}`, undefined, { preferences: { modelRouting: true } });
+    await mount(`/settings/workspaces/${ORBIT}`, undefined, { preferences: {} });
     expect($$('.settings-row-title', section('Sessions')).map(text)).toEqual([
       'Worktree isolation',
       'Smart model selection for tasks',
@@ -302,6 +302,23 @@ describe('a workspace’s Settings page', () => {
   it('says so for a workspace that does not exist', async () => {
     await mount(`/settings/workspaces/33zx0JhRhJo8rd25d3qAQ`);
     expect(document.body.textContent).toContain("This workspace doesn't exist, or isn't yours.");
+  });
+});
+
+describe('worktree isolation on a directory that is not a git repository', () => {
+  const notGit = { enableWorktree: false, repoUrl: null, workDirExists: true, workDirIsGit: false, workDirProbedAt: '2026-11-20T08:00:00.000Z' };
+
+  it('cannot be switched on, and says why', async () => {
+    const { sent } = await mount(`/settings/workspaces/${ORBIT}`, [workspace(ORBIT, 'orbit', notGit)]);
+    expect(toggle('Worktree isolation').hasAttribute('disabled') || toggle('Worktree isolation').getAttribute('aria-disabled') === 'true').toBe(true);
+    expect(document.body.textContent).toContain('Unavailable: the working directory is not a git repository.');
+    await click(toggle('Worktree isolation'));
+    expect(sent).toEqual([]);
+  });
+
+  it('can be switched on once git will be set up there', async () => {
+    await mount(`/settings/workspaces/${ORBIT}`, [workspace(ORBIT, 'orbit', { ...notGit, autoInitGit: true })]);
+    expect(toggle('Worktree isolation').hasAttribute('disabled')).toBe(false);
   });
 });
 
