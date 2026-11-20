@@ -67,6 +67,7 @@ import {
   parseRule,
   ruleCommandHash,
   runsPerWeek,
+  suggestedEndAt,
   type ScheduleRule,
 } from './schedule-time';
 import { closeUnknownItems } from '../conditions/condition-attention';
@@ -122,6 +123,8 @@ export interface ScheduleCreateInput {
   runLimitMinutes?: number;
   startAt?: Date;
   endAt?: Date | null;
+  /** The planned end by count (§8.5): the schedule stops after this many runs have started. */
+  maxRuns?: number | null;
   baseline?: ScheduleBaseline;
   /** The OWNER names it; a session's create always uses the session's own workspace. */
   workspaceId?: string;
@@ -141,6 +144,11 @@ export interface ScheduleCreateInput {
 export interface ScheduleDecisionInput {
   /** The pressing device's IANA zone, taken only when the CREATE proposal names none (§5.1). */
   timezone?: string | null;
+  /**
+   * The create card's **No end** (§8.5): Create writes no end instead of the suggested one. A card that carries no
+   * suggested end ignores it; an end the person or agent named is never removed by it.
+   */
+  dropSuggestedEnd?: boolean;
 }
 
 export type ScheduleDecisionResult =
@@ -168,6 +176,8 @@ export interface SchedulePatch {
   rule?: unknown;
   timezone?: string;
   endAt?: Date | null;
+  /** null removes it. At or below the runs already started is refused (SCHEDULE_MAX_RUNS_ALREADY_REACHED). */
+  maxRuns?: number | null;
   accessLevel?: AccessLevel;
   runLimitMinutes?: number;
   workspaceId?: string;
@@ -194,11 +204,12 @@ type Tx = Prisma.TransactionClient;
 type FieldValues = Record<string, unknown>;
 
 const PATCH_FIELDS = [
-  'intent', 'title', 'prompt', 'rule', 'timezone', 'endAt', 'accessLevel', 'runLimitMinutes', 'workspaceId', 'readBack',
+  'intent', 'title', 'prompt', 'rule', 'timezone', 'endAt', 'maxRuns', 'accessLevel', 'runLimitMinutes', 'workspaceId',
+  'readBack',
 ] as const;
 
 /** The fields that say when and how much a schedule runs: a change of these alone is no restated goal (§8.2). */
-const RESCHEDULE_FIELDS = ['rule', 'timezone', 'endAt', 'accessLevel', 'runLimitMinutes'] as const;
+const RESCHEDULE_FIELDS = ['rule', 'timezone', 'endAt', 'maxRuns', 'accessLevel', 'runLimitMinutes'] as const;
 
 /**
  * Whether `patch` changes only when and how much the schedule runs, besides any intent and read-back it carries:
@@ -330,6 +341,19 @@ function checkRunLimitFitsRule(rule: ScheduleRule, runLimitMinutes: number): voi
 /** The run limit a schedule gets when it names none: half an EVERY rule's interval, at most the default (30). */
 function defaultRunLimit(rule: ScheduleRule): number {
   return rule.kind === 'EVERY' ? Math.min(DEFAULT_RUN_LIMIT_MINUTES, rule.minutes / 2) : DEFAULT_RUN_LIMIT_MINUTES;
+}
+
+/** A planned end by count is a whole number of started runs, at least 1 (§8.5); null is none. */
+function checkMaxRuns(value: unknown): void {
+  if (value === null) return;
+  if (typeof value !== 'number' || !Number.isInteger(value) || value < 1) {
+    throw refusal('BAD_REQUEST', 'SCHEDULE_MAX_RUNS_INVALID', 'maxRuns is a whole number of runs, at least 1.');
+  }
+}
+
+/** Whether a create card proposes the 7-day end (§8.5): an EVERY rule that names neither endAt nor maxRuns. */
+function suggestsEnd(n: { rule: ScheduleRule; endAt: Date | null; maxRuns: number | null }): boolean {
+  return n.rule.kind === 'EVERY' && n.endAt === null && n.maxRuns === null;
 }
 
 function checkAccessLevel(level: unknown): asserts level is AccessLevel {
@@ -501,7 +525,7 @@ export class SchedulesService {
               kind: 'CREATE',
               askedBy: who.changedBy,
               askedBySessionId: who.sessionId,
-              proposed: this.createProposal(normalized),
+              proposed: this.createProposal(normalized, suggestsEnd(normalized)),
               envelopeAsked: needOf(normalized) as unknown as Prisma.InputJsonValue,
               widens: [],
             },
@@ -621,6 +645,10 @@ export class SchedulesService {
               );
             }
             checkTimezone(timezone);
+            // §8.5: the card's suggested end is the same local time 7 days after this press, unless No end was pressed.
+            if ((request.proposed as FieldValues).suggestedEnd === true && input.dropSuggestedEnd !== true) {
+              proposal.endAt = suggestedEndAt(now, timezone);
+            }
             // Re-judged as the world is now: a workspace deleted since the ask is not one to start runs in.
             if (!(await this.ownsWorkspace(tx, actor.ownerId, proposal.workspaceId))) {
               const superseded = await tx.scheduleChangeRequest.update({
@@ -1048,6 +1076,18 @@ export class SchedulesService {
       after.readBack = readBack;
     }
     if (Object.keys(after).length === 0) return { outcome: 'UNCHANGED', schedule };
+    if (typeof after.maxRuns === 'number') {
+      // §8.5: a count already reached is no planned end; ending now is schedule_end.
+      const started = await tx.scheduleRun.count({ where: { scheduleId: schedule.id, startedAt: { not: null } } });
+      if (after.maxRuns <= started) {
+        throw refusal(
+          'CONFLICT',
+          'SCHEDULE_MAX_RUNS_ALREADY_REACHED',
+          `This schedule has already started ${started} ${started === 1 ? 'run' : 'runs'}; maxRuns must be more than `
+            + 'that. To stop it now, end it instead.',
+        );
+      }
+    }
 
     const revision = schedule.revision + 1;
     const updated = await tx.schedule.update({
@@ -1059,6 +1099,7 @@ export class SchedulesService {
         rule: afterSchedule.rule as Prisma.InputJsonValue,
         timezone: afterSchedule.timezone,
         endAt: afterSchedule.endAt,
+        maxRuns: afterSchedule.maxRuns,
         accessLevel: afterSchedule.accessLevel,
         runLimitMinutes: afterSchedule.runLimitMinutes,
         workspaceId: afterSchedule.workspaceId,
@@ -1130,6 +1171,7 @@ export class SchedulesService {
         timezone: input.timezone,
         startAt,
         endAt: input.endAt,
+        maxRuns: input.maxRuns,
         accessLevel: input.accessLevel,
         runLimitMinutes: input.runLimitMinutes,
         ...envelopeColumns(envelope),
@@ -1347,6 +1389,7 @@ export class SchedulesService {
       throw refusal('BAD_REQUEST', 'SCHEDULE_FIELD_INVALID', 'findings is a plural noun of at most 60 characters.');
     }
     if (input.runLimitMinutes != null) checkRunLimit(input.runLimitMinutes);
+    if (input.maxRuns != null) checkMaxRuns(input.maxRuns);
     if (input.baseline) checkText('baseline key', input.baseline.key);
     const rule = ruleOf(input.rule);
     const runLimitMinutes = input.runLimitMinutes ?? defaultRunLimit(rule);
@@ -1373,23 +1416,28 @@ export class SchedulesService {
       runLimitMinutes,
       startAt: input.startAt ?? null,
       endAt: input.endAt ?? null,
+      maxRuns: input.maxRuns ?? null,
       baseline: input.baseline ?? null,
       readBack: input.readBack?.trim() || null,
       findings: input.findings?.trim() || null,
     };
   }
 
-  private createProposal(n: NormalizedCreate): Prisma.InputJsonValue {
+  /** `suggestedEnd` marks the server's 7-day end (§8.5), which Create turns into an endAt unless No end was pressed. */
+  private createProposal(n: NormalizedCreate, suggestedEnd: boolean): Prisma.InputJsonValue {
     return {
       ...n,
       startAt: n.startAt ? n.startAt.toISOString() : null,
       endAt: n.endAt ? n.endAt.toISOString() : null,
+      ...(suggestedEnd ? { suggestedEnd: true } : {}),
     } as unknown as Prisma.InputJsonValue;
   }
 
   private createFromProposal(p: FieldValues): NormalizedCreate {
+    const { suggestedEnd: _suggested, ...proposed } = p;
     return {
-      ...(p as unknown as NormalizedCreate),
+      ...(proposed as unknown as NormalizedCreate),
+      maxRuns: (p.maxRuns as number | null | undefined) ?? null,
       timezone: (p.timezone as string | null | undefined) ?? null,
       readBack: (p.readBack as string | null | undefined) ?? null,
       findings: (p.findings as string | null | undefined) ?? null,
@@ -1406,6 +1454,7 @@ export class SchedulesService {
       rule: s.rule as unknown as ScheduleRule,
       timezone: s.timezone,
       endAt: s.endAt,
+      maxRuns: s.maxRuns,
       accessLevel: s.accessLevel,
       runLimitMinutes: s.runLimitMinutes,
       workspaceId: s.workspaceId,
@@ -1421,6 +1470,7 @@ export class SchedulesService {
     if (patch.rule !== undefined) next.rule = ruleAfter(next.rule, patch.rule);
     if (patch.timezone !== undefined) (checkTimezone(patch.timezone), (next.timezone = patch.timezone));
     if (patch.endAt !== undefined) next.endAt = patch.endAt;
+    if (patch.maxRuns !== undefined) (checkMaxRuns(patch.maxRuns), (next.maxRuns = patch.maxRuns));
     if (patch.accessLevel !== undefined) (checkAccessLevel(patch.accessLevel), (next.accessLevel = patch.accessLevel));
     if (patch.runLimitMinutes !== undefined) (checkRunLimit(patch.runLimitMinutes), (next.runLimitMinutes = patch.runLimitMinutes));
     if (patch.workspaceId !== undefined) {
@@ -1439,6 +1489,7 @@ export class SchedulesService {
       rule: s.rule,
       timezone: s.timezone,
       endAt: stored(s.endAt),
+      maxRuns: s.maxRuns,
       accessLevel: s.accessLevel,
       runLimitMinutes: s.runLimitMinutes,
       workspaceId: s.workspaceId,
@@ -1479,6 +1530,7 @@ interface Settings {
   rule: ScheduleRule;
   timezone: string;
   endAt: Date | null;
+  maxRuns: number | null;
   accessLevel: AccessLevel;
   runLimitMinutes: number;
   workspaceId: string;

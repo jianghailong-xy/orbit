@@ -410,6 +410,8 @@ export const SCHEDULE_COPY = {
   push: {
     failedBody: 'The last run {reason}. It keeps running until you pause it.',
     goalReachedTitle: '{title} ended itself',
+    /** §8.5: a planned end (endAt or maxRuns) reached; also the ENDED row's read. */
+    stoppedAsPlanned: 'Stopped as planned after {runs}',
   },
   empty: {
     lead: 'Nothing scheduled. Say what should happen and when; an agent sets it up and asks you once.',
@@ -597,7 +599,14 @@ export interface ScheduleView {
   note: string | null;
   revision: number;
   startAt: string;
+  /** The planned end by time (§8.5); null for none. */
   endAt: string | null;
+  /** The planned end by count of started runs (§8.5); null for none. Absent from servers before it. */
+  maxRuns?: number | null;
+  /** The runs it has started in all, counted as the weekly budget counts them. Absent from servers before it. */
+  runsStarted?: number;
+  /** maxRuns minus runsStarted, at least 0; null without maxRuns. Absent from servers before it. */
+  runsLeft?: number | null;
   nextDueAt: string | null;
   consecutiveFailures: number;
   createdFromSessionId: string | null;
@@ -1815,6 +1824,11 @@ export function scheduleFailedPush(input: Parameters<typeof scheduleFailedWaitin
 /** A run ending its own schedule: "Release 2.0 freeze watch ended itself". */
 export function scheduleGoalReachedPushTitle(title: string): string {
   return scheduleFill(C.push.goalReachedTitle, { title });
+}
+
+/** §8.5: "Stopped as planned after 12 runs", "after 1 run": the planned-end push and an ENDED row's read. */
+export function scheduleStoppedAsPlannedText(runs: number): string {
+  return scheduleFill(C.push.stoppedAsPlanned, { runs: `${runs} ${runs === 1 ? 'run' : 'runs'}` });
 }
 
 /** A held schedule's card: "Weekly dependency audit is held". */

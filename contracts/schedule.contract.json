@@ -523,7 +523,8 @@
     },
     "push": {
       "failedBody": "The last run {reason}. It keeps running until you pause it.",
-      "goalReachedTitle": "{title} ended itself"
+      "goalReachedTitle": "{title} ended itself",
+      "stoppedAsPlanned": "Stopped as planned after {runs}"
     },
     "empty": {
       "lead": "Nothing scheduled. Say what should happen and when; an agent sets it up and asks you once.",

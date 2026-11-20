@@ -66,12 +66,14 @@ import {
   heldCopy,
   onceMissedCopy,
   overBudgetCopy,
+  plannedEndCopy,
   runReasonText,
   scheduleHomeSession,
   sendAlerts,
   type ScheduleAlert,
   type ScheduleNotifier,
 } from './schedule-attention';
+import { closeUnknownItems } from '../conditions/condition-attention';
 import type { ConditionFiring } from '../conditions/conditions.service';
 import { sampleHolds } from '../conditions/condition-evaluation';
 import { RUN_BLOCK_MAX_SAMPLES, scheduledRunTurn, type RunBlockFiring } from './schedule-run-block';
@@ -445,6 +447,11 @@ export class ScheduleRunsService {
           await this.holdRun(tx, run, schedule.heldReason ?? 'HELD', now);
           return { outcome: 'HELD' };
         }
+        if (schedule.maxRuns !== null && (await this.startedRuns(tx, schedule.id)) >= schedule.maxRuns) {
+          // §8.5: the planned end by count is reached; nothing starts past it.
+          await tx.scheduleRun.update({ where: { id: runId }, data: { state: 'CANCELLED', endedAt: now, notBeforeAt: null } });
+          return { outcome: 'CANCELLED' };
+        }
         // Computed under the lock, so a session another replica opens for this run after this commits is never one.
         const strays = await tx.session.findMany({
           where: { scheduleRunId: runId, ...LIVE_SESSION },
@@ -499,6 +506,9 @@ export class ScheduleRunsService {
           // The level the run starts with is the one its session is held to (schedule-access.ts runAccessLevel).
           data: { state: 'RUNNING', startedAt: now, sessionId, notBeforeAt: null, accessLevel: schedule.accessLevel },
         });
+        if (schedule.maxRuns !== null && schedule.state !== 'ENDED' && (await this.startedRuns(tx, schedule.id)) >= schedule.maxRuns) {
+          await this.endAtMaxRuns(tx, schedule, runId, now);
+        }
         return { outcome: 'STARTED', open: this.openInput(schedule, run, sessionId, prompt, check.plan) };
       },
       loggedRetry(this.logger, 'scheduleRuns.start'),
@@ -786,6 +796,56 @@ export class ScheduleRunsService {
   }
 
   /** §7.4: a NO_CHANGE run's session is completed once its turn has settled. */
+  /**
+   * §8.5's one push, "Stopped as planned after N runs", for each schedule ENDED (END_REACHED) by its endAt or maxRuns
+   * once no run of it is waiting or under way, so the last run's own push comes first. `plannedEndToldAt`, set under
+   * the schedule lock in the transaction that decides the push, keeps it to one. A ONCE rule, whose end is its only
+   * slot, is marked told and sends none.
+   */
+  async tellPlannedEnds(batch = 25): Promise<string[]> {
+    const live = ['QUEUED', ...IN_PROGRESS] as const;
+    const ended = await this.prisma.schedule.findMany({
+      where: { state: 'ENDED', endedReason: 'END_REACHED', plannedEndToldAt: null, runs: { none: { state: { in: [...live] } } } },
+      orderBy: [{ endedAt: 'asc' }, { id: 'asc' }],
+      take: batch,
+      select: { id: true },
+    });
+    const told: string[] = [];
+    for (const { id } of ended) {
+      const alerts: ScheduleAlert[] = [];
+      try {
+        await withTransactionRetry(
+          this.prisma,
+          async (tx) => {
+            alerts.length = 0;
+            const schedule = await this.lock(tx, id);
+            if (!schedule || schedule.state !== 'ENDED' || schedule.endedReason !== 'END_REACHED' || schedule.plannedEndToldAt) return;
+            if ((await tx.scheduleRun.count({ where: { scheduleId: id, state: { in: [...live] } } })) > 0) return;
+            await tx.schedule.update({ where: { id }, data: { plannedEndToldAt: this.clock() } });
+            if ((schedule.rule as { kind?: string } | null)?.kind === 'ONCE') return;
+            alerts.push({
+              kind: 'PLANNED_END',
+              ownerId: schedule.ownerId,
+              scheduleId: id,
+              runId: null,
+              opens: { scheduleId: id },
+              ownerRequestId: null,
+              ...plannedEndCopy(schedule.title, await this.startedRuns(tx, id)),
+              collapseId: `schedule-planned-end-${id}`,
+            });
+          },
+          loggedRetry(this.logger, 'scheduleRuns.tellPlannedEnds'),
+        );
+      } catch (error) {
+        this.logger.error(`the planned end of schedule ${id} was not told: ${messageOf(error)}`);
+        continue;
+      }
+      await this.alert(alerts);
+      if (alerts.length > 0) told.push(id);
+    }
+    return told;
+  }
+
   async completeNoChangeSessions(batch = 25): Promise<string[]> {
     const sessions = await this.prisma.session.findMany({
       where: {
@@ -1465,6 +1525,36 @@ export class ScheduleRunsService {
       where: { scheduleId, state: 'QUEUED' },
       data: { state: 'SKIPPED', endedAt: now, notBeforeAt: null },
     });
+  }
+
+  /** The runs a schedule has started in all, as §4's budget counts them (§8.5): a retried start is the same row. */
+  private startedRuns(tx: Tx, scheduleId: string): Promise<number> {
+    return tx.scheduleRun.count({ where: { scheduleId, startedAt: { not: null } } });
+  }
+
+  /**
+   * §8.5: the start of run `runId` reached the schedule's maxRuns. ENDED (END_REACHED) in the same transaction, under
+   * the schedule lock the count was read under, so two replicas cannot both start a last run; no next slot, a QUEUED
+   * run CANCELLED, and a WHEN rule's condition ended. The run that reached it goes on; tellPlannedEnds pushes once it
+   * is over.
+   */
+  private async endAtMaxRuns(tx: Tx, schedule: Schedule, runId: string, now: Date): Promise<void> {
+    await tx.schedule.update({
+      where: { id: schedule.id },
+      data: { state: 'ENDED', endedReason: 'END_REACHED', endedAt: now, nextDueAt: null },
+    });
+    await tx.scheduleRun.updateMany({
+      where: { scheduleId: schedule.id, state: 'QUEUED', id: { not: runId } },
+      data: { state: 'CANCELLED', endedAt: now, notBeforeAt: null },
+    });
+    const rule = schedule.rule as unknown as ScheduleRule;
+    if (rule.kind === 'WHEN' && rule.conditionId) {
+      const ended = await tx.condition.updateMany({
+        where: { id: rule.conditionId, state: { not: 'ENDED' } },
+        data: { state: 'ENDED', endedAt: now, trueSince: null, repeatFrom: null },
+      });
+      if (ended.count > 0) await closeUnknownItems(tx, rule.conditionId, now);
+    }
   }
 
   private async holdRun(tx: Tx, run: ScheduleRun, reason: string, now: Date): Promise<void> {

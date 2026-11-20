@@ -132,7 +132,7 @@ describe('schedule contract', () => {
     const attention = read('src/apiserver/src/schedules/schedule-attention.ts');
     for (const fn of [
       'scheduleApprovalWaiting', 'scheduleFailedPush', 'scheduleFailedWaiting', 'scheduleHeldClause', 'scheduleHeldWaiting',
-      'scheduleWidenWaitingText', 'scheduleEnvelopeTitle', 'scheduleGoalReachedPushTitle',
+      'scheduleWidenWaitingText', 'scheduleEnvelopeTitle', 'scheduleGoalReachedPushTitle', 'scheduleStoppedAsPlannedText',
     ]) {
       expect(attention, fn).toContain(`  ${fn},`);
     }

@@ -10163,6 +10163,11 @@ model Schedule {
   timezone                 String
   startAt                  DateTime            @map("start_at") @db.Timestamptz(3)
   endAt                    DateTime?           @map("end_at") @db.Timestamptz(3)
+  /// The planned end by count (§8.5, migration 1280): ENDED (END_REACHED) at the start of the run that reaches it.
+  /// At least 1 (CHECK schedule_max_runs_positive); NULL for none.
+  maxRuns                  Int?                @map("max_runs")
+  /// When the one "Stopped as planned" push was sent, or decided against (a ONCE rule). Bookkeeping, set by the worker.
+  plannedEndToldAt         DateTime?           @map("planned_end_told_at") @db.Timestamptz(3)
   accessLevel              ScheduleAccessLevel @map("access_level")
   runLimitMinutes          Int                 @default(30) @map("run_limit_minutes")
   envelopeWorkspaceId      String              @map("envelope_workspace_id") @db.Uuid

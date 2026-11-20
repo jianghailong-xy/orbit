@@ -177,6 +177,18 @@ function parseLocalDateTime(at: unknown): number {
   return local;
 }
 
+/** How far out a sub-daily rule's suggested end is (§8.5). */
+export const SUGGESTED_END_DAYS = 7;
+
+/**
+ * An EVERY create card's suggested end (§8.5): the same local time `SUGGESTED_END_DAYS` days after `now`, in
+ * `timezone`, so a week across a daylight-saving change is still a week.
+ */
+export function suggestedEndAt(now: Date, timezone: string): Date {
+  const wall = now.getTime() + offsetAt(now.getTime(), timezone);
+  return new Date(instantOfLocal(wall + SUGGESTED_END_DAYS * DAY, timezone));
+}
+
 /** Validates a rule as it arrives from a caller and returns it in its canonical shape. */
 export function parseRule(raw: unknown): ScheduleRule {
   const rule = raw as Partial<Record<string, unknown>> | null;

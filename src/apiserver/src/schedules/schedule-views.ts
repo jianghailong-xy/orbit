@@ -27,7 +27,7 @@ import type { Prisma, Schedule, ScheduleChangeRequest, ScheduleFinding, Schedule
 import { cloudWorkspaceIds } from '../managed-runners/managed-runner-work';
 import { runReasonText } from './schedule-attention';
 import type { Envelope, EnvelopePart } from './schedule-envelope';
-import { instantOfLocal, nextDueAt, offsetAt, parseRule, runsPerWeek, type ScheduleRule } from './schedule-time';
+import { instantOfLocal, nextDueAt, offsetAt, parseRule, runsPerWeek, suggestedEndAt, type ScheduleRule } from './schedule-time';
 
 type Tx = Prisma.TransactionClient;
 
@@ -155,6 +155,9 @@ export function scheduleCardView(request: ScheduleChangeRequest, ctx: ScheduleCa
       timezone: string | null;
       startAt?: string | null;
       endAt?: string | null;
+      maxRuns?: number | null;
+      /** §8.5: the server proposes an end 7 days out, which Create writes unless No end was pressed. */
+      suggestedEnd?: boolean;
       baseline?: { key: string; summary?: string | null; links?: unknown[] } | null;
       findings?: string | null;
     };
@@ -190,6 +193,14 @@ export function scheduleCardView(request: ScheduleChangeRequest, ctx: ScheduleCa
         ? { key: p.baseline.key, summary: p.baseline.summary ?? null, text: p.baseline.summary ?? p.baseline.key }
         : null,
       notice: scheduleCreateNotice(p.findings),
+      // §8.5 Ends: the end the agent named, or the server's suggested one, the same local time 7 days after now (in
+      // UTC until a pressing device names the zone); Create fixes it 7 days after the press. `suggested` is what
+      // offers No end (allow with dropSuggestedEnd).
+      ends: p.suggestedEnd === true && request.state === 'PENDING'
+        ? { endAt: suggestedEndAt(ctx.now, p.timezone ?? 'UTC').toISOString(), maxRuns: null, suggested: true }
+        : p.endAt || p.maxRuns != null
+          ? { endAt: p.endAt ?? null, maxRuns: p.maxRuns ?? null, suggested: false }
+          : null,
       envelope: null,
     };
   }
@@ -338,6 +349,8 @@ export interface ScheduleViewNames {
   engines: Map<string, string | null>;
   /** A WHEN schedule's condition, by the schedule's id. */
   conditions?: Map<string, ScheduleConditionReading>;
+  /** The runs each schedule has started in all, by the schedule's id (§8.5); absent counts as none. */
+  runsStarted?: Map<string, number>;
 }
 
 /**
@@ -373,9 +386,18 @@ export async function scheduleViewNames(
         select: { id: true, scheduleId: true, text: true, unit: true, state: true, lastValue: true, lastSampleAt: true },
       })
     : [];
+  // §8.5: started as §4's budget counts them, a retried start being the same row.
+  const started = schedules.length
+    ? await tx.scheduleRun.groupBy({
+        by: ['scheduleId'],
+        where: { scheduleId: { in: schedules.map((s) => s.id) }, startedAt: { not: null } },
+        _count: { _all: true },
+      })
+    : [];
   return {
     agents: new Map(agents.map((a) => [a.id, a.name])),
     engines,
+    runsStarted: new Map(started.map((g) => [g.scheduleId, g._count._all])),
     conditions: new Map(conditions.map((c) => [c.scheduleId!, {
       id: c.id,
       text: c.text,
@@ -390,6 +412,7 @@ export async function scheduleViewNames(
 /** A schedule as the list shows it. */
 export function scheduleView(s: Schedule, workspaces: Map<string, string>, names?: ScheduleViewNames) {
   const rule = s.rule as unknown as ScheduleRule;
+  const runsStarted = names?.runsStarted?.get(s.id) ?? 0;
   return {
     id: s.id,
     title: s.title,
@@ -421,6 +444,10 @@ export function scheduleView(s: Schedule, workspaces: Map<string, string>, names
     revision: s.revision,
     startAt: s.startAt.toISOString(),
     endAt: s.endAt?.toISOString() ?? null,
+    /** The planned end by count (§8.5), and how far along it is: clients read "3 runs left" from runsLeft. */
+    maxRuns: s.maxRuns,
+    runsStarted,
+    runsLeft: s.maxRuns === null ? null : Math.max(0, s.maxRuns - runsStarted),
     nextDueAt: s.nextDueAt?.toISOString() ?? null,
     consecutiveFailures: s.consecutiveFailures,
     createdFromSessionId: s.createdFromSessionId,
