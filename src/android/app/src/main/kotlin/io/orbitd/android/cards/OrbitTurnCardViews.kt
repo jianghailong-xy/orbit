@@ -141,7 +141,7 @@ internal fun isOrbitTurnCard(card: InteractionCard) =
 
 @Composable
 private fun TurnCardFrame(tag: String, tone: Color, icon: Int, head: String, ts: String?, body: @Composable ColumnScope.() -> Unit) {
-    Column(Modifier.fillMaxWidth().testTag(tag)
+    Column(Modifier.conversationCard().testTag(tag)
         .background(tone.copy(alpha = 0.08f), RoundedCornerShape(8.dp))
         .border(1.dp, tone.copy(alpha = 0.30f), RoundedCornerShape(8.dp))
         .padding(horizontal = 10.dp, vertical = 8.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
