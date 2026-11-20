@@ -2893,14 +2893,14 @@ test('the ledger stays append-only, and every later migration is accounted for',
       '0509_project_promotion_request',
       // 0510 adds nullable owner_request client metadata only; no preserved rows, triggers or DONE fence change.
       '0510_owner_request_resolved_client',
-      // 0511 only replaces 0487's `open_list_bump_owner`, so that an UPDATE of `project_integration_job` that changes
+      // 0511 adds nullable project JSON only; no preserved rows, triggers or DONE fence change.
+      '0511_project_done_task_epochs',
+      // 0512 only replaces 0487's `open_list_bump_owner`, so that an UPDATE of `project_integration_job` that changes
       // nothing but a lease renewal's columns bumps no Open-list counter. No table, column, constraint or trigger is
       // created, altered or dropped; the function writes `open_list_epoch` alone, and none of the six preserved
       // triggers/functions is named or replaced, so it is not another writer of the DONE fence. No INSERT, UPDATE or
       // DELETE runs at apply time.
-      '0511_open_list_renewal_not_a_change',
-      // 0512 adds nullable project JSON only; no preserved rows, triggers or DONE fence change.
-      '0512_project_done_task_epochs',
+      '0512_open_list_renewal_not_a_change',
       // 0513 adds attribution and admits its explicit retry; no preserved row or fence changes.
       '0513_integration_baseline_red',
       // 0514 adds two nullable wiki_maintenance_run columns and their CHECK only; no preserved rows, triggers or DONE fence change.
@@ -2928,9 +2928,8 @@ test('the ledger stays append-only, and every later migration is accounted for',
       '0528_approval_subagent_run',
       // 0530 swaps two CHECKs and lets a probe's wiki_repo_op name no job; no preserved rows, triggers or DONE fence change.
       '0530_wiki_repo_probe',
-      // 0531 adds two nullable owner_request columns (repo_url_norm, workspace_id), swaps owner_request's kind CHECK
-      // for one that admits WIKI_CREATE, adds one CHECK and one partial unique index; `owner_request` is none of the
-      // preserved relations, no trigger, function or DONE fence changes, and no row is written.
+      // 0531 adds WIKI_CREATE owner requests, two nullable columns, two CHECKs and a partial unique index;
+      // no preserved rows, triggers or DONE fence change, and no row is written.
       '0531_owner_request_wiki_create',
       // 0532 adds three nullable conversation_turn columns and their CHECK only; no preserved rows, triggers or DONE
       // fence change.
@@ -3111,6 +3110,9 @@ test('the ledger stays append-only, and every later migration is accounted for',
       '0990_runner_keep_free_default',
       // 0990 adds LAND and nullable schedule_run landing status/SHA; no preserved relations or fences change.
       '0990_schedule_land',
+      // 1000 adds the Claude account swap relay's columns to runner (nullable, and one UUID[] with a constant
+      // default); runner is not one of the preserved relations, and no trigger, function or DONE fence changes.
+      '1000_claude_account_swap',
       // 1030 adds the condition, condition_sample and condition_event tables with their enum types, a nullable
       // owner_request.condition_id with a partial index, and widens owner_request_kind_chk by CONDITION_UNKNOWN;
       // `owner_request` is none of the preserved relations, no trigger, function or DONE fence changes, and no row is
@@ -3151,9 +3153,28 @@ test('the ledger stays append-only, and every later migration is accounted for',
       // DECIDED and REVISED; catalog-only, no row is written, and no preserved relation, trigger, function or DONE
       // fence changes.
       '1110_evidence_undecided_item',
+      // 1120 adds nullable translated_note and translation_lang TEXT columns to task_evidence_decision
+      // so queued send-backs retain their translated text. No constraints or defaults are added,
+      // no existing rows are written, and no preserved relation, trigger, function or DONE fence changes.
+      '1120_evidence_send_back_translation',
       // 1130 adds three partial indexes, one on `task` and two on `session`; no row is written, and no preserved
       // relation, trigger, function or DONE fence changes.
       '1130_rare_predicate_indexes',
+      // 1140 opens the Feishu bot to the app's availability (docs/feishu-bot-design.md §14): `feishu_app` gains
+      // access_mode, open_workspace_id (foreign key to `workspace`, ON DELETE SET NULL, with its index),
+      // open_permission_mode and four limits, all NOT NULL with constant defaults but the workspace; `feishu_chat_route`
+      // gains source (NOT NULL, constant default) and three nullable first-use columns, and its enabled CHECK is widened
+      // for OPEN_ACCESS rows; `feishu_thread` gains a nullable open_access_open_id with a partial index. Every CHECK and
+      // the foreign key are added NOT VALID and validated. None is a preserved relation, no `task`, `session`, `project`
+      // or `project_acceptance_*` object nor any of the six preserved triggers/functions is named, and no function,
+      // trigger or type is created, replaced or dropped, so it is not another writer of the DONE fence. No INSERT,
+      // UPDATE or DELETE: a constant default is a catalog change.
+      '1140_feishu_open_access',
+      // 1150 adds feishu_app.show_orbit, BOOLEAN NOT NULL with a constant default (catalog-only, no rewrite), for
+      // Show Orbit in Feishu (docs/feishu-bot-design.md §15.2). feishu_app is no preserved relation; no `task`,
+      // `session`, `project` or `project_acceptance_*` object, trigger, function or type is named, created or replaced,
+      // so it is not another writer of the DONE fence. No INSERT, UPDATE or DELETE.
+      '1150_feishu_show_orbit',
       // 1170 adds one partial index on `session`; no row is written, and no preserved relation, trigger, function or
       // DONE fence changes.
       '1170_session_open_list_owner_idx',
@@ -3169,17 +3190,29 @@ test('the ledger stays append-only, and every later migration is accounted for',
       // preserved relation, and no trigger, function or DONE fence changes.
       '1201_turn_outcome',
       '1202_turn_outcome_backfill',
+      // 1213 adds a nullable session.branch_commits (JSONB, no default); no row is written, and no preserved
+      // relation, trigger, function or DONE fence changes.
+      '1213_session_branch_commits',
       // 1220 sets fastupdate = off on run_event's trigram index and merges its pending list; no row is written, and
       // no preserved relation, trigger, function or DONE fence changes.
       '1220_run_event_text_trgm_fastupdate_off',
       // 1240 adds a plain index on project_coordinator_wake (idempotency_key); no row is written, and no preserved
       // relation, trigger, function or DONE fence changes.
       '1240_project_coordinator_wake_key_idx',
+      // 1250 renames each account's managed runner from orbit-managed to Orbit Cloud: an UPDATE of runner.name joined to
+      // managed_runner; runner is not a preserved relation, and no trigger, function or DONE fence changes.
+      '1250_managed_runner_name_orbit_cloud',
+      // 1260 adds two nullable columns on runner, bg_job_cpus and bg_job_memory_mb (no default); no row is written,
+      // and no preserved relation, trigger, function or DONE fence changes.
+      '1260_runner_bg_job_limits',
       // 1261 adds nullable session.release_cause with a CHECK every stored row passes (all NULL); 1262 validates it and
       // writes session.finished_at and release_cause on terminal rows only. Session is not a preserved relation, and no
       // trigger, function or DONE fence changes.
       '1261_session_release_cause',
-      '1262_session_release_backfill'],
+      '1262_session_release_backfill',
+      // 1267 adds nullable session.executing_event_at, written by the events path only; no row is written, and no
+      // preserved relation, trigger, function or DONE fence changes.
+      '1267_session_executing_event_at'],
     'a later migration exists; re-read it before trusting the assertions above');
   // Stated rather than described: 0230's fence differs from 0228's by exactly one added lane.
   const later = readFileSync(

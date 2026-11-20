@@ -27,22 +27,30 @@ export const SESSION_TERMINAL_STATUS_READERS: Readonly<Record<string, number>> =
   'src/apiserver/src/help/help-ask-marker.ts': 1,
   'src/apiserver/src/help/help-ask-reads.ts': 1,
   'src/apiserver/src/projects/coordinator-evidence-queue.service.ts': 2,
+  // Arrived from main at acb7448a49 in the merge of 2026-11-20, written before this guard reached main; admitted as found, plan phase 4 moves it with the rest.
+  'src/apiserver/src/projects/coordinator-fact-queue.service.ts': 2,
   'src/apiserver/src/projects/coordinator-handoff.service.ts': 3,
   'src/apiserver/src/projects/landing-session.ts': 4,
   'src/apiserver/src/projects/pending-addressees.ts': 1,
   'src/apiserver/src/projects/project-done-request.ts': 1,
   'src/apiserver/src/projects/project-open-item.ts': 4,
+  // Arrived from main at acb7448a49 in the merge of 2026-11-20, written before this guard reached main; admitted as found, plan phase 4 moves it with the rest.
+  'src/apiserver/src/projects/project-tasks-settled.producer.ts': 1,
   'src/apiserver/src/projects/session-source.ts': 1,
   'src/apiserver/src/providers/active-sessions.ts': 3,
   'src/apiserver/src/push/settle-alert.ts': 2,
   'src/apiserver/src/realtime/reaper.service.ts': 4,
   'src/apiserver/src/runner-api/background-job-wake.ts': 3,
-  'src/apiserver/src/runner-api/runner-api.controller.ts': 26,
+  // 4 of the 30 arrived from main at acb7448a49 in the merge of 2026-11-20 (releaseClaudeAccountSwap's ended-status filter), written before this guard
+  // reached main; admitted as found, plan phase 4 moves them with the rest.
+  'src/apiserver/src/runner-api/runner-api.controller.ts': 30,
   'src/apiserver/src/runner-api/runner-link-hints.ts': 1,
   'src/apiserver/src/runner-api/scheduled-wakeup.ts': 3,
   'src/apiserver/src/runner-api/scheduled-wakeup.worker.ts': 2,
   // The old runner protocol's turn status words translated into the turn outcome; goes when plan phase 6 lets the runner report the outcome itself.
   'src/apiserver/src/runner-api/turn-outcome.ts': 4,
+  // Arrived from main at acb7448a49 in the merge of 2026-11-20, written before this guard reached main; admitted as found, plan phase 4 moves it with the rest.
+  'src/apiserver/src/runners/claude-account-swap.ts': 1,
   'src/apiserver/src/schedules/schedule-runs.service.ts': 10,
   'src/apiserver/src/sessions/auto-retry.service.ts': 9,
   'src/apiserver/src/sessions/session-move.ts': 1,

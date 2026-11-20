@@ -163,7 +163,7 @@ import { GithubConnectionService } from '../github/github-connection.service';
 import { githubRepoUrl } from '../github/github-workspace.service';
 import { PrismaService } from '../prisma/prisma.service';
 import { PREPARED_STATEMENT } from '../prisma/prisma-client';
-import { RUNNER_DISK_BELOW_FLOOR, sessionDiskHoldSql } from '../common/runner-disk-gate';
+import { RUNNER_DISK_BELOW_FLOOR, diskBelowFloor, sessionDiskHoldSql } from '../common/runner-disk-gate';
 import { workspaceCloneHoldSql, workspaceCloneReasonSql } from '../common/workspace-clone-gate';
 import {
   reprojectAfterSettledChecks,
@@ -372,7 +372,7 @@ import {
 } from './engine-signin-preflight';
 import {
   managedRunnerFailedRefusal, managedRunnerStartingNote, mergePendingNext, nextTurnStartingRefusal,
-  resumeBlockedRefusal, sessionRecoveryBody, sessionRefusal,
+  resumeBlockedRefusal, sessionRecoveryBody, sessionRefusal, spawnDiskBelowFloorRefusal, spawnRunnerOfflineRefusal,
 } from './session-recovery';
 import { claudeRegionCreateRefusal, isClaudeRegionError, regionCredentialOf } from '../runners/runner-region';
 import { assertManagedFirstSessionRuntime, managedFirstSessionKey } from '../managed-runners/managed-runner-supply';
@@ -410,6 +410,7 @@ import {
 } from '../providers/account';
 import { sanitizeRunnerEngines, usedRunnerEngines } from '../common/runner-engines';
 import { runnerAccountPausedUntil } from '../common/account-pause';
+import { swapClaudeAccountRecords, type ClaudeAccountSwapApplied } from '../runners/claude-account-swap';
 import { ACCOUNT_MOVE_CAPABILITY, cursorMoveRefusal } from '../providers/account-move-capability';
 import { sessionPoolCodexLogin } from '../providers/codex-login';
 import {
@@ -2826,6 +2827,25 @@ export class SessionsService {
     if (targetRunnerId && targetManaged.managed && !targetManaged.comingBack) {
       throw managedRunnerFailedRefusal(targetRunnerId, { type: 'WORKSPACE', id: workspaceId! }, targetManaged);
     }
+    // The same for a runner that is offline (a managed one coming up is waited for, above) or below its Keep Free
+    // (runner-disk-gate.ts): the claim would hold the child, and the agent that asked would wait on it with nothing to
+    // say why. Refused, with the reason. A workspace not named is the parent's own.
+    const spawnWorkspaceId = workspaceId ?? parent.workspaceId;
+    const spawnTarget = await this.prisma.workspace.findFirst({
+      where: { id: spawnWorkspaceId, ownerId },
+      select: {
+        workDirFreeBytes: true,
+        runner: { select: { id: true, name: true, displayName: true, status: true, minFreeDiskMb: true, ...RUNNER_BEATS } },
+      },
+    });
+    if (spawnTarget?.runner) {
+      if (!targetManaged.managed && !runnerIsOnline(spawnTarget.runner)) {
+        throw spawnRunnerOfflineRefusal(spawnTarget.runner, spawnWorkspaceId);
+      }
+      if (diskBelowFloor(spawnTarget.workDirFreeBytes, spawnTarget.runner.minFreeDiskMb)) {
+        throw spawnDiskBelowFloorRefusal(spawnTarget.runner, spawnWorkspaceId);
+      }
+    }
     const narrowedTo = await this.assertChildModeOrNarrow(ownerId, parent, dto, workspaceId, parentAnchor);
     // A root joins its own tree the first time it spawns; before that it belongs to no tree
     // and must not be counted against one. Nothing else writes this column on the parent, so
@@ -5026,6 +5046,8 @@ export class SessionsService {
       // OpenAI's own id of the ChatGPT account a login-pool session runs on (migration 0324): no response
       // names an account but by its email and masked form (providers/codex-login.ts).
       poolCodexAccountId: _poolCodexAccountId,
+      // The runner-clock stamp that orders a beat's executing sets against event batches (runner-executing-sets.ts).
+      executingEventAt: _executingEventAt,
       // Read, never spread: answered as one `lastUserFrom`, the shape the list row and the summary carry.
       lastUserFromSessionId,
       lastUserFromTitle,
@@ -5466,11 +5488,19 @@ export class SessionsService {
       },
     });
     if (!session) throw linkNotFound();
+    // Shared readers may know that the owner must answer, but never what the card asks.
+    // Keep this in the shared header so public and guest roots and live polling agree.
+    const cards = await this.prisma.approval.findMany({
+      where: { sessionId, status: 'PENDING' },
+      select: { id: true, toolName: true },
+    });
+    const waitingOnOwner = cards.length > 0 && (await visibleQuestions(this.prisma, cards)).length > 0;
     const stateful = withSessionState(session);
     // A parked session can still be working (a self-driven turn, a sub-agent, a job, a wait that
     // wakes it): without this the page read its AWAITING_INPUT as idle and said "Awaiting reply".
     const activity = (await readSessionActivities(this.prisma, [session.id])).get(session.id) ?? null;
     return {
+      waitingOnOwner,
       title: session.title,
       workspaceName: session.workspace?.name ?? null,
       status: stateful.status,
@@ -11944,6 +11974,28 @@ export class SessionsService {
       if (outcome === 'reloaded') this.realtime.notifyInbox(id);
     }
     return stuck;
+  }
+
+  /**
+   * Apply a finished Set as default swap of Claude accounts on a runner (docs/claude-default-swap-contract.md §5): in one
+   * transaction, every record Orbit keys by the two account ids follows its account (swapClaudeAccountRecords), and
+   * each live session on either account is given a reload, so its next turn starts in its account's new folder. The
+   * former Default is named by `formerDefaultEmail`, the runner's `now.accountEmail`, until the owner renames it. After
+   * the commit, each is hinted, which delivers what the swap held. Null when the swap is not the pending one.
+   */
+  async applyClaudeAccountSwap(
+    runnerId: string, added: string, attempt: Date, formerDefaultEmail: string | null = null,
+  ): Promise<ClaudeAccountSwapApplied | null> {
+    const applied = await withTransactionRetry(this.prisma, (tx) => swapClaudeAccountRecords(tx, runnerId, added, attempt, async (lockTx, id) => {
+      await lockTx.$queryRaw`SELECT id FROM "session" WHERE id = ${id}::uuid FOR UPDATE`;
+      await this.insertTurnLocked(lockTx, id, {
+        kind: 'reload',
+        content: JSON.stringify({ provider: AgentProvider.CLAUDE }),
+        clientTurnId: randomUUID(),
+      });
+    }, formerDefaultEmail), loggedRetry(this.logger, 'sessions.applyClaudeAccountSwap'));
+    for (const id of applied?.release ?? []) this.realtime.notifyInbox(id);
+    return applied;
   }
 
   /**

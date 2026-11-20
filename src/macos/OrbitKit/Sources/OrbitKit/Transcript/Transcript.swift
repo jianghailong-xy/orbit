@@ -610,6 +610,10 @@ public struct BackgroundProc: Equatable, Sendable, Identifiable, Codable {
     /// The runtime's own id for the task — the shell id, the agent id, the workflow's task id — read
     /// off the launch receipt. It is what a completion that names no tool_use id is matched by.
     public var taskId: String? = nil
+    /// ISO-8601 of the end the runtime reported (the terminal background_task's time), nil while it
+    /// runs and on rows from before this existed. The folded row shows an ended process until the
+    /// person's next message (`BackgroundRowRule`). Web parity: `BgShell.endedAt`.
+    public var endedAt: String? = nil
 }
 
 /// A live tool-permission / question / plan prompt awaiting a human decision.

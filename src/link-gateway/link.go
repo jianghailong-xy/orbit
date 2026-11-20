@@ -32,8 +32,8 @@ const (
 	runnerSchemaRevisionHeader     = "X-Orbit-Runner-Schema-Revision"
 	runnerContractDigestHeader     = "X-Orbit-Runner-Contract-Digest"
 	runnerCLIVersionHeader         = "X-Orbit-CLI-Version"
-	managedGenerationHeader        = "X-Orbit-Managed-Runner-Generation"
-	managedPodUIDHeader            = "X-Orbit-Managed-Runner-Pod-Uid"
+	managedGenerationHeader        = "X-Orbit-Cloud-Runner-Generation"
+	managedPodUIDHeader            = "X-Orbit-Cloud-Runner-Pod-Uid"
 )
 
 type linkState struct {

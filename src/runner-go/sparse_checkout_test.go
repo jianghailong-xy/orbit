@@ -418,7 +418,7 @@ func TestEveryEngineIsToldWhatItsSparseCheckoutLeavesOut(t *testing.T) {
 	if note == "" || !strings.Contains(note, "`docs/mocks/`, `docs/evidence/`") {
 		t.Fatalf("checkoutInstructions = %q", note)
 	}
-	if got, want := job.appendSystemPrompt(), "Owner instructions.\n\n"+note; got != want {
+	if got, want := job.appendSystemPrompt(), "Owner instructions.\n\n"+branchCommitInstructions(job.WT)+"\n\n"+note; got != want {
 		t.Fatalf("appendSystemPrompt = %q, want the agent's own, then the note: %q", got, want)
 	}
 	for engine, instructions := range engineInstructions(t, job) {

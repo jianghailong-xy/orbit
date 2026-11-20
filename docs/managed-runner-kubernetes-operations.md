@@ -450,7 +450,7 @@ kubectl --kubeconfig $ADMIN_KUBECONFIG --context $TEST_CONTEXT drain <node> --ig
   and taken the stop-report finalizer off. With managed runners switched off, or for a managed Pod no running manager
   records, it waits until its `--timeout` ([When a Pod stays Terminating](#the-stop-report-finalizer)).
   `--skip-wait-for-delete-timeout=SECONDS` passes Pods that have been terminating longer than that.
-- `--pod-selector=app.kubernetes.io/name=orbit-managed-runner` moves only the runners. The lab drains its first node this
+- `--pod-selector=app.kubernetes.io/name=orbit-cloud-runner` moves only the runners. The lab drains its first node this
   way, because the CSI controller plugin runs there too.
 
 Measured:
@@ -639,6 +639,24 @@ checkouts below its floor as any runner does
   `.orbit/checkout-exclude` makes checkouts smaller on either filesystem
   ([the format](runner-troubleshooting.md#f-a-sessions-checkout-lacks-some-paths)).
 
+## Names from before orbit-cloud (2026-11-20)
+
+Until 2026-11-20 these names said `orbit-managed`; they now say `orbit-cloud`. What a cluster already holds keeps working:
+
+- The admission webhook configuration is `orbit-cloud-runner-pods`. One applied earlier is `orbit-managed-runner-pods` and
+  still guards the namespace: it selects no label, and the manager accepts a refusal that starts with either
+  `orbit-cloud-runner-admission` or `orbit-managed-runner-admission`. To move to the new name, apply the template, check
+  the two dry runs, then delete `orbit-managed-runner-pods`.
+- Pods and PVCs the manager makes are labelled `app.kubernetes.io/name: orbit-cloud-runner`. Earlier ones keep
+  `orbit-managed-runner` until they are made again. Nothing in Orbit selects by this label, but a `--pod-selector` of
+  your own should name both.
+- A runner image built before the rename sends `X-Orbit-Managed-Runner-Generation` and `-Pod-Uid`. The apiserver reads
+  those as well as `X-Orbit-Cloud-Runner-*`, so a Pod keeps working until its image is replaced.
+- The hosted runners' image is now `<registry>/orbit-cloud-runner`. The first release after the rename builds and pushes
+  it there; the earlier `<registry>/orbit-managed-runner` digests stay in the registry for a rollback.
+- The namespace is whatever the profile's `kubernetes.namespace` says. An existing `orbit-managed` namespace needs no
+  change.
+
 ## Where each setting lives
 
 | Setting | Where | Applies after |
@@ -649,5 +667,5 @@ checkouts below its floor as any runner does
 | The floor a runner reclaims session checkouts at | Its owner's **Keep Free** on the runner's page; with none, a quarter of the claim's size | The runner's next heartbeat |
 | Idle interval, attempts, backoff, poll, lease, startup deadline, heartbeat freshness, drain | The profile, `lifecycle` | The apiserver's restart |
 | The manager's identity and rights | Its ServiceAccount, Role, ClusterRole and the kubeconfig the profile names | At once (RBAC); the kubeconfig at the apiserver's restart |
-| The admission guard | `ValidatingWebhookConfiguration` `orbit-managed-runner-pods`; the API server's admission configuration (token) | At once; the token at the API server's restart |
+| The admission guard | `ValidatingWebhookConfiguration` `orbit-cloud-runner-pods`; the API server's admission configuration (token) | At once; the token at the API server's restart |
 | The webhook token's hash | The profile, `admission.webhookTokenSha256` | The apiserver's restart |

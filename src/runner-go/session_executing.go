@@ -22,6 +22,11 @@ import (
 //     A subagent the engine runs inside its own process (Claude Code's Agent, Task and Workflow tools) is not stated
 //     while no engine is resident: it went with the engine.
 //
+// The beat says when it was composed (HeartbeatRequest.ExecutingAt), read before the probes are. Every change a probe
+// reads is made before the event that reports it is stamped (emitOne observes before it buffers; a job enters or leaves
+// the tailer's records before its launch or end is emitted), so a change a beat missed carries a TS no earlier than the
+// beat's instant, and the control plane keeps a batch that moved the sets at or after it over the beat.
+//
 // A session is named only while its run has installed its probe (sessionPool.setExecutingProbe); one that is being
 // reclaimed, or whose run has ended, is not named, and the control plane leaves it as it is.
 

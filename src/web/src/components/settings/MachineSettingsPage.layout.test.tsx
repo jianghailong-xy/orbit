@@ -4,7 +4,12 @@ import { createRoot, type Root } from 'react-dom/client';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { MemoryRouter, Route, Routes, useLocation } from 'react-router-dom';
 import { afterAll, afterEach, beforeAll, describe, expect, it, vi } from 'vitest';
-import { MACHINE_RESOURCES_CAPABILITY, type RunnerResourcesAnswer } from '@orbit/shared';
+import {
+  BG_JOB_LIMITS_CAPABILITY,
+  BG_JOB_LIMITS_UNAVAILABLE_CAPABILITY_PREFIX,
+  MACHINE_RESOURCES_CAPABILITY,
+  type RunnerResourcesAnswer,
+} from '@orbit/shared';
 import type { Runner } from '../TasksSidePanel';
 import type { RunnerAttentionInput } from '../../lib/runnerAttention';
 import cases from '../../lib/runnerAttention.cases.json';
@@ -269,6 +274,12 @@ async function typeNumber(input: HTMLInputElement, value: string, finish: 'blur'
 }
 
 /** Opens Keep Free and reads what it offers. */
+async function capacityOptions(label: string) {
+  await click($(`[role="combobox"][aria-label="${label}"]`));
+  // The list opened last: an earlier Select's closed list can stay in the document.
+  return $$('[role="option"]', $$('[role="listbox"]').at(-1));
+}
+
 async function keepFreeOptions() {
   await click($('[role="combobox"][aria-label="Keep Free"]'));
   return $$('[role="listbox"] [role="option"]');
@@ -441,6 +452,45 @@ describe('a runner’s page, laid out as web.png', () => {
     expect(sent).toHaveLength(3);
   });
 
+  it('sets each background job limit on pick, Off clears it, and a value set elsewhere shows as it is', async () => {
+    const { sent } = await mount(
+      machine('real wikova', { capabilities: [BG_JOB_LIMITS_CAPABILITY], bgJobMemoryMb: 3000 }),
+    );
+    expect(text($('.rd-job-cpu'))).toBe('Off');
+    expect(text($('.rd-job-memory'))).toBe('3000 MB');
+    expect(text($('.rd-job-limits-hint'))).toBe(
+      'Job CPU and Job Memory limit each background job an agent starts from now on; past its memory a job is ' +
+        'stopped. A job under limits takes no Max Concurrent slot: together, limited jobs get a tenth of the CPU ' +
+        'sessions get when the machine is busy, and at most half its memory.',
+    );
+    const cpus = await capacityOptions('Job CPU');
+    expect(cpus.map(text)).toEqual(['Off', '1 CPU', '2 CPUs', '4 CPUs', '8 CPUs']);
+    await press(cpus[2]);
+    expect(sent.at(-1)).toEqual({ method: 'PATCH', path: `/runners/${RUNNER_ID}`, body: { bgJobCpus: 2 } });
+    const memory = await capacityOptions('Job Memory');
+    expect(memory.map(text)).toEqual(['Off', '2 GB', '3000 MB', '4 GB', '8 GB', '16 GB']);
+    await press(memory[0]);
+    expect(sent.at(-1)).toEqual({ method: 'PATCH', path: `/runners/${RUNNER_ID}`, body: { bgJobMemoryMb: null } });
+    expect(sent).toHaveLength(2);
+  });
+
+  it('greys the background job limits out where the runner cannot apply them, and says why', async () => {
+    const disabled = (label: string) => {
+      const box = $<HTMLButtonElement>(`[role="combobox"][aria-label="${label}"]`);
+      return box.getAttribute('aria-disabled') === 'true' || box.disabled || box.hasAttribute('data-disabled');
+    };
+    await mount(machine('real wikova', { capabilities: [BG_JOB_LIMITS_UNAVAILABLE_CAPABILITY_PREFIX + 'delegate'] }));
+    expect([disabled('Job CPU'), disabled('Job Memory')]).toEqual([true, true]);
+    expect(text($('.rd-job-limits-hint'))).toBe(
+      "Background job limits need the runner's service reinstalled: run `orbit register` on the machine, then restart it.",
+    );
+  });
+
+  it('asks for a runner update before background job limits on a runner too old to declare them', async () => {
+    await mount(machine('real wikova', { capabilities: [] }));
+    expect(text($('.rd-job-limits-hint'))).toBe('Update the runner to limit background jobs on this machine.');
+  });
+
   it('fills Max Concurrent’s bar amber once every slot is taken', async () => {
     await mount(machine('real wikova', { activeSessions: 12 }));
     expect(text($('.machine-meter-value', capacityRow('Max Concurrent')))).toBe('12 of 12 running');
@@ -467,8 +517,13 @@ describe('a runner’s page, laid out as web.png', () => {
     ]);
     expect($('[data-resource="disk"]').className).toBe('machine-res-tile warn');
     expect($$('.machine-res-spark')).toEqual([]);
-    // Capacity keeps the two settings; the disk is a reading, under Resources.
-    expect($$('.machine-section-capacity .settings-row-title').map(text)).toEqual(['Max Concurrent', 'Keep Free']);
+    // Capacity keeps its settings — the disk is a reading, under Resources — and the background job limits.
+    expect($$('.machine-section-capacity .settings-row-title').map(text)).toEqual([
+      'Max Concurrent',
+      'Keep Free',
+      'Job CPU',
+      'Job Memory',
+    ]);
     expect(text($('.machine-section-capacity .rd-hint'))).toBe(
       'Max Concurrent applies to the next session it picks up — no restart. Below Keep Free, new sessions and ' +
         'task runs wait until space frees up, and finished worktrees are cleaned up sooner.',

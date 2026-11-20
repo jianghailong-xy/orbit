@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
-import { diskBelowFloor } from './tasks.service';
+import { diskBelowFloor } from '../common/runner-disk-gate';
 
 const MB = 1024n * 1024n;
 

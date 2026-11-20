@@ -1295,7 +1295,7 @@ test('an escalated item whose coordinator cannot be reached says so, not "no one
   const live = { status: 'AWAITING_INPUT', endReason: null, completedAt: null, archivedAt: null, deletedAt: null, cancelRequestedAt: null };
   const cases = [
     { what: 'reaped, runner away', session: { ...live, status: 'FAILED', cancelRequestedAt: new Date() }, blocked: 'RUNNER_OFFLINE',
-      title: 'Now yours — the coordinator can’t take messages' },
+      title: 'Now yours — no one acted on this for 2h 56m' },
     { what: 'live, but no message reaches it', session: live, blocked: 'RUN_RETIRED',
       title: 'Now yours — the coordinator can’t take messages' },
     { what: 'reachable', session: live, blocked: null, title: 'Now yours — no one acted on this for 2h 56m' },

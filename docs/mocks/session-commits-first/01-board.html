@@ -1,0 +1,329 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Session branch bar: commits first</title>
+<style>
+* { box-sizing: border-box; }
+body { margin: 0; background: #e9e9ee; }
+.board { width: 1760px; padding: 44px 48px 56px; background: #f4f4f7; color: #16161a;
+  font: 15px/1.6 Inter, "Noto Sans SC", sans-serif; -webkit-font-smoothing: antialiased; }
+h1 { font-size: 28px; line-height: 1.3; letter-spacing: -.01em; margin: 0 0 10px; }
+.lede { color: #4a4a54; font-size: 15.5px; max-width: 1500px; margin: 0 0 26px; }
+code { font: 12.5px "JetBrains Mono", monospace; background: #e3e3ea; border-radius: 4px; padding: 1px 5px; }
+.section { display: flex; align-items: baseline; gap: 14px; margin: 34px 0 16px; padding-top: 18px; border-top: 1px solid #dcdce3; }
+.section.first { border-top: 0; padding-top: 0; margin-top: 0; }
+.sec { flex: none; font-size: 15px; font-weight: 700; border-radius: 999px; padding: 3px 14px; }
+.sec.now { background: #ffe0dc; color: #8f1d13; }
+.sec.after { background: #d9e6ff; color: #14428f; }
+.sec.ask { background: #fff0c2; color: #6b4a00; }
+.sec-sub { color: #5a5a64; font-size: 14.5px; }
+.grid2 { display: grid; grid-template-columns: 1fr 1fr; gap: 26px; align-items: start; }
+.grid3 { display: grid; grid-template-columns: repeat(3, 1fr); gap: 22px; align-items: start; }
+.tile { min-width: 0; margin: 0; background: #fff; border-radius: 16px; padding: 18px 20px 16px; box-shadow: 0 0 0 1px rgba(0,0,0,.05), 0 2px 8px rgba(0,0,0,.04); }
+.tile + .tile.stack { margin-top: 26px; }
+.tile-title { font-size: 16px; font-weight: 650; margin: 0 0 12px; display: flex; align-items: center; gap: 8px; }
+.num { display: inline-flex; width: 22px; height: 22px; border-radius: 50%; background: #e5372b; color: #fff;
+  font-size: 12.5px; font-weight: 700; align-items: center; justify-content: center; flex: none; }
+.notes { list-style: none; margin: 12px 0 0; padding: 0; font-size: 14px; line-height: 1.6; color: #34343c; }
+.notes li { display: flex; gap: 10px; margin: 6px 0; }
+.notes li .num { margin-top: 1px; width: 20px; height: 20px; font-size: 11.5px; }
+.cmp { width: 100%; border-collapse: collapse; font-size: 14px; }
+.cmp th, .cmp td { text-align: left; vertical-align: top; padding: 9px 10px; border-top: 1px solid #ececf1; line-height: 1.55; }
+.cmp th { border-top: 0; color: #6a6a74; font-size: 13px; font-weight: 600; }
+.cmp td:first-child { width: 210px; font-weight: 600; }
+
+/* ---- product surface (tokens from src/web/src/index.css, light theme) ---- */
+.ui { --bg-base:#fff; --bg-subtle:#fafbfc; --bg-sunken:#f7f8fa; --bg-hover:#f5f6f7; --border:#dee0e3; --border-subtle:#eceef1;
+  --text-1:#1f2329; --text-2:#646a73; --text-3:#8f959e; --text-4:#a8acb3; --green:#2a9d4b; --red:#d1453b; --accent:#3370ff;
+  --warn:#b76e00; --warn-bg:#fff7e6; --warn-border:#ffe1a8;
+  font: 13px/1.45 Inter, "Noto Sans SC", sans-serif; color: var(--text-1);
+  background: #fff; border: 1px solid #e3e4e8; border-radius: 12px; padding: 14px; position: relative; }
+.ui .mono { font-family: "JetBrains Mono", monospace; }
+.wt-bar { border: 1px solid var(--border-subtle); border-radius: 8px; background: var(--bg-subtle); overflow: hidden; margin-bottom: 8px; }
+.wt-row { overflow: hidden; display: flex; align-items: center; gap: 8px; min-height: 30px; padding: 2px 10px; font-size: 12px; }
+.wt-branch { display: inline-flex; align-items: center; gap: 5px; padding: 2px 7px; border: 1px solid var(--border); border-radius: 6px;
+  background: #fff; font: 11.5px "JetBrains Mono", monospace; color: var(--text-1); white-space: nowrap; flex: none; }
+.wt-branch .p { color: var(--text-3); }
+.dim { color: var(--text-3); white-space: nowrap; }
+.fr { display:inline-flex; width:22px; height:22px; border-radius:6px; background:#16161a; color:#fff; font-size:12.5px; font-weight:700; align-items:center; justify-content:center; flex:none; }
+.add { color: var(--green); font-family: "JetBrains Mono", monospace; font-size: 11.5px; }
+.del { color: var(--red); font-family: "JetBrains Mono", monospace; font-size: 11.5px; }
+.sp { flex: 1; }
+.merged { color: var(--green); font-weight: 600; white-space: nowrap; }
+.count { font-weight: 600; white-space: nowrap; }
+.subj { color: var(--text-1); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; min-width: 0; }
+.caret { color: var(--text-3); font-size: 10px; }
+.btn { border: 1px solid var(--border); background: #fff; border-radius: 6px; padding: 2px 9px; font-size: 12px; font-weight: 500; white-space: nowrap; }
+.btn.pri { background: var(--accent); border-color: var(--accent); color: #fff; }
+.panel { border-top: 1px solid var(--border-subtle); padding: 4px 0; background: #fff; }
+.frow { display: flex; gap: 8px; padding: 3px 12px; font: 11.5px "JetBrains Mono", monospace; color: var(--text-2); }
+.frow .sp { flex: 1; }
+.crow { display: grid; grid-template-columns: 14px 1fr auto auto auto; gap: 10px; align-items: center; padding: 6px 12px; font-size: 12.5px; }
+.crow:hover, .crow.hover { background: var(--bg-hover); }
+.crow .dot { width: 8px; height: 8px; border-radius: 50%; background: var(--text-3); justify-self: center; }
+.crow .dot.pend { background: #fff; border: 1.5px dashed var(--warn); }
+.crow .dot.auto { background: #fff; border: 1.5px solid var(--text-4); }
+.crow .t { min-width: 0; }
+.crow .s { font-weight: 550; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.crow .m { font-size: 11.5px; color: var(--text-3); display: flex; gap: 6px; align-items: center; }
+.crow .sha { font: 11px "JetBrains Mono", monospace; color: var(--text-3); }
+.turn { font-size: 11px; color: var(--accent); background: #eef3ff; border-radius: 4px; padding: 0 5px; }
+.tagx { font-size: 11px; border-radius: 4px; padding: 0 5px; }
+.tagx.auto { background: #eff0f2; color: var(--text-2); }
+.tagx.pend { background: var(--warn-bg); color: var(--warn); border: 1px solid var(--warn-border); }
+.pfoot { display: flex; align-items: center; gap: 8px; padding: 6px 12px 4px; border-top: 1px solid var(--border-subtle); font-size: 12px; color: var(--text-2); }
+.link { color: var(--accent); }
+.composer { border: 1px solid var(--border); border-radius: 14px; padding: 10px 14px; background: #fff; box-shadow: 0 1px 4px rgba(0,0,0,.05); }
+.composer .ph { color: var(--text-4); font-size: 13.5px; min-height: 22px; }
+.composer .txt { font-size: 13.5px; min-height: 22px; }
+.composer .foot { display: flex; align-items: center; gap: 12px; margin-top: 10px; font-size: 12px; color: var(--text-2); }
+.send { width: 24px; height: 24px; border-radius: 50%; background: #c9ccd3; color: #fff; display: inline-flex; align-items: center; justify-content: center; font-size: 13px; }
+.send.on { background: var(--accent); }
+.mk { position: absolute; }
+.mk .num { box-shadow: 0 0 0 2.5px #fff, 0 2px 6px rgba(0,0,0,.3); }
+
+/* drawer */
+.drawer { display: grid; grid-template-columns: 250px 1fr; border: 1px solid var(--border); border-radius: 10px; overflow: hidden; background: #fff; }
+.d-left { border-right: 1px solid var(--border-subtle); background: var(--bg-subtle); padding: 8px 0; }
+.d-tabs { display: flex; gap: 4px; padding: 2px 10px 8px; font-size: 12px; }
+.d-tab { padding: 2px 9px; border-radius: 6px; color: var(--text-2); }
+.d-tab.on { background: #fff; border: 1px solid var(--border); color: var(--text-1); font-weight: 600; }
+.d-c { padding: 6px 12px; font-size: 12.5px; border-left: 2px solid transparent; }
+.d-c.on { background: #fff; border-left-color: var(--accent); }
+.d-c .s { font-weight: 550; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.d-c .m { font-size: 11px; color: var(--text-3); }
+.d-main { padding: 14px 16px; min-width: 0; }
+.d-h { font-size: 15px; font-weight: 650; margin: 0 0 4px; }
+.d-meta { display: flex; gap: 8px; align-items: center; font-size: 12px; color: var(--text-3); margin-bottom: 10px; flex-wrap: wrap; }
+.d-body { font-size: 13px; color: var(--text-2); margin: 0 0 12px; }
+.d-acts { display: flex; gap: 6px; margin-bottom: 12px; }
+.d-files { border: 1px solid var(--border-subtle); border-radius: 8px; overflow: hidden; }
+.d-f { display: flex; gap: 8px; padding: 5px 10px; font: 11.5px "JetBrains Mono", monospace; border-top: 1px solid var(--border-subtle); }
+.d-f:first-child { border-top: 0; }
+.d-f.open { background: var(--bg-sunken); }
+.diff { font: 11.5px/1.6 "JetBrains Mono", monospace; border-top: 1px solid var(--border-subtle); }
+.diff div { padding: 0 10px; white-space: pre; overflow: hidden; }
+.diff .h { color: var(--text-3); background: #f3f6fb; }
+.diff .a { background: #e9f7ee; }
+.diff .r { background: #fdecea; }
+
+/* transcript */
+.turnbox { font-size: 13.5px; color: var(--text-1); padding: 4px 4px 10px; }
+.turnbox p { margin: 0 0 8px; }
+.cchip { display: inline-flex; align-items: center; gap: 7px; border: 1px solid var(--border); border-radius: 8px; padding: 4px 10px; font-size: 12.5px; background: var(--bg-subtle); margin: 2px 0; max-width: 100%; }
+.cchip .g { color: var(--text-3); }
+</style>
+</head>
+<body>
+<div class="board">
+  <h1>Session branch bar: commits first, files one level down</h1>
+  <p class="lede">The bar above the composer answers "what did the agent do, and where is it now". Today its unit is the file. The proposal makes the commit the unit: one intent in the agent's words, tied to the turn that produced it. Files and diffs stay, under a commit. Draft for direction, hand-drawn with the product's tokens; nothing is built.</p>
+
+  <div class="section first"><span class="sec now">Today</span><span class="sec-sub">A size and a file list. Nothing says what the 8 files were changed for.</span></div>
+  <div class="grid2">
+    <figure class="tile">
+      <div class="tile-title">Collapsed</div>
+      <div class="ui">
+        <div class="wt-bar"><div class="wt-row">
+          <span class="wt-branch"><span class="p">⎇ orbit/</span>https-tea-captain-tiktok-row-net-tea<span class="p">-39bcbf</span></span>
+          <span class="add">+479</span><span class="del">−54</span><span class="dim">· 8 files · committed</span>
+          <span class="sp"></span><span class="merged">✓ Merged → develop</span>
+        </div></div>
+        <div class="composer"><div class="ph">Reply…</div><div class="foot"><span>＋</span><span>Auto</span><span class="sp"></span><span><b>DeepSeek V4.1 Flash (ModelHub SG)</b> Ultra</span><span>27%</span><span class="send">↑</span></div></div>
+      </div>
+    </figure>
+    <figure class="tile">
+      <div class="tile-title">Expanded</div>
+      <div class="ui">
+        <div class="wt-bar"><div class="wt-row">
+          <span class="wt-branch"><span class="p">⎇ orbit/</span>https-tea-captain-tiktok-row-net-tea<span class="p">-39bcbf</span></span>
+          <span class="add">+479</span><span class="del">−54</span><span class="dim">· 8 files · committed</span>
+          <span class="sp"></span><span class="merged">✓ Merged → develop</span>
+        </div>
+        <div class="panel">
+          <div class="frow"><span>src/pages/captain/RowList.tsx</span><span class="sp"></span><span class="add">+212</span><span class="del">−31</span></div>
+          <div class="frow"><span>src/pages/captain/useRows.ts</span><span class="sp"></span><span class="add">+96</span><span class="del">−4</span></div>
+          <div class="frow"><span>src/api/tiktok.ts</span><span class="sp"></span><span class="add">+58</span><span class="del">−12</span></div>
+          <div class="frow"><span>src/pages/captain/RowList.test.tsx</span><span class="sp"></span><span class="add">+71</span><span class="del">−0</span></div>
+          <div class="frow dim"><span>… 4 more</span></div>
+        </div></div>
+      </div>
+    </figure>
+  </div>
+
+  <div class="section"><span class="sec after">Proposal</span><span class="sec-sub">The same bar, counted in commits. Every state below is the bar above the composer.</span></div>
+  <div class="grid2">
+    <div>
+      <figure class="tile">
+        <div class="tile-title"><span class="fr">A</span>Collapsed, merged</div>
+        <div class="ui">
+          <div class="wt-bar"><div class="wt-row">
+            <span class="wt-branch"><span class="p">⎇ orbit/</span>https-tea-captain…<span class="p">-39bcbf</span></span>
+            <span class="count">3 commits</span>
+            <span class="subj"><span class="dim">· latest:</span> fix(rows): keep the selected row after a refresh</span>
+            <span class="sp"></span><span class="add">+479</span><span class="del">−54</span><span class="merged">✓ Merged → develop</span><span class="caret">▸</span>
+          </div></div>
+          <div class="composer"><div class="ph">Reply…</div><div class="foot"><span>＋</span><span>Auto</span><span class="sp"></span><span><b>DeepSeek V4.1 Flash (ModelHub SG)</b> Ultra</span><span>27%</span><span class="send">↑</span></div></div>
+        </div>
+        <ul class="notes">
+          <li><span class="num">1</span><span>The count and the latest subject lead. Line counts move to the right as a size hint; "8 files" leaves the collapsed row.</span></li>
+        </ul>
+      </figure>
+
+      <figure class="tile stack">
+        <div class="tile-title"><span class="fr">B</span>Expanded, live session with unsaved work</div>
+        <div class="ui">
+          <div class="wt-bar"><div class="wt-row">
+            <span class="wt-branch"><span class="p">⎇ orbit/</span>https-tea-captain…<span class="p">-39bcbf</span></span>
+            <span class="count">2 commits</span><span class="tagx pend">+ uncommitted</span>
+            <span class="sp"></span><span class="add">+431</span><span class="del">−54</span><span class="btn">Commit</span><span class="caret">▾</span>
+          </div>
+          <div class="panel">
+            <div class="crow">
+              <span class="dot pend"></span>
+              <span class="t"><div class="s">Uncommitted changes</div><div class="m"><span>3 files · the agent is still working</span><span class="turn">Turn 5</span></div></span>
+              <span></span><span class="add">+64</span><span class="del">−9</span>
+            </div>
+            <div class="crow hover">
+              <span class="dot"></span>
+              <span class="t"><div class="s">feat(rows): paginate the TikTok row list</div><div class="m"><span class="sha">a41c9e2</span><span>· 12 min ago · 4 files</span><span class="turn">Turn 3</span></div></span>
+              <span class="dim" style="font-size:11.5px">Revert… · Copy sha</span><span class="add">+308</span><span class="del">−35</span>
+            </div>
+            <div class="crow">
+              <span class="dot"></span>
+              <span class="t"><div class="s">refactor(api): one client for the row endpoints</div><div class="m"><span class="sha">7d03b5f</span><span>· 31 min ago · 2 files</span><span class="turn">Turn 2</span></div></span>
+              <span></span><span class="add">+59</span><span class="del">−10</span>
+            </div>
+            <div class="pfoot"><span class="link">All changes</span><span>· 7 files against develop</span><span class="sp"></span><span class="dim">based on develop @ e9f1c07</span></div>
+          </div></div>
+          <div class="composer"><div class="ph">Reply…</div><div class="foot"><span>＋</span><span>Auto</span><span class="sp"></span><span><b>DeepSeek V4.1 Flash (ModelHub SG)</b> Ultra</span><span>31%</span><span class="send">↑</span></div></div>
+        </div>
+        <ul class="notes">
+          <li><span class="num">2</span><span>Uncommitted work is the top row, so a live session is never an empty list. It opens the same diff view as a commit.</span></li>
+          <li><span class="num">3</span><span>Each row: subject, short sha, age, size, and the turn that made it. The turn label jumps to that turn in the transcript.</span></li>
+          <li><span class="num">4</span><span>"All changes" is today's whole-branch file list and diff, kept for a full review.</span></li>
+        </ul>
+      </figure>
+    </div>
+
+    <figure class="tile">
+      <div class="tile-title"><span class="fr">C</span>A commit opened (right-side drawer, replaces the file drawer)</div>
+      <div class="ui" style="padding:10px">
+        <div class="drawer">
+          <div class="d-left">
+            <div class="d-tabs"><span class="d-tab on">Commits 3</span><span class="d-tab">All changes 8</span></div>
+            <div class="d-c"><div class="s">fix(rows): keep the selected row after a refresh</div><div class="m">c98e1d4 · Turn 5</div></div>
+            <div class="d-c on"><div class="s">feat(rows): paginate the TikTok row list</div><div class="m">a41c9e2 · Turn 3</div></div>
+            <div class="d-c"><div class="s">refactor(api): one client for the row endpoints</div><div class="m">7d03b5f · Turn 2</div></div>
+          </div>
+          <div class="d-main">
+            <div class="d-h">feat(rows): paginate the TikTok row list</div>
+            <div class="d-meta"><span class="mono">a41c9e2</span><span>· 12 min ago</span><span class="turn">Turn 3</span><span class="add">+308</span><span class="del">−35</span><span>· 4 files</span></div>
+            <p class="d-body">The list loaded every row at once and timed out past 2,000. It now asks for 50 per page with a cursor, and the hook keeps pages it already has. Tests cover the last page and an empty one.</p>
+            <div class="d-acts"><span class="btn">Revert…</span><span class="btn">Ask about this commit</span><span class="btn">Copy sha</span></div>
+            <div class="d-files">
+              <div class="d-f open"><span>▾ src/pages/captain/useRows.ts</span><span class="sp" style="flex:1"></span><span class="add">+96</span><span class="del">−4</span></div>
+              <div class="diff">
+                <div class="h">@@ -18,7 +18,12 @@ export function useRows(captainId: string) {</div>
+                <div>   const client = useTikTokClient();</div>
+                <div class="r">-  const rows = useQuery(['rows', captainId], () =&gt; client.rows(captainId));</div>
+                <div class="a">+  const rows = useInfiniteQuery({</div>
+                <div class="a">+    queryKey: ['rows', captainId],</div>
+                <div class="a">+    queryFn: ({ pageParam }) =&gt; client.rows(captainId, { cursor: pageParam, limit: 50 }),</div>
+                <div class="a">+    getNextPageParam: (last) =&gt; last.nextCursor ?? undefined,</div>
+                <div class="a">+  });</div>
+                <div>   return rows;</div>
+              </div>
+              <div class="d-f"><span>▸ src/pages/captain/RowList.tsx</span><span class="sp" style="flex:1"></span><span class="add">+131</span><span class="del">−31</span></div>
+              <div class="d-f"><span>▸ src/pages/captain/RowList.test.tsx</span><span class="sp" style="flex:1"></span><span class="add">+71</span><span class="del">−0</span></div>
+              <div class="d-f"><span>▸ src/api/tiktok.ts</span><span class="sp" style="flex:1"></span><span class="add">+10</span><span class="del">−0</span></div>
+            </div>
+          </div>
+        </div>
+      </div>
+      <ul class="notes">
+        <li><span class="num">5</span><span>The message body is the first thing read: why, in the agent's words. Files and the diff come under it.</span></li>
+        <li><span class="num">6</span><span>The left rail flips between commits; the second tab is the whole-branch file list as it is today.</span></li>
+        <li><span class="num">7</span><span>Actions are requests to the agent, not git buttons (frame E). No staging, no branch graph, no cherry-pick.</span></li>
+      </ul>
+    </figure>
+  </div>
+
+  <div class="grid3" style="margin-top:26px">
+    <figure class="tile">
+      <div class="tile-title"><span class="fr">D</span>In the transcript: a turn that committed</div>
+      <div class="ui">
+        <div class="turnbox">
+          <p>The list now loads 50 rows per page and keeps the pages it already has. The tests pass (14 of 14).</p>
+          <span class="cchip"><span class="g">◆</span><b>feat(rows): paginate the TikTok row list</b><span class="sha mono dim">a41c9e2</span><span class="add">+308</span><span class="del">−35</span></span>
+        </div>
+      </div>
+      <ul class="notes"><li><span class="num">8</span><span>One chip per commit at the end of the turn that made it. It opens the drawer on that commit.</span></li></ul>
+    </figure>
+    <figure class="tile">
+      <div class="tile-title"><span class="fr">E</span>"Revert…" writes to the agent</div>
+      <div class="ui">
+        <div class="composer"><div class="txt">Revert commit a41c9e2 "feat(rows): paginate the TikTok row list" and tell me what else depends on it.</div><div class="foot"><span>＋</span><span>Auto</span><span class="sp"></span><span><b>DeepSeek V4.1 Flash</b> Ultra</span><span class="send on">↑</span></div></div>
+      </div>
+      <ul class="notes"><li><span class="num">9</span><span>The button fills the composer; you edit or send. The agent does the git work and its revert shows up as a new commit row.</span></li></ul>
+    </figure>
+    <figure class="tile">
+      <div class="tile-title"><span class="fr">F</span>Edge rows</div>
+      <div class="ui">
+        <div class="wt-bar" style="margin:0"><div class="panel" style="border-top:0">
+          <div class="crow">
+            <span class="dot auto"></span>
+            <span class="t"><div class="s">chore: update 3 files in src/pages/captain</div><div class="m"><span class="sha">5be20aa</span><span>· at session end</span><span class="tagx auto">Auto-saved by Orbit</span></div></span>
+            <span></span><span class="add">+64</span><span class="del">−9</span>
+          </div>
+          <div class="crow">
+            <span class="dot pend"></span>
+            <span class="t"><div class="s">Uncommitted changes</div><div class="m"><span>8 files · no commits yet</span></div></span>
+            <span></span><span class="add">+479</span><span class="del">−54</span>
+          </div>
+        </div></div>
+      </div>
+      <ul class="notes">
+        <li><span class="num">10</span><span>A commit the runner made as a safety net is labelled, so it does not read as the agent's stated intent.</span></li>
+        <li><span class="num">11</span><span>No commits yet: the bar reads "Uncommitted · 8 files" and the list is this one row.</span></li>
+      </ul>
+    </figure>
+  </div>
+
+  <div class="section"><span class="sec after">Rules</span><span class="sec-sub">What each state shows.</span></div>
+  <figure class="tile">
+    <table class="cmp">
+      <tr><th>State</th><th>Collapsed bar</th><th>Expanded list</th><th>Right-hand action</th></tr>
+      <tr><td>Live, nothing changed</td><td>branch only</td><td>not expandable</td><td>none</td></tr>
+      <tr><td>Live, uncommitted only</td><td>Uncommitted · N files · +a −d</td><td>one pending row</td><td>Commit (held while a turn runs, as today)</td></tr>
+      <tr><td>Live, commits + uncommitted</td><td>N commits + uncommitted · +a −d</td><td>pending row, then commits newest first</td><td>Commit</td></tr>
+      <tr><td>Committed, not merged</td><td>N commits · latest subject · +a −d</td><td>commits newest first</td><td>Merge to &lt;target&gt; (as today)</td></tr>
+      <tr><td>Merged</td><td>N commits · latest subject · +a −d</td><td>commits; footer names the merge commit on the target</td><td>✓ Merged → &lt;target&gt;</td></tr>
+      <tr><td>One commit</td><td>its subject replaces "1 commit · latest:"</td><td>one row</td><td>as above</td></tr>
+    </table>
+  </figure>
+
+  <div class="section"><span class="sec ask">For you to decide</span><span class="sec-sub">Each changes what gets built.</span></div>
+  <figure class="tile">
+    <table class="cmp">
+      <tr><th>Decision</th><th>Recommended</th><th>Otherwise</th></tr>
+      <tr><td>A. Who writes commits</td><td>The agent commits per logical step, message from its own context (primer change). The runner's end-of-session commit stays as a labelled safety net.</td><td>Runner-only commits as today: most lists are one row and this view adds little.</td></tr>
+      <tr><td>B. Collapsed lead</td><td>Count + latest subject (frame A).</td><td>Latest subject only, count inside the list: shorter on a phone.</td></tr>
+      <tr><td>C. Commit actions</td><td>Revert and Ask fill the composer (frame E).</td><td>One-press revert run by the runner: faster, but a second way to change the branch that the agent does not see.</td></tr>
+      <tr><td>D. First release</td><td>Read-only list + drawer on web; turn chip and actions follow; iOS, macOS, Android after the web is agreed.</td><td>All clients at once.</td></tr>
+    </table>
+  </figure>
+
+  <div class="section"><span class="sec after">Would touch</span><span class="sec-sub">For sizing only.</span></div>
+  <figure class="tile">
+    <table class="cmp">
+      <tr><td>Runner</td><td colspan="2"><code>src/runner-go/worktree.go</code>: report the commits of base..branch (sha, subject, body, time, per-commit numstat) beside the changed files; a per-commit diff on request; mark its own safety-net commits.</td></tr>
+      <tr><td>Server</td><td colspan="2">Session detail carries the commit list; <code>/sessions/:id/diff</code> takes a commit; a commit records the turn it was made in.</td></tr>
+      <tr><td>Web</td><td colspan="2"><code>src/web/src/components/SessionOutputs.tsx</code> (bar, list, drawer), the transcript's turn footer (chip), <code>src/web/src/api.ts</code>.</td></tr>
+      <tr><td>Primer</td><td colspan="2">Tells a session's agent to commit per logical step with a why-first message (decision A).</td></tr>
+    </table>
+  </figure>
+</div>
+</body>
+</html>

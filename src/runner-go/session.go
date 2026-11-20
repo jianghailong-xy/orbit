@@ -2206,11 +2206,11 @@ func pushLiveDiff(t *Transport, job *ClaimedSession) {
 	liveFiles, livePatches := liveDiff(job.WT)
 	liveBaseSha := job.WT.baseSha()
 	if err := t.diffResult(job.SessionID, DiffResultRequest{
-		ChangedFiles:   liveFiles,
-		ChangedDiff:    livePatches,
-		BaseSha:        liveBaseSha,
-		WorktreeDirty:  worktreeIsDirty(job.WT),
-		BranchSha:      effectiveBranchSha(job.WT),
+		ChangedFiles:  liveFiles,
+		ChangedDiff:   livePatches,
+		BaseSha:       liveBaseSha,
+		WorktreeDirty: worktreeIsDirty(job.WT),
+		BranchSha:     effectiveBranchSha(job.WT), BranchCommits: branchCommits(job.WT),
 		BranchMerged:   branchMergedInto(job.WT),
 		WorktreeBranch: currentBranch(job.WT),
 	}); err != nil {
@@ -2750,7 +2750,7 @@ func runClaudeSessionProcess(ctx context.Context, shutdownCtx context.Context, t
 						TurnID: resp.TurnID, Status: stSucceeded,
 						Result: "started in background", Subtype: "shell",
 						RuntimeSessionID: currentRuntimeSessionID(job),
-						BranchSha:        effectiveBranchSha(job.WT),
+						BranchSha:        effectiveBranchSha(job.WT), BranchCommits: branchCommits(job.WT),
 					}); err != nil {
 						logln("shell turn-complete failed for", job.SessionID+":", err)
 					}
@@ -3011,7 +3011,7 @@ func runClaudeSessionProcess(ctx context.Context, shutdownCtx context.Context, t
 					Result:           fmt.Sprintf("this runner does not understand turns of kind %q; upgrade the runner", resp.Kind),
 					Subtype:          subtypeUnknownKind,
 					RuntimeSessionID: currentRuntimeSessionID(job),
-					BranchSha:        effectiveBranchSha(job.WT),
+					BranchSha:        effectiveBranchSha(job.WT), BranchCommits: branchCommits(job.WT),
 				}); err != nil {
 					logln("unknown-kind turn-complete failed for", job.SessionID+":", err)
 				}
@@ -3262,9 +3262,9 @@ scanLoop:
 					ChangedDiff:      livePatches,
 					BaseSha:          liveBaseSha,
 					WorktreeDirty:    worktreeIsDirty(job.WT),
-					BranchSha:        effectiveBranchSha(job.WT),
-					BranchMerged:     branchMergedInto(job.WT),
-					WorktreeBranch:   currentBranch(job.WT),
+					BranchSha:        effectiveBranchSha(job.WT), BranchCommits: branchCommits(job.WT),
+					BranchMerged:   branchMergedInto(job.WT),
+					WorktreeBranch: currentBranch(job.WT),
 				}); err != nil {
 					logln("turn-complete failed for", job.SessionID+":", err)
 				}

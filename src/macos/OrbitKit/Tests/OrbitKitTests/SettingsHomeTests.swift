@@ -92,6 +92,16 @@ final class SettingsHomeTests: XCTestCase {
                         .row(.optimizeFor), .row(.promptSuggestions), .promptOptimizer, .row(.recaps)])
     }
 
+    /// Optimize For is drawn only while smart model selection is on, the one thing that reads it
+    /// (owner, 2026-11-20); every other row always is.
+    func testOptimizeForShowsOnlyWhileSmartModelSelectionIsOn() {
+        XCTAssertTrue(SessionSettings.shows(.optimizeFor, smartModelSelection: true))
+        XCTAssertFalse(SessionSettings.shows(.optimizeFor, smartModelSelection: false))
+        for row in SessionSettings.Row.allCases where row != .optimizeFor {
+            XCTAssertTrue(SessionSettings.shows(row, smartModelSelection: false), row.rawValue)
+        }
+    }
+
     // MARK: - What a row says
 
     private func runner(_ id: String, online: Bool) throws -> Runner {
