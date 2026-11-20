@@ -40,6 +40,35 @@ const (
 // workflowLimitRetry is how long a call the session's SubAgent limit turned away waits before asking again.
 var workflowLimitRetry = 2 * time.Second
 
+// envWorkflows carries the Agent's Workflows switch into a session (docs/subagent-workflow-design.md §9 D2): the claim
+// says `workflowsDisabled` when the session's Agent has Workflows or SubAgents off, the runner injects it as
+// ORBIT_WORKFLOWS=off, and `orbit mcp` then leaves the workflow tool out of its list and refuses a call of it. delegate
+// does not read it. A spawn reads it once, so an engine started before the switch moved keeps what it was started with.
+const envWorkflows = "ORBIT_WORKFLOWS"
+
+// workflowsEnv renders the ORBIT_WORKFLOWS value the runner injects at spawn.
+func workflowsEnv(disabled bool) string {
+	if disabled {
+		return "off"
+	}
+	return "on"
+}
+
+// workflowsEnabledFromEnv reads ORBIT_WORKFLOWS. Only an explicit off turns the tool off: a runner that predates the
+// switch injects nothing, and its sessions keep the tool, as they always had it.
+func workflowsEnabledFromEnv() bool {
+	switch strings.ToLower(strings.TrimSpace(os.Getenv(envWorkflows))) {
+	case "off", "0", "false", "no":
+		return false
+	default:
+		return true
+	}
+}
+
+// workflowsOffMessage is what a workflow call answers in a session spawned with Workflows off.
+const workflowsOffMessage = "workflow: Workflows are turned off for this agent (ORBIT_WORKFLOWS=off), so this session " +
+	"cannot start one. Hand each piece of work to delegate, or do it in this session."
+
 // isWorkflowToolName reports whether an engine's name for a tool is Orbit's workflow, as isDelegateToolName does.
 func isWorkflowToolName(name string) bool {
 	n := strings.ToLower(strings.TrimSpace(name))
@@ -85,6 +114,10 @@ func workflowToolDescriptor(obj func(map[string]interface{}, ...string) map[stri
 func (s *mcpServer) callWorkflow(args map[string]interface{}, toolUseID string) map[string]interface{} {
 	if os.Getenv(envSubagentRunID) != "" {
 		return toolResult("workflow: a SubAgent cannot start a workflow. Do the work yourself.", true)
+	}
+	// Not listed in such a session; a model that calls it anyway (a name from before a restart) is told why.
+	if s.workflowsOff {
+		return toolResult(workflowsOffMessage, true)
 	}
 	socket, token := os.Getenv(envBgSocket), os.Getenv(envBgToken)
 	if socket == "" || token == "" {

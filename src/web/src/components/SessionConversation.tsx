@@ -3,6 +3,7 @@ import type { SubagentRunView } from '@orbit/shared';
 import { useNavigate } from 'react-router-dom';
 import { encodeId } from '../lib/idCodec';
 import { useSubagentRuns } from '../lib/subagentRuns';
+import { useWorkflowRuns, WorkflowRunsCtx } from '../lib/workflowRuns';
 import type { SessionStream } from '../lib/useSessionStream';
 import { OrbitLinkCardsProvider } from './OrbitLinkCard';
 import { AnsweredQuestionsCtx } from './OwnerAnswerLine';
@@ -87,6 +88,7 @@ export function SessionConversation({
   const navigate = useNavigate();
   const ownRuns = useSubagentRuns(sessionId, givenRuns ? NO_EVENTS : stream.transcriptEvents);
   const subagentRuns = givenRuns ?? ownRuns;
+  const workflowRuns = useWorkflowRuns(sessionId, stream.transcriptEvents);
   return (
     <SessionNavCtx.Provider value={(rawId) => navigate(`/sessions/${encodeId(rawId)}`)}>
       <EventFullCtx.Provider value={stream.fetchEventFull}>
@@ -97,6 +99,7 @@ export function SessionConversation({
                 <LiveToolOutputsCtx.Provider value={stream.liveToolOutputs}>
                   <TaskActivityCtx.Provider value={stream.taskActivity}>
                     <SubagentRunsCtx.Provider value={subagentRuns}>
+                    <WorkflowRunsCtx.Provider value={workflowRuns}>
                     <SubagentWaitingCtx.Provider value={subagentWaiting}>
                     <SubagentQueuedWakesCtx.Provider value={subagentQueuedWakes}>
                     <StreamingDraftsCtx.Provider value={stream.streamingDrafts}>
@@ -121,6 +124,7 @@ export function SessionConversation({
                     </StreamingDraftsCtx.Provider>
                     </SubagentQueuedWakesCtx.Provider>
                     </SubagentWaitingCtx.Provider>
+                    </WorkflowRunsCtx.Provider>
                     </SubagentRunsCtx.Provider>
                   </TaskActivityCtx.Provider>
                 </LiveToolOutputsCtx.Provider>
