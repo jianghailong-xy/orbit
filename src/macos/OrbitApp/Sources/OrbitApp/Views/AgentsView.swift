@@ -2120,6 +2120,7 @@ struct AgentFormContent: View {
     @State private var enabled = true
     @State private var subagentsEnabled = true
     @State private var subagentsMaxRunning = SubagentSettings.defaultMaxRunning
+    @State private var workflowsEnabled = true
     @State private var confirmingDelete = false
     #if os(macOS)
     /// Agent Tools for this workspace (docs/mocks/agent-tools board ⑤), and whether its Edit asked for the
@@ -2200,7 +2201,7 @@ struct AgentFormContent: View {
             }
 
             SubagentSettingsSection(agents: agents, enabled: $subagentsEnabled,
-                                    maxRunning: $subagentsMaxRunning)
+                                    workflowsEnabled: $workflowsEnabled, maxRunning: $subagentsMaxRunning)
 
             if let env = agent.env, !env.isEmpty {
                 Section("Environment") {
@@ -2274,6 +2275,7 @@ struct AgentFormContent: View {
         enabled = agent.enabled ?? true
         subagentsEnabled = agent.subagentsEnabled ?? true
         subagentsMaxRunning = SubagentSettings.maxRunning(agent.subagentsMaxRunning)
+        workflowsEnabled = agent.workflowsEnabled ?? true
     }
 
     /// True when the working copy diverges from the agent as prefilled — mirrors `prefill()` field
@@ -2291,6 +2293,7 @@ struct AgentFormContent: View {
         || enabled != (agent.enabled ?? true)
         || subagentsEnabled != (agent.subagentsEnabled ?? true)
         || subagentsMaxRunning != SubagentSettings.maxRunning(agent.subagentsMaxRunning)
+        || workflowsEnabled != (agent.workflowsEnabled ?? true)
     }
 
     /// Save (only if changed and still valid) then close. An emptied name is invalid — the form was
@@ -2314,7 +2317,8 @@ struct AgentFormContent: View {
             // SubAgents: each only when moved.
             subagentsEnabled: subagentsEnabled != (agent.subagentsEnabled ?? true) ? subagentsEnabled : nil,
             subagentsMaxRunning: subagentsMaxRunning != SubagentSettings.maxRunning(agent.subagentsMaxRunning)
-                ? subagentsMaxRunning : nil
+                ? subagentsMaxRunning : nil,
+            workflowsEnabled: workflowsEnabled != (agent.workflowsEnabled ?? true) ? workflowsEnabled : nil
         )
         Task { await agents.save(agent.id, req) }
     }

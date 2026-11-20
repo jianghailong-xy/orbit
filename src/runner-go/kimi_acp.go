@@ -615,6 +615,7 @@ func startKimiACP(ctx context.Context, t *Transport, job *ClaimedSession, execDi
 		envWatches+"="+watchesEnv(job.WatchesDisabled),
 		envWiki+"="+wikiEnv(job.WikiDisabled),
 		envBrowser+"="+browserEnv(job.BrowserEnabled),
+		envWorkflows+"="+workflowsEnv(job.WorkflowsDisabled),
 		envScheduleRun+"="+scheduleRunEnv(job.ScheduleRun),
 		envMCPPermissionPrompt+"=0",
 		envSpawnDepth+"="+strconv.Itoa(job.SpawnDepth),

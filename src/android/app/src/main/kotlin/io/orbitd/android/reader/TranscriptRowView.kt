@@ -78,7 +78,7 @@ internal fun interface FullEvents { suspend fun full(seq: Long): RunEvent }
 internal val LocalOwnerHeading = staticCompositionLocalOf { ExternalSender.you }
 
 /** The cards that are lines in the agent's stream, each the whole of a turn Orbit opened for its own news. */
-private val WAKE_LINE_KEYS = listOf(":subagent", ":wake", ":watch")
+private val WAKE_LINE_KEYS = listOf(":workflow", ":subagent", ":wake", ":watch")
 
 @Composable
 internal fun TranscriptRowView(row: TranscriptRow, model: FullEvents, live: Transcript?, open: (String) -> Unit, highlighted: Boolean = false,
@@ -98,6 +98,11 @@ internal fun TranscriptRowView(row: TranscriptRow, model: FullEvents, live: Tran
     // Orbit's own SubAgent is one folded block of its own (board docs/mocks/subagent/03.png).
     if (!detailOnly && event.type == "tool_use" && (event.fields.string("name") ?: event.fields.string("toolName")) == SubagentBlock.TOOL_NAME) {
         SubagentBlockView(row, highlighted) { child -> TranscriptRowView(child, model, live, open) }
+        return
+    }
+    // So is an Orbit workflow, which opens to its calls by phase (board docs/mocks/subagent-workflow part 4).
+    if (!detailOnly && event.type == "tool_use" && (event.fields.string("name") ?: event.fields.string("toolName")) == WorkflowBlock.TOOL_NAME) {
+        WorkflowBlockView(row, highlighted) { child -> TranscriptRowView(child, model, live, open) }
         return
     }
     val clipboard = LocalClipboardManager.current

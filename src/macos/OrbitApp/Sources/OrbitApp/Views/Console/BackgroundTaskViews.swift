@@ -16,6 +16,11 @@ struct TaskActivityLookup: Equatable {
     let subagentItems: (String) -> [TranscriptItem]
     /// The `delegate` call's SubAgent run, for the block's tier, model, duration and Why.
     var subagentRun: (String) -> SubagentRunView? = { _ in nil }
+    /// The session's Orbit workflows, by `mcp__orbit__workflow` call, and all of them for a wake's strip.
+    var workflowRun: (String) -> WorkflowRunView? = { _ in nil }
+    var workflows: () -> [WorkflowRunView] = { [] }
+    /// Scrolls the conversation to a top-level call (a workflow's strip to its block).
+    var reveal: ((String) -> Void)? = nil
     /// The session's own engine, which an Agent's chip leads with when the work moved to another one.
     var parentEngine: String? = nil
     var fullPayload: (@MainActor (Int) async -> JSONValue?)? = nil

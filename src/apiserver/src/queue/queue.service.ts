@@ -117,6 +117,7 @@ import { RunnerHints } from '../realtime/runner-hints';
 import { forkAuthorityBindings, sessionSourceSnapshot } from '../projects/session-source';
 import { currentWatchRollout, watchClaimFields } from '../watches/watch-rollout';
 import { currentWikiRollout, wikiClaimFields } from '../wiki/wiki-rollout';
+import { workflowClaimFields } from '../runner-api/workflow-run';
 import { branchName } from '../projects/project-criterion-landing';
 import { codelessClaimFields } from '../sessions/codeless-checkout';
 import { managedRunnerInstanceClaimable, type ManagedRunnerInstance } from '../managed-runners/managed-runner-instance';
@@ -1251,6 +1252,9 @@ export class QueueService {
       // The browser switch (managed-runner-browser-gate.ts): `browserEnabled` while it is on, so the runner spawns the
       // session with the browser tools; absent, they are not there.
       ...browserClaimFields(this.browserGate),
+      // The Agent's Workflows switch (runner-api/workflow-run.ts): `workflowsDisabled` when its sessions may not start
+      // a workflow, so the runner spawns the session without the `workflow` tool. Absent otherwise.
+      ...workflowClaimFields(workspace),
       // A scheduled task's run (docs/scheduled-tasks-design.md §7.1): the runner spawns it with ORBIT_SCHEDULE_RUN=1,
       // which is what lists schedule_run_report in its `orbit mcp`. Absent for every other session.
       ...(session.scheduleRunId ? { scheduleRun: true } : {}),
