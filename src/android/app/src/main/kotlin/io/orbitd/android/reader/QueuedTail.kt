@@ -179,7 +179,7 @@ internal fun QueuedTurnRow(turn: QueuedTurn, open: (String) -> Unit, cancelEnabl
             turn.watch != null -> WatchWakeLine(turn.watch, null, open, queued = turn.cancelable, onWithdraw = withdraw)
             handover != null -> {
                 turn.cards.forEach { card ->
-                    if (card === handover) OwnerAnswerLineView(card, turn.event, queued = turn.delivery == null) else TranscriptCardView(card, open, turn.event)
+                    if (card === handover) OwnerAnswerLineView(card, turn.event, queued = turn.delivery == null, openLink = open) else TranscriptCardView(card, open, turn.event)
                 }
                 foot()
             }
