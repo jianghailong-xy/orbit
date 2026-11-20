@@ -299,6 +299,14 @@ export class DriveService {
     return { ...entryView(current), path: await pathOf(this.prisma, ownerId, current.id) };
   }
 
+  /** The current version of a live file of the account's — what a share link pins — or the entry's own refusal. */
+  async shareableVersion(ownerId: string, entryId: string): Promise<{ id: string; sizeBytes: number }> {
+    const entry = await this.prisma.driveEntry.findFirst({ where: { id: entryId, ownerId, trashedAt: null } });
+    if (!entry) throw notFound();
+    if (entry.kind !== 'FILE' || !entry.currentVersionId) throw refusal(HttpStatus.CONFLICT, DRIVE_NOT_A_FILE, 'Only a file can be shared.');
+    return { id: entry.currentVersionId, sizeBytes: Number(entry.sizeBytes) };
+  }
+
   /** A file's current and replaced versions, newest first. */
   async versions(ownerId: string, entryId: string) {
     const entry = await this.prisma.driveEntry.findFirst({ where: { id: entryId, ownerId } });

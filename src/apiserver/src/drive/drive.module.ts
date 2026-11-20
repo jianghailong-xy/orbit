@@ -1,5 +1,6 @@
 import { Module } from '@nestjs/common';
 import { DriveChunksService } from './drive-chunks.service';
+import { DriveContentService } from './drive-content.service';
 import { DriveController } from './drive.controller';
 import { DriveService } from './drive.service';
 
@@ -7,7 +8,7 @@ import { DriveService } from './drive.service';
 // PrismaService, FilesService and RealtimeService come from their global modules.
 @Module({
   controllers: [DriveController],
-  providers: [DriveService, DriveChunksService],
-  exports: [DriveService, DriveChunksService],
+  providers: [DriveService, DriveChunksService, DriveContentService],
+  exports: [DriveService, DriveChunksService, DriveContentService],
 })
 export class DriveModule {}

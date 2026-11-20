@@ -3,6 +3,7 @@ import { JwtAuthGuard } from '../auth/jwt-auth.guard';
 import { PatForbidden } from '../auth/pat-scope.decorator';
 import { AuthUser, CurrentUser } from '../common/current-user.decorator';
 import { PublicIdPipe } from '../common/public-id';
+import { DriveContentService } from './drive-content.service';
 import { DriveService } from './drive.service';
 import { CreateDriveFolderDto, RestoreDriveVersionDto, UpdateDriveEntryDto } from './dto';
 
@@ -18,7 +19,10 @@ const limitOf = (limit?: string) => (limit === undefined ? undefined : Number.pa
 @PatForbidden('NO_SCOPE')
 @Controller('drive')
 export class DriveController {
-  constructor(private readonly drive: DriveService) {}
+  constructor(
+    private readonly drive: DriveService,
+    private readonly content: DriveContentService,
+  ) {}
 
   @Get('entries')
   list(
@@ -110,5 +114,13 @@ export class DriveController {
   @Get('changes')
   changes(@CurrentUser() user: AuthUser, @Query('since') since?: string) {
     return this.drive.changes(user.userId, since);
+  }
+
+  /** The secret scan before sharing a file (§9): warns, naming the shape and line, and never blocks. */
+  @Post('entries/:id/share-check')
+  @HttpCode(HttpStatus.OK)
+  async shareCheck(@CurrentUser() user: AuthUser, @Param('id', PublicIdPipe) id: string) {
+    const version = await this.drive.shareableVersion(user.userId, id);
+    return { versionId: version.id, ...(await this.content.shareCheck(user.userId, version.id)) };
   }
 }
