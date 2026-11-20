@@ -22,7 +22,8 @@ export interface WorkflowChild {
 }
 type CallChild = WorkflowChild & { id: string };
 
-export type WorkflowCallState = 'queued' | 'running' | 'done' | 'failed';
+/** `stopped`: ended because the workflow was interrupted or stopped, not by its own failure. */
+export type WorkflowCallState = 'queued' | 'running' | 'done' | 'failed' | 'stopped';
 
 export interface WorkflowCall {
   /** The call's tool_use id, `<workflow call>#<callIndex>`. */
@@ -90,13 +91,15 @@ function callOf(child: CallChild, run: SubagentRunView | undefined): WorkflowCal
       ? 'running'
       : run.status === 'DONE'
         ? 'done'
-        : 'failed'
+        : run.status === 'FAILED'
+          ? 'failed'
+          : 'stopped'
     : child.result
       ? child.result.isError
         ? 'failed'
         : 'done'
       : 'queued';
-  const ended = state === 'done' || state === 'failed';
+  const ended = state !== 'queued' && state !== 'running';
   const meta = run
     ? [run.level, run.modelLabel ?? run.model, ended && run.costUsd > 0 ? usd(run.costUsd) : null].filter(Boolean).join(' · ') ||
       null
@@ -117,6 +120,7 @@ function groupCounts(calls: WorkflowCall[]): string {
   return [
     [n('done'), 'done'],
     [n('failed'), 'failed'],
+    [n('stopped'), 'stopped'],
     [n('running'), 'running'],
     [n('queued'), 'queued'],
   ]
@@ -138,13 +142,13 @@ const BUDGET_SPENT = /WorkflowBudgetSpent/;
 
 function bannersOf(view: WorkflowRunView, calls: WorkflowCall[], runs: SubagentRunView[]): WorkflowModel['banners'] {
   const banners: WorkflowModel['banners'] = [];
-  const ended = calls.filter((call) => call.state === 'done' || call.state === 'failed').length;
   if (view.status === 'INTERRUPTED') {
-    const left = calls.length - ended;
+    const kept = calls.filter((call) => call.state === 'done').length;
+    const left = calls.length - kept;
     banners.push({
       tone: 'warn',
       text:
-        `Interrupted: the runner stopped. ${plural(ended, 'call', 'calls')} finished and ${ended === 1 ? 'is' : 'are'} kept` +
+        `Interrupted: the runner stopped. ${plural(kept, 'call', 'calls')} finished and ${kept === 1 ? 'is' : 'are'} kept` +
         (left > 0 ? `; the other ${left} did not finish.` : '.'),
     });
   }
@@ -229,7 +233,8 @@ export function workflowModel(
   const status: SubagentRunStatus = view?.status ?? (running ? 'RUNNING' : 'DONE');
   const ended = all.filter((call) => call.state === 'done' || call.state === 'failed').length;
   const started = Math.max(all.length, view ? view.callsDone + view.callsFailed : 0);
-  const shownEnded = view && status !== 'RUNNING' ? Math.max(ended, view.callsDone + view.callsFailed) : ended;
+  // Counted from the calls, not the runner's totals, which count an interrupted call as failed.
+  const shownEnded = ended;
   const cost = view
     ? view.maxCostUsd !== null
       ? `${usd(view.costUsd)} of ${usd(view.maxCostUsd)}`
@@ -248,7 +253,8 @@ export function workflowModel(
     status,
     ended: shownEnded,
     started,
-    badge: [`${shownEnded} / ${started}`, cost].filter(Boolean).join(' · '),
+    // A workflow that made no call has spent nothing worth a figure.
+    badge: [`${shownEnded} / ${started}`, started > 0 ? cost : null].filter(Boolean).join(' · '),
     live,
     sections,
     banners: view ? bannersOf(view, all, runs) : [],

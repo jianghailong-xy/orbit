@@ -41,6 +41,8 @@ function CallStatus({ call }: { call: WorkflowCall }) {
       return <CheckCircleFilled className="chat-tool-status ok" aria-label="done" />;
     case 'failed':
       return <CloseCircleFilled className="chat-tool-status err" aria-label="failed" />;
+    case 'stopped':
+      return <span className="owf-stop" role="img" aria-label="stopped" />;
     default:
       return <span className="owf-queued">Queued</span>;
   }
