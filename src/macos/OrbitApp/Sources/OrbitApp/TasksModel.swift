@@ -941,7 +941,11 @@ final class TasksModel {
     /// The owner's Remove exemption (§12.15 P-C2, board 04 b): the task's landing runs the project's
     /// landing check again.
     func removeLandingCheckExemption(_ id: String) async {
-        _ = await mutate(id) { _ = try await self.api.updateTask(id, TaskLandingCheckExemption.removeRequest) }
+        guard await mutate(id, { _ = try await self.api.updateTask(id, TaskLandingCheckExemption.removeRequest) })
+        else { return }
+        // `mutate` rereads the detail only while the Tasks section is the one on screen; a task page
+        // opened from a project, a landing or a link must drop the row it just removed too.
+        _ = await loadDetail(id)
     }
 
     /// When the coordinator marked a task exempt: the project's change record keeps the time the

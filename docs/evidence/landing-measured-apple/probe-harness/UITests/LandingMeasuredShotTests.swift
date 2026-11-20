@@ -94,7 +94,9 @@ final class LandingMeasuredShotTests: ProbeCase {
         let mode = identified(app, "landing-check-mode")
         bring(app, mode, between: 160, and: 420, "03-mode")
         expect(app, "npm run check:landing", "03b")
-        expect(app, "set 12m ago", "03b")
+        // The stub stamps it 12 minutes before the launch; a slow pass can read it a minute later.
+        XCTAssertTrue(appears(app, "set 12m ago", timeout: 5) || appears(app, "set 13m ago", timeout: 5)
+                      || appears(app, "set 14m ago", timeout: 5), "03b: no \"set 12m ago\" time")
         XCTAssertTrue(identified(app, "provenance-coordinator").exists, "03b: no Coordinator badge")
         expect(app, "Changes the coordinator makes are listed under Coordinator’s changes.", "03b")
         expect(app, "3 changes", "03b")
