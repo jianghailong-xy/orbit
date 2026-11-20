@@ -3536,18 +3536,18 @@ export const TRANSACTION_PARTICIPANTS: readonly TransactionParticipant[] = [
   // Test-only, and reachable only from the harness's own transaction.
   { at: 'workspaces/main-checkout.service.ts#writeLine', under: 'workspaces/main-checkout.service.ts#finish, #finishNew, #actionResult and #act — the initiating session row FOR UPDATE, then its notice turn or its run_event at max(seq)+1, after the request row its caller already wrote' },
   { at: 'drive/drive.service.ts#finishCommit', under: "drive.commit: under the entry row FOR UPDATE it holds, the entry UPDATE, recordChanges, the staging's chunk rows DELETEd and its row UPDATEd, and one drive_commit INSERT" },
-  { at: 'drive/drive.service.ts#renameOnto', under: 'drive.rename: under the source row FOR UPDATE, the target FOR UPDATE, one drive_version INSERT and its chunk rows, replaceVersion, the target UPDATE, the source DELETE (cascading its versions), deleteEmptyGroups and recordChanges' },
+  { at: 'drive/drive.service.ts#renameOnto', under: 'drive.rename: under the source row FOR UPDATE, the target FOR UPDATE, deleteGroupFor (one drive_trash_group INSERT), the target UPDATE into Trash, the group UPDATE of its counts, the source UPDATE into the target\'s place, and recordChanges. Nothing is deleted: the target keeps every version in Trash' },
   { at: 'drive/drive.service.ts#bound', under: 'every drive.service.ts unit, first: SET LOCAL statement_timeout, which writes no row' },
   { at: 'drive/drive.service.ts#lockAccount', under: 'drive.rename (a folder move), drive.moveToTrash (a folder), drive.restoreGroup, drive.deleteGroup, drive.deleteVersion and drive.emptyTrash: the per-account advisory key, before any row lock' },
   { at: 'drive/drive.service.ts#rootIn', under: "drive.ensureRoot, and every unit writing into the root: the account's root read, or INSERTed ON CONFLICT DO NOTHING" },
   { at: 'drive/drive.service.ts#lockLiveFolder', under: 'drive.createFolder, drive.createFile, drive.rename, drive.restoreVersion and liveDestination: the folder written into, FOR SHARE' },
   { at: 'drive/drive.service.ts#recordChanges', under: "every drive.service.ts unit that changes an entry, last: drive_change INSERTs and an UPDATE of those entries' seq, rows its caller already holds or made" },
-  { at: 'drive/drive.service.ts#insertChunks', under: 'drive.commit and renameOnto: drive_version_chunk INSERTs of a version its caller just made or holds, taking each file_blob row FOR KEY SHARE' },
-  { at: 'drive/drive.service.ts#replaceVersion', under: 'drive.commit, renameOnto and restoreAsCurrent: one drive_trash_group INSERT and an UPDATE of the replaced version, under the entry row FOR UPDATE its caller holds' },
+  { at: 'drive/drive.service.ts#insertChunks', under: 'drive.commit: drive_version_chunk INSERTs of a version its caller just made or holds, taking each file_blob row FOR KEY SHARE' },
+  { at: 'drive/drive.service.ts#replaceVersion', under: 'drive.commit and restoreAsCurrent: one drive_trash_group INSERT and an UPDATE of the replaced version, under the entry row FOR UPDATE its caller holds' },
   { at: 'drive/drive.service.ts#restoreAsCurrent', under: 'drive.restoreGroup and drive.restoreVersion: the entry FOR UPDATE, replaceVersion, the chosen version UPDATE, deleteEmptyGroups, the entry UPDATE and recordChanges' },
-  { at: 'drive/drive.service.ts#deleteGroupFor', under: 'drive.moveToTrash: with a burst key the advisory key of that key and the open group FOR UPDATE, or one drive_trash_group INSERT, and a group UPDATE when the folder deleted is the one its items came from' },
+  { at: 'drive/drive.service.ts#deleteGroupFor', under: 'drive.moveToTrash, and renameOnto for the file a replacing rename puts in Trash (no burst key): with a burst key the advisory key of that key and the open group FOR UPDATE, or one drive_trash_group INSERT, and a group UPDATE when the folder deleted is the one its items came from' },
   { at: 'drive/drive.service.ts#liveDestination', under: 'drive.restoreGroup, under the per-account lock: folders FOR SHARE and one drive_entry INSERT per missing folder' },
-  { at: 'drive/drive.service.ts#deleteEmptyGroups', under: 'drive.rename, drive.restoreVersion, drive.deleteGroup, drive.deleteVersion: a drive_trash_group DELETE of the named groups nothing is in, and an UPDATE of the counts of the rest' },
+  { at: 'drive/drive.service.ts#deleteEmptyGroups', under: 'drive.restoreVersion, drive.deleteGroup, drive.deleteVersion: a drive_trash_group DELETE of the named groups nothing is in, and an UPDATE of the counts of the rest' },
 ];
 
 /** The recurring shapes an autocommit write takes. */

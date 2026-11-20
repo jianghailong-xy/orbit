@@ -662,8 +662,9 @@ export class DriveService {
 
   /**
    * Rename and/or move a live entry (§3.2, §4.1). A taken name is refused 409 DRIVE_NAME_TAKEN unless `replace` (the
-   * door's rename, a write-then-`os.replace` save): then a file onto a file keeps the target's id and gives it a new
-   * version whose chunks are the source's, the target's previous version going to Trash, and the source is removed. A
+   * door's rename, a write-then-`os.replace` save): then a file onto a file moves to the target's place keeping its own
+   * id, so a handle still writing it commits there (`open a.tmp; write; rename a.tmp a.txt; close` ends with a.txt
+   * holding the bytes), and the file it replaced goes to Trash whole, its versions with it, for the owner to restore. A
    * folder moved into itself, or below itself, is refused 409 DRIVE_MOVE_INTO_ITSELF; a folder move takes the account's
    * lock, so no two moves can interleave into a cycle (§1.4).
    */
@@ -697,7 +698,7 @@ export class DriveService {
       const target = await tx.driveEntry.findFirst({ where: { ownerId, parentId: dest.id, name, trashedAt: null, NOT: { id } } });
       if (target) {
         if (!input.replace || target.kind !== 'FILE' || entry.kind !== 'FILE') throw nameTaken(name);
-        return this.renameOnto(tx, ownerId, entry, target, writer, now);
+        return this.renameOnto(tx, ownerId, entry, target, dest.id, name, writer, now);
       }
       const updated = await tx.driveEntry.update({
         where: { id },
@@ -713,30 +714,29 @@ export class DriveService {
     return entryView(outcome.entry);
   }
 
-  /** A file renamed onto a live file: the target keeps its id and gets the source's content as a new version (§3.2). */
-  private async renameOnto(tx: Tx, ownerId: string, source: EntryRow, target: EntryRow, writer: DriveWriter, now: Date) {
+  /**
+   * A file renamed onto a live file (§3.1, §3.2): the source keeps its id and takes the target's place; the target goes to
+   * Trash as an entry, in a DELETE group of its own, with every version it had. Handles are bound to entry ids, so a
+   * handle still writing the source commits into the file now at the target's path, and one still writing the target
+   * commits into it in Trash: nothing either was writing is lost, and the owner can restore what was replaced.
+   */
+  private async renameOnto(tx: Tx, ownerId: string, source: EntryRow, target: EntryRow, dest: string, name: string, writer: DriveWriter, now: Date) {
     await tx.$queryRaw`SELECT "id" FROM "drive_entry" WHERE "id" = ${target.id}::uuid AND "owner_id" = ${ownerId}::uuid FOR UPDATE`;
-    const from = await tx.driveVersion.findUniqueOrThrow({ where: { id: source.currentVersionId! }, include: { chunks: { orderBy: { idx: 'asc' } } } });
-    const previous = await tx.driveVersion.findUniqueOrThrow({ where: { id: target.currentVersionId! } });
-    const versionId = uuidv7();
-    await tx.driveVersion.create({
-      data: { id: versionId, ownerId, entryId: target.id, sizeBytes: from.sizeBytes, chunkCount: from.chunkCount, createdAt: now, ...versionWriterFields(writer) },
-    });
-    await insertChunks(tx, ownerId, versionId, from.chunks.map((c) => ({ sha256: c.sha256, size: c.sizeBytes })));
-    await replaceVersion(tx, ownerId, target, previous, writer, now);
-    const updated = await tx.driveEntry.update({
+    const groupId = await deleteGroupFor(tx, ownerId, target, writer, now, null);
+    // The target leaves the name first, so the live-name index lets the source take it.
+    await tx.driveEntry.update({
       where: { id: target.id },
-      data: { currentVersionId: versionId, sizeBytes: from.sizeBytes, mtime: now, updatedAt: now, ...lastWriterFields(writer, now) },
+      data: { trashedAt: now, trashGroupId: groupId, trashTop: true, updatedAt: now },
     });
-    // The source is removed outright: its content lives on as the target's version. Groups its replaced versions were in
-    // are let go with them.
-    const groups = await tx.driveVersion.findMany({ where: { entryId: source.id, trashGroupId: { not: null } }, select: { trashGroupId: true } });
-    await tx.driveEntry.delete({ where: { id: source.id } });
-    await deleteEmptyGroups(tx, ownerId, groups.map((g) => g.trashGroupId!));
-    const seq = await recordChanges(tx, ownerId, [
-      { entryId: source.id, parentId: source.parentId, op: 'REMOVE' },
-      { entryId: target.id, parentId: target.parentId, op: 'UPSERT' },
-    ]);
+    await tx.driveTrashGroup.update({ where: { id: groupId }, data: { lastAddedAt: now, itemCount: 1, sizeBytes: target.sizeBytes } });
+    const updated = await tx.driveEntry.update({
+      where: { id: source.id },
+      data: { parentId: dest, name, updatedAt: now, ...lastWriterFields(writer, now) },
+    });
+    const changes: ChangeRow[] = [{ entryId: target.id, parentId: target.parentId, op: 'REMOVE' }];
+    if (source.parentId !== dest) changes.push({ entryId: source.id, parentId: source.parentId, op: 'REMOVE' });
+    changes.push({ entryId: source.id, parentId: dest, op: 'UPSERT' });
+    const seq = await recordChanges(tx, ownerId, changes);
     return { entry: { ...updated, seq: BigInt(seq) }, seq };
   }
 

@@ -18,12 +18,16 @@
  *   (7)  nothing in Trash is listed or reached by a path; only the owner's Trash reads show it;
  *   (8)  last-writer fields: the owner, and an agent's session only when it is the owner's and on the runner it came from;
  *   (9)  a folder cannot move into itself; an owner rename onto a taken name is refused; a door rename onto a file
- *        versions the target; a write into a folder in Trash is refused;
+ *        moves the source, keeping its id, into the target's place and puts the target in Trash whole; a write into a
+ *        folder in Trash is refused;
  *   (10) the change feed answers every change, and its look-back delivers a row whose transaction committed after a higher
  *        seq was read; `drive.changed` is announced after each committed change;
  *   (11) delete for good and Empty Trash remove the rows, chunk rows included;
  *   (12) another account's entry, version and group are not found, and its chunks cannot be named;
- *   (13) the retention sweep's step 0 prunes commit answers and feed rows older than a day.
+ *   (13) the retention sweep's step 0 prunes commit answers and feed rows older than a day;
+ *   (14) handles are bound to entry ids (§3.1): an editor's save (`open a.tmp; write; rename a.tmp a.txt; close`)
+ *        commits after the rename and its bytes are a.txt's; the a.txt it replaced is restored from Trash; a commit,
+ *        CONTINUE or OVERWRITE, to an entry in Trash (deleted, or replaced by a rename) lands in it and it stays in Trash.
  *
  * Not destructive: every row belongs to users this run creates.
  */
@@ -416,7 +420,7 @@ test('Orbit Files drive: the name layer — versions, append, Trash groups, rest
     assert.ok(row.lastWrittenAt.getTime() >= row.createdAt.getTime());
   });
 
-  await t.test('(9) moves into itself, taken names and writes into Trash are refused; a door rename onto a file versions it', async () => {
+  await t.test('(9) moves into itself, taken names and writes into Trash are refused; a door rename onto a file takes its place and puts it in Trash', async () => {
     const top = await drive.createFolder(owner, { name: 'Top' });
     const mid = await drive.createFolder(owner, { parentId: top.id, name: 'Mid' });
     await refusedWith(drive.rename(owner, top.id, { parentId: mid.id }), 409, DRIVE_MOVE_INTO_ITSELF);
@@ -426,19 +430,80 @@ test('Orbit Files drive: the name layer — versions, append, Trash groups, rest
     await refusedWith(drive.rename(owner, x, { name: 'y.txt' }), 409, DRIVE_NAME_TAKEN);
     const moved = await drive.rename(owner, x, { parentId: mid.id });
     assert.equal(moved.parentId, mid.id);
-    // A save by write-then-replace: the target keeps its id and gets the source's content as a new version.
+    // A save by write-then-replace: the source keeps its id and takes the target's place; the target goes to Trash whole.
     const tmp = await fileWith(top.id, '.y.txt.swp', 'y edited');
-    const yBefore = await db.driveEntry.findUniqueOrThrow({ where: { id: y } });
     const onto = await drive.rename(owner, tmp, { name: 'y.txt', replace: true, writer: { kind: 'AGENT' } });
-    assert.equal(onto.id, y);
-    assert.equal(await textOf(y), 'y edited');
-    assert.equal(await db.driveEntry.findUnique({ where: { id: tmp } }), null, 'the source is removed outright');
-    assert.notEqual((await db.driveVersion.findUniqueOrThrow({ where: { id: yBefore.currentVersionId! } })).trashGroupId, null);
+    assert.equal(onto.id, tmp);
+    assert.equal((await drive.resolve(owner, '/Top/y.txt')).id, tmp);
+    assert.equal(await textOf(tmp), 'y edited');
+    const replaced = await db.driveEntry.findUniqueOrThrow({ where: { id: y } });
+    assert.notEqual(replaced.trashGroupId, null, 'the replaced file is in Trash, not deleted');
+    assert.equal(replaced.trashTop, true);
+    assert.equal(await textOf(y), 'y', 'with its content');
     // A folder in Trash takes no new entries.
     await drive.moveToTrash(owner, mid.id);
     await refusedWith(drive.createFolder(owner, { parentId: mid.id, name: 'late' }), 404, DRIVE_PARENT_GONE);
     await refusedWith(drive.createFile(owner, { parentId: mid.id, name: 'late.txt' }), 404, DRIVE_PARENT_GONE);
-    await refusedWith(drive.rename(owner, y, { parentId: mid.id }), 404, DRIVE_PARENT_GONE);
+    await refusedWith(drive.rename(owner, tmp, { parentId: mid.id }), 404, DRIVE_PARENT_GONE);
+  });
+
+  await t.test('(14) an editor\'s save commits after its rename into the new path; the replaced file restores; a commit into Trash stays there', async () => {
+    const work = await drive.createFolder(owner, { name: 'Editor' });
+    const original = await fileWith(work.id, 'a.txt', 'the original');
+    const originalVersion = (await db.driveEntry.findUniqueOrThrow({ where: { id: original } })).currentVersionId!;
+    // A handle that has the original open too, and will commit after it is replaced.
+    const otherHandle = randomUUID();
+    await db.driveVersion.update({ where: { id: originalVersion }, data: { handleId: otherHandle } });
+
+    // open a.tmp; write; rename a.tmp a.txt; close: the close's commit comes after the rename.
+    const handle = randomUUID();
+    const tmp = await drive.createFile(owner, { parentId: work.id, name: 'a.tmp', handleId: handle, writer: { kind: 'AGENT' } });
+    const renamed = await drive.rename(owner, tmp.id, { name: 'a.txt', replace: true, writer: { kind: 'AGENT' } });
+    assert.equal(renamed.id, tmp.id, 'the source keeps its id');
+    const closed = await commit(owner, { entryId: tmp.id, handleId: handle, mode: 'CONTINUE', baseVersionId: tmp.currentVersionId, parts: ['the edited text'] });
+    assert.equal(closed.newVersion, false, 'the handle filled the version it was writing');
+    const atPath = await drive.resolve(owner, '/Editor/a.txt');
+    assert.equal(atPath.id, tmp.id);
+    assert.equal(await textOf(atPath.id), 'the edited text', 'the bytes are under the new path');
+    assert.deepEqual(await names(work.id), ['a.txt'], 'and a.tmp is gone from the folder');
+
+    // The handle still open on the replaced file commits into it, in Trash: not lost, and not back at its old path.
+    const replaced = await db.driveEntry.findUniqueOrThrow({ where: { id: original } });
+    assert.notEqual(replaced.trashedAt, null);
+    const late = await commit(owner, { entryId: original, handleId: otherHandle, mode: 'CONTINUE', baseVersionId: originalVersion, parts: ['the original, finished'] });
+    assert.equal(late.newVersion, false);
+    assert.equal(await textOf(original), 'the original, finished');
+    const stillTrashed = await db.driveEntry.findUniqueOrThrow({ where: { id: original } });
+    assert.notEqual(stillTrashed.trashedAt, null, 'it stays in Trash');
+    assert.equal(stillTrashed.trashGroupId, replaced.trashGroupId);
+    assert.equal((await drive.resolve(owner, '/Editor/a.txt')).id, tmp.id, 'the live a.txt is still the saved one');
+
+    // The owner restores the replaced file from Trash: back beside the saved one, with a suffix, and its own content.
+    const listed = (await drive.trash(owner)).groups.find((g) => g.id === replaced.trashGroupId)!;
+    assert.deepEqual(listed.items.map((i) => i.id), [original]);
+    await drive.restoreGroup(owner, replaced.trashGroupId!);
+    assert.deepEqual((await names(work.id)).sort(), ['a (2).txt', 'a.txt']);
+    assert.equal((await drive.resolve(owner, '/Editor/a (2).txt')).id, original);
+    assert.equal(await textOf(original), 'the original, finished');
+
+    // A commit to a deleted file lands in it in Trash, CONTINUE and OVERWRITE alike, and never brings it back.
+    const h = randomUUID();
+    const doomed = await drive.createFile(owner, { parentId: work.id, name: 'doomed.log', handleId: h, writer: { kind: 'AGENT' } });
+    const { trashGroupId } = await drive.moveToTrash(owner, doomed.id, { writer: { kind: 'AGENT' }, burstKey: `mount-${RUN}-14` });
+    await commit(owner, { entryId: doomed.id, handleId: h, mode: 'CONTINUE', baseVersionId: doomed.currentVersionId, parts: ['written after unlink'] });
+    assert.equal(await textOf(doomed.id), 'written after unlink');
+    const after = await db.driveEntry.findUniqueOrThrow({ where: { id: doomed.id } });
+    await commit(owner, { entryId: doomed.id, mode: 'OVERWRITE', baseVersionId: after.currentVersionId, parts: ['overwritten in Trash'] });
+    assert.equal(await textOf(doomed.id), 'overwritten in Trash');
+    const finalRow = await db.driveEntry.findUniqueOrThrow({ where: { id: doomed.id } });
+    assert.notEqual(finalRow.trashedAt, null, 'still in Trash');
+    assert.equal(finalRow.trashGroupId, trashGroupId);
+    assert.equal(finalRow.parentId, work.id, 'and still at its original place in Trash');
+    assert.ok(!(await names(work.id)).includes('doomed.log'), 'not listed');
+    await refusedWith(drive.resolve(owner, '/Editor/doomed.log'), 404, DRIVE_ENTRY_NOT_FOUND);
+    // Restored, it comes back with what was written to it in Trash.
+    await drive.restoreGroup(owner, trashGroupId);
+    assert.equal(await textOf((await drive.resolve(owner, '/Editor/doomed.log')).id), 'overwritten in Trash');
   });
 
   await t.test('(10) the change feed answers every change, and its look-back delivers a row that committed late', async () => {
