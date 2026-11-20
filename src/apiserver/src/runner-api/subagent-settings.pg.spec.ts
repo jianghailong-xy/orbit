@@ -2,10 +2,10 @@
  * The SubAgents settings and the Providers page's Tier column (docs/subagent-design.md §4.2, §7), on a real
  * PostgreSQL:
  *
- *   1. Defaults: a new Agent has SubAgents on and 8 running at once; a new account blocks no provider, and its
- *      Optimize For (account-wide since 2026-11-19) is Balance.
- *   2. The human doors write them: PATCH /workspaces/:id (subagentsEnabled, subagentsMaxRunning) and
- *      PATCH /users/me/preferences (subagentBlockedProviders, optimizeFor), which routing reads.
+ *   1. Defaults: a new Agent has SubAgents and Workflows on and 8 running at once; a new account blocks no provider,
+ *      and its Optimize For (account-wide since 2026-11-19) is Balance.
+ *   2. The human doors write them: PATCH /workspaces/:id (subagentsEnabled, subagentsMaxRunning, workflowsEnabled)
+ *      and PATCH /users/me/preferences (subagentBlockedProviders, optimizeFor), which routing reads.
  *   3. The runner doors refuse the same fields: PATCH and POST /runner/workspaces answer 400
  *      HUMAN_ONLY_WORKSPACE_FIELD and nothing is written, and a runner's provider write carries no tier.
  *   4. A custom endpoint's model with no tier is listed `Not set` and skipped by routeSubagent with its reason;
@@ -13,6 +13,10 @@
  *   5. A built-in engine's model (Cursor's grok-4.7) is tiered through PATCH /providers/builtin/:engine/model-tier:
  *      stored in the owner's preferences, read by the Tier column and routeSubagent, overriding a family tier, and
  *      cleared back to untiered.
+ *   6. Workflows (docs/subagent-workflow-design.md §9 D2, board docs/mocks/subagent-workflow part 5): on, a session
+ *      opens a workflow; off, POST /runner/sessions/:id/workflows answers 403 WORKFLOWS_DISABLED and writes nothing
+ *      while delegate still opens; and the claim and the reclaim carry `workflowsDisabled` exactly while the Agent's
+ *      Workflows or its SubAgents are off, which is what leaves the `workflow` tool out of its `orbit mcp`.
  *
  *   bash scripts/run-pg-spec.sh src/apiserver/src/runner-api/subagent-settings.pg.spec.ts
  *
@@ -22,8 +26,9 @@ import assert from 'node:assert/strict';
 import { randomUUID } from 'node:crypto';
 import { test } from 'node:test';
 
-import { BadRequestException, NotFoundException, ValidationPipe } from '@nestjs/common';
-import { type PrismaClient } from '@prisma/client';
+import { BadRequestException, ForbiddenException, NotFoundException, ValidationPipe } from '@nestjs/common';
+import { type PrismaClient, type Runner, RunStatus, RunnerStatus } from '@prisma/client';
+import { toUuid } from '@orbit/shared';
 import { Client } from 'pg';
 
 import { sha256 } from '../common/crypto.util';
@@ -33,6 +38,10 @@ import {
   assertCoordinatorPgUrlIsIsolated,
   verifyCoordinatorPgIdentity,
 } from '../projects/coordinator-pg-test-safety';
+import { decideSessionSource } from '../projects/session-source';
+import type { PrismaService } from '../prisma/prisma.service';
+import { QueueService } from '../queue/queue.service';
+import type { RealtimeService } from '../realtime/realtime.service';
 import { UpdateModelProviderDto, UpdateProviderModelTierDto } from '../providers/dto';
 import { ProvidersController } from '../providers/providers.controller';
 import { ProvidersService } from '../providers/providers.service';
@@ -41,7 +50,10 @@ import { UsersController } from '../users/users.controller';
 import { CreateWorkspaceDto, UpdateWorkspaceDto } from '../workspaces/dto';
 import { WorkspacesService } from '../workspaces/workspaces.service';
 import { RunnerAgentsController } from './runner-agents.controller';
+import { RunnerApiController } from './runner-api.controller';
 import { RunnerProvidersController } from './runner-providers.controller';
+import { RunnerSubagentsController } from './runner-subagents.controller';
+import { SubagentRunCreateDto } from './subagent-run';
 import { planSubagentRoute, subagentBlockedProviders } from './subagent-route';
 
 const URL = process.env.COORDINATOR_PG_URL;
@@ -57,7 +69,7 @@ const asSent = <T>(metatype: new () => T, body: unknown): Promise<T> =>
   new ValidationPipe({ whitelist: true, transform: true, forbidNonWhitelisted: false })
     .transform(body, { type: 'body', metatype }) as Promise<T>;
 
-test('SubAgents settings: defaults, the human doors, the runner refusals and the tier a custom model needs', {
+test('SubAgents settings: defaults, the human doors, the runner refusals, Workflows and model tiers', {
   skip, concurrency: 1, timeout: 300_000,
 }, async (t) => {
   const url = URL!;
@@ -107,9 +119,14 @@ test('SubAgents settings: defaults, the human doors, the runner refusals and the
     name: `orbit-worker-${runnerId.slice(-8)}`, runnerId, workDir: '/work/repo',
   }));
 
-  await t.test('defaults: SubAgents on, 8 at once, nothing blocked, Optimize For Balance', async () => {
+  await t.test('defaults: SubAgents and Workflows on, 8 at once, nothing blocked, Optimize For Balance', async () => {
     assert.equal(agent.subagentsEnabled, true);
     assert.equal(agent.subagentsMaxRunning, 8);
+    assert.equal(agent.workflowsEnabled, true, 'Workflows is on by default, as SubAgents is');
+    // What the column itself holds for a row written without it: every Agent there was before the switch.
+    const bare = await prisma.workspace.create({ data: { ownerId, name: `bare-${runnerId.slice(-8)}` } });
+    assert.equal(bare.workflowsEnabled, true);
+    await prisma.workspace.delete({ where: { id: bare.id } });
     const me = await users.me(user);
     assert.deepEqual(subagentBlockedProviders(me?.preferences), [], 'a new account blocks no provider');
     assert.equal((me?.preferences as { optimizeFor?: string } | undefined)?.optimizeFor, undefined, 'nothing stored');
@@ -118,12 +135,17 @@ test('SubAgents settings: defaults, the human doors, the runner refusals and the
 
   await t.test('the human doors write every field', async () => {
     const saved = await workspaces.update(ownerId, agent.id, await asSent(UpdateWorkspaceDto, {
-      subagentsEnabled: false, subagentsMaxRunning: 2,
+      subagentsEnabled: false, subagentsMaxRunning: 2, workflowsEnabled: false,
     }));
     assert.equal(saved.subagentsEnabled, false);
     assert.equal(saved.subagentsMaxRunning, 2);
+    assert.equal(saved.workflowsEnabled, false);
     const stored = await prisma.workspace.findUniqueOrThrow({ where: { id: agent.id } });
-    assert.deepEqual([stored.subagentsEnabled, stored.subagentsMaxRunning], [false, 2]);
+    assert.deepEqual([stored.subagentsEnabled, stored.subagentsMaxRunning, stored.workflowsEnabled], [false, 2, false]);
+    // A save of another field leaves the switch alone.
+    const other = await workspaces.update(ownerId, agent.id, await asSent(UpdateWorkspaceDto, { subagentsEnabled: true }));
+    assert.equal(other.workflowsEnabled, false, 'absent leaves Workflows as it is');
+    await assert.rejects(asSent(UpdateWorkspaceDto, { workflowsEnabled: 'off' }), BadRequestException, 'not a boolean');
 
     // Optimize For: the account's, one value for every Agent.
     for (const optimizeFor of ['cost', 'intelligence', 'balance'] as const) {
@@ -150,7 +172,7 @@ test('SubAgents settings: defaults, the human doors, the runner refusals and the
     assert.deepEqual(subagentBlockedProviders(cleared.preferences), [], '[] unblocks every provider');
 
     await workspaces.update(ownerId, agent.id, await asSent(UpdateWorkspaceDto, {
-      subagentsEnabled: true, subagentsMaxRunning: 4,
+      subagentsEnabled: true, subagentsMaxRunning: 4, workflowsEnabled: true,
     }));
   });
 
@@ -159,6 +181,7 @@ test('SubAgents settings: defaults, the human doors, the runner refusals and the
     const fields: Array<[string, unknown]> = [
       ['subagentsEnabled', false],
       ['subagentsMaxRunning', 9],
+      ['workflowsEnabled', false],
       ['modelRoutingOptimizeFor', 'intelligence'],
       ['modelRoutingProviders', ['codex']],
       ['modelRouting', true],
@@ -373,5 +396,99 @@ test('SubAgents settings: defaults, the human doors, the runner refusals and the
     await assert.rejects(providersDoor.setBuiltinModelTier(user, 'not-an-engine',
       await asSent(UpdateProviderModelTierDto, { model: 'grok-4.7', tier: 'M' })), NotFoundException);
     await assert.rejects(asSent(UpdateProviderModelTierDto, { model: 'grok-4.7', tier: 'XXL' }), BadRequestException);
+  });
+
+  await t.test('Workflows: on, a workflow opens; off, 403 WORKFLOWS_DISABLED while delegate opens, and the claim says so', async () => {
+    // An account of its own, so the keys and block lists of the cases above route none of its SubAgents; its machine, online,
+    // whose catalogue routes a SubAgent onto Claude; and its Agent, made at the human door.
+    const owner = randomUUID();
+    await prisma.user.create({
+      data: { id: owner, email: `subagent-workflows-${owner}@settings.invalid`, name: 'The workflows owner', passwordHash: 'x' },
+    });
+    const hostId = randomUUID();
+    const host = (await prisma.runner.create({
+      data: {
+        id: hostId, name: 'the machine the workflows run on', ownerId: owner, tokenHash: sha256(`subagent-settings-${hostId}`),
+        // Room for every session the claims below hand it at once.
+        status: RunnerStatus.ONLINE, lastHeartbeatAt: new Date(), maxConcurrent: 8,
+        modelCatalog: { claude: [
+          { value: 'claude-opus-5-5', label: 'Opus 5.5', priority: 0 },
+          { value: 'claude-sonnet-5-5', label: 'Sonnet 5.5', priority: 2 },
+        ] },
+      },
+    })) as Runner;
+    const workflowsAgent = await workspaces.create(owner, await asSent(CreateWorkspaceDto, {
+      name: `orbit-workflows-${hostId.slice(-8)}`, runnerId: hostId, workDir: '/work/repo',
+    }));
+    const setSwitches = async (fields: { subagentsEnabled?: boolean; workflowsEnabled?: boolean }) =>
+      workspaces.update(owner, workflowsAgent.id, await asSent(UpdateWorkspaceDto, fields));
+    /** A session of that Agent on that machine: parked between turns (a parent), or waiting for its first claim. */
+    const sessionOf = async (status: RunStatus): Promise<string> => {
+      const decision = await decideSessionSource(prisma as unknown as PrismaService, null);
+      const row = await prisma.session.create({
+        data: {
+          ownerId: owner, creatorId: owner, workspaceId: workflowsAgent.id, assignedRunnerId: hostId,
+          title: 'review the scheduler diff', prompt: 'review the scheduler diff', provider: 'claude', providerBuiltin: true,
+          engine: 'claude', model: 'claude-opus-5-5', effort: 'high', status,
+          numTurns: status === RunStatus.PENDING ? 0 : 1, dispatchOrigin: 'USER', startsTaskWork: false,
+          ...decision.columns,
+        },
+        select: { id: true },
+      });
+      return row.id;
+    };
+    const parent = await sessionOf(RunStatus.AWAITING_INPUT);
+    const subagents = new RunnerSubagentsController(prisma as never, silent(), silent());
+    const workflow = { toolUseId: 'toolu_workflow_review', name: 'review-changes', script: 'return args' };
+
+    // On, the default: the parent's `workflow` call opens one.
+    const opened = await subagents.openWorkflowRun(host, parent, workflow);
+    assert.equal(opened.status, 'RUNNING', 'a workflow opens while Workflows is on');
+
+    // Off, at the human door: a new workflow is refused by name, and nothing is written.
+    await setSwitches({ workflowsEnabled: false });
+    const refused = await subagents.openWorkflowRun(host, parent, { ...workflow, toolUseId: 'toolu_workflow_off' })
+      .then(() => null, (error: unknown) => error);
+    assert.ok(refused instanceof ForbiddenException, `want a 403, got ${String(refused)}`);
+    assert.equal(refused.getStatus(), 403);
+    const said = refused.getResponse() as { code: string; message: string };
+    assert.equal(said.code, 'WORKFLOWS_DISABLED');
+    assert.match(said.message, /Workflows are turned off for this agent/);
+    assert.equal(await prisma.subagentWorkflowRun.count({ where: { sessionId: parent } }), 1, 'no workflow row was written');
+    // A retry of the call that opened one before the switch moved is still answered with its run.
+    assert.deepEqual(await subagents.openWorkflowRun(host, parent, workflow), opened);
+
+    // delegate is not affected: a SubAgent opens on the same session.
+    const delegated = await subagents.openSubagentRun(host, parent, Object.assign(new SubagentRunCreateDto(), {
+      toolUseId: 'toolu_delegate_while_workflows_off', type: 'general', definitionSource: 'builtin', size: 'M',
+    }));
+    assert.equal(delegated.status, 'RUNNING', 'delegate opens while Workflows is off');
+    assert.equal((await prisma.subagentRun.findUniqueOrThrow({ where: { id: delegated.runId } })).workflowRunId, null);
+
+    // The claim a runner spawns a session from, and the reclaim it spawns one again from after a restart.
+    const realtime = { publishSessionUpdated: () => undefined, publishSessionCreated: () => undefined, notifyInbox: () => undefined };
+    const queue = new QueueService(prisma as unknown as PrismaService, realtime as unknown as RealtimeService);
+    const runnerDoor = new RunnerApiController(
+      prisma as unknown as PrismaService, queue, realtime as unknown as RealtimeService,
+      {} as never, { issue: async () => 'orchestration-credential' } as never, {} as never,
+    );
+    const cases: Array<[string, { subagentsEnabled: boolean; workflowsEnabled: boolean }, boolean]> = [
+      ['Workflows off', { subagentsEnabled: true, workflowsEnabled: false }, true],
+      ['SubAgents off, which Workflows follows', { subagentsEnabled: false, workflowsEnabled: true }, true],
+      ['both on', { subagentsEnabled: true, workflowsEnabled: true }, false],
+    ];
+    for (const [name, switches, off] of cases) {
+      await setSwitches(switches);
+      const pending = await sessionOf(RunStatus.PENDING);
+      const claimed = await queue.claimSessionForRunner({ id: hostId });
+      assert.equal(claimed?.sessionId, pending, `${name}: the runner was handed another session`);
+      // Absent, not `false`, while workflows may start: exactly the payload every runner has always received.
+      assert.equal(claimed?.workflowsDisabled, off ? true : undefined, `${name}: the claim`);
+      const reclaimed = (await runnerDoor.reclaim({ id: hostId, ownerId: owner }, undefined)).sessions;
+      assert.ok(reclaimed.some((session) => toUuid(session.sessionId) === pending), `${name}: the reclaim left out the claim`);
+      for (const session of reclaimed) {
+        assert.equal(session.workflowsDisabled, off ? true : undefined, `${name}: the reclaim of ${session.sessionId}`);
+      }
+    }
   });
 });

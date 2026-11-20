@@ -398,6 +398,12 @@ public final class APIClient: @unchecked Sendable {
         try await get("sessions/\(sessionID)/subagents")
     }
 
+    /// The session's Orbit workflows, oldest first (GET /sessions/:id/workflows): what each
+    /// `mcp__orbit__workflow` call's block shows — its phases, counts, cost and how it ended.
+    public func sessionWorkflows(sessionID: String) async throws -> [WorkflowRunView] {
+        try await get("sessions/\(sessionID)/workflows")
+    }
+
     /// The tasks this session's agent created, as its "Tasks created here" card draws them
     /// (`SessionCreatedTasks`): rows already in the card's order, a replaced task already drawn as
     /// the one that took it over. `limit` caps `items` and nothing else — nil leaves it to the

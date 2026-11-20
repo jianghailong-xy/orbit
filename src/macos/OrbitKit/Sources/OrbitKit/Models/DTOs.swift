@@ -157,6 +157,8 @@ public struct Agent: Codable, Equatable, Sendable, Identifiable {
     public var subagentsEnabled: Bool? = nil
     /// How many of one session's SubAgents run at once. Nil reads as 4 (`SubagentSettings.maxRunning`).
     public var subagentsMaxRunning: Int? = nil
+    /// Whether this Agent's sessions may start a workflow (docs/subagent-workflow-design.md §6). Nil reads as on.
+    public var workflowsEnabled: Bool? = nil
     public let workDirExists: Bool?
     public let workDirIsGit: Bool?
     /// BIGINT columns are serialized as strings by the control plane; numeric fixtures and older
@@ -177,7 +179,7 @@ public struct Agent: Codable, Equatable, Sendable, Identifiable {
         case maxTurns, maxBudgetUsd, targetRunnerId, targetLabels, runnerId, env, enabled
         case antigravityKeyAvailableByRunner
         case autoInitGit, codexAccount, claudeAccount, antigravityAccount, kimiAccount, cursorAccount
-        case enableWorktree, subagentsEnabled, subagentsMaxRunning
+        case enableWorktree, subagentsEnabled, subagentsMaxRunning, workflowsEnabled
         case workDirExists, workDirIsGit
         case workDirFreeBytes, workDirTotalBytes, repoHealth, repoCleanup, mainCheckoutActions
     }
@@ -217,6 +219,7 @@ public struct Agent: Codable, Equatable, Sendable, Identifiable {
         enableWorktree = try c.decodeIfPresent(Bool.self, forKey: .enableWorktree)
         subagentsEnabled = try c.decodeIfPresent(Bool.self, forKey: .subagentsEnabled)
         subagentsMaxRunning = try c.decodeIfPresent(Int.self, forKey: .subagentsMaxRunning)
+        workflowsEnabled = try c.decodeIfPresent(Bool.self, forKey: .workflowsEnabled)
         workDirExists = try c.decodeIfPresent(Bool.self, forKey: .workDirExists)
         workDirIsGit = try c.decodeIfPresent(Bool.self, forKey: .workDirIsGit)
         workDirFreeBytes = c.flexibleInt64(forKey: .workDirFreeBytes)

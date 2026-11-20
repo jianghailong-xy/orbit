@@ -1588,6 +1588,10 @@ type ClaimedSession struct {
 	// ORBIT_MANAGED_RUNNER_BROWSER_ENABLED with managed runners on); injected as ORBIT_BROWSER=on, which is what puts the
 	// browser tools in the MCP server and `orbit browser` in the CLI (browser_tools.go). Absent means off: absent tools.
 	BrowserEnabled bool `json:"browserEnabled,omitempty"`
+	// WorkflowsDisabled is set when the session's Agent may not start a workflow: its Workflows switch is off, or its
+	// SubAgents are. Injected as ORBIT_WORKFLOWS=off, which leaves the workflow tool out of `orbit mcp`
+	// (subagent_workflow.go); delegate is not affected. Absent means on.
+	WorkflowsDisabled bool `json:"workflowsDisabled,omitempty"`
 	// ScheduleRun is set for the session of a scheduled task's run (Session.scheduleRunId); injected as
 	// ORBIT_SCHEDULE_RUN=1, which lists schedule_run_report in its `orbit mcp` (schedule_tools.go).
 	ScheduleRun bool `json:"scheduleRun,omitempty"`
@@ -1847,6 +1851,8 @@ type ReclaimSession struct {
 	WikiDisabled    bool `json:"wikiDisabled,omitempty"`
 	// BrowserEnabled, cf. ClaimedSession.BrowserEnabled, said on reclaim for the same reason.
 	BrowserEnabled bool `json:"browserEnabled,omitempty"`
+	// WorkflowsDisabled, cf. ClaimedSession: the Agent's switch may have moved since the session was first claimed.
+	WorkflowsDisabled bool `json:"workflowsDisabled,omitempty"`
 	// ScheduleRun, cf. ClaimedSession.ScheduleRun.
 	ScheduleRun bool `json:"scheduleRun,omitempty"`
 	// OrchestrationToken is freshly persisted for the reclaimed runtime, cf. ClaimedSession.
