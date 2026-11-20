@@ -377,6 +377,8 @@ function storeCases(leg: Leg) {
       // Named again by a new staging: the release mark goes.
       const again = await chunks.openStaging(owner, { source: 'TOOL' });
       await chunks.putChunk(owner, again.id, 0, sha256(held), Readable.from([held]));
+      // Touched as of the spec's clock, or step 0 would find it idle and remove it first.
+      await db.driveStaging.update({ where: { id: again.id }, data: { touchedAt: at(8 * DAY) } });
       await sweep.sweep(at(8 * DAY + 1000));
       assert.equal((await blobOf(sha256(held))).releasedAt, null, 'held again');
       await db.driveStaging.delete({ where: { id: again.id } });
