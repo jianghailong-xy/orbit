@@ -47,6 +47,20 @@ object ExceptionCards {
     fun handledByLine(row: JsonObject): String? = row.objects("handledBy").takeIf { it.isNotEmpty() }
         ?.joinToString(" · ") { "The coordinator is fixing this in ${it.text("title").orEmpty()}." }
 
+    // MARK: a live repair task (board card-ui-polish ①)
+
+    /** The tag an item wears while a repair task filed for it is still live — OrbitKit's `fixingTag`, the browser's `FIXING_TAG`. */
+    const val fixingTag = "Fixing"
+    /** The one line that replaces the server's sentence and the handled-by sentences, with nothing for the reader to do under it. */
+    const val beingFixedIn = "Being fixed in"
+    const val fixingNothingForYou = "In progress · nothing for you to do unless it fails."
+
+    /** The repair tasks still working on an item: any whose state is not DONE or CANCELLED — the server's own test (`hasLiveFix`), so
+     * the card and the sentence it replaces agree. */
+    fun liveRepairs(row: JsonObject): List<JsonObject> = row.objects("handledBy").filter { it.text("state") != "DONE" && it.text("state") != "CANCELLED" }
+
+    fun fixing(row: JsonObject): Boolean = liveRepairs(row).isNotEmpty()
+
     // MARK: the doors (mock 7, 方案 B)
 
     /** The three weights a press is drawn in: the step this kind of exception asks for, the other way to take it, and the quiet rest. */
@@ -177,15 +191,17 @@ object ExceptionCards {
         return listOf(next) + leading.filter { it != next }
     }
 
-    /** The card's whole action row: the pair it leads with in their own order, then the rest of the server's list, quiet. */
-    fun presses(row: JsonObject, mergeCard: String? = null): List<CardPress> {
+    /** The card's whole action row: the pair it leads with in their own order, then the rest of the server's list, quiet. [quiet] is a
+     * repair task already on the item (board card-ui-polish ①, D1 = A): every door is a quiet link and none of them is the reader's
+     * next step, so no door carries a consequence line. */
+    fun presses(row: JsonObject, mergeCard: String? = null, quiet: Boolean = false): List<CardPress> {
         val actions = drawn(row, mergeCard)
         val leading = leadingDoors(row, actions)
         val primary = leading.firstOrNull()
         val secondary = leading.getOrNull(1)
         return (leading + actions.filter { it !in leading }).map { action ->
-            CardPress(action, if (action == primary) PressTier.PRIMARY else if (action == secondary) PressTier.SECONDARY else PressTier.LINK,
-                actionLabel(row, action) ?: action, actionConsequence(row, action))
+            CardPress(action, if (quiet) PressTier.LINK else if (action == primary) PressTier.PRIMARY else if (action == secondary) PressTier.SECONDARY
+                else PressTier.LINK, actionLabel(row, action) ?: action, if (quiet) "" else actionConsequence(row, action))
         }
     }
 
@@ -458,7 +474,8 @@ object ExceptionCards {
         val task = facts.obj("task")
         task?.text("title")?.let { rows += FactRow(taskLabel, it) }
         facts.text("targetRef")?.let { ref ->
-            var into = ref
+            // The branch by its name: `refs/heads/main` is the server's spelling, not a person's.
+            var into = ref.removePrefix("refs/heads/")
             facts.text("targetSha")?.let { into += " at ${it.take(7)}" }
             if (facts.flag("nothingLanded")) into += nothingLanded
             rows += FactRow(intoLabel, into)
