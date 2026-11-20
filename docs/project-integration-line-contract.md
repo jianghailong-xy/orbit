@@ -2623,7 +2623,7 @@ The full record: landing <landingSessionId>.
 - `GET /projects/:id/open-items` 每行增可选 `workSession: { sessionId, offeredAt, returnedAt?, returnReason?, rounds }`。在任务会话手里的待办不进 owner 的 Needs you、不计 attention（没有人在等 owner），项目页 Open items 把它列在「Being fixed by its session」下。
 - 落地时间线（§2.9 LS2，`landing-timeline.ts`）增三种行：`Handed to the task's session`、`Fixed in <sha7> · landing again`、`Returned to the coordinator: <reason>`。
 - 任务行的集成三段（§7.3）在这期间显示 `Landing · fixing`，按压进任务会话。
-- 三端的文案与位置出效果图后定；本修订不含图。
+- 效果图：`docs/mocks/landing-fix-own-session/`（`01-path.png` 一次冲突走的路，`02-iphone.png` 任务会话里的卡、落地窗口的 Fixing 状态与交回，`03-decisions.png` Q30–Q33）。只画了 iPhone；web 与 Android 用同一组部件，方向定了再画。
 
 ### 12.8 测试
 
