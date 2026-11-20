@@ -1591,15 +1591,15 @@ export const RUNNER_ISOLATION_FIELDS_BY_HAND: Readonly<Record<string, string>> =
     'must be a session of the runner\'s owner that this runner hosts, else 403 (runner-api/runner-owner-requests.controller.ts:66), and must be the session that filed the request (owner-requests/owner-requests.service.ts:233)',
   // ── the Orbit Cloud browser's agent tools ─────────────────────────────────────────────────────────
   'POST /runner/browser/sign-in-requests body clientRequestId':
-    'the caller\'s own idempotency key, unique per asking session, and read back only by (the runner\'s owner, the asking session, the key) (owner-requests/owner-requests.service.ts fileBrowserSignIn); it names nothing of anybody else\'s',
+    'the caller\'s own idempotency key, unique per asking session, and read back only by (the runner\'s owner, the asking session, the key) (owner-requests/owner-requests.service.ts:377, read at :291); it names nothing of anybody else\'s',
   'GET /runner/browser header x-orbit-session-id':
     'must be a session of the runner\'s owner that this runner hosts, else 403 (runner-api/runner-browser.controller.ts:55), '
     + 'and what is read is that owner\'s own managed runner, found by the owner (managed-runners/browser-state.ts accountStatus); '
     + 'runner-browser-status.pg.spec.ts (3) sends another account\'s session both ways',
   'POST /runner/browser/sign-in-requests header x-orbit-session-id':
-    'must be a session of the runner\'s owner that this runner hosts, else 403 (runner-api/runner-browser.controller.ts '
-    + 'callingSession), and the runner must be that owner\'s own managed runner, else 403 BROWSER_SIGN_IN_NOT_ORBIT_CLOUD; '
-    + 'the card is filed for that owner and session only (owner-requests.service.ts fileBrowserSignIn); '
+    'must be a session of the runner\'s owner that this runner hosts, else 403 (runner-api/runner-browser.controller.ts:81), '
+    + 'and the runner must be that owner\'s own managed runner, else 403 BROWSER_SIGN_IN_NOT_ORBIT_CLOUD (runner-browser.controller.ts:73); '
+    + 'the card is filed for that owner and session only (owner-requests/owner-requests.service.ts:339); '
     + 'runner-browser-sign-in.pg.spec.ts (3) sends another account\'s session both ways',
   // ── the wiki's import on the server ──────────────────────────────────────────────────────────────
   'POST /runner/wiki/spaces/:id/import-jobs body id':
