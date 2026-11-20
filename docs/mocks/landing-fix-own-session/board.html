@@ -1,5 +1,5 @@
 <!doctype html><html lang="zh"><meta charset="utf-8">
-<title>落地失败先交给任务自己的会话（修订 42 草稿）</title>
+<title>落地：agent 动手，平台守门（修订 42 草稿）</title>
 <link rel="stylesheet" href="../landing-session/v4/kit.css">
 <script src="../landing-session/v4/kit.js"></script>
 <style>
@@ -55,6 +55,29 @@ figcaption ul.rv-ul li { margin: 6px 0; }
 
 .rv-later { opacity: .62; }
 .rv-then { margin: 10px 0 2px; font-size: 12px; font-weight: 600; color: #4a2fa8; background: rgba(122,90,245,.12); border-radius: 8px; padding: 3px 9px; opacity: 1; }
+
+/* ⓪ 合起来的一张 */
+.rv-cv { position: relative; width: 1692px; height: 470px; background: #fff; border-radius: 16px; box-shadow: inset 0 0 0 1px rgba(0,0,0,.08); }
+.rv-cv svg { position: absolute; inset: 0; width: 100%; height: 100%; }
+.rv-n { position: absolute; box-sizing: border-box; background: #fff; border: 1.5px solid #c9c9d0; border-radius: 12px; padding: 8px 11px; font-size: 13px; line-height: 1.45; color: #3a3a42; }
+.rv-n b { display: block; font-size: 14px; color: #16161a; margin-bottom: 1px; }
+.rv-n .who { display: inline-block; font-size: 11px; font-weight: 700; border-radius: 999px; padding: 0 7px; margin-bottom: 3px; }
+.rv-n .who.orbit { background: #d6e4ff; color: #14428f; } .rv-n .who.agent { background: #e7e0ff; color: #4a2fa8; }
+.rv-n .who.coord { background: #ffe8c7; color: #8a4b00; } .rv-n .who.you { background: #16161a; color: #fff; }
+.rv-n.gate { border-color: #3E69F6; background: #f2f6ff; } .rv-n.ok { border-color: #34a853; background: #f1fbf3; }
+.rv-n.hot { border-color: #e0584d; background: #fff4f3; } .rv-n.chg { border-color: #7a5af5; background: #f6f3ff; border-width: 2px; }
+.rv-n .c { position: absolute; top: -11px; right: -11px; width: 22px; height: 22px; border-radius: 50%; background: #7a5af5; color: #fff; font-size: 12.5px; font-weight: 700; display: flex; align-items: center; justify-content: center; }
+.rv-lab { position: absolute; font-size: 12.5px; font-weight: 600; color: #4a4a52; background: #fff; padding: 0 5px; white-space: nowrap; }
+.rv-3 { display: grid; grid-template-columns: repeat(3, 1fr); gap: 16px; width: 1692px; margin-top: 16px; }
+.rv-chg { background: #fff; border-radius: 14px; padding: 12px 15px 13px; box-shadow: inset 0 0 0 1px rgba(0,0,0,.08); font-size: 13.5px; line-height: 1.6; color: #3a3a42; }
+.rv-chg h4 { margin: 0 0 6px; font-size: 15px; display: flex; align-items: center; gap: 8px; color: #16161a; }
+.rv-chg h4 .c { width: 22px; height: 22px; border-radius: 50%; background: #7a5af5; color: #fff; font-size: 12.5px; display: inline-flex; align-items: center; justify-content: center; flex: none; }
+.rv-chg .was { color: #8f1d13; } .rv-chg .now2 { color: #14428f; }
+.rv-chg p { margin: 4px 0 0; }
+.rv-who3 { display: grid; grid-template-columns: repeat(3, 1fr); gap: 16px; width: 1692px; margin-top: 16px; }
+.rv-who3 > div { border-radius: 14px; padding: 11px 15px 12px; font-size: 13.5px; line-height: 1.65; color: #2c2c33; }
+.rv-who3 h4 { margin: 0 0 4px; font-size: 14.5px; }
+.rv-who3 .w1 { background: #e8efff; } .rv-who3 .w2 { background: #fff0d9; } .rv-who3 .w3 { background: #e6e6ea; }
 /* ③ 待定 */
 .rv-panel { width: 1300px; }
 .rv-panel p, .rv-panel li { font-size: 14px; line-height: 1.65; color: #33333a; }
@@ -65,10 +88,10 @@ table.rv-q td.rec { background: rgba(62,105,246,.06); }
 table.rv-q td:first-child { white-space: nowrap; font-weight: 700; }
 </style>
 <body>
-<h1>落地失败先交给任务自己的会话（契约修订 42 草稿 · 2026-11-20）</h1>
+<h1>落地：agent 动手，平台守门（契约修订 42 草稿 · 2026-11-20）</h1>
 <p class="lede rv-lede">今天一次任务落地冲突或检查失败，要经协调会话转一手，再开一条<b>新的</b>工作会话返工；写这份工作的会话不在这条路上。<br>
 修订 42：<b>门不动</b>（排队、在组合树上跑检查、推送、进 main 的确认都还是 Orbit 做），只把「谁来修」换成<b>写这份工作的会话</b>；它修不了，才到协调会话。<br>
-本图：① 一次冲突走的路，现在与改后；② iPhone 上看到什么；③ 待你定的四条。英文是上线文案，中文是说明；项目与任务名是示例数据。只画了 iPhone，web 与 Android 用同一组部件，方向定了再画。</p>
+本图：⓪ 合起来的一张（含第二部分：落不落地由平台量、落地前跑什么由协调者定）；① 一次冲突走的路，现在与改后；② iPhone 上看到什么；③ 第一部分待你定的四条。英文是上线文案，中文是说明；项目与任务名是示例数据。只画了 iPhone，web 与 Android 用同一组部件，方向定了再画。</p>
 <div id="board"></div>
 <script>
 const WP = 'Android 客户端';
@@ -111,6 +134,40 @@ const part1 = `<div class="rv-flows">
 <span>→ 待办交回<b>协调会话</b>，从这一刻起照今天的路走（升级计时也从这一刻算）。</span></div></div>
 </div>
 <p class="rv-sum" style="max-width:1692px"><b>不交给任务会话的</b>：main 或项目分支本身就红（基线红）、检查超时、runner 或 git 出错，以及项目分支合入 main 的失败。这些不是这份工作的错，照旧归协调会话。</p>`;
+
+// ── ⓪ 合起来的一张 ─────────────────────────────────────────────────────────────────
+const nd = (x, y, w, h, cls, who, title, text, c = '') => `<div class="rv-n ${cls}" style="left:${x}px;top:${y}px;width:${w}px;height:${h}px">${who ? `<span class="who ${who[0]}">${who[1]}</span>` : ''}<b>${title}</b>${text}${c ? `<span class="c">${c}</span>` : ''}</div>`;
+const YOU = ['you', '你'];
+const lab = (x, y, t) => `<span class="rv-lab" style="left:${x}px;top:${y}px">${t}</span>`;
+const ln = (d, dash = false) => `<path d="${d}" fill="none" stroke="#7d7d86" stroke-width="1.8" ${dash ? 'stroke-dasharray="6 5"' : ''} marker-end="url(#rv-a)"/>`;
+const part0 = `<div class="rv-cv"><svg viewBox="0 0 1692 470"><defs><marker id="rv-a" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="8" markerHeight="8" orient="auto-start-reverse"><path d="M0 0 10 5 0 10z" fill="#7d7d86"/></marker></defs>
+${ln('M176 192 H222')}${ln('M476 170 V68 H548')}${ln('M476 214 V228 H548')}${ln('M860 68 H908')}
+${ln('M808 228 H858')}${ln('M1160 228 H1210')}${ln('M1420 228 H1468')}
+${ln('M1008 284 V342')}${ln('M858 396 H808')}${ln('M676 342 V284')}${ln('M1160 396 H1210', true)}
+</svg>
+${nd(20, 150, 156, 84, '', TS, '任务完成', 'DONE：验收通过')}
+${nd(224, 132, 252, 120, 'chg', ORB, '分支上有自己的提交吗？', '平台从已提交的行读出来。<br>没有人给项目或任务贴标签', 2)}
+${nd(550, 26, 310, 84, 'ok', ORB, '没有 → 没有落地', '不排队，不经 runner，不开项目分支')}
+${nd(910, 26, 300, 84, 'ok', ORB, '下游任务立刻开工', '任务图多复杂都只等 DONE')}
+${nd(550, 172, 258, 112, 'chg', CO, '有 → 落地前跑什么', '进项目分支的检查由协调者定，<br>可对单个任务免检，不再每次出卡', 3)}
+${nd(860, 172, 300, 112, 'gate', ORB, 'Orbit 的门（不变）', '一次只落一个 · 在组合树上跑检查 ·<br>只推测过的那棵树')}
+${nd(1212, 172, 208, 112, 'ok', ORB, '落上项目分支', '回执；下游开工')}
+${nd(1470, 172, 208, 112, 'gate', YOU, '进 main（不变）', '合并检查 + 你确认<br>（或你开的 Automatic）')}
+${nd(860, 344, 300, 104, 'hot', ORB, '冲突，或这份工作弄红了检查', '什么都没推')}
+${nd(550, 344, 258, 104, 'chg', TS, '写它的会话自己修', '在自己的分支上修、提交。<br>任务保持 DONE', 1)}
+${nd(1212, 344, 466, 104, '', CO, '修不了 → 协调会话 → 你', '没有新提交、这一轮失败、已修过 2 轮。<br>基线红、超时、runner 出错一开始就到这里')}
+${lab(486, 100, '没有')}${lab(486, 236, '有')}${lab(1016, 302, '没过')}${lab(684, 302, '新提交，再走一遍')}${lab(1166, 364, '')}
+</div>
+<div class="rv-3">
+<div class="rv-chg"><h4><span class="c">1</span>落地失败，先交给写它的会话</h4><p><span class="was"><b>现在</b></span>　协调会话读待办、转述，再开一条新会话从头返工，然后重新裁决。</p><p><span class="now2"><b>改后</b></span>　失败直接进写这份工作的会话；它修出新提交，Orbit 自己再落。修不了才到协调会话。</p></div>
+<div class="rv-chg"><h4><span class="c">2</span>落不落地，量出来，不贴标签</h4><p><span class="was"><b>现在</b></span>　靠 <code>nonCode</code>（项目）和 <code>codeless</code>（任务）两个标签；没贴的任务一律排队，等 runner 答一句 Nothing to land，下游跟着等。</p><p><span class="now2"><b>改后</b></span>　任务完成时平台已经知道分支上有没有提交。没有就不进落地这条路；两个标签不再决定落地。</p></div>
+<div class="rv-chg"><h4><span class="c">3</span>进项目分支之前跑什么，协调者定</h4><p><span class="was"><b>现在</b></span>　落地检查每改一次，一张你的确认卡；免检只靠仓库名单或你自己的门。</p><p><span class="now2"><b>改后</b></span>　协调者直接定、留痕、你可改回。前提是进 main 的合并检查还在；那条检查仍然每次问你。</p></div>
+</div>
+<div class="rv-who3">
+<div class="w1"><h4>平台做、平台量（不变的门）</h4>排队 · 在组合树上跑检查 · 推送 · 回执 · 派发下游 · 有没有提交</div>
+<div class="w2"><h4>agent 定、agent 做（这次放开的）</h4>修自己的落地失败 · 进项目分支前跑什么 · 哪条任务免检 · 修几轮</div>
+<div class="w3"><h4>你定（不变）</h4>落在哪条线 · main 是哪条分支 · 合并检查 · 进 main · Agent push · Automatic 与并发</div>
+</div>`;
 
 // ── ② iPhone ────────────────────────────────────────────────────────────────────
 // a · 现在：落地窗口里等决定的那张卡（main 上的样子）
@@ -173,6 +230,10 @@ const part3 = `<div class="rv-panel">
 </div>`;
 
 document.getElementById('board').innerHTML = `
+<section class="rv-part" id="part-0" data-png="00-overview">
+${band('⓪ 合起来看', 'after', '一条任务从完成到落地：三处改动（紫色），两道不变的门（蓝色）')}
+${part0}</section>
+
 <section class="rv-part" id="part-1" data-png="01-path">
 ${band('① 一次冲突走的路', 'now', '同一次落地冲突，现在与改后')}
 ${part1}</section>
