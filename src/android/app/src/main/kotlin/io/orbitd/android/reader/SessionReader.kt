@@ -45,6 +45,7 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import io.orbitd.android.OrbitApplication
 import io.orbitd.android.perf.OrbitPerf
+import io.orbitd.android.realtime.PagePoll
 import io.orbitd.android.realtime.restoredFields
 import io.orbitd.android.R
 import io.orbitd.android.composer.CoordinatorHandoff
@@ -497,9 +498,11 @@ fun SessionReader(app: OrbitApplication, handle: SessionHandle, route: OrbitRout
     LaunchedEffect(console, model) {
         refreshWhileStreaming(model.state.map { it.session?.connection == ConnectionState.CONNECTED }, console::refreshRunner)
     }
-    LaunchedEffect(worktree, state.denied) {
-        if (!state.denied) worktree.poll { (worktree.state.value.detail ?: snapshotDetail)?.let { it.string("runStatus") ?: it.string("status") } in
-            setOf("RUNNING", "AWAITING_INPUT", "INTERRUPTED") }
+    // The bar's detail follows the account stream like every page's poll: a read on a connect, the store's snapshot reads in between
+    // ([WorktreeModel.offer]), a minute's safety read, and its own bounded cadence only while a merge or commit is in flight. It stops with
+    // the Activity.
+    PagePoll(app, handle, emptySet(), worktree, state.denied, inFlightMs = { worktree.inFlightMs() }) {
+        if (!state.denied) worktree.loadDetail()
     }
     // A06-5: the viewport changing size under a pinned reader (keyboard, a taller composer, the reconnect
     // line) asks for the tail again; nothing else re-anchors the bottom of a list that shrank.
