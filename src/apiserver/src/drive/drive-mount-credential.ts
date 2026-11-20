@@ -1,7 +1,16 @@
-import { ForbiddenException, ServiceUnavailableException, SetMetadata, UnauthorizedException } from '@nestjs/common';
+import {
+  createParamDecorator,
+  ForbiddenException,
+  Logger,
+  ServiceUnavailableException,
+  SetMetadata,
+  UnauthorizedException,
+  type ExecutionContext,
+} from '@nestjs/common';
 import { MANAGED_RUNNER_INSTANCE_FENCED } from '@orbit/shared';
 import type { ManagedRunnerManagementState, Prisma, Runner } from '@prisma/client';
 import { generateToken, sha256 } from '../common/crypto.util';
+import { loggedRetry, withTransactionRetry } from '../common/transaction-retry';
 import {
   managedRunnerInstanceOffer,
   managedRunnerInstanceVerdict,
@@ -25,6 +34,8 @@ import type { PrismaService } from '../prisma/prisma.service';
  * The mount credential never enters the user's container, and the runner credential never enters the mounter (§6).
  */
 
+const logger = new Logger('DriveMountCredential');
+
 /** Every mount credential starts so, which is how RunnerAuthGuard tells it from a runner credential without a lookup. */
 export const DRIVE_MOUNT_TOKEN_PREFIX = 'orbit_drive_mount_';
 
@@ -43,6 +54,11 @@ export interface DriveMount {
   generation: number;
 }
 
+/** The mount credential a request authenticated with, or undefined for the runner credential. */
+export const CurrentDriveMount = createParamDecorator(
+  (_data: unknown, ctx: ExecutionContext): DriveMount | undefined => ctx.switchToHttp().getRequest().driveMount as DriveMount | undefined,
+);
+
 export function isDriveMountToken(token: string): boolean {
   return token.startsWith(DRIVE_MOUNT_TOKEN_PREFIX);
 }
@@ -60,12 +76,13 @@ export function driveMountCredentialOutsideDrive(): UnauthorizedException {
  * credential of an older generation of the runner is revoked in the same transaction.
  */
 export async function issueDriveMountCredential(
-  prisma: Pick<PrismaService, '$transaction'>,
+  prisma: PrismaService,
   input: { ownerId: string; runnerId: string; generation: number },
 ): Promise<{ id: string; token: string }> {
+  // Made once, outside the transaction: a retried attempt inserts the same hash, the first having rolled back.
   const token = `${DRIVE_MOUNT_TOKEN_PREFIX}${generateToken(32)}`;
   const now = new Date();
-  const created = await prisma.$transaction(async (tx: Prisma.TransactionClient) => {
+  const created = await withTransactionRetry(prisma, async (tx: Prisma.TransactionClient) => {
     await tx.driveMountCredential.updateMany({
       where: { runnerId: input.runnerId, generation: { lt: input.generation }, revokedAt: null },
       data: { revokedAt: now },
@@ -74,7 +91,7 @@ export async function issueDriveMountCredential(
       data: { ownerId: input.ownerId, runnerId: input.runnerId, generation: input.generation, tokenHash: sha256(token), createdAt: now },
       select: { id: true },
     });
-  });
+  }, loggedRetry(logger, 'drive.issueMountCredential'));
   return { id: created.id, token };
 }
 

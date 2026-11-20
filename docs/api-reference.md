@@ -45,10 +45,10 @@ controllers and their decorators, so it lists what the server mounts, not what a
 | `public` | 37 |
 | `user` | 497 |
 | `admin` | 31 |
-| `runner` | 205 |
+| `runner` | 221 |
 | `channel` | 1 |
 | `link gateway` | 3 |
-| **Total** | **774** |
+| **Total** | **790** |
 
 ## Public routes
 
@@ -648,6 +648,22 @@ controllers and their decorators, so it lists what the server mounts, not what a
 | `POST` | `/api/runner/cursor-key-check-result` | body `CursorKeyCheckResultDto` | `RunnerApiController.cursorKeyCheckResult` |
 | `POST` | `/api/runner/deregister` | — | `RunnerApiController.deregister` |
 | `POST` | `/api/runner/dir-probe-result` | body `Object` | `RunnerApiController.dirProbeResult` |
+| `GET` | `/api/runner/drive/changes` | query `since`, `wait` | `RunnerDriveController.changes` |
+| `GET` | `/api/runner/drive/chunks/:sha256` | path `sha256` | `RunnerDriveController.chunk` |
+| `POST` | `/api/runner/drive/commit` | body `RunnerDriveCommitDto` | `RunnerDriveController.commit` |
+| `GET` | `/api/runner/drive/commits/:commitId` | path `commitId` | `RunnerDriveController.commitStatus` |
+| `POST` | `/api/runner/drive/create` | body `RunnerDriveCreateDto` | `RunnerDriveController.create` |
+| `POST` | `/api/runner/drive/delete` | body `RunnerDriveDeleteDto` | `RunnerDriveController.remove` |
+| `GET` | `/api/runner/drive/list` | query `cursor`, `id`, `limit`, `path` | `RunnerDriveController.list` |
+| `GET` | `/api/runner/drive/manifest` | query `id`, `path` | `RunnerDriveController.manifest` |
+| `POST` | `/api/runner/drive/mkdir` | body `RunnerDriveMkdirDto` | `RunnerDriveController.mkdir` |
+| `POST` | `/api/runner/drive/rename` | body `RunnerDriveRenameDto` | `RunnerDriveController.rename` |
+| `POST` | `/api/runner/drive/stagings` | body `RunnerDriveStagingDto` | `RunnerDriveController.openStaging` |
+| `GET` | `/api/runner/drive/stagings/:id/chunks/:idx` | path `id`, `idx` | `RunnerDriveController.readChunk` |
+| `PUT` | `/api/runner/drive/stagings/:id/chunks/:idx` | path `id`, `idx` | `RunnerDriveController.putChunk` |
+| `POST` | `/api/runner/drive/stagings/:id/keepalive` | body `RunnerDriveKeepaliveDto`; path `id` | `RunnerDriveController.keepalive` |
+| `GET` | `/api/runner/drive/stat` | query `id`, `path` | `RunnerDriveController.stat` |
+| `POST` | `/api/runner/drive/utimens` | body `RunnerDriveUtimensDto` | `RunnerDriveController.utimens` |
 | `GET` | `/api/runner/files` | query `evidenceId`, `sessionId`, `taskId` | `RunnerFilesController.list` |
 | `POST` | `/api/runner/git-credential` | body `RunnerGitCredentialDto` | `RunnerGitCredentialController.credential` |
 | `POST` | `/api/runner/heartbeat` | body `Object` | `RunnerApiController.heartbeat` |

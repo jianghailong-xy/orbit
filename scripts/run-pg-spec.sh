@@ -118,7 +118,10 @@ PRISMA="$API/node_modules/.bin/prisma"; [ -x "$PRISMA" ] || PRISMA="$REPO/node_m
 
 echo "==> building the test tree (rm -rf build first)"
 rm -rf "$API/build"
-( cd "$API" && "$TSC" -p tsconfig.test.json ) || die "tsconfig.test.json failed to compile"
+# RUN_PG_SPEC_TSC_FLAGS is laid after the project flag: `--singleThreaded` keeps the compile under a job memory ceiling
+# that kills the default parallel build (about 3.7 GB instead of 5.9 GB).
+# shellcheck disable=SC2086
+( cd "$API" && "$TSC" -p tsconfig.test.json ${RUN_PG_SPEC_TSC_FLAGS:-} ) || die "tsconfig.test.json failed to compile"
 # The overlay's `src/node_modules/@orbit/shared` already answers for everything under `build/`;
 # this one is here because it is nearer still, and because `build/` is this script's own to lay out.
 mkdir -p "$API/build/node_modules/@orbit"

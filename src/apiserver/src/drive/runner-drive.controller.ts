@@ -27,7 +27,7 @@ import { PrismaService } from '../prisma/prisma.service';
 import { CurrentManagedRunnerInstance, CurrentRunner } from '../runner-api/current-runner.decorator';
 import { RunnerAuthGuard } from '../runner-api/runner-auth.guard';
 import { DriveChunksService } from './drive-chunks.service';
-import { AcceptsDriveMountCredential, fenceManagedInstance, type DriveMount } from './drive-mount-credential';
+import { AcceptsDriveMountCredential, CurrentDriveMount, fenceManagedInstance, type DriveMount } from './drive-mount-credential';
 import { drivePathSegments, DriveService, type DriveEntryRow, type DriveWriter } from './drive.service';
 import {
   RunnerDriveCommitDto,
@@ -156,22 +156,24 @@ export class RunnerDriveController {
   async create(@CurrentRunner() runner: Runner, @Body() dto: RunnerDriveCreateDto) {
     const { parent, name } = splitDrivePath(dto.path);
     const folder = await this.drive.liveAt(runner.ownerId, parent);
-    return this.drive.createFile(runner.ownerId, {
+    const created = await this.drive.createFile(runner.ownerId, {
       parentId: folder.id, name, handleId: dto.handleId ?? null, writer: this.writer(runner, dto.writer), onClash: 'REFUSE',
     });
+    return this.drive.stat(runner.ownerId, await this.drive.liveById(runner.ownerId, created.id));
   }
 
   /** `mkdir`, or with `parents` `mkdir -p`. */
   @Post('mkdir')
-  mkdir(@CurrentRunner() runner: Runner, @Body() dto: RunnerDriveMkdirDto) {
-    return this.drive.mkdirPath(runner.ownerId, dto.path, { parents: dto.parents === true, writer: this.writer(runner, dto.writer) });
+  async mkdir(@CurrentRunner() runner: Runner, @Body() dto: RunnerDriveMkdirDto) {
+    const made = await this.drive.mkdirPath(runner.ownerId, dto.path, { parents: dto.parents === true, writer: this.writer(runner, dto.writer) });
+    return this.drive.stat(runner.ownerId, await this.drive.liveById(runner.ownerId, made.id));
   }
 
   /** A staging for one handle's or one tool call's write, held by this runner. */
   @Post('stagings')
   async openStaging(
     @CurrentRunner() runner: Runner,
-    @Req() req: Request,
+    @CurrentDriveMount() mount: DriveMount | undefined,
     @Body() dto: RunnerDriveStagingDto,
     @CurrentManagedRunnerInstance() instance?: ManagedRunnerInstance,
   ) {
@@ -180,7 +182,6 @@ export class RunnerDriveController {
       const inTrash = await this.prisma.driveEntry.findFirst({ where: { id: dto.entryId, ownerId: runner.ownerId }, select: { id: true } });
       if (!inTrash) throw error;
     });
-    const mount = this.mountOf(req);
     return this.chunks.openStaging(runner.ownerId, {
       source: mount ? 'MOUNT' : 'TOOL',
       entryId: dto.entryId,
@@ -286,9 +287,12 @@ export class RunnerDriveController {
    */
   @Post('delete')
   @HttpCode(HttpStatus.OK)
-  async remove(@CurrentRunner() runner: Runner, @Req() req: Request, @Body() dto: RunnerDriveDeleteDto) {
+  async remove(
+    @CurrentRunner() runner: Runner,
+    @CurrentDriveMount() mount: DriveMount | undefined,
+    @Body() dto: RunnerDriveDeleteDto,
+  ) {
     const entry = await this.named(runner.ownerId, dto.path, dto.id);
-    const mount = this.mountOf(req);
     const own = dto.writer?.burstKey?.trim();
     await this.drive.moveToTrash(runner.ownerId, entry.id, {
       writer: this.writer(runner, dto.writer),
@@ -337,10 +341,6 @@ export class RunnerDriveController {
     });
     if (!staging) throw refusal(HttpStatus.NOT_FOUND, 'DRIVE_STAGING_NOT_FOUND', 'No such write in progress on this runner.');
     return staging;
-  }
-
-  private mountOf(req: Request): DriveMount | undefined {
-    return (req as unknown as { driveMount?: DriveMount }).driveMount;
   }
 
   /** An agent's write through this runner; the session is the name layer's to check (§3.6). */
