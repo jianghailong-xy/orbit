@@ -72,9 +72,9 @@ class SubagentsTest {
         // Not an object (a server before the route answers 404 or a list): no providers, not a crash.
         assertEquals(emptyList<SubagentProvider>(), Subagents.decode(JsonArray(emptyList())))
 
-        assertEquals(SubagentSettings(true, 4), SubagentSettings.of(buildJsonObject { put("name", "a") }))
-        assertEquals(SubagentSettings(false, 9), SubagentSettings.of(buildJsonObject {
-            put("subagentsEnabled", false); put("subagentsMaxRunning", 9) }))
+        assertEquals(SubagentSettings(true, 4, true), SubagentSettings.of(buildJsonObject { put("name", "a") }))
+        assertEquals(SubagentSettings(false, 9, false), SubagentSettings.of(buildJsonObject {
+            put("subagentsEnabled", false); put("subagentsMaxRunning", 9); put("workflowsEnabled", false) }))
         assertEquals(listOf("kimi"), Subagents.blocked(Json.parseToJsonElement("""{"preferences":{"subagentBlockedProviders":["kimi"]}}""")))
         assertEquals(emptyList<String>(), Subagents.blocked(Json.parseToJsonElement("""{"preferences":{"theme":"system"}}""")))
     }
@@ -97,10 +97,10 @@ class SubagentsTest {
     @Test fun workspacePatchSendsSubagentFieldsOnlyWhenTheyMoved() {
         val saved = buildJsonObject { put("name", "app") }
         assertEquals(buildJsonObject { put("name", "app"); put("effort", ""); put("enabled", true) },
-            workspacePatch(saved, "app", "", "", "", true, false, SubagentSettings(true, 4)))
+            workspacePatch(saved, "app", "", "", "", true, false, SubagentSettings(true, 4, true)))
         assertEquals(buildJsonObject { put("name", "app"); put("effort", ""); put("enabled", true); put("subagentsEnabled", false)
-            put("subagentsMaxRunning", 16) },
-            workspacePatch(saved, "app", "", "", "", true, false, SubagentSettings(false, 16)))
+            put("subagentsMaxRunning", 16); put("workflowsEnabled", false) },
+            workspacePatch(saved, "app", "", "", "", true, false, SubagentSettings(false, 16, false)))
     }
 
     @Test fun theGroupsRowsSayTheMocksWordsAndDoneSendsWhatMoved() {
@@ -108,7 +108,7 @@ class SubagentsTest {
         var done = 0
         compose.setContent { WorkspaceSettings(api, ManagementFixture.WORKSPACE, 0, { done++ }, {}, {}) }
         await("5 of 6 · Edit")
-        listOf(Subagents.GROUP, Subagents.SWITCH_DETAIL, Subagents.PROVIDERS,
+        listOf(Subagents.GROUP, Subagents.SWITCH_DETAIL, Subagents.WORKFLOWS, Subagents.WORKFLOWS_DETAIL, Subagents.PROVIDERS,
             Subagents.PROVIDERS_DETAIL, Subagents.RUNNING, Subagents.RUNNING_DETAIL).forEach {
             assertTrue("$it is drawn", compose.onAllNodesWithText(it, useUnmergedTree = true).fetchSemanticsNodes().isNotEmpty())
         }
@@ -117,6 +117,7 @@ class SubagentsTest {
         compose.onNodeWithTag("subagents-running", useUnmergedTree = true).assertTextEquals("4")
         val switch = hasText(Subagents.SWITCH_DETAIL) and isToggleable()
         compose.onNode(switch).assertIsOn()
+        compose.onNode(hasText(Subagents.WORKFLOWS_DETAIL) and isToggleable()).assertIsOn()
 
         compose.onNode(switch).performScrollTo().performClick()
         compose.onNodeWithContentDescription("More").performScrollTo().performClick().performClick()
@@ -130,6 +131,27 @@ class SubagentsTest {
         assertTrue("no runner route", fixture.calls.none { it.contains("runner/") })
     }
 
+    @Test fun theWorkflowsSwitchIsSavedWithDoneAndFollowsSubAgents() {
+        val api = api()
+        var done = 0
+        compose.setContent { WorkspaceSettings(api, ManagementFixture.WORKSPACE, 0, { done++ }, {}, {}) }
+        await("5 of 6 · Edit")
+        val workflows = hasText(Subagents.WORKFLOWS_DETAIL) and isToggleable()
+        compose.onNode(workflows).performScrollTo().assertIsOn().assertIsEnabled().performClick()
+        compose.onNode(workflows).assertIsOff()
+        // SubAgents off takes Workflows with it, and it cannot be turned on while SubAgents is off.
+        val switch = hasText(Subagents.SWITCH_DETAIL) and isToggleable()
+        compose.onNode(switch).performScrollTo().performClick()
+        compose.onNode(workflows).assertIsOff().assertIsNotEnabled()
+        compose.onNode(switch).performClick()
+        compose.onNode(workflows).assertIsOff().assertIsEnabled()
+        compose.onNodeWithText("Done").performClick()
+        compose.waitUntil(60_000) { done == 1 }
+        val patch = written("PATCH workspaces/${ManagementFixture.WORKSPACE}").single()
+        assertEquals(JsonPrimitive(false), patch["workflowsEnabled"])
+        assertNull("SubAgents ends where it started, so it is not sent", patch["subagentsEnabled"])
+    }
+
     @Test fun storedSubagentFieldsPrefillAndAnUnchangedFormWritesNothing() {
         fixture.workspaceExtra = ""","subagentsEnabled":false,"subagentsMaxRunning":16"""
         val api = api()
@@ -137,6 +159,8 @@ class SubagentsTest {
         compose.setContent { WorkspaceSettings(api, ManagementFixture.WORKSPACE, 0, { done++ }, {}, {}) }
         await("5 of 6 · Edit")
         compose.onNode(hasText(Subagents.SWITCH_DETAIL) and isToggleable()).assertIsOff()
+        // Workflows follows SubAgents: off, and not to be turned on while SubAgents is off.
+        compose.onNode(hasText(Subagents.WORKFLOWS_DETAIL) and isToggleable()).assertIsOff().assertIsNotEnabled()
         compose.onNodeWithTag("subagents-running", useUnmergedTree = true).assertTextEquals("16")
         compose.onNodeWithContentDescription("More").assertIsNotEnabled()
         compose.onNodeWithText("Done").performClick()
