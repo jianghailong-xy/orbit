@@ -7,6 +7,7 @@ import {
   OrderedListOutlined,
   QuestionOutlined,
   SafetyCertificateOutlined,
+  SettingOutlined,
 } from '@ant-design/icons';
 import { CoordinatorQuestionCard, coordinatorQuestions, type ProjectOpenItemRow } from '../components/CoordinatorQuestionCard';
 import { OwnerRequestCard, OwnerRequestResolved } from '../components/OwnerRequestCard';
@@ -49,6 +50,7 @@ const ACTION: Readonly<Record<AgentRequestKind, string>> = {
   MANUAL_STEP: 'Open steps',
   CONFIRM: 'Review',
   WIKI_CREATE: 'Review',
+  SETTINGS_CHANGE: 'Review',
 };
 
 const ICON: Readonly<Record<AgentRequestKind, ReactNode>> = {
@@ -57,6 +59,7 @@ const ICON: Readonly<Record<AgentRequestKind, ReactNode>> = {
   MANUAL_STEP: <OrderedListOutlined />,
   CONFIRM: <SafetyCertificateOutlined />,
   WIKI_CREATE: <BookOutlined />,
+  SETTINGS_CHANGE: <SettingOutlined />,
 };
 
 /** "holds 2 tasks", and for how long once that has passed a day: the part of the row that is overdue. */
