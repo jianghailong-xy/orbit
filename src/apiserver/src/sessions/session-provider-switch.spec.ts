@@ -299,8 +299,8 @@ test('a switch to a configured provider leaves Auto alone — its models are the
 
 // The clamp itself still has to fire where the allow-list does apply: a built-in target, on a
 // model Claude Code rejects Auto for.
-test('a switch to the built-in engine re-clamps Auto for a model it cannot run', async () => {
-  const { service, updated } = harness(
+test('a switch to the built-in engine re-clamps Auto for a model it cannot run, and keeps the intent', async () => {
+  const { service, updated, reloads } = harness(
     { provider: 'anthropic', providerBuiltin: false, model: 'claude-opus-5', permissionMode: 'auto' },
     [providerRow({ slug: 'anthropic' })],
   );
@@ -312,7 +312,10 @@ test('a switch to the built-in engine re-clamps Auto for a model it cannot run',
 
   assert.equal(updated().providerBuiltin, true);
   assert.equal(updated().model, 'claude-haiku-4-5-20251001');
-  assert.equal(updated().permissionMode, 'default');
+  // The engine is re-spawned in Default, the model having no Auto; the stored mode is the owner's intent and stays
+  // Auto (actual-permission-mode.ts records what runs).
+  assert.equal(JSON.parse(reloads()[0].content as string).permissionMode, 'default');
+  assert.equal(updated().permissionMode, 'auto');
 });
 
 test('re-selecting the running provider changes nothing and carries no marker', async () => {

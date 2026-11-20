@@ -62,7 +62,12 @@ import {
   type ExternalTurnSender,
 } from './session-message';
 import { senderClientColumns, type TurnSenderClient } from './turn-sender-client';
-import { type ConfigChangeOrigin, configTurnKey, readPermissionModeChanges } from './actual-permission-mode';
+import {
+  type ConfigChangeOrigin,
+  configTurnKey,
+  PERMISSION_MODE_CHANGES_INCLUDE,
+  permissionModeChangesOf,
+} from './actual-permission-mode';
 import { readOrbitMessageFrom } from './orbit-message';
 import {
   closeRequestsTheRetryWillNotResend,
@@ -5330,6 +5335,8 @@ export class SessionsService {
     const session = await this.prisma.session.findFirst({
       where: { id, ownerId },
       include: {
+        // How the actual mode came to be, newest first (permissionModeChangesOf turns it oldest first).
+        permissionModeChanges: PERMISSION_MODE_CHANGES_INCLUDE,
         workspace: true,
         assignedRunner: {
           select: {
@@ -5480,6 +5487,8 @@ export class SessionsService {
       notifyTurnFinished: _notifyTurnFinished,
       notifyNeedsYou: _notifyNeedsYou,
       notificationsMuted: _notificationsMuted,
+      // Read, never spread: answered oldest first as `permissionModeChanges`, below.
+      permissionModeChanges,
       ...rest
     } = projected;
     const tags = tagLinks
@@ -5588,7 +5597,7 @@ export class SessionsService {
       engineVersion,
       // `permissionMode` (the intent) and `actualPermissionMode`/`actualPermissionModeAt` (what the engine runs
       // in) ride along in the spread; here, how the actual mode came to be (actual-permission-mode.ts).
-      permissionModeChanges: await readPermissionModeChanges(this.prisma, session.id),
+      permissionModeChanges: permissionModeChangesOf(permissionModeChanges),
     });
   }
 

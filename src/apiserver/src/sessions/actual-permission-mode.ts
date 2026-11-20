@@ -125,18 +125,18 @@ export function configTurnPayload(content: string | null | undefined): { permiss
   }
 }
 
-/** The session detail's mode changes: the newest SESSION_PERMISSION_MODE_CHANGES_LIMIT, oldest first. */
-export async function readPermissionModeChanges(
-  db: Pick<Prisma.TransactionClient, 'sessionPermissionModeChange'>,
-  sessionId: string,
-): Promise<SessionPermissionModeChange[]> {
-  const rows = await db.sessionPermissionModeChange.findMany({
-    where: { sessionId },
-    orderBy: [{ createdAt: 'desc' }, { id: 'desc' }],
-    take: SESSION_PERMISSION_MODE_CHANGES_LIMIT,
-    select: { fromMode: true, toMode: true, cause: true, client: true, createdAt: true },
-  });
-  return rows.reverse().map((row) => ({
+/** The session detail's mode changes as its `include` reads them: the newest SESSION_PERMISSION_MODE_CHANGES_LIMIT. */
+export const PERMISSION_MODE_CHANGES_INCLUDE = {
+  orderBy: [{ createdAt: 'desc' }, { id: 'desc' }],
+  take: SESSION_PERMISSION_MODE_CHANGES_LIMIT,
+  select: { fromMode: true, toMode: true, cause: true, client: true, createdAt: true },
+} satisfies Prisma.Session$permissionModeChangesArgs;
+
+/** Those rows as the detail answers them, oldest first. None read (an older row shape) is none. */
+export function permissionModeChangesOf(
+  rows: ReadonlyArray<{ fromMode: string | null; toMode: string; cause: string; client: string | null; createdAt: Date }> | undefined,
+): SessionPermissionModeChange[] {
+  return [...(rows ?? [])].reverse().map((row) => ({
     fromMode: row.fromMode,
     toMode: row.toMode,
     cause: row.cause as PermissionModeChangeCause,
