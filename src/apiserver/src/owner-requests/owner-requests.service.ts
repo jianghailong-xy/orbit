@@ -241,6 +241,9 @@ export class OwnerRequestsService implements OnModuleInit, OnModuleDestroy {
       select: VIEW,
     });
     if (created) {
+      // The asking session is now waiting on its owner: its row moves to the top of their list (session.listed_at,
+      // sessions/session-listed-at.ts), before the summary below is published.
+      await this.prisma.session.updateMany({ where: { id: created.askedBySessionId }, data: { listedAt: new Date() } });
       // Told after the row is committed, and never awaited: the request is the fact, the banner a reader of it.
       void this.push?.notifyOwnerRequest(created.id);
       this.realtime?.publishSessionUpdated(created.askedBySessionId);

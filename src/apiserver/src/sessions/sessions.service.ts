@@ -3716,9 +3716,9 @@ export class SessionsService {
                  ELSE 1                  -- branch / agent / task: names of the container, not of this
                END)
               + (CASE
-                   WHEN COALESCE(s.last_turn_at, s.created_at) > now() - interval '1 day'  THEN 3
-                   WHEN COALESCE(s.last_turn_at, s.created_at) > now() - interval '7 days' THEN 2
-                   WHEN COALESCE(s.last_turn_at, s.created_at) > now() - interval '30 days' THEN 1
+                   WHEN COALESCE(s.listed_at, s.created_at) > now() - interval '1 day'  THEN 3
+                   WHEN COALESCE(s.listed_at, s.created_at) > now() - interval '7 days' THEN 2
+                   WHEN COALESCE(s.listed_at, s.created_at) > now() - interval '30 days' THEN 1
                    ELSE 0
                  END)
               -- Exactness, the one match-quality signal a substring search can afford. The length
@@ -4129,15 +4129,15 @@ export class SessionsService {
     // Completed orders by when the session was completed
     // (completed_at, newest first) — not by last activity — and deliberately ignores
     // pinning, which is an Open-list affordance. Every other view floats pinned
-    // sessions to the top and orders by last turn activity.
-    // A session that has never run has no last_turn_at, and the clients place it by when it
-    // was created (not last, as `NULLS LAST` would) — so order on the same key they sort by.
-    // With `limit` that stopped being cosmetic: a differently ordered page would cut exactly
+    // sessions to the top and orders by `listed_at` (migration 1260, session-listed-at.ts): the
+    // clock that moves only when the session changes for its owner, not with every event.
+    // The clients sort on the same key, read as created_at where an older server left it NULL.
+    // With `limit` that is not cosmetic: a differently ordered page would cut exactly
     // the rows the client then floats to the top.
     const orderBy: Prisma.Sql =
       view === 'completed'
         ? Prisma.sql`COALESCE(s.completed_at, s.archived_at) DESC NULLS LAST, s.created_at DESC`
-        : Prisma.sql`(s.pinned_at IS NOT NULL) DESC, COALESCE(s.last_turn_at, s.created_at) DESC, s.created_at DESC`;
+        : Prisma.sql`(s.pinned_at IS NOT NULL) DESC, COALESCE(s.listed_at, s.created_at) DESC, s.created_at DESC`;
     // An Ask (migration 0850) is in no session list: it is listed under /help → Your questions (help/help-ask.ts).
     const build = () => this.listRows(ownerId, {
       scope: Prisma.sql`AND s.help_ask IS NULL ${runnerFilter} ${workspaceFilter} ${confinedFilter} ${tagFilter} ${projectFilter}`,
@@ -4274,6 +4274,7 @@ export class SessionsService {
       title: string;
       createdAt: Date;
       lastTurnAt: Date | null;
+      listedAt: Date | null;
       currentTurnStartedAt: Date | null;
       startedAt: Date | null;
       numTurns: number;
@@ -4370,6 +4371,9 @@ export class SessionsService {
         s.kind            AS "sessionKind",
         s.created_at      AS "createdAt",
         s.last_turn_at    AS "lastTurnAt",
+        -- The list's order key (migration 1260): moved only when the session changes for its owner. NULL only on a row
+        -- an older server inserted mid-deploy, which is read as its creation.
+        COALESCE(s.listed_at, s.created_at) AS "listedAt",
         -- When the turn now in flight was handed to the runner. last_turn_at cannot answer this:
         -- it is rewritten on every state move (turn delivered, awaiting input, the reaper's
         -- idle-clock reset), so on a running session it sits seconds behind now and a list of
@@ -4675,6 +4679,8 @@ export class SessionsService {
         title: r.title,
         createdAt: r.createdAt,
         lastTurnAt: r.lastTurnAt,
+        // Where the row sits: the clients sort by this, never by lastTurnAt, which moves with every event.
+        listedAt: r.listedAt,
         currentTurnStartedAt: r.currentTurnStartedAt,
         startedAt: r.startedAt,
         numTurns: r.numTurns,
@@ -6724,6 +6730,8 @@ export class SessionsService {
       /** Which client sent it (migration 0595), as `senderClientColumns` writes it. */
       senderClient?: string;
       senderClientDetail?: string | null;
+      /** A person sent it (migration 1260): its end, waiting for input, moves the session's `listedAt`. */
+      byPerson?: boolean;
       /** A wiki chat's page and selection (migration 0476), which delivery reads. */
       wikiContext?: Prisma.InputJsonValue;
       /** A held message under Settings › Translation (heldTurnColumns, migration 0532). */
@@ -7017,6 +7025,13 @@ export class SessionsService {
        * never a field of `dto`.
        */
       translated?: { content: string; from: TranslationLanguage };
+      /**
+       * A person sent this turn — the owner at one of their own doors, a guest, a Feishu sender — so the session moves
+       * to the top of the session list (`session.listed_at`, migration 1260). An option of this call and never a field
+       * of `dto`; every platform delivery (wake-ups, notifications, task briefs, re-sends) and every session-to-session
+       * door leaves it unset, which is what keeps a session busy with those where its owner left it.
+       */
+      listed?: boolean;
     },
   ) {
     assertPromptSize(dto.content, 'message');
@@ -7151,6 +7166,7 @@ export class SessionsService {
         return {
           turn: await this.insertHeldTurnLocked(
             tx, ownerId, session, dto, translateFrom, intent, wikiContext, opts?.clearSettledWorktreeState === true,
+            opts?.listed === true,
           ),
           placement: 'queued' as const,
           wakeQueue: false,
@@ -7324,6 +7340,7 @@ export class SessionsService {
       const turn = await this.insertTurnLocked(tx, id, {
         // Whitelist: this endpoint cannot manufacture control turns.
         kind,
+        ...(opts?.listed ? { byPerson: true } : {}),
         content: opts?.translated && dto.content ? opts.translated.content : dto.content,
         ...(opts?.translated && dto.content
           ? { displayPrompt: dto.content, translationState: 'DONE', translationLang: opts.translated.from }
@@ -7358,6 +7375,8 @@ export class SessionsService {
         data: {
           status: nextStatus,
           lastTurnAt: new Date(),
+          // A person's message moves the row; anything else that queues a turn leaves it where it is.
+          ...(opts?.listed ? { listedAt: new Date() } : {}),
           // The message the list previews while it waits to be answered. Written here, at
           // enqueue, rather than when the runner reports the user turn: between the two lies the
           // whole wait — for a runner slot, and for a message queued behind a running turn the
@@ -7462,6 +7481,7 @@ export class SessionsService {
     intent: SessionTurnIntent | undefined,
     wikiContext: WikiChatContext | null,
     clearSettledWorktreeState: boolean,
+    listed: boolean,
   ): Promise<ConversationTurn> {
     const content = dto.content!;
     const attachmentIds = await this.assertLinkableAttachments(ownerId, session.id, dto.clientTurnId, dto.attachmentIds, tx);
@@ -7470,6 +7490,7 @@ export class SessionsService {
       kind: 'message',
       content,
       clientTurnId: dto.clientTurnId,
+      ...(listed ? { byPerson: true } : {}),
       ...(intent === 'NEXT_TURN' ? { sendIntent: 'NEXT_TURN' as const } : {}),
       ...(wikiContext ? { wikiContext: wikiContext as unknown as Prisma.InputJsonValue } : {}),
       ...heldTurnColumns(content, from),
@@ -7479,6 +7500,7 @@ export class SessionsService {
       where: { id: session.id },
       data: {
         lastTurnAt: new Date(),
+        ...(listed ? { listedAt: new Date() } : {}),
         // The owner's own words, as they wrote them.
         ...pendingMessageColumns(content, null, null),
         // The owner took over, as in createTurn.
@@ -7762,6 +7784,8 @@ export class SessionsService {
       senderSessionId?: string;
       /** The owner's own door: the follow-up is held and translated, as `createTurn`'s `translate`. */
       translate?: boolean;
+      /** A person sent the follow-up — see `createTurn`'s own. A stop with no follow-up moves nothing. */
+      listed?: boolean;
     },
   ) {
     // Stopping a turn — or stopping one and replacing it — is an engine door (§2.9 LS6).
@@ -7940,6 +7964,7 @@ export class SessionsService {
         kind: 'message',
         content,
         clientTurnId: dto!.clientTurnId!,
+        ...(opts?.listed ? { byPerson: true } : {}),
         ...(opts?.senderSessionId ? { senderSessionId: opts.senderSessionId } : {}),
         ...(heldFrom ? heldTurnColumns(content, heldFrom) : {}),
       });
@@ -7958,6 +7983,7 @@ export class SessionsService {
         data: {
           status: nextStatus,
           lastTurnAt: new Date(),
+          ...(opts?.listed ? { listedAt: new Date() } : {}),
           // The redirected message is what the session is waiting on now — previewed from here
           // exactly as in createTurn, with who sent it.
           ...(content ? pendingMessageColumns(content, sentBy, sentByOrbit) : {}),
@@ -10386,7 +10412,7 @@ export class SessionsService {
           // attachment with a sentence about ids. Both are worse than the structured refusal this
           // door has always given, which at least names the run to open and re-send in.
           if (dto.attachmentIds?.length) throw inTheWay();
-          const delivered = await this.createTurn(ownerId, holder.id, dto, { translate: opts?.translate });
+          const delivered = await this.createTurn(ownerId, holder.id, dto, { translate: opts?.translate, listed: opts?.listed });
           return {
             ...delivered,
             revived: false as const,
@@ -10500,6 +10526,8 @@ export class SessionsService {
        *  branches — a revived session's message is held like any other (insertHeldOpeningLocked's rule:
        *  the claim does not hand out a session whose only work is held). */
       translate?: boolean;
+      /** A person sent the turn — see `createTurn`'s own. Carried onto both branches. */
+      listed?: boolean;
     },
   ): Promise<SessionResumeAnswer> {
     refuseOwnerFieldsToToken(opts?.credential, { permissionMode: dto.permissionMode });
@@ -10616,6 +10644,7 @@ export class SessionsService {
         onTurnWritten: opts?.onTurnWritten,
         requestFingerprint,
         translate: opts?.translate,
+        listed: opts?.listed,
       });
       // Nothing was revived: this turn joined a process that was already running. Said out loud
       // because the orchestration door offers resume as a fallback for `send`, and the caller
@@ -10918,6 +10947,7 @@ export class SessionsService {
         content: dto.content,
         clientTurnId: dto.clientTurnId,
         requestFingerprint,
+        ...(opts?.listed ? { byPerson: true } : {}),
         ...(opts?.senderSessionId ? { senderSessionId: opts.senderSessionId } : {}),
         ...senderClientColumns(opts?.senderClient),
         ...externalSenderColumns(opts?.externalSender),
@@ -10971,6 +11001,7 @@ export class SessionsService {
           error: null,
           result: null,
           lastTurnAt: new Date(),
+          ...(opts?.listed ? { listedAt: new Date() } : {}),
           // Previewed from enqueue, as in createTurn: a revive waits for a slot like any other
           // turn, and until the runner reports it the row would show the reply from before. With
           // its sender, as there.
