@@ -283,6 +283,14 @@ private fun rows(group: ScheduleDisplay.TimelineGroup, state: ScheduledStore.Sta
                 else { store.inspect(s.id); store.loadDetail(s.id) }
             }
         }
+        // A streak of missed slots as one row: "16 slots missed, 01:00–08:30".
+        is ScheduleDisplay.TimelineItem.Missed -> {
+            val s = item.schedule
+            ScheduleRowModel("${group.id}-${item.id}", ScheduleDisplay.runCircle("MISSED"), s.title,
+                ScheduleDisplay.missedText(item.runs, zone), repeats = false, time = scheduleClock(item.at, zone), draft = false, paused = false) {
+                store.inspect(s.id); store.loadDetail(s.id)
+            }
+        }
         is ScheduleDisplay.TimelineItem.Schedule -> {
             val s = item.schedule
             val inPaused = group.key == ScheduleDisplay.GroupKey.paused
@@ -303,7 +311,9 @@ private fun rows(group: ScheduleDisplay.TimelineGroup, state: ScheduledStore.Sta
                     store.inspect(s.id); store.loadDetail(s.id)
                 }
             }
-            ScheduleRowModel("${group.id}-${item.id}", circle, s.title, ScheduleDisplay.phoneRowLine(s.rule, s.workspaceName, s.accessLevel, s.state, s.heldReason, pausedAt, zone),
+            val line = listOfNotNull(ScheduleDisplay.phoneRowLine(s.rule, s.workspaceName, s.accessLevel, s.state, s.heldReason, pausedAt, zone),
+                ScheduleDisplay.endText(s, now, zone)).joinToString(SC.separator)
+            ScheduleRowModel("${group.id}-${item.id}", circle, s.title, line,
                 ScheduleDisplay.ruleRepeats(s.rule), time, draft = false, paused = inPaused) {
                 store.inspect(s.id); store.loadDetail(s.id)
             }
@@ -421,7 +431,7 @@ private fun ScheduleDetailSheet(store: ScheduledStore, id: String, close: () -> 
             LaunchedEffect(conditionId) { conditionId?.let(store::loadCondition) }
             // A WHEN rule has no time, so its zone says nothing.
             val meta = listOfNotNull(ScheduleDisplay.ruleText(s.rule, ScheduleDisplay.RuleForm.short), s.timezone.takeIf { conditionId == null },
-                s.workspaceName, ScheduleDisplay.accessCopy(s.accessLevel).label).joinToString(SC.separator)
+                s.workspaceName, ScheduleDisplay.accessCopy(s.accessLevel).label, ScheduleDisplay.endText(s, now, zone)).joinToString(SC.separator)
             val next = s.nextDueAt?.let(ScheduleDisplay::parse)?.let { ScheduleDisplay.whenText(it, now, zone) } ?: "—"
             val lastLine = lastRun?.let { run ->
                 val at = ScheduleDisplay.parse(run.startedAt ?: run.plannedAt)?.let { ScheduleDisplay.whenText(it, now, zone) }.orEmpty()

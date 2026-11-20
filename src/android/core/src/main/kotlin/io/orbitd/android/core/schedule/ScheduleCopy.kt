@@ -228,6 +228,29 @@ object ScheduleCopy {
         "WORKSPACE" to "Keep in {workspace}",
         "other" to "Keep as it is",
     )
+    object Every {
+        const val minutes = "Every {count} min"
+        const val hour = "Every hour"
+        const val hours = "Every {count} hours"
+        const val window = "{interval}, {time}–{until}"
+        const val from = "{interval} from {time}"
+        const val days = "{rule}, {days}"
+        const val workweek = "Mon–Fri"
+        const val weekend = "weekends"
+    }
+    object End {
+        const val until = "until {when}"
+        const val today = "{time} today"
+        const val tomorrow = "{time} tomorrow"
+        const val runLeft = "1 run left"
+        const val runsLeft = "{count} runs left"
+        const val missed = "{count} slots missed, {from}–{to}"
+        const val endLabel = "Ends"
+        const val extend = "Extend the end"
+        const val remove = "Remove the end"
+        const val extendAsk = "{title}: extend the end"
+        const val removeAsk = "{title}: remove the end"
+    }
     object History {
         val who: Map<String, String> = mapOf(
             "USER" to "You",
@@ -242,6 +265,7 @@ object ScheduleCopy {
             "rule" to "Time",
             "timezone" to "Time zone",
             "endAt" to "Ends",
+            "maxRuns" to "Runs",
             "accessLevel" to "Access",
             "runLimitMinutes" to "Run limit",
             "workspaceId" to "Workspace",
@@ -284,8 +308,8 @@ object ScheduleCopy {
             "ACCESS_LEVEL" to "Let {title} open PRs?",
             "RUNS_PER_WEEK" to "Let {title} run more often?",
             "RUN_LIMIT" to "Let {title} run longer?",
-            "WORKSPACE" to "Let {title} run in {workspace}?",
             "PROBE_COMMAND" to "Let {title} check with a new command?",
+            "WORKSPACE" to "Let {title} run in {workspace}?",
         )
         const val now = "Now"
         const val asked = "Asked"
@@ -536,6 +560,25 @@ object ScheduleCopy {
         "keep.RUN_LIMIT" to keep.getValue("RUN_LIMIT"),
         "keep.WORKSPACE" to keep.getValue("WORKSPACE"),
         "keep.other" to keep.getValue("other"),
+        "every.minutes" to Every.minutes,
+        "every.hour" to Every.hour,
+        "every.hours" to Every.hours,
+        "every.window" to Every.window,
+        "every.from" to Every.from,
+        "every.days" to Every.days,
+        "every.workweek" to Every.workweek,
+        "every.weekend" to Every.weekend,
+        "end.until" to End.until,
+        "end.today" to End.today,
+        "end.tomorrow" to End.tomorrow,
+        "end.runLeft" to End.runLeft,
+        "end.runsLeft" to End.runsLeft,
+        "end.missed" to End.missed,
+        "end.endLabel" to End.endLabel,
+        "end.extend" to End.extend,
+        "end.remove" to End.remove,
+        "end.extendAsk" to End.extendAsk,
+        "end.removeAsk" to End.removeAsk,
         "history.who.USER" to History.who.getValue("USER"),
         "history.who.SESSION" to History.who.getValue("SESSION"),
         "history.who.RUN" to History.who.getValue("RUN"),
@@ -546,6 +589,7 @@ object ScheduleCopy {
         "history.fields.rule" to History.fields.getValue("rule"),
         "history.fields.timezone" to History.fields.getValue("timezone"),
         "history.fields.endAt" to History.fields.getValue("endAt"),
+        "history.fields.maxRuns" to History.fields.getValue("maxRuns"),
         "history.fields.accessLevel" to History.fields.getValue("accessLevel"),
         "history.fields.runLimitMinutes" to History.fields.getValue("runLimitMinutes"),
         "history.fields.workspaceId" to History.fields.getValue("workspaceId"),
@@ -580,8 +624,8 @@ object ScheduleCopy {
         "envelopeCard.titles.ACCESS_LEVEL" to EnvelopeCard.titles.getValue("ACCESS_LEVEL"),
         "envelopeCard.titles.RUNS_PER_WEEK" to EnvelopeCard.titles.getValue("RUNS_PER_WEEK"),
         "envelopeCard.titles.RUN_LIMIT" to EnvelopeCard.titles.getValue("RUN_LIMIT"),
-        "envelopeCard.titles.WORKSPACE" to EnvelopeCard.titles.getValue("WORKSPACE"),
         "envelopeCard.titles.PROBE_COMMAND" to EnvelopeCard.titles.getValue("PROBE_COMMAND"),
+        "envelopeCard.titles.WORKSPACE" to EnvelopeCard.titles.getValue("WORKSPACE"),
         "envelopeCard.now" to EnvelopeCard.now,
         "envelopeCard.asked" to EnvelopeCard.asked,
         "envelopeCard.accessJoin" to EnvelopeCard.accessJoin,
