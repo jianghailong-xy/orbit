@@ -187,7 +187,7 @@ struct InfrastructureModelTiersSection: View {
         VStack(alignment: .leading, spacing: 2) {
             HStack(spacing: 10) {
                 Text(provider.label).lineLimit(1).frame(maxWidth: .infinity, alignment: .leading)
-                tierCell(provider, model).frame(width: 150, alignment: .leading)
+                tierCell(provider, model).frame(width: 110, alignment: .leading)
                 priceCell(provider, model)
             }
             Text(model.model)
@@ -204,7 +204,7 @@ struct InfrastructureModelTiersSection: View {
                 .lineLimit(1)
                 .truncationMode(.middle)
                 .frame(maxWidth: .infinity, alignment: .leading)
-            tierCell(provider, model).frame(width: 150, alignment: .leading)
+            tierCell(provider, model).frame(width: 110, alignment: .leading)
             priceCell(provider, model)
         }
         #endif

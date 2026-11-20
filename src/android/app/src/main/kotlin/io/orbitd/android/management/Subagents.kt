@@ -295,7 +295,7 @@ private fun TierRow(wide: Boolean, header: Boolean, provider: @Composable (andro
         // are as wide as their longest values ("S–XL by effort", "Subscription"), so the columns line up.
         Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
             Box(Modifier.weight(1f)) { provider(style) }
-            Box(Modifier.width(150.dp)) { tier(style) }
+            Box(Modifier.width(112.dp)) { tier(style) }
             Box(Modifier.width(96.dp), contentAlignment = Alignment.CenterEnd) { price(style) }
         }
         if (!header) model(small)
