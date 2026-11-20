@@ -200,6 +200,11 @@ import {
   normalizeEffortForRuntimeModel,
 } from '../common/runtime-provider';
 import { OPEN_SESSION_STATUSES, statusAfterTurnCompleted } from '../common/session-scheduling';
+import {
+  finalizeReleaseCause,
+  HELD_SESSION_STATUSES,
+  RELEASED_SESSION_STATUSES,
+} from '../common/session-release';
 import { assertValidUpload, MAX_UPLOAD_BYTES } from '../attachments/attachments.media';
 import { FileUploadCleanupInterceptor } from '../files/file-upload-cleanup.interceptor';
 import { FILE_UPLOAD_STORAGE, type FileUpload } from '../files/file-upload-storage';
@@ -482,7 +487,6 @@ import {
   linkBeatDigests,
   linkBeatVerdict,
   quietHeartbeatAnswer,
-  backgroundJobLimitsField,
   readFactsHash,
   readLinkBeat,
   readLinkReconcilePending,
@@ -1103,8 +1107,9 @@ const LEASE_GENERATION_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-
 // entity-ID validation separate from the stricter runner-generated lease UUID
 // validation above so adding a UUID version cannot take the heartbeat offline.
 const SESSION_ID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
-const LIVE: RunStatus[] = [RunStatus.RUNNING, RunStatus.AWAITING_INPUT, RunStatus.INTERRUPTED];
-const TERMINAL: RunStatus[] = [RunStatus.SUCCEEDED, RunStatus.FAILED, RunStatus.CANCELLED];
+// Held by a runner past its claim, and released (common/session-release.ts).
+const LIVE: RunStatus[] = HELD_SESSION_STATUSES.filter((status) => status !== RunStatus.PENDING);
+const TERMINAL: RunStatus[] = [...RELEASED_SESSION_STATUSES];
 // PENDING is also open/resumable. In the active-turn model it can briefly coexist with
 // a still-warm runtime (a new message arrived after the prior turn released its slot), so
 // late event tails and heartbeat snapshots must remain streamable while it waits to claim.
@@ -2894,7 +2899,6 @@ export class RunnerApiController {
       leaseLostSessionIds: ownershipLostSessionIds,
       maxConcurrent: updated.maxConcurrent,
       minFreeDiskMb: managedStorage ? managedStorage.minFreeDiskMb : updated.minFreeDiskMb,
-      ...backgroundJobLimitsField(updated),
       mergeRequests,
       commitRequests,
       artifactRequests,
@@ -8111,6 +8115,8 @@ export class RunnerApiController {
                 // released the turn without a reply. Its own sentence follows when it gave one.
                 error: (acceptanceFailureReason ?? (swallowed ? swallowedMessageError(failureText) : failureText)) || 'run failed',
                 finishedAt: new Date(),
+                // Released for the turn that failed (design §4.2), in the statement that writes FAILED.
+                releaseCause: 'turn_failed',
                 cancelRequestedAt: new Date(),
                 // FAILED is where this session stops being live, so whatever it had running
                 // goes with it (CLEARED_RUNNING_WORK). This write is the reason the runner
@@ -10141,6 +10147,9 @@ export class RunnerApiController {
           // id, so it only serves as a fallback here and is never persisted on its own.
           runtimeSessionId: dto.runtimeSessionId ?? dto.claudeSessionId ?? undefined,
           finishedAt: new Date(),
+          // Why it was released: the requested end's reason, which also chose the status above, or the
+          // engine exiting by itself.
+          releaseCause: finalizeReleaseCause(current),
           // Worktree isolation outcome reported by the runner: the branch it committed
           // the work to, the base it forked from, what it did (worktree/shared-nogit),
           // and the per-file diff summary. Each left untouched when the runner omits it.
@@ -10551,6 +10560,9 @@ export class RunnerApiController {
           status: RunStatus.FAILED,
           error: dto.error ?? 'import failed',
           deletedAt: new Date(),
+          // Released with the status, as every terminal write is (design §4.2).
+          finishedAt: new Date(),
+          releaseCause: 'import_failed',
         },
       });
       return { applied: false, failed: true, announced: true };

@@ -112,7 +112,7 @@ internal fun TranscriptRowView(row: TranscriptRow, model: FullEvents, live: Tran
     val result = fullResult ?: row.result
     val tool = event.type in setOf("tool_use", "tool_result")
     val cards = remember(shown) { transcriptCards(shown) }
-    // The turns Orbit opens for its own news — a SubAgent's end, a background job's news or a wakeup coming due, a watch's wake — are lines
+    // The turns Orbit opens for its own news — a background job's news or a wakeup coming due, a watch's wake — are lines
     // in the agent's stream (owner 2026-11-16: they must not look like something the reader sent): no "Orbit" heading, no row tint, no Copy
     // message — the lines are the whole row, as on the web and iOS.
     // A turn carrying only Orbit's blocks that no line knows is the generic From Orbit line, never the reader's row (OrbitEvent).
@@ -122,6 +122,11 @@ internal fun TranscriptRowView(row: TranscriptRow, model: FullEvents, live: Tran
         val wakeLines = cards.isNotEmpty() && cards.all { card -> WAKE_LINE_KEYS.any { card.key.endsWith(it) } } &&
             (words.isBlank() || cards.any { it.key.endsWith(":watch") })
         val orbitOnly = cards.isEmpty() && OrbitEvent.draws(words, note, (shown.fields["attachments"] as? JsonArray).orEmpty().isNotEmpty())
+        // A SubAgent's end draws nothing: like Claude Code's built-in Agent, the SubAgent is one card from start to end, and that card
+        // draws how it ended (SubagentCardEnd, joined by run id). Its card still keeps the turn from being the reader's bubble or the From
+        // Orbit line; only a job's news written beside it draws, as it always has.
+        val drawn = if (wakeLines) cards.filterNot { it.key.endsWith(":subagent") } else cards
+        if (wakeLines && drawn.isEmpty()) return
         if (wakeLines || orbitOnly) {
             Column(Modifier.fillMaxWidth().padding(horizontal = 10.dp, vertical = 4.dp).testTag(row.key), verticalArrangement = Arrangement.spacedBy(6.dp)) {
                 if (orbitOnly) {
@@ -130,7 +135,7 @@ internal fun TranscriptRowView(row: TranscriptRow, model: FullEvents, live: Tran
                     OrbitEventLine(note!!.trim(), event.ts, BackgroundWakeCard.steerReceipt(
                         BackgroundWakeCard.steerState(shown.fields["steer"] == JsonPrimitive(true), delivery, undelivered)), undelivered)
                 } else {
-                    cards.forEach { TranscriptCardView(it, open, shown) }
+                    drawn.forEach { TranscriptCardView(it, open, shown) }
                 }
             }
             return
@@ -248,7 +253,8 @@ internal fun TranscriptRowView(row: TranscriptRow, model: FullEvents, live: Tran
     val dshRepair = if (event.type == "error") DshRuntime.repair(shown.body().trim())?.takeIf { console?.executesDsh == true } else null
     // A reply is the page's own text (iOS `AssistantBubbleView`): no heading, copied by selecting it, or by TalkBack's Copy message.
     val plainReply = event.type == "assistant" && !detailOnly && cards.isEmpty() && repair == null
-    Column(Modifier.fillMaxWidth().background(bg).padding(10.dp).testTag(row.key)
+    // A person's bubble and a plain reply sit on the list's own 16dp margin, as iOS's 16pt; other rows keep their 10dp inset.
+    Column(Modifier.fillMaxWidth().background(bg).padding(horizontal = if (userBubble || plainReply) 0.dp else 10.dp, vertical = 10.dp).testTag(row.key)
         .then(if (plainReply) Modifier.semantics { customActions = listOf(CustomAccessibilityAction("Copy message") { loadFull(copy = true); true }) }
             else Modifier), verticalArrangement = Arrangement.spacedBy(6.dp)) {
         if (answerLine != null) { cards.forEach { TranscriptCardView(it, open, shown) }; return@Column }

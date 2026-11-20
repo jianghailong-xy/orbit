@@ -81,10 +81,11 @@ import {
   claudeAccountSwapWaitingOf,
 } from './claude-account-swap';
 import { openCodeKeyRows, runsOnOpenCode } from '../providers/custom-provider';
+import { RELEASED_SESSION_STATUSES } from '../common/session-release';
 
 /** The statuses an abandoned checkout can belong to: a session that has stopped running for good.
  *  A parked one can be dirty between turns and is not abandoned, so it is not listed. */
-const FINISHED_SESSION_STATUSES = [RunStatus.SUCCEEDED, RunStatus.FAILED, RunStatus.CANCELLED];
+const FINISHED_SESSION_STATUSES = [...RELEASED_SESSION_STATUSES];
 
 // Cap device-enrollment userCode lookups per user, so an authenticated insider
 // cannot brute-force another user's pending enrollment code online.
@@ -181,9 +182,6 @@ export class RunnersService {
         // The runner page's Capacity › Keep Free reads the floor it writes (PATCH minFreeDiskMb),
         // and About › Repos Folder shows where this machine clones to (reported, not configured).
         minFreeDiskMb: true,
-        // The limits on each background job it runs (PATCH bgJobCpus / bgJobMemoryMb); both null is off.
-        bgJobCpus: true,
-        bgJobMemoryMb: true,
         reposRoot: true,
         // Where `orbit register` ran: the folder a machine's first workspace is offered, once the
         // directory probe has found it there (docs/first-workspace-contract.md §1).
@@ -566,8 +564,6 @@ export class RunnersService {
       displayName?: string | null;
       maxConcurrent?: number;
       minFreeDiskMb?: number | null;
-      bgJobCpus?: number | null;
-      bgJobMemoryMb?: number | null;
     } = {};
     if (dto.displayName !== undefined) {
       const trimmed = dto.displayName.trim();
@@ -583,9 +579,6 @@ export class RunnersService {
     if (dto.minFreeDiskMb !== undefined) {
       data.minFreeDiskMb = dto.minFreeDiskMb;
     }
-    // Handed to the runner in every heartbeat answer, so a change reaches it within one beat.
-    if (dto.bgJobCpus !== undefined) data.bgJobCpus = dto.bgJobCpus;
-    if (dto.bgJobMemoryMb !== undefined) data.bgJobMemoryMb = dto.bgJobMemoryMb;
     // Never echo back tokenHash.
     return this.prisma.runner.update({
       where: { id },
@@ -596,8 +589,6 @@ export class RunnersService {
         displayName: true,
         maxConcurrent: true,
         minFreeDiskMb: true,
-        bgJobCpus: true,
-        bgJobMemoryMb: true,
       },
     });
   }
