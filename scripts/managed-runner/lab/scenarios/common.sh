@@ -144,6 +144,13 @@ lab_collect() {
   journalctl --no-pager -b -o short-iso -u 'orbit-mr-lab*' > "$LOGS/journal-units.txt" 2>&1
   journalctl --no-pager -b -o short-iso -n 600 > "$LOGS/journal.txt" 2>&1
   dmesg -T 2>/dev/null | tail -n 200 > "$LOGS/dmesg.txt"
+  # The host's way into the VM, as the lab's scripts take it, with ssh's own account of it.
+  if vm_running; then
+    { qemu-system-x86_64 --version | head -1; ssh -V; ss -Hltnp | grep -E ":(${LAB_SSH_PORT}|${LAB_API_PORT}) " || true
+      timeout 30 ssh -vvv -i "$LAB_SSH_KEY" -p "$LAB_SSH_PORT" -o IdentitiesOnly=yes -o BatchMode=yes -o ConnectTimeout=10 \
+        -o UserKnownHostsFile="$LAB_DIR/ssh/known_hosts" -o StrictHostKeyChecking=accept-new ubuntu@127.0.0.1 true; echo "ssh exit $?"
+    } > "$LOGS/vm-ssh.txt" 2>&1
+  fi
   docker rm -f orbit-mr-lab-web-nginx >/dev/null 2>&1
   python3 "$L/login-lab.py" gate stop >/dev/null 2>&1
   "$L/stop.sh" >/dev/null 2>&1
