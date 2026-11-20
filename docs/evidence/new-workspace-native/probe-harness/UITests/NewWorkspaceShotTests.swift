@@ -197,17 +197,17 @@ final class NewWorkspaceShotTests: ProbeCase {
         let app = launch(scene: "two", until: "wiki-site", "mac-launch")
         guard let plus = plus(app, "mac") else { return }
         shot(app, "mac-01-entry")
-        // The sidebar folds its section header and the + into one element as wide as the header (run 44704121881):
-        // the + sits at its trailing edge, so click there until the menu opens.
+        // The sidebar folds its section header and the + into one element as wide as the header (run 44704121881), and
+        // under the pointer it narrows to make room for the section's disclosure triangle, the + moving left beside it
+        // (run 44710605671). So: hover, read the frame again, and click just inside its trailing edge.
         let begins = NSPredicate(format: "title BEGINSWITH %@", "orbit@austin")
-        let frame = plus.frame
-        let window = app.windows.firstMatch
-        note("mac: the + element \(plus.elementType.rawValue) label=\(plus.label) frame=\(frame) window=\(window.frame)")
-        for dx in [-6.0, 2, 10, 14, 18, -14] {
-            window.coordinate(withNormalizedOffset: .zero)
-                .withOffset(CGVector(dx: frame.maxX - window.frame.minX + dx, dy: frame.midY - window.frame.minY)).click()
+        for dx in [-12.0, -8, -16, -5] {
+            plus.hover()
+            settle(0.8)
+            note("mac: hovered + element label=\(plus.label) frame=\(plus.frame); click at maxX\(dx)")
+            plus.coordinate(withNormalizedOffset: CGVector(dx: 1, dy: 0.5)).withOffset(CGVector(dx: dx, dy: 0)).click()
             if app.menuItems.matching(begins).firstMatch.waitForExistence(timeout: 2) {
-                note("mac: the menu opened from a click \(dx) pt past the header's trailing edge")
+                note("mac: the menu opened from a click \(dx) pt inside the header's trailing edge")
                 break
             }
             app.typeKey(.escape, modifierFlags: [])
