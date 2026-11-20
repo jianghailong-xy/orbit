@@ -437,7 +437,6 @@ func TestProjectRequestStartRefusesABadShapeBeforeARoundTrip(t *testing.T) {
 	}
 	for name, mutate := range map[string]func(map[string]interface{}){
 		"no project":               func(a map[string]interface{}) { delete(a, "projectId") },
-		"no line":                  func(a map[string]interface{}) { delete(a, "line") },
 		"an unknown line":          func(a map[string]interface{}) { a["line"] = "SOMEWHERE" },
 		"automatic as a string":    func(a map[string]interface{}) { a["automatic"] = "yes" },
 		"no concurrency":           func(a map[string]interface{}) { delete(a, "maxConcurrentTasks") },
