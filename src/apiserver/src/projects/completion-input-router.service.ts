@@ -1,4 +1,4 @@
-import { Injectable, Logger, Optional } from '@nestjs/common';
+import { Inject, Injectable, Logger, Optional, forwardRef } from '@nestjs/common';
 
 import type { CoordinatorWakeEvent, WakeFact } from './coordinator-wake';
 import {
@@ -40,6 +40,7 @@ import {
   TaskExceptionInputProducer,
 } from './task-exception-input.producer';
 import { TaskRunStoppedProducer, type RunStop } from './task-run-stopped.producer';
+import { ProjectPromotionService } from './project-promotion.service';
 import { WakeDispositionService, type WakeSpend } from './wake-disposition.service';
 
 export const COMPLETION_INPUT_DELIVERY_FAILED = 'COMPLETION_INPUT_DELIVERY_FAILED';
@@ -125,6 +126,14 @@ export class CompletionInputRouter {
      * router built by hand without it, a run that stops tells nobody, as it always did.
      */
     @Optional() private readonly stoppedRuns?: TaskRunStoppedProducer,
+    /**
+     * What offers a project branch's tip to its owner (M-F1), asked again after a finish that decided
+     * a deferred landing (§12.15 P-M1). `@Optional()` and last, for the reason the seventh gives: for a
+     * router built by hand without it, the next landing asks instead. The module provides it; by
+     * `forwardRef` because its file reaches this one back through `MergeReceiptService`.
+     */
+    @Optional() @Inject(forwardRef(() => ProjectPromotionService))
+    private readonly promotions?: ProjectPromotionService,
   ) {}
 
   /**
@@ -285,6 +294,7 @@ export class CompletionInputRouter {
   async routeSettledWork(
     projectIds: ReadonlyArray<string | null | undefined>,
   ): Promise<void> {
+    await this.considerPromotionAfterSettledWork(projectIds);
     for (const [name, door] of [
       ['settled-project', () => this.routeSettledProjects(projectIds)],
       ['ready-criteria', () => this.routeReadyCriteria(projectIds)],
@@ -292,6 +302,23 @@ export class CompletionInputRouter {
     ] as const) {
       await door().catch((e) =>
         this.logger.warn(`${name} delivery after settled work failed: ${e?.message ?? e}`));
+    }
+  }
+
+  /**
+   * §12.15 P-M1, M-F1: a deferred landing held the project's promotion candidate back
+   * (`landingDeferred`), and the finish that decided it may have queued nothing — an empty branch — so
+   * no landing result would ever ask again. Asked here, after that finish commits and before the
+   * settled facts, which must read the check this may queue as work still in flight (the order
+   * `afterIntegrationResult` keeps). A finish that queued a landing makes no candidate here: its
+   * landing's result asks once it lands. The service logs and swallows its own failures.
+   */
+  async considerPromotionAfterSettledWork(
+    projectIds: ReadonlyArray<string | null | undefined>,
+  ): Promise<void> {
+    if (!this.promotions) return;
+    for (const projectId of new Set(projectIds.filter((id): id is string => !!id))) {
+      await this.promotions.considerCandidate(projectId);
     }
   }
 

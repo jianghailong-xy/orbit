@@ -7,7 +7,6 @@ import { CoordinatorHandoffService } from './coordinator-handoff.service';
 import { ProjectDoneNotYetController } from './project-done-not-yet.controller';
 import { ProjectPromotionController } from './project-promotion.controller';
 import { ProjectIntegrationRetryController } from './project-integration-retry.controller';
-import { ProjectPromotionService } from './project-promotion.service';
 import { AttemptBudgetMeterService } from './attempt-budget-meter.service';
 import { ConvergenceLedgerService } from './convergence-ledger.service';
 import { CoordinatorJudgmentModule } from './coordinator-judgment.module';
@@ -61,9 +60,6 @@ import { IntegrationJobRelay } from '../runner-api/integration-job-relay';
     // Tightens the candidate set `GET /projects` classifies (0441) back to the exact one, on a timer
     // of its own: the read never pays for it.
     ProjectRollupCandidateService,
-    // Merging a project branch into main (§3). Provided here and exported, so the runner door that
-    // notices a landing and the owner door that answers the card are the same instance.
-    ProjectPromotionService,
     // The owner's abandon door (J-T10) writes through the same result transaction the runner's
     // result route does. The relay is stateless (a logger and Prisma), so the instance here and the
     // runner module's own are interchangeable; providing it here avoids a module cycle.
@@ -86,7 +82,6 @@ import { IntegrationJobRelay } from '../runner-api/integration-job-relay';
     AttemptBudgetMeterService,
     ProjectAcceptanceModule,
     TaskCheckpointService,
-    ProjectPromotionService,
   ],
 })
 export class ProjectsModule {}
