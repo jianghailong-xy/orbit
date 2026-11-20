@@ -44,6 +44,7 @@ import {
   PauseCircleOutlined,
   PictureOutlined,
   PlusOutlined,
+  ProjectOutlined,
   PushpinFilled,
   PushpinOutlined,
   RightOutlined,
@@ -51,6 +52,7 @@ import {
   TeamOutlined,
   ThunderboltOutlined,
   UndoOutlined,
+  UnorderedListOutlined,
 } from '@ant-design/icons';
 import { keepPreviousData, useMutation, useQueries, useQuery, useQueryClient } from '@tanstack/react-query';
 import { AgentToolsDrawer, agentToolsMenuStatus } from './AgentToolsDrawer';
@@ -262,7 +264,8 @@ import { SessionBrowserChip } from './SessionBrowserChip';
 import { mergeRepairLoopLive } from './MergeRecoveryPanel';
 import { BrandMark, NewSessionProviderHero } from './NewSessionProviderHero';
 import { CreatedWorkspaceLine } from './CreatedWorkspaceLine';
-import { MachineSetupCard, RevealedOnArrival, setupCredentialOf } from './MachineSetupCard';
+import { MachineSetupCard, RevealedOnArrival, setupCredentialOf, type HistoryChoice } from './MachineSetupCard';
+import { startHistoryImport } from '../lib/claudeHistoryImport';
 import { ManagedRunnerNotice } from './ManagedRunnerNotice';
 import { useNewAccount } from './WelcomeCard';
 import type { LoginEngine } from '@orbit/shared';
@@ -295,7 +298,7 @@ import {
   watchingWord,
   type SessionWatching,
 } from '../lib/watches';
-import { isQueuedWatchWake, returnsToComposer } from '../lib/queuedTurnRestore';
+import { isQueuedWatchWake, queuedSubagentWake, returnsToComposer } from '../lib/queuedTurnRestore';
 import {
   api,
   ApiError,
@@ -3542,9 +3545,15 @@ export function WorkspaceView({
     : null;
   // The Landings row (owner 2026-10-27, board 01 b): the mark of the most urgent landing and the
   // day's counts, over the project's landing sessions and its merges into main.
+  // No Landings row while the project's line has not started (revision 42 §12.16, ruling D2): the
+  // integration read says so with `line: null`; an unanswered read draws as it always did.
+  const pageIntegrationQ = useQuery({ ...projectIntegrationQuery(openProjectId ?? ''), enabled: !!openProjectId });
+  const pageLineNotStarted = pageIntegrationQ.data != null && typeof pageIntegrationQ.data === 'object'
+    && pageIntegrationQ.data.line === null;
   const landingsSummary = useMemo(
-    () => (openProjectId ? landingsRowSummary(landingMembers, pageMerges, { main: mainBranchName(pageProject?.mainBranch) }) : null),
-    [openProjectId, landingMembers, pageMerges, pageProject?.mainBranch],
+    () => (openProjectId && !pageLineNotStarted
+      ? landingsRowSummary(landingMembers, pageMerges, { main: mainBranchName(pageProject?.mainBranch) }) : null),
+    [openProjectId, pageLineNotStarted, landingMembers, pageMerges, pageProject?.mainBranch],
   );
   // The folder page the list is on: `?folder=<id>` on whichever route the console is at, so it
   // survives a reload and Back leaves it. Only a folder of this workspace, and only where the list
@@ -4826,7 +4835,8 @@ export function WorkspaceView({
   const queuedTailEvents = useMemo(
     () =>
       visibleQueuedTurns
-        .filter((turn) => !inPendingTray(turn))
+        // A SubAgent's end turn waits on its card instead (`subagentQueuedWakes`): the tail draws nothing for it.
+        .filter((turn) => !inPendingTray(turn) && !queuedSubagentWake(turn)?.alone)
         .map((turn) => ({ turn, event: queuedTurnEvent(turn) })),
     [visibleQueuedTurns],
   );
@@ -7253,12 +7263,13 @@ export function WorkspaceView({
   // name the card was given. The list then says the machine has one, and the console moves on to its new
   // session page (WorkspaceConsole), with the engine and credential picked here as its draft's.
   const createWorkspace = useMutation({
-    mutationFn: ({ folder, name }: { folder: PickedFolder; name: string }) =>
+    mutationFn: ({ folder, name }: { folder: PickedFolder; name: string; history: HistoryChoice | null }) =>
       api<{ id: string }>('/workspaces', {
         method: 'POST',
         body: { name, runnerId: runner.id, ...newWorkspaceOf(folder) },
       }),
-    onSuccess: async (made) => {
+    onSuccess: async (made, { history }) => {
+      if (history) void startHistoryImport(made.id, history.history, history.mode, message, refreshSessionLists);
       if (draftHere) setDraftPick({ ...draftHere, workspaceId: made.id });
       await qc.invalidateQueries({ queryKey: ['workspaces'] });
     },
@@ -8211,6 +8222,18 @@ export function WorkspaceView({
     steerOffered,
     queuedHeldTag,
   });
+  // A SubAgent's end turn still on the queue, by run id: its card says the agent has not read it yet, and its
+  // `Don't send` does what the tail's Cancel did (SubagentCardEnd).
+  const subagentQueuedWakes = useMemo(() => {
+    const out = new Map<string, () => void>();
+    if (selectedTrashed) return out;
+    for (const turn of visibleQueuedTurns) {
+      const wake = queuedSubagentWake(turn);
+      for (const runId of wake?.runIds ?? []) out.set(runId, () => void cancelQueued(turn.turnId));
+    }
+    return out;
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- cancelQueued is rebuilt each render; it reads the latest queue itself
+  }, [visibleQueuedTurns, selectedTrashed]);
   // Take back a message whose delivery settled undelivered. Nothing read it, so this bubble is
   // the only copy of what was typed: hand it back the way the transcript's own undelivered card
   // does (appended, never overwriting a draft), then discard the row so the pane stops carrying a
@@ -9805,16 +9828,17 @@ export function WorkspaceView({
                     } },
                   { key: 'divider-complete', type: 'separator' as const },
                 ] : []),
-                { key: 'session', label: SESSION_PROJECT_COPY.openSession, disabled: s.target.kind !== 'session',
+                { key: 'session', label: SESSION_PROJECT_COPY.openSession, icon: <MessageOutlined />, disabled: s.target.kind !== 'session',
                   onSelect: () => { setMenuOpenId(null); openTarget(); } },
-                { key: 'sessions', label: SESSION_PROJECT_COPY.sessions,
+                { key: 'sessions', label: SESSION_PROJECT_COPY.sessions, icon: <UnorderedListOutlined />,
                   onSelect: () => { setMenuOpenId(null); enterProjectSessions(s.projectId, coordinator?.id); } },
-                { key: 'project', label: SESSION_PROJECT_COPY.openProject,
+                { key: 'project', label: SESSION_PROJECT_COPY.openProject, icon: <ProjectOutlined />,
                   onSelect: () => { setMenuOpenId(null); navigate(`/projects/${encodeId(s.projectId)}`); } },
                 { key: 'divider', type: 'separator' },
                 { key: 'pin', label: coordinator?.pinnedAt ? SESSION_PROJECT_COPY.unpin : SESSION_PROJECT_COPY.pin, disabled: !coordinator,
+                  icon: coordinator?.pinnedAt ? <PushpinFilled /> : <PushpinOutlined />,
                   onSelect: () => { setMenuOpenId(null); if (coordinator) runSwipeAction('pin', coordinator); } },
-                { key: 'move', label: SESSION_PROJECT_COPY.move, disabled: !coordinator,
+                { key: 'move', label: SESSION_PROJECT_COPY.move, icon: <FolderOutlined />, disabled: !coordinator,
                   onSelect: () => { setMenuOpenId(null); if (coordinator) runSwipeAction('move', coordinator); } },
               ]}
             />
@@ -10936,6 +10960,7 @@ export function WorkspaceView({
                 wikiChat={wikiChatCards}
                 subagentWaiting={subagentWaiting}
                 subagentRuns={subagentRuns}
+                subagentQueuedWakes={subagentQueuedWakes}
               />
               </QueuedFootCtx.Provider>
               </MainCheckoutCtx.Provider>
@@ -11261,7 +11286,7 @@ export function WorkspaceView({
                 <MachineSetupCard
                   runner={runner}
                   managed={managed}
-                  onCreate={(folder, name) => createWorkspace.mutate({ folder, name })}
+                  onCreate={(folder, name, history) => createWorkspace.mutate({ folder, name, history })}
                   creating={createWorkspace.isPending}
                   createError={createWorkspace.error?.message ?? null}
                   welcome={machineWelcome}

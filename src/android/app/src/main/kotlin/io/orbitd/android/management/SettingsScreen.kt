@@ -14,6 +14,9 @@ import androidx.compose.foundation.text.selection.SelectionContainer
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
+import io.orbitd.android.cards.LocalSettingsAnchor
+import io.orbitd.android.cards.SettingChangedLine
+import io.orbitd.android.cards.settingRow
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.alpha
@@ -49,6 +52,15 @@ import kotlinx.serialization.json.*
 fun SettingsScreen(api: ManagementApi, route: OrbitRoute, revision: Long, open: (OrbitRoute) -> Unit, back: () -> Unit,
     logout: () -> Unit, changed: () -> Unit, workspaceDeleted: () -> Unit, deviceAlerts: () -> Boolean?,
     notifications: @Composable () -> Unit, about: @Composable () -> Unit, terminalsChanged: Long = 0L) {
+    // An `orbit-settings:` link names the row it opened Settings for (route.recordId): its page scrolls to it and flashes it.
+    CompositionLocalProvider(LocalSettingsAnchor provides route.recordId) { SettingsPages(api, route, revision, open, back, logout, changed,
+        workspaceDeleted, deviceAlerts, notifications, about, terminalsChanged) }
+}
+
+@Composable
+private fun SettingsPages(api: ManagementApi, route: OrbitRoute, revision: Long, open: (OrbitRoute) -> Unit, back: () -> Unit,
+    logout: () -> Unit, changed: () -> Unit, workspaceDeleted: () -> Unit, deviceAlerts: () -> Boolean?,
+    notifications: @Composable () -> Unit, about: @Composable () -> Unit, terminalsChanged: Long) {
     when (route.id) {
         "profile" -> EditProfile(api, revision, back)
         "account" -> ProfileSettingsPage(api, revision, open)
@@ -126,7 +138,7 @@ internal const val SUGGESTED_REPLIES_HINT = "When a Claude turn ends, the empty 
 /** SettingsCopy's smart model selection switch: its name doesn't say what it does, so the web's hint is its footer on the Sessions
  * page. */
 internal const val SMART_MODEL_SELECTION = "Smart model selection"
-internal const val SMART_MODEL_SELECTION_HINT = "Coordinators suggest a tier for each task, and a SubAgent's size sets its own. Every SubAgent, and the task runs of Agents you turn this on for, run on a model of that tier from your providers. Off: tasks keep their Agent's model and SubAgents their parent session's."
+internal const val SMART_MODEL_SELECTION_HINT = "Coordinators suggest a tier for each task, and a SubAgent's size sets its own. Task runs and SubAgents run on a model of that tier from your providers. Off: tasks keep their Agent's model and SubAgents their parent session's."
 
 /** UserPreferences.smartModelSelection: off only for an explicit boolean false; absent, or anything else, reads as on. */
 internal fun smartModelSelection(preferences: JsonObject?): Boolean =
@@ -267,7 +279,9 @@ private fun SettingsHome(api: ManagementApi, revision: Long, open: (OrbitRoute) 
             SettingsLink(GENERAL, R.drawable.ic_settings) { page("sessions") }
             SettingsLink("Notifications", R.drawable.ic_bell, when (alerts) { true -> "On"; false -> "Off"; null -> "Unavailable" }) { page("notifications") }
             SettingsPicker("Appearance", R.drawable.ic_appearance, preferences.text("theme").ifBlank { "system" },
-                listOf("system" to "System", "light" to "Light", "dark" to "Dark"), record.ready) { preference("theme", JsonPrimitive(it)) }
+                listOf("system" to "System", "light" to "Light", "dark" to "Dark"), record.ready,
+                Modifier.settingRow("theme")) { preference("theme", JsonPrimitive(it)) }
+            SettingChangedLine("theme", user, preference)
             SettingsLink(SETTINGS_PROFILE, R.drawable.ic_person) { page("account") }
             SettingsLink("Shared links", R.drawable.ic_link, sharedLinks) { page("sharing") }
             SettingsLink(AccessTokens.TITLE, R.drawable.ic_key, accessTokens) { page("access-tokens") }
@@ -330,27 +344,31 @@ private fun SessionSettingsPage(api: ManagementApi, revision: Long) {
     val preference = rememberPreferenceWrite(api, record)
     val preferences = (record.value as? JsonObject)?.get("preferences") as? JsonObject ?: JsonObject(emptyMap())
     fun on(key: String) = (preferences[key] as? JsonPrimitive)?.booleanOrNull != false
+    val user = record.value as? JsonObject
     Column(Modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(horizontal = 16.dp, vertical = 8.dp)) {
         if (record.busy || record.stale || record.error != null) PersonalRecordStatus(record)
         SettingsGroup(null, footer = DEFAULT_PERMISSION_HINT) {
             SettingsPicker("Default permission", null, preferences.text("defaultPermissionMode").ifBlank { "auto" }, personalPermissions,
-                record.ready) { preference("defaultPermissionMode", JsonPrimitive(it)) }
+                record.ready, Modifier.settingRow("defaultPermissionMode")) { preference("defaultPermissionMode", JsonPrimitive(it)) }
+            SettingChangedLine("defaultPermissionMode", user, preference)
         }
         // Settings › Translation (docs/mocks/session-translation, frame 9): one account-wide switch, absent = off, and the language
         // the owner writes and reads in, and the one agents work in, both picked from the one list.
         TranslationGroup(record.value as? JsonObject, record.ready) { key, value -> preference(key, value) }
         SettingsGroup(null, footer = SESSION_ORCHESTRATION_HINT) {
-            SettingsSwitch("Session orchestration", on("enableOrchestration"), record.ready) { preference("enableOrchestration", JsonPrimitive(it)) }
+            SettingsSwitch("Session orchestration", on("enableOrchestration"), record.ready, Modifier.settingRow("enableOrchestration")) { preference("enableOrchestration", JsonPrimitive(it)) }
+            SettingChangedLine("enableOrchestration", user, preference)
         }
         // On unless the account turned it off; written alone (iOS 9fb3ae6ee).
         SettingsGroup(null, footer = SMART_MODEL_SELECTION_HINT) {
-            SettingsSwitch(SMART_MODEL_SELECTION, smartModelSelection(preferences), record.ready) { preference("modelRouting", JsonPrimitive(it)) }
+            SettingsSwitch(SMART_MODEL_SELECTION, smartModelSelection(preferences), record.ready, Modifier.settingRow("modelRouting")) { preference("modelRouting", JsonPrimitive(it)) }
+            SettingChangedLine("modelRouting", user, preference)
         }
         // Account-wide, one answer for every Agent (docs/mocks/routing-mode-account/01-account-wide-optimize-for.png): absent reads
         // as Balance, and a segment writes the preference alone the moment it moves, as the switch above does. Only smart model
         // selection reads it, so it shows only while that is on (owner, 2026-11-20); the saved value is kept while it is off.
         if (smartModelSelection(preferences)) SettingsGroup(null) {
-            ListItem(headlineContent = { Text(OPTIMIZE_FOR) }, colors = settingsRowColors(),
+            ListItem(headlineContent = { Text(OPTIMIZE_FOR) }, colors = settingsRowColors(), modifier = Modifier.settingRow("optimizeFor"),
                 supportingContent = { Text(OPTIMIZE_FOR_DETAIL) })
             SingleChoiceSegmentedButtonRow(Modifier.fillMaxWidth().padding(start = 16.dp, end = 16.dp, bottom = 12.dp)) {
                 OPTIMIZE_FOR_VALUES.forEachIndexed { index, value ->
@@ -362,18 +380,21 @@ private fun SessionSettingsPage(api: ManagementApi, revision: Long) {
                     }
                 }
             }
+            SettingChangedLine("optimizeFor", user, preference)
         }
         // The engine's guess at the next message after a Claude turn (docs/prompt-suggestions-design.md).
         SettingsGroup(null, footer = SUGGESTED_REPLIES_HINT) {
-            SettingsSwitch(SUGGESTED_REPLIES, on("promptSuggestions"), record.ready) { preference("promptSuggestions", JsonPrimitive(it)) }
+            SettingsSwitch(SUGGESTED_REPLIES, on("promptSuggestions"), record.ready, Modifier.settingRow("promptSuggestions")) { preference("promptSuggestions", JsonPrimitive(it)) }
+            SettingChangedLine("promptSuggestions", user, preference)
         }
         // Prompt optimizer (docs/mocks/prompt-optimizer, frame 1): under Suggested replies, off by default; a server without a DeepSeek
         // key draws it disabled with frame 1b's notice (iOS SessionSettings' promptOptimizerSection).
-        PromptOptimizerGroup(record.value as? JsonObject, record.ready) { preference("promptOptimizer", JsonPrimitive(it)) }
+        PromptOptimizerGroup(record.value as? JsonObject, record.ready, undo = preference) { preference("promptOptimizer", JsonPrimitive(it)) }
         // The server's rolling recap on a session's list row (0418). One switch for the whole account, so turning it off holds on
         // the phone and on the web at once — the moment the server has taken the change, the lists behind Settings redraw without it.
         SettingsGroup(null, footer = SESSION_RECAPS_HINT) {
-            SettingsSwitch(SESSION_RECAPS, sessionRecapsEnabled(preferences), record.ready) { preference("recaps", JsonPrimitive(it)) }
+            SettingsSwitch(SESSION_RECAPS, sessionRecapsEnabled(preferences), record.ready, Modifier.settingRow("recaps")) { preference("recaps", JsonPrimitive(it)) }
+            SettingChangedLine("recaps", user, preference)
         }
     }
 }
@@ -418,9 +439,10 @@ private fun SettingsValue(title: String, icon: Int, value: String) {
 /** A menu on the row itself, as iOS's pickers are; a write goes out only for a different value. No glyph on the Sessions page, as
  * iOS draws none there. */
 @Composable
-private fun SettingsPicker(title: String, icon: Int?, current: String, options: List<Pair<String, String>>, enabled: Boolean, select: (String) -> Unit) {
+private fun SettingsPicker(title: String, icon: Int?, current: String, options: List<Pair<String, String>>, enabled: Boolean,
+    modifier: Modifier = Modifier, select: (String) -> Unit) {
     var expanded by remember { mutableStateOf(false) }
-    Box {
+    Box(modifier) {
         ListItem(headlineContent = { Text(title) }, colors = settingsRowColors(), leadingContent = icon?.let { { SettingsIcon(it) } },
             trailingContent = { Text(options.firstOrNull { it.first == current }?.second ?: current, color = MaterialTheme.colorScheme.onSurfaceVariant) },
             modifier = Modifier.clickable(enabled = enabled, role = Role.DropdownList) { expanded = true })
@@ -435,10 +457,10 @@ private fun SettingsPicker(title: String, icon: Int?, current: String, options: 
 
 /** The Sessions page's switch: the row is the switch, its hint the group's footer. */
 @Composable
-private fun SettingsSwitch(title: String, checked: Boolean, enabled: Boolean, change: (Boolean) -> Unit) {
+private fun SettingsSwitch(title: String, checked: Boolean, enabled: Boolean, modifier: Modifier = Modifier, change: (Boolean) -> Unit) {
     ListItem(headlineContent = { Text(title) }, colors = settingsRowColors(),
         trailingContent = { Switch(checked = checked, onCheckedChange = null, enabled = enabled) },
-        modifier = Modifier.toggleable(value = checked, enabled = enabled, role = Role.Switch, onValueChange = change))
+        modifier = modifier.toggleable(value = checked, enabled = enabled, role = Role.Switch, onValueChange = change))
 }
 
 /**
@@ -462,23 +484,27 @@ internal fun TranslationGroup(user: JsonObject?, ready: Boolean, write: (String,
         ListItem(headlineContent = { Text(TranslationCopy.TRANSLATE_CONVERSATIONS) }, colors = settingsRowColors(),
             supportingContent = { Text(TranslationCopy.translateConversationsHint(agentLanguage)) },
             trailingContent = { Switch(checked = on, onCheckedChange = null, enabled = enabled) },
-            modifier = Modifier.toggleable(value = on, enabled = enabled, role = Role.Switch) { write("translationEnabled", JsonPrimitive(it)) })
+            modifier = Modifier.settingRow("translationEnabled").toggleable(value = on, enabled = enabled, role = Role.Switch) { write("translationEnabled", JsonPrimitive(it)) })
+        SettingChangedLine("translationEnabled", user, write)
         if (unavailable) Text(TranslationCopy.UNAVAILABLE, Modifier.padding(horizontal = 16.dp, vertical = 4.dp).fillMaxWidth()
             .background(MaterialTheme.colorScheme.errorContainer, RoundedCornerShape(8.dp)).padding(10.dp).testTag("translation-unavailable"),
             color = MaterialTheme.colorScheme.onErrorContainer, style = MaterialTheme.typography.bodySmall)
         ListItem(headlineContent = { Text(TranslationCopy.YOUR_LANGUAGE) }, colors = settingsRowColors(),
             supportingContent = { Text(Translation.name(language)) },
-            modifier = Modifier.clickable(enabled = enabled, role = Role.DropdownList) { picking = "translationLanguage" }.alpha(if (unavailable) 0.5f else 1f))
+            modifier = Modifier.settingRow("translationLanguage").clickable(enabled = enabled, role = Role.DropdownList) { picking = "translationLanguage" }.alpha(if (unavailable) 0.5f else 1f))
+        SettingChangedLine("translationLanguage", user, write)
         ListItem(headlineContent = { Text(TranslationCopy.AGENTS_WORK_IN) }, colors = settingsRowColors(),
             supportingContent = { Text(Translation.name(agentLanguage)) },
-            modifier = Modifier.clickable(enabled = enabled, role = Role.DropdownList) { picking = "translationAgentLanguage" }.alpha(if (unavailable) 0.5f else 1f))
+            modifier = Modifier.settingRow("translationAgentLanguage").clickable(enabled = enabled, role = Role.DropdownList) { picking = "translationAgentLanguage" }.alpha(if (unavailable) 0.5f else 1f))
+        SettingChangedLine("translationAgentLanguage", user, write)
         // "Show both languages" (02-bilingual.png, mark A): only while translation is on.
         if (on) {
             val both = Translation.bilingual(preferences)
             ListItem(headlineContent = { Text(TranslationCopy.SHOW_BOTH_LANGUAGES) }, colors = settingsRowColors(),
                 trailingContent = { Switch(checked = both, onCheckedChange = null, enabled = enabled) },
-                modifier = Modifier.testTag("translation-bilingual")
+                modifier = Modifier.testTag("translation-bilingual").settingRow("translationBilingual")
                     .toggleable(value = both, enabled = enabled, role = Role.Switch) { write("translationBilingual", JsonPrimitive(it)) })
+            SettingChangedLine("translationBilingual", user, write)
         }
     }
     val key = picking ?: return
@@ -506,14 +532,15 @@ internal fun TranslationGroup(user: JsonObject?, ready: Boolean, write: (String,
  * false) draws it off and disabled with the notice under it, whatever the preference says. No NEW badge.
  */
 @Composable
-internal fun PromptOptimizerGroup(user: JsonObject?, ready: Boolean, write: (Boolean) -> Unit) {
+internal fun PromptOptimizerGroup(user: JsonObject?, ready: Boolean, undo: (String, JsonPrimitive) -> Unit = { _, _ -> }, write: (Boolean) -> Unit) {
     val unavailable = PromptOptimizer.unavailable(user)
     val enabled = ready && !unavailable
     val on = !unavailable && PromptOptimizer.enabled(user?.get("preferences") as? JsonObject)
     SettingsGroup(null, footer = PromptOptimizerCopy.HINT) {
         ListItem(headlineContent = { Text(PromptOptimizerCopy.TITLE) }, colors = settingsRowColors(),
             trailingContent = { Switch(checked = on, onCheckedChange = null, enabled = enabled) },
-            modifier = Modifier.testTag("settings-prompt-optimizer").toggleable(value = on, enabled = enabled, role = Role.Switch, onValueChange = write))
+            modifier = Modifier.testTag("settings-prompt-optimizer").settingRow("promptOptimizer").toggleable(value = on, enabled = enabled, role = Role.Switch, onValueChange = write))
+        SettingChangedLine("promptOptimizer", user, undo)
         if (unavailable) Text(PromptOptimizerCopy.UNAVAILABLE, Modifier.padding(start = 16.dp, end = 16.dp, bottom = 12.dp)
             .testTag("prompt-optimizer-unavailable"), color = Ink.amber, style = MaterialTheme.typography.bodySmall)
     }

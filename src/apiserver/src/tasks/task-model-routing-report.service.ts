@@ -43,15 +43,21 @@ export function sessionUsageUnreported(session: string): Prisma.Sql {
            AND (unreported_mp.owner_id IS NULL OR unreported_mp.owner_id = ${s}.owner_id))))))`;
 }
 
+/** A report's `since` filter: absent is no lower bound; anything but an ISO timestamp is a 400. */
+export function reportSince(since: string | undefined): Date | null {
+  const sinceDate = since === undefined ? null : new Date(since);
+  if (sinceDate && (typeof since !== 'string' || !Number.isFinite(sinceDate.getTime()))) {
+    throw new BadRequestException('since must be an ISO timestamp');
+  }
+  return sinceDate;
+}
+
 @Injectable()
 export class TaskModelRoutingReportService {
   constructor(private readonly prisma: PrismaService) {}
 
   async read(ownerId: string, since?: string, agentId?: string) {
-    const sinceDate = since === undefined ? null : new Date(since);
-    if (sinceDate && (typeof since !== 'string' || !Number.isFinite(sinceDate.getTime()))) {
-      throw new BadRequestException('since must be an ISO timestamp');
-    }
+    const sinceDate = reportSince(since);
     const rows = await this.prisma.$queryRaw<Array<ModelRoutingReportGroup & { applied: boolean }>>(Prisma.sql`
       WITH routed_runs AS (
         SELECT d.policy_version, d.level, d.applied, s.provider, s.model,

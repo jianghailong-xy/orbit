@@ -107,6 +107,20 @@ async function mount(d: SessionDetail, committed = true): Promise<void> {
   });
 }
 
+/** Render the same tree again with new props, as the session page does when it asks the drawer to open. */
+async function rerender(d: SessionDetail, openDiffSignal: number): Promise<void> {
+  await act(async () => {
+    root!.render(
+      <QueryClientProvider client={new QueryClient({ defaultOptions: { queries: { retry: false } } })}>
+        <MemoryRouter>
+          <SessionOutputs detail={d} committed openDiffSignal={openDiffSignal} />
+        </MemoryRouter>
+      </QueryClientProvider>,
+    );
+  });
+  await settle();
+}
+
 async function press(el: Element | null | undefined): Promise<void> {
   expect(el, 'the element to press').toBeTruthy();
   await act(async () => (el as HTMLElement).click());
@@ -190,5 +204,19 @@ describe('the worktree bar counted in commits', () => {
     for (const path of [ROWS, HOOK, API]) {
       expect(list.querySelector(`button[title="View diff · ${path}"]`), path).toBeTruthy();
     }
+  });
+
+  it('opens on All changes again after a commit was looked at and the drawer closed', async () => {
+    const d = detail();
+    await mount(d);
+    await press(bar());
+    await press(commitRow(container!.querySelector('.wt-commits-panel')!, COMMITS[1].subject));
+    expect(document.querySelector('.wt-commit-head')).toBeTruthy();
+    await press(document.querySelector('button[aria-label="Close"]'));
+    // Opened from outside the bar (a changed-files link): no commit is named, so the whole branch.
+    await rerender(d, 1);
+    expect(document.querySelector('.wt-commit-head')).toBeNull();
+    const tab = [...document.querySelectorAll('.wt-rail-tab')].find((t) => t.textContent?.startsWith('All changes'));
+    expect(tab?.getAttribute('aria-selected')).toBe('true');
   });
 });

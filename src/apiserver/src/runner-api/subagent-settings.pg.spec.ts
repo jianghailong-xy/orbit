@@ -10,7 +10,10 @@
  *      HUMAN_ONLY_WORKSPACE_FIELD and nothing is written, and a runner's provider write carries no tier.
  *   4. A custom endpoint's model with no tier is listed `Not set` and skipped by routeSubagent with its reason;
  *      once the owner sets a tier through PATCH /providers/mine/:id/model-tier it is listed and picked.
- *   5. Workflows (docs/subagent-workflow-design.md §9 D2, board docs/mocks/subagent-workflow part 5): on, a session
+ *   5. A built-in engine's model (Cursor's grok-4.7) is tiered through PATCH /providers/builtin/:engine/model-tier:
+ *      stored in the owner's preferences, read by the Tier column and routeSubagent, overriding a family tier, and
+ *      cleared back to untiered.
+ *   6. Workflows (docs/subagent-workflow-design.md §9 D2, board docs/mocks/subagent-workflow part 5): on, a session
  *      opens a workflow; off, POST /runner/sessions/:id/workflows answers 403 WORKFLOWS_DISABLED and writes nothing
  *      while delegate still opens; and the claim and the reclaim carry `workflowsDisabled` exactly while the Agent's
  *      Workflows or its SubAgents are off, which is what leaves the `workflow` tool out of its `orbit mcp`.
@@ -23,7 +26,7 @@ import assert from 'node:assert/strict';
 import { randomUUID } from 'node:crypto';
 import { test } from 'node:test';
 
-import { BadRequestException, ForbiddenException, ValidationPipe } from '@nestjs/common';
+import { BadRequestException, ForbiddenException, NotFoundException, ValidationPipe } from '@nestjs/common';
 import { type PrismaClient, type Runner, RunStatus, RunnerStatus } from '@prisma/client';
 import { toUuid } from '@orbit/shared';
 import { Client } from 'pg';
@@ -66,7 +69,7 @@ const asSent = <T>(metatype: new () => T, body: unknown): Promise<T> =>
   new ValidationPipe({ whitelist: true, transform: true, forbidNonWhitelisted: false })
     .transform(body, { type: 'body', metatype }) as Promise<T>;
 
-test('SubAgents settings: defaults, the human doors, the runner refusals, Workflows and the tier a custom model needs', {
+test('SubAgents settings: defaults, the human doors, the runner refusals, Workflows and model tiers', {
   skip, concurrency: 1, timeout: 300_000,
 }, async (t) => {
   const url = URL!;
@@ -281,15 +284,15 @@ test('SubAgents settings: defaults, the human doors, the runner refusals, Workfl
     const view = await providersDoor.subagentTiers(user);
     const claude = view.providers.find((entry) => entry.slug === 'claude');
     assert.deepEqual(claude?.models, [
-      { model: 'claude-sonnet-5-5', levels: ['S', 'M'], source: 'catalogue', editable: false, outputPricePerMTok: null },
-      { model: 'claude-opus-5-5', levels: ['L', 'XL'], source: 'catalogue', editable: false, outputPricePerMTok: null },
-    ]);
+      { model: 'claude-sonnet-5-5', levels: ['S', 'M'], source: 'catalogue', editable: true, outputPricePerMTok: null },
+      { model: 'claude-opus-5-5', levels: ['L', 'XL'], source: 'catalogue', editable: true, outputPricePerMTok: null },
+    ], "a built-in engine's tiers are the owner's to override");
     assert.equal(claude?.billing, 'subscription');
     assert.deepEqual(view.providers.find((entry) => entry.slug === 'codex')?.models, [
-      { model: 'gpt-5.6-sol', levels: ['S', 'M', 'L', 'XL'], source: 'catalogue', editable: false, outputPricePerMTok: null },
+      { model: 'gpt-5.6-sol', levels: ['S', 'M', 'L', 'XL'], source: 'catalogue', editable: true, outputPricePerMTok: null },
     ]);
     assert.deepEqual(view.providers.find((entry) => entry.slug === 'cursor')?.models, [],
-      'an engine with no tier table lists no models');
+      'an engine its runner reports no catalogue for lists no models');
     const tag = runnerId.slice(-8);
     const deepseek = await prisma.modelProvider.create({
       data: { slug: `deepseek-${tag}`, label: 'DeepSeek', runtime: 'claude', baseUrl: 'https://api.deepseek.com/anthropic',
@@ -306,6 +309,93 @@ test('SubAgents settings: defaults, the human doors, the runner refusals, Workfl
     await assert.rejects(providersDoor.setModelTier(user, deepseek.id, await asSent(UpdateProviderModelTierDto, {
       model: preset.models[0].model, tier: 'S',
     })), BadRequestException, "a preset model's tier is the catalogue's");
+  });
+  await t.test("a built-in engine's model: the owner sets its tier through the API, routing reads it, and a clear restores it", async () => {
+    await prisma.runner.update({
+      where: { id: runnerId },
+      data: {
+        engines: [
+          { engine: 'claude', installed: true, auth: 'yes' },
+          { engine: 'codex', installed: true, auth: 'yes' },
+          { engine: 'cursor', installed: true, auth: 'yes' },
+        ],
+        modelCatalog: {
+          claude: [
+            { value: 'claude-opus-5-5', label: 'Opus 5.5', priority: 0 },
+            { value: 'claude-sonnet-5-5', label: 'Sonnet 5.5', priority: 2 },
+          ],
+          codex: [{ value: 'gpt-5.6-sol', label: 'GPT-5.6 Sol' }],
+          cursor: [
+            { value: 'default', label: 'Auto' },
+            { value: 'grok-4.7', label: 'Grok 4.7', reasoningLevels: ['low', 'medium', 'high'] },
+            { value: 'claude-opus-5-6', label: 'Opus 5.6', reasoningLevels: ['low', 'medium', 'high', 'xhigh', 'max'] },
+          ],
+        },
+      },
+    });
+    // Cursor alone is left to route onto.
+    await prisma.user.update({
+      where: { id: ownerId },
+      data: { preferences: { theme: 'dark', subagentBlockedProviders: ['claude', 'codex', 'kimi', 'opencode', 'antigravity', 'dsh'] } },
+    });
+    await prisma.modelProvider.deleteMany({ where: { ownerId } });
+    const plan = (size: 'S' | 'L' | 'XL') => planSubagentRoute(prisma as never, {
+      ownerId, workspaceId: agent.id, runnerId, parent: { engine: 'claude', provider: 'claude', model: 'claude-opus-5-5', effort: 'high' },
+      dto: { toolUseId: `toolu_${randomUUID()}`, type: 'general', definitionSource: 'builtin', size },
+    });
+    const cursor = async () => (await providersDoor.subagentTiers(user)).providers.find((entry) => entry.slug === 'cursor')?.models;
+    const tier = async (model: string, value: 'S' | 'M' | 'L' | 'XL' | null) =>
+      providersDoor.setBuiltinModelTier(user, 'cursor', await asSent(UpdateProviderModelTierDto, { model, tier: value }));
+
+    // Before: the family tiers Opus; grok-4.7 and Auto are of no family, listed Not set, and the owner's to tier.
+    assert.deepEqual(await cursor(), [
+      { model: 'claude-opus-5-6', levels: ['L', 'XL'], source: 'catalogue', editable: true, outputPricePerMTok: null },
+      { model: 'default', levels: [], source: null, editable: true, outputPricePerMTok: null },
+      { model: 'grok-4.7', levels: [], source: null, editable: true, outputPricePerMTok: null },
+    ]);
+    const before = await plan('S');
+    t.diagnostic(`before: ${JSON.stringify(before)}`);
+    assert.deepEqual([before.provider, before.model, before.pickLevel], ['cursor', 'claude-opus-5-6', 'L'], 'nothing at S: the tier up');
+    assert.ok(before.candidates.some((c) => c.model === 'grok-4.7' && c.reason === 'The model has no tier'));
+
+    // Set grok-4.7 to S: stored under the engine, listed as the owner's, and routed at S at its clamped effort.
+    assert.deepEqual(await tier('grok-4.7', 'S'), { engine: 'cursor', model: 'grok-4.7', tier: 'S' });
+    const stored = (await prisma.user.findUniqueOrThrow({ where: { id: ownerId } })).preferences as Record<string, unknown>;
+    assert.deepEqual(stored.builtinModelTiers, { cursor: { 'grok-4.7': 'S' } });
+    assert.equal(stored.theme, 'dark', 'the rest of the preferences is left alone');
+    assert.deepEqual((await cursor())?.find((row) => row.model === 'grok-4.7'),
+      { model: 'grok-4.7', levels: ['S'], source: 'owner', editable: true, outputPricePerMTok: null });
+    const set = await plan('S');
+    assert.deepEqual([set.provider, set.model, set.effort, set.pickLevel], ['cursor', 'grok-4.7', 'low', 'S']);
+
+    // The owner's tier overrides the family's: Opus at S leaves L and XL with nothing but the tier below.
+    await tier('claude-opus-5-6', 'S');
+    assert.deepEqual((await cursor())?.find((row) => row.model === 'claude-opus-5-6'),
+      { model: 'claude-opus-5-6', levels: ['S'], source: 'owner', editable: true, outputPricePerMTok: null });
+    const opus = await plan('XL');
+    assert.equal(opus.pickLevel, 'S', 'the family rows are gone; S is the nearest');
+    assert.deepEqual([opus, ...opus.fallbacks].filter((pick) => pick.model === 'claude-opus-5-6')
+      .map((pick) => ('pickLevel' in pick ? pick.pickLevel : pick.level)), ['S']);
+
+    // Clearing restores the family tier and returns grok-4.7 to Not set and untiered.
+    await tier('claude-opus-5-6', null);
+    await tier('grok-4.7', null);
+    assert.deepEqual(
+      ((await prisma.user.findUniqueOrThrow({ where: { id: ownerId } })).preferences as Record<string, unknown>).builtinModelTiers,
+      { cursor: {} });
+    assert.deepEqual((await cursor())?.map((row) => [row.model, row.levels, row.source]), [
+      ['claude-opus-5-6', ['L', 'XL'], 'catalogue'], ['default', [], null], ['grok-4.7', [], null],
+    ]);
+    const cleared = await plan('S');
+    assert.deepEqual([cleared.model, cleared.pickLevel], ['claude-opus-5-6', 'L']);
+    assert.ok(cleared.candidates.some((c) => c.model === 'grok-4.7' && c.reason === 'The model has no tier'));
+    assert.deepEqual(await tier('grok-4.7', null), { engine: 'cursor', model: 'grok-4.7', tier: null }, 'a second clear is taken');
+
+    // Refused: a model no runner of the owner's reports for that engine, a name that is no engine, and a bad tier.
+    await assert.rejects(tier('kimi-k3', 'M'), BadRequestException);
+    await assert.rejects(providersDoor.setBuiltinModelTier(user, 'not-an-engine',
+      await asSent(UpdateProviderModelTierDto, { model: 'grok-4.7', tier: 'M' })), NotFoundException);
+    await assert.rejects(asSent(UpdateProviderModelTierDto, { model: 'grok-4.7', tier: 'XXL' }), BadRequestException);
   });
 
   await t.test('Workflows: on, a workflow opens; off, 403 WORKFLOWS_DISABLED while delegate opens, and the claim says so', async () => {

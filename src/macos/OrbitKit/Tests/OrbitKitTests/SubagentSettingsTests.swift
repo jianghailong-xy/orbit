@@ -49,8 +49,35 @@ final class SubagentSettingsTests: XCTestCase {
         XCTAssertEqual(SubagentSettings.tierText(["L", "XL"]), "L · XL")
         XCTAssertEqual(SubagentSettings.tierText(["M"]), "M")
         XCTAssertFalse(SubagentSettings.tierIsUnset(["M"]))
-        XCTAssertFalse(SubagentSettings.menuOffersClear([]))
-        XCTAssertTrue(SubagentSettings.menuOffersClear(["S"]))
+    }
+
+    /// The tier write's door, Clear and the Yours tag (board 2026-11-20): a built-in engine's every model is the owner's
+    /// to tier through providers/builtin/:slug/model-tier; Clear only where the owner set it; a key keeps its own door.
+    func testBuiltinTierDoorClearAndYours() {
+        let cursor = ProviderTierRow(slug: "cursor", label: "Cursor", kind: "builtin", billing: "subscription")
+        let key = ProviderTierRow(slug: "my-endpoint", label: "My endpoint", kind: "key", providerId: "p2")
+        let shared = ProviderTierRow(slug: "shared", label: "Shared", kind: "key")
+        let family = ProviderModelTier(model: "claude-opus-5-6", levels: ["L", "XL"], source: "catalogue", editable: true)
+        let owned = ProviderModelTier(model: "grok-4.7", levels: ["L"], source: "owner", editable: true)
+        let unset = ProviderModelTier(model: "kimi-k3", levels: [], source: nil, editable: true)
+        let preset = ProviderModelTier(model: "deepseek-chat", levels: ["S"], source: "catalogue", editable: false)
+
+        XCTAssertEqual(SubagentSettings.tierPath(cursor, family), "providers/builtin/cursor/model-tier")
+        XCTAssertEqual(SubagentSettings.tierPath(cursor, unset), "providers/builtin/cursor/model-tier")
+        XCTAssertEqual(SubagentSettings.tierPath(key, unset), "providers/mine/p2/model-tier")
+        XCTAssertNil(SubagentSettings.tierPath(key, preset), "the catalogue's tier on a key is not the owner's")
+        XCTAssertNil(SubagentSettings.tierPath(shared, unset), "a key not the owner's own has no door")
+
+        XCTAssertFalse(SubagentSettings.menuOffersClear(cursor, family), "a catalogue tier has nothing to clear")
+        XCTAssertFalse(SubagentSettings.menuOffersClear(cursor, unset))
+        XCTAssertTrue(SubagentSettings.menuOffersClear(cursor, owned))
+        XCTAssertFalse(SubagentSettings.menuOffersClear(key, unset))
+        XCTAssertTrue(SubagentSettings.menuOffersClear(key, ProviderModelTier(model: "q", levels: ["M"], source: "owner", editable: true)))
+
+        XCTAssertTrue(SubagentSettings.showsYours(owned))
+        XCTAssertFalse(SubagentSettings.showsYours(family))
+        XCTAssertFalse(SubagentSettings.showsYours(unset))
+        XCTAssertEqual(SubagentSettings.yours, "Yours")
     }
 
     func testPriceText() {

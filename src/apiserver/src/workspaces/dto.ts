@@ -86,16 +86,16 @@ export class CreateWorkspaceDto {
   // Branch this workspace's sessions merge into by default (null = the runner auto-detects
   // main, else master). Also written implicitly when a session merges to an explicit target.
   @IsOptional() @IsString() defaultMergeTarget?: string;
-  // Smart model selection (docs/model-routing-design.md §7.2): a fresh task run on this Agent is
-  // created on the routed model and effort; off (the default), routing is recorded in shadow only.
-  // The owner's alone: it decides what runs cost, so the agent tools' whitelist
+  // Smart model selection's former per-Agent switch (docs/model-routing-design.md §7.2). Still
+  // accepted and returned, but no longer read (owner, 2026-11-20): the account's switch alone decides
+  // whether task runs are routed. The owner's alone: it decides what runs cost, so the agent tools' whitelist
   // (runner-agents.controller.ts ORCHESTRATOR_WORKSPACE_CREATE_FIELDS) deliberately leaves it out.
   @IsOptional() @IsBoolean() modelRouting?: boolean;
   @IsOptional() @IsIn(['cost', 'balance', 'intelligence'])
   modelRoutingOptimizeFor?: 'cost' | 'balance' | 'intelligence';
-  // The other engines smart selection may move this Agent's task runs to (§6): only engines with a
-  // tier table, and only the owner's to name, for the same reason as the switch. Empty (the
-  // default) keeps every run on this Agent's own engine.
+  // The former per-Agent list of engines smart selection could move task runs to (§6). Still
+  // accepted and returned, but no longer read (owner, 2026-11-20); only the owner's to name, for the
+  // same reason as the switch.
   @IsOptional() @IsArray() @ArrayMaxSize(MODEL_ROUTING_ENGINES.length)
   @IsIn(MODEL_ROUTING_ENGINES, { each: true })
   modelRoutingProviders?: string[];

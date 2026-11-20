@@ -749,6 +749,8 @@ test('0453 §10.4 §10.9 on the schema before it, over rows of every table it al
         // 1130 adds `task_fork_snapshot_idx` (over 0615's fork columns) and two `session` indexes over columns from
         // 0046 and 0288. Self-contained and without BEGIN/COMMIT, so it is replayed as it ships.
         await sql.query(readFileSync(path.join(MIGRATIONS, '1130_rare_predicate_indexes', 'migration.sql'), 'utf8'));
+        // 1270 adds `task_owner_updated_idx`; its other index is on `session_merge_receipt`, already present before 0453.
+        await sql.query(readFileSync(path.join(MIGRATIONS, '1270_receipt_source_sha_task_updated_idx', 'migration.sql'), 'utf8'));
         // 1060 adds `task.start_when_condition_id` with its unique index, its foreign key to `condition` and
         // `task_run_at_or_start_when_chk`. The key needs 1030's `condition` table, which needs `schedule` and more,
         // so 1060 cannot be replayed here alone: its four objects, by name, are left out of the empty side instead.

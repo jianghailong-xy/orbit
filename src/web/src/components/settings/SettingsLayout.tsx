@@ -20,6 +20,7 @@ import {
 import { CSS } from '@dnd-kit/utilities';
 import {
   ApiOutlined,
+  BarChartOutlined,
   GithubOutlined,
   BellOutlined,
   BlockOutlined,
@@ -62,6 +63,7 @@ import { ImpersonationBanner } from '../ImpersonationBanner';
 import { HelpDrawer } from '../HelpDrawer';
 
 import type { Runner } from '../TasksSidePanel';
+import { SettingChangedLine, SettingChangedLineSlot } from './SettingChangedLine';
 import { around, searchSettings, type SettingsHit, type SettingsHitGroup } from './settingsSearch';
 import './Settings.css';
 
@@ -75,6 +77,7 @@ const PERSONAL_ICONS: Record<(typeof PERSONAL_PAGES)[number]['path'], ReactNode>
   '/settings/shared-links': <LinkOutlined />,
   '/settings/access-tokens': <KeyOutlined />,
   '/settings/terminals': <CodeOutlined />,
+  '/settings/routing-report': <BarChartOutlined />,
 };
 
 /** Integrations' rows' icons, one per connected service. */
@@ -164,7 +167,9 @@ export function SettingsLayout() {
                   <span>Settings</span>
                 </button>
               )}
-              <Outlet />
+              <SettingChangedLineSlot.Provider value={SettingChangedLine}>
+                <Outlet />
+              </SettingChangedLineSlot.Provider>
             </div>
           </main>
         )}

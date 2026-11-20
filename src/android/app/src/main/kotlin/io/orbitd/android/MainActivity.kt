@@ -469,8 +469,9 @@ private fun OrbitShell(auth: AuthViewModel, app: OrbitApplication, incoming: Pai
                         }
                     }, actions = {
                         PageBar.Actions(route, this)
-                        // A workspace's new session page has back alone in its bar, as iOS's draft does.
-                        val draftPage = route.destination == Destination.DRAFT && route.workspaceId != null
+                        // A workspace's new session page has back alone in its bar, as iOS's draft does, and a session page back and
+                        // its own ⋯ (iOS `ConsoleView`'s toolbar): neither carries the drawer or a refresh.
+                        val draftPage = route.destination == Destination.DRAFT && route.workspaceId != null || route.destination == Destination.SESSION
                         if (navigation.canGoBack && !draftPage) IconButton(onClick = { scope.launch { focus.clearFocus(); drawer.open() } }) { NeedsYouMenuIcon(app, "Open navigation") }
                         // iOS: a session list is refreshed by pulling it.
                         if (route.destination != Destination.WORKSPACES && route.destination != Destination.WORKSPACE && route.destination != Destination.FOLDER && !draftPage)

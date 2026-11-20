@@ -1200,40 +1200,6 @@ export function newFolderRoot(reposRoot: string, capabilities: readonly string[]
  *  The machine page tells "update the runner" (not declared) from "no reading yet" (declared, nothing kept) by it. */
 export const MACHINE_RESOURCES_CAPABILITY = 'machine-resources/v1';
 
-/** The heartbeat answer's limits on each background job; each field is present only when set. */
-export interface BackgroundJobLimits {
-  cpus?: number;
-  memoryMb?: number;
-}
-
-/** Declared by a runner that can enforce limits on its background jobs on its machine now (Runner.bgJobCpus and
- *  bgJobMemoryMb, handed back as the heartbeat answer's `backgroundJobLimits`). */
-export const BG_JOB_LIMITS_CAPABILITY = 'bg-job-limits/v1';
-
-/** Declared instead, followed by one reason code, by a runner that understands the limits but cannot enforce them on
- *  its machine: `os` (not Linux), `cgroup` (no cgroup v2 of its own: a container, cgroup v1, not run as a systemd
- *  service), `delegate` (the systemd unit lacks Delegate=yes or needs a restart: reinstall the service), `controllers`
- *  (the cpu or memory controller is missing). A runner declaring neither is too old to support limits. */
-export const BG_JOB_LIMITS_UNAVAILABLE_CAPABILITY_PREFIX = 'bg-job-limits-unavailable/v1:';
-
-export type BgJobLimitUnavailableReason = 'os' | 'cgroup' | 'delegate' | 'controllers' | 'unknown';
-
-export type BgJobLimitSupport =
-  | { state: 'old' }
-  | { state: 'available' }
-  | { state: 'unavailable'; reason: BgJobLimitUnavailableReason };
-
-/** What a runner's declared capabilities say about enforcing background job limits. A reason code this build does not
- *  know reads as `unknown`. */
-export function bgJobLimitSupportOf(capabilities: readonly string[] | null | undefined): BgJobLimitSupport {
-  if (capabilities?.includes(BG_JOB_LIMITS_CAPABILITY)) return { state: 'available' };
-  const declared = capabilities?.find((c) => c.startsWith(BG_JOB_LIMITS_UNAVAILABLE_CAPABILITY_PREFIX));
-  if (declared === undefined) return { state: 'old' };
-  const code = declared.slice(BG_JOB_LIMITS_UNAVAILABLE_CAPABILITY_PREFIX.length);
-  const reason = code === 'os' || code === 'cgroup' || code === 'delegate' || code === 'controllers' ? code : 'unknown';
-  return { state: 'unavailable', reason };
-}
-
 /** One reading of a machine (RunnerHeartbeatRequest.resources; the runner's MachineResources). A figure the
  *  platform has no answer for is absent — the page shows a dash, never a zero. Bytes are whole numbers. */
 export interface RunnerResources {
@@ -1615,10 +1581,6 @@ export interface RunnerHeartbeatResponse {
    *  its PVC's size (docs/session-checkout-storage-design.md §5). The default is not stored, so the
    *  auto-run disk gate still reads the owner's setting. */
   minFreeDiskMb?: number | null;
-  /** The limits on each background job this machine runs (Runner.bgJobCpus, bgJobMemoryMb). Present only when the owner
-   *  set at least one, carrying only the ones set; absent means limits are off. Absence replaces, as for `minFreeDiskMb`:
-   *  a runner reads an answer without it as "off", not as "keep what you last heard". */
-  backgroundJobLimits?: BackgroundJobLimits;
   /** The storage budget a Docker managed runner's checkouts are held to: its data volume as the
    *  restricted Docker channel last measured it, and the floor to reclaim at
    *  (docs/session-checkout-storage-design.md §5). statfs inside the container reports the host's
@@ -2935,6 +2897,63 @@ export interface WorkflowRunView {
   endedAt: string | null;
 }
 
+/** A SubAgents report row's tier: the pick's, `named` when the call or its definition named the model, `not-routed`
+ *  when smart model selection was off. */
+export type SubagentReportTier = SubagentSize | 'named' | 'not-routed';
+
+/**
+ * One row of the routing report's SubAgents view (`GET /tasks/model-routing/report/subagents`, docs/subagent-design.md
+ * §7, board docs/mocks/subagent-workflow/08-report.html): the SubAgent runs routed at one tier onto one provider and
+ * model, workflow calls included. A run counts under the pick its decision recorded, wherever a usage limit moved it.
+ */
+export interface SubagentReportGroup {
+  tier: SubagentReportTier;
+  /** The pick's provider slug, and its name on the account (the slug when it has none). Null when no candidate was left. */
+  provider: string | null;
+  providerLabel: string | null;
+  /** The pick's model, and how the owner's tables name it (the id when they do not). Null when no candidate was left. */
+  model: string | null;
+  modelLabel: string | null;
+  runs: number;
+  /** Of `runs`, calls of an Orbit workflow: the Workflows view's calls are these. */
+  workflowCalls: number;
+  /** Runs that have ended, and of them those that finished (DONE). */
+  ended: number;
+  done: number;
+  /** What the runs reported; a subscription that reports no price adds 0. */
+  costUsd: number;
+  /** Runs that moved on to the next candidate after a usage limit, capacity or a failed login. */
+  movedOn: number;
+  /** Runs whose tier was their type's default: the call gave no size, and its definition none. */
+  noSize: number;
+}
+
+/**
+ * One row of the routing report's Workflows view: the runs of the Orbit workflows of one name (`meta.name`). Their
+ * calls are SubAgent runs, so the SubAgents view counts them too.
+ */
+export interface WorkflowReportGroup {
+  name: string;
+  /** The newest description its runs gave; null when none gave one. */
+  description: string | null;
+  runs: number;
+  /** Of `runs`, those still running. */
+  running: number;
+  calls: number;
+  /** Calls that ended without finishing: failed, interrupted or stopped. */
+  failedCalls: number;
+  /** What its calls reported. */
+  costUsd: number;
+  /** The median time its ended runs took, in milliseconds; null while none has ended. */
+  durationP50Ms: number | null;
+}
+
+/** `GET /tasks/model-routing/report/subagents?since=&agentId=`: the routing report's SubAgents and Workflows views. */
+export interface SubagentRoutingReport {
+  subagents: SubagentReportGroup[];
+  workflows: WorkflowReportGroup[];
+}
+
 /** What the runner sends when the parent model calls `delegate` (§5.1 step 2). */
 export interface SubagentRunCreateRequest {
   /** The `delegate` call's tool_use id. A retry with the same id answers with the run it opened. */
@@ -3045,10 +3064,11 @@ export interface ProviderModelTier {
   model: string;
   /** The tiers this model fills, lowest first, at whatever effort each takes. Empty: ranked after tiered models. */
   levels: SubagentSize[];
-  /** `catalogue`: the preset or the built-in tier table. `owner`: set on this page. Null: nobody has. */
+  /** `catalogue`: the preset, the built-in tier table or the model's family. `owner`: set on this page. Null: nobody has. */
   source: 'catalogue' | 'owner' | null;
-  /** The owner may set or clear it (PATCH /providers/mine/:providerId/model-tier): a model of a key's own
-   *  list that the catalogue gives no tier. */
+  /** The owner may set or clear it: a model of a key's own list that the catalogue gives no tier
+   *  (PATCH /providers/mine/:providerId/model-tier), or any model of a built-in engine's catalogue
+   *  (PATCH /providers/builtin/:slug/model-tier, which overrides the catalogue's tier). */
   editable: boolean;
   /** USD per million output tokens, when known (models.dev); null for a subscription or an unpriced key. */
   outputPricePerMTok: number | null;
@@ -3070,7 +3090,8 @@ export interface SubagentTiersResponse {
   providers: ProviderTierRow[];
 }
 
-/** PATCH /providers/mine/:id/model-tier: set or clear (null) the owner's tier for one model of that key. */
+/** PATCH /providers/mine/:id/model-tier, or PATCH /providers/builtin/:engine/model-tier: set or clear (null) the
+ *  owner's tier for one model of that key, or of that built-in engine's catalogue. */
 export interface ProviderModelTierUpdate {
   model: string;
   tier: SubagentSize | null;
@@ -4226,8 +4247,11 @@ export interface IntegrationCheckResult extends Omit<IntegrationCheckSpec, 'time
   scope?: 'COMBINED' | 'BASELINE';
   /** The exact tree measured by the baseline check, before it ran (K4). */
   treeSha?: string;
-  skipped?: 'PATHS_EXEMPT';
+  /** A landing check not run: PATHS_EXEMPT names the `files` that changed (§11 K2), TASK_EXEMPT the
+   *  `reason` its task is exempt (§12.15 P-C2). */
+  skipped?: 'PATHS_EXEMPT' | 'TASK_EXEMPT';
   files?: string[];
+  reason?: string;
   exitCode: number | null;
   timedOut: boolean;
   durationMs: number;
@@ -4281,6 +4305,11 @@ export interface IntegrationJobCommand {
    *  `promotion-automatic-land/v1`; absent on every other job. */
   automatic?: boolean;
   checks: IntegrationCheckSpec[];
+  /** LAND_TASK of a task exempt from the project's landing check (§12.15 P-C2): why. `checks` already
+   *  leaves the landing check out; this is only what the runner records as the skipped
+   *  `{ name: 'LANDING_CHECK', skipped: 'TASK_EXEMPT', reason }`. An older runner ignores it, and the
+   *  control plane records that skip itself when the landing lands. */
+  landingCheckExemptReason?: string;
   /** Somebody asked for this job to stop. Today's runner reads it once, when it starts the job (and
    *  a takeover's new process reads the request its claim carries), so a request written while a
    *  legacy job runs only takes effect if the job is claimed again; the progress protocol adds it to

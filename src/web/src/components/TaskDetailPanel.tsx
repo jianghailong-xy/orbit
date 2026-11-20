@@ -19,6 +19,7 @@ import { MentionDeliveryNotes } from './MentionDeliveryNotes';
 import { GaugeIcon } from './ScheduleCards';
 import { WaitingOnYouTaskBadge } from './OwnerRequestCard';
 import { TaskInputs } from './TaskInputs';
+import { TaskLandingExempt } from './TaskLandingExempt';
 import { LandTaskStatus, landingBadge, landingIsLive } from './LandTaskStatus';
 import { useMutation, useQuery, useQueryClient, type QueryClient } from '@tanstack/react-query';
 import { AgentProvider, ALL_ENGINES, ENGINE_CLI_NAMES, isEngine, type RunnerModelCatalog } from '@orbit/shared';
@@ -1536,7 +1537,7 @@ export function TaskDetailPanel({
       label: 'Model',
       value: q.data?.model
         ? modelLabel(q.data.model)
-        : smartSelection && assigneeWorkspace?.modelRouting ? SMART_SELECTION_PLACEHOLDER : 'Provider default',
+        : smartSelection ? SMART_SELECTION_PLACEHOLDER : 'Provider default',
     },
   ];
   const inputCount = (q.data?.attachments ?? []).length;
@@ -2096,10 +2097,11 @@ export function TaskDetailPanel({
               </div>
             </section>
           )}
-          {landing ? (
+          {landing || q.data?.landingCheckExempt === true ? (
             <section className="tdp-section" aria-label="Task landing">
               <div className="tdp-section-title">Landing</div>
-              <LandTaskStatus integration={q.data.integration} taskStatus={q.data.status} main={mainBranch} />
+              {landing ? <LandTaskStatus integration={q.data.integration} taskStatus={q.data.status} main={mainBranch} /> : null}
+              <TaskLandingExempt task={q.data} />
               {landingSessionId ? (
                 <div className="tdp-landing-open">
                   <LandingLink className="tdp-landing-link" sessionId={landingSessionId} />
@@ -2451,7 +2453,7 @@ export function TaskDetailPanel({
                     value={q.data?.model ?? null}
                     // Unpinned on an assignee with smart selection on, each run's model is picked for it.
                     placeholder={
-                      smartSelection && assigneeWorkspace?.modelRouting ? SMART_SELECTION_PLACEHOLDER : 'Provider default'
+                      smartSelection ? SMART_SELECTION_PLACEHOLDER : 'Provider default'
                     }
                     clearable
                     loading={runnersQ.isLoading || updateRunTarget.isPending}

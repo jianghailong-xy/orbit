@@ -21,7 +21,7 @@ import {
   WarningOutlined,
 } from '@ant-design/icons';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import { bgJobLimitSupportOf, engineUpdateFailedLines, engineUpdateLineFailed, type LoginEngine } from '@orbit/shared';
+import { engineUpdateFailedLines, engineUpdateLineFailed, type LoginEngine } from '@orbit/shared';
 import { useEffect, useRef, useState, type ReactNode } from 'react';
 import { Link, useNavigate, useParams, useSearchParams } from 'react-router-dom';
 import { api, cleanUpWorkspaceRepo } from '../../api';
@@ -89,16 +89,8 @@ import {
   RUNNER_ENGINES_FOOTER,
   RUNNER_ENGINES_MANAGED_FOOTER,
   RUNNER_ENGINES_OFFLINE_FOOTER,
-  RUNNER_JOB_CPU,
-  RUNNER_JOB_LIMIT_OFF,
-  RUNNER_JOB_LIMITS_FOOTER,
-  RUNNER_JOB_LIMITS_OLD,
-  RUNNER_JOB_MEMORY,
   RUNNER_KEEP_FREE,
   RUNNER_LINE_SEPARATOR,
-  runnerJobCpus,
-  runnerJobLimitsUnavailable,
-  runnerJobMemory,
   RUNNER_MAX_CONCURRENT,
   RUNNER_MAX_CONCURRENT_HINT,
   RUNNER_MAX_CONCURRENT_UNIT,
@@ -255,10 +247,6 @@ function engineUpdateReportLines(message: string | null | undefined): string[] {
 /** A managed runner's row tone as the pill's colour; a moving state carries a spinner on the neutral pill. */
 const MANAGED_PILL = { ready: 'online', progress: 'offline', idle: 'offline', attention: 'attention' } as const;
 
-/** Job CPU's and Job Memory's picks besides Off. */
-const JOB_CPU_TIERS = [1, 2, 4, 8];
-const JOB_MEMORY_TIERS_MB = [2048, 4096, 8192, 16384];
-
 export function MachineSettingsPage() {
   const runnerId = routeId(useParams().id);
   const navigate = useNavigate();
@@ -314,12 +302,7 @@ export function MachineSettingsPage() {
   // Capacity saves as it changes — Max Concurrent on its dialog's Save, Keep Free on pick. The value goes
   // into the runner list at once, so a control doesn't snap back to the old number while the save lands.
   const capacityMut = useMutation({
-    mutationFn: (patch: {
-      maxConcurrent?: number;
-      minFreeDiskMb?: number | null;
-      bgJobCpus?: number | null;
-      bgJobMemoryMb?: number | null;
-    }) =>
+    mutationFn: (patch: { maxConcurrent?: number; minFreeDiskMb?: number | null }) =>
       api(`/runners/${runnerId}`, { method: 'PATCH', body: patch }),
     onMutate: async (patch) => {
       await qc.cancelQueries({ queryKey: ['runners'] });
@@ -454,22 +437,6 @@ export function MachineSettingsPage() {
       ? [{ value: reserveMb, label: keepFreeLabel(reserveMb) }]
       : []),
   ].sort((a, b) => a.value - b.value);
-
-  // Job CPU and Job Memory's picks, 0 standing for Off as Keep Free's does; a value set elsewhere is shown as it is.
-  const jobLimitSupport = bgJobLimitSupportOf(runner.capabilities);
-  const jobLimitsOn = jobLimitSupport.state === 'available';
-  const tiersWith = (tiers: number[], current: number | null | undefined, label: (n: number) => string) =>
-    [0, ...tiers, ...(current != null && current > 0 && !tiers.includes(current) ? [current] : [])]
-      .sort((a, b) => a - b)
-      .map((n) => ({ value: String(n), label: n === 0 ? RUNNER_JOB_LIMIT_OFF : label(n) }));
-  const jobCpuOptions = tiersWith(JOB_CPU_TIERS, runner.bgJobCpus, runnerJobCpus);
-  const jobMemoryOptions = tiersWith(JOB_MEMORY_TIERS_MB, runner.bgJobMemoryMb, runnerJobMemory);
-  const jobLimitsHint =
-    jobLimitSupport.state === 'available'
-      ? RUNNER_JOB_LIMITS_FOOTER
-      : jobLimitSupport.state === 'old'
-        ? RUNNER_JOB_LIMITS_OLD
-        : runnerJobLimitsUnavailable(jobLimitSupport.reason);
 
   // Max Concurrent's use: how many of its slots are taken now — online only, as the head's count; amber when all are.
   const running =
@@ -1054,47 +1021,8 @@ export function MachineSettingsPage() {
                 />
               }
             />
-            <SettingsRow
-              title={RUNNER_JOB_CPU}
-              control={
-                <Select
-                  className="rd-job-cpu"
-                  aria-label={RUNNER_JOB_CPU}
-                  size="small"
-                  disabled={!jobLimitsOn}
-                  value={String(runner.bgJobCpus ?? 0)}
-                  options={jobCpuOptions}
-                  onValueChange={(value) => {
-                    if (value === null) return;
-                    const cpus = Number(value);
-                    capacityMut.mutate({ bgJobCpus: cpus === 0 ? null : cpus });
-                  }}
-                  matchTriggerWidth={false}
-                />
-              }
-            />
-            <SettingsRow
-              title={RUNNER_JOB_MEMORY}
-              control={
-                <Select
-                  className="rd-job-memory"
-                  aria-label={RUNNER_JOB_MEMORY}
-                  size="small"
-                  disabled={!jobLimitsOn}
-                  value={String(runner.bgJobMemoryMb ?? 0)}
-                  options={jobMemoryOptions}
-                  onValueChange={(value) => {
-                    if (value === null) return;
-                    const mb = Number(value);
-                    capacityMut.mutate({ bgJobMemoryMb: mb === 0 ? null : mb });
-                  }}
-                  matchTriggerWidth={false}
-                />
-              }
-            />
           </SettingsCard>
           <div className="rd-hint">{RUNNER_CAPACITY_FOOTER}</div>
-          <div className="rd-hint rd-job-limits-hint">{jobLimitsHint}</div>
         </SettingsSection>
       </div>
 

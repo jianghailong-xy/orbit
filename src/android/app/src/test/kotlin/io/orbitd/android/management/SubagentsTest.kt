@@ -32,6 +32,17 @@ internal object SubagentFixtures {
           "models":[{"model":"qwen-coder","levels":[],"source":null,"editable":true,"outputPricePerMTok":null}]},
         {"slug":"kimi","label":"Kimi","kind":"builtin","providerId":null,"billing":"subscription","models":[]},
         {"slug":"team-codex","label":"Team Codex","kind":"pool","providerId":null,"billing":"subscription","models":[]}]}"""
+
+    /** A built-in engine's whole catalogue, every model the owner's to tier (board 2026-11-20): a family's tiers, grok-4.7 tiered by
+     *  the owner, the rest Not set. */
+    val BUILTIN = """{"providers":[
+        {"slug":"cursor","label":"Cursor","kind":"builtin","providerId":null,"billing":"subscription",
+          "models":[{"model":"claude-opus-5-6","levels":["L","XL"],"source":"catalogue","editable":true,"outputPricePerMTok":null},
+            {"model":"composer-2.5","levels":["S"],"source":"catalogue","editable":true,"outputPricePerMTok":null},
+            {"model":"grok-4.7","levels":["L"],"source":"owner","editable":true,"outputPricePerMTok":null},
+            {"model":"kimi-k3","levels":[],"source":null,"editable":true,"outputPricePerMTok":null}]},
+        {"slug":"my-endpoint","label":"My endpoint","kind":"key","providerId":"${ManagementFixture.KEY_OPENAI}","billing":"key",
+          "models":[{"model":"qwen-coder","levels":["M"],"source":"owner","editable":true,"outputPricePerMTok":null}]}]}"""
 }
 
 /** The SubAgents settings and Model tiers (docs/subagent-design.md §7): what is read, what is drawn, and what is written. */
@@ -97,10 +108,10 @@ class SubagentsTest {
     @Test fun workspacePatchSendsSubagentFieldsOnlyWhenTheyMoved() {
         val saved = buildJsonObject { put("name", "app") }
         assertEquals(buildJsonObject { put("name", "app"); put("effort", ""); put("enabled", true) },
-            workspacePatch(saved, "app", "", "", "", true, false, SubagentSettings(true, 4, true)))
+            workspacePatch(saved, "app", "", "", "", true, SubagentSettings(true, 4, true)))
         assertEquals(buildJsonObject { put("name", "app"); put("effort", ""); put("enabled", true); put("subagentsEnabled", false)
             put("subagentsMaxRunning", 16); put("workflowsEnabled", false) },
-            workspacePatch(saved, "app", "", "", "", true, false, SubagentSettings(false, 16, false)))
+            workspacePatch(saved, "app", "", "", "", true, SubagentSettings(false, 16, false)))
     }
 
     @Test fun theGroupsRowsSayTheMocksWordsAndDoneSendsWhatMoved() {
@@ -209,9 +220,9 @@ class SubagentsTest {
         // Providers with no models have no row.
         assertEquals(0, compose.onAllNodesWithText("Kimi", useUnmergedTree = true).fetchSemanticsNodes().size)
         // Only the editable model opens a menu.
-        assertEquals(0, compose.onAllNodesWithTag("tier:deepseek-chat", useUnmergedTree = true).fetchSemanticsNodes().size)
+        assertEquals(0, compose.onAllNodesWithTag("tier:deepseek:deepseek-chat", useUnmergedTree = true).fetchSemanticsNodes().size)
         val reads = fixture.calls.count { it == "GET providers/subagent-tiers" }
-        compose.onNodeWithTag("tier:qwen-coder", useUnmergedTree = true).performScrollTo().performClick()
+        compose.onNodeWithTag("tier:my-endpoint:qwen-coder", useUnmergedTree = true).performScrollTo().performClick()
         compose.waitUntil(60_000) { compose.onAllNodesWithText("XL").fetchSemanticsNodes().isNotEmpty() }
         assertEquals("Clear is offered once a tier is set", 0, compose.onAllNodesWithText("Clear").fetchSemanticsNodes().size)
         compose.onNodeWithText("L").performClick()
@@ -220,12 +231,47 @@ class SubagentsTest {
             written("PATCH providers/mine/${ManagementFixture.KEY_OPENAI}/model-tier").single())
     }
 
+    @Test fun aBuiltInEnginesModelTakesATierThroughTheBuiltinDoor() {
+        fixture.subagentTiers = SubagentFixtures.BUILTIN
+        val api = api()
+        compose.setContent { MachinesAndModelsSettings(api, 0, null, {}, {}) }
+        await("kimi-k3")
+        // Every catalogue model opens the menu; the owner's tiers carry Yours, a catalogue tier does not.
+        listOf("claude-opus-5-6", "composer-2.5", "grok-4.7", "kimi-k3").forEach {
+            assertEquals(it, 1, compose.onAllNodesWithTag("tier:cursor:$it", useUnmergedTree = true).fetchSemanticsNodes().size)
+        }
+        assertEquals(1, compose.onAllNodesWithTag("tier-yours:cursor:grok-4.7", useUnmergedTree = true).fetchSemanticsNodes().size)
+        assertEquals(1, compose.onAllNodesWithTag("tier-yours:my-endpoint:qwen-coder", useUnmergedTree = true).fetchSemanticsNodes().size)
+        assertEquals(0, compose.onAllNodesWithTag("tier-yours:cursor:claude-opus-5-6", useUnmergedTree = true).fetchSemanticsNodes().size)
+        // A catalogue tier: the four, no Clear.
+        compose.onNodeWithTag("tier:cursor:claude-opus-5-6", useUnmergedTree = true).performScrollTo().performClick()
+        compose.waitUntil(60_000) { compose.onAllNodesWithText("XL").fetchSemanticsNodes().isNotEmpty() }
+        assertEquals("no Clear on a catalogue tier", 0, compose.onAllNodesWithText("Clear").fetchSemanticsNodes().size)
+        compose.onNodeWithText("S").performClick()
+        compose.waitUntil(60_000) { fixture.bodies.any { it.contains("model-tier") } }
+        assertEquals(buildJsonObject { put("model", "claude-opus-5-6"); put("tier", "S") },
+            written("PATCH providers/builtin/cursor/model-tier").single())
+    }
+
+    @Test fun aBuiltInEnginesOwnerTierClears() {
+        fixture.subagentTiers = SubagentFixtures.BUILTIN
+        val api = api()
+        compose.setContent { MachinesAndModelsSettings(api, 0, null, {}, {}) }
+        await("grok-4.7")
+        compose.onNodeWithTag("tier:cursor:grok-4.7", useUnmergedTree = true).performScrollTo().performClick()
+        await("Clear")
+        compose.onNodeWithText("Clear").performClick()
+        compose.waitUntil(60_000) { fixture.bodies.any { it.contains("model-tier") } }
+        assertEquals(buildJsonObject { put("model", "grok-4.7"); put("tier", JsonNull) },
+            written("PATCH providers/builtin/cursor/model-tier").single())
+    }
+
     @Test fun clearSendsANullTier() {
         fixture.subagentTiers = SubagentFixtures.TIERS.replace(""""levels":[],"source":null""", """"levels":["M"],"source":"owner"""")
         val api = api()
         compose.setContent { MachinesAndModelsSettings(api, 0, null, {}, {}) }
         await("qwen-coder")
-        compose.onNodeWithTag("tier:qwen-coder", useUnmergedTree = true).performScrollTo().performClick()
+        compose.onNodeWithTag("tier:my-endpoint:qwen-coder", useUnmergedTree = true).performScrollTo().performClick()
         await("Clear")
         compose.onNodeWithText("Clear").performClick()
         compose.waitUntil(60_000) { fixture.bodies.any { it.contains("model-tier") } }

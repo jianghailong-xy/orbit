@@ -114,16 +114,29 @@ class SmartSelectionGateTest {
         compose.onNodeWithText("Coordinator: A well-specified fix.").assertExists()
         compose.onNodeWithTag("task-runs-with-done").performClick()
         page = "workspace"
-        await("Smart model selection for tasks")
-        compose.onNodeWithText("Task runs").assertExists()
+        await("Working directory")
+        // The Agent has no switch of its own any more: the account's alone decides.
+        compose.onAllNodesWithText("Task runs").assertCountEquals(0)
+        compose.onAllNodesWithText("Smart model selection for tasks").assertCountEquals(0)
     }
 
-    @Test fun theWorkspaceFormHasNoTaskRunsWhileTheSwitchIsOff() {
+    @Test fun theWorkspaceFormHasNoSmartSelectionSwitchOfItsOwn() {
         val api = api()
         compose.setContent { WorkspaceSettings(api, ManagementFixture.WORKSPACE, revision, {}, {}, {}) }
         await("Working directory")
         compose.onAllNodesWithText("Task runs").assertCountEquals(0)
         compose.onAllNodesWithText("Smart model selection for tasks").assertCountEquals(0)
+    }
+
+    /** Done on the Agent form writes no modelRouting: the Agent has no switch of its own (owner, 2026-11-20). */
+    @Test fun savingTheWorkspaceFormNeverWritesModelRouting() {
+        val api = api()
+        compose.setContent { CompositionLocalProvider(LocalSmartSelection provides true) { WorkspaceSettings(api, ManagementFixture.WORKSPACE, revision, {}, {}, {}) } }
+        await("Working directory")
+        compose.onNodeWithText("Name").performTextInput(" renamed")
+        compose.onNodeWithText("Done").performClick()
+        compose.waitUntil(60_000) { fixture.bodies.any { it.startsWith("PATCH workspaces/") } }
+        assertTrue(fixture.bodies.none { it.startsWith("PATCH workspaces/") && it.contains("modelRouting") })
     }
 
     /** The switch is the whole app's at once: what AccountAppearance hands every page — the composer's ✦ (A11c) as much as the task
