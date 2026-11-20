@@ -15476,7 +15476,8 @@ export class TasksService implements OnModuleInit, OnModuleDestroy {
       select: { model: true, status: true },
     });
     if (!paused || paused.model === model || SessionsService.TERMINAL.includes(paused.status)) return;
-    await this.sessions.updateConfig(ownerId, sessionId, { model });
+    // Orbit's change, not the owner's pick: a mode change it causes is recorded as ORBIT_CHANGE.
+    await this.sessions.updateConfig(ownerId, sessionId, { model }, undefined, { origin: 'ORBIT' });
   }
 
   /**

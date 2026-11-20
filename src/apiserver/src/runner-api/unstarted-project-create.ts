@@ -1,7 +1,7 @@
 import { ProjectStatus } from '@prisma/client';
 import { toUuid } from '@orbit/shared';
 
-import { isWiderThanStarter, resolvePermissionMode } from '../common/permission-mode';
+import { isWiderThanStarter, resolvePermissionMode, runningPermissionMode } from '../common/permission-mode';
 import type { PrismaService } from '../prisma/prisma.service';
 
 /**
@@ -53,7 +53,7 @@ export async function coordinatorCreateAllowedBy(
       select: {
         startedAt: true,
         coordinatorEnabled: true,
-        coordinatorSession: { select: { permissionMode: true, engine: true } },
+        coordinatorSession: { select: { permissionMode: true, actualPermissionMode: true, engine: true } },
         owner: { select: { preferences: true } },
       },
     });
@@ -61,7 +61,10 @@ export async function coordinatorCreateAllowedBy(
     if (project.startedAt === null) return START_CARD_REVIEWS_MESSAGE;
     if (!project.coordinatorEnabled) return null;
     const starter = {
-      mode: resolvePermissionMode(project.coordinatorSession?.permissionMode, project.owner),
+      // R3: the mode the coordinator is actually running in.
+      mode: project.coordinatorSession
+        ? runningPermissionMode(project.coordinatorSession, project.owner)
+        : resolvePermissionMode(null, project.owner),
       engine: project.coordinatorSession?.engine ?? null,
     };
     return isWiderThanStarter(starter, resolvePermissionMode(null, project.owner), null)

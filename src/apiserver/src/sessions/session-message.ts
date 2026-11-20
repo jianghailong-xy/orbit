@@ -11,7 +11,7 @@ import {
   type SessionReplyOption,
   type SessionRequestState,
 } from '@orbit/shared';
-import { isWiderThanStarter, resolvePermissionMode, whatItRunsAs } from '../common/permission-mode';
+import { isWiderThanStarter, resolvePermissionMode, runningPermissionMode, whatItRunsAs } from '../common/permission-mode';
 import { taskRunResumeToken } from '../tasks/task-run-identity';
 import { readExecuteTarget, TASK_RUN_ACTION } from '../tasks/task-run-receipt';
 
@@ -146,12 +146,13 @@ async function readSender(
     where: { id: senderSessionId, ownerId },
     select: {
       id: true, title: true, taskId: true, workspace: { select: { name: true } },
-      permissionMode: true, engine: true, owner: { select: { preferences: true } },
+      permissionMode: true, actualPermissionMode: true, engine: true, owner: { select: { preferences: true } },
     },
   });
   if (!row) return null;
-  const { permissionMode, owner, ...sender } = row;
-  return { ...sender, mode: resolvePermissionMode(permissionMode, owner) };
+  const { permissionMode, actualPermissionMode, owner, ...sender } = row;
+  // R3: the sender is judged by the mode it is actually running in.
+  return { ...sender, mode: runningPermissionMode({ permissionMode, actualPermissionMode }, owner) };
 }
 
 /** The session a message was sent to, for the comparison. Null when nothing is known of it. */
