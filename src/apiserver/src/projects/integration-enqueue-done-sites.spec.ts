@@ -160,6 +160,25 @@ const SETTLED_BY_CALLER: ReadonlyMap<string, { by: string; why: string }> = new 
   ],
 ]);
 
+/**
+ * Finish writes of sessions that never carry task work, so there is no delivered identity to settle:
+ * `settleDeliveredIdentityAfterFinish` would answer null for every row they write (no task id, or a
+ * session that starts no task work). They write `finished_at` because it is the release column
+ * (docs/session-three-state-design.md §4.2), not because a task's work ended.
+ */
+const ENDS_NO_TASK_WORK: ReadonlyMap<string, string> = new Map([
+  [
+    'projects/landing-session.ts#settleLanding',
+    'A LANDING session is created with taskId null and startsTaskWork false (ensureLandingSession); '
+      + 'the task it lands is reached through the landing row, whose DONE path settles the identity.',
+  ],
+  [
+    'runner-api/runner-api.controller.ts#importResult',
+    'An imported transcript session is created with no task (SessionsService import), and a failed '
+      + 'import ends it before any turn ran.',
+  ],
+]);
+
 /** Blank out comments without moving a line: these files describe their own writes in prose. */
 function withoutComments(source: string): string {
   return source
@@ -362,7 +381,7 @@ test('enqueueForDoneTask settles the identity, and so does every write of a work
   );
   const settling = new Set(declarationsCalling(sources, SETTLE_AFTER_FINISH));
   const missing = finishes.filter((site) => {
-    if (settling.has(site)) return false;
+    if (settling.has(site) || ENDS_NO_TASK_WORK.has(site)) return false;
     const caller = SETTLED_BY_CALLER.get(site);
     return !caller || !settling.has(caller.by);
   });
@@ -375,6 +394,8 @@ test('enqueueForDoneTask settles the identity, and so does every write of a work
   );
   const stale = [...SETTLED_BY_CALLER.keys()].filter((site) => !finishes.includes(site) || settling.has(site));
   assert.deepEqual(stale, [], 'SETTLED_BY_CALLER names a site that does not need it');
+  const staleNoWork = [...ENDS_NO_TASK_WORK.keys()].filter((site) => !finishes.includes(site) || settling.has(site));
+  assert.deepEqual(staleNoWork, [], 'ENDS_NO_TASK_WORK names a site that does not need it');
 });
 
 test('the census notices a DONE that states no identity, and a finish that settles nothing', () => {
