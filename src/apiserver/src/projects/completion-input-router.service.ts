@@ -312,20 +312,27 @@ export class CompletionInputRouter {
    * no landing result would ever ask again. Asked here, after that finish commits and before the
    * settled facts, which must read the check this may queue as work still in flight (the order
    * `afterIntegrationResult` keeps). A finish that queued a landing makes no candidate here: its
-   * landing's result asks once it lands. The service logs and swallows its own failures.
+   * landing's result asks once it lands. The service logs and swallows its own failures; a service
+   * this router cannot find is logged as an error naming the projects.
    */
   async considerPromotionAfterSettledWork(
     projectIds: ReadonlyArray<string | null | undefined>,
   ): Promise<void> {
     const ids = [...new Set(projectIds.filter((id): id is string => !!id))];
-    if (!this.moduleRef || ids.length === 0) return;
+    if (ids.length === 0) return;
+    // A lookup that does not resolve leaves the project with no candidate and nothing that would ask
+    // again, so it is an error naming the projects, never a quiet return.
+    let promotions: { considerCandidate(projectId: string): Promise<unknown> };
     try {
+      if (!this.moduleRef) throw new Error('this router was built without a module graph');
       const { ProjectPromotionService } = await import('./project-promotion.service.js');
-      const promotions = this.moduleRef.get(ProjectPromotionService, { strict: false });
-      for (const projectId of ids) await promotions.considerCandidate(projectId);
+      promotions = this.moduleRef.get(ProjectPromotionService, { strict: false });
     } catch (e) {
-      this.logger.warn(`promotion candidate not considered after settled work: ${(e as Error)?.message ?? e}`);
+      this.logger.error(`promotion candidate not considered after settled work for project ${ids.join(', ')}: `
+        + `ProjectPromotionService not found (${(e as Error)?.message ?? e})`);
+      return;
     }
+    for (const projectId of ids) await promotions.considerCandidate(projectId);
   }
 
   /**

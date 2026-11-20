@@ -11365,7 +11365,7 @@ export class TasksService implements OnModuleInit, OnModuleDestroy {
         });
         await this.completionInputs.considerPromotionAfterSettledWork([task?.projectId]);
       } catch (e) {
-        this.logger.warn(`promotion candidate not considered after task ${doneTaskId}'s work settled: ${
+        this.logger.error(`promotion candidate not considered after task ${doneTaskId}'s work settled: ${
           e instanceof Error ? e.message : e}`);
       }
     }
