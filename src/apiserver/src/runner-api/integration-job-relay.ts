@@ -279,6 +279,7 @@ interface HeldClaim {
   acceptanceTimeoutSeconds: number | null;
   landingCheckCommand: string | null;
   landingCheckTimeoutSeconds: number | null;
+  landingCheckNone: boolean;
   mergeCheckCommand: string | null;
   mergeCheckTimeoutSeconds: number | null;
   cancelRequestedAt: Date | null;
@@ -790,6 +791,7 @@ const HELD_CLAIM_COLUMNS = Prisma.sql`
       t."acceptance_timeout_seconds" AS "acceptanceTimeoutSeconds",
       cb."landing_check_command" AS "landingCheckCommand",
       cb."landing_check_timeout_seconds" AS "landingCheckTimeoutSeconds",
+      cb."landing_check_none" AS "landingCheckNone",
       cb."merge_check_command" AS "mergeCheckCommand",
       cb."merge_check_timeout_seconds" AS "mergeCheckTimeoutSeconds",
       j."cancel_requested_at" AS "cancelRequestedAt",

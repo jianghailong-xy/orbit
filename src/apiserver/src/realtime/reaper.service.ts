@@ -37,6 +37,7 @@ import { settleUnrunSessionRequests } from '../sessions/session-request';
 import { ProjectOpenItemService } from '../projects/project-open-item.service';
 import { PushService } from '../push/push.service';
 import { RUNNER_LINK_REVOCATION_WINDOW_MS } from '../runner-api/runner-link-token';
+import { CompletionInputRouter } from '../projects/completion-input-router.service';
 import { settleUnrunWakeTurns, signalDrainedWakeups } from '../runner-api/wake-turn-withdraw';
 import {
   APISERVER_PROCESS_QUIET_AFTER_MS,
@@ -309,6 +310,12 @@ export class ReaperService implements OnModuleInit, OnModuleDestroy {
      * checks); `@Optional()` for the specs that build the reaper by hand about something else.
      */
     @Optional() private readonly push?: PushService,
+    /**
+     * The completion doors a project's facts go out through. A DONE task whose route this reap decided
+     * (§12.15 P-M1) re-derives the settled fact its deferred landing held. CoordinatorJudgmentModule,
+     * which RealtimeModule imports, provides it; `@Optional()` for the specs that build the reaper by hand.
+     */
+    @Optional() private readonly completionInputs?: CompletionInputRouter,
   ) {}
 
   onModuleInit(): void {
@@ -1001,6 +1008,12 @@ export class ReaperService implements OnModuleInit, OnModuleDestroy {
     // WORK_ELSEWHERE item its frozen identity opened (§12.15 P-M1).
     if ('identitySettled' in outcome && outcome.identitySettled && taskId) {
       await this.openItems?.deliverForTasks([taskId]);
+      // And the project facts the deferred landing held (PROJECT_TASKS_SETTLED / looks-finished),
+      // re-derived now that it is decided. The dependents themselves are the 60 s ready sweep's.
+      if (this.completionInputs) {
+        const settled = await this.prisma.task.findUnique({ where: { id: taskId }, select: { projectId: true } });
+        await this.completionInputs.routeSettledWork([settled?.projectId]);
+      }
     }
     if (outcome.currentWorkTerminalized > 0) {
       this.realtime.publishQueuedTurnsChanged(sessionId);

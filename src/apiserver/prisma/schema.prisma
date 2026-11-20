@@ -3860,6 +3860,16 @@ model ProjectCodebase {
   landingCheckCommand        String? @map("landing_check_command")
   /// Landing check budget; null falls back to mergeCheckTimeoutSeconds.
   landingCheckTimeoutSeconds Int?    @map("landing_check_timeout_seconds")
+  /// True: run no project landing check; a landing runs only the task's own acceptance (1310, P-C1).
+  /// Distinct from a null command, which falls back to the merge check.
+  landingCheckNone           Boolean   @default(false) @map("landing_check_none")
+  /// Who last wrote the landing check: OWNER and CARD lock it; START (the owner's Start press on the
+  /// coordinator's proposal) and COORDINATOR (a cardless write, P-C1) do not (1310). Null: nobody.
+  landingCheckSetBy          String?   @map("landing_check_set_by")
+  /// The coordinator session behind a COORDINATOR write; cleared by every other writer.
+  landingCheckSetBySessionId String?   @map("landing_check_set_by_session_id") @db.Uuid
+  /// When the last write happened, whoever wrote it.
+  landingCheckSetAt          DateTime? @map("landing_check_set_at") @db.Timestamptz(3)
   /// The project-level check run before promotion into upstream. Null: none.
   mergeCheckCommand        String?   @map("merge_check_command")
   /// That check's budget in seconds. Null: the one-hour default an acceptance command gets.

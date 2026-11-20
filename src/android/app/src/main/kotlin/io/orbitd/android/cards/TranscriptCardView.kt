@@ -47,18 +47,8 @@ internal fun TranscriptCardView(card: InteractionCard, open: (String) -> Unit, e
         val delivery = event?.turnId?.let { LocalSteerDeliveries.current[it] } ?: event?.fields?.text("delivery")
         OrbitTurnCardView(card, event, open, undelivered = delivery == "failed" || delivery == "unconfirmed"); return
     }
-    // So is a SubAgent's end (docs/mocks/subagent-finished-line). A job's news in the same note draws its own line after this one, and
-    // that line says how the turn went, once (web `Transcript.tsx`).
-    if (card.family == CardFamily.BACKGROUND && card.key.endsWith(":subagent")) {
-        val wake = SubagentFinished.parse(card.source.text("note")) ?: return
-        val fields = event?.fields
-        val delivery = event?.turnId?.let { LocalSteerDeliveries.current[it] } ?: fields?.text("delivery")
-        val undelivered = delivery == "failed"
-        if (queuedWake(wake.rest) != null) SubagentFinishedLine(wake, ts)
-        else SubagentFinishedLine(wake, ts, BackgroundWakeCard.steerReceipt(
-            BackgroundWakeCard.steerState(fields?.get("steer") == JsonPrimitive(true), delivery, undelivered)), undelivered)
-        return
-    }
+    // A SubAgent's end draws nothing: its card is the end (docs/mocks/subagent-card-and-end-line, web `Transcript.tsx`).
+    if (card.family == CardFamily.BACKGROUND && card.key.endsWith(":subagent")) return
     // A background job's news or a wakeup coming due is a line in the agent's stream (A08-11), not a card of fields.
     if (card.family == CardFamily.BACKGROUND && card.key.endsWith(":wake")) {
         val fields = event?.fields

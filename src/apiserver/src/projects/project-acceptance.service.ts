@@ -47,7 +47,12 @@ import {
 } from './coordinator-authority';
 import { VERIFICATION_METHOD_RUNGS } from './criteria-edit-classification';
 import { NO_REOPEN_RECORD } from './project-done-derived';
-import { defaultStartLine, startProjectLine, type StartLineSettings } from './project-integration-line';
+import {
+  defaultStartLine,
+  startLandingCheckWriter,
+  startProjectLine,
+  type StartLineSettings,
+} from './project-integration-line';
 import { tellCoordinatorProjectStarted } from './project-started';
 import { START_REQUEST_KIND, answerStartRequests } from './project-start-request';
 import {
@@ -672,7 +677,14 @@ export class ProjectAcceptanceService {
 
       const suggested = (request?.payload as unknown as ProjectStartRequest | undefined)?.settings;
       const asked = await settingsFor(tx, project);
-      const line = await startProjectLine(tx, { ownerId, projectId, settings: asked });
+      // The landing check the owner started with as the coordinator proposed it stays the
+      // coordinator's to change; one the owner wrote on the card, or with no request, is theirs.
+      const line = await startProjectLine(tx, {
+        ownerId,
+        projectId,
+        settings: asked,
+        landingCheckWriter: startLandingCheckWriter(asked, suggested),
+      });
       // The main branch is recorded when the start or the request it answers named one — the
       // branch the project stands on now, so a choice a locked line kept out reads as a difference.
       const upstreamNamed = asked.upstreamRef !== undefined || suggested?.upstreamRef !== undefined;

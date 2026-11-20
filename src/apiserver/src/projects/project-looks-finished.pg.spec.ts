@@ -60,6 +60,7 @@ import { Client } from 'pg';
 import { prismaClientFor } from '../prisma/prisma-client';
 import type { PrismaService } from '../prisma/prisma.service';
 import { QueueService } from '../queue/queue.service';
+import { ReaperService } from '../realtime/reaper.service';
 import { RealtimeService } from '../realtime/realtime.service';
 import { IntegrationJobRelay } from '../runner-api/integration-job-relay';
 import { RunnerApiController } from '../runner-api/runner-api.controller';
@@ -132,6 +133,8 @@ interface Stack {
   receipts: MergeReceiptService;
   /** The route a runner posts an integration job's result on, with every post-commit edge wired. */
   api: RunnerApiController;
+  /** The reaper, with the same router behind it as production gives it. */
+  reaper: ReaperService;
   /** The heartbeat's half of the integration queue: what a runner claims and reports on. */
   jobs: IntegrationJobRelay;
 }
@@ -194,7 +197,8 @@ async function connect(): Promise<Stack> {
     new ProjectPromotionService(prisma),
   );
   Object.assign(api, { coordinatorFacts: recovery });
-  return { db, sessions, tasks, projects, acceptance, receipts, api, jobs };
+  const reaper = new ReaperService(prisma, realtime, openItems, undefined, undefined, undefined, router);
+  return { db, sessions, tasks, projects, acceptance, receipts, api, reaper, jobs };
 }
 
 interface World {
@@ -1099,6 +1103,44 @@ test('(5) a judgment opened because the tasks settled files no task while a land
     title: 'build the unserved part', projectId: w.projectId, criterionKey: UNSERVED,
   } as never, { type: CreatorType.AGENT, id: w.workspaceId }, judgment.id);
   assert.equal(filed.creatorSessionId, judgment.id, 'with nothing landing, the bound is the bound it was');
+});
+
+test('(6) the reaper\'s forced finish of the last task\'s work, with nothing to land, derives the settled fact its deferred landing held', {
+  skip, concurrency: 1, timeout: 300_000,
+}, async (t) => {
+  const stack = await connect();
+  t.after(() => stack.db.$disconnect().catch(() => undefined));
+  const w = await world(stack, 'reaped-settled', ['the served part works', 'the unserved part works']);
+  const task = await servingTask(stack, w, w.keys[0]!, 'served');
+  // A live run on a branch that never moved: no commit of its own, so nothing will be landed.
+  const sessionId = randomUUID();
+  await stack.db.session.create({
+    data: {
+      id: sessionId, ownerId: w.ownerId, creatorId: w.ownerId, taskId: task.id, workspaceId: w.workspaceId,
+      assignedRunnerId: w.runnerId, title: 'live run', prompt: 'work', provider: 'claude',
+      status: RunStatus.AWAITING_INPUT, dispatchOrigin: SessionDispatchOrigin.USER, startsTaskWork: true,
+      isolationStatus: 'worktree', branch: 'orbit/reaped-settled', branchSha: sha('b'), baseSha: sha('b'),
+      numTurns: 1, startedAt: new Date(),
+    },
+  });
+  await settleExecutable(stack, task.id);
+  await stack.tasks.update(w.ownerId, task.id, { title: 'served, renamed' } as never);
+  assert.deepEqual(await settledWakes(stack, w), [],
+    'CONTROL: while the DONE task\'s work moves its landing is deferred, so the project is not settled');
+
+  assert.equal(
+    (await stack.db.task.findUniqueOrThrow({ where: { id: task.id }, select: { deliveredAt: true } })).deliveredAt,
+    null, 'CONTROL: the identity is not frozen while the work moves');
+
+  await (stack.reaper as unknown as {
+    forceFinalize(sessionId: string, runnerId: string | null, taskId: string | null, reason: string,
+      opts: { status?: RunStatus }): Promise<void>;
+  }).forceFinalize(sessionId, w.runnerId, task.id, 'runner lost', { status: RunStatus.CANCELLED });
+
+  const frozen = await stack.db.task.findUniqueOrThrow({ where: { id: task.id }, select: { deliveredAt: true } });
+  assert.ok(frozen.deliveredAt, 'CONTROL: the reaper\'s finish froze the identity');
+  assert.equal(await stack.db.projectIntegrationJob.count({ where: { projectId: w.projectId } }), 0, 'nothing to land');
+  assert.equal((await settledWakes(stack, w)).length, 1, 'the finish re-derived PROJECT_TASKS_SETTLED');
 });
 
 test('the looks-finished PostgreSQL target is explicitly disposable', { skip }, () => {

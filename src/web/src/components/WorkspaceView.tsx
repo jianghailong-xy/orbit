@@ -44,6 +44,7 @@ import {
   PauseCircleOutlined,
   PictureOutlined,
   PlusOutlined,
+  ProjectOutlined,
   PushpinFilled,
   PushpinOutlined,
   RightOutlined,
@@ -51,6 +52,7 @@ import {
   TeamOutlined,
   ThunderboltOutlined,
   UndoOutlined,
+  UnorderedListOutlined,
 } from '@ant-design/icons';
 import { keepPreviousData, useMutation, useQueries, useQuery, useQueryClient } from '@tanstack/react-query';
 import { AgentToolsDrawer, agentToolsMenuStatus } from './AgentToolsDrawer';
@@ -9820,16 +9822,17 @@ export function WorkspaceView({
                     } },
                   { key: 'divider-complete', type: 'separator' as const },
                 ] : []),
-                { key: 'session', label: SESSION_PROJECT_COPY.openSession, disabled: s.target.kind !== 'session',
+                { key: 'session', label: SESSION_PROJECT_COPY.openSession, icon: <MessageOutlined />, disabled: s.target.kind !== 'session',
                   onSelect: () => { setMenuOpenId(null); openTarget(); } },
-                { key: 'sessions', label: SESSION_PROJECT_COPY.sessions,
+                { key: 'sessions', label: SESSION_PROJECT_COPY.sessions, icon: <UnorderedListOutlined />,
                   onSelect: () => { setMenuOpenId(null); enterProjectSessions(s.projectId, coordinator?.id); } },
-                { key: 'project', label: SESSION_PROJECT_COPY.openProject,
+                { key: 'project', label: SESSION_PROJECT_COPY.openProject, icon: <ProjectOutlined />,
                   onSelect: () => { setMenuOpenId(null); navigate(`/projects/${encodeId(s.projectId)}`); } },
                 { key: 'divider', type: 'separator' },
                 { key: 'pin', label: coordinator?.pinnedAt ? SESSION_PROJECT_COPY.unpin : SESSION_PROJECT_COPY.pin, disabled: !coordinator,
+                  icon: coordinator?.pinnedAt ? <PushpinFilled /> : <PushpinOutlined />,
                   onSelect: () => { setMenuOpenId(null); if (coordinator) runSwipeAction('pin', coordinator); } },
-                { key: 'move', label: SESSION_PROJECT_COPY.move, disabled: !coordinator,
+                { key: 'move', label: SESSION_PROJECT_COPY.move, icon: <FolderOutlined />, disabled: !coordinator,
                   onSelect: () => { setMenuOpenId(null); if (coordinator) runSwipeAction('move', coordinator); } },
               ]}
             />
