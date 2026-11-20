@@ -322,16 +322,16 @@ export class ReaperService implements OnModuleInit, OnModuleDestroy {
      */
     @Optional() private readonly push?: PushService,
     /**
+     * How the reaper finds SessionsService to file the wakes a lost runner's work owes (settleLostWork), without
+     * RealtimeModule importing SessionsModule. `@Optional()` for the specs that build the reaper by hand.
+     */
+    @Optional() private readonly moduleRef?: ModuleRef,
+    /**
      * The completion doors a project's facts go out through. A DONE task whose route this reap decided
      * (§12.15 P-M1) re-derives the settled fact its deferred landing held. CoordinatorJudgmentModule,
      * which RealtimeModule imports, provides it; `@Optional()` for the specs that build the reaper by hand.
      */
     @Optional() private readonly completionInputs?: CompletionInputRouter,
-    /**
-     * How the reaper finds SessionsService to file the wakes a lost runner's work owes (settleLostWork), without
-     * RealtimeModule importing SessionsModule. `@Optional()` for the specs that build the reaper by hand.
-     */
-    @Optional() private readonly moduleRef?: ModuleRef,
   ) {}
 
   onModuleInit(): void {
