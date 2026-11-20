@@ -16,6 +16,8 @@ export const SESSION_TERMINAL_STATUS_READERS: Readonly<Record<string, number>> =
   'src/apiserver/src/help/help-ask-reads.ts': 1,
   'src/apiserver/src/projects/attempt-ended-unsettled.producer.ts': 5,
   'src/apiserver/src/projects/coordinator-evidence-queue.service.ts': 2,
+  // Arrived from main at acb7448a49 in the merge of 2026-11-20, written before this guard reached main; admitted as found, plan phase 4 moves it with the rest.
+  'src/apiserver/src/projects/coordinator-fact-queue.service.ts': 2,
   'src/apiserver/src/projects/coordinator-handoff.service.ts': 3,
   'src/apiserver/src/projects/criterion-move.ts': 2,
   'src/apiserver/src/projects/landing-session.ts': 4,
@@ -24,6 +26,8 @@ export const SESSION_TERMINAL_STATUS_READERS: Readonly<Record<string, number>> =
   'src/apiserver/src/projects/project-done-request.ts': 1,
   'src/apiserver/src/projects/project-open-item.service.ts': 1,
   'src/apiserver/src/projects/project-open-item.ts': 4,
+  // Arrived from main at acb7448a49 in the merge of 2026-11-20, written before this guard reached main; admitted as found, plan phase 4 moves it with the rest.
+  'src/apiserver/src/projects/project-tasks-settled.producer.ts': 1,
   'src/apiserver/src/projects/session-attempt.service.ts': 1,
   'src/apiserver/src/projects/session-source.ts': 1,
   'src/apiserver/src/projects/task-exception-input.producer.ts': 1,
@@ -32,7 +36,9 @@ export const SESSION_TERMINAL_STATUS_READERS: Readonly<Record<string, number>> =
   'src/apiserver/src/queue/dispatch-pause.service.ts': 2,
   'src/apiserver/src/realtime/reaper.service.ts': 6,
   'src/apiserver/src/runner-api/background-job-wake.ts': 3,
-  'src/apiserver/src/runner-api/runner-api.controller.ts': 32,
+  // 4 of the 36 arrived from main at acb7448a49 in the merge of 2026-11-20 (releaseClaudeAccountSwap's ended-status filter), written before this guard
+  // reached main; admitted as found, plan phase 4 moves them with the rest.
+  'src/apiserver/src/runner-api/runner-api.controller.ts': 36,
   'src/apiserver/src/runner-api/runner-link-hints.ts': 2,
   'src/apiserver/src/runner-api/runner-link-welcome.ts': 1,
   'src/apiserver/src/runner-api/runner-subagents.controller.ts': 4,
@@ -42,6 +48,8 @@ export const SESSION_TERMINAL_STATUS_READERS: Readonly<Record<string, number>> =
   // The old runner protocol's turn status words translated into the turn outcome; goes when plan phase 6 lets the runner report the outcome itself.
   'src/apiserver/src/runner-api/turn-outcome.ts': 4,
   'src/apiserver/src/runners/attention-fix.ts': 1,
+  // Arrived from main at acb7448a49 in the merge of 2026-11-20, written before this guard reached main; admitted as found, plan phase 4 moves it with the rest.
+  'src/apiserver/src/runners/claude-account-swap.ts': 1,
   'src/apiserver/src/runners/runners.service.ts': 4,
   'src/apiserver/src/schedules/schedule-runs.service.ts': 14,
   'src/apiserver/src/sessions/auto-retry.service.ts': 9,
