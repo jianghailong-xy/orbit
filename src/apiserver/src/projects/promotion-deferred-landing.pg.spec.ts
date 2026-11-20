@@ -120,7 +120,9 @@ async function connect(): Promise<Stack> {
   const openItems = new ProjectOpenItemService(prisma, sessions, push);
   const promotions = new ProjectPromotionService(prisma);
   const real = new Set<PropertyKey>(['routeSettledWork', 'considerPromotionAfterSettledWork']);
-  const router = new Proxy({ promotions } as Record<PropertyKey, unknown>, {
+  // The router finds the promotion service through the module graph (`ModuleRef.get`); here, this one.
+  const moduleRef = { get: () => promotions };
+  const router = new Proxy({ moduleRef, logger: console } as Record<PropertyKey, unknown>, {
     get(target, key) {
       if (real.has(key)) return (CompletionInputRouter.prototype as unknown as Record<PropertyKey, unknown>)[key];
       if (key in target) return target[key];

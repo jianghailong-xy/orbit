@@ -1,4 +1,5 @@
-import { Inject, Injectable, Logger, Optional, forwardRef } from '@nestjs/common';
+import { Injectable, Logger, Optional } from '@nestjs/common';
+import { ModuleRef } from '@nestjs/core';
 
 import type { CoordinatorWakeEvent, WakeFact } from './coordinator-wake';
 import {
@@ -40,7 +41,6 @@ import {
   TaskExceptionInputProducer,
 } from './task-exception-input.producer';
 import { TaskRunStoppedProducer, type RunStop } from './task-run-stopped.producer';
-import { ProjectPromotionService } from './project-promotion.service';
 import { WakeDispositionService, type WakeSpend } from './wake-disposition.service';
 
 export const COMPLETION_INPUT_DELIVERY_FAILED = 'COMPLETION_INPUT_DELIVERY_FAILED';
@@ -127,13 +127,14 @@ export class CompletionInputRouter {
      */
     @Optional() private readonly stoppedRuns?: TaskRunStoppedProducer,
     /**
-     * What offers a project branch's tip to its owner (M-F1), asked again after a finish that decided
-     * a deferred landing (§12.15 P-M1). `@Optional()` and last, for the reason the seventh gives: for a
-     * router built by hand without it, the next landing asks instead. The module provides it; by
-     * `forwardRef` because its file reaches this one back through `MergeReceiptService`.
+     * Finds the service that offers a project branch's tip to its owner (M-F1), asked again after a
+     * finish that decided a deferred landing (§12.15 P-M1). Found at the call and imported there, as
+     * `SessionsService.routeSettledFacts` finds this router: a value import of that service's file
+     * closes a ring back to this one (through `MergeReceiptService` and `ProjectFuseService`), and
+     * ProjectsModule, which provides it, imports this module. `@Optional()` and last, for the reason
+     * the seventh gives: for a router built by hand without it, the next landing asks instead.
      */
-    @Optional() @Inject(forwardRef(() => ProjectPromotionService))
-    private readonly promotions?: ProjectPromotionService,
+    @Optional() private readonly moduleRef?: ModuleRef,
   ) {}
 
   /**
@@ -316,9 +317,14 @@ export class CompletionInputRouter {
   async considerPromotionAfterSettledWork(
     projectIds: ReadonlyArray<string | null | undefined>,
   ): Promise<void> {
-    if (!this.promotions) return;
-    for (const projectId of new Set(projectIds.filter((id): id is string => !!id))) {
-      await this.promotions.considerCandidate(projectId);
+    const ids = [...new Set(projectIds.filter((id): id is string => !!id))];
+    if (!this.moduleRef || ids.length === 0) return;
+    try {
+      const { ProjectPromotionService } = await import('./project-promotion.service.js');
+      const promotions = this.moduleRef.get(ProjectPromotionService, { strict: false });
+      for (const projectId of ids) await promotions.considerCandidate(projectId);
+    } catch (e) {
+      this.logger.warn(`promotion candidate not considered after settled work: ${(e as Error)?.message ?? e}`);
     }
   }
 

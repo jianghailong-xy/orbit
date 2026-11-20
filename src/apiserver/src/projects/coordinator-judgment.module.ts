@@ -15,7 +15,6 @@ import { CriterionUnlandedProducer } from './criterion-unlanded.producer';
 import { DependentReadyProducer } from './dependent-ready.producer';
 import { ProjectFuseService } from './project-fuse.service';
 import { ProjectOpenItemService } from './project-open-item.service';
-import { ProjectPromotionService } from './project-promotion.service';
 import { PROJECT_OPEN_ITEM_DELIVERY } from './project-open-item';
 import { ProjectSettledUnmergedProducer } from './project-settled-unmerged.producer';
 import { ProjectTasksSettledProducer } from './project-tasks-settled.producer';
@@ -101,10 +100,6 @@ import { WakeDispositionService } from './wake-disposition.service';
     CoordinatorEvidenceQueueService,
     CoordinatorFactQueueService,
     WakeDispositionService,
-    // Merging a project branch into main (§3). Provided here and exported — ProjectsModule re-exports
-    // this module — so the runner door that notices a landing, the owner door that answers the card
-    // and the router that asks again after a deferred landing's finish (§12.15 P-M1) are one instance.
-    ProjectPromotionService,
   ],
   exports: [
     CoordinatorWakeService,
@@ -126,7 +121,6 @@ import { WakeDispositionService } from './wake-disposition.service';
     CoordinatorEvidenceQueueService,
     CoordinatorFactQueueService,
     WakeDispositionService,
-    ProjectPromotionService,
   ],
 })
 export class CoordinatorJudgmentModule {}
