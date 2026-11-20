@@ -27,6 +27,7 @@ import type { Prisma, Schedule, ScheduleChangeRequest, ScheduleFinding, Schedule
 import { cloudWorkspaceIds } from '../managed-runners/managed-runner-work';
 import { runReasonText } from './schedule-attention';
 import type { Envelope, EnvelopePart } from './schedule-envelope';
+import { SCHEDULE_RUN_STARTED } from './schedule-start-check';
 import { instantOfLocal, nextDueAt, offsetAt, parseRule, runsPerWeek, suggestedEndAt, type ScheduleRule } from './schedule-time';
 
 type Tx = Prisma.TransactionClient;
@@ -386,11 +387,11 @@ export async function scheduleViewNames(
         select: { id: true, scheduleId: true, text: true, unit: true, state: true, lastValue: true, lastSampleAt: true },
       })
     : [];
-  // §8.5: started as §4's budget counts them, a retried start being the same row.
+  // §8.5: started as §4's budget counts them (scheduleRunsStarted), a retried start being the same row.
   const started = schedules.length
     ? await tx.scheduleRun.groupBy({
         by: ['scheduleId'],
-        where: { scheduleId: { in: schedules.map((s) => s.id) }, startedAt: { not: null } },
+        where: { scheduleId: { in: schedules.map((s) => s.id) }, ...SCHEDULE_RUN_STARTED },
         _count: { _all: true },
       })
     : [];

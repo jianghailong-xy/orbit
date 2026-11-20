@@ -81,6 +81,7 @@ import {
   scheduleBudgetStarts,
   scheduleOverBudget,
   scheduleOverBudgetMessage,
+  scheduleRunsStarted,
   scheduleStartCheck,
   type StartPlan,
 } from './schedule-start-check';
@@ -214,6 +215,14 @@ const LIVE_SESSION: Prisma.SessionWhereInput = {
 type Tx = Prisma.TransactionClient;
 
 const IN_PROGRESS = ['RUNNING', 'AWAITING_APPROVAL'] as const;
+
+/**
+ * A run that is not over yet, as §8.5's planned-end push waits for it: waiting (QUEUED, a retry's wait included), under
+ * way, or reported on a LAND schedule and still landing, whose landing may yet fail it (LANDING_FAILED).
+ */
+const RUN_NOT_OVER = {
+  OR: [{ state: { in: ['QUEUED', ...IN_PROGRESS] } }, { landingStatus: { in: ['WAITING', 'MERGING'] } }],
+} satisfies Prisma.ScheduleRunWhereInput;
 
 function refusal(kind: 'BAD_REQUEST' | 'CONFLICT' | 'FORBIDDEN' | 'NOT_FOUND', code: string, message: string): Error {
   const body = { code, message };
@@ -447,7 +456,7 @@ export class ScheduleRunsService {
           await this.holdRun(tx, run, schedule.heldReason ?? 'HELD', now);
           return { outcome: 'HELD' };
         }
-        if (schedule.maxRuns !== null && (await this.startedRuns(tx, schedule.id)) >= schedule.maxRuns) {
+        if (schedule.maxRuns !== null && (await scheduleRunsStarted(tx, schedule.id)) >= schedule.maxRuns) {
           // §8.5: the planned end by count is reached; nothing starts past it.
           await tx.scheduleRun.update({ where: { id: runId }, data: { state: 'CANCELLED', endedAt: now, notBeforeAt: null } });
           return { outcome: 'CANCELLED' };
@@ -506,7 +515,9 @@ export class ScheduleRunsService {
           // The level the run starts with is the one its session is held to (schedule-access.ts runAccessLevel).
           data: { state: 'RUNNING', startedAt: now, sessionId, notBeforeAt: null, accessLevel: schedule.accessLevel },
         });
-        if (schedule.maxRuns !== null && schedule.state !== 'ENDED' && (await this.startedRuns(tx, schedule.id)) >= schedule.maxRuns) {
+        // §8.5: the start that reaches maxRuns ends the schedule, in this transaction and under the lock the count was
+        // read under. The run itself goes on.
+        if (schedule.maxRuns !== null && schedule.state !== 'ENDED' && (await scheduleRunsStarted(tx, schedule.id)) >= schedule.maxRuns) {
           await this.endAtMaxRuns(tx, schedule, now);
         }
         return { outcome: 'STARTED', open: this.openInput(schedule, run, sessionId, prompt, check.plan) };
@@ -795,17 +806,15 @@ export class ScheduleRunsService {
     await this.alert(alerts);
   }
 
-  /** §7.4: a NO_CHANGE run's session is completed once its turn has settled. */
   /**
    * §8.5's one push, "Stopped as planned after N runs", for each schedule ENDED (END_REACHED) by its endAt or maxRuns
-   * once no run of it is waiting or under way, so the last run's own push comes first. `plannedEndToldAt`, set under
-   * the schedule lock in the transaction that decides the push, keeps it to one. A ONCE rule, whose end is its only
-   * slot, is marked told and sends none.
+   * once no run of it is waiting, under way or still landing, so the last run's own push comes first. `plannedEndToldAt`,
+   * set under the schedule lock in the transaction that decides the push, keeps it to one. A ONCE rule, whose end is
+   * its only slot, is marked told and sends none.
    */
   async tellPlannedEnds(batch = 25): Promise<string[]> {
-    const live = ['QUEUED', ...IN_PROGRESS] as const;
     const ended = await this.prisma.schedule.findMany({
-      where: { state: 'ENDED', endedReason: 'END_REACHED', plannedEndToldAt: null, runs: { none: { state: { in: [...live] } } } },
+      where: { state: 'ENDED', endedReason: 'END_REACHED', plannedEndToldAt: null, runs: { none: RUN_NOT_OVER } },
       orderBy: [{ endedAt: 'asc' }, { id: 'asc' }],
       take: batch,
       select: { id: true },
@@ -820,7 +829,7 @@ export class ScheduleRunsService {
             alerts.length = 0;
             const schedule = await this.lock(tx, id);
             if (!schedule || schedule.state !== 'ENDED' || schedule.endedReason !== 'END_REACHED' || schedule.plannedEndToldAt) return;
-            if ((await tx.scheduleRun.count({ where: { scheduleId: id, state: { in: [...live] } } })) > 0) return;
+            if ((await tx.scheduleRun.count({ where: { scheduleId: id, ...RUN_NOT_OVER } })) > 0) return;
             await tx.schedule.update({ where: { id }, data: { plannedEndToldAt: this.clock() } });
             if ((schedule.rule as { kind?: string } | null)?.kind === 'ONCE') return;
             alerts.push({
@@ -830,7 +839,7 @@ export class ScheduleRunsService {
               runId: null,
               opens: { scheduleId: id },
               ownerRequestId: null,
-              ...plannedEndCopy(schedule.title, await this.startedRuns(tx, id)),
+              ...plannedEndCopy(schedule.title, await scheduleRunsStarted(tx, id)),
               collapseId: `schedule-planned-end-${id}`,
             });
           },
@@ -846,6 +855,7 @@ export class ScheduleRunsService {
     return told;
   }
 
+  /** §7.4: a NO_CHANGE run's session is completed once its turn has settled. */
   async completeNoChangeSessions(batch = 25): Promise<string[]> {
     const sessions = await this.prisma.session.findMany({
       where: {
@@ -1527,17 +1537,12 @@ export class ScheduleRunsService {
     });
   }
 
-  /** The runs a schedule has started in all, as §4's budget counts them (§8.5): a retried start is the same row. */
-  private startedRuns(tx: Tx, scheduleId: string): Promise<number> {
-    return tx.scheduleRun.count({ where: { scheduleId, startedAt: { not: null } } });
-  }
-
   /**
-   * §8.5: the start of run `runId` reached the schedule's maxRuns. ENDED (END_REACHED) in the same transaction, under
-   * the schedule lock the count was read under, so two replicas cannot both start a last run; no next slot, and a WHEN
-   * rule's condition ended. No other run is QUEUED (schedule_run_one_queued_key: the one queued was this one), and
-   * start() cancels any run that would start past the count. The run that reached it goes on; tellPlannedEnds pushes
-   * once it is over.
+   * §8.5: a start reached the schedule's maxRuns. ENDED (END_REACHED) in that start's transaction, under the schedule
+   * lock the count was read under, so two replicas cannot both start a last run; no next slot, and a WHEN rule's
+   * condition ended as syncCondition ends it. No other run is QUEUED (schedule_run_one_queued_key: the one queued was
+   * the one starting), and start() cancels any run that would start past the count. The run that reached it goes on;
+   * tellPlannedEnds pushes once it is over.
    */
   private async endAtMaxRuns(tx: Tx, schedule: Schedule, now: Date): Promise<void> {
     await tx.schedule.update({

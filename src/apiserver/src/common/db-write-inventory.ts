@@ -1483,7 +1483,7 @@ export const TRANSACTION_UNITS: readonly TransactionUnit[] = [
   {
     at: 'schedules/schedule-runs.service.ts#tellPlannedEnds',
     shape: 'TX_RETRIED',
-    locks: "pg_advisory_xact_lock(4000750, hashtext(owner id)) — the per-account schedule serializer SchedulesService takes, a key rather than a row — then the schedule row FOR UPDATE (ScheduleRunsService#lock), then a count of its waiting and in-progress runs and one UPDATE of the schedule's planned_end_told_at. Ranks only rise: the advisory key is no relation of LOCK_ORDER, and every row lock below it is a schedule row or one of its children, which no other path holds while it waits for the account's key.",
+    locks: "pg_advisory_xact_lock(4000750, hashtext(owner id)) — the per-account schedule serializer SchedulesService takes, a key rather than a row — then the schedule row FOR UPDATE (ScheduleRunsService#lock), then a count of its runs not over (waiting, in progress, or reported and still landing) and one UPDATE of the schedule's planned_end_told_at. Ranks only rise: the advisory key is no relation of LOCK_ORDER, and every row lock below it is a schedule row or one of its children, which no other path holds while it waits for the account's key.",
     identity: "The schedule's planned_end_told_at, read under the row lock: a second worker finds it set and writes nothing.",
     isolation: '',
     attempts: 4,

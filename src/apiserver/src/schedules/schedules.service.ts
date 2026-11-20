@@ -75,7 +75,7 @@ import { assertConditionRoom, createConditionRow } from '../conditions/condition
 import { MANAGED_RUNNER_DEMAND, type ManagedRunnerDemand } from '../managed-runners/managed-runner-demand';
 import { RealtimeService } from '../realtime/realtime.service';
 import { SCHEDULE_ACCESS_NOT_ENFORCEABLE, scheduleRunMode } from './schedule-access';
-import { scheduleStartCheck } from './schedule-start-check';
+import { scheduleRunsStarted, scheduleStartCheck } from './schedule-start-check';
 import { workspaceNames } from './schedule-views';
 import {
   SCHEDULE_NOTIFIER,
@@ -349,6 +349,22 @@ function checkMaxRuns(value: unknown): void {
   if (typeof value !== 'number' || !Number.isInteger(value) || value < 1) {
     throw refusal('BAD_REQUEST', 'SCHEDULE_MAX_RUNS_INVALID', 'maxRuns is a whole number of runs, at least 1.');
   }
+}
+
+/**
+ * A planned end by count must lie ahead of the runs already started (§8.5): one at or below them is refused, since
+ * ending now is schedule_end. Read under the schedule lock the change holds.
+ */
+async function assertMaxRunsAhead(tx: Tx, scheduleId: string, maxRuns: unknown): Promise<void> {
+  if (typeof maxRuns !== 'number') return;
+  const started = await scheduleRunsStarted(tx, scheduleId);
+  if (maxRuns > started) return;
+  throw refusal(
+    'CONFLICT',
+    'SCHEDULE_MAX_RUNS_ALREADY_REACHED',
+    `This schedule has already started ${started} ${started === 1 ? 'run' : 'runs'}; maxRuns must be more than that. `
+      + 'To stop it now, end it instead.',
+  );
 }
 
 /** Whether a create card proposes the 7-day end (§8.5): an EVERY rule that names neither endAt nor maxRuns. */
@@ -933,6 +949,8 @@ export class SchedulesService {
   ): Promise<ScheduleUpdateResult> {
     const settings = this.settingsAfter(schedule, patch);
     if (who.session && settings.accessLevel !== schedule.accessLevel) this.assertEnforceable(who.session.engine, settings.accessLevel);
+    // §8.5: refused before any card, as an envelope card that carried it could not be allowed.
+    if (settings.maxRuns !== schedule.maxRuns) await assertMaxRunsAhead(tx, schedule.id, settings.maxRuns);
     const judgment = judgeEnvelopeChange(envelopeOf(schedule), needOf(this.settingsOf(schedule)), needOf(settings), who.changedBy);
     if (actor.kind === 'OWNER' || judgment.inside) {
       return this.applyLocked(tx, schedule, patch, who, { widen: actor.kind === 'OWNER', undoOf });
@@ -1076,18 +1094,8 @@ export class SchedulesService {
       after.readBack = readBack;
     }
     if (Object.keys(after).length === 0) return { outcome: 'UNCHANGED', schedule };
-    if (typeof after.maxRuns === 'number') {
-      // §8.5: a count already reached is no planned end; ending now is schedule_end.
-      const started = await tx.scheduleRun.count({ where: { scheduleId: schedule.id, startedAt: { not: null } } });
-      if (after.maxRuns <= started) {
-        throw refusal(
-          'CONFLICT',
-          'SCHEDULE_MAX_RUNS_ALREADY_REACHED',
-          `This schedule has already started ${started} ${started === 1 ? 'run' : 'runs'}; maxRuns must be more than `
-            + 'that. To stop it now, end it instead.',
-        );
-      }
-    }
+    // Again as it is written: an Allow or an Undo comes after runs that started since the ask.
+    if ('maxRuns' in after) await assertMaxRunsAhead(tx, schedule.id, after.maxRuns);
 
     const revision = schedule.revision + 1;
     const updated = await tx.schedule.update({

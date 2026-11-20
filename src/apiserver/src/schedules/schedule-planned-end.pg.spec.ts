@@ -3,13 +3,15 @@
  * through SchedulesService, ScheduleReadsService and the real firing, starting and telling passes:
  *
  *   1. a schedule with maxRuns 3 ends END_REACHED in the transaction that starts its third run, and once that run is
- *      over the owner gets exactly one push, "Stopped as planned after 3 runs";
- *   2. a schedule with endAt ends after its last slot at or before endAt, and gets exactly one push once that slot's
- *      run is over; a ONCE rule's end sends none;
+ *      over the owner gets exactly one push, "Stopped as planned after 3 runs", from the worker's own pass;
+ *   2. a schedule with endAt ends after its last slot at or before endAt (a slot exactly at it, or the last one before
+ *      it on an EVERY rule), and gets exactly one push once that slot's run is over, landing included; a ONCE rule's
+ *      end sends none;
  *   3. an EVERY create card that names no end carries a suggested end 7 days out (the same local time, across a
  *      daylight-saving change); Create writes it, and Create with No end writes none; a named end is not suggested
  *      and DAILY gets no suggestion;
- *   4. the list row carries endAt, maxRuns, runsStarted and runsLeft; maxRuns at or below the runs started is refused.
+ *   4. the list row carries endAt, maxRuns, runsStarted and runsLeft; maxRuns at or below the runs started is refused,
+ *      before any card.
  *
  *   bash scripts/run-pg-spec.sh src/apiserver/src/schedules/schedule-planned-end.pg.spec.ts
  *
@@ -35,6 +37,7 @@ import { ScheduleReadsService } from './schedule-reads.service';
 import { SessionsScheduleRunPort } from './schedule-run-sessions';
 import { ScheduleRunsService, type ScheduleRunSessionPort } from './schedule-runs.service';
 import { SchedulesService, type ScheduleActor, type ScheduleCreateInput } from './schedules.service';
+import { ScheduleWorker } from './schedule.worker';
 
 const URL = process.env.COORDINATOR_PG_URL;
 const skip = !URL;
@@ -49,6 +52,7 @@ const clock = () => clockNow;
 let schedules: SchedulesService;
 let runs: ScheduleRunsService;
 let reads: ScheduleReadsService;
+let worker: ScheduleWorker;
 let alerts: ScheduleAlert[] = [];
 
 function at(iso: string | Date): Date {
@@ -77,6 +81,8 @@ before(async () => {
   schedules = new SchedulesService(db as unknown as PrismaService, clock, notifier);
   runs = new ScheduleRunsService(db as unknown as PrismaService, port, clock, notifier);
   reads = new ScheduleReadsService(db as unknown as PrismaService);
+  // Its passes run here one at a time, never on its own timer.
+  worker = new ScheduleWorker(runs);
 });
 
 after(async () => {
@@ -230,7 +236,8 @@ test('§8.5 maxRuns 3: ENDED (END_REACHED) when its third run starts, one push "
   assert.equal((await scheduleOf(s.id)).plannedEndToldAt, null);
 
   await finish(w, third);
-  assert.deepEqual(await told(s.id), [s.id]);
+  // The worker's own pass tells it, now that the run is over.
+  await worker.runPass();
   const pushed = plannedEnds(s.id);
   assert.equal(pushed.length, 1, 'exactly one push');
   assert.equal(pushed[0].body, 'Stopped as planned after 3 runs');
@@ -240,8 +247,10 @@ test('§8.5 maxRuns 3: ENDED (END_REACHED) when its third run starts, one push "
   // Later passes, and the slots that would have come, send nothing more and start nothing.
   at(new Date(clockNow.getTime() + 3 * 60 * 60_000));
   assert.deepEqual((await runs.fireDue()).filter((f) => f.scheduleId === s.id), []);
+  await worker.runPass();
   assert.deepEqual(await told(s.id), []);
   assert.equal(plannedEnds(s.id).length, 1, 'still exactly one push');
+  assert.equal(await db.scheduleRun.count({ where: { scheduleId: s.id } }), 3, 'no run past the third was written');
   assert.equal(await db.scheduleRun.count({ where: { scheduleId: s.id, startedAt: { not: null } } }), 3, 'three runs started in all');
   row = await listRow(w, s.id);
   assert.deepEqual([row.state, row.endedReason, row.maxRuns, row.runsStarted, row.runsLeft], ['ENDED', 'END_REACHED', 3, 3, 0]);
@@ -305,6 +314,13 @@ test('§8.5 endAt: ENDED after the last slot at or before endAt, one push once t
   await delivered(last.sessionId!, clockNow);
   assert.deepEqual(await told(s.id), [], 'nor while it runs');
   await finish(w, last.sessionId!);
+  // Reported and still landing, as a LAND run is until landReportedRuns settles it (written here directly): its
+  // landing may yet fail it, and that push comes first.
+  await db.scheduleRun.update({ where: { id: last.id }, data: { landingStatus: 'WAITING' } });
+  assert.deepEqual(await told(s.id), [], 'nor while its last run is landing');
+  await db.scheduleRun.update({ where: { id: last.id }, data: { landingStatus: 'MERGING' } });
+  assert.deepEqual(await told(s.id), []);
+  await db.scheduleRun.update({ where: { id: last.id }, data: { landingStatus: 'LANDED' } });
 
   assert.deepEqual(await told(s.id), [s.id]);
   assert.deepEqual(await told(s.id), []);
@@ -324,6 +340,33 @@ test('§8.5 a ONCE rule\'s end is its only slot: no "stopped as planned" push', 
   assert.deepEqual(await told(s.id), []);
   assert.deepEqual(plannedEnds(s.id), []);
   assert.ok((await scheduleOf(s.id)).plannedEndToldAt, 'marked, so the pass does not read it again');
+});
+
+test('§8.5 endAt between slots: an EVERY rule ends at its last slot before endAt, one push once that run is over', { skip }, async () => {
+  const w = await world('end-at-every');
+  at('2026-11-16T08:10:00Z');
+  // Every hour round the clock, until 10:30: the slots left are 09:00 and 10:00.
+  const s = await created(w, { rule: every(60), endAt: new Date('2026-11-16T10:30:00Z') });
+  assert.equal(s.nextDueAt?.toISOString(), '2026-11-16T09:00:00.000Z');
+  await finish(w, await nextRun(s.id));
+  const after9 = await scheduleOf(s.id);
+  assert.deepEqual([after9.state, after9.nextDueAt?.toISOString()], ['ACTIVE', '2026-11-16T10:00:00.000Z'], 'one slot left');
+
+  // 10:00 fires; the next slot, 11:00, is past endAt: ENDED with that last run still to run.
+  const last = await nextRun(s.id);
+  const ended = await scheduleOf(s.id);
+  assert.deepEqual([ended.state, ended.endedReason, ended.nextDueAt], ['ENDED', 'END_REACHED', null]);
+  assert.equal(ended.endedAt?.toISOString(), '2026-11-16T10:00:00.000Z', 'ended by its last slot');
+  assert.deepEqual(await told(s.id), [], 'not while its last run runs');
+  await finish(w, last);
+  assert.deepEqual(await told(s.id), [s.id]);
+  assert.deepEqual(await told(s.id), [], 'told once');
+  assert.deepEqual(plannedEnds(s.id).map((a) => [a.title, a.body]), [['Codex stable check', 'Stopped as planned after 2 runs']]);
+  const row = await listRow(w, s.id);
+  assert.deepEqual(
+    [row.state, row.endedReason, row.endAt, row.maxRuns, row.runsStarted, row.runsLeft],
+    ['ENDED', 'END_REACHED', '2026-11-16T10:30:00.000Z', null, 2, null],
+  );
 });
 
 test('§8.5 an EVERY create card without an end suggests one 7 days out; Create writes it, No end writes none', { skip }, async () => {
@@ -386,6 +429,12 @@ test('§8.5 maxRuns is inside the envelope: a session sets it at once; at or bel
 
   await refusedWith(schedules.update(w.session, s.id, { maxRuns: 2 }), 'SCHEDULE_MAX_RUNS_ALREADY_REACHED');
   await refusedWith(schedules.update(w.session, s.id, { maxRuns: 0 }), 'SCHEDULE_MAX_RUNS_INVALID');
+  // Also beside a change that needs a card (every 30 minutes is more runs a week than allowed): refused before it.
+  await refusedWith(
+    schedules.update(w.session, s.id, { rule: every(30), runLimitMinutes: 15, maxRuns: 2 }),
+    'SCHEDULE_MAX_RUNS_ALREADY_REACHED',
+  );
+  assert.equal(await db.scheduleChangeRequest.count({ where: { scheduleId: s.id, kind: 'UPDATE' } }), 0, 'no card was written');
   const applied = await schedules.update(w.session, s.id, { maxRuns: 4 });
   assert.equal(applied.outcome, 'APPLIED', 'inside the envelope: applied at once');
   const revision = await db.scheduleRevision.findUniqueOrThrow({
