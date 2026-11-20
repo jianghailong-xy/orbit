@@ -1200,40 +1200,6 @@ export function newFolderRoot(reposRoot: string, capabilities: readonly string[]
  *  The machine page tells "update the runner" (not declared) from "no reading yet" (declared, nothing kept) by it. */
 export const MACHINE_RESOURCES_CAPABILITY = 'machine-resources/v1';
 
-/** The heartbeat answer's limits on each background job; each field is present only when set. */
-export interface BackgroundJobLimits {
-  cpus?: number;
-  memoryMb?: number;
-}
-
-/** Declared by a runner that can enforce limits on its background jobs on its machine now (Runner.bgJobCpus and
- *  bgJobMemoryMb, handed back as the heartbeat answer's `backgroundJobLimits`). */
-export const BG_JOB_LIMITS_CAPABILITY = 'bg-job-limits/v1';
-
-/** Declared instead, followed by one reason code, by a runner that understands the limits but cannot enforce them on
- *  its machine: `os` (not Linux), `cgroup` (no cgroup v2 of its own: a container, cgroup v1, not run as a systemd
- *  service), `delegate` (the systemd unit lacks Delegate=yes or needs a restart: reinstall the service), `controllers`
- *  (the cpu or memory controller is missing). A runner declaring neither is too old to support limits. */
-export const BG_JOB_LIMITS_UNAVAILABLE_CAPABILITY_PREFIX = 'bg-job-limits-unavailable/v1:';
-
-export type BgJobLimitUnavailableReason = 'os' | 'cgroup' | 'delegate' | 'controllers' | 'unknown';
-
-export type BgJobLimitSupport =
-  | { state: 'old' }
-  | { state: 'available' }
-  | { state: 'unavailable'; reason: BgJobLimitUnavailableReason };
-
-/** What a runner's declared capabilities say about enforcing background job limits. A reason code this build does not
- *  know reads as `unknown`. */
-export function bgJobLimitSupportOf(capabilities: readonly string[] | null | undefined): BgJobLimitSupport {
-  if (capabilities?.includes(BG_JOB_LIMITS_CAPABILITY)) return { state: 'available' };
-  const declared = capabilities?.find((c) => c.startsWith(BG_JOB_LIMITS_UNAVAILABLE_CAPABILITY_PREFIX));
-  if (declared === undefined) return { state: 'old' };
-  const code = declared.slice(BG_JOB_LIMITS_UNAVAILABLE_CAPABILITY_PREFIX.length);
-  const reason = code === 'os' || code === 'cgroup' || code === 'delegate' || code === 'controllers' ? code : 'unknown';
-  return { state: 'unavailable', reason };
-}
-
 /** One reading of a machine (RunnerHeartbeatRequest.resources; the runner's MachineResources). A figure the
  *  platform has no answer for is absent — the page shows a dash, never a zero. Bytes are whole numbers. */
 export interface RunnerResources {
@@ -1615,10 +1581,6 @@ export interface RunnerHeartbeatResponse {
    *  its PVC's size (docs/session-checkout-storage-design.md §5). The default is not stored, so the
    *  auto-run disk gate still reads the owner's setting. */
   minFreeDiskMb?: number | null;
-  /** The limits on each background job this machine runs (Runner.bgJobCpus, bgJobMemoryMb). Present only when the owner
-   *  set at least one, carrying only the ones set; absent means limits are off. Absence replaces, as for `minFreeDiskMb`:
-   *  a runner reads an answer without it as "off", not as "keep what you last heard". */
-  backgroundJobLimits?: BackgroundJobLimits;
   /** The storage budget a Docker managed runner's checkouts are held to: its data volume as the
    *  restricted Docker channel last measured it, and the floor to reclaim at
    *  (docs/session-checkout-storage-design.md §5). statfs inside the container reports the host's

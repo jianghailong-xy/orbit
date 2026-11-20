@@ -798,6 +798,57 @@ final class ExceptionCardsTests: XCTestCase {
         try require(web, "The coordinator is fixing this in ${task.title}.")
     }
 
+    /// A live repair task (board card-ui-polish ①): any `handledBy` entry not DONE or CANCELLED —
+    /// the server's own `hasLiveFix` — is what turns the card into one linked line, quiet doors and
+    /// nothing for the reader to do. Once every repair has ended the card is the plain one again.
+    func testALiveRepairIsOneLinkedLineAndQuietDoors() throws {
+        let web = try webSource()
+        let live = row { $0.handledBy = [
+            .init(taskId: "01a0bb0b-b3fb-744c-b9a6-2fd68b4420b4", title: "Fix the branch",
+                  state: "IN_PROGRESS"),
+            .init(taskId: "01a0bb0b-b3fb-744c-b9a6-2fd68b4420b5", title: "Re-check later",
+                  state: "OPEN"),
+        ] }
+        XCTAssertEqual(ExceptionCards.liveRepairs(live).map(\.title), ["Fix the branch", "Re-check later"])
+        XCTAssertTrue(ExceptionCards.fixing(live))
+        XCTAssertEqual(ExceptionCards.repairLink(ExceptionCards.liveRepairs(live)[0])?.absoluteString,
+                       "orbit-task:01a0bb0b-b3fb-744c-b9a6-2fd68b4420b4")
+        // The ended ones are not repairs: the card goes back to its current layout.
+        let ended = row { $0.handledBy = [
+            .init(taskId: "01a0bb0b-b3fb-744c-b9a6-2fd68b4420b4", title: "Fix the branch", state: "DONE"),
+            .init(taskId: "01a0bb0b-b3fb-744c-b9a6-2fd68b4420b5", title: "Re-check later",
+                  state: "CANCELLED"),
+        ] }
+        XCTAssertTrue(ExceptionCards.liveRepairs(ended).isEmpty)
+        XCTAssertFalse(ExceptionCards.fixing(ended))
+
+        // Every door is a quiet link with no consequence line, as the browser's quiet row draws them.
+        let quiet = ExceptionCards.presses(live, quiet: true)
+        XCTAssertFalse(quiet.isEmpty)
+        XCTAssertTrue(quiet.allSatisfy { $0.tier == .link && $0.consequence.isEmpty },
+                      "a repair in flight asks nothing of the reader")
+        let loud = ExceptionCards.presses(live)
+        XCTAssertTrue(loud.contains { $0.tier != .link && !$0.consequence.isEmpty })
+
+        // The words are the browser's own declarations.
+        XCTAssertEqual(ExceptionCards.fixingTag, try declaration(web, "FIXING_TAG"))
+        XCTAssertEqual(ExceptionCards.beingFixedIn, try declaration(web, "BEING_FIXED_IN"))
+        XCTAssertEqual(ExceptionCards.fixingNothingForYou, try declaration(web, "FIXING_NOTHING_FOR_YOU"))
+        try require(web, "row.handledBy ?? []).filter((task) => task.state !== 'DONE' && task.state !== 'CANCELLED')")
+    }
+
+    /// The Into row names the branch a person knows, never the ref the server stores it under.
+    func testTheIntoRowNamesTheBranchNotItsRef() {
+        let facts = row { $0.facts = OpenItemFacts(targetRef: "refs/heads/main",
+                                                   targetSha: "928ed7e0000",
+                                                   nothingLanded: true) }
+        guard case .rows(let block) = ExceptionCards.facts(facts) else {
+            return XCTFail("the payload's facts are drawn as rows")
+        }
+        XCTAssertEqual(block.rows.first { $0.label == ExceptionCards.intoLabel }?.value,
+                       "main at 928ed7e · nothing landed")
+    }
+
     /// Every door wears the browser's own label and the browser's own one line saying what pressing
     /// it does — the row is never a bare verb — and the whole table is looked up in the web source,
     /// so neither end can reword a door alone.

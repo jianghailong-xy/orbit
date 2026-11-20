@@ -876,8 +876,8 @@ model Runner {
   // One knob per machine, but evaluated against each workspace's own measured filesystem —
   // "keep this much headroom wherever you are writing" is the same policy on every mount.
   minFreeDiskMb     Int?         @default(10240) @map("min_free_disk_mb")
-  // Limits on each background job (bg_run) this machine runs, set by its owner and handed to the runner
-  // in every heartbeat answer. NULL is no limit on that dimension; both NULL (the default) is limits off.
+  // Unused: the background job limits these held were withdrawn on 2026-11-20. They stay because
+  // migration 1260 already added them to production's database; nothing reads or writes them.
   bgJobCpus         Float?       @map("bg_job_cpus")
   bgJobMemoryMb     Int?         @map("bg_job_memory_mb")
   version           String?
