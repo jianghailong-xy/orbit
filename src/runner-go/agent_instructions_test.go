@@ -519,6 +519,7 @@ func TestOrbitDriveGuidanceMatchesRunnerKind(t *testing.T) {
 			fakeDriveMount(t, mounted)
 			long := "/home/a-long-account-name/.orbit/bin/versions/0.1.999/orbit"
 			instructions := orbitCLIInstructions(long, true, true, true)
+			t.Logf("%s: the longest instructions shape is %d of %d bytes", name, len(instructions), orbitInstructionsMaxBytes)
 			if len(instructions) > orbitInstructionsMaxBytes {
 				t.Errorf("%d instruction bytes exceed budget %d", len(instructions), orbitInstructionsMaxBytes)
 			}
