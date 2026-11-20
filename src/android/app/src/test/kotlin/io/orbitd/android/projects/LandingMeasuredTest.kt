@@ -96,6 +96,9 @@ class LandingMeasuredTest {
         // The first records carried no origin: they were the coordinator's.
         assertEquals("COORDINATOR", ProjectSettingChanges.of(j("""{"settingChanges":[{"id":"x","field":"LANDING_CHECK","createdAt":"2026-11-20T00:00:00Z",
             "oldValue":{"command":null,"timeoutSeconds":null,"none":false},"newValue":{"command":null,"timeoutSeconds":null,"none":true}}]}"""))!!.single().origin)
+        // The owner's revert is said on the row it put back, not listed as a row of its own.
+        val revert = list[0].copy(id = "c4", origin = "OWNER", revertsChangeId = "c3")
+        assertEquals(listOf("c3", "c2", "c1"), ProjectSettingChanges.listed(listOf(revert) + list).map { it.id })
         assertEquals("3 changes", LandingMeasuredCopy.changesCount(3)); assertEquals("1 change", LandingMeasuredCopy.changesCount(1))
     }
 

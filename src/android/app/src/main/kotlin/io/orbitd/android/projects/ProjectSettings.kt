@@ -49,7 +49,7 @@ internal fun RunSettingsSection(state: ProjectPageState, doc: JsonObject, now: I
     revertChange: suspend (ProjectSettingChanges.Change) -> String? = { null }) {
     // The coordinator's changes (board docs/mocks/landing-measured ⑤, D6): a row here, the list a page of its own over this one.
     var changesOpen by remember { mutableStateOf(false) }
-    val changes = ProjectSettingChanges.of(doc)
+    val changes = ProjectSettingChanges.of(doc)?.let(ProjectSettingChanges::listed)
     Column(Modifier.testTag("project-settings"), verticalArrangement = Arrangement.spacedBy(12.dp)) {
         SectionHead(StartProjectCopy.howItRuns, RunSettings.appliesFromNextTask)
         val view = state.integration
