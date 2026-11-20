@@ -135,7 +135,8 @@ class OrbitEventLineTest {
         val event = turn("Ship it", future)
         show(event)
         compose.onAllNodesWithTag("orbit-event", useUnmergedTree = true).assertCountEquals(0)
-        compose.onAllNodes(hasText("You") and hasAnyAncestor(hasTestTag("event:9")), useUnmergedTree = true).assertCountEquals(1)
+        // The reader's own turn carries no heading (1da59c34c2, as iOS): only another sender's is headed.
+        compose.onAllNodes(hasText("You") and hasAnyAncestor(hasTestTag("event:9")), useUnmergedTree = true).assertCountEquals(0)
         compose.onAllNodes(hasText("Ship it") and hasAnyAncestor(hasTestTag("event:9")), useUnmergedTree = true).assertCountEquals(1)
         compose.onAllNodes(hasText("Orbit attached", substring = true), useUnmergedTree = true).assertCountEquals(0)
         compose.onAllNodes(hasText("<orbit-future-thing>", substring = true), useUnmergedTree = true).assertCountEquals(0)
