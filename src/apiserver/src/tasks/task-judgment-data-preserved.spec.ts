@@ -3200,10 +3200,13 @@ test('the ledger stays append-only, and every later migration is accounted for',
       // 1260 adds two nullable columns on runner, bg_job_cpus and bg_job_memory_mb (no default); no row is written,
       // and no preserved relation, trigger, function or DONE fence changes.
       '1260_runner_bg_job_limits',
-      // 1270 widens owner_request's kind check for SETTINGS_CHANGE, adds a nullable JSONB payload with a CHECK every
+      // 1270 adds two plain indexes, session_merge_receipt (source_sha) and task (owner_id, updated_at); no row is
+      // written, and no preserved relation, trigger, function or DONE fence changes.
+      '1270_receipt_source_sha_task_updated_idx',
+      // 1273 widens owner_request's kind check for SETTINGS_CHANGE, adds a nullable JSONB payload with a CHECK every
       // stored row passes and a partial unique index; no row is written, and no preserved relation, trigger, function
       // or DONE fence changes.
-      '1270_owner_request_settings_change'],
+      '1273_owner_request_settings_change'],
     'a later migration exists; re-read it before trusting the assertions above');
   // Stated rather than described: 0230's fence differs from 0228's by exactly one added lane.
   const later = readFileSync(

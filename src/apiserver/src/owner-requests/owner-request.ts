@@ -13,7 +13,7 @@ export type OwnerRequestKind = (typeof OWNER_REQUEST_KINDS)[number];
 
 /**
  * An agent proposing a change to the owner's own Settings (docs/settings-from-conversation-design.md §5.1, migration
- * 1270). Filed only by `POST /runner/settings-proposals`, which writes its title and payload, so it is not one of the
+ * 1273). Filed only by `POST /runner/settings-proposals`, which writes its title and payload, so it is not one of the
  * OWNER_REQUEST_KINDS `POST /runner/owner-requests` takes.
  */
 export const SETTINGS_CHANGE = 'SETTINGS_CHANGE';

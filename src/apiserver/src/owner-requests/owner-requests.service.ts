@@ -100,7 +100,7 @@ const VIEW = {
   // CONDITION_* items (migration 1030, conditions/condition-attention.ts): the condition a can't-read card or the
   // 30-day question is about, which a client reads to name its schedule or task.
   conditionId: true,
-  // SETTINGS_CHANGE (migration 1270): `{ changes: [{ key, from, to, tier }] }`, which the card draws.
+  // SETTINGS_CHANGE (migration 1273): `{ changes: [{ key, from, to, tier }] }`, which the card draws.
   payload: true,
   expiresAt: true,
   clientRequestId: true,
