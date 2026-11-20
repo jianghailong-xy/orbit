@@ -43,12 +43,12 @@ controllers and their decorators, so it lists what the server mounts, not what a
 | Caller | Routes |
 | --- | --- |
 | `public` | 37 |
-| `user` | 497 |
+| `user` | 504 |
 | `admin` | 31 |
 | `runner` | 205 |
 | `channel` | 1 |
 | `link gateway` | 3 |
-| **Total** | **774** |
+| **Total** | **781** |
 
 ## Public routes
 
@@ -138,6 +138,7 @@ controllers and their decorators, so it lists what the server mounts, not what a
 | `DELETE` | `/api/drive/entries/:id` | path `id` | `DriveController.moveToTrash` |
 | `GET` | `/api/drive/entries/:id` | path `id` | `DriveController.get` |
 | `PATCH` | `/api/drive/entries/:id` | body `UpdateDriveEntryDto`; path `id` | `DriveController.update` |
+| `GET` | `/api/drive/entries/:id/content` | path `id` | `DriveController.download` |
 | `GET` | `/api/drive/entries/:id/versions` | path `id` | `DriveController.versions` |
 | `POST` | `/api/drive/folders` | body `CreateDriveFolderDto` | `DriveController.createFolder` |
 | `GET` | `/api/drive/resolve` | query `path` | `DriveController.resolve` |
@@ -146,7 +147,13 @@ controllers and their decorators, so it lists what the server mounts, not what a
 | `DELETE` | `/api/drive/trash/groups/:id` | path `id` | `DriveController.deleteGroup` |
 | `GET` | `/api/drive/trash/groups/:id` | path `id`; query `cursor`, `limit`, `parentId` | `DriveController.trashGroup` |
 | `POST` | `/api/drive/trash/groups/:id/restore` | path `id` | `DriveController.restoreGroup` |
+| `POST` | `/api/drive/uploads` | body `OpenDriveUploadDto` | `DriveController.openUpload` |
+| `DELETE` | `/api/drive/uploads/:id` | path `id` | `DriveController.abandonUpload` |
+| `GET` | `/api/drive/uploads/:id` | path `id` | `DriveController.uploadStatus` |
+| `PUT` | `/api/drive/uploads/:id/chunks/:idx` | path `id`, `idx` | `DriveController.putChunk` |
+| `POST` | `/api/drive/uploads/:id/complete` | path `id` | `DriveController.completeUpload` |
 | `DELETE` | `/api/drive/versions/:id` | path `id` | `DriveController.deleteVersion` |
+| `GET` | `/api/drive/versions/:id/content` | path `id` | `DriveController.downloadVersion` |
 | `POST` | `/api/drive/versions/:id/restore` | body `RestoreDriveVersionDto`; path `id` | `DriveController.restoreVersion` |
 | `GET` | `/api/events` | query `hints` | `EventsController.events` |
 | `GET` | `/api/guest-sessions` | — | `GuestSessionsController.list` |
