@@ -122,9 +122,30 @@ export const waitTask = (T, id, statuses, what, timeoutMs = 240_000) =>
   until(what, async () => { const t = await getTask(T, id); return statuses.includes(t.status) ? t : null; }, { timeoutMs, everyMs: 2_000 });
 export const execute = (T, id) => call('POST', `/tasks/${id}/execute`, T, { triggerId: uuid() });
 
-/** Send a message to a session as the owner (the coordinator's fake engine acts on E2E-MCP lines). */
+/**
+ * Send a message to a session as the owner (the coordinator's fake engine acts on E2E-MCP lines), once every turn the
+ * session already has is answered. A message sent while a turn runs goes in as a steer, and a steer that finds its turn
+ * over is re-filed as an ordinary message; on 2026-11-20 one such message reached the engine twice (task
+ * 350rBMIZ9MSf6BLBb0Pdt), which would run a coordinator write twice. Waiting keeps these runs about revision 42.
+ */
 export async function sendTurn(T, sessionId, content) {
+  const open = () => Number(psql(`select count(*) from conversation_turn
+    where session_id = '${publicIdToUuid(sessionId)}' and answered_at is null`).split('\n')[2]?.trim());
+  await until(`every turn of session ${sessionId} to be answered`, () => open() === 0, { timeoutMs: 180_000, everyMs: 500 });
   return call('POST', `/sessions/${sessionId}/turns`, T, { clientTurnId: uuid(), content });
+}
+
+/** A public id is the row's uuid in base62 (0-9A-Za-z). */
+export function publicIdToUuid(id) {
+  const alphabet = '0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz';
+  let n = 0n;
+  for (const ch of id) {
+    const v = alphabet.indexOf(ch);
+    if (v < 0) throw new Error(`not a public id: ${id}`);
+    n = n * 62n + BigInt(v);
+  }
+  const hex = n.toString(16).padStart(32, '0');
+  return `${hex.slice(0, 8)}-${hex.slice(8, 12)}-${hex.slice(12, 16)}-${hex.slice(16, 20)}-${hex.slice(20)}`;
 }
 
 /** Wait for the fake engine's log line answering one E2E-MCP call. */
