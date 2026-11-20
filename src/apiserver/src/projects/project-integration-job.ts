@@ -241,8 +241,11 @@ export function isRetryableLandingFailure(
 
 /** The checks the runner ran, as it reports them back. `outputTail` is clipped by the runner. */
 export interface IntegrationCheckResult {
-  skipped?: 'PATHS_EXEMPT';
+  /** PATHS_EXEMPT: only the repository's exempt paths changed (§11 K2), with `files`. TASK_EXEMPT: the
+   *  task is exempt from the landing check (§12.15 P-C2), with `reason`. Either is a skip, not a pass. */
+  skipped?: 'PATHS_EXEMPT' | 'TASK_EXEMPT';
   files?: string[];
+  reason?: string;
   name: 'TASK_ACCEPTANCE' | 'MERGE_CHECK' | 'LANDING_CHECK';
   command: string;
   expectedExitCode: number;
@@ -286,6 +289,12 @@ export interface IntegrationCheckSource {
   landingCheckTimeoutSeconds?: number | null;
   /** The project runs no landing check (`landingCheck` NONE, §12.15 P-C1); absent reads false. */
   landingCheckNone?: boolean;
+  /** The task is exempt from the landing check, and why (§12.15 P-C2); absent reads not exempt. */
+  landingCheckExempt?: boolean;
+  landingCheckExemptReason?: string | null;
+  /** Where the job lands and the upstream: an exemption holds only when they differ (a project branch). */
+  targetRef?: string;
+  upstreamRef?: string;
   mergeCheckCommand: string | null;
   mergeCheckTimeoutSeconds: number | null;
   skipMergeCheck: boolean;
@@ -335,6 +344,10 @@ export function checksFor(row: IntegrationCheckSource): IntegrationCheckSpec[] {
   // NONE (§12.15 P-C1) is the project saying "no landing check": a landing then runs only the task's
   // own acceptance above. A null command is not that: it falls back to the merge check (§11 K1).
   if (landing && row.landingCheckNone) return checks;
+  // P-C2: a task exempt from the landing check gets its own acceptance above and nothing else. The
+  // server leaves the check out of the command rather than asking the runner to skip it, so a runner
+  // that has never heard of TASK_EXEMPT still runs exactly what the coordinator decided.
+  if (taskLandingCheckExemption(row) !== null) return checks;
   const command = landing ? row.landingCheckCommand ?? row.mergeCheckCommand : row.mergeCheckCommand;
   if (command && !(landing && row.skipMergeCheck)) {
     checks.push({
@@ -345,6 +358,22 @@ export function checksFor(row: IntegrationCheckSource): IntegrationCheckSpec[] {
     });
   }
   return checks;
+}
+
+/**
+ * Why this job's landing check is not run because its task is exempt (§12.15 P-C2), or null when it
+ * runs as usual. Null too when there was no landing check to skip — `landingCheck` NONE, an owner's
+ * skip of this generation, no command at all — so a skip is recorded only where a check was due.
+ *
+ * Only for a landing onto a project branch. The door refuses the exemption on a MAIN line, and this
+ * asks again of the job itself: a landing whose target IS the upstream is the gate into main, which no
+ * task's exemption opens, whatever the task row says.
+ */
+export function taskLandingCheckExemption(row: IntegrationCheckSource): string | null {
+  if (row.kind !== 'LAND_TASK' || !row.landingCheckExempt || !row.landingCheckExemptReason) return null;
+  if (!row.targetRef || !row.upstreamRef || row.targetRef === row.upstreamRef) return null;
+  if (row.landingCheckNone || row.skipMergeCheck || !(row.landingCheckCommand ?? row.mergeCheckCommand)) return null;
+  return row.landingCheckExemptReason;
 }
 
 /**

@@ -259,7 +259,7 @@ async function escalationWindow(
 }
 
 /** The line a binding states, when somebody decided it: the owner, or the default rule at the start. */
-function decidedLine(row: ProjectCodebaseLine): IntegrationLine | null {
+export function decidedLine(row: ProjectCodebaseLine): IntegrationLine | null {
   if (row.integrationRefSource !== 'EXPLICIT' && !row.integrationStartedAt) return null;
   return row.integrationRef === row.upstreamRef ? 'MAIN' : 'PROJECT_BRANCH';
 }
@@ -1450,7 +1450,7 @@ export function lastLandingCheck(checks: unknown): 'PASSING' | 'FAILING' | 'UNKN
   let complete = true;
   for (const check of checks) {
     if (!check || typeof check !== 'object') { complete = false; continue; }
-    if (check.name === 'LANDING_CHECK' && check.skipped === 'PATHS_EXEMPT') continue;
+    if (check.name === 'LANDING_CHECK' && (check.skipped === 'PATHS_EXEMPT' || check.skipped === 'TASK_EXEMPT')) continue;
     if (check.timedOut === true) return 'FAILING';
     if (typeof check.expectedExitCode !== 'number' || typeof check.exitCode !== 'number'
       || check.timedOut !== false) { complete = false; continue; }
