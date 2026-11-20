@@ -221,6 +221,15 @@ export class DriveController {
   ) {
     return send(await this.content.ofVersion(user.userId, id, { range, ifRange, ifNoneMatch }), res);
   }
+
+  /** The secret scan before sharing a file (§9): warns, naming the shape and line, and never blocks. */
+  @DRIVE_PAT()
+  @Post('entries/:id/share-check')
+  @HttpCode(HttpStatus.OK)
+  async shareCheck(@CurrentUser() user: AuthUser, @Param('id', PublicIdPipe) id: string) {
+    const version = await this.drive.shareableVersion(user.userId, id);
+    return { versionId: version.id, ...(await this.content.shareCheck(user.userId, version.id)) };
+  }
 }
 
 function send(content: DriveContent, res: Response): StreamableFile | undefined {
@@ -231,13 +240,4 @@ function send(content: DriveContent, res: Response): StreamableFile | undefined 
   const stream = content.stream;
   res.once('close', () => stream.destroy());
   return new StreamableFile(stream);
-
-  /** The secret scan before sharing a file (§9): warns, naming the shape and line, and never blocks. */
-  @DRIVE_PAT()
-  @Post('entries/:id/share-check')
-  @HttpCode(HttpStatus.OK)
-  async shareCheck(@CurrentUser() user: AuthUser, @Param('id', PublicIdPipe) id: string) {
-    const version = await this.drive.shareableVersion(user.userId, id);
-    return { versionId: version.id, ...(await this.content.shareCheck(user.userId, version.id)) };
-  }
 }
