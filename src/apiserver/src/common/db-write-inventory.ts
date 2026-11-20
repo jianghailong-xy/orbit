@@ -3015,6 +3015,15 @@ export const TRANSACTION_UNITS: readonly TransactionUnit[] = [
     answer: 'Typed 503 from the global boundary; the runner resends its result and the person presses again, both answered idempotently by the request row.',
   },
   {
+    at: 'drive/drive-uploads.service.ts#complete', shape: 'TX_RETRIED',
+    locks: "One pg_advisory_xact_lock (4001329, hashtext(upload id)): a key, which only the completes of that one upload take, held until the transaction ends. The transaction writes no row; the file is created and committed meanwhile on other connections by DriveService.createFile and DriveService.commit (their own inventoried units), which never take this key, so nothing waits on a lock this holds but another complete of the same upload.",
+    identity: 'The upload (staging) id: the file is found by its first version\'s handle id and the commit by its commit id, both the upload id, so every complete of one upload ends on one entry and one version.',
+    isolation: '', attempts: 4,
+    replay: 'Each attempt re-reads the commit answer and the version by handle id under the lock before creating anything, so a re-run after a lost answer returns the file the first made.',
+    effects: 'None here; the commit announces drive.changed after its own commit.',
+    answer: 'Typed 503 after retry exhaustion; the client sends complete again and is answered the same file.',
+  },
+  {
     at: 'drive/drive.service.ts#ensureRoot', shape: 'TX_RETRIED',
     locks: "SET LOCAL statement_timeout, then the account's root drive_entry: read, and when absent one INSERT ... ON CONFLICT (owner_id) WHERE parent_id IS NULL DO NOTHING (drive_entry_root_key), whose foreign key takes the user row FOR KEY SHARE. No trigger.",
     identity: 'The account: one root per owner, by the partial unique index; a second call or a re-run finds it.',

@@ -14,7 +14,9 @@
  *   (4) an upload that is not complete is refused 409 naming the chunks to send; abandon removes the staging;
  *   (5) a dropped folder's files share one top folder: the first takes a suffix when the name is taken, the rest send
  *       its `dropRootId` back, and missing sub-folders are made once;
- *   (6) another account's upload and file are not found.
+ *   (6) another account's upload and file are not found;
+ *   (7) two completes of one upload, forced to overlap inside the file's creation, make one entry and one version, and
+ *       both answer that entry.
  *
  * The routes are called through the real controller over a small express app, so the headers and statuses are the ones
  * a client sees. Not destructive: every row belongs to users this run creates.
@@ -248,5 +250,38 @@ test('Orbit Files drive: resumable upload and ranged download', { skip: !URL, co
       assert.equal((await call('POST', '/uploads', { body: { name: 'x', size: 1, parentId: (await db.driveEntry.findFirstOrThrow({ where: { ownerId: owner, parentId: { not: null }, kind: 'FOLDER' } })).id } })).status, 404);
     });
     caller = owner;
+  });
+
+  await t.test('(7) two overlapping completes of one upload make one file', async () => {
+    const drive = app.get(DriveService);
+    const upload = await open({ name: 'race.bin', size: 3 });
+    assert.equal((await putChunk(upload.id, 0, Buffer.from('abc'))).status, 200);
+    const original = drive.createFile.bind(drive);
+    let entered!: () => void;
+    const inside = new Promise<void>((resolve) => (entered = resolve));
+    let release!: () => void;
+    const gate = new Promise<void>((resolve) => (release = resolve));
+    drive.createFile = async (...args: Parameters<typeof original>) => {
+      entered();
+      await gate; // the first complete holds here, creation not yet done
+      return original(...args);
+    };
+    try {
+      const first = call('POST', `/uploads/${upload.id}/complete`);
+      await inside;
+      const second = call('POST', `/uploads/${upload.id}/complete`);
+      const early = await Promise.race([second.then(() => 'answered'), new Promise((r) => setTimeout(() => r('waiting'), 500))]);
+      assert.equal(early, 'waiting', 'the second complete waits for the first');
+      release();
+      const [a, b] = await Promise.all([first, second]);
+      assert.equal(a.status, 200);
+      assert.equal(b.status, 200);
+      const [ea, eb] = [(await a.json()) as { id: string }, (await b.json()) as { id: string }];
+      assert.equal(ea.id, eb.id, 'both callers end on the same entry');
+      assert.equal(await db.driveEntry.count({ where: { ownerId: owner, name: { startsWith: 'race' } } }), 1, 'one entry');
+      assert.equal(await db.driveVersion.count({ where: { entryId: ea.id } }), 1);
+    } finally {
+      drive.createFile = original;
+    }
   });
 });

@@ -1,10 +1,14 @@
-import { HttpException, HttpStatus, Injectable } from '@nestjs/common';
+import { HttpException, HttpStatus, Injectable, Logger } from '@nestjs/common';
+import { loggedRetry, withTransactionRetry } from '../common/transaction-retry';
 import { PrismaService } from '../prisma/prisma.service';
 import { DRIVE_CHUNK_MAX, DriveChunksService } from './drive-chunks.service';
 import { assertDriveName, DriveService, OWNER_WRITER } from './drive.service';
 
 export const DRIVE_UPLOAD_INCOMPLETE = 'DRIVE_UPLOAD_INCOMPLETE';
 export const DRIVE_UPLOAD_INVALID = 'DRIVE_UPLOAD_INVALID';
+/** The advisory-lock namespace that serialises the completes of one upload (key: the staging id). */
+const UPLOAD_COMPLETE_LOCK_NAMESPACE = 4001329;
+const UPLOAD_COMPLETE_TRANSACTION = { timeout: 120_000, maxWait: 10_000 };
 const UPLOAD_NOT_FOUND = 'DRIVE_UPLOAD_NOT_FOUND';
 
 function refusal(status: HttpStatus, code: string, message: string, extra: Record<string, unknown> = {}): HttpException {
@@ -20,6 +24,8 @@ const notFound = () => refusal(HttpStatus.NOT_FOUND, UPLOAD_NOT_FOUND, 'No such 
  */
 @Injectable()
 export class DriveUploadsService {
+  private readonly logger = new Logger(DriveUploadsService.name);
+
   constructor(
     private readonly prisma: PrismaService,
     private readonly drive: DriveService,
@@ -77,8 +83,21 @@ export class DriveUploadsService {
     };
   }
 
-  /** Create the file and commit the chunks. Sent again after it applied, it answers the same file. */
+  /**
+   * Create the file and commit the chunks. Sent again after it applied, it answers the same file. The completes of one
+   * upload run one at a time: a transaction takes a per-upload advisory lock and holds it while the file is created and
+   * committed on their own connections, so a second complete (a retry after a timeout, say) waits, then finds the
+   * first's commit answer and returns its file.
+   */
   async complete(ownerId: string, id: string) {
+    await this.find(ownerId, id);
+    return withTransactionRetry(this.prisma, async (tx) => {
+      await tx.$executeRaw`SELECT pg_advisory_xact_lock(${UPLOAD_COMPLETE_LOCK_NAMESPACE}, hashtext(${id}))`;
+      return this.completeLocked(ownerId, id);
+    }, loggedRetry(this.logger, 'drive.completeUpload', { transaction: UPLOAD_COMPLETE_TRANSACTION }));
+  }
+
+  private async completeLocked(ownerId: string, id: string) {
     const staging = await this.find(ownerId, id);
     const answered = await this.prisma.driveCommit.findUnique({ where: { ownerId_commitId: { ownerId, commitId: id } } });
     if (answered) return this.drive.get(ownerId, answered.entryId);
