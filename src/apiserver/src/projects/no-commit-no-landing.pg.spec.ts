@@ -50,7 +50,7 @@ import { readTaskIntegrationViews } from './project-task-integration';
  *      zero-commit task before it is not back-filled, and the task after it waits for its landing;
  *  (4) an empty branch beside a session that reported work opens LANDING_UNOBSERVED (WORK_ELSEWHERE),
  *      queues nothing, and its dependent waits;
- *  (5) a session that never reported a branch_sha still queues — the runner's J-S2 answers it;
+ *  (5) a session that never reported a branch_sha nor a diff still queues — the runner's J-S2 answers it;
  *  (6) a DONE whose work still moves queues nothing and starts no line; the runner's finalize freezes
  *      an empty branch and queues nothing either, and the 60 s ready sweep — the backstop of the
  *      post-commit edge — releases the dependent (coordinator's condition 1);
@@ -482,13 +482,17 @@ test('(4) an empty branch beside a session that reported work opens LANDING_UNOB
     }
   });
 
-test('(5) a session that never reported a branch_sha still queues: the runner\'s J-S2 answers it',
+test('(5) a session that never reported a branch_sha nor a diff still queues: the runner\'s J-S2 answers it',
   { skip, timeout: 180_000 }, async () => {
     const stack = await connect();
     try {
       const w = await world(stack, 'no-tip', 'PROJECT_BRANCH');
       const a = await task(stack, w, 'older-runner');
-      await workSession(stack, w, a, { branch: 'orbit/older-runner', branchSha: null, baseSha: sha('0'), finishedMinutesAgo: 1 });
+      // No tip and no list either: nothing measured the branch, so the line is asked. (An EMPTY list beside a
+      // missing tip is a measurement since the owner's ruling of 2026-11-20 — case (14).)
+      await workSession(stack, w, a, {
+        branch: 'orbit/older-runner', branchSha: null, baseSha: sha('0'), changedFiles: null, finishedMinutesAgo: 1,
+      });
 
       await confirm(stack, w, a);
 
@@ -879,6 +883,7 @@ test('(14) an identity nobody can name whose every work session reported an empt
         data: {
           ownerId: w.ownerId, sessionId: merged.session, taskId: merged.id, result: 'MERGED',
           sourceBranch: 'orbit/merged-once', sourceSha: sha('6'), targetBranch: 'main', recordedBy: 'AGENT',
+          targetShaBefore: sha('7'), targetShaAfter: sha('8'),
           idempotencyKey: `no-commit-${merged.id}`,
         },
       });

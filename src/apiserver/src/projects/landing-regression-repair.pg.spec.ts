@@ -252,7 +252,7 @@ async function flipToOpen(db: PrismaClient, projectId: string): Promise<void> {
   await db.$executeRaw`
     UPDATE "project"
        SET "status" = 'OPEN', "done_by" = NULL, "done_at" = NULL, "done_criteria_digest" = NULL,
-           "done_task_epochs" = NULL, "accepted_gaps" = '{}', "reopened_at" = NULL, "reopened_facts" = NULL
+           "done_task_epochs" = NULL, "accepted_gaps" = '[]'::jsonb, "reopened_at" = NULL, "reopened_facts" = NULL
      WHERE "id" = ${projectId}::uuid`;
 }
 
