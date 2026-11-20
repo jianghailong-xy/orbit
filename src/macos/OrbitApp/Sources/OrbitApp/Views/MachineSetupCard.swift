@@ -169,7 +169,7 @@ private struct MachineDraftContent: View {
     var body: some View {
         ScrollView {
             MachineSetupCard(setup: setup, welcome: welcome)
-                .frame(maxWidth: 620)
+                .frame(maxWidth: ConversationCardWidth.max)
                 .frame(maxWidth: .infinity)
                 .padding(14)
         }
