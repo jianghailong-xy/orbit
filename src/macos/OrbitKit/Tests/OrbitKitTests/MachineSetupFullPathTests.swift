@@ -171,4 +171,10 @@ final class MachineSetupFullPathTests: XCTestCase {
         XCTAssertEqual(machines, [NewWorkspaceMachine(id: "austin", name: "austin@host", online: true, workspaces: 2),
                                   NewWorkspaceMachine(id: "build", name: "build@host", online: false, workspaces: 0)])
     }
+
+    func testTheMenuSaysWhatEachMachineHolds() {
+        XCTAssertEqual(NewWorkspaceCopy.machineDetail(workspaces: 2, online: true), "2 workspaces")
+        XCTAssertEqual(NewWorkspaceCopy.machineDetail(workspaces: 1, online: true), "1 workspace")
+        XCTAssertEqual(NewWorkspaceCopy.machineDetail(workspaces: 0, online: false), "Offline · No workspaces yet")
+    }
 }
