@@ -262,7 +262,8 @@ import { SessionBrowserChip } from './SessionBrowserChip';
 import { mergeRepairLoopLive } from './MergeRecoveryPanel';
 import { BrandMark, NewSessionProviderHero } from './NewSessionProviderHero';
 import { CreatedWorkspaceLine } from './CreatedWorkspaceLine';
-import { MachineSetupCard, RevealedOnArrival, setupCredentialOf } from './MachineSetupCard';
+import { MachineSetupCard, RevealedOnArrival, setupCredentialOf, type HistoryChoice } from './MachineSetupCard';
+import { startHistoryImport } from '../lib/claudeHistoryImport';
 import { ManagedRunnerNotice } from './ManagedRunnerNotice';
 import { useNewAccount } from './WelcomeCard';
 import type { LoginEngine } from '@orbit/shared';
@@ -7254,12 +7255,13 @@ export function WorkspaceView({
   // name the card was given. The list then says the machine has one, and the console moves on to its new
   // session page (WorkspaceConsole), with the engine and credential picked here as its draft's.
   const createWorkspace = useMutation({
-    mutationFn: ({ folder, name }: { folder: PickedFolder; name: string }) =>
+    mutationFn: ({ folder, name }: { folder: PickedFolder; name: string; history: HistoryChoice | null }) =>
       api<{ id: string }>('/workspaces', {
         method: 'POST',
         body: { name, runnerId: runner.id, ...newWorkspaceOf(folder) },
       }),
-    onSuccess: async (made) => {
+    onSuccess: async (made, { history }) => {
+      if (history) void startHistoryImport(made.id, history.history, history.mode, message, refreshSessionLists);
       if (draftHere) setDraftPick({ ...draftHere, workspaceId: made.id });
       await qc.invalidateQueries({ queryKey: ['workspaces'] });
     },
@@ -11275,7 +11277,7 @@ export function WorkspaceView({
                 <MachineSetupCard
                   runner={runner}
                   managed={managed}
-                  onCreate={(folder, name) => createWorkspace.mutate({ folder, name })}
+                  onCreate={(folder, name, history) => createWorkspace.mutate({ folder, name, history })}
                   creating={createWorkspace.isPending}
                   createError={createWorkspace.error?.message ?? null}
                   welcome={machineWelcome}
