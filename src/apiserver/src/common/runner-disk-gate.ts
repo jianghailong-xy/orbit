@@ -2,9 +2,10 @@ import { Prisma } from '@prisma/client';
 
 /**
  * Keep Free's hold on a session that has not started yet: while its workspace's filesystem has less free than its
- * runner's floor (Runner.minFreeDiskMb), it stays queued, however it was started — by hand, a task's Run Now, a spawn.
- * The auto-run sweep holds a task's run before it is a session (diskBelowFloor in tasks.service.ts); this is the same
- * comparison for every session that gets past it.
+ * runner's floor (Runner.minFreeDiskMb), it stays queued, whether started by hand or by a task's Run Now. A spawn
+ * (session_create) is refused before it is written instead, with the reason, since the agent that asked would wait on a
+ * child that never starts (spawnFromSession). The auto-run sweep holds a task's run before it is a session
+ * (diskBelowFloor, below); this is the same comparison for every session that gets past it.
  *
  * Only a session's first run: one that has started (started_at) takes its next message whatever the disk, so an agent
  * on a full machine can still be asked to free space. Fail-open as diskBelowFloor is: no floor, or no reading of the
@@ -26,4 +27,25 @@ export function sessionDiskHoldSql(alias: string): Prisma.Sql {
        AND disk_gate_r."min_free_disk_mb" > 0
        AND disk_gate_w."work_dir_free_bytes" < disk_gate_r."min_free_disk_mb"::bigint * 1048576
   ))`;
+}
+
+/**
+ * Is this workspace's filesystem below its runner's free-space floor, so no new work should be
+ * dispatched onto it?
+ *
+ * Fail-open on every kind of missing information — no floor configured, or no reading from the
+ * runner (too old to measure, work dir gone, a platform with no answer). A disk gate that fired
+ * on absent telemetry would stop a fleet precisely because it knew nothing about it, and the
+ * failure it is guarding against (a volume filling up) is one that its own silence cannot
+ * evidence. The gate is only as good as the reading, and no reading means no gate.
+ *
+ * bigint throughout: a multi-terabyte volume's byte count is past Number.MAX_SAFE_INTEGER.
+ */
+export function diskBelowFloor(
+  freeBytes: bigint | null | undefined,
+  minFreeDiskMb: number | null | undefined,
+): boolean {
+  if (freeBytes == null) return false;
+  if (minFreeDiskMb == null || !Number.isFinite(minFreeDiskMb) || minFreeDiskMb <= 0) return false;
+  return freeBytes < BigInt(Math.floor(minFreeDiskMb)) * 1024n * 1024n;
 }

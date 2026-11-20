@@ -71,11 +71,13 @@ import io.orbitd.android.cards.CardReceiptSheet
 import io.orbitd.android.cards.CardReviewSheet
 import io.orbitd.android.cards.EvidenceFilesSheet
 import io.orbitd.android.cards.LocalAnsweredQuestions
+import io.orbitd.android.cards.LocalRevealItemCard
 import io.orbitd.android.cards.LocalQueuedHeld
 import io.orbitd.android.cards.LocalSteerDeliveries
 import io.orbitd.android.cards.NeedsYouLogic
 import io.orbitd.android.cards.SessionCardsReads
 import io.orbitd.android.cards.rememberSessionCards
+import io.orbitd.android.core.cards.CardFamily
 import io.orbitd.android.core.cards.CardPreviews
 import io.orbitd.android.cards.ReaderSide
 import io.orbitd.android.cards.SessionCards
@@ -375,12 +377,14 @@ fun SessionReader(app: OrbitApplication, handle: SessionHandle, route: OrbitRout
     // A08-4: the queue's turns drawn at the transcript's end, the ones the window has not seen delivered yet — but the reader's own
     // messages still on their way, which the tray above the composer holds; what Orbit queued keeps its card here. After them, the
     // reader's steers only the server's receipt says were not delivered, until Put back takes one away.
-    val queued = remember(state.session?.snapshot?.queuedTurns, state.window.events, composerState.withdrawing, composerState.withdrawn) {
+    val queuedTurns = remember(state.session?.snapshot?.queuedTurns, state.window.events, composerState.withdrawing, composerState.withdrawn) {
         val listed = state.session?.snapshot?.queuedTurns.orEmpty()
         queuedTail(listed, state.window.events).filterNot { it.inTray } + undeliveredTail(listed, state.window.events).filterNot {
             (ObjectId.canonical(it.turnId!!) ?: it.turnId) in composerState.withdrawing + composerState.withdrawn
         }
     }
+    // A SubAgent's end turn still on the queue waits on its run's card, with Don't send ([subagentQueuedWakes]), not in the tail.
+    val queued = remember(queuedTurns) { queuedTurns.filter { it.inTail() } }
     // Whether the tray holds a message of the reader's still waiting for its own turn: then its row says what holds it.
     val trayHeld = remember(state.session?.snapshot?.queuedTurns, state.window.events) {
         queuedTail(state.session?.snapshot?.queuedTurns.orEmpty(), state.window.events).any { it.inTray && it.heldByUpdate }
@@ -406,7 +410,7 @@ fun SessionReader(app: OrbitApplication, handle: SessionHandle, route: OrbitRout
     // the queue — are drawn by those turns, from the rail's records, and not again in the rail (`AnsweredQuestions`).
     val answeredQuestions = remember(state.session?.snapshot, state.session?.fresh, cards.answered, cards.previous, rows, accepted, queued, liveTail) {
         val tail = if (liveTail) accepted + queued.map { it.event } else emptyList()
-        AnsweredQuestions(state.session?.let(cards::shown).orEmpty(), rows.map { it.event } + tail, cards::open)
+        AnsweredQuestions(state.session?.let(cards::shown).orEmpty(), rows.map { it.event } + tail)
     }
     val readerSide by remember(list) { derivedStateOf {
         when (val top = topLineItem(list.layoutInfo.visibleItemsInfo, list.layoutInfo.viewportStartOffset)) {
@@ -427,6 +431,12 @@ fun SessionReader(app: OrbitApplication, handle: SessionHandle, route: OrbitRout
             state.session?.let { live -> cards.shown(live).firstOrNull { it.key == row } }
                 ?.takeIf { CardPreviews.preview(it) != null }?.let { cards.open(it.key) }
         }
+    }
+    // An exception delivery's Go to the item card ↑ (board card-ui-polish ②; iOS `revealOpenItemCard`): the item's own card, brought into
+    // view the way a waiting card is, wherever this conversation's rail draws it — false when it draws none, which the delivery card says.
+    val revealItemCard: (String) -> Boolean = { itemId ->
+        state.session?.let(cards::shown).orEmpty().firstOrNull { it.family == CardFamily.EXCEPTION && ObjectId.same(it.objectId, itemId) }
+            ?.let { showWaiting(it.key); true } ?: false
     }
     // The conversation's last row while it is at rest (RecapCard). It steps aside for the rest of this visit once the conversation
     // starts a new turn — the reader is in it now, and a card arriving under each answer would push the answer up — and is back the
@@ -558,18 +568,21 @@ fun SessionReader(app: OrbitApplication, handle: SessionHandle, route: OrbitRout
     val mainCheckoutResults = remember(state.window.events) {
         state.window.events.filter { it.type == "system" }.mapNotNull { e -> MainCheckout.resultNotice(e.fields)?.let { e.seq to it } }
     }
-    // A SubAgent's finished line points back at the delegate card its run was started from, when that card is drawn.
-    val delegateCalls = remember(state.window.events) { delegateCallsByRun(state.window.events) }
-    val subagentJump: (String) -> (() -> Unit)? = { runId ->
-        delegateCalls[runId]?.takeIf { seq -> currentRows.any { it.contains(seq) } }?.let { seq -> { model.show(seq) } }
+    // Each SubAgent end turn loaded, by run id: its card draws the end, so the turn itself draws nothing (SubagentCardEnd).
+    val subagentWakes = remember(state.window.events, steerDeliveries) { subagentWakesOf(state.window.events, steerDeliveries) }
+    val queuedCancelEnabled = state.session?.fresh == true && !composerState.busy
+    val subagentQueued = remember(queuedTurns, queuedCancelEnabled, liveTail) {
+        if (!liveTail) emptyMap() else subagentQueuedWakes(queuedTurns, queuedCancelEnabled) { turnId -> composer.control("turns/$turnId", HttpMethod.DELETE) }
     }
     CompositionLocalProvider(LocalMainCheckoutResults provides mainCheckoutResults, LocalReaderResources provides resources, LocalShownOriginals provides shownOriginals, LocalTaskActivity provides taskActivity, LocalSteerDeliveries provides steerDeliveries,
         LocalSessionConsole provides console, LocalMainCheckout provides mainCheckout, LocalWatchTargetNames provides targetNames, LocalAnsweredQuestions provides answeredQuestions,
-        LocalExchangeTree provides exchangeTree, LocalSubagentRuns provides subagentRuns, LocalSubagentCardJump provides subagentJump) {
+        LocalRevealItemCard provides revealItemCard, LocalExchangeTree provides exchangeTree, LocalSubagentRuns provides subagentRuns,
+        LocalSubagentWakes provides subagentWakes, LocalSubagentQueuedWakes provides subagentQueued) {
         SessionCardsReads(cards)
         BoxWithConstraints(Modifier.fillMaxSize()) {
         val view = LocalView.current
         val composerHeight = ComposerFold.height(maxHeight, WindowInsets.ime.getBottom(LocalDensity.current), ComposerFold.windowIme(view), composerFocused)
+        // Clipped only while folded to nothing for a card's form: open, the composer card's light shadow spreads over the page above it (iOS).
         val compact = maxWidth < 600.dp
         // What D09 P02 waits for, as this frame composes it: the newest durable row of a window at the live tail (the list's
         // measure says whether it is on screen), and a composer that takes typing, with room, in a window no dialog covers.
@@ -823,7 +836,7 @@ fun SessionReader(app: OrbitApplication, handle: SessionHandle, route: OrbitRout
                 // conversation and above the parking strip (docs/mocks/pending-tray-above-parking, decided 2026-10-28). Not folded while
                 // a phone types, as it is about the messages being typed into; out of the way with the composer while a card's form
                 // holds the keyboard.
-                Box(Modifier.heightIn(max = composerHeight).clipToBounds()) {
+                Box(Modifier.heightIn(max = composerHeight).then(if (composerHeight == 0.dp) Modifier.clipToBounds() else Modifier)) {
                     SessionPendingTray(composer, state.session, unreadSteers,
                         held = runnerUpdatingGate?.let { gate -> { RunnerUpdatingFoot(gate, runnerUpdatingMachine, later = runnerUpdatingLater) } })
                 }
@@ -899,7 +912,7 @@ fun SessionReader(app: OrbitApplication, handle: SessionHandle, route: OrbitRout
                     // does not work then, and the line would say it does.
                     ManagedRunnerAsleepLine(data.workspaces.firstOrNull { ObjectId.same(it.id, workspaceOfSession) }?.runnerId,
                         composerLocked = handoff?.locksComposer == true)
-                    Box(Modifier.heightIn(max = composerHeight).clipToBounds()) { SessionComposer(app, handle, route.id!!, state.session,
+                    Box(Modifier.heightIn(max = composerHeight).then(if (composerHeight == 0.dp) Modifier.clipToBounds() else Modifier)) { SessionComposer(app, handle, route.id!!, state.session,
                     focusRequest = composeFocus, inputFocusChanged = { composerFocused = it },
                     openTask = { open(OrbitRoute(Destination.TASK, it)) },
                     openRunner = { runner, engine -> open(OrbitRoute(Destination.RUNNER, runner, recordId = "engine:$engine")) },

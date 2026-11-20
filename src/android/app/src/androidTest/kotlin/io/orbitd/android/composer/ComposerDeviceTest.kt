@@ -699,6 +699,28 @@ class ComposerDeviceTest {
         assertEquals("no engine's name is cut with Harness ticked: $report", emptyList<String>(), ticked.filterValues { it }.keys.toList())
     }
 
+    /** The session page with one finished exchange, to set beside iOS's (compare-android-ios: the iOS probe's S2, same words). */
+    @Test fun sessionPageWithOneFinishedExchange() = journey("session-page") {
+        login("""{"rows":[{"seq":1,"type":"user","turnId":"t1","payload":{"text":"Highlight the matches in wiki search results."}},
+              {"seq":2,"type":"assistant","turnId":"t1","payload":{"text":"Done — matches are highlighted in titles and in the body excerpt.","messageId":"m2"}},
+              {"seq":3,"type":"result","turnId":"t1","payload":{"subtype":"success","result":"done"}}]}""")
+        awaitText("Done — matches are highlighted in titles and in the body excerpt.")
+        // The page as it rests: the composer drawn and the stream connected. Sign-in's keyboard can still be closing as the page
+        // opens, and the page folds its composer away while the window reports one; the fixture also drops its stream now and then.
+        fun composerShown() = compose.onAllNodes(hasTestTag("composer-input")).fetchSemanticsNodes().any { it.size.height > 0 }
+        if (runCatching { compose.waitUntil(5000) { composerShown() } }.isFailure) {
+            compose.activityRule.scenario.onActivity { activity ->
+                (activity.currentFocus ?: activity.window.decorView).let { view ->
+                    activity.getSystemService(android.view.inputmethod.InputMethodManager::class.java)?.hideSoftInputFromWindow(view.windowToken, 0)
+                    view.clearFocus()
+                }
+            }
+        }
+        compose.waitUntil(15000) { composerShown() && compose.onAllNodes(hasText("Reconnect", substring = true)).fetchSemanticsNodes().isEmpty() }
+        compose.waitForIdle()
+        capture("session-page")
+    }
+
     /** The auto-retry card (baseline): a spent quota counts down to its reset, and its switch turns the armed retry off. */
     @Test fun a07cAutoRetryCardCountsDownAndItsSwitchTurnsItOff() = journey("a07c-auto-retry") {
         login("""{"rows":[{"seq":1,"type":"user","payload":{"text":"Ship the release notes"}},

@@ -2037,7 +2037,7 @@ private struct TaskDetailContent: View {
             (TaskDetailCopy.engineLabel, ProviderEngines.cliName(runPin(task).runEngine)),
             (TaskDetailCopy.providerLabel, providerSummary(task)),
             (TaskDetailCopy.modelLabel, task.model.map { runModelName($0, task) }
-                ?? (smartSelection && assigneeAgent(task)?.modelRouting == true
+                ?? (smartSelection
                     ? TaskDetailCopy.smartSelectionPlaceholder : "Provider default")),
         ]
         return pairs.enumerated().reduce(Text("")) { line, entry in
@@ -2368,8 +2368,8 @@ private struct TaskDetailContent: View {
             engine: pin.runEngine, provider: pin.runProvider(firstDeepSeekKey: firstDeepSeekKey?.slug),
             catalog: model.agents?.modelCatalog(for: assigneeAgent(task)?.runnerId),
             configured: pinConfigured)
-        // Unpinned on an assignee with smart selection on, each run's model is picked for it.
-        let unpinned = smartSelection && assigneeAgent(task)?.modelRouting == true
+        // Unpinned with the account's smart selection on, each run's model is picked for it.
+        let unpinned = smartSelection
             ? TaskDetailCopy.smartSelectionPlaceholder : "Provider default"
         return Picker(TaskDetailCopy.modelLabel, selection: Binding(
             get: { task.model },

@@ -30,6 +30,8 @@ object CoordinatorQuestions {
     const val youWithdrew = "You withdrew it"
     const val yourNote = "Your note"
     const val viewDetails = "View details"
+    /** The unfolded record's last row, folding it back (board card-ui-polish ③; OrbitKit's `hideDetails`, the web's `HIDE_DETAILS`). */
+    const val hideDetails = "Hide details"
 
     /** Whether a closed question is one this build can draw: an address, the question asked, and when and how it ended. */
     fun readable(record: JsonObject): Boolean = record.text("itemId") != null && record.obj("question")?.text("question") != null &&

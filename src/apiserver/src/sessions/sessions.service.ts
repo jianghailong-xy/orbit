@@ -68,6 +68,7 @@ import {
   isSessionReplyTurn,
   queuedRepliesContent,
   readOpenRequestPeers,
+  type OpenRequestPeers,
   settleUnrunSessionRequests,
 } from './session-request';
 import { readTurnCards, type TurnCards } from './turn-cards';
@@ -158,7 +159,7 @@ import { GithubConnectionService } from '../github/github-connection.service';
 import { githubRepoUrl } from '../github/github-workspace.service';
 import { PrismaService } from '../prisma/prisma.service';
 import { PREPARED_STATEMENT } from '../prisma/prisma-client';
-import { RUNNER_DISK_BELOW_FLOOR, sessionDiskHoldSql } from '../common/runner-disk-gate';
+import { RUNNER_DISK_BELOW_FLOOR, diskBelowFloor, sessionDiskHoldSql } from '../common/runner-disk-gate';
 import { workspaceCloneHoldSql, workspaceCloneReasonSql } from '../common/workspace-clone-gate';
 import {
   reprojectAfterSettledChecks,
@@ -362,7 +363,7 @@ import {
 } from './engine-signin-preflight';
 import {
   managedRunnerFailedRefusal, managedRunnerStartingNote, mergePendingNext, nextTurnStartingRefusal,
-  resumeBlockedRefusal, sessionRecoveryBody, sessionRefusal,
+  resumeBlockedRefusal, sessionRecoveryBody, sessionRefusal, spawnDiskBelowFloorRefusal, spawnRunnerOfflineRefusal,
 } from './session-recovery';
 import { claudeRegionCreateRefusal, isClaudeRegionError, regionCredentialOf } from '../runners/runner-region';
 import { assertManagedFirstSessionRuntime, managedFirstSessionKey } from '../managed-runners/managed-runner-supply';
@@ -412,8 +413,8 @@ import {
 } from './current-work-delivery';
 import { deadLetterQueuedWatchWakes } from '../watches/watch-wake-drain';
 import { returnQueuedTurns } from '../projects/project-open-item';
-import { OpenListDeltaStore } from './open-list-delta';
-import { openListEtag, readOpenListVersion } from './open-list-version';
+import { type OpenListBase, OpenListDeltaStore } from './open-list-delta';
+import { type OpenListVersionParts, openListEtag, readOpenListVersion, readOpenListVersionParts } from './open-list-version';
 import {
   SESSION_KIND_CONVERSATION,
   SESSION_KIND_LANDING,
@@ -465,6 +466,106 @@ const MAX_ARM_AHEAD_MS = 8 * 24 * 60 * 60 * 1000;
 
 /** How long a finished Open-list build answers the reads of its version (`sharedOpenList`). */
 const OPEN_LIST_BUILD_KEEP_MS = 5_000;
+
+/** What `listOverlay` reads a row's overlay from: the row's own columns, as the row query or the probe reads them. */
+type ListOverlayInput = {
+  id: string;
+  status: RunStatus;
+  engineTurnActive: boolean | null;
+  taskId: string | null;
+  runningBgShells: string[];
+  runningSubagentCount: number;
+};
+
+/** The part of a list row `listOverlay` reads, keyed in the order the row carries them. */
+type ListOverlay = {
+  questionWithCoordinator: { count: number; since: string; dueAt: string } | null;
+  pendingApprovals: number;
+  waitingKind: ReturnType<typeof sessionWaitingKind>;
+  confirmationUnderReview: (Awaited<ReturnType<typeof readConfirmationsUnderReview>> extends Map<string, infer V> ? V : never) | null;
+  ownerItems: ReturnType<typeof ownerItemsForRow>;
+  awaitingReplyFrom: OpenRequestPeers['awaitingReplyFrom'];
+  owesReplyTo: OpenRequestPeers['owesReplyTo'];
+};
+
+/**
+ * The version sources (`open_list_epoch`, open-list-version.ts) whose writes a `since=` read finds row
+ * by row instead of building the whole list (`SessionsService.openListProbe`):
+ *
+ * - read by the row query, and each covered by the probe's mark of the rows that read it: `session`
+ *   (the row's own columns; a queued row, whose gate counts other sessions, is rebuilt on every read),
+ *   `conversation_turn` (the turn in flight, on a PENDING or RUNNING row), `task` (the title and the
+ *   project of the task, context task and root's tasks a row names), `project` and `coordinator_wake`
+ *   (the project a row's membership resolves to, and its title and status), `workspace` (the name,
+ *   model and effort a row shows; its clone and disk columns gate only a queued row) and `watch`
+ *   (whether a row waits on one);
+ * - not read by the row query of a conversation at all, only by `listOverlay`, which such a read
+ *   reads for every row and compares row by row.
+ *
+ * Every other source — a session's tags and scheduled wake-ups, and any source added after this list
+ * — sends the read to a whole build, which is what every read did before.
+ */
+const OPEN_LIST_ROW_SOURCES: ReadonlySet<string> = new Set([
+  'session', 'conversation_turn', 'task', 'project', 'coordinator_wake', 'workspace', 'watch',
+]);
+const OPEN_LIST_OVERLAY_SOURCES: ReadonlySet<string> = new Set([
+  'approval', 'session_request', 'owner_decision',
+  'confirmation_request', 'confirmation_claim', 'confirmation_review', 'confirmation_review_record',
+  'completion_evidence', 'evidence_decision', 'criteria_decision', 'criteria_authorship',
+  'ratified_intent', 'ratified_commit', 'standard_set_confirmation', 'criterion_definition', 'task_status_count',
+  // Read only by a LANDING row's summary, and a LANDING row is in no flat list.
+  'promotion', 'integration_job', 'project_open_item', 'merge_receipt', 'codebase',
+]);
+
+/** Whether every source that moved between two reads of the counters is one a `since=` read finds row by row. */
+export function openListMovesAreRowLocal(before: Record<string, string>, after: Record<string, string>): boolean {
+  for (const source of new Set([...Object.keys(before), ...Object.keys(after)])) {
+    if (before[source] === after[source]) continue;
+    if (!OPEN_LIST_ROW_SOURCES.has(source) && !OPEN_LIST_OVERLAY_SOURCES.has(source)) return false;
+  }
+  return true;
+}
+
+/** One row of the probe: the overlay's inputs, its mark, and whether it is rebuilt whatever the mark says. */
+type OpenListProbeRow = ListOverlayInput & { token: string; always: boolean; coordinator: boolean };
+
+/**
+ * The sources whose writes can move a row's overlay only through that row itself (whose token then
+ * moves too) — every other source a `since=` read accepts sends it to read the overlay of every row.
+ */
+const OPEN_LIST_ROW_ONLY_SOURCES: ReadonlySet<string> = new Set(['session', 'conversation_turn', 'workspace', 'watch']);
+
+/** The overlay of a row nothing is waiting on, which a row keeps while nothing it reads moves. */
+let emptyOverlayHash: string | undefined;
+function emptyOverlayMark(): string {
+  emptyOverlayHash ??= shortHash({
+    questionWithCoordinator: null,
+    pendingApprovals: 0,
+    waitingKind: sessionWaitingKind(0, undefined),
+    confirmationUnderReview: null,
+    ownerItems: ownerItemsForRow(undefined),
+    awaitingReplyFrom: [],
+    owesReplyTo: [],
+  } satisfies ListOverlay);
+  return emptyOverlayHash;
+}
+
+/** The overlay fields of a built row, as `listOverlay` answers them for the row. */
+function overlayOf(row: ListOverlay): ListOverlay {
+  return {
+    questionWithCoordinator: row.questionWithCoordinator,
+    pendingApprovals: row.pendingApprovals,
+    waitingKind: row.waitingKind,
+    confirmationUnderReview: row.confirmationUnderReview,
+    ownerItems: row.ownerItems,
+    awaitingReplyFrom: row.awaitingReplyFrom,
+    owesReplyTo: row.owesReplyTo,
+  };
+}
+
+function shortHash(value: unknown): string {
+  return createHash('sha256').update(JSON.stringify(value)).digest('base64url').slice(0, 22);
+}
 
 // A lease this close to expiry is not a usable CURRENT_WORK target: capability resolution and the
 // insert still have to commit before the runner can poll. The final check uses PostgreSQL's clock.
@@ -2817,6 +2918,25 @@ export class SessionsService {
     if (targetRunnerId && targetManaged.managed && !targetManaged.comingBack) {
       throw managedRunnerFailedRefusal(targetRunnerId, { type: 'WORKSPACE', id: workspaceId! }, targetManaged);
     }
+    // The same for a runner that is offline (a managed one coming up is waited for, above) or below its Keep Free
+    // (runner-disk-gate.ts): the claim would hold the child, and the agent that asked would wait on it with nothing to
+    // say why. Refused, with the reason. A workspace not named is the parent's own.
+    const spawnWorkspaceId = workspaceId ?? parent.workspaceId;
+    const spawnTarget = await this.prisma.workspace.findFirst({
+      where: { id: spawnWorkspaceId, ownerId },
+      select: {
+        workDirFreeBytes: true,
+        runner: { select: { id: true, name: true, displayName: true, status: true, minFreeDiskMb: true, ...RUNNER_BEATS } },
+      },
+    });
+    if (spawnTarget?.runner) {
+      if (!targetManaged.managed && !runnerIsOnline(spawnTarget.runner)) {
+        throw spawnRunnerOfflineRefusal(spawnTarget.runner, spawnWorkspaceId);
+      }
+      if (diskBelowFloor(spawnTarget.workDirFreeBytes, spawnTarget.runner.minFreeDiskMb)) {
+        throw spawnDiskBelowFloorRefusal(spawnTarget.runner, spawnWorkspaceId);
+      }
+    }
     const narrowedTo = await this.assertChildModeOrNarrow(ownerId, parent, dto, workspaceId, parentAnchor);
     // A root joins its own tree the first time it spawns; before that it belongs to no tree
     // and must not be counted against one. Nothing else writes this column on the parent, so
@@ -4044,7 +4164,8 @@ export class SessionsService {
     return structuredClone((await entry.rows) as T);
   }
 
-  async list(
+  /** The query `list` reads for these filters: the view it resolved to, and the row query's parts. */
+  private listShape(
     ownerId: string,
     filters: {
       runnerId?: string;
@@ -4061,9 +4182,6 @@ export class SessionsService {
       /** A workspace's Scheduled runs folder: its scheduled runs' sessions alone, which every other read leaves out. */
       scheduled?: boolean;
     },
-    /** The Open list's data version the caller read for this list (`openListVersion`). Given, a flat
-     *  Open read is shared with every other read of the same version and filters (`sharedOpenList`). */
-    version?: string,
   ) {
     // Open = neither completed nor deleted; Completed = completed but not deleted;
     // Trash = deleted, regardless of completion state. Legacy view names remain aliases.
@@ -4139,7 +4257,7 @@ export class SessionsService {
         ? Prisma.sql`COALESCE(s.completed_at, s.archived_at) DESC NULLS LAST, s.created_at DESC`
         : Prisma.sql`(s.pinned_at IS NOT NULL) DESC, COALESCE(s.last_turn_at, s.created_at) DESC, s.created_at DESC`;
     // An Ask (migration 0850) is in no session list: it is listed under /help → Your questions (help/help-ask.ts).
-    const build = () => this.listRows(ownerId, {
+    return { view, query: {
       scope: Prisma.sql`AND s.help_ask IS NULL ${runnerFilter} ${workspaceFilter} ${confinedFilter} ${tagFilter} ${projectFilter}`,
       // A scheduled task's run is listed only in its workspace's Scheduled runs folder (`scheduled`), never among
       // a workspace's own sessions (docs/scheduled-tasks-design.md §7.4): every other view, folder and project read,
@@ -4151,15 +4269,69 @@ export class SessionsService {
           : Prisma.sql`(${visibility}) AND s.run_source <> 'SCHEDULE'`,
       orderBy,
       pageLimit,
-    });
-    if (version === undefined || view !== 'open' || filters.projectId !== undefined || filters.scheduled) return build();
+    } };
+  }
+
+  async list(
+    ownerId: string,
+    filters: {
+      runnerId?: string;
+      workspaceId?: string;
+      tagId?: string;
+      projectId?: string;
+      /** Return the project's LANDING sessions too (contract §2.9 LS6). Only the `projectId`
+       *  read honours it; every flat list stays conversations. */
+      includeLanding?: boolean;
+      /** The workspaces a token confined to them may see (`workspaceConfinement`). */
+      confinedTo?: readonly string[];
+      view?: 'open' | 'completed' | 'trash' | 'active' | 'archived' | 'deleted' | 'system';
+      limit?: number;
+      /** A workspace's Scheduled runs folder: its scheduled runs' sessions alone, which every other read leaves out. */
+      scheduled?: boolean;
+    },
+    /** The Open list's data version the caller read for this list (`openListVersion`). Given, a flat
+     *  Open read is shared with every other read of the same version and filters (`sharedOpenList`). */
+    version?: string,
+  ) {
+    const { view, query } = this.listShape(ownerId, filters);
+    if (version === undefined || view !== 'open' || filters.projectId !== undefined || filters.scheduled) {
+      return this.listRows(ownerId, query);
+    }
+    const limit = typeof filters.limit === 'number' && Number.isFinite(filters.limit) && filters.limit > 0
+      ? Math.floor(filters.limit)
+      : null;
+    return (await this.sharedOpenBuild(ownerId, filters, version, limit, query)).rows;
+  }
+
+  /**
+   * One build of the flat Open list at `version`, shared by every read of it (`sharedOpenList`), the
+   * plain read's and a `since=` read's alike. A whole list (no `limit`, which is what every `since=`
+   * read asks for) is probed first (`openListProbe`), so the snapshot a `since=` read keeps of it can
+   * carry each row's mark; the probe is read before the rows, so a mark can only lag its row.
+   */
+  private sharedOpenBuild(
+    ownerId: string,
+    filters: { runnerId?: string; workspaceId?: string; tagId?: string; confinedTo?: readonly string[] },
+    version: string,
+    limit: number | null,
+    query: { scope: Prisma.Sql; visibility: Prisma.Sql; orderBy: Prisma.Sql; pageLimit: Prisma.Sql },
+  ) {
     return this.sharedOpenList(JSON.stringify([
       ownerId, version, filters.runnerId ?? null, filters.workspaceId ?? null, filters.tagId ?? null,
-      filters.confinedTo ?? null,
-      typeof filters.limit === 'number' && Number.isFinite(filters.limit) && filters.limit > 0
-        ? Math.floor(filters.limit)
-        : null,
-    ]), build);
+      filters.confinedTo ?? null, limit,
+    ]), async () => {
+      const probe = limit === null ? (await this.openListProbe(ownerId, query)).rows : undefined;
+      const rows = await this.listRows(ownerId, query);
+      const marks = new Map<string, string>();
+      if (probe) {
+        const tokens = new Map(probe.map((row) => [row.id, row.token]));
+        for (const row of rows) {
+          const token = tokens.get(row.id);
+          if (token !== undefined) marks.set(row.id, `${token}/${shortHash(overlayOf(row))}`);
+        }
+      }
+      return { rows, marks };
+    });
   }
 
   /**
@@ -4195,9 +4367,11 @@ export class SessionsService {
     // it equals the ETag the plain read sends for them. A project read reads no version and is built
     // every time, as its plain read is: its rows are a few, and the LANDING rows of the
     // landing-aware one are not sources of the version.
-    const dataVersion = filters.projectId === undefined ? await this.openListVersion(ownerId) : undefined;
-    const version = dataVersion !== undefined
-      ? openListEtag(dataVersion, {
+    const parts = filters.projectId === undefined
+      ? await readOpenListVersionParts(this.prisma, ownerId, Date.now())
+      : undefined;
+    const version = parts !== undefined
+      ? openListEtag(parts.version, {
           runnerId: filters.runnerId,
           workspaceId: filters.workspaceId,
           tagId: filters.tagId,
@@ -4209,17 +4383,41 @@ export class SessionsService {
     if (since && version !== undefined && this.openListDelta.unchanged(ownerId, scope, since, version)) {
       return { full: false as const, upserts: [], removedIds: [], cursor: since };
     }
-    const rows = await this.list(ownerId, { ...filters, view: 'open' }, dataVersion);
     // A runner's heartbeat restamps every row it hosts every 30 seconds; with a few runners that
     // alone would resend most of the list on most polls. The clients that read this delta draw
     // nothing from the raw timestamp — what it decides (the queue gate, capabilities) are fields of
     // their own and still count — so it is left out of what counts as a change, and a row sent
     // here may carry an older heartbeat than the plain list would.
-    const delta = this.openListDelta.answer(
-      ownerId, scope, rows, since,
-      (row) => row.assignedRunner ? { ...row, assignedRunner: { ...row.assignedRunner, lastHeartbeatAt: null } } : row,
-      version,
-    );
+    const fingerprint = (row: Awaited<ReturnType<SessionsService['listRows']>>[number]) =>
+      row.assignedRunner ? { ...row, assignedRunner: { ...row.assignedRunner, lastHeartbeatAt: null } } : row;
+    let delta;
+    if (parts === undefined) {
+      // A project read: built every time, as its plain read is.
+      const rows = await this.list(ownerId, { ...filters, view: 'open' });
+      delta = this.openListDelta.answer(ownerId, scope, rows, since, fingerprint);
+    } else {
+      const { query } = this.listShape(ownerId, { ...filters, view: 'open' });
+      const base = since ? this.openListDelta.base(ownerId, scope, since) : undefined;
+      // The cursor's snapshot stands, but the account moved: when everything that moved is a source
+      // found row by row, and nothing the probe cannot see moved, only the rows whose mark moved are
+      // built (`openListFromBase`). Shared like a whole build, by every device on this cursor.
+      if (base?.marks && base.marks.steady === parts.steady && openListMovesAreRowLocal(base.marks.epochs, parts.epochs)) {
+        delta = await this.sharedOpenList(
+          JSON.stringify(['since', ownerId, version, scope, since]),
+          () => this.openListFromBase(ownerId, scope, since!, base, query, parts, version, fingerprint),
+        );
+      } else {
+        // A whole build, marked so that the next read can build only what moves: the same build
+        // every read of this list at this version shares, the plain one's included.
+        const built = await this.sharedOpenBuild(ownerId, filters, parts.version, null, query);
+        // No overlay inputs: a shared build cannot say which deadlines its overlay was read after,
+        // so the first read from its cursor reads every row's overlay again.
+        delta = this.openListDelta.answer(
+          ownerId, scope, built.rows, since, fingerprint, version,
+          { epochs: parts.epochs, steady: parts.steady, overlayInputs: '', rows: built.marks },
+        );
+      }
+    }
     if (delta.full) return delta;
     // Rows have their `id` rewritten to the public spelling on the way out; bare id lists are not
     // walked by that pass, so they are spelled here to match.
@@ -4228,6 +4426,225 @@ export class SessionsService {
       removedIds: delta.removedIds.map(uuidToBase62),
       ...(delta.order ? { order: delta.order.map(uuidToBase62) } : {}),
     };
+  }
+
+  /**
+   * A `since=` read answered against its cursor's snapshot by building only the rows that moved.
+   *
+   * The probe reads every row of the list, but only what a row's mark is made of (its own row
+   * version and the few values it reads from other tables), and `listOverlay` reads each row's
+   * waiting cards and decisions by session id. A row is built when its mark differs from the one
+   * the snapshot holds, when it is new to the list, or when it is queued (a queued row's gate counts
+   * other sessions and runners, which no mark of its own can see). Every other row keeps the hash the
+   * snapshot holds: nothing it reads has moved since that snapshot's marks were read, and those were
+   * read before its rows were built, so they can only lag the rows, never cover a write they miss.
+   * With nothing moved in this list, nothing is built and the answer is an empty delta.
+   */
+  private async openListFromBase(
+    ownerId: string,
+    scope: string,
+    since: string,
+    base: OpenListBase,
+    query: { scope: Prisma.Sql; visibility: Prisma.Sql; orderBy: Prisma.Sql; pageLimit: Prisma.Sql },
+    parts: OpenListVersionParts,
+    version: string | undefined,
+    fingerprint: (row: Awaited<ReturnType<SessionsService['listRows']>>[number]) => unknown,
+  ) {
+    const { rows: probe, questions } = await this.openListProbe(ownerId, query);
+    const held = base.marks!;
+    const tokenOf = (mark: string | undefined) => mark?.slice(0, mark.indexOf('/'));
+    const overlayPartOf = (mark: string | undefined) => mark?.slice(mark.indexOf('/') + 1);
+    const moved = new Set(probe
+      .filter((row) => row.always || !base.hashes.has(row.id) || tokenOf(held.rows.get(row.id)) !== row.token)
+      .map((row) => row.id));
+    // A row's overlay is read again when something it reads may have moved: every row's, when any
+    // source but a row's own moved, a deadline passed, or a question held with a coordinator moved
+    // (`questions`: what decides whether it is held reads that coordinator's row and turn); otherwise
+    // only the rows that moved, the rows something was already waiting on, and the coordinators',
+    // whose decisions come from project tables. A row nothing waited on gains a card or a decision
+    // only through a write of one of those sources, or of its own row.
+    const overlayInputs = shortHash([parts.deadlinesPassed, questions]);
+    const everyOverlay = held.overlayInputs !== overlayInputs || Object.keys({ ...held.epochs, ...parts.epochs })
+      .some((source) => held.epochs[source] !== parts.epochs[source] && !OPEN_LIST_ROW_ONLY_SOURCES.has(source));
+    const empty = emptyOverlayMark();
+    const reread = everyOverlay
+      ? probe
+      : probe.filter((row) => moved.has(row.id) || row.coordinator || overlayPartOf(held.rows.get(row.id)) !== empty);
+    const overlay = reread.length === 0 ? new Map<string, ListOverlay>() : await this.listOverlay(ownerId, reread);
+    const marks = new Map(probe.map((row) => [
+      row.id,
+      `${row.token}/${overlay.has(row.id) ? shortHash(overlay.get(row.id)) : overlayPartOf(held.rows.get(row.id))}`,
+    ]));
+    for (const row of probe) {
+      if (!moved.has(row.id) && held.rows.get(row.id) !== marks.get(row.id)) moved.add(row.id);
+    }
+    const rebuilt = moved.size === 0 ? [] : await this.listRows(ownerId, {
+      ...query,
+      scope: Prisma.sql`${query.scope} AND s.id = ANY(${[...moved]}::uuid[])`,
+      pageLimit: Prisma.empty,
+    }, overlay);
+    // A row that moved and left the list between the probe and its build is gone: it is not listed.
+    const built = new Set(rebuilt.map((row) => row.id));
+    const left = new Set([...moved].filter((id) => !built.has(id)));
+    const order = probe.map((row) => row.id).filter((id) => !left.has(id));
+    return this.openListDelta.answerFrom(
+      ownerId, scope, since, base, order, rebuilt, fingerprint, version,
+      { epochs: parts.epochs, steady: parts.steady, overlayInputs, rows: marks },
+    );
+  }
+
+  /**
+   * Every row of a list, read for what a `since=` read decides from without building it: the inputs
+   * of `listOverlay`, and a token that moves whenever anything the row query reads for the row moves
+   * (see OPEN_LIST_ROW_SOURCES). The token is the row's own version (ctid and xmin, which every write
+   * of the row moves, a raw one included), the values it reads from its task, its context task and
+   * its root, the turn in flight, the SubAgent title and how many of its jobs are fresh; and, from
+   * a few reads over the account, the project each of its membership candidates names (title and
+   * status), its workspace's name, model and effort, and whether it waits on a watch, is shared or
+   * has a guest. A row whose token names something those reads did not return — or that is queued,
+   * or whose root is a landing — is built on every read (`always`).
+   */
+  private async openListProbe(
+    ownerId: string,
+    query: { scope: Prisma.Sql; visibility: Prisma.Sql; orderBy: Prisma.Sql },
+  ): Promise<{ rows: OpenListProbeRow[]; questions: string }> {
+    const o = Prisma.sql`${ownerId}::uuid`;
+    type Probed = ListOverlayInput & {
+      own: string;
+      workspaceId: string | null;
+      runningBgJobs: string[];
+      runningBgJobActivity: Prisma.JsonValue;
+      taskTitle: string | null;
+      taskProjectId: string | null;
+      contextProjectId: string | null;
+      rootId: string | null;
+      rootKind: string | null;
+      rootTaskProjectId: string | null;
+      rootContextProjectId: string | null;
+      turnAt: Date | null;
+      subagentTitle: string | null;
+    };
+    const rows = await this.prisma.$queryRaw<Probed[]>(Prisma.sql`${Prisma.raw(PREPARED_STATEMENT)}
+      SELECT
+        s.id, s.status,
+        s.engine_turn_active AS "engineTurnActive",
+        s.task_id AS "taskId",
+        s.running_bg_shells AS "runningBgShells",
+        cardinality(s.running_subagents)::int AS "runningSubagentCount",
+        s.running_bg_jobs AS "runningBgJobs",
+        s.running_bg_job_activity AS "runningBgJobActivity",
+        s.workspace_id AS "workspaceId",
+        s.ctid::text || ':' || s.xmin::text AS own,
+        t.title AS "taskTitle",
+        t.project_id AS "taskProjectId",
+        ctx.project_id AS "contextProjectId",
+        root.id AS "rootId",
+        root.kind::text AS "rootKind",
+        rt.project_id AS "rootTaskProjectId",
+        rctx.project_id AS "rootContextProjectId",
+        CASE WHEN s.status IN ('RUNNING', 'PENDING') THEN (
+          SELECT max(ct.delivered_at) FROM conversation_turn ct
+           WHERE ct.session_id = s.id AND ct.answered_at IS NULL
+        ) END AS "turnAt",
+        CASE WHEN cardinality(s.running_subagents) > 0 THEN (
+          SELECT NULLIF(btrim(tc.input->>'description'), '')
+            FROM tool_call tc
+           WHERE tc.session_id = s.id
+             AND tc.tool_use_id = s.running_subagents[cardinality(s.running_subagents)]
+           ORDER BY tc.started_at DESC NULLS LAST
+           LIMIT 1
+        ) END AS "subagentTitle"
+      FROM session s
+      LEFT JOIN task t ON t.id = s.task_id
+      LEFT JOIN task ctx ON ctx.id = s.context_task_id
+      LEFT JOIN session root ON root.id = s.root_session_id AND root.id <> s.id
+      LEFT JOIN task rt ON rt.id = root.task_id
+      LEFT JOIN task rctx ON rctx.id = root.context_task_id
+      WHERE s.owner_id = ${o}
+        ${query.scope}
+        AND (${query.visibility})
+      ORDER BY ${query.orderBy}
+    `);
+    const [account] = await this.prisma.$queryRaw<Array<{
+      projects: Array<[string, string, string, string | null]> | null;
+      wakes: Array<[string, string]> | null;
+      workspaces: Array<[string, string, string | null, string | null]> | null;
+      watching: string[] | null;
+      shared: string[] | null;
+      guests: string[] | null;
+      questions: unknown;
+    }>>(Prisma.sql`${Prisma.raw(PREPARED_STATEMENT)}
+      SELECT
+        (SELECT json_agg(json_build_array(p.id, p.title, p.status, p.coordinator_session_id))
+           FROM project p WHERE p.owner_id = ${o}) AS projects,
+        (SELECT json_agg(json_build_array(w.session_id, w.project_id))
+           FROM project_coordinator_wake w JOIN project p ON p.id = w.project_id
+          WHERE p.owner_id = ${o} AND w.status = 'SESSION_OPENED' AND w.session_id IS NOT NULL) AS wakes,
+        (SELECT json_agg(json_build_array(a.id, a.name, a.model, a.effort))
+           FROM workspace a WHERE a.owner_id = ${o}) AS workspaces,
+        (SELECT json_agg(DISTINCT x.observer_session_id)
+           FROM watch x
+          WHERE x.owner_id = ${o} AND x.state = 'ACTIVE' AND x.action = 'RESUME_SESSION'
+            AND x.observer_session_id IS NOT NULL) AS watching,
+        (SELECT json_agg(DISTINCT sl.session_id)
+           FROM share_link sl
+          WHERE sl.owner_id = ${o} AND sl.session_id IS NOT NULL AND sl.revoked_at IS NULL
+            AND (sl.expires_at IS NULL OR sl.expires_at > now())) AS shared,
+        (SELECT json_agg(DISTINCT sg.session_id)
+           FROM session_guest sg WHERE sg.owner_id = ${o} AND sg.removed_at IS NULL) AS guests,
+        -- What decides whether a pending question is held with its coordinator (questionHolds): the
+        -- request, the recipient's row and the turn it was delivered in. Only an OPEN request can be
+        -- held; one leaving OPEN is a session_request write, after which every overlay is read again.
+        -- (Every index of session_request is partial on OPEN, which keeps this a scan of the few open.)
+        (SELECT json_agg(json_build_array(r.id, r.reply_by, a.status, c.ctid::text || ':' || c.xmin::text,
+                                          ct.status, ct.delivered_at) ORDER BY r.id)
+           FROM session_request r
+           LEFT JOIN approval a ON a.id = r.approval_id
+           LEFT JOIN session c ON c.id = r.to_session_id
+           LEFT JOIN conversation_turn ct ON ct.id = r.turn_id
+          WHERE r.state = 'OPEN' AND r.kind = 'RUN_QUESTION' AND r.owner_id = ${o}) AS questions
+    `);
+    const projects = new Map((account.projects ?? []).map(([id, title, status]) => [id, [title, status]]));
+    const coordinatorOf = new Map((account.projects ?? []).flatMap(([id, , , session]) => session ? [[session, id] as const] : []));
+    const wakeOf = new Map((account.wakes ?? []).map(([session, project]) => [session, project]));
+    const workspaces = new Map((account.workspaces ?? []).map(([id, name, model, effort]) => [id, [name, model, effort]]));
+    const watching = new Set(account.watching ?? []);
+    const shared = new Set(account.shared ?? []);
+    const guests = new Set(account.guests ?? []);
+    const nowMs = Date.now();
+    return { questions: shortHash(account.questions ?? null), rows: rows.map((row) => {
+      let unknown = false;
+      const project = (id: string | null | undefined) => {
+        if (id == null) return null;
+        const found = projects.get(id);
+        if (!found) unknown = true;
+        return [id, found];
+      };
+      const workspace = row.workspaceId == null ? null : workspaces.get(row.workspaceId);
+      if (row.workspaceId != null && !workspace) unknown = true;
+      const token = shortHash([
+        row.own, row.taskTitle, row.turnAt, row.subagentTitle,
+        freshRunningBgJobs(row.runningBgJobs, row.runningBgJobActivity, nowMs).length,
+        workspace,
+        // Every project a membership candidate of the row or its root can name.
+        project(row.taskProjectId), project(row.contextProjectId),
+        project(coordinatorOf.get(row.id)), project(wakeOf.get(row.id)),
+        row.rootId, project(row.rootTaskProjectId), project(row.rootContextProjectId),
+        project(row.rootId ? coordinatorOf.get(row.rootId) : null), project(row.rootId ? wakeOf.get(row.rootId) : null),
+        watching.has(row.id), shared.has(row.id), guests.has(row.id),
+      ]);
+      return {
+        id: row.id,
+        status: row.status,
+        engineTurnActive: row.engineTurnActive,
+        taskId: row.taskId,
+        runningBgShells: row.runningBgShells,
+        runningSubagentCount: row.runningSubagentCount,
+        token,
+        always: unknown || row.status === 'PENDING' || row.rootKind === 'LANDING',
+        coordinator: coordinatorOf.has(row.id),
+      };
+    }) };
   }
 
   /**
@@ -4263,6 +4680,8 @@ export class SessionsService {
       orderBy: Prisma.Sql;
       pageLimit: Prisma.Sql;
     },
+    /** These rows' `listOverlay`, when the caller already read it. */
+    overlay?: ReadonlyMap<string, ListOverlay>,
   ) {
     // Raw query so the (potentially multi-KB) last-reply preview is truncated in SQL —
     // only ~200 chars per row ever leave the DB. It also omits big unused columns like
@@ -4762,6 +5181,21 @@ export class SessionsService {
         queuedRunnerUpdate: queuedRunnerUpdateOf(r),
       }),
     );
+    // What each row says about who is waiting on whom (`listOverlay`): given by a caller that already
+    // read it for these rows (`listOpenSince`), read here otherwise.
+    const given = overlay ?? new Map<string, ListOverlay>();
+    const missing = rows.filter((r) => !given.has(r.id));
+    const read = missing.length === 0 ? new Map<string, ListOverlay>() : await this.listOverlay(ownerId, missing);
+    return sessions.map((s) => ({ ...s, ...(given.get(s.id) ?? read.get(s.id)!) }));
+  }
+
+  /**
+   * The part of each list row that is not read from the row query: the approval cards and owner
+   * decisions waiting on it, the confirmation under review, and who it waits on for a reply. Every
+   * one of them is read by session id, so `listOpenSince` reads them for a whole list while building
+   * only the rows that moved, and compares them row by row.
+   */
+  private async listOverlay(ownerId: string, inputs: ListOverlayInput[]): Promise<Map<string, ListOverlay>> {
     // A turn blocked on a permission prompt keeps the session generating, so the list can't tell
     // "running" from "waiting for approval" without this count. A conversation can be holding a
     // card in two ways, and it has to be one of them to have one: its turn is live — a generating
@@ -4777,11 +5211,10 @@ export class SessionsService {
     // a shell up — a handful even on a busy account — so this stays a lookup. The turn half counts
     // every PENDING card of a generating session except a job's, which only its live job holds open,
     // and the door re-reads the facts.
-    const generating = new Set(sessions.filter(isSessionGenerating).map((s) => s.id));
-    // Off the raw rows, not the mapped ones: the shell ids are read here and deliberately not
-    // shipped to the client, so they do not survive into the payload above.
+    const generating = new Set(inputs.filter(isSessionGenerating).map((s) => s.id));
+    // The shell ids are read here and deliberately not shipped to the client.
     const shells = new Map(
-      rows.filter((r) => r.runningBgShells.length > 0).map((r) => [r.id, r.runningBgShells]),
+      inputs.filter((r) => r.runningBgShells.length > 0).map((r) => [r.id, r.runningBgShells]),
     );
     const candidates = [...new Set([...generating, ...shells.keys()])];
     const asked = candidates.length === 0
@@ -4793,7 +5226,7 @@ export class SessionsService {
     // The third class: the cards of a SubAgent still running, which its child engine reads whatever the
     // parent's turn is doing (docs/subagent-design.md §5.3). Its candidates are the sessions not generating
     // with a SubAgent in flight (`runningSubagentCount`), a handful at most.
-    const withSubagents = rows.filter((r) => !generating.has(r.id) && r.runningSubagentCount > 0).map((r) => r.id);
+    const withSubagents = inputs.filter((r) => !generating.has(r.id) && r.runningSubagentCount > 0).map((r) => r.id);
     const subagentCards = withSubagents.length === 0
       ? []
       : await liveSubagentCards(this.prisma, { sessionId: { in: withSubagents } });
@@ -4804,7 +5237,7 @@ export class SessionsService {
         .filter((card) => !asked.some((a) => a.id === card.id))
         .map((card) => ({ ...card, backgroundJobId: null })),
     ];
-    const heldQuestions = await questionsWithCoordinator(this.prisma, sessions.filter(s => s.taskId).map(s => s.id));
+    const heldQuestions = await questionsWithCoordinator(this.prisma, inputs.filter(s => s.taskId).map(s => s.id));
     const byId = new Map<string, number>();
     for (const card of await visibleQuestions(this.prisma, cards)) {
       // A job's card is read by its job, not the turn: it counts while the job is up, as the card
@@ -4822,22 +5255,21 @@ export class SessionsService {
     // A row whose only question is an owner confirmation also says which, so it can read "Waiting
     // for your confirmation" rather than "Waiting for approval" (`sessionWaitingKind`).
     const decisions = await readOwnerDecisionsBySession(this.prisma, ownerId, {
-      sessionIds: sessions.map((s) => s.id),
+      sessionIds: inputs.map((s) => s.id),
     });
     // Who is waiting on whose reply (session-request.ts, contract §6): on each row, the sessions it
     // asked and still waits on, and the sessions waiting on it.
-    const requests = await readOpenRequestPeers(this.prisma, ownerId, sessions.map((s) => s.id));
+    const requests = await readOpenRequestPeers(this.prisma, ownerId, inputs.map((s) => s.id));
     // The confirmation still with its reviewer, which the row says instead of counting it
     // (docs/owner-confirmation-review-contract.md §5 N3).
     const underReview = await readConfirmationsUnderReview(this.prisma, ownerId, {
-      sessionIds: sessions.map((s) => s.id),
+      sessionIds: inputs.map((s) => s.id),
     });
-    return sessions.map((s) => {
+    return new Map(inputs.map((s) => {
       const approvals = byId.get(s.id) ?? 0;
       const waiting = decisions.get(s.id);
       const peers = requests.get(s.id);
-      return {
-        ...s,
+      return [s.id, {
         questionWithCoordinator: heldQuestions.get(s.id) ?? null,
         pendingApprovals: approvals + (waiting?.count ?? 0),
         waitingKind: sessionWaitingKind(approvals, waiting),
@@ -4849,8 +5281,8 @@ export class SessionsService {
         ownerItems: ownerItemsForRow(waiting),
         awaitingReplyFrom: peers?.awaitingReplyFrom ?? [],
         owesReplyTo: peers?.owesReplyTo ?? [],
-      };
-    });
+      }];
+    }));
   }
 
   /**

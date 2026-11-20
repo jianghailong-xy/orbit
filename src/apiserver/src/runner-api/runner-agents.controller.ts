@@ -19,6 +19,7 @@ import { CurrentRunner } from './current-runner.decorator';
 import { RunnerAuthGuard } from './runner-auth.guard';
 import { RunnerOrchestrationAuthorizer } from './runner-orchestration-authorizer';
 import { namesWorkspaceCardField, requireWorkspaceWriteApproval } from './runner-workspace-approval';
+import { worktreeNeedsGit } from '../workspaces/worktree-needs-git';
 
 // The exact create contract shared by the runner HTTP route, MCP agent_create and
 // `orbit agent create`. Keep this as one literal: runner-go's parity test reads it and compares all
@@ -147,7 +148,10 @@ export class RunnerAgentsController {
     const sanitized = sanitizeWorkspaceWrite(body);
     if (namesWorkspaceCardField(sanitized)) {
       // Another account's workspace is not found, card or no card, before anything is said about one.
-      await this.workspaces.get(runner.ownerId, id);
+      const current = await this.workspaces.get(runner.ownerId, id);
+      // Refused before the owner is asked to approve a write that would be refused anyway.
+      const needsGit = worktreeNeedsGit(current, sanitized);
+      if (needsGit) throw needsGit;
       await requireWorkspaceWriteApproval(this.prisma, scope, id, sanitized);
     }
     const workspace = await this.workspaces.update(runner.ownerId, id, sanitized as UpdateWorkspaceDto);

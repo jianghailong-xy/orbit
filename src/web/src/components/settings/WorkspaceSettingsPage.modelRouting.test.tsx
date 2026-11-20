@@ -9,11 +9,10 @@ import { meQuery, type UserPreferences } from '../../lib/queries';
 import { SettingsWorkspacePage } from './WorkspaceSettingsPage';
 
 /**
- * Smart model selection on the workspace's Settings page (docs/model-routing-design.md §9; the web
- * mock §1): a switch under Worktree isolation, off until the owner turns it on, saved on its own as
- * the workspace's `modelRouting` — and the read-only Model line saying, once it is on, that
- * the model it names is only what the sessions opened by hand start on. All of it only while the
- * account's switch (`preferences.modelRouting`) is on; off — the default — the Agent has none of it.
+ * Smart model selection on the workspace's Settings page (docs/model-routing-design.md §9): the Agent
+ * has no switch and no engine list of its own any more (owner, 2026-11-20). The account's switch
+ * (`preferences.modelRouting`) alone decides, and while it is on the read-only Model line says that
+ * the model it names is only what the sessions opened by hand start on.
  */
 
 vi.mock('../../api', async (original) => ({ ...(await original<typeof import('../../api')>()), api: vi.fn() }));
@@ -45,12 +44,6 @@ const workspace = (over: Record<string, unknown> = {}) => ({
 });
 
 const SWITCH_LABEL = 'Smart model selection for tasks';
-// The row says it short (board-5); the whole explanation is the control's tooltip.
-const SWITCH_DESC = 'Task runs use the suggested tier’s model and effort.';
-const SWITCH_TOOLTIP =
-  'Task runs use the model and effort of the tier suggested for the task, and go one tier up after a failed run. ' +
-  "Tasks with no suggestion start on this Agent's model. A model pinned on a task always wins. " +
-  'Sessions you open yourself are not affected.';
 // The engine and the credential the workspace's last session ran on, said as they are (board 7 ②), and
 // the model by its catalogue name.
 const MODEL_LINE_OFF =
@@ -178,14 +171,12 @@ const rowOf = (title: string) => {
   if (!row) throw new Error(`no "${title}" row`);
   return row;
 };
-const smartRow = () => rowOf(SWITCH_LABEL);
-const smartSwitch = () => smartRow().querySelector<HTMLElement>('[role="switch"]')!;
 const worktreeSwitch = () => rowOf('Worktree isolation').querySelector<HTMLElement>('[role="switch"]')!;
 const modelLine = () => squash(rowOf('Model').querySelector('.rd-form-derived')?.textContent);
 
 describe('smart model selection on the Agent', () => {
   it('has no Optimize For of its own: it is the account\'s, on Settings → General', async () => {
-    const { writes } = mount(workspace({ modelRouting: true }));
+    const { writes } = mount(workspace());
     await openEditor();
     expect(page().querySelector('[aria-label="Optimize for"]')).toBeNull();
     expect(page().querySelector('[aria-label="Optimize For"]')).toBeNull();
@@ -193,116 +184,27 @@ describe('smart model selection on the Agent', () => {
     expect(writes.map((w) => w.body)).toEqual([{ enableWorktree: false }]);
   });
 
-  it('sits under Worktree isolation, off until it is turned on, with the task routing explanation', async () => {
-    mount(workspace());
+  it('has no switch and no engine list of its own: the account\'s switch alone decides', async () => {
+    // An Agent that had its own switch on and another engine ticked, from before both went.
+    const { writes } = mount(workspace({ modelRouting: true, modelRoutingProviders: ['codex'] }));
     await openEditor();
 
-    expect(settingLabels()).toEqual(['Worktree isolation', SWITCH_LABEL]);
-    expect(smartRow().querySelector('.settings-row-description')?.textContent).toBe(SWITCH_DESC);
-    // The whole explanation, where the row shortens it.
-    expect(smartRow().querySelector('.settings-row-control')?.getAttribute('title')).toBe(SWITCH_TOOLTIP);
-    expect(smartSwitch().getAttribute('aria-checked')).toBe('false');
-    // Off, the Model line is today's.
-    expect(modelLine()).toBe(MODEL_LINE_OFF);
-  });
-
-  it('turned on, says task runs pick their own model, and saves modelRouting: true alone', async () => {
-    const { writes } = mount(workspace());
-    await openEditor();
-
-    await click(smartSwitch());
-    expect(smartSwitch().getAttribute('aria-checked')).toBe('true');
+    expect(settingLabels()).toEqual(['Worktree isolation']);
+    expect(sessions().textContent).not.toContain(SWITCH_LABEL);
+    expect(sessions().textContent).not.toContain('Engines it may use');
+    expect(sessions().querySelector('[role="checkbox"]')).toBeNull();
+    // The account's switch is on, so task runs pick their own model.
     expect(modelLine()).toBe(MODEL_LINE_ON);
     // The bold model is still the one sessions opened by hand start on.
     expect(rowOf('Model').querySelector('.rd-form-derived b')?.textContent).toBe('Opus 5.5');
-    expect(writes).toEqual([{ method: 'PATCH', path: `/workspaces/${WORKSPACE_ID}`, body: { modelRouting: true } }]);
-  });
 
-  it('opens on for an Agent that has it, and turning it off saves modelRouting: false', async () => {
-    const { writes } = mount(workspace({ modelRouting: true }));
-    await openEditor();
-
-    expect(smartSwitch().getAttribute('aria-checked')).toBe('true');
-    expect(modelLine()).toBe(MODEL_LINE_ON);
-
-    await click(smartSwitch());
-    expect(smartSwitch().getAttribute('aria-checked')).toBe('false');
-    expect(modelLine()).toBe(MODEL_LINE_OFF);
-    expect(writes.map((w) => w.body)).toEqual([{ modelRouting: false }]);
-  });
-});
-
-const ENGINES_NOTE =
-  "Only this agent's own engine is ticked by default, so a task never moves to another engine unless you tick it here.";
-
-/** An engine's name on its chip, without the note beside the agent's own. */
-const engineName = (tick: HTMLElement) => {
-  const label = tick.closest('label')?.cloneNode(true) as HTMLElement | undefined;
-  label?.querySelectorAll('.rd-engine-own').forEach((note) => note.remove());
-  return label?.textContent;
-};
-const engineGroup = () => sessions().querySelector<HTMLElement>('.rd-route-engines');
-/** The engines smart selection may use, as each one's tick reads: its CLI's name, whether it says it
- *  is the agent's own, whether it is checked, and whether it is disabled. */
-const engines = () =>
-  [...(engineGroup()?.querySelectorAll<HTMLElement>('.rd-engines-list [role="checkbox"]') ?? [])].map((tick) => ({
-    engine: engineName(tick),
-    own: !!tick.closest('label')?.querySelector('.rd-engine-own'),
-    ticked: tick.getAttribute('aria-checked') === 'true',
-    fixed: tick.getAttribute('aria-disabled') === 'true',
-  }));
-const engineInput = (engine: string) =>
-  [...engineGroup()!.querySelectorAll<HTMLElement>('.rd-engines-list [role="checkbox"]')].find(
-    (tick) => engineName(tick) === engine,
-  )!;
-
-describe('the engines smart selection may use', () => {
-  it('sit under smart model selection, with only the agent\'s own engine ticked, and that one fixed', async () => {
-    mount(workspace());
-    await openEditor();
-
-    expect(engineGroup()?.querySelector('.rd-engines-label')?.textContent).toBe('Engines it may use');
-    expect(engines()).toEqual([
-      { engine: 'Claude Code', own: true, ticked: true, fixed: true },
-      { engine: 'Codex', own: false, ticked: false, fixed: false },
-    ]);
-    expect(engineGroup()?.querySelector('.rd-engine-own')?.textContent).toBe("this agent's engine");
-    expect(squash(engineGroup()?.querySelector('.rd-engines-note')?.textContent)).toBe(ENGINES_NOTE);
-  });
-
-  it('ticking another engine saves it as modelRoutingProviders, and nothing else', async () => {
-    const { writes } = mount(workspace());
-    await openEditor();
-
-    await click(engineInput('Codex'));
-    expect(engines()[1]).toEqual({ engine: 'Codex', own: false, ticked: true, fixed: false });
-    expect(writes).toEqual([
-      { method: 'PATCH', path: `/workspaces/${WORKSPACE_ID}`, body: { modelRoutingProviders: ['codex'] } },
-    ]);
-  });
-
-  it('fixes the engine the agent runs on, and unticking the other one takes it off the list', async () => {
-    const { writes } = mount(workspace({ lastProvider: 'codex', modelRoutingProviders: ['claude'] }));
-    await openEditor();
-
-    // The agent's own engine comes first.
-    expect(engines()).toEqual([
-      { engine: 'Codex', own: true, ticked: true, fixed: true },
-      { engine: 'Claude Code', own: false, ticked: true, fixed: false },
-    ]);
-    await click(engineInput('Claude Code'));
-    expect(writes.map((w) => w.body)).toEqual([{ modelRoutingProviders: [] }]);
-  });
-
-  it('leaves the list as it was when another setting is saved', async () => {
-    const { writes } = mount(workspace({ modelRoutingProviders: ['codex'] }));
-    await openEditor();
+    // Saving another row writes that row alone.
     await click(worktreeSwitch());
     expect(writes.map((w) => w.body)).toEqual([{ enableWorktree: false }]);
   });
 });
 
-describe('the engines, never the keys (board 7)', () => {
+describe('the model line names the key (board 7)', () => {
   const deepseekKey = (slug: string, label: string) => ({
     slug,
     label,
@@ -313,35 +215,27 @@ describe('the engines, never the keys (board 7)', () => {
     engines: ['claude', 'opencode', 'dsh'],
   });
 
-  it('lists the engine a workspace last ran on a key, and says the key in the model line', async () => {
+  it('says the key a workspace last ran on', async () => {
     mount(workspace({ lastEngine: 'claude', lastProvider: 'deepseek' }), { modelRouting: true }, [deepseekKey('deepseek', 'DeepSeek')]);
     await openEditor();
-    expect(engines().map(({ engine, own }) => ({ engine, own }))).toEqual([
-      { engine: 'Claude Code', own: true },
-      { engine: 'Codex', own: false },
-    ]);
     expect(modelLine()).toBe(
-      'Model DeepSeek V4 Pro · Claude Code via DeepSeek on this runner. Pick a different one from the session composer.',
+      'Task runs: model picked per task by smart selection. Sessions you open yourself: DeepSeek V4 Pro · ' +
+        'Claude Code via DeepSeek on this runner.',
     );
   });
 
-  it('locks DeepSeek Harness for a Harness workspace, and leaves its key out of the engines', async () => {
+  it('says DeepSeek Harness and its key for a Harness workspace', async () => {
     const runner = {
       ...RUNNER,
       modelCatalog: { ...RUNNER.modelCatalog, dsh: [{ value: '["deepseek", "deepseek-v4-pro"]', label: 'DeepSeek V4 Pro' }] },
     } as Runner;
     mount(
       workspace({ lastEngine: 'dsh', lastProvider: 'deepseek-2' }),
-      { modelRouting: true },
+      { modelRouting: false },
       [deepseekKey('deepseek', 'DeepSeek'), deepseekKey('deepseek-2', 'DeepSeek 2')],
       runner,
     );
     await openEditor();
-    expect(engines()).toEqual([
-      { engine: 'DeepSeek Harness', own: true, ticked: true, fixed: true },
-      { engine: 'Claude Code', own: false, ticked: false, fixed: false },
-      { engine: 'Codex', own: false, ticked: false, fixed: false },
-    ]);
     expect(modelLine()).toBe(
       'Model DeepSeek V4 Pro · DeepSeek Harness via DeepSeek 2 on this runner. Pick a different one from the session composer.',
     );
@@ -349,24 +243,15 @@ describe('the engines, never the keys (board 7)', () => {
 });
 
 describe('with the account switch off', () => {
-  const cases: Array<[string, UserPreferences]> = [
-    ['preferences with modelRouting explicitly off', { modelRouting: false }],
-  ];
-  for (const [what, preferences] of cases) {
-    it(`(${what}) nothing of smart selection shows, and saving another row leaves the Agent's own setting as it was`, async () => {
-      // An Agent that had it on, with another engine ticked, before the account turned it off.
-      const { writes } = mount(workspace({ modelRouting: true, modelRoutingProviders: ['codex'] }), preferences);
-      await openEditor();
+  it('the Model line is today\'s, and nothing of smart selection shows', async () => {
+    const { writes } = mount(workspace({ modelRouting: true, modelRoutingProviders: ['codex'] }), { modelRouting: false });
+    await openEditor();
 
-      expect(settingLabels()).toEqual(['Worktree isolation']);
-      expect(engineGroup()).toBeNull();
-      expect(sessions().textContent).not.toContain(SWITCH_LABEL);
-      expect(sessions().textContent).not.toContain('Engines it may use');
-      // The Model line is today's, though the Agent's own switch is on.
-      expect(modelLine()).toBe(MODEL_LINE_OFF);
+    expect(settingLabels()).toEqual(['Worktree isolation']);
+    expect(sessions().textContent).not.toContain(SWITCH_LABEL);
+    expect(modelLine()).toBe(MODEL_LINE_OFF);
 
-      await click(worktreeSwitch());
-      expect(writes.map((w) => w.body)).toEqual([{ enableWorktree: false }]);
-    });
-  }
+    await click(worktreeSwitch());
+    expect(writes.map((w) => w.body)).toEqual([{ enableWorktree: false }]);
+  });
 });
