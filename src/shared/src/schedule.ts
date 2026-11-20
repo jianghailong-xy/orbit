@@ -1025,6 +1025,106 @@ function everyRuleText(rule: Extract<ScheduleRule, { kind: 'EVERY' }>): string {
   return scheduleFill(e.days, { rule: text, days: named });
 }
 
+/**
+ * The planned end and the missed-slot line (design §8.5, §9.2). Kept beside SCHEDULE_EVERY_COPY, outside
+ * SCHEDULE_COPY, until the clients that hold SCHEDULE_COPY to the contract word for word carry it too.
+ */
+export const SCHEDULE_END_COPY = {
+  until: 'until {when}',
+  today: '{time} today',
+  runLeft: '1 run left',
+  runsLeft: '{count} runs left',
+  missed: '{count} slots missed, {from}–{to}',
+  endLabel: 'Ends',
+  extend: 'Extend the end',
+  remove: 'Remove the end',
+  extendAsk: '{title}: extend the end',
+  removeAsk: '{title}: remove the end',
+} as const;
+
+/**
+ * A schedule's planned end as one line: "until 18:00 today", "until Nov 25", "3 runs left", or both joined by the
+ * separator when it has an end by time and one by count. Null when it has no end.
+ */
+export function scheduleEndText(
+  schedule: Pick<ScheduleView, 'endAt' | 'maxRuns' | 'runsLeft'>,
+  now: Date,
+  timezone: string,
+): string | null {
+  const e = SCHEDULE_END_COPY;
+  const parts: string[] = [];
+  if (schedule.endAt) {
+    const at = new Date(schedule.endAt);
+    const today = scheduleDayText(at, now, timezone) === C.dates.today;
+    const when = today ? scheduleFill(e.today, { time: localParts(at, timezone).time }) : scheduleDateText(at, timezone);
+    parts.push(scheduleFill(e.until, { when }));
+  }
+  if (schedule.maxRuns != null) {
+    const left = schedule.runsLeft ?? schedule.maxRuns;
+    parts.push(left === 1 ? e.runLeft : scheduleFill(e.runsLeft, { count: left }));
+  }
+  return parts.length ? parts.join(C.separator) : null;
+}
+
+/** "16 slots missed, 01:00–08:30": consecutive MISSED runs of one schedule as one line. */
+export function scheduleMissedText(runs: readonly Pick<ScheduleRunView, 'plannedAt'>[], timezone: string): string {
+  const times = runs.map((r) => Date.parse(r.plannedAt));
+  const at = (ms: number) => localParts(new Date(ms), timezone).time;
+  return scheduleFill(SCHEDULE_END_COPY.missed, {
+    count: runs.length,
+    from: at(Math.min(...times)),
+    to: at(Math.max(...times)),
+  });
+}
+
+/**
+ * Collapses consecutive MISSED runs of one schedule into one item (two or more; a single one stays a run). A
+ * schedule's streak ends at any other run of it between two missed ones. The collapsed item takes the place of the
+ * first member in the list and the time of its last.
+ */
+export interface ScheduleMissedItem {
+  kind: 'MISSED';
+  schedule: ScheduleListRow;
+  runs: ScheduleRunView[];
+  at: string;
+}
+export function scheduleCollapseMissed(items: ScheduleTimelineItem[]): Array<ScheduleTimelineItem | ScheduleMissedItem> {
+  const runItems = items.filter((i): i is Extract<ScheduleTimelineItem, { kind: 'RUN' }> => i.kind === 'RUN');
+  const streakOf = new Map<ScheduleTimelineItem, ScheduleTimelineItem[]>();
+  const bySchedule = new Map<string, typeof runItems>();
+  for (const item of runItems) {
+    const list = bySchedule.get(item.schedule.id) ?? [];
+    list.push(item);
+    bySchedule.set(item.schedule.id, list);
+  }
+  for (const list of bySchedule.values()) {
+    list.sort((a, b) => Date.parse(a.run.plannedAt) - Date.parse(b.run.plannedAt));
+    let streak: typeof runItems = [];
+    const close = () => {
+      if (streak.length > 1) for (const m of streak) streakOf.set(m, streak);
+      streak = [];
+    };
+    for (const item of list) {
+      if (item.run.state === 'MISSED') streak.push(item);
+      else close();
+    }
+    close();
+  }
+  const out: Array<ScheduleTimelineItem | ScheduleMissedItem> = [];
+  const done = new Set<ScheduleTimelineItem[]>();
+  for (const item of items) {
+    const streak = item.kind === 'RUN' ? (streakOf.get(item) as typeof runItems | undefined) : undefined;
+    if (!streak || item.kind !== 'RUN') {
+      out.push(item);
+      continue;
+    }
+    if (done.has(streak)) continue;
+    done.add(streak);
+    out.push({ kind: 'MISSED', schedule: item.schedule, runs: streak.map((m) => m.run), at: streak[streak.length - 1]!.at });
+  }
+  return out;
+}
+
 /** Whether a row shows the repeat mark (↻) before its rule: a one-off does not. */
 export function scheduleRuleRepeats(rule: ScheduleRule): boolean {
   return rule.kind !== 'ONCE';
