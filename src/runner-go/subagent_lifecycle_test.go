@@ -549,3 +549,43 @@ func TestSubagentStoppedByAHandoffOwesTheWake(t *testing.T) {
 	}
 	waitUntil(t, func() bool { return !childAlive(t, r.marks) }, "the SubAgent's child engine outlived the handoff")
 }
+
+// A resume on this machine names the run it continues, so the server opens it where it ran; and a control plane that
+// routes it onto another engine anyway is refused, not handed the conversation's engine with another's model and key.
+func TestSubagentResumeKeepsItsEngine(t *testing.T) {
+	pool := newSessionPoolWithClock(1, newFakePoolClock())
+	s := superviseClaudeSession(t, pool, oneTurn()...)
+	s.awaitParked("turn-1")
+	r := installSubagentChild(t, s)
+	first := r.delegate(true)
+	r.finishChild()
+	r.awaitReport(subagentStatusDone)
+
+	// The server now answers with Codex: what routing a resume afresh would do.
+	s.mu.Lock()
+	s.subagentExec = map[string]interface{}{"provider": providerCodex, "model": "gpt-5.1-codex", "permissionMode": "auto"}
+	s.mu.Unlock()
+	token, err := os.ReadFile(bgTokenPath(r.job.SessionID))
+	if err != nil {
+		t.Fatal(err)
+	}
+	_, err = bgSocketCall(bgSocketPath(r.job.SessionID), string(token), "subagent_start", map[string]interface{}{
+		"toolUseId": "toolu_delegate_2", "description": "continue", "prompt": "carry on", "resume": first.RunID,
+	})
+	if err == nil || !strings.Contains(err.Error(), "its conversation is claude's") {
+		t.Fatalf("the resume onto another engine answered %v, want a refusal naming the conversation's engine", err)
+	}
+	s.mu.Lock()
+	opened := s.subagentOpenBodies[len(s.subagentOpenBodies)-1]
+	s.mu.Unlock()
+	if opened["resumeOf"] != first.RunID || opened["prompt"] != nil {
+		t.Fatalf("the resume was opened with %v, want resumeOf %s and no prompt", opened, first.RunID)
+	}
+	failed := r.awaitReport(subagentStatusFailed)
+	if !strings.Contains(asString(failed["resultSummary"]), "Start a new SubAgent with the full brief instead") {
+		t.Fatalf("the refused resume was reported as %v", failed)
+	}
+	if _, err := os.Stat(filepath.Join(r.marks, "started-2")); err == nil {
+		t.Fatal("a child engine started for the refused resume")
+	}
+}

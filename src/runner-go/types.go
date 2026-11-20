@@ -564,6 +564,9 @@ type HeartbeatResponse struct {
 	// states the floor states the budget too, the link's quiet answer included. Nil from older
 	// control planes and for every runner the control plane has no measurement for.
 	StorageBudget *StorageBudget `json:"storageBudget,omitempty"`
+	// BackgroundJobLimits is the owner's ceiling for this runner's background jobs (bg_limits.go), set on its
+	// Settings → Machine page. Absence replaces, as MinFreeDiskMb's does: no field is limits off.
+	BackgroundJobLimits *bgJobLimits `json:"backgroundJobLimits,omitempty"`
 	// The one Codex rate-limit reset step claimed for this process
 	// (docs/codex-rate-limit-reset-contract.md §6). Nil from older control planes and whenever no
 	// operation is claimed for it; nothing acts on it until this binary declares

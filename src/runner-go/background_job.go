@@ -14,6 +14,7 @@ import (
 	"sort"
 	"strings"
 	"sync"
+	"sync/atomic"
 	"time"
 )
 
@@ -166,6 +167,10 @@ type bgJobSpec struct {
 	// WakeOnStall, when set, asks for a wake once the job, still running, has written nothing for this
 	// long (bg_run's wakeOnStall.afterSeconds; watchForStall).
 	WakeOnStall time.Duration
+	// Limits is the CPU and memory the job runs under (bg_limits.go): the agent's ask within the runner's
+	// ceiling. LimitsNote says where the ask was lowered to that ceiling.
+	Limits     bgJobLimits
+	LimitsNote string
 }
 
 // bgStallConfig is a job's wakeOnStall as bg_run takes it and bg_list shows it.
@@ -194,6 +199,10 @@ type bgJobStatus struct {
 	WakeOnExit    bool           `json:"wakeOnExit,omitempty"`
 	WakeOnOutput  bool           `json:"wakeOnOutput,omitempty"`
 	WakeOnStall   *bgStallConfig `json:"wakeOnStall,omitempty"`
+	// Limits is the CPU and memory the job runs under, as applied; LimitsNote says where they were
+	// lowered to the runner's ceiling, or why they could not be applied at all.
+	Limits     *bgJobLimits `json:"limits,omitempty"`
+	LimitsNote string       `json:"limitsNote,omitempty"`
 	// Note says what to do about a job that is waiting for its card (bgGateWaitingNote).
 	Note string `json:"note,omitempty"`
 }
@@ -228,6 +237,14 @@ type bgJob struct {
 	// wakeOnStall is the silence that wakes the session for this job while it runs (watchForStall),
 	// zero for a job that did not ask.
 	wakeOnStall time.Duration
+
+	// limits is what the job runs under, applied in cgroup, and limitsNote what bg_run says about them
+	// (bgJobStatus). Set when the process starts, under bgTailer.mu.
+	limits     *bgJobLimits
+	limitsNote string
+	// cgroup is the job's own cgroup, nil for a job without one. Atomic: a kill may read it while the
+	// process is being started.
+	cgroup atomic.Pointer[bgJobCgroup]
 
 	status   string
 	exitCode *int
@@ -307,6 +324,8 @@ func (j *bgJob) statusLocked() bgJobStatus {
 		HoldsWorktree: j.status == bgStatusRunning,
 		WakeOnExit:    j.wakeOnExit,
 		WakeOnOutput:  j.wakeOnOutput,
+		Limits:        j.limits,
+		LimitsNote:    j.limitsNote,
 	}
 	if j.wakeOnStall > 0 {
 		st.WakeOnStall = &bgStallConfig{AfterSeconds: int(j.wakeOnStall / time.Second)}
@@ -410,7 +429,9 @@ func (b *bgTailer) prepareJob(spec bgJobSpec) (*bgPreparedJob, error) {
 	jobCtx, cancel := context.WithCancel(b.ctx)
 	cmd := exec.CommandContext(jobCtx, "bash", "-lc", spec.Command)
 	configureSessionProcessTree(cmd)
-	job := &bgJob{
+	// The reap below reads the job's cgroup, set once its process starts (launchJob).
+	var job *bgJob
+	job = &bgJob{
 		id:           jobID,
 		kind:         spec.Kind,
 		command:      spec.Command,
@@ -422,9 +443,16 @@ func (b *bgTailer) prepareJob(spec bgJobSpec) (*bgPreparedJob, error) {
 		wakeOnOutput: spec.WakeOnOutput,
 		wakeOnStall:  spec.WakeOnStall,
 		status:       bgStatusRunning,
-		kill:         func() { _ = terminateSessionProcessTree(cmd) },
+		kill: func() {
+			_ = terminateSessionProcessTree(cmd)
+			// What left the job's process group — a daemonized child — is still in its cgroup.
+			job.cgroup.Load().killAll()
+		},
 		reap: func() int {
 			waitErr := waitSessionProcessTree(cmd)
+			if cg := job.cgroup.Load(); cg != nil {
+				endBgJobCgroup(cg, job.limits, f)
+			}
 			f.Close()
 			return exitCodeFromWait(cmd, waitErr)
 		},
@@ -436,7 +464,9 @@ func (b *bgTailer) prepareJob(spec bgJobSpec) (*bgPreparedJob, error) {
 		if !b.killable(job) {
 			return os.ErrProcessDone
 		}
-		return terminateSessionProcessTree(cmd)
+		err := terminateSessionProcessTree(cmd)
+		job.cgroup.Load().killAll()
+		return err
 	}
 	cmd.WaitDelay = 0
 	cmd.Dir = spec.Dir
@@ -477,12 +507,33 @@ func (b *bgTailer) prepareJob(spec bgJobSpec) (*bgPreparedJob, error) {
 func (b *bgTailer) launchJob(p *bgPreparedJob) (bgJobStatus, error) {
 	job, cmd, f, cancel, spec := p.job, p.cmd, p.output, p.cancel, p.spec
 	jobID, outputPath := job.id, job.outputPath
+	var cg *bgJobCgroup
+	var limits *bgJobLimits
+	limitsNote := spec.LimitsNote
+	if !spec.Limits.none() {
+		var err error
+		if cg, err = newBgJobCgroup(jobID, spec.Limits); err != nil {
+			limitsNote = fmt.Sprintf("Limits not applied (%s): %v.", spec.Limits, err)
+		} else {
+			cg.attach(cmd)
+			l := spec.Limits
+			limits = &l
+		}
+	}
 	if err := cmd.Start(); err != nil {
+		if cg != nil {
+			cg.remove()
+		}
 		cancel()
 		f.Close()
 		return bgJobStatus{}, err
 	}
+	if cg != nil {
+		cg.started()
+	}
 	b.mu.Lock()
+	job.limits, job.limitsNote = limits, limitsNote
+	job.cgroup.Store(cg)
 	job.pid = cmd.Process.Pid
 	job.startedAt = time.Now()
 	// A job that has produced nothing yet has produced nothing since it existed: its first report
@@ -496,6 +547,9 @@ func (b *bgTailer) launchJob(p *bgPreparedJob) (bgJobStatus, error) {
 		b.mu.Unlock()
 		cancel()
 		f.Close()
+		if cg != nil {
+			cg.remove()
+		}
 		if job.recorded {
 			removeBgJobRecord(b.sessionID, jobID)
 		}
