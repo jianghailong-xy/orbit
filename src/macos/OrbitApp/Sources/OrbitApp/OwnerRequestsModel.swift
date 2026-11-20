@@ -196,6 +196,12 @@ final class OwnerRequestsModel {
         adopt(try await api.createWikiFromOwnerRequest(request.id))
     }
 
+    /// A SETTINGS_CHANGE card's Save changes (design §5.2): the server writes the values and answers with the card,
+    /// DONE. A refusal 409 SETTINGS_STALE is thrown for the card to say so.
+    func applySettings(_ request: OwnerRequest) async throws {
+        adopt(try await api.applyOwnerRequestSettings(request.id))
+    }
+
     func decline(_ request: OwnerRequest, reason: String, sendAsWritten: Bool = false) async throws {
         adopt(try await api.declineOwnerRequest(request.id, reason: reason, sendAsWritten: sendAsWritten))
     }

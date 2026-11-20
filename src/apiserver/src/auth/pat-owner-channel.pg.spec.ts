@@ -192,6 +192,19 @@ test('the owner channel refuses a personal access token door by door and field b
     spaces: await db.wikiSpace.count({ where: { ownerId: userId, repoUrlNorm: wikiRepoUrlNorm, deletedAt: null } }),
   });
 
+  // A real SETTINGS_CHANGE card (docs/settings-from-conversation-design.md §5.2): Save changes writes the account's theme
+  // and settles the card.
+  const settingsToApply = (await db.ownerRequest.create({
+    data: {
+      ownerId: userId, askedBySessionId: sessionId, kind: 'SETTINGS_CHANGE', title: 'Change 1 setting?',
+      why: 'the person asked for a dark theme', payload: { changes: [{ key: 'theme', from: 'system', to: 'dark', tier: 1 }] },
+    },
+  })).id;
+  const settingsApplied = async () => ({
+    state: (await db.ownerRequest.findUniqueOrThrow({ where: { id: settingsToApply } })).state,
+    preferences: (await db.user.findUniqueOrThrow({ where: { id: userId } })).preferences,
+  });
+
   // A Feishu app of the account's (switched off, so nothing connects it) with a group waiting on a live ticket, and two
   // groups connected: the three group doors (docs/feishu-bot-design.md §8.1) stood up for real.
   const feishuAppId = `cli_owner_channel_${RUN}`;
@@ -266,6 +279,10 @@ test('the owner channel refuses a personal access token door by door and field b
     {
       route: 'POST /owner-requests/:id/create-wiki', path: `/owner-requests/${wikiToCreate}/create-wiki`,
       login: 200, observe: wikiCreated,
+    },
+    {
+      route: 'POST /owner-requests/:id/apply-settings', path: `/owner-requests/${settingsToApply}/apply-settings`,
+      login: 200, observe: settingsApplied,
     },
     { route: 'GET /account-secrets', path: '/account-secrets', login: 200 },
     {

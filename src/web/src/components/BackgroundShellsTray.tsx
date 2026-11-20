@@ -85,10 +85,13 @@ export function BackgroundShellsTray({
           <>
             <span className="bg-tray-title bg-tray-label">{row.label}</span>
             <FoldedName name={row.name} rotation={rotation} />
-            {row.countParts.length > 0 && <CountLine parts={row.countParts} />}
           </>
         )}
         <span className="wt-spacer" />
+        {/* Folded, the count and then the mark sit at the right edge, before the arrow, as the
+            Agents row draws its status. */}
+        {!open && row.countParts.length > 0 && <CountLine parts={row.countParts} />}
+        {!open && <BgStatusIcon status={row.name.mode === 'rotate' ? 'running' : row.name.item.mark} />}
         <button
           type="button"
           className="wt-expand"
@@ -201,31 +204,21 @@ function useRotation(name: BackgroundRowName | null, paused: boolean): Rotation 
 }
 
 /**
- * The folded row's name: one still name with its mark, or the running names in turn. A change
+ * The folded row's name: one still name, or the running names in turn. A change
  * pushes the old name up and the new one in from below (translateY); under prefers-reduced-motion
  * the two crossfade in place. The rotating text is aria-hidden: the toggle's label says the count.
  */
 function FoldedName({ name, rotation }: { name: BackgroundRowName; rotation: Rotation }) {
-  if (name.mode !== 'rotate') {
-    return (
-      <>
-        <RowName item={name.item} className="bg-tray-name" />
-        <BgStatusIcon status={name.item.mark} />
-      </>
-    );
-  }
+  if (name.mode !== 'rotate') return <RowName item={name.item} className="bg-tray-name" />;
   const { items, changeMs } = name;
   const { step, changing } = rotation;
   const at = (n: number) => items[((n % items.length) + items.length) % items.length];
   const style = { '--bg-rot-change': `${changeMs}ms` } as CSSProperties;
   return (
-    <>
-      <span className={`bg-rot ${reducedMotion() ? 'is-fade' : 'is-push'}`} style={style} aria-hidden="true">
-        {changing && <RowName key={`out-${step}`} item={at(step - 1)} className="bg-rot-name bg-rot-out" />}
-        <RowName key={`in-${step}`} item={at(step)} className={`bg-rot-name${changing ? ' bg-rot-in' : ''}`} />
-      </span>
-      <BgStatusIcon status="running" />
-    </>
+    <span className={`bg-rot ${reducedMotion() ? 'is-fade' : 'is-push'}`} style={style} aria-hidden="true">
+      {changing && <RowName key={`out-${step}`} item={at(step - 1)} className="bg-rot-name bg-rot-out" />}
+      <RowName key={`in-${step}`} item={at(step)} className={`bg-rot-name${changing ? ' bg-rot-in' : ''}`} />
+    </span>
   );
 }
 
