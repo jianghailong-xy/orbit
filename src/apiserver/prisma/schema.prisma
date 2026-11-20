@@ -872,6 +872,10 @@ model Runner {
   // One knob per machine, but evaluated against each workspace's own measured filesystem —
   // "keep this much headroom wherever you are writing" is the same policy on every mount.
   minFreeDiskMb     Int?         @default(10240) @map("min_free_disk_mb")
+  // Limits on each background job (bg_run) this machine runs, set by its owner and handed to the runner
+  // in every heartbeat answer. NULL is no limit on that dimension; both NULL (the default) is limits off.
+  bgJobCpus         Float?       @map("bg_job_cpus")
+  bgJobMemoryMb     Int?         @map("bg_job_memory_mb")
   version           String?
   tokenHash         String       @map("token_hash") // hash of the long-lived runner credential
   // The runner's own low-frequency record of its heartbeats: written by a heartbeat at most every
@@ -8110,7 +8114,7 @@ model OwnerRequest {
   scheduleChangeRequestId String?   @map("schedule_change_request_id") @db.Uuid
   /// CONDITION_UNKNOWN (migration 1030): the condition that cannot be read. History, no FK.
   conditionId             String?   @map("condition_id") @db.Uuid
-  /// SETTINGS_CHANGE (migration 1260): `{ changes: [{ key, from, to, tier }] }`, written by the server. NULL otherwise.
+  /// SETTINGS_CHANGE (migration 1270): `{ changes: [{ key, from, to, tier }] }`, written by the server. NULL otherwise.
   /// Its partial unique `owner_request_settings_change_pending_key` holds a session to one PENDING SETTINGS_CHANGE.
   payload             Json?
   expiresAt           DateTime? @map("expires_at") @db.Timestamptz(3)

@@ -10,6 +10,7 @@ import {
   Optional,
 } from '@nestjs/common';
 import { workspaceCloneReason } from '../common/workspace-clone-gate';
+import { diskBelowFloor } from '../common/runner-disk-gate';
 import { taskRunAnchor, taskRunAnchors } from '../workspaces/start-anchor';
 import { PushService } from '../push/push.service';
 import { ProjectOrphanSweepService } from '../projects/project-orphan-sweep.service';
@@ -1965,27 +1966,6 @@ export const MAX_CONSECUTIVE_FOREMEN = FOREMAN_RETRY_BACKOFF_MS.length + 1;
 /** The transaction lock a foreman is filed under, one per list (`dispatchStalledListForemen`). */
 function foremanLock(listId: string): string {
   return `task-list-foreman:${listId}`;
-}
-
-/**
- * Is this workspace's filesystem below its runner's free-space floor, so no new work should be
- * dispatched onto it?
- *
- * Fail-open on every kind of missing information — no floor configured, or no reading from the
- * runner (too old to measure, work dir gone, a platform with no answer). A disk gate that fired
- * on absent telemetry would stop a fleet precisely because it knew nothing about it, and the
- * failure it is guarding against (a volume filling up) is one that its own silence cannot
- * evidence. The gate is only as good as the reading, and no reading means no gate.
- *
- * bigint throughout: a multi-terabyte volume's byte count is past Number.MAX_SAFE_INTEGER.
- */
-export function diskBelowFloor(
-  freeBytes: bigint | null | undefined,
-  minFreeDiskMb: number | null | undefined,
-): boolean {
-  if (freeBytes == null) return false;
-  if (minFreeDiskMb == null || !Number.isFinite(minFreeDiskMb) || minFreeDiskMb <= 0) return false;
-  return freeBytes < BigInt(Math.floor(minFreeDiskMb)) * 1024n * 1024n;
 }
 
 // PostgreSQL accepts at most 32,767 bind parameters. Dependency lookups are also used

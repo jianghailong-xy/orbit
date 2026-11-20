@@ -2810,7 +2810,7 @@ func buildOperationCatalog() []*operation {
 		add(gateOrchestration,
 			map[string]interface{}{
 				"name":        "session_create",
-				"description": "Spawn a new agent session to run a sub-task immediately (L3 orchestration). Returns the new session's id and status at once. To learn when it finishes its turn, call session_await with that id and end your turn instead of polling session_get, or pass wait to hold this call for a bounded time. Write `prompt` as a self-contained, executable brief (background, files, steps, acceptance) — the sub-agent has no prior context. When the user @mentions an agent in their message, pass that agent's name as `agentName` to run the sub-task under it (use agent_list to discover names); otherwise it runs under the current agent. For one self-contained piece of work on another agent's machine whose result you only need back, use delegate with workspace set to that agent's name: it runs as a SubAgent of this session and its result returns to this call. Requires orchestration to be enabled for this agent. Fails with \"already has N unfinished sessions\" when this run is holding too much unfinished work at once — that is backpressure, not an error in your request: let some of the sessions you started finish, then spawn again.",
+				"description": "Spawn a new agent session to run a sub-task immediately (L3 orchestration). Returns the new session's id and status at once. To learn when it finishes its turn, call session_await with that id and end your turn instead of polling session_get, or pass wait to hold this call for a bounded time. Write `prompt` as a self-contained, executable brief (background, files, steps, acceptance) — the sub-agent has no prior context. When the user @mentions an agent in their message, pass that agent's name as `agentName` to run the sub-task under it (use agent_list to discover names); otherwise it runs under the current agent. For one self-contained piece of work on another agent's machine whose result you only need back, use delegate with workspace set to that agent's name: it runs as a SubAgent of this session and its result returns to this call. Requires orchestration to be enabled for this agent. Fails with \"already has N unfinished sessions\" when this run is holding too much unfinished work at once — that is backpressure, not an error in your request: let some of the sessions you started finish, then spawn again. Refused with the reason, and nothing is created, when the target agent's runner is offline or has less free disk space than its Keep Free setting.",
 				"inputSchema": obj(map[string]interface{}{
 					"prompt":    promptDesc,
 					"agentId":   map[string]interface{}{"type": []string{"string", "null"}, "description": "Which agent runs it (by id); defaults to the current agent."},
@@ -3752,7 +3752,11 @@ func bgToolDescriptors(obj func(map[string]interface{}, ...string) map[string]in
 				" accepts a message mid-turn; new output and silence always wait for your next turn. Whether a job" +
 				" may start follows this session's permission mode: Plan and Don't Ask refuse it, Default and Accept" +
 				" Edits show the owner a card first, in which case this may answer that the job is waiting for them" +
-				" (status waiting_for_owner), and Auto and Bypass start it.",
+				" (status waiting_for_owner), and Auto and Bypass start it. CPU and memory limits (cpus, memoryMb) are" +
+				" off unless the machine's owner has turned them on; then the owner's ceiling applies to every job, and" +
+				" you may ask for less, never more. The result's limits say what the job runs under, and limitsNote why" +
+				" an ask was lowered or not applied. A job running under limits does not count against this machine's" +
+				" capacity, as a watch does not.",
 			"inputSchema": obj(map[string]interface{}{
 				"command": map[string]interface{}{
 					"type":        "string",
@@ -3813,6 +3817,16 @@ func bgToolDescriptors(obj func(map[string]interface{}, ...string) map[string]in
 				"env": map[string]interface{}{
 					"type":        "object",
 					"description": "Extra environment variables, layered over the agent's own.",
+				},
+				"cpus": map[string]interface{}{
+					"type": "number",
+					"description": "Most CPUs' worth of time the job may use, fractions allowed (0.5, 2). Applied only where" +
+						" the owner has turned limits on, and never above their ceiling; see the tool description.",
+				},
+				"memoryMb": map[string]interface{}{
+					"type": "integer",
+					"description": fmt.Sprintf("Most memory the job may hold, in megabytes (at least %d). Past it the whole job"+
+						" is killed and its output ends with a line saying so. Applied as cpus is.", bgMemoryMBMin),
 				},
 			}, "command", "kind"),
 		},
