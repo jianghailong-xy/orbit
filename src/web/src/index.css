@@ -29961,12 +29961,18 @@ button.agent-progress-agent:hover {
 }
 .project-change-row {
   display: grid;
-  grid-template-columns: 150px minmax(0, 1fr) 190px 90px;
-  gap: 12px;
+  grid-template-columns: minmax(0, 1fr) auto;
+  grid-template-areas: 'what action' 'body body' 'who who';
+  gap: 6px 12px;
   align-items: start;
   padding: 10px 12px;
   font-size: 13px;
 }
+.project-change-what { grid-area: what; }
+.project-change-body { grid-area: body; min-width: 0; }
+.project-change-who { grid-area: who; display: flex; flex-wrap: wrap; align-items: center; gap: 4px 8px; }
+.project-change-action { grid-area: action; }
+.project-change-reverted { flex-basis: 100%; }
 .project-change-row + .project-change-row {
   border-top: 1px solid var(--border-subtle);
 }
@@ -29991,12 +29997,6 @@ button.agent-progress-agent:hover {
   margin-top: 6px;
   color: var(--text-3);
 }
-@media (max-width: 720px) {
-  .project-change-row {
-    grid-template-columns: 1fr;
-    gap: 6px;
-  }
-}
 .task-landing-exempt {
   padding: 10px 12px;
   margin-top: 8px;
@@ -30016,4 +30016,7 @@ button.agent-progress-agent:hover {
 }
 .task-landing-exempt .orbit-button {
   margin-top: 8px;
+}
+.project-integration-setting.project-changes-entry {
+  display: block;
 }
