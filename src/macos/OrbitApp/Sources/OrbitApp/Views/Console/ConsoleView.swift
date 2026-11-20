@@ -1086,6 +1086,8 @@ struct TranscriptView: View {
         // Held by its runner's update (board 5 of docs/mocks/runner-update-drain): the foot row of
         // the reader's last message says so, or, before there is one, the queued page does.
         .environment(\.runnerUpdatingFoot, runnerUpdatingFoot)
+        // …and where that message is one no runner has taken, Cancel beside the tag (`HeldCancel`).
+        .environment(\.heldCancel, { [console] bubble in Task { await console.cancelHeld(bubble) } })
         .overlay { runnerUpdatingPage }
         // macOS shows the session state in this band. iOS gave the state up with the nav-bar title,
         // for reading space (see `ConsoleView`'s toolbar), so the band is retired there.

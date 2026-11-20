@@ -892,6 +892,23 @@ public struct TranscriptReducer: Sendable, Codable {
         state.queued.removeAll { $0.id == id }
     }
 
+    /// Take down a message the held tag's Cancel withdrew (`HeldCancel`) once the server said yes:
+    /// the accepted head another client's listing drew, or this console's own send, still pending
+    /// in the conversation with no echo. A turn drawn nowhere is a no-op. Web parity:
+    /// `setAcceptedUserTurns(current ⇒ current.filter(…))`.
+    public mutating func removeAcceptedTurn(turnId: String) {
+        state.accepted.removeAll { $0.turnId == turnId }
+        heldAt.removeValue(forKey: turnId)
+        guard let i = state.items.firstIndex(where: {
+            if case .user(let b) = $0 { return b.turnId == turnId && b.pending }
+            return false
+        }) else { return }
+        state.items.remove(at: i)
+        // The open-bubble cursors are item INDICES: close the gap, as `removeOptimisticUser` does.
+        if let o = openAssistant, o > i { openAssistant = o - 1 }
+        if let o = openThinking, o > i { openThinking = o - 1 }
+    }
+
     /// A queued message the tray's Steer sent into the running turn (`POST …/steer`): a steer now, on
     /// its way into that turn, until the runner's echo takes it over (`appendUser`).
     public mutating func markQueuedSteered(turnId: String) {
@@ -1039,6 +1056,7 @@ public struct TranscriptReducer: Sendable, Codable {
                 bubble.cards = turn.cards
                 bubble.translation = turn.turnTranslation
                 bubble.authoredByOrbit = turn.authoredByOrbit == true
+                bubble.opening = turn.opening == true
                 accepted.append(bubble)
                 continue
             }
