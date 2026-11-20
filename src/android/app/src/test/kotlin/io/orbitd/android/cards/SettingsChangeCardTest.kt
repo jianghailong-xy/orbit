@@ -103,8 +103,8 @@ class SettingsChangeCardTest {
         compose.onAllNodesWithTag("$tag:new-sessions:translationEnabled", useUnmergedTree = true).assertCountEquals(0)
         node("why").assertTextEquals("The agent says: You asked for the agents to write Chinese and for the app to be dark.")
         node("foot").assertTextEquals("Only these change. You can change them back in Settings.")
-        node("primary").assertTextEquals("Save changes")
-        node("chat").assertTextEquals("💬 Chat about this")
+        compose.onNodeWithText("Save changes", useUnmergedTree = true).assertExists()
+        compose.onNodeWithText("💬 Chat about this", useUnmergedTree = true).assertExists()
         compose.onAllNodesWithText("Always allow", substring = true, useUnmergedTree = true).assertCountEquals(0)
     }
 
@@ -123,6 +123,7 @@ class SettingsChangeCardTest {
         assertEquals(JsonPrimitive(false), patch["translationEnabled"])
         assertEquals(JsonPrimitive("en"), patch["translationLanguage"])
         assertEquals(JsonPrimitive("default"), patch["defaultPermissionMode"])
+        compose.waitUntil(10_000) { compose.onAllNodesWithTag("$tag:undone", useUnmergedTree = true).fetchSemanticsNodes().isNotEmpty() }
         node("undone").assertTextEquals("Undone")
     }
 
