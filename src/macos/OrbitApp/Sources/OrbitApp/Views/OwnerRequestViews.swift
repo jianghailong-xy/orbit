@@ -334,9 +334,8 @@ struct OwnerRequestCard: View {
     /// one row on a Mac), Chat about this after the press; then the ways out, as links. A WIKI_CREATE card's
     /// are its own three (design §3.6): Create wiki, Change settings…, Not for this repository.
     @ViewBuilder private var actions: some View {
-        if request.kind == .wikiCreate { wikiCreateActions }
-        else if request.kind == .browserSignIn { browserSignInActions }
-        else { kindActions }
+        if request.kind == .browserSignIn { browserSignInActions }
+        else if request.kind == .wikiCreate { wikiCreateActions } else { kindActions }
     }
 
     private var kindActions: some View {
