@@ -294,6 +294,7 @@ describe('the Settings window', () => {
       ['Storage', '/settings/storage'],
       ['Shared links', '/settings/shared-links'],
       ['Access tokens', '/settings/access-tokens'],
+      ['Secrets', '/settings/secrets'],
       ['Terminals', '/settings/terminals'],
       ['Routing report', '/settings/routing-report'],
     ]);

@@ -8228,6 +8228,13 @@ model OwnerRequestSecret {
   deliveredAt DateTime?    @map("delivered_at") @db.Timestamptz(3)
   removedAt   DateTime?    @map("removed_at") @db.Timestamptz(3)
   removalNote String?      @map("removal_note")
+  /// The saved secret "Use saved" made this grant from (migration 1400); NULL once that saved secret is deleted.
+  /// Indexed by the partial `owner_request_secret_saved_secret_idx` (WHERE saved_secret_id IS NOT NULL), which
+  /// Prisma does not model.
+  savedSecretId String?        @map("saved_secret_id") @db.Uuid
+  savedSecret   AccountSecret? @relation(fields: [savedSecretId], references: [id], onDelete: SetNull)
+  /// The runner's name when the grant was made, so a copy on a runner deleted since is still named.
+  runnerName  String?      @map("runner_name")
   createdAt   DateTime     @default(now()) @map("created_at") @db.Timestamptz(3)
   updatedAt   DateTime     @updatedAt @map("updated_at") @db.Timestamptz(3)
 
@@ -8243,8 +8250,11 @@ model AccountSecret {
   owner     User     @relation(fields: [ownerId], references: [id], onDelete: Cascade)
   label     String
   valueEnc  String   @map("value_enc")
+  /// When "Use saved" last made a grant from it (migration 1400).
+  lastUsedAt DateTime? @map("last_used_at") @db.Timestamptz(3)
   createdAt DateTime @default(now()) @map("created_at") @db.Timestamptz(3)
   updatedAt DateTime @updatedAt @map("updated_at") @db.Timestamptz(3)
+  grants    OwnerRequestSecret[]
 
   @@unique([ownerId, label], map: "account_secret_owner_label_key")
   @@map("account_secret")
