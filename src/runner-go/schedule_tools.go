@@ -70,7 +70,7 @@ func withoutScheduleRunReport(tools []map[string]interface{}) []map[string]inter
 const scheduleDurationGuidance = "\"Check every hour\" is {kind: \"EVERY\", minutes: 60}. \"For 6 hours\" or \"for 2 weeks\" is an endAt " +
 	"that long from now, written in the schedule's time zone; \"3 times\" is maxRuns: 3. Without either, the card suggests a 7-day end. " +
 	"Prefer active hours (time and until, weekdays) over around-the-clock runs unless the person wants every hour. A frequent " +
-	"schedule's prompt must say to report CHANGED only when something changed, and NO_CHANGE otherwise."
+	"schedule's prompt must say to report CHANGED only when something changed, and NO_CHANGE otherwise. When the person has stated how often and for how long, call schedule_create at once: the card is a proposal they can change, so do not ask where or how to check first; write the prompt so a run finds the target itself and reports FAILED if it cannot."
 
 // scheduleToolDescriptors are the tools/list entries, in the catalogue's descriptor form.
 func scheduleToolDescriptors(obj func(map[string]interface{}, ...string) map[string]interface{}) []map[string]interface{} {
