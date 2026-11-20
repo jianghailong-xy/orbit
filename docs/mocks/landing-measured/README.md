@@ -19,4 +19,14 @@ D1 开始卡只有那一行、不给选线控件 · D2 无线时项目页什么�
 
 ## owner 的裁决
 
-（待填。本任务确认前由协调者把 owner 对 D1–D9 的裁决记在这里。）
+2026-11-20 06:23Z，owner 回答了协调者的问题（待办 350iUsdjKUo8VvjWbzMlN）：**D1–D9 全部按推荐**。三个客户端任务（Web、Apple、Android）照图上的绿框方案做。
+
+- **D1** 开始卡没带线时：只有那一行文案，不给选线控件。
+- **D2** 没有线的项目页：什么都不画。
+- **D3** 落地检查的来历：命令下面一行，徽标加时间。
+- **D4** 显式「不跑」：三段开关 Merge check · Command · No check。
+- **D5** 免检的任务：任务页 Landing 段里一行，落地检查清单里一行 Skipped；owner 有 Remove exemption。
+- **D6** 协调者的改动列表：Settings 里一行 Coordinator’s changes，进去是整页列表。
+- **D7** Revert：先确认，写明后果。
+- **D8** 无线的开始卡：保留 Merge check 一行。条文 §12.15 P-M2 的措辞（线与检查两段都不画）由收尾的文档任务改正。
+- **D9** 开始时定的落地检查：徽标读作 *Set at start*。
