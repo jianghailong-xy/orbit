@@ -10046,16 +10046,23 @@ export class SessionsService {
       loggedRetry(this.logger, 'sessions.transitionEnd'),
     );
     await reprojectAfterSettledChecks(this.prisma, ended.checksSettled, this.logger);
-    if (ended.settledProjectId && this.moduleRef) {
-      try {
-        const { CompletionInputRouter } = await import('../projects/completion-input-router.service.js');
-        await this.moduleRef.get(CompletionInputRouter, { strict: false }).routeSettledWork([ended.settledProjectId]);
-      } catch (e) {
-        // Hand-built contexts have no router; the next delivery derives the same facts.
-        this.logger.warn(`project facts after a settled finish not re-derived: ${e instanceof Error ? e.message : e}`);
-      }
-    }
+    if (ended.settledProjectId) await this.routeSettledFacts(ended.settledProjectId);
     return ended;
+  }
+
+  /**
+   * §12.15 P-M1: re-derive a project's facts after a finish that decided a DONE task's landing. The router
+   * is found by `ModuleRef` and imported at the call (see the constructor); a context without one has
+   * nothing to deliver, and the next delivery derives the same facts.
+   */
+  async routeSettledFacts(projectId: string): Promise<void> {
+    if (!this.moduleRef) return;
+    try {
+      const { CompletionInputRouter } = await import('../projects/completion-input-router.service.js');
+      await this.moduleRef.get(CompletionInputRouter, { strict: false }).routeSettledWork([projectId]);
+    } catch (e) {
+      this.logger.warn(`project facts after a settled finish not re-derived: ${e instanceof Error ? e.message : e}`);
+    }
   }
 
   /**
