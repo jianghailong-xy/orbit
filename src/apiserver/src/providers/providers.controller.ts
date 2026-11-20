@@ -131,6 +131,13 @@ export class ProvidersController {
     return this.providers.setModelTier(user.userId, id, dto.model, dto.tier ?? null);
   }
 
+  // The owner's tier for a model of a built-in engine's catalogue (Claude Code, Cursor, …), set or cleared (null).
+  @PatScope('workspaces:write', { workspaceConfinable: false })
+  @Patch('builtin/:engine/model-tier')
+  setBuiltinModelTier(@CurrentUser() user: AuthUser, @Param('engine') engine: string, @Body() dto: UpdateProviderModelTierDto) {
+    return this.providers.setBuiltinModelTier(user.userId, engine, dto.model, dto.tier ?? null);
+  }
+
   @PatScope('workspaces:write', { workspaceConfinable: false })
   @Delete('mine/:id')
   removeMine(@CurrentUser() user: AuthUser, @Param('id', PublicIdPipe) id: string) {

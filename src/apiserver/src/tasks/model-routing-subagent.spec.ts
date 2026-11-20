@@ -392,7 +392,98 @@ test('an engine with no tier table of its own is tiered by family: the newest of
   assert.ok(cursorDrop.some((c) => c.model === 'default' && c.reason === 'The model has no tier'));
 });
 
-test('familyTier: a key's model of a known family takes the family's lowest tier; any other none', () => {
+test('an owner tier on a built-in engine: a model of no family routes at it, overrides a family tier, and clears', () => {
+  const login = (slug: string): SubagentProvider => ({
+    slug, billing: 'subscription', inScope: true, credential: { kind: 'login', engine: slug as 'cursor' }, engines: [{ engine: slug }],
+    account: { quota: null },
+  });
+  const modelCatalog: RunnerModelCatalog = {
+    cursor: [
+      { value: 'default', label: 'Auto' },
+      { value: 'grok-4.7', label: 'Grok 4.7', reasoningLevels: ['low', 'medium', 'high'] },
+      { value: 'claude-opus-5-6', label: 'Opus 5.6', reasoningLevels: ['low', 'medium', 'high', 'xhigh', 'max'] },
+      { value: 'claude-sonnet-5-5', label: 'Sonnet 5.5', reasoningLevels: ['low', 'medium', 'high'] },
+    ],
+  };
+  const engines = { cursor: { installed: true } };
+  const at = (size: 'S' | 'M' | 'L' | 'XL', builtinModelTiers?: SubagentRoutingInput['builtinModelTiers']) => {
+    const d = route(input({ caller: { size }, providers: [login('cursor')], engines, modelCatalog, builtinModelTiers }));
+    return [d.model, d.effort, d.pickLevel];
+  };
+  // Only models of no family: Cursor is untiered, and runs its default model.
+  const bare = { cursor: modelCatalog.cursor!.slice(0, 2) };
+  const plain = (size: 'S' | 'XL', builtinModelTiers?: SubagentRoutingInput['builtinModelTiers']) =>
+    route(input({ caller: { size }, providers: [login('cursor')], engines, modelCatalog: bare, builtinModelTiers }));
+  assert.deepEqual([plain('XL').model, plain('XL').pickLevel], ['default', null]);
+  assert.ok(plain('XL').candidates.some((c) => c.model === 'grok-4.7' && c.reason === 'The model has no tier; cursor runs default'));
+
+  // The owner tiers grok-4.7 XL: it routes there, at XL's max clamped to the highest level it reports.
+  const grok = { cursor: { 'grok-4.7': 'XL' as const } };
+  const routed = plain('XL', grok);
+  assert.deepEqual([routed.model, routed.effort, routed.pickLevel], ['grok-4.7', 'high', 'XL']);
+  assert.equal(routed.candidates.some((c) => c.model === 'grok-4.7'), false, 'no longer removed');
+  assert.deepEqual([plain('S', grok).model, plain('S', grok).pickLevel], ['grok-4.7', 'XL'], 'its only tier: a higher one at S');
+  // Beside the family tiers it joins its tier after the table's rows.
+  const beside = route(input({ caller: { size: 'XL' }, providers: [login('cursor')], engines, modelCatalog, builtinModelTiers: grok }));
+  assert.deepEqual([beside.model, beside.effort], ['claude-opus-5-6', 'max']);
+  assert.deepEqual(beside.fallbacks.slice(0, 1).map((f) => [f.model, f.effort, f.level]), [['grok-4.7', 'high', 'XL']]);
+
+  // An owner tier on a family model overrides the family's: Opus at S only, so XL falls to grok, Opus answers S.
+  const opusS = { cursor: { 'claude-opus-5-6': 'S' as const, 'grok-4.7': 'XL' as const } };
+  assert.deepEqual(at('XL', opusS), ['grok-4.7', 'high', 'XL']);
+  assert.deepEqual(at('L', opusS), ['grok-4.7', 'high', 'XL'], 'no L left: the next tier up');
+  const s = route(input({ caller: { size: 'S' }, providers: [login('cursor')], engines, modelCatalog, builtinModelTiers: opusS }));
+  assert.deepEqual([s.model, s.effort], ['claude-sonnet-5-5', 'low'], 'the table rows keep their order ahead of the owner rows');
+  assert.ok(s.fallbacks.some((f) => f.model === 'claude-opus-5-6' && f.level === 'S' && f.effort === 'low'));
+  assert.equal(s.fallbacks.some((f) => f.model === 'claude-opus-5-6' && f.level !== 'S'), false, 'Opus keeps no family row');
+
+  // Cleared (absent from the map, or another engine's): the family tiers again, grok untiered.
+  for (const cleared of [undefined, {}, { cursor: {} }, { antigravity: { 'grok-4.7': 'XL' as const } }]) {
+    assert.deepEqual(at('XL', cleared), ['claude-opus-5-6', 'max', 'XL']);
+    assert.deepEqual(at('L', cleared), ['claude-opus-5-6', 'high', 'L']);
+  }
+  // A tier for a model the catalogue does not report adds nothing.
+  assert.deepEqual(at('XL', { cursor: { 'kimi-k3': 'XL' } }), ['claude-opus-5-6', 'max', 'XL']);
+});
+
+test('owner tiers apply to the tabled engines too, and with none set Claude, Codex and Kimi rows are unchanged', () => {
+  const kimi: SubagentProvider = {
+    slug: 'kimi', billing: 'subscription', inScope: true, credential: { kind: 'login', engine: 'kimi' }, engines: [{ engine: 'kimi' }],
+    account: { quota: null },
+  };
+  const modelCatalog: RunnerModelCatalog = {
+    ...CATALOG,
+    codex: [{ value: GPT, label: 'GPT-5.6', reasoningLevels: ['low', 'medium', 'high', 'xhigh'] }, { value: 'gpt-5.6-mini', label: 'Mini' }],
+    kimi: [{ value: 'kimi-code/k3', label: 'K3' }, { value: 'kimi-code/k3.1-pro', label: 'K3.1 Pro' }],
+  };
+  const engines = { claude: { installed: true }, codex: { installed: true }, kimi: { installed: true } };
+  const picks = (builtinModelTiers?: SubagentRoutingInput['builtinModelTiers']) =>
+    (['S', 'M', 'L', 'XL'] as const).flatMap((size) => [claude(), codex(), kimi].map((provider) => {
+      const d = route(input({ caller: { size }, providers: [provider], engines, modelCatalog, builtinModelTiers }));
+      return JSON.stringify([size, d.provider, d.model, d.effort, d.pickLevel, d.reasons, d.candidates, d.fallbacks]);
+    }));
+  const none = picks();
+  assert.deepEqual(picks({}), none, 'an empty map is no map');
+  assert.deepEqual(picks({ cursor: { 'grok-4.7': 'XL' } }), none, "another engine's tiers change nothing here");
+  assert.deepEqual(none.map((line) => JSON.parse(line).slice(0, 5)), [
+    ['S', 'claude', SONNET, 'low', 'S'], ['S', 'codex', GPT, 'low', 'S'], ['S', 'kimi', 'kimi-code/k3', 'low', 'S'],
+    ['M', 'claude', SONNET, 'medium', 'M'], ['M', 'codex', GPT, 'medium', 'M'], ['M', 'kimi', 'kimi-code/k3', 'high', 'M'],
+    ['L', 'claude', OPUS, 'high', 'L'], ['L', 'codex', GPT, 'high', 'L'], ['L', 'kimi', 'kimi-code/k3.1-pro', 'high', 'L'],
+    ['XL', 'claude', OPUS, 'max', 'XL'], ['XL', 'codex', GPT, 'xhigh', 'XL'], ['XL', 'kimi', 'kimi-code/k3.1-pro', 'max', 'XL'],
+  ]);
+  // Set: a Codex model the table leaves untiered joins at the owner's tier, effort clamped (none reported: null).
+  const mini = route(input({ caller: { size: 'S' }, providers: [codex()], engines, modelCatalog,
+    builtinModelTiers: { codex: { 'gpt-5.6-mini': 'S' } } }));
+  assert.ok(mini.fallbacks.some((f) => f.model === 'gpt-5.6-mini' && f.level === 'S' && f.effort === null));
+  // And a tabled model the owner tiers takes only the owner's tier: Opus at M, so XL falls back to the tier below.
+  const opusM = route(input({ caller: { size: 'XL' }, providers: [claude()], engines, modelCatalog,
+    builtinModelTiers: { claude: { [OPUS]: 'M' } } }));
+  assert.deepEqual([opusM.model, opusM.pickLevel], [SONNET, 'M'], 'nothing at XL or L: the tier below, the table row first');
+  assert.deepEqual(opusM.fallbacks.filter((f) => f.model === OPUS).map((f) => [f.effort, f.level]), [[null, 'M']],
+    'Opus at M only, and no levels reported: no effort');
+});
+
+test("familyTier: a key's model of a known family takes the family's lowest tier; any other none", () => {
   assert.equal(familyTier('claude-opus-5-6'), 'L');
   assert.equal(familyTier('claude-sonnet-4-5'), 'S');
   assert.equal(familyTier('gemini-3.8-flash'), 'S');

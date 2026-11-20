@@ -103,6 +103,31 @@ function familyTierRows(catalog: readonly RunnerModelInfo[]): SubagentModelRow[]
   return [...rows, ...catalog.filter((row) => !tiered.has(row.value)).map((row) => ({ model: row.value, effort: null, level: null }))];
 }
 
+/** The effort each tier asks of a model the owner tiers: clamped to the model's own levels (clampEffort). */
+const OWNER_TIER_EFFORT: Record<ModelRoutingLevel, string> = { S: 'low', M: 'medium', L: 'high', XL: 'max' };
+
+/** The owner's tiers for the models of a built-in engine's catalogue, engine → model → tier
+ *  (`UserPreferences.builtinModelTiers`, docs/subagent-design.md §7). */
+export type BuiltinModelTiers = Readonly<Record<string, Readonly<Record<string, ModelRoutingLevel>>>>;
+
+/** An engine's catalogue rows with the owner's tiers applied: each model the owner tiers leaves the built-in
+ *  table's and its family's rows and takes one row at the owner's tier, the tier's effort clamped to its levels.
+ *  A tier for a model the catalogue does not report adds nothing. Untiered rows stay last. */
+function withOwnerTiers(
+  rows: SubagentModelRow[],
+  catalog: readonly RunnerModelInfo[],
+  owned: Readonly<Record<string, ModelRoutingLevel>> | undefined,
+): SubagentModelRow[] {
+  const set = owned ? catalog.filter((row) => owned[row.value]) : [];
+  if (set.length === 0) return rows;
+  const names = new Set(set.map((row) => row.value));
+  const kept = rows.filter((row) => !names.has(row.model));
+  const own = set.map((row) => ({
+    model: row.value, effort: clampEffort(OWNER_TIER_EFFORT[owned![row.value]], row.reasoningLevels), level: owned![row.value],
+  }));
+  return [...kept.filter((row) => row.level), ...own, ...kept.filter((row) => !row.level)];
+}
+
 /** The lowest tier a model's family takes, for a key's model with one tier and no effort; null for no family. */
 export function familyTier(model: string): ModelRoutingLevel | null {
   const rule = MODEL_FAMILY_TIERS.find(({ match }) => match.test(model));
@@ -538,6 +563,9 @@ export interface SubagentRoutingInput {
    *  passes the §4.2 filters is a candidate, the rest are removed with their reason, and none left is no pick at
    *  all — never the parent's model. Absent: the first provider in the owner's order that lists it, else the parent's. */
   strictNamedModel?: boolean;
+  /** The owner's tiers for built-in engines' catalogue models (`UserPreferences.builtinModelTiers`): each overrides
+   *  the built-in table and the family tiers for that model on that engine. Absent: none set. */
+  builtinModelTiers?: BuiltinModelTiers;
   /** The account's smart model selection switch (common/model-routing-switch.ts). False: no tier is routed —
    *  a named model is still used, anything else runs on the parent's. Absent: on. */
   smartSelection?: boolean;
@@ -596,9 +624,10 @@ const OPTIMIZE_LABEL = { cost: 'Cost', balance: 'Balance', intelligence: 'Intell
  * The built-in tier table's rows for an engine's runner-reported catalogue: Claude's families at the
  * table's efforts, the family's first model by catalogue priority (as routeTaskRun picks it), and Codex's
  * runner default at each effort, and Kimi's first reported model of each tier. Every other engine's
- * catalogue is tiered by family (MODEL_FAMILY_TIERS); a model of no family has no tier.
+ * catalogue is tiered by family (MODEL_FAMILY_TIERS); a model of no family has no tier. On every engine a model
+ * the owner tiers (builtinModelTiers) takes the owner's tier instead (withOwnerTiers).
  */
-type SubagentCatalogInput = Pick<SubagentRoutingInput, 'modelCatalog' | 'runtimeDefaultModels'>;
+type SubagentCatalogInput = Pick<SubagentRoutingInput, 'modelCatalog' | 'runtimeDefaultModels' | 'builtinModelTiers'>;
 
 function builtinTierRows(
   engine: string,
@@ -610,6 +639,10 @@ function builtinTierRows(
 
 function builtinRows(engine: string, input: SubagentCatalogInput): SubagentModelRow[] {
   const catalog = input.modelCatalog?.[engine as AgentProvider] ?? [];
+  return withOwnerTiers(tableRows(engine, input, catalog), catalog, input.builtinModelTiers?.[engine]);
+}
+
+function tableRows(engine: string, input: SubagentCatalogInput, catalog: readonly RunnerModelInfo[]): SubagentModelRow[] {
   if (engine === AgentProvider.CLAUDE) {
     const family = (prefix: string) => catalog
       .filter((row) => row.value.startsWith(prefix))

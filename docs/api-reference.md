@@ -43,12 +43,12 @@ controllers and their decorators, so it lists what the server mounts, not what a
 | Caller | Routes |
 | --- | --- |
 | `public` | 37 |
-| `user` | 482 |
+| `user` | 483 |
 | `admin` | 31 |
 | `runner` | 205 |
 | `channel` | 1 |
 | `link gateway` | 3 |
-| **Total** | **759** |
+| **Total** | **760** |
 
 ## Public routes
 
@@ -255,6 +255,7 @@ controllers and their decorators, so it lists what the server mounts, not what a
 | `GET` | `/api/projects/sidebar` | — | `ProjectsController.sidebar` |
 | `POST` | `/api/prompt-optimizations` | body `PromptOptimizationDto` | `PromptOptimizerController.optimize` |
 | `GET` | `/api/providers` | — | `ProvidersController.list` |
+| `PATCH` | `/api/providers/builtin/:engine/model-tier` | body `UpdateProviderModelTierDto`; path `engine` | `ProvidersController.setBuiltinModelTier` |
 | `GET` | `/api/providers/mine` | — | `ProvidersController.listMine` |
 | `POST` | `/api/providers/mine` | body `CreateModelProviderDto` | `ProvidersController.createMine` |
 | `DELETE` | `/api/providers/mine/:id` | path `id` | `ProvidersController.removeMine` |
