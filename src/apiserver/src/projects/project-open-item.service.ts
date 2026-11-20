@@ -1190,7 +1190,7 @@ export class ProjectOpenItemService {
       );
     }
     const settings: ProjectStartSettings = {
-      line: body.line,
+      ...(body.line !== undefined ? { line: body.line } : {}),
       ...(body.projectBranchName != null ? { projectBranchName: body.projectBranchName } : {}),
       ...(body.upstreamRef != null ? { upstreamRef: body.upstreamRef } : {}),
       automatic: body.automatic ?? true,

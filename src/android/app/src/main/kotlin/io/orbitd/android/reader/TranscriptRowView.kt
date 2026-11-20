@@ -47,6 +47,7 @@ import io.orbitd.android.cards.OrbitEventLine
 import io.orbitd.android.cards.LocalSteerDeliveries
 import io.orbitd.android.cards.TranscriptCardView
 import io.orbitd.android.cards.isOrbitTurnCard
+import io.orbitd.android.cards.conversationCard
 import io.orbitd.android.cards.DetailFold
 import io.orbitd.android.core.translation.Translation
 import io.orbitd.android.directory.ExternalSender
@@ -272,15 +273,15 @@ internal fun TranscriptRowView(row: TranscriptRow, model: FullEvents, live: Tran
             }
             return@Column
         }
-        if (dshRepair != null && console != null) { DshRepairCard(dshRepair, console); return@Column }
-        if (repair != null && console != null) { AntigravityRepairCard(repair, console); return@Column }
+        if (dshRepair != null && console != null) { Box(Modifier.conversationCard()) { DshRepairCard(dshRepair, console) }; return@Column }
+        if (repair != null && console != null) { Box(Modifier.conversationCard()) { AntigravityRepairCard(repair, console) }; return@Column }
         if (event.type == "auto_retry" && console != null) {
-            AutoRetryCard(AutoRetryNotice(shown.body(), shown.fields.string("variant") == "quota", shown.fields["stale"] == JsonPrimitive(true),
-                shown.fields["afterUserMsg"] == JsonPrimitive(true)), console)
+            Box(Modifier.conversationCard()) { AutoRetryCard(AutoRetryNotice(shown.body(), shown.fields.string("variant") == "quota", shown.fields["stale"] == JsonPrimitive(true),
+                shown.fields["afterUserMsg"] == JsonPrimitive(true)), console) }
             return@Column
         }
         // The main checkout's card (board 01) and an action's outcome line (board 03).
-        if (event.type == MainCheckout.ROW_CARD) { MainCheckout.changedNotice(shown.fields)?.let { MainCheckoutCard(it, row.key, event.seq, event.ts) }; return@Column }
+        if (event.type == MainCheckout.ROW_CARD) { MainCheckout.changedNotice(shown.fields)?.let { Box(Modifier.conversationCard()) { MainCheckoutCard(it, row.key, event.seq, event.ts) } }; return@Column }
         if (event.type == MainCheckout.ROW_RESULT) { MainCheckout.resultNotice(shown.fields)?.let { MainCheckoutResultRow(it) }; return@Column }
         // A thinking row is its own one line (A06-11); a question card's line folds and opens it, as its record does.
         if (!detailOnly && event.type != "thinking" && bubble == null && !userBubble && !plainReply) Row(Modifier.fillMaxWidth().then(if (questions.isEmpty()) Modifier else Modifier
@@ -591,7 +592,7 @@ private fun SettledAuthLine(message: String, resolved: Boolean) {
 private fun ToolFailureCard(message: String, summary: ToolFailureSummary) {
     var expanded by rememberSaveable(message) { mutableStateOf(false) }
     val error = MaterialTheme.colorScheme.error
-    Column(Modifier.fillMaxWidth().drawBehind { drawRect(error, size = size.copy(width = 3.dp.toPx())) }.padding(start = 11.dp),
+    Column(Modifier.conversationCard().testTag("tool-failure-card").drawBehind { drawRect(error, size = size.copy(width = 3.dp.toPx())) }.padding(start = 11.dp),
         verticalArrangement = Arrangement.spacedBy(6.dp)) {
         Row(horizontalArrangement = Arrangement.spacedBy(7.dp), verticalAlignment = Alignment.CenterVertically) {
             Text(summary.tool ?: "Tool call", Modifier.weight(1f, fill = false), fontFamily = FontFamily.Monospace,
