@@ -208,7 +208,8 @@ final class TerminalsTests: XCTestCase {
         XCTAssertTrue(model.contains("try await api.revokeTerminal(terminal.id)\n            await load()"),
                       "a revoke reads the list again, so the revoked terminal leaves it")
         let app = try webSource("src/macos/OrbitApp/Sources/OrbitApp/AppModel.swift")
-        XCTAssertTrue(app.contains("case .terminals:\n            Task {\n                await ownerRequests?.loadTerminalRequests()\n                await terminals?.load()"))
+        XCTAssertTrue(app.contains("case .terminals:\n            whenSeen(\"terminals\") { app in\n                Task {\n"
+                                   + "                    await app.ownerRequests?.loadTerminalRequests()\n                    await app.terminals?.load()"))
     }
 
     private func webSource(_ path: String) throws -> String {

@@ -106,6 +106,11 @@ class BackgroundTrayTest {
             settle()
             val name = c["case"]!!.jsonPrimitive.content
             val expect = c["expect"]!!.jsonObject
+            // A case that carries its transcript is read through the reader, as every client must.
+            c["events"]?.jsonArray?.map { it.jsonObject }?.let { raw ->
+                val events = raw.map { e -> RunEvent(e["type"]!!.jsonPrimitive.content, e["seq"]!!.jsonPrimitive.long, e["payload"]!!, ts = e["ts"]?.jsonPrimitive?.contentOrNull) }
+                assertEquals(name, c["lastUserMessageAt"]?.jsonPrimitive?.contentOrNull, BackgroundTrayLogic.lastUserMessageAt(events))
+            }
             if (expect["hidden"]?.jsonPrimitive?.boolean == true) {
                 compose.onAllNodesWithTag("background-tray").assertCountEquals(0)
                 return@forEachIndexed
@@ -264,6 +269,16 @@ class BackgroundTrayTest {
         assertTrue("all three are in the band: $watching $tray $tasks", watching > 0 && tray > 0 && tasks > 0)
         assertTrue("Watching, then Background, then Tasks", watching < tray && tray < tasks)
         assertEquals("one Background row", tray, reader.lastIndexOf("BackgroundTray("))
+    }
+
+    @Test fun theFoldedRowEndsCountThenMarkThenChevronAsTheAgentsRow() {
+        // The row's semantics are cleared to its one label, so its children's order is read from the source.
+        val tray = generateSequence(File(System.getProperty("user.dir")).absoluteFile) { it.parentFile }
+            .map { File(it, "app/src/main/kotlin/io/orbitd/android/reader/BackgroundTray.kt") }.first { it.isFile }.readText()
+        val folded = tray.substring(tray.indexOf("private fun FoldedRow("), tray.indexOf("private fun Mark("))
+        val at = listOf("AnimatedContent(item, Modifier.weight(1f)", "row.countParts.isNotEmpty()", "Mark(item.mark)",
+            "Icon(WatchIcons.chevronRight").map { piece -> folded.indexOf(piece).also { assertTrue("no $piece", it > 0) } }
+        assertEquals("name, count, mark, chevron", at.sorted(), at)
     }
 
     private companion object { const val FIXTURE = "src/shared/src/background-row.fixture.json" }

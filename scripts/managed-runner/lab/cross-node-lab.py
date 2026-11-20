@@ -77,7 +77,7 @@ USERS = ('ann', 'bob')
 NODES, LINK_IPS = tl.NODES, tl.LINK_IPS
 RECORDER_UNIT = 'orbit-mr-lab-t08x-recorder'
 OUT_OF_SERVICE, STOP_REPORT = tl.OUT_OF_SERVICE, tl.STOP_REPORT
-RUNNER_PODS = 'app.kubernetes.io/name=orbit-managed-runner'  # the label of every Pod the manager makes
+RUNNER_PODS = 'app.kubernetes.io/name=orbit-cloud-runner'  # the label of every Pod the manager makes
 RUNBOOK = REPO / 'docs/managed-runner-kubernetes-operations.md'
 EVIDENCE = 'docs/evidence/managed-runner-cross-node-accounts/2026-10-19'
 MODEL_KEY = LAB_DIR / 'secrets/deepseek-api-key'
@@ -530,7 +530,7 @@ def duplicate_guard(ctx, step):
         after = {'placement': tl.placement(name), 'writerRows': writer_rows(name)}
         judge(step, attempts)
         step.check(job_result['case'] + ': no Pod; the Job controller\'s create refused by the guard', not job_result['admitted']
-                   and any('orbit-managed-runner-admission' in e and 'NOT_THE_MANAGER' in e for e in job_result['events']), job_result['events'])
+                   and any('orbit-cloud-runner-admission' in e and 'NOT_THE_MANAGER' in e for e in job_result['events']), job_result['events'])
         step.check(f'{name}: the authorized Pod is the same one, still running on {NODES[2]}',
                    (before['placement']['pod'] or {}).get('uid') == (after['placement']['pod'] or {}).get('uid') == m['pod_uid'])
         tl.check_placed(step, after['placement'], 2, f'{name}, after the contenders')

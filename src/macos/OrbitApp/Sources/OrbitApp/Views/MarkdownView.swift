@@ -81,6 +81,8 @@ struct MarkdownView: View, Equatable {
                         .modifier(BubbleProseInset(active: inset))
                 case .card(let ref):
                     OrbitLinkCardView(ref: ref, inBubble: inBubble)
+                case .settings(let place):
+                    SettingsLinkCardView(place: place)
                 case .file(let ref):
                     MarkdownFileLinkView(ref: ref)
                         .modifier(BubbleProseInset(active: inset))
@@ -102,6 +104,8 @@ struct MarkdownView: View, Equatable {
                         .modifier(BubbleProseInset(active: inset))
                 case .card(let ref):
                     OrbitLinkCardView(ref: ref, inBubble: inBubble)
+                case .settings(let place):
+                    SettingsLinkCardView(place: place)
                 case .file(let ref):
                     MarkdownFileLinkView(ref: ref)
                         .modifier(BubbleProseInset(active: inset))
@@ -130,6 +134,7 @@ enum MarkdownRenderBlock: Equatable {
     case markdown(MarkdownBlock)
     case card(OrbitLinkRef)
     case file(MarkdownFileRef)
+    case settings(SettingPlace)
 }
 
 /// A message's blocks, with every Orbit link that stands for itself replaced by the card drawn in
@@ -147,6 +152,7 @@ enum MarkdownRenderBlock: Equatable {
     return placed.flatMap { rendered -> [MarkdownRenderBlock] in
         switch rendered {
         case .card(let ref): return [.card(ref)]
+        case .settings(let place): return [.settings(place)]
         case .markdown(let block): return splitFileLinks(in: block)
         }
     }
@@ -158,6 +164,7 @@ extension Array where Element == MarkdownRenderBlock {
         contains { block in
             if case .card = block { return true }
             if case .file = block { return true }
+            if case .settings = block { return true }
             return false
         }
     }
@@ -224,6 +231,7 @@ private enum ProseGroup {
     case block(MarkdownBlock)
     case card(OrbitLinkRef)
     case file(MarkdownFileRef)
+    case settings(SettingPlace)
 }
 
 /// Fold a block list into render groups: maximal runs of flowable prose (headings, paragraphs,
@@ -248,6 +256,11 @@ private func proseGroups(_ blocks: [MarkdownRenderBlock], base: ProseRole) -> [P
         if case .file(let ref) = rendered {
             flush()
             groups.append(.file(ref))
+            continue
+        }
+        if case .settings(let place) = rendered {
+            flush()
+            groups.append(.settings(place))
             continue
         }
         guard case .markdown(let block) = rendered else { continue }

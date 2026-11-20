@@ -25,7 +25,7 @@ import kotlinx.serialization.Serializable
 import kotlinx.serialization.json.JsonObject
 
 val LocalAppearanceChanged = staticCompositionLocalOf<(String) -> Unit> { {} }
-/** The account's smart model selection switch (`preferences.modelRouting`; off unless the owner turned it on, iOS
+/** The account's smart model selection switch (`preferences.modelRouting`; on unless the owner turned it off, iOS
  * UserPreferences.smartModelSelection), read with the theme from the same `users/me`. While it is off no page draws smart selection:
  * the composer's ✦ (OrbitKit `ComposerLogic.smartRoute`), the task page's Suggested and tier tags, the workspace form's Task runs.
  * Settings' switch sets it the moment the server has taken the change. */

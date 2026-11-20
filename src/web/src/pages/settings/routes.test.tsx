@@ -21,6 +21,7 @@ describe('the Personal pages, each at /settings/<slug>', () => {
     ['shared-links', '<SharedLinksPage />'],
     ['access-tokens', '<AccessTokensPage />'],
     ['secrets', '<SecretsPage />'],
+    ['routing-report', '<RoutingReportPage />'],
     ['integrations/feishu', '<FeishuIntegrationPage />'],
     ['integrations/feishu/connect-group', '<FeishuConnectGroupPage />'],
     ['integrations/github', '<GithubIntegrationPage />'],

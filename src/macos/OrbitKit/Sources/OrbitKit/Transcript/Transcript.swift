@@ -295,6 +295,10 @@ public struct UserBubble: Equatable, Sendable, Codable {
     /// the English the engine got (or, while held, the same words). Nil on every message translation
     /// was not involved in.
     public var translation: TurnTranslation?
+    /// The session's opening prompt, while it is the accepted head no runner has echoed yet
+    /// (`QueuedTurnInfo.opening`). The server keeps it, so the held tag offers no Cancel under it
+    /// (`HeldCancel.offers`). False on every other message.
+    public var opening: Bool = false
 
     public init(id: String, text: String, attachments: [TurnAttachment] = [], ts: String? = nil,
                 clientTurnId: String? = nil, turnId: String? = nil, pending: Bool, queued: Bool = false,
@@ -364,7 +368,7 @@ public struct UserBubble: Equatable, Sendable, Codable {
         case sessionMessage, externalSender, sessionReplies
         case authoredByOrbit, reviewRequest, reviewReturn, reviewAnswers, withdrawable, shell
         case evidenceReview, evidenceSendBack, runQuestion, runNotice, sessionOpening
-        case receipt, deliveryCode, deliveryReason, opensTurn, translation
+        case receipt, deliveryCode, deliveryReason, opensTurn, translation, opening
     }
     public init(from decoder: Decoder) throws {
         let c = try decoder.container(keyedBy: CodingKeys.self)
@@ -416,6 +420,7 @@ public struct UserBubble: Equatable, Sendable, Codable {
         // A snapshot from before turn heads existed draws none until the window is re-read.
         opensTurn = try? c.decodeIfPresent(TurnOpening.self, forKey: .opensTurn)
         translation = try? c.decodeIfPresent(TurnTranslation.self, forKey: .translation)
+        opening = (try? c.decodeIfPresent(Bool.self, forKey: .opening)) ?? false
     }
 }
 

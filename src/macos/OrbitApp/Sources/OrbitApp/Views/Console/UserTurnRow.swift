@@ -53,6 +53,9 @@ struct UserTurnRow: View {
     /// The words of a message that never reached the engine, back in the composer: nil unless
     /// `SteerDelivery.offersPutBack` says so and there is a console to act through.
     var putBack: (() -> Void)? = nil
+    /// Scrolls a delivery card to the item's own card in this conversation; nil where there is no
+    /// console to scroll (board card-ui-polish ②).
+    var revealItemCard: ((String) -> Bool)? = nil
     /// The item a record link or a search hit asked for: this turn's long message opens if it is that one.
     @Environment(\.revealedItemID) private var revealedItemID
 
@@ -90,7 +93,8 @@ struct UserTurnRow: View {
             // Nobody typed this turn: draw the delivery card rather than the reader's own bubble.
             OpenItemDeliveryCardView(card: card, text: b.text, ts: b.ts,
                                      undelivered: undelivered,
-                                     onCancelQueued: cancel)
+                                     onCancelQueued: cancel,
+                                     revealItemCard: revealItemCard)
         } else if let card = b.ownerAnswer, b.sessionReplies?.isEmpty ?? true {
             // The owner's answer handed to the coordinator is the platform's message too: the question
             // replayed in full and the answer, written for the AGENT — as a bubble, the reader's own
@@ -155,16 +159,20 @@ struct UserTurnRow: View {
             // note once delivered and the turn's own words while it waits, folded at the card's foot.
             EvidenceToReviewCardView(card: card, told: told(b), ts: b.ts,
                                      undelivered: undelivered, onCancelQueued: cancel)
+                .orbitCardWidth()
         } else if let card = b.evidenceSendBack {
             EvidenceSentBackCardView(card: card, text: b.text, ts: b.ts,
                                      undelivered: undelivered,
                                      onCancelQueued: cancel)
+                .orbitCardWidth()
         } else if let card = b.runQuestion {
             RunQuestionCardView(card: card, told: told(b), ts: b.ts,
                                 undelivered: undelivered, onCancelQueued: cancel)
+                .orbitCardWidth()
         } else if let card = b.runNotice {
             RunNoticeCardView(card: card, told: told(b), ts: b.ts,
                               undelivered: undelivered, onCancelQueued: cancel)
+                .orbitCardWidth()
         } else if let card = b.sessionOpening {
             // The opening of a session Orbit opened with a brief of its own: one row saying why.
             SessionOpeningRowView(card: card, text: b.text,
@@ -189,6 +197,7 @@ struct UserTurnRow: View {
                 }
                 SessionReplyCardsView(replies: replies, ts: b.ts,
                                       undelivered: undelivered, onCancelQueued: cancel)
+                .orbitCardWidth()
             }
         } else if let line = RunnerUpdateNow.resumeLine(b.text) {
             // The turn Orbit sent to continue a turn the owner's Update Now cut (D4): nobody typed it,
@@ -224,27 +233,36 @@ struct UserTurnRow: View {
             WatchWakeCardView(wake: wake, text: b.text, ts: b.ts,
                               undelivered: undelivered, onWithdraw: cancel,
                               queued: queued != nil)
+        } else if queued == nil, let workflow = WorkflowFinishedText.parse(wakeNote) {
+            // An Orbit workflow's end: one pale purple strip (board subagent-workflow part 4 ②); the
+            // parent's answer follows as its own reply. Anything else the note carried keeps its line.
+            VStack(alignment: .leading, spacing: 6) {
+                WorkflowFinishedStripView(wake: workflow)
+                if let subagent = SubagentFinishedText.parse(workflow.rest) {
+                    SubagentFinishedLineView(wake: subagent, ts: b.ts)
+                } else if let jobs = BackgroundWakeText.parse(workflow.rest) {
+                    BackgroundWakeCardView(wake: jobs, ts: b.ts)
+                }
+                if undelivered {
+                    Text(BackgroundWakeCard.undelivered).font(.orbitMeta).foregroundStyle(.orange)
+                }
+                if BackgroundWakeCard.drawsBubble(text: b.text) { UserBubbleView(bubble: b) }
+            }
         } else if let subagent = SubagentFinishedText.parse(wakeNote) {
-            // A SubAgent's end is the same kind of turn, in a block of its own: one line in the
-            // agent's stream (web parity: `SubagentFinishedCard.tsx`). A note that carries a
-            // background job's news beside it draws that line too, after the SubAgent's, as the
-            // control plane wrote them; the job's line then says how the turn went, once.
-            let steerState = BackgroundWakeCard.steerState(steer: b.steer, delivery: b.delivery,
-                                                           undelivered: b.undelivered)
+            // A SubAgent's end is the same kind of turn, in a block of its own, and it draws NOTHING: like
+            // Claude Code's built-in Agent, the SubAgent is one card from start to end, and that card draws
+            // how it ended (`SubagentCardEnd`, joined by run id). The rows leave such a turn out
+            // (`SubagentCardEnd.drawsNothing`); what is left here is a job's news written beside it, which
+            // keeps its line, and words somebody typed, which keep their bubble (web parity: NodeView).
             VStack(alignment: .leading, spacing: 6) {
                 if let jobs = BackgroundWakeText.parse(subagent.rest) {
-                    SubagentFinishedLineView(wake: subagent, ts: b.ts, queued: queued != nil)
                     BackgroundWakeCardView(wake: jobs, ts: b.ts,
                                            undelivered: undelivered,
                                            onCancelQueued: cancel,
-                                           steerState: steerState,
+                                           steerState: BackgroundWakeCard.steerState(
+                                               steer: b.steer, delivery: b.delivery,
+                                               undelivered: b.undelivered),
                                            queued: queued != nil)
-                } else {
-                    SubagentFinishedLineView(wake: subagent, ts: b.ts,
-                                             undelivered: undelivered,
-                                             onCancelQueued: cancel,
-                                             steerState: steerState,
-                                             queued: queued != nil)
                 }
                 if queued == nil, BackgroundWakeCard.drawsBubble(text: b.text) {
                     UserBubbleView(bubble: b)

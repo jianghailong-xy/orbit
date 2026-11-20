@@ -469,7 +469,12 @@ func baseRefName(sessionID string) string {
 //     mid-session, so the old fork is still in its history yet the diff now counts the target's
 //     replayed commits as this session's additions.
 //
-// The candidate fork is merge-base(HEAD, branch). A valid recorded base is only tightened TOWARD
+// The candidate fork is merge-base(target, branch), where target is the branch this session merges
+// INTO (mergeTargetFor — a project task's integration line, project/<id>) when that branch exists
+// here, else the shared checkout's HEAD. Against HEAD alone, a branch forked off a project line and
+// rebased onto newer tips of it never tightened: the project line carries commits main lacks, so
+// the recorded fork was never an ancestor of merge-base(main, branch), and every main merge the
+// project line took in since the fork counted as this session's change. A valid recorded base is only tightened TOWARD
 // it (persisted must be an ancestor of the candidate), never loosened — a branch forked off a
 // non-HEAD branch (e.g. develop while the root sits on main) keeps its tighter recorded fork.
 // And it is never tightened all the way TO the branch tip: a fully-merged branch keeps its old
@@ -490,7 +495,11 @@ func (ops worktreeGitOps) resolveBaseSha(repoRoot, sessionID, branch, persisted 
 	if err != nil || tip == "" {
 		return persisted
 	}
-	mb, err := ops.run(repoRoot, "merge-base", "HEAD", branch)
+	against := "HEAD"
+	if target := mergeTargetFor(sessionID); target != "" && target != branch && ops.branchExists(repoRoot, target) {
+		against = "refs/heads/" + target
+	}
+	mb, err := ops.run(repoRoot, "merge-base", against, branch)
 	if ops.cancelled() {
 		return persisted
 	}

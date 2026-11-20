@@ -46,7 +46,7 @@ import { managedRunnerHeartbeat } from './managed-runner-sleep';
 import { recordManagedDemand } from './managed-runner-work';
 
 const URL = process.env.COORDINATOR_PG_URL;
-const NEW_IMAGE = `registry.invalid/orbit-managed-runner@sha256:${'b'.repeat(64)}`;
+const NEW_IMAGE = `registry.invalid/orbit-cloud-runner@sha256:${'b'.repeat(64)}`;
 
 test('a managed runner on a previous image rolls onto the new one when idle', {
   skip: !URL, concurrency: 1, timeout: 600_000,

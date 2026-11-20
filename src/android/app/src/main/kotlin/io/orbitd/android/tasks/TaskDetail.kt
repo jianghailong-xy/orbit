@@ -671,7 +671,7 @@ private class RunPins(val task: JsonObject, val data: TaskDetailData, assignee: 
     val runProvider = pinnedProvider ?: pinnedEngine?.let { engine -> if (engine == ProviderEngines.DSH) firstDeepSeekKey?.id ?: engine else engine }
         ?: assigneeProvider
     val models = catalog?.models(runEngine, runProvider).orEmpty()
-    val unpinned = if (smartSelection && assignee?.flag("modelRouting") == true) TaskDetailCopy.smartSelectionPlaceholder else TaskDetailCopy.providerDefault
+    val unpinned = if (smartSelection) TaskDetailCopy.smartSelectionPlaceholder else TaskDetailCopy.providerDefault
     val modelValue = task.text("model")?.let { m -> models.firstOrNull { it.text("value") == m }?.text("label") ?: m } ?: unpinned
 }
 
@@ -710,7 +710,7 @@ private fun RunsWithSheet(app: OrbitApplication, handle: SessionHandle, task: Js
                 listOf<Pair<String?, String>>(null to TaskListCopy.unassigned) + orderedWorkspaceRows(workspaces).map { it.text("id") to (it.text("name") ?: "Workspace") } +
                     listOfNotNull(currentAssignee?.takeIf { a -> workspaces.none { ObjectId.same(it.text("id"), a.text("id")) } }?.let { it.text("id") to (it.text("name") ?: it.text("id").orEmpty()) }),
                 tag = "task-assignee") { patch(buildJsonObject { put("assigneeId", it?.let(::JsonPrimitive) ?: JsonNull) }) }
-            // The account's switch for smart model selection, off by default: then none of it is drawn here — no Suggested, no ✦
+            // The account's switch for smart model selection, on by default: then none of it is drawn here — no Suggested, no ✦
             // placeholder, no coordinator's reason — as on the web and iOS (9fb3ae6ee).
             val picks = TaskDetailLogic.modelHintPicks(task.objects("modelHintOptions"))
             if (smartSelection) PickerRow(TaskDetailCopy.suggestedLabel, picks.firstOrNull { it.value == task.text("modelHint") }?.label ?: task.text("modelHint") ?: TaskDetailCopy.noSuggestion,

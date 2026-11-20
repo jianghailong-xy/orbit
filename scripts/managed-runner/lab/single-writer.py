@@ -68,14 +68,14 @@ MANAGER_KUBECONFIG = SERVER / 'manager-kubeconfig.json'
 PROFILE = SERVER / 'managed-runner-profile.json'
 WEBHOOK_TOKEN = SERVER / 'secrets' / 'admission-webhook-token'
 WEBHOOK_TEMPLATE = REPO / 'deploy/managed-runner/admission/pod-admission-webhook.template.json'
-WEBHOOK_NAME = 'orbit-managed-runner-pods'
+WEBHOOK_NAME = 'orbit-cloud-runner-pods'
 GUEST_ADMISSION_DIR = '/etc/rancher/k3s/orbit-admission'
 GUEST_K3S_DROP_IN = '/etc/rancher/k3s/config.yaml.d/50-orbit-admission.yaml'
 PAYLOAD = REPO / 'scripts/managed-runner/ceph-rbd-payload.py'
 # The runner runs as UID 10001 and owns only its home on the volume; the volume's root is root's.
 PAYLOAD_ROOT = '/home/orbit/storage-verification'
 PAYLOAD_IN_POD = '/tmp/t02a-payload.py'
-IMAGE_NAME = 'docker.io/library/orbit-managed-runner-lab'
+IMAGE_NAME = 'docker.io/library/orbit-cloud-runner-lab'
 PG = 'orbit-mr-lab-pg'
 INSTANCE_CAPABILITY = 'managed-runner-instance-v1'
 # Which test owner (and so which mapping) a command is about: state/<name>.json. The first is the
@@ -231,7 +231,7 @@ def cmd_retry(_args):
 
 def manager_objects():
     """The manager's ServiceAccount and exactly the access kubernetes-backend.ts uses, nothing more."""
-    meta = {'name': MANAGER, 'namespace': NAMESPACE, 'labels': {'app.kubernetes.io/name': 'orbit-managed-runner-manager'}}
+    meta = {'name': MANAGER, 'namespace': NAMESPACE, 'labels': {'app.kubernetes.io/name': 'orbit-cloud-runner-manager'}}
     subject = [{'kind': 'ServiceAccount', 'name': MANAGER, 'namespace': NAMESPACE}]
     storage = f'{MANAGER}-storage'
     return [
@@ -828,9 +828,9 @@ def cmd_credential(args):
         if offer.get('declare', True):
             headers['X-Orbit-Runner-Capabilities'] = INSTANCE_CAPABILITY
         if offer.get('generation') is not None:
-            headers['X-Orbit-Managed-Runner-Generation'] = str(offer['generation'])
+            headers['X-Orbit-Cloud-Runner-Generation'] = str(offer['generation'])
         if offer.get('podUid'):
-            headers['X-Orbit-Managed-Runner-Pod-Uid'] = offer['podUid']
+            headers['X-Orbit-Cloud-Runner-Pod-Uid'] = offer['podUid']
         status, answer = call(method, path, body, token=token, headers=headers, timeout=30)
         code = answer.get('code') if isinstance(answer, dict) else None
         message = answer.get('message') if isinstance(answer, dict) else answer

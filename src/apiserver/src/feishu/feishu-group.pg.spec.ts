@@ -69,8 +69,8 @@ const ACCOUNT_MODE = 'plan';
 const ROUTE_MODE = 'acceptEdits';
 
 /** The sentences the bot answers with, spelled out here so the spec pins the words themselves. */
-const NOT_ALLOWED = "This group's Orbit connection doesn't take requests from you, so nothing was started. Ask the bot's owner to add you in Orbit.";
-const NOT_LINKED = `This topic isn't linked to an Orbit session. To start one, send "@${X.botName} <request>" in the group, not in a topic.`;
+const NOT_ALLOWED = "This group's connection doesn't take requests from you, so nothing was started. Ask the bot's owner to add you.";
+const NOT_LINKED = `This topic isn't linked to a session. To start one, send "@${X.botName} <request>" in the group, not in a topic.`;
 
 async function until<T>(what: string, probe: () => Promise<T> | T, ms = 30_000): Promise<NonNullable<T>> {
   const deadline = Date.now() + ms;

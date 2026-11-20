@@ -2159,6 +2159,22 @@ describe('the project sessions page — the Landings row', () => {
     expect(mounted().textContent).not.toContain('Nothing landed today');
   });
 
+  it('draws no Landings row while the project has no line, and draws it once the line exists', async () => {
+    rows = [LOOSE, COORDINATOR, TASK, LANDING(820, 'Land · Build the package', awaiting())];
+    integrationView = { line: null, lineAbsentReason: 'NOT_DECIDED', upstreamRef: null, integratingCount: 0, queuedCount: 0, inFlight: null };
+    await mount();
+    await openSessions();
+    await until(() => expect(mounted().querySelector('.session-project-coordinator')).not.toBeNull());
+    await settle();
+    expect(section()).toBeNull();
+    await unmount();
+
+    integrationView = { line: 'PROJECT_BRANCH', lineAbsentReason: null, upstreamRef: 'main', integratingCount: 0, queuedCount: 0, inFlight: null };
+    await mount();
+    await openSessions();
+    await until(() => expect(section()).not.toBeNull());
+  });
+
   it('opens the project’s Landings window from the whole row', async () => {
     const landing = LANDING(820, 'Land · Build the package', awaiting());
     rows = [LOOSE, COORDINATOR, TASK, landing];

@@ -125,6 +125,16 @@ class EngineFirstShellTest : ComposerShellTest() {
         assertEquals(emptyList<String>(), names.mapNotNull { (engine, name) -> misfit(engine, name) })
     }
 
+    /** The new session page as iOS's draft opens: back alone in the bar (no drawer, no refresh) and the box focused for typing. */
+    @Test fun theNewSessionPageOpensFocusedWithBackAloneInTheBar() {
+        signIn(); openDraft()
+        await { has(hasTestTag("new-session-engine") and isEnabled()) }
+        await { has(hasTestTag("composer-input") and isFocused()) }
+        compose.onNodeWithContentDescription("Back").assertExists()
+        compose.onAllNodesWithContentDescription("Open navigation").assertCountEquals(0)
+        compose.onAllNodesWithContentDescription("Refresh directory").assertCountEquals(0)
+    }
+
     /** An engine picked lands on the workspace's lastModel only where it is the workspace's lastEngine and lastProvider: Codex on
      * its default, whatever the account's old memory says for it; Claude Code back on the lastModel. */
     @Test fun anEnginePickedLandsOnTheWorkspacesLastModelOnlyOnItsOwnEngine() {

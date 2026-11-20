@@ -321,9 +321,12 @@ services:
       ORBIT_MANAGED_RUNNERS_ENABLED: "${ORBIT_MANAGED_RUNNERS_ENABLED:-false}"
       # Orbit Cloud browser, off unless the host's .env says true (docs/runner-browser-design.md §2).
       ORBIT_MANAGED_RUNNER_BROWSER_ENABLED: "${ORBIT_MANAGED_RUNNER_BROWSER_ENABLED:-false}"
-      ORBIT_MANAGED_RUNNERS_PROFILE: /var/lib/orbit-managed-runners/profile.json
+      ORBIT_MANAGED_RUNNERS_PROFILE: /var/lib/orbit-cloud-runners/profile.json
     volumes:
       # Read-only. With ORBIT_MANAGED_RUNNERS_DIR unset, /dev/null stands in, so nothing is created on the host.
+      - "${ORBIT_MANAGED_RUNNERS_DIR:-/dev/null}:/var/lib/orbit-cloud-runners:ro"
+      # The same directory at its path from before the rename, which channel.json and profile.json written by an
+      # earlier install still name inside them.
       - "${ORBIT_MANAGED_RUNNERS_DIR:-/dev/null}:/var/lib/orbit-managed-runners:ro"
       # The files directory (ORBIT_FILES_DIR's default), the way ./data/postgres holds the database: the bytes of every
       # attachment the local store keeps, and the temporary files uploads arrive in.
@@ -451,16 +454,18 @@ services:
     # The disk the storage budget is measured on: an empty volume of the channel's own, read-only, which Docker keeps
     # beside every runner's data volume whatever filesystem its data root is on. This container sees neither the data
     # root nor what is in it.
-    command: ["serve", "--config", "/var/lib/orbit-managed-runners/channel.json", "--disk-probe-path", "/var/lib/orbit-docker-volumes"]
+    command: ["serve", "--config", "/var/lib/orbit-cloud-runners/channel.json", "--disk-probe-path", "/var/lib/orbit-docker-volumes"]
     volumes:
       - /var/run/docker.sock:/var/run/docker.sock
+      - "${ORBIT_MANAGED_RUNNERS_DIR:-/dev/null}:/var/lib/orbit-cloud-runners"
+      # Its path from before the rename, which an earlier install's channel.json still names.
       - "${ORBIT_MANAGED_RUNNERS_DIR:-/dev/null}:/var/lib/orbit-managed-runners"
       - type: volume
         target: /var/lib/orbit-docker-volumes
         read_only: true
     healthcheck:
       # Serving: its socket takes a connection. Every request on it still needs the token.
-      test: ["CMD", "python3", "-c", "import socket; socket.socket(socket.AF_UNIX).connect('/var/lib/orbit-managed-runners/channel.sock')"]
+      test: ["CMD", "python3", "-c", "import socket; socket.socket(socket.AF_UNIX).connect('/var/lib/orbit-cloud-runners/channel.sock')"]
       interval: 5s
       timeout: 5s
       retries: 6
@@ -478,8 +483,8 @@ services:
     build:
       context: .
       dockerfile: deploy/managed-runner/firewall/Dockerfile
-    image: orbit-managed-runner-firewall:local
-    container_name: orbit-managed-runner-firewall
+    image: orbit-cloud-runner-firewall:local
+    container_name: orbit-cloud-runner-firewall
     restart: unless-stopped
     logging: *logging
     network_mode: host
@@ -489,7 +494,7 @@ services:
     read_only: true
     volumes:
       # Its configuration, and the status the Docker channel reads.
-      - "${ORBIT_MANAGED_RUNNERS_DIR:-/dev/null}/firewall:/var/lib/orbit-managed-runner-firewall"
+      - "${ORBIT_MANAGED_RUNNERS_DIR:-/dev/null}/firewall:/var/lib/orbit-cloud-runner-firewall"
       # The legacy iptables backend's lock, which Docker's own iptables calls take too; the install names it only where
       # the host's iptables is legacy. Never made on the host: a directory there would break the host's iptables.
       - type: bind
@@ -499,7 +504,7 @@ services:
           create_host_path: false
     healthcheck:
       # Healthy while its status says the rules are in force: what the Docker channel reads before it starts a runner.
-      test: ["CMD", "python3", "-I", "/opt/orbit-managed-runner-firewall/firewall.py", "status"]
+      test: ["CMD", "python3", "-I", "/opt/orbit-cloud-runner-firewall/firewall.py", "status"]
       interval: 10s
       timeout: 5s
       retries: 3

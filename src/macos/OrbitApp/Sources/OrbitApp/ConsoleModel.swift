@@ -268,7 +268,7 @@ final class ConsoleModel {
         let askedAt = asked.requestedAt ?? ISO8601DateFormatter().string(from: Date())
         let started = Date()
         while !Task.isCancelled, Date().timeIntervalSince(started) < ClaudeRegion.checkWait {
-            try? await Task.sleep(for: .seconds(ClaudeRegion.checkPollInterval))
+            await VisibilityGate.app.pause(ClaudeRegion.checkPollInterval)   // not while hidden (§4 R3)
             await refreshRunner()
             if ClaudeRegion.checkAnswered(checkedAt: runnerRegion?.checkedAt, askedAt: askedAt) { return }
         }
@@ -581,6 +581,7 @@ final class ConsoleModel {
 
     /// Read the detail again for the workspace this conversation made: its clone moved, or was retried.
     func refreshMadeWorkspace() async {
+        if owedWhileHidden("made-workspace", { await $0.refreshMadeWorkspace() }) { return }
         await refreshServerStatus()
     }
 
@@ -1122,6 +1123,10 @@ final class ConsoleModel {
     /// transcript's SubAgent block draws its tier, model, duration and Why from. Re-read when one
     /// starts or ends (`SubagentRuns.signature`); empty for a session that never delegated.
     private(set) var subagentRuns: [String: SubagentRunView] = [:]
+    /// The session's Orbit workflows by `mcp__orbit__workflow` call (GET /sessions/:id/workflows), re-read
+    /// with the runs whenever a workflow, or one of its calls, moves (`WorkflowRuns.signature`); its calls'
+    /// runs are in `subagentRuns`, under `<workflow call>#<callIndex>`.
+    private(set) var workflowRuns: [String: WorkflowRunView] = [:]
     private var subagentRunsSignature = ""
     /// Settings › Translation (3A) after the answer: the owner-language text of the session's question
     /// cards, by the call's tool_use id, so an answered question's record shows what its card showed.
@@ -1185,6 +1190,22 @@ final class ConsoleModel {
     }
     /// Sink for a session outcome — the app's toast host, injected by `ConsoleRegistry`.
     @ObservationIgnored var onToast: (ToastRequest) -> Void = { _ in }
+    /// The runners this console just read (`refreshRunner`): the app's runner snapshot too, so the
+    /// tick's own read of the same list counts from it. Injected by `ConsoleRegistry`.
+    @ObservationIgnored var onRunnersRead: ([Runner]) -> Void = { _ in }
+
+    /// While the app cannot be seen this conversation reads nothing (docs/list-freshness-design.md
+    /// §4 R3), whatever asks — its stream's events and reconnects, the app's list, its own minute
+    /// loops. A read asked for meanwhile is owed under `name`, one read however often it is asked,
+    /// and made once when the app is shown again (`VisibilityGate.read`). True when it was owed.
+    private func owedWhileHidden(_ name: String, _ read: @escaping (ConsoleModel) async -> Void) -> Bool {
+        guard !VisibilityGate.app.isVisible else { return false }
+        VisibilityGate.app.read("console.\(sessionID).\(name)") { [weak self] in
+            guard let self else { return }
+            Task { await read(self) }
+        }
+        return true
+    }
     /// Local `/status` results belong in the conversation, not the error/info banner above the
     /// composer. Keep a short in-memory tail, matching the web client; these are intentionally not
     /// persisted because no corresponding runner event exists.
@@ -1786,18 +1807,30 @@ final class ConsoleModel {
     /// `useSubagentRuns`). The signature makes this a no-op on the many publishes that move nothing
     /// about a SubAgent; a failed read is not retried until the transcript moves again.
     private func refreshSubagentRunsIfNeeded() {
-        let signature = SubagentRuns.signature(items: state.items, background: state.background)
+        let delegates = SubagentRuns.signature(items: state.items, background: state.background)
+        let workflows = WorkflowRuns.signature(items: state.items, nested: state.subagentItems,
+                                               background: state.background)
+        let signature = delegates + "|" + workflows
         guard signature != subagentRunsSignature else { return }
         subagentRunsSignature = signature
-        guard !signature.isEmpty else {
+        guard !delegates.isEmpty || !workflows.isEmpty else {
             subagentRuns = [:]
+            workflowRuns = [:]
             return
         }
         subagentRunsFetch?.cancel()
         subagentRunsFetch = Task { [weak self] in
-            guard let self, let rows = try? await self.api.sessionSubagents(sessionID: self.sessionID) else { return }
+            guard let self else { return }
+            let sessionID = self.sessionID
+            async let runs = self.api.sessionSubagents(sessionID: sessionID)
+            async let flows: [WorkflowRunView]? = workflows.isEmpty ? [] : try? await self.api.sessionWorkflows(sessionID: sessionID)
+            guard let rows = try? await runs else { return }
+            let workflowRows = await flows
             guard !Task.isCancelled else { return }
             self.subagentRuns = Dictionary(rows.map { ($0.toolUseId, $0) }, uniquingKeysWith: { _, last in last })
+            if let workflowRows {
+                self.workflowRuns = Dictionary(workflowRows.map { ($0.toolUseId, $0) }, uniquingKeysWith: { _, last in last })
+            }
         }
     }
 
@@ -2039,13 +2072,20 @@ final class ConsoleModel {
                                       tick: scrollTick)
     }
 
-    /// The `delegate` call a SubAgent run was started from, by the run its result names — what a
-    /// SubAgent's finished line links back to — or nil where the loaded transcript holds none.
-    func delegateCard(forRun runId: String) -> String? {
-        for case .toolCall(let card) in reducer.state.items where card.name == SubagentBlock.toolName {
-            if SubagentFinishedText.delegateRunId(card.result) == runId { return card.id }
+    /// Each SubAgent end turn loaded, by run id: its card draws the end and keeps the block the agent read
+    /// (`SubagentCardEnd.wakes`), so the turn itself draws nothing.
+    var subagentWakes: [String: SubagentCardEnd.WakeSeen] { SubagentCardEnd.wakes(state.items) }
+
+    /// Each SubAgent end turn still on the queue, by run id: its card says the agent has not read it yet,
+    /// and its `Don't send` takes the turn off the queue, as the queue's own Cancel did.
+    var subagentQueuedWakes: SubagentQueuedWakes {
+        var out: [String: @MainActor () -> Void] = [:]
+        for bubble in state.queued {
+            for runId in SubagentCardEnd.queuedWake(bubble)?.runIds ?? [] {
+                out[runId] = { [weak self] in Task { await self?.cancelQueued(bubble) } }
+            }
         }
-        return nil
+        return SubagentQueuedWakes(dontSend: out)
     }
 
     /// The transcript scrolled to the record's row: mark it for a moment, and consume the request so a
@@ -2347,10 +2387,12 @@ final class ConsoleModel {
     /// admission closed, as `loadContext`'s does.
     private func refreshRunner() async {
         guard let runnerID else { return }
+        if owedWhileHidden("runner", { await $0.refreshRunner() }) { return }
         guard let rows = try? await api.runners() else {
             clearCodexResetAdmission()
             return
         }
+        onRunnersRead(rows)
         fleetKnowsCursor = rows.contains(where: CursorRuntime.runnerKnows)
         let runner = rows.first(where: { $0.id == runnerID })
         if let runner { adoptRunnerSnapshot(runner) } else { clearRunnerSnapshot() }
@@ -2495,7 +2537,9 @@ final class ConsoleModel {
     /// asks no owner confirmation. Asked on a reconnect and on the minute, which is all that moves here
     /// when the stream never dropped.
     private func loadContextIfUnread() async {
-        if !contextLoaded { await loadContext() }
+        guard !contextLoaded else { return }
+        if owedWhileHidden("context", { await $0.loadContextIfUnread() }) { return }
+        await loadContext()
     }
 
     /// List seeds and the later detail read resolve the same settings. A model-less session keeps
@@ -3938,7 +3982,7 @@ final class ConsoleModel {
                 }
             }
             while !Task.isCancelled {
-                try? await Task.sleep(nanoseconds: 2_500_000_000)
+                await VisibilityGate.app.pause(2.5)   // not while the app cannot be seen (§4 R3)
                 guard let self, !Task.isCancelled else { return }
                 do {
                     let operation = try await self.api.codexRateLimitResetOperation(
@@ -4130,6 +4174,30 @@ final class ConsoleModel {
             }
         } catch {
             showTransientStatus("This message is already being processed and can't be withdrawn")
+        }
+    }
+
+    /// Messages under the held tag whose Cancel is out, by turn id: a second press waits for the first.
+    private var cancellingHeld: Set<String> = []
+
+    /// The held tag's Cancel (`Queued · runner full · Cancel`, web parity: `cancelHeldTurn`): withdraw
+    /// a message the server accepted but no runner has taken, through the queued Cancel's DELETE —
+    /// the session goes back to awaiting input. Unlike that Cancel nothing leaves the screen until
+    /// the server answers; then the bubble goes and its words come back under any draft. Refused,
+    /// a runner has it, and it stays. Attachments aren't rehydrated, as with Cancel.
+    func cancelHeld(_ bubble: UserBubble) async {
+        guard let turnId = bubble.turnId, !cancellingHeld.contains(turnId) else { return }
+        cancellingHeld.insert(turnId)
+        defer { cancellingHeld.remove(turnId) }
+        let api = self.api
+        let sessionID = self.sessionID
+        switch await HeldCancel.press(bubble, withdraw: { try await api.withdrawTurn(sessionID: sessionID, turnId: $0) }) {
+        case .withdrawn(let words):
+            reducer.removeAcceptedTurn(turnId: turnId)
+            publishStateNow()
+            composerText = HeldCancel.composer(composerText, restoring: words)
+        case .refused:
+            showTransientStatus(HeldCancel.refused)
         }
     }
 
@@ -4887,6 +4955,7 @@ final class ConsoleModel {
     /// iOS-specific gap — a suspended socket misses everything), when a card scrolls into view, and
     /// after any press. What it may never do is remove a card.
     func refreshRulerQuestions(force: Bool = false) async {
+        if owedWhileHidden("ruler", { await $0.refreshRulerQuestions(force: true) }) { return }
         // The evidence cards first, and in every conversation (`refreshEvidenceDecisions`): every
         // door that asks for the ruler's reads — reconnect, a card appearing, a press — asks for them.
         await refreshEvidenceDecisions(force: force)
@@ -5358,7 +5427,9 @@ final class ConsoleModel {
     /// Runs when the session's context loads, with the evidence reads (reconnect, a row's waiting count moving),
     /// and after every press on one of them.
     func refreshScheduleCards(force: Bool = false) async {
-        guard !isDraft, !loadingScheduleCards else { return }
+        guard !isDraft else { return }
+        if owedWhileHidden("schedule-cards", { await $0.refreshScheduleCards(force: true) }) { return }
+        guard !loadingScheduleCards else { return }
         if !force, Date().timeIntervalSince(lastScheduleRead) < Self.rulerReadThrottle { return }
         lastScheduleRead = Date()
         loadingScheduleCards = true
@@ -5725,7 +5796,9 @@ final class ConsoleModel {
     /// is a card saying it could not check — and a card that vanished mid-read is indistinguishable,
     /// to the person reading it, from a render that broke.
     func refreshOwnerConfirmation(force: Bool = false) async {
-        guard !isDraft, let taskID, !loadingOwnerConfirmation else { return }
+        guard !isDraft, taskID != nil else { return }
+        if owedWhileHidden("owner-confirmation", { await $0.refreshOwnerConfirmation(force: true) }) { return }
+        guard let taskID, !loadingOwnerConfirmation else { return }
         if !force, Date().timeIntervalSince(lastOwnerRead) < Self.rulerReadThrottle { return }
         loadingOwnerConfirmation = true
         defer { loadingOwnerConfirmation = false }
@@ -5866,6 +5939,7 @@ final class ConsoleModel {
     /// event, and there may not be one.
     func refreshEvidenceDecisions(force: Bool = false) async {
         guard !isDraft else { return }
+        if owedWhileHidden("evidence", { await $0.refreshEvidenceDecisions(force: true) }) { return }
         // The schedule cards ride every door this read does: a card is asked or a change made while the reader
         // is elsewhere, and only reading again finds it.
         Task { [weak self] in await self?.refreshScheduleCards() }
@@ -6526,6 +6600,21 @@ final class ConsoleModel {
         requestScroll(to: card.id)
     }
 
+    /// Scroll to an exception item's own card in this conversation, where the read still draws one —
+    /// the delivery card's `Go to the item card ↑` (board card-ui-polish ②). False when the
+    /// conversation holds no card for the item, which is what the delivery card then says.
+    @discardableResult
+    func revealOpenItemCard(_ itemID: String) -> Bool {
+        guard let card = decisionCards.first(where: {
+            switch $0.kind {
+            case .escalatedItem(let id), .fusePause(let id): return id == itemID
+            default: return false
+            }
+        }) else { return false }
+        requestScroll(to: card.id)
+        return true
+    }
+
     /// Lift the pause (§6.3 F-T4, mock 6 ①) — the owner's alone, and the one press that starts a
     /// stopped conversation again. The episode the card was drawn from rides along, so a press
     /// made after the pause was lifted is refused by the door rather than resuming the next one.
@@ -6663,6 +6752,7 @@ final class ConsoleModel {
     /// we likewise never received. The `knownBefore` snapshot is captured before the await so a live
     /// nudge that folds in during the fetch isn't mistaken for a stale card and dropped.
     private func refreshApprovals() async {
+        if owedWhileHidden("approvals", { await $0.refreshApprovals() }) { return }
         let knownBefore = Set(reducer.state.pendingApprovals.map(\.id))
         guard let infos = try? await api.approvals(sessionID: sessionID) else { return }
         reducer.reconcileApprovals(infos.map {
@@ -6682,6 +6772,7 @@ final class ConsoleModel {
     /// untagged local POST still in flight survives a snapshot that raced just ahead of its commit.
     private var queuedTurnsFetchGeneration = 0
     private func refreshQueuedTurns() async {
+        if owedWhileHidden("queued-turns", { await $0.refreshQueuedTurns() }) { return }
         queuedTurnsFetchGeneration &+= 1
         let generation = queuedTurnsFetchGeneration
         let knownBefore = reducer.state.listedTurnIDs
@@ -6707,6 +6798,7 @@ final class ConsoleModel {
     /// always longer than that, while an end-of-turn reconnect is seconds. `force` bypasses the throttle
     /// for a cold-open seed (nothing cached yet). Failures don't stamp the clock, so they re-fetch freely.
     private func refreshBackground(force: Bool = false) async {
+        if owedWhileHidden("background", { await $0.refreshBackground(force: force) }) { return }
         let now = Date()
         if !force, let last = lastBackgroundFetch, now.timeIntervalSince(last) < 30 { return }
         guard let dtos = try? await api.backgroundShells(sessionID: sessionID) else { return }

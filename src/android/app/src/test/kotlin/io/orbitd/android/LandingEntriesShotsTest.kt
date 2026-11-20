@@ -186,7 +186,7 @@ abstract class LandingEntriesShots {
     @Test fun theDeliveryCardsTwoLinks() {
         val delivery = buildJsonObject {
             put("itemId", "i1"); put("kind", "INTEGRATION_CHECK_FAILED"); put("title", "Checks failed on the combined tree")
-            putJsonObject("task") { put("id", "t1"); put("title", "Wire the page"); put("sessionId", "s-failed") }
+            putJsonObject("task") { put("id", "01a03f58-40bd-76ac-85c1-d9c6b29f8ca9"); put("title", "Wire the page"); put("sessionId", "489fc485-949c-533a-9b56-7712a68762ef") }
             putJsonArray("files") {}; put("targetRef", "refs/heads/project/launch")
             put("landingSessionId", landing)
         }

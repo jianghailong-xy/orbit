@@ -6,6 +6,7 @@ import { routeId } from '../lib/idCodec';
 import { projectTaskPath } from '../lib/projectTaskRoute';
 import { Spinner } from '../components/ui/Spinner';
 import { TaskListView } from './TaskListView';
+import { taskDocumentReach, type SessionReachDeclaration } from '../lib/sessionReach';
 
 /**
  * The Tasks page's routes — `/tasks`, `/tasks/:id`, `/lists/:key` — and the one place a task's
@@ -38,7 +39,7 @@ export function TaskRoute() {
     // The panel's own read, under its own key: one cache entry with TaskDetailPanel's and
     // ProjectTaskPanel's reads, so it declares what that entry carries — the task's sessions
     // included, which is where its Running/Queued state comes from.
-    meta: { entities: ['task', 'session'] },
+    meta: { entities: ['task', 'session'], sessionReach: taskDocumentReach(taskId ?? '') satisfies SessionReachDeclaration },
     queryFn: () => api<any>(`/tasks/${taskId}`),
     enabled: Boolean(taskId) && browsing,
   });

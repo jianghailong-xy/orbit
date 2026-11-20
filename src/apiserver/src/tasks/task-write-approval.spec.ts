@@ -10,7 +10,10 @@ import assert from 'node:assert/strict';
 import { randomUUID } from 'node:crypto';
 import { test } from 'node:test';
 
+import { ValidationPipe } from '@nestjs/common';
 import { uuidToBase62 } from '@orbit/shared';
+
+import { CreateTaskDto, CreateTasksBatchDto } from './dto';
 
 import {
   TASK_WRITE_NEEDS_OWNER_CARD_ACTION,
@@ -85,6 +88,58 @@ test('a batch matches item for item', () => {
   assert.equal(cardCoversBatch(cardInput, [{ ...request[0], projectId: uuidToBase62(projectId) }, two]), true, 'spellings');
   assert.equal(cardCoversBatch({ tasks: [one] }, [request[0], request[1]]), false, 'an item the card never carried');
   assert.equal(cardCoversBatch({}, request), false, 'no tasks at all');
+});
+
+/** The pipe every request body passes through before the gate reads it (main.ts). */
+const pipe = new ValidationPipe({ whitelist: true, transform: true, forbidNonWhitelisted: false });
+const asReceived = <T>(body: unknown, metatype: new () => T): Promise<T> =>
+  pipe.transform(JSON.parse(JSON.stringify(body)), { type: 'body', metatype }) as Promise<T>;
+
+/** What runner-go sends for a task forked from its session: the session id as ORBIT_SESSION_ID spells it. */
+const forkOf = (sessionId: string) => ({
+  sessionId: uuidToBase62(sessionId),
+  sha: 'a'.repeat(40),
+  baseHead: 'b'.repeat(40),
+  includesUncommitted: true,
+  changedFiles: ['src/web/src/components/Transcript.tsx'],
+});
+
+test('a forked create matches its card after the body passes the validation pipe', async () => {
+  const sessionId = randomUUID();
+  // runner-go files the card with the same body it then posts, ids in base62 (mcp.go task_create).
+  const sent = {
+    ...createBody(),
+    attachmentIds: [uuidToBase62(randomUUID())],
+    runAt: '2026-11-19T20:00:00.000Z',
+    fork: forkOf(sessionId),
+  };
+  const card = { input: JSON.parse(JSON.stringify(sent)), startAfterCreate: false };
+  const request = await asReceived(sent, CreateTaskDto);
+  // The pipe spells the fork's session as a uuid; the card keeps the base62 the runner sent.
+  assert.equal((request as { fork?: { sessionId: string } }).fork?.sessionId, sessionId);
+  assert.equal(cardCoversCreate(card, request), true, 'the same fork, in both spellings');
+  const other = await asReceived({ ...sent, fork: forkOf(randomUUID()) }, CreateTaskDto);
+  assert.equal(cardCoversCreate(card, other), false, 'a fork of another session is another write');
+});
+
+test('a batch with a forked item matches its card after the body passes the validation pipe', async () => {
+  const sessionId = randomUUID();
+  const tasks = [
+    {
+      ref: 'web',
+      title: 'Web first',
+      completionCriterion: 'EVIDENCE_JUDGMENT',
+      attachmentIds: [uuidToBase62(randomUUID())],
+      runAt: '2026-11-19T20:00:00.000Z',
+      fork: forkOf(sessionId),
+    },
+    { ref: 'apple', title: 'Then Apple', completionCriterion: 'EVIDENCE_JUDGMENT', dependsOnRefs: ['web'] },
+  ];
+  const cardInput = JSON.parse(JSON.stringify({ tasks }));
+  const request = await asReceived({ tasks }, CreateTasksBatchDto);
+  assert.equal(cardCoversBatch(cardInput, request.tasks), true, 'the same fork, in both spellings');
+  const other = await asReceived({ tasks: [{ ...tasks[0], fork: forkOf(randomUUID()) }, tasks[1]] }, CreateTasksBatchDto);
+  assert.equal(cardCoversBatch(cardInput, other.tasks), false, 'a fork of another session is another write');
 });
 
 test('a DAG change matches the list and the edges', () => {

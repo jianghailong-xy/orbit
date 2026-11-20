@@ -146,6 +146,42 @@ final class ProjectLandingHeadTests: XCTestCase {
                                 startedAt: iso(ago: 110.5, from: Date()))
     }
 
+    /// 2026-11-19: a merge waiting for its runner's local lock read "fetching · no output for 78m".
+    /// It is waiting, behind the job the server names, on the wait's own clock. Web: the same case in
+    /// ProjectPanoramaHeader.test.tsx.
+    func testAJobWaitingForTheRunnersLocalLockSaysSoAndNamesTheHolder() {
+        // The fixture's ISO timestamps only preserve milliseconds. Use an exact second for the clock boundaries.
+        let now = Date(timeIntervalSince1970: 1_800_000_000)
+        let holder = "Waiting for runner workstation-gpu’s repository lock: the merge check of project “Wiki” holds it"
+        let reason = LandTaskBlockingReason(code: "WAITING_LOCAL_LOCK", summary: holder, jobId: "j-holder")
+        let wait = iso(ago: 78 * 60, from: now)
+        func view(_ liveness: String, heartbeatAgo: TimeInterval = 0) -> ProjectIntegrationView {
+            ProjectIntegrationView(
+                integratingCount: 1, queuedCount: 0,
+                inFlight: ProjectIntegrationInFlight(
+                    state: "RUNNING", startedAt: wait, kind: "LAND_PROMOTION", phase: "FETCH",
+                    heartbeatAt: iso(ago: heartbeatAgo, from: now), jobId: "j-wait", runner: "workstation-gpu",
+                    claim: 1, round: 1, stepStartedAt: wait, outputMovedAt: wait, progressProtocol: "v2",
+                    liveness: liveness, blockingReason: reason),
+                inFlightJobs: [ProjectIntegrationJob(
+                    jobId: "j-wait", kind: "LAND_PROMOTION", state: "RUNNING", phase: "FETCH",
+                    startedAt: wait, queuedAt: wait, heartbeatAt: iso(ago: heartbeatAgo, from: now),
+                    runnerName: "workstation-gpu", claim: 1, round: 1, stepStartedAt: wait,
+                    outputMovedAt: wait, liveness: liveness, blockingReason: reason)])
+        }
+        let line = ProjectPage.landingLine(view("QUIET"), now: now, updatedAt: now)!
+        XCTAssertEqual(line.state, ProjectPage.landingWaiting)
+        XCTAssertEqual(line.head.detail, "waiting · \(holder) · claim 1 · round 1")
+        XCTAssertTrue(line.head.right.hasPrefix("78m "), "the wait's own clock: \(line.head.right)")
+        XCTAssertFalse(line.head.detail.contains("no output"))
+        let job = ProjectPage.landingJobLines(view("QUIET"), now: now, updatedAt: now)[0]
+        XCTAssertEqual(job.line.state, "waiting")
+        XCTAssertEqual(job.line.head.detail, "waiting · \(holder) · claim 1 · round 1")
+        // A runner gone silent is the runner's fact, not the lock's.
+        let silent = ProjectPage.landingLine(view("SILENT", heartbeatAgo: 9 * 60), now: now, updatedAt: now)!
+        XCTAssertEqual(silent.head.detail, "fetching · no word from runner workstation-gpu for 9m · claim 1 · round 1")
+    }
+
     func testTheFiveReadingsDrawTheStepClockAndTheServersLiveness() {
         XCTAssertEqual(v6(liveness: "LIVE", check: acceptance).head,
                        ProjectPage.LandingHead(right: "1m 50s of 60m", isClock: true,

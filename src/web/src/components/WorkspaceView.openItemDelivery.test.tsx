@@ -7,6 +7,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import type { OpenItemDeliveryCard as Delivery } from '@orbit/shared';
 import type { ActiveSessionTurn } from '../api';
 import type { Runner } from './TasksSidePanel';
+import { GO_TO_ITEM_CARD } from './OpenItemDeliveryCard';
 
 /**
  * An exception item's delivery reaches the tab twice: first as a QUEUED TURN the client reads from
@@ -177,7 +178,7 @@ const cardFields = (el: Element) => ({
   headline: el.querySelector('.oic-why')?.textContent,
   files: [...el.querySelectorAll('.oic-files li')].map((li) => li.textContent),
   landing: el.querySelector('.oic-facts')?.textContent,
-  doors: [...el.querySelectorAll('.oic-chip')].map((chip) => chip.textContent),
+  goto: el.querySelector('.oic-goto')?.textContent,
   links: [...el.querySelectorAll('.oic-links a')].map((a) => a.textContent),
   meta: el.querySelector('.oic-meta')?.textContent,
 });
@@ -303,8 +304,8 @@ describe('an exception item’s delivery, on its way into the transcript', () =>
     const placeholder = cardFields(card()!);
     expect(placeholder.title).toBe(CARD.title);
     expect(placeholder.files).toEqual(CARD.files);
-    // The server lists no rerun for a conflict, so the card offers only the quiet door that stops it.
-    expect(placeholder.doors).toEqual(['Cancel the task']);
+    // The doors are pressed on the item's own card; this one points at it.
+    expect(placeholder.goto).toBe(GO_TO_ITEM_CARD);
 
     // …and then the runner leases the turn and echoes it, carrying the same card the ingest path
     // recorded (withOpenItemDelivery). Nothing about the delivery may change shape at that moment.
