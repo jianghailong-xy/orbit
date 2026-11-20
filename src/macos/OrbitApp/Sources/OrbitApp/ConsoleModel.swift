@@ -6550,6 +6550,21 @@ final class ConsoleModel {
         requestScroll(to: card.id)
     }
 
+    /// Scroll to an exception item's own card in this conversation, where the read still draws one —
+    /// the delivery card's `Go to the item card ↑` (board card-ui-polish ②). False when the
+    /// conversation holds no card for the item, which is what the delivery card then says.
+    @discardableResult
+    func revealOpenItemCard(_ itemID: String) -> Bool {
+        guard let card = decisionCards.first(where: {
+            switch $0.kind {
+            case .escalatedItem(let id), .fusePause(let id): return id == itemID
+            default: return false
+            }
+        }) else { return false }
+        requestScroll(to: card.id)
+        return true
+    }
+
     /// Lift the pause (§6.3 F-T4, mock 6 ①) — the owner's alone, and the one press that starts a
     /// stopped conversation again. The episode the card was drawn from rides along, so a press
     /// made after the pause was lifted is refused by the door rather than resuming the next one.

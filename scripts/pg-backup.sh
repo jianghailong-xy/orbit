@@ -37,6 +37,10 @@ SYNC_KNOWN_HOSTS="${ORBIT_BACKUP_SYNC_KNOWN_HOSTS:-/ssh/known_hosts}"
 # archive mirror's --delete would remove them.
 FILES_DIR="${ORBIT_FILES_DIR:-/var/lib/orbit/files}"
 FILES_SYNC_TARGET="${SYNC_TARGET%/}-files"
+# A deployment that mirrors its bucket (ORBIT_FILES_S3_MIRROR=1, docs/orbit-files-drive-technical-design.md §10.2) keeps the
+# mirror of the bucket's files/ prefix here, beside the other two, and the apiserver sets off_host_prune_at for its s3 blobs.
+FILES_S3_MIRROR="${ORBIT_FILES_S3_MIRROR:-0}"
+BUCKET_SYNC_TARGET="${SYNC_TARGET%/}-bucket"
 # The database that names those files (POSTGRES_DB in docker-compose.yml); PGDATABASE here is postgres.
 FILES_DB=orbit
 # When the off-host files copy was last pruned: at most once per interval, since it lists the whole copy.
@@ -330,23 +334,39 @@ prune_files() {
   LAST_PRUNE="$now"
   due="$(printf '%s\n' "$due" | grep -E '^[0-9a-f]{64}$' || true)"
   [ -n "$due" ] || return 0
-  if [ ! -d "$FILES_DIR" ] || [ -z "$(ls -A "$FILES_DIR" | grep -vx tmp)" ]; then
-    log "ERROR: refusing to prune $FILES_SYNC_TARGET: $FILES_DIR is empty or not mounted"
+  status=0
+  prune_copy "$FILES_SYNC_TARGET" local "$due" || status=1
+  # The bucket's mirror, when the deployment declares one (ORBIT_FILES_S3_MIRROR=1): the same names, by the same column, so
+  # the same grace period. It is a copy of the bucket, not of $FILES_DIR, so what the local directory holds says nothing here.
+  if [ "$FILES_S3_MIRROR" = 1 ]; then
+    prune_copy "$BUCKET_SYNC_TARGET" bucket "$due" || status=1
+  fi
+  return "$status"
+}
+
+# One copy of the files, "local" (a copy of $FILES_DIR) or "bucket" (a copy of the bucket's files/ prefix), pruned of the
+# names in $3 that are on it. A local copy keeps whatever is back in $FILES_DIR.
+prune_copy() {
+  target="$1"
+  kind="$2"
+  names="$3"
+  if [ "$kind" = local ] && { [ ! -d "$FILES_DIR" ] || [ -z "$(ls -A "$FILES_DIR" | grep -vx tmp)" ]; }; then
+    log "ERROR: refusing to prune $target: $FILES_DIR is empty or not mounted"
     return 1
   fi
   # No copy there yet lists as empty, and so leaves nothing to prune.
-  if ! listed="$(list_target -r "$FILES_SYNC_TARGET/")"; then
-    log "ERROR: pruning $FILES_SYNC_TARGET failed: could not list it: $listed"
+  if ! listed="$(list_target -r "$target/")"; then
+    log "ERROR: pruning $target failed: could not list it: $listed"
     return 1
   fi
   scratch="$(mktemp -d)"
   mkdir "$scratch/none"
   printf '%s\n' "$listed" | awk '{print $NF}' | LC_ALL=C sort > "$scratch/there"
-  printf '%s\n' "$due" | awk '{print substr($0, 1, 2) "/" $0}' | LC_ALL=C sort > "$scratch/due"
+  printf '%s\n' "$names" | awk '{print substr($0, 1, 2) "/" $0}' | LC_ALL=C sort > "$scratch/due"
   count=0
   # The database keeps naming what has gone, so most of these are long gone from the copy too.
   for file in $(LC_ALL=C comm -12 "$scratch/due" "$scratch/there"); do
-    [ ! -e "$FILES_DIR/$file" ] || continue
+    [ "$kind" != local ] || [ ! -e "$FILES_DIR/$file" ] || continue
     mkdir -p "$scratch/none/${file%/*}"
     printf '+ /%s/\n+ /%s\n' "${file%/*}" "$file" >> "$scratch/rules"
     count=$((count + 1))
@@ -360,13 +380,13 @@ prune_files() {
   # this can be whatever the rules turn out to match.
   echo '- *' >> "$scratch/rules"
   if ! rsync -r --delete --max-delete="$count" --filter="merge $scratch/rules" --timeout=600 \
-       -e "ssh $ssh_opts" "$scratch/none/" "$FILES_SYNC_TARGET/" >/dev/null 2>"$rsync_stderr"; then
+       -e "ssh $ssh_opts" "$scratch/none/" "$target/" >/dev/null 2>"$rsync_stderr"; then
     rm -rf "$scratch"
-    log "ERROR: pruning $FILES_SYNC_TARGET failed: $(rsync_said)"
+    log "ERROR: pruning $target failed: $(rsync_said)"
     return 1
   fi
   rm -rf "$scratch"
-  log "pruned $count file(s) from $FILES_SYNC_TARGET"
+  log "pruned $count file(s) from $target"
 }
 
 take_backup() {

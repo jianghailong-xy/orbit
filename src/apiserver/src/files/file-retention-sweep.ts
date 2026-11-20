@@ -4,7 +4,7 @@ import { PrismaService } from '../prisma/prisma.service';
 import { ControlPlaneLeader } from '../realtime/control-plane-leader';
 import { messageOf } from './file-store';
 import { FilesService } from './files.service';
-import { FILE_UPLOAD_RETENTION, UPLOAD_RETENTION_MS, fileGraceMs } from './file-retention';
+import { FILE_UPLOAD_RETENTION, UPLOAD_RETENTION_MS, fileGraceMs, offHostPruneAtFor } from './file-retention';
 
 /** How often the sweep runs: a file's dates are in days, and nothing waits on it. */
 const SWEEP_INTERVAL_MS = 60 * 60 * 1000;
@@ -310,8 +310,8 @@ export class FileRetentionSweep implements OnApplicationBootstrap, OnModuleDestr
           where: { sha256 },
           data: {
             bytesDeletedAt: now,
-            // Only the local store's bytes are in the off-host copy (scripts/pg-backup.sh).
-            offHostPruneAt: blob.storage === 'local' ? new Date(now.getTime() + this.grace) : null,
+            // The local store's bytes are in the off-host copy, and the bucket's when it is mirrored (scripts/pg-backup.sh).
+            offHostPruneAt: offHostPruneAtFor(blob.storage, this.files.config, now, this.grace),
           },
         });
         return true;

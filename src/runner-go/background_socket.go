@@ -229,11 +229,6 @@ func (s *bgJobService) handle(req bgSocketRequest) bgSocketResponse {
 		if err != nil {
 			return bgSocketResponse{Error: err.Error()}
 		}
-		asked, err := bgLimitArgs(args)
-		if err != nil {
-			return bgSocketResponse{Error: err.Error()}
-		}
-		limits, limitsNote := effectiveBgLimits(asked, runnerBgJobCeiling())
 		spec := bgJobSpec{
 			Command:      getString(args, "command"),
 			Kind:         getString(args, "kind"),
@@ -245,8 +240,6 @@ func (s *bgJobService) handle(req bgSocketRequest) bgSocketResponse {
 			WakeOnExit:   wakeOnExit,
 			WakeOnOutput: wakeOnOutput,
 			WakeOnStall:  wakeOnStall,
-			Limits:       limits,
-			LimitsNote:   limitsNote,
 		}
 		if err := validateBgJobSpec(spec); err != nil {
 			return bgSocketResponse{Error: err.Error()}

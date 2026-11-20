@@ -171,8 +171,7 @@ func hostSetup(env hostSetupEnv, server string) error {
 		"  Runners: orbit-runner@<user>.service, one instance per Linux user,\n"+
 		"           each running that user's own ~/.orbit/bin/orbit\n"+
 		"  Server:  %s\n\n"+
-		"  Every user on this host can now run `orbit register` without root.\n"+
-		"  Runners already running get background job limits (Delegate=yes) when they next restart.\n",
+		"  Every user on this host can now run `orbit register` without root.\n",
 		hostdSocketUnit, hostdSocketPath, exe, server)
 
 	// After the template is written and systemd has read it: a host set up before instances
@@ -344,9 +343,6 @@ TimeoutStopSec=180
 # runner's cgroup — must not stop the runner. systemd's default, stop, would drain and tear down
 # every running turn, and the restart would install a deferred release past the turn gate.
 OOMPolicy=continue
-# The runner limits the CPU and memory of background jobs with a cgroup each, below its own
-# (bg_cgroup_linux.go); a stop still ends everything in the unit, those cgroups included.
-Delegate=yes
 # No Environment= lines here, deliberately. One template serves every instance, and the
 # home, the runner state dir and the login PATH each belong to the instance's own
 # account — while the specifiers that would fill them in (%h, %s) expand in a *system*

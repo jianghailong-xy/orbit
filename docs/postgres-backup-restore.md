@@ -187,7 +187,7 @@ old ones longer than that. Restoring one of those can find rows without their by
 | --- | --- |
 | The file's date | A tombstone on its row (`expired_at`). Name, size, sha256 and test summary stay, and so do the bytes, here and in the copy |
 | One grace period after the last row naming those bytes got its tombstone | The bytes go from `./data/files` (`file_blob.bytes_deleted_at`) |
-| One grace period after that | The bytes go from the off-host copy (`file_blob.off_host_prune_at`) |
+| One grace period after that | The bytes go from the off-host copy (`file_blob.off_host_prune_at`; for a bucket-stored blob only when `ORBIT_FILES_S3_MIRROR=1`, from the `<target>-bucket` mirror) |
 
 The sidecar prunes at most once per base backup interval, and only in a round where the mirror took this archive. It
 asks the database which names are due, lists the copy, and removes those names and nothing else: `pruned N file(s) from …`.
