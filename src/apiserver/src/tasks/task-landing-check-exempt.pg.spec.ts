@@ -269,7 +269,7 @@ test('on a MAIN line the exemption is refused 409 LANDING_CHECK_EXEMPT_NEEDS_PRO
 
     // A task in no project lands on no project branch either.
     const loose = await stack.tasks.create(w.ownerId, {
-      title: 'no project', completionCriterion: 'EVIDENCE_JUDGMENT', acceptanceCriteria: 'done',
+      title: 'no project', completionCriterion: 'EXECUTABLE', acceptanceCommand: 'true', acceptanceExpectedExitCode: 0,
     } as never);
     assert.deepEqual(await refusal(stack.tasks.update(w.ownerId, loose.id, exempt as never)), needsBranch);
   } finally {

@@ -512,6 +512,12 @@ export class CreateTaskDto {
   // Declaring it here is the first statement of what the task is and needs no reason; turning an
   // existing task codeless does (UpdateTaskDto.codelessReason, `task-codeless.ts`).
   @IsOptional() @IsBoolean() codeless?: boolean;
+  // §12.15 P-C2 (`task-landing-check-exempt.ts`): when this task lands on its project's branch, skip the
+  // project's landing check; its own acceptance still runs. Only on a PROJECT_BRANCH line, only from the
+  // project's coordinator or the owner, and only with `landingCheckExemptReason` (at most 280 characters,
+  // checked by the service so the refusal carries its code).
+  @IsOptional() @IsBoolean() landingCheckExempt?: boolean;
+  @IsOptional() @IsString() landingCheckExemptReason?: string;
   // SR55: start this task from a snapshot of the session making the call (the runner door posts it;
   // the MCP tool calls it `forkFromSession`). Create-time only: the five columns it becomes are never
   // written again (migration 0615).
@@ -780,6 +786,11 @@ export class UpdateTaskDto {
   // Why this edit turns the task codeless. Read only when it does — stored beside the declaration
   // (`task.codeless_reason`), and cleared when the declaration is taken back.
   @IsOptional() @IsString() @MaxLength(MAX_TASK_CODELESS_REASON_CHARS) codelessReason?: string;
+  // §12.15 P-C2 on the edit door: true exempts this task from its project's landing check and needs
+  // `landingCheckExemptReason` in the same request; false takes it back and clears the reason. A reason
+  // alone replaces the one an exempt task carries. Omit both to leave it.
+  @IsOptional() @IsBoolean() landingCheckExempt?: boolean;
+  @IsOptional() @IsString() landingCheckExemptReason?: string;
   // Null/null clears EXECUTABLE's evidence fields; omission preserves the stored values.
   @IsOptional() @IsString() acceptanceCommand?: string | null;
   @IsOptional() @IsInt() acceptanceExpectedExitCode?: number | null;
