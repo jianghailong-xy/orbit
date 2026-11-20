@@ -95,8 +95,9 @@ export function taskCodelessReasonRequiredBody() {
     requiredAction: 'EXPLAIN_WHY_THE_TASK_NEEDS_NO_CODE',
     reasonField: 'codelessReason',
     message:
-      'Declaring an existing task codeless takes it out of its criterion\'s landing: the criterion ' +
-      'stops waiting for this task\'s work to reach main. Send a non-blank codelessReason in the ' +
+      'Declaring an existing task codeless means it resolves no source and its run gets a checkout ' +
+      'with no branch until it has something to commit. It does not decide landing: Orbit measures ' +
+      'that from commits. Send a non-blank codelessReason in the ' +
       'same request — why this work produces no code — and it is stored on the task beside the ' +
       'declaration. Declaring codeless when a task is created needs none, and neither does ' +
       're-sending it to a task that already is.',
@@ -115,8 +116,8 @@ export function taskCodelessHasCommitsBody(evidence: readonly TaskCommitEvidence
     evidence: [...evidence],
     message:
       `This task already has commits of its own (${[...new Set(said)].join('; ')}), so it cannot ` +
-      'be declared codeless: the declaration would let its criterion read LANDED over work that is ' +
-      'not on main. Its commits land the ordinary way. If part of what it covers really produces no ' +
+      'be declared codeless: codeless no longer decides landing, which is measured from commits, and ' +
+      'its commits land the ordinary way. If part of what it covers really produces no ' +
       'code, file that part as a task of its own and declare it codeless when you create it.',
   } as const;
 }
