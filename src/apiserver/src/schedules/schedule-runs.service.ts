@@ -507,7 +507,7 @@ export class ScheduleRunsService {
           data: { state: 'RUNNING', startedAt: now, sessionId, notBeforeAt: null, accessLevel: schedule.accessLevel },
         });
         if (schedule.maxRuns !== null && schedule.state !== 'ENDED' && (await this.startedRuns(tx, schedule.id)) >= schedule.maxRuns) {
-          await this.endAtMaxRuns(tx, schedule, runId, now);
+          await this.endAtMaxRuns(tx, schedule, now);
         }
         return { outcome: 'STARTED', open: this.openInput(schedule, run, sessionId, prompt, check.plan) };
       },
@@ -1534,18 +1534,15 @@ export class ScheduleRunsService {
 
   /**
    * §8.5: the start of run `runId` reached the schedule's maxRuns. ENDED (END_REACHED) in the same transaction, under
-   * the schedule lock the count was read under, so two replicas cannot both start a last run; no next slot, a QUEUED
-   * run CANCELLED, and a WHEN rule's condition ended. The run that reached it goes on; tellPlannedEnds pushes once it
-   * is over.
+   * the schedule lock the count was read under, so two replicas cannot both start a last run; no next slot, and a WHEN
+   * rule's condition ended. No other run is QUEUED (schedule_run_one_queued_key: the one queued was this one), and
+   * start() cancels any run that would start past the count. The run that reached it goes on; tellPlannedEnds pushes
+   * once it is over.
    */
-  private async endAtMaxRuns(tx: Tx, schedule: Schedule, runId: string, now: Date): Promise<void> {
+  private async endAtMaxRuns(tx: Tx, schedule: Schedule, now: Date): Promise<void> {
     await tx.schedule.update({
       where: { id: schedule.id },
       data: { state: 'ENDED', endedReason: 'END_REACHED', endedAt: now, nextDueAt: null },
-    });
-    await tx.scheduleRun.updateMany({
-      where: { scheduleId: schedule.id, state: 'QUEUED', id: { not: runId } },
-      data: { state: 'CANCELLED', endedAt: now, notBeforeAt: null },
     });
     const rule = schedule.rule as unknown as ScheduleRule;
     if (rule.kind === 'WHEN' && rule.conditionId) {

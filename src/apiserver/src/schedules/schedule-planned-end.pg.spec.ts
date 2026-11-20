@@ -140,7 +140,8 @@ async function created(w: World, over: Partial<ScheduleCreateInput>) {
 
 /** A session's create card, its id. */
 async function card(w: World, over: Partial<ScheduleCreateInput>): Promise<string> {
-  const asked = await schedules.create(w.session, input({ title: `Card ${randomUUID().slice(0, 6)}`, ...over }));
+  const tag = randomUUID().slice(0, 6);
+  const asked = await schedules.create(w.session, input({ title: `Card ${tag}`, intent: `Check the Codex stable release (${tag})`, ...over }));
   assert.equal(asked.outcome, 'PENDING');
   return (asked as { request: { id: string } }).request.id;
 }
@@ -246,20 +247,15 @@ test('§8.5 maxRuns 3: ENDED (END_REACHED) when its third run starts, one push "
   assert.deepEqual([row.state, row.endedReason, row.maxRuns, row.runsStarted, row.runsLeft], ['ENDED', 'END_REACHED', 3, 3, 0]);
 });
 
-test('§8.5 maxRuns: the run that reaches it cancels the run queued behind it, and a retried start counts once', { skip }, async () => {
-  const w = await world('max-runs-queue');
+test('§8.5 maxRuns: a retried start counts once, and nothing starts past the count', { skip }, async () => {
+  const w = await world('max-runs-retry');
   at('2026-11-16T08:00:00Z');
   const s = await created(w, { rule: every(60), maxRuns: 1 });
-  // A Run now queued while the first slot is also due: the slot's run starts, reaches maxRuns and cancels the other.
   at('2026-11-16T09:00:00Z');
   assert.equal(await runs.fire(s.id), 'FIRED');
   const slotRun = await db.scheduleRun.findFirstOrThrow({ where: { scheduleId: s.id, state: 'QUEUED' } });
-  const manual = await db.scheduleRun.create({
-    data: { scheduleId: s.id, scheduleRevision: 1, plannedAt: new Date('2026-11-16T09:00:30Z'), trigger: 'MANUAL', state: 'QUEUED' },
-  });
   assert.equal(await runs.start(slotRun.id), 'STARTED');
-  assert.equal((await scheduleOf(s.id)).state, 'ENDED');
-  assert.equal((await db.scheduleRun.findUniqueOrThrow({ where: { id: manual.id } })).state, 'CANCELLED', 'the queued run is cancelled');
+  assert.equal((await scheduleOf(s.id)).state, 'ENDED', 'its one run started: ENDED');
 
   // The start never reached its engine: the run is retried, the same row, and still counts as one start.
   const sessionId = (await db.scheduleRun.findUniqueOrThrow({ where: { id: slotRun.id } })).sessionId!;
@@ -273,6 +269,15 @@ test('§8.5 maxRuns: the run that reaches it cancels the run queued behind it, a
   await finish(w, retried.sessionId!);
   assert.deepEqual(await told(s.id), [s.id]);
   assert.deepEqual(plannedEnds(s.id).map((a) => a.body), ['Stopped as planned after 1 run']);
+
+  // A run left queued on it (written here directly: no door queues one on an ENDED schedule) does not start.
+  const stray = await db.scheduleRun.create({
+    data: { scheduleId: s.id, scheduleRevision: 1, plannedAt: new Date('2026-11-16T09:30:00Z'), trigger: 'MANUAL', state: 'QUEUED' },
+  });
+  assert.equal(await runs.start(stray.id), 'CANCELLED', 'past maxRuns nothing starts');
+  assert.equal(await db.scheduleRun.count({ where: { scheduleId: s.id, startedAt: { not: null } } }), 1);
+  assert.deepEqual(await told(s.id), []);
+  assert.equal(plannedEnds(s.id).length, 1, 'still exactly one push');
 });
 
 test('§8.5 endAt: ENDED after the last slot at or before endAt, one push once that slot\'s run is over', { skip }, async () => {
