@@ -697,6 +697,16 @@ export const PUBLIC_ID_FIELDS: ReadonlySet<string> = new Set([
   // An Orbit Files drive write not committed yet (migration 1283, docs/orbit-files-drive-technical-design.md §1.1): the
   // upload or handle a chunk row belongs to, which the upload and door routes address. Never a fence.
   'stagingId',
+  // The drive's name layer (migration 1327, docs/orbit-files-drive-technical-design.md §1.1): an entry's current version,
+  // the Trash group holding an entry or a version, and who last wrote an entry, made a version or deleted into a group
+  // (the session and the runner, §3.6). Addresses the owner's routes answer and accept. Never a fence.
+  'currentVersionId',
+  'trashGroupId',
+  'lastWriterSessionId',
+  'lastWriterRunnerId',
+  'writerSessionId',
+  'writerRunnerId',
+  'actorRunnerId',
 ]);
 
 /** `@db.Uuid` columns that are NOT public ids. They are opaque lease/fence tokens: the runner

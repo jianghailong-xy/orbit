@@ -3202,7 +3202,11 @@ test('the ledger stays append-only, and every later migration is accounted for',
       '1260_runner_bg_job_limits',
       // 1283 creates drive_staging, drive_staging_chunk and drive_version_chunk (Orbit Files drive); no existing row is
       // written, and no preserved relation, trigger, function or DONE fence changes.
-      '1283_drive_chunk_store'],
+      '1283_drive_chunk_store',
+      // 1327 creates drive_entry, drive_version, drive_trash_group, drive_commit and drive_change (Orbit Files drive name
+      // layer) and adds foreign keys from 1283's drive tables to them; no existing row is written, and no preserved
+      // relation, trigger, function or DONE fence changes.
+      '1327_drive_name_layer'],
     'a later migration exists; re-read it before trusting the assertions above');
   // Stated rather than described: 0230's fence differs from 0228's by exactly one added lane.
   const later = readFileSync(

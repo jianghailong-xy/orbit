@@ -135,6 +135,14 @@ export interface Tenant {
   adminSubjectId: string;
   adminSubjectTokenId: string;
   adminProviderId: string;
+  /**
+   * The account's drive (docs/orbit-files-drive-technical-design.md §4.1): a folder, a file in it with a replaced
+   * version in Trash, and a Trash group of a deleted file.
+   */
+  driveFolderId: string;
+  driveFileId: string;
+  driveVersionId: string;
+  driveTrashGroupId: string;
   /** Objects a destructive route takes away, one each, so that no other case loses its own. */
   spare: {
     accessTokenId: string;
@@ -161,6 +169,11 @@ export interface Tenant {
     guestUserId: string;
     listId: string;
     taskId: string;
+    /** A drive file the owner moves to Trash, a replaced version deleted for good, and Trash groups deleted and restored. */
+    driveEntryId: string;
+    driveVersionId: string;
+    driveTrashGroupId: string;
+    driveRestoreGroupId: string;
   };
 }
 
@@ -282,6 +295,18 @@ export const TENANT_ISOLATION_CASES: Readonly<Record<string, TenantCase>> = {
   'GET /attachments/usage/projects/:id/files': { request: (of) => ({ params: { id: of.projectId } }) },
   'GET /attachments/usage/tasks/:id/files': { request: (of) => ({ params: { id: of.taskId } }) },
   'DELETE /attachments/:id/everywhere': { request: (of) => ({ params: { id: of.spare.storedFileId } }) },
+
+  // ── the drive (docs/orbit-files-drive-technical-design.md §4.1, §4.4): every read and write by (id, owner) ────────
+  'GET /drive/entries/:id': { request: (of) => ({ params: { id: of.driveFileId } }) },
+  'PATCH /drive/entries/:id': { request: (of) => ({ params: { id: of.driveFileId }, body: { name: 'renamed by the census.txt' } }) },
+  'DELETE /drive/entries/:id': { request: (of) => ({ params: { id: of.spare.driveEntryId } }) },
+  'GET /drive/entries/:id/versions': { request: (of) => ({ params: { id: of.driveFileId } }) },
+  // As a copy: the owner's own restore leaves the version in Trash for the cases after it.
+  'POST /drive/versions/:id/restore': { request: (of) => ({ params: { id: of.driveVersionId }, body: { as: 'COPY' } }) },
+  'DELETE /drive/versions/:id': { request: (of) => ({ params: { id: of.spare.driveVersionId } }) },
+  'GET /drive/trash/groups/:id': { request: (of) => ({ params: { id: of.driveTrashGroupId } }) },
+  'POST /drive/trash/groups/:id/restore': { request: (of) => ({ params: { id: of.spare.driveRestoreGroupId } }) },
+  'DELETE /drive/trash/groups/:id': { request: (of) => ({ params: { id: of.spare.driveTrashGroupId } }) },
 
   // ── projects ─────────────────────────────────────────────────────────────────────────────────
   'GET /projects/:id': { request: (of) => ({ params: { id: of.projectId } }) },
@@ -1212,6 +1237,16 @@ export const TENANT_ISOLATION_FIELD_CASES: Readonly<Record<string, TenantFieldCa
   },
   'GET /projects/:id/tasks/page query parentId': {
     request: (of, mine) => ({ params: { id: mine.projectId }, query: { parentId: of.projectTaskId } }),
+  },
+
+  // ── the drive: a folder named in B's own request ─────────────────────────────────────────────
+  'GET /drive/entries query parentId': { request: (of) => ({ params: {}, query: { parentId: of.driveFolderId } }) },
+  'GET /drive/trash/groups/:id query parentId': {
+    request: (of, mine) => ({ params: { id: mine.driveTrashGroupId }, query: { parentId: of.driveFolderId } }),
+  },
+  'POST /drive/folders body parentId': { request: (of) => ({ params: {}, body: { parentId: of.driveFolderId, name: 'census folder' } }) },
+  'PATCH /drive/entries/:id body parentId': {
+    request: (of, mine) => ({ params: { id: mine.driveFileId }, body: { parentId: of.driveFolderId } }),
   },
 
   // ── providers, phones, runners ───────────────────────────────────────────────────────────────

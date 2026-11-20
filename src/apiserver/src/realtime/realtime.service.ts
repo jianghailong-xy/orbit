@@ -1424,6 +1424,21 @@ export class RealtimeService implements OnModuleInit, OnModuleDestroy {
     this.publishForUser(ownerId, RunEventType.TERMINALS_CHANGED, id);
   }
 
+  /**
+   * The owner's drive changed (docs/orbit-files-drive-technical-design.md §5.4): a write committed rows to its change feed,
+   * the highest of them `seq`. THE PAYLOAD IS THE SEQ AND NOTHING ELSE: no name, path or size. An accelerant only: the Files
+   * page reads `GET /drive/changes` for what changed, and re-reads it on focus and reconnect. Published after the write
+   * commits, and only to the streams that declared `hints=drive_changed`.
+   */
+  publishDriveChanged(ownerId: string, seq: number): void {
+    this.publish(`${RealtimeService.USER_SCOPE}${ownerId}`, {
+      seq: 0,
+      type: RunEventType.DRIVE_CHANGED,
+      ts: new Date().toISOString(),
+      payload: { seq: String(seq) },
+    });
+  }
+
   /** Same, but for a deployment-wide change every user sees — today only the shared (admin-owned)
    *  model providers. Reaches every connected stream; keep it to genuinely global, low-rate edits. */
   publishForAllUsers(type: RunEventType, id: string): void {
@@ -1444,9 +1459,11 @@ export class RealtimeService implements OnModuleInit, OnModuleDestroy {
   // never enter (the sync controlTypeFor() filter drops them before owner resolution).
   // See docs/realtime-control-plane-stream.md.
 
-  streamForUser(userId: string, options: { listChanged?: boolean } = {}): Observable<ControlEvent> {
+  streamForUser(userId: string, options: { listChanged?: boolean; driveChanged?: boolean } = {}): Observable<ControlEvent> {
     const events$ = this.hub.asObservable().pipe(
       filter((m) => controlTypeFor(m.event.type) !== null),
+      // `drive.changed` only for a stream that declared it (`?hints=drive_changed`), for the same reason.
+      filter((m) => options.driveChanged === true || m.event.type !== RunEventType.DRIVE_CHANGED),
       mergeMap((m) => this.toControlEvent(userId, m)),
       filter((e): e is ControlEvent => e !== null),
     );
@@ -1483,6 +1500,8 @@ export class RealtimeService implements OnModuleInit, OnModuleDestroy {
       const data =
         type === ControlEventType.TASK_CHANGED
           ? taskChangedData(ev.payload)
+          : type === ControlEventType.DRIVE_CHANGED
+            ? { seq: String(ev.payload.seq ?? '') }
           : type === ControlEventType.AGENT_CHANGED
             ? {
                 agentId: String(ev.payload.id ?? ''),
