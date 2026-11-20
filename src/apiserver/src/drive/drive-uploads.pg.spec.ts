@@ -30,6 +30,7 @@ import path from 'node:path';
 import { test } from 'node:test';
 
 import { type INestApplication, Module } from '@nestjs/common';
+import { ConfigService } from '@nestjs/config';
 import { NestFactory, Reflector } from '@nestjs/core';
 import { JwtService } from '@nestjs/jwt';
 import { json } from 'express';
@@ -43,6 +44,7 @@ import { PrismaService } from '../prisma/prisma.service';
 import { assertCoordinatorPgUrlIsIsolated, verifyCoordinatorPgIdentity } from '../projects/coordinator-pg-test-safety';
 import { DriveChunksService, DRIVE_CHUNK_MAX } from './drive-chunks.service';
 import { DriveContentService } from './drive-content.service';
+import { DriveDownloadLinks } from './drive-download-links';
 import { DriveUploadsService } from './drive-uploads.service';
 import { DriveController } from './drive.controller';
 import { DriveService } from './drive.service';
@@ -77,7 +79,9 @@ test('Orbit Files drive: resumable upload and ranged download', { skip: !URL, co
       { provide: JwtService, useValue: { verifyAsync: async () => ({ sub: caller }) } },
       { provide: PrismaService, useValue: db },
       { provide: FilesService, useValue: files },
-      DriveService, DriveChunksService, DriveUploadsService, DriveContentService,
+      // The controller's download-link route needs its signer; this spec does not call it.
+      { provide: ConfigService, useValue: new ConfigService({ JWT_SECRET: `secret-${RUN}` }) },
+      DriveService, DriveChunksService, DriveUploadsService, DriveContentService, DriveDownloadLinks,
     ],
   })
   class DriveHarness {}
