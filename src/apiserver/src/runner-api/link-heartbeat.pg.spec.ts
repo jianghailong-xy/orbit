@@ -621,8 +621,8 @@ test('a link heartbeat answered from runner_presence', { skip: !URL_, concurrenc
     // Another process takes a session over, and another writer ends one: no writer marks anything, and the next beat
     // reconciles anyway, because every beat reads the leases of what it supervises.
     await sql.query(`UPDATE "session" SET inbox_lease_owner = gen_random_uuid() WHERE id = $1`, [takenOver]);
-    await sql.query(`UPDATE "session" SET status = 'SUCCEEDED', finished_at = now() - interval '10 minutes' WHERE id = $1`, [ended]);
-    await sql.query(`UPDATE "session" SET status = 'CANCELLED', finished_at = now() - interval '10 minutes' WHERE id = $1`, [cancelled]);
+    await sql.query(`UPDATE "session" SET status = 'SUCCEEDED', finished_at = now(), release_cause = 'engine_exited' - interval '10 minutes' WHERE id = $1`, [ended]);
+    await sql.query(`UPDATE "session" SET status = 'CANCELLED', finished_at = now(), release_cause = 'cancelled' - interval '10 minutes' WHERE id = $1`, [cancelled]);
     const next = await beat();
     assert.ok(isFull(next.answer));
     assert.deepEqual([...(next.answer.leaseLostSessionIds ?? [])].sort(), [cancelled, takenOver, ended].sort());

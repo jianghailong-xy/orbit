@@ -374,7 +374,7 @@ test('T2 provider-engine foundation on PostgreSQL', { timeout: 600_000 }, async 
     assert.equal(await raw('UPDATE "session" SET inbox_lease_owner = $2 WHERE id = $1', [recorded, owner2], reads), 1);
     assert.equal(await raw('UPDATE "session" SET inbox_lease_generation = $2 WHERE id = $1', [recorded, randomUUID()], reads), 1);
     assert.equal(await raw('UPDATE "session" SET inbox_lease_owner = NULL, inbox_lease_generation = NULL WHERE id = $1', [recorded]), 1, 'release stays open');
-    assert.equal(await raw(`UPDATE "session" SET status = 'CANCELLED' WHERE id = $1`, [recorded]), 1);
+    assert.equal(await raw(`UPDATE "session" SET status = 'CANCELLED', finished_at = now(), release_cause = 'cancelled' WHERE id = $1`, [recorded]), 1);
     assert.equal(
       await raw(`UPDATE "session" SET status = 'PENDING', inbox_lease_owner = $2 WHERE id = $1`, [recorded, newTerminalResumeHandoffOwner()]),
       1, 'a server terminal revive only reserves its handoff marker',

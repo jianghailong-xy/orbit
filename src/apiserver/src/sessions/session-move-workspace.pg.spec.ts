@@ -617,7 +617,7 @@ test('moving a session to another workspace: the panel, the move, its refusals a
     assert.deepEqual([stuck.reason, stuck.needsEnd], ['sleepy has to be online to end the session first.', true]);
     // Once ended, it moves — the second half of End and Move.
     await sql.query(
-      "UPDATE session SET status = 'CANCELLED', end_reason = 'ended', finished_at = now() WHERE id = $1::uuid",
+      "UPDATE session SET status = 'CANCELLED', end_reason = 'ended', release_cause = 'ended', finished_at = now() WHERE id = $1::uuid",
       [idle],
     );
     const settled = (await targetsOf(idle)).json;

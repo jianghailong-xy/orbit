@@ -14,6 +14,7 @@
  *   (7) ending a session still queued                → CANCELLED, ended
  *   (8) the revive                                   → PENDING, finished_at and release_cause both null
  *   (9) migration 1262's backfill, one session per rule, then the two counts of plan step 3.3 over the database
+ *  (10) migrations 1341 and 1342 (plan step 3.4): the CHECK is listed validated, and each violating write is refused
  *
  * The other three writers are asserted where they are already driven: turn-complete's failed turn in
  * runner-api/turn-complete-outcome.pg.spec.ts (2), the landing container in projects/landing-session.pg.spec.ts
@@ -303,6 +304,9 @@ test('every release writes the release column and its cause, and the revive clea
   await t.test('(9) migration 1262 backfills every terminal row, and the two counts are zero', async () => {
     const w = await world(s.db, 'backfill');
     const now = new Date();
+    // Rows from before 1261 break session_release_fact_chk (1341) by design; the check comes back, by its own two
+    // migrations, once the backfill has made the rows whole.
+    await sql.query(`ALTER TABLE "session" DROP CONSTRAINT IF EXISTS "session_release_fact_chk"`);
     // One row per rule of 1262's table, written as a row from before 1261: no cause, and no release column where
     // the old writer set none. Three of each, so the counts are counts.
     const cases: Array<{ name: string; data: Record<string, unknown>; cause: string | null }> = [
@@ -385,5 +389,56 @@ test('every release writes the release column and its cause, and the revive clea
     console.log(`# ${heldWith.replace(/\s+/g, ' ')} -> ${b.n}`);
     assert.equal(a.n, 0, 'terminal rows without the release column or a cause');
     assert.equal(b.n, 0, 'open rows with either');
+  });
+
+  await t.test('(10) 1341 and 1342: the check is validated, and each violating write is refused', async () => {
+    const migrations = join(__dirname, '..', '..', 'prisma', 'migrations');
+    for (const dir of ['1341_session_release_fact_chk', '1342_session_release_fact_validate']) {
+      for (const statement of statementsOf(join(migrations, dir, 'migration.sql'))) await sql.query(statement);
+    }
+    const listed = (await sql.query(
+      `SELECT convalidated FROM pg_constraint WHERE conname = 'session_release_fact_chk' AND conrelid = 'session'::regclass`,
+    )).rows as Array<{ convalidated: boolean }>;
+    console.log(`# pg_constraint session_release_fact_chk ${JSON.stringify(listed)}`);
+    assert.deepEqual(listed, [{ convalidated: true }]);
+
+    const w = await world(s.db, 'check');
+    const refused = async (what: string, run: () => Promise<unknown>): Promise<void> => {
+      await assert.rejects(run, (error: { code?: string; constraint?: string }) => {
+        console.log(`# ${what}: refused ${error.code} ${error.constraint}`);
+        return error.code === '23514' && error.constraint === 'session_release_fact_chk';
+      }, what);
+    };
+    const held = await session(s.db, w, { status: RunStatus.AWAITING_INPUT });
+    const done = await session(s.db, w);
+    await s.api.finalize({ id: w.runnerId }, done, { status: SharedRunStatus.SUCCEEDED } as never);
+    assertReleased(await released(sql, done), 'SUCCEEDED', 'engine_exited');
+
+    await refused('a terminal status with no finished_at (and no cause)', () =>
+      sql.query(`UPDATE "session" SET status = 'FAILED' WHERE id = $1::uuid`, [held]));
+    await refused('a terminal status with a cause but no finished_at', () =>
+      sql.query(`UPDATE "session" SET status = 'FAILED', release_cause = 'turn_failed' WHERE id = $1::uuid`, [held]));
+    await refused('an open status with finished_at set', () =>
+      sql.query(`UPDATE "session" SET finished_at = now() WHERE id = $1::uuid`, [held]));
+    await refused('an open status with finished_at and a cause', () =>
+      sql.query(`UPDATE "session" SET finished_at = now(), release_cause = 'ended' WHERE id = $1::uuid`, [held]));
+    await refused('released without a cause', () =>
+      sql.query(`UPDATE "session" SET release_cause = NULL WHERE id = $1::uuid`, [done]));
+    await refused('a cause on a held session', () =>
+      sql.query(`UPDATE "session" SET release_cause = 'ended' WHERE id = $1::uuid`, [held]));
+    await refused('a revive that clears the status but not the release column', () =>
+      sql.query(`UPDATE "session" SET status = 'PENDING' WHERE id = $1::uuid`, [done]));
+    // Through Prisma the driver error is wrapped; the constraint is still named in its message.
+    await assert.rejects(() => session(s.db, w, { status: RunStatus.CANCELLED }), /session_release_fact_chk/);
+    await assert.rejects(
+      () => s.db.session.update({ where: { id: held }, data: { status: RunStatus.FAILED } }), /session_release_fact_chk/);
+    // The rows are as they were, and the legal writes still go through.
+    assert.equal((await released(sql, held)).finished_at, null);
+    await sql.query(
+      `UPDATE "session" SET status = 'FAILED', finished_at = now(), release_cause = 'turn_failed' WHERE id = $1::uuid`, [held],
+    );
+    await sql.query(
+      `UPDATE "session" SET status = 'PENDING', finished_at = NULL, release_cause = NULL WHERE id = $1::uuid`, [held],
+    );
   });
 });
