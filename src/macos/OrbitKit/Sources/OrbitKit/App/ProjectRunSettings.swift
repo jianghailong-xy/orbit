@@ -156,8 +156,8 @@ extension RunSettings {
     public static let lineSuggested = "the coordinator suggests"
 
     /// A line as a sentence names it, mid-sentence: "a project branch", "directly into main" — into
-    /// the project's main branch, `main`.
-    public static func lineInSentence(_ line: IntegrationLine, main: String = defaultMainBranch) -> String {
+    /// the project's main branch, `main`. A request with no line reads as a project branch, as on web.
+    public static func lineInSentence(_ line: IntegrationLine?, main: String = defaultMainBranch) -> String {
         line == .main ? "directly into \(main)" : "a project branch"
     }
 
