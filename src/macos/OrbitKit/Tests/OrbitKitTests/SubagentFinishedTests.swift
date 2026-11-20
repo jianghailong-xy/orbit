@@ -2,8 +2,8 @@ import Foundation
 import XCTest
 @testable import OrbitKit
 
-/// Reading the block the control plane opens a turn with when a SubAgent ends, and what the line says
-/// about it. The blocks are the web's fixtures (`subagentFinished.fixtures.ts`, the output of the
+/// Reading the block the control plane opens a turn with when a SubAgent ends. The turn draws nothing
+/// (its card is the end, `SubagentCardEndTests`); the card keeps the block under What the agent read. The blocks are the web's fixtures (`subagentFinished.fixtures.ts`, the output of the
 /// apiserver's `buildSubagentFinishedBlock`), read from that file so both ends read the same bytes.
 final class SubagentFinishedTests: XCTestCase {
 
@@ -108,18 +108,16 @@ final class SubagentFinishedTests: XCTestCase {
         XCTAssertEqual(nodesc.result, "ok")
     }
 
-    /// Criterion: the protocol sentences are never shown outside the raw text. Everything the line
-    /// draws comes from these fields and words; only `text` (What the agent read) holds them.
-    func testNothingTheLineShowsCarriesTheSentencesForTheAgent() throws {
+    /// The protocol sentences are never shown outside the raw text: the card says the run's end in its
+    /// own words, read off the run's status, and only `text` (What the agent read) holds them.
+    func testNothingTheCardShowsCarriesTheSentencesForTheAgent() throws {
         for name in try fixtures().keys.sorted() {
             let wake = try wake(name)
-            var shown = [SubagentFinishedCard.title(wake), SubagentFinishedCard.status(wake),
-                         SubagentFinishedCard.foldWhat(wake), SubagentFinishedCard.changes,
-                         SubagentFinishedCard.queuedBy, wake.rest]
-            shown += [SubagentFinishedCard.lineName(wake)].compactMap { $0 }
+            var shown = [wake.rest, SubagentCardEnd.rawSummary, SubagentCardEnd.waiting]
             for run in wake.runs {
-                shown += [run.description, run.runId, run.result, run.reason ?? "",
-                          SubagentFinishedCard.runLine(run), SubagentFinishedCard.runStatus(run)]
+                shown += [SubagentCardEnd.because(run.status) ?? "", SubagentCardEnd.chip(run.status) ?? "",
+                          SubagentCardEnd.endHead(run.status, when: "1m ago") ?? "",
+                          SubagentCardEnd.runLine(run.runId, readAt: "14:02")]
             }
             for text in shown {
                 for sentence in Self.protocolSentences {
@@ -168,37 +166,6 @@ final class SubagentFinishedTests: XCTestCase {
         XCTAssertTrue(SubagentFinishedText.carriesWake(done))
     }
 
-    func testTheLineSaysWhatHappenedAtAGlance() throws {
-        let done = try wake("SUBAGENT_DONE")
-        XCTAssertEqual(SubagentFinishedCard.title(done), "SubAgent finished")
-        XCTAssertEqual(SubagentFinishedCard.status(done), "done")
-        XCTAssertEqual(SubagentFinishedCard.lineName(done), "Deploy 6bb50a957 to production")
-        XCTAssertFalse(SubagentFinishedCard.isFailed(done))
-        XCTAssertEqual(SubagentFinishedCard.foldWhat(done), "SubAgent finished: Deploy 6bb50a957 to production")
-
-        let interrupted = try wake("SUBAGENT_INTERRUPTED")
-        XCTAssertEqual(SubagentFinishedCard.title(interrupted), "SubAgent did not finish")
-        XCTAssertEqual(SubagentFinishedCard.status(interrupted), "interrupted")
-        XCTAssertTrue(SubagentFinishedCard.isFailed(interrupted))
-
-        let two = try wake("SUBAGENT_TWO")
-        XCTAssertEqual(SubagentFinishedCard.title(two), "2 SubAgents finished")
-        XCTAssertEqual(SubagentFinishedCard.status(two), "1 of 2 failed")
-        XCTAssertNil(SubagentFinishedCard.lineName(two))
-        XCTAssertFalse(SubagentFinishedCard.isFailed(two))
-        XCTAssertEqual(SubagentFinishedCard.foldWhat(two), "2 SubAgents finished")
-        XCTAssertEqual(SubagentFinishedCard.runLine(two.runs[0]),
-                       "Three callers, all in `quota/`: poller.ts, account.ts, limits.ts.")
-        XCTAssertEqual(SubagentFinishedCard.runLine(two.runs[1]),
-                       "vitest could not resolve `../quota/poller`; nothing written.")
-        XCTAssertEqual(SubagentFinishedCard.runLine(try wake("SUBAGENT_STOPPED").runs[0]),
-                       "It was stopped before it finished.")
-        let bothDone = SubagentFinished(runs: [two.runs[0], two.runs[0]], text: "", rest: "")
-        XCTAssertEqual(SubagentFinishedCard.status(bothDone), "done")
-        let empty = SubagentFinishedRun(runId: "r", description: "d", status: "DONE", reason: nil, result: "")
-        XCTAssertEqual(SubagentFinishedCard.runLine(empty), "No result")
-    }
-
     func testADelegateCallsResultNamesItsRun() {
         XCTAssertEqual(SubagentFinishedText.delegateRunId(#"{"runId":"34y5Qcall0000000000001","status":"running"}"#),
                        "34y5Qcall0000000000001")
@@ -208,8 +175,9 @@ final class SubagentFinishedTests: XCTestCase {
         XCTAssertNil(SubagentFinishedText.delegateRunId(#"{"runId":""}"#))
     }
 
-    /// The turn is nobody's words: no tray, no composer, no sticky anchor — and it folds like a job's news.
-    func testTheTurnIsNotTheReadersOwnAndFoldsLikeAJob() throws {
+    /// The turn is nobody's words: no tray, no composer, no sticky anchor — and it folds as nothing: it
+    /// draws nothing, so the agent's answer after it stays in view (web: `orbitTurnOf`).
+    func testTheTurnIsNotTheReadersOwnAndFoldsAsNothing() throws {
         let done = try block("SUBAGENT_DONE")
         let bubble = UserBubble(id: "u1", text: "", pending: false, note: done)
         XCTAssertFalse(SteerDelivery.isReadersOwn(bubble))
@@ -219,8 +187,7 @@ final class SubagentFinishedTests: XCTestCase {
         let queued = UserBubble(id: "u2", text: done, pending: false, queued: true)
         XCTAssertNil(ComposerLogic.restorableText(of: queued))
 
-        XCTAssertEqual(OrbitExchangeFold.orbitTurn(bubble)?.what, "SubAgent finished: Deploy 6bb50a957 to production")
-        XCTAssertEqual(OrbitExchangeFold.orbitTurn(bubble)?.category, .job)
+        XCTAssertNil(OrbitExchangeFold.orbitTurn(bubble))
         var failed = bubble
         failed.note = try block("SUBAGENT_FAILED")
         XCTAssertNil(OrbitExchangeFold.orbitTurn(failed))

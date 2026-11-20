@@ -140,6 +140,18 @@ fun guestDestination(id: String) = "guest:${ObjectId.canonical(id) ?: id}"
 /** The destination of a drawer Set up <machine> row (iOS `DrawerDestination.machineDraft`). */
 fun machineDraftDestination(id: String) = "setup:${ObjectId.canonical(id) ?: id}"
 
+/** A machine's new session page opened as New workspace while the machine has one (docs/mocks/new-workspace-form/02-apple-entry, owner
+ *  A 2026-11-20; iOS `AppModel.openNewWorkspace`): the setup card makes one more instead of moving on to the first. */
+const val NEW_WORKSPACE_RECORD = "new-workspace"
+
+/** New workspace on a machine, from the drawer's + or the machine page's row: its new session page with the setup card. One with no
+ *  workspace yet gets the page its Set up row opens. */
+fun newWorkspaceRoute(runnerId: String, hasWorkspace: Boolean, origin: Origin) =
+    OrbitRoute(Destination.DRAFT, id = runnerId, recordId = NEW_WORKSPACE_RECORD.takeIf { hasWorkspace }, origin = origin)
+
+/** The page [newWorkspaceRoute] opens on a machine that has a workspace. */
+val OrbitRoute.addsWorkspace get() = destination == Destination.DRAFT && workspaceId == null && recordId == NEW_WORKSPACE_RECORD
+
 /** The Wiki and Watch pages, whose state is the frame's own (MainActivity drops it once the frame left every stack). */
 val OrbitRoute.isWikiOrWatch get() = destination == Destination.WATCH || destination.name.startsWith("WIKI")
 

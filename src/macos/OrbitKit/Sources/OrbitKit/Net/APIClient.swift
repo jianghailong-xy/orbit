@@ -1352,6 +1352,13 @@ public final class APIClient: @unchecked Sendable {
         try await patch("projects/\(projectID)/integration", body: body)
     }
 
+    /// The owner's Revert on one of the coordinator's recorded landing-check changes (§12.15 P-R1):
+    /// its old value is put back as the owner's own, so the coordinator needs a card for that field
+    /// from then on. Answers the revert's own record; the page reads the project again.
+    public func revertSettingChange(_ projectID: String, changeID: String) async throws -> ProjectSettingChange {
+        try await postEmpty("projects/\(projectID)/setting-changes/\(changeID)/revert")
+    }
+
     /// Pause project: nothing starts its tasks or merges it into main by itself until it is resumed;
     /// runs already going finish. The owner's own credential and no acting session — the door
     /// refuses one.

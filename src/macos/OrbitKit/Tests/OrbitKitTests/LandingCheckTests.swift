@@ -33,6 +33,40 @@ final class LandingCheckTests: XCTestCase {
             ("TIP", LandingCheckCopy.tip),
             ("BASELINE", LandingCheckCopy.baseline),
             ("VIEW_HELD", LandingCheckCopy.viewHeld),
+            // Revision 42 part two (docs/mocks/landing-measured): the three values, who set it, the
+            // coordinator's changes and a task's exemption.
+            ("MERGE_CHECK", LandingProvenanceCopy.modeMergeCheck),
+            ("COMMAND", LandingProvenanceCopy.modeCommand),
+            ("NONE", LandingProvenanceCopy.modeNone),
+            ("NONE_HEAD", LandingProvenanceCopy.noneLead),
+            ("NONE_BODY", LandingProvenanceCopy.noneBody),
+            ("COMMAND_NOTE", LandingProvenanceCopy.commandNote),
+            ("WHO_CAN_SET", LandingProvenanceCopy.whoCanSet),
+            ("OWNER", LandingProvenanceCopy.you),
+            ("COORDINATOR", LandingProvenanceCopy.coordinator),
+            ("CARD", LandingProvenanceCopy.card),
+            ("START", LandingProvenanceCopy.start),
+            ("TITLE", LandingProvenanceCopy.changesTitle),
+            ("INTRO", LandingProvenanceCopy.changesIntro),
+            ("EMPTY", LandingProvenanceCopy.noChanges),
+            ("LANDING_CHECK", LandingProvenanceCopy.landingCheck),
+            ("CHECK_EXEMPT", LandingProvenanceCopy.checkExemptHead),
+            ("USES_MERGE_CHECK", LandingProvenanceCopy.usesMergeCheck),
+            ("NO_CHECK", LandingProvenanceCopy.modeNone),
+            ("EXEMPT", LandingProvenanceCopy.exemptValue),
+            ("NOT_EXEMPT", LandingProvenanceCopy.notExemptValue),
+            ("REVERT", LandingProvenanceCopy.revert),
+            ("YOUR_CHANGE", LandingProvenanceCopy.yourChangeHead),
+            ("YOUR_CHANGE_NOTHING", LandingProvenanceCopy.yourChange),
+            ("CONFIRM_TITLE", LandingProvenanceCopy.revertTitle),
+            ("CONFIRM_CONSEQUENCE", LandingProvenanceCopy.revertAfter),
+            ("CANCEL", LandingProvenanceCopy.cancel),
+            ("LABEL", LandingProvenanceCopy.landingCheck),
+            ("BADGE", LandingProvenanceCopy.exempt),
+            ("REMOVE", LandingProvenanceCopy.removeExemption),
+            ("SKIPPED", LandingProvenanceCopy.skipped),
+            ("MERGE_CHECK_STILL_RUNS", LandingProvenanceCopy.mergeCheckStillRuns),
+            ("STILL_RUNS", LandingProvenanceCopy.stillRuns),
         ]
         let regex = try NSRegularExpression(pattern: "(?m)^  ([A-Z_]+): '([^']*)',")
         let keys = regex.matches(in: web, range: NSRange(web.startIndex..., in: web)).compactMap {
@@ -43,6 +77,15 @@ final class LandingCheckTests: XCTestCase {
         XCTAssertEqual(LandingCheckCopy.inheritedCommand("make all"), "Uses merge check: make all")
         XCTAssertEqual(LandingCheckCopy.inheritedTimeout(900), "Uses merge check timeout: 900 seconds")
         XCTAssertEqual(LandingCheckCopy.title("project/payments"), "Baseline checks failing on project/payments")
+        // The functions beside the objects: the count row, the revert line, the exemption's reason.
+        XCTAssertTrue(web.contains("`${count} ${count === 1 ? 'change' : 'changes'}`"))
+        XCTAssertEqual(LandingProvenanceCopy.changesCount(3), "3 changes")
+        XCTAssertEqual(LandingProvenanceCopy.changesCount(1), "1 change")
+        XCTAssertTrue(web.contains("`Reverted by you · ${when} · coordinator needs a card for this field`"))
+        XCTAssertEqual(LandingProvenanceCopy.revertedByYou("just now"),
+                       "Reverted by you · just now · coordinator needs a card for this field")
+        XCTAssertTrue(web.contains("`Exempt: ${reason}`"))
+        XCTAssertEqual(LandingProvenanceCopy.exemptBecause("why"), "Exempt: why")
     }
 
     func testSettingsDecodeAndWriteExactCommandAndIndependentNulls() throws {
