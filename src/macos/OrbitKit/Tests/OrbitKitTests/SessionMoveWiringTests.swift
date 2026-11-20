@@ -340,11 +340,11 @@ final class SessionMoveWiringTests: XCTestCase {
         let app = code(try appSource("AppModel.swift"))
         let apply = try slice(app, from: "private func apply(_ ev: ControlEvent) {", to: "\n    }\n")
         let branch = try slice(apply, from: "case .folders:", to: "case .providers:")
-        XCTAssertTrue(branch.contains("Task { await loadSessionFolders() }"))
+        XCTAssertTrue(branch.contains("whenSeen(\"folders\") { app in Task { await app.loadSessionFolders() } }"))
         XCTAssertFalse(branch.contains("scheduleControlRefresh()"), "a folder change refetches no list")
         XCTAssertFalse(branch.contains("#else"), "the Mac draws folders too: it reads them on every platform")
 
-        let connected = try slice(app, from: "private func reconcileOnConnect() async {", to: "\n    }\n")
+        let connected = try slice(app, from: "private func alignOnScreenAfterConnect() async {", to: "\n    }\n")
         XCTAssertTrue(connected.contains("Task { await loadSessionFolders() }"))
 
         let load = try slice(app, from: "func loadSessionFolders() async {", to: "\n    }")
