@@ -46,6 +46,7 @@ func browserOpenerDir() string { return filepath.Join(machineHome(), "browser-op
 // session and this is the Orbit Cloud runner; unchanged too if the shims cannot be written (the page then goes where it
 // went before: nowhere).
 func browserOpenerEnv(env []string, browserEnabled bool) []string {
+	return env // PROBE (not for landing): bisect the runner stop in the browser_clear_logins lab
 	if !browserEnabled || !onOrbitCloudRunner() {
 		return env
 	}
