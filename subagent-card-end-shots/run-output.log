@@ -1,0 +1,78 @@
+==> iPhone FCC5F673-7BEC-4A7D-8F2A-4DC35E2668EC
+==> stub ready on 127.0.0.1:8765 (pid 3509, after 3s); {"line": "PROJECT_BRANCH", "ref": "project/P1", "upstreamRef": "main", "integrat
+==> mac
+Test Case '-[LandingSessionMacProbeUITests.SubagentCardEndTests testDone]' started.
+Test Case '-[LandingSessionMacProbeUITests.SubagentCardEndTests testDone]' passed (32.489 seconds).
+Test Case '-[LandingSessionMacProbeUITests.SubagentCardEndTests testInterrupted]' started.
+Test Case '-[LandingSessionMacProbeUITests.SubagentCardEndTests testInterrupted]' passed (34.211 seconds).
+Test Case '-[LandingSessionMacProbeUITests.SubagentCardEndTests testQueued]' started.
+Test Case '-[LandingSessionMacProbeUITests.SubagentCardEndTests testQueued]' passed (26.603 seconds).
+Test Case '-[LandingSessionMacProbeUITests.SubagentCardEndTests testRunning]' started.
+Test Case '-[LandingSessionMacProbeUITests.SubagentCardEndTests testRunning]' passed (25.486 seconds).
+Test Case '-[LandingSessionMacProbeUITests.SubagentCardEndTests testStopped]' started.
+Test Case '-[LandingSessionMacProbeUITests.SubagentCardEndTests testStopped]' passed (27.607 seconds).
+	 Executed 5 tests, with 0 failures (0 unexpected) in 146.397 (146.401) seconds
+	 Executed 5 tests, with 0 failures (0 unexpected) in 146.397 (146.403) seconds
+	 Executed 5 tests, with 0 failures (0 unexpected) in 146.397 (146.407) seconds
+** TEST SUCCEEDED **
+==> stub ready on 127.0.0.1:8765 (pid 21518, after 2s); {"line": "PROJECT_BRANCH", "ref": "project/P1", "upstreamRef": "main", "integrat
+==> ios
+Test Case '-[LandingSessionProbeUITests.SubagentCardEndTests testDone]' started.
+Test Case '-[LandingSessionProbeUITests.SubagentCardEndTests testDone]' passed (53.942 seconds).
+Test Case '-[LandingSessionProbeUITests.SubagentCardEndTests testInterrupted]' started.
+Test Case '-[LandingSessionProbeUITests.SubagentCardEndTests testInterrupted]' passed (40.718 seconds).
+Test Case '-[LandingSessionProbeUITests.SubagentCardEndTests testQueued]' started.
+Test Case '-[LandingSessionProbeUITests.SubagentCardEndTests testQueued]' passed (22.836 seconds).
+Test Case '-[LandingSessionProbeUITests.SubagentCardEndTests testRunning]' started.
+Test Case '-[LandingSessionProbeUITests.SubagentCardEndTests testRunning]' passed (17.098 seconds).
+Test Case '-[LandingSessionProbeUITests.SubagentCardEndTests testStopped]' started.
+Test Case '-[LandingSessionProbeUITests.SubagentCardEndTests testStopped]' passed (21.050 seconds).
+	 Executed 5 tests, with 0 failures (0 unexpected) in 155.644 (155.652) seconds
+	 Executed 5 tests, with 0 failures (0 unexpected) in 155.644 (155.654) seconds
+	 Executed 5 tests, with 0 failures (0 unexpected) in 155.644 (155.656) seconds
+** TEST SUCCEEDED **
+.ls-probe/run.sh: line 82: 21518 Terminated: 15          python3 -u stub.py 8765 "$1" > "$1.out" 2>&1
+/Users/runner/work/orbit/orbit/.ls-probe/shots/ios:
+total 5408
+drwxr-xr-x  25 runner  staff     800 Nov 20 03:48 .
+drwxr-xr-x   4 runner  staff     128 Nov 20 03:28 ..
+drwxr-xr-x  25 runner  staff     800 Nov 20 03:48 attachments
+-rw-r--r--   1 runner  staff  241004 Nov 20 03:47 ios-1-running.png
+-rw-r--r--   1 runner  staff  273253 Nov 20 03:45 ios-2-done-wake-draws-nothing.png
+-rw-r--r--   1 runner  staff  301326 Nov 20 03:46 ios-3-interrupted-folded.png
+-rw-r--r--   1 runner  staff  429443 Nov 20 03:46 ios-4-interrupted-opened.png
+-rw-r--r--   1 runner  staff  271706 Nov 20 03:47 ios-5-stopped.png
+-rw-r--r--   1 runner  staff  271328 Nov 20 03:46 ios-6-queued.png
+-rw-r--r--   1 runner  staff     726 Nov 20 03:48 not-served.txt
+-rw-r--r--   1 runner  staff   42871 Nov 20 03:47 requests.log
+-rw-r--r--   1 runner  staff       0 Nov 20 03:39 requests.log.out
+-rw-r--r--@  1 runner  staff      60 Nov 20 03:45 SubagentCardEndTeststestDone-notes.txt
+-rw-r--r--@  1 runner  staff     370 Nov 20 03:46 SubagentCardEndTeststestInterrupted-notes.txt
+-rw-r--r--@  1 runner  staff      79 Nov 20 03:46 SubagentCardEndTeststestQueued-notes.txt
+-rw-r--r--@  1 runner  staff      29 Nov 20 03:47 SubagentCardEndTeststestRunning-notes.txt
+-rw-r--r--@  1 runner  staff     111 Nov 20 03:47 SubagentCardEndTeststestStopped-notes.txt
+-rw-r--r--@  1 runner  staff   21820 Nov 20 03:45 tree-ios-done.txt
+-rw-r--r--@  1 runner  staff   25393 Nov 20 03:46 tree-ios-interrupted-open.txt
+-rw-r--r--@  1 runner  staff   22669 Nov 20 03:46 tree-ios-interrupted.txt
+-rw-r--r--@  1 runner  staff   20960 Nov 20 03:46 tree-ios-queued.txt
+-rw-r--r--@  1 runner  staff   19827 Nov 20 03:47 tree-ios-running.txt
+-rw-r--r--@  1 runner  staff   22282 Nov 20 03:47 tree-ios-stopped.txt
+-rw-r--r--   1 runner  staff     200 Nov 20 03:48 writes.txt
+-rw-r--r--   1 runner  staff  746763 Nov 20 03:48 xcodebuild-ios.log
+
+/Users/runner/work/orbit/orbit/.ls-probe/shots/mac:
+total 2912
+drwxr-xr-x  14 runner  staff     448 Nov 20 03:48 .
+drwxr-xr-x   4 runner  staff     128 Nov 20 03:28 ..
+drwxr-xr-x  25 runner  staff     800 Nov 20 03:39 attachments
+-rw-r--r--   1 runner  staff   95420 Nov 20 03:39 mac-1-running.png
+-rw-r--r--   1 runner  staff  106107 Nov 20 03:39 mac-2-done-wake-draws-nothing.png
+-rw-r--r--   1 runner  staff  115035 Nov 20 03:39 mac-3-interrupted-folded.png
+-rw-r--r--   1 runner  staff  138201 Nov 20 03:39 mac-4-interrupted-opened.png
+-rw-r--r--   1 runner  staff  106000 Nov 20 03:39 mac-5-stopped.png
+-rw-r--r--   1 runner  staff  107177 Nov 20 03:39 mac-6-queued.png
+-rw-r--r--   1 runner  staff     726 Nov 20 03:48 not-served.txt
+-rw-r--r--   1 runner  staff   37518 Nov 20 03:38 requests.log
+-rw-r--r--   1 runner  staff       0 Nov 20 03:31 requests.log.out
+-rw-r--r--   1 runner  staff     200 Nov 20 03:48 writes.txt
+-rw-r--r--   1 runner  staff  761776 Nov 20 03:38 xcodebuild-mac.log

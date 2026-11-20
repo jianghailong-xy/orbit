@@ -1,0 +1,2 @@
+ios-queued: shows Waiting for the agent to read it
+ios-queued: shows Don't send

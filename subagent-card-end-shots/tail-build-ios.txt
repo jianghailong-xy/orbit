@@ -1,0 +1,300 @@
+    cd /Users/runner/work/orbit/orbit/.ls-probe
+    /usr/bin/touch -c /Users/runner/work/orbit/orbit/.ls-probe/.dd-ios/Build/Products/Debug-iphonesimulator/LandingSessionProbe.app
+
+ProcessInfoPlistFile /Users/runner/work/orbit/orbit/.ls-probe/.dd-ios/Build/Products/Debug-iphonesimulator/LandingSessionProbeUITests-Runner.app/PlugIns/LandingSessionProbeUITests.xctest/Info.plist /Users/runner/work/orbit/orbit/.ls-probe/.dd-ios/Build/Intermediates.noindex/LandingSessionProbe.build/Debug-iphonesimulator/LandingSessionProbeUITests.build/empty-LandingSessionProbeUITests.plist (in target 'LandingSessionProbeUITests' from project 'LandingSessionProbe')
+    cd /Users/runner/work/orbit/orbit/.ls-probe
+    builtin-infoPlistUtility /Users/runner/work/orbit/orbit/.ls-probe/.dd-ios/Build/Intermediates.noindex/LandingSessionProbe.build/Debug-iphonesimulator/LandingSessionProbeUITests.build/empty-LandingSessionProbeUITests.plist -producttype com.apple.product-type.bundle.ui-testing -expandbuildsettings -format binary -platform iphonesimulator -additionalcontentfile /Users/runner/work/orbit/orbit/.ls-probe/.dd-ios/Build/Intermediates.noindex/LandingSessionProbe.build/Debug-iphonesimulator/LandingSessionProbeUITests.build/ProductTypeInfoPlistAdditions.plist -o /Users/runner/work/orbit/orbit/.ls-probe/.dd-ios/Build/Products/Debug-iphonesimulator/LandingSessionProbeUITests-Runner.app/PlugIns/LandingSessionProbeUITests.xctest/Info.plist
+
+Ld /Users/runner/work/orbit/orbit/.ls-probe/.dd-ios/Build/Products/Debug-iphonesimulator/LandingSessionProbeUITests-Runner.app/PlugIns/LandingSessionProbeUITests.xctest/LandingSessionProbeUITests normal (in target 'LandingSessionProbeUITests' from project 'LandingSessionProbe')
+    cd /Users/runner/work/orbit/orbit/.ls-probe
+    /Applications/Xcode_26.6.app/Contents/Developer/Toolchains/XcodeDefault.xctoolchain/usr/bin/clang -Xlinker -reproducible -target arm64-apple-ios17.0-simulator -bundle -isysroot /Applications/Xcode_26.6.app/Contents/Developer/Platforms/iPhoneSimulator.platform/Developer/SDKs/iPhoneSimulator26.5.sdk -O0 -L/Users/runner/work/orbit/orbit/.ls-probe/.dd-ios/Build/Intermediates.noindex/EagerLinkingTBDs/Debug-iphonesimulator -L/Users/runner/work/orbit/orbit/.ls-probe/.dd-ios/Build/Products/Debug-iphonesimulator -L/Applications/Xcode_26.6.app/Contents/Developer/Platforms/iPhoneSimulator.platform/Developer/usr/lib -F/Users/runner/work/orbit/orbit/.ls-probe/.dd-ios/Build/Intermediates.noindex/EagerLinkingTBDs/Debug-iphonesimulator -F/Users/runner/work/orbit/orbit/.ls-probe/.dd-ios/Build/Products/Debug-iphonesimulator -iframework /Applications/Xcode_26.6.app/Contents/Developer/Platforms/iPhoneSimulator.platform/Developer/Library/Frameworks -iframework /Applications/Xcode_26.6.app/Contents/Developer/Platforms/iPhoneSimulator.platform/Developer/SDKs/iPhoneSimulator26.5.sdk/Developer/Library/Frameworks -filelist /Users/runner/work/orbit/orbit/.ls-probe/.dd-ios/Build/Intermediates.noindex/LandingSessionProbe.build/Debug-iphonesimulator/LandingSessionProbeUITests.build/Objects-normal/arm64/LandingSessionProbeUITests.LinkFileList -Xlinker -rpath -Xlinker /usr/lib/swift -Xlinker -rpath -Xlinker @loader_path/Frameworks -Xlinker -rpath -Xlinker @executable_path/Frameworks -Xlinker -dead_strip -Xlinker -object_path_lto -Xlinker /Users/runner/work/orbit/orbit/.ls-probe/.dd-ios/Build/Intermediates.noindex/LandingSessionProbe.build/Debug-iphonesimulator/LandingSessionProbeUITests.build/Objects-normal/arm64/LandingSessionProbeUITests_lto.o -rdynamic -Xlinker -no_deduplicate -Xlinker -objc_abi_version -Xlinker 2 -Xlinker -dependency_info -Xlinker /Users/runner/work/orbit/orbit/.ls-probe/.dd-ios/Build/Intermediates.noindex/LandingSessionProbe.build/Debug-iphonesimulator/LandingSessionProbeUITests.build/Objects-normal/arm64/LandingSessionProbeUITests_dependency_info.dat -fobjc-link-runtime -L/Applications/Xcode_26.6.app/Contents/Developer/Toolchains/XcodeDefault.xctoolchain/usr/lib/swift/iphonesimulator -L/usr/lib/swift -Xlinker -add_ast_path -Xlinker /Users/runner/work/orbit/orbit/.ls-probe/.dd-ios/Build/Intermediates.noindex/LandingSessionProbe.build/Debug-iphonesimulator/LandingSessionProbeUITests.build/Objects-normal/arm64/LandingSessionProbeUITests.swiftmodule @/Users/runner/work/orbit/orbit/.ls-probe/.dd-ios/Build/Intermediates.noindex/LandingSessionProbe.build/Debug-iphonesimulator/LandingSessionProbeUITests.build/Objects-normal/arm64/LandingSessionProbeUITests-linker-args.resp -Xlinker -needed_framework -Xlinker XCTest -framework XCTest -Xlinker -needed-lXCTestSwiftSupport -lXCTestSwiftSupport -Xlinker -sectcreate -Xlinker __TEXT -Xlinker __entitlements -Xlinker /Users/runner/work/orbit/orbit/.ls-probe/.dd-ios/Build/Intermediates.noindex/LandingSessionProbe.build/Debug-iphonesimulator/LandingSessionProbeUITests.build/LandingSessionProbeUITests.xctest-Simulated.xcent -Xlinker -sectcreate -Xlinker __TEXT -Xlinker __ents_der -Xlinker /Users/runner/work/orbit/orbit/.ls-probe/.dd-ios/Build/Intermediates.noindex/LandingSessionProbe.build/Debug-iphonesimulator/LandingSessionProbeUITests.build/LandingSessionProbeUITests.xctest-Simulated.xcent.der -Xlinker -no_adhoc_codesign -o /Users/runner/work/orbit/orbit/.ls-probe/.dd-ios/Build/Products/Debug-iphonesimulator/LandingSessionProbeUITests-Runner.app/PlugIns/LandingSessionProbeUITests.xctest/LandingSessionProbeUITests
+
+ExtractAppIntentsMetadata (in target 'LandingSessionProbeUITests' from project 'LandingSessionProbe')
+    cd /Users/runner/work/orbit/orbit/.ls-probe
+    /Applications/Xcode_26.6.app/Contents/Developer/Toolchains/XcodeDefault.xctoolchain/usr/bin/appintentsmetadataprocessor --toolchain-dir /var/run/com.apple.security.cryptexd/mnt/com.apple.MobileAsset.MetalToolchain-v17.6.109.0.JgY6BS/Metal.xctoolchain --module-name LandingSessionProbeUITests --sdk-root /Applications/Xcode_26.6.app/Contents/Developer/Platforms/iPhoneSimulator.platform/Developer/SDKs/iPhoneSimulator26.5.sdk --xcode-version 17F113 --platform-family iOS --deployment-target 17.0 --bundle-identifier io.orbitd.landingsessionprobe.uitests --output /Users/runner/work/orbit/orbit/.ls-probe/.dd-ios/Build/Products/Debug-iphonesimulator/LandingSessionProbeUITests-Runner.app/PlugIns/LandingSessionProbeUITests.xctest --target-triple arm64-apple-ios17.0-simulator --binary-file /Users/runner/work/orbit/orbit/.ls-probe/.dd-ios/Build/Products/Debug-iphonesimulator/LandingSessionProbeUITests-Runner.app/PlugIns/LandingSessionProbeUITests.xctest/LandingSessionProbeUITests --dependency-file /Users/runner/work/orbit/orbit/.ls-probe/.dd-ios/Build/Intermediates.noindex/LandingSessionProbe.build/Debug-iphonesimulator/LandingSessionProbeUITests.build/Objects-normal/arm64/LandingSessionProbeUITests_dependency_info.dat --stringsdata-file /Users/runner/work/orbit/orbit/.ls-probe/.dd-ios/Build/Intermediates.noindex/LandingSessionProbe.build/Debug-iphonesimulator/LandingSessionProbeUITests.build/Objects-normal/arm64/ExtractedAppShortcutsMetadata.stringsdata --source-file-list /Users/runner/work/orbit/orbit/.ls-probe/.dd-ios/Build/Intermediates.noindex/LandingSessionProbe.build/Debug-iphonesimulator/LandingSessionProbeUITests.build/Objects-normal/arm64/LandingSessionProbeUITests.SwiftFileList --metadata-file-list /Users/runner/work/orbit/orbit/.ls-probe/.dd-ios/Build/Intermediates.noindex/LandingSessionProbe.build/Debug-iphonesimulator/LandingSessionProbeUITests.build/LandingSessionProbeUITests.DependencyMetadataFileList --static-metadata-file-list /Users/runner/work/orbit/orbit/.ls-probe/.dd-ios/Build/Intermediates.noindex/LandingSessionProbe.build/Debug-iphonesimulator/LandingSessionProbeUITests.build/LandingSessionProbeUITests.DependencyStaticMetadataFileList --swift-const-vals-list /Users/runner/work/orbit/orbit/.ls-probe/.dd-ios/Build/Intermediates.noindex/LandingSessionProbe.build/Debug-iphonesimulator/LandingSessionProbeUITests.build/Objects-normal/arm64/LandingSessionProbeUITests.SwiftConstValuesFileList --compile-time-extraction --deployment-aware-processing --validate-assistant-intents --no-app-shortcuts-localization
+2026-11-20 03:44:23.199 appintentsmetadataprocessor[36772:98838] Starting appintentsmetadataprocessor export
+2026-11-20 03:44:23.201 appintentsmetadataprocessor[36772:98838] warning: Metadata extraction skipped. No AppIntents.framework dependency found.
+
+CopySwiftLibs /Users/runner/work/orbit/orbit/.ls-probe/.dd-ios/Build/Products/Debug-iphonesimulator/LandingSessionProbeUITests-Runner.app/PlugIns/LandingSessionProbeUITests.xctest (in target 'LandingSessionProbeUITests' from project 'LandingSessionProbe')
+    cd /Users/runner/work/orbit/orbit/.ls-probe
+    builtin-swiftStdLibTool --copy --verbose --sign - --scan-executable /Users/runner/work/orbit/orbit/.ls-probe/.dd-ios/Build/Products/Debug-iphonesimulator/LandingSessionProbeUITests-Runner.app/PlugIns/LandingSessionProbeUITests.xctest/LandingSessionProbeUITests --scan-folder /Users/runner/work/orbit/orbit/.ls-probe/.dd-ios/Build/Products/Debug-iphonesimulator/LandingSessionProbeUITests-Runner.app/PlugIns/LandingSessionProbeUITests.xctest/Frameworks --scan-folder /Users/runner/work/orbit/orbit/.ls-probe/.dd-ios/Build/Products/Debug-iphonesimulator/LandingSessionProbeUITests-Runner.app/PlugIns/LandingSessionProbeUITests.xctest/PlugIns --scan-folder /Users/runner/work/orbit/orbit/.ls-probe/.dd-ios/Build/Products/Debug-iphonesimulator/LandingSessionProbeUITests-Runner.app/PlugIns/LandingSessionProbeUITests.xctest/SystemExtensions --scan-folder /Users/runner/work/orbit/orbit/.ls-probe/.dd-ios/Build/Products/Debug-iphonesimulator/LandingSessionProbeUITests-Runner.app/PlugIns/LandingSessionProbeUITests.xctest/Extensions --platform iphonesimulator --toolchain /var/run/com.apple.security.cryptexd/mnt/com.apple.MobileAsset.MetalToolchain-v17.6.109.0.JgY6BS/Metal.xctoolchain --toolchain /Applications/Xcode_26.6.app/Contents/Developer/Toolchains/XcodeDefault.xctoolchain --destination /Users/runner/work/orbit/orbit/.ls-probe/.dd-ios/Build/Products/Debug-iphonesimulator/LandingSessionProbeUITests-Runner.app/PlugIns/LandingSessionProbeUITests.xctest/Frameworks --strip-bitcode --scan-executable /Applications/Xcode_26.6.app/Contents/Developer/Platforms/iPhoneSimulator.platform/Developer/usr/lib/libXCTestSwiftSupport.dylib --strip-bitcode-tool /Applications/Xcode_26.6.app/Contents/Developer/Toolchains/XcodeDefault.xctoolchain/usr/bin/bitcode_strip --emit-dependency-info /Users/runner/work/orbit/orbit/.ls-probe/.dd-ios/Build/Intermediates.noindex/LandingSessionProbe.build/Debug-iphonesimulator/LandingSessionProbeUITests.build/SwiftStdLibToolInputDependencies.dep --filter-for-swift-os
+
+AppIntentsSSUTraining (in target 'LandingSessionProbeUITests' from project 'LandingSessionProbe')
+    cd /Users/runner/work/orbit/orbit/.ls-probe
+    /Applications/Xcode_26.6.app/Contents/Developer/Toolchains/XcodeDefault.xctoolchain/usr/bin/appintentsnltrainingprocessor --infoplist-path /Users/runner/work/orbit/orbit/.ls-probe/.dd-ios/Build/Products/Debug-iphonesimulator/LandingSessionProbeUITests-Runner.app/PlugIns/LandingSessionProbeUITests.xctest/Info.plist --temp-dir-path /Users/runner/work/orbit/orbit/.ls-probe/.dd-ios/Build/Intermediates.noindex/LandingSessionProbe.build/Debug-iphonesimulator/LandingSessionProbeUITests.build/ssu --bundle-id io.orbitd.landingsessionprobe.uitests --product-path /Users/runner/work/orbit/orbit/.ls-probe/.dd-ios/Build/Products/Debug-iphonesimulator/LandingSessionProbeUITests-Runner.app/PlugIns/LandingSessionProbeUITests.xctest --extracted-metadata-path /Users/runner/work/orbit/orbit/.ls-probe/.dd-ios/Build/Products/Debug-iphonesimulator/LandingSessionProbeUITests-Runner.app/PlugIns/LandingSessionProbeUITests.xctest/Metadata.appintents --metadata-file-list /Users/runner/work/orbit/orbit/.ls-probe/.dd-ios/Build/Intermediates.noindex/LandingSessionProbe.build/Debug-iphonesimulator/LandingSessionProbeUITests.build/LandingSessionProbeUITests.DependencyMetadataFileList --source-file /Users/runner/work/orbit/orbit/.ls-probe/.dd-ios/Build/Products/Debug-iphonesimulator/LandingSessionProbeUITests-Runner.app/PlugIns/LandingSessionProbeUITests.xctest/Info.plist --archive-ssu-assets
+2026-11-20 03:44:23.231 appintentsnltrainingprocessor[36773:98839] Parsing options for appintentsnltrainingprocessor
+2026-11-20 03:44:23.232 appintentsnltrainingprocessor[36773:98839] Starting AppIntents SSU YAML Generation
+2026-11-20 03:44:23.233 appintentsnltrainingprocessor[36773:98839] No AppShortcuts found - Skipping.
+
+MkDir /Users/runner/work/orbit/orbit/.ls-probe/.dd-ios/Build/Products/Debug-iphonesimulator/LandingSessionProbeUITests-Runner.app (in target 'LandingSessionProbeUITests' from project 'LandingSessionProbe')
+    cd /Users/runner/work/orbit/orbit/.ls-probe
+    /bin/mkdir -p /Users/runner/work/orbit/orbit/.ls-probe/.dd-ios/Build/Products/Debug-iphonesimulator/LandingSessionProbeUITests-Runner.app
+
+CopyPlistFile /Users/runner/work/orbit/orbit/.ls-probe/.dd-ios/Build/Products/Debug-iphonesimulator/LandingSessionProbeUITests-Runner.app/Info.plist /Applications/Xcode_26.6.app/Contents/Developer/Platforms/iPhoneSimulator.platform/Developer/Library/Xcode/Agents/XCTRunner.app/Info.plist (in target 'LandingSessionProbeUITests' from project 'LandingSessionProbe')
+    cd /Users/runner/work/orbit/orbit/.ls-probe
+    builtin-copyPlist --validate --convert xml1 --macro-expansion WRAPPEDPRODUCTNAME LandingSessionProbeUITests-Runner --macro-expansion WRAPPEDPRODUCTBUNDLEIDENTIFIER io.orbitd.landingsessionprobe.uitests.xctrunner --macro-expansion TESTPRODUCTNAME LandingSessionProbeUITests --macro-expansion TESTPRODUCTBUNDLEIDENTIFIER io.orbitd.landingsessionprobe.uitests --copy-value UIDeviceFamily /Users/runner/work/orbit/orbit/.ls-probe/.dd-ios/Build/Products/Debug-iphonesimulator/LandingSessionProbeUITests-Runner.app/PlugIns/LandingSessionProbeUITests.xctest/Info.plist --outdir /Users/runner/work/orbit/orbit/.ls-probe/.dd-ios/Build/Products/Debug-iphonesimulator/LandingSessionProbeUITests-Runner.app -- /Applications/Xcode_26.6.app/Contents/Developer/Platforms/iPhoneSimulator.platform/Developer/Library/Xcode/Agents/XCTRunner.app/Info.plist
+
+CopyAndPreserveArchs /Users/runner/work/orbit/orbit/.ls-probe/.dd-ios/Build/Products/Debug-iphonesimulator/LandingSessionProbeUITests-Runner.app/LandingSessionProbeUITests-Runner (in target 'LandingSessionProbeUITests' from project 'LandingSessionProbe')
+    cd /Users/runner/work/orbit/orbit/.ls-probe
+    /Applications/Xcode_26.6.app/Contents/Developer/Toolchains/XcodeDefault.xctoolchain/usr/bin/lipo /Applications/Xcode_26.6.app/Contents/Developer/Platforms/iPhoneSimulator.platform/Developer/Library/Xcode/Agents/XCTRunner.app/XCTRunner -output /Users/runner/work/orbit/orbit/.ls-probe/.dd-ios/Build/Products/Debug-iphonesimulator/LandingSessionProbeUITests-Runner.app/LandingSessionProbeUITests-Runner -extract arm64
+
+Copy /Users/runner/work/orbit/orbit/.ls-probe/.dd-ios/Build/Products/Debug-iphonesimulator/LandingSessionProbeUITests-Runner.app/PkgInfo /Applications/Xcode_26.6.app/Contents/Developer/Platforms/iPhoneSimulator.platform/Developer/Library/Xcode/Agents/XCTRunner.app/PkgInfo (in target 'LandingSessionProbeUITests' from project 'LandingSessionProbe')
+    cd /Users/runner/work/orbit/orbit/.ls-probe
+    builtin-copy -exclude .DS_Store -exclude CVS -exclude .svn -exclude .git -exclude .hg -resolve-src-symlinks /Applications/Xcode_26.6.app/Contents/Developer/Platforms/iPhoneSimulator.platform/Developer/Library/Xcode/Agents/XCTRunner.app/PkgInfo /Users/runner/work/orbit/orbit/.ls-probe/.dd-ios/Build/Products/Debug-iphonesimulator/LandingSessionProbeUITests-Runner.app
+
+Copy /Users/runner/work/orbit/orbit/.ls-probe/.dd-ios/Build/Products/Debug-iphonesimulator/LandingSessionProbeUITests-Runner.app/Frameworks/libXCTestSwiftSupport.dylib /Applications/Xcode_26.6.app/Contents/Developer/Platforms/iPhoneSimulator.platform/Developer/usr/lib/libXCTestSwiftSupport.dylib (in target 'LandingSessionProbeUITests' from project 'LandingSessionProbe')
+    cd /Users/runner/work/orbit/orbit/.ls-probe
+    builtin-copy -exclude .DS_Store -exclude CVS -exclude .svn -exclude .git -exclude .hg -exclude Headers -exclude PrivateHeaders -exclude Modules -exclude \*.tbd -resolve-src-symlinks /Applications/Xcode_26.6.app/Contents/Developer/Platforms/iPhoneSimulator.platform/Developer/usr/lib/libXCTestSwiftSupport.dylib /Users/runner/work/orbit/orbit/.ls-probe/.dd-ios/Build/Products/Debug-iphonesimulator/LandingSessionProbeUITests-Runner.app/Frameworks
+
+Copy /Users/runner/work/orbit/orbit/.ls-probe/.dd-ios/Build/Products/Debug-iphonesimulator/LandingSessionProbeUITests-Runner.app/Frameworks/XCUnit.framework /Applications/Xcode_26.6.app/Contents/Developer/Platforms/iPhoneSimulator.platform/Developer/Library/PrivateFrameworks/XCUnit.framework (in target 'LandingSessionProbeUITests' from project 'LandingSessionProbe')
+    cd /Users/runner/work/orbit/orbit/.ls-probe
+    builtin-copy -exclude .DS_Store -exclude CVS -exclude .svn -exclude .git -exclude .hg -exclude Headers -exclude PrivateHeaders -exclude Modules -exclude \*.tbd -resolve-src-symlinks /Applications/Xcode_26.6.app/Contents/Developer/Platforms/iPhoneSimulator.platform/Developer/Library/PrivateFrameworks/XCUnit.framework /Users/runner/work/orbit/orbit/.ls-probe/.dd-ios/Build/Products/Debug-iphonesimulator/LandingSessionProbeUITests-Runner.app/Frameworks
+
+Copy /Users/runner/work/orbit/orbit/.ls-probe/.dd-ios/Build/Products/Debug-iphonesimulator/LandingSessionProbeUITests-Runner.app/Frameworks/XCUIAutomation.framework /Applications/Xcode_26.6.app/Contents/Developer/Platforms/iPhoneSimulator.platform/Developer/Library/Frameworks/XCUIAutomation.framework (in target 'LandingSessionProbeUITests' from project 'LandingSessionProbe')
+    cd /Users/runner/work/orbit/orbit/.ls-probe
+    builtin-copy -exclude .DS_Store -exclude CVS -exclude .svn -exclude .git -exclude .hg -exclude Headers -exclude PrivateHeaders -exclude Modules -exclude \*.tbd -resolve-src-symlinks /Applications/Xcode_26.6.app/Contents/Developer/Platforms/iPhoneSimulator.platform/Developer/Library/Frameworks/XCUIAutomation.framework /Users/runner/work/orbit/orbit/.ls-probe/.dd-ios/Build/Products/Debug-iphonesimulator/LandingSessionProbeUITests-Runner.app/Frameworks
+
+Copy /Users/runner/work/orbit/orbit/.ls-probe/.dd-ios/Build/Products/Debug-iphonesimulator/LandingSessionProbeUITests-Runner.app/Frameworks/XCTestSupport.framework /Applications/Xcode_26.6.app/Contents/Developer/Platforms/iPhoneSimulator.platform/Developer/Library/PrivateFrameworks/XCTestSupport.framework (in target 'LandingSessionProbeUITests' from project 'LandingSessionProbe')
+    cd /Users/runner/work/orbit/orbit/.ls-probe
+    builtin-copy -exclude .DS_Store -exclude CVS -exclude .svn -exclude .git -exclude .hg -exclude Headers -exclude PrivateHeaders -exclude Modules -exclude \*.tbd -resolve-src-symlinks /Applications/Xcode_26.6.app/Contents/Developer/Platforms/iPhoneSimulator.platform/Developer/Library/PrivateFrameworks/XCTestSupport.framework /Users/runner/work/orbit/orbit/.ls-probe/.dd-ios/Build/Products/Debug-iphonesimulator/LandingSessionProbeUITests-Runner.app/Frameworks
+
+Copy /Users/runner/work/orbit/orbit/.ls-probe/.dd-ios/Build/Products/Debug-iphonesimulator/LandingSessionProbeUITests-Runner.app/Frameworks/XCTestCore.framework /Applications/Xcode_26.6.app/Contents/Developer/Platforms/iPhoneSimulator.platform/Developer/Library/PrivateFrameworks/XCTestCore.framework (in target 'LandingSessionProbeUITests' from project 'LandingSessionProbe')
+    cd /Users/runner/work/orbit/orbit/.ls-probe
+    builtin-copy -exclude .DS_Store -exclude CVS -exclude .svn -exclude .git -exclude .hg -exclude Headers -exclude PrivateHeaders -exclude Modules -exclude \*.tbd -resolve-src-symlinks /Applications/Xcode_26.6.app/Contents/Developer/Platforms/iPhoneSimulator.platform/Developer/Library/PrivateFrameworks/XCTestCore.framework /Users/runner/work/orbit/orbit/.ls-probe/.dd-ios/Build/Products/Debug-iphonesimulator/LandingSessionProbeUITests-Runner.app/Frameworks
+
+Copy /Users/runner/work/orbit/orbit/.ls-probe/.dd-ios/Build/Products/Debug-iphonesimulator/LandingSessionProbeUITests-Runner.app/Frameworks/XCTest.framework /Applications/Xcode_26.6.app/Contents/Developer/Platforms/iPhoneSimulator.platform/Developer/Library/Frameworks/XCTest.framework (in target 'LandingSessionProbeUITests' from project 'LandingSessionProbe')
+    cd /Users/runner/work/orbit/orbit/.ls-probe
+    builtin-copy -exclude .DS_Store -exclude CVS -exclude .svn -exclude .git -exclude .hg -exclude Headers -exclude PrivateHeaders -exclude Modules -exclude \*.tbd -resolve-src-symlinks /Applications/Xcode_26.6.app/Contents/Developer/Platforms/iPhoneSimulator.platform/Developer/Library/Frameworks/XCTest.framework /Users/runner/work/orbit/orbit/.ls-probe/.dd-ios/Build/Products/Debug-iphonesimulator/LandingSessionProbeUITests-Runner.app/Frameworks
+
+Copy /Users/runner/work/orbit/orbit/.ls-probe/.dd-ios/Build/Products/Debug-iphonesimulator/LandingSessionProbeUITests-Runner.app/Frameworks/XCTAutomationSupport.framework /Applications/Xcode_26.6.app/Contents/Developer/Platforms/iPhoneSimulator.platform/Developer/Library/PrivateFrameworks/XCTAutomationSupport.framework (in target 'LandingSessionProbeUITests' from project 'LandingSessionProbe')
+    cd /Users/runner/work/orbit/orbit/.ls-probe
+    builtin-copy -exclude .DS_Store -exclude CVS -exclude .svn -exclude .git -exclude .hg -exclude Headers -exclude PrivateHeaders -exclude Modules -exclude \*.tbd -resolve-src-symlinks /Applications/Xcode_26.6.app/Contents/Developer/Platforms/iPhoneSimulator.platform/Developer/Library/PrivateFrameworks/XCTAutomationSupport.framework /Users/runner/work/orbit/orbit/.ls-probe/.dd-ios/Build/Products/Debug-iphonesimulator/LandingSessionProbeUITests-Runner.app/Frameworks
+
+Copy /Users/runner/work/orbit/orbit/.ls-probe/.dd-ios/Build/Products/Debug-iphonesimulator/LandingSessionProbeUITests-Runner.app/Frameworks/Testing.framework /Applications/Xcode_26.6.app/Contents/Developer/Platforms/iPhoneSimulator.platform/Developer/Library/Frameworks/Testing.framework (in target 'LandingSessionProbeUITests' from project 'LandingSessionProbe')
+    cd /Users/runner/work/orbit/orbit/.ls-probe
+    builtin-copy -exclude .DS_Store -exclude CVS -exclude .svn -exclude .git -exclude .hg -exclude Headers -exclude PrivateHeaders -exclude Modules -exclude \*.tbd -resolve-src-symlinks /Applications/Xcode_26.6.app/Contents/Developer/Platforms/iPhoneSimulator.platform/Developer/Library/Frameworks/Testing.framework /Users/runner/work/orbit/orbit/.ls-probe/.dd-ios/Build/Products/Debug-iphonesimulator/LandingSessionProbeUITests-Runner.app/Frameworks
+
+CodeSign /Users/runner/work/orbit/orbit/.ls-probe/.dd-ios/Build/Products/Debug-iphonesimulator/LandingSessionProbeUITests-Runner.app/PlugIns/LandingSessionProbeUITests.xctest (in target 'LandingSessionProbeUITests' from project 'LandingSessionProbe')
+    cd /Users/runner/work/orbit/orbit/.ls-probe
+    
+    Signing Identity:     "Sign to Run Locally"
+    
+    /usr/bin/codesign --force --sign - --timestamp\=none --generate-entitlement-der /Users/runner/work/orbit/orbit/.ls-probe/.dd-ios/Build/Products/Debug-iphonesimulator/LandingSessionProbeUITests-Runner.app/PlugIns/LandingSessionProbeUITests.xctest
+
+CodeSign /Users/runner/work/orbit/orbit/.ls-probe/.dd-ios/Build/Products/Debug-iphonesimulator/LandingSessionProbeUITests-Runner.app (in target 'LandingSessionProbeUITests' from project 'LandingSessionProbe')
+    cd /Users/runner/work/orbit/orbit/.ls-probe
+    
+    Signing Identity:     "Sign to Run Locally"
+    
+    /usr/bin/codesign --force --sign - --timestamp\=none --generate-entitlement-der /Users/runner/work/orbit/orbit/.ls-probe/.dd-ios/Build/Products/Debug-iphonesimulator/LandingSessionProbeUITests-Runner.app
+/Users/runner/work/orbit/orbit/.ls-probe/.dd-ios/Build/Products/Debug-iphonesimulator/LandingSessionProbeUITests-Runner.app: replacing existing signature
+
+RegisterExecutionPolicyException /Users/runner/work/orbit/orbit/.ls-probe/.dd-ios/Build/Products/Debug-iphonesimulator/LandingSessionProbeUITests-Runner.app/PlugIns/LandingSessionProbeUITests.xctest (in target 'LandingSessionProbeUITests' from project 'LandingSessionProbe')
+    cd /Users/runner/work/orbit/orbit/.ls-probe
+    builtin-RegisterExecutionPolicyException /Users/runner/work/orbit/orbit/.ls-probe/.dd-ios/Build/Products/Debug-iphonesimulator/LandingSessionProbeUITests-Runner.app/PlugIns/LandingSessionProbeUITests.xctest
+
+Touch /Users/runner/work/orbit/orbit/.ls-probe/.dd-ios/Build/Products/Debug-iphonesimulator/LandingSessionProbeUITests-Runner.app/PlugIns/LandingSessionProbeUITests.xctest (in target 'LandingSessionProbeUITests' from project 'LandingSessionProbe')
+    cd /Users/runner/work/orbit/orbit/.ls-probe
+    /usr/bin/touch -c /Users/runner/work/orbit/orbit/.ls-probe/.dd-ios/Build/Products/Debug-iphonesimulator/LandingSessionProbeUITests-Runner.app/PlugIns/LandingSessionProbeUITests.xctest
+
+2026-11-20 03:44:49.498036+0000 LandingSessionProbeUITests-Runner[37621:101149] [Default] Running tests...
+objc[37621]: Class UIAccessibilityLoaderWebShared is implemented in both /Library/Developer/CoreSimulator/Volumes/iOS_23F77/Library/Developer/CoreSimulator/Profiles/Runtimes/iOS 26.5.simruntime/Contents/Resources/RuntimeRoot/System/Library/AccessibilityBundles/WebCore.axbundle/WebCore (0x10ad0c310) and /Library/Developer/CoreSimulator/Volumes/iOS_23F77/Library/Developer/CoreSimulator/Profiles/Runtimes/iOS 26.5.simruntime/Contents/Resources/RuntimeRoot/System/Library/AccessibilityBundles/WebKit.axbundle/WebKit (0x10a7d8398). This may cause spurious casting failures and mysterious crashes. One of the duplicates must be removed or renamed.
+    t =      nans Interface orientation changed to Portrait
+Test Suite 'All tests' started at 2026-11-20 03:44:57.563.
+Test Suite 'LandingSessionProbeUITests.xctest' started at 2026-11-20 03:44:57.564.
+Test Suite 'SubagentCardEndTests' started at 2026-11-20 03:44:57.565.
+Test Case '-[LandingSessionProbeUITests.SubagentCardEndTests testDone]' started.
+    t =     0.00s Start Test at 2026-11-20 03:44:57.566
+    t =     7.02s Set Up
+    t =     9.23s Open io.orbitd.landingsessionprobe
+    t =     9.23s     Launch io.orbitd.landingsessionprobe
+2026-11-20 03:45:08.929 xcodebuild[21529:63744] [MT] IDELaunchParametersSnapshot: The operation couldn’t be completed. (DebuggerLLDB.DebuggerVersionStore.StoreError error 0.)
+2026-11-20 03:45:08.937 xcodebuild[21529:63744] [MT] IDELaunchParametersSnapshot: no debugger version
+    t =    17.90s         Setting up automation session
+    t =    23.09s         Wait for io.orbitd.landingsessionprobe to idle
+    t =    26.34s Checking existence of `Any (First Match)`
+    t =    27.95s Checking existence of `Any (First Match)`
+    t =    29.00s Checking existence of `Any (First Match)`
+    t =    29.70s Checking existence of `Any (First Match)`
+    t =    33.04s Checking existence of `Any (First Match)`
+    t =    36.01s Checking existence of `Any (First Match)`
+    t =    36.41s Checking existence of `Any (First Match)`
+    t =    40.48s Checking existence of `Any (First Match)`
+    t =    41.82s Checking existence of `Any (First Match)`
+    t =    43.08s Checking existence of `Any (First Match)`
+    t =    45.00s Checking existence of `Any (First Match)`
+    t =    46.14s Checking existence of `Any (First Match)`
+    t =    47.09s Checking existence of `Any (First Match)`
+    t =    47.91s Checking existence of `Any (First Match)`
+    t =    49.33s Checking existence of `Any (First Match)`
+    t =    51.98s Added attachment named 'ios-2-done-wake-draws-nothing'
+    t =    51.98s Requesting snapshot of accessibility hierarchy for app with pid 38543
+    t =    52.65s Requesting snapshot of accessibility hierarchy for app with pid 38543
+    t =    52.78s Added attachment named 'tree-ios-done.txt'
+    t =    52.79s Terminate io.orbitd.landingsessionprobe:38543
+    t =    53.81s Tear Down
+    t =    53.81s     Added attachment named 'SubagentCardEndTeststestDone-notes.txt'
+Test Case '-[LandingSessionProbeUITests.SubagentCardEndTests testDone]' passed (53.942 seconds).
+Test Case '-[LandingSessionProbeUITests.SubagentCardEndTests testInterrupted]' started.
+    t =     0.00s Start Test at 2026-11-20 03:45:51.510
+    t =     0.06s Set Up
+    t =     0.19s Open io.orbitd.landingsessionprobe
+    t =     0.19s     Launch io.orbitd.landingsessionprobe
+2026-11-20 03:45:51.865 xcodebuild[21529:63744] [MT] IDELaunchParametersSnapshot: The operation couldn’t be completed. (DebuggerLLDB.DebuggerVersionStore.StoreError error 0.)
+2026-11-20 03:45:51.865 xcodebuild[21529:63744] [MT] IDELaunchParametersSnapshot: no debugger version
+    t =     6.74s         Setting up automation session
+    t =    10.95s         Wait for io.orbitd.landingsessionprobe to idle
+    t =    13.20s Checking existence of `Any (First Match)`
+    t =    14.61s Checking existence of `Any (First Match)`
+    t =    15.61s Checking existence of `Any (First Match)`
+    t =    16.32s Checking existence of `Any (First Match)`
+    t =    18.66s Checking existence of `Any (First Match)`
+    t =    22.49s Checking existence of `Any (First Match)`
+    t =    22.80s Checking existence of `Any (First Match)`
+    t =    23.07s Checking existence of `Any (First Match)`
+    t =    23.34s Checking existence of `Any (First Match)`
+    t =    23.67s Checking existence of `Any (First Match)`
+    t =    24.11s Checking existence of `Any (First Match)`
+    t =    24.62s Checking existence of `Any (First Match)`
+    t =    25.15s Checking existence of `Any (First Match)`
+    t =    25.64s Checking existence of `Any (First Match)`
+    t =    25.99s Checking existence of `Any (First Match)`
+    t =    26.37s Checking existence of `Any (First Match)`
+    t =    27.90s Added attachment named 'ios-3-interrupted-folded'
+    t =    27.90s Requesting snapshot of accessibility hierarchy for app with pid 39832
+    t =    28.54s Requesting snapshot of accessibility hierarchy for app with pid 39832
+    t =    28.67s Added attachment named 'tree-ios-interrupted.txt'
+    t =    28.68s Get all elements bound by index for: Elements matching predicate 'label BEGINSWITH "Show files"'
+    t =    28.84s Checking existence of `Button (Element at index 0)`
+    t =    28.98s Find the Button (Element at index 0)
+    t =    29.59s Checking existence of `"subagent-ending" Button`
+    t =    29.68s Find the "subagent-ending" Button
+    t =    29.81s Tap "subagent-ending" Button
+    t =    29.81s     Wait for io.orbitd.landingsessionprobe to idle
+    t =    29.82s     Find the "subagent-ending" Button
+    t =    29.94s     Check for interrupting elements affecting "subagent-ending" Button
+    t =    30.13s     Synthesize event
+    t =    31.02s     Wait for io.orbitd.landingsessionprobe to idle
+    t =    32.63s Checking existence of `Any (First Match)`
+    t =    32.98s Checking existence of `Any (First Match)`
+    t =    33.43s Checking existence of `Any (First Match)`
+    t =    34.02s Checking existence of `Any (First Match)`
+    t =    34.61s Checking existence of `Any (First Match)`
+    t =    35.50s Checking existence of `Any (First Match)`
+    t =    36.23s Checking existence of `Any (First Match)`
+    t =    36.77s Checking existence of `Any (First Match)`
+    t =    37.23s Checking existence of `Any (First Match)`
+    t =    37.65s Checking existence of `Any (First Match)`
+    t =    38.10s Checking existence of `Any (First Match)`
+    t =    38.75s Added attachment named 'ios-4-interrupted-opened'
+    t =    38.75s Requesting snapshot of accessibility hierarchy for app with pid 39832
+    t =    39.48s Requesting snapshot of accessibility hierarchy for app with pid 39832
+    t =    39.62s Added attachment named 'tree-ios-interrupted-open.txt'
+    t =    39.62s Terminate io.orbitd.landingsessionprobe:39832
+    t =    40.68s Tear Down
+    t =    40.68s     Added attachment named 'SubagentCardEndTeststestInterrupted-notes.txt'
+Test Case '-[LandingSessionProbeUITests.SubagentCardEndTests testInterrupted]' passed (40.718 seconds).
+Test Case '-[LandingSessionProbeUITests.SubagentCardEndTests testQueued]' started.
+    t =     0.00s Start Test at 2026-11-20 03:46:32.229
+    t =     0.03s Set Up
+    t =     0.08s Open io.orbitd.landingsessionprobe
+    t =     0.08s     Launch io.orbitd.landingsessionprobe
+2026-11-20 03:46:32.325 xcodebuild[21529:63744] [MT] IDELaunchParametersSnapshot: The operation couldn’t be completed. (DebuggerLLDB.DebuggerVersionStore.StoreError error 0.)
+2026-11-20 03:46:32.325 xcodebuild[21529:63744] [MT] IDELaunchParametersSnapshot: no debugger version
+    t =     1.67s         Setting up automation session
+    t =     3.09s         Wait for io.orbitd.landingsessionprobe to idle
+    t =     5.16s Checking existence of `Any (First Match)`
+    t =     5.98s Checking existence of `Any (First Match)`
+    t =     6.71s Checking existence of `Any (First Match)`
+    t =     7.40s Checking existence of `Any (First Match)`
+    t =     8.03s Checking existence of `Any (First Match)`
+    t =    10.14s Checking existence of `Any (First Match)`
+    t =    12.79s Checking existence of `Any (First Match)`
+    t =    13.06s Checking existence of `Any (First Match)`
+    t =    13.58s Checking existence of `Any (First Match)`
+    t =    14.59s Checking existence of `Any (First Match)`
+    t =    15.40s Checking existence of `Any (First Match)`
+    t =    16.70s Checking existence of `Any (First Match)`
+    t =    17.46s Checking existence of `Any (First Match)`
+    t =    18.20s Checking existence of `Any (First Match)`
+    t =    19.00s Checking existence of `Any (First Match)`
+    t =    20.75s Added attachment named 'ios-6-queued'
+    t =    20.76s Requesting snapshot of accessibility hierarchy for app with pid 41084
+    t =    21.55s Requesting snapshot of accessibility hierarchy for app with pid 41084
+    t =    21.76s Added attachment named 'tree-ios-queued.txt'
+    t =    21.76s Terminate io.orbitd.landingsessionprobe:41084
+    t =    22.79s Tear Down
+    t =    22.79s     Added attachment named 'SubagentCardEndTeststestQueued-notes.txt'
+Test Case '-[LandingSessionProbeUITests.SubagentCardEndTests testQueued]' passed (22.836 seconds).
+Test Case '-[LandingSessionProbeUITests.SubagentCardEndTests testRunning]' started.
+    t =     0.00s Start Test at 2026-11-20 03:46:55.066
+    t =     0.03s Set Up
+    t =     0.09s Open io.orbitd.landingsessionprobe
+    t =     0.09s     Launch io.orbitd.landingsessionprobe
+2026-11-20 03:46:55.166 xcodebuild[21529:63744] [MT] IDELaunchParametersSnapshot: The operation couldn’t be completed. (DebuggerLLDB.DebuggerVersionStore.StoreError error 0.)
+2026-11-20 03:46:55.166 xcodebuild[21529:63744] [MT] IDELaunchParametersSnapshot: no debugger version
+    t =     1.56s         Setting up automation session
+    t =     3.01s         Wait for io.orbitd.landingsessionprobe to idle
+    t =     5.67s Checking existence of `Any (First Match)`
+    t =     7.18s Checking existence of `Any (First Match)`
+    t =     7.84s Checking existence of `Any (First Match)`
+    t =     8.49s Checking existence of `Any (First Match)`
+    t =     9.16s Checking existence of `Any (First Match)`
+    t =    10.86s Checking existence of `Any (First Match)`
+    t =    13.74s Checking existence of `Any (First Match)`
+    t =    15.09s Added attachment named 'ios-1-running'
+    t =    15.09s Requesting snapshot of accessibility hierarchy for app with pid 42264
+    t =    15.85s Requesting snapshot of accessibility hierarchy for app with pid 42264
+    t =    16.02s Added attachment named 'tree-ios-running.txt'
+    t =    16.03s Terminate io.orbitd.landingsessionprobe:42264
+    t =    17.07s Tear Down
+    t =    17.07s     Added attachment named 'SubagentCardEndTeststestRunning-notes.txt'
+Test Case '-[LandingSessionProbeUITests.SubagentCardEndTests testRunning]' passed (17.098 seconds).
+Test Case '-[LandingSessionProbeUITests.SubagentCardEndTests testStopped]' started.
+    t =     0.00s Start Test at 2026-11-20 03:47:12.166
+    t =     0.03s Set Up
+2026-11-20 03:47:12.243 xcodebuild[21529:63744] [MT] IDELaunchParametersSnapshot: The operation couldn’t be completed. (DebuggerLLDB.DebuggerVersionStore.StoreError error 0.)
+2026-11-20 03:47:12.244 xcodebuild[21529:63744] [MT] IDELaunchParametersSnapshot: no debugger version
+    t =     0.07s Open io.orbitd.landingsessionprobe
+    t =     0.07s     Launch io.orbitd.landingsessionprobe
+    t =     1.27s         Setting up automation session
+    t =     2.22s         Wait for io.orbitd.landingsessionprobe to idle
+    t =     4.40s Checking existence of `Any (First Match)`
+    t =     5.17s Checking existence of `Any (First Match)`
+    t =     5.83s Checking existence of `Any (First Match)`
+    t =     6.48s Checking existence of `Any (First Match)`
+    t =     8.17s Checking existence of `Any (First Match)`
+    t =    11.07s Checking existence of `Any (First Match)`
+    t =    11.30s Checking existence of `Any (First Match)`
+    t =    11.75s Checking existence of `Any (First Match)`
+    t =    12.06s Checking existence of `Any (First Match)`
+    t =    12.38s Checking existence of `Any (First Match)`
+    t =    12.64s Checking existence of `Any (First Match)`
+    t =    13.25s Checking existence of `Any (First Match)`
+    t =    13.87s Checking existence of `Any (First Match)`
+    t =    14.59s Checking existence of `Any (First Match)`
+    t =    15.28s Checking existence of `Any (First Match)`
+    t =    17.29s Added attachment named 'ios-5-stopped'
+    t =    17.29s Requesting snapshot of accessibility hierarchy for app with pid 42778
+    t =    17.85s Requesting snapshot of accessibility hierarchy for app with pid 42778
+    t =    17.99s Added attachment named 'tree-ios-stopped.txt'
+    t =    17.99s Terminate io.orbitd.landingsessionprobe:42778
+    t =    21.00s Tear Down
+    t =    21.00s     Added attachment named 'SubagentCardEndTeststestStopped-notes.txt'
+Test Case '-[LandingSessionProbeUITests.SubagentCardEndTests testStopped]' passed (21.050 seconds).
+Test Suite 'SubagentCardEndTests' passed at 2026-11-20 03:47:33.217.
+	 Executed 5 tests, with 0 failures (0 unexpected) in 155.644 (155.652) seconds
+Test Suite 'LandingSessionProbeUITests.xctest' passed at 2026-11-20 03:47:33.218.
+	 Executed 5 tests, with 0 failures (0 unexpected) in 155.644 (155.654) seconds
+Test Suite 'All tests' passed at 2026-11-20 03:47:33.218.
+	 Executed 5 tests, with 0 failures (0 unexpected) in 155.644 (155.656) seconds
+2026-11-20 03:48:06.286 xcodebuild[21529:63744] [MT] IDETestOperationsObserverDebug: 222.646 elapsed -- Testing started completed.
+2026-11-20 03:48:06.287 xcodebuild[21529:63744] [MT] IDETestOperationsObserverDebug: 0.000 sec, +0.000 sec -- start
+2026-11-20 03:48:06.287 xcodebuild[21529:63744] [MT] IDETestOperationsObserverDebug: 222.646 sec, +222.646 sec -- end
+
+Test session results, code coverage, and logs:
+	/Users/runner/work/orbit/orbit/.ls-probe/results/ios.xcresult
+
+** TEST SUCCEEDED **
+
+Testing started

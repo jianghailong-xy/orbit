@@ -1,0 +1,10 @@
+mac-sa-interrupted: no window after launch; pressing ⌘N
+mac-sa-interrupted: 1 window(s)
+mac-interrupted: shows interrupted
+mac-interrupted: shows The runner hosting it stopped
+mac-interrupted: shows 9 files left uncommitted
+mac-interrupted: shows Nothing was committed before the interruption
+mac-interrupted: shows in the working tree:
+mac-interrupted: shows 6 more
+mac-interrupted: shows What the agent read
+mac-interrupted: shows Run 34y5PintrRUNid0000003

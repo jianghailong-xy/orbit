@@ -1,0 +1,14 @@
+Test Case '-[LandingSessionProbeUITests.SubagentCardEndTests testDone]' started.
+Test Case '-[LandingSessionProbeUITests.SubagentCardEndTests testDone]' passed (53.942 seconds).
+Test Case '-[LandingSessionProbeUITests.SubagentCardEndTests testInterrupted]' started.
+Test Case '-[LandingSessionProbeUITests.SubagentCardEndTests testInterrupted]' passed (40.718 seconds).
+Test Case '-[LandingSessionProbeUITests.SubagentCardEndTests testQueued]' started.
+Test Case '-[LandingSessionProbeUITests.SubagentCardEndTests testQueued]' passed (22.836 seconds).
+Test Case '-[LandingSessionProbeUITests.SubagentCardEndTests testRunning]' started.
+Test Case '-[LandingSessionProbeUITests.SubagentCardEndTests testRunning]' passed (17.098 seconds).
+Test Case '-[LandingSessionProbeUITests.SubagentCardEndTests testStopped]' started.
+Test Case '-[LandingSessionProbeUITests.SubagentCardEndTests testStopped]' passed (21.050 seconds).
+	 Executed 5 tests, with 0 failures (0 unexpected) in 155.644 (155.652) seconds
+	 Executed 5 tests, with 0 failures (0 unexpected) in 155.644 (155.654) seconds
+	 Executed 5 tests, with 0 failures (0 unexpected) in 155.644 (155.656) seconds
+** TEST SUCCEEDED **

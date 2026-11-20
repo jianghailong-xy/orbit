@@ -1,0 +1,4 @@
+mac-sa-queued: no window after launch; pressing ⌘N
+mac-sa-queued: 1 window(s)
+mac-queued: shows Waiting for the agent to read it
+mac-queued: shows Don't send

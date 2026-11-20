@@ -1,0 +1,5 @@
+mac-sa-stopped: no window after launch; pressing ⌘N
+mac-sa-stopped: 1 window(s)
+mac-stopped: shows stopped
+mac-stopped: shows Stopped by the agent.
+mac-stopped: shows 2 files left uncommitted

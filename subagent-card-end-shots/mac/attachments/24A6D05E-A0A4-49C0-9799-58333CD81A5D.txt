@@ -1,0 +1,4 @@
+mac-sa-done: no window after launch; pressing ⌘N
+mac-sa-done: 1 window(s)
+mac-done: shows 3 services
+mac-done: shows The deploy is out

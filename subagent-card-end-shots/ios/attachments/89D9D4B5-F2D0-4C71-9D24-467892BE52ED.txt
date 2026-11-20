@@ -1,0 +1,3 @@
+ios-stopped: shows stopped
+ios-stopped: shows Stopped by the agent.
+ios-stopped: shows 2 files left uncommitted

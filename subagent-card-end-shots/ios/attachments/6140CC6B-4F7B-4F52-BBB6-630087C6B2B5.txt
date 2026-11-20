@@ -1,0 +1,275 @@
+Attributes: Application, 0x118ab30c0, pid: 39832, label: 'LandingSessionProbe'
+Element subtree:
+ →Application, 0x118ab30c0, pid: 39832, label: 'LandingSessionProbe'
+    Window (Main), 0x118ab1b80, {{0.0, 0.0}, {402.0, 874.0}}
+      Other, 0x118ab1cc0, {{0.0, 0.0}, {402.0, 874.0}}
+        Other, 0x118ab1e00, {{0.0, 0.0}, {402.0, 874.0}}
+          Other, 0x118ab1f40, {{0.0, 0.0}, {402.0, 874.0}}
+            Other, 0x118ab2080, {{0.0, 0.0}, {402.0, 874.0}}
+              CollectionView, 0x118ab21c0, {{0.0, 0.0}, {305.5, 874.0}}
+                Other, 0x118ab2300, {{0.0, -1620.0}, {305.7, 3798.3}}
+                Cell, 0x118ab2440, {{0.0, 128.0}, {305.3, 44.3}}
+                  Other, 0x118ab2580, {{0.0, 128.0}, {305.3, 44.3}}
+                    Other, 0x118ab26c0, {{0.0, 128.0}, {305.3, 44.3}}
+                      Other, 0x118ab2800, {{0.0, 128.0}, {305.3, 44.3}}
+                  Other, 0x118ab2940, {{0.0, 128.0}, {305.3, 44.3}}
+                    Other, 0x118ab2a80, {{0.0, 128.0}, {305.3, 44.3}}
+                      Other, 0x118ab2bc0, {{0.0, 128.0}, {305.3, 44.3}}
+                        Button, 0x118ab2d00, {{0.0, 128.0}, {305.3, 44.3}}, label: 'Projects'
+                          Image, 0x118ab2e40, {{26.3, 142.3}, {15.3, 15.3}}, identifier: 'square.grid.2x2', label: 'Grid View'
+                          StaticText, 0x118ab3340, {{58.0, 140.0}, {62.3, 20.3}}, label: 'Projects'
+                Cell, 0x118ab3480, {{0.0, 172.3}, {305.3, 44.3}}
+                  Other, 0x118ab35c0, {{0.0, 172.3}, {305.3, 44.3}}
+                    Other, 0x118ab3700, {{0.0, 172.3}, {305.3, 44.3}}
+                      Other, 0x118ab3840, {{0.0, 172.3}, {305.3, 44.3}}
+                  Other, 0x118ab3980, {{0.0, 172.3}, {305.3, 44.3}}
+                    Other, 0x118ab3ac0, {{0.0, 172.3}, {305.3, 44.3}}
+                      Other, 0x118ab3c00, {{0.0, 172.3}, {305.3, 44.3}}
+                        Button, 0x118ab3d40, {{0.0, 172.3}, {305.3, 44.3}}, label: 'Tasks'
+                          Image, 0x118ab3e80, {{24.7, 186.0}, {18.7, 17.0}}, identifier: 'checklist', label: 'checklist'
+                          StaticText, 0x118b3c000, {{58.0, 184.3}, {43.0, 20.3}}, label: 'Tasks'
+                Cell, 0x118b3c140, {{0.0, 216.7}, {305.3, 44.3}}
+                  Other, 0x118b3c280, {{0.0, 216.7}, {305.3, 44.3}}
+                    Other, 0x118b3c3c0, {{0.0, 216.7}, {305.3, 44.3}}
+                      Other, 0x118b3c500, {{0.0, 216.7}, {305.3, 44.3}}
+                  Other, 0x118b3c640, {{0.0, 216.7}, {305.3, 44.3}}
+                    Other, 0x118b3c780, {{0.0, 216.7}, {305.3, 44.3}}
+                      Other, 0x118b3c8c0, {{0.0, 216.7}, {305.3, 44.3}}
+                        Button, 0x118b3ca00, {{0.0, 216.7}, {305.3, 44.3}}, label: 'Wiki'
+                          Image, 0x118b3cb40, {{27.0, 230.0}, {14.0, 18.0}}, identifier: 'book.closed', label: 'book.closed'
+                          StaticText, 0x118b3cc80, {{58.0, 228.7}, {32.7, 20.3}}, label: 'Wiki'
+                Cell, 0x118b3cdc0, {{0.0, 261.0}, {305.3, 44.7}}
+                  Other, 0x118b3cf00, {{0.0, 261.0}, {305.3, 44.7}}
+                    Other, 0x118b3d040, {{0.0, 261.0}, {305.3, 44.7}}
+                      Other, 0x118b3d180, {{0.0, 261.0}, {305.3, 44.7}}
+                  Other, 0x118b3d2c0, {{0.0, 261.0}, {305.3, 44.7}}
+                    Other, 0x118b3d400, {{0.0, 261.0}, {305.3, 44.7}}
+                      Other, 0x118b3d540, {{0.0, 261.0}, {305.3, 44.7}}
+                        StaticText, 0x118b3d680, {{0.0, 261.0}, {305.3, 44.7}}, label: 'Workspaces'
+                Cell, 0x118b3d7c0, {{0.0, 305.7}, {305.3, 44.3}}
+                  Other, 0x118b3d900, {{0.0, 305.7}, {305.3, 44.3}}
+                    Other, 0x118b3da40, {{0.0, 305.7}, {305.3, 44.3}}
+                      Other, 0x118b3db80, {{0.0, 305.7}, {305.3, 44.3}}
+                  Other, 0x118b3dcc0, {{0.0, 305.7}, {305.3, 44.3}}
+                    Other, 0x118b3de00, {{0.0, 305.7}, {305.3, 44.3}}
+                      Other, 0x118b3df40, {{0.0, 305.7}, {305.3, 44.3}}
+                        Button, 0x118b3e080, {{0.0, 305.7}, {305.3, 44.3}}, label: 'orbit-macos,  · wikova'
+                          Other, 0x118b3e1c0, {{24.7, 320.0}, {19.0, 15.3}}, label: 'Runner offline'
+                            Image, 0x118b3e300, {{24.7, 320.0}, {19.0, 15.3}}, identifier: 'folder', label: 'Move'
+                          StaticText, 0x118b3e440, {{58.0, 317.7}, {93.0, 20.3}}, label: 'orbit-macos'
+                          StaticText, 0x118b3e580, {{151.0, 317.7}, {65.0, 20.3}}, label: ' · wikova'
+                Cell, 0x118b3e6c0, {{0.0, 350.0}, {305.3, 36.0}}
+                  Other, 0x118b3e800, {{0.0, 350.0}, {305.3, 36.0}}
+                    Other, 0x118b3e940, {{0.0, 350.0}, {305.3, 36.0}}
+                      Other, 0x118b3ea80, {{0.0, 350.0}, {305.3, 36.0}}
+                  Other, 0x118b3ebc0, {{0.0, 350.0}, {305.3, 36.0}}
+                    Other, 0x118b3ed00, {{0.0, 350.0}, {305.3, 36.0}}
+                      Other, 0x118b3ee40, {{0.0, 350.0}, {305.3, 36.0}}
+                        StaticText, 0x118b3ef80, {{22.0, 364.0}, {59.0, 18.0}}, label: 'Projects'
+                        StaticText, 0x118b3f0c0, {{89.0, 366.3}, {5.3, 13.3}}, label: '1'
+                Cell, 0x118b3f200, {{0.0, 386.0}, {305.3, 44.3}}
+                  Other, 0x118b3f340, {{0.0, 386.0}, {305.3, 44.3}}
+                    Other, 0x118b3f480, {{0.0, 386.0}, {305.3, 44.3}}
+                      Other, 0x118b3f5c0, {{0.0, 386.0}, {305.3, 44.3}}
+                  Other, 0x118b3f700, {{0.0, 386.0}, {305.3, 44.3}}
+                    Other, 0x118b3f840, {{0.0, 386.0}, {305.3, 44.3}}
+                      Other, 0x118b3f980, {{0.0, 386.0}, {305.3, 44.3}}
+                        Button, 0x118b3fac0, {{0.0, 386.0}, {305.3, 44.3}}, label: 'Runner hardening'
+                Other, 0x118b3fc00, {{272.2, 128.0}, {30.0, 746.0}}, label: 'Vertical scroll bar, 1 page', value: 0%
+                  Other, 0x118b3fd40, {{299.2, 561.0}, {3.0, 310.0}}
+                Other, 0x118b3fe80, {{272.2, 128.0}, {30.0, 746.0}}, label: 'Vertical scroll bar, 1 page', value: 0%
+                  Other, 0x118b40000, {{299.2, 561.0}, {3.0, 310.0}}
+              StaticText, 0x118b40140, {{22.0, 84.8}, {52.3, 26.3}}, label: 'Orbit'
+              Button, 0x118b40280, {{251.7, 76.0}, {44.0, 44.0}}, identifier: 'magnifyingglass', label: 'Search sessions'
+              Button, 0x118b403c0, {{10.0, 788.7}, {165.0, 43.0}}, label: 'New session'
+                Image, 0x118b40500, {{31.0, 801.0}, {18.3, 18.3}}, identifier: 'square.and.pencil', label: 'Compose'
+                StaticText, 0x118b40640, {{57.0, 799.8}, {100.0, 20.3}}, label: 'New session'
+              Button, 0x118b40780, {{251.7, 788.0}, {44.0, 44.0}}, identifier: 'gearshape', label: 'Settings'
+              Other, 0x118b408c0, {{0.0, 0.0}, {402.0, 874.0}}
+                NavigationBar, 0x118b40a00, {{0.0, 62.0}, {402.0, 54.0}}, identifier: '_TtGC7SwiftUI32NavigationStackHosting'
+                  Button, 0x118b40b40, {{16.0, 62.0}, {44.0, 44.0}}, identifier: 'BackButton', label: 'Back'
+                  Other, 0x118b40c80, {{279.7, 66.0}, {48.3, 36.0}}, identifier: 'project-sessions-button', label: 'Project sessions', value: 2 sessions, Active
+                    Other, 0x118b40dc0, {{279.7, 66.0}, {48.3, 36.0}}
+                      Button, 0x118b40f00, {{279.7, 66.0}, {48.3, 36.0}}, identifier: 'project-sessions-button', label: 'Project sessions', value: 2 sessions, Active
+                  Other, 0x118b41040, {{344.0, 66.0}, {38.0, 36.0}}, label: 'Session actions'
+                    Other, 0x118b41180, {{344.0, 66.0}, {38.0, 36.0}}
+                      Button, 0x118b412c0, {{344.0, 66.0}, {38.0, 36.0}}, label: 'Session actions'
+                        Button, 0x118b41400, {{344.0, 66.0}, {38.0, 36.0}}
+                          Image, 0x118b41540, {{353.0, 82.0}, {20.0, 4.3}}, identifier: 'ellipsis', label: 'More'
+                Other, 0x118b41680, {{0.0, 0.0}, {402.0, 874.0}}
+                  Other, 0x118b417c0, {{0.0, 0.0}, {402.0, 874.0}}
+                    Other, 0x118b41900, {{0.0, 0.0}, {402.0, 874.0}}
+                      Other, 0x118b41a40, {{0.0, 0.0}, {402.0, 874.0}}
+                        Other, 0x118b41b80, {{0.0, 116.0}, {402.0, 585.0}}
+                        CollectionView, 0x118b41cc0, {{0.0, 0.0}, {402.0, 874.0}}
+                          Other, 0x118b41e00, {{0.0, -1632.0}, {402.0, 4207.7}}
+                          Other, 0x118b41f40, {{0.0, 0.0}, {402.0, 874.0}}
+                            Other, 0x118b42080, {{0.0, 0.0}, {402.0, 170.8}}
+                            Other, 0x118b421c0, {{0.0, 636.2}, {402.0, 237.8}}
+                          Other, 0x118b42300, {{0.0, 0.0}, {402.0, 874.0}}
+                            Other, 0x118b42440, {{0.0, 636.2}, {402.0, 237.8}}
+                              Image, 0x118b42580, {{-120.0, 641.0}, {642.0, 466.0}}, identifier: 'AdditionalDimmingOverlay'
+                              Other, 0x118b426c0, {{0.0, 636.2}, {402.0, 237.8}}
+                                Other, 0x118b42800, {{0.0, 636.2}, {402.0, 237.8}}
+                              Other, 0x118b42940, {{0.0, 636.2}, {402.0, 237.8}}
+                                Other, 0x118b42a80, {{0.0, 636.2}, {402.0, 237.8}}
+                                Other, 0x118b42bc0, {{0.0, 636.2}, {402.0, 237.8}}
+                          Cell, 0x118b42d00, {{0.0, 116.0}, {402.0, 97.0}}
+                            Other, 0x118b42e40, {{0.0, 116.0}, {402.0, 97.0}}
+                              Other, 0x118b42f80, {{0.0, 116.0}, {402.0, 97.0}}
+                                Other, 0x118b430c0, {{0.0, 116.0}, {402.0, 97.0}}
+                            Other, 0x118b43200, {{0.0, 116.0}, {402.0, 97.0}}
+                              Other, 0x118b43340, {{0.0, 116.0}, {402.0, 97.0}}
+                                Other, 0x118b43480, {{0.0, 116.0}, {402.0, 97.0}}
+                                  TextView, 0x118b435c0, {{88.0, 130.0}, {286.0, 50.0}}, value: Ship the routing c...
+                                    TextView, 0x118b43700, {{88.0, 130.0}, {286.0, 49.3}}, label: 'Ship the routing change and keep the clients’ tests up to date.'
+                                    Other, 0x118b43840, {{341.0, 130.0}, {30.0, 50.0}}, label: 'Vertical scroll bar, 1 page', value: 0%
+                                      Other, 0x118b43980, {{368.0, 133.0}, {3.0, 44.0}}
+                                    Other, 0x118b43ac0, {{88.0, 152.0}, {286.0, 25.0}}, label: 'Horizontal scroll bar, 1 page', value: 0%
+                                      Other, 0x118b43c00, {{91.0, 174.0}, {280.0, 3.0}}
+                                  Button, 0x118b43d40, {{307.3, 191.7}, {28.0, 15.0}}, identifier: 'doc.on.doc', label: 'Copy'
+                                  StaticText, 0x118b43e80, {{341.3, 192.3}, {44.7, 13.3}}, label: '13m ago'
+                          Cell, 0x118b44000, {{0.0, 213.0}, {402.0, 19.7}}
+                            Other, 0x118b44140, {{0.0, 213.0}, {402.0, 19.7}}
+                              Other, 0x118b44280, {{0.0, 213.0}, {402.0, 19.7}}
+                                Other, 0x118b443c0, {{0.0, 213.0}, {402.0, 19.7}}
+                            Other, 0x118b44500, {{0.0, 213.0}, {402.0, 19.7}}
+                              Other, 0x118b44640, {{0.0, 213.0}, {402.0, 19.7}}
+                                Other, 0x118b44780, {{0.0, 213.0}, {402.0, 19.7}}
+                                  StaticText, 0x118b448c0, {{0.0, 213.0}, {402.0, 19.7}}, label: 'Worked for 2m'
+                          Cell, 0x118b44a00, {{0.0, 232.7}, {402.0, 34.0}}
+                            Other, 0x118b44b40, {{0.0, 232.7}, {402.0, 34.0}}
+                              Other, 0x118b44c80, {{0.0, 232.7}, {402.0, 34.0}}
+                                Other, 0x118b44dc0, {{0.0, 232.7}, {402.0, 34.0}}
+                            Other, 0x118b44f00, {{0.0, 232.7}, {402.0, 34.0}}
+                              Other, 0x118b45040, {{0.0, 232.7}, {402.0, 34.0}}
+                                Other, 0x118b45180, {{0.0, 232.7}, {402.0, 34.0}}
+                                  TextView, 0x118b452c0, {{16.0, 238.7}, {367.0, 22.0}}, value: I’ll hand this to ...
+                                    TextView, 0x118b45400, {{16.0, 238.7}, {366.3, 22.0}}, label: 'I’ll hand this to a SubAgent and keep going here.'
+                                    Other, 0x118b45540, {{350.0, 238.7}, {30.0, 22.0}}, label: 'Vertical scroll bar, 1 page', value: 0%
+                                      Other, 0x118b45680, {{377.0, 221.7}, {3.0, 36.0}}
+                                    Other, 0x118b457c0, {{16.0, 246.7}, {367.0, 11.0}}, label: 'Horizontal scroll bar, 1 page', value: 0%
+                                      Other, 0x118b45900, {{19.0, 254.7}, {361.0, 3.0}}
+                          Cell, 0x118b45a40, {{0.0, 266.7}, {402.0, 369.3}}
+                            Other, 0x118b45b80, {{0.0, 266.7}, {402.0, 369.3}}
+                              Other, 0x118b45cc0, {{0.0, 266.7}, {402.0, 369.3}}
+                                Other, 0x118b45e00, {{0.0, 266.7}, {402.0, 369.3}}
+                            Other, 0x118b45f40, {{0.0, 266.7}, {402.0, 369.3}}
+                              Other, 0x118b46080, {{0.0, 266.7}, {402.0, 369.3}}
+                                Other, 0x118b461c0, {{0.0, 266.7}, {402.0, 369.3}}
+                                  Image, 0x118b46300, {{26.3, 286.7}, {9.7, 5.7}}, identifier: 'chevron.right', label: 'Forward'
+                                  Image, 0x118b46440, {{47.0, 283.3}, {10.7, 10.7}}, identifier: 'sparkle', label: 'sparkle'
+                                  StaticText, 0x118b46580, {{69.3, 280.8}, {40.3, 15.7}}, label: 'Agent'
+                                  StaticText, 0x118b466c0, {{116.7, 280.8}, {139.0, 15.7}}, label: 'Update client tests: smart selection default-on'
+                                  Other, 0x118b46800, {{262.7, 281.0}, {104.0, 15.3}}, identifier: 'subagent-end-status', label: 'interrupted'
+                                    StaticText, 0x118b46940, {{267.7, 282.0}, {75.0, 13.3}}, label: 'interrupted'
+                                    Image, 0x118b46a80, {{353.7, 282.3}, {13.0, 13.0}}, identifier: 'xmark.circle.fill', label: 'Close'
+                                  StaticText, 0x118b46bc0, {{74.7, 307.8}, {8.7, 13.3}}, label: 'C'
+                                  StaticText, 0x118b46d00, {{90.0, 306.7}, {44.3, 15.7}}, label: 'Claude'
+                                  StaticText, 0x118b46e40, {{138.3, 306.7}, {65.3, 15.7}}, label: 'Sonnet 5.5'
+                                  StaticText, 0x118b46f80, {{214.7, 304.7}, {95.0, 15.7}}, label: 'M · Background'
+                                  StaticText, 0x118b470c0, {{314.7, 304.7}, {46.0, 15.7}}, label: '2m 48s'
+                                  StaticText, 0x118b47200, {{27.0, 330.3}, {341.0, 33.7}}, label: 'Why · Tier M from the caller · Sonnet 5.5, the quota that expires first'
+                                  Button, 0x118b47340, {{27.0, 372.0}, {349.0, 15.7}}, label: 'Details'
+                                    StaticText, 0x118b47480, {{27.0, 372.0}, {41.7, 15.7}}, label: 'Details'
+                                    Button, 0x118b475c0, {{365.7, 373.0}, {10.3, 14.0}}
+                                      Image, 0x118b47700, {{365.7, 373.0}, {10.3, 14.0}}, identifier: 'collapsed'
+                                  StaticText, 0x118b47840, {{52.0, 395.7}, {281.3, 15.7}}, label: 'WorkspaceView.modelRouting.test.tsx'
+                                  StaticText, 0x118b47980, {{39.0, 427.3}, {290.0, 58.0}}, identifier: 'subagent-end-block', label: 'Interrupted 10m ago: the runner hosting it stopped (a restart, an update or a crash) before it finished.'
+                                  StaticText, 0x118b47ac0, {{39.0, 489.3}, {298.0, 18.0}}, identifier: 'subagent-end-block', label: '9 files left uncommitted in the working tree:'
+                                  StaticText, 0x118b47c00, {{39.0, 511.3}, {272.0, 13.3}}, identifier: 'subagent-end-block', label: 'src/apiserver/src/tasks/model-routing.ts'
+                                  StaticText, 0x118b47d40, {{39.0, 525.7}, {313.0, 13.3}}, identifier: 'subagent-end-block', label: 'src/apiserver/src/tasks/task-route-decision.ts'
+                                  StaticText, 0x118b47e80, {{39.0, 540.0}, {251.7, 26.3}}, identifier: 'subagent-end-block', label: 'src/web/src/components/TaskDetailPanel.modelRouting.test.tsx'
+                                  Button, 0x118b48000, {{39.0, 567.3}, {54.7, 13.3}}, identifier: 'subagent-end-block', label: '… 6 more'
+                                  Button, 0x118b48140, {{39.0, 584.7}, {325.0, 14.0}}, identifier: 'subagent-end-block', label: 'What the agent read'
+                                    StaticText, 0x118b48280, {{39.0, 585.0}, {107.3, 13.3}}, label: 'What the agent read'
+                                    Button, 0x118b483c0, {{353.7, 584.7}, {10.3, 14.0}}
+                                      Image, 0x118b48500, {{353.7, 584.7}, {10.3, 14.0}}, identifier: 'collapsed'
+                                  StaticText, 0x118b48640, {{39.0, 602.7}, {307.0, 13.3}}, identifier: 'subagent-end-block', label: 'Run 34y5PintrRUNid0000003 · read by the agent at 03:36'
+                          Cell, 0x118b48780, {{0.0, 636.0}, {402.0, 62.0}}
+                            Other, 0x118b488c0, {{0.0, 636.0}, {402.0, 62.0}}
+                              Other, 0x118b48a00, {{0.0, 636.0}, {402.0, 62.0}}
+                                Other, 0x118b48b40, {{0.0, 636.0}, {402.0, 62.0}}
+                            Other, 0x118b48c80, {{0.0, 636.0}, {402.0, 62.0}}
+                              Other, 0x118b48dc0, {{0.0, 636.0}, {402.0, 62.0}}
+                                Other, 0x118b48f00, {{0.0, 636.0}, {402.0, 62.0}}
+                                  TextView, 0x118b49040, {{16.0, 642.0}, {370.0, 50.0}}, value: While it runs, I’m...
+                                    TextView, 0x118b49180, {{16.0, 642.0}, {370.0, 49.3}}, label: 'While it runs, I’m replacing the task router’s pick with the delegate pool.'
+                                    Other, 0x118b492c0, {{353.0, 642.0}, {30.0, 50.0}}, label: 'Vertical scroll bar, 1 page', value: 0%
+                                      Other, 0x118b49400, {{380.0, 645.0}, {3.0, 44.0}}
+                                    Other, 0x118b49540, {{16.0, 664.0}, {370.0, 25.0}}, label: 'Horizontal scroll bar, 1 page', value: 0%
+                                      Other, 0x118b49680, {{19.0, 686.0}, {364.0, 3.0}}
+                          Cell, 0x118b497c0, {{0.0, 698.0}, {402.0, 19.7}}
+                            Other, 0x118b49900, {{0.0, 698.0}, {402.0, 19.7}}
+                              Other, 0x118b49a40, {{0.0, 698.0}, {402.0, 19.7}}
+                                Other, 0x118b49b80, {{0.0, 698.0}, {402.0, 19.7}}
+                            Other, 0x118b49cc0, {{0.0, 698.0}, {402.0, 19.7}}
+                              Other, 0x118b49e00, {{0.0, 698.0}, {402.0, 19.7}}
+                                Other, 0x118b49f40, {{0.0, 698.0}, {402.0, 19.7}}
+                                  StaticText, 0x118b4a080, {{0.0, 698.0}, {402.0, 19.7}}, label: 'Worked for 12s'
+                          Cell, 0x118b4a1c0, {{0.0, 717.7}, {402.0, 89.0}}
+                            Other, 0x118b4a300, {{0.0, 717.7}, {402.0, 89.0}}
+                              Other, 0x118b4a440, {{0.0, 717.7}, {402.0, 89.0}}
+                                Other, 0x118b4a580, {{0.0, 717.7}, {402.0, 89.0}}
+                            Other, 0x118b4a6c0, {{0.0, 717.7}, {402.0, 89.0}}
+                              Other, 0x118b4a800, {{0.0, 717.7}, {402.0, 89.0}}
+                                Other, 0x118b4a940, {{0.0, 717.7}, {402.0, 89.0}}
+                                  TextView, 0x118b4aa80, {{16.0, 723.7}, {366.0, 77.0}}, value: Nothing was commit...
+                                    TextView, 0x118b4abc0, {{16.0, 723.7}, {366.0, 76.6}}, label: 'Nothing was committed before the interruption. The background SubAgent edited only the web tests, so I’ll resume it.'
+                                    Other, 0x118b4ad00, {{349.0, 723.7}, {30.0, 77.0}}, label: 'Vertical scroll bar, 1 page', value: 0%
+                                      Other, 0x118b4ae40, {{376.0, 726.7}, {3.0, 71.0}}
+                                    Other, 0x118b4af80, {{16.0, 767.7}, {366.0, 30.0}}, label: 'Horizontal scroll bar, 1 page', value: 0%
+                                      Other, 0x118b4b0c0, {{19.0, 794.7}, {360.0, 3.0}}
+                          Cell, 0x118b4b200, {{0.0, 806.7}, {402.0, 21.0}}
+                            Other, 0x118b4b340, {{0.0, 806.7}, {402.0, 21.0}}
+                              Other, 0x118b4b480, {{0.0, 806.7}, {402.0, 21.0}}
+                                Other, 0x118b4b5c0, {{0.0, 806.7}, {402.0, 21.0}}
+                            Other, 0x118b4b700, {{0.0, 806.7}, {402.0, 21.0}}
+                              Other, 0x118b4b840, {{0.0, 806.7}, {402.0, 21.0}}
+                                Other, 0x118b4b980, {{0.0, 806.7}, {402.0, 21.0}}
+                                  Other, 0x118b4bac0, {{0.0, 806.7}, {402.0, 21.0}}
+                          Other, 0x118b4bc00, {{369.0, 116.0}, {30.0, 585.0}}, label: 'Vertical scroll bar, 2 pages', value: 0%
+                            Other, 0x118b4bd40, {{396.0, 228.0}, {3.0, 470.0}}
+                          Other, 0x118b4be80, {{369.0, 116.0}, {30.0, 585.0}}, label: 'Vertical scroll bar, 2 pages', value: 0%
+                            Other, 0x118b4c000, {{396.0, 228.0}, {3.0, 470.0}}
+                        Button, 0x118b4c140, {{179.0, 631.0}, {44.0, 44.0}}, label: 'Scroll to latest'
+                          Image, 0x118b4c280, {{179.0, 631.0}, {44.0, 44.0}}, identifier: 'arrow.down', label: 'Down'
+                          Other, 0x118b4c3c0, {{179.0, 631.0}, {44.0, 44.0}}
+                        Button, 0x118b4c500, {{16.0, 701.0}, {370.0, 30.0}}, label: 'Agents: 1, Sonnet 5.5 1 run, 1 failed'
+                          Image, 0x118b4c640, {{27.0, 710.7}, {10.7, 10.7}}, identifier: 'sparkle', label: 'sparkle'
+                          StaticText, 0x118b4c780, {{46.7, 708.2}, {44.7, 15.7}}, label: 'Agents'
+                          StaticText, 0x118b4c8c0, {{99.3, 709.3}, {7.0, 13.3}}, label: '1'
+                          StaticText, 0x118b4ca00, {{120.0, 709.3}, {8.7, 13.3}}, label: 'C'
+                          StaticText, 0x118b4cb40, {{135.3, 708.2}, {65.3, 15.7}}, label: 'Sonnet 5.5'
+                          StaticText, 0x118b4cc80, {{204.7, 708.2}, {16.3, 15.7}}, label: '×1'
+                          Image, 0x118b4cdc0, {{300.3, 710.0}, {11.3, 11.3}}, identifier: 'xmark.circle.fill', label: 'Close'
+                          StaticText, 0x118b4cf00, {{300.3, 709.5}, {59.3, 13.3}}, label: '1 failed'
+                          Image, 0x118b4d040, {{369.7, 711.3}, {5.7, 9.7}}, identifier: 'chevron.right', label: 'Forward'
+                        TextView, 0x118b4d180, {{32.0, 754.0}, {338.0, 22.0}}
+                          StaticText, 0x118b4d2c0, {{32.0, 754.0}, {338.0, 20.3}}, label: 'Message…'
+                          Other, 0x118b4d400, {{337.0, 754.0}, {30.0, 22.0}}, label: 'Vertical scroll bar, 1 page', value: 0%
+                            Other, 0x118b4d540, {{364.0, 737.0}, {3.0, 36.0}}
+                          Other, 0x118b4d680, {{32.0, 762.0}, {338.0, 11.0}}, label: 'Horizontal scroll bar, 1 page', value: 0%
+                            Other, 0x118b4d7c0, {{35.0, 770.0}, {332.0, 3.0}}
+                        Button, 0x118b4d900, {{24.0, 790.0}, {32.0, 32.0}}, label: 'Add'
+                          Button, 0x118b4da40, {{24.0, 790.0}, {32.0, 32.0}}
+                            Image, 0x118b4db80, {{24.0, 790.0}, {32.0, 32.0}}, identifier: 'plus', label: 'Add'
+                        Button, 0x118b4dcc0, {{64.0, 797.0}, {33.0, 18.0}}, label: 'Auto'
+                          Button, 0x118b4de00, {{64.0, 797.0}, {33.0, 18.0}}
+                            StaticText, 0x118b4df40, {{64.0, 797.0}, {33.0, 18.0}}, label: 'Auto'
+                        Button, 0x118b4e080, {{192.7, 797.0}, {105.3, 18.0}}, label: 'Model Opus 5, effort Default'
+                          Button, 0x118b4e1c0, {{192.7, 797.0}, {105.3, 18.0}}
+                            StaticText, 0x118b4e300, {{192.7, 797.0}, {51.0, 18.0}}, label: 'Opus 5'
+                            StaticText, 0x118b4e440, {{248.7, 797.0}, {49.3, 18.0}}, label: 'Default'
+                        Button, 0x118b4e580, {{306.0, 790.0}, {32.0, 32.0}}, label: 'Context window not reported yet · 1M window'
+                        Button, 0x118b4e6c0, {{346.0, 790.0}, {32.0, 32.0}}, identifier: 'arrow.up.circle.fill', label: 'Arrow Up Circle', Disabled
+                        Other, 0x118b4e800, {{0.0, 0.0}, {0.0, 0.0}}
+                Other, 0x118b4e940, {{0.0, 0.0}, {402.0, 874.0}}
+                  Other, 0x118b4ea80, {{0.0, 0.0}, {402.0, 874.0}}
+Path to element:
+ →Application, 0x118ab30c0, pid: 39832, label: 'LandingSessionProbe'
+Query chain:
+ →Find: Target Application 'io.orbitd.landingsessionprobe'
+  Output: {
+    Application, 0x118b4ebc0, pid: 39832, label: 'LandingSessionProbe'
+  }

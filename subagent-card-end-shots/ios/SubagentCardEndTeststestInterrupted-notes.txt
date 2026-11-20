@@ -1,0 +1,8 @@
+ios-interrupted: shows interrupted
+ios-interrupted: shows The runner hosting it stopped
+ios-interrupted: shows 9 files left uncommitted
+ios-interrupted: shows Nothing was committed before the interruption
+ios-interrupted: shows in the working tree:
+ios-interrupted: shows 6 more
+ios-interrupted: shows What the agent read
+ios-interrupted: shows Run 34y5PintrRUNid0000003

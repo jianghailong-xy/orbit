@@ -1,0 +1,3 @@
+mac-sa-running: no window after launch; pressing ⌘N
+mac-sa-running: 1 window(s)
+mac-running: shows Sonnet 5.5

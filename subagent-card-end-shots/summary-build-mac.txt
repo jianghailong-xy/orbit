@@ -1,0 +1,14 @@
+Test Case '-[LandingSessionMacProbeUITests.SubagentCardEndTests testDone]' started.
+Test Case '-[LandingSessionMacProbeUITests.SubagentCardEndTests testDone]' passed (32.489 seconds).
+Test Case '-[LandingSessionMacProbeUITests.SubagentCardEndTests testInterrupted]' started.
+Test Case '-[LandingSessionMacProbeUITests.SubagentCardEndTests testInterrupted]' passed (34.211 seconds).
+Test Case '-[LandingSessionMacProbeUITests.SubagentCardEndTests testQueued]' started.
+Test Case '-[LandingSessionMacProbeUITests.SubagentCardEndTests testQueued]' passed (26.603 seconds).
+Test Case '-[LandingSessionMacProbeUITests.SubagentCardEndTests testRunning]' started.
+Test Case '-[LandingSessionMacProbeUITests.SubagentCardEndTests testRunning]' passed (25.486 seconds).
+Test Case '-[LandingSessionMacProbeUITests.SubagentCardEndTests testStopped]' started.
+Test Case '-[LandingSessionMacProbeUITests.SubagentCardEndTests testStopped]' passed (27.607 seconds).
+	 Executed 5 tests, with 0 failures (0 unexpected) in 146.397 (146.401) seconds
+	 Executed 5 tests, with 0 failures (0 unexpected) in 146.397 (146.403) seconds
+	 Executed 5 tests, with 0 failures (0 unexpected) in 146.397 (146.407) seconds
+** TEST SUCCEEDED **
