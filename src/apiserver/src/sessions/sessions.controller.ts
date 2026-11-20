@@ -885,6 +885,17 @@ export class SessionsController {
   }
 
   /**
+   * The session's Orbit workflows (docs/subagent-workflow-design.md §5.1), oldest first, each keyed by its
+   * `mcp__orbit__workflow` call: name, phases, status, calls done and failed, cost and limit. Its calls are the
+   * SubAgent runs above whose `workflowRunId` is its id.
+   */
+  @PatScope('sessions:read', { workspaceConfinable: { params: { id: 'session' } } })
+  @Get(':id/workflows')
+  workflowRuns(@CurrentUser() user: AuthUser, @Param('id', PublicIdPipe) id: string) {
+    return this.sessions.listWorkflowRuns(user.userId, id);
+  }
+
+  /**
    * The authoritative, complete list of background shells the session ever launched (every
    * Bash(run_in_background), with output recovered from the workspace's Read polls). Derived over ALL
    * persisted events, so the "Background processes" tray shows the same complete list on every

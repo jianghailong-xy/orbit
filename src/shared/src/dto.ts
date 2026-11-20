@@ -2912,8 +2912,102 @@ export interface SubagentRunView {
   readonly: boolean;
   /** Paths the child's edit tools wrote, as the runner collected them; empty while it runs and for a read-only run. */
   changedFiles: string[];
+  /** The Orbit workflow this run is a call of (docs/subagent-workflow-design.md §5.2): the `id` of its
+   *  `WorkflowRunView`. Such a run's `toolUseId` is `<the workflow call's tool_use id>#<callIndex>`. Null, as are
+   *  the three below, on a `delegate` call's run. */
+  workflowRunId: string | null;
+  /** The call's place in the script, numbered from 0 in the order the script made its `agent()` calls. */
+  callIndex: number | null;
+  /** The `agent()` call's `label` and `phase`, as the script gave them; null when it gave none. */
+  label: string | null;
+  phase: string | null;
   createdAt: string;
   endedAt: string | null;
+}
+
+/**
+ * One Orbit workflow as a client reads it (`GET /sessions/:id/workflows`, docs/subagent-workflow-design.md §5.1),
+ * keyed by the `mcp__orbit__workflow` call it belongs to. Its calls are SubAgent runs (`GET /sessions/:id/subagents`)
+ * whose `workflowRunId` is this `id`.
+ */
+export interface WorkflowRunView {
+  id: string;
+  /** The `mcp__orbit__workflow` call's tool_use id. */
+  toolUseId: string;
+  /** The script's `meta`: its name, description and phase titles, in the script's order. */
+  name: string;
+  description: string | null;
+  phases: string[];
+  status: SubagentRunStatus;
+  /** Calls that finished, and calls that ended any other way. While the workflow runs they and `costUsd` are
+   *  counted from its calls' runs; once it has ended they are what the runner reported for the whole script. */
+  callsDone: number;
+  callsFailed: number;
+  costUsd: number;
+  /** The cost limit the call set; null when it set none, the default: the workflow has no limit. */
+  maxCostUsd: number | null;
+  /** Why it did not finish, truncated: the script's error, or what interrupted or stopped it. Null while it runs
+   *  and when it finished. */
+  error: string | null;
+  createdAt: string;
+  endedAt: string | null;
+}
+
+/** A SubAgents report row's tier: the pick's, `named` when the call or its definition named the model, `not-routed`
+ *  when smart model selection was off. */
+export type SubagentReportTier = SubagentSize | 'named' | 'not-routed';
+
+/**
+ * One row of the routing report's SubAgents view (`GET /tasks/model-routing/report/subagents`, docs/subagent-design.md
+ * §7, board docs/mocks/subagent-workflow/08-report.html): the SubAgent runs routed at one tier onto one provider and
+ * model, workflow calls included. A run counts under the pick its decision recorded, wherever a usage limit moved it.
+ */
+export interface SubagentReportGroup {
+  tier: SubagentReportTier;
+  /** The pick's provider slug, and its name on the account (the slug when it has none). Null when no candidate was left. */
+  provider: string | null;
+  providerLabel: string | null;
+  /** The pick's model, and how the owner's tables name it (the id when they do not). Null when no candidate was left. */
+  model: string | null;
+  modelLabel: string | null;
+  runs: number;
+  /** Of `runs`, calls of an Orbit workflow: the Workflows view's calls are these. */
+  workflowCalls: number;
+  /** Runs that have ended, and of them those that finished (DONE). */
+  ended: number;
+  done: number;
+  /** What the runs reported; a subscription that reports no price adds 0. */
+  costUsd: number;
+  /** Runs that moved on to the next candidate after a usage limit, capacity or a failed login. */
+  movedOn: number;
+  /** Runs whose tier was their type's default: the call gave no size, and its definition none. */
+  noSize: number;
+}
+
+/**
+ * One row of the routing report's Workflows view: the runs of the Orbit workflows of one name (`meta.name`). Their
+ * calls are SubAgent runs, so the SubAgents view counts them too.
+ */
+export interface WorkflowReportGroup {
+  name: string;
+  /** The newest description its runs gave; null when none gave one. */
+  description: string | null;
+  runs: number;
+  /** Of `runs`, those still running. */
+  running: number;
+  calls: number;
+  /** Calls that ended without finishing: failed, interrupted or stopped. */
+  failedCalls: number;
+  /** What its calls reported. */
+  costUsd: number;
+  /** The median time its ended runs took, in milliseconds; null while none has ended. */
+  durationP50Ms: number | null;
+}
+
+/** `GET /tasks/model-routing/report/subagents?since=&agentId=`: the routing report's SubAgents and Workflows views. */
+export interface SubagentRoutingReport {
+  subagents: SubagentReportGroup[];
+  workflows: WorkflowReportGroup[];
 }
 
 /** What the runner sends when the parent model calls `delegate` (§5.1 step 2). */
@@ -3175,6 +3269,10 @@ export interface ClaimedSession {
    *  (ORBIT_MANAGED_RUNNER_BROWSER_ENABLED with managed runners on, managed-runner-browser-gate.ts). Injected as
    *  ORBIT_BROWSER=on so `orbit mcp` and the CLI offer the browser tools; absent, they are not there at all. */
   browserEnabled?: boolean;
+  /** Present, and true, only when this session's Agent may not start a workflow: its Workflows switch is off, or its
+   *  SubAgents are (docs/subagent-workflow-design.md §9 D2). Injected as ORBIT_WORKFLOWS=off so `orbit mcp` leaves out
+   *  the `workflow` tool; `delegate` is not affected. Absent means on. */
+  workflowsDisabled?: boolean;
   /** Present, and true, only for the session of a scheduled task's run (`Session.scheduleRunId`, docs/scheduled-
    *  tasks-design.md §7.1). Injected as ORBIT_SCHEDULE_RUN=1 so `orbit mcp` lists schedule_run_report. */
   scheduleRun?: boolean;
@@ -3653,6 +3751,8 @@ export interface ReclaimSession {
   wikiDisabled?: boolean;
   /** The Orbit Cloud browser switched on, cf. ClaimedSession.browserEnabled. */
   browserEnabled?: boolean;
+  /** Workflows not on for the session's Agent, cf. ClaimedSession.workflowsDisabled. */
+  workflowsDisabled?: boolean;
   /** A scheduled task's run, cf. ClaimedSession.scheduleRun. */
   scheduleRun?: boolean;
   /** Fresh runner/session-bound proof for the runner's private credential store. */

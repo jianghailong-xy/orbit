@@ -278,6 +278,7 @@ func prepareCursorLaunch(job *ClaimedSession, execDir, exe, dir string) (CursorL
 		envWatches:                       watchesEnv(job.WatchesDisabled),
 		envWiki:                          wikiEnv(job.WikiDisabled),
 		envBrowser:                       browserEnv(job.BrowserEnabled),
+		envWorkflows:                     workflowsEnv(job.WorkflowsDisabled),
 		envScheduleRun:                   scheduleRunEnv(job.ScheduleRun),
 		envSpawnDepth:                    strconv.Itoa(job.SpawnDepth),
 	}

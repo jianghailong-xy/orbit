@@ -93,6 +93,7 @@ func TestClaudeSpawnCarriesTheOpenerOnlyWithTheSwitchOnOnTheOrbitCloudRunner(t *
 		fake := newFakeClaude(t, fakeStep{Emit: "no-such-frame"})
 		job := claudeSpawnJob(t)
 		job.BrowserEnabled = c.enabled
+		job.WorkflowsDisabled = c.enabled // the Agent's Workflows switch, an independent line beside the browser's
 		openerEnvFor(t, c.managed)
 		t.Setenv("BROWSER", "")
 		os.Unsetenv("BROWSER")
@@ -114,6 +115,10 @@ func TestClaudeSpawnCarriesTheOpenerOnlyWithTheSwitchOnOnTheOrbitCloudRunner(t *
 
 		where := map[bool]string{true: "Orbit Cloud runner", false: "self-hosted runner"}[c.managed] +
 			map[bool]string{true: ", switch on", false: ", switch off"}[c.enabled]
+		// The session context the browser and workflows switches put beside the opener: both, each as the claim said.
+		if envValue(env, envBrowser) != browserEnv(c.enabled) || envValue(env, envWorkflows) != workflowsEnv(c.enabled) {
+			t.Errorf("%s: %s=%q %s=%q", where, envBrowser, envValue(env, envBrowser), envWorkflows, envValue(env, envWorkflows))
+		}
 		dir := browserOpenerDir()
 		firstPath := strings.SplitN(envValue(env, "PATH"), ":", 2)[0]
 		switch {

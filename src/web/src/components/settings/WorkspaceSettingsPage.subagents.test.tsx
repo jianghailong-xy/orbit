@@ -9,9 +9,10 @@ import { meQuery, type UserPreferences } from '../../lib/queries';
 import { SettingsWorkspacePage } from './WorkspaceSettingsPage';
 
 /**
- * The SubAgents group on the Agent's settings (docs/subagent-design.md §7, board docs/mocks/subagent/05.png): the
- * switch and Running at once each saved on the workspace with its own PATCH, and the Providers block list saved
- * to the account's preferences. Optimize For is not here: it is the account's, on Settings → General. Harness as WorkspaceSettingsPage.modelRouting.test.tsx.
+ * The SubAgents group on the Agent's settings (docs/subagent-design.md §7, board docs/mocks/subagent/05.png, and the
+ * Workflows row of board docs/mocks/subagent-workflow part 5): the switches and Running at once each saved on the
+ * workspace with its own PATCH, and the Providers block list saved to the account's preferences. Optimize For is not
+ * here: it is the account's, on Settings → General. Harness as WorkspaceSettingsPage.modelRouting.test.tsx.
  */
 
 vi.mock('../../api', async (original) => ({ ...(await original<typeof import('../../api')>()), api: vi.fn() }));
@@ -161,21 +162,24 @@ const subagentRow = (label: string) => {
 };
 
 describe('the SubAgents group on the Agent (docs/subagent-design.md §7)', () => {
-  it('shows the three rows with the board copy and the defaults: on, every provider, 4', async () => {
+  it('shows the four rows with the board copy and the defaults: on, on, every provider, 4', async () => {
     mount(workspace(), {});
     await openEditor();
     const group = form().querySelector<HTMLElement>('.subagents-group')!;
     expect([...group.querySelectorAll('.rd-set-label')].map((el) => el.textContent)).toEqual([
-      'SubAgents', 'Providers', 'Running at once',
+      'SubAgents', 'Workflows', 'Providers', 'Running at once',
     ]);
     expect(subagentRow('SubAgents').querySelector('.rd-set-desc')?.textContent)
       .toBe('Let this agent hand work to other providers in the same folder');
     expect(subagentRow('SubAgents').querySelector('[role="switch"]')?.getAttribute('aria-checked')).toBe('true');
+    expect(subagentRow('Workflows').querySelector('.rd-set-desc')?.textContent)
+      .toBe('Let this agent run a script that starts many SubAgents and wakes it once');
+    expect(subagentRow('Workflows').querySelector('[role="switch"]')?.getAttribute('aria-checked')).toBe('true');
     expect(subagentRow('Providers').querySelector('.rd-set-desc')?.textContent)
       .toBe('All enabled providers. Block one to keep SubAgents off it.');
     expect(squash(subagentRow('Providers').querySelector('button')?.textContent)).toBe('6 of 6 · Edit');
     expect(subagentRow('Running at once').querySelector('.rd-set-desc')?.textContent)
-      .toBe('Per session, foreground and background together');
+      .toBe('Per session: delegated SubAgents and workflow calls together');
     expect(subagentRow('Running at once').querySelector<HTMLInputElement>('input')?.value).toBe('4');
   });
 
@@ -187,6 +191,33 @@ describe('the SubAgents group on the Agent (docs/subagent-design.md §7)', () =>
     expect(writes).toEqual([
       { method: 'PATCH', path: `/workspaces/${WORKSPACE_ID}`, body: { subagentsEnabled: false } },
     ]);
+  });
+
+  it('saves the Workflows switch through its own PATCH /workspaces/:id', async () => {
+    const { writes } = mount(workspace(), {});
+    await openEditor();
+    await click(subagentRow('Workflows').querySelector<HTMLElement>('[role="switch"]')!);
+    expect(writes).toEqual([
+      { method: 'PATCH', path: `/workspaces/${WORKSPACE_ID}`, body: { workflowsEnabled: false } },
+    ]);
+    expect(subagentRow('Workflows').querySelector('[role="switch"]')?.getAttribute('aria-checked')).toBe('false');
+    expect(subagentRow('SubAgents').querySelector('[role="switch"]')?.getAttribute('aria-checked')).toBe('true');
+  });
+
+  it('Workflows follows SubAgents: off with it, and cannot be turned on while it is off', async () => {
+    const { writes } = mount(workspace({ subagentsEnabled: false, workflowsEnabled: true }), {});
+    await openEditor();
+    const sw = subagentRow('Workflows').querySelector<HTMLElement>('[role="switch"]')!;
+    expect(sw.getAttribute('aria-checked')).toBe('false');
+    expect(sw.hasAttribute('disabled') || sw.getAttribute('aria-disabled') === 'true' || sw.hasAttribute('data-disabled')).toBe(true);
+    await click(sw);
+    expect(writes).toEqual([]);
+    // SubAgents back on: Workflows reads its own value again.
+    await click(subagentRow('SubAgents').querySelector<HTMLElement>('[role="switch"]')!);
+    expect(writes).toEqual([
+      { method: 'PATCH', path: `/workspaces/${WORKSPACE_ID}`, body: { subagentsEnabled: true } },
+    ]);
+    expect(subagentRow('Workflows').querySelector('[role="switch"]')?.getAttribute('aria-checked')).toBe('true');
   });
 
   it('blocks a provider through PATCH /users/me/preferences, and the count follows', async () => {

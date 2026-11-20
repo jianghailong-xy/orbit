@@ -43,12 +43,12 @@ controllers and their decorators, so it lists what the server mounts, not what a
 | Caller | Routes |
 | --- | --- |
 | `public` | 37 |
-| `user` | 485 |
+| `user` | 486 |
 | `admin` | 31 |
 | `runner` | 210 |
 | `channel` | 1 |
 | `link gateway` | 3 |
-| **Total** | **767** |
+| **Total** | **768** |
 
 ## Public routes
 
@@ -428,6 +428,7 @@ controllers and their decorators, so it lists what the server mounts, not what a
 | `POST` | `/api/sessions/:id/turns/:turnId/translation/retry` | path `id`, `turnId` | `SessionsController.retryTurnTranslation` |
 | `POST` | `/api/sessions/:id/turns/:turnId/translation/send-as-written` | path `id`, `turnId` | `SessionsController.sendTurnAsWritten` |
 | `POST` | `/api/sessions/:id/turns/current-work-routing` | body `Object`; path `id` | `SessionsController.routedTurn` |
+| `GET` | `/api/sessions/:id/workflows` | path `id` | `SessionsController.workflowRuns` |
 | `GET` | `/api/sessions/:id/worktree-file` | path `id`; query `path` | `SessionsController.worktreeFile` |
 | `GET` | `/api/sessions/compact` | query `parentSessionId`, `status` | `SessionsController.listCompact` |
 | `GET` | `/api/sessions/counts` | — | `SessionsController.counts` |
@@ -485,6 +486,7 @@ controllers and their decorators, so it lists what the server mounts, not what a
 | `GET` | `/api/tasks/evidence-decisions/pending` | query `decidingSessionId` | `PendingEvidenceJudgmentsController.pending` |
 | `GET` | `/api/tasks/labels` | query `assigneeId`, `listId`, `projectId` | `TasksController.labelSummary` |
 | `GET` | `/api/tasks/model-routing/report` | query `agentId`, `since` | `TaskModelRoutingReportController.read` |
+| `GET` | `/api/tasks/model-routing/report/subagents` | query `agentId`, `since` | `TaskModelRoutingReportController.readSubagents` |
 | `GET` | `/api/tasks/page` | query `assigneeId`, `counts`, `creatorSessionId`, `cursor`, `labels`, `limit`, `listId`, `minPriority`, `projectId`, `q`, `status` | `TasksController.listPage` |
 | `GET` | `/api/terminals` | — | `TerminalsController.list` |
 | `DELETE` | `/api/terminals/:id` | path `id` | `TerminalsController.revoke` |

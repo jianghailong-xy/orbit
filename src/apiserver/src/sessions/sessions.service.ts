@@ -1,6 +1,7 @@
 import { readSessionCoordinatorHandoffs } from '../projects/coordinator-handoff';
-import type { HelpAskMarker, SubagentRunView } from '@orbit/shared';
+import type { HelpAskMarker, SubagentRunView, WorkflowRunView } from '@orbit/shared';
 import { modelLabels, subagentRunView } from '../runner-api/subagent-run';
+import { WORKFLOW_RUN_VIEW_SELECT, workflowRunView } from '../runner-api/workflow-run';
 import { checkedWorkSubdir } from './work-subdir';
 import { visibleQuestions, questionsWithCoordinator } from './run-question';
 import { isRunNotifyTurn, runNotifyContent } from './run-notify';
@@ -6360,6 +6361,26 @@ export class SessionsService {
     const catalog = session.assignedRunner?.modelCatalog as RunnerModelCatalog | null | undefined;
     const labels = modelLabels(providers.map((row) => withPreset(row)), catalog);
     return rows.map((row) => subagentRunView(row, labels));
+  }
+
+  /**
+   * A session's Orbit workflows, oldest first (`GET /sessions/:id/workflows`): what its SubAgent runs that are
+   * workflow calls belong to. A running one's counts and spend are its calls' so far (workflowRunView).
+   */
+  async listWorkflowRuns(userId: string, id: string): Promise<WorkflowRunView[]> {
+    const session = await this.prisma.session.findFirst({ where: { id, ownerId: userId }, select: { id: true } });
+    if (!session) throw new NotFoundException('session not found');
+    const rows = await this.prisma.subagentWorkflowRun.findMany({
+      where: { sessionId: id },
+      orderBy: { createdAt: 'asc' },
+      select: WORKFLOW_RUN_VIEW_SELECT,
+    });
+    const running = rows.filter((row) => row.status === 'RUNNING').map((row) => row.id);
+    const calls = running.length === 0 ? [] : await this.prisma.subagentRun.findMany({
+      where: { sessionId: id, workflowRunId: { in: running } },
+      select: { workflowRunId: true, status: true, costUsd: true },
+    });
+    return rows.map((row) => workflowRunView(row, calls.filter((call) => call.workflowRunId === row.id)));
   }
 
   async getBackgroundShells(userId: string, id: string): Promise<BgShell[]> {

@@ -26,6 +26,7 @@ import { GeneralSettingsPage } from './pages/settings/GeneralPage';
 import { NotificationsSettingsPage } from './pages/settings/NotificationsPage';
 import { AppearanceSettingsPage } from './pages/settings/AppearancePage';
 import { StorageSettingsPage } from './pages/settings/StoragePage';
+import { RoutingReportPage } from './pages/settings/RoutingReportPage';
 import { StorageFilesPage } from './pages/settings/StorageFilesPage';
 import { AdminUsersPage } from './pages/AdminUsersPage';
 import { AdminSignInPage } from './pages/AdminSignInPage';
@@ -316,6 +317,8 @@ export function App() {
             <Route path="access-tokens" element={<AccessTokensPage />} />
             {/* The terminals this account has approved: list, revoke (docs/terminal-session-design.md). */}
             <Route path="terminals" element={<TerminalsPage />} />
+            {/* How routed SubAgents and Orbit workflows went (board docs/mocks/subagent-workflow/08-report.html). */}
+            <Route path="routing-report" element={<RoutingReportPage />} />
             {/* The account's own Feishu or Lark app (docs/feishu-bot-design.md §4.1, §4.2). */}
             <Route path="integrations/feishu" element={<FeishuIntegrationPage />} />
             {/* Connecting a Feishu group, opened from the bot's card with its one-time ticket (docs/feishu-bot-design.md §8.1). */}
