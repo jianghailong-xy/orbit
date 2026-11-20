@@ -1031,6 +1031,8 @@ interface HandedTurn {
   externalSenderName: string | null;
   /** A wiki chat's page and selection, as ids (migration 0476): what `appendWikiChatNotes` reads. */
   wikiContext: unknown;
+  /** The app a config turn's change came from (migration 0595): what the actual-mode change it causes names. */
+  senderClient: string | null;
 }
 // How many times one message may be handed to an engine with nothing under it answering before the
 // control plane stops putting it back on the queue at once. A message that deserves another delivery
@@ -5765,7 +5767,8 @@ export class RunnerApiController {
                    "sender_session_id" AS "senderSessionId",
                    "external_sender_source" AS "externalSenderSource",
                    "external_sender_name" AS "externalSenderName",
-                   "wiki_context" AS "wikiContext"
+                   "wiki_context" AS "wikiContext",
+                   "sender_client" AS "senderClient"
             FROM "conversation_turn" turn
             WHERE turn.id = ${owned[0].inboxRequestTurnId}::uuid
               AND turn."session_id" = ${sessionId}::uuid
@@ -6028,7 +6031,8 @@ export class RunnerApiController {
                   "sender_session_id" AS "senderSessionId",
                   "external_sender_source" AS "externalSenderSource",
                   "external_sender_name" AS "externalSenderName",
-                  "wiki_context" AS "wikiContext"
+                  "wiki_context" AS "wikiContext",
+                  "sender_client" AS "senderClient"
       `;
       if (rows.length === 0) return null;
       const t = rows[0];
@@ -6338,13 +6342,7 @@ export class RunnerApiController {
         // that names no mode (an account move) leaves the engine in the one it had.
         const payload = configTurnPayload(t.content);
         if (payload.permissionMode !== undefined) {
-          const sender = await tx.conversationTurn.findUnique({
-            where: { id: t.id },
-            select: { senderClient: true, clientTurnId: true },
-          });
-          await recordActualPermissionMode(
-            tx, sessionId, payload.permissionMode, causeOfConfigTurn(sender?.clientTurnId), sender?.senderClient,
-          );
+          await recordActualPermissionMode(tx, sessionId, payload.permissionMode, causeOfConfigTurn(t.clientTurnId), t.senderClient);
         }
       }
       // What a resend of this fetch is answered with (above), on the row this transaction holds: a
