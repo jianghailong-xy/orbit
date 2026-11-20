@@ -60,7 +60,11 @@ final class SettingsFromConversationCopyParityTests: XCTestCase {
         let web = try read(Self.card)
         assertSays(web, "{COPY.save}", in: Self.card)
         assertSays(web, "{COPY.chat}", in: Self.card)
-        XCTAssertFalse(web.contains("Always allow"), "the web card grew an Always allow; the native card has none (design §2, Q3)")
+        // The card's own comment says there is no Always allow; the words it draws are what this checks.
+        let drawn = web
+            .replacingOccurrences(of: "(?s)/\\*.*?\\*/", with: " ", options: .regularExpression)
+            .replacingOccurrences(of: "//[^\n]*", with: "", options: .regularExpression)
+        XCTAssertFalse(drawn.contains("Always allow"), "the web card grew an Always allow; the native card has none (design §2, Q3)")
     }
 
     func testEveryRowTitlePageAndSectionIsTheWebs() throws {
