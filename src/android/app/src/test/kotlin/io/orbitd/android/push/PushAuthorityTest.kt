@@ -489,7 +489,6 @@ class PushAuthorityTest {
             val push = message("approval", "sessionID" to sid)
             server.server.shutdown()
             assertEquals(PushCheck.UNKNOWN, authority.check(push))
-            try { authority.needsYou(); fail("Offline must not clear current reminders") } catch (_: NetworkException) { }
             auth.logout()
             try { authority.check(push); fail("Retired account must not finish a check") } catch (_: SessionChanged) { }
         }

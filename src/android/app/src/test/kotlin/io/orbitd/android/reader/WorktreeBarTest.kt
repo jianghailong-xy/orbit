@@ -12,7 +12,9 @@ import io.orbitd.android.core.net.HttpMethod
 import io.orbitd.android.core.protocol.Wire
 import io.orbitd.android.directory.DirectoryApi
 import kotlinx.coroutines.*
+import kotlinx.coroutines.test.advanceTimeBy
 import kotlinx.coroutines.test.currentTime
+import kotlinx.coroutines.test.runCurrent
 import kotlinx.serialization.json.*
 import androidx.compose.foundation.layout.Column
 import androidx.compose.runtime.State
@@ -129,8 +131,8 @@ class WorktreeBarTest {
         backgroundScope.launch {
             io.orbitd.android.realtime.PagePolls.follow(signal, { model.inFlightMs() }, jitter = { 1.0 }) { reads += currentTime }
         }
-        kotlinx.coroutines.test.runCurrent()
-        kotlinx.coroutines.test.advanceTimeBy(150_000); kotlinx.coroutines.test.runCurrent()
+        runCurrent()
+        advanceTimeBy(150_000); runCurrent()
         assertEquals("the stream's page read and its minute, nothing between: $reads", listOf(0L, 60_000L, 120_000L), reads)
         model.offer(session("status" to JsonPrimitive("RUNNING"), "mergeStatus" to JsonPrimitive("pending")))
         assertEquals(3_000L, model.inFlightMs())
