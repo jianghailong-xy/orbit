@@ -63,7 +63,7 @@ internal fun OpenItemDeliveryCardView(card: InteractionCard, event: RunEvent?, o
     val sessionId = task?.text("sessionId")?.takeIf { ObjectId.canonical(it) != null }
     val landingId = delivery.text("landingSessionId")?.takeIf { it.isNotEmpty() }
     val files = delivery.strings("files")
-    Column(Modifier.widthIn(max = 720.dp).fillMaxWidth().testTag(key).background(tone.copy(alpha = 0.10f), RoundedCornerShape(8.dp))
+    Column(Modifier.conversationCard().testTag(key).background(tone.copy(alpha = 0.10f), RoundedCornerShape(8.dp))
         .border(1.dp, tone.copy(alpha = 0.35f), RoundedCornerShape(8.dp)).padding(horizontal = 10.dp, vertical = 8.dp),
         verticalArrangement = Arrangement.spacedBy(6.dp)) {
         // "Exception item · Merge conflict" — what this turn is, before what it is about.

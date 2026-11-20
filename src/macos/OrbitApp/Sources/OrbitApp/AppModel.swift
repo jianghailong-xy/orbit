@@ -121,6 +121,9 @@ final class AppModel {
     /// stack: the page under it keeps its section, its stack and its scroll, and closing the task
     /// is clearing this. Nil on a phone, which pushes the task over the console instead.
     var taskOverPageID: String?
+    /// The Settings row an `orbit-settings:` link asked to be shown: its page scrolls to it and flashes it, then
+    /// clears this (`SettingsAnchorScroll`).
+    var settingsAnchor: String?
     /// The task whose detail fills the pane — and, in the three-column shell, the row drawn as
     /// selected. Kept under its old name so its readers (the pane, the deep-link route, the
     /// delete/404 guards, the scope switch) needed no change, with the difference that it is read
@@ -2194,6 +2197,29 @@ final class AppModel {
         } catch {
             return APIClient.failureReason(error)
         }
+    }
+
+    /// Open Settings at one row (an `orbit-settings:` link's Open in Settings, design §6): the page that holds it
+    /// — on iOS the sheet, pushed to that page — with the row asked to scroll into view and flash. Theme, which
+    /// has no page of its own on the phone, opens Settings' own list.
+    func openSettings(at place: SettingPlace) {
+        settingsAnchor = place.key
+        #if os(iOS)
+        if let page = place.page { nav.openSettings(at: page) } else { nav.openSettings() }
+        #else
+        selectedSection = .settings
+        #endif
+    }
+
+    /// Undo of a change made from a conversation (design §5.3): the owner's own preferences PATCH.
+    func undoSettingsChange(_ values: [String: JSONValue]) async throws {
+        guard let api, !values.isEmpty else { return }
+        user = try await api.undoSettingsChange(values)
+    }
+
+    /// The account read again, for the marks a just-applied card wrote.
+    func reloadUser() async {
+        if let me = try? await api?.me() { assignIfChanged(\.user, me) }
     }
 
     /// Settings → GitHub: the sheet's page on iOS, the Settings section on the Mac, where GitHub is a group of its form.

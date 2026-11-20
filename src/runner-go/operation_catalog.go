@@ -339,6 +339,7 @@ var catalogPlanRunsWrites = map[string]string{
 	"ask_owner":              "puts a question to the owner; a question is not work",
 	"project_ruling_record":  "records what the owner already said; a record of a ruling is not work",
 	"request_owner_action":   "asks the owner for an action that is theirs to take; a question is not work",
+	"settings_propose":       "puts a settings card in front of the owner; nothing is written until they save it",
 	"withdraw_owner_request": "takes back a question this session asked",
 	"schedule_create":        "puts a create card in front of the owner; nothing is scheduled until they press Create",
 	"schedule_update":        "changes a schedule inside what the owner allowed, or asks them on a card; it changes no code",
@@ -3108,6 +3109,9 @@ func buildOperationCatalog() []*operation {
 	// (wiki_tools.go; they are left out entirely when the wiki is off).
 	add(gateAlways, wikiToolDescriptors(obj)...)
 	add(gateAlways, fileToolDescriptors(obj)...)
+	// The owner's own Settings (settings_tools.go): listed whether or not Session orchestration is on, since they fix
+	// ordinary settings and turning orchestration off is itself a proposal (docs/settings-from-conversation-design.md §7).
+	add(gateAlways, settingsToolDescriptors(obj)...)
 	// Always advertised: an agent that cannot see the tool falls back to
 	// Bash(run_in_background), and a session without the runner socket gets a
 	// refusal that says why rather than a silently engine-owned process.
@@ -4485,6 +4489,7 @@ func finishOperationCatalog(ops []*operation) []*operation {
 		{"wiki", wikiCLICapabilities},
 		{"wiki", wikiImportCLICapabilities},
 		{"file", fileCLICapabilities},
+		{"settings", settingsCLICapabilities},
 		{"account", userCLICapabilities},
 		{"guide", guideCLICapabilities},
 	}
@@ -5312,6 +5317,23 @@ var catalogMetadata = map[string]operationMeta{
 	"bg_list": {
 		Object: objectBackgroundJob,
 		Intent: "See this session's background jobs.",
+	},
+
+	// ── the owner's own Settings (settings_tools.go) ──
+	"settings_get": {
+		Object: objectAccount,
+		Intent: "Read the owner's Settings a conversation can propose a change to, with their tiers.",
+	},
+	"settings_propose": {
+		Object:          objectAccount,
+		Intent:          "Propose a change to the owner's own Settings, on a card only they can save.",
+		Approval:        approvalKindOwner,
+		SuccessEvidence: "The SETTINGS_CHANGE request's id and status PENDING.",
+		NextStep:        "End the turn: the owner's answer arrives as a turn in this conversation.",
+		Example: map[string]interface{}{
+			"changes": map[string]interface{}{"translationEnabled": true},
+			"why":     "You asked to read replies in your own language.",
+		},
 	},
 
 	// ── the engine's own bridge, and the person's account ──

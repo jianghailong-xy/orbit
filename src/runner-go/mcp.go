@@ -298,7 +298,11 @@ const noTaskMsg = "no taskId given and no current task in context (ORBIT_TASK_ID
 
 // Where the switch is: its own card on the web's and the Mac's Settings, and a row of the Sessions page
 // on the phones (docs/mocks/ios-settings-order).
-const orchestrationOffMsg = "session orchestration is turned off for this account (Settings → Session orchestration; on a phone, Settings → Sessions → Session orchestration)"
+// orchestrationOffMsg carries the Settings row's link (docs/settings-from-conversation-design.md §6): turning the switch
+// on gives agents more reach, so only the owner can, and the agent links the row rather than describing where it is.
+const orchestrationOffMsg = "session orchestration is turned off for this account, and only the owner can turn it on: " +
+	"link the row in your reply, [Let sessions orchestrate](orbit-settings:enableOrchestration) " +
+	"(Settings → Session orchestration; on a phone, Settings → Sessions → Session orchestration)"
 
 // How many tasks one task_create_batch call may create. Mirrors the server's
 // TASK_BATCH_CREATE_MAX so the tool rejects an oversized batch before the round-trip.
@@ -403,6 +407,10 @@ func (s *mcpServer) runTool(name string, args map[string]interface{}) map[string
 	}
 	// So are the file tools: `orbit file` runs the same runFileTool (file_tools.go).
 	if result, handled := s.callFileTool(name, args); handled {
+		return result
+	}
+	// The owner's Settings: `orbit settings` runs the same runSettingsTool (settings_tools.go).
+	if result, handled := s.callSettingsTool(name, args); handled {
 		return result
 	}
 	// And the scheduled tasks' tools, which act as this session (schedule_tools.go).

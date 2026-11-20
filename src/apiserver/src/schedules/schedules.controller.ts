@@ -227,7 +227,10 @@ export class SchedulesController {
   }
 
   private async decide(user: AuthUser, id: string, decision: 'ALLOW' | 'DECLINE', dto: ScheduleDecisionDto, req: Headers) {
-    const result = await this.schedules.decide(scheduleActorOf(user, req), id, decision, { timezone: dto.timezone ?? null });
+    const result = await this.schedules.decide(scheduleActorOf(user, req), id, decision, {
+      timezone: dto.timezone ?? null,
+      dropSuggestedEnd: dto.dropSuggestedEnd === true,
+    });
     const answer = await this.reads.decisionAnswer(user.userId, result);
     if (result.outcome === 'STALE') {
       throw new ConflictException({

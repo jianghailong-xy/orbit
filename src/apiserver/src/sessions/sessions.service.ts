@@ -13128,7 +13128,10 @@ export class SessionsService {
         throw new BadRequestException('session must be in Trash before it can be permanently deleted');
       }
       await tx.session.delete({ where: { id: session.id } });
-    }, loggedRetry(this.logger, 'sessions.purge'));
+      // That one delete cascades through the session's run_event and tool_call rows — thousands of
+      // wide, TOASTed rows in the two largest tables. It took 1.2s idle and 7–36s on a loaded
+      // production database (2026-11-20), so Prisma's 5s default expired it into a 500 every time.
+    }, loggedRetry(this.logger, 'sessions.purge', { transaction: { timeout: 60_000, maxWait: 10_000 } }));
     this.realtime.publishViewerRevoked({ sessionId: id });
     return { ok: true };
   }
