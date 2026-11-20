@@ -438,7 +438,8 @@ test('an owner tier on a built-in engine: a model of no family routes at it, ove
   assert.equal(s.fallbacks.some((f) => f.model === 'claude-opus-5-6' && f.level !== 'S'), false, 'Opus keeps no family row');
 
   // Cleared (absent from the map, or another engine's): the family tiers again, grok untiered.
-  for (const cleared of [undefined, {}, { cursor: {} }, { antigravity: { 'grok-4.7': 'XL' as const } }]) {
+  const clears: Array<SubagentRoutingInput['builtinModelTiers']> = [undefined, {}, { cursor: {} }, { antigravity: { 'grok-4.7': 'XL' } }];
+  for (const cleared of clears) {
     assert.deepEqual(at('XL', cleared), ['claude-opus-5-6', 'max', 'XL']);
     assert.deepEqual(at('L', cleared), ['claude-opus-5-6', 'high', 'L']);
   }
