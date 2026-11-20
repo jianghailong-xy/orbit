@@ -337,6 +337,15 @@ final class ProjectDetailModel {
         await load()
     }
 
+    /// The owner's Revert on one of the coordinator's landing-check changes (§12.15 P-R1): the old
+    /// value goes back as the owner's own; then the page reads everything again, so the list and the
+    /// setting say where things stand. Throws what the server answered, for the page to say.
+    func revertSettingChange(_ changeID: String) async throws {
+        _ = try await api.revertSettingChange(projectID, changeID: changeID)
+        onChanged()
+        await load()
+    }
+
     /// Pause project, or Resume project — the owner's, and a press rather than a setting: it stops
     /// the project moving at once, and resuming undoes it.
     func setPaused(_ paused: Bool) async -> String? {

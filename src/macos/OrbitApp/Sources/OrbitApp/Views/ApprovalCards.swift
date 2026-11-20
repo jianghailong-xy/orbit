@@ -3695,6 +3695,24 @@ struct StartProjectCard: View {
     @ViewBuilder
     private func howItRunsSection(editable: Bool) -> some View {
         StartSectionHead(title: StartProject.howItRuns)
+        if draft.linePending {
+            // A request that named no line (P-M2, board D1, D8): one sentence where the line, its
+            // main branch, its delivery and its landing check were, and the merge check kept.
+            StartPanel {
+                automaticRow(editable: editable)
+                Divider()
+                Text(StartProject.landsWhenCommits)
+                    .font(.orbitProse)
+                    .fixedSize(horizontal: false, vertical: true)
+                    .startRow()
+                    .background(Color.accentColor.opacity(0.08))
+                    .accessibilityIdentifier("start-lands-when-commits")
+                Divider()
+                mergeCheckRow(editable: editable)
+                Divider()
+                atMostRow(editable: editable)
+            }
+        } else {
         StartPanel {
             automaticRow(editable: editable)
             Divider()
@@ -3736,6 +3754,7 @@ struct StartProjectCard: View {
             mergeCheckRow(editable: editable)
             Divider()
             atMostRow(editable: editable)
+        }
         }
         Text(StartProject.howItRunsNote(asked: asked, suggestedOff: asked && !request.settings.automatic))
             .font(.orbitLabel).foregroundStyle(.secondary)
