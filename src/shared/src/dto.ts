@@ -2499,11 +2499,18 @@ export type RunnerEngineUpdateDismissals = Partial<Record<ReportedEngine, string
 
 /**
  * Fix with an agent (POST /runners/:id/attention/:kind/fix): the machine-side warnings a press hands to
- * an agent on that machine. `engineNotUpdating` and `installFailed` name an engine; `cannotSelfUpdate`
- * (the runner can't update itself, or its updates are turned off) is the runner's own, and so is
- * `engineUpdateFailed` (an Update engines run whose report has failed lines, whichever engines they name).
+ * an agent on that machine. `engineNotUpdating`, `installFailed` and `sandboxMissing` name an engine;
+ * `cannotSelfUpdate` (the runner can't update itself, or its updates are turned off) is the runner's own,
+ * and so is `engineUpdateFailed` (an Update engines run whose report has failed lines, whichever engines
+ * they name). `sandboxMissing` is the engine's own prerequisite a session's transcript caught (Codex
+ * without bubblewrap on PATH).
  */
-export type RunnerAttentionFixKind = 'engineNotUpdating' | 'cannotSelfUpdate' | 'installFailed' | 'engineUpdateFailed';
+export type RunnerAttentionFixKind =
+  | 'engineNotUpdating'
+  | 'cannotSelfUpdate'
+  | 'installFailed'
+  | 'engineUpdateFailed'
+  | 'sandboxMissing';
 
 /** Why no agent can start on a machine: it is offline, no workspace runs on it, or the engine its
  *  most recently used workspace runs on is signed out there. */
@@ -2512,11 +2519,24 @@ export type RunnerAgentFixBlockedCode = 'offline' | 'noWorkspace' | 'engineSigne
 /** An agent already at work on one warning: the session a press started, while it is open. */
 export interface RunnerAgentFixing {
   kind: RunnerAttentionFixKind;
-  /** The engine for `engineNotUpdating` and `installFailed`; null for `cannotSelfUpdate` and `engineUpdateFailed`. */
+  /** The engine for `engineNotUpdating`, `installFailed` and `sandboxMissing`; null for
+   *  `cannotSelfUpdate` and `engineUpdateFailed`. */
   engine: ReportedEngine | null;
   sessionId: string;
   workspaceId: string;
   workspaceName: string;
+}
+
+/** The latest agent a warning was handed to once its session is over. A transcript row is history,
+ *  so it shows what was done about it instead of offering a second agent; the session stays openable. */
+export interface RunnerAgentFixHandled {
+  kind: RunnerAttentionFixKind;
+  engine: ReportedEngine | null;
+  sessionId: string;
+  workspaceId: string;
+  workspaceName: string;
+  /** How that session ended. */
+  status: 'SUCCEEDED' | 'FAILED' | 'CANCELLED';
 }
 
 /**
@@ -2535,11 +2555,13 @@ export interface RunnerAgentFix {
   blocked: { code: RunnerAgentFixBlockedCode; message: string } | null;
   /** The warnings an agent is fixing now, each with its open session. */
   fixing: RunnerAgentFixing[];
+  /** The warnings whose latest agent session is over, each with how it ended. */
+  handled: RunnerAgentFixHandled[];
 }
 
 /** POST /runners/:id/attention/:kind/fix body. */
 export interface RunnerAttentionFixRequest {
-  /** Required for `engineNotUpdating` and `installFailed`. */
+  /** Required for `engineNotUpdating`, `installFailed` and `sandboxMissing`. */
   engine?: ReportedEngine;
   /** `cannotSelfUpdate` only: the newest runner release the client knows of (it reads dl/version.json),
    *  quoted in the agent's first message. */
