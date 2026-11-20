@@ -100,4 +100,23 @@ final class ScheduleEveryTests: XCTestCase {
         XCTAssertEqual(ScheduleDisplay.missedText(streak, timezone: ScheduleDisplayTests.tz), "3 slots missed, 01:00–08:30")
         XCTAssertEqual(collapsed[3], .run(runs[5]), "a single missed run stays a run")
     }
+
+    func testTimelineShowsAMissedStreakAsOneRow() {
+        func run(_ id: String, _ local: String) -> ScheduleRunView {
+            ScheduleRunView(id: id, scheduleId: "s1", plannedAt: ScheduleDisplayTests.sh(local), state: "MISSED")
+        }
+        let schedule = ScheduleView(id: "s1", title: "Check disk", rule: .daily(time: "01:00"), timezone: ScheduleDisplayTests.tz,
+                                  workspaceId: "w1", workspaceName: "apiserver", accessLevel: "CHECK_ONLY", state: "ACTIVE",
+                                  heldReason: nil, nextDueAt: nil, consecutiveFailures: 0)
+        let runs = [run("r1", "2025-11-14T01:00"), run("r2", "2025-11-14T02:00"),
+                    run("r3", "2025-11-14T03:00"), run("r4", "2025-11-14T04:00")]
+        let items = runs.map { ScheduleDisplay.TimelineItem.run(schedule, $0, at: $0.plannedAt) }
+        let rows = ScheduleDisplay.collapseMissedItems(items)
+        XCTAssertEqual(rows.count, 1)
+        guard case .missed(_, let streak, let at) = rows[0] else { return XCTFail("the streak is one row") }
+        XCTAssertEqual(streak.map(\.id), ["r1", "r2", "r3", "r4"])
+        XCTAssertEqual(at, runs[3].plannedAt)
+        XCTAssertEqual(ScheduleDisplay.missedText(streak, timezone: ScheduleDisplayTests.tz), "4 slots missed, 01:00–04:00")
+        XCTAssertEqual(ScheduleDisplay.collapseMissedItems([items[0]]), [.item(items[0])], "one missed run stays a run")
+    }
 }

@@ -161,7 +161,20 @@ enum ScheduleTimelineRows {
     static func rows(_ group: ScheduleDisplay.TimelineGroup, scheduled: ScheduledModel, now: Date,
                      wide: Bool, openTask: @escaping (String) -> Void = { _ in }) -> [ScheduleRowModel] {
         let runs = scheduled.timelineRuns
-        return group.items.map { item -> ScheduleRowModel in
+        return ScheduleDisplay.collapseMissedItems(group.items).map { entry -> ScheduleRowModel in
+            guard case .item(let item) = entry else {
+                // A streak of missed slots is one faint row: "4 slots missed, 01:00–04:00".
+                guard case .missed(let s, let missedRuns, let at) = entry, let first = missedRuns.first else { fatalError() }
+                return ScheduleRowModel(
+                    id: "\(group.id)-missed-\(first.id)",
+                    circle: ScheduleDisplay.runCircle(state: first.state, newFinding: false),
+                    title: s.title,
+                    line: ScheduleDisplay.missedText(missedRuns, timezone: scheduled.timezone),
+                    repeats: false, time: scheduleClock(at), draft: false, paused: wide,
+                    scheduleID: wide ? nil : s.id,
+                    kind: .run(s, first),
+                    open: { Self.select(s.id, scheduled) })
+            }
             switch item {
             case .task(let t):
                 return ScheduleRowModel(

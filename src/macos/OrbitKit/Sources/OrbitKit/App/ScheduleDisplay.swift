@@ -252,6 +252,43 @@ public enum ScheduleDisplay {
         return out
     }
 
+    /// A timeline group's item, or a streak of two or more MISSED runs of one schedule drawn as one row.
+    public enum TimelineRowItem: Equatable, Sendable {
+        case item(TimelineItem)
+        case missed(ScheduleView, runs: [ScheduleRunView], at: String)
+    }
+
+    /// The web's `scheduleCollapseMissed`: per schedule, consecutive MISSED runs (in planned order, nothing else of
+    /// that schedule between them) become one row at the streak's last time; a single missed run stays a run.
+    public static func collapseMissedItems(_ items: [TimelineItem]) -> [TimelineRowItem] {
+        var bySchedule: [String: [(TimelineItem, ScheduleRunView)]] = [:]
+        for item in items {
+            if case .run(let s, let run, _) = item { bySchedule[s.id, default: []].append((item, run)) }
+        }
+        var streakOf: [String: [(TimelineItem, ScheduleRunView)]] = [:]
+        for list in bySchedule.values {
+            let sorted = list.sorted { (parse($0.1.plannedAt) ?? .distantPast) < (parse($1.1.plannedAt) ?? .distantPast) }
+            var streak: [(TimelineItem, ScheduleRunView)] = []
+            func close() {
+                if streak.count > 1 { for m in streak { streakOf[m.0.id] = streak } }
+                streak = []
+            }
+            for entry in sorted {
+                if entry.1.state == "MISSED" { streak.append(entry) } else { close() }
+            }
+            close()
+        }
+        var out: [TimelineRowItem] = []
+        var done: Set<String> = []
+        for item in items {
+            guard case .run(let s, _, _) = item, let streak = streakOf[item.id] else { out.append(.item(item)); continue }
+            let key = streak[0].0.id
+            if !done.insert(key).inserted { continue }
+            out.append(.missed(s, runs: streak.map(\.1), at: streak[streak.count - 1].0.at ?? ""))
+        }
+        return out
+    }
+
     /// Whether a row shows the repeat mark (↻) before its rule: a one-off does not.
     public static func ruleRepeats(_ rule: ScheduleRule) -> Bool {
         if case .once = rule { return false }
