@@ -29968,16 +29968,12 @@ button.agent-progress-agent:hover {
   padding: 10px 12px;
   font-size: 13px;
 }
-.project-change-what { grid-area: what; }
+.project-change-what { grid-area: what; font-weight: 600; }
 .project-change-body { grid-area: body; min-width: 0; }
 .project-change-who { grid-area: who; display: flex; flex-wrap: wrap; align-items: center; gap: 4px 8px; }
 .project-change-action { grid-area: action; }
-.project-change-reverted { flex-basis: 100%; }
 .project-change-row + .project-change-row {
   border-top: 1px solid var(--border-subtle);
-}
-.project-change-what {
-  font-weight: 600;
 }
 .project-change-values s,
 .project-change-reason,
@@ -29990,6 +29986,7 @@ button.agent-progress-agent:hover {
   font-size: 12px;
 }
 .project-change-reverted {
+  flex-basis: 100%;
   margin-top: 4px;
   font-size: 12px;
 }
