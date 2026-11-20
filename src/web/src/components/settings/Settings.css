@@ -933,11 +933,15 @@
   color: var(--brand);
   cursor: pointer;
 }
-.workspace-new-actions {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  margin-top: 20px;
+/* New workspace: the machine page's setup card, as wide there as here (docs/mocks/new-workspace-form). */
+.workspace-new .msc {
+  max-width: 620px;
+}
+/* Headless there: with no head above it, the fields start at the card's top rather than under a rule. */
+.workspace-new .msc > .msc-body:first-child {
+  margin-top: 0;
+  padding-top: 0;
+  border-top: 0;
 }
 
 /* Admin, drawn as Settings is (AdminLayout, docs/mocks/admin-settings-style): text fields 300px wide in a row's
