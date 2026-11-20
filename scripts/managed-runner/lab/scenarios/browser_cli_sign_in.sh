@@ -63,6 +63,7 @@ echo "--- the owner's GET /runners/:id/browser: $(browser_state)"
 check_eq "no Chrome in the runner container before the tool" "$(chrome_count)" 0
 
 step "1. a session's turn runs the CLI sign-in through \$BROWSER, then asks the owner"
+: > "$OUT/asker.log"   # read below while the session's turn, run in the background, still writes it
 session "$SLUG" cli-sign-in-$(date -u +%H%M%S) "Sign the lab CLI in" \
   "Sign the lab CLI in. FAKE-SH $(cli_command browser | b64) CLI FAKE-SIGNIN $SITE SIGNIN" > "$OUT/asker.log" 2>&1 &
 ASKER=$!
