@@ -76,7 +76,7 @@ internal fun TranscriptCardView(card: InteractionCard, open: (String) -> Unit, e
     }
     // The owner's answer handed to the coordinator is one line that opens to the words the agent read, not a card of fields.
     if (card.key.endsWith(":ownerAnswer")) {
-        OwnerAnswerLineView(card, event); return
+        OwnerAnswerLineView(card, event, open = open); return
     }
     // So is a fact told to this session — the coordinator told of one, or the answer to its criteria proposal: its sentence, then when it
     // was sent, opening to the words the agent read.
@@ -114,9 +114,9 @@ internal fun TranscriptCardView(card: InteractionCard, open: (String) -> Unit, e
  * The ended questions this conversation draws — its rail's records — and the turns of it that hand their answers to the coordinator, each
  * by item in one spelling, whichever each read was served ([key]; web `AnsweredQuestionsCtx`, `answeredItemKey`, `answersHandedOver`).
  * Such a turn draws its question's record in its own place (`OwnerAnswerLineView`), so the rail leaves that record out
- * ([leftToItsTurn]), and the record's review folds what the coordinator was told at its foot ([told]). [open] opens a record's review.
+ * ([leftToItsTurn]), and the record, unfolded, folds what the coordinator was told at its foot ([told]).
  */
-internal class AnsweredQuestions(records: List<InteractionCard>, turns: List<RunEvent>, val open: (String) -> Unit) {
+internal class AnsweredQuestions(records: List<InteractionCard>, turns: List<RunEvent>) {
     private val records = records.filter { it.family == CardFamily.QUESTION_RECORD }.associateBy { key(it.objectId) }
     private val turns = turns.mapNotNull { turn -> OwnerAnswerLine.question(turn)?.let { key(it) to turn } }.toMap()
 
@@ -139,7 +139,8 @@ internal val LocalAnsweredQuestions = compositionLocalOf<AnsweredQuestions?> { n
  * The owner's answer handed to the coordinator (`OwnerAnswerLine`). Where the conversation holds the question it answers, the turn is that
  * question's own card, Answered, and nothing else (docs/mocks/owner-answer-sent-card/merged.html): the owner reads Answered as "the agent
  * has my answer", so a line under it said so twice. Drawn here, where the coordinator was handed the answer, the card is dashed and says so
- * while the turn still waits on the queue ([queued]), says when its delivery went unconfirmed, and its review folds the words the agent read.
+ * while the turn still waits on the queue ([queued]), says when its delivery went unconfirmed, and unfolded in place it folds the words the
+ * agent read at its foot.
  *
  * Otherwise — a Not yet… to a request to record the project done, which has no card, or a question the conversation does not hold — it is
  * one line, "Sent to the coordinator · 08:29" — the pill a revision handed to its coordinator leaves (`SentToCoordinatorLine`) — in place of
@@ -147,16 +148,15 @@ internal val LocalAnsweredQuestions = compositionLocalOf<AnsweredQuestions?> { n
  * `OwnerAnswerLine.tsx`, iOS `OwnerAnswerLineView`).
  */
 @Composable
-internal fun OwnerAnswerLineView(card: InteractionCard, event: RunEvent?, queued: Boolean = false) {
+internal fun OwnerAnswerLineView(card: InteractionCard, event: RunEvent?, queued: Boolean = false, open: (String) -> Unit = {}) {
     var open by rememberSaveable(card.key) { mutableStateOf(false) }
     val undelivered = event?.fields?.text("delivery") in setOf("failed", "unconfirmed")
     val answered = LocalAnsweredQuestions.current
     val record = answered?.record(card.source)
     if (answered != null && record != null) {
         Box(Modifier.fillMaxWidth().testTag(card.key)) {
-            QuestionRecordCard(record, queued = queued && !undelivered, notice = OwnerAnswerLine.undelivered.takeIf { undelivered }) {
-                answered.open(record.key)
-            }
+            QuestionRecordCard(record, queued = queued && !undelivered, notice = OwnerAnswerLine.undelivered.takeIf { undelivered },
+                told = event, open = open)
         }
         return
     }

@@ -408,7 +408,7 @@ fun SessionReader(app: OrbitApplication, handle: SessionHandle, route: OrbitRout
     // the queue — are drawn by those turns, from the rail's records, and not again in the rail (`AnsweredQuestions`).
     val answeredQuestions = remember(state.session?.snapshot, state.session?.fresh, cards.answered, cards.previous, rows, accepted, queued, liveTail) {
         val tail = if (liveTail) accepted + queued.map { it.event } else emptyList()
-        AnsweredQuestions(state.session?.let(cards::shown).orEmpty(), rows.map { it.event } + tail, cards::open)
+        AnsweredQuestions(state.session?.let(cards::shown).orEmpty(), rows.map { it.event } + tail)
     }
     val readerSide by remember(list) { derivedStateOf {
         when (val top = topLineItem(list.layoutInfo.visibleItemsInfo, list.layoutInfo.viewportStartOffset)) {
