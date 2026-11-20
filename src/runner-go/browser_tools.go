@@ -645,58 +645,69 @@ func cmdBrowserCLI(args []string, out io.Writer) error {
 		raw, _ := json.Marshal(status)
 		return writeCLIRawJSON(out, raw, *jsonOut)
 	case "open":
-		fs := newCLIFlagSet("orbit browser open")
-		target := fs.String("url", "", "a page for the remote browser to open")
-		noOpen := fs.Bool("no-open", false, "print the tab's address without opening it here")
-		jsonOut := fs.Bool("json", false, "emit compact JSON")
-		if err := fs.Parse(args[1:]); err != nil {
-			return err
-		}
-		if err := rejectTrailing(fs); err != nil {
-			return err
-		}
-		t, err := cliTransport()
-		if err != nil {
-			return err
-		}
-		res, err := runBrowserOpen(t, os.Getenv("ORBIT_SESSION_ID"), *target)
-		if err != nil {
-			return err
-		}
-		if res.TabURL != nil {
-			opened := !*noOpen && openTabLocally(*res.TabURL)
-			res.OpenedLocally = &opened
-			if !*jsonOut {
-				if opened {
-					fmt.Fprintf(out, "Opened the browser tab: %s\n", *res.TabURL)
-				} else {
-					fmt.Fprintf(out, "Open the browser tab: %s\n", *res.TabURL)
-				}
-			}
-		}
-		raw, _ := json.Marshal(res)
-		return writeCLIRawJSON(out, raw, *jsonOut)
+		return cmdBrowserOpenCLI(args[1:], out)
 	case "request-sign-in":
-		fs := newCLIFlagSet("orbit browser request-sign-in")
-		site := fs.String("site", "", "the host to sign in to")
-		reason := fs.String("reason", "", "why the login is needed")
-		jsonOut := fs.Bool("json", false, "emit compact JSON")
-		if err := fs.Parse(args[1:]); err != nil {
-			return err
-		}
-		if err := rejectTrailing(fs); err != nil {
-			return err
-		}
-		t, err := cliTransport()
-		if err != nil {
-			return err
-		}
-		res, err := runBrowserRequestSignIn(t, os.Getenv("ORBIT_SESSION_ID"), *site, *reason, socketBrowserLease(), browserSignInPoll)
-		if err != nil {
-			return err
-		}
-		raw, _ := json.Marshal(res)
-		return writeCLIRawJSON(out, raw, *jsonOut)
+		return cmdBrowserRequestSignInCLI(args[1:], out)
 	}
 	return fmt.Errorf("unknown command %q", action)
+}
+
+// cmdBrowserOpenCLI is `orbit browser open`. Each command parses its flags in a function of its own, which is
+// how the recovery grammar test (recovery_render_test.go) reads a command's flag registrations.
+func cmdBrowserOpenCLI(args []string, out io.Writer) error {
+	fs := newCLIFlagSet("orbit browser open")
+	target := fs.String("url", "", "a page for the remote browser to open")
+	noOpen := fs.Bool("no-open", false, "print the tab's address without opening it here")
+	jsonOut := fs.Bool("json", false, "emit compact JSON")
+	if err := fs.Parse(args); err != nil {
+		return err
+	}
+	if err := rejectTrailing(fs); err != nil {
+		return err
+	}
+	t, err := cliTransport()
+	if err != nil {
+		return err
+	}
+	res, err := runBrowserOpen(t, os.Getenv("ORBIT_SESSION_ID"), *target)
+	if err != nil {
+		return err
+	}
+	if res.TabURL != nil {
+		opened := !*noOpen && openTabLocally(*res.TabURL)
+		res.OpenedLocally = &opened
+		if !*jsonOut {
+			if opened {
+				fmt.Fprintf(out, "Opened the browser tab: %s\n", *res.TabURL)
+			} else {
+				fmt.Fprintf(out, "Open the browser tab: %s\n", *res.TabURL)
+			}
+		}
+	}
+	raw, _ := json.Marshal(res)
+	return writeCLIRawJSON(out, raw, *jsonOut)
+}
+
+// cmdBrowserRequestSignInCLI is `orbit browser request-sign-in` (Orbit Cloud runner only; cmdBrowserCLI checks that).
+func cmdBrowserRequestSignInCLI(args []string, out io.Writer) error {
+	fs := newCLIFlagSet("orbit browser request-sign-in")
+	site := fs.String("site", "", "the host to sign in to")
+	reason := fs.String("reason", "", "why the login is needed")
+	jsonOut := fs.Bool("json", false, "emit compact JSON")
+	if err := fs.Parse(args); err != nil {
+		return err
+	}
+	if err := rejectTrailing(fs); err != nil {
+		return err
+	}
+	t, err := cliTransport()
+	if err != nil {
+		return err
+	}
+	res, err := runBrowserRequestSignIn(t, os.Getenv("ORBIT_SESSION_ID"), *site, *reason, socketBrowserLease(), browserSignInPoll)
+	if err != nil {
+		return err
+	}
+	raw, _ := json.Marshal(res)
+	return writeCLIRawJSON(out, raw, *jsonOut)
 }
