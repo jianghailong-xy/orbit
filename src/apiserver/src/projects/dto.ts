@@ -549,7 +549,7 @@ export class StartProjectDto implements StartProjectRequestBody {
   })
   criteriaDigest!: string;
   /** Where finished tasks land: the project's own branch first, or directly into main. */
-  @IsIn(INTEGRATION_LINES) line!: IntegrationLine;
+  @IsOptional() @IsIn(INTEGRATION_LINES) line?: IntegrationLine;
   /** The project branch as a full ref, with `PROJECT_BRANCH` only; `refs/heads/project/<project
    *  id>` unless named. */
   @IsOptional()
@@ -589,7 +589,8 @@ export class StartProjectDto implements StartProjectRequestBody {
  * and so may Automatic, which suggests it on.
  */
 export class RequestProjectStartDto implements ProjectStartRequestBody {
-  @IsIn(INTEGRATION_LINES) line!: IntegrationLine;
+  /** Left out, the project starts with no line: it is decided when the first task with commits is done. */
+  @IsOptional() @IsIn(INTEGRATION_LINES) line?: IntegrationLine;
   @IsOptional()
   @Matches(BRANCH_REF, {
     message: 'CODEBASE_AUTHORITY_INVALID: projectBranchName must be a full branch ref such as refs/heads/project/next',

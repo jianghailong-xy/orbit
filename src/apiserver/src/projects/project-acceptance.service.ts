@@ -573,7 +573,7 @@ export class ProjectAcceptanceService {
     await this.assertProject(ownerId, projectId);
 
     const asked: ProjectStartSettings & Pick<StartLineSettings, 'deliveryMode'> = {
-      line: input.line,
+      ...(input.line !== undefined ? { line: input.line } : {}),
       ...(input.projectBranchName !== undefined ? { projectBranchName: input.projectBranchName } : {}),
       ...(input.upstreamRef !== undefined ? { upstreamRef: input.upstreamRef } : {}),
       automatic: input.automatic,
@@ -677,7 +677,7 @@ export class ProjectAcceptanceService {
       // branch the project stands on now, so a choice a locked line kept out reads as a difference.
       const upstreamNamed = asked.upstreamRef !== undefined || suggested?.upstreamRef !== undefined;
       const settings: ProjectStartSettings = {
-        line: line.line,
+        ...(line.line !== undefined ? { line: line.line } : {}),
         ...(line.projectBranchName !== undefined ? { projectBranchName: line.projectBranchName } : {}),
         ...(upstreamNamed && line.upstreamRef !== undefined
           ? { upstreamRef: line.upstreamRef }

@@ -160,7 +160,7 @@ import { streamPoll } from '../lib/listBudget';
 
 /** The settings as the card edits them: the number box can be empty mid-edit, the text box is text. */
 export interface StartSettingsDraft {
-  line: ProjectStartSettings['line'];
+  line: NonNullable<ProjectStartSettings['line']>;
   /** The main branch by name, `refs/heads/` left off: what the menu shows and the reader types —
    *  null for a project with no repository, which has no main branch to choose. */
   upstream: string | null;
@@ -196,7 +196,9 @@ export function startDraftOf(
   > | null = null,
 ): StartSettingsDraft {
   return {
-    line: settings.line,
+    // A request with no line (P-M2) opens the card on main, which writes nothing for a project with
+    // no repository; drawing that request is the web task's.
+    line: settings.line ?? 'MAIN',
     // Only a project with a repository has a main branch to choose; a read that does not say whether
     // it has one offers none.
     upstream: standing?.repository ? startMainBranch(settings.upstreamRef, standing) : null,
