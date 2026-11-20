@@ -334,7 +334,7 @@ test('the region check holds Anthropic-bound Claude sessions, refuses them at cr
       assert.equal(error.message, 'Stop the session first.');
       return true;
     });
-    await db.session.update({ where: { id: busy }, data: { status: RunStatus.CANCELLED } });
+    await db.session.update({ where: { id: busy }, data: { status: RunStatus.CANCELLED, finishedAt: new Date(), releaseCause: 'cancelled' } });
 
     const moves = await sessions.moveTargets(from.ownerId, id);
     assert.equal(moves.reason, null, 'the Move panel offers it');

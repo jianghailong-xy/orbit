@@ -646,7 +646,7 @@ test('§13.3 DEP on real PostgreSQL', { skip, concurrency: 1 }, async (t) => {
       // The whole turn's landing, in ONE transaction: the run settles and the verdict is written.
       await writer.query('BEGIN');
       await writer.query(
-        `UPDATE "session" SET "status" = 'SUCCEEDED', "end_reason" = 'task_done',
+        `UPDATE "session" SET "status" = 'SUCCEEDED', "finished_at" = COALESCE("finished_at", now()), "release_cause" = 'engine_exited', "end_reason" = 'task_done',
                 "completed_at" = now(), "updated_at" = now() WHERE "task_id" = $1::uuid`,
         [w.checkId],
       );

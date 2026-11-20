@@ -245,7 +245,7 @@ test('the sentences about a merge into main name the project’s main branch, an
       data: {
         ownerId, creatorId: ownerId, taskId: task.id, workspaceId: w.workspaceId, assignedRunnerId: w.runnerId,
         title, prompt: 'do the work', branch: `orbit/work-${task.id.slice(0, 8)}`,
-        isolationStatus: 'worktree', status: RunStatus.SUCCEEDED, startsTaskWork: true,
+        isolationStatus: 'worktree', status: RunStatus.SUCCEEDED, finishedAt: new Date(), releaseCause: 'engine_exited', startsTaskWork: true,
         finishedAt: new Date(Date.now() - 60_000), worktreeBranch: `orbit/work-${task.id.slice(0, 8)}`,
         worktreeDirty: false, changedFiles: [{ path: 'src/the-work.ts' }] as never,
       },

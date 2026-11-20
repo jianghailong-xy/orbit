@@ -247,7 +247,7 @@ test('a landing is not judged before the work it is about has stopped moving', {
         ...(finish === 'NOT_FINISHED'
           ? { status: RunStatus.RUNNING }
           : {
-            status: RunStatus.SUCCEEDED,
+            status: RunStatus.SUCCEEDED, releaseCause: 'engine_exited',
             finishedAt: new Date(createdAt.getTime() + 60_000),
             worktreeBranch: finish.worktreeBranch ?? branch,
             worktreeDirty: finish.worktreeDirty ?? false,
@@ -461,7 +461,7 @@ test('a landing is not judged before the work it is about has stopped moving', {
       await prisma.session.update({
         where: { id: runningSession },
         data: {
-          status: RunStatus.SUCCEEDED,
+          status: RunStatus.SUCCEEDED, releaseCause: 'engine_exited',
           finishedAt: new Date(),
           worktreeBranch: runningBranch,
           worktreeDirty: false,
@@ -531,7 +531,7 @@ test('a landing is not judged before the work it is about has stopped moving', {
       await prisma.session.update({
         where: { id: workSessionId },
         data: {
-          status: RunStatus.SUCCEEDED,
+          status: RunStatus.SUCCEEDED, releaseCause: 'engine_exited',
           finishedAt: new Date(),
           worktreeBranch: 'orbit/autorun-false-91f94d',
           worktreeDirty: false,
@@ -887,7 +887,7 @@ test('a landing is not judged before the work it is about has stopped moving', {
     await prisma.session.update({
       where: { id: guardSession },
       data: {
-        status: RunStatus.SUCCEEDED,
+        status: RunStatus.SUCCEEDED, releaseCause: 'engine_exited',
         finishedAt: new Date(),
         worktreeBranch: guardEndedOn,
         worktreeDirty: false,

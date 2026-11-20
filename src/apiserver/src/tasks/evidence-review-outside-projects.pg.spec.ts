@@ -447,7 +447,7 @@ suite('outside a project the dispatching session settles the evidence, and the o
       let turns = await deliveredTo(reviewer);
       assert.equal(turns.length, 1);
       await db.conversationTurn.update({ where: { id: turns[0].id }, data: { status: 'ANSWERED' } });
-      await db.session.update({ where: { id: reviewer }, data: { status: RunStatus.FAILED } });
+      await db.session.update({ where: { id: reviewer }, data: { status: RunStatus.FAILED, finishedAt: new Date(), releaseCause: 'engine_exited' } });
       assert.equal(await cardIn(reviewer, work.taskId, new Date(Date.now() + 10 * WINDOW_MS)), null);
       await db.session.update({ where: { id: reviewer }, data: { status: RunStatus.AWAITING_INPUT } });
       await Promise.all([reviews.deliverOwedTo(reviewer), reviews.deliverOwedTo(reviewer)]);
@@ -474,7 +474,7 @@ suite('outside a project the dispatching session settles the evidence, and the o
       assert.equal(await reviews.deliver(ownerId, ownWork.taskId, (await latestEvidence(ownWork.taskId)).id),
         'REVIEWER_NOT_INDEPENDENT', 'the fixture is refused for independence');
       // Release the run's execution claim before making the other session live on the same task.
-      await db.session.update({ where: { id: ownWork.run }, data: { status: RunStatus.FAILED } });
+      await db.session.update({ where: { id: ownWork.run }, data: { status: RunStatus.FAILED, finishedAt: new Date(), releaseCause: 'engine_exited' } });
       await db.session.update({ where: { id: nonIndependent }, data: { status: RunStatus.AWAITING_INPUT } });
 
       const ended = await conversation('interrupted with a recorded end', { status: RunStatus.FAILED });
@@ -506,7 +506,7 @@ suite('outside a project the dispatching session settles the evidence, and the o
         const ended = await dispatched('reconcile the ledger', reviewer);
         await submit(ended, 'reconciled');
         assert.equal(await cardIn(reviewer, ended.taskId), null, 'held while it is open');
-        await db.session.update({ where: { id: reviewer }, data: { status: RunStatus.SUCCEEDED, completedAt: new Date() } });
+        await db.session.update({ where: { id: reviewer }, data: { status: RunStatus.SUCCEEDED, finishedAt: new Date(), releaseCause: 'engine_exited', completedAt: new Date() } });
         const card = await cardIn(reviewer, ended.taskId);
         assert.ok(card, 'its end hands the card to the owner at once, without the window');
         assert.equal(await waitingOn(reviewer), 0, 'completed conversations have no open-session badge');
@@ -514,7 +514,7 @@ suite('outside a project the dispatching session settles the evidence, and the o
         // Ended before the revision arrives: nothing is delivered, and the owner is asked at once.
         const gone = await conversation('files work and is completed', {});
         const unheld = await dispatched('close the books', gone);
-        await db.session.update({ where: { id: gone }, data: { status: RunStatus.SUCCEEDED, completedAt: new Date() } });
+        await db.session.update({ where: { id: gone }, data: { status: RunStatus.SUCCEEDED, finishedAt: new Date(), releaseCause: 'engine_exited', completedAt: new Date() } });
         const turnsBefore = await db.conversationTurn.count({ where: { sessionId: gone } });
         await submit(unheld, 'closed');
         assert.equal(await db.conversationTurn.count({ where: { sessionId: gone } }), turnsBefore,

@@ -592,7 +592,7 @@ test('SubAgent runs: the row, the cost roll-up, the refusals and runningSubagent
     // The parent ends while the run is RUNNING. By an ordinary end its token is refused; by a coordinator handover
     // it keeps serving the run left running (kept-subagent-gateway.ts), until that run ends.
     await prisma.session.update({
-      where: { id: sessionId }, data: { status: RunStatus.CANCELLED, completedAt: new Date(), endReason: 'completed' },
+      where: { id: sessionId }, data: { status: RunStatus.CANCELLED, finishedAt: new Date(), releaseCause: 'cancelled', completedAt: new Date(), endReason: 'completed' },
     });
     assert.equal(await gateway.caller(token!), null, 'an ordinary end refuses the token at once');
     const projectId = (await prisma.project.create({ data: { ownerId, title: 'handover keeps the SubAgent' } })).id;

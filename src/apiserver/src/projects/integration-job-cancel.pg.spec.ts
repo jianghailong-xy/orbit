@@ -235,7 +235,7 @@ async function doneTask(
       branch,
       isolationStatus: 'worktree',
       baseSha: 'b'.repeat(40),
-      status: RunStatus.SUCCEEDED,
+      status: RunStatus.SUCCEEDED, releaseCause: 'engine_exited',
       startsTaskWork: true,
       finishedAt: new Date(Date.now() - 60_000),
       worktreeBranch: branch,

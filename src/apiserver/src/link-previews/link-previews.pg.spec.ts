@@ -175,7 +175,7 @@ test('link previews: five kinds of card, one answer for everything out of reach,
       provider: 'claude',
       model: 'claude-opus-5',
       numTurns: 12,
-      status: RunStatus.FAILED,
+      status: RunStatus.FAILED, finishedAt: new Date(), releaseCause: 'engine_exited',
       error: 'engine exited with code 1',
       retryAt: new Date(now + 30_000),
       startedAt: new Date(now - 2 * HOUR),
@@ -343,7 +343,7 @@ test('link previews: five kinds of card, one answer for everything out of reach,
   await db.session.create({
     data: {
       id: deleted.session, ownerId: me.ownerId, creatorId: me.ownerId, title: 'trashed session',
-      prompt: 'trashed', status: RunStatus.SUCCEEDED, deletedAt: new Date(),
+      prompt: 'trashed', status: RunStatus.SUCCEEDED, finishedAt: new Date(), releaseCause: 'engine_exited', deletedAt: new Date(),
       dispatchOrigin: SessionDispatchOrigin.USER,
     },
   });

@@ -523,7 +523,7 @@ suite('verification relations and phase aggregation, on real PostgreSQL', async 
         taskId: subject.id,
         title: 'dev run',
         prompt: 'do the work',
-        status: RunStatus.SUCCEEDED,
+        status: RunStatus.SUCCEEDED, finishedAt: new Date(), releaseCause: 'engine_exited',
       },
     });
     const ownRun = await db.session.create({

@@ -328,7 +328,7 @@ test('the next candidate supersedes the one standing, and closes the exception i
     await db.session.create({
       data: {
         id: sessionId, ownerId: w.ownerId, creatorId: w.ownerId, taskId: working,
-        title: 'the work', prompt: 'the work', status: RunStatus.SUCCEEDED,
+        title: 'the work', prompt: 'the work', status: RunStatus.SUCCEEDED, finishedAt: new Date(), releaseCause: 'engine_exited',
         startsTaskWork: true, completedAt: new Date(),
       },
     });

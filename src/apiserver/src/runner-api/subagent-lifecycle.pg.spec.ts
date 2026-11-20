@@ -476,7 +476,7 @@ test('SubAgent lifecycle: turn end, runner restart, the wake and its wording', {
   await t.test('a parent that has ended is not woken, and its wake is settled so the sweep leaves it', async () => {
     const sessionId = await parkedParent();
     const opened = await subagents.createSubagentRun(runner, sessionId, create({ toolUseId: 'toolu_01Gone', background: true }));
-    await prisma.session.update({ where: { id: sessionId }, data: { status: RunStatus.CANCELLED, endReason: 'ended' } });
+    await prisma.session.update({ where: { id: sessionId }, data: { status: RunStatus.CANCELLED, finishedAt: new Date(), releaseCause: 'cancelled', endReason: 'ended' } });
     await subagents.updateSubagentRun(runner, sessionId, opened.runId, update({ status: 'DONE', wake: true }));
     assert.equal((await wakeTurns(sessionId)).length, 0);
     assert.ok((await prisma.subagentRun.findUniqueOrThrow({ where: { id: opened.runId } })).wakeFiledAt);

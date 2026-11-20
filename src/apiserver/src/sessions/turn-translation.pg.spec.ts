@@ -308,7 +308,7 @@ scenario('skipTranslation (the prompt optimizer\'s English): an opening message 
   // and the claim answers only whether this session's work is held.
   await prisma.session.updateMany({
     where: { ownerId, id: { not: created.id }, status: { in: [RunStatus.RUNNING, RunStatus.PENDING, RunStatus.AWAITING_INPUT] } },
-    data: { status: RunStatus.SUCCEEDED },
+    data: { status: RunStatus.SUCCEEDED, finishedAt: new Date(), releaseCause: 'engine_exited' },
   });
   const claimed = await queue.claimSessionForRunner({ id: runnerId });
   assert.equal(claimed?.sessionId, created.id, 'not held: the claim hands it out');

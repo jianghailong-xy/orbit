@@ -232,7 +232,7 @@ async function finishedSession(
     data: {
       id, ownerId: w.ownerId, creatorId: w.ownerId, workspaceId: w.workspaceId, assignedRunnerId: w.runnerId,
       title: label, prompt: 'ship the feature', provider: 'claude', providerBuiltin: true,
-      dispatchOrigin: SessionDispatchOrigin.USER, status: RunStatus.SUCCEEDED, startedAt: new Date(Date.now() - 7_200_000),
+      dispatchOrigin: SessionDispatchOrigin.USER, status: RunStatus.SUCCEEDED, releaseCause: 'engine_exited', startedAt: new Date(Date.now() - 7_200_000),
       finishedAt: new Date(Date.now() - 3_600_000), numTurns: 1, branch: `orbit/${label}-${id.slice(0, 8)}`,
       isolationStatus: 'worktree', ...row,
     },

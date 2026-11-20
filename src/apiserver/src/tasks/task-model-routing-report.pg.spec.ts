@@ -62,7 +62,7 @@ test('model-routing report aggregates actual runs, first-run task cohorts and on
     return db.session.create({ data: {
       ownerId: subject.ownerId, creatorId: subject.ownerId, title: 'report run', prompt: 'report', taskId: subject.id,
       workspaceId: subject.ownerId === owner ? agent.id : otherAgent.id, startsTaskWork: true,
-      provider: 'claude', model: OPUS, effort: 'low', status: 'SUCCEEDED', createdAt: at(seconds),
+      provider: 'claude', model: OPUS, effort: 'low', status: 'SUCCEEDED', releaseCause: 'engine_exited', createdAt: at(seconds),
       finishedAt: duration === null ? null : at(seconds + duration), ...data,
     } });
   }

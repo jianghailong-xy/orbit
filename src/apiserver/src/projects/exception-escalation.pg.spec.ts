@@ -503,7 +503,7 @@ test('an item unhandled for the default two hours escalates to the owner', { ski
     const item = await failedTask(stack, w, 'default-window');
     await handTurn(stack, w);
     // A live coordinator keeps a taken item; a failed run exercises the remaining escalation clock.
-    await stack.db.session.update({ where: { id: w.coordinatorSessionId }, data: { status: RunStatus.FAILED } });
+    await stack.db.session.update({ where: { id: w.coordinatorSessionId }, data: { status: RunStatus.FAILED, finishedAt: new Date(), releaseCause: 'engine_exited' } });
     assert.equal(frozenWindowMs(item), DEFAULT_WINDOW_SECONDS * 1_000,
       'the window is frozen into the item when it is opened');
 
@@ -554,9 +554,9 @@ test('a project-specific escalation time is honoured', { skip, timeout: 180_000 
     const long = await failedTask(stack, patient, 'default-beside-short');
     await handTurn(stack, w);
     // A live coordinator keeps a taken item; a failed run exercises the remaining escalation clock.
-    await stack.db.session.update({ where: { id: w.coordinatorSessionId }, data: { status: RunStatus.FAILED } });
+    await stack.db.session.update({ where: { id: w.coordinatorSessionId }, data: { status: RunStatus.FAILED, finishedAt: new Date(), releaseCause: 'engine_exited' } });
     await handTurn(stack, patient);
-    await stack.db.session.update({ where: { id: patient.coordinatorSessionId }, data: { status: RunStatus.FAILED } });
+    await stack.db.session.update({ where: { id: patient.coordinatorSessionId }, data: { status: RunStatus.FAILED, finishedAt: new Date(), releaseCause: 'engine_exited' } });
     assert.equal(frozenWindowMs(short), SHORT_WINDOW_SECONDS * 1_000,
       'the item froze this project\'s window, not the default');
     assert.equal(frozenWindowMs(long), DEFAULT_WINDOW_SECONDS * 1_000);
@@ -591,7 +591,7 @@ test('escalation writes no conversation_turn, session or wake row', { skip, time
     const item = await failedTask(stack, w, 'people-only');
     await handTurn(stack, w);
     // A live coordinator keeps a taken item; a failed run exercises the remaining escalation clock.
-    await stack.db.session.update({ where: { id: w.coordinatorSessionId }, data: { status: RunStatus.FAILED } });
+    await stack.db.session.update({ where: { id: w.coordinatorSessionId }, data: { status: RunStatus.FAILED, finishedAt: new Date(), releaseCause: 'engine_exited' } });
     await quiet(stack.db, w.coordinatorSessionId, 3 * 60 * MINUTE);
     await age(stack.db, item, 3 * 60 * MINUTE);
 
@@ -623,7 +623,7 @@ test('an item inside its window does not escalate', { skip, timeout: 180_000 }, 
     const item = await failedTask(stack, w, 'inside-window');
     await handTurn(stack, w);
     // A live coordinator keeps a taken item; a failed run exercises the remaining escalation clock.
-    await stack.db.session.update({ where: { id: w.coordinatorSessionId }, data: { status: RunStatus.FAILED } });
+    await stack.db.session.update({ where: { id: w.coordinatorSessionId }, data: { status: RunStatus.FAILED, finishedAt: new Date(), releaseCause: 'engine_exited' } });
     await quiet(stack.db, w.coordinatorSessionId, 2 * 60 * MINUTE - MINUTE);
     await age(stack.db, item, 2 * 60 * MINUTE - MINUTE);
 
@@ -758,7 +758,7 @@ test('an item whose coordinator went down after taking it escalates a window lat
       // Its run fails and nobody ends it: down, not over (§4.4 X-D6).
       await stack.db.session.update({
         where: { id: w.coordinatorSessionId },
-        data: { status: RunStatus.FAILED, endReason: null },
+        data: { status: RunStatus.FAILED, finishedAt: new Date(), releaseCause: 'engine_exited', endReason: null },
       });
 
       const told: Array<{ method: string; args: unknown[] }> = [];
@@ -888,7 +888,7 @@ test('an undelivered ITEM whose coordinator is down with no retry reaches the ow
     const stack = await connect();
     try {
       const w = await world(stack, 'down-no-retry');
-      await stack.db.session.update({ where: { id: w.coordinatorSessionId }, data: { status: RunStatus.FAILED } });
+      await stack.db.session.update({ where: { id: w.coordinatorSessionId }, data: { status: RunStatus.FAILED, finishedAt: new Date(), releaseCause: 'engine_exited' } });
       const item = await failedTask(stack, w, 'down-no-retry');
       assert.equal((await deadline(stack, item.id))?.getTime(), item.escalateAt!.getTime(),
         'the window runs from when the item opened');

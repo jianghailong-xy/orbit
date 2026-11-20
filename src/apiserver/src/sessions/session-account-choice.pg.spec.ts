@@ -987,7 +987,7 @@ test('which of its runner’s accounts a session runs on — picked by hand, or 
     assert.deepEqual(await Promise.all([first, second, near, pinned].map(armedAt)), before);
 
     // They finish, and Work has room. The furthest reset goes first, and one a pass.
-    await db.session.updateMany({ where: { id: { in: full } }, data: { status: RunStatus.SUCCEEDED } });
+    await db.session.updateMany({ where: { id: { in: full } }, data: { status: RunStatus.SUCCEEDED, finishedAt: new Date(), releaseCause: 'engine_exited' } });
     const now = new Date();
     await retries.releaseHeldRetries(now);
     const after = await Promise.all([first, second, near, pinned].map(armedAt));

@@ -67,7 +67,7 @@ async function world(db: PrismaClient, label: string): Promise<World> {
   await db.session.create({
     data: {
       id: sessionId, ownerId, creatorId: ownerId, workspaceId,
-      title: label, prompt: 'p', status: RunStatus.SUCCEEDED,
+      title: label, prompt: 'p', status: RunStatus.SUCCEEDED, finishedAt: new Date(), releaseCause: 'engine_exited',
       branch: BRANCH, isolationStatus: 'worktree', assignedRunnerId: runnerId,
     },
   });

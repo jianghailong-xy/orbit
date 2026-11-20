@@ -261,7 +261,7 @@ test('moving a session to another workspace: the panel, the move, its refusals a
       data: {
         id, ownerId, creatorId: ownerId, workspaceId: ws.home, assignedRunnerId: runners.wikova,
         title, prompt: title, provider: 'claude', providerBuiltin: true,
-        status: RunStatus.CANCELLED, endReason: 'ended', startedAt: new Date(Date.now() - 600_000),
+        status: RunStatus.CANCELLED, releaseCause: 'cancelled', endReason: 'ended', startedAt: new Date(Date.now() - 600_000),
         finishedAt: new Date(), numTurns: 3, runtimeSessionId: randomUUID(),
         model: 'claude-opus-5', effort: 'high', permissionMode: 'acceptEdits',
         dispatchOrigin: SessionDispatchOrigin.USER,

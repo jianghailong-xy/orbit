@@ -404,7 +404,7 @@ suite("the shared pools' gateway, end to end on real PostgreSQL", { timeout: 600
     assert.equal(seen.length, 0, 'a refused request reached OpenAI');
 
     // The session ends.
-    await db.session.update({ where: { id: maxSession }, data: { status: RunStatus.CANCELLED } });
+    await db.session.update({ where: { id: maxSession }, data: { status: RunStatus.CANCELLED, finishedAt: new Date(), releaseCause: 'cancelled' } });
     await refused(token, 'the session ended');
     await db.session.update({ where: { id: maxSession }, data: { status: RunStatus.AWAITING_INPUT, completedAt: new Date() } });
     await refused(token, 'the session was completed');

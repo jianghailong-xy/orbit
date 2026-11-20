@@ -304,9 +304,9 @@ test('work with nothing to land stops holding its criterion — on a declaration
         branch,
         isolationStatus: 'worktree',
         ...(finish === 'DIED'
-          ? { status: RunStatus.FAILED }
+          ? { status: RunStatus.FAILED, finishedAt: new Date(), releaseCause: 'engine_exited' }
           : {
-            status: RunStatus.SUCCEEDED,
+            status: RunStatus.SUCCEEDED, releaseCause: 'engine_exited',
             finishedAt: new Date(Date.now() - 60_000),
             worktreeBranch: finish.worktreeBranch ?? branch,
             worktreeDirty: false,

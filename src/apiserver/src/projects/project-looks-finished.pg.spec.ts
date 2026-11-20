@@ -969,7 +969,7 @@ test('a looks-finished fact first raised during FAILED waits and is delivered on
   const sessionId = await workSession(stack, w, task.id, 'orbit/walkthrough');
   await settleExecutable(stack, task.id);
   await queuedJob(stack, w, 'LAND_TASK', task.id, 'NOTHING_TO_LAND');
-  await stack.db.session.update({ where: { id: w.coordinatorSessionId }, data: { status: RunStatus.FAILED } });
+  await stack.db.session.update({ where: { id: w.coordinatorSessionId }, data: { status: RunStatus.FAILED, finishedAt: new Date(), releaseCause: 'engine_exited' } });
   await stack.receipts.record(w.ownerId, sessionId, {
     result: 'ALREADY_MERGED', sourceSha: sha('7'), targetBranch: await projectBranch(stack, w), targetShaBefore: sha('7'),
   }, 'RUNNER');
@@ -1099,7 +1099,7 @@ test('a settled-project fact refused during FAILED recovers on the reconcile tic
     t.after(() => stack.db.$disconnect());
     const w = await world(stack, 'settled-recovery', ['the walkthrough is complete']);
     const task = await servingTask(stack, w, w.keys[0]!, 'completed walkthrough');
-    await stack.db.session.update({ where: { id: w.coordinatorSessionId }, data: { status: RunStatus.FAILED } });
+    await stack.db.session.update({ where: { id: w.coordinatorSessionId }, data: { status: RunStatus.FAILED, finishedAt: new Date(), releaseCause: 'engine_exited' } });
     await settleExecutable(stack, task.id);
     const prisma = stack.db as unknown as PrismaService;
     const convergence = new CoordinatorConvergenceService(prisma);

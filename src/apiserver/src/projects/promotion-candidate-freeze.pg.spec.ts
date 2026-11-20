@@ -193,7 +193,7 @@ test('a candidate is not frozen before the work it offers has stopped moving', {
         createdAt: when.createdAt,
         ...(when.finished
           ? {
-            status: RunStatus.SUCCEEDED,
+            status: RunStatus.SUCCEEDED, releaseCause: 'engine_exited',
             finishedAt: when.finished,
             worktreeBranch: when.worktreeBranch ?? branch,
             worktreeDirty: when.worktreeDirty ?? false,
@@ -362,7 +362,7 @@ test('a candidate is not frozen before the work it offers has stopped moving', {
       await prisma.session.update({
         where: { id: runningSession },
         data: {
-          status: RunStatus.SUCCEEDED,
+          status: RunStatus.SUCCEEDED, releaseCause: 'engine_exited',
           finishedAt: new Date(),
           worktreeBranch: runningBranch,
           worktreeDirty: false,

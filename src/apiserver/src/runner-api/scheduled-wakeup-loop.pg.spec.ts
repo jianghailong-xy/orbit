@@ -372,7 +372,7 @@ test('a wakeup loop outlives failed turns and FAILED sessions, and ends only for
       [sessionId],
     );
     await sql.query(
-      `UPDATE "session" SET "status" = 'FAILED', "finished_at" = clock_timestamp(), "cancel_requested_at" = clock_timestamp(),
+      `UPDATE "session" SET "status" = 'FAILED', "release_cause" = 'engine_exited', "finished_at" = clock_timestamp(), "cancel_requested_at" = clock_timestamp(),
               "error" = 'Prompt is too long', "retry_at" = $2::timestamptz(3)
         WHERE "id" = $1::uuid`,
       [sessionId, retryAt],
@@ -1001,7 +1001,7 @@ test('a wakeup loop outlives failed turns and FAILED sessions, and ends only for
       const filed = await elapse(overLoop.id, over);
       assert.equal(await signalling.deliverTick(filed.id), 'DELIVERED', `tick ${n} of the loop whose session ends`);
     }
-    await db.session.update({ where: { id: over }, data: { status: RunStatus.CANCELLED, endReason: 'ended', finishedAt: new Date() } });
+    await db.session.update({ where: { id: over }, data: { status: RunStatus.CANCELLED, releaseCause: 'cancelled', endReason: 'ended', finishedAt: new Date() } });
     const last = await elapse(overLoop.id, over);
     assert.equal(await signalling.deliverTick(last.id), 'LOOP_ENDED');
     assert.equal(rang.length, 1, 'a loop that ended with its session was told as silent');

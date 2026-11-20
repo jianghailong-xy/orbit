@@ -168,7 +168,7 @@ async function parentSession(
       branch: `orbit/${label}-${id.slice(0, 8)}`, isolationStatus: 'worktree',
       ...(opts.running
         ? { status: RunStatus.RUNNING, engineTurnActive: true, inboxLeaseOwner: opts.running.leaseOwner }
-        : { status: RunStatus.SUCCEEDED, finishedAt: new Date() }),
+        : { status: RunStatus.SUCCEEDED, releaseCause: 'engine_exited', finishedAt: new Date() }),
       ...(opts.recovery ? { mergeRecovery: opts.recovery as never, mergeStatus: 'conflict', mergeRecoveryAction: 'preview' } : {}),
       ...(opts.merge ?? {}),
     },

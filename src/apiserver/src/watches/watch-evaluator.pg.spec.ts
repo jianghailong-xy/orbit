@@ -673,7 +673,7 @@ test('a published event only schedules an evaluation: a status it claims is not 
   assert.equal((await readMatches(watchId)).length, 0);
 
   // The row fails too, and the same event now finds it.
-  await sql.query(`UPDATE "session" SET "status" = 'FAILED' WHERE "id" = $1`, [session]);
+  await sql.query(`UPDATE "session" SET "status" = 'FAILED', "finished_at" = COALESCE("finished_at", now()), "release_cause" = 'engine_exited' WHERE "id" = $1`, [session]);
   realtime.publish(session, event(RunEventType.STATUS, { status: 'FAILED' }));
   const [match] = await eventually('the Match', () => readMatches(watchId), (m) => m.length === 1);
   assert.equal(match.snapshot.targets[0].observed?.status, 'FAILED');
@@ -1497,7 +1497,7 @@ test('a job that ended is not quiet: the leaf does not hold, no deadline is sche
     { predicateVersion: 3 },
   );
   assert.equal((await evaluator.evaluate(eitherWay)).outcome, 'SCHEDULED');
-  await sql.query(`UPDATE "session" SET "status" = 'SUCCEEDED' WHERE "id" = $1`, [host.sessionId]);
+  await sql.query(`UPDATE "session" SET "status" = 'SUCCEEDED', "finished_at" = COALESCE("finished_at", now()), "release_cause" = 'engine_exited' WHERE "id" = $1`, [host.sessionId]);
   assert.equal((await evaluator.evaluate(eitherWay)).outcome, 'MATCHED');
   const [match] = await readMatches(eitherWay);
   assert.equal(match.reason, `ANY_OF(ANY SESSION_JOB_NO_OUTPUT_FOR(300s, ${JOB}) 0/1, ANY SESSION_RUN_TERMINAL 1/1)`);

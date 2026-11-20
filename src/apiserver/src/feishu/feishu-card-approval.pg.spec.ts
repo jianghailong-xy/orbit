@@ -392,7 +392,7 @@ test('Feishu: the owner answers a tool approval on its card — Allow once and D
     // The session no longer running: nothing waits on the card's answer any more.
     const ended = await session('Ended');
     const gone = await ask(ended);
-    await db.session.update({ where: { id: ended }, data: { status: RunStatus.SUCCEEDED, engineTurnActive: false } });
+    await db.session.update({ where: { id: ended }, data: { status: RunStatus.SUCCEEDED, finishedAt: new Date(), releaseCause: 'engine_exited', engineTurnActive: false } });
     const g = await click(gone.messageId, callbacks(gone.card)[0]!);
     assert.deepEqual(g.answer.toast, { type: 'info', content: STALE });
     assert.match(allText(g.answer.card.data), /No longer waiting in Orbit/);

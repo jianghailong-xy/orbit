@@ -130,7 +130,7 @@ async function fixture(db: PrismaClient, label: string): Promise<Fixture> {
     data: {
       id: finishedSessionId,
       ...common('A session that ended with its work in the checkout'),
-      status: RunStatus.SUCCEEDED,
+      status: RunStatus.SUCCEEDED, finishedAt: new Date(), releaseCause: 'engine_exited',
       branch: `orbit/${FINISHED}`,
       completedAt: new Date(),
     },

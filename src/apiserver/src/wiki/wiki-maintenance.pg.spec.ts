@@ -935,7 +935,7 @@ test('a failed run\'s waiting ops are the next run\'s to verify: none goes live 
   expectStatus(web, 200, 'the agent proposes');
   const tainted = web.body.ops[0] as { opId: string; entryId: string };
   assert.equal((await opRow(tainted.opId)).tainted, true);
-  await h.sql.query(`UPDATE "session" SET "status" = 'SUCCEEDED', "completed_at" = now() WHERE "id" = $1`, [reader]);
+  await h.sql.query(`UPDATE "session" SET "status" = 'SUCCEEDED', "finished_at" = COALESCE("finished_at", now()), "release_cause" = 'engine_exited', "completed_at" = now() WHERE "id" = $1`, [reader]);
 
   // And a session still running has an op waiting: the server's verification of that session's ops is its own, and
   // nobody adopts it.

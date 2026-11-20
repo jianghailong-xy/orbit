@@ -94,7 +94,7 @@ async function world(t: { after(fn: () => unknown): void }, opts: { capable?: bo
   await prisma.workspace.create({ data: { id: sharedWorkspaceId, ownerId, runnerId, name: 'shared', workDir: ROOT, enableWorktree: false } });
   const session = (over: Record<string, unknown> = {}) =>
     prisma.session.create({
-      data: { ownerId, creatorId: ownerId, workspaceId, title: 'a session', prompt: 'p', status: RunStatus.SUCCEEDED, ...over },
+      data: { ownerId, creatorId: ownerId, workspaceId, title: 'a session', prompt: 'p', status: RunStatus.SUCCEEDED, finishedAt: new Date(), releaseCause: 'engine_exited', ...over },
       select: { id: true },
     });
   const sessionId = (await session({ isolationStatus: 'worktree', branch: 'orbit/session-1' })).id;

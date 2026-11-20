@@ -27,7 +27,7 @@ const URL = process.env.COORDINATOR_PG_URL;
     status: RunnerStatus.ONLINE, capabilities: [SESSION_MERGE_RECOVERY_V1] } });
   await db.workspace.create({ data: { id: workspaceId, ownerId, runnerId, name: 'test', workDir: '/repo' } });
   await db.session.create({ data: { id: sessionId, ownerId, creatorId: ownerId, workspaceId, assignedRunnerId: runnerId,
-    title: 'test', prompt: 'test', status: RunStatus.SUCCEEDED, branch: 'orbit/recovery-test', isolationStatus: 'worktree' } });
+    title: 'test', prompt: 'test', status: RunStatus.SUCCEEDED, finishedAt: new Date(), releaseCause: 'engine_exited', branch: 'orbit/recovery-test', isolationStatus: 'worktree' } });
   const realtime = new RealtimeService(db as never, {} as never);
   const queue = { notifySessionQueued() {} };
   const sessions = new SessionsService(db as never, queue as never, realtime as never);

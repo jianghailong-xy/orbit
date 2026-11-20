@@ -450,11 +450,11 @@ test('T2 provider-engine foundation on PostgreSQL', { timeout: 600_000 }, async 
     const run = await session(at, ds.slug, { taskId: pinned });
     assert.equal(await engineOf(run), AgentProvider.DSH);
     assert.equal(await claimRaw(run, { 'orbit.runner_supports_dsh': '1' }), 0, 'so that replica cannot run it as Claude');
-    await db.session.update({ where: { id: run }, data: { status: RunStatus.CANCELLED } });
+    await db.session.update({ where: { id: run }, data: { status: RunStatus.CANCELLED, finishedAt: new Date(), releaseCause: 'cancelled' } });
     const other = await key(owner);
     const elsewhere = await session(at, other.slug, { taskId: pinned });
     assert.equal(await engineOf(elsewhere), null, 'a run on another credential is not the pin');
-    await db.session.update({ where: { id: elsewhere }, data: { status: RunStatus.CANCELLED } });
+    await db.session.update({ where: { id: elsewhere }, data: { status: RunStatus.CANCELLED, finishedAt: new Date(), releaseCause: 'cancelled' } });
     const conversation = await session(at, ds.slug, { taskId: pinned, startsTaskWork: false });
     assert.equal(await engineOf(conversation), null, 'a conversation about the task is not its run');
   });

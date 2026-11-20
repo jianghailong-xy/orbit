@@ -1062,7 +1062,7 @@ test('a session target names the task its session runs, and no other', { skip, t
   assert.deepEqual(named(one.body.targets), created, 'the reads name what the create named');
 
   // The standing is the task's as it is now: the run failed, and the task with it.
-  await h.sql.query(`UPDATE "session" SET "status" = 'FAILED', "finished_at" = now() WHERE "id" = $1`, [runOfWork]);
+  await h.sql.query(`UPDATE "session" SET "status" = 'FAILED', "release_cause" = 'engine_exited', "finished_at" = now() WHERE "id" = $1`, [runOfWork]);
   await h.sql.query(`UPDATE "task" SET "status" = 'FAILED' WHERE "id" = $1`, [work]);
   const ended = await call(h, owner.bearer, 'GET', `/watches/${overSessions.id}`);
   expectStatus(ended, 200, 'the watch reads back after the run ended');

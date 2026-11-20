@@ -325,7 +325,7 @@ test('the owner’s Reopen project stands until the facts it was pressed over ch
         taskId,
         title: `ran ${taskId}`,
         prompt: 'do the work',
-        status: RunStatus.SUCCEEDED,
+        status: RunStatus.SUCCEEDED, finishedAt: new Date(), releaseCause: 'engine_exited',
         branch: `orbit/${taskId}`,
         isolationStatus: 'worktree',
       },

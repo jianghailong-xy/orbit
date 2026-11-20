@@ -317,7 +317,7 @@ async function mergeSession(stack: Stack, f: Fixture, taskId: string, label: str
       title: `${label}-merge`,
       prompt: `${label}-merge`,
       provider: 'claude',
-      status: RunStatus.SUCCEEDED,
+      status: RunStatus.SUCCEEDED, finishedAt: new Date(), releaseCause: 'engine_exited',
       dispatchOrigin: SessionDispatchOrigin.USER,
       branch: `orbit/${label}`,
     },

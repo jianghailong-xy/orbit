@@ -403,7 +403,7 @@ async function tasksWithWork(
       title: options.title,
       prompt: options.title,
       provider: 'claude',
-      status: RunStatus.SUCCEEDED,
+      status: RunStatus.SUCCEEDED, finishedAt: new Date(), releaseCause: 'engine_exited',
       dispatchOrigin: SessionDispatchOrigin.USER,
       startsTaskWork: true,
       branch: `orbit/${uuidToBase62(sessionId)}`,

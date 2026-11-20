@@ -322,7 +322,7 @@ async function completeTask(stack: Stack, w: World, taskId: string, label: strin
   await stack.db.session.update({
     where: { id: sessionId },
     data: {
-      status: RunStatus.CANCELLED,
+      status: RunStatus.CANCELLED, releaseCause: 'cancelled',
       completedAt: new Date(),
       finishedAt: new Date(),
       worktreeBranch: branch,

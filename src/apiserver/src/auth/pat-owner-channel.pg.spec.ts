@@ -877,7 +877,7 @@ test('the owner channel refuses a personal access token door by door and field b
 
     // Ended after having run, so a resume revives it — the door where a mode is re-applied.
     await sql.query(
-      `UPDATE "session" SET "status" = 'SUCCEEDED', "started_at" = now(), "runtime_session_id" = $2 WHERE "id" = $1`,
+      `UPDATE "session" SET "status" = 'SUCCEEDED', "finished_at" = COALESCE("finished_at", now()), "release_cause" = 'engine_exited', "started_at" = now(), "runtime_session_id" = $2 WHERE "id" = $1`,
       [sessionId, `runtime-${RUN}`],
     );
     await db.runner.update({ where: { id: runnerId }, data: { status: 'ONLINE', lastHeartbeatAt: new Date() } });

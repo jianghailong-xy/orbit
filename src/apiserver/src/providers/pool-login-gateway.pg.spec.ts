@@ -555,7 +555,7 @@ suite("a login pool's gateway, end to end on real PostgreSQL", { timeout: 600_00
     assert.equal(seen.length, 0, 'a refused request reached the backend');
 
     // The session ends, then is completed; open again, the token is good again.
-    await db.session.update({ where: { id: session }, data: { status: RunStatus.CANCELLED } });
+    await db.session.update({ where: { id: session }, data: { status: RunStatus.CANCELLED, finishedAt: new Date(), releaseCause: 'cancelled' } });
     await refused(token, 'the session ended');
     await db.session.update({ where: { id: session }, data: { status: RunStatus.AWAITING_INPUT, completedAt: new Date() } });
     await refused(token, 'the session was completed');

@@ -653,7 +653,7 @@ test('(2) the refile path: a candidate retired because its check looked at a bra
             branch,
             isolationStatus: 'worktree',
             createdAt,
-            status: RunStatus.SUCCEEDED,
+            status: RunStatus.SUCCEEDED, finishedAt: new Date(), releaseCause: 'engine_exited',
             finishedAt,
             worktreeBranch: branch,
             worktreeDirty: false,

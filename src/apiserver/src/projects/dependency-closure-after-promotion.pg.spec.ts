@@ -185,7 +185,7 @@ async function donePrerequisite(
       title: branch,
       prompt: branch,
       provider: 'claude',
-      status: RunStatus.SUCCEEDED,
+      status: RunStatus.SUCCEEDED, finishedAt: new Date(), releaseCause: 'engine_exited',
       dispatchOrigin: SessionDispatchOrigin.USER,
       startsTaskWork: true,
       isolationStatus: 'worktree',

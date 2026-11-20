@@ -698,7 +698,7 @@ test('refused with its reason where there is no conversation to take the message
       // Ended, and resumable: the platform will not hand it a turn, a person may.
       await stack.db.session.update({
         where: { id: w.coordinatorSessionId },
-        data: { status: RunStatus.SUCCEEDED, finishedAt: new Date() },
+        data: { status: RunStatus.SUCCEEDED, releaseCause: 'engine_exited', finishedAt: new Date() },
       });
       await stack.db.runner.update({ where: { id: w.runnerId }, data: { lastHeartbeatAt: new Date() } });
       let read = await rowOf(stack, w, red.itemId);
@@ -758,7 +758,7 @@ test('escalated, coordinator reaped while its runner is away: Ask again can queu
       // FAILED with the cancel it writes beside it — while the runner stayed away.
       await stack.db.session.update({
         where: { id: w.coordinatorSessionId },
-        data: { status: RunStatus.FAILED, cancelRequestedAt: new Date(), finishedAt: new Date(), error: 'runner offline' },
+        data: { status: RunStatus.FAILED, releaseCause: 'engine_exited', cancelRequestedAt: new Date(), finishedAt: new Date(), error: 'runner offline' },
       });
       await stack.db.runner.update({
         where: { id: w.runnerId },
@@ -790,7 +790,7 @@ test('escalated, coordinator reaped and its runner back (2026-11-15): Ask again 
       // beside it, nobody closing the conversation — and then the runner came back.
       await stack.db.session.update({
         where: { id: w.coordinatorSessionId },
-        data: { status: RunStatus.FAILED, cancelRequestedAt: new Date(), finishedAt: new Date(), error: 'runner offline' },
+        data: { status: RunStatus.FAILED, releaseCause: 'engine_exited', cancelRequestedAt: new Date(), finishedAt: new Date(), error: 'runner offline' },
       });
       await stack.db.runner.update({
         where: { id: w.runnerId },
@@ -865,7 +865,7 @@ test('escalated, coordinator that truly cannot receive — ended with no revival
       });
       await stack.db.session.update({
         where: { id: w.coordinatorSessionId },
-        data: { status: RunStatus.CANCELLED, endReason: 'COMPLETED', completedAt: new Date(), cancelRequestedAt: null },
+        data: { status: RunStatus.CANCELLED, finishedAt: new Date(), releaseCause: 'cancelled', endReason: 'COMPLETED', completedAt: new Date(), cancelRequestedAt: null },
       });
       await expectUnreachable('ended without revival', 'COORDINATOR_UNAVAILABLE');
 

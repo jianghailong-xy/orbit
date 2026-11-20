@@ -581,7 +581,7 @@ test('one task segment collects the DONE, integration_retry, the owner rerun, th
           title: `${task.title} (late)`,
           prompt: 'late',
           provider: 'claude',
-          status: RunStatus.SUCCEEDED,
+          status: RunStatus.SUCCEEDED, finishedAt: new Date(), releaseCause: 'engine_exited',
           dispatchOrigin: SessionDispatchOrigin.USER,
           startsTaskWork: true,
           branch: `orbit/${task.taskId}-late`,
@@ -774,7 +774,7 @@ test('a MAIN-line candidate is the task segment, and a resubmitted candidate sta
           title: `${task.title} (rework)`,
           prompt: 'rework',
           provider: 'claude',
-          status: RunStatus.SUCCEEDED,
+          status: RunStatus.SUCCEEDED, finishedAt: new Date(), releaseCause: 'engine_exited',
           dispatchOrigin: SessionDispatchOrigin.USER,
           startsTaskWork: true,
           branch: reworkBranch,
@@ -1204,7 +1204,7 @@ test('the landing’s todos list its owed INTEGRATION_* item and not another kin
           `${status}: the unread item does not mark the landing as awaiting a decision`);
       }
       // Down with no retry coming, the coordinator never reads it: the owner sees it on the landing.
-      await stack.db.session.update({ where: { id: w.coordinatorSessionId }, data: { status: RunStatus.FAILED, retryAt: null } });
+      await stack.db.session.update({ where: { id: w.coordinatorSessionId }, data: { status: RunStatus.FAILED, finishedAt: new Date(), releaseCause: 'engine_exited', retryAt: null } });
       assert.deepEqual(await todosOf(stack, w, landing.sessionId), [[failedId, 'INTEGRATION_CHECK_FAILED', 'OPEN']],
         'an item its coordinator cannot take is an owner-facing landing todo');
       await stack.db.session.update({ where: { id: w.coordinatorSessionId }, data: { status: RunStatus.AWAITING_INPUT } });

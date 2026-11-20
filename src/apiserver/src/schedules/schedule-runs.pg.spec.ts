@@ -836,7 +836,7 @@ test('§5.2 / §7.2 a run that never reached its engine (no delivered_at) is ret
     assert.equal(current.attempt, attempt);
     sessions.push(current.sessionId!);
     const error = attempt === 4 ? "You've hit your usage limit. Try again later." : 'spawn failed';
-    await db.session.update({ where: { id: current.sessionId! }, data: { status: 'FAILED', error, retryAt: FUTURE } });
+    await db.session.update({ where: { id: current.sessionId! }, data: { status: 'FAILED', finishedAt: new Date(), releaseCause: 'engine_exited', error, retryAt: FUTURE } });
     assert.equal(await runs.reconcileRun(run.id), 'RETRY');
     const waiting = await runOf(run.id);
     assert.equal(waiting.state, 'QUEUED');
@@ -854,7 +854,7 @@ test('§5.2 / §7.2 a run that never reached its engine (no delivered_at) is ret
   // The next hourly attempt would start after the window (02:00Z the next day) closes: the slot is MISSED.
   at('2026-11-15T01:30:00Z');
   const late = await runOf(run.id);
-  await db.session.update({ where: { id: late.sessionId! }, data: { status: 'FAILED', error: 'spawn failed' } });
+  await db.session.update({ where: { id: late.sessionId! }, data: { status: 'FAILED', finishedAt: new Date(), releaseCause: 'engine_exited', error: 'spawn failed' } });
   assert.equal(await runs.reconcileRun(run.id), 'MISSED');
   const missed = await runOf(run.id);
   assert.equal(missed.state, 'MISSED');
@@ -872,7 +872,7 @@ test('§5.2 a ONCE run failing before delivery near the end of its 24-hour windo
   const { started } = await fireAndStart(s.id);
   const run = await runOf(started[0].runId);
   assert.equal(run.trigger, 'CATCH_UP');
-  await db.session.update({ where: { id: run.sessionId! }, data: { status: 'FAILED', error: 'spawn failed' } });
+  await db.session.update({ where: { id: run.sessionId! }, data: { status: 'FAILED', finishedAt: new Date(), releaseCause: 'engine_exited', error: 'spawn failed' } });
   assert.equal(await runs.reconcileRun(run.id), 'MISSED', 'a retry in a minute would be past the window');
   assert.equal((await scheduleOf(s.id)).consecutiveFailures, 0);
 });
@@ -882,7 +882,7 @@ test('§7.2 a run whose first turn was delivered is never retried: ENGINE_CRASHE
   at('2026-11-14T00:00:00Z');
   const w = await world('no-retry');
   const { run, sessionId } = await runningRun(w);
-  await db.session.update({ where: { id: sessionId }, data: { status: 'FAILED', error: 'engine exited' } });
+  await db.session.update({ where: { id: sessionId }, data: { status: 'FAILED', finishedAt: new Date(), releaseCause: 'engine_exited', error: 'engine exited' } });
   assert.equal(await runs.reconcileRun(run.id), 'FAILED');
   const failed = await runOf(run.id);
   assert.equal(failed.failureReason, 'ENGINE_CRASHED');
@@ -1030,7 +1030,7 @@ test('§7.2 A2: a process that died after retiring but before re-queueing, or a 
   at('2026-11-14T02:00:00Z');
   const run = await runOf((await fireAndStart(s.id)).started[0].runId);
   // Retired, and the process died there: the run is still RUNNING on an ended, undelivered session.
-  await db.session.update({ where: { id: run.sessionId! }, data: { status: 'CANCELLED', cancelRequestedAt: clockNow } });
+  await db.session.update({ where: { id: run.sessionId! }, data: { status: 'CANCELLED', finishedAt: new Date(), releaseCause: 'cancelled', cancelRequestedAt: clockNow } });
   assert.equal(await runs.reconcileRun(run.id), 'RETRY');
   // A session of the run left alive (a create that committed after its caller gave up) is retired before a new one.
   const stray = randomUUID();
@@ -1073,7 +1073,7 @@ test('§8.4 a retry is CANCELLED when its schedule was paused meanwhile; a MANUA
   at('2026-11-14T02:00:00Z');
   const run = await runOf((await fireAndStart(s.id)).started[0].runId);
   await schedules.pause(w.owner, s.id);
-  await db.session.update({ where: { id: run.sessionId! }, data: { status: 'FAILED', error: 'spawn failed' } });
+  await db.session.update({ where: { id: run.sessionId! }, data: { status: 'FAILED', finishedAt: new Date(), releaseCause: 'engine_exited', error: 'spawn failed' } });
   assert.equal(await runs.reconcileRun(run.id), 'CANCELLED');
   assert.equal((await runOf(run.id)).state, 'CANCELLED');
   advance(HOUR);
@@ -1081,7 +1081,7 @@ test('§8.4 a retry is CANCELLED when its schedule was paused meanwhile; a MANUA
 
   const manual = await runs.runNow(w.owner, s.id);
   const m = await runOf(manual.id);
-  await db.session.update({ where: { id: m.sessionId! }, data: { status: 'FAILED', error: 'spawn failed' } });
+  await db.session.update({ where: { id: m.sessionId! }, data: { status: 'FAILED', finishedAt: new Date(), releaseCause: 'engine_exited', error: 'spawn failed' } });
   assert.equal(await runs.reconcileRun(manual.id), 'RETRY');
 });
 

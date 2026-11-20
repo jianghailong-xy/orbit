@@ -106,7 +106,7 @@ test('an active condition keeps an Orbit Cloud workspace awake', { skip: !URL, c
       data: {
         ownerId: m.ownerId, creatorId: m.ownerId, workspaceId: workspace.id, title: 'chat', prompt: 'p', provider: 'claude',
         engine: 'claude', providerBuiltin: true, dispatchOrigin: SessionDispatchOrigin.USER, permissionMode: PermissionMode.DEFAULT,
-        status: 'SUCCEEDED',
+        status: 'SUCCEEDED', finishedAt: new Date(), releaseCause: 'engine_exited',
       },
     });
     return { workspaceId: workspace.id, sessionId: session.id };
@@ -373,7 +373,7 @@ test('an active condition keeps an Orbit Cloud workspace awake', { skip: !URL, c
     const selfSession = await db.session.create({
       data: {
         ownerId, creatorId: ownerId, workspaceId: selfWs.id, title: 'chat', prompt: 'p', provider: 'claude', engine: 'claude',
-        providerBuiltin: true, dispatchOrigin: SessionDispatchOrigin.USER, permissionMode: PermissionMode.DEFAULT, status: 'SUCCEEDED',
+        providerBuiltin: true, dispatchOrigin: SessionDispatchOrigin.USER, permissionMode: PermissionMode.DEFAULT, status: 'SUCCEEDED', finishedAt: new Date(), releaseCause: 'engine_exited',
       },
     });
 

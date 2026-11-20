@@ -192,7 +192,7 @@ async function workSession(stack: Stack, ids: World, taskId: string, label: stri
       title: label,
       prompt: label,
       provider: 'claude',
-      status: RunStatus.SUCCEEDED,
+      status: RunStatus.SUCCEEDED, finishedAt: new Date(), releaseCause: 'engine_exited',
       dispatchOrigin: SessionDispatchOrigin.USER,
       startsTaskWork: true,
       isolationStatus: 'worktree',
@@ -285,7 +285,7 @@ async function checkRun(
 async function settleRun(stack: Stack, checkId: string): Promise<void> {
   const ended = await stack.db.session.updateMany({
     where: { taskId: checkId, deletedAt: null },
-    data: { status: RunStatus.SUCCEEDED, endReason: 'task_done', completedAt: new Date() },
+    data: { status: RunStatus.SUCCEEDED, finishedAt: new Date(), releaseCause: 'engine_exited', endReason: 'task_done', completedAt: new Date() },
   });
   assert.equal(ended.count, 1, 'the check had no live run to settle');
 }

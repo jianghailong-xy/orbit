@@ -383,7 +383,7 @@ async function donePrerequisite(
       prompt: label,
       provider: 'claude',
       // Over: a live session would hold the prerequisite in a way that has nothing to do with this.
-      status: RunStatus.SUCCEEDED,
+      status: RunStatus.SUCCEEDED, finishedAt: new Date(), releaseCause: 'engine_exited',
       dispatchOrigin: SessionDispatchOrigin.USER,
       startsTaskWork: true,
       // §1.1 `isCodeTask`'s whole evidence: it ran in a worktree, on a branch.
@@ -924,7 +924,7 @@ test('a dependent-ready fact refused during FAILED recovers on the reconcile tic
     // A codeless prerequisite is released by DONE alone.
     const prerequisite = await task(stack, w, 'finished prerequisite');
     const dependent = await dependentOf(stack, w, 'manual dependent', [prerequisite]);
-    await stack.db.session.update({ where: { id: w.coordinatorSessionId! }, data: { status: RunStatus.FAILED } });
+    await stack.db.session.update({ where: { id: w.coordinatorSessionId! }, data: { status: RunStatus.FAILED, finishedAt: new Date(), releaseCause: 'engine_exited' } });
     await stack.db.task.update({ where: { id: prerequisite }, data: { status: TaskStatus.DONE } });
     await completionEdge(stack, w, prerequisite);
     const wakes = () => stack.db.projectCoordinatorWake.findMany({
@@ -960,7 +960,7 @@ test('recovery leaves obsolete facts and unavailable coordinators alone without 
     const w = await world(stack, 'ready-recovery-ineligible');
     const prerequisite = await task(stack, w, 'finished prerequisite');
     const dependent = await dependentOf(stack, w, 'dependent that becomes obsolete', [prerequisite]);
-    await stack.db.session.update({ where: { id: w.coordinatorSessionId! }, data: { status: RunStatus.FAILED } });
+    await stack.db.session.update({ where: { id: w.coordinatorSessionId! }, data: { status: RunStatus.FAILED, finishedAt: new Date(), releaseCause: 'engine_exited' } });
     await stack.db.task.update({ where: { id: prerequisite }, data: { status: TaskStatus.DONE } });
     await completionEdge(stack, w, prerequisite);
     const rows = () => stack.db.projectCoordinatorWake.count({ where: { projectId: w.projectId, event: 'DEPENDENT_READY' } });

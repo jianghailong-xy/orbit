@@ -401,7 +401,7 @@ test('(b) the hourly Trash purge takes a failed landing\'s session and its neigh
       const neighbour = await stack.db.session.create({
         data: {
           ownerId: w.ownerId, creatorId: w.ownerId, title: 'a chat', prompt: 'p',
-          status: RunStatus.SUCCEEDED,
+          status: RunStatus.SUCCEEDED, finishedAt: new Date(), releaseCause: 'engine_exited',
         },
         select: { id: true },
       });

@@ -127,7 +127,7 @@ test('a reworked task is carried by the next promotion, and reads on main only o
     await prisma.session.create({
       data: {
         id: sessionId, ownerId, creatorId: ownerId, taskId: task.id, title, prompt: title, branch,
-        isolationStatus: 'worktree', status: RunStatus.SUCCEEDED, startsTaskWork: true,
+        isolationStatus: 'worktree', status: RunStatus.SUCCEEDED, releaseCause: 'engine_exited', startsTaskWork: true,
         finishedAt: new Date(Date.now() - 3_000_000), worktreeBranch: branch, worktreeDirty: false,
       },
     });

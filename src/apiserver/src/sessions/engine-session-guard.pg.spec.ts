@@ -627,7 +627,7 @@ async function landingFixture(stack: Stack, label: string): Promise<LandingFixtu
       taskId,
       title: `${label} work`,
       prompt: 'do the work',
-      status: RunStatus.SUCCEEDED,
+      status: RunStatus.SUCCEEDED, finishedAt: new Date(), releaseCause: 'engine_exited',
       provider: 'claude',
       providerBuiltin: true,
       engine: 'claude',
@@ -905,7 +905,7 @@ test('a SESSION_TURN_SETTLED watch on an open landing waits for the landing to e
     // The landing ends: the same watch now matches, and its row is the one that moved.
     await stack.db.session.update({
       where: { id: landing },
-      data: { status: RunStatus.SUCCEEDED, completedAt: new Date() },
+      data: { status: RunStatus.SUCCEEDED, finishedAt: new Date(), releaseCause: 'engine_exited', completedAt: new Date() },
     });
     const evaluation = await new WatchEvaluatorService(stack.prisma, noopRealtime(), {
       rollout: { mode: 'on', canaryOwners: new Set<string>(), problems: [] },

@@ -151,7 +151,7 @@ async function doneTask(stack: Stack, w: World, label: string): Promise<{ taskId
     data: {
       ownerId: w.ownerId, creatorId: w.ownerId, taskId: created.id, workspaceId: w.workspaceId,
       assignedRunnerId: w.runnerId, title, prompt: title, branch, isolationStatus: 'worktree',
-      baseSha: 'b'.repeat(40), status: RunStatus.SUCCEEDED, startsTaskWork: true,
+      baseSha: 'b'.repeat(40), status: RunStatus.SUCCEEDED, releaseCause: 'engine_exited', startsTaskWork: true,
       finishedAt: new Date(Date.now() - 60_000), worktreeBranch: branch, worktreeDirty: false,
     },
     select: { id: true },

@@ -175,7 +175,7 @@ async function fixture(
       ...common,
       id: replaced,
       title: `${label}-replaced`,
-      status: RunStatus.FAILED,
+      status: RunStatus.FAILED, finishedAt: new Date(), releaseCause: 'engine_exited',
       finishedAt: new Date(),
     },
   });
@@ -367,7 +367,7 @@ test('a run that has to wind down keeps the message honest: the stop lands, the 
       // What the runner does when it has finished winding the process down.
       await db.session.update({
         where: { id: f.holder },
-        data: { status: RunStatus.CANCELLED, finishedAt: new Date() },
+        data: { status: RunStatus.CANCELLED, releaseCause: 'cancelled', finishedAt: new Date() },
       });
 
       const answer = await sessions.resume(f.ownerId, f.replaced, dto as never, {

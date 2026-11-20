@@ -114,7 +114,7 @@ test('a claim narrowed to the job row neither waits for nor skips a concurrently
     data: {
       ownerId: w.ownerId, creatorId: w.ownerId, taskId: created.id, workspaceId: w.workspaceId,
       assignedRunnerId: w.runnerId, title: 'the work', prompt: 'the work', branch,
-      isolationStatus: 'worktree', baseSha: sha('b'), status: RunStatus.SUCCEEDED,
+      isolationStatus: 'worktree', baseSha: sha('b'), status: RunStatus.SUCCEEDED, releaseCause: 'engine_exited',
       startsTaskWork: true, finishedAt: new Date(Date.now() - 60_000), worktreeBranch: branch,
       worktreeDirty: false, changedFiles: [{ path: 'src/work.ts' }] as never,
     },

@@ -699,7 +699,7 @@ test('an end turn never revives an observer whose life is over: Completed, ended
   const { delivery } = await worker();
   const cases = [
     { name: 'moved to Completed', finish: `UPDATE "session" SET "completed_at" = now() WHERE "id" = $1`, code: 'OBSERVER_SESSION_COMPLETED' },
-    { name: 'its run succeeded', finish: `UPDATE "session" SET "status" = 'SUCCEEDED', "finished_at" = now() WHERE "id" = $1`, code: 'OBSERVER_SESSION_ENDED' },
+    { name: 'its run succeeded', finish: `UPDATE "session" SET "status" = 'SUCCEEDED', "release_cause" = 'engine_exited', "finished_at" = now() WHERE "id" = $1`, code: 'OBSERVER_SESSION_ENDED' },
     { name: 'ended, interrupted with an end reason', finish: `UPDATE "session" SET "status" = 'INTERRUPTED', "end_reason" = 'ended' WHERE "id" = $1`, code: 'OBSERVER_SESSION_ENDED' },
     { name: 'being ended', finish: `UPDATE "session" SET "cancel_requested_at" = now(), "end_reason" = 'ended' WHERE "id" = $1`, code: 'OBSERVER_SESSION_ENDED' },
     { name: 'in Trash', finish: `UPDATE "session" SET "deleted_at" = now() WHERE "id" = $1`, code: 'OBSERVER_SESSION_IN_TRASH' },

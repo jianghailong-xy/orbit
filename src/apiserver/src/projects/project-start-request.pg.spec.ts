@@ -426,7 +426,7 @@ test('a coordinator asks its owner to start the project, and the plan is checked
         provider: 'claude',
         branch: `orbit/${label}`,
         isolationStatus: 'worktree',
-        status: RunStatus.SUCCEEDED,
+        status: RunStatus.SUCCEEDED, finishedAt: new Date(), releaseCause: 'engine_exited',
         finishedAt: new Date(Date.now() - 60_000),
       },
     });

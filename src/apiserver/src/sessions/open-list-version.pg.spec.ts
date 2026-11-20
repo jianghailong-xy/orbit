@@ -612,7 +612,7 @@ test('a landing insert and its settlement leave the flat Open list alone', { ski
   await db.projectLanding.update({
     where: { sessionId }, data: { settledAt: new Date(), settledAs: 'LANDED' },
   });
-  await db.session.update({ where: { id: sessionId }, data: { status: RunStatus.SUCCEEDED, completedAt: new Date() } });
+  await db.session.update({ where: { id: sessionId }, data: { status: RunStatus.SUCCEEDED, finishedAt: new Date(), releaseCause: 'engine_exited', completedAt: new Date() } });
   const plainAfterSettlement = await poll(f, plain.etag);
   assert.equal(plainAfterSettlement.status, 304, 'a settlement moved the plain list');
   assert.equal(plainAfterSettlement.etag, plain.etag);

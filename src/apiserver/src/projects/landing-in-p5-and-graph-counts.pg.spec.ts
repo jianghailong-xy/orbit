@@ -237,7 +237,7 @@ async function workSession(stack: Stack, ids: World, taskId: string, label: stri
       provider: 'claude',
       // SUCCEEDED, so the run is over: a live session holds a task back through clauses that have
       // nothing to do with landing.
-      status: RunStatus.SUCCEEDED,
+      status: RunStatus.SUCCEEDED, finishedAt: new Date(), releaseCause: 'engine_exited',
       dispatchOrigin: SessionDispatchOrigin.USER,
       startsTaskWork: true,
       isolationStatus: 'worktree',

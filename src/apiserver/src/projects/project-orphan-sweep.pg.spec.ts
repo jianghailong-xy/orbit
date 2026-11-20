@@ -347,7 +347,7 @@ test('evidence with an addressee that was told: the owner\'s card in a project t
     const u = await task(stack, auto, 'ended-run task');
     const ended = await conversation(stack.db, auto, 'ended run', { taskId: u });
     await submit(stack, auto, u, ended);
-    await stack.db.session.update({ where: { id: ended }, data: { status: RunStatus.SUCCEEDED, completedAt: new Date() } });
+    await stack.db.session.update({ where: { id: ended }, data: { status: RunStatus.SUCCEEDED, finishedAt: new Date(), releaseCause: 'engine_exited', completedAt: new Date() } });
     await stack.db.task.update({ where: { id: u }, data: { acceptanceCriteria: 'reworded after the run ended' } });
     const untold = await itemOf(stack, auto, u);
     assert.deepEqual(untold.addressee, { kind: 'COORDINATOR', sessionId: auto.coord });
