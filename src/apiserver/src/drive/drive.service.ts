@@ -58,6 +58,7 @@ export const DRIVE_TRASH_GROUP_NOT_FOUND = 'DRIVE_TRASH_GROUP_NOT_FOUND';
 export const DRIVE_CURSOR_INVALID = 'DRIVE_CURSOR_INVALID';
 
 type Tx = Prisma.TransactionClient;
+export type DriveEntryRow = EntryRow;
 type EntryRow = NonNullable<Awaited<ReturnType<Tx['driveEntry']['findFirst']>>>;
 type VersionRow = NonNullable<Awaited<ReturnType<Tx['driveVersion']['findFirst']>>>;
 type GroupRow = NonNullable<Awaited<ReturnType<Tx['driveTrashGroup']['findFirst']>>>;
@@ -180,6 +181,15 @@ export function suffixedName(name: string, n: number, kind: string): string {
 }
 
 const num = (value: bigint | number) => Number(value);
+
+/**
+ * A drive path's names, from the root: `/Proj/r.md` and `Proj/r.md` alike; empty for the root. Each must be a name the
+ * drive keeps, so `.` and `..` are refused rather than walked.
+ */
+export function drivePathSegments(path: unknown): string[] {
+  if (typeof path !== 'string') throw refusal(HttpStatus.BAD_REQUEST, DRIVE_NAME_INVALID, 'A drive path is a string.');
+  return path.split('/').filter((s) => s !== '').map(assertDriveName);
+}
 
 function entryView(e: EntryRow): DriveEntryView {
   return {
@@ -430,6 +440,148 @@ export class DriveService {
     };
   }
 
+  // ── what the runner drive door reads (§4.2) ───────────────────────────────────────────────────
+
+  /** The live entry at `path`, walked one segment at a time; nothing in Trash is reached (§3.3). */
+  async liveAt(ownerId: string, path: string): Promise<EntryRow> {
+    let current = await this.ensureRoot(ownerId);
+    for (const segment of drivePathSegments(path)) {
+      if (current.kind !== 'FOLDER') throw notFound();
+      const next = await this.prisma.driveEntry.findFirst({
+        where: { ownerId, parentId: current.id, name: segment, trashedAt: null },
+      });
+      if (!next) throw notFound();
+      current = next;
+    }
+    return current;
+  }
+
+  /** A live entry by its id: one in Trash is not found, as no agent sees Trash (D11). */
+  async liveById(ownerId: string, id: string): Promise<EntryRow> {
+    const entry = await this.prisma.driveEntry.findFirst({ where: { id, ownerId, trashedAt: null } });
+    if (!entry) throw notFound();
+    return entry;
+  }
+
+  /** One live entry with its path, as the door answers it. */
+  async stat(ownerId: string, entry: EntryRow) {
+    return { ...entryView(entry), path: await pathOf(this.prisma, ownerId, entry.id) };
+  }
+
+  /**
+   * A live folder's children with their attributes, paged (§4.2, §5.4); a file of one chunk carries that chunk's sha256,
+   * so a reader of small files needs no manifest call.
+   */
+  async listWithChunks(ownerId: string, folder: EntryRow, options: { cursor?: string; limit?: number } = {}) {
+    const page = await this.list(ownerId, { parentId: folder.id, cursor: options.cursor, limit: options.limit });
+    const single = await this.prisma.driveVersion.findMany({
+      where: {
+        ownerId,
+        chunkCount: 1,
+        id: { in: page.entries.map((e) => e.currentVersionId).filter((v): v is string => v !== null) },
+      },
+      select: { id: true, chunks: { select: { sha256: true }, take: 1 } },
+    });
+    const sha = new Map(single.map((v) => [v.id, v.chunks[0]?.sha256 ?? null]));
+    return {
+      ...page,
+      entries: page.entries.map((e) => ({ ...e, sha256: e.currentVersionId ? sha.get(e.currentVersionId) ?? null : null })),
+    };
+  }
+
+  /** A live file's current version: its chunk list, each chunk with its offset (§4.2). */
+  async manifest(ownerId: string, entry: EntryRow) {
+    if (entry.kind !== 'FILE') throw refusal(HttpStatus.CONFLICT, DRIVE_NOT_A_FILE, 'A folder has no content.');
+    const version = await this.prisma.driveVersion.findFirstOrThrow({
+      where: { id: entry.currentVersionId!, ownerId },
+      include: { chunks: { orderBy: { idx: 'asc' } } },
+    });
+    return {
+      entryId: entry.id,
+      versionId: version.id,
+      sizeBytes: num(version.sizeBytes),
+      seq: num(entry.seq),
+      chunks: version.chunks.map((c) => ({ idx: c.idx, offset: num(c.offset), size: c.sizeBytes, sha256: c.sha256 })),
+    };
+  }
+
+  /**
+   * Whether `ownerId` may read the chunk `sha256`: only one its own versions or stagings name (§4.4). Content addressing
+   * is not authorisation, so another account's chunk is not found however its sha256 was learnt.
+   */
+  async namesChunk(ownerId: string, sha256: string): Promise<boolean> {
+    const [version, staging] = await Promise.all([
+      this.prisma.driveVersionChunk.findFirst({ where: { ownerId, sha256 }, select: { sha256: true } }),
+      this.prisma.driveStagingChunk.findFirst({ where: { ownerId, sha256 }, select: { sha256: true } }),
+    ]);
+    return Boolean(version ?? staging);
+  }
+
+  /** The answer a commit got, by the writer's own commit id within its owner (§5.7): whether it applied. */
+  async commitStatus(ownerId: string, commitId: string) {
+    const answered = await this.prisma.driveCommit.findUnique({ where: { ownerId_commitId: { ownerId, commitId } } });
+    return answered ? { applied: true, result: answered.result as unknown as DriveCommitResult } : { applied: false, result: null };
+  }
+
+  /**
+   * `mkdir` by path: the folder at `path`, made in its live parent. With `parents`, every missing folder on the way is
+   * made and a folder already there is answered (`mkdir -p`); without, a taken name is refused 409 DRIVE_NAME_TAKEN.
+   */
+  async mkdirPath(ownerId: string, path: string, options: { parents?: boolean; writer?: DriveWriter } = {}): Promise<DriveEntryView> {
+    const segments = drivePathSegments(path);
+    if (!segments.length) {
+      if (options.parents) return entryView(await this.ensureRoot(ownerId));
+      throw refusal(HttpStatus.CONFLICT, DRIVE_ROOT, 'The root folder is already there.');
+    }
+    let folder = await this.ensureRoot(ownerId);
+    for (const [index, segment] of segments.entries()) {
+      const last = index === segments.length - 1;
+      const found = await this.prisma.driveEntry.findFirst({ where: { ownerId, parentId: folder.id, name: segment, trashedAt: null } });
+      if (found) {
+        if (found.kind !== 'FOLDER') throw refusal(HttpStatus.CONFLICT, DRIVE_NOT_A_FOLDER, `"${segment}" is a file, not a folder.`);
+        if (last && !options.parents) throw nameTaken(segment);
+        folder = found;
+        continue;
+      }
+      if (!last && !options.parents) throw parentGone();
+      let made: DriveEntryView;
+      try {
+        made = await this.createFolder(ownerId, { parentId: folder.id, name: segment, writer: options.writer, onClash: 'REFUSE' });
+      } catch (error) {
+        // Another writer made it meanwhile: with parents, theirs is used.
+        if (!(options.parents && error instanceof HttpException && error.getStatus() === HttpStatus.CONFLICT)) throw error;
+        const raced = await this.prisma.driveEntry.findFirst({ where: { ownerId, parentId: folder.id, name: segment, trashedAt: null } });
+        if (!raced || raced.kind !== 'FOLDER') throw error;
+        folder = raced;
+        continue;
+      }
+      folder = await this.prisma.driveEntry.findUniqueOrThrow({ where: { id: made.id } });
+    }
+    return entryView(folder);
+  }
+
+  /** `utimens` (§5.6): a live entry's mtime, as `touch -d`, `cp -p` and `tar x` set it. */
+  async setMtime(ownerId: string, id: string, mtime: Date, writer: DriveWriter = OWNER_WRITER): Promise<DriveEntryView> {
+    if (Number.isNaN(mtime.getTime())) throw refusal(HttpStatus.BAD_REQUEST, DRIVE_COMMIT_INVALID, 'mtime is not a time.');
+    const outcome = await withTransactionRetry(this.prisma, async (tx) => {
+      await bound(tx);
+      const locked = await tx.$queryRaw<Array<{ id: string }>>`
+        SELECT "id" FROM "drive_entry"
+         WHERE "id" = ${id}::uuid AND "owner_id" = ${ownerId}::uuid AND "trashed_at" IS NULL FOR UPDATE`;
+      if (!locked.length) throw notFound();
+      const checked = await checkedWriter(tx, ownerId, writer);
+      const now = new Date();
+      const updated = await tx.driveEntry.update({
+        where: { id },
+        data: { mtime, updatedAt: now, ...lastWriterFields(checked, now) },
+      });
+      const seq = await recordChanges(tx, ownerId, [{ entryId: id, parentId: updated.parentId, op: 'UPSERT' }]);
+      return { entry: { ...updated, seq: BigInt(seq) }, seq };
+    }, loggedRetry(this.logger, 'drive.setMtime', { transaction: TRANSACTION }));
+    this.announce(ownerId, outcome.seq);
+    return entryView(outcome.entry);
+  }
+
   // ── writes ───────────────────────────────────────────────────────────────────────────────────
 
   /** A new folder in a live folder (the root when none is named). An owner's clashing name gets a suffix (§3.5). */
@@ -524,10 +676,17 @@ export class DriveService {
    *
    * A commit lands on its entry wherever it is now, in Trash included (§3.1).
    */
-  async commit(ownerId: string, input: DriveCommitInput): Promise<DriveCommitResult & { replayed: boolean }> {
+  async commit(
+    ownerId: string,
+    input: DriveCommitInput,
+    options: { fence?: (tx: Tx) => Promise<void> } = {},
+  ): Promise<DriveCommitResult & { replayed: boolean }> {
     validateCommit(input);
     const outcome = await withTransactionRetry(this.prisma, async (tx) => {
       await bound(tx);
+      // A managed runner's commit re-checks its instance in this transaction (§8.2): one racing a generation change lands
+      // before it or is refused.
+      if (options.fence) await options.fence(tx);
       const answered = await tx.driveCommit.findUnique({ where: { ownerId_commitId: { ownerId, commitId: input.commitId } } });
       if (answered) return { result: answered.result as unknown as DriveCommitResult, replayed: true };
       const locked = await tx.$queryRaw<Array<{ id: string }>>`
@@ -746,7 +905,11 @@ export class DriveService {
    * the many deletes of one `rm -rf` are one group whose top item is the folder (§3.4). The owner's own delete is a
    * group of its own, closed at once, which the web's undo restores.
    */
-  async moveToTrash(ownerId: string, id: string, options: { writer?: DriveWriter; burstKey?: string | null } = {}) {
+  async moveToTrash(
+    ownerId: string,
+    id: string,
+    options: { writer?: DriveWriter; burstKey?: string | null; burstWindowMs?: number } = {},
+  ) {
     const outcome = await withTransactionRetry(this.prisma, async (tx) => {
       await bound(tx);
       const seen = await tx.driveEntry.findFirst({ where: { id, ownerId } });
@@ -770,7 +933,7 @@ export class DriveService {
       if (entry.trashedAt) throw notFound();
       const writer = await checkedWriter(tx, ownerId, options.writer ?? OWNER_WRITER);
       const now = new Date();
-      const groupId = await deleteGroupFor(tx, ownerId, entry, writer, now, options.burstKey ?? null);
+      const groupId = await deleteGroupFor(tx, ownerId, entry, writer, now, options.burstKey ?? null, options.burstWindowMs);
       // Then, in a statement of its own and so on a snapshot that sees every create that committed meanwhile, the entry
       // and everything live under it.
       const marked = await tx.$queryRaw<Array<{ id: string; parent_id: string | null; kind: string; size_bytes: bigint }>>`
@@ -1155,13 +1318,21 @@ async function restoreAsCurrent(tx: Tx, ownerId: string, version: VersionRow, wr
  * else a new one. A folder deleted after its contents in one burst becomes the group's top, and the group's folder becomes
  * the folder it was deleted from.
  */
-async function deleteGroupFor(tx: Tx, ownerId: string, entry: EntryRow, writer: DriveWriter, now: Date, burstKey: string | null): Promise<string> {
+async function deleteGroupFor(
+  tx: Tx,
+  ownerId: string,
+  entry: EntryRow,
+  writer: DriveWriter,
+  now: Date,
+  burstKey: string | null,
+  windowMs: number = DRIVE_BURST_WINDOW_MS,
+): Promise<string> {
   if (burstKey) {
     await tx.$executeRaw`SELECT pg_advisory_xact_lock(${DRIVE_BURST_LOCK_NAMESPACE}::int, hashtext(${ownerId} || ':' || ${burstKey}))`;
     const open = await tx.$queryRaw<Array<{ id: string; folder_id: string | null }>>`
       SELECT "id", "folder_id" FROM "drive_trash_group"
        WHERE "owner_id" = ${ownerId}::uuid AND "kind" = 'DELETE' AND "burst_key" = ${burstKey} AND "closed_at" IS NULL
-         AND "last_added_at" > ${new Date(now.getTime() - DRIVE_BURST_WINDOW_MS)}
+         AND "last_added_at" > ${new Date(now.getTime() - windowMs)}
        ORDER BY "last_added_at" DESC LIMIT 1 FOR UPDATE`;
     if (open.length) {
       if (open[0].folder_id === entry.id) {

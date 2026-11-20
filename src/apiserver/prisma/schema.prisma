@@ -379,6 +379,8 @@ model User {
   driveTrashGroups   DriveTrashGroup[]
   driveCommits       DriveCommit[]
   driveChanges       DriveChange[]
+  /// The mount credentials of its managed runner's generations (migration 1339).
+  driveMountCredentials DriveMountCredential[]
 
   /// The account's one managed runner mapping, when it has one (migration 0399).
   managedRunner    ManagedRunner?
@@ -1183,6 +1185,8 @@ model Runner {
   /// When it was last heard from, upserted by every heartbeat (migration 0444). Read it only
   /// through runners/runner-presence.ts.
   presence      RunnerPresence?
+  /// The drive mount credentials issued for its generations (migration 1339): a managed runner's only.
+  driveMountCredentials DriveMountCredential[]
 
   @@index([ownerId])
   /// The tenancy fence `project_codebase` hangs off: naming BOTH the runner and the owner in one
@@ -3730,6 +3734,24 @@ model DriveChange {
   @@index([ownerId, at], map: "drive_change_owner_at_idx")
   @@index([at], map: "drive_change_at_idx")
   @@map("drive_change")
+}
+
+/// What the mount daemon of one managed-runner generation presents at /runner/drive/* (1339,
+/// docs/orbit-files-drive-technical-design.md §4.3): only the token's sha256 is kept. Refused by every other route, and
+/// accepted only while its generation is the mapping's and its instance the one the manager recorded (§8.2).
+model DriveMountCredential {
+  id         String    @id @default(uuid(7)) @db.Uuid
+  ownerId    String    @map("owner_id") @db.Uuid
+  owner      User      @relation(fields: [ownerId], references: [id], onDelete: Cascade, map: "drive_mount_credential_owner_id_fkey")
+  runnerId   String    @map("runner_id") @db.Uuid
+  runner     Runner    @relation(fields: [runnerId], references: [id], onDelete: Cascade, map: "drive_mount_credential_runner_id_fkey")
+  generation Int
+  tokenHash  String    @unique(map: "drive_mount_credential_token_hash_key") @map("token_hash")
+  createdAt  DateTime  @default(now()) @map("created_at") @db.Timestamptz(3)
+  revokedAt  DateTime? @map("revoked_at") @db.Timestamptz(3)
+
+  @@index([runnerId, generation], map: "drive_mount_credential_runner_idx")
+  @@map("drive_mount_credential")
 }
 
 // Lightweight activity feed (no FKs, append-only).
