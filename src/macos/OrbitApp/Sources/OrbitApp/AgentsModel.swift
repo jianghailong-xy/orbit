@@ -26,6 +26,8 @@ final class AgentsModel {
     /// The online machines no workspace is on yet, each a Set up row after the workspaces (board rule
     /// 9). Empty until the workspace list has answered: every machine would read as bare until it lands.
     private(set) var machinesToSetUp: [MachineToSetUp] = []
+    /// Every machine of the account, for the Workspaces group's + (docs/mocks/new-workspace-form/02-apple-entry).
+    private(set) var newWorkspaceMachines: [NewWorkspaceMachine] = []
     /// The first runner online: where an account with no workspace lands, and where New session goes.
     private(set) var firstOnlineMachine: String?
     /// A workspace list from the server is in hand, not one a launch snapshot left.
@@ -420,6 +422,8 @@ final class AgentsModel {
         guard workspacesAnswered else { return }
         let machines = AgentListLogic.machinesToSetUp(runners: runnerRows, agents: items, managedStatus: managedStatus)
         if machines != machinesToSetUp { machinesToSetUp = machines }
+        let offered = AgentListLogic.newWorkspaceMachines(runners: runnerRows, agents: items, managedStatus: managedStatus)
+        if offered != newWorkspaceMachines { newWorkspaceMachines = offered }
         let first = runnerRows.first { AgentListLogic.isOnline($0) || ManagedRunnerLogic.managedSetupState(runnerID: $0.id, status: managedStatus) != nil }?.id
         if first != firstOnlineMachine { firstOnlineMachine = first }
     }

@@ -656,6 +656,7 @@ final class AppModel {
                                           store: ConsoleRegistry.defaultStore(for: url))
         launchSnapshots = LaunchSnapshotStore.defaultStore(for: url)
         machineSetups = [:]
+        newWorkspaceRunners = []
         // A console's fleeting confirmations ("Merged into main", "Committed changes") ride the app's
         // one toast host, not the status line above the composer — see `showToast`.
         consoleRegistry?.onToast = { [weak self] request, sessionID in
@@ -959,6 +960,7 @@ final class AppModel {
         }
         signedIn = false
         machineSetups = [:]
+        newWorkspaceRunners = []
         sharedWithMe = []
         sessions = []
         needsYouSessions = []
@@ -2270,6 +2272,28 @@ final class AppModel {
         nav.openMachineDraft(runnerID: runnerID)
     }
 
+    /// The machines whose new session page was opened as New workspace while they had a workspace already
+    /// (docs/mocks/new-workspace-form/02-apple-entry, owner A 2026-11-20), by storage key: that page makes one more
+    /// rather than moving on to the first.
+    private(set) var newWorkspaceRunners: Set<String> = []
+
+    func addsWorkspace(on runnerID: String) -> Bool {
+        newWorkspaceRunners.contains(PublicID.storageKey(runnerID))
+    }
+
+    /// New workspace on a machine, from the Workspaces group's + or the machine page's row: its new session page,
+    /// with the setup card, whatever the machine holds. One with no workspace yet gets the page its Set up row opens.
+    func openNewWorkspace(_ runnerID: String) {
+        settingsPresented = false
+        let key = PublicID.storageKey(runnerID)
+        if agents?.firstWorkspace(onRunner: runnerID) != nil {
+            newWorkspaceRunners.insert(key)
+        } else {
+            newWorkspaceRunners.remove(key)
+        }
+        openMachineDraft(runnerID)
+    }
+
     // MARK: Shared with me — the sessions other people invited this account to reply in
     // (docs/session-guests-design.md §4; web SharedWithMe.tsx)
 
@@ -2338,6 +2362,7 @@ final class AppModel {
                                                                             runnerID: runnerID))
             await agents?.load()
             machineSetups[PublicID.storageKey(runnerID)] = nil
+            newWorkspaceRunners.remove(PublicID.storageKey(runnerID))
             if machineDraftRunnerID == runnerID { show(.compose(agentID: made.id, folderID: nil), agent: made.id) }
             return nil
         } catch {
@@ -2348,7 +2373,8 @@ final class AppModel {
     /// The machine got a workspace some other way (another device, the web's form): the page moves on
     /// to it, and what was being set up here no longer applies.
     func machineGotWorkspace(_ runnerID: String) {
-        guard machineDraftRunnerID == runnerID, let workspace = agents?.firstWorkspace(onRunner: runnerID)
+        guard machineDraftRunnerID == runnerID, !addsWorkspace(on: runnerID),
+              let workspace = agents?.firstWorkspace(onRunner: runnerID)
         else { return }
         machineSetups[PublicID.storageKey(runnerID)] = nil
         show(.compose(agentID: workspace.id, folderID: nil), agent: workspace.id)
@@ -2358,6 +2384,7 @@ final class AppModel {
     func leaveMachineDraft(_ runnerID: String) {
         guard machineDraftRunnerID == runnerID else { return }
         machineSetups[PublicID.storageKey(runnerID)] = nil
+        newWorkspaceRunners.remove(PublicID.storageKey(runnerID))
         nav.popToRoot()
     }
 
