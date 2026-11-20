@@ -43,12 +43,12 @@ controllers and their decorators, so it lists what the server mounts, not what a
 | Caller | Routes |
 | --- | --- |
 | `public` | 37 |
-| `user` | 482 |
+| `user` | 483 |
 | `admin` | 31 |
 | `runner` | 205 |
 | `channel` | 1 |
 | `link gateway` | 3 |
-| **Total** | **759** |
+| **Total** | **760** |
 
 ## Public routes
 
@@ -236,6 +236,7 @@ controllers and their decorators, so it lists what the server mounts, not what a
 | `POST` | `/api/projects/:id/promotions/:promotionId/integration/retry` | body `RetryIntegrationDto`; path `id`, `promotionId` | `ProjectIntegrationRetryController.retryPromotionCheck` |
 | `POST` | `/api/projects/:id/resume` | path `id` | `ProjectsController.resume` |
 | `POST` | `/api/projects/:id/sessions/complete` | path `id` | `ProjectsController.completeSessions` |
+| `POST` | `/api/projects/:id/setting-changes/:changeId/revert` | path `changeId`, `id` | `ProjectsController.revertSettingChange` |
 | `DELETE` | `/api/projects/:id/share` | path `id` | `ShareLinksController.turnOffProjectLink` |
 | `GET` | `/api/projects/:id/share` | path `id` | `ShareLinksController.projectLink` |
 | `PUT` | `/api/projects/:id/share` | body `PutShareLinkDto`; path `id` | `ShareLinksController.putProjectLink` |

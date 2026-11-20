@@ -69,8 +69,8 @@ test('project default line checks dependency endpoints by project without large 
   assert.equal(await projectDefaultLine(db, 'project-1'), 'PROJECT_BRANCH');
   assert.deepEqual(query, {
     where: {
-      task: { projectId: 'project-1', codeless: false, status: { not: 'CANCELLED' } },
-      dependsOnTask: { projectId: 'project-1', codeless: false, status: { not: 'CANCELLED' } },
+      task: { projectId: 'project-1', status: { not: 'CANCELLED' } },
+      dependsOnTask: { projectId: 'project-1', status: { not: 'CANCELLED' } },
     },
     select: { id: true },
   });

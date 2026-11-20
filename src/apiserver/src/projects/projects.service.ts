@@ -93,6 +93,8 @@ import {
 import { type PendingAddresseeRead, readPendingAddressees } from './pending-addressees';
 import { planCriterionMove, readCriterionMoveFacts, writeCriterionMove } from './criterion-move';
 import { readCriterionMoveRecord } from './criterion-move-record';
+import { readSettingChanges, type ProjectSettingChangeView } from './project-setting-change';
+import { putSettingChangeBack, readSettingChange } from './project-setting-revert';
 import { readLiveRulings } from './project-ruling';
 import { settleTaskSegmentAfterMove } from './landing-session';
 import { lockOwnerTaskGraph, orderedIds } from '../common/lock-order';
@@ -1278,7 +1280,9 @@ export class ProjectsService {
     // to ask and no card to bind, so the field is theirs exactly as it was before this existed.
     if (!sessionId) return null;
 
-    const named = namedIntegrationFields(settings);
+    // `landingCheckReason` is the words of a cardless write, not a setting: it is neither refused as an
+    // owner field nor part of any card's proposal.
+    const named = namedIntegrationFields(settings).filter((field) => field !== 'landingCheckReason');
     const refused = named.filter((field) => !isMergeCheckField(field));
     const mergeCheck = named.filter(isMergeCheckField);
     if (refused.length > 0 || mergeCheck.length === 0) {
@@ -2933,6 +2937,7 @@ export class ProjectsService {
       mainBranchMemory,
       moveRecord,
       rulings,
+      settingChanges,
     ] = await Promise.all([
       // One lookup by primary key, not a tally of this project's tasks.
       //
@@ -2997,6 +3002,8 @@ export class ProjectsService {
       readCriterionMoveRecord(this.prisma, ownerId, id, criterionKeyOf),
       // And the owner rulings still live (coordinator handoff v2 §2): one statement, oldest first.
       readLiveRulings(this.prisma, ownerId, id),
+      // And the coordinator's cardless landing-check changes, newest first (§12.15 P-R1): one statement.
+      readSettingChanges(this.prisma, ownerId, id),
     ]);
     const landingAnswers = criterionLandingWithReasons(
       landingFacts,
@@ -3051,6 +3058,8 @@ export class ProjectsService {
       criteriaMovedOut: moveRecord.movedOut,
       // The owner rulings still live, oldest first; a superseded one is kept but not listed.
       rulings,
+      // The coordinator's cardless landing-check changes, newest first, each one the owner can revert.
+      settingChanges,
       blockers,
       integration: {
         ...projectIntegrationView(codebase, project.exceptionEscalationSeconds),
@@ -3065,7 +3074,6 @@ export class ProjectsService {
         landingAnswers,
         independence,
         standardSetConfirmation,
-        project.nonCode,
       ),
     };
   }
@@ -3251,6 +3259,33 @@ export class ProjectsService {
     // queue is doing is not part of what was just decided, and reading it in the transaction would
     // put two more statements under the binding's lock for a row nobody is waiting on.
     return readProjectIntegrationView(this.prisma, id, written);
+  }
+
+  /**
+   * The account owner putting one recorded landing-check change back to its old value (§12.15 P-R1). Owner
+   * only, like every integration write: a request that carries an acting session is refused whole.
+   */
+  async revertSettingChange(
+    ownerId: string,
+    id: string,
+    changeId: string,
+    actingSessionId?: string,
+  ): Promise<ProjectSettingChangeView> {
+    if (actingSessionId?.trim()) {
+      throw new ForbiddenException({
+        statusCode: 403,
+        code: 'INTEGRATION_SETTINGS_OWNER_ONLY',
+        message: 'putting a recorded landing-check change back is the account owner\'s to do, not this '
+          + 'session\'s. Nothing was written',
+      });
+    }
+    await this.assertOwned(ownerId, id);
+    const row = await readSettingChange(this.prisma, ownerId, id, changeId);
+    return withTransactionRetry(
+      this.prisma,
+      (tx) => putSettingChangeBack(tx, ownerId, id, row),
+      loggedRetry(this.logger, 'projects.revertSettingChange'),
+    );
   }
 
   /**
@@ -3889,8 +3924,9 @@ export class ProjectsService {
   /**
    * Who writes the non-code mark on this request, or null when it carries none. The account owner
    * (no acting session) or the conversation this project is coordinated from (COORDINATOR, with its
-   * session id); any other session is refused whole before anything is written — the mark decides
-   * whether a project reads landing at all, so it is not a side effect of some task's edit.
+   * session id); any other session is refused whole before anything is written. Since revision 42
+   * (§12.15 P-M3) the mark is stored and returned but decides nothing: landing follows from the
+   * commits the project's tasks delivered.
    */
   static nonCodeWriter(
     dto: Pick<UpdateProjectDto, 'nonCode' | 'nonCodeReason'>,
@@ -4224,8 +4260,7 @@ export class ProjectsService {
       // this write is the only thing that moves them — when it moves them at all. A HELD edit
       // moved none of them, so there is nothing to re-project and no reason to re-decide a column
       // the owner may have just written by hand.
-      // So is the non-code mark: a marked project's criteria are no longer withheld for landing.
-      if ((dto.acceptanceCriteriaItems !== undefined && !held) || nonCodeWriter) {
+      if (dto.acceptanceCriteriaItems !== undefined && !held) {
         await this.reprojectProjectStatus(ownerId, id);
         // And the same applied edit may have reworded or deleted a criterion some task's unanswered
         // evidence is bound to: told to whoever can file it again, after the commit.

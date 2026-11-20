@@ -68,8 +68,8 @@ export interface DependencyPrerequisiteFact {
    * §2.5 J9: has this prerequisite's work LANDED on its project's integration line?
    *
    * Additive, and absent reads as "nothing to land" — which is what a prerequisite outside a
-   * project, a codeless one, and every prerequisite of a project that has not started integrating
-   * all are (§8.4 C2). Only `false` holds a dependent back, so a caller that does not gather this
+   * project, one that ran no branch, and every prerequisite of a project that has not started
+   * integrating all are (§8.4 C2). Only `false` holds a dependent back, so a caller that does not gather this
    * gets exactly the behaviour it had before the field existed.
    *
    * It is a separate field from `status` because the two answer different questions and fail
@@ -552,9 +552,10 @@ export function everyPrerequisiteDoneOrRetiredSql(alias = 't'): string {
  *     work of a task filed under a project is still moving (§12.15 P-M1): its DONE has not decided
  *     yet whether it lands, and if it does, that decision starts the line — the dependents of the
  *     first committing task wait for its landing, not for its DONE.
- *  2. **It is not code work** (§1.1 `isCodeTask`): declared codeless, or its newest work session did
- *     not run in a worktree on a branch, or ran in a repository other than the one the project's
- *     line is bound to (revision 29, §10.5 O-L7). A documentation prerequisite has no commit to land,
+ *  2. **It is not code work** (§1.1 `isCodeTask`): its newest work session did not run in a
+ *     worktree on a branch, or ran in a repository other than the one the project's line is bound
+ *     to (revision 29, §10.5 O-L7). The `codeless` flag is not read (revision 42, §12.15 P-M3): a
+ *     codeless run that changed nothing never makes a branch, and one that committed lands. A documentation prerequisite has no commit to land,
  *     and SR27 says the same thing one contract over; work in another repository has none to land on
  *     this line.
  *  3. **A receipt says it landed** on the project's integration line or on its upstream (§1.4
@@ -575,7 +576,6 @@ export function prerequisiteLandedSql(alias = 'chain_task'): string {
            AND landing_line."slot" = 'primary'
            AND landing_line."integration_started_at" IS NOT NULL
       ) AND (${alias}."project_id" IS NULL OR NOT ${workStillMovingSql(alias)}))
-      OR ${alias}."codeless" = true
       OR NOT EXISTS (
         SELECT 1 FROM "session" landing_work
           LEFT JOIN "workspace" landing_workspace ON landing_workspace."id" = landing_work."workspace_id"
@@ -610,7 +610,6 @@ export function prerequisiteLandedSql(alias = 'chain_task'): string {
 export interface PrerequisiteLandingFacts extends DeliveredNothingFacts {
   /** Whether a work session of it has not finished (`workStillMovingSql`). Absent reads as settled. */
   workStillMoving?: boolean;
-  codeless: boolean;
   projectId: string | null;
   /** The project's primary binding, or null when it has none. */
   codebase: {
@@ -635,7 +634,7 @@ export interface PrerequisiteLandingFacts extends DeliveredNothingFacts {
 export function prerequisiteLanded(facts: PrerequisiteLandingFacts): boolean {
   if (deliveredNothingOfItsOwn(facts)) return true;
   if (!facts.codebase?.integrationStartedAt && (facts.projectId === null || !facts.workStillMoving)) return true;
-  if (facts.codeless || facts.projectId === null) return true;
+  if (facts.projectId === null) return true;
   if (facts.work?.isolationStatus !== 'worktree' || !facts.work.branch) return true;
   if (!workOnProjectRepository(facts.work.repoUrl, facts.codebase)) return true;
   // Reached with no binding only for work still moving in a project with no line: no receipt can be
