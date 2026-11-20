@@ -40,7 +40,6 @@ final class UserTurnRowWiringTests: XCTestCase {
         "EvidenceToReviewCardView(", "EvidenceSentBackCardView(", "RunQuestionCardView(",
         "RunNoticeCardView(", "SessionOpeningRowView(",
         "SessionReplyCardsView(", "WatchWakeCardView(", "BackgroundWakeCardView(",
-        "SubagentFinishedLineView(",
     ]
 
     private func path(_ relative: String) throws -> URL {
@@ -137,7 +136,7 @@ final class UserTurnRowWiringTests: XCTestCase {
         }
         // Each card, then the bubble headed with who outside Orbit sent it (`externalSender`), and the
         // owner's own bubble last — and once more the job's line a SubAgent's note can carry beside its
-        // own, which then takes the queue's Cancel in the SubAgent line's place.
+        // end, which draws nothing of its own (`SubagentCardEnd`).
         XCTAssertEqual(values.count, Self.cardViews.count + 3, "a card is drawn with no Cancel while queued")
         XCTAssertEqual(Set(values), ["cancel"], "a card is handed a Cancel that is not the queue's")
     }
