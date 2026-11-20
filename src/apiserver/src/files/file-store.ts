@@ -66,6 +66,8 @@ export interface FilesConfig {
   storage: FileStorage;
   /** Set exactly when `storage` is `s3`. */
   s3?: S3FilesConfig;
+  /** The deployment mirrors its bucket off host (ORBIT_FILES_S3_MIRROR=1), so s3 bytes are in the off-host copy as local ones are. */
+  s3Mirror?: boolean;
   /** The most one account may keep (ORBIT_FILES_QUOTA_BYTES). Unset: no limit, a self-hosted deployment's default. */
   quotaBytes?: number;
   /**
@@ -101,7 +103,11 @@ function fileLimitsFrom(env: NodeJS.ProcessEnv): Pick<FilesConfig, 'quotaBytes' 
   const interval = positiveIntegerFrom(env, 'ORBIT_BASE_BACKUP_INTERVAL', 86_400);
   const keep = positiveIntegerFrom(env, 'ORBIT_BASE_BACKUP_KEEP', 2);
   const quotaBytes = positiveIntegerFrom(env, 'ORBIT_FILES_QUOTA_BYTES');
-  return { ...(quotaBytes ? { quotaBytes } : {}), backupRetentionMs: interval * (keep + 1) * 1000 };
+  return {
+    ...(quotaBytes ? { quotaBytes } : {}),
+    backupRetentionMs: interval * (keep + 1) * 1000,
+    ...(env.ORBIT_FILES_S3_MIRROR?.trim() === '1' ? { s3Mirror: true } : {}),
+  };
 }
 
 /** Where uploads are written while they arrive: inside the files directory, so that keeping one in the

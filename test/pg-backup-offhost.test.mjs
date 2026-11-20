@@ -122,7 +122,7 @@ function fingerprint(dir) {
  * With `server` the target is reached through a stand-in ssh that runs the far side's real rsync, printing OpenSSH's warning first
  * if `server.warns`. `locked`, given the directories, names a directory of the target and the mode it has for the length of each poll.
  */
-function round({ prepare, system = CLUSTER, due = [], database = 'up', interval = 86_400, rsyncFailsOn = null, cut = null, server = null, locked = null }) {
+function round({ prepare, system = CLUSTER, due = [], database = 'up', interval = 86_400, rsyncFailsOn = null, cut = null, server = null, locked = null, mirror = false }) {
   // The far side has to reach this directory as the unprivileged account when this runs as root, so not through a private TMPDIR.
   const scratch = mkdtempSync(path.join(AS_ROOT ? '/tmp' : tmpdir(), 'pg-backup-offhost-'));
   try {
@@ -131,6 +131,7 @@ function round({ prepare, system = CLUSTER, due = [], database = 'up', interval 
       files: path.join(scratch, 'files'),
       target: path.join(scratch, 'backup-host', 'orbit-pg-archive'),
       filesTarget: path.join(scratch, 'backup-host', 'orbit-pg-archive-files'),
+      bucketTarget: path.join(scratch, 'backup-host', 'orbit-pg-archive-bucket'),
       tmp: path.join(scratch, 'tmp'),
     };
     mkdirSync(path.join(dirs.archive, 'base'), { recursive: true });
@@ -185,6 +186,7 @@ exec '${realRsync}' "$@"`,
           ORBIT_BACKUP_SYNC_TARGET: server ? `backup-host:${dirs.target}` : dirs.target,
           ORBIT_BACKUP_MIN_FREE_MB: '0',
           ORBIT_BASE_BACKUP_INTERVAL: String(interval),
+          ...(mirror ? { ORBIT_FILES_S3_MIRROR: '1' } : {}),
         },
         timeout: 30_000,
       });
@@ -203,13 +205,13 @@ exec '${realRsync}' "$@"`,
       cutShort = { log, mirror: fingerprint(dirs.target) };
       cut.then?.(dirs);
     }
-    const before = { mirror: fingerprint(dirs.target), copy: fingerprint(dirs.filesTarget) };
+    const before = { mirror: fingerprint(dirs.target), copy: fingerprint(dirs.filesTarget), bucket: fingerprint(dirs.bucketTarget) };
     const log = poll();
     return {
       log,
       cutShort,
       before,
-      after: { mirror: fingerprint(dirs.target), copy: fingerprint(dirs.filesTarget) },
+      after: { mirror: fingerprint(dirs.target), copy: fingerprint(dirs.filesTarget), bucket: fingerprint(dirs.bucketTarget) },
       archive: fingerprint(dirs.archive),
       queries: existsSync(queries) ? readFileSync(queries, 'utf8') : '',
       rsyncCalls: existsSync(rsyncCalls) ? readFileSync(rsyncCalls, 'utf8').trim().split('\n') : [],
@@ -1176,4 +1178,52 @@ test('a name that is not a sha256 is not a name: a database cannot aim this anyw
   assert.equal(onCopy(result).includes(inCopy(name)), true, result.log);
   assert.equal(onCopy(result).includes(inCopy(NAME('b'))), true, result.log);
   assert.doesNotMatch(result.log, /pruned/);
+});
+
+// ── The bucket's mirror (ORBIT_FILES_S3_MIRROR=1) ───────────────────────────────────────────────────────────────────
+
+/** A mirror that takes this archive, and a bucket mirror holding these names; the local directory holds `local`. */
+function prepareBucket(names, local = [NAME('f')]) {
+  return (dirs) => {
+    prepareCopy([], local)(dirs);
+    for (const name of names) {
+      mkdirSync(path.join(dirs.bucketTarget, name.slice(0, 2)), { recursive: true });
+      writeFileSync(path.join(dirs.bucketTarget, name.slice(0, 2), name), `bytes of ${name}`);
+    }
+  };
+}
+const onBucket = (result) => (result.after.bucket ?? []).map((line) => line.split(' ')[0]);
+
+test('with the bucket mirrored, a name the database says is due leaves it, and the rest stays', () => {
+  const [gone, neighbour] = [`aa${'1'.repeat(62)}`, `aa${'2'.repeat(62)}`];
+  const result = round({ mirror: true, due: [gone], prepare: prepareBucket([gone, neighbour]) });
+  assert.deepEqual(onBucket(result), [inCopy(neighbour)], result.log);
+  assert.match(result.log, /pruned 1 file\(s\) from .*-bucket/);
+});
+
+test('a name not yet due is not in the due list, so the bucket mirror keeps it through its grace period', () => {
+  const [early] = [NAME('a')];
+  const result = round({ mirror: true, due: [], prepare: prepareBucket([early]) });
+  assert.deepEqual(onBucket(result), [inCopy(early)], result.log);
+  assert.doesNotMatch(result.log, /pruned/);
+});
+
+test('without ORBIT_FILES_S3_MIRROR=1 the bucket mirror is left alone, whatever is due', () => {
+  const gone = NAME('a');
+  const result = round({ due: [gone], prepare: prepareBucket([gone]) });
+  assert.deepEqual(onBucket(result), [inCopy(gone)], result.log);
+  assert.doesNotMatch(result.log, /-bucket/);
+});
+
+test('an empty local directory does not stop the bucket mirror pruning, which is not a copy of it', () => {
+  const gone = NAME('a');
+  const result = round({ mirror: true, due: [gone], prepare: prepareBucket([gone], []) });
+  assert.deepEqual(onBucket(result), [], result.log);
+  assert.match(result.log, /ERROR: refusing to prune .*-files.*is empty or not mounted/);
+});
+
+test('a database it cannot read prunes nothing from the bucket mirror either', () => {
+  const gone = NAME('a');
+  const result = round({ mirror: true, database: 'down', due: [gone], prepare: prepareBucket([gone]) });
+  assert.deepEqual(onBucket(result), [inCopy(gone)], result.log);
 });
