@@ -767,6 +767,23 @@ export class ProjectsController {
   }
 
   /**
+   * The account owner putting one of the coordinator's recorded landing-check changes back to its old value
+   * (contract §12.15 P-R1). The record stays; the value written is the owner's own, so the coordinator's next
+   * cardless write of that field is refused and goes to the card. A request carrying `X-Orbit-Session-Id` is
+   * refused 403 `INTEGRATION_SETTINGS_OWNER_ONLY`, as on `PATCH :id/integration`.
+   */
+  @PatForbidden('OWNER_INTERACTIVE')
+  @Post(':id/setting-changes/:changeId/revert')
+  revertSettingChange(
+    @CurrentUser() user: AuthUser,
+    @Param('id', PublicIdPipe) id: string,
+    @Param('changeId', PublicIdPipe) changeId: string,
+    @Headers('x-orbit-session-id') actingSessionId: string | undefined,
+  ) {
+    return this.projects.revertSettingChange(user.userId, id, changeId, actingSessionId);
+  }
+
+  /**
    * Also how a project is settled: `{ "status": "DONE" }` / `{ "status": "CANCELLED" }`. And how its
    * owner reopens one: `{ "status": "OPEN" }` on a project that is DONE or CANCELLED, signed in, is
    * the press the projection leaves standing (`ProjectsService.reopenRecord`).

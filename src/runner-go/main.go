@@ -239,6 +239,7 @@ running it when the machine is idle. Disable the periodic check with ORBIT_NO_EN
 	"watch":     watchHelp,
 	"wiki":      wikiHelp,
 	"file":      fileHelp,
+	"settings":  settingsHelp,
 	"token":     tokenHelp,
 	"login":     loginHelp,
 	"logout":    logoutHelp,
@@ -325,6 +326,7 @@ var leafHelpFamilies = map[string]bool{
 	"watch":     true,
 	"wiki":      true,
 	"file":      true,
+	"settings":  true,
 	"session":   true,
 	"provider":  true,
 	// `agent` has had per-action help since it shipped and has never been able to print it —
@@ -465,6 +467,8 @@ func runOrbitCLI(args []string, in io.Reader, out, errW io.Writer) error {
 		return runCLICommand("orbit wiki", args, true, in, out, errW, func(in io.Reader, out io.Writer) error { return cmdWikiCLI(args[1:], in, out) })
 	case "file":
 		return runCLICommand("orbit file", args, true, in, out, errW, func(in io.Reader, out io.Writer) error { return cmdFileCLI(args[1:], out) })
+	case "settings":
+		return runCLICommand("orbit settings", args, true, in, out, errW, func(in io.Reader, out io.Writer) error { return cmdSettingsCLI(args[1:], out) })
 	case "token":
 		return runCLICommand("orbit token", args, false, in, out, errW, func(in io.Reader, out io.Writer) error { return cmdTokenCLI(args[1:], out) })
 	case "login":

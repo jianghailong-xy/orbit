@@ -563,6 +563,7 @@ test('the detail read reports progress without loading the project’s tasks', a
     // The tally is the maintained one (0282): rows read by primary key, not a groupBy over this
     // project's tasks. A read that went back to the groupBy would find no delegate here.
     projectRuling: { findMany: async () => [] },
+    projectSettingChange: { findMany: async () => [] },
     projectTaskStatusCount: {
       findMany: async (args: any) => {
         tallyArgs = args;
@@ -638,6 +639,7 @@ test('the detail read serves the authored criteria and no second representation 
     task: { groupBy: async () => assert.fail('the detail read must not tally the project’s tasks') },
     projectTaskStatusCount: { findMany: async () => [] },
     projectRuling: { findMany: async () => [] },
+    projectSettingChange: { findMany: async () => [] },
     projectAcceptanceCriterionDefinition: {
       findMany: async () => [{ id: CRITERION_A_ID, ordinal: 1, revision: 1, servingTasks: [] }],
     },
@@ -689,6 +691,7 @@ test('the detail item is the authored declaration, with no derived verdict besid
     task: { groupBy: async () => assert.fail('the detail read must not tally the project’s tasks') },
     projectTaskStatusCount: { findMany: async () => [] },
     projectRuling: { findMany: async () => [] },
+    projectSettingChange: { findMany: async () => [] },
     projectAcceptanceCriterionDefinition: {
       findMany: async () => [{ id: CRITERION_A_ID, ordinal: 1, revision: 2, servingTasks: [] }],
     },

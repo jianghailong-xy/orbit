@@ -43,12 +43,12 @@ controllers and their decorators, so it lists what the server mounts, not what a
 | Caller | Routes |
 | --- | --- |
 | `public` | 37 |
-| `user` | 482 |
+| `user` | 485 |
 | `admin` | 31 |
-| `runner` | 208 |
+| `runner` | 211 |
 | `channel` | 1 |
 | `link gateway` | 3 |
-| **Total** | **762** |
+| **Total** | **768** |
 
 ## Public routes
 
@@ -179,6 +179,7 @@ controllers and their decorators, so it lists what the server mounts, not what a
 | `GET` | `/api/outcomes/inbox` | query `limit` | `OutcomeSurfacesController.inbox` |
 | `GET` | `/api/owner-requests` | query `state` | `OwnerRequestsController.list` |
 | `GET` | `/api/owner-requests/:id` | path `id` | `OwnerRequestsController.get` |
+| `POST` | `/api/owner-requests/:id/apply-settings` | path `id` | `OwnerRequestsController.applySettings` |
 | `POST` | `/api/owner-requests/:id/create-wiki` | path `id` | `OwnerRequestsController.createWiki` |
 | `POST` | `/api/owner-requests/:id/decline` | body `DeclineOwnerRequestDto`; path `id` | `OwnerRequestsController.decline` |
 | `POST` | `/api/owner-requests/:id/done` | body `CompleteOwnerRequestDto`; path `id` | `OwnerRequestsController.complete` |
@@ -236,6 +237,7 @@ controllers and their decorators, so it lists what the server mounts, not what a
 | `POST` | `/api/projects/:id/promotions/:promotionId/integration/retry` | body `RetryIntegrationDto`; path `id`, `promotionId` | `ProjectIntegrationRetryController.retryPromotionCheck` |
 | `POST` | `/api/projects/:id/resume` | path `id` | `ProjectsController.resume` |
 | `POST` | `/api/projects/:id/sessions/complete` | path `id` | `ProjectsController.completeSessions` |
+| `POST` | `/api/projects/:id/setting-changes/:changeId/revert` | path `changeId`, `id` | `ProjectsController.revertSettingChange` |
 | `DELETE` | `/api/projects/:id/share` | path `id` | `ShareLinksController.turnOffProjectLink` |
 | `GET` | `/api/projects/:id/share` | path `id` | `ShareLinksController.projectLink` |
 | `PUT` | `/api/projects/:id/share` | body `PutShareLinkDto`; path `id` | `ShareLinksController.putProjectLink` |
@@ -255,6 +257,7 @@ controllers and their decorators, so it lists what the server mounts, not what a
 | `GET` | `/api/projects/sidebar` | — | `ProjectsController.sidebar` |
 | `POST` | `/api/prompt-optimizations` | body `PromptOptimizationDto` | `PromptOptimizerController.optimize` |
 | `GET` | `/api/providers` | — | `ProvidersController.list` |
+| `PATCH` | `/api/providers/builtin/:engine/model-tier` | body `UpdateProviderModelTierDto`; path `engine` | `ProvidersController.setBuiltinModelTier` |
 | `GET` | `/api/providers/mine` | — | `ProvidersController.listMine` |
 | `POST` | `/api/providers/mine` | body `CreateModelProviderDto` | `ProvidersController.createMine` |
 | `DELETE` | `/api/providers/mine/:id` | path `id` | `ProvidersController.removeMine` |
@@ -627,6 +630,7 @@ controllers and their decorators, so it lists what the server mounts, not what a
 | `GET` | `/api/runner/browser` | — | `RunnerBrowserController.status` |
 | `POST` | `/api/runner/browser/clear` | body `Object` | `RunnerBrowserController.clear` |
 | `POST` | `/api/runner/browser/open` | body `Object` | `RunnerBrowserController.open` |
+| `POST` | `/api/runner/browser/sign-in-requests` | body `BrowserSignInRequestDto` | `RunnerBrowserController.requestSignIn` |
 | `POST` | `/api/runner/claude-account-swap-result` | body `Object` | `RunnerApiController.claudeAccountSwapResult` |
 | `POST` | `/api/runner/claude-history-result` | body `Object` | `RunnerApiController.claudeHistoryResult` |
 | `POST` | `/api/runner/codex-account-remove-result` | body `Object` | `RunnerApiController.codexAccountRemoveResult` |
@@ -766,6 +770,8 @@ controllers and their decorators, so it lists what the server mounts, not what a
 | `GET` | `/api/runner/sessions/search` | query `limit`, `q` | `RunnerSessionsController.searchSessions` |
 | `POST` | `/api/runner/sessions/takeover-leases` | body `Object` | `RunnerApiController.takeoverLeasesBatch` |
 | `POST` | `/api/runner/sessions/worktrees-removable` | body `Object` | `RunnerApiController.worktreesRemovable` |
+| `GET` | `/api/runner/settings` | — | `RunnerOwnerRequestsController.settings` |
+| `POST` | `/api/runner/settings-proposals` | body `ProposeSettingsDto` | `RunnerOwnerRequestsController.proposeSettings` |
 | `PATCH` | `/api/runner/subagent-runs/:runId` | body `SubagentRunUpdateDto`; path `runId` | `RunnerSubagentsController.endRemoteSubagentRun` |
 | `POST` | `/api/runner/subagent-runs/:runId/claim` | path `runId` | `RunnerSubagentsController.claimRemoteSubagentRun` |
 | `POST` | `/api/runner/subagent-runs/:runId/events` | body `Object`; path `runId` | `RunnerSubagentsController.relaySubagentEvents` |

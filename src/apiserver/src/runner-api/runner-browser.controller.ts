@@ -1,13 +1,25 @@
 import { BadRequestException, Body, Controller, ForbiddenException, Get, Headers, HttpCode, Post, UseGuards } from '@nestjs/common';
+import { IsOptional, IsString, MaxLength } from 'class-validator';
 import { Runner } from '@prisma/client';
 import { toUuid, type RunnerBrowserClearLoginsResponse, type RunnerBrowserOpenRequest, type RunnerBrowserOpenResponse, type RunnerBrowserStatus } from '@orbit/shared';
 
 import { ManagedRunnerBrowserEnabledGuard, ManagedRunnerBrowserService } from '../managed-runners/browser-state';
+import { OwnerRequestsService } from '../owner-requests/owner-requests.service';
 import { PrismaService } from '../prisma/prisma.service';
 import { PublicIdPipe } from '../common/public-id';
 import { CurrentRunner } from './current-runner.decorator';
 import { RunnerAuthGuard } from './runner-auth.guard';
 import { accountBrowserRunner, claimBrowserClearApproval } from './runner-browser-clear-approval';
+
+/** The refusal of a sign-in request from a session that is not on the account's Orbit Cloud runner. */
+export const BROWSER_SIGN_IN_NOT_ORBIT_CLOUD = 'BROWSER_SIGN_IN_NOT_ORBIT_CLOUD';
+
+/** browser_request_sign_in's body. Its rules (a host, a reason) are OwnerRequestsService.fileBrowserSignIn's. */
+export class BrowserSignInRequestDto {
+  @IsString() @MaxLength(2048) site!: string;
+  @IsString() @MaxLength(4000) reason!: string;
+  @IsOptional() @IsString() @MaxLength(200) clientRequestId?: string;
+}
 
 /**
  * browser_status and browser_open, and `orbit browser status` and `orbit browser open [--url]`
@@ -34,6 +46,13 @@ import { accountBrowserRunner, claimBrowserClearApproval } from './runner-browse
  *                                the account's Orbit Cloud runner, against the card the asking session filed and a person
  *                                ALLOWED, spent by this clear (runner-browser-clear-approval.ts). Any other card — declined,
  *                                expired, already used, another session's — is 403, and nothing is sent to the runner.
+ *
+ *   POST /runner/browser/sign-in-requests   browser_request_sign_in (board ①): `{ site, reason, clientRequestId? }`
+ *                         files a BROWSER_SIGN_IN card, the Waiting-on-you card machinery behind request_owner_action,
+ *                         and answers with it; the runner then reads it through GET /runner/owner-requests/:id until
+ *                         the owner answers. Only a session on the account's Orbit Cloud runner may: a session on any
+ *                         other runner is refused 403 BROWSER_SIGN_IN_NOT_ORBIT_CLOUD, since the login would be saved
+ *                         in a browser that runner's agents cannot use.
  */
 @UseGuards(ManagedRunnerBrowserEnabledGuard, RunnerAuthGuard)
 @Controller('runner/browser')
@@ -41,6 +60,7 @@ export class RunnerBrowserController {
   constructor(
     private readonly prisma: PrismaService,
     private readonly browser: ManagedRunnerBrowserService,
+    private readonly requests: OwnerRequestsService,
   ) {}
 
   @Get()
@@ -79,6 +99,27 @@ export class RunnerBrowserController {
     return this.browser.open(runner.ownerId, sessionId, body?.url);
   }
 
+  @Post('sign-in-requests')
+  async requestSignIn(
+    @CurrentRunner() runner: Runner,
+    @Headers('x-orbit-session-id') sessionHeader: string | undefined,
+    @Body() dto: BrowserSignInRequestDto,
+  ) {
+    const sessionId = await this.callingSession(runner, sessionHeader);
+    const managed = await this.prisma.managedRunner.findFirst({
+      where: { runnerId: runner.id, ownerId: runner.ownerId },
+      select: { runnerId: true },
+    });
+    if (!managed) {
+      throw new ForbiddenException({
+        code: BROWSER_SIGN_IN_NOT_ORBIT_CLOUD,
+        message: 'browser_request_sign_in is only for sessions on the account\'s Orbit Cloud runner: the login is saved in '
+          + 'that runner\'s browser, which this runner\'s agents cannot use',
+      });
+    }
+    return this.requests.fileBrowserSignIn(runner.ownerId, sessionId, managed.runnerId, dto);
+  }
+
   private async callingSession(runner: Pick<Runner, 'id' | 'ownerId'>, header: string | undefined): Promise<string> {
     const named = header?.trim();
     if (!named) {
@@ -98,3 +139,4 @@ export class RunnerBrowserController {
     return session.id;
   }
 }
+

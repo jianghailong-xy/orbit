@@ -4751,9 +4751,11 @@ export class RunnerApiController {
     @Body() dto: SourcePinRequest,
   ): Promise<SourcePinResponse> {
     await this.assertEngineSessionById(sessionId, (runner as { ownerId?: string }).ownerId);
+    const settledBox: { work: { ownerId: string; taskId: string } | null } = { work: null };
     const outcome = await withTransactionRetry(
       this.prisma,
       async (tx) => {
+        settledBox.work = null;
         const frozen = await freezeSessionSourcePin(
           tx,
           { sessionId, runnerId: runner.id, ownerId: runner.ownerId },
@@ -4775,10 +4777,14 @@ export class RunnerApiController {
           );
           // The refusal ended the run, and that finish may be the one a DONE task's identity was
           // waiting for (§10.5 O-L4 3). Here rather than in the freeze, after the project is taken.
-          await settleDeliveredIdentityAfterFinish(tx, await tx.session.findUnique({
+          const finished = await tx.session.findUnique({
             where: { id: sessionId },
-            select: { ownerId: true, taskId: true, startsTaskWork: true },
-          }));
+            select: { id: true, ownerId: true, taskId: true, startsTaskWork: true },
+          });
+          const settled = await settleDeliveredIdentityAfterFinish(tx, finished);
+          if (finished?.taskId && (settled === 'FROZEN' || settled === 'IDENTITY_UNKNOWN')) {
+            settledBox.work = { ownerId: finished.ownerId, taskId: finished.taskId };
+          }
         }
         return frozen;
       },
@@ -4793,6 +4799,13 @@ export class RunnerApiController {
     // (publishTaskChanged) and the project's coordinator is told, because a start that never became
     // a run is the one thing a project's timeline would otherwise never mention.
     const { refused, ...response } = outcome;
+    // §12.15 P-M1: the refused run's finish decided the route a DONE task's work had left open.
+    const settledWork = settledBox.work;
+    if (settledWork) {
+      await this.tasks?.dispatchDependentsOfSettledWork(settledWork.ownerId, settledWork.taskId).catch((error) =>
+        this.logger.warn(`dependents of task ${settledWork.taskId} not dispatched after its work settled: ${
+          error instanceof Error ? error.message : error}`));
+    }
     if (refused) {
       this.realtime.publishTaskChanged(sessionId, refused.taskId);
       await this.tasks?.deliverDispatchRefusalAfterCommit(refused.taskId);
@@ -7490,6 +7503,7 @@ export class RunnerApiController {
       // message away. A task-bound session additionally reclaims its task as FAILED (it
       // would otherwise sit IN_PROGRESS with nothing watching).
       let failSession = dto.status === RunStatus.FAILED && !regionStopped;
+      let settledWork = false;
       // A reserved L0 turn that cannot produce a comparison is unsettled, not a guessed task
       // failure. An ordinary failed model/shell turn retains the existing FAILED behaviour.
       const failTask = failSession && !!current.taskId && !taskAcceptanceTurn;
@@ -8157,7 +8171,8 @@ export class RunnerApiController {
         // The park above wrote this session's finish, which may be the one a DONE task's identity was
         // waiting for (§10.5 O-L4 3). An item it opens is delivered after the commit with this
         // turn's own exception items.
-        await settleDeliveredIdentityAfterFinish(tx, current);
+        const settled = await settleDeliveredIdentityAfterFinish(tx, current);
+        settledWork = settled === 'FROZEN' || settled === 'IDENTITY_UNKNOWN';
       }
       // NO_REPLY (contract §4.1): the turn has settled, the session is idle and its run goes on. Each
       // request it has read and not answered is closed with its last words — unless something will
@@ -8329,6 +8344,7 @@ export class RunnerApiController {
         repairCheck: repairCheckAfter(current, true, dto.status === RunStatus.SUCCEEDED),
         droppedWakeups,
         checksSettled,
+        settledWork,
       };
     }, loggedRetry(this.logger, 'runnerApi.turnComplete', {
       transaction: {
@@ -8424,6 +8440,13 @@ export class RunnerApiController {
     // what an attempt ending with its task unsettled means. Nothing is decided here: the producer
     // behind this door re-reads what committed and owes the coordinator nothing for a task that
     // settled after all.
+    // §12.15 P-M1: the failed turn ended the last work session of a DONE task whose route was left to
+    // this finish; the DONE edge runs again on what is now decided (the 60 s sweep asks the same).
+    if ('settledWork' in finalized && finalized.settledWork && finalized.taskId && finalized.taskOwnerId) {
+      await this.tasks?.dispatchDependentsOfSettledWork(finalized.taskOwnerId, finalized.taskId).catch((error) =>
+        this.logger.warn(`dependents of task ${finalized.taskId} not dispatched after its work settled: ${
+          error instanceof Error ? error.message : error}`));
+    }
     if (
       finalized.applied
       && !finalized.steer
@@ -10258,6 +10281,10 @@ export class RunnerApiController {
         taskReclaimed,
         dispatchRefused,
         identityUnknown: delivered === 'IDENTITY_UNKNOWN',
+        // This finish froze a DONE task's identity and decided the route its DONE left to it (§12.15
+        // P-M1): a task that delivered nothing releases its dependents on this edge.
+        identityFrozen: delivered === 'FROZEN',
+        ownerId: current.ownerId,
         taskId: current.taskId,
         currentWorkTerminalized,
         // A session the runner finalizes while it runs a turn ends that turn here — completed, failed or
@@ -10296,9 +10323,18 @@ export class RunnerApiController {
       // this door reclaimed the task and told nobody at all.
       await this.openItems?.deliverForTasks([outcome.taskId]);
     }
-    // The item a DONE task's unknown identity opened when this finish settled its work (O-T1).
-    if ('identityUnknown' in outcome && outcome.identityUnknown && outcome.taskId) {
+    // The item a DONE task's unknown identity opened when this finish settled its work (O-T1), or the
+    // WORK_ELSEWHERE one its frozen identity opened (§12.15 P-M1).
+    if ('identityUnknown' in outcome && (outcome.identityUnknown || outcome.identityFrozen) && outcome.taskId) {
       await this.openItems?.deliverForTasks([outcome.taskId]);
+    }
+    // §12.15 P-M1, J10's second edge for a DONE written while its work moved: the finish decided the
+    // route, and a task that delivered nothing releases its dependents now. A predicate the 60 s
+    // ready sweep asks too, so a process that dies here costs one sweep.
+    if ('identityFrozen' in outcome && outcome.identityFrozen && outcome.taskId && outcome.ownerId) {
+      await this.tasks?.dispatchDependentsOfSettledWork(outcome.ownerId, outcome.taskId).catch((error) =>
+        this.logger.warn(`dependents of task ${outcome.taskId} not dispatched after its work settled: ${
+          error instanceof Error ? error.message : error}`));
     }
     // The refusal this finalize recorded: the task row moved, and the project's coordinator is told,
     // because nothing else about a start that never became a run would tell anybody.

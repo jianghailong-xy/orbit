@@ -473,6 +473,8 @@ func orbitTopLevelCommands(t *testing.T) []string {
 // catalogue's agent commands have their rules; its human-only commands carry their catalogue reason;
 // every other first word is in orbitCLIAllowlistExclusions, and none of those has a rule.
 func TestEveryOrbitCommandIsPreApprovedOrExcludedWithAReason(t *testing.T) {
+	// On the Orbit Cloud runner, the one place browser_request_sign_in is offered and pre-approved.
+	t.Setenv(envManagedRunnerGeneration, "3")
 	rules := strings.Join(orbitCLIAllowedTools(capabilityTestExe, true, true), "\n")
 	catalogWords := map[string]bool{}
 	for _, op := range operationCatalog().Ops {

@@ -295,6 +295,11 @@ func (s *bgJobService) handle(req bgSocketRequest) bgSocketResponse {
 	case browserMCPAcquireOp:
 		// One browser tool call by this session (browser_mcp.go).
 		return s.serveBrowserAcquire()
+	case browserSignInYieldOp:
+		// browser_request_sign_in gives the lease up while the owner signs in (browser_tools.go).
+		return s.serveBrowserSignInYield()
+	case browserSignInEndOp:
+		return s.serveBrowserSignInEnd(getBool(args, "retake"))
 
 	case "secret_scan":
 		return s.secretScan(getString(args, "path"))

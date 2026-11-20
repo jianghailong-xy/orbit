@@ -864,9 +864,9 @@ const LANDING_REASON_SENTENCES: Readonly<Record<CriterionLandingReason, string>>
     + 'prove the branch tip is already on main either — with nothing to merge, there will be no receipt',
   NO_RECEIPT: 'no receipt proves its work is on the project branch or on main: it may have been merged outside '
     + 'Orbit, or not merged yet',
-  NO_BRANCH: 'its tasks did no work on a worktree branch and did not declare codeless — they may have changed '
-    + 'code, but with no branch to land there will never be a receipt, so Orbit cannot see whether it reached main',
-  CODELESS: 'its tasks were declared codeless or worked in another repository, so nothing of it lands here',
+  NO_BRANCH: 'its tasks reported changes but did no work on a worktree branch — with no branch to land there '
+    + 'will never be a receipt, so Orbit cannot see whether it reached main',
+  CODELESS: 'its tasks worked in another repository, so nothing of it lands here',
 };
 
 /** The counts line, from the projection's own counts: the one place they are added up. */

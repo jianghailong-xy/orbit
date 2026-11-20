@@ -373,6 +373,10 @@ func orbitCLIAllowedTools(executable string, allowOrchestration, allowBrowser bo
 			if cli.browser && !allowBrowser {
 				continue
 			}
+			// browser_request_sign_in is the Orbit Cloud runner's sessions' only (browser_tools.go).
+			if cli.tool == browserRequestSignInTool && !onOrbitCloudRunner() {
+				continue
+			}
 			rules = append(rules, "Bash("+command+" "+cli.words+" *)")
 		}
 	}
@@ -386,6 +390,7 @@ type orbitCLICommand struct {
 	orchestration bool
 	// browser: one of the Orbit Cloud browser's commands, which exist only while its switch is on.
 	browser bool
+	tool    string
 }
 
 // orbitCLICommands is every command the catalogue offers an agent's session, in catalogue order: each CLI command
@@ -405,6 +410,7 @@ var orbitCLICommands = sync.OnceValue(func() []orbitCLICommand {
 			words:         strings.Join(op.CLI.Argv[1:], " "),
 			orchestration: strings.HasPrefix(op.availability().CLI, "orchestration"),
 			browser:       op.Object == objectBrowser,
+			tool:          op.Tool,
 		})
 	}
 	return commands

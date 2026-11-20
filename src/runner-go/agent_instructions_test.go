@@ -332,7 +332,9 @@ func TestEveryAdvertisedCapabilityIsPreApproved(t *testing.T) {
 	exe := "/usr/local/bin/orbit"
 	// The path the document rewrites argv[0] to, and a shellWordSafe one, so the unquoted rule is
 	// the form that matches the argv an agent copies out of `capabilities --json`.
-	// With the browser switch on, as advertisedCapabilityFamilies lists its family; off, no browser rule at all.
+	// With the browser switch on, as advertisedCapabilityFamilies lists its family; off, no browser rule at all. On the
+	// Orbit Cloud runner, where browser_request_sign_in is offered too.
+	t.Setenv(envManagedRunnerGeneration, "3")
 	ungated := stringSet(orbitCLIAllowedTools(exe, false, true))
 	orchestrated := stringSet(orbitCLIAllowedTools(exe, true, true))
 	for _, rule := range orbitCLIAllowedTools(exe, true, false) {

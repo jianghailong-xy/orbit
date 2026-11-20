@@ -10,7 +10,7 @@ import type {
 } from '@orbit/shared';
 import { PrismaService } from '../prisma/prisma.service';
 import { runnerOfflineSql } from '../runners/runner-presence';
-import { branchNameSql, isCodeTaskSql, lineStartedSql, taskLandingSql } from './project-criterion-landing';
+import { branchNameSql, hasWorkToLandSql, lineStartedSql, taskLandingSql } from './project-criterion-landing';
 import { INTEGRATION_JOB_CLAIM } from './project-integration-job';
 import { baselineHoldSql } from './baseline-hold';
 
@@ -393,7 +393,8 @@ export async function readTaskIntegrationViews(
 ): Promise<Map<string, TaskIntegrationView<Date>>> {
   if (taskIds.length === 0) return new Map();
   const landing = Prisma.raw(taskLandingSql('t'));
-  const isCode = Prisma.raw(isCodeTaskSql('t'));
+  // §12.15 P-M1: a DONE that delivered nothing of its own is not work this line integrates.
+  const isCode = Prisma.raw(hasWorkToLandSql('t'));
   const lineStarted = Prisma.raw(lineStartedSql('t'));
   const mainBranch = Prisma.raw(branchNameSql('pc."upstream_ref"'));
   const ids = Prisma.join(taskIds.map((id) => Prisma.sql`${id}::uuid`));
