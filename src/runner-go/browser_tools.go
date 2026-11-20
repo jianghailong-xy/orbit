@@ -140,7 +140,7 @@ var browserCLICapabilities = []cliCapabilitySpec{
 		Tool:        "browser_open",
 		Argv:        []string{"orbit", "browser", "open"},
 		Usage:       "orbit browser open [--url <url>] [--no-open] [--json]",
-		Arguments:   []string{"--url", "--no-open", "--json"},
+		Arguments:   []string{"--url <url>", "--no-open", "--json"},
 		SessionOnly: true,
 	},
 }

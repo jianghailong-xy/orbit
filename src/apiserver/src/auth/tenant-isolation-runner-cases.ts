@@ -1591,11 +1591,11 @@ export const RUNNER_ISOLATION_FIELDS_BY_HAND: Readonly<Record<string, string>> =
     'must be a session of the runner\'s owner that this runner hosts, else 403 (runner-api/runner-owner-requests.controller.ts:66), and must be the session that filed the request (owner-requests/owner-requests.service.ts:233)',
   // ── the Orbit Cloud browser's agent tools ─────────────────────────────────────────────────────────
   'GET /runner/browser header x-orbit-session-id':
-    'must be a session of the runner\'s owner that this runner hosts, else 403 (runner-api/runner-browser.controller.ts:55), '
+    'must be a session of the runner\'s owner that this runner hosts, else 403 (runner-api/runner-browser.controller.ts:67), '
     + 'and what is read is that owner\'s own managed runner, found by the owner (managed-runners/browser-state.ts accountStatus); '
     + 'runner-browser-status.pg.spec.ts (3) sends another account\'s session both ways',
   'POST /runner/browser/open header x-orbit-session-id':
-    'must be a session of the runner\'s owner that this runner hosts, else 403 (runner-api/runner-browser.controller.ts callingSession), '
+    'must be a session of the runner\'s owner that this runner hosts, else 403 (runner-api/runner-browser.controller.ts:67), '
     + 'and what is opened is that owner\'s own managed runner, found by the owner (managed-runners/browser-state.ts open); '
     + 'runner-browser-open.pg.spec.ts (3) sends another account\'s session both ways',
   // ── the wiki's import on the server ──────────────────────────────────────────────────────────────
