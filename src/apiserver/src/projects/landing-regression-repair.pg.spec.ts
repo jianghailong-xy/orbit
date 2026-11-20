@@ -50,7 +50,13 @@ import { WakeDispositionService } from './wake-disposition.service';
  *  (f) the scope review is not asked about a task with nothing of its own, whose `changed_files` is the
  *      diff to a commit it only checked out;
  *  (g) a project whose only misread task serves no criterion is not projected again: that task moves no
- *      derivation, and a projection would only store what an unrelated lag left.
+ *      derivation, and a projection would only store what an unrelated lag left;
+ *  (h) the repair never takes a project out of DONE: a project DONE by derivation whose projection reads
+ *      not done for reasons of its own (production's 01a0726d: a task filed under a criterion since the
+ *      project was settled, still OPEN) stays DONE through a start, its row untouched. The dry run says so
+ *      in both forms: its printed line for every project — this DONE one among them — shows the status
+ *      read from the row and the status the start leaves, exactly as its JSON holds them, and its summary
+ *      counts the projects it leaves unchanged.
  *
  * What this reads that the tree before the fix does not have is loaded by name, so the file compiles there
  * and every case is red for want of the behaviour rather than of a type.
@@ -65,6 +71,9 @@ interface PredictedProject {
   supersededItemIds: string[];
   statusBefore: string | null;
   statusAfter: string | null;
+  doneByBefore?: string | null;
+  doneByAfter?: string | null;
+  withheld?: string[];
 }
 interface RepairModule {
   predictLandingRegressionRepair(db: unknown): Promise<{
@@ -591,6 +600,85 @@ test('(g) a project whose only misread task serves no criterion is not projected
 
       assert.equal((await projectRow(db, project.projectId)).status, ProjectStatus.OPEN,
         'the repair does not project a project whose misread work serves no criterion');
+    } finally {
+      await db.$disconnect();
+    }
+  });
+
+// ═══ (h) the repair never takes a project out of DONE ═════════════════════════════════════════════
+
+test('(h) a project DONE by derivation whose projection reads not done for a reason of its own stays DONE through a start, its row untouched; the dry run prints DONE -> DONE for it, every line as its JSON says, and counts the unchanged',
+  { skip, timeout: 300_000 }, async () => {
+    const db = await connect();
+    try {
+      // 01a0726d's shape: DONE by derivation since September, its misread task (the V2 row, frozen empty)
+      // serving a criterion, and a task filed under its other criterion since then, still OPEN. Filed by
+      // hand, as rows from before the projection's edges were: the stored DONE is stale against the facts.
+      const project = await settledProject(db, 'stale-done', [V2_ROW, V2_ROW]);
+      await freezeAsTheFirstPassDid(db, project);
+      const second = await db.task.findUniqueOrThrow({
+        where: { id: project.tasks[1]!.taskId }, select: { criterionDefinitionId: true, criterionRevision: true },
+      });
+      await db.task.create({
+        data: {
+          id: randomUUID(), ownerId: project.ownerId, creatorType: 'USER', creatorId: project.ownerId,
+          title: 'a follow-up filed under criterion 2 after the project was settled', projectId: project.projectId,
+          status: 'OPEN', autoRunWhenReady: false, completionCriterion: 'EXECUTABLE', acceptanceCommand: 'true',
+          acceptanceExpectedExitCode: 0,
+          criterionDefinitionId: second.criterionDefinitionId, criterionRevision: second.criterionRevision,
+        },
+      });
+      const stale = await projectRow(db, project.projectId);
+      assert.deepEqual([stale.status, stale.doneBy], [ProjectStatus.DONE, 'DERIVED'], 'CONTROL: stored DONE by derivation');
+      const derived = await readDerivedProjectDone(db as unknown as PrismaService, project.ownerId, project.projectId);
+      assert.deepEqual(derived.withheld, ['CRITERION_UNSATISFIED', 'CRITERION_UNLANDED'],
+        'CONTROL: the projection reads not done, for the OPEN follow-up and not for the misread task');
+
+      const predicted = (await repair.predictLandingRegressionRepair(db)).projects
+        .find((row) => row.projectId === project.projectId);
+      assert.deepEqual(
+        [predicted?.statusBefore, predicted?.statusAfter, predicted?.withheld],
+        [ProjectStatus.DONE, ProjectStatus.DONE, ['CRITERION_UNSATISFIED', 'CRITERION_UNLANDED']],
+        'the prediction leaves it DONE, and says what the projection withholds DONE for');
+
+      // The command a deploy runs, both ways, against this database: every project the fixtures above left
+      // in it, OPEN, DONE and stale DONE alike, printed as its JSON holds it.
+      const dryRun = join(__dirname, 'landing-regression-repair-dry-run.js');
+      const env = { ...process.env, DATABASE_URL: URL };
+      const json = JSON.parse(execFileSync(process.execPath, [dryRun, '--json'], { env, encoding: 'utf8' })) as {
+        projects: PredictedProject[];
+      };
+      const text = execFileSync(process.execPath, [dryRun], { env, encoding: 'utf8' }).split('\n');
+      const lines = text.filter((line) => line.startsWith('landing repair (predicted): project '));
+      const printed = new Map(lines.map((line) => {
+        const match = /^landing repair \(predicted\): project (\S+): (\w+)(?: \((\w+)\))? -> (\w+)(?: \((\w+)\))?, /.exec(line);
+        assert.ok(match, `a project line prints the status read from the row and the status the start leaves: ${line}`);
+        return [match[1]!, { from: match[2], fromBy: match[3] ?? null, to: match[4], toBy: match[5] ?? null }] as const;
+      }));
+      assert.equal(printed.size, json.projects.length, 'one line for every project of the prediction, unchanged ones included');
+      for (const row of json.projects) {
+        assert.deepEqual(printed.get(row.projectId), {
+          from: row.statusBefore ?? 'gone', fromBy: row.statusBefore === 'DONE' ? row.doneByBefore ?? null : null,
+          to: row.statusAfter ?? 'gone', toBy: row.statusAfter === 'DONE' ? row.doneByAfter ?? null : null,
+        }, `the line for ${row.projectId} prints the statuses its JSON holds`);
+      }
+      assert.deepEqual(printed.get(project.projectId), { from: 'DONE', fromBy: 'DERIVED', to: 'DONE', toBy: 'DERIVED' },
+        'this project prints DONE -> DONE');
+      assert.match(lines.find((line) => line.includes(project.projectId)) ?? '',
+        /unchanged: the projection withholds DONE \(CRITERION_UNSATISFIED, CRITERION_UNLANDED\), and the repair never takes a project out of DONE/,
+        'and says why it stays');
+      const summary = text.find((line) => /^landing repair \(predicted\): \d+ project\(s\) hold misread tasks; /.test(line)) ?? '';
+      const count = (status: string) => json.projects.filter((row) => row.statusBefore === status && row.statusAfter === status).length;
+      assert.match(summary, new RegExp(`: ${json.projects.length} project\\(s\\) hold misread tasks; `), 'the summary counts every project');
+      assert.match(summary, /; 0 taken out of DONE; /, 'none taken out of DONE');
+      assert.match(summary, new RegExp(`unchanged: [^;]*\\b${count('DONE')} DONE\\b`), 'the DONE ones it leaves are counted');
+      assert.ok(count('DONE') >= 1, 'CONTROL: DONE projects are among the ones compared');
+
+      await start(db);
+
+      assert.deepEqual(await projectRow(db, project.projectId), stale,
+        'a start leaves it DONE, recorded DERIVED at its original time: the repair wrote nothing to the row');
+      assert.deepEqual(await noise(db, project.projectId), QUIET, 'nothing queued, nothing open, nobody woken');
     } finally {
       await db.$disconnect();
     }

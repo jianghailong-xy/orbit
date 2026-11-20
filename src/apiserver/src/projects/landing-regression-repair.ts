@@ -9,8 +9,7 @@ import {
   frozenIdentityMeasuresNothingSql,
   unnamedIdentityMeasuresNothingSql,
 } from './project-criterion-landing';
-import { readDerivedProjectStatusWrite } from './project-done-derived';
-import { refreshProjectDone } from './project-done-request';
+import { derivedDoneRecord, NO_REOPEN_RECORD, readDerivedProjectStatusWrite } from './project-done-derived';
 import { readDeliveredIdentity } from './project-integration-job';
 import { prerequisiteLandedOtherwiseSql } from '../tasks/task-dependencies';
 import { DELIVERY_REVIEW_KIND, deliveryReviewKey } from './project-open-item';
@@ -49,15 +48,28 @@ import { DELIVERY_REVIEW_KIND, deliveryReviewKey } from './project-open-item';
  *      the scope review (`DR:OUTSIDE_DECLARED_SCOPE:<task>`) and the `LANDING_UNOBSERVED` it opened as
  *      WORK_ELSEWHERE or IDENTITY_UNKNOWN. An item somebody already answered stays as they answered it: a
  *      closed item is never rewritten (`project_open_item_terminal_guard`);
- *   2. each project in which one of them serves a criterion is projected again (`refreshProjectDone`, the
- *      same projection every post-commit edge runs), so a project the first reading took out of DONE is
- *      DONE again when the facts prove it — recorded DERIVED, at the moment of this repair. The original
- *      completion time is not restored: the projection that took DONE away cleared it, and nothing else
- *      recorded it. A task that serves no criterion moves no derivation, so its project is not projected
- *      for it: that would only store whatever an unrelated lag left, which is not this repair's to do.
+ *   2. each project in which one of them serves a criterion, and which is OPEN, is DONE again when the
+ *      projection's own decision over it is to store DONE (`readDerivedProjectStatusWrite`, what every
+ *      post-commit edge stores from) — recorded DERIVED, at the moment of this repair, by one
+ *      compare-and-set that matches only an OPEN row and writes only DONE (`storeDoneOverOpen`). The
+ *      original completion time is not restored: the projection that took DONE away cleared it, and
+ *      nothing else recorded it.
  *
  * It writes no merge receipt, no identity, no task status and no criterion, sends no push, and wakes no
  * coordinator. An owner's record or Reopen press stands, as the projection itself makes it stand.
+ *
+ * ONE DIRECTION, AS A PROPERTY OF THE STATEMENT
+ * ---------------------------------------------
+ * The first reading only ever took DONE away, so undoing it only ever gives DONE back: the repair never
+ * takes a project out of DONE, whatever its projection reads. The production dry run of 2026-11-20 found
+ * four projects DONE by derivation since September and October whose projection reads not done for
+ * reasons of their own — a task under a criterion still OPEN or FAILED, a criterion nobody serves, a
+ * standard set nobody confirmed since it was edited, work only on the project branch — the same reasons
+ * on the code that ran before the fix. The first version of this repair projected through
+ * `refreshProjectDone`, which writes both directions by design, and would have stored OPEN over them at
+ * the start. Their next post-commit edge re-derives them as it always did; that is not this repair's to
+ * do or to undo. A task that serves no criterion moves no derivation, so a project whose misread tasks
+ * serve none is not asked about at all.
  *
  * WHAT IT WILL DO IS READABLE BEFORE IT RUNS
  * ------------------------------------------
@@ -73,7 +85,7 @@ import { DELIVERY_REVIEW_KIND, deliveryReviewKey } from './project-open-item';
  * and this repair run in that first process, and again in the process that stays. An edge of the old
  * server in between can re-derive a repaired project with the first reading and take DONE away again;
  * the second run puts it back. Every write is a compare-and-set — an item only while OPEN, the project
- * only through the projection's own — so a run over repaired rows writes nothing.
+ * only from OPEN to DONE — so a run over repaired rows writes nothing.
  */
 
 const logger = new Logger('LandingRegressionRepair');
@@ -103,13 +115,21 @@ export interface RepairTask {
 export interface RegressionRepairProject {
   projectId: string;
   tasks: RepairTask[];
+  /** Whether a task of these serves a criterion, so the repair asks the projection about the project at
+   *  all. Without one, the project is left as it is whatever the projection reads. */
+  projected: boolean;
   /** The OPEN items superseded by the fact (predicted: that will be). */
   supersededItemIds: string[];
+  /** The row as read before (`project.status`, `project.done_by`); null when there is no such project. */
   statusBefore: string | null;
+  doneByBefore: string | null;
+  /** The row as read after this run; predicted: the row as the repair would leave it. */
   statusAfter: string | null;
-  /** When the projection stored DONE in this run; null when it did not (and in a prediction). */
+  doneByAfter: string | null;
+  /** When this run stored DONE; null when it did not (and in a prediction). */
   doneAgainAt: Date | null;
-  /** What the projection withholds DONE for, when it does. */
+  /** What the projection withholds DONE for, read now — on a DONE project, why its stored DONE is stale
+   *  against the facts; the repair leaves it DONE all the same. Empty when not projected in a run. */
   withheld: string[];
 }
 
@@ -223,6 +243,42 @@ export async function supersedeFirstReadingItems(
   return rows.map((row) => row.id).sort();
 }
 
+/**
+ * The one test the repair and its prediction apply to a project they ask about: the row is OPEN and the
+ * projection's own decision over it (`readDerivedProjectStatusWrite`) is to store DONE. Nothing else
+ * returns a project to DONE here, and nothing here takes one out of DONE.
+ */
+export function returnsToDone(decision: {
+  stored: { status: ProjectStatus } | null;
+  write: ProjectStatus | null;
+}): boolean {
+  return decision.stored?.status === ProjectStatus.OPEN && decision.write === ProjectStatus.DONE;
+}
+
+/**
+ * The repair's only write to a project: DONE over OPEN, recorded DERIVED with the projection's own record
+ * (`derivedDoneRecord`), when `returnsToDone` says so. One compare-and-set on the row as it was read — its
+ * status, which can only be OPEN here, and its record — so the statement itself stores nothing but DONE,
+ * matches nothing but an OPEN row, and writes nothing over an owner's record or press, or a projection,
+ * committed after the read. It sends no push and tells no coordinator.
+ */
+export async function storeDoneOverOpen(prisma: PrismaService, ownerId: string, projectId: string) {
+  const decision = await readDerivedProjectStatusWrite(prisma, ownerId, projectId);
+  if (!decision.stored || !returnsToDone(decision)) return { decision, wrote: false };
+  const written = await prisma.project.updateMany({
+    where: {
+      id: projectId,
+      ownerId,
+      status: ProjectStatus.OPEN,
+      doneBy: decision.stored.doneBy,
+      doneAt: decision.stored.doneAt,
+      reopenedAt: decision.stored.reopenedAt,
+    },
+    data: { ...derivedDoneRecord(decision.seal), ...NO_REOPEN_RECORD },
+  });
+  return { decision, wrote: written.count === 1 };
+}
+
 /** The footprint grouped by project, in project id order. */
 function byProject(rows: readonly Footprint[]): Map<string, { ownerId: string; tasks: RepairTask[] }> {
   const grouped = new Map<string, { ownerId: string; tasks: RepairTask[] }>();
@@ -235,10 +291,11 @@ function byProject(rows: readonly Footprint[]): Map<string, { ownerId: string; t
 }
 
 /**
- * What a start would do now, read and not written: every project of the footprint, the status the
- * projection would store over it, its tasks and the clause each measures nothing by, and the OPEN items
- * that would be superseded. Also the identities the deploy-time pass would freeze first, which the
- * prediction does not follow — a start after a pass that froze some may repair more than this says.
+ * What a start would do now, read and not written: every project of the footprint, its row as it stands
+ * and the row as the repair would leave it — DONE where `returnsToDone` holds, as it is everywhere else —
+ * with what the projection withholds DONE for, its tasks and the clause each measures nothing by, and the
+ * OPEN items that would be superseded. Also the identities the deploy-time pass would freeze first, which
+ * the prediction does not follow — a start after a pass that froze some may repair more than this says.
  */
 export async function predictLandingRegressionRepair(
   db: Prisma.TransactionClient,
@@ -278,16 +335,19 @@ export async function predictLandingRegressionRepair(
          WHERE ${firstReadingItemsWhere(projectId, tasks.map((task) => task.taskId))}
          ORDER BY item."id"`);
     const decision = await readDerivedProjectStatusWrite(db as unknown as PrismaService, ownerId, projectId);
-    const project = await db.project.findFirst({ where: { id: projectId, ownerId }, select: { title: true } });
-    const reprojected = tasks.some((task) => task.servesCriterion);
+    const projected = tasks.some((task) => task.servesCriterion);
+    const returned = projected && returnsToDone(decision);
     prediction.projects.push({
       projectId,
-      title: project?.title ?? null,
+      title: decision.stored?.title ?? null,
       tasks,
+      projected,
       items,
       supersededItemIds: items.map((item) => item.itemId),
       statusBefore: decision.stored?.status ?? null,
-      statusAfter: (reprojected ? decision.write : null) ?? decision.stored?.status ?? null,
+      doneByBefore: decision.stored?.doneBy ?? null,
+      statusAfter: returned ? ProjectStatus.DONE : decision.stored?.status ?? null,
+      doneByAfter: returned ? derivedDoneRecord(decision.seal).doneBy : decision.stored?.doneBy ?? null,
       doneAgainAt: null,
       withheld: decision.derived.withheld,
     });
@@ -308,32 +368,32 @@ export async function runLandingRegressionRepair(
   const result: RegressionRepairResult = { projects: [], failures: [] };
   for (const [projectId, { ownerId, tasks }] of grouped) {
     try {
-      const before = await prisma.project.findFirst({ where: { id: projectId, ownerId }, select: { status: true } });
+      const row = { status: true, doneBy: true, doneAt: true } as const;
+      const before = await prisma.project.findFirst({ where: { id: projectId, ownerId }, select: row });
       const supersededItemIds = await withTransactionRetry(
         prisma,
         (tx) => supersedeFirstReadingItems(tx, { projectId, taskIds: tasks.map((task) => task.taskId) }),
         loggedRetry(logger, 'landingRegressionRepair.items'),
       );
       // Only a project in which a misread task serves a criterion: nothing else moves its derivation.
-      const derived = tasks.some((task) => task.servesCriterion)
-        ? await refreshProjectDone(prisma, ownerId, projectId, {})
-        : null;
-      const after = await prisma.project.findFirst({
-        where: { id: projectId, ownerId }, select: { status: true, doneAt: true },
-      });
-      const doneAgain = before?.status === ProjectStatus.OPEN && after?.status === ProjectStatus.DONE;
+      const projected = tasks.some((task) => task.servesCriterion);
+      const returned = projected ? await storeDoneOverOpen(prisma, ownerId, projectId) : null;
+      const after = await prisma.project.findFirst({ where: { id: projectId, ownerId }, select: row });
       const repaired: RegressionRepairProject = {
         projectId,
         tasks,
+        projected,
         supersededItemIds,
         statusBefore: before?.status ?? null,
+        doneByBefore: before?.doneBy ?? null,
         statusAfter: after?.status ?? null,
-        doneAgainAt: doneAgain ? after?.doneAt ?? null : null,
-        withheld: derived?.withheld ?? [],
+        doneByAfter: after?.doneBy ?? null,
+        doneAgainAt: returned?.wrote ? after?.doneAt ?? null : null,
+        withheld: returned?.decision.derived.withheld ?? [],
       };
       result.projects.push(repaired);
-      const line = repairLine(repaired);
-      if (line) log.log(line);
+      // A line for each project this run wrote something about; the summary counts every other one.
+      if (repaired.doneAgainAt !== null || supersededItemIds.length > 0) log.log(repairLine(repaired));
     } catch (error) {
       const message = error instanceof Error ? error.message : String(error);
       result.failures.push({ projectId, error: message });
@@ -341,35 +401,94 @@ export async function runLandingRegressionRepair(
     }
   }
   if (grouped.size > 0) {
-    const doneAgain = result.projects.filter((project) => project.doneAgainAt !== null).length;
-    const superseded = result.projects.reduce((sum, project) => sum + project.supersededItemIds.length, 0);
-    log.log(`landing repair: ${grouped.size} project(s) hold tasks that measure nothing of their own and were `
-      + `misread, ${doneAgain} done again by derivation, ${superseded} open item(s) superseded, `
-      + `${result.failures.length} failed`);
+    log.log(`${repairSummary(result.projects)}; ${result.failures.length} failed`);
   }
   return result;
 }
 
+/** Whether the repair returned this project to DONE: its own write in a run, its decision in a prediction. */
+function returnedToDone(project: RegressionRepairProject, predicted: boolean): boolean {
+  return predicted
+    ? project.statusBefore === ProjectStatus.OPEN && project.statusAfter === ProjectStatus.DONE
+    : project.doneAgainAt !== null;
+}
+
+/** A status as a line prints it: the column as read, and who recorded a DONE. */
+function statusText(status: string | null, doneBy: string | null): string {
+  if (status === null) return 'gone';
+  return status === ProjectStatus.DONE && doneBy ? `${status} (${doneBy})` : status;
+}
+
 /**
- * One line per project the repair acted on, or will act on, or leaves OPEN — the same line for a run and
- * for its prediction, so the deploy report can set one beside the other; nothing for a project that is
- * DONE and has nothing open.
+ * One line for one project: its status as read from the row, then the status the repair leaves it in
+ * (predicted: would leave it in) and why, the tasks it holds, and the open items superseded. The same line
+ * for a run and for its prediction, so the deploy report can set one beside the other. A prediction prints
+ * one for every project of the footprint; a run logs the projects it wrote something about, and its
+ * summary counts the rest.
  */
-export function repairLine(project: RegressionRepairProject, predicted = false): string | null {
-  const tasks = project.tasks.map((task) => `${task.taskId} ${task.clause}`).join(', ');
-  const head = `landing repair${predicted ? ' (predicted)' : ''}: project ${project.projectId}: `
-    + `${project.tasks.length} task(s) measure nothing of their own (${tasks})`;
+export function repairLine(project: RegressionRepairProject, predicted = false): string {
+  const from = statusText(project.statusBefore, project.doneByBefore);
+  const to = statusText(project.statusAfter, project.doneByAfter);
+  let why: string;
+  if (returnedToDone(project, predicted)) {
+    why = `done again by derivation ${predicted ? 'at the start' : `at ${project.doneAgainAt!.toISOString()}`}; `
+      + 'original completion time not recorded';
+  } else if (project.statusBefore !== project.statusAfter) {
+    why = 'moved by another writer during this run: the repair writes nothing but DONE over OPEN';
+  } else if (project.statusBefore === null) {
+    why = 'unchanged: there is no such project';
+  } else if (project.statusBefore === ProjectStatus.CANCELLED) {
+    why = 'unchanged: a cancelled project is never projected';
+  } else if (!project.projected) {
+    why = 'unchanged: no task of these serves a criterion, so the repair does not project it';
+  } else if (project.statusBefore === ProjectStatus.DONE) {
+    why = project.withheld.length > 0
+      ? `unchanged: the projection withholds DONE (${project.withheld.join(', ')}), and the repair never takes `
+        + 'a project out of DONE'
+      : 'unchanged: the projection reads DONE too';
+  } else {
+    why = project.withheld.length > 0
+      ? `unchanged: the projection withholds DONE (${project.withheld.join(', ')})`
+      : 'unchanged: the owner\'s Reopen stands';
+  }
+  const tasks = project.tasks
+    .map((task) => `${task.taskId} ${task.clause}${task.servesCriterion ? '' : ' (serves no criterion)'}`)
+    .join(', ');
   const items = project.supersededItemIds.length > 0
-    ? `; ${predicted ? 'will supersede' : 'superseded'} ${project.supersededItemIds.length} open item(s) `
+    ? `${predicted ? 'will supersede' : 'superseded'} ${project.supersededItemIds.length} open item(s) `
       + `(${project.supersededItemIds.join(', ')})`
-    : '';
-  const toDone = project.statusBefore === ProjectStatus.OPEN && project.statusAfter === ProjectStatus.DONE;
-  if (toDone) {
-    const at = predicted ? 'at the start' : `at ${project.doneAgainAt?.toISOString() ?? 'this start'}`;
-    return `${head}${items}; OPEN -> DONE: done again by derivation ${at}; original completion time not recorded`;
+    : `${predicted ? 'no open item to supersede' : 'no open item superseded'}`;
+  return `landing repair${predicted ? ' (predicted)' : ''}: project ${project.projectId}: ${from} -> ${to}, ${why}; `
+    + `${project.tasks.length} task(s) measure nothing of their own (${tasks}); ${items}`;
+}
+
+/**
+ * The totals of a run or a prediction: every project of the footprint counted once, by where its status
+ * went — returned to DONE; in a prediction, taken out of DONE, which the repair never does and the count
+ * shows; left as it was, by status, with how many of the DONE ones the projection reads as not done; in a
+ * run, moved by another writer meanwhile — and the open items superseded.
+ */
+export function repairSummary(projects: readonly RegressionRepairProject[], predicted = false): string {
+  const ids = (rows: readonly RegressionRepairProject[]) =>
+    rows.length > 0 ? ` (${rows.map((project) => project.projectId).join(', ')})` : '';
+  const returned = projects.filter((project) => returnedToDone(project, predicted));
+  const rest = projects.filter((project) => !returnedToDone(project, predicted));
+  const unchanged = rest.filter((project) => project.statusBefore === project.statusAfter);
+  const moved = rest.filter((project) => project.statusBefore !== project.statusAfter);
+  const byStatus = new Map<string, number>();
+  for (const project of unchanged) {
+    const status = project.statusBefore ?? 'gone';
+    byStatus.set(status, (byStatus.get(status) ?? 0) + 1);
   }
-  if (project.statusAfter === ProjectStatus.OPEN) {
-    return `${head}${items}; stays OPEN: ${project.withheld.join(', ') || 'the owner\'s Reopen stands'}`;
-  }
-  return items ? `${head}${items}; project stays ${project.statusAfter ?? 'gone'}` : null;
+  const staleDone = unchanged.filter((project) => project.statusBefore === ProjectStatus.DONE
+    && project.withheld.length > 0).length;
+  const items = projects.reduce((sum, project) => sum + project.supersededItemIds.length, 0);
+  const outOfDone = moved.filter((project) => project.statusBefore === ProjectStatus.DONE);
+  return `landing repair${predicted ? ' (predicted)' : ''}: ${projects.length} project(s) hold misread tasks; `
+    + `${returned.length} OPEN -> DONE${ids(returned)}; `
+    + `${predicted ? `${outOfDone.length} taken out of DONE${ids(outOfDone)}; ` : ''}`
+    + `unchanged: ${[...byStatus].map(([status, count]) => `${count} ${status}`).join(', ') || 'none'}`
+    + `${staleDone > 0 ? ` (${staleDone} of the DONE ones read not done by the projection, and stay DONE)` : ''}`
+    + `${!predicted && moved.length > 0 ? `; ${moved.length} moved by another writer during this run${ids(moved)}` : ''}; `
+    + `${items} open item(s) ${predicted ? 'will be superseded' : 'superseded'}`;
 }

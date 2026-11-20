@@ -599,15 +599,7 @@ export async function storeDerivedProjectStatus(
       reopenedAt: stored.reopenedAt,
     },
     data: {
-      ...(derived.done
-        ? {
-          status: ProjectStatus.DONE,
-          doneBy: 'DERIVED' satisfies ProjectDoneBy,
-          doneAt: new Date(),
-          doneCriteriaDigest: seal,
-          acceptedGaps: [],
-        }
-        : { status: ProjectStatus.OPEN, ...NO_DONE_RECORD }),
+      ...(derived.done ? derivedDoneRecord(seal) : { status: ProjectStatus.OPEN, ...NO_DONE_RECORD }),
       ...NO_REOPEN_RECORD,
     },
   });
@@ -682,6 +674,19 @@ export async function readDerivedProjectStatusWrite(
   }
   const write: ProjectStatus = derived.done ? ProjectStatus.DONE : ProjectStatus.OPEN;
   return { derived, seal, stored, write, reopenedBy };
+}
+
+/** The DONE the projection stores: recorded DERIVED, now, against the seal it was derived against. One
+ *  record for `storeDerivedProjectStatus` and for the landing repair's DONE over OPEN
+ *  (`landing-regression-repair.ts`), so the two cannot record DONE differently. */
+export function derivedDoneRecord(seal: string) {
+  return {
+    status: ProjectStatus.DONE,
+    doneBy: 'DERIVED' satisfies ProjectDoneBy,
+    doneAt: new Date(),
+    doneCriteriaDigest: seal,
+    acceptedGaps: [],
+  } satisfies Prisma.ProjectUpdateManyMutationInput;
 }
 
 /** The DONE record of a project that is not recorded done (`project.done_*`, migration 0345). */
