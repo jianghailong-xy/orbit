@@ -62,6 +62,7 @@ import { ProjectTasksSettledProducer } from './project-tasks-settled.producer';
 import { TaskExceptionInputProducer } from './task-exception-input.producer';
 import { WakeDispositionService } from './wake-disposition.service';
 import '../test-support/dequeue-under-lease';
+import { settleDeliveredIdentityAfterFinish } from './project-integration-job';
 
 /**
  * Exception items (docs/project-integration-line-contract.md §4): a task FAILED from any door opens
@@ -654,16 +655,22 @@ async function queuedLanding(
   // The session that produced this branch has stopped moving: the runner commits a worktree when it
   // FINISHES the session (SR13), and a landing is not handed over before that (J-T1a,
   // `task-landing-races-final-commit.pg.spec.ts` — a landing judged earlier answers ALREADY_LANDED
-  // about a branch that is about to grow). The queue reads the finish and where HEAD ended.
-  await stack.db.session.update({
-    where: { id: a.sessionId },
-    data: {
-      status: RunStatus.SUCCEEDED,
-      finishedAt: new Date(),
-      releaseCause: 'engine_exited',
-      worktreeBranch: `orbit/${label}`,
-      worktreeDirty: false,
-    },
+  // about a branch that is about to grow). The status is left as it was: what the queue reads is
+  // the finish and where HEAD ended, and this spec's cases are about the items a landing opens.
+  await stack.db.$transaction(async (tx) => {
+    // The finish settles the DONE's delivered identity in the transaction that writes it, as every
+    // finish door does — and decides the route a DONE written while this work moved left to it
+    // (§10.5 O-L4 3, §12.15 P-M1).
+    const finished = await tx.session.update({
+      where: { id: a.sessionId },
+      data: {
+        status: RunStatus.SUCCEEDED, releaseCause: 'engine_exited', finishedAt: new Date(),
+        worktreeBranch: `orbit/${label}`,
+        worktreeDirty: false,
+      },
+      select: { id: true, ownerId: true, taskId: true, startsTaskWork: true },
+    });
+    await settleDeliveredIdentityAfterFinish(tx, finished);
   });
   return a;
 }
@@ -1390,15 +1397,20 @@ test('a claim with nowhere to run it opens an item the coordinator is told about
     // The session that produced this branch has stopped moving, as in `claimedLanding`: a landing is
     // not handed over before the runner's finalize records it (J-T1a, `landingWorkHasSettled`), and
     // this case is about the other reason a claim ends where it was made.
-    await stack.db.session.update({
-      where: { id: a.sessionId },
-      data: {
-        status: RunStatus.SUCCEEDED,
-        finishedAt: new Date(),
-        releaseCause: 'engine_exited',
-        worktreeBranch: 'orbit/unworkable',
-        worktreeDirty: false,
-      },
+    await stack.db.$transaction(async (tx) => {
+      // The finish settles the DONE's delivered identity in the transaction that writes it, as every
+      // finish door does — and decides the route a DONE written while this work moved left to it
+      // (§10.5 O-L4 3, §12.15 P-M1).
+      const finished = await tx.session.update({
+        where: { id: a.sessionId },
+        data: {
+          status: RunStatus.SUCCEEDED, releaseCause: 'engine_exited', finishedAt: new Date(),
+          worktreeBranch: 'orbit/unworkable',
+          worktreeDirty: false,
+        },
+        select: { id: true, ownerId: true, taskId: true, startsTaskWork: true },
+      });
+      await settleDeliveredIdentityAfterFinish(tx, finished);
     });
 
     const claimed = await stack.jobs.dispatch({

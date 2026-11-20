@@ -243,7 +243,7 @@ fun SessionCards(cards: SessionCardsModel, open: (String) -> Unit, discuss: ((St
                 else requester.bringIntoView()
                 CardFocus.spend(session.id)
             }
-            Box(Modifier.bringIntoViewRequester(requester)) {
+            Box(Modifier.bringIntoViewRequester(requester).then(if (CoordinatorQueue.isSent(card)) Modifier else Modifier.conversationCard())) {
                 val preview = CardPreviews.preview(card)
                 val fresh = cards.fresh(session, card)
                 val result = results[card.key]?.takeIf { it.binding == card.binding } ?: CardActionState()
@@ -278,7 +278,7 @@ fun SessionCards(cards: SessionCardsModel, open: (String) -> Unit, discuss: ((St
             if (focus != null && CardFocus.matches(focus, key)) LaunchedEffect(focus, key) {
                 requester.bringIntoView(); doneReview = true; CardFocus.spend(session.id)
             }
-            Box(Modifier.bringIntoViewRequester(requester)) {
+            Box(Modifier.bringIntoViewRequester(requester).conversationCard()) {
                 CoordinatorDoneCard(app, cards.handle, session.id, coordinated, detail, session.snapshot?.standing.orEmpty(), session.fresh, open,
                     reviewing = doneReview, review = { doneReview = it })
             }

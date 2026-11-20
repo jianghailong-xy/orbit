@@ -1093,6 +1093,17 @@ struct RunnerDetailContent: View {
                 }
                 .runnerRowButtonStyle()
             }
+            // One more workspace on this machine (docs/mocks/new-workspace-form/02-apple-entry, owner A). With none yet,
+            // Start a session above is the way to its first.
+            if !workspaces.isEmpty {
+                Button { newWorkspace() } label: {
+                    Label(NewWorkspaceCopy.NEW_WORKSPACE, systemImage: "plus.circle")
+                        .foregroundStyle(Color.accentColor)
+                        .contentShape(Rectangle())
+                }
+                .runnerRowButtonStyle()
+                .accessibilityIdentifier("machine-new-workspace")
+            }
         } header: {
             RunnerSectionHeader(RunnerPageCopy.RUNNER_WORKSPACES,
                                 trailing: workspaces.isEmpty ? nil : "\(workspaces.count)")
@@ -1428,6 +1439,11 @@ struct RunnerDetailContent: View {
     private func openWorkspace(_ id: String) {
         model.settingsPresented = false
         model.openAgent(id)
+    }
+
+    /// New workspace on this machine: its new session page with the setup card, after the Settings sheet comes down.
+    private func newWorkspace() {
+        model.openNewWorkspace(runner.id)
     }
 
     /// Start a session: this machine's new session page, after the Settings sheet comes down.

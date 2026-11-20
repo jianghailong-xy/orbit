@@ -56,6 +56,7 @@ import { ProjectOpenItemService } from './project-open-item.service';
 import { readTaskIntegrationViews } from './project-task-integration';
 import { ProjectsService } from './projects.service';
 import '../test-support/dequeue-under-lease';
+import { settleDeliveredIdentityAfterFinish } from './project-integration-job';
 
 const URL = process.env.COORDINATOR_PG_URL;
 const skip = !URL;
@@ -273,9 +274,16 @@ async function doneTask(stack: Stack, w: World, label: string, finished = true):
 /** The runner finishing the work session: it commits the worktree and reports where HEAD ended. */
 async function finishWork(stack: Stack, sessionId: string, branch?: string) {
   const session = await stack.db.session.findUniqueOrThrow({ where: { id: sessionId }, select: { branch: true } });
-  await stack.db.session.update({
-    where: { id: sessionId },
-    data: { status: RunStatus.SUCCEEDED, finishedAt: new Date(), releaseCause: 'engine_exited', worktreeBranch: branch ?? session.branch, worktreeDirty: false },
+  await stack.db.$transaction(async (tx) => {
+    // The finish settles the DONE's delivered identity in the transaction that writes it, as every
+    // finish door does — and decides the route a DONE written while this work moved left to it
+    // (§10.5 O-L4 3, §12.15 P-M1).
+    const finished = await tx.session.update({
+      where: { id: sessionId },
+      data: { status: RunStatus.SUCCEEDED, releaseCause: 'engine_exited', finishedAt: new Date(), worktreeBranch: branch ?? session.branch, worktreeDirty: false },
+      select: { id: true, ownerId: true, taskId: true, startsTaskWork: true },
+    });
+    await settleDeliveredIdentityAfterFinish(tx, finished);
   });
 }
 
@@ -455,16 +463,13 @@ test('a DONE task’s landing through the heartbeat and result routes: every que
         'Waiting for a runner: the work’s workspace has no runner to land it');
       await stack.db.workspace.update({ where: { id: w.workspaceId }, data: { runnerId: w.runnerId } });
 
-      // A second task whose work session is still open: the claim leaves it alone.
+      // A second task whose work session is still open: its DONE queues nothing yet — the finish decides
+      // whether there is anything to land (§12.15 P-M1) — and its row keeps the existing reading of done
+      // code work on a started line that has no attempt yet.
       const second = await doneTask(stack, w, 'second', false);
-      const held = (await read(stack, w, second)).landTask!;
-      assert.equal(held.state, 'QUEUED');
-      assert.notEqual(held.landingSessionId, segment.sessionId,
-        'each task owns a segment, and so its own landing session');
-      assert.deepEqual(held.blockingReason, {
-        code: 'WAITING_TASK_WORK',
-        summary: 'Waiting to land: the task’s work session is still running, and its branch can still move',
-      });
+      const waiting = await read(stack, w, second);
+      assert.equal(waiting.state, 'QUEUED', 'Waiting to land: the landing has not been queued yet');
+      assert.equal(waiting.landTask, null, 'no attempt exists while the work moves');
 
       // ── RUNNING ───────────────────────────────────────────────────────────────────────────
       // A capable, leased beat claims the first — and only the first: the second's work is open.
@@ -482,12 +487,14 @@ test('a DONE task’s landing through the heartbeat and result routes: every que
       assert.equal(runningJob.waitMs, runningJob.startedAt.getTime() - runningJob.queuedAt.getTime(),
         'the queue wait stops at the claim');
       assert.equal(running.checksRunningForMs, null, 'fetching is not checking');
-      assert.equal((await read(stack, w, second)).landTask?.blockingReason?.code, 'WAITING_TASK_WORK',
-        'an open work session is named before the busy branch');
+      assert.equal((await read(stack, w, second)).landTask, null, 'the second still has no attempt while it moves');
 
-      // The second's work finishes: now only the running landing on the same branch holds it.
+      // The second's work finishes: its finish queues the landing, and now only the running landing on
+      // the same branch holds it.
       await finishWork(stack, second.sessionId);
       const serial = (await read(stack, w, second)).landTask!;
+      assert.notEqual(serial.landingSessionId, segment.sessionId,
+        'each task owns a segment, and so its own landing session');
       assert.deepEqual(serial.blockingReason, {
         code: 'WAITING_SERIAL_SLOT',
         summary: `Waiting to land: the landing of “${first.title}” is running on this branch first`,

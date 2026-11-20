@@ -33,8 +33,7 @@ import { ProjectHandoffService } from './project-handoff.service';
 import {
   INTEGRATION_JOB_CLAIM,
   enqueueForDoneTask,
-  integrationSerialKey,
-} from './project-integration-job';
+  integrationSerialKey, settleDeliveredIdentityAfterFinish } from './project-integration-job';
 import {
   configureProjectIntegration,
   readInFlightJobs,
@@ -666,7 +665,8 @@ test('a stop is a fact: QUEUED jobs end now, RUNNING ones are asked or ended, an
     await reopenAndRedo(stack, w, work.taskId);
 
     // The work starts moving again after the claim, so the answer is too early (J-T1e).
-    await stack.db.session.create({
+    const stillWorking = await stack.db.session.create({
+      select: { id: true },
       data: {
         ownerId: w.ownerId, creatorId: w.ownerId, taskId: work.taskId, workspaceId: w.workspaceId,
         assignedRunnerId: w.runnerId, title: 'still working', prompt: 'still working',
@@ -683,8 +683,26 @@ test('a stop is a fact: QUEUED jobs end now, RUNNING ones are asked or ended, an
       where: { taskId: work.taskId, kind: 'LAND_TASK' },
       orderBy: { generation: 'asc' },
     });
-    assert.deepEqual(rows.map((job) => [job.generation, job.state]), [[1, 'CANCELLED'], [2, 'QUEUED']],
-      'the DONE after the reopen is queued in the too-early branch too');
+    // §12.15 P-M1: the DONE after the reopen has work still moving, so the result transaction's re-run
+    // of it decides nothing yet and keeps the reopen marker; the finish of that work queues it.
+    assert.deepEqual(rows.map((job) => [job.generation, job.state]), [[1, 'CANCELLED']],
+      'the DONE after the reopen waits for its moving work, not for this answer');
+    assert.ok(await stack.db.taskReopenIntent.findUnique({ where: { taskId: work.taskId } }),
+      'and its reopen marker is kept for the finish that queues it');
+    await stack.db.$transaction(async (tx) => {
+      const finished = await tx.session.update({
+        where: { id: stillWorking.id },
+        data: { status: RunStatus.SUCCEEDED, finishedAt: new Date() },
+        select: { id: true, ownerId: true, taskId: true, startsTaskWork: true },
+      });
+      await settleDeliveredIdentityAfterFinish(tx, finished);
+    });
+    const after = await stack.db.projectIntegrationJob.findMany({
+      where: { taskId: work.taskId, kind: 'LAND_TASK' },
+      orderBy: { generation: 'asc' },
+    });
+    assert.deepEqual(after.map((job) => [job.generation, job.state]), [[1, 'CANCELLED'], [2, 'QUEUED']],
+      'the finish queues the next generation, so the too-early branch loses none');
     assert.equal(await stack.db.taskReopenIntent.findUnique({ where: { taskId: work.taskId } }), null);
   });
 

@@ -53,7 +53,7 @@ func TestDshMCPServers(t *testing.T) {
 	ask, _ := dshPermissionPolicyFor("default")
 	t.Run("orbit-server-and-session-identity", func(t *testing.T) {
 		job := dshTestJob("default")
-		job.AllowOrchestration, job.WikiDisabled, job.SpawnDepth = true, true, 2
+		job.AllowOrchestration, job.WikiDisabled, job.WorkflowsDisabled, job.SpawnDepth = true, true, true, 2
 		// The agent cannot replace Orbit's own server.
 		job.Agent.McpConfig = map[string]interface{}{"orbit": map[string]interface{}{"command": "/bin/false"}}
 		servers, err := dshMCPServers(job, ask)
@@ -69,7 +69,7 @@ func TestDshMCPServers(t *testing.T) {
 			t.Fatal("a stdio entry carries no type field (P0 mcp-stdio-injection)")
 		}
 		for key, want := range map[string]string{"ORBIT_SESSION_ID": publicID(job.SessionID), "ORBIT_AGENT_ID": "p4-agent",
-			"ORBIT_TASK_ID": "p4-task", envMCPOrchestration: "1", envWiki: "off", envMCPPermissionPrompt: "0",
+			"ORBIT_TASK_ID": "p4-task", envMCPOrchestration: "1", envWiki: "off", envWorkflows: "off", envMCPPermissionPrompt: "0",
 			envSpawnDepth: "2", "ORBIT_HOME": machineHome(), envMCPCallTimeout: "60"} {
 			if got, ok := dshEnvValue(entry, key); !ok || got != want {
 				t.Fatalf("%s = %q (%v), want %q", key, got, ok, want)

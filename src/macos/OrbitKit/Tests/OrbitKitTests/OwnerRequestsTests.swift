@@ -156,13 +156,13 @@ final class OwnerRequestsTests: XCTestCase {
     }
 
     func testEachKindsCardSaysWhatItAsksFor() {
-        XCTAssertEqual(OwnerRequestKind.allCases.map(OwnerRequests.kindTag), ["DECISION", "SECRET", "STEPS", "CONFIRM", "WIKI"])
+        XCTAssertEqual(OwnerRequestKind.allCases.map(OwnerRequests.kindTag), ["DECISION", "SECRET", "STEPS", "CONFIRM", "WIKI", "SETTINGS"])
         XCTAssertEqual(OwnerRequestKind.allCases.map(OwnerRequests.primaryLabel),
-                       ["Send answer", "Provide key", "Mark done", "Confirm", "Create wiki"])
+                       ["Send answer", "Provide key", "Mark done", "Confirm", "Create wiki", "Save changes"])
         XCTAssertEqual(OwnerRequestKind.allCases.map(OwnerRequests.declineLabel),
-                       ["Decline…", "Decline…", "Can’t do this…", "Decline…", "Decline…"])
+                       ["Decline…", "Decline…", "Can’t do this…", "Decline…", "Decline…", "Decline…"])
         XCTAssertEqual(OwnerRequestKind.allCases.map(OwnerRequests.inboxAction),
-                       ["Answer", "Provide", "Open steps", "Review", "Review"])
+                       ["Answer", "Provide", "Open steps", "Review", "Review", "Review"])
         XCTAssertEqual(OwnerRequests.askedLine(secret(), now: now), "Asked 2m ago · expires in 2d 23h")
         XCTAssertEqual(OwnerRequests.removedText(secret()), "When the task ends, or after 7 days")
     }
@@ -364,9 +364,10 @@ final class OwnerRequestsTests: XCTestCase {
         XCTAssertEqual(OwnerRequestKind.allCases.map(Notifications.ownerRequestCategory), [
             "ORBIT_OWNER_REQUEST_DECISION", "ORBIT_OWNER_REQUEST_SECRET",
             "ORBIT_OWNER_REQUEST_MANUAL_STEP", "ORBIT_OWNER_REQUEST_CONFIRM", "ORBIT_OWNER_REQUEST_WIKI_CREATE",
+            "ORBIT_OWNER_REQUEST_SETTINGS_CHANGE",
         ])
         XCTAssertEqual(OwnerRequestKind.allCases.map(Notifications.ownerRequestActionTitle),
-                       ["Answer", "Provide key", "Mark done", "Review", "Review"])
+                       ["Answer", "Provide key", "Mark done", "Review", "Review", "Review"])
         XCTAssertEqual(Notifications.ownerRequestLaterTitle, "Later")
         let reminder = Notifications.ownerRequestReminder(requestID: requestID, kind: .secret,
                                                           title: "Provide a DeepSeek API key", sessionID: sessionID)

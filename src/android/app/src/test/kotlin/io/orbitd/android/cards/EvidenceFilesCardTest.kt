@@ -484,7 +484,8 @@ class EvidenceFilesCardTest {
         openPage()
         compose.activityRule.scenario.recreate()
         await { exists(hasTestTag("evidence-files")) }
-        await { exists(hasTestTag("evidence-files:version")) }
+        // The version line is drawn at once from the revision; its count comes only once the recreated page has read the list again.
+        await { draws("evidence-files:version", "9 files · 1.8 MB") }
         says("evidence-files:version", "9 files · 1.8 MB")
     }
 

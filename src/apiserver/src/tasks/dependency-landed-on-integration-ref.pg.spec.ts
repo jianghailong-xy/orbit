@@ -225,12 +225,16 @@ async function workSession(stack: Stack, ids: World, taskId: string, label: stri
       provider: 'claude',
       // SUCCEEDED, so the run is over: a live session would hold the dependent back through a
       // clause that has nothing to do with landing.
-      status: RunStatus.SUCCEEDED, finishedAt: new Date(), releaseCause: 'engine_exited',
+      status: RunStatus.SUCCEEDED, releaseCause: 'engine_exited',
       dispatchOrigin: SessionDispatchOrigin.USER,
       startsTaskWork: true,
       isolationStatus: 'worktree',
       branch: `orbit/${label}`,
       completedAt: new Date(),
+      // Finished, as the runner's /finalize writes SUCCEEDED. Without it the work is still moving,
+      // and a prerequisite whose work moves in a project with no line yet holds its dependents
+      // until the finish decides whether it lands (§12.15 P-M1, `prerequisiteLandedSql`).
+      finishedAt: new Date(),
     },
   });
   return sessionId;

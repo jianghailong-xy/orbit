@@ -43,12 +43,12 @@ controllers and their decorators, so it lists what the server mounts, not what a
 | Caller | Routes |
 | --- | --- |
 | `public` | 37 |
-| `user` | 482 |
+| `user` | 490 |
 | `admin` | 31 |
-| `runner` | 205 |
+| `runner` | 207 |
 | `channel` | 1 |
 | `link gateway` | 3 |
-| **Total** | **759** |
+| **Total** | **769** |
 
 ## Public routes
 
@@ -103,8 +103,11 @@ controllers and their decorators, so it lists what the server mounts, not what a
 | `POST` | `/api/access-tokens/device/:userCode/approve` | path `userCode` | `PatDeviceLoginController.approve` |
 | `POST` | `/api/access-tokens/device/:userCode/deny` | path `userCode` | `PatDeviceLoginController.deny` |
 | `GET` | `/api/account-secrets` | — | `AccountSecretsController.list` |
-| `DELETE` | `/api/account-secrets/:id` | path `id` | `AccountSecretsController.remove` |
+| `POST` | `/api/account-secrets` | body `CreateAccountSecretDto` | `AccountSecretsController.create` |
+| `DELETE` | `/api/account-secrets/:id` | path `id`; query `revokeCopies` | `AccountSecretsController.remove` |
 | `PUT` | `/api/account-secrets/:id` | body `ReplaceAccountSecretDto`; path `id` | `AccountSecretsController.replace` |
+| `GET` | `/api/account-secrets/grants` | query `removed` | `AccountSecretsController.grants` |
+| `POST` | `/api/account-secrets/grants/:id/revoke` | path `id` | `AccountSecretsController.revokeGrant` |
 | `GET` | `/api/agents` | — | `WorkspacesController.list` |
 | `POST` | `/api/agents` | body `CreateWorkspaceDto` | `WorkspacesController.create` |
 | `DELETE` | `/api/agents/:id` | path `id` | `WorkspacesController.remove` |
@@ -179,6 +182,7 @@ controllers and their decorators, so it lists what the server mounts, not what a
 | `GET` | `/api/outcomes/inbox` | query `limit` | `OutcomeSurfacesController.inbox` |
 | `GET` | `/api/owner-requests` | query `state` | `OwnerRequestsController.list` |
 | `GET` | `/api/owner-requests/:id` | path `id` | `OwnerRequestsController.get` |
+| `POST` | `/api/owner-requests/:id/apply-settings` | path `id` | `OwnerRequestsController.applySettings` |
 | `POST` | `/api/owner-requests/:id/create-wiki` | path `id` | `OwnerRequestsController.createWiki` |
 | `POST` | `/api/owner-requests/:id/decline` | body `DeclineOwnerRequestDto`; path `id` | `OwnerRequestsController.decline` |
 | `POST` | `/api/owner-requests/:id/done` | body `CompleteOwnerRequestDto`; path `id` | `OwnerRequestsController.complete` |
@@ -236,6 +240,7 @@ controllers and their decorators, so it lists what the server mounts, not what a
 | `POST` | `/api/projects/:id/promotions/:promotionId/integration/retry` | body `RetryIntegrationDto`; path `id`, `promotionId` | `ProjectIntegrationRetryController.retryPromotionCheck` |
 | `POST` | `/api/projects/:id/resume` | path `id` | `ProjectsController.resume` |
 | `POST` | `/api/projects/:id/sessions/complete` | path `id` | `ProjectsController.completeSessions` |
+| `POST` | `/api/projects/:id/setting-changes/:changeId/revert` | path `changeId`, `id` | `ProjectsController.revertSettingChange` |
 | `DELETE` | `/api/projects/:id/share` | path `id` | `ShareLinksController.turnOffProjectLink` |
 | `GET` | `/api/projects/:id/share` | path `id` | `ShareLinksController.projectLink` |
 | `PUT` | `/api/projects/:id/share` | body `PutShareLinkDto`; path `id` | `ShareLinksController.putProjectLink` |
@@ -255,6 +260,7 @@ controllers and their decorators, so it lists what the server mounts, not what a
 | `GET` | `/api/projects/sidebar` | — | `ProjectsController.sidebar` |
 | `POST` | `/api/prompt-optimizations` | body `PromptOptimizationDto` | `PromptOptimizerController.optimize` |
 | `GET` | `/api/providers` | — | `ProvidersController.list` |
+| `PATCH` | `/api/providers/builtin/:engine/model-tier` | body `UpdateProviderModelTierDto`; path `engine` | `ProvidersController.setBuiltinModelTier` |
 | `GET` | `/api/providers/mine` | — | `ProvidersController.listMine` |
 | `POST` | `/api/providers/mine` | body `CreateModelProviderDto` | `ProvidersController.createMine` |
 | `DELETE` | `/api/providers/mine/:id` | path `id` | `ProvidersController.removeMine` |
@@ -425,6 +431,7 @@ controllers and their decorators, so it lists what the server mounts, not what a
 | `POST` | `/api/sessions/:id/turns/:turnId/translation/retry` | path `id`, `turnId` | `SessionsController.retryTurnTranslation` |
 | `POST` | `/api/sessions/:id/turns/:turnId/translation/send-as-written` | path `id`, `turnId` | `SessionsController.sendTurnAsWritten` |
 | `POST` | `/api/sessions/:id/turns/current-work-routing` | body `Object`; path `id` | `SessionsController.routedTurn` |
+| `GET` | `/api/sessions/:id/workflows` | path `id` | `SessionsController.workflowRuns` |
 | `GET` | `/api/sessions/:id/worktree-file` | path `id`; query `path` | `SessionsController.worktreeFile` |
 | `GET` | `/api/sessions/compact` | query `parentSessionId`, `status` | `SessionsController.listCompact` |
 | `GET` | `/api/sessions/counts` | — | `SessionsController.counts` |
@@ -482,6 +489,7 @@ controllers and their decorators, so it lists what the server mounts, not what a
 | `GET` | `/api/tasks/evidence-decisions/pending` | query `decidingSessionId` | `PendingEvidenceJudgmentsController.pending` |
 | `GET` | `/api/tasks/labels` | query `assigneeId`, `listId`, `projectId` | `TasksController.labelSummary` |
 | `GET` | `/api/tasks/model-routing/report` | query `agentId`, `since` | `TaskModelRoutingReportController.read` |
+| `GET` | `/api/tasks/model-routing/report/subagents` | query `agentId`, `since` | `TaskModelRoutingReportController.readSubagents` |
 | `GET` | `/api/tasks/page` | query `assigneeId`, `counts`, `creatorSessionId`, `cursor`, `labels`, `limit`, `listId`, `minPriority`, `projectId`, `q`, `status` | `TasksController.listPage` |
 | `GET` | `/api/terminals` | — | `TerminalsController.list` |
 | `DELETE` | `/api/terminals/:id` | path `id` | `TerminalsController.revoke` |
@@ -763,6 +771,8 @@ controllers and their decorators, so it lists what the server mounts, not what a
 | `GET` | `/api/runner/sessions/search` | query `limit`, `q` | `RunnerSessionsController.searchSessions` |
 | `POST` | `/api/runner/sessions/takeover-leases` | body `Object` | `RunnerApiController.takeoverLeasesBatch` |
 | `POST` | `/api/runner/sessions/worktrees-removable` | body `Object` | `RunnerApiController.worktreesRemovable` |
+| `GET` | `/api/runner/settings` | — | `RunnerOwnerRequestsController.settings` |
+| `POST` | `/api/runner/settings-proposals` | body `ProposeSettingsDto` | `RunnerOwnerRequestsController.proposeSettings` |
 | `PATCH` | `/api/runner/subagent-runs/:runId` | body `SubagentRunUpdateDto`; path `runId` | `RunnerSubagentsController.endRemoteSubagentRun` |
 | `POST` | `/api/runner/subagent-runs/:runId/claim` | path `runId` | `RunnerSubagentsController.claimRemoteSubagentRun` |
 | `POST` | `/api/runner/subagent-runs/:runId/events` | body `Object`; path `runId` | `RunnerSubagentsController.relaySubagentEvents` |

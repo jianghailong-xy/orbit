@@ -26,11 +26,27 @@ import { answerStillWaiting } from '../conditions/condition-still-waiting';
 import { CONDITION_STILL_WAITING_KIND } from '@orbit/shared';
 import { endUndeliveredGrants, enqueueResolutions } from './owner-request-endings';
 import { OwnerSecretsService, type OwnerSecretGrantView } from './owner-secrets.service';
+import { settingOwnerOnlyBody, settingsChangeTitle } from '@orbit/shared';
+import { normalizeDefaultModels } from '../providers/engine-provider';
+import { applySettingsChanges } from './settings-apply';
+import {
+  SettingsProposalInvalid,
+  sameSettingsChanges,
+  settingsChangeDeclinedMessage,
+  settingsChangeEntries,
+  validateSettingsChanges,
+  wideningKeys,
+  type SettingsChangePayload,
+} from './settings-change';
 import {
   OWNER_REQUEST_EXPIRED,
   OWNER_REQUEST_NOT_ASKER,
   OWNER_REQUEST_NOT_PENDING,
   OwnerRequestNotFileable,
+  SETTINGS_ALREADY_SET,
+  SETTINGS_CHANGE,
+  SETTINGS_CHANGE_DECLINED,
+  SETTINGS_OWNER_CHANNEL_ONLY,
   WIKI_CREATE_DAILY_RUN_LIMIT,
   WIKI_CREATE_DECLINED,
   WIKI_CREATE_LOOKBACK_DAYS,
@@ -84,6 +100,8 @@ const VIEW = {
   // CONDITION_* items (migration 1030, conditions/condition-attention.ts): the condition a can't-read card or the
   // 30-day question is about, which a client reads to name its schedule or task.
   conditionId: true,
+  // SETTINGS_CHANGE (migration 1273): `{ changes: [{ key, from, to, tier }] }`, which the card draws.
+  payload: true,
   expiresAt: true,
   clientRequestId: true,
   askedBySessionId: true,
@@ -279,6 +297,116 @@ export class OwnerRequestsService implements OnModuleInit, OnModuleDestroy {
   }
 
   /**
+   * A session proposes a change to the owner's own Settings (docs/settings-from-conversation-design.md §5.1), filed as
+   * a SETTINGS_CHANGE card the owner approves or declines. Nothing here writes a preference.
+   *
+   *   1. every key is in the tier table and every value passes the PATCH's rules (400), `defaultModels` normalised;
+   *   2. each key's value in force is recorded beside its new value, and a change to what is already in force is
+   *      dropped: with nothing left, 409 SETTINGS_ALREADY_SET;
+   *   3. any change that widens agent reach refuses the whole proposal, 403 SETTING_OWNER_ONLY (§6);
+   *   4. a change this session's card was declined for is refused, 409 SETTINGS_CHANGE_DECLINED;
+   *   5. this session's previous PENDING card is WITHDRAWN in the transaction that files the new one, so the owner never
+   *      answers a stale card (`owner_request_settings_change_pending_key` holds a session to one). The session is not
+   *      woken for it: it is told here, in `withdrawnRequestIds`;
+   *   6. the card is filed with the server's title, "Change N setting(s)?", and `{ changes }` as its payload.
+   */
+  async proposeSettings(
+    ownerId: string,
+    askingSessionId: string,
+    proposal: { changes: Record<string, unknown>; why: string },
+  ): Promise<OwnerRequestView & { created: true; withdrawnRequestIds: string[] }> {
+    const why = proposal.why?.trim();
+    if (!why) throw new BadRequestException('why is required: say what the person asked for');
+    let proposed: Awaited<ReturnType<typeof validateSettingsChanges>>;
+    try {
+      proposed = await validateSettingsChanges(proposal.changes ?? {});
+    } catch (error) {
+      if (error instanceof SettingsProposalInvalid) throw new BadRequestException(error.message);
+      throw error;
+    }
+    const session = await this.prisma.session.findFirst({
+      where: { id: askingSessionId, ownerId, deletedAt: null },
+      select: { id: true },
+    });
+    if (!session) throw new NotFoundException('the asking session is not one of this account’s');
+    if (proposed.defaultModels !== undefined) {
+      proposed.defaultModels = await normalizeDefaultModels(this.prisma, ownerId, proposed.defaultModels as Record<string, string>);
+    }
+    const user = await this.prisma.user.findUnique({ where: { id: ownerId }, select: { preferences: true } });
+    const changes = settingsChangeEntries((user?.preferences ?? {}) as Record<string, unknown>, proposed);
+    if (changes.length === 0) {
+      throw new ConflictException({
+        code: SETTINGS_ALREADY_SET,
+        message: 'Every setting proposed already has that value; nothing was filed.',
+      });
+    }
+    const widening = wideningKeys(changes);
+    if (widening.length > 0) throw new ForbiddenException(settingOwnerOnlyBody(widening));
+    const declined = await this.prisma.ownerRequest.findMany({
+      where: { ownerId, askedBySessionId: askingSessionId, kind: SETTINGS_CHANGE, state: 'DECLINED' },
+      orderBy: { resolvedAt: 'desc' },
+      select: { id: true, payload: true, resolvedAt: true, resolutionNote: true },
+    });
+    const refused = declined.find((request) => sameSettingsChanges(request.payload, changes));
+    if (refused) {
+      throw new ConflictException({
+        code: SETTINGS_CHANGE_DECLINED,
+        message: settingsChangeDeclinedMessage(refused.resolvedAt!, refused.resolutionNote),
+        requestId: refused.id,
+        declinedAt: refused.resolvedAt!.toISOString(),
+        reason: refused.resolutionNote,
+      });
+    }
+
+    const payload: SettingsChangePayload = { changes };
+    // Two filings of one session at once: the second's insert waits on the pending key and fails once the first
+    // commits. Filed again, it withdraws the first, as filing after it would have.
+    const fileOnce = () => withTransactionRetry(this.prisma, async (tx) => {
+      const now = new Date();
+      const withdrawn = await tx.ownerRequest.updateManyAndReturn({
+        where: { ownerId, askedBySessionId: askingSessionId, kind: SETTINGS_CHANGE, state: 'PENDING' },
+        data: {
+          state: 'WITHDRAWN',
+          resolvedAt: now,
+          resolvedBySessionId: askingSessionId,
+          resolutionNote: 'Replaced by a newer settings proposal from the same session.',
+        },
+        select: { id: true },
+      });
+      const created = await tx.ownerRequest.create({
+        data: {
+          ownerId,
+          askedBySessionId: askingSessionId,
+          kind: SETTINGS_CHANGE,
+          state: 'PENDING',
+          title: settingsChangeTitle(changes.length),
+          why,
+          payload: payload as unknown as Prisma.InputJsonValue,
+        },
+        select: VIEW,
+      });
+      return { created, withdrawn: withdrawn.map((row) => row.id) };
+    }, loggedRetry(this.logger, 'ownerRequests.proposeSettings'));
+    let filed: Awaited<ReturnType<typeof fileOnce>>;
+    for (let attempt = 1; ; attempt += 1) {
+      try {
+        filed = await fileOnce();
+        break;
+      } catch (error) {
+        const pendingTaken = error instanceof Prisma.PrismaClientKnownRequestError && error.code === 'P2002';
+        if (!pendingTaken || attempt >= 3) throw error;
+      }
+    }
+    const { created, withdrawn } = filed;
+    void this.push?.notifyOwnerRequest(created.id);
+    this.realtime?.publishSessionUpdated(created.askedBySessionId);
+    void translationLanguages(this.prisma, ownerId)
+      .then((langs) => { if (langs) this.queueTranslation(ownerId, created, langs); })
+      .catch((error: Error) => this.logger.warn(`translating request ${created.id} failed to queue: ${error.message}`));
+    return { ...created, created: true, withdrawnRequestIds: withdrawn };
+  }
+
+  /**
    * What a WIKI_CREATE is for, or why it may not be filed (design §3.6): the asking session's workspace's repository,
    * which has no wiki in use and was never declined one. Asked before anything is written.
    */
@@ -438,6 +566,9 @@ export class OwnerRequestsService implements OnModuleInit, OnModuleDestroy {
     if (request.kind === 'WIKI_CREATE') {
       throw new BadRequestException('a WIKI_CREATE request is done when its repository has a wiki: create it with POST /owner-requests/:id/create-wiki');
     }
+    if (request.kind === SETTINGS_CHANGE) {
+      throw new BadRequestException('a SETTINGS_CHANGE request is done when the owner saves its changes, which writes them; it is not marked done by hand');
+    }
     this.refuseAnsweredElsewhere(request.kind);
     const text = given.text?.trim();
     const option = given.option ?? undefined;
@@ -537,6 +668,42 @@ export class OwnerRequestsService implements OnModuleInit, OnModuleDestroy {
       if (now.state === 'DONE') return now;
       throw error;
     }
+  }
+
+  /**
+   * The owner's Save changes on a SETTINGS_CHANGE card (docs/settings-from-conversation-design.md §5.2), in the
+   * transaction that settles the card DONE: the account's preferences re-read under the user row's lock; any key whose
+   * value in force is no longer the card's `from` answers 409 SETTINGS_STALE and the whole transaction rolls back, so
+   * nothing is written and the card stays PENDING; otherwise each `to` is merged as the owner's PATCH merges it, and each
+   * key written is marked `changedBy[key] = { sessionId, requestId, at, from }` (§5.3). The ending reaches the asking
+   * session as every owner request's does (`settle`). The owner's own login only: a request carrying an acting session
+   * is refused SETTINGS_OWNER_CHANNEL_ONLY before anything is read, and a personal access token never reaches this door
+   * (@PatForbidden('OWNER_INTERACTIVE')).
+   */
+  async applySettings(
+    ownerId: string,
+    id: string,
+    actingSessionId: string | null,
+    client: OwnerRequestClient | null = null,
+  ): Promise<OwnerRequestView> {
+    if (actingSessionId !== null) {
+      throw new ForbiddenException({
+        code: SETTINGS_OWNER_CHANNEL_ONLY,
+        message: 'a settings change is saved by the account owner, signed in, with no acting session: the owner presses Save changes on the card.',
+      });
+    }
+    const request = await this.get(ownerId, id);
+    if (request.kind !== SETTINGS_CHANGE) throw new BadRequestException('only a SETTINGS_CHANGE request applies settings');
+    if (request.state !== 'PENDING') {
+      throw new ConflictException({
+        code: OWNER_REQUEST_NOT_PENDING,
+        state: request.state,
+        message: `this request is already ${request.state}; an ended request is final and nothing was written`,
+      });
+    }
+    const { changes } = request.payload as unknown as SettingsChangePayload;
+    return this.settle(ownerId, id, 'DONE', { resolvedByUserId: ownerId, resolvedClient: client }, (tx, now) =>
+      applySettingsChanges(tx, { ownerId, requestId: id, askedBySessionId: request.askedBySessionId, changes }, now));
   }
 
   /**

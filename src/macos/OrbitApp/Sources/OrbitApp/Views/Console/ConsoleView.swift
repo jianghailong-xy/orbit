@@ -104,6 +104,9 @@ struct ConsoleView: View {
             isRunning: { id in console.state.background.contains { $0.id == id && $0.status == "running" } },
             subagentItems: { console.state.subagentItems[$0] ?? [] },
             subagentRun: { console.subagentRuns[$0] },
+            workflowRun: { console.workflowRuns[$0] },
+            workflows: { Array(console.workflowRuns.values) },
+            reveal: { console.revealAgent($0) },
             parentEngine: appModel.session(id: console.sessionID)?.engine,
             fullPayload: { await console.fullPayload(seq: $0) })
     }
@@ -1169,9 +1172,10 @@ struct TranscriptView: View {
         .environment(\.answeredQuestions, console.answeredQuestions)
         // The item a record link or a search hit asked for: a long message from another session opens to it.
         .environment(\.revealedItemID, console.revealedItemID)
-        // Where a SubAgent's finished line finds the card it was started from, and the scroll to it.
-        .environment(\.subagentCardLinks, SubagentCardLinks(find: { console.delegateCard(forRun: $0) },
-                                                            reveal: { console.revealAgent($0) }))
+        // A SubAgent's end turns, joined to their cards by run id: what the agent read, and a queued one's
+        // Don't send (`SubagentCardEnd`).
+        .environment(\.subagentWakes, console.subagentWakes)
+        .environment(\.subagentQueuedWakes, console.subagentQueuedWakes)
         .scrollContentBackground(.hidden)   // show the window background, not the List's own
         #if os(iOS)
         // Turn OFF the scroll view's touch delay so an in-list control (the jump-to-latest disc, the
@@ -2561,6 +2565,9 @@ struct TranscriptItemView: View {
             UserTurnRow(bubble: b, steer: steerControls(b), putBack: putBack(b), revealItemCard: { console?.revealOpenItemCard($0) ?? false })
         case .assistant(let b): AssistantBubbleView(bubble: b)
         case .thinking(let b):  ThinkingView(block: b)
+        case .toolCall(let c) where c.name == WorkflowBlock.toolName:
+            // An Orbit workflow: its own block, opening to its calls by phase (board subagent-workflow part 4).
+            WorkflowBlockView(card: c, fullPayload: fullPayload)
         case .toolCall(let c):
             // The owner's "Chat about this" reply to one of Orbit's own cards: their message, drawn as
             // theirs under the call rather than left inside its result (`OwnerChatReply`).

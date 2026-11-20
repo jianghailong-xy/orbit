@@ -744,6 +744,7 @@ func claimedSessionFromReclaim(r ReclaimSession) *ClaimedSession {
 		AllowOrchestration: r.AllowOrchestration,
 		WatchesDisabled:    r.WatchesDisabled,
 		WikiDisabled:       r.WikiDisabled,
+		WorkflowsDisabled:  r.WorkflowsDisabled,
 		ScheduleRun:        r.ScheduleRun,
 		OrchestrationToken: r.OrchestrationToken,
 		Reclaimed:          true,

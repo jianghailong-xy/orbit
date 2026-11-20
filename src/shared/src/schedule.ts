@@ -317,6 +317,31 @@ export const SCHEDULE_COPY = {
     WORKSPACE: 'Keep in {workspace}',
     other: 'Keep as it is',
   },
+  every: {
+    minutes: 'Every {count} min',
+    hour: 'Every hour',
+    hours: 'Every {count} hours',
+    window: '{interval}, {time}–{until}',
+    from: '{interval} from {time}',
+    days: '{rule}, {days}',
+    workweek: 'Mon–Fri',
+    weekend: 'weekends',
+  },
+  /** The planned end (§8.5) and the line a run of missed slots collapses into. */
+  end: {
+    until: 'until {when}',
+    today: '{time} today',
+    tomorrow: '{time} tomorrow',
+    runLeft: '1 run left',
+    runsLeft: '{count} runs left',
+    missed: '{count} slots missed, {from}–{to}',
+    missedDated: '{count} slots missed, {fromDate}, {from}–{toDate}, {to}',
+    endLabel: 'Ends',
+    extend: 'Extend the end',
+    remove: 'Remove the end',
+    extendAsk: '{title}: extend the end',
+    removeAsk: '{title}: remove the end',
+  },
   history: {
     who: { USER: 'You', SESSION: 'Session', RUN: 'Run', ALLOWED: 'You allowed' },
     fields: {
@@ -327,6 +352,7 @@ export const SCHEDULE_COPY = {
       rule: 'Time',
       timezone: 'Time zone',
       endAt: 'Ends',
+      maxRuns: 'Runs',
       accessLevel: 'Access',
       runLimitMinutes: 'Run limit',
       workspaceId: 'Workspace',
@@ -410,6 +436,8 @@ export const SCHEDULE_COPY = {
   push: {
     failedBody: 'The last run {reason}. It keeps running until you pause it.',
     goalReachedTitle: '{title} ended itself',
+    /** §8.5: a planned end (endAt or maxRuns) reached; also the ENDED row's read. */
+    stoppedAsPlanned: 'Stopped as planned after {runs}',
   },
   empty: {
     lead: 'Nothing scheduled. Say what should happen and when; an agent sets it up and asks you once.',
@@ -512,6 +540,12 @@ export type ScheduleRule =
   | { kind: 'ONCE'; at: string }
   | { kind: 'DAILY'; time: string }
   | { kind: 'WEEKLY'; time: string; weekdays: ScheduleWeekday[] }
+  /**
+   * Sub-daily: slots every `minutes` (30, 60, 120, 180, 240, 360, 480 or 720) from `time` through `until`
+   * (inclusive) or the end of the day, on `weekdays`, on the local wall clock. The server always writes `time` and
+   * `weekdays`, so a client that predates EVERY reads it as a weekly rule.
+   */
+  | { kind: 'EVERY'; minutes: number; time: string; weekdays: ScheduleWeekday[]; until?: string }
   /** Starts when its condition fires; `conditionId` is null on a create card, before Create writes the condition. */
   | { kind: 'WHEN'; conditionId: string | null; runsPerWeek: number; condition: ScheduleWhenCondition };
 
@@ -591,7 +625,14 @@ export interface ScheduleView {
   note: string | null;
   revision: number;
   startAt: string;
+  /** The planned end by time (§8.5); null for none. */
   endAt: string | null;
+  /** The planned end by count of started runs (§8.5); null for none. Absent from servers before it. */
+  maxRuns?: number | null;
+  /** The runs it has started in all, counted as the weekly budget counts them. Absent from servers before it. */
+  runsStarted?: number;
+  /** maxRuns minus runsStarted, at least 0; null without maxRuns. Absent from servers before it. */
+  runsLeft?: number | null;
   nextDueAt: string | null;
   consecutiveFailures: number;
   createdFromSessionId: string | null;
@@ -729,7 +770,20 @@ export interface ScheduleCreateCard extends ScheduleCardBase, ScheduleEnvelopeLi
   };
   today: { key: string; summary: string | null; text: string } | null;
   notice: string;
+  /** The Ends line (§8.5); null when the card names no end. Absent from servers before it. */
+  ends?: ScheduleCardEnds | null;
   envelope: null;
+}
+
+/**
+ * A create card's planned end (§8.5): the end the agent named, or on an EVERY rule that named none the server's
+ * suggestion 7 days out. A PENDING card's suggestion offers No end (`ScheduleAllowBody.dropSuggestedEnd`); once
+ * allowed, the card reads the end Create wrote, still `suggested`, or null after No end.
+ */
+export interface ScheduleCardEnds {
+  endAt: string | null;
+  maxRuns: number | null;
+  suggested: boolean;
 }
 
 /** The envelope card (§4): *Now* and *Asked*. */
@@ -821,9 +875,13 @@ export interface SessionScheduleCardsResponse {
   records: ScheduleChangeRecord[];
 }
 
-/** `POST /api/schedule-requests/:id/allow`: a zone only for a CREATE card that names none. */
+/**
+ * `POST /api/schedule-requests/:id/allow`: a zone only for a CREATE card that names none; `dropSuggestedEnd` is the
+ * create card's No end (§8.5), so Create writes no end instead of the suggested one.
+ */
 export interface ScheduleAllowBody {
   timezone?: string;
+  dropSuggestedEnd?: boolean;
 }
 
 /** `POST /api/schedule-requests/:id/{allow,decline}`. */
@@ -946,6 +1004,7 @@ export function scheduleRuleText(rule: ScheduleRule, form: 'short' | 'long' = 's
     return scheduleFill(CC.rules[form], { condition: form === 'long' ? lowerFirst(rule.condition.text) : rule.condition.text });
   }
   if (rule.kind === 'DAILY') return scheduleFill(t.daily, { time: rule.time });
+  if (rule.kind === 'EVERY') return everyRuleText(rule);
   const days = SCHEDULE_WEEKDAYS.filter((d) => rule.weekdays.includes(d));
   if (days.length === 7) return scheduleFill(t.daily, { time: rule.time });
   if (days.length === 5 && WORKWEEK.every((d) => days.includes(d))) return scheduleFill(t.weekdays, { time: rule.time });
@@ -956,6 +1015,114 @@ export function scheduleRuleText(rule: ScheduleRule, form: 'short' | 'long' = 's
       : scheduleFill(C.rules.long.weekday, { weekday: C.weekdays[d], time: rule.time });
   }
   return scheduleFill(t.days, { days: days.map((d) => C.weekdaysShort[d]).join(C.rules.daysSeparator), time: rule.time });
+}
+
+/** An EVERY rule's sentence, the same in both forms (design §9.2): "Every 30 min, 09:00–18:00, Mon–Fri", "Every hour". */
+function everyRuleText(rule: Extract<ScheduleRule, { kind: 'EVERY' }>): string {
+  const e = C.every;
+  const interval = rule.minutes < 60
+    ? scheduleFill(e.minutes, { count: rule.minutes })
+    : rule.minutes === 60 ? e.hour : scheduleFill(e.hours, { count: rule.minutes / 60 });
+  const text = rule.until
+    ? scheduleFill(e.window, { interval, time: rule.time, until: rule.until })
+    : rule.time === '00:00' ? interval : scheduleFill(e.from, { interval, time: rule.time });
+  const days = SCHEDULE_WEEKDAYS.filter((d) => rule.weekdays.includes(d));
+  if (days.length === 7) return text;
+  const named = days.length === 5 && WORKWEEK.every((d) => days.includes(d))
+    ? e.workweek
+    : days.length === 2 && days.includes('SAT') && days.includes('SUN')
+      ? e.weekend
+      : days.map((d) => C.weekdaysShort[d]).join(C.rules.daysSeparator);
+  return scheduleFill(e.days, { rule: text, days: named });
+}
+
+/**
+ * A schedule's planned end as one line: "until 18:00 today", "until Nov 25", "3 runs left", or both joined by the
+ * separator when it has an end by time and one by count. Null when it has no end.
+ */
+export function scheduleEndText(
+  schedule: Pick<ScheduleView, 'endAt' | 'maxRuns' | 'runsLeft'>,
+  now: Date,
+  timezone: string,
+): string | null {
+  const e = C.end;
+  const parts: string[] = [];
+  if (schedule.endAt) {
+    const at = new Date(schedule.endAt);
+    const day = scheduleDayText(at, now, timezone);
+    const time = localParts(at, timezone).time;
+    const when = day === C.dates.today ? scheduleFill(e.today, { time })
+      : day === C.dates.tomorrow ? scheduleFill(e.tomorrow, { time })
+        : scheduleDateText(at, timezone);
+    parts.push(scheduleFill(e.until, { when }));
+  }
+  if (schedule.maxRuns != null) {
+    const left = schedule.runsLeft ?? schedule.maxRuns;
+    parts.push(left === 1 ? e.runLeft : scheduleFill(e.runsLeft, { count: left }));
+  }
+  return parts.length ? parts.join(C.separator) : null;
+}
+
+/** "16 slots missed, 01:00–08:30", or with dates when the range spans days: "…, Nov 19, 22:00–Nov 20, 06:30". */
+export function scheduleMissedText(runs: readonly Pick<ScheduleRunView, 'plannedAt'>[], timezone: string): string {
+  const times = runs.map((r) => Date.parse(r.plannedAt));
+  const first = localParts(new Date(Math.min(...times)), timezone);
+  const last = localParts(new Date(Math.max(...times)), timezone);
+  if (first.month === last.month && first.day === last.day) {
+    return scheduleFill(C.end.missed, { count: runs.length, from: first.time, to: last.time });
+  }
+  const date = (p: typeof first) => scheduleFill(C.dates.day, { month: C.months[p.month - 1]!, day: p.day });
+  return scheduleFill(C.end.missedDated, {
+    count: runs.length, fromDate: date(first), from: first.time, toDate: date(last), to: last.time,
+  });
+}
+
+/**
+ * Collapses consecutive MISSED runs of one schedule into one item (two or more; a single one stays a run). A
+ * schedule's streak ends at any other run of it between two missed ones. The collapsed item takes the place of the
+ * first member in the list and the time of its last.
+ */
+export interface ScheduleMissedItem {
+  kind: 'MISSED';
+  schedule: ScheduleListRow;
+  runs: ScheduleRunView[];
+  at: string;
+}
+export function scheduleCollapseMissed(items: ScheduleTimelineItem[]): Array<ScheduleTimelineItem | ScheduleMissedItem> {
+  const runItems = items.filter((i): i is Extract<ScheduleTimelineItem, { kind: 'RUN' }> => i.kind === 'RUN');
+  const streakOf = new Map<ScheduleTimelineItem, ScheduleTimelineItem[]>();
+  const bySchedule = new Map<string, typeof runItems>();
+  for (const item of runItems) {
+    const list = bySchedule.get(item.schedule.id) ?? [];
+    list.push(item);
+    bySchedule.set(item.schedule.id, list);
+  }
+  for (const list of bySchedule.values()) {
+    list.sort((a, b) => Date.parse(a.run.plannedAt) - Date.parse(b.run.plannedAt));
+    let streak: typeof runItems = [];
+    const close = () => {
+      if (streak.length > 1) for (const m of streak) streakOf.set(m, streak);
+      streak = [];
+    };
+    for (const item of list) {
+      if (item.run.state === 'MISSED') streak.push(item);
+      else close();
+    }
+    close();
+  }
+  const out: Array<ScheduleTimelineItem | ScheduleMissedItem> = [];
+  const done = new Set<ScheduleTimelineItem[]>();
+  for (const item of items) {
+    const streak = item.kind === 'RUN' ? (streakOf.get(item) as typeof runItems | undefined) : undefined;
+    if (!streak || item.kind !== 'RUN') {
+      out.push(item);
+      continue;
+    }
+    if (done.has(streak)) continue;
+    done.add(streak);
+    out.push({ kind: 'MISSED', schedule: item.schedule, runs: streak.map((m) => m.run), at: streak[streak.length - 1]!.at });
+  }
+  return out;
 }
 
 /** Whether a row shows the repeat mark (↻) before its rule: a one-off does not. */
@@ -1601,7 +1768,7 @@ export function scheduleHistoryWho(record: Pick<ScheduleChangeRecord, 'changedBy
 }
 
 function fieldValueText(field: string, value: unknown, names: Record<string, string>): string {
-  if (value === null || value === undefined) return field === 'endAt' ? C.history.noEnd : '';
+  if (value === null || value === undefined) return field === 'endAt' || field === 'maxRuns' ? C.history.noEnd : '';
   if (field === 'accessLevel') return C.access[value as ScheduleAccessLevel]?.label ?? String(value);
   if (field === 'runLimitMinutes') return scheduleFill(C.history.minutes, { minutes: Number(value) });
   if (field === 'workspaceId') return names[String(value)] ?? String(value);
@@ -1609,7 +1776,10 @@ function fieldValueText(field: string, value: unknown, names: Record<string, str
 }
 
 function ruleChangeText(before: ScheduleRule | undefined, after: ScheduleRule): { field: string | null; text: string } {
-  if (before && before.kind !== 'ONCE' && after.kind !== 'ONCE' && before.kind !== 'WHEN' && after.kind !== 'WHEN') {
+  if (
+    before && before.kind !== 'ONCE' && after.kind !== 'ONCE' && before.kind !== 'WHEN' && after.kind !== 'WHEN'
+    && before.kind !== 'EVERY' && after.kind !== 'EVERY'
+  ) {
     const sameShape = before.kind === after.kind
       && (before.kind !== 'WEEKLY' || after.kind !== 'WEEKLY' || before.weekdays.join() === after.weekdays.join());
     if (sameShape && before.time !== after.time) {
@@ -1771,6 +1941,11 @@ export function scheduleFailedPush(input: Parameters<typeof scheduleFailedWaitin
 /** A run ending its own schedule: "Release 2.0 freeze watch ended itself". */
 export function scheduleGoalReachedPushTitle(title: string): string {
   return scheduleFill(C.push.goalReachedTitle, { title });
+}
+
+/** §8.5: "Stopped as planned after 12 runs", "after 1 run": the planned-end push and an ENDED row's read. */
+export function scheduleStoppedAsPlannedText(runs: number): string {
+  return scheduleFill(C.push.stoppedAsPlanned, { runs: `${runs} ${runs === 1 ? 'run' : 'runs'}` });
 }
 
 /** A held schedule's card: "Weekly dependency audit is held". */

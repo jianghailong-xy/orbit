@@ -325,7 +325,11 @@ test('the owner’s Reopen project stands until the facts it was pressed over ch
         taskId,
         title: `ran ${taskId}`,
         prompt: 'do the work',
-        status: RunStatus.SUCCEEDED, finishedAt: new Date(), releaseCause: 'engine_exited',
+        status: RunStatus.SUCCEEDED,
+        // Finished, as the runner's /finalize writes SUCCEEDED: a work session with no `finished_at`
+        // is work still moving, and a DONE over it has its landing deferred to the finish (§12.15
+        // P-M1), which the closing guardrail reads as LANDING_IN_FLIGHT.
+        finishedAt: new Date(), releaseCause: 'engine_exited',
         branch: `orbit/${taskId}`,
         isolationStatus: 'worktree',
       },

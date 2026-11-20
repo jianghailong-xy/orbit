@@ -61,6 +61,7 @@ import { ProjectTasksSettledProducer } from './project-tasks-settled.producer';
 import { TaskExceptionInputProducer } from './task-exception-input.producer';
 import { WakeDispositionService } from './wake-disposition.service';
 import '../test-support/dequeue-under-lease';
+import { settleDeliveredIdentityAfterFinish } from './project-integration-job';
 
 /**
  * `integration_retry` (docs/project-integration-line-contract.md §2.3 J-T1b): a project's coordinator
@@ -358,11 +359,18 @@ async function doneTask(
   assert.equal(await taskStatus(stack.db, declared.id), TaskStatus.DONE, 'the acceptance command agreed');
   // The runner commits the worktree when it FINISHES the session (SR13), and a landing is not handed
   // over before that (J-T1a): what the queue reads is the finish and where HEAD ended.
-  await stack.db.session.update({
-    where: { id: sessionId },
-    data: worktree
-      ? { status: RunStatus.SUCCEEDED, releaseCause: 'engine_exited', finishedAt: new Date(), worktreeBranch: branch, worktreeDirty: false }
-      : { status: RunStatus.SUCCEEDED, finishedAt: new Date(), releaseCause: 'engine_exited' },
+  await stack.db.$transaction(async (tx) => {
+    // The finish settles the DONE's delivered identity in the transaction that writes it, as every
+    // finish door does — and decides the route a DONE written while this work moved left to it
+    // (§10.5 O-L4 3, §12.15 P-M1).
+    const finished = await tx.session.update({
+      where: { id: sessionId },
+      data: worktree
+        ? { status: RunStatus.SUCCEEDED, releaseCause: 'engine_exited', finishedAt: new Date(), worktreeBranch: branch, worktreeDirty: false }
+        : { status: RunStatus.SUCCEEDED, releaseCause: 'engine_exited', finishedAt: new Date() },
+      select: { id: true, ownerId: true, taskId: true, startsTaskWork: true },
+    });
+    await settleDeliveredIdentityAfterFinish(tx, finished);
   });
   return { taskId: declared.id, title, sessionId, turnId, branch };
 }

@@ -47,6 +47,7 @@ import { settleUnrunSessionRequests } from '../sessions/session-request';
 import { ProjectOpenItemService } from '../projects/project-open-item.service';
 import { PushService } from '../push/push.service';
 import { RUNNER_LINK_REVOCATION_WINDOW_MS } from '../runner-api/runner-link-token';
+import { CompletionInputRouter } from '../projects/completion-input-router.service';
 import { settleUnrunWakeTurns, signalDrainedWakeups } from '../runner-api/wake-turn-withdraw';
 import {
   APISERVER_PROCESS_QUIET_AFTER_MS,
@@ -320,6 +321,12 @@ export class ReaperService implements OnModuleInit, OnModuleDestroy {
      * checks); `@Optional()` for the specs that build the reaper by hand about something else.
      */
     @Optional() private readonly push?: PushService,
+    /**
+     * The completion doors a project's facts go out through. A DONE task whose route this reap decided
+     * (§12.15 P-M1) re-derives the settled fact its deferred landing held. CoordinatorJudgmentModule,
+     * which RealtimeModule imports, provides it; `@Optional()` for the specs that build the reaper by hand.
+     */
+    @Optional() private readonly completionInputs?: CompletionInputRouter,
     /**
      * How the reaper finds SessionsService to file the wakes a lost runner's work owes (settleLostWork), without
      * RealtimeModule importing SessionsModule. `@Optional()` for the specs that build the reaper by hand.
@@ -1009,7 +1016,7 @@ export class ReaperService implements OnModuleInit, OnModuleDestroy {
       const delivered = taskId
         ? await settleDeliveredIdentityAfterFinish(tx, await tx.session.findUnique({
           where: { id: sessionId },
-          select: { ownerId: true, taskId: true, startsTaskWork: true },
+          select: { id: true, ownerId: true, taskId: true, startsTaskWork: true },
         }))
         : null;
       await retireSessionInboxGeneration(tx, sessionId);
@@ -1073,7 +1080,9 @@ export class ReaperService implements OnModuleInit, OnModuleDestroy {
         ok: true,
         taskReclaimed,
         currentWorkTerminalized,
-        identityUnknown: delivered === 'IDENTITY_UNKNOWN',
+        // Or the WORK_ELSEWHERE item an identity frozen here opened (§12.15 P-M1). The dependents of a
+        // task that delivered nothing are released by the 60 s ready sweep, which asks the same predicate.
+        identitySettled: delivered === 'IDENTITY_UNKNOWN' || delivered === 'FROZEN',
         droppedWakeups,
         checksSettled,
       };
@@ -1096,9 +1105,16 @@ export class ReaperService implements OnModuleInit, OnModuleDestroy {
       // And the exception item this sweep opened goes to whoever is responsible for it (§4.4 X-D4 1).
       await this.openItems?.deliverForTasks([taskId]);
     }
-    // The item a DONE task's unknown identity opened when this finish settled its work (O-T1).
-    if ('identityUnknown' in outcome && outcome.identityUnknown && taskId) {
+    // The item a DONE task's unknown identity opened when this finish settled its work (O-T1), or the
+    // WORK_ELSEWHERE item its frozen identity opened (§12.15 P-M1).
+    if ('identitySettled' in outcome && outcome.identitySettled && taskId) {
       await this.openItems?.deliverForTasks([taskId]);
+      // And the project facts the deferred landing held (PROJECT_TASKS_SETTLED / looks-finished),
+      // re-derived now that it is decided. The dependents themselves are the 60 s ready sweep's.
+      if (this.completionInputs) {
+        const settled = await this.prisma.task.findUnique({ where: { id: taskId }, select: { projectId: true } });
+        await this.completionInputs.routeSettledWork([settled?.projectId]);
+      }
     }
     if (outcome.currentWorkTerminalized > 0) {
       this.realtime.publishQueuedTurnsChanged(sessionId);

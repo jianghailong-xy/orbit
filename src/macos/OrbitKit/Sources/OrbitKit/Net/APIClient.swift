@@ -398,6 +398,12 @@ public final class APIClient: @unchecked Sendable {
         try await get("sessions/\(sessionID)/subagents")
     }
 
+    /// The session's Orbit workflows, oldest first (GET /sessions/:id/workflows): what each
+    /// `mcp__orbit__workflow` call's block shows — its phases, counts, cost and how it ended.
+    public func sessionWorkflows(sessionID: String) async throws -> [WorkflowRunView] {
+        try await get("sessions/\(sessionID)/workflows")
+    }
+
     /// The tasks this session's agent created, as its "Tasks created here" card draws them
     /// (`SessionCreatedTasks`): rows already in the card's order, a replaced task already drawn as
     /// the one that took it over. `limit` caps `items` and nothing else — nil leaves it to the
@@ -1063,6 +1069,17 @@ public final class APIClient: @unchecked Sendable {
         try await postEmpty("owner-requests/\(id)/create-wiki")
     }
 
+    /// A SETTINGS_CHANGE card's Save changes (design §5.2): writes the proposed values and settles the card DONE. A value
+    /// that moved since is refused 409 SETTINGS_STALE and nothing is written.
+    public func applyOwnerRequestSettings(_ id: String) async throws -> OwnerRequest {
+        try await postEmpty("owner-requests/\(id)/apply-settings")
+    }
+
+    /// Undo of a settings change (design §5.3): the owner's own preferences PATCH with each key's `from`.
+    public func undoSettingsChange(_ values: [String: JSONValue]) async throws -> User {
+        try await patch("users/me/preferences", body: values)
+    }
+
     /// A SECRET request's key, in the body and nowhere else; the answer never carries it back.
     public func submitOwnerSecret(_ id: String, _ body: OwnerRequestSecretBody) async throws -> OwnerRequest {
         try await post("owner-requests/\(id)/secret", body: body)
@@ -1289,6 +1306,13 @@ public final class APIClient: @unchecked Sendable {
     /// silent generation ends and the next one is queued. Answers the integration view read again.
     public func retryIntegrationJob(_ projectID: String, jobID: String) async throws -> ProjectIntegrationView {
         try await postEmpty("projects/\(projectID)/integration/jobs/\(jobID)/retry")
+    }
+
+    /// Revert, on a coordinator's change in the project's landing-check history (§12.15 P-R1): the
+    /// server puts the change's old value back and the field then needs a card from the coordinator.
+    /// The answer is not read: the page reads the project again.
+    public func revertSettingChange(projectID: String, changeID: String) async throws {
+        _ = try await postRaw("projects/\(projectID)/setting-changes/\(changeID)/revert", body: Optional<Empty>.none)
     }
 
     /// The owner's "Land without the check" on a landing in flight (§2.4 J-S5): the server stops it
@@ -1827,10 +1851,10 @@ public final class APIClient: @unchecked Sendable {
     /// Every provider with its models' SubAgent tiers and prices (GET /providers/subagent-tiers): the
     /// Providers page's Model tiers table and the SubAgents settings' provider list.
     public func subagentTiers() async throws -> SubagentTiersResponse { try await get("providers/subagent-tiers") }
-    /// Set or clear (nil) the owner's tier for one model of their own key.
-    public func setModelTier(providerID: String, model: String, tier: String?) async throws {
-        _ = try await send(makeRequest("providers/mine/\(providerID)/model-tier", method: "PATCH",
-                                       body: ProviderModelTierUpdate(model: model, tier: tier)))
+    /// Set or clear (nil) the owner's tier for one model, at the path SubagentSettings.tierPath names: a key of
+    /// their own, or a built-in engine's catalogue.
+    public func setModelTier(path: String, model: String, tier: String?) async throws {
+        _ = try await send(makeRequest(path, method: "PATCH", body: ProviderModelTierUpdate(model: model, tier: tier)))
     }
 
     /// The whole DeepSeek account's balance behind one of the account's own DeepSeek keys (GET
