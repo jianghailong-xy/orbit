@@ -42,13 +42,13 @@ controllers and their decorators, so it lists what the server mounts, not what a
 
 | Caller | Routes |
 | --- | --- |
-| `public` | 37 |
-| `user` | 497 |
+| `public` | 38 |
+| `user` | 499 |
 | `admin` | 31 |
 | `runner` | 205 |
 | `channel` | 1 |
 | `link gateway` | 3 |
-| **Total** | **774** |
+| **Total** | **777** |
 
 ## Public routes
 
@@ -82,6 +82,7 @@ controllers and their decorators, so it lists what the server mounts, not what a
 | `GET` | `/api/shared/:token/artifacts` | path `token`; query `path` | `SharedController.artifact` |
 | `GET` | `/api/shared/:token/attachments/:id` | path `id`, `token` | `SharedController.attachment` |
 | `GET` | `/api/shared/:token/card` | path `token` | `SharedController.card` |
+| `GET` | `/api/shared/:token/content` | path `token` | `SharedController.content` |
 | `GET` | `/api/shared/:token/docs/:slug` | path `slug`, `token` | `SharedController.wikiDoc` |
 | `GET` | `/api/shared/:token/events` | path `token`; query `after`, `before`, `limit`, `maxPayload` | `SharedController.events` |
 | `GET` | `/api/shared/:token/events/:seq` | path `seq`, `token` | `SharedController.event` |
@@ -138,6 +139,7 @@ controllers and their decorators, so it lists what the server mounts, not what a
 | `DELETE` | `/api/drive/entries/:id` | path `id` | `DriveController.moveToTrash` |
 | `GET` | `/api/drive/entries/:id` | path `id` | `DriveController.get` |
 | `PATCH` | `/api/drive/entries/:id` | body `UpdateDriveEntryDto`; path `id` | `DriveController.update` |
+| `POST` | `/api/drive/entries/:id/share-check` | path `id` | `DriveController.shareCheck` |
 | `GET` | `/api/drive/entries/:id/versions` | path `id` | `DriveController.versions` |
 | `POST` | `/api/drive/folders` | body `CreateDriveFolderDto` | `DriveController.createFolder` |
 | `GET` | `/api/drive/resolve` | query `path` | `DriveController.resolve` |
@@ -449,6 +451,7 @@ controllers and their decorators, so it lists what the server mounts, not what a
 | `POST` | `/api/sessions/remove-imported` | body `Object` | `SessionsController.removeImported` |
 | `GET` | `/api/sessions/search` | query `limit`, `q` | `SessionsController.search` |
 | `GET` | `/api/share-links` | query `kind` | `ShareLinksController.list` |
+| `POST` | `/api/share-links` | body `ShareDriveFileDto` | `ShareLinksController.shareDriveFile` |
 | `DELETE` | `/api/share-links/:id` | path `id` | `ShareLinksController.turnOff` |
 | `POST` | `/api/share-links/turn-off` | body `TurnOffShareLinksDto` | `ShareLinksController.turnOffMany` |
 | `GET` | `/api/task-lists` | — | `TaskListsController.list` |

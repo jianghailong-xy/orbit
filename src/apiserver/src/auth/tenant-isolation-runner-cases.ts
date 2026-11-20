@@ -1921,6 +1921,10 @@ export const SHARED_BY_HAND: Readonly<Record<string, string>> = {
     'a document slug of the link\'s own wiki space, not an object a caller can name: the space is the link\'s '
     + '(share-links.service.ts:378), and the slug is looked up among that space\'s own written documents — any '
     + 'other is the one 404 (public-wiki.ts:155)',
+  'GET /shared/:token/content':
+    'names nothing but its link: the bytes are those of the version the link was pinned to, read for the link\'s own '
+    + 'owner and entry (share-links.service.ts:480), and a Range is a window on them — nothing in the request names '
+    + 'another object',
   'GET /shared/:token/card':
     'names nothing but its link: the token is resolved as `GET /shared/:token` resolves it, and the answer is that '
     + 'link\'s own kind and root title (share-links.service.ts:359)',

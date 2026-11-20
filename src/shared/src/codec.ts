@@ -383,6 +383,9 @@ export const PUBLIC_ID_FIELDS: ReadonlySet<string> = new Set([
   // The drive file a public link is rooted at (`share_link.drive_entry_id`, 1340): the entry's own id,
   // the one `POST /share-links` takes with kind DRIVE_FILE. An address, never a fence.
   'driveEntryId',
+  // The version of that file the link is pinned to (`share_link.drive_version_id`): an address read back out of the
+  // link's own row, never a fence.
+  'driveVersionId',
   // Owner Ratification's durable decision, reusable authority and two-phase action ledgers. These
   // all name rows a caller can inspect or hand back; whether the named authority is still valid is
   // decided by the database from its immutable scope, not by preserving UUID spelling.

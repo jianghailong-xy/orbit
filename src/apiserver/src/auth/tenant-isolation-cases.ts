@@ -300,6 +300,7 @@ export const TENANT_ISOLATION_CASES: Readonly<Record<string, TenantCase>> = {
   'GET /drive/entries/:id': { request: (of) => ({ params: { id: of.driveFileId } }) },
   'PATCH /drive/entries/:id': { request: (of) => ({ params: { id: of.driveFileId }, body: { name: 'renamed by the census.txt' } }) },
   'DELETE /drive/entries/:id': { request: (of) => ({ params: { id: of.spare.driveEntryId } }) },
+  'POST /drive/entries/:id/share-check': { request: (of) => ({ params: { id: of.driveFileId } }) },
   'GET /drive/entries/:id/versions': { request: (of) => ({ params: { id: of.driveFileId } }) },
   // As a copy: the owner's own restore leaves the version in Trash for the cases after it.
   'POST /drive/versions/:id/restore': { request: (of) => ({ params: { id: of.driveVersionId }, body: { as: 'COPY' } }) },
@@ -1243,6 +1244,9 @@ export const TENANT_ISOLATION_FIELD_CASES: Readonly<Record<string, TenantFieldCa
   'GET /drive/entries query parentId': { request: (of) => ({ params: {}, query: { parentId: of.driveFolderId } }) },
   'GET /drive/trash/groups/:id query parentId': {
     request: (of, mine) => ({ params: { id: mine.driveTrashGroupId }, query: { parentId: of.driveFolderId } }),
+  },
+  'POST /share-links body driveEntryId': {
+    request: (of) => ({ params: {}, body: { kind: 'DRIVE_FILE', driveEntryId: of.driveFileId } }),
   },
   'POST /drive/folders body parentId': { request: (of) => ({ params: {}, body: { parentId: of.driveFolderId, name: 'census folder' } }) },
   'PATCH /drive/entries/:id body parentId': {

@@ -417,6 +417,7 @@ export const TERMINAL_REFUSED_ROUTES: readonly string[] = [
   'POST /sessions/import',
   'POST /sessions/import-batch',
   'POST /sessions/remove-imported',
+  'POST /share-links',
   'POST /share-links/turn-off',
   'POST /task-lists',
   'POST /task-lists/:id/console',
@@ -529,4 +530,5 @@ export const TERMINAL_REFUSED_ROUTES: readonly string[] = [
   'DELETE /drive/trash/groups/:id',
   'DELETE /drive/trash',
   'GET /drive/changes',
+  'POST /drive/entries/:id/share-check',
 ];
