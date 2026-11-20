@@ -1,4 +1,4 @@
--- 1260: a sixth filed owner request kind, SETTINGS_CHANGE — an agent proposing a change to the owner's own Settings,
+-- 1273: a sixth filed owner request kind, SETTINGS_CHANGE — an agent proposing a change to the owner's own Settings,
 -- which the server writes only when the owner approves the card (docs/settings-from-conversation-design.md §5.1).
 --
 --   owner_request.payload  SETTINGS_CHANGE: `{ changes: [{ key, from, to, tier }] }`, the value in force when it was
