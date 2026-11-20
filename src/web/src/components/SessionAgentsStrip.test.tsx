@@ -178,6 +178,25 @@ describe("SessionAgentsStrip", () => {
     );
   };
 
+  // A stopped run was stopped on purpose: grey on the card and in the list, never in the red count
+  // (docs/mocks/subagent-card-and-end-line D1).
+  it("greys a stopped run and leaves it out of the failed count", async () => {
+    draw([
+      run({ toolUseId: "stopped", status: "STOPPED", description: "Sweep stale worktrees" }),
+      run({ toolUseId: "lost", status: "INTERRUPTED", description: "Port the retry" }),
+    ]);
+    expect(host.querySelector(".ag-failed")?.textContent?.trim()).toBe("1 failed");
+    await openList();
+    const rows = [...host.querySelectorAll<HTMLElement>(".ag-row")];
+    const rowOf = (name: string) => rows.find((r) => r.textContent?.includes(name))!;
+    expect(rowOf("Sweep stale worktrees").querySelector(".chat-tool-status.stopped")).not.toBeNull();
+    expect(rowOf("Sweep stale worktrees").querySelector(".chat-tool-status.err")).toBeNull();
+    expect(rowOf("Port the retry").querySelector(".chat-tool-status.err")).not.toBeNull();
+
+    draw([run({ toolUseId: "stopped", status: "STOPPED" })]);
+    expect(host.querySelector(".ag-failed")).toBeNull();
+  });
+
   it("draws nothing for a session with no Agent", () => {
     draw([]);
     expect(host.innerHTML).toBe("");
