@@ -14,6 +14,7 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { machineName, newWorkspaceOf, type PickedFolder } from '../../lib/machineSetup';
 import { startHistoryImport, useClaudeHistory } from '../../lib/claudeHistoryImport';
 import { managedRowOf, useManagedRunner, useManagedRunnerId } from '../../lib/managedRunner';
+import type { SessionReach } from '../../lib/sessionReach';
 import { type MainCheckoutRepoHealth, type RunnerRepoHealth } from '@orbit/shared';
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { Link, useNavigate, useParams, useSearchParams } from 'react-router-dom';
@@ -180,7 +181,7 @@ function WorkspaceSettingsPage({ id }: { id: string }) {
   const rules = useQuery({ ...workspacePermissionRulesQuery(id), enabled: !!workspace });
   const imported = useQuery({
     queryKey: ['imported-sessions', id],
-    meta: { entities: ['session'] },
+    meta: { entities: ['session'], sessionReach: { workspace: id } satisfies SessionReach },
     queryFn: () => countImportedSessions(id),
     enabled: !!workspace,
   });

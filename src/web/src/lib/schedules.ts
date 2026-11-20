@@ -12,6 +12,7 @@ import {
 } from '@orbit/shared';
 import { api } from '../api';
 import { streamPoll } from './listBudget';
+import type { SessionReach } from './sessionReach';
 import { SCHEDULED_RUNS_FOLDER } from './sessionFolders';
 
 /**
@@ -37,7 +38,8 @@ export function scheduleClock(at: string | Date, timezone: string): string {
 export const schedulesQuery = (workspaceId?: string | null, state?: 'all') =>
   queryOptions({
     queryKey: ['schedules', 'list', workspaceId ?? 'any', state ?? 'open'] as const,
-    meta: { entities: ['session', 'workspace'] },
+    // Owner-wide: no one session's event moves it (lib/sessionReach). Its own poll is its safety read.
+    meta: { entities: ['session', 'workspace'], sessionReach: 'none' satisfies SessionReach },
     queryFn: () => {
       const params = new URLSearchParams();
       if (workspaceId) params.set('workspaceId', workspaceId);
@@ -74,7 +76,7 @@ export const scheduleRequestQuery = (id: string) =>
 export const sessionScheduleCardsQuery = (sessionId: string) =>
   queryOptions({
     queryKey: ['schedules', 'session', sessionId] as const,
-    meta: { entities: ['session'] },
+    meta: { entities: ['session'], sessionReach: { session: sessionId } satisfies SessionReach },
     queryFn: () => api<SessionScheduleCardsResponse>(`/sessions/${encodeURIComponent(sessionId)}/schedule-cards`),
     refetchInterval: streamPoll(20_000),
   });

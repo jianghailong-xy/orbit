@@ -88,6 +88,7 @@ import {
 import { mergeWatches } from './watches';
 import { integrationInFlight, pollWhileInFlight, streamPoll, streamStaleTime } from './listBudget';
 import { readOpenList, type OpenListAnswer } from './openListDelta';
+import type { SessionReach } from './sessionReach';
 
 export type { ConfiguredProvider };
 
@@ -427,7 +428,9 @@ export const sessionsQuery = (
 ) => {
   const runnerId = opts.runnerId ?? null;
   const workspaceId = opts.workspaceId ?? null;
-  const view = opts.view ?? null;
+  // No view is the Open list, the server's default, read as the Open list always is: so this reader never sends a
+  // bare `GET /sessions`, which no client should poll (task 350wwd0BfOJPegSAOYpPY).
+  const view = opts.view ?? 'open';
   const tagId = opts.tagId ?? null;
   const limit = opts.limit ?? null;
   const scheduled = opts.scheduled === true;
@@ -436,7 +439,12 @@ export const sessionsQuery = (
     queryKey: (scheduled
       ? ['sessions', runnerId, workspaceId, view, tagId, limit, 'scheduled']
       : ['sessions', runnerId, workspaceId, view, tagId, limit]) as readonly unknown[],
-    meta: { entities: ['session', 'workspace', 'tag', 'folder', 'project'] },
+    // A session's event reads this list again only when the session is in its workspace or in it (lib/sessionReach);
+    // the Scheduled runs folder, which the server builds whole on every read, only when the event can move it.
+    meta: {
+      entities: ['session', 'workspace', 'tag', 'folder', 'project'],
+      sessionReach: (scheduled ? { scheduledRuns: workspaceId } : { workspace: workspaceId }) satisfies SessionReach,
+    },
     queryFn: () => fetchSessions(runnerId, workspaceId, view, tagId, limit, scheduled),
     // The stream marks a list stale the moment an event touches it, so while it is live what was
     // just read is still good to show: the console mounting on the list the splash read moments ago
@@ -744,7 +752,9 @@ export const sessionCreatedTasksQuery = (sessionId: string) =>
     queryKey: ['tasks', 'created-by-session', sessionId] as const,
     // The rows carry `running` / `queued`, which come from the sessions carrying the tasks — the
     // poll below is the safety read of exactly that fact, so the declaration names its source.
-    meta: { entities: ['task', 'session'] },
+    // Of the session events, only this session's own read it again (lib/sessionReach): the runs its rows draw are
+    // other sessions, whose events every open session page would otherwise read for. The poll covers those.
+    meta: { entities: ['task', 'session'], sessionReach: { session: sessionId } satisfies SessionReach },
     queryFn: () => api<SessionCreatedTasks>(`/sessions/${sessionId}/created-tasks`),
     refetchInterval: (q) =>
       q.state.data?.items.some((row) => row.running || row.queued) ? 15_000 : false,
@@ -805,7 +815,8 @@ export const openProjectsQuery = () =>
 export const ownerRequestsQuery = (filter: OwnerRequestListFilter) =>
   queryOptions({
     queryKey: ['owner-requests', filter] as const,
-    meta: { entities: ['session'] },
+    // Owner-wide: no one session's event moves it (lib/sessionReach). Its own poll is its safety read.
+    meta: { entities: ['session'], sessionReach: 'none' satisfies SessionReach },
     queryFn: () => api<{ requests: OwnerRequest[] }>(`/owner-requests?state=${filter}`),
     refetchInterval: streamPoll(20_000),
   });

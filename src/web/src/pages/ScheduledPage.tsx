@@ -45,6 +45,7 @@ import {
   undoScheduleRecord,
   viewerTimezone,
 } from '../lib/schedules';
+import type { SessionReach } from '../lib/sessionReach';
 import { sameResourceId } from '../lib/watches';
 import {
   CONDITION_COPY,
@@ -675,7 +676,7 @@ function ScheduleInspector({ schedule }: { schedule: ScheduleListRow }): JSX.Ele
   // same door, but this needs the title alone.
   const asked = useQuery({
     queryKey: ['schedules', 'asked-in', s.createdFromSessionId] as const,
-    meta: { entities: ['session'] },
+    meta: { entities: ['session'], sessionReach: { session: s.createdFromSessionId ?? '' } satisfies SessionReach },
     queryFn: () => api<{ title?: string | null }>(`/sessions/${encodeURIComponent(s.createdFromSessionId!)}`),
     enabled: Boolean(s.createdFromSessionId),
     staleTime: 300_000,
