@@ -225,11 +225,18 @@ async function fixture(db: PrismaClient, label: string): Promise<Fixture> {
   return { ownerId, runnerId, workspaceId, projectId, coordinatorSessionId, criterion };
 }
 
-/** One more finished task serving the criterion: a new serving set, so a new fact about it. */
+/**
+ * One more finished task serving the criterion: a new serving set, so a new fact about it.
+ *
+ * Its work ran on a worktree branch, reported changes and finished, and no receipt puts it on a
+ * branch: it has commits still to land, which is the merge the CRITERION_UNLANDED fact says is owed.
+ * (A DONE task that never ran a branch delivered no commit and has nothing to land, §12.15 P-M3.)
+ */
 async function finishServingWork(db: PrismaClient, f: Fixture, n: number): Promise<void> {
+  const taskId = randomUUID();
   await db.task.create({
     data: {
-      id: randomUUID(),
+      id: taskId,
       ownerId: f.ownerId,
       projectId: f.projectId,
       title: `serving work ${n}`,
@@ -241,6 +248,15 @@ async function finishServingWork(db: PrismaClient, f: Fixture, n: number): Promi
       criterionDefinitionId: f.criterion.id,
       criterionRevision: f.criterion.revision,
       autoRunWhenReady: false,
+    },
+  });
+  await db.session.create({
+    data: {
+      id: randomUUID(), ownerId: f.ownerId, creatorId: f.ownerId, taskId, workspaceId: f.workspaceId,
+      assignedRunnerId: f.runnerId, title: `serving work ${n}`, prompt: `serving work ${n}`, provider: 'claude',
+      status: RunStatus.SUCCEEDED, dispatchOrigin: SessionDispatchOrigin.USER, startsTaskWork: true,
+      isolationStatus: 'worktree', branch: `orbit/serving-work-${n}-${taskId}`, changedFiles: ['src/work.ts'],
+      finishedAt: new Date(),
     },
   });
 }
