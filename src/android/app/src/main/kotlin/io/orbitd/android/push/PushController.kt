@@ -17,6 +17,8 @@ import kotlinx.coroutines.launch
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
 import kotlinx.coroutines.withContext
+import kotlinx.coroutines.withTimeout
+import kotlinx.serialization.json.JsonObject
 import kotlinx.coroutines.currentCoroutineContext
 import kotlinx.coroutines.ensureActive
 import java.io.File
@@ -190,7 +192,7 @@ class PushController(
         val active = notifications.active().distinctBy { it.notificationKey }
         if (active.isEmpty()) return true
         val authority = PushAuthority(session, handle)
-        val needsYou = if (!readOpen) null else try { authority.needsYou() } catch (cancel: CancellationException) { throw cancel }
+        val needsYou = if (!readOpen) null else try { authority.needsYou(openRows()) } catch (cancel: CancellationException) { throw cancel }
             catch (_: Exception) { null }
         var complete = true
         for (message in active) {
@@ -204,6 +206,12 @@ class PushController(
             if (result in setOf(PushCheck.STALE, PushCheck.MISSING, PushCheck.FORBIDDEN)) remove(message)
         }
         return complete
+    }
+
+    /** The Open rows after the store's own read that left after this call landed (a `since=` delta): a reconcile asks no list of its own. */
+    private suspend fun openRows(): List<JsonObject> {
+        withTimeout(OPEN_READ_TIMEOUT_MS) { realtime.rereadDirectory() }
+        return realtime.state.value.directory?.sessions?.get("open") ?: throw IllegalStateException("no Open snapshot")
     }
 
     private fun remove(message: PushMessage) = notifications.cancel(message)
@@ -223,4 +231,6 @@ class PushController(
     override fun onActivityPaused(activity: Activity) = Unit
     override fun onActivitySaveInstanceState(activity: Activity, outState: Bundle) = Unit
     override fun onActivityDestroyed(activity: Activity) = Unit
+
+    private companion object { const val OPEN_READ_TIMEOUT_MS = 20_000L }
 }
