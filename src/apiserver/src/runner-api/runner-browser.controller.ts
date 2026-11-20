@@ -4,6 +4,7 @@ import { toUuid, type RunnerBrowserClearLoginsResponse, type RunnerBrowserStatus
 
 import { ManagedRunnerBrowserEnabledGuard, ManagedRunnerBrowserService } from '../managed-runners/browser-state';
 import { PrismaService } from '../prisma/prisma.service';
+import { PublicIdPipe } from '../common/public-id';
 import { CurrentRunner } from './current-runner.decorator';
 import { RunnerAuthGuard } from './runner-auth.guard';
 import { accountBrowserRunner, claimBrowserClearApproval } from './runner-browser-clear-approval';
@@ -51,7 +52,7 @@ export class RunnerBrowserController {
   async clear(
     @CurrentRunner() runner: Runner,
     @Headers('x-orbit-session-id') sessionHeader: string | undefined,
-    @Body() body: { approvalId?: unknown } | undefined,
+    @Body(PublicIdPipe.forFields('approvalId')) body: { approvalId?: string } | undefined,
   ): Promise<RunnerBrowserClearLoginsResponse> {
     const sessionId = await this.callingSession(runner, sessionHeader);
     const target = await accountBrowserRunner(this.prisma, runner.ownerId);

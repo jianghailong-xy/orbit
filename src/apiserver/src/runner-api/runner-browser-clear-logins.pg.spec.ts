@@ -202,10 +202,13 @@ test('browser_clear_logins: the profile is cleared only on the owner\'s yes; a d
     await prisma.approval.update({ where: { id: toUuid(ruled.json.id as string) }, data: { status: 'ALLOWED', decidedAt: new Date() } });
     const afterRule = await clear(on, SR, ruled.json.id);
     assert.equal(afterRule.status, 403, afterRule.text);
-    for (const bogus of [undefined, '', 'not-an-id', randomUUID()]) {
+    for (const bogus of [undefined, '', randomUUID()]) {
       const reply = await clear(on, SR, bogus);
       assert.equal(reply.status, 403, `${String(bogus)}: ${reply.text}`);
     }
+    // An id that decodes to nothing is refused before the handler runs (the body's PublicIdPipe).
+    const garbled = await clear(on, SR, 'not-an-id');
+    assert.equal(garbled.status, 400, garbled.text);
     await nothingSent(on, 'no person\'s yes');
   });
 
