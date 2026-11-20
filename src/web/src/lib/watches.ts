@@ -179,6 +179,14 @@ export const LEAF_COPY: Record<WatchLeaf, LeafCopy> = {
     hint: 'A job it started with bg_run has written no output for a set time.',
     met: 'had a quiet job',
   },
+  // Version 4: what session_await and session_create(wait) wait for by default; not offered by the editor.
+  SESSION_QUIESCENT: {
+    one: 'finishes all its work',
+    many: 'finish all their work',
+    option: 'Finishes all its work',
+    hint: 'Its turn is over, nothing it started still runs, and nothing is set to wake it.',
+    met: 'finished all their work',
+  },
 };
 
 const NOUN: Record<WatchTargetKind, [one: string, many: string]> = {
